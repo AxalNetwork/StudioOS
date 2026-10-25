@@ -356,6 +356,9 @@ text in the library yet") and sends Unbind (`POST …/:ref/unbind`, Super Admin
 with a recent step-up and a reason). Each list row and profile carries its
 agreement's envelope state on `envelope`.
 
+D1128 extends `personaSegments.js` with mounted Worker paths for creation,
+completion counts, Events segment choices, and expected-primary follow-up answers.
+
 D1000 (#2815): `personaSegments.js` is Persona segments' profile store on
 `/api/personas/segments`: every profile, one with its history, the needs read
 (members, needs met and gaps, offers by kind, links' reach), and the Super
@@ -370,7 +373,7 @@ published blocks, the change log, the matrix and the subprocessor subscribe, no 
 auditor's reports and Publish with its note, Super Admin) and `securityReportsApi` (Help's
 private Security reports, and HQ's read of them).
 
-D1128 extends `personaSegments.js` with mounted Worker paths for creation,
-completion counts, Events segment choices, and expected-primary follow-up answers.
+
+D1133 adds `billingAlertsApi.pay(id)` and `.updateCard(id, nonce)` for the mounted failed-renewal preparation routes. Keep one validated 8–64-character nonce per open card form and reuse it on retries. Their client secrets belong only in the in-page Stripe form, never storage or logs.
 
 D1135's `companyActions.js` holds self-service company leave and venture restore.

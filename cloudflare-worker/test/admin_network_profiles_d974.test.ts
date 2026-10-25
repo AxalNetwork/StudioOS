@@ -79,7 +79,7 @@ function makeR2() {
 /** The roster before 551: shown and hidden rows, two of them hidden, one with a photo. */
 function fixture() {
   const db = new DatabaseSync(':memory:', { enableForeignKeyConstraints: false, enableDoubleQuotedStringLiterals: true });
-  for (const t of ['users', 'network_profiles', 'activity_logs']) db.exec(tableFromBaseline(BASELINE, t));
+  for (const t of ['users', 'partners', 'network_profiles', 'activity_logs']) db.exec(tableFromBaseline(BASELINE, t));
   const u = db.prepare('INSERT INTO users (id, role, name, email, is_active) VALUES (?, ?, ?, ?, ?)');
   u.run(ADMIN, 'admin', 'Ada Admin', 'ada@example.test', 1);
   u.run(MEMBER, 'partner', 'Pat Partner', 'pat@example.test', 1);
@@ -247,13 +247,30 @@ test('6. a member link must be an account; the creator is recorded', async () =>
   const r = await call(f, 'POST', '/', { name: 'Maple', linked_user_id: MEMBER });
   assert.equal(r.status, 201);
   const maple = (await call(f, 'GET', '/?q=maple')).body.profiles[0];
-  assert.deepEqual(maple.linked_user, { id: MEMBER, name: 'Pat Partner' });
+  // D1125 (AP8b): the linked account's own fields ride along, read only; none is recorded on this account but its name.
+  assert.deepEqual(maple.linked_user, { id: MEMBER, name: 'Pat Partner', account: { name: 'Pat Partner', headline: null, company: null, has_photo: false } });
   assert.deepEqual(maple.created_by, { id: ADMIN, name: 'Ada Admin' });
   assert.equal((await call(f, 'PUT', `/${r.body.id}`, { linked_user_id: GONE })).status, 400);
   assert.equal((await call(f, 'PUT', `/${r.body.id}`, { linked_user_id: null })).status, 200);
   assert.equal((await call(f, 'GET', '/?q=maple')).body.profiles[0].linked_user, null);
   // A row from before 551 has no creator: null, never a guess.
   assert.equal((await call(f, 'GET', '/?q=alder')).body.profiles[0].created_by, null);
+});
+
+test('D1125 (AP8b): a linked card carries what the account says — its name, headline, firm and whether it has a photo — and never the photo key', async () => {
+  const f = fixture();
+  f.db.exec("INSERT INTO partners (id, name, email) VALUES (77, 'Sample Ventures', 'firm@example.test')");
+  f.db.prepare('UPDATE users SET display_name = ?, headline = ?, partner_id = ?, headshot_r2_key = ? WHERE id = ?')
+    .run('Pat P.', 'Operating partner, GTM', 77, 'headshots/pat-private.png', MEMBER);
+  const r = await call(f, 'POST', '/', { name: 'Card name', role: 'Card role', linked_user_id: MEMBER });
+  assert.equal(r.status, 201);
+  const body = (await call(f, 'GET', '/?q=card')).body;
+  const card = body.profiles[0];
+  assert.deepEqual(card.linked_user.account, { name: 'Pat P.', headline: 'Operating partner, GTM', company: 'Sample Ventures', has_photo: true });
+  assert.equal(card.name, 'Card name', 'the card keeps its own fields');
+  assert.doesNotMatch(JSON.stringify(body), /headshots\/|pat-private|firm@example|pat@example/, 'no key or email');
+  // An unlinked card carries no account at all.
+  assert.equal((await call(f, 'GET', '/?q=alder')).body.profiles[0].linked_user, null);
 });
 
 test('7. an admin reads the photo of a hidden or archived row; nobody else does; the public proxy serves shown rows only', async () => {

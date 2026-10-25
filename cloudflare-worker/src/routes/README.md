@@ -16,6 +16,10 @@ D973 reads live in `admin_network_reads.ts`, mounted before D976’s
 `admin_network.ts` at `/api/admin/network`. Opaque person refs use the
 read-only drawer; numeric account IDs continue to the standing router.
 
+D1136's reads of the caller's own companies, ventures and invitations, and
+answering an invitation while signed in, live in `account_companies.ts`,
+mounted at `/api` with full paths before `projects.ts` and `company.ts`.
+
 D979's Firms reads live in `admin_partner_firms.ts`, mounted at
 `/api/admin/partners` before `admin_partners.ts`: `/firms` (search, filters,
 sort and pages with an exact total) and `/firms/:id` (one firm's drawer). Both
@@ -302,6 +306,12 @@ D886 B10 (#2588): `admin_platform.ts` mounts Super Admin-only
 Dispatch requires TOTP plus recent step-up and calls B1's service with the
 operator's own consented session; status events supply content-free timings.
 
+D1128 (#3008): `persona_segments.ts` adds HQ-only `POST /` creation and the
+admin `GET /:key/completion` count. `personas.ts` exposes authenticated
+`GET /audience-segments` (names/statuses only); `/me` includes the member’s
+missing segment questions. Its existing answer route accepts an expected-primary
+check for follow-up; custom stored segment IDs work in sign-up and retag.
+
 D1011 (#2830): `admin_payments.ts` is the Payments page's Super Admin reads,
 mounted at `/api/admin/payments`: the change log over the catalogue's and
 Stripe's audit rows, its CSV export (a recorded reason, failing closed), and the
@@ -327,10 +337,7 @@ use legacy investor grants through `/shared` instead. The data-room spec in
 `../services/records/raise.ts` uses the same owner-only gate. File uploads default
 to NDA when visibility is omitted; explicit Open remains allowed for the owner.
 
-D1128 (#3008): `persona_segments.ts` adds HQ-only `POST /` creation and the
-admin `GET /:key/completion` count. `personas.ts` exposes authenticated
-`GET /audience-segments` (names/statuses only); `/me` includes the member’s
-missing segment questions. Its existing answer route accepts an expected-primary
-check for follow-up; custom stored segment IDs work in sign-up and retag.
+
+D1133: `billing.ts` mounts `/alerts/:id/pay` and `/alerts/:id/update-card` under `/api/billing`, both recent-TOTP gated. They prepare in-page Stripe forms for the caller’s open failed renewal; opening neither confirms a charge nor changes the default card.
 
 D1135: `company.ts` adds member self-leave and validates create/rename; `projects.ts` counts live ventures, adds owner restore within 30 days and sends email-mode team invitations.
