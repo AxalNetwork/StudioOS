@@ -340,6 +340,17 @@ const COMPOSED = new Map([
     'frontend/src/pages/admin/programs/PerksPages.jsx',
     'frontend/src/pages/admin/programs/ReferralPartners.jsx',
   ]],
+  // D964 (#2797): the catalogue draws HQ's tab strip (its Proposals door) from
+  // ProposalsPage and the two proposal lists from ProposalTables, and the
+  // proposals page draws the same lists; Your proposals holds the door to
+  // Propose a program.
+  ['frontend/src/pages/admin/programs/ProgramsCatalogue.jsx', [
+    'frontend/src/pages/admin/programs/ProposalsPage.jsx',
+    'frontend/src/pages/admin/programs/ProposalTables.jsx',
+  ]],
+  ['frontend/src/pages/admin/programs/ProposalsPage.jsx', [
+    'frontend/src/pages/admin/programs/ProposalTables.jsx',
+  ]],
 ]);
 
 /** path → the files whose doors that path can reach. */

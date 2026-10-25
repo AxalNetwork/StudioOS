@@ -184,7 +184,7 @@ it, where in their nav, and how do they get there.*
 
 | Canvas | Route | Nav section | Surface | Entry point | Status | Confidence |
 | --- | --- | --- | --- | --- | --- | --- |
-| Admin · Programs | `/admin/programs` · `/admin/programs/mentor-cohorts` · `/admin/programs/refer-and-earn` · `/admin/programs/perks` · `/admin/programs/learning` · `/admin/programs/referral-partners` · `/admin/programs/investor-cohorts` · `/admin/programs/ai-native-venture` | Admin | Full page | Sidebar → Admin → Programs | UPGRADE | High |
+| Admin · Programs | `/admin/programs` · `/admin/programs/mentor-cohorts` · `/admin/programs/refer-and-earn` · `/admin/programs/perks` · `/admin/programs/learning` · `/admin/programs/referral-partners` · `/admin/programs/investor-cohorts` · `/admin/programs/ai-native-venture` · `/admin/programs/propose` · `/admin/programs/proposals` | Admin | Full page | Sidebar → Admin → Programs | UPGRADE | High |
 | Admin · Subsidiary | `/admin/subsidiary` | — (not routed) | Full page (proposed) | Not reachable yet | NEW | Low |
 | Admin Community | `/admin/held/community` | — (no nav entry) | Full page | Deep link / in-page action | UPGRADE | Medium |
 | Admin Insights | `/admin/held/insights` | — (no nav entry) | Full page | Deep link / in-page action | UPGRADE | Medium |
@@ -218,7 +218,7 @@ it, where in their nav, and how do they get there.*
 
 | Canvas | Route | Nav section | Surface | Entry point | Status | Confidence |
 | --- | --- | --- | --- | --- | --- | --- |
-| Admin · Programs | `/admin/programs` · `/admin/programs/mentor-cohorts` · `/admin/programs/refer-and-earn` · `/admin/programs/perks` · `/admin/programs/learning` · `/admin/programs/referral-partners` · `/admin/programs/investor-cohorts` · `/admin/programs/ai-native-venture` | HQ | Full page | Sidebar → HQ → Programs | UPGRADE | High |
+| Admin · Programs | `/admin/programs` · `/admin/programs/mentor-cohorts` · `/admin/programs/refer-and-earn` · `/admin/programs/perks` · `/admin/programs/learning` · `/admin/programs/referral-partners` · `/admin/programs/investor-cohorts` · `/admin/programs/ai-native-venture` · `/admin/programs/propose` · `/admin/programs/proposals` | HQ | Full page | Sidebar → HQ → Programs | UPGRADE | High |
 | Admin · Super | `/hq` · `/admin/licences` · `/admin/accounts` · `/admin/contracts` · `/admin/funds` · `/admin` · `/admin/*` | HQ | Full page | Sidebar → HQ → Home | UPGRADE | High |
 | Admin Community | `/admin/held/community` | — (no nav entry) | Full page | Deep link / in-page action | UPGRADE | Medium |
 | Admin Insights | `/admin/held/insights` | — (no nav entry) | Full page | Deep link / in-page action | UPGRADE | Medium |
