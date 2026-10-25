@@ -625,8 +625,11 @@ test('each frame is one literal AdminBoardFrame, named for its board, as the who
   const review = codeOnly(read('frontend/src/pages/admin/ReferralReview.jsx'));
   assert.match(review, /\{superAdmin \? \(\s*<Link\s+to="\/admin\/commissions"/);
   // D962: the Queue reads part 4's pages with their total, 25 at a time.
-  assert.match(review, /const params = queueParams\(\{ status, category, sort, page \}\);/);
-  assert.match(review, /r\.referrer_name \|\| r\.referrer_email \|\| NOT_RECORDED/);
+  // D1124 (#3004): with the referrer's role and the Worker's search.
+  assert.match(review, /const params = queueParams\(\{ status, category, sort, page, role, search \}\);/);
+  // The referrer's name or email, else "Not recorded" (D1124 moved the line into the model as `referrerLine`).
+  assert.match(review, /referrerLine\(r\)/);
+  assert.match(read('frontend/src/pages/admin/programs/programPagesModel.js'), /r\?\.referrer_name \|\| r\?\.referrer_email \|\| NOT_RECORDED/);
   assert.doesNotMatch(review, /`user \$\{r\.uid\}`/, 'N6: never the submission\'s id as its referrer');
 });
 

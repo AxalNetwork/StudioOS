@@ -605,8 +605,27 @@ export function referWeeklyChart(read) {
   };
 }
 
-/** The funnel (item 12): no read counts the referrals that reached each stage, so its bars are not drawn. */
-export const FUNNEL_REASON = 'No read counts the referrals that reached each stage, so the stages are not drawn. The tags count where referrals stand now.';
+/**
+ * D1124 (#3004): the funnel's bars, from `GET /api/refer-earn/admin/submissions/funnel`.
+ * Each stage counts the referrals whose furthest stage reached it, all time;
+ * the tags under them count where referrals stand now.
+ */
+export const FUNNEL_WINDOW = 'All time. A referral counts at every stage up to the furthest it reached, so one rejected after Qualified still counts as Qualified. The tags count where referrals stand now.';
+export function referFunnelChart(read) {
+  if (isLoading(read)) return { state: 'loading' };
+  if (isFailed(read)) return { state: 'unreadable', what: 'The referral funnel' };
+  const stages = Array.isArray(read.data?.stages) ? read.data.stages : null;
+  if (!stages || !stages.length || stages.some((x) => !Number.isFinite(Number(x?.count)) || typeof x?.label !== 'string')) {
+    return { state: 'unreadable', what: 'The referral funnel' };
+  }
+  const rows = stages.map((x) => ({ key: x.key, label: x.label, value: Number(x.count) }));
+  return {
+    state: 'ready',
+    chart: { type: 'hbar', rows, axis: 'referrals' },
+    alt: `Referral funnel: ${rows.map((r) => `${nf(r.value)} ${r.label.toLowerCase()}`).join(', ')}.`,
+    window: FUNNEL_WINDOW,
+  };
+}
 export const FUNNEL_TAGS = Object.freeze([
   { key: 'more_info_needed', word: 'More info needed' }, { key: 'rejected', word: 'Rejected' }, { key: 'closed', word: 'Closed' },
 ]);
@@ -627,13 +646,26 @@ export const strategicRow = (x) => ({
 export const QUEUE_OPEN = 'open';
 export const QUEUE_STATUSES = Object.freeze([QUEUE_OPEN, 'all', 'submitted', 'under_review', 'more_info_needed', 'qualified', 'in_conversation', 'converted', 'reward_eligible', 'reward_issued', 'rejected', 'closed']);
 export const queueStatusWord = (s) => (s === QUEUE_OPEN ? 'Open' : s === 'all' ? 'All' : statusWord(s));
-export function queueParams({ status = QUEUE_OPEN, category = '', sort = 'oldest', page = 0 } = {}) {
+export function queueParams({ status = QUEUE_OPEN, category = '', sort = 'oldest', page = 0, role = '', search = '' } = {}) {
   const p = { limit: PAGE_SIZE, offset: page * PAGE_SIZE, sort };
   if (status === QUEUE_OPEN) p.status = OPEN_STATUSES.join(',');
   else if (status !== 'all') p.status = status;
   if (category) p.category = category;
+  // D1124 (#3004, PG9q): the referrer's role, and the Worker's search.
+  if (role) p.role = role;
+  const q = String(search || '').trim().slice(0, SEARCH_MAX);
+  if (q) p.q = q;
   return p;
 }
+
+/** D1124 (PG9q, PG9d): the referrer's platform role, in the canvas's words; `users.role`. */
+export const SEARCH_MAX = 100;
+export const REFERRER_ROLE_WORD = Object.freeze({
+  founder: 'Founder', advisor: 'Advisor', investor: 'Investor', partner: 'Operating Partner', exploring: 'Explorer', admin: 'Admin',
+});
+export const referrerRoleWord = (r) => REFERRER_ROLE_WORD[r] || 'Role not recorded';
+/** "[Name] · Founder": the referrer and their role; a missing name is "Not recorded", never an id. */
+export const referrerLine = (r) => `${r?.referrer_name || r?.referrer_email || NOT_RECORDED} · ${referrerRoleWord(r?.referrer_role)}`;
 
 /* ------------------------------------------------------------------ *
  * Perks (items 15–18)

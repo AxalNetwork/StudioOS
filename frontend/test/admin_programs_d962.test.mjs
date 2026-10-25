@@ -34,7 +34,7 @@ import ReferAndEarn from '../src/pages/admin/programs/ReferAndEarn.jsx';
 import ProgramPage from '../src/pages/admin/programs/ProgramPage.jsx';
 import { HQ_READS_MONEY, NOT_READ_YET, PAGES, routeFor } from '../src/pages/admin/programs/programsModel.js';
 import {
-  ACTIVE_PAIR, ASSIGNED_DONE, CREDITS_FOOT, ENDED_DONE, FUNNEL_REASON, LEARNER_FOOT, MENTOR_ACTIVITY_GAP, REFUSALS,
+  ACTIVE_PAIR, ASSIGNED_DONE, CREDITS_FOOT, ENDED_DONE, LEARNER_FOOT, MENTOR_ACTIVITY_GAP, REFUSALS,
   REVIEW_MOVES, REVIEW_SAVED, REVIEW_TOLD, VISIBLE_DASH, activityText, completionRows, cohortPlace, endedInWindow,
   episodesOf, finishedTotal, hasFinished, hiddenFrom, isDone, listingActions, listingBody, mentorsPerCohort, peopleRows,
   playbookFrom, refusalSentence, reviewPatch, sectionEdit, statusChoices, versionLine,
@@ -275,6 +275,7 @@ function worker(o = {}) {
     assignable = { items: [{ id: 11, name: 'Mentor 11', email: 'm11@example.com', has_advisor_profile: true }, { id: 21, name: 'Mentor 21', email: 'm21@example.com', has_advisor_profile: false }] },
     activity = ACTIVITY, detail = PLAYBOOK, sessions = { cycles: [{ cycle_id: 1, year: 2026, month: 10, mentors: 2, sessions: 7 }], rule: 'Bookings not cancelled.' },
     referrals = (q) => paged([referral('s1', 'submitted', 2), referral('u1', 'under_review', 80)], 2), one = null, weekly = { from: '2026-08-03', items: [{ week: '2026-10-19', startup: 2, customer: 1, strategic: 0 }] },
+    funnel = { stages: [['submitted', 'Submitted', 48], ['under_review', 'Under review', 38], ['qualified', 'Qualified', 24], ['in_conversation', 'In conversation', 15], ['converted', 'Converted', 9], ['reward_issued', 'Reward issued', 6]].map(([key, label, count]) => ({ key, label, count })) },
     strategic = paged([{ user_id: 41, name: 'Ivy Investor', role: 'investor', note: 'Two family offices in Porto.', status: 'requested', requested_at: d1(NOW - 4 * DAY) }]),
     listings = (q) => paged([listing('p1', 'in_review', { review_note: 'Seeded by HQ' }), listing('p2', 'live')], 2),
     claims = { from: '2026-08-03', by_listing: [{ uid: 'p2', offer: 'Offer p2', partner_name: 'Partner p2', claims: 4, redeemed: 3 }], by_week: [{ week: '2026-10-19', kind_at_claim: 'credits', claims: 4, redeemed: 3 }], totals: {} },
@@ -317,6 +318,8 @@ function worker(o = {}) {
     if (/^\/api\/admin\/programs\/[^/]+\/activity$/.test(path)) return call(activity, q, path);
     if (/^\/api\/admin\/programs\/[^/]+$/.test(path)) return call(detail, path);
     if (path === '/api/refer-earn/admin/submissions/weekly') return call(weekly);
+    // D1124 (#3004): the funnel, the furthest stage each referral reached.
+    if (path === '/api/refer-earn/admin/submissions/funnel') return call(funnel);
     if (path === '/api/refer-earn/admin/submissions') return call(referrals, q);
     if (/^\/api\/refer-earn\/admin\/submissions\/[^/]+$/.test(path)) return call(one || { ...referral('u1', 'under_review', 80), history: [{ label: 'Submitted', status: 'submitted', note: null, created_at: d1(NOW - 80 * H) }, { label: 'Under review', status: 'under_review', note: null, created_at: d1(NOW - 60 * H) }] });
     if (path === '/api/refer-earn/admin/strategic-access') return call(strategic, q);
@@ -520,7 +523,7 @@ test('Mentor · How it runs: part 1’s published playbook for an Admin, with th
   } finally { await sup.close(); }
 });
 
-test('Refer & Earn · Overview: exact totals with their window, the funnel’s current tags, the weekly chart, and Grant through a dialog', async () => {
+test('Refer & Earn · Overview: exact totals with their window, the funnel’s bars (D1124) and current tags, the weekly chart, and Grant through a dialog', async () => {
   const totals = { 'submitted,under_review,more_info_needed': 5, '': 48, 'converted,reward_eligible,reward_issued': 9, submitted: 2, under_review: 2, more_info_needed: 1, rejected: 5, closed: 2 };
   let decide = () => refusal(409, 'already_decided', 'Strategic referral access is already granted.');
   const view = await mounted('/admin/programs/refer-and-earn', ReferAndEarn, worker({
@@ -534,7 +537,9 @@ test('Refer & Earn · Overview: exact totals with their window, the funnel’s c
     assert.equal(view.textOf('programs-tile-waiting-value'), '5');
     assert.ok(view.has('programs-tile-waiting-overdue'), 'Overdue from R1’s referrals lane');
     assert.match(view.textOf('programs-refer-bands'), /of the oldest 2 of 5/, 'the bands say what they cover');
-    assert.match(view.textOf('programs-refer-funnel-bars'), new RegExp(FUNNEL_REASON.slice(0, 40)));
+    // D1124 (#3004): the funnel draws its bars, with the stages reached.
+    assert.match(view.textOf('programs-refer-funnel'), /Submitted48Under review38Qualified24In conversation15Converted9Reward issued6/);
+    assert.match(view.textOf('programs-refer-funnel-window'), /^All time\./);
     assert.equal(view.textOf('programs-refer-funnel-rejected'), 'Rejected 5');
     assert.match(view.textOf('programs-refer-weekly-window'), /The last 12 weeks/);
     assert.ok(!/No one can be granted access yet/.test(view.textOf('programs-refer-strategic')), 'that line goes once Grant ships');
