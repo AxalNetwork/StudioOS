@@ -31,6 +31,8 @@ const path = (userId) => `/admin/network/people/${encodeURIComponent(userId)}`;
 
 export const adminNetworkApi = {
   overview: () => request('/admin/network/overview'),
+  // D1125: the four header tabs' counts, each its own block.
+  tabs: () => request('/admin/network/tabs'),
   people: (filters = {}) => request(`/admin/network/people${query(filters)}`),
   person: (userId) => request(path(userId)),
   pause: (userId, reason) => request(`${path(userId)}/pause`, { method: 'POST', body: JSON.stringify({ reason }) }),
