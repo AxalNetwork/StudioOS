@@ -109,6 +109,23 @@ strength of a live route would empty the queue of the work it exists to track.
    `Trust Center v2.dc.html` to `backlog/` for a day, next to the `NEW` canvases
    that have no route, and away from the v1 of its own page.
 
+## Landed 2026-10-25 — HQ › Platform › Bank accounts (#2389)
+
+The owner's artifacts `VKFadETWcanf49seVMzWT1` (the page) and
+`Bhhofcvq6hNkvn16HeJv99` (the board grid) came from S21's prompt on #2389. Each
+was decoded by `scripts/read-canvas.mjs` as is:
+- `Bank accounts · Boards.dc.html` is the board grid (BNK1 to BNK12); it
+  imports the page by name;
+- `Bank Accounts Page.dc.html` is the page.
+
+No value was edited.
+
+**Grade: UPGRADE.** The page is `/admin/platform/bank-accounts` (D938), with
+Cash and History at their own addresses. S21's integration (D1181) draws Cash's
+balances from Mercury's read and says Not read here yet on the series, monthly
+totals and History. The lightbox, dialogs, charts and phone wait for D1181's six
+parts, so this canvas stays in the queue until they land.
+
 ## Landed 2026-10-25 — Raise · Use of funds (#2455)
 
 The owner's artifacts `RknpumZGmSfuuUECQr9Toq` (the page) and

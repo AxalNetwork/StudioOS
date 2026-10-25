@@ -2778,6 +2778,8 @@ function AppInner() {
       <Route path="/admin/wellbeing" element={guard(['admin'], <AdminWellbeingPage />)} />
       {/* Platform and Revenue pages are the Super Admin's, like every other (#2375). */}
       <Route path="/admin/platform/bank-accounts" element={guard(['admin'], hqOnly(<BankAccountsPage />))} />
+      <Route path="/admin/platform/bank-accounts/cash" element={guard(['admin'], hqOnly(<BankAccountsPage />))} />
+      <Route path="/admin/platform/bank-accounts/history" element={guard(['admin'], hqOnly(<BankAccountsPage />))} />
       <Route path="/admin/platform/product-testing" element={guard(['admin'], hqOnly(<ProductTestingHqPage />))} />
       <Route path="/admin/platform/promo-codes" element={guard(['admin'], hqOnly(<PromoCodesPage />))} />
       <Route path="/admin/revenue/billing" element={guard(['admin'], hqOnly(<BillingPage />))} />
