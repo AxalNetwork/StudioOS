@@ -89,6 +89,8 @@ D992: `partner_profile_verdicts_d992.test.ts` holds profile verdict validation,
 explicit clearing, omission, audit recipients and route refusals to the full
 migrated SQLite schema; it also records the shared plan policy's admin exemption.
 
+D1091: `google_workspace_connection.test.ts` tests consent, file scope, previews and disconnect using `_google_workspace_fake.mjs`; `fed_ownership.test.ts` holds the shared ledger-owner helper; `google_workspace_feeds.test.ts` pins the empty feed registry, audience and eight read fragments. No real Google host is called.
+
 `deal_context_d1150.test.ts` executes migration 600 and real source tables for
 derived stages, per-user/firm visit markers and private notes, including audit
 rollback, no admin bypass, NDA exclusion and anonymous change metadata.

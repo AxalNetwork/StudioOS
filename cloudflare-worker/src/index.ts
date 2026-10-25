@@ -209,6 +209,7 @@ import notificationsRoutes from './routes/notifications';
 import votesRoutes from './routes/votes';
 import linkedinRoutes from './routes/linkedin';
 import calendarRoutes from './routes/calendar';
+import googleWorkspaceRoutes from './routes/google_workspace';
 import financialsRoutes from './routes/financials';
 import progressRoutes from './routes/progress';
 import cycleBuildRoutes from './routes/cycle_build';
@@ -1369,6 +1370,7 @@ app.route('/api/personas', personas);
 app.route('/api/notifications', notificationsRoutes);
 app.route('/api/linkedin', linkedinRoutes);
 app.route('/api/calendar', calendarRoutes);
+app.route('/api/connectors/google-workspace', googleWorkspaceRoutes);
 // T11 — Financial Model Builder + Founder Wellbeing (ported from FastAPI).
 app.route('/api/financials', financialsRoutes);
 // Task #1 (AG) — kept alphabetically adjacent to /api/financials.
