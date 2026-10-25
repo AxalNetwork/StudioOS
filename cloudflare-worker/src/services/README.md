@@ -10,6 +10,10 @@ by the deal reader and diligence opener. A room request is not a grant.
 The split matters because it is what makes the logic testable: the worker suite
 runs these directly against an in-process SQLite, with no request at all.
 
+`useOfFunds/` holds D1175's pure, versioned plan engine and founder-scoped,
+transactional legacy copy/Base writer. See its README for the part-3 contract;
+forecasts stay Modelled and never supply runway today.
+
 `bankAccountHistory.ts` (D1182, #3111) reads the masked reveal ledger and
 bank-account/Mercury audit history. It uses a successful read audit as its route
 gate, validates bound filters, pins append-only source ids for insertion-stable
