@@ -29,13 +29,13 @@ test('2448: desktop failed trust read shows unreadable without a perfect score',
   api.trustMe=async()=>{throw new Error('synthetic read failure');};
   view=await mountContracts(React.createElement(TrustCenterPage,{chromeless:true}),'/trust',{role:'founder'});
   await view.flush();
-  assert.ok(view.text().includes('Trust score unreadable'));
+  assert.ok(view.text().includes('Your requirements could not be read.'));
   assert.ok(!view.text().includes('100'));
   await view.unmount(); view=null;
   api.trustMe=async()=>({role:'founder',obligations:[{obligation_key:'tos_v1',required:true,status:'pending'}]});
   view=await mountContracts(React.createElement(TrustCenterPage,{chromeless:true}),'/trust',{role:'founder'});
   await view.flush();
-  assert.ok(!view.text().includes('Trust score unreadable'));
+  assert.ok(!view.text().includes('Your requirements could not be read.'));
  } finally {if(view)await view.unmount();Object.assign(api,originals);}
 });
 
