@@ -234,7 +234,7 @@ const ROOT = resolve(HERE, '../..');
 const MIGRATIONS = resolve(ROOT, 'cloudflare-worker/sql/migrations');
 const RECORD = '573_cap_table_record.sql';
 const JWT_SECRET = 'unit-test-jwt-secret-d1018-0123456789';
-const ADMIN = 1, INVESTOR = 3, OWNER = 4, COFOUNDER = 5, ADVISOR = 6, OTHER = 9;
+const INVESTOR = 3, OWNER = 4, COFOUNDER = 5, ADVISOR = 6, OTHER = 9;
 const USERS: Array<[number, string, number | null]> = [[1, 'admin', null], [3, 'investor', null], [4, 'founder', 40], [5, 'founder', 50], [6, 'advisor', null], [9, 'founder', 90]];
 
 function built(): DatabaseSync {
