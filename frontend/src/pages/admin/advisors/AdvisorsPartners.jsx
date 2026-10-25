@@ -9,6 +9,7 @@ import AdminBoardFrame from '../AdminBoardFrame';
 import AdminNetworkProfiles from '../AdminNetworkProfiles';
 import FirmsTab from './Firms';
 import ApOverview from './ApOverview';
+import People from './People';
 import {
   AP_TITLE, COMMUNITY_PATH, MOVED_NOTICES, PAGE_LINE, PAUSED, PAUSE_EVENTS, RAIL_NOTE, TABS,
   tabCountOf, tabOf,
@@ -22,7 +23,8 @@ import {
  * the moved notice.
  *
  * D977 completes Overview from D973's summary read. Firms keeps its own
- * reads and the Deck roster is embedded; People is a separate UI part. Nothing is decided here that is decided elsewhere: a deal
+ * reads and the Deck roster is embedded; People (D978) is its own read, in
+ * `People.jsx`. Nothing is decided here that is decided elsewhere: a deal
  * and a host decision each open the page that decides. The Firms tab (D952, D979, `Firms.jsx`) makes its own two, each behind
  * a dialog: an account's firm and a firm's directory switches.
  */
@@ -32,6 +34,7 @@ const READS = {
   overview: ['overview'],
   // D979: the firms list is Firms.jsx's own read; the strip and the attach table read `links`.
   firms: ['links'],
+  people: [],
   deck: [],
 };
 
@@ -124,11 +127,12 @@ function AdvisorsPartnersPage() {
   const tabs = (
     <>
       <HeaderTab to="/admin/advisors-partners" count={tabCountOf(counts, 'overview')} data-testid="ap-tab-overview">Overview</HeaderTab>
+      <HeaderTab to="/admin/advisors-partners/people" count={tabCountOf(counts, 'people')} data-testid="ap-tab-people">People</HeaderTab>
       <HeaderTab to="/admin/advisors-partners/firms" count={tabCountOf(counts, 'firms')} data-testid="ap-tab-firms">Firms</HeaderTab>
       <HeaderTab to="/admin/advisors-partners/deck" count={tabCountOf(counts, 'deck')} data-testid="ap-tab-deck">Deck roster</HeaderTab>
     </>
   );
-  const actions = tab === 'deck' ? null : (
+  const actions = tab === 'deck' || tab === 'people' ? null : (
     <>
       <span className="font-mono text-[11.5px] text-axal-muted dark:text-gray-400" data-testid="ap-asof">
         {asOf ? `Updated ${new Date(asOf).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit', hourCycle: 'h23' })}` : 'Reading…'}
@@ -151,6 +155,7 @@ function AdvisorsPartnersPage() {
       />
       {paused ? <PausedNotice /> : null}
       {tab === 'overview' && <ApOverview read={reads.overview} reload={reload} />}
+      {tab === 'people' && <People />}
       {tab === 'firms' && <FirmsTab reads={reads} reload={reload} />}
       {tab === 'deck' && <AdminNetworkProfiles embedded />}
     </div>

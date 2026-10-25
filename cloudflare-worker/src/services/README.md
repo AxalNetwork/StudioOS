@@ -121,6 +121,7 @@ no new schema, runtime or billing path is introduced.
 | `referrals/` | Referral submissions. |
 | `records/` | D690's scoped cycle record contract, registry and ownership checks. |
 | `signals/` | Signal ingestion and evidence. |
+| `vercel/` | D1096: `api.ts`, the only caller of `api.vercel.com`: a read-only client for the planned reads, uninstall and the OAuth code exchange. Its README has the rules. |
 | `wellbeing/` | Wellbeing check-ins. |
 | `productTesters.ts` | D1042 (#2890): the product tester store (migration 576). `TRANSITIONS` (approve, decline, pause, resume, remove and the status each needs), `messageFor` (what the member is told), `listTesters`, `testerDetail`, `isAdminAccount` (admins cannot test) and `applyTransition` (one conditional UPDATE and one append-only event row in a batch). `reapplyAfter` is the decision day plus 90 days. `../routes/admin_product_testers.ts` is its only caller. |
 | `programGrants.ts` | D982 (#2773): program grants. The nine programs and their readiness (held equal to `frontend/src/lib/programGrants.js`), `TERM_FIELDS` (which grant terms apply to which program, and which are defaultable), `validateTerms` (an unknown or inapplicable term is refused; `null` clears), `presentGrant` (the in-force rule and what a grant waits on), `readGrid`, `readDefaults` and `readHistory`. The store is migration 553; `../routes/admin_program_grants.ts` and `licencePrograms.ts` call it. D983 adds the grid's requests tile and series. |
@@ -137,6 +138,9 @@ no new schema, runtime or billing path is introduced.
 `cycleCards.ts` defines the D656 Figure and Card shapes, card failure isolation,
 and shared paging. `buildCycleRecords.ts` holds D662's D661-shaped record table,
 chart specs and bounded search/filter/sort/paging for the Build modules.
+`buildCreates.ts` (D1064, #2934) holds Build's three creates (feature, must-have,
+roadmap item) as statement builders, each INSERT first with `RETURNING id`, so
+a route answers with its own row (`createdId`) and another writer can batch them.
 
 - No `Context`, no `Response`. If you need one, the code belongs in `routes/`.
 - Never build SQL by interpolation. `check-sql-prepare` fails the build on a
@@ -229,6 +233,10 @@ predicate, `tierAdmits()`: a file's `access_tier` (`invited`, `committed`,
 prospect of the venture, by email) and `admittedCounts()`. Every read outside
 the founder's (the investor room, `research.ts`, the advisor brief) decides
 with it, so a hidden file is never listed, counted or downloaded.
+D1103 (#2983) adds a grant's folder scope (migration 594): `grantFolderScope()`
+reads it as the named folders with their subfolders, or null for every folder,
+and `tierAdmits()` takes it as its fourth argument. A scope that cannot be read
+opens nothing.
 `deckSlideDwell.ts` stores a share-link view's seconds per slide, bounded so
 they never add up to more than the view's read time.
 `peerBenchmark.ts` (#1524) is the peer-group benchmark for every founder:
@@ -421,6 +429,8 @@ UTC Monday window for claim totals, listing ranks and weekly price-kind counts.
 actions and reads them back as the Payments change log; `stripeWebhookDeliveries.ts`
 is the webhook's request-log reader, shared by HQ · Platform and Payments, with
 hourly buckets that are null for an hour the log was silent.
+
+D1065 (#2935): `buildPlanner.ts` reads accepted Validate labels/counts and applies the ten fixed mapping rules, then batches a plan and source proposals; acceptance stays with D1066. It never runs AI or writes a Build record.
 
 D971 completes `programRegistry.ts`'s Lab draft path: its canonical section
 catalogue contains headings only. The existing Super Admin edit route creates a

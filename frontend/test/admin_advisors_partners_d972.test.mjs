@@ -130,7 +130,9 @@ test('Needs you: each queue that holds something, with the page that decides it;
 test('the tabs, the redirects\' targets, the strip on a tab, and the whole-page failure', () => {
   assert.equal(tabOf(AP_PATH), 'overview');
   assert.equal(tabOf(`${AP_PATH}/firms`), 'firms');
-  assert.equal(tabOf(`${AP_PATH}/people`), null, 'People is not a tab until its read exists');
+  assert.equal(tabOf(`${AP_PATH}/people`), 'people', 'D978: People is a tab now its read exists');
+  assert.equal(tabOf(`${AP_PATH}/people/user%3A7`), 'people', 'a person opens over People');
+  assert.equal(tabOf(`${AP_PATH}/peoplex`), null);
   assert.equal(legacyContractsTarget('?tab=network-profiles'), '/admin/advisors-partners/deck?moved=network-profiles');
   assert.equal(stripFor('/admin/advisors-partners/deck'), 'Content', 'the Content strip is lost on a tab');
   assert.equal(stripFor('/admin/persona-segments'), 'Content');

@@ -73,6 +73,7 @@ test('mounted: each tab carries its count from one read; a failed count is a das
   const m = await page('/admin/advisors-partners/firms');
   try {
     assert.match(m.of('ap-tab-overview'), /Overview\s*4/);
+    assert.match(m.of('ap-tab-people'), /People\s*82/);
     assert.match(m.of('ap-tab-firms'), /Firms\s*17/);
     assert.match(m.of('ap-tab-deck'), /Deck roster\s*12/);
     assert.equal(m.calls.filter((p) => p === '/api/admin/network/tabs').length, 1);
