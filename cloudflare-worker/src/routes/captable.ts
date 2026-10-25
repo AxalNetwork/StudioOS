@@ -1401,9 +1401,10 @@ captable.post('/register/:projectId/snapshot', async (c) => {
   try {
     await c.env.DB.batch([
       c.env.DB.prepare(
+        // D1105 (migration 596): a paper the platform made and filed is a document, named by its source.
         `INSERT INTO data_room_files (uid, project_id, folder_id, name, r2_key, content_type, size_bytes, visibility, uploaded_by_user_id,
-           created_at, updated_at, access_tier)
-         VALUES (?, ?, NULL, ?, ?, 'application/pdf', ?, 'nda', ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, 'nobody')`,
+           created_at, updated_at, access_tier, source_kind, source_ref)
+         VALUES (?, ?, NULL, ?, ?, 'application/pdf', ?, 'nda', ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, 'nobody', 'document', 'cap_table')`,
       ).bind(uid, projectId, name, key, bytes.byteLength, user.id),
       auditStatement(c.env, user, await actorHash(user as { email?: string | null }), projectId, 'cap_table_snapshot_filed', {
         format: 'pdf', as_of: asOf, file_uid: uid, ...counts,
