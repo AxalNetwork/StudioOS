@@ -165,6 +165,7 @@ test('12. the crumb is set inside the provider, from the record\'s own title, an
   const src = codeOnly(read('frontend/src/pages/cycles/CycleRoute.jsx'));
   // D768 adds the record's `type` and `id`, which name it for the run (`ref`).
   // D906 (2026-10-24, #2454): a narrative tab word is no record, so it names none.
-  assert.match(src, /<RecordCrumb title=\{record && recordState\.status === 'ready' \? recordState\.data\?\.title : null\} type=\{`\$\{cycle\}\/\$\{slug\}`\} id=\{narrativeTab \|\| capTableTab \? null : recordId \?\? null\} \/>\s*<\/RailFrame>\s*<\/RailCrumbsProvider>/);
+  // D1015 and D1101 (#2456): nor is a Cap table or Data room tab word.
+  assert.match(src, /<RecordCrumb title=\{record && recordState\.status === 'ready' \? recordState\.data\?\.title : null\} type=\{`\$\{cycle\}\/\$\{slug\}`\} id=\{narrativeTab \|\| capTableTab \|\| dataRoomTab \? null : recordId \?\? null\} \/>\s*<\/RailFrame>\s*<\/RailCrumbsProvider>/);
   assert.match(src, /setCrumbs\(\{ record: title \|\| null, ref: title && type && id != null \? \{ type, id \} : null \}\);\s*return \(\) => setCrumbs\(\{ record: null \}\);/);
 });

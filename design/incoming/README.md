@@ -109,6 +109,23 @@ strength of a live route would empty the queue of the work it exists to track.
    `Trust Center v2.dc.html` to `backlog/` for a day, next to the `NEW` canvases
    that have no route, and away from the v1 of its own page.
 
+## Landed 2026-10-25 — Raise · Data room (#2456)
+
+The owner's artifacts `LEfVAaN5CLoLZ7gnz8LP9F` (the board grid) and
+`T6VChA7YyxrX8YXt8rryuM` (the page) came from S21's prompt on #2456, each
+decoded by `scripts/read-canvas.mjs` as is:
+- `Data Room · Boards.dc.html` is the board grid (DR1 to DR24, with the
+  lettered boards); it imports the page by name;
+- `Raise Data Room Page.dc.html` is the page.
+
+No value was edited.
+
+**Grade: UPGRADE.** The tool is the Data room module at `/raise/data-room`,
+with six tab words under it. S21's integration (D1101) draws Files, Access and
+Activity from the founder's room read; writes stay in the files tool until
+D1101's parts land, so this canvas stays in the queue until then. It replaces
+`design/canvases/backlog/Data Room.dc.html` once part 8 lands.
+
 ## Landed 2026-10-25 — Account · Trust center (#2425)
 
 The owner's artifacts `2zg26b61pd4Xm2WP4K6kbP` (the board grid) and
