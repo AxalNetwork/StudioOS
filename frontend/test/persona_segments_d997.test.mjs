@@ -16,12 +16,11 @@ import { createRoot } from 'react-dom/client';
 import { MemoryRouter, Routes, Route } from 'react-router-dom';
 import { installDocument } from './_contracts_dom.mjs';
 import {
-  BANDS, confidenceBands, howSet, members, movedNotices, scopeLine, searchMembers, segmentCards, segmentLabel, segmentsByProfile, tabOf, tiles, unclassified,
+  BANDS, members, movedNotices, scopeLine, searchMembers, segmentLabel, tabOf, unclassified,
 } from '../src/pages/admin/segments/segModel.js';
 import PersonaSegments from '../src/pages/admin/segments/PersonaSegments.jsx';
 import { legacyContractsTarget } from '../src/pages/admin/LegacyContractsRedirect.jsx';
 import { stripFor } from '../src/lib/hqStrips.js';
-import { PERSONAS } from '../src/lib/personas.js';
 
 const h = React.createElement;
 const read = (p) => readFileSync(resolve(process.cwd(), p), 'utf8');
@@ -53,38 +52,12 @@ test('the addresses, the redirect, the strip and the two moved notices', () => {
   assert.equal(movedNotices(true).personas, 'Personas is now Persona segments, under Content.');
 });
 
-test('admins are left out of every count; the tiles are in a segment and no segment over members', () => {
+// D1004 (#2819): Overview's tiles, charts and cards count from D999's segment read, so the
+// list-based tiles, segments by profile, how set, bands and cards left this model; they are
+// tested on D999's blocks in persona_segments_overview_d1004.
+test('admins are left out; an unknown stored id is shown as itself; Unclassified and search', () => {
   assert.equal(members(USERS).length, 10);
-  assert.deepEqual(tiles(USERS), { members: 10, tagged: 6, untagged: 4, pct: 60 });
-  assert.equal(tiles([]).pct, null, 'a percentage of nobody');
-});
-
-test('segments by profile: the member\'s role, a bar per segment, a hollow no-segment count, Other only when it holds someone', () => {
-  const g = Object.fromEntries(segmentsByProfile(USERS).map((x) => [x.role || 'other', x]));
-  assert.deepEqual(g.investor.bars.map((b) => [b.id, b.count]), [['angel_scout', 2], ['lp_individual', 1]]);
-  assert.equal(g.investor.none, 1);
-  assert.equal(g.advisor.bars.length, 0);
-  assert.equal(g.advisor.none, 1);
-  assert.equal(g.exploring.bars[0].id, 'founder_new');
-  assert.equal(g.other.total, 1);
-  assert.equal(segmentsByProfile(USERS.slice(0, 10)).some((x) => !x.role), false);
-});
-
-test('how segments were set, and confidence bands over sign-up suggestions where a missing confidence is not 0%', () => {
-  const s = howSet(USERS);
-  assert.deepEqual(s.rows.map((r) => [r.label, r.count]), [['Suggested at sign-up', 4], ['Chosen by the member', 1], ['Set by an admin', 0]]);
-  assert.equal(s.other, 1);
-  const b = confidenceBands(USERS);
-  assert.equal(b.total, 4);
-  assert.deepEqual(b.counts.map((c) => c.count), [1, 0, 1, 1]);
-  assert.equal(b.unrecorded, 1, 'a null confidence was counted as under 50%');
   assert.equal(BANDS.length, 4);
-});
-
-test('the cards are the twelve segments with counts; an unknown stored id is shown as itself; Unclassified and search', () => {
-  const cards = segmentCards(USERS);
-  assert.equal(cards.length, PERSONAS.length);
-  assert.equal(cards.find((c) => c.id === 'angel_scout').count, 2, 'the admin\'s tag was counted');
   assert.match(segmentLabel('retired_one'), /not in the taxonomy/);
   const u = unclassified(USERS);
   assert.deepEqual(u.rows.map((r) => r.user_id), [5, 7, 8, 10]);
@@ -139,24 +112,20 @@ function stub(list) {
   return { seen, restore() { globalThis.fetch = original; } };
 }
 
-test('mounted Overview, as an Admin: one h1, the Accounts crumb and notice, the tiles, the charts, the waits, and today\'s re-tag table', async () => {
+test('mounted Overview, as an Admin: one h1, the Accounts crumb and notice, and today\'s re-tag table (D1004 draws the counts)', async () => {
+  // D1004 (#2819): Overview's tiles, charts and cards read D999's segment counts and D1000's
+  // profiles, tested in persona_segments_overview_d1004; the persona list feeds only the
+  // re-tag table and Unclassified now.
   const s = stub(() => json({ users: USERS }));
   const v = await render('/admin/persona-segments?moved=personas');
   try {
     assert.equal(v.h1s(), 1);
     assert.match(v.of('seg-header'), /Accounts.*Persona segments/s);
     assert.match(v.of('seg-header'), /Personas is now Persona segments, under Accounts\./);
-    assert.match(v.of('seg-tab-unclassified'), /Unclassified\s*4/);
-    assert.match(v.of('seg-tile-tagged'), /6.*of 10 members · 60%/s);
-    assert.match(v.of('seg-tile-untagged'), /4/);
-    for (const id of ['differ', 'moved30']) assert.match(v.of(`seg-tile-${id}`), /Not read here yet/);
-    assert.match(v.of('seg-group-investor'), /Angel \/ Scout.*2.*No segment.*1/s);
-    assert.match(v.of('seg-confidence-unrecorded'), /No confidence recorded for 1/);
-    assert.match(v.of('seg-wait-needs'), /Not read here yet/);
     assert.match(v.of('seg-move-table'), /User Personas/, 'the re-tag table is unreachable');
-    assert.equal(v.count('seg-scope-capped'), 0);
+    assert.equal(v.count('seg-scope-capped'), 0, 'Overview is not under Guard L');
     assert.ok(!v.has('hq-board-persona-segments'), 'a plain admin got the HQ rail');
-    assert.deepEqual([...new Set(s.seen.filter((p) => !p.startsWith('/api/ai')))], ['/api/personas/admin/list']);
+    assert.ok(s.seen.includes('/api/personas/admin/segments'), 'Overview reads the segment counts');
   } finally { await v.unmount(); s.restore(); }
 });
 

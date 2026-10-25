@@ -115,7 +115,8 @@ async function render(url) {
     root.render(h(MemoryRouter, { initialEntries: [url] },
       h(Routes, null,
         h(Route, { path: '/admin/partner-profiles', element: h(PartnerProfiles) }),
-        h(Route, { path: '/admin/partner-profiles/all', element: h(PartnerProfiles) }))));
+        h(Route, { path: '/admin/partner-profiles/all', element: h(PartnerProfiles) }),
+        h(Route, { path: '/admin/partner-profiles/:ref', element: h(PartnerProfiles) }))));
   });
   const settle = async () => { for (let i = 0; i < 10; i += 1) await act(async () => { await new Promise((r) => setTimeout(r, 0)); }); };
   await settle();
@@ -303,10 +304,10 @@ test('mounted: a row\'s "⋯" holds Open, Reopen for review on a verdict only, a
     assert.deepEqual(JSON.parse(post.body), { reason: 'Asked to redo the chat.' });
     assert.ok(!v.has('pp-reopen-dialog'));
     assert.match(v.of('pp-note'), /Back in the queue\./);
-    // Open is the record read, as the old button was.
+    // Open goes to the profile's own address (D995), which reads it by reference.
     await v.press('pp-row-more', at('Val Verified'));
     await v.press('pp-row-open');
-    assert.ok(s.seen.some((q) => q.path.startsWith('/api/profiling/admin/')));
+    assert.ok(s.seen.some((q) => q.path === '/api/admin/partner-profiles/pp_000000000c'));
   } finally { await v.unmount(); s.restore(); }
 });
 

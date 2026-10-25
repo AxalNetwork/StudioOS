@@ -86,6 +86,8 @@ test('the GP\'s checking takes the management fee and Holdings\' the licence fee
   if (!fee.ok) return;
   assert.equal(fee.instructions.account_masked, `••••${GP_NUMBER.slice(-4)}`);
   assert.equal(fee.instructions.beneficiary_name, 'Axal VC GP LLC');
+  assert.equal((fee.instructions as any).recorded_by_name, undefined);
+  assert.equal((fee.instructions as any).recorded_by, undefined);
   assert.equal(fee.warning, PAY_WARNING);
   assert.ok(!JSON.stringify(fee).includes(GP_NUMBER), 'the masked instructions carry the number');
 
@@ -105,7 +107,10 @@ test('the number comes only from revealPayInstructions, after its ledger row', a
   await insert(env, db, { entity: 'gp', number: GP_NUMBER, purposes: ['management_fee'] });
   const r = await revealPayInstructions(env, 'gp', 'management_fee', REVEAL);
   assert.equal(r.ok, true, JSON.stringify(r));
-  if (r.ok) assert.equal(r.instructions.account_number, GP_NUMBER);
+  if (r.ok) {
+    assert.equal(r.instructions.account_number, GP_NUMBER);
+    assert.equal((r.instructions as any).recorded_by_name, undefined);
+  }
   const rows = reveals(db);
   assert.equal(rows.length, 1);
   assert.equal(rows[0].context, 'admin_reveal');

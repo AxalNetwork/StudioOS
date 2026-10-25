@@ -15,7 +15,11 @@ Unreadable, never a zero count. `eventOrganiser.css` owns only these cards.
 `PublicEventDetailPage.jsx` retains public registration and paid checkout and
 shows the signed-in member's own registration. Signed-in numeric event paths
 use the authenticated detail endpoint; public slug paths use the public reader.
-`MyEventsPage.jsx` is My events (D1030, #2387): on a desktop, Upcoming, Hosting, Discover and Past at `/my/events`, `/hosting`, `/discover` and `/past`, built from the pure `myEventsModel.js` (the tabs, a place in the canvas's words, the groups, Past and the counts); a failed read is never "none", and the phone keeps D700's A7m sections. `EventEditorPage.jsx`
+`MyEventsPage.jsx` is My events (D1030, #2387): on a desktop, Upcoming, Hosting, Discover and Past at `/my/events`, `/hosting`, `/discover` and `/past`, built from the pure `myEventsModel.js` (the tabs, a place in the canvas's words, the groups, Past and the counts); a failed read is never "none", and the phone keeps D700's A7m sections.
+
+`eventTimeModel.js` (D1115) formats saved instants in the event’s own zone and
+preserves unchanged seconds/DST occurrences; new local values are converted by
+the existing Worker writer. `EventEditorPage.jsx`
 reads the detail envelope’s `event` and audience rules, and refuses an edit when
 the detail is unreadable. A draft or sent-back event offers one action (D1031): "Publish"
 when unlisted or private, "Send for review" when public. Its words come from
@@ -26,3 +30,20 @@ the member’s own stored check-in code and `comp` flag; member calendar links u
 the authenticated numeric-ID route. `PublicEventsPage.jsx` is the public Programs & Events page (D679): the
 Spin-Out Lab's open cohort, read from `frontend/src/lib/spinoutLab.js`, above the public
 event feed with its filters, archive, paging and calendar file.
+
+
+D1131 (#3011) adds the next-event presenting and recorded seat-source pills,
+the timed Join control, actual suggestion eligibility and its own retry state,
+event-day Check in on desktop Hosting/Hosting soon, and Events' account-menu
+Current marker. `eventTime.js` shares UTC timestamp parsing and event-zone day
+rules with `hostHeaderModel.js`; `myEventsModel.js` holds the join boundary,
+source words and promotion-row projection. A durable promotion marker and
+rule-derived seat source await a migration number; no historical source or
+promotion is guessed. See `design/EVENT_SYSTEM.md` §10 for the surface's current
+scope and the parts still pending. Calendar cancellation cleanup is the Worker's
+`cloudflare-worker/src/routes/_eventCalendar.ts` / `cloudflare-worker/src/services/calendar/cancelEvents.ts`, not a client-side provider call.
+
+D1131 cleanup uses the existing CF/D1 job queue: two immediate copies, bounded
+continuation, independent provider retries and a fresh cancellation check on
+delivery. Its queue contract is in `cloudflare-worker/src/services/queueWorker.ts`
+and `cloudflare-worker/src/models/jobs.ts`; no new schema or binding is needed.

@@ -17,6 +17,7 @@ import { Loading, Empty, Unreadable, NotRecorded, StatusPill, BTN } from './Deal
  * takes a confirmation that says members are not notified. The close call is
  * made only from the confirmation's own button.
  */
+// D1149: project-level syndicates retain USD; a deal cannot relabel them.
 export default function DealSyndicates({ projectId, user }) {
   const [state, setState] = useState({ loading: true, error: false, rows: null });
   const [open, setOpen] = useState(null);
@@ -44,7 +45,7 @@ export default function DealSyndicates({ projectId, user }) {
                   <li key={s.id} className="flex items-center justify-between gap-2 p-3">
                     <div className="min-w-0">
                       <div className="font-semibold text-gray-900 dark:text-gray-100">{s.name}</div>
-                      <div className="text-xs text-gray-500">{centsMoney(s.committed_cents) || '$0.00'} committed · {s.members} member{Number(s.members) === 1 ? '' : 's'}</div>
+                      <div className="text-xs text-gray-500">{centsMoney(s.committed_cents) || 'Not recorded'} committed · {s.members} member{Number(s.members) === 1 ? '' : 's'}</div>
                     </div>
                     <div className="flex items-center gap-2">
                       <SyndicateStatus status={s.status} />
@@ -137,7 +138,7 @@ export function SyndicateDrawer({ state, onRetry, canClose, onClose, onClosed, i
                   <dt className="text-gray-500">Target</dt>
                   <dd>{s.target_cents ? centsMoney(s.target_cents) : <NotRecorded reason={STATES.syndicates.nrTarget} />}</dd>
                   <dt className="text-gray-500">Committed</dt>
-                  <dd className="font-mono">{centsMoney(s.committed_cents) || '$0.00'}</dd>
+                  <dd className="font-mono">{centsMoney(s.committed_cents) || 'Not recorded'}</dd>
                   <dt className="text-gray-500">Members</dt>
                   <dd>{s.member_count ?? (s.members || []).length}</dd>
                   <dt className="text-gray-500">Creator</dt>

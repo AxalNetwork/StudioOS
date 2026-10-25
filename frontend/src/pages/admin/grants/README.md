@@ -25,6 +25,12 @@ studio's side is the Programs tab of its licence page,
   send schedule, the switches), the grant lightbox (GR4 and its review),
   the answer dialog (GR5d) and Edit defaults.
 - `grantsModel.js` — the pure model every view and the test share.
+- `ProgramGrantsHistory.jsx` — D1126 (#3006): HQ's History tab at
+  `/admin/licences/programs/history`: every licence's program decisions,
+  newest first, with HQ's reason, filtered by program, a page at a time. It
+  reads `GET /api/admin/program-grants/history` and writes nothing. The
+  header's More menu downloads the whole grid as CSV
+  (`GET /api/admin/program-grants/export.csv`), on the tabs and on History.
 
 The programs, their groups and the words both sides read live in
 `../../../lib/programGrants.js`.
@@ -40,5 +46,6 @@ The programs, their groups and the words both sides read live in
   as the Worker does; Pause and End stay open.
 - The tabs are literal `HeaderTab`s and the one-studio doors are literal
   links, so the reachability walk sees them.
-- A tab is not added before its feature (D953's rule): there is no History
-  tab until a read spans studios.
+- A tab is not added before its feature (D953's rule). History came with
+  the read that spans studios (D1126).
+- A failed CSV download says so on the page with the Worker's sentence.

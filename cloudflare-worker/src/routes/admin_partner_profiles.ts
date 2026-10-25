@@ -16,6 +16,9 @@
  *                   `export_not_logged`).
  *   GET /:ref       one profile by its reference, `ein` masked, logged as the
  *                   D612 profile read (`partner_profile_access`) by reference.
+ *                   D995: it also says whether Unbind applies (`unbind`), by
+ *                   the unbind route's own rule, so the page offers it only
+ *                   when the write would take it.
  *   GET /:ref/history   D991: the profile's captures and decisions, newest
  *                   first, paged. A decision names the admin who made it.
  *   POST /:ref/reopen   D991: back in the queue, with an optional reason. The
@@ -136,8 +139,18 @@ r.get('/:ref', async (c) => {
     const memberId = listed?.account?.user_id ?? null;
     await logRead(c.env, admin, 'partner_profile_access',
       memberId ? `Admin read partner profile ref=${ref} user_id=${memberId}` : `Admin read partner profile ref=${ref}; no user account`);
+    // D995 — Unbind applies, by POST /:ref/unbind's own rule, when the profile is
+    // bound and its address now belongs to another account, or to none.
+    let unbind: { eligible: boolean; reason: string | null; holder: { user_id: number; name: string | null } | null };
+    if (row.user_id == null) unbind = { eligible: false, reason: 'not_bound', holder: null };
+    else {
+      const h = await c.env.DB.prepare('SELECT id, name FROM users WHERE LOWER(email) = LOWER(?) ORDER BY id LIMIT 1').bind(row.email).first<any>();
+      unbind = h != null && Number(h.id) === Number(row.user_id)
+        ? { eligible: false, reason: 'address_still_theirs', holder: null }
+        : { eligible: true, reason: null, holder: h == null ? null : { user_id: Number(h.id), name: h.name ?? null } };
+    }
     // D634 — the tax ID leaves masked. The list's derived fields ride beside the row.
-    return c.json({ ...maskPartnerProfile(row), listed });
+    return c.json({ ...maskPartnerProfile(row), listed, unbind });
   } catch (e) {
     return refuse(c, 503, { code: 'partner_profiles_unreadable', message: 'The partner profile could not be read. Try again in a moment.', raw: e });
   }

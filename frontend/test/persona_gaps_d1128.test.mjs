@@ -23,6 +23,10 @@ function Probe() { const location = useLocation(); return h('p', { 'data-testid'
 
 test('HQ gets both New segment doors on an empty Overview; a plain Admin gets no authoring door', async () => {
   api.listPersonasAdmin = async () => ({ users: [] });
+  // D1004's Overview reads its own three blocks; answer each, empty.
+  personaSegmentsApi.read = async () => ({});
+  personaSegmentsApi.segmentProfiles = async () => ({ items: [] });
+  personaSegmentsApi.segmentCoverage = async () => ({ items: [] });
   for (const hq of [false, true]) {
     const v = await mountContracts(h(AuthProvider, null, h(PersonaSegments)), '/admin/persona-segments', { ...HQ, is_super_admin: hq ? 1 : 0 });
     try {

@@ -295,6 +295,50 @@ r.get('/admin/queue', async (c) => {
   } catch (e) { return mapError(c, e); }
 });
 
+/**
+ * D1132 (#3012) — one pitch for the board's item address
+ * (`/admin/approvals/co-marketing/…`), as the queue shows it, with its
+ * partner, its attribution and who decided it. `requireAdmin`, like the queue.
+ */
+r.get('/admin/pitches/:uid', async (c) => {
+  try {
+    await requireAdmin(c);
+    const p = await c.env.DB.prepare('SELECT * FROM comarketing_pitches WHERE uid = ?').bind(c.req.param('uid')).first<Pitch>();
+    if (!p) return refuse(c, 404, { code: 'pitch_not_found', message: 'That pitch does not exist.' });
+    const partner = await c.env.DB.prepare('SELECT name, company FROM partners WHERE id = ?').bind(p.partner_id).first<any>();
+    const d = pitchDto(p, await attribCounts(c.env, p.id));
+    d.partner_name = partner?.name || null;
+    d.partner_company = partner?.company || null;
+    d.decided = await deciderOf(c.env, p);
+    return c.json(d);
+  } catch (e) { return mapError(c, e); }
+});
+
+/**
+ * Who decided a pitch and when: the reviewer the row names, or null while it
+ * is undecided. A reviewer whose account is gone reads by its id.
+ */
+async function deciderOf(env: Env, p: Pitch) {
+  if (p.status === 'proposed' || p.reviewed_by_user_id == null) return null;
+  const u = await env.DB.prepare('SELECT name, email FROM users WHERE id = ?').bind(p.reviewed_by_user_id).first<any>();
+  return {
+    status: p.status,
+    by: { id: Number(p.reviewed_by_user_id), name: (u?.name || '').trim() || u?.email || `account ${p.reviewed_by_user_id}` },
+    at: p.reviewed_at,
+  };
+}
+
+/** D1132: a pitch already decided answers this, with who decided it. */
+async function alreadyDecided(c: Context<{ Bindings: Env }>, p: Pitch, target: string) {
+  const decided = await deciderOf(c.env, p);
+  const who = decided ? `${decided.by.name} ${decided.status === 'rejected' ? 'declined' : decided.status} it` : `It is ${p.status}`;
+  return refuse(c, 409, {
+    code: 'pitch_decided',
+    message: `This pitch cannot be ${target === 'reject' ? 'declined' : `${target}d`} now. ${who}${decided?.at ? ` on ${String(decided.at).slice(0, 10)}` : ''}.`,
+    extra: { status: p.status, decided },
+  });
+}
+
 /** D1039: a decline tells the partner why, in at least this many characters. */
 export const DECLINE_REASON_MIN = 10;
 
@@ -321,9 +365,7 @@ async function decide(c: Context<{ Bindings: Env }>, target: 'approve' | 'reject
     .bind(c.req.param('uid')).first<Pitch>();
   if (!p) return c.json({ detail: 'Pitch not found' }, 404);
   const next = target === 'approve' ? 'approved' : target === 'reject' ? 'rejected' : 'published';
-  if (!LEGAL_TRANSITIONS[next].has(p.status)) {
-    return c.json({ detail: `Cannot ${target} from ${p.status}` }, 409);
-  }
+  if (!LEGAL_TRANSITIONS[next].has(p.status)) return alreadyDecided(c, p, target);
   let setAttribCode = p.attribution_code;
   if (next === 'approved' && !p.attribution_code) setAttribCode = await mintCode(c.env);
   let publishedAt = p.published_at;
@@ -338,10 +380,16 @@ async function decide(c: Context<{ Bindings: Env }>, target: 'approve' | 'reject
   } else if (body.notes !== undefined) {
     reviewNotes = body.notes ? String(body.notes).slice(0, 2000) : null;
   }
-  await c.env.DB.prepare(
+  // D1132: only from the status this read saw, so a second admin deciding in
+  // between is refused with who decided, never overwritten.
+  const written = await c.env.DB.prepare(
     `UPDATE comarketing_pitches SET status=?, review_notes=?, reviewed_by_user_id=?, reviewed_at=?,
-       attribution_code=?, published_at=?, published_url=?, updated_at=? WHERE id=?`
-  ).bind(next, reviewNotes, user.id, nowIso(), setAttribCode, publishedAt, publishedUrl, nowIso(), p.id).run();
+       attribution_code=?, published_at=?, published_url=?, updated_at=? WHERE id=? AND status=?`
+  ).bind(next, reviewNotes, user.id, nowIso(), setAttribCode, publishedAt, publishedUrl, nowIso(), p.id, p.status).run();
+  if (Number(written?.meta?.changes ?? 0) !== 1) {
+    const now = await c.env.DB.prepare('SELECT * FROM comarketing_pitches WHERE id = ?').bind(p.id).first<Pitch>();
+    return alreadyDecided(c, now ?? p, target);
+  }
   const fresh = await c.env.DB.prepare('SELECT * FROM comarketing_pitches WHERE id = ?').bind(p.id).first<Pitch>();
   return c.json(pitchDto(fresh!, await attribCounts(c.env, p.id)));
 }

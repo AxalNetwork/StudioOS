@@ -39,11 +39,13 @@ test('TemplatePreviewBody draws the stub line for a document with no body, and t
   assert.doesNotMatch(html, /<b>Parties<\/b>/, 'the body is text, never markup');
 });
 
-test('PartnerProfilesConsole draws a refused send from esign_refusal', () => {
-  const s = codeOnly(read('frontend/src/pages/admin/consoles/PartnerProfilesConsole.jsx'));
-  assert.match(s, /res\?\.esign_refusal/);
-  assert.match(s, /setEsignRefusal\(res\.esign_refusal\)/);
-  assert.match(s, /\{esignRefusal\.message\}/);
+test('a partner profile\'s record draws a refused send from esign_refusal (D995)', () => {
+  const m = codeOnly(read('frontend/src/pages/admin/profiles/profileModel.js'));
+  assert.match(m, /if \(res\?\.esign_refusal\)/);
+  assert.match(m, /res\.esign_refusal\.message/);
+  const r = codeOnly(read('frontend/src/pages/admin/profiles/ProfileRecord.jsx'));
+  assert.match(r, /sendResult\(res, \{ status, email: p\?\.email \}\)/);
+  assert.match(r, /\{result\.text\}/);
 });
 
 test('the explainer and the how-to describe the library, not a generator', () => {

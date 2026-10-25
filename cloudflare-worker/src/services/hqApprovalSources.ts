@@ -18,7 +18,7 @@ import { pressureOf } from './branchHome';
 
 export type HqLaneKey =
   | 'testing_programs' | 'learning' | 'tickets' | 'payouts' | 'ai_runs'
-  | 'notices' | 'support' | 'proposals';
+  | 'notices' | 'support' | 'proposals' | 'grants';
 
 /** An HQ lane: `scope: 'hq'`, so D1040's `sourcesFor` shows it to a Super Admin only. */
 export type HqApprovalSource = ApprovalSource & { key: HqLaneKey; scope: 'hq' };
@@ -154,12 +154,19 @@ export const HQ_APPROVAL_SOURCES: readonly HqApprovalSource[] = [
     // `hq_escalations` with `status = 'open'`, Support's own summary
     // (`openEscalationSummary`). `raised_by_branch_user_id` is a branch's id,
     // never joined to HQ's users; the name and the branch code are the copy.
+    // D1132 (#3012): less the three program requests (`PROGRAM_REQUEST_KINDS`),
+    // which are the `grants` lane below: Support's generic answer refuses
+    // them, so counting them here would count each twice, at a door that
+    // cannot decide them.
     countSql:
-      'SELECT COUNT(*) AS n, MIN(datetime(created_at)) AS oldest FROM hq_escalations WHERE status = \'open\'',
+      'SELECT COUNT(*) AS n, MIN(datetime(created_at)) AS oldest FROM hq_escalations WHERE status = \'open\' '
+      + "AND kind NOT IN ('program_grant', 'program_terms_change', 'program_end')",
     rowsSql:
       "SELECT e.id AS id, COALESCE(NULLIF(e.raised_by_name, ''), 'studio ' || e.branch_code) AS who, "
       + "e.kind || ' · ' || e.subject AS what, e.created_at AS created_at "
-      + "FROM hq_escalations e WHERE e.status = 'open' ORDER BY julianday(e.created_at) ASC LIMIT ?",
+      + "FROM hq_escalations e WHERE e.status = 'open' "
+      + "AND e.kind NOT IN ('program_grant', 'program_terms_change', 'program_end') "
+      + 'ORDER BY julianday(e.created_at) ASC LIMIT ?',
     scope: 'hq',
     notifies: 'The studio',
     decidedOn: 'Support',
@@ -182,6 +189,27 @@ export const HQ_APPROVAL_SOURCES: readonly HqApprovalSource[] = [
     notifies: 'Nobody yet',
     decidedOn: 'Programs › Proposals',
   },
+  {
+    key: 'grants',
+    label: 'Program-grant requests',
+    // D1132 (#3012): a studio's program request (D983, migration 259), an
+    // `hq_escalations` row of one of `PROGRAM_REQUEST_KINDS`, waiting while
+    // `open`: the answer routes write only `WHERE … AND status = 'open'`
+    // (`routes/admin_program_requests.ts`). The studio is told in the bell.
+    countSql:
+      'SELECT COUNT(*) AS n, MIN(datetime(created_at)) AS oldest FROM hq_escalations WHERE status = \'open\' '
+      + "AND kind IN ('program_grant', 'program_terms_change', 'program_end')",
+    rowsSql:
+      "SELECT e.id AS id, COALESCE(NULLIF(e.raised_by_name, ''), 'studio ' || e.branch_code) AS who, "
+      + "CASE e.kind WHEN 'program_grant' THEN 'Program grant' WHEN 'program_terms_change' THEN 'Program terms change' "
+      + "ELSE 'Program end' END || ' · ' || e.subject AS what, e.created_at AS created_at "
+      + "FROM hq_escalations e WHERE e.status = 'open' "
+      + "AND e.kind IN ('program_grant', 'program_terms_change', 'program_end') "
+      + 'ORDER BY julianday(e.created_at) ASC LIMIT ?',
+    scope: 'hq',
+    notifies: 'The studio',
+    decidedOn: 'Licences › Program grants › Requests',
+  },
 ];
 
 /**
@@ -197,11 +225,7 @@ export function inboxSources(): readonly ApprovalSource[] {
 
 /** HQ's lanes with no store to count yet, said rather than laned. */
 export const HQ_NOT_COUNTED_YET: ReadonlyArray<{ key: string; label: string; reason: string }> = [
-  {
-    key: 'grants',
-    label: 'Program-grant requests',
-    reason: 'No program-grant request is stored yet; part 2 of Program grants (#2774) adds them.',
-  },
+  // D1132 (#3012): empty. Program-grant requests are counted (the `grants` lane).
 ];
 
 /**
