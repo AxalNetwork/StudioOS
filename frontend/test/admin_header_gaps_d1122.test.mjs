@@ -33,6 +33,15 @@ test('Legal console and only its dedicated test references are retired; Contract
   assert.match(read('frontend/src/pages/hq/ContractsPage.jsx'), /export \{ default \} from '\.\.\/admin\/contracts\/ContractsDesk\.jsx'/);
 });
 
+test('headers without a breadcrumb start at the title, including scope and tabs', async () => {
+  for (const crumb of [null, { label: 'Community', to: '/admin/community' }]) {
+    const v = await mountContracts(h(AdminPageHeader, { title: 'Community', crumb, scope: true, tabs: h(HeaderTab, { to: '/admin/community' }, 'Overview') }));
+    try {
+      assert.ok(v.props(byId(v, 'admin-page-title-row')).className.includes(crumb ? 'row-start-2' : 'row-start-1'));
+    } finally { await v.unmount(); }
+  }
+});
+
 test('phone primary action has its own full-width row under the line; tabs retain their fade and notice has a touch target', async () => {
   const v = await mountContracts(h(AdminPageHeader, {
     title: 'Invitations', line: 'Bring partners in.', actions: h('button', null, 'New invitation'),
@@ -43,11 +52,11 @@ test('phone primary action has its own full-width row under the line; tabs retai
     const actions = byId(v, 'admin-page-actions');
     const primary = actions.childNodes[0];
     const cls = v.props(primary).className;
-    assert.match(cls, /col-span-2 row-start-4/);
+    assert.match(cls, /row-start-3/);
     assert.ok(cls.includes('[&>*]:w-full'));
     assert.ok(cls.includes('sm:[&>*]:w-auto'));
     const line = v.nodes().find(n => n.tagName === 'P');
-    assert.match(v.props(line).className, /row-start-3/);
+    assert.match(v.props(line).className, /row-start-2/);
     const tabs = byId(v, 'admin-page-tabs');
     assert.match(v.props(tabs).style.maskImage, /linear-gradient/);
     assert.ok(v.props(tabs).style.paddingRight >= 16, 'the final tab must scroll clear of the fade');

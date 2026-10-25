@@ -131,7 +131,7 @@ export function HeaderMenuItem({ to = null, onSelect = null, children, 'data-tes
  * focus to the first item; the arrow keys, Home and End move between items;
  * Escape and an outside click close it, Escape returning focus to "⋯".
  */
-function MoreMenu({ children }) {
+function MoreMenu({ children, hasCrumb }) {
   const [open, setOpen] = useState(false);
   const phone = usePhoneWidth('(max-width: 639px)');
   const wrap = useRef(null);
@@ -171,7 +171,7 @@ function MoreMenu({ children }) {
     </div>
   );
   return (
-    <div ref={wrap} className="relative col-start-2 row-start-2 justify-self-end" onKeyDown={onKey}>
+    <div ref={wrap} className={`relative col-start-2 justify-self-end ${hasCrumb ? 'row-start-2' : 'row-start-1'}`} onKeyDown={onKey}>
       <button ref={button} type="button" aria-label="More" aria-haspopup={phone ? 'dialog' : 'menu'} aria-expanded={open} aria-controls={open ? menu : undefined} onClick={() => setOpen((o) => !o)} className="grid h-11 w-11 place-items-center rounded-[9px] border border-axal-hairline bg-white text-[16px] font-bold text-axal-ink dark:border-gray-700 dark:bg-gray-900 dark:text-gray-100 sm:h-10 sm:w-10" data-testid="admin-page-more">⋯</button>
       {open ? phone ? (
         <Lightbox label="More" phone="sheet" onClose={() => close(true)} returnFocusTo={button} testId="admin-page-more-sheet">
@@ -216,17 +216,17 @@ export default function AdminPageHeader({
           </Link>
         </>
       )}
-      <div className="col-start-1 row-start-2 flex min-w-0 flex-wrap items-center gap-[9px]">
+      <div className={`col-start-1 flex min-w-0 flex-wrap items-center gap-[9px] ${crumb ? 'row-start-2' : 'row-start-1'}`} data-testid="admin-page-title-row">
           <h1 ref={titleRef} tabIndex={-1} className="m-0 text-[20px] font-extrabold leading-tight tracking-[-.02em] text-axal-ink outline-none dark:text-gray-100 sm:text-[24px]">{title}</h1>
           {pills.map((p) => (
             <span key={p.label} title={p.title} className={`inline-flex items-center rounded-full border px-2.5 py-0.5 text-[11.5px] font-bold ${PILL_TONES[p.tone] || PILL_TONES.hq}`}>{p.label}</span>
           ))}
       </div>
-      {actions || more ? <div className="contents sm:col-start-2 sm:row-start-2 sm:flex sm:items-start sm:gap-2" data-testid="admin-page-actions">
-        {actions ? <div className="col-span-2 row-start-4 flex min-w-0 flex-col gap-2 [&>*]:w-full sm:flex-row sm:[&>*]:w-auto">{actions}</div> : null}
-        {more ? <MoreMenu>{more}</MoreMenu> : null}
+      {actions || more ? <div className={`contents sm:col-start-2 sm:flex sm:items-start sm:gap-2 ${crumb ? 'sm:row-start-2' : 'sm:row-start-1'}`} data-testid="admin-page-actions">
+        {actions ? <div className={`col-span-2 flex min-w-0 flex-col gap-2 [&>*]:w-full sm:flex-row sm:[&>*]:w-auto ${crumb ? 'row-start-4' : 'row-start-3'}`}>{actions}</div> : null}
+        {more ? <MoreMenu hasCrumb={Boolean(crumb)}>{more}</MoreMenu> : null}
       </div> : null}
-      {line ? <p className="col-span-2 row-start-3 m-0 max-w-[72ch] text-[13px] leading-normal text-axal-muted dark:text-gray-400">{line}</p> : null}
+      {line ? <p className={`col-span-2 m-0 max-w-[72ch] text-[13px] leading-normal text-axal-muted dark:text-gray-400 ${crumb ? 'row-start-3' : 'row-start-2'}`}>{line}</p> : null}
       {facts ? <p className="col-span-2 m-0 font-mono text-[11.5px] text-axal-muted dark:text-gray-400" data-testid="admin-page-facts">{facts}</p> : null}
       {scope ? (
         <div className="col-span-2">
