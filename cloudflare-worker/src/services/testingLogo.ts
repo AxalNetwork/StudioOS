@@ -72,7 +72,9 @@ const num = (v: string | undefined) => {
 /** Whether the root `<svg>` says it is square: its viewBox, else its width and height. */
 export function svgIsSquare(svg: string): boolean | null {
   const root = /^<svg\b([^>]*)>/i.exec(svg)?.[1] ?? '';
-  const attr = (name: string) => new RegExp(`\\s${name}\\s*=\\s*["']([^"']*)["']`, 'i').exec(root)?.[1];
+  // One literal pattern per attribute: nothing a caller passes becomes a regular expression.
+  const ATTR = { viewBox: /\sviewBox\s*=\s*["']([^"']*)["']/i, width: /\swidth\s*=\s*["']([^"']*)["']/i, height: /\sheight\s*=\s*["']([^"']*)["']/i };
+  const attr = (name: keyof typeof ATTR) => ATTR[name].exec(root)?.[1];
   const box = attr('viewBox')?.trim().split(/[\s,]+/).map(Number);
   if (box && box.length === 4 && box.every(Number.isFinite) && box[2] > 0 && box[3] > 0) return box[2] === box[3];
   const w = num(attr('width')), h = num(attr('height'));

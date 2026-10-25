@@ -160,7 +160,8 @@ test('a square PNG is stored under the Worker\'s key and served with nosniff and
   assert.equal(r.status, 200, JSON.stringify(r.body));
   assert.equal(r.body.logo.content_type, 'image/png');
   const key = logoKey(w, uid);
-  assert.match(key, new RegExp(`^testing-logos/${uid}/[0-9a-f-]{36}\\.png$`));
+  assert.ok(key.startsWith(`testing-logos/${uid}/`), key);
+  assert.match(key.slice(`testing-logos/${uid}/`.length), /^[0-9a-f-]{36}\.png$/);
   assert.equal(r.body.logo.logo_key, key);
   assert.ok(w.files.objects.has(key));
   assert.deepEqual(w.db.prepare('SELECT action FROM testing_events ORDER BY id').all().map((e: any) => e.action), ['created', 'logo_set']);
