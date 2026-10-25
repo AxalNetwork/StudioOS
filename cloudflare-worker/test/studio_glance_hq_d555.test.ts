@@ -44,7 +44,7 @@ const ago = (days: number) => new Date(NOW - days * 86_400_000).toISOString().sl
 
 function seeded() {
   const db = new DatabaseSync(':memory:', { enableForeignKeyConstraints: false, enableDoubleQuotedStringLiterals: true });
-  for (const t of ['users', 'user_role_review', 'partner_profiles', 'projects', 'tickets', 'ai_usage_logs', 'activity_logs']) db.exec(ddl(t));
+  for (const t of ['users', 'user_role_review', 'partner_profiles', 'projects', 'tickets', 'ai_usage_logs', 'activity_logs', 'esign_envelopes']) db.exec(ddl(t));
   // D990: a Draft is read off migration 275's answer columns too.
   db.exec(readFileSync(resolve(process.cwd(), 'cloudflare-worker/sql/migrations/275_partner_profiles_columns.sql'), 'utf8'));
   const u = db.prepare(`INSERT INTO users (id, role, name, email, is_active, created_at, kyc_status, kyc_submitted_at)
@@ -54,6 +54,10 @@ function seeded() {
   u.run(3, 'founder', 'Finn Founder', 'finn@secret.example', 1, ago(20), 'approved', null);
   u.run(4, 'investor', 'Ivy Investor', 'ivy@secret.example', 1, ago(2), 'approved', null);
   u.run(5, 'exploring', 'Eve Explorer', 'eve@secret.example', 1, ago(10), 'approved', null);
+  // D1039: the Exploring lane counts an Explorer whose binding agreement is signed.
+  db.prepare(`INSERT INTO esign_envelopes (id, envelope_uuid, user_id, document_type, document_title, document_body, body_sha256, status, created_by, completed_at)
+              VALUES (70, 'env-70', 5, 'binding_agreement', 'Binding agreement', 'Synthetic', 'synthetic', 'completed', 1, ?)`).run(ago(2));
+  db.prepare('INSERT INTO user_role_review (user_id, binding_envelope_id) VALUES (5, 70)').run();
   u.run(6, 'investor', 'Gone Person', 'gone@secret.example', 0, ago(1), 'approved', null);
   db.prepare(`INSERT INTO partner_profiles (email, persona, admin_status, created_at) VALUES (?, ?, 'pending', ?)`)
     .run('pp@secret.example', 'agency', ago(9));
@@ -86,7 +90,7 @@ test('HQ accounts: counts by role over active accounts, new in 7 and 30 days, ex
     { role: 'founder', count: 2 }, { role: 'admin', count: 1 }, { role: 'exploring', count: 1 }, { role: 'investor', count: 1 },
   ]);
   assert.deepEqual([a.new_7d, a.new_30d, a.deactivated], [2, 4, 1]);
-  assert.equal(a.exploring, 1, 'the Exploring lane\'s own count');
+  assert.equal(a.exploring, 1, 'every account in the holding role, from the Exploring lane\'s `holding` figure (D1039)');
   assert.equal(a.trash_projects, 1);
 });
 

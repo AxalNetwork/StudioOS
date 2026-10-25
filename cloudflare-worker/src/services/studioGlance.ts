@@ -318,7 +318,12 @@ async function hqGlance(env: Env, now: number, superAdmin: boolean) {
     superAdmin ? hqDecides(env, now) : Promise.resolve(null),
   ]);
   const exploringLane = pressure.lanes.find((l) => l.key === 'exploring');
-  const accounts = await hqAccounts(env, exploringLane ? exploringLane.count : null, now);
+  // D1039: the lane counts signed Explorers only; the Accounts tile still
+  // counts every account in the holding role, from the lane's `holding` figure.
+  const explorerFigures = exploringLane?.sub;
+  const holding = exploringLane?.count == null || !explorerFigures || !('holding' in explorerFigures)
+    ? null : explorerFigures.holding;
+  const accounts = await hqAccounts(env, holding, now);
   return {
     tier: 'hq' as const,
     branch: null,

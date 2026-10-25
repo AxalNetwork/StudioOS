@@ -53,7 +53,7 @@ export type QueuePressureLane = {
   notifies: string;
   decided_on: string | null;
   undecided_reason?: string;
-  sub?: { label: string; count: number | null };
+  sub?: LaneCount['sub'];
 };
 
 export type ProgrammeClock = {
@@ -391,7 +391,7 @@ export function pressureOf<K extends string>(
       notifies: l.notifies,
       decided_on: l.decided_on,
       ...(l.undecided_reason ? { undecided_reason: l.undecided_reason } : {}),
-      ...(l.sub ? { sub: l.sub } : {}),
+      ...(l.sub === undefined ? {} : { sub: l.sub }),
     };
   });
   queue_pressure.sort(byPressure);

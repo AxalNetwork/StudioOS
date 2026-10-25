@@ -64,7 +64,7 @@ export const LANES = [
   { key: 'kyc', group: 'people', label: 'KYC', glance: 'kyc', door: 'KYC & KYB' },
   { key: 'kyb', group: 'people', label: 'KYB', glance: 'kyb', door: 'KYC & KYB', isNew: true },
   { key: 'partner_profiles', group: 'people', label: 'Partner profiles', glance: 'partner_profiles', door: 'Partner profiles' },
-  { key: 'exploring', group: 'people', label: 'Explorers ready for a profile', glance: 'exploring', door: 'Exploring board', note: 'Counts every Explorer, signed or not, until part 1 counts only those who signed the binding agreement.' },
+  { key: 'exploring', group: 'people', label: 'Explorers ready for a profile', glance: 'exploring', door: 'Exploring board' },
   { key: 'product_testers', group: 'people', label: 'Product testers', glance: null, here: true, isNew: true, waits: 'No product tester application is stored yet (part 4).' },
   { key: 'lp', group: 'people', label: 'LP applications', glance: 'lp', door: 'LP applications' },
   { key: 'cohort', group: 'programs', label: 'Spin-Out Lab applications', glance: 'cohort', door: 'Spin-Out Lab' },

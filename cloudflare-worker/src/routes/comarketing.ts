@@ -5,7 +5,7 @@
 import { Hono } from 'hono';
 import type { Context } from 'hono';
 import type { Env } from '../types';
-import { requireAuth } from '../auth';
+import { requireAdmin, requireAuth } from '../auth';
 import { ensureTier } from '../middleware/requireTier';
 import { isAdmin, isPartner, mapError, nowIso, newUid, requirePartnerProfile } from './_t13t14t15_helpers';
 import { activeCompanyFor } from '../middleware/activeCompany';
@@ -273,10 +273,12 @@ r.post('/me/pitches/:uid/withdraw', async (c) => {
 });
 
 // Admin -----------------------------------------------------------------
+// D1039 (#2887): every admin route here is behind `requireAdmin`, so the HQ
+// compliance freeze and its refusals apply to the decisions (a read is never
+// frozen), as on every other admin surface.
 r.get('/admin/queue', async (c) => {
   try {
-    const user = await requireAuth(c);
-    if (!isAdmin(user)) return c.json({ detail: 'Admin only' }, 403);
+    await requireAdmin(c);
     const status = c.req.query('status') || 'proposed';
     const rows = await c.env.DB.prepare(
       'SELECT * FROM comarketing_pitches WHERE status = ? ORDER BY created_at DESC'
@@ -293,10 +295,28 @@ r.get('/admin/queue', async (c) => {
   } catch (e) { return mapError(c, e); }
 });
 
+/** D1039: a decline tells the partner why, in at least this many characters. */
+export const DECLINE_REASON_MIN = 10;
+
 async function adminTransition(c: Context<{ Bindings: Env }>, target: 'approve' | 'reject' | 'publish') {
-  const user = await requireAuth(c);
-  if (!isAdmin(user)) return c.json({ detail: 'Admin only' }, 403);
+  try {
+    return await decide(c, target);
+  } catch (e) { return mapError(c, e); }
+}
+
+async function decide(c: Context<{ Bindings: Env }>, target: 'approve' | 'reject' | 'publish') {
+  const user = await requireAdmin(c);
   const body = await c.req.json().catch(() => ({} as any));
+  if (target === 'reject') {
+    const reason = typeof body?.notes === 'string' ? body.notes.trim() : '';
+    if (reason.length < DECLINE_REASON_MIN) {
+      return refuse(c, 400, {
+        code: 'reason_required',
+        message: `A decline needs a reason of at least ${DECLINE_REASON_MIN} characters. The partner sees it.`,
+      });
+    }
+    body.notes = reason;
+  }
   const p = await c.env.DB.prepare('SELECT * FROM comarketing_pitches WHERE uid = ?')
     .bind(c.req.param('uid')).first<Pitch>();
   if (!p) return c.json({ detail: 'Pitch not found' }, 404);
