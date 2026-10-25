@@ -697,7 +697,7 @@ test('every wiring place D923 §1 names follows the page', () => {
   assert.doesNotMatch(sidebar, /'\/admin\/partners'/, 'Approvals no longer lights the page: exactly one row does');
   const placement = read('frontend/src/lib/adminPlacement.js');
   assert.match(placement, /\{ key: '\/admin\/partners', kind: 'row', label: 'Partner Invitations', route: '\/admin\/partner-invitations', hqOnly: false,\s*\.\.\.admin\('Community', 'card link'\), how: [^}]*also: \[admin\('Approvals', 'lane'\)\] \}/);
-  assert.match(read('frontend/src/pages/admin/HeldApprovals.jsx'), /<Link to="\/admin\/partner-invitations" className=\{CONSOLE\}>\/admin\/partner-invitations<\/Link>/);
+  assert.match(read('frontend/src/pages/admin/approvals/AdminApprovals.jsx'), /<Link to="\/admin\/partner-invitations" className=\{LINK\}>Partner invitations<\/Link>/);
   assert.match(read('frontend/src/pages/admin/adminStudioOverview.js'), /'Partner invitations': '\/admin\/partner-invitations',/);
   assert.match(read('frontend/src/pages/admin/community/AdminCommunity.jsx'), /<Link to="\/admin\/partner-invitations" className=\{LINK\}>Open partner invitations<\/Link>/);
   assert.match(read('frontend/src/lib/railPages.js'), /own\('\/admin\/partner-invitations', key\(AD, 'Community', 'Partner invitations'\)\)/);

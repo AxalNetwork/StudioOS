@@ -109,6 +109,30 @@ strength of a live route would empty the queue of the work it exists to track.
    `Trust Center v2.dc.html` to `backlog/` for a day, next to the `NEW` canvases
    that have no route, and away from the v1 of its own page.
 
+## Landed 2026-10-25 — Admin · Approvals (#2390)
+
+The owner's artifacts `MGs5M2u9Cfr4XdNyH1eyce` (the board grid) and
+`AzNTkGGaCTA1GJKRkUTT3w` (the page) came from S21's prompt on #2390:
+- `Approvals · Boards.dc.html` is the board grid (APR1 to APR16, with the
+  lettered boards APR2b, APR3a, APR4a, APR4v, APR5a–c, APR5r, APR6d, APR6t,
+  APR7a–c, APR8a, APR8b, APR8d, APR11a–b, APR13a–c, APR14a–b and APR15a–c), as
+  the artifact gave it;
+- `Approvals Page.dc.html` is the page, in the copy the grid's bundle carries.
+  The page artifact decodes to the same design, differing only in the font link
+  and `data-dc-script=""`.
+
+No value was edited.
+
+**Grade: UPGRADE.** `/admin/approvals` with Lanes, Decided and the three lane
+boards is live for every admin, and `/admin/held/approvals` forwards to it. S21's
+integration (D1038) draws the twenty lanes from the Studio glance (the nine new
+ones as "Not read here yet"), the Inbox's waiting lanes oldest first with their
+doors, HQ decides for a Super Admin, and the boards on the co-marketing queue
+and the experts read, reading and never deciding. Items, assignment, the new
+lanes' counts, the tester store, decision records, the log, the drawers and
+dialogs, phone and dark wait for D1038's nine parts, so this canvas stays in
+the queue until they land. The `ROUTE_MAP.md` row says what is drawn today.
+
 ## Landed 2026-10-25 — Events · My events (#2387)
 
 The owner's artifacts `FmbzyxCRunXN3NDxo2dC8P` (the board grid) and

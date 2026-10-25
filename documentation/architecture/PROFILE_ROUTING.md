@@ -13,8 +13,8 @@ Nothing here is typed by hand, so nothing here can disagree with them.
 each canvas and why. This document answers a different question: *who sees
 it, where in their nav, and how do they get there.*
 
-**Corpus:** 162 canonical canvases at `design/canvases/`, listed
-223 times below — a canvas serving two workspaces appears under both.
+**Corpus:** 163 canonical canvases at `design/canvases/`, listed
+225 times below — a canvas serving two workspaces appears under both.
 
 ## Column meanings
 
@@ -176,7 +176,7 @@ it, where in their nav, and how do they get there.*
 | Research · Sector | `/research/markets/sector/:slug` | Headerless | Full page | Sidebar → Headerless → Research | CURRENT | High |
 | Scoring Engine v2 | `/scoring` | — (no nav entry) | Full page | Deep link / in-page action | UPGRADE | Medium |
 
-## Subsidiary Admin — 27 canvases
+## Subsidiary Admin — 28 canvases
 
 | Canvas | Route | Nav section | Surface | Entry point | Status | Confidence |
 | --- | --- | --- | --- | --- | --- | --- |
@@ -186,6 +186,7 @@ it, where in their nav, and how do they get there.*
 | Admin Insights | `/admin/held/insights` | — (no nav entry) | Full page | Deep link / in-page action | UPGRADE | Medium |
 | Admin page header | `/admin/programs/spinout-lab` | Admin | Full page (proposed) | Sidebar → Admin → Programs | UPGRADE | Low |
 | Advisors & Partners | `/admin?tab=network-profiles` · `/admin/network-profiles` · `/deck` · `/admin/partner-invitations/firm-links` · `/firms` | Admin | Full page | Sidebar → Admin → Community | UPGRADE | High |
+| Approvals (admin) | `/admin/held/approvals` | — (no nav entry) | Full page | Deep link / in-page action | UPGRADE | Medium |
 | Cap table | `/raise/cap-table` · `/raise/cap-table/instruments` · `/option-pool` · `/scenarios` · `/raise/cap-table/:id` · `/new` | — (not routed) | Full page (proposed) | Not reachable yet | UPGRADE | Low |
 | Contracts · Subsidiary | `/admin/contracts` · `/admin?tab=legal` · `/esign/:token` | Admin | Full page | Sidebar → Admin → Contracts | UPGRADE | High |
 | Events Console | `/admin/events` · `/admin/events/review` · `/admin/events/all` · `/admin/events/:id` · `/admin/events/calendar` | Admin | Full page | Sidebar → Admin → Community | UPGRADE | High |
@@ -208,7 +209,7 @@ it, where in their nav, and how do they get there.*
 | Team · Authority | `/admin/team` · `/ic` · `/ic/:uid` | — (no nav entry) | Full page | Deep link / in-page action | NEW | Medium |
 | Validate · Record a session | `/validate/record` · `/validate/interviews?new=record` · `/cycles/validate/modules/customer-research` · `/sessions` · `/channels/threads?status=pending` · `/channels/threads/:uid/assign` · `/validate/record/live` · `/sessions/active` · `/validate/session/:id` | — (not routed) | Full page (proposed) | Not reachable yet | NEW | Low |
 
-## Super Admin — 22 canvases
+## Super Admin — 23 canvases
 
 | Canvas | Route | Nav section | Surface | Entry point | Status | Confidence |
 | --- | --- | --- | --- | --- | --- | --- |
@@ -218,6 +219,7 @@ it, where in their nav, and how do they get there.*
 | Admin Insights | `/admin/held/insights` | — (no nav entry) | Full page | Deep link / in-page action | UPGRADE | Medium |
 | Admin page header | `/admin/programs/spinout-lab` | HQ | Full page (proposed) | Sidebar → HQ → Programs | UPGRADE | Low |
 | Advisors & Partners | `/admin?tab=network-profiles` · `/admin/network-profiles` · `/deck` · `/admin/partner-invitations/firm-links` · `/firms` | — (no nav entry) | Full page | Deep link / in-page action | UPGRADE | Medium |
+| Approvals (admin) | `/admin/held/approvals` | — (no nav entry) | Full page | Deep link / in-page action | UPGRADE | Medium |
 | Contracts · Super | `/admin/contracts` · `/admin/contracts/registry` | HQ | Full page | Sidebar → HQ → Contracts | UPGRADE | High |
 | Eadwyn Tickets · Review queue (T1, T1b, D606) | `/hq/review` | HQ | Full page | Sidebar → HQ → Support | CURRENT | High |
 | Events Console | `/admin/events` · `/admin/events/review` · `/admin/events/all` · `/admin/events/:id` · `/admin/events/calendar` | — (no nav entry) | Full page | Deep link / in-page action | UPGRADE | Medium |
@@ -305,7 +307,7 @@ it, where in their nav, and how do they get there.*
 | Confidence | Rows | Meaning |
 | --- | ---: | --- |
 | High | 109 | Live route, reachable from that workspace’s sidebar. |
-| Medium | 63 | Live route, but no sidebar row for that role — reached by deep link or an in-page action. |
+| Medium | 65 | Live route, but no sidebar row for that role — reached by deep link or an in-page action. |
 | Low | 51 | Not routed. Proposed route only. |
 
 A Medium row is not a defect. Detail pages (`/deals/:id`), print artefacts

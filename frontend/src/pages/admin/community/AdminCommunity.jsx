@@ -286,7 +286,7 @@ function CirclesCard({ circles, roster, onRetry, onOpen }) {
 function NeedsCard({ needs, onRetry }) {
   return (
     <Card id="needs" title="Needs a decision" state={needs.state} reason={needs.reason} onRetry={onRetry}
-      foot={<Link to="/admin/held/approvals" className={`${LINK} self-start`}>{needs.state === 'ready' ? `${needs.total} waiting · Open Approvals` : 'Open Approvals'}</Link>}>
+      foot={<Link to="/admin/approvals" className={`${LINK} self-start`}>{needs.state === 'ready' ? `${needs.total} waiting · Open Approvals` : 'Open Approvals'}</Link>}>
       {() => (<>
       <span className={SUB}>{`Oldest first, by when each was created. ${WAITED_UNRECORDED}`}</span>
       {needs.partial ? <span className="text-[12.5px] text-axal-destructive dark:text-red-400">{needs.partial}</span> : null}
@@ -422,7 +422,7 @@ export default function AdminCommunity() {
           <>
             <div className="grid grid-cols-2 gap-3.5 lg:grid-cols-4" data-testid="community-tiles">
               {tiles.map((t) => (t.key === 'waiting'
-                ? <Tile key={t.key} t={t} onRetry={reload}><Link to="/admin/held/approvals" className={`${LINK} self-start`}>Open Approvals</Link></Tile>
+                ? <Tile key={t.key} t={t} onRetry={reload}><Link to="/admin/approvals" className={`${LINK} self-start`}>Open Approvals</Link></Tile>
                 : <Tile key={t.key} t={t} onRetry={reload} />))}
             </div>
             <div className="grid grid-cols-12 gap-3.5">

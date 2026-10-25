@@ -516,7 +516,7 @@ test('a redirect-only /admin route is excluded, and its target is reachable', ()
   // Derived, not hardcoded: a route whose element is <Navigate> is not a surface.
   // But a redirect INTO an orphan is still a dead end, so the target is checked.
   // D953's Programs redirects and D937/D972's Lab/network redirects coexist.
-  assert.deepEqual(REDIRECTS, ['/admin', '/admin/refer-earn', '/admin/partners', '/admin/partner-invitations/firm-links', '/admin/held/programs', '/admin/held/community', '/admin/held/insights', '/admin/network-profiles', '/admin/spinout-lab', '/admin/spinout-lab/preview', '/admin/news', '/admin/advisor-cohorts'],
+  assert.deepEqual(REDIRECTS, ['/admin', '/admin/refer-earn', '/admin/partners', '/admin/partner-invitations/firm-links', '/admin/held/programs', '/admin/held/approvals', '/admin/held/community', '/admin/held/insights', '/admin/network-profiles', '/admin/spinout-lab', '/admin/spinout-lab/preview', '/admin/news', '/admin/advisor-cohorts'],
 
     'the set of /admin redirect routes changed; confirm each is still a redirect and not a page');
   // A `*Redirect` component names its target in its own file, not in App.jsx
@@ -527,6 +527,8 @@ test('a redirect-only /admin route is excluded, and its target is reachable', ()
   const COMPONENT_TARGETS = {
     HeldInsightsRedirect: ['/admin/insights', 'frontend/src/pages/admin/insights/insightsModel.js', 'INSIGHTS_PATH'],
     HeldCommunityRedirect: ['/admin/community', 'frontend/src/pages/admin/community/communityModel.js', 'COMMUNITY_PATH'],
+    // D1038 (#2390): HeldApprovalsRedirect sends /admin/held/approvals to PATH.
+    HeldApprovalsRedirect: ['/admin/approvals', 'frontend/src/pages/admin/approvals/approvalsModel.js', 'PATH'],
     HeldProgramsRedirect: ['/admin/programs', PROGRAMS_MODEL, 'PROGRAMS_PATH'],
     AdvisorCohortsRedirect: ['/admin/programs/mentor-cohorts/people', PROGRAMS_MODEL, 'MENTOR_PEOPLE_PATH'],
     ReferEarnRedirect: ['/admin/programs/refer-and-earn/queue', PROGRAMS_MODEL, 'REFER_QUEUE_PATH'],
