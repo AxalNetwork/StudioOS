@@ -19,7 +19,8 @@ import publicRoutes from '../src/routes/public.ts';
 import { readAccountSubscription } from '../src/services/accountPlans.ts';
 
 const JWT_SECRET = 'd1049-plan-status-fixture-only-secret-0123456789';
-const FOUNDER = 2; const INVESTOR = 3; const ADVISOR = 4;
+// The fixture seeds 2 (founder) and 3 (investor); `seed` makes 4 an advisor.
+const ADVISOR = 4;
 
 type Price = { id: string; active: boolean; unit_amount: number; interval: 'month' | 'year'; currency?: string };
 const PRODUCTS: Array<{ id: string; name: string; metadata: Record<string, string>; prices: Price[] }> = [
