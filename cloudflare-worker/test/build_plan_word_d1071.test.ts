@@ -40,7 +40,8 @@ const FOUNDER = 1, OTHER = 2, ADMIN = 3;
 
 /** The model's answer, by the refs the prompt sent: the feature is i-something, found by its title. */
 type Answer = (prompt: string) => unknown;
-const refOf = (prompt: string, title: string) => prompt.match(new RegExp(`(i\\d+) · [^\\n]* · rule's title: ${title}\\n`))?.[1];
+const refOf = (prompt: string, title: string) =>
+  prompt.split('\n').find((line) => line.endsWith(` · rule's title: ${title}`))?.split(' · ')[0];
 const GOOD: Answer = (p) => ({
   items: [
     { ref: refOf(p, 'Slow setup'), title: 'Set up in a single sitting', description: 'A guided setup that a new team finishes without help.' },
