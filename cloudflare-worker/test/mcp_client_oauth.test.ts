@@ -33,6 +33,7 @@ import { discoverMcp } from '../src/integrations/mcpClient.ts';
 import { mcpProvider, type McpProvider } from '../src/integrations/mcpProviders.ts';
 import { genericMcpProvider, mcpCallbackUrl, mcpCimdUrl, mcpDisconnect, mcpReadiness } from '../src/integrations/mcpSignIn.ts';
 import { decryptCredentials } from '../src/integrations/secrets.ts';
+import { MCP_CLIENT_METADATA } from '../src/middleware/rateLimit.ts';
 import type { ProviderDescriptor } from '../src/integrations/registry.ts';
 import { personalFixture } from './_mercury_personal_d713.ts';
 import { NOTES_ISSUER, NOTES_MCP, notesFake } from './_mcp_fake.mjs';
@@ -409,6 +410,10 @@ test('8. the client ID metadata document: only for a record that publishes it he
   assert.equal((await req(appWith(fake, {}, notes({ registration: ['cimd'], cimd_url: 'https://app.axal.vc/elsewhere.json' })), env, null, `${BASE}/client.json`)).status, 404, 'not this route on axal.vc');
   assert.equal((await req(appWith(fake, {}, notes({ registration: ['dcr'], cimd_url: mcpCimdUrl(KEY) })), env, null, `${BASE}/client.json`)).status, 404, 'a record that does not register by CIMD');
   assert.equal(mcpCallbackUrl(KEY)({ OAUTH_CALLBACK_BASE_URL: 'https://axal.vc/' } as any), `https://axal.vc${BASE}/callback`);
+  // A public read, so it has its own per-IP bucket.
+  assert.ok(MCP_CLIENT_METADATA.test(`${BASE}/client.json`));
+  for (const p of [`${BASE}/start`, `${BASE}/client.json/x`, '/api/integrations/mcp/a/b/client.json']) assert.ok(!MCP_CLIENT_METADATA.test(p), p);
+  assert.match(readFileSync('cloudflare-worker/src/middleware/rateLimit.ts', 'utf8'), /name: 'mcp_client_metadata',\s+limit: 60,\s+windowSec: 60,\s+test: \(p, m\) => m === 'GET' && MCP_CLIENT_METADATA\.test\(p\),\s+scope: 'ip',/);
 });
 
 test('9. disconnect revokes at the provider, then the row is deleted', async () => {

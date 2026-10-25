@@ -80,6 +80,8 @@ export const ADVISOR_SESSION_CHARGE = /^\/api\/(advisors|mentors)\/bookings\/[^/
  * instructions. Anchored at both ends, the id with `[^/]+`.
  */
 export const BANK_ACCOUNT_WRITES = /^\/api\/admin\/bank-accounts(\/[^/]+(\/(retire|reveal))?)?$/;
+/** D1080 (#2945): a record's public client ID metadata document. */
+export const MCP_CLIENT_METADATA = /^\/api\/integrations\/mcp\/[A-Za-z0-9_]{1,64}\/client\.json$/;
 export const LP_PAY_INSTRUCTIONS = /^\/api\/funds\/[^/]+\/capital-calls\/lines\/[^/]+\/pay-instructions$/;
 
 const BUCKETS: Bucket[] = [
@@ -247,6 +249,16 @@ const BUCKETS: Bucket[] = [
     limit: 60,
     windowSec: 60,
     test: (p, m) => m === 'GET' && p === '/api/public/ai/models',
+    scope: 'ip',
+  },
+  // D1080 (#2945) — the client ID metadata document an authorization server
+  // fetches: public, per IP and fail-open like the other public reads, and
+  // tighter than the general 200/min/IP bucket.
+  {
+    name: 'mcp_client_metadata',
+    limit: 60,
+    windowSec: 60,
+    test: (p, m) => m === 'GET' && MCP_CLIENT_METADATA.test(p),
     scope: 'ip',
   },
   // 60 requests/min per user — default
