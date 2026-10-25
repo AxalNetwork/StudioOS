@@ -30,6 +30,7 @@ import { request } from '../api.js';
 
 const enc = encodeURIComponent;
 const TC = '/admin/security/trust-center';
+const SR = '/help/security-reports';
 
 export const trustPublicApi = {
   read: () => request('/public/trust'),
@@ -51,8 +52,8 @@ export const trustCenterAdminApi = {
 };
 
 export const securityReportsApi = {
-  send: (body) => request('/help/security-reports', { method: 'POST', body: JSON.stringify(body) }),
-  mine: () => request('/help/security-reports/mine'),
+  send: (body) => request(SR, { method: 'POST', body: JSON.stringify(body) }),
+  mine: () => request(`${SR}/mine`),
   list: (status) => request(`/admin/security/reports${status ? `?status=${enc(status)}` : ''}`),
   setStatus: (uid, status) => request(`/admin/security/reports/${enc(uid)}`, { method: 'PATCH', body: JSON.stringify({ status }) }),
 };
