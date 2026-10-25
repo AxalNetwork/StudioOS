@@ -31,7 +31,7 @@ import {
 } from './_programs_catalogue_fixture.mjs';
 import { AuthProvider } from '../src/hooks/useAuthSync.jsx';
 import ProgramsCatalogue from '../src/pages/admin/programs/ProgramsCatalogue.jsx';
-import { LINE_ADMIN, LINE_SUPER, NOT_READ_YET, NOT_RECORDED, PRODUCT_TESTING_FOOT, SCOPE_LABEL, SCOPE_TITLE } from '../src/pages/admin/programs/programsModel.js';
+import { GRANT_UNREADABLE, LINE_ADMIN, LINE_SUPER, NOT_READ_YET, grantBadgeOf, NOT_RECORDED, PRODUCT_TESTING_FOOT, SCOPE_LABEL, SCOPE_TITLE } from '../src/pages/admin/programs/programsModel.js';
 import {
   CREDIT_FOOT, DEFAULT_WEEKS, JOIN_SERIES, NOTHING_OVER_72, NOT_PER_STUDIO, PERIODS, REENROLMENT_LINE, WAITING_ROWS, WAIT_BANDS,
   blockState, catalogueCards, catalogueTiles, creditsChart, deltaText, joinsChart, labApplications, waitingChart, weekLabel, weeksFrom, withWeeks,
@@ -149,8 +149,8 @@ test('Joins per week: Learning is "in the programs assigned to you" for an Admin
 
 test('Waiting by program: the five queues as rows with literal doors, in three bands; a pending queue is words; the foot only when nothing is 72 hours old', () => {
   assert.deepEqual(WAITING_ROWS.map((r) => [r.key, r.to]), [
-    ['cohort', '/admin/spinout-lab'], ['referrals', '/admin/programs/refer-and-earn/queue'], ['strategic', '/admin/programs/refer-and-earn'],
-    ['perks', '/admin/programs/perks/queue'], ['hosts', '/admin/spinout-lab']]);
+    ['cohort', '/admin/programs/spinout-lab/applications'], ['referrals', '/admin/programs/refer-and-earn/queue'], ['strategic', '/admin/programs/refer-and-earn'],
+    ['perks', '/admin/programs/perks/queue'], ['hosts', '/admin/programs/spinout-lab/hosts']]);
   assert.deepEqual(WAIT_BANDS.map((b) => b.key), ['under_24', 'from_24_to_72', 'over_72']);
   const c = waitingChart(ready(catalogueBody()));
   assert.equal(c.chart.type, 'stackbars');
@@ -324,7 +324,7 @@ test('the catalogue for an Admin: header, period, four tiles, the three charts, 
     assert.equal(view.textOf('programs-card-referral-partners-grant'), '⌂HQ-held');
     const hrefs = view.hrefs();
     for (const d of ['/admin/programs/spinout-lab', '/admin/programs/mentor-cohorts', '/admin/programs/refer-and-earn', '/admin/programs/perks', '/admin/programs/learning',
-      '/admin/programs/refer-and-earn/queue', '/admin/programs/perks/queue', '/admin/spinout-lab', '/admin/profiling-trends']) assert.ok(hrefs.includes(d), `no door onto ${d}`);
+      '/admin/programs/refer-and-earn/queue', '/admin/programs/perks/queue', '/admin/programs/spinout-lab/applications', '/admin/programs/spinout-lab/hosts', '/admin/profiling-trends']) assert.ok(hrefs.includes(d), `no door onto ${d}`);
     assert.ok(!view.has('programs-studio'), 'no studio filter for an Admin');
     assert.ok(!view.requests.some((u) => u.startsWith('/api/admin/insights')), 'R12 is the Super Admin\'s');
     await view.click('programs-group-Access');
@@ -475,4 +475,25 @@ test('docs: D961 is recorded, with the phone decision; the client has its Worker
   assert.match(d, /Waiting by program and Credits in and out by month are not drawn on a phone/);
   assert.match(read('frontend/src/lib/api.js'), /export \* from '\.\/api\/adminPrograms\.js';/);
   assert.match(read('cloudflare-worker/src/index.ts'), /app\.route\('\/api\/admin\/programs', adminPrograms\)/);
+});
+
+test('D1124 · the grant badge from D956\'s field (#2789): the canvas\'s words per viewer; no field keeps the held mode; unreadable is never a state', () => {
+  const word = (f) => grantBadgeOf(f)?.word ?? null;
+  assert.deepEqual(['granted', 'requested', 'paused', 'ended', 'not_granted', 'runs_at_hq', 'not_offered', 'hq_held', 'hq_only'].map((state) => word({ state })),
+    ['Granted to your studio', 'Requested', 'Paused by HQ', 'Ended', 'Not granted', 'Runs at HQ', 'Not offered yet', 'HQ-held', 'HQ only']);
+  assert.equal(word({ state: 'granted_to', granted_count: 3 }), 'Granted to 3 studios');
+  assert.equal(word({ state: 'granted_to', granted_count: 1 }), 'Granted to 1 studio');
+  assert.equal(word({ state: 'granted_to', granted_count: 0 }), 'Granted to 0 studios', 'a real none');
+  assert.equal(word({ state: 'granted_to', granted_count: null }), GRANT_UNREADABLE, 'a missing count is not a zero');
+  assert.deepEqual(grantBadgeOf({ available: false, unreadable: true, reason: 'down' }), { word: GRANT_UNREADABLE, glyph: '!', tone: 'muted', reason: 'down' });
+  assert.equal(word({ state: 'something_new' }), GRANT_UNREADABLE);
+  assert.equal(grantBadgeOf({ state: 'granted', in_force: false }).reason, 'Granted, but not in force today.');
+  assert.equal(grantBadgeOf(undefined), null);
+  // On the cards: a row's grant draws its badge; a row without one keeps the constant.
+  const body = catalogueBody();
+  body.programs.rows = body.programs.rows.map((r) => (r.key === 'perks' ? { ...r, grant: { state: 'requested', since: '2026-10-20' } } : r));
+  const { cards } = catalogueCards(ready(body));
+  assert.equal(cards.find((c) => c.key === 'perks').grantBadge.word, 'Requested');
+  assert.equal(cards.find((c) => c.key === 'learning').grantBadge, null);
+  assert.equal(cards.find((c) => c.key === 'learning').grant, 'HQ-held');
 });
