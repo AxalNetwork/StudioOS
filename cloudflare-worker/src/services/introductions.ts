@@ -23,6 +23,7 @@
  * ../personas.ts. No new scoring stores — breakdowns are stamped onto the
  * proposition row at generation time so "why this intro" stays auditable.
  */
+import { inGrace } from '../middleware/planSubscription';
 import type { Env } from '../types';
 import {
   confidenceAdjustedAlignment,
@@ -149,20 +150,26 @@ interface AllowanceUser {
   subscription_tier?: string | null;
   investor_tier?: string | null;
   investor_subscription_status?: string | null;
+  investor_subscription_renews_at?: string | null;
+  subscription_status?: string | null;
+  subscription_renews_at?: string | null;
 }
 export function monthlyAllowanceFor(user: AllowanceUser): number {
   const role = String(user?.role || '').toLowerCase();
   if (role === 'admin') return 25;
   if (role === 'investor') {
     const status = String(user?.investor_subscription_status || 'free').toLowerCase();
-    // D1052: past_due is Stripe still retrying, and keeps the plan's allowance.
-    const lapsed = status === 'unpaid' || status === 'cancelled';
+    const lapsed = status === 'unpaid' || status === 'cancelled' || status === 'canceled'
+      || (status === 'past_due' && !inGrace(status, user.investor_subscription_renews_at));
     const tier = lapsed ? 'free' : String(user?.investor_tier || 'free').toLowerCase();
     if (tier === 'institutional') return 25;
     if (tier === 'professional') return 10;
     return 3;
   }
-  const tier = String(user?.subscription_tier || 'free').toLowerCase();
+  const status = user.subscription_status ?? 'active';
+  const lapsed = status === 'unpaid' || status === 'cancelled' || status === 'canceled'
+    || (status === 'past_due' && !inGrace(status, user.subscription_renews_at));
+  const tier = lapsed ? 'free' : String(user?.subscription_tier || 'free').toLowerCase();
   if (tier === 'studio') return 25;
   if (tier === 'growth') return 10;
   return 3;

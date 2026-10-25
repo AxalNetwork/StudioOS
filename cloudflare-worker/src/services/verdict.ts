@@ -359,6 +359,37 @@ export async function currentDecision(env: Env, projectId: number, scope: Scope)
   ).bind(projectId, scopeBind(scope)).first<DecisionRow>();
 }
 
+/**
+ * D1143 (#2433, owner question 5 A) — the day of the venture's latest Pivot
+ * given, or null. A superseded Pivot still counts: it happened. A withheld
+ * Pivot, or a Pivot on one claim, does not. The Product-market fit collector
+ * counts only the records dated after it.
+ */
+export async function latestVenturePivotDay(env: Env, projectId: number): Promise<string | null> {
+  const row = await env.DB.prepare(
+    `SELECT MAX(decided_at) AS at FROM validation_decisions
+      WHERE project_id = ? AND hypothesis_id IS NULL AND decision = 'pivot' AND state = 'given'`,
+  ).bind(projectId).first<{ at: string | null }>();
+  const d = String(row?.at ?? '').slice(0, 10);
+  return /^\d{4}-\d{2}-\d{2}$/.test(d) ? d : null;
+}
+
+/**
+ * D1143 — the venture's Verdict as Product-market fit shows it (never scores
+ * it): the current given decision, as `currentDecision` reads it, else the
+ * latest withheld one ("Withheld (below 5 pieces)"). No reasoning, no name.
+ */
+export async function ventureVerdictHeader(env: Env, projectId: number): Promise<{ decision: string; state: DecisionState; decided_at: string | null; evidence_count: number } | null> {
+  const row = await env.DB.prepare(
+    `SELECT d.decision, d.state, d.decided_at,
+            (SELECT COUNT(*) FROM validation_decision_evidence e WHERE e.decision_id = d.id) AS evidence_count
+       FROM validation_decisions d
+      WHERE d.project_id = ? AND d.hypothesis_id IS NULL AND d.superseded_at IS NULL
+      ORDER BY CASE WHEN d.state = 'given' THEN 0 ELSE 1 END, d.decided_at DESC, d.id DESC LIMIT 1`,
+  ).bind(projectId).first<{ decision: string; state: DecisionState; decided_at: string | null; evidence_count: number }>();
+  return row ? { decision: row.decision, state: row.state, decided_at: row.decided_at, evidence_count: Number(row.evidence_count) || 0 } : null;
+}
+
 export const DECISION_FILTERS = ['proceed', 'pivot', 'stop', 'withheld'] as const;
 export type DecisionFilter = typeof DECISION_FILTERS[number];
 export const DECISIONS_PAGE_SIZE = 20;
@@ -465,6 +496,23 @@ export async function decisionById(
     ).bind(row.id, projectId).all<DecisionCommitmentRow>(),
   ]);
   return { ...row, evidence: ev.results || [], commitments: cm.results || [] };
+}
+
+/** The newest unsuperseded decision of one scope, given or withheld (D1065's build plan reads it). */
+export type LatestDecision = Pick<DecisionRow, 'id' | 'decision' | 'state' | 'hypothesis_id' | 'pivot_hypothesis_id'>;
+export async function latestDecision(env: Env, projectId: number, scope: Scope): Promise<LatestDecision | null> {
+  return env.DB.prepare(
+    `SELECT id, decision, state, hypothesis_id, pivot_hypothesis_id FROM validation_decisions
+      WHERE project_id = ? AND hypothesis_id IS ? AND superseded_at IS NULL ORDER BY id DESC LIMIT 1`,
+  ).bind(projectId, scopeBind(scope)).first<LatestDecision>();
+}
+
+/** The ref ids of the evidence a decision rests on as support. */
+export async function supportingRefIds(env: Env, decisionId: number): Promise<string[]> {
+  const rows = (await env.DB.prepare(
+    "SELECT ref_id FROM validation_decision_evidence WHERE decision_id = ? AND direction = 'supports'",
+  ).bind(decisionId).all<{ ref_id: string }>()).results || [];
+  return rows.map((r) => r.ref_id);
 }
 
 /**

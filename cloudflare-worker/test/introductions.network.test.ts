@@ -202,7 +202,7 @@ test('monthlyAllowanceFor gives free and paid tiers a monthly allowance', () => 
   }), 3);
   // D1052: a renewal Stripe is still retrying keeps the plan's allowance.
   assert.equal(monthlyAllowanceFor({
-    role: 'investor', investor_tier: 'institutional', investor_subscription_status: 'past_due',
+    role: 'investor', investor_tier: 'institutional', investor_subscription_status: 'past_due', investor_subscription_renews_at: new Date().toISOString(),
   }), 25);
   assert.match(currentMonthKey(new Date('2026-07-11T00:00:00Z')), /^2026-07$/);
 });
