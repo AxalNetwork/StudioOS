@@ -220,6 +220,7 @@ import messagesRoutes from './routes/messages';
 import perksRoutes from './routes/perks';
 import adminLicences from './routes/admin_licences';
 import adminProgramGrants from './routes/admin_program_grants';
+import adminProgramRequests from './routes/admin_program_requests';
 // D986 (#2776) — partner deal types per licence: HQ's reads and write, and the studio's own read.
 import adminPartnerDealTypes from './routes/admin_partner_deal_types';
 import licencePartnerDealTypes from './routes/licence_partner_deal_types';
@@ -1106,6 +1107,8 @@ app.route('/api/branch', branchInvitationRoutes);
 app.route('/api/branch', branchSupportSessionRoutes);
 app.route('/api/admin/licences', adminLicences);
 // D982 (#2773): which programs HQ grants each licensed studio, on what terms.
+// D983: the program requests, mounted before part 1's routes so `/requests` is never read as a licence.
+app.route('/api/admin/program-grants/requests', adminProgramRequests);
 app.route('/api/admin/program-grants', adminProgramGrants);
 app.route('/api/admin/partner-deal-types', adminPartnerDealTypes);
 // Migrations 199/207 — who holds the Super Admin elevation. Mount BEFORE the
