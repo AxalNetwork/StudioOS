@@ -19,11 +19,12 @@ import React, { createContext, useCallback, useContext, useEffect, useRef, useSt
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import SitePage from '../components/site/SitePage';
 import { usePageMeta } from '../lib/seo';
+import { api } from '../lib/api';
 import { publicPricingApi } from '../lib/api/publicPricing';
 import { useViewMode } from '../contexts/ViewModeContext';
 import { TOKEN_PACKS_PATH } from '../lib/aiTokens';
 import {
-  PRICING_TABS, compareCell, heldCard, initialTab, modelGroups, modelPrices, modelsTab, packCards, planCards,
+  PRICING_TABS, compareCell, heldCard, initialTab, modelGroups, modelPrices, modelsTab, needsPlanStatus, packCards, planCards,
 } from '../lib/pricingModel';
 import {
   AI_BAND, CLOSING, COMPARE, FAQ, FAQ_INVESTOR, HERO, LP_ACCESS, MODEL_GROUPS, MODELS_LINE, PACKS, PLAN_CARDS,
@@ -303,6 +304,11 @@ export function PricingBody({ user = null }) {
   const [billing, setBilling] = useState('monthly');
   const [plans, retryPlans] = useRead(publicPricingApi.plansAndPacks);
   const [models, retryModels] = useRead(publicPricingApi.aiModels);
+  // D1049 (#2900): an Advisor's or Operating Partner's plan is in account_subscriptions,
+  // read from their plan status only on their own tab.
+  const wantPlan = needsPlanStatus(user, role, tab);
+  const planFetch = useCallback(() => (wantPlan ? api.planStatus() : Promise.resolve(null)), [wantPlan]);
+  const [planRead] = useRead(planFetch);
 
   const pickTab = (key) => {
     const q = new URLSearchParams(location.search);
@@ -313,7 +319,7 @@ export function PricingBody({ user = null }) {
   const roleTab = tab !== 'models';
   const specs = PLAN_CARDS[tab] || [];
   const built = roleTab && plans.status === 'ready'
-    ? planCards(plans.body, specs, { billing, held: heldCard(user, role, tab), signedIn: !!user })
+    ? planCards(plans.body, specs, { billing, held: heldCard(user, role, tab, planRead), signedIn: !!user })
     : null;
   const ready = built && !built.unreadable;
   const D = user ? '' : ' ax-display';

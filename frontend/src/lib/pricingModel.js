@@ -111,8 +111,23 @@ export function yearlySaving(plans) {
   return Math.min(...pcts) === max ? `Save ${max}%` : `Save up to ${max}%`;
 }
 
-/** The card id a signed-in member holds on `tab`, from the session's own fields; null for a visitor or another role's tab. */
-export function heldCard(user, role, tab) {
+/** Statuses that hold a plan: PersonaBillingPanel's rule for "subscribed". */
+export const HOLDS_PLAN = new Set(['active', 'trialing', 'past_due']);
+/** The tabs whose plan lives in `account_subscriptions`, with the role and plan group each sells to. */
+export const PLAN_GROUP_TABS = Object.freeze({ advisor: { role: 'advisor', group: 'advisor' }, 'operating-partner': { role: 'partner', group: 'partner' } });
+
+/** Whether `heldCard` needs the member's `GET /billing/plan/status` for this tab. */
+export const needsPlanStatus = (user, role, tab) => !!user && PLAN_GROUP_TABS[tab]?.role === role;
+
+/**
+ * The card id a signed-in member holds on `tab`; null for a visitor or another
+ * role's tab. Founders and Investors read the session's own fields. An Advisor
+ * or Operating Partner pays through `account_subscriptions` (D1049, #2900), so
+ * `planRead` is their `GET /billing/plan/status` as `{ status, body }`: Pro
+ * when it holds a plan in their group, Basic when it holds none, and nothing
+ * marked while it is reading or could not be read.
+ */
+export function heldCard(user, role, tab, planRead = null) {
   if (!user) return null;
   if (tab === 'founder' && role === 'founder') {
     const t = String(user.subscription_tier || 'free').toLowerCase();
@@ -122,9 +137,27 @@ export function heldCard(user, role, tab) {
     const t = String(user.investor_tier || 'free').toLowerCase();
     return ['free', 'professional', 'institutional'].includes(t) ? t : null;
   }
-  if (tab === 'advisor' && role === 'advisor') return 'free';
-  if (tab === 'operating-partner' && role === 'partner') return 'free';
+  const g = PLAN_GROUP_TABS[tab];
+  if (g && g.role === role) {
+    if (!planRead || planRead.status !== 'ready') return null;
+    const b = planRead.body || {};
+    return b.plan_group === g.group && HOLDS_PLAN.has(String(b.status || '').toLowerCase()) ? 'pro' : 'free';
+  }
   return null;
+}
+
+/** Every checkout refusal ends here: nothing is charged before the member reaches Stripe's page. */
+export const NOT_CHARGED = 'You were not charged.';
+/**
+ * The paywall's in-page line when a checkout could not open (D1049): it says
+ * money did not move, and never shows a raw Stripe or Worker code.
+ */
+export function checkoutRefusal(err) {
+  const code = err?.code || null;
+  if (code === 'stripe_not_configured' || code === 'catalog_price_missing') return `Checkout is not open for this plan yet. ${NOT_CHARGED}`;
+  if (code === 'investor_only') return `This plan is for investor accounts. ${NOT_CHARGED}`;
+  if (code === 'timeout' || Number(err?.status) >= 500) return `Checkout could not be reached. ${NOT_CHARGED} Try again.`;
+  return `Checkout could not start. ${NOT_CHARGED} Try again.`;
 }
 
 const REGISTER = (lane) => (lane ? `/register?lane=${lane}` : '/register');
