@@ -92,7 +92,7 @@ test('no page draws the old shell: no Admin Console title, dropdown or ?tab= doo
   const hits = [];
   for (const f of ['frontend/src/App.jsx', 'frontend/src/lib/hqStrips.js', 'frontend/src/lib/railPages.js', 'frontend/src/lib/adminPlacement.js',
     'frontend/src/lib/railOptions/admin.js', 'frontend/src/lib/railOptions/superAdmin.js', 'frontend/src/pages/hq/PlatformPage.jsx',
-    'frontend/src/pages/hq/ContentPage.jsx', 'frontend/src/pages/admin/HeldApprovals.jsx', 'frontend/src/pages/admin/HeldAccounts.jsx']) {
+    'frontend/src/pages/hq/ContentPage.jsx', 'frontend/src/pages/admin/approvals/AdminApprovals.jsx', 'frontend/src/pages/admin/HeldAccounts.jsx']) {
     for (const m of read(f).matchAll(/(?:to|href|route)[=:] ?["'`](\/admin\?tab=[\w-]+)/g)) hits.push(`${f}: ${m[1]}`);
   }
   assert.deepEqual(hits, [], 'a door still opens the retired console');

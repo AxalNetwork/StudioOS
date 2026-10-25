@@ -164,6 +164,7 @@ export const REDIRECT_ROUTES: readonly RedirectRoute[] = Object.freeze([
   { path: '/admin/partners' }, // D923 (#2370): Partner invitations moved to /admin/partner-invitations
   { path: '/admin/held/community' }, // D930 (#2367): Community moved to /admin/community
   { path: '/admin/held/programs' }, // D953 (#2371): Programs moved to /admin/programs
+  { path: '/admin/held/approvals' }, // D1038 (#2390): Approvals moved to /admin/approvals
   { path: '/admin/advisor-cohorts' }, // D953 (#2371): now Programs › Mentor cohort access › People
   { path: '/admin/refer-earn' }, // D953 (#2371): now Programs › Refer & Earn › Queue
   { path: '/admin/spinout-lab', keep: true }, // D937 (#2374): the Lab moved under Programs; sent cohort notices carry it (#2375)

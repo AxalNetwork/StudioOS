@@ -19,11 +19,13 @@ import React, { createContext, useCallback, useContext, useEffect, useRef, useSt
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import SitePage from '../components/site/SitePage';
 import { usePageMeta } from '../lib/seo';
+import { api } from '../lib/api';
 import { publicPricingApi } from '../lib/api/publicPricing';
 import { useViewMode } from '../contexts/ViewModeContext';
 import { TOKEN_PACKS_PATH } from '../lib/aiTokens';
+import CheckoutSheet from '../components/checkout/CheckoutSheet';
 import {
-  PRICING_TABS, compareCell, heldCard, initialTab, modelGroups, modelPrices, modelsTab, packCards, planCards,
+  PRICING_TABS, compareCell, heldCard, initialTab, modelGroups, modelPrices, modelsTab, needsPlanStatus, packCards, planCards,
 } from '../lib/pricingModel';
 import {
   AI_BAND, CLOSING, COMPARE, FAQ, FAQ_INVESTOR, HERO, LP_ACCESS, MODEL_GROUPS, MODELS_LINE, PACKS, PLAN_CARDS,
@@ -80,7 +82,7 @@ function Tabs({ tab, onPick }) {
   );
 }
 
-function PlanCard({ card }) {
+function PlanCard({ card, onCheckout }) {
   const D = useContext(Face);
   const cls = `axp-card${card.highlight ? ' is-hi' : ''}${card.current ? ' is-current' : ''}`;
   return (
@@ -102,7 +104,9 @@ function PlanCard({ card }) {
       ) : (
         <div className="axp-notoffered"><span className="axp-pill axp-pill-dash">Not offered yet</span></div>
       )}
-      {card.button.to && !card.button.disabled ? (
+      {card.button.checkout && !card.button.disabled ? (
+        <button type="button" className={`axp-btn${card.highlight ? ' is-primary' : ''}`} onClick={() => onCheckout(card)} data-testid={`pricing-checkout-${card.id}`}>{card.button.label}</button>
+      ) : card.button.to && !card.button.disabled ? (
         <Link to={card.button.to} className={`axp-btn${card.highlight ? ' is-primary' : ''}`}>{card.button.label}</Link>
       ) : (
         <button type="button" className="axp-btn" disabled>{card.button.label}</button>
@@ -301,8 +305,15 @@ export function PricingBody({ user = null }) {
   const role = useViewMode()?.shellRole ?? null;
   const tab = initialTab(location.search, user ? role : null);
   const [billing, setBilling] = useState('monthly');
+  // D1048 (#2451): the card whose checkout sheet is open, over this page; no route change.
+  const [checkout, setCheckout] = useState(null);
   const [plans, retryPlans] = useRead(publicPricingApi.plansAndPacks);
   const [models, retryModels] = useRead(publicPricingApi.aiModels);
+  // D1049 (#2900): an Advisor's or Operating Partner's plan is in account_subscriptions,
+  // read from their plan status only on their own tab.
+  const wantPlan = needsPlanStatus(user, role, tab);
+  const planFetch = useCallback(() => (wantPlan ? api.planStatus() : Promise.resolve(null)), [wantPlan]);
+  const [planRead] = useRead(planFetch);
 
   const pickTab = (key) => {
     const q = new URLSearchParams(location.search);
@@ -313,7 +324,7 @@ export function PricingBody({ user = null }) {
   const roleTab = tab !== 'models';
   const specs = PLAN_CARDS[tab] || [];
   const built = roleTab && plans.status === 'ready'
-    ? planCards(plans.body, specs, { billing, held: heldCard(user, role, tab), signedIn: !!user })
+    ? planCards(plans.body, specs, { billing, held: heldCard(user, role, tab, planRead), signedIn: !!user })
     : null;
   const ready = built && !built.unreadable;
   const D = user ? '' : ' ax-display';
@@ -345,7 +356,7 @@ export function PricingBody({ user = null }) {
           {(plans.status === 'unreadable' || built?.unreadable) && <Unavailable onRetry={retryPlans} />}
           {ready && (
             <div className={`axp-grid axp-grid-${built.cards.length}`}>
-              {built.cards.map((c) => <PlanCard key={c.id} card={c} />)}
+              {built.cards.map((c) => <PlanCard key={c.id} card={c} onCheckout={setCheckout} />)}
             </div>
           )}
           {ready && tab === 'investor' && (
@@ -402,6 +413,10 @@ export function PricingBody({ user = null }) {
             </div>
           </div>
         </section>
+      )}
+      {checkout && (
+        <CheckoutSheet plan={checkout.plan} spec={specs.find((x) => x.id === checkout.id)} user={user} role={role}
+          held={heldCard(user, role, tab)} interval={billing} onClose={() => setCheckout(null)} />
       )}
     </div>
     </Face.Provider>
