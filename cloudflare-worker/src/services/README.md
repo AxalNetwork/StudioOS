@@ -10,6 +10,15 @@ by the deal reader and diligence opener. A room request is not a grant.
 The split matters because it is what makes the logic testable: the worker suite
 runs these directly against an in-process SQLite, with no request at all.
 
+`bankAccountHistory.ts` (D1182, #3111) reads the masked reveal ledger and
+bank-account/Mercury audit history. It uses a successful read audit as its route
+gate, validates bound filters, pins append-only source ids for insertion-stable
+pages, and never reads/decrypts account-number ciphertext or calls Mercury.
+Malformed audit details are flagged per row without disabling the history.
+`entityBankAccounts.ts` resolves the recorder's name only for Super Admin
+console responses; a missing name stays null, with no id/email fallback.
+Shared payment-instruction and notice projections omit recorder names.
+
 `captableAccess.ts` consumes verified project permissions from the cap-table
 router (#2436). Investors receive no project-bound cap-table access; accepted
 cofounders may write and accepted advisors may read without holder emails.

@@ -216,6 +216,9 @@ D708 (#1773): `bankAccounts.js` calls `/api/admin/bank-accounts` (the Super
 Admin's list, add, label and purposes, retire, and a recorded reveal of one
 number) and the LP's own `GET /api/funds/:id/capital-calls/lines/:lineId/pay-instructions`.
 A reveal's answer is held in the caller's component state only, never stored.
+D1182 adds `bankAccountsApi.history(filters)` for the audited Super Admin GET
+`/api/admin/bank-accounts/history`: q, kind, entity, actor, range or from/to,
+page, per and the returned snapshot token. No history screen is added in part 1.
 
 D702 (#1664): `profile.js` calls `/api/profile/me`, `/api/profile/venture` (GET
 and PATCH) and `/api/profile/preview` (`cloudflare-worker/src/routes/founder_profile.ts`), and the
