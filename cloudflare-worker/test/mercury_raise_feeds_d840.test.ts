@@ -234,6 +234,25 @@ test('3c. D1018: once the record holds the cap table, Accept records the SAFE an
   assert.equal(f.one(`SELECT local_table FROM connector_fed_items WHERE kind = 'safe'`).local_table, 'cap_table_issuances');
 });
 
+test('3d. D1025 (CT11a): the founder may enter the SAFE\'s own discount on Accept; a bad one writes nothing', async () => {
+  const f = await fixture();
+  await withFake(f, () => sync(f.env));
+  f.db.exec(`INSERT INTO cap_table_share_classes (uid, project_id, name, kind) VALUES ('cls-common', 101, 'Common', 'common');
+    INSERT INTO cap_table_issuances (uid, project_id, kind, holder_name, class_id, shares, issued_on, source, origin, status, recorded_at)
+      VALUES ('iss-founding', 101, 'founding', 'One', (SELECT id FROM cap_table_share_classes WHERE uid = 'cls-common'), 1000000, '2026-01-01', 'typed', 'owner', 'recorded', datetime('now'));`);
+  const safe = f.one(`SELECT id FROM mercury_raise_proposals WHERE kind = 'safe'`);
+  for (const bad of [-1, 10000, 12.5, '1500']) {
+    const r = await accept(f.env, safe.id, { discount_bps: bad });
+    assert.equal(r.status, 400, `${JSON.stringify(bad)}: ${r.text}`);
+    assert.equal(r.body.error, 'bad_discount_bps');
+  }
+  assert.equal(f.one(`SELECT COUNT(*) AS n FROM cap_table_issuances WHERE kind = 'safe'`).n, 0, 'a refused discount records nothing');
+  assert.equal(f.one(`SELECT status FROM mercury_raise_proposals WHERE id = ?`, safe.id).status, 'pending', 'and hands the request back, to be accepted again');
+  const s = await accept(f.env, safe.id, { discount_bps: 1500 });
+  assert.equal(s.status, 200, s.text);
+  assert.equal(f.one(`SELECT discount_bps FROM cap_table_issuances WHERE kind = 'safe' AND origin = 'mercury'`).discount_bps, 1500);
+});
+
 test('3b. an accepted statement is stored in the data room, NDA and seen by nobody, through part 1\'s statementPdf', async () => {
   // Mutations checked: the file stored open or `invited`; the bytes not stored; the checklist item dropped; the
   // statement's account not carried on its proposal (no read can find it).
@@ -247,6 +266,8 @@ test('3b. an accepted statement is stored in the data room, NDA and seen by nobo
   const file = f.one('SELECT * FROM data_room_files');
   assert.deepEqual([file.visibility, file.access_tier, file.checklist_item, file.content_type], [STATEMENT_ACCESS.visibility, 'nobody', 'financial_statements', 'application/pdf']);
   assert.ok(file.r2_key.startsWith('data-room/p-101/'));
+  // D1105 (migration 596): a statement Mercury delivered says so.
+  assert.deepEqual([file.source_kind, file.source_ref], ['connector', 'mercury']);
   assert.deepEqual([...f.env.FILES.objects.get(file.r2_key).bytes], [...FAKE_PDF]);
   assert.equal(f.one(`SELECT local_id FROM connector_fed_items WHERE kind = 'statement'`).local_id, file.id);
   const room = (await mod(f.env, 'data-room')).parts.mercury;

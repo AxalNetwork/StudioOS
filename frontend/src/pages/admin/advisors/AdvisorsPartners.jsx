@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useState } from 'react';
-import { useLocation } from 'react-router-dom';
+import { Link, useLocation } from 'react-router-dom';
 import { RefreshCw } from 'lucide-react';
 import { api } from '../../../lib/api';
 import { adminNetworkApi } from '../../../lib/api/adminNetwork';
@@ -11,8 +11,8 @@ import FirmsTab from './Firms';
 import ApOverview from './ApOverview';
 import People from './People';
 import {
-  AP_TITLE, COMMUNITY_PATH, MOVED_NOTICES, PAGE_LINE, RAIL_NOTE, TABS,
-  tabOf,
+  AP_TITLE, COMMUNITY_PATH, MOVED_NOTICES, PAGE_LINE, PAUSED, PAUSE_EVENTS, RAIL_NOTE, TABS,
+  tabCountOf, tabOf,
 } from './apModel';
 
 /**
@@ -37,6 +37,49 @@ const READS = {
   people: [],
   deck: [],
 };
+
+const CARD = 'rounded-[12px] border border-axal-hairline bg-white dark:border-gray-700 dark:bg-gray-900';
+const SUB = 'text-[12px] leading-[1.45] text-axal-muted dark:text-gray-400';
+const H2 = 'm-0 text-[15px] font-extrabold tracking-[-.02em] text-axal-ink dark:text-gray-100';
+const GHOST = 'inline-flex min-h-[36px] items-center justify-center gap-2 whitespace-nowrap rounded-[9px] border border-axal-hairline bg-white px-3.5 text-[12.5px] font-bold text-axal-ink hover:bg-axal-ground dark:border-gray-700 dark:bg-gray-900 dark:text-gray-100 dark:hover:bg-gray-800';
+
+/** D1125: the header tabs' counts, one read for all four, reloaded with the page's refresh. */
+function useTabCounts(tick) {
+  const [read, setRead] = useState(idle);
+  useEffect(() => {
+    let live = true;
+    setRead(idle);
+    adminNetworkApi.tabs().then(
+      (data) => { if (live) setRead({ status: 'ready', data }); },
+      (e) => { reportError('advisors-partners:tabs', e); if (live) setRead({ status: 'error', data: null }); },
+    );
+    return () => { live = false; };
+  }, [tick]);
+  return read;
+}
+
+/** D1125 (AP12b): a write on this page was refused because HQ paused this studio's admin access. */
+function usePausedByHq() {
+  const [paused, setPaused] = useState(false);
+  useEffect(() => {
+    if (typeof window === 'undefined') return undefined;
+    const on = () => setPaused(true);
+    for (const name of PAUSE_EVENTS) window.addEventListener(name, on);
+    return () => { for (const name of PAUSE_EVENTS) window.removeEventListener(name, on); };
+  }, []);
+  return paused;
+}
+
+function PausedNotice() {
+  return (
+    <div role="alert" className={`${CARD} mx-auto flex w-full max-w-[560px] flex-col items-center gap-2 px-6 py-6 text-center`} data-testid="ap-paused">
+      <span aria-hidden="true" className="text-[20px] text-axal-muted">‖</span>
+      <h2 className={H2}>{PAUSED.title}</h2>
+      <p className={`m-0 ${SUB}`}>{PAUSED.line}</p>
+      <Link to={PAUSED.to} className={GHOST}>{PAUSED.action}</Link>
+    </div>
+  );
+}
 
 /** The tab's reads. Each settles alone, so a slow or failed read holds back only its blocks. */
 function useApReads(tab) {
@@ -73,16 +116,20 @@ function AdvisorsPartnersPage() {
   const loc = useLocation();
   const tab = tabOf(loc.pathname) || 'overview';
   const { reads, asOf, reload } = useApReads(tab);
+  const [countTick, setCountTick] = useState(0);
+  const counts = useTabCounts(countTick);
+  const paused = usePausedByHq();
+  const refresh = useCallback(() => { reload(); setCountTick((t) => t + 1); }, [reload]);
   const notice = useMovedNotice(MOVED_NOTICES);
   const current = TABS.find((t) => t.key === tab);
 
   // Literal doors, one per tab (D936), so the reachability walk finds each.
   const tabs = (
     <>
-      <HeaderTab to="/admin/advisors-partners" data-testid="ap-tab-overview">Overview</HeaderTab>
-      <HeaderTab to="/admin/advisors-partners/people" data-testid="ap-tab-people">People</HeaderTab>
-      <HeaderTab to="/admin/advisors-partners/firms" data-testid="ap-tab-firms">Firms</HeaderTab>
-      <HeaderTab to="/admin/advisors-partners/deck" data-testid="ap-tab-deck">Deck roster</HeaderTab>
+      <HeaderTab to="/admin/advisors-partners" count={tabCountOf(counts, 'overview')} data-testid="ap-tab-overview">Overview</HeaderTab>
+      <HeaderTab to="/admin/advisors-partners/people" count={tabCountOf(counts, 'people')} data-testid="ap-tab-people">People</HeaderTab>
+      <HeaderTab to="/admin/advisors-partners/firms" count={tabCountOf(counts, 'firms')} data-testid="ap-tab-firms">Firms</HeaderTab>
+      <HeaderTab to="/admin/advisors-partners/deck" count={tabCountOf(counts, 'deck')} data-testid="ap-tab-deck">Deck roster</HeaderTab>
     </>
   );
   const actions = tab === 'deck' || tab === 'people' ? null : (
@@ -90,7 +137,7 @@ function AdvisorsPartnersPage() {
       <span className="font-mono text-[11.5px] text-axal-muted dark:text-gray-400" data-testid="ap-asof">
         {asOf ? `Updated ${new Date(asOf).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit', hourCycle: 'h23' })}` : 'Reading…'}
       </span>
-      <button type="button" aria-label="Refresh" onClick={reload} className="grid h-9 w-9 place-items-center rounded-[9px] border border-axal-hairline text-axal-muted dark:border-gray-700"><RefreshCw size={16} aria-hidden="true" /></button>
+      <button type="button" aria-label="Refresh" onClick={refresh} className="grid h-9 w-9 place-items-center rounded-[9px] border border-axal-hairline text-axal-muted dark:border-gray-700"><RefreshCw size={16} aria-hidden="true" /></button>
     </>
   );
 
@@ -106,6 +153,7 @@ function AdvisorsPartnersPage() {
         tabs={tabs}
         data-testid="ap-header"
       />
+      {paused ? <PausedNotice /> : null}
       {tab === 'overview' && <ApOverview read={reads.overview} reload={reload} />}
       {tab === 'people' && <People />}
       {tab === 'firms' && <FirmsTab reads={reads} reload={reload} />}

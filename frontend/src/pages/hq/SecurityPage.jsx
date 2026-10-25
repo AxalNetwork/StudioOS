@@ -990,6 +990,9 @@ export default function HqSecurityPage() {
           </p>
           <p className="mt-1 text-[12.5px]">
             <Link to="/admin/security/obligations" className="font-semibold text-axal-violet-deep hover:underline dark:text-violet-300">Trust obligations by role</Link>
+            {' · '}
+            {/* D1079 (#2971): TRU14, the public trust center's content. */}
+            <Link to="/admin/security/trust-center" className="font-semibold text-axal-violet-deep hover:underline dark:text-violet-300" data-testid="security-trust-content-link">Trust center content</Link>
           </p>
         </header>
 

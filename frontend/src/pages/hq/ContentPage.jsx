@@ -677,8 +677,17 @@ export const REACH_LABEL = {
   profile: 'Team & Network slide',
   named: 'Names list only',
   counted: 'Network total only',
+  hidden: 'Not on the deck',
   archived: 'Not on the deck',
 };
+
+/** D1125: the roster's three states (D974). A hidden row is kept on the roster, not archived. */
+export const ROSTER_STATE = {
+  active: ['Active', PILL_GREEN],
+  hidden: ['Hidden', PILL_AMBER],
+  archived: ['Archived', PILL_NEUTRAL],
+};
+export const rosterStateOf = (row) => row.state || (row.active ? 'active' : 'archived');
 
 /** "Role on decks": what the slide prints, only for a row it draws. */
 function deckRoleCell(row) {
@@ -694,7 +703,7 @@ export function RosterPanel({ loading, unreadable, roster }) {
     body = (
       <>
         <p className="text-[11.5px] tabular-nums text-axal-muted" data-testid="hq-roster-counts">
-          {num(roster.active)} active · {num(roster.archived)} archived
+          {num(roster.active)} active · {num(roster.hidden)} hidden · {num(roster.archived)} archived
           {' · '}
           {roster.by_kind.map((k) => `${k.kind} ${num(k.active)}`).join(' · ')}
         </p>
@@ -733,8 +742,8 @@ export function RosterPanel({ loading, unreadable, roster }) {
                     <td className="py-1.5 pr-3">{deckRoleCell(row)}</td>
                     <td className="py-1.5 pr-3 text-axal-muted">{REACH_LABEL[row.reach] || row.reach}</td>
                     <td className="py-1.5">
-                      <span className={`${PILL} ${row.active ? PILL_GREEN : PILL_NEUTRAL}`}>
-                        {row.active ? 'Active' : 'Archived'}
+                      <span className={`${PILL} ${ROSTER_STATE[rosterStateOf(row)]?.[1] || PILL_NEUTRAL}`} data-testid={`hq-roster-state-${row.id}`}>
+                        {ROSTER_STATE[rosterStateOf(row)]?.[0] || rosterStateOf(row)}
                       </span>
                     </td>
                   </tr>
@@ -867,7 +876,7 @@ export default function ContentPage() {
     personas?.available
       ? `${num(personas.accounts_tagged)} of ${num(personas.active_accounts)} active accounts carry a persona tag` : null,
     roster?.available
-      ? `${num(roster.active)} active on the Advisors & Partners roster, ${num(roster.archived)} archived` : null,
+      ? `${num(roster.active)} active on the Advisors & Partners roster, ${num(roster.hidden)} hidden, ${num(roster.archived)} archived` : null,
   ].filter(Boolean);
 
   const rail = (

@@ -1,11 +1,10 @@
 import React from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
-import { Sparkles, FileText, Lock, Megaphone } from 'lucide-react';
+import { Sparkles, FileText, Lock } from 'lucide-react';
 import { useAuth } from '../hooks/useAuthSync';
 import { hasTier } from '../sidebarConfig';
 import { openPaywall } from '../components/PaywallModal';
 import PitchDeckPage from './PitchDeckPage';
-import PitchPositioningPage from './PitchPositioningPage';
 import { BUILDER_PATH, MOVED_KEY, MOVED_NOTICE, REVIEW_PATH } from './raise/pitch/pitchStudioModel';
 
 // RAISE Workspaces (Task #1) — Pitch workspace.
@@ -24,19 +23,17 @@ import { BUILDER_PATH, MOVED_KEY, MOVED_NOTICE, REVIEW_PATH } from './raise/pitc
 // D894 (#2434): the builder moved inside the Pitch deck studio, and Review is the
 // studio's own tab. D898 (#2676) put the canvas's editor at /raise/pitch/edit
 // and moved the builder to /raise/pitch/builder until the editor covers its
-// templates and fills. Positioning stays here until the
-// Investor narrative tool takes it (#2454). Each tab keeps the venture in the
+// templates and fills. D1113 retired Positioning here; the Investor narrative
+// tool owns it (#2454). Each remaining tab keeps the venture in the
 // address; the Deck Builder tab used to drop it and land on the read-only page.
 
 const TABS = [
   { id: 'deck', to: BUILDER_PATH, label: 'Deck Builder', icon: Sparkles },
-  { id: 'positioning', to: '/raise/investor-narrative/positioning', label: 'Positioning', icon: Megaphone },
   { id: 'review', to: REVIEW_PATH, label: 'Review', icon: FileText },
 ];
 
-// Task #10 — Positioning shares the Deck Builder's Growth gate (its
-// one-click generator hits a Growth-tier Worker endpoint).
-const GROWTH_TABS = new Set(['deck', 'positioning']);
+// The remaining Deck Builder tab retains its existing Growth gate.
+const GROWTH_TABS = new Set(['deck']);
 
 export default function PitchWorkspacePage() {
   const location = useLocation();
@@ -44,7 +41,7 @@ export default function PitchWorkspacePage() {
   const { user } = useAuth();
   const raiseSeed = location.state?.founderRaiseSeed;
 
-  const active = location.pathname.startsWith('/raise/pitch/positioning') ? 'positioning' : 'deck';
+  const active = 'deck';
   const deckLocked = !hasTier(user, 'growth');
   const params = new URLSearchParams(location.search);
   const moved = params.get('moved') === MOVED_KEY;
@@ -104,7 +101,6 @@ export default function PitchWorkspacePage() {
           initialProjectId={raiseSeed?.projectId}
         />
       ))}
-      {active === 'positioning' && (deckLocked ? <LockedDeck /> : <PitchPositioningPage embedded />)}
     </div>
   );
 }

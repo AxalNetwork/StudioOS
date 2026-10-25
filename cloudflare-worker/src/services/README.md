@@ -229,6 +229,13 @@ assumptions state. Mercury's accepted SAFEs explicitly pass `post_money` through
 `capTableWrites.ts`; manual missing basis retains the legacy pre-money default.
 The [YC post-money user guide](https://bookface-static.ycombinator.com/assets/ycdc/Website%20User%20Guide%20Feb%202023%20-%20final-28acf9a3b938e643cc270b7da514194d5c271359be25b631b025605673fa9f95.pdf)
 explains exclusion of cash-outs and the unissued pool from liquidity capitalization.
+`dataRoomActivity.ts` (D1105, #2985) is the data room's activity and checklist
+reads: `activityRead()` (a period's daily figures against the period before, per
+investor, the paged log), `activityCsv()` (the same rows; 413 past 10,000) and
+`checklistRead()` (per diligence item, its files and how many grants in force can
+open each, by `tierAdmits()` with each grant's folder scope and the NDA gate). A
+refusal (`blocked`) is never counted as an open, and a reader is named only through
+one of the venture's own grants. Its routes are `../routes/data_room.ts`'s.
 `dataRoomAccess.ts` (D691 decision 6, #1700) is the data room's one access
 predicate, `tierAdmits()`: a file's `access_tier` (`invited`, `committed`,
 `nobody`) and `access_expires_at`, with `investorCommitted()` (a committed
@@ -442,3 +449,5 @@ reads do not seed content. Published versions and audit behavior stay in D954's
 store; no migration or canvas sample text is introduced.
 
 D1129 searches decoded audit detail values, never JSON keys, and includes demoted/deleted payment actors in Who alongside current admins.
+
+D1133: `billingRecovery.ts` prepares caller-owned renewal invoice intents or card-only SetupIntents behind Billing’s fresh-TOTP routes, and records only allowlisted payment-refusal families. `billingAlerts.ts` atomically couples renewal history with alert transitions. No card/client secret is stored.
