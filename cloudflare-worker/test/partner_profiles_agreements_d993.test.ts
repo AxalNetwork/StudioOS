@@ -39,7 +39,9 @@ const SCHEMA = ['users', 'super_admins', 'user_sessions', 'activity_logs', 'admi
   'esign_envelopes', 'esign_recipients', 'esign_audit_events', 'legal_templates']
   .map((t) => stripForeignKeys(tableFromBaseline(BASELINE, t))).join('\n')
   + '\n' + read('cloudflare-worker/sql/migrations/275_partner_profiles_columns.sql')
-  + '\n' + read('cloudflare-worker/sql/migrations/556_partner_profiles_ref.sql');
+  + '\n' + read('cloudflare-worker/sql/migrations/556_partner_profiles_ref.sql')
+  // D991: the list reads 557's review columns.
+  + '\n' + read('cloudflare-worker/sql/migrations/557_partner_profile_review.sql');
 const SECRET = ['d993', 'agreements', 'fixture', 'signing', 'secret'].join('-');
 
 const SUPER = 1, SUPER_PW = 2, SUPER_STALE = 3, ADMIN = 4, MEMBER = 5;
