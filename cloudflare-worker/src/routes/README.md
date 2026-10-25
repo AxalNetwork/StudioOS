@@ -148,6 +148,12 @@ Prefixes mirror the FastAPI routers in `backend/app/api/routes/*.py` so the
 local FastAPI dev backend exposes the same `/api/...` paths the frontend
 calls in production.
 
+D1159 (#3066): `funds.ts` adds LP names to distribution previews and enforces
+and audits `fund.create`. `fund_performance.ts` enforces and audits
+`fund.valuation` for marks and fund attribution. Admin controls use the shared
+act table; existing institutional GP ownership/tier scope remains. The overview
+also returns an independent per-fund booklet waiting block.
+
 ### Build operating systems (D686)
 
 `GET /api/cycles/build/systems/choices?project=<id>` returns the caller's own
