@@ -31,6 +31,7 @@ import LabPreviewRedirect from '../src/pages/admin/lab/LabPreviewRedirect.jsx';
 import AdminPageHeader, { HeaderTab } from '../src/ui/AdminPageHeader.jsx';
 import { PARTICIPANTS_EMPTY_UNTRUSTED } from '../src/pages/admin/AdminSpinoutLab.jsx';
 import { NO_RAIL_ROUTES } from '../src/lib/railPages.js';
+import { SIDEBAR_GROUPS } from '../src/sidebarConfig.js';
 import { legacyContractsTarget } from '../src/pages/admin/LegacyContractsRedirect.jsx';
 import { overviewFixture } from './_lab_overview_fixture.mjs';
 
@@ -340,7 +341,13 @@ test('the routes, the redirects, the row, the rail and the reads the page must n
   assert.match(read('cloudflare-worker/src/services/redirectRoutes.ts'), /\{ path: '\/admin\/spinout-lab', keep: true \}/);
   // No rail: D317 keeps Eadwyn out of the Lab, at every tab.
   assert.ok(NO_RAIL_ROUTES.some((n) => n.route === LAB_PATH && n.prefix && n.roles.includes('admin')));
-  assert.match(read('frontend/src/sidebarConfig.js'), /match: \['\/admin\/programs\/spinout-lab'/);
+  // D953: Programs now owns the whole subtree, including every Lab tab.
+  const rows = SIDEBAR_GROUPS.admin.flatMap((g) => g.items || []);
+  for (const sub of ['', '/applications', '/cohorts', '/participants', '/hosts', '/formation', '/graduation', '/preview']) {
+    const path = `${LAB_PATH}${sub}`;
+    const lit = rows.filter((r) => r.to === path || (r.match || []).some((m) => path === m || path.startsWith(`${m}/`)));
+    assert.deepEqual(lit.map((r) => r.label), ['Programs'], path);
+  }
   const page = read('frontend/src/pages/admin/lab/AdminLab.jsx');
   // Guard H: neither read that hides its failures feeds a figure here.
   assert.doesNotMatch(page + read('frontend/src/pages/admin/lab/labModel.js').replace(/\/\*\*[\s\S]*?\*\//g, ''), /adminSpinoutApplications|adminSpinoutParticipants|spinout-applications|spinout-participants/);

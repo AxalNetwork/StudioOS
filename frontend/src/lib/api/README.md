@@ -309,6 +309,8 @@ directory, ratings, sessions, engagement counts per lane, payout readiness, a
 studio agreement on file and Lab host status), Pause and Resume, each with a
 required reason, and the advisor directory switch. No client name and no rating
 comment is on the wire.
+D1011 (#2830): `payments.js` calls `/api/admin/payments`: the change log, its
+CSV (with a reason) and the webhook's deliveries by hour. Super Admin only.
 
 D990 (#2801): `partnerProfiles.js` is HQ's Partner profiles on
 `/api/admin/partner-profiles`: the list (search, filters, sort and pages, with
