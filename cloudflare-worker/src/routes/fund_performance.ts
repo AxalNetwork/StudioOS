@@ -6,6 +6,7 @@ import { lpMembershipScope } from '../services/tenancyScope';
 import { claimLpRowsByEmail } from '../services/lpClaim';
 import { requireFundGp } from '../services/fundGpAccess';
 import { readFundPerformance, validDate } from '../services/fundPerformance';
+import { readFundHistory, readFundPositions } from '../services/fundPositionsHistory';
 import { refuse } from '../util/refusal';
 import { AUTH_ERROR_STATUSES } from '../util/authErrors';
 const r = new Hono<{ Bindings: Env }>();
@@ -52,6 +53,21 @@ r.get('/:id', async (c) => {
   const fund = (await readableFunds(c.env, user)).find((f: any) => f.id === id);
   if (!fund) return notFound();
   return c.json(await readFundPerformance(c.env, fund, today()));
+});
+// D1158: FND10's positions and quarterly history — the fund's GP of record and admins only.
+r.get('/:id/positions', async (c) => {
+  const id = positiveId(c.req.param('id'));
+  if (!id) return notFound();
+  await requireFundGp(c, id);
+  return c.json(await readFundPositions(c.env, id, today()));
+});
+r.get('/:id/history', async (c) => {
+  const id = positiveId(c.req.param('id'));
+  if (!id) return notFound();
+  if ((c.req.query('step') ?? 'quarter') !== 'quarter')
+    return refuse(c, 400, { code: 'invalid_history_step', message: 'History is read by quarter: step=quarter.' });
+  const { fund } = await requireFundGp(c, id);
+  return c.json(await readFundHistory(c.env, fund, today()));
 });
 r.put('/positions/:id/fund', async (c) => {
   const user = await requireAuth(c), id = positiveId(c.req.param('id'));

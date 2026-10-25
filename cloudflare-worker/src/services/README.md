@@ -4,6 +4,9 @@ Everything a route needs that is not request parsing or response shaping. A file
 here takes `env` and plain values; it does not take a Hono `Context` and does
 not return a `Response`.
 
+`dealAccess.ts` is D1149's shared invited-or-committed investor predicate, used
+by the deal reader and diligence opener. A room request is not a grant.
+
 The split matters because it is what makes the logic testable: the worker suite
 runs these directly against an in-process SQLite, with no request at all.
 
@@ -117,6 +120,8 @@ no new schema, runtime or billing path is introduced.
 | `railProposals.ts` | D780: `ai_rail_proposals` (migration 506), what a rail option's run leaves for the member to decide. `proposeRail` stores a draft, proposal or note with the run's page, option, record, model and `usage_log_id` (refusing a field D777 never fills); `decideRail` is the member's accept, edit or discard, once and on their own rows only; `listRail`, `getRail` and `withdrawRail`. Every option outside Validate and the zone drafts writes here. |
 | `narrative/` | D908: the Investor narrative's sections, positioning and bound figures, and the compare of two versions, behind `/api/cycles/raise/narrative/*`. Its README has the rules. |
 | `market_intel/` | Sourcing, extraction and scoring for market intelligence. |
+| `fundAdminLps.ts` | D1158 (#3065): `GET /api/fund-admin/lps`, every LP of every administered fund in one table. Money from the call ledger (`readFundCalls`), paid distributions, the last D716 notice and the booklet through the LP's application. Writes the fail-closed `fund_lps_read` audit row first. A figure no store holds is null with its reason in the row's `unavailable`; a store that cannot be read makes only its own figures Unreadable. Filters, search, sort, pages and totals run here, after the bound read. |
+| `fundPositionsHistory.ts` | D1158 (#3065): `readFundPositions`, each position with its latest dated mark or `marked: false` and a reason; `readFundHistory`, `readFundPerformance` point in time at each quarter end since the first call. Computed on every read, never stored. |
 | `mercury/` | D710: Mercury for fund administration, read-only. A GET-only client, the boundary parser that drops account numbers, the gates and read audit, the entity connections' store, the hourly sync and the reconciliation matches. Its README has the rules. |
 | `referrals/` | Referral submissions. |
 | `records/` | D690's scoped cycle record contract, registry and ownership checks. |
@@ -246,6 +251,11 @@ D1103 (#2983) adds a grant's folder scope (migration 594): `grantFolderScope()`
 reads it as the named folders with their subfolders, or null for every folder,
 and `tierAdmits()` takes it as its fourth argument. A scope that cannot be read
 opens nothing.
+`dataRoomRequests.ts` (D1104, #2984) is the access-request queue (migration
+595): `roundCallRequestStatement()` (the round call's request, in its response
+batch under its claim), `dealPageRequestStatement()` (for DEAL's DL9) and
+`readRequests()`. One open request per investor and venture, and none for an
+investor who already has the room.
 `deckSlideDwell.ts` stores a share-link view's seconds per slide, bounded so
 they never add up to more than the view's read time.
 `peerBenchmark.ts` (#1524) is the peer-group benchmark for every founder:
@@ -429,6 +439,11 @@ current relationship too, beyond the legacy deal-reader gate.
 D886 B8: `meetingBotRuntime.ts` routes commands to a private cross-script DO
 host and derives run-scoped keys. `meetingBotZoom.ts` mints credentials from
 the reauthorized stored run, with a run-bounded SDK JWT. No credentials log.
+
+D1119 (#2999): `programCatalogue.ts` reads part 4's shared claim and requested
+strategic-access counts, including a claim weekly series and independent failure
+states. `programActivity.ts` includes its six audited review actions, naming
+Perk listings without exposing member ids or review notes.
 
 `perkClaims.ts` (D957) gives the admin Perks page and program catalogue one
 UTC Monday window for claim totals, listing ranks and weekly price-kind counts.

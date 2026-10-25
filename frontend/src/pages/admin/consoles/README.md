@@ -10,7 +10,6 @@ its own routed desk and tests.
 | File | Console | Reads |
 | --- | --- | --- |
 | `UsersConsole.jsx` | Users: the account directory, role picker, support sessions, the account drawer | the users list, trust scores |
-| `PartnerProfilesConsole.jsx` | Partner Profiles and the profile review drawer. Since D989 the tab forwards to `/admin/partner-profiles` (`../profiles/`), which opens this file's `ProfileReviewModal` | the profiles list |
 | `KycConsole.jsx` | KYC / AML queue and its review drawer | the queue, one record on Review |
 | `PersonasConsole.jsx` | Personas. Since D997 the tab forwards to `/admin/persona-segments` (`../segments/`), whose Overview embeds `PersonasPanel` until its part 8 | the persona list |
 | `DirectoryConsole.jsx` | Directory | the directory partners |

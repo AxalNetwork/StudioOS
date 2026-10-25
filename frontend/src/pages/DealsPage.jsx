@@ -321,7 +321,7 @@ export default function DealsPage() {
                     </td>
                     <td className="px-3 py-3 text-gray-600 dark:text-gray-400">{deal.lead_partner_name || '—'}</td>
                     <td className="px-3 py-3 text-gray-600 dark:text-gray-400">{deal.source || '—'}</td>
-                    <td className="px-3 py-3 text-gray-600 dark:text-gray-400">{deal.days_in_stage ?? 0}d</td>
+                    <td className="px-3 py-3 text-gray-600 dark:text-gray-400">{deal.days_in_stage == null ? NOT_RECORDED : `${deal.days_in_stage}d`}</td>
                     <td className="px-3 py-3 text-right">
                       <button onClick={() => setDrawer(deal)} className="text-gray-400 hover:text-violet-600 p-1" aria-label="View deal">
                         <Eye size={16} />
