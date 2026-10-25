@@ -26,6 +26,7 @@ const BASELINE = readFileSync(new URL('../sql/schema_baseline.sql', import.meta.
 const TABLES = [
   'users', 'lp_applications', 'referral_submissions', 'cohort_applicants',
   'partner_profiles', 'user_role_review', 'job_postings', 'events', 'admin_consultation_bookings', 'dd_cases',
+  'esign_envelopes',
 ];
 const NOW = Date.parse('2026-09-24T12:00:00Z');
 const at = (h: number) => new Date(NOW - h * 3_600_000).toISOString().replace('T', ' ').slice(0, 19);
@@ -55,8 +56,12 @@ function seed(d: DatabaseSync) {
       (1, 'kyc@x.test', 'Kay', 'founder', 'pending', '${at(90)}', '${at(900)}'),
       (2, 'done@x.test', 'Done', 'founder', 'approved', '${at(95)}', '${at(900)}'),
       (3, 'exp@x.test', '', 'exploring', 'not_started', NULL, '${at(500)}'),
-      (4, 'host@x.test', 'Hostess', 'partner', 'not_started', NULL, '${at(900)}');
-    INSERT INTO user_role_review (user_id, suggested_role, onboarded_at) VALUES (3, 'investor', '${at(40)}');
+      (4, 'host@x.test', 'Hostess', 'partner', 'not_started', NULL, '${at(900)}'),
+      (5, 'unsigned@x.test', 'Una', 'exploring', 'not_started', NULL, '${at(700)}');
+    -- D1039: Exploring holds an Explorer who signed (3); one with no agreement (5) is not waiting on an admin.
+    INSERT INTO esign_envelopes (id, envelope_uuid, user_id, document_type, document_title, document_body, body_sha256, status, created_by, completed_at)
+      VALUES (90, 'env-90', 3, 'binding_agreement', 'Binding agreement', 'Synthetic', 'synthetic', 'completed', 1, '${at(30)}');
+    INSERT INTO user_role_review (user_id, suggested_role, onboarded_at, binding_envelope_id) VALUES (3, 'investor', '${at(40)}', 90), (5, 'founder', '${at(80)}', NULL);
     INSERT INTO partner_profiles (email, persona, legal_entity_name, admin_status, created_at) VALUES
       ('orphan@x.test', 'consultant', 'Orphan LLC', 'pending', '${at(60)}'),
       ('ok@x.test', 'consultant', 'Verified Co', 'verified', '${at(600)}');
