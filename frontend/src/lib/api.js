@@ -11,6 +11,7 @@ import { railBody } from './railPages.js';
 // block does not name exactly the files in lib/api/.
 // api-modules:begin
 export * from './api/adminAiUsage.js';
+export * from './api/adminApprovals.js';
 export * from './api/adminCapitalAttestations.js';
 export * from './api/adminIncorporations.js';
 export * from './api/adminLab.js';
@@ -24,6 +25,7 @@ export * from './api/assistants.js';
 export * from './api/bankAccounts.js';
 export * from './api/billingAlerts.js';
 export * from './api/billingInvoices.js';
+export * from './api/capTableRecord.js';
 export * from './api/channelKeys.js';
 export * from './api/channels.js';
 export * from './api/community.js';
@@ -2599,10 +2601,13 @@ export const api = {
   },
   adminUpdateNotes: (userId, admin_notes) => request(`/admin/users/${userId}/notes`, { method: 'POST', body: JSON.stringify({ admin_notes }) }),
   adminResendVerification: (userId) => request(`/admin/users/${userId}/resend-verification`, { method: 'POST' }),
-  // Task #7 — admit a founder to the next Spin-Out Lab cohort (sends the
-  // "You're in" email from the Worker; dev backend sets flags only).
-  adminSpinoutAdmit: (userId, cohort) =>
-    request(`/admin/users/${userId}/spinout-admit`, { method: 'POST', body: JSON.stringify(cohort ? { cohort } : {}) }),
+  // D945 — Users' door to admit without an application: { cycle_id, reason,
+  // company_name?, confirm_over_places? }, into an open cohort. A free-text
+  // cohort label (the old second argument) is refused by the Worker.
+  adminSpinoutAdmit: (userId, admission) =>
+    request(`/admin/users/${userId}/spinout-admit`, {
+      method: 'POST', body: JSON.stringify(typeof admission === 'string' ? { cohort: admission } : (admission || {})),
+    }),
   // Spin-Out Lab cohort application review queue. Accept → admitted flags +
   // "You're in" email; refuse → encouragement-to-re-apply email (Worker).
   adminSpinoutApplications: () => request('/admin/spinout-applications'),

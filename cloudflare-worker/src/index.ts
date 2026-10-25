@@ -212,6 +212,7 @@ import revenueRoutes from './routes/revenue';
 import wellbeingRoutes from './routes/wellbeing';
 import complianceRoutes from './routes/compliance';
 import captableRoutes from './routes/captable';
+import captableAccessRoutes from './routes/captable_access';
 import dataRoomRoutes from './routes/data_room';
 import advisorGrantRoutes from './routes/advisor_grants';
 import messagesRoutes from './routes/messages';
@@ -228,6 +229,7 @@ import adminSupportSessions from './routes/admin_support_sessions';
 import branchEscalationRoutes from './routes/branch_escalations';
 import branchApprovalRoutes from './routes/branch_approvals';
 import branchApprovalAssignmentRoutes from './routes/branch_approval_assignments';
+import adminApprovalRoutes from './routes/admin_approvals';
 import branchHomeRoutes from './routes/branch_home';
 import branchTemplateRoutes from './routes/branch_templates';
 import branchInsightsRoutes from './routes/branch_insights';
@@ -1078,6 +1080,9 @@ app.route('/api/branch', branchApprovalRoutes);
 // D470 — assignment is a side record, not a decision and not a thread. Its
 // own file so the board route stays a read.
 app.route('/api/branch', branchApprovalAssignmentRoutes);
+// D1040 — HQ's inbox: the same board, assignment and history on requireAdmin,
+// without the branch tier gate.
+app.route('/api/admin/approvals', adminApprovalRoutes);
 // D131 — S1's digest. A third file on the same prefix because it composes what
 // the other two read rather than owning a store of its own.
 app.route('/api/branch', branchHomeRoutes);
@@ -1343,6 +1348,8 @@ app.route('/api/revenue', revenueRoutes);
 app.route('/api/wellbeing', wellbeingRoutes);
 // T12 — Compliance calendar + Cap-table simulator + Co-founder matching.
 app.route('/api/compliance', complianceRoutes);
+// D1019 (#2856): who sees what. Before /api/captable, whose `/:projectId` would take "access".
+app.route('/api/captable/access', captableAccessRoutes);
 app.route('/api/captable', captableRoutes);
 app.route('/api/data-room', dataRoomRoutes);
 // Task #55 — a founder opens a client record to a named advisor, scope by

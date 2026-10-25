@@ -111,7 +111,7 @@ test('D916: create validates editor JSON and legacy audience objects, preserving
     assert.equal(JSON.parse(f.db.prepare('SELECT audience_rules_json FROM events WHERE id=?').get(invite.body.event.id)!.audience_rules_json as string).mode, 'invite_only');
     assert.equal((await f.create()).status, 201, 'omitted rules still allow creation');
     const before = f.db.prepare('SELECT COUNT(*) AS n FROM events').get()!.n;
-    for (const invalid of ['{', 'null', [], { mode: 'selected' }, { roles: ['advisor'] }, { comp_investors: 'yes' }, { unknown: true }]) {
+    for (const invalid of ['{', 'null', [], { mode: 'selected' }, { roles: ['mentor'] }, { comp_investors: 'yes' }, { unknown: true }]) {
       const rejected = await f.create({ audience_rules_json: invalid });
       assert.deepEqual([rejected.status, rejected.body.error], [400, 'invalid_audience_rules']);
     }
