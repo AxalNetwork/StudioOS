@@ -21,10 +21,18 @@ over its tab, and the dialogs.
   with "View as table", drawn with `../../../ui/Charts.jsx`. A C1 bar opens
   Invitations at `?stage=`, a C3 segment Deals at `?type=&state=`.
   Overview's Needs-you row about unattached accounts opens the Firms tab.
-- `PartnersInvitations.jsx` — Invitations (PI2): the table under Guards L and
-  I, its toolbar, the row menu and the pager.
-- `InvitationRecord.jsx` — one invitation (PI3; PI11c on a phone).
-- `NewInvitationDialog.jsx` — New invitation (PI4) and its result (PI4d, PI4n).
+- `PartnersInvitations.jsx` — Invitations (PI2; PI11b on a phone), on part 3's
+  server list (D926, D950): search, stage chips, type, inviter, first send,
+  sort and page are the Worker's, with an exact total; the Email column; Export
+  CSV of the current view, never with the link or its token; the row menu.
+  On a phone, cards, a Filters bottom sheet and the sort as a select.
+- `InvitationRecord.jsx` — one invitation (PI3; PI11c on a phone), on part 4's
+  read (D927, D950): the message, the seven step dates, the latest send, what
+  was offered and seen, the chosen deal, the agreement's refusals and the
+  history, each block alone.
+- `NewInvitationDialog.jsx` — New invitation (PI4) and its result (PI4d,
+  PI4n): the five cards from part 4's offer preview, and the two warnings from
+  part 3's lookup (D950).
 - `PartnersDeals.jsx` — Deals (PI5) and Top deals by redemptions.
 - `DealRecord.jsx` — one deal (PI6).
 - `PartnersReferrals.jsx` — Referrals (PI7), under Guard F; `?deal=<id>`
@@ -33,7 +41,14 @@ over its tab, and the dialogs.
 - `parts.jsx` — the card, pills, stage dots, tiles, read states, copy button,
   row menu, pager and refusal line the tabs share.
 - `usePartnerDesk.js` — the reads, each made alone, and `useRead` for a
-  record's own reads.
+  record's own reads. R1 keeps the Worker's exact `total` (D950).
+- `useInvitationList.js` — the Invitations tab's page from the Worker: one
+  debounced request per filter change, a late reply for old filters dropped
+  (D950).
+- `invitationsModel.js` — pure, D950's rules: the server query, the Email
+  column, the CSV, one invitation's blocks (steps, offers, chosen deal,
+  refusals, history), the offer preview, the lookup's warnings and Resend's
+  result.
 - `partnersDeskModel.js` — pure. Addresses, the words, Guard L (lists that
   stop at their cap), Guard F (sums over the redemptions fan-out), Guard I
   (the stage word and its repair after a resend), the agreement-ready rule,
@@ -43,7 +58,8 @@ over its tab, and the dialogs.
 
 ## Rules
 
-- The desk reads only what D923 §2 lists: the invitations, the six deal lists,
+- The desk reads only what D923 §2 lists, and since D950 part 4's single
+  invitation, its offer preview and part 3's lookup: the invitations, the six deal lists,
   top deals, one deal's redemptions, the uncapped partner-deals read in
   Contracts, the firm links, one envelope, the Partner Services template, the
   partner due-diligence cases, one member's obligations, the members matching
@@ -58,7 +74,9 @@ over its tab, and the dialogs.
   says "Not in this read".
 - Every dialog is a `Lightbox` that says only what the Worker does. A result
   or a refusal sits inside it until Done: no toast, no timer.
-- Nothing D923 §3 lists under "Not drawn now" is drawn, except C1–C4, which
-  D929 draws on these reads until part 4's overview read: no Email column,
-  no CSV, no offer text, no Adjust terms, no step dates beyond the record's
-  own, no history beyond one line.
+- Nothing D923 §3 lists under "Not drawn now" is drawn, except C1–C4 (D929)
+  and what D950 draws from parts 3 and 4: the Email column, the CSV, the offer
+  text, the step dates and the history. Adjust terms waits for O-TERMS.
+- The Invitations tab and one invitation draw the stored stage: since D924 a
+  resend keeps it, so Guard I's repair is not applied there (`repair: false`).
+  The other tabs keep it until their parts.

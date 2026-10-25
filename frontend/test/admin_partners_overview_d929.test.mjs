@@ -28,9 +28,10 @@ import PartnerInvitations from '../src/pages/admin/PartnerInvitations.jsx';
 import { ChartTable, Legend } from '../src/ui/Charts.jsx';
 import {
   C3_STATES, DEAL_STATE_KEYS, WITHIN_DEALS, WITHIN_INVITATIONS, dealFiltersFromSearch, dealRow, dealTiles, dealsByTypeState,
-  dealsOfTypeState, dealsUnion, filterDeals, filterInvitations, invitationRow, invitationsAtStage, stageChart, stagesFromSearch,
+  dealsOfTypeState, dealsUnion, filterDeals, invitationsAtStage, stageChart, stagesFromSearch,
   weekLabel, weekStart, weekStarts, weeklyInvitations, weeklyRedemptions,
 } from '../src/pages/admin/partners/partnersDeskModel.js';
+import { listQuery } from '../src/pages/admin/partners/invitationsModel.js';
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '../..');
 const read = (rel) => readFileSync(resolve(root, rel), 'utf8');
@@ -135,18 +136,18 @@ test('C1: Guard I lifts a resent row from its deal, Guard L says what a capped l
   assert.deepEqual(capped.lines, [`${WITHIN_INVITATIONS}.`]);
 });
 
-test('C1: a bar opens Invitations at that stage, and that list counts what the bar counted', () => {
+test('C1: a bar opens Invitations at that stage, and the Worker is asked for exactly that stage (D950)', () => {
   const rows = c1Rows();
   const b = stageChart(ready(rows), { proposed: ready([]), now: NOW });
-  const all = rows.map((i) => ({ inv: i, row: invitationRow(i, { proposed: ready([]), now: NOW }) }));
   for (const bar of b.chart.rows) {
     const href = invitationsAtStage(bar.group);
     assert.ok(href.startsWith('/admin/partner-invitations/invitations?stage='));
     const stages = stagesFromSearch(href.split('?')[1]);
     assert.deepEqual(stages, [bar.group]);
-    assert.equal(filterInvitations(all, { stages, now: NOW }).length, bar.value, `${bar.label}: the bar and its list agree`);
+    // D950: the list is the Worker's (D926), which counts that stage itself, Lapsed included.
+    assert.deepEqual(listQuery({ stages }).stage, [bar.group], `${bar.label}: the list asks for the bar's stage`);
   }
-  for (const c of b.closed) assert.equal(filterInvitations(all, { stages: stagesFromSearch(invitationsAtStage(c.key).split('?')[1]), now: NOW }).length, c.n, c.word);
+  for (const c of b.closed) assert.deepEqual(listQuery({ stages: stagesFromSearch(invitationsAtStage(c.key).split('?')[1]) }).stage, [c.key], c.word);
   assert.deepEqual(stagesFromSearch('?stage=viewed,nope,viewed'), ['viewed'], 'only known stages, once');
   assert.deepEqual(stagesFromSearch(''), []);
 });

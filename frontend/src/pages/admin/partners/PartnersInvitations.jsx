@@ -45,7 +45,7 @@ function download(name, text) {
   a.download = name;
   document.body.appendChild(a);
   a.click();
-  a.remove();
+  document.body.removeChild(a);
   setTimeout(() => URL.revokeObjectURL(url), 1500);
 }
 

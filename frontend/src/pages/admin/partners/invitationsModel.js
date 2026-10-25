@@ -15,7 +15,7 @@ import { NOT_RECORDED } from '../../../lib/absence.js';
 import { parseStamp } from '../../../ui/parseStamp.js';
 import {
   COULD_NOT_READ, DEAL_TYPES, NOT_REACHED, ROWS_PER_PAGE, STEPS, day, dayOr, dealTypeWord, invitationRow, isFailed, isLoading,
-  dataOf, isCoolOff, PAUSED, whoOf,
+  dataOf, isCoolOff, whoOf,
 } from './partnersDeskModel.js';
 
 const nf = (n) => Number(n).toLocaleString('en-US');
@@ -446,5 +446,3 @@ export function resendResult(reply) {
   if (reply?.email_sent === true) return { text: has ? RESENT_ONBOARDING : RESENT_PLAIN, sent: true };
   return { text: RESENT_NOT_SENT_LINK, sent: false, copy: true };
 }
-
-export { PAUSED };
