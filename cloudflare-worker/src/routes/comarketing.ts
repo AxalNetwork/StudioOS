@@ -12,6 +12,8 @@ import { activeCompanyFor } from '../middleware/activeCompany';
 import { projectInActiveCompany } from '../services/tenancyScope';
 import { refuse } from '../util/refusal';
 import { logActorAct } from '../services/actorLog';
+import { notify } from '../services/notify';
+import { AUTH_ERROR_STATUSES } from '../util/authErrors';
 
 const r = new Hono<{ Bindings: Env }>();
 
@@ -42,11 +44,12 @@ type Pitch = {
   created_at: string; updated_at: string;
 };
 
-async function attribCounts(env: Env, pitchId: number) {
+async function attribCounts(env: Env, pitchId: number, since: string | null = null) {
   const rows = await env.DB.prepare(
     `SELECT event_kind, COUNT(*) c FROM comarketing_attributions
-     WHERE pitch_id = ? GROUP BY event_kind`
-  ).bind(pitchId).all<{ event_kind: string; c: number }>();
+     WHERE pitch_id = ? AND (? IS NULL OR (datetime(created_at) >= datetime(?) AND datetime(created_at) <= datetime('now'))) GROUP BY event_kind`
+  ).bind(pitchId, since, since).all<{ event_kind: string; c: number }>();
+  if (('success' in rows && !rows.success) || !Array.isArray(rows.results)) throw new Error('Attribution counts were not returned');
   const out = { visit: 0, signup: 0, lead: 0, conversion: 0, total: 0 } as Record<string, number>;
   for (const row of rows.results || []) {
     out[row.event_kind] = Number(row.c);
@@ -280,19 +283,46 @@ r.get('/admin/queue', async (c) => {
   try {
     await requireAdmin(c);
     const status = c.req.query('status') || 'proposed';
+    if (!['proposed', 'approved', 'rejected', 'published', 'withdrawn', 'all'].includes(status)) {
+      return refuse(c, 400, { code: 'invalid_status', message: 'Choose a pitch status or all.' });
+    }
+    const limit = Number(c.req.query('limit') ?? 25);
+    const offset = Number(c.req.query('offset') ?? 0);
+    if (!Number.isSafeInteger(limit) || limit < 1 || limit > 200 || !Number.isSafeInteger(offset) || offset < 0) {
+      return refuse(c, 400, { code: 'invalid_page', message: 'Use a limit from 1 to 200 and a nonnegative offset.' });
+    }
+    const since = new Date(Date.now() - 30 * 86400000).toISOString();
+    const total = await c.env.DB.prepare(`SELECT COUNT(*) AS n FROM comarketing_pitches WHERE (? = 'all' OR status = ?)`)
+      .bind(status, status).first<{ n: number }>();
+    if (!total || !Number.isSafeInteger(total.n)) throw new Error('Pitch total was not returned');
     const rows = await c.env.DB.prepare(
-      'SELECT * FROM comarketing_pitches WHERE status = ? ORDER BY created_at DESC'
-    ).bind(status).all<Pitch>();
+      `SELECT * FROM comarketing_pitches WHERE (? = 'all' OR status = ?)
+       ORDER BY datetime(created_at) ASC, id ASC LIMIT ? OFFSET ?`
+    ).bind(status, status, limit, offset).all<Pitch>();
+    if (('success' in rows && !rows.success) || !Array.isArray(rows.results)) throw new Error('Pitch rows were not returned');
+    const summary = await c.env.DB.prepare(
+      `SELECT a.event_kind, COUNT(*) AS n FROM comarketing_attributions a
+       JOIN comarketing_pitches p ON p.id = a.pitch_id
+       WHERE (? = 'all' OR p.status = ?) AND datetime(a.created_at) >= datetime(?) AND datetime(a.created_at) <= datetime('now') GROUP BY a.event_kind`,
+    ).bind(status, status, since).all<{ event_kind: string; n: number }>();
+    if (('success' in summary && !summary.success) || !Array.isArray(summary.results)) throw new Error('Attribution summary was not returned');
+    const attribution30d: Record<string, number> = { visit: 0, signup: 0, lead: 0, conversion: 0, total: 0 };
+    for (const row of summary.results) { attribution30d[row.event_kind] = Number(row.n); attribution30d.total += Number(row.n); }
     const items: any[] = [];
     for (const p of rows.results || []) {
       const partner = await c.env.DB.prepare('SELECT name, company FROM partners WHERE id = ?').bind(p.partner_id).first<any>();
       const d = pitchDto(p, await attribCounts(c.env, p.id));
+      d.attribution_30d = await attribCounts(c.env, p.id, since);
       d.partner_name = partner?.name || null;
       d.partner_company = partner?.company || null;
       items.push(d);
     }
-    return c.json({ items });
-  } catch (e) { return mapError(c, e); }
+    return c.json({ items, total: Number(total.n), limit, offset, attribution_30d: attribution30d, attribution_since: since });
+  } catch (e) {
+    if (e instanceof Response || (e instanceof Error && AUTH_ERROR_STATUSES[e.message])) return mapError(c, e);
+    console.error('[comarketing] queue read failed');
+    return refuse(c, 503, { code: 'queue_unreadable', message: 'The co-marketing queue could not be read. That is not the same as none.' });
+  }
 });
 
 /** D1039: a decline tells the partner why, in at least this many characters. */
@@ -301,12 +331,17 @@ export const DECLINE_REASON_MIN = 10;
 async function adminTransition(c: Context<{ Bindings: Env }>, target: 'approve' | 'reject' | 'publish') {
   try {
     return await decide(c, target);
-  } catch (e) { return mapError(c, e); }
+  } catch (e) {
+    if (e instanceof Response || (e instanceof Error && AUTH_ERROR_STATUSES[e.message])) return mapError(c, e);
+    console.error('[comarketing] decision failed');
+    return refuse(c, 503, { code: 'decision_failed', message: 'The pitch decision could not be completed. Read the pitch before retrying.' });
+  }
 }
 
 async function decide(c: Context<{ Bindings: Env }>, target: 'approve' | 'reject' | 'publish') {
   const user = await requireAdmin(c);
   const body = await c.req.json().catch(() => ({} as any));
+  if (!body || typeof body !== 'object' || Array.isArray(body)) return refuse(c, 400, { code: 'invalid_body', message: 'Send the decision as an object.' });
   if (target === 'reject') {
     const reason = typeof body?.notes === 'string' ? body.notes.trim() : '';
     if (reason.length < DECLINE_REASON_MIN) {
@@ -330,18 +365,31 @@ async function decide(c: Context<{ Bindings: Env }>, target: 'approve' | 'reject
   let publishedUrl = p.published_url;
   let reviewNotes = p.review_notes;
   if (next === 'published') {
+    try {
+      const url = new URL(typeof body.published_url === 'string' ? body.published_url : '');
+      if (url.protocol !== 'https:' || url.username || url.password || url.href.length > 500) throw new Error('invalid');
+      publishedUrl = url.href;
+    } catch {
+      return refuse(c, 400, { code: 'https_url_required', message: 'Publishing needs an HTTPS link without sign-in details.' });
+    }
     publishedAt = nowIso();
-    if (body.published_url) publishedUrl = String(body.published_url).slice(0, 500);
     if (body.notes) {
       reviewNotes = (p.review_notes ? `${p.review_notes}\n\n` : '') + `[publish] ${body.notes}`;
     }
   } else if (body.notes !== undefined) {
     reviewNotes = body.notes ? String(body.notes).slice(0, 2000) : null;
   }
-  await c.env.DB.prepare(
+  const changed = await c.env.DB.prepare(
     `UPDATE comarketing_pitches SET status=?, review_notes=?, reviewed_by_user_id=?, reviewed_at=?,
-       attribution_code=?, published_at=?, published_url=?, updated_at=? WHERE id=?`
-  ).bind(next, reviewNotes, user.id, nowIso(), setAttribCode, publishedAt, publishedUrl, nowIso(), p.id).run();
+       attribution_code=?, published_at=?, published_url=?, updated_at=? WHERE id=? AND status=?`
+  ).bind(next, reviewNotes, user.id, nowIso(), setAttribCode, publishedAt, publishedUrl, nowIso(), p.id, p.status).run();
+  if (Number(changed.meta?.changes) !== 1) return refuse(c, 409, { code: 'pitch_changed', message: 'This pitch changed while you were deciding. Read it again.' });
+  await logActorAct(c.env, user, `comarketing_${next}`, { pitch_uid: p.uid, partner_id: p.partner_id });
+  await notify(c.env, {
+    userId: p.submitter_user_id, type: `comarketing_${next}`, title: `Co-marketing pitch ${next === 'rejected' ? 'declined' : next}`,
+    body: `Your pitch “${p.title}” was ${next === 'rejected' ? 'declined' : next}.${next === 'rejected' ? ` Reason: ${reviewNotes}` : ''}${next === 'published' ? ` ${publishedUrl}` : ''}`,
+    link: '/comarketing', channels: ['in_app', 'email'], payload: { pitch_uid: p.uid, status: next },
+  });
   const fresh = await c.env.DB.prepare('SELECT * FROM comarketing_pitches WHERE id = ?').bind(p.id).first<Pitch>();
   return c.json(pitchDto(fresh!, await attribCounts(c.env, p.id)));
 }

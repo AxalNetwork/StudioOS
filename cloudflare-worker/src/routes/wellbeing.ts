@@ -61,6 +61,8 @@ import { stripeCall } from './billing';
 import { clampLimit } from '../util/pagination';
 import { bindingKey } from '../util/schemaBootstrap';
 import { ensureAdminAuditLogTable } from './admin';
+import expertReviews, { expertReviewResult } from './wellbeing_expert_review';
+import { expertDecision, reviewTarget } from '../services/wellbeing/expertReview';
 
 const wellbeing = new Hono<{ Bindings: Env }>();
 
@@ -172,6 +174,15 @@ async function ensureWellbeingSchema(env: Env): Promise<void> {
        first_session_free INTEGER NOT NULL DEFAULT 0,
        calendly_url TEXT, booking_url TEXT, website_url TEXT,
        verified INTEGER NOT NULL DEFAULT 0,
+       decision_state TEXT NOT NULL DEFAULT 'pending' CHECK (decision_state IN ('pending', 'verified', 'declined')),
+       decided_by INTEGER REFERENCES users(id) ON DELETE SET NULL,
+       decided_at TEXT,
+       decline_reason TEXT,
+       licence_number TEXT,
+       licence_issuer TEXT,
+       licence_expires_on TEXT,
+       review_version INTEGER NOT NULL DEFAULT 0,
+       decision_token TEXT,
        is_active INTEGER NOT NULL DEFAULT 1,
        created_at TEXT NOT NULL DEFAULT (datetime('now'))
      )`,
@@ -1034,7 +1045,7 @@ wellbeing.get('/resources/:uid/file', async (c) => {
 // ---------------------------------------------------------------------------
 // Expert directory (Task #8 DI)
 // ---------------------------------------------------------------------------
-function serializeExpert(e: ExpertRow, opts: { include_score?: number; rating_avg?: number; rating_count?: number; breakdown?: any; services?: any[] } = {}) {
+function serializeExpert(e: ExpertRow, opts: { include_created_at?: boolean; include_score?: number; rating_avg?: number; rating_count?: number; breakdown?: any; services?: any[] } = {}) {
   const parse = (s: string) => { try { return JSON.parse(s); } catch { return []; } };
   return {
     uid: e.uid,
@@ -1065,6 +1076,7 @@ function serializeExpert(e: ExpertRow, opts: { include_score?: number; rating_av
     match_score: opts.include_score ?? null,
     match_breakdown: opts.breakdown ?? null,
     services: opts.services ?? null,
+    ...(opts.include_created_at ? { created_at: (e as ExpertRow & { created_at?: string }).created_at ?? null } : {}),
   };
 }
 
@@ -1226,6 +1238,7 @@ wellbeing.get('/experts', async (c) => {
     const services = await activeServices(c.env, ranked.map((s) => s.expert.id));
     return c.json({
       matches: ranked.map((s) => serializeExpert(s.expert, {
+        include_created_at: isAdmin,
         include_score: Math.round(s.score * 100) / 100,
         rating_avg: s.rating_avg, rating_count: s.rating_count,
         breakdown: s.breakdown,
@@ -2047,37 +2060,42 @@ async function auditExpert(env: Env, adminId: number, action: string, uid: strin
 
 // --- admin review-hide ---
 wellbeing.post('/admin/experts/:uid/hide', async (c) => {
-  const a = await admin(c);
-  if (a instanceof Response) return a;
+  const a = await requireAdmin(c);
   await ensureWellbeingSchema(c.env);
   const body = await c.req.json().catch(() => ({}));
+  if (typeof body?.hidden !== 'boolean') return refuse(c, 400, { code: 'invalid_decision', message: 'Say whether the expert should be hidden.' });
   const hidden = body?.hidden ? 1 : 0;
   // D142 — `hidden: true` is a takedown (stays open on a suspended branch);
   // `hidden: false` restores the expert to the directory, which is the "put
   // something NEW under the brand" case FREEZE_RULE gates.
   if (!hidden) await requireBranchNotSuspended(c);
-  const res = await c.env.DB.prepare(
-    'UPDATE experts SET hidden_by_admin = ? WHERE uid = ?',
-  ).bind(hidden, c.req.param('uid')).run();
-  const changes = (res.meta as any)?.changes ?? 0;
-  if (changes) await auditExpert(c.env, a.id, hidden ? 'expert_hidden' : 'expert_restored', c.req.param('uid'));
-  return c.json({ ok: true, hidden: !!hidden, changes });
+  return expertReviewResult(c, async () => {
+    const row = await reviewTarget(c.env, c.req.param('uid'), a);
+    const saved = await expertDecision(c.env, row, a, hidden ? 'hidden' : 'restored', body);
+    await auditExpert(c.env, a.id, hidden ? 'expert_hidden' : 'expert_restored', row.uid);
+    return c.json({ ...saved, changes: 1 });
+  });
 });
 
 wellbeing.post('/admin/experts/:uid/verify', async (c) => {
-  const a = await admin(c);
-  if (a instanceof Response) return a;
+  const a = await requireAdmin(c);
   await ensureWellbeingSchema(c.env);
   const body = await c.req.json().catch(() => ({}));
+  if (typeof body?.verified !== 'boolean') return refuse(c, 400, { code: 'invalid_decision', message: 'Say whether the expert should be verified.' });
   const verified = body?.verified ? 1 : 0;
   // D142 — verifying is what unlocks an expert's directory listing, so it is
   // the publish-shaped write; removing verification is a takedown and stays
   // open on a suspended branch.
   if (verified) await requireBranchNotSuspended(c);
-  const res = await c.env.DB.prepare('UPDATE experts SET verified = ? WHERE uid = ?').bind(verified, c.req.param('uid')).run();
-  if ((res.meta as any)?.changes) await auditExpert(c.env, a.id, verified ? 'expert_verified' : 'expert_unverified', c.req.param('uid'));
-  return c.json({ ok: true, verified: !!verified });
+  return expertReviewResult(c, async () => {
+    const row = await reviewTarget(c.env, c.req.param('uid'), a);
+    const saved = await expertDecision(c.env, row, a, verified ? 'verified' : 'unverified', body);
+    await auditExpert(c.env, a.id, verified ? 'expert_verified' : 'expert_unverified', row.uid);
+    return c.json(saved);
+  });
 });
+
+wellbeing.route('/', expertReviews);
 
 // Expose schema bootstrap for tests / admin.
 export { ensureWellbeingSchema };

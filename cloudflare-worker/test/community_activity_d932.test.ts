@@ -69,7 +69,8 @@ function seed(opts: { drop?: string[] } = {}) {
   reg.run(10, null, 'rae@reg.example', 'Rae Registrant', 'registered', '2026-10-24 09:30:00');
   reg.run(10, null, 'x@reg.example', 'X Y', 'cancelled', '2026-10-24 10:15:00');
   reg.run(10, null, 'z@reg.example', 'Z W', 'registered', '2026-10-23 07:00:00');
-  db.prepare(`INSERT INTO experts (uid, name, verified) VALUES ('exp-2', 'Dr Elena Expert', 0)`).run();
+  db.exec(read('cloudflare-worker/sql/migrations/577_expert_review_records.sql'));
+  db.prepare(`INSERT INTO experts (uid, user_id, name, verified) VALUES ('exp-2', 2, 'Dr Elena Expert', 0)`).run();
   for (const t of opts.drop || []) db.exec(`DROP TABLE ${t}`);
   return db;
 }
@@ -242,7 +243,7 @@ test('a bad filter is a 400, and a member is refused', async () => {
 
 test('verifying and hiding an expert are recorded as admin actions, without the expert\'s name', async () => {
   const db = seed();
-  await call(db, '/wb/admin/experts/exp-2/verify', { method: 'POST', body: { verified: true } });
+  await call(db, '/wb/admin/experts/exp-2/verify', { method: 'POST', body: { verified: true, credentials_checked: true, expected_version: 0 } });
   await call(db, '/wb/admin/experts/exp-2/hide', { method: 'POST', body: { hidden: true } });
   await call(db, '/wb/admin/experts/exp-2/hide', { method: 'POST', body: { hidden: false } });
   await call(db, '/wb/admin/experts/exp-2/verify', { method: 'POST', body: { verified: false } });
