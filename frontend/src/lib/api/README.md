@@ -333,6 +333,11 @@ and the weekly series, and one profile by its reference (`pp_…`), never by
 email. The older `/api/profiling/admin/*` calls stay on `api.js` for the pages
 that read them.
 
+D971 (#2756): `labOperations.js` reads the Lab's playbook, operative cohort size
+and filtered/paged history, and calls the existing Super Admin draft/publish
+routes and audited size write. Support sessions reuse `adminLab.js`; grant
+terms reuse `programGrants.js`. No Admin is sent to either Super Admin read.
+
 D993 (#2804): `partnerProfiles.js` also reads the first-agreement options
 (`GET /api/admin/partner-profiles/agreements`, each Ready or "Not ready: no
 text in the library yet") and sends Unbind (`POST …/:ref/unbind`, Super Admin

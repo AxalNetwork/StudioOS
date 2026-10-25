@@ -412,3 +412,9 @@ UTC Monday window for claim totals, listing ranks and weekly price-kind counts.
 actions and reads them back as the Payments change log; `stripeWebhookDeliveries.ts`
 is the webhook's request-log reader, shared by HQ · Platform and Payments, with
 hourly buckets that are null for an hour the log was silent.
+
+D971 completes `programRegistry.ts`'s Lab draft path: its canonical section
+catalogue contains headings only. The existing Super Admin edit route creates a
+missing allowed draft section after validation, in the same batch as its edit;
+reads do not seed content. Published versions and audit behavior stay in D954's
+store; no migration or canvas sample text is introduced.
