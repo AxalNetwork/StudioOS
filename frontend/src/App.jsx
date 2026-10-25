@@ -427,6 +427,7 @@ const PitchWorkspaceMoved = lazy(() => import('./pages/raise/pitch/PitchWorkspac
 const PitchPresent = lazy(() => import('./pages/raise/pitch/PitchPresent'));
 const PitchEditor = lazy(() => import('./pages/raise/pitch/PitchEditor'));
 const PitchBoundary = lazy(() => import('./pages/raise/pitch/PitchBoundary'));
+const NewDeck = lazy(() => import('./pages/raise/pitch/NewDeck'));
 const NarrativeBoundary = lazy(() => import('./pages/raise/narrative/NarrativeAdmin').then((m) => ({ default: m.NarrativeBoundary })));
 const FounderRaiseStatus = lazy(() => import('./pages/founder/FounderRaiseStatus'));
 const FounderRaiseCapital = lazy(() => import('./pages/founder/FounderRaiseCapital'));
@@ -3048,6 +3049,8 @@ function AppInner() {
           its templates and fills, when #2676's last part retires it. */}
       <Route path="/raise/pitch/edit" element={guard(labRoles(['admin', 'founder']), founderWorkspace('raise', founderEditor(<PitchEditor />)))} />
       <Route path="/raise/pitch/builder" element={guard(labRoles(['admin', 'founder']), founderWorkspace('raise', founderEditor(<PitchWorkspacePage />)))} />
+      {/* D897 (#2677), PD3–PD6: New deck. A static path, so `/raise/:slug/new` never takes it. */}
+      <Route path="/raise/pitch/new" element={guard(labRoles(['admin', 'founder']), founderEditor(<NewDeck />))} />
       <Route path="/raise/pitch/analytics" element={guard(labRoles(['admin', 'founder']), founderEditor(<PitchStudio tab="analytics" />))} />
       {/* D911 (#2695): Positioning moved into Investor narrative › Positioning (NAR18). */}
       <Route path="/raise/pitch/positioning" element={<PitchPositioningRedirect />} />
