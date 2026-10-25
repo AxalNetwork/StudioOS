@@ -109,6 +109,114 @@ strength of a live route would empty the queue of the work it exists to track.
    `Trust Center v2.dc.html` to `backlog/` for a day, next to the `NEW` canvases
    that have no route, and away from the v1 of its own page.
 
+## Landed 2026-10-25 — Raise · Fundraising readiness (#2433)
+
+The owner's artifacts `XDZ4YKmUxUwBpLEPLYzx8i` (the board grid) and
+`9nHXpZkpWtj6VdqinZAPN4` (the page) came from S21's prompt on #2433, each
+decoded by `scripts/read-canvas.mjs` as is:
+- `Fundraising readiness · Boards.dc.html` is the board grid (RD1 to RD19,
+  with the lettered boards); it imports the page by name;
+- `Fundraising Readiness Page.dc.html` is the page.
+
+No value was edited.
+
+**Grade: UPGRADE.** Product-market fit is a part of the Fundraising readiness
+module at `/raise/fundraising-readiness`. S21's integration (D1141) draws it as
+Not scored yet with model v1, and a door from Validate's overview; nothing
+computes the score on `main`, so this canvas stays in the queue until D1141's
+parts land.
+
+## Landed 2026-10-25 — Account · Companies and projects (#2422)
+
+The owner's artifacts `PVusZxQ7Qx91VaWXwBnE1s` (the board grid) and
+`FxbmngPtN9uks5rgUSEL2k` (the page) came from S21's prompt on #2422, each
+decoded by `scripts/read-canvas.mjs` as is:
+- `Companies and projects · Boards.dc.html` is the board grid (CMP1 to
+  CMP19, with the lettered boards); it imports the page by name;
+- `Companies Projects Page.dc.html` is the page.
+
+No value was edited.
+
+**Grade: NEW.** The section lives at `/account/companies`, second in the
+Account list. S21's integration (D1134) draws Companies from the switcher's own
+read and a founder's ventures by company; the lightboxes, dialogs and the
+switcher hand-off wait for D1134's six parts, so this canvas stays in the queue
+until they land.
+
+## Landed 2026-10-25 — Raise · Data room (#2456)
+
+The owner's artifacts `LEfVAaN5CLoLZ7gnz8LP9F` (the board grid) and
+`T6VChA7YyxrX8YXt8rryuM` (the page) came from S21's prompt on #2456, each
+decoded by `scripts/read-canvas.mjs` as is:
+- `Data Room · Boards.dc.html` is the board grid (DR1 to DR24, with the
+  lettered boards); it imports the page by name;
+- `Raise Data Room Page.dc.html` is the page.
+
+No value was edited.
+
+**Grade: UPGRADE.** The tool is the Data room module at `/raise/data-room`,
+with six tab words under it. S21's integration (D1101) draws Files, Access and
+Activity from the founder's room read; writes stay in the files tool until
+D1101's parts land, so this canvas stays in the queue until then. It replaces
+`design/canvases/backlog/Data Room.dc.html` once part 8 lands.
+
+## Landed 2026-10-25 — Account · Trust center (#2425)
+
+The owner's artifacts `2zg26b61pd4Xm2WP4K6kbP` (the board grid) and
+`2KSActnmAyVMcyYt59Dk55` (the page) came from S21's prompt on #2425, each
+decoded by `scripts/read-canvas.mjs` as is:
+- `Trust center · Boards.dc.html` is the board grid (TRU1 to TRU20, with the
+  lettered boards);
+- `Trust center Page.dc.html` is the page.
+
+No value was edited.
+
+**Grade: NEW** for the public part at `/trust`; the member part moves to
+`/trust/me`. S21's integration (D1072) draws the six public tabs from what the
+code shows and the status read; the content store, the editor and Your trust's
+redesign wait for D1072's seven parts, so this canvas stays in the queue until
+they land. The `ROUTE_MAP.md` row says what is drawn today. It replaces
+`design/canvases/integrated/Trust Center v2.dc.html` once part 6 lands.
+
+## Landed 2026-10-25 — Build · Validate → Build (#2426)
+
+The owner's artifacts `P4pEfmEXmjGcCav3eAtzCY` (the board grid) and
+`7fZasxkjxTJSL1MkXxreXk` (the page) came from S21's prompt on #2426, each
+decoded by `scripts/read-canvas.mjs` as is:
+- `Validate → Build · Boards.dc.html` is the board grid (VB1 to VB22, with
+  the lettered boards);
+- `Validate → Build Page.dc.html` is the page.
+
+No value was edited.
+
+**Grade: NEW.** The plan lives at `/build/plan` with Progress at
+`/build/plan/progress`, and Build's overview opens it. S21's integration
+(D1063) draws "What Validate proved" from the Validate overview read; every
+proposal, handoff and stage waits for D1063's eight parts, so this canvas
+stays in the queue until they land. The `ROUTE_MAP.md` row says what is drawn
+today.
+
+## Landed 2026-10-25 — Grow · Reporting to investors (#2427)
+
+The owner's artifacts `1WS19b5qYpQdJSN1XXowQd` (the board grid) and
+`AR3kPgNmC1WTvo1xqnERMr` (the page) came from S21's prompt on #2427, each
+decoded by `scripts/read-canvas.mjs` as is:
+- `Reporting · Boards.dc.html` is the board grid (RPT1 to RPT21, with the
+  lettered boards RPT5d, RPT7a–b, RPT10r–t, RPT11l–w, RPT13a–c, RPT14b, RPT15b,
+  RPT17a–b, RPT19a–b, RPT20a–c and RPT21a–c);
+- `Reporting Page.dc.html` is the page.
+
+No value was edited.
+
+**Grade: UPGRADE.** Grow's Updates tab becomes Reporting at `/grow/reporting`
+(with Duties at `/duties`; `/grow/updates` forwards there), Portfolio's Updates
+becomes Reports, and each held company has a page at
+`/portfolio/companies/:uid`. S21's integration (D1056) draws the History and
+the investor's Reports from today's reads. Every block that needs a duty, a
+period or a frozen figure says what it waits for until D1056's parts land, so
+this canvas stays in the queue until then. The `ROUTE_MAP.md` row says what is
+drawn today.
+
 ## Landed 2026-10-25 — Pricing · Checkout (#2451)
 
 The owner's artifacts `UHZdASErjSvAZVJE5W5iAZ` (the board grid) and

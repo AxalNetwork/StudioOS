@@ -5,11 +5,11 @@ import { adminPaymentsApi } from '../../../lib/api/adminPayments';
 import { paymentsApi } from '../../../lib/api/payments';
 import { reportError } from '../../../lib/log';
 import {
-  ALLOWANCES_PATH, CATALOG_FAILED, CHANGES_UNREAD, DIALOGS_WAIT, KEEP_PRICE, MEMBERS_UNREAD, PRODUCT_MISSING, PROMOS_UNREAD,
+  ALLOWANCES_PATH, CATALOG_FAILED, CHANGES_UNREAD, KEEP_PRICE, MEMBERS_UNREAD, PRODUCT_MISSING, PROMOS_UNREAD,
   actionWord, allowanceOf, amountText, codesWord, dayText, groupOf, intervalWord, kindGroupWord, membersLine, membersOn,
   priceRows, productChecks, promosFor, showsOnRows, technicalLines, whoText,
 } from './payModel';
-import { AMBER, EYE, GHOST, LINK, MONO, PILL, SUB, PayDialog, Reading, Technical, Unread } from './payUi';
+import { AMBER, EYE, GHOST, LINK, MONO, PILL, PRIMARY, SUB, WRITE_HOLDER_NOTE, PayDialog, Reading, Technical, Unread } from './payUi';
 
 /**
  * D1012 (#2831) — PAY2: one product, as a centred lightbox over Catalogue, at
@@ -21,7 +21,9 @@ import { AMBER, EYE, GHOST, LINK, MONO, PILL, SUB, PayDialog, Reading, Technical
  * It reads only when open, and each read answers alone: members (plans only),
  * promo codes and the change log. The catalogue it draws from is the page's.
  *
- * Changing a product is part 5's (#2832): its buttons are drawn and say so.
+ * D1013 (#2832, part 5): its buttons open the price dialogs (`onAct`, at the
+ * page's level): Add a price, Edit details and Archive, and Change and Archive
+ * on each live price. Only the Super Admin is drawn them (`canWrite`).
  */
 
 const idle = { status: 'loading', data: null };
@@ -74,9 +76,12 @@ function WhereSeen({ product }) {
   );
 }
 
-function Prices({ product }) {
+function Prices({ product, onAct, canWrite }) {
   const rows = priceRows(product);
   const pct = product.plan?.yearly_saving_percent;
+  // Changing a price is drawn on a live, non-pack product, for the Super Admin.
+  const live = canWrite && product.active && groupOf(product) !== 'packs';
+  const SMALL = `${GHOST} min-h-[28px] px-2 text-[11.5px]`;
   return (
     <Section title="Prices" testId="pay-product-prices">
       {groupOf(product) === 'packs' && <Link to={ALLOWANCES_PATH} className={LINK}>Managed on AI allowances →</Link>}
@@ -91,6 +96,7 @@ function Prices({ product }) {
                 <th scope="col" className="py-1 pr-3 font-bold">AI allowance a month</th>
                 <th scope="col" className="py-1 pr-3 font-bold">Nickname</th>
                 <th scope="col" className="py-1 font-bold">Status</th>
+                {live && <th scope="col" className="py-1 pl-3 font-bold"><span className="sr-only">Change</span></th>}
               </tr>
             </thead>
             <tbody>
@@ -103,6 +109,16 @@ function Prices({ product }) {
                     <td className={`py-1.5 pr-3 ${MONO}`}>{a.text ? <span className="text-axal-ink dark:text-gray-100">{a.text}</span> : <span className={SUB} title={a.reason}>—</span>}</td>
                     <td className={`py-1.5 pr-3 ${SUB}`}>{x.nickname || 'None'}</td>
                     <td className={`py-1.5 ${SUB}`}>{x.active ? 'Active' : 'Archived'}</td>
+                    {live && (
+                      <td className="py-1.5 pl-3">
+                        {x.active && (
+                          <span className="flex gap-1.5">
+                            <button type="button" className={SMALL} onClick={() => onAct({ type: 'changePrice', product, price: x })} data-testid={`pay-act-change-${x.id}`}>Change</button>
+                            <button type="button" className={SMALL} onClick={() => onAct({ type: 'archivePrice', product, price: x })} data-testid={`pay-act-archive-${x.id}`}>Archive</button>
+                          </span>
+                        )}
+                      </td>
+                    )}
                   </tr>
                 );
               })}
@@ -180,7 +196,7 @@ function Changes({ product, read, retry }) {
   );
 }
 
-function Body({ product, catalog }) {
+function Body({ product, catalog, onAct, canWrite }) {
   const id = product.id;
   const [members, retryMembers] = useRead(() => adminPaymentsApi.members(), !product.plan, `members:${id}`);
   const [promos, retryPromos] = useRead(() => api.adminListPromos(), false, `promos:${id}`);
@@ -192,15 +208,17 @@ function Body({ product, catalog }) {
         <span className={PILL}>{kindGroupWord(product)}{product.plan?.label ? ` · ${product.plan.label}` : ''}</span>
         <span className={PILL}>{product.active ? '✓ Active' : '– Archived'}</span>
       </div>
-      {!pack && (
+      {!pack && product.active && canWrite && (
         <div className="flex flex-wrap items-center gap-2" data-testid="pay-product-actions">
-          <button type="button" className={GHOST} disabled title={DIALOGS_WAIT}>Add a price</button>
-          <button type="button" className={GHOST} disabled title={DIALOGS_WAIT}>Change a price</button>
-          <span className={SUB}>{DIALOGS_WAIT}</span>
+          <button type="button" className={PRIMARY} onClick={() => onAct({ type: 'addPrice', product })} data-testid="pay-act-add-price">Add a price</button>
+          <button type="button" className={GHOST} onClick={() => onAct({ type: 'edit', product })} data-testid="pay-act-edit">Edit details</button>
+          <button type="button" className={GHOST} onClick={() => onAct({ type: 'archiveProduct', product })} data-testid="pay-act-archive">Archive product</button>
         </div>
       )}
+      {!pack && product.active && !canWrite && <span className={SUB} data-testid="pay-product-holder">{WRITE_HOLDER_NOTE}</span>}
+      {!pack && !product.active && <span className={SUB}>An archived product cannot be changed here; make a new product instead.</span>}
       <WhereSeen product={product} />
-      <Prices product={product} />
+      <Prices product={product} onAct={onAct} canWrite={canWrite} />
       <Members product={product} read={members} retry={retryMembers} />
       <Promos product={product} read={promos} retry={retryPromos} />
       <Checks catalog={catalog} product={product} />
@@ -213,13 +231,13 @@ function Body({ product, catalog }) {
 }
 
 /** The lightbox for the product the address names, over whatever the catalogue read is doing. */
-export default function ProductLightbox({ id, catalogRead, onClose, onRetry }) {
+export default function ProductLightbox({ id, catalogRead, onClose, onRetry, onAct = () => {}, canWrite = false }) {
   const products = catalogRead?.status === 'ready' ? catalogRead.data?.products || [] : [];
   const product = products.find((p) => p.id === id) || null;
   if (catalogRead?.status === 'ready' && product) {
     return (
       <PayDialog label={product.name} title={product.name} sub="Product" onClose={onClose} testId="pay-product">
-        <Body product={product} catalog={catalogRead.data} />
+        <Body product={product} catalog={catalogRead.data} onAct={onAct} canWrite={canWrite} />
       </PayDialog>
     );
   }

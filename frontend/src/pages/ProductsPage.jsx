@@ -9,7 +9,8 @@
 //   4. One-time cart drawer (right slide-over) with promo validation + VAT.
 //   5. Product slide-over (details, deep-linkable via /products/:productId).
 //   6. Active-licenses surface (PRESERVED).
-//   7. Admin-only "Add Product" button + modal (reuses adminCatalog create).
+//   7. The Super Admin's "Add Product": a link to New product on HQ's
+//      Payments page (D1013, #2832). The storefront writes nothing itself.
 //
 // D755 (#1915): each plan card also shows its AI allowance and the free plans
 // get cards of their own, from GET /public/plans-and-packs (lib/plansPricing.js).
@@ -26,13 +27,14 @@
 // client-computed. Subscriptions bypass the cart (one-click Stripe via the
 // slide-over); one-time items go through the cart → /checkout.
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { useSearchParams, useNavigate, useParams } from 'react-router-dom';
+import { Link, useSearchParams, useNavigate, useParams } from 'react-router-dom';
 import {
   Package, Ticket, CheckCircle2, AlertTriangle, Loader2, X, BadgeCheck, Receipt, Plus,
 } from 'lucide-react';
 import { api } from '../lib/api';
 import { AI_DRAW_LINE } from '../lib/aiTokens';
 import { useAuth } from '../hooks/useAuthSync';
+import { isSuperAdminUser } from '../lib/shellRole';
 import { usePhoneWidth } from '../ui';
 import PricingPhone, { usePricingReads } from './account/PricingPhone';
 import SitePage from '../components/site/SitePage';
@@ -195,97 +197,13 @@ function PromoRedeemCard({ initialCode, onRedeemed }) {
   );
 }
 
-// ------- Admin "Add Product" modal (reuses adminCatalog create) -------
-function AddProductModal({ onClose, onCreated }) {
-  const [form, setForm] = useState({ name: '', kind: 'subscription', description: '' });
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState(null);
-
-  const submit = async (e) => {
-    e.preventDefault();
-    if (busy || !form.name.trim()) return;
-    setBusy(true);
-    setError(null);
-    try {
-      const meta = {};
-      if (form.kind === 'incorporation') meta.kind = 'incorporation';
-      else if (form.kind === 'session') meta.kind = 'session';
-      else if (form.kind === 'alacarte') { meta.kind = 'alacarte'; meta.feature_key = ''; meta.unlock_days = ''; }
-      if (form.description.trim()) meta.description = form.description.trim();
-      await api.adminCatalogCreateProduct({ name: form.name.trim(), kind: form.kind, metadata: meta });
-      onCreated?.();
-      onClose();
-    } catch (e2) {
-      const details = e2?.data?.details;
-      setError(details ? details.join('; ') : (e2?.message || 'Create failed'));
-    } finally {
-      setBusy(false);
-    }
-  };
-
-  return (
-    <div onClick={onClose} className="fixed inset-0 z-[85] bg-gray-900/50 flex items-start justify-center p-6 overflow-y-auto" style={{ animation: 'mrdFade .18s ease' }}>
-      <div onClick={(e) => e.stopPropagation()} className="w-full max-w-md bg-white dark:bg-gray-900 rounded-2xl shadow-2xl p-6 mt-16">
-        <div className="flex items-center justify-between mb-4">
-          <h3 className="text-lg font-bold text-gray-900 dark:text-gray-100">Add product</h3>
-          <button onClick={onClose} className="text-gray-400 hover:text-gray-700 dark:hover:text-gray-200"><X size={18} /></button>
-        </div>
-        <form onSubmit={submit} className="space-y-4">
-          <div>
-            <label className="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1">Name</label>
-            <input
-              value={form.name}
-              onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))}
-              autoFocus
-              className="w-full rounded-lg border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-900 px-3 py-2 text-sm text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-violet-500"
-              placeholder="e.g. Founder — Growth"
-            />
-          </div>
-          <div>
-            <label className="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1">Kind</label>
-            <select
-              value={form.kind}
-              onChange={(e) => setForm((f) => ({ ...f, kind: e.target.value }))}
-              className="w-full rounded-lg border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-900 px-3 py-2 text-sm text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-violet-500"
-            >
-              <option value="subscription">Subscription</option>
-              <option value="incorporation">Incorporation</option>
-              <option value="session">Session</option>
-              <option value="alacarte">À la carte</option>
-            </select>
-          </div>
-          <div>
-            <label className="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1">Description</label>
-            <textarea
-              value={form.description}
-              onChange={(e) => setForm((f) => ({ ...f, description: e.target.value }))}
-              rows={3}
-              className="w-full rounded-lg border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-900 px-3 py-2 text-sm text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-violet-500"
-              placeholder="Short summary shown on the card."
-            />
-          </div>
-          <p className="text-xs text-gray-500 dark:text-gray-400">
-            Add prices, edit or archive this product from the Admin › Catalog panel.
-          </p>
-          {error && <p className="text-xs text-red-600 dark:text-red-400">{error}</p>}
-          <div className="flex justify-end gap-2 pt-1">
-            <button type="button" onClick={onClose} className="px-4 py-2 rounded-lg text-sm font-medium text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800">Cancel</button>
-            <button type="submit" disabled={busy || !form.name.trim()} className="px-4 py-2 rounded-lg bg-violet-600 hover:bg-violet-700 text-white text-sm font-medium disabled:opacity-50 inline-flex items-center gap-1.5">
-              {busy && <Loader2 size={14} className="animate-spin" />} Create
-            </button>
-          </div>
-        </form>
-      </div>
-    </div>
-  );
-}
-
 export default function ProductsPage() {
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
   const { productId } = useParams();
   const { user } = useAuth();
-  const isAdmin = user?.role === 'admin';
+  // D1013: only the Super Admin can create a product (D1009), and does it on HQ's Payments page.
+  const canAddProduct = user?.role === 'admin' && isSuperAdminUser(user);
   const member = Boolean(user);
   const deepLinkCode = searchParams.get('code') || '';
 
@@ -302,7 +220,6 @@ export default function ProductsPage() {
   const [audienceFilter, setAudienceFilter] = useState('all');
   const [globalCycle, setGlobalCycle] = useState('monthly');
   const [drawerOpen, setDrawerOpen] = useState(false);
-  const [showAddProduct, setShowAddProduct] = useState(false);
   const [toast, setToast] = useState('');
 
   const refreshUnlocks = useCallback(() => {
@@ -473,13 +390,14 @@ export default function ProductsPage() {
           )}
           {member && <PromoRedeemCard initialCode={deepLinkCode} onRedeemed={refreshUnlocks} />}
         </div>
-        {isAdmin && (
-          <button
-            onClick={() => setShowAddProduct(true)}
+        {canAddProduct && (
+          <Link
+            to="/admin/platform/payments?new=product"
             className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-lg bg-violet-600 hover:bg-violet-700 text-white text-sm font-medium"
+            data-testid="products-add-product"
           >
             <Plus size={15} /> Add Product
-          </button>
+          </Link>
         )}
       </div>
 
@@ -624,10 +542,6 @@ export default function ProductsPage() {
             initialCheckout={Boolean(modalIntent?.checkout)}
           />
         </>
-      )}
-
-      {showAddProduct && (
-        <AddProductModal onClose={() => setShowAddProduct(false)} onCreated={loadCatalog} />
       )}
 
       {toast && (

@@ -43,6 +43,7 @@ import legalcap from './routes/legalcap';
 import partners from './routes/partners';
 import adminPartners from './routes/admin_partners';
 import adminPartnersReads from './routes/admin_partners_reads';
+import adminPartnerFirms from './routes/admin_partner_firms';
 import adminPartnerDealReads from './routes/admin_partner_deal_reads';
 import adminNetworkReads from './routes/admin_network_reads';
 import adminPublications from './routes/admin_publications';
@@ -375,6 +376,7 @@ import { adminPartnerSettlements, partnerSettlements } from './routes/partner_se
 import mercuryPersonalRoutes from './routes/mercury_personal';
 import mercuryAttestationRoutes from './routes/mercury_attestations';
 import mercuryOauthRoutes from './routes/mercury_oauth';
+import connectorMcpOauthRoutes from './routes/connector_mcp_oauth';
 import connectorsHealth from './routes/connectors_health';
 import connectorsCustomRoutes from './routes/connectors_custom';
 import cartaInvestorRoutes from './routes/carta_investor';
@@ -882,6 +884,8 @@ app.route('/api/admin/partners', adminPartnersReads);
 // D928 (#2724): one deal's read, the terminate preview, the cross-deal redemptions and the
 // agreement-ready signal. Before `adminPartners`; its deal ids match digits only, so `/deals/top` stays there.
 app.route('/api/admin/partners', adminPartnerDealReads);
+// D979 (#2765): the Firms tab's list (search, filters, sort, pages, exact total) and one firm's drawer. Read only.
+app.route('/api/admin/partners', adminPartnerFirms);
 app.route('/api/admin/partners', adminPartners);
 // D976 (#2762) — the advisor and partner network's pause, directory switch and standing read.
 app.route('/api/admin/network', adminNetworkReads);
@@ -1344,6 +1348,8 @@ app.route('/api/developer/keys', developerKeys);
 app.route('/api/developer/limits', developerLimits);
 // D840 (#2346): Sign in with Mercury, ahead of the integrations router.
 app.route('/api/integrations/mercury/oauth', mercuryOauthRoutes);
+// D1080 (#2945): Sign in with <Provider> for every other MCP record, and its client ID metadata documents.
+app.route('/api/integrations/mcp', connectorMcpOauthRoutes);
 app.route('/api/connectors', integrations);
 app.route('/api/integrations', integrations);
 // D652 — the Worker AI rail's conversations and their connectors (#1464).

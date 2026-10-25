@@ -1,14 +1,18 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { narrativeApi } from '../../../lib/api/narrative';
+import { ADD_TOKENS_PATH } from '../../../lib/aiTokens';
+import { railPressHeaders } from '../../../lib/railPage';
+import { useRailOption } from '../../../ui/railCrumbs';
 import { Lightbox, Unreadable } from '../../../ui';
 import { useDeckSources } from '../pitch/SourcesBoards';
 import { gapLine, valueText, fillLink } from '../pitch/sourcesModel';
 import { BoundFigure, SectionDot, SourceKind, TypedClaim } from './StoryComponents';
 import {
-  BINDINGS_UNREADABLE, INSERT_FOOT, LIVE_DECK, NOTE_MAX, NOTHING_TO_SAVE, NOT_RECORDED, SAVE_FAILED, SECTION_COUNT, STORY_UNREADABLE,
-  audienceOf, bindingFromItem, bindingsBySection, boundChip, cannotInsert, claimSegments, draftOf, insertGroups, isLiveDeck,
-  moveSection, saveDialog, savePlan, sectionDot, storySections,
+  AI_OFF_LINE, AI_OFF_SUB, ASK_FOOT, ASK_MODES, BINDINGS_UNREADABLE, DRAFT_REMOVED, INSERT_FOOT, LIVE_DECK, NOTE_MAX, NOTHING_TO_SAVE, NOT_RECORDED,
+  PROPOSAL_NOTE, SAVE_FAILED, SECTION_COUNT, SECTION_OPTION, STORY_UNREADABLE,
+  audienceOf, bindingFromItem, bindingsBySection, boundChip, cannotInsert, draftOf, inlineSegments, insertAt, insertGroups, isLiveDeck,
+  moveSection, runRefusal, saveDialog, savePlan, sectionDot, storySections, unplacedFigures,
 } from './storyModel';
 import { versionHref } from './narrativeModel';
 
@@ -46,13 +50,70 @@ function useNarrative(projectId, version, reload) {
   return state;
 }
 
-/** The words as the founder will see them: typed numbers as claims. */
-function ReadsAs({ text }) {
+/**
+ * The words as the founder will see them (NAR2, NAR20): a bound figure inside
+ * the sentence, in its place; any other typed number as a claim (D1114).
+ */
+function ReadsAs({ text, figures = [] }) {
   if (!text.trim()) return <span className={`${NOT_SET} w-fit`} data-testid="story-not-recorded">{NOT_RECORDED}</span>;
   return (
     <p className={`m-0 whitespace-pre-line text-[13.5px] leading-[1.8] ${INK}`} data-testid="story-reads-as">
-      {claimSegments(text).map((s, i) => (s.claim ? <TypedClaim key={i} text={s.text} state={s.state} /> : <React.Fragment key={i}>{s.text}</React.Fragment>))}
+      {inlineSegments(text, figures).map((s, i) => (s.figure ? <span key={i} className="mx-0.5" data-testid="story-inline-figure"><BoundFigure figure={s.figure.view} /></span>
+        : s.claim ? <TypedClaim key={i} text={s.text} state={s.state} /> : <React.Fragment key={i}>{s.text}</React.Fragment>))}
     </p>
+  );
+}
+
+/**
+ * NAR2's "Ask Eadwyn ▾": Draft this section, Shorten, Plain words. Greyed with
+ * NAR17b's line when AI assistance is off on the page; a run the allowance and
+ * tokens cannot cover says so with Top up (NAR17c). The run writes nothing.
+ */
+function AskEadwyn({ aiOn, busy, onAsk }) {
+  const [open, setOpen] = useState(false);
+  return (
+    <span className="relative inline-block">
+      <button type="button" aria-expanded={open} aria-haspopup="menu" disabled={!aiOn || busy} onClick={() => setOpen((o) => !o)}
+        title={!aiOn ? AI_OFF_LINE : undefined} className={`${GHOST} border-axal-lavender-edge bg-axal-lavender text-axal-violet dark:border-violet-800 dark:bg-violet-950/40 dark:text-violet-300`} data-testid="story-ask-open">
+        {busy ? 'Eadwyn is writing…' : 'Ask Eadwyn ▾'}
+      </button>
+      {open && aiOn ? (
+        <span role="menu" className="absolute right-0 z-10 mt-1 flex min-w-[12rem] flex-col rounded-[10px] border border-axal-hairline bg-white p-1 shadow-lg dark:border-gray-700 dark:bg-gray-900" data-testid="story-ask-menu">
+          {ASK_MODES.map((m) => (
+            <button key={m.mode} type="button" role="menuitem" className={`rounded-[7px] px-2.5 py-2 text-left text-[13px] ${INK} hover:bg-axal-ground dark:hover:bg-gray-800`}
+              onClick={() => { setOpen(false); onAsk(m.mode); }} data-testid={`story-ask-${m.mode}`}>{m.label}</button>
+          ))}
+        </span>
+      ) : null}
+    </span>
+  );
+}
+
+/** What Eadwyn proposed for the section, on lavender until accepted; Accept puts it in the words. */
+function Proposal({ run, onAccept, onDiscard }) {
+  return (
+    <div className="flex flex-col gap-2 rounded-[10px] border border-axal-lavender-edge bg-axal-lavender p-3 dark:border-violet-800 dark:bg-violet-950/40" data-testid="story-proposal">
+      <span className={EYEBROW}>Proposed by Eadwyn</span>
+      <p className={`m-0 whitespace-pre-line text-[13.5px] leading-relaxed ${INK}`} data-testid="story-proposal-text">{run.text}</p>
+      {run.removed > 0 ? <p role="status" className={`m-0 text-[12px] ${INK}`} data-testid="story-proposal-removed">{DRAFT_REMOVED}</p> : null}
+      <span className={`text-[11.5px] ${MUTED}`}>{PROPOSAL_NOTE}</span>
+      <span className="flex gap-2">
+        <button type="button" className={BTN} onClick={onAccept} data-testid="story-proposal-accept">Accept</button>
+        <button type="button" className={GHOST} onClick={onDiscard} data-testid="story-proposal-discard">Discard</button>
+      </span>
+    </div>
+  );
+}
+
+/** NAR17b and NAR17c, and any other refused run, in the Worker's words. */
+function RunRefused({ refusal }) {
+  const tone = refusal.kind === 'tokens' ? 'border-amber-300 bg-amber-50 dark:border-amber-800 dark:bg-amber-950/30' : 'border-axal-hairline bg-axal-ground dark:border-gray-700 dark:bg-gray-800';
+  return (
+    <div role="alert" className={`flex flex-col gap-1.5 rounded-[10px] border p-3 ${tone}`} data-testid={`story-ask-refused-${refusal.kind}`}>
+      <span className={`text-[13px] font-semibold ${INK}`}>{refusal.text}</span>
+      {refusal.sub ? <span className={`text-[12px] ${MUTED}`}>{refusal.sub}</span> : null}
+      {refusal.kind === 'tokens' ? <Link to={ADD_TOKENS_PATH} className={`${BTN} mt-1`} data-testid="story-topup">Top up AI tokens</Link> : null}
+    </div>
   );
 }
 
@@ -98,13 +159,14 @@ function SectionRail({ order, byKey, sections, bindings, sources, active, onPick
 }
 
 /** NAR3: the registry's items by area, each with its source, date and grade; a missing one says where to add it. */
-function InsertFigure({ sources, current, onInsert, onClose }) {
+function InsertFigure({ sources, current, onInsert, onClose, only = null }) {
   const [q, setQ] = useState('');
-  const groups = useMemo(() => insertGroups(sources.data?.items, q), [sources.data, q]);
+  const groups = useMemo(() => insertGroups(sources.data?.items, q, only), [sources.data, q, only]);
   return (
     <Lightbox label="Insert a figure" title="Insert a figure" sub="From your records, with its source, date and grade." onClose={onClose} width={520} testId="story-insert">
       <div className="flex flex-col gap-3">
-        <input type="search" aria-label="Search your records" placeholder="Search your records" value={q} onChange={(e) => setQ(e.target.value)} className={FIELD} />
+        {only ? <p className={`m-0 text-[12.5px] ${MUTED}`} data-testid="story-insert-only">From Mercury. It goes where your cursor is in the section that is open.</p>
+          : <input type="search" aria-label="Search your records" placeholder="Search your records" value={q} onChange={(e) => setQ(e.target.value)} className={FIELD} />}
         {sources.status === 'loading' ? <p className={`m-0 text-[13px] ${MUTED}`}>Reading your records…</p>
           : sources.status !== 'ok' ? <Unreadable what="Your records" claim="This is not a claim that you have none." onRetry={sources.retry} />
             : groups.length === 0 ? <p className={`m-0 text-[13px] ${MUTED}`}>No record matches.</p>
@@ -164,7 +226,7 @@ function SaveDialog({ writes, version, onSave, onClose, saving, error }) {
 }
 
 /** The Story tab for one version, read and written through D908's stores. */
-export default function StoryTab({ projectId, version, search = '', phone = false, readOnly: roleReadOnly = false }) {
+export default function StoryTab({ projectId, version, search = '', phone = false, readOnly: roleReadOnly = false, aiOn = true }) {
   const [reload, setReload] = useState(0);
   const retry = useCallback(() => setReload((n) => n + 1), []);
   const read = useNarrative(projectId, version, reload);
@@ -175,6 +237,15 @@ export default function StoryTab({ projectId, version, search = '', phone = fals
   const [active, setActive] = useState(null);
   const [inserting, setInserting] = useState(false);
   const [saving, setSaving] = useState({ open: false, busy: false, error: null });
+  // D1114: Home's From Mercury "Insert in Story" arrives as `?insert=<source_key>` and opens Insert a figure on it.
+  const insertOnly = useMemo(() => new URLSearchParams(search).get('insert') || null, [search]);
+  const [onlyKey, setOnlyKey] = useState(insertOnly);
+  const [asking, setAsking] = useState(null);
+  const [run, setRun] = useState(null);
+  const [refusal, setRefusal] = useState(null);
+  const words = useRef(null);
+  const caret = useRef(null);
+  useRailOption(asking ? 'draft:narrative-section' : null, 'Draft this section');
 
   useEffect(() => {
     if (!sections) { setDraft(null); return; }
@@ -183,6 +254,7 @@ export default function StoryTab({ projectId, version, search = '', phone = fals
     setActive((a) => (a && d.byKey[a] ? a : d.order[0] || null));
     // A fresh read replaces the draft; the read's own identity is the key.
   }, [read.data]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => { if (insertOnly && !roleReadOnly) { setOnlyKey(insertOnly); setInserting(true); } }, [insertOnly, roleReadOnly]);
 
   if (read.status === 'loading') return <div className="h-40 w-full animate-pulse rounded-xl bg-axal-ground dark:bg-gray-800" aria-hidden="true" data-testid="narrative-loading" />;
   if (read.status === 'refused') return <p className={`m-0 text-[13px] ${INK}`}>{read.message || 'This version could not be opened.'}</p>;
@@ -214,6 +286,29 @@ export default function StoryTab({ projectId, version, search = '', phone = fals
     retry();
   };
 
+  const ask = async (mode) => {
+    setAsking(mode); setRun(null); setRefusal(null);
+    try {
+      const r = await narrativeApi.draftSection(projectId, version, active, { mode, words: cur.body }, railPressHeaders(SECTION_OPTION));
+      setRun({ section: active, text: r.text, removed: Number(r.removed) || 0 });
+    } catch (e) {
+      setRefusal(runRefusal(e));
+    } finally { setAsking(null); }
+  };
+  const accept = () => { patch(run.section, { body: run.text, source: 'eadwyn' }); setRun(null); };
+  const insertFigure = (it) => {
+    const b = bindingFromItem(it);
+    const value = valueText(it);
+    if (b) {
+      // The figure's own value goes where the cursor is, so it sits inside the sentence (D1114).
+      const at = value ? insertAt(cur.body, caret.current, value) : null;
+      patch(active, { bindings: [...cur.bindings, b], ...(at ? { body: at.text, source: null } : {}) });
+      if (at) caret.current = at.caret;
+    }
+    setInserting(false); setOnlyKey(null);
+  };
+  const unplaced = unplacedFigures(cur?.body || '', figures);
+
   const rail = (
     <SectionRail order={draft.order} byKey={draft.byKey} sections={sections} bindings={bindings} sources={srcState} active={active}
       onPick={setActive} onMove={(key, delta) => setDraft((d) => ({ ...d, order: moveSection(d.order, key, delta) }))} readOnly={readOnly} />
@@ -241,33 +336,50 @@ export default function StoryTab({ projectId, version, search = '', phone = fals
               {!readOnly && !phone ? (
                 <div className="flex flex-wrap gap-2">
                   <button type="button" className={GHOST} onClick={() => setInserting(true)} disabled={!bindings} title={!bindings ? BINDINGS_UNREADABLE : undefined} data-testid="story-insert-open">+ Insert a figure</button>
+                  <AskEadwyn aiOn={aiOn} busy={Boolean(asking)} onAsk={ask} />
                   <button type="button" className={BTN} onClick={() => setSaving({ open: true, busy: false, error: null })} disabled={!writes.length} title={!writes.length ? NOTHING_TO_SAVE : undefined} data-testid="story-save-open">Save version</button>
                 </div>
               ) : null}
             </div>
-            {readOnly ? <ReadsAs text={cur.body} /> : (
+            {!readOnly && !aiOn ? (
+              <div role="status" className="flex flex-col gap-0.5 rounded-[10px] border border-axal-hairline bg-axal-ground px-3 py-2 dark:border-gray-700 dark:bg-gray-800" data-testid="story-ai-off">
+                <span className={`text-[13px] font-semibold ${INK}`}>{AI_OFF_LINE}</span>
+                <span className={`text-[12px] ${MUTED}`}>{AI_OFF_SUB}</span>
+              </div>
+            ) : null}
+            {!readOnly && aiOn ? <span className={`text-[11.5px] ${MUTED}`} data-testid="story-ask-foot">{ASK_FOOT}</span> : null}
+            {refusal && !readOnly ? <RunRefused refusal={refusal} /> : null}
+            {run && run.section === active && !readOnly ? <Proposal run={run} onAccept={accept} onDiscard={() => setRun(null)} /> : null}
+            {readOnly ? <ReadsAs text={cur.body} figures={figures} /> : (
               <>
                 <label className="flex flex-col gap-1">
                   <span className="sr-only">{spec.label} words</span>
-                  <textarea aria-label={`${spec.label} words`} value={cur.body} maxLength={spec.max} rows={phone ? 8 : 6} className={FIELD}
-                    onChange={(e) => patch(active, { body: e.target.value })} data-testid="story-words" />
+                  <textarea ref={words} aria-label={`${spec.label} words`} value={cur.body} maxLength={spec.max} rows={phone ? 8 : 6} className={FIELD}
+                    onSelect={(e) => { caret.current = e.target.selectionStart; }}
+                    onChange={(e) => { caret.current = e.target.selectionStart; patch(active, { body: e.target.value, source: null }); }} data-testid="story-words" />
                   <span className={`self-end font-mono text-[10.5px] ${MUTED}`}>{cur.body.length} / {spec.max}</span>
                 </label>
                 {spec.store === 'deck' ? <p className={`m-0 text-[11.5px] ${MUTED}`} data-testid="story-deck-words">These are the deck’s words for v{version}.</p> : null}
                 <div className="flex flex-col gap-1">
                   <span className={EYEBROW}>Reads as</span>
-                  <ReadsAs text={cur.body} />
+                  <ReadsAs text={cur.body} figures={figures} />
                 </div>
               </>
             )}
             <div className="flex flex-col gap-1.5" data-testid="story-figures">
-              <span className={EYEBROW}>Figures in this section</span>
+              <span className={EYEBROW}>{figures.length && !unplaced.length ? 'Figures in this section · all in the words' : 'Figures in this section'}</span>
               {!bindings ? <p role="alert" className="m-0 text-[12px] text-red-700 dark:text-red-300">{BINDINGS_UNREADABLE}</p>
                 : figures.length === 0 ? <span className={`text-[12px] ${MUTED}`}>No bound figure. {readOnly ? '' : 'Insert one from your records.'}</span>
-                  : <div className="flex flex-wrap gap-1.5">{figures.map((f, n) => (
-                    <BoundFigure key={f.binding.source_key} figure={f.view}
-                      onRemove={readOnly ? undefined : () => patch(active, { bindings: cur.bindings.filter((_, j) => j !== n) })} />
-                  ))}</div>}
+                  : (
+                    <>
+                      {unplaced.length ? <span className={`text-[12px] ${MUTED}`} data-testid="story-figures-unplaced">Not in the words yet. Insert puts a figure’s value where your cursor is.</span> : null}
+                      <div className="flex flex-wrap gap-1.5">{figures.map((f, n) => (unplaced.includes(f) || !readOnly ? (
+                        <span key={f.binding.source_key} className={unplaced.includes(f) ? '' : 'opacity-80'} data-testid={unplaced.includes(f) ? 'story-figure-unplaced' : 'story-figure-placed'}>
+                          <BoundFigure figure={f.view} onRemove={readOnly ? undefined : () => patch(active, { bindings: cur.bindings.filter((_, j) => j !== n) })} />
+                        </span>
+                      ) : null))}</div>
+                    </>
+                  )}
             </div>
             <label className="flex flex-col gap-1">
               <span className={EYEBROW}>Audience note{audience ? ` · ${audience}` : ''}</span>
@@ -287,8 +399,7 @@ export default function StoryTab({ projectId, version, search = '', phone = fals
         ) : null}
       </div>
       {inserting ? (
-        <InsertFigure sources={sources} current={cur?.bindings || []} onClose={() => setInserting(false)}
-          onInsert={(it) => { const b = bindingFromItem(it); if (b) patch(active, { bindings: [...cur.bindings, b] }); setInserting(false); }} />
+        <InsertFigure sources={sources} current={cur?.bindings || []} only={onlyKey} onClose={() => { setInserting(false); setOnlyKey(null); }} onInsert={insertFigure} />
       ) : null}
       {saving.open ? <SaveDialog writes={writes} version={version} saving={saving.busy} error={saving.error} onSave={doSave} onClose={() => setSaving({ open: false, busy: false, error: null })} /> : null}
     </div>

@@ -43,7 +43,7 @@ test('Validate has only module tabs and its six phone index rows', () => {
   const six = ['problem-discovery', 'customer-research', 'ideal-customer-profile', 'market-intelligence', 'demand-signals', 'experiments'];
   assert.deepEqual(phoneIndex({ index: six.map((key) => ({ key, title: key, detail: '', value: null, href: `/validate/${key}` })), cards: [] }).map((row) => row.key), six);
   assert.deepEqual(phoneIndex({ figures: [], cards: [] }), []);
-  for (const [cycle, title] of [['build', 'Tools'], ['raise', 'Calls'], ['grow', 'Updates']]) {
+  for (const [cycle, title] of [['build', 'Tools'], ['raise', 'Calls'], ['grow', 'Reporting']]) {
     assert.equal(cycleTabs(cycle, cards)[1].name, title);
   }
 });

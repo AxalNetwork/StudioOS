@@ -1,0 +1,69 @@
+<!DOCTYPE html>
+<html><head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <meta name="design_doc_mode" content="canvas">
+  <link href="https://fonts.googleapis.com/css2?family=Roboto+Mono:wght@400;500;600;700&family=Space+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <style>body{margin:0;background:#eeedf2}a{color:#7c3aed;text-decoration:none}a:hover{color:#6d28d9}</style>
+</helmet>
+<div style="display:flex;flex-direction:column;font-family:'Space Grotesk',system-ui,sans-serif;color:#18181b">
+  <header style="padding:40px 44px 8px;display:flex;flex-direction:column;gap:6px">
+    <span style="font:700 11px 'Roboto Mono',monospace;letter-spacing:.07em;text-transform:uppercase;color:#6b6577">Account · /account/companies</span>
+    <h1 style="margin:0;font-size:28px;font-weight:800;letter-spacing:-.02em">Account · Companies and projects</h1>
+    <p style="margin:0;font-size:14px;color:#6b6577;max-width:840px;line-height:1.55">The full view of the sidebar’s company switcher: every company and the ventures inside each, with your role, status, stage, cycles, members, invitations and which one is active. Create, rename, archive, leave and transfer each open a dialog. Drawn for a founder, with an investor, an operating partner, an advisor, an explorer and the admins. Drawers are centred lightboxes, and Account has no Eadwyn rail.</p>
+  </header>
+  <sc-for list="{{ boards }}" as="b" hint-placeholder-count="19">
+    <section id="{{ b.id }}" style="padding:36px 44px;border-bottom:1px solid rgba(0,0,0,.08);display:flex;flex-direction:column;gap:12px;scroll-margin-top:16px">
+      <div style="display:flex;align-items:baseline;gap:10px;flex-wrap:wrap">
+        <a href="#{{ b.id }}" style="font:700 11px 'Roboto Mono',monospace;padding:3px 8px;background:#18181b;color:#fff;border-radius:5px">{{ b.id }}</a>
+        <h2 style="margin:0;font-size:16px;font-weight:800;letter-spacing:-.01em">{{ b.t }}</h2>
+      </div>
+      <p style="margin:0;font-size:13px;line-height:1.55;color:#4a4553;max-width:920px">{{ b.cap }}</p>
+      <div style="display:flex;gap:28px;flex-wrap:wrap;align-items:flex-start">
+        <sc-for list="{{ b.frames }}" as="f" hint-placeholder-count="1">
+          <div style="display:flex;flex-direction:column;gap:8px;flex:none">
+            <sc-if value="{{ f.lab }}" hint-placeholder-val="{{ false }}"><span style="font:600 11px 'Roboto Mono',monospace;color:#6b6577">{{ f.lab }}</span></sc-if>
+            <div style="{{ f.box }}"><dc-import name="Companies Projects Page" board="{{ f.b }}" hint-size="{{ f.hint }}"></dc-import></div>
+          </div>
+        </sc-for>
+      </div>
+    </section>
+  </sc-for>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script="">
+class Component extends DCLogic {
+  renderVals() {
+    const D = (b, lab, w, h, r) => ({ b, lab: lab || false, hint: '100%,' + (h || 900) + 'px', box: 'width:' + (w || 1440) + 'px;' + (h ? 'height:' + h + 'px;' : '') + 'overflow:hidden;border-radius:' + (r || 12) + 'px;border:1px solid rgba(24,24,27,.12);background:#f4f3f7;box-shadow:0 1px 3px rgba(0,0,0,.06)' });
+    const P = (b, lab) => D(b, lab, 390, 844, 28);
+    const boards = [
+      ['CMP1', 'Companies · Founder · desktop 1440 · light', 'The Account section column with Companies and projects lit, then the pane: tabs, the active note, two company cards with members, cycles and ventures, the seat on another founder’s venture, and the shared notice.', [D('CMP1')]],
+      ['CMP2', 'Company · lightbox over CMP1', 'Facts, the four cycles in words, the ventures, the members with their carry, the invitations, and the three lifecycle actions.', [D('CMP2')]],
+      ['CMP3', 'Projects · Founder', 'Ventures grouped by company, then the venture in no company, then the seat on another venture.', [D('CMP3')]],
+      ['CMP4', 'Venture · lightbox over CMP3', 'In Week 2 of the Spin-Out Lab, so invites are locked with the reason. The second frame is the same venture in Week 4.', [D('CMP4'), D('CMP4b', 'Once the Lab reaches Week 4', 760)]],
+      ['CMP5', 'Invitations · Founder', 'Invitations to you, one sent to another address, and the invitations you sent. The second frame is empty.', [D('CMP5'), D('CMP5e', 'Nothing waiting', 680)]],
+      ['CMP6', 'Dialogs A', 'New company with a name clash, Rename, Make active, and Invite people with the email that did not send.', [D('CMP6', false, 1200)]],
+      ['CMP7', 'Dialogs B', 'Transfer primary admin, Archive, Leave, and Leave refused for the only primary admin.', [D('CMP7', false, 1200)]],
+      ['CMP8', 'Dialogs C', 'Move a venture to a company, Transfer ownership, Leave a venture, and Move to trash.', [D('CMP8', false, 1200)]],
+      ['CMP9', 'Companies · Investor', 'The investing firm with the funds it runs, a fund with no firm, the note on Manage, and LP positions held by the person.', [D('CMP9')]],
+      ['CMP10', 'Companies · Operating Partner', 'The firm with what it holds, and the firm name that differs from the partner profile.', [D('CMP10')]],
+      ['CMP11', 'Engagements · Advisor', 'Founders’ grants with what each shares and until when. Practice and Expertise are not yet separated by company.', [D('CMP11')]],
+      ['CMP12', 'Explorer', 'No New company; one invitation to accept.', [D('CMP12', false, 1440, 760)]],
+      ['CMP13', 'Admin and Super Admin', 'An admin’s own company, with the line on reach; the Super Admin belongs to none.', [D('CMP13a', 'Admin', 1440, 820), D('CMP13b', 'Super Admin', 1440, 760)]],
+      ['CMP14', 'Empty', 'No companies, no ventures, nothing archived.', [D('CMP14a', 'No companies', 680), D('CMP14b', 'No ventures', 680), D('CMP14c', 'Nothing archived', 680)]],
+      ['CMP15', 'Loading', 'Header and tabs at once; tab counts are grey bars; three cards read.', [D('CMP15')]],
+      ['CMP16', 'Error and partial', 'Entity records could not be read while the cards render; the memberships could not be read at all.', [D('CMP16a', 'KYB could not be read', 1100), D('CMP16b', 'Memberships could not be read', 1440, 760)]],
+      ['CMP17', 'No permission', 'A plain member sees the members list and why they cannot change it; a company you left; a venture you hold no seat on.', [D('CMP17a', 'A plain member', 900), D('CMP17b', 'A company you left', 680), D('CMP17c', 'A venture with no seat', 680)]],
+      ['CMP18', 'Phone · 390 wide', 'The Account index with the new row, the companies as cards, and a company as its own page.', [P('CMP18a', 'Account index'), P('CMP18b', 'Companies'), P('CMP18c', 'A company')]],
+      ['CMP19', 'Hand-off', 'The sidebar switcher with Manage companies and projects, the renamed sidebar row, and the two moved notices.', [D('CMP19a', 'The switcher', 1000), D('CMP19b', 'Moved notices', 1000)]]
+    ].map(([id, t, cap, frames]) => ({ id, t, cap, frames }));
+    return { boards };
+  }
+}
+</script>
+</body></html>
