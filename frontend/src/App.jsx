@@ -2993,6 +2993,8 @@ function AppInner() {
       {/* D989 (#2380): Partner profiles, its two tabs as sub-paths; /admin?tab=profiles forwards here (LegacyContractsRedirect). */}
       <Route path="/admin/partner-profiles" element={guard(['admin'], <PartnerProfiles />)} />
       <Route path="/admin/partner-profiles/all" element={guard(['admin'], <PartnerProfiles />)} />
+      {/* D995: one profile as PRF3's lightbox, over the list it was opened from. */}
+      <Route path="/admin/partner-profiles/:ref" element={guard(['admin'], <PartnerProfiles />)} />
       {/* D997 (#2378): Persona segments, its two tabs as sub-paths; /admin?tab=personas forwards here (LegacyContractsRedirect). */}
       <Route path="/admin/persona-segments" element={guard(['admin'], <PersonaSegments />)} />
       <Route path="/admin/persona-segments/unclassified" element={guard(['admin'], <PersonaSegments />)} />
