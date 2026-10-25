@@ -12,6 +12,10 @@ the meantime. Deal-room reads retain their separate partner rule. Legacy legal
 entity listing and other routes with independent role gates are separate
 policies, not grants from the founder-resource guard.
 
+D1150: `deal_context.ts`, mounted before the deal router at `/api/deals`,
+provides investor-owned stage/visit metadata and author/firm-private notes.
+No admin bypass; migration 600; writes and audit rows share a batch.
+
 D973 reads live in `admin_network_reads.ts`, mounted before D976’s
 `admin_network.ts` at `/api/admin/network`. Opaque person refs use the
 read-only drawer; numeric account IDs continue to the standing router.

@@ -196,6 +196,8 @@ and seven cards for `../routes/cycle_grow.ts`. `revenueMovements.ts` splits the
 revenue ledger into new, expansion and churned by month (only when customers can
 be told apart; churn needs two billings) and rewrites `revenue_movements`.
 
+D1150: `raiseCycle.ts` also owns the stored-receipt projection `receivedCommitment`: investor/commitment owner/company checked, only receipt id/time returned, no bank fields or provider read. It stays beside D752’s `receivedDates` boundary.
+
 D663: `raiseCycle.ts` computes the Raise figures, seven cards and records, plus D686's independently readable, project-scoped Calls history, for
 `../routes/cycle_raise.ts`, including the computed readiness checks, the
 diligence checklist and the narrative consistency check (fixed patterns, no
