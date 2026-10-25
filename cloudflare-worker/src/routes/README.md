@@ -305,6 +305,8 @@ mounted at `/api/admin/payments`: the change log over the catalogue's and
 Stripe's audit rows, its CSV export (a recorded reason, failing closed), and the
 webhook's deliveries by hour. `catalog.ts` records a failed sync.
 
+D1065 (#2935): `build_plan.ts` mounts at `/api/cycles/build/plan` before the Build router. GET reads a scoped plan; POST prepares/updates only for the venture’s founder or admitted Lab owner. Admins read; company-linked partners read only landed accepted items without a decision or pending proposal.
+
 D971 (#2756): `admin_lab_operations.ts` is mounted by `admin_cohort.ts` under
 `/api/admin/cohort`: read-only `/settings` and `/activity`, both Admin gated.
 The latter filters/paginates one safe projection of existing stores and never

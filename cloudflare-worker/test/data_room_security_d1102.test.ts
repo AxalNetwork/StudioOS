@@ -23,9 +23,10 @@ const roles: Record<number, string> = { 1: 'founder', 2: 'investor', 3: 'founder
 
 function fixture() {
   const db = new DatabaseSync(':memory:', { enableForeignKeyConstraints: false });
-  for (const t of ['users','projects','company_profiles','user_company_links','data_room_files','data_room_folders','data_room_grants','data_room_access_log','raise_prospects','pairwise_ndas','activity_logs','admin_audit_log','dd_cases','dd_requests']) {
+  for (const t of ['users','projects','company_profiles','user_company_links','data_room_files','data_room_folders','data_room_grants','data_room_access_log','raise_prospects','pairwise_ndas','activity_logs','admin_audit_log','dd_cases','dd_requests','project_members']) {
     db.exec(stripForeignKeys(tableFromBaseline(baseline, t)));
   }
+  db.exec(migration('594_data_room_grant_folders.sql'));
   addColumnsFrom(db, migration('442_raise_cycle_stores.sql'), 'data_room_files');
   addColumnsFrom(db, migration('463_raise_record_stores.sql'), 'data_room_files');
   db.exec(stripForeignKeys(tableFromBaseline(migration('463_raise_record_stores.sql'), 'data_room_file_versions')));
@@ -43,6 +44,7 @@ function fixture() {
       (1,'grant-one',1,2,1,'active',NULL),(2,'grant-expired',1,3,1,'active','2000-01-01'),
       (3,'grant-revoked',1,4,1,'revoked',NULL),(4,'legacy-admin-grant',1,900,1,'active',NULL),
       (5,'other-grant',2,2,3,'active',NULL);
+    INSERT INTO project_members (project_id,user_id,role,status) VALUES (1,900,'cofounder','accepted');
     INSERT INTO pairwise_ndas (party_a_user_id,party_b_user_id,status) VALUES (1,2,'active');`);
   const storage = { puts: 0, deletes: 0 };
   const binding = d1Over(db); const statements: string[] = [];
@@ -90,9 +92,14 @@ test('every founder write refuses admins, including admins with a residual found
       ['POST','/room-one/folders',{ name: 'Attempt' }], ['PATCH','/room-one/folders/folder-one',{ name: 'Attempt', visibility: 'open', apply_to_contents: true }],
       ['DELETE','/room-one/folders/folder-one',undefined], ['POST','/room-one/files',{ name: 'Attempt', data: 'data:text/plain;base64,eA==' }],
       ['PATCH','/room-one/files/file-one',{ visibility: 'open' }], ['DELETE','/room-one/files/file-one',undefined],
-      ['POST','/room-one/grants',{ email: 'synthetic-3@example.test' }], ['DELETE','/room-one/grants/grant-one',undefined],
+      ['POST','/room-one/grants',{ email: 'synthetic-3@example.test' }], ['PATCH','/room-one/grants/grant-one',{folders:null}],
+      ['POST','/room-one/files/file-one/versions/1/current',undefined],
+      ['POST','/room-one/files/file-one/download',undefined],
+      ['POST','/room-one/files/file-one/versions/1/download',undefined], ['DELETE','/room-one/grants/grant-one',undefined],
     ] as const) {
+      f.statements.length=0;
       assert.equal((await f.call(method, path, body)).status, 404, method + ' ' + path);
+      assert.ok(!f.statements.some(sql=>/FROM data_room_(files|file_versions)/.test(sql)), 'admin refusal precedes private file reads');
       assert.deepEqual(snapshot(f.db), before);
     }
     assert.deepEqual(f.storage, { puts: 0, deletes: 0 });
@@ -135,7 +142,7 @@ test('support read records the actor and exact reason for the founder and HQ; it
   const f = fixture(); try {
     const reason = "Investigate checklist mapping; literal ' and ? are data.";
     const r = await f.call('POST','/room-one/support-read',{ reason }); assert.equal(r.status,200);
-    assert.equal(r.body.mode,'support'); assert.equal(r.body.read_only,true); assert.equal(r.body.files.length,3);
+    assert.equal(r.body.mode,'support'); assert.equal(r.body.role,'support'); assert.equal(r.body.read_only,true); assert.equal(r.body.files.length,3);
     const audit = f.db.prepare("SELECT * FROM activity_logs WHERE user_id=1 AND action='data_room_support_read'").get() as any;
     assert.ok(audit); assert.equal(audit.project_id,1); assert.equal(audit.actor,'user:900');
     assert.deepEqual(JSON.parse(audit.details),{ admin_user_id:900, reason, read_only:true });
