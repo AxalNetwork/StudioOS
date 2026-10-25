@@ -58,8 +58,7 @@ export function Card({ title, meta, children, className = '', testId }) {
 }
 
 /**
- * A tile: `state` is ready, loading, unreadable or missing (Guard G's "Not in
- * this read"). `words` marks a value that is a sentence, not a number. `note`
+ * A tile: `state` is ready, loading, unreadable or missing (an id absent from the list). `words` marks a value that is a sentence, not a number. `note`
  * is a value nothing records yet.
  */
 export function Tile({ t, onRetry }) {

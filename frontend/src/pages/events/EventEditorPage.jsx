@@ -17,6 +17,7 @@ import Lightbox from '../../ui/Lightbox';
 import { publishAction } from './eventOrganiserModel';
 import HostHeader, { NewEventHeader } from './HostHeader';
 import { pendingCount } from './hostHeaderModel';
+import { eventLocalInput, eventTimePayload } from './eventTimeModel';
 
 const EVENT_TYPES = EVENT_TYPE_IDS;
 const LOCATION_KINDS = ['virtual', 'in_person', 'hybrid'];
@@ -35,20 +36,6 @@ const COMMON_TZS = [
   'Europe/London', 'Europe/Paris', 'Europe/Berlin', 'Asia/Dubai', 'Asia/Singapore',
   'Asia/Tokyo', 'Australia/Sydney',
 ];
-
-function isoToLocalInput(iso) {
-  if (!iso) return '';
-  const d = new Date(iso);
-  if (Number.isNaN(d.getTime())) return '';
-  const pad = (n) => String(n).padStart(2, '0');
-  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
-}
-
-function localInputToIso(value) {
-  if (!value) return null;
-  const d = new Date(value);
-  return Number.isNaN(d.getTime()) ? value : d.toISOString();
-}
 
 const labelCls = 'block text-sm font-medium text-gray-700 dark:text-gray-200';
 const inputCls = 'mt-1 w-full rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 px-3 py-2 text-sm text-gray-900 dark:text-gray-100 placeholder-gray-400 dark:placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-violet-500';
@@ -97,7 +84,7 @@ export default function EventEditorPage() {
         setForm({
           title: ev.title || '', type: ev.type || 'meetup',
           summary: ev.summary || '', description: ev.description || '',
-          starts_at: isoToLocalInput(ev.starts_at), ends_at: isoToLocalInput(ev.ends_at),
+          starts_at: eventLocalInput(ev.starts_at, ev.timezone || 'UTC'), ends_at: eventLocalInput(ev.ends_at, ev.timezone || 'UTC'),
           timezone: ev.timezone || browserTz,
           location_kind: ev.location_kind || 'virtual',
           location_text: ev.location_text || '', location_url: ev.location_url || '',
@@ -128,9 +115,7 @@ export default function EventEditorPage() {
     type: form.type,
     summary: form.summary.trim() || null,
     description: form.description.trim() || null,
-    starts_at: localInputToIso(form.starts_at),
-    ends_at: localInputToIso(form.ends_at),
-    timezone: form.timezone,
+    ...eventTimePayload(form, saved),
     location_kind: form.location_kind,
     location_text: form.location_text.trim() || null,
     location_url: form.location_url.trim() || null,
@@ -140,7 +125,7 @@ export default function EventEditorPage() {
     approval_required: form.approval_required ? 1 : 0,
     visibility: form.visibility,
     audience_rules_json: JSON.stringify(rules),
-  }), [form, rules]);
+  }), [form, rules, saved]);
 
   const save = async () => {
     if (!form.title.trim()) { showToast({ kind: 'error', msg: 'Add a title first.' }); return; }
@@ -149,8 +134,8 @@ export default function EventEditorPage() {
     try {
       if (isEdit) {
         const body = payload();
-        await eventsApi.update(id, body);
-        setSaved((ev) => (ev ? { ...ev, ...body } : ev));
+        const updated = await eventsApi.update(id, body);
+        setSaved((ev) => updated?.event || (ev ? { ...ev, ...body } : ev));
         showToast({ kind: 'success', msg: 'Event saved.' });
       } else {
         const created = await eventsApi.create(payload());
@@ -192,12 +177,12 @@ export default function EventEditorPage() {
         return;
       }
       const body = payload();
-      await eventsApi.update(id, body);
+      const updated = await eventsApi.update(id, body);
       const reply = await eventsApi.submitReview(id);
       const next = reply?.event?.status;
       if (!next) throw new Error('The reply did not say the event\'s status.');
       setStatus(next);
-      setSaved((ev) => (ev ? { ...ev, ...body, status: next } : ev));
+      setSaved((ev) => (updated?.event ? { ...updated.event, status: next } : ev ? { ...ev, ...body, status: next } : ev));
       setPublishing(null);
       showToast({ kind: 'success', msg: asked.done });
     } catch (e) {

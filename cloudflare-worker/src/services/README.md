@@ -24,6 +24,11 @@ screening snapshots use `scoreIntegrity.ts` verification and read auditing.
 Bulk reads deduplicate projects, select snapshots once, and batch per-score
 audit entries without weakening approval or signature checks.
 
+`eventTimes.ts` (D1115, #2995) validates and converts the event writer’s local
+clock inputs in the selected IANA zone, preserving explicit instants and refusing
+invalid or ambiguous wall times. Its instant comparison keeps formatting-only
+normalization out of the changed-after-approval flag.
+
 ## The ones worth knowing
 
 `personaSegments.ts` is D999's segment counts (#2814) behind
