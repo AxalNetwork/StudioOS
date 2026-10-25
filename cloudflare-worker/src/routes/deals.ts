@@ -462,6 +462,8 @@ deals.post('/', async (c) => {
   const data = await c.req.json();
   const currency = data.currency === undefined ? 'USD' : String(data.currency).trim().toUpperCase();
   if (!/^[A-Z]{3}$/.test(currency)) return c.json({ code: 'invalid_currency', detail: 'Use a three-letter currency code.' }, 400);
+  // Bank proof and receipt matching still operate in USD; no FX is implied.
+  if (currency !== 'USD') return c.json({ code: 'currency_not_supported', detail: 'New deals currently use USD. Other currencies require currency-aware bank workflows.' }, 400);
   await ensureDealPassSchema(c.env);
   const sql = getSQL(c.env);
   const p = await sql`SELECT id, founder_id FROM projects WHERE id = ${data.project_id}`;
@@ -504,6 +506,8 @@ deals.post('/draft', async (c) => {
   const data = await c.req.json();
   const currency = data.currency === undefined ? 'USD' : String(data.currency).trim().toUpperCase();
   if (!/^[A-Z]{3}$/.test(currency)) return c.json({ code: 'invalid_currency', detail: 'Use a three-letter currency code.' }, 400);
+  // Bank proof and receipt matching still operate in USD; no FX is implied.
+  if (currency !== 'USD') return c.json({ code: 'currency_not_supported', detail: 'New deals currently use USD. Other currencies require currency-aware bank workflows.' }, 400);
   await ensureDealPassSchema(c.env);
   const sql = getSQL(c.env);
   const p = await sql`SELECT id FROM projects WHERE id = ${data.project_id}`;
@@ -700,8 +704,6 @@ deals.put('/:id', async (c) => {
   const user = await requireRole(c, 'partner');
   const id = parseInt(c.req.param('id'));
   const data = await c.req.json();
-  const currency = data.currency === undefined ? 'USD' : String(data.currency).trim().toUpperCase();
-  if (!/^[A-Z]{3}$/.test(currency)) return c.json({ code: 'invalid_currency', detail: 'Use a three-letter currency code.' }, 400);
   await ensureDealPassSchema(c.env);
   const sql = getSQL(c.env);
   const rows = await sql`SELECT id, status, stage_changed_at, amount, lead_partner_id FROM deals WHERE id = ${id}`;

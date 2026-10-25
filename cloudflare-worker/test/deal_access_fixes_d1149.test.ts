@@ -91,8 +91,14 @@ test('migration gives old deals USD and preserves an explicit currency on reads'
   assert.equal((await call(f, 6, 'PUT', '/deals/100', { currency: 'GBP', amount: 999 })).status, 409);
   assert.equal(f.db.prepare('SELECT currency FROM deals WHERE id=100').get().currency, 'EUR');
   assert.throws(() => f.db.exec("UPDATE deals SET currency='invalid' WHERE id=100"));
-  const created = await call(f, 5, 'POST', '/deals', { project_id: 10, amount: 1000, currency: 'gbp' });
-  assert.equal(created.status, 201, JSON.stringify(created.body)); assert.equal(created.body.currency, 'GBP');
+  const created = await call(f, 5, 'POST', '/deals', { project_id: 10, amount: 1000, currency: 'usd' });
+  assert.equal(created.status, 201, JSON.stringify(created.body)); assert.equal(created.body.currency, 'USD');
+  const count = f.db.prepare('SELECT count(*) n FROM deals').get().n;
+  for (const [who, path] of [[5, '/deals'], [6, '/deals/draft']] as const) {
+    const unsupported = await call(f, who, 'POST', path, { project_id: 10, amount: 1000, currency: 'EUR' });
+    assert.equal(unsupported.status, 400); assert.equal(unsupported.body.code, 'currency_not_supported');
+  }
+  assert.equal(f.db.prepare('SELECT count(*) n FROM deals').get().n, count);
   assert.equal((await call(f, 5, 'POST', '/deals', { project_id: 10, currency: 'bad-code' })).status, 400);
 });
 
