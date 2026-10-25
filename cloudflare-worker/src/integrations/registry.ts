@@ -20,6 +20,7 @@ import type { Env, User } from '../types';
 import type { Tier } from '../middleware/requireTier';
 import { MODULE_LABELS, moduleHref } from './moduleLabels';
 import { MERCURY_FEEDS, mercuryFedModules } from './mercuryFeeds';
+import { NOTION_FEEDS } from './notionFeeds';
 import { bindingKey } from '../util/schemaBootstrap';
 
 export type ProviderStatus = 'live' | 'beta' | 'coming_soon';
@@ -496,6 +497,13 @@ export const REGISTRY: ProviderDescriptor[] = [
     // Proof of funds stays HQ-only by its use (`HQ_ONLY_USES`), not by hiding the connector.
     preview_roles: ['admin'], personal_roles: ['founder', 'partner', 'investor'],
   },
+  // D1085 (#2950, #2405 part 1): a founder's own Notion, read-only, signed in through Notion's MCP server (D1080).
+  {
+    key: 'notion', display_name: 'Notion', integration_type: 'data_feed',
+    description: 'Your own Notion, read-only, through Notion’s own sign-in: Axal VC searches and reads the pages and databases you share. It never creates, edits, moves or deletes anything in Notion.',
+    status: 'beta', tier: 'free', auth_type: 'oauth_mcp', capabilities: ['Read-only'],
+    audience_rule: 'venture', docs_url: 'https://developers.notion.com/docs/mcp', icon: 'FileText',
+  },
 ];
 
 // A catalogue entry describes only behaviour that the shipping provider has.
@@ -524,6 +532,14 @@ export const CONNECTOR_METADATA: Record<string, ConnectorMetadata> = {
     feeds: [...new Set(MERCURY_FEEDS.filter((f) => f.role === 'founder' && f.module !== null).map((f) => f.module!))],
     used_by: [{ label: 'Grow', href: '/grow' }, { label: 'Raise', href: '/raise' }],
     permissions: ['Sign in with Mercury: read your accounts, balances, transactions, cashflow, statements, invoices, customers, treasury and SAFEs through Mercury’s MCP server; it never sends, transfers or requests money.'],
+  },
+  // D1085: what lands is `notionFeeds.ts`'s, empty until Notion parts 3–6 build a feed.
+  notion: {
+    category: 'Docs', verified: false,
+    pulls: NOTION_FEEDS.map((f) => ({ what: f.what, module: f.module })),
+    sends: [],
+    feeds: [...new Set(NOTION_FEEDS.map((f) => f.module))],
+    permissions: ['Sign in with Notion: search and read the pages and databases you share, through Notion’s MCP server; it never creates, edits, moves or deletes anything.'],
   },
   microsoft_365: { category: 'Calendar and workspace', verified: false, pulls: [{ what: 'Events', module: 'customer_research' }], sends: [{ what: 'Calendar events', target: 'Microsoft 365', default_mode: 'ask' }], feeds: ['customer_research', 'operating_systems'], permissions: ['Confirm your Microsoft sign-in identity.', 'Read your public Microsoft profile.', 'Read your account email address.', 'Keep the connection active.', 'Read and update calendar events.', 'Read your basic account profile.'] },
 };

@@ -679,7 +679,8 @@ async function dynamicClient(env: Env, provider: McpProvider, server: McpAuthSer
       grant_types: ['authorization_code', 'refresh_token'],
       response_types: ['code'],
       token_endpoint_auth_method: 'none',
-      scope: provider.scopes.join(' '),
+      // D1085: a record that asks for no scope sends none, never an empty one.
+      ...(provider.scopes.length ? { scope: provider.scopes.join(' ') } : {}),
     }),
   }, 'registration_failed');
   const clientId = typeof body?.client_id === 'string' && /^[\x21-\x7e]{1,256}$/.test(body.client_id) ? body.client_id : null;
@@ -741,7 +742,7 @@ export function authorizeMcpUrl(provider: McpProvider, server: McpAuthServer, cl
   u.searchParams.set('response_type', 'code');
   u.searchParams.set('client_id', client.client_id);
   u.searchParams.set('redirect_uri', client.redirect_uri);
-  u.searchParams.set('scope', provider.scopes.join(' '));
+  if (provider.scopes.length) u.searchParams.set('scope', provider.scopes.join(' '));
   u.searchParams.set('state', p.state);
   u.searchParams.set('code_challenge', p.challenge);
   u.searchParams.set('code_challenge_method', 'S256');

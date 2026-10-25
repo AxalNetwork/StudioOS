@@ -345,6 +345,11 @@ and the weekly series, and one profile by its reference (`pp_…`), never by
 email. The older `/api/profiling/admin/*` calls stay on `api.js` for the pages
 that read them.
 
+D1150: `dealContext.js` reads the investor’s `/deals/:id/stage`, `/whats-new`
+and paged `/notes`; add/edit/delete notes use the same Worker scope. Only
+the author edits and deletes, firm colleagues read, and staff have no bypass.
+Reading whats-new advances that user/firm’s visit marker. #3057 consumes it.
+
 D971 (#2756): `labOperations.js` reads the Lab's playbook, operative cohort size
 and filtered/paged history, and calls the existing Super Admin draft/publish
 routes and audited size write. Support sessions reuse `adminLab.js`; grant
@@ -371,6 +376,10 @@ published blocks, the change log, the matrix and the subprocessor subscribe, no 
 `trustCenterAdminApi` (HQ › Security › Trust center content: drafts, subprocessors, the
 auditor's reports and Publish with its note, Super Admin) and `securityReportsApi` (Help's
 private Security reports, and HQ's read of them).
+
+D1126 (#3006): `programGrants.js` also reads HQ's History tab (`allHistory`, every
+licence's program decisions a page at a time) and downloads the grid's CSV
+(`exportCsv`, and `exportLicenceCsv` for one studio), all Super Admin.
 
 D1133 adds `billingAlertsApi.pay(id)` and `.updateCard(id, nonce)` for the mounted failed-renewal preparation routes. Keep one validated 8–64-character nonce per open card form and reuse it on retries. Their client secrets belong only in the in-page Stripe form, never storage or logs.
 

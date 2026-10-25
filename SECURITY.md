@@ -35,12 +35,12 @@ We strongly prefer private disclosure. Pick whichever channel is easiest:
 2. **Email** `security@axal.vc`. We monitor this address 24/7.
    No PGP key is published (see "Encrypted reports" below), so send
    sensitive detail through the advisory rather than by email.
-3. **In-app report — not in the app yet.** The platform keeps a private
-   store for in-app reports: Help's Security category
-   (`POST /api/help/security-reports`). A report's text is encrypted,
-   only HQ's Super Admins can read it, and it never becomes a Help
-   ticket, a GitHub issue or a Slack post. The form members will file
-   it from is not built yet, so until it is, use the advisory or email.
+3. **In-app report, for members.** Signed in, open the trust center's
+   Disclosure tab (`/trust/disclosure`) and choose "Report a security
+   issue". It files a private report (`POST /api/help/security-reports`).
+   A report's text is encrypted, only HQ's Super Admins can read it, and
+   it never becomes a Help ticket, a GitHub issue or a Slack post. It
+   takes no attachments; send files through the advisory.
 
 Please include:
 
