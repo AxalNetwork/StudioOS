@@ -268,9 +268,10 @@ test('the grid: rows leave out drafts and terminated licences, and the tiles and
   assert.equal(body.tiles.ending_in_90_days, 1);
   assert.deepEqual(body.tiles.fees_a_year, [{ currency: 'EUR', cents: 300000 }, { currency: 'USD', cents: 50000 }]);
   assert.equal(body.tiles.fees_not_recorded, 0);
-  assert.equal(body.tiles.requests_waiting, null, 'requests are part 2; null, never 0');
-  assert.match(body.tiles.requests_waiting_reason, /#2774/);
-  assert.equal(body.series.requests_by_month, null);
+  // D983 (#2774) reads the requests: none raised here is a measured 0, with six months on the axis.
+  assert.equal(body.tiles.requests_waiting, 0);
+  assert.equal(body.tiles.requests_waiting_reason, null);
+  assert.equal(body.series.requests_by_month.length, 6);
   const perks = body.series.holding.find((h: any) => h.program_key === 'perks');
   assert.deepEqual([perks.granted, perks.paused], [2, 0]);
   const lab = body.series.holding.find((h: any) => h.program_key === 'spinout-lab');
