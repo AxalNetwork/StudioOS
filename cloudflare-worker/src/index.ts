@@ -165,6 +165,8 @@ import './integrations/providers/stripe';
 import './integrations/providers/github';
 // D713 (#1778) — a founder's or partner's own Mercury, read-only: `connect` only.
 import './integrations/providers/mercury';
+// D1085 (#2950) — a founder's own Notion, read-only, through Notion's MCP server: sign-in only.
+import './integrations/providers/notion';
 import crunchbaseRoutes from './routes/crunchbase';
 import network from './routes/network';
 import referEarn from './routes/refer_earn';

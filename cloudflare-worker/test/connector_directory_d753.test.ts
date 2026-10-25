@@ -262,7 +262,7 @@ test('page keys: google and microsoft answer their registry rows', async () => {
 // 9 ───────────────────────────────────────────────────────────────────────────
 test('unknown and malformed keys are 404 unknown_provider, never a lookup error', async () => {
   const db = fixture();
-  for (const k of ['notion', 'GitHub', 'git-hub', 'a', 'w'.repeat(41), 'constructor', 'hasownproperty', '%5F%5Fproto%5F%5F', 'signal']) {
+  for (const k of ['no_such_connector', 'GitHub', 'git-hub', 'a', 'w'.repeat(41), 'constructor', 'hasownproperty', '%5F%5Fproto%5F%5F', 'signal']) {
     const r = await call(db, 'founder', `/directory/${k}`);
     assert.deepEqual([r.status, r.body], [404, { error: 'unknown_provider' }], k);
   }
