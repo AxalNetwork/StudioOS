@@ -2558,6 +2558,8 @@ export const api = {
     return request(`/refer-earn/admin/submissions${qs ? `?${qs}` : ''}`);
   },
   adminReferralSubmission: (uid) => request(`/refer-earn/admin/submissions/${encodeURIComponent(uid)}`),
+  // D1124 (#3004): the referral funnel, the furthest stage each referral reached.
+  adminReferralFunnel: () => request('/refer-earn/admin/submissions/funnel'),
   adminReferralWeekly: (weeks = 12) => request(`/refer-earn/admin/submissions/weekly?${new URLSearchParams({ weeks })}`),
   adminStrategicAccess: (params = {}) => {
     const qs = new URLSearchParams(Object.entries(params).filter(([, v]) => v != null && v !== '')).toString();
@@ -4772,6 +4774,8 @@ export const api = {
     request(`/comarketing/me/pitches/${uid}/withdraw`, { method: 'POST' }),
   adminCoMarketingQueue: (status) =>
     request(`/comarketing/admin/queue${status ? `?status=${status}` : ''}`),
+  // D1132 — one pitch for the board's item address, with who decided it.
+  adminCoMarketingPitch: (uid) => request(`/comarketing/admin/pitches/${encodeURIComponent(uid)}`),
   approveCoMarketingPitch: (uid, notes) =>
     request(`/comarketing/admin/pitches/${uid}/approve`, { method: 'POST', body: JSON.stringify({ notes }) }),
   rejectCoMarketingPitch: (uid, notes) =>
