@@ -642,6 +642,35 @@ export const CONNECTOR_PAGES: Record<string, ConnectorPage | VariantPages> = {
   mercury: {
     personal: { founder: mercuryPage('founder'), partner: mercuryPage('partner'), investor: mercuryPage('investor') },
   },
+  // D1085 (#2950, #2405 part 1): each tool is one of `NOTION_READ_TOOLS`, by its call site in `services/notion/reads.ts`.
+  notion: {
+    tagline: 'Read the Notion pages and databases you share, read-only, through Notion’s own sign-in.',
+    long_description: [
+      'Sign in with Notion, and Axal VC searches and reads the pages and databases your Notion sign-in can see, through Notion’s MCP server.',
+      'Notion’s own sign-in allows reading and writing. Axal VC calls three read tools only, from a fixed list; every other tool Notion offers is refused before any request is made.',
+      'Nothing lands in a module yet. The Notion parts that follow add what lands, and where, one at a time.',
+    ],
+    tools: [
+      tool('search', 'page and database titles', 'read', 'Searches the pages and databases your Notion sign-in can see, by title and text.', null, ["call('notion-search'"]),
+      tool('read_page', 'the pages you open', 'read', 'Reads one page you pick: its text, title, link and when it was last edited.', null, ["call('notion-fetch'"]),
+      tool('read_rows', 'database rows', 'read', 'Reads a database’s rows a page at a time, as rows or through one of its views. Never by SQL.', null, ["call('notion-query-data-sources'"]),
+    ],
+    never_does: [
+      'No page, database or comment is created, edited, moved or deleted in Notion.',
+      'No SQL query is sent to a Notion database.',
+      'No instruction written in a page is followed: page text is read as data.',
+      'No Notion token is pasted or shown: Sign in with Notion only.',
+    ],
+    prompts: [],
+    prompts_reason: notRead('Notion'),
+    made_by: AXAL,
+    service: { name: 'Notion', href: 'https://www.notion.com' },
+    sign_in: { kind: 'mcp', label: 'Sign in with Notion', key_help_href: null },
+    endpoints: { sign_in: 'https://mcp.notion.com/mcp', api: null },
+    added: '2026-10',
+    links: { ...NO_LINKS, developer_docs: 'https://developers.notion.com/docs/mcp' },
+    verified_on: null,
+  },
 };
 
 /** Connectors with a page but no registry row (D753 decision 2). */

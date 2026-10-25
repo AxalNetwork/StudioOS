@@ -2339,6 +2339,9 @@ function AppInner() {
       ? <InvestorWorkspacePage page={page} {...options}>{component}</InvestorWorkspacePage>
       : component
   );
+  const trustCenter = user
+    ? guard(['admin', 'founder', 'partner', 'investor', 'advisor', 'exploring'], <TrustCenter inShell />)
+    : <TrustCenter />;
   const investorFundWorkspace = (component) => investorWorkspace('fund', component, {
     fundUnlocked: hasInvestorTier(user, 'institutional'),
   });
@@ -3453,12 +3456,13 @@ function AppInner() {
           carries no role gating, so every advisor could see the link, click it,
           and be bounced off the only page listing what they owe. */}
       {/* D1072 (#2425): the public trust center is /trust and its tabs, for anyone; a member's own part is /trust/me. */}
-      <Route path="/trust" element={<TrustCenter />} />
-      <Route path="/trust/security" element={<TrustCenter />} />
-      <Route path="/trust/data" element={<TrustCenter />} />
-      <Route path="/trust/subprocessors" element={<TrustCenter />} />
-      <Route path="/trust/documents" element={<TrustCenter />} />
-      <Route path="/trust/disclosure" element={<TrustCenter />} />
+      {/* D1077 (#2969, TRU20): signed in, the public trust center sits in the app shell, in the member's colours; signed out, in the site frame (TRU1). */}
+      <Route path="/trust" element={trustCenter} />
+      <Route path="/trust/security" element={trustCenter} />
+      <Route path="/trust/data" element={trustCenter} />
+      <Route path="/trust/subprocessors" element={trustCenter} />
+      <Route path="/trust/documents" element={trustCenter} />
+      <Route path="/trust/disclosure" element={trustCenter} />
       <Route path="/trust/me" element={guard(['admin', 'founder', 'partner', 'investor', 'advisor', 'exploring'], investorWorkspace('trust', <TrustCenterPage chromeless={effectiveRole === 'investor'} />))} />
       <Route path="/monitoring" element={guard(['admin'], <MonitoringPage />)} />
       <Route path="/funds" element={guard(['admin', 'investor'], effectiveRole === 'investor' ? <InvestorFundLanding fundUnlocked={hasInvestorTier(user, 'institutional')} /> : <FundOpsWorkspace />)} />
