@@ -82,7 +82,7 @@ export async function bankAccountHistory(env: Env, f: ReturnType<typeof historyF
                 CASE WHEN a.filters_json IS NULL THEN 0 WHEN json_valid(a.filters_json) THEN json_type(a.filters_json) <> 'object' ELSE 1 END
            FROM admin_audit_log a LEFT JOIN users u ON u.id = a.admin_user_id
            LEFT JOIN entity_bank_accounts b ON b.uid = json_extract(CASE WHEN json_valid(a.filters_json) THEN a.filters_json ELSE '{}' END,'$.account_uid')
-          WHERE a.id <= ? AND (substr(a.action,1,13) = 'bank_account_' OR a.action IN ('mercury_connected','mercury_token_replaced','mercury_disconnected'))
+          WHERE a.id <= ? AND (a.action GLOB 'bank_account_*' OR a.action IN ('mercury_connected','mercury_token_replaced','mercury_disconnected'))
        ), filtered AS (
          SELECT * FROM history
           WHERE (? IS NULL OR kind = ?) AND (? IS NULL OR entity_key = ?) AND (? IS NULL OR actor_id = ?)

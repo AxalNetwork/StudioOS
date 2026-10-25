@@ -79,3 +79,16 @@ test('D1182: formatted account numbers in reveal reasons are redacted',async()=>
 test('D1182: a reveal remains visible when its actor no longer has a user row',async()=>{
  const f=fixture();try{f.db.exec("INSERT INTO entity_bank_account_reveals(uid,account_id,actor_user_id,context,created_at) VALUES ('former-actor',1,999,'admin_reveal','2026-01-04 10:00:00')");const r=await f.call('/history?kind=reveal');assert.equal(r.status,200);assert.equal(r.body.total,3);assert.equal(r.body.rows[0].actor_name,null);assert.equal(r.body.rows[0].actor_ref,'actor:999');}finally{f.db.close();}
 });
+
+
+test('D1182: history uses the existing action index rather than scanning unrelated audits',async()=>{
+ const f=fixture();try{
+  f.db.exec("CREATE INDEX idx_admin_audit_action_ts ON admin_audit_log(action,exported_at DESC)");
+  f.db.exec("WITH RECURSIVE n(i) AS (VALUES(1) UNION ALL SELECT i+1 FROM n WHERE i<1000) INSERT INTO admin_audit_log(admin_user_id,action,filters_json) SELECT 1,'unrelated','not-json' FROM n");
+  const r=await f.call();assert.equal(r.status,200);assert.equal(r.body.total,9);
+  const sql=f.log.find(s=>s.includes('WITH history'))!;
+  const plan=f.db.prepare('EXPLAIN QUERY PLAN '+sql).all(2,10000,null,null,null,null,null,null,null,null,null,null,null,null,25,0).map(x=>String(x.detail)).join('\n');
+  assert.match(plan,/SEARCH a USING INDEX idx_admin_audit_action_ts/);
+  assert.doesNotMatch(plan,/SCAN a(?:\s|$)/);
+ }finally{f.db.close();}
+});
