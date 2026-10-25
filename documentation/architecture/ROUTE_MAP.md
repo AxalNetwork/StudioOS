@@ -92,6 +92,8 @@ New routes:
 - `POST /api/funds/:id/distributions/preview` returns what the distribution job would write. It uses `splitDistribution`, the same function the job runs.
 - `GET /api/fund-admin/access` (`requireAdmin`, HQ only, no support session) answers `{ super_admin, acts }`.
 - `GET /api/fund-admin/overview` (the same gate; PR 3b) writes #1775's `mercury_accounts_read` audit row first, or answers 503 `audit_unavailable` with no figures. It answers five blocks from the stores only, each with its own `state`: `entities` (connection and accounts as "ending NNNN"), `funds` (call totals per administered fund), `fees` (the latest fee period), `drafts` and `matches`. It never calls Mercury, and it carries no account number, routing number, token, counterparty or memo.
+- `GET /api/fund-admin/lps` (the same gate; D1158) writes a `fund_lps_read` audit row first, then answers every LP of every administered fund, filtered, searched, sorted and paged on the Worker, with totals over every page. A figure no store holds is null with its reason.
+- `GET /api/fund-performance/:id/positions` and `/:id/history?step=quarter` (D1158; the fund's GP and admins) answer each position's latest mark, and the fund's performance as of each quarter end since its first call. See `decisions/D1158.md`.
 
 Every admin act leaves one `fund_admin.<act>` row in `admin_audit_log`. `COOL_OFF_ROUTES` gains the three routes that are wholly Super Admin acts. See `decisions/D714.md`.
 
