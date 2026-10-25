@@ -142,7 +142,8 @@ test('Files, Access and Activity read the founder\'s room by the venture\'s uid,
     assert.ok(!v.requests.some((u) => /\/records\/files/.test(u)), 'a tab word is not a record');
     assert.ok(v.testIds().includes('dataroom-files-page') && v.testIds().includes('dataroom-tabs'));
     assert.equal(v.count('dataroom-file-row'), 2);
-    assert.ok(v.hrefs().includes('/raise/data-room?mode=workspace&project_id=3'), 'uploads stay in the files tool');
+    // D1106 (#2986): Upload is the tool's own sheet at `/new`, no longer the old files tool.
+    assert.ok(v.hrefs().includes('/raise/data-room/new?project_id=3'), 'Upload opens the tool\'s sheet');
   } finally { await v.close(); }
   const a = await mounted('/raise/data-room/access?project_id=3');
   try { assert.equal(a.count('dataroom-grant-row'), 2); assert.match(a.text(), /Bluefern Capital/); } finally { await a.close(); }
@@ -202,7 +203,8 @@ test('the wiring: no route is added, CycleRoute branches on the tab word, and th
   const app = read('frontend/src/App.jsx');
   assert.doesNotMatch(app, /path="\/raise\/data-room\/(files|access|requests|activity|checklist|preview)/, 'the module routes carry the tool');
   const route = read('frontend/src/pages/cycles/CycleRoute.jsx');
-  assert.ok(route.includes("const dataRoomTab = record && cycle === 'raise' && isDataRoomTab(slug, recordId) ? recordId : null;"));
+  // D1106 (#2986): the same line also takes a file's lightbox (`/raise/data-room/file/<id>`) to Files.
+  assert.ok(route.includes("const dataRoomTab = record && cycle === 'raise' && (dataRoomFile ? 'files' : isDataRoomTab(slug, recordId) ? recordId : null);"));
   // D1173 (#2455) adds Use of funds' tab words beside these.
   assert.ok(route.includes('!narrativeTab && !capTableTab && !dataRoomTab && !uofTab && !capRelTab && !!projectId'));
   assert.ok(route.includes("slug === DATA_ROOM ? <DataRoomHomeNav search={q} />"));
