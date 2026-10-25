@@ -15,7 +15,7 @@
  */
 import {
   COULD_NOT_READ, NOT_READ_YET, NOT_RECORDED, NONE_CLAIM, OVERDUE_HOURS, PROGRAMS, ageText, isFailed, isLoading,
-  plural, programByKey,
+  grantBadgeOf, plural, programByKey,
 } from './programsModel';
 
 const nf = (n) => Number(n).toLocaleString('en-US');
@@ -354,6 +354,8 @@ export function catalogueCards(read) {
       join: r.join_method ?? null,
       whoReason: base.whoReason || 'Who joins and how is not recorded for this program yet.',
       status: STATUS_WORD[r.status] || 'Status not recorded',
+      // D1124 (#3004): D956's per-viewer grant, when the row carries one.
+      grantBadge: grantBadgeOf(r.grant),
       row: r,
     };
   });

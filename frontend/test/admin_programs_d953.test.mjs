@@ -719,7 +719,10 @@ test('the pages read D953 §2\'s reads, D961\'s catalogue read and D962\'s throu
   // D961 draws the charts through ui/Charts.jsx, never an <svg> of its own. Propose a program landed with D964 (#2797); Pause waits for OD-PAUSE.
   assert.doesNotMatch(src, /window\.confirm|useToast|dangerouslySetInnerHTML|<svg|recharts|Export CSV|Pause program/);
   assert.doesNotMatch(src, /\?\? 0\b/, 'no zero standing in for a value');
-  for (const sample of ['[Studio Lisbon]', '[48]', '[A venture program', 'Granted to your studio', '0 credits']) assert.ok(!src.includes(sample), `a canvas sample reached the pages: ${sample}`);
+  for (const sample of ['[Studio Lisbon]', '[48]', '[A venture program', '0 credits']) assert.ok(!src.includes(sample), `a canvas sample reached the pages: ${sample}`);
+  // D1124 (#3004): "Granted to your studio" is drawn only from D956's `granted` state, in the one word table; never as a held-mode constant.
+  assert.equal(src.split('Granted to your studio').length - 1, 1, 'the word appears once');
+  assert.match(src, /granted: \{ word: 'Granted to your studio'/, 'only as the Worker\'s granted state');
   assert.match(read('frontend/src/pages/admin/programs/programsModel.js'), /import \{ parseStamp \} from '\.\.\/\.\.\/\.\.\/ui\/parseStamp\.js';/);
   assert.doesNotMatch(src, /\bprogramme\b/i, 'spelling: "program" in all new copy');
 });

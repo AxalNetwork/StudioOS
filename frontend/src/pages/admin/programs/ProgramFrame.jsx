@@ -3,7 +3,7 @@ import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { Lightbox, usePhoneWidth } from '../../../ui';
 import { programsApi } from '../../../lib/api/programs';
 import { DIALOG_BODY, DIALOG_LINES, DialogButtons, GrantBadge, MovedNotice, StatusPill, SUB, Unread } from './parts';
-import { NOT_RECORDED, PAGES, crumbText, movedNotice, programByKey, withoutMoved } from './programsModel';
+import { NOT_RECORDED, PAGES, crumbText, grantBadgeOf, movedNotice, programByKey, withoutMoved } from './programsModel';
 import { CSV_DONE, CSV_LINES, CSV_PROGRAMS, refusalSentence } from './programPagesModel';
 
 const CRUMB = 'font-mono text-[11px] font-bold uppercase tracking-[.07em] text-axal-muted dark:text-gray-400';
@@ -31,6 +31,7 @@ export default function ProgramFrame({ program, superAdmin = false, actions = nu
   const page = PAGES[program];
   const card = programByKey(program);
   const moved = movedNotice(loc.pathname, loc.search);
+  const grantBadge = useGrantBadge(program);
   return (
     <div className="mx-auto flex max-w-6xl flex-col gap-4 px-4 pb-24 pt-6 sm:px-6 lg:pb-10" data-testid={`programs-page-${program}`}>
       <nav aria-label="Breadcrumb" className={CRUMB} data-testid="programs-crumb">
@@ -44,7 +45,7 @@ export default function ProgramFrame({ program, superAdmin = false, actions = nu
           <h1 className="m-0 text-[24px] font-extrabold leading-tight tracking-[-.02em] text-axal-ink dark:text-gray-100">{page.title}</h1>
           <div className="flex flex-wrap gap-1.5">
             <StatusPill status={card.status} testId="programs-header-status" />
-            <GrantBadge grant={superAdmin ? card.hqGrant : card.grant} testId="programs-header-grant" />
+            <GrantBadge grant={superAdmin ? card.hqGrant : card.grant} badge={grantBadge} testId="programs-header-grant" />
           </div>
           {page.line
             ? <p className="m-0 text-[13.5px] leading-normal text-axal-muted dark:text-gray-400" data-testid="programs-header-line">{page.line}</p>
@@ -73,6 +74,22 @@ export default function ProgramFrame({ program, superAdmin = false, actions = nu
 }
 
 /** D1124: the header's ⋯ menu, with Download (CSV). */
+/**
+ * D1124 (#3004): the header's badge from D956's `grant` on `/:key` (#2789).
+ * Until it answers, or if the read fails, the held mode's constant stands:
+ * a failed page read is not a grant state.
+ */
+function useGrantBadge(program) {
+  const [badge, setBadge] = useState(null);
+  useEffect(() => {
+    let live = true;
+    setBadge(null);
+    programsApi.program(program).then((d) => { if (live) setBadge(grantBadgeOf(d?.grant)); }, () => {});
+    return () => { live = false; };
+  }, [program]);
+  return badge;
+}
+
 function MoreMenu({ program, title }) {
   const [open, setOpen] = useState(false);
   const [dialog, setDialog] = useState(false);

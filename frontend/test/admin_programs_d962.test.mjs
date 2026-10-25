@@ -745,3 +745,15 @@ test('D1124 · the Lab’s tabs (#2374): Mentor’s office-hours hosts card open
     assert.equal(view.textOf('programs-mentor-hosts-door'), 'Spin-Out Lab › Hosts');
   } finally { await view.close(); }
 });
+
+test('D1124 · the header\'s grant badge reads D956\'s field on /:key; a failed read leaves the held mode, never a state', async () => {
+  const view = await mounted('/admin/programs/perks', ProgramPage, worker({ detail: { ...PLAYBOOK, grant: { state: 'paused' } } }));
+  try { assert.equal(view.textOf('programs-header-grant'), '‖Paused by HQ'); } finally { await view.close(); }
+  const down = await mounted('/admin/programs/perks', ProgramPage, worker({ detail: () => response({ error: 'down' }, 503) }));
+  try { assert.equal(down.textOf('programs-header-grant'), '⌂HQ-held'); } finally { await down.close(); }
+  const unread = await mounted('/admin/programs/perks', ProgramPage, worker({ detail: { ...PLAYBOOK, grant: { available: false, unreadable: true, reason: 'Program grants could not be read.' } } }));
+  try {
+    assert.equal(unread.textOf('programs-header-grant'), '!Grant unreadable');
+    assert.equal(unread.textOf('programs-header-grant-reason'), 'Program grants could not be read.');
+  } finally { await unread.close(); }
+});

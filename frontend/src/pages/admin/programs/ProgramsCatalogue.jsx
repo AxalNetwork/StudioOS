@@ -87,7 +87,7 @@ function ProgramCard({ p, superAdmin, who, needs, figures, door, foot }) {
         : <Unread word={NOT_RECORDED} reason={p.purposeReason} testId={`programs-card-${p.key}-purpose`} />}
       <div className="flex flex-wrap gap-1.5">
         <StatusPill status={p.status} testId={`programs-card-${p.key}-status`} />
-        <GrantBadge grant={superAdmin ? p.hqGrant : p.grant} testId={`programs-card-${p.key}-grant`} />
+        <GrantBadge grant={superAdmin ? p.hqGrant : p.grant} badge={p.grantBadge} testId={`programs-card-${p.key}-grant`} />
         {superAdmin ? null : <NeedsPill needs={needs} programKey={p.key} />}
       </div>
       <div className="border-t border-axal-hairline pt-2 dark:border-gray-700" data-testid={`programs-card-${p.key}-who`}>
