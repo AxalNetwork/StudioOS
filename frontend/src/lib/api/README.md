@@ -298,6 +298,11 @@ D797 (#2230): `licenceTerms.js` reads and saves a licence's terms schedule
 (`GET`/`PUT /api/admin/licences/:uid/terms`, Super Admin; the save takes a
 reason and a recent step-up). The Administrator reads the same terms on
 `/api/licence/mine`. D800 and D801 draw them.
+
+D984 (#2775): `licencePrograms.js` is the Administrator's own programs
+(`GET /api/licence/mine/programs`): the nine programs with HQ's grant and its
+terms, read from HQ's store on HQ and from HQ's dated copy on a branch. An
+account no licence binds reads "On HQ-held accounts, HQ runs every program."
 D798 (#2231): `licenceAccount.js` is the territory licence Administrator's own
 `/api/licence/mine/*`. It covers the contract (in force, pending, earlier, and
 the caller's own signing link), the statements (with each period's usage
@@ -332,6 +337,11 @@ totals over the filtered set and the filters' options), the counts for the tiles
 and the weekly series, and one profile by its reference (`pp_…`), never by
 email. The older `/api/profiling/admin/*` calls stay on `api.js` for the pages
 that read them.
+
+D971 (#2756): `labOperations.js` reads the Lab's playbook, operative cohort size
+and filtered/paged history, and calls the existing Super Admin draft/publish
+routes and audited size write. Support sessions reuse `adminLab.js`; grant
+terms reuse `programGrants.js`. No Admin is sent to either Super Admin read.
 
 D993 (#2804): `partnerProfiles.js` also reads the first-agreement options
 (`GET /api/admin/partner-profiles/agreements`, each Ready or "Not ready: no
