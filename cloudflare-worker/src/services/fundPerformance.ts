@@ -69,23 +69,34 @@ async function rows<T>(statement: D1PreparedStatement): Promise<T[]> {
   if (!result.success) throw new Error('Fund performance read failed');
   return result.results;
 }
-export async function readFundPerformance(env: Env, fund: any, asOf: string) {
+/**
+ * `pointInTime` (D1158) reads the fund as it stood on `asOf`: only positions
+ * held by then, calls issued and distributions paid by then. Without it the
+ * read keeps D627's shape — every attributed position, every call — so the
+ * today read is unchanged.
+ */
+export async function readFundPerformance(env: Env, fund: any, asOf: string, opts: { pointInTime?: boolean } = {}) {
+  const pit = opts.pointInTime ? 1 : 0;
   const positions = await rows<Mark>(env.DB.prepare(
     `SELECT p.id, v.value_cents, v.valuation_date FROM portfolio_positions p
      LEFT JOIN fund_position_valuations v ON v.id = (
        SELECT m.id FROM fund_position_valuations m WHERE m.position_id = p.id AND m.valuation_date <= ?
        ORDER BY m.valuation_date DESC, m.id DESC LIMIT 1)
-     WHERE p.fund_id = ?`).bind(asOf, fund.id));
+     WHERE p.fund_id = ? AND (? = 0 OR COALESCE(substr(p.position_date, 1, 10), substr(p.created_at, 1, 10)) <= ?)`)
+    .bind(asOf, fund.id, pit, asOf));
   // Headers are authoritative. Legacy unnumbered LP lines are included once;
   // numbered lines and receipts never double-count the amount called.
   const calls = await rows<Flow>(env.DB.prepare(
-    `SELECT amount_cents, substr(created_at, 1, 10) AS date FROM fund_capital_calls WHERE fund_id = ?
+    `SELECT amount_cents, substr(created_at, 1, 10) AS date FROM fund_capital_calls
+       WHERE fund_id = ? AND (? = 0 OR substr(created_at, 1, 10) <= ?)
      UNION ALL
      SELECT CASE WHEN c.amount_cents IS NOT NULL THEN c.amount_cents ELSE round(c.amount * 100) END AS amount_cents,
        substr(c.created_at, 1, 10) AS date FROM capital_calls c JOIN limited_partners lp ON lp.id = c.limited_partner_id
-       WHERE lp.fund_id = ? AND c.fund_call_id IS NULL`).bind(fund.id, fund.id));
+       WHERE lp.fund_id = ? AND c.fund_call_id IS NULL AND (? = 0 OR substr(c.created_at, 1, 10) <= ?)`)
+    .bind(fund.id, pit, asOf, fund.id, pit, asOf));
   const distributions = await rows<Flow>(env.DB.prepare(
-    `SELECT amount_cents, substr(distributed_at, 1, 10) AS date FROM fund_distributions WHERE fund_id = ? AND status = 'paid'`).bind(fund.id));
+    `SELECT amount_cents, substr(distributed_at, 1, 10) AS date FROM fund_distributions WHERE fund_id = ? AND status = 'paid'
+       AND (? = 0 OR substr(distributed_at, 1, 10) <= ?)`).bind(fund.id, pit, asOf));
   return { id: fund.id, name: fund.name, vintage_year: fund.vintage_year, status: fund.status,
     ...calculatePerformance(positions, calls, distributions, asOf) };
 }

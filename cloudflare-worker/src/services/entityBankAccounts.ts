@@ -15,6 +15,7 @@
  * To change an account, retire it and add the new one.
  */
 import type { Env } from '../types';
+import { bankHistoryText } from './bankAccountHistory';
 import { encryptColumn, decryptColumn } from './columnCipher';
 import { AXAL_ENTITIES, type AxalEntityKey } from './legalDocFormat';
 // Imported inside function bodies only, so the two modules may import each other.
@@ -50,7 +51,7 @@ export type BankAccountRow = {
   account_kind: AccountKind; account_number_enc: string; account_last4: string;
   routing_number: string; routing_number_alt: string | null; swift_code: string | null; intermediary_swift_code: string | null;
   purposes_json: string; status: 'active' | 'retired'; retired_at: string | null; retired_reason: string | null;
-  recorded_by: number; created_at: string; updated_at: string;
+  recorded_by: number; recorded_by_name?: string | null; created_at: string; updated_at: string;
 };
 
 /** What a list, the console and a masked instruction show: the last four, never the number. */
@@ -81,6 +82,11 @@ export function masked(row: BankAccountRow): MaskedAccount {
     purposes: purposesOf(row), status: row.status, retired_at: row.retired_at, retired_reason: row.retired_reason,
     created_at: row.created_at, updated_at: row.updated_at,
   };
+}
+
+export type ConsoleAccount = MaskedAccount & { recorded_by_name: string | null };
+function consoleAccount(row: BankAccountRow): ConsoleAccount {
+  return { ...masked(row), recorded_by_name: bankHistoryText(row.recorded_by_name) };
 }
 
 // ---------------------------------------------------------------- validation
@@ -146,7 +152,7 @@ async function checkPurposes(env: Env, entityKey: AxalEntityKey, kind: AccountKi
 
 // ---------------------------------------------------------------- writes
 
-const ROW_BY_UID = 'SELECT * FROM entity_bank_accounts WHERE uid = ?';
+const ROW_BY_UID = 'SELECT b.*, u.name AS recorded_by_name FROM entity_bank_accounts b LEFT JOIN users u ON u.id = b.recorded_by WHERE b.uid = ?';
 
 async function rowByUid(env: Env, uid: unknown): Promise<BankAccountRow> {
   if (typeof uid !== 'string' || !/^[a-f0-9-]{8,64}$/i.test(uid)) refuse(404, 'account_not_found', 'No such account.');
@@ -156,7 +162,7 @@ async function rowByUid(env: Env, uid: unknown): Promise<BankAccountRow> {
 }
 
 /** Validate, encrypt, then insert one account. The uid is minted first, so the ciphertext is bound to its row. */
-export async function createAccount(env: Env, input: NewAccountInput, actorId: number): Promise<MaskedAccount> {
+export async function createAccount(env: Env, input: NewAccountInput, actorId: number): Promise<ConsoleAccount> {
   const entityKey = (ENTITY_KEYS as readonly string[]).includes(String(input.entity_key)) ? (input.entity_key as AxalEntityKey) : null;
   if (!entityKey) return refuse(400, 'entity_invalid', 'Choose one of the four Axal entities.');
   const label = text(input.label, 60) ?? refuse(400, 'label_invalid', 'The label is 1 to 60 characters.');
@@ -201,10 +207,10 @@ export async function createAccount(env: Env, input: NewAccountInput, actorId: n
     uid, entityKey, label, bankName, bankAddress, beneficiaryName, beneficiaryAddress, kind,
     enc, number.slice(-4), routing, routingAlt, swift, intermediary, JSON.stringify(purposes), actorId,
   ).run();
-  return masked(await rowByUid(env, uid));
+  return consoleAccount(await rowByUid(env, uid));
 }
 
-/** Every account, masked, active first, then newest. */
+/** Every account, masked, active first, then newest. Shared instruction projection. */
 export async function listAccounts(env: Env): Promise<MaskedAccount[]> {
   const res = await env.DB.prepare(
     `SELECT * FROM entity_bank_accounts ORDER BY CASE status WHEN 'active' THEN 0 ELSE 1 END, entity_key, id DESC`,
@@ -212,8 +218,16 @@ export async function listAccounts(env: Env): Promise<MaskedAccount[]> {
   return (res.results || []).map(masked);
 }
 
+/** Recorder names belong only to the Super Admin console. */
+export async function listAccountsForConsole(env: Env): Promise<ConsoleAccount[]> {
+  const res = await env.DB.prepare(
+    `SELECT b.*, u.name AS recorded_by_name FROM entity_bank_accounts b LEFT JOIN users u ON u.id = b.recorded_by ORDER BY CASE b.status WHEN 'active' THEN 0 ELSE 1 END, b.entity_key, b.id DESC`,
+  ).all<BankAccountRow>();
+  return (res.results || []).map(consoleAccount);
+}
+
 /** The label and the purposes, the only two things that change (decision 3). Any other field is refused. */
-export async function updateAccount(env: Env, uid: unknown, body: Record<string, unknown>): Promise<MaskedAccount> {
+export async function updateAccount(env: Env, uid: unknown, body: Record<string, unknown>): Promise<ConsoleAccount> {
   const extra = Object.keys(body).filter((k) => k !== 'label' && k !== 'purposes');
   if (extra.length) refuse(409, 'instructions_immutable', 'Retire this account and add the new one.');
   const row = await rowByUid(env, uid);
@@ -225,11 +239,11 @@ export async function updateAccount(env: Env, uid: unknown, body: Record<string,
     `UPDATE entity_bank_accounts SET label = ?, purposes_json = ?, updated_at = datetime('now')
       WHERE uid = ? AND status = 'active'`,
   ).bind(label, JSON.stringify(purposes), row.uid).run();
-  return masked(await rowByUid(env, row.uid));
+  return consoleAccount(await rowByUid(env, row.uid));
 }
 
 /** Retire an account, with a reason of up to 200 characters. It is never deleted. */
-export async function retireAccount(env: Env, uid: unknown, reason: unknown): Promise<MaskedAccount> {
+export async function retireAccount(env: Env, uid: unknown, reason: unknown): Promise<ConsoleAccount> {
   const why = text(reason, 200) ?? refuse(400, 'reason_required', 'Say in up to 200 characters why this account is retired.');
   const row = await rowByUid(env, uid);
   if (row.status !== 'active') refuse(409, 'account_retired', 'This account is already retired.');
@@ -238,7 +252,7 @@ export async function retireAccount(env: Env, uid: unknown, reason: unknown): Pr
             updated_at = datetime('now')
       WHERE uid = ? AND status = 'active'`,
   ).bind(why, row.uid).run();
-  return masked(await rowByUid(env, row.uid));
+  return consoleAccount(await rowByUid(env, row.uid));
 }
 
 // ---------------------------------------------------------------- reveals
@@ -263,7 +277,7 @@ export async function accountNumberOf(env: Env, row: Pick<BankAccountRow, 'uid' 
 }
 
 /** A full account: the masked fields and the number. Only the two reveal routes ever send one. */
-export type RevealedAccount = MaskedAccount & { account_number: string };
+export type RevealedAccount = ConsoleAccount & { account_number: string };
 
 /** The Super Admin's reveal of one account: the ledger row, then the number. */
 export async function revealAccount(env: Env, uid: unknown, actorUserId: number, reason: unknown): Promise<RevealedAccount> {
@@ -276,7 +290,7 @@ export async function revealAccount(env: Env, uid: unknown, actorUserId: number,
   }
   const number = await accountNumberOf(env, row);
   if (!number) return refuse(409, 'account_unreadable', 'This account cannot be read, perhaps after a key change. Retire it and add it again.');
-  return { ...masked(row), account_number: number };
+  return { ...consoleAccount(row), account_number: number };
 }
 
 /** Active rows of one entity, for the resolver. Ciphertext included; never returned by a route. */

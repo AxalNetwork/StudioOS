@@ -64,6 +64,8 @@ function builtFromMigrations(): DatabaseSync {
   db.exec(sqlOf('388'));
   db.exec(sqlOf('389'));
   db.exec(sqlOf('390'));
+  // D1124 (#3004): webinars (D560) are program content, so their store is checked.
+  db.exec(sqlOf('391'));
   // D954 (#2787): the enrolment events every enrol and removal now writes.
   db.exec(sqlOf('560'));
   return db;
@@ -189,7 +191,7 @@ test('only the Super Admin authors programs, and every write records its actor',
   assert.deepEqual([row.status, row.enrolled_by], ['removed', SUPER], 'unenrolling deleted the row instead of marking it');
 });
 
-test('an assigned admin must be an admin; contents must exist, once each, and not be a webinar yet', async () => {
+test('an assigned admin must be an admin; contents must exist, once each, a webinar included (D1124)', async () => {
   const db = seeded();
   const { video, course } = await content(db);
   const uid = (await sa(db, SUPER, '/programs', { method: 'POST', body: { name: 'Nordics' } })).body.program.uid;
@@ -198,7 +200,8 @@ test('an assigned admin must be an admin; contents must exist, once each, and no
   assert.equal((await sa(db, SUPER, `/programs/${uid}/admins`, { method: 'POST', body: { user_uid: 'nobody' } })).status, 404);
   assert.equal((db.prepare('SELECT COUNT(*) AS n FROM learning_program_admins').get() as any).n, 0);
   const put = (contents: unknown) => sa(db, SUPER, `/programs/${uid}/contents`, { method: 'PUT', body: { contents } });
-  assert.equal((await put([{ subject_kind: 'webinar', subject_uid: 'w1' }])).body.error, 'webinar_not_built');
+  // D1124 (#3004): a webinar is content now; one that does not exist is unknown like any other.
+  assert.equal((await put([{ subject_kind: 'webinar', subject_uid: 'w1' }])).body.error, 'unknown_content');
   assert.equal((await put([{ subject_kind: 'item', subject_uid: 'no-such' }])).body.error, 'unknown_content');
   assert.equal((await put([{ subject_kind: 'item', subject_uid: video.uid }, { subject_kind: 'item', subject_uid: video.uid }])).body.error, 'duplicate_content');
   assert.equal((db.prepare('SELECT COUNT(*) AS n FROM learning_program_contents').get() as any).n, 0, 'a refused list was stored');

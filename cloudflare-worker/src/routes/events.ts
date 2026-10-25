@@ -19,6 +19,7 @@ import { logAdminAction } from '../services/adminAudit';
 import { agendaLocation, registrationEligibility, validateRegistrationRules } from '../services/eventOrganiser';
 import { notify } from '../services/notify';
 import { ensureEventsSchema } from '../services/eventsSchema';
+import { EventTimeError, eventTimeFields, eventTimeMessage, sameEventInstant } from '../services/eventTimes';
 import {
   classifyNewSeat,
   ensureCheckinCode,
@@ -59,6 +60,7 @@ import {
 } from '../services/eventBadges';
 import { archetypeAccess } from '../services/archetypeEntitlement';
 import { refuse } from '../util/refusal';
+import { scheduleCalendarCancellation } from './_eventCalendar';
 import { memberEventLink } from '../services/eventLinks';
 
 const events = new Hono<{ Bindings: Env }>();
@@ -370,6 +372,8 @@ events.post('/', async (c) => {
   const title = String(body.title || '').trim();
   if (!title) return c.json({ error: 'title_required' }, 400);
   if (!body.starts_at) return c.json({ error: 'starts_at_required' }, 400);
+  try { Object.assign(body, eventTimeFields(body)); }
+  catch (error) { if (error instanceof EventTimeError) return refuse(c, 400, { code: error.code, message: eventTimeMessage(error.code) }); throw error; }
 
   const type = isEventType(body.type) ? body.type : 'meetup';
   const visibility = EVENT_VISIBILITIES.includes(body.visibility) ? body.visibility : 'private';
@@ -466,12 +470,13 @@ events.get('/suggested', async (c) => {
   return c.json({
     archetype,
     track,
-    events: scored.slice(0, 8).map((s) => ({
+    events: await Promise.all(scored.slice(0, 8).map(async (s) => ({
       ...shapeEvent(s.e, { includeJoinLink: canManage(s.e, u) }),
-      suggestion_reason: prefer.has(s.e.type)
+      registration_eligible: (await registrationEligibility(c.env, s.e, u.id, u.email)).eligible,
+      suggestion_reason: u.role === 'exploring' ? 'Popular with new members' : prefer.has(s.e.type)
         ? (archetype?.label ? `Suits ${archetype.label}` : 'Matches your track')
         : null,
-    })),
+    }))),
   });
 });
 
@@ -584,6 +589,8 @@ events.patch('/:id', async (c) => {
   if (!canManage(event, u)) return c.json({ error: 'forbidden' }, 403);
 
   const body = await c.req.json().catch(() => ({} as any));
+  try { Object.assign(body, eventTimeFields(body, event)); }
+  catch (error) { if (error instanceof EventTimeError) return refuse(c, 400, { code: error.code, message: eventTimeMessage(error.code) }); throw error; }
   const sets: string[] = [];
   const binds: unknown[] = [];
   const reviewValues = new Map<string, unknown>();
@@ -612,7 +619,9 @@ events.patch('/:id', async (c) => {
   const reviewFields = ['title', 'starts_at', 'ends_at', 'timezone', 'location_kind', 'location_text', 'location_url', 'price_cents', 'currency'];
   const changed = reviewFields.some((key) => reviewValues.has(key) && (key === 'price_cents'
     ? reviewValues.get(key) !== (event[key] != null ? Number(event[key]) : null)
-    : reviewValues.get(key) !== (event[key] ?? null)));
+    : key === 'starts_at' || key === 'ends_at'
+      ? !sameEventInstant(reviewValues.get(key), event[key])
+      : reviewValues.get(key) !== (event[key] ?? null)));
   if (Number(event.host_user_id) === u.id && changed) {
     sets.push('changed_after_approval_at = CASE WHEN approved_at IS NOT NULL OR admin_published = 1 THEN ? ELSE changed_after_approval_at END');
     binds.push(new Date().toISOString());
@@ -719,6 +728,7 @@ events.post('/:id/cancel', async (c) => {
   if (!cancelled) return refuse(c, 409, { code: 'already_cancelled', message: 'This event is already cancelled.' });
   const paidCount = paidRows.reduce((total, row) => total + Number(row.count), 0);
   await logAdminAction(c.env, u.id, u.email, 'event_cancelled_by_host', { event_id: id, paid_tickets: paidCount });
+  await scheduleCalendarCancellation(c, 'event', id);
   const seated = await c.env.DB.prepare(
     `SELECT DISTINCT user_id FROM event_registrations
        WHERE event_id = ? AND user_id IS NOT NULL AND status IN ('registered','confirmed','attended','waitlisted')`,
@@ -1139,6 +1149,7 @@ events.delete('/:id/registration', async (c) => {
     }
   }
   await logAdminAction(c.env, u.id, u.email, 'event_registration_cancelled', { event_id: id, registration_id: reg.id });
+  await scheduleCalendarCancellation(c, 'ticket', Number(reg.id));
   return c.json({ ok: true });
 });
 

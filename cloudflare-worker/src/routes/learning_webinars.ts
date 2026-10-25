@@ -17,7 +17,7 @@ import type { Env } from '../types';
 import { requireAuth, isSuperAdmin } from '../auth';
 import { refuse } from '../util/refusal';
 import { mapError } from './_t13t14t15_helpers';
-import { canSeeLearning } from '../services/learningAccess';
+import { canSeeLearning, enrolledSql } from '../services/learningAccess';
 import { buildEventIcs } from '../services/eventsCommon';
 import {
   WEBINAR_COLS, memberWebinar, recordingOf, registeredCounts, webinarPhase, type WebinarRow,
@@ -30,13 +30,20 @@ async function auth(c: C): Promise<any | Response> {
   try { return await requireAuth(c); } catch (e) { return mapError(c, e); }
 }
 
-/** A cancelled webinar is shown as one: `canSeeLearning` reads it as published. */
-const seen = (user: any, w: WebinarRow) =>
-  canSeeLearning(user, { status: w.status === 'cancelled' ? 'published' : w.status, visibility: w.visibility });
+/**
+ * A cancelled webinar is shown as one: `canSeeLearning` reads it as published.
+ * D1124 (#3004): a `program` webinar is seen by a member enrolled in a
+ * published program that holds it (`enrolledSql`, selected `AS enrolled`).
+ */
+const seen = (user: any, w: WebinarRow & { enrolled?: unknown }) =>
+  canSeeLearning(user, { status: w.status === 'cancelled' ? 'published' : w.status, visibility: w.visibility, enrolled: w.enrolled });
+
+/** 1 when the caller (its one `?`) is enrolled in a published program holding this webinar. */
+const WEBINAR_ENROLLED = enrolledSql('webinar', 'learning_webinars.uid');
 
 async function visible(c: C, user: any): Promise<WebinarRow | Response> {
-  const w = await c.env.DB.prepare('SELECT ' + WEBINAR_COLS + ' FROM learning_webinars WHERE uid = ?')
-    .bind(c.req.param('uid') ?? '').first<WebinarRow>();
+  const w = await c.env.DB.prepare('SELECT ' + WEBINAR_COLS + ', ' + WEBINAR_ENROLLED + ' AS enrolled FROM learning_webinars WHERE uid = ?')
+    .bind(user.id, c.req.param('uid') ?? '').first<WebinarRow & { enrolled: number }>();
   // Not found and not visible answer alike: a draft's uid is not confirmed to exist.
   if (!w || !seen(user, w)) return refuse(c, 404, { code: 'not_found', message: 'No such webinar.' });
   return w;
@@ -58,12 +65,13 @@ r.get('/webinars', async (c) => {
   const sa = isSuperAdmin(user) ? 1 : 0;
   // Upcoming has not ended yet (live ones included), soonest first; past has, newest first.
   const res = await c.env.DB.prepare(
-    'SELECT ' + WEBINAR_COLS + ` FROM learning_webinars
-      WHERE status IN ('published', 'cancelled') AND (? = 1 OR visibility = 'open') AND starts_at IS NOT NULL AND ends_at IS NOT NULL
+    'SELECT ' + WEBINAR_COLS + ', ' + WEBINAR_ENROLLED + ` AS enrolled FROM learning_webinars
+      WHERE status IN ('published', 'cancelled') AND (? = 1 OR visibility = 'open' OR (visibility = 'program' AND ` + WEBINAR_ENROLLED + `))
+        AND starts_at IS NOT NULL AND ends_at IS NOT NULL
         AND ((? = 'upcoming' AND ends_at > ?) OR (? = 'past' AND ends_at <= ?))
       ORDER BY CASE WHEN ? = 'upcoming' THEN starts_at END ASC, CASE WHEN ? = 'past' THEN starts_at END DESC, id
       LIMIT 100`,
-  ).bind(sa, when, nowIso, when, nowIso, when, when).all<WebinarRow>();
+  ).bind(user.id, sa, user.id, when, nowIso, when, nowIso, when, when).all<WebinarRow & { enrolled: number }>();
   const rows = (res.results || []).filter((w) => seen(user, w));
   const counts = await registeredCounts(c.env, rows.map((w) => w.id));
   const mine = new Set<number>();

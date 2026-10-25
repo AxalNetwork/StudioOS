@@ -52,6 +52,8 @@ export type ApprovalLaneKey =
   // D1041 (#2889): the lanes D1038's canvas adds.
   | 'kyb' | 'comarketing' | 'wellbeing_experts' | 'perk_listings' | 'strategic_access'
   | 'lab_hosts' | 'score_flags' | 'articles'
+  // D1132 (#3012): part 4's store (migration 576) is in, so the lane is counted.
+  | 'product_testers'
   // D1041: HQ's own lanes (`hqApprovalSources.ts`, `scope: 'hq'`), so HQ's
   // inbox (D1040) reads, assigns and keeps history on them like any other.
   | HqLaneKey;
@@ -487,6 +489,23 @@ export const APPROVAL_SOURCES: readonly ApprovalSource[] = [
     notifies: 'The author',
     decidedOn: 'Content queue',
   },
+  {
+    key: 'product_testers',
+    label: 'Product testers',
+    // D1132 (#3012): D1042's store (migration 576). `applied` is the one
+    // undecided state (`TRANSITIONS.approve.from`); the wait is from
+    // `applied_at`. Every decision emails the member and writes their inbox
+    // (`routes/admin_product_testers.ts`).
+    countSql:
+      'SELECT COUNT(*) AS n, MIN(datetime(applied_at)) AS oldest FROM product_testers WHERE status = \'applied\'',
+    rowsSql:
+      "SELECT t.id AS id, COALESCE(NULLIF(u.name, ''), u.email, 'account ' || t.user_id) AS who, "
+      + "'Product tester application' AS what, t.applied_at AS created_at "
+      + 'FROM product_testers t LEFT JOIN users u ON u.id = t.user_id '
+      + "WHERE t.status = 'applied' ORDER BY julianday(t.applied_at) ASC, t.id ASC LIMIT ?",
+    notifies: 'The member',
+    decidedOn: 'Approvals › Product testers',
+  },
 ] as const;
 
 /**
@@ -495,7 +514,7 @@ export const APPROVAL_SOURCES: readonly ApprovalSource[] = [
  * read" on every database, and make every branch's backlog total null.
  */
 export const NOT_COUNTED_YET: ReadonlyArray<{ key: string; label: string; reason: string }> = [
-  { key: 'product_testers', label: 'Product testers', reason: 'No product tester application is stored yet; part 4 (#2890) adds the store.' },
+  // D1132 (#3012): empty. Product testers is counted now that part 4's store exists.
 ];
 
 /**

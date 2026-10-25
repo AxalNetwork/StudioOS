@@ -144,7 +144,10 @@ function seedHq(db: DatabaseSync) {
       ('n2', 3, 1, 'fees', 'Old', 'b', '2026-11-01', 'accepted', '${at(450)}', '${at(500)}');
     INSERT INTO hq_escalations (uid, branch_code, kind, subject, raised_by_name, status, created_at) VALUES
       ('e1', 'fr', 'question', 'Seats', 'Fixture Admin', 'open', '${at(35)}'),
-      ('e2', 'fr', 'question', 'Old', 'Fixture Admin', 'answered', '${at(350)}');
+      ('e2', 'fr', 'question', 'Old', 'Fixture Admin', 'answered', '${at(350)}'),
+      -- D1132 (#3012): a studio's program requests are the grants lane, never Support's.
+      ('e3', 'fr', 'program_grant', 'Founder circles', 'Fixture Admin', 'open', '${at(25)}'),
+      ('e4', 'fr', 'program_end', 'Old program', 'Fixture Admin', 'answered', '${at(300)}');
     INSERT INTO program_proposals (uid, created_by_user_id, licence_uid, status, name, sent_at, created_at) VALUES
       ('pp1', 3, 'lic1', 'sent', 'Founder circles', '${at(55)}', '${at(60)}'),
       ('pp2', 3, NULL, 'draft', 'Unsent', NULL, '${at(60)}'),
@@ -227,7 +230,10 @@ test('each HQ lane counts only its queue\'s own open items', async () => {
   const hq = Object.fromEntries((await countLanes(env(db), HQ_APPROVAL_SOURCES)).map((c) => [c.key, c]));
   assert.deepEqual(Object.fromEntries(Object.entries(hq).map(([k, v]) => [k, v.count])), {
     testing_programs: 1, learning: 1, tickets: 2, payouts: 2, ai_runs: 1, notices: 1, support: 1, proposals: 1,
+    // D1132: the open program grant, and not the answered end; Support keeps only its own question.
+    grants: 1,
   });
+  assert.equal(hq.grants.oldest_at, at(25));
   // Features and tasks: the oldest is the unreviewed feature (70 h), not the reviewed one.
   assert.equal(hq.tickets.oldest_at, at(70));
   // A notice waits from its response, not its issue.
@@ -241,6 +247,9 @@ test('each HQ lane counts only its queue\'s own open items', async () => {
   assert.equal(support[0].who, 'Fixture Admin');
   const props = (await db.prepare(HQ_APPROVAL_SOURCES.find((s) => s.key === 'proposals')!.rowsSql).all(10)) as any[];
   assert.equal(props[0].who, 'Fixture Studio');
+  assert.deepEqual(support.map((r) => r.what), ['question · Seats'], 'D1132: Support no longer counts a program request');
+  const grants = (await db.prepare(HQ_APPROVAL_SOURCES.find((s) => s.key === 'grants')!.rowsSql).all(10)) as any[];
+  assert.deepEqual(grants.map((r) => [r.who, r.what]), [['Fixture Admin', 'Program grant · Founder circles']]);
 });
 
 /**
@@ -313,14 +322,17 @@ test('every lane says who it tells and where it is decided; the gaps are named, 
       cohort: 'The member', partner_profiles: 'The partner, when an agreement is sent', jobs: 'The host', events: 'The host',
       comarketing: 'The partner', wellbeing_experts: 'The expert',
       articles: 'The author', testing_programs: 'The partner', tickets: 'The member', notices: 'The studio', support: 'The studio',
+      // D1132: the Product testers routes email the member; a program request's answer rings the studio's bell.
+      product_testers: 'The member', grants: 'The studio',
     },
   );
   assert.equal(by.kyb.decidedOn, null);
   assert.match(by.kyb.undecidedReason!, /No admin route decides/);
   const keys = new Set([...APPROVAL_SOURCES, ...HQ_APPROVAL_SOURCES].map((s) => s.key));
   for (const n of [...NOT_COUNTED_YET, ...HQ_NOT_COUNTED_YET]) assert.ok(!keys.has(n.key as any), `${n.key} is both laned and not`);
-  assert.deepEqual(NOT_COUNTED_YET.map((n) => n.key), ['product_testers']);
-  assert.deepEqual(HQ_NOT_COUNTED_YET.map((n) => n.key), ['grants']);
+  // D1132: both gaps are laned now.
+  assert.deepEqual(NOT_COUNTED_YET.map((n) => n.key), []);
+  assert.deepEqual(HQ_NOT_COUNTED_YET.map((n) => n.key), []);
   assert.deepEqual(SUB_COUNTS_NOT_YET.map((n) => `${n.lane}:${n.label}`), ['due_diligence:ready for sign-off']);
   // HQ's lanes are not every studio's: none of them reaches a branch's board or backlog.
   for (const s of HQ_APPROVAL_SOURCES) assert.ok(!APPROVAL_SOURCES.some((a) => a.key === (s.key as string)), s.key);
@@ -338,10 +350,10 @@ test('the glance: HQ decides for a Super Admin only, with notifies and decided_o
   assert.deepEqual(lane('comarketing').sub, { label: 'approved, not published yet', count: 1 });
   assert.equal(lane('kyb').decided_on, null);
   assert.ok(lane('kyb').undecided_reason);
-  assert.deepEqual(ap.not_counted.map((n: any) => n.key), ['product_testers']);
+  assert.deepEqual(ap.not_counted.map((n: any) => n.key), []);
   assert.equal(ap.hq_decides.lanes.length, HQ_APPROVAL_SOURCES.length);
-  assert.equal(ap.hq_decides.pending_total, 10);
-  assert.deepEqual(ap.hq_decides.not_counted.map((n: any) => n.key), ['grants']);
+  assert.equal(ap.hq_decides.pending_total, 11, 'D1132: the open program grant is counted once, in its own lane');
+  assert.deepEqual(ap.hq_decides.not_counted.map((n: any) => n.key), []);
   // HQ's total stays apart from the studios' lanes.
   assert.equal(ap.pending_total, ap.lanes.reduce((t: number, l: any) => t + l.count, 0));
 
@@ -387,7 +399,7 @@ test('HQ\'s inbox (D1040) carries HQ\'s lanes for a Super Admin only: read, assi
   assert.equal(plain.body.items.some((it: any) => HQ_KEYS.includes(it.lane)), false, 'an Admin saw an HQ item');
   assert.equal(plain.body.lanes.some((l: any) => HQ_KEYS.includes(l.key)), false);
   assert.ok(plain.body.items.some((it: any) => it.lane === 'articles'), 'an Admin still sees the studio lanes');
-  assert.equal(sup.body.total, plain.body.total + 10, 'HQ\'s ten open items are the whole difference');
+  assert.equal(sup.body.total, plain.body.total + 11, 'HQ\'s eleven open items (D1132: with the program grant) are the whole difference');
 
   const support = sup.body.items.find((it: any) => it.lane === 'support');
   const item = [{ lane: 'support', item_id: support.id }];

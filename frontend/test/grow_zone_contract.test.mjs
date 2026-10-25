@@ -101,17 +101,19 @@ test('Stalled is live, and computed from the stamps the route returns', () => {
   assert.match(CUSTOMERS, /return at != null && Date\.now\(\) - at > STALL_DAYS/);
 });
 
-test('Warm path only is live, and a warm path is the stored contact id', () => {
+test('Warm path only is live, and a warm path is the stored warm_path', () => {
   const block = zoneBlock(FILTERS, 'raise/capital-match');
   assert.match(block, /canvas: 'Warm path only', key: 'warm'/);
   assert.ok(CAPITAL.includes("view === 'warm'"), 'nothing branches on the warm view');
-  // Nothing is inferred from a shared domain or a similar name — the join is a
-  // stored column, and migration 128 is what put it there.
-  assert.match(CAPITAL, /row\?\.contact_id != null/);
+  // Nothing is inferred from a shared domain or a similar name — the path is a
+  // stored column, and migration 442 is what put it there. D1189 (#3123): a
+  // linked contact (`contact_id`) is not an introduction, so it no longer counts.
+  assert.match(CAPITAL, /typeof row\?\.warm_path === 'string' && row\.warm_path\.trim\(\) !== ''/);
+  assert.doesNotMatch(CAPITAL, /row\?\.contact_id != null/);
   assert.match(
-    raw('cloudflare-worker/sql/migrations/128_contact_promotion.sql'),
-    /raise_prospects\(contact_id\)/,
-    'the contact join this chip rests on is gone',
+    raw('cloudflare-worker/sql/migrations/442_raise_cycle_stores.sql'),
+    /ALTER TABLE raise_prospects ADD COLUMN warm_path TEXT/,
+    'the column this chip rests on is gone',
   );
 });
 
