@@ -2,7 +2,11 @@
 export const VERCEL_API = 'https://api.vercel.com';
 export const VERCEL_READ_SCOPES = ['read:project', 'read:deployment', 'read:domain'] as const;
 export class VercelError extends Error {
-  constructor(readonly code: string, readonly status = 502, readonly reset: number | null = null) { super(code); }
+  readonly code: string;
+  readonly status: number;
+  readonly reset: number | null;
+  // Fields are declared, not parameter properties: Node's strip-only TypeScript cannot run those.
+  constructor(code: string, status = 502, reset: number | null = null) { super(code); this.code = code; this.status = status; this.reset = reset; }
 }
 export interface VercelAuth { access_token: string; configuration_id: string; team_id: string | null }
 export interface Installation { id: string; scopes: string[]; teamId?: string | null; projectSelection: 'all' | 'selected'; projects?: string[]; disabledAt?: number | null }
