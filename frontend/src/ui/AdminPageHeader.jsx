@@ -50,9 +50,10 @@ const PILL_TONES = {
  * violet and carries aria-current="page" (NavLink sets it); `end` is on by
  * default, so a page's Overview is open only at its own address.
  */
-export function HeaderTab({ to, end = true, count = null, children, 'data-testid': testId }) {
+export function HeaderTab({ linkRef, to, end = true, count = null, children, 'data-testid': testId }) {
   return (
     <NavLink
+      ref={linkRef}
       to={to}
       end={end}
       data-testid={testId}

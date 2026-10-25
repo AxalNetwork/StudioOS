@@ -71,8 +71,11 @@ export const ADMIN_PLACEMENT = [
     { how: 'Card link. Also an Approvals lane.', also: [admin('Approvals', 'lane')] }),
   row('Communities Admin', '/admin/circles', admin('Community', 'card link'), false,
     { how: 'Card link. Circles have no approval queue.' }),
-  row('Advisor Cohort Access', '/admin/advisor-cohorts', admin('Programs', 'card link'), false,
-    { how: 'Card link. Also an Approvals lane.', also: [admin('Approvals', 'lane')] }),
+  // D953 (#2371): the console is Programs › Mentor cohort access › People. The
+  // key stays the legacy row's route, which H35's question pins; the route is
+  // the same string as Approvals lane 16, which is a door that says No queue.
+  { key: '/admin/advisor-cohorts', kind: 'row', label: 'Advisor Cohort Access', route: '/admin/programs/mentor-cohorts/people', hqOnly: false,
+    ...admin('Programs', 'card link'), how: 'Card link. Approvals lane 16 is also its door, with No queue.', also: [admin('Approvals', 'lane')] },
   row('Exploring Users', '/admin/exploring', admin('Accounts', 'embedded'), false,
     { how: 'Embedded panel. Also an Approvals lane.', also: [admin('Approvals', 'lane')] }),
   row('LP Applications', '/admin/lp-applications', admin('Approvals', 'lane'), false, { how: 'A core lane.' }),
@@ -88,7 +91,10 @@ export const ADMIN_PLACEMENT = [
   // address, a Community card link with Approvals lane 13 as its `also`, as Events.
   { key: '/admin/partners', kind: 'row', label: 'Partner Invitations', route: '/admin/partner-invitations', hqOnly: false,
     ...admin('Community', 'card link'), how: 'Card link. Approvals lane 13 is also its door.', also: [admin('Approvals', 'lane')] },
-  row('Referral Review', '/admin/refer-earn', admin('Approvals', 'lane'), false, { how: 'The Referrals core lane.' }),
+  // D953 (#2371): the review is Programs › Refer & Earn › Queue, and stays laned:
+  // the route is the same string as the Referrals core lane's.
+  { key: '/admin/refer-earn', kind: 'row', label: 'Referral Review', route: '/admin/programs/refer-and-earn/queue', hqOnly: false,
+    ...admin('Programs', 'card link'), how: 'Card link. The Referrals core lane is also its door.', also: [admin('Approvals', 'lane')] },
   row('Public Team Page', '/admin/team', hq('Content', 'sub-nav'), false, { how: 'Sub-navigation item.' }),
   row('My Licence', '/admin/my-licence', admin('Licences', 'embedded'), false, { how: 'Embedded panel.' }),
   // H35 drew Trash as "HQ · Security · proposal — not yet agreed". The

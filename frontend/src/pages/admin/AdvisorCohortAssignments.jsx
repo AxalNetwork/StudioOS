@@ -2,6 +2,7 @@ import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { api } from '../../lib/api';
 import { Card, Pill } from '../../ui';
 import AdminBoardFrame from './AdminBoardFrame';
+import { ASSIGNED_LINE, CAPS, WITHIN_500, refusalText } from './programs/programsModel';
 
 /**
  * Admin — which advisor may read which Lab cohort's founders.
@@ -36,7 +37,13 @@ const MONTHS = ['January', 'February', 'March', 'April', 'May', 'June',
   'July', 'August', 'September', 'October', 'November', 'December'];
 const cycleLabel = (c) => `${MONTHS[Number(c.month) - 1] || `Month ${c.month}`} ${c.year}`;
 
-function AdvisorCohortAssignmentsBody() {
+/**
+ * The console's body. Mounted alone by this file's default export, and by
+ * Programs › Mentor cohort access › People (D953), which passes `embedded`:
+ * the program header replaces this heading, and mounting the body rather than
+ * the default export leaves the page one rail.
+ */
+export function AdvisorCohortAssignmentsBody({ embedded = false } = {}) {
   const [rows, setRows] = useState({ loading: true, error: '', items: [] });
   const [advisors, setAdvisors] = useState({ loading: true, error: '', items: [] });
   const [cycles, setCycles] = useState({ loading: true, error: '', items: [] });
@@ -88,10 +95,11 @@ function AdvisorCohortAssignmentsBody() {
         note: draft.note.trim() || null,
       });
       setDraft({ advisor_user_id: '', cohort_cycle_id: '', note: '' });
-      setNote({ ok: true, text: 'Assigned. The advisor can now read that cohort’s founders.' });
+      // D953: agrees with How it runs, which says when a mentor sees a founder (the map's F2, until O-FND).
+      setNote({ ok: true, text: ASSIGNED_LINE });
       await load();
     } catch (err) {
-      setNote({ ok: false, text: err?.message || 'That could not be assigned. Nothing was changed.' });
+      setNote({ ok: false, text: refusalText(err, err?.message || 'That could not be assigned. Nothing was changed.') });
     } finally {
       setBusy(false);
     }
@@ -104,16 +112,18 @@ function AdvisorCohortAssignmentsBody() {
       setNote({ ok: true, text: `Access ended for ${row.advisor_name || `user #${row.advisor_user_id}`}.` });
       await load();
     } catch (err) {
-      setNote({ ok: false, text: err?.message || 'That could not be ended.' });
+      setNote({ ok: false, text: refusalText(err, err?.message || 'That could not be ended.') });
     }
   };
 
   const visible = (rows.items || []).filter((r) => showEnded || r.is_active);
+  // Guard L (D953 §2): the list stops at the newest 500 without saying so.
+  const full = (rows.items || []).length >= CAPS.assignments;
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-4" data-testid="advisor-cohort-assignments">
       <div className="max-w-3xl">
-        <h1 className="text-lg font-extrabold tracking-tight">Advisor cohort access</h1>
+        {embedded ? null : <h1 className="text-lg font-extrabold tracking-tight">Advisor cohort access</h1>}
         <p className="mt-1.5 text-[12.5px] leading-relaxed text-axal-muted">
           An assignment lets one advisor read the names and email addresses of the founders in one
           Spin-Out Lab cohort. It changes nothing in the Lab, and it is the only way an advisor
@@ -136,6 +146,7 @@ function AdvisorCohortAssignmentsBody() {
               ))}
             </select>
             {advisors.error && <span className="mt-1 block text-[11px] text-red-700 dark:text-red-300">{advisors.error}</span>}
+            {advisors.items.length >= CAPS.assignable ? <span className="mt-1 block text-[11px] text-amber-700 dark:text-amber-300">The first 500 advisors by name are offered.</span> : null}
           </label>
           <label className="block">
             <span className="text-[10px] font-extrabold uppercase tracking-[.09em] text-axal-faint">Cohort</span>
@@ -160,7 +171,7 @@ function AdvisorCohortAssignmentsBody() {
               {busy ? 'Assigning…' : 'Assign'}
             </button>
             {note && (
-              <p className={`mt-2 text-[12px] font-semibold ${note.ok ? 'text-emerald-700 dark:text-emerald-300' : 'text-red-700 dark:text-red-300'}`}>
+              <p role={note.ok ? 'status' : 'alert'} className={`mt-2 text-[12px] font-semibold ${note.ok ? 'text-emerald-700 dark:text-emerald-300' : 'text-red-700 dark:text-red-300'}`} data-testid="advisor-cohort-note">
                 {note.text}
               </p>
             )}
@@ -169,8 +180,8 @@ function AdvisorCohortAssignmentsBody() {
       </Card>
 
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <h2 className="text-sm font-extrabold tracking-tight">
-          Who has access{visible.length ? ` — ${visible.length}` : ''}
+        <h2 className="text-sm font-extrabold tracking-tight" data-testid="advisor-cohort-count">
+          Who has access{visible.length ? ` — ${visible.length}${full ? `, ${WITHIN_500}` : ''}` : ''}
         </h2>
         <label className="flex items-center gap-2 text-[12px]">
           <input type="checkbox" checked={showEnded} onChange={(e) => setShowEnded(e.target.checked)} />

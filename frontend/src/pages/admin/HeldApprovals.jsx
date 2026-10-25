@@ -11,12 +11,14 @@ import { GLANCE_UNREADABLE, laneOf, useHeldGlance } from './heldFigures';
  * SIXTEEN LANES, FIFTEEN LITERAL ROWS WITH A DOOR, NOT A MAP.
  * `admin_route_reachability.test.mjs` walks navigation syntax — a literal
  * `to="/…"` in a routed page's own file — and a `.map` over a data array is
- * not a door it can see. Five of the routes below (LP applications, Referrals,
- * Best-Fit, Due diligence, Spinout moderation on HQ) have this page as their
- * only door once the legacy admin rows are gone, so the rows are written out.
- * Partner invitations (lane 13) is a sixth door to a page Community also
- * opens (D923). The guard (`held_admin_shell_d286.test.mjs`) reads them back
- * and holds them to S22.
+ * not a door it can see. Four of the routes below (LP applications, Best-Fit,
+ * Due diligence, Spinout moderation on HQ) have this page as their only door
+ * once the legacy admin rows are gone, so the rows are written out. Partner
+ * invitations (lane 13) is a door to a page Community also opens (D923), and
+ * Referrals (lane 2) and Advisor cohort access (lane 16) open their pages
+ * under Programs, Refer & Earn › Queue and Mentor cohort access › People
+ * (D953). The guard (`held_admin_shell_d286.test.mjs`) reads them back and
+ * holds them to S22.
  *
  * THE STATE COLUMN IS READ (D555). Each lane's "State here" is its pending
  * count and oldest age from the Studio glance, counted with the console's own
@@ -82,7 +84,7 @@ export default function HeldApprovals() {
           </thead>
           <tbody>
             <tr data-lane="1"><td className={`px-3 py-2 ${STATE}`}>1</td><td className={`px-3 py-2 ${KIND}`}>Core</td><td className={`px-3 py-2 ${LANE}`}>LP applications</td><td className="px-3 py-2 text-[12px]"><Link to="/admin/lp-applications" className={CONSOLE}>/admin/lp-applications</Link></td><td className={`px-3 py-2 ${STATE}`}><LaneState glance={glance} laneKey="lp" /></td></tr>
-            <tr data-lane="2"><td className={`px-3 py-2 ${STATE}`}>2</td><td className={`px-3 py-2 ${KIND}`}>Core</td><td className={`px-3 py-2 ${LANE}`}>Referrals</td><td className="px-3 py-2 text-[12px]"><Link to="/admin/refer-earn" className={CONSOLE}>/admin/refer-earn</Link></td><td className={`px-3 py-2 ${STATE}`}><LaneState glance={glance} laneKey="referrals" /></td></tr>
+            <tr data-lane="2"><td className={`px-3 py-2 ${STATE}`}>2</td><td className={`px-3 py-2 ${KIND}`}>Core</td><td className={`px-3 py-2 ${LANE}`}>Referrals</td><td className="px-3 py-2 text-[12px]"><Link to="/admin/programs/refer-and-earn/queue" className={CONSOLE}>/admin/programs/refer-and-earn/queue</Link></td><td className={`px-3 py-2 ${STATE}`}><LaneState glance={glance} laneKey="referrals" /></td></tr>
             <tr data-lane="3"><td className={`px-3 py-2 ${STATE}`}>3</td><td className={`px-3 py-2 ${KIND}`}>Core</td><td className={`px-3 py-2 ${LANE}`}>Cohort applications</td><td className="px-3 py-2 text-[12px]"><Link to="/admin/programs/spinout-lab/applications" className={CONSOLE}>/admin/programs/spinout-lab/applications</Link></td><td className={`px-3 py-2 ${STATE}`}><LaneState glance={glance} laneKey="cohort" /></td></tr>
             <tr data-lane="4"><td className={`px-3 py-2 ${STATE}`}>4</td><td className={`px-3 py-2 ${KIND}`}>Core</td><td className={`px-3 py-2 ${LANE}`}>Spinout moderation</td><td className="px-3 py-2 text-[12px]"><Link to="/admin/spinout-moderation" className={CONSOLE}>/admin/spinout-moderation</Link></td><td className={`px-3 py-2 ${STATE}`}><LaneState glance={glance} laneKey="moderation" /></td></tr>
             <tr data-lane="5"><td className={`px-3 py-2 ${STATE}`}>5</td><td className={`px-3 py-2 ${KIND}`}>Core</td><td className={`px-3 py-2 ${LANE}`}>Content to HQ</td><td className={`px-3 py-2 ${STATE}`}>None</td><td className={`px-3 py-2 ${STATE}`}>Not applicable to HQ-held accounts</td></tr>
@@ -96,7 +98,7 @@ export default function HeldApprovals() {
             <tr data-lane="13"><td className={`px-3 py-2 ${STATE}`}>13</td><td className={`px-3 py-2 ${KIND}`}>Absorbed</td><td className={`px-3 py-2 ${LANE}`}>Partner invitations</td><td className="px-3 py-2 text-[12px]"><Link to="/admin/partner-invitations" className={CONSOLE}>/admin/partner-invitations</Link></td><td className={`px-3 py-2 ${STATE}`}><LaneState glance={glance} noQueue="Partner invitations" /></td></tr>
             <tr data-lane="14"><td className={`px-3 py-2 ${STATE}`}>14</td><td className={`px-3 py-2 ${KIND}`}>Absorbed</td><td className={`px-3 py-2 ${LANE}`}>Best-Fit</td><td className="px-3 py-2 text-[12px]"><Link to="/admin/best-fit" className={CONSOLE}>/admin/best-fit</Link></td><td className={`px-3 py-2 ${STATE}`}><LaneState glance={glance} laneKey="best_fit" /></td></tr>
             <tr data-lane="15"><td className={`px-3 py-2 ${STATE}`}>15</td><td className={`px-3 py-2 ${KIND}`}>Absorbed</td><td className={`px-3 py-2 ${LANE}`}>Due diligence</td><td className="px-3 py-2 text-[12px]"><Link to="/admin/due-diligence" className={CONSOLE}>/admin/due-diligence</Link></td><td className={`px-3 py-2 ${STATE}`}><LaneState glance={glance} laneKey="due_diligence" /></td></tr>
-            <tr data-lane="16"><td className={`px-3 py-2 ${STATE}`}>16</td><td className={`px-3 py-2 ${KIND}`}>Absorbed</td><td className={`px-3 py-2 ${LANE}`}>Advisor cohort access</td><td className="px-3 py-2 text-[12px]"><Link to="/admin/advisor-cohorts" className={CONSOLE}>/admin/advisor-cohorts</Link></td><td className={`px-3 py-2 ${STATE}`}><LaneState glance={glance} noQueue="Advisor cohort access" /></td></tr>
+            <tr data-lane="16"><td className={`px-3 py-2 ${STATE}`}>16</td><td className={`px-3 py-2 ${KIND}`}>Absorbed</td><td className={`px-3 py-2 ${LANE}`}>Advisor cohort access</td><td className="px-3 py-2 text-[12px]"><Link to="/admin/programs/mentor-cohorts/people" className={CONSOLE}>/admin/programs/mentor-cohorts/people</Link></td><td className={`px-3 py-2 ${STATE}`}><LaneState glance={glance} noQueue="Advisor cohort access" /></td></tr>
           </tbody>
         </table>
       </Card>

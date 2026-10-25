@@ -366,7 +366,8 @@ export function loadStudioGlance() {
 /** Each laned queue's console, by the Worker's lane key (`approvalSources.ts`). */
 export const LANE_CONSOLES = {
   lp: '/admin/lp-applications',
-  referrals: '/admin/refer-earn',
+  // D953 (#2371): lane 2 and this door take the Queue's address together.
+  referrals: '/admin/programs/refer-and-earn/queue',
   cohort: '/admin/programs/spinout-lab/applications',
   moderation: '/admin/spinout-moderation',
   kyc: '/admin/kyc',
@@ -384,7 +385,8 @@ export const NO_QUEUE_CONSOLES = {
   Circles: '/admin/circles',
   // D923 (#2370): lane 13 and this door move together.
   'Partner invitations': '/admin/partner-invitations',
-  'Advisor cohort access': '/admin/advisor-cohorts',
+  // D953 (#2371): lane 16 and this door take People's address together.
+  'Advisor cohort access': '/admin/programs/mentor-cohorts/people',
 };
 
 const fmtN = (n) => Number(n).toLocaleString('en-US');

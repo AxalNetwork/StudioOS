@@ -28,3 +28,24 @@ export async function ensureDeckVersionColumns(env: Env): Promise<void> {
     }
   } catch {}
 }
+
+/**
+ * D897 (#2677) — migration 542's two `pitch_deck_proposals` columns, added
+ * where it has not run: a New deck's outline and the cards the founder kept.
+ * `routes/decks.ts` `ensureSchema` awaits it right after the table exists.
+ */
+export async function ensureProposalOutlineColumns(env: Env): Promise<void> {
+  try {
+    const cols = await env.DB.prepare('PRAGMA table_info(pitch_deck_proposals)').all<any>();
+    const have = new Set(((cols.results || []) as any[]).map((r) => String(r.name)));
+    const add542: Array<[string, string]> = [
+      ['outline_json', 'ALTER TABLE pitch_deck_proposals ADD COLUMN outline_json TEXT'],
+      ['kept_slides_json', 'ALTER TABLE pitch_deck_proposals ADD COLUMN kept_slides_json TEXT'],
+    ];
+    for (const [col, ddl] of add542) {
+      if (!have.has(col)) {
+        try { await env.DB.prepare(ddl).run(); } catch {}
+      }
+    }
+  } catch {}
+}

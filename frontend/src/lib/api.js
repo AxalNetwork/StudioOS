@@ -64,6 +64,7 @@ export * from './api/mercuryInvestor.js';
 export * from './api/mercuryPersonal.js';
 export * from './api/narrative.js';
 export * from './api/network.js';
+export * from './api/newDeck.js';
 export * from './api/newsletter.js';
 export * from './api/partnerDealReads.js';
 export * from './api/partnerProfiles.js';

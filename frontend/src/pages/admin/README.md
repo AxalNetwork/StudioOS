@@ -39,15 +39,17 @@ offers, are listed in `frontend/src/lib/railOptions/superAdmin.js`.
 A record view names its record as the rail's last crumb with
 `useRecordCrumb.js` (D768's contract, as a hook).
 
-`HeldZone.jsx` and the four `Held*.jsx` landings are the Admin shell on
+`HeldZone.jsx` and the two `Held*.jsx` landings are the Admin shell on
 accounts HQ holds directly (canvas S20, D286): `HeldAccounts.jsx` (embeds the
-console's Users panel; links Exploring, Personas, Trash), `HeldApprovals.jsx`
-(S22's sixteen lanes as literal rows) and `HeldPrograms.jsx`. Community
-(now `community/AdminCommunity.jsx`, D930) and Insights (now
-`insights/AdminInsights.jsx`, D893) left `/admin/held/` when each was rebuilt to its canvas. Since D555 each reads HQ's own
-figures from the Studio glance through `heldFigures.jsx` (`useHeldGlance`,
-`Figure`, `laneOf`): lane counts on Approvals, counts on the cards, and the
-headline figures on Insights. Mounted at `/admin/held/*` —
+console's Users panel; links Exploring, Personas, Trash) and
+`HeldApprovals.jsx` (S22's sixteen lanes as literal rows). Programs (now
+`programs/ProgramsCatalogue.jsx`, D953), Community (now
+`community/AdminCommunity.jsx`, D930) and Insights (now
+`insights/AdminInsights.jsx`, D893) left `/admin/held/` when each was rebuilt
+to its canvas. Since D555 the two landings read HQ's own figures from the
+Studio glance through `heldFigures.jsx` (`useHeldGlance`, `Figure`,
+`laneOf`): lane counts on Approvals and counts on the cards. Mounted at
+`/admin/held/*` —
 a prefix of their own so none can collide with an HQ console such as
 `/admin/accounts`. Every console link on them is literal, because
 `frontend/test/admin_route_reachability.test.mjs` reads navigation syntax,
@@ -67,9 +69,11 @@ file that mounts each one's rail.
 
 `AdminCommissions.jsx` is `/admin/commissions` (D569, D572): the commission
 rules (edited through D572's route, never created), every commission, the payout queue with
-its confirmed process actions, and the HQ take rate for the super admin. It is
-reached from the referral review console (`ReferralReview.jsx`) and shares
-its drawing pieces with the partner earnings screens (`parts.jsx`).
+its confirmed process actions, and the HQ take rate for the super admin. A
+Super Admin reaches it from the referral review console (`ReferralReview.jsx`,
+mounted on Programs › Refer & Earn › Queue) and from Programs › Referral
+partners, and it shares its drawing pieces with the partner earnings screens
+(`parts.jsx`).
 
 Assessment Studio (`/admin/assessment`) was removed at the owner’s request on 2026-10-21. Existing games and runs remain readable in HQ Content and Branch Programs.
 
@@ -77,6 +81,12 @@ Assessment Studio (`/admin/assessment`) was removed at the owner’s request on 
 the Super Admin and every Admin on HQ: capital calls, distributions,
 management fees, reconciliation, bank accounts and LP reports, each control
 drawn from the Worker's act table — see its own README.
+
+`programs/` is D953's Admin › Programs: the catalogue at `/admin/programs`,
+one page per program with its tabs as sub-paths, and the redirects from
+`/admin/held/programs`, `/admin/advisor-cohorts` and `/admin/refer-earn`. Its
+Mentor cohort access › People and Refer & Earn › Queue mount the bodies of
+`AdvisorCohortAssignments.jsx` and `ReferralReview.jsx` — see its own README.
 
 `community/` is D930's Admin › Community at `/admin/community`, built to the
 Community overview canvas from the reads that exist; `/admin/held/community`

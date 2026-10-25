@@ -115,6 +115,11 @@ export const SIDEBAR_GROUPS = {
       // The one row this tier exists for. Every route behind it is
       // super-admin-only server-side (routes/admin_licences.ts).
       { to: '/admin/licences', icon: Map, label: 'Licences' },
+      // D953 (#2371): the Programs row the canvas draws after Licences
+      // (`Programs Page.dc.html:509`). `match` keeps it lit on every program
+      // page: hqRowFor returns no row off HQ's strips, and a row without
+      // `match` is exact (SidebarNav's `end`).
+      { to: '/admin/programs', icon: Calendar, label: 'Programs', match: ['/admin/programs'] },
       { to: '/admin/funds', icon: Landmark, label: 'Funds' },
       // D714 (#1779) decision 7 — fund administration, after Funds. Funds keeps
       // its cross-branch registry; this row is HQ's own funds and entities.
@@ -229,9 +234,12 @@ export const SIDEBAR_GROUPS = {
       // is the complete statement of what the row owns (SidebarNav), so a
       // door the landing draws without a `match` entry lights no row.
       { to: '/admin/held/approvals', icon: Inbox, label: 'Approvals',
-        match: ['/admin/kyc', '/admin/partner-profiles', '/admin/lp-applications', '/admin/refer-earn', '/admin/best-fit', '/admin/due-diligence', '/admin/spinout-moderation'] },
-      { to: '/admin/held/programs', icon: Calendar, label: 'Programs',
-        match: ['/admin/programs/spinout-lab', '/admin/spinout-lab', '/admin/advisor-cohorts', '/admin/profiling-trends'] },
+        match: ['/admin/kyc', '/admin/lp-applications', '/admin/best-fit', '/admin/due-diligence', '/admin/spinout-moderation', '/admin/partner-profiles'] },
+      // D953 (#2371): the catalogue and every program page under it, the three
+      // old addresses that redirect into it, and, as before, the Lab console
+      // and Profiling trends, whose one door is the catalogue's foot (O-PRF).
+      { to: '/admin/programs', icon: Calendar, label: 'Programs',
+        match: ['/admin/programs', '/admin/held/programs', '/admin/advisor-cohorts', '/admin/refer-earn', '/admin/spinout-lab', '/admin/profiling-trends'] },
       // D930 (#2367): Community's own address; /admin/held/community redirects here.
       { to: '/admin/community', icon: Network, label: 'Community', match: ['/admin/events', '/admin/jobs', '/admin/circles', '/admin/partner-invitations', '/admin/advisors-partners', '/admin/directory', '/admin/wellbeing'] },
 
