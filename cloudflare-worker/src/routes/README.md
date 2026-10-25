@@ -305,7 +305,9 @@ operator's own consented session; status events supply content-free timings.
 D1011 (#2830): `admin_payments.ts` is the Payments page's Super Admin reads,
 mounted at `/api/admin/payments`: the change log over the catalogue's and
 Stripe's audit rows, its CSV export (a recorded reason, failing closed), and the
-webhook's deliveries by hour. `catalog.ts` records a failed sync.
+webhook's deliveries by hour. D1129 adds bounded `q` search to the log and
+CSV, plus `/change-log/admins` (all admin ids/names, no email). `catalog.ts`
+records a failed sync.
 
 D1065 (#2935): `build_plan.ts` mounts at `/api/cycles/build/plan` before the Build router. GET reads a scoped plan; POST prepares/updates only for the venture’s founder or admitted Lab owner. Admins read; company-linked partners read only landed accepted items without a decision or pending proposal.
 

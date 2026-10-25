@@ -428,7 +428,8 @@ UTC Monday window for claim totals, listing ranks and weekly price-kind counts.
 `raiseEvidence.ts` reads active Mercury runway facts and the files current data-room grants can download, for Raise and deck readiness.
 
 `paymentsChangeLog.ts` (D1011) names the fifteen catalogue and Stripe audit
-actions and reads them back as the Payments change log; `stripeWebhookDeliveries.ts`
+actions and reads them back as the Payments change log (D1129: bound literal
+search before count/page/export, and the complete admin filter list); `stripeWebhookDeliveries.ts`
 is the webhook's request-log reader, shared by HQ · Platform and Payments, with
 hourly buckets that are null for an hour the log was silent.
 
@@ -439,3 +440,5 @@ catalogue contains headings only. The existing Super Admin edit route creates a
 missing allowed draft section after validation, in the same batch as its edit;
 reads do not seed content. Published versions and audit behavior stay in D954's
 store; no migration or canvas sample text is introduced.
+
+D1129 searches decoded audit detail values, never JSON keys, and includes demoted/deleted payment actors in Who alongside current admins.
