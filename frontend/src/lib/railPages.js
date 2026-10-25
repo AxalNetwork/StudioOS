@@ -464,6 +464,10 @@ function best(pages, path, tab, hash) {
  * app-parity test reads this list; each says why.
  */
 export const NO_RAIL_ROUTES = [
+  { route: '/deck/:id/print', roles: ['admin', 'founder', 'partner', 'investor'], why: 'D1112: the standalone deck preview draws shared card components, without a workspace shell or AI rail.' },
+  { route: '/deck/share/:token', roles: [], why: 'D1112: the public deck viewer draws shared card components, without a member workspace or AI rail.' },
+  { route: '/share/deck/:token', roles: [], why: 'D1112: the canonical public deck viewer draws shared card components, without a member workspace or AI rail.' },
+  { route: '/deck/print-export/:token', roles: [], why: 'D1112: the headless deck export draws shared print cards, without a workspace shell or AI rail.' },
   { route: '/account', prefix: true, railCount: 0, pageTestIds: ['settings-page', 'account-phone'], roles: ['founder', 'investor', 'advisor', 'partner', 'admin', 'exploring'], why: 'Owner request: Account and its sections have no AI rail on desktop or phone.' },
   { route: '/perks', railCount: 0, pageTestIds: ['perks-desk'], roles: ['founder', 'investor', 'advisor', 'admin', 'exploring'], why: 'Owner request: the standalone Perks page has no AI rail on desktop or phone. Partner Perk deals remains in its own workspace.' },
   { route: '/learning', railCount: 0, pageTestIds: ['learning-home'], roles: ['founder', 'investor', 'advisor', 'partner', 'admin'], why: 'Owner request: Learning home has no AI rail on desktop or phone. Learning subpages retain their rails.' },
