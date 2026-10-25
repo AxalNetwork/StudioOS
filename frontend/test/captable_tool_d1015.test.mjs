@@ -190,15 +190,15 @@ test('Instruments reads the SAFEs and the model, never a record called "instrume
   } finally { await v.close(); }
 });
 
-test('Option pool draws the 409A in the Worker\'s words, the model\'s pool, and says grants are not read', async () => {
+test('Option pool draws the 409A in the Worker\'s words, the model\'s pool, and reads grants for this venture', async () => {
   const v = await mounted('/raise/cap-table/option-pool?project_id=3');
   try {
     assert.ok(v.requests.some((u) => u.includes('/captable/409a/3')));
     assert.match(v.text(), /Safe harbour in force until 2027-03-03\./);
     assert.match(v.text(), /\$0\.42/);
     assert.match(v.text(), /888,889/);
-    assert.ok(v.testIds().includes('captable-grants-wait'));
-    assert.ok(!v.requests.some((u) => u.includes('/equity-plan')), 'the per-account plan is never read for one venture');
+    assert.ok(v.testIds().includes('captable-grants-none'));
+    assert.ok(v.requests.some((u) => u.includes('/equity-plan?project_id=3')), 'the plan is scoped to this venture');
   } finally { await v.close(); }
 });
 
@@ -280,4 +280,15 @@ test('the wiring: no route is added, CycleRoute branches on the tab word, and th
   }
   assert.match(read('design/incoming/Cap Table · Boards.dc.html'), /dc-import name="Raise Cap Table Page"/);
   assert.ok(existsSync('documentation/architecture/decisions/D1015.md'), 'D1015 records the integration');
+});
+
+test('D1130: grants show the holder-linked 83(b) and isolate an unreadable election store', async () => {
+  for (const available of [true,false]) {
+    const v = await mounted('/raise/cap-table/option-pool?project_id=3',{handle:u => u.includes('/equity-plan?project_id=3') ? response({grants:[{id:1,holder_id:8,total_shares:600,vested_shares:0,start_date:null,cliff_months:12,total_months:48}],elections:{available,rows:available?[{holder_id:8,state:'done',has_document:true},{holder_id:9,state:'todo'}]:[]}}) : u.includes('/captable/record/3') ? response({by_holder:{rows:[{holder_id:8,name:'Synthetic employee'}]}}) : handler(u)});
+    try {
+      assert.equal(v.count('captable-grant-row'),1);assert.match(v.text(),/Synthetic employee/);
+      assert.match(v.text(),available?/Filed · Proof on file · Filing date not recorded/:/Unreadable · Try again/);
+      assert.match(v.text(),/600/);assert.match(v.text(),/Safe harbour in force/);
+    } finally { await v.close(); }
+  }
 });

@@ -1567,3 +1567,9 @@ is added. See `services/channels/telegramCapture.ts` and D867.
 - `POST /api/calendar/push/event_ticket/:registration_id` and `/push/event_hosted/:event_id` copy one to the member's connected calendars. Google and Outlook sync carries both kinds, with no attendees, and on each sync removes the copies whose place or event has left (`removed` in the summary).
 - `GET /api/calendar/event-links/:event_id` (`requireAuth`, then `canViewEvent`'s rule as `eventVisibleTo`): `{ event_id, ics, google, outlook, office365, join_link_included }`. 404 for an unknown event, 403 for one the caller cannot see.
 - Not yet: the token feed for "Subscribe to my events" waits on a migration number (D1033 §4).
+
+D1130 (#3010): `/cap-tables/:projectId` and `/share/captable/venture/:token`
+read recorded issuances at D1019's level; scenario links remain Modelled.
+`/raise/cap-table/option-pool` reads venture grants and holder-linked 83(b)
+filings, with the existing Company creation dialogs as the filing/proof writer.
+Legacy admin cap-table reads are refused; support uses the logged level read.

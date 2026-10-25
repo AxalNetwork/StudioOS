@@ -74,6 +74,9 @@ function fixture({ upgrade = true } = {}) {
     db.exec(MIGRATION);
     for (const name of chain((n) => n > 574)) db.exec(read(`${DIR}/${name}`));
   }
+  if (upgrade) db.exec(`INSERT INTO cap_table_share_classes(id,project_id,name,kind,authorized_shares) VALUES (901,10,'Common','common',10000);
+    INSERT INTO cap_table_issuances(project_id,kind,holder_id,class_id,shares,source,origin,status) VALUES
+    (10,'founding',101,901,600,'typed','owner','recorded'),(10,'founding',102,901,400,'typed','owner','recorded');`);
   const files = new Map<string, Uint8Array>();
   const FILES = {
     put: async (key: string, bytes: Uint8Array) => { files.set(key, bytes); },
@@ -152,7 +155,7 @@ test("a venture read is the venture's gate: another founder, an investor and a b
   assert.equal((await call(f, OTHER, '/equity-plan?project_id=20')).status, 200);
 });
 
-test('/live per venture: its holders only, a share of a known total, and null with any count missing', async () => {
+test('/live per venture reads issuances and ignores stale or missing register counts', async () => {
   const f = fixture();
   const ten = await call(f, FOUNDER, '/live?project_id=10');
   assert.equal(ten.status, 200);
@@ -161,8 +164,8 @@ test('/live per venture: its holders only, a share of a known total, and null wi
   assert.deepEqual(ten.body.holders.map((h: any) => [h.id, h.ownership_pct]).sort(), [[101, 60], [102, 40]]);
   f.db.exec("INSERT INTO cap_table_holders (id, user_id, project_id, name, shares, source) VALUES (106, 4, 10, 'No count', NULL, 'manual')");
   const partly = await call(f, FOUNDER, '/live?project_id=10');
-  assert.equal(partly.body.total_shares, null);
-  assert.ok(partly.body.holders.every((h: any) => h.ownership_pct === null), 'no 0% and no share of a total nobody knows');
+  assert.equal(partly.body.total_shares, 1000);
+  assert.deepEqual(ids(partly.body.holders), [101,102], 'a legacy holder with no recorded issuance cannot change ownership');
   const account = await call(f, FOUNDER, '/live');
   assert.equal(account.body.scope.kind, 'account');
   assert.ok(ids(account.body.holders).includes(104));
@@ -189,7 +192,9 @@ test('Carta: the founder names the venture, its rows move there, and it is the r
   assert.equal(one(f, 'SELECT project_id FROM cap_table_holders WHERE id = 103').project_id, 11, 'a manual row stays where it is');
   assert.ok(one(f, "SELECT 1 AS x FROM activity_logs WHERE action = 'cap_table_carta_venture_set' AND project_id = 10 AND user_id = 4"));
   const live = await call(f, FOUNDER, '/live?project_id=10');
-  assert.equal(live.body.carta_is_record, true);
+  assert.equal(live.body.carta_is_record, false, 'connector rows alone are not accepted issuances');
+  f.db.exec("INSERT INTO cap_table_issuances(project_id,kind,holder_id,class_id,shares,source,origin,status) VALUES (10,'priced',104,901,50,'connector_carta','import','recorded')");
+  assert.equal((await call(f, FOUNDER, '/live?project_id=10')).body.carta_is_record,true);
   assert.equal((await call(f, FOUNDER, '/live?project_id=11')).body.carta_is_record, false);
   assert.deepEqual(ids((await call(f, FOUNDER, '/equity-plan?project_id=10')).body.pools), [401]);
   // Read only here: the one holder writer refuses Carta's rows.
@@ -220,6 +225,7 @@ test("the sync writes only to a venture the founder still owns", async () => {
 test('the CSV export: one venture, a cell never read as a formula, no email for a reader, and one audit row', async () => {
   const f = fixture();
   f.db.exec(`INSERT INTO cap_table_holders (id, user_id, project_id, name, email, shares, source) VALUES (107, 4, 10, '=HYPERLINK("x")', 'f@example.invalid', NULL, 'manual')`);
+  f.db.exec("INSERT INTO cap_table_issuances(project_id,kind,holder_id,class_id,shares,source,origin,status) VALUES (10,'priced',107,901,1,'typed','owner','recorded')");
   const r = await call(f, FOUNDER, '/register/10/export.csv');
   assert.equal(r.status, 200);
   assert.match(r.headers.get('content-type') || '', /text\/csv/);
@@ -228,9 +234,9 @@ test('the CSV export: one venture, a cell never read as a formula, no email for 
   assert.doesNotMatch(r.text, /Cy Eleven/, 'the other venture is not in it');
   assert.doesNotMatch(r.text, /Carta stakeholder/, 'an account-level row is not in it');
   assert.match(r.text, /"'=HYPERLINK\(""x""\)"/, 'a formula is neutralised');
-  assert.match(r.text, /ada@example\.invalid/);
+  assert.doesNotMatch(r.text, /ada@example\.invalid/, 'the issuance projection does not copy legacy contact fields');
   const line = r.text.split('\r\n').find((l) => l.startsWith('"\'=HYPERLINK'))!;
-  assert.equal(line.split(',')[3], '', 'a missing count is an empty cell, never 0');
+  assert.equal(line.split(',')[3], '1', 'shares come from the issuance, not the missing register count');
   assert.ok(one(f, "SELECT 1 AS x FROM activity_logs WHERE action = 'cap_table_register_exported' AND project_id = 10 AND user_id = 4"));
   const advisor = await call(f, ADVISOR, '/register/10/export.csv');
   assert.equal(advisor.status, 200);
@@ -284,4 +290,24 @@ test('a snapshot whose file row fails leaves no stored object', async () => {
     assert.equal(r.status, 500);
     assert.equal(f.files.size, 0);
   } finally { console.error = quiet; }
+});
+
+test('D1130: elections come from this venture and a failed filing read leaves grants readable', async () => {
+  const f=fixture();
+  f.db.exec("INSERT INTO formation_steps(project_id,title,kind,for_holder_id,state,proof_file_key,created_by) VALUES (10,'Synthetic filing','83b',101,'done','private-proof',4),(11,'Other filing','83b',103,'todo',NULL,4)");
+  const plan=(await call(f,FOUNDER,'/equity-plan?project_id=10')).body;
+  assert.deepEqual(plan.elections,{available:true,rows:[{holder_id:101,state:'done',due_date:null,has_document:true}]});
+  assert.ok(!JSON.stringify(plan).includes('private-proof'));
+  f.db.exec('DROP TABLE formation_steps');
+  const broken=await call(f,FOUNDER,'/equity-plan?project_id=10');
+  assert.equal(broken.status,200);assert.deepEqual(ids(broken.body.grants),[301]);assert.deepEqual(broken.body.elections,{available:false,rows:[]});
+});
+
+test('D1130: recorded exports never substitute the legacy register when record reads fail', async () => {
+  const f=fixture(); f.db.exec('DROP TABLE cap_table_issuances');
+  for (const [path,method] of [['/live?project_id=10','GET'],['/register/10/export.csv','GET'],['/register/10/snapshot','POST']]) {
+    const r=await call(f,FOUNDER,path,method,method==='POST'?{}:undefined);
+    assert.equal(r.status,500);assert.ok(!r.text.includes('Ada Ten'));
+  }
+  assert.equal(f.files.size,0);
 });

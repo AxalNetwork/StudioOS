@@ -55,3 +55,8 @@ address, `h-<n>`, opens the holder drawer over Overview (D1022); `e-<n>` and
 - **Every change opens a dialog that says what it changes and who sees it.**
   Never `alert` or `confirm`.
 - **Eadwyn never fills an amount, cap, discount, price or share count** (#2431).
+
+D1130 moves venture access/share views and holder choices to recorded issuances.
+Option pool reads venture grants and holder-linked 83(b) filings; an unreadable
+filing block leaves the grants visible, and an unstored filing date stays Not
+recorded. Company creation's existing dialogs record the filing and proof.

@@ -19,6 +19,7 @@
  */
 import { PDFDocument, StandardFonts, rgb, type PDFFont, type PDFPage } from 'pdf-lib';
 import type { Env } from '../types';
+import { readRecord, RecordError } from './capTableRecord';
 import { winAnsiSafe } from './legalDocFormat';
 import { hashEmail } from '../util/hashEmail';
 
@@ -26,11 +27,11 @@ import { hashEmail } from '../util/hashEmail';
 export const CARTA_SOURCE = 'connector_carta';
 
 export type HolderRow = {
-  id: number; name: string; email: string | null; security_type: string | null;
+  id: number | null; name: string; email: string | null; security_type: string | null;
   shares: number | null; ownership_pct: number | null; source: string; updated_at: string | null;
 };
 export type SecurityRow = {
-  id: number; name: string; share_class: string | null;
+  id: number | string; name: string; share_class: string | null;
   shares_authorized: number | null; shares_issued: number | null; source: string; updated_at: string | null;
 };
 export type PoolRow = {
@@ -77,29 +78,31 @@ export type RegisterScope = { kind: 'venture'; projectId: number } | { kind: 'ac
 
 /** The holders and securities of one venture, or of one account. */
 export async function readRegister(env: Env, scope: RegisterScope): Promise<{ holders: HolderRow[]; securities: SecurityRow[] }> {
-  const holders = scope.kind === 'venture'
-    ? await env.DB.prepare(
-      `SELECT id, name, email, security_type, shares, ownership_pct, source, updated_at
-         FROM cap_table_holders WHERE project_id = ? ORDER BY shares DESC, name ASC LIMIT 500`,
-    ).bind(scope.projectId).all<HolderRow>()
-    : await env.DB.prepare(
-      `SELECT id, name, email, security_type, shares, ownership_pct, source, updated_at
-         FROM cap_table_holders WHERE user_id = ? ORDER BY shares DESC, name ASC LIMIT 500`,
-    ).bind(scope.userId).all<HolderRow>();
-  const securities = scope.kind === 'venture'
-    ? await env.DB.prepare(
-      `SELECT id, name, share_class, shares_authorized, shares_issued, source, updated_at
-         FROM cap_table_securities WHERE project_id = ? ORDER BY name ASC LIMIT 200`,
-    ).bind(scope.projectId).all<SecurityRow>()
-    : await env.DB.prepare(
-      `SELECT id, name, share_class, shares_authorized, shares_issued, source, updated_at
-         FROM cap_table_securities WHERE user_id = ? ORDER BY name ASC LIMIT 200`,
-    ).bind(scope.userId).all<SecurityRow>();
+  // D1130: venture exports and Carta's record read the same issuance ledger as Overview.
+  // Account-level connector imports remain a separate, explicitly unassigned register.
+  if (scope.kind === 'venture') {
+    const record = await readRecord(env, scope.projectId);
+    const h = record.by_holder as { available: boolean; reason: string | null; rows?: Array<{ holder_id: number | null; name: string; shares: number }> };
+    const cls = record.by_class as { available: boolean; reason: string | null; rows?: Array<{ uid: string; name: string; kind: string; authorized_shares: number | null; issued: number | null }> };
+    if ((!h.available && h.reason !== 'nothing_recorded') || (!cls.available && cls.reason !== 'nothing_recorded')) throw new RecordError(409, 'record_unavailable', 'The recorded balances cannot be calculated. Resolve the record before exporting.');
+    return {
+      holders: (h.rows || []).map(row => ({ id: row.holder_id, name: row.name, email: null, security_type: null, shares: row.shares, ownership_pct: null, source: 'record', updated_at: null })),
+      securities: (cls.rows || []).map(row => ({ id: row.uid, name: row.name, share_class: row.kind, shares_authorized: row.authorized_shares, shares_issued: row.issued, source: 'record', updated_at: null })),
+    };
+  }
+  const holders = await env.DB.prepare(
+    `SELECT id, name, email, security_type, shares, ownership_pct, source, updated_at
+       FROM cap_table_holders WHERE user_id = ? ORDER BY shares DESC, name ASC LIMIT 500`,
+  ).bind(scope.userId).all<HolderRow>();
+  const securities = await env.DB.prepare(
+    `SELECT id, name, share_class, shares_authorized, shares_issued, source, updated_at
+       FROM cap_table_securities WHERE user_id = ? ORDER BY name ASC LIMIT 200`,
+  ).bind(scope.userId).all<SecurityRow>();
   return { holders: holders.results || [], securities: securities.results || [] };
 }
 
 /** The option pools and vesting grants of one venture, or of one account. */
-export async function readEquityPlan(env: Env, scope: RegisterScope): Promise<{ pools: PoolRow[]; vesting: VestingRow[] }> {
+export async function readEquityPlan(env: Env, scope: RegisterScope): Promise<{ pools: PoolRow[]; vesting: VestingRow[]; elections: { available: boolean; rows: Array<{ holder_id: number; state: string; due_date: string | null; has_document: boolean }> } }> {
   const pools = scope.kind === 'venture'
     ? await env.DB.prepare(
       `SELECT id, name, shares_authorized, shares_issued, shares_available, source, updated_at
@@ -120,7 +123,14 @@ export async function readEquityPlan(env: Env, scope: RegisterScope): Promise<{ 
               total_shares, vested_shares, source, updated_at
          FROM cap_table_vesting WHERE user_id = ? ORDER BY start_date DESC`,
     ).bind(scope.userId).all<VestingRow>();
-  return { pools: pools.results || [], vesting: vesting.results || [] };
+  let elections: { available: boolean; rows: Array<{ holder_id: number; state: string; due_date: string | null; has_document: boolean }> } = { available: true, rows: [] };
+  if (scope.kind === 'venture') {
+    try {
+      const read = await env.DB.prepare("SELECT for_holder_id AS holder_id, state, due_date, (length(trim(COALESCE(proof_file_key, ''))) > 0) AS has_document FROM formation_steps WHERE project_id = ? AND kind = '83b' AND for_holder_id IS NOT NULL ORDER BY updated_at DESC, id DESC").bind(scope.projectId).all<{ holder_id: number; state: string; due_date: string | null; has_document: number }>();
+      elections.rows = (read.results || []).map(r => ({ holder_id: r.holder_id, state: r.state, due_date: r.due_date, has_document: r.has_document === 1 }));
+    } catch { elections = { available: false, rows: [] }; }
+  }
+  return { pools: pools.results || [], vesting: vesting.results || [], elections };
 }
 
 /** The equity plan's answer: the rows as recorded, and totals only where every row records the figure. */
@@ -155,6 +165,7 @@ export function equityPlanBody(pools: PoolRow[], vesting: VestingRow[]) {
 /** Where a row came from, in words. */
 export function sourceWord(source: string | null | undefined): string {
   if (source === CARTA_SOURCE) return 'Carta';
+  if (source === 'record') return 'Issuance record';
   if (source === 'import') return 'Import';
   return 'Entered on StudioOS';
 }

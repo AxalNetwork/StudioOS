@@ -1395,9 +1395,9 @@ async function filingFields(c: WriteCall, p: Project, body: Record<string, unkno
     if (body.for_holder_id == null) out.holderId = null;
     else {
       const holderId = positiveId(String(body.for_holder_id).replace(/^h-/, ''));
-      const holder = holderId && await ownedRow(c.env, 'cap_table_founders', `h-${holderId}`, p.id)
+      const holder = holderId
         ? await c.env.DB.prepare('SELECT name FROM cap_table_holders WHERE id = ? AND project_id = ?').bind(holderId, p.id).first<{ name: string }>() : null;
-      if (!holder) return c.json({ detail: 'Founder belongs to another project or does not exist' }, 404);
+      if (!holder) return c.json({ detail: 'Holder belongs to another project or does not exist' }, 404);
       out.holderId = holderId; out.holderName = holder.name;
     }
   }

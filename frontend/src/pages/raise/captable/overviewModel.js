@@ -387,7 +387,7 @@ export function holderView(record, holderId, { grants = null, plan = null, filin
   const filing = Array.isArray(filings) ? filings.find((f) => f.kind === '83b' && Number(f.for_holder_id) === holderId) : undefined;
   const key = String(name || '').toLowerCase();
   const grant = Array.isArray(grants?.grants)
-    ? grants.grants.find((g) => String(g.holder_ref || '').trim().toLowerCase() === key || (g.user_uid && String(g.name || '').trim().toLowerCase() === key))
+    ? grants.grants.find((g) => g.holder_ref === `holder:${holderId}` || String(g.holder_ref || '').trim().toLowerCase() === key || (g.user_uid && String(g.name || '').trim().toLowerCase() === key))
     : undefined;
   return {
     found: Boolean(row || issued.length),

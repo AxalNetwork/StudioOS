@@ -428,3 +428,9 @@ catalogue contains headings only. The existing Super Admin edit route creates a
 missing allowed draft section after validation, in the same batch as its edit;
 reads do not seed content. Published versions and audit behavior stay in D954's
 store; no migration or canvas sample text is introduced.
+
+`capTableAccessRecord.ts` (D1130) copy-builds venture level views from the
+issuance record, with stable holder references and fail-closed ambiguous names.
+`capTableRegister.ts` now projects that record for venture exports and `/live`;
+its account view still reads unassigned connector imports. The venture equity
+plan also carries holder-linked filing states without exposing proof keys.

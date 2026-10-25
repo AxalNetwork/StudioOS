@@ -4,6 +4,8 @@ import { api } from '../../../lib/api';
 import { safeIssuancesApi } from '../../../lib/api/safeIssuances';
 import { Unreadable } from '../../../ui';
 import AccessTab from './AccessTab';
+import { capTableHolderApi } from '../../../lib/api/capTableHolder';
+import { capTableRecordApi } from '../../../lib/api/capTableRecord';
 import ImportExportTab from './ImportExportTab';
 import { CycleHeader } from '../../cycles/CycleOverview';
 import { CycleBar } from '../../cycles/PhoneModulePage';
@@ -201,6 +203,35 @@ function InstrumentsTab({ projectId, reload, retry, search }) {
   );
 }
 
+const readEquity = (id) => capTableHolderApi.equityPlan(id);
+const readGrantHolders = (id) => capTableRecordApi.read(id);
+function RecordedGrants({ projectId, reload, retry }) {
+  const plan = useRead(readEquity, projectId, reload);
+  const holders = useRead(readGrantHolders, projectId, reload);
+  const holderName = id => holders.status === 'ready' ? holders.data?.by_holder?.rows?.find(h => h.holder_id === id)?.name || 'Not recorded' : holders.status === 'loading' ? 'Reading…' : 'Unreadable';
+  const election = id => {
+    if (!plan.data?.elections?.available) return 'Unreadable · Try again';
+    const row = plan.data.elections.rows.find(e => e.holder_id === id);
+    return row ? row.state === 'done' ? `Filed · ${row.has_document ? 'Proof on file' : 'No document'} · Filing date not recorded` : `Not filed yet${row.due_date ? ` · due ${row.due_date}` : ''}` : 'Not recorded';
+  };
+  const value = n => typeof n === 'number' ? n.toLocaleString('en-US') : 'Not recorded';
+  return <Section title="Grants and vesting" tag={<Tag kind="record" />} testId="captable-grants">
+    <ReadState read={plan} what="Grants and vesting" claim="This is not a claim that none are recorded." onRetry={retry} testId="captable-grants">
+      {!plan.data?.grants?.length ? <p className={`m-0 text-[12.5px] ${MUTED}`} data-testid="captable-grants-none">No grants are recorded for this venture.</p> : <>
+        <Table testId="captable-grants-table" cols={[{key:'h',label:'Holder'},{key:'s',label:'Shares'},{key:'v',label:'Vesting'},{key:'d',label:'Vested'},{key:'e',label:'Holder’s 83(b)'}]}
+          rows={plan.data.grants.map(g => <tr key={g.id} data-testid="captable-grant-row">
+            <td className={TD}>{holderName(g.holder_id)}</td><td className={`${TD} ${MONO}`}>{value(g.total_shares)}</td>
+            <td className={TD}>{g.start_date || 'Start not recorded'} · {value(g.cliff_months)} month cliff · {value(g.total_months)} months</td>
+            <td className={`${TD} ${MONO}`}>{value(g.vested_shares)}</td><td className={TD}>{election(g.holder_id)}</td>
+          </tr>)} />
+        <Link className={`${LINK} text-[12px]`} to={`/build/company-creation?project=${encodeURIComponent(projectId)}`}>Record an 83(b) filing and its proof in Company creation</Link>
+        <p className={`m-0 text-[11.5px] ${MUTED}`}>The filing is linked to the holder. A separate election for each grant is not recorded.</p>
+        {plan.data?.elections?.available === false ? <button type="button" className={LINK} onClick={retry}>Try again</button> : null}
+      </>}
+    </ReadState>
+  </Section>;
+}
+
 function OptionPoolTab({ projectId, reload, retry, search }) {
   const valuation = useRead(read409a, projectId, reload);
   const model = useRead(readCompare, projectId, reload);
@@ -234,9 +265,7 @@ function OptionPoolTab({ projectId, reload, retry, search }) {
           ) : <p className={`m-0 text-[12.5px] ${MUTED}`} data-testid="captable-pool-none">No model is saved for this venture yet.</p>}
         </ReadState>
       </Section>
-      <Section title="Grants and vesting" testId="captable-grants">
-        <p className={`m-0 text-[12.5px] ${MUTED}`} data-testid="captable-grants-wait">Not read here yet. Grants and vesting are stored per account, not per venture, so they cannot be shown for one venture.</p>
-      </Section>
+      <RecordedGrants projectId={projectId} reload={reload} retry={retry} />
     </div>
   );
 }

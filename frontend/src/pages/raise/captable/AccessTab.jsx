@@ -1,12 +1,12 @@
 import React, { useCallback, useMemo, useState } from 'react';
-import { api } from '../../../lib/api';
+import { capTableRecordApi } from '../../../lib/api/capTableRecord';
 import { capTableAccessApi } from '../../../lib/api/capTableAccess';
 import { actionGhost } from '../../../ui';
 import { INK, LINK, MONO, MUTED, EYEBROW, ReadState, Section, TD, Table, useRead } from './CapTableTool';
 import CapTableDialog, { useWrite } from './CapTableDialog';
 import {
   ATTESTATION, ATTESTED, COFOUNDER_NOTE, DEFAULT_ACCESS, LEVELS, LINK_HOURS, LINK_LEVELS, LINK_VIEWS,
-  grantRows, levelLabel, levelRows, linkBody, linkProblems, linkRows, logRows,
+  grantRows, recordedHolderChoices, levelLabel, levelRows, linkBody, linkProblems, linkRows, logRows,
 } from './capTableAccess';
 
 /**
@@ -18,17 +18,9 @@ import {
 
 const readGrants = (id) => capTableAccessApi.grants(id);
 const readLinks = (id) => capTableAccessApi.links(id);
-const readModel = (id) => api.getCapTableCompare(id);
+const readModel = (id) => capTableRecordApi.read(id);
 const INPUT = 'w-full rounded-[8px] border border-axal-hairline bg-white px-2.5 py-1.5 text-[13px] text-axal-ink dark:border-gray-700 dark:bg-gray-900 dark:text-gray-100';
 
-/** The holders the saved model names, so a grant names one the views can find. */
-function modelHolders(read) {
-  const r = read?.canonical?.result;
-  const rounds = Array.isArray(r?.rounds) ? r.rounds : [];
-  const ledger = rounds.length ? rounds[rounds.length - 1]?.ledger : r?.founding;
-  const names = (Array.isArray(ledger) ? ledger : []).filter((h) => h?.type !== 'option_pool').map((h) => String(h?.holder || '').trim()).filter(Boolean);
-  return [...new Set(names)];
-}
 
 function LevelDialog({ projectId, row, holders, scope, onClose, onDone }) {
   const [level, setLevel] = useState(row?.level || '');
@@ -48,10 +40,10 @@ function LevelDialog({ projectId, row, holders, scope, onClose, onDone }) {
           <span className={EYEBROW}>Holder</span>
           {holders.length
             ? <select className={INPUT} value={holder} onChange={(e) => setHolder(e.target.value)} data-testid="captable-level-holder">
-                <option value="">Choose a holder in your model</option>
-                {holders.map((h) => <option key={h} value={h}>{h}</option>)}
+                <option value="">Choose a holder on record</option>
+                {holders.map((h) => <option key={h.ref} value={h.ref}>{h.name}</option>)}
               </select>
-            : <span className={`text-[12.5px] ${MUTED}`} data-testid="captable-level-no-holders">Your saved model names no holder yet, so there is nobody to share with by name.</span>}
+            : <span className={`text-[12.5px] ${MUTED}`} data-testid="captable-level-no-holders">No holder with a saved identity is on the issuance record yet.</span>}
         </label>
       ) : null}
       <fieldset className="m-0 flex flex-col gap-1.5 border-0 p-0" data-testid="captable-level-choices">
@@ -155,7 +147,7 @@ export default function AccessTab({ projectId, reload: outer, retry: outerRetry 
   const scope = grants.status === 'ready' ? grants.data?.levels : null;
   const rows = grants.status === 'ready' ? grantRows(grants.data) : [];
   const linkList = links.status === 'ready' ? linkRows(links.data) : [];
-  const holders = useMemo(() => (model.status === 'ready' ? modelHolders(model.data) : []), [model]);
+  const holders = useMemo(() => (model.status === 'ready' ? recordedHolderChoices(model.data) : []), [model]);
   const done = () => { setDialog(null); refresh(); };
   return (
     <div className="flex flex-col gap-3.5" data-testid="captable-access">
