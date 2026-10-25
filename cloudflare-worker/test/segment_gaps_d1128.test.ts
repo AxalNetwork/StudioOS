@@ -196,7 +196,7 @@ test('Events validates stored custom segments, admits only their members, and ne
     await assert.rejects(() => registrationRulesFromStore(f.env, { mode: 'selected', personas: ['unknown_segment'] }), /invalid_audience_rules/);
     f.db.exec('DROP TABLE segment_profiles');
     await assert.rejects(() => registrationEligibility(f.env, event, MEMBER, null), /could not be read/);
-    const result = await f.call(MEMBER, 'POST', '/api/events', { title: 'Synthetic event', starts_at: '2099-01-01', audience_rules: rule });
+    const result = await f.call(MEMBER, 'POST', '/api/events', { title: 'Synthetic event', starts_at: '2099-01-01T10:00:00Z', audience_rules: rule });
     assert.equal(result.status, 503); assert.equal(result.body.error, 'segments_unreadable');
   } finally { f.db.close(); }
 });
