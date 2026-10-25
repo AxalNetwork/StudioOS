@@ -524,7 +524,9 @@ async function tierForInvestorThesis(env: Env, user: User): Promise<{ ok: boolea
   // Anything tied to investor_subscription_status='active' or the
   // generic subscription_status='active' is treated as paid here.
   const subs = await loadSubscriptionFields(env, user.id);
-  const active = subs.investor_subscription_status === 'active' || subs.subscription_status === 'active';
+  // D1052 (#2903): past_due, a renewal Stripe is still retrying, keeps the plan.
+  const paid = (s: string | null | undefined) => s === 'active' || s === 'past_due';
+  const active = paid(subs.investor_subscription_status) || paid(subs.subscription_status);
   if (active) return { ok: true };
   return { ok: false, upgrade_link: '/billing/investor-upgrade' };
 }

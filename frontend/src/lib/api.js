@@ -23,6 +23,7 @@ export * from './api/adminPayments.js';
 export * from './api/aiBudget.js';
 export * from './api/assistants.js';
 export * from './api/bankAccounts.js';
+export * from './api/billingAlerts.js';
 export * from './api/billingInvoices.js';
 export * from './api/capTableRecord.js';
 export * from './api/channelKeys.js';

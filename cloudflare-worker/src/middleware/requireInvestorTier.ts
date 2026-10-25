@@ -74,12 +74,13 @@ export function investorTierCovers(userTier: string | null | undefined, required
 /**
  * Returns the *effective* tier for a user, honoring active trial windows.
  * A row with status='trialing' and a future trial_ends_at keeps its tier;
- * past_due/unpaid downgrade to 'free'.
+ * unpaid and cancelled downgrade to 'free'. D1052 (#2903): past_due — a renewal
+ * Stripe is still retrying — keeps the tier (#2451's owner question 4).
  */
 export function effectiveInvestorTier(user: InvestorUser | null | undefined): InvestorTier {
   if (!user) return 'free';
   const status = (user.investor_subscription_status ?? 'free').toLowerCase();
-  if (status === 'past_due' || status === 'unpaid' || status === 'cancelled') return 'free';
+  if (status === 'unpaid' || status === 'cancelled') return 'free';
   // X-1: partner-granted/referred investor tiers expire at renews_at.
   // Cron flips them to 'free'; this read-side check prevents stale
   // sessions from sneaking past expiry between sweeps.
