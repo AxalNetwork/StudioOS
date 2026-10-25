@@ -362,10 +362,14 @@ test('the page keeps its frame, its crumb and its literal tab doors', () => {
   const page = read('frontend/src/pages/admin/AdminEventsPage.jsx');
   assert.match(page, /export default function AdminEventsPage\(\) \{\s*return \(\s*<AdminBoardFrame workspace="Events" note="Eadwyn reads the events listed here\. An event is approved or published only when you do it\." data-testid="admin-board-events">/);
   assert.equal((page.match(/<AdminBoardFrame\b/g) || []).length, 1);
-  const doors = [...page.matchAll(/<DeskTab to="([^"]+)"/g)].map((m) => m[1]);
+  const doors = [...page.matchAll(/<HeaderTab to="([^"]+)"/g)].map((m) => m[1]);
   assert.deepEqual(doors, TABS.map((t) => t.path), 'the strip and TABS list the same four doors');
-  assert.match(page, /<DeskTab to="\/admin\/events" end /, 'Overview is lit only on its own address');
-  assert.match(page, /<Link to="\/admin\/community" className=\{CRUMB_LINK\}>Community<\/Link> › Events/);
+  assert.match(page, /<HeaderTab to="\/admin\/events" end /, 'Overview is lit only on its own address');
+  // D938: the desk draws the shared header (D936), with the same crumb, title, line, chip and actions, and no h1 of its own.
+  assert.match(page, /import \{[^}]*\bAdminPageHeader\b[^}]*\} from '\.\.\/\.\.\/ui'/);
+  assert.match(page, /<AdminPageHeader\s+crumb=\{\{ to: '\/admin\/community', label: 'Community', current: 'Events' \}\}\s+title=\{TITLE\}\s+line=\{LINE\}\s+scope\s/);
+  assert.match(page, /tabs=\{<DeskTabs waiting=\{waiting\} \/>\}\s+data-testid="events-header"/);
+  assert.doesNotMatch(page, /<h1/);
   assert.match(page, /<Link to="\/admin\/events\/all" className=\{CRUMB_LINK\}>‹ All events<\/Link>/);
   assert.match(page, /<Link to="\/events\/new" className=\{actionGhost\} data-testid="events-new">New event<\/Link>/, 'New event, not "New studio event" (O-STU)');
   assert.doesNotMatch(page, /to="\/admin\/held\/community"/, 'the crumb links Community itself, not its redirect');
@@ -524,8 +528,8 @@ test('Review reads the whole queue from R1, draws its facts, and the tab carries
     assert.match(t, /Waiting for review · 2/);
     assert.match(t, /Sends no invitations\./, 'the first in the queue is the one starting soonest, with no free-seat flags');
     assert.equal(view.textOf('events-tab-review-count'), '2');
-    assert.match(view.textOf('events-crumb'), /Community › Events/);
-    assert.ok(view.testIds().includes('events-scope-chip'));
+    assert.match(view.textOf('admin-page-crumb'), /Community\s*›\s*Events/);
+    assert.ok(view.testIds().includes('admin-page-scope'));
     assert.ok(view.hrefs().includes('/events/22/manage'), 'Open as host');
     await view.click('events-queue-row-21');
     assert.match(view.text(), /Sends free-seat invitations to official partners not invited yet\./);
@@ -626,7 +630,7 @@ test('a Worker that is down, or answers {}, draws no zero and does not throw', a
       const t = view.text();
       assert.match(t, /could not be read/);
       for (const id of ['events-tile-waiting', 'events-tile-next30', 'events-tile-waitlists', 'events-tile-showup']) assert.doesNotMatch(view.textOf(id), /\b0\b|—/, id);
-      assert.ok(view.testIds().includes('events-tabs'));
+      assert.ok(view.testIds().includes('admin-page-tabs'));
     } finally { await view.close(); }
   }
 });

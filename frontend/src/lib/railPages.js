@@ -249,8 +249,10 @@ const PARTNER = [
   ...SHARED(O).filter((p) => p.route !== '/perks'),
 ];
 
-// The plain Admin shell: HQ's held consoles (`/admin/held/*`, `/admin?tab=…`)
-// and a branch's own pages (`/branch/*`), one profile (sidebarConfig.js).
+// The plain Admin shell: HQ's held consoles (`/admin/held/*` and the Admin
+// Console's tools at their own addresses, D938) and a branch's own pages
+// (`/branch/*`), one profile (sidebarConfig.js). The keys keep their canvas
+// names (#2375); only the routes moved.
 const AD = 'Admin';
 const ADMIN = [
   // The canvas draws no Admin home; D720 §5's overrides add one.
@@ -259,12 +261,12 @@ const ADMIN = [
   alias('/admin/fund-admin', key(AD, 'Home'), 'Fund admin has no board yet; it takes Admin · Home (D720 §11).'),
   own('/admin/held/accounts', key(AD, 'Accounts')),
   alias('/branch/accounts', key(AD, 'Accounts'), 'The branch’s Accounts page.'),
-  own('/admin?tab=users', key(AD, 'Accounts', 'Users')),
+  own('/admin/accounts/all', key(AD, 'Accounts', 'Users')),
   own('/admin/exploring', key(AD, 'Accounts', 'Exploring members')),
   own('/admin/trash', key(AD, 'Accounts', 'Trash')),
   own('/admin/held/approvals', key(AD, 'Approvals')),
   alias('/branch/approvals', key(AD, 'Approvals'), 'The branch’s Approvals page.'),
-  own('/admin?tab=kyc', key(AD, 'Approvals', 'Identity checks')),
+  own('/admin/kyc', key(AD, 'Approvals', 'Identity checks')),
   own('/admin/partner-profiles', key(AD, 'Approvals', 'Entity profiles')),
   own('/admin/lp-applications', key(AD, 'Approvals', 'LP applications')),
   own('/admin/refer-earn', key(AD, 'Approvals', 'Referrals')),
@@ -297,11 +299,11 @@ const ADMIN = [
   own('/admin/profiling-trends', key(AD, 'Programs', 'Profiling trends')),
   own('/admin/community', key(AD, 'Community')),
   alias('/branch/community', key(AD, 'Community'), 'The branch’s Community page.'),
-  own('/admin?tab=wellbeing', key(AD, 'Community', 'Wellbeing experts')),
-  alias('/admin/wellbeing', key(AD, 'Community', 'Wellbeing experts'), 'The wellbeing resource library, Wellbeing experts’ own page.'),
+  // D938: the roster's own address; the prefix covers its resource library.
+  own('/admin/wellbeing', key(AD, 'Community', 'Wellbeing experts')),
   // D972 (#2369): re-rooted at the page's address; the prefix covers its tabs.
   own('/admin/advisors-partners', key(AD, 'Community', 'Advisors and partners')),
-  own('/admin?tab=directory', key(AD, 'Community', 'Directory')),
+  own('/admin/directory', key(AD, 'Community', 'Directory')),
   // D923 (#2370): re-rooted at the new address; the prefix covers the tabs and
   // the records. `/admin/partners` only redirects, so it draws no rail.
   own('/admin/partner-invitations', key(AD, 'Community', 'Partner invitations')),
@@ -346,7 +348,7 @@ const SUPER = [
   own('/admin/contracts?tab=forms', key(SA, 'Contracts', 'Forms')),
   own('/admin/contracts?tab=document-types', key(SA, 'Contracts', 'Document types')),
   own('/admin/accounts', key(SA, 'Team')),
-  own('/admin?tab=users', key(SA, 'Team', 'Users')),
+  own('/admin/accounts/all', key(SA, 'Team', 'Users')),
   off('/admin/accounts/credits', key(SA, 'Member credits')),
   own('/admin/revenue', key(SA, 'Revenue')),
   own('/admin/revenue#disputes', key(SA, 'Revenue', 'Disputes')),
@@ -359,7 +361,7 @@ const SUPER = [
   own('/admin/publications', key(SA, 'Content', 'Publications')),
   own('/admin/persona-segments', key(SA, 'Content', 'Personas')),
   own('/admin/advisors-partners', key(SA, 'Content', 'Advisors and partners')),
-  own('/admin?tab=directory', key(SA, 'Content', 'Directory')),
+  own('/admin/directory', key(SA, 'Content', 'Directory')),
   own('/admin/team', key(SA, 'Content', 'Public team page')),
   own('/admin/platform', key(SA, 'Platform')),
   alias('/admin/platform/switches', key(SA, 'Platform'), 'Platform’s Switches item, on its overview.'),
@@ -368,7 +370,7 @@ const SUPER = [
   own('/admin/integration-keys', key(SA, 'Platform', 'Integration keys')),
   own('/admin/integration-keys#github', key(SA, 'Platform', 'GitHub sync')),
   own('/admin/platform/payments', key(SA, 'Platform', 'Payments catalogue')),
-  own('/admin?tab=promos', key(SA, 'Platform', 'Promo codes')),
+  own('/admin/platform/promo-codes', key(SA, 'Platform', 'Promo codes')),
   own('/admin/credit-rules', key(SA, 'Platform', 'Credit rules')),
   own('/admin/platform/allowances', key(SA, 'Platform', 'AI allowances')),
   alias('/admin/platform/ai-usage', key(SA, 'Platform', 'AI allowances'), 'HQ › AI usage (D791) is AI allowances’ platform-wide read, and docks the same rail.'),

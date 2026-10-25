@@ -1218,7 +1218,8 @@ publicRoutes.post('/analytics/pageview', async (c) => {
   const allowed = new Set(['/', '/pricing', '/demo', '/status', '/changelog', '/spinout-lab', '/terms', '/privacy']);
   // D939: retain only a complete, explicitly allowlisted admin-tab key.
   // Other paths keep the original query/hash stripping behavior.
-  const path = isRedirectKey(raw) ? raw : raw.split('?')[0].split('#')[0];
+  const adminKey = raw === 'redirect:/admin' || raw.startsWith('redirect:/admin?') || raw.startsWith('redirect:/admin#');
+  const path = adminKey ? (isRedirectKey(raw) ? raw : '') : (isRedirectKey(raw) ? raw : raw.split('?')[0].split('#')[0]);
   // #2301: an old redirect address opened in the SPA, counted under its own
   // `redirect:<pattern>` key — only a pattern on the list (services/redirectRoutes.ts).
   if (!allowed.has(path) && !isRedirectKey(path)) return c.body(null, 204);

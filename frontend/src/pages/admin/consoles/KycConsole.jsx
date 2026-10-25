@@ -8,13 +8,11 @@ import { ROLE_BADGES, KV, CONSOLE_LOADING, ConsoleUnreadable } from './shared';
 /**
  * D648 (#1448) — the KYC / AML queue and its review drawer. It reads the queue
  * only when this console is open (the read writes an audit row). A failed read
- * says so; it no longer draws "No submissions".
- *
- * `onPendingCount` tells the section dropdown how many submissions are
- * pending, whenever this console has read the pending queue.
+ * says so; it no longer draws "No submissions". D938: it is the KYC & KYB
+ * page's body, at /admin/kyc.
  */
 
-export default function KycConsole({ onPendingCount }) {
+export default function KycConsole() {
   const [kycQueue, setKycQueue] = useState([]);
   const [kycFilter, setKycFilter] = useState('pending');
   const [kycDetail, setKycDetail] = useState(null);
@@ -30,7 +28,6 @@ export default function KycConsole({ onPendingCount }) {
       const rows = Array.isArray(q) ? q : [];
       setKycQueue(rows);
       setFailed(false);
-      if (status === 'pending') onPendingCount?.(rows.length);
     } catch (e) {
       reportError('AdminPage:loadKycQueue', e);
       setKycQueue([]);
