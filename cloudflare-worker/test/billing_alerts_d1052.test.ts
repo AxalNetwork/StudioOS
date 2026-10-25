@@ -300,14 +300,14 @@ test('D1100: a subscription update carries its period end to accepted seat colle
 });
 
 // D1133: authenticated preparation, never a new subscription or a server-side charge.
-async function strong(db: DatabaseSync, path: string, who = ADA, recent = true, factor = 'totp') {
+async function strong(db: DatabaseSync, path: string, who = ADA, recent = true, factor = 'totp', body?: unknown) {
   const jti = crypto.randomUUID();
   const now = new Date().toISOString().replace('T', ' ').slice(0, 19);
   db.prepare("INSERT INTO user_sessions (jti,user_id,factor,created_at,last_step_up_at) VALUES (?,?,?,?,?)")
     .run(jti, who, factor, recent ? now : '2020-01-01 00:00:00', recent ? now : null);
   const jwt = await new SignJWT({ user_id: who, role: who === PAT ? 'partner' : 'founder', jti }).setProtectedHeader({ alg: 'HS256' })
     .setIssuedAt().setExpirationTime('1h').sign(new TextEncoder().encode(JWT_SECRET));
-  const res = await app.request(path, { method: 'POST', headers: { Authorization: `Bearer ${jwt}` } }, env(db));
+  const res = await app.request(path, { method: 'POST', headers: { Authorization: `Bearer ${jwt}`, 'Content-Type': 'application/json' }, ...(body === undefined ? {} : { body: JSON.stringify(body) }) }, env(db));
   const text = await res.text();
   return { status: res.status, body: JSON.parse(text), text, headers: res.headers };
 }
@@ -468,5 +468,32 @@ test('D1133 a failed renewal is recorded once as renewal_failed, never as a chec
     await hook(db, 'payment_intent.payment_failed', { invoice: 'in_ada1', last_payment_error: { type: 'card_error' } });
     await hook(db, 'invoice.payment_failed', renewal());
     assert.deepEqual(activity(db).map((r) => r.action), ['renewal_failed']);
+  } finally { db.close(); }
+});
+
+
+test('D1133 normal-customer account plans and shared-customer founder plans update the correct existing card endpoint', async () => {
+  const db = database();
+  try {
+    db.prepare("UPDATE users SET investor_stripe_customer_id='cus_ada', investor_stripe_subscription_id='sub_inv' WHERE id=?").run(ADA);
+    await hook(db, 'invoice.payment_failed', renewal());
+    stripe['/invoices/in_ada1'] = { body: recoveryInvoice() };
+    stripe['/setup_intents'] = { body: { client_secret: 'seti_fixture_secret_synthetic' } };
+    const out = await strong(db, `/api/billing/alerts/${alerts(db)[0].id}/update-card`);
+    assert.equal(out.status, 200); assert.equal(out.body.scope, 'founder');
+    // The normal/founder selector is also the existing account-plan customer
+    // endpoint; it has no founder-role gate. Exercise its real handler.
+    await hook(db, 'invoice.payment_failed', renewal({ id: 'in_pat1', subscription: 'sub_pat', customer: 'cus_pat' }));
+    stripe['/invoices/in_pat1'] = { body: recoveryInvoice({ id: 'in_pat1', subscription: 'sub_pat', customer: 'cus_pat' }) };
+    const setup = await strong(db, `/api/billing/alerts/${alerts(db)[1].id}/update-card`, PAT);
+    assert.equal(setup.body.scope, 'founder');
+    stripe['/payment_methods/pm_new'] = { body: { id: 'pm_new', customer: 'cus_pat' } };
+    stripe['/customers/cus_pat'] = { body: { id: 'cus_pat' } };
+    stripe['/subscriptions'] = { body: { data: [{ id: 'sub_pat', status: 'active' }] } };
+    stripe['/subscriptions/sub_pat'] = { body: { id: 'sub_pat' } };
+    assert.equal((await strong(db, '/api/billing/payment-method/default', PAT, true, 'totp', { scope: setup.body.scope, payment_method_id: 'pm_new' })).status, 200);
+    assert.ok(calls.includes('POST /customers/cus_pat'));
+    assert.ok(calls.includes('POST /subscriptions/sub_pat'));
+    assert.ok(!calls.some((c) => c.includes('cus_ada') && c.startsWith('POST')));
   } finally { db.close(); }
 });
