@@ -30,6 +30,7 @@ import { requireAdmin, requireSuperAdmin, requireSuperAdminWriteBar, isSuperAdmi
 import { branchOf, HQ_ONLY } from '../util/branch';
 import { logAdminAction } from '../services/adminAudit';
 import { Funds } from '../models/funds';
+import { bankAccountHistory, historyFilters, BankHistoryError } from '../services/bankAccountHistory';
 import {
   BankAccountError, createAccount, listAccounts, updateAccount, retireAccount, revealAccount,
 } from '../services/entityBankAccounts';
@@ -62,6 +63,25 @@ const audit = (c: Context<{ Bindings: Env }>, actor: User, action: string, accou
   logAdminAction(c.env, Number(actor.id), String(actor.email || ''), action, {
     account_uid: account.uid, entity_key: account.entity_key, account_last4: account.account_last4, ...extra,
   });
+
+/** D1182: audit must persist before any history store is read. */
+r.get('/history', async (c) => {
+  const actor = await requireSuperAdmin(c);
+  c.header('Cache-Control','no-store');
+  try {
+    const filters = historyFilters(c.req.query());
+    try {
+      const logged = await c.env.DB.prepare(
+        `INSERT INTO admin_audit_log (admin_user_id, action, report_type, filters_json) VALUES (?, ?, ?, ?)`,
+      ).bind(actor.id,'bank_accounts_history_read','bank_accounts',JSON.stringify({filtered:!!(filters.q||filters.kind||filters.entity||filters.actor||filters.from||filters.until)})).run();
+      if (!logged.success || logged.meta?.changes !== 1) throw new Error('audit_unavailable');
+    } catch { return c.json({code:'audit_unavailable',message:'The history read could not be recorded. Try again.'},503); }
+    return c.json(await bankAccountHistory(c.env,filters));
+  } catch (e) {
+    if (e instanceof BankHistoryError) return c.json({code:e.code,message:e.status===400?'Choose valid history filters.':'History could not be read. Try again.'},e.status as any);
+    return c.json({code:'history_unreadable',message:'History could not be read. Try again.'},503);
+  }
+});
 
 r.get('/', async (c) => {
   await requireSuperAdmin(c);

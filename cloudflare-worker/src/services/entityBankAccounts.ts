@@ -15,6 +15,7 @@
  * To change an account, retire it and add the new one.
  */
 import type { Env } from '../types';
+import { bankHistoryText } from './bankAccountHistory';
 import { encryptColumn, decryptColumn } from './columnCipher';
 import { AXAL_ENTITIES, type AxalEntityKey } from './legalDocFormat';
 // Imported inside function bodies only, so the two modules may import each other.
@@ -50,7 +51,7 @@ export type BankAccountRow = {
   account_kind: AccountKind; account_number_enc: string; account_last4: string;
   routing_number: string; routing_number_alt: string | null; swift_code: string | null; intermediary_swift_code: string | null;
   purposes_json: string; status: 'active' | 'retired'; retired_at: string | null; retired_reason: string | null;
-  recorded_by: number; created_at: string; updated_at: string;
+  recorded_by: number; recorded_by_name?: string | null; created_at: string; updated_at: string;
 };
 
 /** What a list, the console and a masked instruction show: the last four, never the number. */
@@ -60,6 +61,7 @@ export type MaskedAccount = {
   account_kind: AccountKind; account_last4: string; account_masked: string;
   routing_number: string; routing_number_alt: string | null; swift_code: string | null; intermediary_swift_code: string | null;
   purposes: PaymentPurpose[]; status: 'active' | 'retired'; retired_at: string | null; retired_reason: string | null;
+  recorded_by_name: string | null;
   created_at: string; updated_at: string;
 };
 
@@ -79,6 +81,7 @@ export function masked(row: BankAccountRow): MaskedAccount {
     routing_number: row.routing_number, routing_number_alt: row.routing_number_alt,
     swift_code: row.swift_code, intermediary_swift_code: row.intermediary_swift_code,
     purposes: purposesOf(row), status: row.status, retired_at: row.retired_at, retired_reason: row.retired_reason,
+    recorded_by_name: bankHistoryText(row.recorded_by_name),
     created_at: row.created_at, updated_at: row.updated_at,
   };
 }
@@ -146,7 +149,7 @@ async function checkPurposes(env: Env, entityKey: AxalEntityKey, kind: AccountKi
 
 // ---------------------------------------------------------------- writes
 
-const ROW_BY_UID = 'SELECT * FROM entity_bank_accounts WHERE uid = ?';
+const ROW_BY_UID = 'SELECT b.*, u.name AS recorded_by_name FROM entity_bank_accounts b LEFT JOIN users u ON u.id = b.recorded_by WHERE b.uid = ?';
 
 async function rowByUid(env: Env, uid: unknown): Promise<BankAccountRow> {
   if (typeof uid !== 'string' || !/^[a-f0-9-]{8,64}$/i.test(uid)) refuse(404, 'account_not_found', 'No such account.');
@@ -207,7 +210,7 @@ export async function createAccount(env: Env, input: NewAccountInput, actorId: n
 /** Every account, masked, active first, then newest. */
 export async function listAccounts(env: Env): Promise<MaskedAccount[]> {
   const res = await env.DB.prepare(
-    `SELECT * FROM entity_bank_accounts ORDER BY CASE status WHEN 'active' THEN 0 ELSE 1 END, entity_key, id DESC`,
+    `SELECT b.*, u.name AS recorded_by_name FROM entity_bank_accounts b LEFT JOIN users u ON u.id = b.recorded_by ORDER BY CASE b.status WHEN 'active' THEN 0 ELSE 1 END, b.entity_key, b.id DESC`,
   ).all<BankAccountRow>();
   return (res.results || []).map(masked);
 }
@@ -282,7 +285,7 @@ export async function revealAccount(env: Env, uid: unknown, actorUserId: number,
 /** Active rows of one entity, for the resolver. Ciphertext included; never returned by a route. */
 export async function activeRowsCarrying(env: Env, purpose: PaymentPurpose): Promise<BankAccountRow[]> {
   const res = await env.DB.prepare(
-    `SELECT a.* FROM entity_bank_accounts a
+    `SELECT a.*, u.name AS recorded_by_name FROM entity_bank_accounts a LEFT JOIN users u ON u.id = a.recorded_by
       WHERE a.status = 'active' AND EXISTS (SELECT 1 FROM json_each(a.purposes_json) p WHERE p.value = ?)
       ORDER BY a.id`,
   ).bind(purpose).all<BankAccountRow>();
