@@ -1596,6 +1596,8 @@ before any owner-detail derivation. It reuses `AdminRoomSummary` from the files
 workspace, preserves Unreadable/Try again, and offers no owner actions. The full
 admin/support tab design remains #2987's.
 
+D1133 (#3013): Pricing’s in-place checkout sheet uses D1049’s held-plan read and retries it independently. Worker `/api/billing/alerts/:id/pay` and `/update-card` prepare only the caller’s failed renewal, behind a fresh TOTP. D1054 owns the still-unbuilt app-wide banner; D1051’s #2902 contract now includes recorded post-payment changes.
+
 D1135 (#3015): Company Settings' existing Leave company confirmation now posts
 `/api/company/:uid/leave` through the switcher's shared action. It removes the
 membership and clears a departed active selection. Explorers have no Add a new

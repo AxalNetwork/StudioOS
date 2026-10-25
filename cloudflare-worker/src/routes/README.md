@@ -331,4 +331,6 @@ use legacy investor grants through `/shared` instead. The data-room spec in
 `../services/records/raise.ts` uses the same owner-only gate. File uploads default
 to NDA when visibility is omitted; explicit Open remains allowed for the owner.
 
+D1133: `billing.ts` mounts `/alerts/:id/pay` and `/alerts/:id/update-card` under `/api/billing`, both recent-TOTP gated. They prepare in-page Stripe forms for the caller’s open failed renewal; opening neither confirms a charge nor changes the default card.
+
 D1135: `company.ts` adds member self-leave and validates create/rename; `projects.ts` counts live ventures, adds owner restore within 30 days and sends email-mode team invitations.
