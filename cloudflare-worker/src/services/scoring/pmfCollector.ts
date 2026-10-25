@@ -32,6 +32,7 @@ import type { Env } from '../../types';
 import { isHeld, heldDate, claimsOf, themesOf, type InterviewRow, type HypRow, type LinkRow } from '../cycleValidate';
 import { loadPainGroupModel, safeParseStrings, severityLevel } from '../painGroups';
 import { WAITLIST_TARGET_KEY } from '../validateWriters';
+import { latestVenturePivotDay, ventureVerdictHeader } from '../verdict';
 import { GRADES, type GradeLabel, type PmfInputFacts } from './pmf';
 
 /** The interview fields the collector reads: no name, role, company, notes or quote. */
@@ -41,9 +42,7 @@ type IvRow = {
   transcribed: number | null;
 };
 
-export type PmfVerdict = {
-  decision: string; state: 'given' | 'withheld'; decided_at: string | null; evidence_count: number;
-} | null;
+export type PmfVerdict = Awaited<ReturnType<typeof ventureVerdictHeader>>;
 
 export interface PmfCollected {
   inputs: PmfInputFacts[];
@@ -91,20 +90,9 @@ const afterPivot = (pivot: string | null, d: string | null) => !pivot || !d || d
 
 export async function collectPmfInputs(env: Env, projectId: number, today: string): Promise<PmfCollected> {
   const DB = env.DB;
-  const pivotRow = await DB.prepare(
-    `SELECT MAX(decided_at) AS at FROM validation_decisions
-      WHERE project_id = ? AND hypothesis_id IS NULL AND decision = 'pivot' AND state = 'given'`,
-  ).bind(projectId).first<{ at: string | null }>();
-  const pivot = day(pivotRow?.at);
-
-  // The current given decision, as `currentDecision` reads it, else the latest withheld one ("Withheld (below 5 pieces)").
-  const verdictRow = await DB.prepare(
-    `SELECT d.decision, d.state, d.decided_at,
-            (SELECT COUNT(*) FROM validation_decision_evidence e WHERE e.decision_id = d.id) AS evidence_count
-       FROM validation_decisions d
-      WHERE d.project_id = ? AND d.hypothesis_id IS NULL AND d.superseded_at IS NULL
-      ORDER BY CASE WHEN d.state = 'given' THEN 0 ELSE 1 END, d.decided_at DESC, d.id DESC LIMIT 1`,
-  ).bind(projectId).first<{ decision: string; state: 'given' | 'withheld'; decided_at: string | null; evidence_count: number }>();
+  // Verdict's tables are read through verdict.ts only (D693 test 10).
+  const pivot = await latestVenturePivotDay(env, projectId);
+  const verdict = await ventureVerdictHeader(env, projectId);
 
   const ivRes = await DB.prepare(
     `SELECT i.id, i.icp_fit, i.segment_id, i.stage, i.done_at, i.interview_date, i.created_at, i.pains_json,
@@ -353,9 +341,7 @@ export async function collectPmfInputs(env: Env, projectId: number, today: strin
 
   return {
     inputs,
-    verdict: verdictRow ? {
-      decision: verdictRow.decision, state: verdictRow.state, decided_at: verdictRow.decided_at, evidence_count: Number(verdictRow.evidence_count) || 0,
-    } : null,
+    verdict,
     pivot_at: pivot,
   };
 }
