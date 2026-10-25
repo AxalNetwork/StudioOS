@@ -13,7 +13,8 @@ const SECRET = 'synthetic-d1135-secret'.repeat(3);
 const baseline = readFileSync(new URL('../sql/schema_baseline.sql', import.meta.url), 'utf8');
 function fixture() {
   const { DB, db } = makeD1('');
-  for (const name of ['users', 'founders', 'company_profiles', 'user_company_links', 'projects', 'deals', 'activity_logs']) db.exec(stripForeignKeys(tableFromBaseline(baseline, name)));
+  for (const name of ['users', 'founders', 'company_profiles', 'user_company_links', 'projects', 'deals', 'activity_logs', 'project_member_invitations']) db.exec(stripForeignKeys(tableFromBaseline(baseline, name)));
+  db.exec(tableFromBaseline(readFileSync(new URL('../sql/migrations/515_newsletter_lists.sql', import.meta.url), 'utf8'), 'email_suppressions'));
   for (const [id, role, fid] of [[1, 'founder', 10], [2, 'founder', 20], [3, 'exploring', null], [4, 'admin', null]] as const) {
     db.prepare('INSERT INTO users(id,email,name,role,founder_id) VALUES(?,?,?,?,?)').run(id, `synthetic${id}@example.test`, `Synthetic ${id}`, role, fid);
   }
@@ -104,10 +105,37 @@ test('email invitation sends one matching accept link, link mode sends none, fai
     assert.ok(text.includes('https://synthetic-branch.example.test' + email.body.accept_path));
     assert.equal((await call(f, 1, 'POST', '/projects/1/invitations', { mode: 'link' })).body.email_sent, null);
     assert.equal(sent.length, 1);
+    assert.equal((await call(f, 1, 'POST', '/projects/1/invitations', { mode: 'email', email: 'invitee@example.test' })).status, 409);
+    assert.equal(sent.length, 1);
+    f.db.exec("INSERT INTO email_suppressions(email,reason) VALUES('suppressed@example.test','bounce')");
+    assert.equal((await call(f, 1, 'POST', '/projects/1/invitations', { mode: 'email', email: 'suppressed@example.test' })).body.email_sent, false);
+    assert.equal(sent.length, 1);
+    assert.doesNotMatch(text, /Synthetic venture|Synthetic 1/);
     works = false;
     assert.equal((await call(f, 1, 'POST', '/projects/1/invitations', { mode: 'email', email: 'second@example.test' })).body.email_sent, false);
     assert.equal(sent.length, 2);
     assert.equal((await call(f, 2, 'POST', '/projects/1/invitations', { mode: 'email', email: 'third@example.test' })).status, 403);
     assert.equal(sent.length, 2);
+  } finally { globalThis.fetch = prior; }
+});
+
+test('email invitations cap each inviter across projects and each project across inviters, reserving before delivery', async () => {
+  const f = fixture(); const prior = globalThis.fetch; let sends = 0;
+  globalThis.fetch = async (input) => {
+    if (String(input) === 'https://oauth2.googleapis.com/token') return Response.json({ access_token: 'synthetic' });
+    sends += 1; return new Response('{}');
+  };
+  try {
+    const insert = f.db.prepare("INSERT INTO project_member_invitations(project_id,invited_by_user_id,source,status,expires_at) VALUES(?,?,'email','pending',datetime('now','+14 days'))");
+    for (let i = 0; i < 9; i += 1) insert.run(2, 1);
+    assert.equal((await call(f, 1, 'POST', '/projects/1/invitations', { mode: 'email', email: 'tenth@example.test' })).body.email_sent, true);
+    assert.equal(sends, 1);
+    assert.equal((await call(f, 1, 'POST', '/projects/1/invitations', { mode: 'email', email: 'eleventh@example.test' })).status, 429);
+    assert.equal(sends, 1);
+    f.db.exec("UPDATE project_member_invitations SET created_at=datetime('now','-2 hours')");
+    assert.equal((await call(f, 1, 'POST', '/projects/1/invitations', { mode: 'email', email: 'after-window@example.test' })).body.email_sent, true);
+    for (let i = 0; i < 19; i += 1) insert.run(1, 2);
+    assert.equal((await call(f, 4, 'POST', '/projects/1/invitations', { mode: 'email', email: 'project-cap@example.test' })).status, 429);
+    assert.equal(sends, 2);
   } finally { globalThis.fetch = prior; }
 });

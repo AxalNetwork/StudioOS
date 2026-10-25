@@ -1572,18 +1572,38 @@ projects.post('/:id/invitations', async (c) => {
   const tokenHash = await hashInviteToken(token);
   const sql = getSQL(c.env);
   try {
-    const [inv] = await sql`INSERT INTO project_member_invitations
-        (project_id, role, status, source, invitee_email, token_hash, invited_by_user_id, expires_at)
-      VALUES (${id}, ${role}, 'pending', ${mode}, ${inviteeEmail}, ${tokenHash}, ${user.id}, datetime('now','+14 days'))
-      RETURNING id, role, status, source, invitee_email, expires_at, created_at`;
+    // D1135: reserve each email atomically before sending. Pending duplicates
+    // cannot send again, and both an inviter and a project have an hourly cap.
+    const [inv] = mode === 'email'
+      ? await sql`INSERT INTO project_member_invitations
+          (project_id, role, status, source, invitee_email, token_hash, invited_by_user_id, expires_at)
+        SELECT ${id}, ${role}, 'pending', 'email', ${inviteeEmail}, ${tokenHash}, ${user.id}, datetime('now','+14 days')
+        WHERE NOT EXISTS (SELECT 1 FROM project_member_invitations
+          WHERE project_id = ${id} AND invitee_email = ${inviteeEmail} AND status = 'pending' AND julianday(expires_at) > julianday('now'))
+        AND (SELECT COUNT(*) FROM project_member_invitations WHERE invited_by_user_id = ${user.id}
+          AND source = 'email' AND julianday(created_at) > julianday('now','-1 hour')) < 10
+        AND (SELECT COUNT(*) FROM project_member_invitations WHERE project_id = ${id}
+          AND source = 'email' AND julianday(created_at) > julianday('now','-1 hour')) < 20
+        RETURNING id, role, status, source, invitee_email, expires_at, created_at`
+      : await sql`INSERT INTO project_member_invitations
+          (project_id, role, status, source, invitee_email, token_hash, invited_by_user_id, expires_at)
+        VALUES (${id}, ${role}, 'pending', ${mode}, ${inviteeEmail}, ${tokenHash}, ${user.id}, datetime('now','+14 days'))
+        RETURNING id, role, status, source, invitee_email, expires_at, created_at`;
+    if (!inv) {
+      const pending = await c.env.DB.prepare(
+        `SELECT id FROM project_member_invitations WHERE project_id = ? AND invitee_email = ?
+         AND status = 'pending' AND julianday(expires_at) > julianday('now') LIMIT 1`
+      ).bind(id, inviteeEmail).first();
+      if (pending) return c.json({ code: 'already_pending', detail: 'An invitation to that address is already pending.' }, 409);
+      return c.json({ code: 'invitation_rate_limited', detail: 'The invitation limit has been reached. Try again in an hour.' }, 429);
+    }
     let emailSent: boolean | null = null;
     if (mode === 'email' && inviteeEmail) {
       const { sendNotificationEmail } = await import('../services/email');
-      const project = await c.env.DB.prepare('SELECT name FROM projects WHERE id = ?').bind(id).first<{ name: string }>();
       const base = String((c.env as any).PUBLIC_BASE_URL || (c.env as any).APP_URL || 'https://axal.vc').replace(/\/+$/, '');
       const link = `${base}/projects/invitations/accept?token=${encodeURIComponent(token)}`;
       emailSent = await sendNotificationEmail(c.env, inviteeEmail, 'Your StudioOS project invitation',
-        `${user.name || 'A teammate'} invited you to ${project?.name || 'a project'} on StudioOS. Accept here: ${link}\nThis invitation expires in 14 days and works only for this email address.`);
+        `You have been invited to a StudioOS project. Accept here: ${link}\nThis invitation expires in 14 days and works only for this email address.`);
     }
     return c.json({
       invitation: inv,
