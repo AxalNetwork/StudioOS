@@ -4,6 +4,7 @@
  * /api/admin/programs, before the /api/admin catch-all.
  *
  *   GET  /?weeks=4|12|52&scope=                    the catalogue read (requireAdmin), counts only
+ *   POST /                                         New program: a `proposed` row and its draft (requireSuperAdmin, D955)
  *   GET  /mentor-cohorts/sessions                  sessions booked with each cycle's mentors (requireAdmin)
  *   GET  /:key                                     the registry row and the published playbook; a Super Admin also gets the draft
  *   PATCH /:key                                    purpose, who, join_method, status (requireSuperAdmin)
@@ -11,7 +12,10 @@
  *   POST /:key/playbook/publish                    the draft becomes the next version (requireSuperAdmin)
  *   GET  /:key/activity?before=&limit=             the program's activity, newest first (requireAdmin)
  *
- * An unknown key is 404 `unknown_program` on every `/:key` route.
+ * An unknown key is 404 `unknown_program` on every `/:key` route, and so is a
+ * program approved for another studio only (D955, migration 561): an admin
+ * reads the programs for every studio and their own studio's; a Super Admin
+ * reads them all. `/proposals` is its own router, mounted before this one.
  *
  * SCOPE works as on Insights (`admin_insights.ts`): no scope, or this
  * deployment's own, reads this deployment. Another scope is HQ's: a plain
@@ -34,6 +38,7 @@ import {
   ProgramError, editDraftSection, programByKey, programDetail, publishDraft, updateProgram,
 } from '../services/programRegistry';
 import { parseActivityQuery, programActivity } from '../services/programActivity';
+import { newProgram, readerOf } from '../services/programProposals';
 
 const r = new Hono<{ Bindings: Env }>();
 type C = Context<{ Bindings: Env }>;
@@ -66,7 +71,8 @@ r.get('/', async (c) => {
       if (!code) return c.json({ code: 'bad_scope', detail: 'scope must be hq or a subsidiary\'s code.' }, 400);
       return c.json(await branchScopedPrograms(c.env, code, programsParams(c.req.query())));
     }
-    return c.json(await programCatalogue(c.env, { id: Number(user.id), superAdmin: isSuperAdmin(user as any) }, weeks));
+    const reader = await readerOf(c.env, { id: Number(user.id), superAdmin: isSuperAdmin(user as any) });
+    return c.json(await programCatalogue(c.env, { id: Number(user.id), superAdmin: reader.superAdmin, licenceUid: reader.licenceUid }, weeks));
   } catch (e) {
     return answer(c, e);
   }
@@ -110,10 +116,23 @@ r.get('/mentor-cohorts/sessions', async (c) => {
   }
 });
 
+/** D955 — New program (PG2's header, dc:469): Basics and How it runs. */
+r.post('/', async (c) => {
+  try {
+    const user = await requireSuperAdmin(c);
+    const body = await c.req.json().catch(() => ({}));
+    const key = await newProgram(c.env, body, actorOf(user));
+    return c.json(await programDetail(c.env, key, true), 201);
+  } catch (e) {
+    return answer(c, e);
+  }
+});
+
 r.get('/:key', async (c) => {
   try {
     const user = await requireAdmin(c);
-    return c.json(await programDetail(c.env, c.req.param('key'), isSuperAdmin(user as any)));
+    const reader = await readerOf(c.env, { id: Number(user.id), superAdmin: isSuperAdmin(user as any) });
+    return c.json(await programDetail(c.env, c.req.param('key'), reader.superAdmin, reader));
   } catch (e) {
     return answer(c, e);
   }
@@ -151,7 +170,7 @@ r.post('/:key/playbook/publish', async (c) => {
 r.get('/:key/activity', async (c) => {
   try {
     const user = await requireAdmin(c);
-    const p = await programByKey(c.env, c.req.param('key'));
+    const p = await programByKey(c.env, c.req.param('key'), await readerOf(c.env, { id: Number(user.id), superAdmin: isSuperAdmin(user as any) }));
     const q = parseActivityQuery((k) => c.req.query(k));
     if (!q.ok) return c.json({ code: q.code, detail: q.detail }, 400);
     return c.json(await programActivity(c.env, p.key, { id: Number(user.id), superAdmin: isSuperAdmin(user as any) }, q));
