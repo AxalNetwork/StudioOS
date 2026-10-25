@@ -18,6 +18,8 @@ import { DirectoryPanel } from './consoles/DirectoryConsole';
 import { WellbeingExpertsPanel } from './consoles/WellbeingConsole';
 import { BankAccountsPanel } from './consoles/BankAccountsConsole';
 import { ProductTestingPanel } from './consoles/ProductTestingConsole';
+import { ProductTestingTabBody } from './productTesting/ProductTestingTabs';
+import { PAGE_LINE as TESTING_LINE, viewOf as testingViewOf } from './productTesting/productTestingModel';
 import { PromoCodesPanel } from './consoles/PromoCodesConsole';
 import { BillingPanel } from './consoles/BillingConsole';
 
@@ -186,10 +188,32 @@ export function BankAccountsPage() {
   );
 }
 
+/**
+ * D1195 (#2382) — Product testing's five tabs at their own addresses (TST1–TST9):
+ * Overview, Review and Programs (D815's console, Review in its `review` view),
+ * one program at `/programs/:uid`, Applicants and the Tester pool.
+ */
 export function ProductTestingHqPage() {
+  const { pathname, search } = useLocation();
+  const view = testingViewOf(pathname, search);
+  const tabs = (
+    <>
+      <HeaderTab to="/admin/platform/product-testing" data-testid="testing-tab-overview">Overview</HeaderTab>
+      <HeaderTab to="/admin/platform/product-testing/review" data-testid="testing-tab-review">Review</HeaderTab>
+      <HeaderTab to="/admin/platform/product-testing/programs" end={false} data-testid="testing-tab-programs">Programs</HeaderTab>
+      <HeaderTab to="/admin/platform/product-testing/applicants" data-testid="testing-tab-applicants">Applicants</HeaderTab>
+      <HeaderTab to="/admin/platform/product-testing/testers" data-testid="testing-tab-testers">Tester pool</HeaderTab>
+    </>
+  );
+  const more = (
+    <>
+      <HeaderMenuItem to="/admin/approvals/product-testers" data-testid="testing-more-approvals">Tester applications in Approvals</HeaderMenuItem>
+      <HeaderMenuItem to="/admin/held/accounts" data-testid="testing-more-accounts">Testers in Accounts</HeaderMenuItem>
+    </>
+  );
   return (
-    <ConsolePage crumb={{ ...PLATFORM, current: 'Product testing' }} title="Product testing" line="Partners' testing programmes waiting for approval, and HQ's own." testId="admin-platform-product-testing">
-      <ProductTestingPanel />
+    <ConsolePage hqOnly crumb={{ ...PLATFORM, current: 'Product testing' }} title="Product testing" line={TESTING_LINE} tabs={tabs} more={more} testId="admin-platform-product-testing">
+      <ProductTestingTabBody view={view} review={<ProductTestingPanel view="review" />} programs={<ProductTestingPanel />} />
     </ConsolePage>
   );
 }

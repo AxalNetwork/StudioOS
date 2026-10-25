@@ -22,7 +22,7 @@ import { installDocument } from './_contracts_dom.mjs';
 import {
   COMMUNITY_PATH, MOVED_KEY, MOVED_NOTICE, PAGE_UNREADABLE,
   buildCircles, buildConsoles, buildJobs, buildNeeds, buildNextUp, buildTiles,
-  isEmptyCommunity, pageFailed, readAllPages, seatsRead, seatsText, upcomingEvents,
+  isEmptyCommunity, pageFailed, readAllPages, seatsText,
 } from '../src/pages/admin/community/communityModel.js';
 import AdminCommunity from '../src/pages/admin/community/AdminCommunity.jsx';
 import HeldCommunityRedirect from '../src/pages/admin/community/HeldCommunityRedirect.jsx';
@@ -38,8 +38,8 @@ const bad = { status: 'error', data: null };
 
 const GLANCE = { approvals: { kind: 'ready', lanes: [{ key: 'events', count: 4 }, { key: 'jobs', count: 3 }, { key: 'lp', count: 9 }] } };
 const EVENTS = [
-  { id: 1, title: 'Founder Breakfast', status: 'published', starts_at: at(2), capacity: 60, timezone: 'UTC', created_at: at(-20) },
-  { id: 2, title: 'Open Lab', status: 'published', starts_at: at(10), capacity: null, timezone: 'UTC', created_at: at(-10) },
+  { id: 1, title: 'Founder Breakfast', status: 'published', starts_at: at(2), capacity: 60, timezone: 'UTC', created_at: at(-20), seats_taken: 42 },
+  { id: 2, title: 'Open Lab', status: 'published', starts_at: at(10), capacity: null, timezone: 'UTC', created_at: at(-10), seats_taken: 12 },
   { id: 3, title: 'Pricing Clinic', status: 'pending_review', starts_at: at(5), capacity: 20, timezone: 'UTC', created_at: at(-3) },
   { id: 4, title: 'Far Away Summit', status: 'published', starts_at: at(45), capacity: 100, timezone: 'UTC', created_at: at(-30) },
   { id: 5, title: 'Last Week Social', status: 'published', starts_at: at(-7), capacity: 30, timezone: 'UTC', created_at: at(-40) },
@@ -85,30 +85,36 @@ test('Waiting on you adds the glance\'s events and jobs lanes, and claims no wai
   assert.equal(tile(buildTiles({ ...ALL, glance: bad }, NOW), 'waiting').state, 'unreadable');
 });
 
-test('next 30 days is published or waiting, from now on, the Events desk\'s rule (D915)', () => {
-  assert.deepEqual(upcomingEvents(EVENTS, NOW).map((e) => e.id), [1, 3, 2]);
-  const t = tile(buildTiles(ALL, NOW), 'upcoming');
-  assert.equal(t.value, '3');
-  assert.equal(t.sub, 'next 30 days · 59 registered');
+// D1121: the Upcoming tile reads D918's next 30 days through the Community read
+// (`events.upcoming`, counts only), and Next up D918's list rows' own seats
+// taken (`GET /api/admin/events`); neither reads the analytics rows.
+const OVERVIEW = ok({ weeks: 12, blocks: { events: {
+  upcoming: { available: true, events: 3, seats_taken: 59, full: 0 },
+} } });
+
+test('Upcoming events is D918\'s next 30 days and its seats, from the Community read (D1121)', () => {
+  // Mutation checked: the tile back on the events list and analytics rows → 59 is not the seats; a failed block drawn as 0 → the unreadable check fails.
+  const t = tile(buildTiles({ ...ALL, overview: OVERVIEW }, NOW), 'upcoming');
+  assert.deepEqual([t.state, t.value, t.sub], ['ready', '3', 'next 30 days · 59 registered']);
+  // The analytics rows no longer matter to the tile.
+  assert.equal(tile(buildTiles({ ...ALL, analytics: bad, overview: OVERVIEW }, NOW), 'upcoming').sub, 'next 30 days · 59 registered');
+  assert.equal(tile(buildTiles({ ...ALL, overview: bad }, NOW), 'upcoming').state, 'unreadable', 'a failed Community read is drawn as a count');
+  assert.equal(tile(buildTiles({ ...ALL, overview: ok({ blocks: { events: { upcoming: { available: false, unreadable: true, reason: 'x' } } } }) }, NOW), 'upcoming').state, 'unreadable');
 });
 
-test('Guard G: seats are drawn only when the analytics rows can be trusted, and a missing event is not a zero', () => {
-  assert.equal(seatsRead(ok({ events: null, unreadable: ['events'] }), EVENTS).state, 'unreadable');
-  assert.equal(seatsRead(ok({ events: [], unreadable: [] }), EVENTS).state, 'unreadable', 'events but no rows is the old zero shape');
-  assert.equal(seatsRead(bad, EVENTS).state, 'unreadable');
-  assert.equal(seatsRead(ok({ events: [], unreadable: [] }), []).state, 'ready', 'no events and no rows is a real empty');
-  const seats = seatsRead(ok({ events: [{ id: 1, registrations: 42 }], unreadable: [] }), EVENTS);
-  assert.equal(seatsText(seats, EVENTS[1]).text, 'Not in this read');
-  assert.equal(seatsText(seats, EVENTS[0]).text, '42 / 60');
-  assert.equal(seatsText(seatsRead(ok(ANALYTICS), EVENTS), EVENTS[1]).text, 'No cap · 12 registered');
-  const tiles = buildTiles({ ...ALL, analytics: ok({ events: [{ id: 1, registrations: 42 }], unreadable: [] }) }, NOW);
-  assert.equal(tile(tiles, 'upcoming').sub, 'next 30 days · registered: not in this read');
-  assert.equal(tile(buildTiles({ ...ALL, analytics: bad }, NOW), 'upcoming').sub, 'next 30 days · registered: could not be read');
+test('seats text: a cap is taken of capacity, no cap says so, and a missing count is never 0', () => {
+  assert.equal(seatsText({ capacity: 60, seats_taken: 42 }).text, '42 / 60');
+  assert.equal(seatsText({ capacity: null, seats_taken: 12 }).text, 'No cap · 12 registered');
+  assert.equal(seatsText({ capacity: 60 }).text, 'Seats not recorded');
 });
 
-test('Next up is the three soonest published events, each with its seats', () => {
-  const n = buildNextUp(ALL, NOW);
+test('Next up is the three soonest published events in 30 days, each with D918\'s own seats (D1121)', () => {
+  // Mutation checked: seats back on the analytics rows → the bad-analytics case loses its seats; a waiting event admitted → Pricing Clinic is listed.
+  const n = buildNextUp({ ...ALL, analytics: bad }, NOW);
   assert.deepEqual(n.rows.map((r) => [r.title, r.seats.text]), [['Founder Breakfast', '42 / 60'], ['Open Lab', 'No cap · 12 registered']]);
+  assert.equal(buildNextUp({ ...ALL, events: bad }, NOW).state, 'unreadable');
+  const without = buildNextUp({ ...ALL, events: ok(EVENTS.map(({ seats_taken: _s, ...e }) => e)) }, NOW);
+  assert.equal(without.rows[0].seats.text, 'Seats not recorded', 'a row with no count is drawn as 0');
 });
 
 test('the period figures wait for the Community read, and are never a zero before it answers (D933 draws them)', () => {

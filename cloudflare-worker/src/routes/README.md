@@ -1,8 +1,7 @@
 # Worker route handlers — production source of truth
 
-D1156 adds `GET /api/admin/program-grants/licences/:uid/in-use` (HQ Super
-Admin) and `POST /api/licence/mine/programs/report` (local branch Admin).
-Both delegate to `../services/programUsage.ts`; neither accepts member data.
+
+D1144: `cycle_raise.ts` returns the stored Product-market fit part, its paged `/pmf/history` read and Re-score’s `pmf: true` flag. The founder/admin project gate is unchanged. `../services/scoring/README.md` names the shared snapshot/checklist/audit transaction.
 
 These files are the production API behind `https://axal.vc/api/*`. They are
 mounted by `cloudflare-worker/src/index.ts` and run on Cloudflare Workers
@@ -142,7 +141,7 @@ widened guard on this very sentence, which is the rule working.)
 /api/admin/channels   → channels.ts `channelsAdmin` (D684: the channels bot's setWebhook and its health read, D756; super admin)
 /api/admin/bank-accounts → admin_bank_accounts.ts (D1182: audited masked history, stable snapshot pages and recorder names; failed read/audit returns 503. D708: each Axal entity's bank accounts, masked, with add, relabel, purposes, retire and a recorded reveal; Super Admin, HQ only; mounted beside /api/admin/stripe, before the /api/admin catch-all)
 /api/admin/fund-structure → admin_fund_structure.ts (D717: the entity and money map, read-only; masked accounts for the Super Admin, and each entity's active accounts masked (#1855); #1773's sentence for a plain Admin; HQ only; mounted beside /api/admin/bank-accounts, before the /api/admin catch-all)
-/api/admin/mercury    → admin_mercury.ts (D710: each Axal entity's read-only Mercury connection, its accounts, transactions and reconciliation matches, and D749's Not ours marks; connect is the Super Admin's behind the write bar, the rest an Admin's on HQ. The only home of Axal VC's own accounts, drawn in HQ › Fund administration › Bank accounts, never on a member connector: D879, D880, D883)
+/api/admin/mercury    → admin_mercury.ts (D710: each Axal entity's read-only Mercury connection, its accounts, transactions and reconciliation matches, and D749's Not ours marks; D1183 adds audit-first GET /balances and /monthly chart reads. Connect is the Super Admin's behind the write bar, the rest an Admin's on HQ. The only home of Axal VC's own accounts, drawn in HQ › Fund administration › Bank accounts, never on a member connector: D879, D880, D883)
 /api/eadwyn       → eadwyn.ts          (the Worker AI rail's conversations, their connector switches, and Send/Cancel for a write Eadwyn proposed; D652)
 /api/wellbeing     → wellbeing.ts       (check-ins, the expert directory and bookings; sample experts are seeded outside production only and never shown to members, D643)
 /api               → realtime.ts (WebSocket fan-out, Durable Objects)
@@ -264,6 +263,10 @@ heartbeat also takes `slides`, the viewer's seconds per slide, stored through
 
 D982 (#2773): `admin_program_grants.ts` mounts `/api/admin/program-grants`: HQ's program grants per licence (the grid, one licence, its history, the default terms) under `requireSuperAdmin`, and grant, change terms, pause, resume, end and the defaults under `requireSuperAdminWriteBar` with a reason of at least 10 characters. Each grant write appends one `licence_events` `program_changed` row; the store is migration 553 and `../services/programGrants.ts`. See `documentation/architecture/decisions/D982.md`.
 
+D1156 adds `GET /api/admin/program-grants/licences/:uid/in-use` (HQ Super
+Admin) and `POST /api/licence/mine/programs/report` (local branch Admin).
+Both delegate to `../services/programUsage.ts`; neither accepts member data.
+
 D983 (#2774): `admin_program_requests.ts` mounts `/api/admin/program-grants/requests`, ahead of part 1's routes: the studios' program requests (a grant, a terms change, an end) from HQ's lane and every branch's, under `requireSuperAdmin`, and HQ's approve and decline under `requireSuperAdminWriteBar` with a reason of at least 10 characters. An approval records a draft as a `program_changed` event (`request_approved`); Grant stays `admin_program_grants.ts`'s write. The generic `PATCH /api/admin/escalations/:uid` refuses these kinds. The checks are `../services/programRequests.ts`. See `documentation/architecture/decisions/D983.md`.
 
 D956 (#2789): `admin_programs.ts` adds `PUT /:key/grantable`, Offer to studios, under `requireSuperAdminWriteBar` with a reason: D982's "can be granted" switch, switched on only with a published playbook, as `admin_program_grants.ts`'s defaults write now also requires. The catalogue and `/:key` carry each program's `grant` for the viewer (`../services/programGrantStates.ts`). An approval for one studio (`admin_program_proposals.ts`) opens a `draft` grant (migration 562), which `admin_program_grants.ts`'s grant write takes to `granted`; every other move from a draft is refused. See `documentation/architecture/decisions/D956.md`.
@@ -358,3 +361,5 @@ D1091 (#2956): `google_workspace.ts` mounts `/api/connectors/google-workspace`: 
 D1133: `billing.ts` mounts `/alerts/:id/pay` and `/alerts/:id/update-card` under `/api/billing`, both recent-TOTP gated. They prepare in-page Stripe forms for the caller’s open failed renewal; opening neither confirms a charge nor changes the default card.
 
 D1135: `company.ts` adds member self-leave and validates create/rename; `projects.ts` counts live ventures, adds owner restore within 30 days and sends email-mode team invitations.
+
+D1123: `admin_lab_operations.ts` adds `/cohorts/:cohort/capacity`, the latest stored capacity event for SL6, separately from current Settings. It never returns free-form event details.

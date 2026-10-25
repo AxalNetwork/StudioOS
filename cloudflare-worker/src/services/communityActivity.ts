@@ -72,12 +72,12 @@ export type ActivityQuery = {
   offset: number;
 };
 
-/** The consoles a row links to. Wellbeing is a tab on the admin console until #2375. */
+/** The consoles a row links to. Wellbeing has its own console at /admin/wellbeing (D1121). */
 export const CONSOLE_HREF: Record<ActivityRow['kind'], string> = {
   events: '/admin/events',
   jobs: '/admin/jobs',
   circles: '/admin/circles',
-  wellbeing: '/admin?tab=wellbeing',
+  wellbeing: '/admin/wellbeing',
 };
 
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
@@ -165,7 +165,7 @@ const WELLBEING_SQL = `
   SELECT 'admin' AS actor, a.action AS action, a.exported_at AS at, NULL AS title, NULL AS featured, a.id AS tiebreak
     FROM admin_audit_log a
    WHERE a.report_type = 'wellbeing'
-     AND a.action IN ('expert_verified', 'expert_unverified', 'expert_hidden', 'expert_restored')`;
+     AND a.action IN ('expert_verified', 'expert_unverified', 'expert_hidden', 'expert_restored', 'expert_declined')`;
 
 const BASE: Record<ActivitySource, string> = {
   events: EVENTS_SQL,
@@ -235,6 +235,7 @@ export function shapeRow(src: ActivitySource, r: Raw): ActivityRow {
     case 'expert_unverified': return { ...base, icon: 'expert-unverified', sentence: 'An admin removed a wellbeing expert’s verification.' };
     case 'expert_hidden': return { ...base, icon: 'expert-hidden', sentence: 'An admin hid a wellbeing expert from the directory.' };
     case 'expert_restored': return { ...base, icon: 'expert-restored', sentence: 'An admin restored a wellbeing expert to the directory.' };
+    case 'expert_declined': return { ...base, icon: 'expert-declined', sentence: 'An admin declined a wellbeing expert.' };
     default: return { ...base, icon: 'activity', sentence: by === 'admin' ? 'An admin made a change.' : 'A change was made.' };
   }
 }

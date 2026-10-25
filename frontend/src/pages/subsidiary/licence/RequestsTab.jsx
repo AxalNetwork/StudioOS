@@ -11,12 +11,17 @@
  * "Your requests" lists each with HQ's response time, its status and HQ's
  * answer inline. Everything goes through D799's module; nothing changes until
  * HQ answers.
+ *
+ * D988 (#2779): a sixth, "Request a program", opens GR9's sheet over D984's
+ * read of this licence's programs, and sends one of D983's program requests.
  */
 import React, { useCallback, useEffect, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { api } from '../../../lib/api';
+import { licenceProgramsApi } from '../../../lib/api/licencePrograms';
 import { licenceRequestsApi } from '../../../lib/api/licenceRequests';
 import { reportError } from '../../../lib/log';
+import ProgramRequestSheet from './ProgramRequestSheet';
 import RequestChangeSheet from './RequestChangeSheet';
 import { NOT_RECORDED, renewalTimeline, requestRows } from './licenceTabsModel';
 
@@ -29,13 +34,14 @@ const STATUS_TONE = {
   'Past response time': 'bg-amber-50 text-amber-800 dark:bg-amber-900/30 dark:text-amber-200',
 };
 
-/** The five buttons, in the canvas's order, and the kind each sends. */
+/** The six buttons, in the canvas's order, and the kind each sends (D988 adds the program request). */
 export const REQUEST_BUTTONS = [
   { id: 'renewal', t: 'Request renewal', kind: 'renewal' },
   { id: 'change', t: 'Request a change', kind: 'terms_change' },
   { id: 'seats', t: 'Request seats', kind: 'seat_increase' },
   { id: 'delegate', t: 'Request a delegate', kind: 'delegate' },
   { id: 'non_renewal', t: 'Give notice of non-renewal', kind: 'non_renewal' },
+  { id: 'program', t: 'Request a program', kind: 'program_grant' },
 ];
 
 /** The renewal, delegate and notice requests, which need no sheet: the body each sends. */
@@ -87,15 +93,16 @@ function SimpleRequest({ id, onSent, onCancel, raise }) {
 }
 
 /** The tab, given D799's list and `/mine`. Separate from the loader so a test can draw it. */
-export function RequestsView({ list, mine, today, initialChange = null, raise = licenceRequestsApi.raise, onReload }) {
+export function RequestsView({ list, mine, programs, today, initialChange = null, raise = licenceRequestsApi.raise, onReload }) {
   const [form, setForm] = useState(null);
+  const [programSheet, setProgramSheet] = useState(false);
   const [sheet, setSheet] = useState(initialChange !== null ? { prefillTerm: initialChange || null, startChip: null } : null);
   const [sent, setSent] = useState('');
   const licence = mine?.licence || null;
   const hidden = new Map((list?.kinds_hidden || []).map((h) => [h.kind, h.reason]));
   const timeline = renewalTimeline(licence?.renews_on, mine?.terms?.non_renewal_notice_days ?? null, today);
   const rows = requestRows(list?.items, list?.response_hours || {});
-  const done = (row) => { setForm(null); setSheet(null); setSent(`Sent to HQ${row?.due_at ? `. HQ answers by ${String(row.due_at).slice(0, 10)}` : ''}.`); onReload?.(); };
+  const done = (row) => { setForm(null); setSheet(null); setProgramSheet(false); setSent(`Sent to HQ${row?.due_at ? `. HQ answers by ${String(row.due_at).slice(0, 10)}` : ''}.`); onReload?.(); };
 
   return (
     <div className="space-y-4" data-testid="requests-tab">
@@ -104,7 +111,8 @@ export function RequestsView({ list, mine, today, initialChange = null, raise = 
           <button key={b.id} type="button" className={BTN} disabled={hidden.has(b.kind)} title={hidden.get(b.kind) || undefined}
             onClick={() => {
               setSent('');
-              if (b.id === 'change') { setForm(null); setSheet({ prefillTerm: null, startChip: 'territory' }); }
+              if (b.id === 'program') { setForm(null); setSheet(null); setProgramSheet(true); }
+              else if (b.id === 'change') { setForm(null); setSheet({ prefillTerm: null, startChip: 'territory' }); }
               else if (b.id === 'seats') { setForm(null); setSheet({ prefillTerm: null, startChip: 'seats' }); }
               else { setSheet(null); setForm(b.id); }
             }}>
@@ -170,6 +178,15 @@ export function RequestsView({ list, mine, today, initialChange = null, raise = 
         onSent={done}
         api={{ raise }}
       />
+      <ProgramRequestSheet
+        open={programSheet}
+        programs={programs}
+        requests={list}
+        initialAsk="grant"
+        onClose={() => setProgramSheet(false)}
+        onSent={done}
+        api={{ raise }}
+      />
     </div>
   );
 }
@@ -177,6 +194,8 @@ export function RequestsView({ list, mine, today, initialChange = null, raise = 
 export default function RequestsTab() {
   const [list, setList] = useState(undefined);
   const [mine, setMine] = useState(null);
+  // D988: the programs GR9's sheet picks from; undefined while reading, null when unreadable.
+  const [programs, setPrograms] = useState(undefined);
   const [params] = useSearchParams();
   const change = params.has('change') ? params.get('change') : null;
   const load = useCallback(() => {
@@ -185,9 +204,12 @@ export default function RequestsTab() {
       .catch((e) => { reportError('licence_requests_list_failed', e); setList(null); });
     // `/mine` gives the licence the sheet and the timeline read; unread, they say "Not recorded".
     api.myLicence().then(setMine).catch(() => setMine(null));
+    licenceProgramsApi.mine()
+      .then((d) => setPrograms(Array.isArray(d?.programs) ? d.programs : null))
+      .catch((e) => { reportError('licence_programs_read_failed', e); setPrograms(null); });
   }, []);
   useEffect(load, [load]);
   if (list === undefined) return <p className="text-sm text-gray-500">Loading…</p>;
   if (list === null) return <p className="text-sm text-red-600">Your requests could not be read. Nothing here is a statement that you have sent none.</p>;
-  return <RequestsView list={list} mine={mine} today={new Date().toISOString()} initialChange={change} onReload={load} />;
+  return <RequestsView list={list} mine={mine} programs={programs} today={new Date().toISOString()} initialChange={change} onReload={load} />;
 }

@@ -102,6 +102,11 @@ item of HQ's Licences strip, built to its canvas under the shared admin page
 header (D936). No grant is stored yet, so its cells say "Not recorded" — see
 its own README.
 
+`productTesting/` is D1195's Product testing at `/admin/platform/product-testing`,
+HQ only, under the shared admin page header: five tabs at their own addresses,
+with Review and Programs drawn by D815's console in `consoles/` — see its own
+README.
+
 `payments/` is D1008's Payments at `/admin/platform/payments`, HQ only, under
 Platform, built to its canvas under the shared admin page header (D936).
 `/admin?tab=payments` redirects to it; today's editor opens on request at the

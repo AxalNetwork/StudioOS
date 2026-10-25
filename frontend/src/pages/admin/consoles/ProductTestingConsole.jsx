@@ -20,6 +20,11 @@ import {
  *   · Every programme, by status, with Open and Close as D812 allows them.
  *   · HQ's own: "New programme" for an Axal VC product, with the same form and
  *     the same Pick screen as a partner's.
+ *
+ * D1195 (#2382): the page's Programs tab draws this console as it was; its
+ * Review tab (`view="review"`, TST2) draws only what waits on HQ: the partner
+ * programmes waiting for approval, the approved ones not yet open, and the
+ * ones sent back, with the same actions and dialogs.
  */
 const btnCls = 'inline-flex items-center gap-1 rounded-md border border-[#dcd9e3] bg-white px-2.5 py-1 text-xs font-semibold text-gray-700 hover:bg-gray-50 disabled:opacity-50 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-200 dark:hover:bg-gray-800';
 const primaryCls = 'inline-flex items-center gap-1 rounded-md bg-axal-violet px-3 py-1.5 text-xs font-bold text-white hover:bg-axal-violet-deep disabled:opacity-50 dark:bg-violet-500 dark:hover:bg-violet-400';
@@ -33,17 +38,17 @@ const roleNames = (roles) => (Array.isArray(roles) ? roles : [])
 
 export const PRODUCT_TESTING_HOLDER_ONLY = 'Product testing is reviewed by the Super Admin.';
 
-export function ProductTestingPanel({ api = adminTestingApi }) {
+export function ProductTestingPanel({ api = adminTestingApi, view = 'programs' }) {
   const holder = isSuperAdminUser(useAuth().user);
   if (!holder) {
     return <p className="p-6 text-sm text-gray-700 dark:text-gray-300" data-testid="product-testing-holder-only">{PRODUCT_TESTING_HOLDER_ONLY}</p>;
   }
-  return <ProductTestingConsole api={api} />;
+  return <ProductTestingConsole api={api} view={view} />;
 }
 
 const NONE = { kind: null, programme: null };
 
-export function ProductTestingConsole({ api = adminTestingApi }) {
+export function ProductTestingConsole({ api = adminTestingApi, view = 'programs' }) {
   const [state, setState] = useState({ status: 'loading', items: [] });
   // { kind: 'new' | 'edit' | 'applicants' | 'reject', programme }
   const [dialog, setDialog] = useState(NONE);
@@ -94,6 +99,9 @@ export function ProductTestingConsole({ api = adminTestingApi }) {
 
   const waiting = state.items.filter((p) => p.status === 'submitted' && p.owner_kind === 'partner');
   const groups = byStatus(state.items);
+  const review = view === 'review';
+  const approved = state.items.filter((p) => p.status === 'approved');
+  const sentBack = state.items.filter((p) => p.status === 'rejected');
 
   const actions = (p) => (
     <div className="flex flex-wrap gap-2">
@@ -147,15 +155,15 @@ export function ProductTestingConsole({ api = adminTestingApi }) {
   );
 
   return (
-    <div className="space-y-6 p-4" data-testid="product-testing-console">
-      <div className="flex flex-wrap items-center justify-between gap-3">
+    <div className="space-y-6 p-4" data-testid={review ? 'product-testing-review' : 'product-testing-console'}>
+      {!review && <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
           <h2 className="text-lg font-bold">Product testing</h2>
           <p className={`text-[12.5px] ${muted}`}>A partner&rsquo;s programme opens once you approve it. Testers hear from the owner through Axal VC Mail.</p>
         </div>
         <button type="button" className={primaryCls} onClick={() => { setNotice(null); setDialog({ kind: 'new', programme: null }); }}
           data-testid="testing-new-programme">New programme</button>
-      </div>
+      </div>}
       {notice && (
         <p role={notice.ok ? 'status' : 'alert'} data-testid="testing-notice"
           className={`text-[12.5px] font-semibold ${notice.ok ? 'text-emerald-700 dark:text-emerald-300' : 'text-red-700 dark:text-red-300'}`}>
@@ -170,7 +178,24 @@ export function ProductTestingConsole({ api = adminTestingApi }) {
           : <ul className="space-y-2">{waiting.map((p) => row(p, true))}</ul>}
       </section>
 
-      <section data-testid="testing-all">
+      {review && (
+        <>
+          <section data-testid="testing-approved">
+            <h3 className="mb-2 text-[11px] font-extrabold uppercase tracking-[.09em] text-axal-faint">Approved, not yet open · {approved.length}</h3>
+            {approved.length === 0
+              ? <p className={`text-[12.5px] ${muted}`} data-testid="testing-approved-empty">No approved programme is waiting to open.</p>
+              : <ul className="space-y-2">{approved.map((p) => row(p, false))}</ul>}
+          </section>
+          <section data-testid="testing-sent-back">
+            <h3 className="mb-2 text-[11px] font-extrabold uppercase tracking-[.09em] text-axal-faint">Sent back · {sentBack.length}</h3>
+            {sentBack.length === 0
+              ? <p className={`text-[12.5px] ${muted}`} data-testid="testing-sent-back-empty">No programme is sent back.</p>
+              : <ul className="space-y-2">{sentBack.map((p) => row(p, false))}</ul>}
+          </section>
+        </>
+      )}
+
+      {!review && <section data-testid="testing-all">
         <h3 className="mb-2 text-[11px] font-extrabold uppercase tracking-[.09em] text-axal-faint">All programmes</h3>
         {groups.length === 0 ? (
           <p className={`text-[12.5px] ${muted}`} data-testid="testing-all-empty">No testing programmes yet. Start one for an Axal VC product with New programme.</p>
@@ -180,7 +205,7 @@ export function ProductTestingConsole({ api = adminTestingApi }) {
             <ul className="space-y-2">{g.items.map((p) => row(p, false))}</ul>
           </div>
         ))}
-      </section>
+      </section>}
 
       {(dialog.kind === 'new' || dialog.kind === 'edit') && (
         <Lightbox label={dialog.kind === 'edit' ? 'Edit programme' : 'New programme'} onClose={close} testId="testing-form-dialog"
