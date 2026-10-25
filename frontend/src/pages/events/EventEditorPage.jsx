@@ -85,7 +85,7 @@ export default function EventEditorPage() {
           title: ev.title || '', type: ev.type || 'meetup',
           summary: ev.summary || '', description: ev.description || '',
           starts_at: eventLocalInput(ev.starts_at, ev.timezone || 'UTC'), ends_at: eventLocalInput(ev.ends_at, ev.timezone || 'UTC'),
-          timezone: ev.timezone || browserTz,
+          timezone: ev.timezone || 'UTC',
           location_kind: ev.location_kind || 'virtual',
           location_text: ev.location_text || '', location_url: ev.location_url || '',
           cover_url: ev.cover_url || '',

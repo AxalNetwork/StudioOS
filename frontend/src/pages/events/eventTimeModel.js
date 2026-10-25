@@ -12,11 +12,11 @@ export function eventLocalInput(value, timezone) {
     return `${p.year}-${p.month}-${p.day}T${p.hour}:${p.minute}`;
   } catch { return ''; }
 }
-/** Preserve seconds and explicit offsets (including the second DST occurrence) on an unchanged edit. */
+/** Preserve seconds and the exact instant (including the second DST occurrence) on an unchanged edit. */
 export function eventTimePayload(form, saved) {
   const value = key => {
     if (!form[key]) return null;
-    if (saved && form.timezone === (saved.timezone || 'UTC') && form[key] === eventLocalInput(saved[key], form.timezone)) return storedStamp(saved[key]);
+    if (saved && form.timezone === (saved.timezone || 'UTC') && form[key] === eventLocalInput(saved[key], form.timezone)) return new Date(storedStamp(saved[key])).toISOString();
     return form[key];
   };
   return { starts_at: value('starts_at'), ends_at: value('ends_at'), timezone: form.timezone };
