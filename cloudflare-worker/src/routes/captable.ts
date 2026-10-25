@@ -48,6 +48,10 @@ import {
   saveScenario, logScenarioAct, loadScenarioByUid as loadByUid, type ScenarioRow,
 } from '../services/capTableWrites';
 import {
+  RecordError, acceptProposal, createClass, dismissProposal, historyPage, propose, readHistory, readRecord, recordIssuance,
+  setCurrency, updateClass, voidIssuance, type RecordActor,
+} from '../services/capTableRecord';
+import {
   actorHash, auditStatement, equityPlanBody, num, readEquityPlan, readRegister, registerCsv, snapshotPdf, withOwnership,
   type RegisterScope,
 } from '../services/capTableRegister';
@@ -988,6 +992,137 @@ captable.get('/live', async (c) => {
     holders: owned.holders.map((h) => (showEmail ? h : { ...h, email: undefined })),
     securities: register.securities.map((s) => ({ ...s, shares_authorized: num(s.shares_authorized), shares_issued: num(s.shares_issued) })),
   });
+});
+
+/**
+ * D1017 (#2854) — the record: what was issued, kept apart from the model
+ * (migration 573, `services/capTableRecord.ts`).
+ *
+ *   GET   /record/:projectId                              by holder, by class, outstanding, fully diluted, instruments, proposals
+ *   GET   /record/:projectId/history?page=&page_size=     issuances and the cap table's activity rows, newest first, exact total
+ *   POST  /record/:projectId/proposals                    propose (owner, co-founder, admin)
+ *   POST  /record/:projectId/proposals/:uid/accept        record a proposal (owner, admin)
+ *   POST  /record/:projectId/proposals/:uid/dismiss       dismiss one (owner, admin)
+ *   POST  /record/:projectId/issuances                    record directly (owner, admin)
+ *   POST  /record/:projectId/issuances/:uid/void          void, with a reason (owner, admin)
+ *   POST  /record/:projectId/classes                      a share class (owner, admin)
+ *   PATCH /record/:projectId/classes/:uid
+ *   PUT   /record/:projectId/currency                     the venture's ISO code (owner, admin)
+ *
+ * Reads take the venture's read gate. Every write takes the Raise + Grow plan
+ * and the venture's write gate (#2651), and an admin's carries a reason.
+ * A co-founder proposes; only the owner records (owner question 2 read as A).
+ */
+async function recordProject(c: Ctx, user: AuthUser) {
+  const projectId = Number(c.req.param('projectId'));
+  if (!Number.isSafeInteger(projectId) || projectId <= 0) throw new HttpError(400, { code: 'invalid_project', detail: 'Invalid project_id' });
+  const proj = await loadProject(c, projectId, user);
+  if (!proj) throw new HttpError(404, 'Project not found');
+  return { projectId, proj };
+}
+
+async function recordReader(c: Ctx) {
+  const user = await requireAuth(c);
+  const { projectId, proj } = await recordProject(c, user);
+  if (!canReadProject(user, proj)) throw new HttpError(403, "You don't have access to that project");
+  return projectId;
+}
+
+/** The writer, and which of the three it is. `records`: only the owner or an admin may. */
+async function recordWriter(c: Ctx, records: boolean): Promise<{ projectId: number; actor: RecordActor }> {
+  const user = await requireAuth(c);
+  ensureTier(user, 'studio');
+  const { projectId, proj } = await recordProject(c, user);
+  if (!canWriteProject(user, proj)) throw new HttpError(403, "You don't have access to that project");
+  const role = user.role.toLowerCase();
+  const founderOwns = role === 'founder' && !!user.founder_id && user.founder_id === proj.founder_id;
+  const actorRole: RecordActor['role'] = role === 'admin' ? 'admin'
+    : founderOwns || (await getProjectMembershipRole(c.env, projectId, user.id)) === 'owner' ? 'owner' : 'cofounder';
+  if (records && actorRole === 'cofounder') {
+    throw new HttpError(403, { error: 'owner_records', code: 'owner_records', message: 'A co-founder proposes; only the venture’s owner records it.', detail: 'A co-founder proposes; only the venture’s owner records it.' });
+  }
+  await auditMemberWrite(c, user, proj);
+  return { projectId, actor: { id: Number(user.id), role: actorRole } };
+}
+
+function recordError(c: Ctx, e: unknown) {
+  if (e instanceof Response) return e;
+  if (e instanceof RecordError) return refuse(c, e.status, { code: e.code, message: e.sentence, extra: { code: e.code, ...e.extra } });
+  return asJsonError(c, e);
+}
+
+const recordBody = async (c: Ctx): Promise<Record<string, unknown>> => {
+  const b = await c.req.json().catch(() => null);
+  return b && typeof b === 'object' && !Array.isArray(b) ? b : {};
+};
+
+captable.get('/record/:projectId', async (c) => {
+  try { return c.json(await readRecord(c.env, await recordReader(c))); }
+  catch (e) { return recordError(c, e); }
+});
+
+captable.get('/record/:projectId/history', async (c) => {
+  try {
+    const projectId = await recordReader(c);
+    const { page, size } = historyPage({ page: c.req.query('page'), page_size: c.req.query('page_size') });
+    return c.json(await readHistory(c.env, projectId, page, size));
+  } catch (e) { return recordError(c, e); }
+});
+
+captable.post('/record/:projectId/proposals', async (c) => {
+  try {
+    const { projectId, actor } = await recordWriter(c, false);
+    return c.json({ issuance: await propose(c.env, projectId, actor, await recordBody(c)) }, 201);
+  } catch (e) { return recordError(c, e); }
+});
+
+captable.post('/record/:projectId/proposals/:uid/accept', async (c) => {
+  try {
+    const { projectId, actor } = await recordWriter(c, true);
+    return c.json({ issuance: await acceptProposal(c.env, projectId, actor, c.req.param('uid'), await recordBody(c)) });
+  } catch (e) { return recordError(c, e); }
+});
+
+captable.post('/record/:projectId/proposals/:uid/dismiss', async (c) => {
+  try {
+    const { projectId, actor } = await recordWriter(c, true);
+    return c.json({ issuance: await dismissProposal(c.env, projectId, actor, c.req.param('uid'), await recordBody(c)) });
+  } catch (e) { return recordError(c, e); }
+});
+
+captable.post('/record/:projectId/issuances', async (c) => {
+  try {
+    const { projectId, actor } = await recordWriter(c, true);
+    return c.json({ issuance: await recordIssuance(c.env, projectId, actor, await recordBody(c)) }, 201);
+  } catch (e) { return recordError(c, e); }
+});
+
+captable.post('/record/:projectId/issuances/:uid/void', async (c) => {
+  try {
+    const { projectId, actor } = await recordWriter(c, true);
+    return c.json({ issuance: await voidIssuance(c.env, projectId, actor, c.req.param('uid'), await recordBody(c)) });
+  } catch (e) { return recordError(c, e); }
+});
+
+captable.post('/record/:projectId/classes', async (c) => {
+  try {
+    const { projectId, actor } = await recordWriter(c, true);
+    return c.json({ class: await createClass(c.env, projectId, actor, await recordBody(c)) }, 201);
+  } catch (e) { return recordError(c, e); }
+});
+
+captable.patch('/record/:projectId/classes/:uid', async (c) => {
+  try {
+    const { projectId, actor } = await recordWriter(c, true);
+    return c.json({ class: await updateClass(c.env, projectId, actor, c.req.param('uid'), await recordBody(c)) });
+  } catch (e) { return recordError(c, e); }
+});
+
+captable.put('/record/:projectId/currency', async (c) => {
+  try {
+    const { projectId, actor } = await recordWriter(c, true);
+    return c.json({ currency: await setCurrency(c.env, projectId, actor, await recordBody(c)) });
+  } catch (e) { return recordError(c, e); }
 });
 
 /**
