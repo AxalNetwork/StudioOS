@@ -3715,6 +3715,8 @@ function AppInner() {
       <Route path="/raise/calls" element={guard(labRoles(['admin', 'founder']), <HistoryRedirect to="/raise/capital-relationships" hash="#calls" />)} />
       {/* D1025 (#2862, CT11): a Cap table proposal's drawer, over the tool; its id is a record proposal's uid or `mercury-<n>`. */}
       <Route path="/raise/cap-table/proposal/:proposal" element={guard(labRoles(['admin', 'founder']), <CycleRoute cycle="raise" slug="cap-table" capTableProposal />)} />
+      {/* D1023 (#2860, CT4): an instrument's drawer, over Instruments; its id is the record's SAFE or note uid. */}
+      <Route path="/raise/cap-table/instrument/:instrument" element={guard(labRoles(['admin', 'founder']), <CycleRoute cycle="raise" slug="cap-table" capTableProposal />)} />
       <Route path="/raise/:slug" element={guard(labRoles(['admin', 'founder']), <CycleRoute cycle="raise" />)} />
       <Route path="/raise/:slug/:id" element={guard(labRoles(['admin', 'founder']), <CycleRoute cycle="raise" record />)} />
       <Route path="/raise/:slug/new" element={guard(labRoles(['admin', 'founder']), <CycleRoute cycle="raise" adding />)} />
