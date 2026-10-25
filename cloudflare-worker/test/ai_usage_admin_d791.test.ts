@@ -439,9 +439,12 @@ test('the member search: an exact id, or a case-insensitive email prefix, at mos
 });
 
 // 9 ───────────────────────────────────────────────────────────────────────────
-test('one member: by model and by day, the same totals as their top-members row, balance, allowance, spend limit, pause and cap with history', async () => {
+test('one member: by model and by day, the same totals as their top-members row, balance, allowance, spend limit, pause and cap with history', async (t) => {
   // Mutations checked: the detail summing outside the range, or another member's rows; the history missing an action
   // or another member's line; the balance read as zero when unreadable; the cap or pause left out.
+  // The routes read the clock and these runs are dated from NOW, so the clock is NOW: on the real one,
+  // the 7d range stopped holding the runs two days before NOW on 2026-10-21.
+  t.mock.timers.enable({ apis: ['Date'], now: NOW });
   const w = world();
   try {
     w.log({ cost: 0.002, charged: 2500, at: at(H) });
