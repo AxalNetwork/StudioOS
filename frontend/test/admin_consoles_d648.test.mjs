@@ -10,7 +10,8 @@
  *   · empty: the read answered with nothing, and the console says so;
  *   · unreadable: the read failed, and the console says it could not be read
  *     and offers Try again, never the empty list a failed read used to draw.
- * And for the shell: opening one tab calls that console's reads and no other.
+ * And for the pages (D938 retired the shell; each console is a page at its
+ * own address): opening one calls that console's reads and no other.
  *
  *   node --import ./frontend/test/_deck-loader.mjs --test frontend/test/admin_consoles_d648.test.mjs
  */
@@ -22,7 +23,7 @@ import React, { act } from 'react';
 import { createRoot } from 'react-dom/client';
 import { MemoryRouter } from 'react-router-dom';
 import { api } from '../src/lib/api.js';
-import AdminPage from '../src/pages/AdminPage.jsx';
+import * as PAGES from '../src/pages/admin/ConsolePages.jsx';
 import { LegalPanel, TemplateUsageModal } from '../src/pages/admin/consoles/LegalConsole.jsx';
 import { renderToStaticMarkup } from 'react-dom/server';
 import UsersConsole from '../src/pages/admin/consoles/UsersConsole.jsx';
@@ -106,13 +107,13 @@ function stubApi(answers) {
 }
 function restoreApi() { Object.assign(api, ORIGINAL); }
 
-async function mount(element, search = '') {
+async function mount(element, search = '', path = '/admin') {
   const restoreDoc = installDocument(search);
   const container = globalThis.document.createElement('div');
   globalThis.document.body.appendChild(container);
   const root = createRoot(container);
   await act(async () => {
-    root.render(React.createElement(MemoryRouter, { initialEntries: [`/admin${search}`] }, element));
+    root.render(React.createElement(MemoryRouter, { initialEntries: [`${path}${search}`] }, element));
   });
   // Let a resolved or rejected read settle into state.
   await act(async () => { await new Promise((r) => setTimeout(r, 0)); });
@@ -219,53 +220,52 @@ test('Billing: a failed disputes read draws Unreadable, never "No disputes loade
     && list.indexOf('<ConsoleUnreadable') < list.indexOf('No disputes loaded'), 'the failed branch is not drawn before the empty one');
 });
 
-// ── The shell fetches only the open console's data ──────────────────────────
-const OWN = {
-  users: ['adminListUsers', 'trustScoreBatch'],
-  // D989 (#2380): ?tab=profiles forwards to /admin/partner-profiles before this page mounts.
-  kyc: ['kycAdminQueue'],
-  // D997 (#2378): ?tab=personas forwards to /admin/persona-segments before this page mounts.
-  directory: ['adminListDirectoryPartners'],
+// ── Each page fetches only its own console's data (D938) ────────────────────
+const OWN = [
+  ['AllAccountsPage', '/admin/accounts/all', ['adminListUsers', 'trustScoreBatch']],
+  ['KycPage', '/admin/kyc', ['kycAdminQueue']],
+  ['DirectoryPage', '/admin/directory', ['adminListDirectoryPartners']],
   // Integration keys and GitHub Sync left the console for HQ's own page
   // (the owner's ruling, 2026-10-20); `integration_keys_hq_only.test.mjs`.
-  promos: ['adminListPromos', 'catalogProducts'],
-  // D1008 (#2386): ?tab=payments forwards to /admin/platform/payments before this page mounts.
-  wellbeing: ['wellbeingExperts'],
-};
+  ['PromoCodesPage', '/admin/platform/promo-codes', ['adminListPromos', 'catalogProducts']],
+  ['AdminWellbeingPage', '/admin/wellbeing', ['wellbeingExperts']],
+];
 /** The reads every tab used to make before it rendered anything. */
 const SHARED_BEFORE = ['adminListUsers', 'adminListProfiles', 'kycAdminQueue', 'trustScoreBatch'];
 
-for (const [tab, own] of Object.entries(OWN)) {
-  test(`opening ?tab=${tab} reads that console's data and nothing else`, async () => {
+for (const [name, path, own] of OWN) {
+  test(`opening ${path} reads that console's data and nothing else`, async () => {
     const calls = stubApi({});
-    const v = await mount(React.createElement(AdminPage), `?tab=${tab}`);
+    const v = await mount(React.createElement(PAGES[name]), '', path);
     try {
       const made = [...new Set(calls)];
-      assert.ok(made.length > 0, `${tab} made no read at all`);
-      for (const k of made) assert.ok(own.includes(k), `${tab} called ${k}, which is not its own read`);
+      assert.ok(made.length > 0, `${path} made no read at all`);
+      for (const k of made) assert.ok(own.includes(k), `${path} called ${k}, which is not its own read`);
       for (const k of SHARED_BEFORE) {
-        if (!own.includes(k)) assert.ok(!made.includes(k), `${tab} still reads ${k} before it renders`);
+        if (!own.includes(k)) assert.ok(!made.includes(k), `${path} still reads ${k} before it renders`);
       }
     } finally { await v.unmount(); restoreApi(); }
   });
 }
 
-test('the shell keeps its tabs, its ?tab= links and its admin-tab-* hooks', async () => {
+test('a console page draws its header at once, with no "Admin Console" title and no section dropdown (D938)', async () => {
   stubApi({});
-  const v = await mount(React.createElement(AdminPage), '?tab=directory');
+  const v = await mount(React.createElement(PAGES.DirectoryPage), '?moved=directory', '/admin/directory');
   try {
-    assert.match(v.text(), /Admin Console/);
-    assert.match(v.text(), /Directory/, 'the dropdown does not name the open console');
+    assert.match(v.text(), /Community/, 'the crumb does not name the section');
+    assert.match(v.text(), /Directory/);
+    assert.match(v.text(), /The Admin Console has moved: Directory now lives under Community\./, 'the moved notice is missing');
+    assert.doesNotMatch(v.text(), /Admin Console[^ ]|Select admin section/);
   } finally { await v.unmount(); restoreApi(); }
-  const shell = readFileSync(resolve(process.cwd(), 'frontend/src/pages/AdminPage.jsx'), 'utf8');
-  assert.match(shell, /data-testid=\{`admin-tab-\$\{s\.value\}`\}/);
-  assert.ok(shell.split('\n').length < 300, 'the shell is a shell: the consoles live in their own files');
+  const code = readFileSync(resolve(process.cwd(), 'frontend/src/pages/admin/ConsolePages.jsx'), 'utf8');
+  assert.doesNotMatch(code, /admin-tab-|ADMIN_SECTIONS|<h1/, 'a page draws the old shell\'s hooks or a title of its own');
+  assert.equal([...code.matchAll(/<AdminPageHeader\b/g)].length, 1, 'the pages share one header');
 });
 
 test('HQ · Accounts mounts the Users console alone, not the whole Admin Console', () => {
   const page = readFileSync(resolve(process.cwd(), 'frontend/src/pages/hq/AccountsPage.jsx'), 'utf8');
   assert.match(page, /<UsersConsole onImpersonate=\{onImpersonate\} \/>/);
-  assert.doesNotMatch(page, /<AdminPage\b/);
+  assert.doesNotMatch(page, /<AdminPage\b|<AllAccountsPage\b/);
   assert.doesNotMatch(page, /from '\.\.\/AdminPage'/);
 });
 

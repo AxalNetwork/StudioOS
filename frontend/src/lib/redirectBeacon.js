@@ -19,7 +19,7 @@ export function redirectPatternFor(pathname, search = '') {
   if (typeof pathname !== 'string' || !pathname) return null;
   if (matchPath({ path: '/admin', end: true }, pathname)) {
     const tab = new URLSearchParams(search).get('tab');
-    return ADMIN_TAB_REDIRECTS.find((r) => r.path === `/admin?tab=${tab}`)?.path || null;
+    return ADMIN_TAB_REDIRECTS.find((r) => r.path === `/admin?tab=${tab}`)?.path || '/admin';
   }
   // The list names each exact pattern before its splat (`/notifications`, then `/notifications/*`).
   const hit = REDIRECT_ROUTES.find((r) => !r.path.includes('?') && matchPath({ path: r.path, end: true }, pathname));
