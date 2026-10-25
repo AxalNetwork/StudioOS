@@ -3,6 +3,7 @@ import { useActiveCompany, useUpdateCompanyDetails } from '../contexts/ActiveCom
 import { useAuth } from '../hooks/useAuthSync';
 import PartnerFirmProfileCard from './partner/PartnerFirmProfileCard';
 import { api, setActiveCompanyId } from '../lib/api';
+import { useCompanySwitch } from '../ui/CompanySwitcher';
 import { bpsPercent } from '../lib/bps';
 import { safeReadJSON } from '../lib/storage';
 import { Lock } from 'lucide-react';
@@ -765,7 +766,7 @@ function WorkspaceCard({ row, flash }) {
 }
 
 function DangerZoneCard({ uid, row, rights, flash }) {
-  const { setCompany } = useActiveCompany();
+  const { leave: leaveCompany } = useCompanySwitch();
   const [confirming, setConfirming] = useState(false);
   const [busy, setBusy] = useState(false);
   const name = row?.company_name || 'this company';
@@ -773,10 +774,9 @@ function DangerZoneCard({ uid, row, rights, flash }) {
   const leave = async () => {
     setBusy(true);
     try {
-      await api.removeCompanyMember(uid, rights.myUserId);
+      await leaveCompany(uid);
       // The company is gone from under this page, so drop it from the switcher
       // rather than leaving a stale selection pointing at a 404.
-      setCompany(null);
       flash(`You have left ${name}`);
     } catch (e) {
       flash(e?.message || 'Could not leave the company', 'error');

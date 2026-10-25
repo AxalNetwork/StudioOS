@@ -1605,3 +1605,9 @@ also renders the aggregate response on the new Files, Access and Activity tabs,
 before any owner-detail derivation. It reuses `AdminRoomSummary` from the files
 workspace, preserves Unreadable/Try again, and offers no owner actions. The full
 admin/support tab design remains #2987's.
+
+D1135 (#3015): Company Settings' existing Leave company confirmation now posts
+`/api/company/:uid/leave` through the switcher's shared action. It removes the
+membership and clears a departed active selection. Explorers have no Add a new
+company control in the switcher. `POST /api/projects/:id/restore` is a founder's
+owner-only undo within 30 days and available plan space; no new page is added.

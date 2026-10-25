@@ -38,6 +38,7 @@ import { recoveryCoolOff } from './middleware/recoveryCoolOff';
 import scoring from './routes/scoring';
 import labReportShares from './routes/lab_report_shares';
 import projects from './routes/projects';
+import accountCompanies from './routes/account_companies';
 import legal from './routes/legal';
 import legalcap from './routes/legalcap';
 import partners from './routes/partners';
@@ -874,6 +875,9 @@ for (const p of INVESTOR_PRO_PREFIXES) {
 app.route('/api/scoring', scoring);
 // D588 (#1215) — a founder shares one official scoring run with one named account.
 app.route('/api/lab-report-shares', labReportShares);
+// D1136 (#3016): the caller's own companies, ventures and invitations, and answering an invitation signed in.
+// Before `projects` and `companyRoutes`; the answer paths are literal `invitations/<id>/accept|decline`.
+app.route('/api', accountCompanies);
 app.route('/api/projects', projects);
 app.route('/api/legal', legal);
 app.route('/api/legalcap', legalcap);
