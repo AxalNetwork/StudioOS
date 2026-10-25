@@ -50,8 +50,7 @@ const MARKETPLACE = between(page, 'function Marketplace(', 'function nextSteps('
 const CLAIM = between(page, 'function ClaimModal(', 'const CLAIM_STATE = {');
 const MYPERKS = between(page, 'const CLAIM_STATE = {', 'const INPUT = ');
 const PERF = between(page, 'function ListingPerformance(', 'function PartnerConsole(');
-const CONSOLE = between(page, 'function PartnerConsole(', 'function ReviewQueue(');
-const REVIEW = between(page, 'function ReviewQueue(', 'export default function PerksPage(');
+const CONSOLE = between(page, 'function PartnerConsole(', 'export const PERKS_REVIEW_PATH');
 const MARKET_PAGE = between(page, 'function PerksMarket(', '</main>');
 
 /* ---------------------------------------------------------------- *
@@ -296,15 +295,21 @@ test('the standalone page mounts no Worker rail, as requested by the owner', () 
 
 test('every perk api method the page calls is defined and mounted', () => {
   const called = [...apiCallsIn(pageRaw)].filter((m) => m.startsWith('perk'));
-  for (const m of ['perkStats', 'perkClaimsForListing', 'perkRedeem', 'perkRate', 'perkUpdate', 'perkReview']) {
+  // D962: the admin review moved to Programs › Perks › Queue, so the page no longer calls perkReview.
+  for (const m of ['perkStats', 'perkClaimsForListing', 'perkRedeem', 'perkRate', 'perkUpdate']) {
     assert.ok(called.includes(m), `the page no longer calls ${m}`);
   }
   const defined = apiMethodNames(raw('frontend/src/lib/api.js'));
   for (const m of called) assert.ok(defined.has(m), `api.js does not define ${m}`);
 });
 
-test('the admin queue writes the featured flag and the editorial quote', () => {
-  assert.match(REVIEW, /\.\.\.\(featured\[uid\] \? \{ featured: true \} : \{\}\)/);
-  assert.match(REVIEW, /\.\.\.\(editorial\[uid\] \? \{ editorial_note: editorial\[uid\] \} : \{\}\)/);
+test('the admin queue writes the featured flag and the editorial quote, from Programs › Perks › Queue (D962)', () => {
+  // D962 (#2795): the /perks Review queue tab is a link to the program page's Queue, whose dialogs write.
+  assert.match(page, /export const PERKS_REVIEW_PATH = '\/admin\/programs\/perks\/queue';/);
+  assert.match(page, /k: 'review', label: 'Review queue', icon: ClipboardCheck, to: PERKS_REVIEW_PATH/);
+  assert.doesNotMatch(page, /api\.perkReview\(/, 'the member page makes no review write of its own');
+  const model = raw('frontend/src/pages/admin/programs/programPagesModel.js');
+  assert.match(model, /if \(featured\) body\.featured = true;/);
+  assert.match(model, /if \(line\) body\.editorial_note = line;/);
   assert.match(worker, /const editorial = b\?\.editorial_note === undefined \? perk\.editorial_note/);
 });

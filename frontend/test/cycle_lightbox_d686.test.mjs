@@ -221,7 +221,7 @@ test('ActionSheet: the header, the pills with aria-current, the banner role, the
 test('the three action routes are literal routes with their guard and `lightbox`, ahead of their slug route; the redirects keep the search and add the hash', () => {
   const app = read('frontend/src/App.jsx');
   const routes = [
-    ['/build/connect', "guard(['admin', 'founder'], <CycleRoute cycle=\"build\" lightbox />)", '/build/:slug'],
+    ['/build/connect', "guard(labRoles(['admin', 'founder']), <CycleRoute cycle=\"build\" lightbox />)", '/build/:slug'],
     ['/raise/call', "guard(labRoles(['admin', 'founder']), <CycleRoute cycle=\"raise\" lightbox />)", '/raise/:slug'],
     ['/grow/update', "guard(['admin', 'founder'], <CycleRoute cycle=\"grow\" lightbox />)", '/grow/:slug'],
     ['/validate/record', "guard(labRoles(['admin', 'founder']), <CycleRoute cycle=\"validate\" lightbox />)", '/validate/:slug'],

@@ -11,9 +11,12 @@
  *
  * Speaker notes are each card's `notes` (D898's slide model, #2676); a card
  * with none says so. They leave the venture only in an export the founder
- * asks to carry them, never in a share link. WHAT IS NOT THERE YET. No card records its
- * source yet (part 2), so "Show sources" says that on each card. Google
- * Slides is part 10: its option is drawn, unavailable, with the reason.
+ * asks to carry them, never in a share link. "Show sources" draws each
+ * figure's binding (D896's, written on every figure New deck fills, D897):
+ * its area, grade and the day it was read (D1111). A figure with no binding,
+ * or bound to a slot nothing filled, says its source is not recorded. WHAT IS
+ * NOT THERE YET. Google Slides is part 10: its option is drawn, unavailable,
+ * with the reason.
  */
 
 import { NOT_RECORDED } from '../../../lib/absence.js';
@@ -36,6 +39,7 @@ export const ESC_TO_EXIT = 'Esc to exit';
 export const NO_NOTES = 'No notes on this card.';
 export const SHOW_SOURCES = 'Show sources';
 export const SOURCE_NOT_RECORDED = `Source: ${NOT_RECORDED}`;
+export const SOURCE_NOT_ON_STUDIOOS = 'Source: Not recorded on StudioOS';
 export const EMPTY_CARD = 'Nothing on this card yet.';
 export const NO_CARDS = 'This version has no cards to present.';
 export const READ_FAILED = 'This version could not be read.';
@@ -45,6 +49,23 @@ export const AUDIENCE = 'Audience view';
 
 const pad2 = (n) => String(n).padStart(2, '0');
 const str = (v) => String(v ?? '').trim();
+
+const AREAS = { validate: 'Validate', build: 'Build', raise: 'Raise', grow: 'Grow', team: 'Team', scoring: 'Scoring' };
+const GRADED = new Set(['Measured', 'Reviewed', 'Sourced', 'Stated']);
+
+/**
+ * The line under a figure in "Show sources": its binding's area, grade and
+ * day (D896's `source_key`, `grade`, `as_of`). Bound to a slot nothing filled,
+ * "Not recorded on StudioOS"; no binding at all, null.
+ */
+export function sourceOf(binding) {
+  if (!binding || typeof binding !== 'object' || !str(binding.source_key)) return null;
+  const grade = GRADED.has(binding.grade) ? binding.grade : null;
+  if (!grade) return SOURCE_NOT_ON_STUDIOOS;
+  const area = AREAS[str(binding.source_key).split('.')[0]] || 'StudioOS';
+  const day = binding.as_of ? dayLabel(binding.as_of) : null;
+  return `Source: ${area} · ${grade}${day && day !== 'Date not recorded' ? ` · ${day}` : ''}`;
+}
 
 /**
  * One card as present mode draws it, from the version's slide JSON and
@@ -78,8 +99,16 @@ export function cardOf(slide, i) {
       }
       if (f?.kind === 'metric_grid') {
         const cells = Array.isArray(f.value) ? f.value : [];
-        for (const c of cells) card.figures.push({ k: str(c?.label), v: unfilled || !str(c?.value) ? NOT_RECORDED : str(c.value) });
+        for (const c of cells) card.figures.push({ k: str(c?.label), v: unfilled || !str(c?.value) ? NOT_RECORDED : str(c.value), source: sourceOf(c?.binding || f.binding) });
         if (!cells.length) card.lines.push(`${str(f.label) || 'Figures'}: ${NOT_RECORDED}`);
+        continue;
+      }
+      if (f?.binding?.source_key) {
+        // A figure New deck filled (D897): a read-only field, "<label> · <value>".
+        const label = str(f.label);
+        const value = str(f.value);
+        const v = unfilled || !value ? NOT_RECORDED : label && value.startsWith(`${label} · `) ? value.slice(label.length + 3) : value;
+        card.figures.push({ k: label || 'Figure', v, source: sourceOf(f.binding), key: str(f.binding.source_key) });
         continue;
       }
       if (unfilled) { card.lines.push(`${str(f?.label) || 'Text'}: ${NOT_RECORDED}`); continue; }
@@ -88,6 +117,14 @@ export function cardOf(slide, i) {
   } else {
     if (str(s.body)) card.lines.push(str(s.body));
     if (Array.isArray(s.bullets)) card.bullets.push(...s.bullets.map(str).filter(Boolean));
+  }
+  // A bound metric block the fields do not already show: one the founder placed in the editor.
+  const shown = new Set(card.figures.map((f) => f.key).filter(Boolean));
+  for (const b of Array.isArray(s.blocks) ? s.blocks : []) {
+    const key = str(b?.binding?.source_key);
+    if (b?.kind !== 'metric' || !key || shown.has(key)) continue;
+    shown.add(key);
+    card.figures.push({ k: str(b.label) || 'Figure', v: str(b.value) || NOT_RECORDED, source: sourceOf(b.binding), key });
   }
   card.empty = !card.sub && !card.lines.length && !card.bullets.length && !card.figures.length && !card.image;
   return card;
