@@ -232,3 +232,13 @@ test('as_of cuts the flows and the marks at the date', async () => {
   assert.equal(quarterEnd.body.nav, 1200000, 'the quarter-end read prices the mark that existed then');
   assert.equal(quarterEnd.body.distributed, 0, 'the May distribution is not in the March quarter');
 });
+
+test('D1057: the chase notice sends the founder to Grow\'s Reporting desk, never the KPI board (#2427 finding 6)', async () => {
+  // Mutation checked: the link back on /build/kpi.
+  const db = freshDb();
+  const r = await call({ user: INVESTOR, role: 'investor' }, '/api/portfolio/chase', { method: 'POST', body: { project_ids: [PROJ] } }, db);
+  assert.equal(r.status, 200);
+  const sent = db.prepare("SELECT user_id, link, cta_url FROM notifications_inbox WHERE type = 'portfolio_update_chase'").all() as any[];
+  assert.equal(sent.length, 1, 'the founder was notified');
+  assert.deepEqual([sent[0].user_id, sent[0].link, sent[0].cta_url], [FOUNDER, '/grow/reporting', '/grow/reporting']);
+});

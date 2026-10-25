@@ -831,6 +831,8 @@ export function mapToSpinoutDeckData(src: SpinoutDemoDayData): SpinoutDeckBundle
     .map((h) => [h.name, pctNum(h.ownership_pct)] as [string, number])
     .filter((s) => has(s[0]) && s[1] > 0)
     .slice(0, 6);
+  // D1018 (#2855): segments from the record are what was issued; from the saved model they are Modelled.
+  const fromModel = simSegments.length > 0 && src.cap_table?.sim_source === 'model';
   if (simSegments.length) segments = simSegments;
   else if (realSegments.length) segments = realSegments;
   else { segments = FALLBACK.segments; gap('Cap table: add holders in the Incorporate / Cap Table module.', null, 'captable'); }
@@ -841,7 +843,7 @@ export function mapToSpinoutDeckData(src: SpinoutDemoDayData): SpinoutDeckBundle
     checklistLabel: 'FOUNDER & ENTITY SETUP',
     items,
     donutLabel: 'CAP TABLE · FULLY DILUTED',
-    centerBig: '100%', centerSmall: 'fully diluted',
+    centerBig: '100%', centerSmall: fromModel ? 'fully diluted · modelled' : 'fully diluted',
     segments,
   };
 

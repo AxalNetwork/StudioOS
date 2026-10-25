@@ -4,15 +4,19 @@
 // or sent-back event offers one action (D1031, #2872): "Send for review" when
 // public, "Publish" when unlisted or private. Either opens a dialog that says
 // what happens and who is told; the save is the dialog's button.
+// D1036 (#2877): the shared host header (MEV12a) carries that one action, and
+// /events/new has its own (MEV12b); a new event lands on its Details tab.
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
-import { ArrowLeft, Save, Send, Gift } from 'lucide-react';
+import { Save, Gift } from 'lucide-react';
 import { eventsApi } from '../../lib/eventsApi';
 import { useToast } from '../../components/useToast';
 import PageExplainer from '../../components/PageExplainer';
 import { EVENT_TYPE_IDS } from '../../lib/eventTypes';
 import Lightbox from '../../ui/Lightbox';
 import { publishAction } from './eventOrganiserModel';
+import HostHeader, { NewEventHeader } from './HostHeader';
+import { pendingCount } from './hostHeaderModel';
 
 const EVENT_TYPES = EVENT_TYPE_IDS;
 const LOCATION_KINDS = ['virtual', 'in_person', 'hybrid'];
@@ -73,6 +77,9 @@ export default function EventEditorPage() {
   const [saving, setSaving] = useState(false);
   const [publishing, setPublishing] = useState(null);
   const [publishError, setPublishError] = useState('');
+  // What the header shows: the event as last read or saved, and Registrations' count.
+  const [saved, setSaved] = useState(null);
+  const [pending, setPending] = useState(undefined);
 
   const set = (k, v) => setForm((f) => ({ ...f, [k]: v }));
 
@@ -102,6 +109,11 @@ export default function EventEditorPage() {
         });
         setStatus(ev.status || 'draft');
         setRules(ev.audience_rules || {});
+        setSaved(ev);
+        // The count is the header's own read: a failure is no number, never a 0.
+        Promise.resolve().then(() => eventsApi.roster(id))
+          .then((roster) => { if (alive) setPending(pendingCount(roster, ev.approval_required === 1 || ev.approval_required === true)); })
+          .catch(() => { if (alive) setPending(null); });
       } catch (e) {
         if (alive) setLoadError(e?.message || 'Could not load this event.');
       } finally {
@@ -136,14 +148,17 @@ export default function EventEditorPage() {
     setSaving(true);
     try {
       if (isEdit) {
-        await eventsApi.update(id, payload());
+        const body = payload();
+        await eventsApi.update(id, body);
+        setSaved((ev) => (ev ? { ...ev, ...body } : ev));
         showToast({ kind: 'success', msg: 'Event saved.' });
       } else {
         const created = await eventsApi.create(payload());
         const newId = created?.id ?? created?.event?.id;
         showToast({ kind: 'success', msg: 'Event created.' });
-        if (newId) navigate(`/events/${newId}/manage`);
-        else navigate('/my/events');
+        // D1036: a new event lands on its Details tab, not on the manage page.
+        if (newId) navigate(`/events/${newId}/edit`);
+        else navigate('/my/events/hosting');
       }
     } catch (e) {
       showToast({ kind: 'error', msg: e?.message || 'Could not save the event.' });
@@ -152,7 +167,8 @@ export default function EventEditorPage() {
     }
   };
 
-  const action = isEdit ? publishAction(form.visibility, status) : null;
+  // A new event is a draft until it is saved, so it offers its visibility's action too.
+  const action = publishAction(form.visibility, isEdit ? status : 'draft');
   const openPublish = () => { setPublishError(''); setPublishing(action); };
   const closePublish = () => { if (!saving) setPublishing(null); };
 
@@ -162,11 +178,26 @@ export default function EventEditorPage() {
     setSaving(true);
     setPublishError('');
     try {
-      await eventsApi.update(id, payload());
+      if (!isEdit) {
+        // MEV12b: create the draft, submit it, and land on its Details tab.
+        if (!form.title.trim()) throw new Error('Add a title first.');
+        if (!form.starts_at) throw new Error('Pick a start date and time.');
+        const created = await eventsApi.create(payload());
+        const newId = created?.id ?? created?.event?.id;
+        if (!newId) throw new Error('The reply did not say the new event\'s id.');
+        await eventsApi.submitReview(newId);
+        setPublishing(null);
+        showToast({ kind: 'success', msg: asked.done });
+        navigate(`/events/${newId}/edit`);
+        return;
+      }
+      const body = payload();
+      await eventsApi.update(id, body);
       const reply = await eventsApi.submitReview(id);
       const next = reply?.event?.status;
       if (!next) throw new Error('The reply did not say the event\'s status.');
       setStatus(next);
+      setSaved((ev) => (ev ? { ...ev, ...body, status: next } : ev));
       setPublishing(null);
       showToast({ kind: 'success', msg: asked.done });
     } catch (e) {
@@ -186,15 +217,9 @@ export default function EventEditorPage() {
 
   return (
     <div className="mx-auto max-w-3xl px-4 py-6">
-      <button
-        onClick={() => navigate('/my/events')}
-        className="mb-2 inline-flex items-center gap-1 text-sm text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200"
-      >
-        <ArrowLeft size={15} /> Back to events
-      </button>
-      <h1 className="text-2xl font-bold text-gray-900 dark:text-gray-100">
-        {isEdit ? 'Edit event' : 'New event'}
-      </h1>
+      {isEdit
+        ? <HostHeader event={{ ...(saved || {}), id, status }} screen="details" pending={pending} publishLabel={action?.label} onPublish={openPublish} busy={saving} />
+        : <NewEventHeader primaryLabel={action?.label} onSaveDraft={save} onPrimary={openPublish} busy={saving} />}
       <PageExplainer pageKey="event_editor" />
 
       <div className="mt-4 space-y-6">
@@ -347,17 +372,6 @@ export default function EventEditorPage() {
           >
             <Save size={16} /> {saving ? 'Saving…' : (isEdit ? 'Save changes' : 'Create event')}
           </button>
-          {action && (
-            <button
-              type="button"
-              onClick={openPublish}
-              disabled={saving}
-              data-testid="event-publish"
-              className="inline-flex items-center gap-2 rounded-lg border border-violet-300 dark:border-violet-700 px-4 py-2 text-sm font-medium text-violet-700 dark:text-violet-300 hover:bg-violet-50 dark:hover:bg-violet-900/20 disabled:opacity-50"
-            >
-              <Send size={16} /> {action.label}
-            </button>
-          )}
         </div>
       </div>
 

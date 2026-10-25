@@ -199,6 +199,7 @@ const EXPECTED: Record<string, string[]> = {
   // D778 part 2: positioning joins the deck draft on the same surface.
   'routes/decks.ts': ['AI_SURFACE.raisePitch'],
   'routes/deck_new.ts': ['AI_SURFACE.raisePitch', 'AI_SURFACE.raisePitch'], // D897: the outline and the build; /generate moved here
+  'routes/deck_assist.ts': ['AI_SURFACE.raisePitch'], // D899: the card tools
   'services/decks/autofill.ts': ['AI_SURFACE.raisePitch'],
   'routes/cycle_raise.ts': ['AI_SURFACE.raiseNarrative'], // D911: the narrative's positioning proposal
   'services/capTableDocumentRead.ts': ['AI_SURFACE.raiseCapTable'], // D1021: Eadwyn's read of a signed document
