@@ -13,7 +13,8 @@ import { DatabaseSync } from 'node:sqlite';
 import { SignJWT } from 'jose';
 import calendar from '../src/routes/calendar.ts';
 import * as service from '../src/services/calendar.ts';
-import { placeOf, addToCalendarLinks } from '../src/services/calendar/myEvents.ts';
+import { placeOf, addToCalendarLinks, eventVisibleTo } from '../src/services/calendar/myEvents.ts';
+import { canViewEvent } from '../src/routes/events.ts';
 import { encryptString } from '../src/services/cryptoBox.ts';
 
 const SECRET = 'synthetic-calendar-d1033-'.repeat(3);
@@ -330,4 +331,30 @@ test('add-to links: title, times, place and page; the join link only for a seat 
 
 test('addToCalendarLinks refuses an unreadable time rather than writing a wrong one', () => {
   assert.throws(() => addToCalendarLinks({ APP_URL: 'https://app.example.test' } as any, { id: 1, title: 'x', starts_at: 'not a date' }, false), /event_time_unreadable/);
+});
+
+test('eventVisibleTo gives canViewEvent\'s answer on every case, so the links route keeps the event routes\' gate', async () => {
+  const f = fixture();
+  seed(f.db);
+  // Public before and after an admin approves, a private one with a live, a
+  // revoked and an email-only invitation, and a draft.
+  event(f.db, 20, { visibility: 'public' });
+  event(f.db, 21, { visibility: 'public' });
+  f.db.prepare('UPDATE events SET admin_published = 1 WHERE id = 21').run();
+  event(f.db, 22, { visibility: 'private' });
+  f.db.exec(`INSERT INTO event_invitations (event_id, token, invited_user_id, status) VALUES (22, 'tok-a', 4, 'pending'), (22, 'tok-b', 5, 'revoked');
+             INSERT INTO event_invitations (event_id, token, invited_email, status) VALUES (22, 'tok-c', 'MEMBER-6@example.test', 'pending');`);
+  const events = f.db.prepare('SELECT * FROM events ORDER BY id').all() as any[];
+  const users = f.db.prepare('SELECT * FROM users ORDER BY id').all() as any[];
+  let compared = 0;
+  const answers = new Set<string>();
+  for (const ev of events) for (const u of users) {
+    const want = await canViewEvent(f.env, ev, u);
+    assert.equal(await eventVisibleTo(f.env, ev, u), want, `event ${ev.id} for user ${u.id}`);
+    answers.add(`${ev.id}:${want}`);
+    compared++;
+  }
+  assert.equal(compared, events.length * users.length);
+  // Both answers occur, on the cases that decide them.
+  for (const k of ['20:false', '21:true', '22:true', '22:false', '10:false', '13:false']) assert.ok(answers.has(k), k);
 });

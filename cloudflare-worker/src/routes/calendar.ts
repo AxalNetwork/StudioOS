@@ -18,8 +18,7 @@ import type { Env, User } from '../types';
 import { getSQL } from '../db';
 import { canAccessProject, getProjectMembershipRole } from '../services/projectAccess';
 import { userMayReadDeal } from './deals';
-import { canViewEvent } from './events';
-import { addToCalendarLinks, joinLinkAllowed } from '../services/calendar/myEvents';
+import { addToCalendarLinks, eventVisibleTo, joinLinkAllowed } from '../services/calendar/myEvents';
 import { logAdminAction } from '../services/adminAudit';
 import { requireAuth } from '../auth';
 import {
@@ -627,7 +626,8 @@ calendar.post('/push/:kind/:source_id', safe('push_one', 'Could not push event',
 // page never assembles a join link it was not given: the URLs carry the title,
 // the times, the place and the event page, and the join link only under the
 // same rule as `canReadJoinLink` in `routes/events.ts` (#2623). Anyone who may
-// see the event may have the links (`canViewEvent`), exactly as with its .ics.
+// see the event may have the links (`canViewEvent`'s rule, as `eventVisibleTo`),
+// exactly as with its .ics.
 // ===========================================================================
 calendar.get('/event-links/:event_id', safe('event_links', 'Could not build calendar links', async (c) => {
   const user = await requireAuth(c);
@@ -636,7 +636,7 @@ calendar.get('/event-links/:event_id', safe('event_links', 'Could not build cale
   const env = c.env as Env;
   const event = await env.DB.prepare('SELECT * FROM events WHERE id = ?').bind(eventId).first<Record<string, any>>();
   if (!event) return c.json({ detail: 'Event not found' }, 404);
-  if (!(await canViewEvent(env, event, user))) return c.json({ detail: 'You cannot see this event' }, 403);
+  if (!(await eventVisibleTo(env, event, user))) return c.json({ detail: 'You cannot see this event' }, 403);
   const registration = await env.DB.prepare(
     'SELECT status, payment_status FROM event_registrations WHERE event_id = ? AND user_id = ?',
   ).bind(eventId, user.id).first<{ status: string; payment_status: string }>();

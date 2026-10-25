@@ -91,6 +91,30 @@ function formatOf(row: Row): string {
   return row.location_kind === 'hybrid' ? 'hybrid' : 'video';
 }
 
+/**
+ * Whether `user` may see `event`: the same rule as `canViewEvent` in
+ * `routes/events.ts`, kept here because importing that route file would pull
+ * its ticket checkout (and Stripe) into everything that imports the calendar
+ * routes (`fund_modules_no_stripe_d707`). The D1033 tests run both on the same
+ * cases and require the same answer.
+ */
+export async function eventVisibleTo(
+  env: Env, event: Row, user: { id: number; role?: string | null; email?: string | null },
+): Promise<boolean> {
+  if (String(user.role || '') === 'admin' || Number(event.host_user_id) === Number(user.id)) return true;
+  const published = event.status === 'published' && (
+    event.visibility === 'unlisted' ||
+    (event.visibility === 'public' && Number(event.admin_published) === 1)
+  );
+  if (published) return true;
+  const inv = await env.DB.prepare(
+    `SELECT id FROM event_invitations
+       WHERE event_id = ? AND (invited_user_id = ? OR lower(invited_email) = lower(?))
+         AND status != 'revoked' LIMIT 1`,
+  ).bind(event.id, user.id, user.email ?? null).first();
+  return !!inv;
+}
+
 /** The same rule as `canReadJoinLink` in `routes/events.ts`, for a row already read. */
 export function joinLinkAllowed(
   event: Row, user: { id: number; role?: string | null },
