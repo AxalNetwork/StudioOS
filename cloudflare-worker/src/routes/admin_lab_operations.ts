@@ -110,8 +110,8 @@ const HISTORY = `WITH params(wanted_type, wanted_cohort, wanted_by, search) AS (
     AND (p.wanted_by = '' OR h.by = p.wanted_by)
     AND (p.search = '' OR instr(lower(coalesce(h.event, '') || ' ' || h.event_label || ' ' || coalesce(h.about, '') || ' ' || h.detail), lower(p.search)) > 0)
 ) SELECT COUNT(*) AS total,
-      json_group_array(json_object('id', id, 'at', at, 'type', type, 'event', event, 'label', event_label,
-        'cohort', cohort, 'about', about, 'by', by, 'detail', detail, 'scheduled_at', scheduled_at))
+      json_group_array(json_object('position', position, 'row', json_object('id', id, 'at', at, 'type', type, 'event', event, 'label', event_label,
+        'cohort', cohort, 'about', about, 'by', by, 'detail', detail, 'scheduled_at', scheduled_at)))
         FILTER (WHERE position > ? AND position <= ?) AS items
     FROM (SELECT *, ROW_NUMBER() OVER (ORDER BY
       CASE WHEN ? = 'newest' THEN julianday(at) END DESC,
@@ -143,7 +143,11 @@ r.get('/activity', async (c) => {
     const result = await c.env.DB.prepare(HISTORY)
       .bind(...binds, offset, offset + limit, sort, sort).first<{ total: number; items: string }>();
     if (!result) throw new Error('No activity result');
-    return c.json({ items: JSON.parse(result.items), total: result.total, limit, offset, coverage: COVERAGE });
+    // Aggregate input order is not part of SQLite's contract. Sort this bounded
+    // page by its assigned row numbers, then return only the public rows.
+    const page: Array<{ position: number; row: Record<string, unknown> }> = JSON.parse(result.items);
+    const items = page.sort((a, b) => a.position - b.position).map((entry) => entry.row);
+    return c.json({ items, total: result.total, limit, offset, coverage: COVERAGE });
   } catch (e) {
     console.warn('[admin-lab:activity] read failed', e);
     return c.json({ error: 'The Lab activity could not be read. Try again.' }, 503);

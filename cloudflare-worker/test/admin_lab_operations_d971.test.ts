@@ -256,3 +256,28 @@ test('type filters skip irrelevant audit JSON work; exact counts and pages share
   assert.equal(plan.filter((x) => /^SCAN e(?: |$)/.test(x.detail)).length, 1, 'one event source scan serves both total and page');
   db.close();
 });
+
+test('aggregate order cannot change the requested page sort; internal row positions stay off the public response', async () => {
+  const db = fresh(); eventsFixture(db);
+  const real = d1Over(db);
+  const reordered = { ...real, prepare(sql: string) {
+    const stmt = real.prepare(sql);
+    if (!sql.startsWith('WITH params')) return stmt;
+    return { ...stmt, bind(...args: any[]) {
+      const bound = stmt.bind(...args);
+      return { ...bound, async first() {
+        const result = await bound.first();
+        // A valid aggregate result with unspecified input order: execute the
+        // real SQL and change only the JSON array's order, never its membership.
+        return { ...result, items: JSON.stringify(JSON.parse(result.items).reverse()) };
+      } };
+    } };
+  } };
+  for (const [sort, event] of [['newest', 'cycle_activated'], ['oldest', 'applications_closed']]) {
+    const reply = await call(adminOperations, db, ADMIN, '/activity?limit=2&sort=' + sort, { env: { DB: reordered } });
+    assert.equal(reply.status, 200); assert.equal(reply.body.total, 9);
+    assert.equal(reply.body.items.length, 2); assert.equal(reply.body.items[0].event, event);
+    assert.ok(reply.body.items.every((x: any) => !('position' in x) && !('row' in x)));
+  }
+  db.close();
+});
