@@ -212,6 +212,7 @@ import revenueRoutes from './routes/revenue';
 import wellbeingRoutes from './routes/wellbeing';
 import complianceRoutes from './routes/compliance';
 import captableRoutes from './routes/captable';
+import captableAccessRoutes from './routes/captable_access';
 import dataRoomRoutes from './routes/data_room';
 import advisorGrantRoutes from './routes/advisor_grants';
 import messagesRoutes from './routes/messages';
@@ -1343,6 +1344,8 @@ app.route('/api/revenue', revenueRoutes);
 app.route('/api/wellbeing', wellbeingRoutes);
 // T12 — Compliance calendar + Cap-table simulator + Co-founder matching.
 app.route('/api/compliance', complianceRoutes);
+// D1019 (#2856): who sees what. Before /api/captable, whose `/:projectId` would take "access".
+app.route('/api/captable/access', captableAccessRoutes);
 app.route('/api/captable', captableRoutes);
 app.route('/api/data-room', dataRoomRoutes);
 // Task #55 — a founder opens a client record to a named advisor, scope by
