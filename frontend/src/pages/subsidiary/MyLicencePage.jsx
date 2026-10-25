@@ -24,7 +24,7 @@ import LicenceSummary from './LicenceSummary';
 import LicenceTerms from './LicenceTerms';
 import ContractTab from './licence/ContractTab';
 import RequestsTab from './licence/RequestsTab';
-import ProgramsTab from './licence/ProgramsTab';
+import ProgramsTab, { ProgramsUnlinked } from './licence/ProgramsTab';
 import StatementsTab from './licence/StatementsTab';
 
 /**
@@ -539,6 +539,10 @@ function MyLicencePageBody() {
 
   // D800 — board L7's "No licence on record". HQ links a licence to an
   // account; the Administrator cannot, so the one action is to ask HQ.
+  // D988 (#2779): on the Programs tab, GR11 C, or GR14 C for HQ.
+  if (data.none && tab === 'programs') {
+    return <div className="mx-auto mt-10 max-w-xl p-6"><ProgramsUnlinked user={user} /></div>;
+  }
   if (data.none) {
     return (
       <div className="mx-auto mt-10 max-w-xl p-6" data-testid="licence-none">
@@ -550,12 +554,6 @@ function MyLicencePageBody() {
             Licences are issued and linked by Axal VC HQ. Once yours is linked, its terms, contract
             and statements appear here.
           </p>
-          {/* D981 (#2376), board GR11 C: today's case on HQ-held accounts. */}
-          {tab === 'programs' && (
-            <p className="text-sm text-gray-600 dark:text-gray-400" data-testid="licence-programs-none">
-              On HQ-held accounts, HQ runs every program.
-            </p>
-          )}
           <Link to="/help" className="rounded-md bg-slate-700 px-4 py-2 text-xs font-bold text-white hover:bg-slate-800">
             Contact HQ
           </Link>
@@ -734,8 +732,8 @@ function MyLicencePageBody() {
       {tab === 'contract' && <ContractTab />}
       {tab === 'statements' && <StatementsTab />}
       {tab === 'requests' && <RequestsTab />}
-      {/* D981 (#2376): the programs HQ lets this studio run (GR7), read only. */}
-      {tab === 'programs' && <ProgramsTab />}
+      {/* D981 (#2376), D988 (#2779): the programs HQ lets this studio run (GR7), and the way to ask for one. */}
+      {tab === 'programs' && <ProgramsTab user={user} />}
 
       {tab === 'history' && (
         <div className="space-y-4" data-testid="licence-history">

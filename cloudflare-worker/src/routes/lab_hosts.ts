@@ -35,6 +35,7 @@
 import { Hono } from 'hono';
 import type { Env } from '../types';
 import { requireAuth, requireAdmin, requireBranchNotSuspended } from '../auth';
+import { programRefusal } from '../services/programEnforcement';
 import { refuse } from '../util/refusal';
 import { logAdminAction } from '../services/adminAudit';
 import { ensureNetworkStatesSchema } from '../services/networkStatesSchema';
@@ -234,6 +235,12 @@ adminLabHosts.post('/:uid/decision', async (c) => {
     ? b.decision as keyof typeof DECISIONS : null;
   if (!decision) {
     return refuse(c, 400, { code: 'decision_invalid', message: 'A decision is "approve", "reject" or "revoke".' });
+  }
+  // D985 — approving a host needs the branch's Spin-Out Lab grant; a reject or
+  // a revoke stays open.
+  if (decision === 'approve') {
+    const notGranted = await programRefusal(c.env, 'spinout-lab');
+    if (notGranted) return c.json(notGranted.body, notGranted.status);
   }
   const note = typeof b.note === 'string' ? b.note.trim().slice(0, STATEMENT_MAX) : '';
   const t = DECISIONS[decision];

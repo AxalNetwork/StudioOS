@@ -3,6 +3,7 @@
 // share. Every value comes from D798's and D799's answers; a fact they do not
 // carry reads "Not recorded", never a guess.
 import { NOT_RECORDED } from '../../../lib/absence';
+import { programRequestKind } from '../../../lib/studioPrograms';
 
 export { NOT_RECORDED };
 
@@ -207,6 +208,8 @@ const upper = (v) => String(v).replace(/_/g, ' ').replace(/^./, (c) => c.toUpper
 
 /** A request's kind as the table reads it: "Seats · Founder +20", "Change · Fee". */
 export function requestKind(item) {
+  const program = programRequestKind(item);
+  if (program) return program;
   const r = item?.request || {};
   const w = REQUEST_WORDS[item?.kind] || upper(item?.kind || '');
   if (item?.kind === 'seat_increase' && r.seat_type) return `${w} · ${upper(r.seat_type)} +${r.seats}`;

@@ -7,16 +7,25 @@
  *   PATCH /api/personas/segments/:key       { expected_version, reason?, name?, profile?, status?,
  *                                             who?, typical?, needs?, offers? }   requireSuperAdmin
  *
+ * D1003 (#2818), part 6: an Admin's suggestions (migration 570), registered
+ * before `/:key` so the word is never read as a segment:
+ *   POST  /api/personas/segments/suggestions              { segment_key?, kind, text }   requireAdmin
+ *   GET   /api/personas/segments/suggestions?status=      HQ's Super Admin: all; others: their own   requireAdmin
+ *   POST  /api/personas/segments/suggestions/:uid/decide  { decision: accept|decline, reason? }   requireSuperAdmin
+ * See `services/segmentSuggestions.ts` for how a subsidiary's suggestion
+ * reaches HQ and how the decision goes back.
+ *
  * Every write is recorded in `segment_profile_history`, and in the admin
  * audit store. A D1 error is a 503, never an empty list. The status rules
  * that act elsewhere (sign-up, finalize, retag) are in `routes/personas.ts`.
  */
 import { Hono } from 'hono';
 import type { Env } from '../types';
-import { requireAdmin, requireSuperAdmin } from '../auth';
+import { isSuperAdmin, requireAdmin, requireSuperAdmin } from '../auth';
 import {
   SegmentInputError, getProfile, historyOf, listProfiles, segmentCoverage, writeProfile,
 } from '../services/segmentProfiles';
+import { SuggestionError, decide, listSuggestions, readInput, suggest } from '../services/segmentSuggestions';
 
 const segments = new Hono<{ Bindings: Env }>();
 
@@ -39,6 +48,48 @@ segments.get('/coverage', async (c) => {
   try {
     return c.json(await segmentCoverage(c.env));
   } catch (e) { return unreadable(c, 'The segments’ needs and offers', e); }
+});
+
+const refused = (c: any, e: SuggestionError) => c.json({ detail: e.sentence, code: e.code }, e.status);
+
+segments.post('/suggestions', async (c) => {
+  const admin = await requireAdmin(c);
+  const body = await c.req.json().catch(() => null);
+  try {
+    const input = await readInput(c.env, body as Record<string, unknown> | null);
+    const made = await suggest(c.env, { id: Number(admin.id), name: (admin as { name?: string }).name ?? null }, input);
+    return c.json(made, 201);
+  } catch (e) {
+    if (e instanceof SuggestionError) return refused(c, e);
+    console.error('[persona-segments] suggestion failed:', (e as Error)?.message);
+    return c.json({ detail: 'The suggestion could not be saved. Nothing was sent.', code: 'write_failed' }, 503);
+  }
+});
+
+segments.get('/suggestions', async (c) => {
+  const admin = await requireAdmin(c);
+  try {
+    return c.json(await listSuggestions(c.env, { id: Number(admin.id), superAdmin: isSuperAdmin(admin as any) }, c.req.query('status') ?? null));
+  } catch (e) { return unreadable(c, 'The suggestions', e); }
+});
+
+segments.post('/suggestions/:uid/decide', async (c) => {
+  const admin = await requireSuperAdmin(c);
+  const body = await c.req.json().catch(() => null);
+  let decided: Awaited<ReturnType<typeof decide>>;
+  try {
+    decided = await decide(c.env, { id: Number(admin.id), name: (admin as { name?: string }).name ?? null }, c.req.param('uid'),
+      body as Record<string, unknown> | null);
+  } catch (e) {
+    if (e instanceof SuggestionError) return refused(c, e);
+    console.error('[persona-segments] decision failed:', (e as Error)?.message);
+    return c.json({ detail: 'The decision could not be saved. Nothing was changed.', code: 'write_failed' }, 503);
+  }
+  try {
+    const { logAdminAction } = await import('../services/adminAudit');
+    await logAdminAction(c.env, Number(admin.id), admin.email, 'segment_suggestion_decided', { suggestion: decided.suggestion.uid, status: decided.suggestion.status });
+  } catch (e) { console.error('[persona-segments] audit copy failed:', (e as Error)?.message); }
+  return c.json(decided);
 });
 
 segments.get('/:key', async (c) => {

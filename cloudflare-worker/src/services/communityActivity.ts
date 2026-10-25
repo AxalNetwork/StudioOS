@@ -72,12 +72,12 @@ export type ActivityQuery = {
   offset: number;
 };
 
-/** The consoles a row links to. Wellbeing is a tab on the admin console until #2375. */
+/** The consoles a row links to. Wellbeing has its own console at /admin/wellbeing (D1121). */
 export const CONSOLE_HREF: Record<ActivityRow['kind'], string> = {
   events: '/admin/events',
   jobs: '/admin/jobs',
   circles: '/admin/circles',
-  wellbeing: '/admin?tab=wellbeing',
+  wellbeing: '/admin/wellbeing',
 };
 
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
