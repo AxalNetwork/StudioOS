@@ -272,11 +272,10 @@ const CONSOLE_PAGES = 'frontend/src/pages/admin/ConsolePages.jsx';
 // console under the shared header at its own address. Legal is no page: its
 // tab has forwarded to Contracts since D647, so nothing mounts it.
 const UNMOUNTED = ['frontend/src/pages/admin/consoles/LegalConsole.jsx'];
-const NATIVE_CONSOLES = ['PartnerProfilesConsole', 'PersonasConsole', 'PaymentsConsole'].map((n) => `frontend/src/pages/admin/consoles/${n}.jsx`);
+const NATIVE_CONSOLES = ['PartnerProfilesConsole', 'PersonasConsole'].map((n) => `frontend/src/pages/admin/consoles/${n}.jsx`);
 const COMPOSED = new Map([
   ['frontend/src/pages/admin/profiles/PartnerProfiles.jsx', [NATIVE_CONSOLES[0]]],
   ['frontend/src/pages/admin/segments/PersonaSegments.jsx', [NATIVE_CONSOLES[1]]],
-  ['frontend/src/pages/admin/payments/Payments.jsx', [NATIVE_CONSOLES[2]]],
   [CONSOLE_PAGES, ADMIN_CONSOLE_FILES.filter((f) => f !== CONSOLE_PAGES && !HQ_KEYS_CONSOLE_FILES.includes(f) && !UNMOUNTED.includes(f) && !NATIVE_CONSOLES.includes(f))],
   ['frontend/src/pages/hq/AccountsPage.jsx', ['frontend/src/pages/admin/consoles/UsersConsole.jsx']],
   // The owner's ruling (2026-10-20): HQ's Integration keys page, Super Admin only.

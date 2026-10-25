@@ -234,7 +234,7 @@ test('the three action routes are literal routes with their guard and `lightbox`
     assert.doesNotMatch(line, /<Navigate/);
     assert.ok(at < app.indexOf(`<Route path="${slug}"`), `${path} is declared before ${slug}`);
   }
-  for (const [path, to, hash] of [['/build/tools', '/build/operating-systems', '#tools'], ['/raise/calls', '/raise/capital-relationships', '#calls'], ['/grow/updates', '/grow/durable-company-building', '#updates']]) {
+  for (const [path, to, hash] of [['/build/tools', '/build/operating-systems', '#tools'], ['/raise/calls', '/raise/capital-relationships', '#calls'], ['/grow/updates', '/grow/reporting', '']]) {
     assert.match(app, new RegExp(`<Route path="${path}" element=\\{guard\\([^\\n]*<HistoryRedirect to="${to}" hash="${hash}" />\\)\\} />`), path);
   }
   assert.match(app, /export function HistoryRedirect\(\{ to, hash \}\) \{\s*const location = useLocation\(\);\s*return <Navigate replace to=\{\{ pathname: to, search: location\.search, hash \}\} \/>;/);
@@ -276,7 +276,7 @@ const cards = (cycle) => MODULES[cycle].map((m) => ({ slug: m.slug, name: m.name
 test('history: Validate has none; other histories require module tabs and appear once', () => {
   assert.deepEqual(cycleTabs('validate', cards('validate'), null, '?project_id=7').slice(0, 2).map((t) => [t.name, t.href]), [['Overview', '/validate?project_id=7'], ['Problem discovery', '/validate/problem-discovery?project_id=7']]);
   // #1598 and #1599: Raise's Calls and Grow's Updates sections shipped, so their histories are live.
-  for (const [c, key] of [['raise', 'calls'], ['grow', 'updates']]) {
+  for (const [c, key] of [['raise', 'calls'], ['grow', 'reporting']]) {
     assert.equal(CYCLES[c].history.live, true, `${c} is live`);
     assert.equal(cycleTabs(c, cards(c)).some((t) => t.key === key), true, `${c} draws its history`);
   }
@@ -392,6 +392,6 @@ test('the docs say what the code does: useEscapeClose names the mount-order haza
   assert.match(hook, /the first Escape\s+\* closes the lightbox, nested dialog and all/);
   const row = read('documentation/architecture/ROUTE_MAP.md').split('\n').find((l) => l.startsWith('| Grow · Share an update |'));
   assert.match(row, /\| `\/grow\/update` \(D686 S02-A, #1596\): the Grow page with the sheet open over it/);
-  assert.match(row, /`\/grow\/updates` redirects to `\/grow\/durable-company-building#updates`/);
+  assert.match(row, /`\/grow\/updates` redirects to `\/grow\/reporting` \(D1056\)/);
   assert.doesNotMatch(row, /`\/grow` \(the cycle overview's primary action\) → the sheet/);
 });

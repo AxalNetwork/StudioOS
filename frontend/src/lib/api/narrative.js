@@ -38,6 +38,11 @@ export const narrativeApi = {
   saveSection: (projectId, version, section, body) => request(`/cycles/raise/narrative/${enc(version)}/sections/${enc(section)}?project=${enc(projectId)}`, {
     method: 'PUT', body: JSON.stringify(body),
   }),
+  // D1114 (#2994): Story's "Ask Eadwyn ▾". One metered run; it writes nothing.
+  //   POST /cycles/raise/narrative/:version/sections/:section/draft { mode: draft | shorten | plain, words? } → { text, removed }
+  draftSection: (projectId, version, section, body, headers) => request(`/cycles/raise/narrative/${enc(version)}/sections/${enc(section)}/draft?project=${enc(projectId)}`, {
+    method: 'POST', body: JSON.stringify(body), headers,
+  }),
   narrativeReads: (projectId) => request(`/cycles/raise/narrative/reads?${q(projectId)}`),
   narrativeGiveReason: (projectId, reason) => request(`/cycles/raise/narrative/reads?${q(projectId)}`, { method: 'POST', body: JSON.stringify({ reason }) }),
   narrativeNotes: (projectId) => request(`/cycles/raise/narrative/notes?${q(projectId)}`),

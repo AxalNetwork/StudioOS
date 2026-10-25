@@ -1,19 +1,20 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { Link, useLocation, useNavigate } from 'react-router-dom';
+import { Link, useLocation, useNavigate, useSearchParams } from 'react-router-dom';
 import { RefreshCw } from 'lucide-react';
 import { api } from '../../../lib/api';
 import { paymentsApi } from '../../../lib/api/payments';
 import { reportError } from '../../../lib/log';
 import { AdminPageHeader, HeaderTab, useMovedNotice } from '../../../ui';
 import AdminBoardFrame from '../AdminBoardFrame';
-import { PaymentsPanel } from '../consoles/PaymentsConsole';
 import {
-  CATALOG_FAILED_SUB, CATALOG_FAILED_TITLE, CHECKS_UNREAD, DIALOGS_WAIT, FILTERS_EMPTY, MOVED_NOTICES, NOT_CONNECTED, NOT_CONNECTED_SUB,
+  CATALOG_FAILED_SUB, CATALOG_FAILED_TITLE, CHECKS_UNREAD, FILTERS_EMPTY, MOVED_NOTICES, NOT_CONNECTED, NOT_CONNECTED_SUB,
   NO_PRODUCTS, NO_PRODUCTS_SUB, PAGE_LINE, PAY_PATH, PAY_TITLE, PER_PAGE, PLATFORM_PATH, RAIL_NOTE, SORTS, STATUS_FILTERS, STRIPE_UNREAD, SURFACE_KEYS,
   allowanceCell, catalogueCounts, filterCount, filterProducts, flaggedProducts, keysMatch, kindGroupWord, kindWord, modeWord, needsYou,
   needsYouAll, notConnected, pageOf, priceText, productIdOf, showsOnRows, sortProducts, stampText, surfaceWord, tableGroups, tabOf, yearlyLine,
 } from './payModel';
-import { AMBER, BIG, CARD, DANGER, EYE, FIELD, GHOST, H2, LINK, MONO, PILL, SUB, Reading, Unread, usePayPhone } from './payUi';
+import { AMBER, BIG, CARD, DANGER, EYE, FIELD, GHOST, H2, LINK, MONO, PILL, PRIMARY, SUB, WRITE_HOLDER_NOTE, Reading, Unread, useCanWrite, usePayPhone } from './payUi';
+import { AddPriceDialog, ArchivePriceDialog, ArchiveProductDialog, ChangePriceDialog, EditProductDialog, NewProductDialog } from './ProductDialogs';
+import { SyncDialog } from './StripeDialogs';
 import ProductLightbox from './ProductLightbox';
 import StripeConnection, { keysLine } from './StripeConnection';
 import ChangeLog from './ChangeLog';
@@ -46,6 +47,14 @@ import ChangeLog from './ChangeLog';
  * and PAY8 (not connected, no products), PAY9 (reading) and PAY10 (a failed
  * block) are drawn. PAY11, a studio admin's closed card, is `hqOnly`'s notice
  * with Payments' words (`pages/hq/hqNoticeModel.js`).
+ *
+ * D1013 (#2832, part 5): the dialogs. Catalogue's New product (PAY3, also
+ * opened by `?new=product`, the storefront's door) and Sync from Stripe, and
+ * from the product lightbox its price dialogs (PAY4: add, change, archive)
+ * with Edit details and Archive a price; Stripe connection's dialogs are
+ * `StripeDialogs.jsx` (PAY6). Each sends the recorded reason and meets the
+ * step-up D1009 requires. Today's editor (`consoles/PaymentsConsole.jsx`) is
+ * retired with them.
  */
 
 const idle = { status: 'loading', data: null };
@@ -287,6 +296,20 @@ function FiltersPanel({ filters, setFilters }) {
   );
 }
 
+/** The dialog the page has open, at page level so the lightbox never holds a dialog inside it. */
+function OpenDialog({ dialog, products, audiences, onClose, onDone }) {
+  if (!dialog) return null;
+  const { type, product, price } = dialog;
+  if (type === 'new') return <NewProductDialog products={products} audiences={audiences} onClose={onClose} onDone={onDone} />;
+  if (type === 'sync') return <SyncDialog onClose={onClose} onDone={onDone} />;
+  if (type === 'addPrice') return <AddPriceDialog product={product} onClose={onClose} onDone={onDone} />;
+  if (type === 'changePrice') return <ChangePriceDialog product={product} price={price} onClose={onClose} onDone={onDone} />;
+  if (type === 'archivePrice') return <ArchivePriceDialog product={product} price={price} onClose={onClose} onDone={onDone} />;
+  if (type === 'archiveProduct') return <ArchiveProductDialog product={product} onClose={onClose} onDone={onDone} />;
+  if (type === 'edit') return <EditProductDialog product={product} audiences={audiences} onClose={onClose} onDone={onDone} />;
+  return null;
+}
+
 function Catalogue({ reads, reload }) {
   const [q, setQ] = useState('');
   const [group, setGroup] = useState('all');
@@ -295,9 +318,12 @@ function Catalogue({ reads, reload }) {
   const [sort, setSort] = useState('name');
   const [page, setPage] = useState(1);
   const [perPage, setPerPage] = useState(PER_PAGE[0]);
-  const [editor, setEditor] = useState(false);
   const loc = useLocation();
   const navigate = useNavigate();
+  const [params, setParams] = useSearchParams();
+  const [dialog, setDialog] = useState(() => (params.get('new') === 'product' ? { type: 'new' } : null));
+  const [saved, setSaved] = useState(null);
+  const canWrite = useCanWrite();
   const openId = productIdOf(loc.pathname);
   const phone = usePayPhone();
   const catalog = reads.catalog;
@@ -311,7 +337,18 @@ function Catalogue({ reads, reload }) {
     return pageOf(tableGroups(rows), page, perPage);
   }, [products, group, q, filters, flagged, sort, page, perPage]);
   useEffect(() => { setPage(1); }, [group, q, filters, sort, perPage]);
-  const lightbox = openId && <ProductLightbox id={openId} catalogRead={catalog} onClose={() => navigate(PAY_PATH)} onRetry={reload} />;
+  const audiences = data?.audience_categories || [];
+  const closeDialog = () => {
+    setDialog(null);
+    if (params.get('new')) { const next = new URLSearchParams(params); next.delete('new'); setParams(next, { replace: true }); }
+  };
+  const done = (out) => { closeDialog(); if (out?.text) setSaved(out.text); reload(); };
+  // One modal at a time: the lightbox steps aside while a dialog is open, and
+  // its address keeps it, so it is back when the dialog closes.
+  const act = (d) => { setSaved(null); setDialog(d); };
+  const lightbox = openId && !(canWrite && dialog) && <ProductLightbox id={openId} catalogRead={catalog} onClose={() => navigate(PAY_PATH)} onRetry={reload} onAct={act} canWrite={canWrite} />;
+  const dialogs = <OpenDialog dialog={canWrite ? dialog : null} products={products} audiences={audiences} onClose={closeDialog} onDone={done} />;
+  const savedLine = saved && <span role="status" className="text-[12.5px] text-emerald-700 dark:text-emerald-300" data-testid="pay-saved">{saved}</span>;
 
   // PAY8a: no account, no tiles, no table, and nothing that looks like a count.
   if (notConnected(reads.config?.status === 'ready' ? reads.config.data : null, data)) {
@@ -319,12 +356,14 @@ function Catalogue({ reads, reload }) {
       <>
         <StateCard mark="○" title={NOT_CONNECTED} sub={NOT_CONNECTED_SUB} testId="pay-not-connected" />
         {lightbox}
+        {dialogs}
       </>
     );
   }
 
   return (
     <>
+      {savedLine}
       <Needs reads={reads} />
       <Tiles reads={reads} reload={reload} />
       {catalog?.status === 'error' && (
@@ -334,16 +373,22 @@ function Catalogue({ reads, reload }) {
       )}
       {data && counts.all === 0 && (
         <StateCard mark="+" title={NO_PRODUCTS} sub={NO_PRODUCTS_SUB} testId="pay-catalogue-empty">
-          <div className="flex flex-wrap justify-center gap-2">
-            <button type="button" className={GHOST} disabled title={DIALOGS_WAIT}>New product</button>
-            <button type="button" className={GHOST} disabled title={DIALOGS_WAIT}>Sync from Stripe</button>
-          </div>
-          <span className={SUB}>{DIALOGS_WAIT}</span>
+          {canWrite ? (
+            <div className="flex flex-wrap justify-center gap-2">
+              <button type="button" className={PRIMARY} onClick={() => act({ type: 'new' })} data-testid="pay-empty-new">New product</button>
+              <button type="button" className={GHOST} onClick={() => act({ type: 'sync' })} data-testid="pay-empty-sync">Sync from Stripe</button>
+            </div>
+          ) : <span className={SUB} data-testid="pay-empty-holder">{WRITE_HOLDER_NOTE}</span>}
         </StateCard>
       )}
       {(catalog?.status === 'loading' || (data && counts.all > 0)) && (
         <section className={`${CARD} flex flex-col gap-3 px-[18px] py-4`} aria-labelledby="pay-h-catalogue" data-testid="pay-catalogue">
-          <h2 id="pay-h-catalogue" className={H2}>Catalogue</h2>
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <h2 id="pay-h-catalogue" className={H2}>Catalogue</h2>
+            {canWrite
+              ? <button type="button" className={PRIMARY} onClick={() => act({ type: 'new' })} disabled={!data} data-testid="pay-new-open">New product</button>
+              : <span className={SUB} data-testid="pay-new-holder">{WRITE_HOLDER_NOTE}</span>}
+          </div>
           {catalog?.status === 'loading' && <Reading />}
           {data && (
             <>
@@ -416,12 +461,7 @@ function Catalogue({ reads, reload }) {
         </section>
       )}
       {lightbox}
-
-      <section className="flex flex-col gap-2" aria-labelledby="pay-h-editor" data-testid="pay-editor">
-        <h2 id="pay-h-editor" className={H2}>Make a change</h2>
-        <span className={SUB}>Today&apos;s editor (products, prices, the publishable key and the webhook), until D1008 part 5 draws the dialogs and the step-up.</span>
-        {editor ? <PaymentsPanel /> : <button type="button" className={`${GHOST} self-start`} onClick={() => setEditor(true)} data-testid="pay-editor-open">Open the editor</button>}
-      </section>
+      {dialogs}
       <p className={`m-0 ${SUB}`}>Money received, refunds and disputes are on <Link to="/admin/revenue" className={LINK}>Revenue →</Link>. Promo codes have their own page: <Link to="/admin/platform/promo-codes" className={LINK}>Promo codes →</Link></p>
     </>
   );

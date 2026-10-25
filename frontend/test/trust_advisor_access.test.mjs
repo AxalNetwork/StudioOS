@@ -25,7 +25,7 @@ const app = read('frontend/src/App.jsx');
 const page = read('frontend/src/pages/TrustCenterPage.jsx');
 const service = read('cloudflare-worker/src/services/trust.ts');
 
-const trustRoute = () => app.split('\n').find((l) => l.includes('path="/trust"'));
+const trustRoute = () => app.split('\n').find((l) => l.includes('path="/trust/me"'));
 
 test('the advisor obligations that make this a bug still exist', () => {
   const matrix = service.slice(service.indexOf('const ROLE_MATRIX'), service.indexOf('export function obligationsForRole'));
@@ -46,7 +46,7 @@ test('an advisor can reach /trust', () => {
 test('every role the ungated dropdown link is shown to can open the page', () => {
   // The link has no role check, so the guard is the whole gate. Any signed-in
   // role that reaches the dropdown must be on it.
-  assert.match(app, /<Link to="\/trust"/);
+  assert.match(app, /<Link to="\/trust\/me"/);
   const line = trustRoute();
   for (const role of ['admin', 'founder', 'partner', 'investor', 'advisor', 'exploring']) {
     assert.ok(line.includes(`'${role}'`), `${role} sees the link and cannot open the page`);
@@ -69,5 +69,5 @@ test('widening the guard did not invent an obligation advisors do not have', () 
 test('Trust Center remains out of the advisor sidebar', () => {
   const sidebar = read('frontend/src/sidebarConfig.js');
   const advisor = sidebar.slice(sidebar.indexOf('\n  advisor: ['), sidebar.indexOf('\n  exploring: ['));
-  assert.doesNotMatch(advisor, /to: '\/trust'/);
+  assert.doesNotMatch(advisor, /to: '\/trust(?:\/me)?'/);
 });
