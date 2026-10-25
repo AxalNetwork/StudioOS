@@ -31,6 +31,7 @@ import AutoReloadCard from './account/AutoReloadCard';
 import { BuyTokensCard, PaymentDetailsCard, PlanAllowanceCard, TokenBalanceCard, useBillingReads } from './account/BillingCards';
 import FollowingSection from './account/AccountFollowing';
 import UsageSection from './account/UsageOverview';
+import CompaniesProjects from './account/companies/CompaniesProjects';
 import CostPage from './account/CostPage';
 // D807 (#2246) — `/account/usage/limits`, Usage's Limits page.
 import LimitsPage from './account/LimitsPage';
@@ -106,7 +107,7 @@ function ComplianceBridge() {
       <div className="flex-1 min-w-[200px] text-sm text-gray-700 dark:text-gray-300" data-testid="compliance-line">
         {line}{' '}Trust Center reports on the data held here.
       </div>
-      <Link to="/trust" className="text-xs px-3 py-1.5 rounded-lg border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 hover:border-violet-400 whitespace-nowrap">
+      <Link to="/trust/me" className="text-xs px-3 py-1.5 rounded-lg border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 hover:border-violet-400 whitespace-nowrap">
         Open Trust Center →
       </Link>
     </div>
@@ -232,6 +233,8 @@ const ActivityPage = lazy(() => import('./ActivityPage'));
 // than dropped with the screens they hold.
 const SECTIONS = [
   { id: 'account', label: 'Profile and identity' },
+  // D1134 (#2422) — Companies and projects, second, as the owner asked ("below Profile and identity").
+  { id: 'companies', label: 'Companies and projects' },
   { id: 'notifications', label: 'Notifications' },
   { id: 'security-privacy', label: 'Sign-in and security' },
   { id: 'billing', label: 'Billing and orders' },
@@ -502,6 +505,7 @@ function AccountPanes({ safeActive, data, setData, flash, patch, reloadAccount, 
           <DigestQuietHoursCard flash={flash} />
         </>
       )}
+      {safeActive === 'companies' && <CompaniesProjects role={role} />}
       {safeActive === 'following' && <FollowingSection />}
       {safeActive === 'usage' && (usagePage === 'limits' ? <LimitsPage /> : usagePage === 'cost' ? <CostPage role={role} /> : <UsageSection role={role} />)}
       {safeActive === 'developer' && allowedIds.has('developer') && <DeveloperSection role={data.role} />}

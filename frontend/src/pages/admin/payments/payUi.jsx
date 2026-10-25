@@ -1,4 +1,6 @@
 import React from 'react';
+import { useAuth } from '../../../hooks/useAuthSync';
+import { isSuperAdminUser } from '../../../lib/shellRole';
 import { Lightbox, usePhoneWidth } from '../../../ui';
 
 /**
@@ -23,6 +25,14 @@ export const AMBER = 'rounded-[10px] border border-amber-300 bg-axal-amber/30 px
 export const LINK = 'font-bold text-axal-violet hover:text-axal-violet-deep dark:text-violet-300 dark:hover:text-violet-200';
 export const FIELD = 'h-9 rounded-[7px] border border-axal-hairline bg-white px-3 text-[13px] text-axal-ink dark:border-gray-700 dark:bg-gray-900 dark:text-gray-100';
 export const BIG = `${MONO} text-[22px] font-medium text-axal-ink dark:text-gray-100`;
+
+/**
+ * D1013: every Payments write is the Super Admin's (D1009's write bar), so the
+ * page draws a change only for the holder of that elevation and tells anyone
+ * else who can make it (D134: never a control the server can only refuse).
+ */
+export const useCanWrite = () => isSuperAdminUser(useAuth().user);
+export const WRITE_HOLDER_NOTE = 'Only the Super Admin can change payments, after a fresh authenticator code.';
 
 /** PAY12's phone: below `md`, the catalogue stacks, the chart is a table, dialogs are bottom sheets. */
 export const PAY_PHONE_QUERY = '(max-width: 767px)';

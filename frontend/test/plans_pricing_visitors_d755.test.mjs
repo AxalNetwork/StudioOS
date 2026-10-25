@@ -116,7 +116,7 @@ test('a visitor gets none of the member-only parts, and none of their reads', ()
     ['the cart drawer and the product modal', /\{member && \(\s*<>\s*<CartDrawer[\s\S]*?<ProductSlideOver/],
     ['the phone\'s account bar', /return phone && member \? <PricingPhone/],
   ]) assert.match(page, re, part);
-  assert.match(page, /\{isAdmin && \(/, 'the admin tools need an admin, so never a visitor');
+  assert.match(page, /\{canAddProduct && \(/, 'the admin tools need an admin, so never a visitor');
   assert.match(page, /onSubscribe=\{member \? handleSubscribeBundle : visitorSignIn\}/);
   assert.match(page, /\(member \? \(products \|\| \[\]\)\.filter\(isBundleProduct\) : visitorPlanProducts\(pricing\)\)/);
   assert.match(read('frontend/src/pages/account/PricingPhone.jsx'), /useAccountRead\(\(\) => aiBudgetApi\.mine\(\), \{ enabled: member \}\)/);

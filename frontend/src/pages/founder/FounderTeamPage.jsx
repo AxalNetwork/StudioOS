@@ -394,7 +394,7 @@ export default function FounderTeamPage() {
               <AlertTriangle size={16} className="mt-0.5 shrink-0" />
               <div>
                 {gaps.length} team {gaps.length === 1 ? 'member has' : 'members have'} missing paperwork — {gaps.map((p) => `${p.name.split(' ')[0]} (${p.ip_assignment === 'missing' ? 'IP assignment' : '83(b) election'})`).join(', ')}. Both are diligence blockers.
-                {' '}<Link to="/trust" className="underline">Open Trust Center →</Link>
+                {' '}<Link to="/trust/me" className="underline">Open Trust Center →</Link>
               </div>
             </div>
           )}

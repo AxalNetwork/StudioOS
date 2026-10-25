@@ -5,7 +5,7 @@ import { Lightbox, actionDanger, actionGhost } from '../../../ui';
 import useRecordCrumb from '../useRecordCrumb';
 import {
   AGREEMENT_NOT_READY, ANSWERS_LOGGED, LINK_LAPSED, NOT_OFFERED, READING, agreementLine, agreementReady, answersOf, dayOr,
-  dealTypeWord, envelopeHref, findInvitation, invitationRow, isRecordId, linkLine, signingLink,
+  dealTypeWord, envelopeHref, findInvitation, invitationRow, isRecordId, linkLine, signingLink, voidReason,
 } from './partnersDeskModel';
 import {
   NO_MESSAGE, blockOf, chosenDeal, detailReply, detailState, historyLines, messageOf, offersSeen, refusalLines, sendLine, stepRows,
@@ -93,7 +93,7 @@ export default function InvitationRecord({ id, reads, now, onClose, actions }) {
   const steps = stepRows(data.steps, stage);
   const link = linkLine(inv, stage);
   const signing = stage.step === 6 && envelopeId !== null ? signingLink(envelope, now) : null;
-  const ready = agreementReady(reads.template);
+  const ready = agreementReady(reads.agreement);
   const chosen = chosenDeal(data.chosen_deal);
   const seen = offersSeen(data.offers_seen, inv);
   const refusals = refusalLines(data.agreement_refusals);
@@ -214,6 +214,7 @@ export default function InvitationRecord({ id, reads, now, onClose, actions }) {
                   </div>
                 ) : <span className={SUB}>{`Deal #${chosen.deal.id} · its offer was not recorded`}</span>
               ) : null}
+              {chosen.state === 'ready' && voidReason(chosen.deal) ? <span className={SUB} data-testid="partners-invitation-void-reason">{voidReason(chosen.deal)}</span> : null}
               {chosen.state === 'none' ? <span className={SUB} data-testid="partners-invitation-chosen-none">No offer chosen yet.</span> : null}
               {chosen.state === 'unreadable' ? <BlockFailed reason={chosen.reason} what="The chosen deal" testId="partners-invitation-chosen-failed" /> : null}
               <p className="m-0 text-[13px] text-axal-ink dark:text-gray-100" data-testid="partners-invitation-agreement-state">{`Agreement: ${agreementLine(inv, envelope).text}`}</p>

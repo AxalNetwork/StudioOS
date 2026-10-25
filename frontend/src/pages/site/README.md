@@ -22,6 +22,8 @@ link list the nav, the burger menu and the footer read.
 | `NewsletterConfirmPage.jsx` | `/newsletter/confirm?token=`, confirmed, expired and used links (W2) | D813 |
 | `NewsletterPreferencesPage.jsx` | `/newsletter/preferences?token=`, the topics, Save, unsubscribe and Resubscribe, no sign-in (W3) | D813 |
 | `newsletterModel.js` | the newsletter pages' words and rules, pure; the topics are migration 515's | D813 |
+| `TrustCenter.jsx` | `/trust` and its five tabs (Security, Data and privacy, Subprocessors, Documents, Disclosure), public; "Your trust" links to `/trust/me` (TRU1–TRU6) | D1072 |
+| `trustCenterModel.js` | the trust center's tabs, addresses and facts, pure; every fact the code shows, everything else Not recorded | D1072 |
 
 The Network section's other pages (Articles, the Directory, Events, Circles,
 Jobs) and Contact were rebuilt in their existing files under

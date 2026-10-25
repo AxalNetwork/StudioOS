@@ -183,19 +183,22 @@ async function sectionsOf(env: Env, projectId: number, version: number) {
 }
 
 type PositioningRow = { version: number | null; kind: Kind; position: number; text: string;
-  source_kind: string | null; source_ref: string | null; source_label: string | null; updated_at: string };
+  source_kind: string | null; source_ref: string | null; source_label: string | null; updated_at: string; by_name?: string | null };
 
 const positioningView = (r: PositioningRow) => ({
   kind: r.kind, position: Number(r.position), text: r.text, version: r.version == null ? null : Number(r.version),
   source: r.source_kind || r.source_label ? { kind: r.source_kind, ref: r.source_ref, label: r.source_label } : null,
   updated_at: r.updated_at,
+  // D1114: who saved it, by name, for NAR4's "Proposed by Eadwyn, accepted by [Name]". Null when not recorded.
+  by: r.by_name ?? null,
 });
 
 /** The core, a version's own fields, and what the version reads: its own field where it has one, else the core's. */
 export async function readPositioning(env: Env, projectId: number, version: number | null) {
   const rows = ((await env.DB.prepare(
-    `SELECT version, kind, position, text, source_kind, source_ref, source_label, updated_at
-       FROM narrative_positioning WHERE project_id = ? AND (version IS NULL OR version = ?) ORDER BY kind, position`,
+    `SELECT p.version, p.kind, p.position, p.text, p.source_kind, p.source_ref, p.source_label, p.updated_at, u.name AS by_name
+       FROM narrative_positioning p LEFT JOIN users u ON u.id = p.updated_by
+      WHERE p.project_id = ? AND (p.version IS NULL OR p.version = ?) ORDER BY p.kind, p.position`,
   ).bind(projectId, version).all<PositioningRow>()).results || []);
   const core = rows.filter((r) => r.version == null).map(positioningView);
   const overrides = version == null ? [] : rows.filter((r) => r.version != null).map(positioningView);

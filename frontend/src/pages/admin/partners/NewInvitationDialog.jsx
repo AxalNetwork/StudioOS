@@ -1,9 +1,10 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
+import { partnerDealTypesApi } from '../../../lib/api/partnerDealTypes';
 import { api } from '../../../lib/api';
 import { Lightbox, actionGhost, actionPrimary } from '../../../ui';
 import {
-  CAPITAL_NOTE, DEAL_TYPES, LINK_FOOT, MESSAGE_HINT, MESSAGE_MAX, NAME_MAX, NEW_SUB, NEW_TITLE, READING, TYPE_CAP,
+  CAPITAL_NOTE, DEAL_TYPES, DEAL_TYPES_UNREADABLE, dealTypesAllowed, isTypeLocked, notGranted, LINK_FOOT, MESSAGE_HINT, MESSAGE_MAX, NAME_MAX, NEW_SUB, NEW_TITLE, READING, TYPE_CAP,
   TYPE_FULL, TYPE_NOTE, counter, createdLines, invitationHref, isCompleteEmail, refusalText, toggleType,
 } from './partnersDeskModel';
 import { PREVIEW_ASKS, PREVIEW_FAILED, PREVIEW_NOTE, lookupChecks, previewFor, previewReply } from './invitationsModel';
@@ -64,6 +65,9 @@ export default function NewInvitationDialog({ reads, onClose }) {
   const preview = useRead('offers:preview', 'preview', previewTry, true,
     () => Promise.all(PREVIEW_ASKS.map((types) => api.adminPartners.previewOffers(types))).then(previewReply));
 
+  // PI10b (D1117): the types this studio's licence allows (D986 §6); a type HQ has not granted is locked.
+  const allowedRead = useRead('deal-types', 'deal-types', 0, true, () => partnerDealTypesApi.mine());
+  const allowed = dealTypesAllowed(allowedRead);
   const ready = isCompleteEmail(typed) && types.length > 0 && !busy;
   const close = () => { if (busy) return; if (created) reads.reload(); onClose(); };
 
@@ -159,7 +163,19 @@ export default function NewInvitationDialog({ reads, onClose }) {
               <button type="button" className="underline" onClick={() => setPreviewTry((n) => n + 1)}>Try again</button>
             </p>
           ) : null}
+          {allowed.state === 'unreadable' ? <p className={`m-0 text-[12.5px] font-semibold ${AMBER}`} data-testid="partners-new-types-unreadable">{DEAL_TYPES_UNREADABLE}</p> : null}
           {DEAL_TYPES.map((t) => {
+            if (isTypeLocked(allowed, t.key)) {
+              return (
+                <div key={t.key} className="flex items-start gap-3 rounded-[10px] border border-dashed border-axal-muted bg-axal-ground px-3 py-2.5 dark:border-gray-500 dark:bg-gray-800" data-testid={`partners-new-type-${t.key}`} data-locked="true">
+                  <span aria-hidden="true" className="mt-0.5 text-[15px] leading-tight text-axal-muted dark:text-gray-400">⊘</span>
+                  <span className="flex min-w-0 flex-col gap-0.5">
+                    <span className="text-[13px] font-extrabold text-axal-muted dark:text-gray-400">{t.word}</span>
+                    <span className={SUB} data-testid={`partners-new-type-${t.key}-locked`}>{notGranted(t.word)}</span>
+                  </span>
+                </div>
+              );
+            }
             const on = types.includes(t.key);
             const full = !on && types.length >= TYPE_CAP;
             const p = previewFor(preview, t.key);
