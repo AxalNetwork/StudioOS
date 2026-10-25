@@ -41,6 +41,11 @@ paths = [
   '''(?i)cloudflare-worker/test/calendar\.google-oauth\.test\.ts$''',
 ]
 regexes = [
+  # D1135: this exact synthetic signing seed belongs only to the SQLite test's
+  # locally minted JWTs. It is no deployed credential. Pin the literal rather
+  # than exempting the test file or rewriting published branch history.
+  '''\bsynthetic-d1135-secret\b''',
+
   # Tailwind / Vite generated content hashes that look like secrets but aren't.
   '''[a-f0-9]{8}\.(js|css|woff2?)''',
   # Known synthetic test JWTs (signed with the literal "test" key).

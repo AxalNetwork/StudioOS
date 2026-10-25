@@ -361,7 +361,7 @@ test('the danger zone ships the two actions that exist and refuses the one that 
   assert.doesNotMatch(dz, /api\.deleteCompany|\/company\/\$\{uid\}',\s*\{\s*method:\s*'DELETE'/,
     'nothing in the danger zone may call a delete-company endpoint');
   assert.match(dz, /await leaveCompany\(uid\)/,
-    'Leave must be the member-removal endpoint applied to yourself, not a new route');
+    'Leave must call the shared self-leave action for this company');
 });
 
 test('leaving is refused for the only primary admin, on both sides', () => {
