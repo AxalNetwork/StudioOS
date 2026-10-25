@@ -435,6 +435,11 @@ D886 B8: `meetingBotRuntime.ts` routes commands to a private cross-script DO
 host and derives run-scoped keys. `meetingBotZoom.ts` mints credentials from
 the reauthorized stored run, with a run-bounded SDK JWT. No credentials log.
 
+D1119 (#2999): `programCatalogue.ts` reads part 4's shared claim and requested
+strategic-access counts, including a claim weekly series and independent failure
+states. `programActivity.ts` includes its six audited review actions, naming
+Perk listings without exposing member ids or review notes.
+
 `perkClaims.ts` (D957) gives the admin Perks page and program catalogue one
 UTC Monday window for claim totals, listing ranks and weekly price-kind counts.
 `raiseEvidence.ts` reads active Mercury runway facts and the files current data-room grants can download, for Raise and deck readiness.
