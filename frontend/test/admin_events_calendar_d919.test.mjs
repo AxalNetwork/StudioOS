@@ -29,7 +29,7 @@ import { MemoryRouter, useLocation } from 'react-router-dom';
 import { installDocument } from './_contracts_dom.mjs';
 import { codeOnly } from './_codeOnly.mjs';
 import AdminEventsPage from '../src/pages/admin/AdminEventsPage.jsx';
-import { DAY_MS, NOT_HELD, NOT_IN_READ, analyticsJoin, statusWord } from '../src/pages/admin/events/eventsDeskModel.js';
+import { DAY_MS, NOT_HELD, NOT_IN_READ, listCounts, statusWord } from '../src/pages/admin/events/eventsDeskModel.js';
 import {
   CALENDAR_PATH, CHIPS_PER_DAY, LEGEND, blockBox, calendarSearch, calendarState, chipStyle, clashMap, laneOut, mondayOf,
   monthGrid, monthList, placeOf, seatsLine, todayKey, unplacedLine, weekGrid,
@@ -51,9 +51,9 @@ const ev = (id, o = {}) => ({
   created_at: '2026-10-01 09:00:00', admin_published: true, audience_rules: {}, ...o,
 });
 // GET /api/admin/events/analytics — one per-event row
-const row = (id, registrations, attended = 0, waitlisted = 0) => ({ id, registrations, attended, waitlisted, cancelled: 0, conversion: 0 });
+const row = (id, registrations, attended = 0, waitlisted = 0) => ({ id, seats_taken: registrations, registrations, attended, waitlisted, cancelled: 0, conversion: 0 });
 const ready = (data) => ({ status: 'ready', data });
-const joined = (rows, known = rows.length) => analyticsJoin(ready({ events: rows }), known);
+const joined = (rows, known = rows.length) => listCounts(ready(rows));
 
 /* ------------------------------------------------------------------ *
  * The month
@@ -182,8 +182,8 @@ test('the chip card\'s seats follow Guard G: never 0 for a count that could not 
   assert.equal(seatsLine(ev(1), joined([row(1, 12)])), 'Seats 12 / 40');
   assert.equal(seatsLine(ev(1, { capacity: null }), joined([row(1, 9)])), '9 taken · No cap');
   assert.equal(seatsLine(ev(1), joined([row(2, 3)], 2)), `Seats taken: ${NOT_IN_READ.toLowerCase()}`);
-  assert.equal(seatsLine(ev(1), joined([], 1)), 'Seats taken: could not be read', 'an empty analytics read with events known is Guard G (a)');
-  assert.equal(seatsLine(ev(1), analyticsJoin({ status: 'error' }, 1)), 'Seats taken: could not be read');
+  assert.equal(seatsLine(ev(1), listCounts({ status: 'error' })), 'Seats taken: could not be read', 'a failed list read is never a zero');
+  assert.equal(seatsLine(ev(1), listCounts({ status: 'error' })), 'Seats taken: could not be read');
 });
 
 test('the address keeps the view, the month and the week, and the filters; the phone opens on List', () => {
@@ -357,7 +357,7 @@ function worker({ list = [], analytics = { events: [] } } = {}) {
       const q = new URLSearchParams(url.split('?')[1]);
       const source = q.get('status') === 'pending_review' ? [] : list;
       const offset = Number(q.get('offset'));
-      return response({ events: source.slice(offset, offset + Number(q.get('limit'))) });
+      return response({ events: source.slice(offset, offset + Number(q.get('limit'))).map(e => { const c = analytics.events?.find(r => r.id === e.id); return c ? { ...e, seats_taken: c.registrations, attended: c.attended, waitlisted: c.waitlisted } : e; }) });
     }
     return response({});
   };
@@ -425,7 +425,7 @@ test('Calendar: the tab, the month with its chips, "+n more", the overlap, and t
     assert.match(String(view.props('events-tab-calendar').className), /border-axal-violet/, 'Calendar is the lit tab');
     assert.equal(view.textOf('events-cal-title'), 'March 2027');
     assert.ok(view.requests.some((u) => u === '/api/admin/events?limit=200&offset=0'), 'R1');
-    assert.ok(view.requests.some((u) => u === '/api/admin/events/analytics'), 'R2, for the card\'s seats');
+    assert.equal(view.requests.some((u) => u === '/api/admin/events/analytics'), false, 'counts come from D918, not capped analytics');
     assert.equal(view.textOf('events-cal-chip-11'), '08:30 Breakfast');
     assert.equal(view.textOf('events-cal-chip-13'), '18:30 Briefing · Review');
     assert.equal(view.textOf('events-cal-overlap-2027-03-13'), '●2 overlap', 'Roundtable and Briefing; the cancelled Social clashes with nothing');
@@ -440,7 +440,7 @@ test('Calendar: the tab, the month with its chips, "+n more", the overlap, and t
     assert.equal(view.textOf('events-cal-card-seats'), 'Seats 12 / 20');
     assert.equal(view.props('events-cal-card-open').href, '/admin/events/11');
     await view.click('events-cal-chip-12');
-    assert.equal(view.textOf('events-cal-card-seats'), `Seats taken: ${NOT_IN_READ.toLowerCase()}`, 'Guard G: missing from R2, never 0');
+    assert.equal(view.textOf('events-cal-card-seats'), 'Seats taken: not recorded', 'a missing D918 count is never an invented zero');
     assert.equal(view.textOf('events-cal-card-clash'), 'Overlaps one other event.');
     await view.click('events-cal-close');
     assert.equal(view.has('events-cal-card'), false);

@@ -74,14 +74,15 @@ export function JoinNote() {
 export function JoinLeaveButton({ dealId, member, quotaState, onChanged, compact = false }) {
   const [busy, setBusy] = useState(false);
   const [refusal, setRefusal] = useState('');
+  const [notice, setNotice] = useState('');
   const q = quotaState?.quota;
   const full = !member && q && q.full;
 
   const act = async () => {
-    setBusy(true); setRefusal('');
+    setBusy(true); setRefusal(''); setNotice('');
     try {
       if (member) await api.dealroomLeave(dealId);
-      else await api.dealroomJoin(dealId);
+      else { await api.dealroomJoin(dealId); setNotice('Your invitation request is recorded. Access starts after an invitation or commitment.'); }
       await onChanged?.();
     } catch (e) {
       if (e?.code === 'quota_dealrooms_exhausted') {
@@ -108,11 +109,12 @@ export function JoinLeaveButton({ dealId, member, quotaState, onChanged, compact
         data-testid={member ? 'dr-leave' : 'dr-join'}
       >
         {busy ? <Loader2 size={14} className="animate-spin" /> : (member ? <LogOut size={14} /> : <LogIn size={14} />)}
-        {member ? 'Leave' : 'Join deal room'}
+        {member ? 'Leave' : 'Request an invitation'}
       </button>
       {fullLine && (
         <p className="mt-1.5 max-w-xs text-xs text-amber-800 dark:text-amber-300" role="status" data-testid="dr-quota-full">{fullLine}</p>
       )}
+      {notice && <p role="status" className="mt-1.5 text-xs text-gray-600 dark:text-gray-400">{notice}</p>}
       {refusal && refusal !== 'quota' && (
         <p className="mt-1.5 max-w-xs text-xs text-red-700 dark:text-red-300" role="alert" data-testid="dr-join-refusal">{refusal}</p>
       )}

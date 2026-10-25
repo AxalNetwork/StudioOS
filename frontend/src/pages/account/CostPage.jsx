@@ -8,6 +8,7 @@ import { DailyCostChart } from './UsageCharts';
 import { UsageCardState } from './UsageOverview';
 import UsageDetails from './AccountUsage';
 import { microUsd, usd } from './usageModel';
+import { COST_STORAGE_NOTE } from './storagePageModel';
 
 const countText = (v) => Number.isSafeInteger(v) && v >= 0 ? v.toLocaleString('en-US') : null;
 function Missing({ value, reason }) {
@@ -79,7 +80,7 @@ function CostRead({ range, group, model, setModel, setRange }) {
 export function downloadCostCsv(client, range, group) {
   return client.costCsv({ range, group });
 }
-export default function CostPage({ role }) {
+export default function CostPage() {
   const [range, setRange] = useState('mtd');
   const [group, setGroup] = useState('model');
   const [model, setModel] = useState('');
@@ -104,8 +105,9 @@ export default function CostPage({ role }) {
     </div>{exportError && <Unreadable what="The CSV download" claim="Try Download CSV again." onRetry={csv} />}</PanelCard>
     <CostRead key={`${range}:${group}`} range={range} group={group} model={model} setModel={setModel} setRange={changeRange} />
     <details open data-testid="usage-preserved-details" className="min-w-0">
-      <summary className="mb-3 cursor-pointer text-sm font-semibold">Allowance, top-ups, where it went, models, rate card, last run and storage</summary>
-      <UsageDetails role={role} details />
+      <summary className="mb-3 cursor-pointer text-sm font-semibold">Allowance, top-ups, where it went, models, rate card and last run</summary>
+      <p className="mb-3 text-[12.5px] text-axal-muted dark:text-gray-400" data-testid="usage-storage-moved">{COST_STORAGE_NOTE} <Link to="/account/usage/storage" className="font-semibold text-axal-violet dark:text-violet-300">Open storage</Link></p>
+      <UsageDetails details />
     </details>
   </div>;
 }

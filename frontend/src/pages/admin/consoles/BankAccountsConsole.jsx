@@ -75,7 +75,7 @@ const FUND_MISSING = 'No account on file. Capital calls can’t issue until the 
 const NO_ACCOUNT = 'No account on file.';
 const RESERVE_WORDS = 'Reserve: never printed on a notice';
 const NO_PURPOSE_WORDS = 'No notice purpose';
-const RECONCILIATION_HREF = '/admin/fund-admin?tab=reconciliation';
+const RECONCILIATION_HREF = '/admin/fund-admin/banking/reconciliation';
 const MERCURY_BANK_OPTION = `Mercury · ${MERCURY_PRESET.bank_name} · ABA ${MERCURY_PRESET.routing_number} · SWIFT ${MERCURY_PRESET.swift_code}`;
 const ADD_NOTE = 'Saved encrypted. The full number is not shown again, except through Reveal.';
 const REVEAL_SHOWN = 'Shown for 30 seconds. It is not kept on this device.';

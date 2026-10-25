@@ -14,7 +14,7 @@ const LINKS = [
   ['pages/ProjectDetail.jsx', 'crunchbase', /Connect it in Account → Connectors/],
   ['pages/CapTablePage.jsx', 'carta', /Connect Carta/],
   ['pages/SettingsPage.jsx', 'slack', /Slack joins this table once it is connected in/],
-  ['pages/admin/consoles/PartnerProfilesConsole.jsx', 'docusign', /connect DocuSign/],
+  ['pages/admin/profiles/ProfileRecord.jsx', 'docusign', /connect DocuSign/],
   ['components/MercuryMatch.jsx', 'mercury', /Open Connectors/],
   ['components/spinout/MercuryCreditImport.jsx', 'mercury', /Open Connectors/],
   ['components/spinout/MercurySpend.jsx', 'mercury', /Open Connectors/],

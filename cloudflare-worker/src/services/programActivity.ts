@@ -45,15 +45,14 @@ export const PROGRAM_ACTIVITY_ACTIONS: Record<ProgramKey, readonly string[]> = {
   'mentor-cohorts': MENTOR_ACCESS_ACTIONS,
   'investor-cohorts': [],
   'referral-partners': [],
-  'refer-and-earn': [],
-  perks: [],
+  'refer-and-earn': ['referral_strategic_access.granted', 'referral_strategic_access.declined'],
+  perks: ['perk.approved', 'perk.rejected', 'perk.paused', 'perk.feature_updated'],
   learning: LEARNING_PROGRAM_ACTIONS,
   'product-testing': [],
 };
 
 /** Writes on a program's page that the audit does not record yet, and who adds them. */
 export const NOT_AUDITED_YET: Partial<Record<ProgramKey, string>> = {
-  perks: 'Perk listing reviews are not written to the admin audit yet. Part 4 (#2790) adds them.',
 };
 
 export const ACTIVITY_LIMIT_MAX = 50;
@@ -191,7 +190,7 @@ export async function programActivity(
   const merged: Array<Row & { details?: Record<string, unknown> }> = [...audit, ...reviews]
     .sort((x, y) => (x.at === y.at ? (x.src === y.src ? y.id - x.id : (x.src < y.src ? 1 : -1)) : (x.at < y.at ? 1 : -1)));
   const page = merged.slice(0, q.limit);
-  const names = await learningNames(env, page.map((r) => String(r.details?.uid ?? '')).filter(Boolean));
+  const names = await learningNames(env, page.filter((r) => r.kind.startsWith('learning.')).map((r) => String(r.details?.uid ?? '')).filter(Boolean));
   const rows = page.map((r) => {
     let concerns = r.concerns;
     if (r.src === 'a') {
@@ -205,7 +204,9 @@ export async function programActivity(
           ...(typeof d.grantable === 'boolean' ? { grantable: d.grantable } : {}),
           ...(Array.isArray(d.fields) ? { fields: d.fields.filter((x) => typeof x === 'string') } : {}),
         };
-      } else if (typeof d.uid === 'string') {
+      } else if (r.kind.startsWith('perk.') && typeof d.uid === 'string') {
+        concerns = { perk: d.uid };
+      } else if (r.kind.startsWith('learning.') && typeof d.uid === 'string') {
         concerns = { learning_program: { uid: d.uid, name: names.get(d.uid) ?? null } };
       } else if (typeof d.cohort_cycle_id === 'number') {
         // D960's rows name the cohort; the mentor in `target_user_id` is a person, so is never named.

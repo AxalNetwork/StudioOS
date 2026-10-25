@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useSearchParams } from 'react-router-dom';
 import { Plus, RefreshCw, X, Send, ArrowUpRight, CheckSquare, Square } from 'lucide-react';
 import { useAuth } from '../hooks/useAuthSync';
 import { api } from '../lib/api';
@@ -51,6 +51,13 @@ export function ContactsPanel() {
     catch (e) { setErr(e.message); }
   };
   const refreshDetail = async () => { if (open) setOpen(await api.contactGet(open.uid)); };
+
+  // D1189 (#3123): `?contact=<uid>` opens that contact's drawer, so a door
+  // such as the Raise pipeline's "Open in Contacts hub" lands on the contact
+  // itself rather than on the whole inbox.
+  const [params] = useSearchParams();
+  const asked = params.get('contact');
+  useEffect(() => { if (asked) openDetail(asked); }, [asked]);
 
   const onCreate = async (e) => {
     e.preventDefault();
