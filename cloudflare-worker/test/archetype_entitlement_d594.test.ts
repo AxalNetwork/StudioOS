@@ -47,7 +47,7 @@ const past = new Date(Date.now() - 10 * DAY).toISOString();
 const USERS: Array<[number, string, string, string, string, string, string | null, number | null, number]> = [
   [1, 'founder', 'free', 'active', 'free', 'free', null, null, 0],               // free founder
   [2, 'founder', 'growth', 'active', 'free', 'free', null, null, 0],             // paid founder
-  [3, 'founder', 'studio', 'past_due', 'free', 'free', null, null, 0],           // founder who stopped paying
+  [3, 'founder', 'studio', 'unpaid', 'free', 'free', null, null, 0],             // founder who stopped paying: Stripe gave up (D1052)
   [4, 'investor', 'free', 'active', 'free', 'free', null, null, 0],              // free investor
   [5, 'investor', 'free', 'active', 'professional', 'active', null, null, 0],    // paid investor
   [6, 'investor', 'free', 'active', 'professional', 'trialing', future, null, 0],// active trial
