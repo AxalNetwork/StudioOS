@@ -21,7 +21,7 @@
  * `GET /api/learning/programs/mine` scopes them. A Super Admin reads every row.
  */
 import type { Env } from '../types';
-import { REGISTRY_ACTIONS, type ProgramKey } from './programRegistry';
+import { PROPOSAL_ACTIONS, REGISTRY_ACTIONS, type ProgramKey } from './programRegistry';
 
 /** Learning's audited writes (`routes/admin_learning_programs.ts`). */
 export const LEARNING_PROGRAM_ACTIONS = [
@@ -55,7 +55,9 @@ export const NOT_AUDITED_YET: Partial<Record<ProgramKey, string>> = {
 
 export const ACTIVITY_LIMIT_MAX = 50;
 
-const REGISTRY_ACTION_LIST = Object.values(REGISTRY_ACTIONS);
+// Matched on each row's program_key. D955 adds the decision on a proposal and New program,
+// whose rows name the program they made; a send names none.
+const REGISTRY_ACTION_LIST = [...Object.values(REGISTRY_ACTIONS), PROPOSAL_ACTIONS.decide, PROPOSAL_ACTIONS.create];
 const SOURCES = ['a', 'r'] as const; // admin audit, referral review
 type Source = typeof SOURCES[number];
 
@@ -101,8 +103,9 @@ function detailsOf(raw: unknown): Record<string, unknown> {
   }
 }
 
-async function auditRows(env: Env, key: ProgramKey, before: ActivityCursor | null, limit: number, learningScope: string[] | null) {
-  const own = PROGRAM_ACTIVITY_ACTIONS[key];
+async function auditRows(env: Env, key: string, before: ActivityCursor | null, limit: number, learningScope: string[] | null) {
+  // A program an approval or New program added (D955) has no actions of its own yet.
+  const own = (PROGRAM_ACTIVITY_ACTIONS as Record<string, readonly string[] | undefined>)[key] ?? [];
   const [at, tie] = bounds(before, 'a');
   // `json_valid` first: a row whose details are not JSON is skipped by the
   // match rather than failing the whole read.
@@ -171,7 +174,7 @@ export async function assignedLearningUids(env: Env, userId: number): Promise<st
  * cursor for the next. `viewer.superAdmin` lifts Learning's assigned scope.
  */
 export async function programActivity(
-  env: Env, key: ProgramKey, viewer: { id: number; superAdmin: boolean },
+  env: Env, key: string, viewer: { id: number; superAdmin: boolean },
   q: { before: ActivityCursor | null; limit: number },
 ) {
   const scope = key === 'learning' && !viewer.superAdmin ? await assignedLearningUids(env, viewer.id) : null;
@@ -192,6 +195,7 @@ export async function programActivity(
           program: d.program_key,
           ...(typeof d.section === 'string' ? { section: d.section } : {}),
           ...(typeof d.version === 'number' ? { version: d.version } : {}),
+          ...(typeof d.outcome === 'string' ? { outcome: d.outcome } : {}),
           ...(Array.isArray(d.fields) ? { fields: d.fields.filter((x) => typeof x === 'string') } : {}),
         };
       } else if (typeof d.uid === 'string') {
@@ -201,7 +205,7 @@ export async function programActivity(
     return { at: r.at, kind: r.kind, by: r.by, concerns };
   });
   const more = merged.length > q.limit;
-  const not = NOT_AUDITED_YET[key];
+  const not = (NOT_AUDITED_YET as Record<string, string | undefined>)[key];
   return {
     program: key,
     rows,
