@@ -141,7 +141,9 @@ const AdminExploring = lazy(() => import('./pages/admin/AdminExploring'));
 // (canvas S20). Under /admin/held/ so none can collide with an HQ console:
 // /admin/accounts is HQ's Team, and the HQ consoles are flat /admin/<noun>.
 const HeldAccounts = lazy(() => import('./pages/admin/HeldAccounts'));
-const HeldApprovals = lazy(() => import('./pages/admin/HeldApprovals'));
+const AdminApprovals = lazy(() => import('./pages/admin/approvals/AdminApprovals'));
+const ApprovalsLaneBoards = lazy(() => import('./pages/admin/approvals/LaneBoards'));
+const HeldApprovalsRedirect = lazy(() => import('./pages/admin/approvals/HeldApprovalsRedirect'));
 // D953 (#2371) — Admin › Programs: the catalogue, one page per program with its
 // tabs as sub-paths, and the three old addresses' redirects.
 const AdminProgramsCatalogue = lazy(() => import('./pages/admin/programs/ProgramsCatalogue'));
@@ -2815,7 +2817,6 @@ function AppInner() {
           this is the plain admin's own shell. Each carries its consoles as
           literal links, which is how the reachability walk reaches them. */}
       <Route path="/admin/held/accounts" element={guard(['admin'], <HeldAccounts />)} />
-      <Route path="/admin/held/approvals" element={guard(['admin'], <HeldApprovals />)} />
       {/* D953 (#2371) — Programs left /admin/held/ when it was rebuilt to its
           canvas. The old address keeps its query and hash and adds
           ?moved=held. The catalogue and each program page with its tabs as
@@ -2839,6 +2840,24 @@ function AppInner() {
       <Route path="/admin/programs/referral-partners/how-it-runs" element={guard(['admin'], <AdminProgramPage />)} />
       <Route path="/admin/programs/investor-cohorts" element={guard(['admin'], <AdminProgramPage />)} />
       <Route path="/admin/programs/ai-native-venture" element={guard(['admin'], <AdminProgramPage />)} />
+      {/* D1038 (#2390) — Approvals left /admin/held/ when it was rebuilt to its
+          canvas, as Insights and Community did: Inbox, Lanes and Decided, and
+          the three lane boards with their tabs as sub-paths. The old address
+          keeps its query and hash and adds ?moved=held-approvals. */}
+      <Route path="/admin/approvals" element={guard(['admin'], <AdminApprovals />)} />
+      <Route path="/admin/approvals/lanes" element={guard(['admin'], <AdminApprovals />)} />
+      <Route path="/admin/approvals/decided" element={guard(['admin'], <AdminApprovals />)} />
+      <Route path="/admin/approvals/product-testers" element={guard(['admin'], <ApprovalsLaneBoards />)} />
+      <Route path="/admin/approvals/co-marketing" element={guard(['admin'], <ApprovalsLaneBoards />)} />
+      <Route path="/admin/approvals/co-marketing/approved" element={guard(['admin'], <ApprovalsLaneBoards />)} />
+      <Route path="/admin/approvals/co-marketing/published" element={guard(['admin'], <ApprovalsLaneBoards />)} />
+      <Route path="/admin/approvals/co-marketing/declined" element={guard(['admin'], <ApprovalsLaneBoards />)} />
+      <Route path="/admin/approvals/co-marketing/withdrawn" element={guard(['admin'], <ApprovalsLaneBoards />)} />
+      <Route path="/admin/approvals/wellbeing-experts" element={guard(['admin'], <ApprovalsLaneBoards />)} />
+      <Route path="/admin/approvals/wellbeing-experts/incomplete" element={guard(['admin'], <ApprovalsLaneBoards />)} />
+      <Route path="/admin/approvals/wellbeing-experts/verified" element={guard(['admin'], <ApprovalsLaneBoards />)} />
+      <Route path="/admin/approvals/wellbeing-experts/hidden" element={guard(['admin'], <ApprovalsLaneBoards />)} />
+      <Route path="/admin/held/approvals" element={<HeldApprovalsRedirect />} />
       {/* D930 (#2367) — Community left /admin/held/ when it was rebuilt to its
           canvas, as Insights did. The old address keeps its query and hash
           and adds ?moved=held-community. */}
@@ -2950,6 +2969,7 @@ function AppInner() {
       <Route path="/admin/programs/spinout-lab" element={guard(['admin'], <AdminLab onImpersonate={handleImpersonate} />)} />
       <Route path="/admin/programs/spinout-lab/applications" element={guard(['admin'], <AdminLab onImpersonate={handleImpersonate} />)} />
       <Route path="/admin/programs/spinout-lab/cohorts" element={guard(['admin'], <AdminLab onImpersonate={handleImpersonate} />)} />
+      <Route path="/admin/programs/spinout-lab/cohorts/:ym" element={guard(['admin'], <AdminLab onImpersonate={handleImpersonate} />)} />
       <Route path="/admin/programs/spinout-lab/participants" element={guard(['admin'], <AdminLab onImpersonate={handleImpersonate} />)} />
       <Route path="/admin/programs/spinout-lab/hosts" element={guard(['admin'], <AdminLab onImpersonate={handleImpersonate} />)} />
       <Route path="/admin/programs/spinout-lab/formation" element={guard(['admin'], <AdminLab onImpersonate={handleImpersonate} />)} />

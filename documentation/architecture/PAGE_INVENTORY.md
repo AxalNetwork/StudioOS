@@ -65,7 +65,7 @@ canvas behind it still shows up here.
 | --- | --- | --- | --- |
 | Admin | Studio | `/studio` | — (no canvas; shipped ahead of the design corpus) |
 | Admin | Accounts | `/admin/held/accounts` | — (no canvas; shipped ahead of the design corpus) |
-| Admin | Approvals | `/admin/held/approvals` | — (no canvas; shipped ahead of the design corpus) |
+| Admin | Approvals | `/admin/approvals` | — (no canvas; shipped ahead of the design corpus) |
 | Admin | Programs | `/admin/programs` | Admin · Programs |
 | Admin | Community | `/admin/community` | — (no canvas; shipped ahead of the design corpus) |
 | Admin | Contracts | `/admin/contracts` | Contracts · Subsidiary |
@@ -131,7 +131,7 @@ rather than merely absent.
 - partner · Headerless · Offers (`/offers`)
 - admin · Admin · Studio (`/studio`)
 - admin · Admin · Accounts (`/admin/held/accounts`)
-- admin · Admin · Approvals (`/admin/held/approvals`)
+- admin · Admin · Approvals (`/admin/approvals`)
 - admin · Admin · Community (`/admin/community`)
 - admin · Admin · Fund admin (`/admin/fund-admin`)
 - admin · Admin · Insights (`/admin/insights`)
@@ -154,4 +154,4 @@ rather than merely absent.
 - branch_admin · Branch · Insights (`/branch/insights`)
 - branch_admin · Branch · Licences (`/admin/my-licence`)
 
-**Canvas corpus:** 162. **Workspace assignments:** 223.
+**Canvas corpus:** 164. **Workspace assignments:** 230.

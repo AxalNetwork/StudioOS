@@ -148,7 +148,8 @@ test('Upcoming: the tabs with counts, the next event with its code, Going, Needs
     assert.match(text, /LP Briefing was sent back by an admin\./);
     assert.equal(ui.nodes().filter((n) => ui.props(n)['data-ticket-code']).length, 1, 'only the next event shows its code');
     assert.ok(!text.includes('OLD-CODE'), 'a past ticket is not on Upcoming');
-    assert.ok(ui.hrefs().includes('/api/events/1/ics') && ui.hrefs().includes('https://example.test/join'));
+    assert.ok(ui.hrefs().includes('/api/events/1/ics'));
+    assert.ok(ui.hrefs().some((href) => href === 'https://example.test/join'));
     assert.ok(ui.hrefs().includes('/my/events/discover'));
   } finally { await ui.unmount(); }
 });
@@ -226,7 +227,7 @@ test('Past: places and hosted events, newest first, with Replay "Not recorded"; 
 test('the wiring: four routes under one guard with Explorers in, the phone view kept, and the canvas in incoming', () => {
   const app = read('frontend/src/App.jsx');
   for (const p of ['/my/events', '/my/events/hosting', '/my/events/discover', '/my/events/past']) {
-    assert.match(app, new RegExp(`<Route path="${p.replace(/\//g, '\\/')}" element=\\{guard\\(\\['admin', 'founder', 'partner', 'investor', 'advisor', 'exploring'\\], <MyEventsPage \\/>\\)\\} \\/>`), p);
+    assert.ok(app.split('\n').some((line) => line.trim() === `<Route path="${p}" element={guard(['admin', 'founder', 'partner', 'investor', 'advisor', 'exploring'], <MyEventsPage />)} />`), p);
   }
   assert.match(page, /if \(phone\) \{[\s\S]*?<EventsPhoneView /, 'the phone keeps A7m until the phone part');
   assert.doesNotMatch(page, /\b(alert|confirm)\(/);

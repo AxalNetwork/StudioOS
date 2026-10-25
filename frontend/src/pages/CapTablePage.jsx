@@ -1019,7 +1019,7 @@ function CartaLogo({ size = 14 }) {
 }
 
 function SourceBadge({ source }) {
-  if (source === 'carta') {
+  if (source === 'connector_carta' || source === 'carta') {
     return (
       <span
         className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-medium bg-orange-50 text-orange-700 border border-orange-200 cursor-not-allowed"
@@ -1041,7 +1041,7 @@ function LiveCapTablePanel({ live, loading, error, onRefresh }) {
   const connected = !!live?.connected;
   const holders = live?.holders || [];
   const securities = live?.securities || [];
-  const cartaHolders = holders.filter(h => h.source === 'carta');
+  const cartaHolders = holders.filter(h => h.source === 'connector_carta' || h.source === 'carta');
   const ago = timeAgo(live?.last_synced_at);
 
   // Hide entirely when there's nothing to show: not connected AND no
@@ -1140,14 +1140,14 @@ function LiveCapTablePanel({ live, loading, error, onRefresh }) {
             </thead>
             <tbody>
               {holders.slice(0, 50).map((h) => (
-                <tr key={h.id} className={`border-t border-gray-100 ${h.source === 'carta' ? 'bg-orange-50/30' : ''}`}>
+                <tr key={h.id} className={`border-t border-gray-100 ${(h.source === 'connector_carta' || h.source === 'carta') ? 'bg-orange-50/30' : ''}`}>
                   <td className="px-4 py-1.5">
                     <div className="font-medium text-gray-900 dark:text-gray-100">{h.name}</div>
                     {h.email && <div className="text-[11px] text-gray-500">{h.email}</div>}
                   </td>
                   <td className="px-2 py-1.5 text-gray-600 text-xs">{h.security_type || '—'}</td>
-                  <td className="px-2 py-1.5 text-right tabular-nums">{Number(h.shares || 0).toLocaleString()}</td>
-                  <td className="px-2 py-1.5 text-right tabular-nums">{Number(h.ownership_pct || 0).toFixed(2)}%</td>
+                  <td className="px-2 py-1.5 text-right tabular-nums">{h.shares == null ? 'Not recorded' : Number(h.shares).toLocaleString()}</td>
+                  <td className="px-2 py-1.5 text-right tabular-nums">{h.ownership_pct == null ? 'Not recorded' : `${Number(h.ownership_pct).toFixed(2)}%`}</td>
                   <td className="px-4 py-1.5"><SourceBadge source={h.source} /></td>
                 </tr>
               ))}

@@ -200,7 +200,7 @@ test('the routes, the redirect, the console mount gone, the lane doors, and the 
   assert.ok(app.includes(`<Route path="/admin/partner-profiles/all" element={guard(['admin'], <PartnerProfiles />)} />`));
   const admin = read('frontend/src/pages/admin/ConsolePages.jsx');
   assert.ok(!admin.includes('<PartnerProfilesConsole'), 'the console still mounts the tab');
-  assert.ok(read('frontend/src/pages/admin/HeldApprovals.jsx').includes('<Link to="/admin/partner-profiles"'));
+  assert.ok(read('frontend/src/pages/admin/approvals/AdminApprovals.jsx').includes('<Link to="/admin/partner-profiles"'));
   assert.match(read('frontend/src/pages/admin/adminStudioOverview.js'), /partner_profiles: '\/admin\/partner-profiles'/);
   assert.ok(SIDEBAR_GROUPS.admin.flatMap((g) => g.items).find((r) => r.label === 'Approvals').match.includes('/admin/partner-profiles'));
   const page = read('frontend/src/pages/admin/profiles/PartnerProfiles.jsx');

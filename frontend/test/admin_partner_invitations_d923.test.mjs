@@ -38,7 +38,7 @@ import {
   STORED_EXPIRED_WORD, TABS, TITLE, TRY_AGAIN, TYPE_FULL, WITHIN_DEALS, WITHIN_INVITATIONS, agreementReady,
   allTimeRedemptions, cameFromOldAddress, copyFailed, countClosing30, countLast90, countOpenWindows, createdLines, day,
   daysLeft, daysUsed, ddFor, dealForInvitation, dealFromSearch, dealPartner, dealState, dealTiles, dealTypeWord, dealsCount, dealsUnion, dotsLabel, duplicateCheck,
-  expiresCell, fanFigure, fanOut, filterInvitations, findDeal, findInvitation, firmCounts, invitationForDeal, invitationRow, invitationTiles, isCompleteEmail,
+  expiresCell, fanFigure, fanOut, filterInvitations, findDeal, findInvitation, firmCounts, invitationForDeal, invitationRow, isCompleteEmail,
   isFirstUse, isLapsed, memberCheck, needsYou, noMatchLine, obligationsLine, offeredTypes, pageOf, parseStamp, partialWrite, pausedLine, rangeText,
   redemptionDealSet, redemptionRow, refusalText, resendCopy, resentAt, resentResult, revokeCopy, revokeVariant, revokedLine, routeFor,
   signingLink, stageOf, tabCounts, tabPath, terminateCopy, terminateReady, terminatedLine, termText, tiersText, toggleType, topDealRows, windowOf,
@@ -198,8 +198,6 @@ test('Guard L: a list at its cap says what it covers, never a total', () => {
   const some = ready(many(37, (i) => inv(i)));
   assert.equal(tabCounts({ invitations: full, deals: lists(), contracts: failed(), needs: null }).invitations.text, '200+');
   assert.equal(tabCounts({ invitations: some, deals: lists(), contracts: failed(), needs: null }).invitations.text, '37');
-  assert.equal(invitationTiles(full, { proposed: ready([]), now: NOW })[0].cover, WITHIN_INVITATIONS);
-  assert.equal(invitationTiles(some, { proposed: ready([]), now: NOW })[0].cover, null);
   assert.equal(WITHIN_INVITATIONS, 'Within the newest 200 by first send');
   // Deals: R5's total is exact; the six lists' sum is a floor at a cap, and nothing when one failed.
   assert.deepEqual(dealsCount(ready({ items: [], total: 312, complete: true }), lists()), { text: '312', title: 'Every deal, in every state' });
@@ -215,8 +213,8 @@ test('Guard L: a list at its cap says what it covers, never a total', () => {
   assert.equal(firmCounts({ accounts: accounts.slice(0, 20), firms: [{ id: 4 }] }).text, '2 attached · 18 not · 1 firm on record', 'one firm is "1 firm"');
   assert.equal(firmCounts({ accounts: accounts.slice(0, 20), firms: [{ id: 4 }, { id: 5 }] }).text, '2 attached · 18 not · 2 firms on record');
   assert.equal(firmCounts({ accounts, firms: many(CAPS.links, (i) => ({ id: i })) }).text, '482 attached · 18 not · 500+ firms on record', 'at the cap the firms say what they cover');
-  const firms = needsYou({ invitations: ready([]), deals: lists(), links: ready({ accounts, firms: [] }), template: ready({ fields: [] }), fan: { state: 'ready', items: [], exact: true }, now: NOW }).rows.find((r) => r.kind === 'Firms');
-  assert.equal(firms.text, '18 partner accounts of the first 500 are not attached to a firm.');
+  const firms = needsYou(ready(overviewReply({ unattached_account: { available: true, rows: accounts.filter((a) => a.partner_id == null).map((a) => ({ kind: 'unattached_account', id: a.id })) } }))).rows.find((r) => r.kind === 'Firms');
+  assert.equal(firms.text, '18 partner accounts are not attached to a firm.');
   assert.deepEqual(firms.action, { label: 'Open Firms', to: '/admin/advisors-partners/firms' }, 'D952: the row opens Advisors & Partners › Firms');
   assert.equal(ddFor(deal(1), ready(many(CAPS.cases, (i) => ({ subject_id: 9000 + i, status: 'open' })))).text, NOT_IN_READ);
   assert.equal(ddFor(deal(1), ready([])).text, 'No case on record');
@@ -441,62 +439,11 @@ test('New invitation: three types at most, and checks that say when they could n
   assert.equal(isCompleteEmail('lio@example.c'), false);
 });
 
-test('Needs you draws only the rows whose data exists, and names a source it could not read', () => {
-  const mara = inv(2, { recipient_name: 'Mara Example', status: 'selected', createdMs: NOW - 30 * DAY, is_expired: true });
-  const teo = inv(3, { recipient_name: 'Teo Sample', status: 'selected' });
-  const deals = lists({ active: ready([deal(7, { expires_at: isoAt(NOW + 20 * DAY) }), deal(8)]) });
-  const links = ready({ accounts: [{ id: 1, partner_id: null }, { id: 2, partner_id: null }, { id: 3, partner_id: 4 }], firms: [] });
-  const fan = { state: 'ready', items: [{ attribution_kind: 'deal_sourcing_revshare', revshare_window_remaining_days: 9, deal: { deal_type: 'deal_sourcing_revshare', status: 'active' } }], complete: true, short: [], firstOnly: [], exact: true };
-  const notReady = failed({ status: 409, code: 'template_has_no_body' });
-  const needs = needsYou({ invitations: ready([mara, teo]), deals, links, template: notReady, fan, now: NOW });
-  assert.equal(needs.settled, true);
-  assert.deepEqual(needs.rows.map((r) => [r.kind, r.text]), [
-    ['Lapsed', 'The invitation to Mara Example lapsed on 8 Oct 2026 at Offer chosen.'],
-    ['Agreement', 'Teo Sample chose an offer, but the agreement cannot be sent yet: the Partner Services agreement is not ready.'],
-    ['Term ending', 'The Services partnership with Dana 7 ends on 13 Nov 2026.'],
-    ['Firms', '2 partner accounts are not attached to a firm.'],
-    ['Rev-share', '1 rev-share window closes within 30 days.'],
-  ]);
-  assert.doesNotMatch(JSON.stringify(needs.rows), /blocked|could not be sent|not delivered/i);
-  const ready_ = needsYou({ invitations: ready([teo]), deals, links, template: ready({ fields: [] }), fan, now: NOW });
-  assert.ok(!ready_.rows.some((r) => r.kind === 'Agreement'), 'no agreement row while the template is ready');
-  const down = needsYou({ invitations: failed(), deals, links: failed(), template: notReady, fan, now: NOW });
-  assert.deepEqual(down.failed.map((f) => f.what), ['The invitations', 'The partner accounts']);
-  assert.equal(needsYou({ invitations: loading(), deals, links, template: notReady, fan, now: NOW }).settled, false);
-  assert.equal(tabCounts({ invitations: ready([mara, teo]), deals, contracts: failed(), needs }).overview.text, '5', 'Overview counts the Needs-you rows drawn');
-});
+// D929: Needs you reads part 4's overview read now; its rows are held in admin_partners_overview_d929.test.mjs.
 
-test('the Overview tiles: real figures from reads that succeeded, and words for what is not read', () => {
-  const list = ready([
-    inv(1, { createdMs: NOW - 4 * DAY }),
-    inv(3, { createdMs: NOW - 10 * DAY }),
-    inv(2, { status: 'selected', createdMs: NOW - 30 * DAY, is_expired: true }),
-    inv(4, { status: 'signed', createdMs: NOW - 40 * DAY, signed_at: d1(NOW - 28 * DAY), is_expired: true }),
-    inv(5, { status: 'signed', createdMs: NOW - 200 * DAY, signed_at: d1(NOW - 180 * DAY), is_expired: true }),
-  ]);
-  const t = Object.fromEntries(invitationTiles(list, { proposed: ready([]), now: NOW }).map((x) => [x.key, x]));
-  assert.equal(t.open.value, '2');
-  assert.equal(t.open.sub, 'oldest first sent 14 Oct 2026');
-  assert.equal(t.lapsed.value, '1');
-  assert.equal(t.lapsed.sub, 'link expired before signing');
-  assert.equal(t.signed90.value, '1');
-  assert.equal(t.median.value, '16');
-  assert.equal(t.median.sub, 'median, over the last 2 signed');
-  assert.equal(invitationTiles(ready([inv(1)]), { now: NOW })[3].value, 'None signed yet', 'never 0 with no signed rows');
-  assert.deepEqual(invitationTiles(failed(), { now: NOW }).map((x) => x.state), ['unreadable', 'unreadable', 'unreadable', 'unreadable']);
+test('first use is a read that holds no invitation, never a failed read (the tiles are D929\'s, on the overview read)', () => {
   assert.equal(isFirstUse(ready([])), true);
   assert.equal(isFirstUse(failed()), false, 'a failed read is never first use');
-  const d = Object.fromEntries(dealTiles({
-    deals: lists({ active: ready([deal(7, { expires_at: isoAt(NOW + 20 * DAY) }), deal(8), deal(9, { expires_at: isoAt(NOW - DAY) })]), awaiting_signature: ready([deal(10, { status: 'awaiting_signature', invitation_id: 2, user_id: null })]) }),
-    invitations: list, fan: { state: 'ready', items: [], complete: true, short: [], firstOnly: [], exact: true }, now: NOW,
-  }).map((x) => [x.key, x]));
-  assert.equal(d.active.value, '3');
-  assert.equal(d.active.sub, '1 end within 30 days');
-  assert.equal(d.active.extra, '1 is past its end, not yet closed');
-  assert.equal(d.awaiting.sub, '1 whose invitation has lapsed');
-  assert.equal(d.redemptions90.value, '0');
-  // D929 renamed it in part 1's words; it stays "Not read here yet" until part 4's read.
-  assert.deepEqual([d.sends.label, d.sends.state, d.sends.note.text], ['Sends that failed', 'note', 'Not read here yet']);
 });
 
 test('one deal: obligations read "No obligations recorded" with none required, never "None outstanding"', () => {
@@ -574,19 +521,15 @@ test('the obligations line names the terms and privacy every partner is seeded w
   assert.equal(obligationsLine(scores, 507).text, 'Outstanding: Terms of service, Privacy, KYB');
 });
 
-test('Awaiting signature: a deal whose invitation is outside R1\'s newest 200 is said, never dropped from the lapsed count (finding 5)', () => {
-  const newest = many(CAPS.invitations - 1, (i) => inv(1000 + i));
-  const lapsedInv = inv(500, { status: 'finalized', envelope_id: 77, createdMs: NOW - 30 * DAY, is_expired: true });
-  const tile = (awaiting, invitations) => dealTiles({ deals: lists({ awaiting_signature: ready(awaiting) }), invitations: ready(invitations), fan: { state: 'loading' }, now: NOW }).find((t) => t.key === 'awaiting');
-  const unseen = tile([deal(9, { status: 'awaiting_signature', invitation_id: 999, user_id: null })], [...newest, inv(1999)]);
-  assert.equal(unseen.sub, null);
-  assert.equal(unseen.cover, '1 whose invitation is not in this read.');
-  const both = tile([deal(8, { status: 'awaiting_signature', invitation_id: 500, user_id: null }), deal(9, { status: 'awaiting_signature', invitation_id: 999, user_id: null })], [...newest, lapsedInv]);
-  assert.equal(both.sub, '1+ whose invitation has lapsed', 'a floor, at the cap');
-  assert.equal(both.subTone, 'amber');
-  assert.equal(both.cover, '1 whose invitation is not in this read.');
-  const below = tile([deal(8, { status: 'awaiting_signature', invitation_id: 500, user_id: null }), deal(9, { status: 'awaiting_signature', invitation_id: 999, user_id: null })], [lapsedInv]);
-  assert.deepEqual([below.sub, below.cover], ['1 whose invitation has lapsed', null], 'below the cap the count is exact');
+test('Awaiting signature counts come from the uncapped overview read, including lapsed invitations outside R1', () => {
+  const data = overviewReply();
+  data.tiles.awaiting_signature = { available: true, count: 401, invitation_lapsed: 201 };
+  const tile = dealTiles(ready(data)).find((t) => t.key === 'awaiting');
+  assert.equal(tile.value, '401');
+  assert.equal(tile.sub, '201 whose invitation has lapsed');
+  assert.equal(tile.subTone, 'amber');
+  const unreadable = dealTiles(failed()).find((t) => t.key === 'awaiting');
+  assert.equal(unreadable.state, 'unreadable');
 });
 
 test('Revoke takes the long variant when a deal list could not refresh (finding 10)', () => {
@@ -611,17 +554,15 @@ test('the revoke and terminate results say what D925\'s replies report, failures
   }
 });
 
-test('Needs you at a cap says what it checked, and is never "Nothing here needs you now." or a bare 0 (finding 1)', () => {
-  const quiet = (o) => needsYou({ invitations: ready([]), deals: lists(), links: ready({ accounts: [], firms: [] }), template: ready({ fields: [] }), fan: { state: 'ready', items: [], exact: true }, now: NOW, ...o });
-  const active = quiet({ deals: lists({ active: ready(many(CAPS.deals, (i) => deal(i, { expires_at: isoAt(NOW + 200 * DAY) }))) }) });
-  assert.deepEqual([active.rows.length, active.failed.length, active.settled], [0, 0, true]);
-  assert.deepEqual(active.cover.map((c) => c.text), ['Deals ending are checked over the newest 200 active deals.']);
-  assert.deepEqual(tabCounts({ invitations: ready([]), deals: lists(), contracts: failed(), needs: active }).overview, { text: '0+', amber: false, title: 'Rows drawn in Needs you; some lists stop at their cap' });
-  const invs = quiet({ invitations: ready(many(CAPS.invitations, (i) => inv(i))) });
-  assert.deepEqual(invs.cover.map((c) => c.text), ['Lapsed invitations and chosen offers are checked within the newest 200 by first send.']);
-  const below = quiet({});
-  assert.deepEqual(below.cover, []);
-  assert.deepEqual(tabCounts({ invitations: ready([]), deals: lists(), contracts: failed(), needs: below }).overview, { text: '0', amber: false, title: 'Rows in Needs you' }, 'below the caps a 0 is real');
+test('Needs you uses the overview read independently of capped lists, and an unreadable overview is never an exact zero', () => {
+  const all = ready(overviewReply({ lapsed: { available: true, rows: [{ id: 999, kind: 'lapsed', stage: 1 }] } }));
+  const needs = needsYou(all, { invitations: ready(many(CAPS.invitations, (i) => inv(i))), deals: lists() });
+  assert.deepEqual([needs.rows.length, needs.failed.length, needs.settled], [1, 0, true]);
+  assert.deepEqual(needs.rows[0].action, { label: 'Open invitation', to: '/admin/partner-invitations/invitations/999' });
+  const below = needsYou(ready(overviewReply()));
+  assert.deepEqual(tabCounts({ invitations: ready([]), deals: lists(), contracts: failed(), needs: below }).overview, { text: '0', amber: false, title: 'Rows in Needs you' });
+  const unreadable = needsYou(failed());
+  assert.deepEqual([unreadable.rows.length, unreadable.failed.length, unreadable.settled], [0, 1, true]);
 });
 
 test('Copy names what it copies: a referral code is a code, not a link (finding 12)', () => {
@@ -697,7 +638,7 @@ test('every wiring place D923 §1 names follows the page', () => {
   assert.doesNotMatch(sidebar, /'\/admin\/partners'/, 'Approvals no longer lights the page: exactly one row does');
   const placement = read('frontend/src/lib/adminPlacement.js');
   assert.match(placement, /\{ key: '\/admin\/partners', kind: 'row', label: 'Partner Invitations', route: '\/admin\/partner-invitations', hqOnly: false,\s*\.\.\.admin\('Community', 'card link'\), how: [^}]*also: \[admin\('Approvals', 'lane'\)\] \}/);
-  assert.match(read('frontend/src/pages/admin/HeldApprovals.jsx'), /<Link to="\/admin\/partner-invitations" className=\{CONSOLE\}>\/admin\/partner-invitations<\/Link>/);
+  assert.match(read('frontend/src/pages/admin/approvals/AdminApprovals.jsx'), /<Link to="\/admin\/partner-invitations" className=\{LINK\}>Partner invitations<\/Link>/);
   assert.match(read('frontend/src/pages/admin/adminStudioOverview.js'), /'Partner invitations': '\/admin\/partner-invitations',/);
   assert.match(read('frontend/src/pages/admin/community/AdminCommunity.jsx'), /<Link to="\/admin\/partner-invitations" className=\{LINK\}>Open partner invitations<\/Link>/);
   assert.match(read('frontend/src/lib/railPages.js'), /own\('\/admin\/partner-invitations', key\(AD, 'Community', 'Partner invitations'\)\)/);
@@ -754,9 +695,26 @@ const response = (body, status = 200) => ({ ok: status < 400, status, statusText
 const LIVE = Date.now();
 const liveInv = (id, o = {}) => inv(id, o, LIVE);
 
+/** D927's overview reply, every block available and empty; `kinds` lays Needs-you rows over it. */
+function overviewReply(kinds = {}) {
+  const ok = (o) => ({ available: true, ...o });
+  const k = {
+    lapsed: ok({ rows: [] }), agreement_blocked: ok({ agreement: { state: 'ready' }, rows: [] }), failed_send: ok({ rows: [] }), deal_ending: ok({ rows: [] }),
+    unattached_account: ok({ rows: [] }), due_diligence_open: ok({ rows: [] }), revshare_closing: ok({ rows: [] }), ...kinds,
+  };
+  return {
+    as_of: new Date().toISOString(),
+    tiles: Object.fromEntries(['open', 'lapsed', 'signed_90d', 'redemptions_90d'].map((t) => [t, ok({ count: 0 })]).concat([
+      ['days_to_sign', ok({ median_days: null, over_signed: 0 })], ['active_deals', ok({ count: 0, ending_within_30d: 0, term_over_not_closed: 0 })],
+      ['awaiting_signature', ok({ count: 0, invitation_lapsed: 0 })], ['failed_sends_30d', ok({ count: 0, by_reason: {} })]])),
+    needs_you: { available: true, kinds: k, rows: Object.values(k).flatMap((x) => x.rows || []), unreadable_kinds: [] },
+    c1: ok({ stages: {}, closed: { signed: 0, lapsed: 0, revoked: 0, signed_after_lapse: 0 } }), c2: ok({ weeks: [] }), c3: ok({ by_type: {} }), c4: ok({ weeks: [] }),
+  };
+}
+
 function worker({
   invitations = [], deals = {}, contracts, links = { accounts: [], firms: [], attached: 0, unattached: 0 }, template = { doc_type: 'partner_services', fields: [] },
-  top = { items: [], status: 'all', limit: 5 }, cases = [], redemptions = {}, envelopes = {}, users = [], writes = {},
+  top = { items: [], status: 'all', limit: 5 }, cases = [], redemptions = {}, envelopes = {}, users = [], writes = {}, overview = overviewReply(),
 } = {}) {
   const call = (v, ...a) => (typeof v === 'function' ? v(...a) : response(v));
   return (url, options = {}) => {
@@ -768,6 +726,7 @@ function worker({
       const kind = path === '/api/admin/partners/invitations' ? 'create' : path === '/api/admin/partners/links' ? 'link' : path.split('/').pop();
       return writes[kind] ? writes[kind](options, path) : response({ ok: true });
     }
+    if (path === '/api/admin/partners/overview') return call(overview);
     if (path === '/api/admin/partners/invitations') {
       if (typeof invitations === 'function') return invitations(q);
       const email = q.get('email');
@@ -880,8 +839,7 @@ test('a failed invitations read is Unreadable with Try again, never "No partner 
   const overview = await mounted('/admin/partner-invitations', worker({ invitations: () => response({ error: 'down' }, 503) }));
   try {
     assert.ok(!overview.has('partners-first-use'), 'a failed read is never first use');
-    assert.match(overview.textOf('partners-tile-open'), /^Open invitations\s*Open invitations could not be read\. A failed list is not a claim that there are none\./);
-    assert.ok(overview.has('partners-needs-failed-invitations'));
+    assert.match(overview.textOf('partners-tile-open'), /^Open invitations0/, 'the tiles are the overview read\'s, which answered');
   } finally { await overview.close(); }
 });
 
@@ -1049,7 +1007,7 @@ test('Terminate is disabled until a reason is typed; its result and its refusal 
 
 test('the old address lands on Overview with the moved notice; first use draws the empty state and the Firms door', async () => {
   const links = { accounts: [{ id: 1, email: 'a@x.co', partner_id: null }, { id: 2, email: 'b@x.co', partner_id: null }], firms: [] };
-  const view = await mounted(MOVED_PATH, worker({ invitations: [], links }));
+  const view = await mounted(MOVED_PATH, worker({ invitations: [], links, overview: overviewReply({ unattached_account: { available: true, rows: [{ kind: 'unattached_account', id: 1 }, { kind: 'unattached_account', id: 2 }] } }) }));
   try {
     assert.equal(view.textOf('admin-page-moved'), `${MOVED_LINE}Dismiss`);
     assert.ok(view.has('partners-first-use'));
@@ -1418,12 +1376,12 @@ test('a record not in the lists says why: past a cap, or no record has the addre
   }
 });
 
-test('Needs you at a cap is never "Nothing here needs you now.", and its count says it is a floor (finding 1)', async () => {
+test('Needs you is exact even when the supporting deal list reaches its cap', async () => {
   const view = await mounted('/admin/partner-invitations', worker({ invitations: [liveInv(1)], deals: { active: many(CAPS.deals, (i) => deal(i, { expires_at: isoAt(LIVE + 200 * DAY) })) } }));
   try {
-    assert.ok(!view.has('partners-needs-none'));
-    assert.equal(view.textOf('partners-needs-cover-active'), 'Deals ending are checked over the newest 200 active deals.');
-    assert.equal(view.textOf('partners-tab-overview-count'), '0+, Rows drawn in Needs you; some lists stop at their cap');
+    assert.ok(view.has('partners-needs-none'));
+    assert.ok(!view.has('partners-needs-cover-active'));
+    assert.equal(view.textOf('partners-tab-overview-count'), '0, Rows in Needs you');
   } finally { await view.close(); }
 });
 
@@ -1511,9 +1469,9 @@ test('a deal\'s partner and invitation are "Not recorded" only when R1 answered 
   assert.deepEqual(dealPartner(before, stale([inv(1)])), { name: COULD_NOT_READ, email: null }, 'a refresh that failed: the invitation can be newer than the last good read');
   assert.deepEqual(dealPartner(before, retrying([inv(1)])), { name: READING, email: null }, 'nor while that list is read again');
   assert.equal(dealPartner(before, stale([inv(77)])).email, 'p77@example.com', 'a stale row that holds it still names it');
-  // The Awaiting tile counts a deal whose invitation it could not check, and never drops it.
-  const tile = dealTiles({ deals: lists({ awaiting_signature: ready([{ ...before, status: 'awaiting_signature' }]) }), invitations: stale([inv(1)]), fan: { state: 'loading' }, now: NOW }).find((t) => t.key === 'awaiting');
-  assert.equal(tile.cover, '1 whose invitation is not in this read.');
+  // Overview has its own read; a failed read never invents a lapsed count from stale R1.
+  const tile = dealTiles(failed()).find((t) => t.key === 'awaiting');
+  assert.equal(tile.state, 'unreadable');
 });
 
 test('a deal before signing says the invitations could not be read, never "address not recorded", after R1 could not refresh (C2)', async () => {
