@@ -3,6 +3,7 @@ import type { Env } from '../types';
 import { loadPainGroupModel } from './painGroups';
 import { themesOf } from './cycleValidate';
 import { evidenceFor } from './validateEvidence';
+import { latestDecision, openCommitments, supportingRefIds } from './verdict';
 
 export const PLAN_MIN_INTERVIEWS = 3;
 export const PLAN_RISK_HIGH_MENTIONS = 3;
@@ -46,8 +47,7 @@ export async function readEvidence(env: Env, projectId: number, scope = 'venture
   if (!project) throw new BuildPlanError('not_this_project', 404);
   const hid = scope === 'venture' ? 0 : Number(scope.slice(2));
   if (hid && !await env.DB.prepare('SELECT id FROM hypotheses WHERE id = ? AND project_id = ? AND retired_at IS NULL').bind(hid, projectId).first()) throw new BuildPlanError('not_this_project', 404);
-  const decision = await env.DB.prepare(`SELECT id, decision, state, hypothesis_id, pivot_hypothesis_id FROM validation_decisions
-    WHERE project_id = ? AND superseded_at IS NULL AND ((? = 0 AND hypothesis_id IS NULL) OR hypothesis_id = ?) ORDER BY id DESC LIMIT 1`).bind(projectId, hid, hid).first<PlanEvidence['decision']>();
+  const decision: PlanEvidence['decision'] = await latestDecision(env, projectId, hid || 'venture');
   const selected = decision?.decision === 'pivot' && decision.state === 'given' ? decision.pivot_hypothesis_id : hid || null;
   const n = selected || 0;
   const hyps = (await env.DB.prepare(`SELECT id, claim FROM hypotheses
@@ -56,8 +56,8 @@ export async function readEvidence(env: Env, projectId: number, scope = 'venture
   // Its detailed labels/dates/amounts are deliberately not carried into this projection.
   const evidence = await evidenceFor({ env, projectId }, n ? { hypothesisId: n } : {});
   if (decision) {
-    const refs = (await env.DB.prepare("SELECT ref_id FROM validation_decision_evidence WHERE decision_id = ? AND direction = 'supports'").bind(decision.id).all<{ ref_id: string }>()).results || [];
-    decision.evidence_hypotheses = [...new Set(evidence.filter(e => e.direction === 'supports' && refs.some(r => r.ref_id === e.id)).map(e => e.hypothesis_id))];
+    const refs = await supportingRefIds(env, decision.id);
+    decision.evidence_hypotheses = [...new Set(evidence.filter(e => e.direction === 'supports' && refs.includes(e.id)).map(e => e.hypothesis_id))];
   }
   const hypotheses = hyps.map(h => ({ ...h, supporting: evidence.filter(e => e.hypothesis_id === h.id && e.direction === 'supports').length,
     contradicting: evidence.filter(e => e.hypothesis_id === h.id && e.direction === 'contradicts').length }));
@@ -91,7 +91,7 @@ export async function readEvidence(env: Env, projectId: number, scope = 'venture
   const competitors = n ? [] : (await env.DB.prepare(`SELECT c.id, c.name AS label FROM competitor_candidates c JOIN competitor_analyses a ON a.id = c.analysis_id
     WHERE a.project_id = ? AND a.status = 'complete' AND (a.edited = 1 OR c.origin = 'manual') ORDER BY c.id`).bind(projectId).all<{ id: string; label: string }>()).results || [];
   const features = (await env.DB.prepare(`SELECT id, title, is_must_have, pain_group_id FROM mvp_features WHERE project_id = ? AND (? = 0 OR hypothesis_id = ?) ORDER BY id`).bind(projectId, n, n).all<PlanEvidence['features'][number]>()).results || [];
-  const commitments = decision ? (await env.DB.prepare('SELECT id, text FROM validation_decision_commitments WHERE project_id = ? AND decision_id = ? AND done_at IS NULL ORDER BY id').bind(projectId, decision.id).all<{ id: number; text: string }>()).results || [] : [];
+  const commitments = decision ? (await openCommitments(env, projectId, decision.id)).map(({ id, text }) => ({ id, text })) : [];
   const formation = (await env.DB.prepare('SELECT title FROM formation_steps WHERE project_id = ? ORDER BY id').bind(projectId).all<{ title: string }>()).results || [];
   return { themes, hypotheses: hypotheses.map(h => ({ ...h, claim: planLabel(h.claim) })).filter(h => h.claim), experiments: experiments.map(x => ({ ...x, title: planLabel(x.title) })), signals,
     objections: objections.map(o => ({ ...o, refs: parse(o.refs) || [] })), segments: segments.map(s => ({ ...s, label: planLabel(s.label) })).filter(s => s.label), positioning,
@@ -186,7 +186,7 @@ export async function readPlan(env: Env, projectId: number, scope = 'venture', p
 export async function preparePlan(env: Env, projectId: number, userId: number, scope = 'venture', trigger: 'manual' | 'decision' | 'update' = 'manual') {
   const old = await currentPlan(env, projectId, scope);
   if (old?.status === 'paused') throw new BuildPlanError('plan_paused');
-  const ventureDecision = await env.DB.prepare(`SELECT decision, state FROM validation_decisions WHERE project_id = ? AND hypothesis_id IS NULL AND superseded_at IS NULL ORDER BY id DESC LIMIT 1`).bind(projectId).first<{ decision: string; state: string }>();
+  const ventureDecision = await latestDecision(env, projectId, 'venture');
   if (ventureDecision?.state === 'given' && ventureDecision.decision === 'stop') throw new BuildPlanError('plan_paused');
   const evidence = await readEvidence(env, projectId, scope);
   if (evidence.decision?.state === 'given' && evidence.decision.decision === 'stop') throw new BuildPlanError('plan_paused');
