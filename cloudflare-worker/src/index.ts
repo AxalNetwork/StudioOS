@@ -198,6 +198,7 @@ import deckExports from './routes/deck_exports';
 import deckNotes from './routes/deck_notes';
 import deckReview from './routes/deck_review';
 import deckSources from './routes/deck_sources';
+import deckNew from './routes/deck_new';
 import notificationsRoutes from './routes/notifications';
 import votesRoutes from './routes/votes';
 import linkedinRoutes from './routes/linkedin';
@@ -353,6 +354,7 @@ import billing from './routes/billing';
 import catalog, { adminCatalog } from './routes/catalog';
 // Task #16 — Admin Stripe management (webhook endpoints + publishable key).
 import adminStripe from './routes/admin_stripe';
+import adminPayments from './routes/admin_payments';
 import adminMoneyRails from './routes/admin_money_rails';
 import { adminPartnerSettlements, partnerSettlements } from './routes/partner_settlements';
 import mercuryPersonalRoutes from './routes/mercury_personal';
@@ -999,6 +1001,8 @@ app.route('/api/admin/catalog', adminCatalog);
 // Task #16 — Admin Stripe management (webhook + publishable key). Mounted
 // BEFORE the catch-all /api/admin so /api/admin/stripe/* resolves here.
 app.route('/api/admin/stripe', adminStripe);
+// D1011 (#2830): the Payments page's change log and webhook deliveries; Super Admin only.
+app.route('/api/admin/payments', adminPayments);
 // D707 (#1772) — the entities' roles and the money rails. Before the catch-all.
 app.route('/api/admin/money-rails', adminMoneyRails);
 app.route('/api/admin/partner-settlements', adminPartnerSettlements);
@@ -1201,6 +1205,8 @@ app.route('/api/decks', deckNotes);
 app.route('/api/decks', deckReview);
 // D896: `/sources` and `/:id/refresh`, before `decks` so its `GET /:id` cannot answer `/sources`.
 app.route('/api/decks', deckSources);
+// D897: New deck (`/new/context`, `/new/quote`, `/outline`, `/generate`, `/proposals/:id/keep-slides`), before `decks` for the same reason.
+app.route('/api/decks', deckNew);
 app.route('/api/decks', decks);
 // Competitor Analysis (in-house crawl + Workers AI synthesis) and Pitch Deck
 // Reviewer (document conversion + investor-style review). Both are

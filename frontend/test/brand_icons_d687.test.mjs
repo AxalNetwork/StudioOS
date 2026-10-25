@@ -312,8 +312,9 @@ test('9. no file imports lucide\'s GitBranch as a GitHub icon; GitHub Sync draws
   // The Admin Console's GitHub Sync entry, which drew the mark, is gone: the
   // owner's ruling (2026-10-20) moved GitHub Sync to HQ's Integration keys
   // page, whose section has a heading and no menu icon.
-  const admin = read('frontend/src/pages/AdminPage.jsx');
-  assert.doesNotMatch(admin, /value: 'github'/);
+  // D938 retired the console itself; its pages draw no GitHub entry either.
+  const admin = read('frontend/src/pages/admin/ConsolePages.jsx');
+  assert.doesNotMatch(admin, /GithubSync|github/i);
   assert.doesNotMatch(admin, /GitBranch/);
   // Drawn the way the menu draws every entry's icon: the mark, its key, the passed size and colour.
   const out = html(h(BrandIcon, { provider: 'github', size: 14, variant: 'bare', tone: 'current', className: 'shrink-0 text-gray-400 dark:text-gray-500' }));

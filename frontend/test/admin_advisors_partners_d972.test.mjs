@@ -144,6 +144,7 @@ test('the tabs, the redirects\' targets, the strip on a tab, and the whole-page 
   assert.equal(tabOf(`${AP_PATH}/people`), null, 'People is not a tab until its read exists');
   assert.equal(legacyContractsTarget('?tab=network-profiles'), '/admin/advisors-partners/deck?moved=network-profiles');
   assert.equal(stripFor('/admin/advisors-partners/deck'), 'Content', 'the Content strip is lost on a tab');
+  assert.equal(stripFor('/admin/persona-segments'), 'Content');
   assert.equal(stripFor('/admin/persona-segments/unclassified'), 'Content');
   assert.equal(stripFor('/admin/advisors-partnersx'), null, 'a sibling path took the strip');
   assert.equal(pageFailed(ALL), false);
@@ -329,7 +330,8 @@ test('the routes, the redirects, the row, the strip and the reads the page must 
     assert.match(src, /Advisors &amp;\s+Partners → Firms/, f);
     assert.doesNotMatch(src, /Partners →\s+Firm links/, f);
   }
-  assert.match(read('frontend/src/sidebarConfig.js'), /'\/admin\/partner-invitations', '\/admin\/advisors-partners'\] \}/);
+  // D938 added Directory and Wellbeing after it.
+  assert.match(read('frontend/src/sidebarConfig.js'), /'\/admin\/partner-invitations', '\/admin\/advisors-partners'(, '[^']+')*\] \}/);
   const page = read('frontend/src/pages/admin/advisors/AdvisorsPartners.jsx');
   // Nothing is decided here that another page decides (AP "DO NOT DRAW").
   assert.doesNotMatch(page, /setFirmLink|terminateDeal|adminSetPartnerDirectory|adminLabHostDecide|adminImpersonate/);

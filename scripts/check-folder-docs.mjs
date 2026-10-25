@@ -92,6 +92,7 @@ const DOCUMENTED = new Map([
   ['frontend/src/pages/admin/profiles',       'Partner profiles under Approvals (D989)'],
   ['frontend/src/pages/admin/payments',       'Payments under Platform, HQ only (D1008)'],
   ['frontend/src/pages/admin/partners',       'the admin Partner invitations desk (D923): its tabs, the records, the dialogs and the model they read'],
+  ['frontend/src/pages/admin/programs',       'Admin › Programs (D953): the catalogue, each program page with its tabs, the redirects and the model they read'],
   ['frontend/src/pages/account',              'the Account center\'s sections, one file per canvas section (D568, D642)'],
   ['frontend/src/pages/cycles',               'the four cycle overviews and module pages, from the shared cycle read (D661)'],
   ['frontend/src/pages/events',                 'event host tools and public/member detail'],

@@ -66,7 +66,7 @@ test('the view models: accounts counts, lanes worst first with consoles, insight
   assert.equal(ap.unreadable, 1);
   assert.equal(ap.worst.key, 'kyc', 'the first lane with something pending, as the Worker sorted them');
   assert.match(ap.text, /^1 lane could not be read, so no total · worst: KYC, oldest 4 days$/);
-  assert.equal(ap.lanes.find((l) => l.key === 'kyc').to, '/admin?tab=kyc');
+  assert.equal(ap.lanes.find((l) => l.key === 'kyc').to, '/admin/kyc');
   assert.deepEqual(ap.noQueue, [{ label: 'Circles', reason: PAYLOAD.approvals.no_queue[0].reason, to: '/admin/circles' }]);
   assert.match(hqApprovalsView({ ...PAYLOAD.approvals, pending_total: 0, lanes: [] }).text, /^Nothing is waiting$/);
   assert.match(hqApprovalsView({ ...PAYLOAD.approvals, pending_total: 5 }).text, /^5 pending · worst: KYC/);
@@ -114,7 +114,7 @@ test('the overview cards draw HQ\'s figures, labelled, with each line linking to
   assert.match(t, /Tickets could not be read/);
   assert.match(t, /Active accounts last week: 9 \(week of 2026-09-28\)/);
   const markup = html(h(AdminStudioOverview, { user: null, glance: PAYLOAD }));
-  for (const to of ['/admin?tab=kyc', '/admin/jobs', '/admin/exploring', '/admin/trash', '/admin/lp-applications']) {
+  for (const to of ['/admin/kyc', '/admin/jobs', '/admin/exploring', '/admin/trash', '/admin/lp-applications']) {
     // None of these paths carries an &, so the href is the path as written.
     assert.ok(markup.includes(`href="${to}"`), `${to} is not linked`);
   }
@@ -189,7 +189,11 @@ test('the held pages read the glance and no longer say "none counted here"', () 
   // D930 (#2367): Community is rebuilt at pages/admin/community/; its queue figures still come from the glance's lanes.
   assert.match(read('frontend/src/pages/admin/community/AdminCommunity.jsx'), /loadStudioGlance\(\)/);
   assert.match(read('frontend/src/pages/admin/community/communityModel.js'), /laneOf\(glance\.data, 'events'\)/);
-  for (const f of ['HeldApprovals', 'HeldAccounts', 'HeldPrograms']) {
+  // D953 (#2371): Programs is rebuilt at pages/admin/programs/; its cohort and
+  // referrals figures still come from the glance's lanes, never "none counted".
+  assert.match(read('frontend/src/pages/admin/programs/useProgramReads.js'), /api\.adminStudioGlance\(\)/);
+  assert.match(read('frontend/src/pages/admin/programs/programsModel.js'), /const cohort = laneFrom\(glance, 'cohort'\);/);
+  for (const f of ['HeldApprovals', 'HeldAccounts']) {
     const src = read(`frontend/src/pages/admin/${f}.jsx`);
     assert.match(src, /useHeldGlance\(\)/, `${f} does not read the glance`);
     assert.doesNotMatch(src, /none counted here/, `${f} still says none counted here`);
@@ -197,5 +201,5 @@ test('the held pages read the glance and no longer say "none counted here"', () 
   assert.doesNotMatch(read('frontend/src/pages/admin/HeldApprovals.jsx'), /Links to its console/);
   const acc = read('frontend/src/pages/admin/HeldAccounts.jsx');
   for (const id of ['held-accounts-users-count', 'held-accounts-exploring-count', 'held-accounts-trash-count']) assert.ok(acc.includes(id), id);
-  assert.ok(read('frontend/src/pages/admin/HeldPrograms.jsx').includes("laneOf(glance.hq, 'cohort')"));
+  assert.doesNotMatch(read('frontend/src/pages/admin/programs/programsModel.js'), /none counted here/);
 });

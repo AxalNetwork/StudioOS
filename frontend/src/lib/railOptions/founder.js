@@ -45,6 +45,8 @@ const ADVISOR = 'frontend/src/components/advisor/PersonalAdvisor.jsx';
 const SESSION = 'frontend/src/pages/founder/InterviewSessionPage.jsx';
 const DECK = 'frontend/src/pages/PitchDeckPage.jsx';
 const REVIEWER = 'frontend/src/pages/DeckReviewerPage.jsx';
+const NEW_DECK = 'frontend/src/pages/raise/pitch/NewDeck.jsx';
+const STUDIO = 'frontend/src/pages/raise/pitch/PitchStudio.jsx';
 const PITCH_REVIEW = 'frontend/src/pages/raise/pitch/PitchReview.jsx';
 const BRAND = 'frontend/src/pages/BrandBuilderPage.jsx';
 const NETWORK_DESK = 'frontend/src/pages/founder/FounderNetworkDesk.jsx';
@@ -156,7 +158,16 @@ export const FOUNDER_OPTIONS = [
   },
   {
     page: 'Founder · Raise · Pitch deck', key: 'form:deck-template', route: '/raise/pitch/builder', label: 'Use this template', kind: 'write', handler: 'form',
-    at: [[DECK, 'api.deckApplyMethod(']],
+    at: [[DECK, 'api.deckApplyMethod('], [NEW_DECK, 'api.deckApplyMethod(']],
+  },
+  // D897 (#2677): New deck (PD5, PD6) and the studio's fast path (PD2).
+  {
+    page: 'Founder · Raise · Pitch deck', key: 'deck:outline', route: '/raise/pitch/new', label: 'Regenerate outline', kind: 'write', handler: 'draft',
+    at: [[NEW_DECK, 'newDeckApi.outline(']],
+  },
+  {
+    page: 'Founder · Raise · Pitch deck', key: 'deck:build', route: '/raise/pitch/new', label: 'Build deck', kind: 'write', handler: 'draft',
+    at: [[NEW_DECK, 'newDeckApi.build('], [STUDIO, 'newDeckApi.build(']],
   },
   {
     page: 'Founder · Raise · Pitch deck', key: 'review:deck-file', route: '/raise/pitch/review', label: 'Drop your deck here or click to browse', kind: 'vision', handler: 'upload',

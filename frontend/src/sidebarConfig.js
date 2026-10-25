@@ -104,8 +104,8 @@ export const SIDEBAR_GROUPS = {
   //   Team  → /admin/accounts, the cross-tenant accounts table with the holder
   //           console above it (canvas H4). /admin/team is the PUBLIC team-page
   //           editor — a different thing wearing the same word.
-  //   Home  → /hq, the HQ Home page (canvas H1). The Admin Console stays one
-  //           row away under Team, and in the admin group the holder keeps.
+  //   Home  → /hq, the HQ Home page (canvas H1). The Admin Console is
+  //           retired (D938); its Users list is All accounts, lit under Team.
   super_admin: [
     { key: 'hq', label: 'HQ', items: [
       // D210 — H15 lights this row (its artboard's own nav). The row's own `to`
@@ -115,6 +115,11 @@ export const SIDEBAR_GROUPS = {
       // The one row this tier exists for. Every route behind it is
       // super-admin-only server-side (routes/admin_licences.ts).
       { to: '/admin/licences', icon: Map, label: 'Licences' },
+      // D953 (#2371): the Programs row the canvas draws after Licences
+      // (`Programs Page.dc.html:509`). `match` keeps it lit on every program
+      // page: hqRowFor returns no row off HQ's strips, and a row without
+      // `match` is exact (SidebarNav's `end`).
+      { to: '/admin/programs', icon: Calendar, label: 'Programs', match: ['/admin/programs'] },
       { to: '/admin/funds', icon: Landmark, label: 'Funds' },
       // D714 (#1779) decision 7 — fund administration, after Funds. Funds keeps
       // its cross-branch registry; this row is HQ's own funds and entities.
@@ -122,14 +127,20 @@ export const SIDEBAR_GROUPS = {
       // The master template library. The doc-type REGISTRY the Contracts ·
       // Super canvas draws above it has no store; the page says so.
       { to: '/admin/contracts', icon: FileText, label: 'Contracts' },
-      { to: '/admin/accounts', icon: Users, label: 'Team' },
+      // D938 (#2743): Team keeps /admin/accounts until #2375's question 1 is
+      // answered, and lights on its subtree: a member's credits, and All
+      // accounts at /admin/accounts/all.
+      { to: '/admin/accounts', icon: Users, label: 'Team', match: ['/admin/accounts'] },
       // Canvas H5. The artboard's own nav puts Revenue straight after
       // Accounts (= Team), which is where it goes here.
-      { to: '/admin/revenue', icon: Coins, label: 'Revenue' },
+      // D938: Billing left the Admin Console for /admin/revenue/billing.
+      { to: '/admin/revenue', icon: Coins, label: 'Revenue', match: ['/admin/revenue'] },
       // Canvas H6, in the artboard's own nav order: Revenue, Content,
       // then Platform. NOT to be confused with `/admin/articles`, the
       // plain-admin Content Queue that reviews one piece at a time.
-      { to: '/admin/content', icon: FileStack, label: 'Content' },
+      // D938 (#2375 "The sidebars after the move"): each strip item's subtree.
+      { to: '/admin/content', icon: FileStack, label: 'Content',
+        match: ['/admin/content', '/admin/articles', '/admin/publications', '/admin/persona-segments', '/admin/advisors-partners', '/admin/team'] },
       // D638 (#1412) — the credit rules page (/admin/credit-rules) is reached
       // from Platform, beside Promo codes, and lights this row; the row keeps
       // its own subtree.
@@ -211,24 +222,26 @@ export const SIDEBAR_GROUPS = {
   // `match` lists the consoles a landing leads to, so the row stays lit
   // inside them. A path can light one row only, so a console placed on two
   // rows (Exploring: Accounts, and an Approvals lane) matches its FIRST
-  // placement in the map. The `/admin` tabs light rows by QUERY, not path —
-  // `adminRowFor` in `lib/hqStrips.js`, read from the same map — which is why
-  // Contracts has its own /admin/contracts route (D647); the remaining
-  // console tabs retain query-based matching.
+  // placement in the map. Since D938 (#2743) every Admin Console tool is a
+  // page at its own address (#2375's route map), so every row lights by path:
+  // there is no `/admin` tab left to light one by query.
   admin: [
     { key: 'admin', label: 'Admin', items: [
       { to: '/studio', icon: LayoutDashboard, label: 'Studio' },
-      { to: '/admin/held/accounts', icon: Users, label: 'Accounts', match: ['/admin/exploring', '/admin/trash', '/admin/persona-segments'] },
+      { to: '/admin/held/accounts', icon: Users, label: 'Accounts', match: ['/admin/accounts/all', '/admin/persona-segments', '/admin/exploring', '/admin/trash'] },
       // D506 — the Spin-Out moderation console joined the lanes Approvals
       // leads to (lane 4 links it), so the row stays lit inside it. `match`
       // is the complete statement of what the row owns (SidebarNav), so a
       // door the landing draws without a `match` entry lights no row.
       { to: '/admin/held/approvals', icon: Inbox, label: 'Approvals',
-        match: ['/admin/lp-applications', '/admin/refer-earn', '/admin/best-fit', '/admin/due-diligence', '/admin/spinout-moderation', '/admin/partner-profiles'] },
-      { to: '/admin/held/programs', icon: Calendar, label: 'Programs',
-        match: ['/admin/programs/spinout-lab', '/admin/spinout-lab', '/admin/advisor-cohorts', '/admin/profiling-trends'] },
+        match: ['/admin/kyc', '/admin/lp-applications', '/admin/best-fit', '/admin/due-diligence', '/admin/spinout-moderation', '/admin/partner-profiles'] },
+      // D953 (#2371): the catalogue and every program page under it, the three
+      // old addresses that redirect into it, and, as before, the Lab console
+      // and Profiling trends, whose one door is the catalogue's foot (O-PRF).
+      { to: '/admin/programs', icon: Calendar, label: 'Programs',
+        match: ['/admin/programs', '/admin/held/programs', '/admin/advisor-cohorts', '/admin/refer-earn', '/admin/spinout-lab', '/admin/profiling-trends'] },
       // D930 (#2367): Community's own address; /admin/held/community redirects here.
-      { to: '/admin/community', icon: Network, label: 'Community', match: ['/admin/events', '/admin/jobs', '/admin/circles', '/admin/partner-invitations', '/admin/advisors-partners'] },
+      { to: '/admin/community', icon: Network, label: 'Community', match: ['/admin/events', '/admin/jobs', '/admin/circles', '/admin/partner-invitations', '/admin/advisors-partners', '/admin/directory', '/admin/wellbeing'] },
 
       // D647 — the shared Contracts page and template library. Not "read-only":
       // `requireHqAuthoring` refuses only on a branch, so a plain HQ admin

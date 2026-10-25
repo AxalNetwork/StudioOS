@@ -152,7 +152,7 @@ test('a holder in the HQ shell indexes the eleven rows, the placed consoles and 
     assert.ok(m.has(it.to), `HQ row ${it.label} is not indexed`);
   }
   for (const w of WORKSPACES) assert.equal(m.get(w.route)?.hint, `Workspaces · ${w.group}`, `${w.route} is not indexed as a workspace`);
-  assert.ok(m.has('/admin?tab=wellbeing'), 'Wellbeing has a home, so it is indexed');
+  assert.ok(m.has('/admin/wellbeing'), 'Wellbeing has a home, so it is indexed');
   assert.ok(m.has('/admin/telegram'), 'a holder is offered the hqOnly console');
   assert.ok(!m.has('/admin/x'), 'the parked X is indexed');
   // Real routes: only the Home row goes to /hq, because /hq is Home.
@@ -169,7 +169,7 @@ test('a plain admin is never offered an hqOnly route, and still gets the 29 and 
   const elevated = items.filter((i) => ROUTES.get(pathOf(i.to)) === true).map((i) => i.to);
   assert.deepEqual(elevated, [], 'these hqOnly routes are offered to an admin without the elevation');
   for (const w of WORKSPACES) assert.ok(m.has(w.route), `${w.route} is not indexed for a plain admin`);
-  assert.ok(m.has('/admin?tab=wellbeing'));
+  assert.ok(m.has('/admin/wellbeing'));
   assert.ok(!m.has('/admin/x'));
   // The shell's own rows are there too — except a row that points at an
   // hqOnly route (Telegram, whose row ends at a notice for a plain admin).

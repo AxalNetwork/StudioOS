@@ -249,7 +249,7 @@ export function BillingExceptions({ refunds, disputes, nowSec, onRetryRefunds, o
       <p className="mt-2 text-[11px] leading-relaxed text-axal-faint">
         {refundsReady ? refunds.source : 'Refunds are read from their audit rows; one made in the Stripe dashboard is not listed.'}
         {' '}The branch column is Not recorded because no charge names the licence it was earned under (U1).
-        Dispute evidence is filed on the <Link to="/admin?tab=billing" className="underline">Billing tab</Link>.
+        Dispute evidence is filed on the <Link to="/admin/revenue/billing" className="underline">Billing tab</Link>.
       </p>
 
       {refundForm}
