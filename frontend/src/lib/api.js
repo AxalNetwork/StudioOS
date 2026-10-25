@@ -68,6 +68,7 @@ export * from './api/newsletter.js';
 export * from './api/partnerDealReads.js';
 export * from './api/partnerProfiles.js';
 export * from './api/partnerSettlements.js';
+export * from './api/payments.js';
 export * from './api/productTesting.js';
 export * from './api/profile.js';
 export * from './api/programGrants.js';
@@ -5782,9 +5783,11 @@ export const adminEvents = {
   get: (id) => request(`/admin/events/${id}`),
   approve: (id) => request(`/admin/events/${id}/approve`, { method: 'POST', body: '{}' }),
   reject: (id, reason) => request(`/admin/events/${id}/reject`, { method: 'POST', body: JSON.stringify({ reason }) }),
-  unpublish: (id) => request(`/admin/events/${id}/unpublish`, { method: 'POST', body: '{}' }),
+  // D917: the host is told, with the optional note (D922 sends it).
+  unpublish: (id, note = '') => request(`/admin/events/${id}/unpublish`, { method: 'POST', body: JSON.stringify(note ? { note } : {}) }),
   feature: (id, featured) => request(`/admin/events/${id}/feature`, { method: 'POST', body: JSON.stringify({ featured }) }),
-  cancel: (id) => request(`/admin/events/${id}/cancel`, { method: 'POST', body: '{}' }),
+  // D917: registrants with an account are told, with the optional note (D922 sends it).
+  cancel: (id, note = '') => request(`/admin/events/${id}/cancel`, { method: 'POST', body: JSON.stringify(note ? { note } : {}) }),
   // capacity: null clears the cap (unlimited). Promotes the waitlist server-side.
   setCapacity: (id, capacity) =>
     request(`/admin/events/${id}/capacity`, { method: 'POST', body: JSON.stringify({ capacity }) }),
