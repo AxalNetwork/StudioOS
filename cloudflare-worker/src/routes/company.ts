@@ -238,10 +238,12 @@ r.put('/company/visits', async (c) => {
 r.post('/company/create', async (c) => {
   try {
     const user = await requireAuth(c);
+    if (user.role === 'exploring') return c.json({ code: 'explorer_company_create_refused', detail: 'Choose a working profile before creating a company.' }, 403);
     const body = await c.req.json().catch(() => ({} as any));
     const name = String(body.company_name || '').trim();
     if (!name) return c.json({ detail: 'company_name required' }, 400);
-    const stored = name.slice(0, 200);
+    if (name.length > 200) return c.json({ detail: 'Company names must be at most 200 characters.' }, 400);
+    const stored = name;
     // Refuse a name this caller already holds.
     //
     // `company_profiles.company_name` is not unique and never should be —
@@ -307,6 +309,16 @@ r.patch('/company/:uid', async (c) => {
       return c.json({ detail: 'Not authorized to edit this company' }, 403);
     }
     const body = await c.req.json().catch(() => ({} as any));
+    if (body.company_name !== undefined) {
+      const name = typeof body.company_name === 'string' ? body.company_name.trim() : '';
+      if (!name || name.length > 200) return c.json({ code: 'invalid_company_name', detail: 'Enter a company name between 1 and 200 characters.' }, 400);
+      const clash = await c.env.DB.prepare(
+        `SELECT cp.id FROM company_profiles cp JOIN user_company_links ucl ON ucl.company_id = cp.id
+         WHERE ucl.user_id = ? AND cp.id != ? AND lower(trim(cp.company_name)) = lower(trim(?)) LIMIT 1`
+      ).bind(user.id, company.id, name).first();
+      if (clash) return c.json({ code: 'company_name_clash', detail: 'You already belong to a company with that name.' }, 409);
+      body.company_name = name;
+    }
     const updatable = ['company_name', 'stage', 'revenue_range', 'employee_count',
       'current_products', 'international_presence', 'expansion_goals',
       'logo_url', 'website', 'linkedin_url', 'description'] as const;
@@ -477,6 +489,26 @@ r.patch('/company/:uid/members/:userId', async (c) => {
     await c.env.DB.prepare(`UPDATE user_company_links SET ${sets.join(', ')} WHERE id = ?`)
       .bind(...params).run();
     return c.json(await detailDto(c.env, company, user));
+  } catch (e) { return mapError(c, e); }
+});
+
+// D1135 — leaving is the member's own act, never an editor's permission.
+r.post('/company/:uid/leave', async (c) => {
+  try {
+    const user = await requireAuth(c);
+    const company = await getCompanyOr404(c.env, c.req.param('uid'));
+    if (!company) return c.json({ detail: 'Company not found' }, 404);
+    const link = await getLink(c.env, company.id, user.id);
+    if (!link) return c.json({ detail: 'Company not found' }, 404);
+    // One statement makes the last-admin check hold even for simultaneous leaves.
+    const result = await c.env.DB.prepare(
+      `DELETE FROM user_company_links WHERE company_id = ? AND user_id = ?
+       AND (is_primary_admin = 0 OR EXISTS (
+         SELECT 1 FROM user_company_links other
+         WHERE other.company_id = ? AND other.user_id != ? AND other.is_primary_admin = 1))`
+    ).bind(company.id, user.id, company.id, user.id).run();
+    if (!result.meta.changes) return c.json({ code: 'last_primary_admin', detail: 'Assign another primary admin before leaving this company.' }, 409);
+    return c.json({ ok: true });
   } catch (e) { return mapError(c, e); }
 });
 

@@ -21,6 +21,7 @@ export const TOP_COUNT = 8;
 export const NO_CATEGORY = 'No category recorded';
 export const CYCLES = [['validate', 'Validate'], ['build', 'Build'], ['raise', 'Raise'], ['grow', 'Grow'], ['network', 'Network']];
 export const SIGN_IN_LABEL = {
+  none: 'Works without signing in',
   oauth: 'Sign in at the service',
   oauth_or_key: 'Sign-in or a personal token',
   key: 'API key or token',
@@ -77,7 +78,7 @@ export function cyclesOf(p) {
 export function signInKind(p) {
   if (typeof p?.sign_in?.kind === 'string' && p.sign_in.kind) return p.sign_in.kind;
   const kind = authKind(p);
-  if (kind === 'first_party' || kind === 'key') return kind;
+  if (kind === 'none' || kind === 'first_party' || kind === 'key') return kind;
   if (kind === 'token_first') return 'oauth_or_key';
   if (p?.supports_pat) return 'oauth_or_key';
   return 'oauth';
@@ -211,9 +212,11 @@ export function discoverGrid(catalogue, { q = '', where = 'all', type = 'all', s
       if (cards.length) out.push({ id: 'suggested', title: SUGGESTED, cards, count: cards.length });
     }
     const list = pick('all', 'all');
-    const top = list.filter((p) => p.status !== 'coming_soon');
+    const top = list.filter((p) => p.auth_type !== 'none' && p.status !== 'coming_soon');
+    const browse = list.filter((p) => p.auth_type === 'none');
     const soon = list.filter((p) => p.status === 'coming_soon');
     out.push({ id: 'top', title: 'Top connectors', cards: top, count: top.length });
+    if (browse.length) out.push({ id: 'without_sign_in', title: 'Works without signing in', cards: browse, count: browse.length });
     if (soon.length) out.push({ id: 'coming_soon', title: 'Coming soon', cards: soon, count: soon.length });
     return out;
   }
