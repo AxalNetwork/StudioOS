@@ -804,13 +804,16 @@ r.get('/admin/listings', async (c) => {
   } catch (e) { return mapError(c, e); }
 });
 
+// D1039 (#2887): the reviewer's backlog is `in_review` only. A submission is
+// created `in_review` (POST /me above), so a `draft` is nobody's to review and
+// is not counted here; Listings still shows it under its own status.
 r.get('/admin/queue', async (c) => {
   try {
     await requireAdmin(c);
     const rows = await c.env.DB.prepare(
       `SELECT p.*, u.email AS partner_email
          FROM perks p LEFT JOIN users u ON u.id = p.partner_user_id
-        WHERE p.status IN ('in_review', 'draft')
+        WHERE p.status = 'in_review'
         ORDER BY p.created_at ASC LIMIT 200`,
     ).all<any>();
     return c.json({ items: rows.results || [] });
