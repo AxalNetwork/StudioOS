@@ -250,7 +250,10 @@ async function mount(url, fail) {
   };
 }
 
-test('mounted Overview: each block from its own read, the header\'s counts, and no Guard H read', async () => {
+test('mounted Overview: each block from its own read, the header\'s counts, and no Guard H read', async (t) => {
+  // The reads are dated from NOW and the page reads the clock: on the real
+  // one, "day 24 of 28" stopped holding on 2026-10-25.
+  t.mock.timers.enable({ apis: ['Date'], now: NOW });
   const m = await mount(LAB_PATH);
   try {
     assert.match(m.of('lab-header'), /Programs.*Spin-Out Lab.*Live.*HQ-held/s);
