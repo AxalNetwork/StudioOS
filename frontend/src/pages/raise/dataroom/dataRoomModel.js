@@ -144,4 +144,5 @@ export const WAITS = {
   preview: 'Not read here yet. Seeing the room exactly as one investor sees it needs a read that runs the investor’s own filter for that grant.',
 };
 
-export const WORKSPACE_LINE = 'Upload, gates, sharing and revoking stay in today’s files tool until this tool takes them over.';
+// D1106: uploads, gates, folders and removing are this tool's now; sharing and revoking wait for Access (part 6).
+export const WORKSPACE_LINE = 'Sharing and revoking stay in today’s files tool until Access takes them over.';
