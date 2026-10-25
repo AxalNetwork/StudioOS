@@ -25,7 +25,7 @@ import {
   answerEscalation, listEscalations, licenceKindsByCode, escalationKindsFor,
   ESCALATION_KINDS, ESCALATION_STATUSES, HQ_TIER_CODE,
 } from '../rpc/hqOps';
-import { withRequestView } from '../services/escalationRequests';
+import { withRequestView, isProgramRequestKind } from '../services/escalationRequests';
 import { notifyRequestAnswer, type AnswerNotice } from '../services/escalationAnswerNotice';
 import { branchByCode } from '../services/branches';
 import { mirrorBranchAction } from '../services/auditMirror';
@@ -40,7 +40,7 @@ type Pushed = { ok: boolean; reason?: string };
  * Send a decision that is already stored. The payload is the caller's; this
  * does not read a new answer off a request (D243).
  */
-async function deliverAnswer(
+export async function deliverAnswer(
   env: Env, branchCode: string, answer: Record<string, unknown>,
 ): Promise<Pushed> {
   let pushed: Pushed = {
@@ -85,7 +85,7 @@ async function deliverAnswer(
  * user, told in the bell. The row's raiser id is read here rather than taken
  * from the caller, so the notice reaches whoever raised it and nobody else.
  */
-async function noticeHqTier(env: Env, uid: string): Promise<AnswerNotice> {
+export async function noticeHqTier(env: Env, uid: string): Promise<AnswerNotice> {
   const row = await env.DB.prepare(
     `SELECT uid, kind, subject, status, answer, raised_by_branch_user_id AS raised_by_user_id
        FROM hq_escalations WHERE uid = ? AND branch_code = ?`,
@@ -181,6 +181,18 @@ r.patch('/escalations/:uid', async (c) => {
     const admin = await requireSuperAdmin(c);
     const uid = str(c.req.param('uid'), 80);
     const b = await c.req.json().catch(() => ({} as any));
+
+    // D983 — A PROGRAM REQUEST IS ANSWERED ON PROGRAM GRANTS, behind the
+    // write bar and with a reason the licence's history keeps
+    // (`routes/admin_program_requests.ts`). Answering it here would skip both.
+    const kindRow = await c.env.DB.prepare('SELECT kind FROM hq_escalations WHERE uid = ?')
+      .bind(uid).first<{ kind: string }>();
+    if (kindRow && isProgramRequestKind(kindRow.kind)) {
+      return c.json({
+        error: 'answer_on_program_grants',
+        message: 'A program request is answered on Program grants, under Requests. It needs your authenticator code and a reason.',
+      }, 409);
+    }
 
     let decided;
     try {

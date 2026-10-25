@@ -568,7 +568,8 @@ export async function reconcile(env: Env) {
 
 export const PLAN_COVERS = 'Covers Eadwyn and the AI tools on every page, Validate interview sessions and live transcription, at the rates on your Usage page.';
 export const PLAN_RESETS = 'Resets on the 1st of each month at 00:00 UTC.';
-export type PlanFamily = 'founder' | 'investor' | 'advisor' | 'partner' | 'market_intelligence' | 'other';
+export type { PlanFamily } from './planCatalogue';
+import type { PlanFamily } from './planCatalogue';
 /** A subscription product's family and licence key, from its metadata (§11). Null when the metadata names no plan: no card. */
 export function planOf(metadata: Record<string, string>): { family: PlanFamily; licence_key: string | null } | null {
   if (metadata.tier === 'growth' || metadata.tier === 'studio') return { family: 'founder', licence_key: `founder:${metadata.tier}` };

@@ -11,7 +11,8 @@
  * NO PERSON IS NAMED. `by` is `hq` when the admin holds the Super Admin
  * elevation today, and `admin` otherwise (PG4's "by an admin", dc:376). What a
  * row concerns is named as the program's page names it: a Learning program by
- * its name, a program by its key, a referral by its uid and status.
+ * its name, a program by its key, a referral by its uid and status, a mentor's
+ * cohort access by its cohort cycle (never the mentor).
  *
  * A WRITE THAT IS NOT AUDITED YET IS SAID, never shown as an empty list.
  * `NOT_AUDITED_YET` names it per program with the part that adds its audit
@@ -22,6 +23,9 @@
  */
 import type { Env } from '../types';
 import { PROPOSAL_ACTIONS, REGISTRY_ACTIONS, type ProgramKey } from './programRegistry';
+
+/** Mentor cohort access's audited writes (D960, `routes/advisors.ts`): giving a mentor a cohort, and ending it. */
+export const MENTOR_ACCESS_ACTIONS = ['advisor_cohort.assigned', 'advisor_cohort.ended'] as const;
 
 /** Learning's audited writes (`routes/admin_learning_programs.ts`). */
 export const LEARNING_PROGRAM_ACTIONS = [
@@ -37,7 +41,7 @@ export const LEARNING_PROGRAM_ACTIONS = [
 export const PROGRAM_ACTIVITY_ACTIONS: Record<ProgramKey, readonly string[]> = {
   'spinout-lab': [],
   'ai-native-venture': [],
-  'mentor-cohorts': [],
+  'mentor-cohorts': MENTOR_ACCESS_ACTIONS,
   'investor-cohorts': [],
   'referral-partners': [],
   'refer-and-earn': [],
@@ -48,8 +52,6 @@ export const PROGRAM_ACTIVITY_ACTIONS: Record<ProgramKey, readonly string[]> = {
 
 /** Writes on a program's page that the audit does not record yet, and who adds them. */
 export const NOT_AUDITED_YET: Partial<Record<ProgramKey, string>> = {
-  'mentor-cohorts':
-    'Assigning a mentor and ending access are not written to the admin audit yet. Part 7 (#2793) adds them.',
   perks: 'Perk listing reviews are not written to the admin audit yet. Part 4 (#2790) adds them.',
 };
 
@@ -200,6 +202,9 @@ export async function programActivity(
         };
       } else if (typeof d.uid === 'string') {
         concerns = { learning_program: { uid: d.uid, name: names.get(d.uid) ?? null } };
+      } else if (typeof d.cohort_cycle_id === 'number') {
+        // D960's rows name the cohort; the mentor in `target_user_id` is a person, so is never named.
+        concerns = { cohort_cycle_id: d.cohort_cycle_id };
       }
     }
     return { at: r.at, kind: r.kind, by: r.by, concerns };

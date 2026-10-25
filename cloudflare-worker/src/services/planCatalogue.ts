@@ -25,7 +25,8 @@
  *   - `included`: the lines the plan includes, the Pricing card's own
  *     (`frontend/src/lib/sitePricing.js`, held equal by the test).
  */
-import type { PlanFamily } from './aiCredits';
+// Keep catalogue types independent of payment and Stripe implementation modules.
+export type PlanFamily = 'founder' | 'investor' | 'advisor' | 'partner' | 'market_intelligence' | 'other';
 
 export type PlanColour = 'violet' | 'sky' | 'amber' | 'emerald' | 'muted';
 export type CatalogueFamily = Exclude<PlanFamily, 'market_intelligence'> | 'lp' | 'staff';
