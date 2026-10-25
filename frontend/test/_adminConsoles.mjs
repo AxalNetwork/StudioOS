@@ -20,7 +20,6 @@ export const ADMIN_CONSOLE_FILES = [
   'frontend/src/pages/admin/consoles/UsersConsole.jsx',
   'frontend/src/pages/admin/consoles/PartnerProfilesConsole.jsx',
   'frontend/src/pages/admin/consoles/KycConsole.jsx',
-  'frontend/src/pages/admin/consoles/LegalConsole.jsx',
   'frontend/src/pages/admin/consoles/PersonasConsole.jsx',
   'frontend/src/pages/admin/consoles/DirectoryConsole.jsx',
   'frontend/src/pages/admin/consoles/IntegrationKeysConsole.jsx',

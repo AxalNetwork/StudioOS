@@ -21,7 +21,7 @@
  * creator column (decision 12, `cycleActivity.ts`).
  */
 import type { ActionResult, ModuleSpec, RecordAction, RecordField, RecordContent, RecordContext, RecordFact, Row, SectionSpec, Store } from './types';
-import { activeGrant, ndaActive, removeDataRoomFile, replaceDataRoomFile } from '../../routes/data_room';
+import { activeGrant, dataRoomOwner, ndaActive, removeDataRoomFile, replaceDataRoomFile } from '../../routes/data_room';
 import { ACCESS_TIERS, grantFolderScope, investorCommitted, tierAdmits } from '../dataRoomAccess';
 import { SERVED_FUNDS, likeLiteral } from '../researchFundDirectory';
 import { deckReaders, readBySentence } from '../narrative/readers';
@@ -490,7 +490,7 @@ async function admittedInvestors(rc: RecordContext, f: any): Promise<Array<{ id:
   return out;
 }
 
-const dataRoom = spec('data_room_files', 'data-room', async (rc, id) => {
+const dataRoom: ModuleSpec = { ...spec('data_room_files', 'data-room', async (rc, id) => {
   const f = await rc.env.DB.prepare(
     `SELECT f.id, f.uid, f.name, f.folder_id, f.visibility, f.checklist_item, f.dd_request_id, f.access_tier, f.access_expires_at,
             f.size_bytes, f.created_at, d.name AS folder, u.name AS uploader
@@ -615,7 +615,10 @@ const dataRoom = spec('data_room_files', 'data-room', async (rc, id) => {
     checklist: DILIGENCE_CHECKLIST.map((c) => ({ value: c.key, label: c.label, area: c.area })),
     tiers: ACCESS_TIERS.map((t) => ({ value: t, label: TIER_LABEL[t] })),
   };
-});
+}),
+  // D1102 — the file record uses the same owner-only policy as the room.
+  read: dataRoomOwner, write: dataRoomOwner,
+};
 
 // ---------------------------------------------------------------------------
 // Cap table — id: decision 4 (h-<holder>, e-<n>, pool)
