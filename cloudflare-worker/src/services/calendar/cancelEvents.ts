@@ -1,6 +1,7 @@
 /** D1131: bounded immediate cleanup, with durable continuation and retry. */
 import type { Env } from '../../types';
 import { enqueueJob } from '../queue';
+import { Jobs } from '../../models/jobs';
 import { onAxalSessionCancelled } from './sync';
 
 type Target = { kind: 'ticket' | 'event'; id: number };
@@ -9,22 +10,57 @@ const BATCH = 5;
 
 /** Recheck source state on delivery: a newly registered seat must keep its copy. */
 async function copies(env: Env, target: Target, after: number, limit: number, exact: number | null = null): Promise<Copy[]> {
+  // Exact delivery uses the mapping primary key, without an optional-id OR.
+  if (exact != null) {
+    const row = await env.DB.prepare(
+      `SELECT s.id, s.user_id, s.provider, s.source_kind, s.source_id
+         FROM calendar_sync_records s
+         LEFT JOIN event_registrations r ON s.source_kind = 'event_ticket' AND r.id = s.source_id
+         LEFT JOIN events e ON e.id = CASE WHEN s.source_kind = 'event_hosted' THEN s.source_id ELSE r.event_id END
+        WHERE s.id = ?
+          AND ((? = 'ticket' AND s.source_kind = 'event_ticket' AND r.id = ?)
+            OR (? = 'event' AND e.id = ? AND s.source_kind IN ('event_ticket','event_hosted')))
+          AND (e.status = 'cancelled' OR (s.source_kind = 'event_ticket' AND r.status = 'cancelled'))`,
+    ).bind(exact, target.kind, target.id, target.kind, target.id).first<Copy>();
+    return row ? [row] : [];
+  }
+  if (target.kind === 'ticket') {
+    const rows = await env.DB.prepare(
+      `SELECT s.id, s.user_id, s.provider, s.source_kind, s.source_id
+         FROM calendar_sync_records s
+         JOIN event_registrations r ON r.id = s.source_id
+         JOIN events e ON e.id = r.event_id
+        WHERE s.source_kind = 'event_ticket' AND s.source_id = ? AND s.id > ?
+          AND (e.status = 'cancelled' OR r.status = 'cancelled')
+        ORDER BY s.id LIMIT ?`,
+    ).bind(target.id, after, limit).all<Copy>();
+    return rows.results || [];
+  }
   const rows = await env.DB.prepare(
     `SELECT s.id, s.user_id, s.provider, s.source_kind, s.source_id
-       FROM calendar_sync_records s
-       LEFT JOIN event_registrations r ON s.source_kind = 'event_ticket' AND r.id = s.source_id
-       LEFT JOIN events e ON e.id = CASE WHEN s.source_kind = 'event_hosted' THEN s.source_id ELSE r.event_id END
-      WHERE s.id > ? AND (? IS NULL OR s.id = ?)
-        AND ((? = 'ticket' AND s.source_kind = 'event_ticket' AND r.id = ?)
-          OR (? = 'event' AND e.id = ? AND s.source_kind IN ('event_ticket','event_hosted')))
-        AND (e.status = 'cancelled' OR (s.source_kind = 'event_ticket' AND r.status = 'cancelled'))
-      ORDER BY s.id LIMIT ?`,
-  ).bind(after, exact, exact, target.kind, target.id, target.kind, target.id, limit).all<Copy>();
+       FROM calendar_sync_records s JOIN events e ON e.id = s.source_id
+      WHERE s.source_kind = 'event_hosted' AND s.source_id = ? AND s.id > ? AND e.status = 'cancelled'
+      UNION ALL
+     SELECT s.id, s.user_id, s.provider, s.source_kind, s.source_id
+       FROM event_registrations r
+       CROSS JOIN calendar_sync_records s ON s.source_kind = 'event_ticket' AND s.source_id = r.id
+       JOIN events e ON e.id = r.event_id
+      WHERE r.event_id = ? AND s.id > ? AND (e.status = 'cancelled' OR r.status = 'cancelled')
+      ORDER BY 1 LIMIT ?`,
+  ).bind(target.id, after, target.id, after, limit).all<Copy>();
   return rows.results || [];
 }
 async function enqueue(env: Env, payload: Target & { after?: number; mapping_id?: number }): Promise<void> {
   try { await enqueueJob(env, 'event_calendar_cleanup', payload, { max_retries: 5 }); }
-  catch { throw new Error('calendar_cleanup_enqueue_failed'); }
+  catch {
+    // Only this proven-idempotent cleanup may fall back after an uncertain CF
+    // send: duplicate scan/copy delivery is safe. The generic producer's
+    // no-dual-write policy for financial and other jobs stays unchanged.
+    try {
+      const job = await Jobs.enqueue(env, 'event_calendar_cleanup', payload, { max_retries: 5 });
+      if (!job) throw new Error('calendar_cleanup_enqueue_failed');
+    } catch { throw new Error('calendar_cleanup_enqueue_failed'); }
+  }
 }
 async function remove(env: Env, row: Copy): Promise<void> {
   await onAxalSessionCancelled(env, row.source_kind, row.source_id, { userId: row.user_id, provider: row.provider });
@@ -32,8 +68,7 @@ async function remove(env: Env, row: Copy): Promise<void> {
 
 export async function cancelEventCalendarCopies(env: Env, target: Target): Promise<void> {
   // Persist continuation before provider work, so waitUntil expiry cannot lose it.
-  try { await enqueue(env, { ...target, after: 0 }); }
-  catch { console.warn('[events/calendar] cancellation_enqueue_failed'); }
+  await enqueue(env, { ...target, after: 0 });
   // At most two concurrent refresh/delete chains in the cancellation request.
   await Promise.all((await copies(env, target, 0, 2)).map(row => remove(env, row)));
 }
