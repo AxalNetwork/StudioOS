@@ -194,7 +194,7 @@ function ProjectsTab({ read, retry, summary, profile }) {
   if (!groups.length) {
     return (
       <Empty title="No ventures yet." note="A venture moves through Validate, Build, Raise and Grow inside its company." testId="projects-none">
-        {profile === 'founder' ? <Link className={BTN} to="/projects">Start a venture</Link> : null}
+        {profile === 'founder' ? <Link className={BTN} to="/build?new=1">Start a venture</Link> : null}
       </Empty>
     );
   }
