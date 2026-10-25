@@ -170,8 +170,12 @@ test('in the app: an admin on an /admin address no route names reads Not found, 
   // Mutation checked: the /admin/* route given `['admin', 'founder']` → the founder reads Not found, not the card (test above);
   // Admins are admitted by the guard and never receive the member refusal.
   const admin = { id: 9402, role: 'admin', is_super_admin: 0, email: 'admin@d940.test', name: 'Admin D940', ...settled };
-  const unknown = await appAt(admin, '/admin/kyc');
-  assert.equal(unknown.landed, '/admin/kyc');
+  const unknown = await appAt(admin, '/admin/not-a-real-page-d940');
+  assert.equal(unknown.landed, '/admin/not-a-real-page-d940');
   assert.equal(unknown.boundary, 0);
   assert.deepEqual(unknown.h1s, ['Page not found']);
+  const founder = { ...admin, id: 9403, role: 'founder' };
+  const refused = await appAt(founder, '/admin/not-a-real-page-d940');
+  assert.equal(refused.boundary, 1);
+  assert.deepEqual(refused.h1s, ['This page is for studio admins']);
 });

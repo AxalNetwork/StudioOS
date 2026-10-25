@@ -42,7 +42,9 @@ test('the list is App.jsx\'s redirect-only routes, no more and no fewer', () => 
   assert.deepEqual([...new Set(routes)].sort(), REDIRECT_ROUTES.filter((r) => !r.path.includes('?')).map((r) => r.path).sort(),
     'a redirect route added, removed or turned into a page: update cloudflare-worker/src/services/redirectRoutes.ts');
   // A route that redirects for some roles only is a page, and is not listed.
-  for (const page of ['/raise/data-room', '/build', '/raise', '/profile', '/admin']) assert.equal(routes.includes(page), false, page);
+  for (const page of ['/raise/data-room', '/build', '/raise', '/profile']) assert.equal(routes.includes(page), false, page);
+  // D938: the Admin Console is retired, so /admin only forwards now, and is kept for good (#2375).
+  assert.ok(routes.includes('/admin'));
   // #2337, #2338, #2342: the pages removed on 2026-10-21 forward everyone now,
   // so they are counted until #2319 retires them. `/needs` stood in the list
   // above while it still rendered the board for a partner.
@@ -89,7 +91,7 @@ test('the fixed tab keys cover the legacy section list and retired moved tabs, n
   assert.equal(redirectPatternFor('/admin', '?tab=k%79c&email=private@example.test'), '/admin?tab=kyc');
   assert.equal(redirectPatternFor('/admin/', '?tab=kyc'), '/admin?tab=kyc');
   assert.equal(redirectPatternFor('/ADMIN', '?tab=kyc'), '/admin?tab=kyc');
-  for (const search of ['', '?tab=unknown', '?tab=private@example.test', '?tab=', '?other=kyc']) assert.equal(redirectPatternFor('/admin', search), null, search);
+  for (const search of ['', '?tab=unknown', '?tab=private@example.test', '?tab=', '?other=kyc']) assert.equal(redirectPatternFor('/admin', search), '/admin', search);
 });
 
 test('mounted beacon counts tab switches, omits other query data and does not resend on unrelated query changes', async () => {
@@ -100,7 +102,7 @@ test('mounted beacon counts tab switches, omits other query data and does not re
     for (const search of ['?tab=kyc&email=private@example.test', '?tab=promos', '?tab=promos&tracking=secret', '?tab=unknown', '?tab=kyc']) {
       await act(async () => { root.render(h(Probe, { search })); });
     }
-    assert.deepEqual(sent, ['redirect:/admin?tab=kyc', 'redirect:/admin?tab=promos', 'redirect:/admin?tab=kyc']);
+    assert.deepEqual(sent, ['redirect:/admin?tab=kyc', 'redirect:/admin?tab=promos', 'redirect:/admin', 'redirect:/admin?tab=kyc']);
   } finally { await act(async () => root.unmount()); restore(); }
 });
 
@@ -121,8 +123,8 @@ test('the mounted default beacon sends canonical tab keys through fetch and tole
     for (const search of ['?tab=kyc&person=private', '?tab=promos', '?tab=unknown']) {
       await act(async () => { root.render(h(Probe, { search })); });
     }
-    assert.deepEqual(requests.map((r) => r.url), ['/api/public/analytics/pageview', '/api/public/analytics/pageview']);
-    assert.deepEqual(requests.map((r) => r.body.path), ['redirect:/admin?tab=kyc', 'redirect:/admin?tab=promos']);
+    assert.deepEqual(requests.map((r) => r.url), ['/api/public/analytics/pageview', '/api/public/analytics/pageview', '/api/public/analytics/pageview']);
+    assert.deepEqual(requests.map((r) => r.body.path), ['redirect:/admin?tab=kyc', 'redirect:/admin?tab=promos', 'redirect:/admin']);
   } finally {
     await act(async () => root.unmount()); globalThis.fetch = previousFetch;
     if (navigatorDescriptor) Object.defineProperty(globalThis, 'navigator', navigatorDescriptor); else delete globalThis.navigator;

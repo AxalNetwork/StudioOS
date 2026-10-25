@@ -740,7 +740,7 @@ export default function LoginPage() {
                 {demoLoading === 'investor' ? 'Signing in…' : 'Sign in as demo investor (dev only)'}
               </button>
                <button
-                 onClick={() => demoLogin({ email: 'demo-admin@axal.test', landing: '/admin' })}
+                 onClick={() => demoLogin({ email: 'demo-admin@axal.test', landing: '/admin/accounts/all' })}
                  disabled={!!demoLoading}
                  data-testid="demo-admin-login"
                  className="w-full bg-violet-100 hover:bg-violet-200 border border-violet-300 disabled:opacity-50 rounded-lg py-2 text-xs font-medium text-violet-900"

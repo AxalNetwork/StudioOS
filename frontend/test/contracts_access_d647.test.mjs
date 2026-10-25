@@ -5,21 +5,21 @@ import { renderToStaticMarkup } from 'react-dom/server';
 import { MemoryRouter } from 'react-router-dom';
 import LegacyContractsRedirect, { legacyContractsTarget, CONTRACTS_MOVED_NOTICE } from '../src/pages/admin/LegacyContractsRedirect.jsx';
 
-test('D647: old legal deep links move, preserving the other console sections', () => {
-  assert.equal(legacyContractsTarget('?tab=legal&unused=1'), '/admin/contracts?moved=legal');
-  for (const query of ['', '?tab=users', '?tab=illegal', '?search=legal']) assert.equal(legacyContractsTarget(query), null);
+test('D647: old legal deep links move, keeping the rest of the query (D938)', () => {
+  assert.equal(legacyContractsTarget('?tab=legal&unused=1'), '/admin/contracts?unused=1&moved=legal');
+  // D938: the console is retired, so every other address forwards too.
+  for (const query of ['', '?tab=users', '?tab=illegal']) assert.equal(legacyContractsTarget(query), '/admin/accounts/all?moved=users', query);
+  assert.equal(legacyContractsTarget('?search=legal'), '/admin/accounts/all?search=legal&moved=users');
   assert.match(CONTRACTS_MOVED_NOTICE, /Legal now lives under Contracts/);
 });
 
-test('D647: redirect prevents the old console from mounting and reading unrelated data', () => {
+test('D647, D938: /admin mounts nothing, so no old console reads anything', () => {
   let mounted = 0;
   function Console() { mounted++; return React.createElement('p', null, 'Console users'); }
   const render = (url) => renderToStaticMarkup(React.createElement(MemoryRouter, { initialEntries: [url] },
     React.createElement(LegacyContractsRedirect, null, React.createElement(Console))));
-  assert.doesNotMatch(render('/admin?tab=legal'), /Console users/);
+  for (const url of ['/admin?tab=legal', '/admin?tab=users', '/admin']) assert.doesNotMatch(render(url), /Console users/, url);
   assert.equal(mounted, 0);
-  assert.match(render('/admin?tab=users'), /Console users/);
-  assert.equal(mounted, 1);
 });
 
 import ContractsPage from '../src/pages/hq/ContractsPage.jsx';

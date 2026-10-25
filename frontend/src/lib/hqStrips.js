@@ -1,14 +1,13 @@
 /**
  * The H36 sub-navigation strips, and which HQ row a location lights (D285).
  *
- * Two rows of the HQ shell hold consoles the old Admin Console still renders:
- * Platform (nine items: Integration keys and GitHub Sync left it for an HQ
- * row of their own, the owner's ruling of 2026-10-20) and Content (seven). H36 draws each as a strip that
- * stays visible after the item lands in the old console, with the row still
- * lit. The strips below are H36's order, verbatim; the H35 map (D283) is what
- * they are held to — every legacy console placed as a sub-navigation item on
- * one of these rows is in its strip, and every strip item that is a legacy
- * console is placed on that row.
+ * Three rows of the HQ shell carry a strip: Licences (D981), Platform and
+ * Content. H36 draws each as a strip that stays visible on every item's page,
+ * with the row still lit. The strips below are H36's order, verbatim; the H35
+ * map (D283) is what they are held to — every legacy console placed as a
+ * sub-navigation item on one of these rows is in its strip, and every strip
+ * item that is a legacy console is placed on that row. Since D938 (#2743)
+ * each of those consoles is a page at its own address, not an `/admin` tab.
  *
  * THE SHELL RENDERS THE STRIPS AS LITERAL LINKS (App.jsx), not from this
  * list: `admin_route_reachability.test.mjs` reads navigation syntax in the
@@ -19,7 +18,6 @@
  * literal sequence equal to it.
  */
 import { SIDEBAR_GROUPS } from '../sidebarConfig.js';
-import { ADMIN_PLACEMENT } from './adminPlacement.js';
 
 const strip = (pairs) => pairs.map(([label, route]) => ({ label, route }));
 
@@ -35,10 +33,11 @@ export const HQ_STRIPS = {
     ['Topology', '/admin/platform/topology'],
     ['AI allowances', '/admin/platform/allowances'],
     ['AI usage', '/admin/platform/ai-usage'],
+    // D938 (#2743): the four left the Admin Console for Platform's own addresses.
     ['Payments', '/admin/platform/payments'],
-    ['Bank accounts', '/admin?tab=bank-accounts'],
-    ['Product testing', '/admin?tab=product-testing'],
-    ['Promo codes', '/admin?tab=promos'],
+    ['Bank accounts', '/admin/platform/bank-accounts'],
+    ['Product testing', '/admin/platform/product-testing'],
+    ['Promo codes', '/admin/platform/promo-codes'],
     ['Monitoring', '/monitoring'],
     ['Telegram', '/admin/telegram'],
   ]),
@@ -57,67 +56,41 @@ export const HQ_ROW_ROUTE = Object.fromEntries(
   (SIDEBAR_GROUPS.super_admin || []).flatMap((g) => g.items || []).map((it) => [it.label, it.to]),
 );
 
-/** The location as a strip item writes it: the path, plus `?tab=` when one is set. */
-export function hereFrom(pathname, search = '') {
-  const tab = new URLSearchParams(search || '').get('tab');
-  return tab ? `${pathname}?tab=${tab}` : pathname;
-}
+/**
+ * Which strip a location belongs to — 'Platform', 'Licences', 'Content' or
+ * null. A page's tabs are sub-paths of its address (D936), so an item also
+ * owns its subtree: `/admin/platform/promo-codes/usage` keeps the strip. Since
+ * D938 no strip item lives on a query, so the path alone decides.
+ */
+const owns = (route, pathname) => route === pathname || pathname.startsWith(`${route}/`);
 
-/** Which strip a location belongs to — 'Platform', 'Content' or null. */
-export function stripFor(pathname, search = '') {
-  const here = hereFrom(pathname, search);
+export function stripFor(pathname) {
   for (const [row, items] of Object.entries(HQ_STRIPS)) {
-    // A page's tabs are sub-paths of its address (D936), so an item that is a
-    // plain path also owns its subtree; a `?tab=` item matches exactly.
-    if (items.some((i) => i.route === here || (!i.route.includes('?') && here.startsWith(`${i.route}/`)))) return row;
+    if (items.some((i) => owns(i.route, pathname))) return row;
   }
   return null;
 }
 
 /**
- * The HQ row a location lights, by route — or null when only the path
- * decides. A `?tab=` on /admin lights the HQ row the map places that tab on
- * (Contracts on legal, Team on users, Revenue on billing, Platform and
- * Content on theirs); a strip's own pages light the strip's row.
+ * The strip item a location opens: the item whose address is the longest
+ * that owns it, so Platform's Overview is not lit on `/admin/platform/payments`
+ * while Promo codes stays lit on its own tabs. Null off every strip.
  */
-export function hqRowFor(pathname, search = '') {
-  const tab = pathname === '/admin' ? new URLSearchParams(search || '').get('tab') : null;
-  if (tab) {
-    const entry = ADMIN_PLACEMENT.find((e) => e.key === `tab:${tab}`);
-    const onHq = entry && [entry, ...(entry.also || [])].find((p) => p.tier === 'HQ');
-    return onHq ? (HQ_ROW_ROUTE[onHq.row] ?? null) : null;
+export function stripItemFor(pathname) {
+  let hit = null;
+  for (const items of Object.values(HQ_STRIPS)) {
+    for (const i of items) if (owns(i.route, pathname) && (!hit || i.route.length > hit.length)) hit = i.route;
   }
-  const row = stripFor(pathname, search);
-  return row ? (HQ_ROW_ROUTE[row] ?? null) : null;
+  return hit;
 }
 
-/** Admin row label → the row's route, read off the shell rather than typed (D286). */
-export const ADMIN_ROW_ROUTE = Object.fromEntries(
-  (SIDEBAR_GROUPS.admin || []).flatMap((g) => g.items || []).map((it) => [it.label, it.to]),
-);
-
 /**
- * "This location lights no row" — distinct from `null`, which hands the
- * decision back to the path rules. On `/admin` the path rules cannot be
- * trusted: the Contracts row points at `/admin?tab=legal`, and `NavLink`
- * compares pathnames only, so it would light on every tab.
+ * The HQ row a location lights, by its strip — or null when the path and the
+ * rows' `match` lists decide. A strip's own pages light the strip's row, even
+ * where the item's address sits under another row's path (`/monitoring`,
+ * `/admin/persona-segments`).
  */
-export const NO_ROW = '';
-
-/**
- * The Admin row a location lights on the S20 shell (D286), by route; `NO_ROW`
- * for an `/admin` tab the map places on no Admin row (Payments, Promo codes
- * and Billing are HQ's); `null` everywhere
- * else, where the path — a row's own `to`, or its `match` list — decides.
- *
- * READ FROM THE H35 MAP, NOT TYPED: the `users` tab lights Accounts because
- * the map places it there (`also`), `legal` lights Contracts, `kyc`
- * Approvals, `wellbeing` Community. A bare `/admin` is the Users tab.
- */
-export function adminRowFor(pathname, search = '') {
-  if (pathname !== '/admin') return null;
-  const tab = new URLSearchParams(search || '').get('tab') || 'users';
-  const entry = ADMIN_PLACEMENT.find((e) => e.key === `tab:${tab}`);
-  const onAdmin = entry && [entry, ...(entry.also || [])].find((p) => p.tier === 'Admin');
-  return onAdmin ? (ADMIN_ROW_ROUTE[onAdmin.row] ?? NO_ROW) : NO_ROW;
+export function hqRowFor(pathname) {
+  const row = stripFor(pathname);
+  return row ? (HQ_ROW_ROUTE[row] ?? null) : null;
 }

@@ -282,14 +282,14 @@ const capTable: Adapter = {
     const out: Record<string, Read> = {};
     // Carta writes holders without a project (carta.ts); the deck reads them by the founder's user, as the Demo Day deck does.
     const holders = await all<{ id: number; carta: number; updated_at: string | null }>(env,
-      `SELECT h.id, (h.source = 'carta' OR h.carta_stakeholder_id IS NOT NULL) AS carta, h.updated_at FROM cap_table_holders h
+      `SELECT h.id, (h.source = 'connector_carta' OR h.carta_stakeholder_id IS NOT NULL) AS carta, h.updated_at FROM cap_table_holders h
         WHERE h.project_id = ? OR (h.project_id IS NULL AND h.user_id IN (SELECT u.id FROM users u JOIN projects p ON p.founder_id = u.founder_id WHERE p.id = ?))`,
       projectId, projectId);
     if (!holders.length) return out;
     const origin: Origin = holders.every((h) => Number(h.carta) === 1) ? 'connector' : 'typed';
     out['raise.cap_table'] = { value: holders.length, as_of: maxDay(holders.map((h) => h.updated_at)), origin, record_ref: `cap_table_holders:${holders.length}` };
     const v = await all<{ id: number; carta: number; updated_at: string | null }>(env,
-      `SELECT v.id, (v.source = 'carta' OR v.carta_vesting_id IS NOT NULL) AS carta, v.updated_at FROM cap_table_vesting v
+      `SELECT v.id, (v.source = 'connector_carta' OR v.carta_vesting_id IS NOT NULL) AS carta, v.updated_at FROM cap_table_vesting v
         WHERE v.holder_id IN (SELECT h.id FROM cap_table_holders h WHERE h.project_id = ?
           OR (h.project_id IS NULL AND h.user_id IN (SELECT u.id FROM users u JOIN projects p ON p.founder_id = u.founder_id WHERE p.id = ?)))`,
       projectId, projectId);
@@ -394,7 +394,7 @@ const team: Adapter = {
   async read({ env, projectId }) {
     const out: Record<string, Read> = {};
     const f = await all<{ id: number; carta: number; updated_at: string | null }>(env,
-      `SELECT id, (source = 'carta' OR carta_stakeholder_id IS NOT NULL) AS carta, updated_at FROM cap_table_holders
+      `SELECT id, (source = 'connector_carta' OR carta_stakeholder_id IS NOT NULL) AS carta, updated_at FROM cap_table_holders
         WHERE project_id = ? AND founder_role IS NOT NULL`, projectId);
     if (f.length) out['team.founders'] = { value: f.length, as_of: maxDay(f.map((r) => r.updated_at)), origin: f.every((r) => Number(r.carta) === 1) ? 'connector' : 'platform_count', record_ref: `cap_table_holders:founders:${f.length}` };
     const skills = await all<{ axis: string; w: number; at: string | null }>(env,
