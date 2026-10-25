@@ -257,7 +257,7 @@ function worker(routes = {}) {
     if (path === '/api/admin/partners/deals/top') return response({ items: [] });
     if (path === '/api/admin/contracts/partner-deals') return response({ items: [], total: 0, limit: 500, offset: 0 });
     if (path === '/api/admin/partners/links') return response({ accounts: [], firms: [] });
-    if (path === '/api/legal/esign/templates/partner_services') return response({ doc_type: 'partner_services', fields: [] });
+    if (path === '/api/admin/partners/agreement-ready') return response({ ready: true, reason: null, fields: [] });
     if (path === '/api/dd/cases') return response({ items: [] });
     if (path === '/api/admin/partners/redemptions') return response({ items: [], total: 0, page: 1, limit: 25, pages: 1 });
     if (/^\/api\/admin\/partners\/deals\/\d+\/redemptions$/.test(path)) return response({ deal: {}, items: [] });

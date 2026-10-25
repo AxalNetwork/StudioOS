@@ -451,7 +451,7 @@ test('Build’s "Connect a tool": list, failed, locked and loading', () => {
 test('the doors: the user menu under Usage, the Account section after Usage, and Build’s header', () => {
   const app = read('frontend/src/App.jsx');
   const menu = app.slice(app.indexOf('function UserDropdown('), app.indexOf('Log Out', app.indexOf('function UserDropdown(')));
-  assert.match(menu, /Usage\s*<\/Link>\s*\{\/\*[^*]*\*\/\}\s*<Link to="\/account\/connectors"[\s\S]*?Connectors\s*<\/Link>\s*<Link to="\/trust"/, 'Connectors, right under Usage');
+  assert.match(menu, /Usage\s*<\/Link>\s*\{\/\*[^*]*\*\/\}\s*<Link to="\/account\/connectors"[\s\S]*?Connectors\s*<\/Link>\s*<Link to="\/trust\/me"/, 'Connectors, right under Usage');
   const settings = read('frontend/src/pages/SettingsPage.jsx');
   assert.match(settings, /\{ id: 'usage', label: 'Usage' \},\n(?:\s*\/\/[^\n]*\n)*\s*\{ id: 'connectors', label: 'Connectors' \},/);
   assert.doesNotMatch(settings, /id: 'integrations'/, 'Integrations left the section list');
