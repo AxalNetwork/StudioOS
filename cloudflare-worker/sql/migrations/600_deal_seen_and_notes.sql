@@ -7,8 +7,8 @@ CREATE TABLE IF NOT EXISTS deal_seen (
   company_id INTEGER REFERENCES company_profiles(id) ON DELETE CASCADE,
   last_seen_at TEXT NOT NULL,
   source_snapshot_json TEXT NOT NULL DEFAULT '{}' CHECK(json_valid(source_snapshot_json)),
-  created_at TEXT NOT NULL DEFAULT (datetime('now')),
-  updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+  created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now')),
+  updated_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now')),
   UNIQUE(deal_id, user_id, company_id)
 );
 CREATE TABLE IF NOT EXISTS deal_notes (
@@ -19,8 +19,8 @@ CREATE TABLE IF NOT EXISTS deal_notes (
   company_id INTEGER REFERENCES company_profiles(id) ON DELETE CASCADE,
   tag TEXT NOT NULL DEFAULT '' CHECK(length(tag) <= 80),
   body TEXT NOT NULL CHECK(length(trim(body)) BETWEEN 1 AND 10000),
-  created_at TEXT NOT NULL DEFAULT (datetime('now')),
-  updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+  created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now')),
+  updated_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now'))
 );
 CREATE INDEX IF NOT EXISTS idx_deal_notes_firm ON deal_notes(deal_id, company_id, id DESC);
 

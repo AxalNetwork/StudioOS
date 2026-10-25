@@ -69,14 +69,14 @@ test('stage recomputes; IC is Not used only for a firm without recorded IC; fore
 test('notes are firm-private, author-edited, and writes are audited without note text',async()=>{
   const {db,call}=world();try{
     const added=await call(1,'notes','POST',{tag:'risk',body:'PRIVATE NOTE'});assert.equal(added.status,201,JSON.stringify(added.body));const uid=added.body.uid;
-    assert.equal((await call(2,'notes')).body.items[0].body,'PRIVATE NOTE');assert.equal((await call(3,'notes')).body.total,0);assert.deepEqual((await call(3,'notes')).body.items,[]);
+    const listed=(await call(2,'notes')).body.items[0];assert.equal(listed.body,'PRIVATE NOTE');assert.match(listed.created_at,/^\d{4}-\d{2}-\d{2}T.*Z$/);assert.match(listed.updated_at,/^\d{4}-\d{2}-\d{2}T.*Z$/);assert.equal((await call(3,'notes')).body.total,0);assert.deepEqual((await call(3,'notes')).body.items,[]);
     for(const verb of ['GET','POST','PUT','DELETE']){
       const path=['PUT','DELETE'].includes(verb)?`notes/${uid}`:'notes';assert.equal((await call(4,path,verb,verb==='GET'?undefined:{body:'no'})).status,403);
     }
     assert.equal((await call(2,`notes/${uid}`,'PUT',{body:'no'})).status,404);
     assert.equal((await call(3,`notes/${uid}`,'DELETE')).status,404);
     assert.equal((await call(1,`notes/${uid}`,'PUT',{tag:'team',body:'REVISED PRIVATE'})).status,200);
-    assert.equal((await call(1,'notes')).body.items[0].body,'REVISED PRIVATE');
+    const edited=(await call(1,'notes')).body.items[0];assert.equal(edited.body,'REVISED PRIVATE');assert.match(edited.updated_at,/^\d{4}-\d{2}-\d{2}T.*Z$/);
     assert.equal((await call(1,`notes/${uid}`,'DELETE')).status,200);assert.equal((await call(1,'notes')).body.total,0);
     const logs=db.prepare("SELECT user_id,action,details FROM activity_logs ORDER BY id").all() as any[];
     assert.deepEqual(logs.map(l=>l.action),['deal_note_added','deal_note_edited','deal_note_deleted']);assert.ok(logs.every(l=>l.user_id===1));assert.doesNotMatch(JSON.stringify(logs),/PRIVATE|risk|team/);
