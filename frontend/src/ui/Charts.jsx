@@ -120,7 +120,6 @@ export function HBars({ rows, axis = '', onSelect, testIdPrefix = 'insights-bar'
 }
 
 /**
-<<<<<<< HEAD
  * D951 — term bars on a day axis (Partner invitations' C5 "Terms ending"):
  * one bar per row from `start` to `end`, in days from today, clipped to
  * `from`…`to`; a line at day 0 is today. A bar whose start lies before the
@@ -163,15 +162,12 @@ export function TermBars({ rows, from = -20, to = 120 }) {
   );
 }
 
-/** Columns. `toDate` hatches the current week; `open` draws a dashed outline for a week not finished. */
-export function Columns({ rows, height = 220, pct = false, max: maxIn }) {
-=======
+/**
  * Columns. `toDate` hatches the current week; `open` draws a dashed outline for a week not finished.
  * D947 (#2752) adds `references`: horizontal lines such as a cohort's places and minimum, each
  * `{ value, label, dashed }`, drawn across the plot with their label at its right edge.
  */
 export function Columns({ rows, height = 220, pct = false, max: maxIn, references = [] }) {
->>>>>>> origin/main
   const [ref, W] = useBoxWidth();
   const hatch = `ins-hatch-${useId().replace(/:/g, '')}`;
   const Lx = 34;
