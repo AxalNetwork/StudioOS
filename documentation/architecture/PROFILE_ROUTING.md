@@ -211,7 +211,7 @@ it, where in their nav, and how do they get there.*
 | Partner profiles | `/admin?tab=profiles` | — (no nav entry) | Full page | Deep link / in-page action | UPGRADE | Medium |
 | Persona segments | `/admin?tab=personas` | — (no nav entry) | Full page | Deep link / in-page action | UPGRADE | Medium |
 | Pitch Deck Studio | `/raise/pitch/new` · `/raise/pitch/edit` · `/raise/pitch/builder` | — (no nav entry) | Full page | Deep link / in-page action | UPGRADE | Medium |
-| Program grants | `/admin/licences/programs` · `/admin/licences/programs/requests` · `/admin/licences/programs/defaults` · `/admin/licences/programs/studio/:uid` · `/admin/my-licence/programs` | Admin | Full page (proposed) | Sidebar → Admin → Licences | UPGRADE | Low |
+| Program grants | `/admin/licences/programs` · `/admin/licences/programs/requests` · `/admin/licences/programs/history` · `/admin/licences/programs/defaults` · `/admin/licences/programs/studio/:uid` · `/admin/my-licence/programs` | Admin | Full page (proposed) | Sidebar → Admin → Licences | UPGRADE | Low |
 | Reporting to investors | `/portfolio/updates` | — (no nav entry) | Full page | Deep link / in-page action | UPGRADE | Medium |
 | Research · Funds (directory) | `/research/funds` | — (no nav entry) | Full page | Deep link / in-page action | CURRENT | Medium |
 | Research · Funds (fund profile) | `/research/funds/catalog/:id` | — (no nav entry) | Full page | Deep link / in-page action | CURRENT | Medium |
@@ -247,7 +247,7 @@ it, where in their nav, and how do they get there.*
 | Partner profiles | `/admin?tab=profiles` | — (no nav entry) | Full page | Deep link / in-page action | UPGRADE | Medium |
 | Payments | `/admin?tab=payments` · `/pricing/products` | — (no nav entry) | Full page | Deep link / in-page action | UPGRADE | Medium |
 | Persona segments | `/admin?tab=personas` | — (no nav entry) | Full page | Deep link / in-page action | UPGRADE | Medium |
-| Program grants | `/admin/licences/programs` · `/admin/licences/programs/requests` · `/admin/licences/programs/defaults` · `/admin/licences/programs/studio/:uid` · `/admin/my-licence/programs` | HQ | Full page (proposed) | Sidebar → HQ → Licences | UPGRADE | Low |
+| Program grants | `/admin/licences/programs` · `/admin/licences/programs/requests` · `/admin/licences/programs/history` · `/admin/licences/programs/defaults` · `/admin/licences/programs/studio/:uid` · `/admin/my-licence/programs` | HQ | Full page (proposed) | Sidebar → HQ → Licences | UPGRADE | Low |
 | Spin-Out Lab (admin) | `/participants/:uid` · `/applications/:id` · `/admin/spinout-lab` · `/admin/spinout-lab/preview` · `/admin?tab=lab-applications` · `/applications` | — (no nav entry) | Full page | Deep link / in-page action | UPGRADE | Medium |
 | Support Security · Super | `/admin/security` · `/admin/hq-support` · `/help` | HQ | Full page | Sidebar → HQ → Security | UPGRADE | High |
 | Team · Authority | `/admin/team` · `/ic` · `/ic/:uid` | HQ | Full page | Sidebar → HQ → Content | NEW | High |
