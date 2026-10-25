@@ -154,7 +154,13 @@ and audits `fund.create`. `fund_performance.ts` enforces and audits
 act table; existing institutional GP ownership/tier scope remains. The overview
 also returns an independent per-fund booklet waiting block.
 
-### Build operating systems (D686)
+#D1174 (#3101): `financials.ts` no longer returns, writes or exports the Capital
+score; its column remains. Export/recompute require a person-saved model.
+`cycle_records.ts` supplies a verified founder/session/company marker before a
+Use of funds section may read private accepted Mercury actuals. Missing and
+unreadable bank data stay distinct, with no provider call.
+
+## Build operating systems (D686)
 
 `GET /api/cycles/build/systems/choices?project=<id>` returns the caller's own
 company-enabled connector choices by system kind. Workspace choices come from

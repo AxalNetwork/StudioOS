@@ -144,14 +144,14 @@ records.route('/api/cycles', createCycleRecords());
 records.onError((err: any, c) => c.json({ detail: String(err?.message || '') }, 500));
 
 /** One record read (or its activity) through the registered route, as `who`. */
-async function rec(db: DatabaseSync, slug: string, id: string | number, { who = FOUNDER, project = P, tail = '' } = {}) {
+async function rec(db: DatabaseSync, slug: string, id: string | number, { who = FOUNDER, project = P, tail = '', support = false, company = undefined as number | undefined } = {}) {
   people(db);
-  const token = await new SignJWT({ user_id: who, role: PEOPLE[who]?.role ?? 'founder' }).setProtectedHeader({ alg: 'HS256' })
+  const token = await new SignJWT({ user_id: who, role: PEOPLE[who]?.role ?? 'founder', ...(support ? { impersonated_by: ADMIN } : {}) }).setProtectedHeader({ alg: 'HS256' })
     .setIssuedAt().setExpirationTime('1h').sign(new TextEncoder().encode(JWT_SECRET));
   const saved = [console.warn, console.error]; console.warn = () => {}; console.error = () => {};
   try {
     const res = await records.request(`/api/cycles/raise/modules/${slug}/records/${encodeURIComponent(String(id))}${tail}?project=${project}`,
-      { headers: { Authorization: `Bearer ${token}` } }, { JWT_SECRET, ENVIRONMENT: 'development', DB: d1Over(db) } as any);
+      { headers: { Authorization: `Bearer ${token}`, ...(company ? { 'X-Company-Id': String(company) } : {}) } }, { JWT_SECRET, ENVIRONMENT: 'development', DB: d1Over(db) } as any);
     return { status: res.status, body: await res.json().catch(() => null) as any };
   } finally { [console.warn, console.error] = saved; }
 }
@@ -607,7 +607,7 @@ test('5: a record never claims what no store holds', async () => {
   const opened = (await rec(db, 'data-room', 12)).body.main.find((x: any) => x.key === 'opened').rows;
   assert.deepEqual(opened.map((r: any) => [r.a, r.c]), [['Person 51', 'Blocked'], ['Person 50', 'Downloaded']]);
   const funds = (await rec(db, 'use-of-funds', 'product')).body.main.find((x: any) => x.key === 'actual');
-  assert.deepEqual([funds.rows, funds.empty], [[], 'Not recorded: no store splits spend by category.']);
+  assert.deepEqual([funds.rows, funds.empty], [[], 'Not recorded: no accepted Mercury mapping with recorded spend for this section.']);
   const docs = (await rec(db, 'cap-table', 'e-3')).body.main.find((x: any) => x.key === 'documents').rows;
   assert.deepEqual(docs.at(-1), { a: 'Side letter', b: '', c: 'Not recorded', tone: 'grey' });
   // A pitch link's views have no city: only a hashed IP is stored.
@@ -839,4 +839,62 @@ test('#2447: a manual score offers only evidence values its writer accepts',asyn
  assert.deepEqual(choices.map((x:any)=>x.value),['anecdote','pattern']);
  for(const choice of choices) assert.equal((await act(db,'fundraising-readiness','team','score',{score:'7',evidence:choice.value,missing:''})).status,200);
  assert.equal((await act(db,'fundraising-readiness','team','score',{score:'7',evidence:'stated',missing:''})).status,400);
+});
+
+
+test('D1174: Actual against plan reads accepted own Mercury mappings with Connector sources, never another member or venture', async () => {
+  const db = await seeded();
+  people(db);
+  db.exec(`INSERT INTO integrations (id, uid, user_id, provider_key, auth_type, status) VALUES
+    (900, 'd1174-own', ${FOUNDER}, 'mercury', 'oauth_mcp', 'active'), (901, 'd1174-admin', ${ADMIN}, 'mercury', 'oauth_mcp', 'active');
+    INSERT INTO mercury_raise_facts (integration_id, project_id, kind, fact_key, label, months, amount_cents, as_of) VALUES
+      (900, ${P}, 'spend', 'spend:3:A', 'Payroll A', 3, 12345, '2026-10-21'),
+      (900, ${P}, 'spend', 'spend:3:B', 'Payroll B', 3, 20000, '2026-10-21'),
+      (900, ${P}, 'spend', 'spend:6:A', 'Payroll A', 6, 0, '2026-10-21'),
+      (900, ${P}, 'spend', 'spend:6:B', 'Payroll B', 6, 0, '2026-10-21'),
+      (900, ${P}, 'spend', 'spend:3:Pending', 'Pending', 3, 999999, '2026-10-21'),
+      (901, ${P}, 'spend', 'spend:3:Other', 'Payroll A', 3, 888888, '2026-10-21'),
+      (900, ${P_OTHER}, 'spend', 'spend:3:OtherProject', 'Payroll A', 3, 777777, '2026-10-21');
+    INSERT INTO mercury_raise_proposals (integration_id, project_id, kind, source_key, payload_json, target, status) VALUES
+      (900, ${P}, 'fund_mapping', 'Payroll A', '{}', 'product', 'accepted'),
+      (900, ${P}, 'fund_mapping', 'Payroll B', '{}', 'product', 'accepted'),
+      (900, ${P}, 'fund_mapping', 'Pending', '{}', 'product', 'pending'),
+      (901, ${P}, 'fund_mapping', 'Payroll A', '{}', 'product', 'accepted'),
+      (900, ${P_OTHER}, 'fund_mapping', 'Payroll A', '{}', 'product', 'accepted');`);
+  const realFetch = globalThis.fetch;
+  globalThis.fetch = (async () => { throw new Error('Mercury provider forbidden in D1174'); }) as any;
+  try {
+    const readActual = async (options = {}) => {
+      const result = await rec(db, 'use-of-funds', 'product', options);
+      assert.equal(result.status, 200, JSON.stringify(result.body));
+      return result.body.main.find((s: any) => s.key === 'actual');
+    };
+    const actual = await readActual();
+    assert.deepEqual(actual.rows.map((r: any) => r.b), ['$360,000', '$323.45', '$0.00', 'Not recorded']);
+    assert.match(actual.rows[0].c, /Source: Modelled.*Typed split/);
+    assert.ok(actual.rows.slice(1).every((r: any) => /Source: Connector.*Mercury/.test(r.c)));
+    db.exec("UPDATE mercury_raise_facts SET amount_cents = NULL WHERE fact_key = 'spend:3:B'");
+    assert.equal((await readActual()).rows[1].b, 'Not recorded', 'a partial amount is never a total');
+    db.exec("UPDATE mercury_raise_facts SET amount_cents = 20000 WHERE fact_key = 'spend:3:B'; DELETE FROM mercury_raise_facts WHERE fact_key = 'spend:6:B'");
+    assert.equal((await readActual()).rows[2].b, 'Not recorded', 'a missing mapped category is not zero');
+    for (const options of [{ who: ADMIN }, { support: true }]) {
+      const denied = await readActual(options);
+      assert.deepEqual(denied.rows, []);
+      assert.match(denied.empty, /private to the founder/);
+    }
+    db.exec(`UPDATE projects SET company_id = 10 WHERE id = ${P};
+      INSERT OR IGNORE INTO user_company_links (uid, user_id, company_id) VALUES ('d1174-company-10', ${FOUNDER}, 10), ('d1174-company-20', ${FOUNDER}, 20);`);
+    assert.deepEqual((await readActual({ company: 20 })).rows, []);
+    assert.equal((await readActual({ company: 10 })).rows[1].b, '$323.45');
+    db.exec("UPDATE integrations SET status = 'disconnected' WHERE id = 900");
+    assert.match((await readActual({ company: 10 })).empty, /Not recorded/);
+    db.exec("UPDATE integrations SET status = 'active' WHERE id = 900; UPDATE mercury_raise_proposals SET status = 'dismissed' WHERE integration_id = 900");
+    assert.match((await readActual({ company: 10 })).empty, /no accepted Mercury mapping/);
+    db.exec('DROP TABLE mercury_raise_facts');
+    const failed = await readActual({ company: 10 });
+    assert.deepEqual(failed.rows, []);
+    assert.match(failed.empty, /Unreadable.*Try again/);
+    db.exec('DROP TABLE user_company_links');
+    assert.match((await readActual({ company: 10 })).empty, /Unreadable.*owner check.*Try again/);
+  } finally { globalThis.fetch = realFetch; }
 });

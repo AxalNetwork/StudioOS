@@ -1,7 +1,9 @@
 /** D690 — one gated record, activity, action and form-options route for cycles. */
 import { Hono } from 'hono';
 import type { Env, User } from '../types';
-import { requireAuth } from '../auth';
+import { requireAuth, selectJwt } from '../auth';
+import { resolveActiveCompany, ACTIVE_COMPANY_HEADER } from '../middleware/activeCompany';
+import { projectInActiveCompany } from '../services/tenancyScope';
 import { canReadBoard, canWrite, canWritePitchDeck, type ProjectRef } from './_founder_validate_helpers';
 import { ADMIN_READ_ONLY, isAdmin, narrativeAdminGate } from '../services/narrative/adminRead';
 import { activityFor } from '../services/cycleActivity';
@@ -78,6 +80,19 @@ function scoped(c: any, registry: RecordRegistry, withId: boolean): Promise<
     // D914: for an admin with a reason, the narrative's versions list is a read.
     const reading = c.req.method === 'GET' && (!c.req.path.endsWith('/form-options') || (isNarrative(c) && isAdmin(user)));
     const ctx: RecordContext = { env: c.env, projectId, project, user };
+    if (reading && cycle === 'raise' && slug === 'use-of-funds') {
+      ctx.mercuryRead = 'refused';
+      if (user.role === 'founder' && user.founder_id != null && Number(user.founder_id) === Number(project.founder_id)) {
+        try {
+          if (!(await selectJwt(c))?.payload?.impersonated_by) {
+            const bankProject = await c.env.DB.prepare('SELECT company_id FROM projects WHERE id = ?').bind(projectId).first() as { company_id: number | null } | null;
+            const company = await resolveActiveCompany(c.env, user, c.req.header(ACTIVE_COMPANY_HEADER));
+            ctx.mercuryRead = bankProject && projectInActiveCompany(company, bankProject) ? 'owner' : 'refused';
+          }
+        } catch { ctx.mercuryRead = 'unreadable'; }
+      }
+    }
+
     if (reading) {
       if (!await allowed(spec.read, project, user, c.env)) return c.json({ detail: 'Forbidden' }, 403);
     } else {
@@ -85,7 +100,7 @@ function scoped(c: any, registry: RecordRegistry, withId: boolean): Promise<
       if (refusal) return refusal;
     }
     if (withId && !await ownedRow(c.env, spec.store, id, projectId)) return c.json({ detail: 'Record not found.' }, 404);
-    return { ctx: { env: c.env, projectId, project, user }, spec, cycle, slug, id };
+    return { ctx, spec, cycle, slug, id };
   })();
 }
 

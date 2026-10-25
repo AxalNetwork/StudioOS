@@ -327,41 +327,6 @@ function sensitivity(a: Assumptions): Sensitivity {
   return { deltas_pct: deltas.map((d) => Math.round(d * 100)), rows };
 }
 
-type CapitalRecompute = {
-  category: 'capital';
-  max: 10;
-  total: number;
-  factors: {
-    burn_efficiency: { raw: number; points: number; max: 5; label: string; source: string };
-    runway: { raw: number; points: number; max: 5; label: string; source: string };
-  };
-};
-
-function capitalRecompute(_a: Assumptions, computed: Computed): CapitalRecompute {
-  const runway = computed.runway_months || 0;
-  const runwaySlider = clamp(runway / 2.4, 0, 10);
-  const ratio = computed.ltv_cac_ratio;
-  const burnSlider = ratio == null ? 5.0 : clamp(ratio * 3.0, 0, 10);
-  const burnPts = r2((burnSlider / 10) * 5);
-  const runwayPts = r2((runwaySlider / 10) * 5);
-  const total = r2(Math.min(burnPts + runwayPts, 10));
-  return {
-    category: 'capital',
-    max: 10,
-    total,
-    factors: {
-      burn_efficiency: {
-        raw: r2(burnSlider), points: burnPts, max: 5,
-        label: 'Burn efficiency', source: 'ltv_cac_ratio',
-      },
-      runway: {
-        raw: r2(runwaySlider), points: runwayPts, max: 5,
-        label: 'Runway / unit econ.', source: 'runway_months',
-      },
-    },
-  };
-}
-
 // ---------------------------------------------------------------------------
 // Authorization helpers — port of _ensure_can_view / _ensure_can_edit.
 // ---------------------------------------------------------------------------
@@ -466,7 +431,6 @@ financials.get('/:projectId', async (c) => {
       assumptions: null,
       computed: null,
       sensitivity: null,
-      capital_recompute: null,
       updated_at: null,
     });
   }
@@ -477,9 +441,6 @@ financials.get('/:projectId', async (c) => {
     assumptions: safeJsonParse<Partial<Assumptions>>(fm.assumptions_json, {}),
     computed: safeJsonParse<Partial<Computed>>(fm.computed_json, {}),
     sensitivity: safeJsonParse<Partial<Sensitivity>>(fm.sensitivity_json, {}),
-    capital_recompute: fm.capital_recompute_json
-      ? safeJsonParse<Partial<CapitalRecompute>>(fm.capital_recompute_json, {} as any)
-      : null,
     updated_at: fm.updated_at || null,
   });
 });
@@ -516,7 +477,6 @@ financials.put('/:projectId', async (c) => {
   const a = { ...stored, ...validated.value, _sources: sources };
   const computed = projectFinancials(a);
   const sens = sensitivity(a);
-  const capital = capitalRecompute(a, computed);
   const now = new Date().toISOString();
 
   // INSERT … ON CONFLICT(project_id) DO UPDATE — atomic upsert keyed by
@@ -527,13 +487,12 @@ financials.put('/:projectId', async (c) => {
   // populates `_financialsLegacyCols` so we can build the column list
   // dynamically here.
   const legacy = getFinancialsLegacyCols();
-  const cols = ['project_id', 'assumptions_json', 'computed_json', 'sensitivity_json', 'capital_recompute_json', 'updated_by', 'updated_at'];
+  const cols = ['project_id', 'assumptions_json', 'computed_json', 'sensitivity_json', 'updated_by', 'updated_at'];
   const vals: unknown[] = [
     projectId,
     JSON.stringify(a),
     JSON.stringify(computed),
     JSON.stringify(sens),
-    JSON.stringify(capital),
     user.id,
     now,
   ];
@@ -548,7 +507,6 @@ financials.put('/:projectId', async (c) => {
          assumptions_json       = excluded.assumptions_json,
          computed_json          = excluded.computed_json,
          sensitivity_json       = excluded.sensitivity_json,
-         capital_recompute_json = excluded.capital_recompute_json,
          updated_by             = excluded.updated_by,
          updated_at             = excluded.updated_at`,
     ).bind(...vals).run();
@@ -569,7 +527,7 @@ financials.put('/:projectId', async (c) => {
          VALUES (?, ?, ?, ?, datetime('now'))`,
     ).bind(
       'financial_model_saved',
-      `Project ${project.name}: runway=${computed.runway_months}mo, breakeven=${computed.breakeven_month}, capital_score=${capital.total}/10`,
+      `Project ${project.name}: runway=${computed.runway_months}mo, breakeven=${computed.breakeven_month}`,
       String(user.id),
       user.id,
     ).run();
@@ -584,7 +542,6 @@ financials.put('/:projectId', async (c) => {
     assumptions: a,
     computed,
     sensitivity: sens,
-    capital_recompute: capital,
     updated_at: now,
   });
 });
@@ -602,7 +559,7 @@ financials.post('/:projectId/recompute', async (c) => {
   let fm: { assumptions_json: string } | null = null;
   try {
     fm = await c.env.DB.prepare(
-      'SELECT assumptions_json FROM financial_models WHERE project_id = ?',
+      'SELECT assumptions_json FROM financial_models WHERE project_id = ? AND updated_by IS NOT NULL',
     ).bind(projectId).first<{ assumptions_json: string }>();
   } catch (e) { console.error('[financials] recompute select:', (e as Error).message); }
   if (!fm) return c.json({ detail: 'No financial model saved yet' }, 404);
@@ -610,16 +567,15 @@ financials.post('/:projectId/recompute', async (c) => {
   const a = normalizeAssumptions(safeJsonParse<Partial<Assumptions>>(fm.assumptions_json, {}));
   const computed = projectFinancials(a);
   const sens = sensitivity(a);
-  const capital = capitalRecompute(a, computed);
   const now = new Date().toISOString();
 
   await c.env.DB.prepare(
     `UPDATE financial_models
-        SET computed_json = ?, sensitivity_json = ?, capital_recompute_json = ?, updated_at = ?
+        SET computed_json = ?, sensitivity_json = ?, updated_at = ?
       WHERE project_id = ?`,
-  ).bind(JSON.stringify(computed), JSON.stringify(sens), JSON.stringify(capital), now, projectId).run();
+  ).bind(JSON.stringify(computed), JSON.stringify(sens), now, projectId).run();
 
-  return c.json({ computed, sensitivity: sens, capital_recompute: capital });
+  return c.json({ computed, sensitivity: sens });
 });
 
 // CSV export — the worker has no openpyxl/SheetJS, so per the T11 spec we
@@ -645,15 +601,15 @@ financials.get('/:projectId/export.xlsx', async (c) => {
   let fm: { assumptions_json: string } | null = null;
   try {
     fm = await c.env.DB.prepare(
-      'SELECT assumptions_json FROM financial_models WHERE project_id = ?',
+      'SELECT assumptions_json FROM financial_models WHERE project_id = ? AND updated_by IS NOT NULL',
     ).bind(projectId).first<{ assumptions_json: string }>();
   } catch (e) { console.error('[financials] export select:', (e as Error).message); }
+  if (!fm) return c.json({ detail: 'No financial model saved yet' }, 404);
   const a = normalizeAssumptions(
     fm ? safeJsonParse<Partial<Assumptions>>(fm.assumptions_json, {}) : null,
   );
   const computed = projectFinancials(a);
   const sens = sensitivity(a);
-  const capital = capitalRecompute(a, computed);
 
   const lines: string[] = [];
   lines.push(`# ${project.name} — Financial Model`);
@@ -678,7 +634,6 @@ financials.get('/:projectId/export.xlsx', async (c) => {
     ['Total revenue (horizon)', computed.total_revenue_horizon],
     ['LTV', computed.ltv],
     ['LTV / CAC', computed.ltv_cac_ratio],
-    ['Capital score (recompute)', `${capital.total} / 10`],
   ];
   for (const [k, v] of summary) lines.push(`${csvEscape(k)},${csvEscape(v)}`);
   lines.push('');

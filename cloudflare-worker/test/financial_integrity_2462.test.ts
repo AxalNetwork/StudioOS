@@ -206,3 +206,33 @@ test('2462: deck autofill excludes models nobody saved', () => {
   db.close();
  }
 });
+
+
+test('D1174: Capital score is not returned, written or exported; legacy storage stays intact', async () => {
+  const db = freshDb();
+  const legacy = '{"total":9,"legacy":true}';
+  assert.equal((await save(db, drivers)).status, 200);
+  db.prepare('UPDATE financial_models SET capital_recompute_json = ? WHERE project_id = ?').run(legacy, PROJECT_A);
+  const saved = await save(db, drivers);
+  assert.equal(saved.status, 200);
+  assert.equal(Object.hasOwn(await saved.json(), 'capital_recompute'), false);
+  const getResult = await (await get(financials, `/${PROJECT_A}`, founder, undefined, db)).json();
+  assert.equal(Object.hasOwn(getResult, 'capital_recompute'), false);
+  const recomputed = await financials.request(`/${PROJECT_A}/recompute`, { method: 'POST', headers: { Authorization: `Bearer ${await token(FOUNDER.user, 'founder')}` } }, env(db));
+  assert.equal(recomputed.status, 200);
+  assert.equal(Object.hasOwn(await recomputed.json(), 'capital_recompute'), false);
+  assert.equal(db.prepare('SELECT capital_recompute_json FROM financial_models WHERE project_id = ?').get(PROJECT_A)?.capital_recompute_json, legacy);
+  const exported = await get(financials, `/${PROJECT_A}/export.xlsx`, founder, undefined, db);
+  assert.equal(exported.status, 200);
+  assert.doesNotMatch(await exported.text(), /Capital score|capital_recompute/i);
+});
+
+
+test('D1174: recompute and export do not invent a forecast from an unsaved model', async () => {
+ const db = freshDb();
+ db.prepare('INSERT INTO financial_models (project_id, assumptions_json) VALUES (?, ?)').run(PROJECT_A, '{"mrr":123}');
+ const exported = await get(financials, `/${PROJECT_A}/export.xlsx`, founder, undefined, db);
+ assert.equal(exported.status, 404);
+ const recomputed = await financials.request(`/${PROJECT_A}/recompute`, { method: 'POST', headers: { Authorization: `Bearer ${await token(FOUNDER.user, 'founder')}` } }, env(db));
+ assert.equal(recomputed.status, 404);
+});

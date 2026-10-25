@@ -133,7 +133,7 @@ export default function CapTablePage({ embedded = false }) {
     ]);
     setProjects(projList);
     setScenarios(scenList);
-    const deepLink = searchParams.get('project');
+    const deepLink = searchParams.get('project_id') ?? searchParams.get('project');
     if (deepLink && projList.some((p) => String(p.id) === String(deepLink))) {
       await selectProject(deepLink, scenList, projList);
     } else {

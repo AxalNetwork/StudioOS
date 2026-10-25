@@ -13,6 +13,12 @@ ids, company boundaries, unchanged models after refused writes, and owner/admin
 access. It also pins the separate deal-room partner reader and the recompute
 edit gate so future read-only relationships cannot acquire writes accidentally.
 
+D1174 regressions live in the use-of-funds, Raise card/record, financial
+integrity and access suites. Synthetic Mercury rows prove accepted mappings,
+private owner/session/company scope, missing versus zero, and local read
+failure; the provider is forbidden. Cash timing and the shared split reader
+are checked against the actual Worker services.
+
 Tests run **in process against a real SQLite database** (`node:sqlite`) loaded
 from the actual schema or a specific migration file — not against mocks. A
 handler that would fail on D1 because of an unknown column fails here too,

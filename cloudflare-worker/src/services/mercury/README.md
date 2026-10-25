@@ -41,3 +41,10 @@ folder's `client.ts` and `parse.ts` only, and reads `mercury_accounts` for
 decision 3 alone. An investor's proof-of-capital statements live in
 `capital_attestations` (`cloudflare-worker/src/services/capitalAttestations.ts`, D752, migration
 491), which stores the statement and no balance.
+
+D1174 (#3101): `raiseFeeds.ts` also exports `fundSectionActual`, a read of
+accepted fund mappings and stored spend through the existing bound readers.
+Only the signed-in founder's own active integration for this venture qualifies.
+Every accepted category needs a recorded amount for a window's total; explicit
+zero remains zero. The section record supplies the support/session/company
+gate. No provider call, credential read or bank figure log occurs here.

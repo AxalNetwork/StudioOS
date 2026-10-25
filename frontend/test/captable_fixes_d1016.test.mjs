@@ -37,7 +37,7 @@ function handler(url, options = {}) {
   return response({});
 }
 
-async function mounted({ handle = handler } = {}) {
+async function mounted({ handle = handler, url = '/raise/capital/cap-table' } = {}) {
   const restore = installDocument();
   const previous = { fetch: globalThis.fetch, confirm: globalThis.confirm, alert: globalThis.alert, URL: globalThis.URL };
   const requests = [];
@@ -46,13 +46,13 @@ async function mounted({ handle = handler } = {}) {
   // A browser pop-up is the fault being fixed: either one, if called, is recorded and fails the test.
   globalThis.confirm = (m) => { popups.push(['confirm', m]); return true; };
   globalThis.alert = (m) => { popups.push(['alert', m]); };
-  globalThis.URL = Object.assign(Object.create(previous.URL), { createObjectURL: () => 'blob:x', revokeObjectURL: () => {} });
+  globalThis.URL = class extends previous.URL { static createObjectURL() { return 'blob:x'; } static revokeObjectURL() {} };
   const create = document.createElement.bind(document);
   document.createElement = (tag) => { const node = create(tag); node.querySelector = () => null; node.querySelectorAll = () => []; node.focus = () => {}; node.click = () => {}; node.children = []; return node; };
   document.body.style = { overflow: 'auto', paddingRight: '' };
   const container = document.createElement('div'); document.body.appendChild(container);
   const root = createRoot(container);
-  await act(async () => root.render(h(MemoryRouter, { initialEntries: ['/raise/capital/cap-table'] }, h(CapTablePage, { embedded: true }))));
+  await act(async () => root.render(h(MemoryRouter, { initialEntries: [url] }, h(CapTablePage, { embedded: true }))));
   const flush = () => act(async () => { for (let i = 0; i < 6; i += 1) await new Promise((r) => setTimeout(r, 0)); });
   await flush();
   const nodes = () => { const walk = (n) => [n, ...(n.childNodes || []).flatMap(walk)]; return walk(container); };
@@ -169,4 +169,17 @@ test('the old simulator has no browser pop-up and no hand-built CSV fetch left',
   assert.ok(!/\balert\(/.test(src), 'no alert()');
   assert.ok(!src.includes("localStorage.getItem('token')"), 'no bearer read by hand');
   assert.ok(src.includes('api.downloadCapTableCsv('));
+});
+
+
+test('D1174: the cap-table tab consumes the financial model venture alias', async () => {
+  const page = await mounted({ url: '/raise/capital/cap-table?project_id=2', handle: (url, options) => {
+    if (url.endsWith('/projects')) return response([{ id: 1, name: 'One' }, { id: 2, name: 'Two' }]);
+    if (url.includes('/scenarios/by-project/2')) return response({ scenario: null });
+    return handler(url, options);
+  } });
+  try {
+    assert.ok(page.requests.some(r => r.url.endsWith('/captable/scenarios/by-project/2')));
+    assert.equal(page.requests.some(r => r.url.endsWith('/captable/scenarios/by-project/1')), false);
+  } finally { await page.close(); }
 });
