@@ -33,13 +33,15 @@ function world() {
     return p;
   }};
   const app = new Hono(); app.route('/api/deals',router as any);
+  const existing = new Hono(); existing.get('/:id/existing', c=>c.json({existing:true}));
+  app.route('/api/deals',existing);
   app.onError((e,c)=>c.json({error:e.message}, e.message==='Unauthorized'?401:500));
   async function call(user=1, suffix='stage', method='GET', body?:any, company?:string, support=false) {
     const tok=await new SignJWT({user_id:user,...(support?{impersonated_by:4}:{})}).setProtectedHeader({alg:'HS256'}).setIssuedAt().setExpirationTime('1h').sign(new TextEncoder().encode(secret));
     const response=await app.request(`/api/deals/9/${suffix}`,{method,headers:{Authorization:`Bearer ${tok}`,'Content-Type':'application/json',...(company?{'X-Company-Id':company}:{})},body:body===undefined?undefined:JSON.stringify(body)},{DB,JWT_SECRET:secret,ENVIRONMENT:'development'} as any);
     return {status:response.status,body:await response.json() as any};
   }
-  return {db,call};
+  return {db,call,DB};
 }
 for (const [stage, setup] of [
   ['Invited',''],
@@ -137,6 +139,34 @@ test('a record created in the visit second is still new, with concurrent visits 
     db.prepare('INSERT INTO documents(project_id,title,created_at,updated_at) VALUES(7,?,?,?)').run('PRIVATE',second,second);
     const pair=await Promise.all([call(1,'whats-new'),call(1,'whats-new')]);
     assert.equal(pair.flatMap(r=>r.body.changes).filter((c:any)=>c.type==='document').length,1);
+    assert.deepEqual((await call(1,'whats-new')).body.changes,[]);
+  }finally{db.close();}
+});
+
+test('new route guards do not wrap a sibling router on the existing deal mount',async()=>{
+  const {db,call}=world();try{
+    assert.deepEqual(await call(1,'existing','GET',undefined,undefined,true),{status:200,body:{existing:true}});
+    assert.equal((await call(1,'notes','GET',undefined,undefined,true)).status,403);
+  }finally{db.close();}
+});
+test('a missing source timestamp remains unrecorded metadata, not a failed visit',async()=>{
+  const {db,call}=world();try{
+    await call(1,'whats-new');db.exec("INSERT INTO pitch_decks(project_id,slides,created_at) VALUES(7,'PRIVATE',NULL)");
+    const r=await call(1,'whats-new');assert.equal(r.status,200);assert.ok(r.body.changes.some((c:any)=>c.type==='deck' && c.at===null));assert.deepEqual((await call(1,'whats-new')).body.changes,[]);
+  }finally{db.close();}
+});
+
+test('a slow older visit cannot replace the newer visit snapshot',async()=>{
+  const {db,call,DB}=world();try{
+    await call(1,'whats-new');
+    let release!:()=>void, captured!:()=>void;
+    const waiting=new Promise<void>(r=>{release=r;}), started=new Promise<void>(r=>{captured=r;});
+    const prepare=DB.prepare;let first=true;
+    DB.prepare=(sql:string)=>{const stmt=prepare(sql);if(sql.startsWith('SELECT id, updated_at AS at FROM documents')){const all=stmt.all;stmt.all=async()=>{const rows=await all();if(first){first=false;captured();await waiting;}return rows;};}return stmt;};
+    const slow=call(1,'whats-new');await started;
+    db.exec("INSERT INTO documents(project_id,title) VALUES(7,'PRIVATE')");
+    const fresh=await call(1,'whats-new');assert.ok(fresh.body.changes.some((c:any)=>c.type==='document'));
+    release();const old=await slow;assert.deepEqual(old.body.changes,[]);
     assert.deepEqual((await call(1,'whats-new')).body.changes,[]);
   }finally{db.close();}
 });

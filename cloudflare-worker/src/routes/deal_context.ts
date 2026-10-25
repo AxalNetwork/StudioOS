@@ -5,12 +5,16 @@ import { requireAuth, selectJwt } from '../auth';
 import { activeCompanyFor } from '../middleware/activeCompany';
 
 const r = new Hono<{ Bindings: Env }>();
-r.use('*', async (c, next) => {
+const guard = async (c: any, next: () => Promise<void>) => {
   if ((await selectJwt(c))?.payload.impersonated_by) return c.json({ error: 'support_session_refused' }, 403);
   await requireAuth(c);
   c.header('Cache-Control', 'no-store');
   await next();
-});
+};
+r.use('/:id/stage', guard);
+r.use('/:id/whats-new', guard);
+r.use('/:id/notes', guard);
+r.use('/:id/notes/:uid', guard);
 
 async function context(c: any) {
   const user = await requireAuth(c);
