@@ -120,7 +120,7 @@ no new schema, runtime or billing path is introduced.
 | `mercury/` | D710: Mercury for fund administration, read-only. A GET-only client, the boundary parser that drops account numbers, the gates and read audit, the entity connections' store, the hourly sync and the reconciliation matches. Its README has the rules. |
 | `referrals/` | Referral submissions. |
 | `records/` | D690's scoped cycle record contract, registry and ownership checks. |
-| `scoring/` | D1143 (#3029): the Product-market fit score, defined once (#2433). `pmf.ts` is model v1 as data and the pure `scorePmf` (value, band, confidence, coverage and the next steps ranked by gain); `pmfCollector.ts` reads Validate's stores for it with bound SQL, after the latest Pivot, and reads no interviewee name or quote. |
+| `scoring/` | D1143 (#3029): the Product-market fit score, defined once (#2433). `pmf.ts` is model v1 as data and the pure `scorePmf` (value, band, confidence, coverage and the next steps ranked by gain); `pmfCollector.ts` reads Validate's stores for it with bound SQL, after the latest Pivot, and reads no interviewee name or quote. D1144 adds `pmfStore.ts`: signed, change-only snapshots, history and the atomic PMF checklist/audit update in shared migration 598. See `scoring/README.md`. |
 | `signals/` | Signal ingestion and evidence. |
 | `vercel/` | D1096: `api.ts`, the only caller of `api.vercel.com`: a read-only client for the planned reads, uninstall and the OAuth code exchange. Its README has the rules. |
 | `wellbeing/` | Wellbeing check-ins. |
