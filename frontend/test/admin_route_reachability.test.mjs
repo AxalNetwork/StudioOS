@@ -268,10 +268,10 @@ const SECOND_MOUNTS = new Map([
  * alone. Checked against the hosts' own imports below, so it cannot drift.
  */
 const CONSOLE_PAGES = 'frontend/src/pages/admin/ConsolePages.jsx';
-const NATIVE_CONSOLES = ['PartnerProfilesConsole', 'PersonasConsole'].map((n) => `frontend/src/pages/admin/consoles/${n}.jsx`);
+// D995 retired PartnerProfilesConsole: Partner profiles draws its own record.
+const NATIVE_CONSOLES = ['PersonasConsole'].map((n) => `frontend/src/pages/admin/consoles/${n}.jsx`);
 const COMPOSED = new Map([
-  ['frontend/src/pages/admin/profiles/PartnerProfiles.jsx', [NATIVE_CONSOLES[0]]],
-  ['frontend/src/pages/admin/segments/PersonaSegments.jsx', [NATIVE_CONSOLES[1]]],
+  ['frontend/src/pages/admin/segments/PersonaSegments.jsx', [NATIVE_CONSOLES[0]]],
   [CONSOLE_PAGES, ADMIN_CONSOLE_FILES.filter((f) => f !== CONSOLE_PAGES && !HQ_KEYS_CONSOLE_FILES.includes(f) && !NATIVE_CONSOLES.includes(f))],
   ['frontend/src/pages/hq/AccountsPage.jsx', ['frontend/src/pages/admin/consoles/UsersConsole.jsx']],
   // The owner's ruling (2026-10-20): HQ's Integration keys page, Super Admin only.
@@ -310,6 +310,13 @@ const COMPOSED = new Map([
   // person (`/admin/advisors-partners/people/:ref`).
   ['frontend/src/pages/admin/advisors/AdvisorsPartners.jsx', [
     'frontend/src/pages/admin/advisors/People.jsx',
+  ]],
+  // D987 (#2778): Program grants draws its grid and its Requests tab from the
+  // files beside it, and they hold the doors to one studio
+  // (`/admin/licences/programs/studio/:uid`).
+  ['frontend/src/pages/admin/grants/ProgramGrants.jsx', [
+    'frontend/src/pages/admin/grants/GridView.jsx',
+    'frontend/src/pages/admin/grants/RequestsView.jsx',
   ]],
   // D947/D948/D949: Overview, Cohorts, Applications and Participants hold the
   // doors to one cohort (`/cohorts/:ym`), one application (`/applications/:id`)

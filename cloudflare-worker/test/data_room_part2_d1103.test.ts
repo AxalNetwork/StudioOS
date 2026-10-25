@@ -70,6 +70,8 @@ function freshDb() {
     db.exec(stripForeignKeys(tableFromBaseline(BASELINE, t)));
   }
   addColumnsFrom(db, stripForeignKeys(MIG463), 'data_room_files');
+  // D1105: migration 596's source of each file.
+  addColumnsFrom(db, readFileSync(resolve(process.cwd(), 'cloudflare-worker/sql/migrations/596_data_room_file_source.sql'), 'utf8'), 'data_room_files');
   addColumnsFrom(db, stripForeignKeys(MIG442), 'data_room_files');
   db.exec(stripForeignKeys(splitStatements(MIG463).find((s: string) => s.includes('CREATE TABLE IF NOT EXISTS data_room_file_versions'))));
   withGrantFolders(db);

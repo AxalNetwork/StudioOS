@@ -266,6 +266,8 @@ test('3b. an accepted statement is stored in the data room, NDA and seen by nobo
   const file = f.one('SELECT * FROM data_room_files');
   assert.deepEqual([file.visibility, file.access_tier, file.checklist_item, file.content_type], [STATEMENT_ACCESS.visibility, 'nobody', 'financial_statements', 'application/pdf']);
   assert.ok(file.r2_key.startsWith('data-room/p-101/'));
+  // D1105 (migration 596): a statement Mercury delivered says so.
+  assert.deepEqual([file.source_kind, file.source_ref], ['connector', 'mercury']);
   assert.deepEqual([...f.env.FILES.objects.get(file.r2_key).bytes], [...FAKE_PDF]);
   assert.equal(f.one(`SELECT local_id FROM connector_fed_items WHERE kind = 'statement'`).local_id, file.id);
   const room = (await mod(f.env, 'data-room')).parts.mercury;

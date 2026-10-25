@@ -318,21 +318,64 @@ events.
 
 ## §10 Host / attendee surface
 
-Spec for Prompt E2. Lazy routes in `App.jsx` + a `sidebarConfig.js` "Events"
-entry. Reuse `qrcode`, `useToast`, `useEscapeClose`, `PageExplainer`; `dark:`
-variants required.
+The signed-in event surface is D1030's My events canvas (MEV1–MEV18), with
+coverage repairs in D1131 (#3011). Events is in the account menu, marked
+**Current** throughout `/my/events`; it is not a sidebar entry.
 
-- **`/my/events` → MyEventsPage**: hosting + attending tabs; tickets show a QR.
-- **`/events/new` and `/events/:id/edit` → EventEditorPage**: title, type,
-  schedule + timezone, `location_kind`, cover, capacity, waitlist,
-  approval_required, visibility, and an **audience-rules builder** (toggle "free
-  seats for official partners" / "for invested LPs" → `audience_rules_json`,
-  §7). "Submit for review" when `visibility=public` (§1.2).
-- **`/events/:id/manage` → EventManagePage**: roster
-  (approve/decline/waitlist/promote), **send invites** (`InvitePeopleModal`:
-  pick from network/connections OR paste emails + a personal message; show comp
-  badges), and a **QR check-in scanner** (device camera →
-  `/api/events/:id/checkin/:code`).
+- `/my/events` is Upcoming; `/hosting`, `/discover` and `/past` are literal
+  child addresses. Explorers reach Upcoming, Discover and Past. The desktop
+  page hides Hosting and New event for them and links to profile setup.
+- Upcoming's next event draws the caller's stored registration, check-in code,
+  `is_speaker` and recorded complimentary-seat source. An unknown historical
+  source says **Source not recorded**, never the member's current profile.
+  **You're presenting** comes from the speaker field. Join is quiet until
+  15 minutes before the UTC start and explains that window. The page clock
+  re-evaluates the boundary without requiring a reload. It also requires the
+  existing confirmed/paid seat and join-link entitlement; a cancelled or ended
+  event offers no live Join control. This is control timing, not a change to
+  the existing authorised join-link contents of calendar feeds.
+- An Explorer's suggestions read actual registration eligibility from the
+  Worker. An ineligible suggestion says **Not open to Explorers** and **The
+  host opened this event to selected profiles.** Unknown eligibility does not
+  offer Register. **Popular with new members** is the approved Explorer copy,
+  not a claim that a popularity count is stored. A failed suggestion read is
+  Unreadable with Retry; the next event and public discovery remain readable.
+- Published Hosting rows and Hosting soon offer **Check in** on the event's
+  own calendar day (its recorded time zone), using the existing
+  `/events/:id/manage/check-in` route. Other statuses retain their own action.
+- Off-the-waitlist Needs you rows require a recorded promotion, never a guess
+  from `confirmed` or an update time. Their words distinguish Going, Pay to
+  confirm and Waiting for the host. The migration for a durable promotion
+  marker and audience-rule seat source is **requested on #3011, not assigned**.
+  Until it lands, those facts are not claimed as built. The prepared row uses
+  the existing signed-in event page's registration/ticket view; the separate
+  ticket drawer remains D1035's work.
+- `/events/new` and `/events/:id/edit` retain the event editor and its audience
+  builder. Public events are sent for review; unlisted/private events publish
+  through the existing in-page confirmation. The shared host header and the
+  check-in route are D1036's, with `canManage` authority retained in the Worker.
+- `/events/:id/manage` retains roster approval, decline and promotion,
+  invitations and QR check-in. The review desk owns refunds for paid event
+  cancellation; no cancellation here initiates a new charge or refund.
 
-Acceptance (E2): a founder creates a private demo day, invites 3 people from
-their network + 1 email, approves a registrant, and checks someone in by QR.
+D1033 supplies event tickets and hosted events to the unified calendar. D1131
+persists connected Google/Outlook cleanup in the existing job queue before
+starting at most two immediate copies in the request's Worker `waitUntil`.
+Bounded scan/copy jobs continue and retry independently; delivery rechecks the
+cancelled source so a newly registered place is preserved. Cancelling one place
+removes only its registration's copies;
+host/admin event cancellation removes that event's hosted and ticket copies.
+Other users, events and calendar kinds are untouched. Provider 404/410 is already
+gone; a failed deletion retains its sync mapping for the existing stale-copy
+retry. Provider response text and credentials are not logged or returned. This
+covers copies StudioOS created and tracks; a manually imported `.ics` or an
+untracked calendar compose link is not an externally editable copy.
+
+The phone still uses D700's A7m My events view until D1037's replacement; this
+patch does not claim that the full MEV18 phone redesign is built. The phone
+account sheet does carry Events' Current marker.
+
+Acceptance remains the owner's live check: register and promote a place,
+observe the recorded free-seat source, cancel a place/event against connected
+test calendars, check the join-window boundary, and scan an eligible ticket on
+the event's day. Local synthetic tests are not a production verification.

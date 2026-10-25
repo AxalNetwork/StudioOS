@@ -270,8 +270,8 @@ function useRun(projectId, request) {
     let alive = true;
     setRun((r) => ({ status: 'loading', data: r.data }));
     const call = req.kind === 'today'
-      ? capTableScenariosApi.simulateFromToday(projectId, req.body)
-      : capTableScenariosApi.simulate(req.inputs).then((result) => ({ source: 'model', inputs: req.inputs, result }));
+      ? capTableScenariosApi.simulate(projectId, req.body)
+      : capTableScenariosApi.simulateModel(req.inputs).then((result) => ({ source: 'model', inputs: req.inputs, result }));
     call.then((data) => { if (alive) setRun({ status: 'ready', data }); })
       .catch((e) => { if (alive) setRun({ status: 'refused', data: null, errors: variantSaveErrors(e) }); });
     return () => { alive = false; };
@@ -592,7 +592,7 @@ function useCompareRuns(projectId, scenarios) {
     setRuns(scenarios.map(() => ({ status: 'loading', result: null })));
     scenarios.forEach((s, k) => {
       const req = runRequest(s, exits);
-      const call = req.kind === 'today' ? capTableScenariosApi.simulateFromToday(projectId, req.body).then((d) => d.result) : capTableScenariosApi.simulate(req.inputs);
+      const call = req.kind === 'today' ? capTableScenariosApi.simulate(projectId, req.body).then((d) => d.result) : capTableScenariosApi.simulateModel(req.inputs);
       call.then((result) => { if (alive) setRuns((r) => r.map((x, j) => (j === k ? { status: result?.errors ? 'error' : 'ready', result: result?.errors ? null : result } : x))); })
         .catch(() => { if (alive) setRuns((r) => r.map((x, j) => (j === k ? { status: 'error', result: null } : x))); });
     });

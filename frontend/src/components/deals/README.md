@@ -8,6 +8,8 @@ The Ops canvas's deal-room screens (`design/canvases/integrated/ops-data.js`:
 | File | What it draws |
 | --- | --- |
 | `dealRoomCopy.js` | Every sentence the screens print, the quota lines, the transfer refusals, and money and time formatting. Pure. |
+| `DealFreePlan.jsx` | D1149: DL22b header/key strip and plan card, with no private reads. |
+| `dealMoney.js` | Currency-aware amount formatting and the role-specific back destination. |
 | `DealRoomKit.jsx` | The four states (loading, empty, Not recorded, Unreadable with "Try again"), status pills and refusals. |
 | `DealRoomJoin.jsx` | The quota read (`GET /deals/dealroom/quota`), the quota line, the join note, and Join / Leave. |
 | `DealRoomsPanel.jsx` | `/deals`: every live deal with Join or Leave. |

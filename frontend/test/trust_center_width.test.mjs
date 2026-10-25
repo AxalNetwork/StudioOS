@@ -39,15 +39,10 @@ test('#2060 /trust is full width for every role, through the shell\'s own rule',
   }
 });
 
-test('#2060 the desktop wrapper carries no width cap; the phone view is unchanged', () => {
-  const desktop = page.match(/if \(phone\) \{\s*return \(\s*<TrustPhoneView[\s\S]*?\n  return \(\s*<div className="([^"]*)">/);
-  assert.ok(desktop, 'the desktop return follows the phone branch');
-  const classes = desktop[1].split(/\s+/);
-  assert.ok(classes.includes('p-6'), 'the page keeps its own gutter');
-  assert.ok(!classes.some((c) => /^max-w-/.test(c) || c === 'mx-auto'), `no cap on the page: ${desktop[1]}`);
-  assert.match(page, /<TrustPhoneView status="ready" obligations=\{obligations\} reload=\{load\} onSelect=\{selectTab\}>/);
-  // D1073 removes the sanctions form. The page/phone width assertions above
-  // remain; admin links and absent screening controls are tested mounted.
+test('#2060 both widths share the responsive member layout without a width cap', () => {
+  const wrapper = page.match(/<div className=\{phone \? '([^']+)' : '([^']+)'\}>/);
+  assert.ok(wrapper); assert.equal(wrapper[1], 'p-4'); assert.equal(wrapper[2], 'p-6');
+  assert.doesNotMatch(wrapper[1] + wrapper[2], /max-w-|mx-auto/);
 });
 
 test('#2060 the tab strip scrolls sideways and its tabs fit it, so no vertical scroll bar is drawn', () => {

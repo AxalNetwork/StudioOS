@@ -2,7 +2,7 @@ import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { Unreadable } from '../../../ui';
 import { usePhoneWidth } from '../../../ui/phone/usePhoneWidth';
-import { LIST_CLAIM, analyticsJoin, eventHref, readyList, statusWord, whenLine } from './eventsDeskModel';
+import { LIST_CLAIM, listCounts, eventHref, readyList, statusWord, whenLine } from './eventsDeskModel';
 import {
   CAL_VIEWS, LEGEND, WEEKDAYS, addMonths, blockBox, calendarSearch, calendarState, monthGrid, monthList, overlapText,
   seatsLine, timeText, unplacedLine, weekGrid, addDays,
@@ -13,7 +13,7 @@ import { CARD, H2, LINK, SUB, StatusPill } from './parts';
 
 /**
  * D919 (#2702) — the Calendar tab (EV8 month, EV8w week, EV17e list), from R1
- * (every page) with R2's seat counts under Guard G for the chip card.
+ * (every page), including D918's seat counts for the chip card (D1115).
  *
  * Month runs Monday to Sunday, three chips a day and "+n more", which opens
  * the day. Week is a time grid where overlapping events sit side by side.
@@ -203,7 +203,7 @@ export default function EventsCalendar({ reads, now }) {
   const state = calendarState(loc.search, now, phone);
   const query = readQuery(loc.search);
   const list = readyList(reads.all);
-  const join = useMemo(() => analyticsJoin(reads.analytics, list ? list.length : 0), [reads.analytics, list]);
+  const join = useMemo(() => listCounts(reads.all), [reads.all]);
   const shown = useMemo(() => (list || []).filter((ev) => matchesFilters(ev, { ...query, when: null, featured: null }, now)), [list, loc.search, now]);
 
   const go = (next) => { setSel(null); navigate({ pathname: loc.pathname, search: calendarSearch(loc.search, next) }); };

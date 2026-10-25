@@ -20,6 +20,7 @@ import type { Env, User } from '../types';
 import type { Tier } from '../middleware/requireTier';
 import { MODULE_LABELS, moduleHref } from './moduleLabels';
 import { MERCURY_FEEDS, mercuryFedModules } from './mercuryFeeds';
+import { NOTION_FEEDS } from './notionFeeds';
 import { bindingKey } from '../util/schemaBootstrap';
 
 export type ProviderStatus = 'live' | 'beta' | 'coming_soon';
@@ -452,6 +453,13 @@ export const REGISTRY: ProviderDescriptor[] = [
       'cloud_recording:read:recording', 'zoomapp:inmeeting', 'user:read:token'],
   },
   {
+    key: 'google_workspace', display_name: 'Google Workspace', integration_type: 'data_feed',
+    description: 'Read only the Google files you choose for your venture.',
+    status: 'coming_soon', tier: 'free', auth_type: 'oauth2', capabilities: ['Choose Google files'],
+    docs_url: 'https://developers.google.com/workspace/drive/picker/guides/web-picker', icon: 'FileText',
+    audience_rule: 'venture', oauth_scopes: ['https://www.googleapis.com/auth/drive.file'],
+  },
+  {
     key: 'google_calendar', display_name: 'Google Calendar', integration_type: 'scheduling',
     description: 'Calendar events and interview slots from your existing Google Calendar connection.',
     status: 'live', tier: 'free', auth_type: 'oauth2', capabilities: ['Calendar events'],
@@ -489,6 +497,13 @@ export const REGISTRY: ProviderDescriptor[] = [
     // Proof of funds stays HQ-only by its use (`HQ_ONLY_USES`), not by hiding the connector.
     preview_roles: ['admin'], personal_roles: ['founder', 'partner', 'investor'],
   },
+  // D1085 (#2950, #2405 part 1): a founder's own Notion, read-only, signed in through Notion's MCP server (D1080).
+  {
+    key: 'notion', display_name: 'Notion', integration_type: 'data_feed',
+    description: 'Your own Notion, read-only, through Notion’s own sign-in: Axal VC searches and reads the pages and databases you share. It never creates, edits, moves or deletes anything in Notion.',
+    status: 'beta', tier: 'free', auth_type: 'oauth_mcp', capabilities: ['Read-only'],
+    audience_rule: 'venture', docs_url: 'https://developers.notion.com/docs/mcp', icon: 'FileText',
+  },
 ];
 
 // A catalogue entry describes only behaviour that the shipping provider has.
@@ -507,6 +522,7 @@ export const CONNECTOR_METADATA: Record<string, ConnectorMetadata> = {
   stripe: { category: 'Payments', verified: false, pulls: [{ what: 'Payments and subscriptions', module: 'revenue_and_traction' }], sends: [], feeds: ['revenue_and_traction', 'customers'], permissions: ['Read charges and subscriptions from your Stripe account.'] },
   github: { category: 'Code', verified: false, pulls: [{ what: 'Issues', module: 'product_roadmap' }, { what: 'Milestones', module: 'product_roadmap' }, { what: 'Releases', module: 'product_roadmap' }, { what: 'Pull requests', module: 'prototype_mvp' }, { what: 'Release checks', module: 'prototype_mvp' }, { what: 'The connection and each sync', module: 'operating_systems' }, { what: 'Architecture notes and decisions', module: 'solution_design' }, { what: 'Languages and topics', module: 'solution_design' }, { what: 'Contributors and their commits', module: 'founding_team' }, { what: 'Where the code sits and its licence', module: 'company_creation' }], sends: [], feeds: ['product_roadmap', 'prototype_mvp', 'operating_systems', 'solution_design', 'founding_team', 'company_creation'], permissions: ['Read issues in the repositories you choose.', 'Read pull requests in the repositories you choose.', 'Read releases, the README, the Markdown in docs/, doc/ and adr/, and the last 90 days of commits in the repositories you choose.', 'Read repository names, visibility, owners, licences, contributors, languages and topics.'] },
   zoom: { category: 'Messaging', verified: false, pulls: [{ what: 'Call transcripts', module: 'customer_research' }], sends: [{ what: 'Interview calls you schedule', target: 'Zoom meeting', default_mode: 'ask' }], feeds: ['customer_research'], used_by: [{ label: 'Validate › Record a session', href: '/validate/record' }], suggests: ['problem_discovery', 'customer_research', 'ideal_customer_profile', 'market_intelligence', 'demand_signals', 'experiments'], permissions: ['Create Zoom meetings for the interview calls you schedule.', 'Delete a Zoom meeting when you cancel its interview call.', 'Read your meetings’ cloud recording files, to download their transcripts.', 'Read a pasted meeting to confirm you host it.', 'List your past meeting instances to recover restarted calls.', 'Read your Zoom user id to identify the connection when you disconnect it.', 'Read a recording’s details, which Zoom grants with transcript notifications; Axal VC uses only the recording files above.', 'Open inside a Zoom meeting, which Zoom grants to every app of this kind; Axal VC does not use it.', 'Let Axal’s notetaker join a call on your behalf, only while you are in it.'] },
+  google_workspace: { category: 'Docs', verified: false, pulls: [], sends: [], feeds: [], permissions: ['Read only the Google files you choose. The file permission also permits writes at Google; Axal VC uses only read methods.'] },
   google_calendar: { category: 'Calendar and workspace', verified: false, pulls: [{ what: 'Events', module: 'customer_research' }], sends: [{ what: 'Calendar events', target: 'Google Calendar', default_mode: 'ask' }], feeds: ['customer_research', 'operating_systems'], permissions: ['Create and update your calendar events.', 'Read your calendar events.', 'Read your account email address.', 'Read your public account profile.', 'Confirm your Google sign-in identity.'] },
   // D879: the founder's Grow and Raise modules, read from `mercuryFeeds.ts` (D840 parts 2 and 3).
   mercury: {
@@ -516,6 +532,14 @@ export const CONNECTOR_METADATA: Record<string, ConnectorMetadata> = {
     feeds: [...new Set(MERCURY_FEEDS.filter((f) => f.role === 'founder' && f.module !== null).map((f) => f.module!))],
     used_by: [{ label: 'Grow', href: '/grow' }, { label: 'Raise', href: '/raise' }],
     permissions: ['Sign in with Mercury: read your accounts, balances, transactions, cashflow, statements, invoices, customers, treasury and SAFEs through Mercury’s MCP server; it never sends, transfers or requests money.'],
+  },
+  // D1085: what lands is `notionFeeds.ts`'s, empty until Notion parts 3–6 build a feed.
+  notion: {
+    category: 'Docs', verified: false,
+    pulls: NOTION_FEEDS.map((f) => ({ what: f.what, module: f.module })),
+    sends: [],
+    feeds: [...new Set(NOTION_FEEDS.map((f) => f.module))],
+    permissions: ['Sign in with Notion: search and read the pages and databases you share, through Notion’s MCP server; it never creates, edits, moves or deletes anything.'],
   },
   microsoft_365: { category: 'Calendar and workspace', verified: false, pulls: [{ what: 'Events', module: 'customer_research' }], sends: [{ what: 'Calendar events', target: 'Microsoft 365', default_mode: 'ask' }], feeds: ['customer_research', 'operating_systems'], permissions: ['Confirm your Microsoft sign-in identity.', 'Read your public Microsoft profile.', 'Read your account email address.', 'Keep the connection active.', 'Read and update calendar events.', 'Read your basic account profile.'] },
 };

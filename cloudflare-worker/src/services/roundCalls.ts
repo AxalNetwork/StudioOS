@@ -5,6 +5,7 @@ import { notify } from './notify';
 import { hashEmail } from '../util/hashEmail';
 import { activeGrant, ndaActive } from '../routes/data_room';
 import { roundCallPipelineStatements } from '../routes/contacts';
+import { roundCallRequestStatement } from './dataRoomRequests';
 
 export class RoundCallError extends Error {
   status: 400 | 403 | 404 | 409 | 422 | 503;
@@ -314,6 +315,8 @@ export async function respond(env: Env, call: CallRow, investor: User, input: Re
     ...roundCallPipelineStatements(env,{callId:call.id,projectId:call.project_id,investorId:investor.id,name:investor.name,email:investor.email,at,claim,commitmentCents:cents}),
   ];
   if(question) statements.push(env.DB.prepare("INSERT INTO round_call_questions(uid,call_id,investor_user_id,question,asked_at) SELECT ?,?,?,?,? WHERE EXISTS(SELECT 1 FROM round_call_recipients r JOIN round_calls c ON c.id=r.call_id WHERE r.id=? AND r.response_claim=? AND c.state='sent' AND c.target_close>=?)").bind(crypto.randomUUID(),call.id,investor.id,question,at,recipient.id,claim,today()));
+  // D1104: a data-room request also lands in the room's one queue (migration 595), under this response's claim.
+  if(action==='data_room') statements.push(roundCallRequestStatement(env,{callId:call.id,projectId:call.project_id,investorUserId:investor.id,recipientId:recipient.id,claim,at}));
   statements.push(...extraStatements(claim));
   statements.push(await responseAudit(env,investor,call,action,claim));
   const result=await env.DB.batch(statements);
