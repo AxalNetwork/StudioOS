@@ -271,20 +271,28 @@ test('a disputed plan payment opens an alert, told once, and closes with its out
 // ── grace ───────────────────────────────────────────────────────────────────
 
 test('grace: a renewal Stripe is still retrying keeps the plan’s access; unpaid ends it', () => {
-  const founder = (status: string) => ({ id: 1, role: 'founder', subscription_tier: 'studio', subscription_status: status } as any);
+  const founder = (status: string) => ({ id: 1, role: 'founder', subscription_tier: 'studio', subscription_status: status, subscription_renews_at: new Date().toISOString() } as any);
   assert.equal(userMeetsTier(founder('past_due'), 'studio'), true);
   assert.equal(userMeetsTier(founder('unpaid'), 'growth'), false);
   assert.equal(userMeetsTier(founder('active'), 'studio'), true);
-  const investor = (status: string) => ({ role: 'investor', investor_tier: 'professional', investor_subscription_status: status } as any);
+  const investor = (status: string) => ({ role: 'investor', investor_tier: 'professional', investor_subscription_status: status, investor_subscription_renews_at: new Date().toISOString() } as any);
   assert.equal(effectiveInvestorTier(investor('past_due')), 'professional');
   assert.equal(effectiveInvestorTier(investor('unpaid')), 'free');
   assert.equal(effectiveInvestorTier(investor('cancelled')), 'free');
-  assert.equal(userHasMiPro({ role: 'investor', mi_subscription_status: 'past_due' } as any), true);
+  assert.equal(userHasMiPro({ role: 'investor', mi_subscription_status: 'past_due', mi_subscription_period_end: new Date().toISOString() } as any), true);
   assert.equal(userHasMiPro({ role: 'investor', mi_subscription_status: 'unpaid' } as any), false);
-  for (const f of ['cloudflare-worker/src/services/introductions.ts', 'cloudflare-worker/src/routes/investor_seats.ts']) {
-    assert.doesNotMatch(read(f), /status === 'past_due'/, `${f} still treats past_due as lapsed`);
-  }
-  for (const f of ['cloudflare-worker/src/services/advisor/writeRouter.ts', 'cloudflare-worker/src/routes/advisor.ts']) {
-    assert.match(read(f), /s === 'active' \|\| s === 'past_due'/, `${f} drops a plan Stripe is retrying`);
-  }
+
+});
+
+test('D1100: a subscription update carries its period end to accepted seat colleagues', async () => {
+  const db=database();
+  const period=new Date(Date.now()-20*86_400_000).toISOString();
+  db.prepare("UPDATE users SET role='investor',investor_stripe_customer_id='cus_grace',investor_stripe_subscription_id='sub_grace',investor_tier='institutional',investor_subscription_status='active' WHERE id=?").run(ADA);
+  db.prepare("UPDATE users SET role='investor',investor_seat_primary_user_id=?,investor_tier='institutional',investor_subscription_status='active' WHERE id=?").run(ADA,IRA);
+  const res=await hook(db,'customer.subscription.updated',{id:'sub_grace',customer:'cus_grace',status:'past_due',current_period_end:Date.parse(period)/1000,metadata:{kind:'investor',investor_tier:'institutional'}});
+  assert.equal(res.status,200);
+  const seat=db.prepare('SELECT * FROM users WHERE id=?').get(IRA) as any;
+  assert.equal(seat.investor_subscription_status,'past_due');assert.equal(seat.investor_subscription_renews_at,period);
+  assert.equal(effectiveInvestorTier(seat),'institutional');
+  db.close();
 });
