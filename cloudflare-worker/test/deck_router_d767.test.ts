@@ -29,6 +29,7 @@ import { autofillDeck } from '../src/services/decks/autofill.ts';
 import { getMethod } from '../src/services/decks/methods.ts';
 import { __resetForTest } from '../src/services/aiRouter.ts';
 import decks from '../src/routes/decks.ts';
+import deckNew from '../src/routes/deck_new.ts';
 import { aiBudgetFixture, setFixtureAllowance } from './_ai_budget_fixture.mjs';
 import { withGuard } from './_guard_stub.mjs';
 
@@ -48,7 +49,8 @@ function fixture({ funded = true } = {}) {
     CREATE TABLE financial_models (project_id INTEGER, computed_json TEXT, assumptions_json TEXT);
     CREATE TABLE cap_table_holders (project_id INTEGER, name TEXT, shares INTEGER, kind TEXT);
     CREATE TABLE score_snapshots (id INTEGER PRIMARY KEY, project_id INTEGER, total_score REAL, created_at TEXT);
-    CREATE TABLE landing_pages (id INTEGER PRIMARY KEY, project_id INTEGER);`);
+    CREATE TABLE landing_pages (id INTEGER PRIMARY KEY, project_id INTEGER);
+    CREATE TABLE integrations (id INTEGER PRIMARY KEY, user_id INTEGER, provider_key TEXT, status TEXT);`);
   f.db.prepare('INSERT INTO projects (id, name, sector, stage, description, problem_statement, solution) VALUES (?, ?, ?, ?, ?, ?, ?)')
     .run(PROJECT.id, PROJECT.name, PROJECT.sector, PROJECT.stage, PROJECT.description, PROJECT.problem_statement, PROJECT.solution);
   setFixtureAllowance(f.db, 0); // D783: no plan, and no tokens
@@ -120,15 +122,16 @@ test('with no founder to charge, the fill makes no run at all', async () => {
   } finally { restore(); f.db.close(); }
 });
 
-test('the deck draft is one router run with option deck_draft', async () => {
+test('D897: the deck build is one router run with option deck:build, and no invented figure reaches the cards', async () => {
   const f = fixture();
   f.db.prepare("INSERT INTO users(id,email,name,role,subscription_tier) VALUES(500,'owner.d767@example.test','Owner','founder','studio')").run();
   f.db.exec('UPDATE users SET founder_id = 500 WHERE id = 500; UPDATE projects SET founder_id = 500 WHERE id = 1');
   const restore = noNetwork();
   try {
+    // D897 (#2677): /generate moved to routes/deck_new.ts and builds a proposal; mounted before `decks` as index.ts does.
     const app = new Hono<any>();
+    app.route('/api/decks', deckNew);
     app.route('/api/decks', decks);
-    // The venture owner passes the project and studio-tier gates; the run is charged to them.
     f.db.prepare('INSERT INTO ai_topup_accounts(user_id,balance_microusd) VALUES(500,5000000)').run();
     f.db.prepare("INSERT INTO ai_licence_caps(licence_key,daily_microusd,monthly_microusd,recorded_by) VALUES('founder:free',0,0,1)").run();
     const jwt = await new SignJWT({ user_id: 500, role: 'founder' }).setProtectedHeader({ alg: 'HS256' }).setIssuedAt().setExpirationTime('1h')
@@ -137,15 +140,16 @@ test('the deck draft is one router run with option deck_draft', async () => {
       method: 'POST', headers: { Authorization: `Bearer ${jwt}`, 'content-type': 'application/json' }, body: JSON.stringify({ project_id: 1 }),
     }, f.env);
     const text = await res.text();
-    assert.ok(res.status < 300, `${res.status} ${text}`);
+    assert.equal(res.status, 201, text);
     const rows = f.rows();
     assert.equal(rows.length, 1, `one usage row: ${JSON.stringify(rows)}`);
     const { charged_microusd, ...who } = rows[0];
-    assert.deepEqual(who, { ...ROW('deck_draft'), user_id: 500 });
-    assert.match(text, /AI drafted this\./, 'the draft uses the run\'s answer');
-    assert.match(text, /Runway: Not recorded/);
-    assert.doesNotMatch(text, /Invented|18–24|24\+/);
-    assert.deepEqual(JSON.parse(text).slides.map((slide:any)=>slide.title),['Problem','Solution','Market','Traction','Business model','Go-to-market','Competition','Team','Ask','Financials']);
+    assert.deepEqual(who, { user_id: 500, task: 'rail_write', surface: '/raise/pitch', rail_page: 'Founder · Raise · Pitch deck', rail_option: 'deck:build', record_ref: 'project:1' });
+    const body = JSON.parse(text);
+    assert.ok(body.proposal?.id, 'a proposal, not a version');
+    assert.equal(f.db.prepare('SELECT COUNT(*) AS n FROM pitch_decks').get().n, 0, 'no version is written until the founder keeps cards');
+    assert.doesNotMatch(text, /Invented|18–24|24\+/, 'the stub\'s invented runway never reaches a card');
+    assert.equal(body.proposal.slides.length, 12, 'the standard deck: twelve cards');
   } finally { restore(); f.db.close(); }
 });
 
@@ -180,19 +184,24 @@ test('both runs use Raise › Pitch deck\'s row in D764\'s matrix', () => {
   const row = matrix.rows.find((r: any) => r.pageKey === 'Founder · Raise · Pitch deck');
   assert.ok(row, 'the matrix has the page\'s row');
   assert.deepEqual([row.kind, row.routeTask], ['vision', 'rail_vision']);
-  for (const f of ['cloudflare-worker/src/routes/decks.ts', 'cloudflare-worker/src/services/decks/autofill.ts']) {
-    const src = readFileSync(resolve(ROOT, f), 'utf8');
-    assert.equal((src.match(new RegExp(`task: '${row.routeTask}'`, 'g')) || []).length, 1, `${f} runs the row's task`);
-    assert.doesNotMatch(src, /task: 'dd_synthesis'/, f);
+  const autofill = readFileSync(resolve(ROOT, 'cloudflare-worker/src/services/decks/autofill.ts'), 'utf8');
+  assert.equal((autofill.match(new RegExp(`task: '${row.routeTask}'`, 'g')) || []).length, 1, 'the fill runs the row\'s task');
+  // D897: the New deck's two runs are writing work, each on its own option row.
+  const fresh = readFileSync(resolve(ROOT, 'cloudflare-worker/src/routes/deck_new.ts'), 'utf8');
+  assert.equal((fresh.match(/task: 'rail_write'/g) || []).length, 1, 'deck_new.ts runs one task');
+  for (const option of ['deck:outline', 'deck:build']) {
+    const opt = matrix.options.find((r: any) => r.pageKey === 'Founder · Raise · Pitch deck' && r.optionKey === option);
+    assert.ok(opt, `the matrix has ${option}`);
+    assert.equal(opt.routeTask, 'rail_write', option);
   }
+  for (const src of [autofill, fresh]) assert.doesNotMatch(src, /task: 'dd_synthesis'/);
 });
 
 test('neither path reaches OpenAI', () => {
   const autofill = readFileSync(resolve(ROOT, 'cloudflare-worker/src/services/decks/autofill.ts'), 'utf8');
   assert.doesNotMatch(autofill, /api\.openai\.com|OPENAI_API_KEY/);
-  const route = readFileSync(resolve(ROOT, 'cloudflare-worker/src/routes/decks.ts'), 'utf8');
-  const draft = route.slice(route.indexOf('async function aiSlides('), route.indexOf('function enforceTen('));
-  assert.ok(draft.length > 100);
-  assert.doesNotMatch(draft, /api\.openai\.com|OPENAI_API_KEY/);
-  assert.match(draft, /aiRouterRun\(env, \{\s*task: 'rail_vision'/);
+  // D897: the draft is now deck_new.ts's build, through the router's `run()`.
+  const route = readFileSync(resolve(ROOT, 'cloudflare-worker/src/routes/deck_new.ts'), 'utf8');
+  assert.doesNotMatch(route, /api\.openai\.com|OPENAI_API_KEY/);
+  assert.match(route, /import \{[^}]*\brun\b[^}]*\} from '\.\.\/services\/aiRouter'/);
 });

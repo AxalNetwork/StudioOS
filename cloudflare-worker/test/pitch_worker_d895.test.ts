@@ -7,6 +7,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { Hono } from 'hono';
 import { SignJWT } from 'jose';
+import deckNew from '../src/routes/deck_new.ts';
 import decks, { createShareLink, deckOwnerBrand, founderPitchSlides, deckShareMetrics, founderSpinoutFields } from '../src/routes/decks.ts';
 import brand from '../src/routes/brand.ts';
 import shareActions from '../src/routes/deck_share_actions.ts';
@@ -48,11 +49,13 @@ async function fixture() {
   db.prepare('INSERT INTO pitch_decks(id,project_id,version,slides,title,is_current,created_by) VALUES(10,1,1,?,?,1,2)').run(JSON.stringify(SLIDES),'Synthetic deck');
   db.prepare("INSERT INTO pitch_deck_proposals(id,project_id,base_deck_id,slides,title,method_id,created_by) VALUES(20,1,10,?,'Synthetic proposal','yc_seed',2)").run(JSON.stringify(SLIDES));
   db.exec("INSERT INTO integrations(id,uid,user_id,provider_key,status,auth_type) VALUES(99,'synthetic-mercury',2,'mercury','active','oauth_mcp')");
-  const app = new Hono<any>().route('/api/decks',decks).route('/api/brand',brand).route('/api/deck-share',shareActions).route('/api/cycles/raise',cycleRaise).route('/api/cycles',cycleRecords);
+  const app = new Hono<any>().route('/api/decks',deckNew).route('/api/decks',decks).route('/api/brand',brand).route('/api/deck-share',shareActions).route('/api/cycles/raise',cycleRaise).route('/api/cycles',cycleRecords);
   app.onError((err,c) => c.json({detail:err.message}, (AUTH_ERROR_STATUSES[err.message] || 500) as any));
   return {db, env, app};
 }
 type F = Awaited<ReturnType<typeof fixture>>;
+/** D897: AI assistance off on Pitch deck for these members, so New deck builds figures only, at no cost. */
+function aiOff(f:F, ...users:number[]){ for(const u of users) f.db.prepare("INSERT INTO ai_rail_preferences(uid,user_id,section,task,mode) VALUES(?,?,'founder · raise · pitch deck','','manual')").run(`synthetic-off-${u}`,u); }
 async function call(f:F, who:number|null, method:string, path:string, json?:any, extra: {claims?:Record<string,any>;headers?:Record<string,string>} = {}) {
   const headers:Record<string,string>={'Content-Type':'application/json',...extra.headers};
   if(who) headers.Authorization='Bearer '+await new SignJWT({...extra.claims,user_id:who}).setProtectedHeader({alg:'HS256'}).setIssuedAt().setExpirationTime('1h').sign(new TextEncoder().encode(JWT_SECRET));
@@ -88,13 +91,14 @@ test('D895: fixed single-segment reads reach methods and brand instead of the de
 for(const [method,path,body,action] of [
  ['PUT','/api/decks/10',{slides:SLIDES},'deck_saved'],['POST','/api/decks/10/restore',undefined,'deck_restored'],
  ['POST','/api/decks/proposals/20/keep',undefined,'deck_kept'],['POST','/api/decks/10/export',{format:'pptx'},'deck_exported'],
- ['POST','/api/decks/generate',{project_id:1},'deck_generated'],
+ ['POST','/api/decks/generate',{project_id:1},'deck_built'],
  ['DELETE','/api/decks/proposals/20',undefined,'deck_proposal_discarded'],
  ['POST','/api/decks/apply-method',{project_id:1,method_id:'yc_seed'},'deck_template_proposed'],
  ['POST','/api/decks/10/autofill',undefined,'deck_fill_proposed'],
 ] as const)test(`D895: ${action} logs one actor-scoped pitch activity without figures`,async()=>{
  const f=await fixture();try{
-  const r=await call(f,2,method,path,body);assert.equal(r.status,200,JSON.stringify(r.body));
+  aiOff(f,2);
+  const r=await call(f,2,method,path,body);assert.equal(r.status,path==='/api/decks/generate'?201:200,JSON.stringify(r.body));
   const rows=f.db.prepare("SELECT project_id,user_id,action,details FROM activity_logs WHERE entity_type='raise.pitch-deck'").all() as any[];
   assert.equal(rows.length,1);assert.equal(rows[0].project_id,1);assert.equal(rows[0].user_id,2);assert.equal(rows[0].action,action);assert.doesNotMatch(rows[0].details,/Recorded problem|\$|runway|revenue/i);
  }finally{f.db.close()}
@@ -173,8 +177,13 @@ test('D895: founder template generation withholds internal scores while the Lab 
 test('D895: no recorded runway says Not recorded in the generated Ask',async()=>{
  const f=await fixture();try{
   f.db.exec('UPDATE projects SET funding_needed=9000000 WHERE id=1');
-  const response=await call(f,2,'POST','/api/decks/generate',{project_id:1});assert.equal(response.status,200);
-  const ask=response.body.slides.find((s:any)=>s.title==='Ask');assert.ok(ask);assert.match(JSON.stringify(ask),/Runway: Not recorded/);assert.doesNotMatch(JSON.stringify(ask),/18-24|24\+|9000000.*months/);
+  // D897: a built deck's runway is the Mercury slot or Not recorded, never a figure made from the ask.
+  aiOff(f,2);
+  const response=await call(f,2,'POST','/api/decks/generate',{project_id:1});assert.equal(response.status,201,JSON.stringify(response.body));
+  const card=response.body.proposal.slides.find((s:any)=>s.spec_id==='new:unit_economics');assert.ok(card);
+  const runway=card.fields.find((x:any)=>x.key==='grow.runway');assert.equal(runway.source,'placeholder');assert.equal(runway.binding.grade,'Not recorded');
+  assert.equal(card.blocks.find((b:any)=>b.binding?.source_key==='grow.runway').value,null);
+  assert.doesNotMatch(JSON.stringify(response.body.proposal.slides),/18-24|24\+|9000000.*months|9,000,000 months/);
  }finally{f.db.close()}
 });
 test('D895: an accepted deck NDA becomes the founder-viewer pairwise NDA, never a body-supplied identity',async()=>{
@@ -275,7 +284,9 @@ test('D895: fractional recorded runway has consistent whole-month display withou
   f.db.prepare('INSERT INTO financial_models(project_id,computed_json,updated_by) VALUES(1,?,2)').run(JSON.stringify({runway_months:13.846153846}));
   assert.equal(await recordedDeckRunway(f.env,1,2),13.846153846);
   assert.equal(formatDeckRunway(13.846153846),'14 months');assert.equal(formatDeckRunway(13.846153846,'mo'),'14 mo');assert.equal(formatDeckRunway(0),'0 months');assert.equal(formatDeckRunway(null),null);
-  const generated=await call(f,2,'POST','/api/decks/generate',{project_id:1});assert.equal(generated.status,200);assert.match(JSON.stringify(generated.body.slides),/Runway: 14 months/);assert.doesNotMatch(JSON.stringify(generated.body.slides),/13\.846/);
+  // D897: New deck reads runway from its Mercury slot only; the model's 13.85 never prints, rounded or not.
+  aiOff(f,2);
+  const generated=await call(f,2,'POST','/api/decks/generate',{project_id:1});assert.equal(generated.status,201);assert.doesNotMatch(JSON.stringify(generated.body.proposal.slides),/13\.8/);
  }finally{f.db.close()}
 });
 for(const failing of ['upsert','activate'])test(`D895: failed pairwise ${failing} leaves no unfinished acceptance or conversion; retry completes one NDA`,async()=>{
@@ -323,11 +334,13 @@ test('D895: only the owning founder outside support can copy their active Mercur
   assert.equal(await recordedDeckRunway(f.env,1),null,'an unscoped service call cannot read Mercury');
   assert.equal(await recordedDeckRunway(f.env,1,3),null,'a cofounder is not the bank owner');
   assert.equal(await recordedDeckRunway(f.env,1,2),4);
+  aiOff(f,2,3);
   for(const [who,extra,allowed] of [[2,{},true],[3,{},false],[2,{claims:{impersonated_by:1}},false]] as const){
-   const generated=await call(f,who,'POST','/api/decks/generate',{project_id:1},extra);assert.equal(generated.status,200,JSON.stringify(generated.body));
+   const generated=await call(f,who,'POST','/api/decks/generate',{project_id:1},extra);assert.equal(generated.status,201,JSON.stringify(generated.body));
    const filled=await call(f,who,'POST','/api/decks/10/autofill',undefined,extra);assert.equal(filled.status,200,JSON.stringify(filled.body));
-   if(allowed){assert.match(JSON.stringify(generated.body.slides),/Runway: 4 months/);assert.match(JSON.stringify(filled.body.proposal.slides),/4 months runway/)}
-   else {assert.match(JSON.stringify(generated.body.slides),/Runway: Not recorded/);assert.doesNotMatch(JSON.stringify(filled.body.proposal.slides),/4 months runway|4 mo/)}
+   const runway=generated.body.proposal.slides.find((s:any)=>s.spec_id==='new:unit_economics').fields.find((x:any)=>x.key==='grow.runway');
+   if(allowed){assert.equal(runway.value,'Runway · 4 months');assert.equal(runway.source,'data');assert.match(JSON.stringify(filled.body.proposal.slides),/4 months runway/)}
+   else {assert.equal(runway.value,'');assert.equal(runway.source,'placeholder');assert.doesNotMatch(JSON.stringify(generated.body.proposal.slides),/4 months/);assert.doesNotMatch(JSON.stringify(filled.body.proposal.slides),/4 months runway|4 mo/)}
   }
   f.db.exec("UPDATE integrations SET user_id=8 WHERE id=99");assert.equal(await recordedDeckRunway(f.env,1,2),null);assert.equal(await recordedDeckRunway(f.env,1,8),null);
   f.db.exec("UPDATE integrations SET user_id=2,status='disconnected' WHERE id=99");assert.equal(await recordedDeckRunway(f.env,1,2),null);
