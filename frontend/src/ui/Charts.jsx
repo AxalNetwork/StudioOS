@@ -118,8 +118,12 @@ export function HBars({ rows, axis = '', onSelect, testIdPrefix = 'insights-bar'
   );
 }
 
-/** Columns. `toDate` hatches the current week; `open` draws a dashed outline for a week not finished. */
-export function Columns({ rows, height = 220, pct = false, max: maxIn }) {
+/**
+ * Columns. `toDate` hatches the current week; `open` draws a dashed outline for a week not finished.
+ * D947 (#2752) adds `references`: horizontal lines such as a cohort's places and minimum, each
+ * `{ value, label, dashed }`, drawn across the plot with their label at its right edge.
+ */
+export function Columns({ rows, height = 220, pct = false, max: maxIn, references = [] }) {
   const [ref, W] = useBoxWidth();
   const hatch = `ins-hatch-${useId().replace(/:/g, '')}`;
   const Lx = 34;
@@ -129,7 +133,7 @@ export function Columns({ rows, height = 220, pct = false, max: maxIn }) {
   const gw = (W - Lx - 4) / n;
   const bw = Math.min(34, gw * 0.62);
   const ch = height - B - top;
-  const max = Math.max(1, maxIn || Math.max(...rows.map((r) => r.value)));
+  const max = Math.max(1, maxIn || Math.max(...rows.map((r) => r.value), ...references.map((x) => Number(x.value) || 0)));
   return (
     <div ref={ref} className="w-full">
       <Svg width={W} height={height}>
@@ -177,6 +181,15 @@ export function Columns({ rows, height = 220, pct = false, max: maxIn }) {
               {bar}
               <text x={x + bw / 2} y={top + ch - h - 4} textAnchor="middle" className={INK}>{r.text ?? nf(r.value)}</text>
               <text x={x + bw / 2} y={height - 6} textAnchor="middle" className={MUTE}>{r.label}</text>
+            </g>
+          );
+        })}
+        {references.map((ref2) => {
+          const y = top + ch - (ch * Number(ref2.value)) / max;
+          return (
+            <g key={ref2.label}>
+              <line x1={Lx} x2={W - 4} y1={y} y2={y} strokeWidth="1.5" strokeDasharray={ref2.dashed ? '1.5 3' : undefined} className="stroke-axal-muted" />
+              <text x={W - 4} y={y - 3} textAnchor="end" className={INK}>{ref2.label}</text>
             </g>
           );
         })}
@@ -599,7 +612,7 @@ export function Chart({ chart, onSelect }) {
   if (chart.type === 'grouped') return <GroupedColumns rows={chart.rows} series={chart.series} height={chart.height} />;
   if (chart.type === 'stackbars') return <StackBars rows={chart.rows} onSelect={chart.clickable ? onSelect : undefined} testIdPrefix={chart.testIdPrefix} />;
   if (chart.type === 'lines') return <WeekLines series={chart.series} labels={chart.labels} height={chart.height} currentIndex={chart.currentIndex} />;
-  if (chart.type === 'columns' || chart.type === 'stack') return <Columns rows={chart.rows} pct={chart.pct} max={chart.max} height={chart.height} />;
+  if (chart.type === 'columns' || chart.type === 'stack') return <Columns rows={chart.rows} pct={chart.pct} max={chart.max} height={chart.height} references={chart.references} />;
   if (chart.type === 'line') return <WeekLine values={chart.values} labels={chart.labels} previous={chart.previous} />;
   if (chart.type === 'bar100') return <Bar100 parts={chart.parts} />;
   if (chart.type === 'donut') return <Donut parts={chart.parts} center={chart.center} centerSub={chart.centerSub} />;
