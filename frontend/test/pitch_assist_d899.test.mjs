@@ -292,7 +292,7 @@ test('AI off: the bar is greyed with the sentence, and the records still fill', 
   const m = await mount({}, { aiOff: true });
   try {
     await m.press(m.by('pitch-editor-block-b1'));
-    assert.match(m.text(m.by('pitch-assist-off')), new RegExp(AI_OFF_LINE.replace(/\./g, '\\.')));
+    assert.ok(m.text(m.by('pitch-assist-off')).includes(AI_OFF_LINE));
     for (const t of TEXT_TOOLS) assert.equal(m.pr(m.by(`pitch-assist-${t.action}`)).disabled, true, t.action);
     assert.equal(m.named('assist.quote').length, 0, 'nothing is quoted while it is off');
     await m.press(m.by('pitch-add-menu-open'));
