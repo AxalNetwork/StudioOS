@@ -6,6 +6,10 @@
  *        → { project_id, items: SourceItem[], coverage }
  *   POST /api/decks/:id/refresh
  *        → { deck_id, version, checked, stale, rows: RefreshRow[] }
+ *   GET  /api/decks/chart-series?project_id=<id>
+ *        → { project_id, series: Series[], types }   (D898 group C, PD9–PD9c)
+ *        Every series a chart can plot, with its points, source, grade and
+ *        binding fields, and how many of them each chart type can draw.
  *
  * Mounted in index.ts BEFORE `decks`: `GET /api/decks/:id` would otherwise
  * answer `/sources` (Hono matches in registration order; #2434's worker map
@@ -13,7 +17,8 @@
  *
  * Both read only. Refresh says which bound cards are stale; re-reading a value
  * into the deck is the editor's Save (`PUT /api/decks/:id`, a new version), and
- * "Keep as of" is simply not saving. Neither route writes, so neither logs a
+ * "Keep as of" is simply not saving. A chart series is compared by its own
+ * snapshot (`chartSeries.ts`), so a new month marks the chart stale. Neither route writes, so neither logs a
  * cycle-activity row.
  *
  * WHO. `projectOwned` decides, as every deck read does. Mercury's figures are
@@ -29,7 +34,8 @@ import { resolveActiveCompany, ACTIVE_COMPANY_HEADER } from '../middleware/activ
 import { projectInActiveCompany } from '../services/tenancyScope';
 import { isSupportSession } from '../integrations/providers/mercury';
 import { founderMercuryConnection } from '../services/mercury/raiseAccess';
-import { bindingsOf, compareBindings, readSources, type SourceCtx } from '../services/decks/sources';
+import { bindingsOf, compareBindings, readSources, type SourceCtx, type SourceItem } from '../services/decks/sources';
+import { chartFits, isSeriesKey, readAllSeries, readSeries, type Series } from '../services/decks/chartSeries';
 
 const deckSources = new Hono<{ Bindings: Env }>();
 
@@ -65,6 +71,26 @@ deckSources.get('/sources', async (c) => {
   return c.json({ project_id: projectId, items, coverage });
 });
 
+/** A series in the shape `compareBindings` reads: its last point is the value, its snapshot the whole run. */
+function seriesAsItem(s: Series): SourceItem {
+  const last = s.points[s.points.length - 1];
+  return {
+    source_key: s.key, area: s.key.startsWith('validate.') ? 'validate' : 'grow', module: s.module, label: s.label,
+    value: last ? last.y : null, unit: s.unit, as_of: s.as_of, grade: s.grade, source: s.source, href: s.href,
+    record_ref: s.record_ref, snapshot_hash: s.snapshot_hash, state: s.state,
+  };
+}
+
+deckSources.get('/chart-series', async (c) => {
+  const user = await requireAuth(c);
+  const projectId = Number(c.req.query('project_id'));
+  if (!Number.isSafeInteger(projectId) || projectId < 1) return c.json({ error: 'project_id required' }, 400);
+  const got = await owned(c, user, projectId);
+  if ('refused' in got) return got.refused;
+  const series = await readAllSeries(c.env, projectId);
+  return c.json({ project_id: projectId, series, types: chartFits(series) });
+});
+
 deckSources.post('/:id{[0-9]+}/refresh', async (c) => {
   const user = await requireAuth(c);
   const id = Number(c.req.param('id'));
@@ -80,7 +106,14 @@ deckSources.post('/:id{[0-9]+}/refresh', async (c) => {
   const { items } = bindings.length
     ? await readSources({ env: c.env, projectId: Number(row.project_id), today: today(), mercury: await mercuryFor(c, user, got.project) }, { includeScoring: true })
     : { items: [] };
-  const rows = compareBindings(bindings, items);
+  // D898: a chart series is read from its own store and compared like any figure.
+  const seriesKeys = [...new Set(bindings.map((b) => b.binding.source_key).filter(isSeriesKey))];
+  const seriesItems: SourceItem[] = [];
+  for (const k of seriesKeys) {
+    const s = await readSeries(c.env, Number(row.project_id), k);
+    if (s) seriesItems.push(seriesAsItem(s));
+  }
+  const rows = compareBindings(bindings, [...items, ...seriesItems]);
   return c.json({ deck_id: row.id, version: row.version, checked: rows.length, stale: rows.filter((r) => r.state === 'stale').length, rows });
 });
 

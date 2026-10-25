@@ -111,6 +111,11 @@ export const REFUSALS = Object.freeze({
   // D954 §7, the learner.
   not_assigned: 'This program is not assigned to you, so its learners are not read here.',
   not_enrolled: 'This learner is not in this program now.',
+  // D1124, Download (CSV).
+  nothing_to_export: 'This program has no figures to export yet, so no file was made.',
+  export_not_logged: 'The export could not be logged, so no file was made. Try again.',
+  export_unreadable: 'The program’s figures could not be read, so no file was made. Try again.',
+  export_not_counts_only: 'This export was stopped: it would have carried more than counts. No file was made.',
 });
 
 export function refusalSentence(err, fallback = TRY_AGAIN) {
@@ -605,8 +610,27 @@ export function referWeeklyChart(read) {
   };
 }
 
-/** The funnel (item 12): no read counts the referrals that reached each stage, so its bars are not drawn. */
-export const FUNNEL_REASON = 'No read counts the referrals that reached each stage, so the stages are not drawn. The tags count where referrals stand now.';
+/**
+ * D1124 (#3004): the funnel's bars, from `GET /api/refer-earn/admin/submissions/funnel`.
+ * Each stage counts the referrals whose furthest stage reached it, all time;
+ * the tags under them count where referrals stand now.
+ */
+export const FUNNEL_WINDOW = 'All time. A referral counts at every stage up to the furthest it reached, so one rejected after Qualified still counts as Qualified. The tags count where referrals stand now.';
+export function referFunnelChart(read) {
+  if (isLoading(read)) return { state: 'loading' };
+  if (isFailed(read)) return { state: 'unreadable', what: 'The referral funnel' };
+  const stages = Array.isArray(read.data?.stages) ? read.data.stages : null;
+  if (!stages || !stages.length || stages.some((x) => !Number.isFinite(Number(x?.count)) || typeof x?.label !== 'string')) {
+    return { state: 'unreadable', what: 'The referral funnel' };
+  }
+  const rows = stages.map((x) => ({ key: x.key, label: x.label, value: Number(x.count) }));
+  return {
+    state: 'ready',
+    chart: { type: 'hbar', rows, axis: 'referrals' },
+    alt: `Referral funnel: ${rows.map((r) => `${nf(r.value)} ${r.label.toLowerCase()}`).join(', ')}.`,
+    window: FUNNEL_WINDOW,
+  };
+}
 export const FUNNEL_TAGS = Object.freeze([
   { key: 'more_info_needed', word: 'More info needed' }, { key: 'rejected', word: 'Rejected' }, { key: 'closed', word: 'Closed' },
 ]);
@@ -627,13 +651,26 @@ export const strategicRow = (x) => ({
 export const QUEUE_OPEN = 'open';
 export const QUEUE_STATUSES = Object.freeze([QUEUE_OPEN, 'all', 'submitted', 'under_review', 'more_info_needed', 'qualified', 'in_conversation', 'converted', 'reward_eligible', 'reward_issued', 'rejected', 'closed']);
 export const queueStatusWord = (s) => (s === QUEUE_OPEN ? 'Open' : s === 'all' ? 'All' : statusWord(s));
-export function queueParams({ status = QUEUE_OPEN, category = '', sort = 'oldest', page = 0 } = {}) {
+export function queueParams({ status = QUEUE_OPEN, category = '', sort = 'oldest', page = 0, role = '', search = '' } = {}) {
   const p = { limit: PAGE_SIZE, offset: page * PAGE_SIZE, sort };
   if (status === QUEUE_OPEN) p.status = OPEN_STATUSES.join(',');
   else if (status !== 'all') p.status = status;
   if (category) p.category = category;
+  // D1124 (#3004, PG9q): the referrer's role, and the Worker's search.
+  if (role) p.role = role;
+  const q = String(search || '').trim().slice(0, SEARCH_MAX);
+  if (q) p.q = q;
   return p;
 }
+
+/** D1124 (PG9q, PG9d): the referrer's platform role, in the canvas's words; `users.role`. */
+export const SEARCH_MAX = 100;
+export const REFERRER_ROLE_WORD = Object.freeze({
+  founder: 'Founder', advisor: 'Advisor', investor: 'Investor', partner: 'Operating Partner', exploring: 'Explorer', admin: 'Admin',
+});
+export const referrerRoleWord = (r) => REFERRER_ROLE_WORD[r] || 'Role not recorded';
+/** "[Name] · Founder": the referrer and their role; a missing name is "Not recorded", never an id. */
+export const referrerLine = (r) => `${r?.referrer_name || r?.referrer_email || NOT_RECORDED} · ${referrerRoleWord(r?.referrer_role)}`;
 
 /* ------------------------------------------------------------------ *
  * Perks (items 15–18)
@@ -748,6 +785,8 @@ export function isDone(cell) {
   const s = cell?.status;
   if (cell?.subject_kind === 'exercise') return s === 'accepted';
   if (cell?.subject_kind === 'exam') return s === 'passed';
+  // D1124 (#3004): a webinar is Done when the learner attended it.
+  if (cell?.subject_kind === 'webinar') return s === 'attended';
   return s === 'completed';
 }
 export const hasFinished = (learner) => Array.isArray(learner?.completion) && learner.completion.length > 0 && learner.completion.every(isDone);
@@ -773,7 +812,7 @@ export function finishedTotal(rows) {
   if (rows.some((r) => r.state !== 'ready')) return { state: 'loading' };
   return { state: 'ready', count: rows.reduce((t, r) => t + r.finished, 0) };
 }
-export const FINISHED_LINE = 'Learners who are Done with every item in a published program: a course or item completed, an exercise accepted, an exam passed.';
+export const FINISHED_LINE = 'Learners who are Done with every item in a published program: a course or item completed, an exercise accepted, an exam passed, a webinar attended.';
 
 /** Enrolled and Enrolments per week (P4), each with its window. */
 export function enrolmentsFrom(read) {
@@ -794,7 +833,7 @@ export function enrolmentsFrom(read) {
 export const enrolledLine = (weeks) => `The last ${weeks} weeks, this week so far. A re-enrolment counts again.`;
 
 /** The learner dialog's rows (item 20): its kind, title, Done or Not yet, and the date it was reached. */
-const KIND_LABEL = { course: 'Course', exercise: 'Exercise', exam: 'Exam' };
+const KIND_LABEL = { course: 'Course', exercise: 'Exercise', exam: 'Exam', webinar: 'Webinar' };
 export function learnerRows(contents, learner) {
   const byUid = new Map((contents || []).map((c) => [`${c.subject_kind}|${c.subject_uid}`, c]));
   return (learner?.completion || []).map((cell) => {
@@ -805,10 +844,13 @@ export function learnerRows(contents, learner) {
     const done = isDone(cell);
     const when = cell.subject_kind === 'exam' ? cell.passed_at
       : cell.subject_kind === 'exercise' ? (done ? cell.reviewed_at : null)
-        : cell.completed_at;
+        // D1124: a webinar is reached on its own date.
+        : cell.subject_kind === 'webinar' ? (c.starts_at ?? null)
+          : cell.completed_at;
     const extra = cell.subject_kind === 'exam'
       ? (cell.attempts ? `Best ${cell.best_score_percent === null || cell.best_score_percent === undefined ? NOT_RECORDED.toLowerCase() : `${cell.best_score_percent}%`} · ${plural(cell.attempts, 'attempt', 'attempts')}` : 'No attempt yet')
-      : null;
+      : cell.subject_kind === 'webinar' ? (WEBINAR_WORD[cell.status] || null)
+        : null;
     return {
       key: `${cell.subject_kind}-${cell.subject_uid}`, kind, title: c.title || 'Title not recorded', done,
       word: done ? 'Done' : 'Not yet', date: done ? (shortDay(when) || NOT_RECORDED) : '—', extra,
@@ -816,5 +858,19 @@ export function learnerRows(contents, learner) {
   });
 }
 export const LEARNER_FOOT = 'No email is shown here. Progress is read only.';
+/** D1124: where a learner stands on a webinar; the host records attendance. */
+const WEBINAR_WORD = { registered: 'Registered', not_attended: 'Did not attend', not_registered: 'Not registered' };
 
 export { COULD_NOT_READ, NOT_READ_YET, dataOf, stateOf };
+
+/* ------------------------------------------------------------------ *
+ * D1124 (#3004): a program page's Download (CSV)
+ * ------------------------------------------------------------------ */
+
+/** The program pages whose ⋯ menu holds Download (CSV): the canvas's, with figures to export. */
+export const CSV_PROGRAMS = Object.freeze(['mentor-cohorts', 'refer-and-earn', 'perks', 'learning']);
+export const CSV_LINES = Object.freeze([
+  'The file holds this page’s figures as counts only, never a name or an email.',
+  'Every export is logged in the admin audit.',
+]);
+export const CSV_DONE = 'The file is ready. The link works for 24 hours.';

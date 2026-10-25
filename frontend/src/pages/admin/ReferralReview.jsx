@@ -17,6 +17,12 @@
  * page. A row opens the referral as a dialog, which reads its timeline from
  * the single-referral read, offers only D957's allowed moves, sends `status`
  * only when it moved, and shows its result in place. There is no toast.
+ *
+ * D1124 (#3004, PG9q, PG9d): the Referrer column, the dialog's "referred by"
+ * line and the "Referrer role" filter name the referrer's platform role
+ * (`referrer_role`); what the referrer said they are to the person stays in
+ * the dialog as their relationship. The search is the Worker's, over every
+ * page, never a filter of the page in hand.
  */
 import React, { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
@@ -28,8 +34,8 @@ import AdminBoardFrame from './AdminBoardFrame';
 import { BlockFailed, CARD, DIALOG_BODY, DialogButtons, EYE, FIELD_LABEL, Field, INPUT, Pill, SUB, Skeleton, TD, TH } from './programs/parts';
 import { useRead } from './programs/useProgramReads';
 import {
-  CATEGORY_WORD, LIMITS, PAGE_SIZE, QUEUE_OPEN, QUEUE_STATUSES, REVIEW_SAVED as SAVED, REVIEW_TOLD, categoryWord, countLine,
-  queueParams, queueStatusWord, refusalSentence, reviewPatch, shortDay, statusChoices, statusWord, timelineRow,
+  CATEGORY_WORD, LIMITS, PAGE_SIZE, QUEUE_OPEN, QUEUE_STATUSES, REFERRER_ROLE_WORD, REVIEW_SAVED as SAVED, REVIEW_TOLD, SEARCH_MAX, categoryWord, countLine,
+  queueParams, queueStatusWord, referrerLine, refusalSentence, reviewPatch, shortDay, statusChoices, statusWord, timelineRow,
 } from './programs/programPagesModel';
 import { HQ_READS_COMMISSIONS, NOTHING_WAITING, NOT_RECORDED, REFERRALS_EMPTY, ageText, hoursSince, isReady } from './programs/programsModel';
 
@@ -37,7 +43,6 @@ export const REVIEW_SAVED = SAVED;
 
 const STATUS_TONE = { more_info_needed: 'amber', qualified: 'violet', in_conversation: 'violet', converted: 'green', reward_eligible: 'green', reward_issued: 'green', rejected: 'red', closed: 'muted' };
 
-const referrer = (r) => [r.referrer_name || r.referrer_email || NOT_RECORDED, r.your_role].filter(Boolean).join(' · ');
 const referred = (r) => [r.referred_name || NOT_RECORDED, r.referred_org].filter(Boolean).join(' · ');
 
 function paged(reply) {
@@ -57,10 +62,13 @@ export function ReferralReviewBody({ embedded = false, onChanged } = {}) {
   const [status, setStatus] = useState(QUEUE_OPEN);
   const [category, setCategory] = useState('');
   const [sort, setSort] = useState('oldest');
+  const [role, setRole] = useState('');
+  const [typed, setTyped] = useState('');
+  const [search, setSearch] = useState('');
   const [page, setPage] = useState(0);
   const [tick, setTick] = useState(0);
   const [openUid, setOpenUid] = useState(null);
-  const params = queueParams({ status, category, sort, page });
+  const params = queueParams({ status, category, sort, page, role, search });
   const what = JSON.stringify(params);
   const list = useRead('referrals:queue', what, tick, true, () => api.adminReferralSubmissions(params).then(paged));
   const reload = () => { setTick((t) => t + 1); onChanged?.(); };
@@ -69,7 +77,8 @@ export function ReferralReviewBody({ embedded = false, onChanged } = {}) {
   const total = isReady(list) ? Number(list.data.total) : null;
   const pages = total === null ? 1 : Math.max(1, Math.ceil(total / PAGE_SIZE));
   const reset = (fn) => (e) => { fn(e.target.value); setPage(0); };
-  const emptyLine = status === QUEUE_OPEN ? `${NOTHING_WAITING} ${REFERRALS_EMPTY}` : 'No referral matches these filters.';
+  const emptyLine = status === QUEUE_OPEN && !role && !search ? `${NOTHING_WAITING} ${REFERRALS_EMPTY}` : 'No referral matches these filters.';
+  const runSearch = (e) => { e?.preventDefault?.(); setSearch(typed.trim()); setPage(0); };
 
   return (
     <div className={embedded ? 'flex flex-col gap-4' : 'mx-auto flex max-w-6xl flex-col gap-4 p-6'} data-testid="admin-referral-review">
@@ -85,12 +94,21 @@ export function ReferralReviewBody({ embedded = false, onChanged } = {}) {
       </div>
 
       <div className="flex flex-wrap items-center gap-2" data-testid="referral-review-toolbar">
+        <form role="search" onSubmit={runSearch} className="flex items-center gap-1.5" data-testid="referral-review-search-form">
+          <input type="search" className={INPUT} value={typed} maxLength={SEARCH_MAX} onChange={(e) => setTyped(e.target.value)}
+            placeholder="Search referred, organisation or referrer" aria-label="Search referred, organisation or referrer" data-testid="referral-review-search" />
+          <button type="submit" className="rounded-[9px] border border-axal-hairline px-3 py-1.5 text-[12px] font-semibold dark:border-gray-700" data-testid="referral-review-search-go">Search</button>
+        </form>
         <select className={INPUT} value={status} onChange={reset(setStatus)} aria-label="Status" data-testid="referral-review-status">
           {QUEUE_STATUSES.map((x) => <option key={x} value={x}>{`Status: ${queueStatusWord(x)}`}</option>)}
         </select>
         <select className={INPUT} value={category} onChange={reset(setCategory)} aria-label="Category" data-testid="referral-review-category">
           <option value="">Every category</option>
           {Object.entries(CATEGORY_WORD).map(([k, w]) => <option key={k} value={k}>{w}</option>)}
+        </select>
+        <select className={INPUT} value={role} onChange={reset(setRole)} aria-label="Referrer role" data-testid="referral-review-role">
+          <option value="">Every referrer role</option>
+          {Object.entries(REFERRER_ROLE_WORD).map(([k, w]) => <option key={k} value={k}>{w}</option>)}
         </select>
         <select className={INPUT} value={sort} onChange={reset(setSort)} aria-label="Sort" data-testid="referral-review-sort">
           <option value="oldest">Sort: Waiting longest</option>
@@ -125,7 +143,7 @@ export function ReferralReviewBody({ embedded = false, onChanged } = {}) {
                       <tr key={r.uid} className="border-b border-axal-hairline last:border-0 dark:border-gray-800" data-testid={`referral-review-row-${r.uid}`}>
                         <td className={`${TD} font-bold`}>{referred(r)}</td>
                         <td className={TD}>{categoryWord(r.category)}</td>
-                        <td className={TD} data-testid={`referral-review-row-${r.uid}-meta`}>{referrer(r)}</td>
+                        <td className={TD} data-testid={`referral-review-row-${r.uid}-meta`}>{referrerLine(r)}</td>
                         <td className={TD}><Pill tone={STATUS_TONE[r.status] || 'muted'}>{statusWord(r.status)}</Pill></td>
                         <td className={TD}>{r.next_step || '—'}</td>
                         <td className={`${TD} font-mono`}>{ageText(h) || NOT_RECORDED}</td>
@@ -197,7 +215,7 @@ export function ReferralDialog({ uid, onClose, onSaved }) {
     }
   };
   const label = row ? referred(row) : 'Referral';
-  const sub = row ? `${categoryWord(row.category)} · referred by ${referrer(row)}` : null;
+  const sub = row ? `${categoryWord(row.category)} · referred by ${referrerLine(row)}` : null;
   return (
     <Lightbox label={label} title={label} sub={sub} onClose={onClose} width={640} testId="referral-dialog"
       footer={read.status === 'ready' ? <DialogButtons onClose={onClose} action="Save changes" busy={busy} disabled={!patch} onAction={save} refusal={refusal} testId="referral-dialog-save" /> : null}>
@@ -237,6 +255,7 @@ export function ReferralDialog({ uid, onClose, onSaved }) {
             <Field label="Reward · a note, never an amount" value={draft.rewardLabel} onChange={set('rewardLabel')} max={LIMITS.reward} testId="referral-dialog-reward" />
             <Field label="Fit notes · the referrer sees them" value={draft.fitNotes} onChange={set('fitNotes')} max={LIMITS.fitNotes} rows={3} testId="referral-dialog-fit" />
             <Field label="Note to the referrer" value={draft.note} onChange={set('note')} max={LIMITS.note} rows={3} sub="Added to the timeline the referrer sees." testId="referral-dialog-note" />
+            {row.your_role ? <p className={`m-0 ${SUB}`} data-testid="referral-dialog-relationship">{`The referrer’s relationship: ${row.your_role}`}</p> : null}
             <p className={`m-0 ${SUB}`} data-testid="referral-dialog-told">{REVIEW_TOLD}</p>
             {row.created_at ? <p className={`m-0 ${SUB}`}>{`Submitted ${shortDay(row.created_at) || NOT_RECORDED}.`}</p> : null}
           </>

@@ -242,9 +242,9 @@ test('the public read lists every family with its allowance, names no person, ne
     assert.equal(r.headers.get('cache-control'), 'public, max-age=300, s-maxage=300');
     const byKey = Object.fromEntries(r.body.plans.map((p: any) => [`${p.family}:${p.licence_key}:${p.product_id}`, p]));
     assert.deepEqual(Object.keys(byKey).sort(), [
-      'advisor:advisor:prod_advisor', 'founder:founder:free:null', 'founder:founder:growth:prod_growth', 'founder:founder:studio:prod_studio',
-      'investor:investor:free:null', 'investor:investor:professional:prod_pro', 'market_intelligence:null:prod_mi', 'other:other:null',
-      'partner:partner:prod_partner',
+      'advisor:advisor:free:null', 'advisor:advisor:prod_advisor', 'founder:founder:free:null', 'founder:founder:growth:prod_growth', 'founder:founder:studio:prod_studio',
+      'investor:investor:free:null', 'investor:investor:plus:null', 'investor:investor:professional:prod_pro', 'lp:lp_access:null', 'market_intelligence:null:prod_mi', 'other:other:null',
+      'partner:partner:free:null', 'partner:partner:prod_partner',
     ], 'an unmarked product gets no card');
     assert.deepEqual(byKey['founder:founder:growth:prod_growth'].allowance, { share: 0.25, monthly_microusd: 12250000, source: 'plan' });
     assert.deepEqual(byKey['advisor:advisor:prod_advisor'].allowance, { share: 0.25, monthly_microusd: 7250000, source: 'plan' });

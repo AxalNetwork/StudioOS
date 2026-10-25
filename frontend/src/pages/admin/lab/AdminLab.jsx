@@ -8,6 +8,7 @@ import { AdminPageHeader, HeaderTab, useMovedNotice } from '../../../ui';
 import { glancesFromStudioGlance, loadStudioGlance } from '../adminStudioOverview';
 import AdminSpinoutLab from '../AdminSpinoutLab';
 import LabFormation from './LabFormation';
+import LabGrantBoundary from './LabGrantBoundary';
 import LabGraduation from './LabGraduation';
 import LabApplications from './LabApplications';
 import LabHosts from './LabHosts';
@@ -15,7 +16,7 @@ import LabHowItRuns from './LabHowItRuns';
 import LabSettings from './LabSettings';
 import LabActivity from './LabActivity';
 import { useAuth } from '../../../hooks/useAuthSync';
-import { isSuperAdminUser } from '../../../lib/shellRole';
+import { branchOfUser, isSuperAdminUser } from '../../../lib/shellRole';
 import LabParticipants from './LabParticipants';
 import { participantsCount } from './participantsModel';
 import LabCohorts from './LabCohorts';
@@ -229,7 +230,7 @@ const SECTIONS = {
 /** D970: the tabs drawn to the canvas (SL9–SL11), each its own file. */
 const DESKS = { hosts: LabHosts, formation: LabFormation, graduation: LabGraduation, 'how-it-runs': LabHowItRuns, settings: LabSettings, activity: LabActivity };
 
-export default function AdminLab({ onImpersonate }) {
+function AdminLabBody({ onImpersonate }) {
   const { user } = useAuth();
   const superAdmin = isSuperAdminUser(user);
   const loc = useLocation();
@@ -275,7 +276,7 @@ export default function AdminLab({ onImpersonate }) {
         title={LAB_TITLE}
         pills={[
           { label: 'Live', tone: 'live' },
-          { label: 'HQ-held', tone: 'held', title: 'No subsidiary studio is deployed yet, so the Lab runs on the accounts HQ holds directly.' },
+          { label: branchOfUser(user) ? 'Granted' : 'HQ-held', tone: 'held', title: branchOfUser(user) ? 'The studio’s Lab grant is in force.' : 'The Lab runs on HQ-held accounts.' },
         ]}
         actions={actions}
         line={PAGE_LINE}
@@ -289,8 +290,13 @@ export default function AdminLab({ onImpersonate }) {
       {DESKS[tab] ? React.createElement(DESKS[tab], { superAdmin }) : null}
       {tab === 'applications' ? <LabApplications /> : null}
       {tab === 'participants' ? <LabParticipants onImpersonate={onImpersonate} /> : null}
-      {tab === 'cohorts' ? <LabCohorts ym={cohortOf(loc.pathname)} /> : null}
+      {tab === 'cohorts' ? <LabCohorts ym={cohortOf(loc.pathname)} onImpersonate={onImpersonate} /> : null}
       {SECTIONS[tab] ? SECTIONS[tab].map((s) => <AdminSpinoutLab key={s} section={s} onImpersonate={onImpersonate} />) : null}
     </div>
   );
+}
+
+/** D1123: branch tools mount only after the dated grant copy is readable. */
+export default function AdminLab(props) {
+  return <LabGrantBoundary><AdminLabBody {...props} /></LabGrantBoundary>;
 }

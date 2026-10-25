@@ -238,7 +238,8 @@ test('ADD FORMS: one dialog draws each form, the module offers it, and the check
   assert.match(route, /const formWrites = \{ \.\.\.cyclesWrite, verdict: verdictApi \};/);
   assert.match(route, /const saved = \(\) => \{ dirty\.current = true; \};/);
   // D695 (#1656): the Add, an Edit from the row's values, and an Edit from its record (Validate's).
-  assert.equal((route.match(/onSaved=\{saved\}/g) || []).length, 3, 'a save, Add or Edit, reads the module again once the form closes');
+  // D1106 (#2986): and the data room's own Upload, which draws in place of the Add form at its `/new`.
+  assert.equal((route.match(/onSaved=\{saved\}/g) || []).length, 4, 'a save, Add or Edit, reads the module again once the form closes');
   // The checklist: tick an open item, undo your own tick, never undo the Lab's.
   const items = [
     { key: 'ein_received', label: 'Tax ID (EIN) received', done: true, source: 'Spin-Out Lab', done_at: null },
