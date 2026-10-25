@@ -758,7 +758,7 @@ const prospect = {
   key: 'investor', cta: 'Add investor', button: 'Add investor',
   title: 'Add investor',
   sub: 'An investor in the pipeline, with how you reach them.',
-  foot: 'Fit is read from their sector focus and fund size.',
+  foot: 'Fit is read from their sector focus only.',
   fields: [
     // Typing searches the fund directory; a fund picked is sent as `research_fund_uid`, else the name typed.
     { kind: 'T', name: 'name', k: 'Investor', ph: 'Search funds and angels, or type a name', required: true, max: 200, search: { into: 'research_fund_uid' } },

@@ -11,6 +11,7 @@ import { SourcesPanel, useDeckSources } from './SourcesBoards';
 import AddMenu from './AddMenu';
 import CardAssistBar from './CardAssistBar';
 import { BlockGrid } from './BlockGrid';
+import { ChartLibrary, ChartToolbar } from './ChartTools';
 import { asList, currentVersion, isReadOnly, ventureQuery } from './pitchStudioModel';
 import { cardOf, presentHref } from './presentExportModel';
 import {
@@ -45,6 +46,11 @@ import {
  * `ConnectorLightbox.jsx`) and, on a selected text block, Eadwyn's bar
  * (`CardAssistBar.jsx`). What they propose is placed here on Accept and
  * written by Save like any other change.
+ *
+ * D898 group C: a chart block is drawn from its bound series
+ * (`ChartTools.jsx`, `GET /api/decks/chart-series`); a selected chart swaps
+ * Eadwyn's bar for the chart toolbar (PD9c) with the Data popover (PD9); the
+ * chart library (PD9b) inserts or edits one.
  *
  * The Check tab (part 6) is not drawn here: it waits for its own store.
  */
@@ -121,6 +127,8 @@ export default function PitchEditor() {
   const kit = useRead(projectId, () => deckEditorApi.brandKit(projectId), []);
   const refresh = useRead(current?.id ?? null, () => deckSourcesApi.refresh(current.id), []);
   const sources = useDeckSources(projectId);
+  // D898 group C: the dated series a chart plots (PD9–PD9c).
+  const charts = useRead(projectId, () => deckEditorApi.chartSeries(projectId), []);
 
   if (projects.status === 'error') return <Shell><ReadFailed text="Your ventures could not be read." onRetry={projects.retry} testId="pitch-editor-ventures-error" /></Shell>;
   if (projects.status === 'ok' && !project) return <Shell><div className={`${CARD} p-5 ${MUTED}`}>Start a venture first, then build its deck.</div></Shell>;
@@ -150,6 +158,7 @@ export default function PitchEditor() {
         kit={kit}
         refresh={refresh}
         sources={sources}
+        charts={charts}
         readOnly={readOnly}
         phone={phone}
         onSaved={() => versions.retry()}
@@ -180,7 +189,7 @@ function EditorSkeleton() {
 // The editor, over one version
 // ---------------------------------------------------------------------------
 
-function Editor({ project, deck, model, kit, refresh, sources, readOnly, phone, onSaved }) {
+function Editor({ project, deck, model, kit, refresh, sources, charts, readOnly, phone, onSaved }) {
   const [base, setBase] = useState(() => ({ deck, cards: cardsOf(deck), theme: deck.theme ?? null, audience: deck.audience ?? null }));
   const [cards, setCards] = useState(base.cards);
   const [theme, setTheme] = useState(base.theme);
@@ -254,8 +263,8 @@ function Editor({ project, deck, model, kit, refresh, sources, readOnly, phone, 
             }} />
           <div className="flex min-w-0 flex-col gap-3">
             {cards.length === 0 ? <div className={`${CARD} p-6 ${MUTED}`}>{NO_CARDS}</div> : (
-              <CenterCard card={card} index={sel} colours={colours} theme={theme} kit={kit} selBlock={selBlock} readOnly={readOnly}
-                onSelectBlock={setSelBlock}
+              <CenterCard card={card} index={sel} colours={colours} theme={theme} kit={kit} selBlock={selBlock} readOnly={readOnly} charts={charts}
+                onSelectBlock={setSelBlock} onChartLibrary={() => setDialog({ kind: 'charts' })}
                 onRemoveBlock={(id) => setDialog({ kind: 'remove-block', id })}
                 onAddBlock={() => setDialog({ kind: 'add-block' })} />
             )}
@@ -266,9 +275,16 @@ function Editor({ project, deck, model, kit, refresh, sources, readOnly, phone, 
                   onDesign={() => setPanel('design')}
                   onPlace={(c) => setCard(sel, c)}
                   onAddCard={(c) => { setCards((cs) => [...cs, c]); setSel(cards.length); setSelBlock(null); }} />
-                <CardAssistBar deckId={base.deck.id} cardIndex={sel} items={sources.data?.items || []}
-                  block={(card.blocks || []).find((b) => b.id === selBlock) || null}
-                  onPlace={(id, text) => setCard(sel, updateBlock(card, id, { text }))} />
+                {(card.blocks || []).find((b) => b.id === selBlock)?.kind === 'chart' ? (
+                  <ChartToolbar block={card.blocks.find((b) => b.id === selBlock)} charts={charts}
+                    onPatch={(patch) => setCard(sel, updateBlock(card, selBlock, patch))}
+                    onLibrary={() => setDialog({ kind: 'charts', edit: selBlock })}
+                    onRemove={() => setDialog({ kind: 'remove-block', id: selBlock })} />
+                ) : (
+                  <CardAssistBar deckId={base.deck.id} cardIndex={sel} items={sources.data?.items || []}
+                    block={(card.blocks || []).find((b) => b.id === selBlock) || null}
+                    onPlace={(id, text) => setCard(sel, updateBlock(card, id, { text }))} />
+                )}
               </>
             ) : null}
             {card ? (
@@ -316,6 +332,19 @@ function Editor({ project, deck, model, kit, refresh, sources, readOnly, phone, 
           lines={[`Every card draws on ${THEME_LABELS[theme?.kind || 'brand']}.`, "Each card's own background is cleared.", 'Nothing is saved until you press Save.']}
           confirm="Apply to all" onClose={() => setDialog(null)}
           onConfirm={() => { setCards((cs) => applyToAll(cs)); setDialog(null); }} />
+      ) : null}
+      {dialog?.kind === 'charts' && card ? (
+        <ChartLibrary charts={charts} cards={cards} colours={colours} problem={dialog.problem || null}
+          initial={dialog.edit ? (card.blocks || []).find((b) => b.id === dialog.edit) || null : null}
+          onClose={() => setDialog(null)}
+          onInsert={(body) => {
+            if (dialog.edit) { setCard(sel, updateBlock(card, dialog.edit, body)); setDialog(null); return; }
+            // A chart takes 8 × 4 where it fits, else 6 × 3; a card with no room says so in the library.
+            const grid = firstFree(card, 8, 4, model) || firstFree(card, 6, 3, model);
+            const r = grid ? addBlock(card, { ...body, grid }, model) : { error: 'This card has no free 6 × 3 range for a chart. Remove or resize a block first.' };
+            if (r.error) { setDialog({ ...dialog, problem: r.error }); return; }
+            setCard(sel, r.card); setSelBlock(r.card.blocks[r.card.blocks.length - 1].id); setDialog(null);
+          }} />
       ) : null}
       {dialog?.kind === 'add-block' && card ? (
         <AddBlockDialog card={card} model={model} sources={sources} initialKind={dialog.initial} onClose={() => setDialog(null)}
@@ -373,7 +402,7 @@ function Rail({ cards, sel, stale, readOnly, onSelect, move, onAdd }) {
 // The centre card (PD1, PD8b)
 // ---------------------------------------------------------------------------
 
-function CenterCard({ card, index, colours, theme, kit, selBlock, readOnly, onSelectBlock, onRemoveBlock, onAddBlock }) {
+function CenterCard({ card, index, colours, theme, kit, selBlock, readOnly, charts, onSelectBlock, onRemoveBlock, onAddBlock, onChartLibrary }) {
   const blocks = Array.isArray(card?.blocks) ? card.blocks : null;
   const bg = card?.background?.color || theme?.background?.color || colours.bg;
   const bgImage = card?.background?.image_url || theme?.background?.image_url || null;
@@ -385,12 +414,13 @@ function CenterCard({ card, index, colours, theme, kit, selBlock, readOnly, onSe
         style={{ aspectRatio: '16 / 9', background: bg, color: colours.ink, backgroundImage: bgImage ? `url("${bgImage}")` : undefined, backgroundSize: 'cover' }}
         data-testid="pitch-editor-card">
         {blocks && blocks.length ? (
-          <BlockGrid blocks={blocks} colours={colours} selected={selBlock} onSelect={onSelectBlock} testId="pitch-editor-blocks" />
+          <BlockGrid blocks={blocks} colours={colours} selected={selBlock} onSelect={onSelectBlock} charts={charts} testId="pitch-editor-blocks" />
         ) : <FieldedCard card={card} index={index} colours={colours} />}
       </div>
       {!readOnly ? (
         <div className="flex flex-wrap items-center gap-2">
           <button type="button" className={GHOST} onClick={onAddBlock} data-testid="pitch-editor-add-block"><Plus size={14} aria-hidden="true" /> Add a block</button>
+          <button type="button" className={GHOST} onClick={onChartLibrary} data-testid="pitch-editor-chart-library">Chart library</button>
           {selBlock ? <button type="button" className={GHOST} onClick={() => onRemoveBlock(selBlock)} data-testid="pitch-editor-remove-block"><Trash2 size={14} aria-hidden="true" /> Remove block</button> : null}
           <span className={`${MUTED} text-[11px]`}>12 × 6 grid. A block's size is the range it covers, columns by rows.</span>
         </div>

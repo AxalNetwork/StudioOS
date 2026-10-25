@@ -10,6 +10,7 @@ import { Hono } from 'hono';
 import type { Context } from 'hono';
 import type { Env, User } from '../types';
 import { getCurrentUser, requireAdmin, requireAuth, requireBranchNotSuspended } from '../auth';
+import { programRefusal } from '../services/programEnforcement';
 import { refuse } from '../util/refusal';
 import { logAdminAction } from '../services/adminAudit';
 import { ensureTier, type TierUser } from '../middleware/requireTier';
@@ -3129,6 +3130,10 @@ advisors.post('/admin/cohort-assignments', async (c) => {
     const user = await requireAdmin(c);
     // D960: a write, so a suspended branch refuses it, as the Lab's decide does.
     await requireBranchNotSuspended(c);
+    // D985 — assigning a mentor needs the branch's Mentor cohorts grant; the
+    // DELETE that ends an assignment stays open.
+    const notGranted = await programRefusal(c.env, 'mentor-cohorts');
+    if (notGranted) return c.json(notGranted.body, notGranted.status);
     await ensureAdvisorStoresSchema(c.env);
     const body = await c.req.json().catch(() => ({} as any));
     const advisorUserId = Number(body.advisor_user_id);

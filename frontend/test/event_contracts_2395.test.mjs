@@ -26,7 +26,7 @@ function prepare(overrides = {}) {
   fixture.api = {
     get: async () => structuredClone(reply), eligibility: async () => ({ eligible: true, seats_taken: 1, is_full: false }),
     list: async () => ({ hosting: [], attending: [
-      { ...event, reg_status: 'confirmed', comp: true, checkin_code: 'own-code' },
+      { ...event, reg_status: 'confirmed', payment_status: 'none', comp: true, checkin_code: 'own-code' },
       { ...event, id: 43, title: 'Waiting fixture', reg_status: 'waitlisted', comp: false, checkin_code: null },
     ] }),
     suggested: async () => ({ events: [] }),
@@ -149,7 +149,7 @@ test('#2395: behavioral checks reject editor, ticket and calendar regressions th
       ['ticketPill(t.reg_status, ahead)', 'ticketPill(t.status, ahead)'],
       ['const place = placeOf(t);', 'const place = placeOf({ ...t, reg_status: t.status });'],
       ['const code = ticket.checkin_code || null;', 'const code = null;'],
-      ['{ticket.comp ? <Pill', '{false ? <Pill'],
+      ['{seat ? <Pill', '{false ? <Pill'],
     ]],
     [detail, calendarScenario, [['user ? events.icsUrl(event.id) : eventsPublic.icsUrl(slug)', 'eventsPublic.icsUrl(slug)']]],
   ];

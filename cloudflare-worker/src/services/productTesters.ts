@@ -161,16 +161,47 @@ export async function isAdminAccount(env: Env, userId: number): Promise<boolean>
 }
 
 /**
+ * D1132 (#3012): a program place is open while its application is `applied`
+ * or `picked` in a programme that has not closed or been rejected. Removing a
+ * tester ends each one: the application becomes `withdrawn` (the only ended
+ * state migration 516 allows) and the programme's log gets a `place_ended`
+ * row saying HQ removed the tester. A closed programme's picks are its
+ * record, so they are left as they were.
+ */
+export const PLACE_OPEN_APPLICATION = ['applied', 'picked'] as const;
+export const PLACE_CLOSED_PROGRAMME = ['closed', 'rejected'] as const;
+
+/**
  * Apply one transition. The UPDATE names the status it read, so a second
  * decision in between changes nothing; the event row is written by the same
- * batch only when the UPDATE stamped this decision.
+ * batch only when the UPDATE stamped this decision. A removal ends the
+ * member's open places in that batch too, under the same stamp, so the places
+ * end exactly when the removal lands and never without it.
  */
 export async function applyTransition(env: Env, tester: Tester, action: TesterAction, actorId: number,
-  input: { note: string | null; reason: string | null }): Promise<{ changed: boolean; decidedAt: string | null }> {
+  input: { note: string | null; reason: string | null }): Promise<{ changed: boolean; decidedAt: string | null; placesEnded: number }> {
   const t = TRANSITIONS[action];
   const stamp = new Date().toISOString().replace('T', ' ').slice(0, 19);
   // Approve and resume take no reason, so a pause's reason is cleared with it.
   const reason = t.reason === 'none' ? null : input.reason;
+  // Each of these runs only when the removal above it stamped this decision
+  // (the EXISTS, written out in both: no SQL text is assembled).
+  const endPlaces = action === 'remove' ? [
+    // The log rows first, while the places still read as open.
+    env.DB.prepare(
+      `INSERT INTO testing_events (programme_id, application_id, actor_user_id, action, detail)
+       SELECT a.programme_id, a.id, ?, 'place_ended', ? FROM testing_applications a
+        WHERE a.user_id = ? AND a.status IN ('applied', 'picked')
+          AND a.programme_id IN (SELECT p.id FROM testing_programmes p WHERE p.status NOT IN ('closed', 'rejected'))
+          AND EXISTS (SELECT 1 FROM product_testers t WHERE t.id = ? AND t.status = 'removed' AND t.decided_at = ? AND t.decided_by = ? AND t.updated_at = ?)`,
+    ).bind(actorId, JSON.stringify({ reason: 'tester_removed', tester_id: tester.id }), tester.user_id, tester.id, stamp, actorId, stamp),
+    env.DB.prepare(
+      `UPDATE testing_applications SET status = 'withdrawn', updated_at = ?
+        WHERE user_id = ? AND status IN ('applied', 'picked')
+          AND programme_id IN (SELECT p.id FROM testing_programmes p WHERE p.status NOT IN ('closed', 'rejected'))
+          AND EXISTS (SELECT 1 FROM product_testers t WHERE t.id = ? AND t.status = 'removed' AND t.decided_at = ? AND t.decided_by = ? AND t.updated_at = ?)`,
+    ).bind(stamp, tester.user_id, tester.id, stamp, actorId, stamp),
+  ] : [];
   const results = await env.DB.batch([
     env.DB.prepare(
       `UPDATE product_testers SET status = ?, decided_at = ?, decided_by = ?, note = COALESCE(?, note),
@@ -182,7 +213,9 @@ export async function applyTransition(env: Env, tester: Tester, action: TesterAc
        SELECT id, user_id, ?, ?, ?, ?, ?, ?, ? FROM product_testers
         WHERE id = ? AND status = ? AND decided_at = ? AND decided_by = ? AND updated_at = ?`,
     ).bind(t.event, tester.status, t.to, actorId, input.note, reason, stamp, tester.id, t.to, stamp, actorId, stamp),
+    ...endPlaces,
   ]);
   const changed = Number(results?.[0]?.meta?.changes ?? 0) > 0;
-  return { changed, decidedAt: changed ? stamp : null };
+  const placesEnded = endPlaces.length ? Number(results?.[3]?.meta?.changes ?? 0) : 0;
+  return { changed, decidedAt: changed ? stamp : null, placesEnded };
 }

@@ -22,7 +22,8 @@ export function redirectPatternFor(pathname, search = '') {
     return ADMIN_TAB_REDIRECTS.find((r) => r.path === `/admin?tab=${tab}`)?.path || '/admin';
   }
   // The list names each exact pattern before its splat (`/notifications`, then `/notifications/*`).
-  const hit = REDIRECT_ROUTES.find((r) => !r.path.includes('?') && matchPath({ path: r.path, end: true }, pathname));
+  // D1160: a role's forward (`role`) counts itself; the same address is another role's page.
+  const hit = REDIRECT_ROUTES.find((r) => !r.path.includes('?') && !r.role && matchPath({ path: r.path, end: true }, pathname));
   return hit ? hit.path : null;
 }
 

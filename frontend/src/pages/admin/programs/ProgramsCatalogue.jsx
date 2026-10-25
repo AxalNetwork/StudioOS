@@ -87,7 +87,7 @@ function ProgramCard({ p, superAdmin, who, needs, figures, door, foot }) {
         : <Unread word={NOT_RECORDED} reason={p.purposeReason} testId={`programs-card-${p.key}-purpose`} />}
       <div className="flex flex-wrap gap-1.5">
         <StatusPill status={p.status} testId={`programs-card-${p.key}-status`} />
-        <GrantBadge grant={superAdmin ? p.hqGrant : p.grant} testId={`programs-card-${p.key}-grant`} />
+        <GrantBadge grant={superAdmin ? p.hqGrant : p.grant} badge={p.grantBadge} testId={`programs-card-${p.key}-grant`} />
         {superAdmin ? null : <NeedsPill needs={needs} programKey={p.key} />}
       </div>
       <div className="border-t border-axal-hairline pt-2 dark:border-gray-700" data-testid={`programs-card-${p.key}-who`}>
@@ -114,11 +114,11 @@ function WaitingRows({ rows }) {
           </span>
           <span className="flex items-baseline gap-3">
             {r.state === 'ready' ? <span className="font-mono text-[12.5px] font-semibold text-axal-ink dark:text-gray-100">{r.text}</span> : null}
-            {r.key === 'cohort' ? <Link to="/admin/spinout-lab" className={LINK}>Open</Link> : null}
+            {r.key === 'cohort' ? <Link to="/admin/programs/spinout-lab/applications" className={LINK} data-testid="programs-waiting-cohort-door">› Applications</Link> : null}
             {r.key === 'referrals' ? <Link to="/admin/programs/refer-and-earn/queue" className={LINK}>Open</Link> : null}
             {r.key === 'strategic' ? <Link to="/admin/programs/refer-and-earn" className={LINK}>Open</Link> : null}
             {r.key === 'perks' ? <Link to="/admin/programs/perks/queue" className={LINK}>Open</Link> : null}
-            {r.key === 'hosts' ? <Link to="/admin/spinout-lab" className={LINK}>Open</Link> : null}
+            {r.key === 'hosts' ? <Link to="/admin/programs/spinout-lab/hosts" className={LINK} data-testid="programs-waiting-hosts-door">› Hosts</Link> : null}
           </span>
         </li>
       ))}

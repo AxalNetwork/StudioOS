@@ -1,6 +1,7 @@
 import React from 'react';
 import { NOT_RECORDED, blockLabel, tileValue } from './editorModel';
 import { SOURCE_NOT_RECORDED, chartLabel, sourceOf } from './presentExportModel';
+import { ChartBlock } from './ChartTools';
 
 export { gridBlocks } from './presentExportModel';
 
@@ -12,11 +13,13 @@ export { gridBlocks } from './presentExportModel';
  * `live` makes the video, audio and link blocks real links, which Present and
  * the print page want and the editor (where a click selects the block) does
  * not. `sources` adds each metric tile's source line ("Show sources").
- * A tile with no figure reads "Not recorded", never 0.
+ * A tile with no figure reads "Not recorded", never 0. `charts` (the editor's
+ * series read, D898 group C) draws a chart from its bound series with each
+ * series' source chip; without it a chart is its type and series in words.
  */
 
 /** One block's face. */
-export function BlockView({ block: b, colours, live = false, sources = false, size = 'card' }) {
+export function BlockView({ block: b, colours, live = false, sources = false, size = 'card', charts = null }) {
   const big = size === 'print';
   const heading = big ? 'text-[64px]' : 'text-[20px]';
   const para = big ? 'text-[30px]' : 'text-[12.5px]';
@@ -60,6 +63,7 @@ export function BlockView({ block: b, colours, live = false, sources = false, si
     return live && b.url ? <a href={b.url} target="_blank" rel="noopener noreferrer" className="no-underline" style={{ color: 'inherit' }}>{face}</a> : face;
   }
   if (b.kind === 'graphic') return <span className={big ? 'text-[24px]' : 'text-[11px]'} style={{ color: colours.muted }}>Graphic · {b.graphic || 'none chosen'}</span>;
+  if (b.kind === 'chart' && charts) return <ChartBlock block={b} charts={charts} colours={colours} />;
   if (b.kind === 'chart') {
     return (
       <span className={`flex h-full flex-col gap-1 ${big ? 'text-[24px]' : 'text-[11px]'}`}>
@@ -80,13 +84,13 @@ export function BlockView({ block: b, colours, live = false, sources = false, si
  * The grid itself, inside a 16:9 face the caller draws. `onSelect` makes each
  * block a button (the editor); without it each block is a plain cell.
  */
-export function BlockGrid({ blocks, colours, live = false, sources = false, size = 'card', selected = null, onSelect = null, testId = 'deck-blocks' }) {
+export function BlockGrid({ blocks, colours, live = false, sources = false, size = 'card', selected = null, onSelect = null, testId = 'deck-blocks', charts = null }) {
   const gap = size === 'print' ? 'gap-6 p-[3%]' : 'gap-2 p-[3%]';
   return (
     <div className={`absolute inset-0 grid ${gap}`} style={{ gridTemplateColumns: 'repeat(12, minmax(0, 1fr))', gridTemplateRows: 'repeat(6, minmax(0, 1fr))' }} data-testid={testId}>
       {blocks.map((b) => {
         const at = { gridColumn: `${b.grid.c1} / ${b.grid.c2 + 1}`, gridRow: `${b.grid.r1} / ${b.grid.r2 + 1}` };
-        const inner = <BlockView block={b} colours={colours} live={live} sources={sources} size={size} />;
+        const inner = <BlockView block={b} colours={colours} live={live} sources={sources} size={size} charts={charts} />;
         if (onSelect) {
           return (
             <button type="button" key={b.id}

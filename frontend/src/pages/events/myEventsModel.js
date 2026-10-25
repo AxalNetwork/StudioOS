@@ -14,6 +14,8 @@
  * review note are not in any read yet; the tab that would draw them says so.
  */
 
+import { eventTime, onEventDay } from './eventTime';
+
 export const PATH = '/my/events';
 export const TITLE = 'Events';
 export const LINE = 'Events you’re going to, events you host, and what’s coming up.';
@@ -31,6 +33,9 @@ export const tabHref = (t) => `${PATH}${t.path}`;
 
 export function tabOf(pathname) {
   const p = String(pathname || '').replace(/\/+$/, '');
+  // D1035: a drawer sits over the tab it opens from: a ticket over Upcoming, a hosted event over Hosting.
+  if (/^\/my\/events\/ticket\/[^/]+$/.test(p)) return 'upcoming';
+  if (/^\/my\/events\/hosting\/[^/]+$/.test(p)) return 'hosting';
   const t = TABS.find((x) => `${PATH}${x.path}` === p);
   return t ? t.key : 'upcoming';
 }
@@ -39,10 +44,7 @@ export function tabOf(pathname) {
 export const isExplorer = (user) => String(user?.role || '').toLowerCase() === 'exploring';
 export const tabsFor = (user) => (isExplorer(user) ? TABS.filter((t) => t.key !== 'hosting') : TABS);
 
-const time = (s) => {
-  const t = new Date(s || '').getTime();
-  return Number.isNaN(t) ? null : t;
-};
+const time = eventTime;
 /** An event is past once it has ended, or started when it has no end. */
 export function isPast(e, now = Date.now()) {
   const end = time(e?.ends_at) ?? time(e?.starts_at);
@@ -138,10 +140,17 @@ export function goingGroups(rest, now = Date.now()) {
  * Needs you (MEV1) from what the reads hold: a hosted event an admin sent back.
  * Pay to confirm, invitations and off-the-waitlist need fields no read sends yet.
  */
-export function needsYou(hosting) {
-  return (hosting || []).filter((e) => e.status === 'rejected').map((e) => ({
+export function needsYou(hosting, attending = [], now = Date.now()) {
+  const sent = (hosting || []).filter((e) => e.status === 'rejected').map((e) => ({
     key: `sent-${e.id}`, pill: 'Sent back', text: `${e.title || 'An event'} was sent back by an admin.`, action: { label: 'Edit and resend', to: `/events/${e.id}/edit` },
   }));
+  const promoted = (attending || []).filter(t => time(t.promoted_at) != null && !isPast(t, now) && t.status !== 'cancelled' && ['confirmed', 'registered'].includes(t.reg_status)).map(t => {
+    const waiting = t.reg_status === 'registered', paying = t.payment_status === 'pending';
+    return { key: `promoted-${t.registration_id || t.id}`, pill: 'Off the waitlist', tone: 'good',
+      text: `A seat opened at ${t.title || 'an event'}. ${waiting ? 'Waiting for the host.' : paying ? 'Pay to confirm your place.' : 'You’re going.'}`,
+      action: { label: paying && !waiting ? 'Pay to confirm' : 'View ticket', to: `/events/${t.id}` } };
+  });
+  return [...promoted, ...sent];
 }
 
 /** Hosting soon (MEV1): the next two hosted events that have not ended and are not cancelled. */
@@ -167,14 +176,21 @@ export function hostingGroups(hosting, now = Date.now(), q = '') {
 }
 
 /**
- * The one action that fits a hosted event's status (MEV4). Publishing and
- * sending for review open part 5's dialogs; until then they open the editor.
+ * The one action that fits a hosted event's status (MEV4). D1035: a draft
+ * whose date is ahead offers "Send for review" (public) or "Publish"
+ * (unlisted, private), which opens the publish dialog; a draft whose date has
+ * passed offers Edit details.
  */
-export function hostAction(e) {
+export function hostAction(e, now = Date.now()) {
   if (e.status === 'rejected') return { label: 'Edit and resend', to: `/events/${e.id}/edit` };
+  if (e.status === 'draft' && !isPast({ starts_at: e.starts_at }, now)) {
+    return e.visibility === 'public' ? { label: 'Send for review', dialog: 'publish' }
+      : ['unlisted', 'private'].includes(e.visibility) ? { label: 'Publish', dialog: 'publish' }
+      : { label: 'Edit details', to: `/events/${e.id}/edit` };
+  }
   if (e.status === 'draft') return { label: 'Edit details', to: `/events/${e.id}/edit` };
   if (e.status === 'pending_review') return { label: null, note: 'Waiting for an admin' };
-  if (e.status === 'published') return { label: 'Manage', to: `/events/${e.id}/manage` };
+  if (e.status === 'published') return onEventDay(e, now) ? { label: 'Check in', to: `/events/${e.id}/manage/check-in` } : { label: 'Manage', to: `/events/${e.id}/manage` };
   return { label: null, note: null };
 }
 
@@ -200,9 +216,9 @@ export function tabCounts({ attending, hosting, ok }, now = Date.now()) {
   return { upcoming: upcoming.length, hosting: (hosting || []).length, past: past.length + pastHosted(hosting, now).length };
 }
 
-/** Discover's row action (MEV8), from what the caller already holds. */
+/** Discover's row action (MEV8), from what the caller already holds; D1035: a held place opens its ticket. */
 export function discoverAction(ev, held) {
-  if (held.has(ev.id)) return { label: 'Going', to: `/events/${ev.id}` };
+  if (held.has(ev.id)) return { label: 'Show ticket', to: `/my/events/ticket/${ev.id}` };
   return { label: 'Open event', to: `/events/${ev.slug || ev.id}` };
 }
 
@@ -214,3 +230,19 @@ export function priceOf(ev) {
   try { return (cents / 100).toLocaleString('en-US', { style: 'currency', currency: code, maximumFractionDigits: cents % 100 ? 2 : 0 }); }
   catch { return `${cents / 100} ${code}`; }
 }
+
+
+export const JOIN_NOTE = 'The join link opens 15 minutes before the start';
+export const JOIN_LEAD_MS = 15 * 60 * 1000;
+export function joinState(ticket, now = Date.now()) {
+  const start = time(ticket?.starts_at), end = time(ticket?.ends_at);
+  if (ticket?.status === 'cancelled' || (end != null && now >= end)) return { available: false, note: 'This event is not open to join.' };
+  if (!['confirmed', 'attended'].includes(ticket?.reg_status) || !['none', 'free', 'paid'].includes(ticket?.payment_status)) return { available: false, note: 'Your seat must be confirmed and paid before you can join.' };
+  if (start == null) return { available: false, note: 'The start time is not recorded.' };
+  if (now < start - JOIN_LEAD_MS) return { available: false, note: JOIN_NOTE };
+  if (!ticket?.location_url) return { available: false, note: 'The join link is not recorded.' };
+  return { available: true, note: null };
+}
+const SEAT_SOURCE = { invitation: 'Invitation', official_partner: 'Official partner', invested_lp: 'Invested LP', investor: 'Investor', startup_founder: 'Startup founder', host_contact: 'Host contact' };
+export const seatSourceLabel = t => t?.comp ? `Free seat · ${SEAT_SOURCE[t.comp_source] || 'Source not recorded'}` : null;
+export const isMyEventsPath = path => /^\/my\/events(?:\/|$)/.test(String(path || ''));

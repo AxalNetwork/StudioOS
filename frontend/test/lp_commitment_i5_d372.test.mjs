@@ -196,8 +196,8 @@ test('/lp-portal and /funds/lp-workspace redirect to the one workspace, and the 
   const fundsPage = codeOnly(read('frontend/src/pages/FundsPage.jsx'));
   assert.doesNotMatch(fundsPage, /LPPortalView/);
   assert.match(fundsPage, /export function LPADrawer\(/);
-  const fundOps = codeOnly(read('frontend/src/pages/FundOpsWorkspace.jsx'));
-  assert.doesNotMatch(fundOps, /SpinoutLabLpWorkspacePage|lp-workspace/);
+  // D1160: Fund Ops, which once carried a copy of the workspace, is retired.
+  assert.ok(!existsSync(resolve(process.cwd(), 'frontend/src/pages/FundOpsWorkspace.jsx')));
   // Nothing in the app links a retired path.
   for (const f of ['frontend/src/pages/SpinoutLabLpWorkspacePage.jsx', 'frontend/src/pages/investor/InvestorFundCalls.jsx']) {
     assert.doesNotMatch(codeOnly(read(f)), /to="\/lp-portal"/, `${f} links the retired portal`);

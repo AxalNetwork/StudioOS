@@ -8,7 +8,8 @@ import { resolve } from 'node:path';
 // D648 — the KYC queue and Partner Profiles are their own consoles now.
 const read = (f) => readFileSync(resolve(process.cwd(), f), 'utf8');
 const page = read('frontend/src/pages/admin/consoles/KycConsole.jsx');
-const profiles = read('frontend/src/pages/admin/consoles/PartnerProfilesConsole.jsx');
+// D995 — a partner profile opens at its own address, read by reference.
+const profiles = read('frontend/src/pages/admin/profiles/ProfileRecord.jsx');
 
 test('Review fetches the KYC record instead of opening the queue row', () => {
   const review = page.slice(page.indexOf('KYC / AML Queue'), page.indexOf('kycDetail &&'));
@@ -17,15 +18,9 @@ test('Review fetches the KYC record instead of opening the queue row', () => {
   assert.doesNotMatch(review, /setKycDetail\(k\)/);
 });
 
-test('Review fetches the partner profile, and a failed read does not open the window', () => {
-  const block = profiles.slice(profiles.indexOf('const openPartnerProfile'), profiles.indexOf('if (loading) return'));
-  assert.ok(block.includes('openPartnerProfile'), block);
-  assert.match(block, /api\.adminGetProfile\(p\.email\)/);
-  assert.match(block, /setOpenProfile\(await api\.adminGetProfile\(p\.email\)\)/);
-  const failed = block.slice(block.indexOf('catch'));
-  assert.ok(failed.includes('could not be read'));
-  assert.equal(failed.includes('setOpenProfile'), false);
-  const table = profiles.slice(profiles.indexOf('Partner Profiles</h3>'), profiles.indexOf('{openProfile && ('));
-  assert.match(table, /openPartnerProfile\(p\)/);
-  assert.equal(table.includes('setOpenProfile(p)'), false);
+test('Review fetches the partner profile, and a failed read draws no decision', () => {
+  assert.match(profiles, /partnerProfilesApi\.get\(refId\)/, 'the logged read by reference (D612, D990)');
+  const failed = profiles.slice(profiles.indexOf("else if (profile.status === 'error')"), profiles.indexOf('} else if (shape.draft)'));
+  assert.ok(failed.includes('This profile could not be read.'), failed);
+  assert.equal(failed.includes('DecisionCard'), false, 'a failed read opens the decision');
 });

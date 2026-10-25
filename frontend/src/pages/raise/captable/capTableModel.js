@@ -13,8 +13,6 @@
  * WHAT IS READ, AND FROM WHERE. Every figure comes from a read on `main`:
  *   - `GET /api/cycles/raise/modules/cap-table` → Overview (the Planned round
  *     card, the Holders records, From Mercury), as CycleRoute draws it today;
- *   - `GET /api/safe-issuances/project/:id` → the SAFEs sent through StudioOS,
- *     each with its envelope's status (D578);
  *   - `GET /api/captable/scenarios/by-project/:id/compare` → the saved model
  *     and its draft variants, each with its computed result;
  *   - `GET /api/captable/409a/:projectId` → the 409A in force and the
@@ -25,7 +23,9 @@
  * Planned round card are the saved model, so every figure they draw is
  * Modelled. Only a countersigned SAFE is on record. The record is D1017's (part 2).
  *
- * WHAT IS DRAWN WHERE. History, the proposal drawers and the dialogs are
+ * WHAT IS DRAWN WHERE. Instruments, its drawer and Option pool are D1023's
+ * (`instrumentsModel.js`, `poolModel.js`), from the record and part 3's
+ * scenario reads. History, the proposal drawers and the dialogs are
  * D1025's (`historyModel.js`). Access and Import and export are D1026's
  * (`capTableAccess.js`, `capTableImport.js`); the holder and instrument
  * drawers, the dialogs and the proposals wait for their parts (D1015 §6).
@@ -122,74 +122,8 @@ export function day(s) {
   return `${Number(m[3])} ${M[Number(m[2]) - 1]} ${m[1]}`;
 }
 
-/** The SAFEs sent through StudioOS (D578), each on record only once countersigned. */
-export function issuedSafes(read) {
-  const list = Array.isArray(read?.safes) ? read.safes : [];
-  return list.map((s) => ({
-    uid: s.uid,
-    holder: String(s.investor_name || '').trim() || NOT_RECORDED,
-    amount: money(s.amount_cents, s.currency),
-    cap: money(s.valuation_cap_cents, s.currency),
-    // The Worker stores no discount for these SAFEs (D578): never 0%.
-    discount: s.discount == null ? NOT_RECORDED : `${s.discount}%`,
-    basis: s.form === 'post_money_cap' ? 'Post-money' : NOT_RECORDED,
-    status: s.status?.label || NOT_RECORDED,
-    onRecord: s.status?.key === 'countersigned',
-    created: day(s.created_at),
-  }));
-}
-
-/** The engine stores a discount and a rate as fractions (0.15 is 15%). */
-export const fraction = (v) => `${Math.round(v * 10000) / 100}%`;
-
-/** The model's basis words. A missing basis is how the engine reads pre-money. */
-export function basisWord(entry) {
-  if (entry?.basis === 'post_money') return 'Post-money';
-  if (entry?.basis === 'pre_money') return 'Pre-money';
-  return 'Pre-money (not stated)';
-}
-
-/**
- * The SAFEs and notes in the saved model (Modelled). A pre-money or unstated
- * basis carries CT3's note, since Axal's own SAFE and Mercury's are post-money.
- */
-export function modelInstruments(scenario) {
-  const list = Array.isArray(scenario?.inputs?.safes) ? scenario.inputs.safes : [];
-  return list.map((s, i) => {
-    const note = s?.instrument === 'note';
-    return {
-      key: `${i}`,
-      holder: String(s?.name || '').trim() || NOT_RECORDED,
-      type: note ? 'Convertible note' : 'SAFE',
-      amount: dollars(s?.amount),
-      cap: num(s?.cap) && s.cap > 0 ? dollars(s.cap) : NOT_RECORDED,
-      discount: num(s?.discount) && s.discount > 0 ? fraction(s.discount) : NOT_RECORDED,
-      basis: basisWord(s),
-      interest: note ? (num(s?.interest_rate) > 0 ? fraction(s.interest_rate) : NOT_RECORDED) : null,
-      signed: day(s?.issue_date),
-      check: s?.basis !== 'post_money',
-      cannotConvert: !(num(s?.cap) > 0) && !(num(s?.discount) > 0),
-    };
-  });
-}
-
+/** CT3's note on a pre-money SAFE (D1023 draws it on the record's instruments). */
 export const BASIS_CHECK = 'Basis: pre-money, as entered. Axal’s SAFE template is post-money.';
-export const CANNOT_CONVERT = 'Cannot convert: no cap and no discount recorded.';
-
-/** How the model's instruments convert in its first round, in the engine's own words. */
-export function conversionLines(scenario) {
-  const round = scenario?.result?.rounds?.[0];
-  if (!round) return null;
-  return { round: String(round.name || 'the round'), lines: Array.isArray(round.events) ? round.events.map(String) : [] };
-}
-
-/** The option pool in the saved model: its target and the shares the founding table gives it. */
-export function modelPool(scenario) {
-  if (!scenario) return null;
-  const target = num(scenario.inputs?.option_pool_pct);
-  const row = (scenario.result?.founding || []).find((h) => h?.type === 'option_pool');
-  return { target: target == null ? NOT_RECORDED : `${target}%`, shares: row ? shares(row.shares) : NOT_RECORDED, pct: row ? pct(row.pct) : NOT_RECORDED };
-}
 
 /** The 409A read in the Worker's words; null for a read that did not answer. */
 export function harbour(read) {
@@ -225,6 +159,8 @@ export function scenarioCard(s, { model = false } = {}) {
     uid: s?.uid,
     name: model ? 'Cap table · model' : (String(s?.name || '').trim() || NOT_RECORDED),
     model,
+    // D1024: where the scenario starts — the record (D1018's `start`), or a model typed by hand.
+    start: model ? 'Your saved model' : s?.inputs?.start ? 'Starts from Today' : 'Starts from your model',
     round: round
       ? `${String(round.name || 'Round').trim()} · pre-money ${dollars(round.pre_money)} · raise ${dollars(round.investment)}${num(round.post_round_pool_pct) != null ? ` · pool ${round.post_round_pool_pct}% post` : ''}`
       : 'No round is planned.',
