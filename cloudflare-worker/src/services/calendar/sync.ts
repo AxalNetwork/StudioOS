@@ -146,12 +146,15 @@ export const onAxalSessionUpdated = onAxalSessionCreated;
  */
 export async function onAxalSessionCancelled(
   env: Env, kind: AxalKind, sourceId: number,
+  copy?: { userId: number; provider: 'google' | 'microsoft' },
 ): Promise<void> {
   try {
     const sql = getSQL(env);
     const rows = await sql`
       SELECT user_id, provider, external_event_id FROM calendar_sync_records
       WHERE source_kind = ${kind} AND source_id = ${sourceId}
+        AND (${copy?.userId ?? null} IS NULL OR user_id = ${copy?.userId ?? null})
+        AND (${copy?.provider ?? null} IS NULL OR provider = ${copy?.provider ?? null})
     ` as SyncRow[];
     if (!rows || rows.length === 0) return;
     // Task #52 follow-up — only DELETE the calendar_sync_records row
@@ -178,8 +181,10 @@ export async function onAxalSessionCancelled(
         const accessToken = r.provider === 'google'
           ? await refreshGoogleAccessToken(env, tok.raw)
           : await refreshMicrosoftAccessToken(env, tok.raw);
-        if (r.provider === 'google') await deleteEventFromGoogle(accessToken, r.external_event_id);
-        else await deleteEventFromMicrosoft(accessToken, r.external_event_id);
+        const removed = r.provider === 'google'
+          ? await deleteEventFromGoogle(accessToken, r.external_event_id)
+          : await deleteEventFromMicrosoft(accessToken, r.external_event_id);
+        if (!removed) throw new Error('calendar_delete_failed');
         // Provider DELETE succeeded — safe to drop the mapping.
         await sql`
           DELETE FROM calendar_sync_records
@@ -189,11 +194,11 @@ export async function onAxalSessionCancelled(
       } catch (e) {
         // Stamp the row with an error so an admin / future retry job
         // can see it failed; do NOT delete the mapping.
-        console.warn('[calendar/sync] cancel failed', { provider: r.provider, user: r.user_id }, e);
+        console.warn('[calendar/sync] cancellation_delete_failed', { provider: r.provider });
         try {
           await sql`
             UPDATE calendar_sync_records
-               SET last_error = ${String((e as Error)?.message || e).slice(0, 200)},
+               SET last_error = ${'calendar_delete_failed'},
                    last_synced_at = ${new Date().toISOString()}
              WHERE user_id = ${r.user_id} AND provider = ${r.provider}
                AND source_kind = ${kind} AND source_id = ${sourceId}
@@ -202,7 +207,7 @@ export async function onAxalSessionCancelled(
       }
     }));
   } catch (e) {
-    console.warn('[calendar/sync] onAxalSessionCancelled failed', e);
+    console.warn('[calendar/sync] cancellation_cleanup_failed');
   }
 }
 

@@ -88,7 +88,7 @@ function freshDb() {
       description TEXT, website TEXT, amount REAL, target_raise REAL,
       minimum_check REAL, valuation_cap REAL, carry_pct REAL,
       management_fee_pct REAL, instrument TEXT, spv_jurisdiction TEXT,
-      closing_deadline TEXT, capital_committed REAL DEFAULT 0, source TEXT,
+      closing_deadline TEXT, capital_committed REAL DEFAULT 0, source TEXT, currency TEXT NOT NULL DEFAULT 'USD',
       created_at TEXT NOT NULL DEFAULT (datetime('now')),
       updated_at TEXT NOT NULL DEFAULT (datetime('now')),
       stage_changed_at TEXT

@@ -208,6 +208,7 @@ import notificationsRoutes from './routes/notifications';
 import votesRoutes from './routes/votes';
 import linkedinRoutes from './routes/linkedin';
 import calendarRoutes from './routes/calendar';
+import googleWorkspaceRoutes from './routes/google_workspace';
 import financialsRoutes from './routes/financials';
 import progressRoutes from './routes/progress';
 import cycleBuildRoutes from './routes/cycle_build';
@@ -858,14 +859,14 @@ for (const p of STUDIO_PREFIXES) {
 // non-investor callers (admin/partner/mentor bypass; founder/etc. pass
 // through unchanged) and only enforces tier when caller.role === 'investor'.
 const INVESTOR_PRO_PREFIXES = [
+  '/api/dd',
   '/api/pipeline',
   '/api/deals',
   '/api/calendar',
   '/api/ic',
 ];
-// D614: `INVESTOR_PRO_EXEMPT` names the one route under these prefixes that
-// stays open on every plan — leaving a deal room, so an investor who drops to
-// Free can still leave the rooms they joined.
+// D614/D1149: precise exemptions allow leaving a room and an authorized
+// deal header/key strip. Child deal reads and diligence stay Professional.
 const investorPro = requireInvestorTierExcept('professional');
 for (const p of INVESTOR_PRO_PREFIXES) {
   app.use(p, investorPro);
@@ -1367,6 +1368,7 @@ app.route('/api/personas', personas);
 app.route('/api/notifications', notificationsRoutes);
 app.route('/api/linkedin', linkedinRoutes);
 app.route('/api/calendar', calendarRoutes);
+app.route('/api/connectors/google-workspace', googleWorkspaceRoutes);
 // T11 — Financial Model Builder + Founder Wellbeing (ported from FastAPI).
 app.route('/api/financials', financialsRoutes);
 // Task #1 (AG) — kept alphabetically adjacent to /api/financials.

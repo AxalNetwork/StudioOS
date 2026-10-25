@@ -133,9 +133,14 @@ const quiet = async <T>(fn: () => Promise<T>) => { const s = [console.error, con
 
 test('the options are the review\'s fifteen values, unchanged, in the five groups', async () => {
   // Mutations checked: a value respelled (profiles carrying it orphaned); a group dropped.
-  const console = read('frontend/src/pages/admin/consoles/PartnerProfilesConsole.jsx');
-  const block = console.slice(console.indexOf('const AGREEMENT_OPTIONS'), console.indexOf('];', console.indexOf('const AGREEMENT_OPTIONS')));
-  const theirs = [...block.matchAll(/value: '([^']+)'/g)].map((m) => m[1]);
+  // D995 retired the console's own list; these are the values it held, which profiles already carry.
+  const theirs = [
+    'Subscription Booklet & LPA', 'SPV Joinder Agreement', 'Co-Investment Side Letter', 'Strategic Side Letter / Focused SPV',
+    'Founder Collaboration Agreement', 'Spin-Out Subsidiary SPA + IP Transfer',
+    'Strategic Scale Partnership Agreement', 'Technology Integration / JV Agreement', 'Referral / Agency Agreement', 'M&A Advisory Mandate',
+    'Venture Share Agreement (FAST)', 'MSA + Equity-for-Services', 'Engagement Letter (Spin-Out Package)', 'White-Label Service Agreement',
+    'Secondary Purchase Agreement',
+  ];
   const mine = AGREEMENT_GROUPS.flatMap((g) => g.options.map((o) => o.value));
   assert.equal(mine.length, 15);
   assert.deepEqual(mine, theirs, 'the Worker\'s values are not the ones profiles already carry');

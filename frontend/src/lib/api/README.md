@@ -365,6 +365,8 @@ D1000 (#2815): `personaSegments.js` is Persona segments' profile store on
 Admin's write, which names the version it read. Counts leave admins out and
 come back suppressed from 1 to 4.
 
+`googleWorkspace.js` (D1091) calls the mounted Workspace consent, picked files, mapping, Stop using and preview routes. The files screen awaits its canvas.
+
 D1065 (#2935): `buildPlan.js` reads or prepares `/api/cycles/build/plan`, with venture and hypothesis scope. Preparation sends no browser-supplied evidence and accepts nothing into Build.
 
 D1075 (#2967): `trustContent.js` is the public trust center's store: `trustPublicApi` (the
