@@ -326,3 +326,7 @@ calls `logAdminAction`. It grants no subsequent write permission. Admins cannot
 use legacy investor grants through `/shared` instead. The data-room spec in
 `../services/records/raise.ts` uses the same owner-only gate. File uploads default
 to NDA when visibility is omitted; explicit Open remains allowed for the owner.
+
+D1150: `deal_context.ts`, mounted before the deal router at `/api/deals`,
+provides investor-owned stage/visit metadata and author/firm-private notes.
+No admin bypass; migration 600; writes and audit rows share a batch.
