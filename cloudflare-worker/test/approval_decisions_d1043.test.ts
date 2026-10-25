@@ -544,3 +544,38 @@ test('unchanged normalized credential saves preserve both verification and decli
     assert.equal(one(f, 'SELECT COUNT(*) AS n FROM expert_review_decisions').n, history); assert.equal(sent.length, mail);
   }
 }));
+
+test('co-marketing response reads cannot report a committed decision as failed', async () => captureMail(async (sent) => {
+  const f = fixture(); pitch(f, 1);
+  f.db.exec("INSERT INTO comarketing_attributions(uid,pitch_id,partner_id,event_kind) VALUES('synthetic-visit',1,7,'visit')");
+  const prepare = f.env.DB.prepare.bind(f.env.DB); let committed = false; let lateReads = 0;
+  f.env.DB.prepare = (sql: string) => {
+    const statement = prepare(sql);
+    if (sql.includes('UPDATE comarketing_pitches SET status=')) {
+      const run = statement.run.bind(statement);
+      statement.run = async (...args: any[]) => { const out = await run(...args); committed = true; return out; };
+    }
+    if (/SELECT[\s\S]*FROM comarketing_(pitches|attributions)/.test(sql)) {
+      for (const method of ['all', 'first']) {
+        const execute = statement[method].bind(statement);
+        statement[method] = async (...args: any[]) => { if (committed) { lateReads++; throw new Error('Synthetic response-read outage'); } return execute(...args); };
+      }
+    }
+    return statement;
+  };
+  const response = await call(f, 1, 'POST', `${cm}/admin/pitches/pitch-1/approve`, {});
+  assert.equal(response.status, 200); assert.equal(response.body.status, 'approved'); assert.equal(lateReads, 0);
+  const saved = one(f, 'SELECT * FROM comarketing_pitches WHERE id=1');
+  assert.equal(saved.reviewed_by_user_id, 1);
+  assert.equal(response.body.reviewed_at, saved.reviewed_at); assert.equal(response.body.updated_at, saved.updated_at);
+  assert.equal(response.body.attribution.visit, 1); assert.equal(sent.length, 1);
+  const other = fixture(); pitch(other, 1); const before = other.env.DB.prepare.bind(other.env.DB);
+  other.env.DB.prepare = (sql: string) => {
+    const statement = before(sql);
+    if (sql.includes('FROM comarketing_attributions')) statement.all = async () => { throw new Error('Synthetic preflight-read outage'); };
+    return statement;
+  };
+  const refused = await call(other, 1, 'POST', `${cm}/admin/pitches/pitch-1/approve`, {});
+  assert.equal(refused.status, 503); assert.equal(one(other, 'SELECT status FROM comarketing_pitches').status, 'proposed');
+  assert.equal(one(other, 'SELECT COUNT(*) AS n FROM notifications_inbox').n, 0); assert.equal(sent.length, 1);
+}));

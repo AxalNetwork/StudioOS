@@ -393,10 +393,14 @@ async function decide(c: Context<{ Bindings: Env }>, target: 'approve' | 'reject
   } else if (body.notes !== undefined) {
     reviewNotes = body.notes ? String(body.notes).slice(0, 2000) : null;
   }
+  // Read response-only data before committing, so a failed read cannot make
+  // a completed decision look like a failed one.
+  const counts = await attribCounts(c.env, p.id);
+  const reviewedAt = nowIso();
   const changed = await c.env.DB.prepare(
     `UPDATE comarketing_pitches SET status=?, review_notes=?, reviewed_by_user_id=?, reviewed_at=?,
        attribution_code=?, published_at=?, published_url=?, updated_at=? WHERE id=? AND status=?`
-  ).bind(next, reviewNotes, user.id, nowIso(), setAttribCode, publishedAt, publishedUrl, nowIso(), p.id, p.status).run();
+  ).bind(next, reviewNotes, user.id, reviewedAt, setAttribCode, publishedAt, publishedUrl, reviewedAt, p.id, p.status).run();
   if (Number(changed.meta?.changes) !== 1) return refuse(c, 409, { code: 'pitch_changed', message: 'This pitch changed while you were deciding. Read it again.' });
   await logActorAct(c.env, user, `comarketing_${next}`, { pitch_uid: p.uid, partner_id: p.partner_id });
   await notify(c.env, {
@@ -404,8 +408,8 @@ async function decide(c: Context<{ Bindings: Env }>, target: 'approve' | 'reject
     body: `Your pitch “${p.title}” was ${next === 'rejected' ? 'declined' : next}.${next === 'rejected' ? ` Reason: ${reviewNotes}` : ''}${next === 'published' ? ` ${publishedUrl}` : ''}`,
     link: '/comarketing', channels: ['in_app', 'email'], payload: { pitch_uid: p.uid, status: next },
   });
-  const fresh = await c.env.DB.prepare('SELECT * FROM comarketing_pitches WHERE id = ?').bind(p.id).first<Pitch>();
-  return c.json(pitchDto(fresh!, await attribCounts(c.env, p.id)));
+  return c.json(pitchDto({ ...p, status: next, review_notes: reviewNotes, reviewed_by_user_id: user.id,
+    reviewed_at: reviewedAt, attribution_code: setAttribCode, published_at: publishedAt, published_url: publishedUrl, updated_at: reviewedAt }, counts));
 }
 
 r.post('/admin/pitches/:uid/approve', (c) => adminTransition(c, 'approve'));
