@@ -22,6 +22,8 @@
  * and `country` is `users.country` as stored; both apply to every block that
  * is about accounts, through `(? IS NULL OR …)` so the SQL is fixed and an
  * absent filter matches everyone. `range` is the weeks the charts draw.
+ * The group lightbox's `group` is a role in place of `profile`, and keeps the
+ * page's `country` (D1110, #2990), so its counts and its export are that country's.
  *
  * WEEKS ARE MONDAY WEEKS IN UTC, built by `weekAxis` — the same axis HQ and
  * branch Analytics draw — so a week here is a week there.
@@ -368,12 +370,13 @@ export function scopeLabel(env: Env): string {
 }
 
 async function groupBlock(env: Env, q: InsightsQuery, axis: WeekAxis, firstDay: string | null, nowMs: number) {
-  const g: InsightsFilter = { role: q.group, country: null };
+  // D1110 (#2990): the group keeps the page's country, which its lightbox shows as a chip.
+  const g: InsightsFilter = { role: q.group, country: q.country };
   const [rows, signups, active, funnel, dormant, countryActive] = await Promise.all([
     liveAccounts(env, g, nowMs),
     signupsByWeek(env, axis, g),
     activeByWeek(env, axis, g, firstDay),
-    activationFunnel(env, nowMs, { weeks: axis.weeks.length, role: g.role }),
+    activationFunnel(env, nowMs, { weeks: axis.weeks.length, role: g.role, country: g.country }),
     dormantCount(env, g, nowMs),
     activeInWeekByCountry(env, axis.last_complete, g),
   ]);

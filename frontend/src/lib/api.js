@@ -10,6 +10,7 @@ import { railBody } from './railPages.js';
 // this file. See lib/api/README.md. scripts/check-api-drift.mjs fails if this
 // block does not name exactly the files in lib/api/.
 // api-modules:begin
+export * from './api/accountCompanies.js';
 export * from './api/adminAiUsage.js';
 export * from './api/adminApprovals.js';
 export * from './api/adminCapitalAttestations.js';
@@ -32,10 +33,12 @@ export * from './api/capTableAccess.js';
 export * from './api/capTableHolder.js';
 export * from './api/capTableRecord.js';
 export * from './api/capTableRegister.js';
+export * from './api/capTableScenarios.js';
 export * from './api/channelKeys.js';
 export * from './api/channels.js';
 export * from './api/community.js';
 export * from './api/communityTasks.js';
+export * from './api/companyActions.js';
 export * from './api/companyEin.js';
 export * from './api/companySheet.js';
 export * from './api/connectors.js';
@@ -46,6 +49,7 @@ export * from './api/cycleValidate.js';
 export * from './api/cycleWrites.js';
 export * from './api/cycles.js';
 export * from './api/dataRoom.js';
+export * from './api/dealContext.js';
 export * from './api/deckAssist.js';
 export * from './api/deckEditor.js';
 export * from './api/deckSources.js';
@@ -62,6 +66,7 @@ export * from './api/fundReporting.js';
 export * from './api/fundReports.js';
 export * from './api/fundStructure.js';
 export * from './api/googleSignIn.js';
+export * from './api/googleWorkspace.js';
 export * from './api/helpCenter.js';
 export * from './api/insights.js';
 export * from './api/interviewSessions.js';
@@ -2552,6 +2557,8 @@ export const api = {
     return request(`/refer-earn/admin/submissions${qs ? `?${qs}` : ''}`);
   },
   adminReferralSubmission: (uid) => request(`/refer-earn/admin/submissions/${encodeURIComponent(uid)}`),
+  // D1124 (#3004): the referral funnel, the furthest stage each referral reached.
+  adminReferralFunnel: () => request('/refer-earn/admin/submissions/funnel'),
   adminReferralWeekly: (weeks = 12) => request(`/refer-earn/admin/submissions/weekly?${new URLSearchParams({ weeks })}`),
   adminStrategicAccess: (params = {}) => {
     const qs = new URLSearchParams(Object.entries(params).filter(([, v]) => v != null && v !== '')).toString();
@@ -2851,11 +2858,6 @@ export const api = {
   // D767 — keep the proposal as the new current version, or discard it (only it).
   deckKeepProposal: (proposalId) => request(`/decks/proposals/${proposalId}/keep`, { method: 'POST', body: '{}' }),
   deckDiscardProposal: (proposalId) => request(`/decks/proposals/${proposalId}`, { method: 'DELETE' }),
-  // Task #10 — one-click positioning: pulls the project's team, traction and
-  // updates, returns { one_liner, elevator_pitch, positioning_lines[],
-  // sourced_from }. 503 `ai_unavailable` when no AI provider is configured
-  // (dev FastAPI has no such route → shows an explicit error, never fake lines).
-  deckPositioning: (projectId, headers) => request('/decks/positioning', { method: 'POST', headers, body: JSON.stringify({ project_id: projectId }) }),
   // Task #41 — assemble the NEW 10-slide Spin-Out deck DATA + NOTES + gaps[]
   // (the Worker remaps the live Lab data). The browser renders/downloads the
   // .pptx from this via frontend/src/decks/spinout/buildDeck.js. Returns
@@ -4771,6 +4773,8 @@ export const api = {
     request(`/comarketing/me/pitches/${uid}/withdraw`, { method: 'POST' }),
   adminCoMarketingQueue: (status) =>
     request(`/comarketing/admin/queue${status ? `?status=${status}` : ''}`),
+  // D1132 — one pitch for the board's item address, with who decided it.
+  adminCoMarketingPitch: (uid) => request(`/comarketing/admin/pitches/${encodeURIComponent(uid)}`),
   approveCoMarketingPitch: (uid, notes) =>
     request(`/comarketing/admin/pitches/${uid}/approve`, { method: 'POST', body: JSON.stringify({ notes }) }),
   rejectCoMarketingPitch: (uid, notes) =>

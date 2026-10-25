@@ -23,6 +23,7 @@
  */
 import type { Env } from '../types';
 import { PROPOSAL_ACTIONS, REGISTRY_ACTIONS, type ProgramKey } from './programRegistry';
+import { GRANT_ACTIONS } from './programGrantStates';
 
 /** Mentor cohort access's audited writes (D960, `routes/advisors.ts`): giving a mentor a cohort, and ending it. */
 export const MENTOR_ACCESS_ACTIONS = ['advisor_cohort.assigned', 'advisor_cohort.ended'] as const;
@@ -44,22 +45,24 @@ export const PROGRAM_ACTIVITY_ACTIONS: Record<ProgramKey, readonly string[]> = {
   'mentor-cohorts': MENTOR_ACCESS_ACTIONS,
   'investor-cohorts': [],
   'referral-partners': [],
-  'refer-and-earn': [],
-  perks: [],
+  'refer-and-earn': ['referral_strategic_access.granted', 'referral_strategic_access.declined'],
+  perks: ['perk.approved', 'perk.rejected', 'perk.paused', 'perk.feature_updated'],
   learning: LEARNING_PROGRAM_ACTIONS,
   'product-testing': [],
 };
 
 /** Writes on a program's page that the audit does not record yet, and who adds them. */
 export const NOT_AUDITED_YET: Partial<Record<ProgramKey, string>> = {
-  perks: 'Perk listing reviews are not written to the admin audit yet. Part 4 (#2790) adds them.',
 };
 
 export const ACTIVITY_LIMIT_MAX = 50;
 
 // Matched on each row's program_key. D955 adds the decision on a proposal and New program,
-// whose rows name the program they made; a send names none.
-const REGISTRY_ACTION_LIST = [...Object.values(REGISTRY_ACTIONS), PROPOSAL_ACTIONS.decide, PROPOSAL_ACTIONS.create];
+// whose rows name the program they made; a send names none. D956 adds Offer to studios and
+// D982's defaults write, which both name the program and flip its "can be granted" switch.
+const REGISTRY_ACTION_LIST = [
+  ...Object.values(REGISTRY_ACTIONS), PROPOSAL_ACTIONS.decide, PROPOSAL_ACTIONS.create, ...Object.values(GRANT_ACTIONS),
+];
 const SOURCES = ['a', 'r'] as const; // admin audit, referral review
 type Source = typeof SOURCES[number];
 
@@ -187,7 +190,7 @@ export async function programActivity(
   const merged: Array<Row & { details?: Record<string, unknown> }> = [...audit, ...reviews]
     .sort((x, y) => (x.at === y.at ? (x.src === y.src ? y.id - x.id : (x.src < y.src ? 1 : -1)) : (x.at < y.at ? 1 : -1)));
   const page = merged.slice(0, q.limit);
-  const names = await learningNames(env, page.map((r) => String(r.details?.uid ?? '')).filter(Boolean));
+  const names = await learningNames(env, page.filter((r) => r.kind.startsWith('learning.')).map((r) => String(r.details?.uid ?? '')).filter(Boolean));
   const rows = page.map((r) => {
     let concerns = r.concerns;
     if (r.src === 'a') {
@@ -198,9 +201,12 @@ export async function programActivity(
           ...(typeof d.section === 'string' ? { section: d.section } : {}),
           ...(typeof d.version === 'number' ? { version: d.version } : {}),
           ...(typeof d.outcome === 'string' ? { outcome: d.outcome } : {}),
+          ...(typeof d.grantable === 'boolean' ? { grantable: d.grantable } : {}),
           ...(Array.isArray(d.fields) ? { fields: d.fields.filter((x) => typeof x === 'string') } : {}),
         };
-      } else if (typeof d.uid === 'string') {
+      } else if (r.kind.startsWith('perk.') && typeof d.uid === 'string') {
+        concerns = { perk: d.uid };
+      } else if (r.kind.startsWith('learning.') && typeof d.uid === 'string') {
         concerns = { learning_program: { uid: d.uid, name: names.get(d.uid) ?? null } };
       } else if (typeof d.cohort_cycle_id === 'number') {
         // D960's rows name the cohort; the mentor in `target_user_id` is a person, so is never named.

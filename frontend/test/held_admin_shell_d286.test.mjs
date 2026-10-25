@@ -211,10 +211,10 @@ test('Approvals draws the canvas\'s twenty lanes, each with a literal door; mode
   for (const [k, to] of Object.entries(doors)) assert.ok(routeLine(pathOf(to)), `${k} opens ${to}, which is not a registered route`);
   assert.equal(doors.moderation, '/admin/spinout-moderation', 'Spinout moderation lost its console — D442 built it and D506 made this lane its HQ door');
   // The laned queues the glance counts are the lanes with a glance key: D215's
-  // eleven and D1041's eight (#2889). Product testers has no store yet.
+  // eleven, D1041's eight (#2889) and Product testers (D1132, #3012).
   assert.deepEqual(LANES.filter((l) => l.glance).map((l) => l.glance).sort(),
     ['articles', 'best_fit', 'cohort', 'comarketing', 'due_diligence', 'events', 'exploring', 'jobs', 'kyb', 'kyc', 'lab_hosts', 'lp',
-      'moderation', 'partner_profiles', 'perk_listings', 'referrals', 'score_flags', 'strategic_access', 'wellbeing_experts']);
+      'moderation', 'partner_profiles', 'perk_listings', 'product_testers', 'referrals', 'score_flags', 'strategic_access', 'wellbeing_experts']);
   // Queued consoles belong on Approvals by the H35 map.
   const laned = new Set(ADMIN_PLACEMENT
     .filter((e) => [e, ...(e.also || [])].some((p) => p.tier === 'Admin' && p.row === 'Approvals'))

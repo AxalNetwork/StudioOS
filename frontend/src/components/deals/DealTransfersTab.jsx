@@ -19,7 +19,7 @@ import { Loading, Empty, Unreadable, NotRecorded, StatusPill, Refusal, BTN, INPU
  * switcher (D467), and refuses with `transfer_firm_required` when the
  * recorder belongs to more than one firm and none is chosen.
  */
-export default function DealTransfersTab({ dealId, canRecord }) {
+export default function DealTransfersTab({ dealId, canRecord, currency = 'USD' }) {
   const [state, setState] = useState({ loading: true, error: false, rows: null });
   const load = useCallback(async () => {
     setState((s) => ({ ...s, loading: true, error: false }));
@@ -31,10 +31,10 @@ export default function DealTransfersTab({ dealId, canRecord }) {
     }
   }, [dealId]);
   useEffect(() => { load(); }, [load]);
-  return <TransfersView dealId={dealId} state={state} onRetry={load} canRecord={canRecord} onRecorded={load} />;
+  return <TransfersView currency={currency} dealId={dealId} state={state} onRetry={load} canRecord={canRecord} onRecorded={load} />;
 }
 
-export function TransfersView({ dealId, state, onRetry, canRecord, onRecorded, initialFormOpen = false, initialRefusal = null }) {
+export function TransfersView({ dealId, currency = 'USD', state, onRetry, canRecord, onRecorded, initialFormOpen = false, initialRefusal = null }) {
   const [formOpen, setFormOpen] = useState(initialFormOpen);
   const cta = canRecord
     ? <button type="button" onClick={() => setFormOpen(true)} className={BTN.primary} data-testid="dr-transfer-cta"><Plus size={14} /> Record a transfer</button>
@@ -50,7 +50,7 @@ export function TransfersView({ dealId, state, onRetry, canRecord, onRecorded, i
           <li key={t.uid} className="flex flex-col gap-2 p-3 md:flex-row md:items-start md:justify-between" data-testid="dr-transfer-row">
             <div className="min-w-0">
               <div className="flex flex-wrap items-center gap-2">
-                <span className="font-mono font-semibold text-gray-900 dark:text-gray-100">{centsMoney(t.amount_cents) || <NotRecorded reason="Not recorded: no amount is stored." />}</span>
+                <span className="font-mono font-semibold text-gray-900 dark:text-gray-100">{centsMoney(t.amount_cents, currency) || <NotRecorded reason="Not recorded: no amount is stored." />}</span>
                 <StatusPill tone={Number(t.phone_verified) ? 'ok' : 'amber'}>{Number(t.phone_verified) ? 'Phone-verified' : 'Not verified'}</StatusPill>
               </div>
               <div className="mt-0.5 font-mono text-xs text-gray-500">{t.reference || 'No reference recorded'}</div>
@@ -78,7 +78,7 @@ export function TransfersView({ dealId, state, onRetry, canRecord, onRecorded, i
     <div>
       {canRecord && hasRows && !formOpen && <div className="mb-3 flex justify-end">{cta}</div>}
       {canRecord && formOpen && (
-        <RecordTransferForm
+        <RecordTransferForm currency={currency}
           dealId={dealId}
           initialRefusal={initialRefusal}
           onClose={() => setFormOpen(false)}
@@ -90,7 +90,7 @@ export function TransfersView({ dealId, state, onRetry, canRecord, onRecorded, i
   );
 }
 
-export function RecordTransferForm({ dealId, onClose, onRecorded, initialRefusal = null }) {
+export function RecordTransferForm({ dealId, onClose, onRecorded, initialRefusal = null, currency = 'USD' }) {
   const [amount, setAmount] = useState('');
   const [reference, setReference] = useState('');
   const [verified, setVerified] = useState(false);
@@ -126,7 +126,7 @@ export function RecordTransferForm({ dealId, onClose, onRecorded, initialRefusal
       </div>
       <div className="grid gap-3 md:grid-cols-2">
         <label className="block text-xs font-medium text-gray-600 dark:text-gray-400">
-          Amount (USD)
+          Amount ({currency})
           <input value={amount} onChange={(e) => setAmount(e.target.value)} inputMode="decimal" placeholder="50,000.00" className={`${INPUT} mt-1`} />
         </label>
         <label className="block text-xs font-medium text-gray-600 dark:text-gray-400">

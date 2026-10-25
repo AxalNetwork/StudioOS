@@ -17,32 +17,34 @@
  *     the reason. Never 0, and never `unreadable`.
  * A failed block never reads 0 and never takes another block with it (PG18a).
  *
- * ONE DEFINITION PER FIGURE. Perk claims and the strategic-access queue are
- * part 4's (#2790, `services/perkClaims.ts` and the queue service in
- * `services/referralSubmissions.ts`). Until they are on this Worker each of
- * those figures is `pending` with `PART4_*_REASON`. The waiting queues are the
- * Approvals lanes' own SQL (`approvalSources.ts`) and its bands (`slaFor`).
+ * ONE DEFINITION PER FIGURE. Perk claims use part 4's perkClaimsCounts;
+ * strategic requests use listStrategicAccess with no member rows requested.
+ * The waiting total retains the Approvals lanes' coverage and age bands.
  *
  * WEEKS ARE MONDAY WEEKS IN UTC, from `weekAxis`, as Insights and Community
  * draw them; the period before is `previousAxis`. The current week is to date.
+ *
+ * D956 (#2789): EACH ROW'S `grant`, for the viewer the route names
+ * (`viewer.grants`, `services/programGrantStates.ts`), and `nothing_granted`
+ * for PG16a. A failed grant read is every row's `grant` unreadable, never a
+ * state. HQ's fan-out to a branch names no viewer, so it carries no grant.
  */
 import type { Env } from '../types';
+import { perkClaimsCounts } from './perkClaims';
+import { listStrategicAccess } from './referralSubmissions';
 import { weekAxis, type WeekAxis } from './activeAccounts';
 import { ownScope, previousAxis, scopeLabel } from './adminInsights';
 import { SLA_PAST_HOURS, SLA_DUE_SOON_HOURS } from './approvalSources';
 import { branchRead } from './branches';
 import { countsOnly, insightsScopes } from './insightsScope';
 import { listPrograms, type ProgramKey, type ProgramRow, PROGRAM_KEYS, PROGRAM_STATUSES } from './programRegistry';
+import { grantFieldOf, grantStates, type GrantViewer } from './programGrantStates';
 
 export const PROGRAM_WEEKS = [4, 12, 52] as const;
 export type ProgramWeeks = typeof PROGRAM_WEEKS[number];
 /** The canvas's choice (dc:533). */
 export const DEFAULT_PROGRAM_WEEKS: ProgramWeeks = 12;
 
-export const PART4_CLAIMS_REASON =
-  'Perk claims are counted by the claims service part 4 (#2790) builds (services/perkClaims.ts), which this Worker does not have yet.';
-export const PART4_STRATEGIC_REASON =
-  'Strategic referral access is read through the queue service part 4 (#2790) builds (services/referralSubmissions.ts), which this Worker does not have yet.';
 export const HQ_READS_REASON = 'HQ reads these figures.';
 export const LAB_PEOPLE_REASON =
   'The Lab is left out until O-FND and #2374 say who a cohort\'s founders are.';
@@ -65,7 +67,7 @@ export const PROGRAM_DEFINITIONS = {
 } as const;
 
 /** D955: `licenceUid` is the viewer's studio, which decides the studio-only programs they read. */
-export type Viewer = { id: number; superAdmin: boolean; licenceUid?: string | null };
+export type Viewer = { id: number; superAdmin: boolean; licenceUid?: string | null; grants?: GrantViewer };
 
 type Unreadable = { available: false; unreadable: true; reason: string };
 type Pending = { available: false; pending: true; reason: string };
@@ -458,6 +460,7 @@ async function creditsByMonth(env: Env, axis: WeekAxis) {
 // ---------------------------------------------------------------------------
 
 type Queues = {
+  strategic: Read<{ count: number }>;
   cohort: Read<ReturnType<typeof queueOf>>;
   referrals: Read<Awaited<ReturnType<typeof referralQueue>>>;
   perks: Read<ReturnType<typeof queueOf>>;
@@ -476,6 +479,7 @@ function cardFigures(key: string, viewer: Viewer, q: Queues, b: {
   coverage: Read<{ cohorts: number; covered: number; uncovered: number }>;
   notAdvisor: Read<{ count: number }>;
   live: Read<{ count: number }>;
+  claims: Read<{ count: number }>;
   learning: Read<Awaited<ReturnType<typeof learningFigures>>>;
   testing: Read<{ open: number; applications: number }> | null;
 }): { figures: Record<string, unknown> | null; needs_you: Record<string, unknown> | null } {
@@ -502,13 +506,13 @@ function cardFigures(key: string, viewer: Viewer, q: Queues, b: {
             ? { available: true, count: q.referrals.count, waiting_on_member: q.referrals.waiting_on_member } : q.referrals,
         },
         needs_you: {
-          ...needs([q.referrals], 'Refer & Earn reviews'),
-          strategic_requests: pending(PART4_STRATEGIC_REASON),
+          ...needs([q.referrals, q.strategic], 'Refer & Earn reviews or strategic requests'),
+          strategic_requests: q.strategic,
         },
       };
     case 'perks':
       return {
-        figures: { live: b.live, claims: pending(PART4_CLAIMS_REASON) },
+        figures: { live: b.live, claims: b.claims },
         needs_you: needs([q.perks], 'Perk listings in review'),
       };
     case 'learning':
@@ -525,7 +529,7 @@ function cardFigures(key: string, viewer: Viewer, q: Queues, b: {
 function waitingTile(q: Queues) {
   const parts = WAITING_COVERED.map((k) => [k, q[k]] as const);
   const bad = parts.filter(([, v]) => !v.available).map(([k]) => k);
-  const left_out = [{ queue: 'strategic', reason: PART4_STRATEGIC_REASON }];
+  const left_out = [{ queue: 'strategic', reason: 'Strategic access requests are counted separately; this total covers the Approvals lanes and their recorded ages.' }];
   if (bad.length) {
     return {
       available: false as const, unreadable: true as const,
@@ -549,7 +553,7 @@ export async function programCatalogue(env: Env, viewer: Viewer, weeks: ProgramW
   const before = previousAxis(axis);
 
   const [
-    registry, cohort, referrals, perks, hosts,
+    registry, cohort, referrals, perks, hosts, strategic, claims,
     mentors, coverage, notAdvisor, live, learning, testing,
     people, joinsReferrals, joinsLearning, joinsLab, credits,
   ] = await Promise.all([
@@ -558,6 +562,15 @@ export async function programCatalogue(env: Env, viewer: Viewer, weeks: ProgramW
     block('Refer & Earn reviews', () => referralQueue(env, nowMs)),
     block('Perk listings in review', () => perkQueue(env, nowMs)),
     block('Office-hours hosts', () => hostQueue(env, nowMs)),
+    block('Strategic referral requests', async () => ({ count: (await listStrategicAccess(env, { limit: 0 })).total })),
+    block('Perk claims', async () => {
+      const read = await perkClaimsCounts(env, weeks, new Date(nowMs));
+      return {
+        count: read.totals.claims,
+        total: read.totals.claims,
+        weeks: axis.weeks.map((week) => ({ week, count: read.by_week.filter((r) => r.week === week).reduce((sum, r) => sum + r.claims, 0) })),
+      };
+    }),
     block('Mentor assignments', () => activeMentors(env)),
     block('Cohort coverage', () => mentorCoverage(env)),
     block('Mentor assignments', async () => ({ count: await openRowsNotAdvisor(env) })),
@@ -576,8 +589,11 @@ export async function programCatalogue(env: Env, viewer: Viewer, weeks: ProgramW
     viewer.superAdmin ? block('The credit ledger', () => creditsByMonth(env, axis)) : Promise.resolve(null),
   ]);
 
-  const q: Queues = { cohort, referrals, perks, hosts };
+  const q: Queues = { cohort, referrals, perks, hosts, strategic };
   const rows: ProgramRow[] = registry.available ? registry.rows : [];
+  const grants = viewer.grants && registry.available
+    ? await grantStates(env, viewer.grants, rows.map((r) => r.key), new Date(nowMs).toISOString().slice(0, 10))
+    : null;
 
   const byStatus = Object.fromEntries(PROGRAM_STATUSES.map((s) => [s, 0])) as Record<string, number>;
   for (const r of rows) byStatus[r.status] = (byStatus[r.status] ?? 0) + 1;
@@ -610,13 +626,20 @@ export async function programCatalogue(env: Env, viewer: Viewer, weeks: ProgramW
         rows: rows.map((r) => ({
           key: r.key, group: r.grp, name: r.name, purpose: r.purpose ?? null, who: r.who ?? null,
           join_method: r.join_method ?? null, status: r.status, position: Number(r.position),
+          ...(grants ? { grant: grantFieldOf(grants, r.key) } : {}),
           ...cardFigures(r.key, viewer, q, {
-            mentors, coverage, notAdvisor, live, learning,
+            mentors, coverage, notAdvisor, live, learning, claims: claims.available ? { available: true, count: claims.count } : claims,
             testing: testing as Read<{ open: number; applications: number }> | null,
           }),
         })),
       }
       : registry,
+    ...(grants ? {
+      grants: grants.available
+        ? { available: true as const, viewer: grants.viewer, held_because: grants.held_because }
+        : grants,
+      nothing_granted: grants.available ? grants.nothing_granted : null,
+    } : {}),
     tiles: {
       running: registry.available
         ? { available: true as const, running: byStatus.live, by_status: byStatus, total: rows.length }
@@ -625,11 +648,11 @@ export async function programCatalogue(env: Env, viewer: Viewer, weeks: ProgramW
       waiting: waitingTile(q),
       credits: creditsTile,
     },
-    waiting: { cohort, referrals, strategic: pending(PART4_STRATEGIC_REASON), perks, hosts },
+    waiting: { cohort, referrals, strategic, perks, hosts },
     joins_weekly: {
       referrals: joinsReferrals,
       learning: joinsLearning,
-      perks: pending(PART4_CLAIMS_REASON),
+      perks: claims,
       lab: joinsLab,
     },
     credits_monthly: !credits ? pending(HQ_READS_REASON) : credits,

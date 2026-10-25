@@ -175,6 +175,8 @@ const CHOICE_READS = {
   item: [() => adminLearningApi.listItems(), 'items', 'The video and reading list'],
   exam: [() => adminLearningApi.listExams(), 'exams', 'The exam list'],
   exercise: [() => adminLearningApi.listExercises(), 'exercises', 'The exercise list'],
+  // D1124 (#3004): webinars are program content now.
+  webinar: [() => adminLearningApi.listWebinars(), 'webinars', 'The webinar list'],
 };
 
 /**
