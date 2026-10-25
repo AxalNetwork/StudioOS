@@ -158,7 +158,7 @@ test('D1168: invalid HEAD sizes are unreadable before any measurement write',asy
 
 
 test('D1168: the bounded pending read uses partial indexes and does not sort the remaining inventory',async()=>{
- const f=fixture();try{seedRows(f);await backfillMemberFileSizes(f.env,1,2);const q=f.sqls.find(s=>s.startsWith("SELECT 'demand'"))!;const plan=f.db.prepare('EXPLAIN QUERY PLAN '+q).all(2).map(x=>String(x.detail)).join('\n');for(const name of ['idx_demand_signals_size_pending','idx_formation_steps_size_pending','idx_entity_obligations_size_pending','idx_obligation_occurrences_size_pending','idx_data_imports_size_pending','idx_member_files_pending'])assert.ok(plan.includes(name),name);assert.doesNotMatch(plan,/USE TEMP B-TREE/);}finally{f.db.close();}
+ const f=fixture();try{seedRows(f);await backfillMemberFileSizes(f.env,1,2);const q=f.sqls.find(s=>s.startsWith("SELECT 'demand'"))!;const plan=f.db.prepare('EXPLAIN QUERY PLAN '+q).all(0,2,0,2,0,2,0,2,0,2,0,2,2).map(x=>String(x.detail)).join('\n');for(const name of ['idx_demand_signals_size_pending','idx_formation_steps_size_pending','idx_entity_obligations_size_pending','idx_obligation_occurrences_size_pending','idx_data_imports_size_pending','idx_member_files_pending'])assert.ok(plan.includes(name),name);assert.doesNotMatch(plan,/USE TEMP B-TREE/);}finally{f.db.close();}
 });
 test('D1168: a removed account leaves unattributed file metadata without blocking account deletion',async()=>{
  const f=fixture();try{await memberFileStatement(f.env,'headshots/3/kept.png',3,'headshot',12).run();f.db.prepare('DELETE FROM user_sessions WHERE user_id=3').run();f.db.exec('PRAGMA foreign_keys=ON');f.db.prepare('DELETE FROM users WHERE id=3').run();const row=f.db.prepare('SELECT owner_user_id,size_bytes FROM member_files').get()!;assert.equal(row.owner_user_id,null);assert.equal(row.size_bytes,12);assert.equal(f.deletes.length,0);}finally{f.db.close();}
@@ -179,4 +179,40 @@ test('D1168: failed metadata writes and discovery batches remain unreadable, not
 test('D1168: finished discovery never hides pending measurements or a failed HEAD',async()=>{
  const f=fixture();try{seedRows(f);f.db.prepare("UPDATE member_file_size_backfill_state SET phase='done'").run();const out=await backfillMemberFileSizes(f.env,1,1);assert.equal(out.recorded,1);assert.equal(out.complete,false);}finally{f.db.close();}
  const g=fixture();try{seedRows(g);g.db.prepare("UPDATE member_file_size_backfill_state SET phase='done'").run();for(const table of ['formation_steps','entity_obligations','obligation_occurrences','data_imports'])g.db.exec('UPDATE '+table+' SET size_bytes=1');g.hook(()=>{g.db.exec('UPDATE demand_signals SET size_bytes=99 WHERE id=1');throw Error('synthetic-private-head-failure');});const out=await backfillMemberFileSizes(g.env,1,1);assert.equal(out.failed,1);assert.equal(out.complete,false);assert.equal(out.outcome,'unreadable');}finally{g.db.close();}
+});
+
+
+test('D1168: bad prefixes, persistent HEAD failures and invalid measurements do not starve later stores',async()=>{
+ for(const mode of ['prefix','head','size','blob']){const f=fixture();try{
+  seedRows(f);f.db.exec("INSERT INTO demand_signals(id,project_id,kind,signal_date,evidence_file_key) VALUES (2,1,'loi','2026-01-01','validate-evidence/1/two.pdf'),(3,1,'loi','2026-01-01','validate-evidence/1/three.pdf')");
+  if(mode==='prefix')f.db.exec("UPDATE demand_signals SET evidence_file_key='legacy/unreadable-'||id");
+  f.db.exec("UPDATE users SET headshot_r2_key='headshots/3/present.png' WHERE id=3");f.objects.set('headshots/3/present.png',new Uint8Array(17));
+  if(mode==='blob')f.db.exec("UPDATE demand_signals SET evidence_file_key=CAST('invalid' AS BLOB)");
+  if(mode==='head'||mode==='size')f.hook(key=>{if(key.startsWith('validate-evidence/')){if(mode==='head')throw Error('synthetic-private-head-key');return {size:NaN};}return f.objects.has(key)?{size:f.objects.get(key)!.byteLength}:null;});
+  let failures=0;for(let i=0;i<12;i++){const out=await backfillMemberFileSizes(f.env,1,1);failures+=out.failed;if(f.db.prepare("SELECT size_bytes FROM member_files WHERE r2_key='headshots/3/present.png'").get()?.size_bytes===17)break;}
+  assert.ok(failures>=3);assert.equal(f.db.prepare('SELECT size_bytes FROM formation_steps WHERE id=1').get()!.size_bytes,12);assert.equal(f.db.prepare('SELECT size_bytes FROM entity_obligations WHERE id=1').get()!.size_bytes,13);assert.equal(f.db.prepare('SELECT size_bytes FROM obligation_occurrences WHERE id=1').get()!.size_bytes,14);assert.equal(f.db.prepare('SELECT size_bytes FROM data_imports WHERE id=1').get()!.size_bytes,15);assert.equal(f.db.prepare("SELECT size_bytes FROM member_files WHERE r2_key='headshots/3/present.png'").get()!.size_bytes,17);assert.equal(f.db.prepare('SELECT COUNT(*) AS n FROM demand_signals WHERE size_bytes IS NULL AND size_missing_at IS NULL').get()!.n,3);
+  f.hook(null);for(const id of [1,2,3]){const key='validate-evidence/1/repaired-'+id+'.pdf';f.db.prepare('UPDATE demand_signals SET evidence_file_key=? WHERE id=?').run(key,id);f.objects.set(key,new Uint8Array(40+id));}
+  let complete=false;for(let i=0;i<12&&!complete;i++)complete=(await backfillMemberFileSizes(f.env,1,1)).complete;assert.equal(complete,true);assert.deepEqual(f.db.prepare('SELECT size_bytes FROM demand_signals ORDER BY id').all().map(r=>r.size_bytes),[41,42,43]);assert.ok(Number(f.db.prepare('SELECT measurement_pass FROM member_file_size_backfill_state').get()!.measurement_pass)>0);
+ }finally{f.db.close();}}
+});
+test('D1168: late measurement checkpoints preserve a newer pass and never rewind the current pass',async()=>{
+ for(const newerPass of [true,false]){const f=fixture();try{seedRows(f);f.hook(()=>{f.db.exec(newerPass?'UPDATE member_file_size_backfill_state SET measurement_pass=1,demand_after=0':'UPDATE member_file_size_backfill_state SET demand_after=99');return {size:11};});await backfillMemberFileSizes(f.env,1,1);const row=f.db.prepare('SELECT measurement_pass,demand_after FROM member_file_size_backfill_state').get()!;assert.equal(row.measurement_pass,newerPass?1:0);assert.equal(row.demand_after,newerPass?0:99);assert.equal(f.db.prepare('SELECT size_bytes FROM demand_signals WHERE id=1').get()!.size_bytes,11);}finally{f.db.close();}}
+});
+
+
+test('D1168: retry reset cannot replace another generation that won the race',async()=>{
+ const f=fixture();try{seedRows(f);for(const table of ['formation_steps','entity_obligations','obligation_occurrences','data_imports'])f.db.exec('UPDATE '+table+' SET size_bytes=1');f.db.exec("UPDATE member_file_size_backfill_state SET phase='done',demand_after=1");const prepare=f.env.DB.prepare;
+  f.env.DB.prepare=(sql:string)=>{const st=prepare(sql);if(!sql.startsWith('UPDATE member_file_size_backfill_state SET measurement_pass='))return st;return {bind(...params:any[]){const bound=st.bind(...params);return {async run(){f.db.exec('UPDATE member_file_size_backfill_state SET measurement_pass=1');return bound.run();}};}};};
+  const out=await backfillMemberFileSizes(f.env,1,1);assert.equal(out.complete,false);assert.equal(f.heads.length,0);const row=f.db.prepare('SELECT measurement_pass,demand_after FROM member_file_size_backfill_state').get()!;assert.equal(row.measurement_pass,1);assert.equal(row.demand_after,1);
+ }finally{f.db.close();}
+});
+test('D1168: failed member-file heads cannot starve another member file',async()=>{
+ const f=fixture();try{f.db.exec("UPDATE member_file_size_backfill_state SET phase='done';INSERT INTO member_files(uid,r2_key,owner_user_id,kind) VALUES ('bad','headshots/3/bad.png',3,'headshot'),('good','headshots/3/good.png',3,'headshot')");f.hook(key=>{if(key.endsWith('bad.png'))throw Error('synthetic-private-head-failure');return {size:17};});const first=await backfillMemberFileSizes(f.env,1,1);assert.equal(first.failed,1);const second=await backfillMemberFileSizes(f.env,1,1);assert.equal(second.recorded,1);assert.equal(second.complete,false);assert.equal(f.db.prepare("SELECT size_bytes FROM member_files WHERE uid='good'").get()!.size_bytes,17);assert.equal(f.db.prepare("SELECT size_bytes FROM member_files WHERE uid='bad'").get()!.size_bytes,null);}finally{f.db.close();}
+});
+
+test('D1168: failed cursor writes report unreadable and remain resumable',async()=>{
+ for(const kind of ['reset','checkpoint']){const f=fixture();try{seedRows(f);if(kind==='reset'){for(const table of ['formation_steps','entity_obligations','obligation_occurrences','data_imports'])f.db.exec('UPDATE '+table+' SET size_bytes=1');f.db.exec("UPDATE member_file_size_backfill_state SET phase='done',demand_after=1");}const prepare=f.env.DB.prepare;
+  f.env.DB.prepare=(sql:string)=>sql.startsWith(kind==='reset'?'UPDATE member_file_size_backfill_state SET measurement_pass=':'UPDATE member_file_size_backfill_state SET demand_after=max')?{bind(){return this;},async run(){return {success:false,meta:{changes:0}};}}:prepare(sql);
+  const r=await f.call();assert.equal(r.status,503);assert.equal(r.body.recorded,undefined);assert.ok(!JSON.stringify(r.body).includes('r2_key'));
+ }finally{f.db.close();}}
 });

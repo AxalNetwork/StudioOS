@@ -4,12 +4,18 @@ import type { MemberFileKind } from './memberFiles';
 type Candidate = { source:string; id:number; r2_key:string; owner_user_id:number|null };
 // Completed rows are durable checkpoints; UNION ALL + LIMIT stops at one bounded
 // batch without sorting every remaining file in every source.
-const PENDING = `SELECT 'demand' AS source,id,evidence_file_key AS r2_key,NULL AS owner_user_id FROM demand_signals WHERE evidence_file_key IS NOT NULL AND evidence_file_key <> '' AND size_bytes IS NULL AND size_missing_at IS NULL
- UNION ALL SELECT 'formation',id,proof_file_key,NULL FROM formation_steps WHERE proof_file_key IS NOT NULL AND proof_file_key <> '' AND size_bytes IS NULL AND size_missing_at IS NULL
- UNION ALL SELECT 'obligation',id,proof_file_key,NULL FROM entity_obligations WHERE proof_file_key IS NOT NULL AND proof_file_key <> '' AND size_bytes IS NULL AND size_missing_at IS NULL
- UNION ALL SELECT 'minutes',id,minutes_file_key,NULL FROM obligation_occurrences WHERE minutes_file_key IS NOT NULL AND minutes_file_key <> '' AND size_bytes IS NULL AND size_missing_at IS NULL
- UNION ALL SELECT 'import',id,raw_file_r2_key,NULL FROM data_imports WHERE raw_file_r2_key IS NOT NULL AND raw_file_r2_key <> '' AND size_bytes IS NULL AND size_missing_at IS NULL
- UNION ALL SELECT 'member',id,r2_key,owner_user_id FROM member_files WHERE size_bytes IS NULL AND size_missing_at IS NULL
+const PENDING = `SELECT 'demand' AS source,id,evidence_file_key AS r2_key,NULL AS owner_user_id FROM
+ (SELECT id,evidence_file_key FROM demand_signals WHERE evidence_file_key IS NOT NULL AND evidence_file_key <> '' AND size_bytes IS NULL AND size_missing_at IS NULL AND id>? ORDER BY id LIMIT ?)
+ UNION ALL SELECT 'formation',id,proof_file_key,NULL FROM
+ (SELECT id,proof_file_key FROM formation_steps WHERE proof_file_key IS NOT NULL AND proof_file_key <> '' AND size_bytes IS NULL AND size_missing_at IS NULL AND id>? ORDER BY id LIMIT ?)
+ UNION ALL SELECT 'obligation',id,proof_file_key,NULL FROM
+ (SELECT id,proof_file_key FROM entity_obligations WHERE proof_file_key IS NOT NULL AND proof_file_key <> '' AND size_bytes IS NULL AND size_missing_at IS NULL AND id>? ORDER BY id LIMIT ?)
+ UNION ALL SELECT 'minutes',id,minutes_file_key,NULL FROM
+ (SELECT id,minutes_file_key FROM obligation_occurrences WHERE minutes_file_key IS NOT NULL AND minutes_file_key <> '' AND size_bytes IS NULL AND size_missing_at IS NULL AND id>? ORDER BY id LIMIT ?)
+ UNION ALL SELECT 'import',id,raw_file_r2_key,NULL FROM
+ (SELECT id,raw_file_r2_key FROM data_imports WHERE raw_file_r2_key IS NOT NULL AND raw_file_r2_key <> '' AND size_bytes IS NULL AND size_missing_at IS NULL AND id>? ORDER BY id LIMIT ?)
+ UNION ALL SELECT 'member',id,r2_key,owner_user_id FROM
+ (SELECT id,r2_key,owner_user_id FROM member_files WHERE size_bytes IS NULL AND size_missing_at IS NULL AND id>? ORDER BY id LIMIT ?)
  LIMIT ?`;
 const prefixes:Record<string,string>={demand:'validate-evidence/',formation:'build-proof/',obligation:'build-proof/',minutes:'grow-minutes/',import:'imports/'};
 function namespaceOwner(key:string):number|null {
@@ -57,6 +63,36 @@ async function discover(env:Env,limit:number){
   WHERE uid=? AND phase=? AND r2_cursor IS ? AND row_cursor=?`).bind(next,cursor,rowCursor,'member-files-v1',state.phase,state.r2_cursor,state.row_cursor));
  const results=await env.DB.batch(statements);if(results.some(r=>!r.success))throw new Error('size_store_unreadable');
 }
+type MeasurementCursor = {measurement_pass:number;demand_after:number;formation_after:number;obligation_after:number;minutes_after:number;import_after:number;member_after:number};
+const cursorValues=(c:MeasurementCursor)=>[c.demand_after,c.formation_after,c.obligation_after,c.minutes_after,c.import_after,c.member_after];
+const zeroCursor=():MeasurementCursor=>({measurement_pass:0,demand_after:0,formation_after:0,obligation_after:0,minutes_after:0,import_after:0,member_after:0});
+const pendingRows=(env:Env,cursor:MeasurementCursor,limit:number)=>env.DB.prepare(PENDING).bind(...cursorValues(cursor).flatMap(after=>[after,limit]),limit).all<Candidate>();
+async function measurementCursor(env:Env){
+ const row=await env.DB.prepare(`SELECT measurement_pass,demand_after,formation_after,obligation_after,minutes_after,import_after,member_after
+  FROM member_file_size_backfill_state WHERE uid=?`).bind('member-files-v1').first<MeasurementCursor>();
+ if(!row)throw new Error('size_store_unreadable');return row;
+}
+/** Failed keys advance too. At the end of a pass they become retryable again. */
+async function measurementBatch(env:Env,limit:number){
+ let cursor=await measurementCursor(env),pending=await pendingRows(env,cursor,limit);
+ if(!pending.success)throw new Error('size_store_unreadable');
+ if(!(pending.results||[]).length&&cursorValues(cursor).some(n=>n>0)){
+  const reset=await env.DB.prepare(`UPDATE member_file_size_backfill_state SET measurement_pass=measurement_pass+1,demand_after=0,formation_after=0,obligation_after=0,minutes_after=0,import_after=0,member_after=0,updated_at=datetime('now')
+   WHERE uid=? AND measurement_pass=? AND demand_after=? AND formation_after=? AND obligation_after=? AND minutes_after=? AND import_after=? AND member_after=?`)
+   .bind('member-files-v1',cursor.measurement_pass,...cursorValues(cursor)).run();
+  if(!reset.success)throw new Error('size_store_unreadable');
+  // A concurrent pass can win this reset. Read its current positions rather
+  // than overwriting them or selecting an unbounded batch.
+  cursor=await measurementCursor(env);pending=await pendingRows(env,cursor,limit);
+  if(!pending.success)throw new Error('size_store_unreadable');
+ }
+ return {cursor,rows:pending.results||[]};
+}
+async function checkpointMeasurements(env:Env,cursor:MeasurementCursor){
+ const saved=await env.DB.prepare(`UPDATE member_file_size_backfill_state SET demand_after=max(demand_after,?),formation_after=max(formation_after,?),obligation_after=max(obligation_after,?),minutes_after=max(minutes_after,?),import_after=max(import_after,?),member_after=max(member_after,?),updated_at=datetime('now') WHERE uid=? AND measurement_pass=?`)
+  .bind(...cursorValues(cursor),'member-files-v1',cursor.measurement_pass).run();
+ if(!saved.success)throw new Error('size_store_unreadable');
+}
 /** Key + unknown-size predicates prevent a late HEAD overwriting a replacement/upload. */
 function record(env:Env,row:Candidate,size:number|null,missing:string|null){
  const values=[size,missing,row.id,row.r2_key];
@@ -81,10 +117,17 @@ export async function backfillMemberFileSizes(env:Env,actorId:number,limit:numbe
  try{
   // Discovery can fail independently: still measure pending, already-known keys.
   try{await discover(env,limit);}catch{counts.failed++;}
-  const pending=await env.DB.prepare(PENDING).bind(limit).all<Candidate>();
-  if(!pending.success)throw new Error('size_store_unreadable');
-  for(const row of pending.results||[]){
-   const prefix=row.source==='member'?/^(headshots|brand-logos)\//.test(row.r2_key):row.r2_key.startsWith(prefixes[row.source]);
+  const batch=await measurementBatch(env,limit);
+  for(const row of batch.rows){
+   switch(row.source){
+    case 'demand':batch.cursor.demand_after=Math.max(batch.cursor.demand_after,row.id);break;
+    case 'formation':batch.cursor.formation_after=Math.max(batch.cursor.formation_after,row.id);break;
+    case 'obligation':batch.cursor.obligation_after=Math.max(batch.cursor.obligation_after,row.id);break;
+    case 'minutes':batch.cursor.minutes_after=Math.max(batch.cursor.minutes_after,row.id);break;
+    case 'import':batch.cursor.import_after=Math.max(batch.cursor.import_after,row.id);break;
+    case 'member':batch.cursor.member_after=Math.max(batch.cursor.member_after,row.id);break;
+   }
+   const prefix=typeof row.r2_key==='string'&&(row.source==='member'?/^(headshots|brand-logos)\//.test(row.r2_key):row.r2_key.startsWith(prefixes[row.source]));
    if(!prefix){counts.failed++;continue;}
    counts.checked++;
    if(row.source==='member'&&row.owner_user_id===null)counts.unattributed++;
@@ -96,7 +139,8 @@ export async function backfillMemberFileSizes(env:Env,actorId:number,limit:numbe
     if(saved.meta.changes===1){if(head)counts.recorded++;else counts.missing++;}else counts.changed++;
    }catch{counts.failed++;}
   }
-  const rest=await env.DB.prepare(PENDING).bind(1).all<Candidate>();
+  await checkpointMeasurements(env,batch.cursor);
+  const rest=await pendingRows(env,zeroCursor(),1);
   if(!rest.success)throw new Error('size_store_unreadable');
   const state=await env.DB.prepare('SELECT phase FROM member_file_size_backfill_state WHERE uid=?').bind('member-files-v1').first<{phase:string}>();
   if(!state)throw new Error('size_store_unreadable');

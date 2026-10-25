@@ -40,6 +40,13 @@ CREATE TABLE IF NOT EXISTS member_file_size_backfill_state (
   phase TEXT NOT NULL CHECK (phase IN ('headshot_rows', 'logo_rows', 'headshots', 'brand_logos', 'done')),
   r2_cursor TEXT,
   row_cursor INTEGER NOT NULL DEFAULT 0 CHECK (row_cursor >= 0),
+  measurement_pass INTEGER NOT NULL DEFAULT 0 CHECK (measurement_pass >= 0),
+  demand_after INTEGER NOT NULL DEFAULT 0 CHECK (demand_after >= 0),
+  formation_after INTEGER NOT NULL DEFAULT 0 CHECK (formation_after >= 0),
+  obligation_after INTEGER NOT NULL DEFAULT 0 CHECK (obligation_after >= 0),
+  minutes_after INTEGER NOT NULL DEFAULT 0 CHECK (minutes_after >= 0),
+  import_after INTEGER NOT NULL DEFAULT 0 CHECK (import_after >= 0),
+  member_after INTEGER NOT NULL DEFAULT 0 CHECK (member_after >= 0),
   created_at TEXT NOT NULL DEFAULT (datetime('now')),
   updated_at TEXT NOT NULL DEFAULT (datetime('now'))
 );

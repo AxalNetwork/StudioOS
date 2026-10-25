@@ -440,10 +440,15 @@ settings.post('/headshot', async (c) => {
   // Best-effort delete previous headshot from R2 to avoid orphans.
   const prev = await sql`SELECT headshot_r2_key, uid FROM users WHERE id = ${user.id}`;
   const oldKey = prev[0]?.headshot_r2_key;
-  await c.env.DB.batch([
+  try {
+    await c.env.DB.batch([
       c.env.DB.prepare('UPDATE users SET headshot_r2_key = ? WHERE id = ?').bind(meta.file_key,user.id),
       memberFileStatement(c.env,meta.file_key,user.id,'headshot',meta.size),
     ]);
+  } catch {
+    await sql.end();
+    return c.json({ code: 'headshot_metadata_unavailable', error: 'The photo could not be saved. Try again.' },503);
+  }
   await sql.end();
   if (oldKey && oldKey !== meta.file_key) {
     try { await c.env.FILES.delete(oldKey); await missingMemberFileStatement(c.env,oldKey,user.id).run(); } catch {}
