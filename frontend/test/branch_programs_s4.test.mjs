@@ -223,13 +223,13 @@ test('assessment runs are listed by cycle, and results still have no list route'
 });
 
 test('every community card points at a route App.jsx registers', () => {
-  assert.equal(COMMUNITY_CONSOLES.length, 5, 'the console list changed size');
+  assert.equal(COMMUNITY_CONSOLES.length, 6, 'the console list changed size'); // D1117: Partner invitations is the sixth
   // One card per console, keyed from the list rather than hand-written — so a
   // sixth entry gets a card without anyone remembering to add one, and two
   // entries cannot share a key and collapse into one.
   assert.match(COMM_RAW, /data-testid=\{`branch-community-\$\{con\.key\}`\}/,
     'the cards are not rendered from COMMUNITY_CONSOLES');
-  assert.equal(new Set(COMMUNITY_CONSOLES.map((c) => c.key)).size, 5,
+  assert.equal(new Set(COMMUNITY_CONSOLES.map((c) => c.key)).size, 6,
     'two consoles share a key, so one card would replace the other');
   for (const con of COMMUNITY_CONSOLES) {
     // D303 — Wellbeing's `to` is `/admin?tab=wellbeing`, a tab on the /admin

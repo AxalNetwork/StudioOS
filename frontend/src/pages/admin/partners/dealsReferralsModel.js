@@ -21,7 +21,7 @@
  * `tiersText`, as everywhere on the desk.
  */
 import {
-  COUNT_CLAIM, DAY_MS, ENDING_SOON_DAYS, NOT_RECORDED, READING, ROWS_PER_PAGE, attributionWord, dataOf, day, dayOr,
+  COULD_NOT_READ, COUNT_CLAIM, DAY_MS, ENDING_SOON_DAYS, LAPSED_BEFORE_SIGNING, NOT_RECORDED, READING, ROWS_PER_PAGE, attributionWord, dataOf, day, dayOr,
   dealPartner, dealRow, isCoolOff, parseStamp, pausedLine, plural, tiersText,
 } from './partnersDeskModel';
 
@@ -81,8 +81,32 @@ export function serverPage(data, page, size = ROWS_PER_PAGE) {
  * the partner the invitation's name and address (D926 §3), so those are used
  * whenever it sent them; otherwise the row falls back to the invitations read.
  */
+/**
+ * D1117 (#2997): the Due diligence column from the row's own `due_diligence`,
+ * which the Worker joins (D926's list), so it is right past any list's cap.
+ * The words are R9's (`ddFor`); a row from before D1117 has no block and says
+ * it was not read.
+ */
+export function ddFromRow(deal) {
+  const d = deal?.due_diligence;
+  if (!d || typeof d !== 'object') return { text: COULD_NOT_READ, failed: true };
+  if (d.state === 'not_opened') return { text: 'Not opened before signing' };
+  if (d.state === 'none') return { text: 'No case on record' };
+  if (d.state !== 'case') return { text: COULD_NOT_READ, failed: true };
+  if (d.status === 'open' || d.status === 'in_review') return { text: 'Open', uid: d.uid, open: true };
+  if (d.status === 'archived') return { text: 'Archived', uid: d.uid };
+  if (d.status === 'completed') return { text: 'Completed', uid: d.uid };
+  return { text: 'Another state', uid: d.uid };
+}
+
+/** An unsigned deal whose own invitation has lapsed (the Worker's `invitation_lapsed`, D1117). */
+export function lapsedFromRow(deal) {
+  const unsigned = deal?.status === 'proposed' || deal?.status === 'awaiting_signature';
+  return unsigned && deal?.invitation_lapsed === true ? LAPSED_BEFORE_SIGNING : null;
+}
+
 export function serverDealRow(deal, opts = {}) {
-  const row = dealRow(deal, opts);
+  const row = { ...dealRow(deal, opts), dd: ddFromRow(deal), lapsed: lapsedFromRow(deal) };
   const name = String(deal?.partner_name || '').trim();
   const email = String(deal?.partner_email || '').trim();
   return name || email ? { ...row, partner: { name: name || email, email: email || NOT_RECORDED } } : { ...row, partner: dealPartner(deal, opts.invitations) };

@@ -188,7 +188,8 @@ export const SIDEBAR_GROUPS = {
       { to: '/branch/accounts', icon: Users, label: 'Accounts' },
       { to: '/branch/approvals', icon: Inbox, label: 'Approvals' },
       { to: '/branch/programs', icon: Calendar, label: 'Programs' },
-      { to: '/branch/community', icon: Network, label: 'Community' },
+      // D1117 (#2997): the Partner invitations desk is the branch's too; its row lights on the desk.
+      { to: '/branch/community', icon: Network, label: 'Community', match: ['/branch/community', '/admin/partner-invitations'] },
       { to: '/branch/contracts', icon: FileText, label: 'Contracts' },
       // D210 — S15 (/branch/insights/analytics) lights this row, per its
       // artboard; `match` covers the row's subtree, which `end` alone does not.

@@ -17,8 +17,9 @@ import {
  * D923 (#2370) — Deals (PI5). D951 (#2727) moves it to D926's server list:
  * search, the six state chips, type, ends within, has redemptions and the
  * sort are the Worker's, 25 a page, with the exact `total` (no Guard L). The
- * partner before signing comes with the row (D926 §3); Due diligence still
- * comes from R9, and the lapsed cross-check from R1. C5 "Terms ending" reads
+ * partner before signing comes with the row (D926 §3), and since D1117 so do
+ * its due-diligence case and whether its invitation lapsed, joined on the
+ * Worker rather than against R9's and R1's capped lists. C5 "Terms ending" reads
  * the active deals soonest end first. Top deals by redemptions is R3.
  * D929: `?type=&state=` (Overview's C3) sets the filters it opens with.
  * On a phone (PI11d): cards, a "Filters · [n]" sheet with four state groups
@@ -147,7 +148,7 @@ export default function PartnersDeals({ reads, now, actions }) {
   const open = (id) => navigate(dealHref(id));
   const data = dataOf(list);
   const shown = data ? serverPage(data, page) : null;
-  const rows = shown ? shown.rows.map((deal) => ({ deal, row: serverDealRow(deal, { invitations: reads.invitations, cases: reads.cases, now }) })) : [];
+  const rows = shown ? shown.rows.map((deal) => ({ deal, row: serverDealRow(deal, { invitations: reads.invitations, now }) })) : [];
   const anyFilter = Boolean(q.trim() || states.length || type || endsWithin || hasRedemptions);
   const filterCount = phoneFilterCount({ states, type, endsWithin });
 
@@ -208,7 +209,6 @@ export default function PartnersDeals({ reads, now, actions }) {
         )}
 
         <ReadState read={list} what="The deals" claim={LIST_CLAIM} onRetry={reads.reload} testId="partners-deals-read" />
-        {reads.cases?.status === 'error' && !dataOf(reads.cases) ? <ReadState read={reads.cases} what="The due-diligence cases" claim="That is not a claim that no case is open." onRetry={reads.reload} testId="partners-deals-cases" /> : null}
 
         {shown ? (
           <>

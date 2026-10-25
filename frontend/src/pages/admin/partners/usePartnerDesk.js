@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { api, dd } from '../../../lib/api';
+import { api } from '../../../lib/api';
+import { partnerDealReadsApi } from '../../../lib/api/partnerDealReads';
 import { reportError } from '../../../lib/log';
 import { overviewReply } from './partnersDeskModel';
 
@@ -11,12 +12,14 @@ import { overviewReply } from './partnersDeskModel';
  *   deals        R2, once for each of the six states;
  *   contracts    R5, every deal, paged at 500 until its `total`;
  *   links        R6, the partner accounts and firms;
- *   template     R8, for the agreement-ready rule;
+ *   agreement    D928's `GET /agreement-ready`, the Worker's agreement-ready rule
+ *                (D1117: it replaced R8's template, read for the browser's rule);
  *   (D951: Guard F's fan-out is gone; Referrals reads D928's cross-deal read.)
  *   overview     part 4's `GET /api/admin/partners/overview` (D927): every
  *                Overview tile, Needs-you row and chart, and the Overview
  *                tab's count (D929).
- * Deals and one deal also read R3 (top deals) and R9 (due-diligence cases).
+ * Deals also reads R3 (top deals). D1117: the Deals list's due-diligence
+ * column comes with each row (D926's list), so R9 is no longer read here.
  * A record's own reads (R7, R10, R4 for its last redeemers, R12 on request)
  * are made by the record with `useRead`.
  *
@@ -140,12 +143,10 @@ export function usePartnerDesk(route) {
     [proposed, awaiting, active, expired, terminated, voided]);
   const contracts = useRead('contracts', 'contracts', tick, true, readContracts);
   const links = useRead('links', 'links', tick, true, readLinks);
-  const template = useRead('template', 'template', tick, true, () => api.esignTemplate('partner_services'));
+  const agreement = useRead('agreement', 'agreement', tick, true, () => partnerDealReadsApi.agreementReady());
   const overview = useRead('overview', 'overview', tick, true, () => api.adminPartners.overview().then(overviewReply));
   const onDeals = route.tab === 'deals';
   const top = useRead('top', 'top', tick, onDeals, () => api.adminPartners.listTopDeals({ limit: 5, status: 'all' }).then((r) => itemsOf(r, 'The top deals')));
-  const cases = useRead('cases', 'cases', tick, onDeals,
-    () => dd.listCases({ subject_type: 'partner' }).then((r) => itemsOf(r, 'The due-diligence cases')));
 
-  return { invitations, deals, contracts, links, template, overview, top, cases, tick, reload, extra, adopt };
+  return { invitations, deals, contracts, links, agreement, overview, top, tick, reload, extra, adopt };
 }

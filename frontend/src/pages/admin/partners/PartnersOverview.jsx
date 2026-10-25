@@ -132,8 +132,8 @@ export function ChartBlock({ b, onRetry, onSelect, children }) {
   );
 }
 
-/** C1's closed line: Signed · Lapsed · Revoked, each opening Invitations at it. */
-function ClosedLine({ closed }) {
+/** C1's closed line: Signed · Revoked, then Lapsed, not closed (D1117), each opening Invitations at it. */
+function ClosedLine({ closed, lapsed }) {
   return (
     <p className="m-0 font-mono text-[12px] text-axal-ink dark:text-gray-100" data-testid="partners-c1-closed">
       <span className="font-display font-bold">Closed:</span>
@@ -145,6 +145,14 @@ function ClosedLine({ closed }) {
           </Link>
         </React.Fragment>
       ))}
+      {lapsed ? (
+        <>
+          {' · '}
+          <Link to={invitationsAtStage(lapsed.key)} className="text-amber-800 underline decoration-dotted underline-offset-2 hover:text-axal-violet dark:text-amber-300 dark:hover:text-violet-300" data-testid="partners-c1-lapsed">
+            {`${lapsed.word} ${lapsed.n.toLocaleString('en-US')}`}
+          </Link>
+        </>
+      ) : null}
     </p>
   );
 }
@@ -156,7 +164,7 @@ function Charts({ reads }) {
   return (
     <div className="grid grid-cols-1 gap-3.5 lg:grid-cols-2" data-testid="partners-charts">
       <ChartBlock b={c1} onRetry={reads.reload} onSelect={(stage) => navigate(invitationsAtStage(stage))}>
-        <ClosedLine closed={c1.closed || []} />
+        <ClosedLine closed={c1.closed || []} lapsed={c1.lapsed || null} />
       </ChartBlock>
       <ChartBlock b={weeklyInvitations(reads.overview)} onRetry={reads.reload} />
       <ChartBlock b={dealsByTypeState(reads.overview)} onRetry={reads.reload} onSelect={(row, part) => { if (part.to) navigate(part.to); }} />

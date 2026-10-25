@@ -246,7 +246,9 @@ test('C1: its states, open invitations per stage with "oldest [n] days" at that 
     ['Sent', 2, '2 · oldest 12 days', 'sent'], ['Opened', 1, '1 · oldest 0 days', 'viewed'], ['Profile done', 0, '0', 'profiled'],
     ['Offers shown', 0, '0', 'proposed'], ['Offer chosen', 1, '1 · oldest not recorded', 'selected'], ['Agreement out', 1, '1 · oldest 3 days', 'finalized'],
   ]);
-  assert.deepEqual(b.closed.map((c) => [c.word, c.n]), [['Signed', 4], ['Lapsed', 1], ['Revoked', 2]]);
+  assert.deepEqual(b.closed.map((c) => [c.word, c.n]), [['Signed', 4], ['Revoked', 2]]);
+  // D1117: a lapsed invitation is not closed, as tile T1 says.
+  assert.deepEqual([b.lapsed.word, b.lapsed.n], ['Lapsed, not closed', 1]);
   assert.deepEqual(b.lines, [
     '1 open invitation has no record of when it reached its stage, so it is counted but not timed.',
     '1 invitation was signed after the link lapsed, and the deal voided.',
@@ -393,7 +395,7 @@ test('PI11a and PI12: tiles two up, Needs you as cards and one chart per card on
 
 test('the Overview reads one route for its figures: no list, fan-out or cap reaches a tile, a row or a chart', () => {
   const src = read('frontend/src/pages/admin/partners/PartnersOverview.jsx');
-  assert.doesNotMatch(src, /reads\.(invitations|deals|contracts|links|template|calls)\b(?!\))/, 'only first use reads R1');
+  assert.doesNotMatch(src, /reads\.(invitations|deals|contracts|links|agreement|calls)\b(?!\))/, 'only first use reads R1');
   assert.match(src, /isFirstUse\(reads\.invitations\)/);
   assert.match(read('frontend/src/pages/admin/partners/usePartnerDesk.js'), /api\.adminPartners\.overview\(\)\.then\(overviewReply\)/);
   assert.doesNotMatch(src, /WITHIN_INVITATIONS|WITHIN_DEALS|fanFigure|not checked here yet/);
@@ -425,7 +427,7 @@ function worker({ invitations = [inv(1)], deals = {}, ov = overview({}, LIVE) } 
     if (/^\/api\/admin\/partners\/deals\/\d+\/redemptions$/.test(path)) return response({ items: [] });
     if (path === '/api/admin/contracts/partner-deals') return response({ items: [], total: 0, limit: 500, offset: 0 });
     if (path === '/api/admin/partners/links') return response({ accounts: [], firms: [], attached: 0, unattached: 0 });
-    if (path === '/api/legal/esign/templates/partner_services') return response({ doc_type: 'partner_services', fields: [] });
+    if (path === '/api/admin/partners/agreement-ready') return response({ ready: true, reason: null, fields: [] });
     if (path === '/api/dd/cases') return response({ items: [] });
     return response({});
   };
@@ -478,7 +480,7 @@ test('mounted: the tiles, Needs you and C1–C4 draw from the overview read, and
     for (const k of ['c1', 'c2', 'c3', 'c4']) assert.ok(view.has(`partners-${k}-chart`), `${k} draws`);
     assert.match(view.props('partners-c1-chart')['aria-label'], /^5 open invitations by stage now: sent 2, opened 1,/);
     assert.match(view.props('partners-c4-chart')['aria-label'], /: 1 through referral and 0 through deal-sourcing rev-share/);
-    assert.equal(view.textOf('partners-c1-closed'), 'Closed: Signed 1 · Lapsed 0 · Revoked 0');
+    assert.equal(view.textOf('partners-c1-closed'), 'Closed: Signed 1 · Revoked 0 · Lapsed, not closed 0');
     assert.match(view.textOf('partners-tile-sends'), /^Sends that failed1Not sent,.*1 the mail service refused it$/);
     assert.equal(view.textOf('partners-needs-send-1'), 'Not sentThe latest send to Partner 1 on ' + new Date(LIVE - DAY).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric', timeZone: 'UTC' }) + ' was Not sent: the mail service refused it.Resend');
     assert.equal(view.textOf('partners-needs-dd-11'), 'Due diligenceThe partner on the Services partnership with Dana 11 has a due-diligence case open.Open in Due diligence');
