@@ -31,7 +31,7 @@ import { ensureAdminAuditLogTable } from '../../routes/admin';
 
 type C = Context<{ Bindings: Env }>;
 
-export const READ_AUDIT_ACTIONS = ['mercury_connections_read', 'mercury_accounts_read', 'mercury_transactions_read', 'mercury_matches_read', 'capital_attestations_read', 'fund_lps_read'] as const;
+export const READ_AUDIT_ACTIONS = ['mercury_connections_read', 'mercury_accounts_read', 'mercury_transactions_read', 'mercury_matches_read', 'mercury_balances_read', 'mercury_monthly_read', 'capital_attestations_read', 'fund_lps_read'] as const;
 export type ReadAuditAction = typeof READ_AUDIT_ACTIONS[number];
 
 async function supportSession(c: C): Promise<boolean> {
@@ -73,8 +73,8 @@ export async function auditRead(env: Env, user: User, action: ReadAuditAction, f
       'INSERT INTO admin_audit_log (admin_user_id, action, filters_json) VALUES (?, ?, ?)',
     ).bind(user.id, action, JSON.stringify(filters)).run();
     return true;
-  } catch (e) {
-    console.warn('[mercury] read audit failed', action, (e as Error).message);
+  } catch {
+    console.warn('[mercury] read audit failed', action);
     return false;
   }
 }

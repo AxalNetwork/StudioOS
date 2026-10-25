@@ -361,6 +361,7 @@ test('co-marketing: a decided pitch answers 409 pitch_decided with who decided, 
   const row = db.prepare('SELECT status, reviewed_by_user_id, review_notes FROM comarketing_pitches WHERE id = 1').get() as any;
   assert.deepEqual([row.status, row.reviewed_by_user_id, row.review_notes], ['approved', BEA, null], 'Bea\'s decision stands');
 
-  const ok = await call(db, ADA, 'POST', '/api/comarketing/admin/pitches/pitch-done/publish', {});
+  // D1043 (#2891): publishing needs its HTTPS link.
+  const ok = await call(db, ADA, 'POST', '/api/comarketing/admin/pitches/pitch-done/publish', { published_url: 'https://example.com/pitch' });
   assert.equal(ok.status, 200, 'a legal next step still goes through');
 });

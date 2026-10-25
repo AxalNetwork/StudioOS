@@ -11,6 +11,9 @@
 //   GET /api/decks/brand-kit?project_id=
 //       → { project_id, kit: null | { name, palette: { bg, ink, accent, secondary }, fonts,
 //           voice: [tag], logo: { light, dark, inline }, updated_at } }   503 unreadable
+//   GET /api/decks/chart-series?project_id=   (D898 group C, routes/deck_sources.ts)
+//       → { project_id, series: [{ key, label, unit, cadence, module, href, state, points: [{ x, y }],
+//           as_of, source, grade, record_ref, snapshot_hash }], types: [{ type, label, description, fits, reason }] }
 // The deck is read and saved through api.js's deckGet and deckUpdate.
 import { request } from '../api.js';
 
@@ -18,4 +21,5 @@ export const deckEditorApi = {
   model: () => request('/decks/model'),
   brandKit: (projectId) => request(`/decks/brand-kit?project_id=${encodeURIComponent(projectId)}`),
   videoLink: (url) => request(`/decks/video-link?url=${encodeURIComponent(url)}`),
+  chartSeries: (projectId) => request(`/decks/chart-series?project_id=${encodeURIComponent(projectId)}`),
 };

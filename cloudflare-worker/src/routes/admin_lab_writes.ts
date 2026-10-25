@@ -21,6 +21,7 @@
 import { Hono, type Context } from 'hono';
 import type { Env, User } from '../types';
 import { requireAdmin, requireBranchNotSuspended } from '../auth';
+import { programRefusal } from '../services/programEnforcement';
 import { ensureCohortAppSchema, monthLabel, notifyOnce } from '../services/cohortApplications';
 import {
   APPLICANT_BY_ID_SQL, activityValues, cohortPlaces, decideApplicant, tellDecision, type Refused,
@@ -64,6 +65,8 @@ async function openCycle(env: Env, cycleId: number): Promise<{ ok: true; cycle: 
 r.post('/applications/:applicant_id/move', async (c) => {
   const adminUser = await requireAdmin(c);
   await requireBranchNotSuspended(c);
+  const notGranted = await programRefusal(c.env, 'spinout-lab');
+  if (notGranted) return c.json(notGranted.body, notGranted.status);
   await ensureCohortAppSchema(c.env);
   const applicantId = idOf(c.req.param('applicant_id'));
   if (!applicantId) return refusal(c, 400, 'invalid_applicant', 'That applicant id is not valid.');
@@ -164,6 +167,10 @@ r.post('/applications/bulk-decide', async (c) => {
   const body = (await c.req.json().catch(() => ({}))) as { applicant_ids?: unknown; status?: unknown; reason?: unknown; confirm_over_places?: unknown };
   const status = (typeof body.status === 'string' ? body.status : '').trim().toLowerCase();
   if (status !== 'approved' && status !== 'waitlisted') return refusal(c, 400, 'bad_status', 'A bulk decision approves or waitlists.');
+  if (status === 'approved') {
+    const notGranted = await programRefusal(c.env, 'spinout-lab');
+    if (notGranted) return c.json(notGranted.body, notGranted.status);
+  }
   const reason = reasonOf(body.reason);
   if (!reason) return refusal(c, 400, 'reason_required', 'One reason covers them all, and it is required.');
   const raw = Array.isArray(body.applicant_ids) ? body.applicant_ids : [];
@@ -291,6 +298,8 @@ export async function admitRoute(c: Context<{ Bindings: Env }>, adminUser: User,
 r.post('/applications/admit', async (c) => {
   const adminUser = await requireAdmin(c);
   await requireBranchNotSuspended(c);
+  const notGranted = await programRefusal(c.env, 'spinout-lab');
+  if (notGranted) return c.json(notGranted.body, notGranted.status);
   const body = (await c.req.json().catch(() => ({}))) as Record<string, unknown>;
   return admitRoute(c, adminUser, body.user_id, body);
 });
