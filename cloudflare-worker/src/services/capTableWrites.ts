@@ -472,9 +472,9 @@ export async function addHolder(env: Env, args: AddHolderArgs): Promise<{ id: st
   try {
     if (vesting) {
       await env.DB.prepare(
-        `INSERT INTO cap_table_vesting (user_id, holder_id, start_date, cliff_months, total_months, total_shares, source)
-         VALUES (?, ?, ?, ?, ?, ?, 'manual')`,
-      ).bind(owner.id, holderId, vesting.start_date, vesting.cliff_months, vesting.total_months, shares).run();
+        `INSERT INTO cap_table_vesting (user_id, project_id, holder_id, start_date, cliff_months, total_months, total_shares, source)
+         VALUES (?, ?, ?, ?, ?, ?, ?, 'manual')`,
+      ).bind(owner.id, args.projectId, holderId, vesting.start_date, vesting.cliff_months, vesting.total_months, shares).run();
     }
     await recompute(env, args.actor, args.projectId, base, { ...stored, founders: [...founders, { name, shares, holder_id: holderId }] } as Inputs);
   } catch (e) {
@@ -501,9 +501,11 @@ export async function updateHolder(env: Env, args: UpdateHolderArgs): Promise<{ 
 
   if (m[1] === 'h') {
     const holderId = Number(m[2]);
-    const reg = await env.DB.prepare('SELECT id, user_id, name, shares, ownership_pct FROM cap_table_holders WHERE id = ? AND project_id = ?')
-      .bind(holderId, args.projectId).first<{ id: number; user_id: number; name: string; shares: number | null; ownership_pct: number | null }>();
+    const reg = await env.DB.prepare('SELECT id, user_id, name, shares, ownership_pct, source FROM cap_table_holders WHERE id = ? AND project_id = ?')
+      .bind(holderId, args.projectId).first<{ id: number; user_id: number; name: string; shares: number | null; ownership_pct: number | null; source: string | null }>();
     if (!reg) throw new HolderError(404, 'Holder not found');
+    // D1020 §4: while Carta is the record, its rows are read only here.
+    if (reg.source === 'connector_carta') throw new HolderError(409, 'This holder comes from Carta. Change it in Carta; the next sync brings it here.');
     const vesting = args.vesting === undefined ? undefined : cleanVesting(args.vesting);
     let shares = args.shares === undefined ? undefined : posInt(args.shares);
     if (args.shares !== undefined && shares == null) throw new HolderError(400, 'shares must be a positive whole number');
@@ -531,9 +533,9 @@ export async function updateHolder(env: Env, args: UpdateHolderArgs): Promise<{ 
       ).bind(vesting.start_date, vesting.cliff_months, vesting.total_months, entry.shares, holderId, reg.user_id).run();
       if (!Number(up.meta?.changes)) {
         await env.DB.prepare(
-          `INSERT INTO cap_table_vesting (user_id, holder_id, start_date, cliff_months, total_months, total_shares, source)
-           VALUES (?, ?, ?, ?, ?, ?, 'manual')`,
-        ).bind(reg.user_id, holderId, vesting.start_date, vesting.cliff_months, vesting.total_months, entry.shares).run();
+          `INSERT INTO cap_table_vesting (user_id, project_id, holder_id, start_date, cliff_months, total_months, total_shares, source)
+           VALUES (?, ?, ?, ?, ?, ?, ?, 'manual')`,
+        ).bind(reg.user_id, args.projectId, holderId, vesting.start_date, vesting.cliff_months, vesting.total_months, entry.shares).run();
       }
     }
     await recompute(env, args.actor, args.projectId, base, { ...stored, founders } as Inputs);

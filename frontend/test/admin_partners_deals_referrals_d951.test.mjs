@@ -228,6 +228,21 @@ test('a redemption row names the member\'s role, its window, and an ended deal\'
 
 const response = (body, status = 200) => ({ ok: status < 400, status, statusText: '', headers: { get: () => 'application/json' }, json: async () => body, text: async () => JSON.stringify(body) });
 
+/** D927's overview reply, every block available and empty, with C4's twelve weeks (Referrals draws the Overview's C4). */
+function overviewReply() {
+  const ok = (o) => ({ available: true, ...o });
+  const monday = (i) => { const d = new Date(Date.now() - (11 - i) * 7 * DAY); d.setUTCDate(d.getUTCDate() - ((d.getUTCDay() + 6) % 7)); return d.toISOString().slice(0, 10); };
+  return {
+    as_of: new Date().toISOString(),
+    tiles: Object.fromEntries(['open', 'lapsed', 'signed_90d', 'redemptions_90d'].map((t) => [t, ok({ count: 0 })]).concat([
+      ['days_to_sign', ok({ median_days: null, over_signed: 0 })], ['active_deals', ok({ count: 0, ending_within_30d: 0, term_over_not_closed: 0 })],
+      ['awaiting_signature', ok({ count: 0, invitation_lapsed: 0 })], ['failed_sends_30d', ok({ count: 0, by_reason: {} })]])),
+    needs_you: { available: true, kinds: {}, rows: [], unreadable_kinds: [] },
+    c1: ok({ stages: {}, closed: { signed: 0, lapsed: 0, revoked: 0, signed_after_lapse: 0 } }), c2: ok({ weeks: [] }), c3: ok({ by_type: {} }),
+    c4: ok({ weeks: Array.from({ length: 12 }, (_, i) => ({ week_start: monday(i), referral: i, deal_sourcing_revshare: 0, other: 0 })) }),
+  };
+}
+
 /** The desk's reads, answered; `routes` overrides one path (a function of the query) or adds one. */
 function worker(routes = {}) {
   return (url, options = {}) => {
@@ -246,6 +261,7 @@ function worker(routes = {}) {
     if (path === '/api/dd/cases') return response({ items: [] });
     if (path === '/api/admin/partners/redemptions') return response({ items: [], total: 0, page: 1, limit: 25, pages: 1 });
     if (/^\/api\/admin\/partners\/deals\/\d+\/redemptions$/.test(path)) return response({ deal: {}, items: [] });
+    if (path === '/api/admin/partners/overview') return response(overviewReply());
     return response({ error: 'not stubbed' }, 404);
   };
 }

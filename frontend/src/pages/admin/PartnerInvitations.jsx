@@ -133,7 +133,7 @@ function PartnerInvitationsBody() {
   const [creating, setCreating] = useState(false);
 
   const fan = fanOut(reads.set, reads.calls);
-  const needs = needsYou({ invitations: reads.invitations, deals: reads.deals, links: reads.links, template: reads.template, fan, now });
+  const needs = needsYou(reads.overview, { invitations: reads.invitations, deals: reads.deals });
   const counts = tabCounts({ invitations: reads.invitations, deals: reads.deals, contracts: reads.contracts, needs });
   const moved = cameFromOldAddress(loc.search);
   const actions = {
@@ -174,7 +174,7 @@ function PartnerInvitationsBody() {
           data-testid="partners-header"
         />
 
-        {route.tab === 'overview' ? <PartnersOverview reads={reads} needs={needs} fan={fan} now={now} actions={actions} /> : null}
+        {route.tab === 'overview' ? <PartnersOverview reads={reads} needs={needs} actions={actions} /> : null}
         {route.tab === 'invitations' ? <PartnersInvitations reads={reads} now={now} actions={actions} /> : null}
         {route.tab === 'deals' ? <PartnersDeals reads={reads} now={now} actions={actions} /> : null}
         {route.tab === 'referrals' ? <PartnersReferrals reads={reads} now={now} /> : null}

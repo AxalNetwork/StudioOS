@@ -1,11 +1,11 @@
 import React, { useMemo, useState } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import {
-  ATTRIBUTIONS, CLOSING_WITHIN, LIST_CLAIM, PAYOUTS_LINE, PAYOUTS_NOTE, dataOf, dealFromSearch, dealsUnion, rangeText,
+  ATTRIBUTIONS, CLOSING_WITHIN, LIST_CLAIM, PAYOUTS_LINE, PAYOUTS_NOTE, dataOf, dealFromSearch, dealsUnion, rangeText, weeklyRedemptions,
 } from './partnersDeskModel';
 import {
-  SERVER_REFERRAL_SORTS, countTile, partnerOptions, redemptionParams, referralSets, serverPage, serverRedemptionRow, weeklyFromRead,
-  windowTiles, windowsClosing,
+  SERVER_REFERRAL_SORTS, countTile, partnerOptions, redemptionParams, referralSets, serverPage, serverRedemptionRow, windowTiles,
+  windowsClosing,
 } from './dealsReferralsModel';
 import { ChartBlock } from './PartnersOverview';
 import { useAllRedemptions, useDebounced, useRedemptionCount, useRedemptionPage } from './useDealsReferrals';
@@ -18,7 +18,7 @@ import { AMBER, CARD, INPUT, LINK, Pager, ReadState, SUB, TD, TH, Tile } from '.
  *     `total`; the rev-share windows open and closing within 30 days are
  *     counted over every open window, on active deals only (D923's rule,
  *     until the owner answers O-WIN);
- *   · C4 full width, from every redemption of the last twelve weeks;
+ *   · C4 full width, the Overview's own from part 4's overview read;
  *   · C6 "Rev-share windows closing", one bar per open window;
  *   · Every redemption, on the Worker's filters, sort and pages, with the
  *     member's role. `?deal=<id>` narrows it to one deal.
@@ -46,7 +46,6 @@ export default function PartnersReferrals({ reads, now }) {
   const all = useRedemptionCount('all', sets.all, reads.tick);
   const last90 = useRedemptionCount('last90', sets.last90, reads.tick);
   const windows = useAllRedemptions('windows', sets.windows, reads.tick);
-  const weeks = useAllRedemptions('weeks', sets.weeks, reads.tick);
   const list = useRedemptionPage(redemptionParams({ q: needle, attribution, partner, closingWithin, from, to, deal, sort, page }), reads.tick);
 
   const tiles = [
@@ -54,7 +53,8 @@ export default function PartnersReferrals({ reads, now }) {
     { key: 'last90', ...countTile(last90, 'Last 90 days') },
     ...windowTiles(windows),
   ];
-  const c4 = weeklyFromRead(weeks, { now });
+  // C4 is the Overview's own, from part 4's overview read (D927), so the two tabs draw the same weeks.
+  const c4 = weeklyRedemptions(reads.overview);
   const c6 = windowsClosing(windows);
   const partners = partnerOptions(dealsUnion(reads.deals).rows);
   const data = dataOf(list);

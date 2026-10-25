@@ -11,8 +11,8 @@
  *   · Terminate (PI8c): D928's preview, "[n] members lose the grant this deal
  *     gave them."
  *   · Referrals: D928's cross-deal read (`GET …/redemptions`), replacing
- *     Guard F's fan-out: the four tiles, C4, C6 and every redemption with the
- *     member's role. A rev-share window counts only while its deal is active,
+ *     Guard F's fan-out: the four tiles, C6 and every redemption with the
+ *     member's role; C4 is the Overview's own, from part 4's overview read. A rev-share window counts only while its deal is active,
  *     as D923 said, until the owner answers O-WIN.
  *   · PI11d on a phone: four state groups, "Ended" being term over,
  *     terminated and voided.
@@ -22,7 +22,7 @@
  */
 import {
   COUNT_CLAIM, DAY_MS, ENDING_SOON_DAYS, NOT_RECORDED, READING, ROWS_PER_PAGE, attributionWord, dataOf, day, dayOr,
-  dealPartner, dealRow, isCoolOff, parseStamp, pausedLine, plural, tiersText, weekStarts, weeklyRedemptions,
+  dealPartner, dealRow, isCoolOff, parseStamp, pausedLine, plural, tiersText,
 } from './partnersDeskModel';
 
 const nf = (n) => Number(n).toLocaleString('en-US');
@@ -348,13 +348,12 @@ export const ATTRIBUTION_DAYS = 365;
 /** `YYYY-MM-DD`, UTC, `days` before `now`. */
 export const isoDay = (ms) => new Date(ms).toISOString().slice(0, 10);
 
-/** The sets Referrals reads in full, each with its own state: the tiles, C4 and C6 come from them. */
+/** The sets Referrals reads, each with its own state: two counts, and every open window (the window tiles and C6). */
 export function referralSets(now = Date.now()) {
   return {
     all: {},
     last90: { from: isoDay(now - 89 * DAY_MS) },
     windows: { window_within: ATTRIBUTION_DAYS, sort: 'window' },
-    weeks: { from: isoDay(weekStarts(now)[0]) },
   };
 }
 
@@ -430,18 +429,6 @@ export function windowsClosing(read) {
     lines,
     foot: 'A window is open for 365 days from the member’s registration, and only while its deal is active.',
   };
-}
-
-/** C4 from the full read of the last twelve weeks, through the Overview's own C4 (D929). */
-export function weeklyFromRead(read, { now = Date.now() } = {}) {
-  if (!read || (read.status === 'loading' && !dataOf(read))) return weeklyRedemptions({ state: 'loading' }, { now });
-  if (read.status === 'error' && !dataOf(read)) {
-    return weeklyRedemptions({ state: 'unreadable', text: failedLine(read, 'The redemptions').replace(/\.$/, ''), claim: 'That is not a claim that nobody registered.' }, { now });
-  }
-  const { items = [], complete = true } = dataOf(read) || {};
-  const block = weeklyRedemptions({ state: 'ready', items, exact: true, complete: true, firstOnly: [], short: [] }, { now });
-  if (block.state === 'ready' && !complete) block.lines = [...(block.lines || []), `Counted over the first ${nf(REDEMPTION_CAP)} redemptions in these weeks.`];
-  return { ...block, key: 'c4' };
 }
 
 const ROLE_WORD = { founder: 'Founder', investor: 'Investor', partner: 'Partner', advisor: 'Advisor', exploring: 'Exploring', admin: 'Admin' };
