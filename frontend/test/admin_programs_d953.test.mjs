@@ -29,6 +29,7 @@ import { createRoot } from 'react-dom/client';
 import { MemoryRouter, Route, Routes, useLocation } from 'react-router-dom';
 import { installDocument } from './_contracts_dom.mjs';
 import { codeOnly } from './_codeOnly.mjs';
+import { catalogueBody, labAppsBody } from './_programs_catalogue_fixture.mjs';
 import { AuthProvider } from '../src/hooks/useAuthSync.jsx';
 import { SIDEBAR_GROUPS } from '../src/sidebarConfig.js';
 import { pageKeyFor } from '../src/lib/railPages.js';
@@ -45,7 +46,7 @@ import AdvisorCohortsRedirect from '../src/pages/admin/programs/AdvisorCohortsRe
 import ReferEarnRedirect from '../src/pages/admin/programs/ReferEarnRedirect.jsx';
 import {
   ASSIGNED_LINE, CAPS, DEACTIVATED_LINE, FROZEN, HQ_READS_COMMISSIONS, LINE_ADMIN, LINE_SUPER, MOVED_NOTICES, NOTHING_WAITING,
-  NOT_READ_YET, NOT_RECORDED, PAGES, PERK_APPROVED, PROGRAMS, PRODUCT_TESTING_FOOT, SCOPE_LABEL, SCOPE_NOT_PER_STUDIO,
+  NOT_READ_YET, NOT_RECORDED, PAGES, PERK_APPROVED, PROGRAMS, PRODUCT_TESTING_FOOT, SCOPE_LABEL, SCOPE_PICK_STUDIO,
   SCOPE_TITLE, SCOPE_UNREAD, SUSPENDED, TRY_AGAIN, WAITING_LABEL, ageText, approveBody, bandOf, cohortName, cycleForStrip,
   etStamp, laneFrom, learningFigures, learningJoin, mentorFigures, mentorNeeds, movedNotice, openReferrals, perkPrice,
   perkQueueFrom, referralOverview, refusalText, rejectBody, routeFor, scopeChip, waitingForYou, weekLines, withoutMoved,
@@ -345,7 +346,7 @@ test('the scope chip follows D893, keyed on R12 for a Super Admin: its reason re
   assert.deepEqual(scopeChip(true, ready({ scopes: [{ code: 'hq', kind: 'hq' }], reason: 'The deployment registry could not be read.' })),
     { label: SCOPE_LABEL, title: 'The deployment registry could not be read.' });
   assert.deepEqual(scopeChip(true, ready({ scopes: [{ code: 'hq', kind: 'hq' }] })), { label: SCOPE_LABEL, title: SCOPE_TITLE });
-  assert.deepEqual(scopeChip(true, ready({ scopes: [{ code: 'hq', kind: 'hq' }, { code: 'pt', kind: 'branch' }] })), { label: SCOPE_LABEL, title: SCOPE_NOT_PER_STUDIO });
+  assert.deepEqual(scopeChip(true, ready({ scopes: [{ code: 'hq', kind: 'hq' }, { code: 'pt', kind: 'branch' }] })), { label: SCOPE_LABEL, title: SCOPE_PICK_STUDIO });
   assert.equal(scopeChip(true, failed()).title, SCOPE_UNREAD);
 });
 
@@ -378,6 +379,7 @@ function worker(o = {}) {
     learners = {},
     testing = { items: [{ uid: 't1', status: 'open', applicant_count: 4 }, { uid: 't2', status: 'open', applicant_count: 5 }, { uid: 't3', status: 'closed', applicant_count: 0 }] },
     scopes = { scopes: [{ code: 'hq', label: 'HQ-held', kind: 'hq', bound: true }] },
+    catalogue = () => response(catalogueBody()), labApps = labAppsBody(),
     user = null, writes = {},
   } = o;
   const call = (v, ...a) => (typeof v === 'function' ? v(...a) : response(v));
@@ -408,6 +410,8 @@ function worker(o = {}) {
     if (l) return call(learners[l[1]] ?? { learners: [] });
     if (path === '/api/admin/testing/programmes') return call(testing);
     if (path === '/api/admin/insights/scopes') return call(scopes);
+    if (path === '/api/admin/programs') return call(catalogue, q);
+    if (path === '/api/admin/spinout-applications') return call(labApps);
     return never();
   };
 }
@@ -463,116 +467,9 @@ async function mounted(url, page, handle, { user = null } = {}) {
 const PROGRAM_DOORS = ['/admin/programs/spinout-lab', '/admin/programs/ai-native-venture', '/admin/programs/mentor-cohorts', '/admin/programs/investor-cohorts',
   '/admin/programs/referral-partners', '/admin/programs/refer-and-earn', '/admin/programs/perks', '/admin/programs/learning'];
 
-test('the catalogue for an Admin: the header, the three tiles, nine cards with their figures, Needs you and doors, and the foot', async () => {
-  const view = await mounted('/admin/programs', ProgramsCatalogue, worker());
-  try {
-    assert.equal(view.textOf('programs-catalogue-line'), LINE_ADMIN);
-    assert.equal(view.textOf('programs-scope-chip'), SCOPE_LABEL);
-    assert.equal(view.props('programs-scope-chip').title, SCOPE_TITLE);
-    assert.match(view.textOf('programs-asof'), /^Updated \d\d:\d\d$/);
-    assert.equal(view.textOf('programs-tile-running'), `Programs running${NOT_RECORDED}No registry records which programs run yet.`);
-    assert.equal(view.textOf('programs-tile-people'), `People taking part${NOT_READ_YET}Each program stores its own members; no read counts them across programs yet.`);
-    assert.equal(view.textOf('programs-tile-waiting-value'), '7');
-    assert.match(view.textOf('programs-tile-waiting'), /oldest 3 days/);
-    assert.ok(view.has('programs-tile-waiting-overdue'), 'an amber Overdue from 72 hours');
-    assert.match(view.textOf('programs-tile-waiting'), /Strategic referral access is not read here yet\./);
-    assert.equal(view.textOf('programs-catalogue-count'), '9 programs');
-    assert.equal(view.textOf('programs-card-spinout-lab-figure'), '2 cohort applications waiting');
-    assert.equal(view.textOf('programs-card-spinout-lab-applications'), `Lab applications: ${NOT_READ_YET}Their read cannot yet tell a failure from none.`);
-    assert.equal(view.textOf('programs-card-spinout-lab-needs'), '!Needs you 3', 'cohort applications and pending hosts');
-    assert.match(view.textOf('programs-card-mentor-cohorts-figure'), /^1 mentor · 2 of 4 cohorts covered/);
-    assert.match(view.textOf('programs-card-mentor-cohorts-figure'), new RegExp(DEACTIVATED_LINE.replace('.', '\\.')));
-    assert.equal(view.textOf('programs-card-mentor-cohorts-needs'), '!Needs you 4', 'two cohorts with no mentor and two open rows of a former Advisor');
-    assert.equal(view.textOf('programs-card-refer-and-earn-figure'), '3 open referralsincluding those waiting on the member');
-    assert.equal(view.textOf('programs-card-refer-and-earn-needs'), '!Needs you 3');
-    assert.equal(view.textOf('programs-card-perks-figure'), '5 live');
-    assert.equal(view.textOf('programs-card-perks-needs'), '!Needs you 1', 'the in_review listing; a draft is not backlog');
-    assert.equal(view.textOf('programs-card-learning-figure'), '2 published programs · 7 active enrolments in themassigned to you');
-    assert.equal(view.textOf('programs-card-investor-cohorts-figure'), 'Not running');
-    assert.match(view.textOf('programs-card-ai-native-venture-purpose'), /^Not recordedThe playbook is not written yet\.$/);
-    assert.equal(view.textOf('programs-card-product-testing-foot'), PRODUCT_TESTING_FOOT);
-    assert.ok(!view.has('programs-card-product-testing-figure'), 'no figures for an Admin');
-    assert.equal(view.textOf('programs-card-referral-partners-grant'), '⌂HQ-held', 'S-HELD: only a granted card reads HQ-held');
-    assert.equal(view.textOf('programs-card-ai-native-venture-grant'), '–Not offered yet');
-    assert.equal(view.textOf('programs-card-product-testing-grant'), '⌂Runs at HQ');
-    const hrefs = view.hrefs();
-    for (const d of PROGRAM_DOORS) assert.ok(hrefs.includes(d), `no door onto ${d}`);
-    assert.ok(!hrefs.includes('/admin?tab=product-testing'), 'Product testing has no door for an Admin');
-    assert.ok(!hrefs.includes('/admin?tab=lab-applications'), 'one Spin-Out Lab card, not two doors to one console');
-    assert.ok(hrefs.includes('/admin/profiling-trends'));
-    assert.match(view.textOf('programs-foot'), /^Profiling trends is not a program\. It stays here until its home is decided\.Open profiling trends$/);
-    assert.ok(!view.requests.some((r) => /spinout-(applications|participants)/.test(r.url)), 'Guard H: the reads that hide failure are not made');
-    assert.ok(!view.requests.some((r) => r.url.startsWith('/api/admin/testing') || r.url.startsWith('/api/admin/insights')), 'R11 and R12 are the Super Admin\'s');
-    // The group chips filter in the browser.
-    await view.click('programs-group-Access');
-    assert.ok(view.has('programs-card-mentor-cohorts') && view.has('programs-card-investor-cohorts') && !view.has('programs-card-perks'));
-    await view.click('programs-group-all');
-    assert.ok(view.has('programs-card-perks'));
-  } finally { await view.close(); }
-});
-
-test('each failed read marks only the blocks it feeds', async () => {
-  const perksDown = await mounted('/admin/programs', ProgramsCatalogue, worker({ perks: down }));
-  try {
-    assert.match(perksDown.textOf('programs-card-perks-figure').trim(), /^Live perks could not be read\. That is not the same as none\.Try again$/);
-    assert.equal(perksDown.textOf('programs-tile-waiting-value'), '7', 'Waiting for you does not read R4');
-    assert.equal(perksDown.textOf('programs-card-perks-needs'), '!Needs you 1', 'the Needs you pill reads R3, which answered');
-    assert.equal(perksDown.textOf('programs-card-refer-and-earn-figure'), '3 open referralsincluding those waiting on the member');
-    assert.match(perksDown.textOf('programs-asof'), /^Updated/);
-  } finally { await perksDown.close(); }
-  const glanceDown = await mounted('/admin/programs', ProgramsCatalogue, worker({ glance: down }));
-  try {
-    assert.match(glanceDown.textOf('programs-tile-waiting'), /Could not be readcohort applications, Refer & Earn reviews could not be read, so no total is drawn\.Try again/);
-    assert.ok(!glanceDown.has('programs-tile-waiting-value'), 'no smaller total');
-    assert.match(glanceDown.textOf('programs-card-spinout-lab-figure').trim(), /^Cohort applications could not be read\./);
-    assert.match(glanceDown.textOf('programs-card-refer-and-earn-figure').trim(), /^Open referrals could not be read\./);
-    assert.equal(glanceDown.textOf('programs-card-spinout-lab-needs'), 'Needs you could not be read');
-    assert.match(glanceDown.textOf('programs-card-mentor-cohorts-figure'), /^1 mentor/, 'the mentor card reads R5 and R7');
-    assert.equal(glanceDown.textOf('programs-card-perks-figure'), '5 live');
-  } finally { await glanceDown.close(); }
-  const mentorsDown = await mounted('/admin/programs', ProgramsCatalogue, worker({ assignments: down }));
-  try {
-    assert.match(mentorsDown.textOf('programs-card-mentor-cohorts-figure').trim(), /^The mentors and cohorts could not be read\./);
-    assert.equal(mentorsDown.textOf('programs-tile-waiting-value'), '7');
-    assert.equal(mentorsDown.textOf('programs-card-learning-figure'), '2 published programs · 7 active enrolments in themassigned to you');
-  } finally { await mentorsDown.close(); }
-  const allDown = await mounted('/admin/programs', ProgramsCatalogue, () => down());
-  try {
-    assert.equal(allDown.textOf('programs-asof'), 'Could not be read', 'when every read fails, the header says so');
-    assert.equal(allDown.textOf('programs-tile-running'), `Programs running${NOT_RECORDED}No registry records which programs run yet.`, 'a block with no read stands');
-  } finally { await allDown.close(); }
-});
-
-test('first use: four empty queues are a real 0 with "Nothing is waiting.", and the queue cards draw no Needs-you pill', async () => {
-  const view = await mounted('/admin/programs', ProgramsCatalogue, worker({
-    glance: glanceBody([lane('cohort', 0), lane('referrals', 0)]), hosts: hostsBody(0, 0), perkQueue: { items: [] },
-  }));
-  try {
-    assert.equal(view.textOf('programs-tile-waiting-value'), '0');
-    assert.match(view.textOf('programs-tile-waiting'), new RegExp(NOTHING_WAITING.replace('.', '\\.')));
-    for (const k of ['spinout-lab', 'refer-and-earn', 'perks']) assert.ok(!view.has(`programs-card-${k}-needs`), k);
-    assert.ok(view.has('programs-card-mentor-cohorts-needs'), 'Mentor counts its own rows: a scheduled cohort with no mentor is one');
-  } finally { await view.close(); }
-});
-
-test('the catalogue for a Super Admin (PG2): HQ\'s line, the chip keyed on R12, no Needs-you pills, Product testing\'s figures and door', async () => {
-  const view = await mounted('/admin/programs', ProgramsCatalogue, worker({
-    user: SUPER, scopes: { scopes: [{ code: 'hq', kind: 'hq' }], reason: 'The deployment registry could not be read.' },
-  }), { user: SUPER });
-  try {
-    assert.equal(view.textOf('programs-catalogue-line'), LINE_SUPER);
-    assert.equal(view.props('programs-scope-chip').title, 'The deployment registry could not be read.');
-    for (const p of PROGRAMS) assert.ok(!view.has(`programs-card-${p.key}-needs`), `${p.key} draws a Needs-you pill for HQ`);
-    assert.equal(view.textOf('programs-card-product-testing-figure'), '2 open · 9 applied, not withdrawn');
-    assert.ok(view.hrefs().includes('/admin?tab=product-testing'));
-    assert.ok(!view.has('programs-card-product-testing-foot'));
-    assert.equal(view.textOf('programs-card-ai-native-venture-grant'), '⌂HQ only');
-    assert.equal(view.textOf('programs-card-mentor-cohorts-grant'), '⌂HQ-held');
-    assert.match(view.textOf('programs-card-learning-who'), /Join: Open or by invitation$/, 'derived from the published rows: one open, one by invitation');
-    assert.ok(view.hrefs().includes('/learning/studio/programs'), 'the program studio\'s door');
-    assert.ok(view.requests.some((r) => r.url.startsWith('/api/admin/testing/programmes')));
-  } finally { await view.close(); }
-});
+// D961 (#2794): the catalogue draws from part 1's catalogue read now, so its
+// mounted tests (an Admin's catalogue, a read that fails, first use and a
+// Super Admin's) live in admin_programs_catalogue_d961.test.mjs, on that read.
 
 test('the redirects keep the query and the hash, add ?moved=, and land where the function now lives', async () => {
   for (const [from, Redirect, to] of [
@@ -964,16 +861,18 @@ test('the tab strips are literal NavLinks, equal to PAGES, and the card doors ar
   for (const d of PROGRAM_DOORS) assert.ok(catalogue.includes(`<Link to="${d}"`), `the ${d} door is not literal`);
 });
 
-test('the pages read only D953 §2\'s reads through existing clients, and draw nothing §3 leaves undrawn', () => {
+test('the pages read D953 §2\'s reads and D961\'s catalogue read through their clients, and draw nothing §3 leaves undrawn', () => {
   const src = PROGRAM_FILES.map((f) => codeOnly(read(f))).join('\n');
   for (const call of ['api.adminStudioGlance(', "api.adminLabHosts('pending')", 'api.perkReviewQueue(', 'api.perksCatalog(', 'api.adminAdvisorCohortAssignments(',
-    'api.adminCohortTimeline(', 'api.adminReferralSubmissions(', 'learningApi.assignedPrograms(', 'learningApi.programLearners(', 'adminTestingApi.programmes(',
-    'insightsApi.insightsScopes(', 'api.perkReview(']) assert.ok(src.includes(call), `the pages no longer read ${call}`);
+    'api.adminCohortTimeline(', 'api.adminReferralSubmissions(', 'learningApi.assignedPrograms(', 'learningApi.programLearners(', 'adminProgramsApi.catalogue(',
+    'api.adminSpinoutApplications(', 'insightsApi.insightsScopes(', 'api.perkReview(']) assert.ok(src.includes(call), `the pages no longer read ${call}`);
   const clients = [...src.matchAll(/import \{([^}]+)\} from '[./]+lib\/api(?:\/(\w+))?'/g)]
     .flatMap((imp) => imp[1].split(',').map((s) => `${imp[2] || 'api'}:${s.trim()}`).filter((s) => !s.endsWith(':')));
-  assert.deepEqual([...new Set(clients)].sort(), ['api:api', 'insights:insightsApi', 'learning:learningApi', 'productTesting:adminTestingApi'],
+  assert.deepEqual([...new Set(clients)].sort(), ['adminPrograms:adminProgramsApi', 'api:api', 'insights:insightsApi', 'learning:learningApi'],
     'the existing clients, each from its own module (lib/api re-exports them, but a named import of lib/api must name what api.js itself declares)');
-  assert.doesNotMatch(src, /adminSpinoutApplications|adminSpinoutParticipants|spinout-applications|spinout-participants/, 'Guard H');
+  // D960 lifted Guard H for applications (a failure is a 503 now); participants still answer [] on any error.
+  assert.doesNotMatch(src, /adminSpinoutParticipants|spinout-participants/, 'Guard H');
+  // D961 draws the charts through ui/Charts.jsx, never an <svg> of its own.
   assert.doesNotMatch(src, /window\.confirm|useToast|dangerouslySetInnerHTML|<svg|recharts|Export CSV|Propose a program|Pause program/);
   assert.doesNotMatch(src, /\?\? 0\b/, 'no zero standing in for a value');
   for (const sample of ['[Studio Lisbon]', '[48]', '[A venture program', 'Granted to your studio', '0 credits']) assert.ok(!src.includes(sample), `a canvas sample reached the pages: ${sample}`);

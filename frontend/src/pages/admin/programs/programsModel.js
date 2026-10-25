@@ -904,7 +904,7 @@ export function testingFrom(read) {
 
 export const SCOPE_READING = 'Reading the scope…';
 export const SCOPE_UNREAD = 'The deployments could not be read, so whether a subsidiary is deployed is not known here.';
-export const SCOPE_NOT_PER_STUDIO = 'Programs reads the accounts HQ holds. No Programs read is per studio yet, so a deployed studio is not shown here.';
+export const SCOPE_PICK_STUDIO = 'These are the accounts HQ holds directly. Pick a studio under Studio to read its own.';
 
 /**
  * The scope chip (D893). For a Super Admin it is keyed on R12. R12 answers 200
@@ -919,7 +919,7 @@ export function scopeChip(superAdmin, scopes) {
   const reason = typeof scopes.data?.reason === 'string' && scopes.data.reason.trim() ? scopes.data.reason.trim() : null;
   if (reason) return { label: SCOPE_LABEL, title: reason };
   const branch = (Array.isArray(scopes.data?.scopes) ? scopes.data.scopes : []).some((s) => s?.kind === 'branch');
-  return { label: SCOPE_LABEL, title: branch ? SCOPE_NOT_PER_STUDIO : SCOPE_TITLE };
+  return { label: SCOPE_LABEL, title: branch ? SCOPE_PICK_STUDIO : SCOPE_TITLE };
 }
 
 /* ------------------------------------------------------------------ *

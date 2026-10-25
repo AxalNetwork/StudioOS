@@ -166,8 +166,64 @@ export function TermBars({ rows, from = -20, to = 120 }) {
  * Columns. `toDate` hatches the current week; `open` draws a dashed outline for a week not finished.
  * D947 (#2752) adds `references`: horizontal lines such as a cohort's places and minimum, each
  * `{ value, label, dashed }`, drawn across the plot with their label at its right edge.
+ * D961 (#2794) adds `below`: a row's `below` (with `belowTone`) is drawn under a zero axis, as
+ * Programs' Credits in and out draws spends under the grants stacked above it.
  */
 export function Columns({ rows, height = 220, pct = false, max: maxIn, references = [] }) {
+  if (rows.some((r) => Number.isFinite(r.below))) return <DivergingColumns rows={rows} height={height} />;
+  return <UpColumns rows={rows} height={height} pct={pct} max={maxIn} references={references} />;
+}
+
+/** Columns stacked above a zero axis, with each row's `below` drawn under it, on one scale. */
+function DivergingColumns({ rows, height }) {
+  const [ref, W] = useBoxWidth();
+  const Lx = 40;
+  const B = 22;
+  const top = 16;
+  const n = Math.max(1, rows.length);
+  const gw = (W - Lx - 4) / n;
+  const bw = Math.min(40, gw * 0.62);
+  const ch = height - B - top;
+  const upOf = (r) => (r.parts?.length ? r.parts.reduce((t, p) => t + (Number(p.value) || 0), 0) : Number(r.value) || 0);
+  const up = Math.max(0, ...rows.map(upOf));
+  const down = Math.max(0, ...rows.map((r) => Number(r.below) || 0));
+  const span = Math.max(1, up + down);
+  const zero = top + (ch * up) / span;
+  const Y = (v) => zero - (ch * v) / span;
+  return (
+    <div ref={ref} className="w-full">
+      <Svg width={W} height={height}>
+        {[up, 0, -down].filter((v, i, all) => all.indexOf(v) === i).map((v) => (
+          <g key={v}>
+            <line x1={Lx} x2={W} y1={Y(v)} y2={Y(v)} className={v === 0 ? 'stroke-axal-muted dark:stroke-gray-400' : GRID} />
+            <text x={Lx - 5} y={Y(v) + 3} textAnchor="end" className={MUTE}>{nf(v)}</text>
+          </g>
+        ))}
+        {rows.map((r, i) => {
+          const x = Lx + gw * i + (gw - bw) / 2;
+          let acc = 0;
+          const parts = r.parts?.length ? r.parts : [{ value: Number(r.value) || 0, tone: r.tone }];
+          const below = Number(r.below) || 0;
+          return (
+            <g key={`${r.label}-${i}`}>
+              {parts.map((p, k) => {
+                const v = Number(p.value) || 0;
+                if (!(v > 0)) return null;
+                const y = Y(acc + v);
+                acc += v;
+                return <rect key={k} x={x} y={y} width={bw} height={Math.max(0, Y(acc - v) - y)} className={FILL[p.tone] || FILL.violet} />;
+              })}
+              {below > 0 ? <rect x={x} y={zero} width={bw} height={Y(-below) - zero} className={FILL[r.belowTone] || FILL.muted} /> : null}
+              <text x={x + bw / 2} y={height - 6} textAnchor="middle" className={MUTE}>{r.label}</text>
+            </g>
+          );
+        })}
+      </Svg>
+    </div>
+  );
+}
+
+function UpColumns({ rows, height, pct, max: maxIn, references }) {
   const [ref, W] = useBoxWidth();
   const hatch = `ins-hatch-${useId().replace(/:/g, '')}`;
   const Lx = 34;
@@ -608,7 +664,11 @@ export function ChartTable({ chart, caption }) {
   let rows = [];
   let head = ['Item', 'Value'];
   const cell = (v) => (v === null || v === undefined ? 'not recorded' : nf(v));
-  if (chart?.type === 'grouped') {
+  // D961: a chart whose rows the cases below cannot spell (Credits in and out's sources) brings its own.
+  if (chart?.table) {
+    head = chart.table.head;
+    rows = chart.table.rows;
+  } else if (chart?.type === 'grouped') {
     head = ['Week', ...chart.series.map((s) => s.label)];
     rows = chart.rows.map((r) => [r.toDate ? `${r.label} (so far)` : r.label, ...chart.series.map((_, j) => cell(r.values[j]))]);
   } else if (chart?.type === 'lines') {

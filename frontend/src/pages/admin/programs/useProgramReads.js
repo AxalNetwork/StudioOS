@@ -1,8 +1,8 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { api } from '../../../lib/api';
+import { adminProgramsApi } from '../../../lib/api/adminPrograms';
 import { insightsApi } from '../../../lib/api/insights';
 import { learningApi } from '../../../lib/api/learning';
-import { adminTestingApi } from '../../../lib/api/productTesting';
 import { reportError } from '../../../lib/log';
 import { OPEN_STATUSES } from './programsModel';
 
@@ -70,7 +70,6 @@ const readPerks = () => api.perksCatalog().then(items('The live perks'));
 const readAssignments = () => api.adminAdvisorCohortAssignments().then(items('The mentor assignments'));
 const readTimeline = () => api.adminCohortTimeline().then(listed('cycles', 'The cohort cycles'));
 const readLearning = () => learningApi.assignedPrograms().then(listed('programs', 'The learning programs'));
-const readTesting = () => adminTestingApi.programmes().then(items('The testing programs'));
 const readScopes = () => insightsApi.insightsScopes();
 /** R8, one call per open status, at the cap of 200. */
 const readReferrals = (status) => () => api.adminReferralSubmissions({ status, limit: 200 }).then(arrayReply);
@@ -81,20 +80,48 @@ function useTick() {
   return [tick, reload];
 }
 
-/** The catalogue (PG1, PG2): every read its tiles and cards draw; R11 and R12 for a Super Admin only. */
-export function useCatalogueReads(superAdmin) {
+/** A catalogue answer is an object with its blocks; anything else is a failed read. */
+function catalogueReply(reply) {
+  if (!reply || typeof reply !== 'object' || !reply.tiles || !reply.programs) throw new Error('The programs did not come back with their blocks.');
+  return reply;
+}
+
+/** R13, D960: the Lab's applications with `counts` by status, all-time and uncapped. */
+function labReply(reply) {
+  if (!reply || typeof reply !== 'object' || !reply.counts || typeof reply.counts !== 'object') {
+    throw new Error('The Lab applications did not come back with their counts.');
+  }
+  return reply;
+}
+const readLabApplications = () => api.adminSpinoutApplications().then(labReply);
+
+/**
+ * The catalogue (PG1, PG2; D961): part 1's catalogue read for the period and
+ * studio (`GET /api/admin/programs?weeks=&scope=`), Lab applications' counts,
+ * and R12 for a Super Admin. `scopeOf(scopesRead)` names the studio the
+ * address asks for (`{ code, canRead }`, plus what the page draws with it):
+ * `canRead` is false while a studio is asked for and R12 has not answered, so
+ * no per-studio read is made then and HQ's figures never sit under a
+ * studio's name. Lab applications have no
+ * per-studio form, so they are not read under a studio.
+ *
+ * The cards do not follow the period (S-PER): while a new period is read,
+ * `cards` keeps the last answer for the same studio, so they do not flicker.
+ */
+export function useCatalogueReads(superAdmin, { weeks, scopeOf = () => ({ code: null, canRead: true }) } = {}) {
   const [tick, reload] = useTick();
-  const glance = useRead('glance', 'glance', tick, true, readGlance);
-  const hosts = useRead('hosts', 'hosts', tick, true, readHosts);
-  const perkQueue = useRead('perk-queue', 'perk-queue', tick, true, readPerkQueue);
-  const perks = useRead('perks', 'perks', tick, true, readPerks);
-  const assignments = useRead('assignments', 'assignments', tick, true, readAssignments);
-  const timeline = useRead('timeline', 'timeline', tick, true, readTimeline);
-  const learning = useRead('learning', 'learning', tick, true, readLearning);
-  const testing = useRead('testing', 'testing', tick, Boolean(superAdmin), readTesting);
   const scopes = useRead('scopes', 'scopes', tick, Boolean(superAdmin), readScopes);
-  const drawn = [glance, hosts, perkQueue, perks, assignments, timeline, learning, ...(superAdmin ? [testing] : [])];
-  return { glance, hosts, perkQueue, perks, assignments, timeline, learning, testing, scopes, drawn, reload };
+  const studio = scopeOf(scopes);
+  const scope = studio.code || null;
+  const canRead = studio.canRead !== false;
+  const catalogue = useRead('catalogue', `catalogue:${weeks}:${scope || ''}`, tick, canRead,
+    () => adminProgramsApi.catalogue({ weeks, scope: scope || undefined }).then(catalogueReply));
+  const labApps = useRead('lab-applications', 'lab-applications', tick, !scope, readLabApplications);
+  const last = useRef({ scope: null, read: null });
+  if (catalogue.status === 'ready') last.current = { scope: scope || '', read: catalogue };
+  const cards = catalogue.status === 'ready' || last.current.scope !== (scope || '') || !last.current.read ? catalogue : last.current.read;
+  const drawn = [catalogue, ...(scope ? [] : [labApps])];
+  return { catalogue, cards, labApps, scopes, studio, drawn, reload };
 }
 
 /** Mentor cohort access: Overview reads R5, R7 and R2; How it runs reads R7. People's body reads its own. */
