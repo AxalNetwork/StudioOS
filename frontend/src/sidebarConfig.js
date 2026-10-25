@@ -188,7 +188,8 @@ export const SIDEBAR_GROUPS = {
       { to: '/branch/accounts', icon: Users, label: 'Accounts' },
       { to: '/branch/approvals', icon: Inbox, label: 'Approvals' },
       { to: '/branch/programs', icon: Calendar, label: 'Programs' },
-      { to: '/branch/community', icon: Network, label: 'Community' },
+      // D1117 (#2997): the Partner invitations desk is the branch's too; its row lights on the desk.
+      { to: '/branch/community', icon: Network, label: 'Community', match: ['/branch/community', '/admin/partner-invitations'] },
       { to: '/branch/contracts', icon: FileText, label: 'Contracts' },
       // D210 — S15 (/branch/insights/analytics) lights this row, per its
       // artboard; `match` covers the row's subtree, which `end` alone does not.
@@ -531,7 +532,7 @@ export const SIDEBAR_GROUPS = {
       { to: '/funds', icon: Wallet, label: 'Fund', match: ['/funds'], requiredInvestorTier: 'institutional' },
       { to: '/network', icon: Handshake, label: 'Network', match: ['/network', '/relationships', '/contacts'] },
       { to: '/research', icon: Radar, label: 'Research', match: ['/research'] },
-      { to: '/trust', icon: ShieldCheck, label: 'Trust' },
+      { to: '/trust/me', icon: ShieldCheck, label: 'Trust' },
       // NO Company Settings row. The canvas asks for one; the shipped decision
       // is that /company-settings is the sidebar's PINNED FOOTER for every
       // role, because it used to be a row as well and rendered twice. The

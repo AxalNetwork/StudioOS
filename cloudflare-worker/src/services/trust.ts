@@ -93,6 +93,13 @@ const ROLE_MATRIX: Record<string, ObligationDef[]> = {
     { key: 'tos_v1',     required: 1, ttlMs: null },
     { key: 'privacy_v1', required: 1, ttlMs: null },
   ],
+  // D1074 (#2966): an Explorer has its own row. It used to fall through to
+  // `partner`'s, which happened to be the same two keys; a partner change would
+  // then have changed what an Explorer owes without anyone deciding it.
+  exploring: [
+    { key: 'tos_v1',     required: 1, ttlMs: null },
+    { key: 'privacy_v1', required: 1, ttlMs: null },
+  ],
 };
 
 export function obligationsForRole(role: string): ObligationDef[] {
@@ -697,6 +704,67 @@ const SATISFIABLE_BY_CLICKWRAP: ReadonlySet<ObligationKey> = new Set<ObligationK
 ]);
 
 /**
+ * D1074 (#2966, migration 583): the version of each clickwrap document, as the
+ * page's own "Last updated" date (`YYYY-MM-DD`). `frontend/src/pages/TermsPage.jsx`
+ * (`TERMS_UPDATED`) and `PrivacyPage.jsx` (`PRIVACY_UPDATED`) are the documents a
+ * member reads, so they are the source; `trust_acceptance_version_d1074.test.ts`
+ * fails when either page's date and this map disagree. Change the page, then this.
+ */
+export const LEGAL_DOCUMENT_VERSIONS: Readonly<Record<'tos_v1' | 'privacy_v1', string>> = Object.freeze({
+  tos_v1: '2026-07-08',
+  privacy_v1: '2026-03-31',
+});
+
+export interface AcceptanceRecord {
+  obligation_key: 'tos_v1' | 'privacy_v1';
+  accepted_at: string | null;
+  surface: string | null;
+  /** The page's date the member accepted; null on a row written before migration 583. */
+  document_version: string | null;
+  current_version: string;
+  /** true when a newer document exists; null when the accepted version was not recorded, or nothing was accepted. */
+  newer_document: boolean | null;
+  reason: string | null;
+}
+
+/**
+ * The member's latest acceptance of each clickwrap document, for `/trust/me`.
+ * Null when the table could not be read, so the page says "Unreadable", never
+ * that nothing was accepted.
+ */
+export async function latestAcceptances(env: Env, userId: number): Promise<AcceptanceRecord[] | null> {
+  let rows: Array<{ obligation_key: string; accepted_at: string; surface: string; document_version: string | null }>;
+  try {
+    const r = await env.DB.prepare(
+      `SELECT a.obligation_key, a.accepted_at, a.surface, a.document_version
+         FROM legal_acceptances a
+        WHERE a.user_id = ?
+          AND a.id = (SELECT b.id FROM legal_acceptances b
+                       WHERE b.user_id = a.user_id AND b.obligation_key = a.obligation_key
+                       ORDER BY b.accepted_at DESC, b.id DESC LIMIT 1)`,
+    ).bind(userId).all<{ obligation_key: string; accepted_at: string; surface: string; document_version: string | null }>();
+    rows = r.results || [];
+  } catch {
+    return null;
+  }
+  return (Object.keys(LEGAL_DOCUMENT_VERSIONS) as Array<'tos_v1' | 'privacy_v1'>).map((key) => {
+    const current = LEGAL_DOCUMENT_VERSIONS[key];
+    const row = rows.find((x) => x.obligation_key === key);
+    if (!row) return { obligation_key: key, accepted_at: null, surface: null, document_version: null, current_version: current, newer_document: null, reason: 'Not accepted yet' };
+    const version = typeof row.document_version === 'string' && row.document_version ? row.document_version : null;
+    return {
+      obligation_key: key,
+      accepted_at: row.accepted_at,
+      surface: row.surface,
+      document_version: version,
+      current_version: current,
+      newer_document: version ? version < current : null,
+      reason: version ? null : 'Accepted before the version was recorded',
+    };
+  });
+}
+
+/**
  * Records an affirmative acceptance of the terms and privacy policy.
  *
  * Before this existed, acceptance happened nowhere a machine could see. The only
@@ -746,7 +814,8 @@ export async function recordTermsAcceptance(
        accepted_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
        surface TEXT NOT NULL,
        ip TEXT,
-       ua TEXT
+       ua TEXT,
+       document_version TEXT
      )`,
   ).run().catch(() => null);
 
@@ -757,9 +826,9 @@ export async function recordTermsAcceptance(
 
   for (const key of keys) {
     await env.DB.prepare(
-      `INSERT INTO legal_acceptances (user_id, obligation_key, accepted_at, surface, ip, ua)
-       VALUES (?, ?, ?, ?, ?, ?)`,
-    ).bind(userId, key, now, ctx.surface, ctx.ip || null, ctx.ua || null).run();
+      `INSERT INTO legal_acceptances (user_id, obligation_key, accepted_at, surface, ip, ua, document_version)
+       VALUES (?, ?, ?, ?, ?, ?, ?)`,
+    ).bind(userId, key, now, ctx.surface, ctx.ip || null, ctx.ua || null, LEGAL_DOCUMENT_VERSIONS[key as 'tos_v1' | 'privacy_v1'] ?? null).run();
 
     // `ttlForObligation` is consulted rather than assumed: both keys are
     // `ttlMs: null` today, so acceptance does not expire, and if that ever

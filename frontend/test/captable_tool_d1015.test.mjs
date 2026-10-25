@@ -94,11 +94,12 @@ async function mounted(url, { phone = false, handle = handler } = {}) {
  * ------------------------------------------------------------------ */
 
 test('the tabs are the canvas\'s with a read, and only their words are tabs; a row is still a record', () => {
-  assert.deepEqual(TABS.map((t) => t.id), ['overview', 'instruments', 'option-pool', 'scenarios']);
-  for (const word of ['instruments', 'option-pool', 'scenarios']) assert.ok(isCapTableTab('cap-table', word), word);
+  // D1026 added Access and Import and export, with their reads; History waits for part 10.
+  assert.deepEqual(TABS.map((t) => t.id), ['overview', 'instruments', 'option-pool', 'scenarios', 'access', 'import-export']);
+  for (const word of ['instruments', 'option-pool', 'scenarios', 'access', 'import-export']) assert.ok(isCapTableTab('cap-table', word), word);
   // D1022 (#2859): a holder's address is the tool's holder drawer; `e-<n>` and `pool` stay records.
   assert.ok(isCapTableTab('cap-table', 'h-12'), 'h-12 opens the holder drawer');
-  for (const id of ['h-0', 'h-x', 'e-3', 'pool', 'new', 'history', 'access', 'import-export', '']) assert.ok(!isCapTableTab('cap-table', id), id);
+  for (const id of ['h-0', 'h-x', 'e-3', 'pool', 'new', 'history', '']) assert.ok(!isCapTableTab('cap-table', id), id);
   assert.ok(!isCapTableTab('investor-narrative', 'instruments'), 'only Cap table has these words');
   assert.equal(tabSearch('?project=7&mode=workspace#x'), '?project_id=7');
   assert.equal(tabSearch('?project_id=0'), '');
@@ -267,7 +268,7 @@ test('the wiring: no route is added, CycleRoute branches on the tab word, and th
   assert.doesNotMatch(app, /path="\/raise\/cap-table\/(instruments|option-pool|scenarios)/, 'the module routes carry the tool');
   const route = read('frontend/src/pages/cycles/CycleRoute.jsx');
   assert.match(route, /const capTableTab = record && cycle === 'raise' && isCapTableTab\(slug, recordId\) \? recordId : null;/);
-  assert.match(route, /!narrativeTab && !capTableTab && !!projectId/);
+  assert.match(route, /!narrativeTab && !capTableTab && (?:!dataRoomTab && )?!!projectId/);
   assert.match(route, /slug === CAP_TABLE \? <CapTableHomeNav search=\{q\} projectId=\{projectId\} \/>/);
   const tool = read('frontend/src/pages/raise/captable/CapTableTool.jsx');
   assert.doesNotMatch(tool, /\b(alert|confirm)\(/);
