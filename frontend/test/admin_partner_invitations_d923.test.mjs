@@ -33,7 +33,7 @@ import PartnerInvitations from '../src/pages/admin/PartnerInvitations.jsx';
 import { parseStamp as uiParseStamp } from '../src/ui/parseStamp.js';
 import {
   AGREEMENT_BANNER, AGREEMENT_LAPSE_WARNING, CAPS, COMMUNITY_PATH, CONTRACTS_PAUSED, COULD_NOT_READ, DEAL_NOT_ACTIVE, DEAL_STATE_KEYS, EMPTY_TITLE,
-  FIRMS_TAB_PATH, FOUNDER_NO_PLAN, FROZEN, INVITATION_CLOSED, LINE, MISSING_DEAL, MOVED_LINE, MOVED_PATH, NO_DEAL, NOT_IN_READ, NOT_READ_YET,
+  FIRMS_TAB_PATH, FOUNDER_NO_PLAN, FROZEN, INVITATION_CLOSED, LINE, MOVED_LINE, MOVED_PATH, NO_DEAL, NOT_IN_READ, NOT_READ_YET,
   NOT_RECORDED, READING, STORED_EXPIRED_WORD, TABS, TITLE, TRY_AGAIN, TYPE_FULL, WITHIN_DEALS, WITHIN_INVITATIONS, agreementReady, allTimeRedemptions,
   cameFromOldAddress, copyFailed, countClosing30, countLast90, countOpenWindows, createdLines, day, daysLeft, daysUsed, ddFor, dealFromSearch,
   dealPartner, dealsCount, dealState, dealsUnion, dealTiles, dealTypeWord, dotsLabel, expiresCell, fanFigure, fanOut, findDeal, findInvitation,
