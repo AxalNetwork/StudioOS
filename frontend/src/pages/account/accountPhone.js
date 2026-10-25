@@ -37,7 +37,7 @@ export const ACCOUNT_PHONE_PAGES = {
     sections: ['Yours', 'Suggested for you'],
   },
   trust: {
-    route: '/trust', title: 'Trust Center', sub: 'Your obligations and verification, for your role.',
+    route: '/trust/me', title: 'Trust Center', sub: 'Your obligations and verification, for your role.',
     sections: ['Trust score', 'Obligations'],
   },
   perks: {
@@ -101,6 +101,8 @@ export const PATH_TO_SECTION = {
   onboarding: 'onboarding',
   profile: 'account',
   account: 'account',
+  // D1134 (#2422) — Companies and projects.
+  companies: 'companies',
   security: 'security-privacy',
   privacy: 'security-privacy',
   'security-privacy': 'security-privacy',
@@ -231,6 +233,7 @@ export function accountIndexGroups({ role, follows, billing } = {}) {
       label: 'Settings',
       rows: [
         { title: 'Profile and identity', description: 'Personal details, identity, company profile', to: accountPathFor({ section: 'account', phone: true }) },
+        { title: 'Companies and projects', description: 'Your companies, projects and invitations', to: '/account/companies' },
         { title: 'Notifications', description: 'Each type, in-app, email and push', to: '/account/notifications' },
         { title: 'Sign-in and security', description: 'Password, authenticator app, SMS', to: '/account/security-privacy' },
         { title: 'Billing and orders', description: planLine(role, billing), to: '/account/billing' },

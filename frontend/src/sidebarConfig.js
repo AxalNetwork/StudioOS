@@ -531,7 +531,7 @@ export const SIDEBAR_GROUPS = {
       { to: '/funds', icon: Wallet, label: 'Fund', match: ['/funds'], requiredInvestorTier: 'institutional' },
       { to: '/network', icon: Handshake, label: 'Network', match: ['/network', '/relationships', '/contacts'] },
       { to: '/research', icon: Radar, label: 'Research', match: ['/research'] },
-      { to: '/trust', icon: ShieldCheck, label: 'Trust' },
+      { to: '/trust/me', icon: ShieldCheck, label: 'Trust' },
       // NO Company Settings row. The canvas asks for one; the shipped decision
       // is that /company-settings is the sidebar's PINNED FOOTER for every
       // role, because it used to be a row as well and rendered twice. The

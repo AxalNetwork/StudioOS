@@ -9,6 +9,7 @@ live here, one file each:
 | File | What it holds |
 | --- | --- |
 | `AccountCenter.jsx` | The shared kit: the section list (`AccountSectionNav`, the `lg` column), `PanelCard`, `FieldRow`, `Switch`, `Chips`, `Outcome`, `LoadingRows`, and `useAccountRead`, which keeps loading, read and unreadable apart (D568). D700: `AccountPhoneIndex`, the A1m index rows, and `AccountPhoneFrame`, a phone's `/account`: the index at bare `/account`, and each section as its own page under a ‹ Back bar D753 F8 (#1992): below `sm`, `BTN`'s buttons and `INPUT`'s fields are 44px tall |
+| `companies/` | D1134 (#2422): Companies and projects at `/account/companies`, second in the list; see its README |
 | `AccountProfile.jsx` | Profile and identity; Company profile reads the sidebar’s selected company and links its Company Settings editor. Signing entity keeps the account’s separate contract details |
 | `AccountDevices.jsx` | The devices registered for push, under Notifications |
 | `AccountNewsletters.jsx` | D813 (#2259): Notifications' Newsletters card (board D1): the member's topics from `GET /api/me/newsletters`, the website's six then the ones a role adds, each switch saved by `PUT /api/me/newsletters` and redrawn from the answer; loading, empty and Unreadable. Its words are `../site/newsletterModel.js`'s. It replaces the Insights page's weekly-digest toggle |
