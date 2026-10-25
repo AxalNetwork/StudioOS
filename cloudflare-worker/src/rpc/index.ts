@@ -40,6 +40,7 @@ import {
 } from './hqOps';
 import { loadInsightsForBranch } from '../routes/admin_insights';
 import { loadProgramsForBranch } from '../services/programCatalogue';
+import { applySegmentSuggestionAnswer, recordSegmentSuggestion } from './segmentSuggestionOps';
 
 /** Exported by a branch Worker; called by HQ over `BRANCH_<CODE>`. */
 export class HqEntrypoint extends WorkerEntrypoint<Env> {
@@ -92,6 +93,10 @@ export class HqEntrypoint extends WorkerEntrypoint<Env> {
   }
 
   applyEscalationAnswer(a: EscalationAnswer) { return applyEscalationAnswer(this.env, a); }
+
+  // D1003 — HQ's decision on a segment suggestion this subsidiary's Admin
+  // made. HQ-authored, no secret: the rule above for `applyEscalationAnswer`.
+  applySegmentSuggestionAnswer(a: Record<string, unknown>) { return applySegmentSuggestionAnswer(this.env, a); }
 
   // D147 — HQ's master contract library, pushed whole. THE WHOLE LIBRARY AND
   // NOT ONE TEMPLATE, because a library is a set: a per-template push can add
@@ -154,6 +159,13 @@ export class HqEntrypoint extends WorkerEntrypoint<Env> {
 export class BranchEntrypoint extends WorkerEntrypoint<Env> {
   escalate(callerCode: string, item: EscalationInput) {
     return recordEscalation(this.env, callerCode, item);
+  }
+
+  // D1003 — a subsidiary's Admin suggests a change to a segment, which HQ
+  // decides. No secret, on `escalate`'s rule: the code is checked against
+  // `licence_deployments`, and a forged call files a suggestion HQ declines.
+  segmentSuggestion(callerCode: string, input: Record<string, unknown>) {
+    return recordSegmentSuggestion(this.env, callerCode, input);
   }
 
   // MONEY-ADJACENT SINCE D244: the answer is a licence's fees, revenue share

@@ -158,6 +158,8 @@ export const RPC_SURFACE: { hqCallsBranch: RpcSide; branchCallsHq: RpcSide } = {
       m('applyLicence', true),
       m('applyPromoCeiling', true),
       m('applyEscalationAnswer', true),
+      // D1003 — HQ's decision on a segment suggestion (persona_segments.ts). HQ-authored, no secret.
+      m('applySegmentSuggestionAnswer', true),
       m('publishTemplate', true),
       // D487 — HQ · Content's games push (admin_content.ts). HQ-authored, no secret.
       m('publishGames', true),
@@ -175,6 +177,8 @@ export const RPC_SURFACE: { hqCallsBranch: RpcSide; branchCallsHq: RpcSide } = {
     called_over: 'HQ',
     methods: [
       m('escalate', true),
+      // D1003 — a subsidiary's segment suggestion (persona_segments.ts). Checked against licence_deployments, no secret.
+      m('segmentSuggestion', true),
       m('licence', true, true),
       m('reportUsage', true, true),
     ],
