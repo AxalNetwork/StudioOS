@@ -147,6 +147,8 @@ test('each row: week, day, days left, progress, this week, deadline, missing and
   assert.deepEqual([...m.keys()].sort(), [A, B, C, D, E, F, G].map((x) => `u-${x}`).sort(), 'the outsider is not a participant');
 
   const a = m.get(`u-${A}`);
+  // D949: each row carries the account id the grace, week and workspace writes are keyed by.
+  assert.ok([...m.values()].every((x) => Number.isInteger(x.user_id) && x.uid === `u-${x.user_id}`), 'user_id is the account id');
   assert.deepEqual({ w: a.week, d: a.day, left: a.days_left, tw: a.this_week, dl: a.deadline_at, miss: a.missing, cohort: a.cohort },
     { w: 2, d: 10, left: 19, tw: 'on_track', dl: '2026-11-15 05:00:00', miss: [], cohort: '2026-11' });
   assert.deepEqual(a.progress, { done: 7, required: REQUIRED_ITEMS });

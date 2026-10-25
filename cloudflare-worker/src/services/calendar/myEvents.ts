@@ -107,6 +107,11 @@ export async function eventVisibleTo(
     (event.visibility === 'public' && Number(event.admin_published) === 1)
   );
   if (published) return true;
+  // D1031 (#2872), as `canViewEvent`: a member who holds a registration reads the event, also once cancelled.
+  const reg = await env.DB.prepare(
+    `SELECT id FROM event_registrations WHERE event_id = ? AND user_id = ? LIMIT 1`,
+  ).bind(event.id, user.id).first();
+  if (reg) return true;
   const inv = await env.DB.prepare(
     `SELECT id FROM event_invitations
        WHERE event_id = ? AND (invited_user_id = ? OR lower(invited_email) = lower(?))

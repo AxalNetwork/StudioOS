@@ -405,11 +405,11 @@ test('14: the data-room Add opens Upload, Manage access opens the file tool, and
     const first = (await read(db, m.slug)).body.records.rows.find((r: any) => r.id != null);
     assert.equal((await rec(db, m.slug, first.id)).status, 200, `${m.slug} ${first.id} opens`);
   }
-  // Manage access opens the file tool on this venture; Model a round opens the variants.
+  // Manage access opens the file tool on this venture; Model a round opens the Scenarios tab on it (D1016).
   const links = async (slug: string, id: string | number) => (await rec(db, slug, id)).body.actions
     .filter((a: any) => a.kind === 'link').map((a: any) => [a.key, a.kind, a.href]);
   assert.deepEqual(await links('data-room', 12), [['manage-access', 'link', `${TOOL_HREF.dataRoom}&project_id=${P}`]]);
-  assert.deepEqual(await links('cap-table', 'e-3'), [['model-a-round', 'link', '/raise/cap-table/variants']]);
+  assert.deepEqual(await links('cap-table', 'e-3'), [['model-a-round', 'link', `/raise/cap-table/scenarios?project_id=${P}`]]);
 });
 
 

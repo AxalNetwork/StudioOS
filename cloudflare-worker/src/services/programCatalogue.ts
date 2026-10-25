@@ -44,8 +44,6 @@ export const PART4_CLAIMS_REASON =
 export const PART4_STRATEGIC_REASON =
   'Strategic referral access is read through the queue service part 4 (#2790) builds (services/referralSubmissions.ts), which this Worker does not have yet.';
 export const HQ_READS_REASON = 'HQ reads these figures.';
-export const DEACTIVATED_NOT_LEFT_OUT =
-  'Deactivated accounts are not left out yet. Part 7 (#2793) serves account state on the assignment list.';
 export const LAB_PEOPLE_REASON =
   'The Lab is left out until O-FND and #2374 say who a cohort\'s founders are.';
 export const REFERRAL_REWARDS_REASON = 'Referral rewards are not paid in perk credits yet.';
@@ -182,23 +180,27 @@ export const WAITING_COVERED = ['cohort', 'referrals', 'perks', 'hosts'] as cons
 // Card figures
 // ---------------------------------------------------------------------------
 
-/** S-CNT: distinct people holding an active row whose current role is Advisor. */
+/**
+ * S-CNT: distinct people holding an active row whose current role is Advisor
+ * and whose account is active. D960's one account rule (`users.is_active = 1`,
+ * what `getCurrentUser` lets through) leaves a deactivated holder out.
+ */
 async function activeMentors(env: Env) {
   const r = await env.DB.prepare(
     `SELECT COUNT(DISTINCT a.advisor_user_id) AS n
        FROM advisor_cohort_assignments a JOIN users u ON u.id = a.advisor_user_id
-      WHERE a.is_active = 1 AND lower(COALESCE(u.role, '')) = 'advisor'`,
+      WHERE a.is_active = 1 AND lower(COALESCE(u.role, '')) = 'advisor' AND u.is_active = 1`,
   ).first<{ n: number }>();
-  return { count: n(r?.n), reason: DEACTIVATED_NOT_LEFT_OUT };
+  return { count: n(r?.n) };
 }
 
-/** S-COV, over every cycle the rule takes (no cap): scheduled or running, not postponed. */
+/** S-COV, over every cycle the rule takes (no cap): scheduled or running, not postponed. A deactivated holder covers nothing (D960). */
 async function mentorCoverage(env: Env) {
   const r = await env.DB.prepare(
     `SELECT COUNT(*) AS cohorts,
             SUM(CASE WHEN EXISTS (
               SELECT 1 FROM advisor_cohort_assignments a JOIN users u ON u.id = a.advisor_user_id
-               WHERE a.cohort_cycle_id = c.id AND a.is_active = 1 AND lower(COALESCE(u.role, '')) = 'advisor'
+               WHERE a.cohort_cycle_id = c.id AND a.is_active = 1 AND lower(COALESCE(u.role, '')) = 'advisor' AND u.is_active = 1
             ) THEN 1 ELSE 0 END) AS covered
        FROM cohort_cycles c
       WHERE c.status IN ('scheduled', 'active') AND COALESCE(c.app_status, '') <> 'postponed'`,
@@ -470,7 +472,7 @@ function needs(parts: Array<{ available: boolean; count?: number } & Record<stri
 }
 
 function cardFigures(key: string, viewer: Viewer, q: Queues, b: {
-  mentors: Read<{ count: number; reason: string }>;
+  mentors: Read<{ count: number }>;
   coverage: Read<{ cohorts: number; covered: number; uncovered: number }>;
   notAdvisor: Read<{ count: number }>;
   live: Read<{ count: number }>;
