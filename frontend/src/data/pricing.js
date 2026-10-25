@@ -8,21 +8,23 @@
  *
  * Local additions in this file:
  *   - the FREE tier (paywall only renders paid tiers)
- *   - annual price equivalents (paywall shows monthly only)
  *   - taglines, CTAs, FAQ — marketing copy that doesn't belong in
  *     the in-app paywall.
+ *
+ * D1050 (#2901): NO PRICE IS TYPED HERE. A paid tier's `priceMonthly` and
+ * `priceAnnual` are null until `pricedTier` (`lib/plansPricing.js`) puts the
+ * plans read's prices on it; a free tier is 0.
  */
 import { TIER_PLANS } from '../components/PaywallModal';
 
 function tierFromPlan(id, extra) {
   const plan = TIER_PLANS[id];
   if (!plan) throw new Error(`Unknown tier id: ${id}`);
-  const priceMonthly = Number(String(plan.price).replace(/[^0-9.]/g, '')) || 0;
   return {
     id,
     name: plan.label,
-    priceMonthly,
-    priceAnnual: extra.priceAnnual,
+    priceMonthly: null,
+    priceAnnual: null,
     tagline: plan.blurb,
     features: plan.features.slice(),
     cta: extra.cta,
@@ -52,12 +54,10 @@ export const FOUNDER_TIERS = [
     cta: { label: 'Start free', to: '/register?plan=free' },
   },
   tierFromPlan('growth', {
-    priceAnnual: 16,
     highlight: true,
     cta: { label: 'Start 14-day trial', to: '/register?plan=growth' },
   }),
   tierFromPlan('studio', {
-    priceAnnual: 80,
     cta: { label: 'Start 14-day trial', to: '/register?plan=studio' },
   }),
 ];
@@ -78,12 +78,10 @@ export const INVESTOR_TIERS = [
     cta: { label: 'Sign up', to: '/register?plan=investor_free' },
   },
   tierFromPlan('professional', {
-    priceAnnual: 119,
     highlight: true,
     cta: { label: 'Start 14-day trial', to: '/register?plan=professional' },
   }),
   tierFromPlan('institutional', {
-    priceAnnual: 479,
     cta: { label: 'Talk to sales', to: '/demo?topic=investor' },
   }),
 ];

@@ -17,6 +17,7 @@
  * frontend can re-use the upsell modal pattern.
  */
 import type { Context } from 'hono';
+import { planByKey } from '../services/planCatalogue';
 import type { Env, User } from '../types';
 import { requireAuth } from '../auth';
 import { bindingKey, runSchemaBootstrap } from '../util/schemaBootstrap';
@@ -38,9 +39,14 @@ const TIER_COPY: Record<Exclude<InvestorTier, 'free'>, string> = {
     'This is an Investor Institutional feature. Upgrade for unlimited dealrooms, co-invest, and LP reporting.',
 };
 
-const PLAN_PRICE_LABEL: Record<Exclude<InvestorTier, 'free'>, string> = {
-  professional: '$149 / month',
-  institutional: '$599 / month',
+/**
+ * D1050 (#2901): no price is typed here. The upsell names the plan by its
+ * catalogue key and name; the price is Stripe's, read from the D1 mirror on
+ * `GET /api/public/plans-and-packs`.
+ */
+const PLAN_KEY: Record<Exclude<InvestorTier, 'free'>, string> = {
+  professional: 'investor:professional',
+  institutional: 'investor:institutional',
 };
 
 export const INVESTOR_QUOTAS: Record<InvestorTier, { intros_per_quarter: number; dealroom_max: number; seats: number }> = {
@@ -74,12 +80,13 @@ export function investorTierCovers(userTier: string | null | undefined, required
 /**
  * Returns the *effective* tier for a user, honoring active trial windows.
  * A row with status='trialing' and a future trial_ends_at keeps its tier;
- * past_due/unpaid downgrade to 'free'.
+ * unpaid and cancelled downgrade to 'free'. D1052 (#2903): past_due — a renewal
+ * Stripe is still retrying — keeps the tier (#2451's owner question 4).
  */
 export function effectiveInvestorTier(user: InvestorUser | null | undefined): InvestorTier {
   if (!user) return 'free';
   const status = (user.investor_subscription_status ?? 'free').toLowerCase();
-  if (status === 'past_due' || status === 'unpaid' || status === 'cancelled') return 'free';
+  if (status === 'unpaid' || status === 'cancelled') return 'free';
   // X-1: partner-granted/referred investor tiers expire at renews_at.
   // Cron flips them to 'free'; this read-side check prevents stale
   // sessions from sneaking past expiry between sweeps.
@@ -108,7 +115,7 @@ export function investorUpsell(required: Exclude<InvestorTier, 'free'>) {
     error: 'investor_tier_required',
     required,
     message: TIER_COPY[required],
-    plan: { tier: required, price_label: PLAN_PRICE_LABEL[required] },
+    plan: { tier: required, name: planByKey(PLAN_KEY[required])!.name, plan_key: PLAN_KEY[required] },
     checkout_path: '/api/billing/investor/checkout',
   };
 }

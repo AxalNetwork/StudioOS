@@ -72,7 +72,7 @@ export function GithubSyncPanel() {
       setToken('');
       setFailed(false);
     } catch (e) {
-      reportError('AdminPage:githubConfigLoad', e);
+      reportError('GithubSyncConsole:githubConfigLoad', e);
       showToast({ kind: 'err', msg: e.message || 'Failed to load' });
       setFailed(true);
     } finally { setLoading(false); }

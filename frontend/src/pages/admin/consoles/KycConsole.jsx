@@ -29,7 +29,7 @@ export default function KycConsole() {
       setKycQueue(rows);
       setFailed(false);
     } catch (e) {
-      reportError('AdminPage:loadKycQueue', e);
+      reportError('KycConsole:loadKycQueue', e);
       setKycQueue([]);
       setFailed(true);
     } finally { setLoading(false); }
@@ -105,7 +105,7 @@ export default function KycConsole() {
                             setKycDetail(await api.kycAdminGet(k.id));
                             setKycRejectReason('');
                           } catch (e) {
-                            reportError('AdminPage:kycRecord', e);
+                            reportError('KycConsole:kycRecord', e);
                             alert(e.message || 'The KYC record could not be read.');
                           }
                         }}

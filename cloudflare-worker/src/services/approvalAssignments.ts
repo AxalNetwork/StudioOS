@@ -15,6 +15,7 @@ import {
   type ApprovalItem, type ApprovalLaneKey, type ApprovalSource,
 } from './approvalSources';
 import { logAdminAction } from './adminAudit';
+import { HQ_APPROVAL_SOURCES } from './hqApprovalSources';
 
 export const ASSIGNMENTS_UNREADABLE =
   'The assignment record could not be read on this database. That is not a claim that nobody is assigned.';
@@ -26,9 +27,14 @@ export const ASSIGNMENT_CAP = 40;
 const READ_CAP = 5000;
 const HISTORY_CAP = 100;
 
-/** A lane `APPROVAL_SOURCES` declares, read from the list each time, so a lane added there (part 3's HQ lanes, D1040) is one too. */
+/**
+ * A lane `APPROVAL_SOURCES` or HQ's lanes declare (D1041), read from the lists
+ * each time. Naming an HQ lane is not enough to assign on it: the item must be
+ * open on the board read with the caller's own sources, which on a branch or
+ * for a plain admin never include an HQ lane.
+ */
 export function isAssignmentLane(lane: string): lane is ApprovalLaneKey {
-  return APPROVAL_SOURCES.some((s) => s.key === lane);
+  return APPROVAL_SOURCES.some((s) => s.key === lane) || HQ_APPROVAL_SOURCES.some((s) => s.key === lane);
 }
 
 export function personLabel(row: { id: number; name?: string | null; email?: string | null }): string {

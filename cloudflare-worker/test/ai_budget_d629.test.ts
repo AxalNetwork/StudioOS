@@ -32,7 +32,8 @@ test('D629 caps use canonical effective tiers and an explicit zero override; env
   assert.deepEqual(environmentAiCaps({WORKERS_AI_BUDGET_USD_DAY:'NaN',WORKERS_AI_BUDGET_USD_MONTH:'-1'} as any),{day:5,month:50,orgMonth:5000});
   assert.equal(aiLicenceKey({role:'founder',subscription_tier:'studio',subscription_status:'active'}),'founder:studio');
   assert.equal(aiLicenceKey({role:'founder',subscription_tier:'growth',subscription_status:'active'}),'founder:growth');
-  assert.equal(aiLicenceKey({role:'founder',subscription_tier:'studio',subscription_status:'past_due'}),'founder:free');
+  assert.equal(aiLicenceKey({role:'founder',subscription_tier:'studio',subscription_status:'past_due'}),'founder:studio','D1052: a renewal Stripe is retrying keeps the plan');
+  assert.equal(aiLicenceKey({role:'founder',subscription_tier:'studio',subscription_status:'unpaid'}),'founder:free');
   assert.equal(aiLicenceKey({role:'founder',subscription_tier:'studio',subscription_status:'partner_grant',subscription_renews_at:'2000-01-01'}),'founder:free');
   assert.equal(aiLicenceKey({role:'investor',investor_tier:'institutional',investor_subscription_status:'active'}),'investor:institutional');
   assert.equal(aiLicenceKey({role:'investor',investor_tier:'professional',investor_subscription_status:'unpaid'}),'investor:free');

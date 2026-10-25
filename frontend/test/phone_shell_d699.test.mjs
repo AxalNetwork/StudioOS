@@ -116,7 +116,7 @@ test('D699 one switch writer and account sheet member routes', () => {
   assert.doesNotMatch(sheet, /\/companies\/new|\/switch\//);
   assert.match(sheet, /Unreadable —/);
   const account = read('frontend/src/ui/phone/AccountSheet.jsx');
-  for (const route of ['/profile', '/account/usage', '/account/connectors', '/trust', '/my/events', '/pricing', '/wellbeing', '/referrals']) assert.ok(account.includes(`'${route}'`) || account.includes(`"${route}"`), route);
+  for (const route of ['/profile', '/account/usage', '/account/connectors', '/trust/me', '/my/events', '/pricing', '/wellbeing', '/referrals']) assert.ok(account.includes(`'${route}'`) || account.includes(`"${route}"`), route);
   assert.match(account, /onLogout\?\.\(\)/);
   const companyHtml = render(h(ActiveCompanyContext.Provider, { value: { company: { id: 1, company_name: 'Juniper Labs' }, companies: [], setCompany() {}, setCompanies() {} } },
     h(CompanySheet, { onClose() {} })));

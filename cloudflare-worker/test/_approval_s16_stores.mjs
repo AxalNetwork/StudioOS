@@ -53,6 +53,43 @@ export const S16_STORES_SQL = `
     created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP);
 `;
 
+/**
+ * D1041 (#2889): the eight stores the canvas's new lanes read, trimmed the same
+ * way. IF NOT EXISTS, because some fixtures already hold `projects` or
+ * `partners` in their own shape.
+ */
+export const D1041_STORES_SQL = `
+  CREATE TABLE IF NOT EXISTS company_profiles (id INTEGER PRIMARY KEY AUTOINCREMENT, company_name TEXT);
+  CREATE TABLE IF NOT EXISTS company_kyb_records (
+    id INTEGER PRIMARY KEY AUTOINCREMENT, company_id INTEGER, status TEXT NOT NULL DEFAULT 'not_started',
+    entity_name TEXT, submitted_at TEXT, created_at TEXT DEFAULT (datetime('now')));
+  CREATE TABLE IF NOT EXISTS partners (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT);
+  CREATE TABLE IF NOT EXISTS comarketing_pitches (
+    id INTEGER PRIMARY KEY AUTOINCREMENT, partner_id INTEGER, submitter_user_id INTEGER, title TEXT NOT NULL,
+    status TEXT NOT NULL DEFAULT 'proposed', published_at TEXT, created_at TEXT);
+  CREATE TABLE IF NOT EXISTS experts (
+    id INTEGER PRIMARY KEY AUTOINCREMENT, uid TEXT NOT NULL, user_id INTEGER, name TEXT, headline TEXT,
+    verified INTEGER DEFAULT 0, is_active INTEGER DEFAULT 1, created_at TEXT DEFAULT (datetime('now')),
+    profile_completion_pct INTEGER, hidden_by_admin INTEGER DEFAULT 0);
+  CREATE TABLE IF NOT EXISTS perks (
+    id INTEGER PRIMARY KEY AUTOINCREMENT, partner_user_id INTEGER, partner_name TEXT, offer TEXT NOT NULL,
+    status TEXT NOT NULL DEFAULT 'draft', created_at TEXT DEFAULT (datetime('now')), updated_at TEXT);
+  CREATE TABLE IF NOT EXISTS referral_strategic_access (
+    id INTEGER PRIMARY KEY AUTOINCREMENT, user_id INTEGER NOT NULL, status TEXT NOT NULL DEFAULT 'requested',
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP);
+  CREATE TABLE IF NOT EXISTS lab_host_applications (
+    id INTEGER PRIMARY KEY AUTOINCREMENT, user_id INTEGER NOT NULL, host_kind TEXT NOT NULL,
+    status TEXT NOT NULL DEFAULT 'pending', created_at TEXT DEFAULT (datetime('now')));
+  CREATE TABLE IF NOT EXISTS projects (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT);
+  CREATE TABLE IF NOT EXISTS score_snapshots (
+    id INTEGER PRIMARY KEY AUTOINCREMENT, project_id INTEGER, tier TEXT,
+    admin_review_status TEXT NOT NULL DEFAULT 'auto_approved', is_sandbox INTEGER DEFAULT 0,
+    created_at TEXT DEFAULT (datetime('now')));
+  CREATE TABLE IF NOT EXISTS articles (
+    id INTEGER PRIMARY KEY AUTOINCREMENT, title TEXT NOT NULL, author_user_id INTEGER,
+    status TEXT NOT NULL DEFAULT 'draft', submitted_at TEXT, created_at TEXT DEFAULT (datetime('now')));
+`;
+
 const USER_COLUMNS = [
   ['role', 'TEXT'],
   ['kyc_status', "TEXT DEFAULT 'not_started'"],
@@ -78,9 +115,10 @@ export function signBinding(d, userId) {
   else d.prepare('INSERT INTO user_role_review (user_id, binding_envelope_id) VALUES (?, ?)').run(userId, id);
 }
 
-/** Create the seven stores on a `node:sqlite` DatabaseSync that already has `users`. */
+/** Create the seven stores, and D1041's eight, on a `node:sqlite` DatabaseSync that already has `users`. */
 export function addS16Stores(d) {
   d.exec(S16_STORES_SQL);
+  d.exec(D1041_STORES_SQL);
   d.exec(readFileSync(new URL('../sql/migrations/275_partner_profiles_columns.sql', import.meta.url), 'utf8'));
   d.exec(readFileSync(new URL('../sql/migrations/546_events_review_columns.sql', import.meta.url), 'utf8'));
   const have = new Set(d.prepare('PRAGMA table_info(users)').all().map((c) => c.name));
