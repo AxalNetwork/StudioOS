@@ -14,9 +14,10 @@ const CRUMB_LINK = 'text-axal-muted hover:text-axal-violet dark:text-gray-400 da
  * pill and grant badge as on the card, the program's line, and the facts
  * strip where the canvas draws one), the moved notice where a redirect lands,
  * then the tab strip and the tab. There is no ⋯ menu: Pause waits for
- * OD-PAUSE, and the CSV for S-CSV.
+ * OD-PAUSE, and the CSV for S-CSV. A page that passes `actionsOnPhone`
+ * false draws no header buttons on a phone (D962, PG20b).
  */
-export default function ProgramFrame({ program, superAdmin = false, actions = null, tabs = null, children }) {
+export default function ProgramFrame({ program, superAdmin = false, actions = null, actionsOnPhone = true, tabs = null, children }) {
   const loc = useLocation();
   const navigate = useNavigate();
   const phone = usePhoneWidth();
@@ -43,7 +44,8 @@ export default function ProgramFrame({ program, superAdmin = false, actions = nu
             : <Unread word={NOT_RECORDED} reason={page.lineReason} testId="programs-header-line" />}
           {page.whoReason ? <span className={SUB} data-testid="programs-header-who">{`Who: ${NOT_RECORDED}. ${page.whoReason}`}</span> : null}
         </div>
-        {actions}
+        {/* D962: a page that draws its own way in on a phone has no header buttons there (PG20b). */}
+        {phone && !actionsOnPhone ? null : actions}
       </header>
 
       {page.facts ? (

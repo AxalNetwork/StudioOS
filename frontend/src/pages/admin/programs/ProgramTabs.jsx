@@ -9,7 +9,9 @@ import { NavLink } from 'react-router-dom';
  * `admin_programs_d953.test.mjs` holds each strip equal to `PAGES`. A program
  * has only the tabs it has today. A Queue tab carries its count, amber when
  * above zero; a program without a queue has no Queue tab, so no tab reads
- * "[0]". On a phone the strip scrolls sideways.
+ * "[0]". On a phone the strip scrolls sideways. D962 adds Activity to
+ * Mentor, Refer & Earn, Perks and Learning; no page has a Terms tab, because
+ * part 1's store holds no program's terms.
  */
 
 function Tab({ to, end = false, count = null, testId, children }) {
@@ -49,6 +51,7 @@ export function MentorTabs() {
       <Tab to="/admin/programs/mentor-cohorts" end testId="programs-tab-overview">Overview</Tab>
       <Tab to="/admin/programs/mentor-cohorts/how-it-runs" testId="programs-tab-how">How it runs</Tab>
       <Tab to="/admin/programs/mentor-cohorts/people" testId="programs-tab-people">People</Tab>
+      <Tab to="/admin/programs/mentor-cohorts/activity" testId="programs-tab-activity">Activity</Tab>
     </Strip>
   );
 }
@@ -60,6 +63,7 @@ export function ReferTabs({ queue }) {
       <Tab to="/admin/programs/refer-and-earn/how-it-runs" testId="programs-tab-how">How it runs</Tab>
       <Tab to="/admin/programs/refer-and-earn/queue" count={queue} testId="programs-tab-queue">Queue</Tab>
       <Tab to="/admin/programs/refer-and-earn/settings" testId="programs-tab-settings">Settings</Tab>
+      <Tab to="/admin/programs/refer-and-earn/activity" testId="programs-tab-activity">Activity</Tab>
     </Strip>
   );
 }
@@ -70,6 +74,7 @@ export function PerksTabs({ queue }) {
       <Tab to="/admin/programs/perks" end testId="programs-tab-overview">Overview</Tab>
       <Tab to="/admin/programs/perks/how-it-runs" testId="programs-tab-how">How it runs</Tab>
       <Tab to="/admin/programs/perks/queue" count={queue} testId="programs-tab-queue">Queue</Tab>
+      <Tab to="/admin/programs/perks/activity" testId="programs-tab-activity">Activity</Tab>
     </Strip>
   );
 }
@@ -80,6 +85,7 @@ export function LearningTabs() {
       <Tab to="/admin/programs/learning" end testId="programs-tab-overview">Overview</Tab>
       <Tab to="/admin/programs/learning/how-it-runs" testId="programs-tab-how">How it runs</Tab>
       <Tab to="/admin/programs/learning/people" testId="programs-tab-people">People</Tab>
+      <Tab to="/admin/programs/learning/activity" testId="programs-tab-activity">Activity</Tab>
     </Strip>
   );
 }

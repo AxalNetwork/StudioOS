@@ -3,6 +3,7 @@ import { api } from '../../../lib/api';
 import { insightsApi } from '../../../lib/api/insights';
 import { learningApi } from '../../../lib/api/learning';
 import { adminTestingApi } from '../../../lib/api/productTesting';
+import { programsApi } from '../../../lib/api/programs';
 import { reportError } from '../../../lib/log';
 import { OPEN_STATUSES } from './programsModel';
 
@@ -57,11 +58,6 @@ function hostsReply(reply) {
   return reply;
 }
 
-function arrayReply(reply) {
-  if (!Array.isArray(reply)) throw new Error('The referrals did not come back as a list.');
-  return reply;
-}
-
 /** R1, R2 and R3: what Waiting for you and the cards' Needs you count. */
 const readGlance = () => api.adminStudioGlance();
 const readHosts = () => api.adminLabHosts('pending').then(hostsReply);
@@ -72,8 +68,10 @@ const readTimeline = () => api.adminCohortTimeline().then(listed('cycles', 'The 
 const readLearning = () => learningApi.assignedPrograms().then(listed('programs', 'The learning programs'));
 const readTesting = () => adminTestingApi.programmes().then(items('The testing programs'));
 const readScopes = () => insightsApi.insightsScopes();
-/** R8, one call per open status, at the cap of 200. */
-const readReferrals = (status) => () => api.adminReferralSubmissions({ status, limit: 200 }).then(arrayReply);
+/** D962: 565's grants and ends (M1), the five newest activity rows (P2) and the sessions (P3). */
+const readHistory = () => api.adminAdvisorCohortHistory({ limit: 200 }).then(items('The access history'));
+const readRecent = () => programsApi.activity('mentor-cohorts', { limit: 5 }).then(listed('rows', 'The activity'));
+const readSessions = () => programsApi.mentorSessions().then(listed('cycles', 'The sessions'));
 
 function useTick() {
   const [tick, setTick] = useState(0);
@@ -97,42 +95,107 @@ export function useCatalogueReads(superAdmin) {
   return { glance, hosts, perkQueue, perks, assignments, timeline, learning, testing, scopes, drawn, reload };
 }
 
-/** Mentor cohort access: Overview reads R5, R7 and R2; How it runs reads R7. People's body reads its own. */
+/**
+ * Mentor cohort access: Overview reads R5, R7, R2, 565's history (M1) and the
+ * five newest activity rows (P2); How it runs reads R5 (founders hidden), R7
+ * and the sessions (P3); Activity reads R7 to name each cohort. People's body
+ * reads its own. Every tab reads R5 and R7, which the header's Assign uses.
+ */
 export function useMentorReads(tab) {
   const [tick, reload] = useTick();
   const overview = tab === 'overview';
-  const assignments = useRead('assignments', 'assignments', tick, overview, readAssignments);
-  const timeline = useRead('timeline', 'timeline', tick, overview || tab === 'how', readTimeline);
+  const assignments = useRead('assignments', 'assignments', tick, true, readAssignments);
+  const timeline = useRead('timeline', 'timeline', tick, true, readTimeline);
   const hosts = useRead('hosts', 'hosts', tick, overview, readHosts);
-  return { assignments, timeline, hosts, reload };
+  const history = useRead('history', 'history', tick, overview, readHistory);
+  const recent = useRead('recent', 'recent', tick, overview, readRecent);
+  const sessions = useRead('sessions', 'sessions', tick, tab === 'how', readSessions);
+  return { assignments, timeline, hosts, history, recent, sessions, reload };
 }
 
+/** A paged read's reply: `{ items, total }`, or a failed read. */
+function paged(what) {
+  return (reply) => {
+    if (!Array.isArray(reply?.items) || !Number.isFinite(Number(reply?.total))) throw new Error(`${what} did not come back with a total.`);
+    return reply;
+  };
+}
+/** D962 (F1): one exact total, read as a page of one. */
+const referTotal = (status) => () => api.adminReferralSubmissions({ ...(status ? { status } : {}), limit: 1, offset: 0 }).then(paged('The referrals'));
+
 /**
- * Refer & Earn: the three open statuses on every tab (the Queue tab's count is
- * Overview's total), and R1 on Overview for the oldest and Overdue.
+ * Refer & Earn (D962): the open total on every tab (the Queue tab's count);
+ * on Overview, each figure's exact total (F1), the oldest 200 open for the
+ * bands, the weekly read (F3), the strategic queue (F4), and R1 for the
+ * oldest and Overdue. The Queue reads its own pages.
  */
 export function useReferReads(tab) {
   const [tick, reload] = useTick();
-  const submitted = useRead('referrals:submitted', 'submitted', tick, true, readReferrals(OPEN_STATUSES[0]));
-  const underReview = useRead('referrals:under_review', 'under_review', tick, true, readReferrals(OPEN_STATUSES[1]));
-  const moreInfo = useRead('referrals:more_info_needed', 'more_info_needed', tick, true, readReferrals(OPEN_STATUSES[2]));
-  const glance = useRead('glance', 'glance', tick, tab === 'overview', readGlance);
-  return { sets: { submitted, under_review: underReview, more_info_needed: moreInfo }, glance, reload };
+  const overview = tab === 'overview';
+  const open = useRead('refer:open', 'open', tick, true, referTotal(OPEN_STATUSES.join(',')));
+  const all = useRead('refer:all', 'all', tick, overview, referTotal(null));
+  const converted = useRead('refer:converted', 'converted', tick, overview, referTotal('converted,reward_eligible,reward_issued'));
+  const submitted = useRead('refer:submitted', 'submitted', tick, overview, referTotal('submitted'));
+  const underReview = useRead('refer:under_review', 'under_review', tick, overview, referTotal('under_review'));
+  const moreInfo = useRead('refer:more_info_needed', 'more_info_needed', tick, overview, referTotal('more_info_needed'));
+  const rejected = useRead('refer:rejected', 'rejected', tick, overview, referTotal('rejected'));
+  const closed = useRead('refer:closed', 'closed', tick, overview, referTotal('closed'));
+  const oldest = useRead('refer:oldest', 'oldest', tick, overview,
+    () => api.adminReferralSubmissions({ status: OPEN_STATUSES.join(','), sort: 'oldest', limit: 200, offset: 0 }).then(paged('The open referrals')));
+  const weekly = useRead('refer:weekly', 'weekly', tick, overview, () => api.adminReferralWeekly(12));
+  const strategic = useRead('refer:strategic', 'strategic', tick, overview, () => api.adminStrategicAccess({ status: 'requested', limit: 200 }).then(paged('The strategic access requests')));
+  const glance = useRead('glance', 'glance', tick, overview, readGlance);
+  return {
+    open, all, converted, totals: { submitted, under_review: underReview, more_info_needed: moreInfo }, rejected, closed,
+    oldest, weekly, strategic, glance, reload,
+  };
 }
 
-/** Perks: R3 on every tab (the Queue tab's count), and R4 on Overview. */
+/**
+ * Perks (D962): the listings in review, oldest first (K1), on every tab: its
+ * total is the Queue tab's count and Overview's Waiting for review, and its
+ * first row is the oldest. On Overview, R4's live listings and the claims
+ * (K2, twelve weeks). The Queue reads its own pages.
+ */
 export function usePerksReads(tab) {
   const [tick, reload] = useTick();
-  const perkQueue = useRead('perk-queue', 'perk-queue', tick, true, readPerkQueue);
+  const inReview = useRead('perks:in-review', 'in-review', tick, true,
+    () => api.adminPerkListings({ status: 'in_review', sort: 'oldest', limit: 1, offset: 0 }).then(paged('The listings in review')));
   const perks = useRead('perks', 'perks', tick, tab === 'overview', readPerks);
-  return { perkQueue, perks, reload };
+  const claims = useRead('perks:claims', 'claims', tick, tab === 'overview', () => api.adminPerkClaims(12));
+  return { inReview, perks, claims, reload };
 }
 
-/** Learning: R9 on Overview and People; R10 for the program People picked. */
+/** Learning: R9 on Overview and People; P4 on Overview; R10 for the program People picked. */
 export function useLearningReads(tab, programUid) {
   const [tick, reload] = useTick();
   const learning = useRead('learning', 'learning', tick, tab === 'overview' || tab === 'people', readLearning);
+  const weekly = useRead('learning:weekly', 'weekly', tick, tab === 'overview', () => programsApi.learningWeekly(12));
   const learners = useRead('learners', `learners:${programUid || ''}`, tick, tab === 'people' && Boolean(programUid),
     () => learningApi.programLearners(programUid).then(listed('learners', 'The learners')));
-  return { learning, learners, reload };
+  return { learning, weekly, learners, reload, tick };
+}
+
+/**
+ * D962: R10 for each program `uids` names, each read alone, so a program
+ * whose learners cannot be read marks only its own row (Completion by
+ * program, OD9's Finished).
+ */
+export function useLearnersFor(uids, tick, enabled) {
+  const [reads, setReads] = useState({});
+  const key = uids.join(',');
+  useEffect(() => {
+    if (!enabled) return undefined;
+    let live = true;
+    setReads(Object.fromEntries(uids.map((u) => [u, { status: 'loading', data: null, error: null, at: null }])));
+    uids.forEach((u) => {
+      learningApi.programLearners(u).then(listed('learners', 'The learners')).then(
+        (data) => { if (live) setReads((r) => ({ ...r, [u]: { status: 'ready', data, error: null, at: Date.now() } })); },
+        (error) => { reportError('admin-programs:learners', error); if (live) setReads((r) => ({ ...r, [u]: { status: 'error', data: null, error, at: null } })); },
+      );
+    });
+    return () => { live = false; };
+    // `uids` is keyed by `key`.
+  }, [key, tick, enabled]);
+  return reads;
 }

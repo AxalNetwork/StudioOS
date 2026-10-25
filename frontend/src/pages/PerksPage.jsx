@@ -1489,86 +1489,12 @@ function PartnerConsole({ zoneActions, zoneFilters, role }) {
 
 /* ------------------------------------------------------------------ *
  * Admin: the review queue                                             *
- * ------------------------------------------------------------------ */
-
-function ReviewQueue() {
-  const [items, setItems] = useState(null);
-  const [note, setNote] = useState({});
-  const [editorial, setEditorial] = useState({});
-  const [featured, setFeatured] = useState({});
-  const [err, setErr] = useState('');
-
-  const load = useCallback(() => {
-    api.perkReviewQueue()
-      .then((d) => setItems(d?.items || []))
-      .catch((e) => { reportError('perk_queue_failed', e); setErr(e?.message || 'Could not read the queue.'); });
-  }, []);
-  useEffect(load, [load]);
-
-  async function act(uid, action) {
-    setErr('');
-    try {
-      // D413 — the featured flag and the editorial quote the marketplace's
-      // "Featured this month" prints. Only this route writes the quote.
-      await api.perkReview(uid, {
-        action,
-        review_note: note[uid] || '',
-        ...(featured[uid] ? { featured: true } : {}),
-        ...(editorial[uid] ? { editorial_note: editorial[uid] } : {}),
-      });
-      load();
-    } catch (e) { reportError('perk_review_failed', e); setErr(e?.message || 'That review did not save.'); }
-  }
-
-  if (err && items === null) return <Unreadable what="The review queue" claim="It is not a sign nothing is waiting." onRetry={load} />;
-  if (items === null) return <p className="text-sm text-gray-500">Loading…</p>;
-  if (!items.length) {
-    return (
-      <div className="rounded-lg border border-dashed border-gray-300 p-8 text-center dark:border-gray-700">
-        <ClipboardCheck size={22} className="mx-auto text-gray-400" />
-        <p className="mt-3 text-sm text-gray-600">Nothing is waiting for review.</p>
-      </div>
-    );
-  }
-  return (
-    <div className="space-y-3">
-      {items.map((p) => (
-        <div key={p.uid} className="rounded-lg border border-gray-200 bg-white p-4 dark:border-gray-800 dark:bg-gray-900">
-          <div className="text-sm font-medium text-gray-900 dark:text-gray-100">{p.offer}</div>
-          <div className="mt-0.5 text-xs text-gray-500">
-            {p.partner_name} · {p.partner_email || 'no account'} · {priceLabel(p)}
-            {p.value_cents != null ? ` · ${dollars(p.value_cents)} stated value` : ''}
-          </div>
-          {p.detail && <p className="mt-2 whitespace-pre-wrap text-sm text-gray-600">{p.detail}</p>}
-          <input
-            className="mt-3 w-full rounded-md border border-gray-300 px-3 py-2 text-sm dark:border-gray-700"
-            placeholder="Note — required to reject, and the partner reads it"
-            value={note[p.uid] || ''}
-            onChange={(e) => setNote((n) => ({ ...n, [p.uid]: e.target.value }))}
-          />
-          <input
-            className="mt-2 w-full rounded-md border border-gray-300 px-3 py-2 text-sm dark:border-gray-700"
-            placeholder="Axal’s quote, shown if featured (optional) — the partner cannot edit it"
-            maxLength={500}
-            value={editorial[p.uid] || ''}
-            onChange={(e) => setEditorial((n) => ({ ...n, [p.uid]: e.target.value }))}
-          />
-          <label className="mt-2 flex items-center gap-2 text-xs text-gray-600">
-            <input type="checkbox" checked={!!featured[p.uid]} onChange={(e) => setFeatured((f) => ({ ...f, [p.uid]: e.target.checked }))} />
-            Feature it in “Featured this month”
-          </label>
-          {err && <p className="mt-2 text-sm text-red-600" role="alert">{err}</p>}
-          <div className="mt-2 flex gap-2">
-            <button type="button" onClick={() => act(p.uid, 'approve')}
-              className="rounded-md bg-green-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-green-700">Approve</button>
-            <button type="button" onClick={() => act(p.uid, 'reject')}
-              className="rounded-md border border-red-300 px-3 py-1.5 text-xs font-medium text-red-700 hover:bg-red-50">Reject</button>
-          </div>
-        </div>
-      ))}
-    </div>
-  );
-}
+ * ------------------------------------------------------------------ *
+ * D962 (#2795): the queue is Programs › Perks › Queue, where every review
+ * opens a dialog (N9). The admin's Review queue tab here is a link to it,
+ * so this page makes no review write of its own.
+ */
+export const PERKS_REVIEW_PATH = '/admin/programs/perks/queue';
 
 /* ------------------------------------------------------------------ */
 
@@ -1694,7 +1620,7 @@ function PerksMarket({ user }) {
       { k: 'market', label: 'Marketplace', icon: Grid3x3 },
       { k: 'mine', label: 'My perks', icon: Ticket, flag: mine ? String(mine.stats.claimed) : '' },
     ];
-    if (isAdmin) t.push({ k: 'review', label: 'Review queue', icon: ClipboardCheck });
+    if (isAdmin) t.push({ k: 'review', label: 'Review queue', icon: ClipboardCheck, to: PERKS_REVIEW_PATH });
     return t;
   }, [isAdmin, mine]);
 
@@ -1715,7 +1641,11 @@ function PerksMarket({ user }) {
   const panels = (
     <>
       <div id="perks-tabs" className="mt-5 flex gap-5 border-b border-gray-200 dark:border-gray-800" role="tablist">
-        {tabs.map(({ k, label, icon: Icon, flag }) => (
+        {tabs.map(({ k, label, icon: Icon, flag, to }) => (to ? (
+          <Link key={k} to={to} className="-mb-px inline-flex items-center gap-1.5 border-b-2 border-transparent pb-2.5 text-[13px] font-semibold text-gray-600 hover:text-gray-900 dark:text-gray-400 dark:hover:text-gray-100" data-testid={`perks-tab-${k}`}>
+            <Icon size={14} />{label}
+          </Link>
+        ) : (
           <button
             key={k} type="button" role="tab" aria-selected={tab === k} onClick={() => setTab(k)}
             className={`-mb-px inline-flex items-center gap-1.5 border-b-2 pb-2.5 text-[13px] ${
@@ -1725,7 +1655,7 @@ function PerksMarket({ user }) {
             <Icon size={14} />{label}
             {flag ? <span className={`min-w-4 rounded-full px-1 text-[9px] font-extrabold ${tab === k ? 'bg-violet-600 text-white' : 'bg-gray-100 text-gray-500 dark:bg-gray-800'}`}>{flag}</span> : null}
           </button>
-        ))}
+        )))}
       </div>
 
       <div className="mt-5">
@@ -1737,7 +1667,6 @@ function PerksMarket({ user }) {
           ? <Unreadable what="Your perks" claim="It is not a sign you have claimed nothing." onRetry={loadMine} />
           : !mine ? <p className="text-sm text-gray-500">Loading…</p>
             : <MyPerks data={mine} onRated={() => { loadMine(); loadCatalog(); }} />)}
-        {tab === 'review' && isAdmin && <ReviewQueue />}
       </div>
     </>
   );

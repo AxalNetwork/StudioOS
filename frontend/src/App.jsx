@@ -2826,16 +2826,20 @@ function AppInner() {
       <Route path="/admin/programs/mentor-cohorts" element={guard(['admin'], <AdminMentorCohortAccess />)} />
       <Route path="/admin/programs/mentor-cohorts/how-it-runs" element={guard(['admin'], <AdminMentorCohortAccess />)} />
       <Route path="/admin/programs/mentor-cohorts/people" element={guard(['admin'], <AdminMentorCohortAccess />)} />
+      <Route path="/admin/programs/mentor-cohorts/activity" element={guard(['admin'], <AdminMentorCohortAccess />)} />
       <Route path="/admin/programs/refer-and-earn" element={guard(['admin'], <AdminReferAndEarn />)} />
       <Route path="/admin/programs/refer-and-earn/how-it-runs" element={guard(['admin'], <AdminReferAndEarn />)} />
       <Route path="/admin/programs/refer-and-earn/queue" element={guard(['admin'], <AdminReferAndEarn />)} />
       <Route path="/admin/programs/refer-and-earn/settings" element={guard(['admin'], <AdminReferAndEarn />)} />
+      <Route path="/admin/programs/refer-and-earn/activity" element={guard(['admin'], <AdminReferAndEarn />)} />
       <Route path="/admin/programs/perks" element={guard(['admin'], <AdminProgramPage />)} />
       <Route path="/admin/programs/perks/how-it-runs" element={guard(['admin'], <AdminProgramPage />)} />
       <Route path="/admin/programs/perks/queue" element={guard(['admin'], <AdminProgramPage />)} />
+      <Route path="/admin/programs/perks/activity" element={guard(['admin'], <AdminProgramPage />)} />
       <Route path="/admin/programs/learning" element={guard(['admin'], <AdminProgramPage />)} />
       <Route path="/admin/programs/learning/how-it-runs" element={guard(['admin'], <AdminProgramPage />)} />
       <Route path="/admin/programs/learning/people" element={guard(['admin'], <AdminProgramPage />)} />
+      <Route path="/admin/programs/learning/activity" element={guard(['admin'], <AdminProgramPage />)} />
       <Route path="/admin/programs/referral-partners" element={guard(['admin'], <AdminProgramPage />)} />
       <Route path="/admin/programs/referral-partners/how-it-runs" element={guard(['admin'], <AdminProgramPage />)} />
       <Route path="/admin/programs/investor-cohorts" element={guard(['admin'], <AdminProgramPage />)} />

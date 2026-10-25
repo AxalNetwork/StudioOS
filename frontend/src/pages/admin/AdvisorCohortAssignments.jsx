@@ -1,8 +1,15 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useState } from 'react';
 import { api } from '../../lib/api';
-import { Card, Pill } from '../../ui';
+import { actionPrimary, usePhoneWidth } from '../../ui';
 import AdminBoardFrame from './AdminBoardFrame';
-import { ASSIGNED_LINE, CAPS, WITHIN_500, refusalText } from './programs/programsModel';
+import { AssignDialog, EndDialog } from './programs/MentorDialogs';
+import { BlockFailed, CARD, H2, INPUT, Pill, SUB, Skeleton, TD, TH } from './programs/parts';
+import { useRead } from './programs/useProgramReads';
+import {
+  HISTORY_LIMIT, NO_MENTORS, PAGE_SIZE, PEOPLE_FOOT, PEOPLE_FOOT_UNREAD, VISIBLE_WAITS, countLine, filterPeople, nextCohort,
+  noMentorsLine, peopleRows,
+} from './programs/programPagesModel';
+import { NOT_READ_YET, WITHIN_500, cohortName, isReady } from './programs/programsModel';
 
 /**
  * Admin — which advisor may read which Lab cohort's founders.
@@ -29,240 +36,185 @@ import { ASSIGNED_LINE, CAPS, WITHIN_500, refusalText } from './programs/program
  * end it.
  */
 
-const inputClass = 'rounded-lg border border-axal-hairline bg-white px-2.5 py-1.5 text-[12.5px] '
-  + 'focus:border-emerald-500 focus:outline-none focus:ring-1 focus:ring-emerald-500 '
-  + 'dark:border-gray-700 dark:bg-gray-900';
-
-const MONTHS = ['January', 'February', 'March', 'April', 'May', 'June',
-  'July', 'August', 'September', 'October', 'November', 'December'];
-const cycleLabel = (c) => `${MONTHS[Number(c.month) - 1] || `Month ${c.month}`} ${c.year}`;
-
 /**
- * The console's body. Mounted alone by this file's default export, and by
- * Programs › Mentor cohort access › People (D953), which passes `embedded`:
- * the program header replaces this heading, and mounting the body rather than
- * the default export leaves the page one rail.
+ * D962 (#2795): the console's body is People (PG6), mounted by Programs ›
+ * Mentor cohort access › People with `embedded` (the program header replaces
+ * the heading, and mounting the body rather than the default export leaves
+ * the page one rail). It draws the toolbar (search, Cohort, Status, Role
+ * changed, Sort), 25 rows a page with a count, and the canvas's columns; the
+ * email is not drawn. Assign and End access are dialogs (`MentorDialogs`),
+ * and each row's earlier episodes come from 565's history (N16).
  */
-export function AdvisorCohortAssignmentsBody({ embedded = false } = {}) {
-  const [rows, setRows] = useState({ loading: true, error: '', items: [] });
-  const [advisors, setAdvisors] = useState({ loading: true, error: '', items: [] });
-  const [cycles, setCycles] = useState({ loading: true, error: '', items: [] });
-  const [draft, setDraft] = useState({ advisor_user_id: '', cohort_cycle_id: '', note: '' });
-  const [busy, setBusy] = useState(false);
-  const [note, setNote] = useState(null);
-  const [showEnded, setShowEnded] = useState(false);
-
-  const load = useCallback(async () => {
-    setRows((c) => ({ ...c, loading: true, error: '' }));
-    try {
-      const res = await api.adminAdvisorCohortAssignments();
-      setRows({ loading: false, error: '', items: Array.isArray(res?.items) ? res.items : [] });
-    } catch (e) {
-      setRows({ loading: false, error: e?.message || 'Assignments could not be read.', items: [] });
-    }
-  }, []);
-
-  useEffect(() => {
-    load();
-    // The picker offers exactly what the worker will accept — the eligibility
-    // rule lives there, not here, so the two cannot disagree.
-    api.adminAssignableAdvisors()
-      .then((r) => setAdvisors({ loading: false, error: '', items: r?.items || [] }))
-      .catch((e) => setAdvisors({ loading: false, error: e?.message || 'Advisors could not be read.', items: [] }));
-    // The Lab's own cycle list, read-only. No Lab file is edited to get it.
-    api.adminCohortTimeline()
-      .then((r) => setCycles({ loading: false, error: '', items: r?.cycles || r?.items || [] }))
-      .catch((e) => setCycles({ loading: false, error: e?.message || 'Cohort cycles could not be read.', items: [] }));
-  }, [load]);
-
-  const byId = useMemo(
-    () => new Map((cycles.items || []).map((c) => [Number(c.id), c])),
-    [cycles.items],
-  );
-
-  const assign = async (e) => {
-    e.preventDefault();
-    setNote(null);
-    if (!draft.advisor_user_id || !draft.cohort_cycle_id) {
-      setNote({ ok: false, text: 'Pick an advisor and a cohort.' });
-      return;
-    }
-    setBusy(true);
-    try {
-      await api.adminAssignAdvisorCohort({
-        advisor_user_id: Number(draft.advisor_user_id),
-        cohort_cycle_id: Number(draft.cohort_cycle_id),
-        note: draft.note.trim() || null,
-      });
-      setDraft({ advisor_user_id: '', cohort_cycle_id: '', note: '' });
-      // D953: agrees with How it runs, which says when a mentor sees a founder (the map's F2, until O-FND).
-      setNote({ ok: true, text: ASSIGNED_LINE });
-      await load();
-    } catch (err) {
-      setNote({ ok: false, text: refusalText(err, err?.message || 'That could not be assigned. Nothing was changed.') });
-    } finally {
-      setBusy(false);
-    }
-  };
-
-  const end = async (row) => {
-    setNote(null);
-    try {
-      await api.adminEndAdvisorCohortAssignment(row.id);
-      setNote({ ok: true, text: `Access ended for ${row.advisor_name || `user #${row.advisor_user_id}`}.` });
-      await load();
-    } catch (err) {
-      setNote({ ok: false, text: refusalText(err, err?.message || 'That could not be ended.') });
-    }
-  };
-
-  const visible = (rows.items || []).filter((r) => showEnded || r.is_active);
-  // Guard L (D953 §2): the list stops at the newest 500 without saying so.
-  const full = (rows.items || []).length >= CAPS.assignments;
+export function AdvisorCohortAssignmentsBody({ embedded = false, onChanged, refresh = 0 } = {}) {
+  const phone = usePhoneWidth();
+  const [own, setOwn] = useState(0);
+  // `refresh` is the page's count of writes made from its header, so a grant made there reads here too.
+  const tick = own + refresh;
+  const reload = useCallback(() => { setOwn((t) => t + 1); onChanged?.(); }, [onChanged]);
+  const assignments = useRead('assignments', 'assignments', tick, true, () => api.adminAdvisorCohortAssignments().then(listOf('The mentor assignments')));
+  const timeline = useRead('timeline', 'timeline', tick, true, () => api.adminCohortTimeline().then(cyclesOf));
+  const history = useRead('history', 'history', tick, true, () => api.adminAdvisorCohortHistory({ limit: HISTORY_LIMIT }).then(listOf('The access history')));
+  const [q, setQ] = useState('');
+  const [cohort, setCohort] = useState('');
+  const [status, setStatus] = useState('both');
+  const [roleChanged, setRoleChanged] = useState(false);
+  const [sort, setSort] = useState('assigned');
+  const [page, setPage] = useState(0);
+  const [dialog, setDialog] = useState(null);
+  const now = Date.now();
+  const p = peopleRows(assignments, timeline, history, now);
+  const statuses = status === 'both' ? ['active', 'ended'] : [status];
+  const rows = p.state === 'ready' ? filterPeople(p.rows, { q, cohort, status: statuses, roleChanged, sort }) : [];
+  const pages = Math.max(1, Math.ceil(rows.length / PAGE_SIZE));
+  const at = Math.min(page, pages - 1);
+  const shown = rows.slice(at * PAGE_SIZE, at * PAGE_SIZE + PAGE_SIZE);
+  const cycles = isReady(timeline) && Array.isArray(timeline.data?.cycles) ? timeline.data.cycles : [];
+  const cohortOf = (r) => { const c = cycles.find((x) => Number(x.id) === Number(r.cohort_cycle_id)); return c ? cohortName(c) : `Cycle #${r.cohort_cycle_id}`; };
+  const next = nextCohort(timeline);
+  const reset = (fn) => (v) => { fn(v); setPage(0); };
+  const openAssign = () => setDialog({ kind: 'assign' });
 
   return (
-    <div className="space-y-4" data-testid="advisor-cohort-assignments">
-      <div className="max-w-3xl">
-        {embedded ? null : <h1 className="text-lg font-extrabold tracking-tight">Advisor cohort access</h1>}
-        <p className="mt-1.5 text-[12.5px] leading-relaxed text-axal-muted">
-          An assignment lets one advisor read the names and email addresses of the founders in one
-          Spin-Out Lab cohort. It changes nothing in the Lab, and it is the only way an advisor
-          gets that access.
-        </p>
-      </div>
-
-      <Card padding="lg">
-        <h2 className="text-sm font-extrabold tracking-tight">Assign an advisor</h2>
-        <form onSubmit={assign} className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-3">
-          <label className="block">
-            <span className="text-[10px] font-extrabold uppercase tracking-[.09em] text-axal-faint">Advisor</span>
-            <select className={`${inputClass} mt-1 w-full`} value={draft.advisor_user_id}
-              onChange={(e) => setDraft({ ...draft, advisor_user_id: e.target.value })}>
-              <option value="">Choose…</option>
-              {advisors.items.map((a) => (
-                <option key={a.id} value={a.id}>
-                  {a.name || a.email || `User #${a.id}`}{a.has_advisor_profile ? '' : ' — no profile yet'}
-                </option>
-              ))}
-            </select>
-            {advisors.error && <span className="mt-1 block text-[11px] text-red-700 dark:text-red-300">{advisors.error}</span>}
-            {advisors.items.length >= CAPS.assignable ? <span className="mt-1 block text-[11px] text-amber-700 dark:text-amber-300">The first 500 advisors by name are offered.</span> : null}
-          </label>
-          <label className="block">
-            <span className="text-[10px] font-extrabold uppercase tracking-[.09em] text-axal-faint">Cohort</span>
-            <select className={`${inputClass} mt-1 w-full`} value={draft.cohort_cycle_id}
-              onChange={(e) => setDraft({ ...draft, cohort_cycle_id: e.target.value })}>
-              <option value="">Choose…</option>
-              {cycles.items.map((c) => (
-                <option key={c.id} value={c.id}>{cycleLabel(c)}{c.status ? ` · ${c.status}` : ''}</option>
-              ))}
-            </select>
-            {cycles.error && <span className="mt-1 block text-[11px] text-red-700 dark:text-red-300">{cycles.error}</span>}
-          </label>
-          <label className="block">
-            <span className="text-[10px] font-extrabold uppercase tracking-[.09em] text-axal-faint">Note</span>
-            <input className={`${inputClass} mt-1 w-full`} value={draft.note}
-              onChange={(e) => setDraft({ ...draft, note: e.target.value })}
-              placeholder="Why, for the record" />
-          </label>
-          <div className="sm:col-span-3">
-            <button type="submit" disabled={busy}
-              className="rounded-lg bg-emerald-700 px-3 py-1.5 text-[12px] font-semibold text-white hover:bg-emerald-800 disabled:opacity-50">
-              {busy ? 'Assigning…' : 'Assign'}
-            </button>
-            {note && (
-              <p role={note.ok ? 'status' : 'alert'} className={`mt-2 text-[12px] font-semibold ${note.ok ? 'text-emerald-700 dark:text-emerald-300' : 'text-red-700 dark:text-red-300'}`} data-testid="advisor-cohort-note">
-                {note.text}
-              </p>
-            )}
-          </div>
-        </form>
-      </Card>
-
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <h2 className="text-sm font-extrabold tracking-tight" data-testid="advisor-cohort-count">
-          Who has access{visible.length ? ` — ${visible.length}${full ? `, ${WITHIN_500}` : ''}` : ''}
-        </h2>
-        <label className="flex items-center gap-2 text-[12px]">
-          <input type="checkbox" checked={showEnded} onChange={(e) => setShowEnded(e.target.checked)} />
-          Include ended
-        </label>
-      </div>
-
-      {rows.loading ? (
-        <p className="text-[12.5px] text-axal-faint">Loading…</p>
-      ) : rows.error ? (
-        <Card variant="dashed" padding="lg">
-          <p className="text-[12.5px] leading-relaxed text-axal-muted">
-            {rows.error} Nothing is listed rather than an empty list, because an empty list here
-            would say nobody has access — which is not something this page can currently know.
-          </p>
-        </Card>
-      ) : visible.length === 0 ? (
-        <Card variant="dashed" padding="lg">
-          <p className="text-[12.5px] leading-relaxed text-axal-muted">
-            {showEnded
-              ? 'No advisor has ever been assigned a cohort.'
-              : 'No advisor currently has access to a cohort’s founders.'}
-          </p>
-        </Card>
-      ) : (
-        <Card padding="none" className="overflow-x-auto">
-          <table className="w-full text-[12.5px]">
-            <thead>
-              <tr className="border-b border-axal-hairline text-left dark:border-gray-700">
-                {['Advisor', 'Cohort', 'Assigned', 'State', ''].map((h) => (
-                  <th key={h} className="px-4 py-2 text-[10px] font-extrabold uppercase tracking-[.09em] text-axal-faint">{h}</th>
-                ))}
-              </tr>
-            </thead>
-            <tbody>
-              {visible.map((r) => {
-                const cycle = byId.get(Number(r.cohort_cycle_id));
-                const stale = r.is_active && r.advisor_role && r.advisor_role.toLowerCase() !== 'advisor';
-                return (
-                  <tr key={r.id} className="border-b border-axal-hairline/60 last:border-0 dark:border-gray-800">
-                    <td className="px-4 py-2.5">
-                      <div className="font-semibold">{r.advisor_name || `User #${r.advisor_user_id}`}</div>
-                      <div className="text-[11px] text-axal-faint">{r.advisor_email || '—'}</div>
-                    </td>
-                    <td className="px-4 py-2.5">{cycle ? cycleLabel(cycle) : `Cycle #${r.cohort_cycle_id}`}</td>
-                    <td className="px-4 py-2.5 text-axal-faint">{String(r.assigned_at || '').slice(0, 10)}</td>
-                    <td className="px-4 py-2.5">
-                      {r.is_active ? <Pill tone="ok">Active</Pill> : <Pill tone="neutral">Ended</Pill>}
-                      {/* The row outlives the access. The worker refuses this
-                          person at read time already; only a human can decide
-                          to tidy the record. */}
-                      {stale && (
-                        <div className="mt-1 text-[11px] leading-relaxed text-amber-700 dark:text-amber-300">
-                          No longer an advisor ({r.advisor_role}) — access is already refused, but
-                          the row is still open.
-                        </div>
-                      )}
-                    </td>
-                    <td className="px-4 py-2.5 text-right">
-                      {r.is_active && (
-                        <button type="button" onClick={() => end(r)}
-                          className="rounded-lg border border-axal-hairline px-3 py-1.5 text-[12px] font-semibold hover:bg-axal-ground dark:border-gray-700 dark:hover:bg-gray-800">
-                          End access
-                        </button>
-                      )}
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
-        </Card>
+    <div className="flex flex-col gap-4" data-testid="advisor-cohort-assignments">
+      {embedded ? null : (
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <h1 className="m-0 text-lg font-extrabold tracking-tight">Advisor cohort access</h1>
+          <button type="button" className={actionPrimary} onClick={openAssign} data-testid="advisor-cohort-assign">Assign a mentor</button>
+        </div>
       )}
-
-      <p className="text-[11px] leading-relaxed text-axal-faint">
-        Ending access keeps the row. A record that vanished could not answer who could see a
-        cohort’s founders, and when — which is the question it exists for.
+      <p className={`m-0 ${SUB}`}>
+        An assignment lets one advisor read the names and email addresses of the founders in one Spin-Out Lab cohort.
+        It changes nothing in the Lab, and it is the only way an advisor gets that access.
       </p>
+      {p.state === 'loading' ? <Skeleton lines={4} /> : null}
+      {p.state === 'unreadable' ? (
+        <BlockFailed what="The mentor assignments" onRetry={reload} testId="advisor-cohort-unreadable"
+          claim="Nothing is listed rather than an empty list, because an empty list would say nobody has access." />
+      ) : null}
+      {p.state === 'ready' && !p.rows.length ? (
+        <section className={`${CARD} flex flex-col items-center gap-2 px-6 py-10 text-center`} data-testid="advisor-cohort-none">
+          <span aria-hidden="true" className="text-[22px] font-bold text-axal-violet dark:text-violet-300">+</span>
+          <h2 className={H2}>{NO_MENTORS}</h2>
+          {noMentorsLine(next) ? <p className={`m-0 ${SUB}`} data-testid="advisor-cohort-none-next">{noMentorsLine(next)}</p> : null}
+          <button type="button" className={actionPrimary} onClick={openAssign} data-testid="advisor-cohort-none-assign">Assign a mentor</button>
+        </section>
+      ) : null}
+      {p.state === 'ready' && p.rows.length ? (
+        <>
+          <div className="flex flex-wrap items-center gap-2" data-testid="advisor-cohort-toolbar">
+            <input type="search" className={`${INPUT} min-w-[200px] flex-1`} value={q} onChange={(e) => reset(setQ)(e.target.value)} placeholder="Search mentor or cohort" aria-label="Search mentor or cohort" data-testid="advisor-cohort-search" />
+            <select className={INPUT} value={cohort} onChange={(e) => reset(setCohort)(e.target.value)} aria-label="Cohort" data-testid="advisor-cohort-filter-cohort">
+              <option value="">Every cohort</option>
+              {cycles.map((c) => <option key={c.id} value={c.id}>{cohortName(c)}</option>)}
+            </select>
+            <select className={INPUT} value={status} onChange={(e) => reset(setStatus)(e.target.value)} aria-label="Status" data-testid="advisor-cohort-filter-status">
+              <option value="both">Status: Active, Ended</option>
+              <option value="active">Active</option>
+              <option value="ended">Ended</option>
+            </select>
+            <label className="flex min-h-[36px] items-center gap-2 text-[12.5px] font-semibold text-axal-ink dark:text-gray-100">
+              <input type="checkbox" checked={roleChanged} onChange={(e) => reset(setRoleChanged)(e.target.checked)} data-testid="advisor-cohort-filter-role" />
+              Role changed
+            </label>
+            <select className={INPUT} value={sort} onChange={(e) => setSort(e.target.value)} aria-label="Sort" data-testid="advisor-cohort-sort">
+              <option value="assigned">Sort: Assigned</option>
+              <option value="cohort">Sort: Cohort</option>
+              <option value="name">Sort: Name</option>
+            </select>
+          </div>
+          <p className="m-0 font-mono text-[12px] font-semibold text-axal-muted dark:text-gray-400" data-testid="advisor-cohort-count">
+            {`${countLine(at * PAGE_SIZE, shown.length, rows.length)}${p.capped ? `, ${WITHIN_500}` : ''}`}
+          </p>
+          {phone ? <button type="button" className={`${actionPrimary} w-full`} onClick={openAssign} data-testid="advisor-cohort-phone-assign">Assign a mentor</button> : null}
+          {!rows.length ? <p className={`m-0 ${SUB}`} data-testid="advisor-cohort-filtered-none">No assignment matches these filters.</p> : null}
+          {rows.length && phone ? (
+            <ul className="m-0 flex list-none flex-col gap-2 p-0" data-testid="advisor-cohort-cards">
+              {shown.map((r) => (
+                <li key={r.id} className={`${CARD} flex items-start justify-between gap-3 px-4 py-3 ${r.open ? '' : 'opacity-70'}`} data-testid={`advisor-cohort-card-${r.id}`}>
+                  <span className="flex min-w-0 flex-col gap-1">
+                    <span className="text-[13.5px] font-bold text-axal-ink dark:text-gray-100">{r.name}</span>
+                    <span className={SUB}>{`${r.cohort} · ${r.visible || NOT_READ_YET}${r.visible ? '' : ' visible'}`}</span>
+                    <span className="flex flex-wrap gap-1.5">
+                      {r.notAdvisor && r.open ? <Pill tone="amber"><span aria-hidden="true">!</span>Not an Advisor now</Pill> : null}
+                      {r.deactivated ? <Pill tone="amber"><span aria-hidden="true">!</span>Deactivated</Pill> : null}
+                      {!r.notAdvisor && !r.deactivated ? <Pill tone={r.open ? 'green' : 'muted'}>{r.open ? 'Active' : 'Ended'}</Pill> : null}
+                    </span>
+                  </span>
+                  {r.open ? (
+                    <button type="button" aria-label={`End ${r.name}’s access`} onClick={() => setDialog({ kind: 'end', row: r.row })}
+                      className="h-[44px] w-[44px] flex-none rounded-[9px] border border-axal-hairline bg-white text-[16px] font-bold text-axal-ink dark:border-gray-700 dark:bg-gray-900 dark:text-gray-100" data-testid={`advisor-cohort-card-${r.id}-menu`}>⋯</button>
+                  ) : null}
+                </li>
+              ))}
+            </ul>
+          ) : null}
+          {rows.length && !phone ? (
+            <div className={`${CARD} overflow-x-auto`}>
+              <table className="w-full min-w-[980px] border-collapse text-[12.5px] text-axal-ink dark:text-gray-100" data-testid="advisor-cohort-table">
+                <thead>
+                  <tr className="border-b border-axal-hairline dark:border-gray-700">
+                    {['Mentor', 'Cohort', 'Assigned', 'Ended', 'Founders visible', 'Note', ''].map((h) => <th key={h || 'actions'} className={TH}>{h}</th>)}
+                  </tr>
+                </thead>
+                <tbody>
+                  {shown.map((r) => (
+                    <tr key={r.id} className={`border-b border-axal-hairline last:border-0 dark:border-gray-800 ${r.open ? '' : 'text-axal-muted dark:text-gray-400'}`} data-testid={`advisor-cohort-row-${r.id}`}>
+                      <td className={TD}>
+                        <span className={`block ${r.open ? 'font-bold' : 'font-semibold'}`}>{r.name}</span>
+                        <span className={`block ${SUB}`}>{r.role}</span>
+                        {r.notAdvisor && r.open ? <span className="mt-1 block"><Pill tone="amber" testId={`advisor-cohort-row-${r.id}-role`}><span aria-hidden="true">!</span>Not an Advisor now</Pill></span> : null}
+                        {r.deactivated ? <span className="mt-1 block"><Pill tone="amber" testId={`advisor-cohort-row-${r.id}-deactivated`}><span aria-hidden="true">!</span>Deactivated</Pill></span> : null}
+                      </td>
+                      <td className={TD}>
+                        <span className="block">{r.cohort}</span>
+                        {r.earlier.length ? <span className={`block ${SUB}`} data-testid={`advisor-cohort-row-${r.id}-earlier`}>{`Earlier: ${r.earlier.join(', ')}`}</span> : null}
+                      </td>
+                      <td className={TD}>{r.assigned}</td>
+                      <td className={`${TD} font-mono`}>{r.ended}</td>
+                      <td className={`${TD} font-mono`} data-testid={`advisor-cohort-row-${r.id}-visible`}>{r.visible || <span className="font-display italic">{NOT_READ_YET}</span>}</td>
+                      <td className={TD}>{r.note}</td>
+                      <td className={`${TD} text-right`}>
+                        {r.open ? (
+                          <button type="button" onClick={() => setDialog({ kind: 'end', row: r.row })} className="rounded-[9px] border border-axal-hairline px-3 py-1.5 text-[12px] font-semibold hover:bg-axal-ground dark:border-gray-700 dark:hover:bg-gray-800" data-testid={`advisor-cohort-row-${r.id}-end`}>
+                            End access
+                          </button>
+                        ) : null}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          ) : null}
+          {pages > 1 ? (
+            <div className="flex items-center justify-end gap-2 text-[12px]">
+              <button type="button" className="rounded-[9px] border border-axal-hairline px-2.5 py-1 font-semibold disabled:opacity-50 dark:border-gray-700" disabled={at <= 0} onClick={() => setPage(at - 1)}>Previous</button>
+              <span className={SUB}>{`Page ${at + 1} of ${pages}`}</span>
+              <button type="button" className="rounded-[9px] border border-axal-hairline px-2.5 py-1 font-semibold disabled:opacity-50 dark:border-gray-700" disabled={at >= pages - 1} onClick={() => setPage(at + 1)} data-testid="advisor-cohort-next">Next</button>
+            </div>
+          ) : null}
+          <p className={`m-0 ${SUB}`} data-testid="advisor-cohort-foot">
+            {p.historyRead ? PEOPLE_FOOT : PEOPLE_FOOT_UNREAD}
+            {p.historyCapped ? ' Earlier episodes are read from the newest 200 grants and ends.' : ''}
+            {` Founders visible: ${VISIBLE_WAITS}`}
+          </p>
+        </>
+      ) : null}
+      {dialog?.kind === 'assign' ? <AssignDialog assignments={assignments} timeline={timeline} cycleId={dialog.cycleId} onClose={() => setDialog(null)} onAssigned={reload} /> : null}
+      {dialog?.kind === 'end' ? <EndDialog row={dialog.row} cohort={cohortOf(dialog.row)} onClose={() => setDialog(null)} onEnded={reload} /> : null}
     </div>
   );
 }
+
+/** A reply without its list is a failed read, never an empty one. */
+const listOf = (what) => (reply) => {
+  if (!Array.isArray(reply?.items)) throw new Error(`${what} did not come back as a list.`);
+  return reply;
+};
+const cyclesOf = (reply) => {
+  if (!Array.isArray(reply?.cycles)) throw new Error('The cohort cycles did not come back as a list.');
+  return reply;
+};
 
 // D774 (#2100): S18 drew no rail. The board's page, in the Admin boards' frame.
 export default function AdvisorCohortAssignments() {

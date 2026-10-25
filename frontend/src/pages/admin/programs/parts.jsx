@@ -1,5 +1,7 @@
 import React from 'react';
 import { Lock } from 'lucide-react';
+import { actionDanger, actionGhost, actionPrimary } from '../../../ui';
+import { Chart, ChartTable, Legend } from '../../../ui/Charts';
 import {
   AMBER, CARD, Card, Chip, Done, EYE, Failed, H2, INPUT, LINK, Pill, Refusal, SUB, TD, TH,
 } from '../partners/parts';
@@ -142,5 +144,92 @@ export function HowItRuns({ sections, superAdmin, fill = () => null, testId = 'p
       ))}
       {!superAdmin ? <p className={`m-0 ${SUB}`} data-testid={`${testId}-foot`}>{PLAYBOOK_ADMIN_FOOT}</p> : null}
     </div>
+  );
+}
+
+/* ------------------------------------------------------------------ *
+ * D962 (#2795): every write opens a dialog (N9)
+ * ------------------------------------------------------------------ */
+
+export const DIALOG_BODY = 'flex flex-col gap-3.5 px-5 py-4';
+export const DIALOG_LINES = 'm-0 flex list-disc flex-col gap-1.5 pl-5 text-[13px] leading-normal text-axal-ink marker:text-axal-violet dark:text-gray-100';
+export const FIELD_LABEL = 'text-[11px] font-bold uppercase tracking-[.06em] text-axal-muted dark:text-gray-400';
+
+/**
+ * A dialog's buttons, as the Events desk's (D915): Back and the action, and
+ * under them the refusal, one sentence in place keyed on its code, or the
+ * result line once the write answered.
+ */
+export function DialogButtons({ back = 'Back', onClose, action, onAction, disabled, busy, tone = 'primary', refusal, done = null, testId }) {
+  return (
+    <div className="flex flex-col gap-2">
+      {done ? <Done testId={testId ? `${testId}-done` : undefined}>{done}</Done> : null}
+      <div className="flex flex-wrap justify-end gap-2">
+        <button type="button" className={actionGhost} onClick={onClose}>{done ? 'Close' : back}</button>
+        {done || !action ? null : (
+          <button type="button" className={tone === 'danger' ? actionDanger : actionPrimary} onClick={onAction} disabled={disabled || busy} data-testid={testId}>
+            {busy ? 'Saving…' : action}
+          </button>
+        )}
+      </div>
+      <Refusal text={refusal} testId={testId ? `${testId}-refusal` : undefined} />
+    </div>
+  );
+}
+
+/** A labelled text field with its counter, for a dialog. */
+export function Field({ label, value, onChange, max, rows = 0, placeholder, sub, testId }) {
+  const common = {
+    value, maxLength: max, placeholder,
+    onChange: (e) => onChange(max ? e.target.value.slice(0, max) : e.target.value),
+    className: `${INPUT} w-full ${rows ? 'py-2 leading-normal' : ''}`,
+    'data-testid': testId,
+  };
+  return (
+    <label className="flex flex-col gap-1">
+      <span className={FIELD_LABEL}>{label}</span>
+      {rows ? <textarea rows={rows} {...common} /> : <input {...common} />}
+      {sub ? <span className={SUB}>{sub}</span> : null}
+      {max ? <span className="self-end font-mono text-[11px] text-axal-muted dark:text-gray-400">{`${String(value || '').length} / ${max.toLocaleString('en-US')}`}</span> : null}
+    </label>
+  );
+}
+
+/**
+ * A chart card (D893's parts and palette, `ui/Charts.jsx`): Reading…, could
+ * not be read with Try again, a placeholder with its reason, or the chart
+ * with its sentence, Chart and Table, its legend, its notes and its window.
+ */
+export function ChartCard({ title, b, onRetry, testId, children }) {
+  const [table, setTable] = React.useState(false);
+  const ready = b.state === 'ready';
+  return (
+    <section className={`${CARD} flex min-w-0 flex-col gap-3 px-[18px] py-4`} data-testid={testId}>
+      <div className="flex flex-wrap items-baseline justify-between gap-2.5">
+        <h2 className={H2}>{title}</h2>
+        {ready && b.chart ? (
+          <span className="flex gap-1" role="group" aria-label="Show as">
+            {['Chart', 'Table'].map((w) => (
+              <button key={w} type="button" aria-pressed={(w === 'Table') === table} onClick={() => setTable(w === 'Table')} data-testid={`${testId}-${w.toLowerCase()}`}
+                className={`rounded-full border px-2.5 py-0.5 text-[11.5px] font-bold ${(w === 'Table') === table
+                  ? 'border-axal-lavender-edge bg-axal-lavender text-axal-violet dark:border-violet-800 dark:bg-violet-950/50 dark:text-violet-300'
+                  : 'border-axal-hairline text-axal-muted dark:border-gray-700 dark:text-gray-400'}`}>{w}</button>
+            ))}
+          </span>
+        ) : null}
+      </div>
+      {b.state === 'loading' ? <Skeleton lines={3} /> : null}
+      {b.state === 'unreadable' ? <BlockFailed what={b.what || title} onRetry={onRetry} testId={`${testId}-unreadable`} /> : null}
+      {b.state === 'placeholder' ? <Unread word={b.word} reason={b.reason} testId={`${testId}-placeholder`} /> : null}
+      {ready && b.chart ? (
+        table
+          ? <div data-testid={`${testId}-as-table`}><ChartTable chart={b.chart} caption={b.alt} /></div>
+          : <div role="img" aria-label={b.alt} data-testid={`${testId}-chart`}><Chart chart={b.chart} /></div>
+      ) : null}
+      {ready && b.legend?.length ? <Legend items={b.legend} /> : null}
+      {ready ? (b.notes || []).map((n) => <p key={n} className={`m-0 text-[12px] font-semibold ${AMBER}`}>{n}</p>) : null}
+      {children}
+      {b.window ? <p className={`m-0 ${SUB}`} data-testid={`${testId}-window`}>{b.window}</p> : null}
+    </section>
   );
 }
