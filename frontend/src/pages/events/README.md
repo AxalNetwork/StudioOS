@@ -15,7 +15,7 @@ Unreadable, never a zero count. `eventOrganiser.css` owns only these cards.
 `PublicEventDetailPage.jsx` retains public registration and paid checkout and
 shows the signed-in member's own registration. Signed-in numeric event paths
 use the authenticated detail endpoint; public slug paths use the public reader.
-`MyEventsPage.jsx` is My events (D1030, #2387): on a desktop, Upcoming, Hosting, Discover and Past at `/my/events`, `/hosting`, `/discover` and `/past`, built from the pure `myEventsModel.js` (the tabs, a place in the canvas's words, the groups, Past and the counts); a failed read is never "none", and the phone keeps D700's A7m sections. `EventEditorPage.jsx`
+`MyEventsPage.jsx` is My events (D1030, #2387): on a desktop, Upcoming, Hosting, Discover and Past at `/my/events`, `/hosting`, `/discover` and `/past`, built from the pure `myEventsModel.js` (the tabs, a place in the canvas's words, the groups, Past and the counts); a failed read is never "none", and the phone keeps D700's A7m sections. `/my/events/ticket/:id` and `/my/events/hosting/:id` draw the ticket and hosted-event drawers over their tab (D1035, #2876): `MyEventsDrawers.jsx` holds the drawers, the publish and cancel dialogs and MEV17's cards, and the pure `eventDrawersModel.js` every rule and line they say. `EventEditorPage.jsx`
 reads the detail envelope’s `event` and audience rules, and refuses an edit when
 the detail is unreadable. A draft or sent-back event offers one action (D1031): "Publish"
 when unlisted or private, "Send for review" when public. Its words come from
