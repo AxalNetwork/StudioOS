@@ -23,6 +23,7 @@ import { promoteWaitlist, type EventSeatRow } from '../services/eventCapacity';
 import {
   OVERVIEW_WEEKS, parseListQuery, readCompPreview, readEventHistory, readEventList, readEventSummary, readOverview,
 } from '../services/adminEventsReads';
+import { hostEventLink, memberEventLink } from '../services/eventLinks';
 
 const adminEvents = new Hono<{ Bindings: Env }>();
 
@@ -285,7 +286,7 @@ adminEvents.post('/:id/approve', async (c) => {
   if (event.host_user_id) {
     await notify(c.env, {
       userId: event.host_user_id, type: 'event_approved', category: 'events',
-      title: `Your event is live: ${event.title}`, link: `/events/${event.slug}`, payload: { event_id: id },
+      title: `Your event is live: ${event.title}`, link: hostEventLink(id), payload: { event_id: id },
     }).catch(() => {});
   }
   // Comp-on-publish (design §7.3): auto-mint comp invites for the event's
@@ -331,7 +332,7 @@ adminEvents.post('/:id/reject', async (c) => {
     await notify(c.env, {
       userId: event.host_user_id, type: 'event_rejected', category: 'events',
       title: `Event needs changes: ${event.title}`, body: reason || undefined,
-      link: `/events/${event.slug}`, payload: { event_id: id },
+      link: hostEventLink(id), payload: { event_id: id },
     }).catch(() => {});
   }
   return c.json({ event: shapeEvent(await loadEvent(c.env, id), { includePrivate: true }) });
@@ -358,7 +359,7 @@ adminEvents.post('/:id/unpublish', async (c) => {
     await notify(c.env, {
       userId: event.host_user_id, type: 'event_unpublished', category: 'events',
       title: `Your event is back with you as a draft: ${event.title}`,
-      body: note || undefined, link: `/events/${event.slug}`, payload: { event_id: id },
+      body: note || undefined, link: hostEventLink(id), payload: { event_id: id },
     }).catch(() => {});
   }
   return c.json({ event: shapeEvent(await loadEvent(c.env, id), { includePrivate: true }) });
@@ -418,7 +419,7 @@ adminEvents.post('/:id/cancel', async (c) => {
   for (const r of (seated.results || []) as any[]) {
     await notify(c.env, {
       userId: Number(r.user_id), type: 'event_cancelled', category: 'events',
-      title: `Event cancelled: ${event.title}`, body: note || undefined, link: `/events/${event.slug}`, payload: { event_id: id },
+      title: `Event cancelled: ${event.title}`, body: note || undefined, link: memberEventLink(id), payload: { event_id: id },
     }).catch(() => {});
   }
   return c.json({
@@ -469,7 +470,7 @@ adminEvents.post('/:id/capacity', async (c) => {
         await notify(c.env, {
           userId: Number(p.user_id), type: 'event_waitlist_promoted', category: 'events',
           title: `You're off the waitlist: ${event.title}`,
-          link: `/events/${event.slug}`, payload: { event_id: id },
+          link: memberEventLink(id), payload: { event_id: id },
         }).catch(() => {});
       }
     }

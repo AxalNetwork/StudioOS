@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { api, dd } from '../../../lib/api';
 import { reportError } from '../../../lib/log';
-import { overviewReply, redemptionDealSet } from './partnersDeskModel';
+import { overviewReply } from './partnersDeskModel';
 
 /**
  * D923 (#2370) — the desk's reads, each made alone so one that fails leaves
@@ -12,7 +12,7 @@ import { overviewReply, redemptionDealSet } from './partnersDeskModel';
  *   contracts    R5, every deal, paged at 500 until its `total`;
  *   links        R6, the partner accounts and firms;
  *   template     R8, for the agreement-ready rule;
- *   calls        R4, one per deal with redemptions (Guard F's fan-out), for Referrals;
+ *   (D951: Guard F's fan-out is gone; Referrals reads D928's cross-deal read.)
  *   overview     part 4's `GET /api/admin/partners/overview` (D927): every
  *                Overview tile, Needs-you row and chart, and the Overview
  *                tab's count (D929).
@@ -87,38 +87,6 @@ async function readLinks() {
 
 const dealList = (status) => () => api.adminPartners.listDeals(status).then((r) => itemsOf(r, `The ${status} deals`));
 
-/**
- * Guard F's fan-out: one R4 call per deal in the set, each tracked alone. The
- * set's ids, joined, are the effect's key, so a re-render that rebuilds the
- * set does not read again.
- */
-function useFanOut(ids, tick, enabled) {
-  const key = ids.join(',');
-  const [calls, setCalls] = useState(() => new Map());
-  useEffect(() => {
-    if (!enabled) return undefined;
-    let live = true;
-    const list = key ? key.split(',') : [];
-    setCalls((prev) => new Map(list.map((id) => {
-      const p = prev.get(id);
-      return [id, p?.data ? { ...p, status: 'loading', error: null } : { status: 'loading', data: null, error: null }];
-    })));
-    for (const id of list) {
-      api.adminPartners.dealRedemptions(id)
-        .then((reply) => {
-          if (!Array.isArray(reply?.items)) throw new Error('The redemptions did not come back as a list.');
-          if (live) setCalls((m) => new Map(m).set(id, { status: 'ready', data: reply, error: null }));
-        })
-        .catch((error) => {
-          reportError('admin-partners:redemptions', error);
-          if (live) setCalls((m) => new Map(m).set(id, { status: 'error', data: m.get(id)?.data ?? null, error }));
-        });
-    }
-    return () => { live = false; };
-  }, [key, tick, enabled]);
-  return calls;
-}
-
 export function usePartnerDesk(route) {
   const [tick, setTick] = useState(0);
   const reload = useCallback(() => setTick((t) => t + 1), []);
@@ -171,9 +139,5 @@ export function usePartnerDesk(route) {
   const cases = useRead('cases', 'cases', tick, onDeals,
     () => dd.listCases({ subject_type: 'partner' }).then((r) => itemsOf(r, 'The due-diligence cases')));
 
-  const set = redemptionDealSet(contracts, deals);
-  const ids = set.state === 'ready' ? set.deals.map((d) => d.id) : [];
-  const calls = useFanOut(ids, tick, set.state === 'ready');
-
-  return { invitations, deals, contracts, links, template, overview, top, cases, set, calls, tick, reload, extra, adopt };
+  return { invitations, deals, contracts, links, template, overview, top, cases, tick, reload, extra, adopt };
 }
