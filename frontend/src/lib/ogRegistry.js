@@ -294,7 +294,7 @@ const ROUTES = [
   {
     path: '/status',
     title: 'System status',
-    description: 'Real-time health of Axal VC StudioOS services, plus a 90-day uptime history.',
+    description: 'Real-time health of Axal VC StudioOS services, and the days with no incident reported since records began.',
     type: 'website',
     section: 'company',
   },

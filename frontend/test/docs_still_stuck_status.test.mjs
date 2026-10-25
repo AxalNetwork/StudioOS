@@ -100,7 +100,9 @@ test('unmonitored inventory does not claim an outage, but its incidents still re
   assert.match(page, /All monitored services operational/);
   assert.match(read('frontend/src/pages/docs/DocsLayout.jsx'), /All monitored services operational/);
   assert.match(page, /label: 'Not monitored'/);
-  assert.match(page, /Uptime not measured/);
+  // D1076: an unmonitored row says it keeps no history; the words are statusHistory.js's.
+  assert.match(page, /recordLine\(s\)/);
+  assert.match(read('frontend/src/lib/statusHistory.js'), /Not monitored: no history is kept/);
   assert.match(page, /s\.availability/);
   assert.match(page, /s\.note/);
 });
