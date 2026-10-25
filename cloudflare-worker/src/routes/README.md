@@ -310,3 +310,5 @@ D971 (#2756): `admin_lab_operations.ts` is mounted by `admin_cohort.ts` under
 The latter filters/paginates one safe projection of existing stores and never
 returns staff identities or free-form audit payloads. An unavailable source is
 503, never an empty successful log. Reads create no schema or data.
+
+D1135: `company.ts` adds member self-leave and validates create/rename; `projects.ts` counts live ventures, adds owner restore within 30 days and sends email-mode team invitations.

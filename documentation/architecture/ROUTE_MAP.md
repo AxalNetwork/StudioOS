@@ -1567,3 +1567,9 @@ is added. See `services/channels/telegramCapture.ts` and D867.
 - `POST /api/calendar/push/event_ticket/:registration_id` and `/push/event_hosted/:event_id` copy one to the member's connected calendars. Google and Outlook sync carries both kinds, with no attendees, and on each sync removes the copies whose place or event has left (`removed` in the summary).
 - `GET /api/calendar/event-links/:event_id` (`requireAuth`, then `canViewEvent`'s rule as `eventVisibleTo`): `{ event_id, ics, google, outlook, office365, join_link_included }`. 404 for an unknown event, 403 for one the caller cannot see.
 - Not yet: the token feed for "Subscribe to my events" waits on a migration number (D1033 §4).
+
+D1135 (#3015): Company Settings' existing Leave company confirmation now posts
+`/api/company/:uid/leave` through the switcher's shared action. It removes the
+membership and clears a departed active selection. Explorers have no Add a new
+company control in the switcher. `POST /api/projects/:id/restore` is a founder's
+owner-only undo within 30 days and available plan space; no new page is added.

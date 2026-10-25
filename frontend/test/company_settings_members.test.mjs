@@ -360,7 +360,7 @@ test('the danger zone ships the two actions that exist and refuses the one that 
   const dz = page.slice(page.indexOf('function DangerZoneCard'), page.indexOf('// ---------- Members'));
   assert.doesNotMatch(dz, /api\.deleteCompany|\/company\/\$\{uid\}',\s*\{\s*method:\s*'DELETE'/,
     'nothing in the danger zone may call a delete-company endpoint');
-  assert.match(dz, /api\.removeCompanyMember\(uid, rights\.myUserId\)/,
+  assert.match(dz, /await leaveCompany\(uid\)/,
     'Leave must be the member-removal endpoint applied to yourself, not a new route');
 });
 

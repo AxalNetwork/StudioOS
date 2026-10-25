@@ -1,7 +1,7 @@
 import React, { useEffect, useRef, useState, useSyncExternalStore } from 'react';
 import { ChevronDown, Plus } from 'lucide-react';
 import { useActiveCompany as _useActiveCompany } from '../contexts/ActiveCompanyContext';
-import { api, setActiveCompanyId, initActiveCompanyId } from '../lib/api';
+import { api, companyActionsApi, setActiveCompanyId, initActiveCompanyId } from '../lib/api';
 
 /**
  * CompanySwitcher — the ONLY way the active company changes.
@@ -127,6 +127,8 @@ export function companyLabel(company, { loading = false, failed = false } = {}) 
  */
 export function useCompanySwitch() {
   const { company, setCompany, companies, setCompanies } = _useActiveCompany();
+  const currentCompany = useRef(company);
+  currentCompany.current = company;
   function switchTo(next) {
     setActiveCompanyId(next.id);
     setCompany(next);
@@ -138,7 +140,15 @@ export function useCompanySwitch() {
     setCompany(created);
     return created;
   }
-  return { company, companies, switchTo, create };
+  async function leave(uid) {
+    await companyActionsApi.leave(uid);
+    setCompanies((rows) => rows.filter((row) => row.uid !== uid));
+    if (currentCompany.current?.uid === uid) {
+      setActiveCompanyId(null);
+      setCompany(null);
+    }
+  }
+  return { company, companies, switchTo, create, leave };
 }
 
 function CompanySwitcher({ collapsed, role }) {
@@ -188,7 +198,7 @@ function CompanySwitcher({ collapsed, role }) {
         // back to the primary company (is_primary_admin=true comes first).
         const restored = savedId ? arr.find((co) => co.id === savedId) : null;
         const next = restored || arr[0] || null;
-        if (next) { setActiveCompanyId(next.id); setCompany(next); }
+        setActiveCompanyId(next?.id ?? null); setCompany(next);
         setReadState({ loading: false, failed: false });
       })
       // A failed read used to be swallowed here, which rendered exactly like an
@@ -274,7 +284,7 @@ function CompanySwitcher({ collapsed, role }) {
         );
       })}
       <div className={companies.length > 0 ? 'border-t border-gray-100 dark:border-gray-800' : ''}>
-        {!adding && (
+        {role !== 'exploring' && !adding && (
           <button
             type="button"
             onClick={() => { setAdding(true); setError(''); }}
@@ -284,7 +294,7 @@ function CompanySwitcher({ collapsed, role }) {
             Add a new company
           </button>
         )}
-        {adding && (
+        {role !== 'exploring' && adding && (
           <form onSubmit={submitNew} className="px-3 py-2.5 space-y-2">
             <input
               autoFocus
