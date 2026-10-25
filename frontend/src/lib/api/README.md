@@ -193,6 +193,11 @@ D928 (#2724): `partnerDealReads.js` calls the four reads in
 sorted and paged) and `GET /api/admin/partners/agreement-ready`. Admin only;
 nothing here writes.
 
+D986 (#2776): `partnerDealTypes.js` calls `/api/admin/partner-deal-types`
+(HQ's list, one licence with its history, and the write, which takes the money
+bar and a reason) and `GET /api/licence/mine/partner-deal-types` (the studio's
+own read). A licence HQ has not set reads "Not recorded", never "every type".
+
 D806 (#2245): `billingInvoices.js` calls `GET /api/billing/invoices?page&per`
 (`cloudflare-worker/src/routes/billing.ts`): the member's own paid orders and
 Stripe plan invoices in one list, newest first. D789's Usage overview reads the newest three rows.
@@ -303,6 +308,10 @@ Administrator's own copy, `minePdfBlob`), both read as Blobs outside the typed
 drift surface. The Administrator's list arrives on `licenceAccountApi.statements()`
 as `fee_invoices`.
 
+D973: `adminNetwork.js` re-exports `network.js`’s single `adminNetworkApi` binding.
+Overview, paged People and opaque drawer refs coexist with numeric standing
+reads and all D976 writes; the barrel exports no competing client objects.
+
 D976 (#2762): `network.js` is the advisor and partner network's admin side on
 `/api/admin/network/people/:userId`: one person's standing (stage, pause,
 directory, ratings, sessions, engagement counts per lane, payout readiness, a
@@ -318,3 +327,9 @@ totals over the filtered set and the filters' options), the counts for the tiles
 and the weekly series, and one profile by its reference (`pp_…`), never by
 email. The older `/api/profiling/admin/*` calls stay on `api.js` for the pages
 that read them.
+
+D993 (#2804): `partnerProfiles.js` also reads the first-agreement options
+(`GET /api/admin/partner-profiles/agreements`, each Ready or "Not ready: no
+text in the library yet") and sends Unbind (`POST …/:ref/unbind`, Super Admin
+with a recent step-up and a reason). Each list row and profile carries its
+agreement's envelope state on `envelope`.

@@ -12,6 +12,13 @@ import { canAccessProject, getProjectMembershipRole } from '../services/projectA
  *   PUT    /scenarios/{uid}              — update inputs + re-simulate
  *   DELETE /scenarios/{uid}              — delete
  *   GET    /scenarios/{uid}/export.csv   — 409A-friendly CSV export
+ *
+ * D1020 (#2857) — the recorded register, per venture:
+ *   GET    /equity-plan?project_id=      — one venture's pools and grants (none: the account's)
+ *   GET    /live?project_id=             — one venture's holders and securities (none: the account's)
+ *   PUT    /carta/venture                — the venture a founder's Carta connection is the record for
+ *   GET    /register/{projectId}/export.csv — the recorded cap table as CSV, one audit row
+ *   POST   /register/{projectId}/snapshot   — a PDF "As of" snapshot into the data room, NDA, seen by nobody
  */
 import { Hono } from 'hono';
 import type { Context } from 'hono';
@@ -40,6 +47,10 @@ import { refuse } from '../util/refusal';
 import {
   saveScenario, logScenarioAct, loadScenarioByUid as loadByUid, type ScenarioRow,
 } from '../services/capTableWrites';
+import {
+  actorHash, auditStatement, equityPlanBody, num, readEquityPlan, readRegister, registerCsv, snapshotPdf, withOwnership,
+  type RegisterScope,
+} from '../services/capTableRegister';
 
 /**
  * Build queue #120 — lazy bootstrap for the share tables. Canonical
@@ -261,6 +272,30 @@ function asJsonError(c: any, err: unknown) {
 }
 
 /**
+ * D1020 — which register a read names: `?project_id=` is one venture, read
+ * through the venture's own gate; no parameter is the caller's account.
+ */
+async function registerScope(c: Ctx, user: AuthUser): Promise<RegisterScope> {
+  const raw = c.req.query('project_id');
+  if (raw === undefined || raw === '') return { kind: 'account', userId: user.id };
+  if (!/^[1-9][0-9]{0,9}$/.test(raw)) throw new HttpError(400, 'project_id must be a venture id');
+  const projectId = Number(raw);
+  await ensureProjectReadAccess(c, projectId, user);
+  return { kind: 'venture', projectId };
+}
+const scopeBody = (scope: RegisterScope) => (scope.kind === 'venture'
+  ? { kind: 'venture', project_id: scope.projectId }
+  : { kind: 'account', project_id: null });
+
+/** A venture's permissions, for the holder email rule and the write gates. */
+async function ventureFor(c: Ctx, projectId: number, user: AuthUser): Promise<ProjectRow> {
+  const proj = await loadProject(c, projectId, user);
+  if (!proj) throw new HttpError(404, 'Project not found');
+  if (!canReadProject(user as AccessUser, proj)) throw new HttpError(403, "You don't have access to that project");
+  return proj;
+}
+
+/**
  * Wave 2 — GET /api/captable/equity-plan
  *
  * The Cap Table Pro canvas asks for a grant-level pool burn-down with vesting.
@@ -271,9 +306,11 @@ function asJsonError(c: any, err: unknown) {
  * `integrations/providers/carta.ts`, which writes them. A founder who connected
  * Carta has this data in D1 and has never been shown it.
  *
- * Scoped by `user_id`, which is how both tables are keyed — there is no
- * project_id on either, so this is a per-account view and does not need the
- * tenancy module.
+ * D1020 (#2857): `?project_id=` reads ONE venture's pools and grants, gated
+ * like the venture's cap table (`ensureProjectReadAccess`); migration 574 gave
+ * both tables `project_id`. Without it, the account's rows as before, for the
+ * Spin-Out Lab's card; that answer says `scope.kind = 'account'`. A row whose
+ * venture is unset is never shown under a venture.
  *
  * SHARES, NOT MONEY. Every figure here is a share count (REAL in the schema,
  * as Carta reports fractional grants). No money crosses this endpoint, so the
@@ -286,21 +323,14 @@ function asJsonError(c: any, err: unknown) {
  * last written so the UI can say how fresh the answer is.
  */
 captable.get('/equity-plan', async (c) => {
-  const user = await requireAuth(c);
+  const user = await requireAuth(c) as AuthUser;
+  let scope: RegisterScope;
+  try { scope = await registerScope(c, user); } catch (e) { return asJsonError(c, e); }
   // D366: a failed SELECT is a refusal, never an empty plan. "No pools or
   // grants recorded" is only said when both stores were actually read.
-  let pools: { results?: any[] };
-  let vesting: { results?: any[] };
+  let plan: Awaited<ReturnType<typeof readEquityPlan>>;
   try {
-    pools = await c.env.DB.prepare(
-      `SELECT id, name, shares_authorized, shares_issued, shares_available, source, updated_at
-         FROM cap_table_option_pools WHERE user_id = ? ORDER BY name`,
-    ).bind(user.id).all<any>();
-    vesting = await c.env.DB.prepare(
-      `SELECT id, holder_id, security_id, start_date, cliff_months, total_months,
-              total_shares, vested_shares, source, updated_at
-         FROM cap_table_vesting WHERE user_id = ? ORDER BY start_date DESC`,
-    ).bind(user.id).all<any>();
+    plan = await readEquityPlan(c.env, scope);
   } catch (e) {
     return refuse(c, 500, {
       code: 'equity_plan_read_failed',
@@ -308,51 +338,9 @@ captable.get('/equity-plan', async (c) => {
       raw: e,
     });
   }
-
-  const poolRows = pools.results || [];
-  const vestRows = vesting.results || [];
-  const num = (v: any) => (v == null || Number.isNaN(Number(v)) ? null : Number(v));
-  const sum = (rows: any[], k: string) => rows.reduce((a, r) => a + (num(r[k]) ?? 0), 0);
-
-  const totalGranted = sum(vestRows, 'total_shares');
-  const totalVested = sum(vestRows, 'vested_shares');
-
-  return c.json({
-    pools: poolRows.map((p) => ({
-      id: p.id,
-      name: p.name,
-      shares_authorized: num(p.shares_authorized),
-      shares_issued: num(p.shares_issued),
-      shares_available: num(p.shares_available),
-      source: p.source,
-      as_of: p.updated_at,
-    })),
-    grants: vestRows.map((v) => ({
-      id: v.id,
-      holder_id: v.holder_id,
-      security_id: v.security_id,
-      start_date: v.start_date,
-      cliff_months: num(v.cliff_months),
-      total_months: num(v.total_months),
-      total_shares: num(v.total_shares),
-      vested_shares: num(v.vested_shares),
-      source: v.source,
-      as_of: v.updated_at,
-    })),
-    // Totals are sums of what is recorded, nothing modelled. Null when there
-    // is nothing to sum, so the UI shows "Not recorded" rather than a
-    // confident zero.
-    summary: {
-      pool_count: poolRows.length,
-      grant_count: vestRows.length,
-      shares_authorized: poolRows.length ? sum(poolRows, 'shares_authorized') : null,
-      shares_issued: poolRows.length ? sum(poolRows, 'shares_issued') : null,
-      shares_available: poolRows.length ? sum(poolRows, 'shares_available') : null,
-      granted_shares: vestRows.length ? totalGranted : null,
-      vested_shares: vestRows.length ? totalVested : null,
-      unvested_shares: vestRows.length ? Math.max(0, totalGranted - totalVested) : null,
-    },
-  });
+  // D1020: totals are sums of what is recorded, nothing modelled, and null
+  // unless every row records the figure (`knownSum`).
+  return c.json({ scope: scopeBody(scope), ...equityPlanBody(plan.pools, plan.vesting) });
 });
 
 captable.post('/simulate', async (c) => {
@@ -954,50 +942,176 @@ captable.delete('/409a/:projectId/events/:id', async (c) => {
 });
 
 captable.get('/live', async (c) => {
-  const user = await requireAuth(c);
-  const integration = await c.env.DB.prepare(
-    "SELECT uid, status, last_synced_at, external_account_name, last_error FROM integrations WHERE provider_key = 'carta' AND user_id = ? ORDER BY id DESC LIMIT 1",
-  ).bind(user.id).first<{ uid: string; status: string; last_synced_at: string | null; external_account_name: string | null; last_error: string | null }>();
-
-  const holdersRes = await c.env.DB.prepare(
-    'SELECT id, name, email, security_type, shares, ownership_pct, source, carta_stakeholder_id, carta_security_id, updated_at ' +
-    'FROM cap_table_holders WHERE user_id = ? ORDER BY shares DESC, name ASC LIMIT 500',
-  ).bind(user.id).all<{
-    id: number; name: string; email: string | null; security_type: string | null;
-    shares: number | null; ownership_pct: number | null; source: string;
-    carta_stakeholder_id: string | null; carta_security_id: string | null; updated_at: string;
-  }>();
-  const securitiesRes = await c.env.DB.prepare(
-    'SELECT id, name, share_class, shares_authorized, shares_issued, source, carta_id, updated_at ' +
-    'FROM cap_table_securities WHERE user_id = ? ORDER BY name ASC LIMIT 200',
-  ).bind(user.id).all<{
-    id: number; name: string; share_class: string | null;
-    shares_authorized: number | null; shares_issued: number | null;
-    source: string; carta_id: string | null; updated_at: string;
-  }>();
-
-  const holders = holdersRes.results || [];
-  const securities = securitiesRes.results || [];
-
-  // Recompute ownership % off the live total so disconnected/manual rows
-  // and Carta-sourced rows share the same denominator.
-  const totalShares = holders.reduce((s, h) => s + (Number(h.shares) || 0), 0);
-  const enriched = holders.map((h) => ({
-    ...h,
-    ownership_pct: totalShares > 0 ? ((Number(h.shares) || 0) / totalShares) * 100 : 0,
-  }));
-
+  const user = await requireAuth(c) as AuthUser;
+  let scope: RegisterScope;
+  let showEmail = true;
+  try {
+    scope = await registerScope(c, user);
+    if (scope.kind === 'venture') showEmail = canWriteProject(user, await ventureFor(c, scope.projectId, user));
+  } catch (e) { return asJsonError(c, e); }
+  let integration: { uid: string; status: string; last_synced_at: string | null; external_account_name: string | null; last_error: string | null; config_json: string | null } | null;
+  let register: Awaited<ReturnType<typeof readRegister>>;
+  try {
+    integration = await c.env.DB.prepare(
+      "SELECT uid, status, last_synced_at, external_account_name, last_error, config_json FROM integrations WHERE provider_key = 'carta' AND user_id = ? ORDER BY id DESC LIMIT 1",
+    ).bind(user.id).first();
+    register = await readRegister(c.env, scope);
+  } catch (e) {
+    return refuse(c, 500, {
+      code: 'cap_register_read_failed',
+      message: 'The recorded cap table could not be read. This is not a claim that nothing is recorded; try again in a moment.',
+      raw: e,
+    });
+  }
+  // D1020: a holder with no recorded shares is null, never 0%, and while any
+  // holder's shares are missing no one's share of the total is known.
+  const owned = withOwnership(register.holders);
+  const venture = integration ? cartaVenture(integration.config_json) : null;
   return c.json({
+    scope: scopeBody(scope),
     connected: !!integration && integration.status === 'active',
     integration_uid: integration?.uid || null,
     provider: 'carta',
+    // D1020 §4: while Carta is connected for this venture, its rows are the record, read only here.
+    carta_project_id: venture,
+    carta_is_record: !!integration && integration.status === 'active' && scope.kind === 'venture' && venture === scope.projectId,
     issuer_name: integration?.external_account_name || null,
     last_synced_at: integration?.last_synced_at || null,
     last_error: integration?.last_error || null,
-    total_shares: totalShares,
-    holders: enriched,
-    securities,
+    total_shares: owned.total_shares,
+    holders: owned.holders.map((h) => (showEmail ? h : { ...h, email: undefined })),
+    securities: register.securities.map((s) => ({ ...s, shares_authorized: num(s.shares_authorized), shares_issued: num(s.shares_issued) })),
   });
+});
+
+/**
+ * D1020 §4 — the venture a founder's Carta connection is the record for.
+ * Carta's sync writes the account's issuer; this names which venture it is.
+ * Setting it moves the connector's rows to that venture, and the next sync
+ * writes there. `null` makes them account-level again. One audit row.
+ */
+captable.put('/carta/venture', async (c) => {
+  const user = await requireAuth(c) as AuthUser;
+  const body = await c.req.json().catch(() => ({}));
+  const raw = (body as any)?.project_id;
+  const projectId = raw === null ? null : Number(raw);
+  if (projectId !== null && !(Number.isSafeInteger(projectId) && projectId > 0)) return c.json({ detail: 'project_id must be a venture id or null' }, 400);
+  try {
+    if (projectId !== null) await ensureProjectWriteAccess(c, projectId, user);
+  } catch (e) { return asJsonError(c, e); }
+  const row = await c.env.DB.prepare(
+    "SELECT id, config_json FROM integrations WHERE provider_key = 'carta' AND user_id = ? LIMIT 1",
+  ).bind(user.id).first<{ id: number; config_json: string | null }>();
+  if (!row) return c.json({ detail: 'Carta is not connected to this account' }, 404);
+  const cfg = safeJson<Record<string, unknown>>(row.config_json, {});
+  if (cfg.audience === 'investor') return c.json({ detail: 'An investor Carta connection imports no cap table' }, 409);
+  const before = cartaVenture(row.config_json);
+  const next = { ...cfg, project_id: projectId };
+  const hash = await actorHash(user as { email?: string | null });
+  await c.env.DB.batch([
+    c.env.DB.prepare('UPDATE integrations SET config_json = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?').bind(JSON.stringify(next), row.id),
+    ...['cap_table_holders', 'cap_table_securities', 'cap_table_option_pools', 'cap_table_vesting'].map((t) => c.env.DB.prepare(
+      CARTA_RETAG[t as keyof typeof CARTA_RETAG],
+    ).bind(projectId, user.id)),
+    auditStatement(c.env, user, hash, projectId ?? before, 'cap_table_carta_venture_set', { from: before, to: projectId }),
+  ]);
+  return c.json({ ok: true, project_id: projectId });
+});
+
+/** Static statements: the table is chosen from this map, never spliced from input. `connector_carta` is CARTA_SOURCE. */
+const CARTA_RETAG = {
+  cap_table_holders: `UPDATE cap_table_holders SET project_id = ?, updated_at = CURRENT_TIMESTAMP WHERE user_id = ? AND source = 'connector_carta'`,
+  cap_table_securities: `UPDATE cap_table_securities SET project_id = ?, updated_at = CURRENT_TIMESTAMP WHERE user_id = ? AND source = 'connector_carta'`,
+  cap_table_option_pools: `UPDATE cap_table_option_pools SET project_id = ?, updated_at = CURRENT_TIMESTAMP WHERE user_id = ? AND source = 'connector_carta'`,
+  cap_table_vesting: `UPDATE cap_table_vesting SET project_id = ?, updated_at = CURRENT_TIMESTAMP WHERE user_id = ? AND source = 'connector_carta'`,
+} as const;
+
+/** The venture a Carta connection's config names, or null. */
+function cartaVenture(configJson: string | null | undefined): number | null {
+  const v = Number(safeJson<Record<string, unknown>>(configJson, {}).project_id);
+  return Number.isSafeInteger(v) && v > 0 ? v : null;
+}
+
+const today = () => new Date().toISOString().slice(0, 10);
+
+/**
+ * D1020 §5 — the recorded cap table of one venture as CSV. Read gate; a reader
+ * who may not write gets no holder emails. One audit row, written before the
+ * file is answered: no audit, no export.
+ */
+captable.get('/register/:projectId/export.csv', async (c) => {
+  const user = await requireAuth(c) as AuthUser;
+  const projectId = Number(c.req.param('projectId'));
+  if (!Number.isSafeInteger(projectId) || projectId <= 0) return c.json({ detail: 'Invalid project_id' }, 400);
+  let proj: ProjectRow;
+  try { proj = await ventureFor(c, projectId, user); } catch (e) { return asJsonError(c, e); }
+  const withEmail = canWriteProject(user, proj);
+  const asOf = today();
+  let csv: string;
+  try {
+    const register = await readRegister(c.env, { kind: 'venture', projectId });
+    csv = registerCsv(register, asOf, withEmail);
+    await auditStatement(c.env, user, await actorHash(user as { email?: string | null }), projectId, 'cap_table_register_exported', {
+      format: 'csv', as_of: asOf, holders: register.holders.length, securities: register.securities.length, emails: withEmail,
+    }).run();
+  } catch (e) {
+    return refuse(c, 500, { code: 'cap_register_export_failed', message: 'The cap table could not be exported. Nothing was downloaded; try again in a moment.', raw: e });
+  }
+  return new Response(csv, {
+    status: 200,
+    headers: {
+      'Content-Type': 'text/csv; charset=utf-8',
+      'Content-Disposition': `attachment; filename="cap-table-${projectId}-${asOf}.csv"`,
+      'Cache-Control': 'no-store',
+    },
+  });
+});
+
+/**
+ * D1020 §5 — a PDF snapshot of the recorded cap table, stamped "As of [date]",
+ * added to the venture's data room under NDA and seen by nobody until the
+ * founder shares it (`visibility = 'nda'`, `access_tier = 'nobody'`). Write
+ * gate. The file row and its audit row are one batch; if either fails the
+ * stored object is removed.
+ */
+captable.post('/register/:projectId/snapshot', async (c) => {
+  const user = await requireAuth(c) as AuthUser;
+  const projectId = Number(c.req.param('projectId'));
+  if (!Number.isSafeInteger(projectId) || projectId <= 0) return c.json({ detail: 'Invalid project_id' }, 400);
+  try { await ensureProjectWriteAccess(c, projectId, user); } catch (e) { return asJsonError(c, e); }
+  if (!c.env.FILES) return c.json({ code: 'storage_not_configured', detail: 'The data room’s storage is not configured here.' }, 503);
+  const venture = await c.env.DB.prepare('SELECT uid, name FROM projects WHERE id = ?').bind(projectId).first<{ uid: string | null; name: string | null }>();
+  if (!venture?.uid) return c.json({ detail: 'This venture has no data room' }, 404);
+  const asOf = today();
+  let bytes: Uint8Array;
+  let counts: { holders: number; securities: number };
+  try {
+    const register = await readRegister(c.env, { kind: 'venture', projectId });
+    counts = { holders: register.holders.length, securities: register.securities.length };
+    bytes = await snapshotPdf(venture.name || 'This venture', asOf, register);
+  } catch (e) {
+    return refuse(c, 500, { code: 'cap_register_read_failed', message: 'The recorded cap table could not be read, so no snapshot was made.', raw: e });
+  }
+  const uid = crypto.randomUUID().replace(/-/g, '');
+  const key = `data-room/${venture.uid}/${uid}`;
+  const name = `Cap table as of ${asOf}.pdf`;
+  await c.env.FILES.put(key, bytes, { httpMetadata: { contentType: 'application/pdf' }, customMetadata: { project_uid: venture.uid, uploaded_by: String(user.id) } });
+  try {
+    await c.env.DB.batch([
+      c.env.DB.prepare(
+        `INSERT INTO data_room_files (uid, project_id, folder_id, name, r2_key, content_type, size_bytes, visibility, uploaded_by_user_id,
+           created_at, updated_at, access_tier)
+         VALUES (?, ?, NULL, ?, ?, 'application/pdf', ?, 'nda', ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, 'nobody')`,
+      ).bind(uid, projectId, name, key, bytes.byteLength, user.id),
+      auditStatement(c.env, user, await actorHash(user as { email?: string | null }), projectId, 'cap_table_snapshot_filed', {
+        format: 'pdf', as_of: asOf, file_uid: uid, ...counts,
+      }),
+    ]);
+  } catch (e) {
+    await c.env.FILES.delete(key).catch(() => {});
+    return refuse(c, 500, { code: 'cap_snapshot_not_filed', message: 'The snapshot could not be added to the data room. Nothing was filed; try again in a moment.', raw: e });
+  }
+  return c.json({ ok: true, file: { uid, name, as_of: asOf, visibility: 'nda', access_tier: 'nobody' } }, 201);
 });
 
 // Task #1 (AG) — spec-contract aliases. Read-only project-scoped views over
