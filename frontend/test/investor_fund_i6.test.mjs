@@ -51,7 +51,8 @@ test('I6 composes live fund sources and preserves detailed tools', () => {
   assert.match(page, /<Link to="\/funds\/calls" data-testid="link-review-call-ledger">/);
   assert.match(app, /path="\/funds\/capital-calls" element=\{<FundCapitalCallsRedirect \/>\}/);
   assert.match(app, /function FundCapitalCallsRedirect\(\)[\s\S]{0,200}?pathname: '\/funds\/calls', search: loc\.search, hash: loc\.hash/);
-  assert.match(app, /path="\/funds\/performance"[^\n]+<FundOpsWorkspace \/>/);
+  // D1160: Fund Ops is retired; an investor's Performance is the page itself.
+  assert.match(app, /path="\/funds\/performance"[^\n]+investorFundWorkspace\(<FundPerformancePage embedded \/>\)/);
 });
 
 test('I6 does not ship canvas sample funds, LPs, figures, or models', () => {

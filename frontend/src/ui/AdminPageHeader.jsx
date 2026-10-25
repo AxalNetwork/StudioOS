@@ -33,6 +33,8 @@ import { usePhoneWidth } from './phone/usePhoneWidth';
  *   { kind: 'dash', tip }       not recorded or not read, with the reason;
  *   { kind: 'dot' }             something waits on you (amber, "waiting" for
  *                               screen readers, since colour is never alone);
+ *   { kind: 'flag', value }     how many wait on you: the amber dot and the
+ *                               number (D1160, Fund admin's tabs);
  *   { kind: 'load' }            still reading: a short grey bar.
  */
 
@@ -80,6 +82,15 @@ function TabCount({ count }) {
       <span className="inline-flex items-center">
         <span aria-hidden="true" className="inline-block h-2 w-2 rounded-full border border-axal-amber-deep bg-axal-amber" />
         <span className="sr-only">waiting</span>
+      </span>
+    );
+  }
+  // D1160 (Fund admin's FND1): the amber dot with how many wait, the number in mono.
+  if (count.kind === 'flag') {
+    return (
+      <span className="inline-flex items-center gap-1 font-mono text-[12px] font-bold tabular-nums text-axal-amber-deep dark:text-amber-300">
+        <span aria-hidden="true" className="inline-block h-2 w-2 rounded-full border border-axal-amber-deep bg-axal-amber" />
+        <span data-testid={count.testId}>{count.value}</span><span className="sr-only"> waiting</span>
       </span>
     );
   }
@@ -219,7 +230,7 @@ export default function AdminPageHeader({
       <div className={`col-start-1 flex min-w-0 flex-wrap items-center gap-[9px] ${crumb ? 'row-start-2' : 'row-start-1'}`} data-testid="admin-page-title-row">
           <h1 ref={titleRef} tabIndex={-1} className="m-0 text-[20px] font-extrabold leading-tight tracking-[-.02em] text-axal-ink outline-none dark:text-gray-100 sm:text-[24px]">{title}</h1>
           {pills.map((p) => (
-            <span key={p.label} title={p.title} className={`inline-flex items-center rounded-full border px-2.5 py-0.5 text-[11.5px] font-bold ${PILL_TONES[p.tone] || PILL_TONES.hq}`}>{p.label}</span>
+            <span key={p.label} title={p.title} data-testid={p.testId} className={`inline-flex items-center rounded-full border px-2.5 py-0.5 text-[11.5px] font-bold ${PILL_TONES[p.tone] || PILL_TONES.hq}`}>{p.label}</span>
           ))}
       </div>
       {actions || more ? <div className={`contents sm:col-start-2 sm:flex sm:items-start sm:gap-2 ${crumb ? 'sm:row-start-2' : 'sm:row-start-1'}`} data-testid="admin-page-actions">
