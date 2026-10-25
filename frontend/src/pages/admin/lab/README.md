@@ -3,7 +3,7 @@
 D937 (#2374): the Spin-Out Lab's admin page at `/admin/programs/spinout-lab`,
 built to the owner's canvas (SL1–SL21, `design/incoming/Spin-Out Lab Admin Page.dc.html`)
 under the shared admin page header (D936, `../../../ui/AdminPageHeader.jsx`).
-Its tabs are sub-paths: `/applications`, `/cohorts` (and one cohort at
+Its tabs are sub-paths: `/applications` (one application at `/applications/:id`, D948), `/cohorts` (and one cohort at
 `/cohorts/YYYY-MM`, D947), `/participants` (one founder at `/participants/:uid`, D949), `/hosts`,
 `/formation` and `/graduation`; the founder-journey preview is `/preview`.
 
@@ -16,9 +16,9 @@ and hash and adding `?moved=`:
 
 - `AdminLab.jsx` — the page: the header (crumb, pills, line, facts, scope chip,
   moved notice, tabs with their counts) and the Overview's blocks.
-  Applications is today's console, asked for one section
-  through `AdminSpinoutLab`'s `section` prop; Participants, Cohorts, Hosts, Formation and
-  Graduation mount the files below.
+  Applications, Participants, Cohorts, Hosts, Formation and Graduation mount
+  the files below; under Applications, `AdminSpinoutLab`'s `cycles` section
+  keeps Settings' minimum and places and the two logs until part 9 (#2756).
 - `LabOverviewBlocks.jsx` — Overview's drawn blocks (SL1, D947): the cohort
   calendar timeline, Applications by cohort, Weeks passed, From application
   to company and Applications per week, each with Chart ⇄ Table and its
@@ -28,6 +28,16 @@ and hash and adding `?moved=`:
   overrides there are still today's `AdminCohortTiming` until part 7.
 - `labOverviewModel.js` — pure. Those blocks and pages from D944's overview
   read (`GET /api/admin/cohort/overview`) and Settings' minimum and places.
+- `LabApplications.jsx` — Applications (SL2) and one application (SL3, D948):
+  the cohort switch, the status chips with the Worker's totals, the capacity
+  bar and the below-the-minimum callout, search, filters, sort, the bulk bar
+  and pages asked of D944's read, the table (cards on a phone), the drawer at
+  `/applications/:id` from D948's read, and SL4 A–G's dialogs (Approve,
+  Waitlist, Decline, Move, Schedule an interview, Run below the minimum, Admit
+  without an application). `AdmitDialog` is exported for the Users console.
+- `applicationsModel.js` — pure. Applications' words, query, rows, cohort
+  switch, capacity, the drawer's sections, the dialogs' copy and refusals, and
+  ET-to-UTC for an interview time.
 - `LabParticipants.jsx` — Participants (SL7) and one founder (SL8, D949): the
   segments and "Where [cohort] stands" from D946's read, its filters, sort and
   pages asked of the Worker, the table (cards on a phone), the drawer at

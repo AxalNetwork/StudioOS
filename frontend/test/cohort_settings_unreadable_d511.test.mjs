@@ -13,33 +13,40 @@ import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import React from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
-import { SizeSettingsLabel, MinimumPill } from '../src/pages/admin/AdminCohortApplications.jsx';
+import { SizeSettingsLabel } from '../src/pages/admin/AdminCohortApplications.jsx';
+import { capacityOf } from '../src/pages/admin/lab/applicationsModel.js';
 
 const render = (C, props) => renderToStaticMarkup(React.createElement(C, props));
 const text = (html) => html.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim();
-const cycle = (o = {}) => ({ id: 7, applicant_counts: { approved: 2, activated: 1 }, meets_minimum: true, ...o });
 
 test('unread settings say so; read ones show their numbers', () => {
   assert.match(render(SizeSettingsLabel, { settings: null }), /data-testid="app-settings-unreadable"[^>]*>Min · Max unreadable</);
   assert.equal(text(render(SizeSettingsLabel, { settings: { min: 4, max: 20 } })), 'Min 4 · Max 20');
 });
 
-test('a cycle is never passed or failed against a minimum nobody read', () => {
-  for (const [settings, meets] of [[null, true], [null, false], [{ min: 4, max: 20 }, null]]) {
-    const html = render(MinimumPill, { cycle: cycle({ meets_minimum: meets }), settings });
-    assert.match(html, /data-testid="cycle-minimum-unreadable-7"/, JSON.stringify({ settings, meets }));
-    assert.equal(text(html), '3 approved · minimum unreadable');
-    assert.doesNotMatch(html, /emerald|amber/, 'no pass or fail colour');
+// D948: the cycle pill went with the Cycles console; Applications' capacity bar
+// (SL2) judges a cohort against the minimum now, and the same rule holds there.
+const overview = (settings, approved = { available: true, value: 3 }) => ({ status: 'ready', data: { blocks: {
+  cohorts: { available: true, items: [{ id: 7, cohort: '2026-12', year: 2026, month: 12, app_status: 'open', approved, force_proceed: 0 }] },
+  settings,
+} } });
+
+test('a cohort is never passed or failed against a minimum nobody read', () => {
+  for (const [settings, approved] of [
+    [{ available: false, reason: 'Minimum and places could not be read, so no cohort is judged against them.' }, undefined],
+    [undefined, undefined],
+    [{ available: true, min: 4, places: 20 }, { available: false, reason: 'The pool could not be read.' }],
+  ]) {
+    const cap = capacityOf(overview(settings, approved), '2026-12');
+    assert.equal(cap.state, 'unreadable', JSON.stringify({ settings, approved }));
+    assert.equal(cap.minimum, undefined, 'no pass or fail');
+    assert.match(cap.reason, /could not be read/);
   }
 });
 
-test('with a minimum read, the pill passes or fails the cycle against it', () => {
-  const pass = render(MinimumPill, { cycle: cycle(), settings: { min: 3, max: 20 } });
-  assert.equal(text(pass), '3/3 approved');
-  assert.match(pass, /emerald/);
-  const fail = render(MinimumPill, { cycle: cycle({ meets_minimum: false }), settings: { min: 5, max: 20 } });
-  assert.equal(text(fail), '3/5 approved');
-  assert.match(fail, /amber/);
+test('with a minimum read, the bar passes or fails the cohort against it', () => {
+  assert.deepEqual(capacityOf(overview({ available: true, min: 3, places: 20 }), '2026-12').minimum, { met: true, text: 'Minimum 3 met' });
+  assert.deepEqual(capacityOf(overview({ available: true, min: 5, places: 20 }), '2026-12').minimum, { met: false, text: 'Below the minimum of 5' });
 });
 
 test('the console holds no typed default for the settings', () => {

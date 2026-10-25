@@ -1,21 +1,18 @@
-// Task #5 — Cohort application lifecycle admin console. Rendered as the
-// "Cycles" tab of AdminSpinoutLab. Shows the per-cycle application funnel
-// (open → reviewing → active/postponed), the minimum-size threshold
-// indicator, close/start countdowns, applicant decisions (reason required,
-// audited), force-proceed, the notification log, and cycle history events.
+// The Spin-Out Lab's cohort settings and logs, under Applications' queue
+// (D948, #2753). Until D948 this was the whole Cycles console, deciding with
+// browser prompts; every decision is now SL4's dialogs in
+// `lab/LabApplications.jsx`. What stays here until part 9 (#2756) draws
+// Settings and Activity: Settings' minimum and places, edited in an in-page
+// dialog, and the notification log and cycle history.
 //
-// Everything time-based is decided by the Worker cron — this UI only
-// inspects state and issues audited admin actions. Worker-only endpoints
-// (dev backend answers 404/405) get the explanatory fallback, matching the
-// dev/Worker parity convention.
+// Everything time-based is decided by the Worker cron — this console only
+// reads state and saves the two settings, audited.
 import React, { useCallback, useEffect, useState } from 'react';
-import {
-  RefreshCw, CalendarRange, AlertTriangle, CheckCircle2, XCircle,
-  Hourglass, Bell, History, Zap, Settings2,
-} from 'lucide-react';
+import { RefreshCw, Bell, History, Settings2 } from 'lucide-react';
 import { api } from '../../lib/api';
 import { reportError } from '../../lib/log';
-import ApplicantDetail from './AdminApplicantDetail';
+import { Dialog, Field, INPUT, SUB, useWrite } from './lab/labParts';
+import { refusalText } from './lab/labDesksModel';
 
 function parseUtc(ts) {
   if (!ts) return null;
@@ -27,31 +24,6 @@ function fmt(ts) {
   if (ms === null) return '—';
   return new Date(ms).toLocaleString(undefined, { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' });
 }
-function timeUntil(ts) {
-  const ms = parseUtc(ts);
-  if (ms === null) return null;
-  const diff = ms - Date.now();
-  if (diff <= 0) return 'passed';
-  const h = Math.floor(diff / 3600_000);
-  if (h >= 48) return `${Math.floor(h / 24)}d`;
-  return `${h}h ${Math.floor((diff % 3600_000) / 60000)}m`;
-}
-
-const APP_STATUS_BADGE = {
-  open: 'bg-emerald-100 dark:bg-emerald-900/40 text-emerald-700 dark:text-emerald-300',
-  reviewing: 'bg-amber-100 dark:bg-amber-900/40 text-amber-700 dark:text-amber-300',
-  active: 'bg-blue-100 dark:bg-blue-900/40 text-blue-700 dark:text-blue-300',
-  postponed: 'bg-gray-200 dark:bg-gray-700 text-gray-600 dark:text-gray-300',
-};
-const APPLICANT_BADGE = {
-  pending: 'bg-gray-100 dark:bg-gray-800 text-gray-500 dark:text-gray-400',
-  approved: 'bg-emerald-100 dark:bg-emerald-900/40 text-emerald-700 dark:text-emerald-300',
-  rejected: 'bg-red-100 dark:bg-red-900/40 text-red-700 dark:text-red-300',
-  waitlisted: 'bg-amber-100 dark:bg-amber-900/40 text-amber-700 dark:text-amber-300',
-  activated: 'bg-blue-100 dark:bg-blue-900/40 text-blue-700 dark:text-blue-300',
-  rolled_forward: 'bg-gray-200 dark:bg-gray-700 text-gray-600 dark:text-gray-300',
-  withdrawn: 'bg-gray-200 dark:bg-gray-700 text-gray-600 dark:text-gray-300',
-};
 
 /**
  * D511 — the size settings as the Worker read them. `settings` is null when the
@@ -62,39 +34,36 @@ export function SizeSettingsLabel({ settings }) {
   return <>Min {settings.min} · Max {settings.max}</>;
 }
 
-/**
- * D511 — a cycle's count against the minimum. With no minimum read, or no
- * judgement from the Worker (`meets_minimum` null), the pill says the minimum
- * is unreadable rather than passing or failing the cycle.
- */
-export function MinimumPill({ cycle, settings }) {
-  const counts = cycle.applicant_counts || {};
-  const approvedish = (counts.approved || 0) + (counts.activated || 0);
-  if (!settings || cycle.meets_minimum == null) {
-    return (
-      <span data-testid={`cycle-minimum-unreadable-${cycle.id}`} className="text-[11px] font-semibold px-2 py-0.5 rounded-full flex items-center gap-1 bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-300">
-        <AlertTriangle size={10} /> {approvedish} approved · minimum unreadable
-      </span>
-    );
-  }
+const whole = (v) => /^\d+$/.test(String(v).trim()) && Number(v) <= 1000;
+
+/** D948 — the minimum and places, changed in an in-page dialog that says what they decide. */
+function SettingsDialog({ settings, onClose, onChanged }) {
+  const [min, setMin] = useState(settings ? String(settings.min) : '');
+  const [max, setMax] = useState(settings ? String(settings.max) : '');
+  const w = useWrite(onChanged, {}, refusalText);
+  const ok = whole(min) && whole(max);
   return (
-    <span className={`text-[11px] font-semibold px-2 py-0.5 rounded-full flex items-center gap-1 ${cycle.meets_minimum ? 'bg-emerald-100 dark:bg-emerald-900/40 text-emerald-700 dark:text-emerald-300' : 'bg-amber-100 dark:bg-amber-900/40 text-amber-700 dark:text-amber-300'}`}>
-      {cycle.meets_minimum ? <CheckCircle2 size={10} /> : <AlertTriangle size={10} />}
-      {approvedish}/{settings.min} approved
-    </span>
+    <Dialog title="Change the cohort minimum and places?" testId="app-settings-dialog" onClose={onClose} w={w} action="Save" disabled={!ok}
+      sub="A cohort below the minimum moves to the next one about 12 hours before it starts, unless an admin runs it anyway. Approving past the places needs a confirmation. Every admin sees the change."
+      onAction={() => w.run(() => api.adminCohortAppSettings({ min_cohort_size: Number(min), max_cohort_size: Number(max) }))}
+      done={w.reply ? `Minimum ${min}, places ${max}, saved.` : null}>
+      {settings ? null : <p className={`m-0 ${SUB}`}>The current settings could not be read, so the fields start empty.</p>}
+      <span className="flex flex-wrap gap-3">
+        <Field label="Minimum"><input inputMode="numeric" value={min} onChange={(e) => setMin(e.target.value.replace(/\D/g, ''))} disabled={Boolean(w.reply)} className={`${INPUT} w-28 font-mono`} data-testid="app-settings-min" /></Field>
+        <Field label="Places"><input inputMode="numeric" value={max} onChange={(e) => setMax(e.target.value.replace(/\D/g, ''))} disabled={Boolean(w.reply)} className={`${INPUT} w-28 font-mono`} data-testid="app-settings-max" /></Field>
+      </span>
+    </Dialog>
   );
 }
 
 export default function AdminCohortApplications() {
-  const [cycles, setCycles] = useState([]);
   const [settings, setSettings] = useState(null);
   const [notifications, setNotifications] = useState([]);
   const [events, setEvents] = useState([]);
-  const [subView, setSubView] = useState('cycles'); // cycles | notifications | history
+  const [subView, setSubView] = useState('notifications'); // notifications | history
   const [loading, setLoading] = useState(true);
-  const [unsupported, setUnsupported] = useState(false);
-  const [busyKey, setBusyKey] = useState(null);
-  const [openApplicant, setOpenApplicant] = useState(null);
+  const [failed, setFailed] = useState(false);
+  const [editing, setEditing] = useState(false);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -104,64 +73,24 @@ export default function AdminCohortApplications() {
         api.adminCohortAppNotifications(),
         api.adminCohortAppEvents(),
       ]);
-      setCycles(apps?.cycles || []);
       setSettings(apps?.settings ?? null);
       setNotifications(notifs?.notifications || []);
       setEvents(evts?.events || []);
-      setUnsupported(false);
+      setFailed(false);
     } catch (e) {
       reportError('AdminCohortApplications:load', e);
-      setUnsupported(true);
+      setFailed(true);
     } finally {
       setLoading(false);
     }
   }, []);
   useEffect(() => { load(); }, [load]);
 
-  const act = async (key, fn) => {
-    setBusyKey(key);
-    try { await fn(); await load(); }
-    catch (e) { reportError('AdminCohortApplications:action', e); window.alert(e?.message || 'Action failed'); }
-    finally { setBusyKey(null); }
-  };
-
-  const decide = (applicant, status) => {
-    const reason = (window.prompt(`Reason for marking this applicant ${status} (required, audited):`) || '').trim();
-    if (!reason) { window.alert('A reason is required.'); return; }
-    act(`decide:${applicant.id}`, () => api.adminCohortApplicantDecide(applicant.id, { status, reason }));
-  };
-
-  // D384 — a decline that carries the note the applicant reads. The worker
-  // reports whether that note was stored; a decision saved without it is said,
-  // not left for the applicant to discover as a blank reason.
-  const declineWithNote = (applicant, payload) => act(`decide:${applicant.id}`, async () => {
-    const r = await api.adminCohortApplicantDecide(applicant.id, { status: 'rejected', ...payload });
-    if (payload.applicant_note && r?.applicant_note_saved === false) {
-      window.alert('The decision was saved, but the note to the applicant was not. Open the applicant and send the note again.');
-    }
-  });
-  const scheduleInterview = (applicant, payload) => act(`interview:${applicant.id}`, () => api.adminCohortScheduleInterview(applicant.id, payload));
-  const cancelInterview = (applicant) => act(`interview:${applicant.id}`, () => api.adminCohortCancelInterview(applicant.id));
-
-  const forceProceed = (cycle) => {
-    const reason = (window.prompt(`Run the ${cycle.label} cohort even below the minimum size? Reason (required, audited):`) || '').trim();
-    if (!reason) { window.alert('A reason is required.'); return; }
-    act(`force:${cycle.id}`, () => api.adminCohortForceProceed(cycle.id, { reason }));
-  };
-
-  const editSettings = () => {
-    const min = parseInt(window.prompt('Minimum cohort size (cycles below this auto-postpone and roll forward):', settings ? String(settings.min) : '') || '', 10);
-    if (!Number.isInteger(min) || min < 0) return;
-    const max = parseInt(window.prompt('Maximum cohort size:', settings ? String(settings.max) : '') || '', 10);
-    if (!Number.isInteger(max) || max < 0) return;
-    act('settings', () => api.adminCohortAppSettings({ min_cohort_size: min, max_cohort_size: max }));
-  };
-
-  if (unsupported) {
+  if (failed) {
     return (
-      <div className="rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 p-6 text-sm text-gray-600 dark:text-gray-300">
-        <AlertTriangle size={16} className="inline mr-1.5 text-amber-500" />
-        Application cycle data is served by the production Worker — it isn't available on the local dev backend.
+      <div role="alert" className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 p-4 text-sm text-gray-600 dark:text-gray-300" data-testid="app-logs-unreadable">
+        <span>The cohort settings and logs could not be read. That is not the same as none.</span>
+        <button type="button" onClick={load} className="font-semibold underline">Try again</button>
       </div>
     );
   }
@@ -169,10 +98,11 @@ export default function AdminCohortApplications() {
   return (
     <div className="space-y-4" data-testid="admin-cohort-applications">
       <div className="flex flex-wrap items-center justify-between gap-2">
-        <div className="flex items-center gap-1.5" role="tablist">
-          {[['cycles', 'Cycles', CalendarRange], ['notifications', 'Notification log', Bell], ['history', 'History', History]].map(([key, label, Icon]) => (
+        <div className="flex items-center gap-1.5" role="tablist" aria-label="Cohort logs">
+          {[['notifications', 'Notification log', Bell], ['history', 'History', History]].map(([key, label, Icon]) => (
             <button
               key={key}
+              type="button"
               role="tab"
               aria-selected={subView === key}
               onClick={() => setSubView(key)}
@@ -185,103 +115,18 @@ export default function AdminCohortApplications() {
         </div>
         <div className="flex items-center gap-2">
           <button
-            onClick={editSettings}
-            disabled={busyKey === 'settings'}
+            type="button"
+            onClick={() => setEditing(true)}
             data-testid="button-app-settings"
             className="px-2.5 py-1 rounded-lg text-xs font-semibold text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800 flex items-center gap-1"
           >
             <Settings2 size={12} /> <SizeSettingsLabel settings={settings} />
           </button>
-          <button onClick={load} className="p-1.5 rounded-lg text-gray-500 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800" data-testid="button-app-refresh" aria-label="Refresh">
+          <button type="button" onClick={load} className="p-1.5 rounded-lg text-gray-500 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800" data-testid="button-app-refresh" aria-label="Refresh">
             <RefreshCw size={14} className={loading ? 'animate-spin' : ''} />
           </button>
         </div>
       </div>
-
-      {subView === 'cycles' && (
-        <div className="space-y-4">
-          {loading && cycles.length === 0 && (
-            <div className="text-sm text-gray-500 dark:text-gray-400 py-6 text-center">Loading cycles…</div>
-          )}
-          {!loading && cycles.length === 0 && (
-            <div className="text-sm text-gray-500 dark:text-gray-400 py-6 text-center">No cohort cycles yet — the scheduler creates them automatically.</div>
-          )}
-          {cycles.map((cy) => {
-            const counts = cy.applicant_counts || {};
-            return (
-              <div key={cy.id} className="rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 p-4" data-testid={`cycle-card-${cy.id}`}>
-                <div className="flex flex-wrap items-center gap-2">
-                  <span className="font-bold text-gray-900 dark:text-gray-100">{cy.label} cohort</span>
-                  <span className={`text-[11px] font-semibold px-2 py-0.5 rounded-full ${APP_STATUS_BADGE[cy.app_status] || APP_STATUS_BADGE.open}`}>{cy.app_status}</span>
-                  {cy.force_proceed === 1 && (
-                    <span className="text-[11px] font-semibold px-2 py-0.5 rounded-full bg-purple-100 dark:bg-purple-900/40 text-purple-700 dark:text-purple-300 flex items-center gap-1"><Zap size={10} /> force-proceed</span>
-                  )}
-                  <MinimumPill cycle={cy} settings={settings} />
-                  {['open', 'reviewing'].includes(cy.app_status) && !cy.force_proceed && (
-                    <button
-                      onClick={() => forceProceed(cy)}
-                      disabled={busyKey === `force:${cy.id}`}
-                      data-testid={`button-force-proceed-${cy.id}`}
-                      className="ml-auto px-2.5 py-1 rounded-lg text-xs font-semibold bg-purple-600 hover:bg-purple-700 text-white disabled:opacity-50"
-                    >
-                      Force proceed
-                    </button>
-                  )}
-                </div>
-                <div className="mt-2 flex flex-wrap gap-x-5 gap-y-1 text-xs text-gray-500 dark:text-gray-400">
-                  <span>Apps close: <span className="font-semibold text-gray-700 dark:text-gray-200">{fmt(cy.applications_close_at)}</span>{cy.app_status === 'open' && timeUntil(cy.applications_close_at) !== 'passed' && <span className="ml-1 text-amber-600 dark:text-amber-400 font-semibold">({timeUntil(cy.applications_close_at)} left)</span>}</span>
-                  <span>Cohort starts: <span className="font-semibold text-gray-700 dark:text-gray-200">{fmt(cy.start_at)}</span>{timeUntil(cy.start_at) !== 'passed' && <span className="ml-1">({timeUntil(cy.start_at)})</span>}</span>
-                  <span>Pending {counts.pending || 0} · Approved {counts.approved || 0} · Waitlisted {counts.waitlisted || 0} · Rejected {counts.rejected || 0} · Activated {counts.activated || 0}{counts.rolled_forward ? ` · Rolled ${counts.rolled_forward}` : ''}</span>
-                </div>
-                {(cy.applicants || []).length > 0 && (
-                  <div className="mt-3 divide-y divide-gray-100 dark:divide-gray-800">
-                    {cy.applicants.map((a) => (
-                      <div key={a.id} className="py-2" data-testid={`applicant-row-${a.id}`}>
-                      <div className="flex flex-wrap items-center gap-2 text-sm">
-                        <div className="min-w-0 flex-1">
-                          <span className="font-semibold text-gray-900 dark:text-gray-100">{a.company_name || '—'}</span>
-                          <span className="text-gray-500 dark:text-gray-400"> · {a.name || a.email}</span>
-                          {a.rolled_from_cycle_id && <span className="ml-1 text-[11px] text-gray-400 dark:text-gray-500">(rolled forward)</span>}
-                          {a.decision_reason && <div className="text-[11px] text-gray-400 dark:text-gray-500 truncate">{a.decided_by}: {a.decision_reason}</div>}
-                        </div>
-                        {a.interview?.status === 'scheduled' && <span className="text-[11px] font-semibold px-2 py-0.5 rounded-full bg-violet-100 dark:bg-violet-900/40 text-violet-700 dark:text-violet-300">interview{a.interview.reschedule_requested_at ? ' · move asked' : ''}</span>}
-                        <span className={`text-[11px] font-semibold px-2 py-0.5 rounded-full ${APPLICANT_BADGE[a.status] || APPLICANT_BADGE.pending}`}>{a.status}</span>
-                        <button onClick={() => setOpenApplicant(openApplicant === a.id ? null : a.id)} aria-expanded={openApplicant === a.id} data-testid={`button-applicant-detail-${a.id}`} className="px-2 py-0.5 rounded text-[11px] font-semibold text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800">
-                          {openApplicant === a.id ? 'Close' : 'Application'}
-                        </button>
-                        {['pending', 'approved', 'waitlisted', 'rejected'].includes(a.status) && ['open', 'reviewing'].includes(cy.app_status) && (
-                          <div className="flex items-center gap-1">
-                            {a.status !== 'approved' && (
-                              <button onClick={() => decide(a, 'approved')} disabled={busyKey === `decide:${a.id}`} data-testid={`button-approve-${a.id}`} className="p-1 rounded text-emerald-600 hover:bg-emerald-50 dark:hover:bg-emerald-900/30" title="Approve"><CheckCircle2 size={15} /></button>
-                            )}
-                            {a.status !== 'waitlisted' && (
-                              <button onClick={() => decide(a, 'waitlisted')} disabled={busyKey === `decide:${a.id}`} data-testid={`button-waitlist-${a.id}`} className="p-1 rounded text-amber-600 hover:bg-amber-50 dark:hover:bg-amber-900/30" title="Waitlist"><Hourglass size={15} /></button>
-                            )}
-                            {a.status !== 'rejected' && (
-                              <button onClick={() => decide(a, 'rejected')} disabled={busyKey === `decide:${a.id}`} data-testid={`button-reject-${a.id}`} className="p-1 rounded text-red-600 hover:bg-red-50 dark:hover:bg-red-900/30" title="Reject"><XCircle size={15} /></button>
-                            )}
-                          </div>
-                        )}
-                      </div>
-                      {openApplicant === a.id && (
-                        <ApplicantDetail
-                          applicant={a}
-                          canDecide={['open', 'reviewing'].includes(cy.app_status)}
-                          busy={busyKey === `decide:${a.id}` || busyKey === `interview:${a.id}`}
-                          onSchedule={(payload) => scheduleInterview(a, payload)}
-                          onCancelInterview={() => cancelInterview(a)}
-                          onDeclineWithNote={(payload) => declineWithNote(a, payload)}
-                        />
-                      )}
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </div>
-            );
-          })}
-        </div>
-      )}
 
       {subView === 'notifications' && (
         <div className="rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 divide-y divide-gray-100 dark:divide-gray-800" data-testid="app-notification-log">
@@ -312,6 +157,7 @@ export default function AdminCohortApplications() {
           ))}
         </div>
       )}
+      {editing ? <SettingsDialog settings={settings} onClose={() => setEditing(false)} onChanged={load} /> : null}
     </div>
   );
 }

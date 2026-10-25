@@ -9,6 +9,7 @@ import { glancesFromStudioGlance, loadStudioGlance } from '../adminStudioOvervie
 import AdminSpinoutLab from '../AdminSpinoutLab';
 import LabFormation from './LabFormation';
 import LabGraduation from './LabGraduation';
+import LabApplications from './LabApplications';
 import LabHosts from './LabHosts';
 import LabParticipants from './LabParticipants';
 import { participantsCount } from './participantsModel';
@@ -29,15 +30,15 @@ import {
  *
  * THE INTEGRATION, NOT THE WHOLE CANVAS (D937 §3). The header, the tabs whose
  * console exists, and the Overview blocks whose reads exist, each drawn
- * truthfully. Applications is today's console, asked for
- * one section through `AdminSpinoutLab`'s `section` prop; Hosts, Formation and
+ * truthfully. D948 (#2753) draws Applications: SL2's queue, SL3's drawer at
+ * `/applications/:id` and SL4's dialogs (`LabApplications.jsx`); Hosts, Formation and
  * Graduation are drawn to the canvas by D970 (#2755). D947 (#2752) draws the
  * Overview's calendar, charts and funnel from part 2's read (D944), and the
  * Cohorts tab: SL5 at /cohorts and one cohort, SL6, at /cohorts/:ym
  * (`LabCohorts.jsx`). D949 (#2754) draws Participants and one founder at
  * `/participants/:uid` (`LabParticipants.jsx`), with its three decision dialogs.
- * Applications is the cycle queue, the one door that decides with a reason;
- * the old list that accepted with none is not reached any more.
+ * Applications decides every application with a reason, in a dialog; the old
+ * list that accepted with none is not reached any more.
  *
  * NO RAIL: D317 keeps Eadwyn out of the Lab, and NO_RAIL_ROUTES says so.
  */
@@ -210,7 +211,11 @@ function Overview({ reads, reload }) {
   );
 }
 
-/** Which console section each tab still asks `AdminSpinoutLab` for. */
+/**
+ * Which console section each tab still asks `AdminSpinoutLab` for. D948: under
+ * Applications' queue, the old Cycles console keeps only Settings' minimum and
+ * places and the two logs, until part 9 (#2756) draws Settings and Activity.
+ */
 const SECTIONS = {
   applications: ['cycles'],
 };
@@ -271,6 +276,7 @@ export default function AdminLab({ onImpersonate }) {
       />
       {tab === 'overview' ? <Overview reads={reads} reload={reload} /> : null}
       {DESKS[tab] ? React.createElement(DESKS[tab]) : null}
+      {tab === 'applications' ? <LabApplications /> : null}
       {tab === 'participants' ? <LabParticipants onImpersonate={onImpersonate} /> : null}
       {tab === 'cohorts' ? <LabCohorts ym={cohortOf(loc.pathname)} /> : null}
       {SECTIONS[tab] ? SECTIONS[tab].map((s) => <AdminSpinoutLab key={s} section={s} onImpersonate={onImpersonate} />) : null}

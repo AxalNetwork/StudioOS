@@ -2969,6 +2969,7 @@ function AppInner() {
           Console's ?tab=lab-applications forward here with the moved notice. */}
       <Route path="/admin/programs/spinout-lab" element={guard(['admin'], <AdminLab onImpersonate={handleImpersonate} />)} />
       <Route path="/admin/programs/spinout-lab/applications" element={guard(['admin'], <AdminLab onImpersonate={handleImpersonate} />)} />
+      <Route path="/admin/programs/spinout-lab/applications/:id" element={guard(['admin'], <AdminLab onImpersonate={handleImpersonate} />)} />
       <Route path="/admin/programs/spinout-lab/cohorts" element={guard(['admin'], <AdminLab onImpersonate={handleImpersonate} />)} />
       <Route path="/admin/programs/spinout-lab/cohorts/:ym" element={guard(['admin'], <AdminLab onImpersonate={handleImpersonate} />)} />
       <Route path="/admin/programs/spinout-lab/participants" element={guard(['admin'], <AdminLab onImpersonate={handleImpersonate} />)} />

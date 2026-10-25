@@ -33,6 +33,8 @@ const read = (p) => readFileSync(fileURLToPath(new URL(p, import.meta.url)), 'ut
 const WORKER = read('../../cloudflare-worker/src/services/applicationLifecycle.ts');
 const PAGE = read('../src/pages/SpinoutLabApplyPage.jsx');
 const ADMIN = read('../src/pages/admin/AdminCohortApplications.jsx');
+const LAB_PAGE = read('../src/pages/admin/lab/LabApplications.jsx');
+const LAB_MODEL = read('../src/pages/admin/lab/applicationsModel.js');
 const CANVAS = read('../../design/canvases/out-of-scope/Apply and Status.dc.html');
 
 const BASE = {
@@ -271,7 +273,8 @@ test('the decline form keeps the internal reason and the applicant’s note apar
 });
 
 test('a decision saved without its note is said to the admin', () => {
-  const code = codeOnly(ADMIN);
-  assert.match(code, /r\?\.applicant_note_saved === false/);
-  assert.match(code, /api\.adminCohortScheduleInterview\(applicant\.id, payload\)/);
+  // D948: the decisions moved to Applications' dialogs (lab/LabApplications.jsx).
+  assert.match(codeOnly(LAB_MODEL), /reply\?\.applicant_note_saved === false/);
+  assert.match(codeOnly(LAB_PAGE), /api\.adminCohortScheduleInterview\(row\.applicantId, \{/);
+  assert.doesNotMatch(codeOnly(ADMIN), /window\.(prompt|alert|confirm)/, 'the old console opens no browser pop-up');
 });
