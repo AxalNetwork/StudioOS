@@ -8,7 +8,7 @@
  * it beside these fields on `GET /api/public/plans-and-packs`. A typed amount
  * disagreed with Stripe four times over before this (the map,
  * `documentation/audits/CHECKOUT_MAP_2026-10-25.md` §1 item 3);
- * `plan_catalogue_d1050.test.ts` fails on any typed `$` amount in the files
+ * `frontend/test/plan_catalogue_d1050.test.mjs` fails on any typed `$` amount in the files
  * that name a plan.
  *
  * EACH ENTRY:
