@@ -25,6 +25,8 @@ async function fixture() {
   const db = freshDb();
   db.exec(readFileSync('cloudflare-worker/sql/migrations/028_partner_deals.sql', 'utf8'));
   db.exec(tableFromBaseline(readFileSync('cloudflare-worker/sql/schema_baseline.sql','utf8'), 'admin_audit_log'));
+  // GET /deals joins each row's partner case (D1117), so the list needs the table.
+  db.exec(tableFromBaseline(readFileSync('cloudflare-worker/sql/schema_baseline.sql','utf8'), 'dd_cases'));
   db.exec(readFileSync('cloudflare-worker/sql/migrations/547_partner_invitation_sends.sql','utf8'));
   db.exec(readFileSync('cloudflare-worker/sql/migrations/548_partner_deal_activation_error.sql', 'utf8'));
   db.exec(`ALTER TABLE users ADD COLUMN subscription_tier TEXT DEFAULT 'free';
