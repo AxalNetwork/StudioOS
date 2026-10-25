@@ -1120,12 +1120,24 @@ export interface SyncSummary {
   removed: number;
 }
 
+/**
+ * D1209 — a refused token refresh is the one failure the page words
+ * differently ("Reconnect"), so it is thrown as `connection_refused`.
+ */
+async function refreshOrRefuse(refresh: () => Promise<string>): Promise<string> {
+  try {
+    return await refresh();
+  } catch {
+    throw Object.assign(new Error('connection_refused'), { code: 'connection_refused' });
+  }
+}
+
 export async function syncUserToGoogle(
   env: Env, userId: number, role: string, fromIso: string, toIso: string,
 ): Promise<SyncSummary> {
   const tok = await loadRefreshToken(env, 'google_oauth_tokens', userId);
   if (!tok) throw new Error('not_connected');
-  const accessToken = await refreshGoogleAccessToken(env, tok.raw);
+  const accessToken = await refreshOrRefuse(() => refreshGoogleAccessToken(env, tok.raw));
   if (tok.wasPlaintext) await reencryptRefreshToken(env, 'google_oauth_tokens', userId, tok.raw);
   return syncUserToProvider(env, userId, role, fromIso, toIso, 'google', accessToken);
 }
@@ -1135,7 +1147,7 @@ export async function syncUserToMicrosoft(
 ): Promise<SyncSummary> {
   const tok = await loadRefreshToken(env, 'microsoft_oauth_tokens', userId);
   if (!tok) throw new Error('not_connected');
-  const accessToken = await refreshMicrosoftAccessToken(env, tok.raw);
+  const accessToken = await refreshOrRefuse(() => refreshMicrosoftAccessToken(env, tok.raw));
   if (tok.wasPlaintext) await reencryptRefreshToken(env, 'microsoft_oauth_tokens', userId, tok.raw);
   return syncUserToProvider(env, userId, role, fromIso, toIso, 'microsoft', accessToken);
 }
