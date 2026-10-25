@@ -1633,8 +1633,20 @@ cycle-record detail/activity/form-options/actions remain owner-only, even after
 a support read. Admin investor grants cannot bypass support auditing via
 `/shared` or its download-token route. Existing investor grants retain their
 normal NDA/tier checks. An omitted upload visibility now means NDA, matching both
-upload forms' defaults. The deck NDA default remains pending explicit-choice
-provenance and a migration number; see D1102.
+upload forms' defaults.
+
+D1102 part 2 (#2982, migration 608): the Raise cycle's data-room paths
+(`cycle_raise.ts`) take the same owner-only rule. `GET /api/cycles/raise/overview`
+gives anyone but the room's owner the room summary as its data-room card (counts
+and recorded checklist coverage, no names); `GET /modules/data-room` answers an
+admin 403 `support_read_required` and anyone else 403; `PUT
+/data-room/files/:id/checklist` answers anyone but the owner 403. Every other
+Raise path keeps its rule. The demo-day deck's NDA row reads the founder's choice
+(`projects.data_room_nda_choice`), else the room's gates, else "Unreadable".
+Project detail's Data room section (`/projects/:id`, `ProjectDetail.jsx`) shows
+Yes/No radios with "Not chosen yet" while unset, and sends
+`data_room_nda_choice` to `PUT /api/projects/:id` only when the founder picks a
+different answer.
 
 D1102 follow-up: the owner-approved minimal guard in `dataroom/DataRoomTool.jsx`
 also renders the aggregate response on the new Files, Access and Activity tabs,
