@@ -345,7 +345,9 @@ test('mounted product lightbox at its address: where members see it, prices, mem
     ]);
     assert.deepEqual(v.links('pay-product-changes'), [['Open the change log', '/admin/platform/payments/log?product=prod_vb']]);
     assert.match(v.of('pay-product-tech'), /^Technical details.*product: prod_vb.*plan: founder:growth.*tier: growth.*price_m/s);
-    assert.match(v.of('pay-product-actions'), /Add a price.*Change a price.*Opens with D1008 part 5/s);
+    // D1013: the price dialogs are the Super Admin's; this render has no signed-in holder.
+    assert.match(v.of('pay-product-holder'), /Only the Super Admin can change payments/);
+    assert.ok(!v.has('pay-product-actions'), 'a change drawn for someone the server would refuse');
     const log = s.seen.find((u) => u.pathname === '/api/admin/payments/change-log');
     assert.equal(log?.searchParams.get('product'), 'prod_vb', 'the recent changes are this product\'s');
     assert.equal(log?.searchParams.get('limit'), '3');
@@ -406,7 +408,7 @@ test('mounted PAY8b, PAY9 and PAY10b: no products yet, eight skeleton rows while
   let v = await render('/admin/platform/payments');
   try {
     assert.match(v.of('pay-catalogue-empty'), /No products yet\.Make the first one, or sync products you made in the Stripe dashboard\./);
-    assert.match(v.of('pay-catalogue-empty'), /New product.*Sync from Stripe/s);
+    assert.match(v.of('pay-catalogue-empty'), /Only the Super Admin can change payments/, 'D1013: New product and Sync are the Super Admin\'s');
     assert.ok(v.has('pay-tiles'), 'the tiles still draw');
   } finally { await v.unmount(); s.restore(); }
 

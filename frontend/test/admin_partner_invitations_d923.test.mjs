@@ -300,16 +300,15 @@ test('term: the stored start and end, never an end from months, and never negati
   assert.equal(used.used, 112);
 });
 
-test('the agreement-ready rule: R8 refuses, or it lists a field finalize leaves empty; R8 failing any other way says nothing', () => {
+test('the agreement-ready rule is the Worker\'s (D928, D1117): ready, not ready with its reason and fields, or nothing said', () => {
   assert.equal(agreementReady(loading()).state, 'loading');
-  assert.deepEqual(agreementReady(failed({ status: 409, code: 'template_has_no_body' })), { state: 'not_ready', why: 'template_has_no_body' });
-  assert.equal(agreementReady(failed({ status: 503, code: 'template_unreadable' })).state, 'not_ready');
-  assert.equal(agreementReady(failed({ status: 500 })).state, 'unknown');
+  assert.deepEqual(agreementReady(ready({ ready: true, reason: null, fields: [] })), { state: 'ready' });
+  assert.deepEqual(agreementReady(ready({ ready: false, reason: 'no_body', fields: [] })), { state: 'not_ready', why: 'no_body' });
+  assert.deepEqual(agreementReady(ready({ ready: false, reason: 'unfilled_fields', fields: [{ key: 'scope', label: 'Scope' }] })),
+    { state: 'not_ready', why: 'unfilled_fields', fields: ['scope'] });
+  assert.equal(agreementReady(ready({ ready: null, reason: 'unreadable', fields: [] })).state, 'unknown');
+  assert.equal(agreementReady(failed({ status: 503, code: 'unreadable' })).state, 'unknown', 'a template that could not be read is not a verdict');
   assert.equal(agreementReady(failed({ status: 423, code: 'recovery_cool_off_active' })).state, 'unknown', 'a paused read is not a verdict');
-  const five = ['partner_name', 'partner_email', 'effective_date', 'deal_type', 'term_months'].map((key) => ({ key, filled_by: key === 'effective_date' ? 'send' : 'sender' }));
-  assert.deepEqual(agreementReady(ready({ fields: [...five, { key: 'recipient_name', filled_by: 'send' }] })), { state: 'ready' });
-  assert.deepEqual(agreementReady(ready({ fields: [...five, { key: 'scope', filled_by: 'sender' }] })), { state: 'not_ready', why: 'fields', fields: ['scope'] });
-  assert.deepEqual(agreementReady(ready({ fields: [...five, { key: 'counterparty.company', filled_by: 'send' }] })).fields, ['counterparty.company'], 'this flow never fills a counterparty field');
   assert.equal(agreementReady(ready({})).state, 'unknown');
   assert.equal(AGREEMENT_BANNER, 'The Partner Services agreement is not ready. Invitees who choose an offer cannot sign until it is completed in Contracts.');
 });
@@ -646,12 +645,14 @@ test('every wiring place D923 §1 names follows the page', () => {
 test('the desk reads only D923 §2\'s reads through existing clients, and draws nothing §3 leaves undrawn', () => {
   const src = DESK_FILES.map((f) => codeOnly(read(f))).join('\n');
   for (const call of ['api.adminPartners.listInvitations(', 'api.adminPartners.listDeals(', 'api.adminPartners.listTopDeals(', 'api.adminPartners.dealRedemptions(',
-    'api.adminListPartnerDeals(', 'api.adminPartners.listFirmLinks(', 'api.esignDetail(', 'api.esignTemplate(\'partner_services\')', 'dd.listCases(',
+    'api.adminListPartnerDeals(', 'api.adminPartners.listFirmLinks(', 'api.esignDetail(',
     'api.adminGetProfile(',
     // D950: one invitation's read, the offer preview and the create lookup (D927, D926).
     'api.adminPartners.getInvitation(', 'api.adminPartners.previewOffers(', 'api.adminPartners.lookupInvitation(',
     // D951 (#2727): one deal, the terminate preview and Referrals read D928's routes; the trust batch is gone with R10.
-    'partnerDealReadsApi.deal(', 'partnerDealReadsApi.terminatePreview(', 'partnerDealReadsApi.redemptions(']) assert.ok(src.includes(call), `the desk no longer reads ${call}`);
+    'partnerDealReadsApi.deal(', 'partnerDealReadsApi.terminatePreview(', 'partnerDealReadsApi.redemptions(',
+    // D1117 (#2997): the record's agreement rule is D928's.
+    'partnerDealReadsApi.agreementReady(']) assert.ok(src.includes(call), `the desk no longer reads ${call}`);
   assert.ok(!src.includes('api.adminListUsers('), 'D950: the member check is the lookup\'s, not a user search');
   assert.ok(!src.includes('api.trustScoreBatch('), 'one deal\'s obligations come from D928\'s read, which never seeds them');
   for (const write of ['createInvitation(', 'resendInvitation(', 'revokeInvitation(', 'terminateDeal(', 'activateDeal(']) assert.ok(src.includes(`api.adminPartners.${write}`), write);
@@ -729,7 +730,7 @@ function overviewReply(kinds = {}) {
 }
 
 function worker({
-  invitations = [], deals = {}, contracts, links = { accounts: [], firms: [], attached: 0, unattached: 0 }, template = { doc_type: 'partner_services', fields: [] },
+  invitations = [], deals = {}, contracts, links = { accounts: [], firms: [], attached: 0, unattached: 0 }, agreement = { ready: true, reason: null, fields: [] },
   top = { items: [], status: 'all', limit: 5 }, cases = [], redemptions = {}, envelopes = {}, users = [], writes = {}, overview = overviewReply(),
   details = {}, preview, lookup, dealReads = {}, previews = {}, crossDeal,
 } = {}) {
@@ -821,7 +822,7 @@ function worker({
       return response({ items: all.map((d) => ({ id: d.id, status: d.status, deal_type: d.deal_type, redemption_count: d.redemptions_count })), total: all.length, limit: 500, offset: 0 });
     }
     if (path === '/api/admin/partners/links') return call(links);
-    if (path === '/api/legal/esign/templates/partner_services') return call(template);
+    if (path === '/api/admin/partners/agreement-ready') return call(agreement);
     if (path === '/api/dd/cases') return typeof cases === 'function' ? cases() : response({ items: cases });
     const env = /^\/api\/legal\/esign\/(\d+)$/.exec(path);
     if (env) return envelopes[env[1]] ? call(envelopes[env[1]]) : response({ error: 'Envelope not found' }, 404);
@@ -1115,9 +1116,10 @@ test('the old address lands on Overview with the moved notice; first use draws t
 
 test('Deals: names before signing come from the invitation, the lapsed cross-check is drawn, and the Contracts total is the tab count', async () => {
   const lapsed = liveInv(2, { recipient_name: 'Teo Sample', status: 'selected', createdMs: LIVE - 30 * DAY, is_expired: true });
+  // D1117: the Worker joins each row's due-diligence case and whether its invitation lapsed.
   const view = await mounted('/admin/partner-invitations/deals', worker({
     invitations: [lapsed],
-    deals: { active: [deal(7, { expires_at: isoAt(LIVE + 10 * DAY) })], proposed: [deal(8, { status: 'proposed', invitation_id: 2, user_id: null, partner_email: null, partner_name: null, referral_code: null, activated_at: null, expires_at: null, envelope_id: null })] },
+    deals: { active: [deal(7, { expires_at: isoAt(LIVE + 10 * DAY), due_diligence: { state: 'case', uid: 'c1', status: 'open' }, invitation_lapsed: false })], proposed: [deal(8, { status: 'proposed', invitation_id: 2, user_id: null, partner_email: null, partner_name: null, referral_code: null, activated_at: null, expires_at: null, envelope_id: null, due_diligence: { state: 'not_opened' }, invitation_lapsed: true })] },
     // R5 holds a deal no R2 list returned here, so its total (3) is not the lists' sum (2).
     contracts: { items: [{ id: 7, redemption_count: 0 }, { id: 8, redemption_count: 0 }, { id: 9, redemption_count: 0 }], total: 3, limit: 500, offset: 0 },
     cases: [{ uid: 'c1', subject_id: 507, status: 'open' }],
@@ -1413,13 +1415,14 @@ test('Top deals reads R3 across every state and lists only the deals with redemp
   } finally { await down.close(); }
 });
 
-test('a 423 cool-off on R9 and R5 is said as paused on Deals, never as unread or as a silent fallback (finding 23)', async () => {
+test('a 423 cool-off on R5 is said as paused on Deals, never as unread or as a silent fallback (finding 23); the case comes with the row (D1117)', async () => {
   const coolOff = () => response({ error: 'recovery_cool_off_active' }, 423);
-  const view = await mounted('/admin/partner-invitations/deals', worker({ deals: { active: [deal(7, { expires_at: isoAt(LIVE + 50 * DAY) })] }, cases: coolOff, contracts: coolOff }));
+  const view = await mounted('/admin/partner-invitations/deals', worker({ deals: { active: [deal(7, { expires_at: isoAt(LIVE + 50 * DAY), due_diligence: { state: 'none' } })] }, cases: coolOff, contracts: coolOff }));
   try {
-    assert.equal(view.textOf('partners-deals-cases-unreadable'), 'Reading the due-diligence cases is paused after a recent account recovery. It resumes when the 24-hour cool-off ends.Try again');
-    assert.match(view.textOf('partners-deals-row-7'), /Paused after a recent account recovery/);
-    assert.doesNotMatch(view.textOf('partners-deals-row-7'), /No case on record|Could not be read|Not opened/);
+    // D1117: R9 is no longer read on Deals, so its pause cannot blank the column.
+    assert.ok(!view.has('partners-deals-cases-unreadable'));
+    assert.match(view.textOf('partners-deals-row-7'), /No case on record/);
+    assert.doesNotMatch(view.textOf('partners-deals-row-7'), /Could not be read|Not opened/);
     // D951: the Deals list is D926's, with its own total; the tab count still says R5's pause.
     assert.ok(!view.has('partners-deals-contracts-paused'));
     assert.equal(view.textOf('partners-tab-deals-count'), `1, Every deal, in every state. ${CONTRACTS_PAUSED}`);

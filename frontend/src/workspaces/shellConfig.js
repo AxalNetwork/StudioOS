@@ -265,7 +265,8 @@ export const SHELLS = {
           // `positions` carries no `legacy` — it used to name
           // `/portfolio/health`, which is the overview, not this zone.
           { slug: 'positions', label: 'Positions', archetype: A.LEDGER },
-          { slug: 'updates', label: 'Updates', archetype: A.FEED },
+          // D1056 (#2427): the canvas names this zone Reports; the address stays.
+          { slug: 'updates', label: 'Reports', archetype: A.FEED },
           { slug: 'value-add', label: 'Value-add', archetype: A.FEED },
         ] },
       // Axal VC Fund — LP participation in Axal's own fund. Not the GP add-on
@@ -298,7 +299,7 @@ export const SHELLS = {
         zones: NETWORK_ZONES },
       { kind: 'bucket', label: 'Research', prefix: '/research', tagline: 'Go deep before money moves',
         zones: RESEARCH_ZONES.investor },
-      { kind: 'link', label: 'Trust', to: '/trust' },
+      { kind: 'link', label: 'Trust', to: '/trust/me' },
       { kind: 'link', label: 'Firm Settings', to: '/company-settings' },
     ],
   },
@@ -361,7 +362,7 @@ export const SHELLS = {
         zones: NETWORK_ZONES },
       { kind: 'bucket', label: 'Research', prefix: '/research', tagline: 'Know more than the room',
         zones: RESEARCH_ZONES.advisor },
-      { kind: 'link', label: 'Trust', to: '/trust' },
+      { kind: 'link', label: 'Trust', to: '/trust/me' },
       { kind: 'link', label: 'Practice Settings', to: '/company-settings' },
     ],
   },
@@ -404,7 +405,7 @@ export const SHELLS = {
         ] },
       { kind: 'bucket', label: 'Network', prefix: '/network', tagline: 'Work our relationships', zones: NETWORK_ZONES },
       { kind: 'bucket', label: 'Research', prefix: '/research', tagline: "Know the client's world", zones: RESEARCH_ZONES.partner },
-      { kind: 'link', label: 'Trust', to: '/trust' },
+      { kind: 'link', label: 'Trust', to: '/trust/me' },
       { kind: 'link', label: 'Firm Settings', to: '/company-settings' },
     ],
   },
