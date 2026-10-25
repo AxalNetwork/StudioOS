@@ -182,8 +182,12 @@ test('every Cohorts route carries the preview gate', () => {
 });
 
 test('the admin grant has a page, and no zone page can reach it', () => {
-  assert.match(app, /path="\/admin\/advisor-cohorts"/);
-  assert.match(app, /guard\(\['admin'\], <AdvisorCohortAssignments \/>\)/);
+  // D953 (#2371): the page is Programs › Mentor cohort access › People, which
+  // mounts the console's body; the old address redirects there and still lights
+  // the Programs row.
+  assert.match(app, /<Route path="\/admin\/advisor-cohorts" element=\{<AdvisorCohortsRedirect \/>\} \/>/);
+  assert.match(app, /<Route path="\/admin\/programs\/mentor-cohorts\/people" element=\{guard\(\['admin'\], <AdminMentorCohortAccess \/>\)\} \/>/);
+  assert.match(read('frontend/src/pages/admin/programs/MentorCohortAccess.jsx'), /<AdvisorCohortAssignmentsBody embedded \/>/);
   assert.match(codeOnly(read('frontend/src/sidebarConfig.js')), /\/admin\/advisor-cohorts/);
 
   for (const m of ['adminAdvisorCohortAssignments', 'adminAssignableAdvisors',

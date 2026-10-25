@@ -17,6 +17,7 @@
 import type { Env } from '../types';
 import { ensureIncorporationsSchema } from './incorporations';
 import { isCalendarDate } from './section83b';
+import { LAB_PARTICIPANT_IDS } from './labParticipants';
 
 export const PACKET_FROM = ['paid', 'packet_processing'] as const;
 
@@ -83,12 +84,26 @@ const PAID_ORDERS =
   + "WHERE i.status IN ('paid', 'packet_processing', 'packet_ready', 'filed') "
   + 'ORDER BY i.paid_at DESC, i.id DESC LIMIT 200';
 
+/**
+ * D946 (#2751) — the same list, Lab ventures only: an order whose founder (the
+ * order's user, or its project's founder) is a Lab participant, by the
+ * participants read's own rule.
+ */
+const LAB_PAID_ORDERS =
+  'SELECT i.id, i.project_id, p.name AS project_name, i.user_id, i.company_name, i.jurisdiction_id, i.status, '
+  + 'i.paid_at, i.packet_document_id, i.packet_ready_at, i.filed_on, i.filed_recorded_at '
+  + 'FROM incorporations i LEFT JOIN projects p ON p.id = i.project_id '
+  + "WHERE i.status IN ('paid', 'packet_processing', 'packet_ready', 'filed') "
+  + 'AND (i.user_id IN (' + LAB_PARTICIPANT_IDS + ') '
+  + 'OR p.founder_id IN (SELECT lu.founder_id FROM users lu WHERE lu.id IN (' + LAB_PARTICIPANT_IDS + '))) '
+  + 'ORDER BY i.paid_at DESC, i.id DESC LIMIT 200';
+
 const PROJECT_DOCS = 'SELECT id, title FROM documents WHERE project_id = ? ORDER BY id DESC LIMIT 50';
 
 /** HQ's list: every paid order, with its project's documents to attach as the packet. */
-export async function listPaidOrders(env: Env) {
+export async function listPaidOrders(env: Env, opts: { labOnly?: boolean } = {}) {
   await ensureIncorporationsSchema(env);
-  const rows = (await env.DB.prepare(PAID_ORDERS).all<Record<string, unknown>>()).results || [];
+  const rows = (await env.DB.prepare(opts.labOnly ? LAB_PAID_ORDERS : PAID_ORDERS).all<Record<string, unknown>>()).results || [];
   const out = [];
   for (const r of rows) {
     const docs = (await env.DB.prepare(PROJECT_DOCS).bind(r.project_id).all<{ id: number; title: string }>()).results || [];
