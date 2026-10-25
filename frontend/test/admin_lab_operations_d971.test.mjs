@@ -10,7 +10,7 @@ import AdminLab from '../src/pages/admin/lab/AdminLab.jsx';
 import LabHowItRuns from '../src/pages/admin/lab/LabHowItRuns.jsx';
 import LabSettings from '../src/pages/admin/lab/LabSettings.jsx';
 import LabActivity from '../src/pages/admin/lab/LabActivity.jsx';
-import { stamp, sizeProblem, pageOf, supportRows } from '../src/pages/admin/lab/labOperationsModel.js';
+import { stamp, sizeProblem, pageOf, supportRows, byWord } from '../src/pages/admin/lab/labOperationsModel.js';
 
 const h = React.createElement;
 const catalogue = [{ key: 'purpose', title: 'Purpose', position: 0 }, { key: 'calendar', title: 'The calendar', position: 1 }];
@@ -63,6 +63,8 @@ test('ET timestamps include the previous day and DST, sizes reject blank/fractio
   assert.match(stamp('2026-11-01 03:30:00'), /31 Oct 2026, 23:30 ET/);
   assert.match(stamp('2026-11-02 04:30:00'), /1 Nov 2026, 23:30 ET/);
   assert.equal(stamp(null), 'Not recorded');
+  assert.equal(byWord('unrecorded'), 'Not recorded');
+  assert.equal(byWord(null), 'Not recorded');
   assert.equal(sizeProblem('0'), null); assert.equal(sizeProblem('1000'), null);
   for (const v of ['', ' ', '1.5', '-1', '1001', 'foo']) assert.ok(sizeProblem(v));
   assert.deepEqual([pageOf(Array.from({ length: 26 }), 2).from, pageOf(Array.from({ length: 26 }), 2).to], [26, 26]);

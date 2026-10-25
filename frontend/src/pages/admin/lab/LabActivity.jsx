@@ -15,7 +15,7 @@ function LogPage({ query, page, setPage, tick, retry }) {
       <tbody>{data.items.map((row) => <tr key={row.id} className="border-t border-axal-hairline dark:border-gray-700"><td className={TD}>{stamp(row.at)}</td><td className={TD}>{row.label || eventWord(row.event)}</td><td className={TD}>{row.cohort || 'Not recorded'}</td><td className={TD}>{row.about || 'Not recorded'}</td><td className={TD}>{byWord(row.by)}</td><td className={TD}>{row.scheduled_at ? `Scheduled ${stamp(row.scheduled_at)} · ${row.detail}` : row.detail || 'Not recorded'}</td></tr>)}</tbody></table></div>
       {!data.items.length && <p className={SUB}>{query.type === 'formation' ? 'No recorded formation actions match these filters.' : 'No recorded events match these filters.'}</p>}
       <Pager shown={shown} onPage={setPage} testId="lab-activity-pages" /><p className={SUB}>{data.coverage}</p>
-      <p className={SUB}>Not recorded means this row has no recorded cohort or subject; no association is inferred.</p>
+      <p className={SUB}>Not recorded means this row has no recorded cohort, subject or actor; no association is inferred.</p>
     </>}
   </>;
 }

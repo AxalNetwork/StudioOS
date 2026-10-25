@@ -136,8 +136,8 @@ function eventsFixture(db: DatabaseSync) {
     (${ADMIN},1,'approved','sent','2026-11-03 05:00:00');
     INSERT INTO stage_transition_log (user_id,cohort_cycle_id,week_number,to_status,triggered_by,reason,created_at)
       VALUES (${FOUNDER},1,1,'passed','scheduler','secret-admin-name','2026-11-07 04:59:00');
-    INSERT INTO spinout_application_interviews (application_id,user_id,scheduled_at,created_at,updated_at)
-      VALUES (99,${FOUNDER},'2026-11-10 17:00:00','2026-11-02 14:00:00','2026-11-02 14:00:00');
+    INSERT INTO spinout_application_interviews (application_id,user_id,scheduled_at,created_at,updated_at,scheduled_by)
+      VALUES (99,${FOUNDER},'2026-11-10 17:00:00','2026-11-02 14:00:00','2026-11-02 14:00:00',${ADMIN});
     INSERT INTO cohort_applicants (application_id,user_id,cohort_cycle_id,status) VALUES (99,${FOUNDER},1,'pending');
     INSERT INTO admin_audit_log (admin_user_id,action,viewed_user_id,filters_json,exported_at) VALUES
       (${ADMIN},'lab_host.approve',${ADMIN},'{"reason":"secret-admin-name"}','2026-11-04 12:00:00'),
@@ -160,8 +160,9 @@ test('one mounted Lab log: exact count, source separation, filters, literal sear
   assert.equal(empty.body.total, 9); assert.deepEqual(empty.body.items, []);
   assert.equal((await call(adminOperations, db, ADMIN, '/activity?type=decisions&cohort=2026-11&by=admin')).body.total, 1);
   assert.equal((await call(adminOperations, db, ADMIN, '/activity?cohort=2026-12')).body.total, 1);
-  assert.equal((await call(adminOperations, db, ADMIN, '/activity?by=clock')).body.total, 5);
+  assert.equal((await call(adminOperations, db, ADMIN, '/activity?by=clock')).body.total, 3);
   assert.equal((await call(adminOperations, db, ADMIN, '/activity?by=admin')).body.total, 4);
+  assert.equal((await call(adminOperations, db, ADMIN, '/activity?by=unrecorded')).body.total, 2);
   assert.equal((await call(adminOperations, db, ADMIN, '/activity?q=Fay')).body.total, 3);
   const visibleName = await call(adminOperations, db, ADMIN, '/activity?q=Cohort%20started');
   assert.equal(visibleName.body.total, 1);
@@ -278,6 +279,22 @@ test('aggregate order cannot change the requested page sort; internal row positi
     assert.equal(reply.status, 200); assert.equal(reply.body.total, 9);
     assert.equal(reply.body.items.length, 2); assert.equal(reply.body.items[0].event, event);
     assert.ok(reply.body.items.every((x: any) => !('position' in x) && !('row' in x)));
+  }
+  db.close();
+});
+
+test('message actors and interviews without a recorded admin scheduler stay unrecorded, never inferred from the source', async () => {
+  const db = fresh(); eventsFixture(db);
+  const messages = await call(adminOperations, db, ADMIN, '/activity?type=messages');
+  assert.ok(messages.body.items.every((x: any) => x.by === 'unrecorded'));
+  assert.equal((await call(adminOperations, db, ADMIN, '/activity?type=messages&by=clock')).body.total, 0);
+  const known = await call(adminOperations, db, ADMIN, '/activity?type=interviews');
+  assert.equal(known.body.items[0].by, 'admin');
+  for (const scheduler of [null, FOUNDER]) {
+    db.prepare('UPDATE spinout_application_interviews SET scheduled_by=?').run(scheduler);
+    const unknown = await call(adminOperations, db, ADMIN, '/activity?type=interviews&by=unrecorded');
+    assert.equal(unknown.body.total, 1); assert.equal(unknown.body.items[0].by, 'unrecorded');
+    assert.equal((await call(adminOperations, db, ADMIN, '/activity?type=interviews&by=admin')).body.total, 0);
   }
   db.close();
 });

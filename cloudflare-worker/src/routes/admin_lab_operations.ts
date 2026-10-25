@@ -25,39 +25,42 @@ const HISTORY = `WITH params(wanted_type, wanted_cohort, wanted_by, search) AS (
   SELECT 'cycle:' || e.id AS id, e.created_at AS at,
     CASE WHEN e.event_type LIKE 'applicant_%' THEN 'decisions' ELSE 'cohort' END AS type,
     e.event_type AS event, c.year || '-' || printf('%02d', c.month) AS cohort,
-    NULL AS about, CASE WHEN e.actor = 'scheduler' THEN 'clock' ELSE 'admin' END AS by,
+    NULL AS about, CASE WHEN e.actor = 'scheduler' THEN 'clock' WHEN e.actor LIKE 'admin:%' THEN 'admin' ELSE 'unrecorded' END AS by,
     'Recorded cohort event' AS detail, NULL AS scheduled_at
     FROM cohort_cycle_events e LEFT JOIN cohort_cycles c ON c.id = e.cohort_cycle_id
     WHERE (SELECT wanted_type FROM params) IN ('', 'decisions', 'cohort')
       AND ((SELECT wanted_cohort FROM params) = '' OR c.year || '-' || printf('%02d', c.month) = (SELECT wanted_cohort FROM params))
-      AND ((SELECT wanted_by FROM params) = '' OR CASE WHEN e.actor = 'scheduler' THEN 'clock' ELSE 'admin' END = (SELECT wanted_by FROM params))
+      AND ((SELECT wanted_by FROM params) = '' OR CASE WHEN e.actor = 'scheduler' THEN 'clock' WHEN e.actor LIKE 'admin:%' THEN 'admin' ELSE 'unrecorded' END = (SELECT wanted_by FROM params))
   UNION ALL
   SELECT 'message:' || n.id, n.sent_at, 'messages', n.notif_type,
     c.year || '-' || printf('%02d', c.month),
-    CASE WHEN u.role = 'admin' THEN 'Admin account' ELSE u.name END, 'clock', n.status, NULL
+    CASE WHEN u.role = 'admin' THEN 'Admin account' ELSE u.name END, 'unrecorded', n.status, NULL
     FROM cohort_app_notification_ledger n LEFT JOIN cohort_cycles c ON c.id = n.cohort_cycle_id
     LEFT JOIN users u ON u.id = n.user_id
     WHERE (SELECT wanted_type FROM params) IN ('', 'messages')
-      AND (SELECT wanted_by FROM params) IN ('', 'clock')
+      AND (SELECT wanted_by FROM params) IN ('', 'unrecorded')
       AND ((SELECT wanted_cohort FROM params) = '' OR c.year || '-' || printf('%02d', c.month) = (SELECT wanted_cohort FROM params))
   UNION ALL
   SELECT 'week:' || s.id, s.created_at, 'weeks', 'Week ' || s.week_number || ' · ' || s.to_status,
     c.year || '-' || printf('%02d', c.month),
     CASE WHEN u.role = 'admin' THEN 'Admin account' ELSE u.name END,
-    CASE WHEN s.triggered_by = 'scheduler' THEN 'clock' ELSE 'admin' END, 'Recorded week transition', NULL
+    CASE WHEN s.triggered_by = 'scheduler' THEN 'clock' WHEN s.triggered_by = 'admin' AND s.admin_user_id IS NOT NULL THEN 'admin' ELSE 'unrecorded' END, 'Recorded week transition', NULL
     FROM stage_transition_log s LEFT JOIN cohort_cycles c ON c.id = s.cohort_cycle_id
     LEFT JOIN users u ON u.id = s.user_id WHERE s.cohort_cycle_id IS NOT NULL
       AND (SELECT wanted_type FROM params) IN ('', 'weeks')
-      AND ((SELECT wanted_by FROM params) = '' OR CASE WHEN s.triggered_by = 'scheduler' THEN 'clock' ELSE 'admin' END = (SELECT wanted_by FROM params))
+      AND ((SELECT wanted_by FROM params) = '' OR CASE WHEN s.triggered_by = 'scheduler' THEN 'clock' WHEN s.triggered_by = 'admin' AND s.admin_user_id IS NOT NULL THEN 'admin' ELSE 'unrecorded' END = (SELECT wanted_by FROM params))
       AND ((SELECT wanted_cohort FROM params) = '' OR c.year || '-' || printf('%02d', c.month) = (SELECT wanted_cohort FROM params))
   UNION ALL
   SELECT 'interview:' || i.id, i.updated_at, 'interviews', 'Interview · ' || i.status,
     (SELECT CASE WHEN COUNT(*) = 1 THEN c.year || '-' || printf('%02d', c.month) END FROM cohort_applicants ca
       JOIN cohort_cycles c ON c.id = ca.cohort_cycle_id WHERE ca.application_id = i.application_id),
-    CASE WHEN u.role = 'admin' THEN 'Admin account' ELSE u.name END, 'admin',
+    CASE WHEN u.role = 'admin' THEN 'Admin account' ELSE u.name END, CASE WHEN EXISTS (SELECT 1 FROM users scheduler WHERE scheduler.id = i.scheduled_by AND scheduler.role = 'admin') THEN 'admin' ELSE 'unrecorded' END,
     'Latest interview record', i.scheduled_at
     FROM spinout_application_interviews i LEFT JOIN users u ON u.id = i.user_id
-    WHERE (SELECT wanted_type FROM params) IN ('', 'interviews') AND (SELECT wanted_by FROM params) IN ('', 'admin')
+    WHERE (SELECT wanted_type FROM params) IN ('', 'interviews')
+      AND ((SELECT wanted_by FROM params) = '' OR CASE WHEN EXISTS
+        (SELECT 1 FROM users scheduler WHERE scheduler.id = i.scheduled_by AND scheduler.role = 'admin')
+        THEN 'admin' ELSE 'unrecorded' END = (SELECT wanted_by FROM params))
   UNION ALL
   SELECT 'audit:' || a.id, a.exported_at,
     CASE WHEN a.action LIKE 'lab_host.%' THEN 'hosts'
@@ -117,7 +120,7 @@ const HISTORY = `WITH params(wanted_type, wanted_cohort, wanted_by, search) AS (
       CASE WHEN ? = 'newest' THEN julianday(at) END DESC,
       CASE WHEN ? = 'oldest' THEN julianday(at) END ASC, id ASC) AS position
       FROM filtered ORDER BY position)`;
-const COVERAGE = 'Recorded cohort events, messages, week transitions, the latest interview records, hosts, certificates and playbook changes. Formation actions cover Lab ventures under the current participant rule; their historical cohort is Not recorded. History never names an admin.';
+const COVERAGE = 'Recorded cohort events, messages, week transitions, the latest interview records, hosts, certificates and playbook changes. Formation actions cover Lab ventures under the current participant rule; their historical cohort is Not recorded. Message actors are not recorded; interview actors use the recorded scheduler when that account is an admin. History never names an admin.';
 
 r.get('/activity', async (c) => {
   await requireAdmin(c);
@@ -129,7 +132,7 @@ r.get('/activity', async (c) => {
   const rawLimit = c.req.query('limit') || '25';
   const rawOffset = c.req.query('offset') || '0';
   if (!['', 'decisions', 'cohort', 'messages', 'weeks', 'interviews', 'hosts', 'certificates', 'playbook', 'formation'].includes(type)
-    || (cohort && !/^\d{4}-(0[1-9]|1[0-2])$/.test(cohort)) || !['', 'clock', 'admin'].includes(by)
+    || (cohort && !/^\d{4}-(0[1-9]|1[0-2])$/.test(cohort)) || !['', 'clock', 'admin', 'unrecorded'].includes(by)
     || !['newest', 'oldest'].includes(sort) || q.length > 200
     || !/^\d+$/.test(rawLimit) || !/^\d+$/.test(rawOffset)
     || Number(rawLimit) < 1 || Number(rawLimit) > 100 || !Number.isSafeInteger(Number(rawOffset))) {

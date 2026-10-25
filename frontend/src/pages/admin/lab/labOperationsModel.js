@@ -28,7 +28,7 @@ export const ACTIVITY_TYPES = [
   ['weeks', 'Week outcomes'], ['messages', 'Messages'], ['hosts', 'Hosts'], ['certificates', 'Certificates'],
   ['formation', 'Formation'], ['playbook', 'Playbook'],
 ].map(([value, label]) => ({ value, label }));
-export const BY = [{ value: '', label: 'By: everyone' }, { value: 'clock', label: 'The Lab’s clock' }, { value: 'admin', label: 'An admin' }];
+export const BY = [{ value: '', label: 'By: everyone' }, { value: 'clock', label: 'The Lab’s clock' }, { value: 'admin', label: 'An admin' }, { value: 'unrecorded', label: 'By: Not recorded' }];
 export const SORT = [{ value: 'newest', label: 'Newest first' }, { value: 'oldest', label: 'Oldest first' }];
 export function stamp(value) {
   const ms = parseStamp(value);
@@ -52,7 +52,7 @@ export function eventWord(value) {
   };
   return words[value] || String(value || 'Not recorded').replaceAll('_', ' ');
 }
-export const byWord = (by) => by === 'clock' ? 'the Lab’s clock' : 'an admin';
+export const byWord = (by) => by === 'clock' ? 'the Lab’s clock' : by === 'admin' ? 'an admin' : 'Not recorded';
 export function supportRows(items, q, sort) {
   const search = q.trim().toLowerCase();
   return items.filter((x) => [x.admin_name, x.target_name, x.reason].some((v) => String(v || '').toLowerCase().includes(search)))
