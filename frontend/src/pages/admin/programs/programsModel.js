@@ -12,7 +12,7 @@
  *       each `{ count, oldest_age_hours, sla }`; a failed lane is `count: null`;
  *   R2  `GET /api/admin/lab-hosts?status=pending`: all-time `counts` by status,
  *       and the newest 500 pending;
- *   R3  `GET /api/perks/admin/queue`: `in_review` and `draft`, the oldest 200;
+ *   R3  `GET /api/perks/admin/queue`: `in_review` only (D1039), the oldest 200;
  *   R4  `GET /api/perks/`: live listings, at most 200;
  *   R5  `GET /api/advisors/admin/cohort-assignments`: the newest 500 rows, with
  *       each holder's current role;

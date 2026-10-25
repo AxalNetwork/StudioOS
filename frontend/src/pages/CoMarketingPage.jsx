@@ -622,7 +622,7 @@ function AdminQueueRow({ pitch, onChange }) {
       )}
       <textarea rows={2} value={notes}
         onChange={(e) => setNotes(e.target.value)}
-        placeholder="Reviewer notes (optional, visible to partner)"
+        placeholder="Reviewer notes, visible to the partner. A decline needs a reason of at least 10 characters."
         className="w-full px-3 py-2 border border-gray-300 rounded text-sm dark:border-gray-700" />
       {pitch.status === 'approved' && (
         <input value={publishUrl}
