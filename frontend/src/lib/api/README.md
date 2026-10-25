@@ -345,6 +345,11 @@ and the weekly series, and one profile by its reference (`pp_…`), never by
 email. The older `/api/profiling/admin/*` calls stay on `api.js` for the pages
 that read them.
 
+D1150: `dealContext.js` reads the investor’s `/deals/:id/stage`, `/whats-new`
+and paged `/notes`; add/edit/delete notes use the same Worker scope. Only
+the author edits and deletes, firm colleagues read, and staff have no bypass.
+Reading whats-new advances that user/firm’s visit marker. #3057 consumes it.
+
 D971 (#2756): `labOperations.js` reads the Lab's playbook, operative cohort size
 and filtered/paged history, and calls the existing Super Admin draft/publish
 routes and audited size write. Support sessions reuse `adminLab.js`; grant
@@ -361,6 +366,8 @@ D1000 (#2815): `personaSegments.js` is Persona segments' profile store on
 (members, needs met and gaps, offers by kind, links' reach), and the Super
 Admin's write, which names the version it read. Counts leave admins out and
 come back suppressed from 1 to 4.
+
+`googleWorkspace.js` (D1091) calls the mounted Workspace consent, picked files, mapping, Stop using and preview routes. The files screen awaits its canvas.
 
 D1065 (#2935): `buildPlan.js` reads or prepares `/api/cycles/build/plan`, with venture and hypothesis scope. Preparation sends no browser-supplied evidence and accepts nothing into Build.
 

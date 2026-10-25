@@ -4,7 +4,7 @@ import { adminEvents, events as eventsApi } from '../../../lib/api';
 import { EVENT_TYPES } from '../../../lib/eventTypes.js';
 import { HBars, RunningTotal, Unreadable, Unrecorded, actionDanger, actionGhost } from '../../../ui';
 import {
-  GONE, READING, ROSTER_LINE, SEATS_CHART_LABEL, agendaRows, analyticsJoin, capacitySavedLine, countsFor, dateLabel, eventTiles,
+  GONE, READING, ROSTER_LINE, SEATS_CHART_LABEL, agendaRows, summaryCounts, capacitySavedLine, dateLabel, eventTiles,
   formatWord, funnelOf, historyRows, hostLine, invitationRows, isEventId, onPublicCalendar, paymentRows, publishGate, refusalText,
   registrantRows, reminderRows, seatsSeries, summaryBlock, summaryTiles, titleOf, typeWord, visibilityWord, whenLine,
 } from './eventsDeskModel';
@@ -13,7 +13,7 @@ import { CARD, Card, Done, EYE, LINK, Pill, StatusPill, SUB } from './parts';
 
 /**
  * D915 (#2368) — one event (EV7), at `/admin/events/:id`, inside the desk's
- * frame. R3 gives the event; R2's row gives its counts under Guard G; R5 gives
+ * frame. R3 gives the event; D918's summary gives its counts; R5 gives
  * the agenda. Each block answers alone. The roster is not read: names and
  * emails stay on the host's roster, one link away.
  *
@@ -123,7 +123,7 @@ export default function EventPage({ id, reads, now }) {
   const ev = reads.event.data?.event;
   if (!ev || typeof ev !== 'object') return <Unreadable what="This event" claim="The answer held no event." onRetry={reads.reload} />;
 
-  const counts = countsFor(analyticsJoin(reads.analytics, 1), ev.id);
+  const counts = summaryCounts(reads.summary);
   const block = (key) => summaryBlock(reads.summary, key);
   const host = hostLine(block('host'));
   const type = typeWord(ev, EVENT_TYPES);

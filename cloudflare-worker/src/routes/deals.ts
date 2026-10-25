@@ -1,3 +1,4 @@
+import { investorHasDealRelationship } from '../services/dealAccess';
 import { getVerifiedLatestSnapshots } from '../services/scoreIntegrity';
 import { Hono } from 'hono';
 import type { Env, User } from '../types';
@@ -35,19 +36,21 @@ function normTs(s: any): number | null {
   return Number.isFinite(t) ? t : null;
 }
 
-function daysInStage(row: any): number {
+function daysInStage(row: any): number | null {
   const ref = normTs(row.stage_changed_at || row.updated_at || row.created_at);
-  if (!ref) return 0;
+  if (ref === null) return null;
   const d = Math.floor((Date.now() - ref) / 86_400_000);
   return d > 0 ? d : 0;
 }
 
 // Mirror FastAPI _serialize_deal: attach progress_pct + days_in_stage.
 function enrichDeal(row: any): any {
-  const target = row.target_raise || row.amount || 0;
-  const committed = row.capital_committed || 0;
-  const progress = target ? Math.round((committed / target) * 1000) / 10 : 0;
-  return { ...row, progress_pct: progress, days_in_stage: daysInStage(row) };
+  const target = row.target_raise ?? row.amount;
+  const committed = row.capital_committed;
+  const progress = target != null && Number.isFinite(Number(target)) && Number(target) > 0
+    && committed != null && Number.isFinite(Number(committed))
+    ? Math.round((Number(committed) / Number(target)) * 1000) / 10 : null;
+  return { ...row, currency: row.currency ?? 'USD', progress_pct: progress, days_in_stage: daysInStage(row) };
 }
 
 const isPrivilegedRole = (role: string) =>
@@ -457,6 +460,10 @@ deals.get('/screening', async (c) => {
 deals.post('/', async (c) => {
   const user = await requireAuth(c);
   const data = await c.req.json();
+  const currency = data.currency === undefined ? 'USD' : String(data.currency).trim().toUpperCase();
+  if (!/^[A-Z]{3}$/.test(currency)) return c.json({ code: 'invalid_currency', detail: 'Use a three-letter currency code.' }, 400);
+  // Bank proof and receipt matching still operate in USD; no FX is implied.
+  if (currency !== 'USD') return c.json({ code: 'currency_not_supported', detail: 'New deals currently use USD. Other currencies require currency-aware bank workflows.' }, 400);
   await ensureDealPassSchema(c.env);
   const sql = getSQL(c.env);
   const p = await sql`SELECT id, founder_id FROM projects WHERE id = ${data.project_id}`;
@@ -475,7 +482,7 @@ deals.post('/', async (c) => {
     await sql.end();
     return c.json({ error: 'unknown_status', detail: `Unknown deal status '${data.status}'`, allowed: DEAL_STATUSES }, 400);
   }
-  const [deal] = await sql`INSERT INTO deals (project_id, partner_id, status, notes, amount, stage_changed_at, source) VALUES (${data.project_id}, ${data.partner_id || null}, ${data.status || 'applied'}, ${data.notes || null}, ${data.amount || null}, datetime('now'), ${source}) RETURNING *`;
+  const [deal] = await sql`INSERT INTO deals (project_id, partner_id, status, notes, amount, stage_changed_at, source, currency) VALUES (${data.project_id}, ${data.partner_id || null}, ${data.status || 'applied'}, ${data.notes || null}, ${data.amount || null}, datetime('now'), ${source}, ${currency}) RETURNING *`;
   // Task #127 — the deal's arrival is its first stage entry. Without this the
   // funnel can measure conversion OUT of the first stage but never has a
   // cohort that entered it, so the first column reads 0 forever.
@@ -497,6 +504,10 @@ deals.post('/', async (c) => {
 deals.post('/draft', async (c) => {
   const user = await requireAdmin(c);
   const data = await c.req.json();
+  const currency = data.currency === undefined ? 'USD' : String(data.currency).trim().toUpperCase();
+  if (!/^[A-Z]{3}$/.test(currency)) return c.json({ code: 'invalid_currency', detail: 'Use a three-letter currency code.' }, 400);
+  // Bank proof and receipt matching still operate in USD; no FX is implied.
+  if (currency !== 'USD') return c.json({ code: 'currency_not_supported', detail: 'New deals currently use USD. Other currencies require currency-aware bank workflows.' }, 400);
   await ensureDealPassSchema(c.env);
   const sql = getSQL(c.env);
   const p = await sql`SELECT id FROM projects WHERE id = ${data.project_id}`;
@@ -519,14 +530,14 @@ deals.post('/draft', async (c) => {
     INSERT INTO deals (
       project_id, partner_id, lead_partner_id, status, notes, description, website,
       amount, target_raise, minimum_check, valuation_cap, carry_pct, management_fee_pct,
-      instrument, spv_jurisdiction, closing_deadline, capital_committed, stage_changed_at, source
+      instrument, spv_jurisdiction, closing_deadline, capital_committed, stage_changed_at, source, currency
     ) VALUES (
       ${data.project_id}, ${data.partner_id || null}, ${data.lead_partner_id || null}, ${status},
       ${data.notes || null}, ${data.description || null}, ${data.website || null},
       ${data.amount ?? null}, ${data.target_raise ?? null}, ${data.minimum_check ?? null},
       ${data.valuation_cap ?? null}, ${data.carry_pct ?? null}, ${data.management_fee_pct ?? null},
       ${data.instrument || null}, ${data.spv_jurisdiction || null}, ${data.closing_deadline || null},
-      0, datetime('now'), ${source}
+      0, datetime('now'), ${source}, ${currency}
     ) RETURNING *`;
   await recordStageEvent(sql, {
     dealId: Number((deal as any)?.id),
@@ -662,12 +673,29 @@ deals.get('/:id', async (c) => {
   const sql = getSQL(c.env);
   const rows = await sql`SELECT d.*, (SELECT COALESCE(SUM(cm.amount), 0) FROM commitments cm WHERE cm.deal_id = d.id AND cm.status = 'confirmed') AS capital_committed, p.name as project_name, p.sector as project_sector, p.founder_id as project_founder_id, pr.name as partner_name, lp.name as lead_partner_name, f.id as founder_user_id FROM deals d LEFT JOIN projects p ON d.project_id = p.id LEFT JOIN partners pr ON d.partner_id = pr.id LEFT JOIN users lp ON lp.id = d.lead_partner_id LEFT JOIN users f ON f.founder_id = p.founder_id WHERE d.id = ${id}`;
   if (rows.length === 0) { await sql.end(); return c.json({ error: 'Deal not found' }, 404); }
-  if (!(await canReadDeal(sql, user, id, (rows[0] as any).project_founder_id))) {
+  if (!(await canReadDeal(c.env, user, id, (rows[0] as any).project_founder_id))) {
     await sql.end();
     return c.json({ detail: 'Forbidden: you do not own this deal' }, 403);
   }
   await sql.end();
-  return c.json(serializeDeal(rows[0], user.role));
+  const deal = serializeDeal(rows[0], user.role);
+  if (user.role === 'investor' && effectiveInvestorTier(user as InvestorUser) === 'free') {
+    let own = null;
+    let ownUnreadable = false;
+    try {
+      own = await c.env.DB.prepare(
+        `SELECT amount, status, created_at FROM commitments WHERE deal_id = ? AND investor_user_id = ?
+         AND status IN ('pending','confirmed') ORDER BY id DESC LIMIT 1`
+      ).bind(id, user.id).first();
+    } catch { ownUnreadable = true; }
+    // A new field cannot accidentally expand a Free reader's response.
+    return c.json({ id: deal.id, project_name: deal.project_name, project_sector: deal.project_sector,
+      status: deal.status, currency: deal.currency ?? 'USD', instrument: deal.instrument,
+      target_raise: deal.target_raise ?? deal.amount ?? null, capital_committed: deal.capital_committed,
+      progress_pct: deal.progress_pct, closing_deadline: deal.closing_deadline,
+      my_commitment: own ?? null, my_commitment_unreadable: ownUnreadable, plan_limited: true });
+  }
+  return c.json(deal);
 });
 
 deals.put('/:id', async (c) => {
@@ -680,6 +708,12 @@ deals.put('/:id', async (c) => {
   const sql = getSQL(c.env);
   const rows = await sql`SELECT id, status, stage_changed_at, amount, lead_partner_id FROM deals WHERE id = ${id}`;
   if (rows.length === 0) { await sql.end(); return c.json({ error: 'Deal not found' }, 404); }
+
+  // A denomination change would relabel historical commitments/transfers.
+  if (data.currency !== undefined) {
+    await sql.end();
+    return c.json({ code: 'currency_fixed', detail: 'Currency is set when a deal is created and cannot be relabelled.' }, 409);
+  }
 
   // D469 — THE AMOUNT CHANGES ONLY FOR AN ADMIN. `requireRole('partner')`
   // admits partners and admins, and both could rewrite a deal's amount here.
@@ -1002,20 +1036,13 @@ type ReadCtx =
 //   (2026-06-25 audit). NOTE: the predicate is intentionally invited-OR-committed
 //   and does NOT include investor_dealroom_members, because Postgres (the dev
 //   backend) has no such table — the two backends must decide identically.
-async function investorHasDealRelationship(sql: any, userId: number, dealId: number): Promise<boolean> {
-  const inv = await sql`SELECT 1 AS x FROM deal_invitations WHERE deal_id = ${dealId} AND investor_user_id = ${userId} LIMIT 1`;
-  if (inv.length) return true;
-  const com = await sql`SELECT 1 AS x FROM commitments WHERE deal_id = ${dealId} AND investor_user_id = ${userId} LIMIT 1`;
-  return com.length > 0;
-}
-
-async function canReadDeal(sql: any, user: User, dealId: number, projectFounderId: any): Promise<boolean> {
+async function canReadDeal(env: Env, user: User, dealId: number, projectFounderId: any): Promise<boolean> {
   // #2460 narrows the generic founder guard; deal-room policy is separate
   // and deliberately retains the existing partner reader pending #2450.
   if (user.role === 'partner') return true;
   if (canAccessFounderResource(user as any, projectFounderId)) return true;
   const role = String((user as any).role || '').toLowerCase();
-  if (role === 'investor') return investorHasDealRelationship(sql, (user as any).id, dealId);
+  if (role === 'investor') return investorHasDealRelationship(env, (user as any).id, dealId);
   return false;
 }
 
@@ -1032,7 +1059,7 @@ export async function userMayReadDeal(env: Env, user: User, dealId: number): Pro
   try {
     const rows = await sql`SELECT p.founder_id AS project_founder_id FROM deals d LEFT JOIN projects p ON d.project_id = p.id WHERE d.id = ${dealId}`;
     if (rows.length === 0) return false;
-    return await canReadDeal(sql, user, dealId, (rows[0] as any).project_founder_id);
+    return await canReadDeal(env, user, dealId, (rows[0] as any).project_founder_id);
   } finally {
     await sql.end();
   }
@@ -1064,7 +1091,7 @@ async function loadDealForRead(c: any, id: number): Promise<ReadCtx> {
   const sql = getSQL(c.env);
   const rows = await sql`SELECT d.*, (SELECT COALESCE(SUM(cm.amount), 0) FROM commitments cm WHERE cm.deal_id = d.id AND cm.status = 'confirmed') AS capital_committed, p.name AS project_name, p.founder_id AS project_founder_id FROM deals d LEFT JOIN projects p ON d.project_id = p.id WHERE d.id = ${id}`;
   if (rows.length === 0) { await sql.end(); return { error: c.json({ error: 'Deal not found' }, 404) }; }
-  if (!(await canReadDeal(sql, user, id, (rows[0] as any).project_founder_id))) {
+  if (!(await canReadDeal(c.env, user, id, (rows[0] as any).project_founder_id))) {
     await sql.end();
     return { error: c.json({ detail: 'Forbidden: you do not own this deal' }, 403) };
   }
@@ -1171,7 +1198,7 @@ deals.get('/:id/activity', async (c) => {
   if (deal.stage_changed_at) events.push({ type: 'stage', label: `Moved to ${deal.status}`, at: deal.stage_changed_at });
   const commits = await sql`SELECT c.amount, c.created_at, u.name AS investor_name FROM commitments c LEFT JOIN users u ON u.id = c.investor_user_id WHERE c.deal_id = ${id} ORDER BY c.created_at DESC`;
   for (const r of commits as any[]) {
-    events.push({ type: 'commitment', label: `${r.investor_name || 'An investor'} committed ${Math.round(r.amount || 0).toLocaleString()}`, at: r.created_at });
+    events.push({ type: 'commitment', label: `${r.investor_name || 'An investor'} committed ${r.amount == null ? 'Not recorded' : `${Math.round(r.amount).toLocaleString()} ${deal.currency ?? 'USD'}`}`, at: r.created_at });
   }
   const invites = await sql`SELECT di.status, di.created_at, di.responded_at, u.name AS investor_name FROM deal_invitations di LEFT JOIN users u ON u.id = di.investor_user_id WHERE di.deal_id = ${id} ORDER BY di.created_at DESC`;
   for (const r of invites as any[]) {
@@ -1491,8 +1518,11 @@ deals.get('/:id/invitations', async (c) => {
   const id = parseInt(c.req.param('id'));
   const sql = getSQL(c.env);
   const rows = await sql`SELECT di.id, di.uid, di.deal_id, di.investor_user_id, di.status, di.message, di.email_opt_in, di.created_at, di.responded_at, u.name AS investor_name, u.email AS investor_email FROM deal_invitations di LEFT JOIN users u ON u.id = di.investor_user_id WHERE di.deal_id = ${id} ORDER BY di.created_at DESC`;
+  // D1149: requests use the legacy room row but grant no access. Staff can
+  // see whom to invite; an issued invitation replaces the pending request.
+  const requests = await sql`SELECT 'request-' || m.id AS id, m.deal_id, m.investor_user_id, 'requested' AS status, m.joined_at AS created_at, u.name AS investor_name, u.email AS investor_email FROM investor_dealroom_members m JOIN users u ON u.id = m.investor_user_id WHERE m.deal_id = ${id} AND u.role = 'investor' AND NOT EXISTS (SELECT 1 FROM deal_invitations i WHERE i.deal_id = m.deal_id AND i.investor_user_id = m.investor_user_id) AND NOT EXISTS (SELECT 1 FROM commitments k WHERE k.deal_id = m.deal_id AND k.investor_user_id = m.investor_user_id) ORDER BY m.joined_at DESC`;
   await sql.end();
-  return c.json(rows);
+  return c.json([...rows, ...requests]);
 });
 
 deals.post('/:id/invitations', async (c) => {
@@ -1642,12 +1672,12 @@ deals.post('/:id/dealroom/join', async (c) => {
   const deal = await c.env.DB.prepare(`SELECT id FROM deals WHERE id = ?`).bind(dealId).first<{ id: number }>();
   if (!deal) return c.json({ error: 'deal_not_found' }, 404);
 
-  // Idempotent join — if already a member, just return ok.
+  // An existing legacy room row is an idempotent invitation request.
   const existing = await c.env.DB.prepare(
     `SELECT 1 AS x FROM investor_dealroom_members
      WHERE investor_user_id = ? AND deal_id = ?`
   ).bind(user.id, dealId).first<{ x: number }>();
-  if (existing) return c.json({ ok: true, already_member: true });
+  if (existing) return c.json({ ok: true, requested: true, already_requested: true });
 
   const tier = effectiveInvestorTier(user);
   const cap = dealroomCap(user);
@@ -1657,7 +1687,7 @@ deals.post('/:id/dealroom/join', async (c) => {
       {
         error: 'quota_exceeded',
         code: 'quota_dealrooms_exhausted',
-        message: `You have joined the maximum of ${cap} dealroom${cap === 1 ? '' : 's'} on the ${tier} plan.`,
+        message: `You have requested the maximum of ${cap} dealroom${cap === 1 ? '' : 's'} on the ${tier} plan.`,
         used,
         cap,
         tier,
@@ -1673,13 +1703,13 @@ deals.post('/:id/dealroom/join', async (c) => {
     ).bind(user.id, dealId).run();
   } catch (e) {
     if (/UNIQUE/i.test((e as Error).message || '')) {
-      return c.json({ ok: true, already_member: true });
+      return c.json({ ok: true, requested: true, already_requested: true });
     }
     throw e;
   }
-  // D630 — the join is recorded with its actor, beside the membership row.
-  await logDealRoomAction(c.env, user, 'dealroom_joined', dealId);
-  return c.json({ ok: true, used: used + 1, cap, tier });
+  // The request is recorded with its actor, beside the legacy room row.
+  await logDealRoomAction(c.env, user, 'deal_invitation_requested', dealId);
+  return c.json({ ok: true, requested: true, used: used + 1, cap, tier });
 });
 
 deals.delete('/:id/dealroom/leave', async (c) => {

@@ -2,7 +2,7 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { Unreadable } from '../../../ui';
 import {
-  LIST_CLAIM, NO_CAP, analyticsJoin, eventHref, pageOf, rangeText, readyList, statusWord, tableRow,
+  LIST_CLAIM, NO_CAP, listCounts, eventHref, pageOf, rangeText, readyList, statusWord, tableRow,
 } from './eventsDeskModel';
 import {
   ATTENTION_NOTE, COUNTS_NEEDED, CSV_NOTE, LIST_VIEWS, PAGE_SIZES, PAID_NOTE, SORTS, csvFor, csvName, filterCount, filteredRows,
@@ -13,7 +13,7 @@ import { CARD, INPUT, Pill, StatusPill, SUB } from './parts';
 
 /**
  * D915 (#2368) — All events (EV6), made complete by D919 (#2702): R1 joined to
- * R2's counts under Guard G, searched by title, with the filters (Status, any
+ * D918's counts on the same paged rows, searched by title, with the filters (Status, any
  * of several; Visibility; When; Price; Featured), the views (This week, Full,
  * Needs attention), the sorts (Starts, Created, Seats taken, Fill, Show-up),
  * 25, 50 or 100 rows a page, the CSV of the rows on screen, and phone cards
@@ -58,7 +58,7 @@ export default function EventsAll({ reads, now }) {
   const query = readQuery(loc.search);
   useEffect(() => { setPage(1); }, [loc.search]);
   const list = readyList(reads.all);
-  const join = useMemo(() => analyticsJoin(reads.analytics, list ? list.length : 0), [reads.analytics, list]);
+  const join = useMemo(() => listCounts(reads.all), [reads.all]);
   const paid = useMemo(() => (query.view === 'paid_cancelled' ? paidOnCancelled(reads.paid) : null), [query.view, reads.paid]);
   const hosts = useMemo(() => hostOptions(list), [list]);
   const rows = list ? filteredRows(list, { q, query, join, now, paid }) : [];

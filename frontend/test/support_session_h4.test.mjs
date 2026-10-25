@@ -59,7 +59,7 @@ test('scope and expiry are stated, not offered as choices', () => {
   const src = codeOnly(ADMIN_PAGE);
   const a = src.indexOf('function SupportSessionDialog(');
   assert.ok(a >= 0, 'the dialog is gone');
-  const body = src.slice(a, src.indexOf('const STATUS_BADGES', a));
+  const body = src.slice(a, src.indexOf('const KYC_BADGES', a));
   assert.ok(body.length > 200, "the dialog's end marker moved");
   assert.match(body, /Read and write as user/, 'the scope is no longer stated');
   assert.match(body, /30 minutes · hard/, 'the expiry is no longer stated');

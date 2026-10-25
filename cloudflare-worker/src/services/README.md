@@ -4,6 +4,9 @@ Everything a route needs that is not request parsing or response shaping. A file
 here takes `env` and plain values; it does not take a Hono `Context` and does
 not return a `Response`.
 
+`dealAccess.ts` is D1149's shared invited-or-committed investor predicate, used
+by the deal reader and diligence opener. A room request is not a grant.
+
 The split matters because it is what makes the logic testable: the worker suite
 runs these directly against an in-process SQLite, with no request at all.
 
@@ -23,6 +26,11 @@ obligation details; a counterparty receives only the bare score. Non-admin risk 
 screening snapshots use `scoreIntegrity.ts` verification and read auditing.
 Bulk reads deduplicate projects, select snapshots once, and batch per-score
 audit entries without weakening approval or signature checks.
+
+`eventTimes.ts` (D1115, #2995) validates and converts the event writer’s local
+clock inputs in the selected IANA zone, preserving explicit instants and refusing
+invalid or ambiguous wall times. Its instant comparison keeps formatting-only
+normalization out of the changed-after-approval flag.
 
 ## The ones worth knowing
 
@@ -107,7 +115,7 @@ no new schema, runtime or billing path is introduced.
 | --- | --- |
 | `advisor/` | The advisor state machine and its question banks. |
 | `ai/` | D763: the AI router's pure parts. `guard.ts` holds Llama Guard's slicing, verdicts, category policy and refusal copy. Its README has the rule for adding here. |
-| `calendar/` | Calendar sync (`sync.ts`), and My events in the calendar (`myEvents.ts`, D1033): tickets and hosted events as calendar kinds, the add-to links, and the copies a sync must remove. |
+| `calendar/` | Calendar sync (`sync.ts`), cancellation-time removal of tracked copies (`cancelEvents.ts`, D1131), and My events in the calendar (`myEvents.ts`, D1033): tickets and hosted events as calendar kinds, the add-to links, and the copies a sync must remove. D1131 uses `queue.ts`, `queueWorker.ts` and `../models/jobs.ts` for two immediate copies, scan batches of five plus continuation, per-copy cancellation rechecks and independent retry/dead-letter handling. This idempotent job alone may fall back to D1 after an uncertain CF send; exact reads use the mapping primary key, scans use existing source/event indexes. |
 | `channels/` | D684: business Telegram and WhatsApp conversations, and Zoom and Google Meet calls, reaching Validate › Interviews. The contract, event dedupe, connection tenancy, link codes, outbound tracking and the pending-thread store. Its README has the rules. |
 | `ai/` | D761: the AI router's request and response shapes, per-class timeouts, context-window and paid-only fallbacks, session affinity and the units each attempt used. D760: `catalogue.ts`, every Workers AI model priced in each unit Cloudflare bills, and `pricing.ts`, cost and billed in exact decimals with `AI_MARKUP` written once. Pure; `aiRouter.ts` calls it. |
 | `decks/` | Deck assembly and export. |
@@ -117,7 +125,10 @@ no new schema, runtime or billing path is introduced.
 | `railProposals.ts` | D780: `ai_rail_proposals` (migration 506), what a rail option's run leaves for the member to decide. `proposeRail` stores a draft, proposal or note with the run's page, option, record, model and `usage_log_id` (refusing a field D777 never fills); `decideRail` is the member's accept, edit or discard, once and on their own rows only; `listRail`, `getRail` and `withdrawRail`. Every option outside Validate and the zone drafts writes here. |
 | `narrative/` | D908: the Investor narrative's sections, positioning and bound figures, and the compare of two versions, behind `/api/cycles/raise/narrative/*`. Its README has the rules. |
 | `market_intel/` | Sourcing, extraction and scoring for market intelligence. |
+| `fundAdminLps.ts` | D1158 (#3065): `GET /api/fund-admin/lps`, every LP of every administered fund in one table. Money from the call ledger (`readFundCalls`), paid distributions, the last D716 notice and the booklet through the LP's application. Writes the fail-closed `fund_lps_read` audit row first. A figure no store holds is null with its reason in the row's `unavailable`; a store that cannot be read makes only its own figures Unreadable. Filters, search, sort, pages and totals run here, after the bound read. |
+| `fundPositionsHistory.ts` | D1158 (#3065): `readFundPositions`, each position with its latest dated mark or `marked: false` and a reason; `readFundHistory`, `readFundPerformance` point in time at each quarter end since the first call. Computed on every read, never stored. |
 | `mercury/` | D710: Mercury for fund administration, read-only. A GET-only client, the boundary parser that drops account numbers, the gates and read audit, the entity connections' store, the hourly sync and the reconciliation matches. Its README has the rules. |
+| `notion/` | D1085: a founder's own Notion, read-only, through Notion's MCP server. `reads.ts` is the only file that opens a Notion session: search, a page with its fingerprint, children, a data source's schema and its rows, each id checked before it is sent, never SQL. Its README has the rules. |
 | `referrals/` | Referral submissions. |
 | `records/` | D690's scoped cycle record contract, registry and ownership checks. |
 | `scoring/` | D1143 (#3029): the Product-market fit score, defined once (#2433). `pmf.ts` is model v1 as data and the pure `scorePmf` (value, band, confidence, coverage and the next steps ranked by gain); `pmfCollector.ts` reads Validate's stores for it with bound SQL, after the latest Pivot, and reads no interviewee name or quote. |
@@ -186,6 +197,8 @@ and seven cards for `../routes/cycle_grow.ts`. `revenueMovements.ts` splits the
 revenue ledger into new, expansion and churned by month (only when customers can
 be told apart; churn needs two billings) and rewrites `revenue_movements`.
 
+D1150: `raiseCycle.ts` also owns the stored-receipt projection `receivedCommitment`: investor/commitment owner/company checked, only receipt id/time returned, no bank fields or provider read. It stays beside D752’s `receivedDates` boundary.
+
 D663: `raiseCycle.ts` computes the Raise figures, seven cards and records, plus D686's independently readable, project-scoped Calls history, for
 `../routes/cycle_raise.ts`, including the computed readiness checks, the
 diligence checklist and the narrative consistency check (fixed patterns, no
@@ -246,6 +259,11 @@ D1103 (#2983) adds a grant's folder scope (migration 594): `grantFolderScope()`
 reads it as the named folders with their subfolders, or null for every folder,
 and `tierAdmits()` takes it as its fourth argument. A scope that cannot be read
 opens nothing.
+`dataRoomRequests.ts` (D1104, #2984) is the access-request queue (migration
+595): `roundCallRequestStatement()` (the round call's request, in its response
+batch under its claim), `dealPageRequestStatement()` (for DEAL's DL9) and
+`readRequests()`. One open request per investor and venture, and none for an
+investor who already has the room.
 `deckSlideDwell.ts` stores a share-link view's seconds per slide, bounded so
 they never add up to more than the view's read time.
 `peerBenchmark.ts` (#1524) is the peer-group benchmark for every founder:
@@ -430,6 +448,11 @@ D886 B8: `meetingBotRuntime.ts` routes commands to a private cross-script DO
 host and derives run-scoped keys. `meetingBotZoom.ts` mints credentials from
 the reauthorized stored run, with a run-bounded SDK JWT. No credentials log.
 
+D1119 (#2999): `programCatalogue.ts` reads part 4's shared claim and requested
+strategic-access counts, including a claim weekly series and independent failure
+states. `programActivity.ts` includes its six audited review actions, naming
+Perk listings without exposing member ids or review notes.
+
 `perkClaims.ts` (D957) gives the admin Perks page and program catalogue one
 UTC Monday window for claim totals, listing ranks and weekly price-kind counts.
 `raiseEvidence.ts` reads active Mercury runway facts and the files current data-room grants can download, for Raise and deck readiness.
@@ -439,6 +462,8 @@ actions and reads them back as the Payments change log (D1129: bound literal
 search before count/page/export, and the complete admin filter list); `stripeWebhookDeliveries.ts`
 is the webhook's request-log reader, shared by HQ · Platform and Payments, with
 hourly buckets that are null for an hour the log was silent.
+
+`google/` holds D1091’s bounded, GET-only Workspace readers over Calendar’s single Google token store. See `google/README.md`.
 
 D1065 (#2935): `buildPlanner.ts` reads accepted Validate labels/counts and applies the ten fixed mapping rules, then batches a plan and source proposals; acceptance stays with D1066. It never runs AI or writes a Build record.
 
