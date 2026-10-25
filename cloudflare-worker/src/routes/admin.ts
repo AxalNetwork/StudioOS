@@ -1114,70 +1114,19 @@ async function ensureSpinoutAdmissionColumns(env: Env): Promise<void> {
   SPINOUT_ADMISSION_SCHEMA_MIGRATED.set(bindingKey(env), true);
 }
 
-// POST /api/admin/users/:user_id/spinout-admit — admit a founder to the
-// next Spin-Out Lab cohort. Sets the admitted flag + cohort label and
-// sends the branded "You're in" email linking to /spinout-lab. Idempotent:
-// re-admitting an already-admitted user just refreshes the cohort label
-// and does NOT re-send the email.
+// POST /api/admin/users/:user_id/spinout-admit — Users' door to D945's admit
+// without an application (routes/admin_lab_writes.ts): { cycle_id, reason,
+// company_name?, confirm_over_places? }. It creates the application and its
+// approved place in an OPEN cohort, so the queue and the calendar agree, and the
+// scheduler starts the founder on the cohort's 1st. The free-text cohort label
+// it used to write, with no application and no cycle row, is refused.
 admin.post('/users/:user_id/spinout-admit', async (c) => {
   const adminUser = await requireAdmin(c);
   // D260 — a suspended branch admits no one to the Lab: 423, after the admin gate.
   await requireBranchNotSuspended(c);
-  const userId = parseInt(c.req.param('user_id'));
-  if (!Number.isFinite(userId)) return c.json({ error: 'Invalid user_id' }, 400);
-  const body = (await c.req.json().catch(() => ({}))) as { cohort?: unknown };
-  const cohort = (typeof body.cohort === 'string' && body.cohort.trim()) || 'Cohort 3';
-
-  await ensureSpinoutAdmissionColumns(c.env);
-  const target: any = await c.env.DB.prepare(
-    `SELECT u.id, u.email, u.name, u.role, usf.spinout_lab_admitted, u.spinout_lab_active, u.is_incorporated
-     FROM users u LEFT JOIN user_spinout_flags usf ON usf.user_id = u.id WHERE u.id = ?`
-  ).bind(userId).first();
-  if (!target) return c.json({ error: 'User not found' }, 404);
-  if (target.role === 'admin') return c.json({ error: 'Admins cannot be admitted to the Lab' }, 400);
-  // Re-entry guard. `is_incorporated` is only ever set by finishing or exiting
-  // the Lab (routes/spinout_lab.ts recordMilestone / exitLab), so this refuses
-  // an alumnus, not a founder who arrived with a company — those have
-  // is_incorporated = 0 and are admitted like anyone else. The Lab is not
-  // restricted to pre-incorporation founders.
-  if (Number(target.is_incorporated) === 1) {
-    return c.json({ error: 'This account has already been through the Lab' }, 409);
-  }
-
-  const alreadyAdmitted = Number(target.spinout_lab_admitted) === 1;
-  await c.env.DB.prepare(
-    `INSERT INTO user_spinout_flags (user_id, spinout_lab_admitted, spinout_lab_cohort)
-     VALUES (?, 1, ?)
-     ON CONFLICT(user_id) DO UPDATE SET spinout_lab_admitted = 1, spinout_lab_cohort = excluded.spinout_lab_cohort`
-  ).bind(userId, cohort).run();
-
-  let emailed = false;
-  if (!alreadyAdmitted) {
-    try {
-      const { send } = await import('../services/email/send');
-      const labUrl = `${(c.env.APP_URL || 'https://axal.vc').replace(/\/+$/, '')}/spinout-lab`;
-      const r = await send(c.env, 'spinout_admitted', target.email, {
-        name: target.name || 'there',
-        cohort_label: cohort,
-        lab_url: labUrl,
-      }, { userId: target.id, ctaUrl: labUrl });
-      emailed = !!r?.ok;
-    } catch (e) {
-      console.error('[admin/spinout-admit] email send failed', e);
-    }
-  }
-
-  try {
-    const adminHash = await hashEmail(adminUser.email);
-    const targetHash = await hashEmail(target.email);
-    await c.env.DB.prepare(
-      `INSERT INTO activity_logs (action, details, actor, user_id) VALUES (?, ?, ?, ?)`
-    ).bind('spinout_lab_admitted',
-      `Admin ${adminUser.name} admitted user_id=${target.id} (email_hash=${targetHash}) to Spin-Out Lab ${cohort}${alreadyAdmitted ? ' (already admitted — cohort refreshed, no email)' : emailed ? '' : ' (email send failed)'}`,
-      adminHash, adminUser.id).run();
-  } catch {}
-
-  return c.json({ ok: true, cohort, already_admitted: alreadyAdmitted, emailed });
+  const body = (await c.req.json().catch(() => ({}))) as Record<string, unknown>;
+  const { admitRoute } = await import('./admin_lab_writes');
+  return admitRoute(c, adminUser, c.req.param('user_id'), body);
 });
 
 // Spin-Out Lab cohort applications — review queue + accept/refuse.

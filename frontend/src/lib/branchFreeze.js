@@ -54,9 +54,12 @@ export const FROZEN = [
     //
     // D960 — mentor cohort access too, both ways: giving a mentor a cohort's
     // founders and ending it are each an act on who can read founder data.
+    //
+    // D945 — moving an applicant to another cohort, bulk decisions and admit
+    // without an application are admissions too (admin_lab_writes.ts).
     row: 'Programs',
-    note: 'Cohort and Spin-Out Lab admissions closed, by the cohort queue and by the older application decide alike. Lab grace, overrides, settings, force-proceed and host decisions, including revocation, are frozen. Graduation certificates cannot be issued or revoked. No mentor can be given, or lose, access to a cohort. Perk reviews and feature changes are frozen too; listings and claims remain readable. The running cohort continues to its end date — its week decisions are not frozen, because the founders in it did nothing.',
-    gatedIn: ['admin_cohort.ts', 'admin.ts', 'lab_hosts.ts', 'spinout_certificates.ts', 'advisors.ts', 'perks.ts'],
+    note: 'Cohort and Spin-Out Lab admissions closed, by the cohort queue and by the older application decide alike, with moves to another cohort, bulk decisions and admitting without an application. Lab grace, overrides, settings, force-proceed and host decisions, including revocation, are frozen. Graduation certificates cannot be issued or revoked. No mentor can be given, or lose, access to a cohort. Perk reviews and feature changes are frozen too; listings and claims remain readable. The running cohort continues to its end date — its week decisions are not frozen, because the founders in it did nothing.',
+    gatedIn: ['admin_cohort.ts', 'admin_lab_writes.ts', 'admin.ts', 'lab_hosts.ts', 'spinout_certificates.ts', 'advisors.ts', 'perks.ts'],
   },
   {
     // D260 — the admin acts that decide an account's access: both KYC
