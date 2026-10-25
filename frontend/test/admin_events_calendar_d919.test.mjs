@@ -339,7 +339,7 @@ test('the new files read nothing new, upload nothing and draw no chart', () => {
   assert.doesNotMatch(src, /host_user_id|\.email\b|Studio team/, 'the host line is D918\'s name and role; Studio team waits for O-STU');
   const hook = codeOnly(read('frontend/src/pages/admin/events/useEventsDesk.js'));
   assert.match(hook, /const wantPaid = tab === 'all' && paidView;\n\s*const paid = useRead\('overview', 'paid', withList, wantPaid, \(\) => adminEvents\.overview\(\)\);/, 'the overview is read only for the paid-tickets view');
-  assert.match(read('frontend/src/pages/admin/AdminEventsPage.jsx'), /<DeskTab to="\/admin\/events\/calendar" testId="events-tab-calendar">Calendar<\/DeskTab>/, 'a literal door for the reachability walk');
+  assert.match(read('frontend/src/pages/admin/AdminEventsPage.jsx'), /<HeaderTab to="\/admin\/events\/calendar" data-testid="events-tab-calendar">Calendar<\/HeaderTab>/, 'a literal door for the reachability walk');
   assert.match(read('documentation/architecture/ROUTE_MAP.md'), /`\/admin\/events\/calendar`/);
   assert.match(read('frontend/src/pages/admin/events/README.md'), /EventsCalendar\.jsx/);
 });

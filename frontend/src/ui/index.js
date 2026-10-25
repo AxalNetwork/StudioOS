@@ -101,7 +101,7 @@ export {
 } from './Charts';
 // D936 (#2375): the one admin page header — crumb, title, line, scope chip,
 // moved notice and tab bar — that replaces the Admin Console's title and dropdown.
-export { default as AdminPageHeader, HeaderTab, useMovedNotice, HELD_SCOPE_LABEL, HELD_SCOPE_TITLE } from './AdminPageHeader';
+export { default as AdminPageHeader, HeaderTab, HeaderMenuItem, useMovedNotice, HELD_SCOPE_LABEL, HELD_SCOPE_TITLE } from './AdminPageHeader';
 
 // Pre-existing, re-exported so `ui/` is the one import surface.
 export { default as EmptyState } from '../components/EmptyState';

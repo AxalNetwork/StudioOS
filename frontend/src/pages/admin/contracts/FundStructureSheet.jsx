@@ -16,7 +16,7 @@ import { useRead, ReadState, button } from './parts';
  * every account cell reads the sentence below. Every string is drawn as text.
  */
 export const ADMIN_WITHHELD = 'Only the Super Admin can see or change payment instructions.';
-export const BANK_ACCOUNTS_HREF = '/admin?tab=bank-accounts';
+export const BANK_ACCOUNTS_HREF = '/admin/platform/bank-accounts';
 const NOT_OPENED_YET = 'Not opened yet';
 const NO_NOTICE_PURPOSE = 'No notice purpose';
 const FOOTNOTE = 'A and B: the two platform licences. The Investment Management Agreement is a stub for counsel to confirm and receives no fee here.';

@@ -116,7 +116,7 @@ test('decision 4 and 6: the Fund\'s note, the org-name sentence, and the fixed s
   assert.equal(ENTITY_BRANCH_MANAGED, 'Axal\'s entity accounts are managed from HQ.');
   // D880: the member side names Axal VC's accounts, never an entity, and points to HQ.
   assert.equal(BRANCH_MANAGED, 'Axal VC\'s own accounts are managed from HQ.');
-  assert.deepEqual(HQ_ACCOUNTS, { text: 'Axal VC\'s own accounts are managed in HQ › Bank accounts.', link: 'Open Bank accounts', href: '/admin?tab=bank-accounts' });
+  assert.deepEqual(HQ_ACCOUNTS, { text: 'Axal VC\'s own accounts are managed in HQ › Bank accounts.', link: 'Open Bank accounts', href: '/admin/platform/bank-accounts' });
   assert.equal(TOKEN_HELP, 'How to create a Read Only token');
   assert.deepEqual(OPEN_BANKING, { text: 'Open Banking', href: '/admin/fund-admin?tab=banking' });
   assert.equal(confirmReadOnlyLabel('Axal VC Holdings LLC'), 'This is a Read Only token from Axal VC Holdings LLC\'s Mercury organization.');
