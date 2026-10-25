@@ -161,7 +161,8 @@ test('plan prices and features come from the catalogue, never typed', () => {
     assert.deepEqual(resolvePlans(DOORS[k]).map((p) => p.tier), ids, `${k}: the catalogue's tiers, in order`);
     for (const id of ids) {
       const t = tier(list, id);
-      assert.ok(html.includes(`>${formatPrice(t)}</div>`), `${k}: the ${id} price is the catalogue's (${formatPrice(t)})`);
+      // D1050: the price is the plans read's; rendered before it answers, a paid tier says it is reading.
+      assert.ok(html.includes(`>${formatPrice(t, true)}</div>`), `${k}: the ${id} price is the catalogue's (${formatPrice(t, true)})`);
       assert.ok(html.includes(`<h3 class="ax-door-plan-name">${attr(t.name)}</h3>`), `${k}: the ${id} plan is called ${t.name}, as /pricing calls it`);
       for (const f of t.features) assert.ok(html.includes(attr(f)), `${k}: the ${id} plan lists "${f}" from the catalogue`);
     }
@@ -227,7 +228,9 @@ test('claims the code does not back stay off the pages', () => {
     /labelled (?:that way|as such) in the product/, // no such label exists
     /drafts replies|handles scheduling|keeps your (?:notes|profile) current/, // no such AI task
     /priced per fund|shaped around them/, // the Enterprise plan does not render
-    /\bStarter\b|\bPro\b|Enterprise/, // the catalogue's plans are Free, Growth, Studio, Professional, Institutional
+    // The catalogue's plans only (D1050, services/planCatalogue.ts): a bare "Pro", "Starter" or "Enterprise" is the old
+    // canvas's, never a plan; "Investor Pro" is Pricing's name for Professional (D786), so it is the one "Pro" allowed.
+    /\bStarter\b|(?<!Investor )\bPro\b|Enterprise/,
   ];
   for (const k of DOOR_ORDER) {
     for (const re of unbacked) assert.doesNotMatch(PAGES[k], re, `${k} claims ${re}`);

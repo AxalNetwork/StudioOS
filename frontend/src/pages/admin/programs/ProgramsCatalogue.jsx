@@ -13,9 +13,13 @@ import { useAuth } from '../../../hooks/useAuthSync';
 import { isSuperAdminUser } from '../../../lib/shellRole';
 import AdminBoardFrame from '../AdminBoardFrame';
 import {
-  BlockFailed, CARD, Chip, EYE, GrantBadge, H2, LINK, MovedNotice, Pill, Skeleton, StatusPill, SUB, Tile, Unread,
+  BlockFailed, CARD, Chip, Done, EYE, GrantBadge, H2, LINK, MovedNotice, Pill, Skeleton, StatusPill, SUB, Tile, Unread,
 } from './parts';
 import { useCatalogueReads } from './useProgramReads';
+import { ProposalsFromStudios, YourProposals } from './ProposalTables';
+import { ProgramsTabs, useWaitingProposals } from './ProposalsPage';
+import NewProgramDialog from './NewProgramDialog';
+import { NEW_PROGRAM } from './proposalsModel';
 import {
   ASSIGNED_TO_YOU, CLAIMS_REASON, COULD_NOT_READ, FOOT_PROFILING, GROUPS, INCLUDING_MEMBER,
   LAB_APPLICATIONS_REASON, LINE_ADMIN, LINE_SUPER, NOT_READ_YET, NOT_RECORDED, NOTHING_WAITING, PEOPLE_REASON,
@@ -24,6 +28,7 @@ import {
   mentorFigures, movedNotice, perkQueueFrom, referCard, scopeChip, testingFrom, waitingForYou, withoutMoved,
 } from './programsModel';
 
+const PRIMARY = 'hidden min-h-[36px] items-center rounded-[9px] bg-axal-violet px-3.5 text-[13px] font-bold text-white hover:opacity-90 sm:inline-flex dark:bg-violet-600';
 const OPEN = 'inline-flex min-h-[34px] items-center rounded-[9px] border border-axal-hairline bg-white px-3.5 text-[13px] font-bold text-axal-ink hover:bg-axal-ground dark:border-gray-700 dark:bg-gray-900 dark:text-gray-100 dark:hover:bg-gray-800';
 const FIGURE = 'font-mono text-[12.5px] font-semibold leading-normal text-axal-ink dark:text-gray-100';
 
@@ -78,6 +83,9 @@ function CatalogueBody() {
   const superAdmin = isSuperAdminUser(useAuth()?.user ?? null);
   const reads = useCatalogueReads(superAdmin);
   const [group, setGroup] = useState(null);
+  const [newOpen, setNewOpen] = useState(false);
+  const [created, setCreated] = useState(null);
+  const waitingProposals = useWaitingProposals(superAdmin);
   const now = Date.now();
   const moved = movedNotice(loc.pathname, loc.search);
   const chip = scopeChip(superAdmin, reads.scopes);
@@ -115,6 +123,10 @@ function CatalogueBody() {
           <span title={chip.title} className="cursor-help self-start rounded-full border border-axal-hairline bg-white px-3 py-1 font-mono text-[11.5px] font-medium text-axal-ink dark:border-gray-700 dark:bg-gray-900 dark:text-gray-100" data-testid="programs-scope-chip">{chip.label}</span>
         </div>
         <div className="flex flex-wrap items-center gap-2.5">
+          {/* D964: PG2's New program and PG1's Propose a program. A phone has no header door (dc:469). */}
+          {superAdmin
+            ? <button type="button" className={PRIMARY} onClick={() => setNewOpen(true)} data-testid="programs-new">{NEW_PROGRAM}</button>
+            : <Link to="/admin/programs/propose" className={PRIMARY} data-testid="programs-propose">Propose a program</Link>}
           <span className={`font-mono text-[12px] ${asOf.kind === 'failed' ? 'font-bold text-red-700 dark:text-red-300' : 'text-axal-muted dark:text-gray-400'}`} data-testid="programs-asof">
             {asOf.kind === 'updated' ? `Updated ${clockLabel(asOf.at)}` : asOf.kind === 'failed' ? COULD_NOT_READ : READING}
           </span>
@@ -123,6 +135,12 @@ function CatalogueBody() {
           </button>
         </div>
       </header>
+
+      {superAdmin ? <ProgramsTabs waiting={waitingProposals} /> : null}
+
+      {created ? (
+        <Done testId="programs-new-done">{`${created.name} is added as Proposed, with an empty playbook draft. This page draws its nine programs, so the new one has no card here yet.`}</Done>
+      ) : null}
 
       <MovedNotice text={moved} onDismiss={() => navigate({ pathname: loc.pathname, search: withoutMoved(loc.search), hash: loc.hash }, { replace: true })} />
 
@@ -265,11 +283,16 @@ function CatalogueBody() {
         ) : null}
       </div>
 
+      {superAdmin ? <ProposalsFromStudios onDecided={waitingProposals.reload} /> : <YourProposals />}
+
       {/* O-PRF: one literal door until Profiling trends' home is decided. */}
       <p className={`m-0 flex flex-wrap items-center gap-x-2 ${SUB}`} data-testid="programs-foot">
         <span>{FOOT_PROFILING}</span>
         <Link to="/admin/profiling-trends" className={LINK}>Open profiling trends</Link>
       </p>
+      {newOpen ? (
+        <NewProgramDialog onClose={() => setNewOpen(false)} onCreated={(c) => { setNewOpen(false); setCreated(c); }} />
+      ) : null}
     </div>
   );
 }

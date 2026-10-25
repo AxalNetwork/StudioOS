@@ -7,6 +7,8 @@ import { Link, useLocation } from 'react-router-dom';
 import { Plus, Calendar, MapPin, Ticket } from 'lucide-react';
 import { eventsApi } from '../../lib/eventsApi';
 import { eventsPublic } from '../../lib/api';
+import { adminEvents } from '../../lib/api';
+import { waitingWords } from './hostHeaderModel';
 import { useAuth } from '../../hooks/useAuthSync';
 import { useToast } from '../../components/useToast';
 import PageExplainer from '../../components/PageExplainer';
@@ -450,11 +452,24 @@ function SuggestedCard({ events }) {
 function HostingTab({ hosting, admin }) {
   const [q, setQ] = useState('');
   const groups = hostingGroups(hosting, Date.now(), q);
+  // D1036 (MEV13): the review desk's waiting count, its own read; a failed read is said, never a 0.
+  const [waiting, setWaiting] = useState(admin ? { state: 'loading' } : null);
+  useEffect(() => {
+    if (!admin) return undefined;
+    let live = true;
+    Promise.resolve().then(() => adminEvents.list({ status: 'pending_review', limit: 1 }))
+      .then((reply) => { if (live) setWaiting({ state: 'ready', words: waitingWords(reply) }); })
+      .catch(() => { if (live) setWaiting({ state: 'unreadable' }); });
+    return () => { live = false; };
+  }, [admin]);
   return (
     <div className="flex flex-col gap-3.5">
       {admin ? (
         <p className="m-0 rounded-[10px] border border-violet-200 bg-violet-50 px-3 py-2 text-[12.5px] text-axal-ink dark:border-violet-900 dark:bg-violet-950/30 dark:text-gray-100" data-testid="my-events-review-line">
-          You also review members’ public events. <Link className={LINK} to="/admin/events/review">Open the review desk</Link>
+          You also review members’ public events.{' '}
+          {waiting?.state === 'ready' && waiting.words ? <span data-testid="my-events-review-waiting">{waiting.words} </span> : null}
+          {waiting?.state === 'unreadable' || (waiting?.state === 'ready' && !waiting.words) ? <span className={MUTED} data-testid="my-events-review-waiting">The waiting count could not be read. </span> : null}
+          <Link className={LINK} to="/admin/events/review">Open the review desk</Link>
         </p>
       ) : null}
       <input type="search" value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search your events" aria-label="Search your events"

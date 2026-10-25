@@ -125,7 +125,8 @@ export const RAIL_NOTE = 'Eadwyn reads the program figures on this page. Nothing
 
 export const TITLE = 'Programs';
 export const LINE_ADMIN = 'Every program on the accounts HQ holds, and what it needs from you now.';
-export const LINE_SUPER = 'Every program on StudioOS, and what needs HQ now.';
+// D964 (#2797): the line regains "…and what studios propose." with HQ's Proposals tab.
+export const LINE_SUPER = 'Every program on StudioOS, what needs HQ now, and what studios propose.';
 export const FOOT_PROFILING = 'Profiling trends is not a program. It stays here until its home is decided.';
 export const PAGE_UNREADABLE = 'Could not be read';
 

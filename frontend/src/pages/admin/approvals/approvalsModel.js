@@ -62,28 +62,28 @@ export const GROUPS = [
  */
 export const LANES = [
   { key: 'kyc', group: 'people', label: 'KYC', glance: 'kyc', door: 'KYC & KYB' },
-  { key: 'kyb', group: 'people', label: 'KYB', glance: null, door: 'KYC & KYB', isNew: true, waits: 'KYB lane (#2384’s business store) is not counted yet.' },
+  { key: 'kyb', group: 'people', label: 'KYB', glance: 'kyb', door: 'KYC & KYB', isNew: true },
   { key: 'partner_profiles', group: 'people', label: 'Partner profiles', glance: 'partner_profiles', door: 'Partner profiles' },
   { key: 'exploring', group: 'people', label: 'Explorers ready for a profile', glance: 'exploring', door: 'Exploring board' },
   { key: 'product_testers', group: 'people', label: 'Product testers', glance: null, here: true, isNew: true, waits: 'No product tester application is stored yet (part 4).' },
   { key: 'lp', group: 'people', label: 'LP applications', glance: 'lp', door: 'LP applications' },
   { key: 'cohort', group: 'programs', label: 'Spin-Out Lab applications', glance: 'cohort', door: 'Spin-Out Lab' },
-  { key: 'lab_hosts', group: 'programs', label: 'Office-hours hosts', glance: null, door: 'Spin-Out Lab › Hosts', isNew: true, waits: 'Not counted on the glance yet (part 3).' },
+  { key: 'lab_hosts', group: 'programs', label: 'Office-hours hosts', glance: 'lab_hosts', door: 'Spin-Out Lab › Hosts', isNew: true },
   { key: 'moderation', group: 'programs', label: 'Spin-Out moderation', glance: 'moderation', door: 'Spin-Out moderation' },
   { key: 'referrals', group: 'programs', label: 'Refer & Earn reviews', glance: 'referrals', door: 'Refer & Earn › Queue' },
-  { key: 'strategic_access', group: 'programs', label: 'Strategic referral access', glance: null, door: 'Refer & Earn', isNew: true, waits: 'No route decides these requests yet (part 5).' },
-  { key: 'perk_listings', group: 'programs', label: 'Perk listings', glance: null, door: 'Perks', isNew: true, waits: 'Not counted on the glance yet (part 3).' },
+  { key: 'strategic_access', group: 'programs', label: 'Strategic referral access', glance: 'strategic_access', door: 'Refer & Earn', isNew: true },
+  { key: 'perk_listings', group: 'programs', label: 'Perk listings', glance: 'perk_listings', door: 'Perks', isNew: true },
   { key: 'best_fit', group: 'programs', label: 'Best-Fit consultations', glance: 'best_fit', door: 'Best-Fit' },
   { key: 'events', group: 'community', label: 'Events', glance: 'events', door: 'Events › Review' },
   { key: 'jobs', group: 'community', label: 'Jobs', glance: 'jobs', door: 'Jobs' },
-  { key: 'wellbeing_experts', group: 'community', label: 'Wellbeing experts', glance: null, here: true, isNew: true, waits: 'Not counted on the glance yet (part 3).' },
-  { key: 'comarketing', group: 'community', label: 'Co-marketing pitches', glance: null, here: true, isNew: true, waits: 'Not counted on the glance yet (part 3).' },
-  { key: 'articles', group: 'community', label: 'Articles', glance: null, door: 'Content queue', isNew: true, waits: 'Not counted on the glance yet (part 3).' },
+  { key: 'wellbeing_experts', group: 'community', label: 'Wellbeing experts', glance: 'wellbeing_experts', here: true, isNew: true },
+  { key: 'comarketing', group: 'community', label: 'Co-marketing pitches', glance: 'comarketing', here: true, isNew: true },
+  { key: 'articles', group: 'community', label: 'Articles', glance: 'articles', door: 'Content queue', isNew: true },
   { key: 'due_diligence', group: 'deals', label: 'Due diligence', glance: 'due_diligence', door: 'Due diligence' },
-  { key: 'score_flags', group: 'deals', label: 'Score sign-off', glance: null, door: 'Monitoring', isNew: true, waits: 'Not counted on the glance yet (part 3).', note: 'A flagged score stays hidden from LPs until an admin signs it off.' },
+  { key: 'score_flags', group: 'deals', label: 'Score sign-off', glance: 'score_flags', door: 'Monitoring', isNew: true, note: 'A flagged score stays hidden from LPs until an admin signs it off.' },
 ];
 
-/** HQ decides (APR9): Super Admin only. None is on the glance yet (part 3). */
+/** HQ decides (APR9): Super Admin only. The glance counts them as `approvals.hq_decides` for a Super Admin (D1041); part 7 (#2893) draws the counts. */
 export const HQ_LANES = [
   { key: 'testing_programs', label: 'Testing programs sent to HQ', door: 'Platform › Product testing' },
   { key: 'learning', label: 'Learning exercises to review', door: 'Learning studio' },
@@ -165,7 +165,7 @@ export function waitingTile(views) {
     value: failed.length ? `${nf(total)} +` : nf(total),
     sub: failed.length
       ? `${failed.map((v) => v.label).join(', ')} could not be read`
-      : `across ${nf(ready.length)} of ${nf(views.length)} lanes; ${nf(uncounted)} are not counted yet`,
+      : `across ${nf(ready.length)} of ${nf(views.length)} lanes; ${nf(uncounted)} ${uncounted === 1 ? 'is' : 'are'} not counted yet`,
   };
 }
 

@@ -122,16 +122,17 @@ async function call(app: any, env: any, who: number, path: string) {
 
 const userRow = (db: DatabaseSync, id: number) => db.prepare('SELECT * FROM users WHERE id = ?').get(id) as any;
 
+// D1050 (#2901): the plan is named by its catalogue key; its price is the plans read's, never typed in the Worker.
 test('each row of the tier table, both ways', async () => {
   const { db, env } = await seeded();
   const locked = async (id: number) => (await archetypeAccess(env, userRow(db, id))).locked;
   const plan = async (id: number) => ((await archetypeAccess(env, userRow(db, id))) as any).required_plan;
   assert.equal(await locked(1), true, 'a free founder saw the archetype');
-  assert.deepEqual(await plan(1), { licence: 'founder', tier: 'growth', name: 'Validate + Build', price_label: '$20 / month' });
+  assert.deepEqual(await plan(1), { licence: 'founder', tier: 'growth', name: 'Validate + Build', plan_key: 'founder:growth' });
   assert.equal(await locked(2), false, 'a Growth founder was locked out');
   assert.equal(await locked(3), true, 'a past-due founder kept the archetype');
   assert.equal(await locked(4), true, 'a free investor saw the archetype');
-  assert.deepEqual(await plan(4), { licence: 'investor', tier: 'professional', price_label: '$149 / month' });
+  assert.deepEqual(await plan(4), { licence: 'investor', tier: 'professional', name: 'Investor Pro', plan_key: 'investor:professional' });
   assert.equal(await locked(5), false, 'a Professional investor was locked out');
   assert.equal(await locked(6), false, 'an active investor trial was locked out');
   assert.equal(await locked(7), true, 'a lapsed investor trial kept the archetype');
@@ -150,7 +151,7 @@ test('the archetype routes send a free account no archetype key, and the plan th
   assert.equal('archetype' in free.body, false, 'best-fit sent a free founder the archetype');
   assert.equal('archetypes' in free.body, false, 'best-fit sent a free founder the archetype list');
   assert.doesNotMatch(free.text, /visionary|The Visionary|You see far/i, 'archetype text reached a free founder');
-  assert.deepEqual(free.body.archetype_access, { locked: true, required_plan: { licence: 'founder', tier: 'growth', name: 'Validate + Build', price_label: '$20 / month' } });
+  assert.deepEqual(free.body.archetype_access, { locked: true, required_plan: { licence: 'founder', tier: 'growth', name: 'Validate + Build', plan_key: 'founder:growth' } });
   assert.ok('fit' in free.body && 'axal_values' in free.body, 'the fit and values were locked too');
   const paid = await call(bestFit, env, 2, '/me');
   assert.equal(paid.body.archetype?.slug, 'visionary', 'a Growth founder lost the archetype');

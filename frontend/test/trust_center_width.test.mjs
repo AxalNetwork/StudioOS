@@ -46,8 +46,8 @@ test('#2060 the desktop wrapper carries no width cap; the phone view is unchange
   assert.ok(classes.includes('p-6'), 'the page keeps its own gutter');
   assert.ok(!classes.some((c) => /^max-w-/.test(c) || c === 'mx-auto'), `no cap on the page: ${desktop[1]}`);
   assert.match(page, /<TrustPhoneView status="ready" obligations=\{obligations\} reload=\{load\} onSelect=\{selectTab\}>/);
-  // A block that reads badly stretched keeps its own cap.
-  assert.match(page, /<form onSubmit=\{runScreen\} className="grid grid-cols-1 md:grid-cols-2 gap-3 max-w-2xl">/);
+  // D1073 removes the sanctions form. The page/phone width assertions above
+  // remain; admin links and absent screening controls are tested mounted.
 });
 
 test('#2060 the tab strip scrolls sideways and its tabs fit it, so no vertical scroll bar is drawn', () => {

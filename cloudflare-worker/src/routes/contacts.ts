@@ -1186,6 +1186,21 @@ r.put('/raise-pro-rata/:id', async (c) => {
   } catch (e) { return mapError(c, e); }
 });
 
+// D1057 (#2927, #2427 finding 7): ONE UPDATES STORE. An investor update posted
+// from the Raise pipeline is a `portfolio_updates` row with status `pipeline`,
+// beside Grow's Share an update rows, instead of a row in a second table that
+// nothing else read. Its pipeline recipients are `update_recipients` rows with
+// no account and no delivery, the way Share an update records a pipeline
+// investor it cannot send to. Nothing here emails anyone, as before:
+//   · status `pipeline` is not `submitted`, so no investor inbox, compliance
+//     read, deck or focus count reads it as a report sent;
+//   · its audience grants nobody (`audience_json` null), so D889's rule shows
+//     it to its founder and admins only.
+// `raise_investor_updates` takes no new rows. The rows already there stay
+// where they are and are read here, marked `pipeline_legacy`, so no history
+// goes missing; D1057 says how they move.
+const PIPELINE_NOT_SENT = 'Recorded on the Raise pipeline; not emailed';
+
 // GET /api/contacts/raise-updates — investor updates posted from the pipeline.
 r.get('/raise-updates', async (c) => {
   try {
@@ -1196,9 +1211,20 @@ r.get('/raise-updates', async (c) => {
     if (pid === 'forbidden') return c.json({ detail: 'Forbidden' }, 403);
     if (pid === 'ambiguous') return c.json({ detail: 'project_id is required' }, 400);
     if (pid === null) return c.json({ items: [] });
-    const rows = await c.env.DB.prepare(
-      `SELECT * FROM raise_investor_updates WHERE project_id = ? ORDER BY created_at DESC, id DESC LIMIT 100`,
+    const posted = await c.env.DB.prepare(
+      `SELECT u.uid, u.project_id, u.title AS subject, u.body, u.author_user_id AS created_by, u.created_at,
+              (SELECT COUNT(*) FROM update_recipients r WHERE r.update_id = u.id) AS recipients_count
+         FROM portfolio_updates u WHERE u.project_id = ? AND u.status = 'pipeline'
+        ORDER BY u.created_at DESC, u.id DESC LIMIT 100`,
     ).bind(pid).all<any>();
+    const legacy = await c.env.DB.prepare(
+      `SELECT uid, project_id, subject, body, created_by, created_at, recipients_count
+         FROM raise_investor_updates WHERE project_id = ? ORDER BY created_at DESC, id DESC LIMIT 100`,
+    ).bind(pid).all<any>();
+    const items = [
+      ...(posted.results || []).map((x: any) => ({ ...x, recipients_count: Number(x.recipients_count) || 0, source: 'pipeline' })),
+      ...(legacy.results || []).map((x: any) => ({ ...x, source: 'pipeline_legacy' })),
+    ].sort((x, y) => String(y.created_at).localeCompare(String(x.created_at))).slice(0, 100);
     // D654: an update sent from Grow › Share an update is also an investor
     // update sent, read from its own `portfolio_updates` row — never copied.
     let shared: any[] = [];
@@ -1211,14 +1237,15 @@ r.get('/raise-updates', async (c) => {
       ).bind(pid).all<any>();
       shared = (s.results || []).map((x: any) => ({ ...x, source: 'share_update', link: `/updates/${x.uid}` }));
     } catch { shared = []; }
-    return c.json({ items: rows.results || [], shared_updates: shared });
+    return c.json({ items, shared_updates: shared });
   } catch (e) { return mapError(c, e); }
 });
 
 // POST /api/contacts/raise-updates — record an investor update. The update is
-// stored on the pipeline and logged to every linked contact's timeline as an
-// outbound reply (mirrors the invite precedent). It is NOT emailed — the UI
-// says so explicitly rather than pretending delivery happened.
+// a `portfolio_updates` row (status `pipeline`, D1057) and is logged to every
+// linked contact's timeline as an outbound reply (mirrors the invite
+// precedent). It is NOT emailed — the UI says so explicitly rather than
+// pretending delivery happened.
 r.post('/raise-updates', async (c) => {
   try {
     const user = await requireRaiseUser(c);
@@ -1232,19 +1259,24 @@ r.post('/raise-updates', async (c) => {
     if (!subject) return c.json({ detail: 'subject is required' }, 400);
     const text = body.body ? String(body.body).slice(0, 10000) : null;
 
-    const round = await c.env.DB.prepare(
-      `SELECT id FROM raise_rounds WHERE project_id = ? AND status = 'active'`,
-    ).bind(pid).first<{ id: number }>();
     const recipients = await c.env.DB.prepare(
-      `SELECT id, contact_id FROM raise_prospects WHERE project_id = ? AND stage != 'passed'`,
-    ).bind(pid).all<{ id: number; contact_id: number | null }>();
+      `SELECT id, contact_id, name, email FROM raise_prospects WHERE project_id = ? AND stage != 'passed'`,
+    ).bind(pid).all<{ id: number; contact_id: number | null; name: string | null; email: string | null }>();
     const recips = recipients.results || [];
 
+    const uid = newUid();
+    const at = nowIso();
     const res = await c.env.DB.prepare(
-      `INSERT INTO raise_investor_updates (uid, project_id, round_id, subject, body, recipients_count, created_by, created_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-    ).bind(newUid(), pid, round?.id ?? null, subject, text, recips.length, user.id, nowIso()).run();
+      `INSERT INTO portfolio_updates (uid, project_id, author_user_id, period, title, body, status, created_at, updated_at)
+       VALUES (?, ?, ?, NULL, ?, ?, 'pipeline', ?, ?)`,
+    ).bind(uid, pid, user.id, subject, text, at, at).run();
     const updateId = lastInsertId(res);
+    if (recips.length > 0) {
+      await c.env.DB.batch(recips.map((p) => c.env.DB.prepare(
+        `INSERT INTO update_recipients (update_id, audience, user_id, email, label, delivered_via, not_delivered_reason, created_at)
+         VALUES (?, 'investor', NULL, ?, ?, NULL, ?, ?)`,
+      ).bind(updateId, p.email ? String(p.email).toLowerCase() : null, p.name || null, PIPELINE_NOT_SENT, at)));
+    }
 
     // Best-effort timeline log on each linked contact — batched into one D1
     // round-trip; a logging failure never rolls back the update itself.
@@ -1262,8 +1294,10 @@ r.post('/raise-updates', async (c) => {
       } catch (e) { console.warn('[contacts] raise-update timeline log failed', e); }
     }
 
-    const update = await c.env.DB.prepare('SELECT * FROM raise_investor_updates WHERE id = ?').bind(updateId).first<any>();
-    return c.json({ ...update, logged_contacts: loggedContacts }, 201);
+    return c.json({
+      uid, project_id: pid, subject, body: text, recipients_count: recips.length, created_by: user.id, created_at: at,
+      source: 'pipeline', logged_contacts: loggedContacts,
+    }, 201);
   } catch (e) { return mapError(c, e); }
 });
 

@@ -153,6 +153,8 @@ const AdminProgramPage = lazy(() => import('./pages/admin/programs/ProgramPage')
 const HeldProgramsRedirect = lazy(() => import('./pages/admin/programs/HeldProgramsRedirect'));
 const AdvisorCohortsRedirect = lazy(() => import('./pages/admin/programs/AdvisorCohortsRedirect'));
 const ReferEarnRedirect = lazy(() => import('./pages/admin/programs/ReferEarnRedirect'));
+const AdminProposePage = lazy(() => import('./pages/admin/programs/ProposePage'));
+const AdminProposalsPage = lazy(() => import('./pages/admin/programs/ProposalsPage'));
 const AdminCommunity = lazy(() => import('./pages/admin/community/AdminCommunity'));
 const HeldCommunityRedirect = lazy(() => import('./pages/admin/community/HeldCommunityRedirect'));
 const PitchPositioningRedirect = lazy(() => import('./pages/raise/narrative/PitchPositioningRedirect'));
@@ -2823,6 +2825,9 @@ function AppInner() {
           static sub-paths, each behind today's guard, never hqOnly. */}
       <Route path="/admin/held/programs" element={<HeldProgramsRedirect />} />
       <Route path="/admin/programs" element={guard(['admin'], <AdminProgramsCatalogue />)} />
+      {/* D964 (#2797): the proposal flow. Both are any admin's (S1-NOTICE); an Admin at proposals reads PG19b in the page. */}
+      <Route path="/admin/programs/propose" element={guard(['admin'], <AdminProposePage />)} />
+      <Route path="/admin/programs/proposals" element={guard(['admin'], <AdminProposalsPage />)} />
       <Route path="/admin/programs/mentor-cohorts" element={guard(['admin'], <AdminMentorCohortAccess />)} />
       <Route path="/admin/programs/mentor-cohorts/how-it-runs" element={guard(['admin'], <AdminMentorCohortAccess />)} />
       <Route path="/admin/programs/mentor-cohorts/people" element={guard(['admin'], <AdminMentorCohortAccess />)} />
@@ -2933,6 +2938,8 @@ function AppInner() {
       <Route path="/admin/platform/payments" element={guard(['admin'], hqOnly(<Payments />))} />
       <Route path="/admin/platform/payments/stripe" element={guard(['admin'], hqOnly(<Payments />))} />
       <Route path="/admin/platform/payments/log" element={guard(['admin'], hqOnly(<Payments />))} />
+      {/* D1012 (#2831): one product, PAY2's lightbox over Catalogue, at its own address. */}
+      <Route path="/admin/platform/payments/products/:id" element={guard(['admin'], hqOnly(<Payments />))} />
       <Route path="/admin/platform/meeting-bots" element={guard(['admin'], hqOnly(<HqMeetingBotsPage />))} />
       <Route path="/admin/platform/topology" element={guard(['admin'], hqOnly(<HqPlatformTopologyPage />))} />
       <Route path="/admin/platform/allowances" element={guard(['admin'], hqOnly(<HqPlatformAllowancesPage />))} />
@@ -2976,6 +2983,9 @@ function AppInner() {
       <Route path="/admin/programs/spinout-lab/hosts" element={guard(['admin'], <AdminLab onImpersonate={handleImpersonate} />)} />
       <Route path="/admin/programs/spinout-lab/formation" element={guard(['admin'], <AdminLab onImpersonate={handleImpersonate} />)} />
       <Route path="/admin/programs/spinout-lab/graduation" element={guard(['admin'], <AdminLab onImpersonate={handleImpersonate} />)} />
+      <Route path="/admin/programs/spinout-lab/how-it-runs" element={guard(['admin'], <AdminLab onImpersonate={handleImpersonate} />)} />
+      <Route path="/admin/programs/spinout-lab/settings" element={guard(['admin'], <AdminLab onImpersonate={handleImpersonate} />)} />
+      <Route path="/admin/programs/spinout-lab/activity" element={guard(['admin'], <AdminLab onImpersonate={handleImpersonate} />)} />
       <Route path="/admin/spinout-lab" element={<LabRedirect />} />
       {/* D442 — the console the approvals board links to. Never a tab of the retired Admin Console. */}
       <Route path="/admin/spinout-moderation" element={guard(['admin'], <SpinoutModerationPage />)} />
@@ -3370,6 +3380,8 @@ function AppInner() {
       <Route path="/events/:id/manage" element={guard(['admin', 'founder', 'partner', 'investor', 'advisor'], <EventManagePage />)} />
       <Route path="/events/:id/manage/registrations" element={guard(['admin', 'founder', 'partner', 'investor', 'advisor'], <EventManagePage />)} />
       <Route path="/events/:id/manage/agenda" element={guard(['admin', 'founder', 'partner', 'investor', 'advisor'], <EventManagePage />)} />
+      {/* D1036 (#2877): check-in at the door, a tab on the event's day. */}
+      <Route path="/events/:id/manage/check-in" element={guard(['admin', 'founder', 'partner', 'investor', 'advisor'], <EventManagePage />)} />
       <Route path="/my/jobs" element={guard(['admin', 'founder', 'partner', 'investor', 'advisor'], user?.role === 'founder' ? <Navigate to="/build/team?mode=workspace&tab=jobs" replace /> : <MyJobsPage />)} />
       <Route path="/my/applications" element={guard(['admin', 'founder', 'partner', 'investor', 'advisor'], <MyApplicationsPage />)} />
       <Route path="/jobs/new" element={guard(['admin', 'founder', 'partner', 'investor', 'advisor'], <JobEditorPage />)} />

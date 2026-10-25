@@ -32,6 +32,16 @@ export const PAGE_SIZE = 10;
  * Axal VC's own accounts are HQ's.
  */
 export const isPersonalMercury = (p) => p?.key === 'mercury';
+
+/**
+ * D1080 (#2945): a connector signed in to through its MCP server's own OAuth
+ * (`/api/integrations/mcp/<key>/start`), by the registry's `oauth_mcp` or the
+ * directory's `sign_in.kind`. Mercury keeps its own route (D840) and words.
+ */
+export const isMcpSignIn = (p) => !isPersonalMercury(p) && (p?.auth_type === 'oauth_mcp' || p?.sign_in?.kind === 'mcp');
+/** The `mcp` kind's words: the button, and the tooltip that says what the button opens. */
+export const mcpSignInLabel = (p) => `Sign in with ${p?.display_name || 'the service'}`;
+export const mcpSignInTooltip = (p) => `Opens ${p?.display_name || 'the service'}’s own sign-in page. Axal VC never sees your password there.`;
 const isMercuryConn = (conn) => conn?.provider_key === 'mercury';
 
 export const CATEGORY_ORDER = ['CRM', 'Payments', 'Accounting and banking', 'Calendar', 'Calendar and workspace', 'Messaging', 'Signing', 'Cap table', 'Data', 'Code', 'Design', 'Docs'];

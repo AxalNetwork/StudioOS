@@ -198,10 +198,11 @@ export function followingLine(follows) {
 }
 
 /**
- * The Billing row's description. A founder's paid tier reads by D683's name,
- * price and period (`TIER_PLANS`); the free tier reads "Free". Every other
- * role reads `planSummary`'s plan and tier, with no price, or the Billing
- * pane's own words when no plan applies.
+ * The Billing row's description. A founder's paid tier reads by D683's name
+ * (`TIER_PLANS`); the free tier reads "Free". Every other role reads
+ * `planSummary`'s plan and tier, or the Billing pane's own words when no plan
+ * applies. D1050 (#2901): no row here carries a price; the Billing pane reads
+ * it from the plans read.
  */
 export function planLine(role, billing) {
   if (billing?.status !== 'ready' || !billing.data || typeof billing.data !== 'object') return PLAN_FALLBACK;
@@ -210,7 +211,7 @@ export function planLine(role, billing) {
     const tier = String(billing.data.tier || 'free').toLowerCase();
     if (tier === 'free') return 'Free';
     const plan = TIER_PLANS[tier];
-    if (plan) return `${plan.label} · ${plan.price} ${plan.period}`;
+    if (plan) return plan.label;
   }
   const s = planSummary(r, billing.data);
   if (!s) return PLAN_FALLBACK;

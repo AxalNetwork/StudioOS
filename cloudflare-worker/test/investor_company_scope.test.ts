@@ -38,6 +38,8 @@ const PROJ_A = 7;         // reached through a dealroom membership in FUND_A
 const PROJ_B = 9;         // reached through an introduction in FUND_B
 const PROJ_NONE = 11;     // relationship with no company — visible everywhere
 const DEAL_A = 71;
+const DEAL_B = 72;
+const DEAL_NONE = 73;
 
 function coerce(a: any[]): any[] {
   return a.map((v) => (v === undefined ? null : v === true ? 1 : v === false ? 0 : v));
@@ -82,6 +84,11 @@ function freshDb() {
       id INTEGER PRIMARY KEY AUTOINCREMENT, company_id INTEGER NOT NULL, user_id INTEGER NOT NULL
     );
     CREATE TABLE deals (id INTEGER PRIMARY KEY, project_id INTEGER);
+    -- D1057: a position is listed only where the investor holds a confirmed commitment.
+    CREATE TABLE commitments (
+      id INTEGER PRIMARY KEY AUTOINCREMENT, deal_id INTEGER NOT NULL, investor_user_id INTEGER NOT NULL,
+      amount REAL NOT NULL DEFAULT 0, status TEXT NOT NULL DEFAULT 'pending', company_id INTEGER
+    );
     -- The three relationship tables, each with the company_id migration 193 adds.
     CREATE TABLE investor_dealroom_members (
       id INTEGER PRIMARY KEY AUTOINCREMENT, investor_user_id INTEGER NOT NULL,
@@ -130,6 +137,12 @@ function freshDb() {
   i.run(INVESTOR, PROJ_NONE, null);   // backfilled nothing — no primary company
   const pos = db.prepare('INSERT INTO portfolio_positions (project_id, invested_amount) VALUES (?, ?)');
   pos.run(PROJ_A, 100); pos.run(PROJ_B, 200); pos.run(PROJ_NONE, 300);
+  // D1057: the investor holds a confirmed commitment in each of the three, so the company tests below
+  // read the relationship scope; the held rule's own tests narrow these.
+  db.prepare('INSERT INTO deals (id, project_id) VALUES (?, ?)').run(DEAL_B, PROJ_B);
+  db.prepare('INSERT INTO deals (id, project_id) VALUES (?, ?)').run(DEAL_NONE, PROJ_NONE);
+  const cm = db.prepare("INSERT INTO commitments (deal_id, investor_user_id, amount, status) VALUES (?, ?, 1000, 'confirmed')");
+  cm.run(DEAL_A, INVESTOR); cm.run(DEAL_B, INVESTOR); cm.run(DEAL_NONE, INVESTOR);
   return db;
 }
 
@@ -140,10 +153,10 @@ async function token(userId: number, role: string): Promise<string> {
 }
 const env = (db: any): any => ({ JWT_SECRET, ENVIRONMENT: 'development', DB: makeD1(db) });
 
-async function listed(who: { user: number; role: string }, company?: number | string): Promise<number[]> {
+async function listed(who: { user: number; role: string }, company?: number | string, db: any = freshDb()): Promise<number[]> {
   const headers: Record<string, string> = { Authorization: `Bearer ${await token(who.user, who.role)}` };
   if (company !== undefined) headers['X-Company-Id'] = String(company);
-  const res = await positions.request('/', { headers }, env(freshDb()));
+  const res = await positions.request('/', { headers }, env(db));
   assert.equal(res.status, 200);
   const body = (await res.json()) as any;
   const rows = Array.isArray(body) ? body : (body.items ?? body.positions ?? []);
@@ -178,4 +191,30 @@ test('admin is unscoped — investorProjectIds returns null for operators', asyn
   // "portfolio-wide", and the company clause is never reached. Selecting a
   // company must not turn an operator view into a tenant view.
   assert.deepEqual(await listed(admin, FUND_A), [PROJ_A, PROJ_B, PROJ_NONE]);
+});
+
+// ── D1057 (#2927, #2427 finding 8): Portfolio lists only held positions ─────────
+
+test('a relationship is not a position: only a confirmed commitment lists a company, and the read says so', async () => {
+  // Mutations checked: the commitment status ignored (pending listed); the relationship intersection dropped.
+  const db = freshDb();
+  db.prepare("UPDATE commitments SET status = 'pending' WHERE deal_id = ?").run(DEAL_B);
+  db.prepare("UPDATE commitments SET status = 'withdrawn' WHERE deal_id = ?").run(DEAL_NONE);
+  assert.deepEqual(await listed(investor, undefined, db), [PROJ_A], 'pending and withdrawn commitments are not holdings');
+  // A confirmed commitment with no relationship in scope widens nothing.
+  db.prepare('DELETE FROM investor_dealroom_members').run();
+  assert.deepEqual(await listed(investor, undefined, db), [], 'the held set never passes what the investor may see');
+  const res = await positions.request('/', { headers: { Authorization: `Bearer ${await token(INVESTOR, 'investor')}` } }, env(freshDb()));
+  const body = (await res.json()) as any;
+  assert.equal(body.scope.rule, 'confirmed_commitment');
+  assert.match(body.scope.text, /confirmed commitment/);
+  const adm = await positions.request('/', { headers: { Authorization: `Bearer ${await token(ADMIN, 'admin')}` } }, env(freshDb()));
+  assert.equal(((await adm.json()) as any).scope.rule, 'all_positions');
+});
+
+test('a held commitment is read in the active company, or with none recorded', async () => {
+  // Mutation checked: the commitment's company clause dropped.
+  const db = freshDb();
+  db.prepare('UPDATE commitments SET company_id = ? WHERE deal_id = ?').run(FUND_B, DEAL_A);
+  assert.deepEqual(await listed(investor, FUND_A, db), [PROJ_NONE], 'a commitment made under the other fund is not held here');
 });

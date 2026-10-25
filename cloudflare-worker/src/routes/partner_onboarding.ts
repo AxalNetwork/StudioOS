@@ -19,6 +19,7 @@ import type { Env } from '../types';
 import { hashEmail } from '../util/hashEmail';
 import { createAndSendEnvelope, templateBodyRefusal, UnfilledFieldsError } from './esign';
 import { refuse } from '../util/refusal';
+import { recordCapture } from '../services/partnerProfileReview';
 import {
   buildProposals, ALL_PARTNER_DEAL_TYPES,
   type PartnerDealType, type PartnerProposalDraft,
@@ -200,6 +201,9 @@ onboard.post('/:token/profile', async (c) => {
     fields.sectors, fields.geography, fields.capacity_per_month, fields.capital_capacity_usd,
     fields.motivation, fields.prior_deals, fields.linkedin_url, fields.raw_chat_json,
   ).run();
+
+  // D991 — the capture joins the profile's history, by source.
+  await recordCapture(c.env, gate.inv.recipient_email, 'invitation');
 
   await c.env.DB.prepare(
     `UPDATE partner_invitations SET status = 'profiled' WHERE id = ? AND status IN ('sent','viewed')`,

@@ -19,14 +19,15 @@ import type { Env, User } from '../types';
 import { userMeetsTier, tierUpsell } from '../middleware/requireTier';
 import { effectiveInvestorTier, investorTierCovers, investorUpsell, type InvestorUser } from '../middleware/requireInvestorTier';
 
-export type RequiredPlan = { licence: 'founder' | 'investor'; tier: 'growth' | 'professional'; name?: string; price_label: string };
+/** D1050: the plan by its catalogue key; its price is the plans read's, never typed here. */
+export type RequiredPlan = { licence: 'founder' | 'investor'; tier: 'growth' | 'professional'; name?: string; plan_key: string };
 export type ArchetypeAccess = { locked: false } | { locked: true; required_plan: RequiredPlan };
 
 /** Roles whose licence is the paid tier. */
 const ALWAYS_UNLOCKED = new Set(['admin', 'partner', 'advisor']);
 
-const FOUNDER_PLAN: RequiredPlan = { licence: 'founder', tier: 'growth', name: tierUpsell('growth').plan.name, price_label: tierUpsell('growth').plan.price_label };
-const INVESTOR_PLAN: RequiredPlan = { licence: 'investor', tier: 'professional', price_label: investorUpsell('professional').plan.price_label };
+const FOUNDER_PLAN: RequiredPlan = { licence: 'founder', tier: 'growth', name: tierUpsell('growth').plan.name, plan_key: tierUpsell('growth').plan.plan_key };
+const INVESTOR_PLAN: RequiredPlan = { licence: 'investor', tier: 'professional', name: investorUpsell('professional').plan.name, plan_key: investorUpsell('professional').plan.plan_key };
 
 /**
  * The investor's effective tier, read as `effectiveInvestorTier` does, plus the

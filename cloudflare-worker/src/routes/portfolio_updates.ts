@@ -18,7 +18,7 @@ import { investorProjectIds, investorActiveCompany } from './_investorProjectSco
 import { canAccessProject, getMemberProjectIds } from '../services/projectAccess';
 import { roundCallsEnabled } from '../services/roundCallPolicy';
 import {
-  ASK_KINDS, ASK_MODULE, LineError, buildMetrics, canAskAgain, cleanAudience, cleanLines, cleanMetrics,
+  ASK_KINDS, ASK_MODULE, LineError, METRIC_KEYS, buildMetrics, canAskAgain, cleanAudience, cleanLines, cleanMetrics,
   draftLines, landReply, noMetrics, payloadFor, periodFacts,
   type Audience, type AskKind, type Snapshot, type ShippedItem,
 } from '../services/updateShare';
@@ -61,6 +61,7 @@ type UpdateRow = {
   id: number; uid: string; project_id: number; author_user_id: number;
   period: string | null; title: string; body: string | null; kpis_json: string | null;
   status: string; submitted_at: string | null; created_at: string; updated_at: string;
+  metrics_json?: string | null;
 };
 
 function isInvestorSide(user: User): boolean {
@@ -107,12 +108,50 @@ async function canShareUpdate(env: Env, user: User, projectId: number, founderId
 
 const shareDenied = { detail: 'You can read this venture but not share its updates.', code: 'share_not_allowed' };
 
+/**
+ * D1057 (#2927, #2427 finding 4): the figures an update carries, each with its
+ * source. A Share an update row stores them in `metrics_json` (D654), keyed
+ * by `METRIC_KEYS` (mrr, growth, customers, burn, runway); part 3's
+ * `REPORT_FIGURES` keys report figures the same way. A row from the older KPI
+ * form stores bare values in `kpis_json`, which carry no source. A figure
+ * nothing recorded stays null with its reason, never 0.
+ */
+export function updateFigures(u: { kpis_json?: string | null; metrics_json?: string | null }): {
+  figures: Array<{ key: string; label: string; value: number | null; unit: string; source: string | null; as_of: string | null; reason: string | null }>;
+  kpis: Record<string, unknown>;
+} {
+  const stored = jload(u.kpis_json ?? null, {});
+  const legacy = stored && typeof stored === 'object' && !Array.isArray(stored) ? stored as Record<string, unknown> : {};
+  // Read as stored: the save already checked each figure against the period's snapshots (`cleanMetrics`),
+  // so a second pass with no verified list would relabel every source "typed".
+  const raw = jload(u.metrics_json ?? null, []);
+  const figures = (Array.isArray(raw) ? raw : []).flatMap((m: any) => {
+    if (!m || typeof m !== 'object' || !(METRIC_KEYS as readonly string[]).includes(String(m.key))) return [];
+    const value = typeof m.value === 'number' && Number.isFinite(m.value) ? m.value : null;
+    const source = typeof m.source === 'string' && m.source.trim() ? m.source.trim() : null;
+    // A recorded figure with no source is not one the update may show (D654's rule).
+    if (value != null && !source) return [];
+    return [{
+      key: String(m.key), label: String(m.label ?? m.key).slice(0, 60), value,
+      unit: ['usd', 'pct', 'count', 'months'].includes(String(m.unit)) ? String(m.unit) : 'count',
+      source: value == null ? null : source,
+      as_of: value == null ? null : (typeof m.as_of === 'string' ? m.as_of.slice(0, 10) : null),
+      reason: value == null ? (typeof m.reason === 'string' && m.reason ? m.reason : 'Not recorded') : null,
+    }];
+  });
+  // `kpis` stays the flat map the pages already read; a sourced figure fills a key the KPI form left empty.
+  const kpis: Record<string, unknown> = {};
+  for (const f of figures) if (f.value != null) kpis[f.key] = f.value;
+  return { figures, kpis: { ...kpis, ...legacy } };
+}
+
 async function dto(env: Env, u: UpdateRow): Promise<any> {
   const proj = await env.DB.prepare('SELECT id, uid, name, sector, stage, status FROM projects WHERE id = ? AND deleted_at IS NULL').bind(u.project_id).first<any>();
+  const { figures, kpis } = updateFigures(u);
   return {
     id: u.id, uid: u.uid, project_id: u.project_id, author_user_id: u.author_user_id,
     project: proj || null,
-    period: u.period, title: u.title, body: u.body, kpis: jload(u.kpis_json, {}),
+    period: u.period, title: u.title, body: u.body, kpis, figures,
     status: u.status, submitted_at: u.submitted_at,
     created_at: u.created_at, updated_at: u.updated_at,
   };

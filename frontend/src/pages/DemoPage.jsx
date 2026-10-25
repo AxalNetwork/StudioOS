@@ -14,7 +14,7 @@ import { request } from '../lib/api';
 import { usePageMeta } from '../lib/seo';
 
 const TOPICS = [
-  { id: 'product', label: '30-min product demo', icon: Calendar, desc: 'Live walkthrough of the founder workspace and admin console.' },
+  { id: 'product', label: '30-min product demo', icon: Calendar, desc: 'Live walkthrough of the founder workspace and the admin pages.' },
   { id: 'investor', label: 'Investor brief', icon: BarChart3, desc: 'How institutional investors use Axal VC for deal flow + LP reporting.' },
   { id: 'partnership', label: 'Partnership intro', icon: Handshake, desc: 'For service providers, accelerators, and strategic partners.' },
 ];

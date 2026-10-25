@@ -3,6 +3,7 @@
 // weekly series, and one profile by its reference (`pp_…`), never by email.
 // Worker: routes/admin_partner_profiles.ts (/api/admin/partner-profiles),
 // Admin and Super Admin; each list and profile read is logged by reference.
+// D991 (#2802) — part 2: a profile's history, and Reopen for review.
 // D993 (#2804) — part 4: the first-agreement options with their readiness,
 // each row's envelope state (on `rows[].envelope` and the profile's `listed`),
 // and Unbind, the Super Admin's one extra control (a recent step-up and a
@@ -25,13 +26,19 @@ export const partnerProfilesApi = {
    * (draft | pending | verified | rejected | not_recorded), source (invitation |
    * chat | eadwyn | none), category, founder_track, entity_type, agreement,
    * has_account (yes | no), identity, captured_from, captured_to (YYYY-MM-DD),
-   * sort (waiting | newest | name), page, page_size.
+   * reviewed_by (an admin's account id | not_recorded), sort (waiting | newest
+   * | reviewed | name), page, page_size. Each row carries `reviewed_at`,
+   * `reviewed_by` and `changed_after_review_at` (D991).
    */
   list: (params) => request(`${BASE}${query(params)}`),
   /** `{ waiting, verified_30d, envelopes_out, weekly }`, each with `available` and `reason`. */
   counts: () => request(`${BASE}/counts`),
   /** One profile by reference, `ein` masked, with the list's derived fields on `listed`. */
   get: (ref) => request(`${BASE}/${encodeURIComponent(ref)}`),
+  /** D991 — `{ items, total, limit, offset }`, newest first: captures by source, and decisions with who made them. */
+  history: (ref, params) => request(`${BASE}/${encodeURIComponent(ref)}/history${query(params)}`),
+  /** D991 — back in the queue, with an optional `reason`; the verdict stays in the history. */
+  reopen: (ref, reason) => request(`${BASE}/${encodeURIComponent(ref)}/reopen`, { method: 'POST', body: JSON.stringify({ reason: reason || null }) }),
   /** `{ groups: [{ label, options: [{ value, label, ready, readiness, source }] }] }`. */
   agreements: () => request(`${BASE}/agreements`),
   /** Free a profile whose address now belongs to another account. Super Admin; `reason` is 10 to 500 characters. */

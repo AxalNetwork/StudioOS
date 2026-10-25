@@ -92,6 +92,12 @@ db.exec(`
   INSERT INTO projects (id, founder_id, name) VALUES (200, 22, 'Beta');
 `);
 db.exec(tableFromBaseline(readFileSync(new URL('../sql/schema_baseline.sql', import.meta.url), 'utf8'), 'activity_logs'));
+// D1057: an update posted from the pipeline is a `portfolio_updates` row, its recipients `update_recipients` rows
+// (the baseline's table with migration 437's columns, and 437's recipients table).
+db.exec(tableFromBaseline(readFileSync(new URL('../sql/schema_baseline.sql', import.meta.url), 'utf8'), 'portfolio_updates'));
+db.exec(readFileSync(new URL('../sql/migrations/437_share_an_update.sql', import.meta.url), 'utf8')
+  .split(/;\s*\n/).map((x) => x.replace(/^\s*--.*$/gm, '').trim())
+  .filter((x) => /^(ALTER TABLE portfolio_updates|CREATE TABLE IF NOT EXISTS update_recipients)/i.test(x)).map((x) => `${x};`).join('\n'));
 const env: any = { JWT_SECRET, ENVIRONMENT: 'development', DB: makeD1(db) };
 
 async function mintToken(userId: number, role = 'founder'): Promise<string> {
@@ -270,7 +276,16 @@ test('investor update: recipients exclude passed prospects; timelines are logged
   const update: any = await res.json();
   assert.equal(update.recipients_count, Number(active.n));
   assert.equal(update.logged_contacts, Number(linked.n));
-  assert.ok(update.round_id, 'update is attached to the active round');
+  // D1057: one updates store. The post is a `portfolio_updates` row, never a `raise_investor_updates` row.
+  assert.equal(update.source, 'pipeline');
+  const row = db.prepare('SELECT id, status, title, body, period, audience_json, sent_at FROM portfolio_updates WHERE uid = ?').get(update.uid) as any;
+  assert.deepEqual([row.status, row.title, row.body, row.period, row.audience_json, row.sent_at], ['pipeline', 'March update', 'MRR up 40%.', null, null, null],
+    'not submitted, no period, no audience granted, not sent');
+  assert.equal((db.prepare('SELECT COUNT(*) AS n FROM raise_investor_updates').get() as any).n, 0, 'the second store takes no new row');
+  const sent = db.prepare('SELECT audience, user_id, delivered_via, not_delivered_reason FROM update_recipients WHERE update_id = ?').all(row.id) as any[];
+  assert.equal(sent.length, Number(active.n), 'one recipient row per active prospect');
+  assert.ok(sent.every((x) => x.audience === 'investor' && x.user_id === null && x.delivered_via === null
+    && x.not_delivered_reason === 'Recorded on the Raise pipeline; not emailed'), 'recorded, never delivered');
 
   const replies = db.prepare(
     `SELECT body FROM contact_replies WHERE direction = 'outbound' AND body LIKE 'Investor update — March update%'`,
@@ -280,7 +295,20 @@ test('investor update: recipients exclude passed prospects; timelines are logged
   const list = await call(alice, 'GET', '/raise-updates?project_id=100');
   assert.equal(list.status, 200);
   const items: any = await list.json();
-  assert.equal(items.items[0].subject, 'March update');
+  assert.deepEqual([items.items[0].subject, items.items[0].recipients_count, items.items[0].source], ['March update', Number(active.n), 'pipeline']);
+  assert.equal(items.shared_updates.length, 0, 'a pipeline post is not a sent update');
+});
+
+test('D1057: a row posted before the fold is still read, marked legacy, and never written again', async () => {
+  const alice = await mintToken(1);
+  db.prepare(`INSERT INTO raise_investor_updates (uid, project_id, subject, body, recipients_count, created_by, created_at)
+    VALUES ('legacy-1', 100, 'January update', 'Old note', 3, 1, '2026-01-15T10:00:00.000Z')`).run();
+  const list: any = await (await call(alice, 'GET', '/raise-updates?project_id=100')).json();
+  const legacy = list.items.find((x: any) => x.uid === 'legacy-1');
+  assert.deepEqual([legacy.subject, legacy.recipients_count, legacy.source], ['January update', 3, 'pipeline_legacy']);
+  assert.ok(list.items.findIndex((x: any) => x.uid === 'legacy-1') > list.items.findIndex((x: any) => x.source === 'pipeline'), 'newest first across both');
+  // An investor never reads a pipeline post: it is not submitted, and grants no audience.
+  assert.equal((db.prepare("SELECT COUNT(*) AS n FROM portfolio_updates WHERE status = 'submitted'").get() as any).n, 0);
 });
 
 test('scoping: another founder gets 403 on someone else\'s project and prospects', async () => {
