@@ -371,3 +371,54 @@ test('HQ · Platform reads the same block, hours included', async () => {
   assert.equal(r.body.payments_catalog.webhook.available, true);
   assert.equal(r.body.payments_catalog.webhook.hours.length, WEBHOOK_WINDOW_HOURS);
 });
+
+
+// D1129 (#3009): the search and complete Who choices, without a new store.
+test('D1129 search finds product names through price rows and recorded detail; count, page and CSV agree', async () => {
+  const db = freshDb(); seed(db);
+  try {
+    const product = await call(payments, db, '/change-log?q=STUDIO&limit=1');
+    assert.equal(product.status, 200);
+    assert.equal(product.body.total, 2);
+    assert.deepEqual(product.body.entries.map((e: any) => e.action), ['catalog_price_update']);
+    const next = await call(payments, db, '/change-log?q=studio&limit=1&offset=1');
+    assert.deepEqual(next.body.entries.map((e: any) => e.action), ['catalog_product_create']);
+    const detail = await call(payments, db, '/change-log?q=Monthly&who=802');
+    assert.equal(detail.body.total, 1);
+    assert.equal(detail.body.entries[0].price_id, 'price_A1');
+    const csv = await call(payments, db, '/change-log.csv?q=Monthly&reason=Quarterly%20payments%20audit');
+    assert.equal(csv.status, 200);
+    assert.equal(csv.headers.get('X-Export-Rows'), '1');
+    assert.match(csv.text, /price_A1/);
+    assert.doesNotMatch(csv.text, /price_B1/);
+    const recorded = JSON.parse(db.prepare('SELECT filters_json FROM admin_audit_log WHERE action = ? ORDER BY id DESC LIMIT 1').get(CHANGE_LOG_EXPORT_ACTION).filters_json as string);
+    assert.equal(recorded.search_applied, true);
+    assert.equal(recorded.filters.q, undefined, 'the query text is not copied to the audit row');
+    const literal = await call(payments, db, '/change-log?q=' + encodeURIComponent("%' OR 1=1 --"));
+    const wildcard = await call(payments, db, '/change-log?q=%25');
+    assert.equal(wildcard.body.total, 0, 'a percent sign is literal, not a match-all wildcard');
+    assert.equal(literal.status, 200);
+    assert.equal(literal.body.total, 0, 'search punctuation stays a bound literal');
+    assert.equal((await call(payments, db, '/change-log?q=' + 'x'.repeat(201))).status, 400);
+  } finally { db.close(); }
+});
+
+test('D1129 Who lists every admin, including one with no log row, with no email or other role', async () => {
+  const db = freshDb(); seed(db);
+  db.prepare('INSERT INTO users (id, role, name, email) VALUES (?, ?, ?, ?)').run(804, 'admin', 'Quiet Admin', 'quiet@example.test');
+  db.prepare('INSERT INTO users (id, role, name, email) VALUES (?, ?, ?, ?)').run(805, 'founder', 'Founder fixture', 'founder@example.test');
+  try {
+    const out = await call(payments, db, '/change-log/admins');
+    assert.equal(out.status, 200);
+    assert.deepEqual(out.body.admins.map((a: any) => a.id).sort(), [801, 802, 803, 804]);
+    assert.ok(out.body.admins.every((a: any) => Object.keys(a).sort().join() === 'id,name'));
+    assert.doesNotMatch(out.text, /@|Founder fixture/);
+    assert.equal((await call(payments, db, '/change-log/admins', { as: ADMIN })).status, 403);
+    assert.equal((await call(payments, db, '/change-log/admins', { as: 0 })).status, 401);
+    const base = makeD1(db);
+    const d1 = { ...base, prepare(sql: string) { if (sql.includes('SELECT id, name FROM users WHERE role')) throw new Error('private database detail'); return base.prepare(sql); } };
+    const failed = await call(payments, db, '/change-log/admins', { d1 });
+    assert.equal(failed.status, 503);
+    assert.doesNotMatch(failed.text, /private database detail/);
+  } finally { db.close(); }
+});

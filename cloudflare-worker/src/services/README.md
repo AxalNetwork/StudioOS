@@ -419,7 +419,8 @@ UTC Monday window for claim totals, listing ranks and weekly price-kind counts.
 `raiseEvidence.ts` reads active Mercury runway facts and the files current data-room grants can download, for Raise and deck readiness.
 
 `paymentsChangeLog.ts` (D1011) names the fifteen catalogue and Stripe audit
-actions and reads them back as the Payments change log; `stripeWebhookDeliveries.ts`
+actions and reads them back as the Payments change log (D1129: bound literal
+search before count/page/export, and the complete admin filter list); `stripeWebhookDeliveries.ts`
 is the webhook's request-log reader, shared by HQ · Platform and Payments, with
 hourly buckets that are null for an hour the log was silent.
 

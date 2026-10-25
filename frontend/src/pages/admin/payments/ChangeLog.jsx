@@ -4,7 +4,7 @@ import { paymentsApi } from '../../../lib/api/payments';
 import { reportError } from '../../../lib/log';
 import {
   EXPORT_REASON_MAX, LOG_PAGE, LOG_UNREAD, WHAT_WORDS,
-  actionWord, detailText, isFailure, logFilters, logRange, peopleOf, reasonOf, reasonProblem, stampText, whatWord, whoText,
+  actionWord, detailText, isFailure, logFilters, logRange, reasonOf, reasonProblem, stampText, whatWord, whoText,
 } from './payModel';
 import {
   BAD_PILL, CARD, EYE, FIELD, GHOST, H2, MONO, PRIMARY, SUB, PayDialog, Reading, Technical, Unread, usePayPhone,
@@ -22,7 +22,7 @@ import {
  * the file leaves, and refuses an export without one.
  */
 
-const EMPTY = { what: '', who: '', product: '', from: '', to: '' };
+const EMPTY = { q: '', what: '', who: '', product: '', from: '', to: '' };
 
 function useChangeLog(filters, offset, tick) {
   const [state, setState] = useState({ status: 'loading', data: null });
@@ -38,6 +38,21 @@ function useChangeLog(filters, offset, tick) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [sig]);
   return state;
+}
+
+function useAdmins() {
+  const [state, setState] = useState({ status: 'loading', data: null });
+  const [tick, setTick] = useState(0);
+  useEffect(() => {
+    let live = true;
+    setState({ status: 'loading', data: null });
+    paymentsApi.changeLogAdmins().then(
+      (data) => { if (live) setState(Array.isArray(data?.admins) ? { status: 'ready', data: data.admins } : { status: 'error', data: null }); },
+      () => { if (live) setState({ status: 'error', data: null }); },
+    );
+    return () => { live = false; };
+  }, [tick]);
+  return [state, () => setTick((t) => t + 1)];
 }
 
 function ExportDialog({ filters, onClose, onDone }) {
@@ -80,9 +95,18 @@ function ExportDialog({ filters, onClose, onDone }) {
 }
 
 function Filters({ filters, setFilter, kinds, people, products, onClear }) {
+  const [search, setSearch] = useState(filters.q);
+  useEffect(() => setSearch(filters.q), [filters.q]);
   const any = Object.values(filters).some(Boolean);
   return (
     <div className="grid grid-cols-2 gap-2 md:flex md:flex-wrap md:items-end" data-testid="pay-log-filters">
+      <form onSubmit={(e) => { e.preventDefault(); setFilter('q', search.trim()); }} className="col-span-2 flex items-end gap-2" data-testid="pay-log-search-form">
+        <label className="flex min-w-0 flex-col gap-1">
+          <span className={EYE}>Search product or detail</span>
+          <input type="search" value={search} maxLength={200} onChange={(e) => setSearch(e.target.value)} className={FIELD} data-testid="pay-log-search" />
+        </label>
+        <button type="submit" className={GHOST} data-testid="pay-log-search-submit">Search</button>
+      </form>
       <label className="flex flex-col gap-1">
         <span className={EYE}>What</span>
         <select value={filters.what} onChange={(e) => setFilter('what', e.target.value)} className={FIELD} data-testid="pay-log-what">
@@ -94,14 +118,14 @@ function Filters({ filters, setFilter, kinds, people, products, onClear }) {
         <span className={EYE}>Who</span>
         <select value={filters.who} onChange={(e) => setFilter('who', e.target.value)} className={FIELD} data-testid="pay-log-who">
           <option value="">Anyone</option>
-          {people.map((p) => <option key={p.id} value={String(p.id)}>{p.name}</option>)}
+          {people.map((p) => <option key={p.id} value={String(p.id)}>{p.name || `Admin #${p.id} · name not recorded`}</option>)}
         </select>
       </label>
       <label className="col-span-2 flex flex-col gap-1">
         <span className={EYE}>Product</span>
         <select value={filters.product} onChange={(e) => setFilter('product', e.target.value)} className={`${FIELD} md:max-w-[260px]`} data-testid="pay-log-product">
           <option value="">Every product</option>
-          {products.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
+          {products.map((p) => <option key={p.id} value={p.id}>{p.name || `Admin #${p.id} · name not recorded`}</option>)}
         </select>
       </label>
       <label className="flex flex-col gap-1">
@@ -169,11 +193,10 @@ export default function ChangeLog({ reads }) {
   const [tick, setTick] = useState(0);
   const [exporting, setExporting] = useState(false);
   const [exported, setExported] = useState(null);
-  const [seen, setSeen] = useState([]);
+  const [admins, retryAdmins] = useAdmins();
   const log = useChangeLog(filters, offset, tick);
   const data = log.data;
   const entries = data?.entries || [];
-  useEffect(() => { if (log.status === 'ready') setSeen((s) => peopleOf(entries, s)); }, [log.status, data]); // eslint-disable-line react-hooks/exhaustive-deps
   const catalog = reads.catalog;
   const products = useMemo(() => (catalog?.status === 'ready' ? (catalog.data?.products || []).slice().sort((a, b) => String(a.name).localeCompare(String(b.name))) : []), [catalog]);
   const names = useMemo(() => Object.fromEntries(products.map((p) => [p.id, p.name])), [products]);
@@ -191,7 +214,9 @@ export default function ChangeLog({ reads }) {
           <button type="button" className={GHOST} onClick={() => { setExported(null); setExporting(true); }} disabled={log.status !== 'ready' || total === 0} data-testid="pay-log-export">Export CSV</button>
         </div>
       </div>
-      <Filters filters={filters} setFilter={setFilter} kinds={kinds} people={seen} products={products} onClear={() => { setFilters(EMPTY); setOffset(0); }} />
+      <Filters filters={filters} setFilter={setFilter} kinds={kinds} people={admins.data || []} products={products} onClear={() => { setFilters(EMPTY); setOffset(0); }} />
+      {admins.status === 'error' && <Unread text="The admin list could not be read. The log is still shown." onRetry={retryAdmins} testId="pay-log-admins-unread" />}
+      {admins.status === 'loading' && <span className={SUB}>Reading admins…</span>}
       {catalog?.status === 'error' && <span className={SUB} data-testid="pay-log-names-unread">Product names could not be read, so products are named by their ID.</span>}
       {exported && <span role="status" className={SUB} data-testid="pay-log-exported">Exported {Number(exported.rows || 0).toLocaleString('en-US')} rows as {exported.filename}. The export and its reason are recorded.</span>}
       {log.status === 'loading' && !data && <Reading />}

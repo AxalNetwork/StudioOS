@@ -334,7 +334,9 @@ studio agreement on file and Lab host status), Pause and Resume, each with a
 required reason, and the advisor directory switch. No client name and no rating
 comment is on the wire.
 D1011 (#2830): `payments.js` calls `/api/admin/payments`: the change log, its
-CSV (with a reason) and the webhook's deliveries by hour. Super Admin only.
+CSV (with a reason) and the webhook's deliveries by hour. D1129 adds the
+submitted `q` filter on the log/CSV and `changeLogAdmins()` for every admin's
+id/name, independent of the log page. Super Admin only.
 
 D990 (#2801): `partnerProfiles.js` is HQ's Partner profiles on
 `/api/admin/partner-profiles`: the list (search, filters, sort and pages, with

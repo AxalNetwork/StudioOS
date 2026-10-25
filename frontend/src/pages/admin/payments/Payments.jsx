@@ -4,7 +4,7 @@ import { RefreshCw } from 'lucide-react';
 import { api } from '../../../lib/api';
 import { paymentsApi } from '../../../lib/api/payments';
 import { reportError } from '../../../lib/log';
-import { AdminPageHeader, HeaderTab, useMovedNotice } from '../../../ui';
+import { AdminPageHeader, HeaderTab, HeaderMenuItem, useMovedNotice } from '../../../ui';
 import AdminBoardFrame from '../AdminBoardFrame';
 import {
   CATALOG_FAILED_SUB, CATALOG_FAILED_TITLE, CHECKS_UNREAD, FILTERS_EMPTY, MOVED_NOTICES, NOT_CONNECTED, NOT_CONNECTED_SUB,
@@ -30,8 +30,8 @@ import ChangeLog from './ChangeLog';
  * connection draw what four existing reads carry, each truthfully, and each
  * read answers alone. The catalogue checks, "shows on", AI allowance, members
  * per plan, the product lightbox, the dialogs, the step-up and the change log
- * wait for D1008's parts. Until the dialogs land, today's editor opens on
- * request at the foot of Catalogue, so nothing HQ can do today is lost.
+ * are drawn by D1010–D1014. D1013 retired the legacy editor; D1129 adds
+ * shared-header actions, log search/admin options and the full phone product page.
  *
  * D1014 (#2833, part 6): Stripe connection is complete (`StripeConnection.jsx`:
  * deliveries per hour, the part-5 buttons), the Change log tab is drawn
@@ -323,6 +323,7 @@ function Catalogue({ reads, reload }) {
   const [params, setParams] = useSearchParams();
   const [dialog, setDialog] = useState(() => (params.get('new') === 'product' ? { type: 'new' } : null));
   const [saved, setSaved] = useState(null);
+  useEffect(() => { if (params.get('new') === 'product') setDialog({ type: 'new' }); }, [params]);
   const canWrite = useCanWrite();
   const openId = productIdOf(loc.pathname);
   const phone = usePayPhone();
@@ -347,8 +348,10 @@ function Catalogue({ reads, reload }) {
   // its address keeps it, so it is back when the dialog closes.
   const act = (d) => { setSaved(null); setDialog(d); };
   const lightbox = openId && !(canWrite && dialog) && <ProductLightbox id={openId} catalogRead={catalog} onClose={() => navigate(PAY_PATH)} onRetry={reload} onAct={act} canWrite={canWrite} />;
-  const dialogs = <OpenDialog dialog={canWrite ? dialog : null} products={products} audiences={audiences} onClose={closeDialog} onDone={done} />;
+  const dialogs = <OpenDialog dialog={canWrite && data ? dialog : null} products={products} audiences={audiences} onClose={closeDialog} onDone={done} />;
   const savedLine = saved && <span role="status" className="text-[12.5px] text-emerald-700 dark:text-emerald-300" data-testid="pay-saved">{saved}</span>;
+
+  if (phone && openId) return <>{lightbox}{dialogs}{savedLine}</>;
 
   // PAY8a: no account, no tiles, no table, and nothing that looks like a count.
   if (notConnected(reads.config?.status === 'ready' ? reads.config.data : null, data)) {
@@ -468,6 +471,11 @@ function Catalogue({ reads, reload }) {
 }
 
 function PaymentsPage() {
+  const navigate = useNavigate();
+  const canWrite = useCanWrite();
+  const phone = usePayPhone();
+  const [sync, setSync] = useState(false);
+  const [saved, setSaved] = useState(null);
   const loc = useLocation();
   const tab = tabOf(loc.pathname) || 'catalogue';
   const { reads, asOf, reload } = usePayReads(tab);
@@ -487,12 +495,20 @@ function PaymentsPage() {
   );
   const actions = (
     <>
+      {canWrite && <button type="button" className={PRIMARY} onClick={() => navigate(`${PAY_PATH}?new=product`)} data-testid="pay-header-new">New product</button>}
       <span className="font-mono text-[11.5px] text-axal-muted dark:text-gray-400" data-testid="pay-asof">
         {asOf ? `Updated ${new Date(asOf).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit', hourCycle: 'h23' })}` : 'Reading…'}
       </span>
       <button type="button" aria-label="Refresh" onClick={reload} className="grid h-9 w-9 place-items-center rounded-[9px] border border-axal-hairline text-axal-muted dark:border-gray-700 dark:text-gray-400"><RefreshCw size={16} aria-hidden="true" /></button>
     </>
   );
+  if (phone && productIdOf(loc.pathname)) return <Catalogue reads={reads} reload={reload} />;
+  const more = <>
+    {canWrite && <HeaderMenuItem onSelect={() => { setSaved(null); setSync(true); }} data-testid="pay-header-sync">Sync from Stripe</HeaderMenuItem>}
+    <HeaderMenuItem to="/admin/platform/allowances" data-testid="pay-header-packs">Token packs</HeaderMenuItem>
+    <HeaderMenuItem to="/admin/platform/promo-codes" data-testid="pay-header-promos">Promo codes</HeaderMenuItem>
+    <HeaderMenuItem to="/admin/revenue" data-testid="pay-header-revenue">Revenue</HeaderMenuItem>
+  </>;
   return (
     <div className="flex flex-col gap-5 pb-24 lg:pb-10" data-testid="payments">
       <AdminPageHeader
@@ -500,11 +516,14 @@ function PaymentsPage() {
         title={PAY_TITLE}
         pills={[{ label: 'HQ only', tone: 'hq' }]}
         actions={actions}
+        more={more}
         line={PAGE_LINE}
         notice={{ text: notice.text, onDismiss: notice.dismiss }}
         tabs={tabs}
         data-testid="pay-header"
       />
+      {saved && <span role="status" className={SUB} data-testid="pay-header-saved">{saved}</span>}
+      {sync && canWrite && <SyncDialog onClose={() => setSync(false)} onDone={(out) => { setSync(false); setSaved(out?.text || null); reload(); }} />}
       {tab === 'catalogue' && <Catalogue reads={reads} reload={reload} />}
       {tab === 'stripe' && <StripeConnection reads={reads} reload={reload} />}
       {tab === 'log' && <ChangeLog reads={reads} />}
