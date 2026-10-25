@@ -62,12 +62,6 @@ export default function FounderGrowCapitalMatch({ user }) {
 
   const query = project?.id ? `?project_id=${project.id}` : '';
   const stages = useMemo(() => [...new Set(prospects.map(normalizedStage).filter(Boolean))], [prospects]);
-  // A WARM PATH IS A `contact_id`, and that is not a heuristic — migration
-  // 128_contact_promotion.sql adds the column to `raise_prospects` and indexes it
-  // as `idx_raise_prospects_contact`, and `contacts` is the network book. A
-  // prospect carrying one was reached through somebody the founder already knows.
-  // Nothing is inferred from a shared domain or a similar name.
-  const hasWarmPath = (row) => row?.contact_id != null && String(row.contact_id).trim() !== '';
   const warmCount = useMemo(() => prospects.filter(hasWarmPath).length, [prospects]);
   const visible = useMemo(() => {
     if (view === 'all') return prospects;
@@ -95,14 +89,24 @@ function CapitalContent({ project, prospects, visible, stages, view, setView, qu
         stored on this project's prospects — `passed` excluded, because the
         canvas gives it its own chip and one record should not be two. */}
     <div className="fg-capital-tabs"><div className="fg-capital-actions"><Link to={`/raise/capital/pipeline${query}`} data-testid="link-open-grow-capital-workspace"><CircleDot size={13} /> Open workspace</Link></div></div>
-    <div className="fg-capital-stats"><Stat label="Prospects tracked" value={error ? 'Unavailable' : prospects.length} note={error ? 'Capital source unavailable' : 'Project-scoped records'} muted={Boolean(error)} /><Stat label="With a warm path" value={error ? 'Unavailable' : warmCount} note={error ? 'Capital source unavailable' : warmCount ? 'Promoted from a network-book contact' : 'No prospect names a contact yet'} muted={Boolean(error) || !warmCount} /><Stat label="Contacted" value={error ? 'Unavailable' : contactedCount} note={error ? 'Capital source unavailable' : 'Derived from recorded stage'} muted={Boolean(error)} /><Stat label="Passed" value={error ? 'Unavailable' : passedCount} note={error ? 'Capital source unavailable' : 'Recorded passed stage'} muted={Boolean(error)} /></div>
+    <div className="fg-capital-stats"><Stat label="Prospects tracked" value={error ? 'Unavailable' : prospects.length} note={error ? 'Capital source unavailable' : 'Project-scoped records'} muted={Boolean(error)} /><Stat label="With a warm path" value={error ? 'Unavailable' : warmCount} note={error ? 'Capital source unavailable' : warmCount ? 'Who can introduce you, as recorded' : 'No prospect names a warm path yet'} muted={Boolean(error) || !warmCount} /><Stat label="Contacted" value={error ? 'Unavailable' : contactedCount} note={error ? 'Capital source unavailable' : 'Derived from recorded stage'} muted={Boolean(error)} /><Stat label="Passed" value={error ? 'Unavailable' : passedCount} note={error ? 'Capital source unavailable' : 'Recorded passed stage'} muted={Boolean(error)} /></div>
     <section className="a5-card fg-capital-table"><Head icon={CircleDot} title="Investor prospects" meta={view === 'all' ? 'Project-scoped records' : `${visible.length} matching record${visible.length === 1 ? '' : 's'}`} />{error ? <EmptyTable error /> : <ProspectTable rows={visible} />}</section>
     <section className="a5-focus fg-capital-read"><div className="a5-head"><div><Sparkles size={15} /><h2>Read the match honestly</h2></div><span>Source-derived</span></div><p>{error ? 'The selected-project capital source is unavailable, so FG5 cannot determine which prospects are tracked. Fit, warm paths, outreach state, and commitment outcomes remain unavailable.' : prospects.length ? `FG5 shows ${prospects.length} stored project-scoped prospect${prospects.length === 1 ? '' : 's'} and their recorded stages. It does not turn a prospect row into a fit score, warm path, ranking rationale, or commitment.` : 'No project-scoped investor prospects are stored for this startup, so fit, warm paths, outreach state, and commitment outcomes remain unavailable.'}</p><Link className="a5-link" to={`/raise/capital/pipeline${query}`}>Open capital pipeline <ChevronRight size={14} /></Link></section>
   </div>;
 }
+/**
+ * D1189: A WARM PATH IS THE PROSPECT'S `warm_path`, who can introduce you, as
+ * the founder recorded it (migration 442; Add investor's "Warm path", and the
+ * pipeline's Path filter). `contact_id` only says the investor was promoted from
+ * the network book (migration 128), which is not an introduction. The stat, the
+ * Warm view and each row's Path cell all read this, so the count is what the
+ * rows show. Nothing is inferred.
+ */
+export const hasWarmPath = (row) => typeof row?.warm_path === 'string' && row.warm_path.trim() !== '';
+
 function ProspectTable({ rows }) {
   if (!rows.length) return <EmptyTable />;
-  return <div className="fg-capital-table-wrap"><table><thead><tr><th>Fund / prospect</th><th>Fit</th><th>Path</th><th>Stage</th><th>Why this rank</th></tr></thead><tbody>{rows.map((row, index) => <tr key={row.id || row.uid || index}><td><strong>{text(row.firm || row.name || row.title, 'Prospect name not recorded')}</strong><small>{row.email || (row.updated_at ? `Updated ${dateLabel(row.updated_at)}` : 'Contact detail not recorded')}</small></td><td><span className="fg-capital-pill">Not scored</span></td><td><span className="fg-capital-pill">Not recorded</span></td><td><span className="fg-capital-pill is-stage">{labelStage(row.stage || row.status)}</span></td><td className="fg-capital-reason">No ranking rationale recorded.</td></tr>)}</tbody></table></div>;
+  return <div className="fg-capital-table-wrap"><table><thead><tr><th>Fund / prospect</th><th>Fit</th><th>Path</th><th>Stage</th><th>Why this rank</th></tr></thead><tbody>{rows.map((row, index) => <tr key={row.id || row.uid || index}><td><strong>{text(row.firm || row.name || row.title, 'Prospect name not recorded')}</strong><small>{row.email || (row.updated_at ? `Updated ${dateLabel(row.updated_at)}` : 'Contact detail not recorded')}</small></td><td><span className="fg-capital-pill">Not scored</span></td><td>{hasWarmPath(row) ? <span className="fg-capital-pill" data-testid="fg-capital-path">{row.warm_path.trim()}</span> : <span className="fg-capital-pill" data-testid="fg-capital-path">Not recorded</span>}</td><td><span className="fg-capital-pill is-stage">{labelStage(row.stage || row.status)}</span></td><td className="fg-capital-reason">No ranking rationale recorded.</td></tr>)}</tbody></table></div>;
 }
 function EmptyTable({ error }) { return <div className="a5-empty"><CircleDot size={18} /><div><b>{error ? 'Capital prospect source unavailable.' : 'No project-scoped prospects are recorded.'}</b><p>FG5 does not infer fit, warm paths, ranking, or commitments.</p></div></div>; }
 function Head({ icon: Icon, title, meta }) { return <div className="a5-head"><div><Icon size={15} /><h2>{title}</h2></div><span>{meta}</span></div>; }

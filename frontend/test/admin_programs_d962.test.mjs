@@ -34,8 +34,8 @@ import ReferAndEarn from '../src/pages/admin/programs/ReferAndEarn.jsx';
 import ProgramPage from '../src/pages/admin/programs/ProgramPage.jsx';
 import { HQ_READS_MONEY, NOT_READ_YET, PAGES, routeFor } from '../src/pages/admin/programs/programsModel.js';
 import {
-  ACTIVE_PAIR, ASSIGNED_DONE, CREDITS_FOOT, ENDED_DONE, FUNNEL_REASON, LEARNER_FOOT, MENTOR_ACTIVITY_GAP, REFUSALS,
-  REVIEW_MOVES, REVIEW_SAVED, REVIEW_TOLD, VISIBLE_DASH, activityText, completionRows, cohortPlace, endedInWindow,
+  ACTIVE_PAIR, ASSIGNED_DONE, CREDITS_FOOT, ENDED_DONE, LEARNER_FOOT, MENTOR_ACTIVITY_GAP, REFUSALS,
+  REVIEW_MOVES, REVIEW_SAVED, REVIEW_TOLD, VISIBLE_DASH, CSV_DONE, CSV_PROGRAMS, NOT_RECORDED, FUNNEL_WINDOW, referFunnelChart, referrerLine, queueParams, activityText, completionRows, cohortPlace, endedInWindow,
   episodesOf, finishedTotal, hasFinished, hiddenFrom, isDone, listingActions, listingBody, mentorsPerCohort, peopleRows,
   playbookFrom, refusalSentence, reviewPatch, sectionEdit, statusChoices, versionLine,
 } from '../src/pages/admin/programs/programPagesModel.js';
@@ -275,6 +275,7 @@ function worker(o = {}) {
     assignable = { items: [{ id: 11, name: 'Mentor 11', email: 'm11@example.com', has_advisor_profile: true }, { id: 21, name: 'Mentor 21', email: 'm21@example.com', has_advisor_profile: false }] },
     activity = ACTIVITY, detail = PLAYBOOK, sessions = { cycles: [{ cycle_id: 1, year: 2026, month: 10, mentors: 2, sessions: 7 }], rule: 'Bookings not cancelled.' },
     referrals = (q) => paged([referral('s1', 'submitted', 2), referral('u1', 'under_review', 80)], 2), one = null, weekly = { from: '2026-08-03', items: [{ week: '2026-10-19', startup: 2, customer: 1, strategic: 0 }] },
+    funnel = { stages: [['submitted', 'Submitted', 48], ['under_review', 'Under review', 38], ['qualified', 'Qualified', 24], ['in_conversation', 'In conversation', 15], ['converted', 'Converted', 9], ['reward_issued', 'Reward issued', 6]].map(([key, label, count]) => ({ key, label, count })) },
     strategic = paged([{ user_id: 41, name: 'Ivy Investor', role: 'investor', note: 'Two family offices in Porto.', status: 'requested', requested_at: d1(NOW - 4 * DAY) }]),
     listings = (q) => paged([listing('p1', 'in_review', { review_note: 'Seeded by HQ' }), listing('p2', 'live')], 2),
     claims = { from: '2026-08-03', by_listing: [{ uid: 'p2', offer: 'Offer p2', partner_name: 'Partner p2', claims: 4, redeemed: 3 }], by_week: [{ week: '2026-10-19', kind_at_claim: 'credits', claims: 4, redeemed: 3 }], totals: {} },
@@ -304,6 +305,7 @@ function worker(o = {}) {
       if (/^\/api\/perks\/admin\/[^/]+\/review$/.test(path)) return writes.perk ? writes.perk(options) : response({ ok: true, status: 'live' });
       if (/^\/api\/admin\/programs\/[^/]+\/playbook\/sections\/[^/]+$/.test(path)) return writes.section ? writes.section(options) : response(PLAYBOOK);
       if (/^\/api\/admin\/programs\/[^/]+\/playbook\/publish$/.test(path)) return writes.publish ? writes.publish(options) : response(PLAYBOOK);
+      if (/^\/api\/admin\/programs\/[^/]+\/export$/.test(path)) return writes.export ? writes.export(options, path) : response({ download_url: 'data:text/csv;base64,eA==', expires_in_seconds: 86400, format: 'csv', rows: 3 });
       return never();
     }
     if (path === '/api/auth/me') return user ? response(user) : never();
@@ -317,6 +319,8 @@ function worker(o = {}) {
     if (/^\/api\/admin\/programs\/[^/]+\/activity$/.test(path)) return call(activity, q, path);
     if (/^\/api\/admin\/programs\/[^/]+$/.test(path)) return call(detail, path);
     if (path === '/api/refer-earn/admin/submissions/weekly') return call(weekly);
+    // D1124 (#3004): the funnel, the furthest stage each referral reached.
+    if (path === '/api/refer-earn/admin/submissions/funnel') return call(funnel);
     if (path === '/api/refer-earn/admin/submissions') return call(referrals, q);
     if (/^\/api\/refer-earn\/admin\/submissions\/[^/]+$/.test(path)) return call(one || { ...referral('u1', 'under_review', 80), history: [{ label: 'Submitted', status: 'submitted', note: null, created_at: d1(NOW - 80 * H) }, { label: 'Under review', status: 'under_review', note: null, created_at: d1(NOW - 60 * H) }] });
     if (path === '/api/refer-earn/admin/strategic-access') return call(strategic, q);
@@ -520,7 +524,7 @@ test('Mentor · How it runs: part 1’s published playbook for an Admin, with th
   } finally { await sup.close(); }
 });
 
-test('Refer & Earn · Overview: exact totals with their window, the funnel’s current tags, the weekly chart, and Grant through a dialog', async () => {
+test('Refer & Earn · Overview: exact totals with their window, the funnel’s bars (D1124) and current tags, the weekly chart, and Grant through a dialog', async () => {
   const totals = { 'submitted,under_review,more_info_needed': 5, '': 48, 'converted,reward_eligible,reward_issued': 9, submitted: 2, under_review: 2, more_info_needed: 1, rejected: 5, closed: 2 };
   let decide = () => refusal(409, 'already_decided', 'Strategic referral access is already granted.');
   const view = await mounted('/admin/programs/refer-and-earn', ReferAndEarn, worker({
@@ -534,7 +538,9 @@ test('Refer & Earn · Overview: exact totals with their window, the funnel’s c
     assert.equal(view.textOf('programs-tile-waiting-value'), '5');
     assert.ok(view.has('programs-tile-waiting-overdue'), 'Overdue from R1’s referrals lane');
     assert.match(view.textOf('programs-refer-bands'), /of the oldest 2 of 5/, 'the bands say what they cover');
-    assert.match(view.textOf('programs-refer-funnel-bars'), new RegExp(FUNNEL_REASON.slice(0, 40)));
+    // D1124 (#3004): the funnel draws its bars, with the stages reached.
+    assert.match(view.textOf('programs-refer-funnel'), /Submitted48Under review38Qualified24In conversation15Converted9Reward issued6/);
+    assert.match(view.textOf('programs-refer-funnel-window'), /^All time\./);
     assert.equal(view.textOf('programs-refer-funnel-rejected'), 'Rejected 5');
     assert.match(view.textOf('programs-refer-weekly-window'), /The last 12 weeks/);
     assert.ok(!/No one can be granted access yet/.test(view.textOf('programs-refer-strategic')), 'that line goes once Grant ships');
@@ -657,4 +663,97 @@ test('the source: every write is a dialog, no corner toast, part 1’s client in
     const fn = src.lastIndexOf('function ', at);
     assert.match(src.slice(fn, src.indexOf('\n}\n', at)), /<Lightbox\b/, `${call} is not made from a dialog`);
   }
+});
+
+/* ------------------------------------------------------------------ *
+ * D1124 (#3004): the D953 gaps on these pages
+ * ------------------------------------------------------------------ */
+
+test('D1124 · the funnel: its alt names every stage reached; a missing count or a failed read is unreadable, never a zero', () => {
+  const stages = [['submitted', 'Submitted', 4], ['qualified', 'Qualified', 0]].map(([key, label, count]) => ({ key, label, count }));
+  const ok = referFunnelChart(ready({ stages }));
+  assert.equal(ok.state, 'ready');
+  assert.equal(ok.alt, 'Referral funnel: 4 submitted, 0 qualified.');
+  assert.deepEqual(ok.chart.rows.map((r) => r.value), [4, 0], 'a real zero stays a zero');
+  assert.equal(ok.window, FUNNEL_WINDOW);
+  assert.equal(referFunnelChart(ready({ stages: [{ key: 'submitted', label: 'Submitted' }] })).state, 'unreadable', 'a missing count is not a zero');
+  assert.equal(referFunnelChart(ready({ stages: [] })).state, 'unreadable');
+  assert.equal(referFunnelChart(failed()).state, 'unreadable');
+});
+
+test('D1124 · the Queue: role and search ride the read, trimmed and capped; the referrer line names their platform role', () => {
+  const p = queueParams({ role: 'investor', search: `  ${'x'.repeat(120)} ` });
+  assert.equal(p.role, 'investor');
+  assert.equal(p.q, 'x'.repeat(100));
+  assert.ok(!('q' in queueParams({ search: '   ' })), 'a blank search is not sent');
+  assert.ok(!('role' in queueParams({})));
+  assert.equal(referrerLine({ referrer_name: 'Ana', referrer_role: 'partner' }), 'Ana · Operating Partner');
+  assert.equal(referrerLine({ referrer_role: null }), `${NOT_RECORDED} · Role not recorded`);
+});
+
+test('D1124 · Refer & Earn · Queue: the search and the role filter go to the Worker; the role sits in the column and the dialog, the relationship apart', async () => {
+  const view = await mounted('/admin/programs/refer-and-earn/queue', ReferAndEarn, worker({
+    referrals: (q) => paged([referral('u1', 'under_review', 80, { referrer_role: 'investor', your_role: 'Former colleague' })], 1),
+    one: { ...referral('u1', 'under_review', 80, { referrer_role: 'investor', your_role: 'Former colleague' }), history: [] },
+  }));
+  try {
+    assert.equal(view.textOf('referral-review-row-u1-meta'), 'Referrer u1 · Investor');
+    const lists = () => view.requests.filter((r) => r.url.startsWith('/api/refer-earn/admin/submissions?') && r.url.includes('limit=25'));
+    await view.change('referral-review-role', { value: 'investor' });
+    assert.equal(new URLSearchParams(lists().at(-1).url.split('?')[1]).get('role'), 'investor');
+    await view.change('referral-review-search', { value: 'bluefern' });
+    const before = lists().length;
+    assert.ok(!lists().some((r) => r.url.includes('q=')), 'typing alone sends nothing');
+    await act(async () => { view.props('referral-review-search-form').onSubmit({ preventDefault() {} }); });
+    await view.flush();
+    assert.ok(lists().length > before);
+    const q = new URLSearchParams(lists().at(-1).url.split('?')[1]);
+    assert.deepEqual([q.get('q'), q.get('role'), q.get('offset')], ['bluefern', 'investor', '0']);
+    await view.click('referral-review-open-u1');
+    assert.match(view.text(), /referred by Referrer u1 · Investor/);
+    assert.equal(view.textOf('referral-dialog-relationship'), 'The referrer’s relationship: Former colleague');
+  } finally { await view.close(); }
+});
+
+test('D1124 · Download (CSV): the ⋯ menu on the four pages; one POST with the weeks; a refusal is its sentence and no link', async () => {
+  let reply = () => refusal(503, 'export_not_logged', 'x');
+  const view = await mounted('/admin/programs/refer-and-earn', ReferAndEarn, worker({ writes: { export: () => reply() } }));
+  try {
+    assert.deepEqual([...CSV_PROGRAMS], ['mentor-cohorts', 'refer-and-earn', 'perks', 'learning']);
+    assert.ok(!view.has('programs-more-menu'));
+    await view.click('programs-more');
+    await view.click('programs-more-csv');
+    assert.ok(view.has('programs-csv-dialog'));
+    assert.equal(writesTo(view, /\/export$/, 'POST').length, 0, 'opening the dialog sends nothing');
+    await view.click('programs-csv-go');
+    const sent = writesTo(view, /\/api\/admin\/programs\/refer-and-earn\/export$/, 'POST');
+    assert.equal(sent.length, 1);
+    assert.deepEqual(JSON.parse(sent[0].body), { weeks: 12 });
+    assert.equal(view.textOf('programs-csv-go-refusal'), REFUSALS.export_not_logged);
+    assert.ok(!view.has('programs-csv-link'), 'no file without its audit row');
+    reply = () => response({ download_url: 'data:text/csv;base64,eA==', expires_in_seconds: 86400, format: 'csv', rows: 3 });
+    await view.click('programs-csv-go');
+    assert.equal(view.textOf('programs-csv-go-done'), CSV_DONE);
+    assert.equal(view.props('programs-csv-link').href, 'data:text/csv;base64,eA==');
+  } finally { await view.close(); }
+});
+
+test('D1124 · the Lab’s tabs (#2374): Mentor’s office-hours hosts card opens Spin-Out Lab › Hosts', async () => {
+  const view = await mounted('/admin/programs/mentor-cohorts', MentorCohortAccess, worker());
+  try {
+    assert.equal(view.props('programs-mentor-hosts-door').href, '/admin/programs/spinout-lab/hosts');
+    assert.equal(view.textOf('programs-mentor-hosts-door'), 'Spin-Out Lab › Hosts');
+  } finally { await view.close(); }
+});
+
+test('D1124 · the header\'s grant badge reads D956\'s field on /:key; a failed read leaves the held mode, never a state', async () => {
+  const view = await mounted('/admin/programs/perks', ProgramPage, worker({ detail: { ...PLAYBOOK, grant: { state: 'paused' } } }));
+  try { assert.equal(view.textOf('programs-header-grant'), '‖Paused by HQ'); } finally { await view.close(); }
+  const down = await mounted('/admin/programs/perks', ProgramPage, worker({ detail: () => response({ error: 'down' }, 503) }));
+  try { assert.equal(down.textOf('programs-header-grant'), '⌂HQ-held'); } finally { await down.close(); }
+  const unread = await mounted('/admin/programs/perks', ProgramPage, worker({ detail: { ...PLAYBOOK, grant: { available: false, unreadable: true, reason: 'Program grants could not be read.' } } }));
+  try {
+    assert.equal(unread.textOf('programs-header-grant'), '!Grant unreadable');
+    assert.equal(unread.textOf('programs-header-grant-reason'), 'Program grants could not be read.');
+  } finally { await unread.close(); }
 });

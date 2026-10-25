@@ -112,7 +112,9 @@ function seed(db: DatabaseSync) {
     -- HQ: a support answer by a named HQ admin, and a payout paid.
     INSERT INTO hq_escalations (id, uid, branch_code, kind, subject, raised_by_name, status, created_at, answer, answered_by_user_id, answered_at, answered_by_name) VALUES
       (1, 'q1', 'lisbon', 'question', 'Fees', 'Rita Branch', 'answered', '${sqlAt(30)}', 'They are due in May.', ${SUPER}, '${isoAt(1)}', 'Sue Super'),
-      (2, 'q2', 'lisbon', 'question', 'Open one', 'Rita Branch', 'open', '${sqlAt(12)}', NULL, NULL, NULL, NULL);
+      (2, 'q2', 'lisbon', 'question', 'Open one', 'Rita Branch', 'open', '${sqlAt(12)}', NULL, NULL, NULL, NULL),
+      -- A program request is the grants lane's, never Support's (D1132).
+      (3, 'q3', 'lisbon', 'program_grant', 'Learning', 'Rita Branch', 'declined', '${sqlAt(40)}', 'Not this year.', ${SUPER}, '${isoAt(2)}', 'Sue Super');
     INSERT INTO payouts (id, user_id, amount_cents, status, payout_method, processed_by, created_at, completed_at) VALUES
       (1, ${MEMBER}, 5000, 'completed', 'bank', ${SUPER}, '${sqlAt(100)}', '${sqlAt(3)}');
   `);
@@ -189,9 +191,11 @@ test('GET /decided: newest first, with outcome, who decided, the wait and whethe
   assert.deepEqual(at('perk_listings', 1).map((r: any) => r.wait_hours), [null], 'a perk\'s wait is not recorded');
   assert.deepEqual(at('product_testers', 1).map((r: any) => [r.outcome, r.note, r.note_shown]), [['declined', 'No availability given.', true]]);
   assert.deepEqual(at('support', 1).map((r: any) => [r.outcome_word, r.decided_by.name, r.note_shown]), [['Answered', 'Sue Super', true]]);
+  assert.equal(at('support', 3).length, 0, 'a program request was listed under Support');
+  assert.deepEqual(at('grants', 3).map((r: any) => [r.outcome, r.note, r.wait_hours]), [['declined', 'Not this year.', 38]]);
   assert.equal(at('lp', 3).length + at('lp', 4).length + at('lp', 5).length, 0, 'pending, withdrawn or in-review LP rows were listed');
 
-  assert.equal(body.total, 14);
+  assert.equal(body.total, 15);
   assert.deepEqual(body.unreadable, []);
   const jobs = body.lanes.find((l: any) => l.key === 'jobs');
   assert.deepEqual([jobs.recorded, jobs.since], [false, null]);
@@ -294,7 +298,7 @@ test('GET /decided/weekly: eight weeks to this one, arrived and decided per lane
   assert.ok(body.totals.decided_leaves_out.includes('Jobs'));
   assert.equal(body.totals.decided[7], body.lanes.filter((l: any) => l.decided).reduce((s: number, l: any) => s + l.decided[7], 0));
   // The tile: every decision this week, and the median wait of those with both ends.
-  assert.equal(body.tile.decided_this_week, 13);
+  assert.equal(body.tile.decided_this_week, 14);
   assert.equal(typeof body.tile.median_wait_hours, 'number');
   assert.ok(body.tile.leaves_out.includes('Wellbeing experts'));
 });

@@ -4,6 +4,8 @@
  * /api/admin/approvals.
  *
  *   GET  /?page=                               the inbox: 25 a page, an exact total, `unreadable`, the tiles
+ *        &q=&lane=&group=&age=&assigned=&sort= D1132: search, filters and sort, each lane's age-band split
+ *   GET  /items/:lane/:id                      D1132: one waiting item, its lane and its history
  *   GET  /history?lane=&item_id=               an item's assignment events
  *   POST /assignments                          { assignee_user_id, items: [{ lane, item_id }] }
  *   GET  /decided?lane=&outcome=&decided_by=&from=&to=&page=
@@ -27,11 +29,12 @@ import { refuse } from '../util/refusal';
 import { sourcesFor } from '../services/approvalSources';
 import { inboxSources } from '../services/hqApprovalSources';
 import {
-  INBOX_LANE_CAP, assignFromBody, assignmentHistory, hqInbox, readHistoryQuery,
+  INBOX_LANE_CAP, assignFromBody, assignmentHistory, hqInbox, inboxItem, readHistoryQuery,
 } from '../services/approvalAssignments';
 import {
   DECIDED_MAX_PAGE, OUTCOMES, decidedLog, decidedWeekly, decisionLanesFor, type Filters, type Outcome,
 } from '../services/approvalDecisions';
+import { parseInboxQuery } from '../services/approvalInbox';
 
 const r = new Hono<{ Bindings: Env }>();
 
@@ -49,7 +52,33 @@ r.get('/', async (c) => {
     if (!Number.isSafeInteger(page) || page < 1) {
       return refuse(c, 400, { code: 'bad_page', message: 'page is a whole number of at least 1.', audience: 'member' });
     }
-    return c.json(await hqInbox(c.env, { page, callerId: Number(admin.id), sources }));
+    const query = parseInboxQuery((k) => c.req.query(k), sources);
+    if (typeof query === 'string') {
+      return refuse(c, 400, { code: 'bad_filter', message: `The ${query} filter is not one this inbox reads.`, audience: 'member' });
+    }
+    const inbox = await hqInbox(c.env, { page, callerId: Number(admin.id), sources, query });
+    if ('refused' in inbox && inbox.refused) {
+      return refuse(c, inbox.refused.status, { code: inbox.refused.code, message: inbox.refused.message, audience: 'member' });
+    }
+    return c.json(inbox);
+  } catch (e) { return mapError(c, e); }
+});
+
+// D1132: one item, for `/admin/approvals/[id]`. A lane the reader cannot see,
+// and an item no longer waiting, are both 404: neither says what HQ holds.
+r.get('/items/:lane/:id', async (c) => {
+  try {
+    const { sources } = await reader(c);
+    const q = readHistoryQuery(c.req.param('lane'), c.req.param('id'), sources);
+    if (!q.ok) return refuse(c, 404, { code: 'item_not_found', message: 'That item is not on this inbox.', audience: 'member' });
+    const found = await inboxItem(c.env, { lane: q.lane, itemId: q.itemId, sources });
+    if (found === 'unreadable') {
+      return refuse(c, 503, { code: 'lane_unreadable', message: 'This lane could not be read, so the item is not shown. Try again in a moment.', audience: 'member' });
+    }
+    if (!found) {
+      return refuse(c, 404, { code: 'item_not_waiting', message: 'This item is not waiting any more: it was decided, withdrawn or moved.', audience: 'member' });
+    }
+    return c.json(found);
   } catch (e) { return mapError(c, e); }
 });
 

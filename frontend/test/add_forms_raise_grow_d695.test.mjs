@@ -542,7 +542,7 @@ const RAISE_COPY = {
   },
   'capital-relationships': {
     title: 'Add investor', cta: 'Add investor', button: 'Add investor',
-    sub: 'An investor in the pipeline, with how you reach them.', foot: 'Fit is read from their sector focus and fund size.',
+    sub: 'An investor in the pipeline, with how you reach them.', foot: 'Fit is read from their sector focus only.',
     labels: ['Investor', 'Stage', 'Warm path', 'Next step · due', 'Notes'],
     chips: {
       stage: [['Identified', 'Contacted', 'Meeting', 'Diligence', 'Committed', 'Passed'], 'to_contact'],
@@ -589,7 +589,7 @@ test('1 (Raise): each Raise form draws the canvas copy, with D691.md decision 11
   await mutationCheck(source, path, assertRaiseCopy, [
     ["foot: 'Scores now, from what is recorded. Earlier scores are kept.',", "foot: 'Takes about a minute. Earlier scores are kept.',"],
     ["foot: 'Access is per investor, per file.',", "foot: 'Access is per investor, per folder.',"],
-    ["foot: 'Fit is read from their sector focus and fund size.',", "foot: 'Fit is read from their thesis and cheque size.',"],
+    ["foot: 'Fit is read from their sector focus only.',", "foot: 'Fit is read from their thesis and cheque size.',"],
     ["{ kind: 'CH', name: 'expires_days', k: 'Expires', opts: EXPIRES, def: 2 },", "{ kind: 'CH', name: 'expires_days', k: 'Expires', opts: EXPIRES, def: 0 },"],
     ["{ kind: 'CH', name: 'group', k: 'Group', opts: GROUP, def: 1, required: true },", "{ kind: 'CH', name: 'group', k: 'Group', opts: GROUP, def: 0, required: true },"],
     ["{ kind: 'CH', name: 'runway', k: 'Runway it buys', opts: RUNWAY, def: 1 },", "{ kind: 'CH', name: 'runway', k: 'Runway it buys', opts: RUNWAY, def: 0 },"],

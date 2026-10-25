@@ -43,6 +43,8 @@ function db() {
   // D1041: the KYB and host stores are migrations 220's and 313's, above the baseline's cutoff.
   d.exec(readFileSync(new URL('../sql/migrations/220_company_kyb.sql', import.meta.url), 'utf8'));
   d.exec(readFileSync(new URL('../sql/migrations/313_lab_host_applications.sql', import.meta.url), 'utf8'));
+  // D1132 (#3012): the Product testers lane reads part 4's store, migration 576.
+  d.exec(readFileSync(new URL('../sql/migrations/576_product_testers.sql', import.meta.url), 'utf8'));
   // NOT IN THE BASELINE: `spinout_moderation.ts` creates it lazily on first
   // use. Trimmed from that route's own DDL.
   d.exec(`CREATE TABLE spinout_moderation_cases (id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -84,6 +86,9 @@ function seed(d: DatabaseSync) {
       (11, 'u11', 'project', 1, 'Acme', 'open', 4, '${at(5)}'),
       (12, 'u12', 'project', 2, 'Beta', 'in_review', 4, '${at(4)}'),
       (13, 'u13', 'project', 3, 'Gamma', 'completed', 4, '${at(600)}');
+    -- D1132: one tester application waiting, one already decided.
+    INSERT INTO product_testers (id, user_id, status, applied_at) VALUES (14, 1, 'applied', '${at(3)}');
+    INSERT INTO product_testers (id, user_id, status, applied_at, decided_at, decided_by) VALUES (15, 2, 'active', '${at(700)}', '${at(600)}', 4);
   `);
 }
 
@@ -102,8 +107,8 @@ test('each new lane holds only what waits on an admin', async () => {
   const counts = Object.fromEntries((await laneCounts(env)).map((c) => [c.key, c.count]));
   assert.deepEqual(
     { kyc: counts.kyc, partner_profiles: counts.partner_profiles, exploring: counts.exploring, jobs: counts.jobs,
-      events: counts.events, best_fit: counts.best_fit, due_diligence: counts.due_diligence },
-    { kyc: 1, partner_profiles: 1, exploring: 1, jobs: 1, events: 1, best_fit: 1, due_diligence: 2 },
+      events: counts.events, best_fit: counts.best_fit, due_diligence: counts.due_diligence, product_testers: counts.product_testers },
+    { kyc: 1, partner_profiles: 1, exploring: 1, jobs: 1, events: 1, best_fit: 1, due_diligence: 2, product_testers: 1 },
   );
 
   const board = await approvalBoard(env, 100, NOW);
@@ -137,8 +142,8 @@ test('the four canvas lanes with no open state are named, not laned', () => {
     assert.ok(!laned.has(n.label), `${n.label} is both laned and not`);
     assert.ok(n.reason.length > 20, `${n.label} needs its reason`);
   }
-  // Four from D130, seven from S16 and eight from D1041: nineteen lanes, four stated gaps.
-  assert.equal(APPROVAL_SOURCES.length, 19);
+  // Four from D130, seven from S16, eight from D1041 and Product testers (D1132): twenty lanes, four stated gaps.
+  assert.equal(APPROVAL_SOURCES.length, 20);
 });
 
 test('the route sends the gaps with the board', () => {

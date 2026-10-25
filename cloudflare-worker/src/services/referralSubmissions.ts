@@ -726,3 +726,46 @@ export async function referralWeekly(env: Env, weeks: number, now = new Date()) 
   }
   return { from, items };
 }
+
+/**
+ * D1124 (#3004) — Refer & Earn's referral funnel (PG9): how many referrals
+ * reached each stage, all time. A referral counts at the furthest stage it
+ * ever held, from its status events and its current status, so one that moved
+ * from Submitted straight to Qualified counts at Under review too, and one
+ * rejected after Qualified still counts as Qualified. A draft was never
+ * submitted and counts nowhere. More info needed sits at Under review's level,
+ * and Reward eligible at Converted's.
+ */
+export const FUNNEL_STAGES = [
+  { key: 'submitted', label: 'Submitted' },
+  { key: 'under_review', label: 'Under review' },
+  { key: 'qualified', label: 'Qualified' },
+  { key: 'in_conversation', label: 'In conversation' },
+  { key: 'converted', label: 'Converted' },
+  { key: 'reward_issued', label: 'Reward issued' },
+] as const;
+
+export async function referralFunnel(env: Env) {
+  const row = await env.DB.prepare(
+    `WITH held(submission_id, status) AS (
+       SELECT id, status FROM referral_submissions
+       UNION ALL
+       SELECT submission_id, status FROM referral_submission_events WHERE status IS NOT NULL
+     ),
+     furthest AS (
+       SELECT h.submission_id, MAX(CASE h.status
+         WHEN 'submitted' THEN 1 WHEN 'under_review' THEN 2 WHEN 'more_info_needed' THEN 2
+         WHEN 'qualified' THEN 3 WHEN 'in_conversation' THEN 4
+         WHEN 'converted' THEN 5 WHEN 'reward_eligible' THEN 5 WHEN 'reward_issued' THEN 6 ELSE 0 END) AS stage
+         FROM held h JOIN referral_submissions s ON s.id = h.submission_id
+        GROUP BY h.submission_id
+     )
+     SELECT COUNT(CASE WHEN stage >= 1 THEN 1 END) AS s1, COUNT(CASE WHEN stage >= 2 THEN 1 END) AS s2,
+            COUNT(CASE WHEN stage >= 3 THEN 1 END) AS s3, COUNT(CASE WHEN stage >= 4 THEN 1 END) AS s4,
+            COUNT(CASE WHEN stage >= 5 THEN 1 END) AS s5, COUNT(CASE WHEN stage >= 6 THEN 1 END) AS s6
+       FROM furthest`,
+  ).first<Record<string, number>>();
+  return {
+    stages: FUNNEL_STAGES.map((st, i) => ({ key: st.key, label: st.label, count: Number(row?.[`s${i + 1}`] ?? 0) })),
+  };
+}

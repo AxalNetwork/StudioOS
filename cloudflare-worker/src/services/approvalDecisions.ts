@@ -69,7 +69,7 @@ const WHO = (alias: string, idCol: string) =>
 export const REFERRAL_VERDICTS_SQL =
   "('qualified', 'in_conversation', 'converted', 'reward_eligible', 'reward_issued', 'rejected', 'closed')";
 
-/** Every lane, in the canvas's order: every studio's lanes, Product testers, then HQ's. */
+/** Every lane, in the canvas's order: every studio's lanes, then HQ's. */
 export const DECISION_LANES: readonly DecisionLane[] = [
   {
     key: 'lp', recorded: true, since: null,
@@ -282,7 +282,6 @@ export const DECISION_LANES: readonly DecisionLane[] = [
   {
     // Migration 576's own log; its approve and decline are the decisions.
     key: 'product_testers', recorded: true, since: null,
-    waitingSql: "SELECT datetime(applied_at) AS arrived_at FROM product_testers WHERE status = 'applied' AND datetime(applied_at) >= ?",
     sql:
       'SELECT ev.tester_id AS item_id, ' + WHO('u', 'ev.user_id') + ' AS who, '
       + "CASE ev.action WHEN 'approved' THEN 'approved' ELSE 'declined' END AS outcome, "
@@ -366,7 +365,7 @@ export const DECISION_LANES: readonly DecisionLane[] = [
       + "WHERE n.status IN ('accepted', 'rejected', 'withdrawn') AND n.reviewed_at IS NOT NULL",
   },
   {
-    // Every kind, as the inbox's Support lane counts them, program-grant requests included.
+    // Less the three program requests, as the inbox's Support lane (D1132): they are the `grants` lane.
     key: 'support', scope: 'hq', recorded: true, since: null,
     sql:
       "SELECT e.id AS item_id, COALESCE(NULLIF(e.raised_by_name, ''), 'studio ' || e.branch_code) AS who, "
@@ -374,7 +373,8 @@ export const DECISION_LANES: readonly DecisionLane[] = [
       + "CASE e.status WHEN 'answered' THEN 'Answered' ELSE 'Declined' END AS outcome_word, "
       + "datetime(e.answered_at) AS decided_at, e.answered_by_user_id AS decided_by_id, NULLIF(e.answered_by_name, '') AS decided_by_label, "
       + "datetime(e.created_at) AS arrived_at, NULLIF(e.answer, '') AS note, 1 AS note_shown "
-      + "FROM hq_escalations e WHERE e.status IN ('answered', 'declined') AND e.answered_at IS NOT NULL",
+      + "FROM hq_escalations e WHERE e.status IN ('answered', 'declined') AND e.answered_at IS NOT NULL "
+      + "AND e.kind NOT IN ('program_grant', 'program_terms_change', 'program_end')",
   },
   {
     key: 'proposals', scope: 'hq', recorded: true, since: null,
@@ -390,11 +390,22 @@ export const DECISION_LANES: readonly DecisionLane[] = [
       + 'LEFT JOIN users u ON u.id = pp.created_by_user_id '
       + "WHERE pp.status IN ('approved', 'declined', 'sent_back') AND pp.decided_at IS NOT NULL",
   },
+  {
+    // D1132's lane: a studio's program request (D983), answered only while open.
+    key: 'grants', scope: 'hq', recorded: true, since: null,
+    sql:
+      "SELECT e.id AS item_id, COALESCE(NULLIF(e.raised_by_name, ''), 'studio ' || e.branch_code) AS who, "
+      + "CASE e.status WHEN 'answered' THEN 'approved' ELSE 'declined' END AS outcome, "
+      + "CASE e.status WHEN 'answered' THEN 'Approved' ELSE 'Declined' END AS outcome_word, "
+      + "datetime(e.answered_at) AS decided_at, e.answered_by_user_id AS decided_by_id, NULLIF(e.answered_by_name, '') AS decided_by_label, "
+      + "datetime(e.created_at) AS arrived_at, NULLIF(e.answer, '') AS note, 1 AS note_shown "
+      + "FROM hq_escalations e WHERE e.status IN ('answered', 'declined') AND e.answered_at IS NOT NULL "
+      + "AND e.kind IN ('program_grant', 'program_terms_change', 'program_end')",
+  },
 ];
 
 const LABELS = new Map<string, string>([
   ...APPROVAL_SOURCES.map((s) => [s.key, s.label] as [string, string]),
-  ['product_testers', 'Product testers'],
   ...HQ_APPROVAL_SOURCES.map((s) => [s.key, s.label] as [string, string]),
 ]);
 export const laneLabel = (key: string) => LABELS.get(key) ?? key;
