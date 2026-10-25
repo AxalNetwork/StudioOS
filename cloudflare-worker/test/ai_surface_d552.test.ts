@@ -201,7 +201,7 @@ const EXPECTED: Record<string, string[]> = {
   'routes/deck_new.ts': ['AI_SURFACE.raisePitch', 'AI_SURFACE.raisePitch'], // D897: the outline and the build; /generate moved here
   'routes/deck_assist.ts': ['AI_SURFACE.raisePitch'], // D899: the card tools
   'services/decks/autofill.ts': ['AI_SURFACE.raisePitch'],
-  'routes/cycle_raise.ts': ['AI_SURFACE.raiseNarrative'], // D911: the narrative's positioning proposal
+  'routes/cycle_raise.ts': ['AI_SURFACE.raiseNarrative', 'AI_SURFACE.raiseNarrative'], // D911: the narrative's positioning proposal; D1114: Story's Ask Eadwyn
   'services/publications.ts': ['AI_SURFACE.adminPublications'],
   // D766 (#2094) — system calls moved into the router.
   'routes/monitoring.ts': ['AI_SURFACE.monitoring'],
