@@ -198,6 +198,11 @@ D986 (#2776): `partnerDealTypes.js` calls `/api/admin/partner-deal-types`
 bar and a reason) and `GET /api/licence/mine/partner-deal-types` (the studio's
 own read). A licence HQ has not set reads "Not recorded", never "every type".
 
+D1052 (#2903): `billingAlerts.js` calls `GET /api/billing/alerts` (the
+member's open billing alerts: a failed renewal, a bank's confirmation, a
+disputed plan payment; no card data) and `POST /api/billing/alerts/:id/confirm`,
+which fetches the client secret from Stripe only when Confirm is pressed.
+
 D806 (#2245): `billingInvoices.js` calls `GET /api/billing/invoices?page&per`
 (`cloudflare-worker/src/routes/billing.ts`): the member's own paid orders and
 Stripe plan invoices in one list, newest first. D789's Usage overview reads the newest three rows.
@@ -333,3 +338,9 @@ D993 (#2804): `partnerProfiles.js` also reads the first-agreement options
 text in the library yet") and sends Unbind (`POST …/:ref/unbind`, Super Admin
 with a recent step-up and a reason). Each list row and profile carries its
 agreement's envelope state on `envelope`.
+
+D1000 (#2815): `personaSegments.js` is Persona segments' profile store on
+`/api/personas/segments`: every profile, one with its history, the needs read
+(members, needs met and gaps, offers by kind, links' reach), and the Super
+Admin's write, which names the version it read. Counts leave admins out and
+come back suppressed from 1 to 4.

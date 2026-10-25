@@ -10,11 +10,13 @@ import AdminSpinoutLab from '../AdminSpinoutLab';
 import LabFormation from './LabFormation';
 import LabGraduation from './LabGraduation';
 import LabHosts from './LabHosts';
+import LabParticipants from './LabParticipants';
+import { participantsCount } from './participantsModel';
 import LabCohorts from './LabCohorts';
 import { ByCohortBlock, CalendarBlock, FunnelBlock, HeatBlock, PerWeekBlock } from './LabOverviewBlocks';
 import { buildByCohort, buildFunnel, buildHeat, buildPerWeek, buildTimeline, cohortOf } from './labOverviewModel';
 import {
-  FACTS, LAB_PATH, LAB_TITLE, MOVED_NOTICES, NOT_YET, PAGE_LINE, PROGRAMS_PATH, TABS,
+  FACTS, LAB_PATH, LAB_TITLE, MOVED_NOTICES, PAGE_LINE, PROGRAMS_PATH, TABS,
   buildNeeds, buildTiles, pageFailed, tabOf,
 } from './labModel';
 
@@ -27,14 +29,15 @@ import {
  *
  * THE INTEGRATION, NOT THE WHOLE CANVAS (D937 §3). The header, the tabs whose
  * console exists, and the Overview blocks whose reads exist, each drawn
- * truthfully. Applications and Participants are today's console, asked for
+ * truthfully. Applications is today's console, asked for
  * one section through `AdminSpinoutLab`'s `section` prop; Hosts, Formation and
  * Graduation are drawn to the canvas by D970 (#2755). D947 (#2752) draws the
  * Overview's calendar, charts and funnel from part 2's read (D944), and the
  * Cohorts tab: SL5 at /cohorts and one cohort, SL6, at /cohorts/:ym
- * (`LabCohorts.jsx`). Applications is the cycle queue,
- * the one door that decides with a reason; the old list that accepted with
- * none is not reached any more.
+ * (`LabCohorts.jsx`). D949 (#2754) draws Participants and one founder at
+ * `/participants/:uid` (`LabParticipants.jsx`), with its three decision dialogs.
+ * Applications is the cycle queue, the one door that decides with a reason;
+ * the old list that accepted with none is not reached any more.
  *
  * NO RAIL: D317 keeps Eadwyn out of the Lab, and NO_RAIL_ROUTES says so.
  */
@@ -52,14 +55,14 @@ const MONO = 'font-mono tabular-nums';
 const idle = { status: 'loading', data: null };
 
 /**
- * The page's reads. The header's two counts (the queue and the hosts) are read
- * on every tab; Overview reads four more. Each settles alone, so a slow or
+ * The page's reads. The header's queue, hosts and participants counts are read
+ * on every tab; Overview reads five more. Each settles alone, so a slow or
  * failed read holds back only its own blocks.
  */
 function useLabReads(overview) {
   const keys = useMemo(() => (overview
-    ? ['glance', 'hosts', 'applications', 'timeline', 'review', 'certificates', 'overview']
-    : ['glance', 'hosts']), [overview]);
+    ? ['glance', 'hosts', 'people', 'applications', 'timeline', 'review', 'certificates', 'overview']
+    : ['glance', 'hosts', 'people']), [overview]);
   const [reads, setReads] = useState({});
   const [asOf, setAsOf] = useState(null);
   const [tick, setTick] = useState(0);
@@ -78,6 +81,8 @@ function useLabReads(overview) {
         return hq;
       }),
       hosts: () => api.adminLabHosts('pending'),
+      // D949: the Participants tab's count, everyone D946's read lists (one row asked for).
+      people: () => adminLabApi.participants({ limit: 1 }),
       applications: () => api.adminCohortApplications(),
       timeline: () => api.adminCohortTimeline(),
       review: () => api.adminCohortReview(),
@@ -110,7 +115,7 @@ function tabCounts(reads) {
     const n = h.status === 'ready' ? Number(h.data?.counts?.pending) : NaN;
     out.hosts = Number.isFinite(n) ? { kind: 'num', value: n.toLocaleString('en-US') } : { kind: 'dash', tip: 'Could not be read: the hosts list did not answer.' };
   }
-  out.participants = { kind: 'dash', tip: `${NOT_YET}: this read cannot yet tell a failure from none.` };
+  out.participants = participantsCount(reads.people);
   return out;
 }
 
@@ -208,7 +213,6 @@ function Overview({ reads, reload }) {
 /** Which console section each tab still asks `AdminSpinoutLab` for. */
 const SECTIONS = {
   applications: ['cycles'],
-  participants: ['participants'],
 };
 
 /** D970: the tabs drawn to the canvas (SL9–SL11), each its own file. */
@@ -267,6 +271,7 @@ export default function AdminLab({ onImpersonate }) {
       />
       {tab === 'overview' ? <Overview reads={reads} reload={reload} /> : null}
       {DESKS[tab] ? React.createElement(DESKS[tab]) : null}
+      {tab === 'participants' ? <LabParticipants onImpersonate={onImpersonate} /> : null}
       {tab === 'cohorts' ? <LabCohorts ym={cohortOf(loc.pathname)} /> : null}
       {SECTIONS[tab] ? SECTIONS[tab].map((s) => <AdminSpinoutLab key={s} section={s} onImpersonate={onImpersonate} />) : null}
     </div>

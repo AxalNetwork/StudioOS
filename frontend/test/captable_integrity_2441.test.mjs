@@ -59,7 +59,7 @@ test('new variant requires recorded main inputs and copies them without invented
 test('saved scenario loads open Save only after a successful current read', async () => {
   const f = setup(async () => null);
   f.scope.api.getCapTableScenario = async () => ({ project_id: 3, inputs: { recorded: true } });
-  const load = handler(source, 'async function loadScenario', '  async function delScenario', f.scope);
+  const load = handler(source, 'async function loadScenario', '  function delScenario', f.scope);
   await load('synthetic'); assert.equal(f.state.ready, '3'); assert.deepEqual(f.state.inputs, { recorded: true });
   f.scope.api.getCapTableScenario = async () => { throw new Error('network'); };
   await load('synthetic'); assert.equal(f.state.ready, ''); assert.ok(f.state.errors);
