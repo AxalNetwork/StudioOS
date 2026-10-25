@@ -69,13 +69,16 @@ export const TABS = [
 /** The Worker's `parseInt`: a record id is a positive whole number. */
 export const isRecordId = (id) => /^[1-9]\d*$/.test(String(id ?? ''));
 
+/** A segment that cannot be decoded (`%E0`, `50%`) stays raw, fails `isRecordId`, and opens no record: never a crash. */
+const safeDecode = (s) => { try { return decodeURIComponent(s); } catch { return s; } };
+
 /** What a path opens: the tab, and the record drawn over it. */
 export function routeFor(pathname) {
   const path = String(pathname || '').replace(/\/+$/, '');
   const hit = TABS.find((t) => t.path === path);
   if (hit) return { tab: hit.key, record: null };
   const m = /^\/admin\/partner-invitations\/(invitations|deals)\/([^/]+)$/.exec(path);
-  if (m) return { tab: m[1], record: { kind: m[1] === 'invitations' ? 'invitation' : 'deal', id: decodeURIComponent(m[2]) } };
+  if (m) return { tab: m[1], record: { kind: m[1] === 'invitations' ? 'invitation' : 'deal', id: safeDecode(m[2]) } };
   return { tab: 'overview', record: null };
 }
 
@@ -123,6 +126,14 @@ export const plural = (n, one, many) => `${nf(n)} ${n === 1 ? one : many}`;
 export const LIST_CLAIM = 'A failed list is not a claim that there are none.';
 export const COUNT_CLAIM = 'That is not a claim that the count is zero.';
 
+const lower = (s) => `${String(s).charAt(0).toLowerCase()}${String(s).slice(1)}`;
+/**
+ * A 423 `recovery_cool_off_active`, said as such. Its subject is "Reading
+ * [what]", so the verb holds for "the envelope" and "the due-diligence cases"
+ * alike.
+ */
+export const pausedLine = (what) => `Reading ${lower(what)} is paused after a recent account recovery. It resumes when the 24-hour cool-off ends.`;
+
 /* ------------------------------------------------------------------ *
  * Time: D1's zone-less stamps are UTC (`parseStamp`)
  * ------------------------------------------------------------------ */
@@ -159,6 +170,13 @@ export const dataOf = (read) => (read && read.data !== undefined && read.data !=
 export const isLoading = (read) => !read || (read.status === 'loading' && dataOf(read) === null);
 export const isFailed = (read) => Boolean(read) && read.status === 'error' && dataOf(read) === null;
 export const isStale = (read) => Boolean(read) && read.status === 'error' && dataOf(read) !== null;
+/**
+ * A stale read being read again: the hook keeps its rows, marks it
+ * `refreshing` and sets its status to `loading` (a read that last answered
+ * keeps `ready`). Until the reply its rows are still the ones from before the
+ * failed refresh, so the page is as unsure as when it was stale.
+ */
+export const isRetrying = (read) => Boolean(read?.refreshing) && read.status === 'loading' && dataOf(read) !== null;
 export const listOf = (read) => (Array.isArray(dataOf(read)) ? dataOf(read) : null);
 /** A 423 `recovery_cool_off_active`: R5, R7, R8 and R9 pause for 24 hours after an account recovery. */
 export const isCoolOff = (error) => Number(error?.status) === 423 && (error?.code === 'recovery_cool_off_active' || error?.data?.error === 'recovery_cool_off_active');
@@ -266,15 +284,20 @@ export function daysLeft(deal, now) {
   }
 }
 
-/** The days-used bar on one deal (PI6): its length is the stored end minus the stored start. */
+/**
+ * The days-used bar on one deal (PI6): its length is the stored end minus the
+ * stored start. The days left round up, as `daysLeft` does, so the record and
+ * its Deals row never differ by a day; the days used are the rest.
+ */
 export function daysUsed(deal, now) {
   const start = parseStamp(deal?.activated_at);
   const end = parseStamp(deal?.expires_at);
   if (start === null || end === null || end <= start) return null;
   const total = Math.round((end - start) / DAY_MS);
   const stop = deal?.status === 'terminated' ? (parseStamp(deal?.terminated_at) ?? now) : now;
-  const used = Math.min(total, Math.max(0, Math.round((stop - start) / DAY_MS)));
-  return { total, used, left: Math.max(0, total - used), fraction: total ? used / total : 0 };
+  const left = Math.min(total, Math.max(0, Math.ceil((end - stop) / DAY_MS)));
+  const used = total - left;
+  return { total, used, left, fraction: total ? used / total : 0 };
 }
 
 /* ------------------------------------------------------------------ *
@@ -551,21 +574,42 @@ export function noMatchLine(q, isCapped) {
  * Deals (PI5), from the six R2 lists under Guard L
  * ------------------------------------------------------------------ */
 
-/** The six lists as one: their rows, and which lists are loading, failed, stale or at their cap. */
+/**
+ * The six lists as one: their rows, and which lists are loading, being read
+ * again (`refreshing`; `retrying` when that follows a failed refresh), failed,
+ * stale or at their cap. A deal that changed
+ * state can sit in two lists read at different moments (an old `active` and a
+ * fresh `terminated`), so each id is kept once: the copy from a list that
+ * answered beats a stale or still-refreshing one, then the later read wins.
+ */
 export function dealsUnion(deals, states = DEAL_STATE_KEYS) {
-  const out = { rows: [], loading: [], failed: [], capped: [], stale: [] };
+  const out = { rows: [], loading: [], failed: [], capped: [], stale: [], refreshing: [], retrying: [] };
+  const byId = new Map();
   for (const s of states) {
     const read = deals?.[s];
     const list = listOf(read);
     if (list) {
-      out.rows.push(...list);
+      const fresh = isStale(read) || read?.refreshing ? 0 : 1;
+      const at = Number(read?.at) || 0;
+      for (const row of list) {
+        const key = String(row?.id);
+        const prev = byId.get(key);
+        if (!prev || fresh > prev.fresh || (fresh === prev.fresh && at > prev.at)) byId.set(key, { row, fresh, at });
+      }
       if (atCap(list, CAPS.deals)) out.capped.push(s);
       if (isStale(read)) out.stale.push(s);
+      if (read?.refreshing) out.refreshing.push(s);
+      if (isRetrying(read)) out.retrying.push(s);
     } else if (isLoading(read)) out.loading.push(s);
     else out.failed.push(s);
   }
+  out.rows = [...byId.values()].map((v) => v.row);
   return out;
 }
+
+/** R5 answered 423 `recovery_cool_off_active`: its figures come from the six lists until the cool-off ends (D923 §2). */
+export const contractsPaused = (contracts) => isFailed(contracts) && isCoolOff(contracts.error);
+export const CONTRACTS_PAUSED = 'Reading every deal from Contracts is paused after a recent account recovery, so the deal lists are counted instead.';
 
 /** The Deals tab's count: R5's `total` when it answers, else the six lists' sum under Guard L. */
 export function dealsCount(contracts, deals) {
@@ -574,28 +618,36 @@ export function dealsCount(contracts, deals) {
   if (isLoading(contracts)) return null;
   const u = dealsUnion(deals);
   if (u.loading.length || u.failed.length) return null;
-  return u.capped.length
-    ? { text: capped(u.rows.length, true), title: WITHIN_DEALS }
-    : { text: nf(u.rows.length), title: 'Every deal, in every state' };
+  const title = u.capped.length ? WITHIN_DEALS : 'Every deal, in every state';
+  return {
+    text: u.capped.length ? capped(u.rows.length, true) : nf(u.rows.length),
+    title: contractsPaused(contracts) ? `${title}. ${CONTRACTS_PAUSED}` : title,
+  };
 }
 
-/** A partner's name and address. Before signing they come from the invitation, by `invitation_id`. */
+/**
+ * A partner's name and address. Before signing they come from the invitation,
+ * by `invitation_id`. "Not recorded" only when R1 answered on its latest read:
+ * a list whose refresh failed (or that is read again after one) did not hold
+ * an invitation newer than its last good read, so it is no claim either way.
+ */
 export function dealPartner(deal, invitations) {
   if (deal?.user_id !== null && deal?.user_id !== undefined && (deal.partner_name || deal.partner_email)) {
     return { name: String(deal.partner_name || '').trim() || String(deal.partner_email), email: deal.partner_email || NOT_RECORDED };
   }
-  const list = listOf(invitations);
-  const inv = list?.find((i) => String(i?.id) === String(deal?.invitation_id));
-  if (inv) return { name: nameOf(inv), email: inv.recipient_email || NOT_RECORDED, inv };
-  if (list) return { name: atCap(list, CAPS.invitations) ? NOT_IN_READ : NOT_RECORDED, email: null };
-  return { name: isLoading(invitations) ? READING : COULD_NOT_READ, email: null };
+  const via = invitationForDeal(deal, invitations);
+  if (via.state === 'ready') return { name: nameOf(via.inv), email: via.inv.recipient_email || NOT_RECORDED, inv: via.inv };
+  const name = { missing: NOT_IN_READ, none: NOT_RECORDED, loading: READING }[via.state] || COULD_NOT_READ;
+  return { name, email: null };
 }
 
-/** The invitation a deal came from, by `invitation_id`, from R1. */
+/** The invitation a deal came from, by `invitation_id`, from R1; `none` only when R1 answered on its latest read (`dealPartner`). */
 export function invitationForDeal(deal, invitations) {
   const list = listOf(invitations);
   const inv = list?.find((i) => String(i?.id) === String(deal?.invitation_id));
   if (inv) return { state: 'ready', inv };
+  if (isRetrying(invitations)) return { state: 'loading' };
+  if (isStale(invitations)) return { state: 'unreadable' };
   if (list) return { state: atCap(list, CAPS.invitations) ? 'missing' : 'none' };
   return { state: isLoading(invitations) ? 'loading' : 'unreadable' };
 }
@@ -816,7 +868,8 @@ export function allTimeRedemptions(contracts, deals) {
   if (u.failed.length) return { state: 'unreadable', reason: COUNT_CLAIM };
   const n = sum(u.rows, 'redemptions_count');
   if (n === null) return { state: 'unreadable', reason: COUNT_CLAIM };
-  return u.capped.length ? { state: 'ready', n, value: capped(n, true), sub: `${WITHIN_DEALS}.`, exact: false } : { state: 'ready', n, value: nf(n) };
+  const paused = contractsPaused(contracts) ? { cover: CONTRACTS_PAUSED, paused: true } : {};
+  return u.capped.length ? { state: 'ready', n, value: capped(n, true), sub: `${WITHIN_DEALS}.`, exact: false, ...paused } : { state: 'ready', n, value: nf(n), ...paused };
 }
 
 /* ------------------------------------------------------------------ *
@@ -953,12 +1006,20 @@ export function dealTiles({ deals, invitations, fan, now = Date.now() }) {
   else {
     const inv = listOf(invitations);
     let sub = null;
+    // A deal whose invitation is outside R1's newest 200, or past a refresh that failed, cannot be checked for a lapse (Guard L): it is counted and said, never dropped.
+    let unseen = 0;
     if (!inv && !isLoading(invitations)) sub = 'Lapsed invitations could not be checked';
     else if (inv) {
-      const lapsed = awaiting.filter((d) => { const hit = inv.find((i) => String(i?.id) === String(d?.invitation_id)); return hit && isLapsed(hit, now); }).length;
-      if (lapsed) sub = `${nf(lapsed)} whose invitation has lapsed`;
+      let lapsed = 0;
+      for (const d of awaiting) {
+        const via = invitationForDeal(d, invitations);
+        if (via.state === 'ready' && isLapsed(via.inv, now)) lapsed += 1;
+        else if (via.state === 'missing' || via.state === 'unreadable' || via.state === 'loading') unseen += 1;
+      }
+      if (lapsed) sub = `${capped(lapsed, unseen > 0)} whose invitation has lapsed`;
     }
-    tiles.push({ key: 'awaiting', label: 'Awaiting signature', state: 'ready', value: capped(awaiting.length, atCap(awaiting, CAPS.deals)), sub, subTone: sub && sub.endsWith('lapsed') ? 'amber' : null, cover: atCap(awaiting, CAPS.deals) ? `${WITHIN_DEALS}.` : null });
+    const cover = [atCap(awaiting, CAPS.deals) ? `${WITHIN_DEALS}.` : null, unseen ? `${nf(unseen)} whose invitation is not in this read.` : null].filter(Boolean).join(' ') || null;
+    tiles.push({ key: 'awaiting', label: 'Awaiting signature', state: 'ready', value: capped(awaiting.length, atCap(awaiting, CAPS.deals)), sub, subTone: sub && sub.endsWith('lapsed') ? 'amber' : null, cover });
   }
   const r90 = fanFigure(fan, countLast90(now));
   tiles.push({ key: 'redemptions90', label: 'Referral redemptions, 90 days', ...r90 });
@@ -978,17 +1039,24 @@ export const NEEDS_YOU_SHOWN = 7;
  * invitations, invitations at Offer chosen while the agreement cannot be sent
  * yet, deals ending within 30 days, unattached partner accounts, and
  * rev-share windows closing within 30 days. A source that could not be read
- * is listed as such, never as "nothing needs you". The undelivered-email and
- * due-diligence rows wait for parts 1 and 5.
+ * is listed as such, never as "nothing needs you". A source at its cap says
+ * what it covered (`cover`, Guard L): R1 drops its oldest rows first, which
+ * are the ones most likely lapsed, and R2 `active` drops the deals that end
+ * first. The undelivered-email and due-diligence rows wait for parts 1 and 5.
  */
+export const NEEDS_COVER_INVITATIONS = `Lapsed invitations and chosen offers are checked ${lower(WITHIN_INVITATIONS)}.`;
+export const NEEDS_COVER_ACTIVE = 'Deals ending are checked over the newest 200 active deals.';
+
 export function needsYou({ invitations, deals, links, template, fan, now = Date.now() }) {
   const rows = [];
   const failed = [];
+  const cover = [];
   let loading = false;
   const proposed = deals?.proposed;
   const inv = listOf(invitations);
   const ready = agreementReady(template);
   if (inv) {
+    if (atCap(inv, CAPS.invitations)) cover.push({ key: 'invitations', text: NEEDS_COVER_INVITATIONS });
     const staged = inv.map((i) => ({ inv: i, stage: stageOf(i, { proposed, now }) }));
     for (const { inv: i, stage } of staged.filter((s) => s.stage.lapsed)) {
       let text = `The invitation to ${whoOf(i)} lapsed on ${dayOr(i.expires_at)} at ${stage.stageWord}.`;
@@ -1006,6 +1074,7 @@ export function needsYou({ invitations, deals, links, template, fan, now = Date.
 
   const active = listOf(deals?.active);
   if (active) {
+    if (atCap(active, CAPS.deals)) cover.push({ key: 'active', text: NEEDS_COVER_ACTIVE });
     const soon = active
       .map((d) => ({ d, end: parseStamp(d?.expires_at) }))
       .filter(({ end }) => end !== null && end > now && end <= now + ENDING_SOON_DAYS * DAY_MS)
@@ -1034,7 +1103,7 @@ export function needsYou({ invitations, deals, links, template, fan, now = Date.
   } else if (closing.state === 'loading') loading = true;
   else failed.push({ key: 'revshare', what: 'Rev-share windows', reason: closing.reason });
 
-  return { rows, failed, settled: !loading };
+  return { rows, failed, cover, settled: !loading };
 }
 
 /* ------------------------------------------------------------------ *
@@ -1288,11 +1357,18 @@ export function weeklyRedemptions(fan, { now = Date.now() } = {}) {
 export function tabCounts({ invitations, deals, contracts, needs }) {
   const list = listOf(invitations);
   const all = allTimeRedemptions(contracts, deals);
+  let overview = null;
+  if (needs?.settled) {
+    const covered = Boolean(needs.cover?.length);
+    const notes = [needs.failed.length ? 'some sources could not be read' : null, covered ? 'some lists stop at their cap' : null].filter(Boolean);
+    overview = { text: capped(needs.rows.length, covered), amber: needs.rows.length > 0, title: notes.length ? `Rows drawn in Needs you; ${notes.join('; ')}` : 'Rows in Needs you' };
+  }
+  const referralsTitle = all.exact === false ? `Redemptions, all time · ${WITHIN_DEALS}` : 'Redemptions, all time';
   return {
-    overview: needs?.settled ? { text: nf(needs.rows.length), amber: needs.rows.length > 0, title: needs.failed.length ? 'Rows drawn in Needs you; some sources could not be read' : 'Rows in Needs you' } : null,
+    overview,
     invitations: list ? { text: capped(list.length, atCap(list, CAPS.invitations)), title: atCap(list, CAPS.invitations) ? `${WITHIN_INVITATIONS}; there may be more` : 'Every invitation' } : null,
     deals: dealsCount(contracts, deals),
-    referrals: all.state === 'ready' ? { text: all.value, title: all.exact === false ? `Redemptions, all time · ${WITHIN_DEALS}` : 'Redemptions, all time' } : null,
+    referrals: all.state === 'ready' ? { text: all.value, title: all.paused ? `${referralsTitle}. ${CONTRACTS_PAUSED}` : referralsTitle } : null,
   };
 }
 
@@ -1300,27 +1376,48 @@ export function tabCounts({ invitations, deals, contracts, needs }) {
  * One invitation (PI3)
  * ------------------------------------------------------------------ */
 
-/** A record is found in the loaded lists (or one this page read for its address). One outside them is "Not in this read". */
+/**
+ * A record is found in the loaded lists (or one this page read for its
+ * address). One outside them is "Not in this read" (D923 §1), with its reason:
+ * `missing` when the list stopped at its cap, so the record may lie past it;
+ * `none` when the list is complete, or the address is no record id at all, so
+ * no invitation has it. A list whose refresh failed is `unreadable`, never
+ * either claim.
+ *
+ * `extra` holds the rows read for one address, each as a read (`useRead`'s
+ * shape). A copy from a read that answered beats one whose refresh failed;
+ * a record drawn from a failed refresh is `stale`, and says so (D923 §2).
+ */
 export function findInvitation(id, invitations, extra = null) {
+  if (!isRecordId(id)) return { state: 'none' };
   const list = listOf(invitations);
-  const hit = list?.find((i) => String(i?.id) === String(id)) || extra?.get?.(String(id)) || null;
-  if (hit) return { state: 'ready', inv: hit };
-  if (isLoading(invitations)) return { state: 'loading' };
-  if (isFailed(invitations)) return { state: 'unreadable' };
-  return { state: 'missing' };
+  const adopted = extra?.get?.(String(id)) || null;
+  const hits = [[list?.find((i) => String(i?.id) === String(id)), invitations], [dataOf(adopted), adopted]].filter(([row]) => row);
+  const [hit, from] = hits.find(([, read]) => !isStale(read)) || hits[0] || [];
+  if (hit) return { state: 'ready', inv: hit, stale: isStale(from) };
+  if (isLoading(invitations) || invitations?.refreshing) return { state: 'loading' };
+  if (invitations?.status === 'error') return { state: 'unreadable' };
+  return { state: atCap(list, CAPS.invitations) ? 'missing' : 'none' };
 }
 
 export const MISSING_INVITATION = 'This invitation is not among the newest 200 read. The Worker has no single-invitation read until part 4.';
 export const MISSING_DEAL = 'This deal is not in the deal lists read. The Worker has no single-deal read until part 5.';
+export const NO_INVITATION = 'No invitation in the list has this address.';
+export const NO_DEAL = 'No deal in the lists has this address.';
 
-/** The deal an invitation led to, in any of the six lists, by `invitation_id` or `resulting_deal_id`; a live deal before a voided one. */
+/**
+ * The deal an invitation led to, in any of the six lists, by `invitation_id`
+ * or `resulting_deal_id`; a live deal before a voided one. While a list is
+ * read again a deal can be between two of them (a revoke moves it from
+ * `proposed` to `voided`), so the answer waits for every list.
+ */
 export function dealForInvitation(inv, deals) {
   const u = dealsUnion(deals);
   const mine = u.rows.filter((d) => String(d?.invitation_id) === String(inv?.id) || (inv?.resulting_deal_id != null && String(d?.id) === String(inv.resulting_deal_id)));
   const hit = mine.find((d) => d.status !== 'voided') || mine[0];
   if (hit) return { state: 'ready', deal: hit };
-  if (u.loading.length) return { state: 'loading' };
-  if (u.failed.length) return { state: 'unreadable' };
+  if (u.loading.length || u.refreshing.length) return { state: 'loading' };
+  if (u.failed.length || u.stale.length) return { state: 'unreadable' };
   if (u.capped.length) return { state: 'missing' };
   return { state: 'none' };
 }
@@ -1435,13 +1532,20 @@ export function answersOf(read, inv) {
  * One deal (PI6)
  * ------------------------------------------------------------------ */
 
+/**
+ * One deal, from the six lists (`findInvitation`'s states). A write moves a
+ * deal between lists, which are read again one by one: until every list has
+ * answered the deal may be in neither copy, so that reads as loading, and a
+ * list whose refresh failed as unreadable, never "not in this read".
+ */
 export function findDeal(id, deals) {
+  if (!isRecordId(id)) return { state: 'none' };
   const u = dealsUnion(deals);
   const hit = u.rows.find((d) => String(d?.id) === String(id));
   if (hit) return { state: 'ready', deal: hit };
-  if (u.loading.length) return { state: 'loading' };
-  if (u.failed.length) return { state: 'unreadable' };
-  return { state: 'missing' };
+  if (u.loading.length || u.refreshing.length) return { state: 'loading' };
+  if (u.failed.length || u.stale.length) return { state: 'unreadable' };
+  return { state: u.capped.length ? 'missing' : 'none' };
 }
 
 /** The deal's agreement (PI6): "Signed [date]", "Out for signature since [date]" from R7, or "Not sent". */
@@ -1458,7 +1562,10 @@ export function dealAgreementLine(deal, envelope) {
   return { text: 'Another state' };
 }
 
-const OBLIGATION_WORD = { partner_msa_v1: 'Partner agreement', kyb_v1: 'KYB', kyc_v1: 'KYC', accreditation_v1: 'Accreditation' };
+/** `tos_v1` and `privacy_v1` are seeded for every partner at activation (`services/trust.ts`), so they are named too. */
+const OBLIGATION_WORD = {
+  tos_v1: 'Terms of service', privacy_v1: 'Privacy', partner_msa_v1: 'Partner agreement', kyb_v1: 'KYB', kyc_v1: 'KYC', accreditation_v1: 'Accreditation',
+};
 const obligationWord = (k) => OBLIGATION_WORD[k] || titleCase(String(k || '').replace(/_v\d+$/, ''));
 
 /** Obligations (R10): "Outstanding: [keys]"; with none required, "No obligations recorded", never "None outstanding". */
@@ -1498,38 +1605,74 @@ export function lastRedeemers(read, deal, size = 10) {
  * The dialogs say only what the Worker does (D923 §3)
  * ------------------------------------------------------------------ */
 
-/** PI8a. Line one is the renewed link; line two depends on the stage. */
+/**
+ * Whether resend renews the agreement's signing link (D924): it does while the
+ * envelope is out and the invitee's own recipient row is still pending, and
+ * then it emails that link; otherwise it sends the onboarding email.
+ */
+function signaturePending(inv, envelope) {
+  const env = dataOf(envelope);
+  if (!ENVELOPE_OUT.has(env?.status)) return false;
+  const email = String(inv?.recipient_email || '').trim().toLowerCase();
+  return (Array.isArray(env?.recipients) ? env.recipients : [])
+    .some((r) => r?.status === 'pending' && String(r?.recipient_email || '').trim().toLowerCase() === email);
+}
+
+const ONBOARDING_INSTEAD = 'so no signing link is renewed. Resending sends the onboarding email instead.';
+
+/**
+ * PI8a. Line one is the renewed link; line two depends on the stage. Resend
+ * keeps the stored stage at every step (D924). At Agreement out the line says
+ * what the Worker does, read from R7 as the dialog opens; it is not a claim
+ * about the write, which `resentResult` reads from the reply alone.
+ */
 export function resendCopy(inv, stage, envelope, now) {
   const who = whoOf(inv);
-  const lines = [`The link gets a new 14 days, until ${day(now + INVITE_TTL_DAYS * DAY_MS)}.`];
+  const until = day(now + INVITE_TTL_DAYS * DAY_MS);
+  const lines = [`The link gets a new 14 days, until ${until}.`];
   if (stage.step === 5) lines.push(`${who}’s chosen offer is kept.`);
-  else if (stage.step === 3 || stage.step === 4) lines.push('Their answers are kept. The stage shown here goes back to Sent until they continue.');
+  else if (stage.step === 3 || stage.step === 4) lines.push(`Their answers are kept. The stage stays at ${stage.stageWord}.`);
   else if (stage.step === 6) {
-    const link = signingLink(envelope, now);
-    if (link.state === 'live') lines.push(`The agreement already sent stays open to signature until ${link.day}.`);
-    else if (link.state === 'expired') lines.push(`The signing link expired on ${link.day}. Resending does not renew it. The original sender can send a reminder from the envelope page.`);
-    else if (link.state === 'signed') lines.push('The agreement already sent is signed. Resending does not change it.');
-    else if (link.state === 'voided') lines.push('The agreement already sent was voided. Resending does not send a new one.');
-    else if (link.state === 'other') lines.push('The agreement already sent is not out for signature. Resending does not change it.');
-    else if (link.state === 'loading') lines.push('Reading whether the signing link is still open…');
-    else lines.push('Whether the agreement’s signing link is still open could not be read.');
+    const link = inv?.envelope_id ? signingLink(envelope, now) : { state: 'no_envelope' };
+    if (['live', 'expired', 'none'].includes(link.state) && signaturePending(inv, envelope)) {
+      lines.push(`The agreement’s signing link is renewed too, until ${until}, and the email carries it.`);
+    } else if (link.state === 'signed') lines.push(`The agreement already sent is signed, ${ONBOARDING_INSTEAD}`);
+    else if (link.state === 'voided') lines.push(`The agreement already sent was voided, ${ONBOARDING_INSTEAD}`);
+    else if (link.state === 'loading') lines.push('Reading whether the agreement is still out for signature…');
+    else if (link.state === 'paused') lines.push(`${pausedLine('The agreement’s envelope')} Until then, whether its signing link is renewed too is not shown.`);
+    else if (link.state === 'unreadable') lines.push('The agreement’s envelope could not be read, so whether its signing link is renewed too is not known.');
+    else lines.push(`No signature from ${who} is pending on the agreement, ${ONBOARDING_INSTEAD}`);
   }
-  return { title: `Resend the invitation to ${who}?`, lines, expiredSigning: stage.step === 6 && signingLink(envelope, now).state === 'expired' };
+  return { title: `Resend the invitation to ${who}?`, lines };
 }
 
 export const RESENT_SENT = 'Sent.';
 export const RESENT_NOT_SENT = 'Not sent. Copy the link instead.';
 
 /**
+ * The resend result, from the reply alone. The Worker's reply is `{ ok,
+ * email_sent, link, expires_at }` whether it renewed the agreement's signing
+ * link or sent the onboarding email instead (the envelope can change while
+ * the dialog is open), so the result says nothing about a renewal. When no
+ * email went, the reply's `link` (the invitation's own) is offered to copy.
+ * #2723 (part 4) adds a `signing_link` answer to this reply; part 7 (#2726)
+ * reads it.
+ */
+export function resentResult(reply) {
+  return reply?.email_sent === true ? { text: RESENT_SENT, sent: true } : { text: RESENT_NOT_SENT, sent: false, copy: true };
+}
+
+/**
  * PI8b. The long variant when there is an `envelope_id` or a deal row; also
- * when R2's `proposed` or `awaiting_signature` list failed or is at its cap,
- * because a deal row may then be out of sight.
+ * when R2's `proposed` or `awaiting_signature` list failed, could not refresh
+ * (or is being read again after that), is loading or is at its cap, because a
+ * deal row may then be out of sight: the long one when unsure.
  */
 export function revokeVariant(inv, deals) {
   if (inv?.envelope_id) return 'long';
   const u = dealsUnion(deals, ['proposed', 'awaiting_signature']);
   if (u.rows.some((d) => String(d?.invitation_id) === String(inv?.id))) return 'long';
-  if (u.failed.length || u.capped.length || u.loading.length) return 'long';
+  if (u.failed.length || u.stale.length || u.retrying.length || u.capped.length || u.loading.length) return 'long';
   return 'short';
 }
 
@@ -1542,18 +1685,57 @@ export function revokeCopy(inv, variant) {
   };
 }
 
-/** The revoke result. The voided counts show only when above zero: a zero is never read as "nothing was voided". */
+/** D925's `failures`: the steps of a write's cascade that did not complete. Only their `step` is read; no exception text is ever printed. */
+const failuresOf = (reply) => (Array.isArray(reply?.failures) ? reply.failures : []);
+/** `void_envelope`: the envelope's own update failed, so that agreement is not voided. */
+export const REVOKE_PARTIAL = 'Some agreements could not be voided. Check them in Contracts.';
+/** `decline_recipients` runs only after the envelope was voided: the agreement is voided, its signers' rows are not all declined. */
+export const REVOKE_UNDECLINED = 'An agreement was voided, but its signers were not all marked declined. Check it in Contracts.';
+export const REVOKE_UNDECLINED_MANY = 'Some agreements were voided, but their signers were not all marked declined. Check them in Contracts.';
+/** `revoke_cascade`: the voiding could not run or be finished, whether or not there was an offer or an agreement to void. */
+export const REVOKE_CASCADE_FAILED = 'Any chosen offer or agreement out for signature could not be voided. Check them in Contracts.';
+/** A step this page does not know yet. */
+export const REVOKE_OTHER = 'Some of the voiding did not complete. Check the agreements in Contracts.';
+
+/**
+ * The revoke result. The voided counts show only when above zero: a zero is
+ * never read as "nothing was voided". Each cascade step that failed (D925) is
+ * said beside the counts, for what that step means.
+ */
 export function revokedLine(reply) {
   const parts = ['Invitation revoked.'];
   const deals = Number(reply?.voided_deals);
   const envelopes = Number(reply?.voided_envelopes);
   if (deals > 0) parts.push(`${plural(deals, 'deal', 'deals')} voided.`);
   if (envelopes > 0) parts.push(`${plural(envelopes, 'agreement', 'agreements')} voided.`);
+  const steps = failuresOf(reply).map((f) => f?.step);
+  const undeclined = steps.filter((s) => s === 'decline_recipients').length;
+  if (steps.includes('void_envelope')) parts.push(REVOKE_PARTIAL);
+  if (undeclined) parts.push(undeclined === 1 ? REVOKE_UNDECLINED : REVOKE_UNDECLINED_MANY);
+  if (steps.includes('revoke_cascade')) parts.push(REVOKE_CASCADE_FAILED);
+  if (steps.some((s) => !['void_envelope', 'decline_recipients', 'revoke_cascade'].includes(s))) parts.push(REVOKE_OTHER);
   return parts.join(' ');
 }
 
 export const REASON_MAX = 500;
 export const TERMINATED = 'Deal terminated.';
+export const TERMINATE_PARTIAL = 'Some tier changes did not complete, so the partner or a member may still hold this deal’s grant.';
+
+/**
+ * The terminate result (D925's reply). `members_revoked` counts the distinct
+ * members whose tiers changed, so it is said as members' tiers, above zero
+ * only; the pre-write count stays the row's `redemptions_count`.
+ */
+export function terminatedLine(reply) {
+  const parts = [TERMINATED];
+  const members = Number(reply?.members_revoked);
+  if (members > 0) parts.push(`${plural(members, 'member’s', 'members’')} tiers revoked.`);
+  if (failuresOf(reply).length) parts.push(TERMINATE_PARTIAL);
+  return parts.join(' ');
+}
+
+/** A result with a failed step is drawn amber. */
+export const partialWrite = (reply) => failuresOf(reply).length > 0;
 
 /** PI8c. The count is the row's `redemptions_count`; the reply's revoked counts are not turned into member counts. */
 export function terminateCopy(deal) {
@@ -1629,7 +1811,9 @@ export function createdLines(reply, email) {
 }
 
 export const COPIED = 'Copied';
-export const COPY_FAILED = 'Copy failed. Select the link and copy it.';
+/** The failed copy names what was being copied: a link, or a referral code. */
+export const copyFailed = (noun = 'link') => `Copy failed. Select the ${noun} and copy it.`;
+export const COPY_FAILED = copyFailed('link');
 
 /* ------------------------------------------------------------------ *
  * Attaching accounts to firms (drawn on Advisors & Partners › Firms since D952)
@@ -1642,7 +1826,7 @@ export function firmCounts(data) {
   const accountsCapped = atCap(accounts, CAPS.links);
   const firmsCapped = atCap(firms, CAPS.links);
   return {
-    text: `${nf(attached)} attached · ${nf(accounts.length - attached)} not · ${capped(firms.length, firmsCapped)} firms on record`,
+    text: `${nf(attached)} attached · ${nf(accounts.length - attached)} not · ${firmsCapped ? `${capped(firms.length, true)} firms` : plural(firms.length, 'firm', 'firms')} on record`,
     cover: accountsCapped ? 'Counted over the first 500 partner accounts.' : null,
   };
 }

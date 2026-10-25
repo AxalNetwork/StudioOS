@@ -14,6 +14,9 @@ import { PAGE_LIMIT, isEventId, readEveryPage } from './eventsDeskModel';
  *   overview   D920's period blocks; Overview draws no capped analytics;
  *   event      R3, one event's page;
  *   agenda     R5, that event's agenda;
+ *   summary    D918's `GET …/:id/summary`: that event's counts, block by block,
+ *              never a name (D922);
+ *   history    D918's `GET …/:id/history`: its admin actions and the host's (D922);
  *   paid       D918's `GET /api/admin/events/overview`, only while All events
  *              shows "Cancelled with paid tickets" (D919): its needs_attention
  *              items are the one read that counts paid tickets per event.
@@ -66,17 +69,19 @@ export function useEventsDesk(tab, eventId, { paidView = false, weeks = 12 } = {
   const analytics = useRead('analytics', 'analytics', withList, wantAnalytics, () => adminEvents.analytics());
   const event = useRead('event', `event:${eventId}`, tick, wantEvent, () => adminEvents.get(eventId));
   const agenda = useRead('agenda', `agenda:${eventId}`, tick, wantEvent, () => eventsApi.agenda(eventId));
+  const summary = useRead('summary', `summary:${eventId}`, tick, wantEvent, () => adminEvents.summary(eventId));
+  const history = useRead('history', `history:${eventId}`, tick, wantEvent, () => adminEvents.history(eventId));
   const wantPaid = tab === 'all' && paidView;
   const paid = useRead('overview', 'paid', withList, wantPaid, () => adminEvents.overview());
   const overview = useRead('overview', `overview:${weeks}`, tick, tab === 'overview', () => adminEvents.overview(weeks));
   const reload = useCallback(() => setTick((t) => t + 1), []);
   // The queue is drawn on every tab: the tab strip's Review count.
-  const drawn = [[queue, true], [all, wantList], [analytics, wantAnalytics], [overview, tab === 'overview'], [event, wantEvent], [agenda, wantEvent], [paid, wantPaid]]
+  const drawn = [[queue, true], [all, wantList], [analytics, wantAnalytics], [overview, tab === 'overview'], [event, wantEvent], [agenda, wantEvent], [summary, wantEvent], [history, wantEvent], [paid, wantPaid]]
     .filter(([, on]) => on).map(([r]) => r);
   const stamps = drawn.map((r) => r.at).filter(Boolean);
   const asOf = stamps.length ? Math.min(...stamps) : null;
   const reading = drawn.some((r) => r.status === 'loading');
-  return { queue, all, analytics, event, agenda, paid, overview, reload, asOf, reading, tick };
+  return { queue, all, analytics, event, agenda, summary, history, paid, overview, reload, asOf, reading, tick };
 }
 
 /**

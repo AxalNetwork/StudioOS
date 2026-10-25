@@ -189,7 +189,11 @@ test('the held pages read the glance and no longer say "none counted here"', () 
   // D930 (#2367): Community is rebuilt at pages/admin/community/; its queue figures still come from the glance's lanes.
   assert.match(read('frontend/src/pages/admin/community/AdminCommunity.jsx'), /loadStudioGlance\(\)/);
   assert.match(read('frontend/src/pages/admin/community/communityModel.js'), /laneOf\(glance\.data, 'events'\)/);
-  for (const f of ['HeldApprovals', 'HeldAccounts', 'HeldPrograms']) {
+  // D953 (#2371): Programs is rebuilt at pages/admin/programs/; its cohort and
+  // referrals figures still come from the glance's lanes, never "none counted".
+  assert.match(read('frontend/src/pages/admin/programs/useProgramReads.js'), /api\.adminStudioGlance\(\)/);
+  assert.match(read('frontend/src/pages/admin/programs/programsModel.js'), /const cohort = laneFrom\(glance, 'cohort'\);/);
+  for (const f of ['HeldApprovals', 'HeldAccounts']) {
     const src = read(`frontend/src/pages/admin/${f}.jsx`);
     assert.match(src, /useHeldGlance\(\)/, `${f} does not read the glance`);
     assert.doesNotMatch(src, /none counted here/, `${f} still says none counted here`);
@@ -197,5 +201,5 @@ test('the held pages read the glance and no longer say "none counted here"', () 
   assert.doesNotMatch(read('frontend/src/pages/admin/HeldApprovals.jsx'), /Links to its console/);
   const acc = read('frontend/src/pages/admin/HeldAccounts.jsx');
   for (const id of ['held-accounts-users-count', 'held-accounts-exploring-count', 'held-accounts-trash-count']) assert.ok(acc.includes(id), id);
-  assert.ok(read('frontend/src/pages/admin/HeldPrograms.jsx').includes("laneOf(glance.hq, 'cohort')"));
+  assert.doesNotMatch(read('frontend/src/pages/admin/programs/programsModel.js'), /none counted here/);
 });

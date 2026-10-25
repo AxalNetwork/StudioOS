@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { api } from '../../../lib/api';
 import { Lightbox, actionGhost, actionPrimary } from '../../../ui';
@@ -37,6 +37,10 @@ export default function NewInvitationDialog({ reads, onClose }) {
   const [created, setCreated] = useState(null);
   const [opening, setOpening] = useState(null);
   const [checkFor, setCheckFor] = useState('');
+  // The result replaces the form, focused Send button and all, inside the same
+  // Lightbox: focus moves to its Done, never to <body>.
+  const doneButton = useRef(null);
+  useEffect(() => { if (created) doneButton.current?.focus?.(); }, [created]);
 
   const typed = email.trim().toLowerCase();
   useEffect(() => {
@@ -94,7 +98,7 @@ export default function NewInvitationDialog({ reads, onClose }) {
         footer={(
           <div className="flex flex-wrap justify-end gap-2">
             <button type="button" className={actionGhost} onClick={openCreated} disabled={opening?.state === 'reading'} data-testid="partners-new-open">Open invitation</button>
-            <button type="button" className={actionPrimary} onClick={close} data-testid="partners-new-done">Done</button>
+            <button ref={doneButton} type="button" className={actionPrimary} onClick={close} data-testid="partners-new-done">Done</button>
           </div>
         )}>
         <div className="flex flex-col gap-3 px-5 py-4" data-testid="partners-new-result">
