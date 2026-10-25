@@ -228,3 +228,31 @@ test('Formation includes only recorded actions for Lab ventures, with no invente
   assert.equal((await call(adminOperations, db, ADMIN, '/activity?type=formation&cohort=2026-11')).body.total, 0);
   db.close();
 });
+
+test('type filters skip irrelevant audit JSON work; exact counts and pages share one source pass', async () => {
+  const db = fresh(); eventsFixture(db);
+  let jsonReads = 0;
+  db.function('json_valid', (value: unknown) => { jsonReads++; try { JSON.parse(String(value)); return 1; } catch { return 0; } });
+  for (const [type, total] of [['cohort', 2], ['messages', 2], ['weeks', 1], ['hosts', 1]]) {
+    jsonReads = 0;
+    const reply = await call(adminOperations, db, ADMIN, '/activity?type=' + type);
+    assert.equal(reply.status, 200); assert.equal(reply.body.total, total);
+    assert.equal(jsonReads, 0, `${type} must not inspect unrelated program/formation audit payloads`);
+  }
+  jsonReads = 0;
+  let sql = '', args: any[] = [];
+  const real = d1Over(db);
+  const instrumented = { ...real, prepare(text: string) {
+    const stmt = real.prepare(text);
+    if (!text.startsWith('WITH params')) return stmt;
+    sql = text;
+    return { ...stmt, bind(...values: any[]) { args = values; return stmt.bind(...values); } };
+  } };
+  const reply = await call(adminOperations, db, ADMIN, '/activity?limit=2', { env: { DB: instrumented } });
+  assert.equal(reply.status, 200); assert.equal(reply.body.total, 9);
+  assert.equal(reply.body.items.length, 2);
+  assert.ok(jsonReads > 0, 'the positive control actually inspects program audit payloads');
+  const plan = db.prepare('EXPLAIN QUERY PLAN ' + sql).all(...args) as any[];
+  assert.equal(plan.filter((x) => /^SCAN e(?: |$)/.test(x.detail)).length, 1, 'one event source scan serves both total and page');
+  db.close();
+});

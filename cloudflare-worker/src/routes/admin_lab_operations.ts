@@ -21,19 +21,25 @@ r.get('/settings', async (c) => {
 
 // Safe, fixed summaries: legacy reasons can contain staff names. Interview rows
 // and stage transitions are identified as records, never invented event history.
-const HISTORY = `WITH history AS (
+const HISTORY = `WITH params(wanted_type, wanted_cohort, wanted_by, search) AS (VALUES (?, ?, ?, ?)), history AS (
   SELECT 'cycle:' || e.id AS id, e.created_at AS at,
     CASE WHEN e.event_type LIKE 'applicant_%' THEN 'decisions' ELSE 'cohort' END AS type,
     e.event_type AS event, c.year || '-' || printf('%02d', c.month) AS cohort,
     NULL AS about, CASE WHEN e.actor = 'scheduler' THEN 'clock' ELSE 'admin' END AS by,
     'Recorded cohort event' AS detail, NULL AS scheduled_at
     FROM cohort_cycle_events e LEFT JOIN cohort_cycles c ON c.id = e.cohort_cycle_id
+    WHERE (SELECT wanted_type FROM params) IN ('', 'decisions', 'cohort')
+      AND ((SELECT wanted_cohort FROM params) = '' OR c.year || '-' || printf('%02d', c.month) = (SELECT wanted_cohort FROM params))
+      AND ((SELECT wanted_by FROM params) = '' OR CASE WHEN e.actor = 'scheduler' THEN 'clock' ELSE 'admin' END = (SELECT wanted_by FROM params))
   UNION ALL
   SELECT 'message:' || n.id, n.sent_at, 'messages', n.notif_type,
     c.year || '-' || printf('%02d', c.month),
     CASE WHEN u.role = 'admin' THEN 'Admin account' ELSE u.name END, 'clock', n.status, NULL
     FROM cohort_app_notification_ledger n LEFT JOIN cohort_cycles c ON c.id = n.cohort_cycle_id
     LEFT JOIN users u ON u.id = n.user_id
+    WHERE (SELECT wanted_type FROM params) IN ('', 'messages')
+      AND (SELECT wanted_by FROM params) IN ('', 'clock')
+      AND ((SELECT wanted_cohort FROM params) = '' OR c.year || '-' || printf('%02d', c.month) = (SELECT wanted_cohort FROM params))
   UNION ALL
   SELECT 'week:' || s.id, s.created_at, 'weeks', 'Week ' || s.week_number || ' · ' || s.to_status,
     c.year || '-' || printf('%02d', c.month),
@@ -41,6 +47,9 @@ const HISTORY = `WITH history AS (
     CASE WHEN s.triggered_by = 'scheduler' THEN 'clock' ELSE 'admin' END, 'Recorded week transition', NULL
     FROM stage_transition_log s LEFT JOIN cohort_cycles c ON c.id = s.cohort_cycle_id
     LEFT JOIN users u ON u.id = s.user_id WHERE s.cohort_cycle_id IS NOT NULL
+      AND (SELECT wanted_type FROM params) IN ('', 'weeks')
+      AND ((SELECT wanted_by FROM params) = '' OR CASE WHEN s.triggered_by = 'scheduler' THEN 'clock' ELSE 'admin' END = (SELECT wanted_by FROM params))
+      AND ((SELECT wanted_cohort FROM params) = '' OR c.year || '-' || printf('%02d', c.month) = (SELECT wanted_cohort FROM params))
   UNION ALL
   SELECT 'interview:' || i.id, i.updated_at, 'interviews', 'Interview · ' || i.status,
     (SELECT CASE WHEN COUNT(*) = 1 THEN c.year || '-' || printf('%02d', c.month) END FROM cohort_applicants ca
@@ -48,6 +57,7 @@ const HISTORY = `WITH history AS (
     CASE WHEN u.role = 'admin' THEN 'Admin account' ELSE u.name END, 'admin',
     'Latest interview record', i.scheduled_at
     FROM spinout_application_interviews i LEFT JOIN users u ON u.id = i.user_id
+    WHERE (SELECT wanted_type FROM params) IN ('', 'interviews') AND (SELECT wanted_by FROM params) IN ('', 'admin')
   UNION ALL
   SELECT 'audit:' || a.id, a.exported_at,
     CASE WHEN a.action LIKE 'lab_host.%' THEN 'hosts'
@@ -55,16 +65,23 @@ const HISTORY = `WITH history AS (
     a.action, NULL, CASE WHEN u.role = 'admin' THEN 'Admin account' ELSE u.name END, 'admin',
     'Recorded admin action', NULL
     FROM admin_audit_log a LEFT JOIN users u ON u.id = a.viewed_user_id
-    WHERE a.action IN ('lab_host.approve', 'lab_host.reject', 'lab_host.revoke',
-      'spinout_certificate_issued', 'spinout_certificate_revoked')
-      OR (a.action IN ('program.playbook.edit', 'program.playbook.publish', 'program.registry.update')
-        AND json_extract(CASE WHEN json_valid(a.filters_json) THEN a.filters_json ELSE '{}' END, '$.program_key') = 'spinout-lab')
+    WHERE (SELECT wanted_type FROM params) IN ('', 'hosts', 'certificates', 'playbook')
+      AND (SELECT wanted_cohort FROM params) = '' AND (SELECT wanted_by FROM params) IN ('', 'admin')
+      AND (((SELECT wanted_type FROM params) IN ('', 'hosts')
+        AND a.action IN ('lab_host.approve', 'lab_host.reject', 'lab_host.revoke'))
+      OR ((SELECT wanted_type FROM params) IN ('', 'certificates')
+        AND a.action IN ('spinout_certificate_issued', 'spinout_certificate_revoked'))
+      OR ((SELECT wanted_type FROM params) IN ('', 'playbook')
+        AND a.action IN ('program.playbook.edit', 'program.playbook.publish', 'program.registry.update')
+        AND json_extract(CASE WHEN json_valid(a.filters_json) THEN a.filters_json ELSE '{}' END, '$.program_key') = 'spinout-lab'))
   UNION ALL
   SELECT 'formation:' || a.id, a.exported_at, 'formation', a.action, NULL, p.name, 'admin', 'Recorded formation action; cohort not recorded', NULL
     FROM admin_audit_log a
     LEFT JOIN incorporations i ON i.id = json_extract(CASE WHEN json_valid(a.filters_json) THEN a.filters_json ELSE '{}' END, '$.incorporation_id')
     LEFT JOIN projects p ON p.id = coalesce(i.project_id, json_extract(CASE WHEN json_valid(a.filters_json) THEN a.filters_json ELSE '{}' END, '$.project_id'))
-    WHERE a.action IN ('incorporation_packet_ready', 'incorporation_filed', 'section_83b_operator_assigned', 'section_83b_operator_review_recorded')
+    WHERE (SELECT wanted_type FROM params) IN ('', 'formation')
+      AND (SELECT wanted_cohort FROM params) = '' AND (SELECT wanted_by FROM params) IN ('', 'admin')
+      AND a.action IN ('incorporation_packet_ready', 'incorporation_filed', 'section_83b_operator_assigned', 'section_83b_operator_review_recorded')
       AND (i.user_id IN (${LAB_PARTICIPANT_IDS}) OR p.founder_id IN
         (SELECT lu.founder_id FROM users lu WHERE lu.id IN (${LAB_PARTICIPANT_IDS})))
 ), labelled AS (
@@ -88,15 +105,18 @@ const HISTORY = `WITH history AS (
     WHEN 'program.registry.update' THEN 'Program updated'
     ELSE replace(event, '_', ' ') END AS event_label FROM history
 ), filtered AS (
-  SELECT * FROM labelled WHERE (? = '' OR type = ?) AND (? = '' OR cohort = ?)
-    AND (? = '' OR by = ?) AND (? = '' OR instr(lower(coalesce(event, '') || ' ' || event_label || ' ' || coalesce(about, '') || ' ' || detail), lower(?)) > 0)
-) SELECT
-      (SELECT COUNT(*) FROM filtered) AS total,
-      (SELECT json_group_array(json_object('id', id, 'at', at, 'type', type, 'event', event, 'label', event_label,
-        'cohort', cohort, 'about', about, 'by', by, 'detail', detail, 'scheduled_at', scheduled_at)) FROM
-        (SELECT * FROM filtered ORDER BY
-          CASE WHEN ? = 'newest' THEN julianday(at) END DESC,
-          CASE WHEN ? = 'oldest' THEN julianday(at) END ASC, id ASC LIMIT ? OFFSET ?)) AS items`;
+  SELECT h.* FROM labelled h CROSS JOIN params p WHERE (p.wanted_type = '' OR h.type = p.wanted_type)
+    AND (p.wanted_cohort = '' OR h.cohort = p.wanted_cohort)
+    AND (p.wanted_by = '' OR h.by = p.wanted_by)
+    AND (p.search = '' OR instr(lower(coalesce(h.event, '') || ' ' || h.event_label || ' ' || coalesce(h.about, '') || ' ' || h.detail), lower(p.search)) > 0)
+) SELECT COUNT(*) AS total,
+      json_group_array(json_object('id', id, 'at', at, 'type', type, 'event', event, 'label', event_label,
+        'cohort', cohort, 'about', about, 'by', by, 'detail', detail, 'scheduled_at', scheduled_at))
+        FILTER (WHERE position > ? AND position <= ?) AS items
+    FROM (SELECT *, ROW_NUMBER() OVER (ORDER BY
+      CASE WHEN ? = 'newest' THEN julianday(at) END DESC,
+      CASE WHEN ? = 'oldest' THEN julianday(at) END ASC, id ASC) AS position
+      FROM filtered ORDER BY position)`;
 const COVERAGE = 'Recorded cohort events, messages, week transitions, the latest interview records, hosts, certificates and playbook changes. Formation actions cover Lab ventures under the current participant rule; their historical cohort is Not recorded. History never names an admin.';
 
 r.get('/activity', async (c) => {
@@ -116,11 +136,12 @@ r.get('/activity', async (c) => {
     return c.json({ error: 'Choose valid activity filters and a page of 1 to 100 rows.' }, 400);
   }
   const limit = Number(rawLimit), offset = Number(rawOffset);
-  const binds = [type, type, cohort, cohort, by, by, q, q];
+  const binds = [type, cohort, by, q];
   try {
-    // One statement gives the count and page from the same snapshot, even past the last row.
+    // One pass counts every filtered row and aggregates only the requested page.
+    // It keeps the exact total even past the last row, without rescanning the sources.
     const result = await c.env.DB.prepare(HISTORY)
-      .bind(...binds, sort, sort, limit, offset).first<{ total: number; items: string }>();
+      .bind(...binds, offset, offset + limit, sort, sort).first<{ total: number; items: string }>();
     if (!result) throw new Error('No activity result');
     return c.json({ items: JSON.parse(result.items), total: result.total, limit, offset, coverage: COVERAGE });
   } catch (e) {
