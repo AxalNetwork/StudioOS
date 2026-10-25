@@ -174,7 +174,7 @@ export default function DealRoomPage() {
       {tab === 'Overview' && (
         <>
           <OverviewTab deal={deal} />
-          <DealSyndicates projectId={deal.project_id} currency={deal.currency} user={user} />
+          <DealSyndicates projectId={deal.project_id} user={user} />
         </>
       )}
       {tab === 'Documents' && <DocumentsTab dealId={deal.id} />}

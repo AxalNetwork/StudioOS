@@ -268,7 +268,7 @@ test('the deal room adds Invitations (admin), Transfers (admin, partner) and Ref
   assert.deepEqual(dealRoomTabs('founder'), ['Overview', 'Documents', 'Commitments', 'Activity']);
   const page = codeOnly(read('pages/DealRoomPage.jsx'));
   assert.match(page, /\{isInvestor && <DealRoomMembership dealId=\{deal\.id\} \/>\}/, 'the header carries Join and Leave for an investor');
-  assert.match(page, /<DealSyndicates projectId=\{deal\.project_id\} currency=\{deal\.currency\} user=\{user\} \/>/);
+  assert.match(page, /<DealSyndicates projectId=\{deal\.project_id\} user=\{user\} \/>/);
   assert.match(page, /<DealTransfersTab dealId=\{deal\.id\} currency=\{deal\.currency\} canRecord=\{isAdmin \|\| role === 'partner'\} \/>/);
   const routes = codeOnly(read('workspaces/investor/InvestorDealsRoutes.jsx'));
   assert.match(routes, /<DealRoomsPanel \/>/, '/deals carries the deal rooms to join');

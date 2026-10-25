@@ -146,6 +146,8 @@ export function requireInvestorTier(required: Exclude<InvestorTier, 'free'>) {
  * other deal and diligence reads remain Professional.
  */
 export const INVESTOR_PRO_EXEMPT: ReadonlyArray<{ method: string; path: RegExp }> = [
+  // Signed report links validate their own short-lived, single-use token.
+  { method: 'GET', path: /^\/api\/dd\/reports\/download\/[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\/?$/ },
   // D1149: the handler restricts Free investors to an authorized header/key strip.
   { method: 'GET', path: /^\/api\/deals\/[1-9][0-9]*\/?$/ },
   { method: 'DELETE', path: /^\/api\/deals\/[^/]+\/dealroom\/leave\/?$/ },

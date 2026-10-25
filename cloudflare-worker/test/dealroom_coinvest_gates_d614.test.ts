@@ -168,9 +168,9 @@ test('leave: a Free investor can leave a room they joined, and still cannot list
   assert.equal((await call(app, env, PRO, '/api/deals')).status, 200);
 });
 
-test('the exemption list is that one route, and index.ts mounts the gate that reads it', () => {
+test('the exemption list names only precise routes, and index.ts mounts the gate that reads it', () => {
   assert.deepEqual(INVESTOR_PRO_EXEMPT.map((e) => [e.method, e.path.source]),
-    [['GET', '^\\/api\\/deals\\/[1-9][0-9]*\\/?$'], ['DELETE', '^\\/api\\/deals\\/[^/]+\\/dealroom\\/leave\\/?$']]);
+    [['GET', '^\\/api\\/dd\\/reports\\/download\\/[A-Za-z0-9_-]+\\.[A-Za-z0-9_-]+\\/?$'], ['GET', '^\\/api\\/deals\\/[1-9][0-9]*\\/?$'], ['DELETE', '^\\/api\\/deals\\/[^/]+\\/dealroom\\/leave\\/?$']]);
   const src = readFileSync(resolve(process.cwd(), 'cloudflare-worker/src/index.ts'), 'utf8');
   assert.match(src, /const investorPro = requireInvestorTierExcept\('professional'\);\s*for \(const p of INVESTOR_PRO_PREFIXES\) \{\s*app\.use\(p, investorPro\);\s*app\.use\(`\$\{p\}\/\*`, investorPro\);/);
 });

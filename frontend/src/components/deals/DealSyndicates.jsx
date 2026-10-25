@@ -17,7 +17,8 @@ import { Loading, Empty, Unreadable, NotRecorded, StatusPill, BTN } from './Deal
  * takes a confirmation that says members are not notified. The close call is
  * made only from the confirmation's own button.
  */
-export default function DealSyndicates({ projectId, user, currency = 'USD' }) {
+// D1149: project-level syndicates retain USD; a deal cannot relabel them.
+export default function DealSyndicates({ projectId, user }) {
   const [state, setState] = useState({ loading: true, error: false, rows: null });
   const [open, setOpen] = useState(null);
   const load = useCallback(async () => {
@@ -44,7 +45,7 @@ export default function DealSyndicates({ projectId, user, currency = 'USD' }) {
                   <li key={s.id} className="flex items-center justify-between gap-2 p-3">
                     <div className="min-w-0">
                       <div className="font-semibold text-gray-900 dark:text-gray-100">{s.name}</div>
-                      <div className="text-xs text-gray-500">{centsMoney(s.committed_cents, currency) || 'Not recorded'} committed · {s.members} member{Number(s.members) === 1 ? '' : 's'}</div>
+                      <div className="text-xs text-gray-500">{centsMoney(s.committed_cents) || 'Not recorded'} committed · {s.members} member{Number(s.members) === 1 ? '' : 's'}</div>
                     </div>
                     <div className="flex items-center gap-2">
                       <SyndicateStatus status={s.status} />
@@ -55,7 +56,7 @@ export default function DealSyndicates({ projectId, user, currency = 'USD' }) {
               </ul>
             )}
       {open != null && (
-        <SyndicateDrawerLoader currency={currency} id={open} user={user} onClose={() => setOpen(null)} onClosed={load} />
+        <SyndicateDrawerLoader id={open} user={user} onClose={() => setOpen(null)} onClosed={load} />
       )}
     </section>
   );
@@ -66,7 +67,7 @@ export function SyndicateStatus({ status }) {
   return <StatusPill tone={status === 'funded' ? 'violet' : status === 'closed' ? 'grey' : 'ok'}>{step ? step.label : status}</StatusPill>;
 }
 
-function SyndicateDrawerLoader({ id, user, onClose, onClosed, currency = 'USD' }) {
+function SyndicateDrawerLoader({ id, user, onClose, onClosed }) {
   const [state, setState] = useState({ loading: true, error: false, syndicate: null });
   const load = useCallback(async () => {
     setState((s) => ({ ...s, loading: true, error: false }));
@@ -80,7 +81,7 @@ function SyndicateDrawerLoader({ id, user, onClose, onClosed, currency = 'USD' }
   useEffect(() => { load(); }, [load]);
   const canClose = Boolean(state.syndicate) && (user?.role === 'admin' || Number(state.syndicate.created_by) === Number(user?.id));
   return (
-    <SyndicateDrawer currency={currency}
+    <SyndicateDrawer
       state={state}
       onRetry={load}
       canClose={canClose}
@@ -91,7 +92,7 @@ function SyndicateDrawerLoader({ id, user, onClose, onClosed, currency = 'USD' }
 }
 
 /** The drawer. Rendered directly by the tests. */
-export function SyndicateDrawer({ state, currency = 'USD', onRetry, canClose, onClose, onClosed, initialConfirming = false }) {
+export function SyndicateDrawer({ state, onRetry, canClose, onClose, onClosed, initialConfirming = false }) {
   const [confirming, setConfirming] = useState(initialConfirming);
   const [busy, setBusy] = useState(false);
   const [refusal, setRefusal] = useState('');
@@ -135,9 +136,9 @@ export function SyndicateDrawer({ state, currency = 'USD', onRetry, canClose, on
                 </ol>
                 <dl className="mt-4 grid grid-cols-2 gap-x-4 gap-y-2 text-sm">
                   <dt className="text-gray-500">Target</dt>
-                  <dd>{s.target_cents ? centsMoney(s.target_cents, currency) : <NotRecorded reason={STATES.syndicates.nrTarget} />}</dd>
+                  <dd>{s.target_cents ? centsMoney(s.target_cents) : <NotRecorded reason={STATES.syndicates.nrTarget} />}</dd>
                   <dt className="text-gray-500">Committed</dt>
-                  <dd className="font-mono">{centsMoney(s.committed_cents, currency) || 'Not recorded'}</dd>
+                  <dd className="font-mono">{centsMoney(s.committed_cents) || 'Not recorded'}</dd>
                   <dt className="text-gray-500">Members</dt>
                   <dd>{s.member_count ?? (s.members || []).length}</dd>
                   <dt className="text-gray-500">Creator</dt>
@@ -157,7 +158,7 @@ export function SyndicateDrawer({ state, currency = 'USD', onRetry, canClose, on
                       {s.members.map((m) => (
                         <li key={m.id} className="flex justify-between py-1.5">
                           <span>{m.name || `User #${m.user_id}`}</span>
-                          <span className="font-mono">{centsMoney(m.commitment_cents, currency)}</span>
+                          <span className="font-mono">{centsMoney(m.commitment_cents)}</span>
                         </li>
                       ))}
                     </ul>

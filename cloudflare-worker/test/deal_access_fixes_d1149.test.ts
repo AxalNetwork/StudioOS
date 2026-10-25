@@ -9,6 +9,7 @@ import { tableFromBaseline, stripForeignKeys } from './_baseline.mjs';
 import deals, { serializeDeal } from '../src/routes/deals.ts';
 import dd from '../src/routes/dd.ts';
 import { requireInvestorTierExcept } from '../src/middleware/requireInvestorTier.ts';
+import { mintDownloadToken } from '../src/services/signedDownload.ts';
 import { investorHasDealRelationship } from '../src/services/dealAccess.ts';
 
 const SECRET = 'x'.repeat(64);
@@ -121,4 +122,24 @@ test('an unreadable own commitment leaves the authorized Free header available',
   const read = await call(f, 4, 'GET', '/deals/100');
   assert.equal(read.status, 200); assert.equal(read.body.project_name, 'Synthetic venture');
   assert.equal(read.body.my_commitment_unreadable, true);
+});
+
+
+test('signed DD downloads retain token-only authentication, audience and replay checks', async () => {
+  const f = fixture();
+  f.db.exec(stripForeignKeys(tableFromBaseline(baseline, 'dd_reports')));
+  const tokens = new Map();
+  f.env.TOKENS = { put: async (k, v) => { tokens.set(k, v); }, get: async (k) => tokens.get(k), delete: async (k) => { tokens.delete(k); } };
+  f.env.FILES = { get: async () => ({ body: 'Synthetic report' }) };
+  const mint = (audience) => mintDownloadToken(f.env, { key: 'synthetic.html', audience });
+  const download = (token) => f.app.request('/api/dd/reports/download/' + token, {}, f.env);
+  const valid = await mint('dd_report');
+  const response = await download(valid.token);
+  assert.equal(response.status, 200); assert.equal(await response.text(), 'Synthetic report');
+  assert.equal((await download(valid.token)).status, 403);
+  assert.equal((await download((await mint('other')).token)).status, 403);
+  const altered = await mint('dd_report');
+  const [payload, signature] = altered.token.split('.');
+  assert.equal((await download(payload + '.' + (signature[0] === 'A' ? 'B' : 'A') + signature.slice(1))).status, 403);
+  assert.equal((await call(f, null, 'GET', '/dd/cases')).status, 401);
 });

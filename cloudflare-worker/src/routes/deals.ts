@@ -460,6 +460,8 @@ deals.get('/screening', async (c) => {
 deals.post('/', async (c) => {
   const user = await requireAuth(c);
   const data = await c.req.json();
+  const currency = data.currency === undefined ? 'USD' : String(data.currency).trim().toUpperCase();
+  if (!/^[A-Z]{3}$/.test(currency)) return c.json({ code: 'invalid_currency', detail: 'Use a three-letter currency code.' }, 400);
   await ensureDealPassSchema(c.env);
   const sql = getSQL(c.env);
   const p = await sql`SELECT id, founder_id FROM projects WHERE id = ${data.project_id}`;
@@ -478,8 +480,6 @@ deals.post('/', async (c) => {
     await sql.end();
     return c.json({ error: 'unknown_status', detail: `Unknown deal status '${data.status}'`, allowed: DEAL_STATUSES }, 400);
   }
-  const currency = data.currency === undefined ? 'USD' : String(data.currency).trim().toUpperCase();
-  if (!/^[A-Z]{3}$/.test(currency)) return c.json({ code: 'invalid_currency', detail: 'Use a three-letter currency code.' }, 400);
   const [deal] = await sql`INSERT INTO deals (project_id, partner_id, status, notes, amount, stage_changed_at, source, currency) VALUES (${data.project_id}, ${data.partner_id || null}, ${data.status || 'applied'}, ${data.notes || null}, ${data.amount || null}, datetime('now'), ${source}, ${currency}) RETURNING *`;
   // Task #127 — the deal's arrival is its first stage entry. Without this the
   // funnel can measure conversion OUT of the first stage but never has a
@@ -502,6 +502,8 @@ deals.post('/', async (c) => {
 deals.post('/draft', async (c) => {
   const user = await requireAdmin(c);
   const data = await c.req.json();
+  const currency = data.currency === undefined ? 'USD' : String(data.currency).trim().toUpperCase();
+  if (!/^[A-Z]{3}$/.test(currency)) return c.json({ code: 'invalid_currency', detail: 'Use a three-letter currency code.' }, 400);
   await ensureDealPassSchema(c.env);
   const sql = getSQL(c.env);
   const p = await sql`SELECT id FROM projects WHERE id = ${data.project_id}`;
@@ -517,8 +519,6 @@ deals.post('/draft', async (c) => {
     }, 400);
   }
   const status = PIPELINE.includes(data.status) ? data.status : 'applied';
-  const currency = data.currency === undefined ? 'USD' : String(data.currency).trim().toUpperCase();
-  if (!/^[A-Z]{3}$/.test(currency)) return c.json({ code: 'invalid_currency', detail: 'Use a three-letter currency code.' }, 400);
   // D463 — the source is recorded at draft. Free text: the taxonomy is the
   // owner's call (which sources exist, and which count as the Lab).
   const source = data.source != null ? String(data.source).trim().slice(0, 120) || null : null;
@@ -700,6 +700,8 @@ deals.put('/:id', async (c) => {
   const user = await requireRole(c, 'partner');
   const id = parseInt(c.req.param('id'));
   const data = await c.req.json();
+  const currency = data.currency === undefined ? 'USD' : String(data.currency).trim().toUpperCase();
+  if (!/^[A-Z]{3}$/.test(currency)) return c.json({ code: 'invalid_currency', detail: 'Use a three-letter currency code.' }, 400);
   await ensureDealPassSchema(c.env);
   const sql = getSQL(c.env);
   const rows = await sql`SELECT id, status, stage_changed_at, amount, lead_partner_id FROM deals WHERE id = ${id}`;

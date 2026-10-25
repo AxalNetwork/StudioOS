@@ -7,6 +7,7 @@ import { mountContracts } from './_contracts_dom.mjs';
 import DealRoomPage, { CommitModal, CommitmentTotal } from '../src/pages/DealRoomPage.jsx';
 import DealFreePlan from '../src/components/deals/DealFreePlan.jsx';
 import { dealMoney, dealBackLink } from '../src/components/deals/dealMoney.js';
+import DealSyndicates, { SyndicateDrawer } from '../src/components/deals/DealSyndicates.jsx';
 import { InvitationsList } from '../src/components/deals/DealInvitationsTab.jsx';
 import { TransfersView } from '../src/components/deals/DealTransfersTab.jsx';
 import { JoinLeaveButton } from '../src/components/deals/DealRoomJoin.jsx';
@@ -74,4 +75,15 @@ test('staff can distinguish a pending invitation request from an issued invitati
   assert.match(result, /Invitation requested/); assert.match(result, /No access has been granted/); assert.match(result, />Requested</);
   const issued = html(h(InvitationsList, { state: { loading: false, rows: [{ id: 1, investor_user_id: 1, status: 'invited' }] } }));
   assert.doesNotMatch(issued, /Invitation requested|No access has been granted/);
+});
+
+
+test('a EUR deal never relabels project-level USD syndicates', async () => {
+  const result = html(h(SyndicateDrawer, { currency: 'EUR', state: { loading: false, syndicate: { name: 'Synthetic syndicate', status: 'open', target_cents: 100000, committed_cents: 12500, members: [{ id: 1, commitment_cents: 12500 }] } } }));
+  assert.match(result, /\$1,000\.00/); assert.match(result, /\$125\.00/); assert.doesNotMatch(result, /€/);
+  const original = api.networkFxProjectSyndicates;
+  api.networkFxProjectSyndicates = async () => [{ id: 1, name: 'Synthetic syndicate', committed_cents: 12500, members: 1 }];
+  const view = await mountContracts(h(DealSyndicates, { projectId: 10, currency: 'EUR' }));
+  try { await view.flush(); assert.match(view.text(), /\$125\.00/); assert.doesNotMatch(view.text(), /€/); }
+  finally { await view.unmount(); api.networkFxProjectSyndicates = original; }
 });
