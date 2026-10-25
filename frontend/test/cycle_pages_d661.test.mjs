@@ -142,7 +142,8 @@ test('A CHOSEN VENTURE RIDES ON EVERY LINK: tabs, card titles and the module pag
   // 4 → 5 (D906): the Investor narrative tool's tab bar on its module page keeps it too.
   // 5 → 4 (2026-10-24, D906 review): that tab bar now takes `tabSearch(q, …)`, the venture and the version.
   // 4 → 5 (D1015, #2432): the Cap table tool's tab bar on its module page keeps it too.
-  assert.equal((route.match(/search=\{q\}/g) || []).length, 5, 'the overview, module, record header, Validate\'s phone focus and the Cap table tabs keep the venture');
+  // 5 → 6 (D1063, #2426): the Build overview's door to the plan keeps it too.
+  assert.equal((route.match(/search=\{q\}/g) || []).length, 6, 'the overview, module, record header, Validate\'s phone focus, the Cap table tabs and the plan door keep the venture');
   assert.match(route, /search=\{tabSearch\(q, searchParams\.get\('version'\)\)\}/, 'the narrative tabs keep the venture, and the version');
 });
 

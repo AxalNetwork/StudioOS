@@ -159,7 +159,7 @@ test('wiring: the routes sit ahead of /grow/:slug, /grow/updates forwards to the
   }
   const route = read('frontend/src/pages/cycles/CycleRoute.jsx');
   assert.match(route, /\} else if \(reporting && cycle === 'grow'\) \{/);
-  assert.match(route, /if \(record \|\| slug \|\| reporting \|\| !projectId \|\| !def\) return undefined;/, 'the desk never reads the overview');
+  assert.match(route, /if \(record \|\| slug \|\| reporting \|\| buildPlan \|\| !projectId \|\| !def\) return undefined;/, 'the desk never reads the overview');
   assert.match(read('cloudflare-worker/src/services/redirectRoutes.ts'), /\{ path: '\/grow\/updates' \}/);
   assert.match(read('frontend/src/pages/PortfolioWorkspace.jsx'), /\{ to: '\/portfolio\/updates', label: 'Reports',/);
   assert.match(read('frontend/src/workspaces/shellConfig.js'), /\{ slug: 'updates', label: 'Reports', archetype: A\.FEED \}/);

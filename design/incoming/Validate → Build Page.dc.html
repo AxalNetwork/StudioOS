@@ -1,0 +1,512 @@
+<!DOCTYPE html>
+<html><head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <link href="https://fonts.googleapis.com/css2?family=Roboto+Mono:wght@400;500;600;700&family=Space+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <style>body{margin:0}a{color:#7c3aed;text-decoration:none}a:hover{color:#6d28d9}dl,dd{margin:0}button:focus-visible,a:focus-visible,[role=switch]:focus-visible,[role=radio]:focus-visible{outline:2px solid #7c3aed;outline-offset:2px}</style>
+</helmet>
+<div style="{{ v.root }}">
+  <sc-if value="{{ v.side }}" hint-placeholder-val="{{ true }}">
+    <aside style="{{ v.asideS }}">
+      <div style="padding:4px 16px 12px;display:flex;align-items:center;gap:8px"><span style="{{ v.logoS }}"></span><span style="font-weight:800;font-size:14px;letter-spacing:-.01em">Axal VC</span></div>
+      <span style="{{ v.groupS }}">{{ v.group }}</span>
+      <nav aria-label="Main" style="display:flex;flex-direction:column;gap:2px">
+        <sc-for list="{{ v.rows }}" as="s" hint-placeholder-count="9"><a href="{{ s.href }}" style="{{ s.st }}">{{ s.t }}</a></sc-for>
+      </nav>
+    </aside>
+  </sc-if>
+  <main style="{{ v.mainS }}">
+    <sc-if value="{{ v.top }}" hint-placeholder-val="{{ true }}">
+      <div style="{{ v.topS }}">
+        <div style="{{ v.searchS }}"><span aria-hidden="true">⌕</span>Search StudioOS</div>
+        <div style="display:flex;align-items:center;gap:12px">
+          <span style="{{ v.badgeS }}">{{ v.badge }}</span>
+          <span role="img" aria-label="Notifications" style="{{ v.iconS }}" dangerouslySetInnerHTML="{{ v.bell }}"></span>
+          <span aria-label="Account" style="{{ v.avS }}">[N]</span>
+        </div>
+      </div>
+    </sc-if>
+    <sc-if value="{{ v.ptop }}" hint-placeholder-val="{{ false }}"><div style="{{ v.ptopS }}"><span style="display:flex;align-items:center;gap:7px"><span style="{{ v.logoS }}"></span><b style="font-size:13px">Axal VC</b></span><span style="font-size:13px;font-weight:700">{{ v.company }}</span><span style="display:flex;align-items:center"><span role="img" aria-label="Studio" style="{{ v.picoS }}" dangerouslySetInnerHTML="{{ v.studioI }}"></span><span role="img" aria-label="Notifications" style="{{ v.picoS }}" dangerouslySetInnerHTML="{{ v.bell }}"></span></span></div></sc-if>
+    <div style="{{ v.bodyS }}">
+      <sc-if value="{{ v.head }}" hint-placeholder-val="{{ true }}">
+        <header style="display:flex;flex-direction:column;gap:8px">
+          <sc-if value="{{ v.crumb }}" hint-placeholder-val="{{ true }}"><a href="{{ v.crumbHref }}" style="{{ v.crumbS }}">{{ v.crumb }}</a></sc-if>
+          <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:14px;flex-wrap:wrap">
+            <div style="display:flex;flex-direction:column;gap:7px;min-width:0">
+              <h1 style="{{ v.h1S }}">{{ v.title }}</h1>
+              <sc-if value="{{ v.hpills }}" hint-placeholder-val="{{ false }}"><div style="display:flex;gap:7px;flex-wrap:wrap"><sc-for list="{{ v.hpills }}" as="p" hint-placeholder-count="3"><span style="{{ p.s }}">{{ p.t }}</span></sc-for></div></sc-if>
+            </div>
+            <div style="display:flex;align-items:center;gap:9px;flex-wrap:wrap">
+              <sc-for list="{{ v.hbtns }}" as="b" hint-placeholder-count="2">
+                <sc-if value="{{ b.txt }}" hint-placeholder-val="{{ false }}"><span style="{{ b.s }}">{{ b.t }}</span></sc-if>
+                <sc-if value="{{ b.btn }}" hint-placeholder-val="{{ true }}"><button type="button" aria-label="{{ b.al }}" style="{{ b.s }}">{{ b.t }}</button></sc-if>
+              </sc-for>
+            </div>
+          </div>
+          <sc-for list="{{ v.hlines }}" as="l" hint-placeholder-count="1"><p style="{{ l.s }}">{{ l.t }}</p></sc-for>
+          <sc-if value="{{ v.scope }}" hint-placeholder-val="{{ false }}"><div><span title="{{ v.scopeTip }}" style="{{ v.scopeS }}">{{ v.scope }}</span></div></sc-if>
+          <sc-if value="{{ v.gate }}" hint-placeholder-val="{{ false }}"><nav aria-label="Raise modules" style="{{ v.gateS }}"><sc-for list="{{ v.gate }}" as="g" hint-placeholder-count="9"><a href="{{ g.href }}" style="{{ g.s }}">{{ g.t }}</a></sc-for></nav></sc-if><sc-if value="{{ v.msel }}" hint-placeholder-val="{{ false }}"><button type="button" aria-label="Raise modules" style="{{ v.mselS }}"><span style="{{ v.eyeS }}">Module</span><b style="flex:1;text-align:left">{{ v.title }}</b><span aria-hidden="true">▾</span></button></sc-if><sc-if value="{{ v.moved }}" hint-placeholder-val="{{ false }}"><div role="status" style="{{ v.movedS }}"><span aria-hidden="true" style="{{ v.infoS }}">i</span><span style="flex:1">{{ v.moved }}</span><button type="button" style="{{ v.dismissS }}">Dismiss</button></div></sc-if><sc-if value="{{ v.tbar }}" hint-placeholder-val="{{ false }}"><div style="{{ v.tbarS }}"><div style="display:flex;gap:7px;flex-wrap:wrap;align-items:center"><sc-for list="{{ v.tbarChips }}" as="g" hint-placeholder-count="4"><span title="{{ g.tip }}" style="{{ g.s }}">{{ g.t }}</span></sc-for></div><div style="display:flex;gap:7px;align-items:center;flex-wrap:wrap"><sc-if value="{{ v.tbarNote }}" hint-placeholder-val="{{ false }}"><span style="{{ v.tbarNoteS }}">{{ v.tbarNote }}</span></sc-if><sc-for list="{{ v.tbarBtns }}" as="b" hint-placeholder-count="2"><button type="button" aria-label="{{ b.al }}" style="{{ b.s }}">{{ b.t }}</button></sc-for></div></div></sc-if>
+        </header>
+      </sc-if>
+      <sc-if value="{{ v.tabs }}" hint-placeholder-val="{{ true }}">
+        <nav aria-label="{{ v.tabsL }}" style="{{ v.tabRowS }}">
+          <sc-for list="{{ v.tabs }}" as="tb" hint-placeholder-count="4"><a aria-current="{{ tb.sel }}" href="{{ tb.href }}" style="{{ tb.s }}">{{ tb.t }}<sc-if value="{{ tb.n }}" hint-placeholder-val="{{ false }}"><span style="{{ tb.ns }}">{{ tb.n }}</span></sc-if></a></sc-for>
+        </nav>
+      </sc-if>
+      <sc-if value="{{ v.period }}" hint-placeholder-val="{{ false }}">
+        <div role="radiogroup" aria-label="Period" style="{{ v.segS }}"><sc-for list="{{ v.period }}" as="pp" hint-placeholder-count="3"><span role="radio" tabindex="0" aria-checked="{{ pp.on }}" style="{{ pp.s }}">{{ pp.t }}</span></sc-for></div>
+      </sc-if>
+      <sc-if value="{{ v.banner }}" hint-placeholder-val="{{ false }}">
+        <div role="alert" style="{{ v.bannerS }}"><span aria-hidden="true" style="{{ v.bannerI }}">!</span><span style="flex:1">{{ v.banner }}</span><button type="button" style="{{ v.btnS }}">Try again</button></div>
+      </sc-if>
+      <div style="{{ v.gridS }}">
+        <sc-for list="{{ v.cols }}" as="col" hint-placeholder-count="3">
+          <div style="{{ col.s }}">
+            <sc-for list="{{ col.blocks }}" as="k" hint-placeholder-count="1">
+              <sc-if value="{{ k.isTiles }}" hint-placeholder-val="{{ false }}">
+                <div style="{{ k.gs }}">
+                  <sc-for list="{{ k.items }}" as="t" hint-placeholder-count="4">
+                    <div style="{{ k.ts }}">
+                      <span style="{{ v.eyeS }}">{{ t.k }}</span>
+                      <span style="{{ t.vs }}">{{ t.v }}</span>
+                      <div style="display:flex;gap:7px;align-items:center;flex-wrap:wrap">
+                        <sc-if value="{{ t.fl }}" hint-placeholder-val="{{ false }}"><span style="{{ t.fls }}">{{ t.fl }}</span></sc-if>
+                        <sc-if value="{{ t.d }}" hint-placeholder-val="{{ false }}"><span style="{{ t.ds }}">{{ t.d }}</span></sc-if>
+                        <span style="{{ t.ss }}">{{ t.sub }}</span>
+                      </div>
+                    </div>
+                  </sc-for>
+                </div>
+              </sc-if>
+              <sc-if value="{{ k.isCard }}" hint-placeholder-val="{{ true }}">
+                <section style="{{ k.cs }}">
+                  <sc-if value="{{ k.glyph }}" hint-placeholder-val="{{ false }}"><span aria-hidden="true" style="{{ v.glyphS }}">{{ k.glyph }}</span></sc-if>
+                  <sc-if value="{{ k.cover }}" hint-placeholder-val="{{ false }}"><div style="{{ k.cover }}"><span style="{{ v.coverT }}">Cover image</span></div></sc-if>
+                  <sc-if value="{{ k.title }}" hint-placeholder-val="{{ true }}">
+                    <div style="{{ k.ths }}">
+                      <div style="display:flex;flex-direction:column;gap:3px;min-width:0">
+                        <sc-if value="{{ k.eye }}" hint-placeholder-val="{{ false }}"><span style="{{ k.es }}">{{ k.eye }}</span></sc-if>
+                        <h3 style="{{ k.hs }}">{{ k.title }}</h3>
+                      </div>
+                      <div style="display:flex;align-items:center;gap:9px;flex-wrap:wrap"><sc-if value="{{ k.lock }}" hint-placeholder-val="{{ false }}"><span style="{{ v.lockS }}"><span aria-hidden="true" style="display:inline-flex" dangerouslySetInnerHTML="{{ v.lockI }}"></span>Set by HQ</span></sc-if>
+                        <sc-if value="{{ k.meta }}" hint-placeholder-val="{{ false }}"><span style="{{ k.ms }}">{{ k.meta }}</span></sc-if>
+                        <sc-if value="{{ k.tog }}" hint-placeholder-val="{{ false }}"><span role="radiogroup" aria-label="View" style="{{ v.segS }}"><sc-for list="{{ k.tog }}" as="o" hint-placeholder-count="2"><span role="radio" tabindex="0" aria-checked="{{ o.on }}" style="{{ o.s }}">{{ o.t }}</span></sc-for></span></sc-if>
+                      </div>
+                    </div>
+                  </sc-if>
+                  <sc-if value="{{ k.note }}" hint-placeholder-val="{{ false }}"><p style="{{ k.ns }}">{{ k.note }}</p></sc-if>
+                  <sc-if value="{{ k.tbar }}" hint-placeholder-val="{{ false }}">
+                    <div style="display:flex;gap:7px;flex-wrap:wrap;align-items:center"><sc-if value="{{ k.tbar.search }}" hint-placeholder-val="{{ false }}"><div style="{{ v.searchS }}"><span aria-hidden="true">⌕</span>{{ k.tbar.search }}</div></sc-if><sc-for list="{{ k.tbar.chips }}" as="g" hint-placeholder-count="3"><span style="{{ g.s }}">{{ g.t }}</span></sc-for></div>
+                  </sc-if>
+                  <sc-if value="{{ k.legend }}" hint-placeholder-val="{{ false }}">
+                    <div style="display:flex;gap:14px;flex-wrap:wrap;font-size:12px"><sc-for list="{{ k.legend }}" as="lg" hint-placeholder-count="2"><span style="display:inline-flex;align-items:center;gap:6px"><span style="{{ lg.sw }}"></span>{{ lg.t }}</span></sc-for></div>
+                  </sc-if>
+                  <sc-if value="{{ k.svg }}" hint-placeholder-val="{{ false }}"><div dangerouslySetInnerHTML="{{ k.svg }}"></div></sc-if>
+                  <sc-if value="{{ k.refL }}" hint-placeholder-val="{{ false }}"><span style="{{ k.refLs }}">{{ k.refL }}</span></sc-if>
+                  <sc-if value="{{ k.bars }}" hint-placeholder-val="{{ false }}">
+                    <div role="img" aria-label="{{ k.sum }}" style="display:flex;flex-direction:column;gap:9px">
+                      <sc-for list="{{ k.bars }}" as="it" hint-placeholder-count="4"><div title="{{ it.tip }}" style="{{ k.bgs }}"><span style="{{ it.ls }}">{{ it.l }}</span><span style="{{ it.trs }}"><span style="{{ it.fs }}"></span><sc-if value="{{ k.refS }}" hint-placeholder-val="{{ false }}"><span style="{{ k.refS }}"></span></sc-if></span><span style="{{ it.vs }}">{{ it.v }}</span></div></sc-for>
+                    </div>
+                  </sc-if>
+                  <sc-if value="{{ k.stacks }}" hint-placeholder-val="{{ false }}">
+                    <sc-for list="{{ k.stacks }}" as="st" hint-placeholder-count="2">
+                      <div style="display:flex;flex-direction:column;gap:7px">
+                        <span style="{{ v.eyeS }}">{{ st.lab }}</span>
+                        <div style="display:flex;gap:12px;flex-wrap:wrap;font-size:12px"><sc-for list="{{ st.leg }}" as="lg" hint-placeholder-count="4"><span style="display:inline-flex;align-items:center;gap:6px"><span style="{{ lg.sw }}"></span>{{ lg.t }}</span></sc-for></div>
+                        <div role="img" aria-label="{{ st.sum }}" style="{{ v.stackS }}"><sc-for list="{{ st.segs }}" as="sg" hint-placeholder-count="4"><span title="{{ sg.tip }}" style="{{ sg.s }}"></span></sc-for></div>
+                      </div>
+                    </sc-for>
+                  </sc-if>
+                  <sc-if value="{{ k.facts }}" hint-placeholder-val="{{ false }}">
+                    <dl style="{{ v.factsS }}"><sc-for list="{{ k.facts }}" as="f" hint-placeholder-count="6"><div style="display:flex;flex-direction:column;gap:3px;min-width:0"><dt style="{{ v.eyeS }}">{{ f.k }}</dt><dd style="{{ v.ddS }}">{{ f.v }}</dd><sc-if value="{{ f.sub }}" hint-placeholder-val="{{ false }}"><span style="{{ v.fsubS }}">{{ f.sub }}</span></sc-if></div></sc-for></dl>
+                  </sc-if>
+                  <sc-if value="{{ k.cal }}" hint-placeholder-val="{{ false }}">
+                    <div role="grid" aria-label="November 2026" style="{{ v.calS }}">
+                      <sc-for list="{{ k.cal.head }}" as="hd" hint-placeholder-count="7"><span role="columnheader" style="{{ v.calH }}">{{ hd.t }}</span></sc-for>
+                      <sc-for list="{{ k.cal.days }}" as="d" hint-placeholder-count="35">
+                        <div role="gridcell" style="{{ d.s }}">
+                          <div style="display:flex;justify-content:space-between;align-items:center;gap:4px"><span style="{{ d.ns }}">{{ d.n }}</span><sc-if value="{{ d.ov }}" hint-placeholder-val="{{ false }}"><span style="{{ v.ovS }}"><span aria-hidden="true" style="{{ v.ovD }}"></span>{{ d.ov }}</span></sc-if></div>
+                          <sc-for list="{{ d.chips }}" as="ch" hint-placeholder-count="1"><span style="{{ ch.s }}">{{ ch.t }}</span></sc-for>
+                          <sc-if value="{{ d.more }}" hint-placeholder-val="{{ false }}"><a href="#" style="{{ v.moreS }}">{{ d.more }}</a></sc-if>
+                          <sc-if value="{{ d.pop }}" hint-placeholder-val="{{ false }}"><div role="dialog" aria-label="Event" style="{{ v.popS }}"><b style="font-size:13px;line-height:1.35">{{ d.pop.t }}</b><sc-for list="{{ d.pop.lines }}" as="pl" hint-placeholder-count="3"><span style="{{ v.popL }}">{{ pl.t }}</span></sc-for><span style="{{ d.pop.st.s }}">{{ d.pop.st.t }}</span><button type="button" style="{{ v.btnS }}">Open event</button></div></sc-if>
+                        </div>
+                      </sc-for>
+                    </div>
+                  </sc-if>
+                  <sc-if value="{{ k.tags }}" hint-placeholder-val="{{ false }}"><div style="display:flex;gap:7px;flex-wrap:wrap;align-items:center"><sc-for list="{{ k.tags }}" as="g" hint-placeholder-count="3"><span style="{{ g.s }}">{{ g.t }}</span></sc-for></div></sc-if>
+                  <div style="{{ k.rowsS }}">
+                    <sc-for list="{{ k.rows }}" as="r" hint-placeholder-count="2">
+                      <div style="{{ r.rs }}">
+                        <sc-if value="{{ r.db }}" hint-placeholder-val="{{ false }}"><span style="{{ v.dbS }}"><span style="{{ v.dbM }}">{{ r.db.m }}</span><b style="{{ v.dbD }}">{{ r.db.d }}</b><span style="{{ v.dbM }}">{{ r.db.w }}</span></span></sc-if>
+                        <sc-if value="{{ r.lead }}" hint-placeholder-val="{{ false }}"><span aria-hidden="true" style="{{ r.ls }}">{{ r.lead }}</span></sc-if>
+                        <div style="flex:1;min-width:0;display:flex;flex-direction:column;gap:5px">
+                          <sc-if value="{{ r.eye }}" hint-placeholder-val="{{ false }}"><span style="{{ r.es }}">{{ r.eye }}</span></sc-if>
+                          <div style="display:flex;gap:7px;align-items:center;flex-wrap:wrap">
+                            <sc-if value="{{ r.pill }}" hint-placeholder-val="{{ false }}"><span style="{{ r.pill.s }}">{{ r.pill.t }}</span></sc-if>
+                            <span style="{{ r.ts }}">{{ r.t }}</span>
+                          </div>
+                          <sc-if value="{{ r.sub }}" hint-placeholder-val="{{ false }}"><span style="{{ r.ss }}">{{ r.sub }}</span></sc-if>
+                          <sc-if value="{{ r.tags }}" hint-placeholder-val="{{ false }}"><div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center"><sc-for list="{{ r.tags }}" as="g" hint-placeholder-count="2"><span style="{{ g.s }}">{{ g.t }}</span></sc-for></div></sc-if>
+                          <sc-if value="{{ r.bar }}" hint-placeholder-val="{{ false }}"><div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap"><span style="{{ r.bar.trs }}"><span style="{{ r.bar.fs }}"></span></span><span style="{{ v.monoS }}">{{ r.bar.t }}</span><sc-if value="{{ r.bar.w }}" hint-placeholder-val="{{ false }}"><span style="{{ v.waitS }}">{{ r.bar.w }}</span></sc-if></div></sc-if>
+                          <sc-if value="{{ r.btns }}" hint-placeholder-val="{{ false }}"><div style="display:flex;gap:7px;flex-wrap:wrap"><sc-for list="{{ r.btns }}" as="b" hint-placeholder-count="2"><button type="button" style="{{ b.s }}">{{ b.t }}</button></sc-for></div></sc-if>
+                        </div>
+                        <sc-if value="{{ r.v }}" hint-placeholder-val="{{ false }}"><span style="{{ r.vs }}">{{ r.v }}</span></sc-if>
+                        <sc-if value="{{ r.st }}" hint-placeholder-val="{{ false }}"><span style="{{ r.st.s }}">{{ r.st.t }}</span></sc-if>
+                        <sc-if value="{{ r.tg }}" hint-placeholder-val="{{ false }}"><span role="switch" tabindex="0" aria-checked="{{ r.on }}" aria-label="{{ r.t }}" style="{{ r.tg }}"><span style="{{ r.tk }}"></span></span></sc-if>
+                        <sc-if value="{{ r.act }}" hint-placeholder-val="{{ false }}"><button type="button" style="{{ r.as }}">{{ r.act }}</button></sc-if>
+                      </div>
+                    </sc-for>
+                  </div>
+                  <sc-if value="{{ k.btns }}" hint-placeholder-val="{{ false }}"><div style="{{ k.bs }}"><sc-for list="{{ k.btns }}" as="b" hint-placeholder-count="2"><button type="button" style="{{ b.s }}">{{ b.t }}</button></sc-for></div></sc-if>
+                  <sc-if value="{{ k.foot }}" hint-placeholder-val="{{ false }}"><p style="{{ k.fs }}">{{ k.foot }}</p></sc-if>
+                </section>
+              </sc-if>
+              <sc-if value="{{ k.isTable }}" hint-placeholder-val="{{ false }}">
+                <section style="{{ k.cs }}">
+                  <sc-if value="{{ k.title }}" hint-placeholder-val="{{ false }}"><div style="{{ k.ths }}"><h3 style="{{ k.hs }}">{{ k.title }}</h3><div style="display:flex;align-items:center;gap:9px"><sc-if value="{{ k.meta }}" hint-placeholder-val="{{ false }}"><span style="{{ k.ms }}">{{ k.meta }}</span></sc-if><sc-if value="{{ k.tog }}" hint-placeholder-val="{{ false }}"><span role="radiogroup" aria-label="View" style="{{ v.segS }}"><sc-for list="{{ k.tog }}" as="o" hint-placeholder-count="2"><span role="radio" tabindex="0" aria-checked="{{ o.on }}" style="{{ o.s }}">{{ o.t }}</span></sc-for></span></sc-if></div></div></sc-if>
+                  <sc-if value="{{ k.tbar }}" hint-placeholder-val="{{ false }}">
+                    <div style="display:flex;gap:7px;flex-wrap:wrap;align-items:center"><sc-if value="{{ k.tbar.search }}" hint-placeholder-val="{{ false }}"><div style="{{ v.searchS }}"><span aria-hidden="true">⌕</span>{{ k.tbar.search }}</div></sc-if><sc-for list="{{ k.tbar.chips }}" as="g" hint-placeholder-count="3"><span style="{{ g.s }}">{{ g.t }}</span></sc-for></div>
+                    <sc-if value="{{ k.tbar.views }}" hint-placeholder-val="{{ false }}"><div style="display:flex;gap:7px;flex-wrap:wrap;align-items:center"><span style="{{ v.eyeS }}">Saved views</span><sc-for list="{{ k.tbar.views }}" as="g" hint-placeholder-count="4"><span style="{{ g.s }}">{{ g.t }}</span></sc-for></div></sc-if>
+                  </sc-if>
+                  <div role="table" style="overflow-x:auto">
+                    <div style="{{ k.ins }}">
+                      <div role="row" style="{{ k.hrs }}"><sc-for list="{{ k.cols }}" as="h" hint-placeholder-count="5"><span role="columnheader">{{ h.t }}</span></sc-for></div>
+                      <sc-for list="{{ k.rows }}" as="row" hint-placeholder-count="4">
+                        <div role="row" style="{{ row.s }}"><sc-for list="{{ row.cells }}" as="cl" hint-placeholder-count="5"><div role="cell" title="{{ cl.tip }}" style="{{ cl.s }}"><sc-if value="{{ cl.pill }}" hint-placeholder-val="{{ false }}"><span style="{{ cl.pill.s }}">{{ cl.pill.t }}</span></sc-if><span style="{{ cl.ts }}">{{ cl.t }}</span><sc-if value="{{ cl.sub }}" hint-placeholder-val="{{ false }}"><span style="{{ cl.ss }}">{{ cl.sub }}</span></sc-if></div></sc-for></div>
+                      </sc-for>
+                    </div>
+                  </div>
+                  <sc-if value="{{ k.pager }}" hint-placeholder-val="{{ false }}">
+                    <div style="display:flex;justify-content:space-between;align-items:center;gap:11px;flex-wrap:wrap"><span style="{{ v.countS }}">{{ k.count }}</span><span style="display:flex;gap:6px;align-items:center"><span style="{{ v.countS }}">Rows per page</span><span style="{{ v.pageS }}">25 ▾</span><button type="button" aria-label="Previous page" style="{{ v.pageS }}">‹</button><button type="button" aria-current="page" style="{{ v.pageS }}">1</button><button type="button" style="{{ v.pageS }}">2</button><button type="button" aria-label="Next page" style="{{ v.pageS }}">›</button></span></div>
+                  </sc-if>
+                  <sc-if value="{{ k.foot }}" hint-placeholder-val="{{ false }}"><p style="{{ k.fs }}">{{ k.foot }}</p></sc-if>
+                </section>
+              </sc-if>
+            </sc-for>
+          </div>
+        </sc-for>
+      </div>
+    </div>
+    <sc-if value="{{ v.pbar }}" hint-placeholder-val="{{ false }}"><div style="{{ v.pbarS }}"><sc-for list="{{ v.pbar }}" as="b" hint-placeholder-count="2"><button type="button" style="{{ b.s }}">{{ b.t }}</button></sc-for></div></sc-if>
+  <sc-if value="{{ v.pnav }}" hint-placeholder-val="{{ false }}"><nav aria-label="Cycles" style="{{ v.pnavS }}"><sc-for list="{{ v.pnav }}" as="pn" hint-placeholder-count="5"><a href="{{ pn.href }}" style="{{ pn.s }}"><span aria-hidden="true" style="{{ pn.ds }}"></span>{{ pn.t }}</a></sc-for></nav></sc-if></main>
+  <sc-if value="{{ v.spine }}" hint-placeholder-val="{{ true }}">
+    <aside aria-label="Eadwyn" title="{{ v.spineTip }}" style="{{ v.spineS }}"><span style="{{ v.eadS }}">E</span><span style="{{ v.spineT }}">Eadwyn</span></aside>
+  </sc-if><sc-if value="{{ v.rail }}" hint-placeholder-val="{{ false }}"><aside aria-label="Eadwyn" style="{{ v.railS }}"><div style="display:flex;align-items:center;gap:9px"><span style="{{ v.eadS }}">E</span><b style="font-size:14px;flex:1">Eadwyn</b><button type="button" aria-label="Collapse Eadwyn" style="{{ v.railX }}">›</button></div><p style="{{ v.railP }}">{{ v.rail.line }}</p><button type="button" style="{{ v.railB }}">{{ v.rail.btn }}</button><sc-for list="{{ v.rail.items }}" as="ri" hint-placeholder-count="3"><div style="{{ v.railI }}"><span style="{{ v.eyeS }}">{{ ri.e }}</span><span style="font-size:12.5px;line-height:1.5">{{ ri.t }}</span></div></sc-for></aside></sc-if>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script="" data-props="{&quot;$preview&quot;:{&quot;width&quot;:&quot;1440px&quot;,&quot;height&quot;:&quot;900px&quot;},&quot;board&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;default&quot;:&quot;VB1&quot;,&quot;options&quot;:[&quot;VB1&quot;,&quot;VB2a&quot;,&quot;VB2b&quot;,&quot;VB3&quot;,&quot;VB4&quot;,&quot;VB5&quot;,&quot;VB6&quot;,&quot;VB7&quot;,&quot;VB7n&quot;,&quot;VB8a&quot;,&quot;VB8b&quot;,&quot;VB9&quot;,&quot;VB10&quot;,&quot;VB11&quot;,&quot;VB11b&quot;,&quot;VB12&quot;,&quot;VB13&quot;,&quot;VB14a&quot;,&quot;VB14b&quot;,&quot;VB15&quot;,&quot;VB16a&quot;,&quot;VB16b&quot;,&quot;VB17&quot;,&quot;VB18&quot;,&quot;VB19a&quot;,&quot;VB19b&quot;,&quot;VB20a&quot;,&quot;VB20b&quot;,&quot;VB21a&quot;,&quot;VB21b&quot;,&quot;VB22a&quot;,&quot;VB22b&quot;],&quot;tsType&quot;:&quot;string&quot;}}">
+class Component extends DCLogic {
+  renderVals() {
+    const B = this.props.board || 'VB1';
+    const dark = B === 'VB12', phone = /^VB2[12]/.test(B);
+    const crop = ['VB2a', 'VB2b', 'VB3', 'VB7n', 'VB8a', 'VB8b', 'VB11b', 'VB13', 'VB14a', 'VB14b', 'VB19a', 'VB19b'].indexOf(B) >= 0;
+    const c = dark
+      ? { bg: '#0b1220', card: '#111827', raised: '#1f2937', ink: '#e5e7eb', mu: '#9ca3af', fa: '#6b7280', hair: '#374151', vi: '#a78bfa', vt: '#a78bfa', lav: '#211f3d', lavE: '#4c3a8a', pos: '#34d399', posBg: 'rgba(52,211,153,.12)', posE: 'rgba(52,211,153,.45)', neg: '#f87171', negBg: 'rgba(248,113,113,.12)', negE: 'rgba(248,113,113,.5)', amT: '#fcd34d', amBg: 'rgba(252,211,77,.1)', amE: 'rgba(252,211,77,.55)', dim: 'rgba(3,7,18,.62)', skel: '#1f2937' }
+      : { bg: '#f4f3f7', card: '#ffffff', raised: '#f8f7fb', ink: '#18181b', mu: '#6b6577', fa: '#a1a1aa', hair: '#ececf1', vi: '#7c3aed', vt: '#6d28d9', lav: '#f4f0fe', lavE: '#ddd0fb', pos: '#047857', posBg: '#ecfdf5', posE: '#a7f3d0', neg: '#b91c1c', negBg: '#fef2f2', negE: '#fecaca', amT: '#92400e', amBg: '#fffbeb', amE: '#fcd34d', dim: 'rgba(24,24,27,.34)', skel: '#ececf1' };
+    const MO = "'Roboto Mono',ui-monospace,monospace", SG = "'Space Grotesk',system-ui,sans-serif";
+    const S = [c.vi, '#0ea5e9', '#f59e0b', '#10b981', '#6b6577'];
+    const eyeS = 'font:700 10px ' + MO + ';letter-spacing:.07em;text-transform:uppercase;color:' + c.mu;
+    const CARD = 'background:' + c.card + ';border:1px solid ' + c.hair + ';border-radius:12px;padding:16px 18px;display:flex;flex-direction:column;gap:11px;min-width:0;box-sizing:border-box';
+    const PLAIN = 'display:flex;flex-direction:column;gap:8px;min-width:0';
+    const SEC = 'display:flex;flex-direction:column;gap:9px;min-width:0;padding-top:14px;border-top:1px solid ' + c.hair;
+    const BTN = 'display:inline-flex;align-items:center;justify-content:center;gap:6px;min-height:' + (phone ? 44 : 34) + 'px;padding:0 14px;border-radius:9px;font:700 13px ' + SG + ';cursor:pointer;white-space:nowrap;box-sizing:border-box;';
+    const btnP = BTN + 'border:1px solid #7c3aed;background:#7c3aed;color:#fff';
+    const btnS = BTN + 'border:1px solid ' + c.hair + ';background:' + c.card + ';color:' + c.ink;
+    const btnG = BTN + 'border:1px solid transparent;background:transparent;color:' + c.vt + ';padding:0 6px';
+    const btnD = BTN + 'border:1px solid ' + c.negE + ';background:' + c.card + ';color:' + c.neg;
+    const btnSm = BTN + 'min-height:' + (phone ? 44 : 30) + 'px;padding:0 11px;font-size:12px;border:1px solid ' + c.hair + ';background:' + c.card + ';color:' + c.ink;
+    const TN = { n: [c.mu, c.raised, c.hair], v: [c.vt, c.lav, c.lavE], g: [c.pos, c.posBg, c.posE], r: [c.neg, c.negBg, c.negE], a: [c.amT, c.amBg, c.amE] };
+    const pl = (ic, t, tone) => { const x = TN[tone || 'n']; return { t: (ic ? ic + ' ' : '') + t, s: 'display:inline-flex;align-items:center;gap:4px;padding:2px 9px;border-radius:999px;font:700 11px ' + SG + ';line-height:1.5;white-space:nowrap;color:' + x[0] + ';background:' + x[1] + ';border:1px solid ' + x[2] }; };
+    const tag = (t, sel) => ({ t, s: 'display:inline-flex;align-items:center;gap:5px;min-height:' + (phone ? 40 : 28) + 'px;padding:0 11px;border-radius:999px;box-sizing:border-box;font:' + (sel ? 700 : 600) + ' 12px ' + SG + ';white-space:nowrap;cursor:pointer;' + (sel ? 'color:' + c.vt + ';background:' + c.lav + ';border:1px solid ' + c.lavE : 'color:' + c.ink + ';background:' + c.card + ';border:1px solid ' + c.hair) });
+    const seg = (opts, cur) => opts.map(t => ({ t, on: t === cur ? 'true' : 'false', s: 'display:inline-flex;align-items:center;min-height:' + (phone ? 40 : 28) + 'px;padding:0 12px;border-radius:7px;font:' + (t === cur ? 700 : 600) + ' 12px ' + SG + ';cursor:pointer;white-space:nowrap;' + (t === cur ? 'background:' + c.card + ';color:' + c.ink + ';box-shadow:0 0 0 1px ' + c.hair : 'color:' + c.mu) }));
+    const TOG = () => seg(['Chart', 'Table'], 'Chart');
+    const RS = 'display:flex;gap:11px;align-items:flex-start;padding:10px 0;border-top:1px solid ' + c.hair;
+    const R = (o) => Object.assign({ rs: RS, db: false, lead: false, ls: 'font-size:14px;line-height:1.3;flex:none;color:' + c.mu, eye: false, es: eyeS, pill: false, t: '', ts: 'font-size:13px;font-weight:600;line-height:1.45', sub: false, ss: 'font-size:12px;color:' + c.mu + ';line-height:1.5', tags: false, bar: false, btns: false, v: false, vs: 'font:700 13px ' + MO + ';white-space:nowrap;color:' + c.ink, st: false, tg: false, tk: '', on: 'false', act: false, as: btnSm }, o);
+    const K = (o) => Object.assign({ isCard: true, isTiles: false, isTable: false, cs: CARD, glyph: false, cover: false, title: false, ths: 'display:flex;align-items:center;justify-content:space-between;gap:11px;flex-wrap:wrap', eye: false, es: eyeS, hs: 'margin:0;font-size:15px;font-weight:800;letter-spacing:-.01em', meta: false, ms: 'font-size:12px;color:' + c.mu, tog: false, lock: false, note: false, ns: 'margin:0;font-size:12.5px;line-height:1.55;color:' + c.mu, tbar: false, legend: false, svg: false, refL: false, refLs: '', bars: false, sum: '', bgs: 'display:grid;grid-template-columns:180px minmax(0,1fr) 150px;gap:11px;align-items:center;font-size:12.5px', refS: false, stacks: false, facts: false, tags: false, cal: false, rows: [], rowsS: 'display:flex;flex-direction:column', btns: false, bs: 'display:flex;gap:7px;flex-wrap:wrap', foot: false, fs: 'margin:0;font-size:12px;color:' + c.mu + ';line-height:1.55' }, o);
+    const TL = (items, n) => ({ isCard: false, isTiles: true, isTable: false, gs: 'display:grid;grid-template-columns:repeat(' + (n || (phone ? 2 : 4)) + ',minmax(0,1fr));gap:' + (phone ? 10 : 14) + 'px', ts: CARD + ';gap:6px;padding:' + (phone ? '12px 13px' : '14px 16px'), items: items.map(x => ({ k: x[0], v: x[1], sub: x[2] || '', d: x[3] || false, ds: 'font:700 12px ' + MO + ';color:' + c.pos, fl: x[5] || false, fls: 'display:inline-flex;align-items:center;gap:5px;padding:1px 8px;border-radius:999px;font:700 11px ' + SG + ';color:' + c.amT + ';background:' + c.amBg + ';border:1px solid ' + c.amE, vs: x[1] === '' ? 'display:block;height:24px;width:60%;border-radius:6px;background:' + c.skel : 'font:700 ' + (x[6] ? 15 : (phone ? 20 : 24)) + 'px ' + (x[6] ? SG : MO) + ';letter-spacing:-.02em;color:' + (x[6] || c.ink), ss: 'font-size:12px;color:' + c.mu + ';line-height:1.45' })) });
+    const CL = (t, o) => Object.assign({ t: t == null ? '' : t, tip: '', s: 'display:flex;flex-direction:column;align-items:flex-start;gap:3px;min-width:0', ts: 'line-height:1.4', pill: false, sub: false, ss: 'font-size:11px;color:' + c.mu + ';line-height:1.4' }, o || {});
+    const MN = { ts: 'font-family:' + MO + ';font-weight:600' }, MU = { ts: 'color:' + c.mu }, LK = { ts: 'font-weight:700;color:' + c.vt + ';cursor:pointer' }, BD = { ts: 'font-weight:700;line-height:1.35' };
+    const DOTS = CL('⋯', { ts: 'font-size:16px;color:' + c.mu + ';cursor:pointer', tip: 'More actions' });
+    const TB = (o) => { const t = Object.assign({ isCard: false, isTiles: false, isTable: true, cs: CARD, title: false, ths: 'display:flex;align-items:center;justify-content:space-between;gap:11px;flex-wrap:wrap', hs: 'margin:0;font-size:15px;font-weight:800;letter-spacing:-.01em', meta: false, ms: 'font-size:12px;color:' + c.mu, tog: false, tbar: false, gc: '1fr', minW: 0, cols: [], rows: [], pager: true, count: '', foot: false, fs: 'margin:0;font-size:12px;color:' + c.mu + ';line-height:1.55' }, o);
+      if (t.tbar && !t.tbar.views) t.tbar.views = false;
+      t.ins = 'min-width:' + t.minW + 'px'; t.hrs = 'display:grid;grid-template-columns:' + t.gc + ';gap:8px;padding:8px 0;border-bottom:1px solid ' + c.hair + ';' + eyeS;
+      t.cols = t.cols.map(x => ({ t: x })); t.rows = t.rows.map(cells => ({ s: 'display:grid;grid-template-columns:' + t.gc + ';gap:8px;padding:9px 0;border-bottom:1px solid ' + c.hair + ';align-items:center;font-size:12px', cells: cells.map(x => typeof x === 'string' ? CL(x) : x) })); return t; };
+    const H18 = 'margin:0;font-size:18px;font-weight:800;letter-spacing:-.02em;line-height:1.3';
+    const FIN = 'display:block;box-sizing:border-box;width:100%;padding:9px 11px;border:1px solid ' + c.hair + ';border-radius:7px;background:' + c.card + ';font:600 13px ' + SG + ';line-height:1.45;color:' + c.ink;
+    const FIE = FIN + ';color:' + c.fa + ';font-weight:500';
+    const TGS = (on) => 'position:relative;display:inline-block;width:34px;height:20px;border-radius:999px;flex:none;margin-top:2px;cursor:pointer;background:' + (on ? '#7c3aed' : c.hair) + ';border:1px solid ' + (on ? '#7c3aed' : c.mu);
+    const TKS = (on) => 'position:absolute;top:2px;left:' + (on ? 16 : 2) + 'px;width:14px;height:14px;border-radius:999px;background:#fff;box-shadow:0 1px 2px rgba(0,0,0,.25)';
+    const NOTE = (tone) => { const x = { n: [c.raised, c.hair], v: [c.lav, c.lavE], a: [c.amBg, c.amE], r: [c.negBg, c.negE] }[tone]; return 'display:flex;gap:10px;align-items:flex-start;padding:12px 14px;border-radius:10px;background:' + x[0] + ';border:1px solid ' + x[1]; };
+    const INFO = 'display:grid;place-items:center;width:18px;height:18px;border-radius:999px;background:#7c3aed;color:#fff;font:700 11px ' + SG + ';flex:none';
+    const dotSw = (col) => 'width:10px;height:10px;border-radius:3px;flex:none;background:' + col;
+    const LEG = (names) => names.map((t, i) => ({ t, sw: dotSw(S[i]) }));
+    const FILL = (w, col) => 'display:block;height:100%;border-radius:3px;width:' + w + ';background:' + (col || S[0]);
+    const TRK = 'position:relative;display:block;height:14px;border-radius:4px;background:' + c.raised + ';border:1px solid ' + c.hair;
+    const BAR = (l, val, w, o) => Object.assign({ l, v: val, tip: l + ' · ' + val, ls: 'line-height:1.35', trs: TRK, fs: FILL(w), vs: 'font:600 12px ' + MO + ';white-space:nowrap' }, o || {});
+    const COL = (span) => 'display:flex;flex-direction:column;gap:14px;min-width:0;grid-column:span ' + (span || 6);
+    const col = (blocks, span) => ({ s: COL(span), blocks });
+    const G6 = 'display:grid;grid-template-columns:repeat(6,minmax(0,1fr));gap:14px;align-items:start';
+    const STACK = 'display:flex;flex-direction:column;gap:14px';
+    const DIMC = { s: 'position:absolute;inset:0;background:' + c.dim + ';z-index:3', blocks: [] };
+    const DLGS = 'background:' + c.card + ';border:1px solid ' + c.hair + ';border-radius:16px;box-shadow:0 30px 80px rgba(24,24,27,.28);padding:22px;display:flex;flex-direction:column;gap:14px;box-sizing:border-box;';
+    const dlgCol = (blocks, abs, w) => ({ s: abs ? DLGS + 'position:absolute;top:110px;left:50%;transform:translateX(-50%);width:' + (w || 560) + 'px;z-index:4' : DLGS + 'width:100%;max-width:580px;margin:0 auto', blocks });
+    const dlg = (title, note, mid, btns) => [K({ cs: PLAIN, title, hs: H18, meta: 'Esc to close', note })].concat(mid).concat([K({ cs: SEC, btns, bs: 'display:flex;gap:7px;justify-content:flex-end;flex-wrap:wrap' })]);
+    const bul = (t) => R({ rs: 'display:flex;gap:9px;align-items:flex-start;padding:5px 0', lead: '•', ls: 'font-size:14px;line-height:1.35;color:' + c.vt, t, ts: 'font-size:13px;font-weight:500;line-height:1.5' });
+    const field = (eye, val, o) => R(Object.assign({ rs: 'display:flex;flex-direction:column;gap:6px;padding:4px 0', eye, t: val, ts: FIN }, o || {}));
+    const SW = (t, on, sub) => R({ rs: 'display:flex;gap:11px;align-items:flex-start;padding:8px 0;border-top:1px solid ' + c.hair, t, sub: sub || false, tg: TGS(on), tk: TKS(on), on: on ? 'true' : 'false' });
+    const RAD = (t, on, sub) => R({ rs: 'display:flex;gap:9px;align-items:flex-start;padding:6px 0', lead: on ? '◉' : '○', ls: 'font-size:15px;line-height:1.2;flex:none;color:' + (on ? c.vt : c.mu), t, sub: sub || false });
+    const CHK = (t, on) => R({ rs: 'display:flex;gap:9px;align-items:flex-start;padding:5px 0', lead: on ? '☑' : '☐', ls: 'font-size:15px;line-height:1.2;flex:none;color:' + (on ? c.vt : c.mu), t });
+    const STEPS = (list, cur) => list.map((t, i) => ({ t: (i ? '→ ' : '') + t, s: 'font-size:12px;white-space:nowrap;font-weight:' + (i === cur ? 800 : 600) + ';color:' + (i === cur ? c.vt : c.mu) }));
+    const MOVED = (t) => K({ cs: PLAIN, rows: [R({ rs: NOTE('v') + ';align-items:center;padding:9px 12px', lead: 'i', ls: INFO, t, ts: 'font-size:13px;font-weight:600;line-height:1.45', act: 'Dismiss', as: btnG })] });
+    const INFOROW = (t, tone, act) => R({ rs: NOTE(tone || 'v'), lead: 'i', ls: INFO, t, ts: 'font-size:13px;font-weight:600;line-height:1.5', act: act || false, as: btnG });
+    const SKR = (w) => R({ rs: 'display:block;height:12px;border-radius:6px;margin:9px 0;background:' + c.skel + ';width:' + w });
+    const sk = (n) => K({ title: 'Reading…', hs: 'margin:0;font-size:13px;font-weight:600;color:' + c.mu, rows: ['92%', '74%', '86%', '60%', '70%'].slice(0, n).map(SKR) });
+    const CENTER = (glyph, t, note, btns, extra) => K({ cs: CARD + ';align-items:center;text-align:center;padding:34px 28px' + (extra || ''), glyph, title: t, ths: 'display:flex;justify-content:center', hs: 'margin:0;font-size:16px;font-weight:800;text-align:center;line-height:1.35', note, ns: 'margin:0;font-size:13px;color:' + c.mu + ';text-align:center;line-height:1.55', btns, bs: 'display:flex;gap:7px;justify-content:center;flex-wrap:wrap' });
+    const svgOpen = (W, H, sum, f) => '<svg viewBox="0 0 ' + W + ' ' + H + '" width="100%" role="img" aria-label="' + sum + '" style="display:block;overflow:visible;font-family:' + (f || 'Roboto Mono,monospace') + '">';
+    const lineSvg = (o) => { const W = o.w || 1080, H = o.h || 260, L = 50, Rt = o.rp == null ? 200 : o.rp, T = 26, Bm = 30, iw = W - L - Rt, ih = H - T - Bm, n = o.n;
+      const X = (i) => +(L + i * iw / (n - 1)).toFixed(1), Y = (v) => +(T + ih - v / o.ymax * ih).toFixed(1);
+      let s = svgOpen(W, H, o.sum);
+      for (let v = 0; v <= o.ymax; v += o.ystep) s += '<line x1="' + L + '" x2="' + (L + iw) + '" y1="' + Y(v) + '" y2="' + Y(v) + '" stroke="' + c.hair + '"/><text x="' + (L - 8) + '" y="' + (Y(v) + 4) + '" text-anchor="end" font-size="11" fill="' + c.mu + '">' + (o.yf ? o.yf(v) : v) + '</text>';
+      s += '<text x="' + L + '" y="11" font-size="11" fill="' + c.mu + '">' + o.yl + '</text>';
+      o.xl.forEach((t, i) => { if (i % (o.xe || 1) === 0 || i === n - 1) s += '<text x="' + X(i) + '" y="' + (H - 8) + '" text-anchor="middle" font-size="11" fill="' + c.mu + '">' + t + '</text>'; });
+      const labs = [];
+      o.series.forEach((se) => { let d = '', pen = false, li = -1; se.vals.forEach((v, i) => { if (v == null) { pen = false; return; } d += (pen ? 'L' : 'M') + X(i) + ' ' + Y(v); pen = true; li = i; });
+        s += '<path d="' + d + '" fill="none" stroke="' + se.col + '" stroke-width="2.5" stroke-linejoin="round" stroke-linecap="round"/>';
+        se.vals.forEach((v, i) => { if (v == null) return; const sf = o.soFar && i === n - 1; s += '<circle cx="' + X(i) + '" cy="' + Y(v) + '" r="' + (sf ? 4.5 : 3) + '" fill="' + (sf ? c.card : se.col) + '" stroke="' + se.col + '" stroke-width="2"><title>' + o.xl[i] + ' · ' + se.name + ' ' + v + (sf ? ' so far' : '') + '</title></circle>'; });
+        if (Rt > 40) labs.push({ y: Y(se.vals[li]) + 4, t: se.name + (o.soFar ? ' · ' + se.vals[li] + ' so far' : ''), col: se.col }); });
+      labs.sort((a, b) => a.y - b.y); for (let i = 1; i < labs.length; i++) if (labs[i].y < labs[i - 1].y + 15) labs[i].y = labs[i - 1].y + 15;
+      labs.forEach((l) => { s += '<circle cx="' + (L + iw + 14) + '" cy="' + (l.y - 4) + '" r="4" fill="' + l.col + '"/><text x="' + (L + iw + 23) + '" y="' + l.y + '" font-size="11.5" fill="' + c.ink + '">' + l.t + '</text>'; });
+      if (o.soFar) s += '<text x="' + X(n - 1) + '" y="' + (T - 10) + '" text-anchor="middle" font-size="10.5" fill="' + c.mu + '">so far</text>';
+      return { __html: s + '</svg>' }; };
+    const colSvg = (o) => { const W = o.w || 560, H = o.h || 230, L = 40, T = 26, Bm = 30, iw = W - L - 8, ih = H - T - Bm, n = o.data.length, step = iw / n, bw = step * .6;
+      const Y = (v) => +(T + ih - v / o.ymax * ih).toFixed(1);
+      let s = svgOpen(W, H, o.sum);
+      for (let v = 0; v <= o.ymax; v += o.ystep) s += '<line x1="' + L + '" x2="' + (L + iw) + '" y1="' + Y(v) + '" y2="' + Y(v) + '" stroke="' + c.hair + '"/><text x="' + (L - 8) + '" y="' + (Y(v) + 4) + '" text-anchor="end" font-size="11" fill="' + c.mu + '">' + v + '</text>';
+      s += '<text x="' + L + '" y="11" font-size="11" fill="' + c.mu + '">' + o.yl + '</text>';
+      o.data.forEach((arr, i) => { const x = +(L + i * step + (step - bw) / 2).toFixed(1), cur = i === n - 1; let acc = 0;
+        arr.forEach((v, j) => { if (!v) return; s += '<rect x="' + x + '" y="' + Y(acc + v) + '" width="' + bw.toFixed(1) + '" height="' + (Y(acc) - Y(acc + v)).toFixed(1) + '" fill="' + S[j] + '"' + (cur ? ' fill-opacity=".4"' : '') + ' stroke="' + c.card + '"><title>' + o.xl[i] + ' · ' + o.names[j] + ' ' + v + (cur ? ' so far' : '') + '</title></rect>'; acc += v; });
+        if (i % 3 === 0 || cur) s += '<text x="' + (x + bw / 2).toFixed(1) + '" y="' + (H - 8) + '" text-anchor="middle" font-size="10.5" fill="' + c.mu + '">' + o.xl[i] + '</text>';
+        if (cur) s += '<text x="' + (x + bw / 2).toFixed(1) + '" y="' + (Y(acc) - 6) + '" text-anchor="middle" font-size="10.5" fill="' + c.mu + '">so far</text>'; });
+      return { __html: s + '</svg>' }; };
+    const hstackSvg = (o) => { const W = o.w || 560, rh = 32, L = o.lw || 182, Rr = 112, H = o.rows.length * rh + 4, iw = W - L - Rr;
+      let s = svgOpen(W, H, o.sum, 'Space Grotesk,sans-serif');
+      o.rows.forEach((r, i) => { const y = i * rh + 4; let acc = 0; s += '<text x="0" y="' + (y + 14) + '" font-size="12" fill="' + c.ink + '">' + r[0] + '</text>';
+        r[1].forEach((v, j) => { if (!v) return; s += '<rect x="' + (L + acc / o.max * iw).toFixed(1) + '" y="' + (y + 2) + '" width="' + (v / o.max * iw - 1.5).toFixed(1) + '" height="16" rx="2" fill="' + S[j] + '"><title>' + r[0] + ' · ' + o.names[j] + ' ' + v + '</title></rect>'; acc += v; });
+        s += '<text x="' + (L + acc / o.max * iw + 8).toFixed(1) + '" y="' + (y + 14) + '" font-family="Roboto Mono,monospace" font-size="11.5" fill="' + c.ink + '">' + r[2] + '</text>'; });
+      return { __html: s + '</svg>' }; };
+    const divSvg = () => { const W = 560, H = 250, L = 52, T = 16, Bm = 28, iw = W - L - 12, ih = H - T - Bm, y1 = 1600, y0 = -1200;
+      const Y = (v) => +(T + (y1 - v) / (y1 - y0) * ih).toFixed(1);
+      const G = [[600, 250, 350, 200], [550, 300, 400, 150], [500, 350, 450, 100]], SP = [800, 850, 950], M = ['[Aug]', '[Sep]', '[Oct]'], GN = ['Lab milestones', 'Bounties', 'Referrals', 'Granted by HQ'];
+      let s = svgOpen(W, H, 'Credits granted and spent, August to October: 1,400 granted each month; 800, 850 and 950 spent on perk claims.');
+      for (let v = y0; v <= y1; v += 400) s += '<line x1="' + L + '" x2="' + (L + iw) + '" y1="' + Y(v) + '" y2="' + Y(v) + '" stroke="' + (v === 0 ? c.mu : c.hair) + '"/><text x="' + (L - 8) + '" y="' + (Y(v) + 4) + '" text-anchor="end" font-size="11" fill="' + c.mu + '">' + v + '</text>';
+      s += '<text x="' + L + '" y="9" font-size="11" fill="' + c.mu + '">credits</text>';
+      const bw = 70, gap = iw / 3;
+      G.forEach((g, i) => { const x = +(L + i * gap + (gap - bw) / 2).toFixed(1); let acc = 0;
+        g.forEach((v, j) => { s += '<rect x="' + x + '" y="' + Y(acc + v) + '" width="' + bw + '" height="' + (Y(acc) - Y(acc + v)).toFixed(1) + '" fill="' + S[j] + '" stroke="' + c.card + '"><title>' + M[i] + ' · ' + GN[j] + ' ' + v + '</title></rect>'; acc += v; });
+        s += '<text x="' + (x + bw / 2) + '" y="' + (Y(acc) - 6) + '" text-anchor="middle" font-size="11" fill="' + c.ink + '">+' + acc + '</text>';
+        s += '<rect x="' + x + '" y="' + Y(0) + '" width="' + bw + '" height="' + (Y(-SP[i]) - Y(0)).toFixed(1) + '" fill="' + S[4] + '"><title>' + M[i] + ' · Spent on perk claims ' + SP[i] + '</title></rect><text x="' + (x + bw / 2) + '" y="' + (Y(-SP[i]) + 14) + '" text-anchor="middle" font-size="11" fill="' + c.ink + '">−' + SP[i] + '</text>';
+        s += '<text x="' + (x + bw / 2) + '" y="' + (H - 4) + '" text-anchor="middle" font-size="11" fill="' + c.mu + '">' + M[i] + '</text>'; });
+      return { __html: s + '</svg>' }; };
+    const PSM = { Live: ['✓', 'g'], 'Partly built': ['◐', 'v'], 'Not built yet': ['○', 'n'], Proposed: ['✎', 'n'], Paused: ['‖', 'a'] };
+    const ps = (s) => pl(PSM[s][0], s, PSM[s][1]);
+    const gb = (s) => { const m = { Requested: ['◷', 'a'], 'Paused by HQ': ['‖', 'a'], Ended: ['–', 'n'], 'Not granted': ['○', 'n'], 'Runs at HQ': ['⌂', 'n'], 'Not offered yet': ['–', 'n'], 'HQ-held': ['⌂', 'n'], 'HQ only': ['⌂', 'n'] }[s] || ['◆', 'v']; return pl(m[0], s, m[1]); };
+    const SM = { Draft: ['✎', 'n'], 'Sent to HQ': ['◷', 'a'], Approved: ['✓', 'g'], 'Sent back': ['↩', 'n'], Declined: ['✕', 'r'], Submitted: ['↑', 'n'], 'Under review': ['◷', 'a'], 'More info needed': ['?', 'a'], Qualified: ['✓', 'v'], 'In conversation': ['⇄', 'v'], Converted: ['✓', 'g'], 'Reward issued': ['✓', 'g'], Rejected: ['✕', 'r'], Closed: ['–', 'n'], 'In review': ['◷', 'a'], Live: ['✓', 'g'], Paused: ['‖', 'a'], Published: ['✓', 'g'], Active: ['✓', 'g'], Ended: ['–', 'n'], Sent: ['◷', 'a'], 'Not sent': ['○', 'n'], Expired: ['–', 'n'], Verified: ['✓', 'g'], 'Not verified': ['○', 'n'], Done: ['✓', 'g'], 'Not yet': ['○', 'n'] };
+    const sp = (s, lab) => { const m = SM[s] || ['–', 'n']; return pl(m[0], lab || s, m[1]); };
+    const PC = (s, lab) => CL('', { pill: sp(s, lab) });
+    const HB = (t, s) => ({ t, s, btn: true, txt: false, al: t });
+    const HT = (t) => ({ t, s: 'font:500 12px ' + MO + ';color:' + c.mu, btn: false, txt: true, al: t });
+    const ICON = (t, al) => ({ t, s: BTN + 'width:34px;padding:0;border:1px solid ' + c.hair + ';background:' + c.card + ';color:' + c.ink, btn: true, txt: false, al });
+    TN.s = [dark ? '#38bdf8' : '#0369a1', dark ? 'rgba(14,165,233,.12)' : '#f0f9ff', dark ? 'rgba(14,165,233,.45)' : '#bae6fd'];
+    let ro = false;
+    const LINE = 'font-size:13px;font-weight:500;line-height:1.5', NS1 = 'margin:0;font-size:13.5px;line-height:1.6;color:' + c.ink;
+    const BTNR = 'display:flex;gap:7px;justify-content:flex-end;flex-wrap:wrap', PCOL = 'display:flex;flex-direction:column;gap:14px;min-width:0';
+    const PILL = 'display:inline-flex;align-items:center;gap:4px;padding:1px 9px;border-radius:999px;font:700 10.5px ' + SG + ';line-height:1.6;white-space:nowrap;';
+    const KS = PILL + 'align-self:flex-start;color:' + c.mu + ';background:' + c.card + ';border:1px solid ' + c.hair;
+    const MONO = (t) => ({ t, s: 'font:600 11.5px ' + MO + ';color:' + c.mu });
+    const EADS = 'display:grid;place-items:center;width:22px;height:22px;border-radius:999px;background:#7c3aed;color:#fff;font:800 11px ' + SG + ';flex:none';
+    const POSN = 'display:flex;gap:10px;align-items:flex-start;padding:10px 14px;border-radius:10px;background:' + c.posBg + ';border:1px solid ' + c.posE;
+    const ERR = (t, tone, btns) => R({ rs: NOTE(tone || 'r'), lead: '!', ls: 'font-weight:800;flex:none;color:' + (tone === 'a' ? c.amT : c.neg), t, ts: 'font-size:13px;font-weight:700;line-height:1.5;color:' + (tone === 'a' ? c.amT : c.neg), btns: btns || false });
+    const NROW = (t) => R({ rs: NOTE('n'), lead: '‖', ls: 'font-weight:800;flex:none;color:' + c.mu, t, ts: 'font-size:13px;font-weight:700;line-height:1.5' });
+    const SRC = { rec: ['Recorded', '#f59e0b'], doc: ['Document', '#0ea5e9'], con: ['Connector', c.vi], sig: ['Signed', '#10b981'], typ: ['Typed', '#6b6577'] };
+    const bc = (k, t, sans) => ({ t: SRC[k][0] + ' · ' + t, s: 'display:inline-flex;align-items:center;min-height:24px;padding:2px 10px 2px 21px;border-radius:999px;box-sizing:border-box;font:600 11px ' + (sans ? SG : MO) + ';line-height:1.45;color:' + c.ink + ';border:1px solid ' + c.hair + ';background:radial-gradient(circle at 11px 50%,' + SRC[k][1] + ' 0 3.5px,transparent 4px) ' + c.card });
+    const VERD = { t: '◆ Verdict · Proceed · 12 Oct', s: PILL + 'font:700 11px ' + MO + ';color:' + c.vt + ';background:' + c.lav + ';border:1px solid ' + c.lavE };
+    const V = () => ro ? [] : [VERD];
+    const RC = { pain: bc('rec', 'Problem discovery · [Setup takes weeks] · Severe · 7 interviews'), h1: bc('rec', 'H1 · supports 5 · contradicts 1'), dem: bc('doc', 'Demand · 3 LOIs confirmed'), icp: bc('rec', 'Ideal customer profile · [Ops leads at 50-200 person logistics firms]', 1), eta: bc('rec', 'Problem discovery · [No live ETA] · Real · 5 interviews'), mig: bc('rec', 'Customer research · [Migration fear] · heard 4 times'), nco: bc('typ', 'Venture record · no company linked', 1) };
+    const ST = { p: ['○ Proposed', 'n'], a: ['✓ Accepted', 'g'], e: ['✎ Edited and accepted', 'g'], w: ['↺ Withdrawn', 'n'], nw: ['✦ New', 'v'] };
+    const stS = (k) => { const x = TN[ST[k][1]]; return PILL + 'color:' + x[0] + ';background:' + x[1] + ';border:1px solid ' + x[2]; };
+    const LANDR = (t) => R({ rs: 'display:flex;padding:0', t, ts: 'font:500 11.5px ' + MO + ';color:' + c.mu });
+    const prop = (o) => K({ cs: CARD + (o.span ? ';grid-column:1/-1' : '') + (o.cs || ''), eye: o.kind, es: KS, title: o.t, hs: 'margin:0;font-size:15px;font-weight:800;letter-spacing:-.01em;line-height:1.35' + (o.struck ? ';text-decoration:line-through;color:' + c.mu : ''), meta: ST[o.st || 'p'][0], ms: stS(o.st || 'p'), note: o.d || false, ns: 'margin:0;font-size:13px;line-height:1.55;color:' + c.ink, facts: o.facts || false, tags: o.because || false, rows: (o.land ? [LANDR(o.land)] : []).concat(o.rows || []), btns: o.btns !== undefined ? o.btns : (ro ? false : [{ t: 'Accept', s: btnP }, { t: 'Edit', s: btnS }, { t: 'Dismiss', s: btnG }]), foot: o.foot || false });
+    const SEL = pl('☑', 'Selected to send', 'v');
+    const done = (o) => K({ cs: CARD + ';padding:10px 16px;grid-column:1/-1', rows: [R({ rs: 'display:flex;gap:11px;align-items:center;flex-wrap:wrap', lead: o.lead || '✓', ls: 'font-size:15px;flex:none;color:' + (o.lead ? c.mu : c.pos), t: o.t, ts: 'font-size:13.5px;font-weight:700' + (o.struck ? ';text-decoration:line-through;color:' + c.mu : ''), sub: o.sub, ss: 'font:500 11.5px ' + MO + ';color:' + c.mu, tags: o.tags || false, act: ro || o.noAct ? false : (o.act || 'Open'), as: btnG })] });
+    const secH = (name, n, extra, noAll) => K({ cs: PLAIN + ';grid-column:1/-1;padding-top:8px', rows: [R({ rs: 'display:flex;gap:11px;align-items:center;flex-wrap:wrap;padding:0', t: name + ' · ' + n, ts: 'font-size:16px;font-weight:800;letter-spacing:-.01em', sub: extra || false, act: (noAll || ro) ? false : 'Accept all in ' + name, as: btnS })] });
+    const EW = (plain) => ({ cs: ';background:' + c.lav + ';border-color:' + c.lavE, rows: [R({ rs: 'display:flex;gap:9px;align-items:center;padding:0', lead: 'E', ls: EADS, t: 'Eadwyn’s wording · not saved', ts: 'font-size:12px;font-weight:700;color:' + c.vt, sub: 'Rule’s title: ' + plain, ss: 'font-size:12px;color:' + c.mu })], btns: [{ t: 'Keep wording', s: btnS }, { t: 'Discard wording', s: btnG }] });
+    const NOW = pl('', 'Now', 'v'), NEXT = pl('', 'Next', 's'), LATER = pl('', 'Later', 'n'), FROMC = pl('◆', 'From your commitment', 'v');
+    const BRIEF = (w) => prop(Object.assign({ kind: 'Brief', t: w ? '[Setup in a day for small logistics ops teams]' : 'Brief · [Northwind Logistics]', span: 1, facts: [{ k: 'For', v: '[Ops leads at 50-200 person logistics firms]', sub: false }, { k: 'Problem', v: '[Setup takes weeks]', sub: 'Severe · 7 interviews' }, { k: 'Promise', v: '[Set up in a day, with live ETAs]', sub: false }, { k: 'Replaces', v: '[Spreadsheets, and a system that takes weeks to set up]', sub: false }], because: [RC.pain, RC.icp, RC.dem].concat(V()), land: 'Lands in Solution design › Brief' }, w ? EW('Brief · [Northwind Logistics]') : {}));
+    const WIZ = (w) => prop(Object.assign({ kind: 'Feature', t: w ? '[Set up your routes in one sitting]' : '[One-day setup wizard]', d: 'A guided setup that imports routes, drivers and customers in one sitting.', because: [RC.pain, RC.h1], land: 'Lands in Solution design › Features' }, w ? EW('[One-day setup wizard]') : {}));
+    const RISK = (w) => prop(Object.assign({ kind: 'Risk', t: w ? '[Buyers worry about moving their data]' : '[Buyers fear migration]', d: 'High · heard 4 times. Plan a migration path the buyer can see.', because: [RC.mig], land: 'Lands in Solution design › Risks' }, w ? EW('[Buyers fear migration]') : {}));
+    const CONN = (n, s) => K({ eye: 'Connect', es: KS, title: n, note: s, rows: [R({ rs: 'display:flex;gap:9px;align-items:center;padding:0', lead: '○', ls: 'flex:none;color:' + c.mu, t: 'Not connected', ts: 'font-size:12.5px;font-weight:600;color:' + c.mu, act: ro ? false : 'Connect', as: btnSm })] });
+    const failPM = () => K({ cs: CARD + ';grid-column:1/-1', title: 'Prototype / MVP', rows: [ERR('Prototype / MVP could not be read. Its proposals are kept.', 'r', [{ t: 'Try again', s: btnS }])] });
+    const planBlocks = (o) => { o = o || {}; const w = o.wording, b = [secH('Solution design', '3 proposed'), BRIEF(w), WIZ(w), RISK(w), done({ t: '[Live ETA panel]', sub: 'Accepted 12 Oct · Solution design › Features', tags: [SEL] })];
+      b.push(secH('Prototype / MVP', '2 proposed'), prop({ kind: 'Must-have', t: 'Prove H1: setup in a day', d: 'The prototype must let an ops lead finish setup in under a day.', because: [RC.h1].concat(V()), land: 'Lands in Prototype / MVP › Must-haves' }), prop({ kind: 'Prototype test', t: '[5] ops leads complete setup in under a day', d: 'Audience: 3 LOIs confirmed. It passes if 4 of 5 finish.', because: [RC.dem, RC.h1], land: 'Lands in Prototype / MVP › Tests' }), done({ t: '[Live ETA for one route]', sub: 'Accepted 12 Oct · Prototype / MVP › Must-haves', tags: [SEL] }));
+      b.push(secH('Product roadmap', '1 proposed'), prop({ kind: 'Roadmap item', t: '[Ship a pilot to two LOI accounts]', span: 1, d: 'From your commitment · [Name] · due 30 Nov.', because: [NOW, FROMC, RC.dem].concat(V()), land: 'Lands in Product roadmap › Now' }), done({ t: '[Exports that don’t break]', sub: 'Accepted 12 Oct · Product roadmap › Next', tags: [NEXT, SEL] }), done({ t: '[Carrier integrations]', sub: 'Accepted 12 Oct · Product roadmap › Later', tags: [LATER] }), done({ t: '[Driver mobile app]', sub: 'Dismissed 12 Oct · it will not be proposed again', lead: '–', struck: 1, noAct: 1 }));
+      b.push(secH('Company creation', '2 proposed', 'Proposed because no company is linked to this venture.'), prop({ kind: 'Formation step', t: 'Incorporate', d: 'Form the company that will hold the product, the IP and the round.', because: [RC.nco], land: 'Lands in Company creation › Formation' }), prop({ kind: 'Formation step', t: 'Assign the IP to the company', d: 'Move what the founders built so far into the company.', because: [RC.nco], land: 'Lands in Company creation › Formation' }));
+      b.push(secH('Operating systems', '3 proposed', 'Connect your own tools so what you build comes back linked.', 1), CONN('GitHub', 'Issues and pull requests come back linked to their plan item.'), CONN('Vercel', 'Deploys show when an item is live.'), CONN('PostHog', 'Finished experiments come back as evidence.'));
+      b.push(K({ cs: PLAIN + ';grid-column:1/-1', note: 'Founding team takes no proposals. Equity and roles are yours to record.' }));
+      return b; };
+    const TRKS = (w) => 'display:block;width:' + (w || 140) + 'px;height:8px;border-radius:999px;background:' + c.raised + ';border:1px solid ' + c.hair + ';overflow:hidden';
+    const rbar = (pct, t, op) => ({ trs: TRKS(140), fs: FILL(pct) + (op ? ';opacity:' + op : ''), t, w: false });
+    const PRS = 'display:flex;padding:8px 0;border-top:1px solid ' + c.hair, PT = 'font-size:12.5px;font-weight:700;line-height:1.4', PH = 'margin:0;font-size:14px;font-weight:800';
+    const proved = () => [K({ cs: PLAIN, title: 'What Validate proved', hs: 'margin:0;font-size:15px;font-weight:800;letter-spacing:-.01em', note: 'Only what you accepted in Validate.' }),
+      K({ title: 'Pain themes', hs: PH, meta: 'by interviews', rows: [['[Setup takes weeks]', 7, 'Severe', 1], ['[No live ETA]', 5, 'Real', .72], ['[Exports break]', 2, 'Mild', .45]].map(([t, n, sv, op]) => R({ rs: PRS, t, ts: PT, sub: sv + ' · ' + n + ' interviews', bar: rbar((n / 7 * 100) + '%', '[' + n + ']', op) })), btns: [{ t: 'Open Problem discovery', s: btnG }] }),
+      K({ title: 'Hypotheses', hs: PH, legend: [{ t: 'Supports', sw: dotSw(S[0]) }, { t: 'Contradicts', sw: dotSw(S[4]) }], rows: [R({ rs: PRS, t: 'H1 · [Ops leads will switch for setup in a day]', ts: PT, sub: 'supports 5 · contradicts 1', bar: { trs: TRKS(140), fs: 'display:block;height:100%;width:100%;background:linear-gradient(90deg,' + S[0] + ' 0 83.3%,' + S[4] + ' 83.3% 100%)', t: '[5] · [1]', w: false } }), R({ rs: PRS, t: 'H2 · [Live ETAs cut support calls]', ts: PT, sub: 'Planned · untested', bar: { trs: 'display:block;width:140px;height:8px;border-radius:999px;border:1.5px dashed ' + c.mu + ';box-sizing:border-box', fs: 'display:none', t: 'Not tested yet', w: false } })], btns: [{ t: 'Open Experiments and evidence', s: btnG }] }),
+      K({ title: 'Customer', hs: PH, rows: [R({ rs: PRS, eye: 'SEGMENT', t: '[Ops leads at 50-200 person logistics firms]', ts: PT }), R({ rs: PRS, eye: 'THE BRIEF’S PROMISE', t: '[Set up in a day, with live ETAs]', ts: PT })], btns: [{ t: 'Open Ideal customer profile', s: btnG }] }),
+      K({ title: 'Demand', hs: PH, rows: [R({ rs: PRS, t: 'LOIs confirmed', ts: PT, bar: rbar('100%', '[3]') }), R({ rs: PRS, t: 'Would pay [€400] a month', ts: PT, bar: rbar('66.7%', '[2]') })], btns: [{ t: 'Open Demand and urgency signals', s: btnG }] })];
+    const strip = (o) => { o = o || {}; return K({ cs: CARD + ';padding:10px 16px;flex-direction:row;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:9px', tags: (o.spin ? [pl('◆', 'Spin-Out Lab venture', 'v')] : []).concat(ro ? [] : [{ t: 'From your Verdict: Proceed · 12 Oct · 6 pieces of evidence', s: VERD.s + (phone ? ';white-space:normal' : '') }]).concat([MONO('Prepared 12 Oct, 14:05 · rules only, no AI cost')]), rows: [R({ rs: 'display:flex;padding:0', t: '[11] proposed · [4] accepted · [1] dismissed', ts: 'font:700 12.5px ' + MO })] }); };
+    const planCols = (o) => { o = o || {}; grid = 'display:grid;grid-template-columns:300px minmax(0,1fr);gap:14px;align-items:start'; return [{ s: 'grid-column:1/-1;' + PCOL, blocks: (o.pre || []).concat([strip(o)]) }, { s: PCOL, blocks: proved() }, { s: 'display:grid;grid-template-columns:' + (o.one ? 'minmax(0,1fr)' : 'repeat(2,minmax(0,1fr))') + ';gap:14px;align-items:start;min-width:0', blocks: planBlocks(o) }]; };
+    const over = (blocks, w) => [DIMC, dlgCol(blocks, true, w || 600)];
+    const IMP = (eye, list, sel) => R({ rs: 'display:flex;flex-direction:column;gap:6px;padding:4px 0', eye, tags: list.map(t => tag(t, t === sel)) });
+    const editDlg = dlg('Edit and accept', 'Feature · [One-day setup wizard]', [K({ cs: SEC, title: 'Evidence', hs: eyeS, note: 'The evidence stays with the item. It cannot be removed here.', tags: [RC.pain, RC.h1] }), K({ cs: SEC, rows: [field('TITLE', '[One-day setup wizard]'), field('DESCRIPTION', 'A guided setup that imports routes, drivers and customers in one sitting.', { ts: FIN + ';min-height:60px;font-weight:500' }), field('PAIN THEME', '[Setup takes weeks] ▾'), field('HYPOTHESIS', 'H1 · [Ops leads will switch for setup in a day] ▾'), IMP('IMPACT', ['Low', 'Medium', 'High'], 'High'), IMP('EFFORT', ['Small', 'Medium', 'Large'], 'Medium')] }), K({ cs: PLAIN, note: 'This adds one feature and links it to its evidence.' })], [{ t: 'Cancel', s: btnS }, { t: 'Accept into Solution design', s: btnP }]);
+    const LOV = 'Build a clickable prototype for [Northwind Logistics].\n\nFor: [Ops leads at 50-200 person logistics firms].\nProblem: [Setup takes weeks], severe, heard in 7 interviews.\nPromise: [Set up in a day, with live ETAs].\n\nBuild these three items, each with the claim it tests:\n1. [Live ETA panel] · tests H2: live ETAs cut support calls.\n2. [Live ETA for one route] · the smallest version that tests H2.\n3. [Exports that don’t break] · answers [Exports break], heard in 2 interviews.\n\nAxal VC plan items VB-4MRT, VB-9XEP, VB-2HQW.';
+    const sendTabs = (sel) => K({ cs: PLAIN, tags: ['Lovable', 'GitHub', 'Notion', 'Vercel'].map(t => tag(t, t === sel)) });
+    const sendHead = (sel) => [K({ cs: PLAIN, eye: 'SEND · 3 ACCEPTED ITEMS', title: 'Send to…', hs: H18, meta: 'Esc to close' }), sendTabs(sel)];
+    const lovBody = () => [K({ cs: SEC, note: 'Build a clickable prototype in Lovable.', ns: NS1, rows: [field('PROMPT', LOV, { ts: FIN + ';min-height:' + (phone ? 320 : 250) + 'px;font:500 12px/1.6 ' + MO + ';white-space:pre-wrap', sub: '1,840 / 4,000', ss: 'font:500 11px ' + MO + ';color:' + c.mu + ';align-self:flex-end' }), R({ rs: POSN, lead: '✓', ls: 'font-weight:800;flex:none;color:' + c.pos, t: 'Privacy check passed: no names, emails or quotes.', ts: 'font-size:13px;font-weight:600;color:' + c.pos })], rowsS: 'display:flex;flex-direction:column;gap:10px' })];
+    const LOVLINE = 'Opens Lovable in a new tab with this prompt. You build there with your own Lovable account. Axal VC does not see what you build until you link it.';
+    const lovFoot = K({ cs: SEC, btns: [{ t: 'Copy prompt', s: btnS }, { t: 'Open in Lovable ↗', s: btnP }], bs: BTNR, foot: LOVLINE });
+    const GH = [['[Live ETA panel]', 'Because: [No live ETA] · Real · 5 interviews\nTests: H2 · planned, untested\nAxal VC plan item VB-4MRT'], ['[Live ETA for one route]', 'Because: H2 · planned, untested\nMust-have in Prototype / MVP\nAxal VC plan item VB-9XEP'], ['[Exports that don’t break]', 'Because: [Exports break] · Mild · 2 interviews\nProduct roadmap · Next\nAxal VC plan item VB-2HQW']];
+    const BODYS = 'font:500 11px/1.6 ' + MO + ';color:' + c.mu + ';white-space:pre-wrap';
+    const ghBody = (conn) => [K({ cs: SEC, note: conn ? 'Open as GitHub issues in [northwind/app].' : 'Connect GitHub to pick a repository.', ns: NS1, rows: conn ? [field('REPOSITORY', '[northwind/app] ▾', { sub: 'Only repositories you picked on the GitHub connector.' })] : [], btns: conn ? false : [{ t: 'Connect GitHub', s: btnS }] }), K({ cs: SEC, rows: GH.map(([t, b]) => R({ lead: conn ? '☑' : false, ls: 'font-size:15px;flex:none;color:' + c.vt, t, ts: 'font-size:13.5px;font-weight:700', sub: b, ss: BODYS, act: conn ? 'Open on GitHub ↗' : 'Copy', as: btnSm })) }), K({ cs: SEC, btns: [{ t: 'Copy all as Markdown', s: btnS }], bs: BTNR, foot: conn ? 'GitHub opens a new issue with this text. You submit it there. It links back here when it arrives through your GitHub connection.' : 'Without a connection, copy each issue and paste it into GitHub yourself.' })];
+    const notionBody = () => [K({ cs: SEC, note: 'One page per must-have, with its evidence and its marker.', ns: NS1, rows: [['[One-day setup wizard]', 'Evidence: [Setup takes weeks] · Severe · 7 interviews\nH1 · supports 5 · contradicts 1\nAxal VC plan item VB-7K2Q'], ['[Live ETA for one route]', 'Evidence: [No live ETA] · Real · 5 interviews\nH2 · planned, untested\nAxal VC plan item VB-9XEP']].map(([t, b]) => R({ lead: '▤', ls: 'flex:none;color:' + c.mu, t, ts: 'font-size:13.5px;font-weight:700', sub: b, ss: BODYS })) }), K({ cs: SEC, btns: [{ t: 'Download .md', s: btnS }, { t: 'Copy for Notion', s: btnP }], bs: BTNR, foot: 'Paste it into Notion. Pick that page as a Specs source and it comes back linked.' })];
+    const vercelBody = () => [K({ cs: SEC, note: 'Put [northwind/app] on the web with your own Vercel account.', ns: NS1, rows: [R({ t: '[northwind/app]', sub: 'From your GitHub connection', ss: 'font:500 11.5px ' + MO + ';color:' + c.mu })] }), K({ cs: SEC, btns: [{ t: 'Deploy [northwind/app] on Vercel ↗', s: btnP }], bs: BTNR, foot: 'Opens Vercel’s import page. Axal VC cannot deploy or change anything on Vercel.' })];
+    const LNK = [{ t: 'Link', s: btnSm }, { t: 'Not this one', s: btnG }];
+    const backDlg = [K({ cs: PLAIN, eye: 'BACK IN', title: 'Arrived from your tools · 3', hs: H18, meta: 'Esc to close' }), K({ cs: SEC, rows: [R({ pill: bc('con', 'GitHub'), t: 'Pull request #12 ‘Bulk CSV import’ names VB-7K2Q.', ts: LINE, sub: 'Link to must-have [One-day setup wizard]?', btns: LNK }), R({ pill: bc('con', 'Notion'), t: 'Page [Setup wizard spec] names VB-3PL9.', ts: LINE, sub: 'Link to feature [One-day setup wizard]?', btns: LNK }), R({ pill: bc('con', 'PostHog'), t: 'Experiment [setup-in-a-day] finished: 4 of 5 completed setup.', ts: LINE, sub: 'Add as evidence on H1? Nothing is chosen for you.', tags: [tag('○ Supports'), tag('○ Contradicts')], btns: [{ t: 'Add evidence', s: btnSm }] }), R({ pill: bc('con', 'GitHub'), t: 'Pull request #15 ‘Fix exports’ · no plan marker.', ts: LINE, btns: [{ t: 'Link to a plan item…', s: btnSm }] })] }), K({ cs: SEC, note: 'Nothing is linked until you press Link.', btns: [{ t: 'Close', s: btnS }], bs: BTNR })];
+    const STC = [S[0], S[1], S[2], S[3], S[3], S[3]], NST = ['Accepted', 'Sent', 'In progress', 'Built', 'Live', 'Tested'];
+    const IT = [['[One-day setup wizard]', 'Must-have', 'Prototype / MVP', ['12 Oct', 'Your accept'], ['Lovable · opened 13 Oct', 'Your press'], ['GitHub · PR #12 open', 'Connector · GitHub'], ['GitHub · merged 20 Oct', 'Connector · GitHub'], ['Vercel · production since 21 Oct', 'Connector · Vercel'], ['Test · 4 of 5 passed', 'Connector · PostHog']],
+      ['[Live ETA for one route]', 'Must-have', 'Prototype / MVP', ['12 Oct', 'Your accept'], ['Lovable · opened 13 Oct', 'Your press'], ['GitHub · PR #21 open', 'Connector · GitHub'], 0, 0, 0],
+      ['[5] ops leads finish setup in a day', 'Prototype test', 'Prototype / MVP', ['12 Oct', 'Your accept'], ['PostHog · experiment set 26 Oct', 'Connector · PostHog'], ['PostHog · ran 26 Oct–8 Nov', 'Connector · PostHog'], 1, 1, ['Test · 4 of 5 passed', 'Connector · PostHog']],
+      ['[Live ETA panel]', 'Feature', 'Solution design', ['12 Oct', 'Your accept'], ['GitHub · issue #9 · 14 Oct', 'Connector · GitHub'], 0, 0, 0, 0],
+      ['Brief · [Northwind Logistics]', 'Brief', 'Solution design', ['12 Oct', 'Your accept'], ['Notion · copied 14 Oct', 'Your press'], ['NR', 'Notion reports nothing back'], 1, 1, 1],
+      ['[Buyers fear migration]', 'Risk', 'Solution design', ['12 Oct', 'Your accept'], ['Notion · copied 14 Oct', 'Your press'], ['NR', 'Notion reports nothing back'], 1, 1, 1],
+      ['[Ship a pilot to two LOI accounts]', 'Roadmap item · Now', 'Product roadmap', ['12 Oct', 'Your accept'], ['GitHub · milestone · 15 Oct', 'Connector · GitHub'], ['GitHub · 6 of 9 issues closed', 'Connector · GitHub'], 0, 0, 0],
+      ['[Exports that don’t break]', 'Roadmap item · Next', 'Product roadmap', ['12 Oct', 'Your accept'], 0, 0, 0, 0, 0],
+      ['[Carrier integrations]', 'Roadmap item · Later', 'Product roadmap', ['12 Oct', 'Your accept'], 0, 0, 0, 0, 0],
+      ['Incorporate', 'Formation step', 'Company creation', ['14 Oct', 'Your accept'], ['Started in Incorporate · 16 Oct', 'Your press'], ['Filed · 18 Oct', 'Typed'], ['Certificate · 3 Nov', 'Signed'], 1, 1],
+      ['Assign the IP to the company', 'Formation step', 'Company creation', ['14 Oct', 'Your accept'], ['IP assignment sent · 4 Nov', 'Signed'], ['1 of 2 signed', 'Signed'], 0, 1, 1],
+      ['GitHub', 'Connect', 'Operating systems', ['13 Oct', 'Your accept'], ['Connected · 13 Oct', 'Connector · GitHub'], 1, 1, ['Reporting since 13 Oct', 'Connector · GitHub'], 1],
+      ['Vercel', 'Connect', 'Operating systems', ['21 Oct', 'Your accept'], ['Connected · 21 Oct', 'Connector · Vercel'], 1, 1, ['Reporting since 21 Oct', 'Connector · Vercel'], 1],
+      ['PostHog', 'Connect', 'Operating systems', ['25 Oct', 'Your accept'], ['Connected · 25 Oct', 'Connector · PostHog'], 1, 1, ['Reporting since 25 Oct', 'Connector · PostHog'], 1]];
+    const DASH = 'display:inline-flex;padding:1px 8px;border-radius:999px;border:1px dashed ' + c.mu + ';font:600 11px ' + SG + ';color:' + c.mu;
+    const cell = (x, j) => x === 0 ? CL('Not yet', { ts: 'font:500 11.5px ' + MO + ';color:' + c.mu + ';padding-left:15px;background:radial-gradient(circle at 5px 50%,transparent 0 2.6px,' + c.mu + ' 2.8px 4.5px,transparent 4.8px)' }) : x === 1 ? CL('Does not apply', { ts: 'font-size:11.5px;color:' + c.mu }) : x[0] === 'NR' ? CL('Not recorded', { ts: DASH, sub: x[1] }) : CL(x[0], { ts: 'font:600 11.5px ' + MO + ';color:' + c.ink + ';padding-left:15px;background:radial-gradient(circle at 5px 50%,' + STC[j] + ' 0 4.5px,transparent 5px)', sub: x[1] || false });
+    const progT = (o) => { o = o || {}; const rows = IT.slice(0, o.n || IT.length).map(r => [CL(r[0], { ts: 'font-weight:700;line-height:1.35', sub: r[1] }), r[2]].concat(r.slice(3).map((x, j) => o.gh && Array.isArray(x) && /GitHub/.test(x[0] + (x[1] || '')) ? CL('Could not be read', { ts: DASH, sub: 'from GitHub · 14:20' }) : cell(x, j))));
+      return TB({ title: o.title || 'Accepted items', tbar: { search: 'Search items', chips: [tag('Module ▾'), tag('Stage ▾'), tag('Tool ▾'), tag('Sort: Last change ▾')] }, gc: '1.7fr 1fr .8fr 1.25fr 1.25fr 1.15fr 1.3fr 1.1fr', minW: 1060, cols: ['Item', 'Module', 'Accepted', 'Sent', 'In progress', 'Built', 'Live', 'Tested'], rows, count: o.n ? '1–' + o.n + ' of [14]' : '1–14 of [14]', foot: o.foot || 'Each dot carries its source. Not recorded means no tool reports that stage, never that it is not done.' }); };
+    const PSEG = [['Accepted', S[0]], ['Sent', S[1]], ['In progress', S[2]], ['Built or live', S[3]], ['Not started', S[4]]];
+    const PDATA = [['Solution design', [0, 1, 0, 0, 0, 2]], ['Prototype / MVP', [0, 0, 1, 2, 0, 0]], ['Product roadmap', [1, 0, 1, 0, 1, 0]], ['Company creation', [0, 0, 1, 1, 0, 0]], ['Operating systems', [0, 0, 0, 3, 0, 0]]];
+    const stageSvg = (ph) => { const W = ph ? 330 : 700, rh = 34, L = ph ? 112 : 150, iw = W - L - (ph ? 34 : 200), mx = 3, H = PDATA.length * rh + 4;
+      let s = svgOpen(W, H, 'Accepted plan items by stage, per module: 6 of 14 are built or live. In Solution design, 2 are not recorded because Notion reports nothing back.', 'Space Grotesk,sans-serif');
+      PDATA.forEach(([m, a], i) => { const y = i * rh + 4; let acc = 0; s += '<text x="0" y="' + (y + 15) + '" font-size="12" fill="' + c.ink + '">' + m + '</text>';
+        a.forEach((n, j) => { if (!n) return; const x = L + acc / mx * iw, w = n / mx * iw - 2; s += j === 5 ? '<rect x="' + (x + .75).toFixed(1) + '" y="' + (y + 3.75) + '" width="' + (w - 1.5).toFixed(1) + '" height="14.5" rx="2" fill="none" stroke="' + c.mu + '" stroke-dasharray="4 3"><title>' + m + ' · Not recorded · ' + n + '</title></rect>' : '<rect x="' + x.toFixed(1) + '" y="' + (y + 3) + '" width="' + w.toFixed(1) + '" height="16" rx="2" fill="' + PSEG[j][1] + '"><title>' + m + ' · ' + PSEG[j][0] + ' · ' + n + '</title></rect>'; acc += n; });
+        s += '<text x="' + (L + acc / mx * iw + 8).toFixed(1) + '" y="' + (y + 15) + '" font-family="Roboto Mono,monospace" font-size="11.5" fill="' + c.ink + '">[' + acc + ']' + (ph ? '' : ' items' + (a[5] ? ' · [' + a[5] + '] not recorded' : '')) + '</text>'; });
+      return { __html: s + '</svg>' }; };
+    const SLEG = PSEG.map(p => ({ t: p[0], sw: dotSw(p[1]) })).concat([{ t: 'Not recorded', sw: 'width:14px;height:10px;border-radius:3px;border:1px dashed ' + c.mu + ';box-sizing:border-box' }]);
+    const stageK = (ph) => K({ title: 'Plan items by stage', tog: TOG(), note: '[6] of [14] accepted items are built or live.', ns: 'margin:0;font-size:13px;font-weight:500;color:' + c.ink, legend: SLEG, svg: stageSvg(ph), foot: 'Not started: accepted for Later on the roadmap. A finished test counts as built. Not recorded: Notion reports nothing back after a copy.' });
+    const BW = [1, 3, 0, 1, 1, 0, 0, 0], WKN = ['12 Oct', '19 Oct', '26 Oct', '2 Nov', '9 Nov', '16 Nov', '23 Nov', '30 Nov'];
+    const wkSvg = () => { const W = 340, H = 210, L = 30, T = 24, Bm = 26, iw = W - L - 14, ih = H - T - Bm, n = 8, ym = 4, X = (i) => +(L + i * iw / (n - 1)).toFixed(1), Y = (v) => +(T + ih - v / ym * ih).toFixed(1);
+      let s = svgOpen(W, H, 'Plan items built per week since 12 Oct: 1, 3, 0, 1, 1, 0, 0, and 0 so far this week. The 8 weeks before the plan are not recorded.');
+      for (let v = 0; v <= ym; v += 2) s += '<line x1="' + L + '" x2="' + (L + iw) + '" y1="' + Y(v) + '" y2="' + Y(v) + '" stroke="' + c.hair + '"/><text x="' + (L - 7) + '" y="' + (Y(v) + 4) + '" text-anchor="end" font-size="11" fill="' + c.mu + '">' + v + '</text>';
+      s += '<line x1="' + L + '" x2="' + (L + iw) + '" y1="' + (Y(0) - 2) + '" y2="' + (Y(0) - 2) + '" stroke="' + c.mu + '" stroke-width="1.2" stroke-dasharray="4 3"/>';
+      let d = ''; BW.forEach((v, i) => { d += (i ? 'L' : 'M') + X(i) + ' ' + Y(v); }); s += '<path d="' + d + '" fill="none" stroke="' + S[0] + '" stroke-width="2.5" stroke-linejoin="round"/>';
+      BW.forEach((v, i) => { const sf = i === n - 1; s += '<circle cx="' + X(i) + '" cy="' + Y(v) + '" r="' + (sf ? 4.5 : 3.2) + '" fill="' + (sf ? c.card : S[0]) + '" stroke="' + S[0] + '" stroke-width="2"><title>Week of [' + WKN[i] + '] · ' + v + ' built' + (sf ? ' so far' : '') + '</title></circle>'; if ((i % 2 === 0 && i < 6) || sf) s += '<text x="' + X(i) + '" y="' + (H - 7) + '" text-anchor="middle" font-size="10.5" fill="' + c.mu + '">' + (sf ? 'so far' : '[' + WKN[i] + ']') + '</text>'; });
+      return { __html: s + '</svg>' }; };
+    const weekK = () => K({ title: 'Built per week', tog: TOG(), legend: [{ t: 'Since the plan began', sw: dotSw(S[0]) }, { t: 'Previous 8 weeks · not recorded', sw: 'width:16px;height:0;border-top:1.5px dashed ' + c.mu }], svg: wkSvg(), foot: 'The plan began on 12 Oct, so the 8 weeks before it hold no plan items.' });
+    const progCols = () => [col([K({ cs: PLAIN, tags: [MONO('As of [30 Nov 2026] · read from GitHub, Vercel and PostHog')] })]), col([stageK()], 4), col([weekK()], 2), col([progT()])];
+    const node = (t, sub, colr, nr, btn) => R({ rs: 'position:relative;display:flex;margin-left:8px;padding:0 0 16px 22px;border-left:2px ' + (nr ? 'dashed ' + c.mu : 'solid ' + c.hair), lead: '\u00a0', ls: 'position:absolute;left:-8px;top:1px;width:14px;height:14px;border-radius:999px;box-sizing:border-box;' + (nr ? 'border:2px dashed ' + c.mu + ';background:' + c.card : 'background:' + colr + ';border:3px solid ' + c.card + ';box-shadow:0 0 0 1px ' + colr), t, ts: 'font-size:13px;font-weight:700;line-height:1.45' + (nr ? ';color:' + c.mu : ''), sub, ss: 'font:500 11.5px ' + MO + ';color:' + c.mu, btns: btn ? [{ t: btn, s: btnSm }] : false });
+    const AMB = '#f59e0b';
+    const TRAIL = (nr) => [node('7 interviews', 'Recorded · Customer research · 2–9 Oct', AMB), node('Pain theme [Setup takes weeks] · Severe', 'Recorded · Problem discovery', AMB), node('H1 · supports 5 · contradicts 1', 'Recorded · Experiments and evidence', AMB)].concat(ro ? [] : [node('Verdict · Proceed · 12 Oct', 'Your decision', c.vt)]).concat([node('Accepted into Prototype / MVP · 12 Oct · [Name]', 'Your accept', S[0]), node('Opened in Lovable · 13 Oct', 'Your press', S[0]), node('GitHub PR #12 · merged 20 Oct', 'Connector · GitHub', S[0])]).concat(nr ? [node('Not recorded: Vercel is not connected.', 'The live step appears once Vercel reports it.', 0, 1, 'Connect')] : [node('Live on [app.northwind-demo.dev] · 21 Oct', 'Connector · Vercel', S[0]), node('Prototype test · 4 of 5 completed setup · added as evidence on H1', 'Connector · PostHog · 9 Nov', '#10b981')]);
+    const itemHead = () => K({ cs: PLAIN, eye: 'PLAN ITEM · VB-7K2Q', title: '[One-day setup wizard]', hs: H18, meta: 'Esc to close', tags: [pl('', 'Must-have', 'n'), pl('', 'Prototype / MVP', 'n'), pl('✓', 'Accepted', 'g')] });
+    const trailK = (nr) => K({ cs: SEC, title: 'Evidence trail', hs: eyeS, rows: TRAIL(nr), rowsS: 'display:flex;flex-direction:column;padding-top:6px', btns: nr ? false : [{ t: 'See how Raise uses it', s: btnG }], foot: nr ? 'As of 20 Oct, before Vercel was connected.' : 'This trail is what Raise shows investors as evidence, once you choose to share it.' });
+    const pCard = (r) => { let k = 0; r.slice(3).forEach((x, j) => { if (Array.isArray(x) && x[0] !== 'NR') k = j; }); return K({ eye: r[2], title: r[0], hs: 'margin:0;font-size:14.5px;font-weight:800;line-height:1.35', rows: [R({ rs: 'display:flex;flex-direction:column;gap:7px;padding:0', t: NST[k] + ' · ' + r[3 + k][0], ts: 'font:600 12px ' + MO, tags: r.slice(3).map((x, j) => ({ t: '', s: 'display:inline-block;width:14px;height:14px;border-radius:999px;box-sizing:border-box;' + (x === 0 ? 'border:2px solid ' + c.mu : x === 1 ? 'background:' + c.hair : x[0] === 'NR' ? 'border:1.5px dashed ' + c.mu : 'background:' + STC[j]) })) })] }); };
+    let shell = 'founder', head = true, crumb = phone ? '‹ Build' : 'Build › Plan', crumbHref = '/build', title = 'Plan the build', hpills = false, hbtns = phone ? [] : [HB('Send to… · [3]', btnP), ICON('⋯', 'More: Update the plan, Pause the plan, Export plan (.md)')], hlines = [{ t: 'What Validate proved, turned into what to build. Nothing lands until you accept it.' }], tabCur = 'Plan', TABL = [['Plan', '/build/plan'], ['Progress', '/build/plan/progress']], grid = G6, cols = [], minH = 900, rail = false, pbar = false;
+    const PG = (b) => [{ s: STACK, blocks: b }];
+    const CEN = ';max-width:560px;margin:90px auto 0;width:100%';
+    const LAVR = (t, act, as) => K({ cs: CARD + ';background:' + c.lav + ';border-color:' + c.lavE, rows: [R({ rs: 'display:flex;gap:11px;align-items:center;flex-wrap:wrap;padding:0', t, ts: 'font-size:14px;font-weight:700;line-height:1.45', act, as })] });
+    if (B === 'VB1') cols = planCols();
+    else if (B === 'VB4') { cols = planCols().concat(over(editDlg, 620)); minH = 1500; }
+    else if (B === 'VB5') { rail = { line: 'Eadwyn words the plan from your accepted evidence. You keep what you want.', btn: 'Word with Eadwyn · [≈ $0.002]', items: [{ e: 'WORDED', t: 'The brief, [One-day setup wizard] and [Buyers fear migration]. Nothing is saved until you keep the wording.' }, { e: 'READS', t: 'Only what you accepted in Validate.' }, { e: 'COST', t: 'Taken from your AI tokens when you press Word with Eadwyn.' }] }; cols = planCols({ wording: 1, one: 1 }); }
+    else if (B === 'VB6') { cols = planCols().concat(over(sendHead('Lovable').concat(lovBody(), [lovFoot]), 600)); minH = 1500; }
+    else if (B === 'VB7') { cols = planCols().concat(over(sendHead('GitHub').concat(ghBody(1)), 600)); minH = 1500; }
+    else if (B === 'VB9') { tabCur = 'Progress'; cols = progCols().concat(over(backDlg, 660)); minH = 1300; }
+    else if (B === 'VB10' || B === 'VB12') { tabCur = 'Progress'; cols = progCols(); }
+    else if (B === 'VB11') { tabCur = 'Progress'; cols = progCols().concat(over([itemHead(), trailK()], 600)); minH = 1450; }
+    else if (B === 'VB15') { shell = 'partner'; ro = true; crumb = 'Delivery › [Northwind Logistics]'; title = 'Build plan'; hbtns = []; hpills = [pl('●', 'Operating Partner', 'g')]; hlines = [{ t: 'You see what the founders accepted and what was built.' }]; TABL = [['Progress', '/build/plan/progress']]; tabCur = 'Progress'; cols = progCols(); }
+    else if (B === 'VB16a' || B === 'VB16b') { const a = B === 'VB16a'; shell = a ? 'admin' : 'hq'; ro = true; crumb = (a ? 'Accounts' : 'Support') + ' › [Northwind Logistics]'; title = 'Build plan'; hbtns = []; hpills = [pl('◉', 'Read only', 'n')]; hlines = [{ t: 'Founders accept their plan. You can read it.' }]; cols = planCols({ pre: [K({ cs: PLAIN, rows: [INFOROW('If the owner allows admins to accept, Accept appears here.')] })] }); }
+    else if (B === 'VB17') { hbtns = [HT('Accept an item to send it.'), ICON('⋯', 'More: Update the plan, Pause the plan, Export plan (.md)')]; cols = [col([CENTER('○', 'Nothing to plan from yet.', 'The plan reads only what you accepted in Validate. Accept findings from your interviews first.', [{ t: 'Record a session', s: btnP }, { t: 'Open Validate', s: btnS }], CEN)])]; }
+    else if (B === 'VB18') { cols = [col([K({ cs: CARD + ';padding:10px 16px', tags: [MONO('Reading…')] })]), col([sk(3), sk(3), sk(2)], 2), col([sk(4), sk(4), sk(3)], 4)]; }
+    else if (B === 'VB20a') { shell = 'investor'; head = false; TABL = []; cols = [col([CENTER('⊘', 'This plan belongs to the venture’s founders.', 'Investors, advisors and explorers see a venture’s evidence only when its founders share it in Raise.', [{ t: 'Go to your home', s: btnP }], CEN)])]; }
+    else if (B === 'VB20b') cols = planCols({ spin: 1 });
+    else if (crop) { head = false; TABL = []; grid = STACK; const one = (b) => [{ s: STACK, blocks: b }];
+      if (B === 'VB2a') cols = one([K({ eye: 'VALIDATE › VERDICT', title: 'Verdict · Proceed', hs: H18, facts: [{ k: 'Decision', v: 'Proceed', sub: 'For the venture' }, { k: 'Recorded by', v: '[Name]', sub: '12 Oct 2026' }, { k: 'Evidence', v: '6 pieces', sub: '3 LOIs · H1 supports 5 · contradicts 1' }, { k: 'Commitment', v: 'Ship a pilot to two LOI accounts', sub: '[Name] · due 30 Nov' }], tags: [pl('✓', 'Proceed', 'g')] }), LAVR('Plan the build from this evidence. [11] proposals are ready.', 'Plan the build', btnP)]);
+      else if (B === 'VB2b') { const mt = TL([['Solution design', '[4]', 'features', false, false, 'From your plan · 3'], ['Prototype / MVP', '[3]', 'must-haves', false, false, 'From your plan · 2'], ['Product roadmap', '[5]', 'items', false, false, 'From your plan · 1'], ['Company creation', 'Not started', '', false, false, 'From your plan · 2', c.mu], ['Operating systems', '[1]', 'tool connected', false, false, 'From your plan · 3']], 3); mt.items.forEach(it => { it.fls = PILL + 'color:' + c.vt + ';background:' + c.lav + ';border:1px solid ' + c.lavE; }); cols = one([K({ cs: PLAIN, eye: 'BUILD · CAN THIS BECOME A REAL COMPANY?', es: 'font-size:10px;font-weight:800;color:' + c.vt + ';text-transform:uppercase;letter-spacing:.09em', title: 'Build', hs: 'margin:0;font-size:24px;font-weight:800;letter-spacing:-.02em', note: 'Turn what Validate proved into a product and a company.', btns: [{ t: 'Connect a tool', s: btnP }] }), LAVR('Your Verdict is Proceed. A plan is ready from what Validate proved.', 'Open the plan', btnS), mt]); }
+      else if (B === 'VB3') { grid = 'display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:14px;align-items:start'; const lab = (t) => K({ cs: PLAIN, note: t, ns: eyeS }); cols = [['Proposed', WIZ()], ['Proposed · worded by Eadwyn', WIZ(1)], ['Edited and accepted', prop({ kind: 'Feature', t: '[One-day setup wizard]', st: 'e', d: 'Edited by [Name] on 12 Oct before accepting.', because: [RC.pain, RC.h1], land: 'Landed in Solution design › Features', btns: [{ t: 'Open', s: btnG }] })], ['Accepted', done({ t: '[One-day setup wizard]', sub: 'Accepted 12 Oct · Solution design › Features' })], ['Dismissed · just now', done({ t: '[Driver mobile app]', sub: 'Dismissed', lead: '–', struck: 1, act: 'Undo · 10 s' })], ['Dismissed', done({ t: '[Driver mobile app]', sub: 'Dismissed · it will not be proposed again', lead: '–', struck: 1, noAct: 1 })], ['Withdrawn', prop({ kind: 'Feature', t: '[Offline mode]', st: 'w', struck: 1, d: 'A newer decision replaced this plan.', because: [RC.eta], btns: false })], ['Could not save', K({ cs: CARD + ';border-color:' + c.negE, eye: 'Feature', es: KS, title: '[One-day setup wizard]', rows: [ERR('Solution design could not save this: [the Worker’s sentence].', 'r', [{ t: 'Try again', s: btnS }])] })]].map(([l, k]) => ({ s: PCOL, blocks: [lab(l), k] })); }
+      else if (B === 'VB7n') cols = [dlgCol(sendHead('GitHub').concat(ghBody(0)))];
+      else if (B === 'VB8a') cols = [dlgCol(sendHead('Notion').concat(notionBody()))];
+      else if (B === 'VB8b') cols = [dlgCol(sendHead('Vercel').concat(vercelBody()))];
+      else if (B === 'VB11b') cols = [dlgCol([itemHead(), trailK(1)])];
+      else if (B === 'VB13') { grid = 'display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px;align-items:start'; cols = [{ s: 'grid-column:1/-1;' + PCOL, blocks: [K({ cs: PLAIN, rows: [R({ rs: NOTE('v') + ';align-items:center', lead: 'i', ls: INFO, t: '4 new pieces of evidence since this plan, 1 contradicting.', ts: 'font-size:13px;font-weight:600', act: 'Update the plan', as: btnS })] }), K({ cs: PLAIN, note: 'After Update the plan', ns: eyeS })] }, { s: PCOL, blocks: [prop({ kind: 'Feature', st: 'nw', t: '[Saved route templates]', d: 'Reuse a route set-up across depots.', because: [bc('rec', 'Customer research · [Repeat routes] · 3 interviews')], land: 'Lands in Solution design › Features' })] }, { s: PCOL, blocks: [K({ rows: [R({ rs: 'display:flex;gap:11px;align-items:center;padding:0 0 10px', lead: '✓', ls: 'font-size:15px;flex:none;color:' + c.pos, t: '[One-day setup wizard]', ts: 'font-size:13.5px;font-weight:700', sub: 'Accepted 12 Oct · Prototype / MVP › Must-haves', ss: 'font:500 11.5px ' + MO + ';color:' + c.mu, act: 'Open', as: btnG }), ERR('Its evidence changed: H1 now supports 6 · contradicts 2.', 'a')], foot: 'No accepted item is changed by itself. Open it to decide.' })] }]; }
+      else if (B === 'VB14a' || B === 'VB14b') { const stop = B === 'VB14b'; cols = one([K({ cs: PLAIN, eye: 'BUILD › PLAN', es: eyeS, title: 'Plan the build', hs: 'margin:0;font-size:22px;font-weight:800;letter-spacing:-.02em', meta: stop ? 'Record a new decision to resume.' : false, ms: 'font-size:12.5px;font-weight:600;color:' + c.mu }), K({ cs: PLAIN, rows: [stop ? NROW('Your verdict is Stop. The plan is paused. Accepted items stay.') : ERR('Your verdict is withheld: 2 of 5 pieces of evidence. You can still plan, but Raise will show the plan as resting on withheld evidence.', 'a', [{ t: 'Plan anyway', s: btnS }])] })].concat(stop ? [done({ t: '[Live ETA panel]', sub: 'Accepted 12 Oct · Solution design › Features' }), done({ t: '[Live ETA for one route]', sub: 'Accepted 12 Oct · Prototype / MVP › Must-haves' })] : [])); }
+      else if (B === 'VB19a') cols = [{ s: 'display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px;align-items:start', blocks: [secH('Solution design', '3 proposed'), WIZ(), RISK(), failPM()] }];
+      else if (B === 'VB19b') cols = one([progT({ gh: 1, n: 6, title: 'Accepted items · GitHub could not be read', foot: 'GitHub could not be read at 14:20. Its cells say so, never that the work is not done. Other tools read as usual.' })]); }
+    else if (phone) { grid = STACK;
+      if (B === 'VB21a') { pbar = [{ t: 'Send to… · [3]', s: btnP + ';flex:1' }]; const acc = (n, k, open) => K({ cs: CARD + ';padding:2px 14px', rows: [R({ rs: 'display:flex;gap:10px;align-items:center;min-height:48px;padding:0', lead: open ? '▾' : '›', ls: 'font-size:16px;flex:none;color:' + c.mu, t: n, ts: 'font-size:14px;font-weight:800', v: k, vs: 'font:600 11.5px ' + MO + ';color:' + c.mu })] }); cols = PG([strip(), acc('Solution design', '3 proposed', 1), BRIEF(), WIZ(), RISK(), done({ t: '[Live ETA panel]', sub: 'Accepted 12 Oct', tags: [SEL] }), acc('Prototype / MVP', '2 proposed'), acc('Product roadmap', '1 proposed'), acc('Company creation', '2 proposed'), acc('Operating systems', '3 proposed')]); }
+      else if (B === 'VB21b') { crumb = '‹ Plan'; crumbHref = '/build/plan'; title = 'Send to…'; hlines = [{ t: '3 accepted items' }]; TABL = []; cols = PG([sendTabs('Lovable')].concat(lovBody(), [K({ cs: PLAIN, note: LOVLINE })])); pbar = [{ t: 'Copy prompt', s: btnS + ';flex:1' }, { t: 'Open in Lovable ↗', s: btnP + ';flex:1.3' }]; }
+      else if (B === 'VB22a') { tabCur = 'Progress'; cols = PG([stageK(1)].concat(IT.slice(0, 5).map(pCard), [K({ cs: PLAIN, note: '1–5 of [14] · Show more' })])); }
+      else if (B === 'VB22b') { crumb = '‹ Progress'; crumbHref = '/build/plan/progress'; title = '[One-day setup wizard]'; hlines = [{ t: 'Must-have · Prototype / MVP · accepted 12 Oct' }]; TABL = []; cols = PG([trailK()]); } }
+    const SIDES = { founder: ['Studio', 'Spin-Out Lab', 'Validate', 'Build', 'Raise', 'Grow', 'Network', 'Research'], investor: ['Studio', 'Spin-Out Lab', 'Deals', 'Portfolio', 'Axal VC Fund', 'Fund', 'Network', 'Research', 'Trust'], partner: ['Studio', 'Spin-Out Lab', 'Pipeline', 'Delivery', 'Offers', 'Network', 'Research'], admin: ['Studio', 'Accounts', 'Approvals', 'Programs', 'Community', 'Contracts', 'Fund admin', 'Insights', 'Licences'], hq: ['Home', 'Licences', 'Programs', 'Funds', 'Fund admin', 'Contracts', 'Team', 'Revenue', 'Content', 'Platform', 'Integration keys', 'Support', 'Security', 'Settings'] };
+    const LIT = { founder: 'Build', investor: '', partner: 'Delivery', admin: 'Accounts', hq: 'Support' };
+    const adm = shell === 'admin' || shell === 'hq';
+    const rows = SIDES[shell].map(t => ({ t, href: (adm ? '/admin/' : '/') + t.toLowerCase().replace(/ /g, '-'), st: 'display:flex;align-items:center;min-height:34px;padding:0 12px;margin:0 8px;border-radius:9px;font-size:13px;text-decoration:none;' + (t === LIT[shell] ? 'background:' + c.lav + ';color:' + c.vt + ';font-weight:800' : 'color:' + c.ink + ';font-weight:600') }));
+    const bell = { __html: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9"/><path d="M10.3 21a1.94 1.94 0 0 0 3.4 0"/></svg>' };
+    const studioI = { __html: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/></svg>' };
+    const isShell = !phone && !crop;
+    const FONT = 'font-family:' + SG + ';background:' + c.bg + ';color:' + c.ink + ';font-variant-numeric:tabular-nums;-webkit-font-smoothing:antialiased;position:relative;box-sizing:border-box';
+    const BADGE = { admin: ['[Studio Lisbon]', '#334155'], hq: ['HQ', '#881337'] }[shell];
+    const v = {
+      eyeS, btnS,
+      root: isShell ? FONT + ';display:grid;grid-template-columns:196px minmax(0,1fr) ' + (rail ? '320px' : '44px') + ';min-height:' + minH + 'px' : phone ? FONT + ';width:390px;height:844px;display:flex;flex-direction:column;overflow:hidden' : FONT + ';padding:28px;background:' + (dark ? '#060a14' : '#e6e4eb'),
+      side: isShell, asideS: 'background:' + c.card + ';border-right:1px solid ' + c.hair + ';padding:14px 0;display:flex;flex-direction:column;gap:2px',
+      logoS: 'width:20px;height:20px;border-radius:6px;flex:none;background:#7c3aed',
+      group: shell === 'founder' ? '[Northwind Logistics] ▾' : shell === 'admin' ? 'Admin' : shell === 'hq' ? 'HQ' : '', groupS: shell === 'founder' ? 'display:flex;align-items:center;margin:0 8px 10px;padding:8px 12px;border-radius:9px;border:1px solid ' + c.hair + ';background:' + c.raised + ';font:700 12.5px ' + SG + ';color:' + c.ink : 'padding:6px 20px 4px;' + eyeS, rows,
+      mainS: 'min-width:0;display:flex;flex-direction:column' + (phone ? ';flex:1;min-height:0' : ''),
+      top: isShell, topS: 'height:52px;border-bottom:1px solid ' + c.hair + ';background:' + c.card + ';display:flex;align-items:center;justify-content:space-between;padding:0 30px;gap:14px',
+      searchS: 'display:flex;align-items:center;gap:8px;min-height:' + (phone ? 44 : 32) + 'px;padding:0 12px;border:1px solid ' + c.hair + ';border-radius:7px;background:' + c.card + ';color:' + c.mu + ';font-size:12.5px;width:280px;max-width:100%;box-sizing:border-box',
+      badge: BADGE ? BADGE[0] : '', badgeS: BADGE ? 'padding:4px 9px;border-radius:999px;font:700 10px ' + MO + ';letter-spacing:.06em;color:#fff;background:' + BADGE[1] : 'display:none',
+      iconS: 'display:grid;place-items:center;width:34px;height:34px;border-radius:9px;border:1px solid ' + c.hair + ';color:' + c.ink, bell,
+      avS: 'display:grid;place-items:center;width:30px;height:30px;border-radius:999px;background:' + c.lav + ';color:' + c.vt + ';font:700 10px ' + MO,
+      ptop: phone, ptopS: 'height:56px;flex:none;display:flex;align-items:center;justify-content:space-between;padding:0 4px 0 14px;border-bottom:1px solid ' + c.hair + ';background:' + c.card, picoS: 'display:grid;place-items:center;width:44px;height:44px;color:' + c.ink, company: '[Northwind Logistics]', studioI,
+      bodyS: isShell ? 'padding:22px 30px 30px;display:flex;flex-direction:column;gap:14px;min-width:0' : phone ? 'padding:14px 14px 18px;display:flex;flex-direction:column;gap:12px;flex:1;min-width:0;min-height:0;overflow-y:auto' : 'display:flex;flex-direction:column;gap:14px;min-width:0',
+      head: (isShell || phone) && head, crumb, crumbHref, crumbS: 'font:700 11px ' + MO + ';letter-spacing:.07em;text-transform:uppercase;color:' + c.mu + ';text-decoration:none' + (phone ? ';min-height:44px;display:inline-flex;align-items:center' : ''),
+      title, h1S: 'margin:0;font-size:' + (phone ? 20 : 24) + 'px;font-weight:800;letter-spacing:-.02em;line-height:1.25', hpills, hbtns, hlines: hlines.map(l => ({ t: l.t, s: 'margin:0;font-size:13px;line-height:1.5;color:' + c.mu })),
+      scope: false, scopeTip: '', scopeS: '', gate: false, gateS: '', msel: false, mselS: '', moved: false, movedS: '', infoS: INFO, dismissS: btnG,
+      tbar: false, tbarS: '', tbarChips: [], tbarBtns: [], tbarNote: false, tbarNoteS: '',
+      tabsL: 'Plan', tabs: TABL.length ? TABL.map(([t, href]) => ({ t, href, n: false, sel: t === tabCur ? 'page' : 'false', ns: '', s: 'display:inline-flex;align-items:center;gap:6px;min-height:' + (phone ? 44 : 36) + 'px;padding:0 2px;margin-bottom:-1px;font-size:13px;text-decoration:none;white-space:nowrap;border-bottom:2px solid ' + (t === tabCur ? c.vi : 'transparent') + ';color:' + (t === tabCur ? c.ink : c.mu) + ';font-weight:' + (t === tabCur ? 800 : 600) })) : false,
+      tabRowS: 'display:flex;gap:22px;border-bottom:1px solid ' + c.hair + (phone ? ';overflow-x:auto;flex:none' : ''),
+      period: false, segS: 'display:inline-flex;gap:2px;padding:3px;border-radius:9px;background:' + c.raised + ';border:1px solid ' + c.hair + ';align-self:flex-start',
+      banner: false, bannerS: '', bannerI: '', gridS: grid, cols,
+      pbar, pbarS: 'display:flex;gap:8px;padding:10px 14px;border-top:1px solid ' + c.hair + ';background:' + c.card + ';flex:none',
+      pnav: phone ? ['Validate', 'Build', 'Raise', 'Grow', 'More'].map(t => ({ t, href: t === 'More' ? '#' : '/' + t.toLowerCase(), s: 'display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px;min-width:60px;min-height:48px;font-size:11px;text-decoration:none;font-weight:' + (t === 'Build' ? 800 : 600) + ';color:' + (t === 'Build' ? c.vt : c.mu), ds: 'width:18px;height:18px;border-radius:5px;box-sizing:border-box;' + (t === 'Build' ? 'background:' + c.lav + ';border:1.5px solid ' + c.vt : 'border:1.5px solid ' + c.mu) })) : false,
+      pnavS: 'display:flex;justify-content:space-around;border-top:1px solid ' + c.hair + ';background:' + c.card + ';padding:2px 0 4px;flex:none',
+      spine: isShell && !rail, spineTip: 'Eadwyn reads what you accepted. Nothing lands until you accept it.', spineS: 'border-left:1px solid ' + c.hair + ';background:' + c.card + ';display:flex;flex-direction:column;align-items:center;gap:12px;padding:16px 0', eadS: 'display:grid;place-items:center;width:28px;height:28px;border-radius:9px;background:#7c3aed;color:#fff;font-weight:800;font-size:13px;flex:none', spineT: 'writing-mode:vertical-rl;transform:rotate(180deg);font:700 10px ' + MO + ';letter-spacing:.07em;text-transform:uppercase;color:' + c.mu,
+      rail, railS: 'border-left:1px solid ' + c.hair + ';background:' + c.card + ';display:flex;flex-direction:column;gap:12px;padding:16px;box-sizing:border-box', railX: 'display:grid;place-items:center;width:30px;height:30px;border-radius:8px;border:1px solid ' + c.hair + ';background:' + c.card + ';color:' + c.ink + ';cursor:pointer', railP: 'margin:0;font-size:13px;line-height:1.55;color:' + c.ink, railB: btnS + ';width:100%', railI: 'display:flex;flex-direction:column;gap:4px;padding:10px 12px;border-radius:10px;background:' + c.lav + ';border:1px solid ' + c.lavE,
+      glyphS: 'display:grid;place-items:center;width:44px;height:44px;border-radius:999px;background:' + c.lav + ';color:' + c.vt + ';font:700 18px ' + SG + ';border:1px solid ' + c.lavE,
+      coverT: '', stackS: '', factsS: 'display:grid;grid-template-columns:' + (phone ? '1fr' : '1fr 1fr') + ';gap:12px 20px', ddS: 'font-size:13px;font-weight:600;line-height:1.45;color:' + c.ink, fsubS: 'font-size:12px;color:' + c.mu, calS: '', calH: '', ovS: '', ovD: '', moreS: '', popS: '', popL: '',
+      dbS: 'display:flex;flex-direction:column;align-items:center;justify-content:center;width:48px;flex:none;padding:5px 0;border-radius:10px;background:' + c.raised + ';border:1px solid ' + c.hair, dbM: 'font:700 9.5px ' + MO + ';letter-spacing:.07em;color:' + c.mu, dbD: 'font:700 17px ' + MO + ';color:' + c.ink + ';line-height:1.2',
+      monoS: 'font:600 12px ' + MO + ';color:' + c.ink, waitS: 'font:600 11.5px ' + MO + ';color:' + c.amT, countS: 'font:500 12px ' + MO + ';color:' + c.mu, pageS: 'display:grid;place-items:center;min-width:30px;height:30px;padding:0 6px;border-radius:7px;border:1px solid ' + c.hair + ';background:' + c.card + ';color:' + c.ink + ';font:600 12px ' + MO + ';cursor:pointer;box-sizing:border-box', lockS: '', lockI: { __html: '' }
+    };
+    return { v };
+  }
+}
+</script>
+</body></html>

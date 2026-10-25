@@ -3062,6 +3062,9 @@ function AppInner() {
       {/* D686 §5.1: Connect a tool, the Build page with its lightbox open; /build/tools is the history's address. */}
       <Route path="/build/connect" element={guard(['admin', 'founder'], <CycleRoute cycle="build" lightbox />)} />
       <Route path="/build/tools" element={guard(['admin', 'founder'], <HistoryRedirect to="/build/operating-systems" hash="#tools" />)} />
+      {/* D1063 (#2426): Validate → Build's plan and its progress, ahead of /build/:slug. */}
+      <Route path="/build/plan" element={guard(['admin', 'founder'], <CycleRoute cycle="build" buildPlan="plan" />)} />
+      <Route path="/build/plan/progress" element={guard(['admin', 'founder'], <CycleRoute cycle="build" buildPlan="progress" />)} />
       <Route path="/build/:slug" element={guard(['admin', 'founder'], <CycleRoute cycle="build" />)} />
       <Route path="/build/:slug/:id" element={guard(['admin', 'founder'], <CycleRoute cycle="build" record />)} />
       <Route path="/build/:slug/new" element={guard(['admin', 'founder'], <CycleRoute cycle="build" adding />)} />

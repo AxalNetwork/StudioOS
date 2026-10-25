@@ -109,6 +109,24 @@ strength of a live route would empty the queue of the work it exists to track.
    `Trust Center v2.dc.html` to `backlog/` for a day, next to the `NEW` canvases
    that have no route, and away from the v1 of its own page.
 
+## Landed 2026-10-25 — Build · Validate → Build (#2426)
+
+The owner's artifacts `P4pEfmEXmjGcCav3eAtzCY` (the board grid) and
+`7fZasxkjxTJSL1MkXxreXk` (the page) came from S21's prompt on #2426, each
+decoded by `scripts/read-canvas.mjs` as is:
+- `Validate → Build · Boards.dc.html` is the board grid (VB1 to VB22, with
+  the lettered boards);
+- `Validate → Build Page.dc.html` is the page.
+
+No value was edited.
+
+**Grade: NEW.** The plan lives at `/build/plan` with Progress at
+`/build/plan/progress`, and Build's overview opens it. S21's integration
+(D1063) draws "What Validate proved" from the Validate overview read; every
+proposal, handoff and stage waits for D1063's eight parts, so this canvas
+stays in the queue until they land. The `ROUTE_MAP.md` row says what is drawn
+today.
+
 ## Landed 2026-10-25 — Grow · Reporting to investors (#2427)
 
 The owner's artifacts `1WS19b5qYpQdJSN1XXowQd` (the board grid) and

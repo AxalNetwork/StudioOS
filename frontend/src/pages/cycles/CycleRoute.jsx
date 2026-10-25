@@ -43,6 +43,7 @@ import RoadmapFromGithub from './RoadmapFromGithub';
 import MvpFromGithub from './MvpFromGithub';
 import UpdatesHistory from './UpdatesHistory';
 import ReportingDesk from './ReportingDesk';
+import BuildPlan, { BuildPlanDoor } from './BuildPlan';
 import UpdateAskReplies from './UpdateAskReplies';
 import CallsHistory from './CallsHistory';
 import RaiseReceiptMatches from '../../components/RaiseReceiptMatches';
@@ -666,7 +667,7 @@ function RecordCrumb({ title, type = null, id = null }) {
   return null;
 }
 
-export default function CycleRoute({ cycle, lightbox = false, adding = false, record = false, slug: suppliedSlug, reporting = null }) {
+export default function CycleRoute({ cycle, lightbox = false, adding = false, record = false, slug: suppliedSlug, reporting = null, buildPlan = null }) {
   const { slug: routeSlug, id: recordId } = useParams();
   const location = useLocation();
   const { user } = useAuth() || {};
@@ -776,8 +777,8 @@ export default function CycleRoute({ cycle, lightbox = false, adding = false, re
   useEffect(() => { setQuery({ q: '', filter: {}, sort: '', page: 1 }); }, [slug]);
 
   useEffect(() => {
-    // D1056: the Reporting desk makes its own read, never the overview's.
-    if (record || slug || reporting || !projectId || !def) return undefined;
+    // D1056, D1063: the Reporting desk and Build's plan make their own reads, never the overview's.
+    if (record || slug || reporting || buildPlan || !projectId || !def) return undefined;
     let alive = true;
     setOverviewStatus('loading');
     cyclesApi.overview(cycle, projectId)
@@ -788,7 +789,7 @@ export default function CycleRoute({ cycle, lightbox = false, adding = false, re
       })
       .catch(() => { if (alive) setOverviewStatus('unreadable'); });
     return () => { alive = false; };
-  }, [record, cycle, slug, reporting, projectId, reload, def]);
+  }, [record, cycle, slug, reporting, buildPlan, projectId, reload, def]);
 
   useEffect(() => {
     if (record || !slug || !known || !projectId || !def) return undefined;
@@ -951,6 +952,12 @@ export default function CycleRoute({ cycle, lightbox = false, adding = false, re
       <ReportingDesk tab={reporting} projectId={projectId} projectStatus={projectStatus} onRetryProject={() => setProjectsKey((n) => n + 1)}
         search={location.search} cards={tabs} action={action} phone={phone} />
     );
+  } else if (buildPlan && cycle === 'build') {
+    // D1063 (#2426): Validate → Build's plan, under Build's header and tab row.
+    body = (
+      <BuildPlan tab={buildPlan} projectId={projectId} projectStatus={projectStatus} onRetryProject={() => setProjectsKey((n) => n + 1)}
+        search={location.search} cards={tabs} action={action} phone={phone} />
+    );
   } else if (capTableTab) {
     body = (
       <CapTableTabPage tab={capTableTab} projectId={projectId} projectStatus={projectStatus} onRetryProject={() => setProjectsKey((n) => n + 1)}
@@ -998,6 +1005,8 @@ export default function CycleRoute({ cycle, lightbox = false, adding = false, re
           action={action}
           search={q}
         />
+        {/* D1063 (#2426): the door to the plan, under Build's overview. */}
+        {cycle === 'build' && <BuildPlanDoor search={q} />}
         <AlsoIn role="founder" row={name} />
       </>
     );

@@ -138,7 +138,7 @@ test('App.jsx serves /validate/record behind the founder guard, as the page and 
   assert.doesNotMatch(line, /<Navigate/);
   const route = read('frontend/src/pages/cycles/CycleRoute.jsx');
   // D695 (#1656): `adding` is the module's `/new` address; `lightbox` is unchanged.
-  assert.match(route, /export default function CycleRoute\(\{ cycle, lightbox = false, adding = false, record = false, slug: suppliedSlug, reporting = null \}\)/);
+  assert.match(route, /export default function CycleRoute\(\{ cycle, lightbox = false, adding = false, record = false, slug: suppliedSlug, reporting = null, buildPlan = null \}\)/);
 });
 
 test('closing goes back to the page underneath, makes no server call, and a plain click records where it came from', () => {
