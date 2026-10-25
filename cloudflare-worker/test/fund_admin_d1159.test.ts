@@ -18,6 +18,7 @@ import { ADMIN, SUPER, INVESTOR, FOUNDER, JTI, freshDb, envFor, tokenFor } from 
 const read = (p: string) => readFileSync(new URL(p, import.meta.url), 'utf8');
 const baseline = read('../sql/schema_baseline.sql');
 const TODAY = '2026-10-25';
+const FREE = 990;
 const digest = 'a'.repeat(64);
 let fetches = 0;
 const realFetch = globalThis.fetch;
@@ -30,7 +31,8 @@ function fixture() {
     db.exec(stripForeignKeys(tableFromBaseline(baseline, table)));
   for (const migration of ['264_admin_notices.sql', '417_fund_position_valuations.sql', '476_fund_report_drafts.sql', '478_fund_notices_booklets.sql', '485_fund_booklet_envelopes.sql'])
     db.exec(read(`../sql/migrations/${migration}`));
-  db.exec(`UPDATE users SET is_active = 1;
+  db.exec(`INSERT INTO users (id, role, name, email, is_active, investor_tier, investor_subscription_status) VALUES (990, 'investor', 'Free investor', 'free@example.test', 1, 'free', 'active');
+    UPDATE users SET is_active = 1;
     UPDATE users SET investor_tier = 'institutional', investor_subscription_status = 'active' WHERE id = ${INVESTOR};
     INSERT INTO vc_funds (id, name, slug, gp_user_id, carried_interest) VALUES
       (1, 'Fund I', 'spinout-fund-i', NULL, 0.2), (2, 'Outside fund', 'outside', ${INVESTOR}, 0.2), (3, 'Empty fund', NULL, ${ADMIN}, 0.2);
@@ -90,7 +92,7 @@ test('D1159: refused writes change no store; outside GPs retain only their exist
     [performance, 'POST', '/positions/1/valuations', mark], [performance, 'PUT', '/positions/1/fund', { fund_id: 3 }]];
   const snapshot = () => JSON.stringify(['vc_funds', 'portfolio_positions', 'fund_position_valuations', 'activity_logs', 'admin_audit_log'].map((t) => db.prepare(`SELECT * FROM ${t} ORDER BY id`).all()));
   for (const [app, method, path, body] of writes) {
-    for (const [who, support] of [[FOUNDER, false], [ADMIN, true]] as const) {
+    for (const [who, support] of [[FREE, false], [ADMIN, true]] as const) {
       const before = snapshot();
       const result = await call(app, env, who, method, path, body, support);
       assert.ok(result.status >= 400 && result.status < 500, JSON.stringify({ who, support, path, ...result }));
@@ -110,6 +112,9 @@ test('D1159: refused writes change no store; outside GPs retain only their exist
   assert.equal((await call(performance, env, INVESTOR, 'POST', '/positions/1/valuations', mark)).status, 404);
   assert.equal((await call(performance, env, INVESTOR, 'PUT', '/positions/2/fund', { fund_id: 1 })).status, 404);
   assert.equal((await call(fundAdmin, env, INVESTOR, 'GET', '/access')).status, 403);
+  db.exec(`UPDATE vc_funds SET gp_user_id = ${FOUNDER} WHERE id = 2;`);
+  assert.equal((await call(performance, env, FOUNDER, 'POST', '/positions/2/valuations', mark)).status, 201);
+  assert.equal((await call(performance, env, FOUNDER, 'PUT', '/positions/2/fund', { fund_id: null })).status, 200);
 });
 
 function booklet(db: any, id: number, options: { status?: string; signed?: boolean; completed?: boolean; gp?: boolean } = {}) {

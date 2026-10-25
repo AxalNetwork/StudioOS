@@ -253,13 +253,6 @@ async function gate(
   // flag to 0 whatever `super_admins` holds (D106), so every caller is refused.
   if (row.act === 'fund.slug_fund_i' && !isSuperAdmin(user)) throw superAdminRequired();
   const isAdmin = String(user?.role ?? '') === 'admin';
-  // D1159: these Admin acts preserve institutional investor GPs' existing
-  // ownership/tier gates. The generic tier helper passes other roles through,
-  // so it cannot by itself admit a non-investor to these fund writes.
-  if ((row.act === 'fund.create' || row.act === 'fund.valuation') && !isAdmin && user?.role !== 'investor') {
-    throw refusal(403, { detail: 'This account cannot perform this fund operation.', code: 'fund_access_refused' });
-  }
-
   if (branchOf(c.env)) {
     if (isAdmin && REFUSED_TO_BRANCH_ADMINS.has(row.act)) throw superAdminRequired();
     return;
