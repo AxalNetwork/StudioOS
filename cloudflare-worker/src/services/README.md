@@ -442,6 +442,8 @@ hourly buckets that are null for an hour the log was silent.
 
 D1065 (#2935): `buildPlanner.ts` reads accepted Validate labels/counts and applies the ten fixed mapping rules, then batches a plan and source proposals; acceptance stays with D1066. It never runs AI or writes a Build record.
 
+D1066 (#2936): `buildPlanAccept.ts` decides plan items: Accept (with an optional edit) claims the proposal and lands the row through `buildCreates.ts` in one batch with its evidence links, `fill_provenance` rows and activity line, handing the claim back if the batch fails; Dismiss, Accept all in a module (at most 50) and each Build row's evidence trail. `buildCreates.ts` gains the risk, formation-step and prototype-test builders.
+
 D971 completes `programRegistry.ts`'s Lab draft path: its canonical section
 catalogue contains headings only. The existing Super Admin edit route creates a
 missing allowed draft section after validation, in the same batch as its edit;
