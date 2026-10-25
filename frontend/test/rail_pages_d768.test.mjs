@@ -125,8 +125,8 @@ test('a route answers its module and every page below it; the section answers th
   assert.equal(pageKeyFor('/pipeline', 'investor'), 'Investor · Deals · Pipeline');
   // D720 §11's table.
   assert.equal(pageKeyFor('/funds/ledger', 'investor'), 'Investor · Fund · Distributions');
-  assert.equal(pageKeyFor('/admin', 'super_admin', { search: '?tab=users' }), 'Super Admin · Team · Users');
-  // D989 (#2380): the board moved with its page; the old tab is the console's again until it forwards.
+  // D938: the Admin Console's tools left /admin for their own addresses; the keys kept their names.
+  assert.equal(pageKeyFor('/admin/accounts/all', 'super_admin'), 'Super Admin · Team · Users');
   assert.equal(pageKeyFor('/admin/partner-profiles', 'admin'), 'Admin · Approvals · Entity profiles');
   assert.equal(pageKeyFor('/admin/partner-profiles/all', 'admin'), 'Admin · Approvals · Entity profiles');
   assert.equal(pageKeyFor('/admin/assessment', 'admin'), null);

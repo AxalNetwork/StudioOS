@@ -165,7 +165,7 @@ test('the reason floor is one number on both sides, and both refund forms requir
   assert.match(ADMIN, /body\.reason = refForm\.reason\.trim\(\);/, 'the Billing tab no longer always sends the reason');
 });
 
-test('the Billing tab stays: the /admin?tab=billing door is linked from Revenue and the panel is still mounted', () => {
-  assert.match(ADMIN, /tab === 'billing' && <div data-testid="admin-billing-panel"><BillingPanel \/><\/div>/);
-  assert.match(PAGE, /to="\/admin\?tab=billing"/);
+test('Billing stays: its page (D938, /admin/revenue/billing) is linked from Revenue and mounts the panel', () => {
+  assert.match(ADMIN, /export function BillingPage\(\) \{[\s\S]*?<BillingPanel \/>/);
+  assert.match(PAGE, /to="\/admin\/revenue\/billing"/);
 });
