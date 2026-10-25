@@ -6,9 +6,9 @@ import { cyclesApi } from '../../../lib/api/cycles';
 import { reportError } from '../../../lib/log';
 import { useAuth } from '../../../hooks/useAuthSync';
 import { Lightbox, RailFrame, WorkerRail, usePhoneWidth } from '../../../ui';
-import DeckReviewerPage from '../../DeckReviewerPage';
 import ExportDialog from './ExportDialog';
 import PitchNotes from './PitchNotes';
+import PitchReview from './PitchReview';
 import { CoverageMeter, useDeckSources } from './SourcesBoards';
 import {
   BUILDER_PATH, EDIT_PATH, EMPTY_DECK, ENGAGEMENT_VIEW_ROWS, LINE, NOT_RECORDED, NO_VENTURE, NO_VIEWS, READ_ONLY, TABS, TITLE,
@@ -25,8 +25,10 @@ import { NEW_LINK, analyticsOf, cardSeries, ndaCell, settingsLine, shareFunnel }
  *
  *   /raise/pitch            Decks (PD2): the current deck, its versions, and
  *                           views by week, most read slide and NDA signed.
- *   /raise/pitch/review     Review (PD14): today's reviewer, until #2434 part 6
- *                           reviews a version of the deck itself.
+ *   /raise/pitch/review     Review (PD14): the current version's review, each
+ *                           point pointing to a card, and the reviews per
+ *                           version (D900, `PitchReview.jsx`); the reviewer for
+ *                           an upload or pasted text below it.
  *   /raise/pitch/analytics  Share & analytics (PD19): one version's readers,
  *                           seconds per slide, and every investor link, a page
  *                           at a time, with Withdraw on every link not
@@ -169,9 +171,10 @@ export default function PitchStudio({ tab = 'decks' }) {
       <div className="flex flex-col gap-5 pb-24 lg:pb-10" data-testid={`pitch-studio-${tab}`}>
         <StudioHeader tab={tab} q={q} readOnly={readOnly} showNew={tab === 'decks' && !readOnly && Boolean(projectId)} />
         {tab === 'review' ? (
-          // The reviewer does its own reads, and works with no venture, as it
-          // did before D894: the studio's ventures read never stands in its way.
-          <DeckReviewerPage embedded />
+          // D900: the review of the current version (PD14), and below it the
+          // reviewer for an upload or pasted text, which works with no venture
+          // as it did before D894: the ventures read never stands in its way.
+          <PitchReview reads={reads} readOnly={readOnly} />
         ) : reads.projects.status === 'error' ? (
           <ReadFailed text="Your ventures could not be read." onRetry={reads.reload} testId="pitch-studio-projects-error" />
         ) : reads.projects.status === 'ok' && !reads.project ? (
