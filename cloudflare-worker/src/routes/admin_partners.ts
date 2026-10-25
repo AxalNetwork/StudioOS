@@ -25,6 +25,7 @@ import { sendPartnerInvitationEmailResult } from '../services/email';
 import { ALL_PARTNER_DEAL_TYPES, activatePartnerDealOnSignature, type PartnerDealType } from '../services/partnerDeals';
 import { ensurePartnerDirectoryColumns } from '../services/partnerDirectorySchema';
 import { notAllowedRefusal, readBranchDealTypes } from '../services/partnerDealTypes';
+import { isLapsed } from '../services/partnerInvitationReads';
 import { branchOf } from '../util/branch';
 // Task #43 — revocation paths must drop investor_dealroom_max to the
 // free-tier cap, not the hardcoded `5` (which is the *professional* cap).
@@ -528,7 +529,15 @@ const DEAL_FILTERED = `
            pd.activation_preserved_investor, terminator.name AS terminated_by_name,
            CASE WHEN pd.user_id IS NULL THEN inv.recipient_email ELSE u.email END AS partner_email,
            CASE WHEN pd.user_id IS NULL THEN inv.recipient_name ELSE u.name END AS partner_name,
-           (SELECT COUNT(*) FROM partner_referral_redemptions WHERE partner_deal_id = pd.id) AS redemptions_count
+           (SELECT COUNT(*) FROM partner_referral_redemptions WHERE partner_deal_id = pd.id) AS redemptions_count,
+           -- D1117: each row's due-diligence case and its invitation, joined here
+           -- rather than against the browser's capped lists. An open case first,
+           -- else the newest.
+           (SELECT dc.uid FROM dd_cases dc WHERE dc.subject_type = 'partner' AND dc.subject_id = pd.user_id
+             ORDER BY CASE WHEN dc.status IN ('open', 'in_review') THEN 0 ELSE 1 END, julianday(dc.created_at) DESC, dc.id DESC LIMIT 1) AS dd_case_uid,
+           (SELECT dc.status FROM dd_cases dc WHERE dc.subject_type = 'partner' AND dc.subject_id = pd.user_id
+             ORDER BY CASE WHEN dc.status IN ('open', 'in_review') THEN 0 ELSE 1 END, julianday(dc.created_at) DESC, dc.id DESC LIMIT 1) AS dd_case_status,
+           inv.id AS invitation_row_id, inv.status AS invitation_status, inv.expires_at AS invitation_expires_at
       FROM partner_deals pd
       LEFT JOIN users u ON u.id = pd.user_id
       LEFT JOIN users terminator ON terminator.id = pd.terminated_by_user_id
@@ -591,9 +600,18 @@ admin_partners.get('/deals', async (c) => {
     c.env.DB.prepare(DEAL_PAGE_SQL).bind(...filters, sort, limit, offset).all(),
     c.env.DB.prepare(DEAL_COUNT_SQL).bind(...filters).first<{ n: number }>(),
   ]);
-  const items = (rows.results || []).map((r: any) => ({
-    ...r, proposal: safeJsonObject(r.proposal_json), proposal_json: undefined,
-  }));
+  const now = Date.now();
+  const items = (rows.results || []).map((raw: any) => {
+    const { dd_case_uid, dd_case_status, invitation_row_id, invitation_status, invitation_expires_at, ...r } = raw;
+    return {
+      ...r, proposal: safeJsonObject(r.proposal_json), proposal_json: undefined,
+      // D1117: no member yet is "not opened"; a member with no case is "none", never "Open".
+      due_diligence: r.user_id == null ? { state: 'not_opened' }
+        : dd_case_uid ? { state: 'case', uid: dd_case_uid, status: dd_case_status } : { state: 'none' },
+      // The deal's own invitation, lapsed by D927's rule; null when the deal has no invitation row.
+      invitation_lapsed: invitation_row_id == null ? null : isLapsed({ status: invitation_status, expires_at: invitation_expires_at }, now),
+    };
+  });
   return c.json({ items, total: Number(count?.n ?? 0), limit, offset, sort });
 });
 

@@ -4,7 +4,7 @@ import { api } from '../../../lib/api';
 import { Lightbox, actionDanger, actionGhost, actionPrimary } from '../../../ui';
 import useRecordCrumb from '../useRecordCrumb';
 import {
-  FIRST_500, NOT_RECORDED, READING, day, dayOr, daysUsed, dealTypeWord, envelopeHref, isRecordId, lastRedeemers, proposalOf, termText, tiersText,
+  FIRST_500, NOT_RECORDED, READING, day, dayOr, daysUsed, dealTypeWord, envelopeHref, isRecordId, lastRedeemers, proposalOf, termText, tiersText, voidReason,
 } from './partnersDeskModel';
 import {
   NO_SUCH_DEAL, RERUN_DONE, RERUN_LINES, RERUN_TITLE, activationPending, agreementFromRead, dealReadState, dueDiligence,
@@ -132,6 +132,7 @@ export default function DealRecord({ id, reads, now, onClose, actions }) {
             <span className="text-[12.5px] font-semibold text-axal-ink dark:text-gray-100">{dealTypeWord(deal.deal_type)}</span>
             <DealStatePill status={deal.status} testId="partners-deal-state" />
           </div>
+          {voidReason(deal) ? <p className={`m-0 ${SUB}`} data-testid="partners-deal-void-reason">{voidReason(deal)}</p> : null}
           {pending ? (
             <div role="status" className="flex flex-wrap items-center justify-between gap-2.5 rounded-[10px] border border-amber-300 bg-amber-50 px-3.5 py-2.5 text-[13px] font-semibold text-amber-900 dark:border-amber-800 dark:bg-amber-950/40 dark:text-amber-200" data-testid="partners-deal-not-activated">
               <span>{deal.activation_failed_at ? `Signed, deal not activated. Activation failed ${dayOr(deal.activation_failed_at)}.` : 'Signed, deal not activated.'}</span>

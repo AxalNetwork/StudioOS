@@ -107,3 +107,10 @@ beecd4b9f67fda255e419c41b8a54c85566acced:frontend/src/pages/admin/partners/partn
 # credential. The next commit builds a low-entropy key at run time instead, so no
 # later commit carries the literal. Scoped to the one finding, as D334's entry is.
 a556b308533429691cb10b1e92092615b1364a82:cloudflare-worker/test/approvals_fixes_d1039.test.ts:generic-api-key:34
+# D1013 (#2832): not a secret. The Payments dialogs test typed an example
+# publishable key (`pk_live_` and six letters) into Replace key and asserted the
+# body the page sends; generic-api-key matched it by the `publishable_key`
+# field name. It was never a Stripe key. The next commit builds its example
+# keys at run time, so no later commit carries the literal. Scoped to the one
+# finding, as D334's entry is.
+7c6b24553752f7ca9b115e6acaf37eaf404ff676:frontend/test/payments_dialogs_d1013.test.mjs:generic-api-key:392

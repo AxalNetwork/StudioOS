@@ -16,6 +16,11 @@ D973 reads live in `admin_network_reads.ts`, mounted before D976’s
 `admin_network.ts` at `/api/admin/network`. Opaque person refs use the
 read-only drawer; numeric account IDs continue to the standing router.
 
+D979's Firms reads live in `admin_partner_firms.ts`, mounted at
+`/api/admin/partners` before `admin_partners.ts`: `/firms` (search, filters,
+sort and pages with an exact total) and `/firms/:id` (one firm's drawer). Both
+are read only; the tab's writes stay in `admin_partners.ts`.
+
 ## Mount map
 
 `index.ts` mounts each router under `/api/<prefix>`. **This is a selected list,
@@ -38,6 +43,7 @@ widened guard on this very sentence, which is the rule working.)
 /api/admin/partner-settlements → partner_settlements.ts (HQ drafts; Super Admin issue/void, D713)
 /api/partner-settlements → partner_settlements.ts (own non-draft settlements, D713)
 /api/mercury/personal → mercury_personal.ts (a member's own Mercury (founders, partners, and investors on HQ): status, payment matches and raise receipts, read-only, D713, D752; connected only by Sign in with Mercury since D881. Never Axal VC's own accounts: D879, guarded by D883's `check-mercury-member-surfaces.mjs`)
+/api/integrations/mcp → connector_mcp_oauth.ts (D1080: Sign in with <Provider> for every MCP record but Mercury's: start, callback, and the public client ID metadata document; mounted ahead of the integrations router)
 /api/connectors/custom → connectors_custom.ts (D852: a member's own remote MCP servers behind CUSTOM_MCP_ENABLED: configure, sign in, approve read tools one by one, health and revoke; founders on a paid plan)
 /api/mercury/attestations → mercury_attestations.ts (an investor's proof of capital: dated statements from their own Mercury, consented and revocable; read-only, HQ only, D752)
 /api/mercury/investor → mercury_investor.ts (an investor's own Mercury feeding Deals · Pipeline, Commit and Closing and Fund · Calls, Accounting and Reporting: facts written, proposals accepted, Pipeline shown only; read-only, on HQ or in a branch (D884), the caller's own data only, D840 part 4)

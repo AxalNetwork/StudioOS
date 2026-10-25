@@ -26,6 +26,8 @@
  *   GET   /narrative/:version        → { version, meta, sections, positioning, bindings }, each part
  *                                      { state: 'ok', … } or { state: 'unreadable' }; 0 is the live deck
  *   PUT   /narrative/:version/sections/:section   { body?, audience_note?, position?, source?, bindings? }
+ *   D1114 (#2994): POST /narrative/:version/sections/:section/draft  { mode: draft | shorten | plain, words? }
+ *         one metered run under `draft:narrative-section` → { version, section, mode, text, removed }; writes nothing
  *   D914 (#2698): an admin reads the narrative read only (`services/narrative/adminRead.ts`).
  *   GET   /narrative/reads           → { reads: [{ id, reason, by: { name, kind }, created_at, expires_at }], mine, viewer }
  *   POST  /narrative/reads           { reason } an admin's reason for opening it; the founder sees it
@@ -79,7 +81,7 @@ import { Hono } from 'hono';
 import type { Env, User } from '../types';
 import { requireAuth } from '../auth';
 import { canWrite, canWritePitchDeck, type ProjectRef } from './_founder_validate_helpers';
-import { CYCLE, QUESTION, MODULES, CARD_FOR, RECORDS_FOR, figures, cards, callsHistory, narrativeHome, recordQuery, type Ctx, type ModuleSlug } from '../services/raiseCycle';
+import { CYCLE, QUESTION, MODULES, CARD_FOR, RECORDS_FOR, INVESTOR_TYPE_LABEL, figures, cards, callsHistory, narrativeHome, recordQuery, type Ctx, type ModuleSlug } from '../services/raiseCycle';
 import {
   WriterError, scoreReadinessItem, rescoreReadiness, saveNarrativeVersion, updateNarrativeVersion, createDeckLink, updateDeckLink,
   addCapHolder, updateCapHolder, saveUseOfFunds, addProspect, updateProspect, setFileChecklistItem, setProspectNextStep,
@@ -91,6 +93,7 @@ import { raisePhone } from '../services/cycleFocus';
 import {
   POSITIONING_OPTION, POSITIONING_PAGE, POSITIONING_SYSTEM, nothingToRead, positioningMaterial, positioningPrompt, readFrom, screenAnswer,
 } from '../services/narrative/positioningDraft';
+import { SECTION_MODES, SECTION_OPTION, SECTION_PAGE, SECTION_SYSTEM, needsWords, screenSection, sectionMaterial, sectionPrompt, type SectionMode } from '../services/narrative/sectionDraft';
 import { decideRail, getRail, listRail, proposeRail, withdrawRail, type RailProposal } from '../services/railProposals';
 import { run as aiRouterRun } from '../services/aiRouter';
 import { AI_SURFACE } from '../services/aiSurfaces';
@@ -485,6 +488,53 @@ cycleRaise.put('/narrative/:version/sections/:section', async (c) => {
     }
     return writeFailed(c, e);
   }
+});
+
+// D1114 (#2994): Story's "Ask Eadwyn ▾". One `rail_write` run under
+// `draft:narrative-section`, metered like every rail option; it writes
+// nothing. The founder accepts the words into the section and Save version
+// writes them with Eadwyn as the source, where the store refuses a digit again.
+const POSITIONING_WORDS: Record<string, string> = { one_liner: 'One-liner', elevator: 'Elevator pitch', category: 'Category', wedge: 'Wedge', line: 'Line' };
+
+cycleRaise.post('/narrative/:version/sections/:section/draft', async (c) => {
+  const s = await narrativeScope(c, 'write');
+  if (s instanceof Response) return s;
+  const raw = c.req.param('version');
+  if (!/^(0|[1-9][0-9]{0,8})$/.test(raw)) return c.json({ detail: 'Version not found' }, 404);
+  const b = await body(c);
+  const mode = String(b.mode ?? 'draft') as SectionMode;
+  if (!(SECTION_MODES as readonly string[]).includes(mode)) return c.json({ detail: 'mode is draft, shorten or plain' }, 400);
+  let read: Awaited<ReturnType<typeof readNarrative>>;
+  try { read = await readNarrative(c.env, s.projectId, raw); } catch (e) { return writeFailed(c, e); }
+  if (read.version === 0) return c.json({ detail: 'Version 0 is the live deck’s wording. Change it in the deck, or in a saved version.' }, 409);
+  if (read.sections.state !== 'ok') return c.json({ code: 'unreadable', detail: 'This version’s sections could not be read, so Eadwyn has nothing to work on. Try again.' }, 503);
+  const sectionKey = String(c.req.param('section') || '');
+  const section = (read.sections.items as Array<{ key: string; body: string | null }>).find((x) => x.key === sectionKey);
+  // The words on the page, unsaved, are what the founder asks about; else the stored words.
+  const words = typeof b.words === 'string' ? b.words.slice(0, 4000) : section?.body ?? '';
+  const audience = read.meta.state === 'ok' && read.meta.investor_type ? INVESTOR_TYPE_LABEL[read.meta.investor_type] ?? null : null;
+  const positioning = read.positioning.state === 'ok'
+    ? (read.positioning.effective as Array<{ kind: string; text: string }>).filter((p) => POSITIONING_WORDS[p.kind]).map((p) => ({ label: POSITIONING_WORDS[p.kind], text: p.text }))
+    : [];
+  const m = section ? sectionMaterial(sectionKey, words, audience, positioning) : null;
+  if (!m) return c.json({ detail: 'Unknown section', sections: NARRATIVE_SECTIONS.map((x) => x.key) }, 404);
+  if (needsWords(mode, m)) return c.json({ code: 'nothing_to_read', detail: `There are no words in ${m.label} to ${mode === 'shorten' ? 'shorten' : 'put in plain words'} yet. Write some, or ask Eadwyn to draft it.` }, 422);
+  const result = await aiRouterRun(c.env, {
+    task: 'rail_write',
+    userId: Number(s.user.id),
+    surface: AI_SURFACE.raiseNarrative,
+    rail: railFor(c, { page: SECTION_PAGE, option: SECTION_OPTION }, `narrative:${s.projectId}:${read.version}:${sectionKey}`),
+    systemPrompt: SECTION_SYSTEM,
+    messages: [{ role: 'user', content: sectionPrompt(mode, m) }],
+    temperature: mode === 'draft' ? 0.5 : 0.3,
+    maxTokens: 900,
+  });
+  if (!result.ok || !result.output) {
+    return refuseRun(c, result) || c.json({ code: 'ai_unavailable', detail: 'Eadwyn could not write this just now. Nothing was charged. Try again.' }, 503);
+  }
+  const { text, removed } = screenSection(parseJsonLoose<unknown>(result.output), m.max);
+  if (!text) return c.json({ code: 'nothing_kept', detail: 'Eadwyn’s words all held a number, so none was kept. Write this section yourself, and insert figures from your records.', removed }, 422);
+  return c.json({ version: read.version, section: sectionKey, mode, text, removed });
 });
 
 cycleRaise.post('/deck-links', async (c) => {
