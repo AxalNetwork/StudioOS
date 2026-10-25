@@ -3,6 +3,10 @@
 // weekly series, and one profile by its reference (`pp_…`), never by email.
 // Worker: routes/admin_partner_profiles.ts (/api/admin/partner-profiles),
 // Admin and Super Admin; each list and profile read is logged by reference.
+// D993 (#2804) — part 4: the first-agreement options with their readiness,
+// each row's envelope state (on `rows[].envelope` and the profile's `listed`),
+// and Unbind, the Super Admin's one extra control (a recent step-up and a
+// reason; logged in Governance).
 import { request } from '../api.js';
 
 const BASE = '/admin/partner-profiles';
@@ -28,4 +32,8 @@ export const partnerProfilesApi = {
   counts: () => request(`${BASE}/counts`),
   /** One profile by reference, `ein` masked, with the list's derived fields on `listed`. */
   get: (ref) => request(`${BASE}/${encodeURIComponent(ref)}`),
+  /** `{ groups: [{ label, options: [{ value, label, ready, readiness, source }] }] }`. */
+  agreements: () => request(`${BASE}/agreements`),
+  /** Free a profile whose address now belongs to another account. Super Admin; `reason` is 10 to 500 characters. */
+  unbind: (ref, reason) => request(`${BASE}/${encodeURIComponent(ref)}/unbind`, { method: 'POST', body: JSON.stringify({ reason }) }),
 };
