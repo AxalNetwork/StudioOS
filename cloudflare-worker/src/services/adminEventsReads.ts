@@ -9,6 +9,9 @@
  *   · seats taken  = registered + confirmed + attended;
  *   · ended        = `ends_at` has passed; with no `ends_at`, a day after start;
  *   · show-up      = attended ÷ seats taken, ended events only;
+ *   · confirmed    = confirmed + attended, the seats past confirmation (a
+ *                    paid ticket confirms; an attendee is counted as one),
+ *                    `hasConfirmedEventSeat`'s statuses (D1121);
  *   · overdue      = more than 72 hours since `submitted_at` (SLA_PAST_HOURS);
  *   · clash        = neither event cancelled and their times overlap; an event
  *                    with no `ends_at` lasts one hour for this rule;
@@ -137,7 +140,7 @@ const EVENT_ROWS_SQL = `
   SELECT e.*,
          COALESCE(NULLIF(TRIM(u.display_name), ''), u.name) AS host_name, u.role AS host_role,
          p.name AS venture_name,
-         COALESCE(r.seats_taken, 0) AS seats_taken, COALESCE(r.attended, 0) AS attended,
+         COALESCE(r.seats_taken, 0) AS seats_taken, COALESCE(r.confirmed, 0) AS confirmed, COALESCE(r.attended, 0) AS attended,
          COALESCE(r.waitlisted, 0) AS waitlisted, COALESCE(r.paid, 0) AS paid_tickets
     FROM events e
     LEFT JOIN users u ON u.id = e.host_user_id
@@ -145,6 +148,7 @@ const EVENT_ROWS_SQL = `
     LEFT JOIN (
       SELECT event_id,
              SUM(CASE WHEN status IN ('registered','confirmed','attended') THEN 1 ELSE 0 END) AS seats_taken,
+             SUM(CASE WHEN status IN ('confirmed','attended') THEN 1 ELSE 0 END) AS confirmed,
              SUM(CASE WHEN status = 'attended' THEN 1 ELSE 0 END) AS attended,
              SUM(CASE WHEN status = 'waitlisted' THEN 1 ELSE 0 END) AS waitlisted,
              SUM(CASE WHEN payment_status = 'paid' THEN 1 ELSE 0 END) AS paid
@@ -158,6 +162,7 @@ export interface EventRow {
   ends_at: string | null;
   host_user_id: number | null;
   seats_taken: number;
+  confirmed: number;
   attended: number;
   waitlisted: number;
   paid_tickets: number;
@@ -169,6 +174,7 @@ async function readEventRows(env: Env): Promise<EventRow[]> {
     ...r,
     id: Number(r.id),
     seats_taken: Number(r.seats_taken || 0),
+    confirmed: Number(r.confirmed || 0),
     attended: Number(r.attended || 0),
     waitlisted: Number(r.waitlisted || 0),
     paid_tickets: Number(r.paid_tickets || 0),
@@ -285,10 +291,12 @@ export async function readOverview(env: Env, weeks: number, now = Date.now()) {
         .filter((e) => e.status !== 'cancelled' && hasEnded(e, now) && inPeriod(endedAt(e)))
         .sort((a, b) => endedAt(b) - endedAt(a) || b.id - a.id);
       const seats = ended.reduce((n, e) => n + e.seats_taken, 0);
+      const confirmed = ended.reduce((n, e) => n + e.confirmed, 0);
       const attended = ended.reduce((n, e) => n + e.attended, 0);
       return {
         events: ended.length,
         seats_taken: seats,
+        confirmed,
         attended,
         rate: seats > 0 ? round2(attended / seats) : null,
         recent: ended.slice(0, 8).map((e) => ({
@@ -414,6 +422,8 @@ const LIST_WHEN = ['upcoming', 'ended', 'this_week', 'next_30d'] as const;
 export interface ListQuery {
   statuses: string[];
   visibility: string | null;
+  /** One of the twelve stored types (`events.type`), CM3's Type ▾ (D1121). */
+  type: string | null;
   when: string | null;
   price: string | null;
   featured: boolean | null;
@@ -430,6 +440,8 @@ export function parseListQuery(read: (k: string) => string | undefined, readAll:
   const statuses = (readAll('status') || []).flatMap((s) => s.split(',')).map((s) => s.trim()).filter(Boolean);
   const visibility = read('visibility')?.trim() || null;
   if (visibility && !['public', 'unlisted', 'private'].includes(visibility)) return { error: 'invalid_visibility' };
+  const type = read('type')?.trim() || null;
+  if (type && !(EVENT_TYPE_IDS as readonly string[]).includes(type)) return { error: 'invalid_type' };
   const when = read('when')?.trim() || null;
   if (when && !(LIST_WHEN as readonly string[]).includes(when)) return { error: 'invalid_when' };
   const price = read('price')?.trim() || null;
@@ -444,7 +456,7 @@ export function parseListQuery(read: (k: string) => string | undefined, readAll:
   const q = read('q')?.trim().toLowerCase().slice(0, 200) || null;
   const limit = Math.min(Math.max(Math.floor(Number(read('limit') || 50)) || 50, 1), 200);
   const offset = Math.max(Math.floor(Number(read('offset') || 0)) || 0, 0);
-  return { statuses, visibility, when, price, featured, q, sort: sort as ListSort | null, dir: dir as 'asc' | 'desc' | null, limit, offset };
+  return { statuses, visibility, type, when, price, featured, q, sort: sort as ListSort | null, dir: dir as 'asc' | 'desc' | null, limit, offset };
 }
 
 /**
@@ -459,6 +471,7 @@ export async function readEventList(env: Env, q: ListQuery, now = Date.now()) {
   const kept = rows.filter((e) => {
     if (q.statuses.length && !q.statuses.includes(e.status)) return false;
     if (q.visibility && e.visibility !== q.visibility) return false;
+    if (q.type && e.type !== q.type) return false;
     if (q.price === 'free' && Number(e.price_cents || 0) > 0) return false;
     if (q.price === 'paid' && !(Number(e.price_cents || 0) > 0)) return false;
     if (q.featured != null && (Number(e.featured) === 1) !== q.featured) return false;

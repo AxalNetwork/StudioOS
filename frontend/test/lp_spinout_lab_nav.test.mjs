@@ -31,7 +31,7 @@
  */
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { readFileSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
 import { resolveActiveRole } from '../src/lib/activeRole.js';
@@ -41,7 +41,6 @@ const read = (rel) => readFileSync(join(SRC, rel), 'utf8');
 
 const app = read('App.jsx');
 const sidebar = read('sidebarConfig.js');
-const fundOps = read('pages/FundOpsWorkspace.jsx');
 
 /* ------------------------------------------------------ who is browsing */
 
@@ -204,7 +203,8 @@ test('the duplicate LP Workspace nav item is gone, and its route is a redirect',
   assert.match(app, /path="\/funds\/lp-workspace" element=\{<FundLpWorkspaceRedirect \/>\}/,
     'the route must stay registered so old deep links land');
   assert.match(app, /function FundLpWorkspaceRedirect\(\)[\s\S]{0,200}?pathname: '\/spinout-lab\/investor-workspace', search: loc\.search, hash: loc\.hash/);
-  assert.doesNotMatch(fundOps, /to: '\/funds\/lp-workspace'/, 'the Fund Ops copy of the workspace is back');
+  // D1160: Fund Ops, the second copy's home, is retired.
+  assert.ok(!existsSync(join(SRC, 'pages/FundOpsWorkspace.jsx')), 'the Fund Ops copy of the workspace is back');
 });
 
 test('the LP workspace renders standalone, not only embedded', () => {

@@ -683,8 +683,8 @@ function RecordCrumb({ title, type = null, id = null }) {
   return null;
 }
 
-export default function CycleRoute({ cycle, lightbox = false, adding = false, record = false, slug: suppliedSlug, reporting = null, buildPlan = null, dataRoomFile = false, capTableProposal = false }) {
-  const { slug: routeSlug, id: recordId, proposal: proposalId, instrument: instrumentId } = useParams();
+export default function CycleRoute({ cycle, lightbox = false, adding = false, record = false, slug: suppliedSlug, reporting = null, buildPlan = null, dataRoomFile = false, capTableProposal = false, capTableScenario = false }) {
+  const { slug: routeSlug, id: recordId, proposal: proposalId, instrument: instrumentId, scenario: scenarioId } = useParams();
   const location = useLocation();
   const { user } = useAuth() || {};
   const def = Object.prototype.hasOwnProperty.call(CYCLE_DEFS, cycle) ? CYCLE_DEFS[cycle] : null;
@@ -778,7 +778,9 @@ export default function CycleRoute({ cycle, lightbox = false, adding = false, re
   // D1025 (#2862): `/new` opens Record an issuance over Overview, and
   // `/raise/cap-table/proposal/<id>` a proposal's drawer (CT11), both the tool's own.
   // D1023 (#2860): `/raise/cap-table/instrument/<uid>` is the instrument drawer (CT4).
-  const capTableTab = capTableProposal && cycle === 'raise' ? (instrumentId ? 'instrument' : 'proposal')
+  // D1024 (#2861): `/raise/cap-table/scenarios/<uid>` is a scenario, and `/scenarios/compare` the compare page.
+  const capTableTab = capTableScenario && cycle === 'raise' ? 'scenario'
+    : capTableProposal && cycle === 'raise' ? (instrumentId ? 'instrument' : 'proposal')
     : capTableAdding ? 'new'
       : record && cycle === 'raise' && isCapTableTab(slug, recordId) ? recordId : null;
   // D1101 (#2456): the Data room tool's tabs are words under its module, never file records.
@@ -994,7 +996,7 @@ export default function CycleRoute({ cycle, lightbox = false, adding = false, re
     );
   } else if (capTableTab) {
     body = (
-      <CapTableTabPage tab={capTableTab} proposal={proposalId} instrument={instrumentId} projectId={projectId} projectStatus={projectStatus} onRetryProject={() => setProjectsKey((n) => n + 1)}
+      <CapTableTabPage tab={capTableTab} proposal={proposalId} instrument={instrumentId} scenario={scenarioId} projectId={projectId} projectStatus={projectStatus} onRetryProject={() => setProjectsKey((n) => n + 1)}
         search={location.search} cards={tabs} action={action} phone={phone} />
     );
   } else if (dataRoomTab) {

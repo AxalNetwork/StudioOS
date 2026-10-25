@@ -3,7 +3,7 @@
 // FastAPI backend does not implement them, so this page 404s in local dev.
 // gray palette, useToast, no nav wrapper (rendered inside the admin layout).
 import React, { useCallback, useEffect, useState } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useSearchParams } from 'react-router-dom';
 import { Briefcase, MapPin, Globe, Users, CheckCircle2, XCircle, EyeOff, Loader2 } from 'lucide-react';
 import { adminJobs } from '../../lib/api';
 import { useToast } from '../../components/useToast';
@@ -30,6 +30,9 @@ const EMPLOYMENT_LABELS = {
 
 function AdminJobsPageBody() {
   const { toast, showToast } = useToast();
+  // D1121: Community's CM4 opens one posting, `?posting=<id>`, whatever its status.
+  const [params, setParams] = useSearchParams();
+  const posting = /^\d+$/.test(params.get('posting') || '') ? Number(params.get('posting')) : null;
   const [statusFilter, setStatusFilter] = useState('pending_review');
   const [rows, setRows] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -38,14 +41,20 @@ function AdminJobsPageBody() {
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      const res = await adminJobs.list({ status: statusFilter || undefined });
-      setRows(Array.isArray(res?.jobs) ? res.jobs : []);
+      if (posting != null) {
+        // The one posting, by its own read: a list page could stop before it.
+        const res = await adminJobs.get(posting).catch((e) => { if (e?.status === 404) return null; throw e; });
+        setRows(res?.job ? [res.job] : []);
+      } else {
+        const res = await adminJobs.list({ status: statusFilter || undefined });
+        setRows(Array.isArray(res?.jobs) ? res.jobs : []);
+      }
     } catch (e) {
       showToast({ kind: 'error', msg: e?.message || 'Could not load roles.' });
     } finally {
       setLoading(false);
     }
-  }, [statusFilter, showToast]);
+  }, [posting, statusFilter, showToast]);
 
   useEffect(() => { load(); }, [load]);
 
@@ -83,7 +92,7 @@ function AdminJobsPageBody() {
         {STATUS_TABS.map((t) => (
           <button
             key={t.id || 'all'}
-            onClick={() => setStatusFilter(t.id)}
+            onClick={() => { setStatusFilter(t.id); if (posting != null) setParams({}, { replace: true }); }}
             className={`px-3 py-1.5 rounded-lg text-sm font-medium ${
               statusFilter === t.id
                 ? 'bg-blue-600 text-white'
@@ -97,7 +106,14 @@ function AdminJobsPageBody() {
 
       {loading ? (
         <div className="text-gray-500 dark:text-gray-400 py-12 text-center">Loading…</div>
-      ) : rows.length === 0 ? (
+      ) : null}
+      {!loading && posting != null ? (
+        <p className="mb-4 text-sm text-gray-600 dark:text-gray-400" data-testid="admin-jobs-one">
+          {rows.length ? 'One role, opened from Community.' : 'That role is not on the job board.'}{' '}
+          <button type="button" className="font-semibold text-blue-700 hover:underline dark:text-blue-300" onClick={() => setParams({}, { replace: true })}>Show every role</button>
+        </p>
+      ) : null}
+      {loading ? null : rows.length === 0 ? (
         <div className="text-center py-16 text-gray-500 dark:text-gray-400">
           <Briefcase size={32} className="mx-auto mb-3 opacity-50" />
           <p className="font-medium">Nothing here</p>

@@ -26,6 +26,7 @@
 import type { Env } from '../types';
 import { notify } from './notify';
 import { newUid, nowIso } from '../routes/_t13t14t15_helpers';
+import { likeNeedle } from '../util/likeSearch';
 
 export type Owner = { kind: 'hq' } | { kind: 'partner'; partnerId: number };
 
@@ -283,6 +284,8 @@ export async function applicants(env: Env, owner: Owner, uid: string) {
   const pool = await testerIds(env, (results || []).map((r: any) => Number(r.user_id)));
   return {
     programme: programmeDto(p),
+    // D1197: the owner decides its own; HQ's read of a partner's says false (`hqApplicants`).
+    can_decide: true,
     // D1200: whether the pool could be read; when it could not, each `tester` is null.
     tester_pool_readable: pool !== null,
     items: (results || []).map((r: any) => ({
@@ -417,6 +420,182 @@ export async function mailApplicants(env: Env, programmeUid: string) {
       email: r.email ?? null,
     })),
   };
+}
+
+// ---------------------------------------------------------------------------
+// D1197 (#3147) — HQ's reads across programmes (TST5, TST6, TST8)
+// ---------------------------------------------------------------------------
+
+/**
+ * A read that could not be made: 503, never an empty list. The D1 error is
+ * logged as its message's class only, never the statement or a value.
+ */
+const UNREADABLE = (what: string) => refuse(503, 'testing_unreadable', `${what} could not be read. That is not the same as none.`);
+async function readOrRefuse<T>(what: string, read: () => Promise<T>): Promise<T> {
+  try { return await read(); } catch (e) {
+    if (e instanceof TestingRefusal) throw e;
+    console.warn('[testing] read failed', what);
+    throw UNREADABLE(what);
+  }
+}
+
+export const PAGE_SIZE = 25;
+export const PAGE_MAX = 100;
+
+/** `page` and `page_size` from a query: whole numbers, the size capped; anything else refused. */
+export function paging(q: { page?: unknown; page_size?: unknown }) {
+  const page = q.page == null || q.page === '' ? 1 : Number(q.page);
+  const size = q.page_size == null || q.page_size === '' ? PAGE_SIZE : Number(q.page_size);
+  if (!Number.isSafeInteger(page) || page < 1) throw refuse(400, 'invalid_request', 'page is a whole number from 1.');
+  if (!Number.isSafeInteger(size) || size < 1 || size > PAGE_MAX) throw refuse(400, 'invalid_request', `page_size is a whole number from 1 to ${PAGE_MAX}.`);
+  return { page, size, offset: (page - 1) * size };
+}
+
+/**
+ * TST5's Activity: a programme's history, newest first, any owner's (HQ reads
+ * every programme). The actor and the applicant are names, never an address;
+ * `detail` is the stored JSON, parsed.
+ */
+export async function programmeEvents(env: Env, uid: string, q: { page?: unknown; page_size?: unknown } = {}) {
+  const { page, size, offset } = paging(q);
+  const p = await readOrRefuse('This programme', () => programmeByUid(env, uid));
+  return readOrRefuse('This programme’s history', async () => {
+    const total = await env.DB.prepare('SELECT COUNT(*) AS n FROM testing_events WHERE programme_id = ?').bind(p.id).first<{ n: number }>();
+    const { results } = await env.DB.prepare(
+      `SELECT e.id, e.action, e.detail, e.created_at, e.actor_user_id,
+              COALESCE(au.display_name, au.name) AS actor_name,
+              ap.uid AS application_uid, COALESCE(mu.display_name, mu.name) AS applicant_name
+         FROM testing_events e
+         LEFT JOIN users au ON au.id = e.actor_user_id
+         LEFT JOIN testing_applications ap ON ap.id = e.application_id
+         LEFT JOIN users mu ON mu.id = ap.user_id
+        WHERE e.programme_id = ?
+        ORDER BY e.created_at DESC, e.id DESC LIMIT ? OFFSET ?`,
+    ).bind(p.id, size, offset).all();
+    return {
+      programme: programmeDto(p),
+      events: {
+        available: true, reason: null, page, page_size: size, total: Number(total?.n ?? 0),
+        items: (results || []).map((r: any) => ({
+          id: r.id, action: r.action, at: r.created_at,
+          // An actor whose account is gone reads as unknown, never as an id.
+          actor: r.actor_user_id == null ? null : { name: r.actor_name ?? null },
+          application_uid: r.application_uid ?? null,
+          applicant_name: r.applicant_name ?? null,
+          detail: parse<unknown>(r.detail, null),
+        })),
+      },
+    };
+  });
+}
+
+/**
+ * TST6: HQ's read of any programme's applicants. HQ's own are its to decide;
+ * a partner's are read only (#2382 owner question 2, read as yes until the
+ * owner answers): `can_decide` says which, and pick and decline still reach
+ * HQ's own programmes only (`decide`, through `ownProgramme`).
+ */
+export async function hqApplicants(env: Env, uid: string) {
+  const p = await readOrRefuse('This programme', () => programmeByUid(env, uid));
+  const out = await readOrRefuse('Its applicants', () => applicants(env, p.owner_kind === 'hq' ? { kind: 'hq' } : { kind: 'partner', partnerId: Number(p.owner_partner_id) }, uid));
+  return { ...out, can_decide: p.owner_kind === 'hq' };
+}
+
+export const APPLICATION_STATUSES = ['applied', 'picked', 'declined', 'withdrawn'] as const;
+export const APPLICATION_SORTS = ['applied', 'name'] as const;
+
+/** Reads `owner`: `hq`, `partner` (every firm) or `partner:<id>` (one firm). */
+function ownerFilter(raw: unknown): { kind: string | null; firm: number | null } {
+  const v = raw == null ? '' : String(raw).trim();
+  if (!v) return { kind: null, firm: null };
+  if (v === 'hq' || v === 'partner') return { kind: v, firm: null };
+  const m = /^partner:([1-9]\d*)$/.exec(v);
+  if (m) return { kind: 'partner', firm: Number(m[1]) };
+  throw refuse(400, 'invalid_request', 'owner is hq, partner, or partner:<firm id>.');
+}
+
+const yesNo = (raw: unknown, name: string): number | null => {
+  const v = raw == null ? '' : String(raw).trim();
+  if (!v) return null;
+  if (v === 'yes' || v === 'true' || v === '1') return 1;
+  if (v === 'no' || v === 'false' || v === '0') return 0;
+  throw refuse(400, 'invalid_request', `${name} is yes or no.`);
+};
+
+/**
+ * The filters, as fixed SQL with every value bound: each `(? IS NULL OR …)`
+ * is off when its value is null. Status: none given leaves withdrawn out,
+ * `all` takes every status, one status takes only it.
+ */
+const APPLICATIONS_WHERE = `
+  WHERE (? IS NULL OR p.uid = ?)
+    AND (? IS NULL OR p.owner_kind = ?)
+    AND (? IS NULL OR p.owner_partner_id = ?)
+    AND ((? = 'default' AND a.status <> 'withdrawn') OR ? = 'all' OR a.status = ?)
+    AND (? IS NULL OR u.role = ?)
+    AND (? IS NULL OR (CASE WHEN a.consent_email_at IS NULL THEN 0 ELSE 1 END) = ?)
+    AND (? IS NULL OR EXISTS (SELECT 1 FROM product_testers t WHERE t.user_id = a.user_id AND t.status = 'active') = ?)
+    AND (? IS NULL OR COALESCE(u.display_name, u.name) LIKE ? ESCAPE '\\')`;
+const APPLICATIONS_FROM = `FROM testing_applications a
+  JOIN testing_programmes p ON p.id = a.programme_id
+  JOIN users u ON u.id = a.user_id
+  LEFT JOIN partners pt ON pt.id = p.owner_partner_id`;
+const APPLICATIONS_COLS = `a.uid, a.status, a.consent_email_at, a.answers, a.availability, a.created_at, a.updated_at,
+  COALESCE(u.display_name, u.name) AS name, u.role,
+  p.uid AS programme_uid, p.product_name, p.owner_kind, ${OWNER_NAME} AS owner_name,
+  EXISTS (SELECT 1 FROM product_testers t WHERE t.user_id = a.user_id AND t.status = 'active') AS in_pool`;
+const APPLICATIONS_COUNT = `SELECT COUNT(*) AS n ${APPLICATIONS_FROM} ${APPLICATIONS_WHERE}`;
+const APPLICATIONS_BY_APPLIED = `SELECT ${APPLICATIONS_COLS} ${APPLICATIONS_FROM} ${APPLICATIONS_WHERE} ORDER BY a.created_at DESC, a.id DESC LIMIT ? OFFSET ?`;
+const APPLICATIONS_BY_NAME = `SELECT ${APPLICATIONS_COLS} ${APPLICATIONS_FROM} ${APPLICATIONS_WHERE} ORDER BY COALESCE(u.display_name, u.name) COLLATE NOCASE, a.id LIMIT ? OFFSET ?`;
+
+export type ApplicationsQuery = {
+  programme?: unknown; owner?: unknown; status?: unknown; role?: unknown; consented?: unknown;
+  tester?: unknown; q?: unknown; sort?: unknown; page?: unknown; page_size?: unknown;
+};
+
+/**
+ * TST8: every application across programmes, for HQ, paged. Never an email.
+ * `in_pool` is whether the member is an active tester in HQ's pool (D1196's
+ * `product_testers`).
+ */
+export async function allApplications(env: Env, query: ApplicationsQuery = {}) {
+  const { page, size, offset } = paging(query);
+  const owner = ownerFilter(query.owner);
+  const statusRaw = query.status == null ? '' : String(query.status).trim();
+  if (statusRaw && statusRaw !== 'all' && !(APPLICATION_STATUSES as readonly string[]).includes(statusRaw)) {
+    throw refuse(400, 'invalid_request', `status is all or one of: ${APPLICATION_STATUSES.join(', ')}.`);
+  }
+  const status = statusRaw || 'default';
+  const roleRaw = query.role == null ? '' : String(query.role).trim();
+  if (roleRaw && !(ROLES as readonly string[]).includes(roleRaw)) throw refuse(400, 'invalid_request', `role is one of: ${ROLES.join(', ')}.`);
+  const sortRaw = query.sort == null || query.sort === '' ? 'applied' : String(query.sort);
+  if (!(APPLICATION_SORTS as readonly string[]).includes(sortRaw)) throw refuse(400, 'invalid_request', 'sort is applied or name.');
+  const programme = query.programme == null || query.programme === '' ? null : String(query.programme);
+  const consented = yesNo(query.consented, 'consented');
+  const tester = yesNo(query.tester, 'tester');
+  const qRaw = query.q == null ? '' : String(query.q).trim();
+  const needle = qRaw ? likeNeedle(qRaw) : null;
+  if (qRaw && needle == null) throw refuse(400, 'invalid_request', 'Search with at least two characters.');
+  const role = roleRaw || null;
+  const binds = [programme, programme, owner.kind, owner.kind, owner.firm, owner.firm, status, status, status,
+    role, role, consented, consented, tester, tester, needle, needle];
+  return readOrRefuse('Applications', async () => {
+    const total = await env.DB.prepare(APPLICATIONS_COUNT).bind(...binds).first<{ n: number }>();
+    const { results } = await env.DB.prepare(sortRaw === 'name' ? APPLICATIONS_BY_NAME : APPLICATIONS_BY_APPLIED)
+      .bind(...binds, size, offset).all();
+    return {
+      applications: {
+        available: true, reason: null, page, page_size: size, total: Number(total?.n ?? 0), sort: sortRaw,
+        items: (results || []).map((r: any) => ({
+          uid: r.uid, name: r.name ?? null, role: r.role ?? null, status: r.status,
+          consented: !!r.consent_email_at, in_pool: !!r.in_pool,
+          answers: parse<string[]>(r.answers, []), availability: r.availability ?? null,
+          applied_at: r.created_at, updated_at: r.updated_at,
+          programme: { uid: r.programme_uid, product_name: r.product_name, owner_kind: r.owner_kind, owner_name: r.owner_name ?? null },
+        })),
+      },
+    };
+  });
 }
 
 // ---------------------------------------------------------------------------

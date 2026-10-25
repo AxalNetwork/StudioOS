@@ -19,6 +19,26 @@ r.get('/settings', async (c) => {
   return c.json({ settings });
 });
 
+// D1123: the stored check result, independent of today's threshold settings.
+r.get('/cohorts/:cohort/capacity', async c => {
+  await requireAdmin(c);
+  const cohort = c.req.param('cohort');
+  if (!/^\d{4}-(0[1-9]|1[0-2])$/.test(cohort)) return c.json({ error: 'Choose a cohort in YYYY-MM form.' }, 400);
+  try {
+    const cycle = await c.env.DB.prepare('SELECT id FROM cohort_cycles WHERE year = ? AND month = ?')
+      .bind(Number(cohort.slice(0, 4)), Number(cohort.slice(5))).first<{ id: number }>();
+    if (!cycle) return c.json({ error: 'The cohort was not found.' }, 404);
+    const event = await c.env.DB.prepare(`SELECT event_type, created_at, details FROM cohort_cycle_events
+      WHERE cohort_cycle_id = ? AND event_type IN ('capacity_ok', 'cycle_postponed', 'capacity_unreadable') ORDER BY id DESC LIMIT 1`)
+      .bind(cycle.id).first<{ event_type: string; created_at: string; details: string | null }>();
+    if (!event) return c.json({ recorded: false, reason: 'No capacity check result is on record for this cohort.' });
+    const counts = /Capacity check passed: (\d+) approved \(minimum (\d+)\)/.exec(event.details || '')
+      || /Below minimum \((\d+) approved < (\d+)\)/.exec(event.details || '');
+    return c.json({ recorded: true, outcome: event.event_type, at: event.created_at,
+      approved: counts ? Number(counts[1]) : null, minimum: counts ? Number(counts[2]) : null });
+  } catch { return c.json({ error: 'The recorded capacity check could not be read. Try again.' }, 503); }
+});
+
 // Safe, fixed summaries: legacy reasons can contain staff names. Interview rows
 // and stage transitions are identified as records, never invented event history.
 const HISTORY = `WITH params(wanted_type, wanted_cohort, wanted_by, search) AS (VALUES (?, ?, ?, ?)), history AS (
