@@ -388,16 +388,14 @@ export function peopleOf(entries, known = []) {
 
 // ─────────────────────────────────────────────── D1012: Catalogue complete (PAY1, PAY2, PAY8–PAY11)
 
-/** Part 2's checks that are about the keys: their action is Stripe connection. */
-export const KEY_CHECKS = new Set(['secret_key_missing', 'publishable_key_missing', 'publishable_key_unknown', 'key_mode_mismatch']);
 export const CHECKS_UNREAD = 'The catalogue’s checks could not be read, so they were not run. This is not a claim that nothing needs you.';
 
 /**
  * Needs you (PAY1), each item with one action.
  *
  * When the catalogue answered, its checks (D1010) say everything about the
- * catalogue and the keys: each product check opens its product, each key
- * check opens Stripe connection. When it did not, the keys are judged from
+ * catalogue and the keys: each product check opens its product; a check
+ * that names no product (the keys' four, D1010) opens Stripe connection. When it did not, the keys are judged from
  * the config and the summary as before (`needsYou`). The webhook items come
  * from the webhook read either way; part 2's checks do not judge the webhook.
  * Blockers come before warnings, then the webhook's.
@@ -414,7 +412,7 @@ export function needsYouAll({ config, summary, webhook, catalog }) {
   }
   const rank = (c) => (c.severity === 'blocker' ? 0 : 1);
   const fromChecks = checks.slice().sort((a, b) => rank(a) - rank(b)).map((c, i) => {
-    if (KEY_CHECKS.has(c.code) || !c.product_id) {
+    if (!c.product_id) {
       return { id: `check-${i}`, code: c.code, severity: c.severity, text: c.message, action: 'Open Stripe connection', href: PAY_STRIPE_PATH };
     }
     return { id: `check-${i}`, code: c.code, severity: c.severity, text: c.message, product: c.product_id, action: `Review ${names[c.product_id] || 'the product'}`, href: productPath(c.product_id) };

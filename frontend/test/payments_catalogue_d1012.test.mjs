@@ -78,6 +78,8 @@ const MEMBERS = {
   by_price: [
     { price_id: 'price_m', product_id: 'prod_vb', active: 37, other: 2 },
     { price_id: 'price_y', product_id: 'prod_vb', active: 12, other: 0 },
+    // Members on an archived price keep it, and still count.
+    { price_id: 'price_old', product_id: 'prod_vb', active: 3, other: 0 },
     { price_id: 'price_rg', product_id: 'prod_rg', active: 9, other: 0 },
   ],
   by_plan: [
@@ -140,7 +142,7 @@ test('the AI allowance and the yearly line: active plans only, from the Worker\'
   assert.deepEqual(allowanceOf(PRODUCTS[0].prices[2]), { text: null, reason: 'An archived price gives no AI allowance.' });
   assert.deepEqual(allowanceOf(price('x', 2000, 'month', { allowance_reason: 'not_usd' })), { text: null, reason: 'An AI allowance is counted in USD only.' });
   assert.match(allowanceOf({ id: 'x', active: true }).reason, /^Not recorded/, 'a read without the allowance is not a zero');
-  assert.equal(allowanceOf(price('x', 2001, 'month', { allowance_microusd: 5_002_500, allowance_reason: null })).text, '$5.00', 'rounded down, never up');
+  assert.equal(allowanceOf(price('x', 2003, 'month', { allowance_microusd: 5_007_500, allowance_reason: null })).text, '$5.00', 'rounded down, never up');
   assert.deepEqual(yearlyLine(PRODUCTS[0]), { tone: 'good', text: 'Yearly saves 15%' });
   assert.deepEqual(yearlyLine(PRODUCTS[1]), { tone: 'muted', text: 'No yearly price' });
   assert.equal(yearlyLine(PRODUCTS[2]), null);
@@ -175,8 +177,8 @@ test('the table: archived in their own group, the kind chip, search, Filters, So
 
 test('members on a plan: paid members per interval from its prices, the others beside, the rows with no price apart', () => {
   const m = membersOn(PRODUCTS[0], MEMBERS);
-  assert.deepEqual(m, { monthly: 37, yearly: 12, otherIntervals: 0, other: 2, withoutPrice: 4 });
-  assert.equal(membersLine(m), '37 monthly · 12 yearly');
+  assert.deepEqual(m, { monthly: 40, yearly: 12, otherIntervals: 0, other: 2, withoutPrice: 4 });
+  assert.equal(membersLine(m), '40 monthly · 12 yearly');
   assert.equal(membersOn(PRODUCTS[2], MEMBERS), null, 'a one-time product is no plan');
   assert.deepEqual(membersOn(PRODUCTS[1], { by_price: [], by_plan: [] }), { monthly: 0, yearly: 0, otherIntervals: 0, other: 0, withoutPrice: 0 });
 });
@@ -330,7 +332,7 @@ test('mounted product lightbox at its address: where members see it, prices, mem
       'Monthly18.00 USD—NoneArchived',
     ]);
     assert.equal(v.of('pay-product-saving'), 'Yearly saves 15%, computed from the two prices.');
-    assert.equal(v.of('pay-product-members-line'), '37 monthly · 12 yearly');
+    assert.equal(v.of('pay-product-members-line'), '40 monthly · 12 yearly');
     assert.match(v.of('pay-product-members'), /2 more trialing, past due, unpaid or incomplete\..*4 on this plan’s family were recorded before prices were stored.*Archiving a price stops new sales\. Members already on it keep their price\./s);
     assert.equal(v.of('pay-product-promos-count'), '2 codes');
     assert.match(v.of('pay-product-promos'), /1 code could not be matched/);
@@ -356,6 +358,7 @@ test('mounted lightbox: a failed check is shown, a product that is not a plan re
   let v = await render('/admin/platform/payments/products/prod_rg');
   try {
     assert.match(v.of('pay-product-checks'), /! “Founder Raise \+ Grow” has no yearly price/);
+    assert.doesNotMatch(v.of('pay-product-checks'), /No issues/, 'a failed check also said no issues');
     assert.ok(!v.has('pay-product-saving'), 'no saving without a yearly price');
   } finally { await v.unmount(); s.restore(); }
   s = stub();
