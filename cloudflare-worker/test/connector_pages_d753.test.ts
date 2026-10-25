@@ -109,6 +109,8 @@ const SOURCES: Record<string, string[]> = {
   crunchbase: ['integrations/providers/crunchbase.ts'],
   whatsapp: ['services/channels/whatsapp.ts', 'services/channels/outbound.ts'],
   telegram: ['services/channels/telegram.ts', 'services/channels/outbound.ts'],
+  // D1085: a member's sign-in reads through Notion's typed reads; its provider revokes on disconnect.
+  notion: ['services/notion/reads.ts', 'integrations/providers/notion.ts'],
 };
 const NOT_SCANNED = new Set(['services/notify.ts']);
 const TEXT = new Map<string, string[]>();
@@ -287,7 +289,7 @@ test('7. verified means a recorded check, and no check is recorded yet', () => {
 const ADDED: Record<string, string | null> = {
   hubspot: '2026-05', calendly: '2026-05', slack: '2026-05', stripe: '2026-05', linkedin: '2026-05',
   carta: '2026-09', docusign: '2026-09', crunchbase: '2026-09',
-  github: '2026-10', zoom: '2026-10', google_calendar: '2026-10', microsoft_365: '2026-10', mercury: '2026-10',
+  github: '2026-10', zoom: '2026-10', google_calendar: '2026-10', microsoft_365: '2026-10', mercury: '2026-10', notion: '2026-10',
   google_workspace: null,
 
   lovable: null,
@@ -345,6 +347,8 @@ const ENDPOINTS: Record<string, { file: string; sign_in: [string, string] | null
   // Both sign in inside the provider's own app (Meta's popup, the bot link), so neither has a sign-in URL.
   whatsapp: { file: 'services/channels/whatsapp.ts', sign_in: null, api: 'GRAPH_BASE' },
   telegram: { file: 'services/channels/telegram.ts', sign_in: null, api: 'TELEGRAM_API' },
+  // D1085: the page names the MCP server a member's sign-in reads through.
+  notion: { file: 'services/notion/reads.ts', sign_in: ['NOTION_MCP_URL', ''], api: null },
 };
 
 test('9. endpoints equal the providers\' own constants', () => {
@@ -391,6 +395,8 @@ test('10. sign-in kinds', () => {
     else if (['google_workspace', 'google_calendar', 'microsoft_365', 'linkedin'].includes(e.key)) assert.equal(kind, 'first_party', e.id);
     // D881 (#2554): a member connects Mercury only by signing in through its MCP server.
     else if (e.key === 'mercury') assert.equal(kind, 'mcp', e.id);
+    // D1085: a record the generic MCP sign-in serves (D1080).
+    else if (row!.auth_type === 'oauth_mcp') assert.equal(kind, 'mcp', e.id);
     else if (row!.auth_type === 'api_key') assert.equal(kind, 'key', e.id);
     else if (row!.supports_pat) assert.equal(kind, 'oauth_or_key', e.id);
     else assert.equal(kind, 'oauth', e.id);
@@ -428,7 +434,7 @@ test('12. pageDescriptor picks Mercury\'s variant by viewer, and works in either
   assert.equal('has_implementation' in gh, false, 'pageDescriptor merged publicDescriptor');
   assert.equal(pageDescriptor(getDescriptor('google_calendar')!)!.page_key, 'google');
   assert.equal(pageDescriptor({ key: 'linkedin' })!.tagline, FIRST_PARTY_PAGES.linkedin.tagline);
-  assert.equal(pageDescriptor({ key: 'notion' }), null);
+  assert.equal(pageDescriptor({ key: 'no_such_connector' }), null); // D1085: Notion is a connector now
   for (const key of CHANNELS) {
     const d = channelPage(key)!;
     assert.equal(d.tagline, (CHANNEL_PAGES as any)[key].tagline, key);
@@ -467,7 +473,7 @@ test('13. connectorPagePath', () => {
   assert.equal(connectorPagePath('linkedin'), '/account/connectors/linkedin');
   assert.equal(connectorPagePath('whatsapp'), '/account/connectors/whatsapp');
   assert.equal(connectorPagePath('telegram'), '/account/connectors/telegram');
-  for (const bad of ['', '../x', 'Github', 'a/b', 'notion']) assert.equal(connectorPagePath(bad), '/account/connectors', bad);
+  for (const bad of ['', '../x', 'Github', 'a/b', 'no_such_connector']) assert.equal(connectorPagePath(bad), '/account/connectors', bad);
   const re = /const PAGE_KEY_RE = \/(.+)\/;/.exec(SRC('integrations/connectorPages.ts'))![1];
   assert.equal(re, CONNECTOR_KEY_RE.source);
 });

@@ -12,11 +12,9 @@ the meantime. Deal-room reads retain their separate partner rule. Legacy legal
 entity listing and other routes with independent role gates are separate
 policies, not grants from the founder-resource guard.
 
-D1159 (#3066): `funds.ts` adds LP names to distribution previews and enforces
-and audits `fund.create`. `fund_performance.ts` enforces and audits
-`fund.valuation` for marks and fund attribution. Admin controls use the shared
-act table; existing institutional GP ownership/tier scope remains. The overview
-also returns an independent per-fund booklet waiting block.
+D1150: `deal_context.ts`, mounted before the deal router at `/api/deals`,
+provides investor-owned stage/visit metadata and author/firm-private notes.
+No admin bypass; migration 600; writes and audit rows share a batch.
 
 D973 reads live in `admin_network_reads.ts`, mounted before D976’s
 `admin_network.ts` at `/api/admin/network`. Opaque person refs use the
@@ -149,6 +147,12 @@ widened guard on this very sentence, which is the rule working.)
 Prefixes mirror the FastAPI routers in `backend/app/api/routes/*.py` so the
 local FastAPI dev backend exposes the same `/api/...` paths the frontend
 calls in production.
+
+D1159 (#3066): `funds.ts` adds LP names to distribution previews and enforces
+and audits `fund.create`. `fund_performance.ts` enforces and audits
+`fund.valuation` for marks and fund attribution. Admin controls use the shared
+act table; existing institutional GP ownership/tier scope remains. The overview
+also returns an independent per-fund booklet waiting block.
 
 ### Build operating systems (D686)
 
@@ -325,7 +329,7 @@ webhook's deliveries by hour. D1129 adds bounded `q` search to the log and
 CSV, plus `/change-log/admins` (all admin ids/names, no email). `catalog.ts`
 records a failed sync.
 
-D1065 (#2935): `build_plan.ts` mounts at `/api/cycles/build/plan` before the Build router. GET reads a scoped plan; POST prepares/updates only for the venture’s founder or admitted Lab owner. Admins read; company-linked partners read only landed accepted items without a decision or pending proposal.
+D1065 (#2935): `build_plan.ts` mounts at `/api/cycles/build/plan` before the Build router. GET reads a scoped plan; POST prepares/updates only for the venture’s founder or admitted Lab owner. Admins read; company-linked partners read only landed accepted items without a decision or pending proposal. D1066 (#2936) adds the item decisions (`/items/:uid/accept`, `PATCH /items/:uid`, `/items/:uid/dismiss`, `/modules/:module/accept`), founders only, and exports `buildEvidenceRoutes`, mounted at `/api/cycles/build/evidence` for each Build row's trail.
 
 D971 (#2756): `admin_lab_operations.ts` is mounted by `admin_cohort.ts` under
 `/api/admin/cohort`: read-only `/settings` and `/activity`, both Admin gated.

@@ -339,11 +339,13 @@ test('U6 renders the total or its absence, unknown sizes, an unreadable place, e
 test('the section draws its heading and the six cards, each in its own loading state, in the canvas order', () => {
   const s = html(h(UsageSection, { role: 'founder' }));
   assert.match(s, /<h2[^>]*>Usage<\/h2><p[^>]*>What you have used across all your companies\.<\/p>/);
-  const order = ['usage-card-allowance', 'usage-card-days', 'usage-card-where', 'usage-card-models', 'usage-card-rates', 'usage-card-last-run', 'usage-card-storage']
+  // D1166 (#2449): storage has its own page, /account/usage/storage.
+  assert.doesNotMatch(s, /usage-card-storage/);
+  const order = ['usage-card-allowance', 'usage-card-days', 'usage-card-where', 'usage-card-models', 'usage-card-rates', 'usage-card-last-run']
     .map((id) => s.indexOf(`data-testid="${id}"`));
   assert.ok(order.every((i) => i >= 0), 'every card renders');
   assert.deepEqual([...order].sort((a, b) => a - b), order, 'in the canvas order');
-  for (const anchor of ['days', 'where', 'models', 'last-run', 'storage']) assert.match(s, new RegExp(`id="${anchor}"`), `#${anchor} lands`);
+  for (const anchor of ['days', 'where', 'models', 'last-run']) assert.match(s, new RegExp(`id="${anchor}"`), `#${anchor} lands`);
 });
 
 // --------------------------------------------- the member's, across companies
@@ -467,7 +469,8 @@ test('the doors: the Account section, the user menu, the rail card, the HQ route
   // D700 — the deep-link map moved to account/accountPhone.js, unchanged.
   assert.match(read('frontend/src/pages/account/accountPhone.js'), /\n  usage: 'usage',/, '/account/usage opens the section');
   // D807 — /account/usage/limits is Usage's Limits page; every other Usage address is this section.
-  assert.match(settings, /\{safeActive === 'usage' && \(usagePage === 'limits' \? <LimitsPage \/> : usagePage === 'cost' \? <CostPage role=\{role\} \/> : <UsageSection role=\{role\} \/>\)\}/);
+  // D1166 (#2449): /account/usage/storage is Usage's Storage page.
+  assert.match(settings, /\{safeActive === 'usage' && \(usagePage === 'storage' \? <StoragePage role=\{role\} \/> : usagePage === 'limits' \? <LimitsPage \/> : usagePage === 'cost' \? <CostPage role=\{role\} \/> : <UsageSection role=\{role\} \/>\)\}/);
   const app = read('frontend/src/App.jsx');
   const menu = app.slice(app.indexOf('function UserDropdown('), app.indexOf('Log Out', app.indexOf('function UserDropdown(')));
   assert.match(menu, /<Link to="\/account" [\s\S]*?Account\s*<\/Link>\s*\{\/\*[^*]*\*\/\}\s*<Link to="\/account\/usage"[\s\S]*?Usage\s*<\/Link>/, 'Usage, right under Account');

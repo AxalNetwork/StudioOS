@@ -30,7 +30,8 @@ function ReadFailed({ read, what, claim }) {
   return <div className="px-4 py-3 sm:px-5"><Unreadable what={what} claim={audit ? 'Nothing was read, because its audit row could not be written.' : claim} onRetry={read.reload} /></div>;
 }
 
-function Accounts({ apis }) {
+/** The entity accounts with Current and Available; HQ › Platform › Bank accounts › Cash draws it too (D1181). */
+export function Accounts({ apis }) {
   const read = useRead(() => apis.mercury.accounts(), [apis]);
   const items = read.data?.items || [];
   const cols = [

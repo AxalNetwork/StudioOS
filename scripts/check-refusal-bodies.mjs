@@ -44,6 +44,7 @@ export const LEDGER = [
   { file: 'admin_contracts.ts', contains: 'if (e instanceof TemplateError) return { ok: false, status: e.status === 409 ? 409 : 400, code: e.code, message: e.message };', reason: 'D717: the draft reader passes the same TemplateError sentence (resolveFormat) on to refuse().' },
   { file: 'admin_telegram.ts', contains: "error: 'telegram_token_missing', code: 'telegram_token_missing', message: e.message", reason: 'TelegramTokenMissing is our own configuration sentence.' },
   { file: 'admin_x.ts', contains: 'if (e instanceof XConfigMissing) return', reason: 'XConfigMissing is our own configuration sentence.' },
+  { file: 'build_plan.ts', contains: 'if (e instanceof PlanItemError) return refuse(c, e.status, { code: e.code, message: e.message', reason: 'D1066: PlanItemError carries a sentence services/buildPlanAccept.ts wrote, with its code; never provider or SQLite text.' },
   { file: 'cofounder.ts', contains: 'try { gate(user); } catch (e: any) { return c.json({ detail: e.message }', reason: "gate() throws one sentence we wrote ('Co-founder matching is for founder accounts')." },
   { file: 'monitoring_analytics.ts', contains: 'if (e instanceof BadRangeError)', reason: 'BadRangeError is our own validation sentence.' },
   { file: 'monitoring_analytics.ts', contains: 'if (e instanceof PlanCreateError) return c.json({ detail: e.message }', reason: 'PlanCreateError is our own validation sentence.' },

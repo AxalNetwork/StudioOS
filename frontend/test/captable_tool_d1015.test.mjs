@@ -240,7 +240,7 @@ test('the wiring: no route is added, CycleRoute branches on the tab word, and th
   // D1025 (#2862): the proposal drawer's route and `/new` are the tool's too.
   // D1023 (#2860): the instrument drawer's route sets `capTableProposal` too, with `:instrument`.
   assert.match(route, /const capTableTab = capTableProposal && cycle === 'raise' \? \(instrumentId \? 'instrument' : 'proposal'\)\s*: capTableAdding \? 'new'\s*: record && cycle === 'raise' && isCapTableTab\(slug, recordId\) \? recordId : null;/);
-  assert.match(route, /!narrativeTab && !capTableTab && (?:!dataRoomTab && )?!!projectId/);
+  assert.match(route, /!narrativeTab && !capTableTab && (?:!dataRoomTab && )?(?:!uofTab && )?(?:!capRelTab && )?!!projectId/);
   assert.match(route, /slug === CAP_TABLE \? <CapTableHomeNav search=\{q\} projectId=\{projectId\} \/>/);
   const tool = read('frontend/src/pages/raise/captable/CapTableTool.jsx');
   assert.doesNotMatch(tool, /\b(alert|confirm)\(/);

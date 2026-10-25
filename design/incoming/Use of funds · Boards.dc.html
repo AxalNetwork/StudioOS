@@ -1,0 +1,72 @@
+<!DOCTYPE html>
+<html><head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <meta name="design_doc_mode" content="canvas">
+  <link href="https://fonts.googleapis.com/css2?family=Roboto+Mono:wght@400;500;600;700&family=Space+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <style>body{margin:0;background:#eeedf2}a{color:#7c3aed;text-decoration:none}a:hover{color:#6d28d9}</style>
+</helmet>
+<div style="display:flex;flex-direction:column;font-family:'Space Grotesk',system-ui,sans-serif;color:#18181b">
+  <header style="padding:40px 44px 8px;display:flex;flex-direction:column;gap:6px">
+    <span style="font:700 11px 'Roboto Mono',monospace;letter-spacing:.07em;text-transform:uppercase;color:#6b6577">Raise · Use of funds</span>
+    <h1 style="margin:0;font-size:28px;font-weight:800;letter-spacing:-.02em">Use of funds</h1>
+    <p style="margin:0;font-size:14px;color:#6b6577;max-width:840px;line-height:1.55">One tool inside the Raise module page, with seven tabs: what the raise pays for, the milestones and hires it funds, runway before and after, scenarios side by side and actual spend against the plan. Every figure names its source; computed values carry a Modelled tag; a missing value says Not recorded. Sample today is [25 Oct 2026]. The section drawer is drawn as a centred lightbox.</p>
+  </header>
+  <sc-for list="{{ boards }}" as="b" hint-placeholder-count="22">
+    <section id="{{ b.id }}" style="padding:36px 44px;border-bottom:1px solid rgba(0,0,0,.08);display:flex;flex-direction:column;gap:12px;scroll-margin-top:16px">
+      <div style="display:flex;align-items:baseline;gap:10px;flex-wrap:wrap">
+        <a href="#{{ b.id }}" style="font:700 11px 'Roboto Mono',monospace;padding:3px 8px;background:#18181b;color:#fff;border-radius:5px">{{ b.id }}</a>
+        <h2 style="margin:0;font-size:16px;font-weight:800;letter-spacing:-.01em">{{ b.t }}</h2>
+      </div>
+      <p style="margin:0;font-size:13px;line-height:1.55;color:#4a4553;max-width:920px">{{ b.cap }}</p>
+      <div style="display:flex;gap:28px;flex-wrap:wrap;align-items:flex-start">
+        <sc-for list="{{ b.frames }}" as="f" hint-placeholder-count="1">
+          <div style="display:flex;flex-direction:column;gap:8px;flex:none">
+            <sc-if value="{{ f.lab }}" hint-placeholder-val="{{ false }}"><span style="font:600 11px 'Roboto Mono',monospace;color:#6b6577">{{ f.lab }}</span></sc-if>
+            <div style="{{ f.box }}"><dc-import name="Raise Use Of Funds Page" board="{{ f.b }}" hint-size="{{ f.hint }}"></dc-import></div>
+          </div>
+        </sc-for>
+      </div>
+    </section>
+  </sc-for>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script="">
+class Component extends DCLogic {
+  renderVals() {
+    const D = (b, lab, w, h, r) => ({ b, lab: lab || false, hint: '100%,' + (h || 900) + 'px', box: 'width:' + (w || 1440) + 'px;' + (h ? 'height:' + h + 'px;' : '') + 'overflow:hidden;border-radius:' + (r || 12) + 'px;border:1px solid rgba(24,24,27,.12);background:#f4f3f7;box-shadow:0 1px 3px rgba(0,0,0,.06)' });
+    const P = (b, lab) => D(b, lab, 390, 844, 28);
+    const boards = [
+      ['UF1', 'Home · Founder · desktop 1440 · light', 'The Raise module header and rail, the tool’s bar and seven tabs. Four tiles, where the money goes, cash with and without the raise, where the plan is used and what needs attention.', [D('UF1')]],
+      ['UF2', 'Allocation', 'The split as a donut and a table with each section’s hires against its amount and its actual share from Mercury. The second frame is a section whose hires cost more than it holds.', [D('UF2'), D('UF2w', 'When hires outgrow a section', 900)]],
+      ['UF3', 'Edit split', 'The raise, the five shares with their amounts, the live total and your target runway.', [D('UF3')]],
+      ['UF4', 'Section · lightbox', 'Product & engineering: its milestone, hires, plan against actual, and what it feeds.', [D('UF4')]],
+      ['UF5', 'Milestones and hires', 'A timeline by section to three months past cash out, payroll from planned hires, and both tables.', [D('UF5')]],
+      ['UF6', 'Add milestone and Add a hire', 'An empty cost stays Not costed. Eadwyn suggests only a milestone’s name.', [D('UF6', false, 1300)]],
+      ['UF7', 'Runway', 'Runway today from its most direct source, the cash path against the previous plan, planned burn by section, and runway after the raise.', [D('UF7')]],
+      ['UF8', 'Runway › Forecast', 'The old financial model as ten drivers with their sources, four modelled tiles, two charts and the sensitivity table. The second frame is a missing driver.', [D('UF8'), D('UF8e', 'A driver is missing', 1100)]],
+      ['UF9', 'Scenarios', 'Three scenarios with their split, runway, milestones and linked cap-table scenario. The second frame makes one the base.', [D('UF9'), D('UF9m', 'Make this the base', 680)]],
+      ['UF10', 'Scenarios compared · light', 'Today and three scenarios side by side, their cash paths, and milestones funded by section.', [D('UF10')]],
+      ['UF11', 'Scenarios compared · dark', 'UF10 in the dark colours; violet becomes #a78bfa.', [D('UF11')]],
+      ['UF12', 'Plan vs actual', 'Planned against actual share by section from Mercury, the categories and one suggested mapping. The second frame is without Mercury.', [D('UF12'), D('UF12n', 'Without Mercury', 1100)]],
+      ['UF13', 'Where this plan is used', 'The round’s three sources and their mismatch, the cap table, the deck and readiness. The second frame chooses the round size.', [D('UF13', false, 1200), D('UF13d', 'Choose the round size', 680)]],
+      ['UF14', 'Eadwyn · plan check', 'Three findings, each citing both sides. Eadwyn never changes an amount or a share.', [D('UF14', false, 900)]],
+      ['UF15', 'History', 'Every save with who made it; an admin’s change carries an Admin tag and its reason.', [D('UF15')]],
+      ['UF16', 'Admin and Super Admin', 'The tool for a venture they support, with a banner. Mercury figures stay the founder’s.', [D('UF16a', 'Admin'), D('UF16b', 'Super Admin')]],
+      ['UF17', 'Empty · new venture', 'Nothing recorded yet, and the first step.', [D('UF17')]],
+      ['UF18', 'Loading', 'The header, rail and tabs at once; the rest reads.', [D('UF18')]],
+      ['UF19', 'Error and partial', 'The plan could not be read; Mercury could not be read while the rest of the page stays.', [D('UF19a', 'The plan could not be read', 1440, 720), D('UF19b', 'Mercury could not be read', 1200)]],
+      ['UF20', 'No access', 'An investor, an operating partner, an advisor and an explorer.', [D('UF20', false, 1000)]],
+      ['UF21', 'Phone · 390 wide', 'Home, the split as a list, and a section as a bottom sheet.', [P('UF21a', 'Home'), P('UF21b', 'Allocation'), P('UF21c', 'A section')]],
+      ['UF22', 'Home · dark', 'UF1 in the dark colours.', [D('UF22')]]
+    ].map(([id, t, cap, frames]) => ({ id, t, cap, frames }));
+    return { boards };
+  }
+}
+</script>
+</body></html>
