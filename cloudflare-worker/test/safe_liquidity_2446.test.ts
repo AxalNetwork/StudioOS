@@ -125,7 +125,7 @@ async function load(path: string, source: string, overrides: Record<string,strin
 test('#2446: liquidity, pool and limitation assertions reject mutations and pass restored code', async () => {
   const groups: [Function, string[][]][] = [
     [liquidity, [
-      ['pendingSafes, Number(exit), warnings', '[], Number(exit), warnings'],
+      ['pendingSafes, exit, warnings', '[], exit, warnings'],
       ["s.basis === 'post_money' ? total : baseShares", 'baseShares'],
       ['exitValue <= Number(s.cap)', 'true'],
       ['if (!changed) break;', 'break;'],
@@ -133,7 +133,7 @@ test('#2446: liquidity, pool and limitation assertions reject mutations and pass
       ['paid[order[i].i] += 1n', 'paid[order[i].i] += 0n'],
     ]],
     [pool, [["h.type !== 'option_pool'", 'true'], ['      POOL_EXIT_ASSUMPTION,', '']]],
-    [limitations, [["s.instrument === 'note'", 'false'], ["!(Number(s.cap) > 0)", 'false'], ['if (postFraction >= 1)', 'if (false)'], ['Number(inputs.exit_value) < 0', 'false'], [' || !Number.isSafeInteger(Math.round(Number(inputs.exit_value) * 100))', ''], ['if (!(baseShares > 0) || !Number.isFinite(baseShares))', 'if (false)'], ['!Number.isFinite(Number(s?.amount)) || ', ''], ['s?.cap != null && !Number.isFinite(Number(s.cap))', 'false']]],
+    [limitations, [["s.instrument === 'note'", 'false'], ["!(Number(s.cap) > 0)", 'false'], ['if (postFraction >= 1)', 'if (false)'], [' && Number(v) >= 0 &&', ' &&'], [' && Number.isSafeInteger(Math.round(Number(v) * 100))', ''], ['if (!(baseShares > 0) || !Number.isFinite(baseShares))', 'if (false)'], ['!Number.isFinite(Number(s?.amount)) || ', ''], ['s?.cap != null && !Number.isFinite(Number(s.cap))', 'false']]],
   ];
   for (const [verify, mutants] of groups) {
     const check = async (source: string) => { const m = (await load(paths.cap, source)).module; verify(m.simulate,m.validateInputs); };

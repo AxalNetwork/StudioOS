@@ -1,8 +1,8 @@
 /* Task #4 (Y-2) — Trust Center frontend.
  *
  * Single page with role-gated tabs (Overview / Identity (KYC) / Entity (KYB) /
- * Accreditation / Agreements / Sanctions). Drives a Trust score 0-100 from
- * /api/trust/me and shows per-pair NDA flow on the Agreements tab.
+ * Accreditation / Agreements). Drives a Trust score 0-100 from
+ * /api/trust/me. Members see their own pairs; platform admin tools are links.
  *
  * THIS PAGE NO LONGER READS /trust/summary, AND THE ROUTE IS GONE (D432). It
  * once did, for backwards compat with legacy KYB / Accreditation / NDA cards
@@ -15,8 +15,8 @@
  */
 import { useEffect, useMemo, useState } from 'react';
 import {
-  ShieldCheck, Lock, FileText, CheckCircle2, AlertCircle, Loader2,
-  Globe, IdCard, Building2, BadgeCheck, FileSignature, Search,
+  ShieldCheck, Lock, FileText, CheckCircle2, Loader2,
+  Globe, IdCard, Building2, BadgeCheck, FileSignature,
   Link2 as LinkIcon,
 } from 'lucide-react';
 import { api, getActiveCompanyId } from '../lib/api';
@@ -33,17 +33,9 @@ import {
   envelopeEventWhen, NO_ENVELOPE_HISTORY_NOTE,
 } from '../lib/trustCenter';
 
-// Task #25 — these personas are KYC-eligible, so the Identity tab is always
-// shown for them rather than only when the obligation matrix happens to surface
-// a kyc_v1 row. Founders/partners see the "not required" state inside the tab.
-//
-// This is deliberately NOT "every role that can reach the page" any more.
-// Advisors were added to the /trust route guard because ROLE_MATRIX gives them
-// two REQUIRED obligations (mentor_nda_v1, mentor_disclaimer_v1) and the
-// dropdown link that reaches this page is ungated — but their matrix carries no
-// kyc_v1 row, so showing them an Identity tab would invent an obligation the
-// platform does not place on them. They land on Overview and Agreements.
-const KYC_ELIGIBLE_ROLES = new Set(['founder', 'partner', 'investor', 'admin']);
+// D1073 — seedObligations waives legacy KYC rows for every non-investor.
+// A legacy row, even one still pending, must not invent a required Identity tab.
+const KYC_ELIGIBLE_ROLES = new Set(['investor']);
 
 // ---------------------------------------------------------------------------
 // Obligation key → human label + which tab the obligation lives under.
@@ -296,9 +288,9 @@ function Section({ icon: Icon, title, subtitle, children }) {
 // POST /trust/kyb/start and GET /trust/summary are retired with D432 (nothing
 // called either; their client methods startKyb and getTrustSummary had no caller). The
 // gap they did not fill stays recorded on the worker: a partner seeded a
-// required kyb_v1 presses Start, lands on in_review, and ObligationList
-// renders no action for in_review while lib/trustCenter.js classes it as
-// waiting on us; kyb_v1 has no working satisfier either
+// required kyb_v1 once changed to in_review on a click without evidence.
+// D1073 retires that generic Start transition; real evidence submission
+// remains responsible for review status. kyb_v1 has no working satisfier either
 // (cloudflare-worker/test/obligation_satisfiable.test.ts).
 //
 // Accreditation evidence has no upload route on either side, so the tab says
@@ -575,10 +567,10 @@ function EnvelopeHistory({ envelopeUuid }) {
 
 /**
  * `rowAction(o)` lets a tab put its own control on a row — the Role
- * agreements section uses it for "Open to sign" (D432) — beside the generic
- * Start. Null means the row gets nothing extra.
+ * agreements section uses it for "Open to sign" (D432) — without changing status.
+ * Null means the row gets nothing extra.
  */
-function ObligationList({ obligations, emptyText, onStart, rowAction = null }) {
+function ObligationList({ obligations, emptyText, rowAction = null }) {
   if (!obligations.length) {
     return <p className="text-sm text-slate-600">{emptyText || 'Nothing required for this section.'}</p>;
   }
@@ -586,7 +578,6 @@ function ObligationList({ obligations, emptyText, onStart, rowAction = null }) {
     <ul className="space-y-2">
       {obligations.map(o => {
         const meta = OBLIGATION_META[o.obligation_key] || { label: o.obligation_key };
-        const open = o.required && o.status !== 'satisfied' && o.status !== 'waived';
         const exp = expiryNote(o.expires_at);
         return (
           <li
@@ -624,14 +615,7 @@ function ObligationList({ obligations, emptyText, onStart, rowAction = null }) {
             <div className="flex items-center gap-3">
               <StatusPill status={o.status} />
               {rowAction ? rowAction(o) : null}
-              {open && o.status === 'pending' && onStart && (
-                <button
-                  onClick={() => onStart(o.obligation_key)}
-                  className="text-xs bg-violet-600 hover:bg-violet-500 text-white px-2 py-1 rounded"
-                >
-                  Start
-                </button>
-              )}
+
             </div>
           </li>
         );
@@ -701,14 +685,12 @@ function pairwiseTitle(row, meId, isAdmin) {
   return `Mutual NDA · ${partyLabel(row, other)}`;
 }
 
-function AgreementsTab({ obligations, onStart, role, requiredNdas = [], onChanged }) {
+function AgreementsTab({ obligations, role, requiredNdas = [], onChanged }) {
   const [items, setItems] = useState([]);
   const [pending, setPending] = useState([]);
   const [documents, setDocuments] = useState([]);
   const [loading, setLoading] = useState(true);
   const [err, setErr] = useState(null);
-  const [busy, setBusy] = useState({});  // { [pairId]: 'resend'|'void' }
-  const [info, setInfo] = useState(null);
   // One row open at a time, as the canvas draws it. Keyed by envelope uuid
   // rather than by pair id so the open row survives a `reload()` that
   // renumbers nothing but re-fetches everything.
@@ -718,13 +700,10 @@ function AgreementsTab({ obligations, onStart, role, requiredNdas = [], onChange
   async function reload() {
     setErr(null);
     try {
-      // Pairwise NDAs come from /trust/pairwise-ndas (admin-aware: admins
-      // see every pair so Resend / Void actually has rows to act on; users
-      // see only the pairs they're a party to). The /trust/agreements
-      // endpoint still feeds the "Other contracts" section with pending
-      // envelopes + signed documents touching the caller.
+      // Admin's platform-wide list belongs in Contracts. Members keep only
+      // their own pairs; other contracts always remain scoped to the caller.
       const [pairs, agree] = await Promise.allSettled([
-        api.trustListPairwiseNdas(),
+        isAdmin ? Promise.resolve({ items: [] }) : api.trustListPairwiseNdas(),
         api.trustAgreements(),
       ]);
       if (pairs.status === 'fulfilled') {
@@ -745,27 +724,6 @@ function AgreementsTab({ obligations, onStart, role, requiredNdas = [], onChange
   }
   useEffect(() => { reload(); }, []);   // eslint-disable-line react-hooks/exhaustive-deps
 
-  async function resend(id) {
-    setBusy(b => ({ ...b, [id]: 'resend' })); setInfo(null);
-    try {
-      const r = await api.trustResendPairwiseNda(id);
-      setInfo(`Sent ${r?.sent || 0} signing email${r?.sent === 1 ? '' : 's'}.`);
-      await reload();
-    } catch (e) { setErr(e?.message || 'Resend failed'); }
-    finally { setBusy(b => { const n = { ...b }; delete n[id]; return n; }); }
-  }
-  async function voidPair(id) {
-    const reason = window.prompt('Reason for voiding this NDA (visible in audit log):', '');
-    if (reason === null) return;
-    setBusy(b => ({ ...b, [id]: 'void' })); setInfo(null);
-    try {
-      await api.trustVoidPairwiseNda(id, reason || 'admin_void');
-      setInfo('NDA voided.');
-      await reload();
-    } catch (e) { setErr(e?.message || 'Void failed'); }
-    finally { setBusy(b => { const n = { ...b }; delete n[id]; return n; }); }
-  }
-
   const ndaObligations = obligations.filter(o => OBLIGATION_META[o.obligation_key]?.tab === 'agreements');
   // D432 — the template-NDA card is folded into these rows. GET /nda/required
   // says, per role NDA, whether it is still open and which envelope to sign;
@@ -783,14 +741,11 @@ function AgreementsTab({ obligations, onStart, role, requiredNdas = [], onChange
   return (
     <>
       <Section icon={FileSignature} title="Role agreements" subtitle="Standing NDAs and disclosures required for your role.">
-        <ObligationList obligations={ndaObligations} emptyText="No role-level agreements required." onStart={onStart} rowAction={roleNdaAction} />
+        <ObligationList obligations={ndaObligations} emptyText="No role-level agreements required." rowAction={roleNdaAction} />
       </Section>
-      <Section icon={Lock} title="Pairwise NDAs" subtitle={isAdmin
-        ? "Every founder ↔ investor mutual NDA. Resend re-emails any unsigned recipients; Void cancels the envelope and revokes access."
-        : "Active and pending mutual NDAs between you and other parties."}>
+      {!isAdmin && <Section icon={Lock} title="Pairwise NDAs" subtitle="Active and pending mutual NDAs between you and other parties.">
         {loading && <p className="text-sm text-slate-600">Loading…</p>}
         {err && <p className="text-sm text-red-600">{err}</p>}
-        {info && <p className="text-sm text-emerald-700 mb-2">{info}</p>}
         {!loading && !err && items.length === 0 && (
           <p className="text-sm text-slate-600">No pairwise NDAs on file.</p>
         )}
@@ -803,7 +758,6 @@ function AgreementsTab({ obligations, onStart, role, requiredNdas = [], onChange
               const display = voided ? 'revoked' : (expired ? 'expired' : a.status);
               const validExp = expiryNote(a.valid_until);
               const canSign = !voided && !expired && a.status !== 'active' && !!a.nda_envelope_uuid;
-              const canAdminAct = isAdmin && !voided && a.status !== 'active' && !expired;
               // Backend computes the signer list on read (joining
               // esign_recipients) and ships it as `signers`. Fall back
               // to the legacy `signers_json` blob if the enrichment
@@ -860,22 +814,7 @@ function AgreementsTab({ obligations, onStart, role, requiredNdas = [], onChange
                     )}
                     <StatusPill status={display} />
                     {canSign && <PairwiseSignButton envelopeUuid={a.nda_envelope_uuid} />}
-                    {canAdminAct && (
-                      <>
-                        <button
-                          onClick={() => resend(a.id)}
-                          disabled={!!busy[a.id]}
-                          className="text-xs px-2 py-1 rounded border border-slate-300 dark:border-slate-600 text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 disabled:opacity-50">
-                          {busy[a.id] === 'resend' ? 'Sending…' : 'Resend'}
-                        </button>
-                        <button
-                          onClick={() => voidPair(a.id)}
-                          disabled={!!busy[a.id]}
-                          className="text-xs px-2 py-1 rounded border border-red-300 text-red-700 hover:bg-red-50 disabled:opacity-50">
-                          {busy[a.id] === 'void' ? 'Voiding…' : 'Void'}
-                        </button>
-                      </>
-                    )}
+
                   </div>
                   </div>
                   {open && <EnvelopeHistory envelopeUuid={a.nda_envelope_uuid} />}
@@ -884,7 +823,7 @@ function AgreementsTab({ obligations, onStart, role, requiredNdas = [], onChange
             })}
           </ul>
         )}
-      </Section>
+      </Section>}
       {(pending.length > 0 || documents.length > 0) && (
         <Section icon={FileText} title="Other contracts" subtitle="Pending envelopes awaiting your signature and signed documents on file.">
           {pending.length > 0 && (
@@ -1023,117 +962,16 @@ function CompanyKybCard() {
   );
 }
 
-// ---------------------------------------------------------------------------
-// Sanctions tab — admin-only.
-// ---------------------------------------------------------------------------
-function SanctionsTab() {
-  const [rows, setRows] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [err, setErr] = useState(null);
-  const [info, setInfo] = useState(null);
-  const [onlyHits, setOnlyHits] = useState(false);
-  // Inline rescreen form
-  const [userId, setUserId] = useState('');
-  const [fullName, setFullName] = useState('');
-  const [dob, setDob] = useState('');
-  const [nationality, setNationality] = useState('');
-  const [busy, setBusy] = useState(false);
-
-  async function reload() {
-    setErr(null);
-    try {
-      const res = await api.trustListSanctions({ only_hits: onlyHits ? 1 : 0, limit: 100 });
-      // Backend returns both `screenings` and `items` (alias for back-compat).
-      setRows(res?.screenings || res?.items || []);
-    } catch (e) { setErr(e?.message || 'Failed to load'); }
-    finally { setLoading(false); }
-  }
-  useEffect(() => { reload(); }, [onlyHits]);   // eslint-disable-line react-hooks/exhaustive-deps
-
-  async function runScreen(e) {
-    e.preventDefault(); setErr(null); setInfo(null);
-    const id = Number(userId);
-    if (!Number.isInteger(id) || id <= 0) { setErr('Enter a numeric user ID.'); return; }
-    setBusy(true);
-    try {
-      const r = await api.trustScreenSanctions(id, {
-        full_legal_name: fullName || undefined,
-        date_of_birth:    dob || undefined,
-        nationality:      nationality || undefined,
-      });
-      const hitCount = r?.matches?.length ?? r?.match_count ?? r?.hits?.length ?? 0;
-      setInfo(`Screening complete · severity: ${r?.severity || 'unknown'} · ${hitCount} hit(s).`);
-      setUserId(''); setFullName(''); setDob(''); setNationality('');
-      await reload();
-    } catch (e2) { setErr(`Screening not completed. ${e2?.message || 'Try again when all sanctions lists are available.'}`); }
-    finally { setBusy(false); }
-  }
-
+// D1073 — administration leaves the member surface. Reuse its existing
+// Section rather than putting a platform-wide list or write form here.
+function TrustAdminTools() {
   return (
-    <>
-      <Section icon={Search} title="Run a sanctions screening" subtitle="OFAC SDN + EU CFSP + UK HMT consolidated lists. Hits are stored for review.">
-        <form onSubmit={runScreen} className="grid grid-cols-1 md:grid-cols-2 gap-3 max-w-2xl">
-          <label className="text-sm text-slate-700 dark:text-slate-300">User ID
-            <input value={userId} onChange={e => setUserId(e.target.value)} className="mt-1 w-full px-2 py-1 rounded border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-900" required />
-          </label>
-          <label className="text-sm text-slate-700 dark:text-slate-300">Full legal name (override)
-            <input value={fullName} onChange={e => setFullName(e.target.value)} placeholder="Defaults to corporate or user name" className="mt-1 w-full px-2 py-1 rounded border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-900" />
-          </label>
-          <label className="text-sm text-slate-700 dark:text-slate-300">Date of birth (optional)
-            <input type="date" value={dob} onChange={e => setDob(e.target.value)} className="mt-1 w-full px-2 py-1 rounded border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-900" />
-          </label>
-          <label className="text-sm text-slate-700 dark:text-slate-300">Nationality (ISO-2, optional)
-            <input value={nationality} onChange={e => setNationality(e.target.value.toUpperCase())} maxLength={2} placeholder="US" className="mt-1 w-full px-2 py-1 rounded border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-900" />
-          </label>
-          <div className="md:col-span-2 flex items-center gap-3">
-            <button type="submit" disabled={busy} className="px-3 py-1.5 rounded bg-violet-600 text-white text-sm hover:bg-violet-700 disabled:opacity-50">
-              {busy ? 'Screening…' : 'Run screening'}
-            </button>
-            {info && <span className="text-sm text-emerald-700">{info}</span>}
-            {err && <span className="text-sm text-red-600">{err}</span>}
-          </div>
-        </form>
-      </Section>
-      <Section icon={Search} title="Recent screenings" subtitle="Most recent runs across all users. Severity = none (clear), review (possible match), or block (high-confidence hit).">
-        <label className="inline-flex items-center gap-2 text-sm text-slate-700 dark:text-slate-300 mb-3">
-          <input type="checkbox" checked={onlyHits} onChange={e => setOnlyHits(e.target.checked)} />
-          Only show review/block
-        </label>
-        {loading && <p className="text-sm text-slate-600">Loading…</p>}
-        {!loading && rows.length === 0 && (
-          <p className="text-sm text-slate-600">No screenings yet.</p>
-        )}
-        {!loading && rows.length > 0 && (
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead className="text-left text-xs uppercase text-slate-500 border-b border-slate-200 dark:border-slate-700">
-                <tr><th className="py-2 pr-2">When</th><th className="pr-2">User</th><th className="pr-2">Provider</th><th className="pr-2">Severity</th><th className="pr-2">Hits</th></tr>
-              </thead>
-              <tbody>
-                {rows.map(r => {
-                  // Backend persists `{ matches, triggeredBy }` in payload_json.
-                  const hits = (() => {
-                    try {
-                      const p = typeof r.payload_json === 'string' ? JSON.parse(r.payload_json || '{}') : (r.payload_json || {});
-                      return Array.isArray(p?.matches) ? p.matches : [];
-                    } catch { return []; }
-                  })();
-                  return (
-                    <tr key={r.id} className="border-b border-slate-100 dark:border-slate-800">
-                      <td className="py-2 pr-2 text-slate-600">{r.run_at ? new Date(r.run_at).toLocaleString() : ''}</td>
-                      <td className="pr-2">#{r.user_id}</td>
-                      <td className="pr-2 font-mono text-xs">{r.provider}</td>
-                      <td className="pr-2"><StatusPill status={r.severity === 'none' ? 'satisfied' : (r.severity === 'block' ? 'rejected' : 'in_review')} /></td>
-                      <td className="pr-2 text-xs text-slate-600">{hits.length ? hits.map(h => h.matched_name || h.name || h.entity).filter(Boolean).slice(0, 2).join(', ') + (hits.length > 2 ? ` +${hits.length - 2}` : '') : '—'}</td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
-        )}
-      </Section>
-    </>
+    <Section icon={ShieldCheck} title="Admin tools" subtitle="Platform reviews and agreements live in their admin tools.">
+      <ul className="space-y-2 text-sm text-violet-700 dark:text-violet-300" data-testid="trust-admin-tools">
+        <li><a className="underline" href="/admin/contracts?tab=ndas">Open Contracts · Pairwise NDAs →</a></li>
+        <li><a className="underline" href="/admin/kyc">Open identity and sanctions reviews →</a></li>
+      </ul>
+    </Section>
   );
 }
 
@@ -1145,8 +983,7 @@ function tabsForRole(role, obligations) {
   // We surface a tab only if the canonical role matrix actually has
   // an obligation that lives under it. This keeps tabs in sync with
   // backend `obligationsForRole()` instead of duplicating the matrix
-  // client-side. Sanctions remains role-gated (admin only) since it
-  // isn't represented as an obligation.
+  // client-side. Identity additionally follows the Worker's investor-only waiver.
   const tabs = [{ key: 'overview', label: 'Overview', icon: Globe }];
   const has = (tabKey) => obligations.some(o => OBLIGATION_META[o.obligation_key]?.tab === tabKey);
   // How many obligations under a tab still need the reader's attention. Counted
@@ -1156,14 +993,11 @@ function tabsForRole(role, obligations) {
   const openIn = (tabKey) => obligations.filter(
     o => OBLIGATION_META[o.obligation_key]?.tab === tabKey && toneOf(o.status) !== 'ok',
   ).length;
-  // Task #25 — surface Identity for every KYC-eligible persona (not only when the
-  // obligation matrix carries a kyc_v1 row) so it's the single entry point to the
-  // Identity Verification form now that the standalone "/kyc" nav item is gone.
-  if (has('identity') || KYC_ELIGIBLE_ROLES.has(role)) tabs.push({ key: 'identity', label: 'Identity', icon: IdCard, open: openIn('identity') });
+  // Investor-only, even when a non-investor still has a legacy KYC row.
+  if (KYC_ELIGIBLE_ROLES.has(role)) tabs.push({ key: 'identity', label: 'Identity', icon: IdCard, open: openIn('identity') });
   if (has('entity'))        tabs.push({ key: 'entity',        label: 'Entity (KYB)',     icon: Building2, open: openIn('entity') });
   if (has('accreditation')) tabs.push({ key: 'accreditation', label: 'Accreditation',    icon: BadgeCheck, open: openIn('accreditation') });
   tabs.push({ key: 'agreements', label: 'Agreements', icon: FileSignature });
-  if (role === 'admin') tabs.push({ key: 'sanctions', label: 'Sanctions', icon: Search });
   return tabs;
 }
 
@@ -1196,10 +1030,21 @@ const PILL_TONE = { ok: 'ok', prog: 'warn', bad: 'danger', neutral: 'neutral' };
  * list is only what the read returns, so no 83(b) row (D700 decision 10).
  * A row selects its obligation's tab, which the page keeps below.
  */
+function RequirementsUnreadable({ reload }) {
+  return (
+    <div role="alert" data-testid="trust-read-unreadable" className="text-sm text-red-700 dark:text-red-300">
+      <strong>Unreadable</strong> — Your requirements could not be read.
+      <button type="button" onClick={reload} className="ml-2 underline">Try again</button>
+    </div>
+  );
+}
+
 export function trustPhoneGroups({ status, obligations = [], reload, onSelect }) {
   const [scoreTitle, listTitle] = ACCOUNT_PHONE_PAGES.trust.sections;
   if (status !== 'ready') {
-    const note = phonePending(status, 'Your obligations', 'This is not a claim that nothing is required of you.', reload);
+    const note = status === 'loading'
+      ? phonePending(status, 'Your obligations', 'This is not a claim that nothing is required of you.', reload)
+      : <RequirementsUnreadable reload={reload} />;
     return [{ label: scoreTitle, rows: [], note, testid: 'trust-phone-score' }, { label: listTitle, rows: [], testid: 'trust-phone-obligations' }];
   }
   const score = computeTrustScore(obligations);
@@ -1260,7 +1105,7 @@ export default function TrustCenterPage({ chromeless = false }) {
   const role = matrix?.role || cachedRole || 'member';
 
   async function load() {
-    setErr(null);
+    setErr(null); setLoading(true);
     try {
       // /api/trust/me is the canonical obligation matrix. Every call here is
       // resilient — we render whatever loaded successfully.
@@ -1284,21 +1129,15 @@ export default function TrustCenterPage({ chromeless = false }) {
         api.getRequiredNdas(),
         api.kycStatus(),
       ]);
-      // `failed` is read by the phone view alone, so a failed matrix reads
-      // Unreadable there rather than as an empty list (D700).
+      // Both widths distinguish an unreadable matrix from an empty one.
       if (m.status === 'fulfilled') setMatrix(m.value); else setMatrix({ obligations: [], role, failed: true });
       setRequiredNdas(n.status === 'fulfilled' ? (n.value?.items || []) : []);
       setKyc(k.status === 'fulfilled' ? k.value : null);
     } catch (e) {
-      setErr(e?.message || 'Failed to load Trust Center');
+      setErr('trust_unreadable');
     } finally { setLoading(false); }
   }
   useEffect(() => { load(); }, []);   // eslint-disable-line react-hooks/exhaustive-deps
-
-  async function startObligation(key) {
-    try { await api.trustObligationStart(key); await load(); }
-    catch (e) { setErr(e?.message || 'Failed to start'); }
-  }
 
   const obligations = matrix?.obligations || [];
   const tabs = useMemo(() => tabsForRole(role, obligations), [role, obligations]);
@@ -1318,8 +1157,7 @@ export default function TrustCenterPage({ chromeless = false }) {
     return <TrustPhoneView status={loading ? 'loading' : 'unreadable'} reload={load} />;
   }
   if (loading) return <div className="p-8 text-slate-600">Loading trust center…</div>;
-  if (matrix?.failed) return <div className="p-8 text-slate-600 dark:text-slate-300" role="alert">Trust score unreadable. <button type="button" onClick={load}>Try again</button></div>;
-  if (err) return <div className="p-8 text-red-600 flex items-center gap-2"><AlertCircle className="w-5 h-5" />{err}</div>;
+  if (matrix?.failed || err) return <div className="p-8"><RequirementsUnreadable reload={load} /></div>;
 
   const overview = (
     <Section icon={Globe} title="Overview" subtitle="Everything required for your role at a glance.">
@@ -1347,7 +1185,7 @@ export default function TrustCenterPage({ chromeless = false }) {
             <ObligationList
               obligations={obligations}
               emptyText="No obligations outstanding for this role. Nothing is required of you right now."
-              onStart={startObligation}
+
             />
           </div>
         </div>
@@ -1389,7 +1227,7 @@ export default function TrustCenterPage({ chromeless = false }) {
       <ObligationList
         obligations={obligations.filter(o => OBLIGATION_META[o.obligation_key]?.tab === 'identity')}
         emptyText="Identity verification is not required for your role."
-        onStart={startObligation}
+
       />
 
       {kyc ? (
@@ -1460,7 +1298,7 @@ export default function TrustCenterPage({ chromeless = false }) {
       <ObligationList
         obligations={obligations.filter(o => OBLIGATION_META[o.obligation_key]?.tab === 'entity')}
         emptyText="KYB not required."
-        onStart={startObligation}
+
       />
       {/*
         THE "YOUR COMPANIES" CARD, WHICH THIS TAB REFUSED TO DRAW UNTIL NOW.
@@ -1496,7 +1334,7 @@ export default function TrustCenterPage({ chromeless = false }) {
       <ObligationList
         obligations={obligations.filter(o => OBLIGATION_META[o.obligation_key]?.tab === 'accreditation')}
         emptyText="Accreditation not required."
-        onStart={startObligation}
+
       />
       {/*
         THE ONE THING THIS TAB CANNOT DO. The card here used to offer a basis
@@ -1576,10 +1414,10 @@ export default function TrustCenterPage({ chromeless = false }) {
       {tab === 'accreditation' && (accreditation || <Section icon={BadgeCheck} title="Accreditation"><p className="text-sm text-slate-600">No accreditation required.</p></Section>)}
       {tab === 'agreements'    && (
         <div data-testid="trust-agreements-panel">
-          <AgreementsTab obligations={obligations} onStart={startObligation} role={role} requiredNdas={requiredNdas} onChanged={load} />
+          <AgreementsTab obligations={obligations} role={role} requiredNdas={requiredNdas} onChanged={load} />
         </div>
       )}
-      {tab === 'sanctions'     && <div data-testid="trust-sanctions-panel"><SanctionsTab /></div>}
+      {role === 'admin' && <TrustAdminTools />}
     </>
   );
 

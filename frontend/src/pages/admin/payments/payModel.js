@@ -57,10 +57,20 @@ export const TABS = [
 
 export function tabOf(pathname) {
   const p = String(pathname || '').replace(/\/+$/, '');
-  if (p === PAY_PATH) return 'catalogue';
+  if (p === PAY_PATH || productIdOf(p)) return 'catalogue';
   if (p === PAY_STRIPE_PATH) return 'stripe';
   if (p === PAY_LOG_PATH) return 'log';
   return null;
+}
+
+/** D1012: one product's address (PAY2's lightbox over Catalogue). */
+export const PAY_PRODUCTS_PATH = '/admin/platform/payments/products';
+export const productPath = (id) => `${PAY_PRODUCTS_PATH}/${encodeURIComponent(id)}`;
+/** The product ID in a product's address, or null for any other address. */
+export function productIdOf(pathname) {
+  const m = /^\/admin\/platform\/payments\/products\/([^/]+)\/?$/.exec(String(pathname || ''));
+  if (!m) return null;
+  try { return decodeURIComponent(m[1]); } catch { return null; }
 }
 
 /** The canvas's words for a product's kind, and the group it sits in. */
@@ -77,6 +87,15 @@ export const GROUPS = [
   { key: 'oneTime', label: 'One-time' },
   { key: 'packs', label: 'Token packs' },
 ];
+/** D1012: the table's groups (PAY1). Archived products sit in their own group, last. */
+export const TABLE_GROUPS = [
+  { key: 'plans', label: 'Plans' },
+  { key: 'oneTime', label: 'One-time · Incorporation, Sessions, Add-ons' },
+  { key: 'packs', label: 'Token packs', readOnly: true },
+  { key: 'archived', label: 'Archived' },
+];
+/** The Kind column's word: a plan, a one-time product or a token pack. */
+export const kindGroupWord = (p) => ({ plans: 'Plan', oneTime: 'One-time', packs: 'Token pack' })[groupOf(p)];
 export const groupOf = (p) => KIND[p?.kind]?.group || 'oneTime';
 
 /** The account's mode in plain words. */
@@ -98,7 +117,7 @@ export function priceText(price) {
   const amount = typeof price.unit_amount === 'number'
     ? `${(price.unit_amount / 100).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} ${cur}`.trim()
     : 'No fixed amount';
-  if (!price.interval) return amount;
+  if (!price.interval) return `${amount} · one time`;
   const n = Number(price.interval_count) || 1;
   return n === 1 ? `${amount} / ${price.interval}` : `${amount} every ${n} ${price.interval}s`;
 }
@@ -107,6 +126,19 @@ export function priceText(price) {
 export function catalogueGroups(products) {
   const list = (products || []).slice().sort((a, b) => Number(b.active) - Number(a.active) || String(a.name).localeCompare(String(b.name)));
   return GROUPS.map((g) => ({ ...g, rows: list.filter((p) => groupOf(p) === g.key) }));
+}
+
+/**
+ * D1012: the table's groups, in the order already sorted: active plans,
+ * one-time and token packs, then every archived product in its own group.
+ * `list` is the sorted, filtered rows; each keeps its place in that order.
+ */
+export function tableGroups(list) {
+  const rows = list || [];
+  return TABLE_GROUPS.map((g) => ({
+    ...g,
+    rows: rows.filter((p) => (g.key === 'archived' ? !p.active : p.active && groupOf(p) === g.key)),
+  }));
 }
 
 /** The counts the toolbar chips and the Active products tile read: over every product. */
@@ -353,3 +385,265 @@ export function peopleOf(entries, known = []) {
   for (const e of entries || []) if (e?.who?.id != null && !map.has(String(e.who.id))) map.set(String(e.who.id), { id: e.who.id, name: whoText(e.who) });
   return [...map.values()].sort((a, b) => String(a.name).localeCompare(String(b.name)));
 }
+
+// ─────────────────────────────────────────────── D1012: Catalogue complete (PAY1, PAY2, PAY8–PAY11)
+
+export const CHECKS_UNREAD = 'The catalogue’s checks could not be read, so they were not run. This is not a claim that nothing needs you.';
+
+/**
+ * Needs you (PAY1), each item with one action.
+ *
+ * When the catalogue answered, its checks (D1010) say everything about the
+ * catalogue and the keys: each product check opens its product; a check
+ * that names no product (the keys' four, D1010) opens Stripe connection. When it did not, the keys are judged from
+ * the config and the summary as before (`needsYou`). The webhook items come
+ * from the webhook read either way; part 2's checks do not judge the webhook.
+ * Blockers come before warnings, then the webhook's.
+ */
+export function needsYouAll({ config, summary, webhook, catalog }) {
+  const checks = Array.isArray(catalog?.checks) ? catalog.checks : null;
+  const names = Object.fromEntries((catalog?.products || []).map((p) => [p.id, p.name]));
+  const hookItems = needsYou({ config: null, summary: null, webhook })
+    .map((it) => ({ ...it, action: 'Fix in Stripe connection', href: PAY_STRIPE_PATH }));
+  if (!checks) {
+    const keyItems = needsYou({ config, summary, webhook: null })
+      .map((it) => ({ ...it, action: 'Open Stripe connection', href: PAY_STRIPE_PATH }));
+    return [...keyItems, ...hookItems];
+  }
+  const rank = (c) => (c.severity === 'blocker' ? 0 : 1);
+  const fromChecks = checks.slice().sort((a, b) => rank(a) - rank(b)).map((c, i) => {
+    if (!c.product_id) {
+      return { id: `check-${i}`, code: c.code, severity: c.severity, text: c.message, action: 'Open Stripe connection', href: PAY_STRIPE_PATH };
+    }
+    return { id: `check-${i}`, code: c.code, severity: c.severity, text: c.message, product: c.product_id, action: `Review ${names[c.product_id] || 'the product'}`, href: productPath(c.product_id) };
+  });
+  return [...fromChecks, ...hookItems];
+}
+
+/** The checks naming one product (PAY2's Checks). */
+export const productChecks = (catalog, id) => (Array.isArray(catalog?.checks) ? catalog.checks.filter((c) => c.product_id === id) : null);
+
+/** The product IDs any check names: the table's "Needs you" marker. */
+export const flaggedProducts = (catalog) => new Set((Array.isArray(catalog?.checks) ? catalog.checks : []).map((c) => c.product_id).filter(Boolean));
+
+const dollars = (microusd) => `$${(Math.floor(microusd / 10_000) / 100).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+const ALLOWANCE_REASONS = {
+  not_a_plan: 'Only active plans include an AI allowance.',
+  archived: 'An archived price gives no AI allowance.',
+  not_usd: 'An AI allowance is counted in USD only.',
+  not_monthly_or_yearly: 'Only monthly and yearly prices give an AI allowance.',
+};
+export const NO_ALLOWANCE = ALLOWANCE_REASONS.not_a_plan;
+const isRecurringOne = (x, interval) => x.active && x.interval === interval && (Number(x.interval_count) || 1) === 1;
+
+/**
+ * One price's AI allowance a month, from the Worker's `allowance_microusd`
+ * (D1010; D783's 25%, a yearly price's ÷ 12). Null with a reason when it gives
+ * none; "Not recorded" when the read carried no allowance at all.
+ */
+export function allowanceOf(price) {
+  if (!price) return { text: null, reason: 'Not recorded' };
+  if (typeof price.allowance_microusd === 'number' && price.allowance_microusd > 0 && !price.allowance_reason) {
+    return { text: dollars(price.allowance_microusd), reason: null };
+  }
+  if (price.allowance_reason) return { text: null, reason: ALLOWANCE_REASONS[price.allowance_reason] || 'Not recorded' };
+  return { text: null, reason: 'Not recorded: the catalogue read carried no allowance.' };
+}
+
+/** The AI allowance column (PAY1): an active plan's monthly allowance, and "on yearly" under it. */
+export function allowanceCell(product) {
+  if (!product?.active || !product.plan) return { main: null, sub: null, reason: NO_ALLOWANCE };
+  const prices = product.prices || [];
+  const month = prices.find((x) => isRecurringOne(x, 'month'));
+  const year = prices.find((x) => isRecurringOne(x, 'year'));
+  const m = month ? allowanceOf(month) : null;
+  const y = year ? allowanceOf(year) : null;
+  if (!m?.text && !y?.text) return { main: null, sub: null, reason: (m || y)?.reason || 'No monthly or yearly price gives an allowance.' };
+  return {
+    main: m?.text ? `${m.text} / month` : `${y.text} / month on yearly`,
+    sub: m?.text && y?.text ? `${y.text} on yearly` : null,
+    reason: null,
+  };
+}
+
+/** The Prices column's line above the amounts: a plan's yearly saving, or that it has no yearly price. */
+export function yearlyLine(product) {
+  if (!product?.plan || !product.active) return null;
+  if (!(product.prices || []).some((x) => isRecurringOne(x, 'year'))) return { tone: 'muted', text: 'No yearly price' };
+  const pct = product.plan.yearly_saving_percent;
+  return typeof pct === 'number' && pct > 0 ? { tone: 'good', text: `Yearly saves ${pct}%` } : null;
+}
+
+/** "Shows on" (D1010 §2) in the canvas's words; the Worker's sentence is the second line. */
+const SURFACE = {
+  pricing: '/pricing',
+  bundles: 'Products page · Profile bundles',
+  addons: 'Products page',
+  incorporate: '/incorporate',
+  packs: '/pricing · token packs',
+};
+export const surfaceWord = (key) => SURFACE[key] || 'Not recorded';
+export const SURFACE_KEYS = Object.keys(SURFACE);
+/** The surfaces a product reaches, or null when the read did not say (an older Worker). */
+export function showsOnRows(product) {
+  if (!Array.isArray(product?.shows_on)) return null;
+  return product.shows_on.map((s) => ({ key: s.key, label: surfaceWord(s.key), path: s.path || null, detail: s.detail || null }));
+}
+
+/** Filters (PAY1's "Filters ▾") and sort ("Sort: Name, A to Z ▾"). */
+export const FILTERS_EMPTY = { status: 'all', needs: false, surface: '' };
+export const STATUS_FILTERS = [['all', 'Active and archived'], ['active', 'Active only'], ['archived', 'Archived only']];
+export const SORTS = [
+  ['name', 'Name, A to Z'],
+  ['name_desc', 'Name, Z to A'],
+  ['needs', 'Needs you first'],
+];
+export const filterCount = (f) => (f.status !== 'all' ? 1 : 0) + (f.needs ? 1 : 0) + (f.surface ? 1 : 0);
+
+/** The rows the toolbar leaves: the kind chip, search, then the filters. */
+export function filterProducts(products, { group = 'all', q = '', filters = FILTERS_EMPTY, flagged = new Set() } = {}) {
+  return searchProducts(products, q).filter((p) => {
+    if (group !== 'all' && groupOf(p) !== group) return false;
+    if (filters.status === 'active' && !p.active) return false;
+    if (filters.status === 'archived' && p.active) return false;
+    if (filters.needs && !flagged.has(p.id)) return false;
+    if (filters.surface && !(Array.isArray(p.shows_on) && p.shows_on.some((s) => s.key === filters.surface))) return false;
+    return true;
+  });
+}
+
+/** The sort the table draws its rows in; every sort keeps archived rows in the Archived group. */
+export function sortProducts(list, sort = 'name', flagged = new Set()) {
+  const byName = (a, b) => String(a.name).localeCompare(String(b.name));
+  const out = (list || []).slice();
+  if (sort === 'name_desc') out.sort((a, b) => -byName(a, b));
+  else if (sort === 'needs') out.sort((a, b) => Number(flagged.has(b.id)) - Number(flagged.has(a.id)) || byName(a, b));
+  else out.sort(byName);
+  return out;
+}
+
+/** The pager (PAY1): rows per page, and which rows a page holds, over the groups' order. */
+export const PER_PAGE = [25, 50, 100];
+export function pageOf(groups, page, perPage) {
+  const flat = groups.flatMap((g) => g.rows.map((p) => ({ g: g.key, p })));
+  const total = flat.length;
+  const pages = Math.max(1, Math.ceil(total / perPage));
+  const at = Math.min(Math.max(1, page), pages);
+  const start = (at - 1) * perPage;
+  const keep = new Set(flat.slice(start, start + perPage).map((x) => x.p.id));
+  return {
+    page: at, pages, total,
+    range: total ? `${start + 1}–${Math.min(start + perPage, total)} of ${total}` : '0 of 0',
+    groups: groups.map((g) => ({ ...g, count: g.rows.length, rows: g.rows.filter((p) => keep.has(p.id)) })),
+  };
+}
+
+// ─────────────────────────────────────────────── D1012: the product lightbox (PAY2)
+
+/** A price's interval in words: "Monthly", "Yearly", "Every 3 months", "One time". */
+export function intervalWord(price) {
+  if (!price?.interval) return 'One time';
+  const n = Number(price.interval_count) || 1;
+  if (n === 1) return ({ month: 'Monthly', year: 'Yearly', week: 'Weekly', day: 'Daily' })[price.interval] || 'Not recorded';
+  return `Every ${n} ${price.interval}s`;
+}
+
+/** An amount alone, in its own currency: "20.00 USD". */
+export function amountText(price) {
+  if (typeof price?.unit_amount !== 'number') return 'No fixed amount';
+  return `${(price.unit_amount / 100).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} ${String(price.currency || '').toUpperCase()}`.trim();
+}
+
+/** The prices table's rows: active first, then archived, each in the order the read gave. */
+export const priceRows = (product) => (product?.prices || []).slice().sort((a, b) => Number(b.active) - Number(a.active));
+
+/**
+ * Members on this plan (PAY2), from `GET /api/admin/catalog/members` (D1010
+ * §3): the paid members on each of the product's prices, by interval, with
+ * the other live statuses beside them. Rows recorded before prices were
+ * stored count under their family, never under one price, so they are named
+ * apart. Null when the product is not a plan.
+ */
+export function membersOn(product, members) {
+  if (!product?.plan) return null;
+  const byPrice = new Map((members?.by_price || []).map((r) => [r.price_id, r]));
+  const out = { monthly: 0, yearly: 0, otherIntervals: 0, other: 0, withoutPrice: 0 };
+  for (const x of product.prices || []) {
+    const r = byPrice.get(x.id);
+    if (!r) continue;
+    const n = Number(r.active) || 0;
+    if (isRecurringOne({ ...x, active: true }, 'month')) out.monthly += n;
+    else if (isRecurringOne({ ...x, active: true }, 'year')) out.yearly += n;
+    else out.otherIntervals += n;
+    out.other += Number(r.other) || 0;
+  }
+  out.withoutPrice = (members?.by_plan || []).filter((r) => r.family === product.plan.family)
+    .reduce((t, r) => t + (Number(r.without_price) || 0), 0);
+  return out;
+}
+
+export function membersLine(m) {
+  const parts = [`${m.monthly.toLocaleString('en-US')} monthly`, `${m.yearly.toLocaleString('en-US')} yearly`];
+  if (m.otherIntervals) parts.push(`${m.otherIntervals.toLocaleString('en-US')} on other intervals`);
+  return parts.join(' · ');
+}
+
+/**
+ * Promo codes that apply to a product (PAY2), from `GET /api/admin/promos`:
+ * the codes checkout would take now (on, not expired, not used up; the rule
+ * of services/promos `promoState`) whose product list is empty (every
+ * product) or names this one. A code whose product list could not be read
+ * is counted apart, never as applying or not.
+ */
+export function promosFor(productId, promos, nowMs = Date.now()) {
+  const usable = (promos || []).filter((x) => {
+    if (!x.active) return false;
+    if (x.max_redemptions != null && Number(x.times_redeemed) >= Number(x.max_redemptions)) return false;
+    if (x.expires_at) {
+      const raw = String(x.expires_at).trim();
+      const t = new Date(/^\d{4}-\d{2}-\d{2} \d{2}:\d{2}/.test(raw) ? `${raw.replace(' ', 'T')}Z` : raw).getTime();
+      if (Number.isFinite(t) && t <= nowMs) return false;
+    }
+    return true;
+  });
+  return {
+    apply: usable.filter((x) => x.product_ids_readable !== false && (!(x.product_ids || []).length || x.product_ids.includes(productId))).length,
+    unreadable: usable.filter((x) => x.product_ids_readable === false).length,
+  };
+}
+
+export const codesWord = (n) => `${n.toLocaleString('en-US')} code${n === 1 ? '' : 's'}`;
+
+/** "18 Oct 2026" from a change-log row's stamp. */
+export function dayText(s) {
+  const t = stampText(s);
+  return t ? t.split(',')[0] : 'Date not recorded';
+}
+
+/** Technical details (PAY2c): the product's codes, each a line, never on the face of the page. */
+export function technicalLines(product) {
+  if (!product) return [];
+  const out = [['product', product.id]];
+  if (product.plan?.key) out.push(['plan', product.plan.key]);
+  for (const [k, v] of Object.entries(product.metadata || {})) out.push([k, String(v)]);
+  for (const x of product.prices || []) out.push([`price ${intervalWord(x).toLowerCase()}`, x.id]);
+  return out;
+}
+
+/** PAY8a: Stripe is not connected when the account answers so; a failed read never says it. */
+export const notConnected = (config, catalog) => config?.mode === 'unconfigured' || catalog?.keys?.account_mode === 'unconfigured';
+export const NOT_CONNECTED = 'Stripe is not connected on this platform yet.';
+export const NOT_CONNECTED_SUB = 'HQ adds the account’s keys at deploy. Until then nothing can be sold, and this page shows no products.';
+export const NO_PRODUCTS = 'No products yet.';
+export const NO_PRODUCTS_SUB = 'Make the first one, or sync products you made in the Stripe dashboard.';
+export const CATALOG_FAILED_TITLE = 'We could not load the catalogue.';
+export const CATALOG_FAILED_SUB = 'The rest of Payments still works.';
+export const PRODUCT_MISSING = 'No product with this ID is in the catalogue. It may have been deleted in Stripe, or the link is wrong.';
+export const MEMBERS_UNREAD = 'Could not be read. That is not a claim that nobody is on this plan.';
+export const PROMOS_UNREAD = 'Could not be read. That is not a claim that no code applies.';
+export const CHANGES_UNREAD = 'Could not be read. Nothing is shown rather than an empty history.';
+export const KEEP_PRICE = 'Archiving a price stops new sales. Members already on it keep their price.';
+
+/** PAY11: the closed card a studio admin meets. */
+export const CLOSED_TITLE = 'This page belongs to the Super Admin';
+export const CLOSED_TEXT = 'HQ sets what members pay. You are signed in as a studio admin, so this page stays closed rather than opening and refusing each action.';

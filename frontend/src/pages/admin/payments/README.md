@@ -7,10 +7,18 @@ sub-paths: Catalogue, `/stripe` and `/log` (D1014). The Admin Console's `?tab=pa
 forwards here with `?moved=payments`, in `../LegacyContractsRedirect.jsx`.
 
 - `Payments.jsx` — the page inside `AdminBoardFrame` (board H29, "Payments
-  catalogue"): the header, its reads, and Catalogue's Needs you, tiles and
-  grouped table (on a phone, cards that open the product as a sheet). Today's
-  editor (`../consoles/PaymentsConsole.jsx`) opens on request at the foot of
-  Catalogue until D1008 parts 4 and 5.
+  catalogue"): the header, its reads, and Catalogue: Needs you from part 2's
+  checks, the tiles, and the table with every column, Filters, Sort, a pager
+  and archived products in their own group (on a phone, cards that open the
+  product's address); PAY8–PAY10's states (D1012). Today's editor
+  (`../consoles/PaymentsConsole.jsx`) opens on request at the foot of
+  Catalogue until D1008 part 5.
+- `ProductLightbox.jsx` — PAY2 (D1012): one product as a lightbox over
+  Catalogue, at `/admin/platform/payments/products/[id]` (a bottom sheet on a
+  phone). Where members see it, its prices, the members on the plan, the
+  promo codes that apply, its checks, its recent changes and Technical
+  details. It reads members (plans only), promo codes and the product's
+  change log when open, each answering alone.
 - `StripeConnection.jsx` — PAY5 (D1014): the account, the key, the webhook,
   deliveries per hour (the no-log hour dashed; a table on request and on a
   phone) and the mirror. Part 5's three buttons are drawn disabled until its
