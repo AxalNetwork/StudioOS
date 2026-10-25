@@ -9,8 +9,11 @@ function makeNode(tag) {
     childNodes: [], options: [], style: { setProperty(key, value) { this[key] = value; }, removeProperty(key) { delete this[key]; } }, parentNode: null, ownerDocument: null, textContent: '',
     namespaceURI: 'http://www.w3.org/1999/xhtml',
     setAttribute() {}, getAttribute() { return null; }, removeAttribute() {}, hasAttribute() { return false; },
-    appendChild(child) { child.parentNode = this; this.childNodes.push(child); return child; },
+    // As in the DOM, a node already in the tree moves: it leaves its old place
+    // first. React reorders keyed children by moving them (D980's roster).
+    appendChild(child) { child.parentNode?.removeChild?.(child); child.parentNode = this; this.childNodes.push(child); return child; },
     insertBefore(child, ref) {
+      child.parentNode?.removeChild?.(child);
       child.parentNode = this;
       const at = this.childNodes.indexOf(ref);
       if (at < 0) this.childNodes.push(child); else this.childNodes.splice(at, 0, child);
