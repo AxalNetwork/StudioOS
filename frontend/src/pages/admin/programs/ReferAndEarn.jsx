@@ -9,7 +9,7 @@
 //
 // D962 (#2795) completes it on part 4's reads (D957): Overview's tiles from
 // exact totals with their window, Waiting for review's counts and bands, the
-// funnel's current tags, Referrals per week by category, and Strategic
+// funnel's current tags (D1124, #3004: and its bars), Referrals per week by category, and Strategic
 // referral access with Grant and Decline; the Queue paged with its total and
 // its referral dialog; Activity; and the phone pages.
 import React, { useState } from 'react';
@@ -25,15 +25,15 @@ import PlaybookEditor, { useProgramDetail } from './PlaybookEditor';
 import ProgramFrame from './ProgramFrame';
 import { ReferTabs } from './ProgramTabs';
 import {
-  BlockFailed, Card, ChartCard, DIALOG_BODY, DIALOG_LINES, DialogButtons, Field, Pill, Skeleton, SUB, Tile, Unread,
+  BlockFailed, Card, ChartCard, DIALOG_BODY, DIALOG_LINES, DialogButtons, Field, Pill, Skeleton, SUB, Tile,
 } from './parts';
 import { useReferReads } from './useProgramReads';
 import {
-  ALL_TIME, FUNNEL_REASON, FUNNEL_TAGS, STRATEGIC_DECLINE, STRATEGIC_DONE, STRATEGIC_EMPTY, STRATEGIC_FOOT, STRATEGIC_GRANT, WEEKS_LINE,
-  referWaiting, referWeeklyChart, refusalSentence, strategicRow, totalOf,
+  ALL_TIME, FUNNEL_TAGS, STRATEGIC_DECLINE, STRATEGIC_DONE, STRATEGIC_EMPTY, STRATEGIC_FOOT, STRATEGIC_GRANT, WEEKS_LINE,
+  referFunnelChart, referWaiting, referWeeklyChart, refusalSentence, strategicRow, totalOf,
 } from './programPagesModel';
 import {
-  BANDS, COULD_NOT_READ, NOT_READ_YET, OPEN_STATUSES, OPEN_WORDS, READING, WHO_CAN_REFER, ageText,
+  BANDS, COULD_NOT_READ, OPEN_STATUSES, OPEN_WORDS, READING, WHO_CAN_REFER, ageText,
   isFailed, isReady, laneFrom, routeFor,
 } from './programsModel';
 
@@ -91,19 +91,19 @@ function WaitingForReview({ reads, w, lane }) {
   );
 }
 
-/** The funnel (dc:416): no read serves the stages reached, so only the current tags draw. */
+/** The funnel (dc:416): D1124's bars, the furthest stage each referral reached, then where referrals stand now. */
 function Funnel({ reads }) {
   const tags = { more_info_needed: reads.totals.more_info_needed, rejected: reads.rejected, closed: reads.closed };
+  const b = referFunnelChart(reads.funnel);
   return (
-    <Card title="Referral funnel" testId="programs-refer-funnel">
-      <Unread word={NOT_READ_YET} reason={FUNNEL_REASON} testId="programs-refer-funnel-bars" />
+    <ChartCard title="Referral funnel" testId="programs-refer-funnel" onRetry={reads.reload} b={b}>
       <p className="m-0 flex flex-wrap gap-x-3 gap-y-1 font-mono text-[12px] font-semibold text-axal-muted dark:text-gray-400" data-testid="programs-refer-funnel-tags">
         {FUNNEL_TAGS.map((t) => {
           const n = totalOf(tags[t.key]);
           return <span key={t.key} data-testid={`programs-refer-funnel-${t.key}`}>{`${t.word} ${n !== null ? nf(n) : isFailed(tags[t.key]) ? COULD_NOT_READ.toLowerCase() : '…'}`}</span>;
         })}
       </p>
-    </Card>
+    </ChartCard>
   );
 }
 

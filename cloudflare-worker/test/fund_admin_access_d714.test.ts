@@ -78,6 +78,7 @@ test('a plain Admin reads every Super Admin act as not allowed, with its sentenc
 test('the table: unique keys, the decision\'s tiers, and a sentence on every Super Admin act', () => {
   const tiers = Object.fromEntries(FUND_ACTS.map((a) => [a.act, a.tier]));
   assert.deepEqual(tiers, {
+    'fund.create': 'admin', 'fund.valuation': 'admin',
     'capital_call.preview': 'admin', 'capital_call.issue': 'super_admin', 'capital_call.receipt': 'admin',
     'distribution.preview': 'admin', 'distribution.execute': 'super_admin', 'distribution.mark_paid': 'admin',
     'fund_report.draft': 'admin', 'fund_report.issue': 'super_admin', 'fund_booklet.read': 'admin', 'fund_booklet.withdraw': 'admin', 'fund_booklet.accept': 'super_admin', 'fund_notice.preview': 'admin', 'fund_notice.issue': 'super_admin', 'fund.gp_of_record': 'super_admin', 'fund.slug_fund_i': 'super_admin', 'fund.economics': 'super_admin', 'fund.write': 'admin',
@@ -92,6 +93,7 @@ test('the table: unique keys, the decision\'s tiers, and a sentence on every Sup
 // ── The table held to the routes ────────────────────────────────────────
 
 const ROUTERS: Record<string, { file: string; name: string }> = {
+  '/api/fund-performance': { file: 'routes/fund_performance.ts', name: 'r' },
   '/api/funds': { file: 'routes/funds.ts', name: 'funds' },
   '/api/capital': { file: 'routes/capital.ts', name: 'capital' },
   '/api/fund-ledger': { file: 'routes/fund_ledger.ts', name: 'r' },

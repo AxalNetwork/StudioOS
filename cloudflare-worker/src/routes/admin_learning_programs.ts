@@ -15,9 +15,9 @@
  *   POST   /programs/:uid/enrollments        {user_uid}
  *   DELETE /programs/:uid/enrollments/:userUid   the row stays, as 'removed'
  *
- * A WEBINAR IS NOT YET CONTENT. The column allows it for D560 (#1161), but
- * there is no webinar store to check a uid against, so it is refused
- * (`webinar_not_built`) rather than stored unchecked.
+ * A WEBINAR IS CONTENT (D1124, #3004). The column allowed it for D560
+ * (#1161); its uid is now checked against `learning_webinars` like any other
+ * kind, and an unknown one is `unknown_content`.
  */
 import { Hono, type Context } from 'hono';
 import type { Env } from '../types';
@@ -138,6 +138,8 @@ const EXISTS_SQL: Record<string, string> = {
   item: 'SELECT 1 AS ok FROM learning_items WHERE uid = ?',
   exam: 'SELECT 1 AS ok FROM learning_exams WHERE uid = ?',
   exercise: 'SELECT 1 AS ok FROM learning_exercises WHERE uid = ?',
+  // D1124 (#3004): a program holds a webinar (D560's store).
+  webinar: 'SELECT 1 AS ok FROM learning_webinars WHERE uid = ?',
 };
 
 r.put('/programs/:uid/contents', async (c) => {
@@ -155,7 +157,6 @@ r.put('/programs/:uid/contents', async (c) => {
       if (!(PROGRAM_SUBJECT_KINDS as readonly string[]).includes(kind) || !uid || uid.length > 64) {
         bad('bad_contents', `Each entry names a subject_kind (${PROGRAM_SUBJECT_KINDS.join(', ')}) and a subject_uid.`);
       }
-      if (kind === 'webinar') bad('webinar_not_built', 'Webinars are not a Learning store yet (D560), so a program cannot hold one.');
       if (seen.has(kind + '|' + uid)) bad('duplicate_content', `${kind} ${uid} is listed twice.`);
       seen.add(kind + '|' + uid);
       if (!(await c.env.DB.prepare(EXISTS_SQL[kind]).bind(uid).first())) bad('unknown_content', `No ${kind} has the uid ${uid}.`);

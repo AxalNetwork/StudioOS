@@ -13,7 +13,10 @@
  *                       10 characters or more; they may apply again 90 days on.
  *   POST /:id/pause     active → paused, `{ reason, note? }`.
  *   POST /:id/resume    paused → active, `{ note? }`.
- *   POST /:id/remove    active or paused → removed, `{ reason, note? }`.
+ *   POST /:id/remove    active or paused → removed, `{ reason, note? }`. D1132:
+ *                       in the same batch, every open program place the
+ *                       member holds ends (`withdrawn`, with a `place_ended`
+ *                       log row); the answer says how many (`places_ended`).
  *
  * All `requireAdmin` (Admin and Super Admin alike; the HQ freeze refuses the
  * writes). Each write tells the member by email and in their inbox, so a member
@@ -95,6 +98,7 @@ for (const action of Object.keys(TRANSITIONS) as TesterAction[]) {
     }
     let tester: Awaited<ReturnType<typeof readTester>>;
     let decidedAt: string | null;
+    let placesEnded = 0;
     try {
       tester = await readTester(c.env, id);
       if (!tester) return refuse(c, 404, NOT_FOUND);
@@ -119,6 +123,7 @@ for (const action of Object.keys(TRANSITIONS) as TesterAction[]) {
         return refuse(c, 409, { code: 'tester_changed', message: 'This tester changed while you were looking at it. Reload and try again.' });
       }
       decidedAt = done.decidedAt;
+      placesEnded = done.placesEnded;
     } catch (e) {
       return refuse(c, 503, { code: 'product_testers_unreadable', message: 'The product tester could not be read, so nothing was changed. Try again in a moment.', raw: e });
     }
@@ -131,7 +136,11 @@ for (const action of Object.keys(TRANSITIONS) as TesterAction[]) {
         link: '/studio', channels: ['in_app', 'email'],
       });
     } catch (e) { console.warn('[admin/product-testers] notify failed', e); }
-    return c.json({ tester: await readTester(c.env, id).catch(() => null), action: t.event, reapply_after: reapply });
+    // D1132: a removal says how many open program places it ended.
+    return c.json({
+      tester: await readTester(c.env, id).catch(() => null), action: t.event, reapply_after: reapply,
+      ...(action === 'remove' ? { places_ended: placesEnded } : {}),
+    });
   });
 }
 
