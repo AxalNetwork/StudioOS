@@ -297,7 +297,8 @@ test('wiring: the zone, the route, the rail key, the HQ tab and its strip', () =
   assert.match(read('frontend/src/workspaces/partner/PartnerBucketRoutes.jsx'), /testing: \(\) => <PartnerTesting \/>/);
   assert.match(read('frontend/src/workspaces/shellConfig.js'), /\{ slug: 'testing', label: 'Product testing', archetype: A\.COLLECTION \}/);
   assert.match(read('frontend/src/lib/railPages.js'), /off\('\/offers\/testing', key\(O, 'Offers', 'Product testing'\)\)/);
-  assert.match(read('frontend/src/pages/AdminPage.jsx'), /\{tab === 'product-testing' && <div data-testid="admin-product-testing-panel"><ProductTestingPanel \/><\/div>\}/);
+  // D938: the HQ tab is its own page, /admin/platform/product-testing.
+  assert.match(read('frontend/src/pages/admin/ConsolePages.jsx'), /export function ProductTestingHqPage\(\) \{[\s\S]*?<ProductTestingPanel \/>/);
   // No new /api method: both pages use D812's module.
   for (const f of ['frontend/src/pages/partner/offers/TestingZone.jsx', 'frontend/src/pages/admin/consoles/ProductTestingConsole.jsx']) {
     assert.match(read(f), /from '\.\.\/\.\.\/\.\.\/lib\/api\/productTesting'/);

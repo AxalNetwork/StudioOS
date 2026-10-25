@@ -3,7 +3,8 @@
 import { request } from '../api.js';
 
 export const adminIncorporationsApi = {
-  list: () => request('/admin/incorporations'),
+  // D946: scope 'lab' keeps only Lab ventures (SL10's switch); omitted, every startup.
+  list: (scope) => request(`/admin/incorporations${scope ? `?scope=${encodeURIComponent(scope)}` : ''}`),
   packetReady: (id, documentId) => request(`/admin/incorporations/${encodeURIComponent(id)}/packet-ready`, {
     method: 'POST',
     body: JSON.stringify({ document_id: documentId }),

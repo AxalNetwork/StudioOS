@@ -6,7 +6,7 @@ import { reportError } from '../../../lib/log';
 import { isSuperAdminUser } from '../../../lib/shellRole';
 import { useAuth } from '../../../hooks/useAuthSync';
 import {
-  Chart, ChartTable, Legend, Lightbox, PhoneSheet, RailFrame, WorkerRail, openEadwynPanel, usePhoneWidth,
+  AdminPageHeader, Chart, ChartTable, Legend, Lightbox, PhoneSheet, RailFrame, WorkerRail, openEadwynPanel, usePhoneWidth,
 } from '../../../ui';
 import {
   EMPTY_LINE, MOVED_KEY, MOVED_NOTICE, NO_PERMISSION, NO_PERMISSION_FILTER,
@@ -433,17 +433,12 @@ export default function AdminInsights() {
   return (
     <RailFrame rail={rail} data-testid="admin-insights">
       <div className="flex flex-col gap-5 pb-24 lg:pb-10" data-testid="admin-insights-page">
-        <header className="flex flex-col gap-[7px]">
-          <h1 className="m-0 text-[24px] font-extrabold leading-tight tracking-[-.02em] text-axal-ink dark:text-gray-100">Insights</h1>
-          <p className="m-0 text-[13.5px] leading-normal text-axal-muted dark:text-gray-400">The accounts you manage, in figures and charts.</p>
-          <span title={scope.kind === 'branch' ? `Read from ${scope.label}’s own database through HQ; counts only.` : SCOPE_TITLE} className="cursor-help self-start rounded-full border border-axal-hairline bg-white px-3 py-1 font-mono text-[11.5px] font-medium text-axal-ink dark:border-gray-700 dark:bg-gray-900 dark:text-gray-100" data-testid="insights-scope-chip">{scopeChip(scope)}</span>
-          {moved && (
-            <div role="status" className="flex items-center justify-between gap-3 rounded-[10px] border border-axal-lavender-edge bg-axal-lavender px-3 py-2 text-[13px] text-axal-ink dark:border-violet-800 dark:bg-violet-950/40 dark:text-gray-100" data-testid="insights-moved">
-              <span>{MOVED_NOTICE}</span>
-              <button type="button" aria-label="Dismiss" className="flex h-8 w-8 items-center justify-center text-[16px] leading-none" onClick={() => setParam('moved', null)}>×</button>
-            </div>
-          )}
-        </header>
+        <AdminPageHeader
+          title="Insights"
+          line="The accounts you manage, in figures and charts."
+          chip={<span title={scope.kind === 'branch' ? `Read from ${scope.label}’s own database through HQ; counts only.` : SCOPE_TITLE} className="inline-flex cursor-help rounded-full border border-axal-hairline bg-white px-3 py-1 font-mono text-[11.5px] font-medium text-axal-ink dark:border-gray-700 dark:bg-gray-900 dark:text-gray-100" data-testid="insights-scope-chip">{scopeChip(scope)}</span>}
+          notice={{ text: moved ? MOVED_NOTICE : null, onDismiss: () => setParam('moved', null) }}
+        />
 
         {!phone ? (
           <div className={`${CARD} sticky top-0 z-[2] flex flex-col gap-2 px-3.5 py-[11px]`} data-testid="insights-filters">

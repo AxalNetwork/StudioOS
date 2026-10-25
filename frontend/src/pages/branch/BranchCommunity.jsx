@@ -106,7 +106,7 @@ export const COMMUNITY_CONSOLES = [
   {
     key: 'wellbeing',
     label: 'Wellbeing',
-    to: '/admin?tab=wellbeing',
+    to: '/admin/wellbeing',
     worker: 'wellbeing.ts',
     scope: 'Expert directory only',
     what: 'Verify or hide an expert on the founder-facing directory; a hidden or unverified '
