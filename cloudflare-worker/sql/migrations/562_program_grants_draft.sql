@@ -57,9 +57,6 @@ CREATE TABLE IF NOT EXISTS program_grants_562 (
     note                      TEXT CHECK (note IS NULL OR length(note) <= 2000),
     paused_at                 TEXT,
     ended_at                  TEXT,
-    -- The proposal a draft was opened for (D955's `program_proposals.uid`);
-    -- NULL on every grant HQ made from its grid.
-    proposal_uid              TEXT,
     set_by_user_id            INTEGER REFERENCES users(id) ON DELETE SET NULL,
     set_at                    TEXT NOT NULL,
     created_at                TEXT NOT NULL DEFAULT (datetime('now')),
@@ -70,12 +67,12 @@ INSERT INTO program_grants_562 (
     id, uid, licence_id, program_key, state, starts_on, ends_on, ends_with_licence, capacity_cap, capacity_uncapped,
     cohorts_per_year, credits_per_quarter, fee_cents, currency, hq_share_bps, hq_approves_each_cohort,
     hq_approval_above_cents, playbook, brand, reporting, requires_signed_schedule, schedule_contract_uid,
-    schedule_signed_at, note, paused_at, ended_at, proposal_uid, set_by_user_id, set_at, created_at)
+    schedule_signed_at, note, paused_at, ended_at, set_by_user_id, set_at, created_at)
 SELECT
     id, uid, licence_id, program_key, state, starts_on, ends_on, ends_with_licence, capacity_cap, capacity_uncapped,
     cohorts_per_year, credits_per_quarter, fee_cents, currency, hq_share_bps, hq_approves_each_cohort,
     hq_approval_above_cents, playbook, brand, reporting, requires_signed_schedule, schedule_contract_uid,
-    schedule_signed_at, note, paused_at, ended_at, NULL, set_by_user_id, set_at, created_at
+    schedule_signed_at, note, paused_at, ended_at, set_by_user_id, set_at, created_at
   FROM program_grants;
 
 DROP TABLE program_grants;
@@ -84,13 +81,18 @@ ALTER TABLE program_grants_562 RENAME TO program_grants;
 
 CREATE INDEX IF NOT EXISTS idx_program_grants_program ON program_grants(program_key, state);
 
+-- The proposal a draft was opened for (D955's `program_proposals.uid`); NULL
+-- on every grant HQ made from its grid. Added after the rebuild, so that a
+-- second application, whose rebuild leaves it out, adds it again.
+ALTER TABLE program_grants ADD COLUMN proposal_uid TEXT;
+
 -- One draft per proposal.
 CREATE UNIQUE INDEX IF NOT EXISTS idx_program_grants_proposal ON program_grants(proposal_uid) WHERE proposal_uid IS NOT NULL;
 
 -- ─────────────────────────────────────────────── the backfill
 
--- The copy above cannot read `proposal_uid` from 553's table, so a second
--- application would leave it NULL. A studio-only program's key is unique in
+-- The copy above does not carry `proposal_uid`, so a second application
+-- would leave it NULL. A studio-only program's key is unique in
 -- the registry, so its proposal is found again from the licence and the key.
 UPDATE program_grants
    SET proposal_uid = (SELECT p.uid FROM program_proposals p JOIN territory_licences l ON l.uid = p.licence_uid
