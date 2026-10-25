@@ -663,6 +663,16 @@ stores the Worker does not have, so this canvas stays in the queue until its
 eight parts land (#2691 to #2698; D906 §6 lists them). The `ROUTE_MAP.md` row
 says what is drawn today.
 
+**Revised 2026-10-25.** The owner sent the same two artifacts again. The board
+grid decodes byte for byte as committed. The page is a layout revision, with no
+board, copy or data change:
+- the Versions and Compare tables use `minmax(0, …)` columns with no minimum
+  width, so they fit without a sideways scroll;
+- NAR3 is 20px taller.
+
+`Investor Narrative Page.dc.html` now holds the revision. The built tool
+(D906–D914) sets no minimum width on either table, so it already matches.
+
 ## Landed 2026-10-24 — Admin · Community · Events (#2368)
 
 The owner's artifacts `6RLtJiyzxKwuknTBk2wjBU` and `76AGQxpRVoEjQGqDXchcHn`
