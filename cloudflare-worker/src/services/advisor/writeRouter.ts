@@ -16,6 +16,7 @@
  * the user types "delete my project" the LLM is instructed (in the
  * advisor system prompt) to deep-link them to the page instead.
  */
+import { inGrace } from '../../middleware/planSubscription';
 import type { Env } from '../../types';
 import type { User } from '../../types';
 import { questionById, mapRoleAnswer, DYNAMIC_ID_RE, FIT_ID_RE } from './questionBank.ts';
@@ -47,12 +48,14 @@ export interface WriteResult {
 interface UserSubscriptionFields {
   investor_subscription_status?: string | null;
   subscription_status?: string | null;
+  investor_subscription_renews_at?: string | null;
+  subscription_renews_at?: string | null;
   advisor_id?: number | null;
 }
 
 async function loadSubscriptionFields(env: Env, userId: number): Promise<UserSubscriptionFields> {
   const row = await env.DB.prepare(
-    `SELECT investor_subscription_status, subscription_status, advisor_id
+    `SELECT investor_subscription_status, investor_subscription_renews_at, subscription_status, subscription_renews_at, advisor_id
        FROM users WHERE id = ?`,
   ).bind(userId).first<UserSubscriptionFields>().catch(() => null);
   return row || {};
@@ -525,9 +528,8 @@ async function tierForInvestorThesis(env: Env, user: User): Promise<{ ok: boolea
   // Anything tied to investor_subscription_status='active' or the
   // generic subscription_status='active' is treated as paid here.
   const subs = await loadSubscriptionFields(env, user.id);
-  // D1052 (#2903): past_due, a renewal Stripe is still retrying, keeps the plan.
-  const paid = (s: string | null | undefined) => s === 'active' || s === 'past_due';
-  const active = paid(subs.investor_subscription_status) || paid(subs.subscription_status);
+  const active = inGrace(subs.investor_subscription_status, subs.investor_subscription_renews_at)
+    || inGrace(subs.subscription_status, subs.subscription_renews_at);
   if (active) return { ok: true };
   return { ok: false, upgrade_link: '/billing/investor-upgrade' };
 }
