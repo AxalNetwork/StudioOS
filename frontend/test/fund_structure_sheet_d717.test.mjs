@@ -134,7 +134,7 @@ test('#1855 the Super Admin sees the masked endings, "Not opened yet", "No notic
     assert.match(t, /Capital contributions; GP commitment/);
     const bank = links(view, 'Bank accounts');
     assert.equal(bank.length, 2, 'one in the desk header, one in the sheet');
-    for (const a of bank) assert.equal(view.props(a).href ?? view.props(a).to, '/admin?tab=bank-accounts');
+    for (const a of bank) assert.equal(view.props(a).href ?? view.props(a).to, '/admin/platform/bank-accounts');
     assert.ok(!t.includes(WITHHELD));
   } finally { await view.unmount(); restore(); }
 });

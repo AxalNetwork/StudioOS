@@ -312,12 +312,12 @@ test('the dialogs say only what the Worker does', () => {
 
   const cancel = cancelCopy(ev(1, { title: 'A' }));
   assert.equal(cancel.lines[0], 'It leaves the public calendar.');
-  assert.match(cancel.lines[1], /^People with an account who hold a seat or wait for one are told in StudioOS\./);
+  assert.match(cancel.lines[1], /^People with an account who hold a seat or wait for one are told in StudioOS, with your note\./, 'D922: the note reaches them');
   assert.equal(cancel.paid, null, 'a free event has no refund box');
   assert.match(cancelCopy(ev(1, { price_cents: 4000 })).paid, /HQ refunds them in Revenue › Billing/);
   const all = JSON.stringify([cancel, cancelCopy(ev(1, { price_cents: 4000 })), unpublishCopy(ev(1)), featureCopy(ev(1)), featureCopy(ev(1, { featured: true }))]);
-  assert.doesNotMatch(all, /cannot be undone|every calendar|with your note|Each gets an email/, 'the canvas copy the Worker does not do');
-  assert.match(unpublishCopy(ev(1)).body, /The host is not told automatically\./);
+  assert.doesNotMatch(all, /cannot be undone|every calendar|Each gets an email/, 'the canvas copy the Worker does not do');
+  assert.match(unpublishCopy(ev(1)).body, /The host is told, with your note\./, 'D922: part 2 tells the host');
   assert.equal(featureCopy(ev(1)).action, 'Feature');
   assert.equal(featureCopy(ev(1)).next, true);
   assert.equal(featureCopy(ev(1, { featured: true })).action, 'Stop featuring');
@@ -362,10 +362,14 @@ test('the page keeps its frame, its crumb and its literal tab doors', () => {
   const page = read('frontend/src/pages/admin/AdminEventsPage.jsx');
   assert.match(page, /export default function AdminEventsPage\(\) \{\s*return \(\s*<AdminBoardFrame workspace="Events" note="Eadwyn reads the events listed here\. An event is approved or published only when you do it\." data-testid="admin-board-events">/);
   assert.equal((page.match(/<AdminBoardFrame\b/g) || []).length, 1);
-  const doors = [...page.matchAll(/<DeskTab to="([^"]+)"/g)].map((m) => m[1]);
+  const doors = [...page.matchAll(/<HeaderTab to="([^"]+)"/g)].map((m) => m[1]);
   assert.deepEqual(doors, TABS.map((t) => t.path), 'the strip and TABS list the same four doors');
-  assert.match(page, /<DeskTab to="\/admin\/events" end /, 'Overview is lit only on its own address');
-  assert.match(page, /<Link to="\/admin\/community" className=\{CRUMB_LINK\}>Community<\/Link> › Events/);
+  assert.match(page, /<HeaderTab to="\/admin\/events" end /, 'Overview is lit only on its own address');
+  // D938: the desk draws the shared header (D936), with the same crumb, title, line, chip and actions, and no h1 of its own.
+  assert.match(page, /import \{[^}]*\bAdminPageHeader\b[^}]*\} from '\.\.\/\.\.\/ui'/);
+  assert.match(page, /<AdminPageHeader\s+crumb=\{\{ to: '\/admin\/community', label: 'Community', current: 'Events' \}\}\s+title=\{TITLE\}\s+line=\{LINE\}\s+scope\s/);
+  assert.match(page, /tabs=\{<DeskTabs waiting=\{waiting\} \/>\}\s+data-testid="events-header"/);
+  assert.doesNotMatch(page, /<h1/);
   assert.match(page, /<Link to="\/admin\/events\/all" className=\{CRUMB_LINK\}>‹ All events<\/Link>/);
   assert.match(page, /<Link to="\/events\/new" className=\{actionGhost\} data-testid="events-new">New event<\/Link>/, 'New event, not "New studio event" (O-STU)');
   assert.doesNotMatch(page, /to="\/admin\/held\/community"/, 'the crumb links Community itself, not its redirect');
@@ -381,8 +385,8 @@ test('the desk reads only R1, R2, R3 and R5, never the roster, R2\'s summary or 
   for (const call of ['adminEvents.list(', 'adminEvents.analytics()', 'adminEvents.get(', 'eventsApi.agenda(', 'adminEvents.history(', 'adminEvents.compPreview(']) assert.ok(src.includes(call), `the desk no longer calls ${call}`);
   for (const write of ['adminEvents.approve(', 'adminEvents.reject(', 'adminEvents.feature(', 'adminEvents.unpublish(', 'adminEvents.cancel(', 'adminEvents.setCapacity(']) assert.ok(src.includes(write), write);
   assert.doesNotMatch(src, /\.roster\(|roster\(/, 'the roster carries names and emails');
-  // An event's own `summary` column is drawn by D921's preview (`ev?.summary`); R2's is not.
-  assert.doesNotMatch(src, /(?<!\bev\??)\.summary\b|\bsummary\./, 'R2\'s summary is all-time and hides its failure');
+  assert.doesNotMatch(src, /analytics[\w.?]*\.summary\b/, 'R2\'s summary is all-time and hides its failure');
+  assert.ok(src.includes('adminEvents.summary(eventId)') && src.includes('adminEvents.history(eventId)'), 'D922: one event\'s own summary and history (D918)');
   assert.doesNotMatch(src, /conversion/, 'R2\'s conversion is 0 for every upcoming event');
   assert.doesNotMatch(src, /window\.confirm|useToast|dangerouslySetInnerHTML/);
   for (const imp of src.matchAll(/import \{([^}]+)\} from '[./]+lib\/api'/g)) {
@@ -391,6 +395,8 @@ test('the desk reads only R1, R2, R3 and R5, never the roster, R2\'s summary or 
   // D920 uses the shared chart components and D918's overview; no extra chart library.
   assert.ok(src.includes('adminEvents.overview(weeks)'));
   assert.doesNotMatch(src, /recharts|<svg/);
+  const pages = DESK_FILES.filter((f) => !f.endsWith('Model.js')).map((f) => codeOnly(read(f))).join('\n');
+  assert.doesNotMatch(pages, /location_kind|In person|'Online'/, 'the format word comes from the model alone');
   for (const sample of ['Northwind', 'Bluefern', 'Rua Exemplo', 'Fund I', 'Pricing Workshop', 'Demo Day Rehearsal', '[$', '[3]']) assert.ok(!src.includes(sample), `a canvas sample reached the desk: ${sample}`);
 });
 
@@ -411,7 +417,7 @@ const response = (body, status = 200) => ({ ok: status < 400, status, headers: {
 const LIVE = Date.now();
 const liveIso = (days) => new Date(LIVE + days * DAY_MS).toISOString();
 
-function worker({ list = [], queue = [], analytics = { summary: {}, events: [] }, event = null, agenda = { agenda: [] }, overview = overviewFixture(), writes = {} } = {}) {
+function worker({ list = [], queue = [], analytics = { summary: {}, events: [] }, event = null, agenda = { agenda: [] }, summary = {}, history = null, overview = overviewFixture(), writes = {} } = {}) {
   return (url, options = {}) => {
     const method = String(options.method || 'GET').toUpperCase();
     const m = url.match(/\/api\/admin\/events\/(\d+)\/(\w+)$/);
@@ -427,6 +433,9 @@ function worker({ list = [], queue = [], analytics = { summary: {}, events: [] }
     }
     if (/\/api\/admin\/events\/\d+$/.test(url)) return event ? response({ event }) : response({ error: 'not_found' }, 404);
     if (/\/api\/events\/\d+\/agenda$/.test(url)) return response(agenda);
+    // D922: the event's own summary and history (D918).
+    if (/\/api\/admin\/events\/\d+\/summary$/.test(url)) return summary instanceof Function ? summary() : response(summary);
+    if (/\/api\/admin\/events\/\d+\/history$/.test(url)) return history instanceof Function ? history() : response(history || { history: { created_at: event?.created_at, items: [] } });
     return response({});
   };
 }
@@ -519,8 +528,8 @@ test('Review reads the whole queue from R1, draws its facts, and the tab carries
     assert.match(t, /Waiting for review · 2/);
     assert.match(t, /Sends no invitations\./, 'the first in the queue is the one starting soonest, with no free-seat flags');
     assert.equal(view.textOf('events-tab-review-count'), '2');
-    assert.match(view.textOf('events-crumb'), /Community › Events/);
-    assert.ok(view.testIds().includes('events-scope-chip'));
+    assert.match(view.textOf('admin-page-crumb'), /Community\s*›\s*Events/);
+    assert.ok(view.testIds().includes('admin-page-scope'));
     assert.ok(view.hrefs().includes('/events/22/manage'), 'Open as host');
     await view.click('events-queue-row-21');
     assert.match(view.text(), /Sends free-seat invitations to official partners not invited yet\./);
@@ -621,7 +630,7 @@ test('a Worker that is down, or answers {}, draws no zero and does not throw', a
       const t = view.text();
       assert.match(t, /could not be read/);
       for (const id of ['events-tile-waiting', 'events-tile-next30', 'events-tile-waitlists', 'events-tile-showup']) assert.doesNotMatch(view.textOf(id), /\b0\b|—/, id);
-      assert.ok(view.testIds().includes('events-tabs'));
+      assert.ok(view.testIds().includes('admin-page-tabs'));
     } finally { await view.close(); }
   }
 });
@@ -641,8 +650,8 @@ test('one event: R3, R2\'s row and R5; Not held yet before it ends; the roster s
     assert.match(view.textOf('events-event-tile-showup'), /Not held yet/);
     assert.match(view.textOf('events-event-gate'), /On the public calendar/);
     assert.match(view.textOf('events-event-roster'), /Names and emails are on the host’s roster\./);
-    assert.match(view.textOf('events-event-history'), /Created · 1 Oct 2026/);
-    assert.match(view.textOf('events-event-history'), /Not read here yet/);
+    assert.match(view.textOf('events-history-created'), /^Created\s*1 Oct 2026$/);
+    assert.doesNotMatch(view.textOf('events-event-history'), /Not read here yet/, 'D922 reads the history');
     assert.match(view.textOf('events-event-agenda'), /Doors/);
     assert.ok(view.hrefs().includes('/events/41/manage/registrations'));
     assert.ok(!view.testIds().includes('events-header'), 'the event\'s own header, not the desk\'s');

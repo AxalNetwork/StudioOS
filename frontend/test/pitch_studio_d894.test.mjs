@@ -696,7 +696,9 @@ test('the studio reads only mounted routes, and no figure it draws is a sample',
     assert.ok(src.includes(call), `the studio no longer calls ${call}`);
   }
   for (const sample of ['Northwind', '[$', '16,950', '0:66', '[128]']) assert.ok(!src.includes(sample), `a canvas sample reached the page: ${sample}`);
-  assert.match(src, /<DeckReviewerPage embedded \/>/, 'the Review tab mounts the reviewer until #2434 part 6');
+  // D900 (#2434 part 6): the Review tab is the version's own review; the reviewer stays inside it for uploads.
+  assert.match(src, /<PitchReview reads=\{reads\} readOnly=\{readOnly\} \/>/, 'the Review tab mounts the version review');
+  assert.match(read('frontend/src/pages/raise/pitch/PitchReview.jsx'), /<DeckReviewerPage embedded \/>/, 'uploads and pasted text stay available');
 });
 
 test('the canvas is committed in the intake queue, the rail canvas carries the deck models, and the decision exists', () => {

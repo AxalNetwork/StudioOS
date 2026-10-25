@@ -22,7 +22,8 @@ const PAGE = read('../src/pages/admin/AdminProfilingTrends.jsx');
 const APP = read('../src/App.jsx');
 const API = read('../src/lib/api.js');
 const SIDEBAR = read('../src/sidebarConfig.js');
-const PROGRAMS = read('../src/pages/admin/HeldPrograms.jsx');
+// D953 (#2371): the Programs landing is the catalogue now.
+const PROGRAMS = read('../src/pages/admin/programs/ProgramsCatalogue.jsx');
 const text = (h) => h.replace(/<[^>]+>/g, ' ').replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&#x27;/g, "'").replace(/\s+/g, ' ').trim();
 
 const arche = (over) => [
@@ -90,10 +91,10 @@ test('D358: a failed read is Unreadable with a retry, not an empty page', () => 
 test('D358: the page is an admin route, lit under Programs, with a door on the Programs landing', () => {
   assert.match(APP, /const AdminProfilingTrends = lazy\(\(\) => import\('\.\/pages\/admin\/AdminProfilingTrends'\)\);/);
   assert.match(APP, /<Route path="\/admin\/profiling-trends" element=\{guard\(\['admin'\], <AdminProfilingTrends \/>\)\} \/>/);
-  // D937 (#2374): the Lab's new address joined the row's match list first.
-  assert.match(SIDEBAR, /match: \['\/admin\/programs\/spinout-lab', '\/admin\/spinout-lab', '\/admin\/advisor-cohorts', '\/admin\/profiling-trends'\] \}/);
-  assert.match(PROGRAMS, /<Link to="\/admin\/profiling-trends" className=\{OPEN\}>Open profiling trends<\/Link>/);
-  assert.match(PROGRAMS, /stance="Four consoles, each opened where it is decided"/);
+  assert.match(SIDEBAR, /label: 'Programs',\s*match: \['\/admin\/programs', '\/admin\/held\/programs', '\/admin\/advisor-cohorts', '\/admin\/refer-earn', '\/admin\/spinout-lab', '\/admin\/profiling-trends'\] \}/);
+  // D953 / O-PRF: Profiling trends is not a program; one literal door stays in the catalogue's foot.
+  assert.match(PROGRAMS, /<Link to="\/admin\/profiling-trends" className=\{LINK\}>Open profiling trends<\/Link>/);
+  assert.match(read('../src/pages/admin/programs/programsModel.js'), /FOOT_PROFILING = 'Profiling trends is not a program\. It stays here until its home is decided\.'/);
 });
 
 test('D358: api.js carries both calls on their Worker paths', () => {
