@@ -66,7 +66,7 @@ function ProductTesters() {
       <AdminPageHeader crumb={CRUMB(b.title)} title={b.title} pills={[NEW_PILL]} line={b.line} scope data-testid="approvals-board-header" />
       <section className={`${CARD} flex flex-col items-start gap-2 px-5 py-5`} data-testid="approvals-testers-none">
         <h2 className={H2}>{NOT_YET}</h2>
-        <p className={`m-0 ${SUB}`}>No product tester application is stored yet, so there is nothing to approve here. The tester store, its routes and the notices are part 4; how members apply waits on the intake decision (#2318).</p>
+        <p className={`m-0 ${SUB}`}>Applications waiting on a decision are counted on the Inbox, under Product testers. This board’s table and its approve, decline, pause and remove dialogs are part 8 (#2894); how members apply waits on the intake decision (#2318).</p>
         <p className={`m-0 ${SUB}`}>Testing programs and who they pick stay on Platform › Product testing (HQ).</p>
       </section>
     </div>

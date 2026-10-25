@@ -99,5 +99,5 @@ export function splitDistribution(
 
 /** The LPs a distribution splits across, as the job selects them. */
 export const DISTRIBUTION_LPS_SQL =
-  `SELECT id, commitment_amount, invested_amount FROM limited_partners
+  `SELECT id, name AS lp_name, commitment_amount, invested_amount FROM limited_partners
            WHERE fund_id = ? AND status IN ('committed','active')`;
