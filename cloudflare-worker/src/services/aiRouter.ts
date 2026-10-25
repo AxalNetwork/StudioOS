@@ -1635,6 +1635,122 @@ export function budgetRefusalMessage(refusal: string, detail?: { limit_microusd?
     : 'The included AI allowance and top-up balance cannot cover this run. Add tokens to continue.';
 }
 
+/** The models one run may reach, or why it may reach none. `record`: the refusal writes a usage row. */
+type ModelChoice =
+  | { ok: true; primary: string; chain: string[] }
+  | { ok: false; refusal: RefusalReason; error: string; record: boolean };
+
+/**
+ * The run's primary model and the chain a failure falls back to: a rail
+ * run's page row (`resolveRailChain`) when it has one for this work, else the
+ * route's, with the caller's own model only when the route offers it. Reads
+ * the member's picks; writes nothing, so `run()` and `quoteRun()` share it.
+ */
+async function chooseModels(env: Env, opts: RunOptions, route: RouteEntry): Promise<ModelChoice> {
+  // ---- D764 PR 3: a rail run's models come from its page's row ------------
+  // A text run (or a vision run) with rail context whose page, or option, has
+  // a matrix row: the caller's model when it can do the work, else the
+  // member's pick, else the row's default; the chain is the row's other models
+  // of the same shape (`resolveRailChain`). Audio, embeddings, rerank,
+  // translation, voice and images keep their route: their shapes are the
+  // task's, and only bge-base writes axal-search. A row with no model for the
+  // run leaves the route in charge too.
+  let railed: { primary: string; chain: string[] } | null = null;
+  const railShaped = !route.isAudio && !route.isEmbed && !opts.rerank && !opts.translate && !opts.speak && !opts.draw;
+  const railRow = opts.rail && railShaped
+    ? resolveRailOption(opts.rail.page, opts.rail.option ?? null) ?? resolveRail(opts.rail.page)
+    : null;
+  if (opts.rail && railRow) {
+    let picks: { page: string | null; option: string | null };
+    try { picks = await railPicks(env, opts.userId, railRow.pageKey, opts.rail.option ?? null); }
+    catch { return { ok: false, refusal: 'misconfigured', error: 'Unreadable: your model picks for this page could not be read. Nothing was run.', record: false }; }
+    const resolved = resolveRailChain(railRow, { vision: (opts.images?.length ?? 0) > 0 }, env as catalogue.CatalogueSwitches, {
+      caller: opts.model ?? null, option: picks.option, page: picks.page,
+    });
+    if (resolved && !resolved.ok) return { ok: false, refusal: 'model_not_offered', error: `${resolved.model} cannot do this page's work`, record: true };
+    if (resolved) railed = { primary: resolved.primary, chain: resolved.chain };
+  }
+
+  const offered = route.alternates ?? [];
+  if (!railed && opts.model && !offered.includes(opts.model)) {
+    return { ok: false, refusal: 'model_not_offered', error: `${opts.model} is not offered for ${opts.task}`, record: true };
+  }
+  return railed ? { ok: true, ...railed } : { ok: true, primary: opts.model || route.model, chain: route.fallbackChain ?? [] };
+}
+
+/**
+ * What a run holds before it is called, in micro-USD at the member's
+ * multiplier: the dearest of `models` for the run's bounded input and its
+ * whole output allowance, plus the guard's share. Throws when the estimate
+ * cannot be read. `run()` reserves exactly this, and `quoteRun()` shows it.
+ */
+function holdQuoteMicro(opts: RunOptions, route: RouteEntry, models: string[], guardOn: boolean, guardInput: string, multiplier: number): number {
+  // UTF-8 bytes bound input tokenization; include chat/system overhead.
+  // Reserve the most expensive offered fallback, refund to the actual logged estimate.
+  const inputBytes = new TextEncoder().encode(defaultContentBlob(opts) + (opts.systemPrompt || '')).byteLength;
+  const promptBound = inputBytes + 4096 + (opts.messages?.length || 1) * 64;
+  // D761: a reasoning model's output budget is its task's, not 512.
+  const outputBound = Math.max(...models
+    .map((m) => shapes.maxTokensFor(shapes.factsFor(m), opts.maxTokens, route.reasoningMaxTokens)));
+  if (!Number.isSafeInteger(outputBound) || outputBound < 1 || !Number.isFinite(opts.audioMinutes || 0) || (opts.audioMinutes || 0) < 0) throw new Error('AI estimate unreadable');
+  // D761 PR 3: a voice is held for its text's characters (Aura) and for the
+  // most audio `readSpeech` accepts (MeloTTS), which bounds what it returns.
+  const quoteMinutes = opts.speak ? audioMinutesFromBytes(shapes.MAX_SPEECH_BYTES) : opts.audioMinutes || 0;
+  const quoteChars = opts.speak ? (opts.text ?? '').length : 0;
+  // D761 PR 4: an image is held for the size and steps sent to each model.
+  const quoteImage = (model: string): shapes.Units => {
+    const req = opts.draw ? shapes.drawRequest(model, opts.text ?? '', opts.draw) : null;
+    return req ? shapes.imageUnits(model, req.sent.width, req.sent.height, req.sent.steps) : {};
+  };
+  const quote = Math.max(...models.map((model) => estimateCostUsd(model, promptBound, outputBound, quoteMinutes, 0, quoteChars, quoteImage(model))));
+  // D763: the guard is held inside this hold, never in one of its own: every
+  // input slice, and every output slice the run's maximum output allows.
+  const outputChars = !guardOn || route.isEmbed || opts.speak || opts.draw ? 0
+    : route.isAudio ? Math.ceil((opts.audioMinutes || 0) * TRANSCRIPT_CHARS_PER_MINUTE)
+      : outputBound * GUARD_CHARS_PER_OUTPUT_TOKEN;
+  const guardQuote = guardOn ? guardQuoteMicro(guardInput, outputChars, multiplier) : 0;
+  return aiBudget.billedUsdToMicro(quote, multiplier) + guardQuote;
+}
+
+export type RunQuote =
+  | { ok: true; hold_microusd: number; model: string }
+  | { ok: false; refusal: RefusalReason; error: string };
+
+/**
+ * D897 (#2677): what `run(env, input)` would hold if it were called now, for a
+ * press that shows its cost before the member runs it. The same model choice
+ * and the same arithmetic as the hold, so the price shown is the most the run
+ * can charge; the receipt settles at what it used. Reads the page's switch,
+ * the member's picks and their multiplier; runs nothing, holds nothing and
+ * writes no usage row. A run with no member holds nothing, so it quotes 0.
+ */
+export async function quoteRun(env: Env, input: RunOptions): Promise<RunQuote> {
+  const opts: RunOptions = input.rail
+    ? { ...input, railPage: input.rail.page, railOption: input.rail.option ?? undefined, recordRef: input.rail.record ?? undefined }
+    : input;
+  const route = ROUTE[opts.task];
+  if (!route) return { ok: false, refusal: 'misconfigured', error: `unknown task ${opts.task}` };
+  if (opts.rail && !route.isAudio) {
+    try { if (await assistOff(env, opts.userId, opts.rail.page)) return { ok: false, refusal: 'assist_off', error: ASSIST_OFF_MESSAGE }; }
+    catch { return { ok: false, refusal: 'misconfigured', error: 'Unreadable: whether AI assistance is on for this page could not be checked.' }; }
+  }
+  const choice = await chooseModels(env, opts, route);
+  if (!choice.ok) return { ok: false, refusal: choice.refusal, error: choice.error };
+  const models = [choice.primary, ...choice.chain];
+  for (const model of models) {
+    const refusal = modelRefusal(env, model);
+    if (refusal) return { ok: false, refusal, error: `${model} ${refusal === 'model_unpriced' ? 'has no price' : 'is not offered'}` };
+  }
+  if (opts.userId <= 0) return { ok: true, hold_microusd: 0, model: choice.primary };
+  try {
+    const multiplier = await aiBudget.memberChargeMultiplier(env, opts.userId);
+    const guardOn = guarded(opts);
+    return { ok: true, hold_microusd: holdQuoteMicro(opts, route, models, guardOn, guardOn ? guardInputFor(opts) : '', multiplier), model: choice.primary };
+  } catch {
+    return { ok: false, refusal: 'misconfigured', error: 'Unreadable: the price of this run could not be worked out.' };
+  }
+}
+
 export async function run(env: Env, input: RunOptions): Promise<RunResult> {
   // D765: a member's rail context is what the log row records.
   const opts: RunOptions = input.rail
@@ -1691,63 +1807,20 @@ export async function run(env: Env, input: RunOptions): Promise<RunResult> {
     }
   }
 
-  // ---- D764 PR 3: a rail run's models come from its page's row ------------
-  // A text run (or a vision run) with rail context whose page, or option, has
-  // a matrix row: the caller's model when it can do the work, else the
-  // member's pick, else the row's default; the chain is the row's other models
-  // of the same shape (`resolveRailChain`). Audio, embeddings, rerank,
-  // translation, voice and images keep their route: their shapes are the
-  // task's, and only bge-base writes axal-search. A row with no model for the
-  // run leaves the route in charge too.
-  let railed: { primary: string; chain: string[] } | null = null;
-  const railShaped = !route.isAudio && !route.isEmbed && !opts.rerank && !opts.translate && !opts.speak && !opts.draw;
-  const railRow = opts.rail && railShaped
-    ? resolveRailOption(opts.rail.page, opts.rail.option ?? null) ?? resolveRail(opts.rail.page)
-    : null;
-  if (opts.rail && railRow) {
-    let picks: { page: string | null; option: string | null };
-    try { picks = await railPicks(env, opts.userId, railRow.pageKey, opts.rail.option ?? null); }
-    catch {
-      const usage: UsageMeta = {
-        task: opts.task, model: route.model, latency_ms: 0,
-        prompt_tokens: 0, completion_tokens: 0, est_cost_usd: 0,
-        fallback_used: false, cached: false, safety_score: null,
-      };
-      return { ok: false, refusal: 'misconfigured', error: 'Unreadable: your model picks for this page could not be read. Nothing was run.', usage };
-    }
-    const resolved = resolveRailChain(railRow, { vision: (opts.images?.length ?? 0) > 0 }, env as catalogue.CatalogueSwitches, {
-      caller: opts.model ?? null, option: picks.option, page: picks.page,
-    });
-    if (resolved && !resolved.ok) {
-      const usage: UsageMeta = {
-        task: opts.task, model: route.model, latency_ms: 0,
-        prompt_tokens: 0, completion_tokens: 0, est_cost_usd: 0,
-        fallback_used: false, cached: false, safety_score: null,
-      };
-      await recordUsage(env, opts, usage, 'model_not_offered');
-      return { ok: false, refusal: 'model_not_offered', error: `${resolved.model} cannot do this page's work`, usage };
-    }
-    if (resolved) railed = { primary: resolved.primary, chain: resolved.chain };
-  }
-
-  const offered = route.alternates ?? [];
-  if (!railed && opts.model && !offered.includes(opts.model)) {
+  // ---- D764 PR 3: a rail run's models come from its page's row (`chooseModels`).
+  const choice = await chooseModels(env, opts, route);
+  if (!choice.ok) {
     const usage: UsageMeta = {
       task: opts.task, model: route.model, latency_ms: 0,
       prompt_tokens: 0, completion_tokens: 0, est_cost_usd: 0,
       fallback_used: false, cached: false, safety_score: null,
     };
-    await recordUsage(env, opts, usage, 'model_not_offered');
-    return {
-      ok: false,
-      refusal: 'model_not_offered',
-      error: `${opts.model} is not offered for ${opts.task}`,
-      usage,
-    };
+    if (choice.record) await recordUsage(env, opts, usage, choice.refusal);
+    return { ok: false, refusal: choice.refusal, error: choice.error, usage };
   }
-  const primaryModel = railed ? railed.primary : opts.model || route.model;
+  const primaryModel = choice.primary;
   // The models a failure falls back to: the rail row's, or the route's.
-  const fallbacks = railed ? railed.chain : route.fallbackChain ?? [];
+  const fallbacks = choice.chain;
 
   // D761 PR 2: a run whose own inputs no model could take is refused here.
   const badInput = inputRefusal(opts);
@@ -1874,32 +1947,7 @@ export async function run(env: Env, input: RunOptions): Promise<RunResult> {
   if (opts.userId > 0) {
     try {
       multiplier = await aiBudget.memberChargeMultiplier(env, opts.userId);
-      // UTF-8 bytes bound input tokenization; include chat/system overhead.
-      // Reserve the most expensive offered fallback, refund to the actual logged estimate.
-      const inputBytes = new TextEncoder().encode(defaultContentBlob(opts)+(opts.systemPrompt || '')).byteLength;
-      const promptBound = inputBytes + 4096 + (opts.messages?.length || 1) * 64;
-      // D761: a reasoning model's output budget is its task's, not 512.
-      const outputBound = Math.max(...[primaryModel, ...fallbacks]
-        .map((m) => shapes.maxTokensFor(shapes.factsFor(m), opts.maxTokens, route.reasoningMaxTokens)));
-      if (!Number.isSafeInteger(outputBound) || outputBound < 1 || !Number.isFinite(opts.audioMinutes || 0) || (opts.audioMinutes || 0)<0) throw new Error('AI estimate unreadable');
-      const models = [primaryModel, ...fallbacks];
-      // D761 PR 3: a voice is held for its text's characters (Aura) and for the
-      // most audio `readSpeech` accepts (MeloTTS), which bounds what it returns.
-      const quoteMinutes = opts.speak ? audioMinutesFromBytes(shapes.MAX_SPEECH_BYTES) : opts.audioMinutes || 0;
-      const quoteChars = opts.speak ? (opts.text ?? '').length : 0;
-      // D761 PR 4: an image is held for the size and steps sent to each model.
-      const quoteImage = (model: string): shapes.Units => {
-        const req = opts.draw ? shapes.drawRequest(model, opts.text ?? '', opts.draw) : null;
-        return req ? shapes.imageUnits(model, req.sent.width, req.sent.height, req.sent.steps) : {};
-      };
-      const quote = Math.max(...models.map(model=>estimateCostUsd(model,promptBound,outputBound,quoteMinutes,0,quoteChars,quoteImage(model))));
-      // D763: the guard is held inside this hold, never in one of its own: every
-      // input slice, and every output slice the run's maximum output allows.
-      const outputChars = !guardOn || route.isEmbed || opts.speak || opts.draw ? 0
-        : route.isAudio ? Math.ceil((opts.audioMinutes || 0) * TRANSCRIPT_CHARS_PER_MINUTE)
-          : outputBound * GUARD_CHARS_PER_OUTPUT_TOKEN;
-      const guardQuote = guardOn ? guardQuoteMicro(guardInput, outputChars, multiplier) : 0;
-      const held = await aiBudget.reserveAiBudget(env,opts.userId,aiBudget.billedUsdToMicro(quote, multiplier) + guardQuote);
+      const held = await aiBudget.reserveAiBudget(env, opts.userId, holdQuoteMicro(opts, route, [primaryModel, ...fallbacks], guardOn, guardInput, multiplier));
       if (!held.ok) {
         const usage:UsageMeta={task:opts.task,model:primaryModel,latency_ms:0,prompt_tokens:0,completion_tokens:0,est_cost_usd:0,fallback_used:false,cached:false,safety_score:null};
         await recordUsage(env, opts, usage, held.refusal);

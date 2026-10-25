@@ -414,6 +414,58 @@ export function WeekLines({ series, labels, height = 220, currentIndex = labels.
   );
 }
 
+/**
+ * D922 (#2705): a running total by day, as the Events desk's "Seats taken over
+ * time" draws it. The line steps up on each day; `capacity` is a dashed line
+ * across the chart, and `today` (an index into `points`, or `after` for a day
+ * past the last point) a dashed amber marker. In the palette above.
+ */
+export function RunningTotal({ points, capacity = null, today = null, height = 200 }) {
+  const [ref, W] = useBoxWidth();
+  const Lx = 36;
+  const R = 70;
+  const B = 22;
+  const top = 14;
+  const ch = height - B - top;
+  const n = Math.max(2, points.length + (today === 'after' ? 1 : 0));
+  const hi = Math.max(1, capacity || 0, ...points.map((p) => p.value));
+  const X = (i) => Lx + ((W - Lx - R) * i) / (n - 1);
+  const Y = (v) => top + ch - (ch * v) / hi;
+  let d = '';
+  points.forEach((p, i) => {
+    d += i === 0 ? `M ${X(0)} ${Y(0)} L ${X(0)} ${Y(p.value)}` : ` L ${X(i)} ${Y(points[i - 1].value)} L ${X(i)} ${Y(p.value)}`;
+  });
+  if (today === 'after' && points.length) d += ` L ${X(points.length)} ${Y(points[points.length - 1].value)}`;
+  const todayX = today === 'after' ? X(points.length) : Number.isInteger(today) ? X(today) : null;
+  const every = Math.max(1, Math.ceil(points.length / 6));
+  return (
+    <div ref={ref} className="w-full">
+      <Svg width={W} height={height}>
+        <line x1={Lx} x2={W - R} y1={top + ch} y2={top + ch} className={GRID} />
+        <text x={Lx - 6} y={top + ch} textAnchor="end" className={MUTE}>0</text>
+        <text x={Lx - 6} y={top + 8} textAnchor="end" className={MUTE}>{nf(hi)}</text>
+        {capacity !== null ? (
+          <g>
+            <line x1={Lx} x2={W - R} y1={Y(capacity)} y2={Y(capacity)} strokeDasharray="5 4" className="stroke-axal-muted" />
+            <text x={W - R + 6} y={Y(capacity) + 4} className={MUTE}>{`Capacity ${nf(capacity)}`}</text>
+          </g>
+        ) : null}
+        {todayX !== null ? (
+          <g>
+            <line x1={todayX} x2={todayX} y1={top} y2={top + ch} strokeDasharray="3 3" className="stroke-[#f59e0b]" />
+            <text x={todayX} y={top - 3} textAnchor="middle" className="fill-amber-700 dark:fill-amber-300">Today</text>
+          </g>
+        ) : null}
+        {points.length ? <path d={d} fill="none" strokeWidth="2.25" className={STROKE_V} /> : null}
+        {points.length ? <text x={X(points.length - 1) + 6} y={Y(points[points.length - 1].value) - 6} className={INK}>{nf(points[points.length - 1].value)}</text> : null}
+        {points.map((p, i) => (i % every === 0 || i === points.length - 1
+          ? <text key={p.label} x={X(i)} y={height - 5} textAnchor="middle" className={MUTE}>{p.label}</text>
+          : null))}
+      </Svg>
+    </div>
+  );
+}
+
 /** A 100% bar, one part per slice. */
 export function Bar100({ parts }) {
   const [ref, W] = useBoxWidth(380);

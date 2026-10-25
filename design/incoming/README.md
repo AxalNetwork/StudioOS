@@ -109,6 +109,27 @@ strength of a live route would empty the queue of the work it exists to track.
    `Trust Center v2.dc.html` to `backlog/` for a day, next to the `NEW` canvases
    that have no route, and away from the v1 of its own page.
 
+## Landed 2026-10-25 — Events · My events (#2387)
+
+The owner's artifacts `FmbzyxCRunXN3NDxo2dC8P` (the board grid) and
+`NydozL4ZQeMNZ7PaC3XPg3` (the page) came from S21's prompt on #2387:
+- `My Events · Boards.dc.html` is the board grid (MEV1 to MEV18, with the
+  lettered boards MEV3a–d, MEV5b, MEV6a–c, MEV7a–b, MEV12a–b, MEV14a–c,
+  MEV16a–b, MEV17a–b and MEV18a–c), the output of `scripts/read-canvas.mjs` as is;
+- `My Events Page.dc.html` is the page, in the copy the grid's bundle carries.
+  The page artifact decodes to the same design, differing only in the font link
+  and `data-dc-script=""`.
+
+No value was edited.
+
+**Grade: UPGRADE.** `/my/events` and `/hosting`, `/discover` and `/past` are live
+for every signed-in profile, Explorers included. S21's integration (D1030) draws
+the tabs, Upcoming's next event, Going, Hosting soon and suggestions, Hosting's
+groups, Discover's public events and Past, each from a read on `main`. The
+drawers, dialogs, month view, calendar kinds, counts per event, the host header
+and the phone wait for D1030's seven parts, so this canvas stays in the queue
+until they land. The `ROUTE_MAP.md` row says what is drawn today.
+
 ## Landed 2026-10-24 — Admin · Community overview (#2367)
 
 The owner's artifacts `3z8Z58GFCcS8SWMv4YbWiH` and `GewVUumBA5KASoPYNGUJuB`

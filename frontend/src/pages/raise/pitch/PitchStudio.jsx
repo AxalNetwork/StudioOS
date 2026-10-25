@@ -1,21 +1,25 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Link, useSearchParams } from 'react-router-dom';
+import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { RefreshCw } from 'lucide-react';
 import { api } from '../../../lib/api';
 import { cyclesApi } from '../../../lib/api/cycles';
 import { reportError } from '../../../lib/log';
 import { useAuth } from '../../../hooks/useAuthSync';
 import { Lightbox, RailFrame, WorkerRail, usePhoneWidth } from '../../../ui';
-import DeckReviewerPage from '../../DeckReviewerPage';
 import ExportDialog from './ExportDialog';
 import PitchNotes from './PitchNotes';
+import PitchReview from './PitchReview';
 import { CoverageMeter, useDeckSources } from './SourcesBoards';
 import {
-  BUILDER_PATH, EDIT_PATH, EMPTY_DECK, ENGAGEMENT_VIEW_ROWS, LINE, NOT_RECORDED, NO_VENTURE, NO_VIEWS, READ_ONLY, TABS, TITLE,
+  EDIT_PATH, EMPTY_DECK, ENGAGEMENT_VIEW_ROWS, LINE, NOT_RECORDED, NO_VENTURE, NO_VIEWS, READ_ONLY, TABS, TITLE,
   asList, coverOf, currentVersion, dayLabel, isReadOnly, linkPage, linkRows, mmss,
   readerStats, slideSeconds, ventureQuery, versionLabel, versionRows, viewsState, weeklyViews,
 } from './pitchStudioModel';
 import { presentHref } from './presentExportModel';
+import { useRailOption } from '../../../ui/railCrumbs';
+import { newDeckApi } from '../../../lib/api/newDeck';
+import { railPressHeaders } from '../../../lib/railPage';
+import { FAST_TITLE, NEW_PATH, buildSentence, fastPathLine, refusalOf } from './newDeckModel';
 import ShareDialog from './ShareDialog';
 import { NEW_LINK, analyticsOf, cardSeries, ndaCell, settingsLine, shareFunnel } from './shareModel';
 
@@ -25,16 +29,20 @@ import { NEW_LINK, analyticsOf, cardSeries, ndaCell, settingsLine, shareFunnel }
  *
  *   /raise/pitch            Decks (PD2): the current deck, its versions, and
  *                           views by week, most read slide and NDA signed.
- *   /raise/pitch/review     Review (PD14): today's reviewer, until #2434 part 6
- *                           reviews a version of the deck itself.
+ *   /raise/pitch/review     Review (PD14): the current version's review, each
+ *                           point pointing to a card, and the reviews per
+ *                           version (D900, `PitchReview.jsx`); the reviewer for
+ *                           an upload or pasted text below it.
  *   /raise/pitch/analytics  Share & analytics (PD19): one version's readers,
  *                           seconds per slide, and every investor link, a page
  *                           at a time, with Withdraw on every link not
  *                           known to be dead.
  *   /raise/pitch/notes      Notes (PD21, D905): the thread from the venture's
  *                           admins to its founders, and the composer.
- *   /raise/pitch/edit       the deck builder (PitchWorkspacePage), until #2434
- *                           part 4 builds the editor (PD1).
+ *   /raise/pitch/new        New deck (PD3–PD6, D897): `NewDeck.jsx`. The Decks
+ *                           tab's New deck and its fast path (PD2) open it.
+ *   /raise/pitch/edit       the card editor (D898, PD1).
+ *   /raise/pitch/builder    the template builder (PitchWorkspacePage).
  *
  * WHO. The venture's founder works here, as does anyone else the route admits
  * who is not an admin. An admin reads it and leaves notes: no New deck, no New
@@ -169,9 +177,10 @@ export default function PitchStudio({ tab = 'decks' }) {
       <div className="flex flex-col gap-5 pb-24 lg:pb-10" data-testid={`pitch-studio-${tab}`}>
         <StudioHeader tab={tab} q={q} readOnly={readOnly} showNew={tab === 'decks' && !readOnly && Boolean(projectId)} />
         {tab === 'review' ? (
-          // The reviewer does its own reads, and works with no venture, as it
-          // did before D894: the studio's ventures read never stands in its way.
-          <DeckReviewerPage embedded />
+          // D900: the review of the current version (PD14), and below it the
+          // reviewer for an upload or pasted text, which works with no venture
+          // as it did before D894: the ventures read never stands in its way.
+          <PitchReview reads={reads} readOnly={readOnly} />
         ) : reads.projects.status === 'error' ? (
           <ReadFailed text="Your ventures could not be read." onRetry={reads.reload} testId="pitch-studio-projects-error" />
         ) : reads.projects.status === 'ok' && !reads.project ? (
@@ -199,8 +208,8 @@ function StudioHeader({ tab, q, readOnly, showNew }) {
           <h1 className={`m-0 text-[24px] font-extrabold leading-tight tracking-[-.02em] ${INK}`}>{TITLE}</h1>
           <p className="m-0 text-[13px] text-axal-muted dark:text-gray-400">{LINE}</p>
         </div>
-        {/* PD3 (/raise/pitch/new) is #2434 part 3; until then a new deck starts in the builder. */}
-        {showNew ? <Link to={`${BUILDER_PATH}${q}`} className={PRIMARY} data-testid="pitch-studio-new">New deck</Link> : null}
+        {/* D897 (#2677): New deck is PD3–PD6 at /raise/pitch/new. */}
+        {showNew ? <Link to={`${NEW_PATH}${q}`} className={PRIMARY} data-testid="pitch-studio-new">New deck</Link> : null}
       </div>
       {/* The reviewer is its own tool, and its writes are its own: Review draws no banner. */}
       {readOnly && tab !== 'review' ? (
@@ -256,7 +265,7 @@ export function StudioDecks({ reads, readOnly, q }) {
     left = (
       <div className={`${CARD} flex flex-col items-center gap-3 px-5 py-7 text-center`} data-testid="pitch-studio-empty">
         <span className={`text-[15px] font-extrabold ${INK}`}>{EMPTY_DECK}</span>
-        {!readOnly ? <Link to={`${BUILDER_PATH}${q}`} className={PRIMARY} data-testid="pitch-studio-empty-new">New deck</Link> : null}
+        {!readOnly ? <Link to={`${NEW_PATH}${q}`} className={PRIMARY} data-testid="pitch-studio-empty-new">New deck</Link> : null}
       </div>
     );
   } else {
@@ -272,11 +281,67 @@ export function StudioDecks({ reads, readOnly, q }) {
     // A proportional aside, not a fixed track: the rail already takes its own
     // column beside the frame, and a fixed 300px here would read as a second one.
     <div className="grid gap-3.5 xl:grid-cols-[minmax(0,2fr)_minmax(0,1fr)]">
-      <div className="flex min-w-0 flex-col gap-3.5">{left}</div>
+      <div className="flex min-w-0 flex-col gap-3.5">
+        {!readOnly && !busy && reads.versions.status === 'ok' && reads.project?.id ? <FastPath projectId={reads.project.id} q={q} /> : null}
+        {left}
+      </div>
       <aside className="flex flex-col gap-3.5" aria-label="Readers">
         <ReadersAside reads={reads} hasDeck={Boolean(current)} />
       </aside>
     </div>
+  );
+}
+
+/**
+ * D897 (#2677), PD2: "Build a standard deck now" — twelve cards from everything
+ * on record, for a seed fund, skipping source curation. Its estimate is the
+ * quote (`POST /api/decks/new/quote`); the build is a proposal, reviewed card
+ * by card at /raise/pitch/new.
+ */
+function FastPath({ projectId, q }) {
+  const navigate = useNavigate();
+  const [quote, setQuote] = useState(null);
+  const [open, setOpen] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [refusal, setRefusal] = useState(null);
+  useRailOption(busy ? 'deck:build' : null, 'Build deck');
+  useEffect(() => {
+    let live = true;
+    newDeckApi.quote({ project_id: projectId, step: 'build', audience: 'seed_fund', length: 'standard' })
+      .then((qt) => { if (live) setQuote(qt); }, (e) => { if (live) setQuote(null); reportError('pitch-studio:fast-quote', e); });
+    return () => { live = false; };
+  }, [projectId]);
+  const build = async () => {
+    setBusy(true); setRefusal(null);
+    try {
+      const r = await newDeckApi.build({ project_id: projectId, audience: 'seed_fund', length: 'standard' }, railPressHeaders('deck:build'));
+      navigate(`${NEW_PATH}${q}${q ? '&' : '?'}proposal=${encodeURIComponent(r.proposal.id)}`);
+    } catch (e) { setRefusal(refusalOf(e)); setOpen(false); reportError('pitch-studio:fast-build', e); } finally { setBusy(false); }
+  };
+  return (
+    <section className={`${CARD} flex flex-wrap items-center justify-between gap-3 px-4 py-3.5`} data-testid="pitch-studio-fast">
+      <div className="flex min-w-0 flex-col gap-1">
+        <span className={`text-[14px] font-extrabold ${INK}`}>{FAST_TITLE}</span>
+        <span className={MUTED}>{fastPathLine(quote)}</span>
+        {refusal ? (
+          <span role="alert" className="text-[12px] font-semibold text-axal-violet dark:text-violet-300">
+            {refusal.message} {refusal.topUp ? <a href={refusal.topUp.href} className="underline">{refusal.topUp.text}</a> : null}
+          </span>
+        ) : null}
+      </div>
+      <button type="button" className={PRIMARY} onClick={() => setOpen(true)} data-testid="pitch-studio-fast-build">Build</button>
+      {open ? (
+        <Lightbox label={FAST_TITLE} title={FAST_TITLE} width={520} onClose={() => !busy && setOpen(false)} testId="pitch-studio-fast-dialog"
+          footer={(
+            <div className="flex justify-end gap-2">
+              <button type="button" className={GHOST} onClick={() => setOpen(false)} disabled={busy}>Cancel</button>
+              <button type="button" className={PRIMARY} onClick={build} disabled={busy}>{busy ? 'Building…' : 'Build deck'}</button>
+            </div>
+          )}>
+          <p className={`m-0 ${MUTED}`}>{buildSentence(quote, 12)}</p>
+        </Lightbox>
+      ) : null}
+    </section>
   );
 }
 

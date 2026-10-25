@@ -111,7 +111,9 @@ test('ROUTE_MAP still parses to the full canvas corpus', () => {
   // 158 the same day (D997, #2378): `Persona segments`, out of the Admin Console at /admin/persona-segments.
   // 159 the same day (D1008, #2386): `Payments`, out of the Admin Console at /admin/platform/payments.
   // 160 the same day (D1015, #2432): `Cap table`, the founder's tool inside the Raise module page.
-  assert.equal(recs.length, 160);
+  // 161 (D1030, #2387, 2026-10-25): `My events`, its four tabs at their own addresses.
+  // 162 (D953, #2371): Admin · Programs, the catalogue and program pages.
+  assert.equal(recs.length, 162);
 
   for (const r of recs) {
     assert.ok(r.canvas.length > 0, 'every row names a canvas');

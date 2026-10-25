@@ -312,12 +312,12 @@ test('the dialogs say only what the Worker does', () => {
 
   const cancel = cancelCopy(ev(1, { title: 'A' }));
   assert.equal(cancel.lines[0], 'It leaves the public calendar.');
-  assert.match(cancel.lines[1], /^People with an account who hold a seat or wait for one are told in StudioOS\./);
+  assert.match(cancel.lines[1], /^People with an account who hold a seat or wait for one are told in StudioOS, with your note\./, 'D922: the note reaches them');
   assert.equal(cancel.paid, null, 'a free event has no refund box');
   assert.match(cancelCopy(ev(1, { price_cents: 4000 })).paid, /HQ refunds them in Revenue › Billing/);
   const all = JSON.stringify([cancel, cancelCopy(ev(1, { price_cents: 4000 })), unpublishCopy(ev(1)), featureCopy(ev(1)), featureCopy(ev(1, { featured: true }))]);
-  assert.doesNotMatch(all, /cannot be undone|every calendar|with your note|Each gets an email/, 'the canvas copy the Worker does not do');
-  assert.match(unpublishCopy(ev(1)).body, /The host is not told automatically\./);
+  assert.doesNotMatch(all, /cannot be undone|every calendar|Each gets an email/, 'the canvas copy the Worker does not do');
+  assert.match(unpublishCopy(ev(1)).body, /The host is told, with your note\./, 'D922: part 2 tells the host');
   assert.equal(featureCopy(ev(1)).action, 'Feature');
   assert.equal(featureCopy(ev(1)).next, true);
   assert.equal(featureCopy(ev(1, { featured: true })).action, 'Stop featuring');
@@ -381,8 +381,8 @@ test('the desk reads only R1, R2, R3 and R5, never the roster, R2\'s summary or 
   for (const call of ['adminEvents.list(', 'adminEvents.analytics()', 'adminEvents.get(', 'eventsApi.agenda(', 'adminEvents.history(', 'adminEvents.compPreview(']) assert.ok(src.includes(call), `the desk no longer calls ${call}`);
   for (const write of ['adminEvents.approve(', 'adminEvents.reject(', 'adminEvents.feature(', 'adminEvents.unpublish(', 'adminEvents.cancel(', 'adminEvents.setCapacity(']) assert.ok(src.includes(write), write);
   assert.doesNotMatch(src, /\.roster\(|roster\(/, 'the roster carries names and emails');
-  // An event's own `summary` column is drawn by D921's preview (`ev?.summary`); R2's is not.
-  assert.doesNotMatch(src, /(?<!\bev\??)\.summary\b|\bsummary\./, 'R2\'s summary is all-time and hides its failure');
+  assert.doesNotMatch(src, /analytics[\w.?]*\.summary\b/, 'R2\'s summary is all-time and hides its failure');
+  assert.ok(src.includes('adminEvents.summary(eventId)') && src.includes('adminEvents.history(eventId)'), 'D922: one event\'s own summary and history (D918)');
   assert.doesNotMatch(src, /conversion/, 'R2\'s conversion is 0 for every upcoming event');
   assert.doesNotMatch(src, /window\.confirm|useToast|dangerouslySetInnerHTML/);
   for (const imp of src.matchAll(/import \{([^}]+)\} from '[./]+lib\/api'/g)) {
@@ -391,6 +391,8 @@ test('the desk reads only R1, R2, R3 and R5, never the roster, R2\'s summary or 
   // D920 uses the shared chart components and D918's overview; no extra chart library.
   assert.ok(src.includes('adminEvents.overview(weeks)'));
   assert.doesNotMatch(src, /recharts|<svg/);
+  const pages = DESK_FILES.filter((f) => !f.endsWith('Model.js')).map((f) => codeOnly(read(f))).join('\n');
+  assert.doesNotMatch(pages, /location_kind|In person|'Online'/, 'the format word comes from the model alone');
   for (const sample of ['Northwind', 'Bluefern', 'Rua Exemplo', 'Fund I', 'Pricing Workshop', 'Demo Day Rehearsal', '[$', '[3]']) assert.ok(!src.includes(sample), `a canvas sample reached the desk: ${sample}`);
 });
 
@@ -411,7 +413,7 @@ const response = (body, status = 200) => ({ ok: status < 400, status, headers: {
 const LIVE = Date.now();
 const liveIso = (days) => new Date(LIVE + days * DAY_MS).toISOString();
 
-function worker({ list = [], queue = [], analytics = { summary: {}, events: [] }, event = null, agenda = { agenda: [] }, overview = overviewFixture(), writes = {} } = {}) {
+function worker({ list = [], queue = [], analytics = { summary: {}, events: [] }, event = null, agenda = { agenda: [] }, summary = {}, history = null, overview = overviewFixture(), writes = {} } = {}) {
   return (url, options = {}) => {
     const method = String(options.method || 'GET').toUpperCase();
     const m = url.match(/\/api\/admin\/events\/(\d+)\/(\w+)$/);
@@ -427,6 +429,9 @@ function worker({ list = [], queue = [], analytics = { summary: {}, events: [] }
     }
     if (/\/api\/admin\/events\/\d+$/.test(url)) return event ? response({ event }) : response({ error: 'not_found' }, 404);
     if (/\/api\/events\/\d+\/agenda$/.test(url)) return response(agenda);
+    // D922: the event's own summary and history (D918).
+    if (/\/api\/admin\/events\/\d+\/summary$/.test(url)) return summary instanceof Function ? summary() : response(summary);
+    if (/\/api\/admin\/events\/\d+\/history$/.test(url)) return history instanceof Function ? history() : response(history || { history: { created_at: event?.created_at, items: [] } });
     return response({});
   };
 }
@@ -641,8 +646,8 @@ test('one event: R3, R2\'s row and R5; Not held yet before it ends; the roster s
     assert.match(view.textOf('events-event-tile-showup'), /Not held yet/);
     assert.match(view.textOf('events-event-gate'), /On the public calendar/);
     assert.match(view.textOf('events-event-roster'), /Names and emails are on the host’s roster\./);
-    assert.match(view.textOf('events-event-history'), /Created · 1 Oct 2026/);
-    assert.match(view.textOf('events-event-history'), /Not read here yet/);
+    assert.match(view.textOf('events-history-created'), /^Created\s*1 Oct 2026$/);
+    assert.doesNotMatch(view.textOf('events-event-history'), /Not read here yet/, 'D922 reads the history');
     assert.match(view.textOf('events-event-agenda'), /Doors/);
     assert.ok(view.hrefs().includes('/events/41/manage/registrations'));
     assert.ok(!view.testIds().includes('events-header'), 'the event\'s own header, not the desk\'s');
