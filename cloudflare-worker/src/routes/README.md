@@ -1,5 +1,8 @@
 # Worker route handlers — production source of truth
 
+
+D1144: `cycle_raise.ts` returns the stored Product-market fit part, its paged `/pmf/history` read and Re-score’s `pmf: true` flag. The founder/admin project gate is unchanged. `../services/scoring/README.md` names the shared snapshot/checklist/audit transaction.
+
 These files are the production API behind `https://axal.vc/api/*`. They are
 mounted by `cloudflare-worker/src/index.ts` and run on Cloudflare Workers
 against D1 (`env.DB`), KV, R2, Vectorize, AI, Queues and Durable Objects.
@@ -139,7 +142,7 @@ widened guard on this very sentence, which is the rule working.)
 /api/admin/channels   → channels.ts `channelsAdmin` (D684: the channels bot's setWebhook and its health read, D756; super admin)
 /api/admin/bank-accounts → admin_bank_accounts.ts (D1182: audited masked history, stable snapshot pages and recorder names; failed read/audit returns 503. D708: each Axal entity's bank accounts, masked, with add, relabel, purposes, retire and a recorded reveal; Super Admin, HQ only; mounted beside /api/admin/stripe, before the /api/admin catch-all)
 /api/admin/fund-structure → admin_fund_structure.ts (D717: the entity and money map, read-only; masked accounts for the Super Admin, and each entity's active accounts masked (#1855); #1773's sentence for a plain Admin; HQ only; mounted beside /api/admin/bank-accounts, before the /api/admin catch-all)
-/api/admin/mercury    → admin_mercury.ts (D710: each Axal entity's read-only Mercury connection, its accounts, transactions and reconciliation matches, and D749's Not ours marks; connect is the Super Admin's behind the write bar, the rest an Admin's on HQ. The only home of Axal VC's own accounts, drawn in HQ › Fund administration › Bank accounts, never on a member connector: D879, D880, D883)
+/api/admin/mercury    → admin_mercury.ts (D710: each Axal entity's read-only Mercury connection, its accounts, transactions and reconciliation matches, and D749's Not ours marks; D1183 adds audit-first GET /balances and /monthly chart reads. Connect is the Super Admin's behind the write bar, the rest an Admin's on HQ. The only home of Axal VC's own accounts, drawn in HQ › Fund administration › Bank accounts, never on a member connector: D879, D880, D883)
 /api/eadwyn       → eadwyn.ts          (the Worker AI rail's conversations, their connector switches, and Send/Cancel for a write Eadwyn proposed; D652)
 /api/wellbeing     → wellbeing.ts       (check-ins, the expert directory and bookings; sample experts are seeded outside production only and never shown to members, D643)
 /api               → realtime.ts (WebSocket fan-out, Durable Objects)
@@ -355,3 +358,5 @@ D1091 (#2956): `google_workspace.ts` mounts `/api/connectors/google-workspace`: 
 D1133: `billing.ts` mounts `/alerts/:id/pay` and `/alerts/:id/update-card` under `/api/billing`, both recent-TOTP gated. They prepare in-page Stripe forms for the caller’s open failed renewal; opening neither confirms a charge nor changes the default card.
 
 D1135: `company.ts` adds member self-leave and validates create/rename; `projects.ts` counts live ventures, adds owner restore within 30 days and sends email-mode team invitations.
+
+D1123: `admin_lab_operations.ts` adds `/cohorts/:cohort/capacity`, the latest stored capacity event for SL6, separately from current Settings. It never returns free-form event details.

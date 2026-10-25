@@ -177,6 +177,7 @@ import matches from './routes/matches';
 import settings from './routes/settings';
 import personas from './routes/personas';
 import personaSegments from './routes/persona_segments';
+import personaMembers from './routes/persona_members';
 import onboarding from './routes/onboarding';
 // Task #6 (IF) — per-role onboarding checklist + product-tour tracking.
 import onboardingChecklist from './routes/onboarding_checklist';
@@ -1368,6 +1369,8 @@ app.route('/api/eadwyn', eadwynRoutes);
 app.route('/api/crunchbase', crunchbaseRoutes);
 // D1000 (#2815): the segment profiles, before the personas routes.
 app.route('/api/personas/segments', personaSegments);
+// D1002 (#2817): members, bulk move, ask to finish and activity, before the personas routes.
+app.route('/api/personas/admin', personaMembers);
 app.route('/api/personas', personas);
 app.route('/api/notifications', notificationsRoutes);
 app.route('/api/linkedin', linkedinRoutes);

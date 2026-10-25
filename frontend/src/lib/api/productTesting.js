@@ -26,6 +26,10 @@
 //   open / close     POST  /admin/testing/programmes/:uid/open|close
 //   create, edit, applicants, pick, decline, uploadLogo, removeLogo: as the partner's, on HQ's own programmes.
 //
+// `adminProductTestersApi`, the tester pool (D1042's store, migration 576; read by
+// D1195's Tester pool tab):
+//   list             GET   /admin/product-testers?status=&page=   → { rows, page, page_size, matching, totals }
+//
 // Every path is written out in full so the drift check (scripts/check-api-drift.mjs)
 // reads each one against the Worker.
 import { request } from '../api.js';
@@ -74,4 +78,17 @@ export const adminTestingApi = {
   decline: (uid) => request(`/admin/testing/applications/${enc(uid)}/decline`, { method: 'POST' }),
   uploadLogo: (uid, file) => request(`/admin/testing/programmes/${enc(uid)}/logo`, { method: 'PUT', body: logoForm(file) }),
   removeLogo: (uid) => request(`/admin/testing/programmes/${enc(uid)}/logo`, { method: 'DELETE' }),
+};
+
+export const TESTER_STATUSES = ['applied', 'active', 'paused', 'declined', 'removed'];
+
+export const adminProductTestersApi = {
+  list: (status, page = 1) => {
+    if (status != null && status !== '' && !TESTER_STATUSES.includes(status)) throw new Error(`Unknown tester status: ${status}`);
+    const q = new URLSearchParams();
+    if (status) q.set('status', status);
+    if (page > 1) q.set('page', String(page));
+    const qs = q.toString();
+    return request(`/admin/product-testers${qs ? `?${qs}` : ''}`);
+  },
 };

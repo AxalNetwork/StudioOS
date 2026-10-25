@@ -103,7 +103,7 @@ the manual writes for migration 440's records. Every call names the project
 with `?project=`.
 
 D661 (#1474): `cycles.js` reads the four cycle pages (`/api/cycles/:cycle/overview`
-and `/modules/:slug`). `cycleWrites.js` is the write table behind their Add and Edit forms,
+and `/modules/:slug`). `cycleWrites.js` also exposes D1144’s venture-scoped `raise.pmfHistory` read and passes the explicit `pmf: true` Re-score flag. It is the write table behind their Add and Edit forms,
 a factory over `request` so the contract test can run it against the real Worker
 routes; `cycles.js` binds it to the app's client as `cyclesWrite`. Its one
 `formOptions(cycle, projectId, slug, query?)` reads a module's form choices from
@@ -176,7 +176,9 @@ the four entity connections (each with its accounts by ending), the Super
 Admin's connect with `confirm_read_only: true` and disconnect with a reason,
 sync now, and the accounts, transactions and matches reads. D749 (#1838) adds
 `markNotOurs` and `withdrawNotOurs`. D717 (#1856): `transactions` takes
-`direction` (`credit` or `debit`). Every read is audited by the Worker;
+`direction` (`credit` or `debit`). D1183 adds `balances({ account, range })`
+(default 90d) and `monthly({ entity })` for the stored cash charts, each a
+mounted GET audited before figures are read. Every read is audited by the Worker;
 nothing here moves money. #1779's console imports it.
 
 D713 (#1778): `mercuryPersonal.js` calls a member's own read-only Mercury:
@@ -387,5 +389,7 @@ licence's program decisions a page at a time) and downloads the grid's CSV
 D1133 adds `billingAlertsApi.pay(id)` and `.updateCard(id, nonce)` for the mounted failed-renewal preparation routes. Keep one validated 8–64-character nonce per open card form and reuse it on retries. Their client secrets belong only in the in-page Stripe form, never storage or logs.
 
 D1135's `companyActions.js` holds self-service company leave and venture restore.
+
+D1123 adds the cohort capacity read to `labOperations.js`; the mounted Worker route is in admin_lab_operations.ts.
 
 D1199 (#3149): `productTesting.js` adds the programme logo: `partnerTestingApi.uploadLogo(uid, file)` and `.removeLogo(uid)`, the same on `adminTestingApi` for HQ's own programmes, and `productTestingApi.logoSrc(uid)`, the `<img>` path (a 404 there means no logo: draw the initial letter).

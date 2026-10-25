@@ -380,7 +380,7 @@ export const APPROVAL_SOURCES: readonly ApprovalSource[] = [
       + 'FROM comarketing_pitches c LEFT JOIN partners pt ON pt.id = c.partner_id '
       + 'LEFT JOIN users u ON u.id = c.submitter_user_id '
       + "WHERE c.status = 'proposed' ORDER BY julianday(c.created_at) ASC LIMIT ?",
-    notifies: 'Nobody yet',
+    notifies: 'The partner',
     decidedOn: 'Co-marketing',
     // Only the publish transition stamps `published_at`, so this is every
     // approved pitch still waiting to go out.
@@ -392,23 +392,24 @@ export const APPROVAL_SOURCES: readonly ApprovalSource[] = [
   {
     key: 'wellbeing_experts',
     label: 'Wellbeing experts',
-    // NO STATUS COLUMN: the directory's own bar (D1038 §2), which is "To
-    // verify": active, unverified, not hidden, at least 70% complete
+    // D1043: the directory's "To verify" bar: active, unverified, not
+    // declined or hidden, at least 70% complete
     // (`profile_completion_pct`, recomputed on every edit), and not a sample
-    // (`seed_` uids, services/wellbeing/seedExperts.ts). There is no declined
-    // state yet (part 5), so none is left out for it.
+    // (`seed_` uids, services/wellbeing/seedExperts.ts).
     countSql:
       'SELECT COUNT(*) AS n, MIN(datetime(created_at)) AS oldest FROM experts '
       + 'WHERE is_active = 1 AND verified = 0 AND COALESCE(hidden_by_admin, 0) = 0 '
+      + "AND decision_state <> 'declined' "
       + "AND COALESCE(profile_completion_pct, 0) >= 70 AND substr(uid, 1, 5) <> 'seed_'",
     rowsSql:
       "SELECT e.id AS id, COALESCE(NULLIF(e.name, ''), NULLIF(u.name, ''), u.email, 'expert ' || e.id) AS who, "
       + "'Wellbeing expert · ' || COALESCE(NULLIF(e.headline, ''), 'no headline') AS what, e.created_at AS created_at "
       + 'FROM experts e LEFT JOIN users u ON u.id = e.user_id '
       + 'WHERE e.is_active = 1 AND e.verified = 0 AND COALESCE(e.hidden_by_admin, 0) = 0 '
+      + "AND e.decision_state <> 'declined' "
       + "AND COALESCE(e.profile_completion_pct, 0) >= 70 AND substr(e.uid, 1, 5) <> 'seed_' "
       + 'ORDER BY julianday(e.created_at) ASC LIMIT ?',
-    notifies: 'Nobody yet',
+    notifies: 'The expert',
     decidedOn: 'Wellbeing',
   },
   {

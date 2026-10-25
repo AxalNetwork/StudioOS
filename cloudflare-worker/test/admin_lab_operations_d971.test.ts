@@ -305,3 +305,25 @@ test('message actors and interviews without a recorded admin scheduler stay unre
   }
   db.close();
 });
+
+test('D1123: a cohort capacity result is the last recorded check, not current settings or another cohort', async () => {
+  const db = fresh(); eventsFixture(db);
+  db.exec("INSERT INTO cohort_cycle_events (cohort_cycle_id,event_type,details) VALUES (1,'capacity_ok','Capacity check passed: 9 approved (minimum 6)'), (2,'capacity_ok','Capacity check passed: 99 approved (minimum 2)')");
+  const got = await call(adminOperations, db, ADMIN, '/cohorts/2026-11/capacity');
+  assert.equal(got.status, 200); assert.deepEqual([got.body.outcome, got.body.approved, got.body.minimum], ['capacity_ok', 9, 6]);
+  db.exec("INSERT INTO cohort_cycle_events (cohort_cycle_id,event_type,details) VALUES (1,'cycle_postponed','Below minimum (2 approved < 6); 3 applicant(s) rolled forward')");
+  const last = await call(adminOperations, db, ADMIN, '/cohorts/2026-11/capacity'); assert.deepEqual([last.body.outcome, last.body.approved, last.body.minimum], ['cycle_postponed', 2, 6]);
+  assert.equal((await call(adminOperations, db, FOUNDER, '/cohorts/2026-11/capacity')).status, 403);
+  assert.equal((await call(adminOperations, db, ADMIN, '/cohorts/2026-13/capacity')).status, 400);
+  assert.equal((await call(adminOperations, db, ADMIN, '/cohorts/2030-01/capacity')).status, 404);
+  db.close();
+});
+test('D1123: an absent capacity check is Not recorded; a broken event store is Unreadable', async () => {
+  const db = fresh(); eventsFixture(db);
+  const empty = await call(adminOperations, db, ADMIN, '/cohorts/2026-11/capacity');
+  assert.deepEqual(empty.body, { recorded: false, reason: 'No capacity check result is on record for this cohort.' });
+  db.exec('DROP TABLE cohort_cycle_events');
+  const broken = await call(adminOperations, db, ADMIN, '/cohorts/2026-11/capacity');
+  assert.equal(broken.status, 503); assert.ok(broken.body.error); assert.equal('approved' in broken.body, false);
+  db.close();
+});

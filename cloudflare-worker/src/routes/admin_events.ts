@@ -98,7 +98,7 @@ function intParam(v: string | undefined): number | null {
 
 // ── GET / — the paged list (D918) ──────────────────────────────────────────
 // Today's fields per event, plus its counts, host line, venture and clash flag.
-// Filters: status (several, comma-separated or repeated), visibility, when,
+// Filters: status (several, comma-separated or repeated), visibility, type (D1121), when,
 // price, featured, q (title, host, venture). Sorts: starts, created,
 // seats_taken, fill, show_up, waiting. With no sort, newest created first.
 adminEvents.get('/', async (c) => {
