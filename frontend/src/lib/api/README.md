@@ -216,6 +216,9 @@ D708 (#1773): `bankAccounts.js` calls `/api/admin/bank-accounts` (the Super
 Admin's list, add, label and purposes, retire, and a recorded reveal of one
 number) and the LP's own `GET /api/funds/:id/capital-calls/lines/:lineId/pay-instructions`.
 A reveal's answer is held in the caller's component state only, never stored.
+D1182 adds `bankAccountsApi.history(filters)` for the audited Super Admin GET
+`/api/admin/bank-accounts/history`: q, kind, entity, actor, range or from/to,
+page, per and the returned snapshot token. No history screen is added in part 1.
 
 D702 (#1664): `profile.js` calls `/api/profile/me`, `/api/profile/venture` (GET
 and PATCH) and `/api/profile/preview` (`cloudflare-worker/src/routes/founder_profile.ts`), and the
@@ -376,6 +379,10 @@ published blocks, the change log, the matrix and the subprocessor subscribe, no 
 `trustCenterAdminApi` (HQ › Security › Trust center content: drafts, subprocessors, the
 auditor's reports and Publish with its note, Super Admin) and `securityReportsApi` (Help's
 private Security reports, and HQ's read of them).
+
+D1126 (#3006): `programGrants.js` also reads HQ's History tab (`allHistory`, every
+licence's program decisions a page at a time) and downloads the grid's CSV
+(`exportCsv`, and `exportLicenceCsv` for one studio), all Super Admin.
 
 D1133 adds `billingAlertsApi.pay(id)` and `.updateCard(id, nonce)` for the mounted failed-renewal preparation routes. Keep one validated 8–64-character nonce per open card form and reuse it on retries. Their client secrets belong only in the in-page Stripe form, never storage or logs.
 

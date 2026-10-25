@@ -1,0 +1,74 @@
+<!DOCTYPE html>
+<html><head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <meta name="design_doc_mode" content="canvas">
+  <link href="https://fonts.googleapis.com/css2?family=Roboto+Mono:wght@400;500;600;700&family=Space+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <style>body{margin:0;background:#eeedf2}a{color:#7c3aed;text-decoration:none}a:hover{color:#6d28d9}</style>
+</helmet>
+<div style="display:flex;flex-direction:column;font-family:'Space Grotesk',system-ui,sans-serif;color:#18181b">
+  <header style="padding:40px 44px 8px;display:flex;flex-direction:column;gap:6px">
+    <span style="font:700 11px 'Roboto Mono',monospace;letter-spacing:.07em;text-transform:uppercase;color:#6b6577">Investor · Deals</span>
+    <h1 style="margin:0;font-size:28px;font-weight:800;letter-spacing:-.02em">Deal page</h1>
+    <p style="margin:0;font-size:14px;color:#6b6577;max-width:840px;line-height:1.55">One deal page where an investor decides and closes, with a stage track and one next action at the top of every tab. Five parts belong to sibling canvases and sit here as grey slot frames. Sample today is [21 Oct 2026], with you at Diligence; the Commitment boards show [4 Nov], after you commit. The syndicate drawer is drawn as a centred lightbox.</p>
+  </header>
+  <sc-for list="{{ boards }}" as="b" hint-placeholder-count="24">
+    <section id="{{ b.id }}" style="padding:36px 44px;border-bottom:1px solid rgba(0,0,0,.08);display:flex;flex-direction:column;gap:12px;scroll-margin-top:16px">
+      <div style="display:flex;align-items:baseline;gap:10px;flex-wrap:wrap">
+        <a href="#{{ b.id }}" style="font:700 11px 'Roboto Mono',monospace;padding:3px 8px;background:#18181b;color:#fff;border-radius:5px">{{ b.id }}</a>
+        <h2 style="margin:0;font-size:16px;font-weight:800;letter-spacing:-.01em">{{ b.t }}</h2>
+      </div>
+      <p style="margin:0;font-size:13px;line-height:1.55;color:#4a4553;max-width:920px">{{ b.cap }}</p>
+      <div style="display:flex;gap:28px;flex-wrap:wrap;align-items:flex-start">
+        <sc-for list="{{ b.frames }}" as="f" hint-placeholder-count="1">
+          <div style="display:flex;flex-direction:column;gap:8px;flex:none">
+            <sc-if value="{{ f.lab }}" hint-placeholder-val="{{ false }}"><span style="font:600 11px 'Roboto Mono',monospace;color:#6b6577">{{ f.lab }}</span></sc-if>
+            <div style="{{ f.box }}"><dc-import name="Investor Deal Page" board="{{ f.b }}" hint-size="{{ f.hint }}"></dc-import></div>
+          </div>
+        </sc-for>
+      </div>
+    </section>
+  </sc-for>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script="">
+class Component extends DCLogic {
+  renderVals() {
+    const D = (b, lab, w, h, r) => ({ b, lab: lab || false, hint: '100%,' + (h || 900) + 'px', box: 'width:' + (w || 1440) + 'px;' + (h ? 'height:' + h + 'px;' : '') + 'overflow:hidden;border-radius:' + (r || 12) + 'px;border:1px solid rgba(24,24,27,.12);background:#f4f3f7;box-shadow:0 1px 3px rgba(0,0,0,.06)' });
+    const P = (b, lab) => D(b, lab, 390, 844, 28);
+    const boards = [
+      ['DL1', 'Overview · Investor · desktop 1440 · light', 'The header, key strip, stage track at Diligence and the tabs, with Eadwyn’s rail open. The scorecard slot and its three least certain scopes, what the score rests on, flags, what’s new, terms at a glance, the round, your next step and the deck slot.', [D('DL1')]],
+      ['DL2', 'Stage track states', 'One crop per step with its next action, then you passed and the studio passed. Crops 5 to 7 are a firm with no IC, so its IC step reads Not recorded.', [D('DL2a', '1 · Invited', 1440), D('DL2b', '2 · Reviewing', 1440), D('DL2c', '3 · Diligence', 1440), D('DL2d', '4 · IC', 1440), D('DL2e', '5 · Terms', 1440), D('DL2f', '6 · Committed', 1440), D('DL2g', '7 · Signed', 1440), D('DL2h', '8 · Funded', 1440), D('DL2i', 'You passed', 1440), D('DL2j', 'Passed by the studio', 1440)]],
+      ['DL3', 'Evidence', 'The tab around the Raise evidence slot: its line, the count of backed claims and the five sources.', [D('DL3')]],
+      ['DL4', 'Team', 'Founders and a key hire as they published themselves, the team’s coverage on eight skill axes with Finance as the gap, the values band, the Team row and the advisors’ count.', [D('DL4')]],
+      ['DL5', 'Market', 'TAM, SAM and SOM with their sources, who pays, where the company is and plans to sell, competitors, and four scorecard rows.', [D('DL5')]],
+      ['DL6', 'Traction', 'Six figures with their sources, ARR with January not reported and the year before dotted, net burn and paying accounts, and the Traction and Financial rows.', [D('DL6')]],
+      ['DL7', 'Diligence', 'The case summary and its door, requests to the founder, your firm’s reference calls and Eadwyn’s questions. The second frame is a company with no case yet.', [D('DL7'), D('DL7n', 'No case yet', 760)]],
+      ['DL8', 'Documents and data room', 'Access with an NDA on file, the folders and files, deal paper and the deck slot. Then the three access states; behind an NDA, withheld files are counted, never named.', [D('DL8'), D('DL8a', 'Not opened to you', 900), D('DL8b', 'Behind an NDA', 1100), D('DL8c', 'NDA on file', 900)]],
+      ['DL9', 'Access and NDA dialogs', 'Asking the founder for access, and the three-way NDA.', [D('DL9', false, 1200)]],
+      ['DL10', 'Terms and legal', 'Proposed terms with where each comes from, the legal paper, the cap table slot and how you invest, handing off to the closing room.', [D('DL10')]],
+      ['DL11', 'Commitment and closing', 'After you commit on [4 Nov]: your Pending commitment and note, your Mercury capacity, the closing slot, the round and its syndicates.', [D('DL11')]],
+      ['DL12', 'Commit and withdraw dialogs', 'Commit, then Recorded, then Withdraw with a required reason.', [D('DL12', false, 1440)]],
+      ['DL13', 'Syndicate', 'A syndicate you are not in, as a centred lightbox over Commitment. The second frame shows a member’s view, the lead’s view and closing the syndicate.', [D('DL13'), D('DL13l', 'As a member and as the lead', 1300)]],
+      ['DL14', 'Notes and activity', 'Your firm’s notes, a summary drafted by Eadwyn waiting to be saved, and the deal’s activity without other investors’ names.', [D('DL14')]],
+      ['DL15', 'Who sees what', 'Twelve kinds of information against seven viewers, then the round as an investor, the founder and an admin see it.', [D('DL15', false, 1440)]],
+      ['DL16', 'Founder view', 'The founder’s own deal from Raise: every commitment with its status and Match to my Mercury, never a note.', [D('DL16')]],
+      ['DL17', 'Admin and Operating Partner', 'An admin sees every commitment, records wires and invites investors; an open IC condition holds wires. An operating partner reads and records wires.', [D('DL17a', 'Admin'), D('DL17b', 'Operating Partner')]],
+      ['DL18', 'Empty', 'Evidence, traction, notes and commitment before you commit.', [D('DL18a', 'Evidence', 760), D('DL18b', 'Traction', 760), D('DL18c', 'Notes', 760), D('DL18d', 'Commitment', 760)]],
+      ['DL19', 'Loading', 'The header and tabs at once; the key strip and cards read.', [D('DL19')]],
+      ['DL20', 'Error and partial', 'The score could not be read while the rest renders, and the deal could not be read.', [D('DL20a', 'The score could not be read', 1100), D('DL20b', 'The deal could not be read', 760)]],
+      ['DL21', 'Phone · 390 wide', 'Overview with the track as a list and the next action fixed at the foot, Traction with its chart, and Commit as a bottom sheet.', [P('DL21a', 'Overview'), P('DL21b', 'Traction'), P('DL21c', 'Commit')]],
+      ['DL22', 'No permission', 'Not invited, the free plan, an advisor and an explorer.', [D('DL22a', 'Not invited', 1440, 640), D('DL22b', 'Free plan', 1440, 760), D('DL22c', 'Advisor', 1440, 640), D('DL22d', 'Explorer', 1440, 640)]],
+      ['DL23', 'Dark', 'Overview and Traction in the dark colours; violet becomes #a78bfa.', [D('DL23a', 'Overview'), D('DL23b', 'Traction')]],
+      ['DL24', 'Slots from sibling canvases', 'Each tab that holds another canvas’s board, drawn as a labelled grey frame with its state.', [D('DL24a', 'Scorecard tab', 1440), D('DL24b', 'Evidence tab', 1440), D('DL24c', 'Terms tab', 1440), D('DL24d', 'Commitment tab', 1440), D('DL24e', 'Overview and Documents', 1440)]]
+    ].map(([id, t, cap, frames]) => ({ id, t, cap, frames }));
+    return { boards };
+  }
+}
+</script>
+</body></html>

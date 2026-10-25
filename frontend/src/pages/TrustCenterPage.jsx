@@ -1,34 +1,22 @@
-/* Task #4 (Y-2) — Trust Center frontend.
- *
- * Single page with role-gated tabs (Overview / Identity (KYC) / Entity (KYB) /
- * Accreditation / Agreements). Drives a Trust score 0-100 from
- * /api/trust/me. Members see their own pairs; platform admin tools are links.
- *
- * THIS PAGE NO LONGER READS /trust/summary, AND THE ROUTE IS GONE (D432). It
- * once did, for backwards compat with legacy KYB / Accreditation / NDA cards
- * built on that endpoint's shape. The first two were unreachable and were
- * deleted; the NDA card was repointed at /nda/required and then folded into
- * the Role agreements rows (D432), whose "Open to sign" is the one signing
- * path for a role NDA. Nothing in the SPA called the endpoint, so it was
- * retired with its client method, getTrustSummary; trust_center_contract.test.mjs holds it
- * gone.
- */
-import { useEffect, useMemo, useState } from 'react';
+/** D1078: the member’s requirements, agreements, verifications and data. */
+import { useEffect, useState } from 'react';
+import { useSearchParams } from 'react-router-dom';
+import MemberOverview, { MemberUnreadable } from './trust/MemberOverview';
+import RequirementDialog from './trust/RequirementDialog';
+import MemberData from './trust/MemberData';
+import { memberRequirements, requirementCounts, signingRequirement, REQUIREMENTS } from './trust/memberTrustModel';
 import {
   ShieldCheck, Lock, FileText, CheckCircle2, Loader2,
   Globe, IdCard, Building2, BadgeCheck, FileSignature,
   Link2 as LinkIcon,
 } from 'lucide-react';
+import { useAuth } from '../hooks/useAuthSync';
+import { isSuperAdminUser, branchOfUser } from '../lib/shellRole';
 import { api, getActiveCompanyId } from '../lib/api';
 import { safeReadJSON } from '../lib/storage';
-import { Unreadable } from '../ui';
 import { usePhoneWidth } from '../ui/phone/usePhoneWidth';
 import { AccountPhonePage, phonePending } from './account/AccountPhonePage';
-import { ACCOUNT_PHONE_PAGES } from './account/accountPhone';
-import TrustScoreBadge, { computeTrustScore } from '../components/TrustScoreBadge';
 import {
-  SCORE_BANDS, bandOf, verdictFor, scoreLine, obligationSummary,
-  outstandingCounts, waitingOn, deltaNote, NO_HISTORY_NOTE,
   collapseEnvelopeHistory, envelopeEventLabel, envelopeEventTone,
   envelopeEventWhen, NO_ENVELOPE_HISTORY_NOTE,
 } from '../lib/trustCenter';
@@ -159,7 +147,7 @@ function StatusPill({ status }) {
   const t = TONE[toneOf(status)];
   return (
     <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded border text-xs font-medium ${t.pill}`}>
-      {String(status || 'pending').replace(/_/g, ' ')}
+      {status ? String(status).replace(/_/g, ' ') : 'Not recorded'}
     </span>
   );
 }
@@ -331,7 +319,7 @@ function OpenToSignButton({ item, onChanged }) {
         onClick={openSigning}
         disabled={busy}
         data-testid={`open-to-sign-${item.obligation_key}`}
-        className="text-xs bg-violet-600 hover:bg-violet-500 disabled:opacity-50 text-white px-2 py-1 rounded inline-flex items-center gap-1.5"
+        className="text-xs bg-violet-600 hover:bg-violet-500 disabled:opacity-50 text-white min-h-11 px-3 py-2 rounded inline-flex items-center gap-1.5"
       >
         {busy ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : null}
         Open to sign
@@ -344,154 +332,9 @@ function OpenToSignButton({ item, onChanged }) {
 // ---------------------------------------------------------------------------
 // Obligation list — generic renderer used on every tab.
 // ---------------------------------------------------------------------------
-/**
- * A three-number summary of the list below it, counted from the SAME array the
- * rows render. It is deliberately not a second data source and deliberately
- * not a second score: the badge beside it is computed by computeTrustScore,
- * which the worker mirrors exactly (`satisfied+waived / required`, trust.ts:157).
- * The canvas this came from proposed its own formula — partial credit for
- * in-review, a gate penalty per open requirement — which would have put this
- * page's number at odds with the server's AND with the same badge on /account.
- * Counts describe; they do not re-score.
- *
- * A tone with nothing in it is omitted rather than shown as a zero, because
- * "0 blocked" and "no blocked row exists" are the same fact stated two ways and
- * the second one reads as an achievement.
- */
-/**
- * The tally beside the obligations list.
- *
- * COUNTED BY `waitingOn`, NOT BY THE PILL TONE — and the render is what
- * caught it. Splitting on `toneOf` puts `pending` under "in progress", so
- * with three untouched obligations and one under review the pills read
- * "4 in progress" inches from a sentence reading "1 in progress", in the
- * same frame, about the same five rows. Both were defensible on their own
- * terms and together they were a contradiction.
- *
- * So there is now ONE split on this page — `outstandingCounts` — and these
- * pills are the same two numbers the two sentences are built from, plus the
- * settled remainder. The severity tones stay: bad for what waits on the
- * reader, amber for what is moving, green for what is done.
- */
-function ToneCounts({ obligations }) {
-  const { needs, inProgress } = outstandingCounts(obligations);
-  const settled = obligations.filter(o => waitingOn(o.status) === 'settled').length;
-  const shown = [
-    ['bad', needs, 'need action'],
-    ['prog', inProgress, 'in progress'],
-    ['ok', settled, 'satisfied'],
-  ].filter(([, c]) => c > 0);
-  if (!shown.length) return null;
-  return (
-    <div className="flex flex-wrap gap-2 mt-3">
-      {shown.map(([tone, c, label]) => (
-        <span key={tone} className={`inline-flex items-center gap-1.5 px-2 py-0.5 rounded border text-xs font-medium ${TONE[tone].pill}`}>
-          <span className="font-bold tabular-nums">{c}</span> {label}
-        </span>
-      ))}
-    </div>
-  );
-}
-
-/**
- * Trust Center v2's score panel — the left column of the Overview.
- *
- * The page already drew a `TrustScoreBadge`; what the canvas draws is a
- * card: a large ring, "of 100", the verdict, a line explaining what is
- * outstanding, the month-over-month move, and the three bands with the
- * current one lit. Every value comes from `lib/trustCenter.js`, which is
- * pure and unit-tested in both directions.
- *
- * THE DELTA IS THE PART THAT CAN LIE, so it is the part with a rule. The
- * canvas fakes it from a per-role literal and falls back to "Unchanged from
- * last month" when it has none — which would tell a brand-new account its
- * score held steady across a month it did not exist for. `deltaNote` returns
- * null when the server reports no earlier month, and the panel says so.
- */
-function ScorePanel({ score, previousScore, previousMonth, obligations }) {
-  const band = bandOf(score);
-  const verdict = verdictFor(score);
-  // Counted by WHO THE ROW WAITS ON, not by the pill's colour. `toneOf` gives
-  // `pending` the amber `prog` tone, and splitting on that told a reader with
-  // three untouched obligations "3 in progress — nothing needs action from
-  // you". `waitingOn` is the separate question, and `lib/trustCenter.js`
-  // explains why the canvas's own split cannot be copied.
-  const { needs, inProgress } = outstandingCounts(obligations);
-  const delta = deltaNote(score, previousScore, previousMonth);
-
-  const RING = 158;
-  const R = 66;
-  const CIRC = 2 * Math.PI * R;
-  const dash = (Math.max(0, Math.min(100, score)) / 100) * CIRC;
-
-  return (
-    <div className={`rounded-2xl border p-6 text-center bg-white dark:bg-slate-900 ${TONE[band].edge}`}>
-      <div className="relative mx-auto" style={{ width: RING, height: RING }}>
-        <svg viewBox="0 0 160 160" width={RING} height={RING} className="block -rotate-90">
-          <circle cx="80" cy="80" r={R} fill="none" strokeWidth="15" className="stroke-slate-200 dark:stroke-slate-700" />
-          <circle
-            cx="80" cy="80" r={R} fill="none" strokeWidth="15" strokeLinecap="round"
-            strokeDasharray={`${dash.toFixed(1)} ${CIRC.toFixed(1)}`}
-            className={TONE[band].ring}
-          />
-        </svg>
-        <div className="absolute inset-0 flex flex-col items-center justify-center">
-          <div className="text-[46px] font-extrabold leading-none tracking-tight tabular-nums text-slate-900 dark:text-slate-100">
-            {score}
-          </div>
-          <div className="mt-1 text-[10px] font-medium uppercase tracking-widest text-slate-500 dark:text-slate-400">
-            of 100
-          </div>
-        </div>
-      </div>
-
-      <div className="mt-4 text-[17px] font-extrabold tracking-tight text-slate-900 dark:text-slate-100">{verdict}</div>
-      <div className="mt-1.5 text-[12.5px] leading-relaxed text-slate-600 dark:text-slate-400">
-        {scoreLine({ needs, inProgress })}
-      </div>
-
-      {delta ? (
-        <div className={`mt-1.5 text-[11.5px] font-semibold tabular-nums ${
-          delta.tone === 'ok' ? 'text-emerald-700 dark:text-emerald-400'
-            : delta.tone === 'bad' ? 'text-red-700 dark:text-red-400'
-              : 'text-slate-500 dark:text-slate-400'}`}>
-          {delta.text}
-        </div>
-      ) : (
-        <div className="mt-1.5 text-[11.5px] text-slate-500 dark:text-slate-400">{NO_HISTORY_NOTE}</div>
-      )}
-
-      <div className="mt-4 flex justify-center gap-1.5 border-t border-slate-100 dark:border-slate-800 pt-4">
-        {SCORE_BANDS.map(b => (
-          <span
-            key={b.key}
-            className={`rounded-full px-2.5 py-1 text-[11px] font-bold border ${
-              b.key === band ? TONE[b.key].pill : 'border-transparent bg-slate-100 text-slate-500 dark:bg-slate-800 dark:text-slate-400'}`}
-          >
-            {b.label}
-          </span>
-        ))}
-      </div>
-    </div>
-  );
-}
-
-/**
- * Trust Center v2's envelope history — the timeline under an expanded
- * agreement row.
- *
- * Fetched on expand, not with the list: `/trust/agreements` already returns
- * up to 400 rows and almost none of them are ever opened. Fetched ONCE per
- * envelope and kept, because a timeline of past events does not change while
- * the reader looks at it.
- *
- * The canvas draws Sent → Viewed → Signed with a dot per step and the last
- * one accented. All three are real audit actions (`routes/esign.ts` appends
- * `envelope_created`, `envelope_viewed`, `envelope_signed`), so nothing here
- * is derived from a guess about what two timestamps imply.
- */
 function EnvelopeHistory({ envelopeUuid }) {
   const [state, setState] = useState({ phase: 'loading', events: [], error: null });
+  const [attempt, setAttempt] = useState(0);
 
   useEffect(() => {
     let live = true;
@@ -509,7 +352,7 @@ function EnvelopeHistory({ envelopeUuid }) {
         setState({ phase: 'error', events: [], error: e?.message || 'Could not load this envelope’s history' });
       });
     return () => { live = false; };
-  }, [envelopeUuid]);
+  }, [envelopeUuid, attempt]);
 
   return (
     <div className="mt-2 border-t border-slate-200 dark:border-slate-700 pt-3 pl-7">
@@ -522,7 +365,7 @@ function EnvelopeHistory({ envelopeUuid }) {
         </div>
       )}
       {state.phase === 'error' && (
-        <div className="text-xs text-red-700 dark:text-red-300">{state.error}</div>
+        <MemberUnreadable what="This agreement’s history" onRetry={() => setAttempt((n) => n + 1)} />
       )}
       {state.phase === 'ready' && state.events.length === 0 && (
         <div className="text-xs text-slate-500 dark:text-slate-400">{NO_ENVELOPE_HISTORY_NOTE}</div>
@@ -582,12 +425,13 @@ function ObligationList({ obligations, emptyText, rowAction = null }) {
         return (
           <li
             key={o.obligation_key}
-            className={`flex items-center justify-between bg-slate-50 dark:bg-slate-800/40 border border-slate-200 dark:border-slate-700 border-l-4 ${TONE[toneOf(o.status)].bar} rounded px-3 py-2`}
+            data-testid={`requirement-${o.obligation_key}`}
+            className={`flex flex-wrap items-center justify-between gap-2 bg-slate-50 dark:bg-slate-800/40 border border-slate-200 dark:border-slate-700 border-l-4 ${TONE[toneOf(o.status)].bar} rounded px-3 py-2`}
           >
-            <div className="flex items-center gap-3 min-w-0">
+            <div className="flex w-full items-center gap-3 min-w-0 sm:w-auto">
               <FileText size={16} className="text-slate-500 dark:text-slate-400 shrink-0" />
               <div className="min-w-0">
-                <div className="text-sm text-slate-900 dark:text-slate-100 truncate">{meta.label}</div>
+                <div className="text-sm text-slate-900 dark:text-slate-100 break-words">{meta.label}</div>
                 <div className="text-xs text-slate-600 dark:text-slate-400">
                   {o.required ? 'Required' : 'Optional'}
                   {exp ? ' · ' : ''}
@@ -612,7 +456,7 @@ function ObligationList({ obligations, emptyText, rowAction = null }) {
                 )}
               </div>
             </div>
-            <div className="flex items-center gap-3">
+            <div className="ml-auto flex flex-wrap items-center gap-3">
               <StatusPill status={o.status} />
               {rowAction ? rowAction(o) : null}
 
@@ -653,7 +497,7 @@ function PairwiseSignButton({ envelopeUuid }) {
     <button
       onClick={go}
       disabled={state === 'loading'}
-      className="text-xs bg-emerald-600 hover:bg-emerald-500 disabled:bg-slate-300 text-white px-2 py-1 rounded inline-flex items-center gap-1"
+      className="text-xs bg-emerald-600 hover:bg-emerald-500 disabled:bg-slate-300 text-white min-h-11 px-3 py-2 rounded inline-flex items-center gap-1"
       title="Open the signing page for this NDA"
     >
       {state === 'loading' ? <Loader2 size={12} className="animate-spin" /> : <CheckCircle2 size={12} />}
@@ -685,7 +529,7 @@ function pairwiseTitle(row, meId, isAdmin) {
   return `Mutual NDA · ${partyLabel(row, other)}`;
 }
 
-function AgreementsTab({ obligations, role, requiredNdas = [], onChanged }) {
+function AgreementsTab({ obligations, role, requiredNdas = [], onChanged, requirementsFailed = false }) {
   const [items, setItems] = useState([]);
   const [pending, setPending] = useState([]);
   const [documents, setDocuments] = useState([]);
@@ -695,31 +539,34 @@ function AgreementsTab({ obligations, role, requiredNdas = [], onChanged }) {
   // rather than by pair id so the open row survives a `reload()` that
   // renumbers nothing but re-fetches everything.
   const [expandedEnvelope, setExpandedEnvelope] = useState(null);
-  const isAdmin = role === 'admin';
+  const [documentsFailed, setDocumentsFailed] = useState(false);
+  const [query, setQuery] = useState('');
+  const [filter, setFilter] = useState('all');
+  const [sort, setSort] = useState('newest');
 
   async function reload() {
-    setErr(null);
+    setErr(null); setLoading(true); setDocumentsFailed(false);
     try {
       // Admin's platform-wide list belongs in Contracts. Members keep only
       // their own pairs; other contracts always remain scoped to the caller.
       const [pairs, agree] = await Promise.allSettled([
-        isAdmin ? Promise.resolve({ items: [] }) : api.trustListPairwiseNdas(),
+        api.trustListPairwiseNdas(),
         api.trustAgreements(),
       ]);
       if (pairs.status === 'fulfilled') {
         setItems(pairs.value?.items || []);
       } else {
         setItems([]);
-        setErr(pairs.reason?.message || 'Failed to load pairwise NDAs');
+        setErr('Your agreements with other members could not be read.');
       }
       if (agree.status === 'fulfilled') {
         setPending(agree.value?.pending_envelopes || []);
         setDocuments(agree.value?.documents || []);
       } else {
-        setPending([]); setDocuments([]);
+        setPending([]); setDocuments([]); setDocumentsFailed(true);
       }
     } catch (e) {
-      setErr(e?.message || 'Failed to load agreements');
+      setErr('Your agreements could not be read.'); setDocumentsFailed(true);
     } finally { setLoading(false); }
   }
   useEffect(() => { reload(); }, []);   // eslint-disable-line react-hooks/exhaustive-deps
@@ -729,35 +576,42 @@ function AgreementsTab({ obligations, role, requiredNdas = [], onChanged }) {
   // says, per role NDA, whether it is still open and which envelope to sign;
   // the row draws "Open to sign" when there is an envelope and says "Not
   // issued yet" when the obligation is open but no envelope exists.
-  const ndaByKey = new Map((requiredNdas || []).map((it) => [it.obligation_key, it]));
   const roleNdaAction = (o) => {
-    const it = ndaByKey.get(o.obligation_key);
+    const it = signingRequirement(o, requiredNdas);
     if (!it || !it.open) return null;
     if (it.evidence_envelope_uuid) return <OpenToSignButton item={it} onChanged={onChanged} />;
     return <span className="text-xs text-slate-500 dark:text-slate-400">Not issued yet</span>;
   };
   const meId = safeReadJSON('user', {})?.id;
+  const visibleItems = items.filter((r) => pairwiseTitle(r, meId, false).toLowerCase().includes(query.toLowerCase()) && (filter === 'all' || r.status === filter)).sort((a, b) => (sort === 'oldest' ? 1 : -1) * (String(a.created_at || '').localeCompare(String(b.created_at || ''))));
 
   return (
     <>
       <Section icon={FileSignature} title="Role agreements" subtitle="Standing NDAs and disclosures required for your role.">
-        <ObligationList obligations={ndaObligations} emptyText="No role-level agreements required." rowAction={roleNdaAction} />
+        {requiredNdas === null && <MemberUnreadable what="Your signing requirements" onRetry={onChanged} />}
+        {requirementsFailed ? <MemberUnreadable what="Your role requirements" onRetry={onChanged} /> : <ObligationList obligations={ndaObligations} emptyText="No role-level agreements required." rowAction={roleNdaAction} />}
       </Section>
-      {!isAdmin && <Section icon={Lock} title="Pairwise NDAs" subtitle="Active and pending mutual NDAs between you and other parties.">
+      {<Section icon={Lock} title="Agreements with other members" subtitle="Active and pending mutual NDAs between you and other parties.">
         {loading && <p className="text-sm text-slate-600">Loading…</p>}
-        {err && <p className="text-sm text-red-600">{err}</p>}
+        {err && <MemberUnreadable what="Your agreements with other members" claim="This is not a claim that none are recorded." onRetry={reload} />}
         {!loading && !err && items.length === 0 && (
-          <p className="text-sm text-slate-600">No pairwise NDAs on file.</p>
+          <p className="text-sm text-slate-600">No agreements with other members yet.</p>
         )}
-        {!loading && items.length > 0 && (
+        {!loading && !err && items.length > 0 && <div className="mb-3 flex flex-wrap gap-3">
+          <label className="text-sm">Search by member <input className="ml-2 min-h-11 rounded border border-slate-300 bg-white px-2 dark:border-slate-700 dark:bg-slate-900" value={query} onChange={(e) => setQuery(e.target.value)} /></label>
+          <label className="text-sm">State <select className="ml-2 min-h-11 rounded border bg-white px-2 dark:border-slate-700 dark:bg-slate-900" value={filter} onChange={(e) => setFilter(e.target.value)}><option value="all">All states</option>{[...new Set(items.map((r) => r.status).filter(Boolean))].map((status) => <option key={status} value={status}>{status.replace(/_/g, ' ')}</option>)}</select></label>
+          <label className="text-sm">Sort <select className="ml-2 min-h-11 rounded border bg-white px-2 dark:border-slate-700 dark:bg-slate-900" value={sort} onChange={(e) => setSort(e.target.value)}><option value="newest">Newest</option><option value="oldest">Oldest</option></select></label>
+        </div>}
+        {!loading && !err && items.length > 0 && visibleItems.length === 0 && <p className="text-sm">No recorded agreements match these filters.</p>}
+        {!loading && !err && visibleItems.length > 0 && (
           <ul className="space-y-2">
-            {items.map(a => {
+            {visibleItems.map(a => {
               const validUntil = a.valid_until ? new Date(a.valid_until) : null;
               const expired = validUntil && validUntil.getTime() < Date.now();
               const voided = a.status === 'voided' || a.status === 'revoked' || !!a.voided_at;
               const display = voided ? 'revoked' : (expired ? 'expired' : a.status);
               const validExp = expiryNote(a.valid_until);
-              const canSign = !voided && !expired && a.status !== 'active' && !!a.nda_envelope_uuid;
+              const canSign = !voided && !expired && !['active', 'signed', 'cancelled', 'completed'].includes(a.status) && !!a.nda_envelope_uuid && !(a.signers || []).some((signer) => signer.signed_at && ((signer.user_id != null && Number(signer.user_id) === Number(meId)) || (signer.email && String(signer.email).toLowerCase() === String(safeReadJSON('user', {})?.email || '').toLowerCase())));
               // Backend computes the signer list on read (joining
               // esign_recipients) and ships it as `signers`. Fall back
               // to the legacy `signers_json` blob if the enrichment
@@ -774,11 +628,11 @@ function AgreementsTab({ obligations, role, requiredNdas = [], onChanged }) {
                   className={`bg-slate-50 dark:bg-slate-800/40 border border-slate-200 dark:border-slate-700 border-l-4 ${TONE[toneOf(display)].bar} rounded px-3 py-2`}
                 >
                   <div className="flex items-center justify-between gap-2 flex-wrap">
-                  <div className="flex items-center gap-3 min-w-0">
+                  <div className="flex w-full items-center gap-3 min-w-0 sm:w-auto">
                     <Lock size={16} className="text-slate-500 dark:text-slate-400 shrink-0" />
                     <div className="min-w-0">
                       <div className="text-sm text-slate-900 dark:text-slate-100 truncate" data-testid="pairwise-title">
-                        {pairwiseTitle(a, meId, isAdmin)}
+                        {pairwiseTitle(a, meId, false)}
                       </div>
                       <div className="text-xs text-slate-500">
                         envelope {a.nda_envelope_uuid?.slice(0, 8)}…
@@ -824,6 +678,7 @@ function AgreementsTab({ obligations, role, requiredNdas = [], onChanged }) {
           </ul>
         )}
       </Section>}
+      {documentsFailed && <Section icon={FileText} title="Other contracts"><MemberUnreadable what="Your other contracts" onRetry={reload} /></Section>}
       {(pending.length > 0 || documents.length > 0) && (
         <Section icon={FileText} title="Other contracts" subtitle="Pending envelopes awaiting your signature and signed documents on file.">
           {pending.length > 0 && (
@@ -896,12 +751,12 @@ function CompanyKybCard() {
     return () => { alive = false; };
   }, [attempt]);
 
-  if (state.phase === 'loading') return null;
+  if (state.phase === 'loading') return <p className="text-sm text-slate-500 dark:text-slate-400">Reading your companies’ entity records…</p>;
   if (state.phase === 'failed') {
     return (
       <div className="mt-4" data-testid="company-kyb-unreadable">
         <h4 className="text-xs font-bold text-slate-900 dark:text-slate-100">Your companies</h4>
-        <Unreadable what="Your companies’ entity records" claim={state.message || ''} onRetry={() => setAttempt((n) => n + 1)} />
+        <MemberUnreadable what="Your companies’ entity records" claim="This is not a claim that you have no companies." onRetry={() => setAttempt((n) => n + 1)} />
       </div>
     );
   }
@@ -953,7 +808,7 @@ function CompanyKybCard() {
       {/* This page reports; Account Settings is where an entity record is
           changed. The canvas puts the way out at the foot of the list. */}
       <a
-        href="/account"
+        href="/account/companies"
         className="mt-3 inline-block text-xs font-semibold text-violet-700 hover:underline dark:text-violet-400"
       >
         Edit in Account Settings &rarr;
@@ -964,13 +819,17 @@ function CompanyKybCard() {
 
 // D1073 — administration leaves the member surface. Reuse its existing
 // Section rather than putting a platform-wide list or write form here.
-function TrustAdminTools() {
+export function TrustAdminTools({ user: suppliedUser } = {}) {
+  const { user: sessionUser } = useAuth();
+  const adminUser = suppliedUser || sessionUser;
+  const superAdmin = isSuperAdminUser(adminUser) && !branchOfUser(adminUser);
   return (
     <Section icon={ShieldCheck} title="Admin tools" subtitle="Platform reviews and agreements live in their admin tools.">
       <ul className="space-y-2 text-sm text-violet-700 dark:text-violet-300" data-testid="trust-admin-tools">
         <li><a className="underline" href="/admin/contracts?tab=ndas">Open Contracts · Pairwise NDAs →</a></li>
         <li><a className="underline" href="/admin/kyc">Open identity and sanctions reviews →</a></li>
       </ul>
+      {superAdmin && <div className="mt-4"><h3 className="font-semibold">Public trust center</h3><p className="text-sm text-slate-600 dark:text-slate-400">Manage the public trust center in HQ Security.</p><a className="inline-flex min-h-11 items-center underline" href="/admin/security/trust-center">Edit public content</a></div>}
     </Section>
   );
 }
@@ -979,57 +838,9 @@ function TrustAdminTools() {
 // Tab definitions — role-gated.
 // ---------------------------------------------------------------------------
 function tabsForRole(role, obligations) {
-  // Authoritative source: the obligation matrix returned by /api/trust/me.
-  // We surface a tab only if the canonical role matrix actually has
-  // an obligation that lives under it. This keeps tabs in sync with
-  // backend `obligationsForRole()` instead of duplicating the matrix
-  // client-side. Identity additionally follows the Worker's investor-only waiver.
-  const tabs = [{ key: 'overview', label: 'Overview', icon: Globe }];
-  const has = (tabKey) => obligations.some(o => OBLIGATION_META[o.obligation_key]?.tab === tabKey);
-  // How many obligations under a tab still need the reader's attention. Counted
-  // from the same matrix that decides whether the tab exists at all, so a badge
-  // can never disagree with the rows behind it. `waived` and `satisfied` are
-  // both `ok` and neither counts — see STATUS_TONE on why a waiver is not open.
-  const openIn = (tabKey) => obligations.filter(
-    o => OBLIGATION_META[o.obligation_key]?.tab === tabKey && toneOf(o.status) !== 'ok',
-  ).length;
-  // Investor-only, even when a non-investor still has a legacy KYC row.
-  if (KYC_ELIGIBLE_ROLES.has(role)) tabs.push({ key: 'identity', label: 'Identity', icon: IdCard, open: openIn('identity') });
-  if (has('entity'))        tabs.push({ key: 'entity',        label: 'Entity (KYB)',     icon: Building2, open: openIn('entity') });
-  if (has('accreditation')) tabs.push({ key: 'accreditation', label: 'Accreditation',    icon: BadgeCheck, open: openIn('accreditation') });
-  tabs.push({ key: 'agreements', label: 'Agreements', icon: FileSignature });
-  return tabs;
+  return [{ key: 'overview', label: 'Overview', icon: Globe }, { key: 'agreements', label: 'Agreements', icon: FileSignature }, { key: 'verifications', label: 'Verifications', icon: IdCard }, { key: 'data', label: 'Your data', icon: Lock }];
 }
 
-// ---------------------------------------------------------------------------
-// Main page.
-// ---------------------------------------------------------------------------
-/**
- * `chromeless` drops the page furniture and nothing else — D33's word for it.
- *
- * On `/trust` an INVESTOR is wrapped by InvestorWorkspacePage, which renders
- * its own `<h1 className="investor-title">Trust</h1>`, and this page then drew
- * `<h1>Trust Center</h1>` inside it. Two <h1>s in one frame is what
- * workspace_frame_contract.test.mjs exists to stop, and it is a real reading
- * problem before it is a lint one: a screen reader announces the page twice
- * under two different names.
- *
- * The trust SCORE stays in both cases. The badge is content — it is the answer
- * the page exists to give — not furniture.
- */
-// ---------------------------------------------------------------------------
-// D700 (#1662) — A4m, the page on a phone.
-// ---------------------------------------------------------------------------
-
-// The desktop's four tones, in `ui/Pill`'s words.
-const PILL_TONE = { ok: 'ok', prog: 'warn', bad: 'danger', neutral: 'neutral' };
-
-/**
- * A4m's two sections from the one `/trust/me` read. The score row's pill is
- * `verdictFor`'s word, as the desktop's, not the canvas's "Partial"; and the
- * list is only what the read returns, so no 83(b) row (D700 decision 10).
- * A row selects its obligation's tab, which the page keeps below.
- */
 function RequirementsUnreadable({ reload }) {
   return (
     <div role="alert" data-testid="trust-read-unreadable" className="text-sm text-red-700 dark:text-red-300">
@@ -1040,45 +851,13 @@ function RequirementsUnreadable({ reload }) {
 }
 
 export function trustPhoneGroups({ status, obligations = [], reload, onSelect }) {
-  const [scoreTitle, listTitle] = ACCOUNT_PHONE_PAGES.trust.sections;
-  if (status !== 'ready') {
-    const note = status === 'loading'
-      ? phonePending(status, 'Your obligations', 'This is not a claim that nothing is required of you.', reload)
-      : <RequirementsUnreadable reload={reload} />;
-    return [{ label: scoreTitle, rows: [], note, testid: 'trust-phone-score' }, { label: listTitle, rows: [], testid: 'trust-phone-obligations' }];
-  }
-  const score = computeTrustScore(obligations);
-  const counts = outstandingCounts(obligations);
-  const open = counts.needs + counts.inProgress;
-  const scoreRow = {
-    title: `${score} of 100`,
-    description: open ? `You have ${open} open ${open === 1 ? 'requirement' : 'requirements'}` : scoreLine(counts),
-    pill: { label: verdictFor(score), tone: PILL_TONE[bandOf(score)] },
-    bar: score,
-    testid: 'trust-phone-score-row',
-  };
-  const rows = obligations.map((o) => {
-    const meta = OBLIGATION_META[o.obligation_key] || { label: o.obligation_key, tab: 'overview' };
-    const exp = expiryNote(o.expires_at);
-    return {
-      key: o.obligation_key,
-      title: meta.label,
-      description: `${o.required ? 'Required' : 'Optional'}${exp ? ` · ${exp.text}` : ''}`,
-      pill: { label: String(o.status || 'pending').replace(/_/g, ' '), tone: PILL_TONE[toneOf(o.status)] },
-      onClick: onSelect ? () => onSelect(meta.tab || 'overview') : undefined,
-      testid: 'trust-phone-obligation',
-    };
-  });
-  return [
-    { label: scoreTitle, rows: [scoreRow], testid: 'trust-phone-score' },
-    {
-      label: listTitle, rows, testid: 'trust-phone-obligations',
-      note: rows.length ? null : 'No obligations outstanding for this role. Nothing is required of you right now.',
-    },
-  ];
+  if (status === 'loading') return [{ label: 'Requirements', rows: [], note: phonePending('loading', 'Your requirements', '', reload) }];
+  if (status === 'unreadable') return [{ label: 'Requirements', rows: [], note: <RequirementsUnreadable reload={reload} /> }];
+  const { done, total } = requirementCounts(obligations);
+  return [{ label: 'Requirements', rows: [{ title: `Requirements met: ${done} of ${total}`, description: total ? 'From your recorded required items.' : 'Nothing is asked of you right now.', testid: 'trust-phone-summary-row' }] },
+    { label: 'Your requirements', rows: obligations.map((o) => ({ title: OBLIGATION_META[o.obligation_key]?.label || o.obligation_key, description: o.source || 'Evidence source not recorded.', testid: 'trust-phone-obligation', onClick: () => onSelect?.(o.obligation_key) })) }];
 }
 
-/** A4m — the bar and the two sections, then `children`: the tab bar and its panels. */
 export function TrustPhoneView({ status, obligations, reload, onSelect, children = null }) {
   return (
     <AccountPhonePage pageKey="trust" testid="trust-phone" groups={trustPhoneGroups({ status, obligations, reload, onSelect })}>
@@ -1093,7 +872,12 @@ export default function TrustCenterPage({ chromeless = false }) {
   const [kyc, setKyc] = useState(null);         // /api/kyc/status — READ ONLY here
   const [err, setErr] = useState(null);
   const [loading, setLoading] = useState(true);
-  const [tab, setTab] = useState('overview');
+  const [search, setSearch] = useSearchParams();
+  const tab = ['overview', 'agreements', 'verifications', 'data'].includes(search.get('tab')) ? search.get('tab') : 'overview';
+  const setTab = (key) => { const next = new URLSearchParams(search); next.set('tab', key); next.delete('requirement'); next.delete('member'); setSearch(next); };
+  const openRequirement = (key) => { const next = new URLSearchParams(search); next.set('requirement', key); setSearch(next); };
+  const closeRequirement = () => { const next = new URLSearchParams(search); next.delete('requirement'); next.delete('member'); setSearch(next, { replace: true }); };
+  const [kycFailed, setKycFailed] = useState(false);
 
   // Task #18 — read role from /api/trust/me once it resolves so a stale
   // localStorage user (impersonation, server-side role change, signup
@@ -1105,7 +889,7 @@ export default function TrustCenterPage({ chromeless = false }) {
   const role = matrix?.role || cachedRole || 'member';
 
   async function load() {
-    setErr(null); setLoading(true);
+    setErr(null); if (matrix == null) setLoading(true);
     try {
       // /api/trust/me is the canonical obligation matrix. Every call here is
       // resilient — we render whatever loaded successfully.
@@ -1129,69 +913,26 @@ export default function TrustCenterPage({ chromeless = false }) {
         api.getRequiredNdas(),
         api.kycStatus(),
       ]);
+      // The shared API client uses its fixed "Session expired" error for 401s.
       // Both widths distinguish an unreadable matrix from an empty one.
-      if (m.status === 'fulfilled') setMatrix(m.value); else setMatrix({ obligations: [], role, failed: true });
-      setRequiredNdas(n.status === 'fulfilled' ? (n.value?.items || []) : []);
-      setKyc(k.status === 'fulfilled' ? k.value : null);
+      if (m.status === 'fulfilled' && Array.isArray(m.value?.obligations)) setMatrix(m.value); else setMatrix({ obligations: [], role, failed: true, unauthorized: m.status === 'rejected' && (m.reason?.status === 401 || m.reason?.message === 'Session expired') });
+      setRequiredNdas(n.status === 'fulfilled' ? (n.value?.items || []) : null);
+      setKyc(k.status === 'fulfilled' ? k.value : null); setKycFailed(k.status !== 'fulfilled');
     } catch (e) {
       setErr('trust_unreadable');
     } finally { setLoading(false); }
   }
   useEffect(() => { load(); }, []);   // eslint-disable-line react-hooks/exhaustive-deps
 
-  const obligations = matrix?.obligations || [];
-  const tabs = useMemo(() => tabsForRole(role, obligations), [role, obligations]);
-  const score = computeTrustScore(obligations);
-  const missing = obligations
-    .filter(o => o.required && o.status !== 'satisfied' && o.status !== 'waived')
-    .map(o => OBLIGATION_META[o.obligation_key]?.label || o.obligation_key);
-
-  // D700 — on a phone, A4m's bar and sections come first, then the tabs. The
-  // investor workspace's chromeless frame keeps its own header (decision 12).
-  const phone = usePhoneWidth() && !chromeless;
-  const selectTab = (key) => {
-    setTab(tabs.some((t) => t.key === key) ? key : 'overview');
-    document.getElementById('trust-tabs')?.scrollIntoView?.({ block: 'start' });
-  };
-  if (phone && (loading || err || matrix?.failed)) {
-    return <TrustPhoneView status={loading ? 'loading' : 'unreadable'} reload={load} />;
-  }
-  if (loading) return <div className="p-8 text-slate-600">Loading trust center…</div>;
-  if (matrix?.failed || err) return <div className="p-8"><RequirementsUnreadable reload={load} /></div>;
-
-  const overview = (
-    <Section icon={Globe} title="Overview" subtitle="Everything required for your role at a glance.">
-      {/* v2's two-column Overview: the score panel, then the obligations.
-          One column on a phone — the ring is 158px and will not sit beside
-          anything at 400px. */}
-      <div className="grid grid-cols-1 gap-4 md:grid-cols-[300px_1fr] md:items-start">
-        <ScorePanel
-          score={score}
-          previousScore={matrix?.previous_score ?? null}
-          previousMonth={matrix?.previous_month ?? null}
-          obligations={obligations}
-        />
-        <div>
-          {/* The canvas's obligations-header sentence. It used to repeat the
-              panel's verdict word for word, and then tell the reader to hover
-              a badge that the two-column layout had already moved out of this
-              column. Same two counts as the panel, different thing said about
-              them. */}
-          <div className="text-sm text-slate-600 dark:text-slate-400">
-            {obligationSummary(outstandingCounts(obligations))}
-            <ToneCounts obligations={obligations} />
-          </div>
-          <div className="mt-4">
-            <ObligationList
-              obligations={obligations}
-              emptyText="No obligations outstanding for this role. Nothing is required of you right now."
-
-            />
-          </div>
-        </div>
-      </div>
-    </Section>
-  );
+  const obligations = memberRequirements(matrix?.obligations || [], role);
+  const tabs = tabsForRole(role, obligations);
+  const phone = usePhoneWidth();
+  if (matrix?.unauthorized) return <div className="p-6 text-slate-900 dark:text-slate-100"><h1>Sign in to see what is asked of you.</h1><p>Your trust lists your own agreements, verifications and data.</p><a className="mr-5 underline" href="/login">Sign in</a><a className="underline" href="/trust">Read the public trust center</a></div>;
+  if (loading) return <div className="p-8 text-slate-600 dark:text-slate-400">Reading your requirements…</div>;
+  const selected = search.get('requirement');
+  const selectedRow = search.has('member') ? null : obligations.find((o) => o.obligation_key === selected);
+  const renderRows = (rows) => <ObligationList obligations={rows} rowAction={(o) => <button type="button" className="min-h-11 text-sm font-semibold text-violet-700 underline dark:text-violet-300" onClick={() => openRequirement(o.obligation_key)}>Details</button>} />;
+  const overview = matrix?.failed || err ? <RequirementsUnreadable reload={load} /> : <MemberOverview role={role} obligations={obligations} acceptances={matrix?.acceptances} renderRows={renderRows} companies={role === 'founder' ? <CompanyKybCard /> : null} onAgreements={() => setTab('agreements')} />;
 
   /**
    * Identity — REPORTED, not edited.
@@ -1218,7 +959,7 @@ export default function TrustCenterPage({ chromeless = false }) {
     <Section
       icon={IdCard}
       title="Identity verification (KYC)"
-      subtitle="Government-issued ID for AML compliance. Status syncs into your Trust score."
+      subtitle="Your recorded identity verification status. Requirement status comes from your requirements read."
     >
       <ManagedElsewhere>
         These values are read from your account profile. This page never edits them.
@@ -1291,7 +1032,7 @@ export default function TrustCenterPage({ chromeless = false }) {
   // always was: the first Trust Center's /trust/summary (retired, D432) never
   // carried a KYB object, so the KybCard branch this used to carry never ran.
   const entity = obligations.some(o => o.obligation_key === 'kyb_v1') && (
-    <Section icon={Building2} title="Entity verification (KYB)" subtitle="Required for service-provider partners and entity investors.">
+    <Section icon={Building2} title="Entity verification (KYB)" subtitle="Your account’s entity record, separate from each company’s record.">
       <ManagedElsewhere cta="Open entity details →" href="/account">
         Entity details are maintained in Account Settings. This page reports their status.
       </ManagedElsewhere>
@@ -1329,7 +1070,7 @@ export default function TrustCenterPage({ chromeless = false }) {
           on purpose — accreditation is an ongoing status you maintain, an
           entity record is a document you amend. */}
       <ManagedElsewhere cta="Manage in Account Settings →" href="/account">
-        Basis and supporting evidence are submitted from your account profile.
+        This page reports the requirement state. Evidence upload is not available here.
       </ManagedElsewhere>
       <ObligationList
         obligations={obligations.filter(o => OBLIGATION_META[o.obligation_key]?.tab === 'accreditation')}
@@ -1372,79 +1113,38 @@ export default function TrustCenterPage({ chromeless = false }) {
     </p>
   );
 
+  const requirementAction = (() => {
+    if (!selectedRow) return null;
+    if (['satisfied', 'waived'].includes(selectedRow.status)) return <p className="text-sm text-slate-600 dark:text-slate-400">No action is required.</p>;
+    if (selectedRow.status === 'in_review') return <p className="text-sm text-slate-600 dark:text-slate-400">The platform records this requirement as in review. No action is required here while it is checked.</p>;
+    const isAgreement = /nda|msa|disclaimer/.test(selectedRow.obligation_key);
+    const entry = isAgreement ? signingRequirement(selectedRow, requiredNdas) : null;
+    if (requiredNdas === null && isAgreement && !entry?.evidence_envelope_uuid) return <span className="text-sm">Unreadable. Signing requirements could not be read. <button className="underline" onClick={load}>Try again</button></span>;
+    if (entry?.open && entry.evidence_envelope_uuid) return <OpenToSignButton item={entry} onChanged={load} />;
+    if (entry && !entry.open) return <p className="text-sm text-slate-600 dark:text-slate-400">Signing is not currently required for this agreement.</p>;
+    const href = REQUIREMENTS[selectedRow.obligation_key]?.[3];
+    if (href) return <a className="inline-flex min-h-11 items-center font-semibold text-violet-700 underline dark:text-violet-300" href={href}>{selectedRow.obligation_key === 'kyc_v1' ? 'Open identity check' : selectedRow.obligation_key === 'kyb_v1' ? 'Open Account' : selectedRow.obligation_key === 'accreditation_v1' ? 'Open Help Center' : 'Read document'}</a>;
+    return <p className="text-sm text-slate-600 dark:text-slate-400">{selectedRow.status === 'satisfied' || selectedRow.status === 'waived' ? 'No action is required.' : 'No signing envelope is recorded yet. Ask through the Help Center.'}</p>;
+  })();
   const panels = (
     <>
-      {/* The baseline is an inset shadow, not a border: the tabs then fit the
-          strip's box, so `overflow-x-auto` (which makes overflow-y auto too)
-          never draws a vertical scroll bar, and each tab's own 2px underline
-          paints over the line (#2060). */}
-      <div id="trust-tabs" className="shadow-[inset_0_-1px_0_#e2e8f0] dark:shadow-[inset_0_-1px_0_#334155] mb-6 flex gap-1 overflow-x-auto" data-testid="trust-center-page">
-        {tabs.map(t => {
-          const Icon = t.icon;
-          const active = tab === t.key;
-          return (
-            <button
-              key={t.key}
-              data-testid={`trust-tab-${t.key}`}
-              onClick={() => setTab(t.key)}
-              className={`inline-flex items-center gap-2 px-3 py-2 text-sm border-b-2 ${active
-                ? 'border-violet-600 text-violet-700 dark:text-violet-300 font-medium'
-                : 'border-transparent text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-100'}`}
-            >
-              <Icon size={14} />{t.label}
-              {t.open > 0 && (
-                <span
-                  data-testid={`trust-tab-badge-${t.key}`}
-                  // red-500 under white is 3.76:1 — under AA. red-600 holds at 4.83:1 on
-                  // both grounds, so the badge keeps one colour rather than getting a
-                  // dark variant that is harder to read than the light one.
-                  className="inline-flex items-center justify-center min-w-[16px] h-4 px-1 rounded-full text-[10px] font-bold text-white bg-red-600 tabular-nums"
-                >
-                  {t.open}
-                </span>
-              )}
-            </button>
-          );
-        })}
+      <div id="trust-tabs" className="mb-5 flex gap-1 overflow-x-auto overflow-y-hidden shadow-[inset_0_-1px_0_0_#e2e8f0] dark:shadow-[inset_0_-1px_0_0_#334155]" role="tablist" aria-label="Your trust">
+        {tabs.map((t) => { const Icon = t.icon; const active = tab === t.key; return <button type="button" key={t.key} role="tab" aria-selected={active} data-testid={`trust-tab-${t.key}`} onClick={() => setTab(t.key)} className={`inline-flex min-h-11 shrink-0 items-center gap-2 border-b-2 px-3 py-2 text-sm ${active ? 'border-violet-600 font-semibold text-violet-700 dark:text-violet-300' : 'border-transparent text-slate-600 dark:text-slate-400'}`}><Icon size={14} />{t.label}</button>; })}
       </div>
-
-      {tab === 'overview'      && overview}
-      {tab === 'identity'      && identity}
-      {tab === 'entity'        && (entity || <Section icon={Building2} title="Entity (KYB)"><p className="text-sm text-slate-600">No entity verification required.</p></Section>)}
-      {tab === 'accreditation' && (accreditation || <Section icon={BadgeCheck} title="Accreditation"><p className="text-sm text-slate-600">No accreditation required.</p></Section>)}
-      {tab === 'agreements'    && (
-        <div data-testid="trust-agreements-panel">
-          <AgreementsTab obligations={obligations} role={role} requiredNdas={requiredNdas} onChanged={load} />
-        </div>
-      )}
+      {tab === 'overview' && overview}
+      {tab === 'agreements' && <div data-testid="trust-agreements-panel"><AgreementsTab obligations={obligations} role={role} requiredNdas={requiredNdas} onChanged={load} requirementsFailed={!!(matrix?.failed || err)} /></div>}
+      {tab === 'verifications' && <div className="space-y-4">{matrix?.failed ? <RequirementsUnreadable reload={load} /> : <>{KYC_ELIGIBLE_ROLES.has(role) && (kycFailed ? <Section icon={IdCard} title="Identity check">{renderRows(obligations.filter((o) => o.obligation_key === 'kyc_v1'))}<MemberUnreadable what="Your identity check" claim="The requirements above come from a different read." onRetry={load} /></Section> : identity)}{entity}{accreditation}{!entity && !accreditation && !KYC_ELIGIBLE_ROLES.has(role) && <p className="text-sm text-slate-600 dark:text-slate-400">No verification is required for your profile today.</p>}</>}</div>}
+      {tab === 'data' && <MemberData role={role} />}
       {role === 'admin' && <TrustAdminTools />}
+      {(selected || search.has('member')) && <RequirementDialog row={selectedRow} unreadable={!!(matrix?.failed || err)} onRetry={load} onClose={closeRequirement} action={requirementAction} status={selectedRow && <StatusPill status={selectedRow.status} />} />}
     </>
   );
-
-  if (phone) {
-    return (
-      <TrustPhoneView status="ready" obligations={obligations} reload={load} onSelect={selectTab}>
-        <div>{provenance}{panels}</div>
-      </TrustPhoneView>
-    );
-  }
-
   return (
-    <div className="p-6">
-      <div className="mb-6 flex items-center justify-between gap-4 flex-wrap">
-        {chromeless ? <div /> : (
-          <div>
-            <h1 className="text-2xl font-bold text-slate-900 dark:text-slate-100 flex items-center gap-2">
-              <ShieldCheck className="w-7 h-7 text-emerald-600" /> Trust Center
-            </h1>
-            <p className="text-sm text-slate-600 dark:text-slate-400 mt-1">Your obligations, agreements, and verification status — tailored to your role.</p>
-          </div>
-        )}
-        <TrustScoreBadge size="md" score={score} missing={missing} label="Trust score" />
+    <div className={phone ? 'p-4' : 'p-6'}>
+      <div className="mb-6 flex flex-wrap items-center justify-between gap-4">
+        {chromeless ? <div /> : (<div><h1 className="flex items-center gap-2 text-2xl font-bold text-slate-900 dark:text-slate-100"><ShieldCheck className="h-7 w-7 text-emerald-600" />Your trust</h1><p className="mt-1 text-sm text-slate-600 dark:text-slate-400">Your requirements, agreements and data.</p></div>)}
       </div>
-
       {provenance}
-
       {panels}
     </div>
   );
