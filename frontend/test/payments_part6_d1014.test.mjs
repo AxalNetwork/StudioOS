@@ -171,7 +171,7 @@ async function render(url, { phone = false } = {}) {
   const root = createRoot(container);
   await act(async () => {
     root.render(h(MemoryRouter, { initialEntries: [url] },
-      h(Routes, null, ['', '/stripe', '/log'].map((p) => h(Route, { key: p, path: `/admin/platform/payments${p}`, element: h(Payments) })))));
+      h(Routes, null, ['', '/stripe', '/log', '/products/:id'].map((p) => h(Route, { key: p, path: `/admin/platform/payments${p}`, element: h(Payments) })))));
   });
   await settle();
   const walk = (n) => [n, ...(n.childNodes || []).flatMap(walk)];
@@ -361,12 +361,16 @@ test('mounted phone: the catalogue stacks into cards, a product opens as a botto
   try {
     assert.ok(v.has('pay-phone-catalogue'));
     assert.equal(v.count('pay-row'), 2);
-    await v.click('pay-row');
+    // D1012: a card is a door to the product's own address; the product opens there.
+    assert.equal(v.props('pay-row').href, '/admin/platform/payments/products/prod_b');
+  } finally { await v.unmount(); }
+  v = await render('/admin/platform/payments/products/prod_b', { phone: true });
+  try {
     assert.ok(v.has('pay-product'), 'no product sheet');
     assert.equal(v.props('pay-product-layer')['data-phone'], 'sheet', 'the dialog is not a bottom sheet');
     assert.match(v.props('pay-product-layer').className, /max-sm:items-end/);
-    assert.match(v.of('pay-product'), /Founder Validate \+ Build.*20\.00 USD \/ month/s);
-    assert.match(v.of('pay-product-tech'), /^Technical details.*prod_b · price_1/);
+    assert.match(v.of('pay-product'), /Founder Validate \+ Build.*Monthly.*20\.00 USD/s, 'D1012: the product is PAY2\'s lightbox, at its own address');
+    assert.match(v.of('pay-product-tech'), /^Technical details.*product: prod_b.*price_1/s);
   } finally { await v.unmount(); }
   v = await render('/admin/platform/payments/log', { phone: true });
   try {

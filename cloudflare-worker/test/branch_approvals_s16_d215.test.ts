@@ -26,6 +26,9 @@ const BASELINE = readFileSync(new URL('../sql/schema_baseline.sql', import.meta.
 const TABLES = [
   'users', 'lp_applications', 'referral_submissions', 'cohort_applicants',
   'partner_profiles', 'user_role_review', 'job_postings', 'events', 'admin_consultation_bookings', 'dd_cases',
+  // D1041 (#2889): the stores the canvas's new lanes read.
+  'company_profiles', 'comarketing_pitches', 'partners', 'experts', 'perks',
+  'referral_strategic_access', 'score_snapshots', 'projects', 'articles',
   'esign_envelopes',
 ];
 const NOW = Date.parse('2026-09-24T12:00:00Z');
@@ -37,6 +40,9 @@ function db() {
   // D990: a Draft is read off migration 275's answer columns too.
   d.exec(readFileSync(new URL('../sql/migrations/275_partner_profiles_columns.sql', import.meta.url), 'utf8'));
   d.exec(readFileSync(new URL('../sql/migrations/546_events_review_columns.sql', import.meta.url), 'utf8'));
+  // D1041: the KYB and host stores are migrations 220's and 313's, above the baseline's cutoff.
+  d.exec(readFileSync(new URL('../sql/migrations/220_company_kyb.sql', import.meta.url), 'utf8'));
+  d.exec(readFileSync(new URL('../sql/migrations/313_lab_host_applications.sql', import.meta.url), 'utf8'));
   // NOT IN THE BASELINE: `spinout_moderation.ts` creates it lazily on first
   // use. Trimmed from that route's own DDL.
   d.exec(`CREATE TABLE spinout_moderation_cases (id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -131,8 +137,8 @@ test('the four canvas lanes with no open state are named, not laned', () => {
     assert.ok(!laned.has(n.label), `${n.label} is both laned and not`);
     assert.ok(n.reason.length > 20, `${n.label} needs its reason`);
   }
-  // Four from D130 plus seven from S16: eleven lanes, four stated gaps.
-  assert.equal(APPROVAL_SOURCES.length, 11);
+  // Four from D130, seven from S16 and eight from D1041: nineteen lanes, four stated gaps.
+  assert.equal(APPROVAL_SOURCES.length, 19);
 });
 
 test('the route sends the gaps with the board', () => {

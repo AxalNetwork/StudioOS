@@ -34,6 +34,7 @@ widened guard on this very sentence, which is the rule working.)
 
 ```
 /api/admin/partner-profiles → admin_partner_profiles.ts (D990: HQ's partner profile list with search, filters, sort and pages, the counts, and one profile by its pp_ reference; Admin, each read logged by reference. D993: agreement readiness, each row's envelope state, and Unbind for a Super Admin with a step-up)
+/api/admin/product-testers → admin_product_testers.ts (D1042: the product tester pool, migration 576: list per status with the member's name, email, role, email verification and identity check, one tester with their programs and history, and approve, decline, pause, resume and remove, each telling the member; Admin)
 /api/admin/partner-settlements → partner_settlements.ts (HQ drafts; Super Admin issue/void, D713)
 /api/partner-settlements → partner_settlements.ts (own non-draft settlements, D713)
 /api/mercury/personal → mercury_personal.ts (a member's own Mercury (founders, partners, and investors on HQ): status, payment matches and raise receipts, read-only, D713, D752; connected only by Sign in with Mercury since D881. Never Axal VC's own accounts: D879, guarded by D883's `check-mercury-member-surfaces.mjs`)
@@ -235,11 +236,15 @@ D982 (#2773): `admin_program_grants.ts` mounts `/api/admin/program-grants`: HQ's
 
 D983 (#2774): `admin_program_requests.ts` mounts `/api/admin/program-grants/requests`, ahead of part 1's routes: the studios' program requests (a grant, a terms change, an end) from HQ's lane and every branch's, under `requireSuperAdmin`, and HQ's approve and decline under `requireSuperAdminWriteBar` with a reason of at least 10 characters. An approval records a draft as a `program_changed` event (`request_approved`); Grant stays `admin_program_grants.ts`'s write. The generic `PATCH /api/admin/escalations/:uid` refuses these kinds. The checks are `../services/programRequests.ts`. See `documentation/architecture/decisions/D983.md`.
 
+D984 (#2775): `licence_programs.ts` mounts `GET /api/licence/mine/programs` at `/api/licence`, beside `licence_requests.ts`: the nine programs HQ grants the caller's licence, read only, with each grant's terms. On HQ it binds the caller through `licence_admins` and reads the store; an account no licence binds reads `linked: false`, "On HQ-held accounts, HQ runs every program." On a branch it answers, to an admin only, from HQ's dated copy (`branch_licence.program_grants_json`, migration 554) with `as_of`. A D1 error or an unreadable copy is a 503. Since D984, `admin_program_grants.ts`'s grant writes push the licence to its branch and answer `pushed`. See `documentation/architecture/decisions/D984.md`.
+
 D986 (#2776): `admin_partner_deal_types.ts` mounts `/api/admin/partner-deal-types`: which partner deal types each licence may offer, read under `requireSuperAdmin` and set under `requireSuperAdminWriteBar` with a reason (one `program_changed` licence event, action `deal_types_changed`, then a push to the branch). `licence_partner_deal_types.ts` mounts `GET /api/licence/mine/partner-deal-types` ahead of `licence.ts`: the bound Administrator on HQ, or a branch admin reading its copy. The branch's partner invitation write (`admin_partners.ts`) refuses a type the copy does not allow. The store is migration 555 and `../services/partnerDealTypes.ts`. See `documentation/architecture/decisions/D986.md`.
 
 D896 (#2675): `deck_sources.ts` mounts `GET /api/decks/sources` and `POST /api/decks/:id/refresh`, after `deck_share_actions.ts` and before `decks.ts`, so that `decks.ts`'s `GET /:id` cannot answer `/sources`. Both read only, through `projectOwned`; Mercury's slots are read only for the venture's own founder. The adapters are `../services/decks/sources.ts`. See `documentation/architecture/decisions/D896.md`.
 
 D897 (#2677): `deck_new.ts` mounts New deck — `GET /api/decks/new/context`, `POST /new/quote`, `POST /outline`, `POST /generate` (moved here from `decks.ts`; it now builds a proposal) and `POST /proposals/:id/keep-slides` — after `deck_sources.ts` and before `decks.ts`. Code fills every figure from `../services/decks/sources.ts` through `../services/decks/newDeck.ts`; the runs write words only, and their price is `quoteRun`'s before they run. See `documentation/architecture/decisions/D897.md`.
+
+D899 (#2678): `deck_assist.ts` mounts Eadwyn's card tools — `POST /api/decks/:id/cards/:card/assist/quote` and `POST /api/decks/:id/cards/:card/assist` — after `deck_new.ts` and before `decks.ts`. Each press is one rail option on "Founder · Raise · Pitch deck" (`deck:rewrite`, `deck:shorten`, `deck:expand`, `deck:tone`, `deck:translate`, `deck:chart`, `deck:table`, `deck:timeline`), runs through `run()`, and leaves one `ai_rail_proposals` row; nothing writes a version. A bound figure is refused 422 `never_fill` before anything runs. See `documentation/architecture/decisions/D899.md`.
 
 D900 (#2679): `deck_review.ts` mounts `POST /api/decks/:id/review` (a version's own review, each point naming a card, with the run's cost) and `GET /api/decks/:id/reviews` (the venture's reviews per version, the first reader of `deck_review_history`), after `deck_notes.ts` and before `decks.ts`. Founders run a review; an Admin and the Super Admin read. The review is `../services/deckVersionReview.ts`; uploads and pasted text stay `deck_reviewer.ts`'s. See `documentation/architecture/decisions/D900.md`.
 
@@ -291,3 +296,9 @@ D1011 (#2830): `admin_payments.ts` is the Payments page's Super Admin reads,
 mounted at `/api/admin/payments`: the change log over the catalogue's and
 Stripe's audit rows, its CSV export (a recorded reason, failing closed), and the
 webhook's deliveries by hour. `catalog.ts` records a failed sync.
+
+D971 (#2756): `admin_lab_operations.ts` is mounted by `admin_cohort.ts` under
+`/api/admin/cohort`: read-only `/settings` and `/activity`, both Admin gated.
+The latter filters/paginates one safe projection of existing stores and never
+returns staff identities or free-form audit payloads. An unavailable source is
+503, never an empty successful log. Reads create no schema or data.

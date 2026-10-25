@@ -69,6 +69,9 @@ export interface ConvertedHolder {
   instrument: InstrumentKind;
   /** Which term set the price. */
   binding: 'cap' | 'discount' | 'none';
+  /** D1018: the two prices the lower of which is taken; null when the term is absent. */
+  cap_price: number | null;
+  discount_price: number | null;
 }
 
 export interface ConversionResult {
@@ -239,6 +242,8 @@ export function convertInstruments(
       warnings.push(`${p.instrument === 'note' ? 'Note' : 'SAFE'} '${p.inst.name}' has no cap and no discount; skipped.`);
       continue;
     }
+    const capPrice = p.cap > 0 && S > 0 ? p.cap / S : null;
+    const dPrice = discountPrice(p.discount);
     holders.push({
       name: p.inst.name,
       converting_amount: bankersRound(p.converting, 2),
@@ -248,6 +253,8 @@ export function convertInstruments(
       basis: 'pre_money',
       instrument: p.instrument,
       binding,
+      cap_price: capPrice == null ? null : bankersRound(capPrice, 6),
+      discount_price: Number.isFinite(dPrice) ? bankersRound(dPrice, 6) : null,
     });
   }
 
@@ -269,6 +276,8 @@ export function convertInstruments(
       basis: 'post_money',
       instrument: p.instrument,
       binding: capPrice <= dPrice ? 'cap' : 'discount',
+      cap_price: Number.isFinite(capPrice) ? bankersRound(capPrice, 6) : null,
+      discount_price: Number.isFinite(dPrice) ? bankersRound(dPrice, 6) : null,
     });
   }
 

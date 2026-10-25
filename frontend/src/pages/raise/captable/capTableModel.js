@@ -44,8 +44,12 @@ export const VARIANTS_PATH = '/raise/cap-table/variants';
 
 export const MODELLED = 'Modelled';
 export const ON_RECORD = 'On record';
-/** Overview's line under the tabs: the Holders list is the model, not a record. */
-export const HOME_NOTE = 'Every figure on this page comes from your saved model, not from a record of what was issued. A record of issued shares is not kept yet.';
+/**
+ * Overview's line under the tabs. D1022: the blocks tagged On record come
+ * from the record of what was issued (D1017); the Holders list and the Planned
+ * round card further down are still the saved model.
+ */
+export const HOME_NOTE = 'Figures tagged On record come from the record of what was issued. The Holders list and the Planned round card below still come from your saved model.';
 
 /**
  * The canvas's seven tabs, less History, which waits for its part (D1025).
@@ -61,9 +65,15 @@ export const TABS = [
   { id: 'import-export', label: 'Import and export', path: '/import-export' },
 ];
 const TAB_WORDS = new Set(TABS.filter((t) => t.path).map((t) => t.id));
+/** D1022: a holder's address, `h-<n>`, opens the holder drawer over Overview. */
+export const HOLDER_ID = /^h-[1-9]\d*$/;
 
-/** True when CycleRoute's record id under this module is a tab, not a row. */
-export const isCapTableTab = (slug, id) => slug === SLUG && TAB_WORDS.has(String(id ?? ''));
+/**
+ * True when CycleRoute's record id under this module is the tool's own page,
+ * not a record: a tab word, or (D1022) a holder, whose drawer is the tool's.
+ * `e-<n>` and `pool` are still records.
+ */
+export const isCapTableTab = (slug, id) => slug === SLUG && (TAB_WORDS.has(String(id ?? '')) || HOLDER_ID.test(String(id ?? '')));
 
 /** The query a tab keeps: the venture only. */
 export function tabSearch(search = '') {

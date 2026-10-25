@@ -211,7 +211,8 @@ test('the Worker fields the desks pinned stay, for the live pages that read them
   assert.match(raw('cloudflare-worker/src/services/roundMath.ts'), /committed = wired \+ signed/);
   assert.match(raw('cloudflare-worker/src/routes/contacts.ts'), /progress: computeRoundProgress\(allocations, round\?\.target_amount \?\? null\)/);
   const simulator = raw('cloudflare-worker/src/services/captable.ts');
-  assert.match(simulator, /if \(exit != null && roundsOut\.length\) wf = waterfall\(roundsOut, Number\(exit\)\);/);
+  // D1018 (#2855): after the rounds, the waterfall still runs on the rounds, with any recorded preferences.
+  assert.match(simulator, /if \(roundsOut\.length\) \{[\s\S]*?return waterfall\(roundsOut, exit, startPrefs as Record<string, number>\);/);
   assert.match(simulator, /preference_paid: bankersRound\(prefPaid, 2\)/);
   // Grow: the month's plan number (FounderGrowFocus, FounderBuildKpi).
   assert.match(progress, /progress\.get\('\/metrics\/:projectId\/targets'/);

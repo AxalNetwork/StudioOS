@@ -29,7 +29,7 @@ const BOUND = {
   VECTORIZE: {}, JOB_QUEUE: {}, PUBLICATIONS: {}, BACKUPS: {}, BROWSER: {},
 };
 
-type Row = { name: string; status: string; uptime_pct: number | null; monitoring?: string; availability?: string; note?: string; history: Array<{ day: string; status: string }> };
+type Row = { name: string; status: string; records_since: string | null; days_recorded: number | null; days_without_incident: number | null; monitoring?: string; availability?: string; note?: string; history: Array<{ day: string; status: string }> };
 
 async function status(extra: Record<string, unknown>, seed = '') {
   const realFetch = globalThis.fetch;
@@ -66,7 +66,8 @@ test("production's bindings read operational on every row, File storage included
     ['Backups', 'operational'],
     ['Document rendering', 'operational'],
   ]);
-  for (const s of services.filter((row) => !row.monitoring)) assert.equal(s.uptime_pct, 100, `${s.name} with no incident is at 100%`);
+  // D1076: no percentage; every recorded day of a row with no incident reads "no incident reported".
+  for (const s of services.filter((row) => !row.monitoring)) assert.equal(s.days_without_incident, s.days_recorded, `${s.name} with no incident reported`);
 });
 
 test('a missing binding is reported, not hidden', async () => {
@@ -91,7 +92,7 @@ test('an incident tagged with the old technical word still paints the row it nam
   const today = new Date().toISOString().slice(0, 10);
   for (const s of services) {
     const cell = s.history.find((h) => h.day === today);
-    assert.equal(cell?.status, s.name === 'File storage' ? 'degraded' : s.monitoring ? 'unknown' : 'operational', s.name);
+    assert.equal(cell?.status, s.name === 'File storage' ? 'degraded' : s.monitoring ? 'unknown' : 'no_incident', s.name);
   }
 });
 
@@ -107,7 +108,8 @@ test('MCP clients and connector coverage follow the shipping registries without 
   assert.equal(new Set(services.map((row) => row.name)).size, services.length);
   for (const row of rows) {
     assert.equal(row.status, 'unknown', row.name);
-    assert.equal(row.uptime_pct, null, row.name);
+    assert.equal(row.days_without_incident, null, row.name);
+    assert.equal(row.records_since, null, row.name);
     assert.equal(row.history.length, 90, row.name);
     assert.ok(row.history.every((cell) => cell.status === 'unknown'), row.name);
     assert.match(row.note!, /Live service health is not monitored here/);
@@ -145,9 +147,9 @@ test('a provider incident affects its MCP client, connector and current state wi
   const today = new Date().toISOString().slice(0, 10);
   for (const row of services) {
     const affected = row.name === 'Mercury MCP client' || row.name === 'Mercury connector';
-    assert.equal(row.history.find((cell) => cell.day === today)?.status, affected ? 'down' : row.monitoring ? 'unknown' : 'operational', row.name);
+    assert.equal(row.history.find((cell) => cell.day === today)?.status, affected ? 'down' : row.monitoring ? 'unknown' : 'no_incident', row.name);
     assert.equal(row.status, affected ? 'down' : row.monitoring ? 'unknown' : 'operational', row.name);
-    if (row.monitoring) assert.equal(row.uptime_pct, null);
+    if (row.monitoring) assert.equal(row.days_without_incident, null);
   }
 });
 
@@ -158,7 +160,7 @@ test('registry keys remain incident aliases when their display names differ', as
   const calendar = services.find((row) => row.name === 'Google Calendar connector')!;
   assert.equal(calendar.status, 'degraded');
   assert.equal(calendar.history.at(-1)?.status, 'degraded');
-  assert.equal(calendar.uptime_pct, null);
+  assert.equal(calendar.days_without_incident, null);
 });
 
 
@@ -169,5 +171,5 @@ test('a resolved incident remains historical without keeping an unmonitored prov
   const row = services.find((service) => service.name === 'Mercury MCP client')!;
   assert.equal(row.status, 'unknown');
   assert.equal(row.history.at(-1)?.status, 'down');
-  assert.equal(row.uptime_pct, null);
+  assert.equal(row.days_without_incident, null);
 });

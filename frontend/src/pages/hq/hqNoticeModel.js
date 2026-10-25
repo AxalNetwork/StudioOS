@@ -12,12 +12,17 @@
  */
 
 export const HQ_EYEBROW = 'HQ only';
+
+/** Payments and its sub-addresses (D1008, D1012). */
+const PAYMENTS_PATH = /^\/admin\/platform\/payments(\/|$)/;
 export const HQ_TITLE = 'This page belongs to the Super Admin';
 export const HQ_REST = 'You are signed in as a studio admin, so this page stays closed rather than opening and refusing each action.';
 
 /** What HQ manages on each HQ-only page, by its path; the canvas names bank accounts for Funds. */
 const SUBJECTS = [
   [/^\/admin\/funds(\/|$)/, 'HQ manages bank accounts.'],
+  // D1012 (#2831): PAY11, Payments' closed card.
+  [PAYMENTS_PATH, 'HQ sets what members pay.'],
 ];
 
 export function hqLine(pathname = '') {
@@ -29,6 +34,15 @@ export const HQ_LINKS = [
   { label: 'Go to Studio', href: '/studio', primary: false },
   { label: 'My licence', href: '/admin/my-licence', primary: false },
 ];
+
+/** D1012 (#2831): PAY11 sends a studio admin on Payments to Studio or the public pricing page. */
+export const PAYMENTS_LINKS = [
+  { label: 'Go to Studio', href: '/studio', primary: false },
+  { label: 'See the public pricing page', href: '/pricing', primary: false },
+];
+
+/** The card's links for a path: Payments' own, else Studio and My licence. */
+export const hqLinks = (pathname = '') => (PAYMENTS_PATH.test(String(pathname)) ? PAYMENTS_LINKS : HQ_LINKS);
 
 export const ADMIN_TITLE = 'This page is for studio admins';
 export const ADMIN_LINE = 'If you run a studio, ask HQ for admin access.';

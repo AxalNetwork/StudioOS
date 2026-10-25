@@ -21,7 +21,7 @@
  */
 import { Hono } from 'hono';
 import type { Env } from '../types';
-import { requireAdmin } from '../auth';
+import { isSuperAdmin, requireAdmin } from '../auth';
 import { mapError } from './_t13t14t15_helpers';
 import { studioGlance } from '../services/studioGlance';
 
@@ -29,8 +29,9 @@ const r = new Hono<{ Bindings: Env }>();
 
 r.get('/glance', async (c) => {
   try {
-    await requireAdmin(c);
-    return c.json(await studioGlance(c.env));
+    const user = await requireAdmin(c);
+    // D1041: HQ decides (`approvals.hq_decides`) rides only for a Super Admin.
+    return c.json(await studioGlance(c.env, Date.now(), { superAdmin: isSuperAdmin(user as any) }));
   } catch (e) {
     return mapError(c, e);
   }

@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
+import { useLocation } from 'react-router-dom';
 import { paymentsApi } from '../../../lib/api/payments';
 import { reportError } from '../../../lib/log';
 import {
@@ -158,7 +159,12 @@ function Row({ e, names, phone }) {
 
 export default function ChangeLog({ reads }) {
   const phone = usePayPhone();
-  const [filters, setFilters] = useState(EMPTY);
+  // D1012: a product's "Open the change log" arrives with `?product=prod_…`, already filtered.
+  const { search } = useLocation();
+  const [filters, setFilters] = useState(() => {
+    const product = new URLSearchParams(search).get('product');
+    return product && /^prod_[A-Za-z0-9]+$/.test(product) ? { ...EMPTY, product } : EMPTY;
+  });
   const [offset, setOffset] = useState(0);
   const [tick, setTick] = useState(0);
   const [exporting, setExporting] = useState(false);
