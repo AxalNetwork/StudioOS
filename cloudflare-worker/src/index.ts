@@ -302,6 +302,7 @@ import needsRoutes, { quotesRouter, engagementsRouter } from './routes/needs';
 import partnerPipeline from './routes/partner_pipeline';
 import partnerOffers from './routes/partner_offers';
 import { testing, partnerTesting, adminTesting } from './routes/testing';
+import adminProductTesters from './routes/admin_product_testers';
 import partnerDelivery from './routes/partner_delivery';
 import founderValidate from './routes/founder_validate';
 import cycleValidate from './routes/cycle_validate';
@@ -1485,6 +1486,8 @@ app.route('/api/partner/offers', partnerOffers);
 app.route('/api/testing', testing);
 app.route('/api/partner/testing', partnerTesting);
 app.route('/api/admin/testing', adminTesting);
+// D1042 (#2890): the product tester pool — HQ approves, declines, pauses, resumes and removes.
+app.route('/api/admin/product-testers', adminProductTesters);
 // #45 — what the firm records about work in flight: milestones, blockers,
 // what was shipped, who holds a seat inside a client's systems, and the
 // recurring update. Health is derived over five of those tables at read time

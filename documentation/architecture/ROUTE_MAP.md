@@ -376,6 +376,15 @@ These are Worker routes in `routes/testing.ts`, backed by `services/testing.ts` 
 | `POST /api/admin/testing/programmes/:uid/close` | Super Admin | An open or testing programme becomes `closed`; otherwise 409 `not_closable`. |
 | `POST /api/admin/testing/programmes`, `PATCH …/:uid`, `GET …/:uid/applicants`, `POST /api/admin/testing/applications/:uid/pick`, `…/decline` | Super Admin | The partner's routes, on HQ's own programmes (`owner_kind = 'hq'`). A partner's programme answers 404 here. |
 
+
+**The product tester pool (D1042, #2890; migration 576).** Under `/api/admin/product-testers` (`admin_product_testers.ts`), every route `requireAdmin`.
+
+| Route | Who | What it answers |
+| --- | --- | --- |
+| `GET /api/admin/product-testers?status=&page=&page_size=` | Admin | `rows`, oldest application first, 25 a page (100 at most), each with `member` (name, email, role, `email_verified`, `kyc_status`) and, for a declined one, `reapply_after`; `totals` per status; `matching`. An unknown status is 400 `unknown_status`. |
+| `GET /api/admin/product-testers/:id` | Admin | `{ tester, programs, events }`: the testing programs they applied to and their history. 404 `tester_not_found`. |
+| `POST /api/admin/product-testers/:id/approve`, `…/decline`, `…/pause`, `…/resume`, `…/remove` | Admin | applied → active; applied → declined (`reason` of 10 or more characters, reapply 90 days on); active → paused (`reason`); paused → active; active or paused → removed (`reason`). `note` is HQ's alone. The member is told by email and inbox (`product_tester_<event>`). Refusals: 409 `email_unverified`, `admins_cannot_test`, `wrong_status`, `tester_changed`; 400 `reason_required`. |
+
 Mail's testers list is `testers:<uid>` on D811's link, read by `testerRecipients` (`services/mailLinkTesters.ts`): picked testers who consented and have not turned programme emails off, on a programme that has opened, at an address neither suppressed nor unsubscribed. `testersAudience(env, uid)` reads the same rule. Mail's two Product testing reads are under the Mail link contract below (D812 part 2b).
 
 ### Legal templates Worker contract (D717, #1782)
