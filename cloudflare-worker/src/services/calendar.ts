@@ -15,6 +15,7 @@ import type { Env } from '../types';
 import { getSQL } from '../db';
 import { encryptString, decryptString } from './cryptoBox';
 import { hostedEvents, staleMyEventCopies, ticketEvents } from './calendar/myEvents';
+import { investorMeetingEvents } from './calendar/investorMeetings';
 
 /**
  * Refresh tokens were originally written in plaintext and migrated to
@@ -420,7 +421,7 @@ export async function fetchMicrosoftUserinfo(accessToken: string): Promise<any> 
 // ===========================================================================
 export interface CalendarEvent {
   id: string;
-  kind: 'ic_meeting' | 'founder_checkin' | 'advisor_booking' | 'partner_office_hour' | 'calendly_event' | 'expert_booking' | 'event_ticket' | 'event_hosted';
+  kind: 'ic_meeting' | 'founder_checkin' | 'advisor_booking' | 'partner_office_hour' | 'calendly_event' | 'expert_booking' | 'event_ticket' | 'event_hosted' | 'investor_meeting';
   source_id: number;
   source_uid: string;
   title: string;
@@ -797,6 +798,8 @@ const READERS: Readonly<Record<CalendarEvent['kind'], CalendarReader>> = {
   expert_booking: (env, userId, from, to) => directEvents(env, userId, from, to, 'expert_booking'),
   event_ticket: ticketEvents,
   event_hosted: hostedEvents,
+  // D1190 (#3124): a founder's meeting or call with an investor, from Capital relationships.
+  investor_meeting: investorMeetingEvents,
 };
 
 export const KNOWN_KINDS = Object.keys(READERS) as readonly CalendarEvent['kind'][];
