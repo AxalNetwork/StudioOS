@@ -4,7 +4,8 @@
  * decision, New program, and studio-only programs in part 1's reads.
  *
  * Run on a database built from the baseline and every migration through 561,
- * as production builds it; 560 and 561 are applied whole and must apply.
+ * as production builds it; 560 and 561 are applied whole and must apply, and
+ * so is 562 (D956), whose store an approval for one studio writes.
  *
  *   node --experimental-strip-types --no-warnings --import ./cloudflare-worker/test/_ts-loader.mjs \
  *     --test cloudflare-worker/test/program_proposals_d955.test.ts
@@ -46,6 +47,8 @@ function built(): DatabaseSync {
   // Whole, as the deploy applies them: a failure here fails the file.
   db.exec(readFileSync(resolve(MIGRATIONS, '560_program_registry.sql'), 'utf8'));
   db.exec(readFileSync(resolve(MIGRATIONS, '561_program_proposals.sql'), 'utf8'));
+  // D956: an approval for one studio opens a draft grant, which 562's store holds.
+  db.exec(readFileSync(resolve(MIGRATIONS, '562_program_grants_draft.sql'), 'utf8'));
   return db;
 }
 const BUILT = built();
