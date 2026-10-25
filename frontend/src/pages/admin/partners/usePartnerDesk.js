@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { api, dd } from '../../../lib/api';
 import { reportError } from '../../../lib/log';
 import { redemptionDealSet } from './partnersDeskModel';
@@ -18,9 +18,11 @@ import { redemptionDealSet } from './partnersDeskModel';
  * are made by the record with `useRead`.
  *
  * `reload()` reads everything again after a write. A read that already
- * answered keeps its rows on screen while it is read again; one that then
- * fails keeps them as stale, and the page draws them under a "Could not
- * refresh" line.
+ * answered keeps its rows on screen while it is read again, marked
+ * `refreshing` until it answers; one that then fails keeps them as stale, and
+ * the page draws them under a "Could not refresh" line. Rows adopted for one
+ * address are read again by that address too, and keep their row the same
+ * way when that read fails.
  */
 
 const idle = (what) => ({ status: 'loading', data: null, error: null, at: null, what });
@@ -36,7 +38,9 @@ export function useRead(scope, what, tick, enabled, load) {
   useEffect(() => {
     if (!enabled) return undefined;
     let live = true;
-    setRead((r) => (r.what === what && r.data !== null ? { ...r, status: r.status === 'error' ? 'loading' : r.status } : idle(what)));
+    // A read again keeps its rows and says it is `refreshing`; the reply's state drops the mark.
+    // A stale read goes to `loading`, not `ready`, so the page still knows its rows are from before a failure (`isRetrying`).
+    setRead((r) => (r.what === what && r.data !== null ? { ...r, status: r.status === 'error' ? 'loading' : r.status, refreshing: true } : idle(what)));
     Promise.resolve().then(load).then(
       (data) => { if (live) setRead({ status: 'ready', data, error: null, at: Date.now(), what }); },
       (error) => {
@@ -116,11 +120,34 @@ export function usePartnerDesk(route) {
   const [tick, setTick] = useState(0);
   const reload = useCallback(() => setTick((t) => t + 1), []);
   // Rows this page read for one address (Open invitation, Open it), so a
-  // record outside the newest 200 still opens.
+  // record outside the newest 200 still opens. Each is held as a read, in
+  // `useRead`'s shape, so a failed refresh of it is said like a list's.
   const [extra, setExtra] = useState(() => new Map());
   const adopt = useCallback((row) => {
-    if (row && row.id !== null && row.id !== undefined) setExtra((m) => new Map(m).set(String(row.id), row));
+    if (row && row.id !== null && row.id !== undefined) setExtra((m) => new Map(m).set(String(row.id), { status: 'ready', data: row, error: null }));
   }, []);
+  // A reload reads each adopted row again by its address, as it was read, so a
+  // record outside the newest 200 shows the Worker's state after a write. A row
+  // is dropped only when that read answered without it: the record then says
+  // it is not in this read. When the read fails the row stays, stale, and the
+  // record draws it under "Could not refresh" with Try again (D923 §2).
+  const extraNow = useRef(extra);
+  extraNow.current = extra;
+  useEffect(() => {
+    if (!tick) return undefined;
+    let live = true;
+    const put = (key, f) => (m) => (m.has(key) ? new Map(m).set(key, f(m.get(key))) : m);
+    const drop = (key) => (m) => { if (!m.has(key)) return m; const n = new Map(m); n.delete(key); return n; };
+    for (const [key, held] of extraNow.current) {
+      api.adminPartners.listInvitations({ email: held.data.recipient_email })
+        .then((r) => itemsOf(r, 'The invitations for this address').find((i) => String(i?.id) === key) || null)
+        .then(
+          (fresh) => { if (live) setExtra(fresh ? put(key, () => ({ status: 'ready', data: fresh, error: null })) : drop(key)); },
+          (error) => { reportError('admin-partners:adopted', error); if (live) setExtra(put(key, (r) => ({ ...r, status: 'error', error }))); },
+        );
+    }
+    return () => { live = false; };
+  }, [tick]);
 
   const invitations = useRead('invitations', 'invitations', tick, true,
     () => api.adminPartners.listInvitations({}).then((r) => itemsOf(r, 'The invitations')));

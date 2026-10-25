@@ -16,6 +16,7 @@ import {
 import { adminNetworkProfiles as api } from '../../lib/api';
 import { useToast } from '../../components/useToast';
 import ToastMessage from '../../components/ToastMessage';
+import Lightbox from '../../ui/Lightbox';
 import { useEscapeClose } from '../../hooks/useEscapeClose';
 
 const SKILL_CATALOG = [
@@ -23,10 +24,11 @@ const SKILL_CATALOG = [
   'Engineering', 'Design', 'Recruiting', 'Technical DD',
   'Operations', 'Fundraising',
 ];
-const NETWORK_KINDS = ['mentor', 'partner', 'advisor', 'investor'];
+const NETWORK_KINDS = ['advisor', 'partner', 'investor'];
+const profileKind = (kind) => kind === 'mentor' ? 'advisor' : kind;
 
 const EMPTY = {
-  name: '', kind: 'mentor', role: '', company: '', bio: '',
+  name: '', kind: 'advisor', role: '', company: '', bio: '',
   linkedin_url: '', skills: [], is_active: true,
 };
 
@@ -40,6 +42,21 @@ function readFileAsDataUri(file) {
     r.onerror = () => reject(new Error('read_failed'));
     r.readAsDataURL(file);
   });
+}
+
+/** The public photo route serves shown profiles only (D975). */
+function ProfilePhoto({ profile, large = false }) {
+  const [failed, setFailed] = useState(false);
+  const source = profile.is_active ? profile.photo_url : null;
+  useEffect(() => { setFailed(false); }, [source]);
+  const size = large ? 'w-16 h-16 text-xl' : 'w-12 h-12 text-sm';
+  const words = (String(profile.name || '').trim() || '?').split(/\s+/);
+  const initials = (words[0][0] + (words.length > 1 ? words.at(-1)[0] : '')).toUpperCase();
+  return source && !failed ? (
+    <img src={source} alt={profile.name} onError={() => setFailed(true)} className={`${size} rounded-lg object-cover flex-shrink-0 bg-zinc-100 dark:bg-zinc-800`} />
+  ) : (
+    <div aria-label={profile.name} className={`${size} rounded-lg bg-gradient-to-br from-violet-500 to-amber-400 flex items-center justify-center text-white font-bold flex-shrink-0`}>{initials}</div>
+  );
 }
 
 function SkillPicker({ value, onChange }) {
@@ -69,7 +86,7 @@ function SkillPicker({ value, onChange }) {
 
 function EditorModal({ initial, onClose, onSave, onPhoto, busy }) {
   useEscapeClose(onClose);
-  const [form, setForm] = useState(() => ({ ...EMPTY, ...(initial || {}) }));
+  const [form, setForm] = useState(() => ({ ...EMPTY, ...(initial || {}), kind: profileKind(initial?.kind || EMPTY.kind) }));
   const [photoErr, setPhotoErr] = useState('');
   const fileRef = useRef(null);
   const set = (k, v) => setForm((f) => ({ ...f, [k]: v }));
@@ -107,13 +124,7 @@ function EditorModal({ initial, onClose, onSave, onPhoto, busy }) {
         <div className="p-5 space-y-4">
           {initial?.id && (
             <div className="flex items-center gap-3">
-              {initial.photo_url ? (
-                <img src={initial.photo_url} alt={form.name} className="w-16 h-16 rounded-lg object-cover bg-zinc-100 dark:bg-zinc-800" />
-              ) : (
-                <div className="w-16 h-16 rounded-lg bg-gradient-to-br from-violet-500 to-amber-400 flex items-center justify-center text-white text-xl font-bold">
-                  {(form.name || '?').slice(0, 2).toUpperCase()}
-                </div>
-              )}
+              <ProfilePhoto profile={{ ...initial, name: form.name }} large />
               <div>
                 <input
                   ref={fileRef}
@@ -246,7 +257,7 @@ function EditorModal({ initial, onClose, onSave, onPhoto, busy }) {
 export async function saveProfileForm({ client, editing, form, notify }) {
   const payload = {
     name: form.name,
-    kind: form.kind,
+    kind: profileKind(form.kind),
     role: form.role || null,
     company: form.company || null,
     bio: form.bio || null,
@@ -281,6 +292,10 @@ export default function AdminNetworkProfiles({ embedded = false }) {
   const [editing, setEditing] = useState(null);
   const [busy, setBusy] = useState(false);
   const [dragId, setDragId] = useState(null);
+  const [archiving, setArchiving] = useState(null);
+  const [archiveBusy, setArchiveBusy] = useState(false);
+  const [archiveError, setArchiveError] = useState('');
+  const archiveLock = useRef(false);
   // `success` and `error` are stable; `toast` (the current message) is data to
   // draw and is never a dependency, or every message would reload the list.
   const { toast, success, error, dismissToast } = useToast();
@@ -324,17 +339,24 @@ export default function AdminNetworkProfiles({ embedded = false }) {
     } finally { setBusy(false); }
   }, [editing, success, error, load]);
 
-  const remove = useCallback(async (p) => {
-    if (!window.confirm(
-      `Archive profile for "${p.name}"?\n\nIt will be hidden from the Demo Day deck immediately. ` +
-      `The record (including photo) is preserved so you can re-activate it later from this list.`,
-    )) return;
+  const closeArchive = () => { if (!archiveLock.current) setArchiving(null); };
+  const remove = async () => {
+    if (!archiving || archiveLock.current) return;
+    archiveLock.current = true;
+    setArchiveBusy(true);
+    setArchiveError('');
     try {
-      await api.remove(p.id);
+      await api.remove(archiving.id);
+      setArchiving(null);
       success('Profile archived');
       await load();
-    } catch (e) { error(e?.message || 'Archive failed'); }
-  }, [success, error, load]);
+    } catch (e) {
+      setArchiveError(e?.message || 'Archive failed. Try again.');
+    } finally {
+      archiveLock.current = false;
+      setArchiveBusy(false);
+    }
+  };
 
   const toggleActive = useCallback(async (p) => {
     try {
@@ -360,10 +382,11 @@ export default function AdminNetworkProfiles({ embedded = false }) {
   };
 
   const counts = useMemo(() => {
-    const m = { mentor: 0, partner: 0, advisor: 0, investor: 0, total: 0, active: 0 };
+    const m = { partner: 0, advisor: 0, investor: 0, total: 0, active: 0 };
     for (const p of profiles) {
       m.total += 1; if (p.is_active) m.active += 1;
-      if (p.kind in m) m[p.kind] += 1;
+      const kind = profileKind(p.kind);
+      if (NETWORK_KINDS.includes(kind)) m[kind] += 1;
     }
     return m;
   }, [profiles]);
@@ -379,7 +402,7 @@ export default function AdminNetworkProfiles({ embedded = false }) {
         ) : (
           <div>
             <h1 className="text-2xl font-bold text-zinc-900 dark:text-zinc-100 flex items-center gap-2">
-              <Users className="w-6 h-6 text-violet-600" /> Mentor & partner network
+              <Users className="w-6 h-6 text-violet-600" /> Advisors & Partners
             </h1>
             <p className="text-sm text-zinc-500 dark:text-zinc-400 mt-1">
               Admin-only roster powering the Spin-Out Demo Day deck's Team & Network slide.
@@ -398,10 +421,10 @@ export default function AdminNetworkProfiles({ embedded = false }) {
         </div>
       </div>
 
-      <div className="grid grid-cols-2 md:grid-cols-6 gap-3 mb-6">
+      <div className="grid grid-cols-2 md:grid-cols-5 gap-3 mb-6">
         {[
           ['Total', counts.total], ['Active', counts.active],
-          ['Mentors', counts.mentor], ['Partners', counts.partner],
+          ['Partners', counts.partner],
           ['Advisors', counts.advisor], ['Investors', counts.investor],
         ].map(([label, n]) => (
           <div key={label} className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded p-3">
@@ -426,7 +449,7 @@ export default function AdminNetworkProfiles({ embedded = false }) {
         <div className="text-center py-12 border-2 border-dashed border-zinc-300 dark:border-zinc-700 rounded-lg">
           <Users className="w-12 h-12 mx-auto text-zinc-400 mb-3" />
           <div className="text-zinc-600 dark:text-zinc-400">No profiles yet.</div>
-          <div className="text-xs text-zinc-500 mt-1">Add the first mentor or partner to populate the Demo Day deck.</div>
+          <div className="text-xs text-zinc-500 mt-1">Add the first advisor or partner to populate the Demo Day deck.</div>
         </div>
       ) : (
         <div className="space-y-2">
@@ -442,17 +465,11 @@ export default function AdminNetworkProfiles({ embedded = false }) {
               } ${dragId === p.id ? 'ring-2 ring-violet-400' : ''}`}
             >
               <GripVertical className="w-4 h-4 text-zinc-400 cursor-grab flex-shrink-0" />
-              {p.photo_url ? (
-                <img src={p.photo_url} alt={p.name} className="w-12 h-12 rounded-lg object-cover flex-shrink-0 bg-zinc-100 dark:bg-zinc-800" />
-              ) : (
-                <div className="w-12 h-12 rounded-lg bg-gradient-to-br from-violet-500 to-amber-400 flex items-center justify-center text-white text-sm font-bold flex-shrink-0">
-                  {(p.name || '?').slice(0, 2).toUpperCase()}
-                </div>
-              )}
+              <ProfilePhoto profile={p} />
               <div className="flex-1 min-w-0">
                 <div className="flex items-baseline gap-2">
                   <div className="font-semibold text-zinc-900 dark:text-zinc-100 truncate">{p.name}</div>
-                  <span className="text-[10px] uppercase tracking-wider text-violet-600 dark:text-violet-400">{p.kind}</span>
+                  <span className="text-[10px] uppercase tracking-wider text-violet-600 dark:text-violet-400">{profileKind(p.kind)}</span>
                 </div>
                 {(p.role || p.company) && (
                   <div className="text-xs text-zinc-500 dark:text-zinc-400 truncate">
@@ -482,13 +499,24 @@ export default function AdminNetworkProfiles({ embedded = false }) {
                 <button onClick={() => setEditing(p)} className="p-2 text-zinc-500 hover:text-violet-600 rounded" title="Edit">
                   <Edit3 className="w-4 h-4" />
                 </button>
-                <button onClick={() => remove(p)} className="p-2 text-zinc-500 hover:text-red-600 rounded" title="Archive (hide from deck, keep history)">
+                <button onClick={() => { setArchiveError(''); setArchiving(p); }} className="p-2 text-zinc-500 hover:text-red-600 rounded" title="Archive (hide from deck, keep history)">
                   <Archive className="w-4 h-4" />
                 </button>
               </div>
             </div>
           ))}
         </div>
+      )}
+
+      {archiving && (
+        <Lightbox label={`Archive ${archiving.name}?`} title={`Archive ${archiving.name}?`} onClose={closeArchive} testId="profile-archive-dialog"
+          footer={<>
+            <button type="button" disabled={archiveBusy} onClick={closeArchive} className="px-4 py-2 text-sm rounded border border-zinc-300 dark:border-zinc-700">Cancel</button>
+            <button type="button" disabled={archiveBusy} onClick={remove} className="px-4 py-2 text-sm rounded bg-violet-600 text-white disabled:opacity-50">{archiveBusy ? 'Archiving…' : 'Archive'}</button>
+          </>}>
+          <p>The next Demo Day deck built leaves this person out. The record and photo are kept. For now, the profile stays in this list and you can restore it with Show on deck.</p>
+          {archiveError && <p role="alert" className="mt-3 text-red-700 dark:text-red-300">Archive failed: {archiveError} Try again.</p>}
+        </Lightbox>
       )}
 
       {editing && (

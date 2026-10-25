@@ -392,3 +392,8 @@ the reauthorized stored run, with a run-bounded SDK JWT. No credentials log.
 `perkClaims.ts` (D957) gives the admin Perks page and program catalogue one
 UTC Monday window for claim totals, listing ranks and weekly price-kind counts.
 `raiseEvidence.ts` reads active Mercury runway facts and the files current data-room grants can download, for Raise and deck readiness.
+
+`paymentsChangeLog.ts` (D1011) names the fifteen catalogue and Stripe audit
+actions and reads them back as the Payments change log; `stripeWebhookDeliveries.ts`
+is the webhook's request-log reader, shared by HQ · Platform and Payments, with
+hourly buckets that are null for an hour the log was silent.
