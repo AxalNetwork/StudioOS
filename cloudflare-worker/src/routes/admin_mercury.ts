@@ -204,9 +204,9 @@ export function createAdminMercury(opts: AdminMercuryOptions = {}) {
   r.get('/balances', async (c) => {
     const user = await requireMercuryReader(c); if (user instanceof Response) return user;
     const account = c.req.query('account') || null, range = c.req.query('range') || '90d';
-    if (account && !/^[A-Za-z0-9_-]{1,80}$/.test(account)) return c.json({ code: 'invalid_account', detail: 'Choose a recorded account.' }, 400);
+    if (account && !/^[a-f0-9]{32}$/.test(account)) return c.json({ code: 'invalid_account', detail: 'Choose a recorded account.' }, 400);
     if (!(BALANCE_RANGES as readonly string[]).includes(range)) return c.json({ code: 'invalid_range', detail: 'Choose 30d, 90d or 12m.' }, 400);
-    if (!await auditRead(c.env, user, 'mercury_balances_read', { account, range })) return c.json(AUDIT_UNAVAILABLE, 503);
+    if (!await auditRead(c.env, user, 'mercury_balances_read', { account_filtered: account !== null, range })) return c.json(AUDIT_UNAVAILABLE, 503);
     try {
       const result = await balanceSeries(c.env, account, range as BalanceRange, opts.now?.() ?? new Date());
       return result ? c.json({ ok: true, ...result }) : c.json({ code: 'account_not_recorded', detail: 'No such account is recorded.' }, 404);

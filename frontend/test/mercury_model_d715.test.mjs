@@ -240,7 +240,7 @@ test('decision 11: adminMercuryApi has one method per #1775 route, D749 marks an
     await adminMercuryApi.rejectMatch('m-2', 'Not this line at all');
     await adminMercuryApi.markNotOurs('t-2', { reason: 'other', note: 'A wire meant for another fund' });
     await adminMercuryApi.withdrawNotOurs('n-1', 'It was ours after all');
-    await adminMercuryApi.balances({ account: 'synthetic-uid', range: '30d' });
+    await adminMercuryApi.balances({ account: 'a'.repeat(32), range: '30d' });
     await adminMercuryApi.monthly({ entity: 'gp' });
   } finally { globalThis.fetch = savedFetch; }
   const path = (u) => new URL(u, 'https://axal.test').pathname + new URL(u, 'https://axal.test').search;
@@ -257,7 +257,7 @@ test('decision 11: adminMercuryApi has one method per #1775 route, D749 marks an
     'POST /api/admin/mercury/matches/m-2/reject',
     'POST /api/admin/mercury/transactions/t-2/not-ours',
     'POST /api/admin/mercury/not-ours/n-1/withdraw',
-    'GET /api/admin/mercury/balances?account=synthetic-uid&range=30d',
+    `GET /api/admin/mercury/balances?account=${'a'.repeat(32)}&range=30d`,
     'GET /api/admin/mercury/monthly?entity=gp',
   ]);
   assert.deepEqual(seen[10].body, { reason: 'other', note: 'A wire meant for another fund' });

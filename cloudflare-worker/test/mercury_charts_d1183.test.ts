@@ -5,6 +5,7 @@ import assert from 'node:assert/strict';
 import { ADMIN, SUPER, FOUNDER, PARTNER, INVESTOR, ADVISOR, EXPLORING, appFor, call, envFor, freshDb } from './_mercury_fixture.ts';
 
 const NOW = new Date('2026-10-25T23:59:59Z');
+const accountUid = (ending: string) => 'a'.repeat(28) + ending;
 const previousFetch = globalThis.fetch;
 let bankCalls = 0;
 const noBank = async () => { bankCalls++; throw new Error('Bank caller must be stubbed'); };
@@ -29,7 +30,7 @@ function setup(now = NOW) {
   } };
   const app = appFor({ now: () => now, fetcher: noBank });
   let seq = 0;
-  const account = (entity: string, ending: string, registered = 1, uid = `account-${ending}`) => {
+  const account = (entity: string, ending: string, registered = 1, uid = accountUid(ending)) => {
     let conn = db.prepare('SELECT id FROM mercury_entity_connections WHERE entity_key = ?').get(entity) as any;
     if (!conn) {
       const result = db.prepare("INSERT INTO mercury_entity_connections (uid, entity_key, status, credentials_enc, connected_by) VALUES (?, ?, 'active', 'v1.synthetic-private-credential', ?)").run(`conn-${entity}`, entity, SUPER);
@@ -64,14 +65,14 @@ test('daily balances retain real readings, gaps, nulls, zero and as-of, with onl
   s.snapshot(h, '2026-10-26', 99999, 99999); // future
   const r = await s.get('/balances?range=30d');
   assert.equal(r.status, 200); assert.deepEqual([r.body.range, r.body.from, r.body.to, r.body.currency], ['30d', '2026-09-26', '2026-10-25', 'USD']);
-  const a = r.body.items.find((x: any) => x.account_uid === 'account-4821');
-  assert.deepEqual(a, { account_uid: 'account-4821', entity_key: 'holdings', kind: 'checking', account_masked: '••••4821', registered: true, reason: null,
+  const a = r.body.items.find((x: any) => x.account_uid === accountUid('4821'));
+  assert.deepEqual(a, { account_uid: accountUid('4821'), entity_key: 'holdings', kind: 'checking', account_masked: '••••4821', registered: true, reason: null,
     points: [
       { date: '2026-09-26', current: { cents: 10005, reason: null }, available: { cents: 9001, reason: null }, as_of: '2026-09-26 08:00:00' },
       { date: '2026-10-23', current: { cents: 0, reason: null }, available: { cents: null, reason: 'not_recorded' }, as_of: '2026-10-23 08:00:00' },
       { date: '2026-10-25', current: { cents: 25000, reason: null }, available: { cents: 24000, reason: null }, as_of: '2026-10-25 08:00:00' },
     ] });
-  assert.deepEqual(r.body.items.find((x: any) => x.account_uid === 'account-6604'), { account_uid: 'account-6604', entity_key: 'gp', kind: 'checking', account_masked: '••••6604', registered: false, reason: 'not_recorded', points: [] });
+  assert.deepEqual(r.body.items.find((x: any) => x.account_uid === accountUid('6604')), { account_uid: accountUid('6604'), entity_key: 'gp', kind: 'checking', account_masked: '••••6604', registered: false, reason: 'not_recorded', points: [] });
   assert.doesNotMatch(r.text, /private-provider|PRIVATE|credentials|last_four/);
   assert.equal(s.db.prepare('SELECT COUNT(*) AS n FROM mercury_balance_snapshots WHERE account_id = ?').get(g)!.n, 0);
 });
@@ -80,11 +81,13 @@ test('account filter, default 90-day range and trailing 12 calendar months inclu
   const s = setup(), a = s.account('fund', '1111');
   s.account('gp', '2222');
   for (const day of ['2025-10-25', '2025-10-26', '2026-07-27', '2026-07-28', '2026-10-25']) s.snapshot(a, day, 1, 2);
-  const ninety = await s.get('/balances?account=account-1111');
+  const ninety = await s.get(`/balances?account=${accountUid('1111')}`);
   assert.equal(ninety.status, 200); assert.equal(ninety.body.range, '90d'); assert.equal(ninety.body.from, '2026-07-28');
-  assert.deepEqual(ninety.body.items.map((x: any) => x.account_uid), ['account-1111']);
+  assert.deepEqual(ninety.body.items.map((x: any) => x.account_uid), [accountUid('1111')]);
+  const audit = s.db.prepare('SELECT filters_json FROM admin_audit_log').get() as any;
+  assert.deepEqual(JSON.parse(audit.filters_json), { account_filtered: true, range: '90d' });
   assert.deepEqual(ninety.body.items[0].points.map((x: any) => x.date), ['2026-07-28', '2026-10-25']);
-  const year = await s.get('/balances?account=account-1111&range=12m');
+  const year = await s.get(`/balances?account=${accountUid('1111')}&range=12m`);
   assert.equal(year.status, 200); assert.equal(year.body.from, '2025-10-26');
   assert.deepEqual(year.body.items[0].points.map((x: any) => x.date), ['2025-10-26', '2026-07-27', '2026-07-28', '2026-10-25']);
   const leap = setup(new Date('2024-02-29T00:30:00Z')), l = leap.account('gp', '3333');
@@ -189,7 +192,7 @@ test('each read records its own action and actor before querying bank tables, ev
     assert.deepEqual(rows.map(x => [x.admin_user_id, x.action]), [[SUPER, action]]);
     assert.doesNotMatch(rows[0].filters_json, /cents|PRIVATE|4821/);
   }
-  const s = setup(); const missing = await s.get('/balances?account=unknown');
+  const s = setup(); const missing = await s.get(`/balances?account=${'f'.repeat(32)}`);
   assert.deepEqual([missing.status, missing.body.code], [404, 'account_not_recorded']); assert.deepEqual(s.bankReads, [1]);
 });
 
@@ -232,7 +235,7 @@ test('HQ admin reads need no write elevation; all other roles, support sessions 
 
 test('bounded account/range and entity filters refuse invalid values without echoing them or reading/auditing bank data', async () => {
   const s = setup();
-  for (const path of ['/balances?range=7d', '/balances?account=%27private', `/balances?account=${'a'.repeat(81)}`, '/monthly?entity=private']) {
+  for (const path of ['/balances?range=7d', '/balances?account=%27private', '/balances?account=987654321098', `/balances?account=${'a'.repeat(81)}`, '/monthly?entity=private']) {
     const r = await s.get(path); assert.equal(r.status, 400); assert.doesNotMatch(r.text, /private|a{81}/);
   }
   assert.deepEqual(s.bankReads, []); assert.equal(s.db.prepare('SELECT COUNT(*) AS n FROM admin_audit_log').get()!.n, 0);
