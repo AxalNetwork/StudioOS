@@ -78,6 +78,12 @@ async function ensureCapTableShareSchema(env: Env): Promise<void> {
      )`,
     `CREATE INDEX IF NOT EXISTS idx_captable_share_views_token ON captable_share_views(share_token_id)`,
     `CREATE INDEX IF NOT EXISTS idx_captable_share_views_scenario ON captable_share_views(scenario_uid, created_at)`,
+    // D1019 (#2856) — migration 575's venture-link columns. On a database that
+    // has 575 these fail as duplicates, and the catch below lets them.
+    `ALTER TABLE captable_share_tokens ADD COLUMN project_id INTEGER`,
+    `ALTER TABLE captable_share_tokens ADD COLUMN level TEXT`,
+    `ALTER TABLE captable_share_tokens ADD COLUMN holders_attested_at TEXT`,
+    `ALTER TABLE captable_share_tokens ADD COLUMN holders_attested_by INTEGER`,
   ];
   for (const s of stmts) {
     try { await env.DB.prepare(s).run(); }
