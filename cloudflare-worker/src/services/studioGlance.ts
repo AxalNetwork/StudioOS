@@ -299,7 +299,10 @@ async function hqGlance(env: Env, now: number) {
     hqInsights(env, now),
   ]);
   const exploringLane = pressure.lanes.find((l) => l.key === 'exploring');
-  const accounts = await hqAccounts(env, exploringLane ? exploringLane.count : null, now);
+  // D1039: the lane counts signed Explorers only; the Accounts tile still
+  // counts every account in the holding role, from the lane's `holding` figure.
+  const holding = exploringLane?.count == null ? null : exploringLane.sub?.holding ?? null;
+  const accounts = await hqAccounts(env, holding, now);
   return {
     tier: 'hq' as const,
     branch: null,

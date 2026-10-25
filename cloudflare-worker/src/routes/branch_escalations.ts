@@ -72,7 +72,7 @@ import { requireBranchTier } from '../util/branch';
 import { mapError, nowIso } from './_t13t14t15_helpers';
 import { branchEscalations, branchLicenceKind } from '../rpc/branchOps';
 import { ESCALATION_KINDS, escalationKindsFor } from '../rpc/hqOps';
-import { parseRequest, parseNote, encodeRequestDetail, isRequestKind, withRequestView } from '../services/escalationRequests';
+import { parseRequest, parseNoteFor, encodeRequestDetail, isRequestKind, withRequestView } from '../services/escalationRequests';
 import {
   CONCERN_KIND, BAD_CONCERN, listConcerns, parseConcern, resolveConcern,
   parseRelation, RELATION_REQUIRED, BAD_RELATION, RELATION_NEEDS_ITEM, RELATION_NOT_FOR_KIND,
@@ -293,7 +293,8 @@ r.post('/escalations', async (c) => {
     const requested = parseRequest(kind, b?.request);
     if (!requested.ok) return c.json({ error: requested.error, message: requested.message, kind }, 400);
     if (requested.request && isRequestKind(kind)) {
-      const note = parseNote(b?.detail);
+      // D983: a program request needs its note here too, before HQ is called.
+      const note = parseNoteFor(kind, b?.detail);
       if (!note.ok) return c.json({ error: note.error, message: note.message, kind }, 400);
       detail = encodeRequestDetail(requested.request, note.note);
     }

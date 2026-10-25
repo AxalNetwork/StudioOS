@@ -63,6 +63,13 @@ export function itemsOf(reply, what) {
   return reply.items;
 }
 
+/** A list's rows carrying the reply's `total` when it is a number (D926), and none otherwise. */
+export function withTotal(items, reply) {
+  const total = Number(reply?.total);
+  if (Number.isFinite(total) && reply?.total !== null && reply?.total !== undefined) Object.defineProperty(items, 'total', { value: total, enumerable: false });
+  return items;
+}
+
 const R5_PAGE = 500;
 
 /** R5, every page: `{ items, total, complete }`. */
@@ -120,8 +127,9 @@ export function usePartnerDesk(route) {
     return () => { live = false; };
   }, [tick]);
 
+  // D950: the rows keep the Worker's exact `total` (D926), so the tab's count is exact past the newest 200.
   const invitations = useRead('invitations', 'invitations', tick, true,
-    () => api.adminPartners.listInvitations({}).then((r) => itemsOf(r, 'The invitations')));
+    () => api.adminPartners.listInvitations({}).then((r) => withTotal(itemsOf(r, 'The invitations'), r)));
   const proposed = useRead('deals:proposed', 'proposed', tick, true, dealList('proposed'));
   const awaiting = useRead('deals:awaiting_signature', 'awaiting_signature', tick, true, dealList('awaiting_signature'));
   const active = useRead('deals:active', 'active', tick, true, dealList('active'));
