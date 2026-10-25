@@ -284,6 +284,7 @@ const BranchAnalytics = lazy(() => import('./pages/branch/BranchAnalytics'));
 // The Super Admin's HQ-only surfaces (migrations 199/207). `hqOnly` below
 // renders the notice for an admin without the elevation.
 const SuperAdminOnlyNotice = lazy(() => import('./pages/hq/SuperAdminOnlyNotice'));
+const LabOnlyNotice = lazy(() => import('./pages/admin/lab/LabOnlyNotice'));
 const AdminOnlyNotice = lazy(() => import('./pages/hq/AdminOnlyNotice'));
 const HqContractsPage = lazy(() => import('./pages/hq/ContractsPage'));
 const HqAccountsPage = lazy(() => import('./pages/hq/AccountsPage'));
@@ -1897,6 +1898,7 @@ function RoleGuard({ user, allowedRoles, children, viewMode, realUser, isImperso
     if (boundary) return <boundary.Panel home={defaultPath} />;
     // D940: retain the canonical policy, including preview and impersonation exceptions.
     if (adminRefusal({ pathname, realRole: (realUser || user)?.role, isImpersonating })) {
+      if (/^\/admin\/programs\/spinout-lab(\/|$)/.test(pathname)) return <LabOnlyNotice home={ROLE_DEFAULT_PATH[effectiveRole] || '/studio'} />;
       return <AdminOnlyNotice home={ROLE_DEFAULT_PATH[effectiveRole] || '/studio'} />;
     }
     return <Navigate to={defaultPath} replace />;
