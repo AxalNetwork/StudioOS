@@ -484,28 +484,34 @@ r.get('/summary', async (c) => {
     // rows after them, so the marking below cannot disagree with the slide.
     // No bio, photo key or LinkedIn URL: the panel needs none of them.
     const rows = await env.DB.prepare(
-      `SELECT id, name, kind, role, company, is_active
+      `SELECT id, name, kind, role, company, is_active, archived_at
          FROM network_profiles
-        ORDER BY CASE WHEN is_active = 1 THEN 0 ELSE 1 END ASC,
+        ORDER BY CASE WHEN archived_at IS NOT NULL THEN 2 WHEN is_active = 1 THEN 0 ELSE 1 END ASC,
                  display_order ASC, name ASC, id ASC
         LIMIT ?`,
     ).bind(ROSTER_LIST_LIMIT + 1).all<Record<string, unknown>>();
     const listed = (rows.results || []).slice(0, ROSTER_LIST_LIMIT);
 
     const kindRows = await env.DB.prepare(
-      `SELECT CASE WHEN is_active = 1 THEN 1 ELSE 0 END AS active, kind, COUNT(*) AS n
+      // D974's three states (migration 551): shown, hidden (inactive, kept) and
+      // archived (`archived_at` set). D1125: a hidden row is not archived.
+      `SELECT CASE WHEN archived_at IS NOT NULL THEN 'archived' WHEN is_active = 1 THEN 'active' ELSE 'hidden' END AS state,
+              kind, COUNT(*) AS n
          FROM network_profiles
-        GROUP BY CASE WHEN is_active = 1 THEN 1 ELSE 0 END, kind`,
-    ).all<{ active: number; kind: string; n: number }>();
-    const byKind = new Map<string, { kind: string; active: number; archived: number; known: boolean }>();
-    for (const k of NETWORK_KINDS) byKind.set(k, { kind: k, active: 0, archived: 0, known: true });
+        GROUP BY state, kind`,
+    ).all<{ state: string; kind: string; n: number }>();
+    const byKind = new Map<string, { kind: string; active: number; hidden: number; archived: number; known: boolean }>();
+    for (const k of NETWORK_KINDS) byKind.set(k, { kind: k, active: 0, hidden: 0, archived: 0, known: true });
     let active = 0;
+    let hidden = 0;
     let archived = 0;
     for (const row of kindRows.results || []) {
       const n = countOf(row.n, 'roster count');
       const kind = String(row.kind ?? '');
-      const slot = byKind.get(kind) ?? { kind, active: 0, archived: 0, known: false };
-      if (Number(row.active) === 1) { slot.active += n; active += n; } else { slot.archived += n; archived += n; }
+      const slot = byKind.get(kind) ?? { kind, active: 0, hidden: 0, archived: 0, known: false };
+      if (row.state === 'active') { slot.active += n; active += n; }
+      else if (row.state === 'hidden') { slot.hidden += n; hidden += n; }
+      else { slot.archived += n; archived += n; }
       byKind.set(kind, slot);
     }
 
@@ -517,8 +523,9 @@ r.get('/summary', async (c) => {
     roster = {
       available: true,
       rows: listed.map((row) => {
-        const isActive = Number(row.is_active) === 1;
-        const state = isActive ? reach[a++] : 'archived';
+        const isArchived = row.archived_at != null && String(row.archived_at) !== '';
+        const isActive = !isArchived && Number(row.is_active) === 1;
+        const state = isActive ? reach[a++] : isArchived ? 'archived' : 'hidden';
         return {
           id: Number(row.id),
           name: String(row.name ?? ''),
@@ -528,11 +535,13 @@ r.get('/summary', async (c) => {
           deck_role: state === 'profile' ? deckAdvisorRole(row.role) : null,
           company: row.company == null || String(row.company).trim() === '' ? null : String(row.company),
           active: isActive,
+          state: isActive ? 'active' : isArchived ? 'archived' : 'hidden',
           reach: state,
         };
       }),
       truncated: (rows.results || []).length > ROSTER_LIST_LIMIT,
       active,
+      hidden,
       archived,
       by_kind: [...byKind.values()],
       caps: { profiles: DECK_ROSTER_PROFILES, names: DECK_ROSTER_NAMES },

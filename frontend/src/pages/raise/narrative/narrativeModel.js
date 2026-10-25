@@ -218,8 +218,9 @@ export const NEEDS_NONE = 'Nothing needs you in the newest version.';
 
 /** The footer: the deck reads the narrative only when one of its cards binds a version. */
 export function homeFooter(part) {
-  if (!part?.deck) return 'No pitch deck yet, so nothing reads your narrative.';
-  return part.deck.reads_narrative ? 'The Pitch deck studio reads your narrative.' : 'No card of your pitch deck reads your narrative yet.';
+  const moved = 'Positioning now lives here. ';
+  if (!part?.deck) return moved + 'No pitch deck yet, so nothing reads your narrative.';
+  return moved + (part.deck.reads_narrative ? 'The Pitch deck studio reads your narrative.' : 'No card of your pitch deck reads your narrative yet.');
 }
 
 /** NAR12's based-on line: "from v1 · saved 2026-10-20 · by Fay Founder", "Not recorded" for what was not. */

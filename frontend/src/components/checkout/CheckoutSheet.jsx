@@ -108,8 +108,10 @@ function Summary({ plan, spec, interval, setInterval, intervals }) {
 }
 
 /** The payment column for a mode that does not pay here (D1048 §3). */
-function NotHere({ mode, onClose }) {
+function NotHere({ mode, onClose, onRetryPlan }) {
   const body = {
+    reading: ['Reading your current plan…', 'Payment waits until your current plan is read.', null],
+    unreadable: ['Your current plan could not be read.', 'Your current plan is Unreadable. Try again before starting a payment.', null],
     staff: ['Staff account · no plan needed', 'Admin and Super Admin accounts hold no plan.', null],
     explorer: ['Choose your profile first.', 'Plans belong to a profile: Founder, Investor, Advisor or Operating Partner. You can still buy AI tokens without a plan.', <Link key="p" to="/onboarding" className={LINK} onClick={onClose}>Choose a profile</Link>],
     other: ['This plan is for another profile.', 'Plans are sold to the profile they belong to.', null],
@@ -121,16 +123,17 @@ function NotHere({ mode, onClose }) {
       <span className="text-[14px] font-bold text-axal-ink dark:text-gray-100">{body[0]}</span>
       <p className={`m-0 ${SUB}`}>{body[1]}</p>
       {body[2]}
+      {mode === 'unreadable' && <button type="button" className={LINK} onClick={onRetryPlan} data-testid="checkout-plan-retry">Try again</button>}
     </div>
   );
 }
 
-export default function CheckoutSheet({ plan, spec, user, role, held, interval: start = 'monthly', onClose }) {
+export default function CheckoutSheet({ plan, spec, user, role, held, planRead, onRetryPlan, interval: start = 'monthly', onClose }) {
   const [paying, setPaying] = useState(false);
   const [paid, setPaid] = useState(null);
   const intervals = intervalsOf(plan);
   const [interval, setInterval] = useState(intervals[start] ? start : intervals.monthly ? 'monthly' : 'yearly');
-  const mode = sheetMode({ user, role, plan, held });
+  const mode = planRead && planRead.status !== 'ready' ? (planRead.status === 'loading' ? 'reading' : 'unreadable') : sheetMode({ user, role, plan, held });
   const price = intervals[interval];
   const close = () => onClose?.();
   const box = useDialog(close);
@@ -159,7 +162,7 @@ export default function CheckoutSheet({ plan, spec, user, role, held, interval: 
             {mode === 'unsellable' ? <p className={SUB}>{NOT_YET}</p> : <Summary plan={plan} spec={spec} interval={interval} setInterval={setInterval} intervals={intervals} />}
             <div className="flex flex-col gap-3.5" data-testid="checkout-payment">
               <span className={EYE}>Payment</span>
-              {mode !== 'pay' ? <NotHere mode={mode} onClose={close} /> : paying ? (
+              {mode !== 'pay' ? <NotHere mode={mode} onClose={close} onRetryPlan={onRetryPlan} /> : paying ? (
                 <>
                   <Suspense fallback={<p className={`m-0 ${SUB}`}>Loading payment form…</p>}>
                     <AxalCheckout key={price.priceId} priceId={price.priceId} description={plan.plan_name || spec?.name} onSuccess={(res) => setPaid(res || {})} />
