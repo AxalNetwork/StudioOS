@@ -384,3 +384,7 @@ licence's program decisions a page at a time) and downloads the grid's CSV
 D1133 adds `billingAlertsApi.pay(id)` and `.updateCard(id, nonce)` for the mounted failed-renewal preparation routes. Keep one validated 8–64-character nonce per open card form and reuse it on retries. Their client secrets belong only in the in-page Stripe form, never storage or logs.
 
 D1135's `companyActions.js` holds self-service company leave and venture restore.
+
+D1168 (#3081): `adminStorage.js` exposes `adminStorageApi.backfillSizes(limit)`
+to the mounted HQ Super Admin POST `/api/admin/platform/storage/backfill-sizes`.
+The operator sends only a bounded batch size; discovery cursors stay server-side.

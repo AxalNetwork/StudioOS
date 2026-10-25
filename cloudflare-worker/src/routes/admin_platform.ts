@@ -74,6 +74,7 @@
  * Mounted at /api/admin/platform BEFORE the catch-all /api/admin in index.ts.
  */
 import { Hono } from 'hono';
+import { backfillMemberFileSizes } from '../services/memberFileSizeBackfill';
 import { ownBotTest, dispatchBotTest, validBotTestId } from '../services/meetingBotOperationsTest';
 import { readMeetingBotOperations, meetingBotPricePolicy } from '../services/meetingBotOperationsRead';
 import type { Env } from '../types';
@@ -788,6 +789,20 @@ r.get('/meeting-bots/test/:uid', async (c) => {
     const result = await ownBotTest(c.env,actor.id,c.req.param('uid'));
     return result ? c.json({ test: result }) : c.json({ code: 'bot_test_not_found', message: 'That check is not available.' },404);
   } catch { return c.json({ code: 'bot_test_unreadable', message: 'The check timings could not be read.' },503); }
+});
+
+/** D1168: one bounded, audited batch; calling again resumes persisted checkpoints. */
+r.post('/storage/backfill-sizes', async (c) => {
+  const actor=await requireSuperAdminWriteBar(c);
+  c.header('Cache-Control','private, no-store');
+  let body:any;
+  try { body=await c.req.json(); } catch { return c.json({code:'backfill_input_invalid',message:'Choose a batch of 1 to 20 files.'},400); }
+  if(!body||typeof body!=='object'||Array.isArray(body)||Object.keys(body).some(k=>k!=='limit'))
+    return c.json({code:'backfill_input_invalid',message:'Choose a batch of 1 to 20 files.'},400);
+  const limit=body.limit??10;
+  if(!Number.isSafeInteger(limit)||limit<1||limit>20) return c.json({code:'backfill_input_invalid',message:'Choose a batch of 1 to 20 files.'},400);
+  try { return c.json(await backfillMemberFileSizes(c.env,actor.id,limit)); }
+  catch { return c.json({code:'storage_backfill_unreadable',message:'The batch could not be read. Try again to resume.'},503); }
 });
 
 export default r;

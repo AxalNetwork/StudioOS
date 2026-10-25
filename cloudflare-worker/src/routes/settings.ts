@@ -1,3 +1,4 @@
+import { memberFileStatement, missingMemberFileStatement } from '../services/memberFiles';
 /**
  * Epic 3 — Settings page backend.
  *
@@ -439,10 +440,13 @@ settings.post('/headshot', async (c) => {
   // Best-effort delete previous headshot from R2 to avoid orphans.
   const prev = await sql`SELECT headshot_r2_key, uid FROM users WHERE id = ${user.id}`;
   const oldKey = prev[0]?.headshot_r2_key;
-  await sql`UPDATE users SET headshot_r2_key = ${meta.file_key} WHERE id = ${user.id}`;
+  await c.env.DB.batch([
+      c.env.DB.prepare('UPDATE users SET headshot_r2_key = ? WHERE id = ?').bind(meta.file_key,user.id),
+      memberFileStatement(c.env,meta.file_key,user.id,'headshot',meta.size),
+    ]);
   await sql.end();
   if (oldKey && oldKey !== meta.file_key) {
-    try { await c.env.FILES.delete(oldKey); } catch {}
+    try { await c.env.FILES.delete(oldKey); await missingMemberFileStatement(c.env,oldKey,user.id).run(); } catch {}
   }
   return c.json({ ok: true, headshot_url: `/api/settings/headshot/${prev[0]?.uid || user.id}` });
 });
@@ -1629,15 +1633,18 @@ settings.post('/profile/linkedin-import/apply', async (c) => {
             const sql = getSQL(c.env);
             const prev = await sql`SELECT headshot_r2_key FROM users WHERE id = ${user.id}`;
             const oldKey = prev[0]?.headshot_r2_key;
-            await sql`UPDATE users SET headshot_r2_key = ${meta.file_key} WHERE id = ${user.id}`;
+            await c.env.DB.batch([
+              c.env.DB.prepare('UPDATE users SET headshot_r2_key = ? WHERE id = ?').bind(meta.file_key,user.id),
+              memberFileStatement(c.env,meta.file_key,user.id,'headshot',meta.size),
+            ]);
             await sql.end();
-            if (oldKey && oldKey !== meta.file_key) { try { await c.env.FILES.delete(oldKey); } catch {} }
+            if (oldKey && oldKey !== meta.file_key) { try { await c.env.FILES.delete(oldKey); await missingMemberFileStatement(c.env,oldKey,user.id).run(); } catch {} }
             photoApplied = true;
             applied.push('photo');
           }
         }
-      } catch (e) {
-        console.error('[linkedin-import] photo fetch failed (non-fatal):', (e as any)?.message || e);
+      } catch {
+        console.error('[linkedin-import] photo fetch failed (non-fatal)');
       }
     }
 

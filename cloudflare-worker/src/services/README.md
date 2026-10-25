@@ -32,6 +32,13 @@ clock inputs in the selected IANA zone, preserving explicit instants and refusin
 invalid or ambiguous wall times. Its instant comparison keeps formatting-only
 normalization out of the changed-after-approval flag.
 
+`memberFiles.ts` (D1168, #3081) writes measured headshot/brand-logo metadata
+with its authoritative key. `memberFileSizeBackfill.ts` measures missing sizes
+for five record stores and profile files with HEAD only, using migration 605's
+durable pointer/discovery cursors and per-row checkpoints. Missing is marked,
+never 0; failures are retryable. Only the HQ Super Admin maintenance route
+invokes it, with step-up and count-only auditing. No object content or deletion.
+
 ## The ones worth knowing
 
 `personaSegments.ts` is D999's segment counts (#2814) behind

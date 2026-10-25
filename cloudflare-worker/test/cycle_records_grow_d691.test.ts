@@ -459,6 +459,7 @@ test('7: Mark held stores minutes under the venture\'s prefix, and a clash answe
   const ok = await act(db, 'durable-company-building', 51, 'mark-held', undefined, { form, env: { FILES } });
   assert.equal(ok.status, 200, JSON.stringify(ok.body));
   const key = (db.prepare('SELECT minutes_file_key AS k FROM obligation_occurrences WHERE event_id = 51 ORDER BY id DESC LIMIT 1').get() as any).k;
+  assert.equal(db.prepare('SELECT size_bytes FROM obligation_occurrences WHERE event_id=51 ORDER BY id DESC LIMIT 1').get()!.size_bytes,4);
   assert.match(key, /^grow-minutes\/1\/[0-9a-f]{32}\.pdf$/);
   assert.ok(files.has(key));
   assert.equal(key.toLowerCase().includes('ana'), false, 'the key carries no file name');

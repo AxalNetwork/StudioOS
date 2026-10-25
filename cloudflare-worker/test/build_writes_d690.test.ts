@@ -779,6 +779,7 @@ test('test 9: Mark filed, the step checks and Upload proof, which stores a key w
   const key = db.prepare('SELECT proof_file_key FROM formation_steps WHERE id = 9').get()!.proof_file_key as string;
   assert.match(key, new RegExp(`^build-proof/${P}/[0-9a-f]{32}\\.pdf$`));
   assert.deepEqual([...bucket(db).store.keys()], [key]);
+  assert.equal(db.prepare('SELECT size_bytes FROM formation_steps WHERE id=9').get()!.size_bytes,PDF().byteLength);
   assert.equal(bucket(db).store.get(key)!.type, 'application/pdf', 'the sniffed type, not the declared one');
   const after = await rec(db, 'company-creation', 'step-9');
   assert.deepEqual(after.body.main.find((x: any) => x.key === 'steps').rows.map((x: any) => [x.a, x.c]),
@@ -792,6 +793,7 @@ test('test 9: Mark filed, the step checks and Upload proof, which stores a key w
   assert.ok(!keysOf(await rec(db, 'company-creation', 'step-9')).includes('mark-filed'));
   // An obligation's proof goes on its own row.
   assert.equal((await act(db, 'company-creation', 'obligation-12', 'upload-proof', proofForm(PDF(), 'tax.pdf'))).status, 200);
+  assert.equal(db.prepare('SELECT size_bytes FROM entity_obligations WHERE id=12').get()!.size_bytes,PDF().byteLength);
   assert.match(db.prepare('SELECT proof_file_key FROM entity_obligations WHERE id = 12').get()!.proof_file_key as string, new RegExp(`^build-proof/${P}/`));
   db.close();
 });
@@ -951,4 +953,20 @@ test('test 10: a closing write whose log fails is not written, and an upload lea
     assert.equal(bucket(db).store.size, 0, `${w.name}: no stored object is left behind`);
     db.close();
   }
+});
+
+
+test('D1168: editing a proof pointer invalidates its old measurement, while other edits preserve it',async()=>{
+ const db=seeded();try{
+  db.prepare("UPDATE formation_steps SET proof_file_key='build-proof/1/old.pdf',size_bytes=42 WHERE id=9").run();
+  assert.equal((await call(db,'PATCH','/formation-steps/9',{title:'Mail filing'})).status,200);
+  assert.equal(db.prepare('SELECT size_bytes FROM formation_steps WHERE id=9').get()!.size_bytes,42);
+  assert.equal((await call(db,'PATCH','/formation-steps/9',{proof_file_key:'build-proof/1/new.pdf'})).status,200);
+  assert.equal(db.prepare('SELECT size_bytes FROM formation_steps WHERE id=9').get()!.size_bytes,null);
+  db.prepare("UPDATE entity_obligations SET proof_file_key='build-proof/1/old.pdf',size_bytes=43 WHERE id=12").run();
+  assert.equal((await call(db,'PATCH','/obligations/12/proof',{proof_file_key:'build-proof/1/old.pdf'})).status,200);
+  assert.equal(db.prepare('SELECT size_bytes FROM entity_obligations WHERE id=12').get()!.size_bytes,43);
+  assert.equal((await call(db,'PATCH','/obligations/12/proof',{proof_file_key:null})).status,200);
+  assert.equal(db.prepare('SELECT size_bytes FROM entity_obligations WHERE id=12').get()!.size_bytes,null);
+ }finally{db.close();}
 });

@@ -1,3 +1,4 @@
+import { memberFileStatement } from '../services/memberFiles';
 /**
  * Task #24 — Brand & landing page generator (Worker).
  *
@@ -1231,6 +1232,8 @@ brand.post('/logo/upload', async (c) => {
     } catch {
       return c.json({ error: 'upload failed' }, 500);
     }
+    try { await memberFileStatement(c.env,key,user.id,'brand_logo',logoBytes.byteLength).run(); }
+    catch { return c.json({error:'upload_metadata_unavailable'},503); }
     // asset_id is the R2 key; the frontend can resolve it via a future
     // signed-URL route. For now, inline the logo for immediate preview.
     let previewUrl: string | null = null;

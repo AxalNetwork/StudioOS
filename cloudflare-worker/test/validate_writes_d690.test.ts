@@ -37,7 +37,7 @@ import { updateInterviewDetails, deleteInterview } from '../src/services/intervi
 import { evidenceFor } from '../src/services/validateEvidence.ts';
 import { insertHypothesis } from '../src/routes/_founder_validate_writes.ts';
 import { hardDeleteProject } from '../src/services/projectTrash.ts';
-import { tableFromBaseline, splitStatements, stripForeignKeys } from './_baseline.mjs';
+import { addColumnsFrom, tableFromBaseline, splitStatements, stripForeignKeys } from './_baseline.mjs';
 import { d1Over } from './_d1_sqlite.mjs';
 import { applySessionTranslationColumns } from './_session_translation_columns.mjs';
 
@@ -72,6 +72,7 @@ function fixture(opts: { fk?: boolean } = {}) {
   db.exec(sqlOf('255_hypothesis_verdict_history.sql'));
   db.exec(sqlOf('311_revenue_entries.sql').replace(/REFERENCES documents\(id\)/, ''));
   db.exec(sqlOf('440_validate_cycle_stores.sql'));
+  addColumnsFrom(db,sqlOf('605_member_file_sizes.sql'),'demand_signals');
   db.exec('ALTER TABLE mvp_features ADD COLUMN pain_group_id INTEGER REFERENCES pain_groups(id)');
   db.exec(sqlOf('459_cycle_activity_convention.sql'));
   db.exec(MIG460);
@@ -371,6 +372,7 @@ test('13: Attach refuses an HTML file and one over 20 MB; open-evidence answers 
   const key = one(db, 'SELECT evidence_file_key FROM demand_signals').evidence_file_key;
   assert.match(key, /^validate-evidence\/1\/[0-9a-f-]{36}\.pdf$/);
   assert.ok(objects.has(key));
+  assert.equal(one(db,'SELECT size_bytes FROM demand_signals').size_bytes,2048);
   const open = await openDemandEvidence(env, { projectId: P, userId: FOUNDER, signalId: sid });
   assert.match(open.open.url, /^\/api\/files\/dl\/[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+$/);
   // A B interview is refused, and writes nothing.
