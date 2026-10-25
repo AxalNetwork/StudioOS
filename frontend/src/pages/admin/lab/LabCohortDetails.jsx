@@ -9,12 +9,12 @@ function CapacityCheck({ cohort }) {
   const read = useRead(`capacity:${cohort}`, tick, () => labOperationsApi.capacity(cohort).then(r => {
     if (typeof r?.recorded !== 'boolean' || (r.recorded && !['capacity_ok', 'cycle_postponed', 'capacity_unreadable'].includes(r.outcome))) throw new Error('invalid_capacity_result');
     return r;
-  }));
+  }).catch(e => { if (e?.status === 404) return { not_found: true }; throw e; }));
   const d = read.data;
   const words = { capacity_ok: 'Run the cohort', cycle_postponed: 'Move to the following cohort', capacity_unreadable: 'Capacity could not be checked' };
   return <section className={`${CARD} flex flex-col gap-3 p-4`} data-testid="lab-cohort-capacity-result"><h2 className={H2}>Recorded capacity check</h2>
     <ReadState read={read} what="The capacity check" claim="The recorded result could not be read." onRetry={() => setTick(n => n + 1)} testId="lab-cohort-capacity" />
-    {d && <><p className={SUB}>{d.recorded ? `${words[d.outcome]} · ${stamp(d.at)}` : `Not recorded — ${d.reason}`}</p>
+    {d?.not_found ? <p className={SUB}>This cohort was not found.</p> : d && <><p className={SUB}>{d.recorded ? `${words[d.outcome]} · ${stamp(d.at)}` : `Not recorded — ${d.reason}`}</p>
       {d.recorded && <p className={SUB}>{d.approved == null || d.minimum == null ? 'Approved and minimum at the check: Not recorded.' : `${d.approved} approved · minimum ${d.minimum} at the check.`}</p>}</>}
   </section>;
 }
@@ -25,5 +25,5 @@ function Events({ cohort, type, title }) {
   </section>;
 }
 export default function LabCohortDetails({ cohort }) {
-  return <div className="flex min-w-0 flex-col gap-4"><CapacityCheck cohort={cohort} /><Events cohort={cohort} type="messages" title="Messages sent" /><Events cohort={cohort} type="" title="History" /></div>;
+  return <div className="flex min-w-0 flex-col gap-4"><CapacityCheck cohort={cohort} /><Events cohort={cohort} type="messages" title="Messages" /><Events cohort={cohort} type="" title="History" /></div>;
 }

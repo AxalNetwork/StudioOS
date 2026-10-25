@@ -144,7 +144,7 @@ function Applicants({ ym }) {
 }
 
 /** SL6: one cohort. */
-function CohortPage({ ym, overview, apps, reload, now }) {
+function CohortPage({ ym, overview, apps, reload, now, onImpersonate }) {
   const page = useMemo(() => buildCohortPage(overview, apps, ym, now), [overview, apps, ym, now]);
   const [poolTable, setPoolTable] = useState(false);
   const back = <Link to="/admin/programs/spinout-lab/cohorts" className={LINK} data-testid="lab-cohort-back">‹ Cohorts</Link>;
@@ -219,20 +219,21 @@ function CohortPage({ ym, overview, apps, reload, now }) {
       <section className="flex flex-col gap-2" data-testid="lab-cohort-grace">
         <h2 className={H2}>Grace and outcome overrides</h2>
         <span className={SUB}>Give grace or change a week’s outcome for a participant in this cohort. Each decision requires a reason.</span>
-        <LabParticipants key={ym} cohort={ym} />
+        <LabParticipants key={ym} cohort={ym} onImpersonate={onImpersonate} />
       </section>
     </div>
   );
 }
 
 /** The Cohorts tab: SL5, or SL6 when the address names a cohort. */
-export default function LabCohorts({ ym }) {
+export default function LabCohorts({ ym, onImpersonate }) {
   const [tick, setTick] = useState(0);
   const [now] = useState(() => Date.now());
   const overview = useRead('cohorts-overview', tick, () => adminLabApi.overview());
   const apps = useRead('cohorts-settings', tick, () => api.adminCohortApplications());
   const reload = () => setTick((t) => t + 1);
+  const missing = ym && buildCohortPage(overview, apps, ym, now).state === 'missing';
   return ym
-    ? <><CohortPage ym={ym} overview={overview} apps={apps} reload={reload} now={now} /><LabCohortDetails key={ym} cohort={ym} /></>
+    ? <><CohortPage ym={ym} overview={overview} apps={apps} reload={reload} now={now} onImpersonate={onImpersonate} />{!missing && overview.status !== 'loading' && <LabCohortDetails key={ym} cohort={ym} />}</>
     : <CohortsHome overview={overview} apps={apps} reload={reload} now={now} />;
 }

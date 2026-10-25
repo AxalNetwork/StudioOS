@@ -242,8 +242,8 @@ function worker(fail = [], overview = overviewFixture(), hold = false) {
     if (p === '/api/admin/cohort/applications/list') return down('list') ? json({ detail: 'down' }, 503) : json(APPLICANTS);
     if (p === '/api/admin/cohort/applications') return down('applications') ? json({ detail: 'down' }, 503) : json({ settings: { min: 1, max: 25 }, settings_unreadable: false, cycles: [] });
     if (p === '/api/admin/cohort/timeline') return json({ cycles: [], server_time: '2026-10-24T12:00:00.000Z' });
-    if (p.endsWith('/capacity')) return json({ recorded: true, outcome: 'capacity_ok', at: '2026-10-01 00:00:00', approved: 22, minimum: 1 });
-    if (p === '/api/admin/cohort/activity') return json({ total: 0, items: [], coverage: 'Recorded cohort history.' });
+    if (p.endsWith('/capacity')) return down('capacity') ? json({ error: 'down' }, 503) : json({ recorded: true, outcome: 'capacity_ok', at: '2026-10-01 00:00:00', approved: 22, minimum: 1 });
+    if (p === '/api/admin/cohort/activity') return down('activity') ? json({ error: 'down' }, 503) : json({ total: 1, items: [{ id: u.searchParams.get('type') === 'messages' ? 'message:1' : 'cycle:1', at: '2026-10-01 04:00:00', event: 'capacity_ok', cohort: '2026-10', about: u.searchParams.get('type') === 'messages' ? 'Message only subject' : 'History only subject', detail: 'Recorded', by: 'unrecorded' }], coverage: 'Recorded cohort history.' });
     if (p === '/api/admin/cohort/participants') return json({ available: true, items: [], total: 0, counts: { needs: 0, everyone: 0 }, standing: null });
     if (p === '/api/admin/cohort/review') return json({ at_risk: [], review: [] });
     if (p === '/api/admin/studio/glance') return json({ tier: 'hq', approvals: { lanes: [] } });
@@ -400,9 +400,11 @@ test('mounted SL6: its own address draws one cohort, its applicants and today’
     assert.match(m.of('lab-cohort-tile-passed_w1'), /Passed Week 1.*20.*of 22 started/s);
     assert.match(m.of('lab-cohort-capacity'), /22 approved of 25 places.*Minimum 1 met/s);
     assert.match(m.of('lab-cohort-week-4'), /Week 4 · now/);
-    assert.match(m.of('lab-cohort-messages'), /No recorded events/);
+    assert.match(m.of('lab-cohort-messages'), /Message only subject/);
+    assert.doesNotMatch(m.of('lab-cohort-messages'), /History only subject/);
     assert.ok(m.seen.some(p => p.includes('/activity?type=messages&cohort=2026-10')));
-    assert.match(m.of('lab-cohort-history'), /No recorded events/);
+    assert.match(m.of('lab-cohort-history'), /History only subject/);
+    assert.doesNotMatch(m.of('lab-cohort-history'), /Message only subject/);
     assert.match(m.of('lab-cohort-capacity-result'), /Run the cohort.*22 approved.*minimum 1/s);
     assert.match(m.of('lab-cohort-applicants'), /Synthetic Labs.*Synthetic Founder.*Approved.*4 Sep/s);
     assert.match(m.of('lab-applicants-pager'), /1–1 of 1/);
@@ -419,5 +421,27 @@ test('mounted SL6: its own address draws one cohort, its applicants and today’
     assert.match(down.of('lab-cohort-tile-applied'), /30/, 'the cohort itself is still drawn');
   } finally { await down.unmount(); }
   const gone = await mount(`${LAB_PATH}/cohorts/2026-10`, { fail: ['overview'] });
-  try { assert.match(gone.of('lab-cohort-page'), /could not be read.*Try again/s); } finally { await gone.unmount(); }
+  try { assert.match(gone.of('lab-cohort-page'), /could not be read.*Try again/s); assert.match(gone.of('lab-cohort-capacity-result'), /Run the cohort/); assert.ok(gone.has('lab-cohort-history')); } finally { await gone.unmount(); }
+});
+
+test('D1123: failed cohort detail reads leave the cohort and decision desk visible', async () => {
+  const m = await mount(`${LAB_PATH}/cohorts/2026-10`, { fail: ['capacity', 'activity'] });
+  try {
+    assert.match(m.of('lab-cohort-capacity-result'), /Unreadable.*Try again/s);
+    assert.match(m.of('lab-cohort-messages'), /Unreadable.*Try again/s);
+    assert.match(m.of('lab-cohort-history'), /Unreadable.*Try again/s);
+    assert.match(m.of('lab-cohort-title'), /Oct 2026/);
+    assert.ok(m.has('lab-participants'));
+    assert.ok(m.seen.some(p => p.startsWith('/api/admin/cohort/participants?') && p.includes('cohort=2026-10')));
+  } finally { await m.unmount(); }
+});
+
+test('D1123: a confirmed missing cohort does not mount its detail desks', async () => {
+  const m = await mount(`${LAB_PATH}/cohorts/2031-01`);
+  try {
+    assert.ok(m.has('lab-cohort-missing'));
+    assert.equal(m.has('lab-cohort-history'), false);
+    assert.equal(m.has('lab-cohort-capacity-result'), false);
+    assert.equal(m.seen.some(p => p.includes('/cohorts/2031-01/capacity')), false);
+  } finally { await m.unmount(); }
 });

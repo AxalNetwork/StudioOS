@@ -15,7 +15,7 @@ import LabHowItRuns from './LabHowItRuns';
 import LabSettings from './LabSettings';
 import LabActivity from './LabActivity';
 import { useAuth } from '../../../hooks/useAuthSync';
-import { isSuperAdminUser } from '../../../lib/shellRole';
+import { branchOfUser, isSuperAdminUser } from '../../../lib/shellRole';
 import LabParticipants from './LabParticipants';
 import { participantsCount } from './participantsModel';
 import LabCohorts from './LabCohorts';
@@ -270,7 +270,7 @@ function AdminLabBody({ onImpersonate }) {
         title={LAB_TITLE}
         pills={[
           { label: 'Live', tone: 'live' },
-          { label: 'HQ-held', tone: 'held', title: 'No subsidiary studio is deployed yet, so the Lab runs on the accounts HQ holds directly.' },
+          { label: branchOfUser(user) ? 'Granted' : 'HQ-held', tone: 'held', title: branchOfUser(user) ? 'The studio’s Lab grant is in force.' : 'The Lab runs on HQ-held accounts.' },
         ]}
         actions={actions}
         line={PAGE_LINE}
@@ -283,7 +283,7 @@ function AdminLabBody({ onImpersonate }) {
       {tab === 'overview' ? <Overview reads={reads} reload={reload} /> : null}
       {DESKS[tab] ? React.createElement(DESKS[tab], { superAdmin }) : null}
       {tab === 'participants' ? <LabParticipants onImpersonate={onImpersonate} /> : null}
-      {tab === 'cohorts' ? <LabCohorts ym={cohortOf(loc.pathname)} /> : null}
+      {tab === 'cohorts' ? <LabCohorts ym={cohortOf(loc.pathname)} onImpersonate={onImpersonate} /> : null}
       {SECTIONS[tab] ? SECTIONS[tab].map((s) => <AdminSpinoutLab key={s} section={s} onImpersonate={onImpersonate} />) : null}
     </div>
   );
