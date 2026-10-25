@@ -394,6 +394,7 @@ export function labApplications(read, { perStudio = false } = {}) {
   if (isFailed(read)) return { state: 'unreadable', reason: `Lab applications could not be read. ${NONE_CLAIM}` };
   const pending = Number(read.data?.counts?.pending);
   if (!read.data?.counts || typeof read.data.counts !== 'object') return { state: 'unreadable', reason: `Lab applications came back with no counts. ${NONE_CLAIM}` };
+  // `counts` holds only the statuses that have rows, so no `pending` key is a real none.
   const n = Number.isFinite(pending) ? pending : 0;
   return { state: 'ready', count: n, text: `${plural(n, 'Lab application', 'Lab applications')} waiting` };
 }

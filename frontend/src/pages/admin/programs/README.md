@@ -67,7 +67,7 @@ The redirects, each the route's whole element:
 ## Rules
 
 - The pages read D953 §2's R1–R12 and, from D961, part 1's catalogue read
-  through `lib/api/adminPrograms.js` and Lab applications through
+  through `frontend/src/lib/api/adminPrograms.js` and Lab applications through
   `GET /api/admin/spinout-applications`, whose failure is a 503 since D960.
   They never read `GET /api/admin/spinout-participants`, which still answers
   `[]` on any error (Guard H).
@@ -78,6 +78,6 @@ The redirects, each the route's whole element:
 - The words are D915's: "Not recorded", "Not read here yet" and "Could not be
   read", each with its reason as a visible line.
 - A refusal is one sentence in place, keyed on its `code`.
-- The charts are `ui/Charts.jsx`'s, never an `<svg>` of their own. Nothing
+- The charts are `frontend/src/ui/Charts.jsx`'s, never an `<svg>` of their own. Nothing
   else D953 §3 lists under "Not drawn now" is drawn: no Propose a program, no
   Pause, no CSV.

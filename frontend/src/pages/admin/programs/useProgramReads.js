@@ -116,11 +116,11 @@ export function useCatalogueReads(superAdmin, { weeks, scopeOf = () => ({ code: 
   const canRead = studio.canRead !== false;
   const catalogue = useRead('catalogue', `catalogue:${weeks}:${scope || ''}`, tick, canRead,
     () => adminProgramsApi.catalogue({ weeks, scope: scope || undefined }).then(catalogueReply));
-  const labApps = useRead('lab-applications', 'lab-applications', tick, !scope, readLabApplications);
+  const labApps = useRead('lab-applications', 'lab-applications', tick, canRead && !scope, readLabApplications);
   const last = useRef({ scope: null, read: null });
   if (catalogue.status === 'ready') last.current = { scope: scope || '', read: catalogue };
   const cards = catalogue.status === 'ready' || last.current.scope !== (scope || '') || !last.current.read ? catalogue : last.current.read;
-  const drawn = [catalogue, ...(scope ? [] : [labApps])];
+  const drawn = [catalogue, ...(scope || !canRead ? [] : [labApps])];
   return { catalogue, cards, labApps, scopes, studio, drawn, reload };
 }
 
