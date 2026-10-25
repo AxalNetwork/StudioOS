@@ -432,7 +432,7 @@ test('D1131: provider failure keeps its mapping for retry and never exposes resp
         }
         return new Response(null,{status:204});
       }
-      if(!recovered&&mode==='refresh'&&String(url).includes('googleapis.com'))throw Error('synthetic-private-response');
+      if(!recovered&&mode==='refresh'&&String(url)==='https://oauth2.googleapis.com/token')throw Error('synthetic-private-response');
       return Response.json({access_token:'synthetic-access'});
     };
     console.warn=(...args:any[])=>logs.push(format(...args));

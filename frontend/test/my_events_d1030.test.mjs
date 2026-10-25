@@ -150,7 +150,7 @@ test('Upcoming: the tabs with counts, the next event with its code, Going, Needs
     assert.equal(ui.nodes().filter((n) => ui.props(n)['data-ticket-code']).length, 1, 'only the next event shows its code');
     assert.ok(!text.includes('OLD-CODE'), 'a past ticket is not on Upcoming');
     assert.ok(ui.hrefs().includes('/api/events/1/ics'));
-    assert.ok(!ui.hrefs().includes('https://example.test/join'), 'Join is quiet before its window');
+    assert.ok(!ui.hrefs().some(href => href === 'https://example.test/join'), 'Join is quiet before its window');
     assert.match(text,/The join link opens 15 minutes before the start/);
     assert.ok(ui.hrefs().includes('/my/events/discover'));
   } finally { await ui.unmount(); }
@@ -282,7 +282,7 @@ test('D1131: the desktop join control, speaker and seat-source pills use the rec
     const ui=await mount('/my/events');
     try{
       assert.equal(ui.count('my-events-presenting'),1);assert.match(ui.text(),/Free seat · Startup founder/);
-      assert.equal(ui.hrefs().includes('https://example.test/join'),offset===-900000);
+      assert.equal(ui.hrefs().some(href => href === 'https://example.test/join'),offset===-900000);
       if(offset===-900001) assert.match(ui.text(),/The join link opens 15 minutes before the start/);
     }finally{await ui.unmount();Date.now=original;}
   }
