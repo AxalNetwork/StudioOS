@@ -1,10 +1,15 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { api } from '../../../lib/api';
+import { capTableHolderApi } from '../../../lib/api/capTableHolder';
+import { capTableRecordApi } from '../../../lib/api/capTableRecord';
+import { useAuth } from '../../../hooks/useAuthSync';
 import { safeIssuancesApi } from '../../../lib/api/safeIssuances';
 import { Unreadable } from '../../../ui';
 import AccessTab from './AccessTab';
 import ImportExportTab from './ImportExportTab';
+import HistoryTab from './HistoryTab';
+import { CorrectDialog, VoidDialog } from './IssuanceDialogs';
 import { CycleHeader } from '../../cycles/CycleOverview';
 import { CycleBar } from '../../cycles/PhoneModulePage';
 import { Tag } from './CapTableTag';
@@ -96,6 +101,31 @@ export function useRead(load, projectId, reload) {
 }
 
 const readCompare = (id) => api.getCapTableCompare(id);
+const readRecordOf = (id) => capTableRecordApi.read(id);
+const readGrantsOf = (id) => capTableHolderApi.grants(id);
+
+/**
+ * D1025 (#2862, CT10): History, with the record (for the classes and the
+ * currency its lines name) and the grants (who may void) read beside it. The
+ * owner voids a recorded row (CT12b); an admin corrects one (CT12c).
+ */
+function HistoryPage({ projectId, reload, retry }) {
+  const { user } = useAuth() || {};
+  const record = useRead(readRecordOf, projectId, reload);
+  const grants = useRead(readGrantsOf, projectId, reload);
+  const [voiding, setVoiding] = useState(null);
+  const [correcting, setCorrecting] = useState(null);
+  const owner = grants.status === 'ready' && !!grants.data?.can_change;
+  const admin = String(user?.role || '').toLowerCase() === 'admin';
+  const done = () => { setVoiding(null); setCorrecting(null); retry(); };
+  return (
+    <>
+      <HistoryTab projectId={projectId} record={record} owner={owner || admin} admin={admin} reload={reload} onVoid={setVoiding} onCorrect={setCorrecting} />
+      {voiding && record.status === 'ready' ? <VoidDialog projectId={projectId} record={record.data} row={voiding} admin={admin && !owner} onClose={() => setVoiding(null)} onDone={done} /> : null}
+      {correcting && record.status === 'ready' ? <CorrectDialog projectId={projectId} record={record.data} row={correcting} onClose={() => setCorrecting(null)} onDone={done} /> : null}
+    </>
+  );
+}
 const readSafes = (id) => safeIssuancesApi.list(id);
 const read409a = (id) => api.get409a(id);
 
@@ -268,9 +298,10 @@ function ScenariosTab({ projectId, reload, retry, search }) {
   );
 }
 
-export function CapTableTabPage({ tab, projectId, projectStatus = 'ready', onRetryProject, search = '', cards, action, phone = false }) {
+export function CapTableTabPage({ tab, proposal = null, projectId, projectStatus = 'ready', onRetryProject, search = '', cards, action, phone = false }) {
   const [reload, setReload] = useState(0);
   const retry = useCallback(() => setReload((n) => n + 1), []);
+  const overlay = tab === 'new' || tab === 'proposal';
   const here = TABS.find((t) => t.id === tab) || TABS[0];
   // D1022: `h-<n>` is the holder drawer, over Overview's record blocks.
   const holder = holderIdOf(tab);
@@ -279,17 +310,21 @@ export function CapTableTabPage({ tab, projectId, projectStatus = 'ready', onRet
   if (projectStatus === 'unreadable') body = <Unreadable what="Your ventures" claim="This is not a claim that you have none." onRetry={onRetryProject} />;
   else if (!projectId) body = <Skeleton testId="captable-loading" />;
   else if (holder != null) body = <CapTableOverview projectId={projectId} search={search} holderId={holder} />;
+  // D1025: `/new` is Record an issuance and `/proposal/<id>` a proposal's drawer, each over Overview.
+  else if (tab === 'new') body = <CapTableOverview projectId={projectId} search={search} open={{ kind: 'record' }} />;
+  else if (tab === 'proposal') body = <CapTableOverview projectId={projectId} search={search} open={{ kind: 'proposal', id: proposal }} />;
+  else if (tab === 'history') body = <HistoryPage projectId={projectId} reload={reload} retry={retry} />;
   else if (tab === 'instruments') body = <InstrumentsTab projectId={projectId} reload={reload} retry={retry} search={search} />;
   else if (tab === 'option-pool') body = <OptionPoolTab projectId={projectId} reload={reload} retry={retry} search={search} />;
   else if (tab === 'access') body = <AccessTab projectId={projectId} reload={reload} retry={retry} />;
   else if (tab === 'import-export') body = <ImportExportTab projectId={projectId} reload={reload} retry={retry} search={search} />;
   else body = <ScenariosTab projectId={projectId} reload={reload} retry={retry} search={search} />;
   return (
-    <div className="flex min-w-0 flex-col gap-4" data-testid={holder != null ? 'captable-holder-page' : `captable-${tab}-page`}>
+    <div className="flex min-w-0 flex-col gap-4" data-testid={holder != null ? 'captable-holder-page' : overlay ? `captable-${tab}-over-overview` : `captable-${tab}-page`}>
       {phone
         ? <CycleBar back={{ label: TITLE, to: `${HOME_PATH}${tabSearch(search)}` }} title={here.label} eadwynLabel={`Raise · ${TITLE}`} />
         : <CycleHeader cycle="raise" cards={cards} active={SLUG} action={action} title={TITLE} sub={LINE} search={tabSearch(search)} />}
-      <CapTableTabBar active={holder != null ? 'overview' : tab} search={search} />
+      <CapTableTabBar active={holder != null || overlay ? 'overview' : tab} search={search} />
       {body}
     </div>
   );

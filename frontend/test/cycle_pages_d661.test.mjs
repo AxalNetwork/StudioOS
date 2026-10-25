@@ -279,7 +279,7 @@ test('ROW EDITS: a row the route can change draws Edit, the sheet starts from th
   assert.match(route, /<FormLightbox key=\{`edit-\$\{editing\.id\}`\} form=\{edit\} current=\{edit\.valuesOf\(editing\)\}/);
   assert.match(route, /onSubmit=\{\(values\) => edit\.submit\(cyclesWrite, projectId, edit\.idOf\(editing\), values\)\}/);
   // D695: the open Add is the address's and the open Edit the history entry's, so neither follows the founder to another module.
-  assert.match(route, /const formOpen = adding && forms\.length \? forms\.find\(\(f\) => f\.key === searchParams\.get\('form'\)\) \|\| forms\[0\] : null;/);
+  assert.match(route, /const formOpen = adding && forms\.length && !capTableAdding \? forms\.find\(\(f\) => f\.key === searchParams\.get\('form'\)\) \|\| forms\[0\] : null;/);
   assert.match(route, /const editingId = !adding && edit && location\.state\?\.editing != null \? String\(location\.state\.editing\) : null;/);
 });
 
