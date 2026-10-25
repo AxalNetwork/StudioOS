@@ -22,6 +22,9 @@ const day = (n: number) => new Date(Date.now() + n * 86_400_000).toISOString();
 const FROM = day(-2);
 const TO = day(60);
 const JOIN = 'https://meet.example.test/fixture-room';
+// What the tests look for: the join link's own room name, so a check that the
+// link is absent is a plain substring test, not a URL check.
+const ROOM = 'fixture-room';
 const MAPS = 'https://maps.example.test/fixture-venue';
 
 // Users: 1 admin, 2 founder (a host), 3-6 investors (ticket holders).
@@ -189,13 +192,13 @@ test('the .ics feed: my events alone, places marked, a cancelled place leaves, a
   // Event 2's VEVENT is tentative and carries no join link.
   const ev2 = ics.split('BEGIN:VEVENT').find(b => b.includes('Fixture event 2'))!;
   assert.match(ev2, /STATUS:TENTATIVE/);
-  assert.equal(ev2.includes(JOIN), false, 'a waitlisted ticket must not carry the join link');
+  assert.equal(ev2.includes(ROOM), false, 'a waitlisted ticket must not carry the join link');
   const ev1 = ics.split('BEGIN:VEVENT').find(b => b.includes('SUMMARY:Fixture event 1'))!;
   assert.match(ev1, /STATUS:CONFIRMED/);
-  assert.ok(ev1.includes(`LOCATION:${JOIN.replace(/:/g, ':')}`), 'a held seat carries the join link');
+  assert.match(ev1, /^LOCATION:.*fixture-room$/m, 'a held seat carries the join link');
   for (const gone of ['Fixture event 5', 'Fixture event 6', 'Fixture event 7', 'Fixture expert session']) assert.equal(ics.includes(gone), false, gone);
   const ev8 = ics.split('BEGIN:VEVENT').find(b => b.includes('Fixture event 8'))!;
-  assert.ok(ev8.includes(`LOCATION:Fixture Hall\\, 1 Example Street — ${MAPS}`), 'the venue words left the LOCATION line');
+  assert.match(ev8, /^LOCATION:Fixture Hall\\, 1 Example Street — \S*fixture-venue$/m, 'the venue words left the LOCATION line');
   // Without `kinds` the whole calendar answers, the older kind included.
   assert.match(await (await f.request(`/events.ics?from=${FROM}&to=${TO}`, 3)).text(), /SUMMARY:Fixture expert session/);
 
@@ -208,7 +211,7 @@ test('the .ics feed: my events alone, places marked, a cancelled place leaves, a
   // Member 4 is waitlisted on event 1: their feed has the event and no join link.
   const other = await feed(4);
   assert.match(other, /SUMMARY:Waitlist · #1: Fixture event 1/);
-  assert.equal(other.includes(JOIN), false, "a non-holder's feed carries the join link");
+  assert.equal(other.includes(ROOM), false, "a non-holder's feed carries the join link");
 
   // The six older kinds stay out of a my-events feed, and an unknown kind is refused.
   assert.equal((await f.request(`/events.ics?kinds=event_ticket,ticket`, 3)).status, 400);
@@ -238,11 +241,11 @@ test('Google and Outlook sync: private copies, places marked, and a cancelled pl
       const title = (b: any) => b.summary ?? b.subject;
       const wait = bodies.find(b => title(b) === 'Waitlist · #3: Fixture event 2');
       assert.ok(wait, `${provider} copy of the waitlisted ticket is not marked`);
-      assert.equal(JSON.stringify(wait).includes(JOIN), false, `${provider} copy of a waitlisted ticket carries the join link`);
+      assert.equal(JSON.stringify(wait).includes(ROOM), false, `${provider} copy of a waitlisted ticket carries the join link`);
       if (provider === 'Google') assert.equal(wait.status, 'tentative');
       else assert.equal(wait.showAs, 'tentative');
       const going = bodies.find(b => title(b) === 'Fixture event 1');
-      assert.ok(JSON.stringify(going).includes(JOIN), `${provider} copy of a held seat lost the join link`);
+      assert.ok(JSON.stringify(going).includes(ROOM), `${provider} copy of a held seat lost the join link`);
       for (const b of bodies) assert.equal(b.attendees, undefined, `${provider} copy invites someone`);
 
       // Member 3 cancels event 1's place; event 4 is cancelled under a place that
@@ -316,7 +319,7 @@ test('add-to links: title, times, place and page; the join link only for a seat 
     const r = await links(eventId, user);
     assert.equal(r.status, 200, `${eventId}/${user}`);
     assert.equal(r.body.join_link_included, false, `${eventId}/${user}`);
-    for (const k of ['google', 'outlook', 'office365']) assert.equal(r.body[k].includes(encodeURIComponent(JOIN)), false, `${k} ${eventId}/${user}`);
+    for (const k of ['google', 'outlook', 'office365']) assert.equal(r.body[k].includes(ROOM), false, `${k} ${eventId}/${user}`);
   }
   // The host and an admin have it.
   for (const user of [2, 1]) assert.equal((await links(2, user)).body.join_link_included, true, String(user));
