@@ -239,7 +239,8 @@ test('mounted Firms: the table, the unattached strip, and only the three reads i
     assert.match(m.of('ap-firm-100'), /Example Ventures Ltd.*Services.*services_partnership.*Featured/s);
     assert.match(m.of('ap-firms-unattached'), /no firm: 1/);
     const paths = [...new Set(m.seen.map((s) => s.split('?')[0]))].filter((p) => !p.startsWith('/api/ai')).sort();
-    assert.deepEqual(paths, ['/api/admin/partners/deals', '/api/admin/partners/directory', '/api/admin/partners/links']);
+    // D1125: the header's tab counts are one read on every tab.
+    assert.deepEqual(paths, ['/api/admin/network/tabs', '/api/admin/partners/deals', '/api/admin/partners/directory', '/api/admin/partners/links']);
   } finally { await m.unmount(); }
 });
 

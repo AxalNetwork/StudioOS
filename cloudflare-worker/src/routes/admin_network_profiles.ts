@@ -168,12 +168,24 @@ function shape(row: any, reach?: Map<number, DeckReachLabel>) {
     state,
     archived_at: row.archived_at || null,
     deck_reach: reach?.get(Number(row.id)) ?? 'not_on_deck',
-    linked_user: row.linked_user_id != null ? { id: Number(row.linked_user_id), name: row.linked_user_name ?? null } : null,
+    linked_user: row.linked_user_id != null ? {
+      id: Number(row.linked_user_id), name: row.linked_user_name ?? null,
+      // D1125 (AP8b): what the account itself says, read only. Null is not recorded on the account.
+      // `has_photo` is null when the read did not carry the account's columns.
+      account: {
+        name: textOf(row.linked_display_name) ?? textOf(row.linked_user_name),
+        headline: textOf(row.linked_headline),
+        company: textOf(row.linked_firm),
+        has_photo: row.linked_has_photo == null ? null : Number(row.linked_has_photo) === 1,
+      },
+    } : null,
     created_by: row.created_by != null ? { id: Number(row.created_by), name: row.created_by_name ?? null } : null,
     created_at: row.created_at,
     updated_at: row.updated_at,
   };
 }
+
+const textOf = (v: unknown): string | null => (typeof v === 'string' && v.trim() ? v.trim() : null);
 
 /** A member account to link, or a sentence saying why not. */
 async function linkedUserOf(env: Env, raw: unknown): Promise<number | null | string> {
@@ -207,9 +219,12 @@ r.get('/', async (c) => {
   const rows = (await c.env.DB.prepare(
     `SELECT p.id, p.name, p.kind, p.role, p.company, p.bio, p.linkedin_url, p.photo_r2_key,
             p.skills_json, p.display_order, p.is_active, p.archived_at, p.linked_user_id, p.created_by,
-            p.created_at, p.updated_at, lu.name AS linked_user_name, cb.name AS created_by_name
+            p.created_at, p.updated_at, lu.name AS linked_user_name, cb.name AS created_by_name,
+            lu.display_name AS linked_display_name, lu.headline AS linked_headline, lf.name AS linked_firm,
+            CASE WHEN lu.headshot_r2_key IS NOT NULL AND lu.headshot_r2_key <> '' THEN 1 ELSE 0 END AS linked_has_photo
        FROM network_profiles p
        LEFT JOIN users lu ON lu.id = p.linked_user_id
+       LEFT JOIN partners lf ON lf.id = lu.partner_id
        LEFT JOIN users cb ON cb.id = p.created_by
       WHERE ((? = 1 AND p.archived_at IS NULL AND p.is_active = 1)
           OR (? = 1 AND p.archived_at IS NULL AND p.is_active = 0)

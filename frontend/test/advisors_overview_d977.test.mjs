@@ -53,7 +53,7 @@ test('explicit blocks distinguish missing, unreadable, loading and recorded zero
 
 test('mounted overview uses the one summary read, all eight tiles, separated settlement directions, six needs first and Show all',async()=>{
   const ui=await mount();try{
-    assert.deepEqual(ui.calls.filter(p=>p.includes('/network/')||p.includes('/partners/')||p.includes('assignable')),['/api/admin/network/overview']);
+    assert.deepEqual(ui.calls.filter(p=>p.includes('/network/')||p.includes('/partners/')||p.includes('assignable')),['/api/admin/network/overview', '/api/admin/network/tabs'], 'the summary read, and the header\'s tab counts (D1125)');
     assert.match(ui.text('ap-tile-sessions'),/17/);assert.match(ui.text('ap-tile-settlements'),/To members \$125\.00.*From members \$40\.00.*across 2/);
     assert.match(ui.text('ap-needs'),/Showing 6 of 9/);assert.equal(ui.ids().filter(id=>id.startsWith('ap-need-')&&!id.startsWith('ap-need-state-')).length,6);assert.doesNotMatch(ui.text('ap-needs'),/Synthetic deck card/);
     await ui.click('ap-needs-all');assert.match(ui.text('ap-needs'),/Showing 9 of 9/);assert.match(ui.text('ap-needs'),/Synthetic deck card.*\$125\.00.*to a member.*\$40\.00.*from a member/);

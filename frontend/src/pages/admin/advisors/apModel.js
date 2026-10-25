@@ -250,3 +250,34 @@ export function buildFirms(reads, now) {
 export function pageFailed(reads) {
   return ['advisors', 'assignments', 'links', 'directory', 'deals', 'hosts', 'roster'].every((k) => failed(reads[k]));
 }
+
+// ---------------------------------------------------------------- D1125
+
+/**
+ * One header tab's count from `GET /api/admin/network/tabs` (AP1), in the
+ * shape `HeaderTab` draws: a number, a dash that says why (never a zero for a
+ * count nobody could read), or the reading bar.
+ */
+export function tabCountOf(read, key) {
+  if (!read || read.status === 'loading') return { kind: 'load' };
+  if (read.status === 'error') return { kind: 'dash', tip: 'The count could not be read.' };
+  const block = read.data?.[key];
+  if (!block || block.available === false) return { kind: 'dash', tip: block?.reason || 'The count could not be read.' };
+  if (block.recorded === false) return { kind: 'dash', tip: block.reason || 'Not recorded.' };
+  const n = Number(block.value);
+  return Number.isFinite(n) ? { kind: 'num', value: n.toLocaleString('en-US') } : { kind: 'dash', tip: 'The count could not be read.' };
+}
+
+/**
+ * AP12b — HQ has paused this studio's admin access. Said when a write on the
+ * page is refused for it (a 423 `admin_frozen` or `branch_suspended`, which
+ * `lib/api.js` announces). Reading is never paused (D107, D142), so the page
+ * keeps its data and says only what is true: changes wait for HQ.
+ */
+export const PAUSED = {
+  title: 'HQ has paused this studio’s admin access.',
+  line: 'You can still read everything here. Changes wait until HQ lifts the pause.',
+  action: 'Contact HQ',
+  to: '/admin/my-licence',
+};
+export const PAUSE_EVENTS = ['studioos:admin_frozen', 'studioos:branch_suspended'];

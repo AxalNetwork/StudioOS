@@ -20,7 +20,8 @@ Firm links, D923) forwards to the Firms tab with `?moved=firm-links`, in
   and the Deck roster, `../AdminNetworkProfiles.jsx` embedded.
 - `ApOverview.jsx` — D977: eight summary tiles, every Needs-you item (six on desktop, three on phone, Show all), C1–C4 and table toggles, independent read states and HQ scope. Charts use the shared `../../../ui/Charts.jsx`.
 - `apOverviewModel.js` — D977: explicit D973 block states, stage/session chart specifications, queue items and the eight tile values. Settlement directions stay separate; founder demand stays Not recorded.
-- `apModel.js` — pure. The address and tabs, the moved sentence, and the
+- `apModel.js` — pure. D1125: `tabCountOf` (each header tab's count from the tabs read) and `PAUSED` (AP12b's words, and the two refusal events that raise it).
+  Also the address and tabs, the moved sentence, and the
   tiles, Needs you and the firms table from the reads, each `ready`,
   `loading`, `unreadable` or `notyet`.
 - `ApRedirect.jsx` — the old bare address.

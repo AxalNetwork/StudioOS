@@ -151,6 +151,24 @@ export function cardOf(row) {
   };
 }
 
+/**
+ * D1125 (AP8b): what a linked card's account says, read only, beside the
+ * card's own fields. A value the account does not hold reads "Not recorded on
+ * the account"; a roster read without the account's columns draws nothing.
+ */
+const ON_ACCOUNT = 'Not recorded on the account';
+export function accountFacts(linked) {
+  const a = linked?.account;
+  if (!a) return null;
+  const word = (v) => (typeof v === 'string' && v.trim() ? v.trim() : ON_ACCOUNT);
+  return [
+    { key: 'name', label: 'Name', text: word(a.name) },
+    { key: 'headline', label: 'Role', text: word(a.headline) },
+    { key: 'company', label: 'Company', text: word(a.company) },
+    { key: 'photo', label: 'Photo', text: a.has_photo === true ? 'On the account' : a.has_photo === false ? 'None on the account' : ON_ACCOUNT },
+  ];
+}
+
 /** The Worker keeps a URL only when it matches this, and drops anything else silently, so the dialog says so first. */
 const URL_RE = /^https?:\/\/[^\s]{4,500}$/i;
 export const MAX_BIO = 2000;

@@ -16,8 +16,9 @@ const SECRET = 'test'.repeat(16);
 const baseline = readFileSync(new URL('../sql/schema_baseline.sql', import.meta.url), 'utf8');
 function fixture() {
   const db = new DatabaseSync(':memory:', { enableForeignKeyConstraints: false });
-  for (const name of ['users', 'super_admins', 'user_sessions', 'advisors', 'network_profiles', 'partners', 'partner_profiles', 'partner_deals', 'advisor_bookings', 'partner_bookings', 'advisor_office_hour_slots', 'partner_office_hour_slots', 'advisor_reviews', 'advisor_cohort_assignments']) db.exec(tableFromBaseline(baseline, name));
+  for (const name of ['users', 'super_admins', 'user_sessions', 'advisors', 'network_profiles', 'partners', 'partner_profiles', 'partner_deals', 'advisor_bookings', 'partner_bookings', 'advisor_office_hour_slots', 'partner_office_hour_slots', 'advisor_reviews', 'advisor_cohort_assignments', 'admin_audit_log']) db.exec(tableFromBaseline(baseline, name));
   for (const [file, name] of [['313_lab_host_applications.sql', 'lab_host_applications'], ['238_advisor_engagements.sql', 'advisor_engagements'], ['477_mercury_personal.sql', 'partner_deal_settlements']]) db.exec(tableFromBaseline(readFileSync(new URL('../sql/migrations/' + file, import.meta.url), 'utf8'), name));
+  db.exec(readFileSync(new URL('../sql/migrations/551_network_profiles_roster.sql', import.meta.url), 'utf8'));
   db.exec(readFileSync(new URL('../sql/migrations/552_network_member_states.sql', import.meta.url), 'utf8'));
   const insert = (table: string, value: Record<string, any>) => db.prepare(`INSERT INTO ${table} (${Object.keys(value).join(',')}) VALUES (${Object.keys(value).map(() => '?').join(',')})`).run(...Object.values(value));
   for (const [id, role, name] of [[1, 'admin', 'Admin'], [2, 'advisor', 'Ada'], [3, 'partner', 'Ben'], [4, 'advisor', 'No profile'], [5, 'founder', 'PRIVATE FOUNDER'], [6, 'admin', 'Other admin'], [7, 'admin', 'Super']]) {
@@ -102,7 +103,7 @@ async function peopleGate(mounted = route) {
       const { body } = await get(db, '/people?' + q, 1, {}, mounted); assert.deepEqual(body.items.map((x: any) => x.ref), refs, String(q));
     }
     const { body: empty } = await get(db, "/people?q=%27%20OR%201%3D1--", 1, {}, mounted); assert.equal(empty.total, 0);
-    for (const q of ['limit=101', 'limit=0', 'offset=-1', 'offset=1.5', 'sort=sql', 'kind=founder', 'on_deck=maybe', 'stage=active']) assert.equal((await get(db, '/people?' + q, 1, {}, mounted)).status, 400);
+    for (const q of ['limit=101', 'limit=0', 'offset=-1', 'offset=1.5', 'sort=sql', 'kind=founder', 'on_deck=maybe', 'stage=sideways']) assert.equal((await get(db, '/people?' + q, 1, {}, mounted)).status, 400);
     privateFree(b);
   } finally { db.close(); }
 }
@@ -116,7 +117,7 @@ async function drawerGate(mounted = route) {
     assert.deepEqual(value(b.work.sessions_90d), { booked: 1, completed: 1, no_show: 1, cancelled: 0, total: 3 });
     assert.deepEqual(value(b.person.rating), { count: 1, average: 4 }); assert.deepEqual(value(b.terms.hourly_rate), { amount_cents: 12500, currency: 'usd' });
     assert.equal(value(b.work.engagements).find((x: any) => x.lane === 'signed').count, 1);
-    assert.equal(value(b.work.open_slots_14d), 1); unknown(b.terms.payout_readiness); unknown(b.terms.studio_agreement); unknown(b.history);
+    assert.equal(value(b.work.open_slots_14d), 1); unknown(b.terms.payout_readiness); unknown(b.terms.studio_agreement); assert.deepEqual(value(b.history), { truncated: false, items: [] });
     const partner = (await get(db, '/people/user:3', 1, {}, mounted)).body;
     unknown(partner.work.sessions_90d); assert.equal(value(partner.work.firm_sessions_90d).completed, 1);
     assert.equal((await get(db, '/people/user:6', 1, {}, mounted)).status, 404);

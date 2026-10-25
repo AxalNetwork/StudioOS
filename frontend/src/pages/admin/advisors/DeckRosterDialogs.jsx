@@ -3,7 +3,7 @@ import { api } from '../../../lib/api';
 import { Lightbox, actionGhost, actionPrimary } from '../../../ui';
 import { EYE, INPUT, Refusal, SUB } from '../partners/parts';
 import {
-  KINDS, MAX_BIO, PHOTO_TYPES, SKILLS, cardErrors, cardOf, confirmCopy, initialsOf, memberOptions, photoError, refusalOf,
+  KINDS, MAX_BIO, accountFacts, PHOTO_TYPES, SKILLS, cardErrors, cardOf, confirmCopy, initialsOf, memberOptions, photoError, refusalOf,
 } from './deckRosterModel';
 
 /**
@@ -58,6 +58,18 @@ function MemberLink({ value, onChange }) {
       <div className="flex flex-wrap items-center gap-2" data-testid="deck-card-linked">
         <span className="rounded-full border border-axal-lavender-edge bg-axal-lavender px-2.5 py-1 text-[12px] font-bold text-axal-violet dark:border-violet-800 dark:bg-violet-950/50 dark:text-violet-300">⛓ {value.name || 'Name not recorded'}</span>
         <button type="button" className="text-[12px] font-semibold text-axal-violet underline dark:text-violet-300" onClick={() => onChange(null)}>Remove the link</button>
+        {accountFacts(value) ? (
+          <dl className="m-0 grid w-full grid-cols-[90px_minmax(0,1fr)] gap-x-2 gap-y-0.5 rounded-[9px] bg-axal-ground px-3 py-2 dark:bg-gray-800" data-testid="deck-card-account">
+            <dt className={`${EYE} col-span-2`}>From the account · read only</dt>
+            {accountFacts(value).map((f) => (
+              <React.Fragment key={f.key}>
+                <dt className={SUB}>{f.label}</dt>
+                <dd className="m-0 text-[12.5px] text-axal-ink dark:text-gray-100" data-testid={`deck-card-account-${f.key}`}>{f.text}</dd>
+              </React.Fragment>
+            ))}
+            <dd className={`m-0 col-span-2 ${SUB}`}>Changed on the member’s own profile, not here. The card keeps its own fields for the deck.</dd>
+          </dl>
+        ) : null}
       </div>
     );
   }
