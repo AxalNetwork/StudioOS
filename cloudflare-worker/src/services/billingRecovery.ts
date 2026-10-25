@@ -3,6 +3,7 @@
  * These actions reuse Billing's recent-TOTP policy for card changes.
  */
 import type { Env } from '../types';
+import { StripeApiError } from '../util/stripeError';
 import { subscriptionOwner } from './planSubscription';
 
 const invoiceId = /^in_[A-Za-z0-9]+$/;
@@ -57,13 +58,23 @@ async function paymentActivity(env: Env, userId: number, key: string, reason: st
     .bind(uid, userId, 'payment_refused', 'stripe', JSON.stringify({ reason_family: reason })).run();
 }
 
+/** A missing object cannot be attributed. Temporary/configuration failures retry. */
+async function auditRead<T>(env: Env, path: string): Promise<T | null> {
+  const { stripeCall } = await import('../routes/billing');
+  try { return await stripeCall<T>(env, path, {}, { method: 'GET' }); }
+  catch (e) {
+    if (e instanceof StripeApiError && (e.status === 404 || (e.status === 400 && e.code === 'resource_missing'))) return null;
+    throw new Error('payment_event_unreadable');
+  }
+}
+
 /** Verified payment_intent.payment_failed, linked to a recorded plan subscription. */
 export async function recordCheckoutRefusal(env: Env, eventId: unknown, pi: Record<string, unknown>) {
   if (typeof eventId !== 'string' || !/^evt_[A-Za-z0-9]+$/.test(eventId)) return;
   const id = ref(pi.invoice);
   if (!id || !invoiceId.test(id)) return;
-  const { stripeCall } = await import('../routes/billing');
-  const invoice = await stripeCall<{ subscription?: unknown; customer?: unknown; billing_reason?: string }>(env, `/invoices/${id}`, {}, { method: 'GET' }).catch(() => { throw new Error('payment_event_unreadable'); });
+  const invoice = await auditRead<{ subscription?: unknown; customer?: unknown; billing_reason?: string }>(env, `/invoices/${id}`);
+  if (!invoice) return;
   if (invoice.billing_reason !== 'subscription_create') return;
   const sub = ref(invoice.subscription);
   if (!sub || !subscriptionId.test(sub)) return;
@@ -71,8 +82,8 @@ export async function recordCheckoutRefusal(env: Env, eventId: unknown, pi: Reco
   // The first decline can precede subscription.created. Read the trusted Stripe
   // subscription and bind its customer to the recorded member, never the browser.
   if (!owner) {
-    const subscription = await stripeCall<{ customer?: unknown; metadata?: { kind?: string; user_id?: string } }>(env, `/subscriptions/${sub}`, {}, { method: 'GET' })
-      .catch(() => { throw new Error('payment_event_unreadable'); });
+    const subscription = await auditRead<{ customer?: unknown; metadata?: { kind?: string; user_id?: string } }>(env, `/subscriptions/${sub}`);
+    if (!subscription) return;
     const candidate = Number(subscription.metadata?.user_id);
     const customer = ref(subscription.customer);
     if (!Number.isSafeInteger(candidate) || candidate <= 0 || !customer || !customerId.test(customer)

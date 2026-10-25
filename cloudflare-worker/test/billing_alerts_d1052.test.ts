@@ -537,3 +537,22 @@ test('D1133 card setup retries reuse their validated member/alert request key', 
     assert.equal(calls.length, before, 'invalid request keys never reach Stripe');
   } finally { db.close(); }
 });
+
+test('D1133 permanent provider object refusals are acknowledged without invented history', async () => {
+  const db = database();
+  try {
+    for (const status of [400, 404]) {
+      stripe['/invoices/in_missing'] = { status, body: { error: { type: 'invalid_request_error', code: 'resource_missing', message: 'private provider context' } } };
+      const event = { id: `evt_missing${status}`, type: 'payment_intent.payment_failed', data: { object: { invoice: 'in_missing' } } };
+      const out = await hit(db, 'POST', '/api/billing/stripe/webhook', null, event);
+      assert.equal(out.status, 200); assert.doesNotMatch(out.text, /private provider context/);
+      stripe['/invoices/in_missing'] = { body: { subscription: 'sub_missing', customer: 'cus_ada', billing_reason: 'subscription_create' } };
+      stripe['/subscriptions/sub_missing'] = { status, body: { error: { type: 'invalid_request_error', code: 'resource_missing' } } };
+      event.id = `evt_missingSub${status}`;
+      assert.equal((await hit(db, 'POST', '/api/billing/stripe/webhook', null, event)).status, 200);
+    }
+    assert.deepEqual(activity(db), []);
+    stripe['/invoices/in_missing'] = { status: 400, body: { error: { type: 'invalid_request_error', code: 'parameter_unknown' } } };
+    assert.equal((await hit(db, 'POST', '/api/billing/stripe/webhook', null, { id: 'evt_badParameter', type: 'payment_intent.payment_failed', data: { object: { invoice: 'in_missing' } } })).status, 500, 'configuration errors are not silently discarded');
+  } finally { db.close(); }
+});
