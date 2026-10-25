@@ -137,6 +137,15 @@ export function termsDiff(before: Terms, after: Terms) {
 
 const addDays = (day: string, n: number) => new Date(Date.parse(`${day}T00:00:00Z`) + n * 86_400_000).toISOString().slice(0, 10);
 
+export type ScheduleStatus = 'not_sent' | 'sent' | 'signed';
+
+/** D1120 — where a grant's schedule stands: signed once its time is set, sent once an envelope is named. */
+export function scheduleStatus(row: { schedule_contract_uid?: unknown; schedule_signed_at?: unknown }): ScheduleStatus {
+  if (row.schedule_signed_at) return 'signed';
+  if (row.schedule_contract_uid) return 'sent';
+  return 'not_sent';
+}
+
 export type LicenceLite = { id: number; uid: string; licence_ref: string | null; brand_name: string | null; kind: string | null; status: string; renews_on: string | null };
 
 /**
@@ -168,7 +177,12 @@ export function presentGrant(row: Record<string, any>, licence: LicenceLite, tod
     effective_end: end,
     in_force: row.state === 'granted' && waiting.length === 0,
     waiting_on: waiting,
-    schedule: { contract_uid: row.schedule_contract_uid ?? null, signed_at: row.schedule_signed_at ?? null },
+    // D1120: not sent, sent (an envelope is named) or signed (its time is set).
+    schedule: {
+      status: scheduleStatus(row),
+      contract_uid: (row.schedule_contract_uid ?? null) as string | null,
+      signed_at: (row.schedule_signed_at ?? null) as string | null,
+    },
     note: row.note ?? null,
     paused_at: row.paused_at ?? null,
     ended_at: row.ended_at ?? null,

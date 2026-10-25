@@ -13,6 +13,15 @@
  *   POST   /licences/:uid/:program/pause      pause                                (write bar, reason)
  *   POST   /licences/:uid/:program/resume     resume                               (write bar, reason)
  *   POST   /licences/:uid/:program/end        end                                  (write bar, reason)
+ *   POST   /licences/:uid/:program/schedule/send  send the schedule for signature  (write bar, reason)
+ *
+ * THE SCHEDULE (D1120). A grant under the signed-schedule rule waits on
+ * `schedule_signed` until the studio signs its schedule. The send builds the
+ * schedule from the grant's terms (`services/programSchedule.ts`), sends it
+ * through e-sign to the licence's principal administrator, and stores the
+ * envelope's uuid as `schedule_contract_uid`. The envelope's completion sets
+ * `schedule_signed_at` once (`onProgramScheduleEnvelopeCompleted`, called from
+ * the e-sign completion block and the DocuSign poller).
  *
  * WHO. Reads are `requireSuperAdmin`, as the ledger's are. Every write is
  * `requireSuperAdminWriteBar` (a TOTP session, a fresh step-up, the
@@ -41,6 +50,8 @@ import { requireSuperAdmin, requireSuperAdminWriteBar } from '../auth';
 import { mapError, newUid, nowIso } from './_t13t14t15_helpers';
 import { logAdminAction } from '../services/adminAudit';
 import { pushLicenceToBranch } from '../services/licencePush';
+import { createAndSendEnvelope } from './esign';
+import { PROGRAM_SCHEDULE_DOC_TYPE, scheduleDocument } from '../services/programSchedule';
 import {
   DEFAULT_KEYS, TERM_KEYS, presentGrant, programOf, readDefaults, readGrid, readHistory, readinessRefusal,
   termsDiff, termsOf, validateTerms, type LicenceLite, type Terms,
@@ -126,6 +137,9 @@ const PAUSE = "UPDATE program_grants SET state = 'paused', paused_at = ?, set_by
 const RESUME = "UPDATE program_grants SET state = 'granted', paused_at = NULL, set_by_user_id = ?, set_at = ? WHERE id = ? AND state = 'paused'";
 const END = "UPDATE program_grants SET state = 'ended', ended_at = ?, set_by_user_id = ?, set_at = ? WHERE id = ? AND state IN ('granted', 'paused')";
 const termValues = (t: Terms) => TERM_KEYS.map((k) => t[k] ?? null);
+// D1120: an envelope is named only on a grant with no signed schedule, so a
+// send racing a signature never replaces the signed one.
+const RECORD_SCHEDULE = 'UPDATE program_grants SET schedule_contract_uid = ? WHERE id = ? AND schedule_signed_at IS NULL';
 
 // ─────────────────────────────────────────────── reads
 
@@ -306,5 +320,86 @@ function transition(action: 'paused' | 'resumed' | 'ended', from: string[], to: 
 r.post('/licences/:uid/:program/pause', transition('paused', ['granted'], 'paused'));
 r.post('/licences/:uid/:program/resume', transition('resumed', ['paused'], 'granted'));
 r.post('/licences/:uid/:program/end', transition('ended', ['granted', 'paused'], 'ended'));
+
+// ─────────────────────────────────────────────── the schedule (D1120)
+
+/** The envelope states after which a schedule can be sent again: it was never signed and never will be. */
+const SCHEDULE_DEAD = new Set(['void', 'rejected']);
+
+r.post('/licences/:uid/:program/schedule/send', async (c) => {
+  try {
+    const t = await target(c);
+    if ('refused' in t) return t.refused;
+    const { admin, reason, programKey, licence } = t;
+    const blocked = frozen(licence);
+    if (blocked) return refuse(c, 409, 'licence_frozen', blocked);
+    const existing = await grantRow(c.env, licence.id, programKey);
+    if (!existing || existing.state === 'ended') {
+      return refuse(c, 409, 'wrong_state', `This program is ${existing ? 'ended' : 'not granted'} for this licence, so it has no schedule to send.`, { state: existing?.state ?? null });
+    }
+    if (existing.requires_signed_schedule != null && Number(existing.requires_signed_schedule) === 0) {
+      return refuse(c, 409, 'schedule_not_required', 'This grant does not wait on a signed schedule, so there is nothing to send. Change its terms first if it should.');
+    }
+    if (existing.schedule_signed_at) {
+      return refuse(c, 409, 'already_signed', 'This grant’s schedule is already signed.', { signed_at: existing.schedule_signed_at });
+    }
+    if (existing.schedule_contract_uid) {
+      const env = await c.env.DB.prepare('SELECT status FROM esign_envelopes WHERE envelope_uuid = ?')
+        .bind(existing.schedule_contract_uid).first<{ status: string }>();
+      if (!env || !SCHEDULE_DEAD.has(String(env.status))) {
+        return refuse(c, 409, 'already_sent', 'This grant’s schedule is already out for signature. It can be sent again only once that envelope is voided or declined.', {
+          contract_uid: existing.schedule_contract_uid, envelope_status: env?.status ?? null,
+        });
+      }
+    }
+    const signer = await c.env.DB.prepare(
+      `SELECT u.id, u.email, u.name
+         FROM licence_admins la
+         JOIN users u ON u.id = la.user_id
+        WHERE la.licence_id = ? AND u.is_active = 1
+        ORDER BY CASE la.admin_role WHEN 'principal' THEN 0 ELSE 1 END, la.id
+        LIMIT 1`,
+    ).bind(licence.id).first<{ id: number; email: string; name: string | null }>();
+    if (!signer?.email) {
+      return refuse(c, 409, 'no_signer', 'No active licence administrator has an account to receive the schedule. Grant an admin on this licence first.');
+    }
+    const named = await c.env.DB.prepare('SELECT legal_entity_name, signatory_name FROM territory_licences WHERE id = ?')
+      .bind(licence.id).first<{ legal_entity_name: string | null; signatory_name: string | null }>();
+    const doc = scheduleDocument({ ...licence, legal_entity_name: named?.legal_entity_name ?? null }, existing, today());
+    // A rendered body skips the template library, so no template refusal can
+    // come back; a malformed body is this code's fault and answers 5xx.
+    const sent = await createAndSendEnvelope(c.env, {
+      adminUserId: admin.id,
+      adminName: admin.name || admin.email,
+      recipientUserId: signer.id,
+      recipientEmail: signer.email,
+      recipientName: signer.name || named?.signatory_name || signer.email,
+      documentType: PROGRAM_SCHEDULE_DOC_TYPE,
+      dealId: existing.id,
+      appUrl: c.env.APP_URL || 'https://axal.vc',
+      viaProvider: 'native',
+      renderedBody: doc,
+      templateVersion: null,
+    });
+    if (!sent) return c.json({ error: 'envelope_send_failed', message: 'The schedule could not be created or sent. Nothing was recorded.' }, 502);
+    const res = await c.env.DB.prepare(RECORD_SCHEDULE).bind(sent.envelope_uuid, existing.id).run();
+    if (!res.meta?.changes) return refuse(c, 409, 'already_signed', 'This grant’s schedule was signed while you were sending it. Read it again.');
+    await logProgram(c.env, licence.id, admin.id, {
+      action: 'schedule_sent', program_key: programKey,
+      changed: [{ key: 'schedule_contract_uid', before: existing.schedule_contract_uid ?? null, after: sent.envelope_uuid }], reason,
+    }, reason);
+    await logAdminAction(c.env, admin.id, admin.email, 'program_grant_schedule_sent', {
+      licence_uid: licence.uid, program_key: programKey, envelope_uuid: sent.envelope_uuid, reason,
+    });
+    const saved = await grantRow(c.env, licence.id, programKey);
+    const pushed = await pushLicenceToBranch(c.env, licence.id);
+    return c.json({
+      ok: true,
+      grant: presentGrant(saved!, licence, today()),
+      envelope: { uuid: sent.envelope_uuid, email_sent: sent.email_sent, already_pending: sent.already_pending ?? false },
+      pushed,
+    });
+  } catch (e) { return mapError(c, e); }
+});
 
 export default r;
