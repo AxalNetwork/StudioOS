@@ -307,6 +307,7 @@ const ReviewQueuePage = lazy(() => import('./pages/hq/ReviewQueuePage'));
 const CreditRulesPage = lazy(() => import('./pages/hq/CreditRulesRegistryPage'));
 const MemberCreditsPage = lazy(() => import('./pages/hq/MemberCreditsPage'));
 const TrustObligationsPage = lazy(() => import('./pages/hq/TrustObligationsPage'));
+const TrustContentPage = lazy(() => import('./pages/hq/TrustContentPage'));
 const HqFundsPage = lazy(() => import('./pages/hq/HqFundsPage'));
 // D714 (#1779) PR 4a — fund administration for the Super Admin and every Admin on HQ.
 const FundAdminConsole = lazy(() => import('./pages/admin/fundAdmin/FundAdminConsole'));
@@ -2974,6 +2975,8 @@ function AppInner() {
       <Route path="/admin/security" element={guard(['admin'], hqOnly(<HqSecurityPage />))} />
       {/* D633 (#1391, Q3) — trust obligations by role, read-only; HQ Security links to it. */}
       <Route path="/admin/security/obligations" element={guard(['admin'], hqOnly(<TrustObligationsPage />))} />
+      {/* D1079 (#2971) — TRU14, the public trust center's content: Super Admin only (hqOnly, and the Worker's requireSuperAdmin). */}
+      <Route path="/admin/security/trust-center" element={guard(['admin'], hqOnly(<TrustContentPage />))} />
       {/* D972 (#2369) — Advisors & Partners under Community, its tabs as
           sub-paths (D936's header). /admin/network-profiles and the Admin
           Console's ?tab=network-profiles forward to the Deck roster tab. */}
