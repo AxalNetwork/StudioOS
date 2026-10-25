@@ -229,6 +229,13 @@ assumptions state. Mercury's accepted SAFEs explicitly pass `post_money` through
 `capTableWrites.ts`; manual missing basis retains the legacy pre-money default.
 The [YC post-money user guide](https://bookface-static.ycombinator.com/assets/ycdc/Website%20User%20Guide%20Feb%202023%20-%20final-28acf9a3b938e643cc270b7da514194d5c271359be25b631b025605673fa9f95.pdf)
 explains exclusion of cash-outs and the unissued pool from liquidity capitalization.
+`dataRoomActivity.ts` (D1105, #2985) is the data room's activity and checklist
+reads: `activityRead()` (a period's daily figures against the period before, per
+investor, the paged log), `activityCsv()` (the same rows; 413 past 10,000) and
+`checklistRead()` (per diligence item, its files and how many grants in force can
+open each, by `tierAdmits()` with each grant's folder scope and the NDA gate). A
+refusal (`blocked`) is never counted as an open, and a reader is named only through
+one of the venture's own grants. Its routes are `../routes/data_room.ts`'s.
 `dataRoomAccess.ts` (D691 decision 6, #1700) is the data room's one access
 predicate, `tierAdmits()`: a file's `access_tier` (`invited`, `committed`,
 `nobody`) and `access_expires_at`, with `investorCommitted()` (a committed
@@ -432,6 +439,8 @@ actions and reads them back as the Payments change log (D1129: bound literal
 search before count/page/export, and the complete admin filter list); `stripeWebhookDeliveries.ts`
 is the webhook's request-log reader, shared by HQ · Platform and Payments, with
 hourly buckets that are null for an hour the log was silent.
+
+`google/` holds D1091’s bounded, GET-only Workspace readers over Calendar’s single Google token store. See `google/README.md`.
 
 D1065 (#2935): `buildPlanner.ts` reads accepted Validate labels/counts and applies the ten fixed mapping rules, then batches a plan and source proposals; acceptance stays with D1066. It never runs AI or writes a Build record.
 
