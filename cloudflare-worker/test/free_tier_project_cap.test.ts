@@ -25,11 +25,11 @@ const SCHEMA = `
 CREATE TABLE founders (id INTEGER PRIMARY KEY, email TEXT, name TEXT);
 CREATE TABLE projects (
   id INTEGER PRIMARY KEY AUTOINCREMENT, founder_id INTEGER, name TEXT,
-  status TEXT, created_at TEXT DEFAULT '2026-01-01');
+  status TEXT, deleted_at TEXT, created_at TEXT DEFAULT '2026-01-01');
 `;
 
 /** The cap's query, lifted from routes/projects.ts and run for real. */
-const COUNT_OWNED = 'SELECT COUNT(*) AS n FROM projects WHERE founder_id = ?';
+const COUNT_OWNED = 'SELECT COUNT(*) AS n FROM projects WHERE founder_id = ? AND deleted_at IS NULL';
 
 function seed(rows: Array<[number, string, string]>) {
   const { DB, db } = makeD1(SCHEMA);
