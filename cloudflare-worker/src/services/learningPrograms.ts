@@ -49,6 +49,8 @@ const DESCRIBE: Record<string, string> = {
   item: 'SELECT uid, kind, title, status FROM learning_items WHERE uid IN (SELECT value FROM json_each(?))',
   exam: 'SELECT uid, title, status FROM learning_exams WHERE uid IN (SELECT value FROM json_each(?))',
   exercise: 'SELECT uid, title, status FROM learning_exercises WHERE uid IN (SELECT value FROM json_each(?))',
+  // D1124 (#3004): a webinar a program holds (D560's store).
+  webinar: 'SELECT uid, title, status, starts_at FROM learning_webinars WHERE uid IN (SELECT value FROM json_each(?))',
 };
 
 /**
@@ -75,6 +77,8 @@ export async function describeContents(env: Env, contents: ContentRow[]) {
         : x.subject_kind === 'course' ? `/learning/courses/${row.slug}`
         : x.subject_kind === 'item' ? `/learning/items/${row.uid}`
         : `/learning/${x.subject_kind}s/${row.uid}`,
+      // D1124: a webinar's start, so a program's page can say when it is.
+      ...(x.subject_kind === 'webinar' ? { starts_at: row?.starts_at ?? null } : {}),
     };
   });
 }
@@ -143,7 +147,8 @@ export async function completionFor(env: Env, contents: ContentRow[], learners: 
   const ids = new Set(learners.map((l) => Number(l.user_id)));
   const who = JSON.stringify([...ids]);
   const courseUids = [...new Set(contents.filter((x) => x.subject_kind === 'course').map((x) => x.subject_uid))];
-  const [progress, lessons, subs, attempts] = await Promise.all([
+  const webinarUids = [...new Set(contents.filter((x) => x.subject_kind === 'webinar').map((x) => x.subject_uid))];
+  const [progress, lessons, subs, attempts, regs] = await Promise.all([
     env.DB.prepare(
       `SELECT user_id, subject_kind, subject_uid, status, percent, completed_at, updated_at FROM learning_progress
         WHERE user_id IN (SELECT value FROM json_each(?))`,
@@ -161,6 +166,14 @@ export async function completionFor(env: Env, contents: ContentRow[], learners: 
       `SELECT a.user_id, x.uid AS exam_uid, a.score_percent, a.passed, a.started_at, a.submitted_at FROM learning_exam_attempts a
          JOIN learning_exams x ON x.id = a.exam_id WHERE a.user_id IN (SELECT value FROM json_each(?))`,
     ).bind(who).all<any>(),
+    // D1124 (#3004): each learner's registration for the program's webinars, and whether they attended.
+    webinarUids.length
+      ? env.DB.prepare(
+        `SELECT r.user_id, w.uid AS webinar_uid, r.registered_at, r.attended FROM learning_webinar_registrations r
+           JOIN learning_webinars w ON w.id = r.webinar_id
+          WHERE r.user_id IN (SELECT value FROM json_each(?)) AND w.uid IN (SELECT value FROM json_each(?))`,
+      ).bind(who, JSON.stringify(webinarUids)).all<any>()
+      : Promise.resolve({ results: [] as any[] }),
   ]);
   const key = (u: number, k: string, s: string) => `${u}|${k}|${s}`;
   const prog = new Map<string, any>();
@@ -206,6 +219,11 @@ export async function completionFor(env: Env, contents: ContentRow[], learners: 
   }
   for (const s of subs.results || []) if (inContents.has(`exercise|${s.exercise_uid}`)) touch(Number(s.user_id), s.submitted_at);
   for (const a of attempts.results || []) if (inContents.has(`exam|${a.exam_uid}`)) touch(Number(a.user_id), a.submitted_at ?? a.started_at);
+  const reg = new Map<string, { registered_at: string | null; attended: number | null }>();
+  for (const g of regs.results || []) {
+    reg.set(key(Number(g.user_id), 'webinar', g.webinar_uid), { registered_at: g.registered_at ?? null, attended: g.attended ?? null });
+    touch(Number(g.user_id), g.registered_at);
+  }
 
   const cell = (uid: number, x: ContentRow) => {
     const base = { subject_kind: x.subject_kind, subject_uid: x.subject_uid };
@@ -234,6 +252,12 @@ export async function completionFor(env: Env, contents: ContentRow[], learners: 
     if (x.subject_kind === 'exam') {
       const e = exam.get(key(uid, 'exam', x.subject_uid));
       return { ...base, status: !e ? 'not_attempted' : e.passed ? 'passed' : 'not_passed', best_score_percent: e?.best ?? null, attempts: e?.attempts ?? 0, passed_at: e?.passed_at ?? null };
+    }
+    if (x.subject_kind === 'webinar') {
+      // D1124: attended is Done; registered waits for the webinar; "did not attend" is recorded by the host.
+      const g = reg.get(key(uid, 'webinar', x.subject_uid));
+      const status = !g ? 'not_registered' : g.attended === null ? 'registered' : Number(g.attended) === 1 ? 'attended' : 'not_attended';
+      return { ...base, status, registered_at: g?.registered_at ?? null };
     }
     return { ...base, status: 'not_built' };
   };

@@ -95,8 +95,19 @@ export function StatusPill({ status, testId }) {
   return <Pill tone={s.tone} testId={testId}><span aria-hidden="true">{s.glyph}</span>{status}</Pill>;
 }
 
-/** The grant badge, in the canvas's held mode (S-HELD). */
-export function GrantBadge({ grant, testId }) {
+/**
+ * The grant badge: D956's `grant` field when the Worker sent one (`badge`,
+ * from `grantBadgeOf`, D1124), else the canvas's held mode (S-HELD).
+ */
+export function GrantBadge({ grant, badge = null, testId }) {
+  if (badge) {
+    return (
+      <span className="inline-flex flex-col gap-0.5" title={badge.reason || undefined}>
+        <Pill tone={badge.tone} testId={testId}><span aria-hidden="true">{badge.glyph}</span>{badge.word}</Pill>
+        {badge.reason ? <span className="sr-only" data-testid={`${testId}-reason`}>{badge.reason}</span> : null}
+      </span>
+    );
+  }
   return <Pill tone="muted" testId={testId}><span aria-hidden="true">{GRANT_GLYPH[grant] || '–'}</span>{grant}</Pill>;
 }
 
