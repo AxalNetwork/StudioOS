@@ -166,6 +166,14 @@ const ledgerRow = (h) => ({
 });
 const GROUP = { founder: 'Founder', preferred: 'Investor', safe: 'Investor', option_pool: 'Option pool', common: 'Common' };
 
+const instrumentRow = (i) => ({
+  holder: i.holder || null,
+  type: i.instrument === 'note' ? 'Convertible note' : 'SAFE',
+  basis: i.basis === 'post_money' ? 'Post-money' : i.basis === 'pre_money' ? 'Pre-money' : NOT_RECORDED,
+  signed: day(i.issue_date),
+  amount: typeof i.amount === 'number' ? `${i.currency || 'Currency not recorded'} ${new Intl.NumberFormat('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(i.amount)}` : NOT_RECORDED,
+});
+
 /**
  * A view the Worker sent, in the shape a page draws. Summary: the split by
  * group and the rounds. Investor and Full: the positions after the last round
@@ -181,7 +189,7 @@ export function sharedView(read) {
     return {
       kind: 'own', holder: v.holder, split, splitReason: v.split_reason || null, disclosure: v.disclosure || null,
       rows: (v.position || []).map(ledgerRow),
-      instruments: (v.instruments || []).map((i) => ({ type: i.instrument === 'note' ? 'Convertible note' : 'SAFE', basis: i.basis === 'post_money' ? 'Post-money' : i.basis === 'pre_money' ? 'Pre-money' : NOT_RECORDED, signed: day(i.issue_date) })),
+      instruments: (v.instruments || []).map(instrumentRow),
       documents: (v.documents || []).map((d) => ({ title: d.title || NOT_RECORDED, status: d.status || NOT_RECORDED })),
     };
   }
@@ -193,6 +201,7 @@ export function sharedView(read) {
   return {
     kind: v.audience === 'full' ? 'full' : 'investor',
     name: v.scenario_name || null,
+    instruments: (v.instruments || []).map(instrumentRow),
     rows: (Array.isArray(ledger) ? ledger : []).map(ledgerRow),
     rounds: rounds.map((r) => ({ name: String(r?.name || 'Round'), price: typeof r?.price_per_share === 'number' ? `$${r.price_per_share.toFixed(2)} a share` : NOT_RECORDED })),
     disclosure: v.disclosure || null,

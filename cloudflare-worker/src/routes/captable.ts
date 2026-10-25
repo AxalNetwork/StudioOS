@@ -1071,7 +1071,7 @@ captable.get('/live', async (c) => {
   }
   // D1020: a holder with no recorded shares is null, never 0%, and while any
   // holder's shares are missing no one's share of the total is known.
-  const owned = withOwnership(register.holders);
+  const owned = withOwnership(register.holders, register.fully_diluted);
   const venture = integration ? cartaVenture(integration.config_json) : null;
   return c.json({
     scope: scopeBody(scope),
@@ -1086,6 +1086,9 @@ captable.get('/live', async (c) => {
     last_synced_at: integration?.last_synced_at || null,
     last_error: integration?.last_error || null,
     total_shares: owned.total_shares,
+    fully_diluted: register.fully_diluted ?? null,
+    fully_diluted_reason: register.fully_diluted_reason ?? null,
+    ownership_basis: scope.kind === 'venture' ? 'fully_diluted' : 'outstanding',
     holders: owned.holders.map((h) => (showEmail ? h : { ...h, email: undefined })),
     securities: register.securities.map((s) => ({ ...s, shares_authorized: num(s.shares_authorized), shares_issued: num(s.shares_issued) })),
   });

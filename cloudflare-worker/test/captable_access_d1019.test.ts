@@ -352,3 +352,12 @@ test('the views are built by copying: Summary and Own position carry nothing the
   assert.ok(o.position.length >= 1, 'the holder is matched by name, case and spacing aside');
   assert.ok(!JSON.stringify(o).includes('Founder A') && !JSON.stringify(o).includes('Founder B'), 'no other holder named; the group label "Founders" is the split');
 });
+
+test('D1130 review: Investor reads SAFE-only investors from recorded holder kind, with no employee instruments', async () => {
+  const db=fixture();
+  db.exec("INSERT INTO cap_table_holders(id,user_id,project_id,name,kind) VALUES (105,3,10,'SAFE-only fund','investor'); INSERT INTO cap_table_issuances(project_id,kind,holder_id,amount_cents,currency,source,origin,status) VALUES (10,'safe',105,12345,'EUR','typed','owner','recorded'),(10,'safe',104,99999,'EUR','typed','owner','recorded')");
+  const r=await call(db,INV,`/${P}`);assert.equal(r.status,200);
+  assert.ok(r.body.view.instruments.some((i:any)=>i.holder==='SAFE-only fund' && i.amount===123.45 && i.currency==='EUR'));
+  assert.ok(!r.body.view.instruments.some((i:any)=>i.holder==='Private Employee'));
+  db.close();
+});

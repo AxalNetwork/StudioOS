@@ -313,7 +313,7 @@ export async function readRecord(env: Env, projectId: number) {
     outstanding,
     fully_diluted: fullyDiluted,
     // Listed, never added into the counts: they convert only in a scenario.
-    instruments: { available: true, reason: null, rows: out.filter((r) => MONEY_KINDS.has(r.kind) && r.status === 'recorded') },
+    instruments: { available: true, reason: null, rows: out.filter((r) => MONEY_KINDS.has(r.kind) && r.status === 'recorded').map(r => ({ ...r, holder_kind: kinds.get(r.holder.holder_id ?? -1) ?? null })) },
     issuances: { available: true, reason: null, rows: out.filter((r) => r.status === 'recorded' || r.status === 'void') },
     proposals: { available: true, reason: null, rows: out.filter((r) => r.status === 'proposed') },
   };

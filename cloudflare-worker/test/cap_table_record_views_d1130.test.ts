@@ -48,3 +48,15 @@ test('SAFE-only own position remains readable without a share issuance', () => {
   const v:any=recordAccessView(r,'own_position','holder:2');assert.equal(v.instruments.length,1);assert.deepEqual(v.position,[]);
   assert.equal(recordHolder(r,'holder:5'),null,'pending issuances cannot supply a grant identity');
 });
+
+test('D1130 review: Investor includes SAFE-only investors without exposing employee instruments', () => {
+  const r=fixture();r.instruments.rows=[{...r.instruments.rows[0],holder:holder(8,'SAFE-only fund'),holder_kind:'investor'},{...r.instruments.rows[0],holder:holder(9,'Private employee'),holder_kind:'employee'}];
+  const v:any=recordAccessView(r,'investor',null);
+  assert.deepEqual(v.instruments.map((i:any)=>i.holder),['SAFE-only fund']);
+  r.by_holder={available:false};const only:any=recordAccessView(r,'investor',null);assert.equal(only.instruments.length,1);
+});
+test('D1130 review: missing holder objects do not break a recorded instrument view', () => {
+  const r=fixture();r.instruments.rows.push({...r.instruments.rows[0],holder:null,holder_kind:null});r.issuances.rows.push({holder:null,status:'recorded'});
+  const own:any=recordAccessView(r,'own_position','holder:2');assert.equal(own.instruments.length,1);
+  const full:any=recordAccessView(r,'full',null);assert.equal(full.instruments.at(-1).holder,'Not recorded');
+});

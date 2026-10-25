@@ -381,3 +381,8 @@ test('D1130: the Access dialog grants a recorded identity and never loads scenar
     assert.ok(p.requests.some(r=>r.url.includes('/captable/record/3')));assert.ok(!p.requests.some(r=>r.url.includes('/compare')));
   } finally { await p.close(); }
 });
+
+test('D1130 review: the Investor page draws recorded SAFE-only instruments in their currency', async () => {
+  const p=await readPage(()=>response(VIEW('grant','investor',{audience:'investor',founding:[],rounds:[],instruments:[{holder:'SAFE-only fund',instrument:'safe',amount:123.45,currency:'EUR',basis:null,issue_date:null}]})));
+  try { assert.equal(p.count('captable-read-view-instruments'),1);assert.match(p.text(),/SAFE-only fund · SAFE · EUR 123\.45/); } finally {await p.close();}
+});

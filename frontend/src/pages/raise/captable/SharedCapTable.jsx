@@ -61,6 +61,10 @@ export function SharedViewBody({ read, testId = 'shared-view' }) {
       ) : (
         <>
           {v.rows.length ? ledger(v.rows) : <span className={`text-[12.5px] ${MUTED}`}>The record holds no positions.</span>}
+          {v.instruments.length ? <div className="flex flex-col gap-1" data-testid={`${testId}-instruments`}>
+            <span className={EYEBROW}>Recorded instruments</span>
+            {v.instruments.map((i, n) => <span key={n} className={`text-[12.5px] ${INK}`}>{i.holder || 'Holder not recorded'} · {i.type} · {i.amount} · {i.basis} · signed {i.signed}</span>)}
+          </div> : null}
           {v.rounds.length ? (
             <div className="flex flex-col gap-1" data-testid={`${testId}-round-list`}>
               <span className={EYEBROW}>Rounds and pricing</span>

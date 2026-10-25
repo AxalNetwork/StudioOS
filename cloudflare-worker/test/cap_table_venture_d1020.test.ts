@@ -4,6 +4,7 @@
 import test, { after } from 'node:test';
 import assert from 'node:assert/strict';
 import { DatabaseSync } from 'node:sqlite';
+import { PDFDocument, PDFArray, PDFRawStream, decodePDFRawStream } from 'pdf-lib';
 import { readFileSync, readdirSync, mkdtempSync, copyFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -310,4 +311,39 @@ test('D1130: recorded exports never substitute the legacy register when record r
     assert.equal(r.status,500);assert.ok(!r.text.includes('Ada Ten'));
   }
   assert.equal(f.files.size,0);
+});
+
+test('D1130 review: option-only holders retain options and fully diluted ownership in live and CSV', async () => {
+  const f=fixture();
+  f.db.exec("UPDATE cap_table_holders SET project_id=10,kind='employee' WHERE id=104; INSERT INTO cap_table_share_classes(id,project_id,name,kind,authorized_shares) VALUES (902,10,'Options','option_pool',1000); INSERT INTO cap_table_issuances(project_id,kind,holder_id,class_id,shares,source,origin,status) VALUES (10,'grant',104,902,200,'typed','owner','recorded')");
+  const live=await call(f,FOUNDER,'/live?project_id=10');
+  const h=live.body.holders.find((h:any)=>h.id===104);
+  assert.deepEqual([h.shares,h.options,h.ownership_pct],[0,200,10]);
+  assert.equal(live.body.fully_diluted,2000);assert.equal(live.body.ownership_basis,'fully_diluted');
+  const csv=await call(f,FOUNDER,'/register/10/export.csv');
+  assert.match(csv.text,/Options,Ownership % \(fully diluted\)/);
+  assert.match(csv.text,/Carta stakeholder,,,0,200,10\.0000,Issuance record/);
+  const snap=await call(f,FOUNDER,'/register/10/snapshot','POST',{});
+  assert.equal(snap.status,201);
+  const file=one(f,'SELECT r2_key FROM data_room_files WHERE uid = ?',snap.body.file.uid);
+  const pdf=await PDFDocument.load(f.files.get(file.r2_key)!);
+  const text:string[]=[];
+  for(const page of pdf.getPages()) {
+    const contents=page.node.Contents();
+    const streams=contents instanceof PDFArray ? contents.asArray() : contents ? [contents] : [];
+    for(const ref of streams) {
+      const stream=pdf.context.lookup(ref,PDFRawStream);
+      const content=new TextDecoder().decode(decodePDFRawStream(stream).decode());
+      for(const match of content.matchAll(/<([0-9A-Fa-f]+)> Tj/g)) text.push(Buffer.from(match[1],'hex').toString('latin1'));
+    }
+  }
+  assert.ok(text.includes('Options') && text.includes('Ownership FD'));
+  const at=text.indexOf('Carta stakeholder');
+  assert.deepEqual(text.slice(at,at+4),['Carta stakeholder','0','200','10.00%']);
+  f.db.exec('UPDATE cap_table_share_classes SET authorized_shares=NULL WHERE id=902');
+  const unknown=await call(f,FOUNDER,'/live?project_id=10');
+  assert.equal(unknown.body.holders.find((h:any)=>h.id===104).ownership_pct,null);
+  assert.equal(unknown.body.fully_diluted,null);
+  assert.match(unknown.body.fully_diluted_reason,/option pool.*size is not recorded/);
+  assert.match((await call(f,FOUNDER,'/register/10/export.csv')).text,/option pool.*size is not recorded/);
 });

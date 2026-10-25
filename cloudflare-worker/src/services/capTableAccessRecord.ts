@@ -34,7 +34,7 @@ export function recordAccessView(record: RecordRead, level: Exclude<AccessLevel,
   const splitReason = fd.available ? null : fd.sentence || 'Fully diluted ownership is not recorded.';
   const copyPosition = (h: typeof positions[number]) => ({ holder: h.holder, type: h.type, shares: h.shares, pct: h.pct });
   const selected = recordHolder(record, holderRef);
-  const mine = (h: Holder) => selected != null && key(h) === key(selected);
+  const mine = (h: Holder | null | undefined) => h != null && selected != null && key(h) === key(selected);
   const instrument = (i: RecordRead['instruments']['rows'][number]) => ({
     instrument: i.kind, amount: i.amount_cents == null ? null : i.amount_cents / 100,
     currency: i.currency, cap: i.terms.cap_cents == null ? null : i.terms.cap_cents / 100,
@@ -49,7 +49,7 @@ export function recordAccessView(record: RecordRead, level: Exclude<AccessLevel,
     summary, split_reason: splitReason,
     disclosure: selected ? 'Your recorded position and the group split. Saved scenarios and proposals are excluded.' : 'No unique recorded holder matches this grant. Ask the founder to update it.',
   };
-  if (!holders.available) return { recorded: false, reason: holders.sentence || 'No ownership has been recorded for this venture yet.' };
+  if (!holders.available && record.instruments.rows.length === 0) return { recorded: false, reason: holders.sentence || 'No ownership has been recorded for this venture yet.' };
   if (level === 'summary') return { audience: level, scenario_name: 'Cap table · on record', rounds_completed: null, summary, split_reason: splitReason, disclosure: 'Recorded ownership by group. Financing-round count is not recorded.' };
   const visible = level === 'full' ? positions.map(copyPosition) : positions.filter(h => h.type !== 'option_pool' && ['founder', 'investor'].includes(h.kind || '')).map(copyPosition);
   if (level === 'investor') {
@@ -59,8 +59,7 @@ export function recordAccessView(record: RecordRead, level: Exclude<AccessLevel,
     }
   } else if (fd.available && fd.unallocated_pool != null) visible.push({ holder: 'Unallocated option pool', type: 'option_pool', shares: fd.unallocated_pool, pct: pct(fd.unallocated_pool) });
   return { audience: level, scenario_name: 'Cap table · on record', rounds_completed: null, founding: visible, rounds: [], split_reason: splitReason,
-    instruments: record.instruments.rows.filter(i => level === 'full' || positions.some(h => mineInstrument(h, i.holder))).map(i => ({ holder: i.holder.name, ...instrument(i) })),
-    disclosure: 'Recorded positions. Saved scenarios, proposals and private notes are excluded. Financing-round history is not recorded.',
+    instruments: record.instruments.rows.filter(i => level === 'full' || (i.holder != null && ['founder', 'investor'].includes(i.holder_kind || ''))).map(i => ({ holder: i.holder?.name || 'Not recorded', ...instrument(i) })),
+    disclosure: 'Recorded positions. Saved scenarios, proposals and private notes are excluded. Financing-round history is not recorded. Instruments with no recorded holder kind are omitted at Investor level.',
   };
 }
-function mineInstrument(h: { identity: string; kind: string | null }, holder: Holder) { return h.identity === key(holder) && ['founder', 'investor'].includes(h.kind || ''); }
