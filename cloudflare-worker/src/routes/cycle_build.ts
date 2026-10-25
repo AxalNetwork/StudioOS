@@ -1418,9 +1418,9 @@ async function patchFormationStep(c: WriteCall, ctx: WriteCtx): Promise<Response
   const fields = await filingFields(c, ctx.project, body, due); if (fields instanceof Response) return fields;
   const state = fields.state ?? existing.state;
   await c.env.DB.batch([
-    c.env.DB.prepare(`UPDATE formation_steps SET title = ?, due_date = ?, state = ?, size_bytes = CASE WHEN proof_file_key IS ? THEN size_bytes END, size_missing_at = CASE WHEN proof_file_key IS ? THEN size_missing_at END, proof_file_key = ?, kind = ?, jurisdiction = ?, for_holder_id = ?,
+    c.env.DB.prepare(`UPDATE formation_steps SET title = ?, due_date = ?, state = ?, size_bytes = CASE WHEN proof_file_key IS ? THEN size_bytes END, size_missing_at = CASE WHEN proof_file_key IS ? THEN size_missing_at END, size_unmeasurable_at = CASE WHEN proof_file_key IS ? THEN size_unmeasurable_at END, proof_file_key = ?, kind = ?, jurisdiction = ?, for_holder_id = ?,
         updated_at = CURRENT_TIMESTAMP WHERE id = ? AND project_id = ?`)
-      .bind(title, due, state, proof, proof, proof, fields.kind === undefined ? existing.kind : fields.kind, fields.jurisdiction === undefined ? existing.jurisdiction : fields.jurisdiction,
+      .bind(title, due, state, proof, proof, proof, proof, fields.kind === undefined ? existing.kind : fields.kind, fields.jurisdiction === undefined ? existing.jurisdiction : fields.jurisdiction,
         fields.holderId === undefined ? existing.for_holder_id : fields.holderId, id, ctx.project.id),
     logged(c.env, ctx.project.id, ctx.user.id, 'company-creation', `step-${id}`, 'build_formation_step_changed', `Filing changed, ${STEP_STATE[String(state)]}`),
   ]);
@@ -1439,8 +1439,8 @@ app.patch('/obligations/:id/proof', async c => {
   const key = text(body.proof_file_key, 500);
   if (key === false) return c.json({ detail: 'Invalid proof key' }, 400);
   await c.env.DB.batch([
-    c.env.DB.prepare('UPDATE entity_obligations SET size_bytes = CASE WHEN proof_file_key IS ? THEN size_bytes END, size_missing_at = CASE WHEN proof_file_key IS ? THEN size_missing_at END, proof_file_key = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ? AND entity_id = ?')
-      .bind(key, key, key, id, ctx.project.entity_id),
+    c.env.DB.prepare('UPDATE entity_obligations SET size_bytes = CASE WHEN proof_file_key IS ? THEN size_bytes END, size_missing_at = CASE WHEN proof_file_key IS ? THEN size_missing_at END, size_unmeasurable_at = CASE WHEN proof_file_key IS ? THEN size_unmeasurable_at END, proof_file_key = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ? AND entity_id = ?')
+      .bind(key, key, key, key, id, ctx.project.entity_id),
     logged(c.env, ctx.project.id, ctx.user.id, 'company-creation', `obligation-${id}`, 'build_obligation_proof_changed', key ? 'Proof key recorded' : 'Proof key cleared'),
   ]);
   return c.json({ ok: true, id });

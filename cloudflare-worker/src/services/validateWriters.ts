@@ -1262,7 +1262,7 @@ export async function attachDemandEvidence(
     await env.FILES.put(key, await input.file.arrayBuffer(), { httpMetadata: { contentType: mime }, customMetadata: { project_id: String(input.projectId) } });
   }
   const stmts = [];
-  if (key) stmts.push(env.DB.prepare("UPDATE demand_signals SET evidence_file_key = ?, evidence_file_name = ?, size_bytes = ?, size_missing_at = NULL, updated_at = datetime('now') WHERE id = ? AND project_id = ?")
+  if (key) stmts.push(env.DB.prepare("UPDATE demand_signals SET evidence_file_key = ?, evidence_file_name = ?, size_bytes = ?, size_missing_at = NULL, size_unmeasurable_at = NULL, updated_at = datetime('now') WHERE id = ? AND project_id = ?")
     .bind(key, fileName, input.file!.size, input.signalId, input.projectId));
   if (interviewId !== undefined) stmts.push(env.DB.prepare("UPDATE demand_signals SET interview_id = ?, updated_at = datetime('now') WHERE id = ? AND project_id = ?")
     .bind(interviewId, input.signalId, input.projectId));

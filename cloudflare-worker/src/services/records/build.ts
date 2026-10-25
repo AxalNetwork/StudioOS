@@ -392,8 +392,8 @@ async function uploadProof(ctx: RecordContext, id: string, f: Filing, body: Body
   const key = `${proofPrefix(ctx.projectId)}${crypto.randomUUID().replace(/-/g, '')}.${type.ext}`;
   await files.put(key, bytes, { httpMetadata: { contentType: type.mime }, customMetadata: { project_id: String(ctx.projectId) } });
   const write = f.source === 'step'
-    ? ctx.env.DB.prepare('UPDATE formation_steps SET proof_file_key = ?, size_bytes = ?, size_missing_at = NULL, updated_at = CURRENT_TIMESTAMP WHERE id = ? AND project_id = ?').bind(key, bytes.byteLength, f.stepId, ctx.projectId)
-    : ctx.env.DB.prepare('UPDATE entity_obligations SET proof_file_key = ?, size_bytes = ?, size_missing_at = NULL, updated_at = CURRENT_TIMESTAMP WHERE id = ? AND entity_id = (SELECT entity_id FROM projects WHERE id = ?)')
+    ? ctx.env.DB.prepare('UPDATE formation_steps SET proof_file_key = ?, size_bytes = ?, size_missing_at = NULL, size_unmeasurable_at = NULL, updated_at = CURRENT_TIMESTAMP WHERE id = ? AND project_id = ?').bind(key, bytes.byteLength, f.stepId, ctx.projectId)
+    : ctx.env.DB.prepare('UPDATE entity_obligations SET proof_file_key = ?, size_bytes = ?, size_missing_at = NULL, size_unmeasurable_at = NULL, updated_at = CURRENT_TIMESTAMP WHERE id = ? AND entity_id = (SELECT entity_id FROM projects WHERE id = ?)')
       .bind(key, bytes.byteLength, numericId(id, 'obligation-'), ctx.projectId);
   try {
     await ctx.env.DB.batch([write, logRow(ctx, 'company-creation', id, 'build_proof_uploaded', 'Proof uploaded')]);

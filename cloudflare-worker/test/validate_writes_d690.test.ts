@@ -367,12 +367,14 @@ test('13: Attach refuses an HTML file and one over 20 MB; open-evidence answers 
   assert.equal((await refused(attachDemandEvidence(env, { projectId: P, userId: FOUNDER, signalId: sid, file: file('application/pdf', 20 * 1024 * 1024 + 1) }))).status, 413);
   assert.equal(one(db, 'SELECT evidence_file_key FROM demand_signals').evidence_file_key, null);
   assert.equal((await refused(openDemandEvidence(env, { projectId: P, userId: FOUNDER, signalId: sid }))).status, 404);
+  db.prepare("UPDATE demand_signals SET size_unmeasurable_at='prior'").run();
   const ok = await attachDemandEvidence(env, { projectId: P, userId: FOUNDER, signalId: sid, file: file('application/pdf', 2048, 'Signed LOI.pdf') });
   assert.equal(ok.file_name, 'Signed LOI.pdf');
   const key = one(db, 'SELECT evidence_file_key FROM demand_signals').evidence_file_key;
   assert.match(key, /^validate-evidence\/1\/[0-9a-f-]{36}\.pdf$/);
   assert.ok(objects.has(key));
   assert.equal(one(db,'SELECT size_bytes FROM demand_signals').size_bytes,2048);
+  assert.equal(one(db,'SELECT size_unmeasurable_at FROM demand_signals').size_unmeasurable_at,null);
   const open = await openDemandEvidence(env, { projectId: P, userId: FOUNDER, signalId: sid });
   assert.match(open.open.url, /^\/api\/files\/dl\/[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+$/);
   // A B interview is refused, and writes nothing.
