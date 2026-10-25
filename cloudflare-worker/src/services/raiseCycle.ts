@@ -35,6 +35,7 @@ import { focusTokens, mapCompanySector, mapFundFocus, normalizeLabel } from './r
 import { deckReaders, readBySentence } from './narrative/readers';
 import { inputsFrom, readCapTable } from './capTableToday';
 import { simulate } from './captable';
+import { deckShareMetrics } from './deckShareUse';
 
 export { recordQuery };
 export type { RecordQuery };
@@ -709,12 +710,23 @@ export async function pitchDeckCard(ctx: Ctx): Promise<Card> {
   });
 }
 
+/**
+ * A link's time on deck, in the seconds the viewer reported (D1111): m:ss for
+ * the eye, and the seconds themselves. None reported is null, "Not recorded",
+ * never "0 min": a view that sends no time stores 0.
+ */
+export function timeOnDeck(seconds: unknown): Cell {
+  const s = Math.round(Number(seconds));
+  if (!Number.isFinite(s) || s <= 0) return null;
+  return { text: `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`, seconds: s };
+}
+
 /** A link made with "Never" stores this expiry: the column is NOT NULL (D691 decision 5). */
 export const NEVER_EXPIRES = '9999-12-31 23:59:59';
 
 async function pitchRecords(ctx: Ctx, rq: RecordQuery): Promise<Records> {
   const res = await ctx.env.DB.prepare(
-    `SELECT t.id, t.created_at, t.expires_at, t.revoked_at, t.view_count, t.last_viewed_at, t.investor_label,
+    `SELECT t.id, t.created_at, t.expires_at, t.revoked_at, t.used_at, t.view_limit, t.view_count, t.last_viewed_at, t.investor_label,
             p.name AS prospect_name, p.firm AS prospect_firm,
             (SELECT COALESCE(SUM(v.read_seconds), 0) FROM deck_share_views v WHERE v.share_token_id = t.id) AS seconds,
             (SELECT s.slide_index FROM deck_view_slides s JOIN deck_share_views v ON v.id = s.view_id
@@ -727,14 +739,17 @@ async function pitchRecords(ctx: Ctx, rq: RecordQuery): Promise<Records> {
   // A link needs a deck: with none, the Add builds one first (D695 decision 11).
   const deck = await ctx.env.DB.prepare('SELECT id FROM pitch_decks WHERE project_id = ? LIMIT 1').bind(ctx.projectId).first();
   const now = new Date().toISOString().replace('T', ' ').slice(0, 19);
-  const status = (t: any) => (t.revoked_at ? 'revoked' : String(t.expires_at) < now ? 'expired' : 'active');
+  // Used up is the engagement read's own rule (D895, deckShareUse.ts): part 1's
+  // promise, so every version's links say it, not only the current one's (D1111).
+  const status = (t: any) => (t.revoked_at ? 'revoked' : String(t.expires_at) < now ? 'expired'
+    : deckShareMetrics(t).exhausted ? 'used_up' : 'active');
   // The investor a link was made for: a prospect still of this venture, else the
   // name typed in. A link made before 463 recorded neither, so it is named by its day.
   const investor = (t: any) => [t.prospect_name, t.prospect_firm].filter(Boolean).join(' · ')
     || String(t.investor_label ?? '').trim() || `Link created ${day(t.created_at) ?? 'on an unrecorded day'}`;
   const expires = (t: any): Cell => {
     const st = status(t);
-    if (st !== 'active') return { text: st === 'revoked' ? 'Revoked' : 'Expired', tone: 'muted' };
+    if (st !== 'active') return { text: st === 'revoked' ? 'Revoked' : st === 'used_up' ? 'Used up' : 'Expired', tone: 'muted' };
     return { text: String(t.expires_at).startsWith(NEVER_EXPIRES.slice(0, 10)) ? 'Never' : day(t.expires_at) ?? '', tone: 'ok' };
   };
   let rows = (res.results || []).filter((t) => has(rq.q, investor(t), day(t.created_at)));
@@ -752,13 +767,13 @@ async function pitchRecords(ctx: Ctx, rq: RecordQuery): Promise<Records> {
         link: investor(t),
         expires: expires(t),
         views: Number(t.view_count) || 0,
-        time: `${Math.round((Number(t.seconds) || 0) / 60)} min`,
+        time: timeOnDeck(t.seconds),
         most_read: t.top_slide == null ? null : `Slide ${Number(t.top_slide) + 1}`,
       },
     })),
     rq.page,
     {
-      filters: [{ key: 'status', label: 'State', options: [{ value: 'active', label: 'Active' }, { value: 'expired', label: 'Expired' }, { value: 'revoked', label: 'Revoked' }] }],
+      filters: [{ key: 'status', label: 'State', options: [{ value: 'active', label: 'Active' }, { value: 'used_up', label: 'Used up' }, { value: 'expired', label: 'Expired' }, { value: 'revoked', label: 'Revoked' }] }],
       sorts: [{ key: 'last_viewed', label: 'Last viewed' }, { key: 'newest', label: 'Newest' }, { key: 'views', label: 'Most views' }],
       add: deck ? { text: 'New link', href: addHref(ctx, 'pitch-deck') } : { text: 'Build your deck', href: TOOL_HREF.pitch },
     },
@@ -1538,7 +1553,7 @@ export const CARD_FOR: Record<ModuleSlug, (ctx: Ctx) => Promise<Card>> = {
   'capital-relationships': capitalCard,
 };
 
-export type Cell = string | number | null | { text: string; tone?: string; href?: string };
+export type Cell = string | number | null | { text: string; tone?: string; href?: string; seconds?: number };
 export type Records = {
   cols: Array<{ key: string; label: string }>;
   /** Null only where decision 4 says so: a cap-table row of a scenario saved before keys. */

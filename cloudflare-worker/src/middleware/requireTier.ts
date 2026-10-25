@@ -20,6 +20,7 @@
  * Mirrors the `requireMiPro` pattern in middleware/miAccess.ts: throws a
  * 402 Response (the global error handler returns it as-is).
  */
+import { inGrace } from './planSubscription';
 import type { Context } from 'hono';
 import { planByKey } from '../services/planCatalogue';
 import type { Env, User } from '../types';
@@ -76,12 +77,10 @@ export function userMeetsTier(user: User | null | undefined, required: Tier): bo
   if (BYPASS_ROLES.has(String(user.role))) return true;
   if (required === 'free') return true;
   const status = (user as TierUser).subscription_status ?? 'active';
-  // Cancelled subs keep tier until renews_at; we read tier as-is and rely on
-  // the Stripe webhook to flip tier→'free' on subscription.deleted.
-  // D1052 (#2903): `past_due` is a renewal Stripe is still retrying, and the
-  // plan keeps its access meanwhile (#2451's owner question 4, as #2453
-  // proposed). `unpaid` is Stripe giving up: the plan's access ends.
-  if (status === 'unpaid') return false;
+  // D1100: past_due access ends 21 days after period end, even without a webhook.
+  // Cancel-at-period-end remains active at Stripe until the subscription ends.
+  if (status === 'unpaid' || status === 'cancelled' || status === 'canceled'
+    || (status === 'past_due' && !inGrace(status, (user as TierUser).subscription_renews_at))) return false;
   // X-1: partner-granted/referred tiers are time-bounded. The cron sweep
   // resets tier→'free' at expiry, but enforce on read too so a stale
   // session can't bypass an expired grant before the cron runs.

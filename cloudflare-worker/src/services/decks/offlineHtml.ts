@@ -17,19 +17,24 @@
  *
  * A card shows what the version holds and nothing else. A field the template
  * left unfilled reads "Not recorded"; a card with no notes says so when notes
- * are included. Slide JSON records no source for any figure yet (the source
- * chips are #2434 part 2), so the Sources appendix says that, and names the
- * cards whose text was written with AI help, which the fields do record.
+ * are included. The Sources appendix lists every figure a card is bound to
+ * (D896's bindings, which D897's New deck writes on each figure): the card, the
+ * figure, the module it was read from, its grade and the day it was read
+ * (D1111). A version with no binding says it records no source. It also names
+ * the cards whose text was written with AI help, which the fields record.
  *
  * `services/decks/render.ts` was not this file: it loaded Tailwind from a CDN
  * and had no caller. Its renderer is gone; its slide types stay for pptx.ts.
  */
 import { LEGAL_FACES, bytesToBase64 } from '../legalPaperCss';
+import { DECK_SOURCES, bindingsOf } from './sources';
 
 export const NOT_RECORDED = 'Not recorded';
 export const NO_NOTES = 'No notes on this card.';
 export const IMAGE_MISSING = 'This image could not be included in the file.';
 export const NO_SOURCES = 'This version does not record where its figures come from.';
+/** A figure bound to a slot its record did not fill when the card was made. */
+export const SOURCE_NOT_ON_STUDIOOS = 'Not recorded on StudioOS';
 export const EMPTY_CARD = 'Nothing on this card yet.';
 
 /** The faces the file carries: body, bold, and the headings. */
@@ -156,6 +161,32 @@ function card(s: any, i: number, d: OfflineDeck, mark: string): string {
     + `<span class="eye">${pad2(i + 1)}${s?.appendix ? ' · Appendix' : ''}</span><h2>${esc(title)}</h2>${body}${mark}</div>${notes}</section>`;
 }
 
+/** Each slot's name and the module it is read from, by its source key. */
+const SLOTS = new Map(DECK_SOURCES.flatMap((a) => a.slots.map((s) => [s.key, { label: s.label, module: a.module }] as const)));
+const GRADED = new Set(['Measured', 'Reviewed', 'Sourced', 'Stated']);
+
+/**
+ * One line per figure a card is bound to, in card order. A figure the card
+ * holds twice (its metric block and its read-only field) is listed once.
+ */
+export function sourceLines(slides: any[]): Array<{ card: number; title: string; figure: string; line: string }> {
+  const seen = new Set<string>();
+  const out: Array<{ card: number; title: string; figure: string; line: string }> = [];
+  for (const { slide, binding } of bindingsOf(slides)) {
+    const id = `${slide}:${binding.source_key}`;
+    if (seen.has(id)) continue;
+    seen.add(id);
+    const slot = SLOTS.get(binding.source_key);
+    const grade = typeof binding.grade === 'string' && GRADED.has(binding.grade) ? binding.grade : null;
+    const asOf = typeof binding.as_of === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(binding.as_of) ? binding.as_of : null;
+    const line = grade
+      ? [slot?.module ?? 'StudioOS', grade, asOf ? `as of ${asOf}` : 'date not recorded'].join(' · ')
+      : SOURCE_NOT_ON_STUDIOOS;
+    out.push({ card: slide + 1, title: String(slides[slide]?.title || '').trim() || `Card ${slide + 1}`, figure: slot?.label ?? binding.source_key, line });
+  }
+  return out;
+}
+
 function sourcesAppendix(d: OfflineDeck): string {
   const ai = d.slides
     .map((s, i) => ({ i, title: String(s?.title || '').trim() || `Card ${i + 1}`, ai: Array.isArray(s?.fields) && s.fields.some((f: any) => f?.source === 'ai') }))
@@ -163,7 +194,11 @@ function sourcesAppendix(d: OfflineDeck): string {
   const aiLine = ai.length
     ? `<p>Written with AI help: ${ai.map((r) => `card ${r.i + 1} (${esc(r.title)})`).join(', ')}.</p>`
     : '';
-  return `<section class="card" id="sources" aria-label="Sources"><div class="face"><span class="eye">Appendix</span><h2>Sources</h2><p>${NO_SOURCES}</p>${aiLine}</div></section>`;
+  const lines = sourceLines(d.slides);
+  const list = lines.length
+    ? `<dl class="sources">${lines.map((l) => `<div><dt>Card ${l.card} (${esc(l.title)}) · ${esc(l.figure)}</dt><dd>${esc(l.line)}</dd></div>`).join('')}</dl>`
+    : `<p>${NO_SOURCES}</p>`;
+  return `<section class="card" id="sources" aria-label="Sources"><div class="face"><span class="eye">Appendix</span><h2>Sources</h2>${list}${aiLine}</div></section>`;
 }
 
 async function sha256Base64(s: string): Promise<string> {
@@ -195,6 +230,7 @@ const CSS = [
   "dt{font-size:12px;color:#475569}dd{margin:0;font-weight:700;font-size:clamp(16px,2vw,24px)}dd.cell-sub{font-weight:400;font-size:12px;color:#475569}",
   "img{max-width:100%;max-height:55%;object-fit:contain;align-self:flex-start;border-radius:8px}",
   ".nr,.missing{color:#64748b;font-style:normal}",
+  ".sources{display:flex;flex-direction:column;gap:6px;margin:0}.sources dd{font-weight:400;font-size:13px}",
   ".notes{margin-top:10px;background:#111827;color:#e5e7eb;border-radius:10px;padding:12px 14px}.notes .eye{color:#c4b5fd}.notes .nr{color:#9ca3af}",
   ".mark{position:absolute;right:4%;bottom:4%;max-height:8%;max-width:20%}",
   "footer{color:#9ca3af;font-size:12px;text-align:center;padding:0 20px 20px}",

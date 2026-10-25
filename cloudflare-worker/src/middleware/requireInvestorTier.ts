@@ -16,6 +16,7 @@
  * Mirrors the requireTier (founder) and requireMiPro (MI) shapes so the
  * frontend can re-use the upsell modal pattern.
  */
+import { inGrace } from './planSubscription';
 import type { Context } from 'hono';
 import { planByKey } from '../services/planCatalogue';
 import type { Env, User } from '../types';
@@ -86,7 +87,8 @@ export function investorTierCovers(userTier: string | null | undefined, required
 export function effectiveInvestorTier(user: InvestorUser | null | undefined): InvestorTier {
   if (!user) return 'free';
   const status = (user.investor_subscription_status ?? 'free').toLowerCase();
-  if (status === 'unpaid' || status === 'cancelled') return 'free';
+  if (status === 'unpaid' || status === 'cancelled' || status === 'canceled'
+    || (status === 'past_due' && !inGrace(status, user.investor_subscription_renews_at))) return 'free';
   // X-1: partner-granted/referred investor tiers expire at renews_at.
   // Cron flips them to 'free'; this read-side check prevents stale
   // sessions from sneaking past expiry between sweeps.
@@ -241,12 +243,13 @@ export async function getIntroQuotaState(env: Env, userId: number): Promise<{
 }> {
   await ensureInvestorPaywallSchema(env);
   const row = await env.DB.prepare(
-    `SELECT investor_tier, investor_subscription_status,
+    `SELECT investor_tier, investor_subscription_status, investor_subscription_renews_at,
             investor_quota_intros_quarter, investor_quota_intros_used
      FROM users WHERE id = ?`
   ).bind(userId).first<{
     investor_tier: string | null;
     investor_subscription_status: string | null;
+    investor_subscription_renews_at: string | null;
     investor_quota_intros_quarter: string | null;
     investor_quota_intros_used: number | null;
   }>();

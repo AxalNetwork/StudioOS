@@ -164,8 +164,10 @@ test('an unpaid plan drops a plan-gated tool; one Stripe is still retrying keeps
   const { env, db } = fixture();
   db.exec(`UPDATE users SET subscription_status = 'unpaid' WHERE id = ${FAY}`);
   assert.ok(!(await names(await session(env, grant(FAY, [P]), READS))).includes('d846_studio_only'));
-  db.exec(`UPDATE users SET subscription_status = 'past_due' WHERE id = ${FAY}`);
+  db.exec(`UPDATE users SET subscription_status = 'past_due', subscription_renews_at = datetime('now') WHERE id = ${FAY}`);
   assert.ok((await names(await session(env, grant(FAY, [P]), READS))).includes('d846_studio_only'));
+  db.prepare("UPDATE users SET subscription_renews_at = ? WHERE id = ?").run(new Date(Date.now()-22*86_400_000).toISOString(),FAY);
+  assert.ok(!(await names(await session(env, grant(FAY, [P]), READS))).includes('d846_studio_only'));
 });
 
 // ── The hidden-tool call ─────────────────────────────────────────────────────

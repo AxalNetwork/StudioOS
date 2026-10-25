@@ -1225,6 +1225,8 @@ function voidedRefusal(c: any) {
 // `document_body` (which is the frozen JSON). Imported on demand, as the
 // completion hooks are, and only for that document type.
 const BOOKLET_DOC_TYPE = 'subscription_booklet';
+/** D1120 — `services/programSchedule.ts`'s document type, repeated so the completion block needs no eager import. */
+const PROGRAM_SCHEDULE_DOC_TYPE = 'program_schedule';
 
 /** A booklet refusal as a response, or null for any other error. */
 async function bookletRefused(c: any, e: unknown): Promise<Response | null> {
@@ -1581,6 +1583,19 @@ esign.post('/sign/:token', async (c) => {
           const { activatePairwiseNda } = await import('../services/trust');
           await activatePairwiseNda(c.env, envelopeRow.envelope_uuid);
         } catch (e) { console.warn('[esign] activatePairwiseNda failed', e); }
+      }
+      // D1120 — a program grant's schedule: the grant that names this envelope
+      // records its signature once, and comes into force if nothing else
+      // holds it. Its own try, so it never fails the signature.
+      if (envelopeRow?.document_type === PROGRAM_SCHEDULE_DOC_TYPE && envelopeRow.envelope_uuid) {
+        try {
+          const { onProgramScheduleEnvelopeCompleted } = await import('../services/programSchedule');
+          const signed = await onProgramScheduleEnvelopeCompleted(c.env, envelopeRow.envelope_uuid);
+          if (signed?.changed) {
+            const { pushLicenceToBranch } = await import('../services/licencePush');
+            await pushLicenceToBranch(c.env, signed.licence_id);
+          }
+        } catch (e) { console.warn('[esign] program_schedule_sign_failed', (e as Error)?.name || 'error'); }
       }
       // Task #8 (X-1) — Partner deal activation hook. Any envelope linked
       // to a `partner_deals` row by `envelope_id` triggers user creation,

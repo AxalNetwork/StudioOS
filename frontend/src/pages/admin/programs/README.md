@@ -19,15 +19,16 @@ page in a child component inside it:
   cards (each door a literal `to`); and the foot's one door to Profiling
   trends.
 - `MentorCohortAccess.jsx` — board S18 (and S21), workspace "Advisor cohort
-  access": `/admin/programs/mentor-cohorts` (Overview), `/how-it-runs` and
-  `/people`. People mounts `AdvisorCohortAssignmentsBody` from
-  `../AdvisorCohortAssignments.jsx`.
+  access": `/admin/programs/mentor-cohorts` (Overview), `/how-it-runs`,
+  `/people` and `/activity` (D962). People mounts `AdvisorCohortAssignmentsBody`
+  from `../AdvisorCohortAssignments.jsx`.
 - `ReferAndEarn.jsx` — board S9, workspace "Referrals":
-  `/admin/programs/refer-and-earn` (Overview), `/how-it-runs`, `/queue` and
-  `/settings`. Queue mounts `ReferralReviewBody` from `../ReferralReview.jsx`.
+  `/admin/programs/refer-and-earn` (Overview), `/how-it-runs`, `/queue`,
+  `/settings` and `/activity` (D962). Queue mounts `ReferralReviewBody` from
+  `../ReferralReview.jsx`.
 - `ProgramPage.jsx` — workspace "Programs": Perks (`/admin/programs/perks`,
-  `/how-it-runs`, `/queue`), Learning (`/admin/programs/learning`,
-  `/how-it-runs`, `/people`), Referral partners
+  `/how-it-runs`, `/queue`, `/activity`), Learning (`/admin/programs/learning`,
+  `/how-it-runs`, `/people`, `/activity`), Referral partners
   (`/admin/programs/referral-partners`, `/how-it-runs`), and the one-page
   `/admin/programs/investor-cohorts` and `/admin/programs/ai-native-venture`.
 
@@ -45,15 +46,24 @@ The pieces they draw with:
 - `ProgramFrame.jsx` — every program page's crumb, header, facts strip and
   moved notice.
 - `ProgramTabs.jsx` — each program's tab strip, as literal `NavLink`s.
-- `PerksPages.jsx` — Perks' Overview tiles and its review Queue.
-- `LearningPages.jsx` — Learning's Overview (tiles and programs table) and
-  People.
+- `PerksPages.jsx` — Perks' Overview (tiles, Top perks by claims, Claims per
+  week, Grant or deduct credits) and its Queue on every listing state, each
+  review a dialog (D962).
+- `LearningPages.jsx` — Learning's Overview (tiles, Completion by program,
+  Enrolments per week, the programs table with assigned admins), People and
+  the learner's record (D962).
 - `ReferralPartners.jsx` — Referral partners' Overview links and its header
   action.
 - `parts.jsx` — the tile, skeleton, Unreadable, placeholder, pills, moved
   notice and How it runs, over Partner invitations' card and chips; and
   D961's chart block (its skeleton, Unreadable and Chart/Table switch), the
   period control and the Studio select.
+- `ActivityTab.jsx` — a program's Activity tab, and Mentor's Recent
+  activity, on part 1's activity read (D962).
+- `PlaybookEditor.jsx` — How it runs from part 1's playbook store, with the
+  Super Admin's Edit and Publish dialogs (D962). Part 10 reuses it.
+- `MentorDialogs.jsx` — Mentor cohort access's Assign a mentor and End access
+  dialogs, opened from Overview, People and the header (D962).
 - `useProgramReads.js` — the reads, each made alone. The catalogue reads
   `adminProgramsApi.catalogue` (`GET /api/admin/programs`, D954) and Lab
   applications' `counts.pending` (`GET /api/admin/spinout-applications`, D960).
@@ -70,6 +80,10 @@ The pieces they draw with:
 - `proposalsModel.js` — D964, pure: the proposal's statuses, PG14's steps and
   lists, the Review lines, PG15a's choices, PG19b, the list parameters and the
   refusals.
+- `programPagesModel.js` — pure. D962's rules on parts 1, 4 and 7's reads:
+  activity sentences, the playbook, the mentor figures and People's columns,
+  D957's referral moves, the perk dialogs, OD9's Done and Finished, and the
+  refusal sentences keyed on `code`.
 - `programsModel.js` — pure. The addresses and moved keys, the nine programs
   (S-RUN), each page's header, facts, tabs and How it runs text, Guard L, the
   bands, Waiting for you, the mentor counts (S-CNT, S-COV), the Refer & Earn,
@@ -85,12 +99,14 @@ The redirects, each the route's whole element:
 
 ## Rules
 
-- The pages read D953 §2's R1–R12 and, from D961, part 1's catalogue read
+- The pages read D953 §2's R1–R12; from D961, part 1's catalogue read
   through `frontend/src/lib/api/adminPrograms.js` and Lab applications through
-  `GET /api/admin/spinout-applications`, whose failure is a 503 since D960; and,
-  from D964, part 2's proposal routes through `../../../lib/api/programProposals.js`.
-  They never read `GET /api/admin/spinout-participants`, which still answers
-  `[]` on any error (Guard H).
+  `GET /api/admin/spinout-applications`, whose failure is a 503 since D960;
+  from D962, parts 1, 4 and 7's reads (`programPagesModel.js` lists them; part
+  1's go through `frontend/src/lib/api/programs.js`); and, from D964, part 2's
+  proposal routes through `../../../lib/api/programProposals.js`. They never
+  read `GET /api/admin/spinout-participants`, which still answers `[]` on any
+  error (Guard H).
 - A failed read marks only the blocks it feeds, with what could not be read,
   "That is not the same as none." and Try again. It is never a zero.
 - A list at its cap says what it covers (Guard L): "200+", "within the newest
@@ -98,7 +114,12 @@ The redirects, each the route's whole element:
 - The words are D915's: "Not recorded", "Not read here yet" and "Could not be
   read", each with its reason as a visible line.
 - A refusal is one sentence in place, keyed on its `code`.
-- The charts are `frontend/src/ui/Charts.jsx`'s, never an `<svg>` of their own. Nothing
-  else D953 §3 lists under "Not drawn now" is drawn: no Pause, no CSV. D964 drew
-  the proposal flow (Propose, the two lists, Decide, New program, PG19b) on part
-  2's routes, through `../../../lib/api/programProposals.js`.
+- Every write opens a dialog (N9), and its result or refusal sits in the
+  dialog. There is no corner toast.
+- The charts are `frontend/src/ui/Charts.jsx`'s (D893, moved by D929), never an
+  `<svg>` of their own. A program page has no period control (S-PER), so every
+  figure there states its window; the catalogue's period control is D961's.
+- Still not drawn: no Pause, no CSV, no Terms tab (part 1's store holds no
+  program's terms). D964 drew the proposal flow (Propose, the two lists,
+  Decide, New program, PG19b) on part 2's routes, through
+  `../../../lib/api/programProposals.js`.
