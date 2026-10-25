@@ -1,4 +1,6 @@
 import { useState } from 'react';
+import { Link } from 'react-router-dom';
+import { insertInStoryHref } from '../raise/narrative/narrativeModel';
 import { cyclesWrite } from '../../lib/api/cycles';
 import { SECTION_LABELS, isEmptyView, mercuryView } from './mercuryRaise';
 import ConnectMercury from './ConnectMercury';
@@ -20,6 +22,7 @@ import ConnectMercury from './ConnectMercury';
  */
 export default function MercuryRaiseFeed({ slug, part, projectId, reload }) {
   const [busy, setBusy] = useState(null);
+  const story = (key) => insertInStoryHref(key, `?project_id=${projectId}`);
   const [error, setError] = useState('');
   const [sections, setSections] = useState({});
   if (!part) return null;
@@ -92,9 +95,16 @@ export default function MercuryRaiseFeed({ slug, part, projectId, reload }) {
       {view.state === 'ok' && view.figures.length > 0 && (
         <div className="flex flex-col gap-1.5" data-testid="mercury-figures">
           <h3 className={SUB}>Figures you can cite</h3>
+          {slug === 'investor-narrative' ? <p className={LINE} data-testid="mercury-insert-note">Investors see one of these only after you insert it in the Story.</p> : null}
           <ul className="m-0 flex list-none flex-col gap-1 p-0">
             {view.figures.map((f) => (
-              <li key={f.key} className={LINE} data-testid={`mercury-figure-${f.key}`}>{f.label}: <strong>{f.value}</strong> <span className={FAINT}>({f.source})</span></li>
+              <li key={f.key} className={`${LINE} flex flex-wrap items-baseline gap-x-2`} data-testid={`mercury-figure-${f.key}`}>
+                <span>{f.label}: <strong>{f.value}</strong> <span className={FAINT}>({f.source})</span></span>
+                {/* D1114 (NAR1): the narrative's figures go into Story as bound figures; investors see one only after that. */}
+                {slug === 'investor-narrative' && story(f.key) ? (
+                  <Link to={story(f.key)} className="text-[11.5px] font-bold text-axal-violet hover:text-axal-violet-deep dark:text-violet-300" data-testid={`mercury-insert-${f.key}`}>Insert in Story</Link>
+                ) : null}
+              </li>
             ))}
           </ul>
         </div>

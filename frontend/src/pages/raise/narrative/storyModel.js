@@ -19,7 +19,11 @@
  * WHERE A BOUND FIGURE SITS. D908 keeps a section's bindings as its own
  * ordered list, beside the words, not as a token inside them: most sections'
  * words are the deck's own rows, and a token there would print in the deck.
- * So the chips are drawn under the words they belong to, in their order.
+ * D1114 (#2994) puts the figure inside the sentence without a token: Insert
+ * writes the figure's own value where the cursor is and binds it, and "Reads
+ * as" draws that value as the bound chip in its place (NAR2, NAR20). The deck
+ * prints the same value. A bound figure whose value is not in the words yet is
+ * listed once under them, until it is placed.
  */
 
 import { NOT_RECORDED } from '../../../lib/absence.js';
@@ -257,7 +261,11 @@ export function savePlan(saved, draft) {
     const now = draft.byKey[key] || was;
     const body = {};
     const changes = [];
-    if (now.body.trim() !== was.body.trim()) { body.body = now.body.trim() ? now.body.trim() : null; changes.push(body.body ? 'new words' : 'words cleared'); }
+    if (now.body.trim() !== was.body.trim()) {
+      body.body = now.body.trim() ? now.body.trim() : null;
+      // D1114: words Eadwyn proposed and the founder accepted, untouched since, are saved as Eadwyn's.
+      if (body.body && now.source === 'eadwyn') { body.source = { kind: 'eadwyn' }; changes.push('Eadwyn’s words'); } else changes.push(body.body ? 'new words' : 'words cleared');
+    }
     if (now.note.trim() !== was.note.trim()) { body.audience_note = now.note.trim() ? now.note.trim() : null; changes.push('audience note'); }
     if (base.order.indexOf(key) !== i) { body.position = i; changes.push('new place'); }
     if (saved.bindings && !sameBindings(now.bindings, was.bindings)) {
@@ -297,9 +305,11 @@ export const SAVE_FAILED = 'Save failed. Your text is kept here; nothing after t
  * missing one shows where to add it. Withheld items are not this reader's,
  * and Scoring is a band the deck includes on purpose, never a story figure.
  */
-export function insertGroups(items, search = '') {
+export function insertGroups(items, search = '', only = null) {
   const needle = String(search || '').trim().toLowerCase();
+  // D1114: Home's "Insert in Story" opens this on its one figure (`only`).
   const keep = (it) => it.state !== 'withheld' && !it.optional && it.area !== 'scoring'
+    && (!only || it.source_key === only)
     && (!needle || `${it.label} ${it.module}`.toLowerCase().includes(needle));
   return AREA_ORDER
     .map((area) => ({ id: area, label: AREA_LABEL[area], items: (items || []).filter((it) => it.area === area && keep(it)) }))
@@ -319,3 +329,80 @@ export const NOTHING_TO_SAVE = 'Nothing changed since the last save.';
 export const SECTION_COUNT = (i, n) => `STORY · SECTION ${i + 1} OF ${n}`;
 
 export { NOT_RECORDED };
+
+/* ------------------------------------------------------------------ *
+ * D1114 (#2994): bound figures inside the sentence
+ * ------------------------------------------------------------------ */
+
+const norm = (t) => String(t ?? '').replace(/\s+/g, '').toLowerCase();
+
+/**
+ * The words as segments: plain text, a typed number as a claim, and a typed
+ * number that is a bound figure's own value as that figure, in its place.
+ * `figures` is `[{ binding, view }]` (`boundChip`); each binds one place.
+ */
+export function inlineSegments(text, figures = []) {
+  const free = figures.filter((f) => f.view?.value);
+  const used = new Set();
+  return claimSegments(text).map((seg) => {
+    if (!seg.claim) return seg;
+    const f = free.find((x) => !used.has(x.binding.source_key) && norm(x.view.value) === norm(seg.text));
+    if (!f) return seg;
+    used.add(f.binding.source_key);
+    return { text: seg.text, figure: f };
+  });
+}
+
+/** The bound figures whose value is not in the words yet: listed under them until placed. */
+export function unplacedFigures(text, figures = []) {
+  const placed = new Set(inlineSegments(text, figures).filter((x) => x.figure).map((x) => x.figure.binding.source_key));
+  return figures.filter((f) => !placed.has(f.binding.source_key));
+}
+
+/** The words with a figure's value put where the cursor is, a space either side as the sentence needs. */
+export function insertAt(text, caret, value) {
+  const s = String(text ?? '');
+  const at = Number.isInteger(caret) && caret >= 0 && caret <= s.length ? caret : s.length;
+  const before = s.slice(0, at);
+  const after = s.slice(at);
+  const pre = before && !/\s$/.test(before) ? ' ' : '';
+  const post = after && !/^[\s.,;:!?)]/.test(after) ? ' ' : '';
+  return { text: `${before}${pre}${value}${post}${after}`, caret: at + pre.length + String(value).length };
+}
+
+/* ------------------------------------------------------------------ *
+ * D1114 (#2994): "Ask Eadwyn ▾" (NAR2), AI off (NAR17b), out of tokens (NAR17c)
+ * ------------------------------------------------------------------ */
+
+/** The menu, in the canvas's words; each is one run of `draft:narrative-section`. */
+export const ASK_MODES = [
+  { mode: 'draft', label: 'Draft this section' },
+  { mode: 'shorten', label: 'Shorten' },
+  { mode: 'plain', label: 'Plain words' },
+];
+export const SECTION_OPTION = 'draft:narrative-section';
+export const AI_OFF_LINE = 'AI assistance is off on this page. You can still write and check.';
+export const AI_OFF_SUB = 'Turn it back on from the Eadwyn rail.';
+export const AI_DRAW = 'Runs use your plan’s AI allowance first, then your AI tokens.';
+export const ASK_FOOT = 'Eadwyn proposes; nothing changes until you accept and save. Eadwyn writes no numbers.';
+export const PROPOSAL_NOTE = 'Proposed by Eadwyn. Accept puts these words in the section; Save version saves them.';
+export const DRAFT_REMOVED = 'A line with a number was removed. Insert figures yourself from your records.';
+
+const TOKEN_CODES = new Set(['budget_user_day', 'budget_user_month', 'budget_org_month', 'spend_limit', 'insufficient_tokens']);
+
+/**
+ * What a refused run says (NAR17b, NAR17c). `tokens`: the allowance and the
+ * tokens cannot cover it, nothing was charged, with Top up. `off`: the page's
+ * switch is off. Otherwise the Worker's own sentence. Never a code.
+ */
+export function runRefusal(e) {
+  const code = e?.code || e?.data?.code || e?.data?.error || null;
+  const said = String(e?.data?.message || e?.data?.detail || e?.message || '').trim();
+  const sentence = said && !/^[a-z_]+$/.test(said) ? said : '';
+  if (Number(e?.status) === 402 || TOKEN_CODES.has(code)) {
+    return { kind: 'tokens', text: sentence || 'Not enough AI tokens for this run.', sub: `${AI_DRAW} Nothing was charged.` };
+  }
+  if (code === 'assist_off') return { kind: 'off', text: AI_OFF_LINE, sub: AI_OFF_SUB };
+  return { kind: 'other', text: sentence || 'Eadwyn could not write this just now. Nothing was charged. Try again.', sub: null };
+}
+

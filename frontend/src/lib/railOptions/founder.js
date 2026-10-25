@@ -151,6 +151,11 @@ export const FOUNDER_OPTIONS = [
     page: 'Founder · Raise · Investor narrative', key: 'draft:narrative-positioning', route: '/raise/investor-narrative/positioning', label: 'Propose positioning', kind: 'write', handler: 'draft',
     at: [['frontend/src/pages/raise/narrative/PositioningTab.jsx', 'narrativeApi.proposePositioning(']],
   },
+  // D1114 (#2994): Story's "Ask Eadwyn ▾" — draft this section, shorten it, or plain words.
+  {
+    page: 'Founder · Raise · Investor narrative', key: 'draft:narrative-section', route: '/raise/investor-narrative/story', label: 'Draft this section', kind: 'write', handler: 'draft',
+    at: [['frontend/src/pages/raise/narrative/StoryTab.jsx', 'narrativeApi.draftSection(']],
+  },
   // The pitch deck's editor, the module's tool link, and its Review tab.
   {
     page: 'Founder · Raise · Pitch deck', key: 'form:deck', route: '/raise/pitch/builder', label: 'Fill from project', kind: 'write', handler: 'form',
