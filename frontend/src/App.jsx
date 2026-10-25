@@ -1,3 +1,4 @@
+import { isMyEventsPath } from './pages/events/myEventsModel';
 import LegacyContractsRedirect from './pages/admin/LegacyContractsRedirect';
 import React, { useState, useEffect, useLayoutEffect, useCallback, useMemo, useRef, lazy, Suspense } from 'react';
 import { safeReadJSON } from './lib/storage';
@@ -767,6 +768,7 @@ function getSidebarGroups(role, primaryPersonaId, user, hqView = true) {
 
 // Carta-style user dropdown — top-right of the global header.
 function UserDropdown({ user, onLogout }) {
+  const eventsCurrent = isMyEventsPath(useLocation().pathname);
   const [open, setOpen] = useState(false);
   const ref = useRef(null);
   useEffect(() => {
@@ -847,9 +849,9 @@ function UserDropdown({ user, onLogout }) {
             className="flex items-center px-4 py-2 text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors" role="menuitem">
             Calendar
           </Link>
-          <Link to="/my/events" onClick={() => setOpen(false)}
-            className="flex items-center px-4 py-2 text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors" role="menuitem">
-            Events
+          <Link to="/my/events" onClick={() => setOpen(false)} aria-current={eventsCurrent ? 'page' : undefined}
+            className="flex items-center justify-between px-4 py-2 text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors" role="menuitem">
+            Events {eventsCurrent ? <span className="text-[11px] font-bold text-axal-violet" data-testid="account-events-current">Current</span> : null}
           </Link>
           {/* D562 — "Learning" replaces "Articles" (the owner, epic #1157).
               Articles live inside Learning now: its Articles tab lists them,
