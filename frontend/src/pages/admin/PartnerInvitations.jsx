@@ -177,7 +177,7 @@ function PartnerInvitationsBody() {
         {route.tab === 'overview' ? <PartnersOverview reads={reads} needs={needs} fan={fan} now={now} actions={actions} /> : null}
         {route.tab === 'invitations' ? <PartnersInvitations reads={reads} now={now} actions={actions} /> : null}
         {route.tab === 'deals' ? <PartnersDeals reads={reads} now={now} actions={actions} /> : null}
-        {route.tab === 'referrals' ? <PartnersReferrals reads={reads} fan={fan} now={now} /> : null}
+        {route.tab === 'referrals' ? <PartnersReferrals reads={reads} now={now} /> : null}
       </div>
 
       {route.record?.kind === 'invitation' ? <InvitationRecord key={route.record.id} id={route.record.id} reads={reads} now={now} onClose={closeRecord} actions={actions} /> : null}
