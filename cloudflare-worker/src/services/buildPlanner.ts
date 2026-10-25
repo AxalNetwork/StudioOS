@@ -30,7 +30,7 @@ export type PlanRuleItem = {
   module: Module; kind: string; item_key: string; payload: Record<string, unknown>; evidence: Ref[];
 };
 export class BuildPlanError extends Error {
-  code: 'no_evidence' | 'plan_paused' | 'not_this_project';
+  code: 'no_evidence' | 'plan_paused' | 'plan_stopped' | 'not_this_project';
   status: number;
   constructor(code: BuildPlanError['code'], status = 409) { super(code); this.code = code; this.status = status; }
 }
@@ -43,6 +43,18 @@ const reference = (kind: string, id: string | number, label: string, source_labe
 
 /** Reads committed module rows, never validate_proposals, session text or contact columns. */
 export async function readEvidence(env: Env, projectId: number, scope = 'venture'): Promise<PlanEvidence> {
+  return (await readEvidenceSeen(env, projectId, scope)).evidence;
+}
+
+/** One evidence item a plan was prepared on: its `evidenceFor` id and direction (D1067). */
+export type SeenItem = { id: string; direction: 'supports' | 'contradicts' };
+
+/**
+ * The projection, and the `evidenceFor` items behind it (D1067). The items are
+ * kept beside the projection, never in it, so the plan's evidence hash means
+ * what D1065 made it mean.
+ */
+export async function readEvidenceSeen(env: Env, projectId: number, scope = 'venture'): Promise<{ evidence: PlanEvidence; seen: SeenItem[] }> {
   const project = await env.DB.prepare('SELECT id, entity_id, icp_definition_meta FROM projects WHERE id = ? AND deleted_at IS NULL').bind(projectId).first<{ id: number; entity_id: number | null; icp_definition_meta: string | null }>();
   if (!project) throw new BuildPlanError('not_this_project', 404);
   const hid = scope === 'venture' ? 0 : Number(scope.slice(2));
@@ -93,11 +105,20 @@ export async function readEvidence(env: Env, projectId: number, scope = 'venture
   const features = (await env.DB.prepare(`SELECT id, title, is_must_have, pain_group_id FROM mvp_features WHERE project_id = ? AND (? = 0 OR hypothesis_id = ?) ORDER BY id`).bind(projectId, n, n).all<PlanEvidence['features'][number]>()).results || [];
   const commitments = decision ? (await openCommitments(env, projectId, decision.id)).map(({ id, text }) => ({ id, text })) : [];
   const formation = (await env.DB.prepare('SELECT title FROM formation_steps WHERE project_id = ? ORDER BY id').bind(projectId).all<{ title: string }>()).results || [];
-  return { themes, hypotheses: hypotheses.map(h => ({ ...h, claim: planLabel(h.claim) })).filter(h => h.claim), experiments: experiments.map(x => ({ ...x, title: planLabel(x.title) })), signals,
+  return { seen: evidence.map(e => ({ id: e.id, direction: e.direction })), evidence: { themes, hypotheses: hypotheses.map(h => ({ ...h, claim: planLabel(h.claim) })).filter(h => h.claim), experiments: experiments.map(x => ({ ...x, title: planLabel(x.title) })), signals,
     objections: objections.map(o => ({ ...o, refs: parse(o.refs) || [] })), segments: segments.map(s => ({ ...s, label: planLabel(s.label) })).filter(s => s.label), positioning,
     alternatives: [...alternatives.map(a => ({ ...a, kind: 'finding' as const, label: planLabel(a.label) })), ...competitors.map(c => ({ id: c.id, kind: 'competitor' as const, label: planLabel(c.label) }))].filter(a => a.label), features: features.map(f => ({ ...f, title: planLabel(f.title) })).filter(f => f.title),
-    commitments: commitments.map(c => ({ ...c, text: planLabel(c.text) })).filter(c => c.text), formation: formation.map(f => planLabel(f.title)), hasEntity: project.entity_id != null, decision };
+    commitments: commitments.map(c => ({ ...c, text: planLabel(c.text) })).filter(c => c.text), formation: formation.map(f => planLabel(f.title)), hasEntity: project.entity_id != null, decision } };
 }
+
+/** The plan's SHA-256 evidence hash (D1065): the same projection, the same hash. */
+export async function evidenceHash(evidence: PlanEvidence): Promise<string> {
+  const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(JSON.stringify(evidence)));
+  return Array.from(new Uint8Array(digest), b => b.toString(16).padStart(2, '0')).join('');
+}
+
+/** Where the plan keeps the evidence it was prepared on, inside its brief. Never served (D1067). */
+export const SEEN_KEY = '_seen';
 
 /** One branch per mapping row in #2426. Only existing evidence unlocks a branch. */
 export function planRules(e: PlanEvidence): { items: PlanRuleItem[]; brief: Record<string, unknown> } {
@@ -154,8 +175,8 @@ export function planRules(e: PlanEvidence): { items: PlanRuleItem[]; brief: Reco
   return { items, brief };
 }
 
-type PlanRow = { id: number; uid: string; scope: string; trigger: string; decision_id: number | null; status: string; brief_json: string; evidence_hash: string };
-const currentPlan = (env: Env, projectId: number, scope: string) => env.DB.prepare(`SELECT id, uid, scope, trigger, decision_id, status, brief_json, evidence_hash
+export type PlanRow = { id: number; uid: string; scope: string; trigger: string; decision_id: number | null; status: string; brief_json: string; evidence_hash: string };
+export const currentPlan = (env: Env, projectId: number, scope: string) => env.DB.prepare(`SELECT id, uid, scope, trigger, decision_id, status, brief_json, evidence_hash
   FROM build_plans WHERE project_id = ? AND scope = ? AND status IN ('draft', 'open', 'paused') ORDER BY id DESC LIMIT 1`).bind(projectId, scope).first<PlanRow>();
 
 /** Partners get landed accepted items only, without the private plan or decision references. */
@@ -178,38 +199,42 @@ export async function readPlan(env: Env, projectId: number, scope = 'venture', p
       payload, evidence, landed_table: r.landed_table, landed_id: r.landed_id, marker: r.marker,
       ...(partner ? {} : { source_kind: r.source_kind, source_ref: r.source_ref, source_label: r.source_label }) });
   }
+  const brief = partner ? null : parse(plan.brief_json);
+  if (brief && typeof brief === 'object') delete brief[SEEN_KEY];
   return { plan: partner ? null : { uid: plan.uid, scope: plan.scope, trigger: plan.trigger, decision_id: plan.decision_id, status: plan.status, evidence_hash: plan.evidence_hash },
-    modules, brief: partner ? null : parse(plan.brief_json) };
+    modules, brief };
 }
 
 /** A single D1 batch creates the plan, source proposals and their items, or none. */
 export async function preparePlan(env: Env, projectId: number, userId: number, scope = 'venture', trigger: 'manual' | 'decision' | 'update' = 'manual') {
   const old = await currentPlan(env, projectId, scope);
-  if (old?.status === 'paused') throw new BuildPlanError('plan_paused');
   const ventureDecision = await latestDecision(env, projectId, 'venture');
   if (ventureDecision?.state === 'given' && ventureDecision.decision === 'stop') throw new BuildPlanError('plan_paused');
-  const evidence = await readEvidence(env, projectId, scope);
+  const { evidence, seen } = await readEvidenceSeen(env, projectId, scope);
   if (evidence.decision?.state === 'given' && evidence.decision.decision === 'stop') throw new BuildPlanError('plan_paused');
+  // D1067: a paused plan waits, except for a newer given decision, which supersedes it.
+  const newerGiven = Boolean(old && evidence.decision?.state === 'given' && old.decision_id !== evidence.decision.id);
+  if (old?.status === 'paused' && !(trigger === 'decision' && newerGiven)) throw new BuildPlanError('plan_paused');
   const result = planRules(evidence);
   if (!old && !result.items.length && !evidence.segments.length && !evidence.themes.length && !evidence.alternatives.length && !Object.keys(evidence.positioning || {}).length) throw new BuildPlanError('no_evidence');
   // AUTOFILL owns these shared source columns. Fail before writing anything if
   // its schema is not deployed; never substitute payload-only provenance.
   await env.DB.prepare('SELECT source_kind, source_ref, source_label FROM ai_rail_proposals LIMIT 0').all();
-  const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(JSON.stringify(evidence)));
-  const hash = Array.from(new Uint8Array(digest), b => b.toString(16).padStart(2, '0')).join('');
+  const hash = await evidenceHash(evidence);
+  const briefJson = JSON.stringify({ ...result.brief, [SEEN_KEY]: seen });
   const changedDecision = Boolean(old && old.decision_id !== (evidence.decision?.id ?? null));
   const uid = changedDecision ? crypto.randomUUID() : old?.uid || crypto.randomUUID();
   const batch: D1PreparedStatement[] = [];
   if (changedDecision) {
-    batch.push(env.DB.prepare(`UPDATE build_plans SET status = 'superseded', updated_at = CURRENT_TIMESTAMP WHERE id = ? AND status IN ('draft', 'open')`).bind(old!.id));
+    batch.push(env.DB.prepare(`UPDATE build_plans SET status = 'superseded', updated_at = CURRENT_TIMESTAMP WHERE id = ? AND status IN ('draft', 'open', 'paused')`).bind(old!.id));
     batch.push(env.DB.prepare(`UPDATE ai_rail_proposals SET status = 'withdrawn', updated_at = CURRENT_TIMESTAMP WHERE status = 'proposed'
       AND uid IN (SELECT i.proposal_uid FROM build_plan_items i JOIN build_plans p ON p.id = i.plan_id WHERE p.id = ? AND p.status = 'superseded')`).bind(old!.id));
   }
   batch.push(env.DB.prepare(`INSERT OR IGNORE INTO build_plans (uid, project_id, scope, trigger, decision_id, status, brief_json, evidence_hash, created_by)
     SELECT ?, ?, ?, ?, ?, 'draft', ?, ?, ? WHERE EXISTS (SELECT 1 FROM projects WHERE id = ? AND deleted_at IS NULL)`)
-    .bind(uid, projectId, scope, trigger, evidence.decision?.id ?? null, JSON.stringify(result.brief), hash, userId, projectId),
+    .bind(uid, projectId, scope, trigger, evidence.decision?.id ?? null, briefJson, hash, userId, projectId),
     env.DB.prepare(`UPDATE build_plans SET brief_json = ?, evidence_hash = ?, updated_at = CURRENT_TIMESTAMP
-      WHERE project_id = ? AND scope = ? AND status IN ('draft', 'open')`).bind(JSON.stringify(result.brief), hash, projectId, scope),
+      WHERE project_id = ? AND scope = ? AND status IN ('draft', 'open')`).bind(briefJson, hash, projectId, scope),
     // No longer supported pending items withdraw; decided items are immutable.
     env.DB.prepare(`UPDATE ai_rail_proposals SET status = 'withdrawn', updated_at = CURRENT_TIMESTAMP WHERE status = 'proposed'
       AND uid IN (SELECT i.proposal_uid FROM build_plan_items i JOIN build_plans p ON p.id = i.plan_id WHERE p.project_id = ? AND p.scope = ? AND p.status IN ('draft', 'open')
