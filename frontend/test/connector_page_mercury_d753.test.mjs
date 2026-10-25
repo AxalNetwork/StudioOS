@@ -114,7 +114,7 @@ test('an admin on HQ: the member page as a preview, one line to HQ \u203a Bank a
       const line = m.by('connector-page-hq-accounts');
       assert.ok(line, 'the line');
       assert.ok(m.text(line).startsWith(HQ_ACCOUNTS.text));
-      assert.equal(m.pr(m.by('connector-page-hq-accounts-link')).href, '/admin?tab=bank-accounts');
+      assert.equal(m.pr(m.by('connector-page-hq-accounts-link')).href, '/admin/platform/bank-accounts');
       assert.equal(m.by('connector-page-connect-button'), undefined, 'nothing to connect');
     } finally { await m.unmount(); }
   }

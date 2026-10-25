@@ -43,6 +43,9 @@ export const CHANGE_ACTIONS: Readonly<Record<string, ChangeKind>> = {
   catalog_price_create: 'price',
   catalog_price_update: 'price',
   catalog_price_archive: 'price',
+  catalog_price_change: 'price',
+  catalog_price_change_rolled_back: 'price',
+  catalog_price_change_incomplete: 'price',
   token_pack_create: 'token_pack',
   token_pack_adopt: 'token_pack',
   token_pack_update: 'token_pack',
@@ -169,7 +172,7 @@ function entryOf(r: Row): ChangeLogEntry {
     action: r.action,
     who: { id: Number(r.admin_user_id), name: r.name ?? null },
     product_id: str(d?.product_id) ?? r.price_product ?? null,
-    price_id: str(d?.price_id),
+    price_id: str(d?.price_id) ?? str(d?.old_price_id),
     details: d,
   };
 }

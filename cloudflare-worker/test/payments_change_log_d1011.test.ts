@@ -187,6 +187,25 @@ test('the log is the payments changes only, newest first, each with what, who an
   assert.doesNotMatch(text, /@example\.test/, 'no email leaves');
 });
 
+test('D1010 price-change outcomes appear in the price-filtered log with their audit details', async () => {
+  const db = freshDb();
+  try {
+    const outcomes = ['catalog_price_change', 'catalog_price_change_rolled_back', 'catalog_price_change_incomplete'];
+    for (const action of outcomes) {
+      audit(db, SUPER, action, { product_id: 'prod_A', old_price_id: 'price_old', new_price_id: 'price_new', reason: 'Synthetic price correction' }, '2026-10-08 10:00:00');
+    }
+    const r = await call(payments, db, '/change-log?what=price&product=prod_A');
+    assert.equal(r.status, 200);
+    assert.deepEqual(r.body.entries.map((e: any) => e.action).sort(), [...outcomes].sort());
+    for (const entry of r.body.entries) {
+      assert.equal(entry.what, 'price');
+      assert.equal(entry.price_id, 'price_old');
+      assert.equal(entry.details.new_price_id, 'price_new');
+      assert.equal(entry.details.reason, 'Synthetic price correction');
+    }
+  } finally { db.close(); }
+});
+
 test('filters: what, who, product (its prices included) and inclusive dates; a bad filter is a 400', async () => {
   const db = freshDb();
   seed(db);

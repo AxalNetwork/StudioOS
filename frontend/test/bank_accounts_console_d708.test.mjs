@@ -68,7 +68,7 @@ const el = () => React.createElement(AuthProvider, null, React.createElement(Ban
 
 async function mounted(user, answers) {
   const calls = stub(answers);
-  const v = await mountContracts(el(), '/admin?tab=bank-accounts', user);
+  const v = await mountContracts(el(), '/admin/platform/bank-accounts', user);
   await v.flush();
   return { v, calls };
 }
@@ -158,8 +158,9 @@ test('placement: Bank accounts is an HQ · Platform sub-nav item, after Payments
   assert.deepEqual([entry.tier, entry.row, entry.form], ['HQ', 'Platform', 'sub-nav']);
   const strip = HQ_STRIPS.Platform.map((i) => i.label);
   assert.equal(strip[strip.indexOf('Payments') + 1], 'Bank accounts');
-  const page = readFileSync(resolve(process.cwd(), 'frontend/src/pages/AdminPage.jsx'), 'utf8');
-  const sections = page.slice(page.indexOf('const ADMIN_SECTIONS = ['), page.indexOf('];', page.indexOf('const ADMIN_SECTIONS = [')));
-  const values = [...sections.matchAll(/\{ value: '([\w-]+)'/g)].map((m) => m[1]);
-  assert.equal(values[values.indexOf('payments') + 1], 'bank-accounts');
+  // D938: the console's dropdown is retired; the page is HQ's own, at its own address.
+  assert.equal(entry.route, '/admin/platform/bank-accounts');
+  assert.equal(HQ_STRIPS.Platform[strip.indexOf('Bank accounts')].route, '/admin/platform/bank-accounts');
+  const app = readFileSync(resolve(process.cwd(), 'frontend/src/App.jsx'), 'utf8');
+  assert.match(app, /<Route path="\/admin\/platform\/bank-accounts" element=\{guard\(\['admin'\], hqOnly\(<BankAccountsPage \/>\)\)\} \/>/);
 });

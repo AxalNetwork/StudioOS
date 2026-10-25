@@ -44,9 +44,10 @@ const admin = (row, form) => ({ tier: 'Admin', row, form });
 
 // A legacy sidebar row. `key` is its route.
 const row = (label, route, place, hqOnly, extra = {}) => ({ key: route, kind: 'row', label, route, hqOnly, ...place, ...extra });
-// An Admin Console tab. `key` is `tab:<value>`; the route is the deep link.
-// /admin is `guard(['admin'])` with no elevation, so no tab is hqOnly.
-const tab = (value, label, place, extra = {}) => ({ key: `tab:${value}`, kind: 'tab', tabValue: value, label, route: `/admin?tab=${value}`, hqOnly: false, ...place, ...extra });
+// A tab of the retired Admin Console. `key` is `tab:<value>`, which H35's
+// question pins; `route` is the page's own address (#2375's route map, D938),
+// where `/admin?tab=<value>` forwards. `hqOnly` restates the route's wrapper.
+const tab = (value, label, route, hqOnly, place, extra = {}) => ({ key: `tab:${value}`, kind: 'tab', tabValue: value, label, route, hqOnly, ...place, ...extra });
 // One of the 28 working pages S23/H37 drew in a launcher, with the canvas's own
 // one-line description of what the page is.
 const page = (group, label, route, what) => ({ key: route, kind: 'page', group, label, route, what, hqOnly: false, tier: 'palette', row: null, form: 'palette' });
@@ -59,8 +60,9 @@ export const ADMIN_PLACEMENT = [
     { how: 'Top-bar button on HQ and Admin.', also: [hq(TOP_BAR, 'top bar')] }),
 
   // ── Admin group ─────────────────────────────────────────────────────────
-  // The Admin Console itself, /admin, is on UNPLACED below: H35 says "Stays
-  // reachable. Its 14 tabs are placed individually", and they are.
+  // The Admin Console itself, /admin, is on UNPLACED below: H35 said "Stays
+  // reachable. Its 14 tabs are placed individually". Since D938 it is a
+  // redirect, and each tab is a page of its own, placed below.
   row('Due Diligence', '/admin/due-diligence', admin('Approvals', 'lane'), false, { how: 'A lane.' }),
   row('Best-Fit Console', '/admin/best-fit', admin('Approvals', 'lane'), false, { how: 'A lane.' }),
   row('Event Admin', '/admin/events', admin('Community', 'card link'), false,
@@ -96,42 +98,44 @@ export const ADMIN_PLACEMENT = [
   row('Public Team Page', '/admin/team', hq('Content', 'sub-nav'), false, { how: 'Sub-navigation item.' }),
   row('My Licence', '/admin/my-licence', admin('Licences', 'embedded'), false, { how: 'Embedded panel.' }),
   // H35 drew Trash as "HQ · Security · proposal — not yet agreed". The
-  // proposal is not adopted: the door is a literal link on the Admin Console
-  // (/admin), which Admin · Accounts embeds. Same product as the row it sat
-  // under, one click further.
+  // proposal is not adopted: the door was a literal link on the Admin Console
+  // header, and since D938 it is an item of All accounts' More menu.
   row('Trash', '/admin/trash', admin('Accounts', 'card link'), false,
-    { how: 'A literal link on the Admin Console header. H35’s Security proposal was not adopted.' }),
+    { how: 'A literal link in All accounts’ More menu (D938). H35’s Security proposal was not adopted.' }),
 
-  // ── Admin Console tabs · /admin?tab=… ───────────────────────────────────
-  tab('users', 'Users', hq('Team', 'embedded'),
-    { how: 'Already embedded on HQ · Team; embedded panel on Admin · Accounts.', also: [admin('Accounts', 'embedded')] }),
-  tab('profiles', 'Partner profiles', admin('Approvals', 'lane'),
-    { route: '/admin/partner-profiles', how: 'Its own page under Approvals (D989), lane 7; the legacy tab redirects here.' }),
-  tab('kyc', 'KYC Queue', admin('Approvals', 'lane'),
+  // ── The Admin Console's tabs, each a page since D938 (#2743) ───────────
+  // `/admin?tab=<value>` forwards to the route (`LegacyContractsRedirect`).
+  // All accounts sits under /admin/accounts until #2375's question 1 is
+  // answered (part 4); Platform and Revenue pages are the Super Admin's.
+  tab('users', 'All accounts', '/admin/accounts/all', false, hq('Team', 'embedded'),
+    { how: 'Already embedded on HQ · Team; its own page on Admin · Accounts.', also: [admin('Accounts', 'embedded')] }),
+  tab('profiles', 'Partner profiles', '/admin/partner-profiles', false, admin('Approvals', 'lane'), { how: 'A lane.' }),
+  tab('kyc', 'KYC & KYB', '/admin/kyc', false, admin('Approvals', 'lane'),
     { how: 'A lane. HQ · Team carries a card link to it.', also: [hq('Team', 'card link')] }),
-  tab('lab-applications', 'Spin-Out Lab', admin('Programs', 'embedded'),
-    { route: '/admin/programs/spinout-lab/applications', how: 'Its own page under Programs (D937); the legacy tab redirects here.' }),
-  tab('legal', 'Contracts', hq('Contracts', 'embedded'),
-    { route: '/admin/contracts', how: 'One Contracts page in both shells; the legacy Legal link redirects here.', also: [admin('Contracts', 'embedded')] }),
-  tab('personas', 'Persona segments', hq('Content', 'sub-nav'),
-    { route: '/admin/persona-segments', how: 'Its own page (D997): a Content sub-navigation item on HQ, under Accounts on the Admin shell; the legacy tab redirects here.', also: [admin('Accounts', 'card link')] }),
-  tab('directory', 'Directory', admin('Approvals', 'lane'), { how: 'A lane.' }),
+  tab('lab-applications', 'Spin-Out Lab', '/admin/programs/spinout-lab/applications', false, admin('Programs', 'embedded'),
+    { how: 'Its own page under Programs (D937); the legacy tab redirects here.' }),
+  tab('legal', 'Contracts', '/admin/contracts', false, hq('Contracts', 'embedded'),
+    { how: 'One Contracts page in both shells; the legacy Legal link redirects here.', also: [admin('Contracts', 'embedded')] }),
+  tab('personas', 'Persona segments', '/admin/persona-segments', false, hq('Content', 'sub-nav'),
+    { how: 'Sub-navigation item (the taxonomy). Retagging one person lives on Admin · Accounts.', also: [admin('Accounts', 'card link')] }),
+  // #2375: Directory is Community's; Approvals lists it under "Not a queue".
+  tab('directory', 'Directory', '/admin/directory', false, admin('Community', 'card link'),
+    { how: 'Card link. Approvals lists it under “Not a queue”.', also: [admin('Approvals', 'lane')] }),
   // Integration keys and GitHub Sync stood here as Platform sub-navigation
   // items. The owner's ruling (2026-10-20) took both out of the Admin Console:
   // they are one Super Admin page, `/admin/integration-keys`, with an HQ row
   // of its own, so there is no legacy tab left to place.
-  tab('payments', 'Payments', hq('Platform', 'sub-nav'),
-    { route: '/admin/platform/payments', hqOnly: true, how: 'Its own page under Platform, HQ only (D1008); sub-navigation item; the legacy tab redirects here.' }),
+  tab('payments', 'Payments', '/admin/platform/payments', true, hq('Platform', 'sub-nav'), { how: 'Sub-navigation item.' }),
   // D708 (#1773) — beside Payments: the Super Admin's bank-account registry.
-  tab('bank-accounts', 'Bank accounts', hq('Platform', 'sub-nav'), { how: 'Sub-navigation item, after Payments.' }),
-  tab('product-testing', 'Product testing', hq('Platform', 'sub-nav'), { how: 'Sub-navigation item, after Bank accounts (D815).' }),
-  tab('promos', 'Promo codes', hq('Platform', 'sub-nav'), { how: 'Sub-navigation item. Promo ceilings stay on Revenue.' }),
-  tab('billing', 'Billing', hq('Revenue', 'card link'), { how: 'Card link.' }),
+  tab('bank-accounts', 'Bank accounts', '/admin/platform/bank-accounts', true, hq('Platform', 'sub-nav'), { how: 'Sub-navigation item, after Payments.' }),
+  tab('product-testing', 'Product testing', '/admin/platform/product-testing', true, hq('Platform', 'sub-nav'), { how: 'Sub-navigation item, after Bank accounts (D815).' }),
+  tab('promos', 'Promo codes', '/admin/platform/promo-codes', true, hq('Platform', 'sub-nav'), { how: 'Sub-navigation item. Promo ceilings stay on Revenue.' }),
+  tab('billing', 'Billing', '/admin/revenue/billing', true, hq('Revenue', 'card link'), { how: 'Card link.' }),
   // Wellbeing had no home on H35. The decision: Admin · Community — the
   // roster is curated where the community it serves is run.
-  tab('wellbeing', 'Wellbeing', admin('Community', 'card link'), { how: 'Card link, beside Events, Jobs and Circles.' }),
-  tab('network-profiles', 'Advisors & Partners', hq('Content', 'sub-nav'),
-    { route: '/admin/advisors-partners', how: 'Its own page under Community (D972); Sub-navigation item on Content; the legacy tab redirects to its Deck roster.', also: [admin('Community', 'card link')] }),
+  tab('wellbeing', 'Wellbeing', '/admin/wellbeing', false, admin('Community', 'card link'), { how: 'Card link, beside Events, Jobs and Circles.' }),
+  tab('network-profiles', 'Advisors & Partners', '/admin/advisors-partners', false, hq('Content', 'sub-nav'),
+    { how: 'Its own page under Community (D972); Sub-navigation item on Content; the legacy tab redirects to its Deck roster.', also: [admin('Community', 'card link')] }),
 
   // ── The 28 working pages (S23 · H37) → the profile sidebars (D563) ──────
   // H37 drew them in a Workspaces launcher on the admin shells; D563 retired
@@ -225,7 +229,7 @@ export function alsoInFor(role, row) {
 // guard pins this list by value, so it cannot grow quietly.
 export const UNPLACED = [
   { key: '/admin', kind: 'row', label: 'Admin Console', route: '/admin', hqOnly: false,
-    why: 'Stays reachable. Its tabs are placed individually.' },
+    why: 'A redirect since D938: every old tab forwards to its own page, placed individually.' },
 ];
 
 /** The entries a shell draws on one of its rows: `tier` first, then `also`. */
@@ -235,7 +239,7 @@ export function placedOn(tier, rowName) {
     || (e.also || []).some((a) => a.tier === tier && a.row === rowName));
 }
 
-/** The route a placement opens, without its `?tab=`: what App.jsx registers. */
+/** The route a placement opens, without its query or hash: what App.jsx registers. */
 export function routePath(route) {
   return route.split('?')[0].split('#')[0];
 }

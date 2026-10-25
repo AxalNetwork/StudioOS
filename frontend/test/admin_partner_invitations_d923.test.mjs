@@ -674,10 +674,16 @@ test('the page keeps its frame and today\'s rail note, its crumb and its literal
   const page = read('frontend/src/pages/admin/PartnerInvitations.jsx');
   assert.match(page, /export default function PartnerInvitations\(\) \{\s*return \(\s*<AdminBoardFrame workspace="Partner invitations" note="Eadwyn reads the invitations listed here\. An invitation goes out only when you send it\." data-testid="admin-board-partner-invitations">/);
   assert.equal((page.match(/<AdminBoardFrame\b/g) || []).length, 1);
-  const doors = [...page.matchAll(/<DeskTab to="([^"]+)"/g)].map((m) => m[1]);
+  const doors = [...page.matchAll(/<HeaderTab to="([^"]+)"/g)].map((m) => m[1]);
   assert.deepEqual(doors, TABS.map((t) => t.path), 'the strip and TABS list the same four doors');
-  assert.match(page, /<DeskTab to="\/admin\/partner-invitations" end /, 'Overview is lit only on its own address');
-  assert.match(page, /<Link to="\/admin\/community" className=\{CRUMB_LINK\}>Community<\/Link> › Partner invitations/);
+  assert.match(page, /<HeaderTab to="\/admin\/partner-invitations" end /, 'Overview is lit only on its own address');
+  // D938: the desk draws the shared header (D936) with the same crumb, title, line, action, moved notice and tabs, and no h1 of its own.
+  assert.match(page, /import \{[^}]*\bAdminPageHeader\b[^}]*\} from '\.\.\/\.\.\/ui'/);
+  assert.match(page, /<AdminPageHeader\s+crumb=\{\{ to: '\/admin\/community', label: 'Community', current: 'Partner invitations' \}\}\s+title=\{TITLE\}\s+line=\{LINE\}/);
+  assert.match(page, /notice=\{\{ text: moved \? MOVED_LINE : null, onDismiss: \(\) => navigate\(\{ pathname: loc\.pathname, search: withoutMoved\(loc\.search\) \}, \{ replace: true \}\) \}\}/);
+  assert.match(page, /tabs=\{<DeskTabs counts=\{counts\} tab=\{route\.tab\} current=\{currentTab\} \/>\}\s+data-testid="partners-header"/);
+  assert.doesNotMatch(page, /<h1/);
+  assert.doesNotMatch(page, /\bscope\b/, 'no scope chip');
   assert.doesNotMatch(page, /to="\/admin\/held\/community"|scope-chip/, 'the crumb links Community itself, not its redirect, and there is no scope chip');
   // D952: Overview's Firms row opens the Firms tab, written out; nothing here links the old address.
   assert.match(read('frontend/src/pages/admin/partners/PartnersOverview.jsx'), /<Link to="\/admin\/advisors-partners\/firms"/);
@@ -1045,7 +1051,7 @@ test('the old address lands on Overview with the moved notice; first use draws t
   const links = { accounts: [{ id: 1, email: 'a@x.co', partner_id: null }, { id: 2, email: 'b@x.co', partner_id: null }], firms: [] };
   const view = await mounted(MOVED_PATH, worker({ invitations: [], links }));
   try {
-    assert.equal(view.textOf('partners-moved'), `${MOVED_LINE}Dismiss`);
+    assert.equal(view.textOf('admin-page-moved'), `${MOVED_LINE}Dismiss`);
     assert.ok(view.has('partners-first-use'));
     assert.match(view.textOf('partners-first-use'), /No partner invitations yet\.Invite an operating partner to start\. They answer a short profile, choose an offer, and sign\.New invitation/);
     assert.equal(view.textOf('partners-needs-firms'), 'Firms2 partner accounts are not attached to a firm.Open Firms');
@@ -1054,7 +1060,7 @@ test('the old address lands on Overview with the moved notice; first use draws t
     assert.match(view.textOf('partners-tab-overview-count'), /^1, Rows in Needs you$/);
     await view.press('Dismiss');
     assert.equal(view.at.path, '/admin/partner-invitations');
-    assert.ok(!view.has('partners-moved'));
+    assert.ok(!view.has('admin-page-moved'));
   } finally { await view.close(); }
 });
 
