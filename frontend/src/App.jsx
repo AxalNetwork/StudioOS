@@ -2977,9 +2977,13 @@ function AppInner() {
       <Route path="/admin/programs/spinout-lab/cohorts" element={guard(['admin'], <AdminLab onImpersonate={handleImpersonate} />)} />
       <Route path="/admin/programs/spinout-lab/cohorts/:ym" element={guard(['admin'], <AdminLab onImpersonate={handleImpersonate} />)} />
       <Route path="/admin/programs/spinout-lab/participants" element={guard(['admin'], <AdminLab onImpersonate={handleImpersonate} />)} />
+      <Route path="/admin/programs/spinout-lab/participants/:uid" element={guard(['admin'], <AdminLab onImpersonate={handleImpersonate} />)} />
       <Route path="/admin/programs/spinout-lab/hosts" element={guard(['admin'], <AdminLab onImpersonate={handleImpersonate} />)} />
       <Route path="/admin/programs/spinout-lab/formation" element={guard(['admin'], <AdminLab onImpersonate={handleImpersonate} />)} />
       <Route path="/admin/programs/spinout-lab/graduation" element={guard(['admin'], <AdminLab onImpersonate={handleImpersonate} />)} />
+      <Route path="/admin/programs/spinout-lab/how-it-runs" element={guard(['admin'], <AdminLab onImpersonate={handleImpersonate} />)} />
+      <Route path="/admin/programs/spinout-lab/settings" element={guard(['admin'], <AdminLab onImpersonate={handleImpersonate} />)} />
+      <Route path="/admin/programs/spinout-lab/activity" element={guard(['admin'], <AdminLab onImpersonate={handleImpersonate} />)} />
       <Route path="/admin/spinout-lab" element={<LabRedirect />} />
       {/* D442 — the console the approvals board links to. Never a tab of the retired Admin Console. */}
       <Route path="/admin/spinout-moderation" element={guard(['admin'], <SpinoutModerationPage />)} />
@@ -3374,6 +3378,8 @@ function AppInner() {
       <Route path="/events/:id/manage" element={guard(['admin', 'founder', 'partner', 'investor', 'advisor'], <EventManagePage />)} />
       <Route path="/events/:id/manage/registrations" element={guard(['admin', 'founder', 'partner', 'investor', 'advisor'], <EventManagePage />)} />
       <Route path="/events/:id/manage/agenda" element={guard(['admin', 'founder', 'partner', 'investor', 'advisor'], <EventManagePage />)} />
+      {/* D1036 (#2877): check-in at the door, a tab on the event's day. */}
+      <Route path="/events/:id/manage/check-in" element={guard(['admin', 'founder', 'partner', 'investor', 'advisor'], <EventManagePage />)} />
       <Route path="/my/jobs" element={guard(['admin', 'founder', 'partner', 'investor', 'advisor'], user?.role === 'founder' ? <Navigate to="/build/team?mode=workspace&tab=jobs" replace /> : <MyJobsPage />)} />
       <Route path="/my/applications" element={guard(['admin', 'founder', 'partner', 'investor', 'advisor'], <MyApplicationsPage />)} />
       <Route path="/jobs/new" element={guard(['admin', 'founder', 'partner', 'investor', 'advisor'], <JobEditorPage />)} />

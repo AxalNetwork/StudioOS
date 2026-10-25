@@ -199,7 +199,7 @@ it, where in their nav, and how do they get there.*
 | Investor narrative | `/raise/investor-narrative` · `/raise/investor-narrative/story` · `/positioning` · `/check` · `/versions` · `/raise/investor-narrative/:version` · `/new` | — (not routed) | Full page (proposed) | Not reachable yet | UPGRADE | Low |
 | Legal & Capital Engine | `/legal-capital` | — (no nav entry) | Full page | Deep link / in-page action | REMOVED | Medium |
 | Licences | `/admin/my-licence` · `/admin/my-licence/terms` · `/programs` · `/contract` · `/statements` · `/requests` · `/history` | Admin | Full page (proposed) | Sidebar → Admin → Licences | UPGRADE | Low |
-| Ops Page · Event organiser (E1–E4, D567) | `/events/:id/manage` · `/events/:id/manage/registrations` · `/events/:id/manage/agenda` · `/events/:id` | — (no nav entry) | Full page | Deep link / in-page action | UPGRADE | Medium |
+| Ops Page · Event organiser (E1–E4, D567) | `/events/:id/manage` · `/events/:id/manage/registrations` · `/events/:id/manage/agenda` · `/events/:id/manage/check-in` · `/events/:id` | — (no nav entry) | Full page | Deep link / in-page action | UPGRADE | Medium |
 | Partner invitations | `/admin/partner-invitations` · `/admin/partner-invitations/invitations` · `/admin/partner-invitations/invitations/:id` · `/admin/partner-invitations/deals` · `/admin/partner-invitations/deals/:id` · `/admin/partner-invitations/referrals` · `/admin/partners` · `/admin/partner-invitations/firm-links` · `/admin/advisors-partners/firms?moved=firm-links` | Admin | Full page | Sidebar → Admin → Community | UPGRADE | High |
 | Partner profiles | `/admin?tab=profiles` | — (no nav entry) | Full page | Deep link / in-page action | UPGRADE | Medium |
 | Persona segments | `/admin?tab=personas` | — (no nav entry) | Full page | Deep link / in-page action | UPGRADE | Medium |
@@ -209,7 +209,7 @@ it, where in their nav, and how do they get there.*
 | Research · Funds (fund profile) | `/research/funds/catalog/:id` | — (no nav entry) | Full page | Deep link / in-page action | CURRENT | Medium |
 | Research · Sector | `/research/markets/sector/:slug` | — (no nav entry) | Full page | Deep link / in-page action | CURRENT | Medium |
 | Scoring Engine v2 | `/scoring` | — (no nav entry) | Full page | Deep link / in-page action | UPGRADE | Medium |
-| Spin-Out Lab (admin) | `/admin/spinout-lab` · `/admin/spinout-lab/preview` · `/admin?tab=lab-applications` · `/applications` | Admin | Full page | Sidebar → Admin → Programs | UPGRADE | High |
+| Spin-Out Lab (admin) | `/participants/:uid` · `/admin/spinout-lab` · `/admin/spinout-lab/preview` · `/admin?tab=lab-applications` · `/applications` | Admin | Full page | Sidebar → Admin → Programs | UPGRADE | High |
 | Support · Subsidiary | `/help` | — (no nav entry) | Full page | Deep link / in-page action | UPGRADE | Medium |
 | Team · Authority | `/admin/team` · `/ic` · `/ic/:uid` | — (no nav entry) | Full page | Deep link / in-page action | NEW | Medium |
 | Validate · Record a session | `/validate/record` · `/validate/interviews?new=record` · `/cycles/validate/modules/customer-research` · `/sessions` · `/channels/threads?status=pending` · `/channels/threads/:uid/assign` · `/validate/record/live` · `/sessions/active` · `/validate/session/:id` | — (not routed) | Full page (proposed) | Not reachable yet | NEW | Low |
@@ -238,7 +238,7 @@ it, where in their nav, and how do they get there.*
 | Payments | `/admin?tab=payments` | — (no nav entry) | Full page | Deep link / in-page action | UPGRADE | Medium |
 | Persona segments | `/admin?tab=personas` | — (no nav entry) | Full page | Deep link / in-page action | UPGRADE | Medium |
 | Program grants | `/admin/licences/programs` · `/admin/my-licence/programs` | HQ | Full page (proposed) | Sidebar → HQ → Licences | UPGRADE | Low |
-| Spin-Out Lab (admin) | `/admin/spinout-lab` · `/admin/spinout-lab/preview` · `/admin?tab=lab-applications` · `/applications` | — (no nav entry) | Full page | Deep link / in-page action | UPGRADE | Medium |
+| Spin-Out Lab (admin) | `/participants/:uid` · `/admin/spinout-lab` · `/admin/spinout-lab/preview` · `/admin?tab=lab-applications` · `/applications` | — (no nav entry) | Full page | Deep link / in-page action | UPGRADE | Medium |
 | Support Security · Super | `/admin/security` · `/admin/hq-support` · `/help` | HQ | Full page | Sidebar → HQ → Security | UPGRADE | High |
 | Team · Authority | `/admin/team` · `/ic` · `/ic/:uid` | HQ | Full page | Sidebar → HQ → Content | NEW | High |
 

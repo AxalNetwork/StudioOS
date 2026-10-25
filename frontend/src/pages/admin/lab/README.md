@@ -4,8 +4,8 @@ D937 (#2374): the Spin-Out Lab's admin page at `/admin/programs/spinout-lab`,
 built to the owner's canvas (SL1–SL21, `design/incoming/Spin-Out Lab Admin Page.dc.html`)
 under the shared admin page header (D936, `../../../ui/AdminPageHeader.jsx`).
 Its tabs are sub-paths: `/applications`, `/cohorts` (and one cohort at
-`/cohorts/YYYY-MM`, D947), `/participants`, `/hosts`,
-`/formation` and `/graduation`; the founder-journey preview is `/preview`.
+`/cohorts/YYYY-MM`, D947), `/participants` (one founder at `/participants/:uid`, D949), `/hosts`,
+`/formation`, `/graduation`, `/how-it-runs`, `/settings` and `/activity`; the founder-journey preview is `/preview`.
 
 Three old doors forward here before any old console mounts, keeping the query
 and hash and adding `?moved=`:
@@ -16,8 +16,8 @@ and hash and adding `?moved=`:
 
 - `AdminLab.jsx` — the page: the header (crumb, pills, line, facts, scope chip,
   moved notice, tabs with their counts) and the Overview's blocks.
-  Applications and Participants are today's console, asked for one section
-  through `AdminSpinoutLab`'s `section` prop; Cohorts, Hosts, Formation and
+  Applications is today's console, asked for one section
+  through `AdminSpinoutLab`'s `section` prop; Participants, Cohorts, Hosts, Formation and
   Graduation mount the files below.
 - `LabOverviewBlocks.jsx` — Overview's drawn blocks (SL1, D947): the cohort
   calendar timeline, Applications by cohort, Weeks passed, From application
@@ -28,6 +28,13 @@ and hash and adding `?moved=`:
   overrides there are still today's `AdminCohortTiming` until part 7.
 - `labOverviewModel.js` — pure. Those blocks and pages from D944's overview
   read (`GET /api/admin/cohort/overview`) and Settings' minimum and places.
+- `LabParticipants.jsx` — Participants (SL7) and one founder (SL8, D949): the
+  segments and "Where [cohort] stands" from D946's read, its filters, sort and
+  pages asked of the Worker, the table (cards on a phone), the drawer at
+  `/participants/:uid`, and the Give grace, Change this week and Open
+  workspace dialogs (SL8a–c).
+- `participantsModel.js` — pure. Participants' words, rows, standing bar,
+  filters, the drawer's sections and the dialogs' copy, on the Lab's clock.
 - `LabHosts.jsx` — Hosts (SL9, D970): status chips with the Worker's counts,
   search, Applied as and the sort, the table (cards on a phone), and the
   Approve, Decline and Remove dialogs with a note the host sees.
@@ -54,8 +61,24 @@ and hash and adding `?moved=`:
   which part brings it. It is never a zero and never a sample.
 - Guard H (D953 §2): `GET /api/admin/spinout-applications` and
   `GET /api/admin/spinout-participants` answer `[]` with 200 on an error, so no
-  figure here comes from them, and the Participants tab's count is a dash.
+  figure here comes from them. Participants reads D946's
+  `GET /api/admin/cohort/participants`, which says when it fails (D949).
 - No rail. D317 keeps Eadwyn out of the Lab; `NO_RAIL_ROUTES` covers the whole
   subtree.
 - Each tab is a literal `HeaderTab`, so the reachability walk finds its door.
 - Dates are the Lab's rule and cannot be moved here. Times are ET.
+
+D971 (#2756), SL12–SL14 and SL21:
+- `LabHowItRuns.jsx` reads the published playbook. Super Admin draft edits and
+  publishing use separate in-page dialogs; the monthly checklist and admin tools
+  link to the live desks. The calendar links to the live cohort calendar rather
+  than copying a sample chart into the playbook.
+- `LabSettings.jsx` reads operative cohort size, edits Minimum or Places in a
+  dialog, reads a selected licensed studio's grant for a Super Admin, and draws
+  the fixed rules. An Admin's grant terms wait explicitly for #2775.
+- `LabActivity.jsx` reads the Worker's filtered and paged history. Super Admin
+  support sessions read separately and search/page over the newest 100 records;
+  an Admin makes no support-session request.
+- `labOperationsModel.js` holds words, ET stamps, validators and support paging;
+  `labOperationsParts.jsx` gives these tabs their explicit Unreadable / Try again
+  block while reusing the shared loading and stale states.

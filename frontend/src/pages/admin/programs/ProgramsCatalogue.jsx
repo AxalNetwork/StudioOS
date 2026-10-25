@@ -21,7 +21,7 @@ import { ProgramsTabs, useWaitingProposals } from './ProposalsPage';
 import NewProgramDialog from './NewProgramDialog';
 import { NEW_PROGRAM } from './proposalsModel';
 import {
-  ASSIGNED_TO_YOU, CLAIMS_REASON, COULD_NOT_READ, DEACTIVATED_LINE, FOOT_PROFILING, GROUPS, INCLUDING_MEMBER,
+  ASSIGNED_TO_YOU, CLAIMS_REASON, COULD_NOT_READ, FOOT_PROFILING, GROUPS, INCLUDING_MEMBER,
   LAB_APPLICATIONS_REASON, LINE_ADMIN, LINE_SUPER, NOT_READ_YET, NOT_RECORDED, NOTHING_WAITING, PEOPLE_REASON,
   PRODUCT_TESTING_FOOT, PROGRAMS, READING, RUNNING_REASON, STRATEGIC_LINE, TITLE, WAITING_LABEL, WITHIN_500, asOfState,
   cardsIn, clockLabel, labCard, learningCardLine, learningFigures, learningJoin, livePerksFrom, mentorCardLine,
@@ -192,7 +192,6 @@ function CatalogueBody() {
                   <>
                     <span className={FIGURE}>{mentorCardLine(mentor)}</span>
                     <span className={SUB}>{mentor.capped ? `Scheduled or running cohorts; ${WITHIN_500} assignments.` : 'Cohorts scheduled or running.'}</span>
-                    <span className={SUB}>{DEACTIVATED_LINE}</span>
                   </>
                 ) : null}
               </CardFigure>

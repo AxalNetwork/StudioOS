@@ -171,6 +171,7 @@ import dashboard from './routes/dashboard';
 import matches from './routes/matches';
 import settings from './routes/settings';
 import personas from './routes/personas';
+import personaSegments from './routes/persona_segments';
 import onboarding from './routes/onboarding';
 // Task #6 (IF) — per-role onboarding checklist + product-tour tracking.
 import onboardingChecklist from './routes/onboarding_checklist';
@@ -200,6 +201,7 @@ import deckNotes from './routes/deck_notes';
 import deckReview from './routes/deck_review';
 import deckSources from './routes/deck_sources';
 import deckNew from './routes/deck_new';
+import deckAssist from './routes/deck_assist';
 import notificationsRoutes from './routes/notifications';
 import votesRoutes from './routes/votes';
 import linkedinRoutes from './routes/linkedin';
@@ -219,6 +221,7 @@ import messagesRoutes from './routes/messages';
 import perksRoutes from './routes/perks';
 import adminLicences from './routes/admin_licences';
 import adminProgramGrants from './routes/admin_program_grants';
+import adminProgramRequests from './routes/admin_program_requests';
 // D986 (#2776) — partner deal types per licence: HQ's reads and write, and the studio's own read.
 import adminPartnerDealTypes from './routes/admin_partner_deal_types';
 import licencePartnerDealTypes from './routes/licence_partner_deal_types';
@@ -267,6 +270,7 @@ import adminInsightsExport from './routes/admin_insights_export';
 import licence from './routes/licence';
 // D799 — the Administrator's requests to HQ, under the same prefix.
 import licenceRequests from './routes/licence_requests';
+import licencePrograms from './routes/licence_programs';
 import cofounderRoutes from './routes/cofounder';
 import skillsRoutes from './routes/skills';
 import valuesRoutes from './routes/values';
@@ -1105,6 +1109,8 @@ app.route('/api/branch', branchInvitationRoutes);
 app.route('/api/branch', branchSupportSessionRoutes);
 app.route('/api/admin/licences', adminLicences);
 // D982 (#2773): which programs HQ grants each licensed studio, on what terms.
+// D983: the program requests, mounted before part 1's routes so `/requests` is never read as a licence.
+app.route('/api/admin/program-grants/requests', adminProgramRequests);
 app.route('/api/admin/program-grants', adminProgramGrants);
 app.route('/api/admin/partner-deal-types', adminPartnerDealTypes);
 // Migrations 199/207 — who holds the Super Admin elevation. Mount BEFORE the
@@ -1147,6 +1153,7 @@ app.route('/api/admin/programs/proposals', adminProgramProposals);
 app.route('/api/admin/programs', adminPrograms);
 app.route('/api/licence', licencePartnerDealTypes);
 app.route('/api/licence', licenceRequests);
+app.route('/api/licence', licencePrograms);
 app.route('/api/licence', licence);
 app.route('/api/best-fit', bestFitSelf);
 app.route('/api/admin', admin);
@@ -1222,6 +1229,8 @@ app.route('/api/decks', deckReview);
 app.route('/api/decks', deckSources);
 // D897: New deck (`/new/context`, `/new/quote`, `/outline`, `/generate`, `/proposals/:id/keep-slides`), before `decks` for the same reason.
 app.route('/api/decks', deckNew);
+// D899 (#2678): Eadwyn's card tools, before `decks` with the other /api/decks routers.
+app.route('/api/decks', deckAssist);
 app.route('/api/decks', decks);
 // Competitor Analysis (in-house crawl + Workers AI synthesis) and Pitch Deck
 // Reviewer (document conversion + investor-style review). Both are
@@ -1329,6 +1338,8 @@ app.route('/api/integrations', integrations);
 // D652 — the Worker AI rail's conversations and their connectors (#1464).
 app.route('/api/eadwyn', eadwynRoutes);
 app.route('/api/crunchbase', crunchbaseRoutes);
+// D1000 (#2815): the segment profiles, before the personas routes.
+app.route('/api/personas/segments', personaSegments);
 app.route('/api/personas', personas);
 app.route('/api/notifications', notificationsRoutes);
 app.route('/api/linkedin', linkedinRoutes);

@@ -44,7 +44,7 @@ import HeldProgramsRedirect from '../src/pages/admin/programs/HeldProgramsRedire
 import AdvisorCohortsRedirect from '../src/pages/admin/programs/AdvisorCohortsRedirect.jsx';
 import ReferEarnRedirect from '../src/pages/admin/programs/ReferEarnRedirect.jsx';
 import {
-  ASSIGNED_LINE, CAPS, DEACTIVATED_LINE, FROZEN, HQ_READS_COMMISSIONS, LINE_ADMIN, LINE_SUPER, MOVED_NOTICES, NOTHING_WAITING,
+  ACTIVE_MENTORS_LINE, ASSIGNED_LINE, CAPS, FROZEN, HQ_READS_COMMISSIONS, LINE_ADMIN, LINE_SUPER, MOVED_NOTICES, NOTHING_WAITING,
   NOT_READ_YET, NOT_RECORDED, PAGES, PERK_APPROVED, PROGRAMS, PRODUCT_TESTING_FOOT, SCOPE_LABEL, SCOPE_NOT_PER_STUDIO,
   SCOPE_TITLE, SCOPE_UNREAD, SUSPENDED, TRY_AGAIN, WAITING_LABEL, ageText, approveBody, bandOf, cohortName, cycleForStrip,
   etStamp, laneFrom, learningFigures, learningJoin, mentorFigures, mentorNeeds, movedNotice, openReferrals, perkPrice,
@@ -81,7 +81,7 @@ const perk = (uid, status, o = {}) => ({
 // R5 — an assignment row.
 const assignment = (id, advisor, cycle, o = {}) => ({
   id, uid: `a${id}`, advisor_user_id: advisor, cohort_cycle_id: cycle, assigned_at: '2026-10-01 10:00:00', unassigned_at: null,
-  is_active: true, note: null, advisor_name: `Mentor ${advisor}`, advisor_email: `m${advisor}@example.com`, advisor_role: 'advisor', ...o,
+  is_active: true, note: null, advisor_name: `Mentor ${advisor}`, advisor_email: `m${advisor}@example.com`, advisor_role: 'advisor', advisor_is_active: true, ...o,
 });
 // R7 — a cycle.
 const cycle = (id, year, month, status, appStatus = 'open', windows = []) => ({
@@ -265,6 +265,18 @@ test('S-CNT: distinct current Advisors on open rows; a demoted holder and an end
   assert.equal(mentorFigures(ready({ items: many(CAPS.assignments, (i) => assignment(i, i, 1)) }), ready({ cycles: [] })).capped, true);
   assert.equal(mentorFigures(failed(), ready({ cycles: CYCLES })).state, 'unreadable');
   assert.equal(mentorFigures(ready({ items: ROWS }), loading()).state, 'loading');
+});
+
+test('S-CNT and S-COV leave a deactivated account out (D960): it counts as no mentor and covers no cohort', () => {
+  const off = (row) => ({ ...row, advisor_is_active: false });
+  const f = mentorFigures(ready({ items: [off(ROWS[0]), ROWS[1], ...ROWS.slice(2)] }), ready({ cycles: CYCLES }));
+  assert.equal(f.mentors, 1, 'advisor 11 still holds cycle 2 on an active account');
+  const g = mentorFigures(ready({ items: ROWS.map((r) => (r.advisor_user_id === 11 ? off(r) : r)) }), ready({ cycles: CYCLES }));
+  const base = mentorFigures(ready({ items: ROWS }), ready({ cycles: CYCLES }));
+  assert.equal(g.mentors, 0, 'a deactivated Advisor is not an active mentor');
+  assert.equal(g.covered, base.covered - 2, 'the two cycles only advisor 11 covered are uncovered now');
+  assert.equal(mentorFigures(ready({ items: [{ ...ROWS[1], advisor_is_active: null }] }), ready({ cycles: [] })).mentors, 0,
+    'an account the Worker could not find is not counted either');
 });
 
 test('S-COV: scheduled and running cycles count, a postponed one is left out by name, a scheduled one with no windows counts', () => {
@@ -481,7 +493,7 @@ test('the catalogue for an Admin: the header, the three tiles, nine cards with t
     assert.equal(view.textOf('programs-card-spinout-lab-applications'), `Lab applications: ${NOT_READ_YET}Their read cannot yet tell a failure from none.`);
     assert.equal(view.textOf('programs-card-spinout-lab-needs'), '!Needs you 3', 'cohort applications and pending hosts');
     assert.match(view.textOf('programs-card-mentor-cohorts-figure'), /^1 mentor · 2 of 4 cohorts covered/);
-    assert.match(view.textOf('programs-card-mentor-cohorts-figure'), new RegExp(DEACTIVATED_LINE.replace('.', '\\.')));
+    assert.doesNotMatch(view.textOf('programs-card-mentor-cohorts-figure'), /not left out/, 'deactivated accounts are left out now (D960)');
     assert.equal(view.textOf('programs-card-mentor-cohorts-needs'), '!Needs you 4', 'two cohorts with no mentor and two open rows of a former Advisor');
     assert.equal(view.textOf('programs-card-refer-and-earn-figure'), '3 open referralsincluding those waiting on the member');
     assert.equal(view.textOf('programs-card-refer-and-earn-needs'), '!Needs you 3');
@@ -609,7 +621,7 @@ test('Mentor cohort access · Overview: S-CNT and S-COV tiles with their lines, 
     assert.match(view.textOf('programs-crumb'), /^Programs › Mentor cohort access$/);
     assert.equal(view.textOf('programs-facts'), 'Who: Advisors· Join: Assigned by an admin· Cycle: monthly cohorts of four weeks');
     assert.equal(view.textOf('programs-tile-mentors-value'), '1');
-    assert.match(view.textOf('programs-tile-mentors'), new RegExp(DEACTIVATED_LINE.replace('.', '\\.')));
+    assert.match(view.textOf('programs-tile-mentors'), new RegExp(ACTIVE_MENTORS_LINE.replace('.', '\\.')));
     assert.equal(view.textOf('programs-tile-covered-value'), '2 of 4');
     assert.match(view.textOf('programs-tile-covered'), /2 of 4 cohorts, scheduled or running/);
     assert.match(view.textOf('programs-tile-hidden'), /Not read here yetFounders’ choices are stored; no admin read counts them yet\./);

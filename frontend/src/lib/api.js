@@ -23,6 +23,7 @@ export * from './api/adminPayments.js';
 export * from './api/aiBudget.js';
 export * from './api/assistants.js';
 export * from './api/bankAccounts.js';
+export * from './api/billingAlerts.js';
 export * from './api/billingInvoices.js';
 export * from './api/capTableRecord.js';
 export * from './api/channelKeys.js';
@@ -38,6 +39,7 @@ export * from './api/creditRules.js';
 export * from './api/cycleValidate.js';
 export * from './api/cycleWrites.js';
 export * from './api/cycles.js';
+export * from './api/deckAssist.js';
 export * from './api/deckEditor.js';
 export * from './api/deckSources.js';
 export * from './api/developerKeys.js';
@@ -56,10 +58,12 @@ export * from './api/googleSignIn.js';
 export * from './api/helpCenter.js';
 export * from './api/insights.js';
 export * from './api/interviewSessions.js';
+export * from './api/labOperations.js';
 export * from './api/labReportShares.js';
 export * from './api/learning.js';
 export * from './api/licenceAccount.js';
 export * from './api/licenceFeeInvoices.js';
+export * from './api/licencePrograms.js';
 export * from './api/licenceRequests.js';
 export * from './api/licenceTerms.js';
 export * from './api/memberCredits.js';
@@ -75,6 +79,7 @@ export * from './api/partnerDealTypes.js';
 export * from './api/partnerProfiles.js';
 export * from './api/partnerSettlements.js';
 export * from './api/payments.js';
+export * from './api/personaSegments.js';
 export * from './api/productTesting.js';
 export * from './api/profile.js';
 export * from './api/programGrants.js';
@@ -5755,11 +5760,14 @@ export const events = {
 
 // Public (no-auth) event surface — feed, detail, register, invite response.
 export const eventsPublic = {
-  list: ({ limit = 20, offset = 0, type, from, to, q, past } = {}) => {
+  // D1032: `format` (virtual, in_person, hybrid) and `price` (free, paid); the reply carries an exact `total`.
+  list: ({ limit = 20, offset = 0, type, from, to, q, past, format, price } = {}) => {
     const qs = new URLSearchParams();
     qs.set('limit', String(limit));
     qs.set('offset', String(offset));
     if (type) qs.set('type', type);
+    if (format) qs.set('format', format);
+    if (price) qs.set('price', price);
     if (from) qs.set('from', from);
     if (to) qs.set('to', to);
     if (q) qs.set('q', q);

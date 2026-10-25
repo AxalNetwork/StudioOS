@@ -755,6 +755,11 @@ test('positions GET /:uid — related investor can read project detail (200)', a
       match: (s: string) => s.includes('from investor_dealroom_members') && s.includes('join deals'),
       results: [{ project_id: 10 }],
     },
+    // D1057: a position is read where the investor holds a confirmed commitment.
+    {
+      match: (s: string) => s.includes('from commitments') && s.includes("status = 'confirmed'"),
+      results: [{ project_id: 10 }],
+    },
   ]);
   const res = await positions.request('/proj-10', { headers: { Authorization: `Bearer ${token}` } }, env);
   assert.equal(res.status, 200);

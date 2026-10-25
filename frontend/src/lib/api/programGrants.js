@@ -14,8 +14,19 @@
 //   POST   /api/admin/program-grants/licences/:uid/:program/pause    { reason }
 //   POST   /api/admin/program-grants/licences/:uid/:program/resume   { reason }
 //   POST   /api/admin/program-grants/licences/:uid/:program/end      { reason }
-// A term nobody set is null and reads "Not recorded"; requests are part 2
-// (#2774), so `tiles.requests_waiting` is null with a reason, never 0.
+// A term nobody set is null and reads "Not recorded".
+// D983 (#2774, part 2): the studios' program requests and HQ's answer.
+// Worker: routes/admin_program_requests.ts over services/programRequests.ts.
+//   GET    /api/admin/program-grants/requests[?status=open|answered|declined|withdrawn]
+//            → { items: [{ uid, kind, asks_for, program_key, program_name, request, note, lane,
+//                          licence, status, created_at, due_at, sla, answer, answered_at, draft }], complete }
+//   POST   /api/admin/program-grants/requests/:uid/approve   { reason, terms? }   (terms on a grant only)
+//   POST   /api/admin/program-grants/requests/:uid/decline   { reason }
+// Both answers take the same bar and reason as a grant write. An approval
+// records a draft; Grant stays the write above. `tiles.requests_waiting` and
+// `series.requests_by_month` are read; null only when the requests could not be.
+// A studio raises one with `licenceRequestsApi.raise` (kinds program_grant,
+// program_terms_change, program_end; `request: { program, term?, asked? }`).
 import { request } from '../api.js';
 
 const enc = encodeURIComponent;
@@ -32,4 +43,7 @@ export const programGrantsApi = {
   pause: (uid, program, body) => request(`${at(uid, program)}/pause`, { method: 'POST', body: JSON.stringify(body || {}) }),
   resume: (uid, program, body) => request(`${at(uid, program)}/resume`, { method: 'POST', body: JSON.stringify(body || {}) }),
   end: (uid, program, body) => request(`${at(uid, program)}/end`, { method: 'POST', body: JSON.stringify(body || {}) }),
+  requests: (status) => request(`/admin/program-grants/requests${status ? `?status=${enc(status)}` : ''}`),
+  approveRequest: (uid, body) => request(`/admin/program-grants/requests/${enc(uid)}/approve`, { method: 'POST', body: JSON.stringify(body || {}) }),
+  declineRequest: (uid, body) => request(`/admin/program-grants/requests/${enc(uid)}/decline`, { method: 'POST', body: JSON.stringify(body || {}) }),
 };

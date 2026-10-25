@@ -173,7 +173,7 @@ export async function recordRenewalFailure(env: Env, invoice: Record<string, unk
 }
 
 /** Which member a Stripe subscription belongs to, across the four plan families. */
-async function subscriptionOwner(env: Env, subId: string): Promise<number | null> {
+export async function subscriptionOwner(env: Env, subId: string): Promise<number | null> {
   const u = await env.DB.prepare(
     'SELECT id FROM users WHERE stripe_subscription_id = ? OR investor_stripe_subscription_id = ? LIMIT 1',
   ).bind(subId, subId).first<{ id: number }>();
