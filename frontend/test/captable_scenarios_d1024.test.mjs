@@ -456,7 +456,7 @@ test('a scenario from Today: its inputs re-run from the record, results Modelled
     assert.equal(body.name, 'Seed · base case');
     assert.deepEqual(body.inputs.start, START, 'the run’s inputs, from the record');
     assert.equal(body.inputs.rounds[0].post_round_pool_pct, 15);
-    assert.match(v.text(v.by('captable-scenario-saved')), new RegExp(SAVED.replace(/\./g, '\\.')));
+    assert.ok(v.text(v.by('captable-scenario-saved')).includes(SAVED));
   } finally { await v.close(); }
 });
 
@@ -556,7 +556,7 @@ test('the model is read, never written: no Rename or Delete, and a line saying w
   const v = await mounted('/raise/cap-table/scenarios/m1?project_id=3');
   try {
     assert.match(v.text(v.by('captable-scenario-name')), /Cap table · model/);
-    assert.match(v.text(v.by('captable-scenario-model-locked')), new RegExp(MODEL_LOCKED.slice(0, 30)));
+    assert.ok(v.text(v.by('captable-scenario-model-locked')).includes(MODEL_LOCKED.slice(0, 30)));
     const ids = v.ids();
     assert.ok(ids.includes('captable-scenario-duplicate'), 'it can be copied into a scenario');
     assert.ok(!ids.includes('captable-scenario-rename') && !ids.includes('captable-scenario-delete'));
