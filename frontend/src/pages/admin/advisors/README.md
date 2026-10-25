@@ -18,7 +18,7 @@ Firm links, D923) forwards to the Firms tab with `?moved=firm-links`, in
 
 - `AdvisorsPartners.jsx` — the page inside `AdminBoardFrame` (its rail): the
   header, Overview's tiles, Needs you and the charts waiting, the Firms table,
-  and the Deck roster, which is today's `../AdminNetworkProfiles.jsx` embedded.
+  and the Deck roster, `../AdminNetworkProfiles.jsx` embedded.
 - `apModel.js` — pure. The address and tabs, the moved sentence, and the
   tiles, Needs you and the firms table from the reads, each `ready`,
   `loading`, `unreadable` or `notyet`.
@@ -28,6 +28,15 @@ Firm links, D923) forwards to the Firms tab with `?moved=firm-links`, in
   the result as a line on the page. Moved from Partner invitations (D952);
   its copy and helpers stay in `../partners/partnersDeskModel.js`.
 - `FirmLinksRedirect.jsx` — the old Firm links address.
+- `deckRosterModel.js` — pure (D980). The Deck roster's rules: shown and
+  hidden in the deck's order, each row's reach (D214's rule, held to the
+  Worker's `cloudflare-worker/src/services/decks/deckRoster.ts` by its test), moves and their
+  announcement, search and the Kind filter, the tiles, the slide preview, the
+  card's errors and payload, and each confirmation's words.
+- `DeckRosterDialogs.jsx` — the Deck roster's dialogs (D980): AP8's card (one
+  Save, the photo previewed and uploaded with it, the member-account link,
+  inline errors) and the Hide, Show, Archive and Restore confirmations. The
+  roster itself is `../AdminNetworkProfiles.jsx` (AP7).
 
 ## Rules
 

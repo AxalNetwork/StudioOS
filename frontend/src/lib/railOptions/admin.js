@@ -69,7 +69,7 @@ export const ADMIN_BOARDS = [
   { id: 'S26', section: 'Community', module: 'Jobs', route: '/admin/jobs', files: ['pages/admin/AdminJobsPage.jsx'], rail: FRAME, alias: 'S16' },
   { id: 'S27', section: 'Community', module: 'Communities', route: '/admin/circles', files: ['pages/admin/AdminCirclesPage.jsx'], rail: FRAME, alias: 'S17' },
   { id: 'S28', section: 'Community', module: 'Wellbeing experts', route: '/admin/wellbeing', files: ['pages/admin/consoles/WellbeingConsole.jsx'], rail: FRAME, host: CONSOLE_PAGES },
-  { id: 'S29', section: 'Community', module: 'Advisors and partners', route: '/admin/advisors-partners', files: ['pages/admin/AdminNetworkProfiles.jsx'], rail: FRAME, host: 'pages/admin/advisors/AdvisorsPartners.jsx' },
+  { id: 'S29', section: 'Community', module: 'Advisors and partners', route: '/admin/advisors-partners', files: ['pages/admin/AdminNetworkProfiles.jsx', 'pages/admin/advisors/DeckRosterDialogs.jsx'], rail: FRAME, host: 'pages/admin/advisors/AdvisorsPartners.jsx' },
   { id: 'S30', section: 'Community', module: 'Directory', route: '/admin/directory', files: ['pages/admin/consoles/DirectoryConsole.jsx'], rail: FRAME, host: CONSOLE_PAGES },
   { id: 'S31', section: 'Community', module: 'Partner invitations', route: '/admin/partner-invitations', files: ['pages/admin/PartnerInvitations.jsx'], rail: FRAME },
   { id: 'S32', section: 'Contracts', module: null, route: '/admin/contracts', files: [CONTRACTS], rail: CONTRACTS },
@@ -87,7 +87,7 @@ export const ADMIN_OPTIONS = [];
 export const ADMIN_QUIET_CONTROLS = [
   { page: 'S11', label: 'Upload signed NDA', file: 'pages/AdminDueDiligenceCasePage.jsx', anchor: 'accept="application/pdf,image/*"', why: 'Stores the reviewer\'s signed NDA; no model reads it.' },
   { page: 'S11', label: 'Generate report', file: 'pages/AdminDueDiligenceCasePage.jsx', anchor: 'await dd.generateReport(uid)', why: 'The Worker assembles the report from the case\'s recorded sections and findings (routes/dd.ts, POST /cases/:uid/report); no model writes it.' },
-  { page: 'S29', label: 'Upload photo', file: 'pages/admin/AdminNetworkProfiles.jsx', anchor: 'onChange={(e) => submitPhoto(e.target.files?.[0])}', why: 'Stores the profile photo; no model reads it.' },
+  { page: 'S29', label: 'Upload photo', file: 'pages/admin/advisors/DeckRosterDialogs.jsx', anchor: 'onChange={(e) => submitPhoto(e.target.files?.[0])}', why: 'Stores the profile photo; no model reads it.' },
 ];
 
 /** The options the rail lists on a board. */
