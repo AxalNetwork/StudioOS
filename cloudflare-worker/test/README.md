@@ -70,6 +70,11 @@ Every external fetch is forbidden; no Mercury call reaches a provider.
 
 D642: `usage_storage_d642.test.ts` exercises caller-only storage aggregates through JWT/Hono and the canonical SQLite schema (including migration 323), covering company independence, unknown sizes, partial failures, precision and recording attribution.
 
+D1167: `storage_plans_d1167.test.ts` pins the owner's storage table, resolves
+effective plans and recorded persona/LP entitlements against canonical SQLite
+DDL, and holds the anonymous public plans projection and general catalogue to
+the same allowances, with read failures and privacy/read-only counterexamples.
+
 D691: `compliance_events_columns_d691.test.ts` builds the full baseline and every
 post-cutoff migration with foreign keys on. It checks Grow obligation writes,
 API state mappings, seeded compliance events and calendar reads, and bans SQL

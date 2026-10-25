@@ -95,7 +95,7 @@ test('the guard: only /admin routes and only non-admin members, after a pending 
   const guard = APP.slice(APP.indexOf('function RoleGuard('), APP.indexOf('function AuthScreen('));
   const pending = guard.indexOf('const pendingTarget = isImpersonating ? impersonationTargetRef?.current : null;');
   const boundary = guard.indexOf('const boundary = !pendingTarget && ROUTE_BOUNDARIES.find(');
-  const drawn = guard.indexOf('if (boundary) return <boundary.Panel home={defaultPath} />;');
+  const drawn = guard.indexOf('if (boundary) return <boundary.Panel home={defaultPath} impersonating={!!isImpersonating} />;');
   const refused = guard.indexOf('if (adminRefusal(');
   const redirect = guard.indexOf('return <Navigate to={defaultPath} replace />;');
   assert.ok(pending > 0 && pending < boundary && boundary < drawn && drawn < refused && refused < redirect, 'the handoff is read first, and the card is drawn instead of the redirect');
