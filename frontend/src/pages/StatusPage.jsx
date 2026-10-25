@@ -2,14 +2,20 @@
  * Task #4 (ID) — Public /status page.
  *
  * Reads `GET /api/public/status` for service health + admin-written
- * incidents. The endpoint also returns 90 days of per-service uptime
- * cells so we can paint the green/yellow/red strip per row.
+ * incidents. The endpoint also returns 90 days of per-service history cells
+ * so we can paint the strip per row.
+ *
+ * D1076 (#2968): nothing measures uptime, so the page never prints a
+ * percentage. A day is "No incident reported", an incident's day, or "Not
+ * recorded" (before the service's records began), and each row counts the
+ * days with no incident reported since then.
  */
 import React, { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { ArrowLeft, CheckCircle, AlertTriangle, XCircle, Clock, Loader2 } from 'lucide-react';
 import { request } from '../lib/api';
 import { overallStatus } from '../lib/statusOverall';
+import { DAY_WORDS, recordLine } from '../lib/statusHistory';
 import { usePageMeta } from '../lib/seo';
 
 const STATUS_PILL = {
@@ -25,17 +31,18 @@ const SEVERITY_PILL = {
   critical: { label: 'Critical', color: 'bg-red-100 text-red-800' },
 };
 
-function UptimeStrip({ cells }) {
+function HistoryStrip({ cells }) {
   // 90 cells (one per day); each cell is { day: 'YYYY-MM-DD', status }
   return (
-    <div className="flex gap-[2px] items-end" aria-label="90-day uptime history" role="img">
+    <div className="flex gap-[2px] items-end" aria-label="90-day incident history" role="img">
       {(cells || []).map((c, i) => {
         const cls =
-          c.status === 'operational' ? 'bg-emerald-500'
+          c.status === 'no_incident' ? 'bg-emerald-500'
           : c.status === 'degraded' ? 'bg-amber-400'
           : c.status === 'down' ? 'bg-red-500'
-          : 'bg-gray-200';
-        return <span key={i} title={`${c.day}: ${c.status}`} className={`inline-block w-[3px] h-6 rounded-sm ${cls}`} />;
+          : c.status === 'not_recorded' ? 'bg-transparent border border-dashed border-gray-300 dark:border-gray-700'
+          : 'bg-gray-200 dark:bg-gray-700';
+        return <span key={i} data-day={c.status} title={`${c.day}: ${DAY_WORDS[c.status] || DAY_WORDS.unknown}`} className={`inline-block w-[3px] h-6 rounded-sm ${cls}`} />;
       })}
     </div>
   );
@@ -48,7 +55,7 @@ export default function StatusPage() {
 
   usePageMeta({
     title: 'System status',
-    description: 'Real-time health of Axal VC StudioOS services, plus a 90-day uptime history.',
+    description: 'Real-time health of Axal VC StudioOS services, and the days with no incident reported since records began.',
     path: '/status',
   });
 
@@ -109,7 +116,7 @@ export default function StatusPage() {
           <>
             <section aria-labelledby="services" className="mb-10">
               <h2 id="services" className="text-lg font-semibold text-gray-900 mb-3 dark:text-gray-100">Services</h2>
-              <p className="text-sm text-gray-600 dark:text-gray-400 mb-3">The summary covers monitored services. Other entries show availability separately; “Not monitored” is not a health check. History is based on recorded incidents.</p>
+              <p className="text-sm text-gray-600 dark:text-gray-400 mb-3">The summary covers monitored services. Other entries show availability separately; “Not monitored” is not a health check. History counts reported incidents only: a day with no incident reported is not a measured check, and days before records began are Not recorded.</p>
               <div className="rounded-2xl border border-gray-200 bg-white divide-y divide-gray-100 dark:border-gray-800 dark:bg-gray-900" data-card>
                 {services.map((s) => {
                   const pill = s.monitoring === 'not_monitored' && s.status === 'unknown'
@@ -122,12 +129,9 @@ export default function StatusPage() {
                         <div className="font-medium text-gray-900 dark:text-gray-100">{s.name}</div>
                         {s.availability && <div className="text-xs text-gray-600 dark:text-gray-400 mt-0.5">{s.availability}</div>}
                         {s.note && <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">{s.note}</p>}
-                        {s.monitoring === 'not_monitored' && <div className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">Uptime not measured</div>}
-                        {typeof s.uptime_pct === 'number' && (
-                          <div className="text-xs text-gray-500 mt-0.5">{s.uptime_pct.toFixed(2)}% uptime · 90 days</div>
-                        )}
+                        {recordLine(s) && <div data-testid="status-record-line" className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">{recordLine(s)}</div>}
                       </div>
-                      <UptimeStrip cells={s.history} />
+                      <HistoryStrip cells={s.history} />
                       <span className={`inline-flex items-center gap-1.5 text-xs font-semibold ${pill.color}`}>
                         <Icon size={14} aria-hidden="true" /> {pill.label}
                       </span>

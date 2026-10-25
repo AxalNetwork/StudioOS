@@ -694,7 +694,7 @@ test('8. Trust lists only what /trust/me returns: no 83(b) row, and the pill is 
   assert.doesNotMatch(text(markup), /\bPartial\b/);
   // A failed matrix is Unreadable, never an empty list.
   const failed = text(html(h(TrustPhoneView, { status: 'unreadable' })));
-  assert.match(failed, /Your obligations could not be read\./);
+  assert.match(failed, /Unreadable.*Your requirements could not be read\./);
   assert.doesNotMatch(failed, /No obligations outstanding/);
   assert.match(read('frontend/src/pages/TrustCenterPage.jsx'), /setMatrix\(\{ obligations: \[\], role, failed: true \}\)/);
 });

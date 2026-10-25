@@ -10,10 +10,7 @@ import { mayReadTrustScores } from '../services/scoreAccess';
  *   POST   /api/trust/intro/request    — investor → founder; auto-issues NDA
  *   GET    /api/trust/intro/status     — pair NDA status check
  *   POST   /api/trust/obligation/:key/start
- *                                      — caller asserts they're starting
- *                                        evidence-collection (e.g. clicks
- *                                        "Sign Founder NDA" → flips status
- *                                        from 'pending' to 'in_review')
+ *                                      — retired: authenticated 410; no write
  *   GET    /api/trust/sanctions        — admin-only (stub for X-1)
  *
  * The 3-way NDA flow lives in `services/trust.ts` + reuses the existing
@@ -34,7 +31,6 @@ import {
   trustScoreOf,
   recordAndCompareScore,
   envelopeHistory,
-  type ObligationKey,
 } from '../services/trust';
 import { getSQL } from '../db';
 import { companyKybScope } from '../services/tenancyScope';
@@ -531,26 +527,14 @@ trust.get('/intro/status', async (c) => {
 });
 
 // ---------------------------------------------------------------------------
-// POST /obligation/:key/start — caller flips an obligation pending->in_review.
+// POST /obligation/:key/start — retired (D1073). A click is not evidence.
 // ---------------------------------------------------------------------------
-const VALID_KEYS: ObligationKey[] = [
-  'tos_v1','privacy_v1','founder_nda_v1','investor_nda_v1','mentor_nda_v1',
-  'mentor_disclaimer_v1','kyc_v1','accreditation_v1','kyb_v1','partner_msa_v1',
-];
 trust.post('/obligation/:key/start', async (c) => {
-  const user = await requireAuth(c);
-  await ensureTrustSchema(c.env);
-  const key = c.req.param('key');
-  if (!VALID_KEYS.includes(key as ObligationKey)) {
-    return c.json({ error: 'unknown_obligation_key' }, 400);
-  }
-  // Only valid transitions: pending -> in_review. Don't clobber satisfied.
-  await c.env.DB.prepare(
-    `UPDATE legal_obligations
-        SET status = 'in_review', updated_at = CURRENT_TIMESTAMP
-      WHERE user_id = ? AND obligation_key = ? AND status = 'pending'`,
-  ).bind(user.id, key).run();
-  return c.json({ ok: true });
+  await requireAuth(c);
+  return refuse(c, 410, {
+    code: 'obligation_start_retired',
+    message: 'Starting a requirement here is no longer supported. Open its signing or verification flow; the status changes after a real submission.',
+  });
 });
 
 // ---------------------------------------------------------------------------

@@ -170,7 +170,7 @@ async function render(url, { user = SUPER } = {}) {
   const root = createRoot(container);
   await act(async () => {
     root.render(h(MemoryRouter, { initialEntries: [url] }, h(AuthProvider, null,
-      h(Routes, null, ['', '/stripe', '/log'].map((p) => h(Route, { key: p, path: `/admin/platform/payments${p}`, element: h(Payments) }))))));
+      h(Routes, null, ['', '/stripe', '/log', '/products/:id'].map((p) => h(Route, { key: p, path: `/admin/platform/payments${p}`, element: h(Payments) }))))));
   });
   await settle();
   const walk = (n) => [n, ...(n.childNodes || []).flatMap(walk)];
@@ -272,9 +272,8 @@ test('the step-up: a write the Worker answers step_up_required is sent again onc
     if (ev.type === 'studioos:step_up_required') { asked.push(ev.detail.ttlMinutes); ev.detail.ack = true; setTimeout(() => ev.detail.done(answer), 0); }
     return true;
   };
-  const v = await render('/admin/platform/payments');
+  const v = await render('/admin/platform/payments/products/prod_b');
   try {
-    await v.click('pay-row-open-prod_b');
     await v.click('pay-act-archive');
     assert.match(v.of('pay-archive-product-effects'), /37 members on it keep their plan until they cancel\./);
     await v.change('pay-archive-product-reason', 'Replaced by the 2027 plan');
@@ -287,7 +286,6 @@ test('the step-up: a write the Worker answers step_up_required is sent again onc
     assert.match(v.of('pay-saved'), /Founder Validate \+ Build was archived/);
     // Cancelled: the original refusal, in words, and the dialog stays.
     first = true; answer = false;
-    await v.click('pay-row-open-prod_b');
     await v.click('pay-act-archive');
     await v.change('pay-archive-product-reason', 'Replaced by the 2027 plan');
     await v.submit('pay-archive-product-form');
@@ -298,11 +296,11 @@ test('the step-up: a write the Worker answers step_up_required is sent again onc
 
 test('Add a price: the billing, the preview with allowance and saving, and the body the Worker takes', async () => {
   const s = stub();
-  const v = await render('/admin/platform/payments');
+  const v = await render('/admin/platform/payments/products/prod_b');
   try {
-    await v.click('pay-row-open-prod_b');
-    assert.match(v.of('pay-product'), /Add a price.*Edit details.*Archive product/s);
+    assert.match(v.of('pay-product-actions'), /Add a price.*Edit details.*Archive product/s);
     await v.click('pay-act-add-price');
+    assert.ok(!v.has('pay-product'), 'the lightbox stayed open under the dialog');
     await v.change('pay-add-price-amount', '204.00');
     await v.click('pay-add-price-year');
     assert.match(v.of('pay-add-price-preview'), /\$204\.00 \/ year · AI allowance \$4\.25 a month · saves 15% against monthly\./);
@@ -310,14 +308,14 @@ test('Add a price: the billing, the preview with allowance and saving, and the b
     await v.submit('pay-add-price-form');
     assert.deepEqual(s.writes().at(-1), { method: 'POST', path: '/api/admin/catalog/products/prod_b/prices', body: { currency: 'usd', unit_amount: 20400, type: 'recurring', interval: 'year', reason: 'Yearly price' } });
     assert.match(v.of('pay-saved'), /The price was added to Founder Validate \+ Build/);
+    assert.ok(v.has('pay-product'), 'the product\'s address no longer opens it after the dialog');
   } finally { await v.unmount(); s.restore(); }
 });
 
 test('Change a price: part 2\'s route, the members who keep the old one, ten characters of reason, and a refusal kept', async () => {
   const s = stub({ 'POST /api/admin/catalog/prices/p1/change': () => json({ error: 'price_change_rolled_back', message: 'The old price could not be archived, so the new one was archived again. The old price is still the price.' }, 502) });
-  const v = await render('/admin/platform/payments');
+  const v = await render('/admin/platform/payments/products/prod_b');
   try {
-    await v.click('pay-row-open-prod_b');
     await v.click('pay-act-change-p1');
     assert.match(v.of('pay-change-price'), /Stripe never edits a price\. This adds the new price and archives the old one\..*Old price.*20\.00 USD \/ month/s);
     await v.change('pay-change-price-amount', '24.00');
@@ -339,9 +337,8 @@ test('Change a price: part 2\'s route, the members who keep the old one, ten cha
 
 test('the members read failing says the count was not taken, never "0 members"', async () => {
   const s = stub({ 'GET /api/admin/catalog/members': () => json({ error: 'members_unreadable', message: 'down' }, 502) });
-  const v = await render('/admin/platform/payments');
+  const v = await render('/admin/platform/payments/products/prod_b');
   try {
-    await v.click('pay-row-open-prod_b');
     await v.click('pay-act-change-p1');
     assert.match(v.of('pay-change-price-effects'), /The members on it could not be counted; they keep the old price\./);
     assert.doesNotMatch(v.of('pay-change-price-effects'), /\b0 members/);
@@ -350,9 +347,8 @@ test('the members read failing says the count was not taken, never "0 members"',
 
 test('Edit details keeps the metadata the plan is read from, and never sends an empty description', async () => {
   const s = stub();
-  const v = await render('/admin/platform/payments');
+  const v = await render('/admin/platform/payments/products/prod_b');
   try {
-    await v.click('pay-row-open-prod_b');
     await v.click('pay-act-edit');
     assert.equal(v.props('pay-edit-product-send').disabled, true, 'saved with nothing changed');
     await v.change('pay-edit-product-name', 'Validate + Build');
@@ -364,13 +360,21 @@ test('Edit details keeps the metadata the plan is read from, and never sends an 
 
 test('a token pack offers no change here, and anyone but the Super Admin is told who can', async () => {
   const s = stub({ 'GET /api/auth/me': () => json({ id: 2, role: 'admin', is_super_admin: 0 }) });
-  const v = await render('/admin/platform/payments', { user: { id: 2, role: 'admin', is_super_admin: 0 } });
+  const v = await render('/admin/platform/payments/products/prod_b', { user: { id: 2, role: 'admin', is_super_admin: 0 } });
   try {
     assert.ok(!v.has('pay-new-open'));
     assert.match(v.of('pay-new-holder'), /Only the Super Admin can change payments/);
-    await v.click('pay-row-open-prod_b');
     assert.ok(!v.has('pay-product-actions'));
     assert.ok(!v.has('pay-act-change-p1'));
+  } finally { await v.unmount(); s.restore(); }
+});
+
+test('the storefront\'s door opens nothing for anyone but the Super Admin', async () => {
+  const s = stub({ 'GET /api/auth/me': () => json({ id: 2, role: 'admin', is_super_admin: 0 }) });
+  const v = await render('/admin/platform/payments?new=product', { user: { id: 2, role: 'admin', is_super_admin: 0 } });
+  try {
+    assert.ok(!v.has('pay-new'), 'New product opened for someone the server would refuse');
+    assert.match(v.of('pay-new-holder'), /Only the Super Admin can change payments/);
   } finally { await v.unmount(); s.restore(); }
 });
 
