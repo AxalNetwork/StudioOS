@@ -2933,6 +2933,8 @@ function AppInner() {
       <Route path="/admin/platform/payments" element={guard(['admin'], hqOnly(<Payments />))} />
       <Route path="/admin/platform/payments/stripe" element={guard(['admin'], hqOnly(<Payments />))} />
       <Route path="/admin/platform/payments/log" element={guard(['admin'], hqOnly(<Payments />))} />
+      {/* D1012 (#2831): one product, PAY2's lightbox over Catalogue, at its own address. */}
+      <Route path="/admin/platform/payments/products/:id" element={guard(['admin'], hqOnly(<Payments />))} />
       <Route path="/admin/platform/meeting-bots" element={guard(['admin'], hqOnly(<HqMeetingBotsPage />))} />
       <Route path="/admin/platform/topology" element={guard(['admin'], hqOnly(<HqPlatformTopologyPage />))} />
       <Route path="/admin/platform/allowances" element={guard(['admin'], hqOnly(<HqPlatformAllowancesPage />))} />

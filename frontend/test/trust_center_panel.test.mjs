@@ -81,7 +81,7 @@ test('the three bands are drawn in the canvas\'s order and cover 0..100', () => 
 
 test('pending waits on the READER, not on us — the whole reason waitingOn exists', () => {
   // `legal_obligations` has no `not_started`: `pending` IS the untouched
-  // state, and POST /obligation/:key/start moves it to `in_review`. The page
+  // state. D1073 retires the synthetic start transition. The page
   // first split on STATUS_TONE, where `pending` is amber `prog`, and so told
   // a reader with three untouched obligations "3 in progress — nothing needs
   // action from you."
@@ -99,13 +99,8 @@ test('pending waits on the READER, not on us — the whole reason waitingOn exis
     'three untouched obligations are being reported as requiring nothing of the reader');
 });
 
-test('the worker\'s premise still holds: start() moves pending, it does not clear it', () => {
-  // If this transition is ever rewritten so `pending` means "submitted",
-  // the classification above is wrong and this test is where you find out.
-  const worker = read('cloudflare-worker/src/routes/trust.ts');
-  assert.match(worker, /SET status = 'in_review'[\s\S]{0,200}?AND status = 'pending'/,
-    "POST /obligation/:key/start no longer reads pending as the untouched state");
-});
+// D1073 replaces the old transition-source pin with mounted, real-SQLite
+// retirement/no-write/auth tests in trust_start_retired_d1073.test.ts.
 
 test('every status the WORKER writes is classified, and settled means settled', () => {
   // Same parse as the contract test's tone check, for the same reason: a

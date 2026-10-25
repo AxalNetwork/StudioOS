@@ -644,12 +644,24 @@ type ServiceHealth = {
   name: string;
   match?: string;
   status: 'operational' | 'degraded' | 'down' | 'unknown';
-  uptime_pct?: number | null;
   monitoring?: 'not_monitored';
   availability?: string;
   note?: string;
   history?: Array<{ day: string; status: string }>;
 };
+
+/**
+ * D1076 (#2968) — the day incident records began, per service. A day before it
+ * is `not_recorded`: nothing says whether that day had an incident, so it is
+ * never drawn as a good day. Nothing in the product enters an incident yet
+ * (`POST /status/incidents` has no caller, D202), so the page counts "days with
+ * no incident reported", never a percentage of uptime (owner question 7, A).
+ * UNVERIFIED: the date is D1076's; if incidents were kept before it, the owner
+ * moves it back here.
+ */
+export const STATUS_RECORDS_SINCE = '2026-10-25';
+const RECORDS_SINCE: Record<string, string> = {};
+export const recordsSinceOf = (name: string) => RECORDS_SINCE[name] ?? STATUS_RECORDS_SINCE;
 
 function todayUTC(): string {
   return new Date().toISOString().slice(0, 10);
@@ -810,9 +822,10 @@ publicRoutes.get('/status', async (c) => {
     updates: updateMap.get(r.id) || [],
   }));
 
-  // Per-service 90-day history derived from incidents that name the service.
-  // We mark every day in the window operational by default and downgrade based
-  // on active incidents touching that service.
+  // Per-service 90-day history from the incidents that name the service (D1076).
+  // A day before the service's records began is `not_recorded`; a recorded day
+  // with no incident is `no_incident`, never "operational", because no check
+  // measured it. An incident paints its days either way: it is a record.
   const today = todayUTC();
   const days: string[] = [];
   for (let i = 89; i >= 0; i--) days.push(daysBefore(i));
@@ -829,8 +842,9 @@ publicRoutes.get('/status', async (c) => {
 
   const enriched = services.map(({ match, ...svc }) => {
     const slug = `${svc.name} ${match || ''}`.toLowerCase();
+    const since = svc.monitoring === 'not_monitored' ? null : recordsSinceOf(svc.name);
     const cells = days.map((day) => {
-      let status: ServiceHealth['status'] = svc.monitoring === 'not_monitored' ? 'unknown' : 'operational';
+      let status: string = since === null ? 'unknown' : day < since ? 'not_recorded' : 'no_incident';
       for (const inc of incidents) {
         const touches = !inc.affected_services?.length
           || inc.affected_services.some((s: string) => slug.includes(String(s).toLowerCase()));
@@ -850,7 +864,7 @@ publicRoutes.get('/status', async (c) => {
       }
       return { day, status };
     });
-    const opCount = cells.filter((c) => c.status === 'operational').length;
+    const recorded = since === null ? null : cells.filter((c) => c.day >= since).length;
     // A resolved incident stays in today's history but must not keep today's
     // live state down after recovery.
     const activeIncidents = incidents.filter((inc) => inc.status !== 'resolved'
@@ -859,7 +873,12 @@ publicRoutes.get('/status', async (c) => {
     const incidentStatus = activeIncidents.some((inc) => inc.severity === 'critical') ? 'down'
       : activeIncidents.length ? 'degraded' : null;
     const status = svc.status === 'down' || incidentStatus === 'down' ? 'down' : incidentStatus ?? svc.status;
-    return { ...svc, status, history: cells, uptime_pct: svc.monitoring === 'not_monitored' ? null : (opCount / cells.length) * 100 };
+    return {
+      ...svc, status, history: cells,
+      records_since: since,
+      days_recorded: recorded,
+      days_without_incident: since === null ? null : cells.filter((c) => c.status === 'no_incident').length,
+    };
   });
 
   return c.json({ services: enriched, incidents });
