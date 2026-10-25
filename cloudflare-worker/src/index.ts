@@ -171,6 +171,7 @@ import dashboard from './routes/dashboard';
 import matches from './routes/matches';
 import settings from './routes/settings';
 import personas from './routes/personas';
+import personaSegments from './routes/persona_segments';
 import onboarding from './routes/onboarding';
 // Task #6 (IF) — per-role onboarding checklist + product-tour tracking.
 import onboardingChecklist from './routes/onboarding_checklist';
@@ -1329,6 +1330,8 @@ app.route('/api/integrations', integrations);
 // D652 — the Worker AI rail's conversations and their connectors (#1464).
 app.route('/api/eadwyn', eadwynRoutes);
 app.route('/api/crunchbase', crunchbaseRoutes);
+// D1000 (#2815): the segment profiles, before the personas routes.
+app.route('/api/personas/segments', personaSegments);
 app.route('/api/personas', personas);
 app.route('/api/notifications', notificationsRoutes);
 app.route('/api/linkedin', linkedinRoutes);
