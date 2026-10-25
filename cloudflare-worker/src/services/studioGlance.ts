@@ -64,7 +64,8 @@ import { readBranchTemplateCopy } from '../routes/branch_templates';
 import { readBranchBenchmarks } from '../routes/branch_insights';
 import { listTemplates } from './legalTemplateStore';
 import { queuePressure } from './branchHome';
-import { NOT_LANED } from './approvalSources';
+import { NOT_COUNTED_YET, NOT_LANED, SUB_COUNTS_NOT_YET } from './approvalSources';
+import { hqLanes } from './hqApprovalSources';
 import { ticketBacklog } from './supportQueues';
 import { ACTIVE_ACCOUNT_BASIS, loadBranchWeeklyActives, weekAxis } from './activeAccounts';
 
@@ -207,6 +208,23 @@ export function hqApprovals(pressure: Awaited<ReturnType<typeof queuePressure>>[
     unreadable,
     no_queue: NOT_LANED.map((n) => ({ label: n.label, reason: n.reason })),
     not_applicable: [{ label: 'Content to HQ', reason: CONTENT_TO_HQ_REASON }],
+    // D1041 — the canvas's lanes and sub-counts no store can answer yet.
+    not_counted: NOT_COUNTED_YET,
+    sub_counts_not_yet: SUB_COUNTS_NOT_YET,
+  };
+}
+
+/**
+ * D1041 — HQ decides (APR9), for a Super Admin only. The lanes are HQ's own
+ * stores (`hqApprovalSources.ts`); their total is apart from `pending_total`,
+ * which stays the lanes every studio has. A failed lane is `count: null` with
+ * the reason, as above.
+ */
+async function hqDecides(env: Env, now: number) {
+  const hq = await hqLanes(env, now);
+  return {
+    ...hq,
+    lanes: hq.lanes.map((l) => (l.count === null ? { ...l, reason: LANE_UNREADABLE } : l)),
   };
 }
 
@@ -290,22 +308,28 @@ async function branchLicenceTableReadable(env: Env): Promise<boolean> {
  * Seats, the share rate and the licence summary are not (U1), and neither is
  * the benchmark copy: HQ pushes it and keeps none.
  */
-async function hqGlance(env: Env, now: number) {
-  const [programme, agreements, templates, pressure, insights] = await Promise.all([
+async function hqGlance(env: Env, now: number, superAdmin: boolean) {
+  const [programme, agreements, templates, pressure, insights, decides] = await Promise.all([
     programmeClock(env, now),
     agreementsExpiring(env, now),
     hqLibrary(env),
     queuePressure(env, now),
     hqInsights(env, now),
+    superAdmin ? hqDecides(env, now) : Promise.resolve(null),
   ]);
   const exploringLane = pressure.lanes.find((l) => l.key === 'exploring');
-  const accounts = await hqAccounts(env, exploringLane ? exploringLane.count : null, now);
+  // D1039: the lane counts signed Explorers only; the Accounts tile still
+  // counts every account in the holding role, from the lane's `holding` figure.
+  const explorerFigures = exploringLane?.sub;
+  const holding = exploringLane?.count == null || !explorerFigures || !('holding' in explorerFigures)
+    ? null : explorerFigures.holding;
+  const accounts = await hqAccounts(env, holding, now);
   return {
     tier: 'hq' as const,
     branch: null,
     ...hqPerSubsidiary(),
     accounts,
-    approvals: hqApprovals(pressure.queue_pressure),
+    approvals: { ...hqApprovals(pressure.queue_pressure), ...(decides ? { hq_decides: decides } : {}) },
     programme: { recorded: true as const, ...programme },
     agreements: { recorded: true as const, ...agreements },
     templates,
@@ -381,8 +405,9 @@ async function branchGlance(env: Env, code: string, now: number) {
   };
 }
 
-export async function studioGlance(env: Env, now = Date.now()) {
+export async function studioGlance(env: Env, now = Date.now(), opts: { superAdmin?: boolean } = {}) {
   const code = branchOf(env);
-  if (!code) return hqGlance(env, now);
+  // D1041 — HQ decides is read only on HQ, and only for a Super Admin.
+  if (!code) return hqGlance(env, now, opts.superAdmin === true);
   return branchGlance(env, code, now);
 }

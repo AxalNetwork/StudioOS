@@ -20,7 +20,7 @@ export function PersonasPanel() {
   const load = async () => {
     setLoading(true);
     try { const r = await api.listPersonasAdmin(); setRows(r.users || []); setFailed(false); }
-    catch (e) { reportError('AdminPage:personas', e); setFailed(true); }
+    catch (e) { reportError('PersonasConsole:personas', e); setFailed(true); }
     finally { setLoading(false); }
   };
   useEffect(() => { load(); }, []);

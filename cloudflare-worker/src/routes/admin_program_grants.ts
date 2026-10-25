@@ -27,6 +27,12 @@
  * resume are refused there; pause and end stay open, as they do on every
  * licence. A terminated licence takes no grant, change or resume either.
  *
+ * THE BRANCH'S COPY (D984). Each grant write pushes the licence to its branch,
+ * which carries the grants (`branch_licence.program_grants_json`, migration
+ * 554), and answers `pushed` as a terms save does; a push that does not land
+ * is retried (D272). A defaults change pushes nothing: it reaches each branch
+ * with that licence's next push.
+ *
  * A D1 failure is a 5xx through `mapError`, never an empty list.
  */
 import { Hono } from 'hono';
@@ -34,6 +40,7 @@ import type { Env } from '../types';
 import { requireSuperAdmin, requireSuperAdminWriteBar } from '../auth';
 import { mapError, newUid, nowIso } from './_t13t14t15_helpers';
 import { logAdminAction } from '../services/adminAudit';
+import { pushLicenceToBranch } from '../services/licencePush';
 import {
   DEFAULT_KEYS, TERM_KEYS, presentGrant, programOf, readDefaults, readGrid, readHistory, readinessRefusal,
   termsDiff, termsOf, validateTerms, type LicenceLite, type Terms,
@@ -229,7 +236,8 @@ r.post('/licences/:uid/:program', async (c) => {
     const changed = termsDiff({}, Object.fromEntries(Object.entries(terms).filter(([, val]) => val != null)));
     await logProgram(c.env, licence.id, admin.id, { action: existing ? 'regranted' : 'granted', program_key: programKey, changed, reason }, reason);
     const saved = await grantRow(c.env, licence.id, programKey);
-    return c.json({ ok: true, grant: presentGrant(saved!, licence, today()) }, existing ? 200 : 201);
+    const pushed = await pushLicenceToBranch(c.env, licence.id);
+    return c.json({ ok: true, grant: presentGrant(saved!, licence, today()), pushed }, existing ? 200 : 201);
   } catch (e) { return mapError(c, e); }
 });
 
@@ -259,7 +267,8 @@ r.patch('/licences/:uid/:program', async (c) => {
     if (!res.meta?.changes) return refuse(c, 409, 'not_granted', 'This grant changed while you were changing it. Read it again.');
     await logProgram(c.env, licence.id, admin.id, { action: 'terms_changed', program_key: programKey, changed, note_changed: noteChanged, reason }, reason);
     const saved = await grantRow(c.env, licence.id, programKey);
-    return c.json({ ok: true, grant: presentGrant(saved!, licence, today()), changed });
+    const pushed = await pushLicenceToBranch(c.env, licence.id);
+    return c.json({ ok: true, grant: presentGrant(saved!, licence, today()), changed, pushed });
   } catch (e) { return mapError(c, e); }
 });
 
@@ -288,7 +297,8 @@ function transition(action: 'paused' | 'resumed' | 'ended', from: string[], to: 
         action, program_key: programKey, changed: [{ key: 'state', before: existing.state, after: to }], reason,
       }, reason);
       const saved = await grantRow(c.env, licence.id, programKey);
-      return c.json({ ok: true, grant: presentGrant(saved!, licence, today()) });
+      const pushed = await pushLicenceToBranch(c.env, licence.id);
+      return c.json({ ok: true, grant: presentGrant(saved!, licence, today()), pushed });
     } catch (e) { return mapError(c, e); }
   };
 }

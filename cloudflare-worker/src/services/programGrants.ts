@@ -200,7 +200,51 @@ export async function readDefaults(env: Env) {
   });
 }
 
-export const REQUESTS_NOT_READ = 'Program requests arrive with part 2 (#2774); none is read here yet.';
+export const REQUESTS_UNREADABLE = 'Program requests could not be read. That is not the same as none.';
+/** Requests by month: the current month, so far, and the five before it. */
+export const REQUEST_MONTHS = 6;
+
+/**
+ * D983: the program requests' tile and series, from `hq_escalations`. Waiting
+ * is every open program request, on HQ's lane and every branch's. By month,
+ * each month counts the requests sent in it, as they stand now: still
+ * waiting, approved, declined or withdrawn. A failed read is null with its
+ * reason, never 0.
+ */
+async function readRequestFigures(env: Env, today: string) {
+  try {
+    const open = await env.DB.prepare(
+      `SELECT COUNT(*) AS n FROM hq_escalations
+        WHERE status = 'open' AND kind IN ('program_grant', 'program_terms_change', 'program_end')`,
+    ).first<{ n: number }>();
+    const months: string[] = [];
+    const [y, m] = today.slice(0, 7).split('-').map(Number);
+    for (let i = REQUEST_MONTHS - 1; i >= 0; i -= 1) {
+      const d = new Date(Date.UTC(y, m - 1 - i, 1));
+      months.push(d.toISOString().slice(0, 7));
+    }
+    const rows = ((await env.DB.prepare(
+      `SELECT substr(created_at, 1, 7) AS month, status, COUNT(*) AS n FROM hq_escalations
+        WHERE kind IN ('program_grant', 'program_terms_change', 'program_end') AND substr(created_at, 1, 7) >= ?
+        GROUP BY 1, 2`,
+    ).bind(months[0]).all<{ month: string; status: string; n: number }>()).results || []);
+    const by = (month: string, status: string) => rows.filter((r) => r.month === month && r.status === status).reduce((t, r) => t + Number(r.n), 0);
+    return {
+      waiting: Number(open?.n ?? 0),
+      by_month: months.map((month) => ({
+        month,
+        so_far: month === months[months.length - 1],
+        waiting: by(month, 'open'),
+        approved: by(month, 'answered'),
+        declined: by(month, 'declined'),
+        withdrawn: by(month, 'withdrawn'),
+      })),
+    };
+  } catch (e) {
+    console.error('[program-grants] requests', (e as Error)?.message);
+    return null;
+  }
+}
 
 /**
  * HQ's grid (GR1): every licence that holds or may hold a territory, its
@@ -224,6 +268,7 @@ export async function readGrid(env: Env, today: string) {
   }
   const all = [...byLicence.values()].flat();
   const live = all.filter((g) => g.state !== 'ended');
+  const requests = await readRequestFigures(env, today);
   const horizon = addDays(today, 90);
   const fees = new Map<string, number>();
   let feesUnrecorded = 0;
@@ -242,8 +287,8 @@ export async function readGrid(env: Env, today: string) {
       in_force: all.filter((g) => g.in_force).length,
       granted: all.filter((g) => g.state === 'granted').length,
       paused: all.filter((g) => g.state === 'paused').length,
-      requests_waiting: null as number | null,
-      requests_waiting_reason: REQUESTS_NOT_READ,
+      requests_waiting: requests ? requests.waiting : null,
+      requests_waiting_reason: requests ? null : REQUESTS_UNREADABLE,
       ending_in_90_days: live.filter((g) => g.effective_end && g.effective_end >= today && g.effective_end <= horizon).length,
       fees_a_year: [...fees.entries()].sort(([a], [b]) => a.localeCompare(b)).map(([currency, cents]) => ({ currency, cents })),
       fees_not_recorded: feesUnrecorded,
@@ -254,8 +299,8 @@ export async function readGrid(env: Env, today: string) {
         granted: live.filter((g) => g.program_key === p.key && g.state === 'granted').length,
         paused: live.filter((g) => g.program_key === p.key && g.state === 'paused').length,
       })),
-      requests_by_month: null as unknown[] | null,
-      requests_by_month_reason: REQUESTS_NOT_READ,
+      requests_by_month: requests ? requests.by_month : null,
+      requests_by_month_reason: requests ? null : REQUESTS_UNREADABLE,
     },
   };
 }

@@ -26,6 +26,10 @@ const BASELINE = readFileSync(new URL('../sql/schema_baseline.sql', import.meta.
 const TABLES = [
   'users', 'lp_applications', 'referral_submissions', 'cohort_applicants',
   'partner_profiles', 'user_role_review', 'job_postings', 'events', 'admin_consultation_bookings', 'dd_cases',
+  // D1041 (#2889): the stores the canvas's new lanes read.
+  'company_profiles', 'comarketing_pitches', 'partners', 'experts', 'perks',
+  'referral_strategic_access', 'score_snapshots', 'projects', 'articles',
+  'esign_envelopes',
 ];
 const NOW = Date.parse('2026-09-24T12:00:00Z');
 const at = (h: number) => new Date(NOW - h * 3_600_000).toISOString().replace('T', ' ').slice(0, 19);
@@ -36,6 +40,9 @@ function db() {
   // D990: a Draft is read off migration 275's answer columns too.
   d.exec(readFileSync(new URL('../sql/migrations/275_partner_profiles_columns.sql', import.meta.url), 'utf8'));
   d.exec(readFileSync(new URL('../sql/migrations/546_events_review_columns.sql', import.meta.url), 'utf8'));
+  // D1041: the KYB and host stores are migrations 220's and 313's, above the baseline's cutoff.
+  d.exec(readFileSync(new URL('../sql/migrations/220_company_kyb.sql', import.meta.url), 'utf8'));
+  d.exec(readFileSync(new URL('../sql/migrations/313_lab_host_applications.sql', import.meta.url), 'utf8'));
   // NOT IN THE BASELINE: `spinout_moderation.ts` creates it lazily on first
   // use. Trimmed from that route's own DDL.
   d.exec(`CREATE TABLE spinout_moderation_cases (id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -55,8 +62,12 @@ function seed(d: DatabaseSync) {
       (1, 'kyc@x.test', 'Kay', 'founder', 'pending', '${at(90)}', '${at(900)}'),
       (2, 'done@x.test', 'Done', 'founder', 'approved', '${at(95)}', '${at(900)}'),
       (3, 'exp@x.test', '', 'exploring', 'not_started', NULL, '${at(500)}'),
-      (4, 'host@x.test', 'Hostess', 'partner', 'not_started', NULL, '${at(900)}');
-    INSERT INTO user_role_review (user_id, suggested_role, onboarded_at) VALUES (3, 'investor', '${at(40)}');
+      (4, 'host@x.test', 'Hostess', 'partner', 'not_started', NULL, '${at(900)}'),
+      (5, 'unsigned@x.test', 'Una', 'exploring', 'not_started', NULL, '${at(700)}');
+    -- D1039: Exploring holds an Explorer who signed (3); one with no agreement (5) is not waiting on an admin.
+    INSERT INTO esign_envelopes (id, envelope_uuid, user_id, document_type, document_title, document_body, body_sha256, status, created_by, completed_at)
+      VALUES (90, 'env-90', 3, 'binding_agreement', 'Binding agreement', 'Synthetic', 'synthetic', 'completed', 1, '${at(30)}');
+    INSERT INTO user_role_review (user_id, suggested_role, onboarded_at, binding_envelope_id) VALUES (3, 'investor', '${at(40)}', 90), (5, 'founder', '${at(80)}', NULL);
     INSERT INTO partner_profiles (email, persona, legal_entity_name, admin_status, created_at) VALUES
       ('orphan@x.test', 'consultant', 'Orphan LLC', 'pending', '${at(60)}'),
       ('ok@x.test', 'consultant', 'Verified Co', 'verified', '${at(600)}');
@@ -126,8 +137,8 @@ test('the four canvas lanes with no open state are named, not laned', () => {
     assert.ok(!laned.has(n.label), `${n.label} is both laned and not`);
     assert.ok(n.reason.length > 20, `${n.label} needs its reason`);
   }
-  // Four from D130 plus seven from S16: eleven lanes, four stated gaps.
-  assert.equal(APPROVAL_SOURCES.length, 11);
+  // Four from D130, seven from S16 and eight from D1041: nineteen lanes, four stated gaps.
+  assert.equal(APPROVAL_SOURCES.length, 19);
 });
 
 test('the route sends the gaps with the board', () => {

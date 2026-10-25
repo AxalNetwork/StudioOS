@@ -43,11 +43,18 @@ import { SLA_DUE_SOON_HOURS } from './slaWindow';
 import { MODERATION_AWAITING_SQL } from './moderationOpen';
 import { PRE_VERDICT_STATUSES } from './referralSubmissions';
 import { IS_WAITING_SQL } from './partnerProfiles';
+import type { HqLaneKey } from './hqApprovalSources';
 
 /** A lane's stable key. The UI orders by this list, so the order is the canvas's. */
 export type ApprovalLaneKey =
   | 'lp' | 'referrals' | 'cohort' | 'moderation'
-  | 'kyc' | 'partner_profiles' | 'exploring' | 'jobs' | 'events' | 'best_fit' | 'due_diligence';
+  | 'kyc' | 'partner_profiles' | 'exploring' | 'jobs' | 'events' | 'best_fit' | 'due_diligence'
+  // D1041 (#2889): the lanes D1038's canvas adds.
+  | 'kyb' | 'comarketing' | 'wellbeing_experts' | 'perk_listings' | 'strategic_access'
+  | 'lab_hosts' | 'score_flags' | 'articles'
+  // D1041: HQ's own lanes (`hqApprovalSources.ts`, `scope: 'hq'`), so HQ's
+  // inbox (D1040) reads, assigns and keeps history on them like any other.
+  | HqLaneKey;
 
 export type ApprovalSource = {
   key: ApprovalLaneKey;
@@ -81,12 +88,53 @@ export type ApprovalSource = {
    */
   rowsSql: string;
   /**
+   * D1041 — who a decision in this lane tells today, read off the decide
+   * route, in the canvas's words ("The member", "The partner", "The author",
+   * "Nobody yet"). An audit or activity row is not a notice, so a lane whose
+   * route writes only that says "Nobody yet".
+   */
+  notifies: string;
+  /**
+   * D1041 — the page that decides this lane, by its name on the canvas (APR2's
+   * "Decided on"), or null when nothing decides it yet; `undecidedReason` then
+   * says why.
+   */
+  decidedOn: string | null;
+  undecidedReason?: string;
+  /**
+   * D1041 — a second count inside the lane (APR2's line under it), literal like
+   * the others. It is read alone: a failed sub-count is null and leaves the
+   * lane's own count standing.
+   */
+  sub?: { label: string; countSql: string };
+  /**
+   * D1039: optional figures beside the lane's count, from one more literal
+   * query whose every column is a count. Each is reported under its column's
+   * name; a failed read of these leaves the lane's own count standing and
+   * reports them as null.
+   */
+  subSql?: string;
+  /**
    * D1040 (#2888): `'hq'` marks a lane that is HQ's own work (part 3's HQ
    * lanes, #2390). HQ's inbox shows it to a Super Admin only (`sourcesFor`).
-   * Every lane here today is a local queue, so none sets it.
+   * No lane in this file sets it: they are every studio's. D1041's HQ lanes
+   * (`hqApprovalSources.ts`) all do.
    */
   scope?: 'hq';
 };
+
+/**
+ * D1039 (#2887): an Explorer is ready for a profile once their binding
+ * agreement is signed, because only then can an admin assign the role
+ * (`routes/admin_exploring.ts`, POST /users/:id/assign-role). Signed means the
+ * envelope `user_role_review.binding_envelope_id` names is this account's own
+ * and `completed` — the route's own gate, in a subquery so the count has no
+ * join. The role is still `exploring` until it is assigned.
+ */
+const EXPLORER_SIGNED =
+  "u.role = 'exploring' AND EXISTS (SELECT 1 FROM esign_envelopes e WHERE e.id = "
+  + '(SELECT rr.binding_envelope_id FROM user_role_review rr WHERE rr.user_id = u.id) '
+  + "AND e.user_id = u.id AND LOWER(e.status) = 'completed')";
 
 /**
  * Referrals reuse the route's own set minus `'draft'` rather than restating it,
@@ -116,6 +164,8 @@ export const APPROVAL_SOURCES: readonly ApprovalSource[] = [
       + "'LP application · ' || a.fund_slug AS what, a.created_at AS created_at "
       + 'FROM lp_applications a LEFT JOIN users u ON u.id = a.user_id '
       + "WHERE a.status = 'pending' ORDER BY a.created_at ASC LIMIT ?",
+    notifies: 'Nobody yet',
+    decidedOn: 'LP applications',
   },
   {
     key: 'referrals',
@@ -135,6 +185,8 @@ export const APPROVAL_SOURCES: readonly ApprovalSource[] = [
       + 'FROM referral_submissions s LEFT JOIN users u ON u.id = s.referrer_user_id '
       + "WHERE s.status IN ('submitted', 'under_review', 'more_info_needed') "
       + 'ORDER BY s.created_at ASC LIMIT ?',
+    notifies: 'Nobody yet',
+    decidedOn: 'Refer & Earn › Queue',
   },
   {
     key: 'cohort',
@@ -146,6 +198,8 @@ export const APPROVAL_SOURCES: readonly ApprovalSource[] = [
       + "'Cohort application' AS what, ca.created_at AS created_at "
       + 'FROM cohort_applicants ca LEFT JOIN users u ON u.id = ca.user_id '
       + "WHERE ca.status = 'pending' ORDER BY ca.created_at ASC LIMIT ?",
+    notifies: 'The member',
+    decidedOn: 'Spin-Out Lab',
   },
   {
     key: 'moderation',
@@ -161,6 +215,8 @@ export const APPROVAL_SOURCES: readonly ApprovalSource[] = [
       + 'FROM spinout_moderation_cases m LEFT JOIN users u ON u.id = m.user_id WHERE '
       + MODERATION_AWAITING_SQL
       + ' ORDER BY m.created_at ASC LIMIT ?',
+    notifies: 'Nobody yet',
+    decidedOn: 'Spin-Out moderation',
   },
   // ── S16 (D215): the queues the live console kept on their own pages. ──
   //
@@ -178,6 +234,8 @@ export const APPROVAL_SOURCES: readonly ApprovalSource[] = [
       "SELECT u.id AS id, COALESCE(NULLIF(u.name, ''), u.email, 'account ' || u.id) AS who, "
       + "'KYC · ' || COALESCE(u.role, 'account') AS what, u.kyc_submitted_at AS created_at "
       + "FROM users u WHERE u.kyc_status = 'pending' ORDER BY u.kyc_submitted_at ASC LIMIT ?",
+    notifies: 'Nobody yet',
+    decidedOn: 'KYC & KYB',
   },
   {
     key: 'partner_profiles',
@@ -195,23 +253,34 @@ export const APPROVAL_SOURCES: readonly ApprovalSource[] = [
       + 'p.created_at AS created_at '
       + 'FROM partner_profiles p LEFT JOIN users u ON u.email = p.email '
       + 'WHERE ' + IS_WAITING_SQL + ' ORDER BY p.created_at ASC LIMIT ?',
+    notifies: 'The partner, when an agreement is sent',
+    decidedOn: 'Partner profiles',
   },
   {
     key: 'exploring',
     label: 'Exploring',
     // NO STATUS COLUMN: the queue is `role = 'exploring'` (admin_exploring.ts),
-    // left when an admin assigns the final role. Its age is the route's own,
-    // `COALESCE(onboarded_at, users.created_at)` — a subquery in the count so
-    // the count still has no join.
+    // left when an admin assigns the final role. D1039: the lane counts only
+    // those who signed (EXPLORER_SIGNED), because nobody else can be given a
+    // role. Its age is the route's own, `COALESCE(onboarded_at,
+    // users.created_at)` — a subquery in the count so the count has no join.
     countSql:
       'SELECT COUNT(*) AS n, MIN(COALESCE((SELECT rr.onboarded_at FROM user_role_review rr '
-      + "WHERE rr.user_id = u.id), u.created_at)) AS oldest FROM users u WHERE u.role = 'exploring'",
+      + 'WHERE rr.user_id = u.id), u.created_at)) AS oldest FROM users u WHERE ' + EXPLORER_SIGNED,
     rowsSql:
       "SELECT u.id AS id, COALESCE(NULLIF(u.name, ''), u.email, 'account ' || u.id) AS who, "
       + "'Exploring · ' || COALESCE(rr.suggested_role, 'no role suggested') AS what, "
       + 'COALESCE(rr.onboarded_at, u.created_at) AS created_at '
       + 'FROM users u LEFT JOIN user_role_review rr ON rr.user_id = u.id '
-      + "WHERE u.role = 'exploring' ORDER BY COALESCE(rr.onboarded_at, u.created_at) ASC LIMIT ?",
+      + 'WHERE ' + EXPLORER_SIGNED + ' ORDER BY COALESCE(rr.onboarded_at, u.created_at) ASC LIMIT ?',
+    // Beside it: every account in the holding role, and those who have not
+    // been sent an agreement yet (the lane's sub-count).
+    subSql:
+      'SELECT COUNT(*) AS holding, '
+      + 'COALESCE(SUM(CASE WHEN (SELECT rr.binding_envelope_id FROM user_role_review rr WHERE rr.user_id = u.id) IS NULL THEN 1 ELSE 0 END), 0) AS no_agreement_sent '
+      + "FROM users u WHERE u.role = 'exploring'",
+    notifies: 'Nobody yet',
+    decidedOn: 'Exploring board',
   },
   {
     key: 'jobs',
@@ -223,6 +292,8 @@ export const APPROVAL_SOURCES: readonly ApprovalSource[] = [
       + "'Job · ' || j.title AS what, j.created_at AS created_at "
       + 'FROM job_postings j LEFT JOIN users u ON u.id = j.host_user_id '
       + "WHERE j.status = 'pending_review' ORDER BY j.created_at ASC LIMIT ?",
+    notifies: 'The host',
+    decidedOn: 'Jobs',
   },
   {
     key: 'events',
@@ -234,6 +305,8 @@ export const APPROVAL_SOURCES: readonly ApprovalSource[] = [
       + "'Event · ' || e.title AS what, COALESCE(e.submitted_at, e.created_at) AS created_at "
       + 'FROM events e LEFT JOIN users u ON u.id = e.host_user_id '
       + "WHERE e.status = 'pending_review' ORDER BY julianday(COALESCE(e.submitted_at, e.created_at)) ASC LIMIT ?",
+    notifies: 'The host',
+    decidedOn: 'Events › Review',
   },
   {
     key: 'best_fit',
@@ -249,6 +322,8 @@ export const APPROVAL_SOURCES: readonly ApprovalSource[] = [
       + 'b.created_at AS created_at '
       + 'FROM admin_consultation_bookings b LEFT JOIN users u ON u.id = b.user_id '
       + "WHERE b.status = 'requested' ORDER BY b.created_at ASC LIMIT ?",
+    notifies: 'Nobody yet',
+    decidedOn: 'Best-Fit',
   },
   {
     key: 'due_diligence',
@@ -264,8 +339,172 @@ export const APPROVAL_SOURCES: readonly ApprovalSource[] = [
       + "'Due diligence · ' || d.subject_label AS what, d.created_at AS created_at "
       + 'FROM dd_cases d LEFT JOIN users u ON u.id = d.owner_user_id '
       + "WHERE d.status IN ('open', 'in_review') ORDER BY d.created_at ASC LIMIT ?",
+    notifies: 'Nobody yet',
+    decidedOn: 'Due diligence',
+  },
+  // ── D1041 (#2889): the lanes D1038's canvas adds, each in its store's own words. ──
+  {
+    key: 'kyb',
+    label: 'KYB',
+    // A BUSINESS, NOT A PERSON (the KYC split). `company_kyb_records`
+    // (migration 220) has no CHECK; its comment gives `users.kyc_status`'s
+    // vocabulary, and the one writer (`POST /api/trust/companies/kyb`) stores
+    // `in_review`. Both of the waiting words are counted, so neither writer's
+    // choice drops a submission off the board.
+    countSql:
+      'SELECT COUNT(*) AS n, MIN(datetime(COALESCE(submitted_at, created_at))) AS oldest FROM company_kyb_records '
+      + "WHERE status IN ('pending', 'in_review')",
+    rowsSql:
+      "SELECT k.id AS id, COALESCE(NULLIF(cp.company_name, ''), NULLIF(k.entity_name, ''), 'company ' || k.company_id) AS who, "
+      + "'KYB · ' || COALESCE(NULLIF(k.entity_name, ''), 'entity not named') AS what, "
+      + 'COALESCE(k.submitted_at, k.created_at) AS created_at '
+      + 'FROM company_kyb_records k LEFT JOIN company_profiles cp ON cp.id = k.company_id '
+      + "WHERE k.status IN ('pending', 'in_review') "
+      + 'ORDER BY julianday(COALESCE(k.submitted_at, k.created_at)) ASC LIMIT ?',
+    notifies: 'Nobody yet',
+    decidedOn: null,
+    undecidedReason: 'No admin route decides a business verification yet; the KYB record is written by the company and read by Trust.',
+  },
+  {
+    key: 'comarketing',
+    label: 'Co-marketing pitches',
+    // `comarketing_pitches` (baseline): proposed → approved | rejected |
+    // withdrawn; approved → published | withdrawn (`LEGAL_TRANSITIONS`).
+    countSql:
+      'SELECT COUNT(*) AS n, MIN(datetime(created_at)) AS oldest FROM comarketing_pitches WHERE status = \'proposed\'',
+    rowsSql:
+      "SELECT c.id AS id, COALESCE(NULLIF(pt.name, ''), NULLIF(u.name, ''), u.email, 'account ' || c.submitter_user_id) AS who, "
+      + "'Co-marketing pitch · ' || c.title AS what, c.created_at AS created_at "
+      + 'FROM comarketing_pitches c LEFT JOIN partners pt ON pt.id = c.partner_id '
+      + 'LEFT JOIN users u ON u.id = c.submitter_user_id '
+      + "WHERE c.status = 'proposed' ORDER BY julianday(c.created_at) ASC LIMIT ?",
+    notifies: 'Nobody yet',
+    decidedOn: 'Co-marketing',
+    // Only the publish transition stamps `published_at`, so this is every
+    // approved pitch still waiting to go out.
+    sub: {
+      label: 'approved, not published yet',
+      countSql: "SELECT COUNT(*) AS n FROM comarketing_pitches WHERE status = 'approved' AND published_at IS NULL",
+    },
+  },
+  {
+    key: 'wellbeing_experts',
+    label: 'Wellbeing experts',
+    // NO STATUS COLUMN: the directory's own bar (D1038 §2), which is "To
+    // verify": active, unverified, not hidden, at least 70% complete
+    // (`profile_completion_pct`, recomputed on every edit), and not a sample
+    // (`seed_` uids, services/wellbeing/seedExperts.ts). There is no declined
+    // state yet (part 5), so none is left out for it.
+    countSql:
+      'SELECT COUNT(*) AS n, MIN(datetime(created_at)) AS oldest FROM experts '
+      + 'WHERE is_active = 1 AND verified = 0 AND COALESCE(hidden_by_admin, 0) = 0 '
+      + "AND COALESCE(profile_completion_pct, 0) >= 70 AND substr(uid, 1, 5) <> 'seed_'",
+    rowsSql:
+      "SELECT e.id AS id, COALESCE(NULLIF(e.name, ''), NULLIF(u.name, ''), u.email, 'expert ' || e.id) AS who, "
+      + "'Wellbeing expert · ' || COALESCE(NULLIF(e.headline, ''), 'no headline') AS what, e.created_at AS created_at "
+      + 'FROM experts e LEFT JOIN users u ON u.id = e.user_id '
+      + 'WHERE e.is_active = 1 AND e.verified = 0 AND COALESCE(e.hidden_by_admin, 0) = 0 '
+      + "AND COALESCE(e.profile_completion_pct, 0) >= 70 AND substr(e.uid, 1, 5) <> 'seed_' "
+      + 'ORDER BY julianday(e.created_at) ASC LIMIT ?',
+    notifies: 'Nobody yet',
+    decidedOn: 'Wellbeing',
+  },
+  {
+    key: 'perk_listings',
+    label: 'Perk listings',
+    // `in_review` ONLY. A draft is the partner's own, still being written; the
+    // Perks queue's own read counts it too, which part 1 (#2887) corrects. The
+    // wait is from `updated_at`, which a submit stamps (the queue sorts by it).
+    countSql:
+      'SELECT COUNT(*) AS n, MIN(datetime(COALESCE(updated_at, created_at))) AS oldest FROM perks '
+      + "WHERE status = 'in_review'",
+    rowsSql:
+      "SELECT pk.id AS id, COALESCE(NULLIF(pk.partner_name, ''), NULLIF(u.name, ''), u.email, 'account ' || pk.partner_user_id, 'no partner') AS who, "
+      + "'Perk · ' || pk.offer AS what, COALESCE(pk.updated_at, pk.created_at) AS created_at "
+      + 'FROM perks pk LEFT JOIN users u ON u.id = pk.partner_user_id '
+      + "WHERE pk.status = 'in_review' ORDER BY julianday(COALESCE(pk.updated_at, pk.created_at)) ASC LIMIT ?",
+    notifies: 'Nobody yet',
+    decidedOn: 'Perks',
+  },
+  {
+    key: 'strategic_access',
+    label: 'Strategic referral access',
+    countSql:
+      'SELECT COUNT(*) AS n, MIN(datetime(created_at)) AS oldest FROM referral_strategic_access WHERE status = \'requested\'',
+    rowsSql:
+      "SELECT r.id AS id, COALESCE(NULLIF(u.name, ''), u.email, 'account ' || r.user_id) AS who, "
+      + "'Strategic referral access' AS what, r.created_at AS created_at "
+      + 'FROM referral_strategic_access r LEFT JOIN users u ON u.id = r.user_id '
+      + "WHERE r.status = 'requested' ORDER BY julianday(r.created_at) ASC LIMIT ?",
+    notifies: 'Nobody yet',
+    decidedOn: 'Refer & Earn',
+  },
+  {
+    key: 'lab_hosts',
+    label: 'Office-hours hosts',
+    countSql:
+      'SELECT COUNT(*) AS n, MIN(datetime(created_at)) AS oldest FROM lab_host_applications WHERE status = \'pending\'',
+    rowsSql:
+      "SELECT h.id AS id, COALESCE(NULLIF(u.name, ''), u.email, 'account ' || h.user_id) AS who, "
+      + "'Office-hours host · ' || h.host_kind AS what, h.created_at AS created_at "
+      + 'FROM lab_host_applications h LEFT JOIN users u ON u.id = h.user_id '
+      + "WHERE h.status = 'pending' ORDER BY julianday(h.created_at) ASC LIMIT ?",
+    notifies: 'Nobody yet',
+    decidedOn: 'Spin-Out Lab › Hosts',
+  },
+  {
+    key: 'score_flags',
+    label: 'Score sign-off',
+    // A flagged official score stays hidden from LPs until an admin signs it
+    // off. Sandbox runs are a founder's own practice and never reach an LP.
+    countSql:
+      'SELECT COUNT(*) AS n, MIN(datetime(created_at)) AS oldest FROM score_snapshots '
+      + "WHERE admin_review_status = 'flagged' AND COALESCE(is_sandbox, 0) = 0",
+    rowsSql:
+      "SELECT s.id AS id, COALESCE(NULLIF(p.name, ''), 'project ' || s.project_id) AS who, "
+      + "'Score sign-off · ' || COALESCE(s.tier, 'no tier') AS what, s.created_at AS created_at "
+      + 'FROM score_snapshots s LEFT JOIN projects p ON p.id = s.project_id '
+      + "WHERE s.admin_review_status = 'flagged' AND COALESCE(s.is_sandbox, 0) = 0 "
+      + 'ORDER BY julianday(s.created_at) ASC LIMIT ?',
+    notifies: 'Nobody yet',
+    decidedOn: 'Monitoring',
+  },
+  {
+    key: 'articles',
+    label: 'Articles',
+    // Waiting on a reviewer: submitted, or picked up and in review. Changes
+    // requested is back with the author; approved waits only on a publish.
+    countSql:
+      'SELECT COUNT(*) AS n, MIN(datetime(COALESCE(submitted_at, created_at))) AS oldest FROM articles '
+      + "WHERE status IN ('submitted', 'in_review')",
+    rowsSql:
+      "SELECT a.id AS id, COALESCE(NULLIF(u.name, ''), u.email, 'account ' || a.author_user_id) AS who, "
+      + "'Article · ' || a.title AS what, COALESCE(a.submitted_at, a.created_at) AS created_at "
+      + 'FROM articles a LEFT JOIN users u ON u.id = a.author_user_id '
+      + "WHERE a.status IN ('submitted', 'in_review') "
+      + 'ORDER BY julianday(COALESCE(a.submitted_at, a.created_at)) ASC LIMIT ?',
+    notifies: 'The author',
+    decidedOn: 'Content queue',
   },
 ] as const;
+
+/**
+ * D1041 — the canvas's lanes with no store to count yet, said rather than
+ * laned. A source over a table that does not exist would read "could not be
+ * read" on every database, and make every branch's backlog total null.
+ */
+export const NOT_COUNTED_YET: ReadonlyArray<{ key: string; label: string; reason: string }> = [
+  { key: 'product_testers', label: 'Product testers', reason: 'No product tester application is stored yet; part 4 (#2890) adds the store.' },
+];
+
+/**
+ * D1041 — sub-counts the issue names that no store can answer yet.
+ * `due_diligence`'s "ready for sign-off" has no state on `dd_cases`, and a rule
+ * derived here (every section completed, say) would be one #2385 has not made.
+ */
+export const SUB_COUNTS_NOT_YET: ReadonlyArray<{ lane: ApprovalLaneKey; label: string; reason: string }> = [
+  { lane: 'due_diligence', label: 'ready for sign-off', reason: 'No case records being ready for sign-off yet; #2385 defines it.' },
+];
 
 /**
  * The canvas's four other S16 lanes, which are NOT laned, and why (D215).
@@ -451,7 +690,33 @@ export type LaneCount = {
   count: number | null;
   /** The SQL stamp of the oldest open item, or null when the lane is empty. */
   oldest_at: string | null;
+  /** D1041 — who a decision tells, and the page that decides it (null when none does). */
+  notifies: string;
+  decided_on: string | null;
+  undecided_reason?: string;
+  /** D1041 labelled count or D1039 named figures; null is preserved for a failed named-figure read. */
+  sub?: { label: string; count: number | null } | Record<string, number> | null;
 };
+
+/** D1041 — the fields every lane reports beside its count. */
+function laneMeta(s: ApprovalSource) {
+  return {
+    notifies: s.notifies,
+    decided_on: s.decidedOn,
+    ...(s.undecidedReason ? { undecided_reason: s.undecidedReason } : {}),
+  };
+}
+
+/** A lane's sub-count, read alone: a failure is its own null, never the lane's. */
+async function subCount(env: Env, s: ApprovalSource): Promise<LaneCount['sub']> {
+  if (!s.sub) return undefined;
+  try {
+    const row = await env.DB.prepare(s.sub.countSql).first<{ n: number }>();
+    return { label: s.sub.label, count: Number(row?.n) || 0 };
+  } catch {
+    return { label: s.sub.label, count: null };
+  }
+}
 
 /**
  * Each lane's count and oldest item, from `countSql` — the SAME query
@@ -474,19 +739,44 @@ export type LaneCount = {
  * others measured and marks itself unread. The CALLER decides what that means
  * — the board keeps its rows, the backlog count refuses to be a total.
  */
+/** A lane's `subSql`, each column a count; null when the read fails, never zeros. */
+async function subCounts(env: Env, sql: string): Promise<Record<string, number> | null> {
+  try {
+    const row = await env.DB.prepare(sql).first<Record<string, unknown>>();
+    if (!row) return null;
+    return Object.fromEntries(Object.entries(row).map(([k, v]) => [k, Number(v) || 0]));
+  } catch {
+    return null;
+  }
+}
+
 export async function laneCounts(env: Env, sources: readonly ApprovalSource[] = APPROVAL_SOURCES): Promise<LaneCount[]> {
-  const out: LaneCount[] = [];
+  return countLanes(env, sources);
+}
+
+/**
+ * The count read over any list of sources: this file's lanes, or HQ's
+ * (`hqApprovalSources.ts`, D1041). Per-lane isolation as above.
+ */
+export async function countLanes<K extends string>(
+  env: Env, sources: readonly (Omit<ApprovalSource, 'key'> & { key: K })[],
+): Promise<(Omit<LaneCount, 'key'> & { key: K })[]> {
+  const out: (Omit<LaneCount, 'key'> & { key: K })[] = [];
   for (const s of sources) {
+    const meta = laneMeta(s as ApprovalSource);
     try {
       const row = await env.DB.prepare(s.countSql).first<{ n: number; oldest: string | null }>();
+      const sub = s.subSql ? await subCounts(env, s.subSql) : await subCount(env, s as ApprovalSource);
       out.push({
         key: s.key,
         label: s.label,
         count: Number(row?.n) || 0,
         oldest_at: row?.oldest ?? null,
+        ...meta,
+        ...(sub === undefined ? {} : { sub }),
       });
     } catch {
-      out.push({ key: s.key, label: s.label, count: null, oldest_at: null });
+      out.push({ key: s.key, label: s.label, count: null, oldest_at: null, ...meta });
     }
   }
   return out;
