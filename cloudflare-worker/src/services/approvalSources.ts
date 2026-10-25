@@ -80,7 +80,27 @@ export type ApprovalSource = {
    * the email, a missing user row to the account id.
    */
   rowsSql: string;
+  /**
+   * D1039: optional figures beside the lane's count, from one more literal
+   * query whose every column is a count. Each is reported under its column's
+   * name; a failed read of these leaves the lane's own count standing and
+   * reports them as null.
+   */
+  subSql?: string;
 };
+
+/**
+ * D1039 (#2887): an Explorer is ready for a profile once their binding
+ * agreement is signed, because only then can an admin assign the role
+ * (`routes/admin_exploring.ts`, POST /users/:id/assign-role). Signed means the
+ * envelope `user_role_review.binding_envelope_id` names is this account's own
+ * and `completed` — the route's own gate, in a subquery so the count has no
+ * join. The role is still `exploring` until it is assigned.
+ */
+const EXPLORER_SIGNED =
+  "u.role = 'exploring' AND EXISTS (SELECT 1 FROM esign_envelopes e WHERE e.id = "
+  + '(SELECT rr.binding_envelope_id FROM user_role_review rr WHERE rr.user_id = u.id) '
+  + "AND e.user_id = u.id AND LOWER(e.status) = 'completed')";
 
 /**
  * Referrals reuse the route's own set minus `'draft'` rather than restating it,
@@ -194,18 +214,25 @@ export const APPROVAL_SOURCES: readonly ApprovalSource[] = [
     key: 'exploring',
     label: 'Exploring',
     // NO STATUS COLUMN: the queue is `role = 'exploring'` (admin_exploring.ts),
-    // left when an admin assigns the final role. Its age is the route's own,
-    // `COALESCE(onboarded_at, users.created_at)` — a subquery in the count so
-    // the count still has no join.
+    // left when an admin assigns the final role. D1039: the lane counts only
+    // those who signed (EXPLORER_SIGNED), because nobody else can be given a
+    // role. Its age is the route's own, `COALESCE(onboarded_at,
+    // users.created_at)` — a subquery in the count so the count has no join.
     countSql:
       'SELECT COUNT(*) AS n, MIN(COALESCE((SELECT rr.onboarded_at FROM user_role_review rr '
-      + "WHERE rr.user_id = u.id), u.created_at)) AS oldest FROM users u WHERE u.role = 'exploring'",
+      + 'WHERE rr.user_id = u.id), u.created_at)) AS oldest FROM users u WHERE ' + EXPLORER_SIGNED,
     rowsSql:
       "SELECT u.id AS id, COALESCE(NULLIF(u.name, ''), u.email, 'account ' || u.id) AS who, "
       + "'Exploring · ' || COALESCE(rr.suggested_role, 'no role suggested') AS what, "
       + 'COALESCE(rr.onboarded_at, u.created_at) AS created_at '
       + 'FROM users u LEFT JOIN user_role_review rr ON rr.user_id = u.id '
-      + "WHERE u.role = 'exploring' ORDER BY COALESCE(rr.onboarded_at, u.created_at) ASC LIMIT ?",
+      + 'WHERE ' + EXPLORER_SIGNED + ' ORDER BY COALESCE(rr.onboarded_at, u.created_at) ASC LIMIT ?',
+    // Beside it: every account in the holding role, and those who have not
+    // been sent an agreement yet (the lane's sub-count).
+    subSql:
+      'SELECT COUNT(*) AS holding, '
+      + 'COALESCE(SUM(CASE WHEN (SELECT rr.binding_envelope_id FROM user_role_review rr WHERE rr.user_id = u.id) IS NULL THEN 1 ELSE 0 END), 0) AS no_agreement_sent '
+      + "FROM users u WHERE u.role = 'exploring'",
   },
   {
     key: 'jobs',
@@ -431,6 +458,8 @@ export type LaneCount = {
   count: number | null;
   /** The SQL stamp of the oldest open item, or null when the lane is empty. */
   oldest_at: string | null;
+  /** D1039: the lane's `subSql` figures by name, `null` when they could not be read. Absent when the lane has none. */
+  sub?: Record<string, number> | null;
 };
 
 /**
@@ -454,17 +483,30 @@ export type LaneCount = {
  * others measured and marks itself unread. The CALLER decides what that means
  * — the board keeps its rows, the backlog count refuses to be a total.
  */
+/** A lane's `subSql`, each column a count; null when the read fails, never zeros. */
+async function subCounts(env: Env, sql: string): Promise<Record<string, number> | null> {
+  try {
+    const row = await env.DB.prepare(sql).first<Record<string, unknown>>();
+    if (!row) return null;
+    return Object.fromEntries(Object.entries(row).map(([k, v]) => [k, Number(v) || 0]));
+  } catch {
+    return null;
+  }
+}
+
 export async function laneCounts(env: Env): Promise<LaneCount[]> {
   const out: LaneCount[] = [];
   for (const s of APPROVAL_SOURCES) {
     try {
       const row = await env.DB.prepare(s.countSql).first<{ n: number; oldest: string | null }>();
-      out.push({
+      const lane: LaneCount = {
         key: s.key,
         label: s.label,
         count: Number(row?.n) || 0,
         oldest_at: row?.oldest ?? null,
-      });
+      };
+      if (s.subSql) lane.sub = await subCounts(env, s.subSql);
+      out.push(lane);
     } catch {
       out.push({ key: s.key, label: s.label, count: null, oldest_at: null });
     }
