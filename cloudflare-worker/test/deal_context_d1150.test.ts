@@ -124,7 +124,7 @@ test('no-firm notes remain author-only and null-company visits have one watermar
 test('visit exposes metadata for documents, firm notes, anonymous commitments and accessible DD answers only',async()=>{
   const {db,call}=world();try{
     await call(1,'whats-new');db.exec("UPDATE deal_seen SET last_seen_at='2020-01-01T00:00:00Z'; INSERT INTO pitch_decks(project_id,slides,created_at) VALUES(7,'PRIVATE SLIDES','2021-01-01'); INSERT INTO documents(project_id,title,content,created_at,updated_at) VALUES(7,'PRIVATE FILE','PRIVATE CONTENT','2021-01-01','2021-01-01'); INSERT INTO deal_notes(deal_id,author_user_id,company_id,body,updated_at) VALUES(9,2,11,'PRIVATE FIRM NOTE','2021-01-01'),(9,3,22,'FOREIGN NOTE','2021-01-01'); INSERT INTO commitments(deal_id,investor_user_id,company_id,amount) VALUES(9,3,22,101); INSERT INTO dd_cases(id,uid,subject_type,subject_id,subject_label,owner_user_id) VALUES(40,'dd','project',7,'PRIVATE DD',1),(41,'other','project',7,'FOREIGN DD',3); INSERT INTO dd_requests(case_id,title,responded_at) VALUES(40,'PRIVATE ANSWER','2021-01-01'),(41,'FOREIGN ANSWER','2021-01-01')");
-    const r=await call(1,'whats-new');assert.equal(r.status,200);for(const type of ['deck','document','firm_note','investor_commitment','diligence_answer'])assert.ok(r.body.changes.some((c:any)=>c.type===type),type);
+    const r=await call(1,'whats-new');assert.equal(r.status,200);for(const type of ['document','firm_note','investor_commitment','diligence_answer'])assert.ok(r.body.changes.some((c:any)=>c.type===type),type);
     assert.equal(r.body.changes.filter((c:any)=>c.type==='firm_note').length,1);assert.equal(r.body.changes.filter((c:any)=>c.type==='diligence_answer').length,1);assert.doesNotMatch(JSON.stringify(r.body),/PRIVATE|FOREIGN|example/);
     assert.deepEqual((await call(1,'whats-new')).body.changes,[]);
   }finally{db.close();}
@@ -149,10 +149,10 @@ test('new route guards do not wrap a sibling router on the existing deal mount',
     assert.equal((await call(1,'notes','GET',undefined,undefined,true)).status,403);
   }finally{db.close();}
 });
-test('a missing source timestamp remains unrecorded metadata, not a failed visit',async()=>{
+test('an unshared private deck is excluded even when its timestamp is missing',async()=>{
   const {db,call}=world();try{
     await call(1,'whats-new');db.exec("INSERT INTO pitch_decks(project_id,slides,created_at) VALUES(7,'PRIVATE',NULL)");
-    const r=await call(1,'whats-new');assert.equal(r.status,200);assert.ok(r.body.changes.some((c:any)=>c.type==='deck' && c.at===null));assert.deepEqual((await call(1,'whats-new')).body.changes,[]);
+    const r=await call(1,'whats-new');assert.equal(r.status,200);assert.ok(r.body.changes.every((c:any)=>c.type!=='deck'));assert.match(r.body.unavailable[0].reason,/share-token/);assert.deepEqual((await call(1,'whats-new')).body.changes,[]);
   }finally{db.close();}
 });
 
@@ -162,7 +162,7 @@ test('a slow older visit cannot replace the newer visit snapshot',async()=>{
     let release!:()=>void, captured!:()=>void;
     const waiting=new Promise<void>(r=>{release=r;}), started=new Promise<void>(r=>{captured=r;});
     const prepare=DB.prepare;let first=true;
-    DB.prepare=(sql:string)=>{const stmt=prepare(sql);if(sql.startsWith('SELECT id, updated_at AS at FROM documents')){const all=stmt.all;stmt.all=async()=>{const rows=await all();if(first){first=false;captured();await waiting;}return rows;};}return stmt;};
+    DB.prepare=(sql:string)=>{const stmt=prepare(sql);if(sql.startsWith('SELECT id, created_at AS at FROM documents')){const all=stmt.all;stmt.all=async()=>{const rows=await all();if(first){first=false;captured();await waiting;}return rows;};}return stmt;};
     const slow=call(1,'whats-new');await started;
     db.exec("INSERT INTO documents(project_id,title) VALUES(7,'PRIVATE')");
     const fresh=await call(1,'whats-new');assert.ok(fresh.body.changes.some((c:any)=>c.type==='document'));

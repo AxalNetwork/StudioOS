@@ -91,8 +91,7 @@ r.get('/:id/whats-new', async c => {
     const x = await context(c); if ('error' in x) return x.error;
     const expected = await c.env.DB.prepare('SELECT source_snapshot_json FROM deal_seen WHERE deal_id = ? AND user_id = ? AND company_id IS ?').bind(x.id,x.user.id,x.company).first<{source_snapshot_json:string}>();
     const f = await facts(c.env.DB, x);
-    const documents = await c.env.DB.prepare('SELECT id, updated_at AS at FROM documents WHERE project_id = ? ORDER BY id DESC').bind(x.deal.project_id).all<{ id: number; at: string }>();
-    const decks = await c.env.DB.prepare('SELECT id, created_at AS at FROM pitch_decks WHERE project_id = ? AND is_current = 1').bind(x.deal.project_id).all<{id:number;at:string}>();
+    const documents = await c.env.DB.prepare('SELECT id, created_at AS at FROM documents WHERE project_id = ? ORDER BY id DESC').bind(x.deal.project_id).all<{ id: number; at: string }>();
     const notes = await c.env.DB.prepare(`SELECT id, updated_at AS at FROM deal_notes WHERE deal_id = ? AND company_id IS ?
       AND (company_id IS NOT NULL OR author_user_id = ?)`).bind(x.id,x.company,x.user.id).all<{id:number;at:string}>();
     const others = await c.env.DB.prepare(`SELECT id, created_at AS at FROM commitments WHERE deal_id = ? AND investor_user_id != ? AND status IN ('pending','confirmed')`).bind(x.id,x.user.id).all<{id:number;at:string}>();
@@ -101,7 +100,6 @@ r.get('/:id/whats-new', async c => {
       (d.owner_user_id = ? OR EXISTS (SELECT 1 FROM dd_reviewers v WHERE v.case_id = d.id AND v.user_id = ?))`).bind(x.deal.project_id,x.user.id,x.user.id).all<{id:number;at:string}>();
     const sources = [
       { type: 'deal', ref: x.id, version: x.deal.status, at: x.deal.updated_at || x.deal.created_at },
-      ...(decks.results || []).map(d => ({ type: 'deck', ref: d.id, version: '', at: d.at })),
       ...(documents.results || []).map(d => ({ type: 'document', ref: d.id, version: '', at: d.at })),
       ...(notes.results || []).map(d => ({ type: 'firm_note', ref: d.id, version: '', at: d.at })),
       ...(others.results || []).map(d => ({ type: 'investor_commitment', ref: d.id, version: '', at: d.at })),
@@ -124,7 +122,7 @@ r.get('/:id/whats-new', async c => {
     const old = previous ? JSON.parse(previous.source_snapshot_json) : {};
     const consumed = Number(results[1].meta.changes) > 0;
     const changes = previous && consumed ? sources.filter(s => old[`${s.type}:${s.ref}`] !== snapshot[`${s.type}:${s.ref}`]).map(({ type, at }) => ({ type, at })) : [];
-    return c.json({ since, seen_at: at, first_visit: since === null, changes, coverage: 'Latest stored change in each accessible source and current decks, documents, firm notes, anonymous commitments and accessible diligence answers. A first visit establishes the baseline; historical intermediate changes are not reconstructed.' });
+    return c.json({ unavailable: [{ type: 'deck', reason: 'Deck versions use share-token access; this read has no caller-specific deck grant.' }], since, seen_at: at, first_visit: since === null, changes, coverage: 'Latest stored change in each accessible source and document catalog additions, firm notes, anonymous commitments and accessible diligence answers. A first visit establishes the baseline; historical intermediate changes are not reconstructed.' });
   } catch { return c.json({ error: 'changes_unreadable', message: 'Changes are unreadable. Try again.' }, 503); }
 });
 
