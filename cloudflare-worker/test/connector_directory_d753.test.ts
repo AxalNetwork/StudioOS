@@ -49,7 +49,7 @@ const JWT_SECRET = 'y'.repeat(64); // synthetic fixture key
 const KEK = 'fixture-cipher-key-'.repeat(4); // synthetic fixture key
 const ROLES = ['admin', 'founder', 'partner', 'investor', 'advisor', 'operator', 'service_provider', 'exploring'];
 const ALLOWED = ROLES.filter((r) => r !== 'exploring');
-const SIGN_IN = ['oauth', 'oauth_or_key', 'key', 'first_party', 'mcp']; // D879: no 'entity' page; D881: Mercury's members sign in through its MCP server
+const SIGN_IN = ['none', 'oauth', 'oauth_or_key', 'key', 'first_party', 'mcp']; // D879: no 'entity' page; D881: Mercury's members sign in through its MCP server
 const PAGE_FIELDS = ['tagline', 'made_by', 'service', 'sign_in', 'added', 'verified', 'verified_on', 'read_only', 'page_key', 'page_href'];
 const BODY_FIELDS = ['long_description', 'tools', 'prompts', 'links', 'endpoints', 'trust', 'calls'];
 const PRIVATE = ['calls', 'already_connected', 'connection', 'uid', 'api_key_preview', 'credentials', 'entity_roles', 'personal_roles', 'personal_hq_only_roles', 'oauth_scopes', 'unreadable_sources'];
@@ -262,7 +262,7 @@ test('page keys: google and microsoft answer their registry rows', async () => {
 // 9 ───────────────────────────────────────────────────────────────────────────
 test('unknown and malformed keys are 404 unknown_provider, never a lookup error', async () => {
   const db = fixture();
-  for (const k of ['notion', 'GitHub', 'git-hub', 'a', 'w'.repeat(41), 'constructor', 'hasownproperty', '%5F%5Fproto%5F%5F', 'signal']) {
+  for (const k of ['no_such_connector', 'GitHub', 'git-hub', 'a', 'w'.repeat(41), 'constructor', 'hasownproperty', '%5F%5Fproto%5F%5F', 'signal']) {
     const r = await call(db, 'founder', `/directory/${k}`);
     assert.deepEqual([r.status, r.body], [404, { error: 'unknown_provider' }], k);
   }

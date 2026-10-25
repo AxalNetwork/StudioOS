@@ -11,6 +11,7 @@
  * `approve` flips a pending_review event to status='published' +
  * admin_published=1, which is what the public feed predicate requires.
  */
+import { scheduleCalendarCancellation } from './_eventCalendar';
 import { Hono } from 'hono';
 import type { Env } from '../types';
 import { requireAdmin, requireBranchNotSuspended } from '../auth';
@@ -411,6 +412,7 @@ adminEvents.post('/:id/cancel', async (c) => {
   ).bind(id).first();
   if (!cancelled) return c.json({ error: 'already_cancelled' }, 409);
   await writeAudit(c.env, { adminId: a.id, adminEmail: a.email, action: 'event_cancelled', eventId: id });
+  await scheduleCalendarCancellation(c, 'event', id);
   // Notify seated registrants (best-effort).
   const seated = await c.env.DB.prepare(
     `SELECT DISTINCT user_id FROM event_registrations

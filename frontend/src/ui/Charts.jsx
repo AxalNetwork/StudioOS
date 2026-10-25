@@ -169,9 +169,9 @@ export function TermBars({ rows, from = -20, to = 120 }) {
  * D961 (#2794) adds `below`: a row's `below` (with `belowTone`) is drawn under a zero axis, as
  * Programs' Credits in and out draws spends under the grants stacked above it.
  */
-export function Columns({ rows, height = 220, pct = false, max: maxIn, references = [] }) {
+export function Columns({ rows, height = 220, pct = false, max: maxIn, references = [], onSelect, testIdPrefix = 'insights-stack' }) {
   if (rows.some((r) => Number.isFinite(r.below))) return <DivergingColumns rows={rows} height={height} />;
-  return <UpColumns rows={rows} height={height} pct={pct} max={maxIn} references={references} />;
+  return <UpColumns rows={rows} height={height} pct={pct} max={maxIn} references={references} onSelect={onSelect} testIdPrefix={testIdPrefix} />;
 }
 
 /** Columns stacked above a zero axis, with each row's `below` drawn under it, on one scale. */
@@ -223,7 +223,11 @@ function DivergingColumns({ rows, height }) {
   );
 }
 
-function UpColumns({ rows, height, pct, max: maxIn, references }) {
+/**
+ * D1110 (#2990): with `onSelect`, a stacked part with a `group` is a button that
+ * opens its group (INS3), keyed `${testIdPrefix}-${row index}-${group}`.
+ */
+function UpColumns({ rows, height, pct, max: maxIn, references, onSelect, testIdPrefix }) {
   const [ref, W] = useBoxWidth();
   const hatch = `ins-hatch-${useId().replace(/:/g, '')}`;
   const Lx = 34;
@@ -269,7 +273,18 @@ function UpColumns({ rows, height, pct, max: maxIn, references }) {
                 {r.parts.map((p, k) => {
                   const ph = (ch * p.value) / max;
                   y0 -= ph;
-                  return ph > 0 ? <rect key={k} x={x} y={y0} width={bw} height={ph} className={FILL[p.tone] || FILL.violet} /> : null;
+                  if (!(ph > 0)) return null;
+                  const seg = <rect x={x} y={y0} width={bw} height={ph} className={FILL[p.tone] || FILL.violet} />;
+                  if (!p.group || !onSelect) return <g key={k}>{seg}</g>;
+                  return (
+                    <g key={k} role="button" tabIndex={0} aria-label={`Open the ${p.label || p.group} group, ${nf(p.value)} that week`}
+                      className="cursor-pointer outline-none focus-visible:[&>rect]:stroke-axal-ink focus-visible:[&>rect]:stroke-2"
+                      onClick={() => onSelect(p.group)}
+                      onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onSelect(p.group); } }}
+                      data-testid={`${testIdPrefix}-${i}-${p.group}`}>
+                      {seg}
+                    </g>
+                  );
                 })}
               </>
             );
@@ -641,7 +656,8 @@ const BORDER = {
  * `hollow`. `mark: 'line'` or `'dashed'` draws a line swatch in the tone, for
  * a line chart whose series differ by dash as well as colour.
  */
-export function Legend({ items }) {
+/** D1110 (#2990): with `onSelect`, an item with a `group` is a button that opens it. */
+export function Legend({ items, onSelect }) {
   const dot = (tone, mark) => {
     if (mark === 'line' || mark === 'dashed') return `h-0 w-4 rounded-none border-t-2 ${mark === 'dashed' ? 'border-dashed' : 'border-solid'} ${BORDER[tone] || BORDER.violet}`;
     if (tone === 'hatch') return 'border border-axal-violet dark:border-[#a78bfa] bg-[repeating-linear-gradient(45deg,#7c3aed_0_2px,transparent_2px_4px)] dark:bg-[repeating-linear-gradient(45deg,#a78bfa_0_2px,transparent_2px_4px)]';
@@ -654,12 +670,18 @@ export function Legend({ items }) {
   };
   return (
     <div className="flex flex-wrap gap-x-3.5 gap-y-1.5">
-      {items.map((g) => (
+      {items.map((g) => (g.group && onSelect ? (
+        <button key={g.label} type="button" onClick={() => onSelect(g.group)} aria-label={`Open the ${g.label} group`} data-testid={`insights-legend-${g.group}`}
+          className="flex items-center gap-1.5 text-[11.5px] text-axal-muted underline-offset-2 hover:text-axal-ink hover:underline dark:text-gray-400 dark:hover:text-gray-100">
+          <span className={`h-2.5 w-2.5 flex-none rounded-[3px] ${dot(g.tone, g.mark)}`} />
+          {g.label}
+        </button>
+      ) : (
         <span key={g.label} className="flex items-center gap-1.5 text-[11.5px] text-axal-muted dark:text-gray-400">
           <span className={`h-2.5 w-2.5 flex-none rounded-[3px] ${dot(g.tone, g.mark)}`} />
           {g.label}
         </span>
-      ))}
+      )))}
     </div>
   );
 }
@@ -720,7 +742,7 @@ export function Chart({ chart, onSelect }) {
   if (chart.type === 'grouped') return <GroupedColumns rows={chart.rows} series={chart.series} height={chart.height} />;
   if (chart.type === 'stackbars') return <StackBars rows={chart.rows} onSelect={chart.clickable ? onSelect : undefined} testIdPrefix={chart.testIdPrefix} />;
   if (chart.type === 'lines') return <WeekLines series={chart.series} labels={chart.labels} height={chart.height} currentIndex={chart.currentIndex} />;
-  if (chart.type === 'columns' || chart.type === 'stack') return <Columns rows={chart.rows} pct={chart.pct} max={chart.max} height={chart.height} references={chart.references} />;
+  if (chart.type === 'columns' || chart.type === 'stack') return <Columns rows={chart.rows} pct={chart.pct} max={chart.max} height={chart.height} references={chart.references} onSelect={chart.clickable ? onSelect : undefined} testIdPrefix={chart.testIdPrefix} />;
   if (chart.type === 'line') return <WeekLine values={chart.values} labels={chart.labels} previous={chart.previous} />;
   if (chart.type === 'bar100') return <Bar100 parts={chart.parts} />;
   if (chart.type === 'donut') return <Donut parts={chart.parts} center={chart.center} centerSub={chart.centerSub} />;

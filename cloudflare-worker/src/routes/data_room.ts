@@ -24,6 +24,26 @@
  *   POST   /:projectUid/files/:uid/versions/:n/download   one earlier version
  *   POST   /:projectUid/files/:uid/versions/:n/current    make it current (a swap)
  *   GET    /:projectUid/preview?grant=<uid>   the room as that grant sees it; no log
+ *   GET    /:projectUid/requests              the access-request queue (D1104)
+ *   POST   /:projectUid/requests/:uid/accept  write the grant, with folders and an end date
+ *   POST   /:projectUid/requests/:uid/decline a reason the investor is told
+ *   POST   /:projectUid/grants/:uid/nda       the founder sends the three-way NDA (D1104)
+ *   GET    /:projectUid/activity?from&to&investor&action&page   daily figures against the
+ *                                             period before, per investor, and the log (D1105)
+ *   GET    /:projectUid/activity.csv?from&to&investor&action    the same rows as CSV (D1105)
+ *   GET    /:projectUid/checklist             per diligence item, its files and who can
+ *                                             open them (D1105)
+ *
+ * REQUESTS AND THE FOUNDER'S NDA (D1104, migration 595). An investor's ask
+ * to see the room — from a round call, or the deal page once DL9 is built —
+ * is one row in `data_room_access_requests`, one open per investor and
+ * venture (`services/dataRoomRequests.ts`). The owner and co-founders read
+ * the queue; only the owner answers it, as only the owner shares. Accepting
+ * writes the grant in the same way `POST /grants` does; a request already
+ * decided answers 409 and writes nothing. The three-way NDA, which only the
+ * investor could start (`/api/trust/intro/request`), the venture's founder
+ * can now send for a grant: they are party A, as `pairwise_ndas` requires,
+ * so an admin or a co-founder cannot send it in their name.
  *
  * WHO ON THE FOUNDER SIDE (D1103, owner question 2, answer A). The owner — the
  * account that owns the venture — does everything; admins use D1102 summary/support reads. A co-founder
@@ -82,8 +102,10 @@ import {
   tierAdmits, investorCommitted, admittedCounts, isAccessTier, expiryMs, grantFolderScope, folderInScope, type FolderScope,
 } from '../services/dataRoomAccess';
 import { CHECKLIST_KEYS } from '../services/raiseCycle';
+import { activityCsv, activityRead, checklistRead, investorOfGrant, parseActivityQuery, CSV_MAX_ROWS } from '../services/dataRoomActivity';
 import { logCycleWrite } from '../services/cycleActivity';
 import { WriterError } from '../services/validateWriters';
+import { DECLINE_REASON_MAX, readRequests } from '../services/dataRoomRequests';
 
 const r = new Hono<{ Bindings: Env }>();
 
@@ -434,7 +456,7 @@ async function roomDetails(env: Env, project: ProjectRow, role: RoomRole | 'supp
     // and never a view count — no per-file view is logged (header note).
     const files = await env.DB.prepare(
       `SELECT f.id, f.uid, f.name, f.folder_id, f.content_type, f.size_bytes, f.visibility, f.created_at,
-              f.access_tier, f.access_expires_at,
+              f.access_tier, f.access_expires_at, f.source_kind, f.source_ref,
               (SELECT COUNT(*) FROM data_room_access_log l
                 WHERE l.file_id = f.id AND l.project_id = f.project_id AND l.action = 'download') AS downloads
          FROM data_room_files f WHERE f.project_id = ? ORDER BY f.name`,
@@ -1138,6 +1160,67 @@ export async function removeDataRoomFile(
 }
 
 /** D1103 — each scoped grant's named folders, by grant id; null when the store cannot be read. */
+// ─────────────────────────────────────────────── activity and checklist (D1105)
+
+/**
+ * The room and the investor a query names, for the activity reads: the
+ * owner's or a co-founder's room (404 otherwise, as every founder route), and
+ * a grant uid of this venture (404 `unknown_investor` otherwise).
+ */
+async function activityTarget(c: any) {
+  const user = await requireAuth(c);
+  const room = await roomProject(c, user, c.req.param('projectUid'));
+  if (!room) return { refused: c.json({ detail: 'Project not found' }, 404) };
+  const parsed = parseActivityQuery((k) => c.req.query(k), nowIso().slice(0, 10));
+  if (!parsed.ok) return { refused: c.json({ code: parsed.code, detail: parsed.detail }, 400) };
+  let userId: number | null = null;
+  if (parsed.q.investor) {
+    const g = await investorOfGrant(c.env, room.project.id, parsed.q.investor);
+    if (!g) return { refused: c.json({ code: 'unknown_investor', detail: 'This room has no such grant.' }, 404) };
+    userId = Number(g.investor_user_id);
+  }
+  return { room, q: parsed.q, userId };
+}
+
+r.get('/:projectUid/activity', async (c) => {
+  try {
+    const t = await activityTarget(c);
+    if ('refused' in t) return t.refused;
+    return c.json(await activityRead(c.env, t.room.project.id, t.q, t.userId));
+  } catch (e) { return mapError(c, e); }
+});
+
+r.get('/:projectUid/activity.csv', async (c) => {
+  try {
+    const t = await activityTarget(c);
+    if ('refused' in t) return t.refused;
+    const out = await activityCsv(c.env, t.room.project.id, t.q, t.userId);
+    if ('tooMany' in out) {
+      return refuse(c, 413, {
+        code: 'too_many_rows',
+        message: `This period holds ${out.tooMany} events, more than one file takes (${CSV_MAX_ROWS}). Choose a shorter period, an investor or an action.`,
+        extra: { code: 'too_many_rows' },
+      });
+    }
+    return new Response(out.csv, {
+      headers: {
+        'Content-Type': 'text/csv; charset=utf-8',
+        'Content-Disposition': `attachment; filename="data-room-activity-${t.q.from}-to-${t.q.to}.csv"`,
+        'Cache-Control': 'no-store',
+      },
+    });
+  } catch (e) { return mapError(c, e); }
+});
+
+r.get('/:projectUid/checklist', async (c) => {
+  try {
+    const user = await requireAuth(c);
+    const room = await roomProject(c, user, c.req.param('projectUid'));
+    if (!room) return c.json({ detail: 'Project not found' }, 404);
+    return c.json(await checklistRead(c.env, room.project.id));
+  } catch (e) { return mapError(c, e); }
+});
+
 async function grantScopesOf(env: Env, projectId: number): Promise<Map<number, string[]> | null> {
   try {
     const rows = await env.DB.prepare(
@@ -1352,6 +1435,197 @@ r.delete('/:projectUid/grants/:uid', async (c) => {
     ).bind(nowIso(), c.req.param('uid'), project.id).run();
     if (!(res as any).meta?.changes) return c.json({ detail: 'Grant not found' }, 404);
     return c.json({ ok: true });
+  } catch (e) { return mapError(c, e); }
+});
+
+/* ------------------------------------------------------------------ *
+ * D1104 — the access-request queue, and the founder's NDA
+ * ------------------------------------------------------------------ */
+
+const REQUESTS_UNREADABLE = { detail: 'The access requests could not be read. This is not a claim that nobody asked; try again in a moment.', code: 'requests_unreadable' } as const;
+const REQUEST_DECIDED = { detail: 'This request has already been answered.', code: 'request_decided' } as const;
+
+/** The owner and co-founders read the queue; anyone else gets 404, as for the room. */
+r.get('/:projectUid/requests', async (c) => {
+  try {
+    const user = await requireAuth(c);
+    const room = await roomProject(c, user, c.req.param('projectUid'));
+    if (!room) return c.json({ detail: 'Project not found' }, 404);
+    let requests;
+    try { requests = await readRequests(c.env, room.project.id); }
+    catch (e) {
+      console.warn('[data_room] access requests unreadable:', (e as Error)?.message);
+      return c.json(REQUESTS_UNREADABLE, 503);
+    }
+    return c.json({ requests, open: requests.filter((q) => q.state === 'open').length, can_answer: room.role === 'owner' });
+  } catch (e) { return mapError(c, e); }
+});
+
+/** The request this route names, on this venture; null when there is none. */
+async function requestOf(env: Env, projectId: number, uid: string) {
+  return env.DB.prepare(
+    'SELECT id, uid, investor_user_id, state FROM data_room_access_requests WHERE uid = ? AND project_id = ?',
+  ).bind(uid, projectId).first<{ id: number; uid: string; investor_user_id: number; state: string }>();
+}
+
+/**
+ * Accept: the request is claimed first (open → accepted, by this owner, at
+ * this instant), so two presses or a decline in between can never both win;
+ * then the grant is written as `POST /grants` writes it. If the grant write
+ * fails, the claim is put back and nothing is granted.
+ */
+r.post('/:projectUid/requests/:uid/accept', async (c) => {
+  try {
+    const user = await requireAuth(c);
+    const room = await roomProject(c, user, c.req.param('projectUid'));
+    if (!room) return c.json({ detail: 'Project not found' }, 404);
+    if (room.role !== 'owner') return c.json(OWNER_ONLY, 403);
+    const { project } = room;
+    const body = await c.req.json().catch(() => ({} as any));
+    const fields = await grantFields(c.env, project.id, body);
+    if ('refusal' in fields) return c.json({ detail: fields.refusal }, fields.status);
+    const found = await requestOf(c.env, project.id, c.req.param('uid'));
+    if (!found) return c.json({ detail: 'Request not found' }, 404);
+
+    // The claim is the check: only an open request moves, so a decided one answers 409.
+    const at = nowIso();
+    const claimed = await c.env.DB.prepare(
+      `UPDATE data_room_access_requests SET state = 'accepted', decided_by = ?, decided_at = ?
+        WHERE id = ? AND state = 'open'`,
+    ).bind(user.id, at, found.id).run();
+    if (Number((claimed as any).meta?.changes) !== 1) return c.json(REQUEST_DECIDED, 409);
+
+    const investorId = Number(found.investor_user_id);
+    try {
+      await c.env.DB.batch([
+        c.env.DB.prepare(
+          `INSERT INTO data_room_grants
+             (uid, project_id, investor_user_id, granted_by_user_id, status, expires_at, created_at, updated_at)
+           VALUES (?, ?, ?, ?, 'active', ?, ?, ?)
+           ON CONFLICT (project_id, investor_user_id) DO UPDATE SET
+             status = 'active', granted_by_user_id = excluded.granted_by_user_id,
+             expires_at = excluded.expires_at, updated_at = excluded.updated_at`,
+        ).bind(newUid(), project.id, investorId, user.id, fields.values.expires_at ?? null, at, at),
+        ...(fields.values.folders !== undefined ? scopeStatements(c.env, 'investor', [project.id, investorId], fields.values.folders) : []),
+      ]);
+    } catch (e) {
+      await c.env.DB.prepare(
+        `UPDATE data_room_access_requests SET state = 'open', decided_by = NULL, decided_at = NULL
+          WHERE id = ? AND state = 'accepted' AND decided_by = ? AND decided_at = ?`,
+      ).bind(found.id, user.id, at).run().catch(() => {});
+      throw e;
+    }
+    await logCycleWrite(c.env, { projectId: project.id, userId: Number(user.id), cycle: 'raise', module: 'data-room',
+      entityId: found.id, action: 'access_request_accepted', summary: 'Access request accepted; the room was shared' });
+    await tellInvestor(c.env, investorId, 'Your data room request was accepted',
+      `${project.name || 'The venture'} opened its data room to you.`, '/research/diligence');
+    return c.json({ ok: true, state: 'accepted' });
+  } catch (e) { return mapError(c, e); }
+});
+
+/** Decline: a reason of 1 to 500 characters, kept on the request and told to the investor; never logged. */
+r.post('/:projectUid/requests/:uid/decline', async (c) => {
+  try {
+    const user = await requireAuth(c);
+    const room = await roomProject(c, user, c.req.param('projectUid'));
+    if (!room) return c.json({ detail: 'Project not found' }, 404);
+    if (room.role !== 'owner') return c.json(OWNER_ONLY, 403);
+    const { project } = room;
+    const body = await c.req.json().catch(() => ({} as any));
+    const reason = typeof body.reason === 'string' ? body.reason.trim() : '';
+    if (!reason || reason.length > DECLINE_REASON_MAX) {
+      return c.json({ detail: `Say why, in 1 to ${DECLINE_REASON_MAX} characters. The investor is told.`, code: 'reason_required' }, 400);
+    }
+    const found = await requestOf(c.env, project.id, c.req.param('uid'));
+    if (!found) return c.json({ detail: 'Request not found' }, 404);
+    const res = await c.env.DB.prepare(
+      `UPDATE data_room_access_requests SET state = 'declined', decided_by = ?, decided_at = ?, decline_reason = ?
+        WHERE id = ? AND state = 'open'`,
+    ).bind(user.id, nowIso(), reason, found.id).run();
+    if (Number((res as any).meta?.changes) !== 1) return c.json(REQUEST_DECIDED, 409);
+    await logCycleWrite(c.env, { projectId: project.id, userId: Number(user.id), cycle: 'raise', module: 'data-room',
+      entityId: found.id, action: 'access_request_declined', summary: 'Access request declined' });
+    await tellInvestor(c.env, Number(found.investor_user_id), 'Your data room request was declined',
+      `${project.name || 'The venture'} declined your request to see its data room: ${reason}`, null);
+    return c.json({ ok: true, state: 'declined' });
+  } catch (e) { return mapError(c, e); }
+});
+
+/** The investor's inbox line. Best effort: the decision is recorded whether or not the note lands. */
+async function tellInvestor(env: Env, userId: number, title: string, body: string, link: string | null) {
+  try {
+    const { notify } = await import('../services/notify');
+    await notify(env, { userId, type: 'data_room_request', title, body, link, category: 'deals' });
+  } catch (e) {
+    console.warn('[data_room] request notice not sent:', (e as Error)?.message);
+  }
+}
+
+/**
+ * The founder sends the platform's three-way NDA for a grant (owner question
+ * 4, answer A). Only the venture's founder — party A of `pairwise_ndas`, as
+ * migration 025 fixes it — may send it, and only for a live grant of this
+ * venture. Refused when the NDA is already live, or already out for
+ * signature (a second envelope would replace the first's record mid-signing).
+ * The founder gets only their own signing link back; the others are emailed.
+ */
+r.post('/:projectUid/grants/:uid/nda', async (c) => {
+  try {
+    const user = await requireAuth(c);
+    const room = await roomProject(c, user, c.req.param('projectUid'));
+    if (!room) return c.json({ detail: 'Project not found' }, 404);
+    if (room.role !== 'owner') return c.json(OWNER_ONLY, 403);
+    const { project } = room;
+    const founder = await c.env.DB.prepare(
+      `SELECT u.id, u.email, u.name FROM projects p JOIN users u ON u.founder_id = p.founder_id
+        WHERE p.id = ? AND u.id = ? AND u.role = 'founder'`,
+    ).bind(project.id, user.id).first<{ id: number; email: string; name: string | null }>();
+    if (!founder) return c.json({ detail: 'Only the venture’s founder can send the NDA: they sign it as party A.', code: 'founder_only' }, 403);
+    const grant = await c.env.DB.prepare(
+      `SELECT g.investor_user_id, u.email, u.name FROM data_room_grants g JOIN users u ON u.id = g.investor_user_id
+        WHERE g.uid = ? AND g.project_id = ? AND g.status = 'active'
+          AND (g.expires_at IS NULL OR datetime(g.expires_at) > datetime('now'))`,
+    ).bind(c.req.param('uid'), project.id).first<{ investor_user_id: number; email: string; name: string | null }>();
+    if (!grant) return c.json({ detail: 'Grant not found' }, 404);
+    const investorId = Number(grant.investor_user_id);
+    const existing = await c.env.DB.prepare(
+      `SELECT status, valid_until FROM pairwise_ndas WHERE party_a_user_id = ? AND party_b_user_id = ?`,
+    ).bind(founder.id, investorId).first<{ status: string; valid_until: string | null }>();
+    if (await projectNdaActive(c.env, project.id, investorId) || await ndaActive(c.env, founder.id, investorId)) {
+      return c.json({ detail: 'An NDA with this investor is already in force. Nothing was sent.', code: 'nda_active' }, 409);
+    }
+    if (existing?.status === 'pending') {
+      return c.json({ detail: 'An NDA with this investor is already out for signature. Nothing was sent.', code: 'nda_pending' }, 409);
+    }
+
+    const { createThreeWayNdaEnvelope } = await import('../services/trustEnvelope');
+    const { upsertPairwiseNda } = await import('../services/trust');
+    let envelope;
+    try {
+      envelope = await createThreeWayNdaEnvelope(c.env, {
+        founder: { user_id: founder.id, email: founder.email, name: founder.name || founder.email },
+        investor: { user_id: investorId, email: grant.email, name: grant.name || grant.email },
+        appUrl: (c.env as any).APP_URL || 'https://axal.vc',
+      });
+    } catch (e) {
+      if ((e as Error)?.message === 'unfilled_fields') {
+        return c.json({ detail: 'The NDA is not ready to send yet: Axal VC still has to complete it. Nothing was sent.', code: 'template_fields_unfilled' }, 409);
+      }
+      console.error('[data_room] NDA envelope not created:', (e as Error)?.name || 'error');
+      return c.json({ detail: 'The NDA could not be sent for signature. Nothing was sent; try again in a moment.', code: 'envelope_creation_failed' }, 502);
+    }
+    await upsertPairwiseNda(c.env, founder.id, investorId, envelope.envelope_uuid);
+    await logCycleWrite(c.env, { projectId: project.id, userId: Number(user.id), cycle: 'raise', module: 'data-room',
+      entityId: null, action: 'nda_sent', summary: 'Three-way NDA sent to a grant holder' });
+    try {
+      const { notify } = await import('../services/notify');
+      await notify(c.env, {
+        userId: investorId, type: 'contract_sign_request', category: 'contract_sign_request', link: '/trust',
+        title: 'An NDA to sign', body: `${founder.name || 'A founder'} sent you the three-way NDA for ${project.name || 'their data room'}. Sign it in your Trust Center.`,
+        payload: { envelope_uuid: envelope.envelope_uuid, founder_user_id: founder.id },
+      });
+    } catch (e) { console.warn('[data_room] NDA notice not sent:', (e as Error)?.message); }
+    return c.json({ status: 'envelope_issued', envelope_uuid: envelope.envelope_uuid, signing_url: envelope.signing_urls.founder }, 201);
   } catch (e) { return mapError(c, e); }
 });
 

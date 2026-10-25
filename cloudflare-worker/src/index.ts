@@ -38,6 +38,7 @@ import { recoveryCoolOff } from './middleware/recoveryCoolOff';
 import scoring from './routes/scoring';
 import labReportShares from './routes/lab_report_shares';
 import projects from './routes/projects';
+import accountCompanies from './routes/account_companies';
 import legal from './routes/legal';
 import legalcap from './routes/legalcap';
 import partners from './routes/partners';
@@ -79,6 +80,7 @@ import partnernet from './routes/partnernet';
 import capital from './routes/capital';
 import tickets from './routes/tickets';
 import deals from './routes/deals';
+import dealContext from './routes/deal_context';
 import users from './routes/users';
 import marketIntel from './routes/market_intel';
 import marketIntelPublic from './routes/market_intel_public';
@@ -163,6 +165,8 @@ import './integrations/providers/stripe';
 import './integrations/providers/github';
 // D713 (#1778) — a founder's or partner's own Mercury, read-only: `connect` only.
 import './integrations/providers/mercury';
+// D1085 (#2950) — a founder's own Notion, read-only, through Notion's MCP server: sign-in only.
+import './integrations/providers/notion';
 import crunchbaseRoutes from './routes/crunchbase';
 import network from './routes/network';
 import referEarn from './routes/refer_earn';
@@ -207,10 +211,12 @@ import notificationsRoutes from './routes/notifications';
 import votesRoutes from './routes/votes';
 import linkedinRoutes from './routes/linkedin';
 import calendarRoutes from './routes/calendar';
+import googleWorkspaceRoutes from './routes/google_workspace';
 import financialsRoutes from './routes/financials';
 import progressRoutes from './routes/progress';
 import cycleBuildRoutes from './routes/cycle_build';
 import buildPlanRoutes, { buildEvidenceRoutes } from './routes/build_plan';
+import buildPlanStateRoutes from './routes/build_plan_state';
 import metricsRoutes from './routes/metrics';
 import revenueRoutes from './routes/revenue';
 import wellbeingRoutes from './routes/wellbeing';
@@ -856,14 +862,14 @@ for (const p of STUDIO_PREFIXES) {
 // non-investor callers (admin/partner/mentor bypass; founder/etc. pass
 // through unchanged) and only enforces tier when caller.role === 'investor'.
 const INVESTOR_PRO_PREFIXES = [
+  '/api/dd',
   '/api/pipeline',
   '/api/deals',
   '/api/calendar',
   '/api/ic',
 ];
-// D614: `INVESTOR_PRO_EXEMPT` names the one route under these prefixes that
-// stays open on every plan — leaving a deal room, so an investor who drops to
-// Free can still leave the rooms they joined.
+// D614/D1149: precise exemptions allow leaving a room and an authorized
+// deal header/key strip. Child deal reads and diligence stay Professional.
 const investorPro = requireInvestorTierExcept('professional');
 for (const p of INVESTOR_PRO_PREFIXES) {
   app.use(p, investorPro);
@@ -873,6 +879,9 @@ for (const p of INVESTOR_PRO_PREFIXES) {
 app.route('/api/scoring', scoring);
 // D588 (#1215) — a founder shares one official scoring run with one named account.
 app.route('/api/lab-report-shares', labReportShares);
+// D1136 (#3016): the caller's own companies, ventures and invitations, and answering an invitation signed in.
+// Before `projects` and `companyRoutes`; the answer paths are literal `invitations/<id>/accept|decline`.
+app.route('/api', accountCompanies);
 app.route('/api/projects', projects);
 app.route('/api/legal', legal);
 app.route('/api/legalcap', legalcap);
@@ -899,6 +908,7 @@ app.route('/api/advisor', advisorRoutes);
 app.route('/api/partnernet', partnernet);
 app.route('/api/capital', capital);
 app.route('/api/tickets', tickets);
+app.route('/api/deals', dealContext);
 app.route('/api/deals', deals);
 app.route('/api/users', users);
 app.route('/api/market-intel', marketIntel);
@@ -1362,6 +1372,7 @@ app.route('/api/personas', personas);
 app.route('/api/notifications', notificationsRoutes);
 app.route('/api/linkedin', linkedinRoutes);
 app.route('/api/calendar', calendarRoutes);
+app.route('/api/connectors/google-workspace', googleWorkspaceRoutes);
 // T11 — Financial Model Builder + Founder Wellbeing (ported from FastAPI).
 app.route('/api/financials', financialsRoutes);
 // Task #1 (AG) — kept alphabetically adjacent to /api/financials.
@@ -1369,6 +1380,8 @@ app.route('/api/founder-risk', founderRiskRoutes);
 // Task #9 — Venture Risk (internal deal-team 10-layer rating).
 app.route('/api/venture-risk', ventureRiskRoutes);
 app.route('/api/progress', progressRoutes);
+// D1067: pause, resume and "new evidence since" before D1065's plan router.
+app.route('/api/cycles/build/plan', buildPlanStateRoutes);
 app.route('/api/cycles/build/plan', buildPlanRoutes);
 app.route('/api/cycles/build/evidence', buildEvidenceRoutes);
 app.route('/api/cycles/build', cycleBuildRoutes);

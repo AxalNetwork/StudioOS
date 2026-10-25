@@ -39,7 +39,7 @@ export interface PagePrompt {
 }
 
 /** `mcp` (D847): "Sign in with <Provider>" through its MCP server; no page uses it until a provider issue adds one. */
-export type SignInKind = 'oauth' | 'oauth_or_key' | 'key' | 'first_party' | 'channel' | 'mcp';
+export type SignInKind = 'none' | 'oauth' | 'oauth_or_key' | 'key' | 'first_party' | 'channel' | 'mcp';
 
 export interface ConnectorPage {
   /** At most 120 characters. */
@@ -47,6 +47,8 @@ export interface ConnectorPage {
   /** One to four paragraphs. */
   long_description: string[];
   tools: PageTool[];
+  works_without_signing_in?: Array<{ name: string; what: string; built: boolean }>;
+  never_does?: string[];
   prompts: PagePrompt[];
   /** Null exactly when `prompts` is not empty. */
   prompts_reason: string | null;
@@ -202,6 +204,25 @@ function mercuryPage(variant: MercuryVariant): ConnectorPage {
  * (D753 decision 15). Read through `pageDescriptor`, never directly by a route.
  */
 export const CONNECTOR_PAGES: Record<string, ConnectorPage | VariantPages> = {
+  lovable: {
+    tagline: 'Works without signing in. Launch links and app links for your venture.',
+    long_description: [
+      'No Lovable account is connected to Axal VC. The Worker never calls Lovable.',
+      'Build in Lovable launch links are being built in part 2. App links and founder-pressed live checks are being built in part 3. Neither is available from this directory entry yet.',
+      'A Lovable project synced to GitHub can already use the existing GitHub connector. That is a GitHub connection, not a Lovable sign-in.',
+    ],
+    works_without_signing_in: [
+      { name: 'Build in Lovable', what: 'Part 2: review a prompt, then open Lovable in your browser. Not built yet.', built: false },
+      { name: 'App links and live checks', what: 'Part 3: record your app’s address and check its public page when you ask. Not built yet.', built: false },
+    ],
+    never_does: ['No Lovable sign-in or stored Lovable key.', 'No prompt sent by the Worker.', 'Nothing built or published for you.'],
+    tools: [], prompts: [], prompts_reason: 'Eadwyn does not read Lovable. No Lovable data is read by the Worker.',
+    made_by: AXAL, service: { name: 'Lovable', href: 'https://lovable.dev' },
+    sign_in: { kind: 'none', label: 'Works without signing in', key_help_href: null },
+    endpoints: { sign_in: null, api: null }, added: null,
+    links: { ...NO_LINKS, developer_docs: 'https://docs.lovable.dev/integrations/build-with-url' }, verified_on: null,
+  },
+
   figma: {
     tagline: 'Design files for Prototype / MVP. Coming soon.',
     long_description: [
@@ -543,13 +564,36 @@ export const CONNECTOR_PAGES: Record<string, ConnectorPage | VariantPages> = {
     links: { ...NO_LINKS, developer_docs: 'https://developers.zoom.us/docs/integrations/oauth/' },
     verified_on: null,
   },
+  google_workspace: {
+    tagline: 'Choose Google files for your modules. Coming soon.',
+    long_description: [
+      'Axal VC reads only files you choose. It cannot browse the rest of your Drive.',
+      'Connect Google first at /account/connectors/google. File selection and the chosen-files screen await their approved design.',
+      'Stopping use or disconnecting keeps accepted facts; linked source records are removed. Module imports ship in later parts.',
+    ],
+    tools: [
+      tool('pick_files', 'Choose files', 'read', 'Confirms each file chosen in Google’s Picker.', null, ["'files.get'"]),
+      tool('read_form', 'Form questions', 'read', 'Previews the chosen Form’s questions without respondent identity.', null, ["'forms.get'"]),
+      tool('read_doc', 'Documents', 'read', 'Reads a chosen document; module imports are not built yet.', null, ["'documents.get'"]),
+      tool('read_sheet', 'Sheets', 'read', 'Previews up to five rows; stores no cells.', null, ["'spreadsheets.values.get'"]),
+      tool('read_slides', 'Slides', 'read', 'Reads chosen slides; deck imports are not built yet.', null, ["'presentations.get'"]),
+      tool('read_form_responses', 'Forms', 'read', 'Read-only Forms reader; importing responses is not built yet.', null, ["'forms.responses.list'"]),
+      tool('copy_file_to_data_room', 'Data room', 'read', 'Not built yet: a future import may read an exported or downloaded copy.', null, ["'files.export'", "'alt=media'"]),
+      tool('revoke_grant', 'Disconnect Google', 'account', 'Revokes the combined Google grant at your request.', null, ['clearWorkspaceConnection(']),
+    ],
+    prompts: [], prompts_reason: 'Eadwyn does not read Google Workspace yet.',
+    made_by: AXAL, service: { name: 'Google Workspace', href: 'https://workspace.google.com' },
+    sign_in: { kind: 'first_party', label: 'Allow Google files', key_help_href: null },
+    endpoints: { sign_in: 'https://accounts.google.com/o/oauth2/v2/auth', api: null },
+    added: null, links: { ...NO_LINKS, developer_docs: 'https://developers.google.com/workspace/drive/picker/guides/web-picker' }, verified_on: null,
+  },
   google_calendar: {
     tagline: 'Your Google Calendar events and interview slots, and sign-in with Google.',
     long_description: [
       'Calendar events and interview slots from your Google sign-in.',
       'Axal VC adds, updates and removes the events it schedules on your primary calendar, including Google Meet interview calls. It reads your events, and the Meet transcripts you allow, into Customer research.',
       'A Meet call that ends without a transcript can still reach Customer research: upload its recording file in Record a Session, and Workers AI transcribes it on your AI tokens.',
-      'If an earlier connection granted Gmail access, use Remove Gmail access to revoke the old Google grant and reconnect without Gmail.',
+      'Google Docs, Sheets, Slides, Forms and Drive file choosing is coming soon on the Google Workspace page (/account/connectors/google_workspace). If an earlier connection granted Gmail access, use Remove Gmail access to revoke the old Google grant and reconnect without Gmail.',
     ],
     tools: [
       tool('remove_gmail_access', 'Google account access', 'account', 'Revokes an earlier Google grant that included Gmail, then starts a fresh consent without Gmail.', null, ['https://oauth2.googleapis.com/revoke']),
@@ -597,6 +641,35 @@ export const CONNECTOR_PAGES: Record<string, ConnectorPage | VariantPages> = {
   },
   mercury: {
     personal: { founder: mercuryPage('founder'), partner: mercuryPage('partner'), investor: mercuryPage('investor') },
+  },
+  // D1085 (#2950, #2405 part 1): each tool is one of `NOTION_READ_TOOLS`, by its call site in `services/notion/reads.ts`.
+  notion: {
+    tagline: 'Read the Notion pages and databases you share, read-only, through Notion’s own sign-in.',
+    long_description: [
+      'Sign in with Notion, and Axal VC searches and reads the pages and databases your Notion sign-in can see, through Notion’s MCP server.',
+      'Notion’s own sign-in allows reading and writing. Axal VC calls three read tools only, from a fixed list; every other tool Notion offers is refused before any request is made.',
+      'Nothing lands in a module yet. The Notion parts that follow add what lands, and where, one at a time.',
+    ],
+    tools: [
+      tool('search', 'page and database titles', 'read', 'Searches the pages and databases your Notion sign-in can see, by title and text.', null, ["call('notion-search'"]),
+      tool('read_page', 'the pages you open', 'read', 'Reads one page you pick: its text, title, link and when it was last edited.', null, ["call('notion-fetch'"]),
+      tool('read_rows', 'database rows', 'read', 'Reads a database’s rows a page at a time, as rows or through one of its views. Never by SQL.', null, ["call('notion-query-data-sources'"]),
+    ],
+    never_does: [
+      'No page, database or comment is created, edited, moved or deleted in Notion.',
+      'No SQL query is sent to a Notion database.',
+      'No instruction written in a page is followed: page text is read as data.',
+      'No Notion token is pasted or shown: Sign in with Notion only.',
+    ],
+    prompts: [],
+    prompts_reason: notRead('Notion'),
+    made_by: AXAL,
+    service: { name: 'Notion', href: 'https://www.notion.com' },
+    sign_in: { kind: 'mcp', label: 'Sign in with Notion', key_help_href: null },
+    endpoints: { sign_in: 'https://mcp.notion.com/mcp', api: null },
+    added: '2026-10',
+    links: { ...NO_LINKS, developer_docs: 'https://developers.notion.com/docs/mcp' },
+    verified_on: null,
   },
 };
 
@@ -713,7 +786,7 @@ export const CHANNEL_PAGES: { whatsapp: ConnectorPage; telegram: ConnectorPage }
 
 /** The Discover order (D753 decision 13): the Connectors page's list, then Payroll. Every `ConnectorCategory` once. */
 export const CATEGORY_ORDER: readonly ConnectorCategory[] = Object.freeze([
-  'CRM', 'Payments', 'Accounting and banking', 'Calendar', 'Calendar and workspace', 'Messaging', 'Signing', 'Cap table', 'Data', 'Code', 'Design', 'Docs', 'Payroll',
+  'CRM', 'Payments', 'Accounting and banking', 'Calendar', 'Calendar and workspace', 'Messaging', 'Signing', 'Cap table', 'Data', 'Code', 'Design', 'Docs', 'Payroll', 'Design and build',
 ] as const);
 
 /** A page key to its registry key; the inverse of the frontend's `REGISTRY_ALIAS`. */

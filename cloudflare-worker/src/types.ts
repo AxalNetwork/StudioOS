@@ -192,6 +192,8 @@ export interface Env {
   GOOGLE_SHEETS_REDIRECT_URI?: string;
   // Calendar-specific OAuth client (Task #52). Optional; `services/calendar.ts`
   // already reads these via `(env as any)` and falls back to GOOGLE_CLIENT_*.
+  GOOGLE_PICKER_API_KEY?: string;
+  GOOGLE_PICKER_APP_ID?: string;
   GOOGLE_CAL_CLIENT_ID?: string;
   GOOGLE_CAL_CLIENT_SECRET?: string;
   MICROSOFT_CLIENT_ID?: string;

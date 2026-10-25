@@ -8,13 +8,11 @@
  * `h-<n>`, `e-<n>` or `pool` (D691 decision 4), so the tool's tabs are words
  * CycleRoute reads as tabs, never records (`isCapTableTab`), as D906 did for
  * the Investor narrative. No route is added: the module page is Overview,
- * `/raise/cap-table/h-12` is still a holder and `/new` is still Add holder.
+ * `/raise/cap-table/h-12` is still a holder; `/new` is Record an issuance (D1025).
  *
  * WHAT IS READ, AND FROM WHERE. Every figure comes from a read on `main`:
  *   - `GET /api/cycles/raise/modules/cap-table` → Overview (the Planned round
  *     card, the Holders records, From Mercury), as CycleRoute draws it today;
- *   - `GET /api/safe-issuances/project/:id` → the SAFEs sent through StudioOS,
- *     each with its envelope's status (D578);
  *   - `GET /api/captable/scenarios/by-project/:id/compare` → the saved model
  *     and its draft variants, each with its computed result;
  *   - `GET /api/captable/409a/:projectId` → the 409A in force and the
@@ -25,8 +23,10 @@
  * Planned round card are the saved model, so every figure they draw is
  * Modelled. Only a countersigned SAFE is on record. The record is D1017's (part 2).
  *
- * WHAT IS NOT DRAWN YET, AND WHO DRAWS IT. History has no tab yet (D953's
- * rule; part 10 draws it). Access and Import and export are D1026's
+ * WHAT IS DRAWN WHERE. Instruments, its drawer and Option pool are D1023's
+ * (`instrumentsModel.js`, `poolModel.js`), from the record and part 3's
+ * scenario reads. History, the proposal drawers and the dialogs are
+ * D1025's (`historyModel.js`). Access and Import and export are D1026's
  * (`capTableAccess.js`, `capTableImport.js`); the holder and instrument
  * drawers, the dialogs and the proposals wait for their parts (D1015 §6).
  */
@@ -52,15 +52,16 @@ export const ON_RECORD = 'On record';
 export const HOME_NOTE = 'Figures tagged On record come from the record of what was issued. The Holders list and the Planned round card below still come from your saved model.';
 
 /**
- * The canvas's seven tabs, less History, which waits for its part (D1025).
- * Access and Import and export read D1019's and D1020's routes and D1017's
- * record (D1026). `path` is the tab's segment under HOME_PATH.
+ * The canvas's seven tabs. History reads D1017's history read, by section
+ * (D1025); Access and Import and export read D1019's and D1020's routes and
+ * D1017's record (D1026). `path` is the tab's segment under HOME_PATH.
  */
 export const TABS = [
   { id: 'overview', label: 'Overview', path: '' },
   { id: 'instruments', label: 'Instruments', path: '/instruments' },
   { id: 'option-pool', label: 'Option pool', path: '/option-pool' },
   { id: 'scenarios', label: 'Scenarios', path: '/scenarios' },
+  { id: 'history', label: 'History', path: '/history' },
   { id: 'access', label: 'Access', path: '/access' },
   { id: 'import-export', label: 'Import and export', path: '/import-export' },
 ];
@@ -121,74 +122,8 @@ export function day(s) {
   return `${Number(m[3])} ${M[Number(m[2]) - 1]} ${m[1]}`;
 }
 
-/** The SAFEs sent through StudioOS (D578), each on record only once countersigned. */
-export function issuedSafes(read) {
-  const list = Array.isArray(read?.safes) ? read.safes : [];
-  return list.map((s) => ({
-    uid: s.uid,
-    holder: String(s.investor_name || '').trim() || NOT_RECORDED,
-    amount: money(s.amount_cents, s.currency),
-    cap: money(s.valuation_cap_cents, s.currency),
-    // The Worker stores no discount for these SAFEs (D578): never 0%.
-    discount: s.discount == null ? NOT_RECORDED : `${s.discount}%`,
-    basis: s.form === 'post_money_cap' ? 'Post-money' : NOT_RECORDED,
-    status: s.status?.label || NOT_RECORDED,
-    onRecord: s.status?.key === 'countersigned',
-    created: day(s.created_at),
-  }));
-}
-
-/** The engine stores a discount and a rate as fractions (0.15 is 15%). */
-export const fraction = (v) => `${Math.round(v * 10000) / 100}%`;
-
-/** The model's basis words. A missing basis is how the engine reads pre-money. */
-export function basisWord(entry) {
-  if (entry?.basis === 'post_money') return 'Post-money';
-  if (entry?.basis === 'pre_money') return 'Pre-money';
-  return 'Pre-money (not stated)';
-}
-
-/**
- * The SAFEs and notes in the saved model (Modelled). A pre-money or unstated
- * basis carries CT3's note, since Axal's own SAFE and Mercury's are post-money.
- */
-export function modelInstruments(scenario) {
-  const list = Array.isArray(scenario?.inputs?.safes) ? scenario.inputs.safes : [];
-  return list.map((s, i) => {
-    const note = s?.instrument === 'note';
-    return {
-      key: `${i}`,
-      holder: String(s?.name || '').trim() || NOT_RECORDED,
-      type: note ? 'Convertible note' : 'SAFE',
-      amount: dollars(s?.amount),
-      cap: num(s?.cap) && s.cap > 0 ? dollars(s.cap) : NOT_RECORDED,
-      discount: num(s?.discount) && s.discount > 0 ? fraction(s.discount) : NOT_RECORDED,
-      basis: basisWord(s),
-      interest: note ? (num(s?.interest_rate) > 0 ? fraction(s.interest_rate) : NOT_RECORDED) : null,
-      signed: day(s?.issue_date),
-      check: s?.basis !== 'post_money',
-      cannotConvert: !(num(s?.cap) > 0) && !(num(s?.discount) > 0),
-    };
-  });
-}
-
+/** CT3's note on a pre-money SAFE (D1023 draws it on the record's instruments). */
 export const BASIS_CHECK = 'Basis: pre-money, as entered. Axal’s SAFE template is post-money.';
-export const CANNOT_CONVERT = 'Cannot convert: no cap and no discount recorded.';
-
-/** How the model's instruments convert in its first round, in the engine's own words. */
-export function conversionLines(scenario) {
-  const round = scenario?.result?.rounds?.[0];
-  if (!round) return null;
-  return { round: String(round.name || 'the round'), lines: Array.isArray(round.events) ? round.events.map(String) : [] };
-}
-
-/** The option pool in the saved model: its target and the shares the founding table gives it. */
-export function modelPool(scenario) {
-  if (!scenario) return null;
-  const target = num(scenario.inputs?.option_pool_pct);
-  const row = (scenario.result?.founding || []).find((h) => h?.type === 'option_pool');
-  return { target: target == null ? NOT_RECORDED : `${target}%`, shares: row ? shares(row.shares) : NOT_RECORDED, pct: row ? pct(row.pct) : NOT_RECORDED };
-}
 
 /** The 409A read in the Worker's words; null for a read that did not answer. */
 export function harbour(read) {

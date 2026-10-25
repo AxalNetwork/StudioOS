@@ -46,9 +46,11 @@ test('every fact is checked as Not recorded, every gap says why, and nothing cla
   assert.equal(docs.find((d) => d.name === 'Data Processing Addendum').to, null, 'not published, not linked');
 });
 
-test('wiring: the public routes have no guard, /trust/me keeps the six-role guard, and every signed-in door opens /trust/me', () => {
+test('wiring: the public routes have no guard signed out, /trust/me keeps the six-role guard, and every signed-in door opens /trust/me', () => {
   const app = read('frontend/src/App.jsx');
-  for (const p of PUBLIC_PATHS) assert.ok(app.split('\n').some((l) => l.trim() === `<Route path="${p}" element={<TrustCenter />} />`), p);
+  // D1077 (#2969, TRU20): no guard signed out; signed in, the same page inside the app shell.
+  for (const p of PUBLIC_PATHS) assert.ok(app.split('\n').some((l) => l.trim() === `<Route path="${p}" element={trustCenter} />`), p);
+  assert.match(app, /: <TrustCenter \/>;/, 'signed out, no guard');
   assert.ok(app.includes(`<Route path="/trust/me" element={guard(['admin', 'founder', 'partner', 'investor', 'advisor', 'exploring'], investorWorkspace('trust', <TrustCenterPage chromeless={effectiveRole === 'investor'} />))} />`));
   assert.ok(app.includes('<Link to="/trust/me" onClick={() => setOpen(false)}'), 'the account menu');
   for (const f of ['frontend/src/ui/phone/AccountSheet.jsx', 'frontend/src/sidebarConfig.js', 'frontend/src/workspaces/shellConfig.js', 'frontend/src/pages/account/accountPhone.js',

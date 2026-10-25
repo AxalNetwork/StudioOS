@@ -9,39 +9,14 @@
 import { formatWord, statusOf, visibilityWord } from './myEventsModel';
 import { registrationTab } from './eventOrganiserModel';
 
-const time = (v) => {
-  if (!v) return null;
-  const t = Date.parse(String(v).includes('T') || String(v).endsWith('Z') ? v : `${String(v).replace(' ', 'T')}Z`);
-  return Number.isFinite(t) ? t : null;
-};
+import { eventTime as time, dayIn, onEventDay } from './eventTime';
+export { dayIn, onEventDay };
 
 /** "Europe/Berlin" → "Berlin time"; UTC is UTC. */
 export function zoneWords(zone) {
   if (!zone || zone === 'UTC' || zone === 'Etc/UTC') return 'UTC';
   const city = String(zone).split('/').pop().replace(/_/g, ' ');
   return `${city} time`;
-}
-
-/** The calendar day of `ms` in `zone`, as YYYY-MM-DD. */
-export function dayIn(ms, zone) {
-  try {
-    return new Date(ms).toLocaleDateString('en-CA', { timeZone: zone || 'UTC', year: 'numeric', month: '2-digit', day: '2-digit' });
-  } catch {
-    return new Date(ms).toISOString().slice(0, 10);
-  }
-}
-
-/**
- * Is today, in the event's own zone, one of its days (its start day through
- * its end day)? An event with no start is never on its day.
- */
-export function onEventDay(event, now = Date.now()) {
-  const start = time(event?.starts_at);
-  if (start == null) return false;
-  const zone = event?.timezone || 'UTC';
-  const end = time(event?.ends_at) ?? start;
-  const today = dayIn(now, zone);
-  return today >= dayIn(start, zone) && today <= dayIn(Math.max(start, end), zone);
 }
 
 const clock = (ms, zone) => {

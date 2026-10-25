@@ -279,6 +279,22 @@ test('group=<role> fills the lightbox, with its table by country', async () => {
   assert.equal((await read(seeded())).group, undefined, 'no group block unless asked');
 });
 
+test('D1110 (#2990): the group read keeps the page\'s country', async () => {
+  const g = (await read(seeded(), { group: 'founder', country: 'Canada' })).group;
+  assert.deepEqual(g.by_country.map((x: any) => x.country), ['Canada'], 'only that country');
+  assert.deepEqual([g.count, g.new_30d, g.active_last_week, g.dormant], [2, 1, 0, 1]);
+  assert.deepEqual(g.active_by_week.map((x: any) => x.count), [1, 0, 0, 0, 0, 0, 0, 1], 'France\'s founder is not in the line');
+  assert.equal(g.signups_by_week.reduce((t: number, w: any) => t + w.count, 0), 2, 'Fay and Fred; Finn is French');
+  // A French founder who came back in week two: France activates, Canada does not.
+  const db = seeded();
+  db.prepare(`INSERT INTO users (id, role, name, email, is_active, created_at, country) VALUES (7, 'founder', 'Flo Private', 'flo@secret.example', 1, '2026-09-01 09:00:00', 'France')`).run();
+  db.prepare(`INSERT INTO activity_logs (user_id, action, endpoint, created_at) VALUES (7, 'request', '/api/inbox', '2026-09-10 09:00:00')`).run();
+  const ca = (await read(db, { group: 'founder', country: 'Canada' })).group;
+  const fr = (await read(db, { group: 'founder', country: 'France' })).group;
+  assert.deepEqual([ca.count, ca.activated_pct], [2, 0], 'Canada\'s rate counts Canada\'s cohorts only');
+  assert.deepEqual([fr.count, fr.activated_pct, fr.by_country.map((x: any) => x.country)], [2, 100, ['France']]);
+});
+
 test('each block fails alone: a missing table is that block\'s unreadable, never zero', async () => {
   const cases: Array<[string, (r: any) => void]> = [
     ['lp_applications', (r) => {

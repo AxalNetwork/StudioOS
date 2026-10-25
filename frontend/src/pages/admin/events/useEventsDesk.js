@@ -10,7 +10,6 @@ import { PAGE_LIMIT, isEventId, readEveryPage } from './eventsDeskModel';
  *              the tab strip's count;
  *   all        R1, every page: Overview, All events and Calendar, and
  *              Review's Clashes card (D921), which needs every event's times;
- *   analytics  R2's per-event rows on the other tabs, under Guard G;
  *   overview   D920's period blocks; Overview draws no capped analytics;
  *   event      R3, one event's page;
  *   agenda     R5, that event's agenda;
@@ -26,10 +25,9 @@ import { PAGE_LIMIT, isEventId, readEveryPage } from './eventsDeskModel';
  * after a write; a read that already answered keeps its rows on screen until
  * the new answer lands, so a refresh never blanks the page.
  *
- * R2 and the queue are read again whenever the list (R1) is switched on or
- * off, so coming back from an event's page re-reads all three together and
- * Guard G never joins a fresh list to old counts. `asOf` is the OLDEST answer
- * among the reads the tab draws, so "Updated" is never newer than what is on
+ * The queue is read again whenever the list is switched on or off. D1115 uses
+ * D918's counts on those same list rows, or the event's own summary. `asOf` is
+ * the OLDEST answer among the reads the tab draws, so Updated is never newer than what is on
  * screen; `reading` is true only while one of those reads is still loading.
  */
 
@@ -65,8 +63,6 @@ export function useEventsDesk(tab, eventId, { paidView = false, weeks = 12 } = {
   const withList = `${tick}:${wantList}`;
   const queue = useRead('queue', 'queue', withList, true, () => pages('pending_review'));
   const all = useRead('list', 'all', tick, wantList, () => pages(undefined));
-  const wantAnalytics = (wantAll && tab !== 'overview') || wantEvent;
-  const analytics = useRead('analytics', 'analytics', withList, wantAnalytics, () => adminEvents.analytics());
   const event = useRead('event', `event:${eventId}`, tick, wantEvent, () => adminEvents.get(eventId));
   const agenda = useRead('agenda', `agenda:${eventId}`, tick, wantEvent, () => eventsApi.agenda(eventId));
   const summary = useRead('summary', `summary:${eventId}`, tick, wantEvent, () => adminEvents.summary(eventId));
@@ -76,12 +72,12 @@ export function useEventsDesk(tab, eventId, { paidView = false, weeks = 12 } = {
   const overview = useRead('overview', `overview:${weeks}`, tick, tab === 'overview', () => adminEvents.overview(weeks));
   const reload = useCallback(() => setTick((t) => t + 1), []);
   // The queue is drawn on every tab: the tab strip's Review count.
-  const drawn = [[queue, true], [all, wantList], [analytics, wantAnalytics], [overview, tab === 'overview'], [event, wantEvent], [agenda, wantEvent], [summary, wantEvent], [history, wantEvent], [paid, wantPaid]]
+  const drawn = [[queue, true], [all, wantList], [overview, tab === 'overview'], [event, wantEvent], [agenda, wantEvent], [summary, wantEvent], [history, wantEvent], [paid, wantPaid]]
     .filter(([, on]) => on).map(([r]) => r);
   const stamps = drawn.map((r) => r.at).filter(Boolean);
   const asOf = stamps.length ? Math.min(...stamps) : null;
   const reading = drawn.some((r) => r.status === 'loading');
-  return { queue, all, analytics, event, agenda, summary, history, paid, overview, reload, asOf, reading, tick };
+  return { queue, all, event, agenda, summary, history, paid, overview, reload, asOf, reading, tick };
 }
 
 /**

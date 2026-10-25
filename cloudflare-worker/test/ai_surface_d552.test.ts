@@ -196,8 +196,7 @@ const EXPECTED: Record<string, string[]> = {
   'services/deckExtract.ts': ['AI_SURFACE.raisePitchReview', 'AI_SURFACE.raisePitchReview'],
   'services/deckVersionReview.ts': ['AI_SURFACE.raisePitchReview'],
   // D767 (#2096): the deck draft and the slide fill.
-  // D778 part 2: positioning joins the deck draft on the same surface.
-  'routes/decks.ts': ['AI_SURFACE.raisePitch'],
+  // D1113 retired decks.ts's old positioning call; the active deck/narrative calls remain below.
   'routes/deck_new.ts': ['AI_SURFACE.raisePitch', 'AI_SURFACE.raisePitch'], // D897: the outline and the build; /generate moved here
   'routes/deck_assist.ts': ['AI_SURFACE.raisePitch'], // D899: the card tools
   'services/decks/autofill.ts': ['AI_SURFACE.raisePitch'],

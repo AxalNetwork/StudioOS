@@ -25,7 +25,7 @@ import learningPrograms from '../src/routes/learning_programs.ts';
 import adminLearningPrograms from '../src/routes/admin_learning_programs.ts';
 import { branchPrograms } from '../src/rpc/branchOps.ts';
 import {
-  HQ_READS_REASON, PART4_CLAIMS_REASON, PART4_STRATEGIC_REASON, REFERRAL_REWARDS_REASON,
+  HQ_READS_REASON, REFERRAL_REWARDS_REASON,
   loadProgramsForBranch, programCatalogue,
 } from '../src/services/programCatalogue.ts';
 import { PROGRAM_KEYS, PAUSE_NOT_DECIDED } from '../src/services/programRegistry.ts';
@@ -363,7 +363,7 @@ test('the catalogue: the queues, their bands and the Waiting total, exact', asyn
   assert.equal(w.referrals.aged, 'since submitted');
   assert.deepEqual({ count: w.perks.count, oldest: w.perks.oldest_hours, aged: w.perks.aged }, { count: 1, oldest: 50, aged: 'since last edit' });
   assert.equal(w.hosts.count, 1);
-  assert.deepEqual(w.strategic, { available: false, pending: true, reason: PART4_STRATEGIC_REASON });
+  assert.deepEqual(w.strategic, { available: true, count: 0 });
   const tile = cat.tiles.waiting as any;
   assert.equal(tile.count, 6);
   assert.equal(tile.oldest_hours, 80);
@@ -406,7 +406,7 @@ test('the catalogue: each card\'s figures and Needs you, and Programs running', 
   const refer = rowOf(sa, 'refer-and-earn');
   assert.deepEqual(refer.figures.open_referrals, { available: true, count: 2, waiting_on_member: 1 });
   assert.equal(refer.needs_you.count, 2);
-  assert.deepEqual(refer.needs_you.strategic_requests, { available: false, pending: true, reason: PART4_STRATEGIC_REASON });
+  assert.deepEqual(refer.needs_you.strategic_requests, { available: true, count: 0 });
 
   const perks = rowOf(sa, 'perks');
   assert.deepEqual(perks.figures.live, { available: true, count: 1 });
@@ -427,20 +427,39 @@ test('the catalogue: each card\'s figures and Needs you, and Programs running', 
   assert.equal(rowOf(admin, 'product-testing').figures, null, 'an Admin gets no Product testing figure');
 });
 
-test('a figure waiting on part 4 answers pending with its reason, never unreadable or 0', async () => {
+test('D1119: part 4 claims and strategic requests are read, including zero and independent failures', async () => {
   const db = fresh();
   catalogueFixture(db);
-  const cat = await programCatalogue(envOf(db), { id: SUPER, superAdmin: true }, 4, NOW);
-  for (const [where, b] of [
-    ['perk claims', rowOf(cat, 'perks').figures.claims], ['perks per week', cat.joins_weekly.perks],
-    ['strategic queue', cat.waiting.strategic], ['strategic requests', rowOf(cat, 'refer-and-earn').needs_you.strategic_requests],
-  ] as const) {
-    assert.equal((b as any).pending, true, where);
-    assert.equal((b as any).available, false, where);
-    assert.equal('unreadable' in (b as any), false, where);
-    assert.equal('count' in (b as any), false, where);
-  }
-  assert.equal((cat.joins_weekly.perks as any).reason, PART4_CLAIMS_REASON);
+  db.exec(`INSERT INTO referral_strategic_access (user_id, status) VALUES (5, 'requested'), (6, 'requested'), (7, 'granted');`);
+  // The shared claims read counts all kinds, excludes future and old rows, and uses UTC Monday weeks.
+  db.exec(`INSERT INTO perk_claims (uid, perk_id, user_id, kind_at_claim, created_at) VALUES
+    ('d1119-tier', 2, 6, 'tier', '2026-10-19 00:00:00'),
+    ('d1119-money', 2, 7, 'money', '2026-09-28 00:00:00'),
+    ('d1119-old', 1, 6, 'credits', '2026-09-27 23:59:59'),
+    ('d1119-future', 3, 7, 'credits', '2026-10-21 12:00:01');`);
+  const read = () => programCatalogue(envOf(db), { id: SUPER, superAdmin: true }, 4, NOW);
+  const cat = await read();
+  assert.deepEqual(rowOf(cat, 'perks').figures.claims, { available: true, count: 3 });
+  assert.deepEqual(cat.waiting.strategic, { available: true, count: 2 });
+  assert.deepEqual(rowOf(cat, 'refer-and-earn').needs_you, { available: true, count: 4, strategic_requests: { available: true, count: 2 } });
+  assert.deepEqual(cat.joins_weekly.perks, { available: true, count: 3, total: 3, weeks: [
+    { week: '2026-09-28', count: 1 }, { week: '2026-10-05', count: 0 },
+    { week: '2026-10-12', count: 0 }, { week: '2026-10-19', count: 2 },
+  ] });
+  db.exec('DELETE FROM perk_claims; DELETE FROM referral_strategic_access;');
+  const empty = await read();
+  assert.deepEqual(rowOf(empty, 'perks').figures.claims, { available: true, count: 0 });
+  assert.deepEqual(empty.waiting.strategic, { available: true, count: 0 });
+  db.exec('DROP TABLE perk_claims;');
+  const brokenClaims = await read();
+  assert.equal((brokenClaims.joins_weekly.perks as any).unreadable, true);
+  assert.equal(rowOf(brokenClaims, 'perks').figures.claims.unreadable, true);
+  assert.deepEqual(brokenClaims.waiting.strategic, { available: true, count: 0 });
+  db.exec('DROP TABLE referral_strategic_access;');
+  const brokenQueue = await read();
+  assert.equal((brokenQueue.waiting.strategic as any).unreadable, true);
+  assert.equal(rowOf(brokenQueue, 'refer-and-earn').needs_you.unreadable, true);
+  assert.equal((brokenQueue.waiting.perks as any).available, true);
 });
 
 test('People taking part counts distinct accounts across the programs, and the period before', async () => {
@@ -737,7 +756,23 @@ test('activity: the program\'s own rows, newest first, paged, by hq or admin; Le
   assert.deepEqual(mentor.body.rows, []);
   const perks = await progs(db, ADMIN, '/perks/activity');
   assert.deepEqual(perks.body.rows.map((x: any) => x.concerns.program), ['perks']);
-  assert.equal(perks.body.not_audited.recorded, false);
+  assert.equal(perks.body.not_audited, null);
+});
+
+test('D1119: part 4 audit actions are program-specific and never expose a person or private note', async () => {
+  const db = fresh();
+  const actions = ['perk.approved', 'perk.rejected', 'perk.paused', 'perk.feature_updated',
+    'referral_strategic_access.granted', 'referral_strategic_access.declined'];
+  for (const action of actions) db.prepare(`INSERT INTO admin_audit_log (admin_user_id, action, filters_json, exported_at) VALUES (?, ?, ?, ?)`)
+    .run(SUPER, action, JSON.stringify({ uid: 'pk-approval', target_user_id: FOUNDER, note: 'private note' }), '2026-10-21 12:00:00');
+  const perks = await progs(db, ADMIN, '/perks/activity');
+  assert.deepEqual(perks.body.rows.map((r: any) => r.kind), actions.slice(0, 4).reverse());
+  assert.deepEqual(perks.body.rows.map((r: any) => r.concerns), Array(4).fill({ perk: 'pk-approval' }));
+  assert.equal(perks.body.not_audited, null);
+  const strategic = await progs(db, ADMIN, '/refer-and-earn/activity');
+  assert.deepEqual(strategic.body.rows.map((r: any) => r.kind), actions.slice(4).reverse());
+  assert.deepEqual(strategic.body.rows.map((r: any) => r.concerns), [{}, {}]);
+  assert.equal(JSON.stringify([perks.body, strategic.body]).includes('private note'), false);
 });
 
 test('activity: Mentor reads D960\'s assign and end rows, naming the cohort and never the mentor', async () => {

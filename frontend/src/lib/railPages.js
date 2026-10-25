@@ -264,6 +264,8 @@ const ADMIN = [
   own('/admin/accounts/all', key(AD, 'Accounts', 'Users')),
   own('/admin/exploring', key(AD, 'Accounts', 'Exploring members')),
   own('/admin/trash', key(AD, 'Accounts', 'Trash')),
+  // D1004 (#2819, #1874): Persona segments sits under Accounts; the AIRail canvas draws no Admin board for it.
+  off('/admin/persona-segments', key(AD, 'Accounts', 'Persona segments')),
   own('/admin/approvals', key(AD, 'Approvals')),
   alias('/branch/approvals', key(AD, 'Approvals'), 'The branch’s Approvals page.'),
   own('/admin/kyc', key(AD, 'Approvals', 'Identity checks')),

@@ -1,17 +1,21 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { Link, useLocation } from 'react-router-dom';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { RefreshCw } from 'lucide-react';
-import { api } from '../../../lib/api';
 import { partnerProfilesApi } from '../../../lib/api/partnerProfiles';
 import { reportError } from '../../../lib/log';
-import { AdminPageHeader, HeaderTab, useMovedNotice } from '../../../ui';
+import { AdminPageHeader, HeaderMenuItem, HeaderTab, useMovedNotice } from '../../../ui';
 import { ChartTable, GroupedColumns, Legend, StackBars } from '../../../ui/Charts';
 import AdminBoardFrame from '../AdminBoardFrame';
-import { ProfileReviewModal } from '../consoles/PartnerProfilesConsole';
+import { useAuth } from '../../../hooks/useAuthSync';
+import { isSuperAdminUser } from '../../../lib/shellRole';
+import ProfileRecord from './ProfileRecord';
+import { ReopenDialog } from './ProfileDialogs';
+import { neighbours, recordPath, refOfPath } from './profileModel';
 import {
-  APPROVALS_PATH, CHANGED_WAITS, COUNTS_FAILED, IDENTITY_STATES, LIST_FAILED, LIST_FAILED_SUB, MOVED_NOTICES, NOT_GIVEN, NOT_RECORDED,
-  PAGE_LINE, PAGE_SIZE, PP_TITLE, RAIL_NOTE, REVIEWED_WAITS, SORTS, SOURCES, STATUS_CHIPS, SUMMARY_CAP,
-  categoryChart, failureRef, filtersSet, listParams, pageLabel, pagesOf, rowView, tabOf, tilesOf, weeklyAlt, weeklyChart,
+  APPROVALS_PATH, COLUMNS, COUNTS_FAILED, IDENTITY_STATES, LIST_FAILED, LIST_FAILED_SUB, MOVED_NOTICES, NOT_GIVEN, NOT_RECORDED,
+  PAGE_LINE, PAGE_SIZE, PAGE_SIZES, PP_TITLE, RAIL_NOTE, REOPEN, REVIEWED_BEFORE, SORTS, SOURCES, STATUS_CHIPS, SUMMARY_CAP,
+  categoryChart, exportParams, exportedLine, failureRef, filtersSet, listParams, pageLabel, pagesOf, refusalLine, reviewerOptions,
+  rowView, shownColumns, tabOf, tilesOf, weeklyAlt, weeklyChart,
 } from './ppModel';
 
 /**
@@ -28,11 +32,18 @@ import {
  * categories, the status chips (Drafts their own), and every profile with
  * search, filters, a sort and pages, all asked of D990's list read.
  *
- * WHAT IS NOT RECORDED SAYS SO (D994 §3): who reviewed a profile and when,
- * the changed-since-verified flag and each week's decisions wait for part 2.
- * The envelopes out for signature, and each row's, are D993's (part 4). The review is today's dialog
- * (`ProfileReviewModal`) until part 6; a failed record read says so in the
- * page, never in a browser pop-up.
+ * WHAT IS NOT RECORDED SAYS SO (D994 §3): a verdict given before D991
+ * recorded review dates reads Not recorded; each week's decisions stay "not
+ * recorded" while the counts read says so. The envelopes out for signature,
+ * and each row's, are D993's (part 4).
+ *
+ * D1127 (#3007): the More menu (Export this view, Approvals, the Exploring
+ * board), the row checkboxes and each row's "⋯" (Open, Reopen for review,
+ * Export), the Columns picker, Rows per page, an Explorer's binding agreement,
+ * and part 2's Reviewed column, changed dot, filter and sort. The review is today's dialog
+ * D995 (#2806): one profile opens as PRF3's lightbox at its own address,
+ * `/admin/partner-profiles/<ref>`, over the list it was opened from
+ * (`ProfileRecord.jsx`), with Previous and Next through that list.
  */
 
 const BTN = 'inline-flex min-h-[36px] items-center justify-center gap-2 whitespace-nowrap rounded-[9px] px-3.5 text-[12.5px] font-bold';
@@ -194,7 +205,13 @@ function Agreement({ v }) {
 
 function Account({ v }) {
   if (!v.account.has) return <span className={SUB}>{v.account.text}</span>;
-  return <><span className={OUTLINE}>{v.account.text}</span>{v.account.sub ? <span className={`block ${SUB}`}>{v.account.sub}</span> : null}</>;
+  return (
+    <>
+      <span className={OUTLINE}>{v.account.text}</span>
+      {v.account.sub ? <span className={`block ${SUB}`}>{v.account.sub}</span> : null}
+      {v.account.binding ? <span className={`block ${SUB}`} data-testid="pp-binding">{v.account.binding}</span> : null}
+    </>
+  );
 }
 
 function Identity({ v }) {
@@ -230,12 +247,20 @@ function Skeleton() {
   );
 }
 
-function Pager({ list, page, setPage, testId }) {
+function Pager({ list, page, pageSize = PAGE_SIZE, setPage, setPageSize, testId }) {
   const total = list.data?.totals?.total ?? 0;
-  const pages = pagesOf(PAGE_SIZE, total);
+  const pages = pagesOf(pageSize, total);
   return (
-    <span className="flex items-center gap-2">
-      <span className={`${MONO} text-[12px] text-axal-muted dark:text-gray-400`} data-testid={testId}>{list.status === 'ready' ? pageLabel(page, PAGE_SIZE, total) : ''}</span>
+    <span className="flex flex-wrap items-center gap-2">
+      {setPageSize ? (
+        <label className="flex items-center gap-1.5 text-[12px] text-axal-muted dark:text-gray-400">
+          Rows per page
+          <select value={pageSize} onChange={(e) => setPageSize(Number(e.target.value))} className={SELECT} data-testid={`${testId}-size`}>
+            {PAGE_SIZES.map((n) => <option key={n} value={n}>{n}</option>)}
+          </select>
+        </label>
+      ) : null}
+      <span className={`${MONO} text-[12px] text-axal-muted dark:text-gray-400`} data-testid={testId}>{list.status === 'ready' ? pageLabel(page, pageSize, total) : ''}</span>
       <button type="button" className={GHOST} disabled={page <= 1} onClick={() => setPage(page - 1)}>Previous</button>
       <button type="button" className={GHOST} disabled={page >= pages} onClick={() => setPage(page + 1)}>Next</button>
     </span>
@@ -264,7 +289,7 @@ function Queue({ list, options, f, set, drafts, onReview, reload }) {
         <Pick label="Onboarding category" value={f.category} options={withNone(options?.category)} onChange={(category) => set({ category })} testId="pp-filter-category" />
         <Pick label="Founder track" value={f.founder_track} options={withNone(options?.founder_track)} onChange={(founder_track) => set({ founder_track })} testId="pp-filter-track" />
         <Pick label="Sort" value={f.sort === 'waiting' ? '' : f.sort} options={SORTS.review.slice(1)} onChange={(sort) => set({ sort: sort || 'waiting' })} testId="pp-sort" />
-        <Pager list={list} page={f.page} setPage={(page) => set({ page }, true)} testId="pp-queue-count" />
+        <Pager list={list} page={f.page} pageSize={f.page_size || PAGE_SIZE} setPage={(page) => set({ page }, true)} setPageSize={(page_size) => set({ page_size })} testId="pp-queue-count" />
       </div>
       {String(f.q || '').trim().length === 1 && <span className={SUB}>Type at least two characters.</span>}
       {list.status === 'loading' && <Skeleton />}
@@ -356,7 +381,7 @@ function Weekly({ counts }) {
       testId="pp-weekly"
       table={chart}
       alt={weeklyAlt(chart)}
-      note={`Profiles per week, by the Monday each week starts.${chart.decided ? '' : ` Verified and Rejected are not recorded: ${chart.reason || REVIEWED_WAITS}`}`}
+      note={`Profiles per week, by the Monday each week starts.${chart.decided ? '' : ` Verified and Rejected are not recorded: ${chart.reason || REVIEWED_BEFORE}`}`}
       legend={<Legend items={[{ label: 'Captured', tone: 'violet' }, { label: 'Verified', tone: 'sky' }, { label: 'Rejected', tone: 'amber' }, ...(chart.decided ? [] : [{ label: 'Not recorded', tone: 'dash' }])]} />}
       foot={`This week is not finished, so its columns are hatched: ${chart.thisWeek.toLocaleString('en-US')} captured so far.`}
     >
@@ -391,10 +416,102 @@ function Categories({ summary, onPick }) {
   );
 }
 
-function AllProfiles({ list, summary, counts, f, set, reset, onReview, reload }) {
+/** Closes on Escape and on a click outside `wrap`, while `open`. */
+function useDismiss(open, setOpen, wrap, button) {
+  useEffect(() => {
+    if (!open) return undefined;
+    const away = (e) => { if (!wrap.current?.contains(e.target)) setOpen(false); };
+    document.addEventListener('mousedown', away);
+    return () => document.removeEventListener('mousedown', away);
+  }, [open, setOpen, wrap]);
+  return (e) => {
+    if (open && e.key === 'Escape') { e.preventDefault(); setOpen(false); button.current?.focus?.(); }
+  };
+}
+
+const MENU = 'absolute right-0 top-full z-30 mt-1 flex min-w-[190px] flex-col rounded-[10px] border border-axal-hairline bg-white p-1 text-left shadow-lg dark:border-gray-700 dark:bg-gray-900';
+const MENU_ITEM = 'flex min-h-[38px] items-center rounded-[7px] px-3 text-left text-[12.5px] font-semibold text-axal-ink hover:bg-axal-ground dark:text-gray-100 dark:hover:bg-gray-800';
+
+/** PRF2's row "⋯": Open, Reopen for review (a verdict only), and Export. */
+function RowMenu({ v, onOpen, onReopen, onExport }) {
+  const [open, setOpen] = useState(false);
+  const wrap = useRef(null);
+  const button = useRef(null);
+  const onKey = useDismiss(open, setOpen, wrap, button);
+  const pick = (fn) => () => { setOpen(false); fn(); };
+  return (
+    <span ref={wrap} className="relative inline-block" onKeyDown={onKey}>
+      <button ref={button} type="button" aria-label={`More actions for ${v.name || v.email}`} aria-haspopup="menu" aria-expanded={open}
+        onClick={() => setOpen((o) => !o)} className="grid h-8 w-8 place-items-center rounded-[8px] text-[16px] font-bold text-axal-muted hover:bg-axal-ground dark:text-gray-400 dark:hover:bg-gray-800" data-testid="pp-row-more">⋯</button>
+      {open ? (
+        <span role="menu" aria-label={`Actions for ${v.name || v.email}`} className={MENU} data-testid="pp-row-menu">
+          <button type="button" role="menuitem" className={MENU_ITEM} onClick={pick(onOpen)} data-testid="pp-row-open">Open</button>
+          {v.reopenable ? <button type="button" role="menuitem" className={MENU_ITEM} onClick={pick(onReopen)} data-testid="pp-row-reopen">Reopen for review</button> : null}
+          <button type="button" role="menuitem" className={MENU_ITEM} onClick={pick(onExport)} data-testid="pp-row-export">Export</button>
+        </span>
+      ) : null}
+    </span>
+  );
+}
+
+/** PRF2's "Columns ▾": the columns a viewer can hide. Person and Status always show. */
+function ColumnsPicker({ shown, onChange }) {
+  const [open, setOpen] = useState(false);
+  const wrap = useRef(null);
+  const button = useRef(null);
+  const onKey = useDismiss(open, setOpen, wrap, button);
+  return (
+    <span ref={wrap} className="relative inline-block" onKeyDown={onKey}>
+      <button ref={button} type="button" aria-expanded={open} onClick={() => setOpen((o) => !o)} className={SELECT} data-testid="pp-columns">Columns ▾</button>
+      {open ? (
+        <fieldset className={`${MENU} gap-0.5 px-3 py-2`} data-testid="pp-columns-menu">
+          <legend className="sr-only">Columns to show</legend>
+          {COLUMNS.map((c) => (
+            <label key={c.key} className="flex min-h-[32px] items-center gap-2 text-[12.5px] font-semibold text-axal-ink dark:text-gray-100">
+              <input type="checkbox" checked={shown.includes(c.key)} onChange={(e) => onChange(c.key, e.target.checked)} data-testid={`pp-col-${c.key}`} />
+              {c.label}
+            </label>
+          ))}
+          <span className={`pt-1 ${SUB}`}>Person and Status always show.</span>
+        </fieldset>
+      ) : null}
+    </span>
+  );
+}
+
+/** Which columns this viewer hid, kept in this browser only (a per-viewer convenience). */
+const COLUMNS_KEY = 'partner-profiles.hidden-columns';
+function useHiddenColumns() {
+  const [hidden, setHidden] = useState(() => {
+    try { const v = JSON.parse(localStorage.getItem(COLUMNS_KEY) || '[]'); return Array.isArray(v) ? v : []; } catch { return []; }
+  });
+  const toggle = useCallback((key, on) => {
+    setHidden((h) => {
+      const next = on ? h.filter((k) => k !== key) : [...new Set([...h, key])];
+      try { localStorage.setItem(COLUMNS_KEY, JSON.stringify(next)); } catch { /* the choice lasts this visit */ }
+      return next;
+    });
+  }, []);
+  return [hidden, toggle];
+}
+
+const HEAD = { source: 'Source', category: 'Onboarding category', entity: 'Entity', agreement: 'Agreement', reviewed: 'Reviewed', captured: 'Captured' };
+
+function Reviewed({ v }) {
+  return <span className={v.reviewed.recorded ? 'font-semibold text-axal-ink dark:text-gray-100' : 'text-axal-muted dark:text-gray-400'} title={v.reviewed.tip} data-testid="pp-reviewed">{v.reviewed.text}</span>;
+}
+
+function AllProfiles({ list, summary, counts, f, set, reset, onReview, onReopen, onExport, reload }) {
+  const [hidden, toggleColumn] = useHiddenColumns();
+  const shown = shownColumns(hidden);
+  // The chosen rows are this page's: a new page, filter or refresh clears them.
+  const [chosen, setChosen] = useState(() => new Set());
+  useEffect(() => { setChosen(new Set()); }, [list.data]);
+  const pick = (ref, on) => setChosen((c) => { const n = new Set(c); if (on) n.add(ref); else n.delete(ref); return n; });
   const totals = summary.data?.totals;
   const options = summary.data?.options || list.data?.options;
   const rows = list.data?.rows || [];
+  const pageRefs = rows.map((r) => r.ref).filter(Boolean);
   const filtered = filtersSet('all', f) > 0 || String(f.q || '').trim().length >= 2 || (f.status && f.status !== 'all');
   const onPick = (row, part) => {
     if (row.category === 'Founder' && part.key !== 'profiles') {
@@ -443,13 +560,20 @@ function AllProfiles({ list, summary, counts, f, set, reset, onReview, reload })
             to
             <input type="date" value={f.captured_to || ''} onChange={(e) => set({ captured_to: e.target.value || null })} className={SELECT} data-testid="pp-filter-to" />
           </label>
-          <Pick label="Reviewed by" value={null} options={[]} onChange={() => {}} testId="pp-filter-reviewed" disabled title={REVIEWED_WAITS} />
+          <Pick label="Reviewed by" value={f.reviewed_by} options={reviewerOptions(options?.reviewed_by)} onChange={(reviewed_by) => set({ reviewed_by })} testId="pp-filter-reviewed" />
           <Pick label="Sort" value={f.sort === 'newest' ? '' : f.sort} options={SORTS.all.slice(1)} onChange={(sort) => set({ sort: sort || 'newest' })} testId="pp-sort" />
+          <ColumnsPicker shown={shown} onChange={toggleColumn} />
           {filtered ? <button type="button" className={GHOST} onClick={reset} data-testid="pp-clear">Clear filters</button> : null}
         </div>
         <div className="flex flex-wrap items-center justify-between gap-2">
-          <span className={SUB}>{REVIEWED_WAITS} Until then the Reviewed column and the Reviewed by filter say Not recorded.</span>
-          <Pager list={list} page={f.page} setPage={(page) => set({ page }, true)} testId="pp-count" />
+          {chosen.size > 0 ? (
+            <span className="flex flex-wrap items-center gap-2" data-testid="pp-chosen">
+              <span className="text-[12.5px] font-bold text-axal-ink dark:text-gray-100">{chosen.size} selected</span>
+              <button type="button" className={GHOST} onClick={() => onExport({ refs: [...chosen] })} data-testid="pp-export-chosen">Export selected</button>
+              <button type="button" className={GHOST} onClick={() => setChosen(new Set())}>Clear selection</button>
+            </span>
+          ) : <span className={SUB}>A verdict given before 24 Oct 2026 has no review date, so its Reviewed says Not recorded.</span>}
+          <Pager list={list} page={f.page} pageSize={f.page_size || PAGE_SIZE} setPage={(page) => set({ page }, true)} setPageSize={(page_size) => set({ page_size })} testId="pp-count" />
         </div>
         {String(f.q || '').trim().length === 1 && <span className={SUB}>Type at least two characters.</span>}
         {list.status === 'loading' && <Skeleton />}
@@ -462,24 +586,39 @@ function AllProfiles({ list, summary, counts, f, set, reset, onReview, reload })
             <table className="w-full min-w-[1080px] border-collapse text-left text-[12.5px]">
               <thead>
                 <tr className={EYE}>
-                  {['Person', 'Status', 'Source', 'Onboarding category', 'Entity', 'Agreement', 'Reviewed', 'Captured'].map((t) => <th key={t} scope="col" className="py-1.5 pr-3 font-bold">{t}</th>)}
-                  <th scope="col" className="py-1.5 font-bold"><span className="sr-only">Open</span></th>
+                  <th scope="col" className="w-8 py-1.5 pr-2">
+                    <input type="checkbox" aria-label="Select every profile on this page" checked={pageRefs.length > 0 && pageRefs.every((x) => chosen.has(x))}
+                      onChange={(e) => setChosen(e.target.checked ? new Set(pageRefs) : new Set())} data-testid="pp-check-all" />
+                  </th>
+                  {['Person', 'Status', ...shown.map((k) => HEAD[k])].map((t) => <th key={t} scope="col" className="py-1.5 pr-3 font-bold">{t}</th>)}
+                  <th scope="col" className="py-1.5 font-bold"><span className="sr-only">Actions</span></th>
                 </tr>
               </thead>
               <tbody>
                 {rows.map((r) => {
                   const v = rowView(r);
+                  const cell = {
+                    source: <Sources v={v} />,
+                    category: <Category v={v} />,
+                    entity: <Entity v={v} />,
+                    agreement: <Agreement v={v} />,
+                    reviewed: <Reviewed v={v} />,
+                    captured: <span className={`${MONO} whitespace-nowrap text-[11.5px] font-semibold text-axal-ink dark:text-gray-100`}>{v.captured}</span>,
+                  };
                   return (
                     <tr key={v.ref || v.email} className="border-t border-axal-hairline align-top dark:border-gray-700" data-testid="pp-all-row">
+                      <td className="py-2 pr-2">
+                        {v.ref ? <input type="checkbox" aria-label={`Select ${v.name || v.email}`} checked={chosen.has(v.ref)} onChange={(e) => pick(v.ref, e.target.checked)} data-testid="pp-check" /> : null}
+                      </td>
                       <td className="py-2 pr-3"><Person v={v} /></td>
-                      <td className="py-2 pr-3"><StatusPill v={v} /></td>
-                      <td className="py-2 pr-3"><Sources v={v} /></td>
-                      <td className="py-2 pr-3"><Category v={v} /></td>
-                      <td className="py-2 pr-3"><Entity v={v} /></td>
-                      <td className="py-2 pr-3"><Agreement v={v} /></td>
-                      <td className="py-2 pr-3 text-axal-muted dark:text-gray-400" title={REVIEWED_WAITS}>{v.statusKey === 'verified' || v.statusKey === 'rejected' ? NOT_RECORDED : '—'}</td>
-                      <td className={`py-2 pr-3 ${MONO} whitespace-nowrap text-[11.5px] font-semibold text-axal-ink dark:text-gray-100`}>{v.captured}</td>
-                      <td className="py-2 text-right"><button type="button" className={GHOST} onClick={() => onReview(r)}>Open</button></td>
+                      <td className="py-2 pr-3">
+                        <StatusPill v={v} />
+                        {v.changed ? <span className="mt-1 block text-[11px] font-bold text-[#92400e] dark:text-amber-300" title={v.changed.tip} data-testid="pp-changed">{v.changed.text}</span> : null}
+                      </td>
+                      {shown.map((k) => <td key={k} className="py-2 pr-3">{cell[k]}</td>)}
+                      <td className="py-2 text-right">
+                        <RowMenu v={v} onOpen={() => onReview(r)} onReopen={() => onReopen(r)} onExport={() => onExport({ refs: [v.ref] })} />
+                      </td>
                     </tr>
                   );
                 })}
@@ -487,17 +626,21 @@ function AllProfiles({ list, summary, counts, f, set, reset, onReview, reload })
             </table>
           </div>
         )}
-        <span className={SUB}>{CHANGED_WAITS} Opening this list is recorded.</span>
+        <span className={SUB}>A profile whose answers changed after its verdict keeps the verdict, marked ● in amber. Opening this list, and each export, is recorded.</span>
       </section>
     </>
   );
 }
 
-const BLANK = { q: '', sort: null, page: 1, status: 'all', source: null, category: null, founder_track: null, entity_type: null, agreement: null, has_account: null, identity: null, captured_from: null, captured_to: null };
+const BLANK = { q: '', sort: null, page: 1, page_size: PAGE_SIZE, status: 'all', source: null, category: null, founder_track: null, entity_type: null, agreement: null, has_account: null, identity: null, captured_from: null, captured_to: null, reviewed_by: null };
 
 function PartnerProfilesPage() {
   const loc = useLocation();
-  const tab = tabOf(loc.pathname) || 'review';
+  const navigate = useNavigate();
+  const { user: viewer } = useAuth();
+  // D995 — a record's address keeps the tab it was opened from under it.
+  const ref = refOfPath(loc.pathname);
+  const tab = tabOf(loc.pathname) || (ref && loc.state?.from === 'all' ? 'all' : 'review');
   const notice = useMovedNotice(MOVED_NOTICES);
   const [tick, setTick] = useState(0);
   const reload = useCallback(() => setTick((t) => t + 1), []);
@@ -522,18 +665,42 @@ function PartnerProfilesPage() {
   const [asOf, setAsOf] = useState(null);
   useEffect(() => { if (counts.status === 'ready') setAsOf(Date.now()); }, [counts.status]);
 
-  const [open, setOpen] = useState(null);
-  const [openFailed, setOpenFailed] = useState(null);
-  // The record read is the logged one (D612). A failure is said in the page.
-  const onReview = useCallback(async (row) => {
-    setOpenFailed(null);
+  // D995 — Review and Open go to the profile's own address; the record reads it (logged, D612).
+  const listPath = tab === 'all' ? '/admin/partner-profiles/all' : '/admin/partner-profiles';
+  const onReview = useCallback((row) => {
+    // A literal door, so the reachability walk finds the record's address.
+    if (row?.ref) navigate(`/admin/partner-profiles/${row.ref}`, { state: { from: tab } });
+  }, [navigate, tab]);
+  const rows = list.data?.rows || [];
+  const onDecided = useCallback((result, advance) => {
+    setNote({ tone: 'ok', text: result.text });
+    // PRF6: on the queue, the next waiting profile opens; the list keeps its filters.
+    const next = advance && tab === 'review' ? neighbours(rows, ref).next : null;
+    if (next) navigate(recordPath(next), { state: { from: tab }, replace: true });
+    else navigate(listPath, { replace: true });
+  }, [navigate, rows, ref, tab, listPath]);
+
+  // D1127 — Reopen for review (PRF5d) and the exports, each said in the page.
+  const [reopening, setReopening] = useState(null);
+  const [note, setNote] = useState(null);
+  const onReopen = useCallback((row) => { setNote(null); setReopening(row); }, []);
+  const onExport = useCallback(async (params) => {
+    setNote({ tone: 'quiet', text: 'Exporting…' });
     try {
-      setOpen(await api.adminGetProfile(row.email));
+      const done = await partnerProfilesApi.exportCsv(params);
+      setNote({ tone: 'ok', text: exportedLine(done?.rows) });
     } catch (e) {
-      reportError('partner-profiles:record', e);
-      setOpenFailed(row);
+      reportError('partner-profiles:export', e);
+      setNote({ tone: 'bad', text: refusalLine(e, 'The export could not be made. Nothing was downloaded.') });
     }
   }, []);
+  const more = (
+    <>
+      <HeaderMenuItem onSelect={() => onExport(exportParams(tab, f))} data-testid="pp-more-export">Export this view</HeaderMenuItem>
+      <HeaderMenuItem to="/admin/approvals" data-testid="pp-more-approvals">Open Approvals</HeaderMenuItem>
+      <HeaderMenuItem to="/admin/exploring" data-testid="pp-more-exploring">Open the Exploring board</HeaderMenuItem>
+    </>
+  );
 
   const reviewCount = !tiles ? { kind: 'load' }
     : tiles.waiting.kind === 'num' ? { kind: 'num', value: tiles.waiting.value.toLocaleString('en-US') }
@@ -569,14 +736,14 @@ function PartnerProfilesPage() {
         scope
         notice={{ text: notice.text, onDismiss: notice.dismiss }}
         tabs={tabs}
+        more={more}
         data-testid="pp-header"
       />
       <span className={SUB}>Reading this list, a profile and its tax ID are each recorded under your name.</span>
-      {openFailed && (
-        <div role="alert" className={`${CARD} flex flex-wrap items-center gap-2.5 px-[18px] py-3 text-[13px] text-axal-destructive dark:text-red-300`} data-testid="pp-record-failed">
-          <span>This profile could not be read.</span>
-          <button type="button" className={GHOST} onClick={() => onReview(openFailed)}>Try again</button>
-          <button type="button" className={GHOST} onClick={() => setOpenFailed(null)}>Dismiss</button>
+      {note && (
+        <div role={note.tone === 'bad' ? 'alert' : 'status'} className={`${CARD} flex flex-wrap items-center gap-2.5 px-[18px] py-3 text-[13px] ${note.tone === 'bad' ? 'text-axal-destructive dark:text-red-300' : 'text-axal-ink dark:text-gray-100'}`} data-testid="pp-note">
+          <span>{note.text}</span>
+          <button type="button" className={GHOST} onClick={() => setNote(null)}>Dismiss</button>
         </div>
       )}
       {tab === 'review' && <Tiles tiles={tiles} />}
@@ -588,8 +755,13 @@ function PartnerProfilesPage() {
         </div>
       )}
       {tab === 'review' && !none && <Queue list={list} options={summary.data?.options || list.data?.options} f={f} set={set} drafts={tiles?.drafts ?? null} onReview={onReview} reload={reload} />}
-      {tab === 'all' && <AllProfiles list={list} summary={summary} counts={counts} f={f} set={set} reset={reset} onReview={onReview} reload={reload} />}
-      {open && <ProfileReviewModal profile={open} onClose={() => setOpen(null)} onSaved={() => { setOpen(null); reload(); }} />}
+      {tab === 'all' && <AllProfiles list={list} summary={summary} counts={counts} f={f} set={set} reset={reset} onReview={onReview} onReopen={onReopen} onExport={onExport} reload={reload} />}
+      {reopening && <ReopenDialog row={reopening} onClose={() => setReopening(null)} onDone={() => { setReopening(null); setNote({ tone: 'ok', text: REOPEN.done }); reload(); }} />}
+      {ref && (
+        <ProfileRecord refId={ref} rows={rows} viewerSuper={isSuperAdminUser(viewer)}
+          onGo={(to) => navigate(recordPath(to), { state: { from: tab }, replace: true })}
+          onClose={() => navigate(listPath)} onChanged={reload} onDecided={onDecided} />
+      )}
     </div>
   );
 }

@@ -17,6 +17,9 @@ import { MemoryRouter } from 'react-router-dom';
 import { installDocument } from './_contracts_dom.mjs';
 import { familyOf, includedLines, intervalPrice, intervalsOf, sheetMode } from '../src/components/checkout/checkoutModel.js';
 import { PricingBody } from '../src/pages/PricingPage.jsx';
+import ViewModeContext from '../src/contexts/ViewModeContext.js';
+import { billingAlertsApi } from '../src/lib/api/billingAlerts.js';
+import { api } from '../src/lib/api.js';
 import { publicPricingApi } from '../src/lib/api/publicPricing.js';
 
 const read = (p) => readFileSync(resolve(process.cwd(), p), 'utf8');
@@ -122,4 +125,54 @@ test('the sheet loads Stripe only on Continue, uses today\'s payment form, and h
   assert.match(src, /paying \? \(/, 'the form mounts once the member presses Continue');
   assert.doesNotMatch(src, /window\.(alert|confirm)|\balert\(|\bconfirm\(/);
   assert.ok(read('design/incoming/Checkout · Boards.dc.html').includes('PAYX21'));
+});
+
+
+// D1133: a sheet opened while the plan read is pending must use its eventual result.
+test('D1133 Pricing passes the Advisor and Partner plan read to the open sheet, with failure/retry', async () => {
+  for (const [role, tab, key] of [['advisor', 'advisor', 'advisor'], ['partner', 'operating-partner', 'partner']]) {
+    const restore = installDocument();
+    const create = document.createElement.bind(document);
+    document.createElement = (tag) => { const n = create(tag); n.querySelector = () => null; return n; };
+    const saved = { ...publicPricingApi }; const planStatus = api.planStatus;
+    let resolvePlan; let fail = false;
+    api.planStatus = () => fail ? Promise.reject(new Error('fixture down')) : new Promise((r) => { resolvePlan = r; });
+    publicPricingApi.plansAndPacks = async () => ({ plans: [{ ...GROWTH, family: role, licence_key: key, plan_name: 'Synthetic Pro' }], packs: [] });
+    publicPricingApi.aiModels = async () => ({ models: [] });
+    const container = document.createElement('div'); const root = createRoot(container);
+    const walk = (n) => [n, ...(n.childNodes || []).flatMap(walk)];
+    const props = (n) => Object.entries(n).find(([k]) => k.startsWith('__reactProps$'))?.[1] || {};
+    const byId = (id) => walk(container).find((n) => props(n)['data-testid'] === id);
+    const settle = async () => { for (let n = 0; n < 6; n++) await act(async () => { await new Promise((r) => setTimeout(r, 0)); }); };
+    try {
+      await act(async () => root.render(React.createElement(MemoryRouter, { initialEntries: ['/pricing?for=' + tab] }, React.createElement(ViewModeContext.Provider, { value: { shellRole: role } }, React.createElement(PricingBody, { user: { role } })))));
+      await settle();
+      await act(async () => props(byId('pricing-checkout-pro')).onClick()); await settle();
+      assert.ok(byId('checkout-mode-reading')); assert.ok(!byId('checkout-continue'));
+      await act(async () => resolvePlan({ plan_group: role, status: 'active' })); await settle();
+      assert.ok(byId('checkout-mode-change')); assert.ok(!byId('checkout-continue'));
+      // Remount to exercise a failed read while a sheet is open, then its own retry.
+      await act(async () => root.unmount());
+      const next = createRoot(container); fail = true;
+      await act(async () => next.render(React.createElement(MemoryRouter, { initialEntries: ['/pricing?for=' + tab] }, React.createElement(ViewModeContext.Provider, { value: { shellRole: role } }, React.createElement(PricingBody, { user: { role } }))))); await settle();
+      await act(async () => props(byId('pricing-checkout-pro')).onClick()); await settle();
+      assert.ok(byId('checkout-mode-unreadable')); assert.ok(!byId('checkout-continue'));
+      fail = false;
+      await act(async () => props(byId('checkout-plan-retry')).onClick()); await settle();
+      assert.ok(byId('checkout-mode-reading'));
+      await act(async () => resolvePlan({ plan_group: role, status: 'free' })); await settle();
+      assert.ok(byId('checkout-continue'));
+      await act(async () => next.unmount());
+    } finally { Object.assign(publicPricingApi, saved); api.planStatus = planStatus; restore(); }
+  }
+});
+
+
+test('D1133 renewal clients prepare the mounted alert actions with explicit POSTs', async () => {
+  const restore = installDocument(); const original = globalThis.fetch; const calls = [];
+  globalThis.fetch = async (url, init) => { calls.push([String(url), init.method, init.body]); return new Response('{}', { status: 200 }); };
+  try {
+    await billingAlertsApi.pay(17); await billingAlertsApi.updateCard(17, 'fixture_nonce_1');
+    assert.deepEqual(calls, [['/api/billing/alerts/17/pay', 'POST', undefined], ['/api/billing/alerts/17/update-card', 'POST', JSON.stringify({ nonce: 'fixture_nonce_1' })]]);
+  } finally { globalThis.fetch = original; restore(); }
 });
