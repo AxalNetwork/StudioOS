@@ -12,7 +12,7 @@ function LogPage({ query, page, setPage, tick, retry }) {
   return <>
     <ReadState read={read} what="Lab activity" claim="The event log could not be read." onRetry={retry} testId="lab-activity-log" />
     {data && <><div className="overflow-x-auto"><table className="w-full min-w-[820px] border-collapse"><thead><tr>{['When', 'Event', 'Cohort', 'About', 'By', 'Detail'].map((t) => <th className={TH} key={t}>{t}</th>)}</tr></thead>
-      <tbody>{data.items.map((row) => <tr key={row.id} className="border-t border-axal-hairline dark:border-gray-700"><td className={TD}>{stamp(row.at)}</td><td className={TD}>{eventWord(row.event)}</td><td className={TD}>{row.cohort || 'Not recorded'}</td><td className={TD}>{row.about || 'Not recorded'}</td><td className={TD}>{byWord(row.by)}</td><td className={TD}>{row.scheduled_at ? `Scheduled ${stamp(row.scheduled_at)} · ${row.detail}` : row.detail || 'Not recorded'}</td></tr>)}</tbody></table></div>
+      <tbody>{data.items.map((row) => <tr key={row.id} className="border-t border-axal-hairline dark:border-gray-700"><td className={TD}>{stamp(row.at)}</td><td className={TD}>{row.label || eventWord(row.event)}</td><td className={TD}>{row.cohort || 'Not recorded'}</td><td className={TD}>{row.about || 'Not recorded'}</td><td className={TD}>{byWord(row.by)}</td><td className={TD}>{row.scheduled_at ? `Scheduled ${stamp(row.scheduled_at)} · ${row.detail}` : row.detail || 'Not recorded'}</td></tr>)}</tbody></table></div>
       {!data.items.length && <p className={SUB}>{query.type === 'formation' ? 'No recorded formation actions match these filters.' : 'No recorded events match these filters.'}</p>}
       <Pager shown={shown} onPage={setPage} testId="lab-activity-pages" /><p className={SUB}>{data.coverage}</p>
       <p className={SUB}>Not recorded means this row has no recorded cohort or subject; no association is inferred.</p>
@@ -38,10 +38,12 @@ function SupportSessions() {
 export default function LabActivity({ superAdmin = false }) {
   const [query, setQuery] = useState({ type: '', cohort: '', by: '', q: '', sort: 'newest' });
   const [page, setPage] = useState(1), [tick, setTick] = useState(0);
+  const [search, setSearch] = useState('');
   const change = (key, value) => { setQuery((q) => ({ ...q, [key]: value })); setPage(1); };
   return <div className="flex min-w-0 flex-col gap-4" data-testid="lab-activity">
     <section className={`${CARD} flex min-w-0 flex-col gap-3 p-4`}><h2 className={H2}>Activity</h2>
-      <div className="flex flex-wrap items-center gap-2"><label className="sr-only" htmlFor="lab-activity-search">Search events</label><input id="lab-activity-search" className={INPUT} value={query.q} maxLength={200} onChange={(e) => change('q', e.target.value)} placeholder="Search events" data-testid="lab-activity-search" />
+      <div className="flex flex-wrap items-center gap-2"><form className="flex flex-wrap gap-2" onSubmit={(e) => { e.preventDefault(); change('q', search.trim()); }} data-testid="lab-activity-search-form"><label className="sr-only" htmlFor="lab-activity-search">Search events</label><input id="lab-activity-search" className={INPUT} value={search} maxLength={200} onChange={(e) => setSearch(e.target.value)} placeholder="Search events" data-testid="lab-activity-search" />
+        <button type="submit" className={actionGhost}>Search</button></form>
         <Select label="Activity type" value={query.type} onChange={(v) => change('type', v)} options={ACTIVITY_TYPES} testId="lab-activity-type" />
         <label className={SUB}>Cohort <input type="month" className={INPUT} value={query.cohort} onChange={(e) => change('cohort', e.target.value)} data-testid="lab-activity-cohort" /></label>
         <Select label="Activity by" value={query.by} onChange={(v) => change('by', v)} options={BY} testId="lab-activity-by" />

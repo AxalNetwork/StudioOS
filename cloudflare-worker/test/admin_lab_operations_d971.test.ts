@@ -160,7 +160,13 @@ test('one mounted Lab log: exact count, source separation, filters, literal sear
   assert.equal(empty.body.total, 9); assert.deepEqual(empty.body.items, []);
   assert.equal((await call(adminOperations, db, ADMIN, '/activity?type=decisions&cohort=2026-11&by=admin')).body.total, 1);
   assert.equal((await call(adminOperations, db, ADMIN, '/activity?cohort=2026-12')).body.total, 1);
+  assert.equal((await call(adminOperations, db, ADMIN, '/activity?by=clock')).body.total, 5);
+  assert.equal((await call(adminOperations, db, ADMIN, '/activity?by=admin')).body.total, 4);
   assert.equal((await call(adminOperations, db, ADMIN, '/activity?q=Fay')).body.total, 3);
+  const visibleName = await call(adminOperations, db, ADMIN, '/activity?q=Cohort%20started');
+  assert.equal(visibleName.body.total, 1);
+  assert.equal(visibleName.body.items[0].label, 'Cohort started');
+  assert.equal((await call(adminOperations, db, ADMIN, '/activity?q=Host%20approved')).body.total, 1);
   assert.equal((await call(adminOperations, db, ADMIN, '/activity?q=%25')).body.total, 0, 'search wildcards are literal');
   assert.equal((await call(adminOperations, db, ADMIN, '/activity?sort=oldest&limit=1')).body.items[0].event, 'applications_closed');
   assert.equal((await call(adminOperations, db, FOUNDER, '/activity')).status, 403);

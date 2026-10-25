@@ -52,6 +52,7 @@ async function mount(Component, o = {}, props = {}) {
   return { calls, text: () => text(container), has: (id) => !!by(id), props: (id) => p(by(id)),
     of: (id) => { assert.ok(by(id), id); return text(by(id)); },
     async click(id) { const props = p(by(id)); assert.ok(props.onClick, id); assert.ok(!props.disabled, `${id} disabled`); await act(async () => props.onClick({ preventDefault() {}, stopPropagation() {} })); await flush(); },
+    async submit(id) { assert.ok(by(id), id); await act(async () => p(by(id)).onSubmit({ preventDefault() {} })); await flush(); },
     async type(id, value) { assert.ok(by(id), id); await act(async () => p(by(id)).onChange({ target: { value } })); await flush(); },
     async clickText(word) { const n = walk(container).find((n) => n.tagName === 'BUTTON' && text(n) === word); assert.ok(n, word); await act(async () => p(n).onClick()); await flush(); },
     async close() { await act(async () => root.unmount()); Object.assign(globalThis, original); restore(); },
@@ -125,7 +126,7 @@ test('Settings failed size is independent of fixed rules; retry and SA grant sel
   try {
     assert.match(m.of('lab-size-unreadable'), /Unreadable/); assert.match(m.text(), /America\/New_York/);
     assert.match(m.text(), /HQ-held accounts have no subsidiary grant/);
-    await m.type('lab-grant-studio', 'lic-one'); assert.match(m.of('lab-grant-terms'), /Off/); assert.match(m.of('lab-grant-terms'), /Not recorded — HQ has not set this term/);
+    await m.type('lab-grant-studio', 'lic-one'); assert.match(m.of('lab-grant-terms'), /Cohorts a year0/); assert.match(m.of('lab-grant-terms'), /Off/); assert.match(m.of('lab-grant-terms'), /Not recorded — HQ has not set this term/);
     fail = false; await m.clickText('Try again'); assert.equal(m.of('lab-size-min'), '0');
   } finally { await m.close(); }
 });
@@ -136,6 +137,10 @@ test('Activity sends type, cohort, actor, literal search and sort to the Worker;
     assert.equal(m.calls.some((c) => c.path.includes('impersonation')), false);
     await m.clickText('Next'); assert.equal(m.calls.at(-1).query.get('offset'), '25');
     for (const [id, value] of [['type', 'decisions'], ['cohort', '2026-11'], ['by', 'admin'], ['search', 'Fay %'], ['sort', 'oldest']]) await m.type('lab-activity-' + id, value);
+    const beforeSearch = m.calls.filter((c) => c.path.endsWith('/activity')).length;
+    await m.type('lab-activity-search', 'Fay %');
+    assert.equal(m.calls.filter((c) => c.path.endsWith('/activity')).length, beforeSearch, 'typing does not query D1');
+    await m.submit('lab-activity-search-form');
     const q = m.calls.filter((c) => c.path.endsWith('/activity')).at(-1).query;
     assert.deepEqual([q.get('type'), q.get('cohort'), q.get('by'), q.get('q'), q.get('sort'), q.get('offset')], ['decisions', '2026-11', 'admin', 'Fay %', 'oldest', '0']);
   } finally { await m.close(); }
@@ -186,4 +191,9 @@ test('Places confirms its effects, sends only max, and rereads after success; mi
 test('Super Admin grant failure is independent of operative size and does not turn into an absent grant', async () => {
   const m = await mount(LabSettings, { '/api/admin/program-grants': json({ error: 'failed' }, 503) }, { superAdmin: true });
   try { assert.match(m.of('lab-grants-unreadable'), /Unreadable/); assert.equal(m.of('lab-size-max'), '25'); assert.doesNotMatch(m.text(), /this studio has no Spin-Out Lab grant/); } finally { await m.close(); }
+});
+
+test('an invalid negative size in a successful response is unreadable, never drawn as an operative value', async () => {
+  const m = await mount(LabSettings, { '/api/admin/cohort/settings': { settings: { min: -1, max: 25 } } });
+  try { assert.match(m.of('lab-size-unreadable'), /Unreadable/); assert.equal(m.has('lab-size-edit-min'), false); } finally { await m.close(); }
 });

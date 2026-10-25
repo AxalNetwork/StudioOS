@@ -67,12 +67,32 @@ const HISTORY = `WITH history AS (
     WHERE a.action IN ('incorporation_packet_ready', 'incorporation_filed', 'section_83b_operator_assigned', 'section_83b_operator_review_recorded')
       AND (i.user_id IN (${LAB_PARTICIPANT_IDS}) OR p.founder_id IN
         (SELECT lu.founder_id FROM users lu WHERE lu.id IN (${LAB_PARTICIPANT_IDS})))
+), labelled AS (
+  SELECT *, CASE event
+    WHEN 'applicant_approved' THEN 'Application approved'
+    WHEN 'applicant_rejected' THEN 'Application declined'
+    WHEN 'applicant_waitlisted' THEN 'Application waitlisted'
+    WHEN 'applications_closed' THEN 'Applications closed'
+    WHEN 'capacity_ok' THEN 'Capacity checked'
+    WHEN 'cycle_postponed' THEN 'Cohorts combined'
+    WHEN 'cycle_activated' THEN 'Cohort started'
+    WHEN 'force_proceed' THEN 'Run below the minimum'
+    WHEN 'settings_updated' THEN 'Cohort size changed'
+    WHEN 'lab_host.approve' THEN 'Host approved'
+    WHEN 'lab_host.reject' THEN 'Host declined'
+    WHEN 'lab_host.revoke' THEN 'Host removed'
+    WHEN 'spinout_certificate_issued' THEN 'Certificate issued'
+    WHEN 'spinout_certificate_revoked' THEN 'Certificate revoked'
+    WHEN 'program.playbook.edit' THEN 'Playbook draft edited'
+    WHEN 'program.playbook.publish' THEN 'Playbook published'
+    WHEN 'program.registry.update' THEN 'Program updated'
+    ELSE replace(event, '_', ' ') END AS event_label FROM history
 ), filtered AS (
-  SELECT * FROM history WHERE (? = '' OR type = ?) AND (? = '' OR cohort = ?)
-    AND (? = '' OR by = ?) AND (? = '' OR instr(lower(coalesce(event, '') || ' ' || coalesce(about, '') || ' ' || detail), lower(?)) > 0)
+  SELECT * FROM labelled WHERE (? = '' OR type = ?) AND (? = '' OR cohort = ?)
+    AND (? = '' OR by = ?) AND (? = '' OR instr(lower(coalesce(event, '') || ' ' || event_label || ' ' || coalesce(about, '') || ' ' || detail), lower(?)) > 0)
 ) SELECT
       (SELECT COUNT(*) FROM filtered) AS total,
-      (SELECT json_group_array(json_object('id', id, 'at', at, 'type', type, 'event', event,
+      (SELECT json_group_array(json_object('id', id, 'at', at, 'type', type, 'event', event, 'label', event_label,
         'cohort', cohort, 'about', about, 'by', by, 'detail', detail, 'scheduled_at', scheduled_at)) FROM
         (SELECT * FROM filtered ORDER BY
           CASE WHEN ? = 'newest' THEN julianday(at) END DESC,
