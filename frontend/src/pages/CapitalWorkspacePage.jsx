@@ -24,6 +24,21 @@ const TABS = [
   { id: 'pipeline', to: '/raise/capital/pipeline', label: 'Raise Pipeline', icon: TrendingUp },
 ];
 
+/**
+ * D1016: the query a tab keeps — the venture (`?project=` or `?project_id=`) and nothing else, so
+ * switching tabs never drops the startup the founder picked. Exported for its test.
+ */
+export function tabHref(to, search = '') {
+  const from = new URLSearchParams(String(search || '').replace(/^\?/, ''));
+  const keep = new URLSearchParams();
+  for (const k of ['project', 'project_id']) {
+    const v = from.get(k);
+    if (v) keep.set(k, v);
+  }
+  const q = keep.toString();
+  return q ? `${to}?${q}` : to;
+}
+
 export default function CapitalWorkspacePage() {
   const location = useLocation();
   const navigate = useNavigate();
@@ -54,7 +69,7 @@ export default function CapitalWorkspacePage() {
               key={t.id}
               type="button"
               data-testid={`capital-tab-${t.id}`}
-              onClick={() => navigate(t.to)}
+              onClick={() => navigate(tabHref(t.to, location.search))}
               className={`inline-flex items-center gap-2 px-4 py-2.5 text-sm font-medium border-b-2 -mb-px transition-colors ${
                 isActive
                   ? 'border-violet-600 text-violet-700 dark:text-violet-300'
