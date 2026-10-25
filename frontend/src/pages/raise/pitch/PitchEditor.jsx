@@ -11,7 +11,7 @@ import { SourcesPanel, useDeckSources } from './SourcesBoards';
 import AddMenu from './AddMenu';
 import CardAssistBar from './CardAssistBar';
 import { BlockGrid } from './BlockGrid';
-import { ChartLibrary, ChartToolbar } from './ChartTools';
+import { ChartBlock, ChartLibrary, ChartToolbar } from './ChartTools';
 import { asList, currentVersion, isReadOnly, ventureQuery } from './pitchStudioModel';
 import { cardOf, presentHref } from './presentExportModel';
 import {
@@ -414,7 +414,7 @@ function CenterCard({ card, index, colours, theme, kit, selBlock, readOnly, char
         style={{ aspectRatio: '16 / 9', background: bg, color: colours.ink, backgroundImage: bgImage ? `url("${bgImage}")` : undefined, backgroundSize: 'cover' }}
         data-testid="pitch-editor-card">
         {blocks && blocks.length ? (
-          <BlockGrid blocks={blocks} colours={colours} selected={selBlock} onSelect={onSelectBlock} charts={charts} testId="pitch-editor-blocks" />
+          <BlockGrid blocks={blocks} colours={colours} selected={selBlock} onSelect={onSelectBlock} chart={(b) => <ChartBlock block={b} charts={charts} colours={colours} />} testId="pitch-editor-blocks" />
         ) : <FieldedCard card={card} index={index} colours={colours} />}
       </div>
       {!readOnly ? (
