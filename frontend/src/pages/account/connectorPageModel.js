@@ -9,7 +9,7 @@
  * unknown keys.
  */
 import {
-  REGISTRY_ALIAS, TIER_LABEL, authKind, cardAction, categoryOf, connectionStatus, connectorPagePath, flowBanner, isPersonalMercury, oauthReturn, patOnly,
+  REGISTRY_ALIAS, TIER_LABEL, authKind, cardAction, categoryOf, connectionStatus, connectorPagePath, flowBanner, isMcpSignIn, isPersonalMercury, mcpSignInLabel, mcpSignInTooltip, oauthReturn, patOnly,
 } from './connectorsModel.js';
 import { MCP_SIGN_IN } from './mercuryModel.js';
 import { channelEntry, isChannelKey } from './channelPageModel.js';
@@ -114,6 +114,8 @@ export function pageAction(p, { view = 'idle' } = {}) {
   if (view === 'signin') return { kind: 'starting', label: `Opening ${name}…`, busy: true };
   // D840, D881: a member's Mercury names its sign-in, its only way in.
   if (isPersonalMercury(p)) return { kind: 'oauth', label: MCP_SIGN_IN, aria: `${MCP_SIGN_IN} to connect it to Axal VC` };
+  // D1080: any other MCP sign-in names its provider, and its tooltip says what it opens.
+  if (isMcpSignIn(p)) return { kind: 'oauth', label: mcpSignInLabel(p), aria: `${mcpSignInLabel(p)} to connect it to Axal VC`, title: mcpSignInTooltip(p) };
   return { kind: keyPath(p) ? 'key' : 'oauth', label: 'Connect to Axal VC', aria: `Connect ${name} to Axal VC` };
 }
 
@@ -122,7 +124,8 @@ export function pageAction(p, { view = 'idle' } = {}) {
  *   `sync`       — Sync now, when the connection is a registry row (it has a uid);
  *   `replace`    — Replace key, or Replace token (a token connector);
  *   `reconnect`  — Reconnect, for a sign-in provider (a member's Mercury: Sign in again, or,
- *                  on a token row kept from before D881, Sign in with Mercury);
+ *                  on a token row kept from before D881, Sign in with Mercury; any other
+ *                  MCP sign-in, D1080: Sign in again);
  *   `disconnect` — Disconnect, which asks first.
  * When the connection needs attention, Reconnect (or Replace) is the band's
  * primary action (`pageAction`), so Manage holds only the rest.
@@ -136,6 +139,7 @@ export function manageItems(p) {
   if (conn.uid) items.push({ id: 'sync', label: 'Sync now' });
   if (!attention) {
     if (keyPath(p)) { if (conn.uid) items.push({ id: 'replace', label: authKind(p) === 'key' && p.key !== 'mercury' ? 'Replace key' : 'Replace token' }); }
+    else if (isMcpSignIn(p)) items.push({ id: 'reconnect', label: 'Sign in again' });
     else items.push({ id: 'reconnect', label: !isPersonalMercury(p) ? 'Reconnect' : conn.auth_type === 'api_key' ? MCP_SIGN_IN : 'Sign in again' });
     // D881 (#2554): a member's Mercury takes no token, so it has no Replace.
   }
@@ -158,7 +162,7 @@ export function pageChoices(p) {
   const kind = authKind(p);
   const alt = [];
   // D881 (#2554): a member's Mercury has no other way in.
-  if (!isPersonalMercury(p) && p.supports_pat && kind === 'oauth' && !patOnly(p)) alt.push({ id: 'pat', label: 'Use a personal access token' });
+  if (!isPersonalMercury(p) && !isMcpSignIn(p) && p.supports_pat && kind === 'oauth' && !patOnly(p)) alt.push({ id: 'pat', label: 'Use a personal access token' });
   if (kind === 'token_first' && !p.oauthOff) alt.push({ id: 'oauth', label: `Sign in with ${p.display_name} instead` });
   return { env, alt };
 }

@@ -369,6 +369,7 @@ import { adminPartnerSettlements, partnerSettlements } from './routes/partner_se
 import mercuryPersonalRoutes from './routes/mercury_personal';
 import mercuryAttestationRoutes from './routes/mercury_attestations';
 import mercuryOauthRoutes from './routes/mercury_oauth';
+import connectorMcpOauthRoutes from './routes/connector_mcp_oauth';
 import connectorsHealth from './routes/connectors_health';
 import connectorsCustomRoutes from './routes/connectors_custom';
 import cartaInvestorRoutes from './routes/carta_investor';
@@ -1328,6 +1329,8 @@ app.route('/api/developer/keys', developerKeys);
 app.route('/api/developer/limits', developerLimits);
 // D840 (#2346): Sign in with Mercury, ahead of the integrations router.
 app.route('/api/integrations/mercury/oauth', mercuryOauthRoutes);
+// D1080 (#2945): Sign in with <Provider> for every other MCP record, and its client ID metadata documents.
+app.route('/api/integrations/mcp', connectorMcpOauthRoutes);
 app.route('/api/connectors', integrations);
 app.route('/api/integrations', integrations);
 // D652 — the Worker AI rail's conversations and their connectors (#1464).

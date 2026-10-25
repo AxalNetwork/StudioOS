@@ -435,6 +435,7 @@ function BandAction({ p, action, flow, phone, superAdmin, onChanged, manage = []
           disabled={starting || flow.busy}
           aria-busy={starting ? 'true' : undefined}
           aria-label={action.aria}
+          title={action.title}
           onClick={press}
           data-testid="connector-page-connect-button"
         >

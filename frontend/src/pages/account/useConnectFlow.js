@@ -3,11 +3,12 @@ import { useNavigate } from 'react-router-dom';
 import { api } from '../../lib/api';
 import { connectorsApi } from '../../lib/api/connectors';
 import { mercuryPersonalApi } from '../../lib/api/mercuryPersonal';
+import { mcpOauthApi } from '../../lib/api/mcpOauth';
 import { safeWriteJSON } from '../../lib/storage';
 import { PENDING_LINKEDIN_IMPORT_KEY } from '../../lib/linkedinCsv';
 import { successBanner } from './githubSync';
 import {
-  INTEGRATION_KEYS_HREF, adminKeysHref, authKind, connectFailure, isPersonalMercury, keepBuildProject,
+  INTEGRATION_KEYS_HREF, adminKeysHref, authKind, connectFailure, isMcpSignIn, isPersonalMercury, keepBuildProject,
 } from './connectorsModel';
 
 /**
@@ -89,6 +90,9 @@ export function useConnectFlow(p, { setView, onChanged, onClose, returnTo = null
       } else if (personalMercury) {
         // D840 (#2346): Mercury's own sign-in route; it returns to /account/connectors/mercury.
         url = (await mercuryPersonalApi.oauthStart())?.authorize_url;
+      } else if (isMcpSignIn(p)) {
+        // D1080 (#2945): the generic MCP sign-in; it returns to /account/connectors/<key>.
+        url = (await mcpOauthApi.start(p.key))?.authorize_url;
       } else {
         const params = returnTo === 'build' ? { return_to: 'build', ...(Number(projectId) > 0 ? { project_id: String(Number(projectId)) } : {}) } : {};
         if (p.key === 'salesforce') params.sandbox = sfSandbox ? '1' : '';

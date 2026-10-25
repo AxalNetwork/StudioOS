@@ -144,15 +144,16 @@ function walk(dir: string, out: string[] = []): string[] {
   return out;
 }
 
-test('2. Mercury\'s mcp.ts is the only caller; the client, the records and src/mcp/ never import each other', () => {
+test('2. the client\'s callers are named; the client, the records and src/mcp/ never import each other', () => {
   const ROOT = process.cwd();
   const files = walk(resolve(ROOT, 'cloudflare-worker/src')).map((p) => ({ path: relative(ROOT, p), text: readFileSync(p, 'utf8') }));
   const importers = (mod: RegExp) => files.filter((f) => mod.test(f.text)).map((f) => f.path).sort();
   // D852 (#2475): a member's custom servers are the client's second caller.
-  assert.deepEqual(importers(/from\s+['"][^'"]*integrations\/mcpClient['"]|from\s+['"]\.\/mcpClient['"]/), ['cloudflare-worker/src/integrations/customMcp.ts', 'cloudflare-worker/src/services/mercury/mcp.ts']);
+  // D1080 (#2945): the generic sign-in (its route and its helpers) is the third.
+  assert.deepEqual(importers(/from\s+['"][^'"]*integrations\/mcpClient['"]|from\s+['"]\.\/mcpClient['"]/), ['cloudflare-worker/src/integrations/customMcp.ts', 'cloudflare-worker/src/integrations/mcpSignIn.ts', 'cloudflare-worker/src/routes/connector_mcp_oauth.ts', 'cloudflare-worker/src/services/mercury/mcp.ts']);
   // #2549: public status reads provider metadata only. The transport importer
   // assertion above still permits only the two actual client callers.
-  assert.deepEqual(importers(/from\s+['"][^'"]*integrations\/mcpProviders['"]|from\s+['"]\.\/mcpProviders['"]/), ['cloudflare-worker/src/integrations/customMcp.ts', 'cloudflare-worker/src/integrations/mcpClient.ts', 'cloudflare-worker/src/routes/public.ts', 'cloudflare-worker/src/services/mercury/mcp.ts']);
+  assert.deepEqual(importers(/from\s+['"][^'"]*integrations\/mcpProviders['"]|from\s+['"]\.\/mcpProviders['"]/), ['cloudflare-worker/src/integrations/customMcp.ts', 'cloudflare-worker/src/integrations/mcpClient.ts', 'cloudflare-worker/src/integrations/mcpSignIn.ts', 'cloudflare-worker/src/routes/connector_mcp_oauth.ts', 'cloudflare-worker/src/routes/public.ts', 'cloudflare-worker/src/services/mercury/mcp.ts']);
   const client = files.find((f) => f.path.endsWith('integrations/mcpClient.ts'))!.text;
   const records = files.find((f) => f.path.endsWith('integrations/mcpProviders.ts'))!.text;
   assert.doesNotMatch(client, /from\s+['"][^'"]*\/mcp\/|from\s+['"]\.\.\/mcp['"]/, 'the client imports StudioOS\'s own MCP server');

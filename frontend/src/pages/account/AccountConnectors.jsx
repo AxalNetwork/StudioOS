@@ -10,8 +10,8 @@ import { AssistantsSection } from './AssistantsGroup';
 import { ChannelsSection } from './ChannelsGroup';
 import {
   MOVED_SEEN_KEY, YOURS_FILTERS, YOURS_SORTS, cardAction, cardPill, companiesLabel, connectorPagePath,
-  discoverSections, doesLabel, isPersonalMercury, keysHref, lastSyncLabel, matchesQuery, oauthReturn, pageOf, stripReturn, yoursFeedsLabel, yoursRows,
-  SUGGESTED,
+  discoverSections, doesLabel, isMcpSignIn, isPersonalMercury, keysHref, lastSyncLabel, matchesQuery, oauthReturn, pageOf, stripReturn, yoursFeedsLabel, yoursRows,
+  SUGGESTED, mcpSignInTooltip,
 } from './connectorsModel';
 import { ACCOUNT_PHONE_COPY, ACCOUNT_PHONE_PAGES } from './accountPhone';
 import { hubSearchFor, hubTabFor } from './connectorPageModel';
@@ -113,7 +113,8 @@ export function ConnectorCard({ p, onNotify, onUnnotify, busy, keysHref: keys = 
   const state = { connectorsTab: 'discover' };
   const maker = makerLine(p);
   let corner = null;
-  if (act === 'add') corner = <span aria-hidden="true" className="grid h-[26px] w-[26px] place-items-center rounded-[8px] border border-axal-hairline text-axal-ink dark:border-gray-700 dark:text-gray-100"><Plus size={14} /></span>;
+  // D1080: an MCP sign-in's "+" says what it opens; the page's button does the same.
+  if (act === 'add') corner = <span aria-hidden="true" title={isMcpSignIn(p) ? mcpSignInTooltip(p) : undefined} className="grid h-[26px] w-[26px] place-items-center rounded-[8px] border border-axal-hairline text-axal-ink dark:border-gray-700 dark:text-gray-100"><Plus size={14} /></span>;
   if (act === 'connected') corner = <span aria-hidden="true" className="grid h-[26px] w-[26px] place-items-center rounded-[8px] bg-emerald-50 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-300"><Check size={14} /></span>;
   if (act === 'notify') corner = <button type="button" disabled={busy} onClick={() => onNotify(p)} className={`${BTN.link} relative z-10 max-sm:inline-flex max-sm:min-h-[44px] max-sm:items-center`}>Notify me</button>;
   if (act === 'joined') corner = <button type="button" disabled={busy} onClick={() => onUnnotify(p)} className={`${BTN.link} relative z-10`} title="Click to stop the notice">We&apos;ll tell you</button>;

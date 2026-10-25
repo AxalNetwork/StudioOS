@@ -59,6 +59,7 @@ import {
 } from '../integrations/secrets';
 import { buildPkce, issueOauthState, consumeOauthState } from '../integrations/oauth';
 import { refuse } from '../util/refusal';
+import { mcpDisconnect } from '../integrations/mcpSignIn';
 import { MANAGED_PROVIDERS, PROVIDER_ENV_VARS, type ManagedProviderKey } from '../services/providerOauthKeys';
 import { activeCompanyFor } from '../middleware/activeCompany';
 import { companyEnabled, enabledCompanyIds, projectEnabled, writesProjectData } from '../integrations/companyScope';
@@ -775,6 +776,10 @@ integrations.delete('/:uid', async (c) => {
   if (impl?.disconnect) {
     try { await impl.disconnect(c, user, row); }
     catch (e) { console.warn('[integrations] provider disconnect threw:', (e as Error).message); }
+  } else {
+    // D1080: a member's MCP sign-in is revoked at the provider before its row is deleted.
+    try { await mcpDisconnect(c.env, row); }
+    catch { console.warn('[integrations] mcp revoke failed'); }
   }
 
   await c.env.DB.prepare('DELETE FROM integration_companies WHERE integration_id = ?').bind(row.id).run();
