@@ -1,0 +1,571 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700;800&amp;family=Roboto+Mono:wght@400;500;600;700&amp;display=swap" rel="stylesheet">
+  <style>body{margin:0}a{color:#7c3aed;text-decoration:none}a:hover{color:#6d28d9}dl,dd{margin:0}button:focus-visible,a:focus-visible,[role=switch]:focus-visible,[role=radio]:focus-visible{outline:2px solid #7c3aed;outline-offset:2px}</style>
+</helmet>
+<div style="{{ v.root }}">
+  <sc-if value="{{ v.side }}" hint-placeholder-val="{{ true }}">
+    <aside style="{{ v.asideS }}">
+      <div style="padding:4px 16px 12px;display:flex;align-items:center;gap:8px"><span style="{{ v.logoS }}"></span><span style="font-weight:800;font-size:14px;letter-spacing:-.01em">Axal VC</span></div>
+      <span style="{{ v.groupS }}">{{ v.group }}</span>
+      <nav aria-label="Main" style="display:flex;flex-direction:column;gap:2px">
+        <sc-for list="{{ v.rows }}" as="s" hint-placeholder-count="9"><a href="{{ s.href }}" style="{{ s.st }}">{{ s.t }}</a></sc-for>
+      </nav>
+    </aside>
+  </sc-if>
+  <main style="{{ v.mainS }}">
+    <sc-if value="{{ v.top }}" hint-placeholder-val="{{ true }}">
+      <div style="{{ v.topS }}">
+        <div style="{{ v.searchS }}"><span aria-hidden="true">⌕</span>Search StudioOS</div>
+        <div style="display:flex;align-items:center;gap:12px">
+          <span style="{{ v.badgeS }}">{{ v.badge }}</span>
+          <span role="img" aria-label="Notifications" style="{{ v.iconS }}" dangerouslySetInnerHTML="{{ v.bell }}"></span>
+          <span aria-label="Account" style="{{ v.avS }}">[N]</span>
+        </div>
+      </div>
+    </sc-if>
+    <sc-if value="{{ v.strip }}" hint-placeholder-val="{{ false }}"><nav aria-label="Licences" style="{{ v.stripS }}"><sc-for list="{{ v.strip }}" as="x" hint-placeholder-count="2"><a href="{{ x.href }}" aria-current="{{ x.cur }}" style="{{ x.s }}">{{ x.t }}</a></sc-for></nav></sc-if><sc-if value="{{ v.ptop }}" hint-placeholder-val="{{ false }}">
+      <div style="{{ v.ptopS }}">
+        <button type="button" aria-label="Menu" style="{{ v.picoS }}">☰</button>
+        <span style="display:flex;align-items:center;gap:7px"><span style="{{ v.logoS }}"></span><b style="font-size:13px">Axal VC</b></span>
+        <span role="img" aria-label="Notifications" style="{{ v.picoS }}" dangerouslySetInnerHTML="{{ v.bell }}"></span>
+      </div>
+    </sc-if>
+    <div style="{{ v.bodyS }}">
+      <sc-if value="{{ v.head }}" hint-placeholder-val="{{ true }}">
+        <header style="display:flex;flex-direction:column;gap:8px">
+          <sc-if value="{{ v.crumb }}" hint-placeholder-val="{{ true }}"><a href="{{ v.crumbHref }}" style="{{ v.crumbS }}">{{ v.crumb }}</a></sc-if>
+          <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:14px;flex-wrap:wrap">
+            <div style="display:flex;flex-direction:column;gap:7px;min-width:0">
+              <h1 style="{{ v.h1S }}">{{ v.title }}</h1>
+              <sc-if value="{{ v.hpills }}" hint-placeholder-val="{{ false }}"><div style="display:flex;gap:7px;flex-wrap:wrap"><sc-for list="{{ v.hpills }}" as="p" hint-placeholder-count="3"><span style="{{ p.s }}">{{ p.t }}</span></sc-for></div></sc-if>
+            </div>
+            <div style="display:flex;align-items:center;gap:9px;flex-wrap:wrap">
+              <sc-for list="{{ v.hbtns }}" as="b" hint-placeholder-count="2">
+                <sc-if value="{{ b.txt }}" hint-placeholder-val="{{ false }}"><span style="{{ b.s }}">{{ b.t }}</span></sc-if>
+                <sc-if value="{{ b.btn }}" hint-placeholder-val="{{ true }}"><button type="button" aria-label="{{ b.al }}" style="{{ b.s }}">{{ b.t }}</button></sc-if>
+              </sc-for>
+            </div>
+          </div>
+          <sc-for list="{{ v.hlines }}" as="l" hint-placeholder-count="1"><p style="{{ l.s }}">{{ l.t }}</p></sc-for>
+          <sc-if value="{{ v.scope }}" hint-placeholder-val="{{ false }}"><div><span title="{{ v.scopeTip }}" style="{{ v.scopeS }}">{{ v.scope }}</span></div></sc-if>
+          <sc-if value="{{ v.gate }}" hint-placeholder-val="{{ false }}"><div style="{{ v.gateS }}"><sc-for list="{{ v.gate }}" as="g" hint-placeholder-count="4"><span style="{{ g.s }}">{{ g.t }}</span></sc-for></div></sc-if>
+        </header>
+      </sc-if>
+      <sc-if value="{{ v.tabs }}" hint-placeholder-val="{{ true }}">
+        <div role="tablist" aria-label="{{ v.tabsL }}" style="{{ v.tabRowS }}">
+          <sc-for list="{{ v.tabs }}" as="tb" hint-placeholder-count="4"><a role="tab" aria-selected="{{ tb.sel }}" href="{{ tb.href }}" style="{{ tb.s }}">{{ tb.t }}<sc-if value="{{ tb.n }}" hint-placeholder-val="{{ false }}"><span style="{{ tb.ns }}">{{ tb.n }}</span></sc-if></a></sc-for>
+        </div>
+      </sc-if>
+      <sc-if value="{{ v.period }}" hint-placeholder-val="{{ false }}">
+        <div role="radiogroup" aria-label="Period" style="{{ v.segS }}"><sc-for list="{{ v.period }}" as="pp" hint-placeholder-count="3"><span role="radio" tabindex="0" aria-checked="{{ pp.on }}" style="{{ pp.s }}">{{ pp.t }}</span></sc-for></div>
+      </sc-if>
+      <sc-if value="{{ v.banner }}" hint-placeholder-val="{{ false }}">
+        <div role="alert" style="{{ v.bannerS }}"><span aria-hidden="true" style="{{ v.bannerI }}">!</span><span style="flex:1">{{ v.banner }}</span><button type="button" style="{{ v.btnS }}">Try again</button></div>
+      </sc-if>
+      <div style="{{ v.gridS }}">
+        <sc-for list="{{ v.cols }}" as="col" hint-placeholder-count="3">
+          <div style="{{ col.s }}">
+            <sc-for list="{{ col.blocks }}" as="k" hint-placeholder-count="1">
+              <sc-if value="{{ k.isTiles }}" hint-placeholder-val="{{ false }}">
+                <div style="{{ k.gs }}">
+                  <sc-for list="{{ k.items }}" as="t" hint-placeholder-count="4">
+                    <div style="{{ k.ts }}">
+                      <span style="{{ v.eyeS }}">{{ t.k }}</span>
+                      <span style="{{ t.vs }}">{{ t.v }}</span>
+                      <div style="display:flex;gap:7px;align-items:center;flex-wrap:wrap">
+                        <sc-if value="{{ t.fl }}" hint-placeholder-val="{{ false }}"><span style="{{ t.fls }}">{{ t.fl }}</span></sc-if>
+                        <sc-if value="{{ t.d }}" hint-placeholder-val="{{ false }}"><span style="{{ t.ds }}">{{ t.d }}</span></sc-if>
+                        <span style="{{ t.ss }}">{{ t.sub }}</span>
+                      </div>
+                    </div>
+                  </sc-for>
+                </div>
+              </sc-if>
+              <sc-if value="{{ k.isCard }}" hint-placeholder-val="{{ true }}">
+                <section style="{{ k.cs }}">
+                  <sc-if value="{{ k.glyph }}" hint-placeholder-val="{{ false }}"><span aria-hidden="true" style="{{ v.glyphS }}">{{ k.glyph }}</span></sc-if>
+                  <sc-if value="{{ k.cover }}" hint-placeholder-val="{{ false }}"><div style="{{ k.cover }}"><span style="{{ v.coverT }}">Cover image</span></div></sc-if>
+                  <sc-if value="{{ k.title }}" hint-placeholder-val="{{ true }}">
+                    <div style="{{ k.ths }}">
+                      <div style="display:flex;flex-direction:column;gap:3px;min-width:0">
+                        <sc-if value="{{ k.eye }}" hint-placeholder-val="{{ false }}"><span style="{{ k.es }}">{{ k.eye }}</span></sc-if>
+                        <h3 style="{{ k.hs }}">{{ k.title }}</h3>
+                      </div>
+                      <div style="display:flex;align-items:center;gap:9px;flex-wrap:wrap"><sc-if value="{{ k.lock }}" hint-placeholder-val="{{ false }}"><span style="{{ v.lockS }}"><span aria-hidden="true" style="display:inline-flex" dangerouslySetInnerHTML="{{ v.lockI }}"></span>Set by HQ</span></sc-if>
+                        <sc-if value="{{ k.meta }}" hint-placeholder-val="{{ false }}"><span style="{{ k.ms }}">{{ k.meta }}</span></sc-if>
+                        <sc-if value="{{ k.tog }}" hint-placeholder-val="{{ false }}"><span role="radiogroup" aria-label="View" style="{{ v.segS }}"><sc-for list="{{ k.tog }}" as="o" hint-placeholder-count="2"><span role="radio" tabindex="0" aria-checked="{{ o.on }}" style="{{ o.s }}">{{ o.t }}</span></sc-for></span></sc-if>
+                      </div>
+                    </div>
+                  </sc-if>
+                  <sc-if value="{{ k.note }}" hint-placeholder-val="{{ false }}"><p style="{{ k.ns }}">{{ k.note }}</p></sc-if>
+                  <sc-if value="{{ k.tbar }}" hint-placeholder-val="{{ false }}">
+                    <div style="display:flex;gap:7px;flex-wrap:wrap;align-items:center"><sc-if value="{{ k.tbar.search }}" hint-placeholder-val="{{ false }}"><div style="{{ v.searchS }}"><span aria-hidden="true">⌕</span>{{ k.tbar.search }}</div></sc-if><sc-for list="{{ k.tbar.chips }}" as="g" hint-placeholder-count="3"><span style="{{ g.s }}">{{ g.t }}</span></sc-for></div>
+                  </sc-if>
+                  <sc-if value="{{ k.legend }}" hint-placeholder-val="{{ false }}">
+                    <div style="display:flex;gap:14px;flex-wrap:wrap;font-size:12px"><sc-for list="{{ k.legend }}" as="lg" hint-placeholder-count="2"><span style="display:inline-flex;align-items:center;gap:6px"><span style="{{ lg.sw }}"></span>{{ lg.t }}</span></sc-for></div>
+                  </sc-if>
+                  <sc-if value="{{ k.svg }}" hint-placeholder-val="{{ false }}"><div dangerouslySetInnerHTML="{{ k.svg }}"></div></sc-if>
+                  <sc-if value="{{ k.refL }}" hint-placeholder-val="{{ false }}"><span style="{{ k.refLs }}">{{ k.refL }}</span></sc-if>
+                  <sc-if value="{{ k.bars }}" hint-placeholder-val="{{ false }}">
+                    <div role="img" aria-label="{{ k.sum }}" style="display:flex;flex-direction:column;gap:9px">
+                      <sc-for list="{{ k.bars }}" as="it" hint-placeholder-count="4"><div title="{{ it.tip }}" style="{{ k.bgs }}"><span style="{{ it.ls }}">{{ it.l }}</span><span style="{{ it.trs }}"><span style="{{ it.fs }}"></span><sc-if value="{{ k.refS }}" hint-placeholder-val="{{ false }}"><span style="{{ k.refS }}"></span></sc-if></span><span style="{{ it.vs }}">{{ it.v }}</span></div></sc-for>
+                    </div>
+                  </sc-if>
+                  <sc-if value="{{ k.stacks }}" hint-placeholder-val="{{ false }}">
+                    <sc-for list="{{ k.stacks }}" as="st" hint-placeholder-count="2">
+                      <div style="display:flex;flex-direction:column;gap:7px">
+                        <span style="{{ v.eyeS }}">{{ st.lab }}</span>
+                        <div style="display:flex;gap:12px;flex-wrap:wrap;font-size:12px"><sc-for list="{{ st.leg }}" as="lg" hint-placeholder-count="4"><span style="display:inline-flex;align-items:center;gap:6px"><span style="{{ lg.sw }}"></span>{{ lg.t }}</span></sc-for></div>
+                        <div role="img" aria-label="{{ st.sum }}" style="{{ v.stackS }}"><sc-for list="{{ st.segs }}" as="sg" hint-placeholder-count="4"><span title="{{ sg.tip }}" style="{{ sg.s }}"></span></sc-for></div>
+                      </div>
+                    </sc-for>
+                  </sc-if>
+                  <sc-if value="{{ k.facts }}" hint-placeholder-val="{{ false }}">
+                    <dl style="{{ v.factsS }}"><sc-for list="{{ k.facts }}" as="f" hint-placeholder-count="6"><div style="display:flex;flex-direction:column;gap:3px;min-width:0"><dt style="{{ v.eyeS }}">{{ f.k }}</dt><dd style="{{ v.ddS }}">{{ f.v }}</dd><sc-if value="{{ f.sub }}" hint-placeholder-val="{{ false }}"><span style="{{ v.fsubS }}">{{ f.sub }}</span></sc-if></div></sc-for></dl>
+                  </sc-if>
+                  <sc-if value="{{ k.cal }}" hint-placeholder-val="{{ false }}">
+                    <div role="grid" aria-label="November 2026" style="{{ v.calS }}">
+                      <sc-for list="{{ k.cal.head }}" as="hd" hint-placeholder-count="7"><span role="columnheader" style="{{ v.calH }}">{{ hd.t }}</span></sc-for>
+                      <sc-for list="{{ k.cal.days }}" as="d" hint-placeholder-count="35">
+                        <div role="gridcell" style="{{ d.s }}">
+                          <div style="display:flex;justify-content:space-between;align-items:center;gap:4px"><span style="{{ d.ns }}">{{ d.n }}</span><sc-if value="{{ d.ov }}" hint-placeholder-val="{{ false }}"><span style="{{ v.ovS }}"><span aria-hidden="true" style="{{ v.ovD }}"></span>{{ d.ov }}</span></sc-if></div>
+                          <sc-for list="{{ d.chips }}" as="ch" hint-placeholder-count="1"><span style="{{ ch.s }}">{{ ch.t }}</span></sc-for>
+                          <sc-if value="{{ d.more }}" hint-placeholder-val="{{ false }}"><a href="#" style="{{ v.moreS }}">{{ d.more }}</a></sc-if>
+                          <sc-if value="{{ d.pop }}" hint-placeholder-val="{{ false }}"><div role="dialog" aria-label="Event" style="{{ v.popS }}"><b style="font-size:13px;line-height:1.35">{{ d.pop.t }}</b><sc-for list="{{ d.pop.lines }}" as="pl" hint-placeholder-count="3"><span style="{{ v.popL }}">{{ pl.t }}</span></sc-for><span style="{{ d.pop.st.s }}">{{ d.pop.st.t }}</span><button type="button" style="{{ v.btnS }}">Open event</button></div></sc-if>
+                        </div>
+                      </sc-for>
+                    </div>
+                  </sc-if>
+                  <sc-if value="{{ k.tags }}" hint-placeholder-val="{{ false }}"><div style="display:flex;gap:7px;flex-wrap:wrap;align-items:center"><sc-for list="{{ k.tags }}" as="g" hint-placeholder-count="3"><span style="{{ g.s }}">{{ g.t }}</span></sc-for></div></sc-if>
+                  <div style="{{ k.rowsS }}">
+                    <sc-for list="{{ k.rows }}" as="r" hint-placeholder-count="2">
+                      <div style="{{ r.rs }}">
+                        <sc-if value="{{ r.db }}" hint-placeholder-val="{{ false }}"><span style="{{ v.dbS }}"><span style="{{ v.dbM }}">{{ r.db.m }}</span><b style="{{ v.dbD }}">{{ r.db.d }}</b><span style="{{ v.dbM }}">{{ r.db.w }}</span></span></sc-if>
+                        <sc-if value="{{ r.lead }}" hint-placeholder-val="{{ false }}"><span aria-hidden="true" style="{{ r.ls }}">{{ r.lead }}</span></sc-if>
+                        <div style="flex:1;min-width:0;display:flex;flex-direction:column;gap:5px">
+                          <sc-if value="{{ r.eye }}" hint-placeholder-val="{{ false }}"><span style="{{ r.es }}">{{ r.eye }}</span></sc-if>
+                          <div style="display:flex;gap:7px;align-items:center;flex-wrap:wrap">
+                            <sc-if value="{{ r.pill }}" hint-placeholder-val="{{ false }}"><span style="{{ r.pill.s }}">{{ r.pill.t }}</span></sc-if>
+                            <span style="{{ r.ts }}">{{ r.t }}</span>
+                          </div>
+                          <sc-if value="{{ r.sub }}" hint-placeholder-val="{{ false }}"><span style="{{ r.ss }}">{{ r.sub }}</span></sc-if>
+                          <sc-if value="{{ r.tags }}" hint-placeholder-val="{{ false }}"><div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center"><sc-for list="{{ r.tags }}" as="g" hint-placeholder-count="2"><span style="{{ g.s }}">{{ g.t }}</span></sc-for></div></sc-if>
+                          <sc-if value="{{ r.bar }}" hint-placeholder-val="{{ false }}"><div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap"><span style="{{ r.bar.trs }}"><span style="{{ r.bar.fs }}"></span></span><span style="{{ v.monoS }}">{{ r.bar.t }}</span><sc-if value="{{ r.bar.w }}" hint-placeholder-val="{{ false }}"><span style="{{ v.waitS }}">{{ r.bar.w }}</span></sc-if></div></sc-if>
+                          <sc-if value="{{ r.btns }}" hint-placeholder-val="{{ false }}"><div style="display:flex;gap:7px;flex-wrap:wrap"><sc-for list="{{ r.btns }}" as="b" hint-placeholder-count="2"><button type="button" style="{{ b.s }}">{{ b.t }}</button></sc-for></div></sc-if>
+                        </div>
+                        <sc-if value="{{ r.v }}" hint-placeholder-val="{{ false }}"><span style="{{ r.vs }}">{{ r.v }}</span></sc-if>
+                        <sc-if value="{{ r.st }}" hint-placeholder-val="{{ false }}"><span style="{{ r.st.s }}">{{ r.st.t }}</span></sc-if>
+                        <sc-if value="{{ r.tg }}" hint-placeholder-val="{{ false }}"><span role="switch" tabindex="0" aria-checked="{{ r.on }}" aria-label="{{ r.t }}" style="{{ r.tg }}"><span style="{{ r.tk }}"></span></span></sc-if>
+                        <sc-if value="{{ r.act }}" hint-placeholder-val="{{ false }}"><button type="button" style="{{ r.as }}">{{ r.act }}</button></sc-if>
+                      </div>
+                    </sc-for>
+                  </div>
+                  <sc-if value="{{ k.btns }}" hint-placeholder-val="{{ false }}"><div style="{{ k.bs }}"><sc-for list="{{ k.btns }}" as="b" hint-placeholder-count="2"><button type="button" style="{{ b.s }}">{{ b.t }}</button></sc-for></div></sc-if>
+                  <sc-if value="{{ k.foot }}" hint-placeholder-val="{{ false }}"><p style="{{ k.fs }}">{{ k.foot }}</p></sc-if>
+                </section>
+              </sc-if>
+              <sc-if value="{{ k.isTable }}" hint-placeholder-val="{{ false }}">
+                <section style="{{ k.cs }}">
+                  <sc-if value="{{ k.title }}" hint-placeholder-val="{{ false }}"><div style="{{ k.ths }}"><h3 style="{{ k.hs }}">{{ k.title }}</h3><div style="display:flex;align-items:center;gap:9px"><sc-if value="{{ k.meta }}" hint-placeholder-val="{{ false }}"><span style="{{ k.ms }}">{{ k.meta }}</span></sc-if><sc-if value="{{ k.tog }}" hint-placeholder-val="{{ false }}"><span role="radiogroup" aria-label="View" style="{{ v.segS }}"><sc-for list="{{ k.tog }}" as="o" hint-placeholder-count="2"><span role="radio" tabindex="0" aria-checked="{{ o.on }}" style="{{ o.s }}">{{ o.t }}</span></sc-for></span></sc-if></div></div></sc-if>
+                  <sc-if value="{{ k.tbar }}" hint-placeholder-val="{{ false }}">
+                    <div style="display:flex;gap:7px;flex-wrap:wrap;align-items:center"><sc-if value="{{ k.tbar.search }}" hint-placeholder-val="{{ false }}"><div style="{{ v.searchS }}"><span aria-hidden="true">⌕</span>{{ k.tbar.search }}</div></sc-if><sc-for list="{{ k.tbar.chips }}" as="g" hint-placeholder-count="3"><span style="{{ g.s }}">{{ g.t }}</span></sc-for></div>
+                    <sc-if value="{{ k.tbar.views }}" hint-placeholder-val="{{ false }}"><div style="display:flex;gap:7px;flex-wrap:wrap;align-items:center"><span style="{{ v.eyeS }}">Saved views</span><sc-for list="{{ k.tbar.views }}" as="g" hint-placeholder-count="4"><span style="{{ g.s }}">{{ g.t }}</span></sc-for></div></sc-if>
+                  </sc-if>
+                  <div role="table" style="overflow-x:auto">
+                    <div style="{{ k.ins }}">
+                      <div role="row" style="{{ k.hrs }}"><sc-for list="{{ k.cols }}" as="h" hint-placeholder-count="5"><span role="columnheader">{{ h.t }}</span></sc-for></div>
+                      <sc-for list="{{ k.rows }}" as="row" hint-placeholder-count="4">
+                        <div role="row" style="{{ row.s }}"><sc-for list="{{ row.cells }}" as="cl" hint-placeholder-count="5"><div role="cell" title="{{ cl.tip }}" style="{{ cl.s }}"><sc-if value="{{ cl.pill }}" hint-placeholder-val="{{ false }}"><span style="{{ cl.pill.s }}">{{ cl.pill.t }}</span></sc-if><span style="{{ cl.ts }}">{{ cl.t }}</span><sc-if value="{{ cl.pills }}" hint-placeholder-val="{{ false }}"><span style="display:flex;gap:4px;flex-wrap:wrap"><sc-for list="{{ cl.pills }}" as="q" hint-placeholder-count="2"><span style="{{ q.s }}">{{ q.t }}</span></sc-for></span></sc-if><sc-if value="{{ cl.sub }}" hint-placeholder-val="{{ false }}"><span style="{{ cl.ss }}">{{ cl.sub }}</span></sc-if><sc-if value="{{ cl.note }}" hint-placeholder-val="{{ false }}"><span style="{{ cl.nts }}">{{ cl.note }}</span></sc-if></div></sc-for></div>
+                      </sc-for>
+                    </div>
+                  </div>
+                  <sc-if value="{{ k.pager }}" hint-placeholder-val="{{ false }}">
+                    <div style="display:flex;justify-content:space-between;align-items:center;gap:11px;flex-wrap:wrap"><span style="{{ v.countS }}">{{ k.count }}</span><span style="display:flex;gap:6px;align-items:center"><span style="{{ v.countS }}">Rows per page</span><span style="{{ v.pageS }}">25 ▾</span><button type="button" aria-label="Previous page" style="{{ v.pageS }}">‹</button><button type="button" aria-current="page" style="{{ v.pageS }}">1</button><button type="button" style="{{ v.pageS }}">2</button><button type="button" aria-label="Next page" style="{{ v.pageS }}">›</button></span></div>
+                  </sc-if>
+                  <sc-if value="{{ k.foot }}" hint-placeholder-val="{{ false }}"><p style="{{ k.fs }}">{{ k.foot }}</p></sc-if>
+                </section>
+              </sc-if>
+            </sc-for>
+          </div>
+        </sc-for>
+      </div>
+    </div>
+    <sc-if value="{{ v.pbar }}" hint-placeholder-val="{{ false }}"><div style="{{ v.pbarS }}"><sc-for list="{{ v.pbar }}" as="b" hint-placeholder-count="2"><button type="button" style="{{ b.s }}">{{ b.t }}</button></sc-for></div></sc-if>
+  </main>
+  <sc-if value="{{ v.rail }}" hint-placeholder-val="{{ false }}"><aside aria-label="Eadwyn" style="{{ v.railS }}"><div style="display:flex;align-items:center;justify-content:space-between;gap:8px"><span style="display:flex;align-items:center;gap:8px"><span style="{{ v.eadS }}">E</span><b style="font-size:14px">Eadwyn</b></span><button type="button" aria-label="Collapse Eadwyn" style="{{ v.railBtn }}">›</button></div><p style="{{ v.railNote }}">{{ v.spineTip }}</p><sc-for list="{{ v.railRows }}" as="rr" hint-placeholder-count="3"><div style="{{ v.railRowS }}"><span style="{{ v.eyeS }}">{{ rr.e }}</span><span style="font-size:12.5px;line-height:1.5">{{ rr.t }}</span></div></sc-for><div style="{{ v.railInS }}">Ask about these grants…</div></aside></sc-if><sc-if value="{{ v.spine }}" hint-placeholder-val="{{ true }}">
+    <aside aria-label="Eadwyn" title="{{ v.spineTip }}" style="{{ v.spineS }}"><span style="{{ v.eadS }}">E</span><span style="{{ v.spineT }}">Eadwyn</span></aside>
+  </sc-if>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;$preview&quot;:{&quot;width&quot;:&quot;1440px&quot;,&quot;height&quot;:&quot;900px&quot;},&quot;board&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;default&quot;:&quot;GR1&quot;,&quot;options&quot;:[&quot;GR1&quot;,&quot;GR2&quot;,&quot;GR3&quot;,&quot;GR4&quot;,&quot;GR5&quot;,&quot;GR5d&quot;,&quot;GR6&quot;,&quot;GR7&quot;,&quot;GR8&quot;,&quot;GR9a&quot;,&quot;GR9b&quot;,&quot;GR10a&quot;,&quot;GR10b&quot;,&quot;GR10c&quot;,&quot;GR10d&quot;,&quot;GR11&quot;,&quot;GR12a&quot;,&quot;GR12b&quot;,&quot;GR13&quot;,&quot;GR14&quot;,&quot;GR15a&quot;,&quot;GR15b&quot;,&quot;GR15c&quot;,&quot;GR15d&quot;],&quot;tsType&quot;:&quot;string&quot;}}">
+class Component extends DCLogic {
+  renderVals() {
+    const B = this.props.board || 'GR1';
+    const dark = B === 'GR2', phone = B.indexOf('GR15') === 0;
+    const crop = ['GR9a', 'GR9b', 'GR10a', 'GR10b', 'GR10c', 'GR10d', 'GR11', 'GR13', 'GR14'].indexOf(B) >= 0;
+    const c = dark
+      ? { bg: '#0b1220', card: '#111827', raised: '#1f2937', ink: '#e5e7eb', mu: '#9ca3af', fa: '#6b7280', hair: '#374151', vi: '#a78bfa', vt: '#a78bfa', lav: '#211f3d', lavE: '#4c3a8a', pos: '#34d399', posBg: 'rgba(52,211,153,.12)', posE: 'rgba(52,211,153,.45)', neg: '#f87171', negBg: 'rgba(248,113,113,.12)', negE: 'rgba(248,113,113,.5)', amT: '#fcd34d', amBg: 'rgba(252,211,77,.1)', amE: 'rgba(252,211,77,.55)', dim: 'rgba(3,7,18,.62)', skel: '#1f2937' }
+      : { bg: '#f4f3f7', card: '#ffffff', raised: '#f8f7fb', ink: '#18181b', mu: '#6b6577', fa: '#a1a1aa', hair: '#ececf1', vi: '#7c3aed', vt: '#6d28d9', lav: '#f4f0fe', lavE: '#ddd0fb', pos: '#047857', posBg: '#ecfdf5', posE: '#a7f3d0', neg: '#b91c1c', negBg: '#fef2f2', negE: '#fecaca', amT: '#92400e', amBg: '#fffbeb', amE: '#fcd34d', dim: 'rgba(24,24,27,.34)', skel: '#ececf1' };
+    const MO = "'Roboto Mono',ui-monospace,monospace", SG = "'Space Grotesk',system-ui,sans-serif";
+    const S = [c.vi, '#0ea5e9', '#f59e0b', '#10b981', '#6b6577'];
+    const eyeS = 'font:700 10px ' + MO + ';letter-spacing:.07em;text-transform:uppercase;color:' + c.mu;
+    const CARD = 'background:' + c.card + ';border:1px solid ' + c.hair + ';border-radius:12px;padding:16px 18px;display:flex;flex-direction:column;gap:11px;min-width:0;box-sizing:border-box';
+    const PLAIN = 'display:flex;flex-direction:column;gap:8px;min-width:0';
+    const SEC = 'display:flex;flex-direction:column;gap:9px;min-width:0;padding-top:14px;border-top:1px solid ' + c.hair;
+    const BTN = 'display:inline-flex;align-items:center;justify-content:center;gap:6px;min-height:' + (phone ? 44 : 34) + 'px;padding:0 14px;border-radius:9px;font:700 13px ' + SG + ';cursor:pointer;white-space:nowrap;box-sizing:border-box;';
+    const btnP = BTN + 'border:1px solid #7c3aed;background:#7c3aed;color:#fff';
+    const btnS = BTN + 'border:1px solid ' + c.hair + ';background:' + c.card + ';color:' + c.ink;
+    const btnG = BTN + 'border:1px solid transparent;background:transparent;color:' + c.vt + ';padding:0 6px';
+    const btnD = BTN + 'border:1px solid ' + c.negE + ';background:' + c.card + ';color:' + c.neg;
+    const btnSm = BTN + 'min-height:' + (phone ? 44 : 30) + 'px;padding:0 11px;font-size:12px;border:1px solid ' + c.hair + ';background:' + c.card + ';color:' + c.ink;
+    const TN = { n: [c.mu, c.raised, c.hair], v: [c.vt, c.lav, c.lavE], g: [c.pos, c.posBg, c.posE], r: [c.neg, c.negBg, c.negE], a: [c.amT, c.amBg, c.amE] };
+    const pl = (ic, t, tone) => { const x = TN[tone || 'n']; return { t: (ic ? ic + ' ' : '') + t, s: 'display:inline-flex;align-items:center;gap:4px;padding:2px 9px;border-radius:999px;font:700 11px ' + SG + ';line-height:1.5;white-space:nowrap;color:' + x[0] + ';background:' + x[1] + ';border:1px solid ' + x[2] }; };
+    const tag = (t, sel) => ({ t, s: 'display:inline-flex;align-items:center;gap:5px;min-height:' + (phone ? 40 : 28) + 'px;padding:0 11px;border-radius:999px;box-sizing:border-box;font:' + (sel ? 700 : 600) + ' 12px ' + SG + ';white-space:nowrap;cursor:pointer;' + (sel ? 'color:' + c.vt + ';background:' + c.lav + ';border:1px solid ' + c.lavE : 'color:' + c.ink + ';background:' + c.card + ';border:1px solid ' + c.hair) });
+    const seg = (opts, cur) => opts.map(t => ({ t, on: t === cur ? 'true' : 'false', s: 'display:inline-flex;align-items:center;min-height:' + (phone ? 40 : 28) + 'px;padding:0 12px;border-radius:7px;font:' + (t === cur ? 700 : 600) + ' 12px ' + SG + ';cursor:pointer;white-space:nowrap;' + (t === cur ? 'background:' + c.card + ';color:' + c.ink + ';box-shadow:0 0 0 1px ' + c.hair : 'color:' + c.mu) }));
+    const TOG = () => seg(['Chart', 'Table'], 'Chart');
+    const RS = 'display:flex;gap:11px;align-items:flex-start;padding:10px 0;border-top:1px solid ' + c.hair;
+    const R = (o) => Object.assign({ rs: RS, db: false, lead: false, ls: 'font-size:14px;line-height:1.3;flex:none;color:' + c.mu, eye: false, es: eyeS, pill: false, t: '', ts: 'font-size:13px;font-weight:600;line-height:1.45', sub: false, ss: 'font-size:12px;color:' + c.mu + ';line-height:1.5', tags: false, bar: false, btns: false, v: false, vs: 'font:700 13px ' + MO + ';white-space:nowrap;color:' + c.ink, st: false, tg: false, tk: '', on: 'false', act: false, as: btnSm }, o);
+    const K = (o) => Object.assign({ isCard: true, isTiles: false, isTable: false, cs: CARD, glyph: false, cover: false, title: false, ths: 'display:flex;align-items:center;justify-content:space-between;gap:11px;flex-wrap:wrap', eye: false, es: eyeS, hs: 'margin:0;font-size:15px;font-weight:800;letter-spacing:-.01em', meta: false, ms: 'font-size:12px;color:' + c.mu, tog: false, lock: false, note: false, ns: 'margin:0;font-size:12.5px;line-height:1.55;color:' + c.mu, tbar: false, legend: false, svg: false, refL: false, refLs: '', bars: false, sum: '', bgs: 'display:grid;grid-template-columns:180px minmax(0,1fr) 150px;gap:11px;align-items:center;font-size:12.5px', refS: false, stacks: false, facts: false, tags: false, cal: false, rows: [], rowsS: 'display:flex;flex-direction:column', btns: false, bs: 'display:flex;gap:7px;flex-wrap:wrap', foot: false, fs: 'margin:0;font-size:12px;color:' + c.mu + ';line-height:1.55' }, o);
+    const TL = (items, n) => ({ isCard: false, isTiles: true, isTable: false, gs: 'display:grid;grid-template-columns:repeat(' + (n || (phone ? 2 : 4)) + ',minmax(0,1fr));gap:' + (phone ? 10 : 14) + 'px', ts: CARD + ';gap:6px;padding:' + (phone ? '12px 13px' : '14px 16px'), items: items.map(x => ({ k: x[0], v: x[1], sub: x[2] || '', d: x[3] || false, ds: 'font:700 12px ' + MO + ';color:' + c.pos, fl: x[5] || false, fls: 'display:inline-flex;align-items:center;gap:5px;padding:1px 8px;border-radius:999px;font:700 11px ' + SG + ';color:' + c.amT + ';background:' + c.amBg + ';border:1px solid ' + c.amE, vs: x[1] === '' ? 'display:block;height:24px;width:60%;border-radius:6px;background:' + c.skel : 'font:700 ' + (x[6] ? 15 : (phone ? 20 : 24)) + 'px ' + (x[6] ? SG : MO) + ';letter-spacing:-.02em;color:' + (x[6] || c.ink), ss: 'font-size:12px;color:' + c.mu + ';line-height:1.45' })) });
+    const CL = (t, o) => Object.assign({ t: t == null ? '' : t, tip: '', s: 'display:flex;flex-direction:column;align-items:flex-start;gap:3px;min-width:0', ts: 'line-height:1.4', pill: false, pills: false, note: false, nts: '', sub: false, ss: 'font-size:11px;color:' + c.mu + ';line-height:1.4' }, o || {});
+    const MN = { ts: 'font-family:' + MO + ';font-weight:600' }, MU = { ts: 'color:' + c.mu }, LK = { ts: 'font-weight:700;color:' + c.vt + ';cursor:pointer' }, BD = { ts: 'font-weight:700;line-height:1.35' };
+    const DOTS = CL('⋯', { ts: 'font-size:16px;color:' + c.mu + ';cursor:pointer', tip: 'More actions' });
+    const TB = (o) => { const t = Object.assign({ isCard: false, isTiles: false, isTable: true, cs: CARD, title: false, ths: 'display:flex;align-items:center;justify-content:space-between;gap:11px;flex-wrap:wrap', hs: 'margin:0;font-size:15px;font-weight:800;letter-spacing:-.01em', meta: false, ms: 'font-size:12px;color:' + c.mu, tog: false, tbar: false, gc: '1fr', minW: 0, cols: [], rows: [], pager: true, count: '', foot: false, fs: 'margin:0;font-size:12px;color:' + c.mu + ';line-height:1.55' }, o);
+      if (t.tbar && !t.tbar.views) t.tbar.views = false;
+      t.ins = 'min-width:' + t.minW + 'px'; t.hrs = 'display:grid;grid-template-columns:' + t.gc + ';gap:8px;padding:8px 0;border-bottom:1px solid ' + c.hair + ';' + eyeS;
+      t.cols = t.cols.map(x => ({ t: x })); t.rows = t.rows.map(cells => ({ s: 'display:grid;grid-template-columns:' + t.gc + ';gap:8px;padding:9px 0;border-bottom:1px solid ' + c.hair + ';align-items:center;font-size:12px', cells: cells.map(x => typeof x === 'string' ? CL(x) : x) })); return t; };
+    const H18 = 'margin:0;font-size:18px;font-weight:800;letter-spacing:-.02em;line-height:1.3';
+    const FIN = 'display:block;box-sizing:border-box;width:100%;padding:9px 11px;border:1px solid ' + c.hair + ';border-radius:7px;background:' + c.card + ';font:600 13px ' + SG + ';line-height:1.45;color:' + c.ink;
+    const FIE = FIN + ';color:' + c.fa + ';font-weight:500';
+    const TGS = (on) => 'position:relative;display:inline-block;width:34px;height:20px;border-radius:999px;flex:none;margin-top:2px;cursor:pointer;background:' + (on ? '#7c3aed' : c.hair) + ';border:1px solid ' + (on ? '#7c3aed' : c.mu);
+    const TKS = (on) => 'position:absolute;top:2px;left:' + (on ? 16 : 2) + 'px;width:14px;height:14px;border-radius:999px;background:#fff;box-shadow:0 1px 2px rgba(0,0,0,.25)';
+    const NOTE = (tone) => { const x = { n: [c.raised, c.hair], v: [c.lav, c.lavE], a: [c.amBg, c.amE], r: [c.negBg, c.negE] }[tone]; return 'display:flex;gap:10px;align-items:flex-start;padding:12px 14px;border-radius:10px;background:' + x[0] + ';border:1px solid ' + x[1]; };
+    const INFO = 'display:grid;place-items:center;width:18px;height:18px;border-radius:999px;background:#7c3aed;color:#fff;font:700 11px ' + SG + ';flex:none';
+    const dotSw = (col) => 'width:10px;height:10px;border-radius:3px;flex:none;background:' + col;
+    const LEG = (names) => names.map((t, i) => ({ t, sw: dotSw(S[i]) }));
+    const FILL = (w, col) => 'display:block;height:100%;border-radius:3px;width:' + w + ';background:' + (col || S[0]);
+    const TRK = 'position:relative;display:block;height:14px;border-radius:4px;background:' + c.raised + ';border:1px solid ' + c.hair;
+    const BAR = (l, val, w, o) => Object.assign({ l, v: val, tip: l + ' · ' + val, ls: 'line-height:1.35', trs: TRK, fs: FILL(w), vs: 'font:600 12px ' + MO + ';white-space:nowrap' }, o || {});
+    const COL = (span) => 'display:flex;flex-direction:column;gap:14px;min-width:0;grid-column:span ' + (span || 6);
+    const col = (blocks, span) => ({ s: COL(span), blocks });
+    const G6 = 'display:grid;grid-template-columns:repeat(6,minmax(0,1fr));gap:14px;align-items:start';
+    const STACK = 'display:flex;flex-direction:column;gap:14px';
+    const DIMC = { s: 'position:absolute;inset:0;background:' + c.dim + ';z-index:3', blocks: [] };
+    const DLGS = 'background:' + c.card + ';border:1px solid ' + c.hair + ';border-radius:16px;box-shadow:0 30px 80px rgba(24,24,27,.28);padding:22px;display:flex;flex-direction:column;gap:14px;box-sizing:border-box;';
+    const dlgCol = (blocks, abs, w) => ({ s: abs ? DLGS + 'position:absolute;top:110px;left:50%;transform:translateX(-50%);width:' + (w || 560) + 'px;z-index:4' : DLGS + 'width:100%;max-width:580px;margin:0 auto', blocks });
+    const dlg = (title, note, mid, btns) => [K({ cs: PLAIN, title, hs: H18, meta: 'Esc to close', note })].concat(mid).concat([K({ cs: SEC, btns, bs: 'display:flex;gap:7px;justify-content:flex-end;flex-wrap:wrap' })]);
+    const bul = (t) => R({ rs: 'display:flex;gap:9px;align-items:flex-start;padding:5px 0', lead: '•', ls: 'font-size:14px;line-height:1.35;color:' + c.vt, t, ts: 'font-size:13px;font-weight:500;line-height:1.5' });
+    const field = (eye, val, o) => R(Object.assign({ rs: 'display:flex;flex-direction:column;gap:6px;padding:4px 0', eye, t: val, ts: FIN }, o || {}));
+    const SW = (t, on, sub) => R({ rs: 'display:flex;gap:11px;align-items:flex-start;padding:8px 0;border-top:1px solid ' + c.hair, t, sub: sub || false, tg: TGS(on), tk: TKS(on), on: on ? 'true' : 'false' });
+    const RAD = (t, on, sub) => R({ rs: 'display:flex;gap:9px;align-items:flex-start;padding:6px 0', lead: on ? '◉' : '○', ls: 'font-size:15px;line-height:1.2;flex:none;color:' + (on ? c.vt : c.mu), t, sub: sub || false });
+    const CHK = (t, on) => R({ rs: 'display:flex;gap:9px;align-items:flex-start;padding:5px 0', lead: on ? '☑' : '☐', ls: 'font-size:15px;line-height:1.2;flex:none;color:' + (on ? c.vt : c.mu), t });
+    const STEPS = (list, cur) => list.map((t, i) => ({ t: (i ? '→ ' : '') + t, s: 'font-size:12px;white-space:nowrap;font-weight:' + (i === cur ? 800 : 600) + ';color:' + (i === cur ? c.vt : c.mu) }));
+    const MOVED = (t) => K({ cs: PLAIN, rows: [R({ rs: NOTE('v') + ';align-items:center;padding:9px 12px', lead: 'i', ls: INFO, t, ts: 'font-size:13px;font-weight:600;line-height:1.45', act: 'Dismiss', as: btnG })] });
+    const INFOROW = (t, tone, act) => R({ rs: NOTE(tone || 'v'), lead: 'i', ls: INFO, t, ts: 'font-size:13px;font-weight:600;line-height:1.5', act: act || false, as: btnG });
+    const SKR = (w) => R({ rs: 'display:block;height:12px;border-radius:6px;margin:9px 0;background:' + c.skel + ';width:' + w });
+    const sk = (n) => K({ title: 'Reading…', hs: 'margin:0;font-size:13px;font-weight:600;color:' + c.mu, rows: ['92%', '74%', '86%', '60%', '70%'].slice(0, n).map(SKR) });
+    const CENTER = (glyph, t, note, btns, extra) => K({ cs: CARD + ';align-items:center;text-align:center;padding:34px 28px' + (extra || ''), glyph, title: t, ths: 'display:flex;justify-content:center', hs: 'margin:0;font-size:16px;font-weight:800;text-align:center;line-height:1.35', note, ns: 'margin:0;font-size:13px;color:' + c.mu + ';text-align:center;line-height:1.55', btns, bs: 'display:flex;gap:7px;justify-content:center;flex-wrap:wrap' });
+    const svgOpen = (W, H, sum, f) => '<svg viewBox="0 0 ' + W + ' ' + H + '" width="100%" role="img" aria-label="' + sum + '" style="display:block;overflow:visible;font-family:' + (f || 'Roboto Mono,monospace') + '">';
+    const lineSvg = (o) => { const W = o.w || 1080, H = o.h || 260, L = 50, Rt = o.rp == null ? 200 : o.rp, T = 26, Bm = 30, iw = W - L - Rt, ih = H - T - Bm, n = o.n;
+      const X = (i) => +(L + i * iw / (n - 1)).toFixed(1), Y = (v) => +(T + ih - v / o.ymax * ih).toFixed(1);
+      let s = svgOpen(W, H, o.sum);
+      for (let v = 0; v <= o.ymax; v += o.ystep) s += '<line x1="' + L + '" x2="' + (L + iw) + '" y1="' + Y(v) + '" y2="' + Y(v) + '" stroke="' + c.hair + '"/><text x="' + (L - 8) + '" y="' + (Y(v) + 4) + '" text-anchor="end" font-size="11" fill="' + c.mu + '">' + (o.yf ? o.yf(v) : v) + '</text>';
+      s += '<text x="' + L + '" y="11" font-size="11" fill="' + c.mu + '">' + o.yl + '</text>';
+      o.xl.forEach((t, i) => { if (i % (o.xe || 1) === 0 || i === n - 1) s += '<text x="' + X(i) + '" y="' + (H - 8) + '" text-anchor="middle" font-size="11" fill="' + c.mu + '">' + t + '</text>'; });
+      const labs = [];
+      o.series.forEach((se) => { let d = '', pen = false, li = -1; se.vals.forEach((v, i) => { if (v == null) { pen = false; return; } d += (pen ? 'L' : 'M') + X(i) + ' ' + Y(v); pen = true; li = i; });
+        s += '<path d="' + d + '" fill="none" stroke="' + se.col + '" stroke-width="2.5" stroke-linejoin="round" stroke-linecap="round"/>';
+        se.vals.forEach((v, i) => { if (v == null) return; const sf = o.soFar && i === n - 1; s += '<circle cx="' + X(i) + '" cy="' + Y(v) + '" r="' + (sf ? 4.5 : 3) + '" fill="' + (sf ? c.card : se.col) + '" stroke="' + se.col + '" stroke-width="2"><title>' + o.xl[i] + ' · ' + se.name + ' ' + v + (sf ? ' so far' : '') + '</title></circle>'; });
+        if (Rt > 40) labs.push({ y: Y(se.vals[li]) + 4, t: se.name + (o.soFar ? ' · ' + se.vals[li] + ' so far' : ''), col: se.col }); });
+      labs.sort((a, b) => a.y - b.y); for (let i = 1; i < labs.length; i++) if (labs[i].y < labs[i - 1].y + 15) labs[i].y = labs[i - 1].y + 15;
+      labs.forEach((l) => { s += '<circle cx="' + (L + iw + 14) + '" cy="' + (l.y - 4) + '" r="4" fill="' + l.col + '"/><text x="' + (L + iw + 23) + '" y="' + l.y + '" font-size="11.5" fill="' + c.ink + '">' + l.t + '</text>'; });
+      if (o.soFar) s += '<text x="' + X(n - 1) + '" y="' + (T - 10) + '" text-anchor="middle" font-size="10.5" fill="' + c.mu + '">so far</text>';
+      return { __html: s + '</svg>' }; };
+    const colSvg = (o) => { const W = o.w || 560, H = o.h || 230, L = 40, T = 26, Bm = 30, iw = W - L - 8, ih = H - T - Bm, n = o.data.length, step = iw / n, bw = step * .6;
+      const Y = (v) => +(T + ih - v / o.ymax * ih).toFixed(1);
+      let s = svgOpen(W, H, o.sum);
+      for (let v = 0; v <= o.ymax; v += o.ystep) s += '<line x1="' + L + '" x2="' + (L + iw) + '" y1="' + Y(v) + '" y2="' + Y(v) + '" stroke="' + c.hair + '"/><text x="' + (L - 8) + '" y="' + (Y(v) + 4) + '" text-anchor="end" font-size="11" fill="' + c.mu + '">' + v + '</text>';
+      s += '<text x="' + L + '" y="11" font-size="11" fill="' + c.mu + '">' + o.yl + '</text>';
+      o.data.forEach((arr, i) => { const x = +(L + i * step + (step - bw) / 2).toFixed(1), cur = i === n - 1; let acc = 0;
+        arr.forEach((v, j) => { if (!v) return; s += '<rect x="' + x + '" y="' + Y(acc + v) + '" width="' + bw.toFixed(1) + '" height="' + (Y(acc) - Y(acc + v)).toFixed(1) + '" fill="' + S[j] + '"' + (cur ? ' fill-opacity=".4"' : '') + ' stroke="' + c.card + '"><title>' + o.xl[i] + ' · ' + o.names[j] + ' ' + v + (cur ? ' so far' : '') + '</title></rect>'; acc += v; });
+        if (i % (o.xe || 3) === 0 || cur) s += '<text x="' + (x + bw / 2).toFixed(1) + '" y="' + (H - 8) + '" text-anchor="middle" font-size="10.5" fill="' + c.mu + '">' + o.xl[i] + '</text>';
+        if (cur) s += '<text x="' + (x + bw / 2).toFixed(1) + '" y="' + (Y(acc) - 6) + '" text-anchor="middle" font-size="10.5" fill="' + c.mu + '">so far</text>'; });
+      return { __html: s + '</svg>' }; };
+    const hstackSvg = (o) => { const W = o.w || 560, rh = 32, L = o.lw || 182, Rr = 112, H = o.rows.length * rh + 4, iw = W - L - Rr;
+      let s = svgOpen(W, H, o.sum, 'Space Grotesk,sans-serif');
+      o.rows.forEach((r, i) => { const y = i * rh + 4; let acc = 0; s += '<text x="0" y="' + (y + 14) + '" font-size="12" fill="' + c.ink + '">' + r[0] + '</text>';
+        r[1].forEach((v, j) => { if (!v) return; s += '<rect x="' + (L + acc / o.max * iw).toFixed(1) + '" y="' + (y + 2) + '" width="' + (v / o.max * iw - 1.5).toFixed(1) + '" height="16" rx="2" fill="' + S[j] + '"><title>' + r[0] + ' · ' + o.names[j] + ' ' + v + '</title></rect>'; acc += v; });
+        s += '<text x="' + (L + acc / o.max * iw + 8).toFixed(1) + '" y="' + (y + 14) + '" font-family="Roboto Mono,monospace" font-size="11.5" fill="' + c.ink + '">' + r[2] + '</text>'; });
+      return { __html: s + '</svg>' }; };
+    const divSvg = () => { const W = 560, H = 250, L = 52, T = 16, Bm = 28, iw = W - L - 12, ih = H - T - Bm, y1 = 1600, y0 = -1200;
+      const Y = (v) => +(T + (y1 - v) / (y1 - y0) * ih).toFixed(1);
+      const G = [[600, 250, 350, 200], [550, 300, 400, 150], [500, 350, 450, 100]], SP = [800, 850, 950], M = ['[Aug]', '[Sep]', '[Oct]'], GN = ['Lab milestones', 'Bounties', 'Referrals', 'Granted by HQ'];
+      let s = svgOpen(W, H, 'Credits granted and spent, August to October: 1,400 granted each month; 800, 850 and 950 spent on perk claims.');
+      for (let v = y0; v <= y1; v += 400) s += '<line x1="' + L + '" x2="' + (L + iw) + '" y1="' + Y(v) + '" y2="' + Y(v) + '" stroke="' + (v === 0 ? c.mu : c.hair) + '"/><text x="' + (L - 8) + '" y="' + (Y(v) + 4) + '" text-anchor="end" font-size="11" fill="' + c.mu + '">' + v + '</text>';
+      s += '<text x="' + L + '" y="9" font-size="11" fill="' + c.mu + '">credits</text>';
+      const bw = 70, gap = iw / 3;
+      G.forEach((g, i) => { const x = +(L + i * gap + (gap - bw) / 2).toFixed(1); let acc = 0;
+        g.forEach((v, j) => { s += '<rect x="' + x + '" y="' + Y(acc + v) + '" width="' + bw + '" height="' + (Y(acc) - Y(acc + v)).toFixed(1) + '" fill="' + S[j] + '" stroke="' + c.card + '"><title>' + M[i] + ' · ' + GN[j] + ' ' + v + '</title></rect>'; acc += v; });
+        s += '<text x="' + (x + bw / 2) + '" y="' + (Y(acc) - 6) + '" text-anchor="middle" font-size="11" fill="' + c.ink + '">+' + acc + '</text>';
+        s += '<rect x="' + x + '" y="' + Y(0) + '" width="' + bw + '" height="' + (Y(-SP[i]) - Y(0)).toFixed(1) + '" fill="' + S[4] + '"><title>' + M[i] + ' · Spent on perk claims ' + SP[i] + '</title></rect><text x="' + (x + bw / 2) + '" y="' + (Y(-SP[i]) + 14) + '" text-anchor="middle" font-size="11" fill="' + c.ink + '">−' + SP[i] + '</text>';
+        s += '<text x="' + (x + bw / 2) + '" y="' + (H - 4) + '" text-anchor="middle" font-size="11" fill="' + c.mu + '">' + M[i] + '</text>'; });
+      return { __html: s + '</svg>' }; };
+    const PSM = { Live: ['✓', 'g'], 'Partly built': ['◐', 'v'], 'Not built yet': ['○', 'n'], Proposed: ['✎', 'n'], Paused: ['‖', 'a'] };
+    const ps = (s) => pl(PSM[s][0], s, PSM[s][1]);
+    const gb = (s) => { const m = { Requested: ['◷', 'a'], 'Paused by HQ': ['‖', 'a'], Ended: ['–', 'n'], 'Not granted': ['○', 'n'], 'Runs at HQ': ['⌂', 'n'], 'Not offered yet': ['–', 'n'], 'HQ-held': ['⌂', 'n'], 'HQ only': ['⌂', 'n'] }[s] || ['◆', 'v']; return pl(m[0], s, m[1]); };
+    const SM = { Draft: ['✎', 'n'], 'Sent to HQ': ['◷', 'a'], Approved: ['✓', 'g'], 'Sent back': ['↩', 'n'], Declined: ['✕', 'r'], Submitted: ['↑', 'n'], 'Under review': ['◷', 'a'], 'More info needed': ['?', 'a'], Qualified: ['✓', 'v'], 'In conversation': ['⇄', 'v'], Converted: ['✓', 'g'], 'Reward issued': ['✓', 'g'], Rejected: ['✕', 'r'], Closed: ['–', 'n'], 'In review': ['◷', 'a'], Live: ['✓', 'g'], Paused: ['‖', 'a'], Published: ['✓', 'g'], Active: ['✓', 'g'], Ended: ['–', 'n'], Sent: ['◷', 'a'], 'Not sent': ['○', 'n'], Expired: ['–', 'n'], Verified: ['✓', 'g'], 'Not verified': ['○', 'n'], Done: ['✓', 'g'], 'Not yet': ['○', 'n'] };
+    const sp = (s, lab) => { const m = SM[s] || ['–', 'n']; return pl(m[0], lab || s, m[1]); };
+    const PC = (s, lab) => CL('', { pill: sp(s, lab) });
+    const HB = (t, s) => ({ t, s, btn: true, txt: false, al: t });
+    const HT = (t) => ({ t, s: 'font:500 12px ' + MO + ';color:' + c.mu, btn: false, txt: true, al: t });
+    const ICON = (t, al) => ({ t, s: BTN + 'width:34px;padding:0;border:1px solid ' + c.hair + ';background:' + c.card + ';color:' + c.ink, btn: true, txt: false, al });
+    const btnX = BTN + 'border:1px solid ' + c.hair + ';background:' + c.raised + ';color:' + c.fa + ';cursor:not-allowed';
+    const BK = { t: 'Back', s: btnS };
+    const lit = 'Licences';
+    let railOpen = false, strip = false, railRows = [];
+    const NSB = 'margin:0;font-size:13.5px;line-height:1.6;color:' + c.ink;
+    const MONO = 'font:500 11px ' + MO + ';color:' + c.mu;
+    const NOTEROW = (t, tone, act, sub) => R({ rs: NOTE(tone) + ';align-items:center', lead: tone === 'v' ? 'i' : '!', ls: tone === 'v' ? INFO : 'font-weight:800;flex:none;color:' + (tone === 'r' ? c.neg : tone === 'a' ? c.amT : c.mu), t, ts: 'font-size:13px;font-weight:600;line-height:1.5;color:' + (tone === 'r' ? c.neg : tone === 'a' ? c.amT : c.ink), sub: sub || false, act: act || false, as: btnSm });
+    const BASE = 'display:flex;flex-direction:column;align-items:flex-start;gap:3px;min-width:0';
+    const LICM = { Active: ['✓', 'g'], 'Pending activation': ['◷', 'a'], Suspended: ['‖', 'r'], Draft: ['✎', 'n'], Terminated: ['✕', 'r'] };
+    const lp = (s) => pl(LICM[s][0], s, LICM[s][1]);
+    const kp = (k) => pl('', k, 'n');
+    const GSM = { Granted: ['✓', 'v'], Requested: ['◷', 'a'], Paused: ['‖', 'n'], Ended: ['–', 'n'], 'Not granted': ['○', 'n'], 'HQ only': ['⌂', 'n'], 'Not ready to grant': ['–', 'n'] };
+    const gs = (s, lab) => { const m = GSM[s]; return pl(m[0], lab || s, m[1]); };
+    const wrapP = (p) => ({ t: p.t, s: p.s + ';white-space:normal;line-height:1.3;text-align:left' });
+    const ownP = (lab, wrap) => { const p = pl('✓', lab, 'v'); p.s += ';padding-right:22px;background-image:radial-gradient(circle at calc(100% - 10px) 50%,#0ea5e9 0 3.5px,transparent 4px)'; return wrap ? wrapP(p) : p; };
+    const CHIP = (t, on) => ({ t, s: 'display:inline-flex;align-items:center;padding:1px 8px;border-radius:999px;font:700 10.5px ' + SG + ';white-space:nowrap;' + (on ? 'color:' + c.vt + ';background:' + c.lav + ';border:1px solid ' + c.lavE : 'color:' + c.mu + ';background:' + c.raised + ';border:1px solid ' + c.hair) });
+    const DEFC = CHIP('Default', false), CHGC = CHIP('Changed', true), SETC = CHIP('Set for your studio', true);
+    const SECC = (t) => ({ t, s: 'display:inline-flex;align-items:center;padding:1px 8px;border-radius:7px;font:600 10.5px ' + MO + ';white-space:nowrap;color:' + c.mu + ';border:1px solid ' + c.hair + ';background:' + c.card });
+    const PROGS = [
+      { k: 'spinout', n: 'Spin-Out Lab', g: 'Ventures', st: 'Live', pu: 'Idea to incorporated company in 28 days.' },
+      { k: 'ainative', n: 'AI-native Venture', g: 'Ventures', st: 'Proposed', nr: 'Proposed', pu: 'A venture program built with Eadwyn and the studio’s tools.' },
+      { k: 'mentor', n: 'Mentor cohort access', g: 'Access', st: 'Live', pu: 'Advisors who mentor a Lab cohort.' },
+      { k: 'investor', n: 'Investor cohort access', g: 'Access', st: 'Not built yet', nr: 'Not built yet', pu: 'Verified investors follow one Lab cohort.' },
+      { k: 'refpart', n: 'Referral partners', g: 'Network and referrals', st: 'Partly built', pu: 'People who bring events, startups, deals and LPs.' },
+      { k: 'rae', n: 'Refer & Earn', g: 'Network and referrals', st: 'Live', pu: 'Members refer founders, users and contacts for credits.' },
+      { k: 'perks', n: 'Perks', g: 'Rewards', st: 'Live', pu: 'Partners list perks; members claim them.' },
+      { k: 'learning', n: 'Learning', g: 'Learning', st: 'Live', pu: 'Courses, videos, exercises and exams.' },
+      { k: 'product', n: 'Product testing', g: 'Product', st: 'Live', hq: true, pu: 'Members test StudioOS features before they ship.' }];
+    const P = {}; PROGS.forEach(p => { P[p.k] = p; });
+    const STUDIOS = [
+      { n: '[Studio Lisbon]', ref: '[AXL-002]', kind: 'Subsidiary', status: 'Active', renew: '[31 Oct 2027]', req: 1, cells: { spinout: ['G', '[31 Oct 2027]'], mentor: ['G', '[31 Oct 2027]'], refpart: ['N', '', true], rae: ['O', '[31 Oct 2027]', 'Changed: credits a quarter [300] → [400]'], perks: ['G', '[31 Oct 2027]'], learning: ['R', '[12 Oct]'] } },
+      { n: '[Studio Nairobi]', ref: '[AXL-003]', kind: 'Subsidiary', status: 'Active', renew: '[31 Mar 2028]', req: 1, cells: { mentor: ['E', '[30 Sep]'], rae: ['G', '[12 Jan 2027]'], perks: ['G', '[31 Mar 2028]'], learning: ['G', '[31 Mar 2028]'] } },
+      { n: '[Northfield Ventures]', ref: '[AXL-004]', kind: 'White-label', status: 'Active', renew: '[30 Jun 2028]', req: 1, cells: { refpart: ['R', '[18 Oct]'], perks: ['O', '[30 Jun 2028]', 'Changed: HQ share [10]% → [5]%'] } },
+      { n: '[Studio Seoul]', ref: '[AXL-005]', kind: 'Subsidiary', status: 'Suspended', renew: '[31 Dec 2027]', sus: true, note: 'Suspended since [18 Jul 2026]. Program changes are frozen until HQ lifts the suspension.', cells: { spinout: ['P', '[3 Jul]'], perks: ['G', '[31 Dec 2027]'] } },
+      { n: '[Studio Bogotá]', ref: '[AXL-006]', kind: 'Subsidiary', status: 'Pending activation', renew: false, note: 'Grants start when the licence is active.', cells: {} }];
+    const STRIP = [['Ledger', '/admin/licences', false], ['Program grants', '/admin/licences/programs', true]].map(([t, href, on]) => ({ t, href, cur: on ? 'page' : 'false', s: 'display:inline-flex;align-items:center;min-height:30px;padding:0 12px;border-radius:7px;font-size:12.5px;text-decoration:none;' + (on ? 'font-weight:800;color:' + c.vt + ';background:' + c.lav + ';border:1px solid ' + c.lavE : 'font-weight:600;color:' + c.mu + ';border:1px solid transparent') }));
+    const TABS_HQ = [['Grid', '/admin/licences/programs', false, false], ['Requests', '/admin/licences/programs/requests', '● [3]', true], ['Default terms', '/admin/licences/programs/defaults', false, false], ['History', '/admin/licences/programs/history', false, false]];
+    const TABS_AD = [['Summary', '/admin/my-licence'], ['Terms', '/admin/my-licence/terms'], ['Programs', '/admin/my-licence/programs'], ['Contract', '/admin/my-licence/contract'], ['Statements', '/admin/my-licence/statements'], ['Requests', '/admin/my-licence/requests', '[1]'], ['History', '/admin/my-licence/history']];
+    let shell = 'hq', head = true, tabsList = false, tabCur = '', period = false, title = 'Program grants', crumb = false, crumbHref = '/admin/licences', hlines = [], hpills = false, hbtns = [], scope = false, scopeTip = '', gateV = false, grid = G6, cols = [], pbar = false, minH = 900, tabsL = 'Program grants';
+    const hqHead = (tab) => { shell = 'hq'; strip = STRIP; crumb = phone ? '‹ Licences' : 'Licences › Program grants'; crumbHref = '/admin/licences'; title = 'Program grants'; hpills = [pl('⌂', 'HQ only', 'n')]; hlines = [{ t: 'Which programs each studio may run, and on what terms. Studios ask; HQ decides.' }]; hbtns = phone ? [] : [HT('Updated [10:42]'), ICON('↻', 'Refresh'), HB('Grant a program', btnP), ICON('⋯', 'More: Download CSV, Edit default terms')]; tabsList = TABS_HQ.map(x => ({ t: x[0], href: x[1], n: x[2], w: x[3] })); tabCur = tab; tabsL = 'Program grants'; };
+    const stHead = () => { shell = 'hq'; strip = STRIP; crumb = phone ? '‹ Program grants' : 'Licences › Program grants › [Studio Lisbon]'; crumbHref = '/admin/licences/programs'; title = '[Studio Lisbon]'; hpills = [kp('Subsidiary'), lp('Active')]; hlines = [{ t: 'Licence [AXL-002] · Portugal · renews [31 Oct 2027]. The programs this studio may run, and on what terms.' }]; hbtns = phone ? [] : [HB('Grant a program', btnP), ICON('⋯', 'More: Open the licence, Download CSV')]; tabsList = false; tabsL = '[Studio Lisbon]'; };
+    const adHead = (tab) => { shell = 'admin'; strip = false; crumb = false; title = '[Studio Lisbon]'; hpills = [kp('Subsidiary'), lp('Active')]; hlines = [{ t: 'Licence [AXL-002] · Portugal · Year [2] of [3]' }]; hbtns = []; tabsList = TABS_AD.map(x => ({ t: x[0], href: x[1], n: x[2] || false, w: false })); tabCur = tab; tabsL = 'Licence'; };
+    const W4 = () => { const u = ((railOpen ? 864 : 1140) - 70) / 6; return Math.round(u * 4 + 6); };
+    const W2 = () => { const u = ((railOpen ? 864 : 1140) - 70) / 6; return Math.round(u * 2 - 22); };
+    const T1 = [['Studios with a licence', '[5]', '[3] active · [1] suspended · [1] pending activation'], ['Grants in force', '[9]', 'across [5] programs · [2] on their own terms'], ['Requests waiting', '[3]', 'oldest [9 days]', false, false, '● Past response time'], ['Ending in 90 days', '[1]', 'Refer & Earn · [Studio Nairobi] · ends [12 Jan 2027]']];
+    const HN = ['Granted', 'Granted, own terms', 'Requested', 'Paused'];
+    const HOLD = [['Spin-Out Lab', [1, 0, 0, 1]], ['Mentor cohort access', [1, 0, 0, 0]], ['Referral partners', [0, 0, 1, 0]], ['Refer &amp; Earn', [1, 1, 0, 0]], ['Perks', [3, 1, 0, 0]], ['Learning', [1, 0, 1, 0]]];
+    const sumA = (a) => a.reduce((x, y) => x + y, 0);
+    const HSUM = 'Studios holding each program, of 5: Spin-Out Lab 2 (1 granted, 1 paused); Mentor cohort access 1; Referral partners 1 requested; Refer and Earn 2 (1 on own terms); Perks 4 (1 on own terms); Learning 2 (1 requested).';
+    const HFOOT = 'Perks is the most granted program: [4] of [5] studios. The bars run from 0 to the [5] licensed studios.';
+    const holdK = (w) => K({ title: 'Studios holding each program', tog: TOG(), legend: LEG(HN), svg: hstackSvg({ w, max: 5, lw: 168, names: HN, sum: HSUM, rows: HOLD.map(([l, a]) => [l, a, '[' + sumA(a) + '] of [5] studios']) }), foot: HFOOT });
+    const holdPhone = () => K({ title: 'Studios holding each program', legend: LEG(HN), rows: HOLD.map(([l, a]) => { const tot = sumA(a); let acc = 0; const stops = a.map((x, i) => { const s0 = acc / tot * 100, s1 = (acc + x) / tot * 100; acc += x; return x ? S[i] + ' ' + s0 + '% ' + s1 + '%' : ''; }).filter(Boolean).join(','); return R({ t: l.replace('&amp;', '&'), v: '[' + tot + '] of [5]', vs: 'font:700 12px ' + MO + ';white-space:nowrap', bar: { trs: 'display:block;flex:1;min-width:150px;height:10px;border-radius:999px;background:' + c.raised + ';border:1px solid ' + c.hair + ';overflow:hidden', fs: 'display:block;height:100%;width:' + (tot / 5 * 100) + '%;background:linear-gradient(90deg,' + stops + ')', t: '', w: false } }); }), foot: HFOOT });
+    const RQN = ['Granted on default terms', 'Granted with changed terms', 'Declined', 'Still waiting'];
+    const reqK = (w) => K({ title: 'Requests by month', tog: TOG(), legend: LEG(RQN), svg: colSvg({ w, h: 230, ymax: 6, ystep: 2, yl: 'requests', xe: 1, xl: ['[May]', '[Jun]', '[Jul]', '[Aug]', '[Sep]', '[Oct]'], names: RQN, sum: 'Requests by month, May to October; October so far has 3 still waiting, 1 granted with changed terms and 1 declined.', data: [[1, 0, 0, 0], [2, 1, 0, 0], [1, 0, 1, 0], [2, 1, 0, 0], [1, 1, 1, 0], [0, 1, 1, 3]] }) });
+    const GC = '240px repeat(9,124px)';
+    const STK = ';position:sticky;left:0;z-index:2;background:' + c.card + ';align-self:stretch;justify-content:center;padding:6px 10px 6px 0;box-shadow:1px 0 0 ' + c.hair;
+    const headCell = (st) => CL(st.n, { s: BASE + STK, ts: 'font-weight:800;font-size:13px;line-height:1.3;color:' + c.vt + ';cursor:pointer', pills: [kp(st.kind), lp(st.status)], sub: st.ref + ' · ' + (st.renew ? 'Renews ' + st.renew : 'Not active yet'), ss: MONO, note: st.note || false, nts: st.sus ? 'display:block;margin-top:4px;padding:6px 8px;border-left:3px solid ' + c.neg + ';background:' + c.negBg + ';border-radius:0 7px 7px 0;font-size:11.5px;line-height:1.4;color:' + c.ink : 'display:block;margin-top:4px;font-size:11.5px;line-height:1.4;color:' + c.mu, tip: st.n + ' · licence ' + st.ref });
+    const cellFor = (st, p) => {
+      const tip = st.n + ', ' + p.n + ', ';
+      if (p.hq) return CL('⌂ HQ only', { s: BASE + ';align-self:stretch;justify-content:center;padding:6px 8px;border-radius:8px;border:1px solid ' + c.hair + ';background:repeating-linear-gradient(135deg,' + c.raised + ' 0 6px,' + c.card + ' 6px 12px)', ts: 'font-size:11px;font-weight:700;color:' + c.mu, tip: tip + 'HQ only' });
+      if (p.nr) return CL(p.nr, { s: BASE + ';align-self:stretch;justify-content:center;padding:6px 8px;border-radius:8px;background:' + c.raised, ts: 'font-size:11px;color:' + c.mu, tip: tip + 'not ready to grant' });
+      const x = st.cells[p.k], S0 = BASE + (st.sus ? ';opacity:.6' : ''), DS = 'font:500 10.5px ' + MO + ';color:' + c.mu;
+      if (!x || x[0] === 'N') return x && x[2] ? CL('+ Grant', { ts: 'display:inline-flex;align-items:center;min-height:30px;padding:0 10px;border-radius:9px;border:1px solid ' + c.lavE + ';background:' + c.card + ';font-weight:700;font-size:12px;color:' + c.vt + ';box-shadow:0 0 0 2px #7c3aed', tip: tip + 'not granted. Enter grants it.' }) : CL('', { s: S0, tip: tip + 'not granted' });
+      if (x[0] === 'G') return CL('', { s: S0, pill: gs('Granted'), sub: 'to ' + x[1], ss: DS, tip: tip + 'granted to ' + x[1] });
+      if (x[0] === 'O') return CL('', { s: S0, pill: ownP('Granted'), sub: 'own terms · to ' + x[1], ss: DS, tip: tip + 'granted on its own terms. ' + x[2] });
+      if (x[0] === 'R') return CL('', { s: S0, pill: gs('Requested', 'Requested ' + x[1]), tip: tip + 'requested ' + x[1] });
+      if (x[0] === 'P') return CL('', { s: S0, pill: gs('Paused', 'Paused ' + x[1]), tip: tip + 'paused ' + x[1] });
+      return CL('Ended ' + x[1], { s: S0, ts: 'font-size:12px;color:' + c.mu, tip: tip + 'ended ' + x[1] });
+    };
+    const gridT = () => {
+      const groups = [['Ventures', 2], ['Access', 2], ['Network and referrals', 2], ['Rewards', 1], ['Learning', 1], ['Product', 1]];
+      const grpRow = [CL('', { s: BASE + STK })].concat(groups.map(([g, n]) => CL(g, { s: BASE + ';grid-column:span ' + n + ';padding-bottom:5px;border-bottom:2px solid ' + c.hair, ts: eyeS })));
+      const progRow = [CL('Studio', { s: BASE + STK, ts: eyeS })].concat(PROGS.map(p => CL(p.n, { ts: 'font-size:12px;font-weight:700;line-height:1.3;color:' + (p.nr ? c.mu : c.ink), sub: p.hq ? '⌂ HQ only · runs in Platform' : (p.nr || false), ss: 'font-size:10.5px;color:' + c.mu + ';line-height:1.3' })));
+      const t = TB({ title: 'Grants by studio', meta: 'Scroll sideways · the studio column stays', tbar: { search: 'Search studio or reference', chips: [tag('Licence status ▾'), tag('Kind ▾'), tag('Program group ▾'), tag('Has a request'), tag('Sort: Studio A–Z ▾')] }, gc: GC, minW: 1428, cols: [], rows: [grpRow, progRow].concat(STUDIOS.map(st => [headCell(st)].concat(PROGS.map(p => cellFor(st, p))))), count: '1–5 of [5]', foot: 'A studio name opens its page; a cell opens its grant. Arrow keys move between cells and Enter opens one. The focused empty cell shows + Grant.' });
+      const HS = 'display:grid;grid-template-columns:' + GC + ';gap:8px;padding:6px 0;align-items:end;font-size:12px';
+      t.hrs = 'display:none'; t.rows[0].s = HS; t.rows[1].s = HS + ';padding-bottom:9px;border-bottom:1px solid ' + c.hair;
+      return t;
+    };
+    const s3T = TL([['Programs granted', '[4]', 'of [6] HQ can grant'], ['On their own terms', '[1]', 'Refer & Earn'], ['Requests waiting', '[1]', 'Learning · [9 days]', false, false, '● Past response time'], ['Program fees a year', '[€8,000]', 'from the grant terms']]);
+    const NA = CL('—', MU);
+    const PER = (t) => CL(t, { ts: 'font-family:' + MO + ';font-size:11.5px;line-height:1.4' });
+    const PROGC = (p) => CL(p.n, { ts: 'font-weight:700;line-height:1.35', pills: [ps(p.st)], sub: p.g, ss: 'font-size:11px;color:' + c.mu });
+    const NRC = CL('Not recorded', { ts: 'font-weight:600;color:' + c.mu, sub: 'This studio has not reported program figures yet.' });
+    const G3D = [
+      ['spinout', gs('Granted'), '[1 Nov 2024] → licence end', ['[12] cohorts a year', 'HQ approves each cohort'], 'Signed [2 Oct]', ['[24] people', '[1] cohort running'], 'dots'],
+      ['ainative', wrapP(gs('Not ready to grant')), null, 'Proposed. HQ is writing the playbook.', null, null, null],
+      ['mentor', gs('Granted'), '[1 Nov 2024] → licence end', ['Up to [8] mentors', '[12] cohorts a year'], 'Signed [2 Oct]', 'nr', 'dots'],
+      ['investor', wrapP(gs('Not ready to grant')), null, 'Not built yet.', null, null, null],
+      ['refpart', gs('Not granted'), null, 'Default terms apply if granted.', 'Not sent', null, 'Grant ›'],
+      ['rae', ownP('Granted, own terms', true), '[1 Feb 2025] → licence end', ['[400] credits a quarter', '[10]% to HQ', true], 'Signed [2 Oct]', ['[48] referrals', '[9] converted'], 'dots'],
+      ['perks', gs('Granted'), '[1 Nov 2024] → licence end', ['[300] credits a quarter', '[10]% to HQ'], 'Signed [2 Oct]', ['[42] claims', '[18] live perks'], 'dots'],
+      ['learning', wrapP(gs('Requested', 'Requested [12 Oct]')), null, 'Waiting for HQ’s answer.', 'Not sent', null, 'Answer ›'],
+      ['product', gs('HQ only'), null, 'Runs in HQ › Platform.', null, null, null]];
+    const g3Row = (d) => [PROGC(P[d[0]]), CL('', { pill: d[1] }), d[2] ? PER(d[2]) : NA, Array.isArray(d[3]) ? CL(d[3][0], { ts: 'line-height:1.4', pills: d[3][2] ? [CHGC] : false, sub: d[3][1], ss: 'font-size:11.5px;color:' + c.mu + ';line-height:1.4' }) : CL(d[3], { ts: 'color:' + c.mu + ';line-height:1.4' }), d[4] ? (d[4] === 'Not sent' ? CL('Not sent', MU) : CL(d[4], MN)) : NA, d[5] === 'nr' ? NRC : Array.isArray(d[5]) ? CL(d[5][0], { ts: 'font-family:' + MO + ';font-weight:600', sub: d[5][1] }) : NA, d[6] === 'dots' ? DOTS : d[6] ? CL(d[6], LK) : NA];
+    const g3T = TB({ title: 'Programs', meta: '[9] programs', tbar: { search: 'Search program', chips: [tag('Grant ▾'), tag('Group ▾'), tag('Sort: Catalogue order ▾')] }, gc: '1.45fr 1.25fr 1.05fr 1.5fr .85fr 1.15fr .55fr', minW: 0, cols: ['Program', 'Grant', 'Period', 'Key terms', 'Schedule', 'In use', ''], rows: G3D.map(g3Row), count: '1–9 of [9]', foot: '⋯ holds Change terms, Pause, End, Send schedule and View history. HQ only and Not ready rows show their reason and no action.' });
+    const g3Phone = K({ title: 'Programs', meta: '[9]', rows: G3D.map(d => R({ t: P[d[0]].n, ts: 'font-size:13.5px;font-weight:700', sub: Array.isArray(d[3]) ? d[3][0] + ' · ' + d[3][1] : d[3], tags: [d[1]], act: d[6] === 'dots' ? '⋯' : d[6] ? d[6].replace(' ›', '') : false })) });
+    const DT = [['Equity partnership', true], ['Services partnership', true], ['Deal-sourcing revenue share', true], ['Capital partnership', false], ['Custom', false]];
+    const dealHQ = K({ title: 'Partner deal types this studio may offer', rows: DT.map(([t, on]) => SW(t, on)), foot: 'The studio’s partner invitations offer only the types allowed here. Each switch opens a dialog that asks for a reason.' });
+    const reqS = K({ title: 'Requests from [Studio Lisbon]', meta: '[1]', rows: [R({ t: 'Learning · Grant', sub: 'Sent [12 Oct] · waiting [9 days] · past response time', ss: 'font-size:12px;font-weight:600;color:' + c.neg + ';line-height:1.5', act: 'Answer' })] });
+    const chgK = K({ title: 'Recent changes', rows: [['[14 Oct]', 'Refer & Earn: credits a quarter [300] → [400]', '[Referral volume doubled since July.]'], ['[2 Oct]', 'Program schedules signed for four programs', '[Annual schedule renewal.]'], ['[12 Sep]', 'Partner deal types: Deal-sourcing revenue share allowed', '[The studio hired a deal partner.]'], ['[1 Feb 2025]', 'Refer & Earn granted', '[Year one plan.]'], ['[1 Nov 2024]', 'Spin-Out Lab, Mentor cohort access and Perks granted', '[Licence start.]']].map(([d, t, r]) => R({ eye: d + ' · by HQ', t, ts: 'font-size:13px;font-weight:600;line-height:1.45', sub: 'Reason: ' + r })) });
+    const gr3Cols = () => [col([s3T]), col([g3T], 4), col([dealHQ, reqS, chgK], 2)];
+    const TERM = (eye, t, chip, o) => R(Object.assign({ eye, t, ts: 'font-size:13px;font-weight:600;line-height:1.45', tags: chip ? [chip] : false }, o || {}));
+    const grantDlg = dlg('Grant Learning to [Studio Lisbon]', false, [
+      K({ cs: PLAIN, rows: [R({ rs: NOTE('v') + ';flex-direction:column;gap:6px', eye: 'From a request · requested [12 Oct]', t: '‘[Forty founders in Porto and Lisbon want the fundraising course in Portuguese.]’', ts: 'font-size:13px;font-weight:500;line-height:1.55' })] }),
+      K({ cs: SEC, rows: [field('PROGRAM', 'Learning ▾', { sub: 'Product testing, Investor cohort access and AI-native Venture are listed but cannot be picked: HQ only, or not ready to grant.' }), field('STUDIO', '[Studio Lisbon] · [AXL-002] · Active ▾', { sub: '[Studio Seoul] is listed but cannot be picked: lift the suspension first.' })] }),
+      K({ cs: SEC, title: 'Grant terms', meta: 'Filled from Learning’s defaults', rows: [
+        TERM('PERIOD', 'Starts [1 Nov 2026] · ends with the licence term, [31 Oct 2027]', DEFC),
+        TERM('CAPACITY', 'Up to [60] learners at a time', DEFC),
+        TERM('MONEY', 'Program fee to HQ [€2,000] a year · HQ share [10]% of what the program earns', DEFC),
+        TERM('PLAYBOOK', 'Follow HQ’s playbook as written', DEFC),
+        TERM('BRAND', 'Run under the studio’s brand', CHGC, { act: 'Reset to default', as: btnG, sub: 'Default: run as an Axal VC program.' }),
+        TERM('REPORTING', 'Program figures to HQ quarterly', DEFC),
+        TERM('CONTRACT', '[Program schedule · Learning v2] · Draft', DEFC, { sub: 'Starts only when the schedule is signed: On.' })], foot: 'Credits, HQ approval and cohorts a year do not apply to Learning, so they are hidden.' }),
+      K({ cs: PLAIN, rows: [INFOROW('[Studio Lisbon] may run Learning from [1 Nov 2026] to the end of its licence, for up to [60] learners at a time, paying HQ [€2,000] a year. It starts when the program schedule is signed.')] }),
+      K({ cs: SEC, rows: [field('REASON FOR HQ’S RECORD · REQUIRED · AT LEAST 10 CHARACTERS', '[Forty founders asked; the studio has a Portuguese course lead.]', { ts: FIN + ';min-height:52px;font-weight:500' }), field('NOTE TO THE STUDIO · OPTIONAL · THE STUDIO READS IT', '[Report enrolments each quarter.]', { ts: FIN + ';min-height:52px;font-weight:500' })] })], [BK, { t: 'Review', s: btnP }]);
+    const WT = (d, kind) => CL(d, { ts: 'font-family:' + MO + ';font-weight:700;color:' + (kind === 'past' ? c.neg : kind === 'soon' ? c.amT : c.ink), sub: kind === 'past' ? 'Past response time' : kind === 'soon' ? 'Response due soon' : 'Within response time', ss: 'font-size:11px;font-weight:700;line-height:1.4;color:' + (kind === 'past' ? c.neg : kind === 'soon' ? c.amT : c.mu) });
+    const STU = (n, r) => CL(n, { ts: 'font-weight:700', sub: r, ss: MONO });
+    const RQS = (s) => CL('', { pill: s === 'Waiting' ? pl('◷', 'Waiting', 'a') : pl('✓', 'Answered', 'g') });
+    const reqT = TB({ tbar: { search: 'Search studio or program', chips: [tag('Program ▾'), tag('Studio ▾'), tag('Asks for ▾'), tag('Status ▾'), tag('Sort: Waiting longest ▾')] }, gc: '1.3fr 1.4fr .85fr .7fr 1.05fr 1.7fr .85fr .6fr', minW: 0, cols: ['Studio', 'Program', 'Asks for', 'Sent', 'Waiting', 'Their note', 'Status', ''], rows: [
+      [STU('[Studio Lisbon]', '[AXL-002]'), 'Learning', 'Grant', CL('[12 Oct]', MN), WT('[9 days]', 'past'), '[Forty founders want the fundraising course in Portuguese.]', RQS('Waiting'), CL('Answer', LK)],
+      [STU('[Northfield Ventures]', '[AXL-004]'), 'Referral partners', 'Grant', CL('[18 Oct]', MN), WT('[3 days]', 'soon'), '[Two venture scouts are ready to start.]', RQS('Waiting'), CL('Answer', LK)],
+      [STU('[Studio Nairobi]', '[AXL-003]'), CL('[Founder Fitness Sprint]', { ts: 'line-height:1.35', pills: [pl('↳', 'From a proposal', 'v')] }), 'Grant', CL('[20 Oct]', MN), WT('[1 day]', 'within'), '[Approved for our studio on Programs; terms to finish.]', RQS('Waiting'), CL('Finish grant', LK)],
+      [STU('[Studio Lisbon]', '[AXL-002]'), 'Refer & Earn', 'Change terms', CL('[8 Oct]', MN), NA, '[Credits a quarter to 400.]', RQS('Answered'), CL('Open', LK)],
+      [STU('[Studio Nairobi]', '[AXL-003]'), 'Perks', 'Change terms', CL('[2 Oct]', MN), NA, '[Raise credits a quarter to 500.]', RQS('Answered'), CL('Open', LK)],
+      [STU('[Studio Seoul]', '[AXL-005]'), 'Spin-Out Lab', 'End', CL('[28 Jun]', MN), NA, '[Pause the Lab while we restructure.]', RQS('Answered'), CL('Open', LK)]], count: '1–6 of [6]', foot: 'From a proposal: a studio’s own program proposal that HQ approved for that studio only on Programs. It arrives here as a draft grant to finish. HQ answers within [3 days].' });
+    const ansDlg = dlg('Answer [Studio Lisbon] · Learning', 'Asks for a grant · sent [12 Oct] · waiting [9 days], past response time.', [
+      K({ cs: SEC, title: 'The request', note: '‘[Forty founders in Porto and Lisbon want the fundraising course in Portuguese. We have a course lead ready.]’', ns: NSB }),
+      K({ cs: SEC, title: 'The studio', facts: [{ k: 'Licence', v: 'Active · [AXL-002]', sub: false }, { k: 'Programs granted', v: '[4]', sub: false }, { k: 'Administrators', v: '[2]', sub: false }, { k: 'Renews', v: '[31 Oct 2027]', sub: false }] }),
+      K({ cs: SEC, title: 'Your answer', rows: [RAD('Grant on default terms', true), RAD('Grant with changed terms', false, 'Opens the grant with these terms filled in.'), RAD('Ask for more', false, 'A note is required.'), RAD('Decline', false, 'A note is required.'), field('NOTE TO THE STUDIO', 'Write a note…', { ts: FIE + ';min-height:52px' })], foot: 'The studio reads your answer on its Licences page, under Requests.' })], [BK, { t: 'Continue', s: btnP }]);
+    const DFT = { spinout: [['People at once', 'Up to [60]'], ['Cohorts a year', '[12]'], ['Program fee', '[€2,000] a year'], ['HQ share', '[10]%'], ['HQ approves each cohort', 'Off']], mentor: [['People at once', 'Up to [8] mentors'], ['Cohorts a year', '[12]'], ['Program fee', '[€2,000] a year']], refpart: [['Program fee', '[€2,000] a year'], ['HQ share', '[10]%'], ['HQ approves custom terms above', '[€10,000]']], rae: [['Credits a quarter', '[300]'], ['Program fee', '[€2,000] a year'], ['HQ share', '[10]%']], perks: [['Credits a quarter', '[300]'], ['Program fee', '[€2,000] a year'], ['HQ share', '[10]%']], learning: [['People at once', 'Up to [60] learners'], ['Program fee', '[€2,000] a year'], ['Reporting', 'Quarterly']] };
+    const GRN = { spinout: 'Granted to [2] studios · [1] paused', mentor: 'Granted to [1] studio', refpart: 'Granted to 0 studios · [1] request', rae: 'Granted to [2] studios', perks: 'Granted to [4] studios', learning: 'Granted to [1] studio · [1] request' };
+    const defCard = (p) => {
+      if (p.hq) return K({ eye: p.g, title: p.n, tags: [ps(p.st)], rows: [SW('Can be granted', false, 'HQ keeps this program. Studios see ‘Runs at HQ’.')], foot: 'Runs in HQ › Platform.' });
+      if (p.nr) return K({ cs: CARD + ';background:' + c.raised, eye: p.g, title: p.n, tags: [ps(p.st)], rows: [R({ rs: 'display:flex;gap:11px;align-items:flex-start;padding:8px 0;border-top:1px solid ' + c.hair, t: 'Can be granted', sub: 'Not ready to grant', tg: TGS(false) + ';opacity:.45;cursor:not-allowed', tk: TKS(false), on: 'false' })] });
+      return K({ eye: p.g, title: p.n, tags: [ps(p.st)], rows: [SW('Can be granted', true)].concat(DFT[p.k].map(([t, v2]) => R({ rs: 'display:flex;gap:11px;align-items:baseline;padding:7px 0;border-top:1px solid ' + c.hair, t, ts: 'font-size:12.5px;font-weight:500;color:' + c.mu, v: v2, vs: 'font:700 12.5px ' + MO + ';white-space:nowrap;color:' + c.ink }))), btns: [{ t: 'Edit defaults', s: btnSm }], foot: GRN[p.k] });
+    };
+    const lockK = K({ cs: CARD + ';padding:12px 16px', title: 'HQ decides which programs your studio runs, and on what terms.', hs: 'margin:0;font-size:13px;font-weight:700', lock: true, note: 'You can ask for a change from this tab or under Requests.' });
+    const T7 = [['Programs granted', '[4]', 'of [6] HQ offers'], ['Requests with HQ', '[1]', 'Learning · sent [12 Oct]'], ['Ending in 90 days', '0', 'none end before [31 Oct 2027]'], ['Program fees a year', '[€8,000]', 'set in your grant terms']];
+    const ADM = [['spinout', 'Granted to your studio', '[12] cohorts a year · HQ approves each cohort', 'Open program', '[1 Nov 2024] → [31 Oct 2027]', 'Signed [2 Oct]'], ['ainative', 'Not offered yet', false, false, false, false], ['mentor', 'Granted to your studio', 'Up to [8] mentors · [12] cohorts a year', 'Open program', '[1 Nov 2024] → [31 Oct 2027]', 'Signed [2 Oct]'], ['investor', 'Not offered yet', false, false, false, false], ['refpart', 'Not granted', false, 'Request it', false, false], ['rae', 'Granted to your studio', '[400] credits a quarter · [10]% to HQ', 'Open program', '[1 Feb 2025] → [31 Oct 2027]', 'Signed [2 Oct]'], ['perks', 'Granted to your studio', '[300] credits a quarter · [10]% to HQ', 'Open program', '[1 Nov 2024] → [31 Oct 2027]', 'Signed [2 Oct]'], ['learning', 'Requested', 'Waiting for HQ since [12 Oct]', 'View request', false, 'Not sent'], ['product', 'Runs at HQ', 'HQ keeps this program.', false, false, false]];
+    const APR = (p) => CL(p.n, { ts: 'font-weight:700;line-height:1.35', sub: p.pu, ss: 'font-size:11.5px;color:' + c.mu + ';line-height:1.4' });
+    const OPEN = CL('Open program ›', { ts: 'font-weight:700;color:' + c.vt + ';cursor:pointer', sub: '⋯ View all terms · Request a change · Request to end', ss: 'font-size:11px;color:' + c.mu + ';line-height:1.4' });
+    const adRow = (d) => { const p = P[d[0]], g = d[1] === 'Granted to your studio'; return [APR(p), CL('', { pill: g ? wrapP(gb(d[1])) : gb(d[1]) }), d[2] ? (g ? CL(d[2].split(' · ')[0], { ts: 'line-height:1.4', sub: d[2].split(' · ')[1], ss: 'font-size:11.5px;color:' + c.mu }) : CL(d[2], { ts: 'line-height:1.4;font-weight:600;color:' + (d[1] === 'Requested' ? c.amT : c.mu) })) : NA, d[4] ? PER(d[4]) : NA, d[5] ? (d[5] === 'Not sent' ? CL('Not sent', MU) : CL(d[5], MN)) : NA, d[3] === 'Open program' ? OPEN : d[3] ? CL(d[3], LK) : NA]; };
+    const adT = TB({ title: 'Programs', meta: '[9] programs', tbar: { search: 'Search program', chips: [tag('Status ▾'), tag('Group ▾'), tag('Sort: Catalogue order ▾')] }, gc: '1.9fr 1.35fr 1.7fr 1.35fr .9fr 1.5fr', minW: 0, cols: ['Program', 'Status', 'Your terms', 'Period', 'Schedule', 'Action'], rows: ADM.map(adRow), count: '1–9 of [9]', foot: 'Open program goes to that program’s page under Programs. A paused program shows HQ’s note and View terms. Runs at HQ has no action and no link.' });
+    const adPhone = K({ title: 'Programs', meta: '[9]', rows: ADM.map(d => R({ t: P[d[0]].n, ts: 'font-size:13.5px;font-weight:700', sub: d[2] || P[d[0]].pu, tags: [gb(d[1])], act: d[3] || false })) });
+    const dealAd = K({ title: 'Partner deal types you may offer', tags: DT.map(([t, on]) => on ? pl('✓', t, 'v') : pl('–', t + ' · locked', 'n')), foot: 'HQ sets these. Your partner invitations offer only these types.' });
+    const in1 = K({ eye: 'Inset · Summary tab · new card', title: 'Programs', rows: [R({ rs: 'display:flex;padding:0', t: '[4] granted · [1] with HQ', ts: 'font:700 14px ' + MO })], btns: [{ t: 'Open Programs ›', s: btnG }] });
+    const in2 = K({ eye: 'Inset · Requests tab', title: 'Ask HQ', btns: ['Request renewal', 'Request a change', 'Request seats', 'Request a delegate', 'Give notice of non-renewal'].map(t => ({ t, s: btnSm })).concat([{ t: 'Request a program · new', s: btnSm + ';border-color:' + c.lavE + ';color:' + c.vt + ';background:' + c.lav }]) });
+    const T8 = (eye, t, chips, o) => R(Object.assign({ eye, t, ts: 'font-size:13px;font-weight:600;line-height:1.45', tags: chips }, o || {}));
+    const termsBody = [
+      K({ cs: SEC, title: 'Grant terms', rows: [
+        T8('PERIOD', 'From [1 Feb 2025] · ends with the licence term, [31 Oct 2027]', [SECC('Schedule P-3 §1')]),
+        T8('CAPACITY', 'No cap', [SECC('Schedule P-3 §1')], { sub: 'An empty capacity means no cap.' }),
+        T8('MONEY', 'Program fee to HQ [€2,000] a year · HQ share [10]%', [SECC('Schedule P-3 §3')]),
+        T8('CREDITS', '[400] credits a quarter', [SETC, SECC('Schedule P-3 §2')], { sub: '1 credit is worth $1 of perk value.' }),
+        T8('PLAYBOOK', 'Follow HQ’s playbook as written', [SECC('Schedule')]),
+        T8('BRAND', 'Run under the studio’s brand', [SECC('Schedule P-3 §4')]),
+        T8('REPORTING', 'Not recorded', false, { ts: 'font-size:13px;font-weight:600;color:' + c.mu, sub: 'HQ has not entered this term.' }),
+        T8('CONTRACT', '[Program schedule P-3 · Refer & Earn v3] · Signed [2 Oct]', [SECC('Schedule')]),
+        T8('NOTE TO THE STUDIO', '[Credits rose with your referral volume. Report conversions each quarter.]', false, { ts: 'font-size:13px;font-weight:500;line-height:1.55' })] }),
+      K({ cs: SEC, title: 'History of this grant', rows: [R({ eye: '[14 Oct]', t: 'Terms changed by HQ: credits a quarter [300] → [400]', sub: 'HQ’s note: [Referral volume doubled since July.]' }), R({ eye: '[2 Oct]', t: 'Schedule P-3 signed', sub: 'HQ’s note: [Annual schedule renewal.]' }), R({ eye: '[1 Feb 2025]', t: 'Granted by HQ', sub: 'HQ’s note: [Year one plan.]' })] })];
+    const termsDlg = dlg('Refer & Earn · your terms', false, [K({ cs: PLAIN, tags: [gb('Granted to your studio')] })].concat(termsBody), [{ t: 'Request a change', s: btnS }, { t: 'Open program', s: btnP }]);
+    const reqDlg = (limit) => dlg('Request a program', false, [
+      K({ cs: SEC, rows: [field('PROGRAM · ONLY PROGRAMS HQ OFFERS', 'Refer & Earn ▾'), R({ rs: 'display:flex;flex-direction:column;gap:6px;padding:4px 0', eye: 'WHAT YOU ASK FOR', tags: [tag('Grant'), tag('Change a term', true), tag('End')] }), field('WHICH TERM', 'Credits a quarter ▾'), field('AS IT STANDS · READ ONLY', '[400] credits a quarter', { ts: FIN + ';background:' + c.raised + ';font-family:' + MO }), field('WHAT YOU ASK INSTEAD', '[600] credits a quarter', { ts: FIN + ';font-family:' + MO }), field('WHY YOUR STUDIO NEEDS IT · REQUIRED', '[Referrals doubled again this quarter and members are waiting for credits.]', { ts: FIN + ';min-height:64px;font-weight:500', sub: '[74] / 2000', ss: 'font:500 11px ' + MO + ';color:' + c.mu + ';align-self:flex-end' })] })].concat(limit ? [K({ cs: PLAIN, rows: [NOTEROW('You have [20] open requests with HQ, the most allowed. Wait for an answer before you send another.', 'a')] })] : [K({ cs: PLAIN, note: 'HQ answers within [3 days]. You will see the answer here and under Requests.' })]), [BK, limit ? { t: 'Send to HQ', s: btnX } : { t: 'Send to HQ', s: btnP }]);
+    const RSN = (l2) => field(l2, 'Write a reason…', { ts: FIE + ';min-height:52px' });
+    const dA = dlg('Grant Learning to [Studio Lisbon]?', 'The studio sees these terms on its Licences page. Members can join once the schedule is signed.', [K({ cs: SEC, title: 'Terms that differ from the default', hs: eyeS, rows: [bul('Brand: run under the studio’s brand. Default: run as an Axal VC program.')] }), K({ cs: SEC, rows: [field('AUTHENTICATOR CODE', '[• • • • • •]', { ts: FIN + ';font-family:' + MO + ';letter-spacing:.2em', sub: 'Changing a grant needs your authenticator code.' })] })], [BK, { t: 'Grant', s: btnP }]);
+    const dB = dlg('Pause Refer & Earn for [Studio Nairobi]?', 'New sign-ups stop. People already in keep their access. The studio sees ‘Paused by HQ’ with your note.', [K({ cs: SEC, rows: [RSN('REASON · REQUIRED')] })], [BK, { t: 'Pause', s: btnD }]);
+    const dC = dlg('End Spin-Out Lab for [Studio Lisbon]?', 'The running cohort, [Oct 2026], continues to its end date, [28 Oct 2026]. No new cohort opens. To run it again, HQ grants it again.', [K({ cs: SEC, rows: [RSN('REASON · REQUIRED')] })], [BK, { t: 'End grant', s: btnD }]);
+    const dD = dlg('Decline this request?', '[Northfield Ventures] asked for Referral partners on [18 Oct].', [K({ cs: SEC, rows: [field('NOTE TO THE STUDIO · REQUIRED', 'Write a note…', { ts: FIE + ';min-height:52px' })] })], [BK, { t: 'Decline', s: btnD }]);
+    const EMP = (lab, g, t, n, b) => ({ s: PLAIN, blocks: [K({ cs: PLAIN, note: lab, ns: eyeS }), CENTER(g, t, n, b)] });
+    const PG = (b) => [{ s: STACK, blocks: b }];
+    const over = (blocks, w) => [DIMC, dlgCol(blocks, true, w || 600)];
+    const studioCards = K({ title: 'Studios', meta: '1–5 of [5]', tbar: { search: 'Search studio', chips: [tag('Filters · [0]')] }, rows: STUDIOS.map(st => { const chips = PROGS.filter(p => st.cells[p.k] && ['G', 'O', 'R', 'P'].indexOf(st.cells[p.k][0]) >= 0).map(p => { const x = st.cells[p.k][0]; return x === 'R' ? pl('◷', p.n, 'a') : x === 'P' ? pl('‖', p.n, 'n') : x === 'O' ? ownP(p.n) : pl('✓', p.n, 'v'); }); return R({ t: st.n, ts: 'font-size:13.5px;font-weight:700;color:' + c.vt, sub: st.ref + ' · ' + st.status + (st.req ? ' · [' + st.req + '] request' : ''), ss: MONO, tags: chips.length ? chips : [pl('○', 'Nothing granted', 'n')], act: '›' }); }) });
+    if (B === 'GR1' || B === 'GR2') { hqHead('Grid'); railOpen = B === 'GR1'; railRows = [{ e: 'On this page', t: '[5] studios hold a licence. [9] grants are in force; [3] requests wait for HQ.' }, { e: 'Ask Eadwyn', t: 'Which grants end in the next 90 days?' }, { e: 'Ask Eadwyn', t: 'Which studios run a program on their own terms?' }]; cols = [col([TL(T1)]), col([holdK(W4())], 4), col([reqK(W2())], 2), col([gridT()])]; }
+    else if (B === 'GR3') { stHead(); cols = gr3Cols(); }
+    else if (B === 'GR4') { stHead(); cols = gr3Cols().concat(over(grantDlg, 600)); minH = 1720; }
+    else if (B === 'GR5') { hqHead('Requests'); cols = [col([reqT])]; }
+    else if (B === 'GR5d') { hqHead('Requests'); cols = [col([reqT])].concat(over(ansDlg, 600)); minH = 1180; }
+    else if (B === 'GR6') { hqHead('Default terms'); cols = [col([K({ cs: PLAIN, rows: [INFOROW('New grants start from these terms. Grants in force keep their own terms until HQ changes them.')] })])].concat(PROGS.map(p => col([defCard(p)], 2))); }
+    else if (B === 'GR7') { adHead('Programs'); cols = [col([lockK, TL(T7)]), col([adT]), col([dealAd], 2), col([in1], 2), col([in2], 2)]; }
+    else if (B === 'GR8') { adHead('Programs'); cols = [col([lockK, TL(T7)]), col([adT]), col([dealAd], 2), col([in1], 2), col([in2], 2)].concat(over(termsDlg, 600)); minH = 1500; }
+    else if (B === 'GR12a') { hqHead('Grid'); cols = [col([TL(T1.map(x => [x[0], '', 'Reading…']))]), col([sk(5)], 4), col([sk(5)], 2), col([sk(5)])]; }
+    else if (B === 'GR12b') { adHead('Programs'); cols = [col([lockK, TL(T7.map(x => [x[0], '', 'Reading…']))]), col([sk(5)])]; }
+    else if (crop) { head = false; grid = STACK;
+      if (B === 'GR9a' || B === 'GR9b') cols = [dlgCol(reqDlg(B === 'GR9b'))];
+      else if (B === 'GR10a') cols = [dlgCol(dA)];
+      else if (B === 'GR10b') cols = [dlgCol(dB)];
+      else if (B === 'GR10c') cols = [dlgCol(dC)];
+      else if (B === 'GR10d') cols = [dlgCol(dD)];
+      else if (B === 'GR11') { grid = 'display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px;align-items:start'; cols = [EMP('A · HQ · no licence issued yet', '○', 'No studio holds a licence yet.', 'Issue one in the ledger, then grant programs here.', [{ t: 'Open the ledger', s: btnP }]), EMP('B · Admin · nothing granted', '○', 'HQ has not granted any program to [Studio Lisbon] yet.', 'See what HQ offers below, or request one.', [{ t: 'Request a program', s: btnP }]), EMP('C · Admin · account not linked to a licence', '⌂', 'Your account is not linked to a licence.', 'On HQ-held accounts, HQ runs every program.', [{ t: 'Open Programs', s: btnS }, { t: 'Contact HQ', s: btnS }]), EMP('D · HQ · Requests tab', '✓', 'No requests are waiting.', 'A studio’s request lands here when it is sent.', false)]; }
+      else if (B === 'GR13') { grid = 'display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px;align-items:start'; cols = [
+        { s: PLAIN, blocks: [K({ cs: PLAIN, note: 'A · The grid could not be read', ns: eyeS }), TL([['Studios with a licence', '[5]', '[3] active'], ['Grants in force', 'Unreadable', 'Not read with the grid', false, false, false, c.mu], ['Requests waiting', '[3]', 'oldest [9 days]'], ['Ending in 90 days', 'Unreadable', 'Not read with the grid', false, false, false, c.mu]], 2), K({ title: 'Grants by studio', rows: [NOTEROW('Program grants could not be read. That is not the same as none.', 'r', 'Try again')] })] },
+        { s: PLAIN, blocks: [K({ cs: PLAIN, note: 'B · One block failed', ns: eyeS }), K({ title: 'Requests by month', rows: [NOTEROW('Requests could not be read.', 'a', 'Try again')] }), K({ cs: PLAIN, note: 'C · On a studio’s own deployment, under the Admin header', ns: eyeS }), K({ cs: PLAIN, rows: [INFOROW('As of [10:42, 18 Oct]. This is HQ’s copy of your grants. It updates when HQ changes them.')] })] },
+        { s: PLAIN, blocks: [K({ cs: PLAIN, note: 'D · A refused action', ns: eyeS }), K({ title: 'Pause Spin-Out Lab for [Studio Seoul]', btns: [BK, { t: 'Pause', s: btnX }], bs: 'display:flex;gap:7px;justify-content:flex-end', foot: 'This studio’s licence is suspended, so program changes are frozen until HQ lifts it.', fs: 'margin:0;font-size:12.5px;font-weight:600;line-height:1.5;color:' + c.neg })] },
+        { s: PLAIN, blocks: [K({ cs: PLAIN, note: 'E · A term HQ has not entered', ns: eyeS }), K({ title: 'Grant terms', rows: [R({ eye: 'REPORTING', t: 'Not recorded', ts: 'font-size:13px;font-weight:600;color:' + c.mu, sub: 'HQ has not entered this term.' })] })] }]; }
+      else if (B === 'GR14') { grid = 'display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:14px;align-items:start'; cols = [EMP('A · An Admin opens /admin/licences/programs', '⊘', 'Program grants are HQ’s.', 'Your studio’s programs and terms are on Licences › Programs.', [{ t: 'Open my Licences', s: btnP }]), EMP('B · A member opens /admin/my-licence/programs', '⊘', 'This page is for studio admins.', 'If you run a studio, ask HQ for admin access.', [{ t: 'Go to your home', s: btnP }]), EMP('C · A Super Admin viewing as an Admin', '⌂', 'You are viewing as an Admin.', 'HQ is not a studio, so it holds no grants.', [{ t: 'Open Program grants', s: btnP }])]; } }
+    else if (phone) { grid = STACK;
+      if (B === 'GR15a') { adHead('Programs'); cols = PG([lockK, TL(T7), adPhone, dealAd]); }
+      else if (B === 'GR15c') { adHead('Programs'); tabsList = false; crumb = '‹ Programs'; crumbHref = '/admin/my-licence/programs'; title = 'Refer & Earn · your terms'; hpills = [gb('Granted to your studio')]; hlines = []; cols = PG(termsBody); pbar = [{ t: 'Request a change', s: btnP + ';flex:1' }]; }
+      else if (B === 'GR15b') { hqHead('Grid'); cols = PG([TL(T1), studioCards, holdPhone(), reqK(330)]); }
+      else if (B === 'GR15d') { stHead(); cols = PG([s3T, g3Phone]); } }
+    const SIDES = { admin: ['Studio', 'Accounts', 'Approvals', 'Programs', 'Community', 'Contracts', 'Fund admin', 'Insights', 'Licences'], hq: ['Home', 'Licences', 'Programs', 'Funds', 'Fund admin', 'Contracts', 'Team', 'Revenue', 'Content', 'Platform', 'Integration keys', 'Support', 'Security', 'Settings'], member: ['Studio', 'Spin-Out Lab', 'Validate', 'Build', 'Raise', 'Grow', 'Network', 'Research'] };
+    const rows = SIDES[shell].map(t => ({ t, href: (shell === 'member' ? '/' : '/admin/') + t.toLowerCase().replace(/ /g, '-'), st: 'display:flex;align-items:center;min-height:34px;padding:0 12px;margin:0 8px;border-radius:9px;font-size:13px;text-decoration:none;' + (shell !== 'member' && t === lit ? 'background:' + c.lav + ';color:' + c.vt + ';font-weight:800' : 'color:' + c.ink + ';font-weight:600') }));
+    const bell = { __html: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9"/><path d="M10.3 21a1.94 1.94 0 0 0 3.4 0"/></svg>' };
+    const isShell = !phone && !crop;
+    const FONT = 'font-family:' + SG + ';background:' + c.bg + ';color:' + c.ink + ';font-variant-numeric:tabular-nums;-webkit-font-smoothing:antialiased;position:relative;box-sizing:border-box';
+    const v = {
+      eyeS, btnS,
+      root: isShell ? FONT + ';display:grid;grid-template-columns:196px minmax(0,1fr) ' + (railOpen ? '320px' : '44px') + ';min-height:' + minH + 'px' : phone ? FONT + ';width:390px;height:844px;display:flex;flex-direction:column;overflow:hidden' : FONT + ';padding:28px;background:' + (dark ? '#060a14' : '#e6e4eb'),
+      side: isShell, asideS: 'background:' + c.card + ';border-right:1px solid ' + c.hair + ';padding:14px 0;display:flex;flex-direction:column;gap:2px',
+      logoS: 'width:20px;height:20px;border-radius:6px;flex:none;background:#7c3aed', group: shell === 'admin' ? 'Admin' : shell === 'hq' ? 'HQ' : '', groupS: 'padding:6px 20px 4px;' + eyeS, rows,
+      mainS: 'min-width:0;display:flex;flex-direction:column' + (phone ? ';flex:1;min-height:0' : ''),
+      top: isShell, topS: 'height:52px;border-bottom:1px solid ' + c.hair + ';background:' + c.card + ';display:flex;align-items:center;justify-content:space-between;padding:0 30px;gap:14px',
+      searchS: 'display:flex;align-items:center;gap:8px;min-height:' + (phone ? 44 : 32) + 'px;padding:0 12px;border:1px solid ' + c.hair + ';border-radius:7px;background:' + c.card + ';color:' + c.mu + ';font-size:12.5px;width:280px;max-width:100%;box-sizing:border-box',
+      badge: shell === 'admin' ? '[Studio Lisbon]' : shell === 'hq' ? 'HQ' : '[Northwind Labs]', badgeS: 'padding:4px 9px;border-radius:999px;font:700 10px ' + MO + ';letter-spacing:.06em;color:#fff;background:' + (shell === 'admin' ? '#334155' : shell === 'hq' ? '#881337' : '#7c3aed'),
+      iconS: 'display:grid;place-items:center;width:34px;height:34px;border-radius:9px;border:1px solid ' + c.hair + ';color:' + c.ink, bell,
+      avS: 'display:grid;place-items:center;width:30px;height:30px;border-radius:999px;background:' + c.lav + ';color:' + c.vt + ';font:700 10px ' + MO,
+      ptop: phone, ptopS: 'height:56px;flex:none;display:flex;align-items:center;justify-content:space-between;padding:0 4px;border-bottom:1px solid ' + c.hair + ';background:' + c.card, picoS: 'display:grid;place-items:center;width:44px;height:44px;border:0;background:transparent;color:' + c.ink + ';font-size:18px;cursor:pointer',
+      bodyS: isShell ? 'padding:22px 30px 30px;display:flex;flex-direction:column;gap:14px;min-width:0' : phone ? 'padding:14px 14px 18px;display:flex;flex-direction:column;gap:12px;flex:1;min-width:0;min-height:0;overflow-y:auto' : 'display:flex;flex-direction:column;gap:14px;min-width:0',
+      head: (isShell || phone) && head, crumb, crumbHref, crumbS: 'font:700 11px ' + MO + ';letter-spacing:.07em;text-transform:uppercase;color:' + c.mu + (phone ? ';min-height:44px;display:inline-flex;align-items:center' : ''),
+      title, h1S: 'margin:0;font-size:' + (phone ? 20 : 24) + 'px;font-weight:800;letter-spacing:-.02em;line-height:1.25', hpills, hbtns, hlines: hlines.map(l => ({ t: l.t, s: 'margin:0;font-size:13px;line-height:1.5;color:' + c.mu })),
+      scope, scopeTip, scopeS: 'display:inline-flex;align-items:center;padding:3px 10px;border-radius:999px;border:1px solid ' + c.hair + ';background:' + c.card + ';font:600 11px ' + MO + ';color:' + c.mu,
+      gate: gateV, gateS: 'display:flex;gap:9px;flex-wrap:wrap;align-items:center;padding:9px 12px;border-radius:10px;background:' + c.card + ';border:1px solid ' + c.hair,
+      tabsL, tabs: tabsList ? tabsList.map(x => ({ t: x.t, href: x.href, n: x.n || false, sel: x.t === tabCur ? 'true' : 'false', ns: 'display:inline-flex;align-items:center;padding:0 7px;border-radius:999px;font:700 10.5px ' + MO + ';' + (x.w ? 'color:' + c.amT + ';background:' + c.amBg + ';border:1px solid ' + c.amE : 'color:' + c.mu + ';background:' + c.raised + ';border:1px solid ' + c.hair), s: 'display:inline-flex;align-items:center;gap:6px;min-height:' + (phone ? 44 : 36) + 'px;padding:0 2px;margin-bottom:-1px;font-size:13px;text-decoration:none;white-space:nowrap;border-bottom:2px solid ' + (x.t === tabCur ? c.vi : 'transparent') + ';color:' + (x.t === tabCur ? c.ink : c.mu) + ';font-weight:' + (x.t === tabCur ? 800 : 600) })) : false,
+      tabRowS: 'display:flex;gap:22px;border-bottom:1px solid ' + c.hair + (phone ? ';overflow-x:auto;flex:none' : ''),
+      period: period ? seg(['4 weeks', '12 weeks', '52 weeks'], '12 weeks') : false, segS: 'display:inline-flex;gap:2px;padding:3px;border-radius:9px;background:' + c.raised + ';border:1px solid ' + c.hair + ';align-self:flex-start',
+      banner: false, bannerS: '', bannerI: '', gridS: grid, cols,
+      pbar, pbarS: 'display:flex;gap:8px;padding:10px 14px;border-top:1px solid ' + c.hair + ';background:' + c.card + ';flex:none',
+      spine: isShell && shell !== 'member' && !railOpen, spineTip: 'Eadwyn reads the grants on this page. It changes nothing.', rail: isShell && railOpen, railRows, railS: 'background:' + c.card + ';border-left:1px solid ' + c.hair + ';padding:16px;display:flex;flex-direction:column;gap:12px;box-sizing:border-box;min-width:0', railBtn: 'display:grid;place-items:center;width:32px;height:32px;border-radius:9px;border:1px solid ' + c.hair + ';background:' + c.card + ';color:' + c.ink + ';cursor:pointer', railNote: 'margin:0;padding:10px 12px;border-radius:10px;background:' + c.lav + ';border:1px solid ' + c.lavE + ';font-size:12.5px;line-height:1.5;color:' + c.ink, railRowS: 'display:flex;flex-direction:column;gap:4px;padding:10px 0;border-top:1px solid ' + c.hair, railInS: 'margin-top:auto;padding:10px 12px;border:1px solid ' + c.hair + ';border-radius:9px;font-size:12.5px;color:' + c.fa, strip: isShell ? strip : false, stripS: 'display:flex;gap:4px;align-items:center;padding:6px 30px;border-bottom:1px solid ' + c.hair + ';background:' + c.card, spineS: 'border-left:1px solid ' + c.hair + ';background:' + c.card + ';display:flex;flex-direction:column;align-items:center;gap:12px;padding:16px 0', eadS: 'display:grid;place-items:center;width:28px;height:28px;border-radius:9px;background:#7c3aed;color:#fff;font-weight:800;font-size:13px', spineT: 'writing-mode:vertical-rl;transform:rotate(180deg);font:700 10px ' + MO + ';letter-spacing:.07em;text-transform:uppercase;color:' + c.mu,
+      glyphS: 'display:grid;place-items:center;width:44px;height:44px;border-radius:999px;background:' + c.lav + ';color:' + c.vt + ';font:700 18px ' + SG + ';border:1px solid ' + c.lavE,
+      lockS: 'display:inline-flex;align-items:center;gap:5px;padding:2px 9px;border-radius:999px;font:700 11px ' + SG + ';color:' + c.mu + ';background:' + c.raised + ';border:1px solid ' + c.hair,
+      lockI: { __html: '<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/></svg>' },
+      stackS: 'display:flex;gap:2px;height:16px;border-radius:5px;overflow:hidden', factsS: 'display:grid;grid-template-columns:1fr 1fr;gap:12px 20px', ddS: 'font-size:13px;font-weight:600;line-height:1.45;color:' + c.ink, fsubS: 'font-size:12px;color:' + c.mu,
+      monoS: 'font:600 12px ' + MO + ';color:' + c.ink, waitS: 'font:600 11.5px ' + MO + ';color:' + c.amT,
+      countS: 'font:500 12px ' + MO + ';color:' + c.mu, pageS: 'display:grid;place-items:center;min-width:30px;height:30px;padding:0 6px;border-radius:7px;border:1px solid ' + c.hair + ';background:' + c.card + ';color:' + c.ink + ';font:600 12px ' + MO + ';cursor:pointer;box-sizing:border-box'
+    };
+    return { v };
+  }
+}
+</script>
+</body>
+</html>

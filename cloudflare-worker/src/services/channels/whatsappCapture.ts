@@ -184,7 +184,7 @@ export async function answerCapture(env: Env, userId: number, uid: string, answe
   if (!row) return { done: 'nothing' };
   if (answer === 'no') {
     const [, r] = await env.DB.batch([
-      env.DB.prepare(`DELETE FROM channel_consents WHERE capture_id = ?`).bind(row.id),
+      env.DB.prepare(`DELETE FROM channel_consents WHERE provider = 'whatsapp' AND capture_id = ?`).bind(row.id),
       env.DB.prepare(`DELETE FROM whatsapp_captures WHERE id = ? AND status = 'waiting'`).bind(row.id),
     ]);
     return Number(r.meta?.changes ?? 0) ? { done: 'deleted' } : { done: 'nothing' };
@@ -241,7 +241,7 @@ export async function importCapture(env: Env, uid: string, job: string, now = ne
   if (!row) return { done: 'nothing' };
   const userId = Number(row.user_id);
   const consent = await env.DB.prepare(
-    "SELECT method FROM channel_consents WHERE id = ? AND capture_id = ? AND status = 'given'",
+    "SELECT method FROM channel_consents WHERE provider = 'whatsapp' AND id = ? AND capture_id = ? AND status = 'given'",
   ).bind(row.consent_id, row.id).first<{ method: string }>();
   if (!consent) return release(env, row, null, { done: 'nothing' });
 
@@ -339,7 +339,7 @@ export function expireCapturesStatements(env: Env, now: Date): D1PreparedStateme
   const at = now.toISOString();
   return [
     env.DB.prepare(
-      `DELETE FROM channel_consents WHERE capture_id IN
+      `DELETE FROM channel_consents WHERE provider = 'whatsapp' AND capture_id IN
         (SELECT id FROM whatsapp_captures WHERE status IN ('waiting', 'consented') AND fetch_by <= ?)`,
     ).bind(at),
     env.DB.prepare(`DELETE FROM whatsapp_captures WHERE status IN ('waiting', 'consented') AND fetch_by <= ?`).bind(at),

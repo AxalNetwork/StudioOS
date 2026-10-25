@@ -45,6 +45,12 @@ const ADVISOR = 'frontend/src/components/advisor/PersonalAdvisor.jsx';
 const SESSION = 'frontend/src/pages/founder/InterviewSessionPage.jsx';
 const DECK = 'frontend/src/pages/PitchDeckPage.jsx';
 const REVIEWER = 'frontend/src/pages/DeckReviewerPage.jsx';
+const NEW_DECK = 'frontend/src/pages/raise/pitch/NewDeck.jsx';
+const STUDIO = 'frontend/src/pages/raise/pitch/PitchStudio.jsx';
+const PITCH_REVIEW = 'frontend/src/pages/raise/pitch/PitchReview.jsx';
+const ASSIST_BAR = 'frontend/src/pages/raise/pitch/CardAssistBar.jsx';
+const ADD_MENU = 'frontend/src/pages/raise/pitch/AddMenu.jsx';
+const CONNECTOR_CARD = 'frontend/src/pages/raise/pitch/ConnectorLightbox.jsx';
 const BRAND = 'frontend/src/pages/BrandBuilderPage.jsx';
 const NETWORK_DESK = 'frontend/src/pages/founder/FounderNetworkDesk.jsx';
 const ASK = 'frontend/src/pages/research/AskZone.jsx';
@@ -142,20 +148,67 @@ export const FOUNDER_OPTIONS = [
     page: 'Founder · Raise · Investor narrative', key: 'draft:raise/narrative-fix', route: '/raise/investor-narrative', label: 'Phrase the fix', kind: 'write', handler: 'draft',
     at: [[CYCLE, "surface: 'raise/narrative-fix'"]],
   },
-  // The positioning workspace: Investor narrative's tool link opens it inside the
-  // pitch workspace, which D768's page map keys to Pitch deck.
+  // D911 (#2695): positioning moved into the Investor narrative tool, so its
+  // option moved from Pitch deck's page to the narrative's (was draft:positioning).
   {
-    page: 'Founder · Raise · Pitch deck', key: 'draft:positioning', route: '/raise/pitch/positioning', label: 'Generate positioning', kind: 'write', handler: 'draft',
-    at: [['frontend/src/pages/PitchPositioningPage.jsx', 'api.deckPositioning(']],
+    page: 'Founder · Raise · Investor narrative', key: 'draft:narrative-positioning', route: '/raise/investor-narrative/positioning', label: 'Propose positioning', kind: 'write', handler: 'draft',
+    at: [['frontend/src/pages/raise/narrative/PositioningTab.jsx', 'narrativeApi.proposePositioning(']],
+  },
+  // D1114 (#2994): Story's "Ask Eadwyn ▾" — draft this section, shorten it, or plain words.
+  {
+    page: 'Founder · Raise · Investor narrative', key: 'draft:narrative-section', route: '/raise/investor-narrative/story', label: 'Draft this section', kind: 'write', handler: 'draft',
+    at: [['frontend/src/pages/raise/narrative/StoryTab.jsx', 'narrativeApi.draftSection(']],
   },
   // The pitch deck's editor, the module's tool link, and its Review tab.
   {
-    page: 'Founder · Raise · Pitch deck', key: 'form:deck', route: '/raise/pitch?mode=workspace', label: 'Fill from project', kind: 'write', handler: 'form',
+    page: 'Founder · Raise · Pitch deck', key: 'form:deck', route: '/raise/pitch/builder', label: 'Fill from project', kind: 'write', handler: 'form',
     at: [[DECK, 'api.deckAutofill(']],
   },
   {
-    page: 'Founder · Raise · Pitch deck', key: 'form:deck-template', route: '/raise/pitch?mode=workspace', label: 'Use this template', kind: 'write', handler: 'form',
-    at: [[DECK, 'api.deckApplyMethod(']],
+    page: 'Founder · Raise · Pitch deck', key: 'form:deck-template', route: '/raise/pitch/builder', label: 'Use this template', kind: 'write', handler: 'form',
+    at: [[DECK, 'api.deckApplyMethod('], [NEW_DECK, 'api.deckApplyMethod(']],
+  },
+  // D897 (#2677): New deck (PD5, PD6) and the studio's fast path (PD2).
+  {
+    page: 'Founder · Raise · Pitch deck', key: 'deck:outline', route: '/raise/pitch/new', label: 'Regenerate outline', kind: 'write', handler: 'draft',
+    at: [[NEW_DECK, 'newDeckApi.outline(']],
+  },
+  {
+    page: 'Founder · Raise · Pitch deck', key: 'deck:build', route: '/raise/pitch/new', label: 'Build deck', kind: 'write', handler: 'draft',
+    at: [[NEW_DECK, 'newDeckApi.build('], [STUDIO, 'newDeckApi.build(']],
+  },
+  // D899 (#2678): Eadwyn's card tools in the editor (PD7, PD9d). Ask and the connector card's headline are rewrites.
+  {
+    page: 'Founder · Raise · Pitch deck', key: 'deck:rewrite', route: '/raise/pitch/edit', label: 'Rewrite', kind: 'write', handler: 'draft',
+    at: [[ASSIST_BAR, 'deckAssistApi.run('], [CONNECTOR_CARD, 'deckAssistApi.run(']],
+  },
+  {
+    page: 'Founder · Raise · Pitch deck', key: 'deck:shorten', route: '/raise/pitch/edit', label: 'Shorten', kind: 'write', handler: 'draft',
+    at: [[ASSIST_BAR, 'deckAssistApi.run(']],
+  },
+  {
+    page: 'Founder · Raise · Pitch deck', key: 'deck:expand', route: '/raise/pitch/edit', label: 'Expand', kind: 'write', handler: 'draft',
+    at: [[ASSIST_BAR, 'deckAssistApi.run(']],
+  },
+  {
+    page: 'Founder · Raise · Pitch deck', key: 'deck:tone', route: '/raise/pitch/edit', label: 'Change tone', kind: 'write', handler: 'draft',
+    at: [[ASSIST_BAR, 'deckAssistApi.run(']],
+  },
+  {
+    page: 'Founder · Raise · Pitch deck', key: 'deck:translate', route: '/raise/pitch/edit', label: 'Translate', kind: 'write', handler: 'draft',
+    at: [[ASSIST_BAR, 'deckAssistApi.run(']],
+  },
+  {
+    page: 'Founder · Raise · Pitch deck', key: 'deck:chart', route: '/raise/pitch/edit', label: 'Chart from your records', kind: 'write', handler: 'draft',
+    at: [[ADD_MENU, 'deckAssistApi.run(']],
+  },
+  {
+    page: 'Founder · Raise · Pitch deck', key: 'deck:table', route: '/raise/pitch/edit', label: 'Table from your records', kind: 'write', handler: 'draft',
+    at: [[ADD_MENU, 'deckAssistApi.run(']],
+  },
+  {
+    page: 'Founder · Raise · Pitch deck', key: 'deck:timeline', route: '/raise/pitch/edit', label: 'Timeline from your records', kind: 'write', handler: 'draft',
+    at: [[ADD_MENU, 'deckAssistApi.run(']],
   },
   {
     page: 'Founder · Raise · Pitch deck', key: 'review:deck-file', route: '/raise/pitch/review', label: 'Drop your deck here or click to browse', kind: 'vision', handler: 'upload',
@@ -168,6 +221,10 @@ export const FOUNDER_OPTIONS = [
   {
     page: 'Founder · Raise · Pitch deck', key: 'review:deck-again', route: '/raise/pitch/review', label: 'Regenerate review', kind: 'reason', handler: 'draft',
     at: [[REVIEWER, 'deckReviewer.regenerate(']],
+  },
+  {
+    page: 'Founder · Raise · Pitch deck', key: 'review:deck-version', route: '/raise/pitch/review', label: 'Review this version', kind: 'reason', handler: 'draft',
+    at: [[PITCH_REVIEW, 'api.deckReviewVersion(']],
   },
   {
     page: 'Founder · Raise · Cap table', key: 'draft:raise/capital', route: '/raise/cap-table', label: 'Read the round back', kind: 'numbers', handler: 'draft',

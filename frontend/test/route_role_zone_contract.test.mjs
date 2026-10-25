@@ -54,6 +54,9 @@ const BRANCHED = {
   // "Founders manage their room; investors see what was shared with them. One
   // route, role-branched inside the page, so there is no second root."
   '/raise/data-room': ['investor'],
+  // D905 (#2684), PD22: the studio's home tells an Advisor or an Operating
+  // Partner it is for the venture's founders (PitchBoundary), never their body.
+  '/raise/pitch': ['advisor', 'partner'],
 };
 
 /**

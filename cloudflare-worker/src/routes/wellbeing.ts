@@ -60,6 +60,7 @@ import { hasFeatureUnlock } from '../services/featureUnlocks';
 import { stripeCall } from './billing';
 import { clampLimit } from '../util/pagination';
 import { bindingKey } from '../util/schemaBootstrap';
+import { ensureAdminAuditLogTable } from './admin';
 
 const wellbeing = new Hono<{ Bindings: Env }>();
 
@@ -2027,6 +2028,23 @@ wellbeing.post('/bookings/:uid/cancel', async (c) => {
   return c.json({ ok: true, status: 'cancelled' });
 });
 
+/**
+ * D932 (#2716) — an admin's verify or hide, recorded so Admin · Community's
+ * Recent activity can say "An admin verified a wellbeing expert". The row
+ * carries the expert's uid for the governance feed and nothing that names
+ * them. Best-effort, as every audit write here: the act has happened.
+ */
+async function auditExpert(env: Env, adminId: number, action: string, uid: string) {
+  try {
+    await ensureAdminAuditLogTable(env);
+    await env.DB.prepare(
+      `INSERT INTO admin_audit_log (admin_user_id, action, report_type, filters_json) VALUES (?, ?, 'wellbeing', ?)`,
+    ).bind(adminId, action, JSON.stringify({ expert_uid: uid })).run();
+  } catch (e) {
+    console.warn('[wellbeing] audit write failed', action, (e as Error).message);
+  }
+}
+
 // --- admin review-hide ---
 wellbeing.post('/admin/experts/:uid/hide', async (c) => {
   const a = await admin(c);
@@ -2041,7 +2059,9 @@ wellbeing.post('/admin/experts/:uid/hide', async (c) => {
   const res = await c.env.DB.prepare(
     'UPDATE experts SET hidden_by_admin = ? WHERE uid = ?',
   ).bind(hidden, c.req.param('uid')).run();
-  return c.json({ ok: true, hidden: !!hidden, changes: (res.meta as any)?.changes ?? 0 });
+  const changes = (res.meta as any)?.changes ?? 0;
+  if (changes) await auditExpert(c.env, a.id, hidden ? 'expert_hidden' : 'expert_restored', c.req.param('uid'));
+  return c.json({ ok: true, hidden: !!hidden, changes });
 });
 
 wellbeing.post('/admin/experts/:uid/verify', async (c) => {
@@ -2054,7 +2074,8 @@ wellbeing.post('/admin/experts/:uid/verify', async (c) => {
   // the publish-shaped write; removing verification is a takedown and stays
   // open on a suspended branch.
   if (verified) await requireBranchNotSuspended(c);
-  await c.env.DB.prepare('UPDATE experts SET verified = ? WHERE uid = ?').bind(verified, c.req.param('uid')).run();
+  const res = await c.env.DB.prepare('UPDATE experts SET verified = ? WHERE uid = ?').bind(verified, c.req.param('uid')).run();
+  if ((res.meta as any)?.changes) await auditExpert(c.env, a.id, verified ? 'expert_verified' : 'expert_unverified', c.req.param('uid'));
   return c.json({ ok: true, verified: !!verified });
 });
 

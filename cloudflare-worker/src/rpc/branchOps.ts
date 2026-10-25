@@ -42,6 +42,8 @@ import { readBranchAdminTickets, type BranchTicketsRead } from '../services/supp
 import { activationFunnel, type ActivationRead } from '../services/activationFunnel';
 import { applyGameSet, readGameHoldings, type GameSet, type GameHoldings } from '../services/gameLibrary';
 import { notifyRequestAnswer } from '../services/escalationAnswerNotice';
+import { countsOnly, insightsParams, type InsightsLoader } from '../services/insightsScope';
+import { programsParams, type ProgramsLoader } from '../services/programCatalogue';
 
 /** Every branch answer carries the code, because a binding does not (D.7). */
 export type BranchAnswer<T> = T & { branch: string; as_of: string };
@@ -408,6 +410,25 @@ export async function applyLicenceCopy(
         .bind(s('terms_json'), pushedAt).run();
     } catch (e) {
       console.warn('[branchOps] branch_licence.terms_json not written', (e as Error).message);
+    }
+  }
+  // D984 — the program grants (migration 554) ride the same way, on the same rule.
+  if (Object.prototype.hasOwnProperty.call(record, 'program_grants_json')) {
+    try {
+      await env.DB.prepare('UPDATE branch_licence SET program_grants_json = ? WHERE id = 1 AND pushed_at = ?')
+        .bind(s('program_grants_json'), pushedAt).run();
+    } catch (e) {
+      console.warn('[branchOps] branch_licence.program_grants_json not written', (e as Error).message);
+    }
+  }
+  // D986 — the partner deal types (migration 555), by the same rule: only when
+  // HQ sent the key, and only onto the copy this push wrote.
+  if (Object.prototype.hasOwnProperty.call(record, 'partner_deal_types_json')) {
+    try {
+      await env.DB.prepare('UPDATE branch_licence SET partner_deal_types_json = ? WHERE id = 1 AND pushed_at = ?')
+        .bind(s('partner_deal_types_json'), pushedAt).run();
+    } catch (e) {
+      console.warn('[branchOps] branch_licence.partner_deal_types_json not written', (e as Error).message);
     }
   }
   return { applied: true, branch, as_of: pushedAt };
@@ -1213,6 +1234,42 @@ export async function branchActivation(env: Env): Promise<BranchAnswer<{ activat
   const branch = requireBranch(env);
   const nowMs = Date.now();
   return { branch, as_of: new Date(nowMs).toISOString(), activation: await activationFunnel(env, nowMs) };
+}
+
+/**
+ * D893 (#2662) — Admin › Insights over this branch's own database, for HQ's
+ * Super Admin scope. The same read HQ makes over its own (`load`, #2660's
+ * loader), with the contract's parameters only, and counts only: the read is
+ * stripped of every personal key before it leaves (`countsOnly`). A read, so
+ * no secret, on `rpc/index.ts`'s rule.
+ */
+export async function branchInsights(
+  env: Env,
+  params: unknown,
+  load: InsightsLoader,
+): Promise<BranchAnswer<{ insights: Record<string, unknown> }>> {
+  const branch = requireBranch(env);
+  const query = params && typeof params === 'object' ? params as Record<string, string | undefined> : {};
+  const read = await load(env, insightsParams(query));
+  return { branch, as_of: nowIso(), insights: countsOnly(read) as Record<string, unknown> };
+}
+
+/**
+ * D954 (#2787) — Admin › Programs' catalogue over this branch's own database,
+ * for HQ's Super Admin scope. The same read HQ makes over its own (`load`),
+ * with the contract's parameters only, and counts only: stripped of every
+ * personal key before it leaves (`countsOnly`), so it answers program keys and
+ * counts and HQ adds the names from its registry. A read, so no secret.
+ */
+export async function branchPrograms(
+  env: Env,
+  params: unknown,
+  load: ProgramsLoader,
+): Promise<BranchAnswer<{ programs: Record<string, unknown> }>> {
+  const branch = requireBranch(env);
+  const query = params && typeof params === 'object' ? params as Record<string, string | undefined> : {};
+  const read = await load(env, programsParams(query));
+  return { branch, as_of: nowIso(), programs: countsOnly(read) as Record<string, unknown> };
 }
 
 /**

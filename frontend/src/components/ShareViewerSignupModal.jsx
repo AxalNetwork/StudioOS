@@ -28,7 +28,7 @@ export default function ShareViewerSignupModal({
     email: '', name: '', role: asksForFeedback(category) ? 'partner' : 'investor',
   });
   const [user, setUser] = useState(null);
-  const [, setNdaDoc] = useState(null);
+  const [ndaDoc, setNdaDoc] = useState(null);
   const [dealPack, setDealPack] = useState([]);
   const [feedback, setFeedback] = useState({
     overall_note: '', problem_fit: '', willingness_to_pay: '', contact: '',
@@ -49,7 +49,7 @@ export default function ShareViewerSignupModal({
     { key: 'want_more', label: '💡 Want more' },
   ];
   const [dealForm] = useState({
-    check_size: '$25,000', valuation_cap: '$8M', discount: '20%',
+    check_size: '', valuation_cap: '', discount: '',
   });
 
   const [turnstileToken, setTurnstileToken] = useState('');
@@ -150,7 +150,7 @@ export default function ShareViewerSignupModal({
       setStep(STEPS.POST_NDA);
       // Pre-load the deal pack for every category whose CTA offered one.
       // Surface failures so the user sees an actionable error instead of the
-      // modal hanging at the "Generating documents…" placeholder.
+      // modal hanging at the "No documents are available. Agreed terms must be recorded first." placeholder.
       //
       // THIS LINE IS WHY #205 EXISTED. It read `=== 'fundraising'` while the
       // CTA promised the deal pack to anything that was not `'commercial'`, so
@@ -163,7 +163,7 @@ export default function ShareViewerSignupModal({
           });
           setDealPack(pack?.documents || []);
         } catch (err) {
-          setError(err?.message || 'Could not generate deal pack');
+          setError(err?.data?.missing_fields?.length ? `Terms not recorded: ${err.data.missing_fields.join(', ')}. Ask the founder to record the agreed terms.` : err?.message || 'Could not generate deal pack');
         }
       }
     } catch (err) {
@@ -187,11 +187,16 @@ export default function ShareViewerSignupModal({
     if (dealPack.length === 0) return;
     setError(null); setBusy(true);
     try {
-      await api.deckShareSignDealPack(shareToken, {
+      const result = await api.deckShareSignDealPack(shareToken, {
         view_id: viewId,
         signed_by: form.name || user.email,
         document_ids: dealPack.map((d) => d.id).filter(Boolean),
       });
+      const requested = dealPack.map(d => d.id).filter(Boolean);
+      if (requested.some(id => !result?.signed_ids?.includes(id))) {
+        setError('These documents require completed e-sign envelopes before their signatures can be recorded.');
+        return;
+      }
       setStep(STEPS.DONE);
     } catch (err) {
       setError(err?.message || 'Could not record signature');
@@ -209,7 +214,7 @@ export default function ShareViewerSignupModal({
           <div>
             <h2 className="text-lg font-semibold text-gray-900 dark:text-slate-100">
               {step === STEPS.SIGNUP && 'Join the Axal VC network'}
-              {step === STEPS.NDA && 'Review and sign the NDA'}
+              {step === STEPS.NDA && 'Review and accept the NDA'}
               {step === STEPS.POST_NDA && asksForFeedback(category) && 'Share your feedback'}
               {step === STEPS.POST_NDA && offersDealPack(category) && 'Review the deal pack'}
               {step === STEPS.DONE && 'All set'}
@@ -300,8 +305,8 @@ export default function ShareViewerSignupModal({
                 <p className="font-semibold mb-2">{projectName || 'Startup'} — Non-Disclosure Agreement</p>
                 <p className="text-gray-600 dark:text-slate-400">
                   You agree to keep all information disclosed in this deck and any subsequent
-                  materials confidential. The full template will be sent to your email for your
-                  records, and is governed by the standard Axal VC investor NDA.
+                  materials confidential under the standard Axal VC investor NDA.
+                  This acceptance does not grant data-room access; a separate founder grant and the data room NDA checks still apply.
                 </p>
               </div>
               <button
@@ -309,11 +314,12 @@ export default function ShareViewerSignupModal({
                 className="w-full inline-flex items-center justify-center gap-2 bg-violet-600 hover:bg-violet-700 text-white text-sm font-medium px-4 py-2.5 rounded-lg disabled:opacity-50"
               >
                 {busy ? <Loader2 className="w-4 h-4 animate-spin" /> : <FileSignature size={14} />}
-                {busy ? 'Recording signature…' : 'I agree — sign NDA'}
+                {busy ? 'Recording acceptance…' : 'I agree — record acceptance'}
               </button>
             </div>
           )}
 
+          {ndaDoc && step === STEPS.POST_NDA && <p className="mb-3 text-xs text-gray-600 dark:text-slate-400">NDA acceptance recorded. This does not grant data-room access; a separate founder grant and the data room NDA checks still apply.</p>}
           {step === STEPS.POST_NDA && asksForFeedback(category) && (
             <div className="space-y-3">
               <p className="text-sm text-gray-600 dark:text-slate-400">
@@ -397,10 +403,10 @@ export default function ShareViewerSignupModal({
           {step === STEPS.POST_NDA && offersDealPack(category) && (
             <div className="space-y-3">
               <p className="text-sm text-gray-600 dark:text-slate-400">
-                Generated deal pack for {projectName || 'this startup'}. Review each document, then sign all to record your commitment.
+                Deal pack for {projectName || 'this startup'}. Documents require recorded terms and completed e-sign envelopes.
               </p>
               {dealPack.length === 0 && (
-                <p className="text-xs text-gray-500">Generating documents…</p>
+                <p className="text-xs text-gray-500">No documents are available. Agreed terms must be recorded first.</p>
               )}
               {dealPack.map((d) => (
                 <details key={d.id} className="border dark:border-slate-700 rounded-lg">
@@ -413,7 +419,7 @@ export default function ShareViewerSignupModal({
                 className="w-full inline-flex items-center justify-center gap-2 bg-violet-600 hover:bg-violet-700 text-white text-sm font-medium px-4 py-2.5 rounded-lg disabled:opacity-50"
               >
                 {busy ? <Loader2 className="w-4 h-4 animate-spin" /> : <FileSignature size={14} />}
-                {busy ? 'Signing…' : 'Sign all and notify the founder'}
+                {busy ? 'Checking signatures…' : 'Record completed e-signatures'}
               </button>
             </div>
           )}
@@ -425,7 +431,7 @@ export default function ShareViewerSignupModal({
               <p className="text-sm text-gray-500 dark:text-slate-400 mt-1">
                 {asksForFeedback(category)
                   ? 'Your feedback has been delivered to the founders.'
-                  : 'The founder has been notified — you can track progress from your Axal VC dashboard.'}
+                  : 'Completed signatures are recorded.'}
               </p>
               <button
                 onClick={onClose}

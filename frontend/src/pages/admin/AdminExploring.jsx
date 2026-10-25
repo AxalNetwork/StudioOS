@@ -7,6 +7,7 @@
 //   2. Assign final role — the server rejects this until the envelope is
 //      status='completed', so the button stays disabled until signed.
 import React, { useCallback, useEffect, useState } from 'react';
+import { Link } from 'react-router-dom';
 import {
   Compass, RefreshCw, Loader2, Send, UserCheck, AlertCircle,
   FileSignature, CheckCircle2, Clock,
@@ -62,6 +63,22 @@ function BindingBadge({ status }) {
   );
 }
 
+// D992: the profile verdict uses the Partner profiles canvas's words and colours.
+const PROFILE_STATUS = {
+  pending: { label: 'Waiting', tone: 'bg-axal-amber text-axal-amber-deep dark:bg-amber-900/40 dark:text-amber-200' },
+  verified: { label: 'Verified', tone: 'bg-emerald-50 text-axal-positive dark:bg-emerald-900/30 dark:text-emerald-300' },
+  rejected: { label: 'Rejected', tone: 'bg-axal-destructive-tint text-axal-destructive dark:bg-red-900/30 dark:text-red-300' },
+};
+export function ProfileStatus({ status }) {
+  const view = Object.hasOwn(PROFILE_STATUS, status) ? PROFILE_STATUS[status] : { label: 'Not recorded', tone: 'border-dashed text-axal-muted dark:text-gray-400' };
+  return (
+    <Link to="/admin/partner-profiles" className={`mt-1 inline-flex rounded-full border border-axal-hairline px-2 py-0.5 text-[11px] font-semibold dark:border-gray-700 ${view.tone}`}
+      aria-label={`Partner profiles: ${view.label}`} data-testid="exploring-profile-status">
+      {view.label}
+    </Link>
+  );
+}
+
 function Row({ u, onSendBinding, onAssign, busy }) {
   // Default the role picker to the stored suggestion when there is one.
   const [role, setRole] = useState(
@@ -109,9 +126,7 @@ function Row({ u, onSendBinding, onAssign, busy }) {
       </td>
       <td className="px-3 py-3 align-top text-sm text-gray-700 dark:text-gray-300">
         {u.profiling_answered || 0} answered
-        {u.profile_admin_status && (
-          <div className="text-xs text-gray-400 dark:text-gray-500 mt-0.5">{u.profile_admin_status}</div>
-        )}
+        <div><ProfileStatus status={u.profile_admin_status} /></div>
       </td>
       <td className="px-3 py-3 align-top">
         <BindingBadge status={u.binding_status} />

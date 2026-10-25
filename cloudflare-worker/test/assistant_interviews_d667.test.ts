@@ -39,6 +39,7 @@ import {
 import structure from '../src/routes/founder_validate_structure.ts';
 import sessionsApp from '../src/routes/founder_validate_sessions.ts';
 import cycleValidate from '../src/routes/cycle_validate.ts';
+import { applySessionTranslationColumns } from './_session_translation_columns.mjs';
 
 const BASELINE = readFileSync(new URL('../sql/schema_baseline.sql', import.meta.url), 'utf8');
 const mig = (name: string) => readFileSync(new URL(`../sql/migrations/${name}`, import.meta.url), 'utf8');
@@ -92,6 +93,7 @@ function world(reply: (model: string, input: any) => any = () => ({ response: '{
     '452_record_session_setup.sql', '453_interview_processing.sql']) {
     db.exec(mig(m));
   }
+  applySessionTranslationColumns(db); // D857: migration 527's segment columns
   // D754 (#1893): deleteSession also deletes the session's chat consents and frees
   // the chat that pointed at it: 449's thread table, then 488.
   db.exec(mig('449_interview_channels.sql').split(';')

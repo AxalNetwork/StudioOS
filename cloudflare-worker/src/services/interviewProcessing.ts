@@ -44,13 +44,15 @@ import { AI_SURFACE } from './aiSurfaces';
 import * as aiBudget from './aiBudget';
 import { enqueueJob } from './queue';
 import {
-  AUDIO_CHANNELS, AUDIO_PREFIX, consentBlocks, labelSegments, sessionHasAudio, listChunks, loadSession, recordReceipt, replaceWithFinal,
-  type ChunkRow, type SessionRow, type StoredSegment,
+  AUDIO_CHANNELS, AUDIO_PREFIX, CHUNK_MIME, UPLOAD_BYTES_PER_SECOND, UPLOAD_SOURCE, WAV_HEADER_BYTES, consentBlocks, labelSegments,
+  sessionHasAudio, listChunks, loadSession, recordReceipt, replaceWithFinal, type ChunkRow, type SessionRow, type StoredSegment,
 } from './interviewSessions';
 import { DEFAULT_FINAL_MODEL } from './sttModels';
 import { appendSegments } from './interviewIntake';
 import type { ChannelProvider } from './channels/types';
 import type { DigestOutcome } from './validateEngine';
+import { NOVA_3 } from './sttFormats';
+import { callTranscriptSource } from './conversationAnalytics';
 import { summariseTranscript, toSegments, type DigestSections, type ReceiptLine, type SegmentRow, type SummarySentence } from './interviewStructuring';
 
 export const STAGES = ['uploading', 'transcribing', 'summarising', 'placing', 'done', 'failed'] as const;
@@ -131,6 +133,20 @@ export const TRANSCRIBE_OPTIONS = { recording: 'transcribe:recording', session: 
 export const DIGEST_PAGE = 'validate';
 export const DIGEST_OPTIONS = { summarise: 'summarise:session', structure: 'structure:transcript', ask: 'ask:transcript' } as const;
 
+/**
+ * D872 (#2519): the minutes a chunk is held and charged on. An upload's chunk
+ * is 16 kHz mono 16-bit PCM behind a 44-byte header, which the chunk route
+ * enforces, so its bytes are its duration exactly. Any other chunk keeps the
+ * router's 32 kbps estimate (`audioMinutesFromBytes`).
+ */
+export function chunkAudioMinutes(chunk: Pick<ChunkRow, 'mime' | 'size_bytes'>, session: Pick<SessionRow, 'submitted_via'>): number {
+  if (session.submitted_via === UPLOAD_SOURCE && CHUNK_MIME[chunk.mime] === 'wav') {
+    const seconds = Math.max(0, Number(chunk.size_bytes) - WAV_HEADER_BYTES) / UPLOAD_BYTES_PER_SECOND;
+    return seconds > 0 ? Math.max(1, Math.ceil(seconds / 60)) : 0;
+  }
+  return audioMinutesFromBytes(chunk.size_bytes);
+}
+
 export type ChunkTranscript =
   | { ok: true; segments: StoredSegment[]; language: string | null; model: string; fallback: boolean; costMicro: number }
   | { ok: false; refusal: string; message: string; budget: boolean };
@@ -140,7 +156,7 @@ export type ChunkTranscript =
  * at `offsetMs`. Language and the model's fallback are the router's.
  */
 export async function transcribeChunk(env: Env, opts: {
-  session: Pick<SessionRow, 'language'>; userId: number; chunk: ChunkRow; model: string; intervieweeName: string | null; offsetMs: number;
+  session: Pick<SessionRow, 'language' | 'submitted_via'>; userId: number; chunk: ChunkRow; model: string; intervieweeName: string | null; offsetMs: number;
   /** The run's rail context; a chat's voice note (D754) keeps the default. */
   rail?: RailContext;
 }): Promise<ChunkTranscript> {
@@ -155,7 +171,7 @@ export async function transcribeChunk(env: Env, opts: {
     model: opts.model,
     audio: new Uint8Array(await obj.arrayBuffer()),
     audioMime: opts.chunk.mime,
-    audioMinutes: audioMinutesFromBytes(opts.chunk.size_bytes),
+    audioMinutes: chunkAudioMinutes(opts.chunk, opts.session),
     language: opts.session.language,
   });
   if (!r.ok) {
@@ -213,34 +229,55 @@ export async function transcribeVoiceNote(env: Env, opts: {
   if (!chunk || !chunk.r2_key.startsWith(AUDIO_PREFIX)) {
     return { ok: false, refusal: 'chunk_missing', message: 'The voice note could not be read. Nothing was stored.', budget: false };
   }
+  // D866: retain the proven pending-message hash on a Telegram voice passage.
+  const source = opts.provider === 'telegram' ? await env.DB.prepare(
+    `SELECT m.external_message_id FROM channel_thread_messages m JOIN channel_threads t ON t.id = m.thread_id
+      WHERE m.id = ? AND t.session_id = ? AND t.user_id = ? AND t.provider = 'telegram'`,
+  ).bind(seq, session.id, userId).first<{ external_message_id: string }>() : null;
+  if (opts.provider === 'telegram' && !source) {
+    // A deleted placeholder is not an untracked voice note. Mark the chunk
+    // consumed without speech or a new charge so recovery cannot retry it.
+    await env.DB.batch([
+      env.DB.prepare(`INSERT OR IGNORE INTO interview_chunk_transcripts
+        (session_id, seq, model, language, segments_json, cost_microusd, fallback_used)
+        VALUES (?, ?, ?, NULL, '[]', 0, 0)`).bind(session.id, seq, voiceNoteModel(session)),
+      ...(opts.alongside ?? []),
+    ]);
+    return { ok: true, appended: 0, already: true };
+  }
   const model = voiceNoteModel(session);
   const r = await transcribeChunk(env, { session, userId, chunk, model, intervieweeName: null, offsetMs: 0 });
   if (!r.ok) {
     await recordReceipt(env, session.id, {
       kind: 'final', model, requested_model: model, fallback_used: false,
-      audio_minutes: audioMinutesFromBytes(chunk.size_bytes), cost_microusd: 0,
+      audio_minutes: chunkAudioMinutes(chunk, session), cost_microusd: 0,
       outcome: r.budget ? 'refused' : 'failed', refusal: r.refusal,
     });
     return r;
   }
   // D754 §6: one `final` segment per note, under the side's label, beside the chat's own lines.
   const text = r.segments.map((x) => String(x.text ?? '').trim()).filter(Boolean).join(' ');
-  const segments: StoredSegment[] = text ? [{ start_ms: null, end_ms: null, speaker_label: opts.speakerLabel, speaker_raw: null, text }] : [];
+  const segments: StoredSegment[] = text ? [{ start_ms: null, end_ms: null, speaker_label: opts.speakerLabel, speaker_raw: null, text, ...(source ? { source_ref: source.external_message_id } : {}) }] : [];
   // A plain INSERT, not OR IGNORE: a chunk staged by another run fails the whole batch, so nothing is appended twice.
   const stage = env.DB.prepare(
     `INSERT INTO interview_chunk_transcripts (session_id, seq, model, language, segments_json, cost_microusd, fallback_used)
-     VALUES (?, ?, ?, ?, ?, ?, ?)`,
-  ).bind(session.id, seq, r.model, r.language, JSON.stringify(segments), r.costMicro, r.fallback ? 1 : 0);
+     SELECT ?, ?, ?, ?, CASE WHEN ? IS NULL OR EXISTS (
+       SELECT 1 FROM channel_thread_messages m JOIN channel_threads t ON t.id = m.thread_id
+       WHERE m.id = ? AND m.external_message_id = ? AND t.session_id = ? AND t.user_id = ? AND t.provider = 'telegram')
+       THEN ? ELSE '[]' END, ?, ?`,
+  ).bind(session.id, seq, r.model, r.language, source?.external_message_id ?? null,
+    seq, source?.external_message_id ?? null, session.id, userId, JSON.stringify(segments), r.costMicro, r.fallback ? 1 : 0);
   let appended = 0;
   try {
-    appended = await appendSegments(env, userId, session.id, segments, opts.provider, [stage, ...(opts.alongside ?? [])]);
+    appended = await appendSegments(env, userId, session.id, segments, opts.provider, [stage, ...(opts.alongside ?? [])],
+      source ? { messageId: seq, sourceRef: source.external_message_id } : undefined);
   } catch (e) {
     if (!isKeyConflict(e)) throw e;
     return { ok: true, appended: 0, already: true };
   }
   await recordReceipt(env, session.id, {
     kind: 'final', model: r.model, requested_model: model, fallback_used: r.fallback,
-    audio_minutes: audioMinutesFromBytes(chunk.size_bytes), cost_microusd: r.costMicro, outcome: 'ok',
+    audio_minutes: chunkAudioMinutes(chunk, session), cost_microusd: r.costMicro, outcome: 'ok',
   });
   return { ok: true, appended, already: false };
 }
@@ -347,8 +384,11 @@ export async function summariseSession(env: Env, session: SessionRow, userId: nu
   };
   await env.DB.prepare(
     `UPDATE interview_sessions SET summary = ?, summary_model = ?, summarised_at = datetime('now'), summary_citations_json = ?,
-            digest_json = ?, digest_kept_at = NULL, digest_kept_by = NULL, updated_at = datetime('now') WHERE id = ? AND consent_status <> 'declined'`,
-  ).bind(out.sentences.map((s) => s.text).join(' '), usedModel, JSON.stringify(out.sentences), JSON.stringify(digest), session.id).run();
+            digest_json = ?, digest_kept_at = NULL, digest_kept_by = NULL, updated_at = datetime('now') WHERE id = ? AND consent_status <> 'declined'
+        AND NOT EXISTS (SELECT 1 FROM json_each(?) expected
+          LEFT JOIN interview_transcript_segments current ON current.id = json_extract(expected.value, '$.id') AND current.session_id = ?
+          WHERE current.id IS NULL OR current.text IS NOT json_extract(expected.value, '$.text'))`,
+  ).bind(out.sentences.map((s) => s.text).join(' '), usedModel, JSON.stringify(out.sentences), JSON.stringify(digest), session.id, JSON.stringify(rows.results ?? []), session.id).run();
   return { ok: true, sentences: out.sentences, model: usedModel, digest: out.digest };
 }
 
@@ -357,7 +397,11 @@ export function summaryOf(session: SessionRow) {
   if (!session.summary) return null;
   let sentences: SummarySentence[] = [];
   try { sentences = JSON.parse(session.summary_citations_json || '[]'); } catch { sentences = []; }
-  return { text: session.summary, sentences, model: session.summary_model ?? null, summarised_at: session.summarised_at ?? null };
+  return {
+    text: session.summary, sentences, model: session.summary_model ?? null, summarised_at: session.summarised_at ?? null,
+    // D873 (#2520): a call's summary says how its text was made, the provider's transcript or speech-to-text, and by what.
+    ...(callTranscriptSource(session) ? { transcript: { source: callTranscriptSource(session), model: session.final_model } } : {}),
+  };
 }
 
 // ---------------------------------------------------------------------------
@@ -426,7 +470,7 @@ async function transcribeBatch(env: Env, session: SessionRow, userId: number, in
     .bind(session.id).all<{ seq: number }>();
   const have = new Set((staged.results || []).map((r) => r.seq));
   const todo = chunks.filter((ch) => !have.has(ch.seq));
-  const model = session.final_model || DEFAULT_FINAL_MODEL;
+  const model = session.submitted_via === 'meeting_bot' ? NOVA_3 : session.final_model || DEFAULT_FINAL_MODEL;
   await env.DB.prepare(`UPDATE interview_sessions SET status = 'transcribing', updated_at = datetime('now') WHERE id = ? AND status = 'stopped'`)
     .bind(session.id).run();
   await setStage(env, session.id, 'transcribing', { done: have.size, total: chunks.length });
@@ -439,13 +483,19 @@ async function transcribeBatch(env: Env, session: SessionRow, userId: number, in
     if (!r.ok) {
       await recordReceipt(env, session.id, {
         kind: 'final', model, requested_model: model, fallback_used: false,
-        audio_minutes: audioMinutesFromBytes(ch.size_bytes), cost_microusd: 0,
+        audio_minutes: chunkAudioMinutes(ch, session), cost_microusd: 0,
         outcome: r.budget ? 'refused' : 'failed', refusal: r.refusal,
       });
       await failProcessing(env, session, r.message);
       return 'failed';
     }
-    await env.DB.prepare(
+    if (session.submitted_via === 'meeting_bot') {
+      const { sessionBot } = await import('./meetingBots');
+      const run = await sessionBot(env,session.id,userId);
+      if (!run) throw new Error('bot_not_ready');
+      const { stageBotChunk } = await import('./meetingBotAssembly');
+      await stageBotChunk(env,run.uid,ch.seq,r);
+    } else await env.DB.prepare(
       `INSERT OR IGNORE INTO interview_chunk_transcripts (session_id, seq, model, language, segments_json, cost_microusd, fallback_used)
        VALUES (?, ?, ?, ?, ?, ?, ?)`,
     ).bind(session.id, ch.seq, r.model, r.language, JSON.stringify(r.segments), r.costMicro, r.fallback ? 1 : 0).run();
@@ -457,6 +507,14 @@ async function transcribeBatch(env: Env, session: SessionRow, userId: number, in
 
 /** Every staged chunk, placed on one timeline, written as the final transcript once. */
 async function assemble(env: Env, session: SessionRow) {
+  if (session.submitted_via === 'meeting_bot') {
+    const { sessionBot } = await import('./meetingBots');
+    const run = await sessionBot(env,session.id,session.created_by_user_id);
+    if (!run) throw new Error('bot_not_ready');
+    const { prepareBotAssembly, commitBotAssembly } = await import('./meetingBotAssembly');
+    await commitBotAssembly(env,await prepareBotAssembly(env,run.uid));
+    return;
+  }
   const lastSeq = session.expected_last_seq ?? -1;
   const chunks = expectedChunks(await listChunks(env, session.id), lastSeq);
   const rows = await env.DB.prepare(
@@ -485,7 +543,7 @@ async function assemble(env: Env, session: SessionRow) {
   await replaceWithFinal(env, session, segments, model, language);
   await recordReceipt(env, session.id, {
     kind: 'final', model, requested_model: session.final_model, fallback_used: fallback,
-    audio_minutes: chunks.reduce((m, c) => m + audioMinutesFromBytes(c.size_bytes), 0), cost_microusd: cost, outcome: 'ok',
+    audio_minutes: chunks.reduce((m, c) => m + chunkAudioMinutes(c, session), 0), cost_microusd: cost, outcome: 'ok',
   });
 }
 
@@ -513,6 +571,13 @@ export async function runInterviewProcessJob(env: Env, payload: unknown): Promis
   const interview = await env.DB.prepare('SELECT interviewee_name FROM discovery_interviews WHERE id = ?')
     .bind(session.interview_id).first<{ interviewee_name: string | null }>();
   try {
+    if (session.submitted_via === 'meeting_bot') {
+      const { sessionBot } = await import('./meetingBots');
+      const run = await sessionBot(env,session.id,userId);
+      if (!run) throw new Error('bot_not_ready');
+      const { botAssemblyInputs } = await import('./meetingBotAssembly');
+      await botAssemblyInputs(env,run.uid);
+    }
     // D754 (#1935): a chat's session holds voice notes, not a recording: append, never assemble.
     if (!AUDIO_CHANNELS.has(session.channel)) return await transcribeVoiceNotes(env, session, userId, interview?.interviewee_name ?? null);
     if (session.processing_stage === 'uploading' || session.processing_stage === 'transcribing') {
@@ -553,7 +618,8 @@ export async function runInterviewProcessJob(env: Env, payload: unknown): Promis
     }
     return session.processing_stage as Stage;
   } catch (e) {
-    console.warn('[processing] job failed', sessionId, (e as Error)?.message);
+    if (session.submitted_via === 'meeting_bot') console.warn('[processing] bot job failed');
+    else console.warn('[processing] job failed', sessionId, (e as Error)?.message);
     await failProcessing(env, session, 'Processing stopped unexpectedly. Nothing was lost; try again.');
     return 'failed';
   }

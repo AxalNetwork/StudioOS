@@ -315,7 +315,9 @@ async function listProjectsHandler(c: any) {
   const user = await requireAuth(c);
   const status = c.req.query('status');
   const sql = getSQL(c.env);
-  const isPrivileged = user.role === 'admin' || user.role === 'partner' || user.role === 'investor';
+  // D889 (#2438): a partner is not privileged here; like a founder, they list
+  // only the ventures they own or are an accepted member of.
+  const isPrivileged = user.role === 'admin' || user.role === 'investor';
   // IDOR guard: founders can only see their OWN projects.
   // Task #3 (Y-1) — investor list rows JOIN to users so we can per-row
   // mask via maskFounderForInvestor (no active pairwise NDA → public
@@ -527,7 +529,7 @@ async function createProjectHandler(c: any) {
   if (!name) return c.json({ error: 'Project name is required' }, 400);
   const sql = getSQL(c.env);
 
-  // Task #6 — free-tier project cap (1). Counts ALL projects owned by the
+  // D1135 — free-tier project cap (1). Counts non-trashed projects owned by the
   // founder regardless of status. Bypass roles never hit the cap.
   //
   // We check BEFORE resolving founder_id: a founder whose users.founder_id is
@@ -551,7 +553,7 @@ async function createProjectHandler(c: any) {
       // anyone creating a second project, or a first one after onboarding had
       // registered them — so the core founder action returned a 500 instead of
       // either the project or the clean 402 the cap is supposed to raise.
-      const existing = await sql`SELECT COUNT(*) AS n FROM projects WHERE founder_id = ${fid}`;
+      const existing = await sql`SELECT COUNT(*) AS n FROM projects WHERE founder_id = ${fid} AND deleted_at IS NULL`;
       const count = Number(existing?.[0]?.n ?? 0);
       if (count >= FREE_TIER_LIMITS.projects) {
         await sql.end();
@@ -621,13 +623,25 @@ projects.post('/submit', async (c) => {
   // DB writes. The /submit path is wide-open intake; a malicious founder
   // could otherwise send a pre-built TIER_1 payload AND have a project row
   // created as a side effect even when the request is rejected.
-  const { assertNoReservedFields, signScore, detectAnomalies, INTEGRITY_VERSION } =
+  const { assertNoReservedFields, assertOfficialInputsComplete, MissingOfficialInputsError, signScore, detectAnomalies, INTEGRITY_VERSION } =
     await import('../services/scoreIntegrity');
   try {
     assertNoReservedFields(data);
+    assertOfficialInputsComplete(data);
   } catch (e) {
+    if (e instanceof MissingOfficialInputsError) return c.json({ error: 'Complete all scoring inputs before submitting.', missing: e.missing, code: 'missing_official_inputs' }, 400);
     const message = e instanceof Error ? e.message : 'Reserved field rejected';
     return c.json({ error: message, code: 'reserved_field' }, 400);
+  }
+
+  for (const field of ['sam', 'funding_needed']) {
+    const raw = data[field];
+    if (raw == null || (typeof raw === 'string' && raw.trim() === '')) { data[field] = null; continue; }
+    const value = Number(raw);
+    if (!['number', 'string'].includes(typeof raw) || !Number.isFinite(value)) {
+      return c.json({ error: 'Optional numeric inputs must be finite numbers.', field, code: 'invalid_numeric_input' }, 400);
+    }
+    data[field] = value;
   }
 
   // Task #2 — validate + canonicalize the structured Use-of-Funds allocation
@@ -635,6 +649,12 @@ projects.post('/submit', async (c) => {
   const uof = normalizeUseOfFunds(data.use_of_funds);
   if (uof.error) return c.json({ error: uof.error, code: 'invalid_use_of_funds' }, 400);
   const useOfFunds = uof.value;
+
+  const result = runFullScore(data);
+  if (result.total_score == null || !result.breakdown) {
+    return c.json({ error: 'Complete all scoring inputs before submitting.', missing: result.missing, code: 'missing_official_inputs' }, 400);
+  }
+  const b = result.breakdown;
 
   const sql = getSQL(c.env);
 
@@ -649,10 +669,7 @@ projects.post('/submit', async (c) => {
 
   const submitCompanyId = await resolveActiveCompany(
     c.env, submitUser as any, c.req.header(ACTIVE_COMPANY_HEADER));
-  const [project] = await sql`INSERT INTO projects (name, description, sector, stage, founder_id, company_id, problem_statement, solution, why_now, tam, sam, cost_to_mvp, funding_needed, use_of_funds) VALUES (${data.name}, ${data.description || null}, ${data.sector || null}, 'idea', ${founderId}, ${submitCompanyId}, ${data.problem_statement || null}, ${data.solution || null}, ${data.why_now || null}, ${data.tam || null}, ${data.sam || null}, ${data.cost_to_mvp || null}, ${data.funding_needed || null}, ${useOfFunds}) RETURNING *`;
-
-  const result = runFullScore(data);
-  const b = result.breakdown;
+  const [project] = await sql`INSERT INTO projects (name, description, sector, stage, founder_id, company_id, problem_statement, solution, why_now, tam, sam, cost_to_mvp, funding_needed, use_of_funds) VALUES (${data.name}, ${data.description || null}, ${data.sector || null}, 'idea', ${founderId}, ${submitCompanyId}, ${data.problem_statement || null}, ${data.solution || null}, ${data.why_now || null}, ${data.tam ?? null}, ${data.sam ?? null}, ${data.cost_to_mvp ?? null}, ${data.funding_needed ?? null}, ${useOfFunds}) RETURNING *`;
 
   // Snapshot the scoring inputs so the nightly audit + admin queue can
   // reproduce the math, and so anomaly detection can compare to history.
@@ -675,6 +692,9 @@ projects.post('/submit', async (c) => {
     projectId: project.id, totalScore: result.total_score, isSandbox: false,
     inputs: inputsSnapshot as Record<string, number>, qualitativeText: qualText || '',
   });
+  if (result.total_score < 70) {
+    intakeFlags.push({ type: 'low_score_review', detail: 'A low score requires a human decision; project status is unchanged.', severity: 'low' });
+  }
   const intakeReview: 'auto_approved' | 'flagged' =
     intakeFlags.length > 0 ? 'flagged' : 'auto_approved';
   const intakeFlagsJson = intakeFlags.length > 0 ? JSON.stringify(intakeFlags) : null;
@@ -699,7 +719,7 @@ projects.post('/submit', async (c) => {
       ${b.capital.cost_mvp}, ${b.capital.time_revenue}, ${b.capital.burn_traction}, ${b.capital.total},
       ${b.fit.alignment}, ${b.fit.synergy}, ${b.fit.total},
       ${b.distribution.channels}, ${b.distribution.virality}, ${b.distribution.total},
-      0, 'auto',
+      ${result.ai_adjustment}, 'auto',
       0, ${INTEGRITY_VERSION}, ${JSON.stringify(inputsSnapshot)}, ${qualText}, ${lockedUntil},
       ${intakeFlagsJson}, ${intakeReview}
     )
@@ -708,8 +728,8 @@ projects.post('/submit', async (c) => {
   const intakeHash = await signScore(c.env, project.id, result.total_score, snapshot.created_at, INTEGRITY_VERSION);
   await sql`UPDATE score_snapshots SET integrity_hash = ${intakeHash} WHERE id = ${snapshot.id}`;
 
-  let newStatus = 'rejected', dealStatus = 'rejected', newStage = project.stage;
-  if (intakeReview === 'flagged') {
+  let newStatus = project.status, dealStatus = 'applied', newStage = project.stage;
+  if (intakeReview === 'flagged' && result.total_score >= 70) {
     // Flagged intake holds the project in review until admin signs off, so
     // an LP or partner viewing the pipeline never sees an unverified TIER_1.
     newStatus = 'scoring';
@@ -738,18 +758,19 @@ projects.put('/:id', async (c) => {
   const rows = await sql`SELECT * FROM projects WHERE id = ${id}`;
   if (rows.length === 0) { await sql.end(); return c.json({ error: 'Project not found' }, 404); }
 
-  // RBAC: admins/partners can edit any project; founders can only edit their own.
+  // RBAC: admins can edit any project; founders can only edit their own; a
+  // partner edits only as an accepted owner or co-founder member (D889).
   // Investors are NOT editors (audit M2) — their project access is the read-only,
   // NDA-masked view in GET '/:id'. Letting an investor through here is a
   // write-IDOR (they could mutate any founder's project, incl. the
   // admin/partner-only stage/status/playbook_week fields below).
   const project = rows[0];
-  const isPrivileged = user.role === 'admin' || user.role === 'partner';
+  const isPrivileged = user.role === 'admin';
   const isOwner = !!user.founder_id && project.founder_id === user.founder_id;
   // Task #1 — accepted co-founders may also edit project DATA. Advisors are
   // read-only (membership role 'advisor' is NOT granted write), and investors
   // are never editors. privilegedFields (stage/status/playbook_week) stay
-  // admin/partner-only via the `isPrivileged` gate further below.
+  // admin-only via the `isPrivileged` gate further below (D889: not a partner's).
   let isCofounderEditor = false;
   if (!isPrivileged && !isOwner && user.role !== 'investor') {
     const memberRole = await getProjectMembershipRole(c.env, id, user.id);
@@ -949,16 +970,15 @@ projects.delete('/:id', async (c) => {
   if (rows.length === 0) { await sql.end(); return c.json({ error: 'Project not found' }, 404); }
   const project = rows[0];
   const isAdmin = user.role === 'admin';
-  const isPartner = user.role === 'partner';
-  const isOwner = !!user.founder_id && project.founder_id === user.founder_id;
-  // Task #7 (AM) — admins + partners may soft-delete any project (partners
-  // routinely manage portfolio hygiene); founders may only delete their own.
-  if (!isAdmin && !isPartner && !isOwner) {
+  const isOwner = user.role === 'founder' && !!user.founder_id && project.founder_id === user.founder_id;
+  // D889 (#2438): an admin may delete any project; a founder only their own.
+  // No other role deletes a venture, a partner or a member included.
+  if (!isAdmin && !isOwner) {
     await sql.end();
     return c.json({ detail: 'Forbidden: you do not own this project' }, 403);
   }
   if (hard && !isAdmin) {
-    // Hard-delete is irreversible → admin-only, even partners can't bypass.
+    // Hard-delete is irreversible → admin-only.
     await sql.end();
     return c.json({ detail: 'Forbidden: hard delete is admin-only' }, 403);
   }
@@ -992,8 +1012,27 @@ projects.delete('/:id', async (c) => {
   return c.json({ ok: true, soft: true });
 });
 
+// D1135 — the owning founder can undo trash within the retention window.
+projects.post('/:id/restore', async (c) => {
+  const user = await requireAuth(c);
+  const id = Number(c.req.param('id'));
+  if (!Number.isSafeInteger(id) || id <= 0) return c.json({ detail: 'Invalid project id' }, 400);
+  const row = await c.env.DB.prepare('SELECT id, founder_id, deleted_at FROM projects WHERE id = ?').bind(id).first<any>();
+  if (!row || user.role !== 'founder' || !user.founder_id || row.founder_id !== user.founder_id) return c.json({ detail: 'Project not found' }, 404);
+  if (!row.deleted_at) return c.json({ ok: true, already_restored: true });
+  // The cap applies to restore too: trash cannot be used to exceed the free plan.
+  const result = await c.env.DB.prepare(
+    `UPDATE projects SET deleted_at = NULL WHERE id = ? AND founder_id = ?
+     AND julianday(deleted_at) > julianday('now', '-30 days')
+     AND (? = 1 OR (SELECT COUNT(*) FROM projects p WHERE p.founder_id = ? AND p.deleted_at IS NULL) < ?)`
+  ).bind(id, user.founder_id, userMeetsTier(user, 'growth') ? 1 : 0, user.founder_id, FREE_TIER_LIMITS.projects).run();
+  if (!result.meta.changes) return c.json({ code: 'restore_unavailable', detail: 'Restore requires space in your plan and a venture trashed less than 30 days ago.' }, 409);
+  return c.json({ ok: true });
+});
+
 projects.post('/:id/advance-week', async (c) => {
-  await requireRole(c, 'partner', 'investor');
+  // D889 (#2438): no longer a partner's, on any venture. Admins pass requireRole.
+  await requireRole(c, 'investor');
   const id = parseInt(c.req.param('id'));
   const sql = getSQL(c.env);
   const rows = await sql`SELECT * FROM projects WHERE id = ${id}`;
@@ -1069,7 +1108,8 @@ async function resolveSpinoutDeckAccess(
   } finally {
     await sql.end();
   }
-  const isStaff = user.role === 'admin' || user.role === 'partner';
+  // D889 (#2438): a partner generates a deck only as an accepted owner or co-founder member.
+  const isStaff = user.role === 'admin';
   const isOwner = !!user.founder_id && project.founder_id === user.founder_id;
   // Task #1 — accepted co-founders may also generate the deck (advisors are
   // read-only on data; investors/advisors stay excluded). The deck is ALWAYS
@@ -1214,7 +1254,8 @@ projects.put('/:projectId/spinout-deck/overrides', async (c) => {
 async function canEditProjectData(
   env: Env, project: { id: number; founder_id: number | null }, user: User,
 ): Promise<boolean> {
-  if (user.role === 'admin' || user.role === 'partner') return true;
+  // D889 (#2438): only an admin bypasses membership; a partner edits as an accepted owner or co-founder.
+  if (user.role === 'admin') return true;
   if (user.role === 'investor') return false;
   if (user.founder_id && project.founder_id === user.founder_id) return true;
   const memberRole = await getProjectMembershipRole(env, project.id, user.id);
@@ -1531,12 +1572,42 @@ projects.post('/:id/invitations', async (c) => {
   const tokenHash = await hashInviteToken(token);
   const sql = getSQL(c.env);
   try {
-    const [inv] = await sql`INSERT INTO project_member_invitations
-        (project_id, role, status, source, invitee_email, token_hash, invited_by_user_id, expires_at)
-      VALUES (${id}, ${role}, 'pending', ${mode}, ${inviteeEmail}, ${tokenHash}, ${user.id}, datetime('now','+14 days'))
-      RETURNING id, role, status, source, invitee_email, expires_at, created_at`;
+    // D1135: reserve each email atomically before sending. Pending duplicates
+    // cannot send again, and both an inviter and a project have an hourly cap.
+    const [inv] = mode === 'email'
+      ? await sql`INSERT INTO project_member_invitations
+          (project_id, role, status, source, invitee_email, token_hash, invited_by_user_id, expires_at)
+        SELECT ${id}, ${role}, 'pending', 'email', ${inviteeEmail}, ${tokenHash}, ${user.id}, datetime('now','+14 days')
+        WHERE NOT EXISTS (SELECT 1 FROM project_member_invitations
+          WHERE project_id = ${id} AND invitee_email = ${inviteeEmail} AND status = 'pending' AND julianday(expires_at) > julianday('now'))
+        AND (SELECT COUNT(*) FROM project_member_invitations WHERE invited_by_user_id = ${user.id}
+          AND source = 'email' AND julianday(created_at) > julianday('now','-1 hour')) < 10
+        AND (SELECT COUNT(*) FROM project_member_invitations WHERE project_id = ${id}
+          AND source = 'email' AND julianday(created_at) > julianday('now','-1 hour')) < 20
+        RETURNING id, role, status, source, invitee_email, expires_at, created_at`
+      : await sql`INSERT INTO project_member_invitations
+          (project_id, role, status, source, invitee_email, token_hash, invited_by_user_id, expires_at)
+        VALUES (${id}, ${role}, 'pending', ${mode}, ${inviteeEmail}, ${tokenHash}, ${user.id}, datetime('now','+14 days'))
+        RETURNING id, role, status, source, invitee_email, expires_at, created_at`;
+    if (!inv) {
+      const pending = await c.env.DB.prepare(
+        `SELECT id FROM project_member_invitations WHERE project_id = ? AND invitee_email = ?
+         AND status = 'pending' AND julianday(expires_at) > julianday('now') LIMIT 1`
+      ).bind(id, inviteeEmail).first();
+      if (pending) return c.json({ code: 'already_pending', detail: 'An invitation to that address is already pending.' }, 409);
+      return c.json({ code: 'invitation_rate_limited', detail: 'The invitation limit has been reached. Try again in an hour.' }, 429);
+    }
+    let emailSent: boolean | null = null;
+    if (mode === 'email' && inviteeEmail) {
+      const { sendNotificationEmail } = await import('../services/email');
+      const base = String((c.env as any).PUBLIC_BASE_URL || (c.env as any).APP_URL || 'https://axal.vc').replace(/\/+$/, '');
+      const link = `${base}/projects/invitations/accept?token=${encodeURIComponent(token)}`;
+      emailSent = await sendNotificationEmail(c.env, inviteeEmail, 'Your StudioOS project invitation',
+        `You have been invited to a StudioOS project. Accept here: ${link}\nThis invitation expires in 14 days and works only for this email address.`);
+    }
     return c.json({
       invitation: inv,
+      email_sent: emailSent,
       token, // returned ONCE — only the hash is persisted.
       accept_path: `/projects/invitations/accept?token=${token}`,
     });

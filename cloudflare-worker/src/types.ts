@@ -52,7 +52,11 @@ export interface Env {
   // D754 / D756 — wrangler vars, not secrets: "on", "canary" (Super Admins
   // only) or "off" per chat channel. Absent or unknown reads as "canary".
   WHATSAPP_CHANNEL?: string;
+  /** D860 (#2505): WhatsApp calls groundwork, on only when exactly "true". */
+  WHATSAPP_CALLS?: string;
   TELEGRAM_CHANNEL?: string;
+  // D867: private forwarded recordings; absent/unknown is off.
+  TELEGRAM_CAPTURE?: string;
   // D754 — Axal's own WhatsApp number and its WhatsApp Business Account. Ids,
   // not secrets; once set, Embedded Signup refuses them, so no member can
   // claim Axal's number. Unset, the guard does nothing.
@@ -419,6 +423,14 @@ export interface Env {
   // Durable Objects for real-time WebSocket fan-out. Optional so unit-test
   // envs without DO bindings don't crash; the realtime route returns 503
   // when these are undefined.
+  MEETING_BOT?: string;
+  MEETING_BOT_SECRET?: string;
+  MEETING_BOT_ZOOM_CLIENT_ID?: string;
+  MEETING_BOT_ZOOM_CLIENT_SECRET?: string;
+  MEETING_BOT_COST_MICROUSD_PER_MINUTE?: string;
+  MEETING_BOT_RUN?: DurableObjectNamespace;
+  MEETING_BOT_CONTAINER?: DurableObjectNamespace;
+  MEETING_BOT_RUNTIME?: import('./services/meetingBots').BotRuntime;
   PIPELINE_ROOM?: DurableObjectNamespace;
   ONBOARDING_CHAT?: DurableObjectNamespace;
   // Vectorize index `axal-search` (768-dim, cosine) for semantic search.

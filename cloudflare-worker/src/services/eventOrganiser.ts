@@ -2,7 +2,8 @@
 import type { Env } from '../types';
 import { PERSONAS } from '../personas';
 
-export const EVENT_ROLES = ['admin', 'founder', 'partner', 'investor', 'exploring'] as const;
+// D1031 (#2872): advisors host events, so they can be an audience too.
+export const EVENT_ROLES = ['admin', 'founder', 'partner', 'investor', 'advisor', 'exploring'] as const;
 const COMP_KEYS = ['comp_official_partners', 'comp_invested_lps', 'comp_investors', 'comp_host_connections', 'comp_project_founders'];
 export function validateRegistrationRules(value: unknown): Record<string, unknown> {
   const rules = typeof value === 'string' ? JSON.parse(value) : value;

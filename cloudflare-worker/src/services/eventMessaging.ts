@@ -14,8 +14,9 @@
  */
 import type { Env } from '../types';
 import { notify } from './notify';
-import { buildEventIcs } from './eventsCommon';
+import { buildEventIcs, shapeEvent } from './eventsCommon';
 import { wrap, type EmailTemplate } from '../templates/email/layout';
+import { memberEventLink } from './eventLinks';
 
 export interface EventInviteTarget {
   /** Recipient account id (drives the in-app inbox row). */
@@ -92,7 +93,7 @@ export async function deliverEventInvite(
       category: 'events',
       title: subject,
       body: invite.message || undefined,
-      link: `/events/${event.slug}`,
+      link: memberEventLink(event.id),
       payload: { event_id: event.id, token: invite.token, comp: !!invite.comp },
     }).catch(() => {});
   }
@@ -105,7 +106,8 @@ export async function deliverEventInvite(
 
   const rsvpUrl = `${base}/invite/${encodeURIComponent(invite.token)}`;
   const when = formatWhen(event);
-  const where = formatWhere(event);
+  const publicEvent = shapeEvent(event);
+  const where = formatWhere(publicEvent);
   const greeting = invite.name ? `Hi ${invite.name},` : 'Hi,';
   const lead = invite.comp
     ? `You've received a complimentary invitation to ${event.title}.`
@@ -143,7 +145,7 @@ ${messageHtml}
   // A meeting invite (METHOD:REQUEST) with ORGANIZER + ATTENDEE so clients
   // render accept/decline. ORGANIZER is parsed from the email From so the .ics
   // and the envelope agree (Outlook matches them); ATTENDEE is the recipient.
-  const ics = buildEventIcs(event, base, {
+  const ics = buildEventIcs(publicEvent, base, {
     method: 'REQUEST',
     organizer: parseEmailAddress(rendered.from),
     attendee: { email: invite.email, name: invite.name },

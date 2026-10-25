@@ -1,3 +1,5 @@
+import { botParticipants } from '../services/meetingBotParticipants';
+import { BotError, dispatchBot, sessionBot, botControl, botView, stopSessionBot } from '../services/meetingBots';
 /**
  * D657 — interview sessions on Validate: record, transcribe live and in full,
  * mark, review, delete. Mounted on `/api/founder/validate` beside
@@ -15,7 +17,17 @@
  *   PATCH  /sessions/:id/consent            record consent to record
  *   POST   /sessions/:id/{start,pause,resume,stop}
  *   PUT    /sessions/:id/chunks/:seq        one audio chunk, idempotent by seq
+ *
+ * D872 (#2519) — a call recording uploaded as a file. Both opening routes take
+ * `{ source: 'upload', attestation: { agreed: true, method }, duration_ms }`:
+ * the founder's word that everyone recorded agreed (verbal | written |
+ * pre_agreed) is the session's consent, with its method and time; the session
+ * opens `stopped` (`submitted_via 'upload'`, nothing live), takes the
+ * uploader's 16 kHz mono WAV parts on the chunk route up to 3 hours, and
+ * `/finish` runs the recorder's pipeline. `frontend/src/lib/recordingUpload.js`.
  *   GET    /sessions/active                 D685: the caller's recordings in flight
+ *   GET    /meetings/setup                  D875: the Zoom and Google Meet setup, step by step, from stored rows
+ *   GET    /meetings/upcoming               D875: the caller's calendar calls in the next 14 days, not yet attached
  *   POST   /sessions/:id/marks              mark a moment (D685: gated, client_key, capped)
  *   GET    /sessions/:id/live               WebSocket: the live transcript
  *   POST   /sessions/:id/transcribe         the final transcript
@@ -23,6 +35,9 @@
  *   GET    /sessions/:id/receipt            what each job cost, and the budget left
  *   GET    /sessions/:id/audio              one signed download per recorded chunk (D690)
  *   DELETE /sessions/:id                    the session, its audio and its transcript
+ *   DELETE /sessions/:id/audio              D877: the audio only; the transcript stays
+ *   GET    /sessions/audio-retention        D877: how long the caller's call audio is kept
+ *   PUT    /sessions/audio-retention        D877: { days: 1..3650 | null } (null keeps it until deleted)
  *
  * A session belongs to a `discovery_interviews` row, so a Spin-Out Lab
  * venture's interviews (ordinary `projects` rows) get sessions with no
@@ -30,18 +45,23 @@
  * the venture's own founder or an admin: a session holds a recording of
  * someone else's voice, so nobody reads it who could not write it.
  */
+import { readTranslation } from '../services/sessionTranslation';
 import { Hono } from 'hono';
 import type { Env, User } from '../types';
 import { requireAuth } from '../auth';
 import { canWrite, type ProjectRef } from './_founder_validate_helpers';
-import { audioMinutesFromBytes, budgetRefusalMessage, estimateCostUsd } from '../services/aiRouter';
+import { budgetRefusalMessage, estimateCostUsd } from '../services/aiRouter';
 import * as aiBudget from '../services/aiBudget';
 import {
-  AUDIO_CHANNELS, AUDIO_PREFIX, CHANNELS, CHUNK_MIME, CONSENT, CONSENT_METHODS, MAX_CHUNK_BYTES, MAX_CHUNKS,
-  TRANSITIONS, consentBlocks, deleteSession, listChunks, loadSession, putChunk, recordReceipt, sessionHasAudio,
-  replaceWithFinal, transition, type SessionRow, type StoredSegment,
+  AUDIO_CHANNELS, AUDIO_PREFIX, CHANNELS, CHUNK_MIME, CONSENT, CONSENT_METHODS, MAX_CHUNK_BYTES, MAX_CHUNKS, MAX_UPLOAD_MS,
+  TRANSITIONS, UPLOAD_ATTESTATIONS, UPLOAD_BYTES_PER_SECOND, UPLOAD_SOURCE, WAV_HEADER_BYTES, consentBlocks, deleteSession, deleteSessionAudio,
+  isUploadWav, listChunks, loadSession, putChunk, recordReceipt, sessionHasAudio, replaceWithFinal, transition,
+  type SessionRow, type StoredSegment,
 } from '../services/interviewSessions';
 import { DEFAULT_FINAL_MODEL, DEFAULT_LIVE_MODEL, isChoosable, listSttModels } from '../services/sttModels';
+import {
+  DEFAULT_CALL_AUDIO_RETENTION_DAYS, MAX_RETENTION_DAYS, MIN_RETENTION_DAYS, retentionFor, setRetention, validRetention,
+} from '../services/callAudioRetention';
 import { WHISPER_TURBO } from '../services/sttFormats';
 import { holdBlock, openLiveRelay } from '../services/liveTranscription';
 import { railFor } from '../util/railContext';
@@ -51,7 +71,7 @@ import {
 } from '../services/sessionSetup';
 import { setInterviewStage } from '../services/validateWriters';
 import {
-  CUSTOMER_RESEARCH_PAGE, DIGEST_OPTIONS, DIGEST_PAGE, TRANSCRIBE_OPTIONS, afterChunkStored, finishSession, isStale, processingOf, recoverSession, summaryOf, transcribeChunk,
+  CUSTOMER_RESEARCH_PAGE, DIGEST_OPTIONS, DIGEST_PAGE, TRANSCRIBE_OPTIONS, afterChunkStored, chunkAudioMinutes, finishSession, isStale, processingOf, recoverSession, summaryOf, transcribeChunk,
 } from '../services/interviewProcessing';
 import { consentRefusal, digestConsentRefusal, modelFrom, processingBusy, refusedBody, refusedStatus } from './founder_validate_structure';
 import { digestSession, withdrawDigest } from '../services/validateEngine';
@@ -61,6 +81,8 @@ import { logCycleWriteStatement } from '../services/cycleActivity';
 import { QUOTE_WITHHELD } from '../services/cycleValidate';
 import { mintDownloadToken } from '../services/signedDownload';
 import { consentForSession } from '../services/channels/consent';
+import { meetingSetup, upcomingCalls } from '../services/channels/meetingSetup';
+import { MEETING_ERRORS, MeetingProviderError } from '../services/channels/meetings';
 
 const sessions = new Hono<{ Bindings: Env }>();
 
@@ -123,6 +145,86 @@ sessions.get('/sessions/active', async (c) => {
   return json({ items: await activeSessionsOf(c.env, user.id) });
 });
 
+// D877 (#2524) — how long the caller's call audio is kept. Declared above
+// `/sessions/:id` so "audio-retention" is never read as an id. The member's
+// own setting; `days: null` keeps the audio until they delete it.
+sessions.get('/sessions/audio-retention', async (c) => {
+  const user = (await requireAuth(c)) as User;
+  const r = await retentionFor(c.env, user.id);
+  return json({ ...r, default_days: DEFAULT_CALL_AUDIO_RETENTION_DAYS, min_days: MIN_RETENTION_DAYS, max_days: MAX_RETENTION_DAYS });
+});
+
+sessions.put('/sessions/audio-retention', async (c) => {
+  const user = (await requireAuth(c)) as User;
+  const body = await c.req.json().catch(() => null) as { days?: unknown } | null;
+  if (!body || !('days' in body) || !validRetention(body.days)) {
+    return json({ detail: 'invalid_retention', message: `Choose a number of days from ${MIN_RETENTION_DAYS} to ${MAX_RETENTION_DAYS}, or keep the audio until you delete it.` }, 400);
+  }
+  return json(await setRetention(c.env, user.id, body.days));
+});
+
+// D875 (#2522) — Meeting Capture: is the caller set up for Zoom and Google
+// Meet, and which of their own upcoming calls can be attached to an interview.
+// The setup read calls no provider; the upcoming read reads only the caller's
+// own primary calendar, and answers title, time, provider and link.
+sessions.get('/meetings/setup', async (c) => {
+  const user = (await requireAuth(c)) as User;
+  return json(await meetingSetup(c.env, user.id));
+});
+
+sessions.get('/meetings/upcoming', async (c) => {
+  const user = (await requireAuth(c)) as User;
+  try {
+    return json(await upcomingCalls(c.env, user.id));
+  } catch (e) {
+    if (!(e instanceof MeetingProviderError)) throw e;
+    const status = e.retryable ? 503 : /_(not_connected|reconnect)$/.test(e.code) ? 409 : 502;
+    return json({ detail: e.code, message: MEETING_ERRORS[e.code] }, status);
+  }
+});
+
+// D886 B1: all bot controls stay behind the session's normal tenant scope.
+const botFailure = (e: unknown) => e instanceof BotError
+  ? json(e.body(), e.status)
+  : json({ code: 'bot_unavailable', detail: 'The meeting bot is temporarily unavailable.', message: 'The meeting bot is temporarily unavailable.' }, 503);
+
+sessions.post('/sessions/:id/bot', async (c) => {
+  const scoped = await scopeSession(c); if (scoped instanceof Response) return scoped;
+  if (scoped.session.created_by_user_id !== scoped.user.id) return notFound('Session');
+  const body = await c.req.json().catch(() => null);
+  if (!body || typeof body !== 'object' || Array.isArray(body)) return json({ code: 'invalid_body', message: 'Provide a meeting link.' }, 400);
+  try { return json({ bot: await dispatchBot(c.env, scoped.user, scoped.session, body) }, 202); }
+  catch (e) { return botFailure(e); }
+});
+sessions.get('/sessions/:id/bot', async (c) => {
+  const scoped = await scopeSession(c); if (scoped instanceof Response) return scoped;
+  if (scoped.session.created_by_user_id !== scoped.user.id) return notFound('Session');
+  if (!c.env.MEETING_BOT_RUN) return json({ code: 'bot_unavailable', message: 'The meeting bot is not set up here.' }, 503);
+  try {
+    const run = await sessionBot(c.env, scoped.session.id, scoped.user.id);
+    if (!run) return json({bot:null});
+    const response=await botControl(c.env,run.uid,'init');
+    if (!response.ok) return botFailure(new BotError(503,'bot_unavailable','The meeting bot is temporarily unavailable.'));
+    return json({bot:await response.json()});
+  } catch (e) { return botFailure(e); }
+});
+// D886 B7: identities are a separate creator-only read, never the content-free status DTO.
+sessions.get('/sessions/:id/bot/participants', async (c) => {
+  const scoped = await scopeSession(c); if (scoped instanceof Response) return scoped;
+  if (scoped.session.created_by_user_id !== scoped.user.id) return notFound('Session');
+  try { return json(await botParticipants(c.env, scoped.session.id, scoped.user.id)); }
+  catch (e) { return botFailure(e); }
+});
+sessions.post('/sessions/:id/bot/stop', async (c) => {
+  const scoped = await scopeSession(c); if (scoped instanceof Response) return scoped;
+  if (scoped.session.created_by_user_id !== scoped.user.id) return notFound('Session');
+  try {
+    await stopSessionBot(c.env, scoped.session.id, scoped.user.id, true);
+    const run = await sessionBot(c.env, scoped.session.id, scoped.user.id);
+    return json({ bot: run ? botView(run) : null });
+  } catch (e) { return botFailure(e); }
+});
+
 // ---------------------------------------------------------------------------
 // Opening a session
 // ---------------------------------------------------------------------------
@@ -159,13 +261,53 @@ type OpenPlan = {
   channel: string; audio: boolean; consent: string; method: string; liveModel: string | null; finalModel: string | null;
   language: string | null; callProvider: string | null; meetingUrl: string | null; clientKey: string | null;
   messages: StoredSegment[] | null; quoteConsent: boolean;
+  /** D872: a call recording uploaded as a file, and its declared length. */
+  upload: { durationMs: number } | null;
 };
+
+/** D872 (#2519): the attestation an upload needs, in the founder's words. */
+const ATTESTATION_SENTENCE = 'Confirm that everyone recorded agreed (out loud, in writing, or beforehand) before uploading.';
+
+/**
+ * D872 — an upload's own checks, before anything is written: an audio
+ * channel, the founder's attestation, and a length within the cap. The
+ * attestation is the session's recording consent, with its method and time,
+ * as a member's word is on a forwarded recording (D754 way B).
+ */
+function planUpload(body: any, audio: boolean): { method: string; durationMs: number } | Response {
+  if (!audio) return json({ detail: 'upload_needs_audio_channel', accepted: [...AUDIO_CHANNELS] }, 400);
+  const method = String(body?.attestation?.method || '');
+  if (body?.attestation?.agreed !== true || !(UPLOAD_ATTESTATIONS as readonly string[]).includes(method)) {
+    return json({ detail: 'attestation_required', message: ATTESTATION_SENTENCE, accepted: UPLOAD_ATTESTATIONS }, 400);
+  }
+  const durationMs = Number(body?.duration_ms);
+  if (!Number.isSafeInteger(durationMs) || durationMs <= 0) return json({ detail: 'duration_required', message: 'The recording\'s length could not be read.' }, 400);
+  if (durationMs > MAX_UPLOAD_MS) {
+    return json({ detail: 'upload_too_long', message: 'A recording can be at most 3 hours long. Trim it, or upload it in parts.', max_ms: MAX_UPLOAD_MS }, 413);
+  }
+  return { method, durationMs };
+}
 
 function planSession(body: any, legacy: boolean): OpenPlan | Response {
   const channel = String(body?.channel || '');
   const offered: readonly string[] = legacy ? CHANNELS : SETUP_CHANNELS;
   if (!offered.includes(channel)) return json({ detail: 'invalid_channel', accepted: offered }, 400);
   const audio = AUDIO_CHANNELS.has(channel);
+
+  if (body?.source != null && body.source !== UPLOAD_SOURCE) return json({ detail: 'invalid_source', accepted: [UPLOAD_SOURCE] }, 400);
+  if (body?.source === UPLOAD_SOURCE) {
+    const up = planUpload(body, audio);
+    if (up instanceof Response) return up;
+    const finalModel = String(body?.final_model || DEFAULT_FINAL_MODEL);
+    if (!isChoosable(finalModel, 'final')) return json({ detail: 'model_not_offered', model: finalModel, kind: 'final' }, 400);
+    const lang = languageFor(body?.language, null);
+    if (!lang.ok) return json({ detail: 'invalid_language', message: lang.message }, 400);
+    return {
+      channel, audio, consent: 'given', method: up.method, liveModel: null, finalModel, language: lang.language,
+      callProvider: null, meetingUrl: null, clientKey: text(body?.client_key, 100), messages: null, quoteConsent: false,
+      upload: { durationMs: up.durationMs },
+    };
+  }
 
   const consent = audio ? String(body?.consent?.status || 'not_recorded') : 'not_recorded';
   if (!(CONSENT as readonly string[]).includes(consent)) return json({ detail: 'invalid_consent', accepted: CONSENT }, 400);
@@ -197,6 +339,7 @@ function planSession(body: any, legacy: boolean): OpenPlan | Response {
   return {
     channel, audio, consent, method, liveModel, finalModel, language: lang.language, callProvider,
     meetingUrl, clientKey: text(body?.client_key, 100), messages: audio ? null : messagesToSegments(body?.messages), quoteConsent,
+    upload: null,
   };
 }
 
@@ -223,13 +366,18 @@ async function sessionBody(env: Env, session: SessionRow) {
 async function openOn(env: Env, user: User, interview: { id: number | null; project_id: number }, plan: OpenPlan, body: any,
   create: D1PreparedStatement | null = null): Promise<SessionRow> {
   const uid = crypto.randomUUID();
+  // D872: an upload records nothing live. It opens stopped, its length the file's, and takes chunks at once.
+  const up = plan.upload;
   const insert = env.DB.prepare(
     `INSERT INTO interview_sessions
        (uid, interview_id, project_id, created_by_user_id, channel, status, consent_status, consent_method, consent_at,
-        live_model, final_model, language, call_provider, meeting_url, client_key)
-     VALUES (?, COALESCE(?, last_insert_rowid()), ?, ?, ?, 'draft', ?, ?, CASE WHEN ? = 'given' THEN datetime('now') END, ?, ?, ?, ?, ?, ?)`,
-  ).bind(uid, interview.id, interview.project_id, user.id, plan.channel, plan.consent, plan.method || null, plan.consent,
-    plan.liveModel, plan.finalModel, plan.language, plan.callProvider, plan.meetingUrl, plan.clientKey);
+        live_model, final_model, language, call_provider, meeting_url, client_key,
+        submitted_via, active_ms, started_at, stopped_at)
+     VALUES (?, COALESCE(?, last_insert_rowid()), ?, ?, ?, ?, ?, ?, CASE WHEN ? = 'given' THEN datetime('now') END, ?, ?, ?, ?, ?, ?,
+             ?, ?, CASE WHEN ? = 1 THEN datetime('now') END, CASE WHEN ? = 1 THEN datetime('now') END)`,
+  ).bind(uid, interview.id, interview.project_id, user.id, plan.channel, up ? 'stopped' : 'draft', plan.consent, plan.method || null, plan.consent,
+    plan.liveModel, plan.finalModel, plan.language, plan.callProvider, plan.meetingUrl, plan.clientKey,
+    up ? UPLOAD_SOURCE : null, up ? up.durationMs : 0, up ? 1 : 0, up ? 1 : 0);
   const ins = create ? (await env.DB.batch([create, insert]))[1] : await insert.run();
   const session = (await loadSession(env, Number(ins.meta?.last_row_id)))!;
   interview = { id: session.interview_id, project_id: interview.project_id };
@@ -240,10 +388,15 @@ async function openOn(env: Env, user: User, interview: { id: number | null; proj
     env.DB.prepare('UPDATE discovery_interviews SET channel = COALESCE(channel, ?) WHERE id = ?').bind(plan.channel, interview.id),
     ...(plan.quoteConsent ? [env.DB.prepare('UPDATE discovery_interviews SET quote_consent = 1 WHERE id = ?').bind(interview.id)] : []),
     env.DB.prepare(`INSERT INTO activity_logs (action, details, actor, user_id, project_id) VALUES (?, ?, ?, ?, ?)`)
-      .bind('interview_session_created', JSON.stringify({ session_uid: uid, interview_id: interview.id, channel: plan.channel, consent: plan.consent }),
-        `user:${user.id}`, user.id, interview.project_id),
+      .bind('interview_session_created', JSON.stringify({
+        session_uid: uid, interview_id: interview.id, channel: plan.channel, consent: plan.consent,
+        // D872: the attestation, with its method; its time is the session's consent_at.
+        ...(up ? { source: UPLOAD_SOURCE, attested: plan.method } : {}),
+      }), `user:${user.id}`, user.id, interview.project_id),
   ];
   await env.DB.batch(stmts);
+  // An uploaded call has been held.
+  if (up) await markInterviewHeld(env, session, user.id);
 
   if (plan.messages && plan.messages.length) {
     await replaceWithFinal(env, session, plan.messages, plan.channel === 'text' ? 'text_chat' : 'manual_entry', null);
@@ -264,7 +417,8 @@ async function openOn(env: Env, user: User, interview: { id: number | null; proj
  * second session, and the page could not offer the live one in its place.
  */
 async function liveRefusal(env: Env, userId: number, plan: OpenPlan): Promise<Response | null> {
-  if (!plan.audio) return null;
+  // D872: an upload records nothing live, so it is never refused for a recording in flight.
+  if (!plan.audio || plan.upload) return null;
   const live = await activeSessionOf(env, userId);
   return live ? json({ error: 'session_active', session_id: live.id, message: 'You are already recording another session. Stop it, or return to it, first.' }, 409) : null;
 }
@@ -313,10 +467,11 @@ sessions.post('/sessions', async (c) => {
     const picked = await c.env.DB.prepare('SELECT id, project_id, stage FROM discovery_interviews WHERE id = ?')
       .bind(pickedId).first<{ id: number; project_id: number; stage: string | null }>();
     if (!picked || picked.project_id !== projectId) return notFound('Interview');
-    if (!['lead', 'invited', 'booked'].includes(String(picked.stage))) {
+    // D872: a recording of a call already held can be uploaded onto its interview.
+    if (!plan.upload && !['lead', 'invited', 'booked'].includes(String(picked.stage))) {
       return json({ detail: 'interview_not_in_pipeline', message: 'That interview has already been held. Pick one still to come, or name someone new.' }, 409);
     }
-    if (picked.stage !== 'booked') {
+    if (!plan.upload && picked.stage !== 'booked') {
       await setInterviewStage(c.env, { projectId, userId: user.id, interviewId: picked.id, stage: 'booked' });
     }
     interview = picked;
@@ -372,7 +527,8 @@ sessions.get('/sessions/:id', async (c) => {
   const [segments, marks, chunks] = await Promise.all([
     c.env.DB.prepare(
       // D757 (#1927): `created_at` is a chat message's time, for "Heard in".
-      `SELECT id, source, start_ms, end_ms, speaker_label, text, model, created_at FROM interview_transcript_segments
+      `SELECT id, source, start_ms, end_ms, speaker_label, text, model, created_at,
+              source_lang, translated_text, translated_lang, translation_status FROM interview_transcript_segments
         WHERE session_id = ? ORDER BY source, COALESCE(start_ms, 0), id`,
     ).bind(s.session.id).all(),
     c.env.DB.prepare('SELECT id, offset_ms, label, created_at FROM interview_session_marks WHERE session_id = ? ORDER BY offset_ms')
@@ -390,7 +546,11 @@ sessions.get('/sessions/:id', async (c) => {
     summary: summaryOf(s.session),
     // D757 (#1924): this route admits writers only (scopeInterview), so it always reads the draft.
     digest: await sessionDigest(c.env, s.session, { writer: true, quoteConsent: quoteConsent?.quote_consent === 1 }),
-    segments: segments.results || [],
+    // D857 (#2502): each segment keeps its own words in `text`; its translation, decrypted for this writer, sits beside it.
+    segments: await Promise.all(((segments.results || []) as Array<Record<string, any>>).map(async ({ translated_text, ...seg }) => ({
+      ...seg,
+      translation: seg.translation_status === 'done' ? await readTranslation(c.env, Number(seg.id), translated_text) : null,
+    }))),
     marks: marks.results || [],
     chunks: chunks.map((ch) => ({ seq: ch.seq, size_bytes: ch.size_bytes, start_ms: ch.start_ms })),
   });
@@ -592,10 +752,11 @@ sessions.patch('/sessions/:id/consent', async (c) => {
   if (s instanceof Response) return s;
   if (!AUDIO_CHANNELS.has(s.session.channel)) return json({ detail: 'no_audio_on_this_channel' }, 400);
   const before = s.session.status;
-  if (!['draft', 'paused', ...AFTER_RECORDING].includes(before)) return json({ detail: 'consent_locked', status: before }, 409);
+  if (!['draft', 'paused', ...AFTER_RECORDING, ...(s.session.submitted_via === 'meeting_bot' ? ['recording'] : [])].includes(before)) return json({ detail: 'consent_locked', status: before }, 409);
   const body = await c.req.json<any>().catch(() => ({}));
   const status = String(body?.status || '');
   if (!(CONSENT as readonly string[]).includes(status)) return json({ detail: 'invalid_consent', accepted: CONSENT }, 400);
+  if (before === 'recording' && s.session.submitted_via === 'meeting_bot' && status !== 'declined') return json({ detail: 'consent_locked', status: before }, 409);
   const method = status === 'given' ? String(body?.method || '') : '';
   if (status === 'given' && !(CONSENT_METHODS as readonly string[]).includes(method)) {
     return json({ detail: 'consent_method_required', accepted: CONSENT_METHODS }, 400);
@@ -614,6 +775,9 @@ sessions.patch('/sessions/:id/consent', async (c) => {
             consent_at = CASE WHEN ? = 'given' THEN datetime('now') ELSE NULL END, updated_at = datetime('now')
       WHERE id = ?`,
   ).bind(status, method || null, status, s.session.id).run();
+  if (status === 'declined') {
+    try { await stopSessionBot(c.env, s.session.id, s.session.created_by_user_id); } catch (e) { return botFailure(e); }
+  }
   // A paused recording whose consent is withdrawn is stopped, not resumed.
   if (status !== 'given' && s.session.status === 'paused') await transition(c.env, s.session, 'stop');
   // D765 (#2090): consent given no longer starts a summary; the founder presses Summarise.
@@ -630,6 +794,7 @@ for (const action of Object.keys(TRANSITIONS) as (keyof typeof TRANSITIONS)[]) {
     const s = await scopeSession(c);
     if (s instanceof Response) return s;
     if (!AUDIO_CHANNELS.has(s.session.channel)) return json({ detail: 'no_audio_on_this_channel' }, 400);
+    if (s.session.submitted_via === 'meeting_bot') return json({ code: 'bot_control_required', message: 'Use the meeting bot controls for this session.' }, 409);
     // THE WORKER ENFORCES CONSENT. A page that hides the button is not the gate.
     if (action === 'start' || action === 'resume') {
       const blocked = consentBlocks(s.session.channel, s.session.consent_status, {
@@ -649,11 +814,32 @@ for (const action of Object.keys(TRANSITIONS) as (keyof typeof TRANSITIONS)[]) {
   });
 }
 
+/**
+ * D872 — an uploaded recording's chunk: the uploader's format only, so its
+ * bytes are its duration, and never past the cap. A repeated `seq` is not
+ * counted twice: `putChunk` answers it as a duplicate.
+ */
+async function uploadChunkRefusal(env: Env, sessionId: number, seq: number, mime: string, bytes: Uint8Array): Promise<Response | null> {
+  if (CHUNK_MIME[mime] !== 'wav' || !isUploadWav(bytes)) {
+    return json({ detail: 'upload_format', message: 'An uploaded recording arrives as 16 kHz mono WAV parts from StudioOS\'s uploader.' }, 415);
+  }
+  const stored = await env.DB.prepare(
+    'SELECT COUNT(*) AS n, COALESCE(SUM(size_bytes), 0) AS b, COALESCE(MAX(seq = ?), 0) AS dup FROM interview_session_chunks WHERE session_id = ?',
+  ).bind(seq, sessionId).first<{ n: number; b: number; dup: number }>();
+  if (stored?.dup) return null;
+  const audioBytes = Number(stored?.b ?? 0) - WAV_HEADER_BYTES * Number(stored?.n ?? 0) + (bytes.byteLength - WAV_HEADER_BYTES);
+  if (audioBytes > (MAX_UPLOAD_MS / 1000) * UPLOAD_BYTES_PER_SECOND) {
+    return json({ detail: 'upload_too_long', message: 'A recording can be at most 3 hours long. Trim it, or upload it in parts.', max_ms: MAX_UPLOAD_MS }, 413);
+  }
+  return null;
+}
+
 sessions.put('/sessions/:id/chunks/:seq', async (c) => {
   const s = await scopeSession(c);
   if (s instanceof Response) return s;
   if (!c.env.FILES) return json({ detail: 'storage_not_configured' }, 503);
   if (!AUDIO_CHANNELS.has(s.session.channel)) return json({ detail: 'no_audio_on_this_channel' }, 400);
+  if (s.session.submitted_via === 'meeting_bot') return json({ code: 'bot_upload_required', message: 'Bot audio uses its one-time upload permission.' }, 409);
   const blocked = consentBlocks(s.session.channel, s.session.consent_status, {
     hasAudio: await sessionHasAudio(c.env, s.session.id), submittedVia: s.session.submitted_via ?? null,
   });
@@ -670,6 +856,10 @@ sessions.put('/sessions/:id/chunks/:seq', async (c) => {
   const bytes = await c.req.arrayBuffer();
   if (!bytes.byteLength) return json({ detail: 'empty_chunk' }, 400);
   if (bytes.byteLength > MAX_CHUNK_BYTES) return json({ detail: 'too_large', max_bytes: MAX_CHUNK_BYTES }, 413);
+  if (s.session.submitted_via === UPLOAD_SOURCE) {
+    const refused = await uploadChunkRefusal(c.env, s.session.id, seq, mime, new Uint8Array(bytes));
+    if (refused) return refused;
+  }
   // For placing passages on the timeline only; never billed on.
   const rawStart = Number(c.req.header('x-chunk-start-ms'));
   const startMs = Number.isSafeInteger(rawStart) && rawStart >= 0 ? Math.min(rawStart, 24 * 3600 * 1000) : null;
@@ -851,7 +1041,7 @@ sessions.post('/sessions/:id/transcribe', async (c) => {
   // nothing: the job is quoted at its dearest (the chosen model, or the
   // default it may fall back to) and held, then the hold is released and each
   // chunk is billed through the router as it runs.
-  const minutesPer = chunks.map((ch) => audioMinutesFromBytes(ch.size_bytes));
+  const minutesPer = chunks.map((ch) => chunkAudioMinutes(ch, s.session));
   const totalMinutes = minutesPer.reduce((a, b) => a + b, 0);
   const quote = Math.max(estimateCostUsd(model, 0, 0, totalMinutes), estimateCostUsd(WHISPER_TURBO, 0, 0, totalMinutes));
   if (s.user.id > 0) {
@@ -1022,6 +1212,13 @@ sessions.get('/sessions/:id/audio', async (c) => {
   if (blocked) return blocked;
   try {
     const parts = await sessionAudioParts(c.env, s.session, Number(s.user.id));
+    // D877: audio removed while the text stayed says so, and why.
+    if (!parts && s.session.audio_removed_at) {
+      return json({ detail: 'audio_removed', reason: s.session.audio_removed_reason ?? null, removed_at: s.session.audio_removed_at,
+        message: s.session.audio_removed_reason === 'retention'
+          ? 'This call\'s audio was removed after your retention period. Its transcript is kept.'
+          : 'You deleted this session\'s audio. Its transcript is kept.' }, 404);
+    }
     if (!parts) return json({ detail: 'This session has no recorded audio.' }, 404);
     return json({ parts });
   } catch (e) {
@@ -1030,16 +1227,40 @@ sessions.get('/sessions/:id/audio', async (c) => {
   }
 });
 
+/**
+ * D685 §5.9 — a run that is moving is waited for; a failed or stale one
+ * (including a row the old synchronous route left in `transcribing`) is not.
+ */
+function runMoving(session: SessionRow): boolean {
+  const moving = session.processing_stage && !['done', 'failed'].includes(session.processing_stage) && !isStale(session);
+  const legacyStuck = !session.processing_stage && session.status === 'transcribing';
+  return Boolean(moving || (legacyStuck && !isStale({ ...session, processing_stage: 'transcribing', processing_updated_at: session.updated_at })));
+}
+
+// D877 (#2524) — remove the session's audio and keep its text. The same
+// wait as deleting the session: a run that is moving still reads the chunks.
+sessions.delete('/sessions/:id/audio', async (c) => {
+  const s = await scopeSession(c);
+  if (s instanceof Response) return s;
+  try { await stopSessionBot(c.env, s.session.id, s.session.created_by_user_id); } catch (e) { return botFailure(e); }
+  s.session = (await loadSession(c.env, s.session.id)) ?? s.session;
+  if (runMoving(s.session)) return json({ detail: 'transcribing', message: 'Wait for the transcript to finish.' }, 409);
+  try {
+    const r = await deleteSessionAudio(c.env, s.session, s.user.id, 'deleted');
+    const after = await loadSession(c.env, s.session.id);
+    return json({ ok: true, audio_chunks_deleted: r.keys.length, audio_removed_at: after?.audio_removed_at ?? null, audio_removed_reason: after?.audio_removed_reason ?? null });
+  } catch (e) {
+    console.error('[sessions] audio delete failed:', (e as Error).message);
+    return json({ detail: 'delete_failed' }, 502);
+  }
+});
+
 sessions.delete('/sessions/:id', async (c) => {
   const s = await scopeSession(c);
   if (s instanceof Response) return s;
-  // D685 §5.9 — a run that is moving is waited for; a failed or stale one
-  // (including a row the old synchronous route left in `transcribing`) is not.
-  const moving = s.session.processing_stage && !['done', 'failed'].includes(s.session.processing_stage) && !isStale(s.session);
-  const legacyStuck = !s.session.processing_stage && s.session.status === 'transcribing';
-  if (moving || (legacyStuck && !isStale({ ...s.session, processing_stage: 'transcribing', processing_updated_at: s.session.updated_at }))) {
-    return json({ detail: 'transcribing', message: 'Wait for the transcript to finish.' }, 409);
-  }
+  try { await stopSessionBot(c.env, s.session.id, s.session.created_by_user_id); } catch (e) { return botFailure(e); }
+  s.session = (await loadSession(c.env, s.session.id)) ?? s.session;
+  if (runMoving(s.session)) return json({ detail: 'transcribing', message: 'Wait for the transcript to finish.' }, 409);
   try {
     const r = await deleteSession(c.env, s.session, s.user.id);
     return json({ ok: true, audio_chunks_deleted: r.keys.length });

@@ -18,21 +18,29 @@ lives in `providers/`.
 | `secrets.ts` | Credential encryption over `../services/columnCipher.ts`, with the row's uid in the AAD, and the masked previews the list endpoints show. Never logs plaintext. |
 | `oauth.ts` | PKCE pairs, signed state tokens and `consumeOauthState`. The state's `extra` carries per-connect values (the selected company, a Salesforce sandbox flag, the literal `build` return token) so the callback never trusts its query string. |
 | `companyScope.ts` | Which providers write project-backed data, and whether a connection is enabled for a company or project. A missing scope row denies the write. |
-| `connectorRules.ts` | `hasScopeOverreach` (a grant wider than the request is refused) and the validation of a connector's settings patch. |
+| `cartaScopes.ts` | #2634: separate founder issuer and investor read scopes, selected by the authenticated role; never a union. |
+| `cartaInvestor.ts` | #2634: one-page, bounded Carta investor reads and explicit field projections; no stakeholder names/emails, provider payload storage or derived money totals. Missing values stay null. |
+| `connectorRules.ts` | `hasScopeOverreach` (a grant wider than the request is refused), `extraScopes` (the scopes named in that refusal's log line) and the validation of a connector's settings patch. |
 | `autopush.ts` | Background pushes started outside the connector routes (a deal's stage change, a new project), logged to `integration_logs` like a user's own push. |
 | `refreshLease.ts` | `acquireRefreshLease` and `REFRESH_LEASE_TTL_S`: the KV lease on `<provider>:refresh:<uid>` that serializes one connection's OAuth token refresh, shared by HubSpot, Calendly, Carta, DocuSign and Salesforce (#1903). `release()` deletes the key only for the caller that acquired it. Best-effort: KV is eventually consistent, so the providers keep their D1 re-checks. |
 | `mcpClient.ts` | D847 (#2468): the Worker as an MCP client of any provider, through one client. `openMcpSession` speaks both eras (`legacy` with `initialize` and the session id, `modern` `2026-07-28` with `_meta` and the `Mcp-*` headers, `auto` probing), with a per-session POST budget, 10-second deadlines, a 25-second wall, a 2 MB body cap and redirects refused; it offers only the record's read tools the server lists, and logs every unknown, annotated, invalid or changed tool as one `mcp_tool_drift` line. Discovery, registration (pre-registered, CIMD, DCR), PKCE, RFC 9207 `iss`, the leased refresh and revoke. Never imports `../mcp/` (StudioOS's own MCP server, D784). |
 | `customMcp.ts` | D852 (#2475): remote MCP servers a member adds, behind `CUSTOM_MCP_ENABLED`. The URL and address guard (https, no IP literal or private name, public addresses only after DNS over HTTPS), `guardedFetcher` (the only fetcher the shared client gets for a custom server), a connection's record (`customProvider`: its approved read tools pinned, no write tool), configure and sign-in, listing (descriptions marked untrusted), approval, `callCustomTool`, health and drift, and revoke (everything deleted). |
+| `mcpSignIn.ts` | D1080 (#2945): what the generic MCP sign-in (`../routes/connector_mcp_oauth.ts`) shares: which records it serves (`genericMcpProvider`: not Mercury's, which keeps its own route), their callback and CIMD paths, D751 readiness for a record, the pre-registered client's loader from HQ › Integration keys, `mcpCallbackUrl` for `CALLBACK_URL`, and the revoke a disconnect runs before the row is deleted. |
 | `mcpProviders.ts` | D847: `MCP_PROVIDERS`, one frozen record per MCP provider (Mercury's first): its server URLs and hosts, scopes, read and write tools (none without a publishing issue), registration order, era, budget, tool pins and D840's legacy names. Imports nothing. |
 
 ## Who sees a provider
 
-`audienceFor(provider, viewer)` answers `open`, `entity`, `personal` or `none`;
+`audienceFor(provider, viewer)` answers `open`, `preview`, `personal` or `none`;
 a `none` provider is answered everywhere as if its key did not exist (404
 `unknown_provider`). The viewer is `{ role, hq, venture }`, built in one place
 per caller (`viewerOf` in `../routes/integrations.ts`, Mercury's own connect).
 
-- **Roles (D710).** `entity_roles` and `personal_roles` — Mercury.
+- **Roles (D710, D879).** `personal_roles` and `preview_roles` — Mercury. A
+  `preview` role (an admin on HQ) reads the founder's card and page, connects
+  nothing and reads no connection, and is told that Axal VC's own accounts live
+  in HQ › Fund administration › Bank accounts (`HQ_ACCOUNTS_NOTE`). D879
+  (#2552) removed D710's `entity_roles`: Axal VC's accounts are never a
+  connector, only `/api/admin/mercury` (`../services/mercury/`).
 - **The venture audience (D757 §2.11).** `audience_rule: 'venture'` — Zoom —
   makes a provider founder-facing: `personal` for a viewer who can hold a
   venture, `none` for everyone else. `venture` is `canHoldValidateSource` in
@@ -81,3 +89,8 @@ not one provider's goes in this folder; anything with HTTP belongs in
 `../routes/`.
 
 A KV TTL is at least 60 seconds, KV's minimum: a shorter `expirationTtl` makes the `put` throw in production. `cloudflare-worker/test/kv_refresh_lease.test.ts` fails on a literal under 60 anywhere in `cloudflare-worker/src`, and `cloudflare-worker/test/_mem_kv.mjs` refuses one as KV does.
+
+D1081 (#2946): `lovableFeeds.ts` holds Lovable's four planned launch/app-link
+landings. Only shipped inbound entries become metadata pulls and feeds; none
+have shipped in part 1. Lovable is a directory page with `auth_type: 'none'`,
+not a provider implementation or an account connection.

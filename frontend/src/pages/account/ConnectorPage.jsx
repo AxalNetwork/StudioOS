@@ -11,7 +11,7 @@ import {
 import Lightbox from '../../ui/Lightbox';
 import { useConnectFlow } from './useConnectFlow';
 import { RequestSheet, useMovedNotice } from './AccountConnectors';
-import { connectionStatus, disconnectNote, isEntityRow, isPersonalMercury, keysHref, lastSyncLabel, moduleLabel, stripReturn } from './connectorsModel';
+import { connectionStatus, disconnectNote, isPersonalMercury, keysHref, lastSyncLabel, moduleLabel, stripReturn } from './connectorsModel';
 import {
   DETAIL_MISSING, backHrefFor, bodyDetailsRows, detailsRows, headerTagline, keyHelpOf, keyPath, manageItems, modeLabel, pageAction,
   pageChoices, pageEntry, pageNotice, pageLanding, pageTitle, toolGroups,
@@ -19,8 +19,8 @@ import {
 import { isChannelKey } from './channelPageModel';
 import ChannelPage from './ChannelPage';
 import GithubRepositoriesSection from './GithubRepositoriesSection';
-import { MEMBER_REPLACE, notOfferedSentence } from './mercuryModel';
-import { MercuryEntityPageBody, MercuryLandsGroup, MercuryReadsGroup, MercuryUsesGroups } from './MercurySheet';
+import { HQ_ACCOUNTS, MEMBER_REPLACE, notOfferedSentence } from './mercuryModel';
+import { MercuryLandsGroup, MercuryReadsGroup, MercuryUsesGroups } from './MercurySheet';
 import { useAuth } from '../../hooks/useAuthSync';
 import { branchOfUser, isSuperAdminUser } from '../../lib/shellRole';
 import { ZOOM_DISCONNECT_NOTE, ZOOM_SECTIONS, zoomHowItWorks, zoomNotices } from '../../lib/validateSourceWording';
@@ -70,15 +70,11 @@ import { ZOOM_DISCONNECT_NOTE, ZOOM_SECTIONS, zoomHowItWorks, zoomNotices } from
  * the header's line becomes its tagline. Without `body` it draws F1's About
  * and Details from the catalogue row.
  *
- * MERCURY (#1991, F5). The Axal entities' row (`isEntityRow`, an admin on HQ)
- * draws `MercuryEntityPageBody` in "Connect and manage": the entity
- * connections, what they feed, Open Banking and the audit foot, with the one
- * audited read on mount and no header action. A member's own Mercury draws
- * its groups (what it is for, where it lands, what it reads) above the token
- * form until it is connected, then in "Your connection" with Manage's Sync
- * now, Replace token and Disconnect: no interim panel. D840 (#2346): the band
- * signs in with Mercury, the chevron opens the token form, and the sign-in
- * returns to this page.
+ * MERCURY (#1991, F5; D880, D881). This page is the member's own Mercury
+ * only: an admin on HQ reads `HQ_ACCOUNTS`, linking HQ › Bank accounts.
+ * Members see their groups above the sign-in band, then in "Your connection"
+ * with Manage's Sync now, Sign in again and Disconnect. Sign in with Mercury
+ * is the only connect path and returns to this page.
  *
  * THE READ (#1955, part 2). Handed `readPage` (`connectorsApi.page`), the view
  * reads `GET /api/connectors/directory/<page_key>` once the connector is known,
@@ -180,10 +176,8 @@ function ReadyPage({ p, back, phone, ret, moved, onChanged, children, connector 
   const auth = useAuth();
   const superAdmin = isSuperAdminUser(auth?.user);
   // A return opens on what happened. GitHub's lands on its Repositories section instead (`pageLanding`, #1957).
-  // D715 decision 3: the Axal entities' Mercury has no sign-in, so a return naming it says nothing there.
-  const shownRet = isEntityRow(p) ? null : ret;
-  const [view, setView] = useState(() => (shownRet ? shownRet.view : 'idle'));
-  const [flowRet, setFlowRet] = useState(shownRet || {});
+  const [view, setView] = useState(() => (ret ? ret.view : 'idle'));
+  const [flowRet, setFlowRet] = useState(ret || {});
   const setFlowView = (v) => { setFlowRet({}); setView(v); };
   const flow = useConnectFlow(p, { setView: setFlowView, onChanged });
   const name = p.display_name;
@@ -192,10 +186,10 @@ function ReadyPage({ p, back, phone, ret, moved, onChanged, children, connector 
   const notice = pageNotice({ view, ret: flowRet, message: flow.message, name, moved });
   // Connect by key, Reconnect by key, or Manage's Replace key on a connected row.
   const keyOpen = (view === 'key' || view === 'badkey') && ['key', 'oauth', 'reconnect', 'status'].includes(action.kind);
-  // D753 F5 (#1991): the Axal entities' Mercury is drawn on the page itself.
-  const entity = isEntityRow(p);
   const role = auth?.user?.role ?? null;
-  // A member's own Mercury says what it is for above the token form, as the sheet's first step did; the band connects.
+  // D880: Axal VC's own accounts stay in HQ; this page draws only the link.
+  const hqAccounts = p.key === 'mercury' && role === 'admin' && !branchOfUser(auth?.user);
+  // A member's own Mercury says what it is for above the sign-in band.
   const memberMercury = isPersonalMercury(p) && !p.connection;
   return (
     <div className="flex min-w-0 flex-col gap-4" data-testid="connector-page" data-state="ready" data-key={p.key}>
@@ -206,7 +200,7 @@ function ReadyPage({ p, back, phone, ret, moved, onChanged, children, connector 
           {!phone && <h1 className="text-2xl font-extrabold tracking-axal-heading text-axal-ink dark:text-gray-100">{p.display_name}</h1>}
           {tagline && <p className="mt-0.5 min-w-0 break-words text-[13.5px] leading-snug text-axal-muted dark:text-gray-400" data-testid="connector-page-tagline">{tagline}</p>}
         </div>
-        <BandAction p={p} action={action} flow={flow} phone={phone} superAdmin={superAdmin} onChanged={onChanged} manage={entity ? [] : manageItems(p)} />
+        <BandAction p={p} action={action} flow={flow} phone={phone} superAdmin={superAdmin} onChanged={onChanged} manage={manageItems(p)} />
       </header>
 
       {notice && (
@@ -215,10 +209,10 @@ function ReadyPage({ p, back, phone, ret, moved, onChanged, children, connector 
         </div>
       )}
 
-      {entity && (
-        <section aria-label="Connect and manage" data-testid="connector-page-connect" data-mode="entity">
-          <MercuryEntityPageBody p={p} />
-        </section>
+      {hqAccounts && (
+        <p className="text-[12.5px] text-axal-muted dark:text-gray-400" data-testid="connector-page-hq-accounts">
+          {HQ_ACCOUNTS.text} <Link className={BTN.link} to={HQ_ACCOUNTS.href} data-testid="connector-page-hq-accounts-link">{HQ_ACCOUNTS.link}</Link>
+        </p>
       )}
       {(keyOpen || memberMercury) && (
         <section aria-label="Connect and manage" data-testid="connector-page-connect" data-mode={keyOpen ? 'key' : 'mercury'}>
@@ -232,7 +226,7 @@ function ReadyPage({ p, back, phone, ret, moved, onChanged, children, connector 
           {keyOpen && <InlineKeyForm p={p} flow={flow} view={view} connector={connector} />}
         </section>
       )}
-      {p.connection && !entity && <YourConnection p={p} flow={flow} role={role} onChanged={onChanged} repositories={repositories} />}
+      {p.connection && <YourConnection p={p} flow={flow} role={role} onChanged={onChanged} repositories={repositories} />}
       {flow.confirming && (
         <Lightbox label={`Disconnect ${name}?`} title={`Disconnect ${name}?`} onClose={() => flow.setConfirming(false)} width={440} testId="connector-page-disconnect-dialog"
           footer={(
@@ -281,7 +275,7 @@ function YourConnection({ p, flow, role = null, onChanged, repositories = false 
           <div className="text-[10.5px] font-bold uppercase tracking-axal-label text-axal-muted dark:text-gray-400">Last sync</div>
           <div data-testid="connector-page-last-sync">{flow.syncNote || lastSyncLabel(conn)}</div>
         </div>
-        {conn.uid && (
+        {conn.uid && !p.legacy_only && (
           <button type="button" className={`${BTN.ghost} sm:ml-auto`} disabled={flow.syncing} onClick={flow.syncNow} data-testid="connector-page-sync">
             {flow.syncing ? 'Syncing…' : 'Sync now'}
           </button>
@@ -300,7 +294,7 @@ function YourConnection({ p, flow, role = null, onChanged, repositories = false 
         ) : <CompaniesGroup conn={conn} onChanged={onChanged} />}
         {/* Decision 8: a partner's Mercury feeds no module. */}
         {(!mercury || role === 'founder') && <FedGroup conn={conn} name={p.display_name} />}
-        <SettingsGroup p={p} onTool={flow.setTool} onReplace={() => flow.go('key')} />
+        {p.legacy_only ? <Group label="Connection"><Row a={p.legacy_notice} /></Group> : <SettingsGroup p={p} onTool={flow.setTool} onReplace={() => flow.go('key')} />}
         {conn.uid
           ? <ActivityGroup conn={conn} />
           : <Group label="Activity"><Row a={<Unrecorded reason={`${p.display_name} keeps no activity log in StudioOS.`}>Not recorded</Unrecorded>} /></Group>}
@@ -441,6 +435,7 @@ function BandAction({ p, action, flow, phone, superAdmin, onChanged, manage = []
           disabled={starting || flow.busy}
           aria-busy={starting ? 'true' : undefined}
           aria-label={action.aria}
+          title={action.title}
           onClick={press}
           data-testid="connector-page-connect-button"
         >
@@ -511,10 +506,10 @@ function ManageRows({ p, items, flow }) {
 
 /** Pick an account kind on the flow, or take the other way in. */
 function useChoices(p, flow) {
-  const envValue = p.key === 'salesforce' ? (flow.sfSandbox ? 'sandbox' : 'production') : p.key === 'docusign' ? (flow.dsDemo ? 'demo' : 'production') : null;
+  const envValue = p.key === 'salesforce' ? (flow.sfSandbox ? 'sandbox' : 'production') : (p.key === 'docusign' || p.key === 'carta') ? (flow.dsDemo ? 'demo' : 'production') : null;
   const pickEnv = (v) => {
     if (p.key === 'salesforce') flow.setSfSandbox(v === 'sandbox');
-    if (p.key === 'docusign') flow.setDsDemo(v === 'demo');
+    if (p.key === 'docusign' || p.key === 'carta') flow.setDsDemo(v === 'demo');
   };
   const takeAlt = (id) => (id === 'pat' ? flow.go('key') : flow.startOauth());
   return { envValue, pickEnv, takeAlt };
@@ -628,7 +623,7 @@ function WaitlistAction({ p, action, onChanged }) {
 
 /** About: what it reads and sends, and what it may do, from today's fields. It makes no read. */
 function About({ p }) {
-  // Mercury's own groups read its status on mount, so they are drawn once: above the token form, then in Your connection.
+  // Mercury's own groups read its status on mount, so they are drawn once: before it is connected, then in Your connection.
   const mercury = p.key === 'mercury';
   return (
     <section data-testid="connector-page-about" className="flex min-w-0 flex-col">
@@ -711,9 +706,21 @@ export function ConnectorBody({ state = 'ready', connector, p, onRetry }) {
         <h2 className={H2}>About</h2>
         {hold || <BodyAbout c={c} />}
       </section>
+      {c?.works_without_signing_in?.length > 0 && (
+        <section data-testid="connector-page-without-sign-in" className="flex min-w-0 flex-col gap-3">
+          <h2 className={H2}>Works without signing in</h2>
+          {c.works_without_signing_in.map(item => <p key={item.name} className="text-[13px] text-axal-ink dark:text-gray-200"><strong>{item.name}</strong> — {item.what}</p>)}
+        </section>
+      )}
+      {c?.never_does?.length > 0 && (
+        <section data-testid="connector-page-never-does" className="flex min-w-0 flex-col gap-3">
+          <h2 className={H2}>What Axal VC never does</h2>
+          {c.never_does.map(line => <p key={line} className="text-[13px] text-axal-ink dark:text-gray-200">{line}</p>)}
+        </section>
+      )}
       <section data-testid="connector-page-tools" className="flex min-w-0 flex-col gap-2">
-        <h2 className={H2}>Tools</h2>
-        {hold || <BodyTools tools={c.tools} name={name} />}
+        <h2 className={H2}>{c?.sign_in?.kind === 'none' ? 'It reads' : 'Tools'}</h2>
+        {hold || (c.sign_in?.kind === 'none' ? <p className="text-[13px] text-axal-muted dark:text-gray-400">Nothing from {name}. The Worker never calls {name}.</p> : <BodyTools tools={c.tools} name={name} />)}
       </section>
       {c && Array.isArray(c.prompts) && c.prompts.length > 0 && (
         <section data-testid="connector-page-prompts" className="flex min-w-0 flex-col gap-2">

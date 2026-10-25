@@ -401,7 +401,7 @@ function YourTicketsCard({ isAdmin }) {
 // nothing at all until the probe answers — an unreachable status endpoint must
 // not read as "all good".
 const STATUS_LINE = {
-  operational: { text: 'All systems operational', dot: 'bg-emerald-500' },
+  operational: { text: 'All monitored services operational', dot: 'bg-emerald-500' },
   degraded: { text: 'Some systems degraded', dot: 'bg-amber-500' },
   down: { text: 'Active outage', dot: 'bg-red-500' },
   // D332 — a failed probe says so, rather than vanishing: silence reads as
@@ -444,7 +444,7 @@ function StillStuck({ user, onOpenChat }) {
             <button type="button" onClick={onOpenChat} className={SECONDARY_ACTION}>Message the team</button>
           )}
           <span className="flex flex-col items-center gap-1">
-            <Link to="/trust" className={SECONDARY_ACTION}>What we can see</Link>
+            <Link to="/trust/me" className={SECONDARY_ACTION}>What we can see</Link>
             <span className="font-mono text-[9.5px] text-gray-400">Trust Center</span>
           </span>
         </div>

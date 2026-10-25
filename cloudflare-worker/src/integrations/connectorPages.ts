@@ -39,7 +39,7 @@ export interface PagePrompt {
 }
 
 /** `mcp` (D847): "Sign in with <Provider>" through its MCP server; no page uses it until a provider issue adds one. */
-export type SignInKind = 'oauth' | 'oauth_or_key' | 'key' | 'first_party' | 'entity' | 'channel' | 'mcp';
+export type SignInKind = 'none' | 'oauth' | 'oauth_or_key' | 'key' | 'first_party' | 'channel' | 'mcp';
 
 export interface ConnectorPage {
   /** At most 120 characters. */
@@ -47,6 +47,8 @@ export interface ConnectorPage {
   /** One to four paragraphs. */
   long_description: string[];
   tools: PageTool[];
+  works_without_signing_in?: Array<{ name: string; what: string; built: boolean }>;
+  never_does?: string[];
   prompts: PagePrompt[];
   /** Null exactly when `prompts` is not empty. */
   prompts_reason: string | null;
@@ -61,9 +63,8 @@ export interface ConnectorPage {
   verified_on: string | null;
 }
 
-/** Mercury's pages, by audience: the HQ entity connection, and a member's own by role. */
+/** Mercury's pages: a member's own, by role (D879: there is no entity page; Axal VC's accounts are HQ's only). */
 export interface VariantPages {
-  entity: ConnectorPage;
   personal: Record<string, ConnectorPage>;
 }
 
@@ -75,14 +76,14 @@ const tool = (name: string, label: string, access: ToolAccess, what: string, lan
 
 const notRead = (name: string) => `Eadwyn does not read ${name} yet.`;
 
-// ── Mercury: one client, two audiences ────────────────────────────────────────
+// ── Mercury: a member's own account, by role (D879) ───────────────────────────
 
 const MERCURY_API = 'https://api.mercury.com/api/v1';
 const MERCURY_DOCS = 'https://docs.mercury.com';
 /** D840 (#2346): Mercury's MCP server, which a member's sign-in reads through (`services/mercury/mcp.ts`). */
 const MERCURY_MCP = 'https://mcp.mercury.com/mcp';
 
-type MercuryVariant = 'entity' | 'founder' | 'partner' | 'investor';
+type MercuryVariant = 'founder' | 'partner' | 'investor';
 
 /**
  * Each tool names the API path a pasted token reads and, for a member, the
@@ -90,9 +91,8 @@ type MercuryVariant = 'entity' | 'founder' | 'partner' | 'investor';
  * holds the MCP names to `integrations/mercuryFeeds.ts`.
  */
 function mercuryTools(variant: MercuryVariant): PageTool[] {
-  const member = variant !== 'entity';
   // Each MCP read is one JSON-RPC POST (`mcp.ts`), named here so the page's write check knows it reads.
-  const mcp = (name: string) => (member ? [`'${name}'`, "jsonrpc: '2.0'"] : []);
+  const mcp = (name: string) => [`'${name}'`, "jsonrpc: '2.0'"];
   const tools = [
     tool('read_organization', 'your organization', 'read', 'Reads the organization’s id and legal name, to match it to the right owner.', null, ["read(token, '/organization'", ...mcp('getOrganization')]),
     tool('list_accounts', 'account names and last four digits', 'read', 'Lists the organization’s accounts by name, kind and last four digits.', null, ["read(token, '/accounts'", ...mcp('getAccounts')]),
@@ -101,14 +101,13 @@ function mercuryTools(variant: MercuryVariant): PageTool[] {
   if (variant !== 'investor') {
     tools.push(
       tool('list_transactions', 'transactions', 'read',
-        variant === 'entity' ? 'Reads each account’s transactions every hour, for reconciliation against capital calls and fees.'
-          : variant === 'founder' ? 'Lists the credits in your account. Only the ones you import become revenue rows.'
-            : 'Lists your account’s transactions so you can pick the one that settled an invoice, payout or deal.',
+        variant === 'founder' ? 'Lists the credits in your account. Only the ones you import become revenue rows.'
+          : 'Lists your account’s transactions so you can pick the one that settled an invoice, payout or deal.',
         variant === 'founder' ? 'revenue_and_traction' : null,
         ['`/account/${accountId}/transactions`', ...mcp('listTransactions')]),
     );
   }
-  if (variant !== 'entity' && variant !== 'investor') {
+  if (variant !== 'investor') {
     tools.push(tool('read_transaction', 'the transaction you pick', 'read', 'Reads the one transaction you picked, to confirm it before it is used.', null,
       ['`/account/${accountId}/transaction/${transactionId}`', ...mcp('getTransactionById')]));
   }
@@ -134,6 +133,8 @@ function mercuryTools(variant: MercuryVariant): PageTool[] {
   // D840 part 4 (#2349): a signed-in investor's sections, each read through the MCP server only.
   if (variant === 'investor') {
     tools.push(
+      // D884 (#2557): Pipeline shows the capacity Commit read, beside the cheques you intend; it calls no tool of its own.
+      tool('pipeline_capacity', 'your capacity beside your pipeline', 'read', 'Shows the capacity read for Deals › Commit beside the cheques you intend on the live deals in your pipeline. Only you see it.', 'deals_pipeline', [...mcp('getAccounts')]),
       tool('read_capacity', 'available balances of the accounts you pick', 'read', 'Reads the available balance of the accounts you pick, as your capacity beside your own commitments. Only you see it.', 'deals_commit', [...mcp('getAccounts')]),
       tool('list_payments_out', 'outgoing wires and ACH payments', 'read', 'Lists your outgoing payments, to propose the one that funded a commitment. Nothing is recorded until you accept it.', 'deals_closing', [...mcp('listTransactions')]),
       tool('list_payments_in', 'incoming payments', 'read', 'Lists the credits into your fund’s accounts, to propose the capital-call line each one pays. A receipt is recorded only when you accept it.', 'fund_calls', [...mcp('listTransactions')]),
@@ -152,38 +153,31 @@ function mercuryTools(variant: MercuryVariant): PageTool[] {
       tool('partner_payments', 'payments to Axal partners', 'read', 'Finds payments to an Axal partner’s company and proposes linking them; nothing is linked until you accept.', 'partner_network', mcp('listTransactions')),
     );
   }
-  if (member) {
-    tools.push(tool('sign_in_with_mercury', 'your sign-in', 'account',
-      'Registers Axal VC with Mercury’s sign-in once, and revokes your sign-in’s tokens when you disconnect. Your sign-in asks only for read access.',
-      null, ['server.registration_endpoint', 'server.revocation_endpoint']));
-  }
+  tools.push(tool('sign_in_with_mercury', 'your sign-in', 'account',
+    'Registers Axal VC with Mercury’s sign-in once, and revokes your sign-in’s tokens when you disconnect. Your sign-in asks only for read access.',
+    null, ['server.registration_endpoint', 'server.revocation_endpoint']));
   return tools;
 }
 
-const MERCURY_SIGN_IN = 'Sign in with Mercury: Axal VC reads through Mercury’s own MCP server and asks only for read access. It calls only the read tools named below, and refuses any other. A Read Only API token works too.';
+const MERCURY_SIGN_IN = 'Sign in with Mercury: Axal VC reads through Mercury’s own MCP server and asks only for read access. It calls only the read tools named below, and refuses any other.';
 
 function mercuryPage(variant: MercuryVariant): ConnectorPage {
-  const entity = variant === 'entity';
   return {
-    tagline: entity ? 'Balances and transactions of the Axal entity accounts, for fund administration. Read-only.'
-      : variant === 'founder' ? 'Credits from your own Mercury account, imported as venture revenue. Read-only.'
-        : variant === 'investor' ? 'Proof of funds for a commitment you made, shared with Axal’s admins. Read-only, never a balance.'
-          : 'Your invoices, payouts and settlements matched to your own Mercury lines. Read-only.',
-    long_description: entity ? [
-        'Read balances and transactions of the Axal entity accounts for fund administration. Read-only: nothing here can move money.',
-        'A Super Admin adds a Read Only API token for each Axal entity. Axal VC reads the organization, its accounts and their transactions, and proposes matches to capital calls and fees for a person to confirm.',
-      ]
-      : [...(variant === 'founder'
+    tagline: variant === 'founder' ? 'Credits from your own Mercury account, imported as venture revenue. Read-only.'
+      : variant === 'investor' ? 'Your capacity in Deals › Pipeline and Commit, and the wire that funded a commitment. Read-only; only you see a balance.'
+        : 'Your invoices, payouts and settlements matched to your own Mercury lines. Read-only.',
+    long_description: [...(variant === 'founder'
         ? [
           'Your own Mercury account, read-only.',
           'Axal VC lists the credits in your account. Only the credits you choose to import become rows in Revenue and traction. It never sends, transfers or requests money.',
           'When you sync Grow, it fills Revenue and traction, Durable company-building, Team expansion, Distribution and Partner network: facts are written, a partner match is proposed for you to accept, and cash, treasury, runway, payroll and spend are shown to your team only.',
         ]
         : variant === 'investor'
+          // D884 (#2557): what it reads, then Deals and Pipeline first, then Fund, then proof of funds.
           ? [
-            'Your own Mercury account, read-only, on HQ only (D752).',
-            'Axal VC reads your accounts’ names, kinds and last four digits, so you can pick the ones a proof of funds counts. Axal’s admins see only a dated statement of at least an amount you choose, never a balance. It never sends, transfers or requests money.',
-            'Signed in with Mercury, it also fills your sections (D840): your capacity beside your own commitments, on your page only; and proposals for Deals · Closing, Fund · Calls, Accounting and Reporting, which write nothing until you accept them. Portfolio gets nothing from Mercury.',
+            'Your own Mercury account, read-only, on HQ or in a branch. Axal VC reads your accounts’ names, kinds and last four digits, their available balances, your transactions and your statements. A balance is shown to you alone, and it never sends, transfers or requests money.',
+            'Deals first. Deals › Pipeline shows your capacity beside the cheques you intend on your live deals. Deals › Commit reads that capacity from the accounts you pick, beside your commitments. Deals › Closing proposes the wire that funded a commitment, for you to accept.',
+            'Then Fund › Calls, Accounting and Reporting, whose proposals write nothing until you accept them. Portfolio gets nothing from Mercury. On HQ, a proof of funds: Axal’s admins see only a dated statement of at least an amount you choose, never a balance.',
           ]
           : [
           'Your own Mercury account, read-only.',
@@ -194,11 +188,9 @@ function mercuryPage(variant: MercuryVariant): ConnectorPage {
     prompts_reason: notRead('Mercury'),
     made_by: AXAL,
     service: { name: 'Mercury', href: null },
-    // D840 (#2346): a member signs in with Mercury (its MCP server, read-only), or pastes a Read Only API token.
-    sign_in: entity
-      ? { kind: 'entity', label: 'Read Only API token, added for each Axal entity by the Super Admin', key_help_href: null }
-      : { kind: 'oauth_or_key', label: 'Sign in with Mercury, or a Read Only API token', key_help_href: MERCURY_DOCS },
-    endpoints: { sign_in: entity ? null : MERCURY_MCP, api: MERCURY_API },
+    // D840 (#2346), D881 (#2554): a member connects only by signing in with Mercury (its MCP server, read-only).
+    sign_in: { kind: 'mcp', label: 'Sign in with Mercury', key_help_href: null },
+    endpoints: { sign_in: MERCURY_MCP, api: MERCURY_API },
     added: '2026-10',
     links: { ...NO_LINKS, developer_docs: MERCURY_DOCS },
     verified_on: null,
@@ -212,6 +204,25 @@ function mercuryPage(variant: MercuryVariant): ConnectorPage {
  * (D753 decision 15). Read through `pageDescriptor`, never directly by a route.
  */
 export const CONNECTOR_PAGES: Record<string, ConnectorPage | VariantPages> = {
+  lovable: {
+    tagline: 'Works without signing in. Launch links and app links for your venture.',
+    long_description: [
+      'No Lovable account is connected to Axal VC. The Worker never calls Lovable.',
+      'Build in Lovable launch links are being built in part 2. App links and founder-pressed live checks are being built in part 3. Neither is available from this directory entry yet.',
+      'A Lovable project synced to GitHub can already use the existing GitHub connector. That is a GitHub connection, not a Lovable sign-in.',
+    ],
+    works_without_signing_in: [
+      { name: 'Build in Lovable', what: 'Part 2: review a prompt, then open Lovable in your browser. Not built yet.', built: false },
+      { name: 'App links and live checks', what: 'Part 3: record your app’s address and check its public page when you ask. Not built yet.', built: false },
+    ],
+    never_does: ['No Lovable sign-in or stored Lovable key.', 'No prompt sent by the Worker.', 'Nothing built or published for you.'],
+    tools: [], prompts: [], prompts_reason: 'Eadwyn does not read Lovable. No Lovable data is read by the Worker.',
+    made_by: AXAL, service: { name: 'Lovable', href: 'https://lovable.dev' },
+    sign_in: { kind: 'none', label: 'Works without signing in', key_help_href: null },
+    endpoints: { sign_in: null, api: null }, added: null,
+    links: { ...NO_LINKS, developer_docs: 'https://docs.lovable.dev/integrations/build-with-url' }, verified_on: null,
+  },
+
   figma: {
     tagline: 'Design files for Prototype / MVP. Coming soon.',
     long_description: [
@@ -326,10 +337,10 @@ export const CONNECTOR_PAGES: Record<string, ConnectorPage | VariantPages> = {
     links: { ...NO_LINKS, developer_docs: 'https://developer.salesforce.com/docs' },
     verified_on: null,
   },
-  carta: {
+  carta: { personal: { founder: {
     tagline: 'Your Carta cap table in Founding team, refreshed every six hours. Read-only.',
     long_description: [
-      'Mirror your Carta cap table (issuer, stakeholders, securities and vesting) into Founding team on a six-hour sync.',
+      'Mirror your Carta cap table (issuer, stakeholders, securities and vesting) into Founding team on a six-hour sync. Choose Playground for a playground app, or Production for an approved production app.',
       'Read-only: Axal VC reads your cap table and never changes it in Carta. When you disconnect, it revokes its Carta sign-in.',
     ],
     tools: [
@@ -337,18 +348,43 @@ export const CONNECTOR_PAGES: Record<string, ConnectorPage | VariantPages> = {
       tool('list_stakeholders', 'stakeholders', 'read', 'Reads each issuer’s stakeholders.', 'founding_team', ["/stakeholders`, 'stakeholders'"]),
       tool('list_securities', 'securities', 'read', 'Reads each issuer’s securities.', 'founding_team', ["/securities`, 'securities'"]),
       tool('list_vesting_schedules', 'vesting schedules', 'read', 'Reads each issuer’s vesting schedules.', null, ['/vesting-schedules`']),
-      tool('revoke_token', 'the sign-in', 'account', 'Revokes the Carta sign-in when you disconnect.', null, ['`${AUTH_HOST}/o/revoke_token/`']),
+      tool('revoke_token', 'the sign-in', 'account', 'Revokes the Carta sign-in when you disconnect.', null, ['/o/revoke_token/']),
     ],
     prompts: [],
     prompts_reason: notRead('Carta'),
     made_by: AXAL,
     service: { name: 'Carta', href: null },
     sign_in: { kind: 'oauth', label: 'Sign in with Carta', key_help_href: null },
-    endpoints: { sign_in: 'https://login.carta.com/o/authorize/', api: 'https://api.carta.com/v1alpha1' },
+    endpoints: { sign_in: 'https://login.playground.carta.team/o/authorize/', api: 'https://api.playground.carta.team/v1alpha1' },
     added: '2026-09',
-    links: { ...NO_LINKS, developer_docs: 'https://carta.com/api/' },
+    links: { ...NO_LINKS, developer_docs: 'https://docs.carta.com/api-platform/guides/' },
     verified_on: null,
-  },
+  }, investor: {
+    tagline: 'Your own Carta firms, funds, investments, securities and cap tables. Read-only.',
+    long_description: [
+      'For investors, sign in to your own Carta firm. Axal VC reads only the firms and funds you share, their portfolio investments, investment securities and capitalization tables. It never changes Carta or imports these records into a founder’s cap table.',
+      'Founders have a separate connection to their company’s issuer, stakeholders, securities and vesting. An investor grant never requests founder issuer permissions.',
+      'Carta returns only investments with cap-table data on Carta. Other investments are not recorded here. A denied or failed read is Unreadable, and missing figures are Not recorded.',
+      'Choose Playground for a playground app, or Production for an approved production app. Disconnect revokes this sign-in.',
+    ],
+    tools: [
+      tool('list_firms', 'your firms', 'read', 'Reads the investment firms you shared in Carta.', null, ["path: '/firms'"]),
+      tool('list_funds', 'their funds', 'read', 'Reads funds in the selected firm.', null, ["path: '/firms/:firmId/funds'"]),
+      tool('list_investments', 'portfolio investments', 'read', 'Reads the selected fund’s portfolio companies with Carta cap-table data.', null, ["path: '/firms/:firmId/funds/:fundId/investments'"]),
+      tool('list_securities', 'investment securities', 'read', 'Reads certificates, convertible notes and warrants of the selected investment.', null, ["'certificates', 'convertibleNotes', 'warrants'"]),
+      tool('read_capitalization_tables', 'capitalization tables', 'read', 'Reads a portfolio company’s cap tables and share-class summary, without stakeholder names or emails.', null, ["kind: 'capitalizationTable'"]),
+      tool('revoke_token', 'the sign-in', 'account', 'Revokes the Carta sign-in when you disconnect.', null, ['/o/revoke_token/']),
+    ],
+    prompts: [],
+    prompts_reason: notRead('Carta'),
+    made_by: AXAL,
+    service: { name: 'Carta', href: null },
+    sign_in: { kind: 'oauth', label: 'Sign in with Carta', key_help_href: null },
+    endpoints: { sign_in: 'https://login.playground.carta.team/o/authorize/', api: 'https://api.playground.carta.team/v1alpha1' },
+    added: '2026-09',
+    links: { ...NO_LINKS, developer_docs: 'https://docs.carta.com/api-platform/guides/' },
+    verified_on: null,
+  } } },
   slack: {
     tagline: 'Alerts from Axal VC in the Slack channel you choose.',
     long_description: [
@@ -501,6 +537,7 @@ export const CONNECTOR_PAGES: Record<string, ConnectorPage | VariantPages> = {
     long_description: [
       'Schedule a Zoom call from a Validate interview on your own Zoom account. When the call’s cloud transcript is ready, it is imported into the interview.',
       'Axal VC creates a meeting only when you schedule an interview call, and deletes it when you cancel. It reads a meeting’s recordings only to download its transcript into Customer research.',
+      'A call that ends without a cloud transcript can still reach Customer research: upload its recording file in Record a Session, and Workers AI transcribes it on your AI tokens.',
       'When you disconnect, Axal VC revokes its Zoom grant.',
     ],
     tools: [
@@ -514,6 +551,8 @@ export const CONNECTOR_PAGES: Record<string, ConnectorPage | VariantPages> = {
         ['`/past_meetings/${meetingPathId(meetingId)}/instances`']),
       tool('receive_events', 'meeting events', 'inbound', 'Zoom tells Axal VC when a transcript is ready or the app is removed.', null, ['export async function handleZoomWebhook(']),
       tool('revoke_grant', 'the grant', 'account', 'Revokes the Zoom grant when you disconnect.', null, ['`${ZOOM_AUTH}/oauth/revoke`']),
+      tool('notetaker_join_token', 'the notetaker’s join', 'read', 'Gets a one-time token for Axal’s notetaker to join your call, only while you are in it. It is never stored.', null,
+        ['`/users/me/token?type=onbehalf&meeting_id=${meetingId}`']),
     ],
     prompts: [],
     prompts_reason: notRead('Zoom'),
@@ -530,9 +569,11 @@ export const CONNECTOR_PAGES: Record<string, ConnectorPage | VariantPages> = {
     long_description: [
       'Calendar events and interview slots from your Google sign-in.',
       'Axal VC adds, updates and removes the events it schedules on your primary calendar, including Google Meet interview calls. It reads your events, and the Meet transcripts you allow, into Customer research.',
-      'At sign-in, Google also asks for permission to read Gmail. Axal VC does not read your Gmail.',
+      'A Meet call that ends without a transcript can still reach Customer research: upload its recording file in Record a Session, and Workers AI transcribes it on your AI tokens.',
+      'If an earlier connection granted Gmail access, use Remove Gmail access to revoke the old Google grant and reconnect without Gmail.',
     ],
     tools: [
+      tool('remove_gmail_access', 'Google account access', 'account', 'Revokes an earlier Google grant that included Gmail, then starts a fresh consent without Gmail.', null, ['https://oauth2.googleapis.com/revoke']),
       tool('read_profile', 'your profile', 'read', 'Reads your email address and name, when you sign in.', null, ['fetchWithTimeout(GOOGLE_USERINFO_URL']),
       tool('create_event', 'calendar events', 'write', 'Adds an event to your primary calendar, when you schedule one.', null, ['`${GOOGLE_CALENDAR_API}/calendars/primary/events`,']),
       tool('update_event', 'calendar events', 'write', 'Updates an event Axal VC added, when you change it.', null, ['`${GOOGLE_CALENDAR_API}/calendars/primary/events/${googleEventId}`']),
@@ -576,7 +617,6 @@ export const CONNECTOR_PAGES: Record<string, ConnectorPage | VariantPages> = {
     verified_on: null,
   },
   mercury: {
-    entity: mercuryPage('entity'),
     personal: { founder: mercuryPage('founder'), partner: mercuryPage('partner'), investor: mercuryPage('investor') },
   },
 };
@@ -634,7 +674,8 @@ export const CHANNEL_PAGES: { whatsapp: ConnectorPage; telegram: ConnectorPage }
     long_description: [
       'Customers’ chats with your business number wait here for 30 days. Add one to an interview, and Axal asks the customer for consent in the chat before anything is recorded.',
       'Axal sends only what you ask it to, and only within 24 hours of the customer’s last message. Messages are billed by Meta to your WhatsApp Business Account after 1,000 a month.',
-      'Calls: not yet. WhatsApp calls do not reach Axal; record a call with the in-app recorder instead.',
+      'Calls stay closed on numbers connected through the WhatsApp Business app. Axal does not answer or place WhatsApp calls; use the in-app recorder with everyone’s consent instead.',
+      'Costs: transcription and translation use AI tokens. Translation keeps the original and adds your working language when needed.',
     ],
     tools: [
       tool('list_numbers', 'your business account’s numbers', 'read', 'Lists the numbers in your WhatsApp Business Account, to confirm the one you signed up is yours, and again before you disconnect.', null,
@@ -665,8 +706,8 @@ export const CHANNEL_PAGES: { whatsapp: ConnectorPage; telegram: ConnectorPage }
     long_description: [
       'What it reads: only the chats you choose in Telegram Business, each waiting in Interviews until you add it to an interview. Voice notes and audio files are taken in only after the person replies YES to the recording notice, and are kept until you delete them.',
       'What it sends: only what you send from Axal (replies and the notice), plus one line confirming YES, NO or STOP, within 24 hours of the person’s last message.',
-      'What it can’t do: calls, group chats, files over 5 MB, round videos for now.',
-      'Costs: transcription is billed to your AI budget, up to 50 notes a day. Needs Telegram Premium: chatbots are part of Telegram Business.',
+      'What it can’t do: group chats, files over 5 MB, round videos for now. For a round video, send its audio track as an audio file up to 5 MB instead. Calls: Axal does not join, place or answer Telegram calls. Forwarded recordings (Send to Axal) are built but not switched on yet. When enabled, Axal waits for you to confirm everyone agreed before it downloads or transcribes the audio.',
+      'Costs: transcription and translation use AI tokens. Translation keeps the original and adds your working language when needed. Up to 50 notes a day. Needs Telegram Premium: chatbots are part of Telegram Business.',
     ],
     tools: [
       tool('download_voice_note', 'voice notes', 'read', 'Downloads a voice note from a chat you added to an interview, to transcribe it.', 'customer_research',
@@ -693,7 +734,7 @@ export const CHANNEL_PAGES: { whatsapp: ConnectorPage; telegram: ConnectorPage }
 
 /** The Discover order (D753 decision 13): the Connectors page's list, then Payroll. Every `ConnectorCategory` once. */
 export const CATEGORY_ORDER: readonly ConnectorCategory[] = Object.freeze([
-  'CRM', 'Payments', 'Accounting and banking', 'Calendar', 'Calendar and workspace', 'Messaging', 'Signing', 'Cap table', 'Data', 'Code', 'Design', 'Docs', 'Payroll',
+  'CRM', 'Payments', 'Accounting and banking', 'Calendar', 'Calendar and workspace', 'Messaging', 'Signing', 'Cap table', 'Data', 'Code', 'Design', 'Docs', 'Payroll', 'Design and build',
 ] as const);
 
 /** A page key to its registry key; the inverse of the frontend's `REGISTRY_ALIAS`. */
@@ -711,9 +752,9 @@ export interface Trust {
   sentence: string;
 }
 
-const isVariant = (e: ConnectorPage | VariantPages | undefined): e is VariantPages => !!e && 'entity' in e && 'personal' in e;
+const isVariant = (e: ConnectorPage | VariantPages | undefined): e is VariantPages => !!e && 'personal' in e;
 
-/** The page for a key (registry or page key) and an optional Mercury variant: `entity` or a role. */
+/** The page for a key (registry or page key) and an optional Mercury variant: a role. */
 function pageFor(key: string, variant?: string): ConnectorPage | null {
   const k = Object.hasOwn(PAGE_ALIAS, key) ? PAGE_ALIAS[key as keyof typeof PAGE_ALIAS] : key;
   if (k === 'linkedin') return FIRST_PARTY_PAGES.linkedin;
@@ -721,7 +762,6 @@ function pageFor(key: string, variant?: string): ConnectorPage | null {
   if (!Object.hasOwn(CONNECTOR_PAGES, k)) return null;
   const entry = CONNECTOR_PAGES[k];
   if (!isVariant(entry)) return entry;
-  if (variant === 'entity') return entry.entity;
   return variant && Object.hasOwn(entry.personal, variant) ? entry.personal[variant] : null;
 }
 
@@ -734,7 +774,7 @@ function listWords(items: string[]): string {
 const unique = (items: string[]) => [...new Set(items)];
 
 /** The trust notice (D753 decision 5), from the page's tools. */
-export function trustFor(key: string, variant?: 'entity' | string): Trust | null {
+export function trustFor(key: string, variant?: string): Trust | null {
   const page = pageFor(key, variant);
   if (!page) return null;
   const k = Object.hasOwn(PAGE_ALIAS, key) ? PAGE_ALIAS[key as keyof typeof PAGE_ALIAS] : key;
@@ -785,31 +825,32 @@ export type PageDescriptor = ConnectorPage & { key: string; page_key: string; pa
 
 /**
  * One connector's page for this viewer, or null. Mercury's variant follows
- * `audienceFor` (D753 decision 15): an admin on HQ gets `entity`, a founder or
- * partner their `personal` role, anyone else null. It does not merge
+ * `audienceFor` (D753 decision 15): a founder, partner or investor gets their
+ * `personal` role; an admin on HQ (`preview`, D879) the founder's, read-only;
+ * anyone else null. It does not merge
  * `publicDescriptor`; the route's `catalogueEntry` (#1878) joins the two.
  */
 export function pageDescriptor(p: { key: string } & Partial<ProviderDescriptor>, viewer?: DescriptorViewer): PageDescriptor | null {
   const key = p?.key;
   if (typeof key !== 'string') return null;
   let page: ConnectorPage | null = null;
+  let variant: string | undefined;
   if (key === 'linkedin') {
     page = FIRST_PARTY_PAGES.linkedin;
   } else if (Object.hasOwn(CHANNEL_PAGES, key)) {
     page = CHANNEL_PAGES[key as keyof typeof CHANNEL_PAGES];
   } else if (Object.hasOwn(CONNECTOR_PAGES, key)) {
     const entry = CONNECTOR_PAGES[key];
-    const audience = viewer && (p.entity_roles || p.personal_roles || p.audience_rule) ? audienceFor(p as ProviderDescriptor, viewer) : 'open';
+    const audience = viewer && (p.preview_roles || p.personal_roles || p.audience_rule) ? audienceFor(p as ProviderDescriptor, viewer) : 'open';
     if (audience === 'none') return null;
     if (isVariant(entry)) {
-      if (audience === 'entity') page = entry.entity;
-      else if (audience === 'personal') page = pageFor(key, String(viewer?.role || '').toLowerCase());
+      variant = audience === 'preview' ? 'founder' : audience === 'personal' ? String(viewer?.role || '').toLowerCase() : undefined;
+      page = variant ? pageFor(key, variant) : null;
     } else {
       page = entry;
     }
   }
   if (!page) return null;
-  const variant = isVariant(CONNECTOR_PAGES[key]) ? (page === (CONNECTOR_PAGES[key] as VariantPages).entity ? 'entity' : String(viewer?.role || '').toLowerCase()) : undefined;
   const page_href = connectorPagePath(key);
   return {
     ...page,

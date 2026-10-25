@@ -20,6 +20,7 @@
  * never as 0 or "".
  */
 import { verdictForm } from './verdictForm.js';
+import { newVersionLine } from '../raise/narrative/narrativeModel.js';
 
 import { queueRefusal } from '../raise/dataRoomRead.js';
 
@@ -404,10 +405,18 @@ const INVESTOR_TYPE = opts([['angel', 'Angel'], ['pre_seed_fund', 'Pre-seed fund
 const LIVE = 'live';
 const BLANK = 'blank';
 const VERSION = 'version-';
-/** Start from: each saved version, newest first, then the live deck, then blank. */
-export function startFromChips(versions) {
+/**
+ * Start from (NAR11): each saved version, newest first; the Spin-Out deck's
+ * wording, for a Spin-Out venture only (owner question 5 on #2454, read as A;
+ * form-options' `spinout`); then blank. D909.
+ */
+export function startFromChips(versions, spinout = false) {
   const saved = chipsOf(versions).filter((o) => /^[1-9][0-9]{0,8}$/.test(o.value)).sort((a, b) => Number(b.value) - Number(a.value));
-  return [...saved.map((o) => ({ value: VERSION + o.value, label: o.label })), { value: LIVE, label: 'The live deck' }, { value: BLANK, label: 'Blank' }];
+  return [
+    ...saved.map((o) => ({ value: VERSION + o.value, label: o.label, meta: 'Copies its words, sections and positioning.' })),
+    ...(spinout ? [{ value: LIVE, label: 'The Spin-Out deck wording', meta: 'Starts from the wording of your Spin-Out deck.' }] : []),
+    { value: BLANK, label: 'Blank', meta: 'Sections only, nothing written.' },
+  ];
 }
 /** Check against: the deck and the metrics, not the data room (D691 decision 7). */
 const CHECK_AGAINST = [{ value: 'deck', label: 'Pitch deck', checked: true }, { value: 'metrics', label: 'Metrics', checked: true }];
@@ -425,14 +434,20 @@ const narrative = {
   sub: 'One narrative per investor type. Each is checked for consistency.',
   foot: 'Start from a version or blank; you edit.',
   fields: [
-    { kind: 'CH', name: 'investor_type', k: 'Investor type', opts: INVESTOR_TYPE, def: 'seed_fund', required: true },
-    { kind: 'CH', name: 'start_from', k: 'Start from', opts: startFromChips([]), def: 0 },
+    { kind: 'CH', name: 'investor_type', k: 'Audience', opts: INVESTOR_TYPE, def: 'seed_fund', required: true },
+    // D909 (NAR11): the dialog says what it creates and that the version it starts from does not change.
+    { kind: 'CH', name: 'start_from', k: 'Start from', opts: startFromChips([]), def: 0, note: (v) => newVersionLine(v, []) },
     ...narrativeWords,
   ],
-  // The newest saved version is chosen; with none, the live deck.
-  loadOptions: (w, projectId) => raiseOptions(w, projectId, 'investor-narrative').then((r) => ({ start_from: { opts: startFromChips(r?.versions), def: 0 } })),
+  // The newest saved version is chosen; with none, the Spin-Out wording for a Spin-Out venture, else blank.
+  loadOptions: (w, projectId) => raiseOptions(w, projectId, 'investor-narrative').then((r) => {
+    const saved = chipsOf(r?.versions);
+    return { start_from: { opts: startFromChips(r?.versions, r?.spinout === true), def: 0, note: (v) => newVersionLine(v, saved) } };
+  }),
+  // NAR12's "Make vN the start of a new version" opens this dialog with vN chosen.
+  fromQuery: (q) => (/^version-[1-9][0-9]{0,8}$/.test(q.get('start_from') || '') ? { start_from: q.get('start_from') } : {}),
   toBody: (v) => {
-    const from = String(v.start_from || LIVE);
+    const from = String(v.start_from || BLANK);
     const based = from.startsWith(VERSION) ? posId(from.slice(VERSION.length)) : null;
     return {
       investor_type: v.investor_type || null,

@@ -24,7 +24,6 @@ const read = (rel) => readFileSync(new URL(rel, import.meta.url), 'utf8');
 
 const ZONES = {
   Status: 'FounderRaiseStatus.jsx',
-  Pitch: 'FounderRaisePitch.jsx',
   Capital: 'FounderRaiseCapital.jsx',
   Legal: 'FounderRaiseLegal.jsx',
   'Data room': 'FounderRaiseDataRoom.jsx',

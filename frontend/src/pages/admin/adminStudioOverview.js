@@ -366,24 +366,37 @@ export function loadStudioGlance() {
 /** Each laned queue's console, by the Worker's lane key (`approvalSources.ts`). */
 export const LANE_CONSOLES = {
   lp: '/admin/lp-applications',
-  referrals: '/admin/refer-earn',
-  cohort: '/admin/spinout-lab',
+  // D953 (#2371): lane 2 and this door take the Queue's address together.
+  referrals: '/admin/programs/refer-and-earn/queue',
+  cohort: '/admin/programs/spinout-lab/applications',
   moderation: '/admin/spinout-moderation',
-  kyc: '/admin?tab=kyc',
-  partner_profiles: '/admin?tab=profiles',
+  kyc: '/admin/kyc',
+  partner_profiles: '/admin/partner-profiles',
   exploring: '/admin/exploring',
   jobs: '/admin/jobs',
-  events: '/admin/events',
+  // D1038 (#2390): the lane opens the desk's Review tab, its queue.
+  events: '/admin/events/review',
   best_fit: '/admin/best-fit',
   due_diligence: '/admin/due-diligence',
+  // D1041 (#2889): part 3's lanes, each by the door Approvals draws for it (D1038's LaneDoor).
+  kyb: '/admin/kyc',
+  comarketing: '/admin/approvals/co-marketing',
+  wellbeing_experts: '/admin/approvals/wellbeing-experts',
+  perk_listings: '/admin/programs/perks',
+  strategic_access: '/admin/programs/refer-and-earn',
+  lab_hosts: '/admin/programs/spinout-lab/hosts',
+  score_flags: '/monitoring',
+  articles: '/admin/articles',
 };
 
 /** The lanes with no pending notion (`NOT_LANED`), by label, with their consoles. */
 export const NO_QUEUE_CONSOLES = {
-  Directory: '/admin?tab=directory',
+  Directory: '/admin/directory',
   Circles: '/admin/circles',
-  'Partner invitations': '/admin/partners',
-  'Advisor cohort access': '/admin/advisor-cohorts',
+  // D923 (#2370): lane 13 and this door move together.
+  'Partner invitations': '/admin/partner-invitations',
+  // D953 (#2371): lane 16 and this door take People's address together.
+  'Advisor cohort access': '/admin/programs/mentor-cohorts/people',
 };
 
 const fmtN = (n) => Number(n).toLocaleString('en-US');
@@ -423,7 +436,9 @@ export function hqApprovalsView(approvals) {
   const lanes = approvals.lanes.map((l) => ({
     ...l,
     to: LANE_CONSOLES[l.key] || null,
-    age: ageText(l.oldest_age_hours),
+    // D935: Jobs still counts creation; #2700 moved Events to submission.
+    // TODO #2715: remove its prefix when the Jobs query moves to submission.
+    age: l.key === 'jobs' ? `created ${ageText(l.oldest_age_hours) || 'undated'}` : ageText(l.oldest_age_hours),
   }));
   const worst = lanes.find((l) => typeof l.count === 'number' && l.count > 0) || null;
   const total = approvals.pending_total;
@@ -445,6 +460,22 @@ export function hqApprovalsView(approvals) {
   };
 }
 
+/**
+ * Last week's active accounts (D893): read from `activity_logs` on the glance.
+ * A week before the log began has no value, and says so rather than 0.
+ */
+export const ACTIVE_BEFORE_LOG =
+  'The request log holds nothing for that week, so it is left blank rather than shown as zero.';
+function activeView(a) {
+  if (a?.available === true) {
+    return a.value === null || a.value === undefined
+      ? { kind: 'unrecorded', reason: ACTIVE_BEFORE_LOG, week: a.week }
+      : { kind: 'ready', value: a.value, week: a.week };
+  }
+  if (a?.available === false) return { kind: 'unreadable', reason: a.reason };
+  return { kind: 'unrecorded', reason: a?.reason || 'Active accounts were not on the glance.' };
+}
+
 /** HQ's Insights block: each figure is its own state. */
 export function hqInsightsView(insights) {
   if (!insights || insights.recorded === false) {
@@ -464,7 +495,7 @@ export function hqInsightsView(insights) {
     tickets: insights.open_tickets?.available
       ? { kind: 'ready', open: insights.open_tickets.open }
       : { kind: 'unreadable', reason: insights.open_tickets?.reason },
-    active: { kind: 'unrecorded', reason: insights.active_accounts?.reason },
+    active: activeView(insights.active_accounts),
     benchmark: { kind: 'unrecorded', reason: insights.benchmark?.reason },
   };
 }

@@ -1512,12 +1512,7 @@ const Slide14Team: React.FC<DeckProps> = ({ data = {}, editable, onEdit }) => {
 const Slide15Ask: React.FC<DeckProps> = ({ data = {}, editable, onEdit }) => {
   const uof = data.use_of_funds?.length
     ? data.use_of_funds
-    : [
-        { label: 'Engineering', pct: 45 },
-        { label: 'GTM', pct: 30 },
-        { label: 'Ops + Infra', pct: 15 },
-        { label: 'Reserve', pct: 10 },
-      ];
+    : [];
   const hiring = data.hiring_plan?.length
     ? data.hiring_plan
     : [
@@ -1626,6 +1621,7 @@ const Slide15Ask: React.FC<DeckProps> = ({ data = {}, editable, onEdit }) => {
         <div className="col-span-5 flex flex-col gap-4">
           <Card title="USE OF FUNDS" style={{ background: 'rgba(255,255,255,0.05)', border: `1px solid rgba(255,255,255,0.1)`, color: PAPER }}>
             <div className="space-y-2.5 mt-2">
+              {!uof.length && <p>Use of funds not recorded</p>}
               {uof.map((u, i) => (
                 <div key={i}>
                   <div className="flex justify-between" style={{ fontSize: 12 }}>
@@ -2079,9 +2075,10 @@ export const Deck_series_a_growth_app: React.FC<RegistryDeckProps> = ({ data, ed
 );
 
 const Deck_series_a_growth_app_inner: React.FC<RegistryDeckProps> = ({ data, editable, onEdit }) => {
-  const seed: SeriesAData = (data && Object.keys(data).length > 0)
+  const base: SeriesAData = (data && Object.keys(data).length > 0)
     ? mergeShape(SAMPLE_DATA, data as Record<string, any>)
     : SAMPLE_DATA;
+  const seed = { ...base, use_of_funds: data?.use_of_funds ?? [] };
   return (
     <>
       {SLIDES.map((Slide, i) => (

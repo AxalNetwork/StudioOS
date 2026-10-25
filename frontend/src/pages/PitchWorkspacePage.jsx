@@ -1,12 +1,11 @@
 import React from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
-import { Sparkles, FileText, Lock, Megaphone } from 'lucide-react';
+import { Sparkles, FileText, Lock } from 'lucide-react';
 import { useAuth } from '../hooks/useAuthSync';
 import { hasTier } from '../sidebarConfig';
 import { openPaywall } from '../components/PaywallModal';
 import PitchDeckPage from './PitchDeckPage';
-import DeckReviewerPage from './DeckReviewerPage';
-import PitchPositioningPage from './PitchPositioningPage';
+import { BUILDER_PATH, MOVED_KEY, MOVED_NOTICE, REVIEW_PATH } from './raise/pitch/pitchStudioModel';
 
 // RAISE Workspaces (Task #1) — Pitch workspace.
 //
@@ -20,16 +19,21 @@ import PitchPositioningPage from './PitchPositioningPage';
 // on the "Pitch Deck" sidebar item): non-growth founders see an upgrade panel
 // instead of the builder. The Review tab stays free for everyone, exactly as the
 // standalone reviewer was.
+//
+// D894 (#2434): the builder moved inside the Pitch deck studio, and Review is the
+// studio's own tab. D898 (#2676) put the canvas's editor at /raise/pitch/edit
+// and moved the builder to /raise/pitch/builder until the editor covers its
+// templates and fills. D1113 retired Positioning here; the Investor narrative
+// tool owns it (#2454). Each remaining tab keeps the venture in the
+// address; the Deck Builder tab used to drop it and land on the read-only page.
 
 const TABS = [
-  { id: 'deck', to: '/raise/pitch', label: 'Deck Builder', icon: Sparkles },
-  { id: 'positioning', to: '/raise/pitch/positioning', label: 'Positioning', icon: Megaphone },
-  { id: 'review', to: '/raise/pitch/review', label: 'Review', icon: FileText },
+  { id: 'deck', to: BUILDER_PATH, label: 'Deck Builder', icon: Sparkles },
+  { id: 'review', to: REVIEW_PATH, label: 'Review', icon: FileText },
 ];
 
-// Task #10 — Positioning shares the Deck Builder's Growth gate (its
-// one-click generator hits a Growth-tier Worker endpoint).
-const GROWTH_TABS = new Set(['deck', 'positioning']);
+// The remaining Deck Builder tab retains its existing Growth gate.
+const GROWTH_TABS = new Set(['deck']);
 
 export default function PitchWorkspacePage() {
   const location = useLocation();
@@ -37,12 +41,17 @@ export default function PitchWorkspacePage() {
   const { user } = useAuth();
   const raiseSeed = location.state?.founderRaiseSeed;
 
-  const active = location.pathname.startsWith('/raise/pitch/review')
-    ? 'review'
-    : location.pathname.startsWith('/raise/pitch/positioning')
-      ? 'positioning'
-      : 'deck';
+  const active = 'deck';
   const deckLocked = !hasTier(user, 'growth');
+  const params = new URLSearchParams(location.search);
+  const moved = params.get('moved') === MOVED_KEY;
+  const venture = params.get('project_id');
+  const keep = venture ? `?project_id=${encodeURIComponent(venture)}` : '';
+  const dismissMoved = () => {
+    params.delete('moved');
+    const q = params.toString();
+    navigate({ pathname: location.pathname, search: q ? `?${q}` : '', hash: location.hash }, { replace: true });
+  };
 
   return (
     <div data-testid="pitch-workspace" className="p-6 max-w-[1600px] mx-auto">
@@ -53,6 +62,12 @@ export default function PitchWorkspacePage() {
         <p className="text-sm text-gray-600 dark:text-gray-400 mt-1">
           Build your investor deck and get an honest, AI-driven review — all in one place.
         </p>
+        {moved && (
+          <div role="status" className="mt-4 flex items-center justify-between gap-3 rounded-[10px] border border-axal-lavender-edge bg-axal-lavender px-3 py-2 text-[13px] text-axal-ink dark:border-violet-800 dark:bg-violet-950/40 dark:text-gray-100" data-testid="pitch-moved">
+            <span>{MOVED_NOTICE}</span>
+            <button type="button" aria-label="Dismiss" className="flex h-8 w-8 items-center justify-center text-[16px] leading-none" onClick={dismissMoved}>×</button>
+          </div>
+        )}
       </div>
 
       <div className="flex items-center gap-1 border-b border-gray-200 dark:border-gray-800 mb-6">
@@ -65,7 +80,7 @@ export default function PitchWorkspacePage() {
               key={t.id}
               type="button"
               data-testid={`pitch-tab-${t.id}`}
-              onClick={() => navigate(t.to)}
+              onClick={() => navigate(`${t.to}${keep}`)}
               className={`inline-flex items-center gap-2 px-4 py-2.5 text-sm font-medium border-b-2 -mb-px transition-colors ${
                 isActive
                   ? 'border-violet-600 text-violet-700 dark:text-violet-300'
@@ -86,8 +101,6 @@ export default function PitchWorkspacePage() {
           initialProjectId={raiseSeed?.projectId}
         />
       ))}
-      {active === 'positioning' && (deckLocked ? <LockedDeck /> : <PitchPositioningPage embedded />)}
-      {active === 'review' && <DeckReviewerPage embedded />}
     </div>
   );
 }

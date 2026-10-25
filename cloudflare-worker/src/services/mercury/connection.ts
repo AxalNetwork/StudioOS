@@ -6,7 +6,8 @@
  * (`oauth_mcp`, D840) reads through Mercury's MCP server, its access token
  * refreshed when it is about to expire. Both give the same organization,
  * accounts and lines (`MercuryBankReader`), so D713's and D752's feeds do not
- * know which way the member connected.
+ * know which way the member connected. Since D881 (#2554) no new `api_key`
+ * row is made; one kept from before D881 still reads here, unchanged.
  */
 import type { Env } from '../../types';
 import type { IntegrationRow } from '../../integrations/registry';

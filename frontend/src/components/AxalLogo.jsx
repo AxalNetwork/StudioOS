@@ -1,4 +1,5 @@
 import React from 'react';
+import { builtRelease, releaseBadge, releaseTitle } from '../lib/release';
 
 /** Icon-only mark — favicons, tight spaces, and the icon half of the lockup. */
 export const AXAL_MARK = '/axal-mark.png';
@@ -33,6 +34,32 @@ export const AXAL_WORDMARK = '/axal-wordmark.png';
  * to Space Grotesk with Inter and the system stack behind it. Naming the token
  * rather than the font means a brand change lands in one place.
  */
+/**
+ * The release beside the logo: `v0.2.0-alpha`, or the stage alone ("alpha")
+ * when the build carries no release (local, CI, previews). See lib/release.js.
+ * Amber is alpha, sky is beta; a stable release shows the version in grey.
+ */
+const BADGE_TONE = {
+  alpha: 'bg-amber-100 text-amber-800 ring-amber-200',
+  beta: 'bg-sky-100 text-sky-800 ring-sky-200',
+  rc: 'bg-violet-100 text-violet-800 ring-violet-200',
+  stable: 'bg-gray-100 text-gray-700 ring-gray-200',
+};
+
+export function ReleaseBadge({ tag = builtRelease(), className = '' }) {
+  const badge = releaseBadge(tag);
+  if (!badge) return null;
+  return (
+    <span
+      data-testid="release-badge"
+      title={releaseTitle(badge)}
+      className={`inline-flex items-center rounded-full px-1.5 py-0.5 text-[10px] font-semibold leading-none tracking-wide ring-1 ring-inset ${BADGE_TONE[badge.stage] || BADGE_TONE.stable} ${className}`}
+    >
+      {badge.label}
+    </span>
+  );
+}
+
 const SIZE = {
   sm: { icon: 'h-7 w-7', text: 'text-sm' },
   md: { icon: 'h-8 w-8', text: 'text-base' },
@@ -45,6 +72,7 @@ export default function AxalLogo({
   markOnly = false,
   onDark = false,
   onLight = false,
+  showRelease = false,
   className = '',
   ...props
 }) {
@@ -82,6 +110,7 @@ export default function AxalLogo({
       >
         Axal VC
       </span>
+      {showRelease && <ReleaseBadge />}
     </span>
   );
 }

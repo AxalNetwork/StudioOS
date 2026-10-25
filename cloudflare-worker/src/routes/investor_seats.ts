@@ -10,6 +10,7 @@
  * Accepted seats inherit the primary's tier transparently via
  * `investor_seat_primary_user_id` on the seat user's row.
  */
+import { inGrace } from '../middleware/planSubscription';
 import { Hono } from 'hono';
 import type { Env } from '../types';
 import { requireAuth } from '../auth';
@@ -106,16 +107,18 @@ async function logSeatAct(env: Env, user: InvestorUser, action: string, details:
 }
 
 /** Whether the inviting account's plan still covers seats. Fail-closed. */
-async function primaryCover(env: Env, primaryId: number): Promise<{ ok: true; tier: string; status: string } | { ok: false; error: 'primary_unavailable' | 'primary_not_institutional' }> {
+export async function primaryCover(env: Env, primaryId: number): Promise<{ ok: true; tier: string; status: string; renewsAt: string | null } | { ok: false; error: 'primary_unavailable' | 'primary_not_institutional' }> {
   const primary = await env.DB.prepare(
-    `SELECT investor_tier, investor_subscription_status FROM users WHERE id = ?`
-  ).bind(primaryId).first<{ investor_tier: string | null; investor_subscription_status: string | null }>();
+    `SELECT investor_tier, investor_subscription_status, investor_subscription_renews_at FROM users WHERE id = ?`
+  ).bind(primaryId).first<{ investor_tier: string | null; investor_subscription_status: string | null; investor_subscription_renews_at: string | null }>();
   if (!primary) return { ok: false, error: 'primary_unavailable' };
   const tier = (primary.investor_tier ?? 'free').toLowerCase();
   const status = (primary.investor_subscription_status ?? 'free').toLowerCase();
-  const lapsed = status === 'cancelled' || status === 'past_due' || status === 'unpaid';
+  // D1100: an invitation cannot outlive the primary's bounded retry grace.
+  const lapsed = status === 'cancelled' || status === 'canceled' || status === 'unpaid'
+    || (status === 'past_due' && !inGrace(status, primary.investor_subscription_renews_at));
   if (tier !== 'institutional' || lapsed) return { ok: false, error: 'primary_not_institutional' };
-  return { ok: true, tier, status };
+  return { ok: true, tier, status, renewsAt: primary.investor_subscription_renews_at };
 }
 
 /** `ab***@firm.com` — enough for the holder of a link to see it was not theirs. */
@@ -286,7 +289,7 @@ seats.post('/accept', async (c) => {
 
   // Mirror primary's tier onto the seat user so paywall checks pass.
   // Fail-CLOSED: if the primary row is missing, or no longer Institutional,
-  // or has lapsed (cancelled/past_due/unpaid), reject the acceptance — a
+  // or has lapsed (including past_due outside D1100’s grace), reject the acceptance — a
   // stale invite must never grant paid access on its own.
   const cover = await primaryCover(c.env, seat.primary_user_id);
   if (!cover.ok && cover.error === 'primary_unavailable') return c.json({ error: 'primary_unavailable', message: 'The inviting account no longer exists.' }, 410);
@@ -323,9 +326,9 @@ seats.post('/accept', async (c) => {
     `UPDATE users SET investor_seat_primary_user_id = ?,
                        role = 'investor',
                        investor_tier = ?,
-                       investor_subscription_status = ?
+                       investor_subscription_status = ?, investor_subscription_renews_at = ?
      WHERE id = ?`
-  ).bind(seat.primary_user_id, inheritedTier, inheritedStatus, user.id).run();
+  ).bind(seat.primary_user_id, inheritedTier, inheritedStatus, cover.renewsAt, user.id).run();
   await logSeatAct(c.env, user, 'investor_seat_accepted', { seat_id: seat.id, primary_user_id: seat.primary_user_id, previous_role: user.role });
   return c.json({ ok: true, primary_user_id: seat.primary_user_id, tier: inheritedTier });
 });

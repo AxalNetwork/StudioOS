@@ -41,7 +41,8 @@ export default function PortfolioWorkspace({ activeRole }) {
     // refused there clicks into a redirect. The founder composes in Grow ·
     // Share an update (D654; D463's card left with /build/metrics, #2336), so
     // the tab no longer offers the founder a route their shell has no zone for.
-    { to: '/portfolio/updates', label: 'Updates', icon: Inbox, roles: ['admin', 'investor'] },
+    // D1056 (#2427): Updates is Reports, at the same address.
+    { to: '/portfolio/updates', label: 'Reports', icon: Inbox, roles: ['admin', 'investor'] },
     { to: '/portfolio/positions', label: 'Cap Table', icon: PieChart, roles: ['admin', 'investor'] },
     { to: '/portfolio/performance', label: 'Performance', icon: TrendingUp, roles: ['admin', 'investor'] },
     { to: '/portfolio/value-add', label: 'Value-add', icon: Rocket, roles: ['admin', 'investor'] },

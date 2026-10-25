@@ -12,78 +12,48 @@ import React, { useEffect, useState, useCallback } from 'react';
 import { Lock, Check, X } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { api } from '../lib/api';
+import { checkoutRefusal } from '../lib/pricingModel';
 import QuotaCard from './QuotaCard';
+import { PRICE_UNREAD, PRICE_UNREAD_LINE, priceOf, usePlansRead } from '../lib/planPrices';
 import { useEscapeClose } from './useEscapeClose';
 
 // Task #4 (ID) — Exported so the public /pricing page can derive its
 // feature lists from the same source-of-truth instead of duplicating
 // them and drifting over time. See `frontend/src/data/pricing.js`.
+//
+// D1050 (#2901): each plan is the plan catalogue's (`services/planCatalogue.ts`
+// in the Worker): `key`, its name, its line and the lines it includes, held
+// equal by `frontend/test/plan_catalogue_d1050.test.mjs`. No price is typed
+// here. The card reads it from `GET /api/public/plans-and-packs`
+// (`lib/planPrices.js`), as Pricing and the checkout sheet do.
 export const TIER_PLANS = {
-  // D683 (owner, 2026-10-13): the founder plans are the four cycles in two
-  // groups, and the second keeps everything in the first. The tier ids stay
-  // `growth` and `studio`; the price is the active Stripe price on the tier's
-  // product, which `requireTier.ts` PLAN_PRICE_LABEL quotes too.
   growth: {
+    key: 'founder:growth',
     label: 'Validate + Build',
-    price: '$20',
-    period: '/ month',
     blurb: 'Prove the idea, then build the company.',
-    features: [
-      'Unlimited startups',
-      'Unlimited customer interviews and OKRs',
-      'Venture-readiness scoring runs',
-      'Company data for market research',
-      'Your full archetype card',
-      'Wellbeing sessions with experts',
-      'Accept up to 10 proposed introductions a month',
-    ],
+    features: ['Unlimited startups', 'Unlimited interviews and OKRs', 'Venture-readiness scoring', 'Company data for market research', 'Your full archetype card', 'Accept up to 10 introductions a month'],
   },
   studio: {
+    key: 'founder:studio',
     label: 'Raise + Grow',
-    price: '$100',
-    period: '/ month',
     blurb: 'Raise the money, then grow the company.',
-    features: [
-      'Everything in Validate + Build',
-      'Pitch decks: every template, share links, your own branding',
-      'Cap table scenarios and the dilution simulator',
-      'Funds and the exit waterfall',
-      'Legal, compliance, KYC, and the 83(b)',
-      'Co-founder matching',
-      'Advisor booking, co-marketing, and partner office hours',
-      'Demand insights',
-      'Accept up to 25 proposed introductions a month',
-    ],
+    // D683: the second group keeps everything in the first, as Pricing's card leads its lines.
+    lead: 'Everything in Validate + Build, plus:',
+    features: ['Pitch decks: every template, share links, your branding', 'Cap table scenarios and the dilution simulator', 'Capital, funds and the data room', 'Legal, compliance and the 83(b)', 'Advisor booking and partner office hours', 'Accept up to 25 introductions a month'],
   },
   professional: {
-    label: 'Professional',
-    price: '$149',
-    period: '/ month',
-    blurb: 'Active investors who need full deal flow.',
+    key: 'investor:professional',
+    label: 'Investor Pro',
+    blurb: 'For professional angels, investment analysts and smaller firms.',
     plan: 'investor_pro_monthly',
-    features: [
-      '25 warm intros / quarter',
-      'Up to 5 active deal rooms',
-      'Full pipeline + deal flow access',
-      'Calendar bookings with founders',
-      'Market Intelligence exports',
-      'Founder reference checks',
-    ],
+    features: ['Advanced investment research and screening', 'Portfolio tracking and analytics', 'Investment memo generation', 'Data exports and integrations', 'Higher AI research usage limits', 'More advanced investment workflows'],
   },
   institutional: {
+    key: 'investor:institutional',
     label: 'Institutional',
-    price: '$599',
-    period: '/ month',
-    blurb: 'Funds and family offices investing at scale.',
+    blurb: 'For institutional investors, family offices and investment teams.',
     plan: 'investor_inst_monthly',
-    features: [
-      '100 warm intros / quarter',
-      'Unlimited deal rooms',
-      'Co-invest discovery & syndication',
-      'Carta sync (write) + LP reporting',
-      'Peer benchmarks',
-      '4 colleague seats included',
-    ],
+    features: ['Shared research workspaces', 'Team access controls and permissions', 'Advanced reporting and analytics', 'Custom integrations and workflows', 'Organization-wide administration', 'Negotiated usage limits and support'],
   },
 };
 
@@ -98,11 +68,36 @@ export function openPaywall(required = 'growth', message = '') {
   }));
 }
 
+/** A card's monthly price, from the plans read: reading, the price, or that it was not read, never a zero. */
+export function PlanPrice({ read, planKey }) {
+  if (read.status === 'loading') {
+    return <div className="mt-2 text-sm text-gray-500 dark:text-gray-400" data-testid={`paywall-price-${planKey}`}>Reading…</div>;
+  }
+  const price = read.status === 'ready' ? priceOf(read.data, planKey, 'month') : null;
+  if (!price) {
+    return (
+      <div className="mt-2 flex flex-col gap-0.5" data-testid={`paywall-price-${planKey}`}>
+        <span className="text-sm font-semibold text-gray-900 dark:text-gray-100">{PRICE_UNREAD}</span>
+        <span className="text-xs text-gray-500 dark:text-gray-400">{PRICE_UNREAD_LINE}</span>
+      </div>
+    );
+  }
+  return (
+    <div className="mt-2 flex items-baseline gap-1" data-testid={`paywall-price-${planKey}`}>
+      <span className="text-3xl font-bold text-gray-900 dark:text-gray-100">{price.amount}</span>
+      <span className="text-sm text-gray-500 dark:text-gray-400">/ month</span>
+    </div>
+  );
+}
+
 export default function PaywallModal({ user }) {
   const [open, setOpen] = useState(false);
   const [required, setRequired] = useState('growth');
   const [message, setMessage] = useState('');
   const [busy, setBusy] = useState(null);
+  const [refusal, setRefusal] = useState(null);
+  // D1050: the prices, from the plans read the checkout sheet and Pricing read.
+  const prices = usePlansRead();
 
   useEffect(() => {
     function onEvt(e) {
@@ -128,6 +123,7 @@ export default function PaywallModal({ user }) {
       }
       setRequired(norm);
       setMessage(typeof detail.message === 'string' ? detail.message : '');
+      setRefusal(null);
       setOpen(true);
     }
     window.addEventListener('studioos:tier_required', onEvt);
@@ -141,15 +137,18 @@ export default function PaywallModal({ user }) {
 
   const startCheckout = useCallback(async (key) => {
     setBusy(key);
+    setRefusal(null);
     try {
       const plan = TIER_PLANS[key]?.plan;
       const res = isInvestorMode && plan
         ? await api.investorCheckout(plan)
         : await api.tierCheckout(key);
+      // An answer with no checkout address opened nothing, so it is a refusal too.
       if (res?.url) window.location.href = res.url;
+      else setRefusal(checkoutRefusal(null));
     } catch (e) {
-      // eslint-disable-next-line no-alert
-      alert(e?.message || 'Checkout failed. Please try again.');
+      // D1049 (#2900): an in-page line, never a browser pop-up, saying no money moved.
+      setRefusal(checkoutRefusal(e));
     } finally {
       setBusy(null);
     }
@@ -214,6 +213,12 @@ export default function PaywallModal({ user }) {
             <QuotaCard user={{ role: 'investor' }} />
           </div>
         )}
+        {refusal && (
+          <p role="alert" data-testid="paywall-refusal"
+            className="mx-5 sm:mx-6 mt-5 mb-0 rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-sm font-medium text-amber-900 dark:border-amber-800 dark:bg-amber-950/40 dark:text-amber-200">
+            {refusal}
+          </p>
+        )}
         <div className={`grid gap-4 p-5 sm:p-6 ${tiersToShow.length > 1 ? 'sm:grid-cols-2' : 'sm:grid-cols-1'}`}>
           {tiersToShow.map((tier) => {
             const plan = TIER_PLANS[tier];
@@ -235,12 +240,10 @@ export default function PaywallModal({ user }) {
                     </span>
                   )}
                 </div>
-                <div className="mt-2 flex items-baseline gap-1">
-                  <span className="text-3xl font-bold text-gray-900 dark:text-gray-100">{plan.price}</span>
-                  <span className="text-sm text-gray-500 dark:text-gray-400">{plan.period}</span>
-                </div>
+                <PlanPrice read={prices} planKey={plan.key} />
                 <p className="text-sm text-gray-600 dark:text-gray-400 mt-1">{plan.blurb}</p>
-                <ul className="mt-4 space-y-1.5 flex-1">
+                {plan.lead ? <p className="mt-4 text-sm font-semibold text-gray-800 dark:text-gray-200">{plan.lead}</p> : null}
+                <ul className={`${plan.lead ? 'mt-2' : 'mt-4'} space-y-1.5 flex-1`}>
                   {plan.features.map((f) => (
                     <li key={f} className="flex items-start gap-2 text-sm text-gray-700 dark:text-gray-300">
                       <Check size={14} className="text-violet-600 dark:text-violet-400 mt-1 flex-shrink-0" />

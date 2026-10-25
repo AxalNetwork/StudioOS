@@ -42,6 +42,8 @@ represents a bug that reached production once:
 | `check-unused-imports.mjs` | A name a module binds and never uses — both `import { a } from '…'` and a destructured `const { a } = obj`. CodeQL reports these as alerts, so the choice is here or in a CI round trip; it raised three in one session before this existed. Deliberately narrow in both halves, because a false positive demands a change that breaks working code: named imports only (never default or namespace), and for destructuring `const` only — never a parameter list, and never a pattern with a rest element, since `const { password, ...safe } = user` names the field precisely to exclude it. Its own tests are the evidence it can fail, because **zero** destructured bindings in the repo are currently dead: `frontend/test/unused_imports_guard.test.mjs`. |
 | `check-react-hook-imports.mjs` | The other half of that rule — a name USED but never imported. `useState` shipped undefined to the apex once and took the public site down on first paint; a missing binding is a runtime error, so the bundle was clean and no test rendered the component. Since `lint:undef` below, this is coverage-redundant across `frontend/src`'s JS and JSX (verified by mutation); since `test:types:frontend` (#201, D96) it is redundant across the TS and TSX files too — a deleted `useState` import in `demo_day_app.tsx` was caught by BOTH, which is how that was established rather than assumed. **It now earns its place on its message alone**, which names the hook and the file in one line where `tsc` gives a TS2304 per call site. Kept for that; not for coverage. |
 | `check-frontend-logging.mjs` | A client error report that never arrives, in three shapes that all run without throwing. **Reversed arguments** — `reportError(err, { where })` instead of `reportError('Scope:op', err)` — shipped at 27 call sites: `toEntry` reads `.name`/`.message`/`.stack` off the context object, so the entry carried no stack, a message of `"[object Object]"`, and the error's own text in `scope`, the one beaconed field with no redaction, which the Worker writes verbatim into a deployment log line. **A missing import** is worse and was undetectable: `reportError` is a Web API global, so `SpinoutLabLpWorkspacePage.jsx` called `window.reportError()` instead — reporting the scope string as an uncaught exception and discarding the real error — and `no-undef`, this repo's only ESLint rule, can never flag a legitimate global. The two need separate assertions, because the argument-order check *passes* the unimported call. Third, a scope `redact()` would rewrite (`auth:refresh` → `auth:[redacted]`) loses support the one string they grep by. Fourth and commonest, **no report at all**: 36 catches logged to the console and nowhere else, 33 of them across the eight Spin-Out Lab pages that never imported the helper — visible only to whoever already had that browser's devtools open, which is nobody. Every surviving `console.*` is allowlisted with a reason, the methods that reason covers, and, for the five error boundaries, a requirement that the file still calls `reportError` — so a boundary that quietly loses its report fails rather than resting on an entry that stopped being true. |
+| `check-secret-logging.mjs` | D849 (#2472): no `console.*` call, `logActorAct(...)` call or `activity_logs` write in `cloudflare-worker/src` names a bearer, a secret or an `axk_` value. It reads each call's arguments with strings and comments blanked (keeping every `${}` expression), and fails on an identifier containing `bearer` or `secret` — an object key names a field and passes — or on the text `axk_`. A name that matches but is not a credential goes in its `ALLOW` map with the reason; an entry that stops matching fails too. |
+| `check-mercury-member-surfaces.mjs` | D883 (#2556): Axal VC's own Mercury accounts back on a member surface. Fails when a member page (`frontend/src/pages/account/**`) names an Axal entity, `mercury_entity_connections`, the admin Mercury API or the entity sheet; when the `mercury` registry row gets `entity_roles` again or its description or `CONNECTOR_METADATA.mercury` names the entity accounts; when the registry routes a connector to `mercury_entity_connections`; when Mercury's connector pages get an `entity` variant; or when the member connect routes answer with `entity_connection_only`. Code only: comments and READMEs are not swept, and HQ's own files (`frontend/src/pages/admin/**`, `cloudflare-worker/src/routes/admin_mercury.ts`) are never read. |
 | `npm-audit-gate.mjs` | A critical advisory in a production dependency — and, separately, a registry that did not answer. `npm audit` exits 1 for both, so a 503 from the advisory endpoint went red exactly like a real CVE. The gate retries a transport failure, names the advisories on a real finding, and still fails when the database is unreachable rather than passing on a question it could not ask. |
 | `migration-immutability-gate.mjs` | An applied migration edited after the fact. The runner records each migration it applies by filename and never runs that file again, so an edit changes no database that already has it — only every database built from the files afterwards, which then disagrees with production. It happened eight times: seven comment edits across migrations 022, 035, 049, 109, 196, 200 and 205, and a rewrite of 039 (55 lines in, 214 out). Production's own ledger shows each drifted checksum is the file as it stood before exactly one later commit. `migrate-d1.mjs` noticed each at deploy time and only warned, by which point the edit was on main. Six of the eight came in one commit pushed straight to main (1563f0aa8), which no pull-request check sees, so this gate runs twice: on every pull request, against its base branch, and on every push to main, against the commit main pointed at before that push. Either way it allows only additions under `cloudflare-worker/sql/migrations/`: an edit, deletion, rename or type change of a file already on the base fails, and so does a status letter it does not recognise. It reads `git diff -z`, because git quotes a non-ASCII path and a quoted path would slip past the folder prefix. A base that does not fetch, does not resolve, shares no history, or holds no migration is a failure with its own sentence, never a pass — and a push with no usable before-commit is refused rather than judged as a pull request, where the diff is always empty. There is no bypass flag. CI-only, in its own workflow (`migration-immutability.yml`, `fetch-depth: 0`) rather than a `ci.yml` job, because `ci.yml` cancels a run on main when the next push lands and a cancelled push's range would never be checked; so it is not a `check-*.mjs`. The rule lives in `lib/migrationImmutability.mjs` (D269). |
 | `changelog-gate.mjs` | A task PR that edits `CHANGELOG.md`. Every such PR added an entry at the top of the file and conflicted with every other open PR on the same lines, so the owner moved the file to Session 1 on 2026-10-19 (AGENTS.md). It diffs HEAD against its merge base with the PR's base branch and fails when `CHANGELOG.md` is in the list, unless `CHANGELOG_LABEL=true` (the PR carries the `changelog` label, which Session 1 puts on its own changelog PR). Its failure message gives the one command that puts the file back. A base that does not fetch or shares no history is a failure, never a pass. CI-only, in `changelog-gate.yml` with `fetch-depth: 0`, so it is not a `check-*.mjs`. |
@@ -171,3 +173,48 @@ pull.
 Write the failure first — a guard that cannot fail on the bug it was written for
 is decoration. Several here were rewritten after passing cleanly over the exact
 code that motivated them.
+
+## Meeting bot image pipeline (#2586, D886 B8)
+
+`build-meeting-bot-image.mjs` builds the future B2 runtime context
+(`meeting-bot/`) only when its Dockerfile and ignore file both exist.
+`lib/meetingBotImage.mjs` validates repository/commit metadata and forms
+Docker argument arrays; its test uses a stub runner to check failure ordering.
+The image helper performs no migrations, deployment, login or publication.
+`--fixture` builds a scratch image solely to smoke-test CI plumbing; it emits
+no publishable image output and contains no bot runtime.
+
+## Daily release drafts (the version beside the logo)
+
+`release-draft.mjs` reads the complete first-parent commit history of
+`origin/main`, using UTC committer dates to identify when changes landed on
+main. Each active day gets one release draft targeting that day's final main
+commit. Titles show the version alone, without dates or descriptions.
+The version counts active months since the start; week/day counters reset
+each month. Active seven-day blocks within the month (1–7, 8–14, etc.)
+produce a zero-based week counter, 0–4. Active days count 1–31. Empty
+blocks/days add nothing. October 23 with activity every day is v8.3.23. Publication dates
+are not used to date historical releases.
+
+All release pages are read before writing. A daily marker associates the
+release with its commit day. Only matching drafts refresh; unchanged drafts
+need no write. Published daily releases and tags are frozen. Existing legacy
+releases and unrelated drafts are untouched. A conflicting unrelated tag
+fails rather than being overwritten. Writes are paced for GitHub's secondary
+content-creation limit. `--dry-run` plans without writes or waits.
+
+The workflow checks out full history (`fetch-depth: 0`). Publishing stays
+manual; no publishing or deploy is performed by this generator. Notes link
+the exact comparison from the previous active day's final commit to this
+one. Publishing still triggers `release-published.yml` for the logo badge.
+`lib/releaseDraft.test.mjs` covers the date counters, historical backfill,
+pagination, fixed published versions and idempotent draft updates.
+
+`dry-run-meeting-bot-deploy.mjs` validates only the separate bot Worker configs
+with an isolated scratch image; Docker is required. It never deploys.
+`lib/meetingBotDeploy.test.mjs` protects independent site releases, remote
+binding targets and branch isolation.
+
+`configure-meeting-bot-binding.mjs` prints the prospective site config and topology catalogue; only
+`--write` changes it, after the owner deploys both bot hosts. Its pure helper
+`lib/meetingBotBinding.mjs` adds all three remote bindings and the HQ-only catalogue entry idempotently.

@@ -97,6 +97,8 @@ export const INTERIM_KINDS: Readonly<Record<string, 'rerank' | 'embedding' | 'tr
   '@cf/google/embeddinggemma-300m': 'embedding',
   '@cf/pfnet/plamo-embedding-1b': 'embedding',
   '@cf/meta/m2m100-1.2b': 'translation',
+  // D857: English into the Indic languages, `{ text, target_language }` (translateRequest).
+  '@cf/ai4bharat/indictrans2-en-indic-1B': 'translation',
   // PR 3: text to speech.
   '@cf/deepgram/aura-1': 'voice',
   '@cf/deepgram/aura-2-en': 'voice',
@@ -467,8 +469,19 @@ export function translateRefusal(t: TranslateInput | undefined, text: string | u
   return null;
 }
 
-/** `@cf/meta/m2m100-1.2b`: `{ text, source_lang?, target_lang }`. No source is the model's default, English. */
-export function translateRequest(text: string, t: TranslateInput): Record<string, unknown> {
+/** D857: the model that translates English into the Indic languages, and their FLORES codes on its page. */
+export const INDIC_TRANSLATION_MODEL = '@cf/ai4bharat/indictrans2-en-indic-1B';
+export const INDIC_FLORES: Readonly<Record<string, string>> = Object.freeze({
+  as: 'asm_Beng', bn: 'ben_Beng', gu: 'guj_Gujr', hi: 'hin_Deva', kn: 'kan_Knda', ml: 'mal_Mlym', mr: 'mar_Deva',
+  ne: 'npi_Deva', or: 'ory_Orya', pa: 'pan_Guru', sa: 'san_Deva', ta: 'tam_Taml', te: 'tel_Telu', ur: 'urd_Arab',
+});
+
+/**
+ * `@cf/meta/m2m100-1.2b`: `{ text, source_lang?, target_lang }`. No source is the model's default, English.
+ * D857: IndicTrans2 takes `{ text, target_language }` with a FLORES code, and translates from English only.
+ */
+export function translateRequest(text: string, t: TranslateInput, model?: string): Record<string, unknown> {
+  if (model === INDIC_TRANSLATION_MODEL) return { text, target_language: INDIC_FLORES[t.targetLang.split('-')[0]] ?? t.targetLang };
   const payload: Record<string, unknown> = { text, target_lang: t.targetLang };
   if (t.sourceLang) payload.source_lang = t.sourceLang;
   return payload;
@@ -476,8 +489,10 @@ export function translateRequest(text: string, t: TranslateInput): Record<string
 
 /** The translated text, flat or under `result`, and its units: tokens in and out, priced alike on its page. */
 export function parseTranslate(raw: unknown, text: string): { text: string | null; units: Units } {
-  const r = raw as { translated_text?: unknown; result?: { translated_text?: unknown } } | null;
-  const v = r?.translated_text ?? r?.result?.translated_text;
+  const r = raw as { translated_text?: unknown; translations?: unknown; result?: { translated_text?: unknown; translations?: unknown } } | null;
+  // D857: IndicTrans2 answers `{ translations: [..] }`, one per text sent.
+  const list = r?.translations ?? r?.result?.translations;
+  const v = r?.translated_text ?? r?.result?.translated_text ?? (Array.isArray(list) ? list[0] : undefined);
   const out = typeof v === 'string' ? v : null;
   return { text: out, units: { tokens_in: estTokens(text), tokens_out: out == null ? 0 : estTokens(out) } };
 }

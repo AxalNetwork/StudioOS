@@ -625,9 +625,18 @@ function ParticipantsSection({ participants, catalog, loading, unreadable = fals
 // ---------------------------------------------------------------------------
 // Page shell
 // ---------------------------------------------------------------------------
-export default function AdminSpinoutLab({ onImpersonate, standalone = false }) {
+
+/**
+ * `section` fixes one section and draws only its body, with no heading and no
+ * tab strip: /admin/programs/spinout-lab (D937) draws its own header and tabs
+ * (D936) and asks this console for one section per tab. Only the sections
+ * that need the two reads below make them.
+ */
+export default function AdminSpinoutLab({ onImpersonate, standalone = false, section: fixedSection = null }) {
   const navigate = useNavigate();
-  const [section, setSection] = useState('applications');
+  const [chosen, setSection] = useState('applications');
+  const section = fixedSection || chosen;
+  const reads = !fixedSection || fixedSection === 'applications' || fixedSection === 'participants';
   const [apps, setApps] = useState([]);
   const [participants, setParticipants] = useState([]);
   const [catalog, setCatalog] = useState([]);
@@ -649,7 +658,7 @@ export default function AdminSpinoutLab({ onImpersonate, standalone = false }) {
       setUnreadable({ applications: appsRes == null, participants: partsRes == null });
     } finally { setLoading(false); }
   }, []);
-  useEffect(() => { load(); }, [load]);
+  useEffect(() => { if (reads) load(); }, [load, reads]);
 
   const openWorkspace = async (p) => {
     // A REASON, because opening a participant's workspace is a support
@@ -685,6 +694,43 @@ export default function AdminSpinoutLab({ onImpersonate, standalone = false }) {
 
   const pendingCount = apps.filter((a) => a.status === 'pending').length;
 
+  const content = (
+    section === 'applications' ? (
+      <ApplicationsSection apps={apps} loading={loading} unreadable={unreadable.applications} onDecided={load} onRetry={load} />
+    ) : section === 'timing' ? (
+      <AdminCohortTiming />
+    ) : section === 'cycles' ? (
+      <AdminCohortApplications />
+    ) : section === 'certificates' ? (
+      // D382 — the canvas's admin artboard. Its "Issue all eligible" is the
+      // backfill that used to sit under Participants.
+      <AdminSpinoutCertificates />
+    ) : section === 'hosts' ? (
+      // D377 — who Lab founders see on /spinout-lab/office-hours.
+      <AdminLabHosts />
+    ) : section === 'formation' ? (
+      // D601 — record each paid order's packet and its state filing.
+      <AdminFormationOrders />
+    ) : section === 'review83b' ? (
+      // D580 — assign each startup's 83(b) operator and record reviews.
+      <AdminSection83bReview />
+    ) : (
+      <>
+        <ParticipantsSection
+          participants={participants}
+          catalog={catalog}
+          loading={loading}
+          unreadable={unreadable.participants}
+          onRetry={load}
+          onOpenWorkspace={openWorkspace}
+          openingId={openingId}
+        />
+      </>
+    )
+  );
+
+  if (fixedSection) return <div data-testid={`admin-spinout-lab-${fixedSection}`}>{content}</div>;
+
   const body = (
     <div data-testid="admin-spinout-lab">
       <div className="flex flex-wrap items-center justify-between gap-3 mb-5">
@@ -697,7 +743,7 @@ export default function AdminSpinoutLab({ onImpersonate, standalone = false }) {
               (marketing → apply → confirmation → welcome → workspace →
               graduation) on simulated data; no impersonation, no writes. */}
           <button
-            onClick={() => navigate('/admin/spinout-lab/preview')}
+            onClick={() => navigate('/admin/programs/spinout-lab/preview')}
             data-testid="button-preview-journey"
             className="text-xs font-semibold px-2.5 py-1.5 rounded-lg border border-gray-200 dark:border-gray-700 text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800 flex items-center gap-1.5"
           >
@@ -790,38 +836,7 @@ export default function AdminSpinoutLab({ onImpersonate, standalone = false }) {
         </button>
       </div>
 
-      {section === 'applications' ? (
-        <ApplicationsSection apps={apps} loading={loading} unreadable={unreadable.applications} onDecided={load} onRetry={load} />
-      ) : section === 'timing' ? (
-        <AdminCohortTiming />
-      ) : section === 'cycles' ? (
-        <AdminCohortApplications />
-      ) : section === 'certificates' ? (
-        // D382 — the canvas's admin artboard. Its "Issue all eligible" is the
-        // backfill that used to sit under Participants.
-        <AdminSpinoutCertificates />
-      ) : section === 'hosts' ? (
-        // D377 — who Lab founders see on /spinout-lab/office-hours.
-        <AdminLabHosts />
-      ) : section === 'formation' ? (
-        // D601 — record each paid order's packet and its state filing.
-        <AdminFormationOrders />
-      ) : section === 'review83b' ? (
-        // D580 — assign each startup's 83(b) operator and record reviews.
-        <AdminSection83bReview />
-      ) : (
-        <>
-          <ParticipantsSection
-            participants={participants}
-            catalog={catalog}
-            loading={loading}
-            unreadable={unreadable.participants}
-            onRetry={load}
-            onOpenWorkspace={openWorkspace}
-            openingId={openingId}
-          />
-        </>
-      )}
+      {content}
     </div>
   );
 

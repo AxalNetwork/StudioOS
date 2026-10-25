@@ -21,12 +21,17 @@ test('every investor portfolio read applies the shared project scope', () => {
   // the old literal `investorProjectIds(c.env, user)`: a call that dropped the
   // argument would still have matched that, silently reverting the scoping to
   // portfolio-wide while this test stayed green.
-  assert.match(positions, /investorProjectIds\(c\.env, user, await investorActiveCompany\(c, user\)\)/);
+  // D1057: positions read the HELD scope, the relationship scope narrowed to confirmed commitments.
+  assert.match(positions, /investorHeldProjectIds\(c\.env, user, await investorActiveCompany\(c, user\)\)/);
+  assert.doesNotMatch(positions, /[^d]investorProjectIds\(/, 'no positions read falls back to the relationship scope alone');
+  assert.match(scope, /const related = await investorProjectIds\(env, user, companyId\);[\s\S]*t\.status = 'confirmed'/);
   assert.match(positions, /projectIds != null && !projectIds\.includes/);
   assert.match(health, /isInvestor\(user\)\) return investorProjectIds\(env, user, await investorActiveCompany\(c, user\)\)/);
   assert.match(health, /visible != null && !visible\.includes\(Number\(project\.id\)\)/);
-  assert.match(updates, /const visible = await investorProjectIds\(c\.env, user, await investorActiveCompany\(c, user\)\)/);
-  assert.match(updates, /!visible\?\.includes\(Number\(u\.project_id\)\)/);
+  // D889 (#2438): the investor's scope now sits in `readerProjectIds`, which the inbox and the detail both read.
+  assert.match(updates, /if \(isInvestor\(user\)\) return \(await investorProjectIds\(c\.env, user, await investorActiveCompany\(c, user\)\)\) \|\| \[\]/);
+  assert.match(updates, /!\(await readerProjectIds\(c, user\)\)\.includes\(Number\(u\.project_id\)\)/);
+  assert.match(updates, /const ids = await readerProjectIds\(c, user\);/);
 });
 
 test('the founder branch of portfolio health is narrowed too', () => {

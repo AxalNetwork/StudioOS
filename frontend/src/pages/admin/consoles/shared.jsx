@@ -60,4 +60,4 @@ export function ConsoleUnreadable({ what, onRetry }) {
 }
 
 /** What every console draws while its own first read is in flight. */
-export const CONSOLE_LOADING = 'Loading admin console...';
+export const CONSOLE_LOADING = 'Loading…';

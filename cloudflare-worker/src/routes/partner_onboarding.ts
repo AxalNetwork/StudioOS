@@ -19,6 +19,7 @@ import type { Env } from '../types';
 import { hashEmail } from '../util/hashEmail';
 import { createAndSendEnvelope, templateBodyRefusal, UnfilledFieldsError } from './esign';
 import { refuse } from '../util/refusal';
+import { recordCapture } from '../services/partnerProfileReview';
 import {
   buildProposals, ALL_PARTNER_DEAL_TYPES,
   type PartnerDealType, type PartnerProposalDraft,
@@ -201,6 +202,9 @@ onboard.post('/:token/profile', async (c) => {
     fields.motivation, fields.prior_deals, fields.linkedin_url, fields.raw_chat_json,
   ).run();
 
+  // D991 — the capture joins the profile's history, by source.
+  await recordCapture(c.env, gate.inv.recipient_email, 'invitation');
+
   await c.env.DB.prepare(
     `UPDATE partner_invitations SET status = 'profiled' WHERE id = ? AND status IN ('sent','viewed')`,
   ).bind(gate.inv.id).run();
@@ -305,6 +309,15 @@ onboard.post('/:token/select', async (c) => {
 
 // D758 (#1863) — the Partner Services row still holds a field this route
 // cannot fill. PartnerOnboardPage prints the Worker's message.
+/**
+ * The merge keys finalize fills itself, below. With the keys the envelope
+ * fills from the recipient and the date (`AUTO_MERGE_KEYS`, never the
+ * `counterparty.*` ones: finalize sends with no recipient user), they are what
+ * D928's agreement-ready signal checks the template against. A test holds this
+ * list equal to the `mergeFields` finalize passes.
+ */
+export const FINALIZE_MERGE_KEYS = ['partner_name', 'partner_email', 'effective_date', 'deal_type', 'term_months'] as const;
+
 const AGREEMENT_NOT_READY = 'This agreement is not ready to send yet: Axal VC still has to complete it. Nothing was sent, and the proposal you chose is kept.';
 
 onboard.post('/:token/finalize', async (c) => {

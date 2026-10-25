@@ -1,3 +1,4 @@
+import { raiseEvidenceTables } from './_raise_evidence_fixture.ts';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
@@ -168,6 +169,7 @@ function raiseFixture() {
   }
   db.exec(mig('249_project_metrics.sql'));
   db.exec(mig('442_raise_cycle_stores.sql'));
+  raiseEvidenceTables(db);
   db.exec(mig('463_raise_record_stores.sql'));
   personalMatchTables(db); // D752: Capital relationships reads a raise receipt's posted date
   db.exec("INSERT INTO users(id, role, name, email, is_active, founder_id) VALUES (10, 'founder', 'Test Founder', 'founder@example.test', 1, 1001)");
@@ -224,7 +226,7 @@ test('D688: new Raise cards pin the seven lines and actions; figures stay null',
     ['empty', 'No narrative saved yet. Each version appears here.', 'New version', '/raise/investor-narrative?project=1&add=1'],
     ['empty', 'No deck yet. Views per week appear here.', 'Build your deck', '/raise/pitch'],
     // D695 (#1657): each module with a form opens its address; a link needs a deck, so Pitch deck builds one first.
-    ['empty', 'No files yet. Coverage of the diligence checklist appears here.', 'Upload', '/raise/data-room/new?project=1'],
+    ['empty', 'No files are currently downloadable by a granted investor.', 'Upload', '/raise/data-room/new?project=1'],
     ['empty', 'No holders yet. Ownership before and after the round appears here.', 'Add holder', '/raise/cap-table/new?project=1'],
     ['empty', 'No split yet. The planned split and runway appear here.', 'Edit split', '/raise/use-of-funds/new?project=1'],
     ['empty', 'No investors yet. The pipeline by stage appears here.', 'Add investor', '/raise/capital-relationships/new?project=1'],

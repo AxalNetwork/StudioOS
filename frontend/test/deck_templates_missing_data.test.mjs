@@ -139,7 +139,7 @@ test('minimal_seed — empty falls back to sample; populated company overrides i
     'sample one-liner fallback missing on empty',
   );
   // render({}) is the SAMPLE_DATA fallback, byte-for-byte.
-  assert.equal(empty, render(Deck_minimal_seed, MINIMAL_SAMPLE), 'empty render should equal the sample render');
+  assert.equal(empty, render(Deck_minimal_seed, { ...MINIMAL_SAMPLE, use_of_funds: [] }), 'empty render should equal the sample render');
 
   const populated = render(Deck_minimal_seed, { company: 'ZZACME' });
   assert.ok(populated.includes('ZZACME'), 'company override did not bind');
@@ -161,7 +161,7 @@ const SAMPLE_FALLBACK = [
 for (const { name, Comp, sample, needle } of SAMPLE_FALLBACK) {
   test(`${name} — empty render degrades to the full sample deck`, () => {
     const empty = render(Comp, {});
-    assert.equal(empty, render(Comp, sample), `${name} empty render should equal the sample render`);
+    assert.equal(empty, render(Comp, ['series_a_growth_app','series_b_diligence_app'].includes(name) ? { ...sample, use_of_funds: [] } : sample), `${name} empty render should equal the sample render`);
     if (needle) {
       assert.ok(empty.includes(needle), `${name} sample fallback string missing on empty`);
     }

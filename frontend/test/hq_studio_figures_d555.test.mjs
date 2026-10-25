@@ -15,12 +15,12 @@ import { renderToStaticMarkup } from 'react-dom/server';
 import { MemoryRouter } from 'react-router-dom';
 
 import {
-  glancesFromStudioGlance, hqAccountsView, hqApprovalsView, hqInsightsView, LANE_CONSOLES, NO_QUEUE_CONSOLES,
+  glancesFromStudioGlance, hqAccountsView, hqApprovalsView, hqInsightsView, LANE_CONSOLES, NO_QUEUE_CONSOLES, ACTIVE_BEFORE_LOG,
   orderNeedsDecision,
 } from '../src/pages/admin/adminStudioOverview.js';
 import { AdminStudioOverview, HqAccounts, HqApprovals, HqInsights } from '../src/pages/admin/AdminStudioOverview.jsx';
 import { StudioNeedsDecisionView } from '../src/pages/admin/StudioNeedsDecision.jsx';
-import { LaneState } from '../src/pages/admin/HeldApprovals.jsx';
+import { laneView, LANES as APPROVAL_LANES } from '../src/pages/admin/approvals/approvalsModel.js';
 import { Figure, laneOf } from '../src/pages/admin/heldFigures.jsx';
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '../..');
@@ -50,7 +50,7 @@ const PAYLOAD = {
   templates: { recorded: true, available: true, items: [{ slug: 'msa' }], pushed_at: null },
   insights: { recorded: true, label: LABEL,
     signups_by_week: { available: true, weeks: Array.from({ length: 8 }, (_, i) => ({ week_start: `2026-08-${String(10 + i * 7).padStart(2, '0')}`, count: i, to_date: i === 7 })) },
-    active_accounts: { recorded: false, reason: 'No store on this database records a sign-in per account.' },
+    active_accounts: { available: true, week: '2026-09-28', value: 9, basis: 'An active account is …' },
     ai_spend_month: { available: true, month: '2026-10', usd: 12.5, calls: 40 },
     open_tickets: { available: false, reason: 'The support ticket table could not be read.' },
     benchmark: { recorded: false, reason: 'HQ pushes the territory median and keeps no copy (D148).' } },
@@ -66,7 +66,7 @@ test('the view models: accounts counts, lanes worst first with consoles, insight
   assert.equal(ap.unreadable, 1);
   assert.equal(ap.worst.key, 'kyc', 'the first lane with something pending, as the Worker sorted them');
   assert.match(ap.text, /^1 lane could not be read, so no total · worst: KYC, oldest 4 days$/);
-  assert.equal(ap.lanes.find((l) => l.key === 'kyc').to, '/admin?tab=kyc');
+  assert.equal(ap.lanes.find((l) => l.key === 'kyc').to, '/admin/kyc');
   assert.deepEqual(ap.noQueue, [{ label: 'Circles', reason: PAYLOAD.approvals.no_queue[0].reason, to: '/admin/circles' }]);
   assert.match(hqApprovalsView({ ...PAYLOAD.approvals, pending_total: 0, lanes: [] }).text, /^Nothing is waiting$/);
   assert.match(hqApprovalsView({ ...PAYLOAD.approvals, pending_total: 5 }).text, /^5 pending · worst: KYC/);
@@ -74,11 +74,14 @@ test('the view models: accounts counts, lanes worst first with consoles, insight
   assert.deepEqual([i.signups.thisWeek, i.signups.eightWeeks], [7, 28]);
   assert.equal(i.spend.usd, 12.5);
   assert.equal(i.tickets.kind, 'unreadable');
-  assert.equal(i.active.kind, 'unrecorded');
-  // Every console the overview links is one HeldApprovals links.
-  const held = read('frontend/src/pages/admin/HeldApprovals.jsx');
+  assert.deepEqual(i.active, { kind: 'ready', value: 9, week: '2026-09-28' }, 'D893: last week\'s actives are read');
+  assert.equal(hqInsightsView({ ...PAYLOAD.insights, active_accounts: { available: true, week: 'w', value: null } }).active.reason,
+    ACTIVE_BEFORE_LOG, 'a week before the log began is blank, not zero');
+  assert.equal(hqInsightsView({ ...PAYLOAD.insights, active_accounts: { available: false, reason: 'gone' } }).active.kind, 'unreadable');
+  // Every console the overview links is one Approvals links (D1038: /admin/approvals).
+  const held = read('frontend/src/pages/admin/approvals/AdminApprovals.jsx');
   for (const to of [...Object.values(LANE_CONSOLES), ...Object.values(NO_QUEUE_CONSOLES)]) {
-    assert.ok(held.includes(`to="${to}"`), `${to} is not a lane console on HeldApprovals`);
+    assert.ok(held.includes(`to="${to}"`), `${to} is not a lane console on Approvals`);
   }
 });
 
@@ -103,15 +106,15 @@ test('the overview cards draw HQ\'s figures, labelled, with each line linking to
   assert.match(t, /1 deactivated, not counted above/);
   assert.match(t, /No total: a lane could not be read/);
   assert.match(t, /KYC · 4 pending · oldest 4 days · past the window/);
-  assert.match(t, /Jobs · 1 pending · oldest 5h/);
+  assert.match(t, /Jobs · 1 pending · oldest created 5h/);
   assert.match(t, /LP applications could not be read/);
   assert.doesNotMatch(t, /Events · 0 pending/, 'an empty lane is not listed on the card');
   assert.match(t, /Sign-ups: 7 this week \(to date\) · 28 in 8 weeks/);
   assert.match(t, /AI spend this month: \$12\.50 over 40 calls/);
   assert.match(t, /Tickets could not be read/);
-  assert.match(t, /Active accounts: Not recorded/);
+  assert.match(t, /Active accounts last week: 9 \(week of 2026-09-28\)/);
   const markup = html(h(AdminStudioOverview, { user: null, glance: PAYLOAD }));
-  for (const to of ['/admin?tab=kyc', '/admin/jobs', '/admin/exploring', '/admin/trash', '/admin/lp-applications']) {
+  for (const to of ['/admin/kyc', '/admin/jobs', '/admin/exploring', '/admin/trash', '/admin/lp-applications']) {
     // None of these paths carries an &, so the href is the path as written.
     assert.ok(markup.includes(`href="${to}"`), `${to} is not linked`);
   }
@@ -155,17 +158,16 @@ test('the needs-a-decision strip: on HQ the Seats tile is Accounts, and Approval
   assert.equal(order[0].key, 'approvals', 'an unreadable lane ranks the Approvals tile first');
 });
 
-test('a held lane\'s State: pending and oldest, 0 pending, Unreadable, No queue, Reading', () => {
+test('a lane on Approvals (D1038): a count and oldest age, 0, unreadable, not on the glance, loading', () => {
   const ready = { status: 'ready', hq: glancesFromStudioGlance(PAYLOAD, null).hq };
-  assert.match(text(h(LaneState, { glance: ready, laneKey: 'kyc' })), /^ ?4 pending · oldest 4 days ?$/);
-  assert.match(text(h(LaneState, { glance: ready, laneKey: 'events' })), /0 pending/);
-  assert.match(text(h(LaneState, { glance: ready, laneKey: 'lp' })), /could not be read/);
-  const noQ = html(h(LaneState, { glance: ready, noQueue: 'Circles' }));
-  assert.match(noQ, /No queue/);
-  assert.match(noQ, /nobody submits one for review/);
-  assert.match(text(h(LaneState, { glance: ready, laneKey: 'best_fit' })), /Not recorded/, 'a lane the glance did not carry');
-  assert.match(text(h(LaneState, { glance: { status: 'loading', hq: null }, laneKey: 'kyc' })), /Reading/);
-  assert.match(text(h(LaneState, { glance: { status: 'unreadable', hq: null }, laneKey: 'kyc' })), /not a claim that the count is zero/);
+  const lane = (k) => laneView(APPROVAL_LANES.find((l) => l.key === k), ready);
+  assert.deepEqual([lane('kyc').state, lane('kyc').count, lane('kyc').age], ['ready', 4, '4 d 0 h']);
+  assert.deepEqual([lane('events').state, lane('events').count], ['ready', 0]);
+  assert.equal(lane('lp').state, 'unreadable');
+  assert.equal(lane('lp').count, null, 'a failed lane is never 0');
+  assert.equal(lane('best_fit').state, 'unrecorded', 'a lane the glance did not carry');
+  assert.equal(laneView(APPROVAL_LANES.find((l) => l.key === 'kyc'), { status: 'loading', hq: null }).state, 'loading');
+  assert.equal(laneView(APPROVAL_LANES.find((l) => l.key === 'kyc'), { status: 'unreadable', hq: null }).state, 'unreadable');
   assert.equal(laneOf(ready.hq, 'jobs').count, 1);
 });
 
@@ -181,14 +183,22 @@ test('a held card\'s figure: a number (0 included), Unreadable, Not recorded, Re
 });
 
 test('the held pages read the glance and no longer say "none counted here"', () => {
-  for (const f of ['HeldApprovals', 'HeldAccounts', 'HeldCommunity', 'HeldPrograms', 'HeldInsights']) {
+  // D893 (#2366, #2660): Insights is rebuilt at pages/admin/insights/ and reads its own read, not the glance.
+  assert.match(read('frontend/src/pages/admin/insights/AdminInsights.jsx'), /insightsApi\.adminInsights\(/);
+  // D930 (#2367): Community is rebuilt at pages/admin/community/; its queue figures still come from the glance's lanes.
+  assert.match(read('frontend/src/pages/admin/community/AdminCommunity.jsx'), /loadStudioGlance\(\)/);
+  assert.match(read('frontend/src/pages/admin/community/communityModel.js'), /laneOf\(glance\.data, 'events'\)/);
+  // D953 (#2371): Programs is rebuilt at pages/admin/programs/; its cohort and
+  // referrals figures still come from the glance's lanes, never "none counted".
+  assert.match(read('frontend/src/pages/admin/programs/useProgramReads.js'), /api\.adminStudioGlance\(\)/);
+  assert.match(read('frontend/src/pages/admin/programs/programsModel.js'), /const cohort = laneFrom\(glance, 'cohort'\);/);
+  for (const f of ['approvals/AdminApprovals', 'HeldAccounts']) {
     const src = read(`frontend/src/pages/admin/${f}.jsx`);
     assert.match(src, /useHeldGlance\(\)/, `${f} does not read the glance`);
     assert.doesNotMatch(src, /none counted here/, `${f} still says none counted here`);
   }
-  assert.doesNotMatch(read('frontend/src/pages/admin/HeldApprovals.jsx'), /Links to its console/);
+  assert.doesNotMatch(read('frontend/src/pages/admin/approvals/AdminApprovals.jsx'), /Links to its console/);
   const acc = read('frontend/src/pages/admin/HeldAccounts.jsx');
   for (const id of ['held-accounts-users-count', 'held-accounts-exploring-count', 'held-accounts-trash-count']) assert.ok(acc.includes(id), id);
-  assert.ok(read('frontend/src/pages/admin/HeldCommunity.jsx').includes("laneOf(glance.hq, key)"));
-  assert.ok(read('frontend/src/pages/admin/HeldPrograms.jsx').includes("laneOf(glance.hq, 'cohort')"));
+  assert.doesNotMatch(read('frontend/src/pages/admin/programs/programsModel.js'), /none counted here/);
 });

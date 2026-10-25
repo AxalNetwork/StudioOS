@@ -74,10 +74,13 @@ const missingTable = (e: unknown, table: string) => {
 // The webhook's write
 // ---------------------------------------------------------------------------
 
-interface SubscriptionItem { quantity?: number; price?: { unit_amount?: number | null; currency?: string; recurring?: { interval?: string; interval_count?: number } | null } }
+interface SubscriptionItem { quantity?: number; price?: { id?: string; unit_amount?: number | null; currency?: string; recurring?: { interval?: string; interval_count?: number } | null } }
 
-/** The subscription's charge from its items: Σ unit_amount × quantity at the first item's interval. Null when unreadable. */
-export function chargeOf(obj: Record<string, unknown>): { amount_cents: number; currency: string | null; interval: string; interval_count: number } | null {
+/**
+ * The subscription's charge from its items: Σ unit_amount × quantity at the first item's interval. Null when unreadable.
+ * D1010: `price_id` is the first such item's Stripe price, or null when it carries none.
+ */
+export function chargeOf(obj: Record<string, unknown>): { amount_cents: number; currency: string | null; interval: string; interval_count: number; price_id: string | null } | null {
   const items = ((obj.items as { data?: SubscriptionItem[] } | undefined)?.data ?? []).filter(Boolean);
   const first = items.find((i) => i.price?.recurring?.interval);
   const interval = first?.price?.recurring?.interval;
@@ -91,7 +94,8 @@ export function chargeOf(obj: Record<string, unknown>): { amount_cents: number; 
     if (typeof unit !== 'number' || !Number.isSafeInteger(unit) || unit < 0 || !Number.isSafeInteger(qty) || qty < 0) return null;
     amount += unit * qty;
   }
-  return Number.isSafeInteger(amount) ? { amount_cents: amount, currency: first.price?.currency ?? null, interval, interval_count: count } : null;
+  const priceId = typeof first.price?.id === 'string' && /^price_[A-Za-z0-9]+$/.test(first.price.id) ? first.price.id : null;
+  return Number.isSafeInteger(amount) ? { amount_cents: amount, currency: first.price?.currency ?? null, interval, interval_count: count, price_id: priceId } : null;
 }
 
 /**
@@ -145,14 +149,14 @@ export async function recordSubscriptionAmount(env: Env, obj: Record<string, unk
   const status = typeof obj.status === 'string' ? obj.status : 'active';
   const periodEnd = typeof obj.current_period_end === 'number' ? new Date(obj.current_period_end * 1000).toISOString() : null;
   await env.DB.prepare(`INSERT INTO member_subscription_amounts
-      (subscription_id, user_id, plan_family, amount_cents, currency, interval, interval_count, status, period_end)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+      (subscription_id, user_id, plan_family, amount_cents, currency, interval, interval_count, status, period_end, price_id)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     ON CONFLICT(subscription_id) DO UPDATE SET user_id = excluded.user_id, plan_family = excluded.plan_family,
       amount_cents = excluded.amount_cents, currency = excluded.currency, interval = excluded.interval,
       interval_count = excluded.interval_count, status = excluded.status, period_end = excluded.period_end,
-      updated_at = datetime('now')
+      price_id = COALESCE(excluded.price_id, member_subscription_amounts.price_id), updated_at = datetime('now')
     WHERE member_subscription_amounts.status <> 'canceled'`)
-    .bind(obj.id, owner.userId, owner.family, charge.amount_cents, charge.currency, charge.interval, charge.interval_count, status, periodEnd).run();
+    .bind(obj.id, owner.userId, owner.family, charge.amount_cents, charge.currency, charge.interval, charge.interval_count, status, periodEnd, charge.price_id).run();
   return 'recorded';
 }
 

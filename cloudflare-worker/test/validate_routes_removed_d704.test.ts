@@ -33,6 +33,7 @@ import { normaliseSurface } from '../src/services/aiRouter.ts';
 import { loadMyAiSpend } from '../src/services/aiSpend.ts';
 import ai from '../src/routes/ai.ts';
 import { createJWT } from '../src/auth.ts';
+import { applySessionTranslationColumns } from './_session_translation_columns.mjs';
 
 const read = (p: string) => readFileSync(resolve(process.cwd(), p), 'utf8');
 const SCHEMA = `${tableFromBaseline(read('cloudflare-worker/sql/schema_baseline.sql'), 'ai_usage_logs')}
@@ -225,6 +226,7 @@ function venture() {
   db.exec(sqlOf('311_revenue_entries.sql').replace(/REFERENCES documents\(id\)/, ''));
   for (const m of ['440_validate_cycle_stores.sql', '438_interview_sessions.sql', '447_assistant_interviews.sql',
     '453_interview_processing.sql', '459_cycle_activity_convention.sql', '460_validate_record_stores.sql']) db.exec(sqlOf(m));
+    applySessionTranslationColumns(db); // D857: migration 527's segment columns
   db.prepare("INSERT INTO users (id, role, name, email, is_active, founder_id, spinout_lab_active) VALUES (?, 'founder', 'Juniper Lane', 'juniper@example.test', 1, 1001, 0)").run(V_FOUNDER);
   db.exec(`INSERT INTO projects (id, name, founder_id) VALUES (${V_A}, 'Orchard Ops', 1001), (${V_B}, 'Quill Freight', 1001)`);
   return db;

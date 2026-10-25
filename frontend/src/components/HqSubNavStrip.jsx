@@ -1,7 +1,6 @@
 /**
  * The H36 sub-navigation strip's chrome (D285): a row of links under an HQ
- * row's title that stays visible after an item lands in the old Admin
- * Console. Its items are literal links written in App.jsx — the shell — so
+ * row's title that stays visible on every item's page. Its items are literal links written in App.jsx — the shell — so
  * the reachability walk can see them; this file owns only the states and the
  * phone rule.
  *
@@ -13,11 +12,11 @@
  */
 import React, { useEffect, useRef } from 'react';
 import { Link, useLocation } from 'react-router-dom';
-import { hereFrom } from '../lib/hqStrips.js';
+import { stripItemFor } from '../lib/hqStrips.js';
 
 export function StripLink({ to, children }) {
   const location = useLocation();
-  const selected = hereFrom(location.pathname, location.search) === to;
+  const selected = stripItemFor(location.pathname) === to;
   return (
     <Link
       to={to}
@@ -47,7 +46,7 @@ export default function HqSubNavStrip({ label, children }) {
     const right = left + el.offsetWidth;
     if (left < c.scrollLeft) c.scrollLeft = Math.max(0, left - 8);
     else if (right > c.scrollLeft + c.clientWidth) c.scrollLeft = right - c.clientWidth + 8;
-  }, [location.pathname, location.search]);
+  }, [location.pathname]);
 
   return (
     <nav

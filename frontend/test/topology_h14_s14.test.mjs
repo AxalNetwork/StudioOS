@@ -208,9 +208,13 @@ test('the deploy strip lists what the Worker lists, and the dispatch sentence fo
 
 test('HQ\'s card: its own bindings and which are missing, both sides of the RPC surface, Access and the secret writers', () => {
   const full = html(HqWorkerCard, { topo: HQ });
-  const tags = byTestId(full, 'h14-hq-bindings');
-  for (const b of OWN) assert.ok(tags.includes(b.hq ? `${b.name} · ${b.hq}` : b.name), `${b.name} is drawn with its resource`);
-  for (const b of BINDINGS.filter((x) => x.shared)) assert.ok(!tags.includes(b.name), `${b.name} is shared and belongs to the shared card`);
+  const at = full.indexOf('data-testid="h14-hq-bindings"');
+  assert.ok(at >= 0, 'HQ bindings are rendered');
+  const tags = full.slice(at, full.indexOf('</div>', at));
+  // Compare whole chips: AI is also a substring of MEETING_BOT_CONTAINER.
+  // Exact equality rejects missing/duplicate own bindings and leaked shared ones.
+  const labels = [...tags.matchAll(/<span\b[^>]*>([\s\S]*?)<\/span>/g)].map((m) => readable(m[1]));
+  assert.deepEqual(labels, OWN.map((b) => b.hq ? `${b.name} · ${b.hq}` : b.name));
   hasText(renderedText(full), `All ${OWN.length} of its own bindings are present on this Worker.`);
   assert.match(full, /data-testid="rpc-side-HqEntrypoint"/);
   assert.match(full, /data-testid="rpc-side-BranchEntrypoint"/);

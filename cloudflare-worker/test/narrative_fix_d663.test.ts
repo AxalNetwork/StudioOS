@@ -1,3 +1,4 @@
+import { raiseEvidenceTables } from './_raise_evidence_fixture.ts';
 import { AI_LOG_SCHEMA, AI_BUDGET_MIGRATION } from './_ai_budget_fixture.mjs';
 /**
  * #1524 item 3 (D663 follow-up) — Eadwyn phrases the fix for one narrative
@@ -63,6 +64,7 @@ function freshDb() {
     if (/ALTER TABLE spinout_deck_overrides ADD COLUMN|CREATE TABLE IF NOT EXISTS narrative_checks/.test(s)) db.exec(stripForeignKeys(s));
   }
   db.exec(AI_LOG_SCHEMA + AI_BUDGET_MIGRATION);
+  raiseEvidenceTables(db);
   for (const who of [MINE, THEIRS]) {
     db.prepare('INSERT INTO users (id, role, founder_id) VALUES (?, ?, ?)').run(who.user, 'founder', who.founder_id);
   }

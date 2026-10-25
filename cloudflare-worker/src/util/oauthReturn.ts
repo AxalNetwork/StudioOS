@@ -28,6 +28,6 @@ export function returnTag(returnTo: string, projectId: unknown): string {
 }
 /** The return a verified nonce names, or '' when it names none. */
 export function returnFromNonce(nonce: string | null): string {
-  const m = /^(?:gm_)?rb(\d{0,12})_/.exec(nonce || '');
+  const m = /^(?:(?:gm|mp)_)?rb(\d{0,12})_/.exec(nonce || '');
   return m ? (m[1] ? `build:${m[1]}` : 'build') : '';
 }

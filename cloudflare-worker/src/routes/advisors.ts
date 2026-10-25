@@ -9,7 +9,8 @@
 import { Hono } from 'hono';
 import type { Context } from 'hono';
 import type { Env, User } from '../types';
-import { getCurrentUser, requireAuth } from '../auth';
+import { getCurrentUser, requireAdmin, requireAuth, requireBranchNotSuspended } from '../auth';
+import { refuse } from '../util/refusal';
 import { logAdminAction } from '../services/adminAudit';
 import { ensureTier, type TierUser } from '../middleware/requireTier';
 import {
@@ -22,6 +23,7 @@ import {
   computeWatchOuts,
 } from '../services/matchingVectors';
 import { ensureAdvisorStoresSchema } from '../services/advisorStoresSchema';
+import { ensureNetworkStatesSchema } from '../services/networkStatesSchema';
 import {
   PAYOUT_GATE, cutCents, derivePayoutState, settlementMode, takeRate, totalLines,
 } from '../services/advisorMoney';
@@ -68,6 +70,7 @@ const advisors = new Hono<{ Bindings: Env }>();
  */
 advisors.use('*', async (c, next) => {
   await ensureAdvisorStoresSchema(c.env);
+  await ensureNetworkStatesSchema(c.env);
   await next();
 });
 
@@ -261,14 +264,27 @@ async function takenForSlot(env: Env, slotId: number): Promise<number> {
 // ---------------------------------------------------------------------------
 // Advisor profile CRUD
 // ---------------------------------------------------------------------------
+/** D976: true while an admin has paused this advisor in the network. */
+async function advisorPaused(env: Env, advisorId: number): Promise<boolean> {
+  const row = await env.DB.prepare(
+    `SELECT 1 AS paused FROM advisors v JOIN network_member_states nms ON nms.user_id = v.user_id
+      WHERE v.id = ? AND nms.paused_at IS NOT NULL LIMIT 1`
+  ).bind(advisorId).first<{ paused: number }>();
+  return !!row;
+}
+
 advisors.get('/', async (c) => {
   try {
     await requireAuth(c);
     const q = (c.req.query('q') || '').trim().toLowerCase();
     const sector = (c.req.query('sector') || '').trim().toLowerCase();
     const expertise = (c.req.query('expertise') || '').trim().toLowerCase();
+    // D976: a paused advisor, or one an admin hid from the directory, is not listed.
     const rows = await c.env.DB.prepare(
-      'SELECT * FROM advisors WHERE is_active = 1 ORDER BY display_name ASC'
+      `SELECT * FROM advisors WHERE is_active = 1
+         AND NOT EXISTS (SELECT 1 FROM network_member_states nms WHERE nms.user_id = advisors.user_id
+           AND (nms.paused_at IS NOT NULL OR nms.directory_hidden_at IS NOT NULL))
+       ORDER BY display_name ASC`
     ).all<AdvisorRow>();
     let items = (rows.results || []).map(advisorDto);
     if (q) items = items.filter((m: any) =>
@@ -420,9 +436,12 @@ advisors.get('/match', async (c) => {
       return c.json({ detail: 'Founder role required' }, 403);
     }
 
-    // Load all active advisors
+    // Load all active advisors the directory lists (D976: not paused, not hidden)
     const rows = await c.env.DB.prepare(
-      'SELECT * FROM advisors WHERE is_active = 1 ORDER BY display_name ASC'
+      `SELECT * FROM advisors WHERE is_active = 1
+         AND NOT EXISTS (SELECT 1 FROM network_member_states nms WHERE nms.user_id = advisors.user_id
+           AND (nms.paused_at IS NOT NULL OR nms.directory_hidden_at IS NOT NULL))
+       ORDER BY display_name ASC`
     ).all<AdvisorRow>();
     const allAdvisors = (rows.results || []) as AdvisorRow[];
 
@@ -697,6 +716,10 @@ advisors.post('/slots/:id/book', async (c) => {
     const body = await c.req.json().catch(() => ({} as any));
     const slot = await c.env.DB.prepare('SELECT * FROM advisor_office_hour_slots WHERE id = ?').bind(slotId).first<SlotRow>();
     if (!slot || slot.is_cancelled) return c.json({ detail: 'Slot not available' }, 404);
+    // D976: an advisor an admin paused takes no new bookings; bookings already made stay.
+    if (await advisorPaused(c.env, slot.advisor_id)) {
+      return c.json({ detail: 'This advisor is not taking new bookings', code: 'advisor_paused' }, 409);
+    }
     const context = body.booking_link_slug === undefined ? null
       : await usableBookingLink(c, body.booking_link_slug, user);
     if (context && context.advisor.id !== slot.advisor_id) {
@@ -2923,22 +2946,33 @@ advisors.get('/me/thinking', async (c) => {
 });
 
 /**
+ * D960 (#2793) — WHO MAY HOLD AN ASSIGNMENT, in one place: the picker below and
+ * the POST ask the same question, so the picker can only offer what the POST
+ * accepts. An advisor (the role) whose account is active (`users.is_active`,
+ * the rule `getCurrentUser` applies to every request). A deactivated holder
+ * would be granted founders' names and could read none of them.
+ */
+const accountActive = (u: { is_active?: unknown } | null | undefined) => !!u && Number(u.is_active) === 1;
+
+/**
  * Admin: the users who may actually be assigned.
  *
  * Same predicate as the write, so the picker can only ever offer what the POST
  * will accept. Putting the eligibility rule in the UI instead would give two
  * answers to one question.
+ *
+ * D960 — `requireAdmin`, as every other admin route. A read, so a frozen admin
+ * still reads it: the freeze never gates a read.
  */
 advisors.get('/admin/cohort-assignments/assignable', async (c) => {
   try {
-    const user = await requireAuth(c);
-    if (!isAdmin(user)) return c.json({ detail: 'Admin required' }, 403);
+    await requireAdmin(c);
     await ensureAdvisorStoresSchema(c.env);
     const rows = await c.env.DB.prepare(
       `SELECT u.id AS id, u.name AS name, u.email AS email, a.id AS advisor_profile_id
          FROM users u
          LEFT JOIN advisors a ON a.user_id = u.id
-        WHERE LOWER(u.role) = 'advisor'
+        WHERE LOWER(u.role) = 'advisor' AND u.is_active = 1
         ORDER BY u.name ASC
         LIMIT 500`
     ).all<{ id: number; name: string | null; email: string | null; advisor_profile_id: number | null }>();
@@ -2955,6 +2989,51 @@ advisors.get('/admin/cohort-assignments/assignable', async (c) => {
 });
 
 /**
+ * D960 — how many founders are hidden from each holder, as counts only.
+ *
+ * A founder counts against a row when their opt-out from that advisor is in
+ * force (367: `withdrawn_at IS NULL`) and they are in that row's cycle as the
+ * mentor's own reads count them (`company_week_status`, the founders read
+ * above). An ended row still carries its count; the page decides what to draw.
+ *
+ * The total is for PG4's tile: distinct founders hidden from at least one
+ * active holder (an open row, held by an advisor whose account is active), so
+ * a founder hidden from two mentors counts once.
+ *
+ * Null, not 0, when the opt-outs or the cohort membership cannot be read.
+ */
+async function hiddenFounderCounts(env: Env): Promise<{ byRow: Map<number, number>; total: number } | null> {
+  try {
+    const rows = await env.DB.prepare(
+      `SELECT a.id AS id, COUNT(DISTINCT o.founder_user_id) AS n
+         FROM advisor_cohort_assignments a
+         JOIN cohort_advisor_optouts o
+           ON o.advisor_user_id = a.advisor_user_id AND o.withdrawn_at IS NULL
+        WHERE EXISTS (SELECT 1 FROM company_week_status w
+                       WHERE w.user_id = o.founder_user_id AND w.cohort_cycle_id = a.cohort_cycle_id)
+        GROUP BY a.id`
+    ).all<{ id: number; n: number }>();
+    const total = await env.DB.prepare(
+      `SELECT COUNT(DISTINCT o.founder_user_id) AS n
+         FROM advisor_cohort_assignments a
+         JOIN users u ON u.id = a.advisor_user_id
+         JOIN cohort_advisor_optouts o
+           ON o.advisor_user_id = a.advisor_user_id AND o.withdrawn_at IS NULL
+        WHERE a.is_active = 1 AND LOWER(u.role) = 'advisor' AND u.is_active = 1
+          AND EXISTS (SELECT 1 FROM company_week_status w
+                       WHERE w.user_id = o.founder_user_id AND w.cohort_cycle_id = a.cohort_cycle_id)`
+    ).first<{ n: number }>();
+    return {
+      byRow: new Map((rows.results || []).map((r) => [Number(r.id), Number(r.n) || 0])),
+      total: Number(total?.n) || 0,
+    };
+  } catch (e) {
+    console.error('[advisors] hidden founder counts unreadable:', (e as Error).message);
+    return null;
+  }
+}
+
+/**
  * Admin: who is assigned to which cohort.
  *
  * Registered under `/admin/...` — two segments with a literal first — so the
@@ -2963,8 +3042,7 @@ advisors.get('/admin/cohort-assignments/assignable', async (c) => {
  */
 advisors.get('/admin/cohort-assignments', async (c) => {
   try {
-    const user = await requireAuth(c);
-    if (!isAdmin(user)) return c.json({ detail: 'Admin required' }, 403);
+    await requireAdmin(c);
     await ensureAdvisorStoresSchema(c.env);
     const rows = await c.env.DB.prepare(
       // `advisor_role` is the target's CURRENT role, not the one they had when
@@ -2972,11 +3050,13 @@ advisors.get('/admin/cohort-assignments', async (c) => {
       // something that can answer "who has access who should not": a still
       // active row beside a role that is no longer advisor is exactly the case
       // the read now refuses, and an admin needs to see it to end it.
+      // `advisor_is_active` (D960) is the same question for the account: a
+      // deactivated holder reads nothing either.
       `SELECT a.id AS id, a.uid AS uid, a.advisor_user_id AS advisor_user_id,
               a.cohort_cycle_id AS cohort_cycle_id, a.assigned_at AS assigned_at,
               a.unassigned_at AS unassigned_at, a.is_active AS is_active,
               a.note AS note, u.name AS advisor_name, u.email AS advisor_email,
-              u.role AS advisor_role
+              u.role AS advisor_role, u.is_active AS advisor_is_active
          FROM advisor_cohort_assignments a
          LEFT JOIN users u ON u.id = a.advisor_user_id
         ORDER BY a.assigned_at DESC
@@ -2985,20 +3065,70 @@ advisors.get('/admin/cohort-assignments', async (c) => {
       id: number; uid: string; advisor_user_id: number; cohort_cycle_id: number;
       assigned_at: string; unassigned_at: string | null; is_active: number;
       note: string | null; advisor_name: string | null; advisor_email: string | null;
-      advisor_role: string | null;
+      advisor_role: string | null; advisor_is_active: number | null;
     }>();
+    const hidden = await hiddenFounderCounts(c.env);
     return c.json({
       items: (rows.results || []).map((r) => ({
-        ...r, is_active: !!r.is_active,
+        ...r,
+        is_active: !!r.is_active,
+        // A deleted user has no account to be active: null, not false.
+        advisor_is_active: r.advisor_is_active == null ? null : Number(r.advisor_is_active) === 1,
+        founders_hidden: hidden ? hidden.byRow.get(Number(r.id)) ?? 0 : null,
       })),
+      founders_hidden_total: hidden ? hidden.total : null,
+    });
+  } catch (e) { return mapError(c, e); }
+});
+
+/**
+ * D960 — every grant and end, newest first, from 565's history. A re-assign
+ * adds a row here instead of overwriting the last one. Counts and ids only:
+ * `by_admin` says whether an admin was recorded, never which.
+ */
+advisors.get('/admin/cohort-assignments/history', async (c) => {
+  try {
+    await requireAdmin(c);
+    await ensureAdvisorStoresSchema(c.env);
+    const intOrNull = (v: string | undefined) => (v != null && /^\d+$/.test(v) ? Number(v) : null);
+    const assignmentId = intOrNull(c.req.query('assignment_id'));
+    const cycleId = intOrNull(c.req.query('cohort_cycle_id'));
+    const limit = Math.min(200, Math.max(1, intOrNull(c.req.query('limit')) ?? 50));
+    const offset = Math.max(0, intOrNull(c.req.query('offset')) ?? 0);
+    const [rows, total] = await Promise.all([
+      c.env.DB.prepare(
+        `SELECT kind, created_at, assignment_id, advisor_user_id, cohort_cycle_id, admin_user_id
+           FROM advisor_cohort_assignment_events
+          WHERE (?1 IS NULL OR assignment_id = ?1) AND (?2 IS NULL OR cohort_cycle_id = ?2)
+          ORDER BY created_at DESC, id DESC
+          LIMIT ?3 OFFSET ?4`
+      ).bind(assignmentId, cycleId, limit, offset).all<{
+        kind: string; created_at: string; assignment_id: number; advisor_user_id: number;
+        cohort_cycle_id: number; admin_user_id: number | null;
+      }>(),
+      c.env.DB.prepare(
+        `SELECT COUNT(*) AS n FROM advisor_cohort_assignment_events
+          WHERE (?1 IS NULL OR assignment_id = ?1) AND (?2 IS NULL OR cohort_cycle_id = ?2)`
+      )
+        .bind(assignmentId, cycleId).first<{ n: number }>(),
+    ]);
+    return c.json({
+      items: (rows.results || []).map((r) => ({
+        kind: r.kind, created_at: r.created_at, assignment_id: r.assignment_id,
+        advisor_user_id: r.advisor_user_id, cohort_cycle_id: r.cohort_cycle_id,
+        by_admin: r.admin_user_id != null,
+      })),
+      total: Number(total?.n) || 0,
+      limit, offset,
     });
   } catch (e) { return mapError(c, e); }
 });
 
 advisors.post('/admin/cohort-assignments', async (c) => {
   try {
-    const user = await requireAuth(c);
-    if (!isAdmin(user)) return c.json({ detail: 'Admin required' }, 403);
+    const user = await requireAdmin(c);
+    // D960: a write, so a suspended branch refuses it, as the Lab's decide does.
+    await requireBranchNotSuspended(c);
     await ensureAdvisorStoresSchema(c.env);
     const body = await c.req.json().catch(() => ({} as any));
     const advisorUserId = Number(body.advisor_user_id);
@@ -3008,8 +3138,8 @@ advisors.post('/admin/cohort-assignments', async (c) => {
     }
     // Both ends are checked before the write so a bad id fails with a sentence
     // rather than a foreign-key error nobody can read.
-    const target = await c.env.DB.prepare('SELECT id, role FROM users WHERE id = ?')
-      .bind(advisorUserId).first<{ id: number; role: string }>();
+    const target = await c.env.DB.prepare('SELECT id, role, is_active FROM users WHERE id = ?')
+      .bind(advisorUserId).first<{ id: number; role: string; is_active: number }>();
     if (!target) return c.json({ detail: 'No such user' }, 404);
     // `role` was SELECTed here from the day this shipped and never read, so the
     // only check was that the id existed. The parameter is named
@@ -3025,30 +3155,66 @@ advisors.post('/admin/cohort-assignments', async (c) => {
         detail: 'Only a user with the advisor role can be assigned a cohort',
       }, 400);
     }
+    // D960: the picker's rule. A deactivated account would read nothing.
+    if (!accountActive(target)) {
+      return refuse(c, 400, {
+        code: 'account_inactive',
+        message: 'This account is deactivated, so it cannot be given a cohort.',
+      });
+    }
     const cycle = await c.env.DB.prepare('SELECT id FROM cohort_cycles WHERE id = ?')
       .bind(cycleId).first<{ id: number }>();
     if (!cycle) return c.json({ detail: 'No such cohort cycle' }, 404);
 
     const now = nowIso();
+    const note = trimOrNull(body.note, 1000);
     // UNIQUE (advisor_user_id, cohort_cycle_id) — reassigning the same pair
     // REACTIVATES the existing row rather than stacking a second one that
     // every read would then have to de-duplicate. See 206's header.
-    await c.env.DB.prepare(
-      `INSERT INTO advisor_cohort_assignments
-         (uid, advisor_user_id, cohort_cycle_id, assigned_by_admin_id,
-          assigned_at, note, is_active, created_at, updated_at)
-       VALUES (?, ?, ?, ?, ?, ?, 1, ?, ?)
-       ON CONFLICT (advisor_user_id, cohort_cycle_id) DO UPDATE SET
-         is_active = 1, unassigned_at = NULL, assigned_by_admin_id = excluded.assigned_by_admin_id,
-         assigned_at = excluded.assigned_at, note = excluded.note, updated_at = excluded.updated_at`
-    ).bind(newUid(), advisorUserId, cycleId, user.id, now,
-           trimOrNull(body.note, 1000), now, now).run();
+    //
+    // D960: only an ENDED row is reactivated. A pair that is already open
+    // changes nothing (the `WHERE` on the update), so a second POST no longer
+    // starts a new episode: founders were sent a fresh "can see you" and then
+    // an "access has ended" that was not true. The history row is written in
+    // the same batch, and only when the upsert opened access: it selects the
+    // row only if it is open with this call's `assigned_at`, which a skipped
+    // update leaves at its earlier value.
+    const [upsert] = await c.env.DB.batch([
+      c.env.DB.prepare(
+        `INSERT INTO advisor_cohort_assignments
+           (uid, advisor_user_id, cohort_cycle_id, assigned_by_admin_id,
+            assigned_at, note, is_active, created_at, updated_at)
+         VALUES (?, ?, ?, ?, ?, ?, 1, ?, ?)
+         ON CONFLICT (advisor_user_id, cohort_cycle_id) DO UPDATE SET
+           is_active = 1, unassigned_at = NULL, assigned_by_admin_id = excluded.assigned_by_admin_id,
+           assigned_at = excluded.assigned_at, note = excluded.note, updated_at = excluded.updated_at
+         WHERE advisor_cohort_assignments.is_active = 0`
+      ).bind(newUid(), advisorUserId, cycleId, user.id, now, note, now, now),
+      c.env.DB.prepare(
+        `INSERT INTO advisor_cohort_assignment_events
+           (assignment_id, advisor_user_id, cohort_cycle_id, kind, admin_user_id, note, created_at)
+         SELECT id, advisor_user_id, cohort_cycle_id, 'assigned', ?, ?, ?
+           FROM advisor_cohort_assignments
+          WHERE advisor_user_id = ? AND cohort_cycle_id = ? AND is_active = 1 AND assigned_at = ?`
+      ).bind(user.id, note, now, advisorUserId, cycleId, now),
+    ]);
+    if (!(Number(upsert?.meta?.changes) > 0)) {
+      return refuse(c, 409, {
+        code: 'already_assigned',
+        message: 'This mentor already has access to this cohort, so nothing changed.',
+      });
+    }
     const fresh = await c.env.DB.prepare(
       'SELECT * FROM advisor_cohort_assignments WHERE advisor_user_id = ? AND cohort_cycle_id = ?'
     ).bind(advisorUserId, cycleId).first<CohortAssignmentRow>();
-    // U6 (D492): every founder in the cohort is told, now.
-    let notified = 0;
+    await logAdminAction(c.env, user.id, user.email, 'advisor_cohort.assigned', {
+      target_user_id: advisorUserId, assignment_id: fresh!.id, cohort_cycle_id: cycleId,
+    });
+    // U6 (D492): every founder in the cohort is told, now. D960: null, not 0,
+    // when the sweep failed — nobody knows how many were told.
+    let notified: number | null = 0;
     try { notified = (await syncCohortAdvisorNotices(c.env, { assignmentId: fresh!.id })).started; } catch (e) {
+      notified = null;
       console.error('[advisors] cohort start notices failed:', (e as Error).message);
     }
     return c.json({ ...fresh!, is_active: !!fresh!.is_active, founders_notified: notified });
@@ -3059,22 +3225,44 @@ advisors.post('/admin/cohort-assignments', async (c) => {
  * End an assignment. The row stays and says when it ended — see 206's header.
  * A record that vanishes cannot answer who had access to a cohort's founders
  * and when, which is the question an access record exists to answer.
+ *
+ * D960: ending a row that is already ended changes nothing and says so. It
+ * used to move the end date to now. The end is also a row in 565's history.
  */
 advisors.delete('/admin/cohort-assignments/:id', async (c) => {
   try {
-    const user = await requireAuth(c);
-    if (!isAdmin(user)) return c.json({ detail: 'Admin required' }, 403);
+    const user = await requireAdmin(c);
+    await requireBranchNotSuspended(c);
     await ensureAdvisorStoresSchema(c.env);
     const row = await c.env.DB.prepare('SELECT * FROM advisor_cohort_assignments WHERE id = ?')
       .bind(Number(c.req.param('id'))).first<CohortAssignmentRow>();
     if (!row) return c.json({ detail: 'Assignment not found' }, 404);
     const now = nowIso();
-    await c.env.DB.prepare(
-      'UPDATE advisor_cohort_assignments SET is_active = 0, unassigned_at = ?, updated_at = ? WHERE id = ?'
-    ).bind(now, now, row.id).run();
+    const [ended] = await c.env.DB.batch([
+      c.env.DB.prepare(
+        'UPDATE advisor_cohort_assignments SET is_active = 0, unassigned_at = ?, updated_at = ? WHERE id = ? AND is_active = 1'
+      ).bind(now, now, row.id),
+      c.env.DB.prepare(
+        `INSERT INTO advisor_cohort_assignment_events
+           (assignment_id, advisor_user_id, cohort_cycle_id, kind, admin_user_id, note, created_at)
+         SELECT id, advisor_user_id, cohort_cycle_id, 'ended', ?, NULL, ?
+           FROM advisor_cohort_assignments
+          WHERE id = ? AND is_active = 0 AND unassigned_at = ?`
+      ).bind(user.id, now, row.id, now),
+    ]);
+    if (!(Number(ended?.meta?.changes) > 0)) {
+      return refuse(c, 409, {
+        code: 'already_ended',
+        message: 'This access has already ended, so nothing changed.',
+      });
+    }
+    await logAdminAction(c.env, user.id, user.email, 'advisor_cohort.ended', {
+      target_user_id: row.advisor_user_id, assignment_id: row.id, cohort_cycle_id: row.cohort_cycle_id,
+    });
     // U6 (D492): every founder who was told it started is told it ended.
-    let notified = 0;
+    let notified: number | null = 0;
     try { notified = (await syncCohortAdvisorNotices(c.env, { assignmentId: row.id })).ended; } catch (e) {
+      notified = null;
       console.error('[advisors] cohort end notices failed:', (e as Error).message);
     }
     return c.json({ ok: true, id: row.id, is_active: false, unassigned_at: now, founders_notified: notified });

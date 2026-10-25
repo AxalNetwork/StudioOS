@@ -7,7 +7,7 @@
  *   GET /callback   Mercury redirects the browser here; answers with a redirect
  *                   to `/account/connectors/mercury?oauth=ok|error&reason=…`
  *
- * WHO. Exactly who may paste a token (D713, D752): a founder, a partner, or an
+ * WHO. Exactly who holds a personal connection (D713, D752): a founder, a partner, or an
  * investor on HQ, as their role's personal variant. A support session is
  * refused; an investor off HQ reads D752's sentence; anyone else is answered
  * 404 as if Mercury were not there. A founder needs the plan Mercury needs.
@@ -26,7 +26,8 @@
  * to D713's decision 3 (not an Axal entity's). Only then is the row written:
  * the member's one `integrations` row for `mercury`, `auth_type = 'oauth_mcp'`,
  * its tokens encrypted (`secrets.ts`). A member who had pasted a token keeps
- * the same row, now signed in; pasting a token later switches it back.
+ * the same row, now signed in. Since D881 (#2554) this is the only way to
+ * connect: `/connect` refuses a token, new or a replace (`token_connect_retired`).
  *
  * NOTHING CREDENTIAL-SHAPED IS LOGGED OR RETURNED. A failure's redirect and
  * its `activity_logs` row carry a fixed reason word only.

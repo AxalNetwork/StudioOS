@@ -191,7 +191,7 @@ export function meetingLinkProblem(provider, raw) {
   const host = url.hostname.toLowerCase();
   const scheduled = MEETING_PROVIDERS.find((p) => p.key === provider);
   if (scheduled && !safeJoinUrl(text, provider)) return provider === 'zoom' ? 'A Zoom link is on zoom.us.' : `A ${scheduled.label} link is on meet.google.com.`;
-  if (provider === 'teams' && !(host === 'teams.microsoft.com' || host === 'teams.live.com')) return 'A Teams link is on teams.microsoft.com or teams.live.com.';
+  if (provider === 'teams' && !(host === 'teams.microsoft.com' || host === 'teams.live.com' || host === 'teams.cloud.microsoft')) return 'Use a Microsoft Teams meeting link.';
   if (provider === 'whatsapp' || provider === 'telegram') return 'A WhatsApp or Telegram call has no meeting link.';
   return null;
 }

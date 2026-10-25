@@ -1,0 +1,17 @@
+-- 550 — when a job posting entered the admin review queue (D931, #2715).
+-- Reserved by S1 on #2711, 2026-10-24.
+--
+-- Admin › Community's queue (CM1, `GET /api/admin/community/overview`) says
+-- how long the oldest posting has waited and marks one Overdue after 72 hours
+-- (D915's rule). The Studio glance and the Approvals lane measured that wait
+-- from `created_at`, which is when the draft was started, not when its host
+-- sent it for review. `submitForReview` (`services/jobBoardCommon.ts`) now
+-- writes this column each time a posting enters `pending_review`.
+--
+-- Nothing is backfilled: when a posting already waiting was submitted is not
+-- recorded anywhere, so it stays NULL and the read counts it as waiting with
+-- no recorded wait, never as a wait of zero.
+--
+-- Grep first (D689 D-t): `submitted_at` exists on `job_postings` in no earlier
+-- migration and not in schema_baseline.sql.
+ALTER TABLE job_postings ADD COLUMN submitted_at TEXT;

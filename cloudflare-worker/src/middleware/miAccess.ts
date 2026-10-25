@@ -1,3 +1,4 @@
+import { inGrace } from './planSubscription';
 import type { Context } from 'hono';
 import type { Env, User } from '../types';
 import { bindingKey } from '../util/schemaBootstrap';
@@ -56,8 +57,8 @@ export function miUpsell(feature: MiFeature): MiUpsellPayload {
 export function userHasMiPro(user: User | null): boolean {
   if (!user) return false;
   if (user.role === 'admin') return true;
-  const status = (user as User & { mi_subscription_status?: string }).mi_subscription_status;
-  return status === 'active' || status === 'trialing';
+  const sub = user as User & { mi_subscription_status?: string; mi_subscription_period_end?: string | null };
+  return inGrace(sub.mi_subscription_status, sub.mi_subscription_period_end);
 }
 
 /**

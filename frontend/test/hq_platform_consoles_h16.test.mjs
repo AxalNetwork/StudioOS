@@ -79,8 +79,8 @@ test('each console is linked once, from its own panel, by a literal path', () =>
   const links = [
     ['/admin/integration-keys', 'hq-h16-link-keys'],
     ['/admin/integration-keys#github', 'hq-h16-link-sync'],
-    ['/admin?tab=payments', 'hq-h16-link-payments'],
-    ['/admin?tab=promos', 'hq-h16-link-promos'],
+    ['/admin/platform/payments', 'hq-h16-link-payments'],
+    ['/admin/platform/promo-codes', 'hq-h16-link-promos'],
   ];
   for (const [to, testid] of links) {
     assert.equal(count(P, `to="${to}"`), 1, `${to} is linked ${count(P, `to="${to}"`)} times on the page`);
@@ -96,8 +96,8 @@ test('the four panels each render exactly one console link, and it is the right 
   const cases = [
     [IntegrationKeysPanel, { keys: { available: false, reason: 'x' } }, '/admin/integration-keys'],
     [GithubSyncPanel, { unreadable: true }, '/admin/integration-keys#github'],
-    [PaymentsCatalogPanel, { unreadable: true }, '/admin?tab=payments'],
-    [PromoCodesPanel, { promos: { available: false, reason: 'x' } }, '/admin?tab=promos'],
+    [PaymentsCatalogPanel, { unreadable: true }, '/admin/platform/payments'],
+    [PromoCodesPanel, { promos: { available: false, reason: 'x' } }, '/admin/platform/promo-codes'],
   ];
   for (const [Panel, props, to] of cases) {
     const html = render(Panel, props);

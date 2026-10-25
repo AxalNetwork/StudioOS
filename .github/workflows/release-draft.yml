@@ -1,0 +1,36 @@
+name: Release draft
+
+# Keeps daily drafts from main commit history, with cumulative active
+# month totals, monthly week (0–4) and day (1–31) counters. Published tags stay fixed.
+# Publishing remains manual.
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+# One writer at a time; a newer push supersedes a queued one.
+concurrency:
+  group: release-draft
+  cancel-in-progress: true
+
+permissions:
+  contents: write
+
+jobs:
+  draft:
+    name: update the release draft
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v6
+        with:
+          node-version: '22'
+      - name: Test the release rules
+        run: node --test scripts/lib/releaseDraft.test.mjs
+      - name: Create or update the draft
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: node scripts/release-draft.mjs

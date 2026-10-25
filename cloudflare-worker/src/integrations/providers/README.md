@@ -23,7 +23,7 @@ GitHub's per-module feeds (D782, #2110) live in `github/`, one file per
 part, each called by one line from `github.ts`'s sync: `github/roadmap.ts`
 gives Product roadmap its milestones, release rows and Shipped marks (#2111). `github/mvp.ts`
 makes each must-have follow its pull request, and records each release's checks
-on the must-haves (#2112).
+on the must-haves (#2112). Both retain exact commit evidence for deployment joins: merged PRs store their merge commit SHA and releases resolve their tag to its commit (#2414, migration 534).
 
 The module is then imported once from the worker entry point
 (`cloudflare-worker/src/index.ts`) so its top-level `registerProvider`
@@ -68,6 +68,13 @@ call runs at boot.
   `purpose_not_allowed` before the provider, which refuses again. Connect
   stores the capabilities of the caller's role's variant
   (`personalMercuryFor`, `registry.ts`).
+- D881 (#2554) — members connect only by Sign in with Mercury
+  (`cloudflare-worker/src/routes/mercury_oauth.ts`). `connect` takes no token: after the support-session
+  and role refusals, every token, new or a replace, is 410
+  `token_connect_retired` ("Connect Mercury with Sign in with Mercury."),
+  and nothing reaches Mercury or is stored. A token row kept from before D881
+  keeps reading until the member signs in or disconnects;
+  `/api/mercury/personal/status` gives it `LEGACY_TOKEN_NOTICE`.
 
 ## Credential handling
 
@@ -81,3 +88,23 @@ Use `cloudflare-worker/src/integrations/oauth.ts` `buildPkce()` inside your
 `buildAuthorizeUrl` so the verifier is bound to the signed state. The
 callback handler in `cloudflare-worker/src/routes/integrations.ts` will hand the verifier back
 to your `connect()` via `input.config.pkce_verifier`.
+
+Carta (#2634 part 1) defaults new OAuth connections to Playground. The chosen
+`is_demo` flag rides in signed state and the saved connection config; exchange,
+refresh, issuer reads and revocation all use that environment. Legacy rows
+without the flag retain their original production environment. The account
+choice reuses DocuSign's existing selector.
+
+Carta investor grants (#2634) request only `read_investor_*` scopes and save
+`config.audience = investor`; founder/legacy rows remain issuer grants.
+Investor reads go through `../cartaInvestor.ts` and
+`../../routes/carta_investor.ts`, one page at a time. They are live, read-only,
+and never enter founder cap-table stores or the six-hour issuer cron.
+An expanded refresh grant is revoked before any API retry or persistence.
+`audience` and environment cannot be changed through settings; reconnect.
+
+A refused expanded Carta refresh marks its row `error` with a static code,
+then revokes the refused token; future reads ask to reconnect. Legacy Carta
+rows held by other roles keep their own Disconnect path but never enter the
+issuer scheduler or manual sync. A failed local read-log write has its own
+503 code, separate from a Carta read failure.

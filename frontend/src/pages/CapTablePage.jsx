@@ -1,9 +1,10 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import PageExplainer from '../components/PageExplainer';
 import { api } from '../lib/api';
 import { useToast } from '../components/useToast';
 import { toastText } from '../components/ToastMessage';
+import { Lightbox, NOT_RECORDED } from '../ui';
 import SafeHarbourPanel from './captable/SafeHarbourPanel';
 import EquityPlanPanel from './captable/EquityPlanPanel';
 import {
@@ -82,6 +83,13 @@ export default function CapTablePage({ embedded = false }) {
   // under the misleading "Validation errors" header — that header is reserved
   // for real 422 input-validation feedback from the simulator.
   const [apiError, setApiError] = useState(null);
+  // D1016: a delete waits on an in-page dialog that names what goes (never `confirm()`).
+  // `{ kind: 'scenario' | 'variant', uid, name }`; the error is the dialog's own.
+  const [pendingDelete, setPendingDelete] = useState(null);
+  const [deleteBusy, setDeleteBusy] = useState(false);
+  const [deleteError, setDeleteError] = useState(null);
+  // D1016: the CSV goes through the shared client; a failure is said here, never in an `alert`.
+  const [csvError, setCsvError] = useState(null);
   const [loading, setLoading] = useState(false);
   const [scenarios, setScenarios] = useState([]);
   const [activeUid, setActiveUid] = useState(null);
@@ -91,6 +99,8 @@ export default function CapTablePage({ embedded = false }) {
   // `selectedProjectId` drives load/save. Deep-linkable via ?project=<id>.
   const [projects, setProjects] = useState([]);
   const [selectedProjectId, setSelectedProjectId] = useState('');
+  const [readProjectId, setReadProjectId] = useState('');
+  const projectRead = useRef(0);
   const [searchParams, setSearchParams] = useSearchParams();
   // T19 — toast hook auto-clears on unmount. Replaces the inline
   // `setTimeout(() => setSavedFlash(''), 1500)` that leaked on quick navigation.
@@ -201,6 +211,8 @@ export default function CapTablePage({ embedded = false }) {
   // Optional scenList/projList overrides avoid stale state during bootstrap.
   async function selectProject(pid, scenList = scenarios, projList = projects) {
     const id = pid ? String(pid) : '';
+    const request = ++projectRead.current;
+    setReadProjectId('');
     setSelectedProjectId(id);
     setApiError(null);
     // Task #29 — compare is project-scoped; drop any stale comparison.
@@ -218,14 +230,16 @@ export default function CapTablePage({ embedded = false }) {
     let scen = null;
     try {
       const r = await api.getCapTableByProject(id);
+      if (request !== projectRead.current) return;
       scen = r?.scenario || null;
     } catch (e) {
-      if (e?.status === 403) {
-        setApiError("You don't have access to that project's cap table.");
-      } else if (e?.status && e.status !== 404) {
-        setApiError("Couldn't load that startup's cap table. Please retry.");
-      }
+      if (request !== projectRead.current) return;
+      setApiError(e?.status === 403
+        ? "You don't have access to that project's cap table."
+        : "Couldn't load that startup's cap table. Please retry.");
+      return;
     }
+    setReadProjectId(id);
     if (scen) {
       setInputs(scen.inputs);
       setResult(scen.result);
@@ -241,6 +255,10 @@ export default function CapTablePage({ embedded = false }) {
   }
 
   async function saveScenario() {
+    if (!selectedProjectId || readProjectId !== selectedProjectId) {
+      setApiError('Load the cap table successfully before saving.');
+      return;
+    }
     setSavedFlash(''); setApiError(null);
     if (!selectedProjectId) {
       setApiError('Select a startup first — each cap table belongs to a startup.');
@@ -276,22 +294,61 @@ export default function CapTablePage({ embedded = false }) {
   }
 
   async function loadScenario(uid) {
-    const s = await api.getCapTableScenario(uid);
+    const request = ++projectRead.current;
+    setReadProjectId('');
+    let s;
+    try { s = await api.getCapTableScenario(uid); } catch {
+      if (request === projectRead.current) setApiError('Could not load this scenario. Please retry.');
+      return;
+    }
+    if (request !== projectRead.current) return;
     setInputs(s.inputs);
     setResult(s.result);
     setActiveUid(uid);
     setScenarioName(s.name);
-    if (s.project_id != null) setSelectedProjectId(String(s.project_id));
+    setSelectedProjectId(s.project_id != null ? String(s.project_id) : '');
+    setReadProjectId(s.project_id != null ? String(s.project_id) : '');
   }
 
-  async function delScenario(uid) {
-    if (!confirm('Delete this scenario?')) return;
+  function delScenario(uid, name) {
+    setDeleteError(null);
+    setPendingDelete({ kind: 'scenario', uid, name });
+  }
+
+  async function removeScenario(uid) {
     await api.deleteCapTableScenario(uid);
     if (uid === activeUid) {
       setActiveUid(null);
       setScenarioName('Untitled scenario');
     }
     loadScenarios();
+  }
+
+  async function confirmDelete() {
+    const target = pendingDelete;
+    if (!target || deleteBusy) return;
+    setDeleteBusy(true);
+    setDeleteError(null);
+    try {
+      if (target.kind === 'variant') await removeVariant(target.uid);
+      else await removeScenario(target.uid);
+      setPendingDelete(null);
+    } catch {
+      setDeleteError(target.kind === 'variant'
+        ? 'The variant could not be deleted. Nothing changed. Try again.'
+        : 'The scenario could not be deleted. Nothing changed. Try again.');
+    } finally {
+      setDeleteBusy(false);
+    }
+  }
+
+  async function exportCsv() {
+    setCsvError(null);
+    try {
+      await downloadCsv(activeUid, scenarioName);
+    } catch {
+      setCsvError('The CSV could not be downloaded. Try again.');
+    }
   }
 
   // Reset the canvas to defaults for the selected project (Save then overwrites
@@ -307,6 +364,9 @@ export default function CapTablePage({ embedded = false }) {
   // project. Variants never touch the canonical cap table (the deck + project
   // load only ever read canonical), so this is always an INSERT, never an upsert.
   async function saveAsVariant() {
+    if (!selectedProjectId || readProjectId !== selectedProjectId) {
+      setApiError('Load the cap table successfully before saving.'); return;
+    }
     setApiError(null); setErrors([]);
     if (!selectedProjectId) {
       setApiError('Select a startup first — variants belong to a startup.');
@@ -357,15 +417,15 @@ export default function CapTablePage({ embedded = false }) {
     loadCompare(selectedProjectId, true);
   }
 
-  async function deleteVariant(uid) {
-    if (!confirm('Delete this variant?')) return;
-    try {
-      await api.deleteCapTableScenario(uid);
-      loadScenarios();
-      await loadCompare(selectedProjectId, true);
-    } catch (e) {
-      setCompareError('Could not delete that variant. Please retry.');
-    }
+  function deleteVariant(uid, name) {
+    setDeleteError(null);
+    setPendingDelete({ kind: 'variant', uid, name });
+  }
+
+  async function removeVariant(uid) {
+    await api.deleteCapTableScenario(uid);
+    loadScenarios();
+    await loadCompare(selectedProjectId, true);
   }
 
   // ---------- Founder dilution chart data
@@ -416,13 +476,13 @@ export default function CapTablePage({ embedded = false }) {
             className="px-3 py-1.5 text-sm bg-white border border-gray-300 rounded hover:bg-gray-50 dark:hover:bg-gray-800 flex items-center gap-1 dark:bg-gray-900 dark:border-gray-700">
             <Plus size={14} /> New
           </button>
-          <button onClick={saveScenario}
+          <button onClick={saveScenario} disabled={!selectedProjectId || readProjectId !== selectedProjectId}
             className="px-3 py-1.5 text-sm bg-violet-600 text-white rounded hover:bg-violet-700 flex items-center gap-1">
             <Save size={14} /> {activeUid ? 'Update' : 'Save'}
           </button>
           {selectedProjectId && (
             <>
-              <button onClick={saveAsVariant}
+              <button onClick={saveAsVariant} disabled={readProjectId !== selectedProjectId}
                 title="Save the current inputs as a named draft variant to compare"
                 className="px-3 py-1.5 text-sm bg-white border border-gray-300 rounded hover:bg-gray-50 dark:hover:bg-gray-800 flex items-center gap-1 dark:bg-gray-900 dark:border-gray-700">
                 <Copy size={14} /> Save as variant
@@ -434,23 +494,34 @@ export default function CapTablePage({ embedded = false }) {
             </>
           )}
           {activeUid && (
-            <a
-              href={api.exportCapTableCsvUrl(activeUid)}
-              target="_blank" rel="noreferrer"
+            <button
+              type="button"
+              data-testid="captable-csv"
               className="px-3 py-1.5 text-sm bg-white border border-gray-300 rounded hover:bg-gray-50 dark:hover:bg-gray-800 flex items-center gap-1 dark:bg-gray-900 dark:border-gray-700"
-              onClick={(e) => {
-                // Append the auth header by switching to fetch+blob — easier: open with token in URL hash.
-                e.preventDefault();
-                downloadCsv(activeUid, scenarioName);
-              }}
+              onClick={exportCsv}
             >
               <Download size={14} /> CSV
-            </a>
+            </button>
           )}
         </div>
       </div>
 
       {savedFlash && <div className="mb-3 text-sm text-emerald-700">{toastText(savedFlash)}</div>}
+      {csvError && (
+        <div role="alert" data-testid="captable-csv-error" className="mb-3 flex items-start gap-2 bg-rose-50 border border-rose-200 rounded-lg px-4 py-3 text-sm text-rose-700 dark:bg-rose-950/40 dark:border-rose-900 dark:text-rose-300">
+          <AlertCircle size={16} className="mt-0.5 shrink-0" />
+          <span>{csvError}</span>
+        </div>
+      )}
+      {pendingDelete && (
+        <DeleteDialog
+          target={pendingDelete}
+          busy={deleteBusy}
+          error={deleteError}
+          onConfirm={confirmDelete}
+          onClose={() => { if (!deleteBusy) setPendingDelete(null); }}
+        />
+      )}
       {apiError && (
         <div className="mb-4 flex items-start gap-2 bg-rose-50 border border-rose-200 rounded-lg px-4 py-3 text-sm text-rose-700">
           <AlertCircle size={16} className="mt-0.5 shrink-0" />
@@ -569,7 +640,7 @@ export default function CapTablePage({ embedded = false }) {
                     <button onClick={() => loadScenario(s.uid)} className={`text-left flex-1 truncate ${activeUid === s.uid ? 'font-semibold text-violet-700' : 'text-gray-700 hover:text-violet-700'}`}>
                       {s.name}
                     </button>
-                    <button onClick={() => delScenario(s.uid)} className="text-gray-400 hover:text-red-600 ml-2"><Trash2 size={14}/></button>
+                    <button onClick={() => delScenario(s.uid, s.name)} data-testid={`scenario-delete-${s.uid}`} title="Delete scenario" className="text-gray-400 hover:text-red-600 ml-2"><Trash2 size={14}/></button>
                   </li>
                 ))}
               </ul>
@@ -593,7 +664,7 @@ export default function CapTablePage({ embedded = false }) {
 
           {(result?.rounds || []).map((r, idx) => (
             <Section key={idx}
-              title={`After ${r.name} — pre $${fmtMoney(r.pre_money)} / post $${fmtMoney(r.post_money)} / PPS $${r.price_per_share.toFixed(4)}`}>
+              title={`After ${r.name} — pre ${fmtMoney(r.pre_money)} / post ${fmtMoney(r.post_money)} / PPS $${r.price_per_share.toFixed(4)}`}>
               {r.events?.length > 0 && (
                 <ul className="text-xs text-gray-600 mb-2 list-disc pl-5">
                   {r.events.map((e, i) => <li key={i}>{e}</li>)}
@@ -621,18 +692,18 @@ export default function CapTablePage({ embedded = false }) {
           )}
 
           {result?.waterfall && (
-            <Section title={`Exit waterfall @ $${fmtMoney(result.waterfall.exit_value)}`}>
+            <Section title={`Exit waterfall @ ${fmtMoney(result.waterfall.exit_value)}`}>
               <div className="grid grid-cols-3 gap-2 text-center mb-3">
-                <Stat label="Preferences paid" value={`$${fmtMoney(result.waterfall.totals.preference_paid)}`} />
-                <Stat label="Common pool"     value={`$${fmtMoney(result.waterfall.totals.common_pool)}`} />
-                <Stat label="Total"           value={`$${fmtMoney(result.waterfall.totals.total_distributed)}`} />
+                <Stat label="Preferences paid" value={`${fmtMoney(result.waterfall.totals.preference_paid)}`} />
+                <Stat label="Common pool"     value={`${fmtMoney(result.waterfall.totals.common_pool)}`} />
+                <Stat label="Total"           value={`${fmtMoney(result.waterfall.totals.total_distributed)}`} />
               </div>
               <ResponsiveContainer width="100%" height={Math.max(200, waterfallChart.length * 32)}>
                 <BarChart data={waterfallChart} layout="vertical" margin={{ left: 100 }}>
                   <CartesianGrid strokeDasharray="3 3" />
-                  <XAxis type="number" tickFormatter={v => `$${fmtMoney(v)}`} />
+                  <XAxis type="number" tickFormatter={v => `${fmtMoney(v)}`} />
                   <YAxis type="category" dataKey="holder" width={120} tick={{ fontSize: 11 }} />
-                  <Tooltip formatter={v => `$${fmtMoney(v)}`} />
+                  <Tooltip formatter={v => `${fmtMoney(v)}`} />
                   <Bar dataKey="payout" fill="#7c3aed" />
                 </BarChart>
               </ResponsiveContainer>
@@ -644,8 +715,8 @@ export default function CapTablePage({ embedded = false }) {
                       <td className="py-1">{r.holder}</td>
                       <td><span className={`px-1.5 py-0.5 rounded text-[10px] ${TYPE_COLOR[r.type] || 'bg-gray-100 text-gray-700'}`}>{r.type}</span></td>
                       <td className="text-right">{r.shares.toLocaleString()}</td>
-                      <td className="text-right">{r.preference ? `$${fmtMoney(r.preference)}` : '—'}</td>
-                      <td className="text-right font-semibold">${fmtMoney(r.payout)}</td>
+                      <td className="text-right">{r.preference ? `${fmtMoney(r.preference)}` : '—'}</td>
+                      <td className="text-right font-semibold">{fmtMoney(r.payout)}</td>
                       <td className="text-gray-500">{r.source}</td>
                     </tr>
                   ))}
@@ -800,7 +871,7 @@ export function ScenarioComparePanel({ data, loading, error, activeUid, onClose,
                         className="ml-1 align-middle text-[11px] font-medium text-violet-700 hover:underline dark:text-violet-300 dark:hover:underline">Edit</Link>
                     ) : null}
                     {!canonical && onDeleteVariant && (
-                      <button onClick={() => onDeleteVariant(scen.uid)} title="Delete variant"
+                      <button onClick={() => onDeleteVariant(scen.uid, scen.name)} title="Delete variant" data-testid={`variant-delete-${scen.uid}`}
                         className="ml-1 align-middle text-gray-400 hover:text-red-600"><Trash2 size={12} /></button>
                     )}
                   </th>
@@ -835,11 +906,16 @@ export function ScenarioComparePanel({ data, loading, error, activeUid, onClose,
   );
 }
 
-function fmtMoney(n) {
-  if (n === null || n === undefined) return '0';
-  if (Math.abs(n) >= 1_000_000) return `${(n / 1_000_000).toFixed(2)}M`;
-  if (Math.abs(n) >= 1_000) return `${(n / 1_000).toFixed(1)}K`;
-  return Number(n).toLocaleString(undefined, { maximumFractionDigits: 2 });
+/**
+ * A dollar figure, with its `$`. D1016: a missing amount reads "Not recorded", never "0"
+ * (and never "$0", which is a figure). Exported for its test.
+ */
+export function fmtMoney(n) {
+  if (n === null || n === undefined || n === '' || !Number.isFinite(Number(n))) return NOT_RECORDED;
+  const v = Number(n);
+  if (Math.abs(v) >= 1_000_000) return `$${(v / 1_000_000).toFixed(2)}M`;
+  if (Math.abs(v) >= 1_000) return `$${(v / 1_000).toFixed(1)}K`;
+  return `$${v.toLocaleString(undefined, { maximumFractionDigits: 2 })}`;
 }
 
 function updateRow(setter, key, idx, patch) {
@@ -856,18 +932,60 @@ function removeRow(setter, key, idx) {
   setter(prev => ({ ...prev, [key]: prev[key].filter((_, i) => i !== idx) }));
 }
 
+// D1016: through the shared client (`api.downloadCapTableCsv`), so the cookie, the CSRF and
+// company headers ride with it; a refusal throws and the caller says so in the page.
 async function downloadCsv(uid, name) {
-  const token = localStorage.getItem('token');
-  const r = await fetch(`/api/captable/scenarios/${uid}/export.csv`, {
-    headers: token ? { Authorization: `Bearer ${token}` } : {},
-  });
-  if (!r.ok) { alert('Export failed'); return; }
-  const blob = await r.blob();
+  const blob = await api.downloadCapTableCsv(uid);
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
   a.href = url; a.download = `captable-${name || 'scenario'}.csv`;
   a.click();
   setTimeout(() => URL.revokeObjectURL(url), 1500);
+}
+
+/**
+ * D1016: the delete dialog, in the page (never `confirm()`). It says what goes and what does not:
+ * a variant leaves the main cap table as it is; a scenario that is not a variant IS a saved cap
+ * table, so deleting it removes that model for everyone who can open it.
+ */
+export function deleteDialogCopy(target) {
+  const name = String(target?.name || '').trim();
+  if (target?.kind === 'variant') {
+    return {
+      title: 'Delete this variant?',
+      lines: [
+        name ? `"${name}" is deleted, with its round and its exit figures.` : 'This variant is deleted, with its round and its exit figures.',
+        'The main cap table does not change.',
+      ],
+      confirm: 'Delete variant',
+    };
+  }
+  return {
+    title: 'Delete this cap table?',
+    lines: [
+      name ? `"${name}" is deleted: its holders, SAFEs, rounds and exit.` : 'This cap table is deleted: its holders, SAFEs, rounds and exit.',
+      'It is the saved model itself, not a variant, so everyone who can open it loses it. Its variants stay.',
+    ],
+    confirm: 'Delete cap table',
+  };
+}
+
+function DeleteDialog({ target, busy, error, onConfirm, onClose }) {
+  const copy = deleteDialogCopy(target);
+  return (
+    <Lightbox label={copy.title} title={copy.title} onClose={onClose} testId="captable-delete-dialog" width={460}>
+      <div className="space-y-2 text-sm text-gray-700 dark:text-gray-300">
+        {copy.lines.map((l) => <p key={l}>{l}</p>)}
+        {error && <p role="alert" data-testid="captable-delete-error" className="text-rose-700 dark:text-rose-300">{error}</p>}
+      </div>
+      <div className="mt-4 flex justify-end gap-2">
+        <button type="button" onClick={onClose} disabled={busy}
+          className="px-3 py-1.5 text-sm rounded border border-gray-300 bg-white hover:bg-gray-50 dark:bg-gray-900 dark:border-gray-700 dark:hover:bg-gray-800">Cancel</button>
+        <button type="button" onClick={onConfirm} disabled={busy} data-testid="captable-delete-confirm"
+          className="px-3 py-1.5 text-sm rounded bg-rose-600 text-white hover:bg-rose-700 disabled:opacity-60 dark:bg-rose-700 dark:hover:bg-rose-600">{busy ? 'Deleting…' : copy.confirm}</button>
+      </div>
+    </Lightbox>
+  );
 }
 
 // ───────────────────────────────────────────────────────── Task #5 — Live Cap Table
@@ -901,7 +1019,7 @@ function CartaLogo({ size = 14 }) {
 }
 
 function SourceBadge({ source }) {
-  if (source === 'carta') {
+  if (source === 'connector_carta' || source === 'carta') {
     return (
       <span
         className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-medium bg-orange-50 text-orange-700 border border-orange-200 cursor-not-allowed"
@@ -923,7 +1041,7 @@ function LiveCapTablePanel({ live, loading, error, onRefresh }) {
   const connected = !!live?.connected;
   const holders = live?.holders || [];
   const securities = live?.securities || [];
-  const cartaHolders = holders.filter(h => h.source === 'carta');
+  const cartaHolders = holders.filter(h => h.source === 'connector_carta' || h.source === 'carta');
   const ago = timeAgo(live?.last_synced_at);
 
   // Hide entirely when there's nothing to show: not connected AND no
@@ -1022,14 +1140,14 @@ function LiveCapTablePanel({ live, loading, error, onRefresh }) {
             </thead>
             <tbody>
               {holders.slice(0, 50).map((h) => (
-                <tr key={h.id} className={`border-t border-gray-100 ${h.source === 'carta' ? 'bg-orange-50/30' : ''}`}>
+                <tr key={h.id} className={`border-t border-gray-100 ${(h.source === 'connector_carta' || h.source === 'carta') ? 'bg-orange-50/30' : ''}`}>
                   <td className="px-4 py-1.5">
                     <div className="font-medium text-gray-900 dark:text-gray-100">{h.name}</div>
                     {h.email && <div className="text-[11px] text-gray-500">{h.email}</div>}
                   </td>
                   <td className="px-2 py-1.5 text-gray-600 text-xs">{h.security_type || '—'}</td>
-                  <td className="px-2 py-1.5 text-right tabular-nums">{Number(h.shares || 0).toLocaleString()}</td>
-                  <td className="px-2 py-1.5 text-right tabular-nums">{Number(h.ownership_pct || 0).toFixed(2)}%</td>
+                  <td className="px-2 py-1.5 text-right tabular-nums">{h.shares == null ? 'Not recorded' : Number(h.shares).toLocaleString()}</td>
+                  <td className="px-2 py-1.5 text-right tabular-nums">{h.ownership_pct == null ? 'Not recorded' : `${Number(h.ownership_pct).toFixed(2)}%`}</td>
                   <td className="px-4 py-1.5"><SourceBadge source={h.source} /></td>
                 </tr>
               ))}

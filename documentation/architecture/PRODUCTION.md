@@ -164,7 +164,9 @@ A grant older than a raised session floor is also refused on every tool call (`g
       leaves every encrypted value unreadable; each bank account then reads
       `account_unreadable` until it is retired and added again.
       D710's Mercury entity tokens are stored under it too, and read
-      `token_unreadable` after a change until the Super Admin enters them again.
+      `token_unreadable` after a change until the Super Admin enters them again
+      in HQ › Fund administration › Bank accounts (`/api/admin/mercury`), the
+      only place they are managed: never the member connector (D879, D883).
 
 ### Cloudflare Worker (optional, per feature)
 - [ ] `GITHUB_ACCESS_TOKEN` – ticket → GitHub-issue sync.
@@ -183,6 +185,10 @@ A grant older than a raised session floor is also refused on every tool call (`g
     sends four events for packs: `payment_intent.succeeded` (the credit),
     `charge.refunded`, `charge.dispute.created` and `charge.dispute.closed`
     (taking tokens back). Its signing secret is `STRIPE_WEBHOOK_SECRET`.
+    For plans it also sends `invoice.payment_failed` and
+    `invoice.payment_action_required` (D892, D1052: the renewal alerts) and
+    the subscription and invoice events; HQ › Payments › Stripe lists any it
+    is missing.
   - `STRIPE_PRICE_AI_TOPUP` is now an **optional fallback**: the ID
     (`price_…`) of an active, one-time, USD price with a fixed amount, in the
     same Stripe mode as `STRIPE_SECRET_KEY`. Set and not already a pack, it
@@ -199,10 +205,11 @@ A grant older than a raised session floor is also refused on every tool call (`g
 - [ ] `NEWSLETTER_TOKEN_KEY` – the HMAC key that signs every newsletter preferences and unsubscribe link (D810). **The owner sets it**; until then every public `/api/newsletter/*` route answers 503 `newsletter_unconfigured` in production (dev and preview fall back to `JWT_SECRET`). Any long random string, generated once and never committed: `openssl rand -base64 48 | npx wrangler secret put NEWSLETTER_TOKEN_KEY --config wrangler.toml --env production`. Rotating it retires every link already sent, so rotate only if it leaks. It also salts the signup's `ip_hash`.
 - [ ] `GOOGLE_AUTH_CLIENT_ID`, `GOOGLE_AUTH_CLIENT_SECRET` – "Continue with Google" sign-in. Its own Web client, never mail's or the Calendar client. Google Cloud Console setup: Authorized JavaScript origins `https://axal.vc` and `https://app.axal.vc` (D722, Google's window on /login); Authorized redirect URI `https://app.axal.vc/api/auth/google/callback` (the redirect fallback); OAuth consent screen External and "In production", so gmail.com accounts can sign in. Without both secrets the button stays and a click answers "Google sign-in is not enabled on this environment."
   - `GOOGLE_SIGNIN_POPUP` is a wrangler **var**, not a secret, in both `[vars]` and `[env.production.vars]`: `"on"` lets /login open Google's own window for everyone, `"canary"` only for `/login?google_window=1`, and anything else keeps every click on the redirect and closes `POST /api/auth/google/popup` (503 `popup_off`). It ships `"off"`. After the JavaScript origins above are registered (Google says up to a few hours to take effect), set both blocks to `"canary"` in one PR, check both hosts with `?google_window=1` on Mac Safari, iPhone Safari and Chrome, then set both to `"on"`. Rollback is `"off"` and a deploy. To find the client in the Console, look for the Web client whose redirect URIs include `https://app.axal.vc/api/auth/google/callback`; Cloudflare never shows the secret's value.
-- [ ] Interview channels (D684). Each provider reports itself unavailable until all of its secrets are set; none is ever committed.
+- [ ] Interview channels (D684). Each provider reports itself unavailable until all of its secrets are set; none is ever committed. The Telegram and WhatsApp secrets below can be set in HQ › Integration keys › Channels (D885) as well as with `wrangler secret put`; the page shows each one set or not set, never a value.
   - `TELEGRAM_CHANNEL_BOT_TOKEN`, `TELEGRAM_CHANNEL_BOT_USERNAME`, `TELEGRAM_CHANNEL_WEBHOOK_SECRET` – the Telegram Business bot. It is a separate bot from `TELEGRAM_BOT_TOKEN`, and needs Business Mode switched on in @BotFather.
   - `WHATSAPP_APP_ID`, `WHATSAPP_APP_SECRET`, `WHATSAPP_VERIFY_TOKEN`, `WHATSAPP_EMBEDDED_SIGNUP_CONFIG_ID` – the Meta app (Tech Provider) for Embedded Signup and the Cloud API webhook (way A, the member's own business number).
   - `WHATSAPP_AXAL_ACCESS_TOKEN`, `WHATSAPP_AXAL_PHONE_NUMBER_ID`, `WHATSAPP_AXAL_WABA_ID` – Axal's own number, for way B ("Send to Axal", D754 §1). Set them only if the owner said yes to way B; way B is absent until all three and the var below are set. `WHATSAPP_AXAL_DISPLAY_NUMBER` is its public E.164 number, a wrangler **var** in `[vars]` and `[env.production.vars]`, not a secret; it ships `""`.
+  - **Telegram private captures (D867, #2513).** `TELEGRAM_CAPTURE` is a var, default `"off"` in development, production and preview; only `"on"` enables it, and `TELEGRAM_CHANNEL` still gates the member. Migration 528 must precede deployment, including with capture off because the purge reads its table. Reuses the channel bot secrets, queue and recorder store; no new secret or binding. Keep it off until the owner's real-client checks in D867 and #2514 pass. Rollback is capture off; existing Business chat consent is separate.
   - **WhatsApp rollout (D754).** `WHATSAPP_CHANNEL` is a wrangler **var**, not a secret, in both `[vars]` and `[env.production.vars]`: `"off"`, `"canary"` or `"on"`; absent or anything else means `"canary"`. It ships `"canary"`: only Super Admins can connect or link, and members see "Not available yet". After the owner's live check (`documentation/operations/WHATSAPP.md` §3) passes, set both blocks to `"on"` in one PR. Rollback is `"off"` and a deploy: members read "Axal has switched this off for now…", and the webhook still verifies and acknowledges but stores nothing. The Worker reads the var since #1950 (D754 `w1_switch_on`), and consent (#1954) is on `main`, so the secrets can be set. In canary a member already sees way B's **Link your WhatsApp** once Axal's number is set, and pressing it is refused. `TELEGRAM_CHANNEL` works the same way for Telegram.
   - `ZOOM_CLIENT_ID`, `ZOOM_CLIENT_SECRET`, `ZOOM_WEBHOOK_SECRET_TOKEN` – the Zoom General app (D757). Zoom is set up only with all three: without the webhook token no transcript arrives, the webhook answers 503 and the Zoom card reads "Not set up here".
   - Google Meet uses the existing Google Calendar client (`GOOGLE_CAL_CLIENT_*`, else `GOOGLE_CLIENT_*`). It has no secret of its own; its transcript import is switched by the var `MEET_TRANSCRIPTS_ENABLED` (below).
@@ -213,11 +220,11 @@ A grant older than a raised session floor is also refused on every tool call (`g
       - A **General app, User-managed**, so each founder connects their own Zoom with no Zoom admin.
       - Redirect `https://app.axal.vc/api/integrations/oauth/zoom/callback` (`OAUTH_CALLBACK_BASE_URL` + `/api/integrations/oauth/zoom/callback`).
       - Event endpoint `https://axal.vc/api/channels/zoom/webhook`, for three events: `meeting.ended`, `recording.transcript_completed` and `app_deauthorized`. Zoom's validation challenge is answered only when signed with `ZOOM_WEBHOOK_SECRET_TOKEN`, so put the three secrets before pressing Validate.
-      - Scopes, exactly the registry's six: `meeting:write:meeting`, `meeting:delete:meeting`, `cloud_recording:read:list_recording_files`, `meeting:read:meeting`, `meeting:read:list_past_instances`, `user:read:user`. The callback refuses a wider grant (403 `scope_overreach`).
+      - Scopes, the registry's nine: `meeting:write:meeting`, `meeting:delete:meeting`, `cloud_recording:read:list_recording_files`, `meeting:read:meeting`, `meeting:read:list_past_instances`, `user:read:user`, plus `cloud_recording:read:recording` and `zoomapp:inmeeting`, plus `user:read:token` (D886, #2582: the notetaker's OBF join token). Zoom grants `cloud_recording:read:recording` and `zoomapp:inmeeting` whatever the Scopes page says (2026-10-22), and Axal calls no endpoint under either. Add `user:read:token` to the app only after the registry lists it. The callback refuses a wider grant (403 `scope_overreach`).
       - **Distribution is the gate.** Until Zoom approves sharing, only users in Axal's own Zoom account can authorize the app. `ZOOM_APP_AUDIENCE` is a wrangler **var**, not a secret, in both `[vars]` and `[env.production.vars]`: `"own_account"` (shipped; also absent or unknown), `"beta"` once Zoom approves Beta Test sharing (up to 100 users), `"public"` once the app is on the Zoom Marketplace. It sets only what the Zoom page says; Zoom itself refuses accounts the app is not shared with.
       - **What a founder needs** for a transcript: a Zoom Pro plan or higher, cloud recording on, and "Create audio transcript" turned on before the call. There is no audio fallback (D757 §2.14).
     - **GitHub App.** Callback `https://app.axal.vc/api/integrations/oauth/github/callback`. Repository permissions Contents, Issues, Metadata and Pull requests, each Read-only, and nothing else: the callback refuses a wider grant. Webhook inactive. Installable on any account. Setup URL `https://app.axal.vc/account/connectors/github` with Redirect on update; OAuth during installation off; Expire user authorization tokens ticked. No private key is needed. The full steps are in [GITHUB_CONNECTOR_APP.md](../operations/GITHUB_CONNECTOR_APP.md).
-    - **Google Meet transcripts (D757, #1926).** They need `meetings.space.readonly` on the Calendar OAuth client, Google's verification of it, and the Meet REST API enabled. `MEET_TRANSCRIPTS_ENABLED` is a wrangler **var** in both vars blocks: `"on"` offers "Allow transcript import" (an incremental consent, `POST /api/calendar/google/meet-transcripts/connect`); `"off"` (shipped, also unset) hides it and that route answers 503 `meet_transcripts_not_set_up`. Set `"on"` only after verification. A grant made before the scope was added does not carry it: the member presses "Allow transcript import" once. Scheduling a Meet call works either way.
+    - **Google Meet transcripts (D757, #1926).** They need `meetings.space.readonly` on the Calendar OAuth client, Google's verification of it, and the Meet REST API enabled. `MEET_TRANSCRIPTS_ENABLED` is a wrangler **var** in both vars blocks: `"on"` offers "Allow transcript import" (an incremental consent, `POST /api/calendar/google/meet-transcripts/connect`); `"off"` (also unset) hides it and that route answers 503 `meet_transcripts_not_set_up`. It is `"on"`, set after verification; `"off"` is the rollback. A grant made before the scope was added does not carry it: the member presses "Allow transcript import" once. Scheduling a Meet call works either way.
   - **Telegram: rollout, rotation and the off switch (D756).** The full owner steps, the real-device check and these switches are in `documentation/operations/TELEGRAM.md`.
     - `TELEGRAM_CHANNEL` is a wrangler **var**, not a secret, in both `[vars]` and `[env.production.vars]`: `"off"`, `"canary"` or `"on"`; absent or anything else means `"canary"`. It ships `"canary"`: only Super Admins can link or connect. After the owner's live check passes, set both blocks to `"on"` in one PR. Rollback is `"off"` and a deploy: connected members read "Axal has switched this off for now…", and the webhook still checks its secret and acknowledges, but stores nothing. The Worker reads the var since #1950. An assigned chat's text goes into its session at once; its notes are fetched only after the interviewee's YES (#1998), and until #1978 only their transcribed text is kept.
     - Health: after registering, the "Telegram Business bot (interviews)" section on `/admin/telegram` (`GET /api/admin/channels/telegram/webhook`, #1963; also on `/account/connectors/telegram` for a Super Admin) should say ready. Register the webhook again after any change to `TELEGRAM_ALLOWED_UPDATES`; the section reports the mismatch until you do.
@@ -281,3 +288,89 @@ git push
 
 Rollback reverts the worker (and with it the SPA), not D1 — see
 [DEPLOY.md §3](../operations/DEPLOY.md#3-capture-a-rollback-point-first).
+
+## Meeting bot control plane (D886 B1, #2579)
+
+Before any canary, apply migration 531 and the appended `v2-meeting-bot` Durable
+Object migration. Keep the existing `v1-realtime` migration. `MEETING_BOT_RUN`
+binds class `MeetingBotRun` in default, production and preview environments.
+B8 supplies the runtime factory through `MEETING_BOT_CONTAINER`; runtime must enforce
+the budget lease locally and acknowledge commands without awaiting callbacks.
+Provision a distinct `MEETING_BOT_SECRET` (32+ random characters) in each
+environment; never put its value in configuration, logs or review material.
+The existing column cipher and FILES binding are also required.
+
+Absent/off `MEETING_BOT` refuses dispatch. B9 owns switching to `canary` (hydrated
+Super Admins only, D886 ceiling cost) and then `on`. Public `on` additionally
+requires `MEETING_BOT_COST_MICROUSD_PER_MINUTE`, a measured bot-only cost from
+D886 §7; no unmeasured fallback is allowed there. Existing AI_BILLING/admin
+pricing applies. Dispatch checks the whole plan limit including transcription;
+only rolling two-minute bot-fee holds are taken. B6 charges Nova through aiRouter.
+See D886 §12 for the HMAC protocol, final-part drain and recovery. No live call,
+price measurement, switch change or deployment is performed by B1.
+
+## Meeting bot deployment (#2586, D886 B8)
+
+The bot is a separate private Worker, `studioos-meeting-bot`, configured in
+`wrangler.meeting-bot.toml`. Its preview is `studioos-meeting-bot-preview`.
+Only this config owns the container image and `v1-meeting-bot-container` DO
+migration. The runtime uses cross-script DO bindings named `MEETING_BOT_CONTAINER`
+in default, production and preview once provisioned. The shipped site config
+omits them until the remote hosts exist, so merging this cannot break site
+deployment on an unresolved namespace. It has no image or preflight.
+Site deploys retain their normal timeout and migration hook. A bot image or
+registry failure cannot fail the site deployment workflow.
+
+The runtime factory preserves B1's start/stop/heartbeat interface. Missing host
+binding refuses dispatch before billing. Branch configs deliberately omit the
+HQ host binding: a branch needs its own host, callback origin and HMAC secret
+before it can dispatch. Do not share HQ's secret with a branch.
+
+### Owner-only first deployment
+
+1. Enable Cloudflare Containers for the account. Provision the dedicated
+   `MEETING_BOT_CLOUDFLARE_API_TOKEN` Actions secret, scoped to this deployment
+   with Containers registry access and Worker/DO deployment permissions. The
+   existing site token is not widened. `CLOUDFLARE_ACCOUNT_ID` is reused.
+2. Provision the same random `MEETING_BOT_SECRET` (32+ characters) separately
+   on the site and corresponding bot host through Wrangler secrets. Preview
+   uses a different pair. On first creation, deploy the bot hosts before adding the site
+   cross-script binding; the rollout/notice gates stay closed throughout.
+   The config fixes the callback `APP_URL` per host; verify the preview origin.
+3. On the site only, provision `MEETING_BOT_ZOOM_CLIENT_ID` and
+   `MEETING_BOT_ZOOM_CLIENT_SECRET` for the approved Zoom Meeting SDK app.
+   Its OBF permission and founder OAuth grant remain separate prerequisites.
+   SDK JWT expiry follows the run deadline, capped at two hours, subject to
+   Zoom's 30-minute minimum. The container receives a derived run-only key;
+   it never receives the master secret or long-lived SDK/OAuth credentials.
+4. After merge and owner verification, set the Actions variable
+   `MEETING_BOT_DEPLOY_ENABLED=true`, then manually dispatch
+   `meeting-bot-deploy.yml` on main. It builds/tests the image before deploying
+   only the preview and production bot hosts, in that order. Later main changes
+   under `meeting-bot/` or the bundled shared helpers trigger it.
+   Disabling this variable freezes bot deployments without affecting the site.
+5. After both production and preview hosts exist, run
+   `node scripts/configure-meeting-bot-binding.mjs` to review the full site
+   config and matching HQ-only architecture catalogue entry, then use
+   `--write` in a follow-up owner PR. Run the full build/drift suite, including
+   binding parity, branch isolation and topology, before normal site deployment. This adds all three
+   remote bindings together; absent bindings keep `botConfigured` false.
+6. Record first deployment and remaining live checks on #1008. No production
+   bot deployment was performed by this implementation. First deployment,
+   container sandbox compatibility, D886 §7 memory/CPU/size and two-hour soak,
+   and real calls remain owner follow-up, not implementation prerequisites.
+
+`meeting-bot-image.yml` builds and boots the real Linux image on PRs without
+provider network, checks the Python SDK load, and dry-runs both bot configs.
+A manual main run can publish a commit-tagged GHCR image using `GITHUB_TOKEN`.
+Wrangler builds/pushes its own container image during bot deployment; retain
+that deployment's digest and Worker version for rollback. Roll back only the
+bot Worker/config and its image, never the site as part of bot rollback.
+
+No secret is an image build argument or label. Never log meeting links,
+passcodes, names, transcripts or signed material. Container Stop records a
+persistent tombstone before waiting for startup; SIGTERM uses B2's bounded
+drain, with destruction after 30 seconds. Expired funded leases stop the
+container. Replacement/rejoin stays refused until a durable resume contract
+exists. Publication, canary/price switches and actual meetings remain gated
+by B9 and the owner; deployment alone enables none of them.

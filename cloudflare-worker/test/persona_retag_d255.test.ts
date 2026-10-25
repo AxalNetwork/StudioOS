@@ -48,6 +48,8 @@ function freshDb() {
   db.exec(ddl('users'));
   db.exec(ddl('user_personas'));
   db.exec(ddl('activity_logs'));
+  // D1000: a retag reads the segment's status from migration 559's store.
+  db.exec(read('cloudflare-worker/sql/migrations/559_segment_profiles.sql'));
   db.prepare(
     `INSERT INTO users (id, role, name, email, is_active) VALUES (?, 'admin', 'Holder', 'holder@example.test', 1)`,
   ).run(ADMIN_ID);

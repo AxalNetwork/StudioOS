@@ -20,6 +20,7 @@
 import { isMcpPath, routeMcp } from './mcp/oauth';
 import { assistantGrants, mcpConsent } from './routes/mcp_consent';
 import { developerKeys } from './routes/developer_keys';
+import { developerLimits } from './routes/developer_limits';
 import { Hono } from 'hono';
 import { cors } from 'hono/cors';
 import type { Env, JobMessage } from './types';
@@ -37,17 +38,24 @@ import { recoveryCoolOff } from './middleware/recoveryCoolOff';
 import scoring from './routes/scoring';
 import labReportShares from './routes/lab_report_shares';
 import projects from './routes/projects';
+import accountCompanies from './routes/account_companies';
 import legal from './routes/legal';
 import legalcap from './routes/legalcap';
 import partners from './routes/partners';
 import adminPartners from './routes/admin_partners';
+import adminPartnersReads from './routes/admin_partners_reads';
+import adminPartnerFirms from './routes/admin_partner_firms';
+import adminPartnerDealReads from './routes/admin_partner_deal_reads';
+import adminNetworkReads from './routes/admin_network_reads';
 import adminPublications from './routes/admin_publications';
 // Task #10 (LD) — Admin team roster + public team endpoint.
 import adminTeam from './routes/admin_team';
 import adminNetworkProfiles from './routes/admin_network_profiles';
+import adminNetwork from './routes/admin_network';
 import profileHistoryRoutes from './routes/profile_history';
 import founderProfileRoutes from './routes/founder_profile';
 import adminProfilingRoutes from './routes/admin_profiling';
+import adminPartnerProfilesRoutes from './routes/admin_partner_profiles';
 import helpCenterRoutes, { adminHelpCenter } from './routes/help_center';
 import networkPublic from './routes/network_public';
 // Task #3 — Admin Telegram channels + aggregator + post send.
@@ -165,6 +173,7 @@ import dashboard from './routes/dashboard';
 import matches from './routes/matches';
 import settings from './routes/settings';
 import personas from './routes/personas';
+import personaSegments from './routes/persona_segments';
 import onboarding from './routes/onboarding';
 // Task #6 (IF) — per-role onboarding checklist + product-tour tracking.
 import onboardingChecklist from './routes/onboarding_checklist';
@@ -188,6 +197,13 @@ import cycleGrow from './routes/cycle_grow';
 // catch-all so its `/share/:token/...` subpaths take precedence over
 // the existing /share/:token reader in decks.ts.
 import deckShareActions from './routes/deck_share_actions';
+// D901 (#2680) — the HTML export and the deck export ledger.
+import deckExports from './routes/deck_exports';
+import deckNotes from './routes/deck_notes';
+import deckReview from './routes/deck_review';
+import deckSources from './routes/deck_sources';
+import deckNew from './routes/deck_new';
+import deckAssist from './routes/deck_assist';
 import notificationsRoutes from './routes/notifications';
 import votesRoutes from './routes/votes';
 import linkedinRoutes from './routes/linkedin';
@@ -195,16 +211,24 @@ import calendarRoutes from './routes/calendar';
 import financialsRoutes from './routes/financials';
 import progressRoutes from './routes/progress';
 import cycleBuildRoutes from './routes/cycle_build';
+import buildPlanRoutes from './routes/build_plan';
+import buildPlanStateRoutes from './routes/build_plan_state';
 import metricsRoutes from './routes/metrics';
 import revenueRoutes from './routes/revenue';
 import wellbeingRoutes from './routes/wellbeing';
 import complianceRoutes from './routes/compliance';
 import captableRoutes from './routes/captable';
+import captableAccessRoutes from './routes/captable_access';
 import dataRoomRoutes from './routes/data_room';
 import advisorGrantRoutes from './routes/advisor_grants';
 import messagesRoutes from './routes/messages';
 import perksRoutes from './routes/perks';
 import adminLicences from './routes/admin_licences';
+import adminProgramGrants from './routes/admin_program_grants';
+import adminProgramRequests from './routes/admin_program_requests';
+// D986 (#2776) — partner deal types per licence: HQ's reads and write, and the studio's own read.
+import adminPartnerDealTypes from './routes/admin_partner_deal_types';
+import licencePartnerDealTypes from './routes/licence_partner_deal_types';
 import adminDeployments from './routes/admin_deployments';
 import adminStatements from './routes/admin_statements';
 import adminEscalations from './routes/admin_escalations';
@@ -212,6 +236,7 @@ import adminSupportSessions from './routes/admin_support_sessions';
 import branchEscalationRoutes from './routes/branch_escalations';
 import branchApprovalRoutes from './routes/branch_approvals';
 import branchApprovalAssignmentRoutes from './routes/branch_approval_assignments';
+import adminApprovalRoutes from './routes/admin_approvals';
 import branchHomeRoutes from './routes/branch_home';
 import branchTemplateRoutes from './routes/branch_templates';
 import branchInsightsRoutes from './routes/branch_insights';
@@ -232,17 +257,27 @@ import learningWebinarsRoutes from './routes/learning_webinars';
 import adminLearningWebinarsRoutes from './routes/admin_learning_webinars';
 import { adminLearningVideo, learningVideo } from './routes/learning_video';
 import adminHq from './routes/admin_hq';
+import adminInsightsScopes from './routes/admin_insights_scopes';
+import adminCommunityRoutes from './routes/admin_community';
 import adminRevenue from './routes/admin_revenue';
 import adminContent from './routes/admin_content';
 import adminPlatform from './routes/admin_platform';
 import adminSecurity from './routes/admin_security';
+import adminTrustCenter from './routes/admin_trust_center';
+import trustPublic from './routes/trust_public';
+import { securityReports, adminSecurityReports } from './routes/security_reports';
 import adminHqSupport from './routes/admin_hq_support';
 import adminStudioGlance from './routes/admin_studio_glance';
+import adminInsights from './routes/admin_insights';
+import adminPrograms from './routes/admin_programs';
+import adminProgramProposals from './routes/admin_program_proposals';
+import adminInsightsExport from './routes/admin_insights_export';
 // The holder-facing read of one licence — see routes/licence.ts for why it is
 // not a role branch inside the admin ledger.
 import licence from './routes/licence';
 // D799 — the Administrator's requests to HQ, under the same prefix.
 import licenceRequests from './routes/licence_requests';
+import licencePrograms from './routes/licence_programs';
 import cofounderRoutes from './routes/cofounder';
 import skillsRoutes from './routes/skills';
 import valuesRoutes from './routes/values';
@@ -274,6 +309,7 @@ import needsRoutes, { quotesRouter, engagementsRouter } from './routes/needs';
 import partnerPipeline from './routes/partner_pipeline';
 import partnerOffers from './routes/partner_offers';
 import { testing, partnerTesting, adminTesting } from './routes/testing';
+import adminProductTesters from './routes/admin_product_testers';
 import partnerDelivery from './routes/partner_delivery';
 import founderValidate from './routes/founder_validate';
 import cycleValidate from './routes/cycle_validate';
@@ -282,6 +318,7 @@ import cycleVerdict from './routes/cycle_verdict';
 import cycleRaise from './routes/cycle_raise';
 import founderValidateStructure from './routes/founder_validate_structure';
 import founderValidateSessions from './routes/founder_validate_sessions';
+import meetingBotCallbacks from './routes/meeting_bot_callbacks';
 import validateConversations from './routes/validate_conversations';
 // D684 (#1575) — interview channels: business Telegram and WhatsApp
 // conversations (S19), Zoom and Google Meet calls from an interview (S18).
@@ -336,13 +373,16 @@ import billing from './routes/billing';
 import catalog, { adminCatalog } from './routes/catalog';
 // Task #16 — Admin Stripe management (webhook endpoints + publishable key).
 import adminStripe from './routes/admin_stripe';
+import adminPayments from './routes/admin_payments';
 import adminMoneyRails from './routes/admin_money_rails';
 import { adminPartnerSettlements, partnerSettlements } from './routes/partner_settlements';
 import mercuryPersonalRoutes from './routes/mercury_personal';
 import mercuryAttestationRoutes from './routes/mercury_attestations';
 import mercuryOauthRoutes from './routes/mercury_oauth';
+import connectorMcpOauthRoutes from './routes/connector_mcp_oauth';
 import connectorsHealth from './routes/connectors_health';
 import connectorsCustomRoutes from './routes/connectors_custom';
+import cartaInvestorRoutes from './routes/carta_investor';
 import mercuryInvestorRoutes from './routes/mercury_investor';
 import adminBankAccounts from './routes/admin_bank_accounts';
 import adminFundStructure from './routes/admin_fund_structure';
@@ -676,6 +716,8 @@ const COOL_OFF_PREFIXES = [
   // D755 — the catalog's writes, token packs included, sell what members pay
   // for and can mint a pack. Same class as promos.
   '/api/admin/catalog',
+  // D1009 — checkout keys and webhook settings share the Payments cool-off.
+  '/api/admin/stripe',
 ];
 for (const p of COOL_OFF_PREFIXES) {
   app.use(p, recoveryCoolOff);
@@ -833,6 +875,9 @@ for (const p of INVESTOR_PRO_PREFIXES) {
 app.route('/api/scoring', scoring);
 // D588 (#1215) — a founder shares one official scoring run with one named account.
 app.route('/api/lab-report-shares', labReportShares);
+// D1136 (#3016): the caller's own companies, ventures and invitations, and answering an invitation signed in.
+// Before `projects` and `companyRoutes`; the answer paths are literal `invitations/<id>/accept|decline`.
+app.route('/api', accountCompanies);
 app.route('/api/projects', projects);
 app.route('/api/legal', legal);
 app.route('/api/legalcap', legalcap);
@@ -840,7 +885,17 @@ app.route('/api/partners', partners);
 // Task #8 (X-1) — Partner deal engine. Admin endpoints under
 // /api/admin/partners (separate from legacy /api/partners) and the
 // public token-gated onboarding flow under /api/partner-onboard.
+// D927 (#2723) — the read-only overview, one invitation's read and the offer preview.
+app.route('/api/admin/partners', adminPartnersReads);
+// D928 (#2724): one deal's read, the terminate preview, the cross-deal redemptions and the
+// agreement-ready signal. Before `adminPartners`; its deal ids match digits only, so `/deals/top` stays there.
+app.route('/api/admin/partners', adminPartnerDealReads);
+// D979 (#2765): the Firms tab's list (search, filters, sort, pages, exact total) and one firm's drawer. Read only.
+app.route('/api/admin/partners', adminPartnerFirms);
 app.route('/api/admin/partners', adminPartners);
+// D976 (#2762) — the advisor and partner network's pause, directory switch and standing read.
+app.route('/api/admin/network', adminNetworkReads);
+app.route('/api/admin/network', adminNetwork);
 app.route('/api/admin/publications', adminPublications);
 app.route('/api/partner-onboard', partnerOnboarding);
 app.route('/api/partner-portal', partnerPortal);
@@ -967,11 +1022,13 @@ app.route('/api/admin/articles', adminArticles);
 // generic admin router. Step-up + requireAdmin enforced per-route.
 app.route('/api/admin/billing', adminBilling);
 // Task — Stripe product catalog admin sync. Mounted BEFORE the catch-all
-// /api/admin so /api/admin/catalog/* resolves here. requireAdmin per-route.
+// /api/admin so /api/admin/catalog/* resolves here. Super Admin gates per-route (D1009).
 app.route('/api/admin/catalog', adminCatalog);
 // Task #16 — Admin Stripe management (webhook + publishable key). Mounted
 // BEFORE the catch-all /api/admin so /api/admin/stripe/* resolves here.
 app.route('/api/admin/stripe', adminStripe);
+// D1011 (#2830): the Payments page's change log and webhook deliveries; Super Admin only.
+app.route('/api/admin/payments', adminPayments);
 // D707 (#1772) — the entities' roles and the money rails. Before the catch-all.
 app.route('/api/admin/money-rails', adminMoneyRails);
 app.route('/api/admin/partner-settlements', adminPartnerSettlements);
@@ -982,6 +1039,7 @@ app.route('/api/mercury/personal', mercuryPersonalRoutes);
 app.route('/api/mercury/attestations', mercuryAttestationRoutes);
 // D840 part 4 — an investor's own Mercury feeds their sections, read-only, HQ only.
 app.route('/api/mercury/investor', mercuryInvestorRoutes);
+app.route('/api/carta/investor', cartaInvestorRoutes);
 // D708 — each Axal entity's bank accounts, Super Admin only. Before the
 // catch-all /api/admin so /api/admin/bank-accounts/* resolves here.
 app.route('/api/admin/bank-accounts', adminBankAccounts);
@@ -998,6 +1056,9 @@ app.route('/api/admin/jobs', adminJobsRoutes);
 // Task #9 — Communities & Circles admin. Mount BEFORE the catch-all /api/admin
 // so /api/admin/circles/* resolves here, not in the generic admin router.
 app.route('/api/admin/circles', adminCirclesRoutes);
+// D932 — Admin · Community's reads (Recent activity). Any admin; before the
+// catch-all like the consoles above.
+app.route('/api/admin/community', adminCommunityRoutes);
 app.route('/api/admin/assessment', adminAssessmentRoutes);
 // Task #19 — Best-Fit admin surfaces. Mount BEFORE the catch-all /api/admin so
 // the specific prefixes resolve here, not in the generic admin router.
@@ -1037,6 +1098,9 @@ app.route('/api/branch', branchApprovalRoutes);
 // D470 — assignment is a side record, not a decision and not a thread. Its
 // own file so the board route stays a read.
 app.route('/api/branch', branchApprovalAssignmentRoutes);
+// D1040 — HQ's inbox: the same board, assignment and history on requireAdmin,
+// without the branch tier gate.
+app.route('/api/admin/approvals', adminApprovalRoutes);
 // D131 — S1's digest. A third file on the same prefix because it composes what
 // the other two read rather than owning a store of its own.
 app.route('/api/branch', branchHomeRoutes);
@@ -1058,6 +1122,11 @@ app.route('/api/branch', branchInvitationRoutes);
 // database recorded. Same prefix as the other branch reads.
 app.route('/api/branch', branchSupportSessionRoutes);
 app.route('/api/admin/licences', adminLicences);
+// D982 (#2773): which programs HQ grants each licensed studio, on what terms.
+// D983: the program requests, mounted before part 1's routes so `/requests` is never read as a licence.
+app.route('/api/admin/program-grants/requests', adminProgramRequests);
+app.route('/api/admin/program-grants', adminProgramGrants);
+app.route('/api/admin/partner-deal-types', adminPartnerDealTypes);
 // Migrations 199/207 — who holds the Super Admin elevation. Mount BEFORE the
 // catch-all for the same reason as the licence ledger above.
 app.route('/api/admin/super-admins', adminSuperAdmins);
@@ -1070,6 +1139,9 @@ app.route('/api/admin/ticket-reviews', adminTicketReviews);
 // HQ · Home — the franchisor's overview. Super-admin-only, mounted before
 // the catch-all like everything else in the HQ tier.
 app.route('/api/admin/hq', adminHq);
+// D893 — Admin › Insights' Scope select: HQ-held and each deployed
+// subsidiary. Super Admin on HQ, before the catch-all.
+app.route('/api/admin/insights/scopes', adminInsightsScopes);
 // HQ · Revenue — the money rails. Super-admin-only, and before the
 // catch-all for the same reason as the rest of the HQ tier.
 app.route('/api/admin/revenue', adminRevenue);
@@ -1079,6 +1151,11 @@ app.route('/api/admin/revenue', adminRevenue);
 // piece at a time. This is the cross-tenant pipeline view above it.
 app.route('/api/admin/content', adminContent);
 app.route('/api/admin/platform', adminPlatform);
+// D1075 — the public trust center's content store (Super Admin writes) and
+// members' security reports. Mounted before the desk below so the desk's
+// router never answers for them.
+app.route('/api/admin/security/trust-center', adminTrustCenter);
+app.route('/api/admin/security/reports', adminSecurityReports);
 // HQ · Security — the cross-tenant security desk. Super-admin-only.
 app.route('/api/admin/security', adminSecurity);
 // HQ · Support — the three queues as one read (D204, canvas H22). Super-admin-
@@ -1086,7 +1163,16 @@ app.route('/api/admin/security', adminSecurity);
 app.route('/api/admin/hq-support', adminHqSupport);
 // Studio glance — both tiers, before the /api/admin catch-all (D443).
 app.route('/api/admin/studio', adminStudioGlance);
+// D893 (#2661): the logged, counts-only export of the Insights read below. Mounted first, so /export never reaches the read's router.
+app.route('/api/admin/insights/export', adminInsightsExport);
+app.route('/api/admin/insights', adminInsights);
+// D954 (#2787): Admin › Programs — the registry, the playbook, the catalogue read and each program's activity.
+// D955: proposals before the programs router, whose `/:key` would otherwise answer `proposals`.
+app.route('/api/admin/programs/proposals', adminProgramProposals);
+app.route('/api/admin/programs', adminPrograms);
+app.route('/api/licence', licencePartnerDealTypes);
 app.route('/api/licence', licenceRequests);
+app.route('/api/licence', licencePrograms);
 app.route('/api/licence', licence);
 app.route('/api/best-fit', bestFitSelf);
 app.route('/api/admin', admin);
@@ -1151,6 +1237,19 @@ app.route('/api/brand', brand);
 // /api/decks/share/:token (signup, nda, feedback, deal-pack, context)
 // resolve to the new handlers before falling through to the catch-all.
 app.route('/api/decks', deckShareActions);
+// D901 (#2680): before decks.ts, so its middleware records the PDF and
+// PowerPoint file that POST /api/decks/:id/export answers.
+app.route('/api/decks', deckExports);
+// D905 (#2684): a deck's notes, from its admins to its founders; two-segment paths, before `decks`.
+app.route('/api/decks', deckNotes);
+// D900 (#2679): a version's review and the venture's review history; two-segment paths, before `decks`.
+app.route('/api/decks', deckReview);
+// D896: `/sources` and `/:id/refresh`, before `decks` so its `GET /:id` cannot answer `/sources`.
+app.route('/api/decks', deckSources);
+// D897: New deck (`/new/context`, `/new/quote`, `/outline`, `/generate`, `/proposals/:id/keep-slides`), before `decks` for the same reason.
+app.route('/api/decks', deckNew);
+// D899 (#2678): Eadwyn's card tools, before `decks` with the other /api/decks routers.
+app.route('/api/decks', deckAssist);
 app.route('/api/decks', decks);
 // Competitor Analysis (in-house crawl + Workers AI synthesis) and Pitch Deck
 // Reviewer (document conversion + investor-style review). Both are
@@ -1223,6 +1322,10 @@ app.route('/api/profile', profileHistoryRoutes);
 app.route('/api/profile', founderProfileRoutes);
 // D358 — admin aggregates of how profiles move over time (routes/admin_profiling.ts).
 app.route('/api/admin/profiling', adminProfilingRoutes);
+// D990 — Partner profiles: the list, the counts and one profile by reference (routes/admin_partner_profiles.ts).
+app.route('/api/admin/partner-profiles', adminPartnerProfilesRoutes);
+// D1075 — Help's Security category: a private report only HQ's Super Admins read.
+app.route('/api/help/security-reports', securityReports);
 // D603 — the Help Center's guide views and yes/no answers (routes/help_center.ts).
 app.route('/api/help', helpCenterRoutes);
 app.route('/api/admin/help', adminHelpCenter);
@@ -1247,13 +1350,19 @@ app.route('/api/connectors/custom', connectorsCustomRoutes);
 app.route('/api/mcp/consent', mcpConsent);
 // D841 (#2464): a member's own API keys for /mcp, behind API_KEYS_ENABLED.
 app.route('/api/developer/keys', developerKeys);
+// D849 (#2472): the limits in force on the member's connections and keys.
+app.route('/api/developer/limits', developerLimits);
 // D840 (#2346): Sign in with Mercury, ahead of the integrations router.
 app.route('/api/integrations/mercury/oauth', mercuryOauthRoutes);
+// D1080 (#2945): Sign in with <Provider> for every other MCP record, and its client ID metadata documents.
+app.route('/api/integrations/mcp', connectorMcpOauthRoutes);
 app.route('/api/connectors', integrations);
 app.route('/api/integrations', integrations);
 // D652 — the Worker AI rail's conversations and their connectors (#1464).
 app.route('/api/eadwyn', eadwynRoutes);
 app.route('/api/crunchbase', crunchbaseRoutes);
+// D1000 (#2815): the segment profiles, before the personas routes.
+app.route('/api/personas/segments', personaSegments);
 app.route('/api/personas', personas);
 app.route('/api/notifications', notificationsRoutes);
 app.route('/api/linkedin', linkedinRoutes);
@@ -1265,6 +1374,9 @@ app.route('/api/founder-risk', founderRiskRoutes);
 // Task #9 — Venture Risk (internal deal-team 10-layer rating).
 app.route('/api/venture-risk', ventureRiskRoutes);
 app.route('/api/progress', progressRoutes);
+// D1067: pause, resume and "new evidence since" before D1065's plan router.
+app.route('/api/cycles/build/plan', buildPlanStateRoutes);
+app.route('/api/cycles/build/plan', buildPlanRoutes);
 app.route('/api/cycles/build', cycleBuildRoutes);
 // Task #3 (DF) — `/api/metrics/*` alias of /api/progress/metrics/* + /series.
 app.route('/api/metrics', metricsRoutes);
@@ -1273,6 +1385,8 @@ app.route('/api/revenue', revenueRoutes);
 app.route('/api/wellbeing', wellbeingRoutes);
 // T12 — Compliance calendar + Cap-table simulator + Co-founder matching.
 app.route('/api/compliance', complianceRoutes);
+// D1019 (#2856): who sees what. Before /api/captable, whose `/:projectId` would take "access".
+app.route('/api/captable/access', captableAccessRoutes);
 app.route('/api/captable', captableRoutes);
 app.route('/api/data-room', dataRoomRoutes);
 // Task #55 — a founder opens a client record to a named advisor, scope by
@@ -1349,6 +1463,8 @@ app.route('/api/public', circlesPublicRoutes);
 // certificate verifier rather than falling through.
 app.route('/api/public', publicCertificateRoutes);
 app.route('/api/public', publicRoutes);
+// D1075 — the public trust center's reads and subprocessor notices (routes/trust_public.ts).
+app.route('/api/public', trustPublic);
 // Task #10 (LD) — Public team roster. Mounted under /api/public so it
 // sits OUTSIDE auth and outside the admin routers' requireAdmin gates. /api/public/team
 // was written for the Jekyll marketing build that used to curl it into
@@ -1397,6 +1513,8 @@ app.route('/api/partner/offers', partnerOffers);
 app.route('/api/testing', testing);
 app.route('/api/partner/testing', partnerTesting);
 app.route('/api/admin/testing', adminTesting);
+// D1042 (#2890): the product tester pool — HQ approves, declines, pauses, resumes and removes.
+app.route('/api/admin/product-testers', adminProductTesters);
 // #45 — what the firm records about work in flight: milestones, blockers,
 // what was shipped, who holds a seat inside a client's systems, and the
 // recurring update. Health is derived over five of those tables at read time
@@ -1404,6 +1522,7 @@ app.route('/api/admin/testing', adminTesting);
 app.route('/api/partner/delivery', partnerDelivery);
 // D657 — interview sessions: recording, live and final speech-to-text.
 app.route('/api/founder/validate', founderValidateSessions);
+app.route('/api/meeting-bots', meetingBotCallbacks);
 // D858 (#2503): what a session's and a venture's conversations show, read only.
 app.route('/api/validate', validateConversations);
 app.route('/api/founder/validate', founderValidate);
@@ -1656,6 +1775,10 @@ const ROLE_SCHEMA_SAFE_ANONYMOUS_READS: readonly (string | RegExp)[] = [
   '/api/public/partners',
   '/api/public/status',
   '/api/public/changelog',
+  // D1075: the trust center's reads touch only migration 584's tables.
+  '/api/public/trust',
+  '/api/public/trust/changes',
+  '/api/public/trust/matrix',
   /^\/api\/public\/events(?:\.ics|\/[^/]+(?:\/ics)?)?$/,
   /^\/api\/public\/invite\/[^/]+$/,
   /^\/api\/public\/jobs(?:\/[^/]+)?$/,
@@ -1846,6 +1969,26 @@ export default {
         // remediation, notification flushes and the score audits all act on
         // this deployment's own rows and would be wrong to centralise.
         const hqCadences = branchOf(env) === null;
+        // D1075: subprocessor notices left by a Publish (a send that failed is
+        // retried after an hour). HQ only: the trust center is axal.vc's.
+        if (hqCadences && now.getUTCMinutes() % 5 === 4) {
+          try {
+            const { sendSubprocessorNotices } = await import('./services/subprocessorNotices');
+            const r = await sendSubprocessorNotices(env, { now: now.getTime() });
+            if (r.sent || r.failed) console.info(`[cron] subprocessor notices sent=${r.sent} failed=${r.failed}`);
+          } catch {
+            console.error('[cron] subprocessor notices unreadable');
+          }
+        }
+        // D886 B10: counts-only alerts in the existing HQ notification inbox.
+        if (hqCadences && now.getUTCMinutes() % 5 === 3) {
+          try {
+            const { sweepMeetingBotOperations } = await import('./services/meetingBotOperationsAlerts');
+            await sweepMeetingBotOperations(env, now.getTime());
+          } catch {
+            console.error('[cron] meeting bot operations unreadable');
+          }
+        }
         if (now.getUTCHours() === 3 && now.getUTCMinutes() === 0) {
           await Jobs.cleanup(env);
         }
@@ -1895,6 +2038,14 @@ export default {
             if (r.threads || r.messages) console.info(`[cron] channel purge threads=${r.threads} messages=${r.messages}`);
           } catch (e) {
             console.error('[cron] channel purge failed', e instanceof Error ? e.message : 'error');
+          }
+          // D877 (#2524) — a call's audio past its founder's retention; the text stays.
+          try {
+            const { purgeExpiredCallAudio } = await import('./services/callAudioRetention');
+            const r = await purgeExpiredCallAudio(env, now);
+            if (r.sessions) console.info(`[cron] call audio purge sessions=${r.sessions} objects=${r.objects}`);
+          } catch (e) {
+            console.error('[cron] call audio purge failed', e instanceof Error ? e.message : 'error');
           }
         }
         // D572 part 3b — the partner leaderboard's daily standings, so the
@@ -2144,8 +2295,8 @@ export default {
           try {
             const { sweepScheduledPosts } = await import('./services/scheduledPosts');
             const p = await sweepScheduledPosts(env, now);
-            if (p.due || p.stale_failed || p.unreadable_failed || p.errors.length) {
-              console.info(`[cron] scheduled posts due=${p.due} sent=${p.sent} refused_or_failed=${p.refused_or_failed} stale_failed=${p.stale_failed} unreadable_failed=${p.unreadable_failed} left_for_next_tick=${p.left_for_next_tick}`);
+            if (p.due || p.stale_failed || p.stale_unknown || p.unreadable_failed || p.unreadable_draft || p.errors.length) {
+              console.info(`[cron] scheduled posts due=${p.due} sent=${p.sent} refused_or_failed=${p.refused_or_failed} stale_failed=${p.stale_failed} stale_unknown=${p.stale_unknown} unreadable_failed=${p.unreadable_failed} unreadable_draft=${p.unreadable_draft} left_for_next_tick=${p.left_for_next_tick}`);
               if (p.errors.length) console.warn('[cron] scheduled posts errors', p.errors.slice(0, 5));
             }
           } catch (e) { console.error('[cron] scheduled posts sweep failed', e); }
@@ -2774,3 +2925,5 @@ export { OnboardingChat } from './durable-objects/onboarding-chat';
 // in their own files. Both ship on every deploy — one codebase — and each
 // method refuses on the tier it does not belong to.
 export { HqEntrypoint, BranchEntrypoint } from './rpc';
+
+export { MeetingBotRun } from './durable-objects/meeting-bot-run';

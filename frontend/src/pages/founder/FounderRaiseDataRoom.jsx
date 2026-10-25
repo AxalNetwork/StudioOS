@@ -1,3 +1,4 @@
+import { accessNow, grantIsActive } from '../raise/dataRoomRead';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { AlertCircle, ArrowLeft, Eye, FileText, Filter, FolderOpen, RefreshCw, ShieldCheck, Sparkles, Users } from 'lucide-react';
@@ -16,18 +17,16 @@ const asList = (value, ...keys) => {
   for (const key of keys) if (Array.isArray(value?.[key])) return value[key];
   return [];
 };
-const clean = (value) => String(value ?? '').trim();
 const formatDate = (value) => {
   if (!value) return 'Date not recorded';
   const parsed = new Date(value);
   return Number.isNaN(parsed.getTime()) ? String(value) : new Intl.DateTimeFormat(undefined, { month: 'short', day: 'numeric', year: 'numeric' }).format(parsed);
 };
-const grantIsActive = (grant) => clean(grant.status).toLowerCase() === 'active'
-  && (!grant.expires_at || new Date(grant.expires_at).getTime() > Date.now());
 const fileAccess = (file, grant) => {
   if (!grantIsActive(grant)) return { label: 'None', tone: 'neutral' };
-  if (file.visibility === 'nda' && !grant.nda_signed) return { label: 'NDA gated', tone: 'warn' };
-  return { label: 'Granted', tone: 'good' };
+  if (accessNow(file, [grant]).length) return { label: 'Granted', tone: 'good' };
+  if (file.visibility === 'nda' && !grant.nda_signed && accessNow({ ...file, visibility: 'open' }, [grant]).length) return { label: 'NDA gated', tone: 'warn' };
+  return { label: 'None', tone: 'neutral' };
 };
 
 export default function FounderRaiseDataRoom() {
@@ -94,8 +93,8 @@ export default function FounderRaiseDataRoom() {
   const folders = asList(room?.folders);
   const grants = asList(room?.grants);
   const access = asList(room?.recent_access);
-  const activeGrants = grants.filter(grantIsActive);
-  const fileActivity = access.filter((event) => event.file_name);
+  const activeGrants = grants.filter(grant => grantIsActive(grant));
+  const fileActivity = access.filter((event) => event.file_name && event.action === 'download');
   const mostViewed = useMemo(() => {
     const counts = new Map();
     fileActivity.forEach((event) => counts.set(event.file_name, (counts.get(event.file_name) || 0) + 1));

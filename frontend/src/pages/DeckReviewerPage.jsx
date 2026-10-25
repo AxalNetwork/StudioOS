@@ -393,6 +393,11 @@ function scoreColor(s) {
   return 'text-red-600 dark:text-red-400';
 }
 
+export function ReviewScore({ score }) {
+  if (score == null) return <div className="text-sm text-gray-500 dark:text-gray-400">Score not returned</div>;
+  return <><div className={`text-4xl font-bold ${scoreColor(score)}`}>{score}</div><div className="text-xs text-gray-400 dark:text-gray-500">/ 100</div></>;
+}
+
 function ReviewView({ review, setReview, dirty, saving, busy, onSave, onRegenerate, onPurgeRaw, onReset }) {
   const rv = review.review || {};
   const sections = review.sections || [];
@@ -444,8 +449,7 @@ function ReviewView({ review, setReview, dirty, saving, busy, onSave, onRegenera
       {/* Score + summary */}
       <div className={`${CARD} p-5 mb-4 flex items-start gap-5`}>
         <div className="text-center shrink-0">
-          <div className={`text-4xl font-bold ${scoreColor(rv.overall_score || 0)}`}>{rv.overall_score ?? '—'}</div>
-          <div className="text-xs text-gray-400 dark:text-gray-500">/ 100</div>
+          <ReviewScore score={rv.overall_score} />
         </div>
         <div className="flex-1">
           <div className="text-sm font-semibold text-gray-700 dark:text-gray-300 mb-1">What to fix first</div>

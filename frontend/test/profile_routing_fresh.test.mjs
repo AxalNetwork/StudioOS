@@ -97,7 +97,29 @@ test('ROUTE_MAP still parses to the full canvas corpus', () => {
   // the Cycle Overview canvas draws (CO:244-247), now a route of its own.
   // 145 on 2026-10-19 (D717, #1782): `Legal Documents · Templates`, graduated when #1782 closed.
   // 146 on 2026-10-20 (D800, #2233): `Licences`, the Administrator's licence page and its tabs.
-  assert.equal(recs.length, 146);
+  // 147 on 2026-10-24 (D893, #2366): `Admin Insights`, the page built to INS1–INS11 at /admin/insights.
+  // 148 the same day (D894, #2434): `Pitch Deck Studio`, its shell and the Decks and Share & analytics tabs at /raise/pitch.
+  // 149 the same day (D906, #2454): `Investor narrative`, the tool's tabs inside the module page at /raise/investor-narrative.
+  // 150 the same day (D915, #2368): `Events Console`, the admin Events desk's tabs and one page per event at /admin/events.
+  // 151 the same day (D923, #2370): `Partner invitations`, its tabs and one address per invitation and per deal at /admin/partner-invitations.
+  // 152 the same day (D930, #2367): `Admin Community`, the overview at /admin/community.
+  // 154 the same day (D936, #2375; D937, #2374): `Admin page header`, the shared header, and
+  // `Spin-Out Lab (admin)`, the Lab's page at /admin/programs/spinout-lab.
+  // 155 the same day (D972, #2369): `Advisors & Partners`, the network's page at /admin/advisors-partners.
+  // 156 the same day (D981, #2376): `Program grants`, HQ's grid at /admin/licences/programs.
+  // 157 the same day (D989, #2380): `Partner profiles`, out of the Admin Console at /admin/partner-profiles.
+  // 158 the same day (D997, #2378): `Persona segments`, out of the Admin Console at /admin/persona-segments.
+  // 159 the same day (D1008, #2386): `Payments`, out of the Admin Console at /admin/platform/payments.
+  // 160 the same day (D1015, #2432): `Cap table`, the founder's tool inside the Raise module page.
+  // 161 (D1030, #2387, 2026-10-25): `My events`, its four tabs at their own addresses.
+  // 162 (D953, #2371): Admin · Programs, the catalogue and program pages.
+  // 163 (D1038, #2390): `Approvals (admin)`, out of /admin/held/ at /admin/approvals.
+  // 164 (D1048, #2451): `Checkout`, the sheet over /pricing.
+  // 165 (D1056, #2427): `Reporting to investors`, the desk and the company page.
+  // 166 (D1063, #2426): `Validate → Build plan`, /build/plan and its progress.
+  // 167 (D1072, #2425): `Trust center (public)`, /trust and its five public tabs.
+  assert.equal(recs.length, 167);
+
   for (const r of recs) {
     assert.ok(r.canvas.length > 0, 'every row names a canvas');
     assert.ok(r.status.length > 0, `row "${r.canvas}" has no status`);

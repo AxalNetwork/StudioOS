@@ -79,7 +79,8 @@ const upload = (db: any, headers?: Record<string, string>) => {
 };
 
 test('D778: the reviewer\'s three presses fall back to the page and options D771\'s inventory gives them', () => {
-  const rows = FOUNDER_OPTIONS.filter((o: any) => String(o.key).startsWith('review:deck'));
+  // D900's `review:deck-version` is the studio's own review (`routes/deck_review.ts`), not one of the reviewer's presses.
+  const rows = FOUNDER_OPTIONS.filter((o: any) => String(o.key).startsWith('review:deck') && o.key !== 'review:deck-version');
   assert.deepEqual(rows.map((o: any) => o.key).sort(), Object.values(DECK_REVIEW_OPTIONS).sort());
   for (const o of rows as any[]) assert.equal(o.page, DECK_REVIEW_PAGE, o.key);
 });

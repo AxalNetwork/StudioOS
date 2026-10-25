@@ -1,0 +1,560 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700;800&amp;family=Roboto+Mono:wght@400;500;600;700&amp;display=swap" rel="stylesheet">
+  <style>body{margin:0}a{color:#7c3aed;text-decoration:none}a:hover{color:#6d28d9}dl,dd{margin:0}button:focus-visible,a:focus-visible,[role=switch]:focus-visible,[role=radio]:focus-visible{outline:2px solid #7c3aed;outline-offset:2px}</style>
+</helmet>
+<div style="{{ v.root }}">
+  <sc-if value="{{ v.side }}" hint-placeholder-val="{{ true }}">
+    <aside style="{{ v.asideS }}">
+      <div style="padding:4px 16px 12px;display:flex;align-items:center;gap:8px"><span style="{{ v.logoS }}"></span><span style="font-weight:800;font-size:14px;letter-spacing:-.01em">Axal VC</span></div>
+      <span style="{{ v.groupS }}">{{ v.group }}</span>
+      <nav aria-label="Main" style="display:flex;flex-direction:column;gap:2px">
+        <sc-for list="{{ v.rows }}" as="s" hint-placeholder-count="9"><a href="{{ s.href }}" style="{{ s.st }}">{{ s.t }}</a></sc-for>
+      </nav>
+    </aside>
+  </sc-if>
+  <main style="{{ v.mainS }}">
+    <sc-if value="{{ v.top }}" hint-placeholder-val="{{ true }}">
+      <div style="{{ v.topS }}">
+        <div style="{{ v.searchS }}"><span aria-hidden="true">⌕</span>Search StudioOS</div>
+        <div style="display:flex;align-items:center;gap:12px">
+          <span style="{{ v.badgeS }}">{{ v.badge }}</span>
+          <span role="img" aria-label="Notifications" style="{{ v.iconS }}" dangerouslySetInnerHTML="{{ v.bell }}"></span>
+          <span aria-label="Account" style="{{ v.avS }}">[N]</span>
+        </div>
+      </div>
+    </sc-if>
+    <sc-if value="{{ v.strip }}" hint-placeholder-val="{{ false }}"><nav aria-label="Content" style="{{ v.stripS }}"><sc-for list="{{ v.strip }}" as="sx" hint-placeholder-count="6"><a href="{{ sx.href }}" style="{{ sx.s }}">{{ sx.t }}</a></sc-for></nav></sc-if>
+    <sc-if value="{{ v.ptop }}" hint-placeholder-val="{{ false }}">
+      <div style="{{ v.ptopS }}">
+        <button type="button" aria-label="Menu" style="{{ v.picoS }}">☰</button>
+        <span style="display:flex;align-items:center;gap:7px"><span style="{{ v.logoS }}"></span><b style="font-size:13px">{{ v.ptitle }}</b></span>
+        <button type="button" style="{{ v.askS }}">Ask Eadwyn</button>
+      </div>
+    </sc-if>
+    <div style="{{ v.bodyS }}">
+      <sc-if value="{{ v.head }}" hint-placeholder-val="{{ true }}">
+        <header style="display:flex;flex-direction:column;gap:8px">
+          <sc-if value="{{ v.crumb }}" hint-placeholder-val="{{ true }}"><a href="{{ v.crumbHref }}" style="{{ v.crumbS }}">{{ v.crumb }}</a></sc-if>
+          <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:14px;flex-wrap:wrap">
+            <div style="display:flex;flex-direction:column;gap:7px;min-width:0">
+              <h1 style="{{ v.h1S }}">{{ v.title }}</h1>
+              <sc-if value="{{ v.hpills }}" hint-placeholder-val="{{ false }}"><div style="display:flex;gap:7px;flex-wrap:wrap"><sc-for list="{{ v.hpills }}" as="p" hint-placeholder-count="3"><span style="{{ p.s }}">{{ p.t }}</span></sc-for></div></sc-if>
+            </div>
+            <div style="display:flex;align-items:center;gap:9px;flex-wrap:wrap">
+              <sc-for list="{{ v.hbtns }}" as="b" hint-placeholder-count="2">
+                <sc-if value="{{ b.txt }}" hint-placeholder-val="{{ false }}"><span style="{{ b.s }}">{{ b.t }}</span></sc-if>
+                <sc-if value="{{ b.btn }}" hint-placeholder-val="{{ true }}"><button type="button" aria-label="{{ b.al }}" style="{{ b.s }}">{{ b.t }}</button></sc-if>
+              </sc-for>
+            </div>
+          </div>
+          <sc-for list="{{ v.hlines }}" as="l" hint-placeholder-count="1"><p style="{{ l.s }}">{{ l.t }}</p></sc-for>
+          <sc-if value="{{ v.scope }}" hint-placeholder-val="{{ false }}"><div><span title="{{ v.scopeTip }}" style="{{ v.scopeS }}">{{ v.scope }}</span></div></sc-if>
+          <sc-if value="{{ v.notice }}" hint-placeholder-val="{{ false }}"><div role="status" style="{{ v.noticeS }}"><span aria-hidden="true" style="{{ v.noticeI }}">i</span><span style="flex:1">{{ v.notice }}</span><button type="button" style="{{ v.btnG2 }}">Dismiss</button></div></sc-if>
+          <sc-if value="{{ v.gate }}" hint-placeholder-val="{{ false }}"><div style="{{ v.gateS }}"><sc-for list="{{ v.gate }}" as="g" hint-placeholder-count="4"><span style="{{ g.s }}">{{ g.t }}</span></sc-for></div></sc-if>
+        </header>
+      </sc-if>
+      <sc-if value="{{ v.tabs }}" hint-placeholder-val="{{ true }}">
+        <div role="tablist" aria-label="{{ v.tabsL }}" style="{{ v.tabRowS }}">
+          <sc-for list="{{ v.tabs }}" as="tb" hint-placeholder-count="4"><a role="tab" aria-selected="{{ tb.sel }}" href="{{ tb.href }}" style="{{ tb.s }}">{{ tb.t }}<sc-if value="{{ tb.n }}" hint-placeholder-val="{{ false }}"><span style="{{ tb.ns }}">{{ tb.n }}</span></sc-if></a></sc-for>
+        </div>
+      </sc-if>
+      <sc-if value="{{ v.period }}" hint-placeholder-val="{{ false }}">
+        <div role="radiogroup" aria-label="Period" style="{{ v.segS }}"><sc-for list="{{ v.period }}" as="pp" hint-placeholder-count="3"><span role="radio" tabindex="0" aria-checked="{{ pp.on }}" style="{{ pp.s }}">{{ pp.t }}</span></sc-for></div>
+      </sc-if>
+      <sc-if value="{{ v.banner }}" hint-placeholder-val="{{ false }}">
+        <div role="alert" style="{{ v.bannerS }}"><span aria-hidden="true" style="{{ v.bannerI }}">!</span><span style="flex:1">{{ v.banner }}</span><button type="button" style="{{ v.btnS }}">Try again</button></div>
+      </sc-if>
+      <div style="{{ v.gridS }}">
+        <sc-for list="{{ v.cols }}" as="col" hint-placeholder-count="3">
+          <div style="{{ col.s }}">
+            <sc-for list="{{ col.blocks }}" as="k" hint-placeholder-count="1">
+              <sc-if value="{{ k.isTiles }}" hint-placeholder-val="{{ false }}">
+                <div style="{{ k.gs }}">
+                  <sc-for list="{{ k.items }}" as="t" hint-placeholder-count="4">
+                    <div style="{{ k.ts }}">
+                      <span style="{{ v.eyeS }}">{{ t.k }}</span>
+                      <span style="{{ t.vs }}">{{ t.v }}</span>
+                      <div style="display:flex;gap:7px;align-items:center;flex-wrap:wrap">
+                        <sc-if value="{{ t.fl }}" hint-placeholder-val="{{ false }}"><span style="{{ t.fls }}">{{ t.fl }}</span></sc-if>
+                        <sc-if value="{{ t.d }}" hint-placeholder-val="{{ false }}"><span style="{{ t.ds }}">{{ t.d }}</span></sc-if>
+                        <span style="{{ t.ss }}">{{ t.sub }}</span>
+                      </div>
+                    </div>
+                  </sc-for>
+                </div>
+              </sc-if>
+              <sc-if value="{{ k.isCard }}" hint-placeholder-val="{{ true }}">
+                <section style="{{ k.cs }}">
+                  <sc-if value="{{ k.glyph }}" hint-placeholder-val="{{ false }}"><span aria-hidden="true" style="{{ v.glyphS }}">{{ k.glyph }}</span></sc-if>
+                  <sc-if value="{{ k.cover }}" hint-placeholder-val="{{ false }}"><div style="{{ k.cover }}"><span style="{{ v.coverT }}">Cover image</span></div></sc-if>
+                  <sc-if value="{{ k.title }}" hint-placeholder-val="{{ true }}">
+                    <div style="{{ k.ths }}">
+                      <div style="display:flex;flex-direction:column;gap:3px;min-width:0">
+                        <sc-if value="{{ k.eye }}" hint-placeholder-val="{{ false }}"><span style="{{ k.es }}">{{ k.eye }}</span></sc-if>
+                        <h3 style="{{ k.hs }}">{{ k.title }}</h3>
+                      </div>
+                      <div style="display:flex;align-items:center;gap:9px;flex-wrap:wrap"><sc-if value="{{ k.lock }}" hint-placeholder-val="{{ false }}"><span style="{{ v.lockS }}"><span aria-hidden="true" style="display:inline-flex" dangerouslySetInnerHTML="{{ v.lockI }}"></span>Set by HQ</span></sc-if>
+                        <sc-if value="{{ k.meta }}" hint-placeholder-val="{{ false }}"><span style="{{ k.ms }}">{{ k.meta }}</span></sc-if>
+                        <sc-if value="{{ k.tog }}" hint-placeholder-val="{{ false }}"><span role="radiogroup" aria-label="View" style="{{ v.segS }}"><sc-for list="{{ k.tog }}" as="o" hint-placeholder-count="2"><span role="radio" tabindex="0" aria-checked="{{ o.on }}" style="{{ o.s }}">{{ o.t }}</span></sc-for></span></sc-if>
+                      </div>
+                    </div>
+                  </sc-if>
+                  <sc-if value="{{ k.note }}" hint-placeholder-val="{{ false }}"><p style="{{ k.ns }}">{{ k.note }}</p></sc-if>
+                  <sc-if value="{{ k.tbar }}" hint-placeholder-val="{{ false }}">
+                    <div style="display:flex;gap:7px;flex-wrap:wrap;align-items:center"><sc-if value="{{ k.tbar.search }}" hint-placeholder-val="{{ false }}"><div style="{{ v.searchS }}"><span aria-hidden="true">⌕</span>{{ k.tbar.search }}</div></sc-if><sc-for list="{{ k.tbar.chips }}" as="g" hint-placeholder-count="3"><span style="{{ g.s }}">{{ g.t }}</span></sc-for></div>
+                  </sc-if>
+                  <sc-if value="{{ k.legend }}" hint-placeholder-val="{{ false }}">
+                    <div style="display:flex;gap:14px;flex-wrap:wrap;font-size:12px"><sc-for list="{{ k.legend }}" as="lg" hint-placeholder-count="2"><span style="display:inline-flex;align-items:center;gap:6px"><span style="{{ lg.sw }}"></span>{{ lg.t }}</span></sc-for></div>
+                  </sc-if>
+                  <sc-if value="{{ k.svg }}" hint-placeholder-val="{{ false }}"><div dangerouslySetInnerHTML="{{ k.svg }}"></div></sc-if>
+                  <sc-if value="{{ k.refL }}" hint-placeholder-val="{{ false }}"><span style="{{ k.refLs }}">{{ k.refL }}</span></sc-if>
+                  <sc-if value="{{ k.bars }}" hint-placeholder-val="{{ false }}">
+                    <div role="img" aria-label="{{ k.sum }}" style="display:flex;flex-direction:column;gap:9px">
+                      <sc-for list="{{ k.bars }}" as="it" hint-placeholder-count="4"><div title="{{ it.tip }}" style="{{ k.bgs }}"><span style="{{ it.ls }}">{{ it.l }}</span><span style="{{ it.trs }}"><span style="{{ it.fs }}"></span><sc-if value="{{ k.refS }}" hint-placeholder-val="{{ false }}"><span style="{{ k.refS }}"></span></sc-if></span><span style="{{ it.vs }}">{{ it.v }}</span></div></sc-for>
+                    </div>
+                  </sc-if>
+                  <sc-if value="{{ k.stacks }}" hint-placeholder-val="{{ false }}">
+                    <sc-for list="{{ k.stacks }}" as="st" hint-placeholder-count="2">
+                      <div style="display:flex;flex-direction:column;gap:7px">
+                        <span style="{{ v.eyeS }}">{{ st.lab }}</span>
+                        <div style="display:flex;gap:12px;flex-wrap:wrap;font-size:12px"><sc-for list="{{ st.leg }}" as="lg" hint-placeholder-count="4"><span style="display:inline-flex;align-items:center;gap:6px"><span style="{{ lg.sw }}"></span>{{ lg.t }}</span></sc-for></div>
+                        <div role="img" aria-label="{{ st.sum }}" style="{{ v.stackS }}"><sc-for list="{{ st.segs }}" as="sg" hint-placeholder-count="4"><span title="{{ sg.tip }}" style="{{ sg.s }}"></span></sc-for></div>
+                      </div>
+                    </sc-for>
+                  </sc-if>
+                  <sc-if value="{{ k.facts }}" hint-placeholder-val="{{ false }}">
+                    <dl style="{{ v.factsS }}"><sc-for list="{{ k.facts }}" as="f" hint-placeholder-count="6"><div style="display:flex;flex-direction:column;gap:3px;min-width:0"><dt style="{{ v.eyeS }}">{{ f.k }}</dt><dd style="{{ v.ddS }}">{{ f.v }}</dd><sc-if value="{{ f.sub }}" hint-placeholder-val="{{ false }}"><span style="{{ v.fsubS }}">{{ f.sub }}</span></sc-if></div></sc-for></dl>
+                  </sc-if>
+                  <sc-if value="{{ k.cal }}" hint-placeholder-val="{{ false }}">
+                    <div role="grid" aria-label="November 2026" style="{{ v.calS }}">
+                      <sc-for list="{{ k.cal.head }}" as="hd" hint-placeholder-count="7"><span role="columnheader" style="{{ v.calH }}">{{ hd.t }}</span></sc-for>
+                      <sc-for list="{{ k.cal.days }}" as="d" hint-placeholder-count="35">
+                        <div role="gridcell" style="{{ d.s }}">
+                          <div style="display:flex;justify-content:space-between;align-items:center;gap:4px"><span style="{{ d.ns }}">{{ d.n }}</span><sc-if value="{{ d.ov }}" hint-placeholder-val="{{ false }}"><span style="{{ v.ovS }}"><span aria-hidden="true" style="{{ v.ovD }}"></span>{{ d.ov }}</span></sc-if></div>
+                          <sc-for list="{{ d.chips }}" as="ch" hint-placeholder-count="1"><span style="{{ ch.s }}">{{ ch.t }}</span></sc-for>
+                          <sc-if value="{{ d.more }}" hint-placeholder-val="{{ false }}"><a href="#" style="{{ v.moreS }}">{{ d.more }}</a></sc-if>
+                          <sc-if value="{{ d.pop }}" hint-placeholder-val="{{ false }}"><div role="dialog" aria-label="Event" style="{{ v.popS }}"><b style="font-size:13px;line-height:1.35">{{ d.pop.t }}</b><sc-for list="{{ d.pop.lines }}" as="pl" hint-placeholder-count="3"><span style="{{ v.popL }}">{{ pl.t }}</span></sc-for><span style="{{ d.pop.st.s }}">{{ d.pop.st.t }}</span><button type="button" style="{{ v.btnS }}">Open event</button></div></sc-if>
+                        </div>
+                      </sc-for>
+                    </div>
+                  </sc-if>
+                  <sc-if value="{{ k.tags }}" hint-placeholder-val="{{ false }}"><div style="display:flex;gap:7px;flex-wrap:wrap;align-items:center"><sc-for list="{{ k.tags }}" as="g" hint-placeholder-count="3"><span style="{{ g.s }}">{{ g.t }}</span></sc-for></div></sc-if>
+                  <div style="{{ k.rowsS }}">
+                    <sc-for list="{{ k.rows }}" as="r" hint-placeholder-count="2">
+                      <div style="{{ r.rs }}">
+                        <sc-if value="{{ r.db }}" hint-placeholder-val="{{ false }}"><span style="{{ v.dbS }}"><span style="{{ v.dbM }}">{{ r.db.m }}</span><b style="{{ v.dbD }}">{{ r.db.d }}</b><span style="{{ v.dbM }}">{{ r.db.w }}</span></span></sc-if>
+                        <sc-if value="{{ r.lead }}" hint-placeholder-val="{{ false }}"><span aria-hidden="true" style="{{ r.ls }}">{{ r.lead }}</span></sc-if>
+                        <div style="flex:1;min-width:0;display:flex;flex-direction:column;gap:5px">
+                          <sc-if value="{{ r.eye }}" hint-placeholder-val="{{ false }}"><span style="{{ r.es }}">{{ r.eye }}</span></sc-if>
+                          <div style="display:flex;gap:7px;align-items:center;flex-wrap:wrap">
+                            <sc-if value="{{ r.pill }}" hint-placeholder-val="{{ false }}"><span style="{{ r.pill.s }}">{{ r.pill.t }}</span></sc-if>
+                            <span style="{{ r.ts }}">{{ r.t }}</span>
+                          </div>
+                          <sc-if value="{{ r.sub }}" hint-placeholder-val="{{ false }}"><span style="{{ r.ss }}">{{ r.sub }}</span></sc-if>
+                          <sc-if value="{{ r.tags }}" hint-placeholder-val="{{ false }}"><div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center"><sc-for list="{{ r.tags }}" as="g" hint-placeholder-count="2"><span style="{{ g.s }}">{{ g.t }}</span></sc-for></div></sc-if>
+                          <sc-if value="{{ r.bar }}" hint-placeholder-val="{{ false }}"><div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap"><span style="{{ r.bar.trs }}"><span style="{{ r.bar.fs }}"></span></span><span style="{{ v.monoS }}">{{ r.bar.t }}</span><sc-if value="{{ r.bar.w }}" hint-placeholder-val="{{ false }}"><span style="{{ v.waitS }}">{{ r.bar.w }}</span></sc-if></div></sc-if>
+                          <sc-if value="{{ r.btns }}" hint-placeholder-val="{{ false }}"><div style="display:flex;gap:7px;flex-wrap:wrap"><sc-for list="{{ r.btns }}" as="b" hint-placeholder-count="2"><button type="button" style="{{ b.s }}">{{ b.t }}</button></sc-for></div></sc-if>
+                        </div>
+                        <sc-if value="{{ r.v }}" hint-placeholder-val="{{ false }}"><span style="{{ r.vs }}">{{ r.v }}</span></sc-if>
+                        <sc-if value="{{ r.st }}" hint-placeholder-val="{{ false }}"><span style="{{ r.st.s }}">{{ r.st.t }}</span></sc-if>
+                        <sc-if value="{{ r.tg }}" hint-placeholder-val="{{ false }}"><span role="switch" tabindex="0" aria-checked="{{ r.on }}" aria-label="{{ r.t }}" style="{{ r.tg }}"><span style="{{ r.tk }}"></span></span></sc-if>
+                        <sc-if value="{{ r.act }}" hint-placeholder-val="{{ false }}"><button type="button" style="{{ r.as }}">{{ r.act }}</button></sc-if>
+                      </div>
+                    </sc-for>
+                  </div>
+                  <sc-if value="{{ k.btns }}" hint-placeholder-val="{{ false }}"><div style="{{ k.bs }}"><sc-for list="{{ k.btns }}" as="b" hint-placeholder-count="2"><button type="button" style="{{ b.s }}">{{ b.t }}</button></sc-for></div></sc-if>
+                  <sc-if value="{{ k.foot }}" hint-placeholder-val="{{ false }}"><p style="{{ k.fs }}">{{ k.foot }}</p></sc-if>
+                </section>
+              </sc-if>
+              <sc-if value="{{ k.isTable }}" hint-placeholder-val="{{ false }}">
+                <section style="{{ k.cs }}">
+                  <sc-if value="{{ k.title }}" hint-placeholder-val="{{ false }}"><div style="{{ k.ths }}"><h3 style="{{ k.hs }}">{{ k.title }}</h3><div style="display:flex;align-items:center;gap:9px"><sc-if value="{{ k.meta }}" hint-placeholder-val="{{ false }}"><span style="{{ k.ms }}">{{ k.meta }}</span></sc-if><sc-if value="{{ k.tog }}" hint-placeholder-val="{{ false }}"><span role="radiogroup" aria-label="View" style="{{ v.segS }}"><sc-for list="{{ k.tog }}" as="o" hint-placeholder-count="2"><span role="radio" tabindex="0" aria-checked="{{ o.on }}" style="{{ o.s }}">{{ o.t }}</span></sc-for></span></sc-if></div></div></sc-if>
+                  <sc-if value="{{ k.tbar }}" hint-placeholder-val="{{ false }}">
+                    <div style="display:flex;gap:7px;flex-wrap:wrap;align-items:center"><sc-if value="{{ k.tbar.search }}" hint-placeholder-val="{{ false }}"><div style="{{ v.searchS }}"><span aria-hidden="true">⌕</span>{{ k.tbar.search }}</div></sc-if><sc-for list="{{ k.tbar.chips }}" as="g" hint-placeholder-count="3"><span style="{{ g.s }}">{{ g.t }}</span></sc-for></div>
+                    <sc-if value="{{ k.tbar.views }}" hint-placeholder-val="{{ false }}"><div style="display:flex;gap:7px;flex-wrap:wrap;align-items:center"><span style="{{ v.eyeS }}">Saved views</span><sc-for list="{{ k.tbar.views }}" as="g" hint-placeholder-count="4"><span style="{{ g.s }}">{{ g.t }}</span></sc-for></div></sc-if>
+                  </sc-if>
+                  <div role="table" style="overflow-x:auto">
+                    <div style="{{ k.ins }}">
+                      <div role="row" style="{{ k.hrs }}"><sc-for list="{{ k.cols }}" as="h" hint-placeholder-count="5"><span role="columnheader">{{ h.t }}</span></sc-for></div>
+                      <sc-for list="{{ k.rows }}" as="row" hint-placeholder-count="4">
+                        <div role="row" style="{{ row.s }}"><sc-for list="{{ row.cells }}" as="cl" hint-placeholder-count="5"><div role="cell" title="{{ cl.tip }}" style="{{ cl.s }}"><sc-if value="{{ cl.pill }}" hint-placeholder-val="{{ false }}"><span style="{{ cl.pill.s }}">{{ cl.pill.t }}</span></sc-if><span style="{{ cl.ts }}">{{ cl.t }}</span><sc-if value="{{ cl.sub }}" hint-placeholder-val="{{ false }}"><span style="{{ cl.ss }}">{{ cl.sub }}</span></sc-if></div></sc-for></div>
+                      </sc-for>
+                    </div>
+                  </div>
+                  <sc-if value="{{ k.pager }}" hint-placeholder-val="{{ false }}">
+                    <div style="display:flex;justify-content:space-between;align-items:center;gap:11px;flex-wrap:wrap"><span style="{{ v.countS }}">{{ k.count }}</span><span style="display:flex;gap:6px;align-items:center"><span style="{{ v.countS }}">Rows per page</span><span style="{{ v.pageS }}">25 ▾</span><button type="button" aria-label="Previous page" style="{{ v.pageS }}">‹</button><button type="button" aria-current="page" style="{{ v.pageS }}">1</button><button type="button" style="{{ v.pageS }}">2</button><button type="button" aria-label="Next page" style="{{ v.pageS }}">›</button></span></div>
+                  </sc-if>
+                  <sc-if value="{{ k.foot }}" hint-placeholder-val="{{ false }}"><p style="{{ k.fs }}">{{ k.foot }}</p></sc-if>
+                </section>
+              </sc-if>
+            </sc-for>
+          </div>
+        </sc-for>
+      </div>
+    </div>
+    <sc-if value="{{ v.pbar }}" hint-placeholder-val="{{ false }}"><div style="{{ v.pbarS }}"><sc-for list="{{ v.pbar }}" as="b" hint-placeholder-count="2"><button type="button" style="{{ b.s }}">{{ b.t }}</button></sc-for></div></sc-if>
+  </main>
+  <sc-if value="{{ v.spine }}" hint-placeholder-val="{{ true }}">
+    <aside aria-label="Eadwyn" title="{{ v.spineTip }}" style="{{ v.spineS }}"><span style="{{ v.eadS }}">E</span><span style="{{ v.spineT }}">Eadwyn</span><sc-if value="{{ v.railDot }}" hint-placeholder-val="{{ false }}"><span title="Reading" style="{{ v.railDotS }}"></span></sc-if><sc-if value="{{ v.railOpen }}" hint-placeholder-val="{{ false }}"><p style="{{ v.railNoteS }}">{{ v.spineTip }}</p><div style="{{ v.railQS }}">Ask Eadwyn about these segments…</div></sc-if></aside>
+  </sc-if>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;$preview&quot;:{&quot;width&quot;:&quot;1440px&quot;,&quot;height&quot;:&quot;900px&quot;},&quot;board&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;default&quot;:&quot;SEG1&quot;,&quot;options&quot;:[&quot;SEG1&quot;,&quot;SEG2&quot;,&quot;SEG3&quot;,&quot;SEG3i&quot;,&quot;SEG4a&quot;,&quot;SEG4b&quot;,&quot;SEG4c&quot;,&quot;SEG4t&quot;,&quot;SEG5&quot;,&quot;SEG5d&quot;,&quot;SEG6&quot;,&quot;SEG6c&quot;,&quot;SEG6s&quot;,&quot;SEG7&quot;,&quot;SEG8&quot;,&quot;SEG9&quot;,&quot;SEG10&quot;,&quot;SEG11&quot;,&quot;SEG12&quot;,&quot;SEG12d&quot;,&quot;SEG12f&quot;,&quot;SEG13a&quot;,&quot;SEG13b&quot;,&quot;SEG14a&quot;,&quot;SEG14b&quot;],&quot;tsType&quot;:&quot;string&quot;}}">
+class Component extends DCLogic {
+  renderVals() {
+    const B = this.props.board || 'SEG1';
+    const dark = B === 'SEG9', phone = B.indexOf('SEG14') === 0;
+    const crop = ['SEG3i', 'SEG4a', 'SEG4b', 'SEG4c', 'SEG4t', 'SEG6c', 'SEG6s', 'SEG12d'].indexOf(B) >= 0;
+    const railOpen = B === 'SEG1';
+    const c = dark
+      ? { bg: '#0b1220', card: '#111827', raised: '#1f2937', ink: '#e5e7eb', mu: '#9ca3af', fa: '#6b7280', hair: '#374151', vi: '#a78bfa', vt: '#a78bfa', lav: '#211f3d', lavE: '#4c3a8a', pos: '#34d399', posBg: 'rgba(52,211,153,.12)', posE: 'rgba(52,211,153,.45)', neg: '#f87171', negBg: 'rgba(248,113,113,.12)', negE: 'rgba(248,113,113,.5)', amT: '#fcd34d', amBg: 'rgba(252,211,77,.1)', amE: 'rgba(252,211,77,.55)', dim: 'rgba(3,7,18,.62)', skel: '#1f2937' }
+      : { bg: '#f4f3f7', card: '#ffffff', raised: '#f8f7fb', ink: '#18181b', mu: '#6b6577', fa: '#a1a1aa', hair: '#ececf1', vi: '#7c3aed', vt: '#6d28d9', lav: '#f4f0fe', lavE: '#ddd0fb', pos: '#047857', posBg: '#ecfdf5', posE: '#a7f3d0', neg: '#b91c1c', negBg: '#fef2f2', negE: '#fecaca', amT: '#92400e', amBg: '#fffbeb', amE: '#fcd34d', dim: 'rgba(24,24,27,.34)', skel: '#ececf1' };
+    const MO = "'Roboto Mono',ui-monospace,monospace", SG = "'Space Grotesk',system-ui,sans-serif";
+    const S = [c.vi, '#0ea5e9', '#f59e0b', '#10b981', '#6b6577'];
+    const eyeS = 'font:700 10px ' + MO + ';letter-spacing:.07em;text-transform:uppercase;color:' + c.mu;
+    const CARD = 'background:' + c.card + ';border:1px solid ' + c.hair + ';border-radius:12px;padding:16px 18px;display:flex;flex-direction:column;gap:11px;min-width:0;box-sizing:border-box';
+    const PLAIN = 'display:flex;flex-direction:column;gap:8px;min-width:0';
+    const SEC = 'display:flex;flex-direction:column;gap:9px;min-width:0;padding-top:14px;border-top:1px solid ' + c.hair;
+    const BTN = 'display:inline-flex;align-items:center;justify-content:center;gap:6px;min-height:' + (phone ? 44 : 34) + 'px;padding:0 14px;border-radius:9px;font:700 13px ' + SG + ';cursor:pointer;white-space:nowrap;box-sizing:border-box;';
+    const btnP = BTN + 'border:1px solid #7c3aed;background:#7c3aed;color:#fff';
+    const btnS = BTN + 'border:1px solid ' + c.hair + ';background:' + c.card + ';color:' + c.ink;
+    const btnG = BTN + 'border:1px solid transparent;background:transparent;color:' + c.vt + ';padding:0 6px';
+    const btnD = BTN + 'border:1px solid ' + c.negE + ';background:' + c.card + ';color:' + c.neg;
+    const btnSm = BTN + 'min-height:' + (phone ? 44 : 30) + 'px;padding:0 11px;font-size:12px;border:1px solid ' + c.hair + ';background:' + c.card + ';color:' + c.ink;
+    const TN = { n: [c.mu, c.raised, c.hair], v: [c.vt, c.lav, c.lavE], g: [c.pos, c.posBg, c.posE], r: [c.neg, c.negBg, c.negE], a: [c.amT, c.amBg, c.amE] };
+    const pl = (ic, t, tone) => { const x = TN[tone || 'n']; return { t: (ic ? ic + ' ' : '') + t, s: 'display:inline-flex;align-items:center;gap:4px;padding:2px 9px;border-radius:999px;font:700 11px ' + SG + ';line-height:1.5;white-space:nowrap;color:' + x[0] + ';background:' + x[1] + ';border:1px solid ' + x[2] }; };
+    const tag = (t, sel) => ({ t, s: 'display:inline-flex;align-items:center;gap:5px;min-height:' + (phone ? 40 : 28) + 'px;padding:0 11px;border-radius:999px;box-sizing:border-box;font:' + (sel ? 700 : 600) + ' 12px ' + SG + ';white-space:nowrap;cursor:pointer;' + (sel ? 'color:' + c.vt + ';background:' + c.lav + ';border:1px solid ' + c.lavE : 'color:' + c.ink + ';background:' + c.card + ';border:1px solid ' + c.hair) });
+    const seg = (opts, cur) => opts.map(t => ({ t, on: t === cur ? 'true' : 'false', s: 'display:inline-flex;align-items:center;min-height:' + (phone ? 40 : 28) + 'px;padding:0 12px;border-radius:7px;font:' + (t === cur ? 700 : 600) + ' 12px ' + SG + ';cursor:pointer;white-space:nowrap;' + (t === cur ? 'background:' + c.card + ';color:' + c.ink + ';box-shadow:0 0 0 1px ' + c.hair : 'color:' + c.mu) }));
+    const TOG = () => seg(['Chart', 'Table'], 'Chart');
+    const RS = 'display:flex;gap:11px;align-items:flex-start;padding:10px 0;border-top:1px solid ' + c.hair;
+    const R = (o) => Object.assign({ rs: RS, db: false, lead: false, ls: 'font-size:14px;line-height:1.3;flex:none;color:' + c.mu, eye: false, es: eyeS, pill: false, t: '', ts: 'font-size:13px;font-weight:600;line-height:1.45', sub: false, ss: 'font-size:12px;color:' + c.mu + ';line-height:1.5', tags: false, bar: false, btns: false, v: false, vs: 'font:700 13px ' + MO + ';white-space:nowrap;color:' + c.ink, st: false, tg: false, tk: '', on: 'false', act: false, as: btnSm }, o);
+    const K = (o) => Object.assign({ isCard: true, isTiles: false, isTable: false, cs: CARD, glyph: false, cover: false, title: false, ths: 'display:flex;align-items:center;justify-content:space-between;gap:11px;flex-wrap:wrap', eye: false, es: eyeS, hs: 'margin:0;font-size:15px;font-weight:800;letter-spacing:-.01em', meta: false, ms: 'font-size:12px;color:' + c.mu, tog: false, lock: false, note: false, ns: 'margin:0;font-size:12.5px;line-height:1.55;color:' + c.mu, tbar: false, legend: false, svg: false, refL: false, refLs: '', bars: false, sum: '', bgs: 'display:grid;grid-template-columns:180px minmax(0,1fr) 150px;gap:11px;align-items:center;font-size:12.5px', refS: false, stacks: false, facts: false, tags: false, cal: false, rows: [], rowsS: 'display:flex;flex-direction:column', btns: false, bs: 'display:flex;gap:7px;flex-wrap:wrap', foot: false, fs: 'margin:0;font-size:12px;color:' + c.mu + ';line-height:1.55' }, o);
+    const TL = (items, n) => ({ isCard: false, isTiles: true, isTable: false, gs: 'display:grid;grid-template-columns:repeat(' + (n || (phone ? 2 : 4)) + ',minmax(0,1fr));gap:' + (phone ? 10 : 14) + 'px', ts: CARD + ';gap:6px;padding:' + (phone ? '12px 13px' : '14px 16px'), items: items.map(x => ({ k: x[0], v: x[1], sub: x[2] || '', d: x[3] || false, ds: 'font:700 12px ' + MO + ';color:' + c.pos, fl: x[5] || false, fls: 'display:inline-flex;align-items:center;gap:5px;padding:1px 8px;border-radius:999px;font:700 11px ' + SG + ';color:' + c.amT + ';background:' + c.amBg + ';border:1px solid ' + c.amE, vs: x[1] === '' ? 'display:block;height:24px;width:60%;border-radius:6px;background:' + c.skel : 'font:700 ' + (x[6] ? 15 : (phone ? 20 : 24)) + 'px ' + (x[6] ? SG : MO) + ';letter-spacing:-.02em;color:' + (x[6] || c.ink), ss: 'font-size:12px;color:' + c.mu + ';line-height:1.45' })) });
+    const CL = (t, o) => Object.assign({ t: t == null ? '' : t, tip: '', s: 'display:flex;flex-direction:column;align-items:flex-start;gap:3px;min-width:0', ts: 'line-height:1.4', pill: false, sub: false, ss: 'font-size:11px;color:' + c.mu + ';line-height:1.4' }, o || {});
+    const MN = { ts: 'font-family:' + MO + ';font-weight:600' }, MU = { ts: 'color:' + c.mu }, LK = { ts: 'font-weight:700;color:' + c.vt + ';cursor:pointer' }, BD = { ts: 'font-weight:700;line-height:1.35' };
+    const DOTS = CL('⋯', { ts: 'font-size:16px;color:' + c.mu + ';cursor:pointer', tip: 'More actions' });
+    const TB = (o) => { const t = Object.assign({ isCard: false, isTiles: false, isTable: true, cs: CARD, title: false, ths: 'display:flex;align-items:center;justify-content:space-between;gap:11px;flex-wrap:wrap', hs: 'margin:0;font-size:15px;font-weight:800;letter-spacing:-.01em', meta: false, ms: 'font-size:12px;color:' + c.mu, tog: false, tbar: false, gc: '1fr', minW: 0, cols: [], rows: [], pager: true, count: '', foot: false, fs: 'margin:0;font-size:12px;color:' + c.mu + ';line-height:1.55' }, o);
+      if (t.tbar && !t.tbar.views) t.tbar.views = false;
+      t.ins = 'min-width:' + t.minW + 'px'; t.hrs = 'display:grid;grid-template-columns:' + t.gc + ';gap:8px;padding:8px 0;border-bottom:1px solid ' + c.hair + ';' + eyeS;
+      t.cols = t.cols.map(x => ({ t: x })); t.rows = t.rows.map(cells => ({ s: 'display:grid;grid-template-columns:' + t.gc + ';gap:8px;padding:9px 0;border-bottom:1px solid ' + c.hair + ';align-items:center;font-size:12px', cells: cells.map(x => typeof x === 'string' ? CL(x) : x) })); return t; };
+    const H18 = 'margin:0;font-size:18px;font-weight:800;letter-spacing:-.02em;line-height:1.3';
+    const FIN = 'display:block;box-sizing:border-box;width:100%;padding:9px 11px;border:1px solid ' + c.hair + ';border-radius:7px;background:' + c.card + ';font:600 13px ' + SG + ';line-height:1.45;color:' + c.ink;
+    const FIE = FIN + ';color:' + c.fa + ';font-weight:500';
+    const TGS = (on) => 'position:relative;display:inline-block;width:34px;height:20px;border-radius:999px;flex:none;margin-top:2px;cursor:pointer;background:' + (on ? '#7c3aed' : c.hair) + ';border:1px solid ' + (on ? '#7c3aed' : c.mu);
+    const TKS = (on) => 'position:absolute;top:2px;left:' + (on ? 16 : 2) + 'px;width:14px;height:14px;border-radius:999px;background:#fff;box-shadow:0 1px 2px rgba(0,0,0,.25)';
+    const NOTE = (tone) => { const x = { n: [c.raised, c.hair], v: [c.lav, c.lavE], a: [c.amBg, c.amE], r: [c.negBg, c.negE] }[tone]; return 'display:flex;gap:10px;align-items:flex-start;padding:12px 14px;border-radius:10px;background:' + x[0] + ';border:1px solid ' + x[1]; };
+    const INFO = 'display:grid;place-items:center;width:18px;height:18px;border-radius:999px;background:#7c3aed;color:#fff;font:700 11px ' + SG + ';flex:none';
+    const dotSw = (col) => 'width:10px;height:10px;border-radius:3px;flex:none;background:' + col;
+    const LEG = (names) => names.map((t, i) => ({ t, sw: dotSw(S[i]) }));
+    const FILL = (w, col) => 'display:block;height:100%;border-radius:3px;width:' + w + ';background:' + (col || S[0]);
+    const TRK = 'position:relative;display:block;height:14px;border-radius:4px;background:' + c.raised + ';border:1px solid ' + c.hair;
+    const BAR = (l, val, w, o) => Object.assign({ l, v: val, tip: l + ' · ' + val, ls: 'line-height:1.35', trs: TRK, fs: FILL(w), vs: 'font:600 12px ' + MO + ';white-space:nowrap' }, o || {});
+    const COL = (span) => 'display:flex;flex-direction:column;gap:14px;min-width:0;grid-column:span ' + (span || 6);
+    const col = (blocks, span) => ({ s: COL(span), blocks });
+    const G6 = 'display:grid;grid-template-columns:repeat(6,minmax(0,1fr));gap:14px;align-items:start';
+    const STACK = 'display:flex;flex-direction:column;gap:14px';
+    const DIMC = { s: 'position:absolute;inset:0;background:' + c.dim + ';z-index:3', blocks: [] };
+    const DLGS = 'background:' + c.card + ';border:1px solid ' + c.hair + ';border-radius:16px;box-shadow:0 30px 80px rgba(24,24,27,.28);padding:22px;display:flex;flex-direction:column;gap:14px;box-sizing:border-box;';
+    const dlgCol = (blocks, abs, w) => ({ s: abs ? DLGS + 'position:absolute;top:110px;left:50%;transform:translateX(-50%);width:' + (w || 560) + 'px;z-index:4' : DLGS + 'width:100%;max-width:580px;margin:0 auto', blocks });
+    const dlg = (title, note, mid, btns) => [K({ cs: PLAIN, title, hs: H18, meta: 'Esc to close', note })].concat(mid).concat([K({ cs: SEC, btns, bs: 'display:flex;gap:7px;justify-content:flex-end;flex-wrap:wrap' })]);
+    const bul = (t) => R({ rs: 'display:flex;gap:9px;align-items:flex-start;padding:5px 0', lead: '•', ls: 'font-size:14px;line-height:1.35;color:' + c.vt, t, ts: 'font-size:13px;font-weight:500;line-height:1.5' });
+    const field = (eye, val, o) => R(Object.assign({ rs: 'display:flex;flex-direction:column;gap:6px;padding:4px 0', eye, t: val, ts: FIN }, o || {}));
+    const SW = (t, on, sub) => R({ rs: 'display:flex;gap:11px;align-items:flex-start;padding:8px 0;border-top:1px solid ' + c.hair, t, sub: sub || false, tg: TGS(on), tk: TKS(on), on: on ? 'true' : 'false' });
+    const RAD = (t, on, sub) => R({ rs: 'display:flex;gap:9px;align-items:flex-start;padding:6px 0', lead: on ? '◉' : '○', ls: 'font-size:15px;line-height:1.2;flex:none;color:' + (on ? c.vt : c.mu), t, sub: sub || false });
+    const CHK = (t, on) => R({ rs: 'display:flex;gap:9px;align-items:flex-start;padding:5px 0', lead: on ? '☑' : '☐', ls: 'font-size:15px;line-height:1.2;flex:none;color:' + (on ? c.vt : c.mu), t });
+    const STEPS = (list, cur) => list.map((t, i) => ({ t: (i ? '→ ' : '') + t, s: 'font-size:12px;white-space:nowrap;font-weight:' + (i === cur ? 800 : 600) + ';color:' + (i === cur ? c.vt : c.mu) }));
+    const MOVED = (t) => K({ cs: PLAIN, rows: [R({ rs: NOTE('v') + ';align-items:center;padding:9px 12px', lead: 'i', ls: INFO, t, ts: 'font-size:13px;font-weight:600;line-height:1.45', act: 'Dismiss', as: btnG })] });
+    const INFOROW = (t, tone, act) => R({ rs: NOTE(tone || 'v'), lead: 'i', ls: INFO, t, ts: 'font-size:13px;font-weight:600;line-height:1.5', act: act || false, as: btnG });
+    const SKR = (w) => R({ rs: 'display:block;height:12px;border-radius:6px;margin:9px 0;background:' + c.skel + ';width:' + w });
+    const sk = (n) => K({ title: 'Reading…', hs: 'margin:0;font-size:13px;font-weight:600;color:' + c.mu, rows: ['92%', '74%', '86%', '60%', '70%'].slice(0, n).map(SKR) });
+    const CENTER = (glyph, t, note, btns, extra) => K({ cs: CARD + ';align-items:center;text-align:center;padding:34px 28px' + (extra || ''), glyph, title: t, ths: 'display:flex;justify-content:center', hs: 'margin:0;font-size:16px;font-weight:800;text-align:center;line-height:1.35', note, ns: 'margin:0;font-size:13px;color:' + c.mu + ';text-align:center;line-height:1.55', btns, bs: 'display:flex;gap:7px;justify-content:center;flex-wrap:wrap' });
+    const svgOpen = (W, H, sum, f) => '<svg viewBox="0 0 ' + W + ' ' + H + '" width="100%" role="img" aria-label="' + sum + '" style="display:block;overflow:visible;font-family:' + (f || 'Roboto Mono,monospace') + '">';
+    const lineSvg = (o) => { const W = o.w || 1080, H = o.h || 260, L = 50, Rt = o.rp == null ? 200 : o.rp, T = 26, Bm = 30, iw = W - L - Rt, ih = H - T - Bm, n = o.n;
+      const X = (i) => +(L + i * iw / (n - 1)).toFixed(1), Y = (v) => +(T + ih - v / o.ymax * ih).toFixed(1);
+      let s = svgOpen(W, H, o.sum);
+      for (let v = 0; v <= o.ymax; v += o.ystep) s += '<line x1="' + L + '" x2="' + (L + iw) + '" y1="' + Y(v) + '" y2="' + Y(v) + '" stroke="' + c.hair + '"/><text x="' + (L - 8) + '" y="' + (Y(v) + 4) + '" text-anchor="end" font-size="11" fill="' + c.mu + '">' + (o.yf ? o.yf(v) : v) + '</text>';
+      s += '<text x="' + L + '" y="11" font-size="11" fill="' + c.mu + '">' + o.yl + '</text>';
+      o.xl.forEach((t, i) => { if (i % (o.xe || 1) === 0 || i === n - 1) s += '<text x="' + X(i) + '" y="' + (H - 8) + '" text-anchor="middle" font-size="11" fill="' + c.mu + '">' + t + '</text>'; });
+      const labs = [];
+      o.series.forEach((se) => { let d = '', pen = false, li = -1; se.vals.forEach((v, i) => { if (v == null) { pen = false; return; } d += (pen ? 'L' : 'M') + X(i) + ' ' + Y(v); pen = true; li = i; });
+        s += '<path d="' + d + '" fill="none" stroke="' + se.col + '" stroke-width="2.5" stroke-linejoin="round" stroke-linecap="round"/>';
+        se.vals.forEach((v, i) => { if (v == null) return; const sf = o.soFar && i === n - 1; s += '<circle cx="' + X(i) + '" cy="' + Y(v) + '" r="' + (sf ? 4.5 : 3) + '" fill="' + (sf ? c.card : se.col) + '" stroke="' + se.col + '" stroke-width="2"><title>' + o.xl[i] + ' · ' + se.name + ' ' + v + (sf ? ' so far' : '') + '</title></circle>'; });
+        if (Rt > 40) labs.push({ y: Y(se.vals[li]) + 4, t: se.name + (o.soFar ? ' · ' + se.vals[li] + ' so far' : ''), col: se.col }); });
+      labs.sort((a, b) => a.y - b.y); for (let i = 1; i < labs.length; i++) if (labs[i].y < labs[i - 1].y + 15) labs[i].y = labs[i - 1].y + 15;
+      labs.forEach((l) => { s += '<circle cx="' + (L + iw + 14) + '" cy="' + (l.y - 4) + '" r="4" fill="' + l.col + '"/><text x="' + (L + iw + 23) + '" y="' + l.y + '" font-size="11.5" fill="' + c.ink + '">' + l.t + '</text>'; });
+      if (o.soFar) s += '<text x="' + X(n - 1) + '" y="' + (T - 10) + '" text-anchor="middle" font-size="10.5" fill="' + c.mu + '">so far</text>';
+      return { __html: s + '</svg>' }; };
+    const colSvg = (o) => { const W = o.w || 560, H = o.h || 230, L = 40, T = 26, Bm = 30, iw = W - L - 8, ih = H - T - Bm, n = o.data.length, step = iw / n, bw = step * .6;
+      const Y = (v) => +(T + ih - v / o.ymax * ih).toFixed(1);
+      let s = svgOpen(W, H, o.sum);
+      for (let v = 0; v <= o.ymax; v += o.ystep) s += '<line x1="' + L + '" x2="' + (L + iw) + '" y1="' + Y(v) + '" y2="' + Y(v) + '" stroke="' + c.hair + '"/><text x="' + (L - 8) + '" y="' + (Y(v) + 4) + '" text-anchor="end" font-size="11" fill="' + c.mu + '">' + v + '</text>';
+      s += '<text x="' + L + '" y="11" font-size="11" fill="' + c.mu + '">' + o.yl + '</text>';
+      o.data.forEach((arr, i) => { const x = +(L + i * step + (step - bw) / 2).toFixed(1), cur = i === n - 1; let acc = 0;
+        arr.forEach((v, j) => { if (!v) return; s += '<rect x="' + x + '" y="' + Y(acc + v) + '" width="' + bw.toFixed(1) + '" height="' + (Y(acc) - Y(acc + v)).toFixed(1) + '" fill="' + S[j] + '"' + (cur ? ' fill-opacity=".4"' : '') + ' stroke="' + c.card + '"><title>' + o.xl[i] + ' · ' + o.names[j] + ' ' + v + (cur ? ' so far' : '') + '</title></rect>'; acc += v; });
+        if (i % 3 === 0 || cur) s += '<text x="' + (x + bw / 2).toFixed(1) + '" y="' + (H - 8) + '" text-anchor="middle" font-size="10.5" fill="' + c.mu + '">' + o.xl[i] + '</text>';
+        if (cur) s += '<text x="' + (x + bw / 2).toFixed(1) + '" y="' + (Y(acc) - 6) + '" text-anchor="middle" font-size="10.5" fill="' + c.mu + '">so far</text>'; });
+      return { __html: s + '</svg>' }; };
+    const hstackSvg = (o) => { const W = o.w || 560, rh = 32, L = o.lw || 182, Rr = 112, H = o.rows.length * rh + 4, iw = W - L - Rr;
+      let s = svgOpen(W, H, o.sum, 'Space Grotesk,sans-serif');
+      o.rows.forEach((r, i) => { const y = i * rh + 4; let acc = 0; s += '<text x="0" y="' + (y + 14) + '" font-size="12" fill="' + c.ink + '">' + r[0] + '</text>';
+        r[1].forEach((v, j) => { if (!v) return; s += '<rect x="' + (L + acc / o.max * iw).toFixed(1) + '" y="' + (y + 2) + '" width="' + (v / o.max * iw - 1.5).toFixed(1) + '" height="16" rx="2" fill="' + S[j] + '"><title>' + r[0] + ' · ' + o.names[j] + ' ' + v + '</title></rect>'; acc += v; });
+        s += '<text x="' + (L + acc / o.max * iw + 8).toFixed(1) + '" y="' + (y + 14) + '" font-family="Roboto Mono,monospace" font-size="11.5" fill="' + c.ink + '">' + r[2] + '</text>'; });
+      return { __html: s + '</svg>' }; };
+    const divSvg = () => { const W = 560, H = 250, L = 52, T = 16, Bm = 28, iw = W - L - 12, ih = H - T - Bm, y1 = 1600, y0 = -1200;
+      const Y = (v) => +(T + (y1 - v) / (y1 - y0) * ih).toFixed(1);
+      const G = [[600, 250, 350, 200], [550, 300, 400, 150], [500, 350, 450, 100]], SP = [800, 850, 950], M = ['[Aug]', '[Sep]', '[Oct]'], GN = ['Lab milestones', 'Bounties', 'Referrals', 'Granted by HQ'];
+      let s = svgOpen(W, H, 'Credits granted and spent, August to October: 1,400 granted each month; 800, 850 and 950 spent on perk claims.');
+      for (let v = y0; v <= y1; v += 400) s += '<line x1="' + L + '" x2="' + (L + iw) + '" y1="' + Y(v) + '" y2="' + Y(v) + '" stroke="' + (v === 0 ? c.mu : c.hair) + '"/><text x="' + (L - 8) + '" y="' + (Y(v) + 4) + '" text-anchor="end" font-size="11" fill="' + c.mu + '">' + v + '</text>';
+      s += '<text x="' + L + '" y="9" font-size="11" fill="' + c.mu + '">credits</text>';
+      const bw = 70, gap = iw / 3;
+      G.forEach((g, i) => { const x = +(L + i * gap + (gap - bw) / 2).toFixed(1); let acc = 0;
+        g.forEach((v, j) => { s += '<rect x="' + x + '" y="' + Y(acc + v) + '" width="' + bw + '" height="' + (Y(acc) - Y(acc + v)).toFixed(1) + '" fill="' + S[j] + '" stroke="' + c.card + '"><title>' + M[i] + ' · ' + GN[j] + ' ' + v + '</title></rect>'; acc += v; });
+        s += '<text x="' + (x + bw / 2) + '" y="' + (Y(acc) - 6) + '" text-anchor="middle" font-size="11" fill="' + c.ink + '">+' + acc + '</text>';
+        s += '<rect x="' + x + '" y="' + Y(0) + '" width="' + bw + '" height="' + (Y(-SP[i]) - Y(0)).toFixed(1) + '" fill="' + S[4] + '"><title>' + M[i] + ' · Spent on perk claims ' + SP[i] + '</title></rect><text x="' + (x + bw / 2) + '" y="' + (Y(-SP[i]) + 14) + '" text-anchor="middle" font-size="11" fill="' + c.ink + '">−' + SP[i] + '</text>';
+        s += '<text x="' + (x + bw / 2) + '" y="' + (H - 4) + '" text-anchor="middle" font-size="11" fill="' + c.mu + '">' + M[i] + '</text>'; });
+      return { __html: s + '</svg>' }; };
+    const PSM = { Live: ['✓', 'g'], 'Partly built': ['◐', 'v'], 'Not built yet': ['○', 'n'], Proposed: ['✎', 'n'], Paused: ['‖', 'a'] };
+    const ps = (s) => pl(PSM[s][0], s, PSM[s][1]);
+    const gb = (s) => { const m = { Requested: ['◷', 'a'], 'Paused by HQ': ['‖', 'a'], Ended: ['–', 'n'], 'Not granted': ['○', 'n'], 'Runs at HQ': ['⌂', 'n'], 'Not offered yet': ['–', 'n'], 'HQ-held': ['⌂', 'n'], 'HQ only': ['⌂', 'n'] }[s] || ['◆', 'v']; return pl(m[0], s, m[1]); };
+    const SM = { Draft: ['✎', 'n'], 'Sent to HQ': ['◷', 'a'], Approved: ['✓', 'g'], 'Sent back': ['↩', 'n'], Declined: ['✕', 'r'], Submitted: ['↑', 'n'], 'Under review': ['◷', 'a'], 'More info needed': ['?', 'a'], Qualified: ['✓', 'v'], 'In conversation': ['⇄', 'v'], Converted: ['✓', 'g'], 'Reward issued': ['✓', 'g'], Rejected: ['✕', 'r'], Closed: ['–', 'n'], 'In review': ['◷', 'a'], Live: ['✓', 'g'], Paused: ['‖', 'a'], Published: ['✓', 'g'], Active: ['✓', 'g'], Ended: ['–', 'n'], Sent: ['◷', 'a'], 'Not sent': ['○', 'n'], Expired: ['–', 'n'], Verified: ['✓', 'g'], 'Not verified': ['○', 'n'], Done: ['✓', 'g'], 'Not yet': ['○', 'n'] };
+    const sp = (s, lab) => { const m = SM[s] || ['–', 'n']; return pl(m[0], lab || s, m[1]); };
+    const PC = (s, lab) => CL('', { pill: sp(s, lab) });
+    const HB = (t, s) => ({ t, s, btn: true, txt: false, al: t });
+    const HT = (t) => ({ t, s: 'font:500 12px ' + MO + ';color:' + c.mu, btn: false, txt: true, al: t });
+    const ICON = (t, al) => ({ t, s: BTN + 'width:34px;padding:0;border:1px solid ' + c.hair + ';background:' + c.card + ';color:' + c.ink, btn: true, txt: false, al });
+    const TXT = 'margin:0;font-size:13.5px;line-height:1.6;color:' + c.ink;
+    const TAKE = 'margin:0;font-size:13px;font-weight:600;line-height:1.5;color:' + c.ink;
+    const HOLF = dark ? '#111827' : '#ffffff';
+    const PCOL = { Founders: c.vi, Investors: '#0ea5e9', Advisors: '#f59e0b', 'Operating Partners': '#10b981', Explorers: '#6b6577', 'Any profile': '#6b6577' };
+    const P1 = { Founder: 'Founders', Investor: 'Investors', Advisor: 'Advisors', 'Operating Partner': 'Operating Partners', Explorer: 'Explorers' };
+    const ppl = (p) => { const col2 = PCOL[P1[p] || p] || '#6b6577'; return { t: p, s: 'display:inline-flex;align-items:center;padding:2px 9px 2px 21px;border-radius:999px;font:700 11px ' + SG + ';line-height:1.5;white-space:nowrap;color:' + c.ink + ';background:radial-gradient(circle at 11px 50%,' + col2 + ' 3.5px,transparent 4px),' + col2 + (dark ? '33' : '1f') + ';border:1px solid ' + col2 + '66' }; };
+    const obg = (t) => ({ t, s: 'display:inline-flex;align-items:center;padding:1px 8px;border-radius:999px;font:700 10.5px ' + SG + ';line-height:1.5;white-space:nowrap;color:' + c.ink + ';background:transparent;border:1px solid ' + c.mu });
+    const stp = (s) => s === 'Draft' ? pl('✎', 'Draft', 'n') : s === 'Retired' ? pl('–', 'Retired', 'n') : pl('✓', 'Active', 'g');
+    const gapP = (t) => pl('!', t || 'Gap', 'a');
+    const CW = phone ? 362 : railOpen ? 864 : 1140;
+    const spanW = (n) => phone ? 326 : Math.round(n * (CW - 70) / 6 + (n - 1) * 14 - 36);
+    const HOWS = 'font-size:12px;font-weight:700;color:' + c.vt + ';cursor:pointer;white-space:nowrap';
+    const chartK = (o) => K(Object.assign({ meta: 'How is this counted?', ms: HOWS, tog: seg(['Chart', 'View as table'], 'Chart'), ns: TAKE }, o));
+    const hollowSw = 'width:12px;height:10px;border-radius:3px;box-sizing:border-box;background:' + HOLF + ';border:1px solid ' + c.mu;
+    const HFS = (w) => 'display:block;height:100%;box-sizing:border-box;border-radius:3px;width:' + w + ';background:' + HOLF + ';border:1px solid ' + c.mu;
+    const NRS = 'font:700 10.5px ' + MO + ';color:' + c.mu + ';text-transform:uppercase;letter-spacing:.05em';
+    const LN = 'font:700 12px ' + MO + ';color:' + c.mu + ';width:14px;flex:none;padding-top:2px';
+    const pct = (n, d) => (n / d * 100).toFixed(1) + '%';
+    const gbar = (o) => { const W = o.w, st2 = W < 420, L = st2 ? 16 : Math.min(200, Math.round(W * .36)), iw = W - L - 46, rh = st2 ? 38 : 25;
+      let y = 2, b = '';
+      o.groups.forEach((g) => {
+        b += '<circle cx="5" cy="' + (y + 9) + '" r="4.5" fill="' + g.col + '"/><text x="16" y="' + (y + 13) + '" font-family="Roboto Mono,monospace" font-size="10.5" font-weight="700" letter-spacing=".07em" fill="' + c.mu + '">' + g.h.toUpperCase() + '</text>'; y += 24;
+        g.rows.forEach((r) => { const bw = Math.max(3, r[1] / o.max * iw), by = st2 ? y + 18 : y + 3, tip = (r[2] ? g.h + ' · ' : '') + r[0] + ' · ' + r[1] + ' members';
+          b += '<text x="16" y="' + (y + 13) + '" font-size="12" fill="' + c.ink + '">' + r[0] + '</text><rect x="' + L + '" y="' + by + '" width="' + bw.toFixed(1) + '" height="14" rx="3" fill="' + (r[2] ? HOLF : g.col) + '"' + (r[2] ? ' stroke="' + c.mu + '"' : '') + ' tabindex="0"><title>' + tip + '</title></rect><text x="' + (L + bw + 7).toFixed(1) + '" y="' + (by + 11) + '" font-family="Roboto Mono,monospace" font-size="11.5" font-weight="700" fill="' + c.ink + '">' + r[1] + '</text>'; y += rh; });
+        if (g.line) { b += '<text x="16" y="' + (y + 13) + '" font-size="12" fill="' + c.mu + '">' + g.line + '</text>'; y += 25; }
+        y += 10; });
+      return { __html: svgOpen(W, y, o.sum, 'Space Grotesk,sans-serif') + b + '</svg>' }; };
+    const vcol = (o) => { const W = o.w, H = o.h || 210, L = 34, T = 22, Bm = 30, iw = W - L - 4, ih = H - T - Bm, n = o.items.length, step = iw / n, bw = Math.min(54, step * .6);
+      const Y = (v2) => +(T + ih - v2 / o.ymax * ih).toFixed(1);
+      let s = svgOpen(W, H, o.sum);
+      for (let v2 = 0; v2 <= o.ymax; v2 += o.ystep) s += '<line x1="' + L + '" x2="' + (L + iw) + '" y1="' + Y(v2) + '" y2="' + Y(v2) + '" stroke="' + c.hair + '"/><text x="' + (L - 6) + '" y="' + (Y(v2) + 4) + '" text-anchor="end" font-size="10.5" fill="' + c.mu + '">' + v2 + '</text>';
+      s += '<text x="' + L + '" y="10" font-size="10.5" fill="' + c.mu + '">' + o.yl + '</text>';
+      o.items.forEach((it, i) => { const x = +(L + i * step + (step - bw) / 2).toFixed(1), hol = it[2], cx = (x + bw / 2).toFixed(1);
+        s += '<rect x="' + x + '" y="' + Y(it[1]) + '" width="' + bw.toFixed(1) + '" height="' + Math.max(1, Y(0) - Y(it[1])).toFixed(1) + '" rx="2" fill="' + (hol ? HOLF : o.col) + '"' + (hol ? ' stroke="' + c.mu + '"' : '') + ' tabindex="0"><title>' + it[0] + ' · ' + it[1] + ' members</title></rect><text x="' + cx + '" y="' + (Y(it[1]) - 5) + '" text-anchor="middle" font-size="11" font-weight="700" fill="' + c.ink + '">' + it[1] + '</text><text x="' + cx + '" y="' + (H - 9) + '" text-anchor="middle" font-size="10" fill="' + c.mu + '">' + it[0] + '</text>'; });
+      return { __html: s + '</svg>' }; };
+    const WKL = ['31 Aug', '7 Sep', '14 Sep', '21 Sep', '28 Sep', '5 Oct', '12 Oct', '19 Oct'];
+    const wkSvg = (w) => { const o = lineSvg({ w, h: 210, rp: 16, n: 8, ymax: 40, ystep: 10, yl: 'members given a segment', soFar: true, xl: phone ? WKL.map((t, i) => i % 2 ? '' : t) : WKL, xe: 1, sum: 'Members given a segment per week from 31 August: 18, 22, 25, 19, 31, 27, 24, and 9 so far in the week of 19 October.', series: [{ name: 'Given a segment', vals: [18, 22, 25, 19, 31, 27, 24, 9], col: c.vi }] }); return { __html: o.__html.split('so far').join('to date') }; };
+    const T1 = [['In a segment', '632', 'of 1,271 members · 50%', '+91 in 4 weeks'], ['No segment', '639', 'Open Unclassified ›'], ['Segment and profile differ', '9', 'Advisors in Operator / Advisor'], ['Moved by an admin, 30 days', '14', '']];
+    const DIV = { t: '', s: 'display:inline-block;width:1px;height:26px;background:' + c.hair + ';margin:0 4px' };
+    const profF = (hq) => K({ cs: PLAIN, tags: (hq ? [tag('Scope: HQ-held accounts ▾', true), DIV] : []).concat(['All', 'Founders', 'Investors', 'Advisors', 'Operating Partners', 'Explorers'].map((t, i) => tag(t, !i))).concat([DIV, tag('LPs 41'), tag('Product testers 57')]), foot: hq ? 'Today only HQ-held accounts exist. Subsidiaries appear once they are deployed.' : false });
+    const SEGG = [
+      { h: 'Founders', col: PCOL.Founders, rows: [['Founder — New Venture', 268], ['Founder — Existing Company', 141], ['No segment', 134, 1]] },
+      { h: 'Investors', col: PCOL.Investors, rows: [['Angel / Scout', 61], ['LP — Individual', 38], ['GP — External Fund', 27], ['Corporate VC', 14], ['LP — Institutional', 9], ['Sovereign / Family Office', 4], ['No segment', 76, 1]] },
+      { h: 'Advisors', col: PCOL.Advisors, rows: [], line: 'No segment for Advisors yet. 87 advisors have none.' },
+      { h: 'Operating Partners', col: PCOL['Operating Partners'], rows: [['Operator / Advisor', 22], ['Service Provider', 17], ['No segment', 33, 1]] },
+      { h: 'Any profile', col: PCOL['Any profile'], rows: [['Academic / Lab', 19], ['Press / Analyst', 12]] },
+      { h: 'Explorers', col: PCOL.Explorers, rows: [['No segment', 309, 1]] }];
+    const segK = () => chartK({ title: 'Segments by profile', note: 'Half your members have a segment. Explorers and Advisors have the fewest.', legend: [['Founders', PCOL.Founders], ['Investors', PCOL.Investors], ['Operating Partners', PCOL['Operating Partners']], ['Any profile', PCOL['Any profile']]].map(([t, cl]) => ({ t, sw: dotSw(cl) })).concat([{ t: 'No segment (hollow, measured)', sw: hollowSw }]), svg: gbar({ w: spanW(phone ? 6 : 4), max: 320, groups: SEGG, sum: 'Members by segment within each profile: 632 of 1,271 have a segment and 639 have none, including 309 Explorers and 87 Advisors.' }), foot: 'A bar opens its segment. A hollow No segment bar opens Unclassified for that profile.' });
+    const howK = () => chartK({ title: 'How segments were set', note: 'Most members accepted the sign-up suggestion.', bgs: 'display:grid;grid-template-columns:116px minmax(0,1fr) 34px;gap:9px;align-items:center;font-size:12.5px', sum: 'How the 632 segments were set: 412 suggested at sign-up, 171 chosen by the member, 49 set by an admin.', bars: [['Suggested at sign-up', 412], ['Chosen by the member', 171], ['Set by an admin', 49]].map(([l, n]) => BAR(l, String(n), pct(n, 412))), foot: 'Suggested at sign-up: the sign-up chat suggested it and the member accepted.' });
+    const confK = () => chartK({ title: 'How sure the sign-up suggestion was', note: '38 members accepted a suggestion under 50% sure. Check them first.', svg: vcol({ w: spanW(phone ? 6 : 3), col: c.vi, ymax: 200, ystep: 50, yl: 'members', items: [['Under 50%', 38], ['50 to 69%', 96], ['70 to 89%', 171], ['90% and over', 107]], sum: 'Of 412 suggestions accepted at sign-up: 38 under 50% sure, 96 from 50 to 69%, 171 from 70 to 89%, 107 at 90% and over.' }), btns: [{ t: 'Review these 38', s: btnSm }] });
+    const failK = () => K({ title: 'How sure the sign-up suggestion was', meta: 'How is this counted?', ms: HOWS, rows: [R({ rs: NOTE('a') + ';align-items:center', lead: '!', ls: 'font-weight:800;color:' + c.amT, t: 'Could not be read. This is not a claim that no one was tagged.', ts: 'font-size:13px;font-weight:600;color:' + c.amT, act: 'Try again' })] });
+    const wkK = () => chartK({ title: 'New segment tags per week', note: '91 members were given a segment in the last 4 weeks, 9 of them this week to date.', svg: wkSvg(spanW(phone ? 6 : 3)), foot: 'Weeks start on Monday, UTC. The current week is hollow and still open.' });
+    const CARDS = [
+      { p: 'Founders', n: 'Founder — New Venture', who: 'Founders turning a new idea or a lab result into a company.', m: '268', d: '+38', need: 'A clear path from idea to an incorporated company.', met: '4 of 4', g: 0, st: 'Active' },
+      { p: 'Founders', n: 'Founder — Existing Company', who: 'Founders of a company that already trades and wants to raise or grow.', m: '141', d: '+17', need: 'Introductions to investors for the next round.', met: '3 of 4', g: 1, st: 'Active' },
+      { p: 'Investors', n: 'Angel / Scout', who: 'Individual angel or scout sourcing and writing small early checks.', m: '61', d: '+7', need: 'Early deal flow that fits their thesis.', met: '3 of 4', g: 1, st: 'Active' },
+      { p: 'Investors', n: 'LP — Institutional', who: 'Institutions that commit to Axal VC funds as limited partners.', m: '9', d: '+1', need: 'Clear terms and steady reporting on each fund.', met: '2 of 3', g: 1, st: 'Active' },
+      { p: 'Operating Partners', n: 'Service Provider', who: 'Firms that sell services to startups: legal, finance, design and more.', m: '17', d: '+3', need: 'Founders who need their service now.', met: '1 of 3', g: 2, st: 'Active' },
+      { p: 'Any profile', n: 'Academic / Lab', who: 'Researchers and lab teams exploring a spin-out.', m: '19', d: '+2', need: null, met: null, g: 0, st: 'Draft' }];
+    const scard = (o) => K({ eye: o.p.toUpperCase(), title: o.n, note: o.who, rows: [
+      R({ rs: 'display:flex;gap:8px;align-items:baseline;padding:9px 0 0;border-top:1px solid ' + c.hair, t: o.m + ' members', ts: 'font:700 17px ' + MO + ';letter-spacing:-.01em', v: o.d + ' in 30 days', vs: 'font:700 12px ' + MO + ';white-space:nowrap;color:' + c.pos }),
+      R({ rs: 'display:flex;padding:0', t: 'Top need: ' + (o.need || 'Not recorded'), ts: 'font-size:12.5px;font-weight:500;line-height:1.45' + (o.need ? '' : ';color:' + c.mu) }),
+      R({ rs: 'display:flex;padding:0', t: o.met ? 'Needs met ' + o.met : 'Needs met: Not recorded', ts: 'font:600 12px ' + MO + (o.met ? '' : ';color:' + c.mu), tags: (o.g ? [gapP(o.g + (o.g > 1 ? ' gaps' : ' gap'))] : []).concat([stp(o.st)]) })],
+      foot: o.met ? false : 'HQ has not written needs for this segment yet.' });
+    const gh = (p) => K({ cs: PLAIN + ';padding-top:6px', rows: [R({ rs: 'display:flex;gap:8px;align-items:center;padding:0', lead: '●', ls: 'font-size:13px;line-height:1;flex:none;color:' + PCOL[p], t: p, ts: 'font-size:14px;font-weight:800' })] });
+    const advK = (hq) => K({ cs: CARD + ';border-style:dashed;background:transparent', eye: 'ADVISORS', title: 'No segment for Advisors yet.', note: hq ? '87 advisors have none.' : 'HQ is defining them. Suggest one. 87 advisors have none.', btns: [{ t: hq ? 'New segment' : 'Suggest one', s: btnS }] });
+    const cardCols = (hq) => { const out = [col([K({ cs: PLAIN, title: 'Your segments', hs: H18, note: 'Grouped by profile. A card opens its segment.' })])];
+      ['Founders', 'Investors', 'Advisors', 'Operating Partners', 'Any profile'].forEach((p) => { out.push(col([gh(p)])); if (p === 'Advisors') out.push(col([advK(hq)], 2)); CARDS.filter(x => x.p === p).forEach(x => out.push(col([scard(x)], 2))); });
+      return out; };
+    const NROWS = [
+      ['Service Provider', 'Operating Partners', 'Gap', 'Gap', '0', '1', '—', '1 of 3'],
+      ['LP — Institutional', 'Investors', 'Gap', '—', '1', '2', '1', '2 of 3'],
+      ['Angel / Scout', 'Investors', '2 · Gap', '1', '3', '1', '2', '3 of 4'],
+      ['Founder — Existing Company', 'Founders', '[2]', '[3]', '[4]', '[3]', 'Gap', '3 of 4'],
+      ['Founder — New Venture', 'Founders', '3', '4', '5', '6', '—', '4 of 4'],
+      ['LP — Individual', 'Investors', '[1]', '—', '[2]', '[3]', '[1]', '[3] of [3]'],
+      ['GP — External Fund', 'Investors', '[1]', '[1]', '[2]', '[2]', '[1]', '[3] of [3]'],
+      ['Operator / Advisor', 'Operating Partners', '[1]', '[2]', '[2]', '[2]', '—', '[3] of [3]'],
+      ['Academic / Lab', 'Any profile · Draft', '—', '—', '—', '—', '—', 'Not recorded'],
+      ['Corporate VC', 'Investors', '[1]', '—', '[1]', '[2]', '[1]', '[2] of [2]'],
+      ['Press / Analyst', 'Any profile', '—', '—', '[2]', '[3]', '—', '[2] of [2]'],
+      ['Sovereign / Family Office', 'Investors', '[1]', '—', '[1]', '[1]', '[1]', '[3] of [3]']];
+    const ncell = (x) => x === 'Gap' ? CL('', { pill: gapP() }) : x === '—' ? CL('—', MU) : x.indexOf(' · Gap') > 0 ? CL(x.replace(' · Gap', ''), { ts: 'font-family:' + MO + ';font-weight:600', pill: gapP() }) : x === 'Not recorded' ? CL(x, MU) : CL(x, MN);
+    const needsT = () => TB({ title: 'Needs and offers', meta: 'How is this counted?', ms: HOWS, tbar: { search: 'Search a segment', chips: [tag('Sort: Gaps first ▾'), tag('Profile: All ▾')] }, gc: '2.2fr .8fr .8fr .8fr .8fr .9fr .9fr', minW: 760, cols: ['Segment', 'Programs', 'Perks', 'Events', 'Content', 'Sidebar links', 'Needs met'], rows: NROWS.map(r => [CL(r[0], { ts: 'font-weight:700;line-height:1.35', sub: r[1] })].concat(r.slice(2).map(ncell))), count: '1–12 of 12', foot: 'A number counts offers of that kind. Gap: a need asks for that kind and nothing answers it. A dash: no need asks for it.' });
+    const needsPh = () => K({ title: 'Needs and offers', meta: 'How is this counted?', ms: HOWS, rows: NROWS.map(r => { const g = r.slice(2, 7).filter(x => x.indexOf('Gap') >= 0).length; return R({ t: r[0] + (r[7] === 'Not recorded' ? ' · Needs: Not recorded' : ' · Needs met ' + r[7]) + (g ? ' · ' + g + (g > 1 ? ' gaps' : ' gap') : ''), ts: 'font-size:13px;font-weight:600;line-height:1.45', tags: g ? [gapP(g + (g > 1 ? ' gaps' : ' gap'))] : false }); }) });
+    const sugK = () => K({ eye: 'SUGGESTIONS · 2', title: 'Waiting for HQ', meta: 'Open Suggestions ›', ms: HOWS, rows: [
+      R({ t: '[Studio Lisbon] (sample) · LP — Institutional', sub: 'A need: ‘Quarterly fund reporting in one place’ · 3 days ago', btns: [{ t: 'Accept…', s: btnSm }, { t: 'Decline…', s: btnSm }] }),
+      R({ t: 'HQ-held · New segment: ‘University spin-out teams’', sub: '6 days ago', btns: [{ t: 'Accept…', s: btnSm }, { t: 'Decline…', s: btnSm }] })],
+      foot: 'Accept opens Edit segment, filled in. Decline asks for one line the admin will read.' });
+    const overview = (o) => { o = o || {}; const SP = (n) => phone ? 6 : n;
+      let L2 = [col([TL(T1)]), col([profF(o.hq)])];
+      if (o.hq) L2.push(col([sugK()]));
+      return L2.concat([col([segK()], SP(4)), col([howK()], SP(2)), col([o.fail ? failK() : confK()], SP(3)), col([wkK()], SP(3))]).concat(cardCols(o.hq)).concat([col([phone ? needsPh() : needsT()])]); };
+    const SCT = 'No subsidiary is deployed yet, so these are the accounts HQ holds directly.';
+    let shell = 'admin', head = true, tabsList = false, tabCur = '', period = false, title = 'Persona segments', crumb = false, crumbHref = '/admin/accounts', hlines = [], hpills = false, hbtns = [], scope = false, scopeTip = '', gateV = false, grid = G6, cols = [], pbar = false, minH = 900, tabsL = 'Persona segments', notice = false, railDot = false, strip = false;
+    const mainHdr = (cur, hq) => { const sec = hq ? 'Content' : 'Accounts'; crumb = phone ? '‹ ' + sec : sec + ' › Persona segments'; crumbHref = hq ? '/admin/content' : '/admin/accounts'; title = 'Persona segments'; hlines = [{ t: 'Who your members are within each profile, what each segment needs, and what you offer it.' }]; scope = hq ? false : 'HQ-held accounts · axal.vc'; scopeTip = SCT; tabsL = 'Persona segments'; tabsList = [['Overview', ''], ['Unclassified', '/unclassified', '639'], ['Activity', '/activity']].concat(hq ? [['Suggestions', '/suggestions', '2', true]] : []).map(x => ({ t: x[0], href: '/admin/persona-segments' + x[1], n: x[2] || false, w: !!x[3] })); tabCur = cur; hbtns = phone ? [] : [hq ? HB('New segment', btnP) : HB('Suggest a change', btnS)]; };
+    const segHdr = (cur, hq) => { const sec = hq ? 'Content' : 'Accounts'; crumb = phone ? '‹ Persona segments' : sec + ' › Persona segments › Angel / Scout'; crumbHref = '/admin/persona-segments'; title = 'Angel / Scout'; hpills = [ppl('Investors'), stp('Active')]; hlines = [{ t: 'Individual angel or scout sourcing and writing small early checks.' }]; scope = hq ? false : 'HQ-held accounts · axal.vc'; scopeTip = SCT; tabsL = 'Angel / Scout'; tabsList = [['Profile', ''], ['Members', '/members', '61'], ['Activity', '/activity']].map(x => ({ t: x[0], href: '/admin/persona-segments/angel-scout' + x[1], n: x[2] || false, w: false })); tabCur = cur; hbtns = phone ? [] : [hq ? HB('Edit segment', btnP) : HB('Suggest a change', btnS)]; };
+    const mkStrip = () => ['Overview', 'Content queue', 'Publications', 'Persona segments', 'Advisors & Partners', 'Public team page'].map(t => ({ t, href: '/admin/' + (t === 'Persona segments' ? 'persona-segments' : 'content'), s: 'display:inline-flex;align-items:center;min-height:30px;padding:0 11px;border-radius:999px;font-size:12.5px;text-decoration:none;white-space:nowrap;' + (t === 'Persona segments' ? 'background:' + c.lav + ';border:1px solid ' + c.lavE + ';color:' + c.vt + ';font-weight:800' : 'border:1px solid transparent;color:' + c.mu + ';font-weight:600') }));
+    const segTiles = TL([['Members', '61', '', '+7 in 30 days'], ['Sub-accounts', 'LP 6 · Product tester 5', 'not added to the total', false, false, false, c.ink], ['Still Explorers', '0', 'every member here is an Investor'], ['Answered every question', '34 of 61', '']]);
+    const whoK = (hq) => K({ title: 'Who they are', lock: !hq, note: 'Individual angel or scout sourcing and writing small early checks.', ns: TXT, rows: [R({ rs: 'display:flex;padding:8px 0 2px;border-top:1px solid ' + c.hair, eye: 'TYPICAL MEMBER' })].concat(['Writes 3 to 5 checks a year.', 'Mostly $10k to $50k a check.', 'Brings introductions and go-to-market help.'].map(bul)), foot: 'Written by HQ · edited 14 Oct 2026.' + (hq ? '' : ' HQ writes the segment profiles.') });
+    const workK = () => chartK({ title: 'How they work', note: 'Thesis-Driven Backers are the largest group. 11 have no working-style profile yet.', legend: [{ t: 'Investors', sw: dotSw('#0ea5e9') }, { t: 'Not profiled yet (hollow)', sw: hollowSw }], bgs: 'display:grid;grid-template-columns:150px minmax(0,1fr) 30px;gap:9px;align-items:center;font-size:12.5px', sum: 'Angel / Scout members by working style: Thesis-Driven Backer 18, Network Amplifier 14, Hands-On Partner 11, Disciplined Allocator 7, not profiled yet 11.', bars: [['Thesis-Driven Backer', 18], ['Network Amplifier', 14], ['Hands-On Partner', 11], ['Disciplined Allocator', 7], ['Not profiled yet', 11, 1]].map(([l, n, h]) => BAR(l, String(n), pct(n, 18), h ? { fs: HFS(pct(n, 18)) } : { fs: FILL(pct(n, 18), '#0ea5e9') })), foot: 'From each member’s working-style profile.' });
+    const qK = (t, take, items, ymax, foot, sum) => chartK({ eye: 'SIGN-UP QUESTION', title: t, note: take, svg: vcol({ w: spanW(3), col: '#0ea5e9', ymax, ystep: 5, yl: 'members', items, sum }), foot: foot || 'Not answered is a measured count, drawn hollow.' });
+    const EAD = 'Eadwyn groups open answers into themes. A theme shows only with 5 or more answers. No answer is shown on its own.';
+    const q4K = () => K({ eye: 'SIGN-UP QUESTION · OPEN ANSWER', title: 'Primary value-add to founders?', meta: 'How is this counted?', ms: HOWS, note: 'Answered by 39 of 61.', ns: TAKE, rows: [R({ rs: NOTE('n'), t: 'No theme has 5 or more answers yet, so no theme is shown.', ts: 'font-size:13px;font-weight:500;line-height:1.5' })], foot: EAD });
+    const sovK = () => K({ eye: 'INSET · SOVEREIGN / FAMILY OFFICE · 4 MEMBERS', title: 'Venture allocation target (USD)?', note: 'Every cell is under 5, so each one is hidden.', ns: TAKE, tags: ['[Under $25m]', '[$25m to $100m]', '[$100m to $500m]', '[Over $500m]'].map((t, i) => ({ t: t + '   <5', s: 'display:inline-flex;align-items:center;padding:9px 12px;border-radius:10px;border:1px solid ' + c.hair + ';background:' + c.raised + ';font:600 12px ' + MO + ';color:' + c.ink + (i === 1 ? ';box-shadow:0 0 0 2px ' + c.vi : '') })), rows: [R({ rs: 'display:flex;padding:9px 12px;margin-top:4px;border-radius:9px;background:' + (dark ? '#e5e7eb' : '#18181b'), t: 'Fewer than 5, hidden so a small group cannot identify a person.', ts: 'font-size:12px;font-weight:600;line-height:1.45;color:' + (dark ? '#0b1220' : '#ffffff') })] });
+    const och = (kind, t) => ({ t: kind + ' · ' + t, s: 'display:inline-flex;align-items:center;padding:3px 10px;border-radius:999px;font:600 11.5px ' + SG + ';white-space:nowrap;color:' + c.ink + ';background:' + c.raised + ';border:1px solid ' + c.hair });
+    const REACH = 'font:600 12px ' + MO + ';white-space:nowrap;color:' + c.mu;
+    const segNeedsK = (hq) => K({ title: 'Needs and what answers them', meta: 'In HQ’s order', rows: [
+      R({ lead: '1', ls: LN, t: 'Early deal flow that fits their thesis.', tags: [och('Sidebar link', 'Deal Flow'), och('Program', 'Investor cohort access'), och('Events', '3 upcoming')], v: 'Reaches [41] of 61', vs: REACH }),
+      R({ rs: NOTE('a') + ';margin:0 0 6px 25px;padding:9px 12px', lead: '!', ls: 'font-weight:800;flex:none;color:' + c.amT, t: 'Sidebar link Deal Flow reaches 0 of 61. Sidebar links show only when a member’s profile matches the segment’s profile.', ts: 'font-size:12.5px;font-weight:600;line-height:1.5;color:' + c.amT }),
+      R({ lead: '2', ls: LN, t: 'Co-invest next to the studio.', tags: [gapP('Gap: nothing answers this yet')], btns: [hq ? { t: 'Add an offer', s: btnS } : { t: 'Suggest an offer', s: btnG }], v: '—', vs: REACH }),
+      R({ lead: '3', ls: LN, t: 'Quick, light diligence on a deal.', tags: [och('Content', '[Diligence checklist]'), och('Perk', '[Diligence tools · Partner A]')], v: 'Reaches [27] of 61', vs: REACH }),
+      R({ lead: '4', ls: LN, t: 'Get paid for the founders they bring.', tags: [och('Program', 'Refer & Earn'), och('Sidebar link', 'Refer & Earn')], v: 'Reaches [52] of 61', vs: REACH })], foot: hq ? false : 'HQ writes the segment profiles. Suggest an offer to propose one.' });
+    const segCols = (hq) => [col([segTiles]), col([whoK(hq)], 3), col([workK()], 3), col([K({ cs: PLAIN, title: 'What they told us at sign-up', hs: H18, note: 'Counts only. No answer is shown on its own or next to a name. A count under 5 shows as <5.' })]),
+      col([qK('Typical angel check size (USD)?', 'Most write $10k to $25k a check.', [['Under $10k', 9], ['$10k to $25k', 17], ['$25k to $50k', 14], ['$50k and over', 8], ['Not answered', 13, 1]], 20, false, 'Typical check size: under 10k 9, 10k to 25k 17, 25k to 50k 14, 50k and over 8, not answered 13.')], 3),
+      col([qK('How many deals per year do you write?', 'Most write 3 to 5 deals a year.', [['1 to 2', 15], ['3 to 5', 21], ['6 or more', 11], ['Not answered', 14, 1]], 25, false, 'Deals a year: 1 to 2 15, 3 to 5 21, 6 or more 11, not answered 14.')], 3),
+      col([qK('Sectors you focus on?', 'Answered by 44 of 61. Fintech is the largest theme.', [['Fintech', 12], ['Climate', 9], ['AI tools', 8], ['Health', 6], ['Other', 9, 1]], 15, EAD, 'Sector themes from 44 answers: Fintech 12, Climate 9, AI tools 8, Health 6, Other 9.')], 3),
+      col([q4K()], 3), col([sovK()], 3), col([segNeedsK(hq)])];
+    const MEM = [[1, '[Jo Testcase]', 'jo', '', 'Set by an admin', '—', '11 Oct 2026', 'Today'], [1, '[Ana Sample]', 'ana', 'LP', 'Suggested at sign-up', '88%', '6 Oct 2026', '2 days ago'], [1, '[Kai Example]', 'kai', '', 'Suggested at sign-up', '74%', '29 Sep 2026', '6 days ago'], [0, '[Mo Placeholder]', 'mo', '', 'Chosen by the member', '—', '21 Sep 2026', '12 Oct 2026'], [0, '[Rowan Sample]', 'rowan', 'LP', 'Suggested at sign-up', '92%', '2 Sep 2026', 'Yesterday'], [0, '[Priya Example]', 'priya', 'Product tester', 'Chosen by the member', '—', '28 Aug 2026', '3 days ago'], [0, '[Tess Mock]', 'tess', '', 'Suggested at sign-up', '46%', '19 Aug 2026', '14 Sep 2026'], [0, '[Uma Demo]', 'uma', 'Product tester', 'Suggested at sign-up', '67%', '11 Aug 2026', '2 Oct 2026'], [0, '[Vic Testwell]', 'vic', 'LP', 'Chosen by the member', '—', '30 Jul 2026', '5 Sep 2026'], [0, '[Wes Specimen]', 'wes', '', 'Set by an admin', '—', '22 Jul 2026', '9 Oct 2026']];
+    const CHKC = (on) => CL(on ? '☑' : '☐', { ts: 'font-size:15px;color:' + (on ? c.vt : c.mu) });
+    const bulkM = K({ cs: CARD + ';padding:10px 14px;background:' + c.lav + ';border-color:' + c.lavE, rows: [R({ rs: 'display:flex;gap:11px;align-items:center;flex-wrap:wrap', t: '[3] selected', ts: 'font-size:13px;font-weight:800', btns: [{ t: 'Move to another segment…', s: btnP }, { t: 'Clear', s: btnG }] })] });
+    const memT = TB({ tbar: { search: 'Search name or email', chips: [tag('Profile ▾'), tag('How set ▾'), tag('Confidence ▾'), tag('Sub-account ▾'), tag('Answered ▾'), tag('Last active ▾'), tag('Sort: Tagged, newest first ▾')] }, gc: '.26fr 2fr 1fr 1fr 1.3fr .8fr 1.05fr .95fr .26fr', minW: 1000, cols: ['', 'Member', 'Profile', 'Sub-accounts', 'How set', 'Confidence', 'Tagged on', 'Last active', ''], rows: MEM.map(m => [CHKC(m[0]), CL(m[1], { ts: 'font-weight:700', sub: m[2] + '@example.com' }), CL('', { pill: ppl('Investor') }), m[3] ? CL('', { pill: obg(m[3]) }) : CL('—', MU), m[4], m[5] === '—' ? CL('—', MU) : CL(m[5], MN), CL(m[6], MN), m[7], DOTS]), count: '1–25 of 61', foot: 'Ten of the first twenty-five rows are drawn. ⋯ holds Move to another segment… and Open account. Confidence shows only for a suggestion at sign-up.' });
+    const inset = TB({ title: 'Inset · Operator / Advisor · members', pager: false, gc: '2fr 1fr 1.3fr 1fr', cols: ['Member', 'Profile', 'How set', 'Tagged on'], rows: [[CL('[Sam Placeholder]', { ts: 'font-weight:700', pill: pl('!', 'Profile differs', 'a'), sub: 'sam@example.com', tip: 'This segment is for Operating Partners.' }), CL('', { pill: ppl('Advisor') }), 'Set by an admin', CL('3 Oct 2026', MN)], [CL('[Nia Sample]', { ts: 'font-weight:700', pill: obg('also'), sub: 'nia@example.com', tip: 'Main segment Founder — Existing Company. Also carries Operator / Advisor.' }), CL('', { pill: ppl('Founder') }), 'Chosen by the member', CL('26 Sep 2026', MN)]], foot: 'Hover Profile differs: “This segment is for Operating Partners.” A founder who also carries Operator / Advisor shows a small also tag.' });
+    const OPT = (picked) => K({ cs: 'display:flex;flex-direction:column;gap:2px;padding:6px;border:1px solid ' + c.hair + ';border-radius:10px;background:' + c.card + ';box-shadow:0 10px 24px rgba(24,24,27,.08)', rows: [R({ rs: 'display:flex;padding:4px', t: 'Search segments', ts: FIE }), R({ rs: 'display:flex;padding:6px 8px 2px', eye: 'INVESTORS' })].concat(['Angel / Scout', 'LP — Individual', 'GP — External Fund', 'Corporate VC', 'LP — Institutional', 'Sovereign / Family Office'].map(t => R({ rs: 'display:flex;gap:8px;align-items:center;padding:6px 8px;border-radius:8px;' + (t === picked ? 'background:' + c.lav : ''), lead: t === picked ? '✓' : '\u00a0', ls: 'width:14px;flex:none;color:' + c.vt + ';font-weight:800', t: t + (t === 'Angel / Scout' ? ' · now' : ''), ts: 'font-size:13px;font-weight:' + (t === picked ? 800 : 500) }))).concat(['Founders · 2 segments', 'Operating Partners · 2 segments', 'Any profile · 2 segments'].map(t => R({ rs: 'display:flex;padding:6px 8px;border-top:1px solid ' + c.hair, t: t + ' ›', ts: 'font-size:12.5px;font-weight:600;color:' + c.mu }))) });
+    const moveMid = (picked) => [K({ cs: SEC, rows: [R({ rs: 'display:flex;padding:0', eye: 'NOW', t: 'Angel / Scout · Suggested at sign-up · 92%', ts: 'font:600 13px ' + MO })] }), K({ cs: SEC, rows: [field('NEW SEGMENT', picked + ' ▾', picked === 'Angel / Scout' ? { sub: 'Already in Angel / Scout. Nothing to change.', ss: 'font-size:12.5px;font-weight:700;color:' + c.amT } : {})] }), OPT(picked)].concat(picked === 'Angel / Scout' ? [] : [K({ cs: PLAIN, rows: [INFOROW('[Rowan Sample] is an Investor. Corporate VC is an Investor segment.')] }), K({ cs: SEC, title: 'What changes', hs: eyeS, rows: ['Their sidebar shows Corporate VC’s links.', 'Events open only to Angel / Scout close to them; Corporate VC’s open.', 'Corporate VC’s questions are asked next time they open their profile.', 'Logged under your name.'].map(bul) })]);
+    const mvA = dlg('Move [Rowan Sample] to another segment', false, moveMid('Corporate VC'), [{ t: 'Cancel', s: btnS }, { t: 'Move', s: btnP }]);
+    const mvB = dlg('Move [Kim Placeholder] to another segment', '[Kim Placeholder] · Admin', [K({ cs: SEC, rows: [R({ rs: NOTE('r') + ';align-items:center', lead: '!', ls: 'font-weight:800;flex:none;color:' + c.neg, t: 'Only a super admin can move an admin account.', ts: 'font-size:13px;font-weight:600;color:' + c.neg })] })], [{ t: 'Close', s: btnS }]);
+    const mvC = dlg('Move [Rowan Sample] to another segment', false, moveMid('Angel / Scout'), [{ t: 'Cancel', s: btnS }]);
+    const toast = [K({ cs: PLAIN, note: 'After a move', ns: eyeS }), K({ cs: CARD + ';max-width:440px;box-shadow:0 14px 36px rgba(24,24,27,.18)', rows: [R({ rs: 'display:flex;gap:10px;align-items:center;padding:0', lead: '✓', ls: 'color:' + c.pos + ';font-weight:800;font-size:15px', t: 'Moved to Corporate VC.', ts: 'font-size:13.5px;font-weight:700', act: 'View activity', as: btnG })] })];
+    const UN = [[1, '[Ben Sample]', 'ben', 'Explorer', '12 Oct 2026', 'Never', 'Not started'], [1, '[Cara Example]', 'cara', 'Founder', '3 Oct 2026', 'Yesterday', 'Started'], [1, '[Dan Mock]', 'dan', 'Advisor', '28 Sep 2026', '2 days ago', 'Not offered'], [1, '[Eli Demo]', 'eli', 'Investor', '19 Sep 2026', '5 days ago', 'Not started'], [1, '[Fay Testcase]', 'fay', 'Operating Partner', '14 Sep 2026', '9 Oct 2026', 'Started'], [1, '[Gil Placeholder]', 'gil', 'Explorer', '2 Sep 2026', '30 Sep 2026', 'Started'], [1, '[Hana Sample]', 'hana', 'Advisor', '27 Aug 2026', 'Today', 'Not offered'], [1, '[Ira Example]', 'ira', 'Explorer', '15 Aug 2026', 'Never', 'Not started']];
+    const chatP = (s) => s === 'Started' ? pl('◐', 'Started', 'v') : s === 'Not offered' ? pl('–', 'Not offered', 'n') : pl('○', 'Not started', 'n');
+    const unCols = () => [col([K({ cs: PLAIN, note: 'Members with no segment. Ask them to finish their profile, or place them yourself.', ns: TAKE, tags: [['All', 639], ['Founders', 134], ['Investors', 76], ['Advisors', 87], ['Operating Partners', 33], ['Explorers', 309]].map(([t, n], i) => tag(t + ' ' + n, !i)) })]),
+      col([chartK({ title: 'Why they have no segment', note: 'Most skipped the sign-up chat.', bgs: 'display:grid;grid-template-columns:230px minmax(0,1fr) 40px;gap:10px;align-items:center;font-size:12.5px', sum: 'Of 639 members with no segment: 402 skipped the sign-up chat, 150 started and did not finish, 87 have a profile with no segment yet.', bars: [['Skipped the sign-up chat', 402], ['Started, did not finish', 150], ['Their profile has no segment yet', 87]].map(([l, n]) => BAR(l, String(n), pct(n, 402))), foot: 'Their profile has no segment yet: the Advisors, until HQ defines one.' })]),
+      col([K({ cs: CARD + ';padding:10px 14px;background:' + c.lav + ';border-color:' + c.lavE, rows: [R({ rs: 'display:flex;gap:11px;align-items:center;flex-wrap:wrap', t: '[12] selected', ts: 'font-size:13px;font-weight:800', btns: [{ t: 'Ask to finish their profile', s: btnP }, { t: 'Place in a segment…', s: btnS }, { t: 'Clear', s: btnG }] })] }), TB({ tbar: { search: 'Search name or email', chips: [tag('Profile ▾'), tag('Sign-up chat ▾'), tag('Last active ▾'), tag('Sort: Joined, newest first ▾')] }, gc: '.26fr 2fr 1.1fr 1fr 1fr 1fr .26fr', minW: 900, cols: ['', 'Member', 'Profile', 'Joined', 'Last active', 'Sign-up chat', ''], rows: UN.map(u => [CHKC(u[0]), CL(u[1], { ts: 'font-weight:700', sub: u[2] + '@example.com' }), CL('', { pill: ppl(u[3]) }), CL(u[4], MN), u[5], CL('', { pill: chatP(u[6]) }), DOTS]), count: '1–25 of 639', foot: 'Eight of the first twenty-five rows are drawn; [12] are selected across pages. ⋯ holds Place in a segment…, Ask to finish their profile and Open account.' })])];
+    const askDlg = dlg('Ask to finish their profile', false, [K({ cs: SEC, rows: [R({ rs: NOTE('n'), t: 'We will send [12] members one notice: ‘Tell us a bit more about what you do, so we can show you what fits.’ It links to their profile questions.', ts: 'font-size:13px;font-weight:500;line-height:1.55' }), R({ rs: 'display:flex;padding:8px 0 0', t: 'A member gets it at most once every 30 days; [3] had one recently and are skipped.', ts: 'font-size:13px;font-weight:600;line-height:1.5' })] })], [{ t: 'Cancel', s: btnS }, { t: 'Send to 9', s: btnP }]);
+    const NEWCH = { t: 'Program · [Co-invest club] · new', s: och('', '').s + ';background:' + c.lav + ';border-color:' + c.lavE + ';color:' + c.vt };
+    const editDlg = [K({ cs: PLAIN, eye: 'SUPER ADMIN', title: 'Edit Angel / Scout', hs: H18, meta: 'Esc to close' }),
+      K({ cs: SEC, rows: [field('NAME', 'Angel / Scout')] }),
+      K({ cs: SEC, title: 'Profile', hs: eyeS, tags: ['Founders', 'Investors', 'Advisors', 'Operating Partners', 'Explorers', 'Any profile'].map(t => tag(t, t === 'Investors')) }),
+      K({ cs: SEC, title: 'Status', hs: eyeS, rows: [RAD('Active', true), RAD('Draft', false, 'Only admins place members in it; sign-up does not offer it.'), RAD('Retired', false, 'No new members; current members keep it until moved.')] }),
+      K({ cs: SEC, rows: [field('WHO THEY ARE', 'Individual angel or scout sourcing and writing small early checks.', { ts: FIN + ';min-height:54px;font-weight:500', sub: '66 / 280', ss: 'font:500 11px ' + MO + ';color:' + c.mu + ';align-self:flex-end' })] }),
+      K({ cs: SEC, title: 'Typical member · up to 4', hs: eyeS, rows: [field(false, 'Writes 3 to 5 checks a year.'), field(false, 'Mostly $10k to $50k a check.'), field(false, 'Brings introductions and go-to-market help.'), field(false, 'Add a line', { ts: FIE })] }),
+      K({ cs: SEC, title: 'Needs · up to 6', hs: eyeS, rows: [['Early deal flow that fits their thesis.', [och('Sidebar link', 'Deal Flow'), och('Program', 'Investor cohort access'), och('Events', '3 upcoming')]], ['Co-invest next to the studio.', [NEWCH]], ['Quick, light diligence on a deal.', [och('Content', '[Diligence checklist]'), och('Perk', '[Diligence tools · Partner A]')]], ['Get paid for the founders they bring.', [och('Program', 'Refer & Earn'), och('Sidebar link', 'Refer & Earn')]]].map(([t, ch]) => R({ lead: '⋮⋮', ls: 'font-size:13px;color:' + c.mu + ';flex:none;padding-top:2px;cursor:grab', t, tags: [{ t: 'Answered by', s: eyeS + ';align-self:center' }].concat(ch).concat([tag('+ Add')]) })), btns: [{ t: '+ Add a need', s: btnSm }] }),
+      K({ cs: SEC, title: 'Offers', hs: eyeS, rows: [R({ eye: 'PROGRAMS', tags: [och('Program', 'Investor cohort access'), och('Program', 'Refer & Earn'), NEWCH], btns: [{ t: '+ Add a program', s: btnSm }] }), R({ eye: 'PERKS', tags: [och('Perk', '[Diligence tools · Partner A]')], btns: [{ t: '+ Add a perk', s: btnSm }] }), R({ eye: 'CONTENT', tags: [och('Content', '[Diligence checklist]')], btns: [{ t: '+ Add content', s: btnSm }] }), R({ eye: 'SIDEBAR LINKS · LABEL AND ADDRESS', tags: [och('Deal Flow', '/deals'), och('Refer & Earn', '/referrals')], btns: [{ t: '+ Add a link', s: btnSm }] }), R({ eye: 'EVENTS · READ ONLY', t: '3 upcoming', sub: 'Organisers open each event to segments.' })] }),
+      K({ cs: SEC, title: 'Sign-up questions · read only', hs: eyeS, rows: ['Typical angel check size (USD)?', 'How many deals per year do you write?', 'Sectors you focus on?', 'Primary value-add to founders?'].map((t, i) => R({ lead: String(i + 1), ls: LN, t })), foot: 'Questions are set in code today. Changing them is a separate change.' }),
+      K({ cs: SEC, note: 'Changes apply to every studio.', btns: [{ t: 'Cancel', s: btnS }, { t: 'Save changes', s: btnP }], bs: 'display:flex;gap:7px;justify-content:flex-end' })];
+    const cfDlg = dlg('Save changes to Angel / Scout?', 'These changes apply to every studio.', [K({ cs: SEC, rows: [bul('Need ‘Co-invest next to the studio’ is now answered by Program [Co-invest club].'), bul('Needs met goes from 3 of 4 to 4 of 4.')] })], [{ t: 'Back', s: btnS }, { t: 'Save', s: btnP }]);
+    const sgDlg = dlg('Suggest a change', 'HQ answers on the Activity tab.', [K({ cs: SEC, rows: [field('SEGMENT', 'Angel / Scout ▾'), R({ rs: 'display:flex;flex-direction:column;gap:6px;padding:4px 0', eye: 'WHAT SHOULD CHANGE?', tags: ['Who they are', 'A need', 'An offer', 'A new segment', 'Something else'].map(t => tag(t, t === 'An offer')) }), field('DESCRIBE THE CHANGE', '[A co-invest club would answer their need to invest next to the studio.]', { ts: FIN + ';min-height:80px;font-weight:500', sub: '[72] / 500', ss: 'font:500 11px ' + MO + ';color:' + c.mu + ';align-self:flex-end' })] })], [{ t: 'Cancel', s: btnS }, { t: 'Send to HQ', s: btnP }]);
+    const kindP = (k) => k === 'Moved by an admin' ? pl('→', k, 'v') : k === 'Chosen at sign-up' ? pl('✓', k, 'g') : k === 'Segment edited' ? pl('✎', k, 'n') : pl('?', k, 'a');
+    const ACT = [['[Admin A] moved [Rowan Sample] from Angel / Scout to Corporate VC', 'Moved by an admin', 'Angel / Scout → Corporate VC', '18 Oct 2026, 10:42'], ['[Lee Fictional] chose Founder — Existing Company at sign-up', 'Chosen at sign-up', 'Founder — Existing Company', '17 Oct 2026, 16:05'], ['HQ edited LP — Institutional: added the need ‘Quarterly reporting in one place’', 'Segment edited', 'LP — Institutional', '15 Oct 2026, 09:12'], ['[Admin B] suggested an offer for Service Provider', 'Suggestion', 'Service Provider', '12 Oct 2026, 08:30', 'Declined by HQ: ‘Perks already answers this.’'], ['[Admin A] moved [Jo Testcase] from No segment to Angel / Scout', 'Moved by an admin', 'Angel / Scout', '11 Oct 2026, 14:20'], ['[Ana Sample] accepted Angel / Scout at sign-up, 88% sure', 'Chosen at sign-up', 'Angel / Scout', '6 Oct 2026, 11:03']];
+    const actT = TB({ tbar: { search: 'Search activity', chips: [tag('What ▾'), tag('Who ▾'), tag('Segment ▾'), tag('Date range ▾'), tag('Sort: Newest first ▾')] }, gc: '2.6fr 1.1fr 1.4fr 1.1fr', minW: 980, cols: ['Event', 'What', 'Segment', 'When'], rows: ACT.map(a => [CL(a[0], { ts: 'font-weight:600;line-height:1.45', sub: a[4] || false }), CL('', { pill: kindP(a[1]) }), a[2], CL(a[3], MN)]), count: '1–25 of [214]', foot: 'Six of the first twenty-five rows are drawn, newest first.' });
+    const draftK = K({ eye: 'ACADEMIC / LAB · DRAFT', title: 'Needs and what answers them', meta: 'Not recorded', ms: NRS, note: 'HQ has not written needs for this segment yet.' });
+    const over = (blocks, w) => [DIMC, dlgCol(blocks, true, w || 560)];
+    const PG = (b) => [{ s: STACK, blocks: b }];
+    if (B === 'SEG1' || B === 'SEG9') { mainHdr('Overview'); notice = 'Personas is now Persona segments, under Accounts.'; cols = overview(); }
+    else if (B === 'SEG2') { segHdr('Profile'); cols = segCols(false); }
+    else if (B === 'SEG3') { segHdr('Members'); cols = [col([bulkM, memT])]; }
+    else if (B === 'SEG5' || B === 'SEG5d') { mainHdr('Unclassified'); cols = unCols(); if (B === 'SEG5d') cols = cols.concat(over(askDlg)); }
+    else if (B === 'SEG6') { shell = 'hq'; strip = mkStrip(); segHdr('Profile', true); cols = segCols(true).concat(over(editDlg, 640)); minH = 2350; }
+    else if (B === 'SEG7') { shell = 'hq'; strip = mkStrip(); mainHdr('Overview', true); notice = 'Personas is now Persona segments, under Content.'; cols = overview({ hq: true }); }
+    else if (B === 'SEG8') { mainHdr('Activity'); cols = [col([actT])]; }
+    else if (B === 'SEG10') { mainHdr('Overview'); cols = [col([TL([['In a segment', '0', 'of 0 members'], ['No segment', '0', ''], ['Segment and profile differ', '0', ''], ['Moved by an admin, 30 days', '0', '']])]), col([profF(false)]), col([CENTER('○', 'No member has a segment yet.', 'Members get one when they finish the sign-up chat, or when you place them.', [{ t: 'Open Unclassified', s: btnP }])], 4), col([advK(false)], 2)]; }
+    else if (B === 'SEG11') { mainHdr('Overview'); railDot = true; cols = [col([TL(T1.map(x => [x[0], '', 'Reading…']))]), col([profF(false)]), col([sk(5)], 4), col([sk(3)], 2), col([sk(4)], 3), col([sk(4)], 3), col([sk(5)])]; }
+    else if (B === 'SEG12') { mainHdr('Overview'); cols = overview({ fail: true }); }
+    else if (B === 'SEG12f') { mainHdr('Overview'); cols = [col([CENTER('!', 'Persona segments could not be read.', 'Try again. The sidebar, the tabs and Eadwyn still work.', [{ t: 'Try again', s: btnS }], ';max-width:560px;margin:40px auto 0;width:100%')])]; }
+    else if (B === 'SEG13a') { head = false; cols = [col([K({ cs: CARD + ';border-style:dashed;align-items:center;text-align:center;padding:36px 28px;max-width:560px;margin:110px auto 0;width:100%', eye: 'HQ ONLY', title: 'Only HQ creates segments', ths: 'display:flex;justify-content:center', hs: 'margin:0;font-size:17px;font-weight:800;text-align:center', note: 'You can suggest one. HQ answers on the Activity tab.', ns: 'margin:0;font-size:13px;color:' + c.mu + ';text-align:center', btns: [{ t: 'Suggest a segment', s: btnP }], bs: 'display:flex;justify-content:center' })])]; }
+    else if (B === 'SEG13b') { shell = 'member'; head = false; cols = [col([CENTER('⊘', 'This page is for studio admins.', 'If you run a studio, ask HQ for admin access.', [{ t: 'Go to your home', s: btnP }], ';max-width:520px;margin:110px auto 0;width:100%')])]; }
+    else if (crop) { head = false; grid = STACK;
+      if (B === 'SEG3i') cols = PG([inset]);
+      else if (B === 'SEG4a') cols = [dlgCol(mvA)];
+      else if (B === 'SEG4b') cols = [dlgCol(mvB)];
+      else if (B === 'SEG4c') cols = [dlgCol(mvC)];
+      else if (B === 'SEG4t') cols = PG(toast);
+      else if (B === 'SEG6c') cols = [dlgCol(cfDlg)];
+      else if (B === 'SEG6s') cols = [dlgCol(sgDlg)];
+      else if (B === 'SEG12d') cols = PG([draftK]); }
+    else if (phone) { grid = STACK;
+      if (B === 'SEG14a') { mainHdr('Overview'); cols = PG([TL(T1), K({ cs: PLAIN, tags: [tag('Filters · 0 on')] }), segK(), howK(), confK(), wkK()].concat(CARDS.map(scard)).concat([advK(false), needsPh()])); }
+      else if (B === 'SEG14b') { crumb = '‹ Members'; crumbHref = '/admin/persona-segments/angel-scout/members'; title = 'Move [Rowan Sample]'; hlines = [{ t: 'To another segment.' }]; cols = PG(moveMid('Corporate VC')); pbar = [{ t: 'Cancel', s: btnS + ';flex:1' }, { t: 'Move', s: btnP + ';flex:1.4' }]; } }
+    const SIDES = { admin: ['Studio', 'Accounts', 'Approvals', 'Programs', 'Community', 'Contracts', 'Fund admin', 'Insights', 'Licences'], hq: ['Home', 'Licences', 'Programs', 'Funds', 'Fund admin', 'Contracts', 'Team', 'Revenue', 'Content', 'Platform', 'Integration keys', 'Support', 'Security', 'Settings'], member: ['Studio', 'Spin-Out Lab', 'Validate', 'Build', 'Raise', 'Grow', 'Network', 'Research'] };
+    const rows = SIDES[shell].map(t => ({ t, href: (shell === 'member' ? '/' : '/admin/') + t.toLowerCase().replace(/ /g, '-'), st: 'display:flex;align-items:center;min-height:34px;padding:0 12px;margin:0 8px;border-radius:9px;font-size:13px;text-decoration:none;' + (shell !== 'member' && t === (shell === 'hq' ? 'Content' : 'Accounts') ? 'background:' + c.lav + ';color:' + c.vt + ';font-weight:800' : 'color:' + c.ink + ';font-weight:600') }));
+    const bell = { __html: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9"/><path d="M10.3 21a1.94 1.94 0 0 0 3.4 0"/></svg>' };
+    const isShell = !phone && !crop;
+    const FONT = 'font-family:' + SG + ';background:' + c.bg + ';color:' + c.ink + ';font-variant-numeric:tabular-nums;-webkit-font-smoothing:antialiased;position:relative;box-sizing:border-box';
+    const v = {
+      eyeS, btnS,
+      root: isShell ? FONT + ';display:grid;grid-template-columns:196px minmax(0,1fr) ' + (railOpen ? '320px' : '44px') + ';min-height:' + minH + 'px' : phone ? FONT + ';width:390px;height:844px;display:flex;flex-direction:column;overflow:hidden' : FONT + ';padding:28px;background:' + (dark ? '#060a14' : '#e6e4eb'),
+      side: isShell, asideS: 'background:' + c.card + ';border-right:1px solid ' + c.hair + ';padding:14px 0;display:flex;flex-direction:column;gap:2px',
+      logoS: 'width:20px;height:20px;border-radius:6px;flex:none;background:#7c3aed', group: shell === 'admin' ? 'Admin' : shell === 'hq' ? 'HQ' : '', groupS: 'padding:6px 20px 4px;' + eyeS, rows,
+      mainS: 'min-width:0;display:flex;flex-direction:column' + (phone ? ';flex:1;min-height:0' : ''),
+      top: isShell, topS: 'height:52px;border-bottom:1px solid ' + c.hair + ';background:' + c.card + ';display:flex;align-items:center;justify-content:space-between;padding:0 30px;gap:14px',
+      searchS: 'display:flex;align-items:center;gap:8px;min-height:' + (phone ? 44 : 32) + 'px;padding:0 12px;border:1px solid ' + c.hair + ';border-radius:7px;background:' + c.card + ';color:' + c.mu + ';font-size:12.5px;width:280px;max-width:100%;box-sizing:border-box',
+      badge: shell === 'admin' ? 'HQ-held · axal.vc' : shell === 'hq' ? 'HQ' : '[Northwind Labs]', badgeS: 'padding:4px 9px;border-radius:999px;font:700 10px ' + MO + ';letter-spacing:.06em;color:#fff;background:' + (shell === 'admin' ? '#334155' : shell === 'hq' ? '#881337' : '#7c3aed'),
+      iconS: 'display:grid;place-items:center;width:34px;height:34px;border-radius:9px;border:1px solid ' + c.hair + ';color:' + c.ink, bell,
+      avS: 'display:grid;place-items:center;width:30px;height:30px;border-radius:999px;background:' + c.lav + ';color:' + c.vt + ';font:700 10px ' + MO,
+      ptop: phone, ptopS: 'height:56px;flex:none;display:flex;align-items:center;justify-content:space-between;padding:0 4px;border-bottom:1px solid ' + c.hair + ';background:' + c.card, picoS: 'display:grid;place-items:center;width:44px;height:44px;border:0;background:transparent;color:' + c.ink + ';font-size:18px;cursor:pointer',
+      bodyS: isShell ? 'padding:22px 30px 30px;display:flex;flex-direction:column;gap:14px;min-width:0' : phone ? 'padding:14px 14px 18px;display:flex;flex-direction:column;gap:12px;flex:1;min-width:0;min-height:0;overflow-y:auto' : 'display:flex;flex-direction:column;gap:14px;min-width:0',
+      head: (isShell || phone) && head, crumb, crumbHref, crumbS: 'font:700 11px ' + MO + ';letter-spacing:.07em;text-transform:uppercase;color:' + c.mu + (phone ? ';min-height:44px;display:inline-flex;align-items:center' : ''),
+      title, h1S: 'margin:0;font-size:' + (phone ? 20 : 24) + 'px;font-weight:800;letter-spacing:-.02em;line-height:1.25', hpills, hbtns, hlines: hlines.map(l => ({ t: l.t, s: 'margin:0;font-size:13px;line-height:1.5;color:' + c.mu })),
+      scope, scopeTip, scopeS: 'display:inline-flex;align-items:center;padding:3px 10px;border-radius:999px;border:1px solid ' + c.hair + ';background:' + c.card + ';font:600 11px ' + MO + ';color:' + c.mu,
+      gate: gateV, gateS: 'display:flex;gap:9px;flex-wrap:wrap;align-items:center;padding:9px 12px;border-radius:10px;background:' + c.card + ';border:1px solid ' + c.hair,
+      tabsL, tabs: tabsList ? tabsList.map(x => ({ t: x.t, href: x.href, n: x.n || false, sel: x.t === tabCur ? 'true' : 'false', ns: 'display:inline-flex;align-items:center;padding:0 7px;border-radius:999px;font:700 10.5px ' + MO + ';' + (x.w ? 'color:' + c.amT + ';background:' + c.amBg + ';border:1px solid ' + c.amE : 'color:' + c.mu + ';background:' + c.raised + ';border:1px solid ' + c.hair), s: 'display:inline-flex;align-items:center;gap:6px;min-height:' + (phone ? 44 : 36) + 'px;padding:0 2px;margin-bottom:-1px;font-size:13px;text-decoration:none;white-space:nowrap;border-bottom:2px solid ' + (x.t === tabCur ? c.vi : 'transparent') + ';color:' + (x.t === tabCur ? c.ink : c.mu) + ';font-weight:' + (x.t === tabCur ? 800 : 600) })) : false,
+      tabRowS: 'display:flex;gap:22px;border-bottom:1px solid ' + c.hair + (phone ? ';overflow-x:auto;flex:none' : ''),
+      period: period ? seg(['4 weeks', '12 weeks', '52 weeks'], '12 weeks') : false, segS: 'display:inline-flex;gap:2px;padding:3px;border-radius:9px;background:' + c.raised + ';border:1px solid ' + c.hair + ';align-self:flex-start',
+      banner: false, bannerS: '', bannerI: '', gridS: grid, cols,
+      pbar, pbarS: 'display:flex;gap:8px;padding:10px 14px;border-top:1px solid ' + c.hair + ';background:' + c.card + ';flex:none',
+      spine: isShell && shell !== 'member', spineTip: 'Eadwyn reads the segment counts on this page. Nothing changes until you act.', spineS: 'border-left:1px solid ' + c.hair + ';background:' + c.card + ';display:flex;flex-direction:column;align-items:center;gap:12px;padding:16px 0', eadS: 'display:grid;place-items:center;width:28px;height:28px;border-radius:9px;background:#7c3aed;color:#fff;font-weight:800;font-size:13px', spineT: 'writing-mode:vertical-rl;transform:rotate(180deg);font:700 10px ' + MO + ';letter-spacing:.07em;text-transform:uppercase;color:' + c.mu,
+      glyphS: 'display:grid;place-items:center;width:44px;height:44px;border-radius:999px;background:' + c.lav + ';color:' + c.vt + ';font:700 18px ' + SG + ';border:1px solid ' + c.lavE,
+      lockS: 'display:inline-flex;align-items:center;gap:5px;padding:2px 9px;border-radius:999px;font:700 11px ' + SG + ';color:' + c.mu + ';background:' + c.raised + ';border:1px solid ' + c.hair,
+      lockI: { __html: '<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/></svg>' },
+      stackS: 'display:flex;gap:2px;height:16px;border-radius:5px;overflow:hidden', factsS: 'display:grid;grid-template-columns:1fr 1fr;gap:12px 20px', ddS: 'font-size:13px;font-weight:600;line-height:1.45;color:' + c.ink, fsubS: 'font-size:12px;color:' + c.mu,
+      monoS: 'font:600 12px ' + MO + ';color:' + c.ink, waitS: 'font:600 11.5px ' + MO + ';color:' + c.amT,
+      countS: 'font:500 12px ' + MO + ';color:' + c.mu, pageS: 'display:grid;place-items:center;min-width:30px;height:30px;padding:0 6px;border-radius:7px;border:1px solid ' + c.hair + ';background:' + c.card + ';color:' + c.ink + ';font:600 12px ' + MO + ';cursor:pointer;box-sizing:border-box'
+    };
+    v.notice = notice; v.noticeS = NOTE('v') + ';align-items:center;padding:8px 12px;font-size:13px;font-weight:600;color:' + c.ink; v.noticeI = INFO; v.btnG2 = btnG;
+    v.strip = strip; v.stripS = 'display:flex;gap:6px;align-items:center;flex-wrap:wrap;padding:7px 30px;border-bottom:1px solid ' + c.hair + ';background:' + c.card;
+    v.ptitle = 'Persona segments'; v.askS = 'display:inline-flex;align-items:center;min-height:44px;padding:0 12px;margin-right:4px;border-radius:9px;border:1px solid ' + c.lavE + ';background:' + c.lav + ';color:' + c.vt + ';font:700 12.5px ' + SG + ';cursor:pointer';
+    v.railOpen = railOpen; v.railDot = railDot; v.railDotS = 'display:inline-block;width:8px;height:8px;border-radius:999px;background:' + c.vi;
+    v.railNoteS = 'margin:0;font-size:13px;line-height:1.55;color:' + c.mu;
+    v.railQS = 'width:100%;box-sizing:border-box;padding:11px 12px;border:1px solid ' + c.hair + ';border-radius:10px;font-size:12.5px;color:' + c.fa + ';background:' + c.card;
+    if (railOpen) { v.spineS = 'border-left:1px solid ' + c.hair + ';background:' + c.card + ';display:flex;flex-direction:column;align-items:flex-start;gap:12px;padding:18px 16px;box-sizing:border-box'; v.spineT = 'font:800 15px ' + SG + ';letter-spacing:-.01em;color:' + c.ink; }
+    return { v };
+  }
+}
+</script>
+</body>
+</html>

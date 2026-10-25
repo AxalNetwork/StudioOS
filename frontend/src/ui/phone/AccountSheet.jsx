@@ -9,7 +9,7 @@ import { PhoneSheet, SheetRow } from './PhoneSheet.jsx';
 // removed (#2297).
 const ACCOUNT_ROWS = [
   ['Messages', '/messages'], ['Your profile', '/profile'], ['Account', '/account'], ['Usage', '/account/usage'],
-  ['Connectors', '/account/connectors'], ['Trust Center', '/trust'], ['Perks', '/perks'],
+  ['Connectors', '/account/connectors'], ['Trust Center', '/trust/me'], ['Perks', '/perks'],
   ['Calendar', '/calendar'], ['Events', '/my/events'], ['Learning', '/learning'],
   ['Help Center', '/help'], ['Pricing', '/pricing'],
 ];

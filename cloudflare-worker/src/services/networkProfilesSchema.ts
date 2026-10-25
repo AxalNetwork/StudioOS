@@ -100,6 +100,16 @@ export async function ensureNetworkProfilesSchema(env: Env): Promise<void> {
     // duplicate-column errors on re-run are swallowed.
     try { await env.DB.exec(`ALTER TABLE network_profiles ADD COLUMN company TEXT`); }
     catch (_e) { /* column already exists */ }
+    // D974 — migration 551: the member link, the creator and the archived
+    // state, apart from hidden. Same idempotent pattern.
+    for (const ddl of [
+      'ALTER TABLE network_profiles ADD COLUMN linked_user_id INTEGER REFERENCES users(id)',
+      'ALTER TABLE network_profiles ADD COLUMN created_by INTEGER REFERENCES users(id)',
+      'ALTER TABLE network_profiles ADD COLUMN archived_at TEXT',
+    ]) {
+      try { await env.DB.exec(ddl); }
+      catch (_e) { /* column already exists */ }
+    }
     READY.set(bindingKey(env), true);
   } catch (err) {
      

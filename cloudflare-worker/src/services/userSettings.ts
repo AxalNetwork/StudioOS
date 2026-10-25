@@ -104,6 +104,7 @@ export async function ensureUserSettings(env: Env): Promise<void> {
         sidebar_default TEXT DEFAULT 'expanded',
         feature_flags TEXT DEFAULT '{}',
         dismissed_explainers TEXT NOT NULL DEFAULT '[]',
+        validate_working_lang TEXT,
         updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
       )`,
     ).run();
@@ -111,6 +112,10 @@ export async function ensureUserSettings(env: Env): Promise<void> {
       await env.DB.prepare(
         `CREATE INDEX IF NOT EXISTS idx_user_settings_slug ON user_settings(profile_slug) WHERE profile_slug IS NOT NULL`,
       ).run();
+    } catch {}
+    // D857 (#2502) — migration 527's working language for Validate (idempotent ALTER).
+    try {
+      await env.DB.prepare('ALTER TABLE user_settings ADD COLUMN validate_working_lang TEXT').run();
     } catch {}
     // Task #15 — additive column for existing rows (idempotent ALTER).
     try {

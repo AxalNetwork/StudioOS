@@ -19,12 +19,21 @@ import {
   preflightOAuthSecrets,
   buildGoogleAuthUrl,
   buildMicrosoftAuthUrl,
+  revokeGoogleOAuthGrant,
 } from '../src/services/calendar.ts';
 import {
   buildGoogleOAuthStartResponse,
   buildMicrosoftOAuthStartResponse,
   persistGoogleCallbackTokens,
+  revokeAndDisconnectGoogle,
+  googleGrantHasScope,
+  makeGoogleSyncIdentityStateMarker,
+  googleSyncIdentityMatchesState,
+  shouldResetGoogleSyncMappings,
+  callbackGoogleScopes,
+  clearGoogleIdentityLink,
 } from '../src/routes/calendar.ts';
+import { returnFromNonce } from '../src/util/oauthReturn.ts';
 
 type EnvShape = Record<string, string | undefined>;
 
@@ -130,6 +139,154 @@ test('buildGoogleAuthUrl attaches login_hint when an email is provided', () => {
   assert.equal(url.searchParams.get('login_hint'), 'founder@axal.vc');
 });
 
+test('Google Calendar consent excludes Gmail and does not inherit old grants', () => {
+  const url = new URL(buildGoogleAuthUrl(FULL_GOOGLE as any, 'nonce.sig'));
+  const scopes = url.searchParams.get('scope') || '';
+  assert.doesNotMatch(scopes, /gmail\.readonly/);
+  assert.equal(url.searchParams.get('include_granted_scopes'), 'false');
+});
+
+test('legacy Gmail grants are detected in stored Google scopes', () => {
+  assert.equal(googleGrantHasScope('openid https://www.googleapis.com/auth/gmail.readonly', 'https://www.googleapis.com/auth/gmail.readonly'), true);
+  assert.equal(googleGrantHasScope('openid,https://www.googleapis.com/auth/gmail.readonly', 'https://www.googleapis.com/auth/gmail.readonly'), true);
+  assert.equal(googleGrantHasScope('openid https://www.googleapis.com/auth/calendar.readonly', 'https://www.googleapis.com/auth/gmail.readonly'), false);
+  assert.equal(googleGrantHasScope('openid https://www.googleapis.com/auth/meetings.space.readonly', 'https://www.googleapis.com/auth/meetings.space.readonly'), true);
+});
+
+test('retained Calendar mappings are bound to the original Google identity', async () => {
+  const env = FULL_GOOGLE as any;
+  const marker = await makeGoogleSyncIdentityStateMarker(env, 'google-sub-1');
+  assert.match(marker, /^gs[A-Za-z0-9_-]{43}_$/);
+  assert.equal(await googleSyncIdentityMatchesState(env, `mp_rb42_${marker}nonce`, 'google-sub-1'), true);
+  assert.equal(await googleSyncIdentityMatchesState(env, `mp_rb42_${marker}nonce`, 'google-sub-2'), false);
+  assert.equal(await googleSyncIdentityMatchesState(env, `mp_rb42_${marker}nonce`, ''), false);
+  assert.equal(await googleSyncIdentityMatchesState(env, 'gm_nonce', 'google-sub-1'), null);
+  assert.equal(shouldResetGoogleSyncMappings(true, false), false);
+  assert.equal(shouldResetGoogleSyncMappings(false, true), true);
+  assert.equal(shouldResetGoogleSyncMappings(null, true), false);
+  assert.equal(shouldResetGoogleSyncMappings(null, false), true);
+  const gmailScope = 'https://www.googleapis.com/auth/gmail.readonly';
+  assert.ok(callbackGoogleScopes('openid calendar.readonly', `openid ${gmailScope}`, false).includes(gmailScope));
+  assert.ok(!callbackGoogleScopes('openid calendar.readonly', `openid ${gmailScope}`, true).includes(gmailScope));
+});
+
+test('preserved Meet OAuth state keeps Build return routing without showing a new-grant banner', () => {
+  assert.equal(returnFromNonce('mp_rb42_nonce'), 'build:42');
+  assert.equal(returnFromNonce('gm_rb_nonce'), 'build');
+});
+
+test('Google reconnect can explicitly retain a previously granted Meet transcript scope', () => {
+  const url = new URL(buildGoogleAuthUrl(FULL_GOOGLE as any, 'nonce.sig', undefined, true));
+  assert.ok((url.searchParams.get('scope') || '').includes('https://www.googleapis.com/auth/meetings.space.readonly'));
+  assert.equal(url.searchParams.get('include_granted_scopes'), 'false');
+});
+
+test('Google OAuth revocation posts the refresh token as form data', async () => {
+  let request: { url: string; init?: RequestInit } | null = null;
+  await revokeGoogleOAuthGrant('refresh-token-for-test', async (input, init) => {
+    request = { url: String(input), init };
+    assert.ok(init?.signal, 'revocation request must carry the timeout abort signal');
+    return new Response('', { status: 200 });
+  });
+  assert.equal(request?.url, 'https://oauth2.googleapis.com/revoke');
+  assert.equal(request?.init?.method, 'POST');
+  assert.equal(new Headers(request?.init?.headers).get('content-type'), 'application/x-www-form-urlencoded');
+  assert.equal(new URLSearchParams(String(request?.init?.body)).get('token'), 'refresh-token-for-test');
+});
+
+test('Google OAuth revocation treats an already-revoked grant as complete', async () => {
+  await revokeGoogleOAuthGrant('expired-refresh-token', async () =>
+    new Response(JSON.stringify({ error: 'invalid_token' }), { status: 400 }),
+  );
+});
+
+test('Google OAuth revocation preserves retryability when Google rejects the grant', async () => {
+  await assert.rejects(
+    () => revokeGoogleOAuthGrant('refresh-token-for-test', async () =>
+      new Response(JSON.stringify({ error: 'invalid_request' }), { status: 400 }),
+    ),
+    /google_revoke_failed:400:invalid_request/,
+  );
+});
+
+test('Google disconnect revokes before deleting its saved connection', async () => {
+  const order: string[] = [];
+  const DB = {
+    prepare(sql: string) {
+      return { bind() { return { async all() {
+        if (/SELECT refresh_token FROM google_oauth_tokens/.test(sql)) return { results: [{ refresh_token: 'plain-refresh-token' }] };
+        order.push(`db:${sql.trim().split(/\s+/).slice(0, 2).join(' ')}`);
+        return { results: [] };
+      } }; } };
+    },
+  };
+  await revokeAndDisconnectGoogle({ ...FULL_GOOGLE, DB } as any, 42, async () => {
+    order.push('google:revoke');
+    return new Response('', { status: 200 });
+  });
+  assert.deepEqual(order, [
+    'google:revoke',
+    'db:DELETE FROM',
+    'db:DELETE FROM',
+    'db:DELETE FROM',
+  ]);
+});
+
+test('a confirmed Google identity switch clears the old sign-in link', async () => {
+  const writes: string[] = [];
+  const DB = { prepare(sql: string) { return { bind() { return { async all() {
+    writes.push(sql);
+    return { results: [] };
+  } }; } }; } };
+  await clearGoogleIdentityLink({ ...FULL_GOOGLE, DB } as any, 42, 'old-google-sub');
+  assert.ok(writes.some(sql => /DELETE FROM user_google_links WHERE user_id = \? AND google_sub = \?/.test(sql)));
+});
+
+test('Google disconnect keeps the saved connection when revocation fails', async () => {
+  const writes: string[] = [];
+  const DB = {
+    prepare(sql: string) {
+      return { bind() { return { async all() {
+        if (/SELECT refresh_token FROM google_oauth_tokens/.test(sql)) return { results: [{ refresh_token: 'plain-refresh-token' }] };
+        writes.push(sql);
+        return { results: [] };
+      } }; } };
+    },
+  };
+  await assert.rejects(
+    () => revokeAndDisconnectGoogle({ ...FULL_GOOGLE, DB } as any, 42, async () =>
+      new Response(JSON.stringify({ error: 'temporarily_unavailable' }), { status: 503 }),
+    ),
+    /google_revoke_failed:503/,
+  );
+  await assert.rejects(
+    () => revokeAndDisconnectGoogle({ ...FULL_GOOGLE, DB } as any, 42, async () =>
+      new Response(JSON.stringify({ error: 'temporarily_unavailable' }), { status: 503 }),
+    ),
+    (error: any) => error.code === 'google_revocation_failed',
+  );
+  assert.deepEqual(writes, [], 'local credentials must remain available for a later revoke retry');
+});
+
+test('removing Gmail preserves Google event mappings for the immediate reconnect', async () => {
+  const deletes: string[] = [];
+  const DB = {
+    prepare(sql: string) {
+      return { bind() { return { async all() {
+        if (/SELECT refresh_token FROM google_oauth_tokens/.test(sql)) return { results: [{ refresh_token: 'plain-refresh-token' }] };
+        deletes.push(sql);
+        return { results: [] };
+      } }; } };
+    },
+  };
+  await revokeAndDisconnectGoogle({ ...FULL_GOOGLE, DB } as any, 42, async () =>
+    new Response('', { status: 200 }), { preserveCalendarSync: true, preserveGoogleIdentity: true },
+  );
+  assert.equal(deletes.some(sql => /DELETE FROM calendar_sync_records/.test(sql)), false);
+  assert.ok(deletes.some(sql => /DELETE FROM google_oauth_tokens/.test(sql)));
+  assert.equal(deletes.some(sql => /DELETE FROM user_google_links/.test(sql)), false);
+});
+
 test('buildMicrosoftAuthUrl produces a well-formed login.microsoftonline.com URL', () => {
   const url = new URL(buildMicrosoftAuthUrl(FULL_MICROSOFT as any, 'nonce.sig'));
   assert.equal(url.hostname, 'login.microsoftonline.com');
@@ -191,6 +348,20 @@ test('/google/start: healthy → 200 with redirect_url to accounts.google.com', 
   assert.equal(redirectUri, 'https://app.axal.vc/api/calendar/google/callback');
   // OAuth state row must have been persisted
   assert.ok(stub.calls.some(c => /INSERT INTO oauth_state_tokens/.test(c.sql)));
+});
+
+test('preserved Meet consent carries the retained Google identity in signed Build state', async () => {
+  const stub = makeStubDB();
+  const env = { ...FULL_GOOGLE, DB: stub.DB } as any;
+  const marker = await makeGoogleSyncIdentityStateMarker(env, 'google-sub-1');
+  const { status, body } = await buildGoogleOAuthStartResponse(
+    env, 42, undefined, true, 'rb42_', true, marker,
+  );
+  assert.equal(status, 200);
+  const state = new URL(body.redirect_url).searchParams.get('state') || '';
+  const nonce = decodeURIComponent(state.split('.')[0]);
+  assert.match(nonce, /^mp_rb42_gs[A-Za-z0-9_-]{43}_/);
+  assert.equal(returnFromNonce(nonce), 'build:42');
 });
 
 test('/outlook/start: missing secret → typed 500 oauth_config_missing', async () => {

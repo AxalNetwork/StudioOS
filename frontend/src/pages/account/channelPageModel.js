@@ -21,7 +21,8 @@ export const CHANNEL_PAGE_TEXT = Object.freeze({
     about: Object.freeze([
       'Customers’ chats with your business number wait here for 30 days. Add one to an interview, and Axal asks the customer for consent in the chat before anything is recorded.',
       'Axal sends only what you ask it to, and only within 24 hours of the customer’s last message. Messages are billed by Meta to your WhatsApp Business Account after 1,000 a month.',
-      'Calls: not yet. WhatsApp calls do not reach Axal; record a call with the in-app recorder instead.',
+      'Calls stay closed on numbers connected through the WhatsApp Business app. Axal does not answer or place WhatsApp calls; use the in-app recorder with everyone’s consent instead.',
+      'Costs: transcription and translation use AI tokens. Translation keeps the original and adds your working language when needed.',
     ]),
     signIn: 'Meta sign-up',
     docs: 'https://developers.facebook.com/docs/whatsapp/cloud-api',
@@ -31,8 +32,8 @@ export const CHANNEL_PAGE_TEXT = Object.freeze({
     about: Object.freeze([
       'What it reads: only the chats you choose in Telegram Business, each waiting in Interviews until you add it to an interview. Voice notes and audio files are taken in only after the person replies YES to the recording notice, and are kept until you delete them.',
       'What it sends: only what you send from Axal (replies and the notice), plus one line confirming YES, NO or STOP, within 24 hours of the person’s last message.',
-      'What it can’t do: calls, group chats, files over 5 MB, round videos for now.',
-      'Costs: transcription is billed to your AI budget, up to 50 notes a day. Needs Telegram Premium: chatbots are part of Telegram Business.',
+      'What it can’t do: group chats, files over 5 MB, round videos for now. For a round video, send its audio track as an audio file up to 5 MB instead. Calls: Axal does not join, place or answer Telegram calls. Forwarded recordings (Send to Axal) are built but not switched on yet. When enabled, Axal waits for you to confirm everyone agreed before it downloads or transcribes the audio.',
+      'Costs: transcription and translation use AI tokens. Translation keeps the original and adds your working language when needed. Up to 50 notes a day. Needs Telegram Premium: chatbots are part of Telegram Business.',
     ]),
     signIn: 'Telegram bot link',
     docs: 'https://core.telegram.org/bots/api',

@@ -1,0 +1,65 @@
+<!DOCTYPE html>
+<html><head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <meta name="design_doc_mode" content="canvas">
+  <link href="https://fonts.googleapis.com/css2?family=Roboto+Mono:wght@400;500;600;700&family=Space+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <style>body{margin:0;background:#eeedf2}a{color:#7c3aed;text-decoration:none}a:hover{color:#6d28d9}</style>
+</helmet>
+<div style="display:flex;flex-direction:column;font-family:'Space Grotesk',system-ui,sans-serif;color:#18181b">
+  <header style="padding:40px 44px 8px;display:flex;flex-direction:column;gap:6px">
+    <span style="font:700 11px 'Roboto Mono',monospace;letter-spacing:.07em;text-transform:uppercase;color:#6b6577">HQ · Licences › Program grants</span>
+    <h1 style="margin:0;font-size:28px;font-weight:800;letter-spacing:-.02em">Program grants</h1>
+    <p style="margin:0;font-size:14px;color:#6b6577;max-width:840px;line-height:1.55">Which programs each licensed studio may run, on what grant terms, and how each studio reads that on its Licences page. HQ decides; studios ask. Sample today is [21 Oct 2026]. Drawers are drawn as centred lightboxes.</p>
+  </header>
+  <sc-for list="{{ boards }}" as="b" hint-placeholder-count="15">
+    <section id="{{ b.id }}" style="padding:36px 44px;border-bottom:1px solid rgba(0,0,0,.08);display:flex;flex-direction:column;gap:12px;scroll-margin-top:16px">
+      <div style="display:flex;align-items:baseline;gap:10px;flex-wrap:wrap">
+        <a href="#{{ b.id }}" style="font:700 11px 'Roboto Mono',monospace;padding:3px 8px;background:#18181b;color:#fff;border-radius:5px">{{ b.id }}</a>
+        <h2 style="margin:0;font-size:16px;font-weight:800;letter-spacing:-.01em">{{ b.t }}</h2>
+      </div>
+      <p style="margin:0;font-size:13px;line-height:1.55;color:#4a4553;max-width:920px">{{ b.cap }}</p>
+      <div style="display:flex;gap:28px;flex-wrap:wrap;align-items:flex-start">
+        <sc-for list="{{ b.frames }}" as="f" hint-placeholder-count="1">
+          <div style="display:flex;flex-direction:column;gap:8px;flex:none">
+            <sc-if value="{{ f.lab }}" hint-placeholder-val="{{ false }}"><span style="font:600 11px 'Roboto Mono',monospace;color:#6b6577">{{ f.lab }}</span></sc-if>
+            <div style="{{ f.box }}"><dc-import name="Program Grants Page" board="{{ f.b }}" hint-size="{{ f.hint }}"></dc-import></div>
+          </div>
+        </sc-for>
+      </div>
+    </section>
+  </sc-for>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script="">
+class Component extends DCLogic {
+  renderVals() {
+    const D = (b, lab, w, h, r) => ({ b, lab: lab || false, hint: '100%,' + (h || 900) + 'px', box: 'width:' + (w || 1440) + 'px;' + (h ? 'height:' + h + 'px;' : '') + 'overflow:hidden;border-radius:' + (r || 12) + 'px;border:1px solid rgba(24,24,27,.12);background:#f4f3f7;box-shadow:0 1px 3px rgba(0,0,0,.06)' });
+    const P = (b, lab) => D(b, lab, 390, 844, 28);
+    const boards = [
+      ['GR1', 'Program grants · Grid · Super Admin · desktop 1440 · light', 'Four tiles, studios holding each program, requests by month, and the grid: one row per studio with a sticky studio column, one column per program under its group. Eadwyn’s rail is open.', [D('GR1')]],
+      ['GR2', 'Grid · dark', 'GR1 in the dark colours, rail collapsed; violet series become #a78bfa.', [D('GR2')]],
+      ['GR3', 'One studio · [Studio Lisbon]', 'Tiles, every program with its grant, period, key terms, schedule and use, and on the right the partner deal types, the studio’s request and recent changes.', [D('GR3')]],
+      ['GR4', 'Grant or change · lightbox over GR3', 'Opened from Lisbon’s request. Terms filled from Learning’s defaults, each marked Default or Changed; the live sentence says what the grant does. Review opens GR10 A.', [D('GR4')]],
+      ['GR5', 'Requests tab', 'Every request, waiting longest first, with the response time stated. One row arrives from an approved proposal as a draft grant.', [D('GR5'), D('GR5d', 'Answer a request')]],
+      ['GR6', 'Default terms tab', 'One card per program with its switch and default terms. Product testing stays at HQ; two programs are not ready to grant.', [D('GR6')]],
+      ['GR7', 'Licences › Programs · Admin · desktop 1440', 'The admin’s own view: tiles, every program with its status and terms, the deal types HQ allows, and two insets for the Summary and Requests tabs.', [D('GR7')]],
+      ['GR8', 'One program’s terms · lightbox over GR7', 'Read only. Each term names the schedule section that states it; one term is not recorded.', [D('GR8')]],
+      ['GR9', 'Request sheet · Admin', 'A request to change a term, and the state when the studio has the most open requests allowed.', [D('GR9a', 'Request', 680), D('GR9b', 'At the limit', 680)]],
+      ['GR10', 'Confirm dialogs · Super Admin', 'A · grant with an authenticator code · B · pause · C · end a grant · D · decline a request.', [D('GR10a', 'A · Grant', 680), D('GR10b', 'B · Pause', 680), D('GR10c', 'C · End', 680), D('GR10d', 'D · Decline', 680)]],
+      ['GR11', 'Empty states', 'No licence yet; nothing granted; an account not linked to a licence (today’s case on axal.vc); no requests waiting.', [D('GR11', false, 1100)]],
+      ['GR12', 'Loading', 'GR1 and GR7 with the header and tabs live and every block reading.', [D('GR12a', 'Program grants'), D('GR12b', 'Licences › Programs')]],
+      ['GR13', 'Error and refused', 'A · the grid failed while read tiles render · B · one chart failed · C · the studio’s dated copy · D · a refused action · E · a term not entered.', [D('GR13', false, 1200)]],
+      ['GR14', 'No permission', 'An admin on HQ’s page, a member on the admin page, and HQ viewing as an admin.', [D('GR14', false, 1200)]],
+      ['GR15', 'Phone · 390 wide', 'The admin’s programs as cards with the terms sheet full screen, and HQ’s grid as one card per studio with the studio page stacked.', [P('GR15a', 'Licences › Programs'), P('GR15c', 'Terms sheet'), P('GR15b', 'Program grants'), P('GR15d', 'One studio')]]
+    ].map(([id, t, cap, frames]) => ({ id, t, cap, frames }));
+    return { boards };
+  }
+}
+</script>
+</body></html>

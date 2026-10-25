@@ -25,11 +25,18 @@
  * or match is 404, as a missing one is. `/status` reads only the caller's own
  * `integrations` row, never the bank. Disconnect stays with the generic
  * integrations route.
+ *
+ * D881 (#2554): members connect only by Sign in with Mercury. `/status` names
+ * how a connection reads (`via`: `oauth_mcp` or `api_key`), and a token row
+ * kept from before D881 carries `notice`, the sentence that asks for the
+ * sign-in. It keeps reading until the member signs in or disconnects.
  */
 import { Hono, type Context } from 'hono';
 import type { Env, User } from '../types';
 import { requireAuth } from '../auth';
 import { branchOf } from '../util/branch';
+import { LEGACY_TOKEN_NOTICE } from '../integrations/providers/mercury';
+import { MERCURY_AUTH_TYPE } from '../services/mercury/oauth';
 import {
   HQ_ONLY_USES, PERSONAL_USES, TARGET_WORDS, USE_OF_TARGET, UUID_RE, WITHDRAW_REASON_MIN,
   confirmMatch, logPersonalRead, matchDto, matchUse, ownTargets, personalConnection, personalPolicy,
@@ -55,15 +62,19 @@ const positiveId = (v: unknown) => (typeof v === 'number' || (typeof v === 'stri
 mercuryPersonal.get('/status', async (c) => {
   const user = await requireAuth(c);
   const row = await c.env.DB.prepare(
-    "SELECT uid, status, external_account_name, config_json FROM integrations WHERE user_id = ? AND provider_key = 'mercury' LIMIT 1",
-  ).bind(user.id).first<{ uid: string; status: string; external_account_name: string | null; config_json: string | null }>();
+    "SELECT uid, status, auth_type, external_account_name, config_json FROM integrations WHERE user_id = ? AND provider_key = 'mercury' LIMIT 1",
+  ).bind(user.id).first<{ uid: string; status: string; auth_type: string | null; external_account_name: string | null; config_json: string | null }>();
   let readOnly: string | null = null;
   try { readOnly = row?.config_json ? (JSON.parse(row.config_json)?.read_only ?? null) : null; } catch { readOnly = null; }
   const held = usesFor(user.role);
   const hq = branchOf(c.env) === null;
   return c.json({
     connected: !!row,
-    connection: row ? { uid: row.uid, status: row.status, account_name: row.external_account_name, read_only: readOnly } : null,
+    connection: row ? {
+      uid: row.uid, status: row.status, account_name: row.external_account_name, read_only: readOnly,
+      via: row.auth_type === MERCURY_AUTH_TYPE ? MERCURY_AUTH_TYPE : 'api_key',
+      notice: row.auth_type === MERCURY_AUTH_TYPE ? null : LEGACY_TOKEN_NOTICE,
+    } : null,
     uses: ALL_USES.map((key) => ({
       key,
       available: held.includes(key) && (!HQ_ONLY_USES.includes(key) || hq),

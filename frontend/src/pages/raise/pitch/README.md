@@ -1,0 +1,72 @@
+# frontend/src/pages/raise/pitch — the Pitch deck studio
+
+The founder's Pitch deck studio at `/raise/pitch` (D894, #2434), built to the
+owner's "Pitch Deck Studio" canvas: `design/incoming/Pitch Deck Studio Page.dc.html`
+and `design/incoming/Pitch Deck Studio · Boards.dc.html` (PD1–PD28).
+
+| File | What it is |
+|---|---|
+| `PitchStudio.jsx` | The studio's shell and the tabs whose reads exist: Decks (PD2) at `/raise/pitch`, Review at `/raise/pitch/review` (`PitchReview.jsx`), Share & analytics (PD19) at `/raise/pitch/analytics`. |
+| `pitchStudioModel.js` | Pure: the addresses, the words, and every derivation from the reads (views by week, seconds per slide, one version's readers and its funnel, the investor links and their pages). |
+| `PitchPresent.jsx` | Present mode at `/raise/pitch/present` (D901, PD16 and PD26 frame 2): the presenter view, the audience view and the phone viewer. Reads one version; writes nothing. |
+| `ExportDialog.jsx` | The export dialog (D901, PD17 and PD25): PDF, PowerPoint and HTML, with Google Slides drawn as unavailable. It says what the export records before it runs. |
+| `presentExportModel.js` | Pure: present mode's cards, keys, timer and dots, and the export dialog's formats, sentences and ledger line. |
+| `PitchReview.jsx` | D900 (#2679), PD14: the Review tab. The current version's review (`POST /api/decks/:id/review`) with its score only when one came back, four columns each pointing to a card, and the run's cost; "Reviews per version" (`GET /api/decks/:id/reviews`) with "Score not returned"; "Review this version" behind a dialog. The reviewer for an upload or pasted text (`DeckReviewerPage`, embedded) stays below it. |
+| `reviewModel.js` | D900: pure words and derivations of the Review tab: the cost in dollars or "Not recorded", the score or "Score not returned", the card pointer, the history rows, the estimate and the dialog's sentence. |
+| `PitchNotes.jsx` | D905 (#2684), PD21: the Notes tab at `/raise/pitch/notes`: the thread from the venture's admins to its founders (`GET /api/decks/:id/notes`), a card pill on each note, the composer (posting opens a dialog), and the Super Admin's default template by sector and stage. Who may post is the Worker's `viewer`. |
+| `PitchBoundary.jsx` | D905, PD22: what an Advisor, an Operating Partner or an Explorer reads at `/raise/pitch`, inside their own shell. Nothing from a deck is read. |
+| `sourcesModel.js` | D896 (#2675): pure words and derivations of the deck's sources — value wording by unit, chips, grouping and filters, the coverage meter, Missing, the scorecard dialog. |
+| `NewDeck.jsx` | D897 (#2677), PD3–PD6: New deck at `/raise/pitch/new` — audience and round, the sources step (D896's `SourcesStep`), the outline Eadwyn proposes, then the proposal kept card by card. Every write opens a dialog with its cost; `?proposal=<id>` reopens a proposal. |
+| `newDeckModel.js` | D897: pure words and derivations for New deck and PD2's fast path — AI tokens, the prompt's figure check (the Worker's word list), the round line, outline edits, chips, estimates, the dialogs' sentences, and the proposal's cards. |
+| `SourcesBoards.jsx` | D896: `CoverageMeter` (PD11), `SourceChip`, `SourcesLegend` (PD10b), `ScorecardDialog`, `SourcesPanel` (PD10), `SourcesStep` (PD4) and `useDeckSources`, over `GET /api/decks/sources`. Built here, mounted by part 3 (New deck) and part 4 (the editor). |
+| `PitchEditor.jsx` | D898 (#2676), PD1, PD1b, PD8, PD8c and PD24–PD27: the editor at `/raise/pitch/edit`. The rail with stale dots and reorder, the centre card on the brand kit with its blocks on the 12 × 6 grid, speaker notes, the Sources, Design and Notes tabs, Add a block, and Save, which says what it changes before it writes a version. Reads the slide model from the Worker (`GET /api/decks/model`). |
+| `editorModel.js` | Pure: what a save changes, layouts that carry a card's content, placement on the grid, standard sizes, stale cards, "Saved · …", the card's colours. |
+| `CardAssistBar.jsx` | D899 (#2678), PD7: Eadwyn's bar under the selected text block — Rewrite, Shorten, Expand, Change tone, Translate and Ask, each with its cost. A press shows its cost first; the result is a proposal (the before struck, the after on lavender) that Accept places on the card. A bound figure takes no tool; AI off greys it. Mounted by `PitchEditor.jsx`. |
+| `AddMenu.jsx` | D899, PD7 and PD28: the Add menu — Text and Image open Add a block (PD8c), Background and Layout open Design, Chart proposes a chart, table or timeline whose series are bindings, From a connector opens `ConnectorLightbox.jsx`; the rail row's models with their catalogue prices. Mounted by `PitchEditor.jsx`. |
+| `ConnectorLightbox.jsx` | D899, PD9d: each connector with its state and last sync (`GET /api/integrations`), the recorded figures it feeds, and a new card of bound tiles (free) under a headline that is the founder's or Eadwyn's with its cost. |
+| `AssistParts.jsx` | D899: what the card tools share — the press dialog with the cost, the tokens dialog (PD25), a text proposal. |
+| `deckAssistModel.js` | D899: pure words and derivations of the card tools — the tools and their options, the cost line, what a press sends, why a figure takes no tool, the connector groups and their card, the rail row's models. |
+| `PitchWorkspaceMoved.jsx` | The old `/raise/pitch?mode=workspace` address: it opens the editor at `/raise/pitch/edit` with `?moved=pitch-workspace`, the venture and the hash kept. |
+
+The template builder, `../../PitchWorkspacePage.jsx` (with
+`../../PitchDeckPage.jsx`), stays at `/raise/pitch/builder`; the editor
+uses `/raise/pitch/edit` (D898). New deck (D897) at `/raise/pitch/new`
+and the Decks tab's standard-deck fast path build proposals. Nothing
+they build becomes a version until the founder saves the cards they kept.
+
+## The rules for adding here
+
+- **Every figure comes from a mounted read.** A read that fails says so where its
+  figure would be; a value nobody recorded reads "Not recorded", never 0. No
+  canvas sample (`[Northwind Labs]`, `[$16,950]`) ever reaches a page.
+- **Only the Worker says nobody opened a link.** "No one has opened a link yet."
+  is its own empty card; a card that could not be read is a failed read, and
+  eight zero weeks is a count.
+- **A figure from a capped list says so.** The engagement read sends at most
+  200 views, so at the cap the views read "200+" and the viewers and the median
+  say they cover the latest 200. NDA signatures are a count, never a share of
+  browsers.
+- **A link is live only when it has not expired and is not used up.** The
+  records give the first; the engagement read's `shares` give the second for
+  the current version's links. An opened link the engagement read does not
+  answer for (another version's, or any while that read is running or has
+  failed) says why its views left are not shown, and still offers Withdraw.
+  Withdrawing one that had already been used up marks it Revoked, and the
+  dialog says so.
+- **A board waits for its store.** The canvas draws boards whose Worker reads do
+  not exist yet: the coverage meter and source chips, the generate flow, the
+  editor, card AI tools, present mode and export, the share dialog, images and
+  Google Slides. Each is a slot task on #2434. Build a board in the PR that
+  builds its read, and add its derivation to `pitchStudioModel.js` with a test
+  in `frontend/test/pitch_studio_d894.test.mjs` or its own file.
+- **An admin reads, and changes nothing** (PD21). `isReadOnly` is true for an
+  admin account only (viewing as a founder included) and hides New deck, New
+  link and Withdraw; everyone else the route admits works here. Review draws no
+  "Read only." banner: an admin reads the reviews and is told only the
+  founders run one (the Worker's `viewer`, D900); the reviewer below is its own
+  tool, with its own writes. The
+  Worker's own refusal is #2434's fixes part. An admin leaves notes on the Notes
+  tab (D905); a note is never in a share or an export.
+- **The roles the studio is not for see a boundary** (PD22). An Advisor, an
+  Operating Partner or an Explorer opening `/raise/pitch` reads
+  `PitchBoundary`, never a bounce; the other studio addresses keep their guard.

@@ -25,6 +25,18 @@ export const TIER_THRESHOLDS = [
   { key: 'TIER_1', score: 85, label: 'Tier 1 — Immediate Spinout' },
 ];
 
+// A cleared form input is absent evidence, while an explicit numeric zero is kept.
+export function scoringInputsOf(form, keys) {
+  const inputs = {};
+  for (const key of keys) {
+    const raw = form[key];
+    if (raw == null || (typeof raw === 'string' && raw.trim() === '')) continue;
+    const value = Number(raw);
+    if (Number.isFinite(value)) inputs[key] = value;
+  }
+  return inputs;
+}
+
 export const TIER_LABELS = {
   TIER_1: 'Tier 1 — Immediate Spinout',
   TIER_2: 'Tier 2 — Conditional / Refine in Week 1',

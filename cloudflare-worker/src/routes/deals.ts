@@ -1,3 +1,4 @@
+import { getVerifiedLatestSnapshots } from '../services/scoreIntegrity';
 import { Hono } from 'hono';
 import type { Env, User } from '../types';
 import { schedulePush } from '../integrations/autopush';
@@ -6,7 +7,6 @@ import { investorActiveCompany } from './_investorProjectScope';
 import { openConditionsOnDeal } from './ic';
 import { activeCompanyFor } from '../middleware/activeCompany';
 import { requireAuth, requireRole, requireAdmin, canAccessFounderResource } from '../auth';
-import { buildZip } from '../util/zip';
 import { isPassReason, passReasonLabel, PASS_REASON_KEYS, PASS_REASON_UNRECORDED } from '../services/dealPassTaxonomy';
 import { buildPassBreakdown, buildStageFunnel, DEAL_METRIC_UNAVAILABLE } from '../services/dealAnalytics';
 import { ensureDealPassSchema, recordStageEvent, stageRecordingStartedAt } from '../services/dealStageHistory';
@@ -53,6 +53,18 @@ function enrichDeal(row: any): any {
 const isPrivilegedRole = (role: string) =>
   role === 'admin' || role === 'partner' || role === 'investor';
 
+/** Internal deal-team fields never leave staff responses. */
+export function serializeDeal(row: any, role: string): any {
+  const result = enrichDeal(row);
+  if (role !== 'admin' && role !== 'partner') {
+    delete result.notes;
+    delete result.pass_reason;
+    delete result.pass_note;
+    delete result.passed_by_user_id;
+  }
+  return result;
+}
+
 deals.get('/', async (c) => {
   const user = await requireAuth(c);
   const status = c.req.query('status');
@@ -69,8 +81,8 @@ deals.get('/', async (c) => {
   // without an extra round-trip per row.
   if (isPrivileged) {
     rows = status
-      ? await sql`SELECT d.*, p.name as project_name, p.sector as project_sector, pr.name as partner_name, lp.name as lead_partner_name, f.id as founder_user_id FROM deals d LEFT JOIN projects p ON d.project_id = p.id LEFT JOIN partners pr ON d.partner_id = pr.id LEFT JOIN users lp ON lp.id = d.lead_partner_id LEFT JOIN users f ON f.founder_id = p.founder_id WHERE d.status = ${status} AND (p.id IS NULL OR p.deleted_at IS NULL) ORDER BY d.created_at DESC`
-      : await sql`SELECT d.*, p.name as project_name, p.sector as project_sector, pr.name as partner_name, lp.name as lead_partner_name, f.id as founder_user_id FROM deals d LEFT JOIN projects p ON d.project_id = p.id LEFT JOIN partners pr ON d.partner_id = pr.id LEFT JOIN users lp ON lp.id = d.lead_partner_id LEFT JOIN users f ON f.founder_id = p.founder_id WHERE (p.id IS NULL OR p.deleted_at IS NULL) ORDER BY d.created_at DESC`;
+      ? await sql`SELECT d.*, (SELECT COALESCE(SUM(cm.amount), 0) FROM commitments cm WHERE cm.deal_id = d.id AND cm.status = 'confirmed') AS capital_committed, p.name as project_name, p.sector as project_sector, pr.name as partner_name, lp.name as lead_partner_name, f.id as founder_user_id FROM deals d LEFT JOIN projects p ON d.project_id = p.id LEFT JOIN partners pr ON d.partner_id = pr.id LEFT JOIN users lp ON lp.id = d.lead_partner_id LEFT JOIN users f ON f.founder_id = p.founder_id WHERE d.status = ${status} AND (p.id IS NULL OR p.deleted_at IS NULL) ORDER BY d.created_at DESC`
+      : await sql`SELECT d.*, (SELECT COALESCE(SUM(cm.amount), 0) FROM commitments cm WHERE cm.deal_id = d.id AND cm.status = 'confirmed') AS capital_committed, p.name as project_name, p.sector as project_sector, pr.name as partner_name, lp.name as lead_partner_name, f.id as founder_user_id FROM deals d LEFT JOIN projects p ON d.project_id = p.id LEFT JOIN partners pr ON d.partner_id = pr.id LEFT JOIN users lp ON lp.id = d.lead_partner_id LEFT JOIN users f ON f.founder_id = p.founder_id WHERE (p.id IS NULL OR p.deleted_at IS NULL) ORDER BY d.created_at DESC`;
     // Task #82 — annotate each deal with is_member (is this investor in the
     // dealroom?) so the SPA can render "View room" vs "Join room", and apply
     // the optional scope=mine relationship filter.
@@ -116,14 +128,14 @@ deals.get('/', async (c) => {
     const founderCompanyId = await investorActiveCompany(c, user);
     rows = status
       ? (founderCompanyId === null
-        ? await sql`SELECT d.*, p.name as project_name, p.sector as project_sector, pr.name as partner_name, f.id as founder_user_id FROM deals d LEFT JOIN projects p ON d.project_id = p.id LEFT JOIN partners pr ON d.partner_id = pr.id LEFT JOIN users f ON f.founder_id = p.founder_id WHERE d.status = ${status} AND p.founder_id = ${user.founder_id} AND p.deleted_at IS NULL ORDER BY d.created_at DESC`
-        : await sql`SELECT d.*, p.name as project_name, p.sector as project_sector, pr.name as partner_name, f.id as founder_user_id FROM deals d LEFT JOIN projects p ON d.project_id = p.id LEFT JOIN partners pr ON d.partner_id = pr.id LEFT JOIN users f ON f.founder_id = p.founder_id WHERE d.status = ${status} AND p.founder_id = ${user.founder_id} AND (p.company_id = ${founderCompanyId} OR p.company_id IS NULL) AND p.deleted_at IS NULL ORDER BY d.created_at DESC`)
+        ? await sql`SELECT d.*, (SELECT COALESCE(SUM(cm.amount), 0) FROM commitments cm WHERE cm.deal_id = d.id AND cm.status = 'confirmed') AS capital_committed, p.name as project_name, p.sector as project_sector, pr.name as partner_name, f.id as founder_user_id FROM deals d LEFT JOIN projects p ON d.project_id = p.id LEFT JOIN partners pr ON d.partner_id = pr.id LEFT JOIN users f ON f.founder_id = p.founder_id WHERE d.status = ${status} AND p.founder_id = ${user.founder_id} AND p.deleted_at IS NULL ORDER BY d.created_at DESC`
+        : await sql`SELECT d.*, (SELECT COALESCE(SUM(cm.amount), 0) FROM commitments cm WHERE cm.deal_id = d.id AND cm.status = 'confirmed') AS capital_committed, p.name as project_name, p.sector as project_sector, pr.name as partner_name, f.id as founder_user_id FROM deals d LEFT JOIN projects p ON d.project_id = p.id LEFT JOIN partners pr ON d.partner_id = pr.id LEFT JOIN users f ON f.founder_id = p.founder_id WHERE d.status = ${status} AND p.founder_id = ${user.founder_id} AND (p.company_id = ${founderCompanyId} OR p.company_id IS NULL) AND p.deleted_at IS NULL ORDER BY d.created_at DESC`)
       : (founderCompanyId === null
-        ? await sql`SELECT d.*, p.name as project_name, p.sector as project_sector, pr.name as partner_name, f.id as founder_user_id FROM deals d LEFT JOIN projects p ON d.project_id = p.id LEFT JOIN partners pr ON d.partner_id = pr.id LEFT JOIN users f ON f.founder_id = p.founder_id WHERE p.founder_id = ${user.founder_id} AND p.deleted_at IS NULL ORDER BY d.created_at DESC`
-        : await sql`SELECT d.*, p.name as project_name, p.sector as project_sector, pr.name as partner_name, f.id as founder_user_id FROM deals d LEFT JOIN projects p ON d.project_id = p.id LEFT JOIN partners pr ON d.partner_id = pr.id LEFT JOIN users f ON f.founder_id = p.founder_id WHERE p.founder_id = ${user.founder_id} AND (p.company_id = ${founderCompanyId} OR p.company_id IS NULL) AND p.deleted_at IS NULL ORDER BY d.created_at DESC`);
+        ? await sql`SELECT d.*, (SELECT COALESCE(SUM(cm.amount), 0) FROM commitments cm WHERE cm.deal_id = d.id AND cm.status = 'confirmed') AS capital_committed, p.name as project_name, p.sector as project_sector, pr.name as partner_name, f.id as founder_user_id FROM deals d LEFT JOIN projects p ON d.project_id = p.id LEFT JOIN partners pr ON d.partner_id = pr.id LEFT JOIN users f ON f.founder_id = p.founder_id WHERE p.founder_id = ${user.founder_id} AND p.deleted_at IS NULL ORDER BY d.created_at DESC`
+        : await sql`SELECT d.*, (SELECT COALESCE(SUM(cm.amount), 0) FROM commitments cm WHERE cm.deal_id = d.id AND cm.status = 'confirmed') AS capital_committed, p.name as project_name, p.sector as project_sector, pr.name as partner_name, f.id as founder_user_id FROM deals d LEFT JOIN projects p ON d.project_id = p.id LEFT JOIN partners pr ON d.partner_id = pr.id LEFT JOIN users f ON f.founder_id = p.founder_id WHERE p.founder_id = ${user.founder_id} AND (p.company_id = ${founderCompanyId} OR p.company_id IS NULL) AND p.deleted_at IS NULL ORDER BY d.created_at DESC`);
   }
   await sql.end();
-  return c.json((rows as any[]).map(enrichDeal));
+  return c.json((rows as any[]).map(row => serializeDeal(row, user.role)));
 });
 
 // ---------------------------------------------------------------------------
@@ -137,7 +149,7 @@ deals.get('/funnel', async (c) => {
     SELECT d.status AS stage,
            COUNT(*) AS count,
            COALESCE(SUM(COALESCE(d.target_raise, d.amount, 0)), 0) AS total_target,
-           COALESCE(SUM(COALESCE(d.capital_committed, 0)), 0) AS total_committed,
+           COALESCE(SUM((SELECT COALESCE(SUM(cm.amount), 0) FROM commitments cm WHERE cm.deal_id = d.id AND cm.status = 'confirmed')), 0) AS total_committed,
            SUM(CASE WHEN d.created_at >= datetime('now', '-7 days') THEN 1 ELSE 0 END) AS added_7d
     FROM deals d
     LEFT JOIN projects p ON p.id = d.project_id
@@ -305,7 +317,7 @@ deals.get('/stage-analytics', async (c) => {
  */
 deals.get('/screening', async (c) => {
   const user = await requireAuth(c);
-  if (!isPrivilegedRole(user.role as string)) return c.json({ detail: 'Forbidden' }, 403);
+  if (user.role !== 'admin' && user.role !== 'partner') return c.json({ detail: 'Forbidden' }, 403);
   const sql = getSQL(c.env);
 
   /** The six the scorer writes, in the order it writes them. */
@@ -321,7 +333,7 @@ deals.get('/screening', async (c) => {
   let scored: unknown;
   let flags: unknown;
   try {
-    const rows = await sql`
+    const rows = user.role === 'admin' ? await sql`
       SELECT d.id AS deal_id, d.status AS deal_status,
              p.name AS company, p.sector AS sector,
              s.total_score, s.tier, s.created_at AS scored_at,
@@ -341,7 +353,20 @@ deals.get('/screening', async (c) => {
              ) s ON s.project_id = d.project_id
        WHERE (p.id IS NULL OR p.deleted_at IS NULL)
        ORDER BY s.created_at DESC, d.created_at DESC
-       LIMIT 200`;
+       LIMIT 200` : await sql`
+      SELECT d.id AS deal_id, d.status AS deal_status, d.project_id,
+             p.name AS company, p.sector
+        FROM deals d JOIN projects p ON p.id = d.project_id
+       WHERE p.deleted_at IS NULL ORDER BY d.created_at DESC LIMIT 200`;
+    if (user.role !== 'admin') {
+      const verified = await getVerifiedLatestSnapshots(c.env, (rows as any[]).map(row => Number(row.project_id)), {
+        role: user.role, userId: user.id,
+      });
+      for (const row of rows as any[]) {
+        const snapshot = verified.get(Number(row.project_id));
+        if (snapshot) Object.assign(row, snapshot.row, { scored_at: snapshot.row.created_at });
+      }
+    }
 
     const list = (rows as any[]).map((r) => {
       // `anomaly_flags` is JSON written by detectAnomalies: [{type, severity}].
@@ -357,8 +382,10 @@ deals.get('/screening', async (c) => {
         total_score: r.total_score === null || r.total_score === undefined ? null : Number(r.total_score),
         tier: r.tier ?? null,
         scored_at: r.scored_at ?? null,
-        review_status: r.admin_review_status ?? null,
-        flags: Array.isArray(parsed) ? parsed : [],
+        ...(user.role === 'admin' ? {
+          review_status: r.admin_review_status ?? null,
+          flags: Array.isArray(parsed) ? parsed : [],
+        } : {}),
         // The six, in the rubric's order, so the page never re-derives it.
         dimensions: RUBRIC.map((dim) => ({
           key: dim.key,
@@ -383,12 +410,12 @@ deals.get('/screening', async (c) => {
     const flagged = withScore.filter((r) => r.review_status === 'flagged');
     const bySeverity: Record<string, number> = {};
     for (const r of flagged) {
-      for (const f of r.flags) {
+      for (const f of r.flags || []) {
         const key = String(f?.severity || 'unrecorded');
         bySeverity[key] = (bySeverity[key] || 0) + 1;
       }
     }
-    flags = {
+    flags = user.role !== 'admin' ? { available: false, reason: 'Administrator access required.' } : {
       available: true,
       open: flagged.length,
       by_severity: bySeverity,
@@ -633,14 +660,14 @@ deals.get('/:id', async (c) => {
   const user = await requireAuth(c);
   const id = parseInt(c.req.param('id'));
   const sql = getSQL(c.env);
-  const rows = await sql`SELECT d.*, p.name as project_name, p.sector as project_sector, p.founder_id as project_founder_id, pr.name as partner_name, lp.name as lead_partner_name, f.id as founder_user_id FROM deals d LEFT JOIN projects p ON d.project_id = p.id LEFT JOIN partners pr ON d.partner_id = pr.id LEFT JOIN users lp ON lp.id = d.lead_partner_id LEFT JOIN users f ON f.founder_id = p.founder_id WHERE d.id = ${id}`;
+  const rows = await sql`SELECT d.*, (SELECT COALESCE(SUM(cm.amount), 0) FROM commitments cm WHERE cm.deal_id = d.id AND cm.status = 'confirmed') AS capital_committed, p.name as project_name, p.sector as project_sector, p.founder_id as project_founder_id, pr.name as partner_name, lp.name as lead_partner_name, f.id as founder_user_id FROM deals d LEFT JOIN projects p ON d.project_id = p.id LEFT JOIN partners pr ON d.partner_id = pr.id LEFT JOIN users lp ON lp.id = d.lead_partner_id LEFT JOIN users f ON f.founder_id = p.founder_id WHERE d.id = ${id}`;
   if (rows.length === 0) { await sql.end(); return c.json({ error: 'Deal not found' }, 404); }
   if (!(await canReadDeal(sql, user, id, (rows[0] as any).project_founder_id))) {
     await sql.end();
     return c.json({ detail: 'Forbidden: you do not own this deal' }, 403);
   }
   await sql.end();
-  return c.json(enrichDeal(rows[0]));
+  return c.json(serializeDeal(rows[0], user.role));
 });
 
 deals.put('/:id', async (c) => {
@@ -759,7 +786,7 @@ deals.put('/:id', async (c) => {
   }
   if (writeError !== null) { await sql.end(); throw writeError; }
 
-  const [updated] = await sql`SELECT d.*, p.name as project_name, p.sector as project_sector, pr.name as partner_name, lp.name as lead_partner_name FROM deals d LEFT JOIN projects p ON d.project_id = p.id LEFT JOIN partners pr ON d.partner_id = pr.id LEFT JOIN users lp ON lp.id = d.lead_partner_id WHERE d.id = ${id}`;
+  const [updated] = await sql`SELECT d.*, (SELECT COALESCE(SUM(cm.amount), 0) FROM commitments cm WHERE cm.deal_id = d.id AND cm.status = 'confirmed') AS capital_committed, p.name as project_name, p.sector as project_sector, pr.name as partner_name, lp.name as lead_partner_name FROM deals d LEFT JOIN projects p ON d.project_id = p.id LEFT JOIN partners pr ON d.partner_id = pr.id LEFT JOIN users lp ON lp.id = d.lead_partner_id WHERE d.id = ${id}`;
 
   // Phase 0.2 notify — surface stage changes to the founder behind the project.
   try {
@@ -852,7 +879,7 @@ deals.post('/:id/advance', async (c) => {
     actorUserId: (user as any)?.id ?? null,
   });
   await sql`UPDATE deals SET status = ${next}, stage_changed_at = datetime('now'), updated_at = CURRENT_TIMESTAMP WHERE id = ${id}`;
-  const [updated] = await sql`SELECT d.*, p.name as project_name, p.sector as project_sector, lp.name as lead_partner_name FROM deals d LEFT JOIN projects p ON d.project_id = p.id LEFT JOIN users lp ON lp.id = d.lead_partner_id WHERE d.id = ${id}`;
+  const [updated] = await sql`SELECT d.*, (SELECT COALESCE(SUM(cm.amount), 0) FROM commitments cm WHERE cm.deal_id = d.id AND cm.status = 'confirmed') AS capital_committed, p.name as project_name, p.sector as project_sector, lp.name as lead_partner_name FROM deals d LEFT JOIN projects p ON d.project_id = p.id LEFT JOIN users lp ON lp.id = d.lead_partner_id WHERE d.id = ${id}`;
 
   // Notify the owning founder about the stage change.
   try {
@@ -931,7 +958,7 @@ deals.post('/:id/pass', async (c) => {
            updated_at = CURRENT_TIMESTAMP
      WHERE id = ${id}`;
 
-  const [updated] = await sql`SELECT d.*, p.name as project_name, p.sector as project_sector, lp.name as lead_partner_name FROM deals d LEFT JOIN projects p ON d.project_id = p.id LEFT JOIN users lp ON lp.id = d.lead_partner_id WHERE d.id = ${id}`;
+  const [updated] = await sql`SELECT d.*, (SELECT COALESCE(SUM(cm.amount), 0) FROM commitments cm WHERE cm.deal_id = d.id AND cm.status = 'confirmed') AS capital_committed, p.name as project_name, p.sector as project_sector, lp.name as lead_partner_name FROM deals d LEFT JOIN projects p ON d.project_id = p.id LEFT JOIN users lp ON lp.id = d.lead_partner_id WHERE d.id = ${id}`;
 
   // The founder is told the outcome, never the internal reason. The taxonomy
   // is the fund's own shorthand — "Team" delivered as a notification is a
@@ -983,6 +1010,9 @@ async function investorHasDealRelationship(sql: any, userId: number, dealId: num
 }
 
 async function canReadDeal(sql: any, user: User, dealId: number, projectFounderId: any): Promise<boolean> {
+  // #2460 narrows the generic founder guard; deal-room policy is separate
+  // and deliberately retains the existing partner reader pending #2450.
+  if (user.role === 'partner') return true;
   if (canAccessFounderResource(user as any, projectFounderId)) return true;
   const role = String((user as any).role || '').toLowerCase();
   if (role === 'investor') return investorHasDealRelationship(sql, (user as any).id, dealId);
@@ -1008,10 +1038,31 @@ export async function userMayReadDeal(env: Env, user: User, dealId: number): Pro
   }
 }
 
+/** Bulk deal authorization for admin/partner/investor score readers.
+ * Same staff and invited-or-committed rule as userMayReadDeal; other roles
+ * retain the single-deal ownership path and are refused by this bulk surface.
+ */
+export async function userReadableDealIds(env: Env, user: User, dealIds: number[]): Promise<Set<number>> {
+  const ids = [...new Set(dealIds.filter(id => Number.isInteger(id) && id > 0))];
+  if (!ids.length) return new Set();
+  if (user.role !== 'admin' && user.role !== 'partner' && user.role !== 'investor') return new Set();
+  const rows = await env.DB.prepare(`
+    SELECT d.id FROM deals d
+     WHERE d.id IN (SELECT CAST(value AS INTEGER) FROM json_each(?))
+       AND (? IN ('admin','partner') OR (
+         ? = 'investor' AND (
+           EXISTS (SELECT 1 FROM deal_invitations i WHERE i.deal_id = d.id AND i.investor_user_id = ?)
+           OR EXISTS (SELECT 1 FROM commitments k WHERE k.deal_id = d.id AND k.investor_user_id = ?)
+         )
+       ))
+  `).bind(JSON.stringify(ids), user.role, user.role, user.id, user.id).all<{ id: number }>();
+  return new Set((rows.results || []).map(row => Number(row.id)));
+}
+
 async function loadDealForRead(c: any, id: number): Promise<ReadCtx> {
   const user = await requireAuth(c);
   const sql = getSQL(c.env);
-  const rows = await sql`SELECT d.*, p.name AS project_name, p.founder_id AS project_founder_id FROM deals d LEFT JOIN projects p ON d.project_id = p.id WHERE d.id = ${id}`;
+  const rows = await sql`SELECT d.*, (SELECT COALESCE(SUM(cm.amount), 0) FROM commitments cm WHERE cm.deal_id = d.id AND cm.status = 'confirmed') AS capital_committed, p.name AS project_name, p.founder_id AS project_founder_id FROM deals d LEFT JOIN projects p ON d.project_id = p.id WHERE d.id = ${id}`;
   if (rows.length === 0) { await sql.end(); return { error: c.json({ error: 'Deal not found' }, 404) }; }
   if (!(await canReadDeal(sql, user, id, (rows[0] as any).project_founder_id))) {
     await sql.end();
@@ -1032,89 +1083,82 @@ deals.get('/:id/documents', async (c) => {
 });
 
 deals.get('/:id/data-room', async (c) => {
-  const id = parseInt(c.req.param('id'));
-  const ctx = await loadDealForRead(c, id);
-  if (ctx.error) return ctx.error;
-  const { sql, deal } = ctx;
-  const docs = deal.project_id
-    ? await sql`SELECT id, title, content FROM documents WHERE project_id = ${deal.project_id} ORDER BY created_at DESC`
-    : [];
-  await sql.end();
-  const entries = [{
-    name: 'README.txt',
-    content: [
-      `Data Room — ${deal.project_name || 'Deal #' + id}`,
-      `Stage: ${deal.status}`,
-      `Documents: ${docs.length}`,
-      `Exported: ${new Date().toISOString()}`,
-    ].join('\n'),
-  }];
-  const seen = new Set<string>();
-  for (const d of docs as any[]) {
-    const base = String(d.title || `document_${d.id}`).replace(/[^a-zA-Z0-9 \-_.]/g, '_');
-    let name = `${base}.txt`;
-    let i = 1;
-    while (seen.has(name)) { name = `${base}_${i++}.txt`; }
-    seen.add(name);
-    entries.push({ name, content: d.content || '(document stored externally — no inline content)' });
-  }
-  const zip = buildZip(entries);
-  return new Response(zip, {
-    headers: {
-      'Content-Type': 'application/zip',
-      'Content-Disposition': `attachment; filename="data-room-deal-${id}.zip"`,
-    },
-  });
+  await requireAuth(c);
+  return c.json({ detail: 'This export is retired. Use the shared data room with its grants and NDA checks.' }, 410);
 });
 
 deals.get('/:id/commitments', async (c) => {
   const id = parseInt(c.req.param('id'));
   const ctx = await loadDealForRead(c, id);
   if (ctx.error) return ctx.error;
-  const { sql } = ctx;
-  const rows = await sql`SELECT c.id, c.uid, c.deal_id, c.investor_user_id, c.amount, c.status, c.notes, c.created_at, u.name AS investor_name FROM commitments c LEFT JOIN users u ON u.id = c.investor_user_id WHERE c.deal_id = ${id} ORDER BY c.created_at DESC`;
+  const { sql, user } = ctx;
+  if (user.role !== 'admin' && user.role !== 'founder' && user.role !== 'investor') {
+    const rows = await sql`SELECT COALESCE(SUM(amount), 0) AS total FROM commitments WHERE deal_id = ${id} AND status = 'confirmed'`;
+    await sql.end();
+    return c.json({ total: Number(rows[0]?.total ?? 0) });
+  }
+  const rows = user.role === 'investor'
+    ? await sql`SELECT c.id, c.uid, c.deal_id, c.investor_user_id, c.amount, c.status, c.notes, c.created_at, u.name AS investor_name FROM commitments c LEFT JOIN users u ON u.id = c.investor_user_id WHERE c.deal_id = ${id} AND c.investor_user_id = ${user.id} ORDER BY c.created_at DESC`
+    : await sql`SELECT c.id, c.uid, c.deal_id, c.investor_user_id, c.amount, c.status, c.notes, c.created_at, u.name AS investor_name FROM commitments c LEFT JOIN users u ON u.id = c.investor_user_id WHERE c.deal_id = ${id} ORDER BY c.created_at DESC`;
   await sql.end();
   return c.json(rows);
 });
 
 deals.post('/:id/commitments', async (c) => {
   const user = await requireRole(c, 'investor');
-  const id = parseInt(c.req.param('id'));
+  const id = Number(c.req.param('id'));
   const data = await c.req.json();
   const amount = Number(data.amount);
   if (!Number.isFinite(amount) || amount <= 0) return c.json({ detail: 'Commitment amount must be positive' }, 400);
-  const sql = getSQL(c.env);
-  const rows = await sql`SELECT id FROM deals WHERE id = ${id}`;
-  if (rows.length === 0) { await sql.end(); return c.json({ error: 'Deal not found' }, 404); }
-  // An investor must be invited to a deal before committing capital. This also
-  // prevents self-granting deal-room read access by committing to any deal id.
-  const invited = await sql`SELECT 1 AS x FROM deal_invitations WHERE deal_id = ${id} AND investor_user_id = ${user.id} LIMIT 1`;
-  if (!invited.length) { await sql.end(); return c.json({ detail: 'You must be invited to this deal before committing capital' }, 403); }
-  const [inserted] = await sql`INSERT INTO commitments (deal_id, investor_user_id, amount, status, notes) VALUES (${id}, ${user.id}, ${amount}, 'pending', ${data.notes || null}) RETURNING uid`;
-  await sql`UPDATE deals SET capital_committed = COALESCE(capital_committed, 0) + ${amount}, updated_at = CURRENT_TIMESTAMP WHERE id = ${id}`;
-  const [after] = await sql`SELECT capital_committed FROM deals WHERE id = ${id}`;
+  const db = c.env.DB;
+  const deal = await db.prepare('SELECT id, status, minimum_check FROM deals WHERE id = ?').bind(id).first<any>();
+  if (!deal) return c.json({ error: 'Deal not found' }, 404);
+  if (deal.status !== 'active') return c.json({ detail: 'Deal is not open for commitments' }, 409);
+  if (amount < Number(deal.minimum_check || 0)) return c.json({ detail: 'Amount is below the deal minimum' }, 400);
+  const firm = await transferFirm(c, user);
+  if ('refuse' in firm) return firm.refuse;
+  const companyId = firm.companyId;
+  const invited = await db.prepare(`SELECT 1 FROM deal_invitations WHERE deal_id = ? AND investor_user_id = ?
+    AND (company_id IS ? OR company_id IS NULL) LIMIT 1`).bind(id, user.id, companyId).first();
+  if (!invited) return c.json({ detail: 'You must be invited to this deal before committing capital' }, 403);
+  const confirmed = await db.prepare(`SELECT id FROM commitments WHERE deal_id = ? AND investor_user_id = ?
+    AND company_id IS ? AND status = 'confirmed' LIMIT 1`).bind(id, user.id, companyId).first();
+  if (confirmed) return c.json({ detail: 'Withdraw the confirmed commitment before replacing it' }, 409);
+  const uid = newUid();
+  const notes = data.notes == null ? null : String(data.notes).slice(0, 4000);
+  const results = await db.batch([
+    db.prepare(`UPDATE commitments SET amount = ?, notes = ? WHERE id =
+      (SELECT MIN(id) FROM commitments WHERE deal_id = ? AND investor_user_id = ? AND company_id IS ? AND status = 'pending')
+      AND EXISTS (SELECT 1 FROM deals WHERE id = ? AND status = 'active' AND COALESCE(minimum_check, 0) <= ?)
+      AND NOT EXISTS (SELECT 1 FROM commitments WHERE deal_id = ? AND investor_user_id = ? AND company_id IS ? AND status = 'confirmed')`)
+      .bind(amount, notes, id, user.id, companyId, id, amount, id, user.id, companyId),
+    db.prepare(`INSERT INTO commitments (uid, deal_id, investor_user_id, company_id, amount, status, notes)
+      SELECT ?, ?, ?, ?, ?, 'pending', ? WHERE NOT EXISTS
+      (SELECT 1 FROM commitments WHERE deal_id = ? AND investor_user_id = ? AND company_id IS ? AND status IN ('pending','confirmed'))
+      AND EXISTS (SELECT 1 FROM deals WHERE id = ? AND status = 'active' AND COALESCE(minimum_check, 0) <= ?)`)
+      .bind(uid, id, user.id, companyId, amount, notes, id, user.id, companyId, id, amount),
+    db.prepare(`UPDATE deals SET capital_committed = (SELECT COALESCE(SUM(amount), 0) FROM commitments WHERE deal_id = ? AND status = 'confirmed') WHERE id = ?`).bind(id, id),
+  ]);
+  if (!results[0].meta?.changes && !results[1].meta?.changes) return c.json({ detail: 'Deal or commitment changed; refresh before retrying' }, 409);
+  await logDealRoomAction(c.env, user, 'deal_commitment_pending', id, { company_id: companyId, amount });
+  const saved = await db.prepare(`SELECT uid FROM commitments WHERE deal_id = ? AND investor_user_id = ? AND company_id IS ? AND status = 'pending' ORDER BY id LIMIT 1`).bind(id, user.id, companyId).first<any>();
+  const total = await db.prepare(`SELECT COALESCE(SUM(amount), 0) AS total FROM commitments WHERE deal_id = ? AND status = 'confirmed'`).bind(id).first<any>();
+  return c.json({ ok: true, uid: saved?.uid, capital_committed: total?.total ?? 0 });
+});
 
-  // Notify the founder that capital was committed.
-  try {
-    const own = await sql`SELECT f.id AS founder_user_id FROM deals d LEFT JOIN projects p ON p.id = d.project_id LEFT JOIN users f ON f.founder_id = p.founder_id WHERE d.id = ${id}`;
-    const founderUserId = (own[0] as any)?.founder_user_id;
-    if (founderUserId) {
-      const { notify } = await import('../services/notify');
-      await notify(c.env, {
-        userId: founderUserId,
-        type: 'deal_commitment',
-        title: 'New capital commitment',
-        body: `${user.name} committed ${Math.round(amount).toLocaleString()} to your deal`,
-        link: `/deals/${id}`,
-        payload: { deal_id: id, amount },
-        channels: ['in_app', 'email'],
-        category: 'deals',
-      });
-    }
-  } catch (e) { console.warn('[deals] commitment notify failed', e); }
-
-  await sql.end();
-  return c.json({ ok: true, uid: (inserted as any)?.uid, capital_committed: (after as any)?.capital_committed });
+deals.post('/:id/commitments/:uid/withdraw', async (c) => {
+  const user = await requireRole(c, 'investor');
+  const id = Number(c.req.param('id'));
+  const firm = await transferFirm(c, user);
+  if ('refuse' in firm) return firm.refuse;
+  const results = await c.env.DB.batch([
+    c.env.DB.prepare(`UPDATE commitments SET status = 'withdrawn' WHERE uid = ? AND deal_id = ? AND investor_user_id = ? AND company_id IS ? AND status IN ('pending','confirmed')`)
+      .bind(c.req.param('uid'), id, user.id, firm.companyId),
+    c.env.DB.prepare(`UPDATE deals SET capital_committed = (SELECT COALESCE(SUM(amount), 0) FROM commitments WHERE deal_id = ? AND status = 'confirmed') WHERE id = ? AND changes() > 0`).bind(id, id),
+  ]);
+  if (!results[0].meta?.changes) return c.json({ detail: 'Commitment not found or already withdrawn' }, 404);
+  await logDealRoomAction(c.env, user, 'deal_commitment_withdrawn', id, { commitment_uid: c.req.param('uid'), company_id: firm.companyId });
+  return c.json({ ok: true });
 });
 
 deals.get('/:id/activity', async (c) => {

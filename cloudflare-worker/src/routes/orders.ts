@@ -14,7 +14,7 @@
  */
 import { Hono } from 'hono';
 import type { Env } from '../types';
-import { requireAuth } from '../auth';
+import { requireAuth, selectJwt } from '../auth';
 import { ensureTierSchema, type TierUser } from '../middleware/requireTier';
 import { ensurePaymentsCustomer } from './payments';
 import { stripeCall } from './billing';
@@ -38,7 +38,7 @@ import {
 } from '../services/orders';
 import { refuse } from '../util/refusal';
 import { recordAiTopupPurchase } from '../services/aiTopups';
-import { tokenPackQuote } from '../services/aiCredits';
+import { isTokenPackPrice, tokenPackQuote } from '../services/aiCredits';
 
 const orders = new Hono<{ Bindings: Env }>();
 
@@ -112,6 +112,14 @@ orders.post('/intent', async (c) => {
   const priorById = await c.env.DB.prepare('SELECT order_ref FROM orders WHERE id = ?')
     .bind(orderId)
     .first<{ order_ref: string }>();
+
+  // D849 (#2472): a support session never buys AI tokens with the member's
+  // card, as it never answers assistant consent (mcp_consent.ts). Judged
+  // before the pack's own refusals, so it answers the same for every pack.
+  const packCart = (await Promise.all(cart.lines.map((l) => isTokenPackPrice(c.env, l.price_id)))).some(Boolean);
+  if (packCart && (await selectJwt(c))?.payload.impersonated_by) {
+    return c.json({ error: 'support_session_refused', message: 'A support session cannot buy AI tokens.' }, 403);
+  }
 
   // D755 §5: a token pack is bought alone, at face value, with no promo and
   // within the limits. Judged before the promo, so it never takes the free path.

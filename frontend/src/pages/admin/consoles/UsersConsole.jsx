@@ -455,7 +455,7 @@ export default function UsersConsole({ onImpersonate }) {
       });
       setFailed(false);
     } catch (e) {
-      reportError('AdminPage:loadUsers', e);
+      reportError('UsersConsole:loadUsers', e);
       setFailed(true);
     }
   };
@@ -484,13 +484,13 @@ export default function UsersConsole({ onImpersonate }) {
           for (const s of (res?.scores || [])) map[s.user_id] = s;
           setTrustScores(map);
         } catch (e) {
-          reportError('AdminPage:trustScoreBatch', e);
+          reportError('UsersConsole:trustScoreBatch', e);
         }
       } else {
         setTrustScores({});
       }
     } catch (e) {
-      reportError('AdminPage:loadAdminData', e);
+      reportError('UsersConsole:loadAdminData', e);
       setFailed(true);
     } finally { setLoading(false); }
   };

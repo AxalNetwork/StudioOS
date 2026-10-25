@@ -49,7 +49,7 @@ export interface ExtractionResult {
 }
 
 export interface DeckReview {
-  overall_score: number;
+  overall_score: number | null;
   summary: string;
   strengths: string[];
   weaknesses: string[];
@@ -203,13 +203,15 @@ export async function mapSections(env: Env, userId: number, markdown: string, ch
   return heuristic;
 }
 
-function normalizeReview(ai: Partial<DeckReview> | null, sections: DeckSection[]): DeckReview {
+export function normalizeReview(ai: Partial<DeckReview> | null, sections: DeckSection[]): DeckReview {
   const present = sections.filter((s) => s.key !== 'other' && s.content.trim()).map((s) => s.key);
   const missing = DECK_SECTIONS.filter((s) => s.key !== 'other' && !present.includes(s.key)).map((s) => s.label);
   const strArr = (v: unknown): string[] => (Array.isArray(v) ? v.map((x) => String(x)).filter(Boolean).slice(0, 12) : []);
-  const score = Number(ai?.overall_score);
+  const returnedScore: unknown = ai?.overall_score;
+  const score = typeof returnedScore === 'number' || (typeof returnedScore === 'string' && returnedScore.trim() !== '')
+    ? Number(returnedScore) : NaN;
   return {
-    overall_score: Number.isFinite(score) ? Math.max(0, Math.min(100, Math.round(score))) : Math.max(20, Math.min(90, 30 + present.length * 6)),
+    overall_score: Number.isFinite(score) ? Math.max(0, Math.min(100, Math.round(score))) : null,
     summary: typeof ai?.summary === 'string' && ai.summary.trim() ? ai.summary.trim() : `Deck covers ${present.length}/${DECK_SECTIONS.length - 1} standard sections.`,
     strengths: strArr(ai?.strengths).length ? strArr(ai?.strengths) : present.length ? [`Covers ${present.slice(0, 4).join(', ')}`] : [],
     weaknesses: strArr(ai?.weaknesses),
@@ -228,7 +230,7 @@ function normalizeReview(ai: Partial<DeckReview> | null, sections: DeckSection[]
           .map((x) => ({ section: String(x.section || ''), before: String(x.before || ''), after: String(x.after) }))
           .slice(0, 8)
       : [],
-    fix_first: typeof ai?.fix_first === 'string' && ai.fix_first.trim() ? ai.fix_first.trim() : missing.length ? `Add the missing ${missing[0]} slide — investors screen for it fast.` : 'Sharpen the traction slide with concrete numbers.',
+    fix_first: typeof ai?.fix_first === 'string' && ai.fix_first.trim() ? ai.fix_first.trim() : '',
   };
 }
 

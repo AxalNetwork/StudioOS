@@ -15,10 +15,10 @@ import { isAdmin, isInvestor, isPartner, isFounder, mapError, nowIso, newUid, jl
 import { notify } from '../services/notify';
 import { ensureFollowsSchema } from './follows';
 import { investorProjectIds, investorActiveCompany } from './_investorProjectScope';
-import { canAccessProject } from '../services/projectAccess';
+import { canAccessProject, getMemberProjectIds } from '../services/projectAccess';
 import { roundCallsEnabled } from '../services/roundCallPolicy';
 import {
-  ASK_KINDS, ASK_MODULE, LineError, buildMetrics, canAskAgain, cleanAudience, cleanLines, cleanMetrics,
+  ASK_KINDS, ASK_MODULE, LineError, METRIC_KEYS, buildMetrics, canAskAgain, cleanAudience, cleanLines, cleanMetrics,
   draftLines, landReply, noMetrics, payloadFor, periodFacts,
   type Audience, type AskKind, type Snapshot, type ShippedItem,
 } from '../services/updateShare';
@@ -61,10 +61,40 @@ type UpdateRow = {
   id: number; uid: string; project_id: number; author_user_id: number;
   period: string | null; title: string; body: string | null; kpis_json: string | null;
   status: string; submitted_at: string | null; created_at: string; updated_at: string;
+  metrics_json?: string | null;
 };
 
 function isInvestorSide(user: User): boolean {
   return isAdmin(user) || isInvestor(user) || isPartner(user);
+}
+
+/*
+ * D889 (#2438): who reads a submitted update besides its founder and an admin.
+ * Two things must hold, or it fails closed:
+ *  - the relationship: an investor sees the company (`investorProjectIds`); a
+ *    partner is an accepted member of the venture (`project_members`);
+ *  - the founder chose them: their audience is switched on in `audience_json`
+ *    as an explicit JSON `true`, or they are a recorded recipient of that
+ *    audience in `update_recipients`. A missing, malformed or partial grant is
+ *    no grant, so an update with no audience recorded (one made before the
+ *    share sheet) stays with its founder and admins until it is shared again.
+ * Each fragment takes one bound parameter: the reader's user id.
+ */
+const INVESTOR_GRANT = `(EXISTS (SELECT 1 FROM update_recipients ur WHERE ur.update_id = portfolio_updates.id AND ur.user_id = ? AND ur.audience = 'investor')
+  OR (CASE WHEN json_valid(portfolio_updates.audience_json) THEN json_type(portfolio_updates.audience_json, '$.investors') END) = 'true')`;
+const TEAM_GRANT = `(EXISTS (SELECT 1 FROM update_recipients ur WHERE ur.update_id = portfolio_updates.id AND ur.user_id = ? AND ur.audience = 'team')
+  OR (CASE WHEN json_valid(portfolio_updates.audience_json) THEN json_type(portfolio_updates.audience_json, '$.team') END) = 'true')`;
+// The one-row checks, written out in full (as `_investorProjectScope.ts` does) so no query text is assembled.
+const INVESTOR_GRANTED = `SELECT 1 AS ok FROM portfolio_updates WHERE id = ? AND (EXISTS (SELECT 1 FROM update_recipients ur WHERE ur.update_id = portfolio_updates.id AND ur.user_id = ? AND ur.audience = 'investor')
+  OR (CASE WHEN json_valid(portfolio_updates.audience_json) THEN json_type(portfolio_updates.audience_json, '$.investors') END) = 'true')`;
+const TEAM_GRANTED = `SELECT 1 AS ok FROM portfolio_updates WHERE id = ? AND (EXISTS (SELECT 1 FROM update_recipients ur WHERE ur.update_id = portfolio_updates.id AND ur.user_id = ? AND ur.audience = 'team')
+  OR (CASE WHEN json_valid(portfolio_updates.audience_json) THEN json_type(portfolio_updates.audience_json, '$.team') END) = 'true')`;
+
+/** The ventures whose updates this non-admin reader may be shown, by their relationship (D889). */
+async function readerProjectIds(c: any, user: User): Promise<number[]> {
+  if (isInvestor(user)) return (await investorProjectIds(c.env, user, await investorActiveCompany(c, user))) || [];
+  if (isPartner(user)) return getMemberProjectIds(c.env, user.id);
+  return [];
 }
 
 async function projectFounderId(env: Env, projectId: number): Promise<number | null> {
@@ -78,12 +108,50 @@ async function canShareUpdate(env: Env, user: User, projectId: number, founderId
 
 const shareDenied = { detail: 'You can read this venture but not share its updates.', code: 'share_not_allowed' };
 
+/**
+ * D1057 (#2927, #2427 finding 4): the figures an update carries, each with its
+ * source. A Share an update row stores them in `metrics_json` (D654), keyed
+ * by `METRIC_KEYS` (mrr, growth, customers, burn, runway); part 3's
+ * `REPORT_FIGURES` keys report figures the same way. A row from the older KPI
+ * form stores bare values in `kpis_json`, which carry no source. A figure
+ * nothing recorded stays null with its reason, never 0.
+ */
+export function updateFigures(u: { kpis_json?: string | null; metrics_json?: string | null }): {
+  figures: Array<{ key: string; label: string; value: number | null; unit: string; source: string | null; as_of: string | null; reason: string | null }>;
+  kpis: Record<string, unknown>;
+} {
+  const stored = jload(u.kpis_json ?? null, {});
+  const legacy = stored && typeof stored === 'object' && !Array.isArray(stored) ? stored as Record<string, unknown> : {};
+  // Read as stored: the save already checked each figure against the period's snapshots (`cleanMetrics`),
+  // so a second pass with no verified list would relabel every source "typed".
+  const raw = jload(u.metrics_json ?? null, []);
+  const figures = (Array.isArray(raw) ? raw : []).flatMap((m: any) => {
+    if (!m || typeof m !== 'object' || !(METRIC_KEYS as readonly string[]).includes(String(m.key))) return [];
+    const value = typeof m.value === 'number' && Number.isFinite(m.value) ? m.value : null;
+    const source = typeof m.source === 'string' && m.source.trim() ? m.source.trim() : null;
+    // A recorded figure with no source is not one the update may show (D654's rule).
+    if (value != null && !source) return [];
+    return [{
+      key: String(m.key), label: String(m.label ?? m.key).slice(0, 60), value,
+      unit: ['usd', 'pct', 'count', 'months'].includes(String(m.unit)) ? String(m.unit) : 'count',
+      source: value == null ? null : source,
+      as_of: value == null ? null : (typeof m.as_of === 'string' ? m.as_of.slice(0, 10) : null),
+      reason: value == null ? (typeof m.reason === 'string' && m.reason ? m.reason : 'Not recorded') : null,
+    }];
+  });
+  // `kpis` stays the flat map the pages already read; a sourced figure fills a key the KPI form left empty.
+  const kpis: Record<string, unknown> = {};
+  for (const f of figures) if (f.value != null) kpis[f.key] = f.value;
+  return { figures, kpis: { ...kpis, ...legacy } };
+}
+
 async function dto(env: Env, u: UpdateRow): Promise<any> {
   const proj = await env.DB.prepare('SELECT id, uid, name, sector, stage, status FROM projects WHERE id = ? AND deleted_at IS NULL').bind(u.project_id).first<any>();
+  const { figures, kpis } = updateFigures(u);
   return {
     id: u.id, uid: u.uid, project_id: u.project_id, author_user_id: u.author_user_id,
     project: proj || null,
-    period: u.period, title: u.title, body: u.body, kpis: jload(u.kpis_json, {}),
+    period: u.period, title: u.title, body: u.body, kpis, figures,
     status: u.status, submitted_at: u.submitted_at,
     created_at: u.created_at, updated_at: u.updated_at,
   };
@@ -99,13 +167,15 @@ r.get('/', async (c) => {
     const params: any[] = [];
     if (isInvestorSide(user)) {
       where += " AND status = 'submitted'";
-      if (isInvestor(user)) {
-        const visible = await investorProjectIds(c.env, user, await investorActiveCompany(c, user));
-        const ids = visible || [];
+      // D889: an admin reads every submitted update; anyone else needs the relationship and the founder's grant.
+      if (!isAdmin(user)) {
+        const ids = await readerProjectIds(c, user);
         if (ids.length === 0) where += ' AND 1 = 0';
         else {
           where += ` AND project_id IN (${ids.map(() => '?').join(',')})`;
           params.push(...ids);
+          where += ` AND ${isInvestor(user) ? INVESTOR_GRANT : TEAM_GRANT}`;
+          params.push(user.id);
         }
       }
     } else if (isFounder(user) && user.founder_id) {
@@ -165,12 +235,12 @@ async function loadOwned(c: any, user: User): Promise<UpdateRow | null | { _forb
   const u = await c.env.DB.prepare('SELECT * FROM portfolio_updates WHERE uid = ?').bind(c.req.param('uid')).first() as UpdateRow | null;
   if (!u) return { _notfound: true };
   if (isInvestorSide(user)) {
-    // Investor side may only read submitted updates.
-    if (u.status !== 'submitted' && !isAdmin(user)) return { _forbidden: true };
-    if (isInvestor(user)) {
-      const visible = await investorProjectIds(c.env, user, await investorActiveCompany(c, user));
-      if (!visible?.includes(Number(u.project_id))) return { _forbidden: true };
-    }
+    if (isAdmin(user)) return u;
+    // Investor side may only read submitted updates, of a venture they are tied to, that its founder chose them for (D889).
+    if (u.status !== 'submitted') return { _forbidden: true };
+    if (!(await readerProjectIds(c, user)).includes(Number(u.project_id))) return { _forbidden: true };
+    const granted = await c.env.DB.prepare(isInvestor(user) ? INVESTOR_GRANTED : TEAM_GRANTED).bind(u.id, user.id).first();
+    if (!granted) return { _forbidden: true };
     return u;
   }
   // Founder: must own the project.
@@ -441,7 +511,9 @@ r.put('/:uid/share', async (c) => {
       if (e instanceof LineError) return c.json({ detail: e.sentence, field: 'lines' }, 400);
       throw e;
     }
-    const metrics = body.metrics === undefined ? jload(u.metrics_json, []) : cleanMetrics(body.metrics);
+    const proofSnapshots = start && end ? await periodSnapshots(c.env, u.project_id, start, end) : { inPeriod: [], before: [] };
+    const verifiedMetrics = start ? buildMetrics(proofSnapshots.inPeriod, proofSnapshots.before, start) : [];
+    const metrics = cleanMetrics(body.metrics === undefined ? jload(u.metrics_json, []) : body.metrics, verifiedMetrics);
     const audience = body.audience === undefined ? jload(u.audience_json, cleanAudience({})) : cleanAudience(body.audience);
     const incl = body.network_includes_metrics === undefined ? u.network_includes_metrics : (body.network_includes_metrics === true ? 1 : 0);
     if (body.asks !== undefined) {

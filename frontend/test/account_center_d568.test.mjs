@@ -612,7 +612,8 @@ test('SettingsPage lists the canvas sections in its order, and mounts each secti
   const labels = [...block.matchAll(/label: '([^']+)'/g)].map((m) => m[1]);
   // D642 (#1435) — the Usage canvas's acNav puts Usage after Billing and orders.
   // D651 (#1463) — the Connectors canvas puts Connectors after Usage.
-  assert.deepEqual(labels.slice(0, 8), ['Profile and identity', 'Notifications', 'Sign-in and security', 'Billing and orders', 'Usage', 'Connectors', 'Following', 'Developer']);
+  // D1134 (#2422) — Companies and projects, second, below Profile and identity.
+  assert.deepEqual(labels.slice(0, 9), ['Profile and identity', 'Companies and projects', 'Notifications', 'Sign-in and security', 'Billing and orders', 'Usage', 'Connectors', 'Following', 'Developer']);
   assert.match(block, /\{ id: 'developer', label: 'Developer', roles: \['admin'\] \}/);
   for (const id of ['onboarding', 'appearance', 'activity']) {
     assert.match(block, new RegExp(`\\{ id: '${id}', label: '[^']+', group: 'more' \\}`), `${id} is kept, under More`);
@@ -664,7 +665,7 @@ test('the sign-in pane uses the signed-in enrolment routes, never the login-flow
   const page = read('frontend/src/pages/SettingsPage.jsx');
   assert.doesNotMatch(page, /api\.(setupTotp|verifyTotp|smsStartChallenge|smsVerifyChallenge|authFactors)\(/);
   assert.match(page, /<TotpEnrollment/);
-  assert.match(page, /api\.smsStartEnrollment\(phone, country, null\)/);
+  assert.match(page, /api\.smsStartEnrollment\(normalizedPhone\.e164, normalizedPhone\.country, null\)/);
   const auth = read('cloudflare-worker/src/routes/auth.ts');
   assert.match(auth, /if \(user\.verification_token !== tokenHash\) \{ await sql\.end\(\); return c\.json\(\{ error: 'Invalid setup token\.' \}, 403\); \}/);
   const sms = read('cloudflare-worker/src/routes/auth_sms.ts');

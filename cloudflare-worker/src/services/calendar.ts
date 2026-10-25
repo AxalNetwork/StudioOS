@@ -14,6 +14,7 @@
 import type { Env } from '../types';
 import { getSQL } from '../db';
 import { encryptString, decryptString } from './cryptoBox';
+import { hostedEvents, staleMyEventCopies, ticketEvents } from './calendar/myEvents';
 
 /**
  * Refresh tokens were originally written in plaintext and migrated to
@@ -75,16 +76,11 @@ const GOOGLE_CALENDAR_API = 'https://www.googleapis.com/calendar/v3';
 // (follow-up #58) can list external events via sync_token without a
 // second consent screen. `userinfo.profile` is included so the consent
 // screen names the connecting user.
-// Task #70 — single Google consent screen now covers Calendar AND Gmail
-// AND "Continue with Google" sign-in. Gmail is read-only metadata so the
-// app can show event invites/threads adjacent to calendar items without
-// asking for a second consent. Adding `gmail.readonly` will force any
-// pre-Task-#70 connection to re-consent on its next OAuth round-trip,
-// which is the intended behaviour for the consolidated Google tile.
+// Task #2413 — the Calendar connector does not read Gmail, so its consent
+// stays limited to Calendar and the identity scopes used to link the account.
 const GOOGLE_SCOPES = [
   'https://www.googleapis.com/auth/calendar.events',
   'https://www.googleapis.com/auth/calendar.readonly',
-  'https://www.googleapis.com/auth/gmail.readonly',
   'https://www.googleapis.com/auth/userinfo.email',
   'https://www.googleapis.com/auth/userinfo.profile',
   'openid',
@@ -254,10 +250,35 @@ export function buildGoogleAuthUrl(env: Env, state: string, loginHint?: string, 
     access_type: 'offline',
     prompt: 'select_account consent',
     state,
-    include_granted_scopes: 'true',
+    // Do not carry forward a previously granted scope that this consent no
+    // longer requests (notably Gmail on existing connections).
+    include_granted_scopes: 'false',
   });
   if (loginHint) p.set('login_hint', loginHint);
   return `${GOOGLE_AUTH_URL}?${p.toString()}`;
+}
+
+/** Revoke every Google OAuth scope attached to this refresh token. */
+export async function revokeGoogleOAuthGrant(
+  refreshToken: string,
+  fetcher: typeof fetch = fetch,
+): Promise<void> {
+  const body = new URLSearchParams({ token: refreshToken });
+  const response = await fetchWithTimeout('https://oauth2.googleapis.com/revoke', {
+    method: 'POST',
+    headers: { 'content-type': 'application/x-www-form-urlencoded' },
+    body,
+  }, 10_000, fetcher);
+  if (response.ok) return;
+
+  let providerError = '';
+  try {
+    const data = await response.json() as { error?: string };
+    providerError = String(data?.error || '');
+  } catch { /* Google's error body is optional. */ }
+  // Google documents invalid_token as an already expired or revoked grant.
+  if (providerError === 'invalid_token') return;
+  throw new Error(`google_revoke_failed:${response.status}:${providerError || 'unknown'}`);
 }
 
 export function buildMicrosoftAuthUrl(env: Env, state: string): string {
@@ -277,11 +298,13 @@ export function buildMicrosoftAuthUrl(env: Env, state: string): string {
 // Token exchange / refresh — fetch with explicit timeout, fail with thrown
 // Error so callers can map to a HTTP status.
 // ===========================================================================
-async function fetchWithTimeout(url: string, init: RequestInit, timeoutMs = 10_000): Promise<Response> {
+async function fetchWithTimeout(
+  url: string, init: RequestInit, timeoutMs = 10_000, fetcher: typeof fetch = fetch,
+): Promise<Response> {
   const ctrl = new AbortController();
   const t = setTimeout(() => ctrl.abort(), timeoutMs);
   try {
-    return await fetch(url, { ...init, signal: ctrl.signal });
+    return await fetcher(url, { ...init, signal: ctrl.signal });
   } finally {
     clearTimeout(t);
   }
@@ -397,7 +420,7 @@ export async function fetchMicrosoftUserinfo(accessToken: string): Promise<any> 
 // ===========================================================================
 export interface CalendarEvent {
   id: string;
-  kind: 'ic_meeting' | 'founder_checkin' | 'advisor_booking' | 'partner_office_hour' | 'calendly_event' | 'expert_booking';
+  kind: 'ic_meeting' | 'founder_checkin' | 'advisor_booking' | 'partner_office_hour' | 'calendly_event' | 'expert_booking' | 'event_ticket' | 'event_hosted';
   source_id: number;
   source_uid: string;
   title: string;
@@ -412,6 +435,17 @@ export interface CalendarEvent {
   deal_id?: number | null;
   project_id?: number | null;
   /**
+   * D1033 — set only by the two My events kinds (`calendar/myEvents.ts`). The
+   * venue words (`location_text`), the event row the copy came from, its page,
+   * and whether a calendar client should show it as held or tentative. The
+   * other six kinds leave them unset, so their .ics and provider payloads are
+   * unchanged.
+   */
+  place?: string | null;
+  event_id?: number;
+  url?: string;
+  ics_status?: 'CONFIRMED' | 'TENTATIVE';
+  /**
    * Providers this exact event has already been copied to, from
    * `calendar_sync_records`. Only `GET /calendar/events` fills it in
    * (`attachPushRecords`); the readers above do not, because .ics export and
@@ -424,7 +458,7 @@ function addMinutes(iso: string, mins: number): string {
   return new Date(new Date(iso).getTime() + mins * 60_000).toISOString();
 }
 
-async function icEvents(env: Env, userId: number, isAdmin: boolean,
+async function icEvents(env: Env, userId: number,
                         fromIso: string, toIso: string): Promise<CalendarEvent[]> {
   const sql = getSQL(env);
   const rows = await sql`
@@ -441,7 +475,7 @@ async function icEvents(env: Env, userId: number, isAdmin: boolean,
       WHERE a.meeting_id = ${m.id}
     ` as any[];
     const invited = new Set(attendeeRows.map(a => a.user_id));
-    if (!(isAdmin || m.organizer_user_id === userId || invited.has(userId))) continue;
+    if (!(m.organizer_user_id === userId || invited.has(userId))) continue;
     const organizer = (await sql`SELECT email FROM users WHERE id = ${m.organizer_user_id}` as any[])[0];
     out.push({
       id: `ic_meeting:${m.id}`,
@@ -465,19 +499,14 @@ async function icEvents(env: Env, userId: number, isAdmin: boolean,
   return out;
 }
 
-async function checkinEvents(env: Env, userId: number, isAdmin: boolean,
+async function checkinEvents(env: Env, userId: number,
                              fromIso: string, toIso: string): Promise<CalendarEvent[]> {
   const sql = getSQL(env);
-  const rows = isAdmin
-    ? await sql`
-        SELECT * FROM founder_checkins
-        WHERE start_at >= ${fromIso} AND start_at <= ${toIso} AND status != 'cancelled'
-      ` as any[]
-    : await sql`
-        SELECT * FROM founder_checkins
-        WHERE start_at >= ${fromIso} AND start_at <= ${toIso} AND status != 'cancelled'
-          AND (founder_user_id = ${userId} OR counterpart_user_id = ${userId})
-      ` as any[];
+  const rows = await sql`
+    SELECT * FROM founder_checkins
+    WHERE start_at >= ${fromIso} AND start_at <= ${toIso} AND status != 'cancelled'
+      AND (founder_user_id = ${userId} OR counterpart_user_id = ${userId})
+  ` as any[];
   const out: CalendarEvent[] = [];
   for (const c of rows) {
     const founder = (await sql`SELECT email, name FROM users WHERE id = ${c.founder_user_id}` as any[])[0];
@@ -529,11 +558,11 @@ function isMissingColumnError(e: any): boolean {
   return msg.includes('no such column');
 }
 
-async function advisorBookingEvents(env: Env, userId: number, isAdmin: boolean,
+async function advisorBookingEvents(env: Env, userId: number,
                                    fromIso: string, toIso: string): Promise<CalendarEvent[]> {
   const sql = getSQL(env);
   try {
-    // Visibility: requester, advisor (via users.advisor_id), or admin.
+    // Visibility: requester or advisor (via users.advisor_id).
     const me = (await sql`SELECT advisor_id FROM users WHERE id = ${userId}` as any[])[0];
     const myAdvisorId = me?.advisor_id || null;
     // A booking carries no time of its own — the slot does. `advisor_bookings`
@@ -555,7 +584,7 @@ async function advisorBookingEvents(env: Env, userId: number, isAdmin: boolean,
       // (routes/advisors.ts), so that filter matched nothing either.
       const isRequester = b.founder_user_id === userId;
       const isAdvisor = !!(myAdvisorId && b.advisor_id === myAdvisorId);
-      if (!(isAdmin || isRequester || isAdvisor)) continue;
+      if (!(isRequester || isAdvisor)) continue;
       const advisor = (await sql`SELECT email, display_name AS name FROM advisors WHERE id = ${b.advisor_id}` as any[])[0];
       const requester = (await sql`SELECT email, name FROM users WHERE id = ${b.founder_user_id}` as any[])[0];
       out.push({
@@ -587,7 +616,7 @@ async function advisorBookingEvents(env: Env, userId: number, isAdmin: boolean,
   }
 }
 
-async function partnerOfficeHourEvents(env: Env, userId: number, isAdmin: boolean,
+async function partnerOfficeHourEvents(env: Env, userId: number,
                                        fromIso: string, toIso: string): Promise<CalendarEvent[]> {
   const sql = getSQL(env);
   try {
@@ -607,7 +636,7 @@ async function partnerOfficeHourEvents(env: Env, userId: number, isAdmin: boolea
     for (const b of rows) {
       const isRequester = b.founder_user_id === userId;
       const isPartnerSide = !!(myPartnerId && b.partner_id === myPartnerId);
-      if (!(isAdmin || isRequester || isPartnerSide)) continue;
+      if (!(isRequester || isPartnerSide)) continue;
       const partner = (await sql`SELECT email, name FROM partners WHERE id = ${b.partner_id}` as any[])[0];
       const requester = (await sql`SELECT email, name FROM users WHERE id = ${b.founder_user_id}` as any[])[0];
       out.push({
@@ -639,16 +668,13 @@ async function partnerOfficeHourEvents(env: Env, userId: number, isAdmin: boolea
 
 // Task #3 — Calendly events surfaced in the unified calendar. Read from
 // the local `calendar_events` projection table written by the Calendly
-// provider's webhook + sync. Visibility: requester only (admin sees all).
-async function calendlyEvents(env: Env, userId: number, isAdmin: boolean,
+// provider's webhook + sync. Visibility: owner only, including an admin’s personal calendar.
+async function calendlyEvents(env: Env, userId: number,
                               fromIso: string, toIso: string): Promise<CalendarEvent[]> {
   try {
-    const where = isAdmin
-      ? "source = 'calendly' AND start_at >= ? AND start_at <= ?"
-      : "source = 'calendly' AND user_id = ? AND start_at >= ? AND start_at <= ?";
-    const stmt = isAdmin
-      ? env.DB.prepare(`SELECT * FROM calendar_events WHERE ${where}`).bind(fromIso, toIso)
-      : env.DB.prepare(`SELECT * FROM calendar_events WHERE ${where}`).bind(userId, fromIso, toIso);
+    const stmt = env.DB.prepare(
+      "SELECT * FROM calendar_events WHERE source = 'calendly' AND user_id = ? AND start_at >= ? AND start_at <= ?",
+    ).bind(userId, fromIso, toIso);
     const res = await stmt.all<{
       id: number; uid: string; user_id: number; external_uri: string;
       title: string | null; start_at: string; end_at: string; status: string;
@@ -692,24 +718,14 @@ async function calendlyEvents(env: Env, userId: number, isAdmin: boolean,
  * Reading by `kind` is what makes this generic: a second such feature adds a
  * `KNOWN_KINDS` entry and nothing here changes.
  */
-async function directEvents(env: Env, userId: number, isAdmin: boolean,
+async function directEvents(env: Env, userId: number,
                             fromIso: string, toIso: string,
                             kind: string): Promise<CalendarEvent[]> {
   try {
-    // D331 (wave 8, item 3) — `expert_booking` is owner-only even for an
-    // admin. This is a wellbeing booking, and the admin branch below exists
-    // for kinds an admin legitimately reviews platform-wide (ic_meeting,
-    // partner_office_hour); an admin's own calendar has no business showing
-    // every founder's expert session. Widened to owner-only here rather than
-    // in a per-kind allowlist at the call site, so a future direct-write kind
-    // is scoped by default and must opt INTO the admin-wide read, not out.
-    const ownerOnly = isAdmin && kind !== 'expert_booking';
-    const where = ownerOnly
-      ? "source <> 'calendly' AND kind = ? AND start_at >= ? AND start_at <= ?"
-      : "source <> 'calendly' AND kind = ? AND user_id = ? AND start_at >= ? AND start_at <= ?";
-    const stmt = ownerOnly
-      ? env.DB.prepare(`SELECT * FROM calendar_events WHERE ${where}`).bind(kind, fromIso, toIso)
-      : env.DB.prepare(`SELECT * FROM calendar_events WHERE ${where}`).bind(kind, userId, fromIso, toIso);
+    // Personal calendars never inherit a staff member's wider read access.
+    const stmt = env.DB.prepare(
+      "SELECT * FROM calendar_events WHERE source <> 'calendly' AND kind = ? AND user_id = ? AND start_at >= ? AND start_at <= ?",
+    ).bind(kind, userId, fromIso, toIso);
     const res = await stmt.all<{
       id: number; uid: string; kind: string; source_id: number | null; source_uid: string | null;
       title: string | null; start_at: string; end_at: string; status: string;
@@ -758,7 +774,7 @@ async function directEvents(env: Env, userId: number, isAdmin: boolean,
  * rather than from a list someone remembered to update.
  */
 type CalendarReader = (
-  env: Env, userId: number, isAdmin: boolean, fromIso: string, toIso: string,
+  env: Env, userId: number, fromIso: string, toIso: string,
 ) => Promise<CalendarEvent[]>;
 
 /**
@@ -778,12 +794,14 @@ const READERS: Readonly<Record<CalendarEvent['kind'], CalendarReader>> = {
   advisor_booking: advisorBookingEvents,
   partner_office_hour: partnerOfficeHourEvents,
   calendly_event: calendlyEvents,
-  expert_booking: (env, userId, isAdmin, from, to) => directEvents(env, userId, isAdmin, from, to, 'expert_booking'),
+  expert_booking: (env, userId, from, to) => directEvents(env, userId, from, to, 'expert_booking'),
+  event_ticket: ticketEvents,
+  event_hosted: hostedEvents,
 };
 
 export const KNOWN_KINDS = Object.keys(READERS) as readonly CalendarEvent['kind'][];
 
-/** Whether one source answered, so a page can say which of the six did not. */
+/** Whether one source answered, so a page can say which of the eight did not. */
 export interface CalendarSourceStatus {
   kind: CalendarEvent['kind'];
   ok: boolean;
@@ -810,17 +828,16 @@ export interface CalendarSourceStatus {
  *     report an event as "not found" when the truth is that its source broke.
  */
 async function gather(
-  env: Env, userId: number, role: string, fromIso: string, toIso: string,
+  env: Env, userId: number, _role: string, fromIso: string, toIso: string,
   kinds?: string[],
 ): Promise<{ events: CalendarEvent[]; sources: CalendarSourceStatus[] }> {
-  const isAdmin = role.toLowerCase() === 'admin';
   const wanted = new Set<string>(kinds && kinds.length ? kinds : KNOWN_KINDS);
   const events: CalendarEvent[] = [];
   const sources: CalendarSourceStatus[] = [];
   for (const kind of KNOWN_KINDS) {
     if (!wanted.has(kind)) continue;
     try {
-      events.push(...await READERS[kind](env, userId, isAdmin, fromIso, toIso));
+      events.push(...await READERS[kind](env, userId, fromIso, toIso));
       sources.push({ kind, ok: true, error: null });
     } catch (e) {
       console.warn('[calendar] source failed', { kind, user_id: userId }, e);
@@ -912,6 +929,16 @@ function icsEscape(s: string | null | undefined): string {
   return s.replace(/\\/g, '\\\\').replace(/,/g, '\\,').replace(/;/g, '\\;').replace(/\n/g, '\\n');
 }
 
+/** The venue words and the URI together (D1033); for the six older kinds, the URI alone as before. */
+function locationLine(ev: CalendarEvent): string {
+  return [ev.place, ev.location_uri].filter(Boolean).join(' — ');
+}
+
+/** The notes, then the event page when the copy has one (D1033). */
+function bodyText(ev: CalendarEvent): string {
+  return [ev.notes || '', ev.url ? `Event page: ${ev.url}` : ''].filter(Boolean).join('\n\n');
+}
+
 export function eventsToIcs(events: CalendarEvent[], calendarName = 'Axal StudioOS'): string {
   const lines = [
     'BEGIN:VCALENDAR',
@@ -930,7 +957,10 @@ export function eventsToIcs(events: CalendarEvent[], calendarName = 'Axal Studio
     lines.push(`DTEND:${icsDt(ev.end_at)}`);
     lines.push(`SUMMARY:${icsEscape(ev.title)}`);
     if (ev.notes) lines.push(`DESCRIPTION:${icsEscape(ev.notes)}`);
-    if (ev.location_uri) lines.push(`LOCATION:${icsEscape(ev.location_uri)}`);
+    const where = locationLine(ev);
+    if (where) lines.push(`LOCATION:${icsEscape(where)}`);
+    if (ev.url) lines.push(`URL:${icsEscape(ev.url)}`);
+    if (ev.ics_status) lines.push(`STATUS:${ev.ics_status}`);
     for (const a of ev.attendees) {
       if (a.email) lines.push(`ATTENDEE;CN=${icsEscape(a.name || a.email)}:mailto:${a.email}`);
     }
@@ -946,12 +976,14 @@ export function eventsToIcs(events: CalendarEvent[], calendarName = 'Axal Studio
 function googlePayload(ev: CalendarEvent): any {
   const body: any = {
     summary: ev.title,
-    description: ev.notes || '',
+    description: bodyText(ev),
     start: { dateTime: ev.start_at, timeZone: 'UTC' },
     end: { dateTime: ev.end_at, timeZone: 'UTC' },
-    source: { title: 'Axal StudioOS', url: 'https://axal.vc' },
+    source: { title: 'Axal StudioOS', url: ev.url || 'https://axal.vc' },
   };
-  if (ev.location_uri) body.location = ev.location_uri;
+  const where = locationLine(ev);
+  if (where) body.location = where;
+  if (ev.ics_status === 'TENTATIVE') body.status = 'tentative';
   const att = ev.attendees
     .filter(a => a.email && a.email !== ev.organizer_email)
     .map(a => ({ email: a.email, displayName: a.name }));
@@ -1013,11 +1045,13 @@ export async function deleteEventFromGoogle(accessToken: string, googleEventId: 
 function microsoftPayload(ev: CalendarEvent): any {
   const body: any = {
     subject: ev.title,
-    body: { contentType: 'text', content: ev.notes || '' },
+    body: { contentType: 'text', content: bodyText(ev) },
     start: { dateTime: ev.start_at, timeZone: 'UTC' },
     end: { dateTime: ev.end_at, timeZone: 'UTC' },
   };
-  if (ev.location_uri) body.location = { displayName: ev.location_uri };
+  const where = locationLine(ev);
+  if (where) body.location = { displayName: where };
+  if (ev.ics_status === 'TENTATIVE') body.showAs = 'tentative';
   const att = ev.attendees
     .filter(a => a.email && a.email !== ev.organizer_email)
     .map(a => ({
@@ -1082,6 +1116,8 @@ export async function deleteEventFromMicrosoft(accessToken: string, eventId: str
 // ===========================================================================
 export interface SyncSummary {
   pushed: number; updated: number; failed: number; skipped: number; total: number;
+  /** D1033 — My events copies taken off the provider because their place or event left. */
+  removed: number;
 }
 
 export async function syncUserToGoogle(
@@ -1145,11 +1181,46 @@ async function syncUserToProvider(
       }
     }
   }
+  const removed = await removeStaleMyEventCopies(env, userId, provider, accessToken);
   const nowIso = new Date().toISOString();
   const tokenTable = provider === 'google' ? 'google_oauth_tokens' : 'microsoft_oauth_tokens';
   await sql.unsafe(
     `UPDATE ${tokenTable} SET last_synced_at = ? WHERE user_id = ?`,
     [nowIso, userId],
   );
-  return { pushed, updated, failed, skipped: 0, total: events.length };
+  return { pushed, updated, failed, skipped: 0, total: events.length, removed };
+}
+
+/**
+ * D1033 — a cancelled place or event leaves Google and Outlook on the next sync.
+ *
+ * The push above only ever adds and updates. For the six older kinds a cancel
+ * route calls `onAxalSessionCancelled`; nothing in the event routes does, so
+ * without this a ticket the member cancelled would sit on their Google calendar
+ * for good. The copies are found from the source rows (`staleMyEventCopies`),
+ * not from this sync's window. A refused delete keeps its mapping and records
+ * the error, as `onAxalSessionCancelled` does, so the next sync tries again.
+ */
+async function removeStaleMyEventCopies(
+  env: Env, userId: number, provider: 'google' | 'microsoft', accessToken: string,
+): Promise<number> {
+  const stale = await staleMyEventCopies(env, userId, provider);
+  let removed = 0;
+  for (const r of stale) {
+    const ok = provider === 'google'
+      ? await deleteEventFromGoogle(accessToken, r.external_event_id)
+      : await deleteEventFromMicrosoft(accessToken, r.external_event_id);
+    if (ok) {
+      await env.DB.prepare(
+        'DELETE FROM calendar_sync_records WHERE user_id = ? AND provider = ? AND source_kind = ? AND source_id = ?',
+      ).bind(userId, provider, r.source_kind, r.source_id).run();
+      removed++;
+    } else {
+      await env.DB.prepare(
+        `UPDATE calendar_sync_records SET last_error = ?, last_synced_at = ?
+          WHERE user_id = ? AND provider = ? AND source_kind = ? AND source_id = ?`,
+      ).bind('delete_refused', new Date().toISOString(), userId, provider, r.source_kind, r.source_id).run();
+    }
+  }
+  return removed;
 }

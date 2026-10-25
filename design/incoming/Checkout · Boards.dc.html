@@ -1,0 +1,71 @@
+<!DOCTYPE html>
+<html><head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <meta name="design_doc_mode" content="canvas">
+  <link href="https://fonts.googleapis.com/css2?family=Roboto+Mono:wght@400;500;600;700&family=Space+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <style>body{margin:0;background:#eeedf2}a{color:#7c3aed;text-decoration:none}a:hover{color:#6d28d9}</style>
+</helmet>
+<div style="display:flex;flex-direction:column;font-family:'Space Grotesk',system-ui,sans-serif;color:#18181b">
+  <header style="padding:40px 44px 8px;display:flex;flex-direction:column;gap:6px">
+    <span style="font:700 11px 'Roboto Mono',monospace;letter-spacing:.07em;text-transform:uppercase;color:#6b6577">StudioOS · Checkout</span>
+    <h1 style="margin:0;font-size:28px;font-weight:800;letter-spacing:-.02em">Checkout</h1>
+    <p style="margin:0;font-size:14px;color:#6b6577;max-width:840px;line-height:1.55">One payment sheet that opens in place over the page the member is on, to buy or change a plan. It never leaves axal.vc. Sample today is [21 Oct 2026]; every price is a placeholder for the figure Stripe holds.</p>
+  </header>
+  <sc-for list="{{ boards }}" as="b" hint-placeholder-count="21">
+    <section id="{{ b.id }}" style="padding:36px 44px;border-bottom:1px solid rgba(0,0,0,.08);display:flex;flex-direction:column;gap:12px;scroll-margin-top:16px">
+      <div style="display:flex;align-items:baseline;gap:10px;flex-wrap:wrap">
+        <a href="#{{ b.id }}" style="font:700 11px 'Roboto Mono',monospace;padding:3px 8px;background:#18181b;color:#fff;border-radius:5px">{{ b.id }}</a>
+        <h2 style="margin:0;font-size:16px;font-weight:800;letter-spacing:-.01em">{{ b.t }}</h2>
+      </div>
+      <p style="margin:0;font-size:13px;line-height:1.55;color:#4a4553;max-width:920px">{{ b.cap }}</p>
+      <div style="display:flex;gap:28px;flex-wrap:wrap;align-items:flex-start">
+        <sc-for list="{{ b.frames }}" as="f" hint-placeholder-count="1">
+          <div style="display:flex;flex-direction:column;gap:8px;flex:none">
+            <sc-if value="{{ f.lab }}" hint-placeholder-val="{{ false }}"><span style="font:600 11px 'Roboto Mono',monospace;color:#6b6577">{{ f.lab }}</span></sc-if>
+            <div style="{{ f.box }}"><dc-import name="Checkout Sheet Page" board="{{ f.b }}" hint-size="{{ f.hint }}"></dc-import></div>
+          </div>
+        </sc-for>
+      </div>
+    </section>
+  </sc-for>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script="">
+class Component extends DCLogic {
+  renderVals() {
+    const D = (b, lab, w, h, r) => ({ b, lab: lab || false, hint: '100%,' + (h || 900) + 'px', box: 'width:' + (w || 1440) + 'px;' + (h ? 'height:' + h + 'px;' : '') + 'overflow:hidden;border-radius:' + (r || 12) + 'px;border:1px solid rgba(24,24,27,.12);background:#f4f3f7;box-shadow:0 1px 3px rgba(0,0,0,.06)' });
+    const P = (b, lab) => D(b, lab, 390, 844, 28);
+    const boards = [
+      ['PAYX1', 'Pricing › Founder · member on Free · context', 'The Pricing page as it is today, not redesigned. Free is the current plan; the paid cards say Upgrade, which opens Checkout over this page without changing the address.', [D('PAYX1')]],
+      ['PAYX2', 'Checkout · new plan · Founder · the main board', 'The sheet opens in place over the dimmed page: Your plan on the left, Payment on the right. A member with no saved card sees this; a member with one sees PAYX3.', [D('PAYX2')]],
+      ['PAYX3', 'Yearly, returning member', 'A · Yearly selected, billed [$204] today. B · Pay with a saved card; choosing A new card shows the card form.', [D('PAYX3', false, 1100)]],
+      ['PAYX4', 'Change plan', 'A · an upgrade, with the unused time credited. B · a downgrade at the end of what was paid, with the storage note. C · the authenticator step before any plan change.', [D('PAYX4', false, 1440)]],
+      ['PAYX5', 'Promo code', 'Applying, valid, expired, not for this plan, and a code that covers the whole first payment. A code that doesn’t exist says “That code isn’t valid.” in the same place as Expired.', [D('PAYX5', false, 1440)]],
+      ['PAYX6', 'Processing and 3-D Secure', 'The locked form while the payment processes, and the bank’s own window over the sheet.', [D('PAYX6a', 'Processing', 640), D('PAYX6b', '3-D Secure', 1000)]],
+      ['PAYX7', 'Accepted', 'The sheet becomes one column with the receipt and what the plan gives now. From a paywall, the primary button returns to the locked feature.', [D('PAYX7'), D('PAYX7b', 'From a paywall', 680)]],
+      ['PAYX8', 'Activating', 'Waiting for the plan to switch on, and the line after one minute.', [D('PAYX8', false, 1200)]],
+      ['PAYX9', 'Refused', 'Five refusals. Each keeps the form filled in, says the member was not charged, and offers Try again or Use another method.', [D('PAYX9', false, 1440)]],
+      ['PAYX10', 'Renewal failed', 'The banner under the top bar on every page; the bank asking for confirmation; the plan ended after the grace period, with Billing’s pills.', [D('PAYX10a', 'Renewal failed', 1440, 420), D('PAYX10b', 'Bank wants confirmation', 1440, 380), D('PAYX10c', 'After the grace period', 1440, 520)]],
+      ['PAYX11', 'Billing touch points', 'The plan card, the cancel dialog, the cancelled state, and two rows of the existing invoice list.', [D('PAYX11', false, 1200)]],
+      ['PAYX12', 'From a paywall and from Usage', 'A locked feature opens Checkout straight on Raise + Grow; the Limits card on Usage opens it on Validate + Build.', [D('PAYX12', false, 1200)]],
+      ['PAYX13', 'Investor', 'Investor Basic to Investor Pro, beside the Investor tab’s cards.', [D('PAYX13', false, 1200)]],
+      ['PAYX14', 'Advisor and Operating Partner', 'Advisor Pro and Operating Partner Pro, and a paying Operating Partner’s tab with Current plan on Pro.', [D('PAYX14', false, 1440)]],
+      ['PAYX15', 'Explorer', 'No profile yet, so no plan and no payment column.', [D('PAYX15', false, 680)]],
+      ['PAYX16', 'Admin and Super Admin', 'Staff accounts need no plan. HQ sees Test mode in the sheet’s header, with links to Payments and Promo codes.', [D('PAYX16', false, 1200)]],
+      ['PAYX17', 'Loading', 'The sheet frame drawn at once, with skeletons where the summary and the card form go.', [D('PAYX17')]],
+      ['PAYX18', 'Error', 'Checkout couldn’t start, the price couldn’t be read, and payments not set up. None shows a Pay button or a price it doesn’t have.', [D('PAYX18', false, 1440)]],
+      ['PAYX19', 'No permission', 'A visitor signs in first and lands on the plan they chose; a Founder opening an Investor plan.', [D('PAYX19a', 'Sign in first', 900), D('PAYX19b', 'Another profile’s plan', 680)]],
+      ['PAYX20', 'Phone · 390 wide', 'Checkout full screen with Pay fixed at the bottom, its details open, accepted, refused, and the renewal banner on Billing.', [P('PAYX20a', 'Checkout'), P('PAYX20b', 'Details open'), P('PAYX20c', 'Accepted'), P('PAYX20d', 'Refused'), P('PAYX20e', 'Renewal banner')]],
+      ['PAYX21', 'Dark', 'PAYX2 and the Card declined crop in the dark colours. Apple Pay stays black, with a white hairline.', [D('PAYX21'), D('PAYX21b', 'Card declined', 640)]]
+    ].map(([id, t, cap, frames]) => ({ id, t, cap, frames }));
+    return { boards };
+  }
+}
+</script>
+</body></html>

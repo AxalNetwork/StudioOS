@@ -90,7 +90,7 @@ export function buildMetrics(inPeriod: Snapshot[], before: Snapshot[], periodSta
 export const noMetrics = (m: Metric[]) => !m.some((x) => x.value != null);
 
 /** Keep only well-formed metrics the founder kept; a null stays null. */
-export function cleanMetrics(raw: unknown): Metric[] {
+export function cleanMetrics(raw: unknown, verified: Metric[] = []): Metric[] {
   if (!Array.isArray(raw)) return [];
   const out: Metric[] = [];
   for (const m of raw) {
@@ -102,7 +102,7 @@ export function cleanMetrics(raw: unknown): Metric[] {
       key: String(r.key), label: String(r.label ?? r.key).slice(0, 60),
       unit: (['usd', 'pct', 'count', 'months'].includes(String(r.unit)) ? r.unit : 'count') as Metric['unit'],
       value,
-      source: value == null ? null : (typeof r.source === 'string' && r.source.trim() ? r.source.trim().slice(0, 120) : null),
+      source: value == null ? null : (verified.find(f => f.key === r.key && f.unit === r.unit && f.value === value && f.source === r.source && f.as_of === r.as_of)?.source || 'typed'),
       as_of: value == null ? null : (typeof r.as_of === 'string' ? r.as_of.slice(0, 10) : null),
       reason: value == null ? `${NOT_RECORDED}` : null,
     });

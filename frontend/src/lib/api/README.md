@@ -160,6 +160,11 @@ D764 (#2089) adds `page`, `setPagePick` and `setPageMode` to `railPrefs.js`:
 member's pick and switch for that page, and the two `PUT`s write them. The
 page key is the canvas's, in the query or the body.
 
+D1080 (#2945): `mcpOauth.js` starts Sign in with <Provider> for a connector
+whose MCP server signs members in (`GET /api/integrations/mcp/<key>/start`,
+`cloudflare-worker/src/routes/connector_mcp_oauth.ts`); Mercury keeps
+`mercuryPersonal.js`'s own start.
+
 D715 (#1780) PR 3b: `mercuryPersonal.js` calls `GET /api/mercury/personal/status`
 (`cloudflare-worker/src/routes/mercury_personal.ts`, D713): the caller's own
 Mercury connection and the uses their role holds, each with `available` and a
@@ -184,6 +189,24 @@ is shown to its owner only and never stored. `partnerSettlements.js` calls
 `GET /api/partner-settlements` (the member's own issued, matched and void rows)
 and `/api/admin/partner-settlements` (an Admin's list, draft, edit and delete;
 the Super Admin's issue and void). Nothing here moves money.
+
+D928 (#2724): `partnerDealReads.js` calls the four reads in
+`cloudflare-worker/src/routes/admin_partner_deal_reads.ts`: `GET
+/api/admin/partners/deals/:id` (one deal, in full), `GET
+/api/admin/partners/deals/:id/terminate-preview`, `GET
+/api/admin/partners/redemptions` (every redemption across deals, filtered,
+sorted and paged) and `GET /api/admin/partners/agreement-ready`. Admin only;
+nothing here writes.
+
+D986 (#2776): `partnerDealTypes.js` calls `/api/admin/partner-deal-types`
+(HQ's list, one licence with its history, and the write, which takes the money
+bar and a reason) and `GET /api/licence/mine/partner-deal-types` (the studio's
+own read). A licence HQ has not set reads "Not recorded", never "every type".
+
+D1052 (#2903): `billingAlerts.js` calls `GET /api/billing/alerts` (the
+member's open billing alerts: a failed renewal, a bank's confirmation, a
+disputed plan payment; no card data) and `POST /api/billing/alerts/:id/confirm`,
+which fetches the client secret from Stripe only when Confirm is pressed.
 
 D806 (#2245): `billingInvoices.js` calls `GET /api/billing/invoices?page&per`
 (`cloudflare-worker/src/routes/billing.ts`): the member's own paid orders and
@@ -249,16 +272,42 @@ D780 (#2105): `railProposals.js` lists the caller's own drafts, proposals and
 notes from a rail option's run (`ai_rail_proposals`, migration 506) and decides
 one: accept, edit or discard. Deciding writes no record; the page's own Save does.
 
+D893 (#2660): `insights.js` reads Admin › Insights' one read,
+`insightsApi.adminInsights(params)` (`GET /api/admin/insights`, any admin): every
+block of the canvas as counts, filtered by range, profile and country, with the
+period before (`compare`) and one profile's lightbox (`group`). For #2661,
+`insightsApi.insightsExport(body)` (`POST /api/admin/insights/export`) asks for
+the same figures as a logged, counts-only CSV or PDF, and answers with a signed
+24-hour link.
+
+D931 (#2715): `community.js` reads Admin › Community's counts read,
+`communityApi.overview({ weeks })` (`GET /api/admin/community/overview`, any
+admin, `weeks` 4, 12 or 52): the queue's ages, the job board, who takes part,
+circles, the roster and wellbeing, each block answering alone. Its events parts
+come from the Events desk's overview (D918).
+
+D885 (#2561): `channelKeys.js` sets, rotates (or generates) and removes the
+interview channels' Worker secrets from HQ › Integration keys › Channels
+(`/api/admin/integration-keys/channels/:channel`, Super Admin behind the write
+bar). The list comes with `GET /admin/integration-keys`; a value is never read
+back, and a generated one is returned once.
+
 D845 (#2471): `developerUsage.js` reads the caller's own usage reports over
 `api_usage_events` (D843): `report` (`GET /api/developer/usage`, grouped by day,
 key, provider, connector, tool or model, or by day and a second way) and `events`
-(`GET /api/developer/usage/events`, the request history, 100 a page). A NULL
-charge means not metered.
+(`GET /api/developer/usage/events`, the request history, 100 a page), and
+`keys` (`GET /api/developer/usage/keys`, each key's cap, this month's charge
+and the 80% / 100% flag). A NULL charge means not metered.
 
 D797 (#2230): `licenceTerms.js` reads and saves a licence's terms schedule
 (`GET`/`PUT /api/admin/licences/:uid/terms`, Super Admin; the save takes a
 reason and a recent step-up). The Administrator reads the same terms on
 `/api/licence/mine`. D800 and D801 draw them.
+
+D984 (#2775): `licencePrograms.js` is the Administrator's own programs
+(`GET /api/licence/mine/programs`): the nine programs with HQ's grant and its
+terms, read from HQ's store on HQ and from HQ's dated copy on a branch. An
+account no licence binds reads "On HQ-held accounts, HQ runs every program."
 D798 (#2231): `licenceAccount.js` is the territory licence Administrator's own
 `/api/licence/mine/*`. It covers the contract (in force, pending, earlier, and
 the caller's own signing link), the statements (with each period's usage
@@ -273,3 +322,54 @@ record the total received or void, and the PDF (`pdfBlob`, and the
 Administrator's own copy, `minePdfBlob`), both read as Blobs outside the typed
 drift surface. The Administrator's list arrives on `licenceAccountApi.statements()`
 as `fee_invoices`.
+
+D973: `adminNetwork.js` re-exports `network.js`’s single `adminNetworkApi` binding.
+Overview, paged People and opaque drawer refs coexist with numeric standing
+reads and all D976 writes; the barrel exports no competing client objects.
+
+D976 (#2762): `network.js` is the advisor and partner network's admin side on
+`/api/admin/network/people/:userId`: one person's standing (stage, pause,
+directory, ratings, sessions, engagement counts per lane, payout readiness, a
+studio agreement on file and Lab host status), Pause and Resume, each with a
+required reason, and the advisor directory switch. No client name and no rating
+comment is on the wire.
+D1011 (#2830): `payments.js` calls `/api/admin/payments`: the change log, its
+CSV (with a reason) and the webhook's deliveries by hour. D1129 adds the
+submitted `q` filter on the log/CSV and `changeLogAdmins()` for every admin's
+id/name, independent of the log page. Super Admin only.
+
+D990 (#2801): `partnerProfiles.js` is HQ's Partner profiles on
+`/api/admin/partner-profiles`: the list (search, filters, sort and pages, with
+totals over the filtered set and the filters' options), the counts for the tiles
+and the weekly series, and one profile by its reference (`pp_…`), never by
+email. The older `/api/profiling/admin/*` calls stay on `api.js` for the pages
+that read them.
+
+D971 (#2756): `labOperations.js` reads the Lab's playbook, operative cohort size
+and filtered/paged history, and calls the existing Super Admin draft/publish
+routes and audited size write. Support sessions reuse `adminLab.js`; grant
+terms reuse `programGrants.js`. No Admin is sent to either Super Admin read.
+
+D993 (#2804): `partnerProfiles.js` also reads the first-agreement options
+(`GET /api/admin/partner-profiles/agreements`, each Ready or "Not ready: no
+text in the library yet") and sends Unbind (`POST …/:ref/unbind`, Super Admin
+with a recent step-up and a reason). Each list row and profile carries its
+agreement's envelope state on `envelope`.
+
+D1000 (#2815): `personaSegments.js` is Persona segments' profile store on
+`/api/personas/segments`: every profile, one with its history, the needs read
+(members, needs met and gaps, offers by kind, links' reach), and the Super
+Admin's write, which names the version it read. Counts leave admins out and
+come back suppressed from 1 to 4.
+
+D1065 (#2935): `buildPlan.js` reads or prepares `/api/cycles/build/plan`, with venture and hypothesis scope. Preparation sends no browser-supplied evidence and accepts nothing into Build.
+
+D1075 (#2967): `trustContent.js` is the public trust center's store: `trustPublicApi` (the
+published blocks, the change log, the matrix and the subprocessor subscribe, no session),
+`trustCenterAdminApi` (HQ › Security › Trust center content: drafts, subprocessors, the
+auditor's reports and Publish with its note, Super Admin) and `securityReportsApi` (Help's
+private Security reports, and HQ's read of them).
+
+D1133 adds `billingAlertsApi.pay(id)` and `.updateCard(id, nonce)` for the mounted failed-renewal preparation routes. Keep one validated 8–64-character nonce per open card form and reuse it on retries. Their client secrets belong only in the in-page Stripe form, never storage or logs.
+
+D1135's `companyActions.js` holds self-service company leave and venture restore.

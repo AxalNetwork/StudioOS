@@ -159,8 +159,11 @@ test('D632: each invitation state, including the wrong account', async () => {
   assert.equal(wrong.body.invited_email, 'se***@firm.test');
   assert.ok(!JSON.stringify(wrong.body).includes('seat@firm.test'));
 
-  db.prepare(`UPDATE users SET investor_subscription_status = 'past_due' WHERE id = 1`).run();
+  db.prepare(`UPDATE users SET investor_subscription_status = 'unpaid' WHERE id = 1`).run();
   assert.equal((await call(db, 'POST', '/investor-seats/invitation', 4, { token })).body.state, 'plan_lapsed');
+  // D1052: a renewal Stripe is still retrying keeps the plan's seats.
+  db.prepare(`UPDATE users SET investor_subscription_status = 'past_due', investor_subscription_renews_at = datetime('now') WHERE id = 1`).run();
+  assert.notEqual((await call(db, 'POST', '/investor-seats/invitation', 4, { token })).body.state, 'plan_lapsed');
   db.prepare(`UPDATE users SET investor_subscription_status = 'active' WHERE id = 1`).run();
 
   assert.equal((await call(db, 'POST', '/investor-seats/accept', 4, { token })).status, 200);
@@ -200,4 +203,15 @@ test('D632: every accept refusal reads as a sentence', async () => {
 test('D632: maskEmail keeps the domain and two letters', () => {
   assert.equal(maskEmail('jane@firm.com'), 'ja***@firm.com');
   assert.equal(maskEmail('nope'), '***');
+});
+
+test('D1100: accepting during grace inherits the primary’s period end',async()=>{
+  const db=freshDb();
+  const invited=await call(db,'POST','/investor-seats/invite',1,{email:'seat@firm.test'});
+  const period=new Date(Date.now()-20*86_400_000).toISOString();
+  db.prepare("UPDATE users SET investor_subscription_status='past_due',investor_subscription_renews_at=? WHERE id=1").run(period);
+  assert.equal((await call(db,'POST','/investor-seats/accept',4,{token:tokenOf(invited.body.invite_link)})).status,200);
+  const seat=db.prepare('SELECT investor_subscription_status,investor_subscription_renews_at FROM users WHERE id=4').get() as any;
+  assert.equal(seat.investor_subscription_status,'past_due');assert.equal(seat.investor_subscription_renews_at,period);
+  db.close();
 });

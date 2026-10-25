@@ -112,9 +112,12 @@ test('1. A1m: a founder\'s index draws the Settings rows in order, the plan by D
   const markup = html(h(AccountPhoneIndex, { role: 'founder', follows: ready(FOLLOWS), billing: ready(GROWTH) }));
   assert.deepEqual(rowsOf(markup), [
     ['/account/profile', 'Profile and identity Personal details, identity, company profile ›'],
+    // D1134 (#2422): Companies and projects, below Profile and identity.
+    ['/account/companies', 'Companies and projects Your companies, projects and invitations ›'],
     ['/account/notifications', 'Notifications Each type, in-app, email and push ›'],
     ['/account/security-privacy', 'Sign-in and security Password, authenticator app, SMS ›'],
-    ['/account/billing', 'Billing and orders Validate + Build · $20 / month ›'],
+    // D1050: the row names the plan; its price is the Billing pane's, read from the plans read.
+    ['/account/billing', 'Billing and orders Validate + Build ›'],
     ['/account/following', 'Following 3 people and companies ›'],
     ['/account/onboarding', 'Onboarding ›'],
     ['/account/appearance', 'Appearance ›'],
@@ -150,7 +153,7 @@ test('2. the Following and plan lines hold no number while their read loads or f
   }
   assert.equal(PLAN_FALLBACK, 'Your plan, orders and invoices');
   assert.equal(planLine('founder', ready({ ...GROWTH, tier: 'free' })), 'Free');
-  assert.equal(planLine('founder', ready({ ...GROWTH, tier: 'studio' })), 'Raise + Grow · $100 / month');
+  assert.equal(planLine('founder', ready({ ...GROWTH, tier: 'studio' })), 'Raise + Grow', 'D1050: the name, no typed price');
   assert.equal(planLine('admin', ready({ plan_group: null, status: 'free', has_customer: false })), NO_PLAN);
   assert.equal(NO_PLAN, 'No subscription plan applies');
   assert.equal(planLine('investor', ready({ tier: 'professional', raw_tier: 'professional', status: 'active', has_customer: true, quotas: {} })), 'Investor · Professional');
@@ -517,9 +520,9 @@ const PROVIDERS = [
 ];
 const EV_NOW = new Date(Date.UTC(2026, 9, 17, 12));
 const TICKETS = [
-  { id: 't1', title: 'Pricing pressure-test workshop', starts_at: '2026-10-24T15:00:00Z', status: 'confirmed', location_kind: 'Online' },
-  { id: 't2', title: 'Demo Day', starts_at: '2026-11-18T15:00:00Z', status: 'waitlisted' },
-  { id: 't3', title: 'Fundraising basics', starts_at: '2026-10-03T15:00:00Z', status: 'attended' },
+  { id: 't1', title: 'Pricing pressure-test workshop', starts_at: '2026-10-24T15:00:00Z', status: 'published', reg_status: 'confirmed', location_kind: 'Online' },
+  { id: 't2', title: 'Demo Day', starts_at: '2026-11-18T15:00:00Z', status: 'published', reg_status: 'waitlisted' },
+  { id: 't3', title: 'Fundraising basics', starts_at: '2026-10-03T15:00:00Z', status: 'published', reg_status: 'attended' },
 ];
 const HOSTING = [{ id: 41, title: 'Founder dinner', starts_at: '2026-11-02T18:00:00Z', status: 'published', visibility: 'members' }];
 const SUGGESTED = [{ id: 51, slug: 'office-hours-block', title: 'Office hours block', starts_at: '2026-12-02T15:00:00Z' }];
@@ -693,7 +696,7 @@ test('8. Trust lists only what /trust/me returns: no 83(b) row, and the pill is 
   assert.doesNotMatch(text(markup), /\bPartial\b/);
   // A failed matrix is Unreadable, never an empty list.
   const failed = text(html(h(TrustPhoneView, { status: 'unreadable' })));
-  assert.match(failed, /Your obligations could not be read\./);
+  assert.match(failed, /Unreadable.*Your requirements could not be read\./);
   assert.doesNotMatch(failed, /No obligations outstanding/);
   assert.match(read('frontend/src/pages/TrustCenterPage.jsx'), /setMatrix\(\{ obligations: \[\], role, failed: true \}\)/);
 });

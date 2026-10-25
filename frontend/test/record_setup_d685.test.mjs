@@ -139,8 +139,9 @@ test('a meeting link must be https, and its host must match the provider', () =>
   assert.equal(meetingLinkProblem('google_meet', 'https://meet.google.com/abc-defg-hij'), null);
   assert.equal(meetingLinkProblem('google_meet', 'https://notmeet.google.com/x'), 'A Google Meet link is on meet.google.com.');
   assert.equal(meetingLinkProblem('teams', 'https://teams.microsoft.com/l/meetup-join/x'), null);
+  assert.equal(meetingLinkProblem('teams', 'https://teams.cloud.microsoft/meet/fixture'), null);
   assert.equal(meetingLinkProblem('teams', 'https://teams.live.com/meet/1'), null);
-  assert.equal(meetingLinkProblem('teams', 'https://x.teams.microsoft.com/y'), 'A Teams link is on teams.microsoft.com or teams.live.com.');
+  assert.equal(meetingLinkProblem('teams', 'https://x.teams.microsoft.com/y'), 'Use a Microsoft Teams meeting link.');
   assert.match(meetingLinkProblem('whatsapp', 'https://wa.me/1'), /no meeting link/);
   assert.match(meetingLinkProblem('telegram', 'https://t.me/x'), /no meeting link/);
   assert.equal(hasMeetingLink('video', 'zoom'), true);

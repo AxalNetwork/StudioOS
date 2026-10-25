@@ -24,8 +24,10 @@
  * connection's daily cap and the member's AI budget. A stranger who writes in
  * can therefore never run the model on the member's account.
  *
- * Edits and deletions at the source change a PENDING message. Once a message
- * is in an interview the transcript is the member's record: they edit it there.
+ * Edits and deletions at the source change a PENDING message. D866 §4 is
+ * Telegram's exception for assigned chats: a proven source_ref follows edits
+ * and deletions into the transcript, withdrawing only undecided proposals.
+ * Decided proposals stay; deletion marks their citation as deleted at source.
  *
  * A CHAT WAITS FOR CONSENT WHERE ITS PROVIDER ASKS FOR IT (D754 §4, #1893;
  * `consentRequired`, WhatsApp today). Assigning such a chat links it to its
@@ -62,6 +64,7 @@ import { refKey } from './events';
 import { enqueueChannelJob } from './jobs';
 import { isOurSend } from './outbound';
 import { expireCapturesStatements } from './whatsappCapture';
+import { discardExpiredDrafts, expireCapturesStatements as expireTelegramCapturesStatements } from './telegramCapture';
 import {
   CHANNEL_LIMITS, audioConsentRequired, consentAsked, consentRequired, consentRequiredProviders, type InboundDelete, type InboundEdit, type InboundMessage, type MessageSide,
   type MessagingProvider, type VoiceMedia,
@@ -312,6 +315,7 @@ export async function storeMessage(env: Env, conn: ChannelConnection, m: ThreadM
       const { interview } = await writableInterview(env, conn.userId, Number(thread.interview_id));
       const seg: StoredSegment = {
         start_ms: null, end_ms: null, speaker_raw: null, text,
+        source_ref: conn.provider === 'telegram' ? await refKey('telegram', m.externalMessageId) : null,
         speaker_label: speaker(m.side, interview.interviewee_name, m.contactName ?? (await contactName(env, thread))),
       };
       await appendSegments(env, conn.userId, Number(thread.session_id), [seg], conn.provider, [bumpStatement(env, thread.id, m.side)]);
@@ -485,8 +489,8 @@ export async function noteVoiceTry(env: Env, messageUid: string, job: string, er
 export async function storeVoiceTranscript(
   env: Env, conn: ChannelConnection, note: VoiceJobNote, transcript: string, alongside: D1PreparedStatement[] = [],
 ): Promise<'session' | 'pending' | 'empty' | 'gone'> {
-  const still = await env.DB.prepare(`SELECT thread_id FROM channel_thread_messages WHERE id = ? AND uid = ? AND voice_ref_enc IS NOT NULL`)
-    .bind(note.id, note.uid).first<{ thread_id: number }>();
+  const still = await env.DB.prepare(`SELECT thread_id, external_message_id FROM channel_thread_messages WHERE id = ? AND uid = ? AND voice_ref_enc IS NOT NULL`)
+    .bind(note.id, note.uid).first<{ thread_id: number; external_message_id: string }>();
   const thread = still ? await env.DB.prepare('SELECT * FROM channel_threads WHERE id = ?').bind(still.thread_id).first<ThreadRow>() : null;
   if (!thread || keepsNothing(thread)) return 'gone';
   const drop = env.DB.prepare(`DELETE FROM channel_thread_messages WHERE id = ?`).bind(note.id);
@@ -500,6 +504,7 @@ export async function storeVoiceTranscript(
       const { interview } = await writableInterview(env, conn.userId, Number(thread.interview_id));
       const seg: StoredSegment = {
         start_ms: null, end_ms: null, speaker_raw: null, text,
+        source_ref: conn.provider === 'telegram' ? still?.external_message_id : null,
         speaker_label: speaker(note.side, interview.interviewee_name, await contactName(env, thread)),
       };
       await appendSegments(env, conn.userId, Number(thread.session_id), [seg], conn.provider, [drop, ...alongside]);
@@ -533,6 +538,10 @@ export async function threadForChat(env: Env, conn: ChannelConnection, externalC
 /** An edit at the source replaces a pending message's text. False when there is no pending copy. */
 export async function applyEdit(env: Env, conn: ChannelConnection, edit: InboundEdit): Promise<boolean> {
   const thread = await threadForChat(env, conn, edit.externalChatId);
+  if (thread?.status === 'assigned' && conn.provider === 'telegram') {
+    const { changeTelegramSource } = await import('./telegramSource');
+    return (await changeTelegramSource(env, conn, thread, [edit.externalMessageId], clip(edit.text, CHANNEL_LIMITS.maxTextChars))) > 0;
+  }
   if (!thread || thread.status !== 'pending') return false;
   // A voice note's placeholder has no text to replace.
   const row = await env.DB.prepare(
@@ -554,11 +563,18 @@ export async function applyEdit(env: Env, conn: ChannelConnection, edit: Inbound
 export async function applyDelete(env: Env, conn: ChannelConnection, del: InboundDelete): Promise<number> {
   const thread = await threadForChat(env, conn, del.externalChatId);
   if (!thread) return 0;
+  const { changeTelegramSource } = await import('./telegramSource');
   let removed = 0;
+  // Remove voice placeholders first. An in-flight append either committed
+  // before this deletion (and the source lookup below sees it), or loses its
+  // atomic placeholder guard and stores only the transcription receipt.
   for (const id of del.externalMessageIds.slice(0, 100)) {
     const res = await env.DB.prepare(`DELETE FROM channel_thread_messages WHERE thread_id = ? AND external_message_id = ?`)
       .bind(thread.id, await refKey(thread.provider, id)).run();
     removed += Number(res.meta?.changes ?? 0);
+  }
+  if (conn.provider === 'telegram' && thread.status === 'assigned') {
+    removed += await changeTelegramSource(env, conn, thread, del.externalMessageIds.slice(0, 100), null);
   }
   if (removed) {
     await env.DB.prepare(
@@ -647,6 +663,7 @@ async function movePending(
       if (!text) continue;
       segments.push({
         start_ms: null, end_ms: null, speaker_raw: null, text,
+        source_ref: thread.provider === 'telegram' ? r.external_message_id : null,
         speaker_label: speaker(r.direction, scoped.interview.interviewee_name, name),
       });
     }
@@ -1064,12 +1081,13 @@ export async function forgetConnection(env: Env, integrationId: number): Promise
 export async function purgeExpired(env: Env, now = new Date()): Promise<{
   threads: number; messages: number; codes: number; events: number; counters: number; drafts: number; lapsed: number; captures: number;
 }> {
+  await discardExpiredDrafts(env, now);
   const cutoff = new Date(now.getTime() - CHANNEL_LIMITS.pendingDays * 86_400_000).toISOString();
   const day = new Date(now.getTime() - 86_400_000).toISOString();
   const twoDays = new Date(now.getTime() - 2 * 86_400_000).toISOString();
   const events = new Date(now.getTime() - 90 * 86_400_000).toISOString();
   const unused = new Date(now.getTime() - CHANNEL_LIMITS.senderLinkDays * 86_400_000).toISOString();
-  const [msgs, threads, codes, evs, counters, linkAttempts, lapsed, , captures] = await env.DB.batch([
+  const [msgs, threads, codes, evs, counters, linkAttempts, lapsed, , captures, , telegramCaptures] = await env.DB.batch([
     env.DB.prepare(`DELETE FROM channel_thread_messages WHERE datetime(sent_at) < datetime(?)`).bind(cutoff),
     env.DB.prepare(
       `DELETE FROM channel_threads WHERE status IN ('pending', 'ignored')
@@ -1090,6 +1108,7 @@ export async function purgeExpired(env: Env, now = new Date()): Promise<{
           AND datetime(COALESCE(last_synced_at, updated_at, created_at)) < datetime(?)`,
     ).bind(unused),
     ...expireCapturesStatements(env, now),
+    ...expireTelegramCapturesStatements(env, now),
   ]);
   // #1939 part 3: a lapsed (or otherwise ended) link keeps no venture choice, so relinking starts clean.
   await env.DB.prepare(`DELETE FROM whatsapp_link_settings WHERE integration_id NOT IN
@@ -1102,6 +1121,6 @@ export async function purgeExpired(env: Env, now = new Date()): Promise<{
     codes: Number(codes.meta?.changes ?? 0), events: Number(evs.meta?.changes ?? 0),
     counters: Number(counters.meta?.changes ?? 0) + Number(linkAttempts.meta?.changes ?? 0),
     lapsed: Number(lapsed.meta?.changes ?? 0),
-    captures: Number(captures.meta?.changes ?? 0),
+    captures: Number(captures.meta?.changes ?? 0) + Number(telegramCaptures.meta?.changes ?? 0),
   };
 }

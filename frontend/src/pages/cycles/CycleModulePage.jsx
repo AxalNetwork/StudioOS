@@ -175,7 +175,7 @@ function RowAction({ action }) {
 
 export default function CycleModulePage({
   cycle, slug, moduleName, cards, data, status = data ? 'ready' : 'loading', message = '', onRetry,
-  records, recordsStatus, recordsMessage, query, onQuery, onRetryRecords, action, add, rowAction, tool, tools = [], children, search = '',
+  records, recordsStatus, recordsMessage, query, onQuery, onRetryRecords, action, add, rowAction, tool, tools = [], children, search = '', subnav = null,
 }) {
   const meta = cycleOf(cycle);
   if (!meta) return null;
@@ -189,6 +189,8 @@ export default function CycleModulePage({
   return (
     <div className="flex min-w-0 flex-col gap-4" data-testid="cycle-module" data-cycle={meta.key} data-module={slug}>
       <CycleHeader cycle={meta.key} cards={cards || (card ? [card] : [])} active={slug} action={action} title={name} sub={[card?.caption, 'Records below; the tabs above move between modules.'].filter(Boolean).join(' ')} search={search} />
+      {/* A module that is also a tool draws its own tabs here (D906: Investor narrative). */}
+      {subnav}
       {status === 'refused' ? (
         <p role="status" className="m-0 rounded-xl border border-axal-hairline bg-axal-ground px-4 py-3.5 text-[13px] leading-relaxed text-axal-ink dark:border-gray-800 dark:bg-gray-900 dark:text-gray-200" data-testid="cycle-module-refused">
           {message || 'You do not have access to this module.'}

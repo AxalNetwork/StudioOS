@@ -33,6 +33,7 @@ import integrationKeys from '../src/routes/admin_integration_keys.ts';
 import github from '../src/routes/admin_github.ts';
 import stripe from '../src/routes/admin_stripe.ts';
 import { AUTH_ERROR_STATUSES } from '../src/util/authErrors.ts';
+import { codeOnly } from './_codeOnly.mjs';
 
 const JWT_SECRET = 'unit-test-jwt-secret-0123456789-abcdef';
 const HOLDER = 901;
@@ -109,12 +110,14 @@ const envFor = (db: InstanceType<typeof DatabaseSync>, extra: Record<string, unk
 
 /* ── every outbound call, recorded ─────────────────────────────────────── */
 
-let calls: Array<{ url: string; method: string }> = [];
+let calls: Array<{ url: string; method: string; form?: URLSearchParams }> = [];
+let webhookEvents: string[][] = [];
 const realFetch = globalThis.fetch;
 globalThis.fetch = (async (input: any, init: any = {}) => {
   const url = String(typeof input === 'string' ? input : input?.url);
   const method = String(init?.method || 'GET').toUpperCase();
-  calls.push({ url, method });
+  calls.push({ url, method, ...(url.startsWith('https://api.stripe.com/') && method === 'POST'
+    ? { form: new URLSearchParams(String(init.body || '')) } : {}) });
   if (url.startsWith('https://api.cloudflare.com/')) {
     return new Response(JSON.stringify({ success: true, errors: [], result: {} }), { status: 200 });
   }
@@ -124,10 +127,15 @@ globalThis.fetch = (async (input: any, init: any = {}) => {
       enabled_events: ['checkout.session.completed'], secret: 'whsec_stripe_sentinel',
     }), { status: 200 });
   }
+  if (url === 'https://api.stripe.com/v1/webhook_endpoints' && method === 'GET') {
+    return Response.json({ data: webhookEvents.map((enabled_events, i) => ({
+      id: `we_test_${i}`, url: 'https://axal.vc/api/billing/stripe/webhook', status: 'enabled', enabled_events,
+    })) });
+  }
   return new Response('unexpected call in test', { status: 599 });
 }) as typeof fetch;
 process.on('exit', () => { globalThis.fetch = realFetch; });
-beforeEach(() => { calls = []; });
+beforeEach(() => { calls = []; webhookEvents = []; });
 
 const toCloudflare = () => calls.filter((c) => c.url.startsWith('https://api.cloudflare.com/'));
 const toStripe = () => calls.filter((c) => c.url.startsWith('https://api.stripe.com/'));
@@ -300,14 +308,83 @@ test('GET /api/admin/github carries has_token and no preview of the token', asyn
   }
 });
 
-test('the Stripe webhook update, which writes no secret, stays open to a plain admin', async () => {
-  // It adds the route's own fixed event set to an existing endpoint; the
-  // register beside it is the write the bar exists for.
+test('D1009: the Stripe webhook update is Super Admin only without a step-up', async () => {
+  // Updating the fixed event set is HQ-only; registering still takes D223's bar.
   const db = freshDb();
   const r = await call(envFor(db), { app: 'stripe', method: 'POST', path: '/webhook', body: { action: 'update', endpoint_id: 'we_1' } },
     PLAIN_ADMIN, 'totp-plain');
-  assert.notEqual(r.status, 403, r.text);
+  assert.equal(r.status, 403, r.text);
+  assert.equal(toStripe().length, 0);
+  const holder = await call(envFor(db), { app: 'stripe', method: 'POST', path: '/webhook', body: { action: 'update', endpoint_id: 'we_1' } }, HOLDER, 'totp-stale-holder');
+  assert.equal(holder.status, 200, holder.text);
   assert.equal(toCloudflare().length, 0, 'an events update wrote a Worker secret');
+});
+
+// #2393: derive the coverage guard from the billing handler, not a second
+// hand-maintained copy of REQUIRED_EVENTS. Reads and writes use the real router.
+function handledStripeEvents(): string[] {
+  const source = codeOnly(read('cloudflare-worker/src/routes/billing.ts'));
+  const start = source.indexOf('async function handleStripeEvent(');
+  const end = source.indexOf('async function verifyStripeSignature(', start);
+  assert.ok(start >= 0 && end > start, 'the billing event handler must be found');
+  const events = [...source.slice(start, end).matchAll(/\bcase\s+(['"])([^'"]+)\1\s*:/g)].map((m) => m[2]);
+  assert.ok(events.length > 0, 'the event coverage guard must not pass with no cases');
+  return events;
+}
+const REPAIR_EVENTS = ['payment_intent.payment_failed', 'charge.refunded', 'charge.dispute.created', 'charge.dispute.closed'];
+// D1049 (#2900): required before the webhook handles it, so part 4 (D1052, #2903) receives it on its first deploy.
+const AHEAD_OF_HANDLER = ['invoice.payment_action_required'];
+
+test('D1049 invoice.payment_action_required is required, and every event required ahead of its handler is named here', async () => {
+  const db = freshDb();
+  try {
+    const r = await call(envFor(db), { app: 'stripe', method: 'GET', path: '/webhook' }, HOLDER, 'totp-holder');
+    assert.equal(r.status, 200, r.text);
+    assert.ok(r.body.required_events.includes('invoice.payment_action_required'));
+    const handled = new Set(handledStripeEvents());
+    assert.deepEqual(r.body.required_events.filter((ev: string) => !handled.has(ev)).filter((ev: string) => !AHEAD_OF_HANDLER.includes(ev)), [],
+      'a required event with no handler must be named in AHEAD_OF_HANDLER, so nothing is subscribed by accident');
+  } finally { db.close(); }
+});
+
+test('#2393 every billing webhook case is in the console required event set', async () => {
+  const db = freshDb();
+  try {
+    const r = await call(envFor(db), { app: 'stripe', method: 'GET', path: '/webhook' }, HOLDER, 'totp-holder');
+    assert.equal(r.status, 200, r.text);
+    assert.deepEqual(handledStripeEvents().filter((event) => !r.body.required_events.includes(event)), [],
+      'the console and Register must require every handled billing event');
+  } finally { db.close(); }
+});
+
+test('#2393 old endpoints report all four omissions; complete and wildcard endpoints have no drift', async () => {
+  const handled = handledStripeEvents();
+  // D1049: the required set is the handled one plus events subscribed ahead of their handler.
+  const required = [...new Set([...handled, ...AHEAD_OF_HANDLER])];
+  webhookEvents = [required.filter((event) => !REPAIR_EVENTS.includes(event)), required, ['*'], handled];
+  const db = freshDb();
+  try {
+    const r = await call(envFor(db), { app: 'stripe', method: 'GET', path: '/webhook' }, HOLDER, 'totp-holder');
+    assert.equal(r.status, 200, r.text);
+    assert.deepEqual(r.body.endpoints.map((ep: any) => [...ep.missing_events].sort()),
+      [[...REPAIR_EVENTS].sort(), [], [], AHEAD_OF_HANDLER.filter((event) => !handled.includes(event)).sort()], 'an endpoint with only handled events misses only those still subscribed ahead');
+  } finally { db.close(); }
+});
+
+test('#2393 Register and Update both send every handled billing event to Stripe', async () => {
+  for (const action of ['register', 'update']) {
+    const db = freshDb();
+    try {
+      calls = [];
+      const r = await call(envFor(db), { app: 'stripe', method: 'POST', path: '/webhook', body: { action, endpoint_id: 'we_test_0' } }, HOLDER, 'totp-holder');
+      assert.equal(r.status, 200, r.text);
+      const writes = toStripe().filter((c) => c.method === 'POST');
+      assert.equal(writes.length, 1);
+      const events = [...writes[0].form!.entries()].filter(([name]) => /^enabled_events\[\d+\]$/.test(name)).map(([, event]) => event);
+      assert.deepEqual([...events].sort(), [...new Set([...handledStripeEvents(), ...AHEAD_OF_HANDLER])].sort(),
+        `${action} must subscribe to every handled event, and to the ones subscribed ahead of their handler`);
+    } finally { db.close(); }
+  }
 });
 
 /* ── the source: every secret writer behind the bar ────────────────────── */

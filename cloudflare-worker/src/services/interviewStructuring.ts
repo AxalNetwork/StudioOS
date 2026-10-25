@@ -33,6 +33,7 @@ import type { Env } from '../types';
 import { run as aiRun, type RailContext } from './aiRouter';
 import { AI_SURFACE } from './aiSurfaces';
 import { normPhrase } from './painGroups';
+import { SOURCE_DELETED_TEXT } from './interviewSessions';
 import type { ModuleSlug } from './cycleValidate';
 import { FINDING_KINDS, norm, parseAmount, type FindingKind } from './interviewFindings';
 
@@ -69,6 +70,9 @@ export interface Placement {
   payload: Record<string, unknown>;
   cite: { from: number; to: number };
   quote: string;
+  /** D857: when the run read a translation, the cited segments' original words and their language. */
+  quoteOriginal?: string;
+  sourceLang?: string;
 }
 
 const str = (v: unknown, max: number): string | null => {
@@ -219,6 +223,11 @@ export const PLACEMENT_KINDS: Record<PlacementKind, KindSpec> = {
   urgency: finding('urgency', 'demand-signals'),
   buying_trigger: finding('buying_trigger', 'demand-signals'),
   objection: finding('objection', 'demand-signals'),
+  // D859 (#2504): a conversation's next step, and a prototype ask (`build_candidate`).
+  follow_up: finding('follow_up', 'customer-research'),
+  prototype_ask: finding('prototype_ask', 'customer-research'),
+  // D873 (#2520): what a call decided.
+  decision: finding('decision', 'customer-research'),
   hypothesis_new: {
     slug: 'experiments',
     module: 'experiments',
@@ -437,6 +446,9 @@ const KIND_LINES: Record<PlacementKind, string> = {
   urgency: '- urgency: {"level": "low" | "medium" | "high", "reason": "<optional>"}',
   buying_trigger: '- buying_trigger: {"trigger": "<the event that would make them buy>"}',
   objection: '- objection: {"about": "price" | "risk" | "fit" | "timing" | "trust" | "other", "detail": "<what they objected to>"}',
+  follow_up: '- follow_up: {"kind": "follow_up" | "intro_offer" | "beta_signup" | "action_item", "detail": "<the next step, or what was offered>", "owner_hint": "<optional: who said they would do it, as said>", "due_hint": "<optional: when, as they said it>"}',
+  decision: '- decision: {"statement": "<what was decided, in a sentence>", "owner_hint": "<optional: who owns it, as said>"}',
+  prototype_ask: '- prototype_ask: {"feature": "<the feature they asked for>", "workflow": "<optional: the workflow they described>", "pain_ref": "<optional: the pain it answers, in their words>"}',
   evidence: '- evidence: {"hypothesis_id": <id from the list>, "pain_group_id": <optional id from the list>,\n    "direction": "supports" | "refutes", "strength": "anecdote" | "pattern" | "measured"}',
   hypothesis_new: '- hypothesis_new: {"claim": "<a new testable claim the interview suggests>", "disproof": "<optional: what would prove it wrong>"}',
   experiment_idea: '- experiment_idea: {"hypothesis_id": <id from the list>, "title": "<a test to run>", "method": "<optional>"}',
@@ -451,7 +463,11 @@ export const STRUCTURE_PASSES = [
   { name: 'A', reads: 'the problem, the person and the market',
     kinds: ['pain_severity', 'icp_fit', 'segment', 'firmographic', 'job_to_be_done', 'competitor_mention', 'market_fact', 'alternative'] },
   { name: 'B', reads: 'demand and evidence',
-    kinds: ['demand_signal', 'budget', 'timing', 'urgency', 'buying_trigger', 'objection', 'evidence', 'hypothesis_new', 'experiment_idea'] },
+    kinds: ['demand_signal', 'budget', 'timing', 'urgency', 'buying_trigger', 'objection', 'evidence', 'hypothesis_new', 'experiment_idea',
+      // D859 (#2504): a structuring run may propose them too; dedupe keeps one.
+      'follow_up', 'prototype_ask',
+      // D873 (#2520): a call's decisions; dedupe keeps one with the extraction's.
+      'decision'] },
 ] as const satisfies readonly { name: string; reads: string; kinds: readonly PlacementKind[] }[];
 
 /** Each pass's output budget: raised from one pass's 1500, and the router's reservation follows it. */
@@ -655,6 +671,12 @@ export interface SegmentRow {
  */
 export function toSegments(rows: readonly SegmentRow[]): Segment[] {
   const out: Segment[] = [];
+  const nextStarts: Array<number | undefined> = new Array(rows.length);
+  let nextStart: number | undefined;
+  for (let i = rows.length - 1; i >= 0; i -= 1) {
+    nextStarts[i] = nextStart;
+    if (Number.isSafeInteger(rows[i].start_ms)) nextStart = rows[i].start_ms as number;
+  }
   for (let i = 0; i < rows.length; i += 1) {
     const r = rows[i];
     const text = String(r.text || '').trim();
@@ -662,13 +684,14 @@ export function toSegments(rows: readonly SegmentRow[]): Segment[] {
     const prevEnd = out.length ? out[out.length - 1].end : 0;
     // A recorded start is kept as recorded, even where two speakers overlap.
     const start = Number.isSafeInteger(r.start_ms) && (r.start_ms as number) >= 0 ? (r.start_ms as number) : Math.max(prevEnd, i * 1000);
-    const nextStart = rows.slice(i + 1).map((n) => n.start_ms).find((n) => Number.isSafeInteger(n));
+    const nextStart = nextStarts[i];
     let end = Number.isSafeInteger(r.end_ms) ? (r.end_ms as number)
       : (typeof nextStart === 'number' && nextStart > start ? nextStart : start + 1000);
     if (end <= start) end = start + 1;
     out.push({ start, end, speaker: r.speaker_label || null, text, ...(Number.isSafeInteger(r.id) ? { id: r.id as number } : {}) });
   }
-  return out;
+  // Compute spans before hiding tombstones: later citations keep their offsets.
+  return out.filter((s) => s.text !== SOURCE_DELETED_TEXT);
 }
 
 export type AskOutcome =

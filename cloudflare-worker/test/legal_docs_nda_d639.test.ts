@@ -91,11 +91,11 @@ async function call(db: DatabaseSync, who: number, path: string, init: { method?
 
 // ── 1. one access rule for the three document handlers ─────────────────────
 
-// What each role may open, by the rule: admin and partner every document; a
+// What each role may open, by the rule: admin every document; a
 // founder their own project's; an investor none; nobody but staff an
 // unattached one.
 const EXPECTED: Record<number, number[]> = {
-  [ADMIN]: [1, 2, 3], [PARTNER]: [1, 2, 3], [INVESTOR]: [], [OWNER]: [1], [OTHER]: [2],
+  [ADMIN]: [1, 2, 3], [PARTNER]: [], [INVESTOR]: [], [OWNER]: [1], [OTHER]: [2],
 };
 
 test('D639: for every role, the list holds exactly the documents the single read opens', async () => {
@@ -123,7 +123,7 @@ test('D639: the project filter narrows the same way, and never widens a founder 
   const db = freshDb();
   const ids = async (who: number, pid: number) => (await call(db, who, `/legal/documents?project_id=${pid}`)).body.map((d: any) => d.id);
   assert.deepEqual(await ids(ADMIN, 2), [2]);
-  assert.deepEqual(await ids(PARTNER, 1), [1]);
+  assert.deepEqual(await ids(PARTNER, 1), []);
   assert.deepEqual(await ids(OWNER, 1), [1]);
   assert.deepEqual(await ids(OWNER, 2), [], 'another founder’s project lists nothing');
   assert.deepEqual(await ids(INVESTOR, 1), [], 'an investor lists nothing, filtered or not');

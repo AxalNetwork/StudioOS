@@ -25,6 +25,9 @@ import { publicModels, type PublicModel } from '../services/ai/publicModels';
 import { sendNotificationEmail } from '../services/email';
 import { CONTACT_MAILBOX, DEFAULT_CONTACT_MAILBOX } from './contact';
 import { isRedirectKey } from '../services/redirectRoutes';
+import { REGISTRY } from '../integrations/registry';
+import { MCP_PROVIDERS } from '../integrations/mcpProviders';
+import { channelRollout } from '../services/channels/connections';
 
 const publicRoutes = new Hono<{ Bindings: Env }>();
 
@@ -641,9 +644,24 @@ type ServiceHealth = {
   name: string;
   match?: string;
   status: 'operational' | 'degraded' | 'down' | 'unknown';
-  uptime_pct?: number;
+  monitoring?: 'not_monitored';
+  availability?: string;
+  note?: string;
   history?: Array<{ day: string; status: string }>;
 };
+
+/**
+ * D1076 (#2968) — the day incident records began, per service. A day before it
+ * is `not_recorded`: nothing says whether that day had an incident, so it is
+ * never drawn as a good day. Nothing in the product enters an incident yet
+ * (`POST /status/incidents` has no caller, D202), so the page counts "days with
+ * no incident reported", never a percentage of uptime (owner question 7, A).
+ * UNVERIFIED: the date is D1076's; if incidents were kept before it, the owner
+ * moves it back here.
+ */
+export const STATUS_RECORDS_SINCE = '2026-10-25';
+const RECORDS_SINCE: Record<string, string> = {};
+export const recordsSinceOf = (name: string) => RECORDS_SINCE[name] ?? STATUS_RECORDS_SINCE;
 
 function todayUTC(): string {
   return new Date().toISOString().slice(0, 10);
@@ -721,6 +739,37 @@ async function probeServices(c: Parameters<typeof requireAuth>[0]): Promise<Serv
   services.push({ name: 'Published pages', match: 'publications', status: presence('PUBLICATIONS') });
   services.push({ name: 'Backups', match: 'backups', status: presence('BACKUPS') });
   services.push({ name: 'Document rendering', match: 'browser rendering pdf', status: presence('BROWSER') });
+
+  // Public capability coverage, not member connection checks. Never contact a
+  // remote MCP server, read credentials or run a tool on this anonymous GET.
+  const unmonitored = (name: string, match: string, availability: string) => {
+    services.push({ name, match, availability, status: 'unknown', monitoring: 'not_monitored',
+      note: 'Availability reflects platform settings. Live service health is not monitored here.' });
+  };
+  unmonitored('MCP server', 'mcp server assistants',
+    env.MCP_SERVER_ENABLED === 'true' && bound('OAUTH_KV') ? 'Enabled' : 'Not enabled');
+  unmonitored('Member API keys', 'member api keys', env.API_KEYS_ENABLED === 'true' ? 'Enabled' : 'Not enabled');
+  unmonitored('MCP clients', 'mcp clients shared client', 'Available');
+  for (const provider of Object.values(MCP_PROVIDERS)) {
+    const name = REGISTRY.find((entry) => entry.key === provider.key)?.display_name ?? provider.key;
+    unmonitored(`${name} MCP client`, `${provider.key} mcp client`, 'Available');
+  }
+  unmonitored('Custom MCP clients', 'custom mcp clients',
+    String(env.CUSTOM_MCP_ENABLED ?? '').trim().toLowerCase() === 'true' ? 'Enabled' : 'Not enabled');
+  for (const provider of REGISTRY.filter((entry) => entry.status !== 'coming_soon')) {
+    unmonitored(`${provider.display_name} connector`, `${provider.key} connector`,
+      provider.status === 'beta' ? 'Beta' : 'Available');
+  }
+  for (const provider of ['whatsapp', 'telegram'] as const) {
+    const rollout = channelRollout(env, provider);
+    unmonitored(provider === 'whatsapp' ? 'WhatsApp messaging' : 'Telegram messaging', provider,
+      rollout === 'on' ? 'Enabled' : rollout === 'off' ? 'Not enabled' : 'Limited rollout');
+  }
+  unmonitored('Google Meet transcripts', 'google meet transcripts',
+    String(env.MEET_TRANSCRIPTS_ENABLED ?? '').trim().toLowerCase() === 'on' ? 'Enabled' : 'Not enabled');
+  unmonitored('Email delivery', 'email gmail notifications',
+    bound('GMAIL_CLIENT_ID') && bound('GMAIL_CLIENT_SECRET') && bound('GMAIL_REFRESH_TOKEN') ? 'Configured' : 'Not configured');
+  unmonitored('Payments', 'payments billing stripe', bound('STRIPE_SECRET_KEY') ? 'Configured' : 'Not configured');
   return services;
 }
 
@@ -773,9 +822,10 @@ publicRoutes.get('/status', async (c) => {
     updates: updateMap.get(r.id) || [],
   }));
 
-  // Per-service 90-day history derived from incidents that name the service.
-  // We mark every day in the window operational by default and downgrade based
-  // on active incidents touching that service.
+  // Per-service 90-day history from the incidents that name the service (D1076).
+  // A day before the service's records began is `not_recorded`; a recorded day
+  // with no incident is `no_incident`, never "operational", because no check
+  // measured it. An incident paints its days either way: it is a record.
   const today = todayUTC();
   const days: string[] = [];
   for (let i = 89; i >= 0; i--) days.push(daysBefore(i));
@@ -792,8 +842,9 @@ publicRoutes.get('/status', async (c) => {
 
   const enriched = services.map(({ match, ...svc }) => {
     const slug = `${svc.name} ${match || ''}`.toLowerCase();
+    const since = svc.monitoring === 'not_monitored' ? null : recordsSinceOf(svc.name);
     const cells = days.map((day) => {
-      let status: 'operational' | 'degraded' | 'down' = 'operational';
+      let status: string = since === null ? 'unknown' : day < since ? 'not_recorded' : 'no_incident';
       for (const inc of incidents) {
         const touches = !inc.affected_services?.length
           || inc.affected_services.some((s: string) => slug.includes(String(s).toLowerCase()));
@@ -809,12 +860,25 @@ publicRoutes.get('/status', async (c) => {
         if (day > endDay) continue;
         const sev = (inc.severity || 'minor') as string;
         if (sev === 'critical') status = 'down';
-        else if (status === 'operational') status = 'degraded';
+        else if (status !== 'down') status = 'degraded';
       }
       return { day, status };
     });
-    const opCount = cells.filter((c) => c.status === 'operational').length;
-    return { ...svc, history: cells, uptime_pct: (opCount / cells.length) * 100 };
+    const recorded = since === null ? null : cells.filter((c) => c.day >= since).length;
+    // A resolved incident stays in today's history but must not keep today's
+    // live state down after recovery.
+    const activeIncidents = incidents.filter((inc) => inc.status !== 'resolved'
+      && inc.created_at.slice(0, 10) <= today
+      && (!inc.affected_services?.length || inc.affected_services.some((key: string) => slug.includes(String(key).toLowerCase()))));
+    const incidentStatus = activeIncidents.some((inc) => inc.severity === 'critical') ? 'down'
+      : activeIncidents.length ? 'degraded' : null;
+    const status = svc.status === 'down' || incidentStatus === 'down' ? 'down' : incidentStatus ?? svc.status;
+    return {
+      ...svc, status, history: cells,
+      records_since: since,
+      days_recorded: recorded,
+      days_without_incident: since === null ? null : cells.filter((c) => c.status === 'no_incident').length,
+    };
   });
 
   return c.json({ services: enriched, incidents });
@@ -1171,7 +1235,10 @@ publicRoutes.post('/analytics/pageview', async (c) => {
   const raw = String(body.path || '').trim();
   // Only count paths from our known public surfaces; ignore everything else.
   const allowed = new Set(['/', '/pricing', '/demo', '/status', '/changelog', '/spinout-lab', '/terms', '/privacy']);
-  const path = raw.split('?')[0].split('#')[0];
+  // D939: retain only a complete, explicitly allowlisted admin-tab key.
+  // Other paths keep the original query/hash stripping behavior.
+  const adminKey = raw === 'redirect:/admin' || raw.startsWith('redirect:/admin?') || raw.startsWith('redirect:/admin#');
+  const path = adminKey ? (isRedirectKey(raw) ? raw : '') : (isRedirectKey(raw) ? raw : raw.split('?')[0].split('#')[0]);
   // #2301: an old redirect address opened in the SPA, counted under its own
   // `redirect:<pattern>` key — only a pattern on the list (services/redirectRoutes.ts).
   if (!allowed.has(path) && !isRedirectKey(path)) return c.body(null, 204);

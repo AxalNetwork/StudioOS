@@ -1,11 +1,9 @@
 /**
  * Golden test for the cap-table simulation engine (services/captable.ts).
  *
- * captable.ts declares a byte-identical-output contract with the FastAPI
- * port (`backend/app/services/captable.py`) so saved `result_json`
- * blobs and CSV exports stay stable — but until now NO test exercised
- * `simulate()` at all. The existing captable tests cover access control
- * and persistence, not the math.
+ * Financing share issuance keeps the original FastAPI convention. #2446
+ * intentionally changes exit payouts: the unissued pool is excluded and
+ * outstanding SAFEs exercise their pre-round liquidity rights.
  *
  * This file pins the legacy pre-money path with exact expected numbers.
  * It was added alongside build queue #120, which routes post-money
@@ -168,4 +166,15 @@ test('a note carries its accrued interest into the liquidation preference', () =
   }));
   const prefs = r.rounds[0].round_meta.safe_preferences;
   assert.equal(prefs.Bridge, 1_080_000, 'preference follows the money in, interest included');
+});
+
+// #2446: all financing quantities above stay pinned; only the payout denominator
+// loses the unissued reserve. The pool's former $3,636,363.22 goes to actual holders.
+test('#2446 golden: $50m exit excludes the unallocated pool and pays issued holders', () => {
+  const w = ok(simulate(LEGACY)).waterfall!;
+  assert.deepEqual(w.rows.map(h => [h.holder, h.payout]), [
+    ['Ada', 21_176_470.09], ['Grace', 14_117_646.73],
+    ['Seed Investors', 9_803_922.12], ['Angel', 4_901_961.06],
+  ]);
+  assert.equal(w.rows.some(h => h.type === 'option_pool'), false);
 });

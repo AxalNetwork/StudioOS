@@ -774,11 +774,7 @@ function TrackerCard({ ticket, isAdmin, onChanged }) {
   return (
     <RailCard label="Tracker">
       {n ? (
-        ticket.github_issue_url ? (
-          <a href={ticket.github_issue_url} target="_blank" rel="noopener noreferrer" className="font-mono text-[13px] font-bold text-violet-700 hover:underline dark:text-violet-300">#{n} ↗</a>
-        ) : (
-          <span className="font-mono text-[13px] font-bold text-violet-700 dark:text-violet-300">#{n}</span>
-        )
+        <span className="font-mono text-[13px] font-bold text-violet-700 dark:text-violet-300">#{n}</span>
       ) : (
         <span className="font-mono text-[13px] font-bold text-amber-800 dark:text-amber-300">Not on the tracker</span>
       )}

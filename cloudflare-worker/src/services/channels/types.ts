@@ -312,9 +312,23 @@ export interface InboundAxalMessage {
   sentAt: string;
 }
 
+/** D867: the linked member's private bot chat, never a Business contact's consent. */
+export interface InboundTelegramCapture {
+  kind: 'telegram_capture';
+  provider: 'telegram';
+  eventId: string;
+  telegramUserId: string;
+  chatId: string;
+  externalMessageId: string;
+  contextMessageId: string | null;
+  text: string | null;
+  voice: InboundMessage['voice'];
+  sentAt: string;
+}
+
 export type InboundEvent =
   | InboundMessage | InboundEdit | InboundDelete | InboundStatus
-  | InboundConnection | InboundLink | InboundLinkConfirm | InboundManageChat | InboundConsentReply | InboundAxalMessage | InboundIgnored;
+  | InboundConnection | InboundLink | InboundLinkConfirm | InboundManageChat | InboundConsentReply | InboundAxalMessage | InboundTelegramCapture | InboundIgnored;
 
 /** What a send returns. `submitted` is acceptance by the provider, never delivery. */
 export interface SendResult {

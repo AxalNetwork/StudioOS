@@ -178,7 +178,9 @@ test('the partner stat strips read fields the worker actually emits', () => {
     'the lifecycle row must read the claim alias the route emits');
   assert.match(perks, /const used = Number\(p\.redeemed_count\);/,
     'the lifecycle row must read the redeemed alias the route emits');
-  const partnerRoute = read('cloudflare-worker/src/routes/perks.ts');
+  const route = read('cloudflare-worker/src/routes/perks.ts');
+  // D957 adds an admin listing read with the same alias. Only inspect GET /partner.
+  const partnerRoute = route.slice(route.indexOf("r.get('/partner'"), route.indexOf("r.post('/partner'"));
   assert.equal((partnerRoute.match(/AND x\.status = 'redeemed'\) AS redeemed_count/g) || []).length, 2,
     'GET /partner must emit `redeemed_count` on both its queries');
 });

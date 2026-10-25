@@ -36,7 +36,7 @@ import { AdminStudioOverview, studioCardTarget } from '../src/pages/admin/AdminS
 
 import { SIDEBAR_GROUPS } from '../src/sidebarConfig.js';
 import { ADMIN_PLACEMENT } from '../src/lib/adminPlacement.js';
-import { HQ_STRIPS, ADMIN_ROW_ROUTE, NO_ROW, adminRowFor } from '../src/lib/hqStrips.js';
+import { HQ_STRIPS } from '../src/lib/hqStrips.js';
 import { shellRoleFor } from '../src/lib/shellRole.js';
 import { ACCENT } from '../src/workspaces/shellConfig.js';
 import { codeOnly } from './_codeOnly.mjs';
@@ -49,13 +49,16 @@ const SIDEBAR_NAV = codeOnly(read('frontend/src/ui/SidebarNav.jsx'));
 const ADMIN_PAGE = adminConsoleSource();
 const SIDEBAR_SRC = read('frontend/src/sidebarConfig.js');
 
+// D953 (#2371): Programs left /admin/held/ when it was rebuilt to its canvas,
+// so the two landings that keep HeldZone carry its pins.
 const LANDINGS = {
   Accounts: 'frontend/src/pages/admin/HeldAccounts.jsx',
-  Approvals: 'frontend/src/pages/admin/HeldApprovals.jsx',
-  Programs: 'frontend/src/pages/admin/HeldPrograms.jsx',
-  Community: 'frontend/src/pages/admin/HeldCommunity.jsx',
-  Insights: 'frontend/src/pages/admin/HeldInsights.jsx',
 };
+const PROGRAMS = 'frontend/src/pages/admin/programs/ProgramsCatalogue.jsx';
+// D893 (#2366): Insights left /admin/held/ when it was rebuilt to its canvas.
+const INSIGHTS = 'frontend/src/pages/admin/insights/AdminInsights.jsx';
+// D930 (#2367): so did Community.
+const COMMUNITY = 'frontend/src/pages/admin/community/AdminCommunity.jsx';
 const ZONE = 'frontend/src/pages/admin/HeldZone.jsx';
 const HELD_FILES = [...Object.values(LANDINGS), ZONE];
 const SRC = Object.fromEntries(HELD_FILES.map((f) => [f, read(f)]));
@@ -78,12 +81,12 @@ test('the nine rows are S20\'s eight, in S20\'s order, with D714\'s Fund admin a
   assert.deepEqual(rows.map((r) => r.to), [
     '/studio',
     '/admin/held/accounts',
-    '/admin/held/approvals',
-    '/admin/held/programs',
-    '/admin/held/community',
+    '/admin/approvals',
+    '/admin/programs',
+    '/admin/community',
     '/admin/contracts',
     '/admin/fund-admin',
-    '/admin/held/insights',
+    '/admin/insights',
     '/admin/my-licence',
   ]);
   for (const r of rows) {
@@ -98,7 +101,19 @@ test('the nine rows are S20\'s eight, in S20\'s order, with D714\'s Fund admin a
   assert.match(SIDEBAR_SRC, /^\s*\/\/ \{ to: '\/admin\/x', icon: Megaphone, label: 'X \(Twitter\)' \},$/m);
 });
 
-test('the five landings are guard([\'admin\']) without hqOnly, under a prefix no HQ console can collide with', () => {
+test('the two held landings, Programs, Community and Insights are guard([\'admin\']) without hqOnly, the held two under a prefix no HQ console can collide with', () => {
+  for (const [path, page, old, redirect] of [
+    ['/admin/insights', 'AdminInsights', '/admin/held/insights', 'HeldInsightsRedirect'],
+    ['/admin/community', 'AdminCommunity', '/admin/held/community', 'HeldCommunityRedirect'],
+    ['/admin/approvals', 'AdminApprovals', '/admin/held/approvals', 'HeldApprovalsRedirect'],
+    ['/admin/programs', 'AdminProgramsCatalogue', '/admin/held/programs', 'HeldProgramsRedirect'],
+  ]) {
+    const line = routeLine(path);
+    assert.ok(line, `${path} is not registered`);
+    assert.match(line, new RegExp(`guard\\(\\['admin'\\], <${page} \\/>\\)`), `${path} is not guard(['admin'])`);
+    assert.doesNotMatch(line, /hqOnly\(/, `${path} is wrapped in hqOnly — this is the plain admin's own shell`);
+    assert.match(routeLine(old), new RegExp(`<${redirect} \\/>`), `the old address ${old} no longer redirects`);
+  }
   for (const [label, file] of Object.entries(LANDINGS)) {
     const row = rows.find((r) => r.label === label);
     assert.ok(row, `${label} has no row`);
@@ -120,9 +135,11 @@ test('the five landings are guard([\'admin\']) without hqOnly, under a prefix no
 });
 
 test('every console link on a landing is literal, registered, and never under /branch/', () => {
-  // Programs has four doors after the owner removed the Assessment editor.
   // D506 — Approvals gained its fifteenth door, Spinout moderation (D442's console).
-  const expectedDoors = { Accounts: 4, Approvals: 15, Programs: 4, Community: 5, Insights: 0 };
+  // D953 — Programs is no longer a held landing; its catalogue's doors are pinned
+  // in admin_programs_d953.test.mjs.
+  const expectedDoors = { Accounts: 4, Approvals: 15 };
+
   for (const [label, file] of Object.entries(LANDINGS)) {
     const doors = doorsIn(CODE[file]);
     assert.equal(doors.length, expectedDoors[label], `${label} draws ${doors.length} literal links, expected ${expectedDoors[label]}`);
@@ -167,89 +184,100 @@ test('off a branch, Studio card Open links are the S20 rows and never /branch/*'
 });
 
 /* ------------------------------------------------------------------ *
- * S22 — the sixteen lanes
+ * D1038 (#2390) — the twenty lanes, at /admin/approvals
  * ------------------------------------------------------------------ */
 
-// D555 — the State column is read: each laned queue's pending count and
-// oldest age (`LaneState`), and "No queue" for the four with no pending notion.
-const S22_LANES = [
-  [1, 'Core', 'LP applications', '/admin/lp-applications', '<LaneState glance={glance} laneKey="lp" />'],
-  [2, 'Core', 'Referrals', '/admin/refer-earn', '<LaneState glance={glance} laneKey="referrals" />'],
-  [3, 'Core', 'Cohort applications', '/admin/spinout-lab', '<LaneState glance={glance} laneKey="cohort" />'],
-  // D506 — lane 4 links the console D442 built; HQ-held accounts reach held cases from here.
-  [4, 'Core', 'Spinout moderation', '/admin/spinout-moderation', '<LaneState glance={glance} laneKey="moderation" />'],
-  [5, 'Core', 'Content to HQ', null, 'Not applicable to HQ-held accounts'],
-  [6, 'Absorbed', 'KYC', '/admin?tab=kyc', '<LaneState glance={glance} laneKey="kyc" />'],
-  [7, 'Absorbed', 'Partner profiles', '/admin?tab=profiles', '<LaneState glance={glance} laneKey="partner_profiles" />'],
-  [8, 'Absorbed', 'Directory', '/admin?tab=directory', '<LaneState glance={glance} noQueue="Directory" />'],
-  [9, 'Absorbed', 'Exploring', '/admin/exploring', '<LaneState glance={glance} laneKey="exploring" />'],
-  [10, 'Absorbed', 'Jobs', '/admin/jobs', '<LaneState glance={glance} laneKey="jobs" />'],
-  [11, 'Absorbed', 'Events', '/admin/events', '<LaneState glance={glance} laneKey="events" />'],
-  [12, 'Absorbed', 'Circles', '/admin/circles', '<LaneState glance={glance} noQueue="Circles" />'],
-  [13, 'Absorbed', 'Partner invitations', '/admin/partners', '<LaneState glance={glance} noQueue="Partner invitations" />'],
-  [14, 'Absorbed', 'Best-Fit', '/admin/best-fit', '<LaneState glance={glance} laneKey="best_fit" />'],
-  [15, 'Absorbed', 'Due diligence', '/admin/due-diligence', '<LaneState glance={glance} laneKey="due_diligence" />'],
-  [16, 'Absorbed', 'Advisor cohort access', '/admin/advisor-cohorts', '<LaneState glance={glance} noQueue="Advisor cohort access" />'],
-];
+// S22's sixteen lanes became the canvas's twenty (APR2): the eleven the
+// glance counts, the nine new ones, and the Not-a-queue card. Each lane's
+// door is a literal Link in `LaneDoor`, keyed by the lane.
+const APPROVALS = 'frontend/src/pages/admin/approvals/AdminApprovals.jsx';
+const APPROVALS_CODE = codeOnly(read(APPROVALS));
 
-/** The lanes as the JSX draws them: one `<tr data-lane>` each, cells in S22's order. */
-function drawnLanes() {
-  const out = [];
-  for (const m of CODE[LANDINGS.Approvals].matchAll(/<tr data-lane="(\d+)">([\s\S]*?)<\/tr>/g)) {
-    const cells = [...m[2].matchAll(/<td[^>]*>([\s\S]*?)<\/td>/g)].map((c) => c[1]);
-    assert.equal(cells.length, 5, `lane ${m[1]} draws ${cells.length} cells`);
-    // The link's target and its shown text are read together, as one match:
-    // no tag-stripping pass, which CodeQL reads as an HTML sanitiser.
-    const link = /<Link to="([^"]+)"[^>]*>([^<]*)<\/Link>/.exec(cells[3]);
-    out.push([Number(m[1]), cells[1].trim(), cells[2].trim(), link ? link[1] : null, cells[4].trim()]);
-    if (link) assert.equal(link[2].trim(), link[1], `lane ${m[1]} shows a route it does not link`);
+/** `LaneDoor`'s cases as lane key → literal target. */
+function laneDoors() {
+  const out = {};
+  const body = APPROVALS_CODE.slice(APPROVALS_CODE.indexOf('export function LaneDoor'), APPROVALS_CODE.indexOf('export function HqDoor'));
+  for (const m of body.matchAll(/((?:case '[a-z_]+': )+)return <Link to="([^"]+)"/g)) {
+    for (const k of m[1].matchAll(/case '([a-z_]+)'/g)) out[k[1]] = m[2];
   }
   return out;
 }
 
-test('Approvals draws S22\'s sixteen lanes verbatim and in order; moderation links its console (D506) and Content-to-HQ links nowhere', () => {
-  assert.deepEqual(drawnLanes(), S22_LANES);
-  const moderation = drawnLanes().find((l) => l[2] === 'Spinout moderation');
-  assert.equal(moderation[3], '/admin/spinout-moderation', 'Spinout moderation lost its console — D442 built it and D506 made this lane its HQ door');
-  // Held to the map: every route S22 links is a console the H35 map places on Admin · Approvals, or a tab S22 absorbs.
+test('Approvals draws the canvas\'s twenty lanes, each with a literal door; moderation keeps its console (D506)', async () => {
+  const { LANES } = await import('../src/pages/admin/approvals/approvalsModel.js');
+  const doors = laneDoors();
+  assert.equal(LANES.length, 20);
+  assert.deepEqual(Object.keys(doors).sort(), LANES.map((l) => l.key).sort(), 'every lane has exactly one door');
+  for (const [k, to] of Object.entries(doors)) assert.ok(routeLine(pathOf(to)), `${k} opens ${to}, which is not a registered route`);
+  assert.equal(doors.moderation, '/admin/spinout-moderation', 'Spinout moderation lost its console — D442 built it and D506 made this lane its HQ door');
+  // The laned queues the glance counts are the lanes with a glance key: D215's
+  // eleven and D1041's eight (#2889). Product testers has no store yet.
+  assert.deepEqual(LANES.filter((l) => l.glance).map((l) => l.glance).sort(),
+    ['articles', 'best_fit', 'cohort', 'comarketing', 'due_diligence', 'events', 'exploring', 'jobs', 'kyb', 'kyc', 'lab_hosts', 'lp',
+      'moderation', 'partner_profiles', 'perk_listings', 'referrals', 'score_flags', 'strategic_access', 'wellbeing_experts']);
+  // Queued consoles belong on Approvals by the H35 map.
   const laned = new Set(ADMIN_PLACEMENT
     .filter((e) => [e, ...(e.also || [])].some((p) => p.tier === 'Admin' && p.row === 'Approvals'))
     .map((e) => e.route));
-  for (const [, , lane, route] of S22_LANES) {
-    if (!route || route === '/admin/spinout-lab') continue; // the Lab console is reached through its tab's placement
-    // D506 — the moderation console (D442) was built after the H35 map was drawn and is
-    // not a legacy row, so the map does not place it (admin_placement_h35 pins the map
-    // to H35's question); this lane and the branch board are its two doors.
-    if (route === '/admin/spinout-moderation') continue;
-    assert.ok(laned.has(route), `${lane} links ${route}, which the H35 map does not place on Admin · Approvals`);
+  // D215's eleven only: the nine new lanes' doors are D1038's canvas, drawn after the H35 map,
+  // and every door is a registered route by the check above.
+  for (const l of LANES.filter((x) => x.glance && !x.isNew)) {
+    const route = doors[l.key];
+    // The Lab's queue is placed on Programs (D937); moderation (D442) postdates the map (D506);
+    // Events opens the desk's Review tab, a sub-path of the placed /admin/events (D1038).
+    if (['/admin/programs/spinout-lab/applications', '/admin/spinout-moderation', '/admin/events/review'].includes(route)) continue;
+    assert.ok(laned.has(route), `${l.label} links ${route}, which the H35 map does not place on Admin · Approvals`);
   }
+  // Not a queue: each reference is an Admin console.
+  const adminConsoles = new Set(ADMIN_PLACEMENT.filter((e) => e.tier === 'Admin').map((e) => e.route));
+  const card = APPROVALS_CODE.slice(APPROVALS_CODE.indexOf('data-testid="approvals-not-a-queue"'));
+  for (const to of ['/admin/directory', '/admin/circles', '/admin/partner-invitations', '/admin/programs/mentor-cohorts/people']) {
+    assert.ok(card.includes(`<Link to="${to}"`), `Not a queue lost its door onto ${to}`);
+    assert.ok(adminConsoles.has(to), `${to} has no Admin console placement`);
+  }
+  assert.doesNotMatch(APPROVALS_CODE, /\.map\([^)]*<Link/, 'a mapped link is invisible to the reachability walk');
 });
 
 /* ------------------------------------------------------------------ *
  * The other landings
  * ------------------------------------------------------------------ */
 
-test('Community links its five consoles at their own routes — Advisors & Partners at the tab, never the standalone route', () => {
-  const doors = doorsIn(CODE[LANDINGS.Community]);
-  assert.deepEqual(doors, ['/admin/events', '/admin/jobs', '/admin/circles', '/admin?tab=network-profiles', '/admin?tab=wellbeing']);
-  assert.ok(!doors.includes('/admin/network-profiles'), 'a door onto the standalone roster route would make its EXEMPT entry stale');
-  assert.match(SRC[LANDINGS.Community], /import \{ COMMUNITY_CONSOLES \} from '\.\.\/branch\/BranchCommunity'/,
-    'the console prose is BranchCommunity\'s own list, read rather than copied');
+test('Community (D930) links its six consoles at their own routes — Advisors & Partners at its own page (D972), never the old roster address', () => {
+  const code = codeOnly(read(COMMUNITY));
+  const doors = [...new Set(doorsIn(code))];
+  for (const d of ['/admin/events', '/admin/jobs', '/admin/circles', '/admin/advisors-partners', '/admin/wellbeing', '/admin/partner-invitations']) {
+    assert.ok(doors.includes(d), `Community has no literal door onto ${d}`);
+  }
+
+  assert.ok(!doors.includes('/admin/network-profiles'), 'a door onto the old roster address, which only forwards now (D972)');
+  for (const d of doors) {
+    assert.ok(!d.startsWith('/branch'), `Community links ${d}, under /branch/`);
+    assert.ok(routeLine(pathOf(d)), `Community links ${d}, which is not a registered route`);
+  }
+  assert.doesNotMatch(code, /\.map\([^)]*<Link/, 'Community maps data into links — invisible to the reachability walk');
 });
 
-test('Programs links its four consoles; Accounts links the Users table, Exploring, Personas and Trash', () => {
-  assert.deepEqual(doorsIn(CODE[LANDINGS.Programs]),
-    ['/admin?tab=lab-applications', '/admin/spinout-lab', '/admin/advisor-cohorts', '/admin/profiling-trends']);
+test('Programs (D953) opens the Lab console and Profiling trends, never the Admin Console\'s Lab tab; Accounts links the Users table, Exploring, Personas and Trash', () => {
+  // Defect 1 of #2371: two cards opened one console. One Spin-Out Lab card
+  // now, and Programs no longer links the Admin Console's Lab tab.
+  const programs = doorsIn(codeOnly(read(PROGRAMS)));
+  for (const d of ['/admin/programs/spinout-lab', '/admin/profiling-trends']) assert.ok(programs.includes(d), `Programs has no literal door onto ${d}`);
+  assert.ok(!programs.includes('/admin?tab=lab-applications'), 'Programs links the Lab tab and the Lab console, one console twice');
+  assert.ok(!programs.includes('/admin/advisor-cohorts'), 'Programs links the old address, which only redirects');
   assert.deepEqual(doorsIn(CODE[LANDINGS.Accounts]),
-    ['/admin', '/admin/exploring', '/admin?tab=personas', '/admin/trash']);
+    ['/admin/accounts/all', '/admin/exploring', '/admin/persona-segments', '/admin/trash']);
 });
 
-test('Insights draws HQ\'s figures (D555), not S20\'s sentence, and links nowhere', () => {
-  // D555 replaced S20's "No console fits yet" with the figures the owner asked for.
-  assert.doesNotMatch(SRC[LANDINGS.Insights], /No console fits yet for HQ-held accounts/);
-  assert.match(SRC[LANDINGS.Insights], /useHeldGlance\(\)/);
-  assert.doesNotMatch(CODE[LANDINGS.Insights], /<Link\b|\bto="\//, 'Insights borrowed a page');
-  assert.doesNotMatch(CODE[LANDINGS.Insights], /admin\/analytics|branch\/insights/, 'Insights borrowed an HQ-only or branch page');
+test('Insights (D893) reads the Insights read, and links only registered routes, never /branch/', () => {
+  const src = read(INSIGHTS);
+  const code = codeOnly(src);
+  assert.match(src, /insightsApi\.adminInsights\(/, 'Insights no longer reads GET /api/admin/insights (#2660)');
+  assert.doesNotMatch(src, /No console fits yet for HQ-held accounts/);
+  for (const d of doorsIn(code)) {
+    assert.ok(!d.startsWith('/branch'), `Insights links ${d}, under /branch/`);
+    assert.ok(routeLine(pathOf(d)), `Insights links ${d}, which is not a registered route`);
+  }
+  assert.doesNotMatch(code, /branch\/insights/, 'Insights borrowed the branch page');
 });
 
 test('the three false labels are not rendered, and no gate was narrowed or raised', () => {
@@ -268,7 +296,8 @@ test('the three false labels are not rendered, and no gate was narrowed or raise
   for (const r of rows) assert.doesNotMatch(r.label, /read-only/i, `${r.label} says read-only`);
   assert.equal(rows.find((r) => r.label === 'Contracts').to, '/admin/contracts');
   // The gates this item touches nothing of.
-  for (const path of ['/admin', '/monitoring', '/admin/articles', '/admin/publications', '/admin/team']) {
+  // D938: `/admin` only forwards now; All accounts carries its gate.
+  for (const path of ['/admin/accounts/all', '/monitoring', '/admin/articles', '/admin/publications', '/admin/team']) {
     const line = routeLine(path);
     assert.match(line, /guard\(\['admin'/, `${path} no longer admits an admin`);
     assert.doesNotMatch(line, /hqOnly\(/, `${path}'s gate was raised — D286 files that question, it does not decide it`);
@@ -285,11 +314,16 @@ test('the three false labels are not rendered, and no gate was narrowed or raise
  * ------------------------------------------------------------------ */
 
 test('the ten routes that lost their sidebar row have a literal door on this shell', () => {
-  const orphans = ['/admin/refer-earn', '/admin/partners', '/admin/lp-applications', '/admin/my-licence', '/admin/best-fit',
-    '/admin/events', '/admin/jobs', '/admin/circles', '/admin/due-diligence', '/admin/advisor-cohorts'];
+  // D953: the referral review and the assignments console are under Programs
+  // now; their old addresses only redirect, and lanes 2 and 16 are their doors.
+  const orphans = ['/admin/programs/refer-and-earn/queue', '/admin/partner-invitations', '/admin/lp-applications', '/admin/my-licence', '/admin/best-fit',
+    '/admin/events', '/admin/jobs', '/admin/circles', '/admin/due-diligence', '/admin/programs/mentor-cohorts/people'];
   const doors = new Set([
     ...rows.map((r) => pathOf(r.to)),
     ...Object.values(LANDINGS).flatMap((f) => doorsIn(CODE[f]).map(pathOf)),
+    // D1038 and D930: Approvals and Community left /admin/held/ with their doors.
+    ...doorsIn(APPROVALS_CODE).map(pathOf),
+    ...doorsIn(codeOnly(read(COMMUNITY))).map(pathOf),
   ]);
   const missing = orphans.filter((p) => !doors.has(p));
   assert.deepEqual(missing, [], 'these routes have no door on the Admin shell');
@@ -299,26 +333,16 @@ test('the ten routes that lost their sidebar row have a literal door on this she
  * The active row, the chrome, the accent, the wall rules
  * ------------------------------------------------------------------ */
 
-test('an /admin tab lights the Admin row the H35 map places it on, and a tab placed only on HQ lights no row', () => {
-  assert.equal(adminRowFor('/admin', '?tab=kyc'), ADMIN_ROW_ROUTE.Approvals);
-  assert.equal(adminRowFor('/admin', '?tab=profiles'), ADMIN_ROW_ROUTE.Approvals);
-  assert.equal(adminRowFor('/admin', '?tab=legal'), ADMIN_ROW_ROUTE.Contracts);
-  assert.equal(adminRowFor('/admin', '?tab=users'), ADMIN_ROW_ROUTE.Accounts);
-  assert.equal(adminRowFor('/admin', ''), ADMIN_ROW_ROUTE.Accounts, 'a bare /admin is the Users tab');
-  assert.equal(adminRowFor('/admin', '?tab=personas'), ADMIN_ROW_ROUTE.Accounts);
-  assert.equal(adminRowFor('/admin', '?tab=lab-applications'), ADMIN_ROW_ROUTE.Programs);
-  assert.equal(adminRowFor('/admin', '?tab=wellbeing'), ADMIN_ROW_ROUTE.Community);
-  assert.equal(adminRowFor('/admin', '?tab=network-profiles'), ADMIN_ROW_ROUTE.Community);
-  for (const tab of ['integration-keys', 'github', 'payments', 'promos', 'billing']) {
-    assert.equal(adminRowFor('/admin', `?tab=${tab}`), NO_ROW, `${tab} is HQ's and lit an Admin row`);
-  }
-  assert.equal(adminRowFor('/admin', '?tab=no-such-tab'), NO_ROW);
-  assert.equal(adminRowFor('/admin/held/programs', ''), null, 'off /admin the path decides');
-  assert.equal(adminRowFor('/admin/events', ''), null);
-  assert.ok(!rows.some((r) => r.to === NO_ROW), 'NO_ROW must equal no row\'s route');
-  assert.match(SIDEBAR_NAV, /role === 'admin' \? adminRowFor\(navLocation\.pathname, navLocation\.search\)/,
-    'SidebarNav does not derive the Admin row from the map');
+test('the Admin rows light by path and `match` alone: no admin page lives on a query (D938)', () => {
+  assert.match(SIDEBAR_NAV, /const derivedRow = role === 'super_admin' \? hqRowFor\(navLocation\.pathname\) : null;/,
+    'the Admin shell derives a row from the query again');
+  assert.doesNotMatch(SIDEBAR_NAV, /adminRowFor/);
   assert.match(SIDEBAR_NAV, /const active = derivedRow !== null\s*\? to === derivedRow/, 'the derived row does not decide the active row');
+  const row = (label) => rows.find((r) => r.label === label);
+  for (const [label, path] of [['Accounts', '/admin/accounts/all'], ['Accounts', '/admin/persona-segments'], ['Approvals', '/admin/kyc'],
+    ['Approvals', '/admin/partner-profiles'], ['Community', '/admin/directory'], ['Community', '/admin/wellbeing']]) {
+    assert.ok(row(label).match.includes(path), `${label} does not light on ${path}`);
+  }
 });
 
 test('the top bar says whose data: "HQ-held · axal.vc" and the HQ-HELD badge, on the plain Admin shell off a branch only', () => {

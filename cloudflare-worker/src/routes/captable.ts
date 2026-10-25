@@ -1,16 +1,28 @@
+import { canAccessProject, getProjectMembershipRole } from '../services/projectAccess';
 /**
  * T12 — Cap-table simulator routes (port of backend/app/api/routes/captable.py).
  *
  * Mounted at /api/captable. Authenticated. Scenarios are owned by their
- * creator; admin can read all.
+ * creator; project-bound data additionally requires current project access.
  *
  *   POST   /simulate                     — stateless run (no persist)
- *   GET    /scenarios                    — list mine (admin: all)
+ *   GET    /scenarios                    — list mine (including admin)
  *   POST   /scenarios                    — create + simulate + persist
  *   GET    /scenarios/{uid}              — read one
  *   PUT    /scenarios/{uid}              — update inputs + re-simulate
  *   DELETE /scenarios/{uid}              — delete
  *   GET    /scenarios/{uid}/export.csv   — 409A-friendly CSV export
+ *
+ * D1018 (#2855) — scenarios from the record (part 3):
+ *   GET    /scenarios/by-project/{projectId}/today    — Today from the record, the model as "Cap table · model", its rows offered as proposals
+ *   POST   /scenarios/by-project/{projectId}/simulate — a scenario from Today: { rounds, exit_values (≤4), converting? }
+ *
+ * D1020 (#2857) — the recorded register, per venture:
+ *   GET    /equity-plan?project_id=      — one venture's pools and grants (none: the account's)
+ *   GET    /live?project_id=             — one venture's holders and securities (none: the account's)
+ *   PUT    /carta/venture                — the venture a founder's Carta connection is the record for
+ *   GET    /register/{projectId}/export.csv — the recorded cap table as CSV, one audit row
+ *   POST   /register/{projectId}/snapshot   — a PDF "As of" snapshot into the data room, NDA, seen by nobody
  */
 import { Hono } from 'hono';
 import type { Context } from 'hono';
@@ -22,7 +34,7 @@ import { requireAuth } from '../auth';
 import { simulate, validateInputs, toCsv, type Inputs, type SimulateResult } from '../services/captable';
 import {
   canReadProject, canWriteProject, canReadScenario, canWriteScenario,
-  type AccessUser,
+  type AccessUser, type AccessProject,
 } from '../services/captableAccess';
 import { ensureCapTableVariantColumn } from '../services/captableSchema';
 import {
@@ -39,6 +51,18 @@ import { refuse } from '../util/refusal';
 import {
   saveScenario, logScenarioAct, loadScenarioByUid as loadByUid, type ScenarioRow,
 } from '../services/capTableWrites';
+import {
+  RecordError, acceptProposal, createClass, dismissProposal, historyPage, historyQuery, propose, proposeImport, readHistory, readHistorySection, readRecord, recordCsv,
+  recordIssuance, setCurrency, updateClass, voidIssuance, type RecordActor,
+} from '../services/capTableRecord';
+import { proposeFromClose, readClose } from '../services/capTableClose';
+import { DOCUMENT_OPTION, DOCUMENT_PAGE, documentRecord, readDocumentTerms } from '../services/capTableDocumentRead';
+import { railFor, refuseRun } from '../util/railContext';
+import { MODEL_SCENARIO_NAME, inputsFrom, offerFromModel, startFromRecord } from '../services/capTableToday';
+import {
+  actorHash, auditStatement, csvCell, equityPlanBody, num, readEquityPlan, readRegister, registerCsv, snapshotPdf, withOwnership,
+  type RegisterScope,
+} from '../services/capTableRegister';
 
 /**
  * Build queue #120 — lazy bootstrap for the share tables. Canonical
@@ -77,6 +101,12 @@ async function ensureCapTableShareSchema(env: Env): Promise<void> {
      )`,
     `CREATE INDEX IF NOT EXISTS idx_captable_share_views_token ON captable_share_views(share_token_id)`,
     `CREATE INDEX IF NOT EXISTS idx_captable_share_views_scenario ON captable_share_views(scenario_uid, created_at)`,
+    // D1019 (#2856) — migration 575's venture-link columns. On a database that
+    // has 575 these fail as duplicates, and the catch below lets them.
+    `ALTER TABLE captable_share_tokens ADD COLUMN project_id INTEGER`,
+    `ALTER TABLE captable_share_tokens ADD COLUMN level TEXT`,
+    `ALTER TABLE captable_share_tokens ADD COLUMN holders_attested_at TEXT`,
+    `ALTER TABLE captable_share_tokens ADD COLUMN holders_attested_by INTEGER`,
   ];
   for (const s of stmts) {
     try { await env.DB.prepare(s).run(); }
@@ -94,8 +124,6 @@ captable.use('*', async (c, next) => {
   await ensureCapTableVariantColumn(c.env);
   return next();
 });
-
-function isAdmin(role: string): boolean { return (role || '').toLowerCase() === 'admin'; }
 
 function safeJson<T>(s: string | null | undefined, fallback: T): T {
   if (!s) return fallback;
@@ -120,7 +148,7 @@ function serialize(s: ScenarioRow, withResult = true): any {
 
 type AuthUser = AccessUser & { id: number; role: string };
 
-type ProjectRow = { id: number; founder_id: number | null; company_id?: number | null };
+type ProjectRow = { id: number; founder_id: number | null; company_id?: number | null } & AccessProject;
 type Ctx = Context<{ Bindings: Env }>;
 
 /** The project row as stored — no company narrowing. Only the gates below read this. */
@@ -129,21 +157,32 @@ async function loadProjectRow(env: Env, projectId: number): Promise<ProjectRow |
     .bind(projectId).first<ProjectRow>();
 }
 
-/**
- * Roles whose access to a project does NOT come from owning it.
- *
- * Mirrors `canReadProject` in services/captableAccess: admin, partner and
- * investor may read any project. Company scoping narrows the OWNERSHIP path
- * only — `projects.company_id` is the founder's company, and under the
- * agreed model every other role's active company is their own firm, an id
- * this column never carries. Narrowing them by it would not restrict them, it
- * would erase them. The same set is used for the write gates: writes are
- * still refused afterwards by `canWriteProject`/`canWriteScenario` exactly as
- * before, so exempting the wider set here loosens nothing.
- */
-function isCompanyExempt(user: { role?: string | null }): boolean {
-  const r = String(user.role || '').toLowerCase();
-  return r === 'admin' || r === 'partner' || r === 'investor';
+/** Membership paths are independent of the member's own active company. */
+function isCompanyExempt(user: AuthUser, project: ProjectRow): boolean {
+  return !(user.role.toLowerCase() === 'founder' && !!user.founder_id && user.founder_id === project.founder_id);
+}
+async function computeProjectPermissions(env: Env, user: AuthUser, project: ProjectRow): Promise<ProjectRow> {
+  const principal = { ...user, role: user.role.toLowerCase() } as any;
+  if (principal.role === 'admin') return { ...project, capRead: true, capWrite: true };
+  if (principal.role === 'investor') return { ...project, capRead: false, capWrite: false };
+  const owner = principal.role === 'founder' && !!principal.founder_id && principal.founder_id === project.founder_id;
+  // A recorded membership first, for every non-owner. Since D889 (#2438)
+  // canAccessProject requires one of a partner too; this check stays explicit.
+  const member = owner ? null : await getProjectMembershipRole(env, project.id, principal.id);
+  if (!owner && !['owner','cofounder','advisor'].includes(member ?? '')) return { ...project, capRead: false, capWrite: false };
+  return { ...project,
+    capRead: await canAccessProject(env, principal, project),
+    capWrite: (owner || member !== 'advisor') && await canAccessProject(env, principal, project, { write: true }),
+  };
+}
+
+async function projectPermissions(c: Ctx, user: AuthUser, project: ProjectRow): Promise<ProjectRow> {
+  const key = `captable_permissions:${project.id}`;
+  const cached = c.get(key as never) as ProjectRow | undefined;
+  if (cached) return cached;
+  const answer = await computeProjectPermissions(c.env, user, project);
+  c.set(key as never, answer as never);
+  return answer;
 }
 
 /** The caller's active company for this request, verified once and memoised. */
@@ -166,37 +205,32 @@ const ACTIVE_COMPANY_KEY = '__activeCompanyId';
 async function loadProject(c: Ctx, projectId: number, user: AuthUser): Promise<ProjectRow | null> {
   const row = await loadProjectRow(c.env, projectId);
   if (!row) return null;
-  if (isCompanyExempt(user)) return row;
-  return projectInActiveCompany(await activeCompanyFor(c, user), row) ? row : null;
+  if (isCompanyExempt(user, row)) {
+    const answer = await projectPermissions(c, user, row);
+    if (!answer.capRead && user.role.toLowerCase() === 'founder'
+      && !projectInActiveCompany(await activeCompanyFor(c, user), row)) return null;
+    return answer;
+  }
+  return projectInActiveCompany(await activeCompanyFor(c, user), row) ? projectPermissions(c, user, row) : null;
 }
 
-/**
- * A scenario bound to a project the caller cannot see under their active
- * company is itself invisible.
- *
- * This is the one place the progress.ts pattern is not enough on its own.
- * `canReadScenario` admits the scenario's OWNER before it ever looks at the
- * project, so if the narrowed loader simply returned null here, a founder
- * would still reach their scenario through the owner path with the project
- * hidden — a cross-company leak, and one that would report `project: null`
- * as if the binding did not exist. So the project is loaded RAW, and the
- * company rule is applied explicitly: bound + row exists + caller on the
- * ownership path + outside the active company → 404, the same answer the
- * project itself gives.
- *
- * A bound scenario whose project row is genuinely GONE is unchanged: it
- * still falls through to the owner path, as it always has. Only the
- * out-of-company case is new.
+/** Project-bound scenarios inherit current membership and owner-company gates.
+ * Missing projects never turn a bound scenario into a private ownership bypass.
  */
 async function projectForScenario(c: Ctx, row: ScenarioRow, user: AuthUser): Promise<ProjectRow | null> {
   if (row.project_id == null) return null;
   const proj = await loadProjectRow(c.env, row.project_id);
   if (!proj) return null;
-  if (isCompanyExempt(user)) return proj;
+  if (isCompanyExempt(user, proj)) {
+    const answer = await projectPermissions(c, user, proj);
+    if (!answer.capRead && user.role.toLowerCase() === 'founder'
+      && !projectInActiveCompany(await activeCompanyFor(c, user), proj)) throw new HttpError(404, 'Scenario not found');
+    return answer;
+  }
   if (!projectInActiveCompany(await activeCompanyFor(c, user), proj)) {
     throw new HttpError(404, 'Scenario not found');
   }
-  return proj;
+  return projectPermissions(c, user, proj);
 }
 
 /** Read-gate a scenario by uid: owner / admin / (project-bound → project read). */
@@ -208,12 +242,23 @@ async function ensureScenarioReadOr404(c: Ctx, uid: string, user: AuthUser): Pro
   return row;
 }
 
+async function auditMemberWrite(c: Ctx, user: AuthUser, project: ProjectRow | null) {
+  if (!project || user.role.toLowerCase() === 'admin' ||
+    (user.role.toLowerCase() === 'founder' && !!user.founder_id && user.founder_id === project.founder_id)) return;
+  const key = `captable_write:${project.id}`;
+  if (c.get(key as never)) return;
+  await c.env.DB.prepare('INSERT INTO activity_logs (project_id, user_id, action, details, actor) VALUES (?, ?, ?, ?, ?)')
+    .bind(project.id, user.id, 'captable_member_write_authorized', JSON.stringify({ method: c.req.method, route: c.req.routePath }), `user:${user.id}`).run();
+  c.set(key as never, true as never);
+}
+
 /** Write-gate a scenario by uid: owner / admin / (project-bound → project write). */
 async function ensureScenarioWriteOr404(c: Ctx, uid: string, user: AuthUser): Promise<ScenarioRow> {
   const row = await loadByUid(c.env, uid);
   if (!row) throw new HttpError(404, 'Scenario not found');
   const proj = await projectForScenario(c, row, user);
   if (!canWriteScenario(user, row, proj)) throw new HttpError(403, 'Not your scenario');
+  await auditMemberWrite(c, user, proj);
   return row;
 }
 
@@ -223,6 +268,7 @@ async function ensureProjectWriteAccess(c: Ctx, projectId: number | null | undef
   const proj = await loadProject(c, projectId, user);
   if (!proj) throw new HttpError(404, 'Project not found');
   if (!canWriteProject(user, proj)) throw new HttpError(403, "You don't have access to that project");
+  await auditMemberWrite(c, user, proj);
 }
 
 class HttpError extends Error {
@@ -244,6 +290,30 @@ function asJsonError(c: any, err: unknown) {
 }
 
 /**
+ * D1020 — which register a read names: `?project_id=` is one venture, read
+ * through the venture's own gate; no parameter is the caller's account.
+ */
+async function registerScope(c: Ctx, user: AuthUser): Promise<RegisterScope> {
+  const raw = c.req.query('project_id');
+  if (raw === undefined || raw === '') return { kind: 'account', userId: user.id };
+  if (!/^[1-9][0-9]{0,9}$/.test(raw)) throw new HttpError(400, 'project_id must be a venture id');
+  const projectId = Number(raw);
+  await ensureProjectReadAccess(c, projectId, user);
+  return { kind: 'venture', projectId };
+}
+const scopeBody = (scope: RegisterScope) => (scope.kind === 'venture'
+  ? { kind: 'venture', project_id: scope.projectId }
+  : { kind: 'account', project_id: null });
+
+/** A venture's permissions, for the holder email rule and the write gates. */
+async function ventureFor(c: Ctx, projectId: number, user: AuthUser): Promise<ProjectRow> {
+  const proj = await loadProject(c, projectId, user);
+  if (!proj) throw new HttpError(404, 'Project not found');
+  if (!canReadProject(user as AccessUser, proj)) throw new HttpError(403, "You don't have access to that project");
+  return proj;
+}
+
+/**
  * Wave 2 — GET /api/captable/equity-plan
  *
  * The Cap Table Pro canvas asks for a grant-level pool burn-down with vesting.
@@ -254,9 +324,11 @@ function asJsonError(c: any, err: unknown) {
  * `integrations/providers/carta.ts`, which writes them. A founder who connected
  * Carta has this data in D1 and has never been shown it.
  *
- * Scoped by `user_id`, which is how both tables are keyed — there is no
- * project_id on either, so this is a per-account view and does not need the
- * tenancy module.
+ * D1020 (#2857): `?project_id=` reads ONE venture's pools and grants, gated
+ * like the venture's cap table (`ensureProjectReadAccess`); migration 574 gave
+ * both tables `project_id`. Without it, the account's rows as before, for the
+ * Spin-Out Lab's card; that answer says `scope.kind = 'account'`. A row whose
+ * venture is unset is never shown under a venture.
  *
  * SHARES, NOT MONEY. Every figure here is a share count (REAL in the schema,
  * as Carta reports fractional grants). No money crosses this endpoint, so the
@@ -269,21 +341,14 @@ function asJsonError(c: any, err: unknown) {
  * last written so the UI can say how fresh the answer is.
  */
 captable.get('/equity-plan', async (c) => {
-  const user = await requireAuth(c);
+  const user = await requireAuth(c) as AuthUser;
+  let scope: RegisterScope;
+  try { scope = await registerScope(c, user); } catch (e) { return asJsonError(c, e); }
   // D366: a failed SELECT is a refusal, never an empty plan. "No pools or
   // grants recorded" is only said when both stores were actually read.
-  let pools: { results?: any[] };
-  let vesting: { results?: any[] };
+  let plan: Awaited<ReturnType<typeof readEquityPlan>>;
   try {
-    pools = await c.env.DB.prepare(
-      `SELECT id, name, shares_authorized, shares_issued, shares_available, source, updated_at
-         FROM cap_table_option_pools WHERE user_id = ? ORDER BY name`,
-    ).bind(user.id).all<any>();
-    vesting = await c.env.DB.prepare(
-      `SELECT id, holder_id, security_id, start_date, cliff_months, total_months,
-              total_shares, vested_shares, source, updated_at
-         FROM cap_table_vesting WHERE user_id = ? ORDER BY start_date DESC`,
-    ).bind(user.id).all<any>();
+    plan = await readEquityPlan(c.env, scope);
   } catch (e) {
     return refuse(c, 500, {
       code: 'equity_plan_read_failed',
@@ -291,51 +356,9 @@ captable.get('/equity-plan', async (c) => {
       raw: e,
     });
   }
-
-  const poolRows = pools.results || [];
-  const vestRows = vesting.results || [];
-  const num = (v: any) => (v == null || Number.isNaN(Number(v)) ? null : Number(v));
-  const sum = (rows: any[], k: string) => rows.reduce((a, r) => a + (num(r[k]) ?? 0), 0);
-
-  const totalGranted = sum(vestRows, 'total_shares');
-  const totalVested = sum(vestRows, 'vested_shares');
-
-  return c.json({
-    pools: poolRows.map((p) => ({
-      id: p.id,
-      name: p.name,
-      shares_authorized: num(p.shares_authorized),
-      shares_issued: num(p.shares_issued),
-      shares_available: num(p.shares_available),
-      source: p.source,
-      as_of: p.updated_at,
-    })),
-    grants: vestRows.map((v) => ({
-      id: v.id,
-      holder_id: v.holder_id,
-      security_id: v.security_id,
-      start_date: v.start_date,
-      cliff_months: num(v.cliff_months),
-      total_months: num(v.total_months),
-      total_shares: num(v.total_shares),
-      vested_shares: num(v.vested_shares),
-      source: v.source,
-      as_of: v.updated_at,
-    })),
-    // Totals are sums of what is recorded, nothing modelled. Null when there
-    // is nothing to sum, so the UI shows "Not recorded" rather than a
-    // confident zero.
-    summary: {
-      pool_count: poolRows.length,
-      grant_count: vestRows.length,
-      shares_authorized: poolRows.length ? sum(poolRows, 'shares_authorized') : null,
-      shares_issued: poolRows.length ? sum(poolRows, 'shares_issued') : null,
-      shares_available: poolRows.length ? sum(poolRows, 'shares_available') : null,
-      granted_shares: vestRows.length ? totalGranted : null,
-      vested_shares: vestRows.length ? totalVested : null,
-      unvested_shares: vestRows.length ? Math.max(0, totalGranted - totalVested) : null,
-    },
-  });
+  // D1020: totals are sums of what is recorded, nothing modelled, and null
+  // unless every row records the figure (`knownSum`).
+  return c.json({ scope: scopeBody(scope), ...equityPlanBody(plan.pools, plan.vesting) });
 });
 
 captable.post('/simulate', async (c) => {
@@ -349,14 +372,20 @@ captable.post('/simulate', async (c) => {
 
 captable.get('/scenarios', async (c) => {
   const user = await requireAuth(c);
-  const rows = isAdmin(user.role)
-    ? await c.env.DB.prepare(
-        'SELECT * FROM cap_table_scenarios ORDER BY updated_at DESC',
-      ).all<ScenarioRow>()
-    : await c.env.DB.prepare(
-        'SELECT * FROM cap_table_scenarios WHERE owner_user_id = ? ORDER BY updated_at DESC',
-      ).bind(user.id).all<ScenarioRow>();
-  return c.json({ items: (rows.results || []).map((r) => serialize(r as any, false)) });
+  const rows = await c.env.DB.prepare(
+    'SELECT * FROM cap_table_scenarios WHERE owner_user_id = ? ORDER BY updated_at DESC',
+  ).bind(user.id).all<ScenarioRow>();
+  const visible: ScenarioRow[] = [];
+  const projects = new Map<number, ProjectRow | null>();
+  for (const row of rows.results || []) {
+    if (row.project_id == null || user.role.toLowerCase() === 'admin') { visible.push(row); continue; }
+    if (!projects.has(row.project_id)) {
+      try { projects.set(row.project_id, await projectForScenario(c, row, user)); }
+      catch (e) { if (e instanceof HttpError && e.status === 404) projects.set(row.project_id, null); else throw e; }
+    }
+    if (canReadScenario(user, row, projects.get(row.project_id) ?? null)) visible.push(row);
+  }
+  return c.json({ items: visible.map((r) => serialize(r as any, false)) });
 });
 
 captable.post('/scenarios', async (c) => {
@@ -450,6 +479,80 @@ captable.get('/scenarios/by-project/:projectId/compare', async (c) => {
   });
 });
 
+// D1018 (#2855) — what every scenario states it assumes (CT9).
+const SCENARIO_ASSUMPTIONS = [
+  '1× non-participating preferred, no participation, no seniority stack.',
+  'The unallocated pool takes no proceeds; granted options are counted as if exercised.',
+  'A SAFE that has not converted takes cash back or converts at its cap, whichever pays more.',
+];
+
+async function readableVenture(c: Ctx, user: AuthUser): Promise<number> {
+  const projectId = Number(c.req.param('projectId'));
+  if (!Number.isSafeInteger(projectId) || projectId < 1) throw new HttpError(400, 'Invalid project_id');
+  const proj = await loadProject(c, projectId, user);
+  if (!proj) throw new HttpError(404, 'Project not found');
+  if (!canReadProject(user, proj)) throw new HttpError(403, "You don't have access to that project");
+  return projectId;
+}
+
+/**
+ * D1018 — Today from the record, and the saved model beside it. A venture
+ * with nothing recorded answers `today.available: false` with the record's
+ * reason; its model is "Cap table · model" and its rows are offered as
+ * part 2's proposals, never written here.
+ */
+captable.get('/scenarios/by-project/:projectId/today', async (c) => {
+  const user = await requireAuth(c);
+  let projectId: number;
+  try { projectId = await readableVenture(c, user); } catch (e) { return asJsonError(c, e); }
+  const record = await readRecord(c.env, projectId);
+  const start = startFromRecord(record);
+  const model = await c.env.DB.prepare(
+    'SELECT * FROM cap_table_scenarios WHERE project_id = ? AND COALESCE(is_variant,0) = 0 ORDER BY updated_at DESC LIMIT 1',
+  ).bind(projectId).first<ScenarioRow>();
+  const modelInputs = model ? safeJson<Inputs | null>(model.inputs_json, null) : null;
+  let today: Record<string, unknown>;
+  if (start.available) {
+    const inputs = inputsFrom(start);
+    today = { available: true, reason: null, source: 'record', inputs, result: simulate(inputs), not_modelled: start.not_modelled };
+  } else today = { available: false, reason: start.reason, sentence: start.sentence };
+  return c.json({
+    project_id: projectId,
+    currency: record.currency,
+    today,
+    model: model ? { ...serialize(model), name: MODEL_SCENARIO_NAME, stored_name: model.name, source: 'model' } : null,
+    offer: offerFromModel(modelInputs, record),
+    assumptions: SCENARIO_ASSUMPTIONS,
+  });
+});
+
+/**
+ * D1018 — a scenario from Today: the record's holders and instruments with
+ * the caller's rounds (each with its `top_up_payer`), up to four exit values
+ * and the instruments that convert (all by default). Computes, saves nothing.
+ */
+captable.post('/scenarios/by-project/:projectId/simulate', async (c) => {
+  const user = await requireAuth(c);
+  let projectId: number;
+  try { projectId = await readableVenture(c, user); } catch (e) { return asJsonError(c, e); }
+  const body = await c.req.json().catch(() => ({})) as Record<string, any>;
+  if (body.converting != null && !(Array.isArray(body.converting) && body.converting.every((n: unknown) => typeof n === 'string'))) {
+    return refuse(c, 400, { code: 'bad_converting', message: 'converting must be a list of instrument names.', extra: { code: 'bad_converting' } });
+  }
+  const start = startFromRecord(await readRecord(c.env, projectId));
+  if (!start.available) return refuse(c, 409, { code: start.reason, message: start.sentence, extra: { code: start.reason } });
+  const unknown = (body.converting ?? []).filter((n: string) => !start.safes.some((s) => s.name === n));
+  if (unknown.length) return refuse(c, 400, { code: 'unknown_instrument', message: 'One of the instruments named to convert is not on the record.', extra: { code: 'unknown_instrument', names: unknown } });
+  const inputs = inputsFrom(start, {
+    rounds: Array.isArray(body.rounds) ? body.rounds : [],
+    exit_values: Array.isArray(body.exit_values) ? body.exit_values : undefined,
+    converting: body.converting ?? null,
+  });
+  const errs = validateInputs(inputs);
+  if (errs.length) return c.json({ detail: { code: 'invalid_inputs', errors: errs } }, 400);
+  return c.json({ source: 'record', currency: start.currency, inputs, result: simulate(inputs), not_modelled: start.not_modelled, assumptions: SCENARIO_ASSUMPTIONS });
+});
+
 captable.get('/scenarios/:uid', async (c) => {
   const user = await requireAuth(c);
   try {
@@ -525,16 +628,14 @@ captable.get('/scenarios/:uid/export.csv', async (c) => {
   });
 });
 
-// =====================================================================
-// Build queue #120 — audience-scoped share links.
+// ==============================================================// Build queue #120 — audience-scoped share links.
 //
 // ROUTE ORDER MATTERS: `/share/:token` and the scenario-scoped share
 // endpoints are registered here, ABOVE the `/:projectId` catch-all
 // further down this file. Hono matches in registration order, so moving
 // these below it would route `/api/captable/share/abc` into the
 // project handler and 404 (or worse, treat "share" as a project id).
-// =====================================================================
-
+// ==============================================================
 const SHARE_TTL_HOURS_DEFAULT = 168;   // 7 days
 const SHARE_TTL_HOURS_MAX = 24 * 90;   // 90 days
 const SHARE_VIEW_LIMIT_MAX = 500;
@@ -931,50 +1032,389 @@ captable.delete('/409a/:projectId/events/:id', async (c) => {
 });
 
 captable.get('/live', async (c) => {
-  const user = await requireAuth(c);
-  const integration = await c.env.DB.prepare(
-    "SELECT uid, status, last_synced_at, external_account_name, last_error FROM integrations WHERE provider_key = 'carta' AND user_id = ? ORDER BY id DESC LIMIT 1",
-  ).bind(user.id).first<{ uid: string; status: string; last_synced_at: string | null; external_account_name: string | null; last_error: string | null }>();
-
-  const holdersRes = await c.env.DB.prepare(
-    'SELECT id, name, email, security_type, shares, ownership_pct, source, carta_stakeholder_id, carta_security_id, updated_at ' +
-    'FROM cap_table_holders WHERE user_id = ? ORDER BY shares DESC, name ASC LIMIT 500',
-  ).bind(user.id).all<{
-    id: number; name: string; email: string | null; security_type: string | null;
-    shares: number | null; ownership_pct: number | null; source: string;
-    carta_stakeholder_id: string | null; carta_security_id: string | null; updated_at: string;
-  }>();
-  const securitiesRes = await c.env.DB.prepare(
-    'SELECT id, name, share_class, shares_authorized, shares_issued, source, carta_id, updated_at ' +
-    'FROM cap_table_securities WHERE user_id = ? ORDER BY name ASC LIMIT 200',
-  ).bind(user.id).all<{
-    id: number; name: string; share_class: string | null;
-    shares_authorized: number | null; shares_issued: number | null;
-    source: string; carta_id: string | null; updated_at: string;
-  }>();
-
-  const holders = holdersRes.results || [];
-  const securities = securitiesRes.results || [];
-
-  // Recompute ownership % off the live total so disconnected/manual rows
-  // and Carta-sourced rows share the same denominator.
-  const totalShares = holders.reduce((s, h) => s + (Number(h.shares) || 0), 0);
-  const enriched = holders.map((h) => ({
-    ...h,
-    ownership_pct: totalShares > 0 ? ((Number(h.shares) || 0) / totalShares) * 100 : 0,
-  }));
-
+  const user = await requireAuth(c) as AuthUser;
+  let scope: RegisterScope;
+  let showEmail = true;
+  try {
+    scope = await registerScope(c, user);
+    if (scope.kind === 'venture') showEmail = canWriteProject(user, await ventureFor(c, scope.projectId, user));
+  } catch (e) { return asJsonError(c, e); }
+  let integration: { uid: string; status: string; last_synced_at: string | null; external_account_name: string | null; last_error: string | null; config_json: string | null } | null;
+  let register: Awaited<ReturnType<typeof readRegister>>;
+  try {
+    integration = await c.env.DB.prepare(
+      "SELECT uid, status, last_synced_at, external_account_name, last_error, config_json FROM integrations WHERE provider_key = 'carta' AND user_id = ? ORDER BY id DESC LIMIT 1",
+    ).bind(user.id).first();
+    register = await readRegister(c.env, scope);
+  } catch (e) {
+    return refuse(c, 500, {
+      code: 'cap_register_read_failed',
+      message: 'The recorded cap table could not be read. This is not a claim that nothing is recorded; try again in a moment.',
+      raw: e,
+    });
+  }
+  // D1020: a holder with no recorded shares is null, never 0%, and while any
+  // holder's shares are missing no one's share of the total is known.
+  const owned = withOwnership(register.holders);
+  const venture = integration ? cartaVenture(integration.config_json) : null;
   return c.json({
+    scope: scopeBody(scope),
     connected: !!integration && integration.status === 'active',
     integration_uid: integration?.uid || null,
     provider: 'carta',
+    // D1020 §4: while Carta is connected for this venture, its rows are the record, read only here.
+    carta_project_id: venture,
+    carta_is_record: !!integration && integration.status === 'active' && scope.kind === 'venture' && venture === scope.projectId,
     issuer_name: integration?.external_account_name || null,
     last_synced_at: integration?.last_synced_at || null,
     last_error: integration?.last_error || null,
-    total_shares: totalShares,
-    holders: enriched,
-    securities,
+    total_shares: owned.total_shares,
+    holders: owned.holders.map((h) => (showEmail ? h : { ...h, email: undefined })),
+    securities: register.securities.map((s) => ({ ...s, shares_authorized: num(s.shares_authorized), shares_issued: num(s.shares_issued) })),
   });
+});
+
+/**
+ * D1017 (#2854) — the record: what was issued, kept apart from the model
+ * (migration 573, `services/capTableRecord.ts`).
+ *
+ *   GET   /record/:projectId                              by holder, by class, outstanding, fully diluted, instruments, proposals
+ *   GET   /record/:projectId/history?page=&page_size=     issuances and the cap table's activity rows, newest first, exact total
+ *         …&section=record|changes&q=&kind=&source=&has_document=&from=&to=   D1025: History's two blocks, each paged and filtered
+ *   POST  /record/:projectId/proposals                    propose (owner, co-founder, admin)
+ *   POST  /record/:projectId/proposals/:uid/accept        record a proposal (owner, admin)
+ *   POST  /record/:projectId/proposals/:uid/dismiss       dismiss one (owner, admin)
+ *   POST  /record/:projectId/issuances                    record directly (owner, admin)
+ *   POST  /record/:projectId/issuances/:uid/void          void, with a reason (owner, admin)
+ *   POST  /record/:projectId/classes                      a share class (owner, admin)
+ *   PATCH /record/:projectId/classes/:uid
+ *   PUT   /record/:projectId/currency                     the venture's ISO code (owner, admin)
+ *
+ * Reads take the venture's read gate. Every write takes the Raise + Grow plan
+ * and the venture's write gate (#2651), and an admin's carries a reason.
+ * A co-founder proposes; only the owner records (owner question 2 read as A).
+ */
+async function recordProject(c: Ctx, user: AuthUser) {
+  const projectId = Number(c.req.param('projectId'));
+  if (!Number.isSafeInteger(projectId) || projectId <= 0) throw new HttpError(400, { code: 'invalid_project', detail: 'Invalid project_id' });
+  const proj = await loadProject(c, projectId, user);
+  if (!proj) throw new HttpError(404, 'Project not found');
+  return { projectId, proj };
+}
+
+async function recordReader(c: Ctx) {
+  const user = await requireAuth(c);
+  const { projectId, proj } = await recordProject(c, user);
+  if (!canReadProject(user, proj)) throw new HttpError(403, "You don't have access to that project");
+  return projectId;
+}
+
+/** The writer, and which of the three it is. `records`: only the owner or an admin may. */
+async function recordWriter(c: Ctx, records: boolean): Promise<{ projectId: number; actor: RecordActor }> {
+  const user = await requireAuth(c);
+  ensureTier(user, 'studio');
+  const { projectId, proj } = await recordProject(c, user);
+  if (!canWriteProject(user, proj)) throw new HttpError(403, "You don't have access to that project");
+  const role = user.role.toLowerCase();
+  const founderOwns = role === 'founder' && !!user.founder_id && user.founder_id === proj.founder_id;
+  const actorRole: RecordActor['role'] = role === 'admin' ? 'admin'
+    : founderOwns || (await getProjectMembershipRole(c.env, projectId, user.id)) === 'owner' ? 'owner' : 'cofounder';
+  if (records && actorRole === 'cofounder') {
+    throw new HttpError(403, { error: 'owner_records', code: 'owner_records', message: 'A co-founder proposes; only the venture’s owner records it.', detail: 'A co-founder proposes; only the venture’s owner records it.' });
+  }
+  await auditMemberWrite(c, user, proj);
+  return { projectId, actor: { id: Number(user.id), role: actorRole } };
+}
+
+function recordError(c: Ctx, e: unknown) {
+  if (e instanceof Response) return e;
+  if (e instanceof RecordError) return refuse(c, e.status, { code: e.code, message: e.sentence, extra: { code: e.code, ...e.extra } });
+  return asJsonError(c, e);
+}
+
+const recordBody = async (c: Ctx): Promise<Record<string, unknown>> => {
+  const b = await c.req.json().catch(() => null);
+  return b && typeof b === 'object' && !Array.isArray(b) ? b : {};
+};
+
+captable.get('/record/:projectId', async (c) => {
+  try { return c.json(await readRecord(c.env, await recordReader(c))); }
+  catch (e) { return recordError(c, e); }
+});
+
+captable.get('/record/:projectId/history', async (c) => {
+  try {
+    const projectId = await recordReader(c);
+    const { page, size } = historyPage({ page: c.req.query('page'), page_size: c.req.query('page_size') });
+    // D1025: History's two blocks, each paged and filtered on its own.
+    const { section, filters } = historyQuery(c.req.query());
+    if (section) return c.json(await readHistorySection(c.env, projectId, section, filters, page, size));
+    return c.json(await readHistory(c.env, projectId, page, size));
+  } catch (e) { return recordError(c, e); }
+});
+
+captable.post('/record/:projectId/proposals', async (c) => {
+  try {
+    const { projectId, actor } = await recordWriter(c, false);
+    return c.json({ issuance: await propose(c.env, projectId, actor, await recordBody(c)) }, 201);
+  } catch (e) { return recordError(c, e); }
+});
+
+/**
+ * D1026 (#2863) — a spreadsheet's rows as proposals (`origin: 'import'`),
+ * never on the record. Anyone who may propose may import; every row is checked
+ * before any is written.
+ */
+captable.post('/record/:projectId/proposals/import', async (c) => {
+  try {
+    const { projectId, actor } = await recordWriter(c, false);
+    return c.json(await proposeImport(c.env, projectId, actor, await recordBody(c)), 201);
+  } catch (e) { return recordError(c, e); }
+});
+
+/**
+ * D1026 (#2863) — the record and its history as one spreadsheet (CSV). The
+ * venture's read gate. One audit row (`cap_table_record_exported`), written
+ * before the file is answered: no audit row, no export (D1020 §4).
+ */
+captable.get('/record/:projectId/export.csv', async (c) => {
+  let projectId: number;
+  try { projectId = await recordReader(c); } catch (e) { return recordError(c, e); }
+  const user = await requireAuth(c);
+  const asOf = today();
+  let out: Awaited<ReturnType<typeof recordCsv>>;
+  try {
+    out = await recordCsv(c.env, projectId, csvCell, asOf);
+    await auditStatement(c.env, user, await actorHash(user as { email?: string | null }), projectId, 'cap_table_record_exported', {
+      format: 'csv', as_of: asOf, issuances: out.issuances, history: out.history, complete: out.complete,
+    }).run();
+  } catch (e) {
+    return refuse(c, 500, { code: 'cap_record_export_failed', message: 'The record could not be exported. Nothing was downloaded; try again in a moment.', raw: e });
+  }
+  return new Response(out.csv, {
+    status: 200,
+    headers: {
+      'Content-Type': 'text/csv; charset=utf-8',
+      'Content-Disposition': `attachment; filename="cap-table-record-${projectId}-${asOf}.csv"`,
+      'Cache-Control': 'no-store',
+      'X-Export-Rows': String(out.issuances),
+    },
+  });
+});
+
+captable.post('/record/:projectId/proposals/:uid/accept', async (c) => {
+  try {
+    const { projectId, actor } = await recordWriter(c, true);
+    return c.json({ issuance: await acceptProposal(c.env, projectId, actor, c.req.param('uid'), await recordBody(c)) });
+  } catch (e) { return recordError(c, e); }
+});
+
+captable.post('/record/:projectId/proposals/:uid/dismiss', async (c) => {
+  try {
+    const { projectId, actor } = await recordWriter(c, true);
+    return c.json({ issuance: await dismissProposal(c.env, projectId, actor, c.req.param('uid'), await recordBody(c)) });
+  } catch (e) { return recordError(c, e); }
+});
+
+captable.post('/record/:projectId/issuances', async (c) => {
+  try {
+    const { projectId, actor } = await recordWriter(c, true);
+    return c.json({ issuance: await recordIssuance(c.env, projectId, actor, await recordBody(c)) }, 201);
+  } catch (e) { return recordError(c, e); }
+});
+
+captable.post('/record/:projectId/issuances/:uid/void', async (c) => {
+  try {
+    const { projectId, actor } = await recordWriter(c, true);
+    return c.json({ issuance: await voidIssuance(c.env, projectId, actor, c.req.param('uid'), await recordBody(c)) });
+  } catch (e) { return recordError(c, e); }
+});
+
+captable.post('/record/:projectId/classes', async (c) => {
+  try {
+    const { projectId, actor } = await recordWriter(c, true);
+    return c.json({ class: await createClass(c.env, projectId, actor, await recordBody(c)) }, 201);
+  } catch (e) { return recordError(c, e); }
+});
+
+captable.patch('/record/:projectId/classes/:uid', async (c) => {
+  try {
+    const { projectId, actor } = await recordWriter(c, true);
+    return c.json({ class: await updateClass(c.env, projectId, actor, c.req.param('uid'), await recordBody(c)) });
+  } catch (e) { return recordError(c, e); }
+});
+
+captable.put('/record/:projectId/currency', async (c) => {
+  try {
+    const { projectId, actor } = await recordWriter(c, true);
+    return c.json({ currency: await setCurrency(c.env, projectId, actor, await recordBody(c)) });
+  } catch (e) { return recordError(c, e); }
+});
+
+/**
+ * D1021 (#2858) — part 6: a close's proposals, and Eadwyn's read of a signed document.
+ *
+ *   GET   /record/:projectId/closes/:closeUid             CT11b: the close's investors, each proposal, signed or not
+ *   POST  /record/:projectId/closes/:closeUid/proposals   a closed close proposes one issuance per investor (owner, co-founder, admin)
+ *   POST  /record/:projectId/document-read                CT11c: non-money terms with their page; money fields their page only
+ *
+ * A close's proposal is part 2's row (origin 'close'): Accept and Dismiss are
+ * part 2's routes, and Accept refuses an investor whose document is not signed.
+ * The document read writes nothing on the record; it is one metered run.
+ */
+captable.get('/record/:projectId/closes/:closeUid', async (c) => {
+  try { return c.json(await readClose(c.env, await recordReader(c), c.req.param('closeUid'))); }
+  catch (e) { return recordError(c, e); }
+});
+
+captable.post('/record/:projectId/closes/:closeUid/proposals', async (c) => {
+  try {
+    const { projectId, actor } = await recordWriter(c, false);
+    return c.json(await proposeFromClose(c.env, projectId, actor, c.req.param('closeUid'), await recordBody(c)));
+  } catch (e) { return recordError(c, e); }
+});
+
+captable.post('/record/:projectId/document-read', async (c) => {
+  try {
+    const { projectId, actor } = await recordWriter(c, false);
+    const rail = railFor(c, { page: DOCUMENT_PAGE, option: DOCUMENT_OPTION }, documentRecord(projectId));
+    const { result, draft } = await readDocumentTerms(c.env, projectId, actor.id, await recordBody(c), rail);
+    if (!draft) {
+      return refuseRun(c, result) || refuse(c, 503, { code: 'ai_unavailable', message: 'Eadwyn could not read that document just now. Try again.' });
+    }
+    return c.json({ draft });
+  } catch (e) { return recordError(c, e); }
+});
+
+/**
+ * D1020 §4 — the venture a founder's Carta connection is the record for.
+ * Carta's sync writes the account's issuer; this names which venture it is.
+ * Setting it moves the connector's rows to that venture, and the next sync
+ * writes there. `null` makes them account-level again. One audit row.
+ */
+captable.put('/carta/venture', async (c) => {
+  const user = await requireAuth(c) as AuthUser;
+  const body = await c.req.json().catch(() => ({}));
+  const raw = (body as any)?.project_id;
+  const projectId = raw === null ? null : Number(raw);
+  if (projectId !== null && !(Number.isSafeInteger(projectId) && projectId > 0)) return c.json({ detail: 'project_id must be a venture id or null' }, 400);
+  try {
+    if (projectId !== null) await ensureProjectWriteAccess(c, projectId, user);
+  } catch (e) { return asJsonError(c, e); }
+  const row = await c.env.DB.prepare(
+    "SELECT id, config_json FROM integrations WHERE provider_key = 'carta' AND user_id = ? LIMIT 1",
+  ).bind(user.id).first<{ id: number; config_json: string | null }>();
+  if (!row) return c.json({ detail: 'Carta is not connected to this account' }, 404);
+  const cfg = safeJson<Record<string, unknown>>(row.config_json, {});
+  if (cfg.audience === 'investor') return c.json({ detail: 'An investor Carta connection imports no cap table' }, 409);
+  const before = cartaVenture(row.config_json);
+  const next = { ...cfg, project_id: projectId };
+  const hash = await actorHash(user as { email?: string | null });
+  await c.env.DB.batch([
+    c.env.DB.prepare('UPDATE integrations SET config_json = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?').bind(JSON.stringify(next), row.id),
+    ...['cap_table_holders', 'cap_table_securities', 'cap_table_option_pools', 'cap_table_vesting'].map((t) => c.env.DB.prepare(
+      CARTA_RETAG[t as keyof typeof CARTA_RETAG],
+    ).bind(projectId, user.id)),
+    auditStatement(c.env, user, hash, projectId ?? before, 'cap_table_carta_venture_set', { from: before, to: projectId }),
+  ]);
+  return c.json({ ok: true, project_id: projectId });
+});
+
+/** Static statements: the table is chosen from this map, never spliced from input. `connector_carta` is CARTA_SOURCE. */
+const CARTA_RETAG = {
+  cap_table_holders: `UPDATE cap_table_holders SET project_id = ?, updated_at = CURRENT_TIMESTAMP WHERE user_id = ? AND source = 'connector_carta'`,
+  cap_table_securities: `UPDATE cap_table_securities SET project_id = ?, updated_at = CURRENT_TIMESTAMP WHERE user_id = ? AND source = 'connector_carta'`,
+  cap_table_option_pools: `UPDATE cap_table_option_pools SET project_id = ?, updated_at = CURRENT_TIMESTAMP WHERE user_id = ? AND source = 'connector_carta'`,
+  cap_table_vesting: `UPDATE cap_table_vesting SET project_id = ?, updated_at = CURRENT_TIMESTAMP WHERE user_id = ? AND source = 'connector_carta'`,
+} as const;
+
+/** The venture a Carta connection's config names, or null. */
+function cartaVenture(configJson: string | null | undefined): number | null {
+  const v = Number(safeJson<Record<string, unknown>>(configJson, {}).project_id);
+  return Number.isSafeInteger(v) && v > 0 ? v : null;
+}
+
+const today = () => new Date().toISOString().slice(0, 10);
+
+/**
+ * D1020 §5 — the recorded cap table of one venture as CSV. Read gate; a reader
+ * who may not write gets no holder emails. One audit row, written before the
+ * file is answered: no audit, no export.
+ */
+captable.get('/register/:projectId/export.csv', async (c) => {
+  const user = await requireAuth(c) as AuthUser;
+  const projectId = Number(c.req.param('projectId'));
+  if (!Number.isSafeInteger(projectId) || projectId <= 0) return c.json({ detail: 'Invalid project_id' }, 400);
+  let proj: ProjectRow;
+  try { proj = await ventureFor(c, projectId, user); } catch (e) { return asJsonError(c, e); }
+  const withEmail = canWriteProject(user, proj);
+  const asOf = today();
+  let csv: string;
+  try {
+    const register = await readRegister(c.env, { kind: 'venture', projectId });
+    csv = registerCsv(register, asOf, withEmail);
+    await auditStatement(c.env, user, await actorHash(user as { email?: string | null }), projectId, 'cap_table_register_exported', {
+      format: 'csv', as_of: asOf, holders: register.holders.length, securities: register.securities.length, emails: withEmail,
+    }).run();
+  } catch (e) {
+    return refuse(c, 500, { code: 'cap_register_export_failed', message: 'The cap table could not be exported. Nothing was downloaded; try again in a moment.', raw: e });
+  }
+  return new Response(csv, {
+    status: 200,
+    headers: {
+      'Content-Type': 'text/csv; charset=utf-8',
+      'Content-Disposition': `attachment; filename="cap-table-${projectId}-${asOf}.csv"`,
+      'Cache-Control': 'no-store',
+    },
+  });
+});
+
+/**
+ * D1020 §5 — a PDF snapshot of the recorded cap table, stamped "As of [date]",
+ * added to the venture's data room under NDA and seen by nobody until the
+ * founder shares it (`visibility = 'nda'`, `access_tier = 'nobody'`). Write
+ * gate. The file row and its audit row are one batch; if either fails the
+ * stored object is removed.
+ */
+captable.post('/register/:projectId/snapshot', async (c) => {
+  const user = await requireAuth(c) as AuthUser;
+  const projectId = Number(c.req.param('projectId'));
+  if (!Number.isSafeInteger(projectId) || projectId <= 0) return c.json({ detail: 'Invalid project_id' }, 400);
+  try { await ensureProjectWriteAccess(c, projectId, user); } catch (e) { return asJsonError(c, e); }
+  if (!c.env.FILES) return c.json({ code: 'storage_not_configured', detail: 'The data room’s storage is not configured here.' }, 503);
+  const venture = await c.env.DB.prepare('SELECT uid, name FROM projects WHERE id = ?').bind(projectId).first<{ uid: string | null; name: string | null }>();
+  if (!venture?.uid) return c.json({ detail: 'This venture has no data room' }, 404);
+  const asOf = today();
+  let bytes: Uint8Array;
+  let counts: { holders: number; securities: number };
+  try {
+    const register = await readRegister(c.env, { kind: 'venture', projectId });
+    counts = { holders: register.holders.length, securities: register.securities.length };
+    bytes = await snapshotPdf(venture.name || 'This venture', asOf, register);
+  } catch (e) {
+    return refuse(c, 500, { code: 'cap_register_read_failed', message: 'The recorded cap table could not be read, so no snapshot was made.', raw: e });
+  }
+  const uid = crypto.randomUUID().replace(/-/g, '');
+  const key = `data-room/${venture.uid}/${uid}`;
+  const name = `Cap table as of ${asOf}.pdf`;
+  await c.env.FILES.put(key, bytes, { httpMetadata: { contentType: 'application/pdf' }, customMetadata: { project_uid: venture.uid, uploaded_by: String(user.id) } });
+  try {
+    await c.env.DB.batch([
+      c.env.DB.prepare(
+        // D1105 (migration 596): a paper the platform made and filed is a document, named by its source.
+        `INSERT INTO data_room_files (uid, project_id, folder_id, name, r2_key, content_type, size_bytes, visibility, uploaded_by_user_id,
+           created_at, updated_at, access_tier, source_kind, source_ref)
+         VALUES (?, ?, NULL, ?, ?, 'application/pdf', ?, 'nda', ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, 'nobody', 'document', 'cap_table')`,
+      ).bind(uid, projectId, name, key, bytes.byteLength, user.id),
+      auditStatement(c.env, user, await actorHash(user as { email?: string | null }), projectId, 'cap_table_snapshot_filed', {
+        format: 'pdf', as_of: asOf, file_uid: uid, ...counts,
+      }),
+    ]);
+  } catch (e) {
+    await c.env.FILES.delete(key).catch(() => {});
+    return refuse(c, 500, { code: 'cap_snapshot_not_filed', message: 'The snapshot could not be added to the data room. Nothing was filed; try again in a moment.', raw: e });
+  }
+  return c.json({ ok: true, file: { uid, name, as_of: asOf, visibility: 'nda', access_tier: 'nobody' } }, 201);
 });
 
 // Task #1 (AG) — spec-contract aliases. Read-only project-scoped views over
@@ -984,12 +1424,9 @@ captable.get('/:projectId', async (c) => {
   const user = await requireAuth(c);
   const projectId = Number(c.req.param('projectId'));
   if (!Number.isFinite(projectId)) return c.json({ detail: 'Invalid project_id' }, 400);
-  const proj = await c.env.DB.prepare('SELECT id, founder_id FROM projects WHERE id = ?')
-    .bind(projectId).first<{ id: number; founder_id: number | null }>();
+  const proj = await loadProject(c, projectId, user);
   if (!proj) return c.json({ detail: 'Project not found' }, 404);
-  if (user.role === 'founder' && user.founder_id !== proj.founder_id) {
-    return c.json({ detail: 'Forbidden' }, 403);
-  }
+  if (!canReadProject(user, proj)) return c.json({ detail: 'Forbidden' }, 403);
   const holders = await c.env.DB.prepare(
     'SELECT * FROM cap_table_holders WHERE project_id = ? ORDER BY id ASC',
   ).bind(projectId).all();
@@ -998,38 +1435,13 @@ captable.get('/:projectId', async (c) => {
   ).bind(projectId).all();
   return c.json({
     project_id: projectId,
-    holders: holders.results || [],
+    holders: (holders.results || []).map((row: any) => {
+      const out = { ...row };
+      if (!canWriteProject(user, proj)) delete out.email;
+      return out;
+    }),
     securities: securities.results || [],
   });
-});
-
-captable.put('/:projectId/holders', async (c) => {
-  const user = await requireAuth(c);
-  const projectId = Number(c.req.param('projectId'));
-  if (!Number.isFinite(projectId)) return c.json({ detail: 'Invalid project_id' }, 400);
-  const proj = await c.env.DB.prepare('SELECT id, founder_id FROM projects WHERE id = ?')
-    .bind(projectId).first<{ id: number; founder_id: number | null }>();
-  if (!proj) return c.json({ detail: 'Project not found' }, 404);
-  if (user.role === 'founder' && user.founder_id !== proj.founder_id) {
-    return c.json({ detail: 'Forbidden' }, 403);
-  }
-  if (user.role !== 'admin' && user.role !== 'founder') {
-    return c.json({ detail: 'Forbidden' }, 403);
-  }
-  const body: Record<string, unknown> = await c.req.json().catch(() => ({}));
-  const incoming = Array.isArray(body?.holders) ? body.holders as Array<Record<string, unknown>> : [];
-  await c.env.DB.prepare('DELETE FROM cap_table_holders WHERE project_id = ?').bind(projectId).run();
-  for (const h of incoming) {
-    const name = String(h?.name || '').trim().slice(0, 200);
-    if (!name) continue;
-    const shares = h?.shares != null && Number.isFinite(Number(h.shares)) ? Number(h.shares) : 0;
-    const kind = h?.kind ? String(h.kind).slice(0, 40) : 'common';
-    await c.env.DB.prepare(
-      `INSERT INTO cap_table_holders (project_id, name, shares, kind, created_at, updated_at)
-       VALUES (?, ?, ?, ?, datetime('now'), datetime('now'))`,
-    ).bind(projectId, name, shares, kind).run();
-  }
-  return c.json({ ok: true, count: incoming.length });
 });
 
 export default captable;

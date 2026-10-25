@@ -376,7 +376,7 @@ tickets.post('/:id{[0-9]+}/mirror', async (c) => {
   if (!githubConfigured(c.env)) {
     return c.json(refusalBody({
       code: 'github_not_configured',
-      message: 'GitHub Sync is not configured in this environment, so no issue can be opened. Set it up in Admin Console → GitHub Sync.',
+      message: 'GitHub Sync is not configured in this environment, so no issue can be opened. Set it up in HQ › Integration keys › GitHub Sync.',
     }), 409);
   }
   const sql = getSQL(c.env);

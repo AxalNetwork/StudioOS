@@ -41,8 +41,9 @@ const LICENCE = {
   starts_on: '2025-03-01', renews_on: '2028-03-01', term_years: 3, admin_role: 'principal',
 };
 
-test('the six tabs are sub-paths of /admin/my-licence, routed behind the admin guard, and written out as doors', () => {
-  assert.deepEqual(LICENCE_TABS.map((t) => t.label), ['Summary', 'Terms', 'Contract', 'Statements', 'Requests', 'History']);
+test('the seven tabs are sub-paths of /admin/my-licence, routed behind the admin guard, and written out as doors', () => {
+  // D981 (#2376) added Programs after Terms (board GR7).
+  assert.deepEqual(LICENCE_TABS.map((t) => t.label), ['Summary', 'Terms', 'Programs', 'Contract', 'Statements', 'Requests', 'History']);
   assert.equal(tabPath('summary'), '/admin/my-licence');
   const app = read('frontend/src/App.jsx');
   for (const t of LICENCE_TABS.slice(1)) {
@@ -52,7 +53,7 @@ test('the six tabs are sub-paths of /admin/my-licence, routed behind the admin g
   for (const t of LICENCE_TABS) assert.equal(tabFor(t.path), t.key);
   assert.equal(tabFor('/admin/my-licence/terms/'), 'terms');
   assert.equal(tabFor('/admin/my-licence/unknown'), 'summary');
-  // The tab row's literal doors are exactly the six paths (the reachability walk counts literals).
+  // The tab row's literal doors are exactly the seven paths (the reachability walk counts literals).
   const frame = codeOnly(read('frontend/src/pages/subsidiary/LicenceFrame.jsx'));
   const doors = [...frame.matchAll(/<Tab to="([^"]+)" tab="([a-z]+)">/g)].map((m) => [m[2], m[1]]);
   assert.deepEqual(doors, LICENCE_TABS.map((t) => [t.key, t.path]));

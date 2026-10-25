@@ -86,6 +86,8 @@ const STATEMENTS: string[] = [
   `ALTER TABLE job_postings ADD COLUMN equity_pct REAL CHECK (equity_pct IS NULL OR equity_pct BETWEEN 0 AND 100)`,
   // #2181 (migration 507): the founder's switch that shows the band on the public board, off by default.
   `ALTER TABLE job_postings ADD COLUMN comp_public INTEGER NOT NULL DEFAULT 0 CHECK (comp_public IN (0, 1))`,
+  // D931 (migration 550): when a posting entered the review queue, written by submitForReview.
+  `ALTER TABLE job_postings ADD COLUMN submitted_at TEXT`,
 ];
 
 export async function ensureJobBoardSchema(env: Env): Promise<boolean> {

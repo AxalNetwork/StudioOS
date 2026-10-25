@@ -24,6 +24,7 @@ import { MODULES, QUOTE_WITHHELD } from '../src/services/cycleValidate.ts';
 import { VALIDATE_SPECS } from '../src/services/records/validate.ts';
 import { interviewEvidenceLine, interviewEvidenceSince, verdictCard } from '../src/services/verdict.ts';
 import { canReadDecision } from '../src/routes/_founder_validate_helpers.ts';
+import { applySessionTranslationColumns } from './_session_translation_columns.mjs';
 
 const BASELINE = readFileSync(new URL('../sql/schema_baseline.sql', import.meta.url), 'utf8');
 const mig = (name: string) => readFileSync(new URL(`../sql/migrations/${name}`, import.meta.url), 'utf8');
@@ -69,6 +70,7 @@ function world() {
   db.exec(mig('464_verdict_decisions.sql'));
   for (const m of ['214_validate_proposals.sql', '246_fills_the_blanks_everywhere.sql', '438_interview_sessions.sql', '439_validate_proposals_structuring.sql', '446_interview_structure_receipts.sql',
     '447_assistant_interviews.sql', '452_record_session_setup.sql', '453_interview_processing.sql']) db.exec(mig(m));
+    applySessionTranslationColumns(db); // D857: migration 527's segment columns
   db.exec(mig('449_interview_channels.sql').split(';')
     .filter((sql) => /CREATE TABLE IF NOT EXISTS channel_threads \(/.test(sql)).map((sql) => `${sql};`).join('\n'));
   db.exec(mig('488_channel_consents.sql'));
@@ -152,6 +154,8 @@ test('1: a writer sees a module\'s pending suggestions with where each was heard
   const seg = segId(db, SESSION, 20000);
   assert.deepEqual(r.json.parts.suggestions, [{
     id: ids[4], kind: 'timing', payload: { when: 'tomorrow' }, quote: QUOTE_WITHHELD,
+    // D857: no translation was read, so no original and no source language.
+    quote_original: null, source_lang: null,
     interviewee: 'Interviewee A', interview_id: IV, session_id: SESSION, cite_from: 20000,
     segment_id: seg, speaker: '[Interviewee]', href: `/validate/session/${SESSION}?project=${PROJECT}#seg-${seg}`,
   }]);

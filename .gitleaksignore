@@ -71,3 +71,46 @@ fe8fe20055a0ccb2a32530287fbf08aab27420f1:cloudflare-worker/test/validate_sources
 # credential. The next commit uses a lower-entropy placeholder, so no later
 # commit carries it. Scoped to the one finding, as D334's entry is.
 96ce08bedd1d010c3a33accd3786343872b7df40:frontend/test/newsletter_pages_d813.test.mjs:generic-api-key:226
+
+# D849 (#2472): synthetic in-memory signing value in the support-session order
+# fixture's first commit; no provider or deployed environment used it. The
+# fixture now uses the low-entropy test value. Only this historical finding
+# is ignored; the file and all secret-scanning rules remain covered.
+774e90f7030ec634e23591e8e33d1d70b134423f:cloudflare-worker/test/orders_support_session_d849.test.ts:generic-api-key:31
+
+# #2391 / PR #2624: synthetic JWT signing value for an in-memory DD regression
+# fixture. It was never a provider or deployed credential; the following
+# commit replaces the literal. Ignore only this already-pushed historical
+# finding, retaining coverage for every other commit, file and secret rule.
+86bb4cb3819f07a4555f31f8850b3011e7dff3cd:cloudflare-worker/test/dd_external_evidence.test.ts:generic-api-key:13
+
+# #2634: synthetic signing value used only by the in-memory Carta fixture.
+# The next commit replaces it with a generated test value; pin the already
+# pushed finding only, retaining all other file/commit/rule coverage.
+57b1626b52f079eb204c8a296c6085daa1b1e49d:cloudflare-worker/test/carta_oauth_2634.test.ts:generic-api-key:17
+
+# D888 (#2392): synthetic JWT signing literal in the original SQLite-only DD
+# fixture commit, never a production credential. Current fixture derives a
+# low-entropy test-only key. Scope this exception to that one historical finding.
+689cc8c3a3d5143334510e1dcfe41734bc201ded:cloudflare-worker/test/dd_advisor_subject_2392.test.ts:generic-api-key:20
+
+# D916 (#2699): synthetic signing value in the in-memory event fixture only.
+# The next commit uses a generated low-entropy test value. Pin this already
+# pushed finding; keep every other commit, file and secret rule covered.
+65b2ef75d7337fe242f14526403d6781752ac0a7:cloudflare-worker/test/events_d916.test.ts:generic-api-key:15
+
+# D923 / PR #2706: redemptions90 is a UI tile key for the 90-day referral
+# count, not a credential. Ignore only this historical generic-api-key finding.
+beecd4b9f67fda255e419c41b8a54c85566acced:frontend/src/pages/admin/partners/partnersDeskModel.js:generic-api-key:937
+# D1039 (#2887): the synthetic JWT signing string in the D1039 route test's first
+# commit. It signs test tokens for an in-memory database only, and was never a
+# credential. The next commit builds a low-entropy key at run time instead, so no
+# later commit carries the literal. Scoped to the one finding, as D334's entry is.
+a556b308533429691cb10b1e92092615b1364a82:cloudflare-worker/test/approvals_fixes_d1039.test.ts:generic-api-key:34
+# D1013 (#2832): not a secret. The Payments dialogs test typed an example
+# publishable key (`pk_live_` and six letters) into Replace key and asserted the
+# body the page sends; generic-api-key matched it by the `publishable_key`
+# field name. It was never a Stripe key. The next commit builds its example
+# keys at run time, so no later commit carries the literal. Scoped to the one
+# finding, as D334's entry is.
+7c6b24553752f7ca9b115e6acaf37eaf404ff676:frontend/test/payments_dialogs_d1013.test.mjs:generic-api-key:392

@@ -142,7 +142,7 @@ export function PlacementCard({ p, error, busy, onAccept, onDiscard, heard = nul
         ? <a href={heard.href} className="mt-0.5 inline-block text-[11.5px] font-semibold text-violet-700 underline dark:text-violet-300" data-testid={`placement-heard-${p.id}`}>{heard.text}</a>
         : <p className="mt-0.5 text-[11.5px] text-axal-faint" data-testid={`placement-heard-${p.id}`}>{heard.text}</p>)}
       <blockquote className="mt-1 border-l-2 border-violet-300 pl-2 text-[12px] italic text-gray-600 dark:border-violet-700 dark:text-gray-300" data-testid={`placement-cite-${p.id}`}>
-        {p.cite?.quote || 'Quote not recorded'} <span className="not-italic text-axal-faint">· {spanLabel(p.cite?.from, p.cite?.to)}</span>
+        {p.cite?.source_deleted ? (p.cite.source_note || 'Deleted at the source.') : (p.cite?.quote || 'Quote not recorded')} <span className="not-italic text-axal-faint">· {spanLabel(p.cite?.from, p.cite?.to)}</span>
       </blockquote>
       {error && (refusalKind(error) === 'budget'
         ? <BudgetRefusal err={error} />

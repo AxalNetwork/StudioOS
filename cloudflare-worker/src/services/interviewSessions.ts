@@ -57,6 +57,61 @@ export const CHUNK_MIME: Record<string, string> = {
   'audio/x-wav': 'wav',
 };
 
+/**
+ * D872 (#2519) — a call recording uploaded as a file (`submitted_via
+ * 'upload'`). The browser decodes the file and re-encodes it as the one
+ * format below; the chunk route refuses anything else for such a session, so
+ * its bytes are its duration and the cap is exact.
+ */
+export const UPLOAD_SOURCE = 'upload';
+export const UPLOAD_SAMPLE_RATE = 16_000;
+/** 16 kHz, mono, 16-bit PCM: 32 000 bytes a second. */
+export const UPLOAD_BYTES_PER_SECOND = UPLOAD_SAMPLE_RATE * 2;
+/** A canonical WAV header (RIFF, fmt, data), the only one an upload chunk may carry. */
+export const WAV_HEADER_BYTES = 44;
+/** The longest upload: 3 hours, about $0.09 on whisper-large-v3-turbo and $0.94 on nova-3 (D872 §3). */
+export const MAX_UPLOAD_MS = 3 * 3600 * 1000;
+/** How the founder attests that everyone recorded agreed, as the session's consent method. */
+export const UPLOAD_ATTESTATIONS = ['verbal', 'written', 'pre_agreed'] as const;
+
+export interface WavInfo { sampleRate: number; channels: number; bitsPerSample: number; dataOffset: number; dataBytes: number; durationMs: number }
+
+/**
+ * A PCM WAV's format and length, read from its header, or null when the bytes
+ * are not one. `dataBytes` is what the bytes actually hold, never more than
+ * the header claims. The duration is what a decoder plays, so it is what
+ * speech-to-text is charged on (`interviewProcessing.chunkAudioMinutes`).
+ */
+export function wavInfo(bytes: Uint8Array): WavInfo | null {
+  if (bytes.byteLength < WAV_HEADER_BYTES) return null;
+  const v = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
+  const tag = (at: number) => String.fromCharCode(bytes[at], bytes[at + 1], bytes[at + 2], bytes[at + 3]);
+  if (tag(0) !== 'RIFF' || tag(8) !== 'WAVE') return null;
+  let fmt: { format: number; channels: number; sampleRate: number; bitsPerSample: number } | null = null;
+  for (let at = 12; at + 8 <= bytes.byteLength;) {
+    const id = tag(at);
+    const size = v.getUint32(at + 4, true);
+    const body = at + 8;
+    if (id === 'fmt ' && size >= 16 && body + 16 <= bytes.byteLength) {
+      fmt = { format: v.getUint16(body, true), channels: v.getUint16(body + 2, true), sampleRate: v.getUint32(body + 4, true), bitsPerSample: v.getUint16(body + 14, true) };
+    } else if (id === 'data') {
+      if (!fmt || fmt.format !== 1 || !fmt.channels || !fmt.sampleRate || !fmt.bitsPerSample) return null;
+      const dataBytes = Math.min(size, bytes.byteLength - body);
+      const perSecond = fmt.sampleRate * fmt.channels * (fmt.bitsPerSample / 8);
+      return { ...fmt, dataOffset: body, dataBytes, durationMs: Math.round((dataBytes / perSecond) * 1000) };
+    }
+    at = body + size + (size % 2);
+  }
+  return null;
+}
+
+/** Whether a chunk is the upload format exactly: canonical header, 16 kHz, mono, 16-bit PCM, with samples. */
+export function isUploadWav(bytes: Uint8Array): boolean {
+  const w = wavInfo(bytes);
+  return !!w && w.dataOffset === WAV_HEADER_BYTES && w.sampleRate === UPLOAD_SAMPLE_RATE && w.channels === 1
+    && w.bitsPerSample === 16 && w.dataBytes > 0 && w.dataBytes === bytes.byteLength - WAV_HEADER_BYTES;
+}
+
 export interface SessionRow {
   id: number; uid: string; interview_id: number; project_id: number; created_by_user_id: number;
   channel: Channel; status: string; consent_status: string; consent_method: string | null; consent_at: string | null;
@@ -73,6 +128,8 @@ export interface SessionRow {
   digest_status?: 'queued' | 'running' | 'done' | 'refused' | 'skipped' | null; digest_note?: string | null;
   digest_hash?: string | null; digest_trigger?: string | null; digest_run_id?: string | null; digested_at?: string | null;
   digest_json?: string | null; digest_kept_at?: string | null; digest_kept_by?: number | null;
+  // D877 (migration 530): the audio went, the text stayed.
+  audio_removed_at?: string | null; audio_removed_reason?: AudioRemovedReason | null;
 }
 
 export async function loadSession(env: Env, id: number): Promise<SessionRow | null> {
@@ -181,7 +238,7 @@ export async function transition(env: Env, session: SessionRow, action: keyof ty
             started_at = COALESCE(started_at, CASE WHEN ? = 1 THEN datetime('now') END),
             stopped_at = CASE WHEN ? = 'stop' THEN datetime('now') ELSE stopped_at END,
             updated_at = datetime('now')
-      WHERE id = ? AND status IN (?, ?)`,
+      WHERE id = ? AND status IN (?, ?) AND COALESCE(submitted_via, '') <> 'meeting_bot'`,
   ).bind(t.to, closesInterval ? 1 : 0, opensInterval ? 1 : 0, closesInterval ? 1 : 0, opensInterval ? 1 : 0,
     action, session.id, fromA, fromB).run();
   const changed = Number(r.meta?.changes || 0) === 1;
@@ -240,7 +297,10 @@ export async function listChunks(env: Env, sessionId: number): Promise<ChunkRow[
 }
 
 /** A passage ready to store: its offsets, speaker label and text. */
-export interface StoredSegment { start_ms: number | null; end_ms: number | null; speaker_label: string; speaker_raw: string | null; text: string }
+/** D866 §4: a content-free tombstone keeps the passage's position stable. */
+export const SOURCE_DELETED_TEXT = '[Deleted at the source]';
+export const SOURCE_DELETED_NOTE = 'The source message was deleted in Telegram.';
+export interface StoredSegment { start_ms: number | null; end_ms: number | null; speaker_label: string; speaker_raw: string | null; text: string; source_ref?: string | null }
 
 export function labelSegments(segments: SttSegment[], intervieweeName: string | null, offsetMs = 0): StoredSegment[] {
   return segments.map((s) => ({
@@ -303,12 +363,50 @@ export async function recordReceipt(env: Env, sessionId: number, r: {
     Math.max(0, Math.round(r.cost_microusd)), r.outcome, r.refusal ?? null).run();
 }
 
+/** D877 (#2524) — why a session's audio went while its text stayed. */
+export type AudioRemovedReason = 'retention' | 'deleted';
+
+/**
+ * D877 (#2524) — remove a session's audio and keep its text: the R2 chunks
+ * first, then their rows, then `audio_removed_at` and its reason on the
+ * session, and one audit row. The segments, marks, receipts, digest and every
+ * accepted item stay. Keys outside the feature's prefix are never deleted,
+ * whatever a row says. `actorUserId` is null for the retention purge.
+ */
+export async function deleteSessionAudio(env: Env, session: SessionRow, actorUserId: number | null, reason: AudioRemovedReason): Promise<{ keys: string[] }> {
+  if (env.MEETING_BOT_RUN) {
+    const { stopSessionBot } = await import('./meetingBots');
+    await stopSessionBot(env, session.id, session.created_by_user_id);
+  }
+  const keys = (await listChunks(env, session.id)).map((c) => c.r2_key).filter((k) => k.startsWith(AUDIO_PREFIX));
+  if (keys.length && env.FILES) {
+    for (let i = 0; i < keys.length; i += 1000) await env.FILES.delete(keys.slice(i, i + 1000));
+  }
+  await env.DB.batch([
+    env.DB.prepare('DELETE FROM interview_session_chunks WHERE session_id = ?').bind(session.id),
+    env.DB.prepare(
+      `UPDATE interview_sessions SET audio_removed_at = COALESCE(audio_removed_at, datetime('now')),
+              audio_removed_reason = COALESCE(audio_removed_reason, ?), updated_at = datetime('now') WHERE id = ?`,
+    ).bind(reason, session.id),
+    env.DB.prepare(
+      `INSERT INTO activity_logs (action, details, actor, user_id, project_id) VALUES (?, ?, ?, ?, ?)`,
+    ).bind('interview_session_audio_deleted', JSON.stringify({
+      session_uid: session.uid, interview_id: session.interview_id, reason, audio_chunks: keys.length,
+    }), actorUserId ? `user:${actorUserId}` : 'system:call_audio_retention', actorUserId ?? session.created_by_user_id, session.project_id),
+  ]);
+  return { keys };
+}
+
 /**
  * Delete a session: its R2 chunks first, then its rows, then one audit row in
  * `activity_logs` naming what was removed. Keys outside the feature's prefix
  * are never deleted, whatever a row says.
  */
 export async function deleteSession(env: Env, session: SessionRow, actorUserId: number): Promise<{ keys: string[] }> {
+  if (env.MEETING_BOT_RUN) {
+    const { stopSessionBot } = await import('./meetingBots');
+    await stopSessionBot(env, session.id, session.created_by_user_id);
+  }
   const keys = (await listChunks(env, session.id)).map((c) => c.r2_key).filter((k) => k.startsWith(AUDIO_PREFIX));
   if (keys.length && env.FILES) {
     for (let i = 0; i < keys.length; i += 1000) await env.FILES.delete(keys.slice(i, i + 1000));
@@ -323,7 +421,10 @@ export async function deleteSession(env: Env, session: SessionRow, actorUserId: 
   const findings = (await presentTables(env, ['interview_findings'])).has('interview_findings')
     ? [env.DB.prepare('UPDATE interview_findings SET quote = NULL, cite_from = NULL, cite_to = NULL WHERE session_id = ?').bind(session.id)]
     : [];
+  const botTables = await presentTables(env, ['meeting_bots', 'meeting_bot_events']);
   await env.DB.batch([
+    ...(botTables.has('meeting_bots') && botTables.has('meeting_bot_events') ? [env.DB.prepare('DELETE FROM meeting_bot_events WHERE run_uid IN (SELECT uid FROM meeting_bots WHERE session_id = ?)').bind(session.id)] : []),
+    ...(botTables.has('meeting_bots') ? [env.DB.prepare('DELETE FROM meeting_bots WHERE session_id = ?').bind(session.id)] : []),
     ...findings,
     // D667 — the session's PENDING proposals go with it, whoever proposed
     // them (StudioOS or an assistant): each carries a quote of a transcript

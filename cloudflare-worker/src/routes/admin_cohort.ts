@@ -8,12 +8,19 @@
  *   POST /override              → { user_id, cycle_id, week, decision: pass|fail, reason } — reason REQUIRED,
  *                                 logged to stage_transition_log with triggered_by='admin'
  *   GET  /impersonation-audit   → recent impersonation_sessions rows
+ *   GET  /participants, /participants/:uid → D946's participants read (admin_lab_participants.ts)
+ *   POST /applications/:id/move, /applications/bulk-decide, /applications/admit
+ *                               → D945's writes (admin_lab_writes.ts), through D943's
+ *                                 one decision path (services/labDecisions.ts)
  *
  * All admin decisions write stage_transition_log (audit) and notify the
  * founder instantly. Grace extensions defer the scheduler's decision until
  * grace_until; the cron's grace-expiry sweep finalizes them.
  */
-import { Hono } from 'hono';
+import { Hono, type Context } from 'hono';
+import adminLabReads from './admin_lab';
+import adminLabParticipants from './admin_lab_participants';
+import adminLabOperations from './admin_lab_operations';
 import type { Env } from '../types';
 import { requireAdmin, requireSuperAdmin, requireBranchNotSuspended } from '../auth';
 import { hashEmail } from '../util/hashEmail';
@@ -24,8 +31,17 @@ import {
   sqliteUtcToMs,
 } from '../services/cohortTiming';
 import { MILESTONES } from '../services/spinoutLabCatalog';
+import { APPLICANT_BY_APPLICATION_SQL, APPLICANT_BY_ID_SQL, DECISION_STATUSES, decideApplicant, type DecisionStatus } from '../services/labDecisions';
+import adminLabWrites from './admin_lab_writes';
 
 const r = new Hono<{ Bindings: Env }>();
+r.route('/', adminLabReads);
+// D946 (#2751): the participants read, SL7 and SL8.
+r.route('/', adminLabParticipants);
+// D971: settings and the Lab history, with no read-time bootstrap.
+r.route('/', adminLabOperations);
+// D945 (#2750): move to another cohort, bulk decisions, admit without an application.
+r.route('/', adminLabWrites);
 
 const isoNow = (): string => new Date().toISOString().replace('T', ' ').slice(0, 19);
 
@@ -127,6 +143,7 @@ r.get('/review', async (c) => {
 
 r.post('/grace', async (c) => {
   const adminUser = await requireAdmin(c);
+  await requireBranchNotSuspended(c);
   await ensureCohortTimingSchema(c.env);
   const body = await c.req.json().catch(() => ({}));
   const userId = parseInt(String(body.user_id ?? '')) || 0;
@@ -159,6 +176,7 @@ r.post('/grace', async (c) => {
 
 r.post('/override', async (c) => {
   const adminUser = await requireAdmin(c);
+  await requireBranchNotSuspended(c);
   await ensureCohortTimingSchema(c.env);
   const body = await c.req.json().catch(() => ({}));
   const userId = parseInt(String(body.user_id ?? '')) || 0;
@@ -331,6 +349,7 @@ r.get('/applications', async (c) => {
 
 r.post('/applications/settings', async (c) => {
   const adminUser = await requireAdmin(c);
+  await requireBranchNotSuspended(c);
   const { ensureCohortAppSchema, logCycleEvent } = await import('../services/cohortApplications');
   await ensureCohortAppSchema(c.env);
   const body = (await c.req.json().catch(() => ({}))) as { min_cohort_size?: unknown; max_cohort_size?: unknown };
@@ -354,155 +373,56 @@ r.post('/applications/settings', async (c) => {
   return c.json({ ok: true });
 });
 
-r.post('/applications/:applicant_id/decide', async (c) => {
+export async function decideCohortApplication(c: Context<{ Bindings: Env }>, legacy = false) {
   const adminUser = await requireAdmin(c);
   // D107 — a suspended branch's queues are frozen: 423, after the admin gate.
   await requireBranchNotSuspended(c);
-  const { ensureCohortAppSchema, logCycleEvent, notifyOnce, monthLabel } = await import('../services/cohortApplications');
+  const { ensureCohortAppSchema, monthLabel } = await import('../services/cohortApplications');
   await ensureCohortAppSchema(c.env);
-  const applicantId = parseInt(c.req.param('applicant_id'));
-  if (!Number.isFinite(applicantId)) return c.json({ error: 'Invalid applicant id' }, 400);
+  const targetId = Number(c.req.param(legacy ? 'app_id' : 'applicant_id'));
+  if (!Number.isSafeInteger(targetId) || targetId < 1) return refusal(c, 400, 'invalid_applicant', 'That application id is not valid.');
   const body = (await c.req.json().catch(() => ({}))) as {
-    status?: unknown; reason?: unknown; applicant_note?: unknown; applicant_asks?: unknown;
+    status?: unknown; decision?: unknown; cohort?: unknown; confirm_over_places?: unknown; reason?: unknown; applicant_note?: unknown; applicant_asks?: unknown;
   };
-  const status = (typeof body.status === 'string' ? body.status : '').trim().toLowerCase();
+  const decision = (typeof body.decision === 'string' ? body.decision : '').trim().toLowerCase();
+  const status = legacy ? (decision === 'accepted' ? 'approved' : decision === 'refused' ? 'rejected' : '')
+    : (typeof body.status === 'string' ? body.status : '').trim().toLowerCase();
+  if (legacy && body.cohort != null) return refusal(c, 400, 'cohort_label_unsupported', 'Use the application’s assigned cohort; a free-text cohort label cannot select it.');
   const reason = (typeof body.reason === 'string' ? body.reason : '').trim().slice(0, 500);
   // D383 — what the APPLICANT is told, written for them. Optional, and kept
   // apart from `reason`, which is the admin's required note and never shown.
   const applicantNote = (typeof body.applicant_note === 'string' ? body.applicant_note : '').trim().slice(0, 2000);
   const { normaliseAsks } = await import('../services/applicationLifecycle');
   const applicantAsks = normaliseAsks(body.applicant_asks);
-  if (!['approved', 'rejected', 'waitlisted'].includes(status)) {
+  if (!(DECISION_STATUSES as readonly string[]).includes(status)) {
     return c.json({ error: "status must be 'approved', 'rejected' or 'waitlisted'" }, 400);
   }
   if (!reason) return c.json({ error: 'A reason is required for every decision' }, 400);
-  const row = await c.env.DB.prepare(
-    `SELECT ca.*, cc.year, cc.month, cc.app_status, sa.company_name FROM cohort_applicants ca
-       JOIN cohort_cycles cc ON cc.id = ca.cohort_cycle_id
-       LEFT JOIN spinout_applications sa ON sa.id = ca.application_id WHERE ca.id = ?`,
-  ).bind(applicantId).first<Record<string, unknown>>();
-  if (!row) return c.json({ error: 'Applicant not found' }, 404);
-  // D383 — a withdrawn applicant left the pool themselves; deciding them
-  // would put back an application its owner took out.
-  if (['activated', 'rolled_forward', 'withdrawn'].includes(String(row.status))) {
-    return c.json({ error: `Applicant is already ${row.status}` }, 409);
+  if (legacy) {
+    const app = await c.env.DB.prepare('SELECT id FROM spinout_applications WHERE id = ?').bind(targetId).first();
+    if (!app) return refusal(c, 404, 'application_not_found', 'That application does not exist.');
   }
-  await c.env.DB.prepare(
-    `UPDATE cohort_applicants SET status = ?, decided_at = datetime('now'), decided_by = ?, decision_reason = ?
-      WHERE id = ? AND status NOT IN ('activated', 'rolled_forward', 'withdrawn')`,
-  ).bind(status, `admin:${adminUser.id}`, reason, applicantId).run();
-  // Keep the legacy spinout_applications row in lockstep so /apply's
-  // "one pending application" gate and the founder-side UI stay correct:
-  //   rejected  → 'refused' (frees the founder to re-apply)
-  //   approved/waitlisted → back to 'pending' if previously refused
-  //     (still in play; activation flips approved → 'accepted' on the 1st)
-  const appId = Number(row.application_id);
-  if (status === 'rejected') {
-    await c.env.DB.prepare(
-      `UPDATE spinout_applications SET status = 'refused', decided_at = datetime('now') WHERE id = ? AND status = 'pending'`,
-    ).bind(appId).run();
-  } else {
-    await c.env.DB.prepare(
-      `UPDATE spinout_applications SET status = 'pending', decided_at = NULL WHERE id = ? AND status = 'refused'`,
-    ).bind(appId).run();
-  }
-  // null when no note was sent; false when one was sent and did not save, so
-  // the console can say the applicant was not told rather than assume it.
-  let applicantNoteSaved: boolean | null = null;
-  if (applicantNote) {
-    applicantNoteSaved = false;
-    try {
-      await c.env.DB.prepare(
-        `UPDATE spinout_applications
-            SET applicant_note = ?, applicant_asks_json = ?, applicant_note_at = datetime('now')
-          WHERE id = ?`,
-      ).bind(applicantNote, applicantAsks.length ? JSON.stringify(applicantAsks) : null, appId).run();
-      applicantNoteSaved = true;
-    } catch (e) {
-      console.error('[admin-cohort/decide] applicant note write failed', (e as Error)?.message);
-    }
+  const statement = legacy
+    ? c.env.DB.prepare(APPLICANT_BY_APPLICATION_SQL)
+    : c.env.DB.prepare(APPLICANT_BY_ID_SQL);
+  const row = await statement.bind(targetId).first<Record<string, unknown>>();
+  if (!row) return legacy
+    ? refusal(c, 400, 'cohort_required', 'This application has no assigned cohort. Assign it to a cohort before deciding it.')
+    : refusal(c, 404, 'applicant_not_found', 'That cohort applicant does not exist.');
+  const out = await decideApplicant(c.env, adminUser, row, {
+    status: status as DecisionStatus, reason, confirmOverPlaces: body.confirm_over_places === true, applicantNote, applicantAsks,
+  });
+  if (!out.ok) {
+    return out.code === 'applicant_terminal' ? c.json({ error: out.message }, 409) : refusal(c, out.status, out.code, out.message);
   }
   const label = monthLabel(Number(row.year), Number(row.month));
-  const cycleId = Number(row.cohort_cycle_id);
-  const userId = Number(row.user_id);
-  // Templated admission-decision email (accepted → welcome link, refused →
-  // re-apply link). The in-app notification below stays, but with email: false
-  // for approved/rejected so candidates don't get two emails for one decision.
-  let emailed = false;
-  // True once the templated decision email is accounted for — either sent by
-  // this call, or already claimed earlier (re-decide, retry, or the legacy
-  // admin decide route which claims the same ledger key). notifyOnce below
-  // must not email in either case, only when no decision email ever went out.
-  let emailHandled = false;
-  if (status === 'approved' || status === 'rejected') {
-    try {
-      // Idempotency: at most ONE decision email per (user, cycle, decision).
-      const { claimDecisionEmail } = await import('../services/cohortApplications');
-      const alreadyClaimed = !(await claimDecisionEmail(c.env, userId, cycleId, status));
-      if (alreadyClaimed) emailHandled = true;
-      const target = alreadyClaimed
-        ? null
-        : await c.env.DB.prepare(`SELECT email, name FROM users WHERE id = ?`)
-            .bind(userId).first<{ email: string; name: string | null }>();
-      if (target?.email) {
-        const { send } = await import('../services/email/send');
-        const appUrl = (c.env.APP_URL || 'https://axal.vc').replace(/\/+$/, '');
-        if (status === 'approved') {
-          const labUrl = `${appUrl}/spinout-lab`;
-          const r = await send(c.env, 'spinout_admitted', target.email, {
-            name: target.name || 'there',
-            cohort_label: label,
-            lab_url: labUrl,
-          }, { userId, ctaUrl: labUrl });
-          emailed = !!r?.ok;
-          if (emailed) emailHandled = true;
-        } else {
-          const y = Number(row.year); const m = Number(row.month);
-          const nextLabel = monthLabel(m === 12 ? y + 1 : y, m === 12 ? 1 : m + 1);
-          const applyUrl = `${appUrl}/spinout-lab/apply`;
-          const r = await send(c.env, 'spinout_refused', target.email, {
-            name: target.name || 'there',
-            company_name: String(row.company_name || 'your startup'),
-            cohort_label: label,
-            next_cohort_label: nextLabel,
-            apply_url: applyUrl,
-          }, { userId, ctaUrl: applyUrl });
-          emailed = !!r?.ok;
-          if (emailed) emailHandled = true;
-        }
-      }
-    } catch (e) {
-      console.error('[admin-cohort/decide] decision email failed', e);
-    }
-  }
-  if (status === 'approved') {
-    await notifyOnce(c.env, {
-      userId, cycleId, notifType: 'decision_approved',
-      title: `You're in — ${label} Spin-Out Lab cohort`,
-      body: `Your application was approved for the ${label} cohort. Your workspace unlocks automatically when the cohort starts on the 1st.`,
-      email: !emailHandled,
-    });
-  } else if (status === 'rejected') {
-    await notifyOnce(c.env, {
-      userId, cycleId, notifType: 'decision_rejected',
-      title: `Spin-Out Lab ${label} cohort decision`,
-      body: `Your application wasn't selected for the ${label} cohort this time. You're welcome to apply again for a future cohort.`,
-      link: '/spinout-lab/apply',
-      email: !emailHandled,
-    });
-  } else {
-    await notifyOnce(c.env, {
-      userId, cycleId, notifType: 'decision_waitlisted',
-      title: `You're waitlisted for the ${label} cohort`,
-      body: `Your application is on the waitlist for the ${label} cohort. If a spot opens — or the cohort rolls forward — you'll be moved automatically.`,
-    });
-  }
-  await logCycleEvent(c.env, cycleId, `applicant_${status}`,
-    `Applicant #${applicantId} (user_id=${userId}) ${status}: ${reason}`, `admin:${adminUser.id}`);
-  await logActivity(c.env, adminUser.email, adminUser.id, `cohort_applicant_${status}`,
-    `Admin ${adminUser.name} marked applicant #${applicantId} ${status} for ${label} (reason: ${reason})`);
-  return c.json({ ok: true, status, emailed, applicant_note_saved: applicantNoteSaved });
-});
+  return c.json({
+    ok: true, status: legacy ? decision : status, emailed: out.emailed, applicant_note_saved: out.applicant_note_saved,
+    ...(legacy ? { cohort: status === 'approved' ? label : null } : {}),
+  });
+}
+
+r.post('/applications/:applicant_id/decide', (c) => decideCohortApplication(c));
 
 // D383 — the partner interview. Schedule (or re-schedule: a new row, the
 // previous one cancelled) and cancel. Frozen with the rest of the queue
@@ -583,6 +503,7 @@ r.post('/applications/:applicant_id/interview/cancel', async (c) => {
 
 r.post('/applications/cycles/:cycle_id/force-proceed', async (c) => {
   const adminUser = await requireAdmin(c);
+  await requireBranchNotSuspended(c);
   const { ensureCohortAppSchema, logCycleEvent, monthLabel } = await import('../services/cohortApplications');
   await ensureCohortAppSchema(c.env);
   const cycleId = parseInt(c.req.param('cycle_id'));

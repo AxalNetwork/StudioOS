@@ -1,3 +1,4 @@
+import { readableRoomFiles, mercuryRunway, mercuryFacts, verifiedMonthlyRevenue, selectedCheckSources } from './raiseEvidence';
 /**
  * D663 — the Raise cycle's reads: four figures, seven cards, seven record
  * tables. Mounted by `routes/cycle_raise.ts` at `/api/cycles/raise`.
@@ -31,6 +32,10 @@ import { roundCallsEnabled } from './roundCallPolicy';
 import { peerBenchmark, type PeerBenchmark } from './peerBenchmark';
 import { SERVED_FUNDS } from './researchFundDirectory';
 import { focusTokens, mapCompanySector, mapFundFocus, normalizeLabel } from './researchTaxonomy';
+import { deckReaders, readBySentence } from './narrative/readers';
+import { inputsFrom, readCapTable } from './capTableToday';
+import { simulate } from './captable';
+import { deckShareMetrics } from './deckShareUse';
 
 export { recordQuery };
 export type { RecordQuery };
@@ -100,10 +105,10 @@ export const READINESS_ITEMS = [
 ] as const;
 export type ReadinessKey = (typeof READINESS_ITEMS)[number]['key'];
 export const READINESS_KEYS: readonly string[] = READINESS_ITEMS.map((i) => i.key);
-export const EVIDENCE = ['anecdote', 'pattern', 'measured'] as const;
-const EVIDENCE_TONE: Record<string, string> = { measured: 'v1', pattern: 'v2', anecdote: 'v3' };
+export const EVIDENCE = ['anecdote', 'pattern', 'stated', 'measured'] as const;
+const EVIDENCE_TONE: Record<string, string> = { measured: 'v1', stated: 'v2', pattern: 'v2', anecdote: 'v3' };
 
-export type ScoreRow = { item_id: number; item_key: string; score: number; evidence: string; missing: string | null; source: string; scored_at: string };
+export type ScoreRow = { item_id: number; item_key: string; score: number | null; evidence: string | null; missing: string | null; source: string; scored_at: string };
 export type ItemRow = { id: number; item_key: string; label: string; position: number };
 
 export async function loadReadiness(ctx: Ctx): Promise<{ items: ItemRow[]; scores: ScoreRow[] }> {
@@ -115,7 +120,7 @@ export async function loadReadiness(ctx: Ctx): Promise<{ items: ItemRow[]; score
        FROM readiness_scores s JOIN readiness_items i ON i.id = s.item_id
       WHERE s.project_id = ? ORDER BY s.scored_at, s.id`,
   ).bind(ctx.projectId).all<ScoreRow>();
-  return { items: items.results || [], scores: scores.results || [] };
+  return { items: items.results || [], scores: (scores.results || []).filter(s => READINESS_KEYS.includes(s.item_key) && (s.item_key === 'team' || s.source === 'computed') && !(s.source === 'manual' && s.evidence === 'measured')) };
 }
 
 /** The newest score each item has, as of the end of `asOf` (or now). */
@@ -129,8 +134,8 @@ export function latestScores(scores: ScoreRow[], asOf?: string): Map<number, Sco
 }
 
 /** The overall score out of 100: the mean of each scored item's newest score. Null with none. */
-export function overallReadiness(latest: Iterable<{ score: number }>): number | null {
-  const xs = [...latest].map((s) => Number(s.score)).filter((n) => Number.isFinite(n));
+export function overallReadiness(latest: Iterable<{ score: number | null }>): number | null {
+  const xs = [...latest].filter(s => s.score != null).map((s) => Number(s.score)).filter((n) => Number.isFinite(n));
   if (xs.length === 0) return null;
   return Math.round((xs.reduce((a, b) => a + b, 0) / xs.length) * 10);
 }
@@ -148,7 +153,7 @@ export function readinessHistory(scores: ScoreRow[]): Array<{ day: string; score
 
 /** One input a computed check read: what it counted, and whether that input is met (D691 decision 8). */
 export type ReadRow = { a: string; b: string; c: 'Counted' | 'Partial' | 'Missing'; tone: 'ok' | 'amb' | 'bad' };
-export type ComputedScore = { key: ReadinessKey; score: number; evidence: 'measured'; missing: string | null; reads: ReadRow[] };
+export type ComputedScore = { compared_count?: number; key: ReadinessKey; score: number | null; evidence: 'measured' | 'stated' | null; missing: string | null; reads: ReadRow[] };
 const met = (ok: boolean, partial = false): Pick<ReadRow, 'c' | 'tone'> => (ok ? { c: 'Counted', tone: 'ok' } : partial ? { c: 'Partial', tone: 'amb' } : { c: 'Missing', tone: 'bad' });
 
 /**
@@ -164,15 +169,12 @@ export async function computeReadiness(env: Env, projectId: number): Promise<Com
   const scen = await env.DB.prepare(
     'SELECT COUNT(*) AS n FROM cap_table_scenarios WHERE project_id = ? AND COALESCE(is_variant, 0) = 0',
   ).bind(projectId).first<{ n: number }>();
-  const mapped = await env.DB.prepare(
-    `SELECT DISTINCT checklist_item FROM data_room_files WHERE project_id = ? AND checklist_item IS NOT NULL`,
-  ).bind(projectId).all<{ checklist_item: string }>();
+  const accessible = await readableRoomFiles(env, projectId);
+  const mapped = { results: accessible.filter(f => f.checklist_item != null) };
   const latestVersion = await env.DB.prepare(
     `SELECT MAX(version) AS v FROM spinout_deck_overrides WHERE project_id = ? AND version > 0`,
   ).bind(projectId).first<{ v: number | null }>();
-  const staged = await env.DB.prepare(
-    'SELECT COUNT(*) AS files, COUNT(DISTINCT folder_id) AS folders FROM data_room_files WHERE project_id = ?',
-  ).bind(projectId).first<{ files: number; folders: number }>();
+  const staged = { files: accessible.length, folders: new Set(accessible.map(f => f.folder_id).filter(f => f != null)).size };
 
   // Each check says what it read beside its score (decision 8); no score changes.
   const out: ComputedScore[] = [];
@@ -202,13 +204,16 @@ export async function computeReadiness(env: Env, projectId: number): Promise<Com
   });
 
   const fieldOf = (v: unknown) => (num(v) ?? 0) > 0;
-  const traction = fieldOf(p?.revenue) || fieldOf(p?.mrr) || fieldOf(p?.paying_customers);
+  const verifiedRevenue = await verifiedMonthlyRevenue(env, projectId);
+  const measuredRevenue = verifiedRevenue != null && Number(verifiedRevenue.cents) > 0;
+  const traction = measuredRevenue || fieldOf(p?.revenue) || fieldOf(p?.mrr) || fieldOf(p?.paying_customers);
   out.push({
-    key: 'traction', score: traction ? 10 : 0, evidence: 'measured', missing: traction ? null : 'Log revenue or update your proof fields.',
+    key: 'traction', score: traction ? 10 : 0, evidence: measuredRevenue ? 'measured' : 'stated', missing: traction ? null : 'Log revenue or update your proof fields.',
     reads: [
-      { a: 'Revenue', b: fieldOf(p?.revenue) ? usd(Number(p!.revenue)) : 'not recorded', ...met(fieldOf(p?.revenue), traction) },
-      { a: 'MRR', b: fieldOf(p?.mrr) ? usd(Number(p!.mrr)) : 'not recorded', ...met(fieldOf(p?.mrr), traction) },
-      { a: 'Paying customers', b: fieldOf(p?.paying_customers) ? String(Math.round(Number(p!.paying_customers))) : 'not recorded', ...met(fieldOf(p?.paying_customers), traction) },
+      { a: 'Verified revenue', b: verifiedRevenue ? `${usd(verifiedRevenue.cents / 100)} · ${verifiedRevenue.month}` : 'not recorded', ...met(measuredRevenue) },
+      { a: 'Revenue (stated)', b: fieldOf(p?.revenue) ? usd(Number(p!.revenue)) : 'not recorded', ...met(fieldOf(p?.revenue), traction) },
+      { a: 'MRR (stated)', b: fieldOf(p?.mrr) ? usd(Number(p!.mrr)) : 'not recorded', ...met(fieldOf(p?.mrr), traction) },
+      { a: 'Paying customers (stated)', b: fieldOf(p?.paying_customers) ? String(Math.round(Number(p!.paying_customers))) : 'not recorded', ...met(fieldOf(p?.paying_customers), traction) },
     ],
   });
 
@@ -219,7 +224,7 @@ export async function computeReadiness(env: Env, projectId: number): Promise<Com
     key: 'data_room', score: Math.round((known.size / DILIGENCE_CHECKLIST.length) * 10), evidence: 'measured',
     missing: open === 0 ? null : `${plural(open, 'checklist item has', 'checklist items have')} no file.`,
     reads: [
-      { a: 'Files staged', b: files ? `${files} in ${plural(Number(staged?.folders ?? 0), 'folder', 'folders')}` : 'none uploaded', ...met(files > 0) },
+      { a: 'Files investors can download', b: files ? `${files} in ${plural(Number(staged?.folders ?? 0), 'folder', 'folders')}` : 'none downloadable', ...met(files > 0) },
       { a: 'Diligence checklist covered', b: `${known.size} of ${DILIGENCE_CHECKLIST.length} items`, ...met(open === 0, known.size > 0) },
     ],
   });
@@ -227,19 +232,20 @@ export async function computeReadiness(env: Env, projectId: number): Promise<Com
   const v = num(latestVersion?.v);
   if (v == null) {
     out.push({
-      key: 'narrative', score: 0, evidence: 'measured', missing: 'Save an investor narrative version.',
+      key: 'narrative', score: null, evidence: null, missing: 'Not enough recorded · save an investor narrative version.',
       reads: [{ a: 'Narrative versions', b: 'none saved', ...met(false) }],
     });
   } else {
-    const m = await env.DB.prepare('SELECT COUNT(*) AS n FROM narrative_checks WHERE project_id = ? AND version = ?')
-      .bind(projectId, v).first<{ n: number }>();
-    const mismatches = Number(m?.n ?? 0);
+    const { stated, metrics, compared } = await checkInputs(env, projectId, v);
+    // Re-score compares the current evidence itself; an empty or stale stored
+    // mismatch list is not proof that a version agrees with today's figures.
+    const mismatches = consistencyCheck(stated, metrics).length;
     out.push({
-      key: 'narrative', score: Math.max(0, 10 - 2 * mismatches), evidence: 'measured',
-      missing: mismatches === 0 ? null : `${plural(mismatches, 'figure differs', 'figures differ')} from the stored metrics.`,
+      compared_count: compared, key: 'narrative', score: compared > 0 ? Math.max(0, 10 - 2 * mismatches) : null, evidence: compared > 0 ? 'measured' : null,
+      missing: compared === 0 ? 'Not enough recorded' : mismatches === 0 ? null : `${plural(mismatches, 'figure differs', 'figures differ')} from the stored metrics.`,
       reads: [
         { a: 'Newest version', b: `v${v}`, ...met(true) },
-        { a: 'Consistency check', b: mismatches ? plural(mismatches, 'mismatch', 'mismatches') : 'no mismatch', ...met(mismatches === 0, true) },
+        { a: 'Consistency check', b: compared === 0 ? 'Not enough recorded · nothing compared yet' : `${compared} compared · ${plural(mismatches, 'mismatch', 'mismatches')}`, ...met(compared > 0 && mismatches === 0, compared > 0) },
       ],
     });
   }
@@ -270,10 +276,10 @@ const LATEST_WRITE: Record<Exclude<ReadinessKey, 'team'>, string | null> = {
  * something other than that score (a deleted row leaves no newer write).
  */
 export async function changedSinceScored(
-  env: Env, projectId: number, c: ComputedScore, newest: { score: number; missing: string | null; scored_at: string } | undefined,
+  env: Env, projectId: number, c: ComputedScore, newest: { score: number | null; missing: string | null; scored_at: string } | undefined,
 ): Promise<boolean> {
   if (!newest) return true;
-  if (Number(newest.score) !== c.score || (newest.missing ?? null) !== c.missing) return true;
+  if (newest.score !== c.score || (newest.missing ?? null) !== c.missing) return true;
   const sql = LATEST_WRITE[c.key as Exclude<ReadinessKey, 'team'>];
   if (sql == null) return true;
   // Each statement names the venture once per store it reads.
@@ -298,7 +304,7 @@ export async function readinessCard(ctx: Ctx): Promise<Card> {
       kind: 'hbar',
       items: items.map((i) => {
         const s = latest.get(Number(i.id));
-        return { label: i.label, value: s ? Number(s.score) : null, tone: s ? EVIDENCE_TONE[s.evidence] ?? 'grey' : 'grey' };
+        return { label: i.label, value: s?.score != null ? Number(s.score) : null, tone: s?.score != null && s.evidence ? EVIDENCE_TONE[s.evidence] ?? 'grey' : 'grey' };
       }),
       legend: [{ label: 'Measured', tone: 'v1' }, { label: 'Pattern', tone: 'v2' }, { label: 'Anecdote', tone: 'v3' }],
     }];
@@ -326,7 +332,7 @@ export async function readinessCard(ctx: Ctx): Promise<Card> {
  * not become unreadable because the benchmark could not be read.
  */
 export function benchmarkRows(b: PeerBenchmark): Array<{ label: string; value: string | number | null; tone?: string }> {
-  const own = { label: 'Your venture score', value: b.own_score };
+  const own = { label: 'Your Lab score', value: b.own_score };
   if (b.state === 'ok' && b.group) {
     return [
       own,
@@ -354,9 +360,9 @@ async function readinessRecords(ctx: Ctx, rq: RecordQuery): Promise<Records> {
   const latest = latestScores(scores);
   let rows = items.map((i) => ({ i, s: latest.get(Number(i.id)) ?? null })).filter(({ i }) => has(rq.q, i.label));
   const state = rq.filter.state;
-  if (state === 'scored') rows = rows.filter(({ s }) => s != null);
+  if (state === 'scored') rows = rows.filter(({ s }) => s?.score != null);
   else if (state === 'gap') rows = rows.filter(({ s }) => s != null && String(s.missing ?? '').trim() !== '');
-  else if (state === 'not_scored') rows = rows.filter(({ s }) => s == null);
+  else if (state === 'not_scored') rows = rows.filter(({ s }) => s?.score == null);
   // Score, highest first, is the default; an item no one scored comes last.
   if (rq.sort !== 'order') rows.sort((a, b) => (b.s?.score ?? -1) - (a.s?.score ?? -1));
   return paged(
@@ -365,7 +371,7 @@ async function readinessRecords(ctx: Ctx, rq: RecordQuery): Promise<Records> {
       // D691 decision 3: the item's key, the same in every list, record and write.
       id: READINESS_KEYS.includes(i.item_key) ? i.item_key : null,
       cells: {
-        item: i.label, score: s ? Number(s.score) : null, evidence: s?.evidence ?? null,
+        item: i.label, score: s?.score != null ? Number(s.score) : null, evidence: s?.score != null ? s.evidence : null,
         missing: s ? s.missing ?? '' : null, updated: s ? day(s.scored_at) : null,
       },
     })),
@@ -389,9 +395,9 @@ export const INVESTOR_TYPE_LABEL: Record<string, string> = {
 /** The marker row every saved version carries, so a version with no override still exists. */
 export const VERSION_MARKER_KEY = '_version';
 
-export const FIGURES = ['mrr', 'paying_customers', 'raise'] as const;
+export const FIGURES = ['mrr', 'paying_customers', 'raise', 'revenue'] as const;
 export type FigureKey = (typeof FIGURES)[number];
-export const FIGURE_LABEL: Record<FigureKey, string> = { mrr: 'MRR', paying_customers: 'Paying customers', raise: 'The raise' };
+export const FIGURE_LABEL: Record<FigureKey, string> = { mrr: 'MRR', paying_customers: 'Paying customers', raise: 'The raise', revenue: 'Monthly revenue' };
 
 export type Stated = { figure: FigureKey; value: number; source: string };
 export type Mismatch = { figure: FigureKey; stated_value: number; stated_source: string; metric_value: number; metric_source: string };
@@ -419,6 +425,9 @@ export function parseStatedFigures(fieldKey: string, text: string): Stated[] {
   if (cust) { const v = amount(cust[1]); if (Number.isFinite(v)) out.push({ figure: 'paying_customers', value: v, source: src }); }
   const raise = new RegExp(`rais(?:e|ing)\\s+(?:a\\s+|an\\s+|our\\s+)?${MONEY}`, 'i').exec(t);
   if (raise) { const v = amount(raise[1], raise[2]); if (Number.isFinite(v)) out.push({ figure: 'raise', value: v, source: src }); }
+  const revenue = new RegExp(`${MONEY}\\s*(?:in\\s+)?monthly revenue`, 'i').exec(t)
+    || new RegExp(`monthly revenue\\s*(?:of|is|at|:|=)?\\s*${MONEY}`, 'i').exec(t);
+  if (revenue) { const v = amount(revenue[1], revenue[2]); if (Number.isFinite(v)) out.push({ figure: 'revenue', value: v, source: src }); }
   return out;
 }
 
@@ -443,51 +452,111 @@ export function consistencyCheck(stated: Stated[], metrics: Partial<Record<Figur
   return out;
 }
 
-/** What the deck and a narrative version state, and what the stores hold, for one project. */
+/** What this narrative version states and what its metric stores hold. */
 export async function checkInputs(env: Env, projectId: number, version: number) {
-  const p = await env.DB.prepare('SELECT mrr, paying_customers, funding_needed FROM projects WHERE id = ?')
-    .bind(projectId).first<{ mrr: number | null; paying_customers: number | null; funding_needed: number | null }>();
   const stated: Stated[] = [];
-  // The deck's own traction and ask slides read these three fields.
-  if ((num(p?.mrr) ?? 0) > 0) stated.push({ figure: 'mrr', value: Number(p!.mrr), source: 'Deck · projects.mrr' });
-  if ((num(p?.paying_customers) ?? 0) > 0) stated.push({ figure: 'paying_customers', value: Number(p!.paying_customers), source: 'Deck · projects.paying_customers' });
-  if ((num(p?.funding_needed) ?? 0) > 0) stated.push({ figure: 'raise', value: Number(p!.funding_needed), source: 'Deck · projects.funding_needed' });
+  // A deck is not compared until it binds a narrative version (#2434).
   const words = await env.DB.prepare(
     'SELECT field_key, value FROM spinout_deck_overrides WHERE project_id = ? AND version = ? AND field_key != ? ORDER BY field_key',
   ).bind(projectId, version, VERSION_MARKER_KEY).all<{ field_key: string; value: string }>();
   for (const w of words.results || []) stated.push(...parseStatedFigures(w.field_key, w.value));
   // Why now has no deck key: it lives in the version's meta (D691 decision 7).
-  const meta = await env.DB.prepare('SELECT why_now FROM narrative_version_meta WHERE project_id = ? AND version = ?')
-    .bind(projectId, version).first<{ why_now: string | null }>();
+  const meta = await env.DB.prepare('SELECT why_now, check_against_json FROM narrative_version_meta WHERE project_id = ? AND version = ?')
+    .bind(projectId, version).first<{ why_now: string | null; check_against_json: string | null }>();
   if (meta?.why_now) stated.push(...parseStatedFigures('why_now', meta.why_now));
 
+  const metrics = selectedCheckSources(meta?.check_against_json).includes('metrics') ? await narrativeMetrics(env, projectId) : {};
+  const compared = stated.filter(s => Number.isFinite(s.value) && Number.isFinite(metrics[s.figure]?.value)).length;
+  return { stated, metrics, compared };
+}
+
+/** Read the common metric side once when several versions are listed. */
+async function narrativeMetrics(env: Env, projectId: number) {
   const metrics: Partial<Record<FigureKey, { value: number; source: string }>> = {};
   const mrr = await env.DB.prepare(
-    'SELECT mrr, snapshot_date FROM project_metrics WHERE project_id = ? AND mrr IS NOT NULL ORDER BY snapshot_date DESC, id DESC LIMIT 1',
-  ).bind(projectId).first<{ mrr: number; snapshot_date: string }>();
-  if (mrr) metrics.mrr = { value: Number(mrr.mrr), source: `Metrics · project_metrics.mrr on ${mrr.snapshot_date}` };
+    `SELECT mrr, snapshot_date, source FROM project_metrics WHERE project_id = ? AND mrr IS NOT NULL ORDER BY CASE WHEN source = 'stripe' THEN 0 ELSE 1 END, snapshot_date DESC, id DESC LIMIT 1`,
+  ).bind(projectId).first<{ mrr: number; snapshot_date: string; source: string | null }>();
+  if (mrr) metrics.mrr = { value: Number(mrr.mrr), source: `${mrr.source === 'stripe' ? 'Stripe (measured)' : 'Metrics (stated: ' + (mrr.source || 'manual') + ')'} · project_metrics.mrr on ${mrr.snapshot_date}` };
   const pay = await env.DB.prepare(
-    'SELECT paying_accounts, snapshot_date FROM project_metrics WHERE project_id = ? AND paying_accounts IS NOT NULL ORDER BY snapshot_date DESC, id DESC LIMIT 1',
-  ).bind(projectId).first<{ paying_accounts: number; snapshot_date: string }>();
-  if (pay) metrics.paying_customers = { value: Number(pay.paying_accounts), source: `Metrics · project_metrics.paying_accounts on ${pay.snapshot_date}` };
+    `SELECT paying_accounts, snapshot_date, source FROM project_metrics WHERE project_id = ? AND paying_accounts IS NOT NULL ORDER BY CASE WHEN source = 'stripe' THEN 0 ELSE 1 END, snapshot_date DESC, id DESC LIMIT 1`,
+  ).bind(projectId).first<{ paying_accounts: number; snapshot_date: string; source: string | null }>();
+  if (pay) metrics.paying_customers = { value: Number(pay.paying_accounts), source: `${pay.source === 'stripe' ? 'Stripe (measured)' : 'Metrics (stated: ' + (pay.source || 'manual') + ')'} · project_metrics.paying_accounts on ${pay.snapshot_date}` };
   const round = await env.DB.prepare(
     `SELECT target_amount FROM raise_rounds WHERE project_id = ? AND status = 'active' AND target_amount IS NOT NULL LIMIT 1`,
   ).bind(projectId).first<{ target_amount: number }>();
   if (round) metrics.raise = { value: Number(round.target_amount), source: 'Pipeline · raise_rounds.target_amount (active round)' };
-  return { stated, metrics };
+  const verified = await verifiedMonthlyRevenue(env, projectId);
+  if (verified) metrics.revenue = { value: verified.cents / 100, source: `Verified revenue · ${verified.month}` };
+  else {
+    const bank = (await mercuryFacts(env, projectId, 'revenue')).filter(f => f.fact_key !== 'revenue:growth' && f.amount_cents != null).sort((a,b) => String(b.label).localeCompare(String(a.label)))[0];
+    if (bank) metrics.revenue = { value: Number(bank.amount_cents) / 100, source: `Mercury revenue credits · ${bank.label} · measured ${bank.as_of}` };
+  }
+  return metrics;
 }
 
-export type VersionRow = { version: number; investor_type: string | null; deck_version: number | null; saved_at: string; mismatches: number };
+export type VersionRow = {
+  version: number; investor_type: string | null; deck_version: number | null; saved_at: string; mismatches: number; compared: number;
+  /** D909: where the version started (`narrative_version_meta`), null when it was saved before 463 recorded it. */
+  start_from: string | null; based_on_version: number | null;
+  /** D909: who saved it, by name; null when no name is recorded. */
+  by: string | null;
+};
 
 export async function loadVersions(ctx: Ctx): Promise<VersionRow[]> {
   const res = await ctx.env.DB.prepare(
-    `SELECT o.version, MAX(o.investor_type) AS investor_type, MAX(o.deck_version) AS deck_version, MAX(o.updated_at) AS saved_at,
-            (SELECT COUNT(*) FROM narrative_checks c WHERE c.project_id = o.project_id AND c.version = o.version) AS mismatches
+    `SELECT o.version, MAX(o.investor_type) AS investor_type, MAX(o.deck_version) AS deck_version, MAX(o.updated_at) AS saved_at
        FROM spinout_deck_overrides o
       WHERE o.project_id = ? AND o.version > 0
       GROUP BY o.version ORDER BY o.version DESC`,
-  ).bind(ctx.projectId).all<VersionRow>();
-  return res.results || [];
+  ).bind(ctx.projectId).all<Pick<VersionRow, 'version' | 'investor_type' | 'deck_version' | 'saved_at'>>();
+  const versions = res.results || [];
+  if (!versions.length) return [];
+  const words = await ctx.env.DB.prepare(
+    'SELECT version, field_key, value FROM spinout_deck_overrides WHERE project_id = ? AND version > 0 AND field_key != ? ORDER BY version, field_key',
+  ).bind(ctx.projectId, VERSION_MARKER_KEY).all<{ version: number; field_key: string; value: string }>();
+  const meta = await ctx.env.DB.prepare(
+    `SELECT m.version, m.why_now, m.check_against_json, m.start_from, m.based_on_version, u.name AS by_name
+       FROM narrative_version_meta m LEFT JOIN users u ON u.id = m.created_by
+      WHERE m.project_id = ? AND m.version > 0`,
+  ).bind(ctx.projectId).all<{ version: number; why_now: string | null; check_against_json: string | null; start_from: string | null; based_on_version: number | null; by_name: string | null }>();
+  const metaOf = new Map((meta.results || []).map((m) => [Number(m.version), m]));
+
+  const stated = new Map<number, Stated[]>();
+  for (const word of words.results || []) {
+    const key = Number(word.version);
+    stated.set(key, [...(stated.get(key) || []), ...parseStatedFigures(word.field_key, word.value)]);
+  }
+  for (const row of meta.results || []) if (row.why_now) {
+    const key = Number(row.version);
+    stated.set(key, [...(stated.get(key) || []), ...parseStatedFigures('why_now', row.why_now)]);
+  }
+  const choices = new Map((meta.results || []).map(m => [Number(m.version), selectedCheckSources(m.check_against_json)]));
+  const commonMetrics = versions.some(v => (choices.get(Number(v.version)) || ['deck', 'metrics']).includes('metrics')) ? await narrativeMetrics(ctx.env, ctx.projectId) : {};
+  return versions.map((v) => {
+    const metrics = (choices.get(Number(v.version)) || ['deck', 'metrics']).includes('metrics') ? commonMetrics : {};
+    const values = stated.get(Number(v.version)) || [];
+    const compared = values.filter(s => Number.isFinite(s.value) && Number.isFinite(metrics[s.figure]?.value)).length;
+    const m = metaOf.get(Number(v.version));
+    return {
+      ...v, compared, mismatches: consistencyCheck(values, metrics).length,
+      start_from: m?.start_from ?? null, based_on_version: m?.based_on_version == null ? null : Number(m.based_on_version),
+      by: String(m?.by_name ?? '').trim() || null,
+    };
+  });
+}
+
+/**
+ * D909: where a version started, as the versions table and the Versions tab
+ * say it: "v1", "Blank", the live wording, or null (saved before 463 recorded
+ * it, which reads "Not recorded"). The live wording is the Spin-Out deck's, so
+ * a Spin-Out venture reads it by that name; any other venture's earlier
+ * versions copied it under today's name, "The live deck".
+ */
+export function basedOnLabel(v: Pick<VersionRow, 'start_from' | 'based_on_version'>, spinout: boolean): string | null {
+  if (v.start_from === 'version' && v.based_on_version != null) return `v${v.based_on_version}`;
+  if (v.start_from === 'blank') return 'Blank';
+  if (v.start_from === 'live') return spinout ? 'The Spin-Out deck wording' : 'The live deck';
+  return null;
 }
 
 export const fmtFigure = (f: FigureKey, v: number) => (f === 'paying_customers' ? Math.round(v).toLocaleString('en-US') : usd(v));
@@ -508,47 +577,86 @@ export async function narrativeCard(ctx: Ctx): Promise<Card> {
       byType.set(k, (byType.get(k) ?? 0) + 1);
     }
     const newest = versions[0];
-    const checks = await ctx.env.DB.prepare(
-      `SELECT figure, stated_value, stated_source, metric_value, metric_source FROM narrative_checks
-        WHERE project_id = ? AND version = ? ORDER BY id`,
-    ).bind(ctx.projectId, newest.version).all<Mismatch>();
-    const found = checks.results || [];
+    const inputs = await checkInputs(ctx.env, ctx.projectId, newest.version);
+    const found = consistencyCheck(inputs.stated, inputs.metrics);
     const series: unknown[] = [
       { kind: 'hbar', items: [...byType.entries()].map(([k, n]) => ({ label: INVESTOR_TYPE_LABEL[k] ?? k, value: n, tone: 'v1' })) },
       {
         kind: 'rows',
         items: [
           { label: `Newest · v${newest.version} · ${INVESTOR_TYPE_LABEL[newest.investor_type ?? 'other'] ?? 'Other'}`, value: day(newest.saved_at) },
-          { label: 'Mismatches', value: found.length, tone: found.length ? 'warn' : 'ok' },
+          { label: 'Comparison', value: inputs.compared ? `${inputs.compared} compared · ${plural(found.length, 'mismatch', 'mismatches')}` : 'Nothing compared yet', tone: !inputs.compared ? 'muted' : found.length ? 'warn' : 'ok' },
           ...found.map((m) => ({ label: FIGURE_LABEL[m.figure as FigureKey] ?? m.figure, value: mismatchSentence(m), tone: 'warn' })),
         ],
       },
     ];
     const next = found.length
-      ? { text: `Reconcile ${plural(found.length, 'figure', 'figures')} the narrative states differently from the metrics`, href: href(ctx, 'investor-narrative') }
+      ? { text: `Reconcile ${plural(found.length, 'figure', 'figures')} the narrative states differently from the metrics`, href: `/raise/investor-narrative/check?project_id=${ctx.projectId}` }
       : null;
     return { state: 'ok', series, next, reason: null };
   });
 }
 
+/**
+ * D909 (#2693, NAR1 and NAR12): what Home's tiles, "Needs you" and the
+ * Versions tab read, in one part of the module read (`parts.narrative`):
+ *   - `versions`: every saved version, newest first, with where it started,
+ *     when and by whom it was saved, and which cards of the current deck read
+ *     it (`services/narrative/readers.ts`);
+ *   - `newest`: the newest version's check, as the card states it: how many
+ *     figures were compared and each mismatch, figure by figure;
+ *   - `deck`: the current deck, and whether any of its cards reads a version;
+ *   - `spinout`: whether New version offers the Spin-Out deck wording.
+ * Claims backed (#2430) and Objections answered (#2457) have no store, so the
+ * part carries neither; the page says why.
+ */
+export async function narrativeHome(ctx: Ctx) {
+  const [versions, readers] = await Promise.all([loadVersions(ctx), deckReaders(ctx.env, ctx.projectId)]);
+  const newest = versions[0] ?? null;
+  const inputs = newest ? await checkInputs(ctx.env, ctx.projectId, newest.version) : null;
+  const found = inputs ? consistencyCheck(inputs.stated, inputs.metrics) : [];
+  return {
+    state: 'ok' as const,
+    versions: versions.map((v) => {
+      const cards = readers.deck ? readers.byVersion.get(Number(v.version)) ?? [] : [];
+      return {
+        version: Number(v.version), audience: INVESTOR_TYPE_LABEL[v.investor_type ?? 'other'] ?? null,
+        based_on: basedOnLabel(v, readers.spinout), saved: day(v.saved_at), by: v.by,
+        read_by: cards.length ? { deck_version: readers.deck!.version, cards } : null,
+      };
+    }),
+    newest: newest && {
+      version: Number(newest.version), compared: inputs!.compared,
+      mismatches: found.map((m) => ({ figure: FIGURE_LABEL[m.figure], sentence: mismatchSentence(m) })),
+    },
+    deck: readers.deck && { version: readers.deck.version, reads_narrative: readers.byVersion.size > 0 },
+    spinout: readers.spinout,
+  };
+}
+
 async function narrativeRecords(ctx: Ctx, rq: RecordQuery): Promise<Records> {
+  const readers = await deckReaders(ctx.env, ctx.projectId);
   let rows = (await loadVersions(ctx)).filter((v) => has(rq.q, INVESTOR_TYPE_LABEL[v.investor_type ?? 'other'], `v${v.version}`));
   if (rq.filter.investor_type) rows = rows.filter((v) => (v.investor_type ?? 'other') === rq.filter.investor_type);
   if (rq.sort === 'oldest') rows.reverse();
+  // D909 (NAR1): the canvas's columns less Claims backed, which waits for #2430's claim check.
   return paged(
-    [col('version', 'Version'), col('investor_type', 'Investor type'), col('deck', 'Used by deck'), col('mismatches', 'Mismatches'), col('date', 'Date')],
+    [col('version', 'Version'), col('investor_type', 'Audience'), col('based_on', 'Based on'), col('mismatches', 'Mismatches'),
+      col('deck', 'Read by deck'), col('date', 'Saved'), col('by', 'By')],
     rows.map((v) => ({
       id: v.version,
       cells: {
         version: `v${v.version}`, investor_type: INVESTOR_TYPE_LABEL[v.investor_type ?? 'other'] ?? null,
-        deck: v.deck_version != null ? `v${v.deck_version}` : null,
-        mismatches: { text: String(Number(v.mismatches)), tone: Number(v.mismatches) ? 'warn' : 'ok' },
+        based_on: basedOnLabel(v, readers.spinout),
+        mismatches: { text: v.compared ? String(Number(v.mismatches)) : 'Nothing compared yet', tone: !v.compared ? 'muted' : Number(v.mismatches) ? 'warn' : 'ok' },
+        deck: readBySentence(readers, Number(v.version)),
         date: day(v.saved_at),
+        by: v.by,
       },
     })),
     rq.page,
     {
-      filters: [{ key: 'investor_type', label: 'Investor type', options: INVESTOR_TYPES.map((t) => ({ value: t, label: INVESTOR_TYPE_LABEL[t] })) }],
+      filters: [{ key: 'investor_type', label: 'Audience', options: INVESTOR_TYPES.map((t) => ({ value: t, label: INVESTOR_TYPE_LABEL[t] })) }],
       sorts: [{ key: 'newest', label: 'Newest' }, { key: 'oldest', label: 'Oldest' }],
     },
   );
@@ -602,12 +710,23 @@ export async function pitchDeckCard(ctx: Ctx): Promise<Card> {
   });
 }
 
+/**
+ * A link's time on deck, in the seconds the viewer reported (D1111): m:ss for
+ * the eye, and the seconds themselves. None reported is null, "Not recorded",
+ * never "0 min": a view that sends no time stores 0.
+ */
+export function timeOnDeck(seconds: unknown): Cell {
+  const s = Math.round(Number(seconds));
+  if (!Number.isFinite(s) || s <= 0) return null;
+  return { text: `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`, seconds: s };
+}
+
 /** A link made with "Never" stores this expiry: the column is NOT NULL (D691 decision 5). */
 export const NEVER_EXPIRES = '9999-12-31 23:59:59';
 
 async function pitchRecords(ctx: Ctx, rq: RecordQuery): Promise<Records> {
   const res = await ctx.env.DB.prepare(
-    `SELECT t.id, t.created_at, t.expires_at, t.revoked_at, t.view_count, t.last_viewed_at, t.investor_label,
+    `SELECT t.id, t.created_at, t.expires_at, t.revoked_at, t.used_at, t.view_limit, t.view_count, t.last_viewed_at, t.investor_label,
             p.name AS prospect_name, p.firm AS prospect_firm,
             (SELECT COALESCE(SUM(v.read_seconds), 0) FROM deck_share_views v WHERE v.share_token_id = t.id) AS seconds,
             (SELECT s.slide_index FROM deck_view_slides s JOIN deck_share_views v ON v.id = s.view_id
@@ -620,14 +739,17 @@ async function pitchRecords(ctx: Ctx, rq: RecordQuery): Promise<Records> {
   // A link needs a deck: with none, the Add builds one first (D695 decision 11).
   const deck = await ctx.env.DB.prepare('SELECT id FROM pitch_decks WHERE project_id = ? LIMIT 1').bind(ctx.projectId).first();
   const now = new Date().toISOString().replace('T', ' ').slice(0, 19);
-  const status = (t: any) => (t.revoked_at ? 'revoked' : String(t.expires_at) < now ? 'expired' : 'active');
+  // Used up is the engagement read's own rule (D895, deckShareUse.ts): part 1's
+  // promise, so every version's links say it, not only the current one's (D1111).
+  const status = (t: any) => (t.revoked_at ? 'revoked' : String(t.expires_at) < now ? 'expired'
+    : deckShareMetrics(t).exhausted ? 'used_up' : 'active');
   // The investor a link was made for: a prospect still of this venture, else the
   // name typed in. A link made before 463 recorded neither, so it is named by its day.
   const investor = (t: any) => [t.prospect_name, t.prospect_firm].filter(Boolean).join(' · ')
     || String(t.investor_label ?? '').trim() || `Link created ${day(t.created_at) ?? 'on an unrecorded day'}`;
   const expires = (t: any): Cell => {
     const st = status(t);
-    if (st !== 'active') return { text: st === 'revoked' ? 'Revoked' : 'Expired', tone: 'muted' };
+    if (st !== 'active') return { text: st === 'revoked' ? 'Revoked' : st === 'used_up' ? 'Used up' : 'Expired', tone: 'muted' };
     return { text: String(t.expires_at).startsWith(NEVER_EXPIRES.slice(0, 10)) ? 'Never' : day(t.expires_at) ?? '', tone: 'ok' };
   };
   let rows = (res.results || []).filter((t) => has(rq.q, investor(t), day(t.created_at)));
@@ -645,13 +767,13 @@ async function pitchRecords(ctx: Ctx, rq: RecordQuery): Promise<Records> {
         link: investor(t),
         expires: expires(t),
         views: Number(t.view_count) || 0,
-        time: `${Math.round((Number(t.seconds) || 0) / 60)} min`,
+        time: timeOnDeck(t.seconds),
         most_read: t.top_slide == null ? null : `Slide ${Number(t.top_slide) + 1}`,
       },
     })),
     rq.page,
     {
-      filters: [{ key: 'status', label: 'State', options: [{ value: 'active', label: 'Active' }, { value: 'expired', label: 'Expired' }, { value: 'revoked', label: 'Revoked' }] }],
+      filters: [{ key: 'status', label: 'State', options: [{ value: 'active', label: 'Active' }, { value: 'used_up', label: 'Used up' }, { value: 'expired', label: 'Expired' }, { value: 'revoked', label: 'Revoked' }] }],
       sorts: [{ key: 'last_viewed', label: 'Last viewed' }, { key: 'newest', label: 'Newest' }, { key: 'views', label: 'Most views' }],
       add: deck ? { text: 'New link', href: addHref(ctx, 'pitch-deck') } : { text: 'Build your deck', href: TOOL_HREF.pitch },
     },
@@ -692,24 +814,21 @@ export function checklistCoverage(mapped: Iterable<string>): Array<{ area: strin
 
 export async function dataRoomCard(ctx: Ctx): Promise<Card> {
   return safeCard(meta('data-room', 'Last 90 days', 'How much of each diligence area the files answer, and who opened the room.', 'Data room'), async (): Promise<CardBody> => {
-    const files = await ctx.env.DB.prepare(
-      'SELECT COUNT(*) AS n FROM data_room_files WHERE project_id = ?',
-    ).bind(ctx.projectId).first<{ n: number }>();
-    if (Number(files?.n ?? 0) === 0) {
-      return { state: 'empty', series: null, next: { text: 'Upload', href: addHref(ctx, 'data-room') }, reason: 'No files yet. Coverage of the diligence checklist appears here.' };
+    const accessible = await readableRoomFiles(ctx.env, ctx.projectId);
+    if (!accessible.length) {
+      const staged = await ctx.env.DB.prepare('SELECT COUNT(*) AS n FROM data_room_files WHERE project_id = ?').bind(ctx.projectId).first<{ n: number }>();
+      const reason = 'No files are currently downloadable by a granted investor.';
+      if (Number(staged?.n ?? 0) > 0) return { state: 'empty', series: null, next: { text: 'Manage access', href: `${TOOL_HREF.dataRoom}&project_id=${ctx.projectId}` }, reason };
+      return { state: 'empty', series: null, next: { text: 'Upload', href: addHref(ctx, 'data-room') }, reason };
     }
-    const mapped = await ctx.env.DB.prepare(
-      'SELECT DISTINCT checklist_item FROM data_room_files WHERE project_id = ? AND checklist_item IS NOT NULL',
-    ).bind(ctx.projectId).all<{ checklist_item: string }>();
+    const mapped = { results: accessible.filter(f => f.checklist_item != null) };
     const viewers = await ctx.env.DB.prepare(
       `SELECT l.user_id, u.name, COUNT(*) AS n FROM data_room_access_log l LEFT JOIN users u ON u.id = l.user_id
-        WHERE l.project_id = ? AND substr(l.created_at, 1, 10) > ?
+        WHERE l.project_id = ? AND l.action = 'download' AND substr(l.created_at, 1, 10) > ?
         GROUP BY l.user_id ORDER BY n DESC, l.user_id LIMIT 6`,
     ).bind(ctx.projectId, daysBefore(ctx.today, 90)).all<{ user_id: number; name: string | null; n: number }>();
     const coverage = checklistCoverage((mapped.results || []).map((r) => r.checklist_item));
-    const unmapped = await ctx.env.DB.prepare(
-      'SELECT COUNT(*) AS n FROM data_room_files WHERE project_id = ? AND checklist_item IS NULL',
-    ).bind(ctx.projectId).first<{ n: number }>();
+    const unmapped = { n: accessible.filter(f => f.checklist_item == null).length };
     const v = viewers.results || [];
     const series = [
       { kind: 'progress', items: coverage.map((c) => ({ label: c.area, pct: c.pct })) },
@@ -807,12 +926,16 @@ async function dataRoomRecords(ctx: Ctx, rq: RecordQuery): Promise<Records> {
 // ---------------------------------------------------------------------------
 
 export const HOLDER_GROUPS = ['Founders', 'Option pool', 'Investors'] as const;
-export const groupOf = (type: string) => (type === 'founder' ? 'Founders' : type === 'option_pool' ? 'Option pool' : 'Investors');
-const INSTRUMENT: Record<string, string> = { founder: 'Common', option_pool: 'Options', safe: 'SAFE', preferred: 'Preferred' };
+export const groupOf = (type: string) => (type === 'founder' ? 'Founders' : type === 'option_pool' || type === 'options' ? 'Option pool' : 'Investors');
+// `options` is a recorded grant (D1018): options granted from a pool, counted in the pool's group.
+const INSTRUMENT: Record<string, string> = { founder: 'Common', option_pool: 'Options', options: 'Options', safe: 'SAFE', preferred: 'Preferred' };
 
 type Holder = { holder: string; type: string; shares: number };
-/** `type` is the simulator's ledger type, which `capIdOf` pairs with an `inputs_json` list. */
-export type CapRow = { holder: string; type: string; group: string; instrument: string; before: number | null; after: number | null };
+/**
+ * `type` is the simulator's ledger type, which `capIdOf` pairs with an `inputs_json` list.
+ * D1018: a row read from the record carries its own `id` (`h-<holder>`), which `capIdOf` returns.
+ */
+export type CapRow = { holder: string; type: string; group: string; instrument: string; before: number | null; after: number | null; id?: string | null };
 
 /** One row per holder with their percentage before and after the first planned round. */
 export function capRows(before: Holder[], after: Holder[] | null): CapRow[] {
@@ -839,24 +962,44 @@ export function groupShares(rows: CapRow[], side: 'before' | 'after'): number[] 
 /** The planned round as `simulate` stored it: its pre-money and the lines saying how each instrument converted. */
 export type PlannedRound = { name: string; preMoney: number | null; events: string[] };
 
-export async function loadCap(ctx: Ctx): Promise<{ exists: boolean; computed: boolean; roundName: string | null; rows: CapRow[]; inputs: any; round: PlannedRound | null }> {
-  const s = await ctx.env.DB.prepare(
-    'SELECT inputs_json, result_json FROM cap_table_scenarios WHERE project_id = ? AND COALESCE(is_variant, 0) = 0 ORDER BY updated_at DESC LIMIT 1',
-  ).bind(ctx.projectId).first<{ inputs_json: string | null; result_json: string | null }>();
-  if (!s) return { exists: false, computed: false, roundName: null, rows: [], inputs: null, round: null };
-  let r: any = null;
-  try { r = s.result_json ? JSON.parse(s.result_json) : null; } catch { r = null; }
-  let inputs: any = null;
-  try { inputs = s.inputs_json ? JSON.parse(s.inputs_json) : null; } catch { inputs = null; }
+export type CapSource = 'record' | 'model' | null;
+type LoadedCap = {
+  exists: boolean; computed: boolean; roundName: string | null; rows: CapRow[]; inputs: any; round: PlannedRound | null;
+  /** D1018: where "before" comes from. "After" is always a scenario, so always Modelled. */
+  source: CapSource;
+};
+
+const plannedOf = (round: any): PlannedRound | null => (round ? {
+  name: String(round.name ?? 'the round'), preMoney: num(round.pre_money),
+  events: Array.isArray(round.events) ? round.events.map(String) : [],
+} : null);
+
+/**
+ * D1018 (#2855): through the one cap table reader. On record, "before" is
+ * Today from the record and "after" is the model's planned round run from
+ * Today (Modelled). Otherwise both come from the saved model, as before.
+ */
+export async function loadCap(ctx: Ctx): Promise<LoadedCap> {
+  const cap = await readCapTable(ctx.env, ctx.projectId);
+  if (cap.source === 'none') return { exists: false, computed: false, roundName: null, rows: [], inputs: null, round: null, source: null };
+  if (cap.source === 'record') {
+    const inputs: any = cap.model?.inputs ?? null;
+    const rounds = Array.isArray(inputs?.rounds) ? inputs.rounds.slice(0, 1) : [];
+    const sim: any = rounds.length ? simulate(inputsFrom(cap.start, { rounds })) : null;
+    const round = sim && !sim.errors && sim.rounds?.length ? sim.rounds[0] : null;
+    const planned = plannedOf(round);
+    const rows = capRows(cap.today.founding ?? [], round && Array.isArray(round.ledger) ? round.ledger : null)
+      .map((row) => ({ ...row, id: row.type === 'option_pool' ? 'pool' : cap.start.ids[row.holder] ?? capIdOf(row, inputs) }));
+    return { exists: true, computed: true, roundName: planned ? planned.name : null, rows, inputs, round: planned, source: 'record' };
+  }
+  const r: any = cap.model.result;
+  const inputs: any = cap.model.inputs;
   const founding: Holder[] | null = Array.isArray(r?.founding) ? r.founding : null;
-  if (!founding) return { exists: true, computed: false, roundName: null, rows: [], inputs, round: null };
+  if (!founding) return { exists: true, computed: false, roundName: null, rows: [], inputs, round: null, source: 'model' };
   const round = Array.isArray(r?.rounds) && r.rounds.length ? r.rounds[0] : null;
   const after: Holder[] | null = round && Array.isArray(round.ledger) ? round.ledger : null;
-  const planned = round ? {
-    name: String(round.name ?? 'the round'), preMoney: num(round.pre_money),
-    events: Array.isArray(round.events) ? round.events.map(String) : [],
-  } : null;
-  return { exists: true, computed: true, roundName: planned ? planned.name : null, rows: capRows(founding, after), inputs, round: planned };
+  const planned = plannedOf(round);
+  return { exists: true, computed: true, roundName: planned ? planned.name : null, rows: capRows(founding, after), inputs, round: planned, source: 'model' };
 }
 
 const ENTRY_KEY = /^e-[1-9][0-9]{0,8}$/;
@@ -879,7 +1022,8 @@ export function capEntryOf(row: { holder: string; type: string }, inputs: any): 
  * pool. A row of a scenario saved before keys has none: null, drawn plain, and
  * the read never writes one.
  */
-export function capIdOf(row: { holder: string; type: string }, inputs: any): string | null {
+export function capIdOf(row: { holder: string; type: string; id?: string | null }, inputs: any): string | null {
+  if (row.id !== undefined) return row.id;
   if (row.type === 'option_pool') return 'pool';
   const entry = capEntryOf(row, inputs);
   if (!entry) return null;
@@ -917,8 +1061,10 @@ export async function capTableCard(ctx: Ctx): Promise<Card> {
       return { state: 'not_recorded', series: null, next: { text: 'Compute the cap table', href: TOOL_HREF.capTable }, reason: 'The cap table has not been computed yet.' };
     }
     const tones = ['v1', 'v2', 'v3'];
-    const rows = [{ label: 'Before', parts: groupShares(cap.rows, 'before') }];
-    if (cap.roundName) rows.push({ label: `After ${cap.roundName}`, parts: groupShares(cap.rows, 'after') });
+    // D1018: on record, "Today" is what was issued and the round after it is Modelled.
+    const recorded = cap.source === 'record';
+    const rows = [{ label: recorded ? 'Today' : 'Before', parts: groupShares(cap.rows, 'before') }];
+    if (cap.roundName) rows.push({ label: recorded ? `After ${cap.roundName} · Modelled` : `After ${cap.roundName}`, parts: groupShares(cap.rows, 'after') });
     return {
       state: 'ok',
       series: [{ kind: 'stack', rows, tones, legend: HOLDER_GROUPS.map((g, i) => ({ label: g, tone: tones[i] })) }],
@@ -1306,32 +1452,39 @@ const sparkOrNone = (points: number[]) => (points.filter((p) => Number.isFinite(
 async function readinessFigure(ctx: Ctx): Promise<Figure> {
   return safeFigure({ key: 'readiness_score', label: 'Readiness score', unit: 'score', source: 'readiness_scores' }, async () => {
     const { scores } = await loadReadiness(ctx);
-    const now = overallReadiness(latestScores(scores).values());
-    if (now == null) return { value: null, delta_30d: null, spark: [], state: 'empty', as_of: ctx.today, reason: 'No readiness item scored yet' };
+    const latest = latestScores(scores);
+    const coverage = { scored: [...latest.values()].filter(s => s.score != null && Number.isFinite(Number(s.score))).length, total: READINESS_ITEMS.length };
+    const now = overallReadiness(latest.values());
+    if (now == null) return { value: null, coverage, delta_30d: null, spark: [], state: 'empty', as_of: ctx.today, reason: 'No readiness item scored yet' };
     const cut = daysBefore(ctx.today, 30);
     const then = scores.some((s) => String(s.scored_at).slice(0, 10) <= cut) ? overallReadiness(latestScores(scores, cut).values()) : null;
     return {
-      value: now, delta_30d: then == null ? null : now - then,
+      value: now, coverage, delta_30d: then == null ? null : now - then,
       spark: sparkOrNone(readinessHistory(scores).slice(-8).map((h) => h.score)), state: 'ok', as_of: ctx.today, reason: null,
     };
   });
 }
 
 async function committedFigure(ctx: Ctx): Promise<Figure> {
-  return safeFigure({ key: 'committed', label: 'Committed against target', unit: 'of', source: 'raise_prospects · raise_rounds' }, async () => {
+  return safeFigure({ key: 'committed', label: 'Signed or received against target', unit: 'of', source: 'raise_prospects · raise_rounds' }, async () => {
     const c = await ctx.env.DB.prepare(
-      `SELECT COUNT(*) AS n, COALESCE(SUM(amount), 0) AS amt FROM raise_prospects WHERE project_id = ? AND stage = 'committed'`,
-    ).bind(ctx.projectId).first<{ n: number; amt: number }>();
+      `SELECT COUNT(*) AS n, SUM(CASE WHEN commit_status = 'signed' THEN amount END) AS amt, SUM(CASE WHEN commit_status = 'soft' THEN amount END) AS soft, SUM(CASE WHEN commit_status = 'wired' THEN amount END) AS received, SUM(CASE WHEN commit_status IS NULL OR commit_status NOT IN ('signed','soft','wired') THEN amount END) AS unclassified, SUM(CASE WHEN commit_status IS NULL OR commit_status NOT IN ('signed','soft','wired') THEN 1 ELSE 0 END) AS unclassified_n, SUM(CASE WHEN commit_status IN ('signed','wired') AND amount IS NULL THEN 1 ELSE 0 END) AS firm_missing, SUM(CASE WHEN amount IS NULL OR commit_status IS NULL OR commit_status NOT IN ('signed','soft','wired') THEN 1 ELSE 0 END) AS unrecorded FROM raise_prospects WHERE project_id = ? AND stage = 'committed'`,
+    ).bind(ctx.projectId).first<{ n: number; amt: number|null; soft:number|null; received:number|null; unclassified:number|null; unclassified_n:number; firm_missing:number; unrecorded:number }>();
     const r = await ctx.env.DB.prepare(
       `SELECT target_amount FROM raise_rounds WHERE project_id = ? AND status = 'active' LIMIT 1`,
     ).bind(ctx.projectId).first<{ target_amount: number | null }>();
-    const amt = Number(c?.amt ?? 0);
+    const amt = Number(c?.firm_missing ?? 0) > 0 ? null
+      : c?.amt == null && c?.received == null
+        ? Number(c?.unclassified_n ?? 0) > 0 ? null : 0
+        : Number(c?.amt ?? 0) + Number(c?.received ?? 0);
+    const split = `Soft: ${c?.soft == null ? "Not recorded" : usd(c.soft)} · Signed: ${c?.amt == null ? "Not recorded" : usd(c.amt)} · Received: ${c?.received == null ? "Not recorded" : usd(c.received)} · Status not recorded: ${c?.unclassified == null ? 'Not recorded' : usd(c.unclassified)} · Firm amounts not recorded: ${c?.firm_missing ?? 0} · Incomplete commitments: ${c?.unrecorded ?? 0}`;
     const target = num(r?.target_amount);
     if (target == null || target <= 0) {
       if (Number(c?.n ?? 0) === 0) return { value: null, delta_30d: null, spark: [], state: 'empty', as_of: ctx.today, reason: 'No active round and no commitment yet' };
-      return { value: amt, unit: 'usd', delta_30d: null, spark: [], state: 'ok', as_of: ctx.today, reason: 'No active round target is recorded' };
+      return { value: amt, unit: 'usd', delta_30d: null, spark: [], state: amt == null ? 'not_recorded' : 'ok', as_of: ctx.today, reason: `${split}; no active round target is recorded` };
     }
-    return { value: [Math.round(amt), Math.round(target)] as any, delta_30d: null, spark: [], state: 'ok', as_of: ctx.today, reason: null };
+    if (amt == null) return { value: null, delta_30d: null, spark: [], state: 'not_recorded', as_of: ctx.today, reason: split };
+    return { value: [Math.round(amt), Math.round(target)] as any, delta_30d: null, spark: [], state: 'ok', as_of: ctx.today, reason: split };
   });
 }
 
@@ -1354,7 +1507,12 @@ export function runwayMonths(cash: number | null, burn: number | null): number |
 }
 
 async function runwayFigure(ctx: Ctx): Promise<Figure> {
-  return safeFigure({ key: 'runway_months', label: 'Months of runway', unit: 'months', source: 'project_metrics' }, async () => {
+  return safeFigure({ key: 'runway_months', label: 'Months of runway', unit: 'months', source: 'project_metrics · stated' }, async () => {
+    const bank = await mercuryRunway(ctx.env, ctx.projectId);
+    if (bank) {
+      const value = runwayMonths(bank.amount_cents, bank.burn_cents);
+      return { value, source: 'Mercury · measured cash and net burn', delta_30d: null, spark: [], state: value == null ? 'not_recorded' : 'ok', as_of: bank.as_of, reason: value == null ? 'Mercury has no positive recorded net burn' : null };
+    }
     const res = await ctx.env.DB.prepare(
       `SELECT cash_balance, net_burn, snapshot_date FROM project_metrics
         WHERE project_id = ? AND cash_balance IS NOT NULL AND net_burn IS NOT NULL ORDER BY snapshot_date DESC, id DESC LIMIT 8`,
@@ -1395,7 +1553,7 @@ export const CARD_FOR: Record<ModuleSlug, (ctx: Ctx) => Promise<Card>> = {
   'capital-relationships': capitalCard,
 };
 
-export type Cell = string | number | null | { text: string; tone?: string; href?: string };
+export type Cell = string | number | null | { text: string; tone?: string; href?: string; seconds?: number };
 export type Records = {
   cols: Array<{ key: string; label: string }>;
   /** Null only where decision 4 says so: a cap-table row of a scenario saved before keys. */

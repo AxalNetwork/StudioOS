@@ -290,9 +290,11 @@ test('logs: one integration_logs row per read, with the use and counts only', as
   } finally { b.restore(); }
 });
 
-test('no file but services/mercuryPersonal.ts writes a commitments row', () => {
+test('only the receipt service and explicit deal pledge/withdrawal routes update commitments', () => {
   const root = 'cloudflare-worker/src';
   const walk = (p: string): string[] => readdirSync(p, { withFileTypes: true }).flatMap((e) => (e.isDirectory() ? walk(join(p, e.name)) : [join(p, e.name)]));
   const writers = walk(root).filter((f) => /\.[cm]?[jt]s$/.test(f) && /UPDATE\s+commitments\b/i.test(readFileSync(f, 'utf8'))).map((f) => relative(root, f));
-  assert.deepEqual(writers, ['services/mercuryPersonal.ts']);
+  assert.deepEqual(writers, ['routes/deals.ts', 'services/mercuryPersonal.ts']);
+  const dealSource = readFileSync(join(root, 'routes/deals.ts'), 'utf8');
+  assert.doesNotMatch(dealSource, /UPDATE\s+commitments\s+SET\s+status\s*=\s*'confirmed'/i, 'deal pledges never confirm a receipt');
 });

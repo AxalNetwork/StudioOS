@@ -2,6 +2,8 @@
 // allowance) and the Super Admin's token-pack, member-account, adjustment and
 // reconcile routes. Stripe is stubbed: a URL no stub answers fails the test.
 import test from 'node:test';
+import { readFileSync } from 'node:fs';
+import { tableFromBaseline } from './_baseline.mjs';
 import assert from 'node:assert/strict';
 import { SignJWT } from 'jose';
 import { Hono } from 'hono';
@@ -115,7 +117,7 @@ async function world(opts: { packs?: boolean; mirror?: boolean; env?: Record<str
   return { ...f, env };
 }
 async function auth(f: any, user: number) {
-  const jwt = await new SignJWT({ user_id: user }).setProtectedHeader({ alg: 'HS256' }).setIssuedAt().setExpirationTime('1h').sign(new TextEncoder().encode(f.env.JWT_SECRET));
+  const jwt = await new SignJWT({ user_id: user, ...(f.jti ? { jti: f.jti } : {}) }).setProtectedHeader({ alg: 'HS256' }).setIssuedAt().setExpirationTime('1h').sign(new TextEncoder().encode(f.env.JWT_SECRET));
   return { Authorization: `Bearer ${jwt}`, 'content-type': 'application/json' };
 }
 async function call(f: any, method: string, path: string, user: number | null, body?: unknown) {
@@ -345,6 +347,9 @@ test('pack creation is idempotent; a bad amount reaches no Stripe; adopt judges 
 
 test('the generic catalog writes refuse a pack, its product and its price', async () => {
   const f = await world(); const s = stripeStub({ products: SEED_PRODUCTS, prices: SEED_PRICES });
+  f.db.exec(tableFromBaseline(readFileSync(new URL('../sql/schema_baseline.sql', import.meta.url), 'utf8'), 'user_sessions'));
+  f.db.exec("INSERT INTO user_sessions(user_id,jti,factor,created_at) VALUES(1,'d1009-holder','totp',datetime('now'))");
+  f.jti = 'd1009-holder';
   try {
     const refused: [string, string, unknown?][] = [
       ['POST', '/api/admin/catalog/products', { name: '$5 of tokens', kind: 'token_pack', metadata: {} }],
@@ -357,12 +362,12 @@ test('the generic catalog writes refuse a pack, its product and its price', asyn
       ['POST', '/api/admin/catalog/prices/price_pack25/archive'],
     ];
     for (const [method, path, body] of refused) {
-      const r = await call(f, method, path, PLAIN_ADMIN, body);
+      const r = await call(f, method, path, 1, { ...(body as any), reason: 'Verify token pack ownership' });
       assert.deepEqual([r.status, r.body?.error], [409, 'token_pack_managed_on_hq'], `${method} ${path}`);
     }
     assert.deepEqual(s.calls, [], 'refused before any Stripe call');
     // The same writes on an ordinary product still reach Stripe.
-    assert.equal((await call(f, 'POST', '/api/admin/catalog/prices/price_other/archive', PLAIN_ADMIN)).status, 200);
+    assert.equal((await call(f, 'POST', '/api/admin/catalog/prices/price_other/archive', 1, { reason: 'Retire old ordinary price' })).status, 200);
   } finally { s.restore(); f.db.close(); }
 });
 

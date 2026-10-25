@@ -90,7 +90,7 @@ test('every channels call hits D684 §9’s method and path, with the body the W
     await channelsApi.scheduleMeeting(7, { provider: 'zoom', starts_at: '2026-10-20T09:00:00.000Z', duration_min: '30', topic: 'Interview' });
     await channelsApi.cancelMeeting(7, 'r 1');
     await channelsApi.importMeeting(7, 'r1');
-    await channelsApi.scheduleMeeting(7, { provider: 'zoom', starts_at: '2026-10-20T09:00:00.000Z', duration_min: 30, consent: { status: 'given', method: 'verbal' }, auto_record: true });
+    await channelsApi.scheduleMeeting(7, { provider: 'zoom', auto_send_bot: true, starts_at: '2026-10-20T09:00:00.000Z', duration_min: 30, consent: { status: 'given', method: 'verbal' }, auto_record: true });
   } finally { f.restore(); }
   assert.deepEqual(f.calls.map((c) => `${c.method} ${c.path}`), [
     'GET /channels', 'POST /channels/telegram/link', 'POST /channels/whatsapp/connect', 'DELETE /channels/telegram',
@@ -102,14 +102,14 @@ test('every channels call hits D684 §9’s method and path, with the body the W
     'POST /founder/validate/interviews/7/meetings',
   ]);
   // Zoom's cloud recording reaches the Worker only when the member turned it on (`auto_record`, routes/founder_validate_meetings.ts).
-  assert.deepEqual(f.calls[17].body, { provider: 'zoom', starts_at: '2026-10-20T09:00:00.000Z', duration_min: 30, consent: { status: 'given', method: 'verbal' }, auto_record: true });
+  assert.deepEqual(f.calls[17].body, { provider: 'zoom', auto_send_bot: true, starts_at: '2026-10-20T09:00:00.000Z', duration_min: 30, consent: { status: 'given', method: 'verbal' }, auto_record: true });
   assert.deepEqual(f.calls[2].body, { code: 'c0de', waba_id: '1', phone_number_id: '2' });
   assert.deepEqual(f.calls[8].body, { interview_id: 7 });
   assert.deepEqual(f.calls[9].body, { create: { interviewee_name: 'Ada', project_id: 3 } });
   assert.deepEqual(f.calls[10].body, { ignored: true });
   assert.deepEqual(f.calls[11].body, { ignored: false });
   assert.deepEqual(f.calls[12].body, { text: 'Thanks!', client_key: 'key-1' });
-  assert.deepEqual(f.calls[14].body, { provider: 'zoom', starts_at: '2026-10-20T09:00:00.000Z', duration_min: 30, topic: 'Interview' });
+  assert.deepEqual(f.calls[14].body, { provider: 'zoom', auto_send_bot: true, starts_at: '2026-10-20T09:00:00.000Z', duration_min: 30, topic: 'Interview' });
 });
 
 test('#1587 the assignment carries Who\'s company and quote consent, as the Worker reads them', async () => {
@@ -161,7 +161,9 @@ test('every request in the module is written as a literal path the drift check c
     'GET /admin/channels/telegram/webhook',
     // D757 (#1926): the Calendar status read for meet_transcripts, and the Meet transcript consent.
     'GET /calendar/google/status',
-    'GET /channels', 'GET /channels/telegram/link', 'GET /channels/threads', 'GET /channels/threads/:p', 'GET /channels/whatsapp/captures', 'GET /channels/whatsapp/link', 'GET /founder/validate/interviews/:p/meetings',
+    'GET /channels', 'GET /channels/telegram/link', 'GET /channels/telegram/setup', 'GET /channels/threads', 'GET /channels/threads/:p', 'GET /channels/whatsapp/captures', 'GET /channels/whatsapp/link', 'GET /founder/validate/interviews/:p/meetings',
+    // D871 (#2518): a Meet call's Drive recordings.
+    'GET /founder/validate/interviews/:p/meetings/:p/recording',
     'POST /admin/channels/telegram/webhook',
     'POST /calendar/google/meet-transcripts/connect',
     'POST /channels/:p/test', 'POST /channels/telegram/link', 'POST /channels/telegram/link/:p/confirm', 'POST /channels/threads/:p/assign',
@@ -169,6 +171,8 @@ test('every request in the module is written as a literal path the drift check c
     'POST /channels/threads/:p/consent', 'POST /channels/threads/:p/consent-request', 'POST /channels/threads/:p/ignore',
     'POST /channels/threads/:p/reply', 'POST /channels/threads/:p/voice/:p/retry', 'POST /channels/whatsapp/captures/:p/consent', 'POST /channels/whatsapp/connect', 'POST /channels/whatsapp/link', 'POST /channels/whatsapp/link/:p/confirm', 'POST /founder/validate/interviews/:p/meetings',
     // #1588: attach by link posts to the same route as scheduling (D685 §5.3.2).
+    'POST /founder/validate/interviews/:p/meetings',
+    // D871 (#2518): attach a Meet call from the member's Calendar posts to the same route again.
     'POST /founder/validate/interviews/:p/meetings',
     'POST /founder/validate/interviews/:p/meetings/:p/import',
     'PUT /channels/whatsapp/link/venture',
@@ -355,10 +359,11 @@ test('#1625 the claim and Axal\'s confirm are the Worker\'s routes', async () =>
   try {
     const { channelsApi } = await import('../src/lib/api/channels.js');
     await channelsApi.telegramClaim();
+    await channelsApi.telegramSetup();
     await channelsApi.confirmTelegram('lc 1');
   } finally { f.restore(); }
-  assert.deepEqual(f.calls.map((c) => `${c.method} ${c.path}`), ['GET /channels/telegram/link', 'POST /channels/telegram/link/lc%201/confirm']);
-  assert.deepEqual(f.calls[1].body, {});
+  assert.deepEqual(f.calls.map((c) => `${c.method} ${c.path}`), ['GET /channels/telegram/link', 'GET /channels/telegram/setup', 'POST /channels/telegram/link/lc%201/confirm']);
+  assert.deepEqual(f.calls[2].body, {});
 });
 
 // ------------------------------------------------------------------ WhatsApp: Embedded Signup

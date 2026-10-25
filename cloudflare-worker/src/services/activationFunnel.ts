@@ -128,8 +128,20 @@ export function foldCohorts(
 }
 
 /** This database's funnel, by creation week. Never throws: a failed read is a stated state. */
-export async function activationFunnel(env: Env, nowMs: number = Date.now()): Promise<ActivationRead> {
-  const axis = weekAxis(new Date(nowMs).toISOString(), ACTIVATION_WEEKS);
+/**
+ * Who the funnel counts, beyond the creation week. D893's Insights read narrows
+ * it by profile (`users.role`) and country (`users.country`, as stored); every
+ * other caller passes nothing, and a NULL bind matches every account, so their
+ * answer is unchanged. `weeks` widens the axis for Insights' longer ranges.
+ */
+export type FunnelFilter = { weeks?: number; role?: string | null; country?: string | null };
+
+export async function activationFunnel(
+  env: Env, nowMs: number = Date.now(), filter: FunnelFilter = {},
+): Promise<ActivationRead> {
+  const axis = weekAxis(new Date(nowMs).toISOString(), filter.weeks ?? ACTIVATION_WEEKS);
+  const role = filter.role ?? null;
+  const country = filter.country ?? null;
   const from = axis.from;
   const to = axis.to;
 
@@ -144,8 +156,9 @@ export async function activationFunnel(env: Env, nowMs: number = Date.now()): Pr
                          AND datetime(a.created_at) >= datetime(u.created_at, '+7 days')
                          AND datetime(a.created_at) <  datetime(u.created_at, '+14 days')) AS active_w2
          FROM users u
-        WHERE datetime(u.created_at) >= datetime(?) AND datetime(u.created_at) < datetime(?)`,
-    ).bind(from, to).all<AccountRow>();
+        WHERE datetime(u.created_at) >= datetime(?) AND datetime(u.created_at) < datetime(?)
+          AND (? IS NULL OR u.role = ?) AND (? IS NULL OR u.country = ?)`,
+    ).bind(from, to, role, role, country, country).all<AccountRow>();
     rows = q.results || [];
   } catch (e) {
     return {
@@ -159,8 +172,9 @@ export async function activationFunnel(env: Env, nowMs: number = Date.now()): Pr
   try {
     const q = await env.DB.prepare(
       `SELECT DISTINCT l.user_id AS id FROM legal_acceptances l JOIN users u ON u.id = l.user_id
-        WHERE l.obligation_key = ? AND datetime(u.created_at) >= datetime(?) AND datetime(u.created_at) < datetime(?)`,
-    ).bind(TOS_KEY, from, to).all<{ id: number }>();
+        WHERE l.obligation_key = ? AND datetime(u.created_at) >= datetime(?) AND datetime(u.created_at) < datetime(?)
+          AND (? IS NULL OR u.role = ?) AND (? IS NULL OR u.country = ?)`,
+    ).bind(TOS_KEY, from, to, role, role, country, country).all<{ id: number }>();
     tos = new Set((q.results || []).map((r) => Number(r.id)));
   } catch (e) {
     termsState = {
@@ -175,11 +189,12 @@ export async function activationFunnel(env: Env, nowMs: number = Date.now()): Pr
     const q = await env.DB.prepare(
       `SELECT u.id FROM users u
         WHERE datetime(u.created_at) >= datetime(?) AND datetime(u.created_at) < datetime(?)
+          AND (? IS NULL OR u.role = ?) AND (? IS NULL OR u.country = ?)
           AND (EXISTS (SELECT 1 FROM company_invitations ci WHERE ci.accepted_by_user_id = u.id AND ci.status = 'accepted')
             OR EXISTS (SELECT 1 FROM project_member_invitations pi WHERE pi.accepted_by_user_id = u.id AND pi.status = 'accepted')
             OR EXISTS (SELECT 1 FROM partner_invitations pa WHERE pa.resulting_user_id = u.id)
             OR EXISTS (SELECT 1 FROM branch_invitations bi WHERE bi.status = 'accepted' AND lower(bi.email) = lower(u.email)))`,
-    ).bind(from, to).all<{ id: number }>();
+    ).bind(from, to, role, role, country, country).all<{ id: number }>();
     invited = new Set((q.results || []).map((r) => Number(r.id)));
   } catch (e) {
     invitedState = {

@@ -487,7 +487,8 @@ function findingsSection(
         rows: found.map((f) => ({
           a: f.what,
           b: joined(f.detail, f.quote == null ? null : f.quote === QUOTE_WITHHELD ? f.quote : `"${f.quote}"`),
-          c: f.interviewee ?? 'Interview', tone: 'vio',
+          // D877 (#2524): the finding stays after its session is deleted, and says so.
+          c: f.source_deleted ? `${f.interviewee ?? 'Interview'} · Source deleted` : (f.interviewee ?? 'Interview'), tone: 'vio',
           href: `/validate/customer-research/${f.interview_id}?project=${ctx.projectId}`,
         })),
         empty,
@@ -628,6 +629,9 @@ const customerResearch: ModuleSpec = {
         };
       },
     },
+    // D859 (#2504): the follow-ups and prototype asks accepted from this conversation.
+    findingsSection('findings', 'From this conversation', findingKindsOf('customer-research'), 'No follow-up or prototype ask accepted from this interview yet.',
+      async (ctx, id) => ({ interviewId: Number((await loadInterview(ctx, id)).iv.id) })),
     {
       key: 'cost', title: 'Cost', side: true, gate: 'write',
       read: async (ctx, id) => {

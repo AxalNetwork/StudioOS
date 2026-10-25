@@ -47,7 +47,7 @@ const past = new Date(Date.now() - 10 * DAY).toISOString();
 const USERS: Array<[number, string, string, string, string, string, string | null, number | null, number]> = [
   [1, 'founder', 'free', 'active', 'free', 'free', null, null, 0],               // free founder
   [2, 'founder', 'growth', 'active', 'free', 'free', null, null, 0],             // paid founder
-  [3, 'founder', 'studio', 'past_due', 'free', 'free', null, null, 0],           // founder who stopped paying
+  [3, 'founder', 'studio', 'unpaid', 'free', 'free', null, null, 0],             // founder who stopped paying: Stripe gave up (D1052)
   [4, 'investor', 'free', 'active', 'free', 'free', null, null, 0],              // free investor
   [5, 'investor', 'free', 'active', 'professional', 'active', null, null, 0],    // paid investor
   [6, 'investor', 'free', 'active', 'professional', 'trialing', future, null, 0],// active trial
@@ -122,16 +122,17 @@ async function call(app: any, env: any, who: number, path: string) {
 
 const userRow = (db: DatabaseSync, id: number) => db.prepare('SELECT * FROM users WHERE id = ?').get(id) as any;
 
+// D1050 (#2901): the plan is named by its catalogue key; its price is the plans read's, never typed in the Worker.
 test('each row of the tier table, both ways', async () => {
   const { db, env } = await seeded();
   const locked = async (id: number) => (await archetypeAccess(env, userRow(db, id))).locked;
   const plan = async (id: number) => ((await archetypeAccess(env, userRow(db, id))) as any).required_plan;
   assert.equal(await locked(1), true, 'a free founder saw the archetype');
-  assert.deepEqual(await plan(1), { licence: 'founder', tier: 'growth', name: 'Validate + Build', price_label: '$20 / month' });
+  assert.deepEqual(await plan(1), { licence: 'founder', tier: 'growth', name: 'Validate + Build', plan_key: 'founder:growth' });
   assert.equal(await locked(2), false, 'a Growth founder was locked out');
   assert.equal(await locked(3), true, 'a past-due founder kept the archetype');
   assert.equal(await locked(4), true, 'a free investor saw the archetype');
-  assert.deepEqual(await plan(4), { licence: 'investor', tier: 'professional', price_label: '$149 / month' });
+  assert.deepEqual(await plan(4), { licence: 'investor', tier: 'professional', name: 'Investor Pro', plan_key: 'investor:professional' });
   assert.equal(await locked(5), false, 'a Professional investor was locked out');
   assert.equal(await locked(6), false, 'an active investor trial was locked out');
   assert.equal(await locked(7), true, 'a lapsed investor trial kept the archetype');
@@ -150,7 +151,7 @@ test('the archetype routes send a free account no archetype key, and the plan th
   assert.equal('archetype' in free.body, false, 'best-fit sent a free founder the archetype');
   assert.equal('archetypes' in free.body, false, 'best-fit sent a free founder the archetype list');
   assert.doesNotMatch(free.text, /visionary|The Visionary|You see far/i, 'archetype text reached a free founder');
-  assert.deepEqual(free.body.archetype_access, { locked: true, required_plan: { licence: 'founder', tier: 'growth', name: 'Validate + Build', price_label: '$20 / month' } });
+  assert.deepEqual(free.body.archetype_access, { locked: true, required_plan: { licence: 'founder', tier: 'growth', name: 'Validate + Build', plan_key: 'founder:growth' } });
   assert.ok('fit' in free.body && 'axal_values' in free.body, 'the fit and values were locked too');
   const paid = await call(bestFit, env, 2, '/me');
   assert.equal(paid.body.archetype?.slug, 'visionary', 'a Growth founder lost the archetype');
@@ -175,10 +176,16 @@ test('the archetype routes send a free account no archetype key, and the plan th
 });
 
 test('the events suggestion drops its archetype framing on a free plan', async () => {
-  const { env } = await seeded();
+  const { env, db } = await seeded();
+  // D1031 (#2872): a founder-track workshop is suggested, worded to the canvas.
+  db.exec(`INSERT INTO events (slug, host_user_id, title, type, starts_at, visibility, status, admin_published)
+           VALUES ('d1031-workshop', 99, 'Workshop fixture', 'workshop', '2099-01-01T10:00:00Z', 'public', 'published', 1)`);
   const free = await call(events, env, 1, '/suggested');
   assert.equal(free.status, 200);
   assert.equal(free.body.archetype, null, 'events framed a free founder with their archetype');
   assert.equal(free.body.track, 'founder', 'the track stopped personalising');
-  assert.equal((await call(events, env, 2, '/suggested')).body.archetype?.slug, 'visionary');
+  const paid = await call(events, env, 2, '/suggested');
+  assert.equal(paid.body.archetype?.slug, 'visionary');
+  assert.deepEqual(paid.body.events.map((e: any) => e.suggestion_reason), ['Suits The Visionary']);
+  assert.deepEqual(free.body.events.map((e: any) => e.suggestion_reason), ['Matches your track'], 'a free plan is not told its archetype');
 });

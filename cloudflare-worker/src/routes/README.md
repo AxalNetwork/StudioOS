@@ -4,6 +4,27 @@ These files are the production API behind `https://axal.vc/api/*`. They are
 mounted by `cloudflare-worker/src/index.ts` and run on Cloudflare Workers
 against D1 (`env.DB`), KV, R2, Vectorize, AI, Queues and Durable Objects.
 
+Issue #2460 removes blanket Operating Partner access from the shared
+founder-resource guard and the financial/revenue loaders. Financial recompute
+requires the same edit permission as saving. A project relationship for these
+outside members is pending #2438; the generic guard grants them no access in
+the meantime. Deal-room reads retain their separate partner rule. Legacy legal
+entity listing and other routes with independent role gates are separate
+policies, not grants from the founder-resource guard.
+
+D973 reads live in `admin_network_reads.ts`, mounted before D976’s
+`admin_network.ts` at `/api/admin/network`. Opaque person refs use the
+read-only drawer; numeric account IDs continue to the standing router.
+
+D1136's reads of the caller's own companies, ventures and invitations, and
+answering an invitation while signed in, live in `account_companies.ts`,
+mounted at `/api` with full paths before `projects.ts` and `company.ts`.
+
+D979's Firms reads live in `admin_partner_firms.ts`, mounted at
+`/api/admin/partners` before `admin_partners.ts`: `/firms` (search, filters,
+sort and pages with an exact total) and `/firms/:id` (one firm's drawer). Both
+are read only; the tab's writes stay in `admin_partners.ts`.
+
 ## Mount map
 
 `index.ts` mounts each router under `/api/<prefix>`. **This is a selected list,
@@ -21,12 +42,15 @@ widened guard on this very sentence, which is the rule working.)
 
 
 ```
+/api/admin/partner-profiles → admin_partner_profiles.ts (D990: HQ's partner profile list with search, filters, sort and pages, the counts, and one profile by its pp_ reference; Admin, each read logged by reference. D993: agreement readiness, each row's envelope state, and Unbind for a Super Admin with a step-up)
+/api/admin/product-testers → admin_product_testers.ts (D1042: the product tester pool, migration 576: list per status with the member's name, email, role, email verification and identity check, one tester with their programs and history, and approve, decline, pause, resume and remove, each telling the member; Admin)
 /api/admin/partner-settlements → partner_settlements.ts (HQ drafts; Super Admin issue/void, D713)
 /api/partner-settlements → partner_settlements.ts (own non-draft settlements, D713)
-/api/mercury/personal → mercury_personal.ts (a member's own Mercury (founders, partners, and investors on HQ): status, payment matches and raise receipts, read-only, D713, D752)
+/api/mercury/personal → mercury_personal.ts (a member's own Mercury (founders, partners, and investors on HQ): status, payment matches and raise receipts, read-only, D713, D752; connected only by Sign in with Mercury since D881. Never Axal VC's own accounts: D879, guarded by D883's `check-mercury-member-surfaces.mjs`)
+/api/integrations/mcp → connector_mcp_oauth.ts (D1080: Sign in with <Provider> for every MCP record but Mercury's: start, callback, and the public client ID metadata document; mounted ahead of the integrations router)
 /api/connectors/custom → connectors_custom.ts (D852: a member's own remote MCP servers behind CUSTOM_MCP_ENABLED: configure, sign in, approve read tools one by one, health and revoke; founders on a paid plan)
 /api/mercury/attestations → mercury_attestations.ts (an investor's proof of capital: dated statements from their own Mercury, consented and revocable; read-only, HQ only, D752)
-/api/mercury/investor → mercury_investor.ts (an investor's own Mercury feeding Deals · Commit and Closing and Fund · Calls, Accounting and Reporting: facts written, proposals accepted; read-only, HQ only, the caller's own data only, D840 part 4)
+/api/mercury/investor → mercury_investor.ts (an investor's own Mercury feeding Deals · Pipeline, Commit and Closing and Fund · Calls, Accounting and Reporting: facts written, proposals accepted, Pipeline shown only; read-only, on HQ or in a branch (D884), the caller's own data only, D840 part 4)
 /api/admin/capital-attestations → admin_capital_attestations.ts (HQ admins read an investor's shared proof of funds; audited before it answers; reads capital_attestations only, never a connection; D752)
 /api/testing/mail  → testing_mail.ts (D811: programme-signed preferences and one-click unsubscribe; no newsletter opt-in required)
 /api/mail-link     → mail_link.ts (D811: Mail HMAC only, before session middleware; audiences, recipients, feedback and health)
@@ -37,6 +61,7 @@ widened guard on this very sentence, which is the rule working.)
 /api/legal         → legal.ts
 /api/legalcap      → legalcap.ts
 /api/partners      → partners.ts
+/api/admin/partners → admin_partner_deal_reads.ts (D928: one deal in full, terminate preview, redemptions across deals, agreement ready; read only, mounted before admin_partners.ts)
 /api/partnernet    → partnernet.ts
 /api/partner/…     → partner_pipeline.ts  (the partner WORKSPACE's own stores)
 /api/capital       → capital.ts
@@ -47,6 +72,7 @@ widened guard on this very sentence, which is the rule working.)
 /api/portfolio-updates → portfolio_updates.ts  (founder updates; D654/D686 Share an update: venture and open-call context, shipped facts, validated audience, retry-safe send, co-founder authors, author/recipient pages)
 /api/cycles/grow   → cycle_grow.ts  (D664/D686: the Grow overview, module reads including update ask replies and Updates history, and store writes; shared card types live in cycleCards)
 /api/cycles/raise  → cycle_raise.ts  (D663: the Raise overview, module reads and the readiness, narrative, checklist and next-step writes)
+/api/personas/segments → persona_segments.ts  (D1000: the segment profiles HQ writes, their history and the needs read; mounted before /api/personas → personas.ts)
 /api/users         → users.ts
 /api/market-intel  → market_intel.ts
 /api/market-intel-public → market_intel_public.ts
@@ -61,6 +87,7 @@ widened guard on this very sentence, which is the rule working.)
 /api/public/plans-and-packs → public.ts (D755: every plan's price and AI allowance and the packs on sale; D1 only, no session)
 /api/usage         → usage.ts           (the caller's own stored files by area, across all their companies; never another member's, D642)
 /api/connectors/health → connectors_health.ts (D848: the caller's connections, each with its granted companies, its health state, the time it was checked, its error category and its last ten checks; never a token or a provider's message. Mounted before the connector router)
+/api/carta/investor → carta_investor.ts (#2634: the caller's own active investor grant; live read-only firms, funds, investments, certificates, convertible notes, warrants and capitalization tables; no support/admin bypass, founder imports or personal-data logs)
 /api/connectors    → integrations.ts    (canonical connection catalogue, company scope, requests, suggestions and logs; D650; connector pages (`GET /directory/:key`, D753))
 /api/integrations  → integrations.ts    (temporary alias to the same handlers; D650)
                                          (D655: GET /:uid/sync-status, GET /:uid/fed, GET|PUT /:uid/repositories for GitHub)
@@ -92,16 +119,16 @@ widened guard on this very sentence, which is the rule working.)
 /api/admin/learning → admin_learning_assessment.ts (authoring exercises and exams, reviewing submissions; D559)
 /api/admin/money-rails → admin_money_rails.ts (each Axal entity's role and each money kind's rail; admin only; D707)
 /api/ai           → ai.ts              (the caller's own AI spend, by task, page, model and day; the rate card at /rates, D641; GET /catalogue, the offered models with cost and billed unit prices, and cost and billed on /pricing and /rates, D760)
-/api/developer/usage → developer_usage.ts (D845: the caller's own usage reports over `api_usage_events`; GET / grouped by day, key, provider, connector, tool or model, GET /events the request history with a `(created_at, id)` cursor)
+/api/developer/usage → developer_usage.ts (D845: the caller's own usage reports over `api_usage_events`; GET / grouped by day, key, provider, connector, tool or model, GET /events the request history with a `(created_at, id)` cursor, GET /keys each key's cap, this month's charge and the 80% / 100% flag)
 /api/ai/rail/proposals → ai_rail_proposals.ts (D780: the caller's own drafts, proposals and notes from a rail option's run, `ai_rail_proposals`; GET by option and record, POST /:uid/decide accept, edit or discard)
 /api/founder/validate → founder_validate_structure.ts (structure a session's transcript, compare two runs, ask it; accept, edit then accept or discard each placement; D658. Since D757 (#1925) `POST /sessions/:id/placements/accept` is Accept all, for a module (`{ slug }`) or chosen placements (`{ ids }`, at most 50): each placement's own claim and writer, every outcome reported)
-/api/founder/validate → founder_validate_meetings.ts (D684: schedule, list, cancel and import a Zoom or Google Meet call on an interview)
-/api/validate → validate_conversations.ts (D858: a session's and a venture's conversation analytics, read only; `canReadBoard`, else 404; the venture read is aggregates only)
+/api/founder/validate → founder_validate_meetings.ts (D684: schedule, list, cancel and import a Zoom or Google Meet call on an interview; D871: attach a Meet call from the member's own Calendar, and GET …/:refUid/recording, its Drive recording link)
+/api/validate → validate_conversations.ts (D858: a session's and a venture's conversation analytics, read only; `canReadBoard`, else 404; the venture read is aggregates only; D873: calls, `kind=chats|calls|all`)
 /api/channels         → founder_validate_meetings.ts `zoomWebhook` (the public Zoom webhook, mounted first), then channels.ts (D684: Telegram and WhatsApp connections, the conversation inbox, replies, and their public webhooks; D754: consent requests in the chat and the member's word)
 /api/admin/channels   → channels.ts `channelsAdmin` (D684: the channels bot's setWebhook and its health read, D756; super admin)
 /api/admin/bank-accounts → admin_bank_accounts.ts (D708: each Axal entity's bank accounts, masked, with add, relabel, purposes, retire and a recorded reveal; Super Admin, HQ only; mounted beside /api/admin/stripe, before the /api/admin catch-all)
 /api/admin/fund-structure → admin_fund_structure.ts (D717: the entity and money map, read-only; masked accounts for the Super Admin, and each entity's active accounts masked (#1855); #1773's sentence for a plain Admin; HQ only; mounted beside /api/admin/bank-accounts, before the /api/admin catch-all)
-/api/admin/mercury    → admin_mercury.ts (D710: each Axal entity's read-only Mercury connection, its accounts, transactions and reconciliation matches, and D749's Not ours marks; connect is the Super Admin's behind the write bar, the rest an Admin's on HQ)
+/api/admin/mercury    → admin_mercury.ts (D710: each Axal entity's read-only Mercury connection, its accounts, transactions and reconciliation matches, and D749's Not ours marks; connect is the Super Admin's behind the write bar, the rest an Admin's on HQ. The only home of Axal VC's own accounts, drawn in HQ › Fund administration › Bank accounts, never on a member connector: D879, D880, D883)
 /api/eadwyn       → eadwyn.ts          (the Worker AI rail's conversations, their connector switches, and Send/Cancel for a write Eadwyn proposed; D652)
 /api/wellbeing     → wellbeing.ts       (check-ins, the expert directory and bookings; sample experts are seeded outside production only and never shown to members, D643)
 /api               → realtime.ts (WebSocket fan-out, Durable Objects)
@@ -215,6 +242,26 @@ heartbeat also takes `slides`, the viewer's seconds per slide, stored through
 `../services/deckSlideDwell.ts`. See
 `documentation/architecture/decisions/D663.md`.
 
+D982 (#2773): `admin_program_grants.ts` mounts `/api/admin/program-grants`: HQ's program grants per licence (the grid, one licence, its history, the default terms) under `requireSuperAdmin`, and grant, change terms, pause, resume, end and the defaults under `requireSuperAdminWriteBar` with a reason of at least 10 characters. Each grant write appends one `licence_events` `program_changed` row; the store is migration 553 and `../services/programGrants.ts`. See `documentation/architecture/decisions/D982.md`.
+
+D983 (#2774): `admin_program_requests.ts` mounts `/api/admin/program-grants/requests`, ahead of part 1's routes: the studios' program requests (a grant, a terms change, an end) from HQ's lane and every branch's, under `requireSuperAdmin`, and HQ's approve and decline under `requireSuperAdminWriteBar` with a reason of at least 10 characters. An approval records a draft as a `program_changed` event (`request_approved`); Grant stays `admin_program_grants.ts`'s write. The generic `PATCH /api/admin/escalations/:uid` refuses these kinds. The checks are `../services/programRequests.ts`. See `documentation/architecture/decisions/D983.md`.
+
+D956 (#2789): `admin_programs.ts` adds `PUT /:key/grantable`, Offer to studios, under `requireSuperAdminWriteBar` with a reason: D982's "can be granted" switch, switched on only with a published playbook, as `admin_program_grants.ts`'s defaults write now also requires. The catalogue and `/:key` carry each program's `grant` for the viewer (`../services/programGrantStates.ts`). An approval for one studio (`admin_program_proposals.ts`) opens a `draft` grant (migration 562), which `admin_program_grants.ts`'s grant write takes to `granted`; every other move from a draft is refused. See `documentation/architecture/decisions/D956.md`.
+
+D984 (#2775): `licence_programs.ts` mounts `GET /api/licence/mine/programs` at `/api/licence`, beside `licence_requests.ts`: the nine programs HQ grants the caller's licence, read only, with each grant's terms. On HQ it binds the caller through `licence_admins` and reads the store; an account no licence binds reads `linked: false`, "On HQ-held accounts, HQ runs every program." On a branch it answers, to an admin only, from HQ's dated copy (`branch_licence.program_grants_json`, migration 554) with `as_of`. A D1 error or an unreadable copy is a 503. Since D984, `admin_program_grants.ts`'s grant writes push the licence to its branch and answer `pushed`. See `documentation/architecture/decisions/D984.md`.
+
+D986 (#2776): `admin_partner_deal_types.ts` mounts `/api/admin/partner-deal-types`: which partner deal types each licence may offer, read under `requireSuperAdmin` and set under `requireSuperAdminWriteBar` with a reason (one `program_changed` licence event, action `deal_types_changed`, then a push to the branch). `licence_partner_deal_types.ts` mounts `GET /api/licence/mine/partner-deal-types` ahead of `licence.ts`: the bound Administrator on HQ, or a branch admin reading its copy. The branch's partner invitation write (`admin_partners.ts`) refuses a type the copy does not allow. The store is migration 555 and `../services/partnerDealTypes.ts`. See `documentation/architecture/decisions/D986.md`.
+
+D1075 (#2967): `trust_public.ts` mounts the public trust center's reads under `/api/public` (`GET /trust`, `/trust/changes`, `/trust/matrix`; published blocks only, each part read on its own) and the subprocessor notices' subscribe, confirm and unsubscribe (double opt-in; confirm and unsubscribe CSRF-exempt). `admin_trust_center.ts` mounts `/api/admin/security/trust-center`, ahead of `admin_security.ts`: the store's drafts, subprocessors, auditor's reports and Publish with one change note, read under `requireSuperAdmin` and written under `requireSuperAdminWriteBar`, each write in the admin audit log. `security_reports.ts` mounts Help's Security category at `/api/help/security-reports` (a member's private report, HQ only) and HQ's read at `/api/admin/security/reports` (Super Admin). The store is migration 584 and `../services/trustContent.ts`, `../services/subprocessorNotices.ts` and `../services/securityReports.ts`. See `documentation/architecture/decisions/D1075.md`.
+
+D896 (#2675): `deck_sources.ts` mounts `GET /api/decks/sources` and `POST /api/decks/:id/refresh`, after `deck_share_actions.ts` and before `decks.ts`, so that `decks.ts`'s `GET /:id` cannot answer `/sources`. Both read only, through `projectOwned`; Mercury's slots are read only for the venture's own founder. The adapters are `../services/decks/sources.ts`. See `documentation/architecture/decisions/D896.md`.
+
+D897 (#2677): `deck_new.ts` mounts New deck — `GET /api/decks/new/context`, `POST /new/quote`, `POST /outline`, `POST /generate` (moved here from `decks.ts`; it now builds a proposal) and `POST /proposals/:id/keep-slides` — after `deck_sources.ts` and before `decks.ts`. Code fills every figure from `../services/decks/sources.ts` through `../services/decks/newDeck.ts`; the runs write words only, and their price is `quoteRun`'s before they run. See `documentation/architecture/decisions/D897.md`.
+
+D899 (#2678): `deck_assist.ts` mounts Eadwyn's card tools — `POST /api/decks/:id/cards/:card/assist/quote` and `POST /api/decks/:id/cards/:card/assist` — after `deck_new.ts` and before `decks.ts`. Each press is one rail option on "Founder · Raise · Pitch deck" (`deck:rewrite`, `deck:shorten`, `deck:expand`, `deck:tone`, `deck:translate`, `deck:chart`, `deck:table`, `deck:timeline`), runs through `run()`, and leaves one `ai_rail_proposals` row; nothing writes a version. A bound figure is refused 422 `never_fill` before anything runs. See `documentation/architecture/decisions/D899.md`.
+
+D900 (#2679): `deck_review.ts` mounts `POST /api/decks/:id/review` (a version's own review, each point naming a card, with the run's cost) and `GET /api/decks/:id/reviews` (the venture's reviews per version, the first reader of `deck_review_history`), after `deck_notes.ts` and before `decks.ts`. Founders run a review; an Admin and the Super Admin read. The review is `../services/deckVersionReview.ts`; uploads and pasted text stay `deck_reviewer.ts`'s. See `documentation/architecture/decisions/D900.md`.
+
 D653: `round_calls.ts` mounts `/api/round-calls`. Every operational route checks the default-off flag. Founder writes require venture ownership and verified active-company scope; investor reads/responses require active investor role, approved KYC and recipient entitlement; counsel reads/approval require HQ plus Super Admin, with fresh step-up on approval writes. D686 (#1594) adds owner counsel requests and the independent Super Admin counsel queue (registered before the UID route); request notices are emitted only after the winning audited write commits. Structured key terms, commitment dates and privacy-limited audience facts are stored/read by the Worker. Actual writes record the actor in activity_logs. `portfolio_updates.ts` links capital asks to an open private call without granting additional access.
 
 D667 (#1497): the assistant interview tools are service functions in
@@ -241,3 +288,51 @@ D691 (#1696): Grow obligation routes use the production `compliance_events`
 columns (`due_date`, `completion_status`), translate the existing API keys in
 TypeScript, require a due date and record manual provenance and the entity’s
 jurisdiction. Duplicate event/date writes return 409.
+
+D886 B1 (#2579): `meeting_bot_callbacks.ts`, mounted at `/api/meeting-bots`,
+accepts bounded HMAC-authenticated events and one-use audio uploads, then forwards
+them to `MeetingBotRun`. It uses no member session or provider credential.
+`founder_validate_sessions.ts` supplies the authenticated creator-only dispatch,
+status and stop routes; consent withdrawal and deletion stop the bot too.
+See D886 §12 for the concrete contract and feature gates.
+
+D886 B7: the sessions router adds creator-only `…/bot/participants` for the saved
+roster. The meetings router accepts `auto_send_bot:false`, otherwise queues B1
+for the consented session at the scheduled start. Bot refusal is separate from
+successful call creation; cancellation stops the bot before the provider call.
+
+D886 B10 (#2588): `admin_platform.ts` mounts Super Admin-only
+`/meeting-bots` count/charge reads and `/meeting-bots/test` dispatch/timing reads.
+Dispatch requires TOTP plus recent step-up and calls B1's service with the
+operator's own consented session; status events supply content-free timings.
+
+D1011 (#2830): `admin_payments.ts` is the Payments page's Super Admin reads,
+mounted at `/api/admin/payments`: the change log over the catalogue's and
+Stripe's audit rows, its CSV export (a recorded reason, failing closed), and the
+webhook's deliveries by hour. D1129 adds bounded `q` search to the log and
+CSV, plus `/change-log/admins` (all admin ids/names, no email). `catalog.ts`
+records a failed sync.
+
+D1065 (#2935): `build_plan.ts` mounts at `/api/cycles/build/plan` before the Build router. GET reads a scoped plan; POST prepares/updates only for the venture’s founder or admitted Lab owner. Admins read; company-linked partners read only landed accepted items without a decision or pending proposal.
+
+D971 (#2756): `admin_lab_operations.ts` is mounted by `admin_cohort.ts` under
+`/api/admin/cohort`: read-only `/settings` and `/activity`, both Admin gated.
+The latter filters/paginates one safe projection of existing stores and never
+returns staff identities or free-form audit payloads. An unavailable source is
+503, never an empty successful log. Reads create no schema or data.
+
+D1105 (#2985): `data_room.ts` adds the owner's and a co-founder's `GET /:projectUid/activity` (any period, by investor, paged), `GET /:projectUid/activity.csv` and `GET /:projectUid/checklist`, from `../services/dataRoomActivity.ts`; migration 596 records each file's source (`document`, `connector`, `signed`). See `documentation/architecture/decisions/D1105.md`.
+
+D1102 (#2982, part): `data_room.ts` keeps founder details and mutations owner-only.
+The ordinary admin GET returns scoped aggregate counts and checklist coverage,
+with unavailable blocks explicit and no file names, investor identities or access
+rows. `POST /:projectUid/support-read` takes an admin's required reason and must
+write a founder-visible activity row before loading read-only details; it also
+calls `logAdminAction`. It grants no subsequent write permission. Admins cannot
+use legacy investor grants through `/shared` instead. The data-room spec in
+`../services/records/raise.ts` uses the same owner-only gate. File uploads default
+to NDA when visibility is omitted; explicit Open remains allowed for the owner.
+
+D1133: `billing.ts` mounts `/alerts/:id/pay` and `/alerts/:id/update-card` under `/api/billing`, both recent-TOTP gated. They prepare in-page Stripe forms for the caller’s open failed renewal; opening neither confirms a charge nor changes the default card.
+
+D1135: `company.ts` adds member self-leave and validates create/rename; `projects.ts` counts live ventures, adds owner restore within 30 days and sends email-mode team invitations.

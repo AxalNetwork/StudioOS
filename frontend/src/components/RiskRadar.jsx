@@ -25,12 +25,10 @@ export default function RiskRadar({ layers = [], size = 300, band = 'medium', mu
   };
 
   const dataPoints = layers.map((l, i) =>
-    point(i, Math.max(0, Math.min(100, Number(l.score) || 0)) / 100),
+    l.score == null ? null : point(i, Math.max(0, Math.min(100, Number(l.score))) / 100),
   );
-  const dataPath =
-    dataPoints
-      .map(([x, y], i) => `${i === 0 ? 'M' : 'L'}${x.toFixed(1)},${y.toFixed(1)}`)
-      .join(' ') + ' Z';
+  const complete = dataPoints.every(Boolean);
+  const dataPath = dataPoints.map((p, i) => p ? `${i === 0 || !dataPoints[i - 1] ? 'M' : 'L'}${p[0].toFixed(1)},${p[1].toFixed(1)}` : '').join(' ') + (complete ? ' Z' : '');
 
   // No-data state: tint the (collapsed) polygon and vertices slate so an
   // unscored company never reads as a red "high risk" cluster at the center.
@@ -77,7 +75,7 @@ export default function RiskRadar({ layers = [], size = 300, band = 'medium', mu
       <path
         d={dataPath}
         fill={accent}
-        fillOpacity="0.16"
+        fillOpacity={complete ? "0.16" : "0"}
         stroke={accent}
         strokeWidth="2"
         strokeLinejoin="round"
@@ -86,11 +84,11 @@ export default function RiskRadar({ layers = [], size = 300, band = 'medium', mu
       {/* Vertices, tinted by each layer's effective band. Prefer the
           backend-provided band (honours analyst band-only overrides) and fall
           back to deriving it from the score. */}
-      {dataPoints.map(([x, y], i) => (
+      {dataPoints.map((p, i) => p && (
         <circle
           key={`pt-${i}`}
-          cx={x}
-          cy={y}
+          cx={p[0]}
+          cy={p[1]}
           r="3.5"
           fill={muted ? MUTED_HEX : (RISK_BAND_HEX[layers[i].band] || RISK_BAND_HEX[bandFromScore(layers[i].score)])}
           stroke="#fff"

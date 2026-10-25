@@ -1,24 +1,20 @@
 /**
  * Task #25 — Pitch deck builder (Worker mirror).
  *
- * 10-slide deck pulling project + scoring data, per-slide rich-text
+ * 10-slide deck pulling project facts, per-slide rich-text
  * (markdown body) + image fields, version history, restore, and
  * ONE-TIME signed share URLs (HMAC + DB-tracked single-use).
  */
 import { Hono } from 'hono';
-import { findableBy } from '../services/investorFindable';
 import type { Env } from '../types';
-import { requireAuth } from '../auth';
-import { activeCompanyFor } from '../middleware/activeCompany';
-import { projectInActiveCompany } from '../services/tenancyScope';
+import { hydrateSuperAdmin, isSuperAdmin, requireAuth } from '../auth';
+import { projectOwned as sharedProjectOwned } from '../middleware/projectContentAccess';
+import { getProjectMembershipRole } from '../services/projectAccess';
 import { ensureTier, tierCovers } from '../middleware/requireTier';
 import {
   DECK_METHODS, PREMIUM_METHOD_IDS, getMethod,
 } from '../services/decks/methods';
-import { autofillDeck, toEditorSlides, parseJsonLoose } from '../services/decks/autofill';
-import { run as aiRouterRun } from '../services/aiRouter';
-import { AI_SURFACE } from '../services/aiSurfaces';
-import { formatUseOfFundsText } from '../util/useOfFunds';
+import { autofillDeck, toEditorSlides } from '../services/decks/autofill';
 // Task #15 — Axal 28-day Spin-Out Lab demo day deck. Custom autofill
 // path that bypasses the generic field-source vocabulary in autofill.ts
 // because the deck binds to Lab tables (interviews, milestones, OKRs)
@@ -33,14 +29,53 @@ import { renderDeckPPTX, renderDeckPPTXWithImages } from '../services/decks/pptx
 import { stripTrailingSlashes } from '../util/url';
 import { bindingKey } from '../util/schemaBootstrap';
 import { refuse } from '../util/refusal';
-import { railFor, refuseRun } from '../util/railContext';
+import { railFor } from '../util/railContext';
 import { slideTotals, recordSlideSeconds } from '../services/deckSlideDwell';
 import { logCycleWrite } from '../services/cycleActivity';
+import { shareAnalytics, type LinkAnalytics } from '../services/decks/shareAnalytics';
+import { DEFAULT_SHARE_INCLUDE, parseShareInclude, shareSlides, shareSpinoutFields, type ShareInclude } from '../services/decks/shareInclude';
+import { sanitizeBinding } from '../services/decks/sources';
+import {
+  AUDIENCES, BLOCK_KINDS, CHART_RANGES, CHART_TYPES, GRID_COLS, GRID_ROWS, IMAGE_TAGS, LAYOUTS, MAX_BLOCKS, NOTES_MAX,
+  TEXT_STYLES, THEME_KINDS, VIDEO_RATIOS, contentHash, modelProblems, sanitizeModel, sanitizeTheme,
+} from '../services/decks/slideModel';
+import { checkVideoLink } from '../services/decks/videoLink';
+import { ensureDeckVersionColumns, ensureProposalOutlineColumns } from '../services/decks/deckVersionColumns';
+import { isSupportSession } from '../integrations/providers/mercury';
+import { deckShareMetrics, LEGACY_SHARE_NO_VIEW_LIMIT } from '../services/deckShareUse';
+
+/** D895 applies only to deck operations, not other project-content routes. */
+export async function projectOwned(c: any, user: any, projectId: number, opts: { write?: boolean; audit?: boolean; contactData?: boolean } = {}) {
+  user = { ...user, role: String(user.role || '').toLowerCase() };
+  if (user.role === 'advisor' || (opts.write && user.role === 'admin')) throw new Error('Forbidden');
+  const project = await sharedProjectOwned(c, user, projectId, opts);
+  const owner = user.role === 'founder' && user.founder_id != null && user.founder_id === project.founder_id;
+  if (!owner && user.role !== 'admin' && await getProjectMembershipRole(c.env, projectId, user.id) === 'advisor') throw new Error('Forbidden');
+  return project;
+}
+
+/** Called after projectOwned has verified this request's active-company scope. */
+async function mercuryRunwayOwner(c: any, user: any, projectId: number): Promise<number | null> {
+  if (user.role !== 'founder' || user.founder_id == null || await isSupportSession(c)) return null;
+  const project = await c.env.DB.prepare('SELECT founder_id FROM projects WHERE id = ?').bind(projectId).first() as { founder_id: number | null } | null;
+  return project?.founder_id === user.founder_id ? Number(user.id) : null;
+}
+
+export async function auditDeckWrite(c: any, user: any, projectId: number, action: string, summary: string) {
+  await logCycleWrite(c.env, { projectId, userId: Number(user.id), cycle: 'raise', module: 'pitch-deck', entityId: null, action, summary });
+}
+
+/** Export always follows the venture owner's plan, even when a cofounder exports. */
+export async function deckOwnerBrand(env: Env, projectId: number) {
+  const owner = await env.DB.prepare("SELECT u.id, u.role, u.subscription_tier FROM users u JOIN projects p ON p.founder_id = u.founder_id WHERE p.id = ? AND u.role = 'founder' ORDER BY u.id LIMIT 1").bind(projectId).first<any>();
+  // Missing ownership never inherits a more generous exporter's plan.
+  return getDeckBrand(env, owner || { id: 0, role: 'founder', subscription_tier: 'free' } as any);
+}
 
 const decks = new Hono<{ Bindings: Env }>();
 
 const MIGRATED = new WeakMap<object, boolean>();
-async function ensureSchema(env: Env): Promise<void> {
+export async function ensureSchema(env: Env): Promise<void> {
   if (MIGRATED.get(bindingKey(env))) return;
   const stmts = [
     `CREATE TABLE IF NOT EXISTS pitch_decks (
@@ -74,7 +109,7 @@ async function ensureSchema(env: Env): Promise<void> {
        token_hash TEXT NOT NULL UNIQUE,
        expires_at TEXT NOT NULL,
        used_at TEXT,
-       view_limit INTEGER NOT NULL DEFAULT 1,
+       view_limit INTEGER DEFAULT 1,
        view_count INTEGER NOT NULL DEFAULT 0,
        last_viewed_at TEXT,
        revoked_at TEXT,
@@ -85,7 +120,10 @@ async function ensureSchema(env: Env): Promise<void> {
        investor_label TEXT,
        allow_download INTEGER NOT NULL DEFAULT 1 CHECK (allow_download IN (0, 1)),
        allow_forwarding INTEGER NOT NULL DEFAULT 1 CHECK (allow_forwarding IN (0, 1)),
-       bound_viewer_hash TEXT
+       bound_viewer_hash TEXT,
+       -- Migration 567 (D902): the NDA gate and what the link includes.
+       nda_required INTEGER NOT NULL DEFAULT 0 CHECK (nda_required IN (0, 1)),
+       include_json TEXT
      )`,
     `CREATE INDEX IF NOT EXISTS idx_deck_share_hash ON pitch_deck_share_tokens(token_hash)`,
     // Task #53 — per-impression telemetry surfaced in the Engagement panel.
@@ -112,7 +150,7 @@ async function ensureSchema(env: Env): Promise<void> {
     const cols = await env.DB.prepare(`PRAGMA table_info(pitch_deck_share_tokens)`).all<any>();
     const have = new Set(((cols.results || []) as any[]).map((r) => String(r.name)));
     if (!have.has('view_limit')) {
-      try { await env.DB.prepare(`ALTER TABLE pitch_deck_share_tokens ADD COLUMN view_limit INTEGER NOT NULL DEFAULT 1`).run(); } catch {}
+      try { await env.DB.prepare(`ALTER TABLE pitch_deck_share_tokens ADD COLUMN view_limit INTEGER DEFAULT 1`).run(); } catch {}
     }
     if (!have.has('view_count')) {
       try { await env.DB.prepare(`ALTER TABLE pitch_deck_share_tokens ADD COLUMN view_count INTEGER NOT NULL DEFAULT 0`).run(); } catch {}
@@ -134,6 +172,9 @@ async function ensureSchema(env: Env): Promise<void> {
       ['allow_download', `ALTER TABLE pitch_deck_share_tokens ADD COLUMN allow_download INTEGER NOT NULL DEFAULT 1 CHECK (allow_download IN (0, 1))`],
       ['allow_forwarding', `ALTER TABLE pitch_deck_share_tokens ADD COLUMN allow_forwarding INTEGER NOT NULL DEFAULT 1 CHECK (allow_forwarding IN (0, 1))`],
       ['bound_viewer_hash', `ALTER TABLE pitch_deck_share_tokens ADD COLUMN bound_viewer_hash TEXT`],
+      // Migration 567 — D902: the NDA gate and what the link includes.
+      ['nda_required', `ALTER TABLE pitch_deck_share_tokens ADD COLUMN nda_required INTEGER NOT NULL DEFAULT 0 CHECK (nda_required IN (0, 1))`],
+      ['include_json', `ALTER TABLE pitch_deck_share_tokens ADD COLUMN include_json TEXT`],
     ];
     for (const [col, ddl] of add463) {
       if (!have.has(col)) {
@@ -141,6 +182,10 @@ async function ensureSchema(env: Env): Promise<void> {
       }
     }
   } catch {}
+  // Migration 539 — D898: what a version records about itself, for the editor.
+  await ensureDeckVersionColumns(env);
+  // Migration 542 — D897: a New deck proposal's outline and kept cards.
+  await ensureProposalOutlineColumns(env);
   MIGRATED.set(bindingKey(env), true);
 }
 
@@ -236,169 +281,11 @@ async function hashViewerField(env: Env, value: string | null): Promise<string |
   return out;
 }
 
-const SLIDE_TITLES = [
-  'Problem', 'Solution', 'Market', 'Traction', 'Business model',
-  'Go-to-market', 'Competition', 'Team', 'Ask', 'Financials',
-];
-
-function fmtMoney(n: any): string | null {
-  const v = Number(n);
-  if (!isFinite(v) || v <= 0) return null;
-  return `$${Math.round(v).toLocaleString()}`;
-}
-
-async function latestScore(env: Env, projectId: number): Promise<any | null> {
-  try {
-    return await env.DB.prepare(
-      `SELECT * FROM score_snapshots WHERE project_id = ? AND is_sandbox = 0
-       ORDER BY created_at DESC LIMIT 1`
-    ).bind(projectId).first<any>();
-  } catch { return null; }
-}
-
-function heuristicSlides(p: any, snap: any | null): any[] {
-  // Task #14 — extended to read every project column the 12 deck templates
-  // reference, preserving the literal '—' placeholder when the column is
-  // empty so the editor renders a visible "needs filling" cue instead of
-  // an opinionated default. The dash mirrors `autofill.ts::PLACEHOLDER`.
-  const DASH = '—';
-  const orDash = (v: any): string => {
-    const s = (v == null ? '' : String(v)).trim();
-    return s ? s : DASH;
-  };
-  const name = orDash(p.name);
-  const sector = orDash(p.sector);
-  const tagline = orDash(p.tagline);
-  const vision = orDash(p.vision);
-  const tractionSummary = orDash(p.traction_summary);
-  const contactEmail = orDash(p.contact_email);
-  const logoUrl = (p.logo_url && String(p.logo_url).trim()) ? String(p.logo_url).trim() : null;
-  const problem = orDash(p.problem_statement);
-  const solution = (p.solution || p.description || '').toString().trim() || DASH;
-  const whyNow = orDash(p.why_now);
-  const tam = fmtMoney(p.tam);
-  const sam = fmtMoney(p.sam);
-  const som = fmtMoney(p.som);
-  const users = Number(p.users_count || 0);
-  const revenue = fmtMoney(p.revenue);
-  const funding = fmtMoney(p.funding_needed);
-  const useOf = formatUseOfFundsText(p.use_of_funds) || DASH;
-  const cac = fmtMoney(p.cac);
-  const grossMarginPct = p.gross_margin_pct != null && p.gross_margin_pct !== ''
-    ? `${Math.round(Number(p.gross_margin_pct) * 100) / 100}%` : null;
-  const scoreLine = snap ? `Internal score: ${Math.round(Number(snap.total_score) * 10) / 10}/100 (${snap.tier}).` : '';
-  const marketLine = snap ? `Market scoring: ${Math.round(Number(snap.market_total) * 10) / 10} (urgency + trend signal).` : '';
-  const arr = (xs: (string | null | undefined)[]) => xs.filter((x): x is string => !!x);
-
-  return [
-    { title: 'Title', subtitle: name, body: tagline, bullets: arr([vision !== DASH ? `Vision: ${vision}` : null]), image_url: logoUrl },
-    { title: 'Problem', subtitle: name, body: problem, bullets: arr([whyNow !== DASH ? whyNow : null]), image_url: null },
-    { title: 'Solution', subtitle: name, body: solution, bullets: [], image_url: null },
-    { title: 'Market', subtitle: sector, body: '', bullets: arr([
-      tam ? `TAM: ${tam}` : `TAM: ${DASH}`,
-      sam ? `SAM: ${sam}` : `SAM: ${DASH}`,
-      som ? `SOM: ${som}` : `SOM: ${DASH}`,
-      whyNow !== DASH ? whyNow : null, marketLine,
-    ]), image_url: null },
-    { title: 'Traction', subtitle: "What's working", body: tractionSummary, bullets: arr([
-      users > 0 ? `${users.toLocaleString()} users` : `Users: ${DASH}`,
-      revenue ? `${revenue} revenue` : `Revenue: ${DASH}`,
-      p.growth_signals || DASH,
-      scoreLine,
-    ]), image_url: null },
-    { title: 'Business model', subtitle: 'How we make money', body: '', bullets: arr([
-      cac ? `Blended CAC: ${cac}` : `CAC: ${DASH}`,
-      grossMarginPct ? `Gross margin: ${grossMarginPct}` : `Gross margin: ${DASH}`,
-    ]), image_url: null },
-    { title: 'Go-to-market', subtitle: 'Channels & motion', body: '', bullets: [DASH], image_url: null },
-    { title: 'Competition', subtitle: 'Landscape', body: '', bullets: [DASH], image_url: null },
-    { title: 'Team', subtitle: 'Why us', body: '', bullets: [DASH], image_url: null },
-    { title: 'Ask', subtitle: 'Round', body: '', bullets: arr([
-      funding ? `Raising ${funding}` : `Raise: ${DASH}`,
-      '18-24 months of runway to hit the next milestone.',
-      useOf,
-    ]), image_url: null },
-    { title: 'Financials', subtitle: 'Plan', body: '', bullets: arr([
-      funding ? `Burn target reflecting ${funding} raise.` : `Burn target: ${DASH}`,
-    ]), image_url: null },
-    { title: 'Contact', subtitle: name, body: contactEmail, bullets: [], image_url: null },
-  ];
-}
-
-// D767 (#2096): one router run on Workers AI, held, guarded and charged to the
-// founder who pressed, with the Raise › Pitch deck page and option on its usage
-// row. The task is the page's row in D764's matrix (`ai/railMatrix.json`,
-// "Founder · Raise · Pitch deck": kind vision, `rail_vision`). A refusal or a failed run returns null and the
-// heuristic deck is used, as a missing key used to.
-async function aiSlides(env: Env, p: any, snap: any | null, userId: number): Promise<any[] | null> {
-  try {
-    const ctx = {
-      name: p.name, sector: p.sector, stage: p.stage,
-      description: p.description, problem: p.problem_statement,
-      solution: p.solution, why_now: p.why_now,
-      tam: p.tam, sam: p.sam, users: p.users_count, revenue: p.revenue,
-      growth_signals: p.growth_signals, cost_to_mvp: p.cost_to_mvp,
-      funding_needed: p.funding_needed, use_of_funds: p.use_of_funds,
-      scoring: snap ? {
-        total_score: snap.total_score, tier: snap.tier,
-        market_total: snap.market_total, team_total: snap.team_total,
-        product_total: snap.product_total, capital_total: snap.capital_total,
-        fit_total: snap.fit_total, distribution_total: snap.distribution_total,
-        ai_notes: snap.ai_notes,
-      } : null,
-    };
-    const prompt = `Draft a 10-slide pitch deck for the following startup. Return ONLY valid JSON of the shape:
-{"slides":[{"title":"...","subtitle":"...","body":"...","bullets":["...","..."]}, ...]}
-Use exactly these slide titles in order: ${JSON.stringify(SLIDE_TITLES)}.
-\`body\` is a 1-2 sentence narrative paragraph (markdown allowed). \`bullets\` is 2-4 punchy bullets (≤18 words each).
-Use the scoring numbers in the Traction and Market slides where helpful.
-Startup data: ${JSON.stringify(ctx)}`;
-    const res = await aiRouterRun(env, {
-      task: 'rail_vision',
-      userId,
-      surface: AI_SURFACE.raisePitch,
-      // D765: the member's rail context; run() records it as D767's page, option and record.
-      rail: { page: AI_SURFACE.raisePitch, option: 'deck_draft', record: `project:${Number(p?.id) || 0}` },
-      systemPrompt: 'You are a senior VC associate drafting concise pitch decks. Always return valid JSON.',
-      messages: [{ role: 'user', content: prompt }],
-      temperature: 0.5,
-      maxTokens: 1800,
-    });
-    if (!res.ok || !res.output) return null;
-    const parsed: any = parseJsonLoose<any>(res.output);
-    const slides = Array.isArray(parsed?.slides) ? parsed.slides : null;
-    return slides && slides.length >= 1 ? slides : null;
-  } catch { return null; }
-}
-
-// Spec: deck "auto-creates 10 slides". Pad with fallback content from the
-// heuristic when the AI returns fewer; trim when more. Aligned by canonical
-// slide title where possible.
-function enforceTen(slides: any[], fallback: any[]): any[] {
-  const byTitle = new Map<string, any>();
-  for (const s of slides || []) {
-    if (!s || typeof s !== 'object') continue;
-    const t = String(s.title || '').trim().toLowerCase();
-    if (t && !byTitle.has(t)) byTitle.set(t, s);
-  }
-  const out: any[] = [];
-  for (let i = 0; i < SLIDE_TITLES.length; i++) {
-    const canonical = SLIDE_TITLES[i];
-    let s = byTitle.get(canonical.toLowerCase());
-    if (!s && i < slides.length && slides[i] && typeof slides[i] === 'object') s = slides[i];
-    if (!s) s = fallback[i];
-    s = { ...s };
-    if (!s.title) s.title = canonical;
-    out.push(s);
-  }
-  return out;
-}
-
 // Task #16 — must accept *both* the legacy {title,body,bullets,image_url}
 // shape AND the new fielded shape { title, subtitle, spec_id, appendix,
 // method_id, fields:[{key,label,kind,value,source,edited?}] }. Anything
 // else is dropped. Caps prevent runaway sizes.
-function sanitizeSlides(input: any[]): any[] {
+export function sanitizeSlides(input: any[]): any[] {
   return (input || []).slice(0, 60).map((s: any) => {
     const title = String((s?.title || '') as string).trim().slice(0, 120) || 'Slide';
     const sub = s?.subtitle ? String(s.subtitle).trim().slice(0, 200) : null;
@@ -416,6 +303,9 @@ function sanitizeSlides(input: any[]): any[] {
     if (s?.method_id) out.method_id = String(s.method_id).slice(0, 80);
     if (s?.appendix) out.appendix = !!s.appendix;
     if (Array.isArray(s?.fields)) out.fields = sanitizeFields(s.fields);
+    // D898: the editor's layout, notes, background and blocks, and (D896,
+    // #2675) the card's own binding, so refresh can find it.
+    Object.assign(out, sanitizeModel(s, sanitizeImageUrl));
     return out;
   });
 }
@@ -460,6 +350,10 @@ function sanitizeFields(input: any[]): any[] {
     // Preserve the read-only flag so auto-computed fields stay non-editable
     // after a save/reload round-trip.
     if (f?.readonly) out.readonly = true;
+    // D902 — a quote's consent, recorded on the field, is what lets a link carry it.
+    if (f?.consent === true) out.consent = true;
+    const binding = sanitizeBinding(f?.binding);
+    if (binding) out.binding = binding;
     return out;
   });
 }
@@ -501,61 +395,125 @@ export function sanitizeImageUrl(input: string | null | undefined): string | nul
   return u.toString();
 }
 
-/**
- * The project behind a deck, or a throw. The single gate this file has, which
- * is why the company clause belongs here and not at its thirteen call sites.
- *
- * COMPANY SCOPING, and read THIS file's exemption set rather than a sibling's:
- * admin, partner AND investor are all exempt here, because a deck is shown to
- * people who do not own the project. Only the founder branch narrows, and only
- * after ownership is established — this throws Forbidden, so a company that
- * could grant rather than narrow would be a hole.
- *
- * Takes the context rather than the env because the active company is a
- * property of the REQUEST. Passing the env would have meant resolving the
- * header at every call site, which is the arrangement that lets one of them
- * quietly forget.
- */
-async function projectOwned(
-  c: { env: Env; req: { header: (n: string) => string | undefined } },
-  user: any,
-  projectId: number,
-): Promise<any> {
-  const row = await c.env.DB.prepare(
-    'SELECT id, founder_id, company_id FROM projects WHERE id = ?',
-  ).bind(projectId).first<any>();
-  if (!row) throw new Error('NotFound');
-  const role = String(user?.role || '').toLowerCase();
-  // D702 — an investor opening a venture its founder keeps to introductions,
-  // without one, finds nothing, exactly as for a venture that does not exist.
-  if (role === 'investor' && !(await findableBy(c.env, user, row.id))) throw new Error('NotFound');
-  if (role === 'admin' || role === 'partner' || role === 'investor') return row;
-  if (role === 'founder' && user.founder_id && row.founder_id === user.founder_id) {
-    if (!projectInActiveCompany(await activeCompanyFor(c, user), row)) throw new Error('NotFound');
-    return row;
-  }
-  throw new Error('Forbidden');
-}
 
-/** D767 — a "Fill from project" proposal as the editor shows it beside the current version. */
-function rowToProposal(row: any): any {
+
+/**
+ * D767 — a "Fill from project" proposal as the editor shows it beside the
+ * current version. D897: a New deck's proposal also carries its outline and
+ * the cards kept so far (migration 542); both are null on any other proposal.
+ */
+export function rowToProposal(row: any): any {
   let slides: any[] = [];
-  try { slides = JSON.parse(row.slides || '[]'); } catch { slides = []; }
+  try { slides = founderPitchSlides(JSON.parse(row.slides || '[]')); } catch { slides = []; }
+  let outline: any = null;
+  try { outline = row.outline_json ? JSON.parse(row.outline_json) : null; } catch { outline = null; }
+  let kept: number[] | null = null;
+  try { kept = row.kept_slides_json ? (JSON.parse(row.kept_slides_json) as unknown[]).filter((x): x is number => Number.isInteger(x)) : null; } catch { kept = null; }
   return {
     id: row.id, project_id: row.project_id, base_deck_id: row.base_deck_id,
     title: row.title, method_id: row.method_id, created_at: row.created_at, slides,
+    outline: outline && typeof outline === 'object' ? outline : null, kept,
   };
 }
 
-function rowToDeck(row: any, withSlides = true): any {
+export function founderPitchSlides(slides: any[]): any[] {
+  return slides.filter((slide) => slide && typeof slide === 'object').map((slide) => ({ ...slide, fields: Array.isArray(slide.fields) ? slide.fields.map((field: any) => {
+    if (!String(field?.key || '').startsWith('vr_')) return field;
+    return { ...field, value: field.kind === 'metric_grid' || field.kind === 'bullets' ? [] : field.key === 'vr_sandbox' ? 'false' : 'Not recorded' };
+  }) : slide.fields }));
+}
+
+export function rowToDeck(row: any, withSlides = true): any {
   const out: any = {
     id: row.id, project_id: row.project_id, version: row.version,
     title: row.title, is_current: !!row.is_current, created_at: row.created_at,
+    // D898: who the version is for, its round, its theme and who saved it.
+    // A version saved before D898 reads null for each: "Not recorded".
+    audience: row.audience ?? null,
+    round: row.round_ref ? { uid: row.round_ref, name: row.round_name ?? null } : null,
+    theme: themeOfRow(row),
+    content_hash: row.content_hash ?? null,
+    by: row.created_by != null ? { id: Number(row.created_by), name: row.created_by_name ?? null } : null,
   };
   if (withSlides) {
-    try { out.slides = JSON.parse(row.slides || '[]'); } catch { out.slides = []; }
+    try { out.slides = founderPitchSlides(JSON.parse(row.slides || '[]')); } catch { out.slides = []; }
   }
   return out;
+}
+
+/**
+ * D898 — a version as someone outside the venture reads it: the share link and
+ * the headless print export. The speaker notes, who saved it, and who and which
+ * round it was written for stay with the venture; the theme stays, because the
+ * cards render on it.
+ */
+function publicDeckOf(row: any): any {
+  const { audience, round, by, content_hash, ...deck } = rowToDeck(row);
+  void audience; void round; void by; void content_hash;
+  deck.slides = (deck.slides || []).map((s: any) => {
+    const { notes, ...card } = s || {};
+    void notes;
+    return card;
+  });
+  return deck;
+}
+
+export function themeOfRow(row: any): any {
+  if (!row?.theme_json) return null;
+  try { return sanitizeTheme(JSON.parse(row.theme_json), sanitizeImageUrl); } catch { return null; }
+}
+
+/** What a version records about itself besides its slides (D898). */
+export type VersionMeta = { audience?: string | null; round_ref?: string | null; theme?: any };
+
+/**
+ * The audience, round and theme a save asks for, checked: an unknown audience,
+ * or a round that is not this venture's, is refused. A field the request
+ * leaves out keeps the version's own (`base`).
+ */
+async function versionMetaOf(env: Env, projectId: number, body: any, base: any): Promise<VersionMeta | string> {
+  const has = (k: string) => body && Object.prototype.hasOwnProperty.call(body, k);
+  const audience = has('audience') ? body.audience : base?.audience ?? null;
+  if (audience != null && !(AUDIENCES as readonly string[]).includes(audience)) return `audience must be one of ${AUDIENCES.join(', ')}`;
+  const round_ref = has('round_ref') ? body.round_ref : base?.round_ref ?? null;
+  if (round_ref != null) {
+    if (typeof round_ref !== 'string' || round_ref.length > 64) return 'round_ref must be a round of this venture';
+    const r = await env.DB.prepare('SELECT 1 AS ok FROM raise_rounds WHERE uid = ? AND project_id = ?').bind(round_ref, projectId).first<any>().catch(() => null);
+    if (!r) return 'round_ref must be a round of this venture';
+  }
+  let theme = has('theme') ? body.theme : themeOfRow(base);
+  if (theme != null) {
+    theme = sanitizeTheme(theme, sanitizeImageUrl);
+    if (!theme) return 'theme.kind must be brand, neutral_light or neutral_dark';
+  }
+  return { audience, round_ref, theme };
+}
+
+/**
+ * Adds each version's round name and saver's name, for the deck read and the
+ * versions list. A lookup that fails leaves the name null ("Not recorded"); the
+ * version itself still reads.
+ */
+async function withNames(env: Env, rows: any[]): Promise<any[]> {
+  const rounds = [...new Set(rows.map((r) => r.round_ref).filter((x) => typeof x === 'string'))];
+  const users = [...new Set(rows.map((r) => r.created_by).filter((x) => x != null).map(Number))];
+  const roundName = new Map<string, string | null>();
+  const userName = new Map<number, string | null>();
+  if (rounds.length && rows.length) {
+    try {
+      const res = await env.DB.prepare(
+        `SELECT uid, name FROM raise_rounds WHERE project_id = ? AND uid IN (SELECT value FROM json_each(?))`,
+      ).bind(Number(rows[0].project_id), JSON.stringify(rounds)).all<any>();
+      for (const r of (res.results || []) as any[]) roundName.set(String(r.uid), r.name ?? null);
+    } catch {}
+  }
+  if (users.length) {
+    try {
+      const res = await env.DB.prepare('SELECT id, name FROM users WHERE id IN (SELECT value FROM json_each(?))').bind(JSON.stringify(users)).all<any>();
+      for (const u of (res.results || []) as any[]) userName.set(Number(u.id), u.name ?? null);
+    } catch {}
+  }
+  return rows.map((r) => ({ ...r, round_name: roundName.get(r.round_ref) ?? null, created_by_name: userName.get(Number(r.created_by)) ?? null }));
 }
 
 async function nextVersion(env: Env, projectId: number): Promise<number> {
@@ -565,188 +523,40 @@ async function nextVersion(env: Env, projectId: number): Promise<number> {
   return (Number(row?.v) || 0) + 1;
 }
 
-async function insertVersion(env: Env, projectId: number, slides: any[], title: string, userId: number | null): Promise<number> {
+export async function insertVersion(env: Env, projectId: number, slides: any[], title: string, userId: number | null, meta: VersionMeta = {}): Promise<number> {
   await env.DB.prepare(
     'UPDATE pitch_decks SET is_current = 0 WHERE project_id = ? AND is_current = 1'
   ).bind(projectId).run();
   const v = await nextVersion(env, projectId);
+  const stored = founderPitchSlides(slides);
+  const theme = meta.theme ?? null;
   const res = await env.DB.prepare(
-    `INSERT INTO pitch_decks (project_id, version, slides, title, is_current, created_by)
-     VALUES (?, ?, ?, ?, 1, ?)`
-  ).bind(projectId, v, JSON.stringify(slides), title, userId).run();
+    `INSERT INTO pitch_decks (project_id, version, slides, title, is_current, created_by, audience, round_ref, theme_json, content_hash)
+     VALUES (?, ?, ?, ?, 1, ?, ?, ?, ?, ?)`
+  ).bind(projectId, v, JSON.stringify(stored), title, userId, meta.audience ?? null, meta.round_ref ?? null,
+    theme ? JSON.stringify(theme) : null, await contentHash(stored, theme)).run();
   return Number((res as any)?.meta?.last_row_id || 0);
 }
 
-decks.post('/generate', async (c) => {
-  // Task #6 — deck generation/save. D683: the pitch deck is Raise work, so it
-  // is on the Raise + Grow plan (`studio`).
-  ensureTier(await requireAuth(c), 'studio');
+// D897 (#2677): POST /generate moved to `routes/deck_new.ts`, where it builds a
+// proposal the founder keeps card by card instead of writing a version.
+
+/** GET /api/decks/recommend?project_id=... — suggested method for project. */
+decks.get('/recommend', async (c) => {
   const user = await requireAuth(c);
-  const body = await c.req.json().catch(() => ({} as any));
-  const pid = parseInt(body?.project_id);
+  const pid = parseInt(c.req.query('project_id') || '');
   if (!pid) return c.json({ error: 'project_id required' }, 400);
-  let p: any;
+  let proj: any;
   try {
     await projectOwned(c, user, pid);
-    p = await c.env.DB.prepare('SELECT * FROM projects WHERE id = ?').bind(pid).first<any>();
-  } catch (e: any) {
-    if (e?.message === 'NotFound') return c.json({ error: 'not found' }, 404);
-    return c.json({ error: 'forbidden' }, 403);
-  }
-  await ensureSchema(c.env);
-  const snap = await latestScore(c.env, pid);
-  const fallback = heuristicSlides(p, snap);
-  const raw = (await aiSlides(c.env, p, snap, Number(user.id) || 0)) || fallback;
-  const aligned = enforceTen(raw, fallback);
-  const slides = sanitizeSlides(aligned);
-  while (slides.length < 10) slides.push(fallback[slides.length]);
-  // Task #6 — inject brand kit from landing page (generic generate = 'off' theme)
-  const landingPage = await fetchLandingPageForProject(c.env, pid);
-  const brandedSlides = applyBrandKitToSlides(slides, landingPage, 'off', p.name);
-  const title = `${p.name} — Pitch deck`;
-  const id = await insertVersion(c.env, pid, brandedSlides, title, Number(user.id) || null);
-  const row = await c.env.DB.prepare('SELECT * FROM pitch_decks WHERE id = ?').bind(id).first<any>();
-  return c.json(rowToDeck(row));
-});
-
-// Task #10 — One-liner & Elevator pitch generator ("one-click positioning").
-// Pulls the selected project's TEAM (cap-table founders), TRACTION (project
-// columns + financial model + latest score) and recent UPDATES (submitted
-// portfolio updates), then asks the AI for a punchy one-liner, a short
-// elevator pitch and 3-5 alternate positioning lines. Growth-tier, owner-
-// scoped. Uses the held, guarded run path; a refused run has no silent
-// fallback and no fabricated lines (security-first / explicit-error prefs).
-decks.post('/positioning', async (c) => {
-  ensureTier(await requireAuth(c), 'studio'); // D683: Raise + Grow
-  const user = await requireAuth(c);
-  const body = await c.req.json().catch(() => ({} as any));
-  const pid = parseInt(body?.project_id);
-  if (!pid) return c.json({ error: 'project_id required' }, 400);
-
-  let p: any;
-  try {
-    await projectOwned(c, user, pid);
-    p = await c.env.DB.prepare('SELECT * FROM projects WHERE id = ?').bind(pid).first<any>();
-  } catch (e: any) {
-    if (e?.message === 'NotFound') return c.json({ error: 'not found' }, 404);
-    return c.json({ error: 'forbidden' }, 403);
-  }
-  if (!p) return c.json({ error: 'not found' }, 404);
-
-  // --- Gather grounding data (each source degrades to empty on failure). ---
-  // Team = cap-table founders (fall back to all holders if none tagged).
-  let team: string[] = [];
-  try {
-    const hr = await c.env.DB.prepare(
-      'SELECT name, kind FROM cap_table_holders WHERE project_id = ?',
-    ).bind(pid).all<{ name: string; kind: string }>();
-    const rows = hr.results || [];
-    const founders = rows.filter((h) => /founder/i.test(h.kind || ''));
-    team = (founders.length ? founders : rows)
-      .map((h) => String(h.name || '').trim()).filter(Boolean).slice(0, 6);
-  } catch { /* table may not exist in dev */ }
-
-  // Financials — runway / burn / LTV:CAC add credible traction color.
-  let fin: any = null;
-  try {
-    const fmRow = await c.env.DB
-      .prepare('SELECT computed_json, assumptions_json FROM financial_models WHERE project_id = ?')
+    proj = await c.env.DB.prepare('SELECT id, name, sector, stage FROM projects WHERE id = ?')
       .bind(pid).first<any>();
-    if (fmRow?.computed_json) { try { fin = JSON.parse(fmRow.computed_json); } catch { fin = null; } }
-    if (!fin && fmRow?.assumptions_json) { try { fin = JSON.parse(fmRow.assumptions_json); } catch { fin = null; } }
-  } catch { /* table may not exist in dev */ }
-
-  // Recent submitted portfolio updates → the "updates" grounding.
-  let updates: Array<{ period: string | null; title: string }> = [];
-  try {
-    const ur = await c.env.DB.prepare(
-      `SELECT period, title FROM portfolio_updates
-       WHERE project_id = ? AND status = 'submitted'
-       ORDER BY COALESCE(submitted_at, updated_at) DESC LIMIT 5`,
-    ).bind(pid).all<{ period: string | null; title: string }>();
-    updates = (ur.results || []).filter((u) => String(u.title || '').trim());
-  } catch { /* table may not exist in dev */ }
-
-  const snap = await latestScore(c.env, pid);
-
-  const hasTraction = !!(
-    p.traction_summary || p.growth_signals || p.users_count || p.revenue
-  );
-  const sourced_from = {
-    team: team.length,
-    traction: hasTraction,
-    updates: updates.length,
-    financials: !!fin,
-  };
-
-  const ctx = {
-    name: p.name, sector: p.sector, stage: p.stage,
-    description: p.description, problem: p.problem_statement,
-    solution: p.solution, why_now: p.why_now,
-    tagline: p.tagline, vision: p.vision,
-    tam: p.tam, sam: p.sam, som: p.som,
-    users: p.users_count, revenue: p.revenue,
-    traction_summary: p.traction_summary,
-    growth_signals: p.growth_signals, funding_needed: p.funding_needed,
-    team,
-    runway_months: fin?.runway_months, ltv_cac_ratio: fin?.ltv_cac_ratio,
-    avg_monthly_burn: fin?.avg_monthly_burn,
-    score_tier: snap?.tier,
-    recent_updates: updates.map((u) => (u.period ? `${u.period}: ${u.title}` : u.title)),
-  };
-
-  const prompt = `You are a world-class startup positioning strategist.
-Using ONLY the startup data below, craft investor-ready positioning.
-
-Startup data (JSON):
-${JSON.stringify(ctx)}
-
-Return ONLY valid JSON of exactly this shape:
-{
-  "one_liner": "<one punchy sentence, <= 15 words, no buzzwords>",
-  "elevator_pitch": "<2-3 sentences a founder can say in ~20 seconds>",
-  "positioning_lines": ["<line 1>", "<line 2>", "<line 3>", "<line 4>"]
-}
-
-Rules:
-- 3 to 5 positioning_lines, each <= 18 words, each a DISTINCT angle
-  (customer value, market wedge, why-now, outcome).
-- Concrete and specific to THIS startup — never generic filler.
-- Never invent metrics, customers, or funding not present in the data.`;
-
-  const result = await aiRouterRun(c.env, {
-    task: 'rail_write',
-    userId: Number(user.id),
-    surface: AI_SURFACE.raisePitch,
-    rail: railFor(c, { page: 'Founder · Raise · Pitch deck', option: 'draft:positioning' }, `project:${pid}`),
-    systemPrompt: 'You are a senior startup positioning strategist. Always return valid JSON.',
-    messages: [{ role: 'user', content: prompt }],
-    temperature: 0.6,
-    maxTokens: 700,
-  });
-  if (!result.ok || !result.output) {
-    return refuseRun(c, result) || c.json({ error: 'ai_unavailable', code: 'ai_unavailable', message: 'The positioning generator could not complete. Please try again.' }, 503);
+  } catch (e: any) {
+    if (e?.message === 'NotFound') return c.json({ error: 'not found' }, 404);
+    return c.json({ error: 'forbidden' }, 403);
   }
-  const parsed = parseJsonLoose<any>(result.output);
-
-  const one_liner = typeof parsed?.one_liner === 'string' ? parsed.one_liner.trim() : '';
-  const elevator_pitch = typeof parsed?.elevator_pitch === 'string' ? parsed.elevator_pitch.trim() : '';
-  const positioning_lines = Array.isArray(parsed?.positioning_lines)
-    ? parsed.positioning_lines.map((s: any) => String(s).trim()).filter(Boolean).slice(0, 6)
-    : [];
-
-  if (!one_liner && !elevator_pitch && positioning_lines.length === 0) {
-    return c.json({ error: 'ai_failed', code: 'ai_failed', message: 'The positioning generator returned nothing usable. Please try again.' }, 502);
-  }
-
-  return c.json({
-    project_id: pid,
-    project_name: String(p.name || ''),
-    one_liner,
-    elevator_pitch,
-    positioning_lines,
-    sourced_from,
-  });
+  const rec = await recommendMethod(c.env, proj || {});
+  return c.json(rec);
 });
 
 decks.get('/by-project/:pid', async (c) => {
@@ -755,22 +565,22 @@ decks.get('/by-project/:pid', async (c) => {
   try { await projectOwned(c, user, pid); } catch { return c.json({ error: 'forbidden' }, 403); }
   await ensureSchema(c.env);
   const rows = await c.env.DB.prepare(
-    `SELECT id, project_id, version, title, is_current, created_at FROM pitch_decks
-     WHERE project_id = ? ORDER BY version DESC`
+    // `*`, then drop the slides: a database that has not run 539 still lists its versions.
+    'SELECT * FROM pitch_decks WHERE project_id = ? ORDER BY version DESC'
   ).bind(pid).all<any>();
   const proposal = await c.env.DB.prepare(
     'SELECT * FROM pitch_deck_proposals WHERE project_id = ? ORDER BY id DESC LIMIT 1',
   ).bind(pid).first<any>();
   return c.json({
-    versions: ((rows.results ?? []) as any[]).map((r) => rowToDeck(r, false)),
+    versions: (await withNames(c.env, (rows.results ?? []) as any[])).map((r) => rowToDeck(r, false)),
     proposal: proposal ? rowToProposal(proposal) : null,
   });
 });
 
-async function getDeckRow(env: Env, id: number): Promise<any> {
+export async function getDeckRow(env: Env, id: number): Promise<any> {
   const row = await env.DB.prepare('SELECT * FROM pitch_decks WHERE id = ?').bind(id).first<any>();
   if (!row) throw new Error('NotFound');
-  return row;
+  return (await withNames(env, [row]))[0];
 }
 
 // ---------------------------------------------------------------------
@@ -785,6 +595,18 @@ async function getDeckRow(env: Env, id: number): Promise<any> {
 // never the viewer, mirroring POST /projects/:id/spinout-deck. Any failure
 // returns null so the viewer degrades to the sample instead of erroring.
 // ---------------------------------------------------------------------
+/** A malformed readiness card never discards unrelated public deck fields. */
+export function founderSpinoutFields(fields: Record<string, string>): Record<string, string> {
+  const safe = { ...fields };
+  if ('validation.cards_json' in safe) {
+    let cards: unknown;
+    try { cards = JSON.parse(safe['validation.cards_json']); } catch { /* unreadable card data */ }
+    safe['validation.cards_json'] = JSON.stringify(Array.isArray(cards)
+      ? cards.filter((card: any) => Array.isArray(card) && !/axal\s+score/i.test(String(card[1] || ''))) : []);
+  }
+  return safe;
+}
+
 async function bakeSpinoutFields(env: Env, row: any): Promise<Record<string, string> | null> {
   if (extractDeckMethodId(row) !== 'axal_spinout_demoday') return null;
   const projectId = Number(row?.project_id);
@@ -809,7 +631,7 @@ async function bakeSpinoutFields(env: Env, row: any): Promise<Record<string, str
     // shared / printed deck would silently revert every manual edit back to the
     // module text — the founder would see one deck on screen and send another.
     const overrides = await loadSpinoutDeckOverrides(env, projectId);
-    return applySpinoutOverrides(base, overrides).fields || null;
+    return founderSpinoutFields(applySpinoutOverrides(base, overrides).fields || {});
   } catch (e) {
     console.error('[decks] spinout fields bake failed:', (e as Error).message);
     return null;
@@ -835,7 +657,7 @@ decks.get('/print-export/:token', async (c) => {
     if (pr?.name) projectName = String(pr.name).slice(0, 200);
   } catch {}
   return c.json({
-    ...rowToDeck(row),
+    ...publicDeckOf(row),
     method_id: methodId,
     project_id: Number(row.project_id) || null,
     project_name: projectName,
@@ -852,7 +674,7 @@ decks.get('/share/:token', async (c) => {
     // viewer pages can show a "share link expired" state distinct from
     // an outright invalid signature (which stays 403).
     if (/expired/i.test(String(e?.message || ''))) {
-      return c.json({ error: 'share link has expired' }, 410);
+      return closedLink(c, 'share link has expired', await expiredTokenDeckId(c.env, token));
     }
     return refuse(c, 403, { code: 'forbidden', message: 'This share link is not valid.', raw: e });
   }
@@ -863,6 +685,20 @@ decks.get('/share/:token', async (c) => {
   // the claim, so a refused browser uses no view.
   const bind = await bindShareViewer(c, await sha256Hex(token));
   if (bind.refused) return refuse(c, 403, { code: 'forwarding_off', message: SHARE_SENT_TO_SOMEONE_ELSE });
+  // D902 — the link's NDA and what it includes. With the NDA required, a live
+  // link sends no card, and uses no view, until the person opening it has
+  // accepted the NDA on this link; the gate carries only what the NDA names.
+  const link = await c.env.DB.prepare(
+    'SELECT id, nda_required, include_json, prospect_id, investor_label FROM pitch_deck_share_tokens WHERE token_hash = ?',
+  ).bind(await sha256Hex(token)).first<{ id: number; nda_required: number | null; include_json: string | null; prospect_id: number | null; investor_label: string | null }>();
+  const ndaRequired = Number(link?.nda_required ?? 0) === 1;
+  if (link && ndaRequired && await shareLinkLive(c.env, await sha256Hex(token), bind.viewerHash)) {
+    const gate = await ndaGate(c, Number(link.id), parseInt(m[1]));
+    if (gate) {
+      if (bind.setCookie) c.header('Set-Cookie', bind.setCookie);
+      return c.json(gate);
+    }
+  }
   // Task #53 — atomic claim against view_limit. Increment view_count
   // only when there is capacity left and the token hasn't expired.
   // D1's meta.changes tells us if THIS request consumed a view slot.
@@ -871,9 +707,10 @@ decks.get('/share/:token', async (c) => {
     `UPDATE pitch_deck_share_tokens
         SET view_count = view_count + 1,
             last_viewed_at = datetime('now'),
-            used_at = CASE WHEN view_count + 1 >= view_limit THEN datetime('now') ELSE used_at END
+            used_at = CASE WHEN view_limit IS NOT NULL AND view_count + 1 >= view_limit THEN datetime('now') ELSE used_at END
       WHERE token_hash = ?
-        AND view_count < view_limit
+        AND (view_limit IS NULL OR view_count < view_limit)
+        AND used_at IS NULL
         AND datetime(expires_at) > datetime('now')
         -- Task #196. Revoking sets expires_at too, so this predicate is
         -- belt-and-braces, deliberately: without it the guarantee would depend on
@@ -892,7 +729,7 @@ decks.get('/share/:token', async (c) => {
       `SELECT id, view_count, view_limit, expires_at FROM pitch_deck_share_tokens WHERE token_hash = ?`
     ).bind(h).first<any>();
     if (!tokRow) return c.json({ error: 'share link is invalid' }, 403);
-    return c.json({ error: 'share link is no longer valid' }, 410);
+    return closedLink(c, 'share link is no longer valid', parseInt(m[1]));
   }
   const id = parseInt(m[1]);
   const row = await c.env.DB.prepare('SELECT * FROM pitch_decks WHERE id = ?').bind(id).first<any>();
@@ -933,18 +770,83 @@ decks.get('/share/:token', async (c) => {
     if (pr?.name) projectName = String(pr.name).slice(0, 200);
   } catch {}
   if (bind.setCookie) c.header('Set-Cookie', bind.setCookie);
+  // D902 — only what the link includes leaves the Worker (`shareInclude.ts`).
+  const included = parseShareInclude(link?.include_json);
+  // D898's public fields (no audience, round, author or hash), with the cards
+  // as the link includes them: speaker notes go only with notes on.
   return c.json({
-    ...rowToDeck(row),
+    ...publicDeckOf(row),
+    slides: shareSlides(rowToDeck(row).slides, included),
     view_id: viewId,
     method_id: methodId,
     project_id: Number(row.project_id) || null,
     project_name: projectName,
-    spinout_fields: await bakeSpinoutFields(c.env, row),
+    spinout_fields: shareSpinoutFields(await bakeSpinoutFields(c.env, row)),
     // D691 decision 5 — the viewer hides Save as PDF when this is false. It
     // does not stop a screenshot or the browser's own print.
     allow_download: bind.allowDownload,
+    nda_required: ndaRequired,
+    // D902 — a studio link names its investor and offers no deal pack (bug 12; `deck_share_actions.ts`).
+    offers_deal_pack: !(link && (link.prospect_id != null || String(link.investor_label || '').trim() !== '')),
+    included,
+    // A link is frozen to the version it was made from (D902; the token's scope).
+    frozen: { version: Number(row.version), as_of: row.created_at ?? null },
   });
 });
+
+/** D902 — PD22: a link that is no longer open says so, names the venture to ask, and shows nothing from the deck. */
+export const SHARE_LINK_CLOSED = 'This link is no longer open.';
+export const shareLinkAsk = (venture: string | null) => (venture ? `Ask ${venture} for a new one.` : 'Ask the venture for a new one.');
+
+async function closedLink(c: any, error: string, deckId: number | null) {
+  const env: Env = c.env;
+  let venture: string | null = null;
+  if (deckId) {
+    try {
+      const r = await env.DB.prepare('SELECT p.name FROM pitch_decks d JOIN projects p ON p.id = d.project_id WHERE d.id = ?')
+        .bind(deckId).first<{ name: string | null }>();
+      if (r?.name) venture = String(r.name).slice(0, 200);
+    } catch { /* the card still says the link is closed */ }
+  }
+  return c.json({ error, code: 'link_closed', message: SHARE_LINK_CLOSED, venture, ask: shareLinkAsk(venture) }, 410);
+}
+
+/**
+ * D902 — the NDA gate's answer, or null when this person accepted the NDA on
+ * this link (`deck_share_conversions` 'nda_signed', written by
+ * `POST /share/:token/nda`). It names the venture and the version, and sends
+ * no card: the text is read from `GET /share/:token/nda`.
+ */
+async function ndaGate(c: any, linkId: number, deckId: number) {
+  const env: Env = c.env;
+  let userId: number | null = null;
+  try { userId = Number((await requireAuth(c)).id) || null; } catch { /* not signed in: the gate asks them to */ }
+  if (userId) {
+    try {
+      const { ensureDeckShareConversionSchema } = await import('./deck_share_actions');
+      await ensureDeckShareConversionSchema(env);
+      const ok = await env.DB.prepare(
+        "SELECT 1 AS ok FROM deck_share_conversions WHERE share_token_id = ? AND user_id = ? AND type = 'nda_signed' LIMIT 1",
+      ).bind(linkId, userId).first<{ ok: number }>();
+      if (ok) return null;
+    } catch (e) {
+      // An acceptance that cannot be read is not one: the gate stays shut.
+      console.error('[decks share] NDA acceptance unreadable', (e as Error).message);
+    }
+  }
+  const deck = await env.DB.prepare(
+    'SELECT d.version, d.title, d.created_at, p.name AS project_name FROM pitch_decks d LEFT JOIN projects p ON p.id = d.project_id WHERE d.id = ?',
+  ).bind(deckId).first<{ version: number; title: string | null; created_at: string | null; project_name: string | null }>();
+  return {
+    gate: 'nda',
+    nda_required: true,
+    nda_accepted: false,
+    signed_in: userId != null,
+    project_name: deck?.project_name ? String(deck.project_name).slice(0, 200) : null,
+    title: deck?.title ?? null,
+    frozen: { version: deck ? Number(deck.version) : null, as_of: deck?.created_at ?? null },
+  };
+}
 
 /**
  * POST /api/decks/share/:token/heartbeat — viewer pings read-time so
@@ -979,6 +881,9 @@ decks.post('/share/:token/heartbeat', async (c) => {
   }
   return c.json({ ok: true });
 });
+
+/** D895: unknown counts and an unlimited cap are distinct from measured zero. One rule, shared with the link records (D1111). */
+export { deckShareMetrics };
 
 /**
  * GET /api/decks/:id/engagement — founder-facing roll-up of share-link
@@ -1017,7 +922,7 @@ decks.get('/:id/engagement', async (c) => {
   // Task #6 — surface conversion funnel alongside the existing view
   // metrics. We aggregate by type and join the latest conversion per
   // view so the engagement panel can render a per-view badge.
-  let convAgg: Record<string, number> = {};
+  let convAgg: Record<string, number> | null = {};
   const convByView = new Map<number, string>();
   try {
     const { ensureDeckShareConversionSchema } = await import('./deck_share_actions');
@@ -1033,29 +938,36 @@ decks.get('/:id/engagement', async (c) => {
       if (r.view_id) convByView.set(Number(r.view_id), String(r.type));
     }
   } catch (e) {
+    convAgg = null;
     console.error('[decks engagement] conversion aggregation failed', (e as Error).message);
   }
+
+  // D902 — PD19 for this version: per-viewer median, seconds per card against
+  // the version before, the ask, and each link's investor and settings.
+  let analytics: Awaited<ReturnType<typeof shareAnalytics>> | null = null;
+  try { analytics = await shareAnalytics(c.env, row); } catch (e) {
+    console.error('[decks engagement] share analytics failed', (e as Error).message);
+  }
+  const linkOf = (shareId: number): LinkAnalytics | null => analytics?.links.get(Number(shareId)) ?? null;
 
   return c.json({
     deck_id: id,
     total_views: viewRows.length,
-    total_read_seconds: totalRead,
+    total_read_seconds: viewRows.some(v => v.read_seconds == null) ? null : totalRead,
     last_viewed_at: viewRows[0]?.created_at || null,
     conversions: {
-      signups:           convAgg.signup           || 0,
-      nda_signed:        convAgg.nda_signed       || 0,
-      feedbacks:         convAgg.feedback         || 0,
-      deal_pack_opened:  convAgg.deal_pack_opened || 0,
-      deals_signed:      convAgg.deal_signed      || 0,
+      signups:           convAgg === null ? null : (convAgg.signup ?? 0),
+      nda_signed:        convAgg === null ? null : (convAgg.nda_signed ?? 0),
+      feedbacks:         convAgg === null ? null : (convAgg.feedback ?? 0),
+      deal_pack_opened:  convAgg === null ? null : (convAgg.deal_pack_opened ?? 0),
+      deals_signed:      convAgg === null ? null : (convAgg.deal_signed ?? 0),
     },
     shares: tokRows.map((t) => ({
       id: t.id,
       created_at: t.created_at,
       expires_at: t.expires_at,
-      view_limit: Number(t.view_limit) || 1,
-      view_count: Number(t.view_count) || 0,
+      ...deckShareMetrics(t),
       last_viewed_at: t.last_viewed_at,
-      exhausted: !!t.used_at || (Number(t.view_count) || 0) >= (Number(t.view_limit) || 1),
       // Task #196 — `revoked_at` is the one thing `exhausted` cannot express, and
       // withdrawing sets `expires_at` too, so a revoked link looks neither
       // exhausted nor freshly live. Without this field the panel would report
@@ -1063,15 +975,138 @@ decks.get('/:id/engagement', async (c) => {
       // withdraw. `revoked_at` is also what distinguishes "the owner ended
       // this" from "it ran out" — the reason the column exists.
       revoked_at: t.revoked_at || null,
+      // D902 — the investor and settings, null when the analytics could not be read.
+      ...(linkOf(t.id) ?? { investor: null, allow_download: null, allow_forwarding: null, nda_required: null, include: null, nda_signed: null }),
     })),
     views: viewRows.map((v) => ({
       id: v.id, share_token_id: v.share_token_id,
       ip_hash: v.ip_hash, ua_fingerprint: v.ua_fingerprint,
-      read_seconds: Number(v.read_seconds) || 0,
+      read_seconds: v.read_seconds == null ? null : Number(v.read_seconds),
       created_at: v.created_at, updated_at: v.updated_at,
       conversion: convByView.get(Number(v.id)) || null,
     })),
+    analytics: analytics
+      ? {
+          available: true,
+          viewers: analytics.viewers,
+          median_seconds_per_viewer: analytics.median_seconds_per_viewer,
+          cards: analytics.cards,
+          previous: analytics.previous,
+          reached_ask: analytics.reached_ask,
+        }
+      : { available: false, unreadable: true, reason: 'The views on this version could not be read. That is not the same as none.' },
   });
+});
+
+// D898 (#2676) — the slide model the editor draws: the grid, the twelve
+// layouts as presets, the block kinds, chart types, audiences and themes. The
+// editor reads it rather than keeping its own copy, so the two cannot drift.
+// Registered before `/:id`, like every single-segment read.
+decks.get('/model', async (c) => {
+  await requireAuth(c);
+  return c.json({
+    grid: { cols: GRID_COLS, rows: GRID_ROWS },
+    max_blocks: MAX_BLOCKS,
+    notes_max: NOTES_MAX,
+    layouts: LAYOUTS,
+    block_kinds: BLOCK_KINDS,
+    chart_types: CHART_TYPES,
+    chart_ranges: CHART_RANGES,
+    text_styles: TEXT_STYLES,
+    image_tags: IMAGE_TAGS,
+    video_ratios: VIDEO_RATIOS,
+    audiences: AUDIENCES,
+    themes: THEME_KINDS,
+  });
+});
+
+// D898, PD1 and PD8 — the venture's brand kit, which the editor's centre card
+// and its Design tab draw on: the newest live landing page's palette, fonts,
+// logos and voice. `kit: null` is a venture with no brand kit yet; a read that
+// fails is 503, never an empty kit. The inline logo SVG is not sent (the page
+// would have to inject it); its URL forms are, through the image guard.
+decks.get('/brand-kit', async (c) => {
+  const user = await requireAuth(c);
+  const pid = Number(c.req.query('project_id'));
+  if (!Number.isSafeInteger(pid) || pid <= 0) return c.json({ error: 'project_id required' }, 400);
+  try { await projectOwned(c, user, pid); } catch { return c.json({ error: 'forbidden' }, 403); }
+  let row: any;
+  try {
+    row = await c.env.DB.prepare(
+      `SELECT name, theme_color, palette_bg, palette_ink, palette_secondary, palette_accent, font_pairing, voice_json,
+              logo_url, logo_dark_url, logo_svg, logo_dark_svg, updated_at
+         FROM landing_pages WHERE project_id = ? AND archived_at IS NULL ORDER BY id DESC LIMIT 1`,
+    ).bind(pid).first<any>();
+  } catch (e) {
+    console.warn('[decks] brand kit unreadable', (e as Error)?.message);
+    return c.json({ error: 'Your brand kit could not be read.', code: 'unreadable' }, 503);
+  }
+  if (!row) return c.json({ project_id: pid, kit: null });
+  const hex = (v: unknown) => (typeof v === 'string' && /^#[0-9a-f]{6}$/i.test(v.trim()) ? v.trim().toLowerCase() : null);
+  let voice: string[] = [];
+  try {
+    const parsed = JSON.parse(row.voice_json || '[]');
+    const list = Array.isArray(parsed) ? parsed : Array.isArray(parsed?.tags) ? parsed.tags : [];
+    voice = list.filter((t: unknown) => typeof t === 'string' && t.trim()).map((t: string) => t.trim().slice(0, 40)).slice(0, 8);
+  } catch { voice = []; }
+  return c.json({
+    project_id: pid,
+    kit: {
+      name: typeof row.name === 'string' ? row.name.slice(0, 120) : null,
+      palette: { bg: hex(row.palette_bg), ink: hex(row.palette_ink), accent: hex(row.palette_accent) ?? hex(row.theme_color), secondary: hex(row.palette_secondary) },
+      fonts: typeof row.font_pairing === 'string' && row.font_pairing.trim() ? row.font_pairing.trim().slice(0, 120) : null,
+      voice,
+      logo: { light: sanitizeImageUrl(row.logo_url), dark: sanitizeImageUrl(row.logo_dark_url), inline: Boolean(row.logo_svg || row.logo_dark_svg) },
+      updated_at: row.updated_at ?? null,
+    },
+  });
+});
+
+// D898, PD8c — a video link, checked with its provider before it is placed.
+// Only YouTube and Vimeo, only their fixed oEmbed URLs (services/decks/videoLink.ts).
+decks.get('/video-link', async (c) => {
+  await requireAuth(c);
+  const r = await checkVideoLink(c.req.query('url'), sanitizeImageUrl);
+  if (r.state === 'ok') return c.json(r);
+  if (r.state === 'refused') return c.json({ error: 'Paste a YouTube or Vimeo link.', state: r.state }, 400);
+  if (r.state === 'not_found') return c.json({ error: 'That video is not public, or does not exist.', state: r.state }, 404);
+  return c.json({ error: 'The video could not be checked just now. Try again.', state: r.state }, 503);
+});
+
+decks.get('/methods', async (c) => {
+  const user = await requireAuth(c);
+  const tier = String((user as any).subscription_tier || 'free').toLowerCase();
+  const isBypass = ['admin', 'partner', 'investor', 'advisor'].includes(String(user.role));
+  const items = DECK_METHODS.map((m) => ({
+    id: m.id, key: m.key, label: m.label, prompt_hint: m.prompt_hint,
+    best_for: m.best_for, slide_count: m.slide_count, premium: !!m.premium,
+    category: m.category, ai_fill_hint: m.ai_fill_hint,
+    locked: !!m.premium && !isBypass && !tierCovers(tier, 'studio'),
+    fields_from_project: m.fields_from_project,
+    fields_from_financials: m.fields_from_financials,
+    fields_from_captable: m.fields_from_captable,
+    slides: m.slides.map((s) => ({
+      id: s.id, title: s.title, appendix: !!s.appendix,
+      fields: s.fields.map((f) => ({ key: f.key, label: f.label, kind: f.kind, optional: !!f.optional })),
+    })),
+  }));
+  const brand = await getDeckBrand(c.env, user as any);
+  return c.json({
+    methods: items,
+    premium_method_ids: PREMIUM_METHOD_IDS,
+    user_tier: tier,
+    can_remove_footer: brand.can_remove_footer,
+    // Capability mirrors server-side enforcement in setStudioWatermark
+    // (studio tier required; bypass roles do NOT bypass tier here).
+    can_upload_watermark: tierCovers(tier, 'studio'),
+    watermark_url: brand.watermark_url,
+  });
+});
+
+decks.get('/brand', async (c) => {
+  const user = await requireAuth(c);
+  const brand = await getDeckBrand(c.env, user as any);
+  return c.json({ brand });
 });
 
 decks.get('/:id', async (c) => {
@@ -1095,7 +1130,7 @@ decks.put('/:id', async (c) => {
   await ensureSchema(c.env);
   let row: any;
   try { row = await getDeckRow(c.env, id); } catch { return c.json({ error: 'not found' }, 404); }
-  try { await projectOwned(c, user, Number(row.project_id)); }
+  try { await projectOwned(c, user, Number(row.project_id), { write: true }); }
   catch { return c.json({ error: 'forbidden' }, 403); }
   const persistedMethod = extractDeckMethodId(row);
   if (persistedMethod && PREMIUM_METHOD_IDS.includes(persistedMethod as any)) {
@@ -1103,6 +1138,12 @@ decks.put('/:id', async (c) => {
     catch { return c.json({ error: 'paywall', code: 'PAYWALL_PREMIUM_METHOD', method_id: persistedMethod, required_tier: 'studio' }, 402); }
   }
   const body = await c.req.json().catch(() => ({} as any));
+  // D898: a save the model cannot keep whole is refused with what is wrong,
+  // never trimmed, so no block is lost without the founder being told.
+  const problems = modelProblems(body?.slides, sanitizeImageUrl);
+  if (problems.length) return c.json({ error: problems[0], code: 'SLIDE_MODEL', problems }, 400);
+  const meta = await versionMetaOf(c.env, Number(row.project_id), body, row);
+  if (typeof meta === 'string') return c.json({ error: meta, code: 'VERSION_META' }, 400);
   const slides = sanitizeSlides(body?.slides || []);
   // Refuse client-side attempts to escalate a non-premium deck into a
   // premium one via PUT — apply-method is the only way to switch templates.
@@ -1196,8 +1237,9 @@ decks.put('/:id', async (c) => {
     }
   }
 
-  const newId = await insertVersion(c.env, Number(row.project_id), slides, title, Number(user.id) || null);
-  return c.json(rowToDeck(await getDeckRow(c.env, newId)));
+  const newId = await insertVersion(c.env, Number(row.project_id), slides, title, Number(user.id) || null, meta);
+  await auditDeckWrite(c, user, Number(row.project_id), 'deck_saved', 'Deck saved');
+  return c.json(rowToDeck(await getDeckRow(c.env, Number(newId))));
 });
 
 decks.post('/:id/restore', async (c) => {
@@ -1206,12 +1248,14 @@ decks.post('/:id/restore', async (c) => {
   await ensureSchema(c.env);
   let row: any;
   try { row = await getDeckRow(c.env, id); } catch { return c.json({ error: 'not found' }, 404); }
-  try { await projectOwned(c, user, Number(row.project_id)); }
+  try { await projectOwned(c, user, Number(row.project_id), { write: true }); }
   catch { return c.json({ error: 'forbidden' }, 403); }
   let slides: any[] = [];
   try { slides = sanitizeSlides(JSON.parse(row.slides || '[]')); } catch {}
-  const newId = await insertVersion(c.env, Number(row.project_id), slides, row.title, Number(user.id) || null);
-  return c.json(rowToDeck(await getDeckRow(c.env, newId)));
+  const newId = await insertVersion(c.env, Number(row.project_id), slides, row.title, Number(user.id) || null,
+    { audience: row.audience ?? null, round_ref: row.round_ref ?? null, theme: themeOfRow(row) });
+  await auditDeckWrite(c, user, Number(row.project_id), 'deck_restored', 'Deck version restored');
+  return c.json(rowToDeck(await getDeckRow(c.env, Number(newId))));
 });
 
 decks.post('/:id/share', async (c) => {
@@ -1221,7 +1265,7 @@ decks.post('/:id/share', async (c) => {
   await ensureSchema(c.env);
   let row: any;
   try { row = await getDeckRow(c.env, id); } catch { return c.json({ error: 'not found' }, 404); }
-  try { await projectOwned(c, user, Number(row.project_id)); }
+  try { await projectOwned(c, user, Number(row.project_id), { write: true }); }
   catch { return c.json({ error: 'forbidden' }, 403); }
   const body = await c.req.json().catch(() => ({} as any));
   const ttlHours = Math.min(
@@ -1291,11 +1335,12 @@ decks.delete('/:id/shares/:shareId', async (c) => {
   await ensureSchema(c.env);
   let row: any;
   try { row = await getDeckRow(c.env, id); } catch { return c.json({ error: 'not found' }, 404); }
-  try { await projectOwned(c, user, Number(row.project_id)); }
+  try { await projectOwned(c, user, Number(row.project_id), { write: true }); }
   catch { return c.json({ error: 'forbidden' }, 403); }
 
   const out = await revokeShareLink(c.env, id, shareId);
   if (!out) return c.json({ error: 'not found' }, 404);
+  if (out.newly_revoked) await auditDeckWrite(c, user, Number(row.project_id), 'deck_link_revoked', 'Deck link withdrawn');
   return c.json({ ok: true, ...out });
 });
 
@@ -1340,7 +1385,7 @@ export async function revokeShareLink(env: Env, deckId: number, shareId: number)
 export const SHARE_NEVER_EXPIRES = '9999-12-31 23:59:59';
 const SHARE_NEVER_EPOCH = Math.floor(Date.parse('9999-12-31T23:59:59Z') / 1000);
 /** No view cap on a new link; old links keep theirs. */
-export const SHARE_NO_VIEW_LIMIT = 2147483647;
+export const SHARE_NO_VIEW_LIMIT = null;
 export const SHARE_SENT_TO_SOMEONE_ELSE = 'This link was sent to someone else.';
 /** The browser's id for bound links: random, HttpOnly, never readable by the page. */
 export const SHARE_VIEWER_COOKIE = 'axal_deck_viewer';
@@ -1352,11 +1397,15 @@ export type CreateShareLinkArgs = {
   actorEmail: string | null;
   /** Seconds the link lives; null is "Never". */
   ttlSeconds: number | null;
-  viewLimit?: number;
+  viewLimit?: number | null;
   prospectId?: number | null;
   investorLabel?: string | null;
   allowDownload?: boolean;
   allowForwarding?: boolean;
+  /** D902 — no card is sent until the NDA is accepted on this link. */
+  ndaRequired?: boolean;
+  /** D902 — what the link includes; the default when left out. */
+  include?: ShareInclude;
   /** The deck's venture: the link's `raise.pitch-deck` row is logged under it (D691 decision 12). */
   projectId?: number | null;
 };
@@ -1378,12 +1427,14 @@ export async function createShareLink(env: Env, a: CreateShareLinkArgs): Promise
   const label = typeof a.investorLabel === 'string' && a.investorLabel.trim() ? a.investorLabel.trim().slice(0, 200) : null;
   const ins = await env.DB.prepare(
     `INSERT INTO pitch_deck_share_tokens
-       (deck_id, token_hash, expires_at, view_limit, view_count, created_by, prospect_id, investor_label, allow_download, allow_forwarding)
-     VALUES (?, ?, ?, ?, 0, ?, ?, ?, ?, ?)`
+       (deck_id, token_hash, expires_at, view_limit, view_count, created_by, prospect_id, investor_label, allow_download, allow_forwarding,
+        nda_required, include_json)
+     VALUES (?, ?, ?, ?, 0, ?, ?, ?, ?, ?, ?, ?)`
   ).bind(
-    a.deckId, await sha256Hex(token), expiresAt, a.viewLimit ?? SHARE_NO_VIEW_LIMIT, a.userId,
+    a.deckId, await sha256Hex(token), expiresAt, a.viewLimit === LEGACY_SHARE_NO_VIEW_LIMIT ? null : a.viewLimit ?? SHARE_NO_VIEW_LIMIT, a.userId,
     a.prospectId ?? null, a.prospectId ? null : label,
     a.allowDownload === false ? 0 : 1, a.allowForwarding === false ? 0 : 1,
+    a.ndaRequired ? 1 : 0, JSON.stringify(a.include ?? DEFAULT_SHARE_INCLUDE),
   ).run();
   // D367 — the link's row id, so the sheet that minted it can withdraw it
   // (DELETE /:id/shares/:shareId) when the founder replaces it. Null if the
@@ -1504,11 +1555,32 @@ async function signingKey(env: Env): Promise<CryptoKey> {
 async function mintSignedToken(env: Env, fileKey: string, ttlSeconds: number, actor: string | null): Promise<string> {
   const payload: any = { k: fileKey, exp: Math.floor(Date.now() / 1000) + Math.max(1, ttlSeconds) };
   if (actor) payload.a = actor;
+  // D902 — a nonce, so two links made for one version in the same second are two
+  // tokens. Without it they signed the same payload, and the second link's
+  // insert failed on the unique hash.
+  payload.n = b64url(crypto.getRandomValues(new Uint8Array(9)));
   const body = b64url(new TextEncoder().encode(JSON.stringify(payload)));
   const key = await signingKey(env);
   const sig = await crypto.subtle.sign('HMAC', key, new TextEncoder().encode(body));
   return `${body}.${b64url(sig)}`;
 }
+/**
+ * D902 — the deck an authentic but expired share token names, so its closed
+ * card can name the venture. The signature is checked first, as
+ * `verifySignedToken` does; a forged token names nothing.
+ */
+async function expiredTokenDeckId(env: Env, token: string): Promise<number | null> {
+  try {
+    const idx = token.indexOf('.');
+    if (idx <= 0) return null;
+    const body = token.slice(0, idx);
+    const expected = b64url(await crypto.subtle.sign('HMAC', await signingKey(env), new TextEncoder().encode(body)));
+    if (!timingEqual(expected, token.slice(idx + 1))) return null;
+    const m = /^deck:(\d+):v(\d+)$/.exec(String(JSON.parse(new TextDecoder().decode(b64urlDecode(body)))?.k || ''));
+    return m ? parseInt(m[1]) : null;
+  } catch { return null; }
+}
+
 export async function verifySignedToken(env: Env, token: string): Promise<any> {
   const idx = token.indexOf('.');
   if (idx <= 0) throw new Error('Malformed token');
@@ -1533,55 +1605,6 @@ async function sha256Hex(s: string): Promise<string> {
 // =====================================================================
 // Task #16 (DE) — Pitch Deck Builder rewrite endpoints.
 // =====================================================================
-
-/** GET /api/decks/methods — list all 13 templates with lock status. */
-decks.get('/methods', async (c) => {
-  const user = await requireAuth(c);
-  const tier = String((user as any).subscription_tier || 'free').toLowerCase();
-  const isBypass = ['admin', 'partner', 'investor', 'advisor'].includes(String(user.role));
-  const items = DECK_METHODS.map((m) => ({
-    id: m.id, key: m.key, label: m.label, prompt_hint: m.prompt_hint,
-    best_for: m.best_for, slide_count: m.slide_count, premium: !!m.premium,
-    category: m.category, ai_fill_hint: m.ai_fill_hint,
-    locked: !!m.premium && !isBypass && !tierCovers(tier, 'studio'),
-    fields_from_project: m.fields_from_project,
-    fields_from_financials: m.fields_from_financials,
-    fields_from_captable: m.fields_from_captable,
-    slides: m.slides.map((s) => ({
-      id: s.id, title: s.title, appendix: !!s.appendix,
-      fields: s.fields.map((f) => ({ key: f.key, label: f.label, kind: f.kind, optional: !!f.optional })),
-    })),
-  }));
-  const brand = await getDeckBrand(c.env, user as any);
-  return c.json({
-    methods: items,
-    premium_method_ids: PREMIUM_METHOD_IDS,
-    user_tier: tier,
-    can_remove_footer: brand.can_remove_footer,
-    // Capability mirrors server-side enforcement in setStudioWatermark
-    // (studio tier required; bypass roles do NOT bypass tier here).
-    can_upload_watermark: tierCovers(tier, 'studio'),
-    watermark_url: brand.watermark_url,
-  });
-});
-
-/** GET /api/decks/recommend?project_id=... — suggested method for project. */
-decks.get('/recommend', async (c) => {
-  const user = await requireAuth(c);
-  const pid = parseInt(c.req.query('project_id') || '');
-  if (!pid) return c.json({ error: 'project_id required' }, 400);
-  let proj: any;
-  try {
-    await projectOwned(c, user, pid);
-    proj = await c.env.DB.prepare('SELECT id, name, sector, stage FROM projects WHERE id = ?')
-      .bind(pid).first<any>();
-  } catch (e: any) {
-    if (e?.message === 'NotFound') return c.json({ error: 'not found' }, 404);
-    return c.json({ error: 'forbidden' }, 403);
-  }
-  const rec = await recommendMethod(c.env, proj || {});
-  return c.json(rec);
-});
 
 /**
  * D778 part 5 (#2103): the page and option D771's inventory gives the two deck
@@ -1624,7 +1647,7 @@ decks.post('/apply-method', async (c) => {
   }
   let proj: any;
   try {
-    await projectOwned(c, user, pid);
+    await projectOwned(c, user, pid, { write: true });
     proj = await c.env.DB.prepare('SELECT * FROM projects WHERE id = ?').bind(pid).first<any>();
   } catch (e: any) {
     if (e?.message === 'NotFound') return c.json({ error: 'not found' }, 404);
@@ -1643,7 +1666,7 @@ decks.post('/apply-method', async (c) => {
   // back via buildTemplateData and merges onto its canonical SAMPLE_DATA
   // via mergeShape().
   if (methodId === 'axal_spinout_demoday') {
-    const data = await fillAxalSpinoutDemoDay(c.env, Number(user.id), pid);
+    const data = await fillAxalSpinoutDemoDay(c.env, Number(user.id), pid, { includeInternalScore: false });
     const wrapped = buildAxalSpinoutDemoDaySlides(data);
     const safeWrapped = sanitizeSlides(wrapped);
     // Task #6 — inject brand kit for spin-out (accent_only)
@@ -1655,6 +1678,7 @@ decks.post('/apply-method', async (c) => {
     // No generic coverage metric for the custom path — report 1 when
     // the project has a name + sector, else 0. Keeps the picker's
     // "filled" badge meaningful without lying.
+    await auditDeckWrite(c, user, pid, 'deck_template_applied', 'Deck template applied');
     const coverage = data.meta.project_name !== '—' && data.meta.sector !== '—' ? 1 : 0.5;
     return c.json({
       deck: rowToDeck(row),
@@ -1669,7 +1693,7 @@ decks.post('/apply-method', async (c) => {
   // pitch_decks.slides. We also stash the method_id + spec_id on each
   // slide so the editor can re-render the right field controls.
   const rail = railFor(c, { page: DECK_FORM_RAIL.page, option: DECK_FORM_RAIL.template }, `project:${pid}`);
-  const filled = await autofillDeck(c.env, method, pid, { userId: Number(user.id) || 0, projectId: pid, rail });
+  const filled = await autofillDeck(c.env, method, pid, { userId: Number(user.id) || 0, projectId: pid, rail, mercuryOwnerUserId: await mercuryRunwayOwner(c, user, pid) });
   const editorSlides = toEditorSlides(method, filled);
   const wrapped = editorSlides.map((s) => ({
     title: s.title,
@@ -1697,6 +1721,7 @@ decks.post('/apply-method', async (c) => {
   const current = await c.env.DB.prepare('SELECT id FROM pitch_decks WHERE project_id = ? AND is_current = 1 ORDER BY id DESC LIMIT 1')
     .bind(pid).first<any>();
   const proposal = await proposeFill(c.env, { id: Number(current?.id) || 0, project_id: pid, title }, branded, methodId, Number(user.id));
+  await auditDeckWrite(c, user, pid, 'deck_template_proposed', 'Deck template proposed');
   return c.json({
     proposal,
     method_id: methodId,
@@ -1723,11 +1748,11 @@ async function proposeFill(env: Env, base: any, slides: any[], methodId: string,
   return rowToProposal(row);
 }
 
-async function ownedProposal(c: any, user: any, id: number): Promise<any | Response> {
+export async function ownedProposal(c: any, user: any, id: number): Promise<any | Response> {
   const env = c.env as Env;
   const row = id ? await env.DB.prepare('SELECT * FROM pitch_deck_proposals WHERE id = ?').bind(id).first<any>() : null;
   if (!row) return c.json({ error: 'not found' }, 404);
-  try { await projectOwned(c, user, Number(row.project_id)); } catch { return c.json({ error: 'forbidden' }, 403); }
+  try { await projectOwned(c, user, Number(row.project_id), { write: true }); } catch { return c.json({ error: 'forbidden' }, 403); }
   return row;
 }
 
@@ -1743,9 +1768,14 @@ decks.post('/proposals/:id/keep', async (c) => {
   if (row instanceof Response) return row;
   let slides: any[] = [];
   try { slides = JSON.parse(row.slides || '[]'); } catch { slides = []; }
-  const deckId = await insertVersion(c.env, Number(row.project_id), slides, row.title || 'Pitch deck', Number(user.id) || null);
+  // D898: the kept version is for the same audience, round and theme as the version it was proposed over.
+  const base = await c.env.DB.prepare('SELECT audience, round_ref, theme_json FROM pitch_decks WHERE id = ? AND project_id = ?')
+    .bind(row.base_deck_id, row.project_id).first<any>().catch(() => null);
+  const deckId = await insertVersion(c.env, Number(row.project_id), slides, row.title || 'Pitch deck', Number(user.id) || null,
+    base ? { audience: base.audience ?? null, round_ref: base.round_ref ?? null, theme: themeOfRow(base) } : {});
   await c.env.DB.prepare('DELETE FROM pitch_deck_proposals WHERE id = ?').bind(row.id).run();
   const fresh = await getDeckRow(c.env, deckId);
+  await auditDeckWrite(c, user, Number(row.project_id), 'deck_kept', 'Deck proposal kept');
   return c.json({ deck: rowToDeck(fresh) });
 });
 
@@ -1756,6 +1786,7 @@ decks.delete('/proposals/:id', async (c) => {
   const row = await ownedProposal(c, user, parseInt(c.req.param('id')));
   if (row instanceof Response) return row;
   await c.env.DB.prepare('DELETE FROM pitch_deck_proposals WHERE id = ?').bind(row.id).run();
+  await auditDeckWrite(c, user, Number(row.project_id), 'deck_proposal_discarded', 'Deck proposal discarded');
   return c.json({ ok: true });
 });
 
@@ -1783,7 +1814,7 @@ decks.post('/:id/autofill', async (c) => {
   let row: any;
   try { row = await getDeckRow(c.env, id); }
   catch { return c.json({ error: 'not found' }, 404); }
-  try { await projectOwned(c, user, Number(row.project_id)); }
+  try { await projectOwned(c, user, Number(row.project_id), { write: true }); }
   catch { return c.json({ error: 'forbidden' }, 403); }
 
   // Extract method_id from the persisted slides. /apply-method stamps
@@ -1816,10 +1847,11 @@ decks.post('/:id/autofill', async (c) => {
   // sync when the founder pushes "Fill from project" after logging more
   // interviews / completing more milestones).
   if (methodId === 'axal_spinout_demoday') {
-    const data = await fillAxalSpinoutDemoDay(c.env, Number(user.id), Number(row.project_id));
+    const data = await fillAxalSpinoutDemoDay(c.env, Number(user.id), Number(row.project_id), { includeInternalScore: false });
     const wrapped = buildAxalSpinoutDemoDaySlides(data);
     const safeWrapped = sanitizeSlides(wrapped);
     const proposal = await proposeFill(c.env, row, safeWrapped, methodId, Number(user.id));
+    await auditDeckWrite(c, user, Number(row.project_id), 'deck_fill_proposed', 'Deck fill proposed from records');
     const coverage = data.meta.project_name !== '—' && data.meta.sector !== '—' ? 1 : 0.5;
     return c.json({
       proposal,
@@ -1834,7 +1866,7 @@ decks.post('/:id/autofill', async (c) => {
   }
 
   const rail = railFor(c, { page: DECK_FORM_RAIL.page, option: DECK_FORM_RAIL.fill }, `project:${Number(row.project_id)}`);
-  const filled = await autofillDeck(c.env, method, Number(row.project_id), { userId: Number(user.id) || 0, projectId: Number(row.project_id), rail });
+  const filled = await autofillDeck(c.env, method, Number(row.project_id), { userId: Number(user.id) || 0, projectId: Number(row.project_id), rail, mercuryOwnerUserId: await mercuryRunwayOwner(c, user, Number(row.project_id)) });
   const editorSlides = toEditorSlides(method, filled);
   const wrapped = editorSlides.map((s) => ({
     title: s.title,
@@ -1855,6 +1887,7 @@ decks.post('/:id/autofill', async (c) => {
   const landingPage = await fetchLandingPageForProject(c.env, Number(row.project_id));
   const branded = applyBrandKitToSlides(safeWrapped, landingPage, method.brandTheme, projectName);
   const proposal = await proposeFill(c.env, row, branded, methodId, Number(user.id));
+  await auditDeckWrite(c, user, Number(row.project_id), 'deck_fill_proposed', 'Deck fill proposed from records');
   // Per-slide confidence — surfaced in the editor rail. `filled.slides`
   // and `editorSlides` share the same order/length.
   const slide_confidence = filled.slides.map((s, i) => ({
@@ -1891,7 +1924,7 @@ decks.post('/:id/export', async (c) => {
   await ensureSchema(c.env);
   let row: any;
   try { row = await getDeckRow(c.env, id); } catch { return c.json({ error: 'not found' }, 404); }
-  try { await projectOwned(c, user, Number(row.project_id)); }
+  try { await projectOwned(c, user, Number(row.project_id), { write: true }); }
   catch { return c.json({ error: 'forbidden' }, 403); }
   const body = await c.req.json().catch(() => ({} as any));
   const format = String(body?.format || 'pdf').toLowerCase();
@@ -1902,7 +1935,7 @@ decks.post('/:id/export', async (c) => {
   try { slides = JSON.parse(row.slides || '[]'); } catch { slides = []; }
   // Re-sanitize persisted slides (defence-in-depth against legacy rows
   // pre-dating sanitizeImageUrl) before they reach Browser Rendering.
-  slides = sanitizeSlides(slides);
+  slides = founderPitchSlides(sanitizeSlides(slides));
   const renderable: RenderableDeck = {
     title: row.title || 'Pitch deck',
     project_name: row.title || '',
@@ -1921,7 +1954,7 @@ decks.post('/:id/export', async (c) => {
       return { title: s.title || 'Slide', subtitle: s.subtitle, appendix: false, fields };
     }),
   };
-  const brand = await getDeckBrand(c.env, user as any);
+  const brand = await deckOwnerBrand(c.env, Number(row.project_id));
   const fname = (row.title || 'pitch-deck').replace(/[^A-Za-z0-9_-]+/g, '-').slice(0, 80);
 
   const browser = (c.env as any).BROWSER;
@@ -1977,6 +2010,7 @@ decks.post('/:id/export', async (c) => {
       return refuse(c, 502, { code: 'pdf_render_failed', message: 'The PDF could not be produced. Try again in a moment.', raw: text, extra: { status: r.status } });
     }
     const bytes = await r.arrayBuffer();
+    await auditDeckWrite(c, user, Number(row.project_id), 'deck_exported', 'Deck exported');
     return new Response(bytes, {
       status: 200,
       headers: {
@@ -1993,6 +2027,7 @@ decks.post('/:id/export', async (c) => {
     // so a download still works in dev. Production always has the
     // BROWSER binding.
     const bytes = renderDeckPPTX(renderable, brand);
+    await auditDeckWrite(c, user, Number(row.project_id), 'deck_exported', 'Deck exported');
     return new Response(bytes, {
       status: 200,
       headers: {
@@ -2036,6 +2071,7 @@ decks.post('/:id/export', async (c) => {
     images.push(new Uint8Array(await r.arrayBuffer()));
   }
   const bytes = renderDeckPPTXWithImages(renderable, brand, images);
+  await auditDeckWrite(c, user, Number(row.project_id), 'deck_exported', 'Deck exported');
   return new Response(bytes, {
     status: 200,
     headers: {
@@ -2047,12 +2083,6 @@ decks.post('/:id/export', async (c) => {
 });
 
 // --- Branding endpoints (Studio tier custom watermark) ---------------
-
-decks.get('/brand', async (c) => {
-  const user = await requireAuth(c);
-  const brand = await getDeckBrand(c.env, user as any);
-  return c.json({ brand });
-});
 
 decks.put('/brand/watermark', async (c) => {
   const user = await requireAuth(c);
@@ -2084,6 +2114,8 @@ decks.get('/admin/recommend-overrides', async (c) => {
 decks.put('/admin/recommend-overrides', async (c) => {
   const user = await requireAuth(c);
   if (String(user.role) !== 'admin') return c.json({ error: 'forbidden' }, 403);
+  // D905 (#2684, PD21): the Super Admin on HQ sets the default template by sector and stage; a branch admin reads it.
+  if (!isSuperAdmin(await hydrateSuperAdmin(c.env, user))) return c.json({ error: 'super_admin_required', message: 'Only the Super Admin sets the default template by sector and stage.' }, 403);
   const body = await c.req.json().catch(() => ({} as any));
   const sector = String(body?.sector || '').trim();
   const stage = String(body?.stage || '').trim();
@@ -2098,6 +2130,8 @@ decks.put('/admin/recommend-overrides', async (c) => {
 decks.delete('/admin/recommend-overrides', async (c) => {
   const user = await requireAuth(c);
   if (String(user.role) !== 'admin') return c.json({ error: 'forbidden' }, 403);
+  // D905 (#2684, PD21): the Super Admin on HQ sets the default template by sector and stage; a branch admin reads it.
+  if (!isSuperAdmin(await hydrateSuperAdmin(c.env, user))) return c.json({ error: 'super_admin_required', message: 'Only the Super Admin sets the default template by sector and stage.' }, 403);
   const sector = c.req.query('sector') || '';
   const stage = c.req.query('stage') || '';
   if (!sector || !stage) return c.json({ error: 'sector + stage query required' }, 400);

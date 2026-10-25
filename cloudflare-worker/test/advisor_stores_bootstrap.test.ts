@@ -82,6 +82,8 @@ const MIGRATIONS = [
   '204_advisor_proof', '205_advisor_booking_amounts', '206_advisor_cohort_assignments',
   // D492: the founder notice ledger and the per-advisor opt-out ride the same bootstrap.
   '367_cohort_advisor_founder_notice',
+  // D960: the grant and end history.
+  '565_advisor_cohort_assignment_events',
 ];
 
 function fresh() {
@@ -119,7 +121,7 @@ test('the bootstrap produces the same schema the migrations do', async () => {
   for (const t of ['advisors', 'advisor_bookings', 'advisor_services',
                    'advisor_proof_items', 'advisor_proof_consents',
                    'advisor_cohort_assignments',
-                   'cohort_advisor_notices', 'cohort_advisor_optouts',
+                   'cohort_advisor_notices', 'cohort_advisor_optouts', 'advisor_cohort_assignment_events',
                    'advisor_deliverables', 'advisor_session_types', 'advisor_booking_links']) {
     assert.deepEqual(cols(healed, t), cols(migrated, t), `same columns on ${t}`);
   }

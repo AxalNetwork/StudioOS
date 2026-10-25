@@ -67,11 +67,13 @@ export function serializeAudienceRules(rules: AudienceRules): string {
   return JSON.stringify(clean);
 }
 
-async function safeAll(env: Env, sql: string, binds: unknown[] = []): Promise<any[]> {
+async function readSource(env: Env, sql: string, binds: unknown[] = [], strict = false): Promise<any[]> {
   try {
     const r: any = await env.DB.prepare(sql).bind(...binds).all();
     return (r?.results || []) as any[];
   } catch (e) {
+    // D918: a dry run that counts must not read a failed source as nobody.
+    if (strict) throw e;
     console.warn('[eventAudience] source query failed (skipping rule)', (e as Error).message);
     return [];
   }
@@ -81,8 +83,10 @@ export async function evaluateCompEligibility(
   env: Env,
   rules: AudienceRules,
   hostUserId: number | null,
+  opts: { strict?: boolean } = {},
 ): Promise<CompPrincipal[]> {
   const out: CompPrincipal[] = [];
+  const safeAll = (env: Env, sql: string, binds: unknown[] = []) => readSource(env, sql, binds, opts.strict === true);
 
   if (rules.comp_official_partners) {
     const rows = await safeAll(

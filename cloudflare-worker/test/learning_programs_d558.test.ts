@@ -5,7 +5,7 @@
  * and `canSeeLearning` opening program content to enrolled members.
  *
  * Run on a database built from the baseline and every migration through 390,
- * as production builds it. What is pinned:
+ * and 560's enrolment events, as production builds it. What is pinned:
  *
  *   - an unassigned admin gets 403; an assigned admin sees only their own
  *     program's members; the Super Admin sees every program;
@@ -64,6 +64,8 @@ function builtFromMigrations(): DatabaseSync {
   db.exec(sqlOf('388'));
   db.exec(sqlOf('389'));
   db.exec(sqlOf('390'));
+  // D954 (#2787): the enrolment events every enrol and removal now writes.
+  db.exec(sqlOf('560'));
   return db;
 }
 const BUILT = builtFromMigrations();
@@ -307,7 +309,8 @@ test('an unassigned admin gets 403; an assigned admin sees only their program; t
   const pia = view.body.learners.find((l: any) => l.uid === UID[PEER]);
   assert.deepEqual(pia.completion.map((x: any) => x.status), ['not_started', 'not_started', 'not_attempted', 'not_submitted']);
   assert.equal(pia.completion.find((x: any) => x.subject_kind === 'exam').best_score_percent, null, 'no attempt read as a score of 0');
-  assert.deepEqual(Object.keys(mia).sort(), ['completion', 'enrolled_at', 'name', 'uid']);
+  // D954 §7 adds `last_activity_at`; still no email.
+  assert.deepEqual(Object.keys(mia).sort(), ['completion', 'enrolled_at', 'last_activity_at', 'name', 'uid']);
 
   const one = await prog(db, ASSIGNED, `/programs/${nordics}/learners/${UID[PEER]}`);
   assert.equal(one.body.learner.name, 'Pia Peer');

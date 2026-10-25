@@ -145,11 +145,10 @@ export const CATALOG: Record<ChecklistRole, ChecklistItem[]> = {
     { key: 'op.intro',      label: 'Make first qualified intro',         route: '/pipeline',                   autoDetect: true },
     { key: 'op.notifs',     label: 'Configure notifications',            route: '/account/notifications',     autoDetect: true },
   ],
-  // Advisors are NOT allowed on /onboarding/persona or /trust per App.jsx
-  // guards, and no advisor step points at Connectors — advisor onboarding stays inside
-  // Settings + Office Hours.
+  // D998: Advisors can complete the same persona wizard their detector requires.
+  // Trust and Connectors access remain governed by their existing routes.
   advisor: [
-    { key: 'mt.persona',    label: 'Complete profiling chatbot',         route: '/account/profile',           autoDetect: true },
+    { key: 'mt.persona',    label: 'Complete profiling chatbot',         route: '/onboarding/persona',           autoDetect: true },
     { key: 'mt.tags',       label: 'Add expertise tags + sectors + stages', route: '/account/profile',        autoDetect: true },
     { key: 'mt.comp',       label: 'Pick comp model',                    route: '/advisors',                    autoDetect: true },
     { key: 'mt.calendar',   label: 'Connect Calendly or Google Calendar',route: '/calendar',                   autoDetect: true },

@@ -454,39 +454,16 @@ test('create call: the Super Admin with a fresh step-up is allowed (201)', async
   assert.equal(body.lp_investor_id, 100);
 });
 
-test('issue-to-all: a non-admin investor is forbidden (403)', async () => {
-  const token = await mintToken(OWNER_ID, 'investor');
-  const env = makeEnv({ id: OWNER_ID, role: 'investor', is_active: 1 });
-  const res = await issueToAllInvestors(env, token, { startup_id: 1, amount: 1000 });
-  assert.equal(res.status, 403);
-});
-
-test('issue-to-all: a plain admin is refused as not the Super Admin (403), and nothing is written (D714)', async () => {
-  const token = await mintToken(ADMIN_ID, 'admin');
-  const env = makeEnv({ id: ADMIN_ID, role: 'admin', is_active: 1 });
-  const res = await issueToAllInvestors(env, token, { startup_id: 1, amount: 1000 });
-  assert.equal(res.status, 403);
-  assert.equal(((await res.json()) as any).code, 'super_admin_required');
-  assert.equal(env.__db.prepare('SELECT COUNT(*) AS n FROM capital_calls').get().n, 3);
-});
-
-test('issue-to-all: the Super Admin with a fresh step-up is allowed and fans out to active investors (200)', async () => {
-  const token = await mintToken(SUPER_ID, 'admin', SUPER_JTI);
-  const env = makeEnv({ id: SUPER_ID, role: 'admin', is_active: 1 });
-  const res = await issueToAllInvestors(env, token, { startup_id: 1, amount: 1000 });
-  assert.equal(res.status, 200);
-  const body = (await res.json()) as any;
-  assert.equal(body.calls_created.length, 3, 'one call per active LP row');
-  // The route splits the total across active LPs and rounds to cents, so three
-  // ways leaves a residual: 3 x 333.33 is 999.99, not 1000. Asserted rather
-  // than smoothed over — `amount` here is a legacy float dollars column, and
-  // making the split whole is a money-representation change to a route this
-  // work does not otherwise touch.
-  assert.equal(body.calls_created[0].amount, 333.33);
-  const dealt = body.calls_created.reduce((sum: number, x: any) => sum + x.amount, 0);
-  assert.equal(Number(dealt.toFixed(2)), 999.99, 'a cent is left undealt by the even split');
-  assert.equal(body.total_amount, 1000, 'the total reported is still the amount requested');
-});
+for (const [id, role, jti] of [[OWNER_ID, 'investor', undefined], [ADMIN_ID, 'admin', undefined], [SUPER_ID, 'admin', SUPER_JTI]] as const) {
+  test(`retired issue-to-all: ${role} ${id} gets 404 and no call is written`, async () => {
+    const token = await mintToken(id, role, jti);
+    const env = makeEnv({ id, role, is_active: 1 });
+    const before = env.__db.prepare('SELECT COUNT(*) AS n FROM capital_calls').get().n;
+    const res = await issueToAllInvestors(env, token, { startup_id: 1, amount: 1000 });
+    assert.equal(res.status, 404);
+    assert.equal(env.__db.prepare('SELECT COUNT(*) AS n FROM capital_calls').get().n, before);
+  });
+}
 
 // --- the legacy LP (task #175) ---------------------------------------------
 // LP #300 has a real position and a NULL user_id — a "legacy LP migrated from

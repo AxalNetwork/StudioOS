@@ -95,7 +95,7 @@ test('every band a desk mounted is on the cycle module page whose read it explai
 
 test('a band is drawn only with the switch on and a venture chosen, and spends nothing to be looked at', () => {
   // D771 (#2097): the band also names its rail option, `draft:<surface>`.
-  assert.match(route, /\{fillsOn && projectId \? drafts\.map\(\(draft\) => \(\s*<ZoneDraft key=\{`\$\{slug\}-\$\{draft\.surface\}`\} \{\.\.\.draft\} scopeKey=\{String\(projectId\)\} ai=\{ai\} accent="violet" railOption=\{`draft:\$\{draft\.surface\}`\} \/>/,
+  assert.match(route, /\{fillsOn && projectId \? drafts\.map\(\(draft\) => \(\s*<ZoneDraft key=\{`\$\{slug\}-\$\{draft\.surface\}`\} \{\.\.\.draft\} scopeKey=\{String\(projectId\)\} scoped=\{cycle === 'raise' && slug === 'investor-narrative'\} ai=\{ai\} accent="violet" railOption=\{`draft:\$\{draft\.surface\}`\} \/>/,
     'a band is drawn without the switch, without a venture, or without its scope');
   // The cost read (D424) waits for the switch and for a band to show it on,
   // and every band, draft or fill, quotes its cost from it before its run.
@@ -211,7 +211,8 @@ test('the Worker fields the desks pinned stay, for the live pages that read them
   assert.match(raw('cloudflare-worker/src/services/roundMath.ts'), /committed = wired \+ signed/);
   assert.match(raw('cloudflare-worker/src/routes/contacts.ts'), /progress: computeRoundProgress\(allocations, round\?\.target_amount \?\? null\)/);
   const simulator = raw('cloudflare-worker/src/services/captable.ts');
-  assert.match(simulator, /if \(exit != null && roundsOut\.length\) wf = waterfall\(roundsOut, Number\(exit\)\);/);
+  // D1018 (#2855): after the rounds, the waterfall still runs on the rounds, with any recorded preferences.
+  assert.match(simulator, /if \(roundsOut\.length\) \{[\s\S]*?return waterfall\(roundsOut, exit, startPrefs as Record<string, number>\);/);
   assert.match(simulator, /preference_paid: bankersRound\(prefPaid, 2\)/);
   // Grow: the month's plan number (FounderGrowFocus, FounderBuildKpi).
   assert.match(progress, /progress\.get\('\/metrics\/:projectId\/targets'/);

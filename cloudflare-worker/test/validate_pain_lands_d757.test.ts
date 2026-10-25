@@ -27,6 +27,7 @@ import { addInterviewPain } from '../src/services/interviewWriters.ts';
 import { pendingMoves } from '../src/services/validateFocus.ts';
 import structure, { loadStructureContext, storePlacements } from '../src/routes/founder_validate_structure.ts';
 import cycleValidate from '../src/routes/cycle_validate.ts';
+import { applySessionTranslationColumns } from './_session_translation_columns.mjs';
 
 const BASELINE = readFileSync(new URL('../sql/schema_baseline.sql', import.meta.url), 'utf8');
 const JWT_SECRET = 'unit-test-jwt-secret-0123456789-abcdef';
@@ -71,6 +72,7 @@ function world(reply: (model: string, input: any) => any = () => ({ response: '{
     '440_validate_cycle_stores.sql', '446_interview_structure_receipts.sql', '453_interview_processing.sql']) {
     db.exec(mig(m));
   }
+  applySessionTranslationColumns(db); // D857: migration 527's segment columns
   applyEngineSchema(db);
   db.exec(`
     INSERT INTO hypotheses (id, project_id, code, claim) VALUES (31, ${PROJECT}, 'H1', 'Finance leads reconcile by hand');

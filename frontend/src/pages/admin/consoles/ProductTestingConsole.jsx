@@ -11,7 +11,7 @@ import {
 } from '../../testing/programmeModel';
 
 /**
- * HQ › Product testing — `/admin?tab=product-testing` (D815 board D5, #2261).
+ * HQ › Product testing — `/admin/platform/product-testing` (D815 board D5, #2261).
  * Super Admin only, as D812's `/api/admin/testing` routes are.
  *
  *   · Waiting for approval: a partner's submitted programmes, each with Approve

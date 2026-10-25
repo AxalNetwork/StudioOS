@@ -74,8 +74,8 @@ interface Entry { id: string; key: string; variant?: string; page: Page }
 
 const ENTRIES: Entry[] = [];
 for (const [key, entry] of Object.entries(CONNECTOR_PAGES)) {
-  if ('entity' in entry) {
-    ENTRIES.push({ id: `${key}.entity`, key, variant: 'entity', page: entry.entity });
+  // D879 (#2552): Mercury's variants are a member's own, by role; there is no entity page.
+  if ('personal' in entry) {
     for (const [role, page] of Object.entries(entry.personal)) ENTRIES.push({ id: `${key}.personal.${role}`, key, variant: role, page });
   } else {
     ENTRIES.push({ id: key, key, page: entry });
@@ -102,7 +102,7 @@ const SOURCES: Record<string, string[]> = {
   hubspot: ['integrations/providers/hubspot.ts'],
   calendly: ['integrations/providers/calendly.ts'],
   salesforce: ['integrations/providers/salesforce.ts'],
-  carta: ['integrations/providers/carta.ts'],
+  carta: ['integrations/providers/carta.ts', 'routes/carta_investor.ts'],
   docusign: ['integrations/providers/docusign.ts'],
   stripe: ['integrations/providers/stripe.ts'],
   crunchbase: ['integrations/providers/crunchbase.ts'],
@@ -117,7 +117,7 @@ const linesOf = (file: string) => {
 };
 
 /** The sign-in's own token exchange and refresh: not tools (D753 decision 3). */
-const TOKEN_EXCHANGE = ['/oauth/token', '/oauth/v1/token', '/o/token/', '/services/oauth2/token', 'login/oauth/access_token', 'oauth.v2.access', 'GOOGLE_TOKEN_URL', 'msToken(', 'LINKEDIN_TOKEN_URL', 'server.token_endpoint'];
+const TOKEN_EXCHANGE = ['/oauth/token', '/oauth/v1/token', '/o/token/', '/o/access_token/', '/services/oauth2/token', 'login/oauth/access_token', 'oauth.v2.access', 'GOOGLE_TOKEN_URL', 'msToken(', 'LINKEDIN_TOKEN_URL', 'server.token_endpoint'];
 /** A read that is a POST. */
 const READ_BY_POST: Record<string, string[]> = { hubspot: ["'/crm/v3/objects/deals/search'"], crunchbase: ["'/searches/organizations'"], mercury: ["jsonrpc: '2.0'"] };
 /** Connection plumbing: a revoke, a deauthorize, a webhook subscription or listener, a signing key. */
@@ -127,6 +127,7 @@ const ACCOUNT_CALLS: Record<string, string[]> = {
   hubspot: ['/oauth/v1/refresh-tokens/'],
   calendly: ['/webhook_subscriptions', "fetch(uri, { method: 'DELETE'"],
   salesforce: ['/services/oauth2/revoke'],
+  google_calendar: ['https://oauth2.googleapis.com/revoke'],
   carta: ['/o/revoke_token/'],
   docusign: ["'/connect'", '/hmac`', '`/connect/${encodeURIComponent(connectId)}`', '/oauth/revoke`'],
   stripe: ['/oauth/deauthorize'],
@@ -162,12 +163,14 @@ test('1. every registry row, LinkedIn and each Mercury variant has a page, and n
   assert.deepEqual([...providers![1].matchAll(/'(\w+)'/g)].map((m) => m[1]).sort(), [...CHANNELS].sort(), 'the channel pages are not the messaging providers');
   for (const row of REGISTRY) {
     const entry = CONNECTOR_PAGES[row.key];
-    if (!row.entity_roles && !row.personal_roles) {
-      assert.equal('entity' in entry, false, `${row.key} has variants with no audience fields`);
+    if (!row.preview_roles && !row.personal_roles) {
+      assert.equal('personal' in entry, false, `${row.key} has variants with no audience fields`);
       continue;
     }
-    assert.ok('entity' in entry, `${row.key} has audience fields but no variants`);
-    if (row.entity_roles?.length) assert.ok(entry.entity, `${row.key} has no entity page`);
+    assert.ok('personal' in entry, `${row.key} has audience fields but no variants`);
+    assert.equal('entity' in entry, false, `${row.key}: no entity page (D879)`);
+    // D879: a previewing role reads the founder's page, so there must be one.
+    if (row.preview_roles?.length) assert.ok(entry.personal.founder, `${row.key} has no founder page to preview`);
     assert.deepEqual(Object.keys(entry.personal).sort(), [...(row.personal_roles ?? [])].sort(), `${row.key}: a personal variant per role in personal_roles`);
   }
   const front = FRONT('pages/account/connectorsModel.js');
@@ -275,7 +278,8 @@ test('7. verified means a recorded check, and no check is recorded yet', () => {
     assert.equal(CONNECTOR_METADATA[e.key].verified, e.page.verified_on !== null, `${e.id}: verified without a recorded date, or the reverse`);
   }
   for (const k of ['hubspot', 'calendly', 'slack', 'stripe', 'google_calendar', 'microsoft_365']) assert.equal(CONNECTOR_METADATA[k].verified, false, k);
-  assert.ok(CONNECTOR_METADATA.google_calendar.permissions.includes('Gmail (read-only) is asked for at sign-in; Axal VC does not read your Gmail.'));
+  assert.equal(CONNECTOR_METADATA.google_calendar.permissions.some((p) => /Gmail/i.test(p)), false,
+    'the Google Calendar connector must not disclose or request Gmail access');
   assert.equal(CONNECTOR_METADATA.google_calendar.permissions.some((p) => /Read Gmail messages/.test(p)), false);
 });
 
@@ -283,6 +287,7 @@ const ADDED: Record<string, string | null> = {
   hubspot: '2026-05', calendly: '2026-05', slack: '2026-05', stripe: '2026-05', linkedin: '2026-05',
   carta: '2026-09', docusign: '2026-09', crunchbase: '2026-09',
   github: '2026-10', zoom: '2026-10', google_calendar: '2026-10', microsoft_365: '2026-10', mercury: '2026-10',
+  lovable: null,
   figma: null, salesforce: null, affinity: null,
   // D754 and D756 switch them on; until then nothing connects on production.
   whatsapp: null, telegram: null,
@@ -341,7 +346,7 @@ const ENDPOINTS: Record<string, { file: string; sign_in: [string, string] | null
 test('9. endpoints equal the providers\' own constants', () => {
   for (const e of ENTRIES) {
     const spec = ENDPOINTS[e.key];
-    if (e.key === 'mercury' && e.variant !== 'entity') {
+    if (e.key === 'mercury') {
       const mcp = ENDPOINTS.mercury_personal;
       assert.equal(e.page.endpoints.sign_in, constant(SRC(mcp.file), mcp.sign_in![0]), `${e.id}: sign_in`);
       assert.equal(e.page.endpoints.api, constant(SRC(spec.file), spec.api!), `${e.id}: api`);
@@ -377,11 +382,11 @@ test('10. sign-in kinds', () => {
   for (const e of ENTRIES) {
     const row = getDescriptor(e.key);
     const kind = e.page.sign_in.kind;
-    if (e.variant === 'entity') assert.equal(kind, 'entity', e.id);
+    if (row?.auth_type === 'none') assert.equal(kind, 'none', e.id);
     else if (CHANNELS.has(e.key)) assert.equal(kind, 'channel', e.id);
     else if (['google_calendar', 'microsoft_365', 'linkedin'].includes(e.key)) assert.equal(kind, 'first_party', e.id);
-    // D840: a member signs in with Mercury or pastes a Read Only token.
-    else if (e.key === 'mercury') assert.equal(kind, 'oauth_or_key', e.id);
+    // D881 (#2554): a member connects Mercury only by signing in through its MCP server.
+    else if (e.key === 'mercury') assert.equal(kind, 'mcp', e.id);
     else if (row!.auth_type === 'api_key') assert.equal(kind, 'key', e.id);
     else if (row!.supports_pat) assert.equal(kind, 'oauth_or_key', e.id);
     else assert.equal(kind, 'oauth', e.id);
@@ -403,12 +408,14 @@ test('11. CATEGORY_ORDER holds every category once, with the Connectors page\'s 
 test('12. pageDescriptor picks Mercury\'s variant by viewer, and works in either import order', async () => {
   const mercury = getDescriptor('mercury')!;
   const v = (role: string, hq: boolean) => ({ role, hq });
-  assert.equal(pageDescriptor(mercury, v('admin', true))!.tagline, (CONNECTOR_PAGES.mercury as any).entity.tagline);
+  // D879 (#2552): an admin on HQ previews the founder's page; there is no entity page.
+  assert.equal(pageDescriptor(mercury, v('admin', true))!.tagline, (CONNECTOR_PAGES.mercury as any).personal.founder.tagline);
+  assert.deepEqual(pageDescriptor(mercury, v('admin', true))!.trust, pageDescriptor(mercury, v('founder', true))!.trust);
   assert.equal(pageDescriptor(mercury, v('founder', true))!.tagline, (CONNECTOR_PAGES.mercury as any).personal.founder.tagline);
   assert.equal(pageDescriptor(mercury, v('partner', false))!.tagline, (CONNECTOR_PAGES.mercury as any).personal.partner.tagline);
-  // D752: an investor reads their own page on HQ, and none on a branch.
-  assert.equal(pageDescriptor(mercury, v('investor', true))!.tagline, (CONNECTOR_PAGES.mercury as any).personal.investor.tagline);
-  for (const viewer of [v('admin', false), v('investor', false), v('advisor', true)]) assert.equal(pageDescriptor(mercury, viewer), null, JSON.stringify(viewer));
+  // D884 (#2557): an investor reads their own page on HQ and on a branch (D752 kept it on HQ only).
+  for (const hq of [true, false]) assert.equal(pageDescriptor(mercury, v('investor', hq))!.tagline, (CONNECTOR_PAGES.mercury as any).personal.investor.tagline);
+  for (const viewer of [v('admin', false), v('advisor', true)]) assert.equal(pageDescriptor(mercury, viewer), null, JSON.stringify(viewer));
   const gh = pageDescriptor(getDescriptor('github')!, v('investor', false))!;
   assert.equal(gh.key, 'github');
   assert.equal(gh.page_href, '/account/connectors/github');
@@ -445,7 +452,7 @@ test('12. pageDescriptor picks Mercury\'s variant by viewer, and works in either
     + "const d = p.pageDescriptor(r.getDescriptor('mercury'), { role: 'admin', hq: true });"
     + "process.stdout.write(d && d.sign_in.kind);";
   const out = execFileSync(process.execPath, ['--experimental-strip-types', '--no-warnings', '--import', './cloudflare-worker/test/_ts-loader.mjs', '--input-type=module', '-e', script], { cwd: root, encoding: 'utf8' });
-  assert.equal(out, 'entity');
+  assert.equal(out, 'mcp'); // D881 (#2554): Sign in with Mercury only
 });
 
 test('13. connectorPagePath', () => {
@@ -481,4 +488,50 @@ test('15. the module imports only ./registry and fetches nothing', () => {
   const named = line![1].split(',').map((n) => n.trim().replace(/^type\s+/, '')).sort();
   const exported = [...src.matchAll(/^export (?:const|function|type|interface) (\w+)/gm)].map((m) => m[1]).sort();
   assert.deepEqual(named, exported, 'registry.ts re-exports a different list than connectorPages.ts exports');
+});
+
+// D861 / D860: the public description follows the shipped closed calling path.
+test('16. WhatsApp Calls copy keeps coexistence closed and recorder consent explicit', () => {
+  const check = (description: string[]) => {
+    const lines = description.filter((line) => line.startsWith('Calls'));
+    assert.equal(lines.length, 1, 'one Calls statement');
+    assert.match(lines[0], /Calls stay closed on numbers connected through the WhatsApp Business app\./);
+    assert.match(lines[0], /Axal does not answer or place WhatsApp calls/);
+    assert.match(lines[0], /in-app recorder with everyone’s consent/);
+  };
+  const description = CHANNEL_PAGES.whatsapp.long_description;
+  check(description);
+  // Isolated copy mutations: each promise must fail if removed or inverted.
+  for (const [before, after] of [
+    ['Calls stay closed', 'Calls are available'],
+    ['Axal does not answer or place', 'Axal answers and places'],
+    ['with everyone’s consent', 'automatically'],
+  ]) {
+    const changed = description.map((line) => line.replace(before, after));
+    assert.throws(() => check(changed), assert.AssertionError);
+  }
+  assert.throws(() => check(description.filter((line) => !line.startsWith('Calls'))), assert.AssertionError);
+  assert.throws(() => check([...description, description.find((line) => line.startsWith('Calls'))!]), assert.AssertionError);
+  check(description);
+});
+
+
+test('17. WhatsApp translation is stated once, with AI tokens and the original kept', () => {
+  const check = (description: string[]) => {
+    const lines = description.filter(line => /translation/i.test(line));
+    assert.equal(lines.length, 1, 'one translation paragraph');
+    assert.match(lines[0], /transcription and translation use AI tokens/);
+    assert.match(lines[0], /Translation keeps the original/);
+    assert.match(lines[0], /adds your working language when needed/);
+  };
+  const description = CHANNEL_PAGES.whatsapp.long_description;
+  check(description);
+  for (const [before, after] of [
+    ['use AI tokens', 'are free'],
+    ['keeps the original', 'replaces the original'],
+    ['your working language when needed', 'English every time'],
+  ]) assert.throws(() => check(description.map(line => line.replace(before, after))), assert.AssertionError);
+  assert.throws(() => check(description.filter(line => !/translation/i.test(line))), assert.AssertionError);
+  assert.throws(() => check([...description, description.find(line => /translation/i.test(line))!]), assert.AssertionError);
+  check(description);
 });

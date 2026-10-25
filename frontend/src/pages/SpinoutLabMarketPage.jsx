@@ -93,7 +93,6 @@ export function FilledMark({ fill }) {
     source ? `Source: ${source}` : null,
     fill.citation?.quote ? `“${fill.citation.quote}”` : null,
     fill.edited && fill.proposed_value ? `It proposed: ${fill.proposed_value}` : null,
-    fill.model ? `Model: ${fill.model.split('/').pop()}` : null,
     // D777 part 4: the run that filled it and what it cost.
     fillRunLine(fill.run),
   ].filter(Boolean).join('\n');
@@ -1372,7 +1371,7 @@ export default function SpinoutLabMarketPage() {
                   <p className="text-[10.5px] text-gray-400 dark:text-gray-500 leading-relaxed mb-3">Dot placement is an illustrative sketch from your competitor set — directional, not measured data.</p>
                   {deckUnlocked ? (
                     <Link
-                      to="/raise/pitch/positioning"
+                      to="/raise/investor-narrative/positioning"
                       data-testid="link-positioning"
                       onClick={() => {
                         setPosDone(true);

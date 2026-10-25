@@ -200,7 +200,8 @@ const overview = async (db: DatabaseSync) => {
 /** Step 3's table: title, columns, filters, default sort. */
 const CANVAS: Record<string, { title: string; cols: string[]; filters: string[]; sort: string }> = {
   'fundraising-readiness': { title: 'Readiness items', cols: ['Item', 'Score', 'Evidence', 'Missing', 'Updated'], filters: ['State'], sort: 'Score' },
-  'investor-narrative': { title: 'Versions', cols: ['Version', 'Investor type', 'Used by deck', 'Mismatches', 'Date'], filters: ['Investor type'], sort: 'Newest' },
+  // D909 (#2693): NAR1's columns, less Claims backed, which waits for #2430.
+  'investor-narrative': { title: 'Versions', cols: ['Version', 'Audience', 'Based on', 'Mismatches', 'Read by deck', 'Saved', 'By'], filters: ['Audience'], sort: 'Newest' },
   'pitch-deck': { title: 'Investor links', cols: ['Investor', 'Expires', 'Views', 'Time on deck', 'Most read'], filters: ['State'], sort: 'Last viewed' },
   'data-room': { title: 'Files', cols: ['File', 'Folder', 'Answers request', 'Access', 'Updated'], filters: ['Folder', 'Access', 'Answers', 'Area'], sort: 'Updated' },
   'cap-table': { title: 'Holders', cols: ['Holder', 'Group', 'Instrument', 'Before', 'After round'], filters: ['Group', 'Instrument'], sort: 'Ownership' },
@@ -290,7 +291,7 @@ test('1: the cells read the stores 463 added and say Not recorded where nothing 
   assert.deepEqual(funds.product, { category: 'Product & engineering', share: 30, amount: 360000, monthly: 30000, milestone: 'Launch v2 by 2027-03' });
   assert.equal(funds.reserve.milestone, null);
   const versions = await cells('investor-narrative');
-  assert.equal(versions[2].deck, 'v4');
+  assert.equal(versions[2].deck, 'No deck reads this version.');
   const investors = await cells('capital-relationships');
   assert.equal(investors[6].stage, 'Identified', 'to_contact reads Identified');
   const holders = (await read(db, 'cap-table')).body.records.rows;
@@ -404,11 +405,11 @@ test('14: the data-room Add opens Upload, Manage access opens the file tool, and
     const first = (await read(db, m.slug)).body.records.rows.find((r: any) => r.id != null);
     assert.equal((await rec(db, m.slug, first.id)).status, 200, `${m.slug} ${first.id} opens`);
   }
-  // Manage access opens the file tool on this venture; Model a round opens the variants.
+  // Manage access opens the file tool on this venture; Model a round opens the Scenarios tab on it (D1016).
   const links = async (slug: string, id: string | number) => (await rec(db, slug, id)).body.actions
     .filter((a: any) => a.kind === 'link').map((a: any) => [a.key, a.kind, a.href]);
   assert.deepEqual(await links('data-room', 12), [['manage-access', 'link', `${TOOL_HREF.dataRoom}&project_id=${P}`]]);
-  assert.deepEqual(await links('cap-table', 'e-3'), [['model-a-round', 'link', '/raise/cap-table/variants']]);
+  assert.deepEqual(await links('cap-table', 'e-3'), [['model-a-round', 'link', `/raise/cap-table/scenarios?project_id=${P}`]]);
 });
 
 
@@ -479,7 +480,7 @@ test('1: each record has a title, four facts with a value or a reason, its secti
   assert.deepEqual(team.facts.map((f: any) => [f.value, f.reason]), Array(4).fill([null, 'Not scored yet']));
   assert.equal(team.main[0].empty, 'Team is scored by a person, not by a check.');
   const reads = (await rec(db, 'fundraising-readiness', 'data_room')).body.main[0].rows;
-  assert.deepEqual(reads.map((r: any) => r.c), ['Counted', 'Partial'], 'the check\'s own reads');
+  assert.deepEqual(reads.map((r: any) => r.c), ['Missing', 'Missing'], 'ungranted files do not satisfy the readiness check');
 });
 
 test('1: Fit, Expires, Monthly and the data-room access read their stores', async () => {
@@ -563,15 +564,18 @@ test('4: only the venture\'s own writer reads a record, and another venture\'s i
   for (const m of MODULES) {
     const id = SECTIONS[m.slug].id;
     for (const who of [40, 41, 50, 20]) assert.equal((await rec(db, m.slug, id, { who })).status, 403, `${m.slug} as ${PEOPLE[who].role} ${who}`);
-    for (const who of [FOUNDER, ADMIN, 60]) assert.equal((await rec(db, m.slug, id, { who })).status, 200, `${m.slug} as ${who}`);
+    // D914: narrative support needs a reason. D1102: file records are owner-only.
+    for (const who of [FOUNDER, ADMIN, 60]) assert.equal((await rec(db, m.slug, id, { who })).status, (m.slug === 'investor-narrative' && who === ADMIN) || (m.slug === 'data-room' && who !== FOUNDER) ? 403 : 200, `${m.slug} as ${who}`);
   }
+  db.exec(`INSERT INTO narrative_read_reasons (project_id, reader_user_id, reader_kind, reason, expires_at) VALUES (${P}, ${ADMIN}, 'admin', 'Portfolio review', datetime('now', '+8 hours'))`);
+  assert.equal((await rec(db, 'investor-narrative', SECTIONS['investor-narrative'].id, { who: ADMIN })).status, 200, 'with a reason, the admin reads it');
   // Venture B's rows, read with ?project= the founder's own venture.
   db.exec(`INSERT INTO pitch_deck_share_tokens (id, deck_id, token_hash, expires_at, created_at) VALUES (45, 6, 'h45', '2999-01-01 00:00:00', '2026-10-01 10:00:00')`);
   db.exec(`INSERT INTO data_room_files (id, uid, project_id, name, r2_key) VALUES (15, 'f15', ${P_OTHER}, 'theirs.pdf', 'k15')`);
   db.exec(`INSERT INTO spinout_deck_overrides (project_id, field_key, value, version) VALUES (${P_OTHER}, '_version', '', 7)`);
   for (const [slug, id] of [['capital-relationships', 9], ['pitch-deck', 45], ['data-room', 15], ['investor-narrative', 7]] as const) {
     assert.equal((await rec(db, slug, id)).status, 404, `${slug} ${id}`);
-    assert.equal((await rec(db, slug, id, { who: ADMIN })).status, 404, `${slug} ${id}, even as an admin`);
+    assert.equal((await rec(db, slug, id, { who: ADMIN })).status, slug === 'data-room' ? 403 : 404, `${slug} ${id}, even as an admin`);
   }
   // An h- id names a register row: one of venture B's, carried in A's scenario, is still 404.
   db.exec(`INSERT INTO cap_table_holders (id, user_id, project_id, name, shares) VALUES (77, 20, ${P_OTHER}, 'Their founder', 100), (78, ${FOUNDER}, ${P}, 'Mira Okafor', 100)`);
@@ -609,7 +613,7 @@ test('5: a record never claims what no store holds', async () => {
   // A pitch link's views have no city: only a hashed IP is stored.
   db.exec(`INSERT INTO deck_share_views (deck_id, share_token_id, read_seconds, created_at) VALUES (5, 41, 125, '2026-10-12 10:00:00')`);
   const views = (await rec(db, 'pitch-deck', 41)).body.main.find((x: any) => x.key === 'views').rows;
-  assert.deepEqual(views, [{ a: '2026-10-12 · 10:00', b: '2 min' }]);
+  assert.deepEqual(views, [{ a: '2026-10-12 · 10:00', b: '2:05' }]);
 });
 
 
@@ -740,7 +744,8 @@ test('4: form-options and every action take the module\'s write gate, and an id 
       assert.equal((await act(db, m.slug, null, '', undefined, { who })).status, 403, `${m.slug} form-options as ${who}`);
       for (const key of ACTIONS[m.slug]) assert.equal((await act(db, m.slug, id, key, {}, { who })).status, 403, `${m.slug} ${key} as ${who}`);
     }
-    for (const who of [FOUNDER, ADMIN, 60]) assert.equal((await act(db, m.slug, null, '', undefined, { who })).status, 200, `${m.slug} form-options as ${who}`);
+    // D895/D914/D1102: admins have no ordinary deck, narrative or data-room write access.
+    for (const who of [FOUNDER, ADMIN, 60]) assert.equal((await act(db, m.slug, null, '', undefined, { who })).status, (['pitch-deck', 'investor-narrative'].includes(m.slug) && who === ADMIN) || (m.slug === 'data-room' && who !== FOUNDER) ? 403 : 200, `${m.slug} form-options as ${who}`);
   }
   assert.equal(count(db, 'SELECT COUNT(*) AS n FROM activity_logs'), before, 'a refused action writes nothing');
   // Venture B's prospect (9) named in a holder's body, and its version (7) as Based on.
@@ -802,4 +807,36 @@ test('9 (form-options): each module serves its Add form; funds only by name from
   assert.deepEqual((await fo('capital-relationships', '&q=100%25')).funds.map((f: any) => f.value), ['fund-pct'], '% matches itself');
   assert.deepEqual((await fo('capital-relationships', '&q=Gridline_AI')).funds, [], '_ matches itself, not any character');
   assert.deepEqual((await fo('capital-relationships', `&q=${'g'.repeat(500)}`)).funds, []);
+});
+
+
+test('#2691: a narrative record compares current values, ignores stale check rows, and never claims a deck reads it',async()=>{
+ const db=await seeded();
+ try {
+  db.exec(`INSERT INTO spinout_deck_overrides(project_id,field_key,value,version) VALUES(${P},'traction.takeaway','We have $45k MRR',2)`);
+  db.exec(`INSERT INTO project_metrics(project_id,snapshot_date,mrr) VALUES(${P},'2026-10-01',38000)`);
+  const before=db.prepare('SELECT COUNT(*) AS n FROM activity_logs').get()?.n;
+  let r=await rec(db,'investor-narrative',2); assert.equal(r.status,200);
+  let rows=r.body.main.find((s:any)=>s.key==='consistency').rows;
+  assert.equal(rows.find((x:any)=>x.a==='MRR').c,'Mismatch','even without a saved mismatch');
+  assert.equal(rows.find((x:any)=>x.a==='Pitch deck').c,'Not compared');
+  assert.match(r.body.sub,/No deck reads this version/);
+  db.exec(`UPDATE project_metrics SET mrr=45000 WHERE project_id=${P}`);
+  db.exec(`INSERT INTO narrative_checks(project_id,version,figure,stated_value,stated_source,metric_value,metric_source) VALUES(${P},2,'mrr',45000,'Narrative',38000,'Old snapshot')`);
+  r=await rec(db,'investor-narrative',2);
+  rows=r.body.main.find((s:any)=>s.key==='consistency').rows;
+  assert.equal(rows.find((x:any)=>x.a==='MRR').c,'OK','stale mismatches do not overrule the actual comparison');
+  db.exec(`DELETE FROM spinout_deck_overrides WHERE project_id=${P} AND field_key='traction.takeaway'`);
+  r=await rec(db,'investor-narrative',2);
+  assert.ok(r.body.pills.some((p:any)=>p.text==='Nothing compared yet'));
+  assert.equal(db.prepare('SELECT COUNT(*) AS n FROM activity_logs').get()?.n,before,'reads do not write');
+ }finally{db.close();}
+});
+
+test('#2447: a manual score offers only evidence values its writer accepts',async()=>{
+ const db=await seeded();const team=(await rec(db,'fundraising-readiness','team')).body;
+ const choices=team.actions.find((a:any)=>a.key==='score').form.fields.find((f:any)=>f.key==='evidence').options;
+ assert.deepEqual(choices.map((x:any)=>x.value),['anecdote','pattern']);
+ for(const choice of choices) assert.equal((await act(db,'fundraising-readiness','team','score',{score:'7',evidence:choice.value,missing:''})).status,200);
+ assert.equal((await act(db,'fundraising-readiness','team','score',{score:'7',evidence:'stated',missing:''})).status,400);
 });

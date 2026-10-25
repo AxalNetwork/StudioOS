@@ -19,12 +19,11 @@
  * DOORS ARE MATCHED BY SYNTAX, NOT BY PATH SUBSTRING, and that is load-bearing
  * rather than tidy. `frontend/src/lib/api.js` carries ~90 `/admin/*` strings and
  * ZERO navigation — every one an argument to `request(...)`. A bare grep scores
- * `/admin/x` as linked 19 times and `/admin/team` 6 times, all falsely. Note
- * `codeOnly` does NOT save you here: the prose naming `/admin/partners`, in the
- * indented JSX block comment above that route's own `<Route>` in App.jsx, has
- * continuation lines that carry no leading asterisk, so it survives the strip.
- * Only the syntax anchor rejects it, which is what 'the door scanner reads
- * navigation syntax…' pins.
+ * `/admin/x` as linked 19 times and `/admin/team` 6 times, all falsely. A path
+ * that survives `codeOnly` is not a door either: `/admin/partners` survives as
+ * its redirect route's own `path=` (D923), which is code and not navigation.
+ * Only the syntax anchor tells the two apart, which is what 'the door scanner
+ * reads navigation syntax…' pins.
  *
  * `SIDEBAR_GROUPS` IS IMPORTED, NOT PARSED. `super_admin_shell.test.mjs:25` does
  * the same and ships (the "cannot be imported, lucide-react" note on
@@ -54,6 +53,7 @@ import { SIDEBAR_GROUPS } from '../src/sidebarConfig.js';
 import { codeOnly } from './_codeOnly.mjs';
 import { readRoutesSource, lazyImports, conflictingLazyImports } from './_routesSource.mjs';
 import { adminConsoleSource, ADMIN_CONSOLE_FILES, HQ_KEYS_CONSOLE_FILES } from './_adminConsoles.mjs';
+import { ADMIN_TAB_MOVES } from '../src/pages/admin/LegacyContractsRedirect.jsx';
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '../..');
 const read = (rel) => readFileSync(resolve(root, rel), 'utf8');
@@ -86,8 +86,11 @@ function routes(src) {
     out.push({
       path: p[1],
       body,
-      redirect: els[0] === 'Navigate',
-      component: els.find((e) => e !== 'Navigate' && e !== 'LegacyContractsRedirect') ?? null,
+      // A `*Redirect` element that is the route's whole body is a redirect too,
+      // as `redirect_hits_2301.test.mjs` counts it (D893's HeldInsightsRedirect).
+      // Since D938 that includes LegacyContractsRedirect: `/admin` mounts nothing.
+      redirect: els[0] === 'Navigate' || (/Redirect$/.test(els[0] || '') && els.length === 1),
+      component: els.find((e) => e !== 'Navigate') ?? null,
     });
   }
   return out;
@@ -247,9 +250,10 @@ const CHROME = (() => {
  * run short.
  */
 const SECOND_MOUNTS = new Map([
-  // The Admin Console's own tabs. These two are also the `same-component-elsewhere`
-  // exemptions, so one table feeds both and they cannot disagree.
-  ['frontend/src/pages/AdminPage.jsx', ['AdminNetworkProfiles', 'AdminSpinoutLab']],
+  // The Admin Console's own tabs stood here, and fed the `same-component-elsewhere`
+  // exemptions.
+  // D937 (#2374) and D972 (#2369): AdminSpinoutLab and AdminNetworkProfiles
+  // left the console; their tabs forward to their own pages before it mounts.
   // The founder-journey walkthrough renders the real apply page on simulated data
   // (its own comment at AdminSpinoutLab.jsx:743-745 describes the read-only tour).
   ['frontend/src/pages/admin/AdminSpinoutJourneyPreview.jsx', ['SpinoutLabApplyPage']],
@@ -263,8 +267,12 @@ const SECOND_MOUNTS = new Map([
  * file, not in AdminPage.jsx. HQ's Accounts page mounts the Users console
  * alone. Checked against the hosts' own imports below, so it cannot drift.
  */
+const CONSOLE_PAGES = 'frontend/src/pages/admin/ConsolePages.jsx';
+const NATIVE_CONSOLES = ['PartnerProfilesConsole', 'PersonasConsole'].map((n) => `frontend/src/pages/admin/consoles/${n}.jsx`);
 const COMPOSED = new Map([
-  ['frontend/src/pages/AdminPage.jsx', ADMIN_CONSOLE_FILES.filter((f) => f !== 'frontend/src/pages/AdminPage.jsx' && !HQ_KEYS_CONSOLE_FILES.includes(f))],
+  ['frontend/src/pages/admin/profiles/PartnerProfiles.jsx', [NATIVE_CONSOLES[0]]],
+  ['frontend/src/pages/admin/segments/PersonaSegments.jsx', [NATIVE_CONSOLES[1]]],
+  [CONSOLE_PAGES, ADMIN_CONSOLE_FILES.filter((f) => f !== CONSOLE_PAGES && !HQ_KEYS_CONSOLE_FILES.includes(f) && !NATIVE_CONSOLES.includes(f))],
   ['frontend/src/pages/hq/AccountsPage.jsx', ['frontend/src/pages/admin/consoles/UsersConsole.jsx']],
   // The owner's ruling (2026-10-20): HQ's Integration keys page, Super Admin only.
   ['frontend/src/pages/hq/IntegrationKeysPage.jsx', HQ_KEYS_CONSOLE_FILES],
@@ -274,6 +282,84 @@ const COMPOSED = new Map([
     'frontend/src/pages/subsidiary/LicenceFrame.jsx',
     'frontend/src/pages/subsidiary/LicenceSummary.jsx',
     'frontend/src/pages/subsidiary/LicenceTerms.jsx',
+  ]],
+  // D915 (2026-10-24, #2368): the Events desk draws its tabs from the files
+  // beside it, and they hold the doors to one event's page (`/admin/events/:id`).
+  ['frontend/src/pages/admin/AdminEventsPage.jsx', [
+    'frontend/src/pages/admin/events/EventsOverview.jsx',
+    'frontend/src/pages/admin/events/EventsReview.jsx',
+    'frontend/src/pages/admin/events/EventsAll.jsx',
+    'frontend/src/pages/admin/events/EventsCalendar.jsx',
+    'frontend/src/pages/admin/events/EventPage.jsx',
+  ]],
+  // D923 (2026-10-24, #2370): Partner invitations draws its tabs, its records
+  // and its dialogs from the files beside it. They hold the doors to one
+  // invitation and one deal, and Overview's Needs-you row opens Advisors &
+  // Partners › Firms (D952).
+  ['frontend/src/pages/admin/PartnerInvitations.jsx', [
+    'frontend/src/pages/admin/partners/PartnersOverview.jsx',
+    'frontend/src/pages/admin/partners/PartnersInvitations.jsx',
+    'frontend/src/pages/admin/partners/InvitationRecord.jsx',
+    'frontend/src/pages/admin/partners/NewInvitationDialog.jsx',
+    'frontend/src/pages/admin/partners/PartnersDeals.jsx',
+    'frontend/src/pages/admin/partners/DealRecord.jsx',
+    'frontend/src/pages/admin/partners/PartnersReferrals.jsx',
+    'frontend/src/pages/admin/partners/PartnerDialogs.jsx',
+  ]],
+  // D978 (#2764): Advisors & Partners' People tab holds the door to one
+  // person (`/admin/advisors-partners/people/:ref`).
+  ['frontend/src/pages/admin/advisors/AdvisorsPartners.jsx', [
+    'frontend/src/pages/admin/advisors/People.jsx',
+  ]],
+  // D987 (#2778): Program grants draws its grid and its Requests tab from the
+  // files beside it, and they hold the doors to one studio
+  // (`/admin/licences/programs/studio/:uid`).
+  ['frontend/src/pages/admin/grants/ProgramGrants.jsx', [
+    'frontend/src/pages/admin/grants/GridView.jsx',
+    'frontend/src/pages/admin/grants/RequestsView.jsx',
+  ]],
+  // D947/D948/D949: Overview, Cohorts, Applications and Participants hold the
+  // doors to one cohort (`/cohorts/:ym`), one application (`/applications/:id`)
+  // and one founder (`/participants/:uid`).
+  ['frontend/src/pages/admin/lab/AdminLab.jsx', [
+    'frontend/src/pages/admin/lab/LabApplications.jsx',
+    'frontend/src/pages/admin/lab/LabParticipants.jsx',
+    'frontend/src/pages/admin/lab/LabCohorts.jsx',
+    'frontend/src/pages/admin/lab/LabOverviewBlocks.jsx',
+  ]],
+  // D953 (2026-10-24, #2371): Programs. The catalogue draws its card doors and
+  // its foot in its own file. Each program page draws its crumb from the frame,
+  // its tab strip from ProgramTabs, and its blocks' doors from the files
+  // beside it. Mentor cohort access and Refer & Earn mount the two consoles'
+  // bodies; once /admin/refer-earn redirects, ReferralReview.jsx is not
+  // routed, and its /admin/commissions door counts only through this entry.
+  ['frontend/src/pages/admin/programs/MentorCohortAccess.jsx', [
+    'frontend/src/pages/admin/programs/ProgramFrame.jsx',
+    'frontend/src/pages/admin/programs/ProgramTabs.jsx',
+    'frontend/src/pages/admin/AdvisorCohortAssignments.jsx',
+  ]],
+  ['frontend/src/pages/admin/programs/ReferAndEarn.jsx', [
+    'frontend/src/pages/admin/programs/ProgramFrame.jsx',
+    'frontend/src/pages/admin/programs/ProgramTabs.jsx',
+    'frontend/src/pages/admin/ReferralReview.jsx',
+  ]],
+  ['frontend/src/pages/admin/programs/ProgramPage.jsx', [
+    'frontend/src/pages/admin/programs/ProgramFrame.jsx',
+    'frontend/src/pages/admin/programs/ProgramTabs.jsx',
+    'frontend/src/pages/admin/programs/LearningPages.jsx',
+    'frontend/src/pages/admin/programs/PerksPages.jsx',
+    'frontend/src/pages/admin/programs/ReferralPartners.jsx',
+  ]],
+  // D964 (#2797): the catalogue draws HQ's tab strip (its Proposals door) from
+  // ProposalsPage and the two proposal lists from ProposalTables, and the
+  // proposals page draws the same lists; Your proposals holds the door to
+  // Propose a program.
+  ['frontend/src/pages/admin/programs/ProgramsCatalogue.jsx', [
+    'frontend/src/pages/admin/programs/ProposalsPage.jsx',
+    'frontend/src/pages/admin/programs/ProposalTables.jsx',
+  ]],
+  ['frontend/src/pages/admin/programs/ProposalsPage.jsx', [
+    'frontend/src/pages/admin/programs/ProposalTables.jsx',
   ]],
 ]);
 
@@ -360,16 +446,14 @@ const EXEMPT = [
        + 'the Telegram row).',
   },
   {
-    path: '/admin/network-profiles',
-    kind: 'same-component-elsewhere',
-    host: '/admin',
-    tab: 'network-profiles',
-    // Copied verbatim from ONE physical line of AdminPage.jsx, above the
-    // AdminNetworkProfiles import. Tested below (`adminPage.includes(e.cites)`).
-    cites: '/admin/network-profiles route stays wired for direct deep-links',
-    why: 'AdminPage.jsx records that this standalone route stays wired for direct '
-       + 'deep links; the roster itself is reached at /admin?tab=network-profiles.',
+    path: '/admin/*',
+    kind: 'not-found',
+    why: 'D940 (#2745): the catch-all for an /admin address no route names. It draws Not found for an '
+       + 'admin, and RoleGuard draws SHL7b\'s card for a member, so nothing should link to it.',
   },
+  // `/admin/network-profiles`'s entry was deleted in D972 (#2369): the route
+  // forwards to Advisors & Partners' Deck roster now, so it is a redirect, not
+  // a page with no door.
   // `/admin/spinout-lab`'s entry was DELETED IN D140, by this guard's own rule:
   // `BranchPrograms` links to it as the console where grace and override are
   // actually decided, so the route has a real door and an exemption claiming it
@@ -458,10 +542,47 @@ test('every in-page /admin link points at a registered route', () => {
 test('a redirect-only /admin route is excluded, and its target is reachable', () => {
   // Derived, not hardcoded: a route whose element is <Navigate> is not a surface.
   // But a redirect INTO an orphan is still a dead end, so the target is checked.
-  assert.deepEqual(REDIRECTS, ['/admin/news'],
+  // D953's Programs redirects and D937/D972's Lab/network redirects coexist.
+  assert.deepEqual(REDIRECTS, ['/admin', '/admin/refer-earn', '/admin/partners', '/admin/partner-invitations/firm-links', '/admin/held/programs', '/admin/held/approvals', '/admin/held/community', '/admin/held/insights', '/admin/network-profiles', '/admin/spinout-lab', '/admin/spinout-lab/preview', '/admin/news', '/admin/advisor-cohorts'],
+
     'the set of /admin redirect routes changed; confirm each is still a redirect and not a page');
+  // A `*Redirect` component names its target in its own file, not in App.jsx
+  // (D893: HeldInsightsRedirect sends /admin/held/insights to INSIGHTS_PATH;
+  // D930: HeldCommunityRedirect sends /admin/held/community to COMMUNITY_PATH;
+  // D953: the three Programs redirects take theirs from programsModel.js).
+  const PROGRAMS_MODEL = 'frontend/src/pages/admin/programs/programsModel.js';
+  const COMPONENT_TARGETS = {
+    HeldInsightsRedirect: ['/admin/insights', 'frontend/src/pages/admin/insights/insightsModel.js', 'INSIGHTS_PATH'],
+    HeldCommunityRedirect: ['/admin/community', 'frontend/src/pages/admin/community/communityModel.js', 'COMMUNITY_PATH'],
+    // D1038 (#2390): HeldApprovalsRedirect sends /admin/held/approvals to PATH.
+    HeldApprovalsRedirect: ['/admin/approvals', 'frontend/src/pages/admin/approvals/approvalsModel.js', 'PATH'],
+    HeldProgramsRedirect: ['/admin/programs', PROGRAMS_MODEL, 'PROGRAMS_PATH'],
+    AdvisorCohortsRedirect: ['/admin/programs/mentor-cohorts/people', PROGRAMS_MODEL, 'MENTOR_PEOPLE_PATH'],
+    ReferEarnRedirect: ['/admin/programs/refer-and-earn/queue', PROGRAMS_MODEL, 'REFER_QUEUE_PATH'],
+    // D937 (#2374): the Lab and its preview moved under Programs.
+    LabRedirect: ['/admin/programs/spinout-lab', 'frontend/src/pages/admin/lab/labModel.js', 'LAB_PATH'],
+    LabPreviewRedirect: ['/admin/programs/spinout-lab/preview', 'frontend/src/pages/admin/lab/labModel.js', 'LAB_PREVIEW_PATH'],
+    // D972 (#2369): the roster is Advisors & Partners' Deck roster tab.
+    ApRedirect: ['/admin/advisors-partners/deck', 'frontend/src/pages/admin/advisors/apModel.js', 'AP_DECK_PATH'],
+    // D952 (#2728): Partner invitations' Firm links moved to the Firms tab.
+    FirmLinksRedirect: ['/admin/advisors-partners/firms', 'frontend/src/pages/admin/advisors/apModel.js', 'AP_FIRMS_PATH'],
+  };
   for (const path of REDIRECTS) {
-    const { redirects } = doorsIn(BY_PATH.get(path).body);
+    const route = BY_PATH.get(path);
+    // D938: `/admin` forwards each old tab to its own page; every one must be reachable.
+    if (route.component === 'LegacyContractsRedirect') {
+      for (const [tab, move] of Object.entries(ADMIN_TAB_MOVES)) {
+        assert.ok(REACHED.has(move.to) || REACHED.has(move.to.split('/').slice(0, -1).join('/')),
+          `/admin?tab=${tab} forwards to ${move.to}, which is itself unreachable`);
+      }
+      continue;
+    }
+    let { redirects } = doorsIn(route.body);
+    if (!redirects.length && COMPONENT_TARGETS[route.component]) {
+      const [target, file, name] = COMPONENT_TARGETS[route.component];
+      assert.match(read(file), new RegExp(`${name} = '${target}'`), `${route.component}'s target moved`);
+      redirects = [target];
+    }
     assert.equal(redirects.length, 1, `${path} should name exactly one redirect target`);
     const target = toRoute(redirects[0]);
     assert.ok(typeof target === 'string', `${path} redirects to ${redirects[0]}, which is not a route`);
@@ -486,6 +607,17 @@ test('no exemption covers a route that already has a door', () => {
   for (const e of EXEMPT) {
     assert.ok(BY_PATH.has(e.path), `${e.path} is exempted but is not a registered route`);
     assert.ok(e.why && e.why.length > 40, `${e.path}'s exemption does not state a reason`);
+  }
+});
+
+test('a not-found exemption is a splat that draws Not found and nothing else', () => {
+  // A 404 has no door by definition; the claim is that this route IS one, so its element is checked.
+  const app = readRoutesSource();
+  for (const e of EXEMPT.filter((x) => x.kind === 'not-found')) {
+    assert.ok(e.path.endsWith('/*'), `${e.path} is exempted as not-found but is not a splat`);
+    assert.equal(BY_PATH.get(e.path)?.component, 'NotFoundPage', `${e.path} no longer draws NotFoundPage`);
+    const line = app.split('\n').find((l) => l.includes(`<Route path="${e.path}"`));
+    assert.match(line || '', /element=\{guard\(\['admin'\], <NotFoundPage \/>\)\} \/>/, `${e.path} draws more than Not found`);
   }
 });
 
@@ -536,18 +668,13 @@ test('a route exempted as a tab still mounts the same component behind that tab'
   }
 });
 
-test('the ?tab= deep link is honoured and validated', () => {
-  // Without this the exemptions above rest on a URL nothing reads.
-  const adminPage = adminConsoleSource();
-  // NOT AN ALTERNATION. The first draft read
-  //   /get\('tab'\)|searchParams|URLSearchParams/
-  // and a mutation that broke the actual `tab` read escaped, because the two
-  // generic alternatives still matched. An OR across a specific claim and its
-  // vaguer neighbours is satisfied by the neighbours, so it pins neither.
-  assert.match(adminPage, /get\('tab'\)/,
-    'AdminPage no longer reads the `tab` search param, so the deep links the exemptions cite are dead');
-  assert.match(adminPage, /ADMIN_SECTION/,
-    'AdminPage no longer validates the tab against its section list');
+test('every old ?tab= forwards before anything mounts (D938)', () => {
+  // The console that read `?tab=` is retired; the redirect is what reads it now.
+  const redirect = read('frontend/src/pages/admin/LegacyContractsRedirect.jsx');
+  assert.match(redirect, /get\('tab'\)/, 'the redirect no longer reads the `tab` search param');
+  assert.match(redirect, /Object\.hasOwn\(ADMIN_TAB_MOVES, /, 'the redirect no longer validates the tab against its map');
+  assert.equal(BY_PATH.get('/admin').component, 'LegacyContractsRedirect');
+  assert.ok(BY_PATH.get('/admin').redirect, '/admin renders a surface again');
 });
 
 test('the door scanner reads navigation syntax, not paths in prose or api calls', () => {
@@ -556,16 +683,14 @@ test('the door scanner reads navigation syntax, not paths in prose or api calls'
   const api = doorsIn(read('frontend/src/lib/api.js')).doors.filter((d) => d.startsWith('/admin'));
   assert.deepEqual(api, [], 'api.js yielded navigation targets; the scanner is matching request() arguments');
 
-  // And prose. codeOnly does NOT strip the /admin/partners block comment in
-  // App.jsx — it is an indented {/* … */} whose continuation lines carry no
-  // leading `*` — so this proves the SYNTAX anchor rejects it, not the comment
-  // stripper.
+  // And a path in code that is not navigation. `/admin/partners` survives
+  // codeOnly as the redirect route's own `path="…"` (D923, #2370), so this
+  // proves the SYNTAX anchor rejects it, not the comment stripper.
   assert.ok(codeOnly(APP).includes('/admin/partners'),
-    'the /admin/partners prose comment in App.jsx no longer survives codeOnly; this '
-    + 'assertion now proves nothing — find another comment that mentions a route and '
-    + 'pin that instead');
+    'the /admin/partners route no longer survives codeOnly; this assertion now proves '
+    + 'nothing: pin another non-navigation path that does');
   assert.ok(!doorsIn(CHROME).doors.includes('/admin/partners'),
-    'the scanner read a path out of prose');
+    'the scanner read a door out of a path that is not navigation');
 
   // The commented row is invisible to the live set but present in the text.
   const raw = read('frontend/src/sidebarConfig.js');
@@ -622,18 +747,14 @@ test('D648: every composed console file is imported by the page it is credited t
   }
 });
 
-test('the Spin-Out Lab preview button renders in both framings', () => {
-  // The one place file-level attribution over-approximates: the scanner sees the
-  // door in the file and cannot see a conditional around it. If the button moved
-  // inside `{standalone && …}` it would only exist on a route that has no row,
-  // and nothing else here would notice.
-  const src = read('frontend/src/pages/admin/AdminSpinoutLab.jsx');
-  assert.match(src, /if \(!standalone\) return body;/,
-    'AdminSpinoutLab no longer returns `body` in the embedded framing');
-  const bodyAt = src.indexOf('const body = (');
-  const buttonAt = src.indexOf("navigate('/admin/spinout-lab/preview')");
-  const returnAt = src.indexOf('if (!standalone) return body;');
-  assert.ok(bodyAt >= 0 && buttonAt > bodyAt && buttonAt < returnAt,
-    'the preview button is no longer inside `body`, so it does not render in the '
-    + '/admin?tab=lab-applications framing and /admin/spinout-lab/preview loses its door');
+test('the Spin-Out Lab preview door is in the Lab header on every tab', () => {
+  // D937 (#2374): the preview's one door is the Lab header's action, drawn on
+  // every tab. File-level attribution cannot see a condition around it, so
+  // this pins that it is not inside the Overview-only actions.
+  const src = read('frontend/src/pages/admin/lab/AdminLab.jsx');
+  const actionsAt = src.indexOf('const actions = (');
+  const doorAt = src.indexOf('to="/admin/programs/spinout-lab/preview"');
+  const overviewOnlyAt = src.indexOf("{tab === 'overview' && (", actionsAt);
+  assert.ok(actionsAt >= 0 && doorAt > actionsAt && doorAt < overviewOnlyAt,
+    'the preview door is no longer an unconditional header action, so /admin/programs/spinout-lab/preview may lose its door');
 });

@@ -8,7 +8,8 @@ export const section83bReviewApi = {
   // The founder's own startup (owner or co-founder); 404 for anyone else.
   read: (projectId) => request(`/legal/83b/operator-review?project_id=${encodeURIComponent(projectId)}`),
   // HQ: every startup with a tracker, and the admins an operator is chosen from.
-  adminList: () => request('/admin/83b-review'),
+  // D946: scope 'lab' keeps only Lab ventures (SL10's switch); omitted, every startup.
+  adminList: (scope) => request(`/admin/83b-review${scope ? `?scope=${encodeURIComponent(scope)}` : ''}`),
   adminAssign: (projectId, operatorUserId) => request(`/admin/83b-review/projects/${encodeURIComponent(projectId)}/operator`, {
     method: 'PUT',
     body: JSON.stringify({ operator_user_id: operatorUserId }),

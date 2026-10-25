@@ -239,7 +239,7 @@ test('callTool: a free tool holds nothing; a priced tool runs through meteredCal
     // 600000 of 800000 is spent; a third call does not fit, and says so.
     const refused = await callTool(f.env, props, null, tool('paid_tool'), {}, ['validate:read'], priced);
     assert.equal(refused.isError, true);
-    assert.deepEqual(json(refused), { error: REFUSAL_WORDS.budget_user_month.sentence, code: 'insufficient_tokens' });
+    assert.deepEqual(json(refused), { error: REFUSAL_WORDS.budget_user_month.sentence, code: 'insufficient_tokens', needed_microusd: null, available_microusd: null, add_tokens_href: '/pricing/products#token-packs' });
     // The server's own v1 policy: a registered tool name holds nothing.
     const before = holds(f.db).length;
     await callTool(f.env, props, null, tool('list_companies'), {}, ['validate:read']);

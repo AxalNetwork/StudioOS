@@ -29,6 +29,7 @@ import { withThrownResponses } from '../src/util/thrownResponse.ts';
 import { tableFromBaseline } from './_baseline.mjs';
 import { d1Over } from './_d1_sqlite.mjs';
 import '../src/services/channels/zoom.ts';
+import { applySessionTranslationColumns } from './_session_translation_columns.mjs';
 
 const { CONNECTOR_METADATA, getDescriptor, pageDescriptor, publicDescriptor, zoomDistribution } = registry as any;
 
@@ -110,8 +111,11 @@ function fixture(extraEnv: Record<string, string> = {}) {
     '246_fills_the_blanks_everywhere.sql', '438_interview_sessions.sql', '439_validate_proposals_structuring.sql',
     '440_validate_cycle_stores.sql', '446_interview_structure_receipts.sql', '447_assistant_interviews.sql',
     '449_interview_channels.sql', '450_channel_events_delete_kind.sql', '451_channel_review_fixes.sql',
+    // D870: interview_channel_refs.transcript_source, call_lang and stt_reservation_uid.
+    '529_meeting_transcript_source.sql',
     '452_record_session_setup.sql', '454_channel_voice_failures.sql', '458_channel_link_consent.sql',
     '488_channel_consents.sql', '492_whatsapp_sender_links.sql', '504_whatsapp_link_settings.sql']) db.exec(mig(m));
+    applySessionTranslationColumns(db); // D857: migration 527's segment columns
   const env = { DB: d1Over(db), JWT_SECRET, ENVIRONMENT: 'development', ...ZOOM_ENV, ...CHANNEL_ENV, ...extraEnv } as any;
   const states = () => (db.prepare('SELECT COUNT(*) AS n FROM oauth_state_tokens').get() as any).n as number;
   return { db, env, states };
@@ -196,13 +200,13 @@ test('Zoom\'s page is null for a non-venture viewer, as its audience is', () => 
 });
 
 // 3b ──────────────────────────────────────────────────────────────────────────
-test('the venture rule touches no other provider', async () => {
+test('the venture rule leaves other providers and Carta’s own audience rule intact', async () => {
   // Mutation checked: `audienceFor` answering `none` for every non-venture
   // viewer whatever the rule (the investor's list shrinks to Mercury-less nothing).
   const f = fixture();
   const keysFor = async (who: string) => (await call(f.env, who, 'GET', '/api/connectors/available')).body.items.map((p: any) => p.key).filter((k: string) => k !== 'mercury');
   const founder = await keysFor('founder');
-  for (const who of CONNECTORS_NOT_VENTURE) assert.deepEqual(await keysFor(who), founder.filter((k: string) => k !== 'zoom'), who);
+  for (const who of CONNECTORS_NOT_VENTURE) assert.deepEqual(await keysFor(who), founder.filter((k: string) => getDescriptor(k)?.audience_rule !== 'venture' && (k !== 'carta' || who === 'investor')), who);
 });
 
 // 4 ───────────────────────────────────────────────────────────────────────────
@@ -286,7 +290,8 @@ test('Zoom\'s metadata: used_by, suggests and feeds, passed through publicDescri
   assert.deepEqual([d.used_by, d.suggests, d.feeds], [used, suggests, ['customer_research']]);
   const page = await call(fixture().env, 'founder', 'GET', '/api/connectors/directory/zoom');
   assert.deepEqual([page.body.connector.used_by, page.body.connector.suggests], [used, suggests]);
-  for (const key of Object.keys(CONNECTOR_METADATA).filter((k) => k !== 'zoom')) {
+  // D879 (#2552): Mercury declares where it is used too, Grow and Raise (`mercury_member_only_d879.test.ts`).
+  for (const key of Object.keys(CONNECTOR_METADATA).filter((k) => k !== 'zoom' && k !== 'mercury')) {
     assert.ok(!('used_by' in CONNECTOR_METADATA[key]) && !('suggests' in CONNECTOR_METADATA[key]), key);
   }
 });

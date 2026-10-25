@@ -77,20 +77,20 @@ const canon = (k) => (Object.hasOwn(BRAND_ALIAS, k) ? BRAND_ALIAS[k] : k);
 const TABLES = { mark: BRAND_MARKS, generic: BRAND_GENERIC, monogram: BRAND_MONOGRAM };
 
 const SIMPLE_ICONS_KEYS = ['figma', 'hubspot', 'calendly', 'crunchbase', 'stripe', 'github', 'zoom', 'google_meet', 'telegram', 'whatsapp', 'signal', 'claude', 'gemini', 'x', 'facebook', 'instagram', 'youtube', 'tiktok'];
-const VENDOR_OR_MONOGRAM = ['google', 'salesforce', 'slack', 'docusign', 'carta', 'affinity', 'microsoft', 'teams', 'linkedin', 'chatgpt', 'grok', 'mercury'];
+const VENDOR_OR_MONOGRAM = ['lovable', 'google', 'salesforce', 'slack', 'docusign', 'carta', 'affinity', 'microsoft', 'teams', 'linkedin', 'chatgpt', 'grok', 'mercury'];
 const GENERIC = { phone_speaker: 'Phone', sms: 'MessageSquare', paste: 'ClipboardPaste', other: 'Bot', website: 'Globe', email: 'Mail' };
 
 // ── 1. Every key is classified ──────────────────────────────────────────────
 
 test('1. every key the app draws is classified, exactly once', () => {
-  assert.deepEqual(SOURCES.registry, ['figma', 'hubspot', 'calendly', 'salesforce', 'carta', 'slack', 'docusign', 'crunchbase', 'stripe', 'github', 'zoom', 'google_calendar', 'microsoft_365', 'mercury'], 'the Worker registry\'s 14 keys, figma\'s one-line entry included');
+  assert.deepEqual(SOURCES.registry, ['lovable', 'figma', 'hubspot', 'calendly', 'salesforce', 'carta', 'slack', 'docusign', 'crunchbase', 'stripe', 'github', 'zoom', 'google_calendar', 'microsoft_365', 'mercury'], 'the Worker registry\'s 15 keys, figma\'s one-line entry included');
   for (const key of ALL_KEYS) {
     const c = canon(key);
     const homes = Object.entries(TABLES).filter(([, t]) => Object.hasOwn(t, c)).map(([n]) => n);
     assert.equal(homes.length, 1, `${key} (${c}) is in exactly one table, not ${JSON.stringify(homes)}`);
   }
   const classified = [...new Set(ALL_KEYS.map(canon))].sort();
-  assert.equal(classified.length, 36);
+  assert.equal(classified.length, 37);
   assert.deepEqual(classified, [...SIMPLE_ICONS_KEYS, ...VENDOR_OR_MONOGRAM, ...Object.keys(GENERIC)].sort());
   assert.deepEqual(BRAND_ALIAS, { google_calendar: 'google', microsoft_365: 'microsoft', twitter: 'x', gcip: 'google' });
   assert.deepEqual(Object.keys(BRAND_MARKS).sort(), [...SIMPLE_ICONS_KEYS, ...Object.keys(VENDOR_MARKS)].sort(), 'Simple Icons and the recorded vendor artwork');
@@ -271,7 +271,8 @@ test('7b. the surfaces this test cannot mount pass the key to BrandIcon at the a
   has('frontend/src/pages/admin/consoles/IntegrationKeysConsole.jsx', /<BrandIcon provider=\{row\.provider_key\} name=\{label\} size=\{24\} \/>/, 'a 24px tile by each label');
   has('frontend/src/pages/hq/PlatformPage.jsx', /<BrandIcon provider=\{k\.provider_key\} name=\{PROVIDER_LABEL\[k\.provider_key\] \|\| k\.provider_key\} size=\{24\} \/>/, 'a 24px tile by each label');
   has('frontend/src/pages/admin/consoles/GithubSyncConsole.jsx', /<BrandIcon provider="github" name="GitHub" size=\{18\} variant="bare" tone="current" className="text-gray-800 dark:text-gray-100" \/>/, 'the GitHub mark in GitHub\'s documented monochrome, as the console drew it, not lucide\'s GitBranch');
-  has('frontend/src/pages/account/AccountConnectors.jsx', /<BrandIcon provider="telegram" name="Telegram" \/>\s*<span className="text-sm font-bold[^"]*">Telegram · Axal VC channels/, 'the Telegram card\'s tile');
+  // The owner removed the Community "Telegram · Axal VC channels" card from Connectors (#2559).
+  assert.doesNotMatch(read('frontend/src/pages/account/AccountConnectors.jsx'), /Telegram · Axal VC channels/, 'the Community card is gone');
   has('frontend/src/pages/account/AccountConnectors.jsx', /<VerifiedBadge on=\{p\.verified_on\} \/>/, 'the Verified mark is the one primitive');
   has('frontend/src/ui/VerifiedBadge.jsx', /role="img" aria-label="Verified"/, 'the Verified mark is an image');
   assert.doesNotMatch(read('frontend/src/pages/account/AccountConnectors.jsx'), /title="Built and verified by Axal"/, 'the unrecorded ✓ is gone');
@@ -311,8 +312,9 @@ test('9. no file imports lucide\'s GitBranch as a GitHub icon; GitHub Sync draws
   // The Admin Console's GitHub Sync entry, which drew the mark, is gone: the
   // owner's ruling (2026-10-20) moved GitHub Sync to HQ's Integration keys
   // page, whose section has a heading and no menu icon.
-  const admin = read('frontend/src/pages/AdminPage.jsx');
-  assert.doesNotMatch(admin, /value: 'github'/);
+  // D938 retired the console itself; its pages draw no GitHub entry either.
+  const admin = read('frontend/src/pages/admin/ConsolePages.jsx');
+  assert.doesNotMatch(admin, /GithubSync|github/i);
   assert.doesNotMatch(admin, /GitBranch/);
   // Drawn the way the menu draws every entry's icon: the mark, its key, the passed size and colour.
   const out = html(h(BrandIcon, { provider: 'github', size: 14, variant: 'bare', tone: 'current', className: 'shrink-0 text-gray-400 dark:text-gray-500' }));

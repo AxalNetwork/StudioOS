@@ -52,7 +52,7 @@ export default function PublicNav() {
     <nav className="ax-site-chrome ax-navbar" aria-label="Main">
       <div className="ax-wrap ax-navbar-row">
         <Link to="/" aria-label="Axal VC home" className="flex items-center flex-none">
-          <AxalLogo size="sm" onLight />
+          <AxalLogo size="sm" onLight showRelease />
         </Link>
 
         <div className="ax-navlinks">

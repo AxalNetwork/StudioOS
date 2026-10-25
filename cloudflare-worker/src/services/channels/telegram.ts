@@ -71,15 +71,16 @@ export const TELEGRAM_ALLOWED_UPDATES = [
 ] as const;
 
 /**
- * getFile's own ceiling: the Bot API serves nothing larger. Axal takes at most
- * the recorder's MAX_CHUNK_BYTES (5 MB, `CHANNEL_AUDIO_MAX_BYTES`), D756.
+ * getFile's own ceiling, not Axal's admission limit. D865 retains the
+ * recorder's MAX_CHUNK_BYTES (5 MB, `CHANNEL_AUDIO_MAX_BYTES`): increasing
+ * this constant alone cannot admit a larger note through the shared intake.
  */
 export const TELEGRAM_MAX_DOWNLOAD_BYTES = 20 * 1024 * 1024;
 
 /**
- * D756 (#1896): round video messages are stored as placeholders but not
- * fetched, until the owner's live check shows Whisper reads Telegram's MP4
- * with a video track. A follow-up flips this, with a fixture test.
+ * D756 / D865: round videos remain placeholders. Direct MP4-with-video
+ * support is UNVERIFIED on Workers AI. Enabling this also needs an
+ * admitted audio track: video/mp4 is refused by the shared audio MIME rule.
  */
 export const TELEGRAM_VIDEO_NOTES = false;
 
@@ -239,7 +240,20 @@ export function normaliseTelegramUpdate(update: unknown, ownerTelegramUserId: st
     if (tgUser && chatId && /^\/confirm(?:@[A-Za-z0-9_]+)?$/.test(text)) {
       return { kind: 'link_confirm', provider: 'telegram', eventId, telegramUserId: tgUser, chatId, displayName: displayName(from) };
     }
-    if (!start || !tgUser || !chatId) return ignored('not_a_link');
+    if (!start || !tgUser || !chatId) {
+      const messageId = idStr(pm.message_id);
+      // Private media is attributed later through the D684 integration, never
+      // through a forwarded origin, display name or username.
+      if (!tgUser || chatId !== tgUser || !messageId) return ignored('not_a_link');
+      const voice = noteFrom(pm);
+      const replyId = idStr(obj(pm.reply_to_message)?.message_id);
+      return {
+        kind: 'telegram_capture', provider: 'telegram', eventId, telegramUserId: tgUser, chatId,
+        externalMessageId: telegramMessageRef(chatId, messageId),
+        contextMessageId: replyId ? telegramMessageRef(chatId, replyId) : null,
+        text: text || null, voice: voice?.media === 'video_note' ? null : voice, sentAt: isoFromUnix(pm.date),
+      };
+    }
     return {
       kind: 'link', provider: 'telegram', eventId, telegramUserId: tgUser, chatId,
       displayName: displayName(from),
@@ -663,8 +677,10 @@ export async function sendConsentNotice(env: Env, userId: number, chatId: string
 }
 
 /** A message in the member's own private chat with the bot (link prompts, confirmations, the test). */
-export async function sendPrivateMessage(env: Env, chatId: string, text: string): Promise<SendResult> {
-  const r = await call(env, 'sendMessage', { chat_id: chatId, text, link_preview_options: { is_disabled: true } });
+export async function sendPrivateMessage(env: Env, chatId: string, text: string, replyMarkup?: Record<string, unknown>): Promise<SendResult> {
+  const r = await call(env, 'sendMessage', { chat_id: chatId, text, link_preview_options: { is_disabled: true },
+    ...(replyMarkup ? { reply_markup: replyMarkup } : {}),
+  });
   return sendResult(r, chatId);
 }
 

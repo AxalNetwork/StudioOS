@@ -235,7 +235,7 @@ test('tools: list_companies is the grant; get_validate_context never names an in
   const { token } = await connect(env, [P]);
   const list = await mcp(env, token, 'tools/list');
   assert.equal(list.status, 200, JSON.stringify(list.body));
-  assert.deepEqual(list.body.result.tools.map((t: any) => t.name).sort(), ['get_interview_guide', 'get_validate_context', 'list_companies', 'propose_placements', 'structure_with_studioos', 'submit_interview']);
+  assert.deepEqual(list.body.result.tools.map((t: any) => t.name).sort(), ['assign_chat_to_interview', 'extract_action_items', 'get_interview_guide', 'get_meeting_transcript', 'get_session_insights', 'get_validate_context', 'list_channel_chats', 'list_companies', 'list_meetings', 'propose_placements', 'structure_with_studioos', 'submit_interview', 'summarize_meeting']);
   for (const t of list.body.result.tools) assert.ok(t.description.length > 20 && t.inputSchema?.type === 'object', t.name);
   assert.deepEqual(toolJson(await callTool(env, token, 'list_companies')).companies, [{ id: P, name: 'Acme' }]);
   const ctxRes = await callTool(env, token, 'get_validate_context', { company: P });
@@ -276,13 +276,22 @@ test('activity_logs: one row per call with tool, company, client and outcome, an
   assert.ok(!JSON.stringify(db.prepare('SELECT * FROM activity_logs').all()).includes('SECRET-ARG-TEXT'));
 });
 
-test('tools are rate-limited per grant', async () => {
+test('tools are rate-limited per grant', async (t) => {
   const { env } = fixture();
   const { token } = await connect(env, [P]);
-  let last: any;
-  for (let i = 0; i <= 60; i += 1) last = await callTool(env, token, 'list_companies');
-  assert.equal(last.body.result.isError, true);
-  assert.match(toolJson(last).error, /Too many calls/);
+  // Keep all 61 calls in one minute, even when CI runs across a wall-clock boundary.
+  const minuteStart = Math.floor(Date.now() / 60_000) * 60_000;
+  t.mock.timers.enable({ apis: ['Date'], now: minuteStart + 59_999 });
+  for (let i = 0; i < 60; i += 1) {
+    const allowed = await callTool(env, token, 'list_companies');
+    assert.notEqual(allowed.body.result.isError, true, `call ${i + 1} is within the limit`);
+  }
+  const limited = await callTool(env, token, 'list_companies');
+  assert.equal(limited.body.result.isError, true);
+  assert.match(toolJson(limited).error, /Too many calls/);
+  t.mock.timers.setTime(minuteStart + 60_000);
+  const nextMinute = await callTool(env, token, 'list_companies');
+  assert.notEqual(nextMinute.body.result.isError, true, 'the next minute has a fresh allowance');
 });
 
 // ── Grants ─────────────────────────────────────────────────────────────────

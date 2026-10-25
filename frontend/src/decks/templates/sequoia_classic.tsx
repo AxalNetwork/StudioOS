@@ -876,10 +876,7 @@ const Slide12Vision: React.FC<SP> = ({ data, editable, onEdit }) => {
     { quarter: '+12 mo', goal: 'Adjacent workflow live' },
     { quarter: '+24 mo', goal: 'Category leader' },
   ];
-  const uof = data?.use_of_funds?.length && typeof data.use_of_funds[0] === 'object' ? data.use_of_funds : [
-    { label: 'Engineering', pct: 45 }, { label: 'GTM', pct: 30 },
-    { label: 'Operations + Infra', pct: 15 }, { label: 'Reserve', pct: 10 },
-  ];
+  const uof = data?.use_of_funds?.length && typeof data.use_of_funds[0] === 'object' ? data.use_of_funds : [];
   return (
     <Frame index={11} label="The Vision" company={v(data, 'company')} bg={INK} ink={PAPER}>
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(12, 1fr)', gap: 40, height: '100%' }}>
@@ -932,7 +929,7 @@ const Slide12Vision: React.FC<SP> = ({ data, editable, onEdit }) => {
         <div style={{ gridColumn: 'span 5', display: 'flex', flexDirection: 'column', justifyContent: 'space-between' }}>
           <div>
             <div style={{ fontFamily: FONT_SANS, fontSize: 10, letterSpacing: 4, color: '#A89F8F' }}>USE OF FUNDS</div>
-            <div style={{ marginTop: 24 }}><Donut data={uof} /></div>
+            <div style={{ marginTop: 24 }}><>{uof.length ? <Donut data={uof} /> : <p>Use of funds not recorded</p>}</></div>
           </div>
           <Editable value={v(data, 'closing_line')} path="closing_line" editable={editable} onEdit={onEdit}
             placeholder="The decade that follows depends on whether this company exists."

@@ -21,16 +21,18 @@
  * creator column (decision 12, `cycleActivity.ts`).
  */
 import type { ActionResult, ModuleSpec, RecordAction, RecordField, RecordContent, RecordContext, RecordFact, Row, SectionSpec, Store } from './types';
-import { activeGrant, ndaActive, removeDataRoomFile, replaceDataRoomFile } from '../../routes/data_room';
-import { ACCESS_TIERS, investorCommitted, tierAdmits } from '../dataRoomAccess';
+import { activeGrant, dataRoomOwner, ndaActive, removeDataRoomFile, replaceDataRoomFile } from '../../routes/data_room';
+import { ACCESS_TIERS, grantFolderScope, investorCommitted, tierAdmits } from '../dataRoomAccess';
 import { SERVED_FUNDS, likeLiteral } from '../researchFundDirectory';
+import { deckReaders, readBySentence } from '../narrative/readers';
 import { RAISE_STAGES } from '../../routes/contacts';
 import {
   type Ctx, type ProspectRow, READINESS_ITEMS, TOOL_HREF, DILIGENCE_CHECKLIST, EVIDENCE, FIGURES, FIGURE_LABEL, INVESTOR_TYPES,
-  INVESTOR_TYPE_LABEL, FUND_SECTIONS, FIT_LABEL, LIST_STAGE_LABEL, NEVER_EXPIRES, accessText, capIdOf, capEntryOf, checkInputs,
-  checklistLabel, computeReadiness, fmtFigure, fundCells, groupOf, instrumentOf, loadCap, loadFunds, loadProspects, loadReadiness,
-  loadVersions, prospectFunds, requestTitles,
+  INVESTOR_TYPE_LABEL, FUND_SECTIONS, FIT_LABEL, LIST_STAGE_LABEL, NEVER_EXPIRES, accessText, capIdOf, capEntryOf, checkInputs, consistencyCheck,
+  basedOnLabel, checklistLabel, computeReadiness, fmtFigure, fundCells, groupOf, instrumentOf, loadCap, loadFunds, loadProspects, loadReadiness,
+  loadVersions, prospectFunds, requestTitles, timeOnDeck,
 } from '../raiseCycle';
+import { deckShareMetrics } from '../deckShareUse';
 import {
   CHECK_SOURCES, EVENT_KINDS, LINK_EXPIRY_DAYS, START_FROM, WriterError, addProspectFeedback, addSectionHire, duplicateNarrativeVersion,
   logProspectEvent, markProspectPassed, rescoreReadiness, revokeDeckLink, saveUseOfFunds, scoreReadinessItem, updateCapHolder,
@@ -58,6 +60,11 @@ const section = (key: string, title: string, read: SectionSpec['read'], extra: P
 const duration = (seconds: number) => {
   const s = Math.max(0, Math.round(seconds));
   return s >= 60 ? `${Math.floor(s / 60)} min ${String(s % 60).padStart(2, '0')} s` : `${s} s`;
+};
+/** Seconds the viewer reported, as m:ss (D1111); none reported is null, never "0 min". */
+const seconds = (n: unknown): string | null => {
+  const cell = timeOnDeck(n);
+  return cell && typeof cell === 'object' ? cell.text : null;
 };
 const bytes = (n: unknown) => {
   const v = Number(n);
@@ -148,12 +155,12 @@ const readiness = spec('readiness_items', 'fundraising-readiness', async (rc, id
   const out: RecordContent = {
     title: item.label,
     sub: s ? `Readiness item · scored ${day(s.scored_at)}` : 'Readiness item · not scored yet',
-    pills: s
-      ? [{ text: `${Number(s.score)} / 10`, tone: s.score >= 8 ? 'ok' : s.score >= 5 ? 'amb' : 'bad' }, { text: cap1(String(s.evidence)), tone: 'vio' }]
+    pills: s?.score != null
+      ? [{ text: s.score == null ? 'Not scored' : `${Number(s.score)} / 10`, tone: s.score == null ? 'grey' : s.score >= 8 ? 'ok' : s.score >= 5 ? 'amb' : 'bad' }, { text: cap1(String(s.evidence)), tone: 'vio' }]
       : [{ text: 'Not scored', tone: 'grey' }],
     facts: [
-      fact('Score', s ? `${Number(s.score)} / 10` : null, notScored),
-      fact('Evidence', s ? cap1(String(s.evidence)) : null, notScored),
+      fact('Score', s?.score != null ? `${Number(s.score)} / 10` : null, notScored),
+      fact('Evidence', s?.score != null ? cap1(String(s.evidence)) : null, s?.missing || notScored),
       fact('Missing', s ? String(s.missing ?? '').trim() || 'Nothing' : null, notScored),
       fact('Last scored', s ? day(s.scored_at) : null, notScored),
     ],
@@ -184,7 +191,7 @@ const readiness = spec('readiness_items', 'fundraising-readiness', async (rc, id
   }, { when: (id) => id === 'data_room' }),
   section('history', 'Score over time', async (_rc, _id, record) => {
     const { mine } = loadedOf(record);
-    return { rows: [...(mine ?? [])].reverse().slice(0, 12).map((s: any) => ({ a: day(s.scored_at) ?? '', b: String(Number(s.score)) })), empty: 'Not scored yet.' };
+    return { rows: [...(mine ?? [])].reverse().slice(0, 12).map((s: any) => ({ a: day(s.scored_at) ?? '', b: s.score == null ? (s.missing || 'Not scored') : String(Number(s.score)) })), empty: 'Not scored yet.' };
   }, { side: true }),
   section('opens', 'Opens', async (rc, id) => {
     const o = OPENS[id];
@@ -198,8 +205,8 @@ const readiness = spec('readiness_items', 'fundraising-readiness', async (rc, id
       key: 'score', label: 'Score', kind: 'form', tone: 'primary',
       form: { title: 'Score Team', cta: 'Save score', fields: [
         { key: 'score', label: 'Score', kind: 'CH', options: Array.from({ length: 11 }, (_, n) => ({ value: String(n), label: `${n} / 10` })),
-          value: s ? String(Number(s.score)) : undefined, required: true },
-        { key: 'evidence', label: 'Evidence', kind: 'CH', options: EVIDENCE.map((e) => ({ value: e, label: cap1(e) })), value: s?.evidence ?? undefined, required: true },
+          value: s?.score != null ? String(Number(s.score)) : undefined, required: true },
+        { key: 'evidence', label: 'Evidence', kind: 'CH', options: EVIDENCE.filter(e => e === 'anecdote' || e === 'pattern').map((e) => ({ value: e, label: cap1(e) })), value: s?.evidence ?? undefined, required: true },
         { key: 'missing', label: 'Missing', kind: 'T', value: s?.missing ?? '' },
       ] },
       execute: (c, _id, body) => refusing(async () => ({ ok: true, record: await scoreReadinessItem(c.env, {
@@ -222,10 +229,10 @@ const readiness = spec('readiness_items', 'fundraising-readiness', async (rc, id
   return {
     items: READINESS_ITEMS.map((i) => {
       const sc = newest.get(i.key);
-      return { value: i.key, label: i.label, by_hand: i.key === 'team', last_scored: sc ? day(sc.scored_at) : null, score: sc ? Number(sc.score) : null };
+      return { value: i.key, label: i.label, by_hand: i.key === 'team', last_scored: sc ? day(sc.scored_at) : null, score: sc?.score != null ? Number(sc.score) : null };
     }),
     since: opts([['all', 'Everything'], ['last', 'Since the last score']]),
-    evidence: EVIDENCE.map((e) => ({ value: e, label: cap1(e) })),
+    evidence: EVIDENCE.filter(e => e === 'anecdote' || e === 'pattern').map((e) => ({ value: e, label: cap1(e) })),
   };
 });
 
@@ -246,18 +253,19 @@ const narrative = spec('spinout_deck_overrides', 'investor-narrative', async (rc
     'SELECT start_from, based_on_version, why_now, check_against_json FROM narrative_version_meta WHERE project_id = ? AND version = ?',
   ).bind(rc.projectId, n).first<{ start_from: string; based_on_version: number | null; why_now: string | null; check_against_json: string | null }>();
   const mismatches = Number(v?.mismatches ?? 0);
-  const deck = v?.deck_version != null ? Number(v.deck_version) : null;
-  const basedOn = !meta ? null
-    : meta.start_from === 'version' && meta.based_on_version != null ? `v${meta.based_on_version}`
-      : meta.start_from === 'blank' ? 'Blank' : 'The live deck';
+  const compared = Number(v?.compared ?? 0);
+  // D909: Read by is a binding on the current deck (`services/narrative/readers.ts`), never the deck at save time.
+  const readers = await deckReaders(rc.env, rc.projectId);
+  const readBy = readBySentence(readers, n);
+  const basedOn = !meta ? null : basedOnLabel({ start_from: meta.start_from, based_on_version: meta.based_on_version }, readers.spinout);
   const out: RecordContent = {
     title: `v${n} · ${typeLabel(v?.investor_type).toLowerCase()}`,
-    sub: [`Saved ${day(v?.saved_at) ?? 'on an unrecorded day'}`, deck != null ? `used by deck v${deck}` : null].filter(Boolean).join(' · '),
-    pills: [{ text: typeLabel(v?.investor_type), tone: 'vio' }, { text: plural(mismatches, 'mismatch', 'mismatches'), tone: mismatches ? 'amb' : 'ok' }],
+    sub: `Saved ${day(v?.saved_at) ?? 'on an unrecorded day'} · ${readBy}`,
+    pills: [{ text: typeLabel(v?.investor_type), tone: 'vio' }, { text: compared ? plural(mismatches, 'mismatch', 'mismatches') : 'Nothing compared yet', tone: !compared ? 'grey' : mismatches ? 'amb' : 'ok' }],
     facts: [
       fact('Investor type', typeLabel(v?.investor_type), ''),
-      fact('Used by', deck != null ? `Pitch deck v${deck}` : null, 'No deck version was recorded with it'),
-      fact('Mismatches', mismatches, ''),
+      fact('Read by', readBy, ''),
+      fact('Mismatches', compared ? mismatches : null, 'Nothing compared yet'),
       fact('Based on', basedOn, 'Saved before versions recorded their source'),
     ],
   };
@@ -278,21 +286,18 @@ const narrative = spec('spinout_deck_overrides', 'investor-narrative', async (rc
       action: 'edit',
     };
   }),
-  // Each figure as the stored check found it: a mismatch, consistent, or not compared (decision 7).
+  // Each current stated/metric comparison: mismatch, agreement, or not compared (D907).
   section('consistency', 'Consistency check', async (rc, id) => {
     const n = Number(id);
-    const checks = await rc.env.DB.prepare(
-      'SELECT figure, stated_value, metric_value FROM narrative_checks WHERE project_id = ? AND version = ? ORDER BY id',
-    ).bind(rc.projectId, n).all<{ figure: string; stated_value: number; metric_value: number }>();
-    const found = new Map((checks.results || []).map((c) => [c.figure, c]));
     const { stated, metrics } = await checkInputs(rc.env, rc.projectId, n);
+    const found = consistencyCheck(stated, metrics);
     return {
-      rows: FIGURES.map((f) => {
-        const m = found.get(f);
+      rows: [{ a: 'Pitch deck', b: 'No deck bindings are recorded.', c: 'Not compared', tone: 'grey' }, ...FIGURES.map((f) => {
+        const m = found.find(m => m.figure === f);
         if (m) return { a: FIGURE_LABEL[f], b: `stated ${fmtFigure(f, Number(m.stated_value))} · metrics ${fmtFigure(f, Number(m.metric_value))}`, c: 'Mismatch', tone: 'bad' };
-        if (stated.some((s) => s.figure === f) && metrics[f]) return { a: FIGURE_LABEL[f], b: 'consistent everywhere', c: 'OK', tone: 'ok' };
+        if (stated.some((s) => s.figure === f && Number.isFinite(s.value)) && Number.isFinite(metrics[f]?.value)) return { a: FIGURE_LABEL[f], b: 'consistent everywhere', c: 'OK', tone: 'ok' };
         return { a: FIGURE_LABEL[f], b: 'stated or stored in one place only', c: 'Not compared', tone: 'grey' };
-      }),
+      })],
     };
   }),
   section('feedback', 'Investor feedback', async (rc) => {
@@ -349,12 +354,16 @@ const narrative = spec('spinout_deck_overrides', 'investor-narrative', async (rc
   ];
 }, async (rc) => {
   // Investor types, saved versions to start from, and the two check sources (decision 7).
+  // D909: the live wording is the Spin-Out deck's, offered to Spin-Out ventures only (owner question 5 on #2454).
   const versions = await loadVersions(ctxOf(rc));
+  const { spinout } = await deckReaders(rc.env, rc.projectId);
   return {
     investor_types: INVESTOR_TYPES.map((t) => ({ value: t, label: typeLabel(t) })),
-    start_from: START_FROM.map((k) => ({ value: k, label: k === 'live' ? 'The live deck' : k === 'version' ? 'A saved version' : 'Blank' })),
+    start_from: START_FROM.filter((k) => spinout || k !== 'live')
+      .map((k) => ({ value: k, label: k === 'live' ? 'The Spin-Out deck wording' : k === 'version' ? 'A saved version' : 'Blank' })),
     versions: versions.map((x) => ({ value: String(x.version), label: `v${x.version} · ${typeLabel(x.investor_type).toLowerCase()}` })),
     check_against: opts([['deck', 'Pitch deck'], ['metrics', 'Metrics']]),
+    spinout,
   };
 });
 
@@ -364,7 +373,7 @@ const narrative = spec('spinout_deck_overrides', 'investor-narrative', async (rc
 
 const pitch = spec('pitch_deck_share_tokens', 'pitch-deck', async (rc, id) => {
   const t = await rc.env.DB.prepare(
-    `SELECT t.id, t.created_at, t.expires_at, t.revoked_at, t.view_count, t.investor_label, t.allow_download, t.allow_forwarding,
+    `SELECT t.id, t.created_at, t.expires_at, t.revoked_at, t.used_at, t.view_limit, t.view_count, t.investor_label, t.allow_download, t.allow_forwarding,
             d.version AS deck_version, p.id AS prospect_ref, p.name AS prospect_name, p.firm AS prospect_firm,
             (SELECT COALESCE(SUM(v.read_seconds), 0) FROM deck_share_views v WHERE v.share_token_id = t.id) AS seconds,
             (SELECT s.slide_index FROM deck_view_slides s JOIN deck_share_views v ON v.id = s.view_id
@@ -375,7 +384,8 @@ const pitch = spec('pitch_deck_share_tokens', 'pitch-deck', async (rc, id) => {
       WHERE t.id = ? AND d.project_id = ?`,
   ).bind(Number(id), rc.projectId).first<any>();
   const now = new Date().toISOString().replace('T', ' ').slice(0, 19);
-  const state = t.revoked_at ? 'revoked' : String(t.expires_at) < now ? 'expired' : 'active';
+  // Used up: the engagement read's rule (D895), as the list says it (D1111).
+  const state = t.revoked_at ? 'revoked' : String(t.expires_at) < now ? 'expired' : deckShareMetrics(t).exhausted ? 'used_up' : 'active';
   const never = String(t.expires_at).startsWith(NEVER_EXPIRES.slice(0, 10));
   const investor = [t.prospect_name, t.prospect_firm].filter(Boolean).join(' · ')
     || String(t.investor_label ?? '').trim() || `Link created ${day(t.created_at) ?? 'on an unrecorded day'}`;
@@ -384,10 +394,11 @@ const pitch = spec('pitch_deck_share_tokens', 'pitch-deck', async (rc, id) => {
     title: `${investor} · link`,
     sub: [`Deck v${Number(t.deck_version)}`,
       state === 'revoked' ? `revoked ${day(t.revoked_at) ?? ''}`.trim() : never ? 'never expires' : `${state === 'expired' ? 'expired' : 'expires'} ${day(t.expires_at)}`].join(' · '),
-    pills: [state === 'active' ? { text: 'Active', tone: 'ok' } : state === 'expired' ? { text: 'Expired', tone: 'grey' } : { text: 'Revoked', tone: 'bad' }],
+    pills: [state === 'active' ? { text: 'Active', tone: 'ok' } : state === 'expired' ? { text: 'Expired', tone: 'grey' }
+      : state === 'used_up' ? { text: 'Used up', tone: 'grey' } : { text: 'Revoked', tone: 'bad' }],
     facts: [
       fact('Views', Number(t.view_count) || 0, ''),
-      fact('Time on deck', `${Math.round((Number(t.seconds) || 0) / 60)} min`, ''),
+      fact('Time on deck', seconds(t.seconds), Number(t.view_count) ? 'No read time recorded' : 'Not opened yet'),
       fact('Most read', t.top_slide == null ? null : `Slide ${Number(t.top_slide) + 1}`, 'No slide time recorded'),
       fact('Expires', expires, 'No expiry recorded'),
     ],
@@ -406,7 +417,7 @@ const pitch = spec('pitch_deck_share_tokens', 'pitch-deck', async (rc, id) => {
     return {
       rows: (res.results || []).map((v) => ({
         a: `${day(v.created_at) ?? ''} · ${clock(v.created_at)}`,
-        b: [`${Math.round((Number(v.read_seconds) || 0) / 60)} min`, v.first_slide == null ? null
+        b: [seconds(v.read_seconds) ?? 'No read time recorded', v.first_slide == null ? null
           : `slides ${Number(v.first_slide) + 1}–${Number(v.last_slide) + 1}`].filter(Boolean).join(' · '),
       })),
       empty: 'Not opened yet.',
@@ -459,7 +470,7 @@ const pitch = spec('pitch_deck_share_tokens', 'pitch-deck', async (rc, id) => {
  * `activeGrant`, whose investor the file's tier and expiry admit
  * (`tierAdmits`, with `investorCommitted` for a committed-only file), and,
  * for an `nda` file, only once that investor's NDA is live (`ndaActive`),
- * the gate `data_room.ts` applies.
+ * the gate `data_room.ts` applies. D1103 — and whose folders hold the file.
  */
 async function admittedInvestors(rc: RecordContext, f: any): Promise<Array<{ id: number; name: string | null }>> {
   const res = await rc.env.DB.prepare(
@@ -472,14 +483,14 @@ async function admittedInvestors(rc: RecordContext, f: any): Promise<Array<{ id:
     const grant = await activeGrant(rc.env, rc.projectId, investor);
     if (!grant) continue;
     const committed = f.access_tier === 'committed' ? await investorCommitted(rc.env, rc.projectId, investor) : false;
-    if (!tierAdmits(f, committed)) continue;
+    if (!tierAdmits(f, committed, Date.now(), await grantFolderScope(rc.env, grant.id))) continue;
     if (f.visibility === 'nda' && !(await ndaActive(rc.env, grant.granted_by_user_id, investor))) continue;
     out.push({ id: investor, name: g.name });
   }
   return out;
 }
 
-const dataRoom = spec('data_room_files', 'data-room', async (rc, id) => {
+const dataRoom: ModuleSpec = { ...spec('data_room_files', 'data-room', async (rc, id) => {
   const f = await rc.env.DB.prepare(
     `SELECT f.id, f.uid, f.name, f.folder_id, f.visibility, f.checklist_item, f.dd_request_id, f.access_tier, f.access_expires_at,
             f.size_bytes, f.created_at, d.name AS folder, u.name AS uploader
@@ -604,7 +615,10 @@ const dataRoom = spec('data_room_files', 'data-room', async (rc, id) => {
     checklist: DILIGENCE_CHECKLIST.map((c) => ({ value: c.key, label: c.label, area: c.area })),
     tiers: ACCESS_TIERS.map((t) => ({ value: t, label: TIER_LABEL[t] })),
   };
-});
+}),
+  // D1102 — the file record uses the same owner-only policy as the room.
+  read: dataRoomOwner, write: dataRoomOwner,
+};
 
 // ---------------------------------------------------------------------------
 // Cap table — id: decision 4 (h-<holder>, e-<n>, pool)
@@ -706,7 +720,9 @@ const capTable = spec('cap_table_scenarios', 'cap-table', async (rc, id) => {
     return { rows };
   }, { side: true }),
 ], async (rc, id, record): Promise<RecordAction[]> => {
-  const actions: RecordAction[] = [{ key: 'model-a-round', label: 'Model a round', kind: 'link', href: '/raise/cap-table/variants' }];
+  // D1016: the tool's Scenarios tab on this venture, which lists the variants (D1015). The bare
+  // `/raise/cap-table/variants` it used to open had no venture, so it said "Open variants from a startup's cap table".
+  const actions: RecordAction[] = [{ key: 'model-a-round', label: 'Model a round', kind: 'link', href: raiseHref(rc, 'cap-table', 'scenarios') }];
   const { entry, type, name } = loadedOf(record);
   // A founder or a SAFE/note holder is edited through `updateHolder()`; the pool and a round's investors are set in the tool.
   if (type !== 'founder' && type !== 'safe') return actions;

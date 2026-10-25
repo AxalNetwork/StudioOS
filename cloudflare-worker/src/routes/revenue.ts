@@ -84,7 +84,7 @@ const afterLedgerWrite = async (c: Context<{ Bindings: Env }>, next: () => Promi
 revenue.use('/projects/:projectId/entries', afterLedgerWrite);
 revenue.use('/projects/:projectId/entries/*', afterLedgerWrite);
 
-const isPrivileged = (role: User['role']) => role === 'admin' || role === 'partner';
+const isPrivileged = (role: User['role']) => role === 'admin';
 
 async function loadProject(c: Ctx, projectId: number, user: User): Promise<Project | null> {
   const row = await c.env.DB.prepare(

@@ -7,6 +7,12 @@ node --experimental-strip-types --no-warnings \
 ```
 Usually you just want `npm run test:drift`, which runs this plus everything else.
 
+`financial_access_2460.test.ts` mounts the financial, revenue and legal routers
+over the real SQLite schema. It checks every outside role, residual founder
+ids, company boundaries, unchanged models after refused writes, and owner/admin
+access. It also pins the separate deal-room partner reader and the recompute
+edit gate so future read-only relationships cannot acquire writes accidentally.
+
 Tests run **in process against a real SQLite database** (`node:sqlite`) loaded
 from the actual schema or a specific migration file — not against mocks. A
 handler that would fail on D1 because of an unknown column fails here too,
@@ -67,3 +73,18 @@ real SQLite fixtures with every provider stubbed. Its in-process mutation checks
 run the same positive scenarios before restoring ordinary modules.
 
 D755 CR7: `checkout_order_topup_d755.test.ts` reads an owner's pack order in each webhook state, verifies the current account balance and VAT exclusion, rejects other members and failed reads, and leaves ordinary orders unchanged. It also preserves historical receipts when HQ adopts their price, bounds ordinary reads to one purchase lookup, handles absent legacy tables without hiding genuine failures, and covers authentication. It embeds thirteen mutations, with the restored scenario checked before and after each mutant. Providers are forbidden.
+
+D895: `pitch_worker_d895.test.ts` mounts the deck, branding, NDA and pitch-link
+record routes over the migrated schema with synthetic data. It covers read-only
+admins, advisor denial, admitted cofounders, measured runway, absent versus zero
+review scores/counts, owner-plan export branding, live brand-kit selection,
+founder/Lab score separation, canonical pairwise NDA state and one activity row
+per completed write. `decks.autofill.test.ts` also checks AI-only coverage is zero.
+
+`deck_share_null_limit_d895.test.ts` covers migration 549's data, index, foreign-key
+and sequence preservation, nullable fresh/legacy bootstraps, NULL module links,
+finite editor caps, concurrent claims and unchanged expiry/revocation/browser guards.
+
+D992: `partner_profile_verdicts_d992.test.ts` holds profile verdict validation,
+explicit clearing, omission, audit recipients and route refusals to the full
+migrated SQLite schema; it also records the shared plan policy's admin exemption.

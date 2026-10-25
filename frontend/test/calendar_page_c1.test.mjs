@@ -86,7 +86,7 @@ const pageKinds = [...(codeOnly(pageRaw).match(/const KINDS = \[([\s\S]*?)\n\];/
 
 test('the canvas and the page were both parsed, so a silent zero-match cannot pass', () => {
   assert.equal(canvasKinds.length, 5, 'the canvas kind table no longer parses as five entries');
-  assert.equal(pageKinds.length, 6, 'the page kind table no longer parses as six entries');
+  assert.equal(pageKinds.length, 8, 'the page kind table no longer parses as eight entries');
 });
 
 test('the page draws a chip for every kind the worker can emit, and no others', () => {
@@ -95,7 +95,7 @@ test('the page draws a chip for every kind the worker can emit, and no others', 
   // is added — which is exactly how partner_office_hour lost its chip.
   const union = service.match(/\n {2}kind: ((?:'\w+'(?:\s*\|\s*)?)+);/)?.[1] || '';
   const emitted = [...union.matchAll(/'(\w+)'/g)].map((m) => m[1]).sort();
-  assert.equal(emitted.length, 6, 'the CalendarEvent kind union did not parse');
+  assert.equal(emitted.length, 8, 'the CalendarEvent kind union did not parse');
   assert.deepEqual(pageKinds.map((k) => k.id).sort(), emitted,
     'a kind the worker can emit has no chip on /calendar, or a chip names a kind it cannot');
 
@@ -148,11 +148,48 @@ test('the sixth kind is derived in the canvas\'s idiom rather than borrowed from
     'the deviation from the canvas is no longer recorded in the page');
 });
 
+test('D1033: the two My events kinds are derived in the same idiom, apart from every other mark', () => {
+  const drawnShapes = canvasKinds.map((k) => k.shape);
+  const drawnHues = canvasKinds.flatMap((k) => [k.hue, k.dHue]);
+  // Literal patterns, one per kind this test reads, rather than a pattern built at run time.
+  const DOT = {
+    expert_booking: /\.cal-dot\[data-kind='expert_booking'\] \{([^}]*)\}/,
+    event_ticket: /\.cal-dot\[data-kind='event_ticket'\] \{([^}]*)\}/,
+    event_hosted: /\.cal-dot\[data-kind='event_hosted'\] \{([^}]*)\}/,
+  };
+  const HUE = {
+    expert_booking: /--k-expert_booking: (#[0-9a-f]{6});/g,
+    event_ticket: /--k-event_ticket: (#[0-9a-f]{6});/g,
+    event_hosted: /--k-event_hosted: (#[0-9a-f]{6});/g,
+  };
+  const shapeOf = (id) => css.match(DOT[id])?.[1]?.match(/border-radius: ([^;]+);/)?.[1];
+  const huesOf = (id) => [...css.matchAll(HUE[id])].map((m) => m[1]);
+  const taken = new Set([...drawnShapes, shapeOf('expert_booking')]);
+  const takenHues = new Set([...drawnHues, ...huesOf('expert_booking'), '#6d28d9']);
+  for (const id of ['event_ticket', 'event_hosted']) {
+    const shape = shapeOf(id);
+    assert.ok(shape, `${id} has no dot`);
+    assert.ok(!taken.has(shape), `${id} reuses a shape another kind has`);
+    taken.add(shape);
+    const hues = huesOf(id);
+    assert.equal(hues.length, 2, `${id} needs one light and one dark hue`);
+    assert.notEqual(hues[0], hues[1], `${id} does not lift to a separate dark hue`);
+    for (const h of hues) {
+      assert.ok(!takenHues.has(h), `${id} reuses ${h}`);
+      takenHues.add(h);
+    }
+  }
+  assert.deepEqual(pageKinds.filter((k) => k.id.startsWith('event_')).map((k) => [k.id, k.label, k.src]), [
+    ['event_ticket', 'Event ticket', 'event_registrations'],
+    ['event_hosted', 'Hosting', 'events'],
+  ]);
+});
+
 test('push is drawn for exactly the kinds the route accepts', () => {
   const routeSet = route.match(/const PUSHABLE_KINDS = new Set\(\[([\s\S]*?)\]\);/)?.[1] || '';
   const pageSet = page.match(/const PUSHABLE_KINDS = new Set\(\[([\s\S]*?)\]\);/)?.[1] || '';
   const ids = (s) => [...s.matchAll(/'(\w+)'/g)].map((m) => m[1]).sort();
-  assert.equal(ids(routeSet).length, 4, 'the route PUSHABLE_KINDS set did not parse');
+  assert.equal(ids(routeSet).length, 6, 'the route PUSHABLE_KINDS set did not parse');
   assert.deepEqual(ids(pageSet), ids(routeSet),
     '/calendar draws a push control the route would refuse, or hides one it would accept');
 
@@ -417,4 +454,24 @@ test('every value read out of the canvas is escaped before it becomes a pattern'
 
 test('the page prints none of the canvas fixture', () => {
   assert.doesNotMatch(pageRaw, /Halyard Security|Meridian Robotics|Priya Nair|Perkins Coie|Thornbury Capital|Kelp Bio|LoopSense|Ashurst|Marcus Chen|Verity Health|7 – 13 Sep 2026|2 min ago|4 hrs ago/);
+});
+
+test('members with a legacy Gmail grant can remove it and reconnect Google without Gmail', () => {
+  assert.match(pageRaw, /provider === 'google_calendar'[\s\S]*?gmail\.readonly/,
+    'the removal action must be limited to a Google connection that still has the Gmail scope');
+  assert.match(pageRaw, /data-testid="calendar-remove-gmail-access"[\s\S]*?>\s*\{gmailRemovalBusy \? 'Removing Gmail access…' : 'Remove Gmail access'\}/,
+    'the quiet removal action is missing from the Google Calendar card');
+  assert.match(pageRaw, /api\.googleCalRemoveGmailAccess\(\)[\s\S]*?window\.location\.assign\(r\.redirect_url \|\| r\.auth_url\)/,
+    "removing Gmail access must continue into Google's fresh consent");
+});
+
+test('Google offers an explicit local-only disconnect after revocation fails', () => {
+  assert.match(pageRaw, /e\?\.code === 'google_revocation_failed'[\s\S]*?forceDisconnectAvailable: revocationFailed/,
+    'only a confirmed Google revocation failure must leave a local disconnect option');
+  assert.match(pageRaw, /data-testid="calendar-force-disconnect"[\s\S]*?Disconnect locally/,
+    'the fallback action must be labeled so it does not imply Google revocation');
+  assert.match(pageRaw, /googleCalForceDisconnect\(\)[\s\S]*?Google Account/,
+    'the fallback must warn the member about any remaining Google grant');
+  assert.match(pageRaw, /busy && !gmailRemovalBusy && text === 'Sync now' \? 'Syncing…'/,
+    'removing Gmail must not label the calendar as syncing');
 });

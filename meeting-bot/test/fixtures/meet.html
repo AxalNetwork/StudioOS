@@ -1,0 +1,175 @@
+<!doctype html>
+<!--
+  D886 B3 (#2581). CONSTRUCTED, NOT RECORDED (UNVERIFIED).
+
+  The session that wrote this could not reach meet.google.com, so this page
+  imitates the hooks in src/adapters/meet/selectors.ts and nothing more. It is
+  not a copy of Meet's page. Measuring Meet (#2581 step 1, D886 §8 M3/M4)
+  replaces it with recorded pages, one per state below.
+
+  One page, every state. The state is the first segment of the meeting path
+  (meet.google.com/<state>-…), else `prejoin`. window.__meet drives what the
+  tests need. tone() plays a sine through a local WebRTC loopback, the way a
+  remote participant's audio arrives. No real name, link or text is in it.
+-->
+<html lang="en">
+<head><meta charset="utf-8"><title>Meet fixture</title></head>
+<body>
+<main id="app"></main>
+
+<template id="prejoin">
+  <h1>Ready to join?</h1>
+  <input aria-label="Your name" value="">
+  <div role="button" aria-label="Turn off microphone (ctrl + d)" data-toggle="mic">mic</div>
+  <div role="button" aria-label="Turn off camera (ctrl + e)" data-toggle="camera">cam</div>
+  <button id="ask">Ask to join</button>
+</template>
+
+<template id="prejoin_open">
+  <h1>Ready to join?</h1>
+  <input aria-label="Your name" value="">
+  <div role="button" aria-label="Turn off microphone (ctrl + d)" data-toggle="mic">mic</div>
+  <div role="button" aria-label="Turn off camera (ctrl + e)" data-toggle="camera">cam</div>
+  <button id="join">Join now</button>
+</template>
+
+<template id="lobby">
+  <p>Asking to be let in…</p>
+</template>
+
+<template id="denied">
+  <p>Someone in the call denied your request to join</p>
+</template>
+
+<template id="blocked">
+  <p>You can't join this video call</p>
+  <p>Only people in this organization can join</p>
+</template>
+
+<template id="link_invalid">
+  <p>Check your meeting code</p>
+</template>
+
+<template id="in_call">
+  <div id="tiles"></div>
+  <div role="button" aria-label="People (3)" id="people">people</div>
+  <div role="button" aria-label="Chat with everyone" id="chat">chat</div>
+  <div role="button" aria-label="Leave call" id="leave">leave</div>
+  <aside id="panel" role="list" hidden></aside>
+  <section id="chatbox" hidden>
+    <textarea aria-label="Send a message"></textarea>
+    <div role="button" aria-label="Send a message" id="send">send</div>
+  </section>
+</template>
+
+<template id="ended">
+  <p>The call has ended</p>
+</template>
+
+<template id="removed">
+  <p>You've been removed from the meeting</p>
+</template>
+
+<script>
+(() => {
+  const app = document.getElementById('app');
+  const people = new Map();
+  const speaking = new Set();
+  const log = { mic: 'on', camera: 'on', name: null, asked: null, chat: [], left: false, panelOpened: false };
+
+  function render(state) {
+    app.replaceChildren(document.getElementById(state).content.cloneNode(true));
+    app.dataset.state = state;
+    if (state === 'prejoin' || state === 'prejoin_open') wirePrejoin();
+    if (state === 'in_call') { wireCall(); draw(); }
+  }
+
+  function wirePrejoin() {
+    for (const el of app.querySelectorAll('[data-toggle]')) {
+      el.addEventListener('click', () => {
+        const what = el.dataset.toggle;
+        log[what] = 'off';
+        el.setAttribute('aria-label', what === 'mic' ? 'Turn on microphone (ctrl + d)' : 'Turn on camera (ctrl + e)');
+      });
+    }
+    const name = app.querySelector('input');
+    const go = (asked) => () => { log.name = name.value; log.asked = asked; render(asked === 'join' ? 'in_call' : 'lobby'); };
+    app.querySelector('#ask')?.addEventListener('click', go('ask'));
+    app.querySelector('#join')?.addEventListener('click', go('join'));
+  }
+
+  function draw() {
+    const panel = app.querySelector('#panel');
+    const tiles = app.querySelector('#tiles');
+    if (!panel) return;
+    panel.replaceChildren();
+    tiles.replaceChildren();
+    for (const [key, p] of people) {
+      const row = document.createElement('div');
+      row.setAttribute('role', 'listitem');
+      row.dataset.participantId = key;
+      if (p.self) row.dataset.participantSelf = 'true';
+      const label = document.createElement('span');
+      label.dataset.participantName = p.name;
+      label.textContent = p.name;
+      row.append(label);
+      panel.append(row);
+      const tile = document.createElement('div');
+      tile.dataset.participantId = key;
+      tile.dataset.speaking = speaking.has(key) ? 'true' : 'false';
+      tile.textContent = '·';
+      tiles.append(tile);
+    }
+  }
+
+  function wireCall() {
+    app.querySelector('#people').addEventListener('click', () => { app.querySelector('#panel').hidden = false; log.panelOpened = true; });
+    app.querySelector('#chat').addEventListener('click', () => { app.querySelector('#chatbox').hidden = false; });
+    app.querySelector('#send').addEventListener('click', () => {
+      const box = app.querySelector('textarea');
+      log.chat.push(box.value);
+      box.value = '';
+    });
+    app.querySelector('#leave').addEventListener('click', () => { log.left = true; render('ended'); });
+  }
+
+  // A remote participant's audio, the way Meet receives it: a WebRTC track.
+  async function tone(hz = 440) {
+    const ctx = new AudioContext();
+    const osc = ctx.createOscillator();
+    osc.frequency.value = hz;
+    const dest = ctx.createMediaStreamDestination();
+    osc.connect(dest);
+    osc.start();
+    const a = new RTCPeerConnection();
+    const b = new RTCPeerConnection();
+    a.onicecandidate = (e) => e.candidate && b.addIceCandidate(e.candidate);
+    b.onicecandidate = (e) => e.candidate && a.addIceCandidate(e.candidate);
+    for (const t of dest.stream.getTracks()) a.addTrack(t, dest.stream);
+    const offer = await a.createOffer();
+    await a.setLocalDescription(offer);
+    await b.setRemoteDescription(offer);
+    const answer = await b.createAnswer();
+    await b.setLocalDescription(answer);
+    await a.setRemoteDescription(answer);
+    window.__tone = { ctx, a, b };
+  }
+
+  window.__meet = {
+    log, render, tone,
+    admit: () => render('in_call'),
+    deny: () => render('denied'),
+    end: () => render('ended'),
+    remove: () => render('removed'),
+    join: (key, name, self = false) => { people.set(key, { name, self }); draw(); },
+    part: (key) => { people.delete(key); speaking.delete(key); draw(); },
+    rename: (key, name) => { people.get(key).name = name; draw(); },
+    speak: (key, on) => { if (on) speaking.add(key); else speaking.delete(key); draw(); },
+  };
+
+  const first = location.pathname.replace(/^\/+/, '').split('-')[0];
+  render(document.getElementById(first) ? first : 'prejoin');
+})();
+</script>
+</body>
+</html>

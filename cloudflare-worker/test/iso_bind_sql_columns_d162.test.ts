@@ -248,10 +248,16 @@ test("the derived set covers D160's typed six, so its narrower scan is a backsto
   // runtime bootstrap. A hand list can carry a name nothing has ever declared
   // and nothing will ever tell you — it costs no failure, so it is invisible.
   // The derived set cannot hold one, because every member comes from a DDL.
-  for (const ghost of ['occurred_at', 'recorded_at']) {
+  for (const ghost of ['occurred_at']) {
     assert.ok(!all.has(ghost) && !clockCols.has(ghost),
       `${ghost} is in D160's list and is declared by nothing`);
   }
+  // `recorded_at` was the other ghost until D1017 (#2854) declared it on
+  // `cap_table_issuances` (migration 573). Its DDL has no default; the record's
+  // writes set it with `datetime('now')`, so the code half of the derivation
+  // finds it, as it found `paid_at`.
+  assert.ok(clockCols.has('recorded_at') && CLOCK_WRITTEN.get('cap_table_issuances')?.has('recorded_at'),
+    "recorded_at is in D160's list and is now declared, clock-written, on cap_table_issuances");
   assert.equal(BASELINE.includes('occurred_at'), false,
     'If either is ever declared, delete this assertion and add it above — but do not '
     + "loosen the subsumption check to make D160's typed list look right, which is how the "

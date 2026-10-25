@@ -1,14 +1,22 @@
 // Task #40 (E2) — EventEditorPage: create (/events/new) + edit (/events/:id/edit).
 // Title, type, schedule + timezone, location, cover, capacity, waitlist,
-// approval, visibility, and the audience-rules builder (design §7.1). The
-// "Submit for review" action appears only when visibility = public (design §1.2).
+// approval, visibility, and the audience-rules builder (design §7.1). A draft
+// or sent-back event offers one action (D1031, #2872): "Send for review" when
+// public, "Publish" when unlisted or private. Either opens a dialog that says
+// what happens and who is told; the save is the dialog's button.
+// D1036 (#2877): the shared host header (MEV12a) carries that one action, and
+// /events/new has its own (MEV12b); a new event lands on its Details tab.
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
-import { ArrowLeft, Save, Send, Gift } from 'lucide-react';
+import { Save, Gift } from 'lucide-react';
 import { eventsApi } from '../../lib/eventsApi';
 import { useToast } from '../../components/useToast';
 import PageExplainer from '../../components/PageExplainer';
 import { EVENT_TYPE_IDS } from '../../lib/eventTypes';
+import Lightbox from '../../ui/Lightbox';
+import { publishAction } from './eventOrganiserModel';
+import HostHeader, { NewEventHeader } from './HostHeader';
+import { pendingCount } from './hostHeaderModel';
 
 const EVENT_TYPES = EVENT_TYPE_IDS;
 const LOCATION_KINDS = ['virtual', 'in_person', 'hybrid'];
@@ -65,17 +73,27 @@ export default function EventEditorPage() {
   const [rules, setRules] = useState({});
   const [status, setStatus] = useState('draft');
   const [loading, setLoading] = useState(isEdit);
+  const [loadError, setLoadError] = useState('');
   const [saving, setSaving] = useState(false);
+  const [publishing, setPublishing] = useState(null);
+  const [publishError, setPublishError] = useState('');
+  // What the header shows: the event as last read or saved, and Registrations' count.
+  const [saved, setSaved] = useState(null);
+  const [pending, setPending] = useState(undefined);
 
   const set = (k, v) => setForm((f) => ({ ...f, [k]: v }));
 
   useEffect(() => {
     if (!isEdit) return;
     let alive = true;
+    setLoading(true);
+    setLoadError('');
     (async () => {
       try {
-        const ev = await eventsApi.get(id);
+        const reply = await eventsApi.get(id);
         if (!alive) return;
+        if (!reply?.event || !Array.isArray(reply.agenda)) throw new Error('Event response is incomplete.');
+        const ev = reply.event;
         setForm({
           title: ev.title || '', type: ev.type || 'meetup',
           summary: ev.summary || '', description: ev.description || '',
@@ -90,14 +108,14 @@ export default function EventEditorPage() {
           visibility: ev.visibility || 'private',
         });
         setStatus(ev.status || 'draft');
-        try {
-          const parsed = typeof ev.audience_rules_json === 'string'
-            ? JSON.parse(ev.audience_rules_json || '{}')
-            : (ev.audience_rules_json || {});
-          setRules(parsed && typeof parsed === 'object' ? parsed : {});
-        } catch { setRules({}); }
+        setRules(ev.audience_rules || {});
+        setSaved(ev);
+        // The count is the header's own read: a failure is no number, never a 0.
+        Promise.resolve().then(() => eventsApi.roster(id))
+          .then((roster) => { if (alive) setPending(pendingCount(roster, ev.approval_required === 1 || ev.approval_required === true)); })
+          .catch(() => { if (alive) setPending(null); });
       } catch (e) {
-        showToast({ kind: 'error', msg: e?.message || 'Could not load this event.' });
+        if (alive) setLoadError(e?.message || 'Could not load this event.');
       } finally {
         if (alive) setLoading(false);
       }
@@ -130,14 +148,17 @@ export default function EventEditorPage() {
     setSaving(true);
     try {
       if (isEdit) {
-        await eventsApi.update(id, payload());
+        const body = payload();
+        await eventsApi.update(id, body);
+        setSaved((ev) => (ev ? { ...ev, ...body } : ev));
         showToast({ kind: 'success', msg: 'Event saved.' });
       } else {
         const created = await eventsApi.create(payload());
         const newId = created?.id ?? created?.event?.id;
         showToast({ kind: 'success', msg: 'Event created.' });
-        if (newId) navigate(`/events/${newId}/manage`);
-        else navigate('/my/events');
+        // D1036: a new event lands on its Details tab, not on the manage page.
+        if (newId) navigate(`/events/${newId}/edit`);
+        else navigate('/my/events/hosting');
       }
     } catch (e) {
       showToast({ kind: 'error', msg: e?.message || 'Could not save the event.' });
@@ -146,15 +167,41 @@ export default function EventEditorPage() {
     }
   };
 
-  const submitForReview = async () => {
+  // A new event is a draft until it is saved, so it offers its visibility's action too.
+  const action = publishAction(form.visibility, isEdit ? status : 'draft');
+  const openPublish = () => { setPublishError(''); setPublishing(action); };
+  const closePublish = () => { if (!saving) setPublishing(null); };
+
+  // The save is the dialog's button; a refusal stays in the dialog.
+  const confirmPublish = async () => {
+    const asked = publishing;
     setSaving(true);
+    setPublishError('');
     try {
-      await eventsApi.update(id, payload());
-      await eventsApi.submitReview(id);
-      setStatus('pending_review');
-      showToast({ kind: 'success', msg: 'Submitted for admin review.' });
+      if (!isEdit) {
+        // MEV12b: create the draft, submit it, and land on its Details tab.
+        if (!form.title.trim()) throw new Error('Add a title first.');
+        if (!form.starts_at) throw new Error('Pick a start date and time.');
+        const created = await eventsApi.create(payload());
+        const newId = created?.id ?? created?.event?.id;
+        if (!newId) throw new Error('The reply did not say the new event\'s id.');
+        await eventsApi.submitReview(newId);
+        setPublishing(null);
+        showToast({ kind: 'success', msg: asked.done });
+        navigate(`/events/${newId}/edit`);
+        return;
+      }
+      const body = payload();
+      await eventsApi.update(id, body);
+      const reply = await eventsApi.submitReview(id);
+      const next = reply?.event?.status;
+      if (!next) throw new Error('The reply did not say the event\'s status.');
+      setStatus(next);
+      setSaved((ev) => (ev ? { ...ev, ...body, status: next } : ev));
+      setPublishing(null);
+      showToast({ kind: 'success', msg: asked.done });
     } catch (e) {
-      showToast({ kind: 'error', msg: e?.message || 'Could not submit for review.' });
+      setPublishError(e?.message || (asked.kind === 'review' ? 'Could not send for review.' : 'Could not publish.'));
     } finally {
       setSaving(false);
     }
@@ -164,17 +211,15 @@ export default function EventEditorPage() {
     return <p className="py-12 text-center text-gray-500 dark:text-gray-400">Loading…</p>;
   }
 
+  if (loadError) {
+    return <p role="alert" className="py-12 text-center text-gray-500 dark:text-gray-400">Unreadable — {loadError}</p>;
+  }
+
   return (
     <div className="mx-auto max-w-3xl px-4 py-6">
-      <button
-        onClick={() => navigate('/my/events')}
-        className="mb-2 inline-flex items-center gap-1 text-sm text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200"
-      >
-        <ArrowLeft size={15} /> Back to events
-      </button>
-      <h1 className="text-2xl font-bold text-gray-900 dark:text-gray-100">
-        {isEdit ? 'Edit event' : 'New event'}
-      </h1>
+      {isEdit
+        ? <HostHeader event={{ ...(saved || {}), id, status }} screen="details" pending={pending} publishLabel={action?.label} onPublish={openPublish} busy={saving} />
+        : <NewEventHeader primaryLabel={action?.label} onSaveDraft={save} onPrimary={openPublish} busy={saving} />}
       <PageExplainer pageKey="event_editor" />
 
       <div className="mt-4 space-y-6">
@@ -327,17 +372,19 @@ export default function EventEditorPage() {
           >
             <Save size={16} /> {saving ? 'Saving…' : (isEdit ? 'Save changes' : 'Create event')}
           </button>
-          {isEdit && form.visibility === 'public' && status !== 'pending_review' && status !== 'published' && (
-            <button
-              onClick={submitForReview}
-              disabled={saving}
-              className="inline-flex items-center gap-2 rounded-lg border border-violet-300 dark:border-violet-700 px-4 py-2 text-sm font-medium text-violet-700 dark:text-violet-300 hover:bg-violet-50 dark:hover:bg-violet-900/20 disabled:opacity-50"
-            >
-              <Send size={16} /> Submit for review
-            </button>
-          )}
         </div>
       </div>
+
+      {publishing && (
+        <Lightbox label={publishing.title} title={publishing.title} onClose={closePublish} testId="event-publish-dialog"
+          footer={<>
+            <button type="button" disabled={saving} onClick={closePublish} className="px-4 py-2 text-sm rounded border border-zinc-300 dark:border-zinc-700">Cancel</button>
+            <button type="button" disabled={saving} onClick={confirmPublish} data-testid="event-publish-confirm" className="px-4 py-2 text-sm rounded bg-violet-600 text-white disabled:opacity-50">{saving ? publishing.busy : publishing.label}</button>
+          </>}>
+          <p>{publishing.body}</p>
+          {publishError && <p role="alert" className="mt-3 text-red-700 dark:text-red-300">{publishError}</p>}
+        </Lightbox>
+      )}
 
       {toast && (
         <div className={`fixed bottom-6 left-1/2 z-50 -translate-x-1/2 rounded-lg px-4 py-2 text-sm text-white shadow-lg ${

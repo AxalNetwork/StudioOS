@@ -6,7 +6,8 @@
  * person's name, email, role, consent and notes, so every route checks the
  * reference's deal with the deal-room reader rule (`userMayReadDeal`,
  * routes/deals.ts): an admin reads and writes any deal's references; an
- * investor only those on a deal they are invited to or committed on. Founders
+ * investor reads only those on a deal they are invited to or committed on.
+ * PATCH/DELETE additionally require that investor to be the author (#2437). Founders
  * and partners stay out (`gate`). A reference — or a deal — the caller cannot
  * open is a 404, the same as a missing one, so its existence does not leak.
  * The cross-deal list is gone: `GET /` requires `deal_id`.
@@ -150,6 +151,7 @@ r.patch('/:id', async (c) => {
     const user = await requireAuth(c); gate(user);
     const row = await loadReference(c, user, c.req.param('id'));
     if (!row) return c.json(NOT_FOUND, 404);
+    if (user.role !== 'admin' && Number(row.created_by) !== user.id) return c.json({ detail: 'Forbidden' }, 403);
     const id = row.id;
     const body = await c.req.json().catch(() => ({} as any));
     const fields = ['reference_email', 'reference_role', 'relationship', 'scheduled_at', 'notes', 'status'] as const;
@@ -173,6 +175,7 @@ r.delete('/:id', async (c) => {
     const user = await requireAuth(c); gate(user);
     const row = await loadReference(c, user, c.req.param('id'));
     if (!row) return c.json(NOT_FOUND, 404);
+    if (user.role !== 'admin' && Number(row.created_by) !== user.id) return c.json({ detail: 'Forbidden' }, 403);
     const id = row.id;
     await c.env.DB.prepare('DELETE FROM reference_checks WHERE id = ?').bind(id).run();
     await logDealRoomAction(c.env, user, 'reference_deleted', Number(row.deal_id), { reference_id: id });

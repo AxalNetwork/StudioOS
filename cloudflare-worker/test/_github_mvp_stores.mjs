@@ -6,6 +6,7 @@
  * fixture that already ran 441 or 461 is left as it is.
  */
 import { readFileSync } from 'node:fs';
+import { splitStatements } from './_baseline.mjs';
 
 const mig = (n) => readFileSync(`cloudflare-worker/sql/migrations/${n}`, 'utf8');
 
@@ -15,4 +16,10 @@ export function addMvpStores(db) {
   if (!has('mvp_features', 'done_at')) db.exec('ALTER TABLE mvp_features ADD COLUMN done_at TEXT');
   db.exec(/CREATE TABLE IF NOT EXISTS mvp_release_checks \([\s\S]*?\n\);/.exec(mig('461_build_record_stores.sql'))[0]);
   db.exec(mig('501_github_mvp.sql'));
+  // #2414: apply the assigned migration; older fixtures may omit the roadmap store.
+  const commitLinks = mig('534_github_commit_links.sql');
+  for (const sql of splitStatements(commitLinks)) {
+    if (sql.endsWith('ADD COLUMN commit_sha TEXT') && !db.prepare("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'roadmap_releases'").get()) continue;
+    db.exec(sql);
+  }
 }

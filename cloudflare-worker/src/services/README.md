@@ -7,13 +7,59 @@ not return a `Response`.
 The split matters because it is what makes the logic testable: the worker suite
 runs these directly against an in-process SQLite, with no request at all.
 
+`captableAccess.ts` consumes verified project permissions from the cap-table
+router (#2436). Investors receive no project-bound cap-table access; accepted
+cofounders may write and accepted advisors may read without holder emails.
+Partners require recorded membership. Scenario ownership cannot bypass project
+permissions; list responses are owner-scoped, including for admins. Bound
+scenarios whose project is missing fail closed for non-admins; admin can recover
+or delete them. They are never silently detached into private scenarios.
+
+`scoreAccess.ts` scopes #2439 project risk through existing deal permissions,
+and, since D1074 (#2966), trust-score reads to the member, an admin of this
+territory (this deployment's database), and a counterparty in an open intro or
+deal (`mayReadTrustScores`, `counterpartiesOf`). Self/admin trust reads retain
+obligation details; a counterparty receives only the bare score. Non-admin risk and
+screening snapshots use `scoreIntegrity.ts` verification and read auditing.
+Bulk reads deduplicate projects, select snapshots once, and batch per-score
+audit entries without weakening approval or signature checks.
+
 ## The ones worth knowing
+
+`personaSegments.ts` is D999's segment counts (#2814) behind
+`GET /api/personas/admin/segments`: one grouped pass over every account but
+admins (deactivated ones counted apart), folded into blocks that each carry
+`available` and `reason`; the LP store, the tag dates and the move log are read
+alone, so one failed count never blanks the page. Counts only: no row names or
+ids a member.
+
+`meetingBotOperations.ts` implements D886 B10 (#2588): count-only time windows,
+complete-measurement financials, strict failure/heartbeat/markup thresholds and
+fixed notification copy. `meetingBotOperationsRead.ts` reads B1's canonical
+state in complete keyset pages and sums its settled per-block bot fee ledger.
+Audio uses final session receipts; STT uses attributed settled aiRouter reservations.
+Reused-session audio and unmeasured supplier cost stay Not recorded; canary
+prices are ceilings, never measurements. Bot runtime includes waiting and is
+separate from transcribed audio. A 25% markup is a 20% gross margin; the alert
+fires below 15% markup over seven days, only with complete measurements.
+
+`meetingBotOperationsAlerts.ts` evaluates HQ every five minutes and atomically
+writes a dedupe receipt plus the existing in-app inbox item. Active HQ Super
+Admins only; their notification opt-outs apply. Repeated/concurrent sweeps
+share daily failure/markup receipts and per-run heartbeat receipts. Processing
+is excluded from runtime heartbeat alerts. `meetingBotOperationsTest.ts`
+delegates the step-up-protected live check to B1's existing dispatch
+service with the authenticated actor and reads only the operator's own status-event timings. It never reads
+roster, speaker or transcript content. The routes are on `admin_platform.ts`;
+no new schema, runtime or billing path is introduced.
 
 | File | Why it matters |
 | --- | --- |
 | `profileEvidenceBlend.ts` | D592's bounded skill-level blend and audited default-off settings read; snapshot versions name the switch state. Only the Super Admin writes through `profile_evidence_blend.ts`; the owner activates it after the synthetic comparison. |
 | `interviewStructuring.ts` | D658: an interview transcript turned into Validate placements. The kinds with a schema each (seven, and since D757 §2.6 (#1923) seventeen, each with its MCP module string and its cycle `slug`; `placementSlug` reads a kind that spans two modules by its payload), the rule that a placement without a cited span is dropped, splitting a long transcript without cutting it, Ask's citation check, and Compare's alignment by module. A pain may name one of the founder's themes, never a new one (D757, #1897). Since D757 (#1923) structuring runs as two passes (`STRUCTURE_PASSES`: A, the problem, the person and the market; B, demand and evidence), each call with `PASS_MAX_TOKENS`; pass B refused keeps pass A's placements and returns `passBRefusal`, which the engine turns into its note. |
-| `metering.ts` | D844 (#2466): metering on the one AI token ledger. `METERING_POLICY` (versioned) prices each operation in integer micro-USD; v1 lists every MCP tool at 0. `quoteFor` quotes from the policy only; `meteredCall` holds through `reserveAiBudget` under `exec:<execution id>:<component>` (migration 525's idempotency key), runs, settles at the provider's reported cost or the quote, and releases on a throw, timeout or cancel. `REFUSAL_WORDS` says the ledger's refusals in plain words, with no amounts. The failure table is in D844.md. |
+| `conversationItems.ts` | D859 (#2504): a customer chat's data points (price, spend, frequency, current tool, team size, pain), actions (follow-up, intro offered, beta sign-up) and prototype asks, extracted after a chat's structure stage and stored as `validate_proposals` placements on existing kinds plus `follow_up` and `prototype_ask`, so Accept writes through the module's own writer. Consent first, every item cites its passage, an amount is kept only when the figure is in the quote, below `MIN_CONFIDENCE` a data point is dropped, dedupe makes a re-run propose nothing twice, and each call is metered by `aiRouter`. D873 (#2520): a Zoom, Meet or uploaded call is read too, for two more items, a `decision` and an `action_item` (a `follow_up`), and every run reads D857's translation. |
+| `apiKeyLimits.ts` | D849 (#2472) part 2: a member API key's own monthly cap and its alerts, with no migration. A key's metered holds are tagged `key:<uid>:exec:…` (`keyHoldKey`), so `keyMonthSpend` sums its own rows in `ai_budget_reservations` (pending and review at what they hold, settled at what they charged, refunded at nothing). `meteredCall` refuses with `key_limit_reached` before the hold and again after it. `noteKeyLimitThresholds` (`api_key_limit`, 80% and 100%) and `noteKeyFailures` (`api_key_failures`, more than 20% of at least 50 calls in an hour) notify through `notify()`, once per window, deduplicated in `RATE_LIMITS`. |
+| `metering.ts` | D844 (#2466): metering on the one AI token ledger. `METERING_POLICY` (versioned) prices each operation in integer micro-USD; v1 lists every MCP tool at 0. `quoteFor` quotes from the policy only; `meteredCall` holds through `reserveAiBudget` under `exec:<execution id>:<component>` (migration 525's idempotency key; `key:<uid>:exec:…` for a call through an API key, whose own cap it checks, D849), runs, settles at the provider's reported cost or the quote, and releases on a throw, timeout or cancel. `REFUSAL_WORDS` says the ledger's refusals in plain words, with no amounts. The failure table is in D844.md. |
 | `flows.ts` | D853 (#2476): multi-connector flows on JOB_QUEUE. Recipes are code constants (trigger → read → map → proposal → accept → publish → result); runs and step attempts are in migration 526. Each attempt holds through `meteredCall` under `flow:<run>:<step>:<attempt>`, writes its output before the hold settles so a crash never charges twice, and is leased so a duplicate message is a no-op. A proposal stops at `waiting_accept` until `acceptFlow`; `cancelFlow` releases the run's pending holds; scope (member, company, connection) is re-checked at every step. The crash table is in D853.md. |
 | `mercurySpend.ts` | D752: a founder's months, burn, cash and runway from their own Mercury lines. Pure, no SQL; financing never lowers burn. |
 | `interviewFindings.ts` | D757 §2.6 (#1923): the findings no Validate module table holds (`firmographic`, `job_to_be_done`, `market_fact`, `alternative`, and the demand kinds `budget`, `timing`, `urgency`, `buying_trigger`, `objection`), each with its parse, dedupe key and module, pure so the structure step, the MCP tool and the writer hold a payload to one rule. They land in `interview_findings` (migration 489) through `validateWriters.ts`'s `writeInterviewFinding`, which upserts on `(interview_id, kind, key_norm)` so a retried accept is one row. `presentTables` lets the §2.13 privacy statements (a deleted or withdrawn session clears the findings' quotes; a deleted interview deletes its findings and its interview evidence links) run only where their tables are. |
@@ -40,15 +86,18 @@ runs these directly against an in-process SQLite, with no request at all.
 | `aiConsumption.ts` | D776 (#2093): a member's own AI runs in a month, grouped by the rail's page, by option within a page, or by record, with what they were charged (`charged_microusd`, D762), and the allowance and token split read once per hold from `ai_budget_reservations`. A NULL charge is counted as Not recorded, never as 0. The member's rows only; `GET /api/ai-budget/runs` serves it. PR 2's `memberMonth` gives HQ the same grouped read for one member, by option within a page, with each run's cost, charge and model; `GET /api/ai-budget/members/:id/runs` serves it to HQ's Admin and Super Admin and audits each read. |
 | `aiAutoReload.ts` | D794 (#2219): the `ai_auto_reload` job and the member's settings. `runAutoReload` takes the member's lock (migration 511), checks the reload is still due and `reloadBlocked` (D791: a member HQ paused answers `paused`, nothing charged), judges the pack with `tokenPackQuote` and the member's D788 spend limit (`limitStop`, told once), claims the crossing, creates the PaymentIntent unconfirmed, writes the pending order and its `ai_topup_purchases` row, then confirms off-session; the webhook credits it as any pack. A card failure turns auto-reload off and notifies once (`DISABLED_WORDS`); a Stripe outage hands the crossing back. `saveAutoReload` and `createReloadSetup` serve the `/api/ai-budget/auto-reload` routes; the card is read back from Stripe, never taken from the browser. D806: the pending order's lines carry `origin: 'auto_reload'`, so the invoice list names it as a reload. |
 | `aiAutoReloadDue.ts` | D794 (#2219): whether a member's auto-reload is due — on, with a saved card, the balance below their threshold, and the crossing (`crossingOf`, the latest credited pack's payment intent) not yet claimed. Reads D1 only and never throws; `queueAutoReloadIfDue` queues one `ai_auto_reload` job per crossing. Called from `aiBudget.settleAiReservation`, so it must stay free of Stripe code (D707). |
-| `redirectRoutes.ts` | #2301: the SPA's redirect-only routes (`REDIRECT_ROUTES`, each exact pattern before its splat, `keep` on the ones an email or external link carries) and `isRedirectKey`, which `POST /api/public/analytics/pageview` checks before counting a `redirect:<pattern>` beacon. The SPA imports it (`frontend/src/lib/redirectBeacon.js`); a frontend test holds it equal to App.jsx's redirect routes. |
+| `redirectRoutes.ts` | #2301: the SPA's redirect-only routes (`REDIRECT_ROUTES`, each exact pattern before its splat, `keep` on the ones an email or external link carries) and `isRedirectKey`, which `POST /api/public/analytics/pageview` checks before counting a `redirect:<pattern>` beacon. The SPA imports it (`frontend/src/lib/redirectBeacon.js`); a frontend test holds its path-only entries equal to App.jsx's redirect routes; D939 adds a separately pinned closed set of historical admin-tab counter keys. |
 | `billingInvoices.ts` | D806 (#2245): Billing's one invoice list, for `GET /api/billing/invoices`. `orderInvoiceRows` reads the member's own paid orders, each with its token pack (`ai_topup_purchases`) and the cents refunded of it (the latest `ai_credit_ledger` refund row's `source_ref`); `stripeInvoiceRow` turns a Stripe plan invoice into a row (the plan's name and interval, its credit notes, its `invoice_pdf` passed through); `pageInvoices` sorts newest first and pages. D1 and pure only: the route reads Stripe. |
 | `aiUsageAdmin.ts` | D791 (#2216): HQ › AI usage. `platformAiUsage` totals `ai_usage_logs` over a range (7d, 30d or month to date) by day, model, role and plan, as `aiConsumption.ts` sums them (a NULL charge is Not recorded, never 0), and ranks the top 20 members by charged and by velocity. `aiUsageFlags` raises the five abuse flags from `AI_USAGE_FLAGS`, the one block of thresholds. `pauseMemberAi`, `unpauseMemberAi` and `setMemberAiCap` write migration 510's tables with their audit line in one batch; a new pause tells the member once. `searchAiMembers` finds members by exact user ID or a case-insensitive email prefix (at most 50), and `aiMemberDetail` reads one member's month by model and by day with their balance, allowance, spend limit (D788), pause and cap with history. A member is `{id, name, email}`, the owner's ruling of 2026-10-20 (S1 on #2227); each query reads `u.email` by name, and the audit lines keep the user id. `aiBudget.ts` holds `aiPaused` and `memberAiCap`, which the hold and `resolveAiCaps` read. |
 | `aiProviders.ts` | D851 (#2474): `runProviderModel`, a run on a model provider's own API (pattern C) on the one AI token ledger. Off unless the provider's switch is exactly 'on' (`AI_PROVIDER_ANTHROPIC`); the page's AI switch; the platform key from the Worker secret `AI_PROVIDER_ANTHROPIC_KEY`, never in D1 or logged. It holds a quote (`providerQuoteMicro`) through `reserveAiBudget`, calls the adapter in `ai/providers/`, and settles through `settleAiReservation` at the provider's reported usage × its printed rates × `memberChargeMultiplier` (`ai/pricing.ts` `usdRatesBilledMicro`), or at the quote with `usage_reported: false` and the `pricing_version` when it reported none. A failure releases the hold. One `ai_usage_logs` row through `aiRouter`'s `recordUsage`. Nothing calls it yet; the guard (D763) comes first. |
 | `aiCost.ts` | D787 (#2212): a member's own AI cost per day and per model for `mtd`, `30d` or `prev_month` (UTC): runs, tokens in and out, the non-token units in `units_json`, `cost_usd` (Cloudflare's cost) and `charged_microusd`, grouped by model, page or option, plus `costCsv`. A refused run counts in `refused` only; a guard run under the guard model; a NULL charge as Not recorded. At most 10,000 runs. The member's rows only; `GET /api/ai-budget/cost` and `cost.csv` serve it. D805 (#2243): `totals.by_kind` through `KIND_GROUP` (every catalogue kind placed), `other_models`, `output_not_recorded`, and the CSV's `kind`. |
 | `aiCredits.ts` | D755: the AI top-up balance bought as token packs. `TOKEN_PACK_LIMITS` is §16's one constant block; `ledgerBalance` sums `ai_credit_ledger` (migration 486), which must equal `ai_topup_accounts.balance_microusd` for every member. Holds, releases and spends are written by 486's triggers on `ai_budget_reservations`, so `aiBudget.ts` writes no ledger row. `tokenPackForPrice`, `isTokenPackPrice`, `packOnSale` and `tokenPackQuote` decide what a pack is and whether it can be bought: alone, at face value, no promo, within §16's limits. Only the order intent sells one, and only the payment webhook (`aiTopups.ts`) credits it. `orderTopUp` projects the recorded owner-scoped purchase state and current balance for the order receipt; it never credits or fulfils an order. It returns no projection for historical ordinary orders, even when their prices are later adopted as packs; an explicit pack line without a purchase keeps its receipt with an unreadable marker. Today’s catalogue never reclassifies receipts. Kept apart from Perk and Introduction credits: nothing here reads their ledgers. D805: `recentPackOrders` is the one count of a member's pack orders in the rolling window, read by `tokenPackQuote` and by `packOrdersToday` (`GET /api/ai-budget/limit`'s `pack_orders`). |
 | `licenceFeeInvoices.ts` | D802 (#2238), with `statements.ts`'s per-stream draw (`StreamShares`, the `platform_licence_royalties` row): HQ's annual licence-fee invoices to a territory licensee (migration 513). `licenceYear` runs a year from the licence's anniversary (`starts_on`); `issueFeeInvoice` issues one per year at the ledger's `annual_fee_cents`, due after D797's payment terms or 30 days, and refuses a second for the year, a licence with no fee, no start date or a status other than active or suspended, and a missing bank account for `territory_licence_fee`. The printed figures are frozen on the row; `feeInvoicePdf` draws D716's invoice paper from them (`fundNotices.territoryLicenceInvoice`). Payments are HQ-entered running totals, never above the amount; a void needs nothing paid and a reason. |
-| `planAllowance.ts` | D783 (#2124): a plan includes 25% of its price as AI allowance each month. `PLAN_AI_SHARE` is the share; `allowanceFromCharge` turns a charge into whole micro-USD a month, rounded down, a yearly price ÷ 12. `recordSubscriptionAmount` and `markSubscriptionAmountCanceled` keep `member_subscription_amounts` (migration 505) from the subscription webhook. `planAllowanceFor` sums a member's active member plans (founder, investor, Market Intelligence, advisor and partner; never Registered Agent), falling back to the catalogue's price for a plan with no recorded row. `aiBudget.ts`'s `resolveAiCaps` reads it for every licence but `admin`. |
+| `paymentsCatalog.ts` | D1010 (#2829): what Payments' catalogue read says, from the D1 mirror only. `catalogChecks` (two products making one plan, a plan with no yearly price, a subscription that makes no card, a price charged every N intervals, a non-USD or a weekly plan price, the publishable key's mode against the account's), `showsOn` (where a product reaches members), `priceAllowance` and `annotateCatalog` (each price's AI allowance, each plan's yearly saving), `membersPerPlan` (live members per price and per family and interval, rows with no price counted apart), and `changePrice` (add the new price, archive the old, archive the new again if that fails). Never a key, only modes. |
+| `planAllowance.ts` | D783 (#2124): a plan includes 25% of its price as AI allowance each month. `PLAN_AI_SHARE` is the share; `allowanceFromCharge` turns a charge into whole micro-USD a month, rounded down, a yearly price ÷ 12. `recordSubscriptionAmount` and `markSubscriptionAmountCanceled` keep `member_subscription_amounts` (migration 505) from the subscription webhook, with the price each subscription is charged at since D1010 (migration 572). `planAllowanceFor` sums a member's active member plans (founder, investor, Market Intelligence, advisor and partner; never Registered Agent), falling back to the catalogue's price for a plan with no recorded row. `aiBudget.ts`'s `resolveAiCaps` reads it for every licence but `admin`. |
+| `planCatalogue.ts` | D1050 (#2901): the one plan catalogue, read by every surface that names a plan. `PLAN_CATALOGUE` holds each plan key (`founder:free|growth|studio`, `investor:free|plus|professional|institutional`, `advisor:free|pro`, `partner:free|pro`, `other`, `lp_access`, `admin`) with its family, name, tagline, profile colour, the Stripe metadata `aiCredits.planOf` matches (`licence_key`, `matches`), `sellable` and its reason (Investor Plus is not sold, D786), storage and "Best suited for" (#2449's, null with the reason until decided) and the included lines. **No price is in it**: prices are Stripe's, read from the D1 mirror. `catalogueFields` and `publicCatalogue` are what `GET /api/public/plans-and-packs` sends (the name as `label`: the public read carries no `name` key). `requireTier.ts` and `requireInvestorTier.ts` name a plan from it. |
 | `aiCreditReversals.ts` | D755 §8: `charge.refunded`, `charge.dispute.created` and `charge.dispute.closed` take a token pack's tokens back, up to the member's balance, recording the rest as `shortfall_microusd`. The share and the balance are read inside the one INSERT that writes the row, so the balance CHECK never fires and racing deliveries take a share once. Acts only on a charge whose PaymentIntent has an `ai_topup_purchases` row; every other charge is untouched. |
+| `hqApprovalSources.ts` | D1041 (#2889): HQ decides — the eight queues only the Super Admin decides (testing programs sent to HQ, learning exercises, features and tasks, payout requests, held AI runs, notice responses, requests from studios, program proposals), each on its own queue's open predicate. Kept apart from `approvalSources.ts`'s `APPROVAL_SOURCES` so a branch's board, backlog total and assignments never read them; `hqLanes` is read only by HQ's glance for a Super Admin. Program-grant requests are `HQ_NOT_COUNTED_YET` until #2774 part 2 stores them. |
 | `approvalAssignments.ts` | Who is looking at a board item (D470, migration 341). One current reviewer per lane and item, and an event only when this write changes that person. A missing table stays unreadable — it is not "nobody assigned". A reviewer is an active admin. The write does not change a queue's status and does not open a thread. |
 | `activeAccounts.ts` | Active accounts per week, defined once for both tiers (D210): `ACTIVE_ACCOUNT_BASIS` (the sentence both pages print), `activityLogged` (which requests the middleware records — `observability.ts` imports it, so the rule and the log cannot drift), `aeLoggedRequestPredicate` (the Analytics Engine WHERE that mirrors it exactly), `ANALYTICS_RANGES`, `weekAxis`, `weeklyKpi` and `loadBranchWeeklyActives` (a branch's own `activity_logs`, grouped by Monday). A week it cannot count is `null` with one of four reasons, never zero, and each week carries its own reason (`gapNotes` names them once per chart). The KPI is the last complete week; its delta is given only when both weeks carry the same set of series and neither holds a series' first recorded request — `partialWeekReason`'s whole-week rule, which the benchmark median's input and a branch's own figure beside it also read (D211). |
 
@@ -58,7 +107,7 @@ runs these directly against an in-process SQLite, with no request at all.
 | --- | --- |
 | `advisor/` | The advisor state machine and its question banks. |
 | `ai/` | D763: the AI router's pure parts. `guard.ts` holds Llama Guard's slicing, verdicts, category policy and refusal copy. Its README has the rule for adding here. |
-| `calendar/` | Calendar sync. |
+| `calendar/` | Calendar sync (`sync.ts`), and My events in the calendar (`myEvents.ts`, D1033): tickets and hosted events as calendar kinds, the add-to links, and the copies a sync must remove. |
 | `channels/` | D684: business Telegram and WhatsApp conversations, and Zoom and Google Meet calls, reaching Validate › Interviews. The contract, event dedupe, connection tenancy, link codes, outbound tracking and the pending-thread store. Its README has the rules. |
 | `ai/` | D761: the AI router's request and response shapes, per-class timeouts, context-window and paid-only fallbacks, session affinity and the units each attempt used. D760: `catalogue.ts`, every Workers AI model priced in each unit Cloudflare bills, and `pricing.ts`, cost and billed in exact decimals with `AI_MARKUP` written once. Pure; `aiRouter.ts` calls it. |
 | `decks/` | Deck assembly and export. |
@@ -66,12 +115,23 @@ runs these directly against an in-process SQLite, with no request at all.
 | `fills/` | "AI fills the blanks" — the fill-kind registry and the provenance of an accepted fill. A `sourced` fill carries a citation or it is dropped. `neverFill.ts` lists the fields Eadwyn never fills (D777), mirrored by `frontend/src/lib/neverFill.js`; propose, accept and `recordFill` each refuse one. |
 | `apiUsageReport.ts` | D845: a member's own usage reports over `api_usage_events` (D843). Every statement is `WHERE e.user_id = ?` from the session and joins only the same user's hold; a `key=` is re-checked by `ownsKey`. Grouping is a bound `CASE ?1`, never a spliced column. A charge is the settled hold's, else the row's own, and stays NULL when unknown. |
 | `railProposals.ts` | D780: `ai_rail_proposals` (migration 506), what a rail option's run leaves for the member to decide. `proposeRail` stores a draft, proposal or note with the run's page, option, record, model and `usage_log_id` (refusing a field D777 never fills); `decideRail` is the member's accept, edit or discard, once and on their own rows only; `listRail`, `getRail` and `withdrawRail`. Every option outside Validate and the zone drafts writes here. |
+| `narrative/` | D908: the Investor narrative's sections, positioning and bound figures, and the compare of two versions, behind `/api/cycles/raise/narrative/*`. Its README has the rules. |
 | `market_intel/` | Sourcing, extraction and scoring for market intelligence. |
 | `mercury/` | D710: Mercury for fund administration, read-only. A GET-only client, the boundary parser that drops account numbers, the gates and read audit, the entity connections' store, the hourly sync and the reconciliation matches. Its README has the rules. |
 | `referrals/` | Referral submissions. |
 | `records/` | D690's scoped cycle record contract, registry and ownership checks. |
+| `scoring/` | D1143 (#3029): the Product-market fit score, defined once (#2433). `pmf.ts` is model v1 as data and the pure `scorePmf` (value, band, confidence, coverage and the next steps ranked by gain); `pmfCollector.ts` reads Validate's stores for it with bound SQL, after the latest Pivot, and reads no interviewee name or quote. |
 | `signals/` | Signal ingestion and evidence. |
+| `vercel/` | D1096: `api.ts`, the only caller of `api.vercel.com`: a read-only client for the planned reads, uninstall and the OAuth code exchange. Its README has the rules. |
 | `wellbeing/` | Wellbeing check-ins. |
+| `productTesters.ts` | D1042 (#2890): the product tester store (migration 576). `TRANSITIONS` (approve, decline, pause, resume, remove and the status each needs), `messageFor` (what the member is told), `listTesters`, `testerDetail`, `isAdminAccount` (admins cannot test) and `applyTransition` (one conditional UPDATE and one append-only event row in a batch). `reapplyAfter` is the decision day plus 90 days. `../routes/admin_product_testers.ts` is its only caller. |
+| `programGrants.ts` | D982 (#2773): program grants. The nine programs and their readiness (held equal to `frontend/src/lib/programGrants.js`), `TERM_FIELDS` (which grant terms apply to which program, and which are defaultable), `validateTerms` (an unknown or inapplicable term is refused; `null` clears), `presentGrant` (the in-force rule and what a grant waits on), `readGrid`, `readDefaults` and `readHistory`. The store is migration 553; `../routes/admin_program_grants.ts` and `licencePrograms.ts` call it. D983 adds the grid's requests tile and series. D956 adds the `draft` state (migration 562), `programNamed` (the nine or a registry key), the terms every program carries for a program D955 added, and `openDraftStatements`. |
+| `programGrantStates.ts` | D956 (#2789): what each viewer reads of a program's grant (`grantViewerOf`, `grantStates`): a Super Admin's count or HQ only, a deployed studio's licence state in the canvas's words (`requested` from both request lanes), the held mode for an admin with no licence or an undeployed studio, and a branch's state from D984's copy; a failed read is unreadable, never a state. Also Offer to studios (`offerToStudios`, `offerRefusal`: D982's switch, on only with a published playbook). Callers: `../routes/admin_programs.ts`, `programCatalogue.ts`, `../routes/admin_program_grants.ts`. |
+| `licencePrograms.ts` | D984 (#2775): the Administrator's programs. `programCopy` (the licence's grant rows and which programs HQ grants, as the licence push carries them to the branch, migration 554), `parseProgramCopy`, `studioPrograms` (the nine programs in the studio's words, in force by `presentGrant` and the day) and `unlinkedPrograms` (HQ runs every program). Callers: `../routes/licence_programs.ts` and `licencePush.ts`. |
+| `programRequests.ts` | D983 (#2774): the program requests checked against HQ's grants where HQ records them (`checkProgramRequest`: offered, held, a term that applies, one open request per question, what the term stands at read from the grant), the open-request counts per lane, a request's licence, and the draft an approval leaves (`draftOf`). Called by `../rpc/hqOps.ts` and `../routes/admin_program_requests.ts`. |
+| `trustContent.ts` | D1075 (#2967): the public trust center's content store (migration 584): the seven blocks, each line a fact or a gap with its reason (`parseBody`), a certification only with its auditor's report on file, Publish in one batch with one change note (`publish`), the subprocessors (ten days' notice), the change log, and the public matrix from `trust.ts`'s `obligationsForRole` (`publicMatrix`). |
+| `subprocessorNotices.ts` | D1075: the subprocessor notices: double opt-in (an encrypted address, a hashed single-use confirm token), a signed unsubscribe link that works once, and the sweep that emails confirmed subscribers once per new subprocessor before it starts. |
+| `securityReports.ts` | D1075: Help's Security category: a member's report, encrypted, read only by HQ's Super Admins and its sender, never a ticket row (tickets mirror to GitHub and Slack). Five a day; HQ only. |
 | `licenceTerms.ts` | D797: a licence's terms schedule, the one list of its 31 fields (`LICENCE_TERM_FIELDS`: key, group, label, type and range) and the canvas's section numbers (`DEFAULT_TERM_SECTIONS`), `validateTermsBody` (an unknown key or a bad value is refused, naming the field; `null` clears), `termsFromRow`, `readLicenceTerms`, `termsDiff` and the `TERMS_REASON` sentences. Migration 512's CHECKs hold the same ranges; HQ's write, `/licence/mine`, the branch copy and D800/D801 import it. |
 | `eadwynTools.ts` | D854: Eadwyn uses the MCP registry's tools inside the member's own access. `eadwynToolInfo` lists them (scope and the page's company; D846's filter replaces `eadwynToolAvailable`), `runEadwynToolCalls` re-checks each call the model proposed, runs a read through `callTool` (metered by D844) and turns a write into an `ai_rail_proposals` row, and `toolResultsForModel` hands results back as escaped data. |
 
@@ -80,6 +140,9 @@ runs these directly against an in-process SQLite, with no request at all.
 `cycleCards.ts` defines the D656 Figure and Card shapes, card failure isolation,
 and shared paging. `buildCycleRecords.ts` holds D662's D661-shaped record table,
 chart specs and bounded search/filter/sort/paging for the Build modules.
+`buildCreates.ts` (D1064, #2934) holds Build's three creates (feature, must-have,
+roadmap item) as statement builders, each INSERT first with `RETURNING id`, so
+a route answers with its own row (`createdId`) and another writer can batch them.
 
 - No `Context`, no `Response`. If you need one, the code belongs in `routes/`.
 - Never build SQL by interpolation. `check-sql-prepare` fails the build on a
@@ -146,13 +209,43 @@ list reads as the holder's id. It also holds `addHolder()` and `updateHolder()`
 vesting row, on the same `user_id` and `holder_id`) and returns `h-<id>`;
 Investors · SAFE or note adds a `safes[]` entry and returns its `e-<n>`. Both
 refuse a caller below `studio` with `ensureTier`'s 402, recompute through
-`saveScenario()`, and log nothing themselves.
+`saveScenario()`, and log nothing themselves. Since D1020 a vesting row also
+carries the holder's venture, and `updateHolder()` refuses a Carta
+(`connector_carta`) holder: Carta is the record while connected.
+`capTableRegister.ts` (D1020, #2857) reads the recorded register of one venture
+or of one account: holders, securities, option pools and vesting. Its totals are
+`knownSum`, which is null when any row lacks the figure. It also writes the
+register's CSV and the "As of" PDF snapshot, and the audit row every export
+writes.
+`captable.ts` keeps financing reserves in dilution but excludes unallocated
+option-pool shares from exit payouts (#2446). Pre-round capped SAFEs choose
+purchase amount or cap/basis-based conversion; cash-out SAFEs leave liquidity
+capitalization and insufficient cash is prorated, with exact integer-cent
+allocation. Exit values must fit safe integer cents; SAFE amounts and caps must
+be finite. A pre-round ledger with no positive finite issued shares is withheld.
+Unrecorded note or uncapped liquidity terms produce no waterfall plus a warning.
+Scenario inputs do not record individual option grants, which the payout
+assumptions state. Mercury's accepted SAFEs explicitly pass `post_money` through
+`capTableWrites.ts`; manual missing basis retains the legacy pre-money default.
+The [YC post-money user guide](https://bookface-static.ycombinator.com/assets/ycdc/Website%20User%20Guide%20Feb%202023%20-%20final-28acf9a3b938e643cc270b7da514194d5c271359be25b631b025605673fa9f95.pdf)
+explains exclusion of cash-outs and the unissued pool from liquidity capitalization.
+`dataRoomActivity.ts` (D1105, #2985) is the data room's activity and checklist
+reads: `activityRead()` (a period's daily figures against the period before, per
+investor, the paged log), `activityCsv()` (the same rows; 413 past 10,000) and
+`checklistRead()` (per diligence item, its files and how many grants in force can
+open each, by `tierAdmits()` with each grant's folder scope and the NDA gate). A
+refusal (`blocked`) is never counted as an open, and a reader is named only through
+one of the venture's own grants. Its routes are `../routes/data_room.ts`'s.
 `dataRoomAccess.ts` (D691 decision 6, #1700) is the data room's one access
 predicate, `tierAdmits()`: a file's `access_tier` (`invited`, `committed`,
 `nobody`) and `access_expires_at`, with `investorCommitted()` (a committed
 prospect of the venture, by email) and `admittedCounts()`. Every read outside
 the founder's (the investor room, `research.ts`, the advisor brief) decides
 with it, so a hidden file is never listed, counted or downloaded.
+D1103 (#2983) adds a grant's folder scope (migration 594): `grantFolderScope()`
+reads it as the named folders with their subfolders, or null for every folder,
+and `tierAdmits()` takes it as its fourth argument. A scope that cannot be read
+opens nothing.
 `deckSlideDwell.ts` stores a share-link view's seconds per slide, bounded so
 they never add up to more than the view's read time.
 `peerBenchmark.ts` (#1524) is the peer-group benchmark for every founder:
@@ -202,6 +295,14 @@ and a placement's quote must be verbatim in the stored transcript. Nothing is
 accepted on the founder's behalf. `interviewSessions.ts`'s `deleteSession`
 now takes the session's pending proposals with it.
 
+D877 (#2524): `callAudioRetention.ts` keeps a call's audio for its founder's
+retention, apart from its text. A call is a session with a Zoom or Meet ref,
+or an upload (D872). It reads and writes the member's setting (migration 530;
+30 days by default, `null` keeps until deleted), and `purgeExpiredCallAudio`,
+run by the daily cron, removes audio past it through `interviewSessions.ts`'s
+`deleteSessionAudio`, which the founder's audio-only delete also calls. The
+segments stay, and the session records `audio_removed_at` and its reason.
+
 D684 (#1575): `interviewIntake.ts` is the one way an outside channel writes
 into an interview. It reloads the member and re-checks the venture on every
 write, takes the interview only from an id already scoped to the member, and
@@ -217,7 +318,7 @@ on a `structured` chat does not mark it again, so a stage the member set stays,
 and an interview with no stage is left alone: the readers already count it as
 held on its `interview_date`.
 `submitted_via` is unchanged. `channels/` holds the rest.
-`conversationAnalytics.ts` (D858, #2503) reads a session's and a venture's conversation figures for `../routes/validate_conversations.ts`: messages by side and source, voice notes, languages, suggestion reach, pain themes, objections, willingness to pay, competitor mentions and quotes per theme. Each is `{ value, sources, reason }`, null with its reason when no store holds it; quotes only where the interview allows quoting, and counts only in the venture read. It writes nothing and calls no model.
+`conversationAnalytics.ts` (D858, #2503) reads a session's and a venture's conversation figures for `../routes/validate_conversations.ts`: messages by side and source, voice notes, languages, suggestion reach, pain themes, objections, willingness to pay, competitor mentions and quotes per theme. Each is `{ value, sources, reason }`, null with its reason when no store holds it; quotes only where the interview allows quoting, and counts only in the venture read. Since D873 (#2520) a Zoom, Meet or uploaded call is a `call`, its speakers each on their side (the founder's or interviewee's by name, else `unattributed`), with its length from its lines and how its text was made (`transcript_source`). D866 (#2512) names every session's channel (`channelOf`: a call's, else the chat's provider, else `recorder`, else its own channel; NULL when unknown), takes a `channel` filter, and gives a venture's figures per channel. It writes nothing and calls no model.
 `sessionAutoStructure.ts` runs D658's Structure without the button: when a
 call's transcript is imported, when a chat is assigned, and when an assigned
 chat goes quiet. Its findings are proposals for the founder to review. It keeps
@@ -275,3 +376,78 @@ once, in the app only.
 D811: `mailLinkAudiences.ts` reads consented, suppression-filtered Mail audiences and signed D810 links. `mailLinkEvents.ts` validates and atomically applies feedback with receipts and service-actor audit.
 
 D811: `mailLinkTesters.ts` reads picked, consented programme audiences and signs programme/email-scoped preferences and unsubscribe links, with atomic opt-in/out and actor audits.
+
+D886 B1 (#2579): `meetingBots.ts` owns dispatch validation, plan limits,
+content-free status projection, the runtime interface and the full-call budget
+check. `MeetingBotRun` serializes state and renews two-minute bot-fee holds on
+the existing ledger. Transcription remains B6's `aiRouter` charge. See D886 §12
+for the callback, runtime lease, privacy and release contracts.
+
+D886 B6 (#2584): `meetingBotAssembly.ts` reads B1's authenticated encrypted
+event store, projects roster snapshots and null speaker marks into the pure
+mapper in `channels/botTranscript.ts`, and validates the complete uploaded
+manifest before using the existing recorder job. The job forces Nova-3 for bot
+chunks and reuses their staged `speaker_raw` numbers and paid results. It keeps
+the existing `processing_auto` choice: summary/structure are manual unless that
+choice was recorded. No second STT or billing path is introduced.
+
+Migration 532 supplies `meeting_bots.participants_enc` (531 stays immutable).
+Final participant labels/times, transcript, legacy transcript mirror and receipt
+commit in one batch guarded by current consent, audio retention, account and
+project access. Per-run ciphertext is the batch marker; a refused guard makes
+all later writes no-ops. Retries reuse the staged chunks and cannot duplicate
+final receipts. B1 alone writes bot status, after the session reaches done and
+the final encrypted participants exist. Processing activity keeps its timeout
+alive without extending capture or billing. Stop drains at most 30 seconds;
+incomplete manifests fail explicitly. Audio-only deletion retains the final
+text and labels; session deletion removes the run and events.
+
+`readBotFinalParticipants` is creator-scoped and returns B7's display-name/time
+shape (null before assembly); corrupt encrypted data fails as unreadable. B7
+owns mounting this final read alongside its live roster. There is no new route,
+feature-switch change, live-runtime validation or production deployment here.
+
+D886 B7: `meetingBotParticipants.ts` decrypts the latest roster for the separate
+creator-only participants read. It projects display names/times only, excludes
+the bot and emails, and never turns a failed read into an empty list.
+
+Event responses use `eventsCommon.ts` to withhold online and hybrid join URLs
+unless a manager or a confirmed seat with settled payment reads them. Public
+calendar exports and invitation attachments use the same public projection.
+
+#2440: `calendar.ts` reads only events the member owns, organises or attends,
+including for admins. The same boundary feeds the page, calendar downloads,
+Google/Outlook sync and individual pushes; staff-wide typed lists stay separate.
+`../routes/calendar.ts` checks a founder's project and the caller/counterpart's
+recorded membership, deal relationship, assigned deal lead or live advisor session grant before
+creating a check-in. IC creation requires a readable deal and validates named
+attendees against that exact deal (venture owner/member/advisor, invited or
+committed investor, or assigned lead); the organiser explicitly opts themselves in. Passed investor invitations and
+withdrawn commitments confer no scheduling rights; investor organisers need a
+current relationship too, beyond the legacy deal-reader gate.
+
+D886 B8: `meetingBotRuntime.ts` routes commands to a private cross-script DO
+host and derives run-scoped keys. `meetingBotZoom.ts` mints credentials from
+the reauthorized stored run, with a run-bounded SDK JWT. No credentials log.
+
+`perkClaims.ts` (D957) gives the admin Perks page and program catalogue one
+UTC Monday window for claim totals, listing ranks and weekly price-kind counts.
+`raiseEvidence.ts` reads active Mercury runway facts and the files current data-room grants can download, for Raise and deck readiness.
+
+`paymentsChangeLog.ts` (D1011) names the fifteen catalogue and Stripe audit
+actions and reads them back as the Payments change log (D1129: bound literal
+search before count/page/export, and the complete admin filter list); `stripeWebhookDeliveries.ts`
+is the webhook's request-log reader, shared by HQ · Platform and Payments, with
+hourly buckets that are null for an hour the log was silent.
+
+D1065 (#2935): `buildPlanner.ts` reads accepted Validate labels/counts and applies the ten fixed mapping rules, then batches a plan and source proposals; acceptance stays with D1066. It never runs AI or writes a Build record.
+
+D971 completes `programRegistry.ts`'s Lab draft path: its canonical section
+catalogue contains headings only. The existing Super Admin edit route creates a
+missing allowed draft section after validation, in the same batch as its edit;
+reads do not seed content. Published versions and audit behavior stay in D954's
+store; no migration or canvas sample text is introduced.
+
+D1129 searches decoded audit detail values, never JSON keys, and includes demoted/deleted payment actors in Who alongside current admins.
+
+D1133: `billingRecovery.ts` prepares caller-owned renewal invoice intents or card-only SetupIntents behind Billing’s fresh-TOTP routes, and records only allowlisted payment-refusal families. `billingAlerts.ts` atomically couples renewal history with alert transitions. No card/client secret is stored.

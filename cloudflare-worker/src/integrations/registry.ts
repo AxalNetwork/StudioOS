@@ -13,17 +13,20 @@
  *   - the capability list shown as chips on each card,
  *   - the auth flow (api_key | oauth2 | webhook) the connect modal renders.
  */
+import { lovablePulls, lovableFedModules } from './lovableFeeds';
+import { cartaAudience, cartaScopesFor } from './cartaScopes';
 import type { Context } from 'hono';
 import type { Env, User } from '../types';
 import type { Tier } from '../middleware/requireTier';
 import { MODULE_LABELS, moduleHref } from './moduleLabels';
+import { MERCURY_FEEDS, mercuryFedModules } from './mercuryFeeds';
 import { bindingKey } from '../util/schemaBootstrap';
 
 export type ProviderStatus = 'live' | 'beta' | 'coming_soon';
 /** `oauth_mcp`: a member's sign-in through a provider's MCP server (D840's Mercury, D847's shared client). */
-export type AuthType = 'api_key' | 'oauth2' | 'webhook' | 'oauth_mcp';
+export type AuthType = 'none' | 'api_key' | 'oauth2' | 'webhook' | 'oauth_mcp';
 export type IntegrationType = 'crm' | 'scheduling' | 'cap_table' | 'messaging' | 'e_sign' | 'data_feed' | 'custom';
-export type ConnectorCategory = 'CRM' | 'Payments' | 'Calendar' | 'Messaging' | 'Signing' | 'Cap table' | 'Data' | 'Code' | 'Design' | 'Docs' | 'Accounting and banking' | 'Payroll' | 'Calendar and workspace';
+export type ConnectorCategory = 'CRM' | 'Payments' | 'Calendar' | 'Messaging' | 'Signing' | 'Cap table' | 'Data' | 'Code' | 'Design' | 'Docs' | 'Accounting and banking' | 'Payroll' | 'Calendar and workspace' | 'Design and build';
 export interface ConnectorMetadata {
   category: ConnectorCategory;
   verified: boolean;
@@ -58,12 +61,14 @@ export interface ProviderDescriptor {
    */
   supports_pat?: boolean;
   /**
-   * D710 (#1775): the roles that see this provider as an HQ entity connection
-   * (an `admin` on HQ for Mercury), read through its own store rather than an
-   * `integrations` row. With `personal_roles`, it narrows who sees the
-   * provider at all. A provider with neither field is unchanged.
+   * D879 (#2552): the roles that, on HQ, see the founder's page as a read-only
+   * preview (`audienceFor` → `preview`): they connect nothing and read no
+   * member's connection. With `personal_roles`, it narrows who sees the
+   * provider at all. A provider with neither field is unchanged. It replaces
+   * D710's `entity_roles`: Axal VC's own accounts are HQ's only, never a
+   * connector (`/api/admin/mercury`).
    */
-  entity_roles?: string[];
+  preview_roles?: string[];
   /** D710: the roles that may hold their own connection (#1778 adds founders and partners for Mercury). */
   personal_roles?: string[];
   /**
@@ -248,6 +253,13 @@ export function getProviderImpl(key: string): ProviderImpl | null {
  * their entry's `status` from 'coming_soon' to 'live'/'beta' when shipping.
  */
 export const REGISTRY: ProviderDescriptor[] = [
+  {
+    key: 'lovable', display_name: 'Lovable', integration_type: 'data_feed',
+    description: 'Build in Lovable and app links, without connecting a Lovable account. Module tools are being built.',
+    status: 'beta', tier: 'free', auth_type: 'none', capabilities: ['Works without signing in'],
+    audience_rule: 'venture', docs_url: 'https://docs.lovable.dev/integrations/build-with-url', icon: 'Sparkles',
+  },
+
   { key: 'figma', display_name: 'Figma', integration_type: 'data_feed', description: 'Design files for Prototype / MVP.', status: 'coming_soon', tier: 'free', auth_type: 'oauth2', capabilities: [], docs_url: null, icon: 'Figma' },
   {
     key: 'hubspot',
@@ -307,6 +319,7 @@ export const REGISTRY: ProviderDescriptor[] = [
   },
   {
     key: 'carta',
+    personal_roles: ['founder', 'investor'],
     display_name: 'Carta',
     integration_type: 'cap_table',
     description: 'Mirror your Carta cap table (issuer, stakeholders, securities) into the Capital module on a 6-hour sync.',
@@ -318,9 +331,9 @@ export const REGISTRY: ProviderDescriptor[] = [
     tier: 'studio',
     auth_type: 'oauth2',
     capabilities: ['Cap-table sync', 'Stakeholder import', 'Securities import'],
-    docs_url: 'https://carta.com/api/',
+    docs_url: 'https://docs.carta.com/api-platform/guides/',
     icon: 'PieChart',
-    oauth_scopes: ['read:cap_table', 'read:stakeholders', 'read:securities'],
+    oauth_scopes: ['read_issuer_info', 'read_issuer_stakeholders', 'read_issuer_securities'],
   },
   {
     key: 'slack',
@@ -419,6 +432,13 @@ export const REGISTRY: ProviderDescriptor[] = [
     // D685 adds meeting and user reads to prove a pasted call is hosted by
     // this member and to resolve Zoom's deauthorization event to their grant.
     // Zoom sets scopes on the app itself; the callback refuses a wider grant.
+    // The last two are granted by every General app the owner set up on
+    // 2026-10-22, whatever its Scopes page says (zoomapp:inmeeting) or with the
+    // transcript event subscribed (cloud_recording:read:recording); Axal calls
+    // no endpoint under either. Accepted so the grant is not refused.
+    // D886 (#2582): `user:read:token` mints the notetaker's OBF join token
+    // (`mintObfToken`). Listed before the owner adds it to the app, so the
+    // grant that carries it is not refused; a grant without it still connects.
     status: 'beta',
     tier: 'free',
     auth_type: 'oauth2',
@@ -428,7 +448,8 @@ export const REGISTRY: ProviderDescriptor[] = [
     // D757 §2.11: founder-facing, a Validate source.
     audience_rule: 'venture',
     oauth_scopes: ['meeting:write:meeting', 'meeting:delete:meeting', 'cloud_recording:read:list_recording_files',
-      'meeting:read:meeting', 'meeting:read:list_past_instances', 'user:read:user'],
+      'meeting:read:meeting', 'meeting:read:list_past_instances', 'user:read:user',
+      'cloud_recording:read:recording', 'zoomapp:inmeeting', 'user:read:token'],
   },
   {
     key: 'google_calendar', display_name: 'Google Calendar', integration_type: 'scheduling',
@@ -437,7 +458,6 @@ export const REGISTRY: ProviderDescriptor[] = [
     docs_url: null, icon: 'Calendar', oauth_scopes: [
       'https://www.googleapis.com/auth/calendar.events',
       'https://www.googleapis.com/auth/calendar.readonly',
-      'https://www.googleapis.com/auth/gmail.readonly',
       'https://www.googleapis.com/auth/userinfo.email',
       'https://www.googleapis.com/auth/userinfo.profile',
       'openid',
@@ -451,21 +471,23 @@ export const REGISTRY: ProviderDescriptor[] = [
       'openid', 'profile', 'email', 'offline_access', 'Calendars.ReadWrite', 'User.Read',
     ],
   },
-  // D710 (#1775): the bank provider D686 left open. Read-only: an HQ entity
-  // connection a Super Admin adds per Axal organization, in its own store
-  // (`services/mercury/`). Only an admin on HQ sees that row, and to an admin
-  // `has_implementation` stays false: an entity is never connected from here.
+  // D879 (#2552): a member connector only. A member reads their OWN Mercury,
+  // read-only, through Mercury's MCP server (D840), for Grow and Raise.
   // D713 (#1778): founders and partners hold their own read-only connection, an
   // ordinary `integrations` row (`providers/mercury.ts`), and see their role's
   // personal variant below (`PERSONAL_MERCURY`), on HQ and on a branch.
-  // D752 (#1886): investors hold one too, on HQ only (`personal_hq_only_roles`):
-  // their one use, `capital_attestation`, is HQ-only.
+  // D752 (#1886): investors hold one too; D884 (#2557): on HQ or in a branch, proof of funds HQ-only by use.
+  // An admin on HQ sees the founder's page as a preview (`preview_roles`) and
+  // connects nothing. Axal VC's own accounts are never here: they are HQ ›
+  // Fund administration › Bank accounts (`/api/admin/mercury`, `services/mercury/`).
   {
     key: 'mercury', display_name: 'Mercury', integration_type: 'data_feed',
-    description: 'Read balances and transactions of the Axal entity accounts for fund administration. Read-only: nothing here can move money. Members connect their own Mercury from their own Connectors page; their accounts never appear here.',
-    status: 'beta', tier: 'growth', auth_type: 'api_key', capabilities: ['Balances', 'Transactions', 'Reconciliation'],
+    description: 'Your own Mercury account, read-only, through Mercury’s own sign-in: Axal VC reads your accounts, transactions, cashflow and statements to fill Grow and Raise. It never sends, transfers or requests money.',
+    status: 'beta', tier: 'growth', auth_type: 'api_key', capabilities: ['Grow', 'Raise', 'Read-only'],
     docs_url: 'https://docs.mercury.com', icon: 'Landmark',
-    entity_roles: ['admin'], personal_roles: ['founder', 'partner', 'investor'], personal_hq_only_roles: ['investor'],
+    // D884 (#2557, the owner's answer A): an investor connects their own Mercury on HQ or in a branch.
+    // Proof of funds stays HQ-only by its use (`HQ_ONLY_USES`), not by hiding the connector.
+    preview_roles: ['admin'], personal_roles: ['founder', 'partner', 'investor'],
   },
 ];
 
@@ -473,6 +495,7 @@ export const REGISTRY: ProviderDescriptor[] = [
 // Calendar connections are read from calendar.ts; they do not create a second
 // integrations row or a second OAuth flow.
 export const CONNECTOR_METADATA: Record<string, ConnectorMetadata> = {
+  lovable: { category: 'Design and build', verified: false, pulls: lovablePulls(), sends: [], feeds: lovableFedModules(), permissions: [] },
   figma: { category: 'Design', verified: false, pulls: [{ what: 'Designs', module: 'prototype_mvp' }], sends: [], feeds: ['prototype_mvp'], permissions: [] },
   hubspot: { category: 'CRM', verified: false, pulls: [{ what: 'Deals and contacts', module: 'capital_relationships' }], sends: [{ what: 'New company', target: 'HubSpot company', default_mode: 'ask' }, { what: 'Deal stage change', target: 'HubSpot deal', default_mode: 'auto' }], feeds: ['capital_relationships', 'network'], permissions: ['Connect to your HubSpot account.', 'Read your HubSpot deals.', 'Update your HubSpot deals.', 'Read your HubSpot contacts.', 'Update your HubSpot contacts.', 'Read your HubSpot companies.', 'Update your HubSpot companies.', 'Read your HubSpot deal fields.'] },
   calendly: { category: 'Calendar', verified: false, pulls: [{ what: 'Booked meetings', module: 'customer_research' }], sends: [], feeds: ['customer_research'], permissions: ['Read your Calendly calendar through its default grant.', 'Read your Calendly profile and scheduled events.'] },
@@ -483,9 +506,17 @@ export const CONNECTOR_METADATA: Record<string, ConnectorMetadata> = {
   crunchbase: { category: 'Data', verified: false, pulls: [{ what: 'Company data', module: 'market_intelligence' }], sends: [], feeds: ['market_intelligence'], permissions: ['Read company profiles with your Crunchbase key.'] },
   stripe: { category: 'Payments', verified: false, pulls: [{ what: 'Payments and subscriptions', module: 'revenue_and_traction' }], sends: [], feeds: ['revenue_and_traction', 'customers'], permissions: ['Read charges and subscriptions from your Stripe account.'] },
   github: { category: 'Code', verified: false, pulls: [{ what: 'Issues', module: 'product_roadmap' }, { what: 'Milestones', module: 'product_roadmap' }, { what: 'Releases', module: 'product_roadmap' }, { what: 'Pull requests', module: 'prototype_mvp' }, { what: 'Release checks', module: 'prototype_mvp' }, { what: 'The connection and each sync', module: 'operating_systems' }, { what: 'Architecture notes and decisions', module: 'solution_design' }, { what: 'Languages and topics', module: 'solution_design' }, { what: 'Contributors and their commits', module: 'founding_team' }, { what: 'Where the code sits and its licence', module: 'company_creation' }], sends: [], feeds: ['product_roadmap', 'prototype_mvp', 'operating_systems', 'solution_design', 'founding_team', 'company_creation'], permissions: ['Read issues in the repositories you choose.', 'Read pull requests in the repositories you choose.', 'Read releases, the README, the Markdown in docs/, doc/ and adr/, and the last 90 days of commits in the repositories you choose.', 'Read repository names, visibility, owners, licences, contributors, languages and topics.'] },
-  zoom: { category: 'Messaging', verified: false, pulls: [{ what: 'Call transcripts', module: 'customer_research' }], sends: [{ what: 'Interview calls you schedule', target: 'Zoom meeting', default_mode: 'ask' }], feeds: ['customer_research'], used_by: [{ label: 'Validate › Record a session', href: '/validate/record' }], suggests: ['problem_discovery', 'customer_research', 'ideal_customer_profile', 'market_intelligence', 'demand_signals', 'experiments'], permissions: ['Create Zoom meetings for the interview calls you schedule.', 'Delete a Zoom meeting when you cancel its interview call.', 'Read your meetings’ cloud recording files, to download their transcripts.', 'Read a pasted meeting to confirm you host it.', 'List your past meeting instances to recover restarted calls.', 'Read your Zoom user id to identify the connection when you disconnect it.'] },
-  google_calendar: { category: 'Calendar and workspace', verified: false, pulls: [{ what: 'Events', module: 'customer_research' }], sends: [{ what: 'Calendar events', target: 'Google Calendar', default_mode: 'ask' }], feeds: ['customer_research', 'operating_systems'], permissions: ['Create and update your calendar events.', 'Read your calendar events.', 'Gmail (read-only) is asked for at sign-in; Axal VC does not read your Gmail.', 'Read your account email address.', 'Read your public account profile.', 'Confirm your Google sign-in identity.'] },
-  mercury: { category: 'Accounting and banking', verified: false, pulls: [], sends: [], feeds: [], permissions: ['Read balances and transactions of the Axal entity accounts a Super Admin connects.'] },
+  zoom: { category: 'Messaging', verified: false, pulls: [{ what: 'Call transcripts', module: 'customer_research' }], sends: [{ what: 'Interview calls you schedule', target: 'Zoom meeting', default_mode: 'ask' }], feeds: ['customer_research'], used_by: [{ label: 'Validate › Record a session', href: '/validate/record' }], suggests: ['problem_discovery', 'customer_research', 'ideal_customer_profile', 'market_intelligence', 'demand_signals', 'experiments'], permissions: ['Create Zoom meetings for the interview calls you schedule.', 'Delete a Zoom meeting when you cancel its interview call.', 'Read your meetings’ cloud recording files, to download their transcripts.', 'Read a pasted meeting to confirm you host it.', 'List your past meeting instances to recover restarted calls.', 'Read your Zoom user id to identify the connection when you disconnect it.', 'Read a recording’s details, which Zoom grants with transcript notifications; Axal VC uses only the recording files above.', 'Open inside a Zoom meeting, which Zoom grants to every app of this kind; Axal VC does not use it.', 'Let Axal’s notetaker join a call on your behalf, only while you are in it.'] },
+  google_calendar: { category: 'Calendar and workspace', verified: false, pulls: [{ what: 'Events', module: 'customer_research' }], sends: [{ what: 'Calendar events', target: 'Google Calendar', default_mode: 'ask' }], feeds: ['customer_research', 'operating_systems'], permissions: ['Create and update your calendar events.', 'Read your calendar events.', 'Read your account email address.', 'Read your public account profile.', 'Confirm your Google sign-in identity.'] },
+  // D879: the founder's Grow and Raise modules, read from `mercuryFeeds.ts` (D840 parts 2 and 3).
+  mercury: {
+    category: 'Accounting and banking', verified: false,
+    pulls: MERCURY_FEEDS.filter((f) => f.role === 'founder' && f.module !== null).map((f) => ({ what: f.what, module: f.module! })),
+    sends: [],
+    feeds: [...new Set(MERCURY_FEEDS.filter((f) => f.role === 'founder' && f.module !== null).map((f) => f.module!))],
+    used_by: [{ label: 'Grow', href: '/grow' }, { label: 'Raise', href: '/raise' }],
+    permissions: ['Sign in with Mercury: read your accounts, balances, transactions, cashflow, statements, invoices, customers, treasury and SAFEs through Mercury’s MCP server; it never sends, transfers or requests money.'],
+  },
   microsoft_365: { category: 'Calendar and workspace', verified: false, pulls: [{ what: 'Events', module: 'customer_research' }], sends: [{ what: 'Calendar events', target: 'Microsoft 365', default_mode: 'ask' }], feeds: ['customer_research', 'operating_systems'], permissions: ['Confirm your Microsoft sign-in identity.', 'Read your public Microsoft profile.', 'Read your account email address.', 'Keep the connection active.', 'Read and update calendar events.', 'Read your basic account profile.'] },
 };
 
@@ -496,6 +527,24 @@ export interface PersonalMercuryVariant {
   /** Exactly one sentence, as every `api_key` row has (`connectors_d650.test.ts`). */
   permissions: string[];
   feeds: string[];
+  /** D884 (#2557): what the card says it pulls, and the sections it links to. Absent, the card claims none. */
+  pulls?: Array<{ what: string; module: string }>;
+  used_by?: Array<{ label: string; href: string }>;
+}
+
+/**
+ * D884 (#2557): a role's Mercury sections as the card names them, from
+ * `MERCURY_FEEDS` itself and in its order: what each pulls, and a link to each
+ * section that has a page. Proof of funds has no module, so it is neither.
+ */
+export function mercuryPulls(role: string): Array<{ what: string; module: string }> {
+  return MERCURY_FEEDS.filter((f) => f.role === role && f.module !== null).map((f) => ({ what: f.what, module: f.module! }));
+}
+export function mercuryUsedBy(role: string): Array<{ label: string; href: string }> {
+  return mercuryFedModules(role).flatMap((m) => {
+    const href = moduleHref(m);
+    return href ? [{ label: MODULE_LABELS[m] ?? m, href }] : [];
+  });
 }
 
 export type PersonalMercuryRole = 'founder' | 'partner' | 'investor';
@@ -526,11 +575,14 @@ export const PERSONAL_MERCURY: Readonly<Record<PersonalMercuryRole, Readonly<Per
     permissions: FOUNDER_PARTNER_PERMISSIONS, feeds: [],
   }),
   investor: Object.freeze({
-    description: "Your own Mercury account, read-only: show Axal's admins that you can fund a commitment you made, with a dated statement of at least an amount you choose, and fill your Deals and Fund sections. Axal's admins never see your balance.",
-    capabilities: ['Proof of funds', 'Capacity', 'Closing, calls, accounting and reporting proposals'],
+    description: "Your own Mercury account, read-only: your capacity in Deals › Pipeline and Deals › Commit, the wire that funded a commitment in Deals › Closing, and proposals for your Fund sections. On HQ, also a dated proof of funds for Axal's admins, who never see your balance.",
+    capabilities: ['Capacity', 'Closing proposals', 'Fund calls, accounting and reporting proposals', 'Proof of funds'],
     permissions: ['Read your Mercury account names, last four digits, available balances, transactions and statements for your own sections; only you see a balance, and it never sends, transfers or requests money.'],
-    // D840 part 4 (#2349): the investor's sections, held to `mercuryFeeds.ts`.
-    feeds: ['deals_commit', 'deals_closing', 'fund_calls', 'fund_ledger', 'fund_reporting'],
+    // D840 part 4 (#2349), D884 (#2557): the investor's sections, read from `mercuryFeeds.ts` itself.
+    feeds: mercuryFedModules('investor'),
+    // D884 PR 2: Deals first, then Fund, each a link to its section.
+    pulls: mercuryPulls('investor'),
+    used_by: mercuryUsedBy('investor'),
   }),
 });
 
@@ -542,6 +594,7 @@ export function personalMercuryFor(role: string | null | undefined): Readonly<Pe
 
 /** The modules a connector feeds for this viewer: Mercury's personal variant by role, else the catalogue's. */
 export function connectorFeeds(providerKey: string, role?: string | null): string[] {
+  if (providerKey === 'carta' && role === 'investor') return ['deals_pipeline', 'investor_portfolio'];
   if (providerKey === 'mercury' && role != null && String(role).toLowerCase() !== 'admin') return [...(personalMercuryFor(role)?.feeds ?? [])];
   return CONNECTOR_METADATA[providerKey]?.feeds ?? [];
 }
@@ -647,16 +700,18 @@ export interface DescriptorViewer { role: string; hq: boolean; venture: boolean 
 
 /**
  * D710: how a viewer may see a provider. `open` for a provider with no
- * audience fields (today's behaviour); `entity` for an HQ entity connection;
- * `personal` for the viewer's own; `none` when it is not theirs to see. On a
- * branch, only `personal_roles` count, never `entity_roles`. A provider with
+ * audience fields (today's behaviour); `personal` for the viewer's own;
+ * `preview` (D879) for a role that reads the founder's page on HQ and connects
+ * nothing; `none` when it is not theirs to see. On a branch, only
+ * `personal_roles` count, never `preview_roles`. A provider with
  * `audience_rule: 'venture'` (D757) reads only `viewer.venture`.
  */
-export function audienceFor(p: ProviderDescriptor, viewer: DescriptorViewer): 'open' | 'entity' | 'personal' | 'none' {
+export type Audience = 'open' | 'preview' | 'personal' | 'none';
+export function audienceFor(p: ProviderDescriptor, viewer: DescriptorViewer): Audience {
   if (p.audience_rule === 'venture') return viewer.venture === true ? 'personal' : 'none';
-  if (!p.entity_roles && !p.personal_roles) return 'open';
+  if (!p.preview_roles && !p.personal_roles) return 'open';
   const role = String(viewer.role || '').toLowerCase();
-  if (viewer.hq && (p.entity_roles ?? []).includes(role)) return 'entity';
+  if (viewer.hq && (p.preview_roles ?? []).includes(role)) return 'preview';
   // D752: a personal role whose every use is HQ-only sees nothing off HQ.
   if ((p.personal_roles ?? []).includes(role)) return personalHqOnlyOffHq(p, viewer) ? 'none' : 'personal';
   return 'none';
@@ -685,37 +740,63 @@ export function personalHqOnlyOffHq(p: ProviderDescriptor, viewer: DescriptorVie
   return (p.personal_roles ?? []).includes(role) && (p.personal_hq_only_roles ?? []).includes(role);
 }
 
+/** D879: the line a previewing admin reads, pointing at where Axal VC's own accounts live. */
+export const HQ_ACCOUNTS_NOTE = Object.freeze({
+  line: 'Axal VC’s own accounts are managed in HQ › Fund administration › Bank accounts.',
+  href: '/admin?tab=bank-accounts',
+});
+
+/** D879: the refusal a role with no personal connection reads at connect (`providers/mercury.ts` and `/connect`). */
+export function noPersonalConnectionSentence(name: string): string {
+  return `Your role does not hold a personal ${name} connection.`;
+}
+
 /** D752: the refusal an HQ-only personal role reads at connect off HQ. */
 export function personalHqOnlySentence(name: string): string {
   return `${name} is offered to your profile on HQ only.`;
 }
 
+/** The allowlist is selected from the authenticated member, never a request parameter. */
+export function descriptorForRole(p: ProviderDescriptor, role: string): ProviderDescriptor {
+  const audience = cartaAudience(role);
+  return p.key === 'carta' && audience ? { ...p, oauth_scopes: cartaScopesFor(audience) } : p;
+}
+
 export function publicDescriptor(p: ProviderDescriptor, viewer?: DescriptorViewer, env?: Pick<Env, 'ZOOM_APP_AUDIENCE'>) {
   const audience = viewer ? audienceFor(p, viewer) : 'open';
-  // D713, D752: a founder, partner or investor reads their role's Mercury variant.
-  const variant = p.key === 'mercury' && audience === 'personal' ? personalMercuryFor(viewer!.role) : null;
-  const feeds = variant ? [...variant.feeds] : CONNECTOR_METADATA[p.key]?.feeds ?? [];
+  // D713, D752: a founder, partner or investor reads their role's Mercury variant; D879: a previewing admin reads the founder's.
+  const variant = p.key !== 'mercury' ? null
+    : audience === 'personal' ? personalMercuryFor(viewer!.role) : audience === 'preview' ? PERSONAL_MERCURY.founder : null;
+  const cartaInvestor = p.key === 'carta' && viewer?.role === 'investor';
+  const metadata = cartaInvestor ? { ...CONNECTOR_METADATA.carta, feeds: ['deals_pipeline', 'investor_portfolio'],
+    pulls: [{ what: 'Your firms, funds, portfolio investments, securities and cap tables', module: 'investor_portfolio' }],
+    permissions: ['Read your Carta firms.', 'Read funds in those firms.', 'Read their portfolio investments.', 'Read their investment securities.', 'Read their portfolio companies’ capitalization tables.'],
+    used_by: [{ label: 'Deals · Pipeline', href: '/deals/pipeline' }, { label: 'Portfolio', href: '/portfolio' }] } : CONNECTOR_METADATA[p.key];
+  const feeds = variant ? [...variant.feeds] : metadata?.feeds ?? [];
   return {
     key: p.key,
     display_name: p.display_name,
     integration_type: p.integration_type,
-    description: variant ? variant.description : p.description,
+    description: cartaInvestor ? 'Read your own Carta firms, funds, investments, securities and cap tables. Read-only.' : variant ? variant.description : p.description,
     status: p.status,
     tier: p.tier,
     auth_type: p.auth_type,
-    capabilities: variant ? [...variant.capabilities] : p.capabilities,
+    capabilities: cartaInvestor ? ['Firm and fund reads', 'Portfolio investments', 'Securities and cap tables'] : variant ? [...variant.capabilities] : p.capabilities,
     docs_url: p.docs_url,
     icon: p.icon ?? null,
     supports_pat: !!p.supports_pat,
-    // An entity connection is never made through `/connect`, so the admin's row has no implementation here.
+    // Only a member's own connection is made here: a preview has no implementation (D879).
     has_implementation: PROVIDER_IMPLS.has(p.key) && !(p.key === 'mercury' && audience !== 'personal'),
-    ...CONNECTOR_METADATA[p.key],
+    ...metadata,
     ...(variant ? { permissions: [...variant.permissions] } : {}),
+    // D879: the catalogue's pulls and `used_by` are the founder's Grow and Raise; a partner's card claims neither.
+    // D884 (#2557): an investor's card claims its own sections, from `MERCURY_FEEDS`.
+    ...(variant && variant !== PERSONAL_MERCURY.founder ? { pulls: [...(variant.pulls ?? [])], used_by: [...(variant.used_by ?? [])] } : {}),
     ...(p.key === 'zoom' ? { distribution: zoomDistribution(env?.ZOOM_APP_AUDIENCE) } : {}),
     feeds,
     feed_modules: feeds.map(key => ({ key, label: MODULE_LABELS[key] ?? key, href: moduleHref(key) })),
-    connection_source: p.key === 'google_calendar' ? 'google_oauth_tokens' : p.key === 'microsoft_365' ? 'microsoft_oauth_tokens'
-      : p.key === 'mercury' && audience === 'entity' ? 'mercury_entity_connections' : 'integrations',
+    connection_source: p.key === 'google_calendar' ? 'google_oauth_tokens' : p.key === 'microsoft_365' ? 'microsoft_oauth_tokens' : 'integrations',
+    ...(audience === 'preview' ? { preview: true, hq_accounts: { ...HQ_ACCOUNTS_NOTE } } : {}),
   };
 }
 

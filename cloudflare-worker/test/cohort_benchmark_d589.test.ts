@@ -237,15 +237,21 @@ test('ties count halfway, and the returned percentile is the coarsened rank', as
   assert.equal(r.body.median, coarsenMedian(medianOf(scores)));
 });
 
-test('a partner read of the benchmark is logged', async () => {
+for (const role of ['partner', 'admin']) test(`${role}: benchmark follows the narrowed founder guard and logs only an allowed read`, async () => {
   const db = fixture();
   db.exec(ddl('activity_logs'));
   for (let i = 0; i < 5; i += 1) {
     member(db, 10 + i, 100 + i, `f${i}@example.test`, 3, 'Cohort 3');
     await official(db, 100 + i, 10 + i);
   }
-  db.prepare(`INSERT INTO users (id, role, name, email, is_active) VALUES (50, 'partner', 'Pat', 'p@example.test', 1)`).run();
+  db.prepare('INSERT INTO users (id, role, name, email, is_active) VALUES (50, ?, ?, ?, 1)').run(role, 'Synthetic caller', 'benchmark@example.invalid');
   const r = await call(db, 50, 100);
+  if (role === 'partner') {
+    assert.equal(r.status, 403, JSON.stringify(r.body));
+    assert.equal('own_score' in r.body, false);
+    assert.equal(db.prepare('SELECT count(*) AS n FROM activity_logs').get()!.n, 0);
+    return;
+  }
   assert.equal(r.status, 200, JSON.stringify(r.body));
   assert.equal(r.body.available, true);
   const logs = db.prepare(`SELECT action, project_id, user_id FROM activity_logs`).all() as { action: string; project_id: number; user_id: number }[];

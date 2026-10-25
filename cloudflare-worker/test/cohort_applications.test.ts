@@ -233,69 +233,26 @@ test('claimDecisionEmail: distinct decision/cycle/user keys claim independently'
 // ---------------------------------------------------------------------------
 // Admission PARITY between the two decide surfaces.
 //
-// The two engines sit one tab apart in AdminSpinoutLab.jsx and are already
-// hand-synced on status and on the email ledger — but they used to diverge on
-// the thing that matters most: the legacy route stopped at `admitted = 1` and
-// left `spinout_lab_active` at 0, so the founder clicked "Start Week 1" and
-// `startLab()` stamped `spinout_lab_started_at` with their CLICK time.
-//
-// That drift is silent and consequential. `getCohortGate` resolves a founder's
-// cycle by `start_at <= started_at < end_at`, so an early starter resolves to
-// the PREVIOUS cycle — whose week windows have already expired, unlocking all
-// four weeks at once — or to no cycle at all. And the admin review/at-risk
-// queues count participants by `started_at BETWEEN cycle.start_at AND
-// cycle.end_at`, so that founder stops appearing in their own cohort.
-//
-// These are source-level assertions (the same technique the market-intel
-// gating tests use) because the write lives in a route handler inside
-// admin.ts, whose import graph the strip-types gate cannot load. What they pin
-// is the invariant a future edit would break: both paths bind `started_at` to
-// the CYCLE's start instant, and both guard against re-stamping a founder who
-// is already running.
-// ---------------------------------------------------------------------------
-
+// D943: both admin doors now decide through the cycle handler. Activation
+// belongs only to the scheduler, which binds the cohort's start instant.
+// Mounted SQLite parity and missing-cycle regressions are in lab_decisions_d943.
 import { readFileSync } from 'node:fs';
-
 const ADMIN_SRC = readFileSync(new URL('../src/routes/admin.ts', import.meta.url), 'utf8');
+const COHORT_SRC = readFileSync(new URL('../src/routes/admin_cohort.ts', import.meta.url), 'utf8');
 const CRON_SRC = readFileSync(new URL('../src/services/cohortApplications.ts', import.meta.url), 'utf8');
-
-/** The activation write, normalised so formatting differences don't matter. */
 const ACTIVATION = /UPDATE users SET spinout_lab_active = 1, spinout_lab_week = 1, spinout_lab_started_at = \?\s+WHERE id = \? AND \(spinout_lab_active IS NULL OR spinout_lab_active = 0\)/;
 
 test('the cron activates with a started_at bind and an already-active guard', () => {
-  assert.match(CRON_SRC, ACTIVATION, 'activateDueCycles is the reference implementation');
+  assert.match(CRON_SRC, ACTIVATION);
+  assert.match(CRON_SRC, /\.bind\(cyc\.start_at, a\.user_id\)/);
 });
-
-test('the legacy decide route performs the SAME activation write as the cron', () => {
-  assert.match(
-    ADMIN_SRC, ACTIVATION,
-    'a legacy accept must land the founder in the same state the cron would, or week-gating drifts',
-  );
+test('the legacy decide delegates to the same cycle decision without activating', () => {
+  const route = ADMIN_SRC.split("admin.post('/spinout-applications/:app_id/decide'")[1].split('// Task #102')[0];
+  assert.match(route, /decideCohortApplication\(c, true\)/);
+  assert.doesNotMatch(route, /UPDATE users|INSERT INTO user_spinout_flags/);
 });
-
-test('the legacy route binds started_at to the cycle start, never to now()', () => {
-  // The specific regression: `datetime('now')` here would reintroduce exactly
-  // the drift this fix removes, while still looking correct in review.
-  const activation = ADMIN_SRC.slice(ADMIN_SRC.search(ACTIVATION));
-  const bindLine = activation.slice(0, 400);
-  assert.match(bindLine, /\.bind\(cycle\.start_at, app\.user_id\)/, 'bound to the cycle instant');
-  assert.ok(
-    !/spinout_lab_started_at = datetime\('now'\)/.test(ADMIN_SRC),
-    'started_at must never be stamped with the decision time',
-  );
-});
-
-test('the legacy route retires the applicant so the cron does not re-admit', () => {
-  assert.match(
-    ADMIN_SRC,
-    /UPDATE cohort_applicants SET status = 'activated'[\s\S]{0,160}WHERE application_id = \? AND status = 'approved'/,
-    "hand-activating without retiring the 'approved' row leaves the cron a second admission to perform",
-  );
-});
-
-test('activation is skipped when no cycle is known, rather than guessing a date', () => {
-  // An un-migrated dev DB (or an application never pinned to a cycle) has no
-  // calendar to clamp to, and getCohortGate treats those founders as un-gated
-  // anyway — so the old admitted-only behaviour is correct there.
-  assert.match(ADMIN_SRC, /if \(cycle\) \{/, 'the activation block is cycle-conditional');
+test('the cycle decide registers the shared decision and leaves activation to the clock', () => {
+  assert.match(COHORT_SRC, /r\.post\('\/applications\/:applicant_id\/decide', \(c\) => decideCohortApplication\(c\)\)/);
+  const decision = COHORT_SRC.split('export async function decideCohortApplication')[1].split("r.post('/applications/:applicant_id/decide'")[0];
+  assert.doesNotMatch(decision, /UPDATE users|INSERT INTO user_spinout_flags/);
 });

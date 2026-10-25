@@ -54,6 +54,9 @@ export const MODEL_COPY = {
   '@cf/black-forest-labs/flux-1-schnell': { name: 'FLUX.1 Schnell' },
   '@cf/mistralai/mistral-small-3.1-24b-instruct': { name: 'Mistral Small 3.1 24B' },
   '@cf/ibm-granite/granite-4.0-h-micro': { name: 'Granite 4.0 Micro' },
+  // D857 (#2502): translate_segment's models.
+  '@cf/meta/m2m100-1.2b': { name: 'M2M100' },
+  '@cf/ai4bharat/indictrans2-en-indic-1B': { name: 'IndicTrans2' },
 };
 
 /** The guard: listed under Safety, never picked. */
@@ -81,7 +84,7 @@ export const ALL_MODELS = [
   ['Code', [R('Kimi K2.7 Code', '@cf/moonshotai/kimi-k2.7-code'), R('Qwen2.5 Coder 32B', '@cf/qwen/qwen2.5-coder-32b-instruct')]],
   ['Reading images and files', [R('Llama 4 Scout', '@cf/meta/llama-4-scout-17b-16e-instruct'), R('Gemma 4 26B', '@cf/google/gemma-4-26b-a4b-it'), R('Llama 3.2 11B Vision'), R('Moondream 3.1')]],
   ['Search and ranking', [R('BGE-M3'), R('Qwen3 Embedding 0.6B'), R('BGE Base EN v1.5', '@cf/baai/bge-base-en-v1.5'), R('BGE Reranker Base')]],
-  ['Languages', [R('M2M100'), R('IndicTrans2'), R('SEA-LION v4 27B')]],
+  ['Languages', [R('M2M100', '@cf/meta/m2m100-1.2b'), R('IndicTrans2', '@cf/ai4bharat/indictrans2-en-indic-1B'), R('SEA-LION v4 27B')]],
   ['Speech to text', [
     R('Whisper Large v3 Turbo', '@cf/openai/whisper-large-v3-turbo'), R('Whisper', '@cf/openai/whisper'),
     R('Deepgram Nova-3', '@cf/deepgram/nova-3'), R('Deepgram Flux'), R('Smart Turn v2'),

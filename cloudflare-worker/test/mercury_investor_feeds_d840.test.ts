@@ -23,7 +23,7 @@ import { openMercuryReads } from '../src/services/mercury/reads.ts';
 import { createMercuryInvestor, openOwnInvestorMercuryWith, type OpenInvestorMercury } from '../src/routes/mercury_investor.ts';
 import { encryptCredentials } from '../src/integrations/secrets.ts';
 import { callLineFits } from '../src/services/mercury/match.ts';
-import { MERCURY_FEEDS, PORTFOLIO_NOTE } from '../src/integrations/mercuryFeeds.ts';
+import { INVESTOR_LANDS, MERCURY_FEEDS, PORTFOLIO_NOTE } from '../src/integrations/mercuryFeeds.ts';
 import { ADMIN, FOUNDER, INVESTOR, FUND_ADMIN, envFor, freshDb, one, rows, tokenFor } from './_mercury_fixture.ts';
 
 const read = (p: string) => readFileSync(resolve(process.cwd(), p), 'utf8');
@@ -127,7 +127,7 @@ const ledger = (db: any, ext: string) => one(db, 'SELECT module, kind, local_tab
 
 // ─────────────────────────────────────────────────────────── who
 
-test('only the investor, on HQ, outside a support session: founder, admin, branch and support are refused before Mercury is read', async () => {
+test('only the investor, outside a support session: founder, admin and support are refused before Mercury is read; a branch reads as HQ (D884)', async () => {
   const h = harness();
   for (const as of [FOUNDER, ADMIN]) {
     for (const [m, p] of [['GET', '/commit'], ['POST', '/sync'], ['GET', '/proposals?kind=closing'], ['GET', `/reporting?fund_id=${FUND}`]] as const) {
@@ -139,10 +139,10 @@ test('only the investor, on HQ, outside a support session: founder, admin, branc
   const support = await h.call('GET', '/commit', INVESTOR, { impersonated: true });
   assert.equal(support.status, 403);
   assert.equal(support.body.error, 'support_session_refused');
-  const branch = await h.call('GET', '/commit', INVESTOR, { env: { ...h.env, BRANCH_CODE: 'lon' } });
-  assert.equal(branch.status, 403);
-  assert.equal(branch.body.error, 'hq_only');
   assert.deepEqual(h.opened, [], 'no refused caller opened a Mercury session');
+  // D884 (#2557, the owner's answer A): an investor in a branch reads their own sections.
+  const branch = await h.call('GET', '/commit', INVESTOR, { env: { ...h.env, BRANCH_CODE: 'lon' } });
+  assert.equal(branch.status, 200, JSON.stringify(branch.body));
 });
 
 test('the Fund sections need the institutional tier, as the Fund bucket does', async () => {
@@ -364,11 +364,12 @@ test('read-only: every section calls only read tools, and the logs hold counts, 
   }
 });
 
-test('the page lists exactly what is built: Trust and the five fed sections, from part 1\'s one list; Portfolio gets nothing', async () => {
+test('the page lists exactly what is built: Trust, Pipeline (D884) and the five fed sections, from part 1\'s one list; Portfolio gets nothing', async () => {
   const h = harness();
   const r = await h.call('GET', '', INVESTOR);
   assert.deepEqual(r.body.sections.map((s: any) => [s.section, s.module, s.href, s.lands]), [
     ['Trust', null, '/trust', 'statement'],
+    ['Deals · Pipeline', 'deals_pipeline', '/deals/pipeline', 'shown'],
     ['Deals · Commit', 'deals_commit', '/deals/commit', 'fact'],
     ['Deals · Closing', 'deals_closing', '/deals/closing', 'proposal'],
     ['Fund · Calls', 'fund_calls', '/funds/calls', 'proposal'],
@@ -377,10 +378,11 @@ test('the page lists exactly what is built: Trust and the five fed sections, fro
   ]);
   assert.equal(r.body.portfolio, PORTFOLIO_NOTE);
   assert.ok(!MERCURY_FEEDS.some((f) => /portfolio/i.test(String(f.module))));
-  // Each ledger module a sync writes is one the list names, and the reverse.
+  // Each ledger module a sync writes is one the list names, and the reverse; a `shown` section writes nothing (D884).
   const src = read('cloudflare-worker/src/services/mercury/investorFeeds.ts');
   const written = [...src.matchAll(/^\s+\w+: '((?:deals|fund)_\w+)',$/gm)].map((m) => m[1]);
-  assert.deepEqual([...new Set(written)].sort(), MERCURY_FEEDS.filter((f) => f.role === 'investor' && f.module).map((f) => f.module).sort());
+  assert.deepEqual([...new Set(written)].sort(),
+    MERCURY_FEEDS.filter((f) => f.role === 'investor' && f.module && INVESTOR_LANDS[f.key] !== 'shown').map((f) => f.module).sort());
 });
 
 // ─────────────────────────────────────────────────────────── the real opener (part 1's sign-in)

@@ -10,17 +10,34 @@ import { railBody } from './railPages.js';
 // this file. See lib/api/README.md. scripts/check-api-drift.mjs fails if this
 // block does not name exactly the files in lib/api/.
 // api-modules:begin
+export * from './api/accountCompanies.js';
 export * from './api/adminAiUsage.js';
+export * from './api/adminApprovals.js';
 export * from './api/adminCapitalAttestations.js';
 export * from './api/adminIncorporations.js';
+export * from './api/adminLab.js';
 export * from './api/adminLearning.js';
+export * from './api/adminMeetingBots.js';
 export * from './api/adminMercury.js';
+export * from './api/adminNetwork.js';
+export * from './api/adminPartnerFirms.js';
+export * from './api/adminPayments.js';
+export * from './api/adminPrograms.js';
 export * from './api/aiBudget.js';
 export * from './api/assistants.js';
 export * from './api/bankAccounts.js';
+export * from './api/billingAlerts.js';
 export * from './api/billingInvoices.js';
+export * from './api/buildPlan.js';
+export * from './api/capTableAccess.js';
+export * from './api/capTableHolder.js';
+export * from './api/capTableRecord.js';
+export * from './api/capTableRegister.js';
+export * from './api/channelKeys.js';
 export * from './api/channels.js';
+export * from './api/community.js';
 export * from './api/communityTasks.js';
+export * from './api/companyActions.js';
 export * from './api/companyEin.js';
 export * from './api/companySheet.js';
 export * from './api/connectors.js';
@@ -30,6 +47,10 @@ export * from './api/creditRules.js';
 export * from './api/cycleValidate.js';
 export * from './api/cycleWrites.js';
 export * from './api/cycles.js';
+export * from './api/dataRoom.js';
+export * from './api/deckAssist.js';
+export * from './api/deckEditor.js';
+export * from './api/deckSources.js';
 export * from './api/developerKeys.js';
 export * from './api/developerUsage.js';
 export * from './api/eadwyn.js';
@@ -44,21 +65,36 @@ export * from './api/fundReports.js';
 export * from './api/fundStructure.js';
 export * from './api/googleSignIn.js';
 export * from './api/helpCenter.js';
+export * from './api/insights.js';
 export * from './api/interviewSessions.js';
+export * from './api/labOperations.js';
 export * from './api/labReportShares.js';
 export * from './api/learning.js';
 export * from './api/licenceAccount.js';
 export * from './api/licenceFeeInvoices.js';
+export * from './api/licencePrograms.js';
 export * from './api/licenceRequests.js';
 export * from './api/licenceTerms.js';
+export * from './api/mcpOauth.js';
 export * from './api/memberCredits.js';
 export * from './api/mercuryAttestations.js';
 export * from './api/mercuryInvestor.js';
 export * from './api/mercuryPersonal.js';
+export * from './api/narrative.js';
+export * from './api/network.js';
+export * from './api/newDeck.js';
 export * from './api/newsletter.js';
+export * from './api/partnerDealReads.js';
+export * from './api/partnerDealTypes.js';
+export * from './api/partnerProfiles.js';
 export * from './api/partnerSettlements.js';
+export * from './api/payments.js';
+export * from './api/personaSegments.js';
 export * from './api/productTesting.js';
 export * from './api/profile.js';
+export * from './api/programGrants.js';
+export * from './api/programProposals.js';
+export * from './api/programs.js';
 export * from './api/publicAiModels.js';
 export * from './api/publicPricing.js';
 export * from './api/railPrefs.js';
@@ -74,6 +110,7 @@ export * from './api/section83bReview.js';
 export * from './api/shareUpdate.js';
 export * from './api/ticketReviews.js';
 export * from './api/tokenPacks.js';
+export * from './api/trustContent.js';
 export * from './api/usage.js';
 export * from './api/verdict.js';
 // api-modules:end
@@ -193,6 +230,8 @@ export function isPublicPath(pathname) {
     || currentPath.startsWith('/authors/')
     || /^\/advisors\/[^/]+$/.test(currentPath)
     || currentPath === '/spinout-lab'
+    // D1072 (#2425): the public trust center and its tabs; /trust/me is the member's own and stays auth-only.
+    || ['/trust', '/trust/security', '/trust/data', '/trust/subprocessors', '/trust/documents', '/trust/disclosure'].includes(currentPath)
     // Printable Program Brief — public brochure page; /spinout-lab/apply
     // is intentionally NOT listed (auth-only, a 401 there should bounce).
     || currentPath === '/spinout-lab/brief'
@@ -380,6 +419,7 @@ export const SLOW_PATHS = [
   /^\/dd\/cases\/[^/]+\/(scan|report)$/,
   /^\/deck-reviewer\/[^/]+\/regenerate$/,
   /^\/decks\/generate$/,
+  /^\/decks\/[^/]+\/review$/,           // D900: a version's review
   /^\/funds\/[^/]+\/regenerate-lpa$/,
   /^\/profiling\/chat$/,                 // onboarding chat
   /^\/references\/[^/]+\/(transcribe|summarize)$/,
@@ -1218,21 +1258,59 @@ export const api = {
 
   // Task #9 (X-2) — Partner deal engine: admin invitations + deals.
   adminPartners: {
+    activateDeal: (id) => request(`/admin/partners/deals/${id}/activate`, { method: 'POST' }),
+    // D926 — search, filters, sort and pages run on the Worker, which answers
+    // an exact `total`. With no options the call is today's: the newest 200.
+    // `stage` is a list of stored stages and `lapsed`.
     listInvitations: (opts = {}) => {
       const q = new URLSearchParams();
       if (opts.status) q.set('status', opts.status);
       if (opts.email) q.set('email', opts.email);
+      if (opts.q) q.set('q', opts.q);
+      for (const s of [].concat(opts.stage || [])) q.append('stage', s);
+      if (opts.dealType) q.set('deal_type', opts.dealType);
+      if (opts.invitedBy != null) q.set('invited_by', String(opts.invitedBy));
+      if (opts.sentWithin) q.set('sent_within', String(opts.sentWithin));
+      if (opts.sort) q.set('sort', opts.sort);
+      if (opts.limit) q.set('limit', String(opts.limit));
+      if (opts.offset) q.set('offset', String(opts.offset));
       const qs = q.toString();
       return request(`/admin/partners/invitations${qs ? `?${qs}` : ''}`);
     },
+    // D926 — PI4's two warnings: an open invitation to this address, and the
+    // member who owns it (their role only).
+    lookupInvitation: (email) =>
+      request(`/admin/partners/invitations/lookup?email=${encodeURIComponent(email)}`),
     createInvitation: (data) =>
       request('/admin/partners/invitations', { method: 'POST', body: JSON.stringify(data) }),
+    // D927 (#2723) — read only. The Overview's blocks (each `{ available, … }`
+    // alone), one invitation (message, step dates, offers seen, chosen deal,
+    // refusals, admin history), and the offers a set of types makes over a
+    // neutral profile. None writes a row or logs a view.
+    overview: () => request('/admin/partners/overview'),
+    getInvitation: (id) => request(`/admin/partners/invitations/${encodeURIComponent(id)}`),
+    previewOffers: (types = []) =>
+      request(`/admin/partners/offers/preview?types=${encodeURIComponent([].concat(types).join(','))}`),
+    // The reply carries `signing_link`: 'renewed' | 'not_renewed' | null (D927).
     resendInvitation: (id) =>
       request(`/admin/partners/invitations/${id}/resend`, { method: 'POST' }),
     revokeInvitation: (id, reason) =>
       request(`/admin/partners/invitations/${id}/revoke`, { method: 'POST', body: JSON.stringify({ reason: reason || '' }) }),
-    listDeals: (status = 'active') =>
-      request(`/admin/partners/deals?status=${encodeURIComponent(status)}`),
+    // A state, as today, or D926's options: `status` (a list, or 'all'),
+    // `q`, `dealType`, `endsWithin`, `hasRedemptions`, `sort`, `limit`, `offset`.
+    listDeals: (statusOrOpts = 'active') => {
+      const opts = typeof statusOrOpts === 'string' ? { status: statusOrOpts } : (statusOrOpts || {});
+      const q = new URLSearchParams();
+      for (const s of [].concat(opts.status || 'active')) q.append('status', s);
+      if (opts.q) q.set('q', opts.q);
+      if (opts.dealType) q.set('deal_type', opts.dealType);
+      if (opts.endsWithin) q.set('ends_within', String(opts.endsWithin));
+      if (opts.hasRedemptions) q.set('has_redemptions', 'true');
+      if (opts.sort) q.set('sort', opts.sort);
+      if (opts.limit) q.set('limit', String(opts.limit));
+      if (opts.offset) q.set('offset', String(opts.offset));
+      return request(`/admin/partners/deals?${q.toString()}`);
+    },
     terminateDeal: (id, reason) =>
       request(`/admin/partners/deals/${id}/terminate`, { method: 'POST', body: JSON.stringify({ reason }) }),
     // Task #26 — operational counters
@@ -1444,6 +1522,7 @@ export const api = {
     URL.revokeObjectURL(url);
   },
   dealCommitments: (id) => request(`/deals/${id}/commitments`),
+  dealCommitmentWithdraw: (id, uid) => request(`/deals/${id}/commitments/${encodeURIComponent(uid)}/withdraw`, { method: 'POST' }),
   createCommitment: (id, data) => request(`/deals/${id}/commitments`, { method: 'POST', body: JSON.stringify(data) }),
   dealActivity: (id) => request(`/deals/${id}/activity`),
   dealInvitations: (id) => request(`/deals/${id}/invitations`),
@@ -1467,7 +1546,6 @@ export const api = {
 
   matchPartnersLegacy: (data) => request('/partners/matchPartners', { method: 'POST', body: JSON.stringify(data) }),
   generateMemo: (data) => request('/scoring/generateMemo', { method: 'POST', body: JSON.stringify(data) }),
-  capitalCall: (data) => request('/capital/capitalCall', { method: 'POST', body: JSON.stringify(data) }),
 
   founderSubmit: (data) => request('/projects/submit', { method: 'POST', body: JSON.stringify(data) }),
 
@@ -1915,7 +1993,6 @@ export const api = {
 
   activityLog: (params) => request(`/activity${params ? `?${new URLSearchParams(params)}` : ''}`),
   activitySummary: () => request('/activity/summary'),
-  activitySyncGithub: () => request('/activity/sync-github', { method: 'POST' }),
 
   // D128 — `q` searches name and email; `envelope: 1` adds the per-role TOTALS
   // over the whole table. Called with no argument this is byte-for-byte the
@@ -1998,16 +2075,16 @@ export const api = {
   //   adminCatalogSync()                       → { ok, synced }
   //   adminCatalogCreateProduct(body)          → { ok, product }
   //   adminCatalogUpdateProduct(id, body)      → { ok }
-  //   adminCatalogArchiveProduct(id)           → { ok }
+  //   adminCatalogArchiveProduct(id, reason)   → { ok }
   //   adminCatalogAddPrice(productId, body)    → { ok, price }
-  //   adminCatalogArchivePrice(priceId)        → { ok }
+  //   adminCatalogArchivePrice(priceId, reason) → { ok }
   // Webhook:
   //   adminStripeListWebhooks()                → { endpoints, required_events, our_url }
   //   adminStripeRegisterWebhook()             → { ok, endpoint_id, url, secret_stored }
   //   adminStripeUpdateWebhookEvents(epId)     → { ok, endpoint_id, url }
   // Config (publishable key):
   //   adminStripeGetConfig()                   → { publishable_key, mode, configured }
-  //   adminStripeSetConfig(pk)                 → { ok, mode }
+  //   adminStripeSetConfig(pk, reason)         → { ok, mode }
   // D232 — `adminCatalogMode` went: no caller, and the mode already rides on
   // `adminCatalogList` and `adminStripeGetConfig`. The route stays.
   adminCatalogList: () => request('/admin/catalog/products'),
@@ -2019,10 +2096,13 @@ export const api = {
       method: 'PATCH',
       body: JSON.stringify(body || {}),
     }),
-  adminCatalogArchiveProduct: (id) =>
+  // D1009: every product and price write carries the admin's `reason` (1 to
+  // 500 characters), recorded with the change; the bodies above take it as a
+  // field, the two archives and the key take it here (D1013).
+  adminCatalogArchiveProduct: (id, reason) =>
     request(`/admin/catalog/products/${encodeURIComponent(id)}/archive`, {
       method: 'POST',
-      body: '{}',
+      body: JSON.stringify({ reason }),
     }),
   adminCatalogAddPrice: (productId, body) =>
     request(`/admin/catalog/products/${encodeURIComponent(productId)}/prices`, {
@@ -2034,10 +2114,10 @@ export const api = {
       method: 'PATCH',
       body: JSON.stringify(body || {}),
     }),
-  adminCatalogArchivePrice: (priceId) =>
+  adminCatalogArchivePrice: (priceId, reason) =>
     request(`/admin/catalog/prices/${encodeURIComponent(priceId)}/archive`, {
       method: 'POST',
-      body: '{}',
+      body: JSON.stringify({ reason }),
     }),
   adminStripeListWebhooks: () => request('/admin/stripe/webhook'),
   adminStripeRegisterWebhook: () =>
@@ -2051,10 +2131,10 @@ export const api = {
       body: JSON.stringify({ action: 'update', endpoint_id: endpointId }),
     }),
   adminStripeGetConfig: () => request('/admin/stripe/config'),
-  adminStripeSetConfig: (publishableKey) =>
+  adminStripeSetConfig: (publishableKey, reason) =>
     request('/admin/stripe/config', {
       method: 'PUT',
-      body: JSON.stringify({ publishable_key: publishableKey }),
+      body: JSON.stringify({ publishable_key: publishableKey, reason }),
     }),
 
   adminDownloadContractUrl: (uid) => `/api/admin/contracts/${uid}/download`,
@@ -2473,6 +2553,13 @@ export const api = {
     ).toString();
     return request(`/refer-earn/admin/submissions${qs ? `?${qs}` : ''}`);
   },
+  adminReferralSubmission: (uid) => request(`/refer-earn/admin/submissions/${encodeURIComponent(uid)}`),
+  adminReferralWeekly: (weeks = 12) => request(`/refer-earn/admin/submissions/weekly?${new URLSearchParams({ weeks })}`),
+  adminStrategicAccess: (params = {}) => {
+    const qs = new URLSearchParams(Object.entries(params).filter(([, v]) => v != null && v !== '')).toString();
+    return request(`/refer-earn/admin/strategic-access${qs ? `?${qs}` : ''}`);
+  },
+  adminStrategicAccessDecision: (userId, data) => request(`/refer-earn/admin/strategic-access/${encodeURIComponent(userId)}/decision`, { method: 'POST', body: JSON.stringify(data) }),
   adminReferralReview: (uid, data) =>
     request(`/refer-earn/admin/submissions/${encodeURIComponent(uid)}`, {
       method: 'PATCH', body: JSON.stringify(data),
@@ -2536,10 +2623,13 @@ export const api = {
   },
   adminUpdateNotes: (userId, admin_notes) => request(`/admin/users/${userId}/notes`, { method: 'POST', body: JSON.stringify({ admin_notes }) }),
   adminResendVerification: (userId) => request(`/admin/users/${userId}/resend-verification`, { method: 'POST' }),
-  // Task #7 — admit a founder to the next Spin-Out Lab cohort (sends the
-  // "You're in" email from the Worker; dev backend sets flags only).
-  adminSpinoutAdmit: (userId, cohort) =>
-    request(`/admin/users/${userId}/spinout-admit`, { method: 'POST', body: JSON.stringify(cohort ? { cohort } : {}) }),
+  // D945 — Users' door to admit without an application: { cycle_id, reason,
+  // company_name?, confirm_over_places? }, into an open cohort. A free-text
+  // cohort label (the old second argument) is refused by the Worker.
+  adminSpinoutAdmit: (userId, admission) =>
+    request(`/admin/users/${userId}/spinout-admit`, {
+      method: 'POST', body: JSON.stringify(typeof admission === 'string' ? { cohort: admission } : (admission || {})),
+    }),
   // Spin-Out Lab cohort application review queue. Accept → admitted flags +
   // "You're in" email; refuse → encouragement-to-re-apply email (Worker).
   adminSpinoutApplications: () => request('/admin/spinout-applications'),
@@ -2585,6 +2675,16 @@ export const api = {
     request('/advisors/admin/cohort-assignments', { method: 'POST', body: JSON.stringify(data) }),
   adminEndAdvisorCohortAssignment: (id) =>
     request(`/advisors/admin/cohort-assignments/${id}`, { method: 'DELETE' }),
+  // D960 — every grant and end (migration 565), newest first: { items, total }.
+  // `params`: assignment_id, cohort_cycle_id, limit (1–200), offset.
+  adminAdvisorCohortHistory: (params = {}) => {
+    const q = new URLSearchParams();
+    for (const k of ['assignment_id', 'cohort_cycle_id', 'limit', 'offset']) {
+      if (params[k] != null && params[k] !== '') q.set(k, String(params[k]));
+    }
+    const qs = q.toString();
+    return request(`/advisors/admin/cohort-assignments/history${qs ? `?${qs}` : ''}`);
+  },
 
   adminCohortTimeline: () => request('/admin/cohort/timeline'),
   adminCohortReview: (cycleId) => request(`/admin/cohort/review${cycleId ? `?cycle_id=${cycleId}` : ''}`),
@@ -2697,6 +2797,16 @@ export const api = {
     { method: 'POST', body: JSON.stringify(slides ? { view_id: viewId, seconds, slides } : { view_id: viewId, seconds }) },
   ),
   deckEngagement: (id) => request(`/decks/${id}/engagement`),
+  // D905 (#2684) — a deck's notes, from its admins to its founders (PD21).
+  deckNotes: (id) => request(`/decks/${id}/notes`),
+  deckPostNote: (id, payload) => request(`/decks/${id}/notes`, { method: 'POST', body: JSON.stringify(payload || {}) }),
+  // D900 (#2679) — the studio's review of one version (PD14), and the venture's reviews per version.
+  // `headers` is the press's own rail context (`railPressHeaders('review:deck-version')`).
+  deckReviewVersion: (id, headers) => request(`/decks/${id}/review`, { ...(headers ? { headers } : {}), method: 'POST', body: JSON.stringify({}) }),
+  deckReviews: (id) => request(`/decks/${id}/reviews`),
+  // The Super Admin's default template by sector and stage; an admin reads it.
+  deckRecommendOverrides: () => request('/decks/admin/recommend-overrides'),
+  deckSetRecommendOverride: (payload) => request('/decks/admin/recommend-overrides', { method: 'PUT', body: JSON.stringify(payload || {}) }),
   // Task #196 — withdraw a share link. Revoking EXPIRES the row rather than
   // deleting it, so the impression history stays attributable to a link the
   // founder can still see they created; idempotent, so a double-click or a
@@ -2712,6 +2822,8 @@ export const api = {
     `/decks/share/${encodeURIComponent(token)}/nda`,
     { method: 'POST', body: JSON.stringify(payload || {}) },
   ),
+  // D902 — the NDA's text before acceptance (PD20 A).
+  deckShareNdaText: (token) => request(`/decks/share/${encodeURIComponent(token)}/nda`),
   deckShareFeedback: (token, payload) => request(
     `/decks/share/${encodeURIComponent(token)}/feedback`,
     { method: 'POST', body: JSON.stringify(payload || {}) },
@@ -2741,11 +2853,6 @@ export const api = {
   // D767 — keep the proposal as the new current version, or discard it (only it).
   deckKeepProposal: (proposalId) => request(`/decks/proposals/${proposalId}/keep`, { method: 'POST', body: '{}' }),
   deckDiscardProposal: (proposalId) => request(`/decks/proposals/${proposalId}`, { method: 'DELETE' }),
-  // Task #10 — one-click positioning: pulls the project's team, traction and
-  // updates, returns { one_liner, elevator_pitch, positioning_lines[],
-  // sourced_from }. 503 `ai_unavailable` when no AI provider is configured
-  // (dev FastAPI has no such route → shows an explicit error, never fake lines).
-  deckPositioning: (projectId, headers) => request('/decks/positioning', { method: 'POST', headers, body: JSON.stringify({ project_id: projectId }) }),
   // Task #41 — assemble the NEW 10-slide Spin-Out deck DATA + NOTES + gaps[]
   // (the Worker remaps the live Lab data). The browser renders/downloads the
   // .pptx from this via frontend/src/decks/spinout/buildDeck.js. Returns
@@ -2781,6 +2888,22 @@ export const api = {
       },
       body: JSON.stringify({ format }),
     }),
+  // D901 (#2680) — the version as one self-contained HTML file; the Worker
+  // records it (`deck_exports` plus an audit row) before answering. Raw
+  // Response, like deckExport: the caller reads the file or the refusal.
+  deckExportHtml: (id, { notes = false, sources = false } = {}) =>
+    fetch(`${BASE}/decks/${id}/export/html`, {
+      method: 'POST',
+      credentials: 'include',
+      headers: {
+        'Content-Type': 'application/json',
+        ...getAuthHeaders(),
+        ...getCsrfHeader('POST'),
+      },
+      body: JSON.stringify({ notes: Boolean(notes), sources: Boolean(sources) }),
+    }),
+  // D901 — every export of the deck's venture, newest first (50).
+  deckExportList: (id) => request(`/decks/${id}/exports`),
   // Task #2 — public, HMAC-token-gated deck payload consumed by the
   // headless Browser-Rendering session driving server-side exports.
   // No auth cookies/JWT are sent because the session has none; the
@@ -3393,6 +3516,11 @@ export const api = {
     request(`/perks/partner/${encodeURIComponent(uid)}/redeem`, { method: 'POST', body: JSON.stringify(data || {}) }),
   perkRate: (uid, stars) =>
     request(`/perks/${encodeURIComponent(uid)}/rating`, { method: 'POST', body: JSON.stringify({ stars }) }),
+  adminPerkClaims: (weeks = 12) => request(`/perks/admin/claims?${new URLSearchParams({ weeks })}`),
+  adminPerkListings: (params = {}) => {
+    const qs = new URLSearchParams(Object.entries(params).filter(([, v]) => v != null && v !== '')).toString();
+    return request(`/perks/admin/listings${qs ? `?${qs}` : ''}`);
+  },
   perkReviewQueue: () => request('/perks/admin/queue'),
   perkReview: (uid, data) =>
     request(`/perks/admin/${encodeURIComponent(uid)}/review`, { method: 'POST', body: JSON.stringify(data || {}) }),
@@ -3710,7 +3838,15 @@ export const api = {
     request(`/captable/scenarios/${uid}`, { method: 'PUT', body: JSON.stringify(data) }),
   deleteCapTableScenario: (uid) =>
     request(`/captable/scenarios/${uid}`, { method: 'DELETE' }),
-  exportCapTableCsvUrl: (uid) => `/api/captable/scenarios/${uid}/export.csv`,
+  // D1016: the CSV as a blob, with `request()`'s headers (bearer, CSRF, company, rail) and the
+  // cookie; a refusal throws its own sentence, which the page shows in place.
+  downloadCapTableCsv: async (uid) => {
+    const res = await fetch(`${BASE}/captable/scenarios/${encodeURIComponent(uid)}/export.csv`, {
+      method: 'GET', headers: rawRequestHeaders('GET'), credentials: 'include',
+    });
+    if (!res.ok) throw await refusalError(res, 'The CSV could not be downloaded.');
+    return res.blob();
+  },
   // 409A safe harbour — appraisals on file plus the material events that
   // can end the presumption before the 12 months are up.
   get409a: (projectId) => request(`/captable/409a/${projectId}`),
@@ -3950,8 +4086,9 @@ export const api = {
   trustScore: (userId) => request(`/trust/score/${encodeURIComponent(userId)}`),
   // Task #40 — batch the per-row trust-score lookups on AdminPage / DealsPage
   // into a single request. Returns { scores: [{ user_id, score, missing[],
-  // required_total }] } in the same order the ids were sent. Admin/partner/
-  // investor only; founders should keep using `trustScore(userId)` for self.
+  // required_total }] } in the same order the ids were sent. D1074: the single
+  // read's rule for every id (self, this territory's admin, an open intro or
+  // deal's counterparty); one id the caller may not read refuses the batch.
   trustScoreBatch: (userIds) => request('/trust/score/batch', {
     method: 'POST',
     body: JSON.stringify({ user_ids: userIds }),
@@ -4651,7 +4788,9 @@ export const api = {
   googleCalStatus: () => request('/calendar/google/status'),
   googleCalConnect: ({ return_to, project_id } = {}) =>
     request(`/calendar/google/connect${return_to ? `?return_to=${encodeURIComponent(return_to)}${project_id ? `&project_id=${encodeURIComponent(project_id)}` : ''}` : ''}`, { method: 'POST' }),
+  googleCalRemoveGmailAccess: () => request('/calendar/google/remove-gmail-access', { method: 'POST' }),
   googleCalDisconnect: () => request('/calendar/google', { method: 'DELETE' }),
+  googleCalForceDisconnect: () => request('/calendar/google/force-disconnect', { method: 'POST' }),
   googleCalSync: () => request('/calendar/google/sync', { method: 'POST' }),
 
   // Microsoft 365 / Outlook Calendar sync
@@ -5287,7 +5426,16 @@ export const adminExploring = {
 // Task #1 — Admin advisor & partner network profiles (drives Spin-Out
 // Demo Day deck's Advisors & Network slide).
 export const adminNetworkProfiles = {
-  list: () => request('/admin/network-profiles'),
+  // D974: `{ state: 'shown' | 'hidden' | 'archived', q, limit }`; with no
+  // state the Worker lists shown and hidden rows.
+  list: (params = {}) => {
+    const qs = new URLSearchParams();
+    for (const k of ['state', 'q', 'limit']) if (params[k] != null && params[k] !== '') qs.set(k, String(params[k]));
+    const tail = qs.toString();
+    return request(`/admin/network-profiles${tail ? `?${tail}` : ''}`);
+  },
+  archive: (id) => request(`/admin/network-profiles/${id}/archive`, { method: 'POST' }),
+  restore: (id) => request(`/admin/network-profiles/${id}/restore`, { method: 'POST' }),
   create: (payload) => request('/admin/network-profiles', { method: 'POST', body: JSON.stringify(payload) }),
   update: (id, patch) => request(`/admin/network-profiles/${id}`, { method: 'PUT', body: JSON.stringify(patch) }),
   remove: (id) => request(`/admin/network-profiles/${id}`, { method: 'DELETE' }),
@@ -5406,6 +5554,9 @@ export const adminX = {
       method: 'POST',
       body: JSON.stringify(override_reason ? { override_reason } : {}),
     }),
+  resolvePost: (id, outcome) => request(`/admin/x/posts/${id}/resolve`, {
+    method: 'POST', body: JSON.stringify(outcome),
+  }),
   schedulePost: (id, scheduled_for) =>
     request(`/admin/x/posts/${id}/schedule`, {
       method: 'POST', body: JSON.stringify({ scheduled_for }),
@@ -5622,11 +5773,14 @@ export const events = {
 
 // Public (no-auth) event surface — feed, detail, register, invite response.
 export const eventsPublic = {
-  list: ({ limit = 20, offset = 0, type, from, to, q, past } = {}) => {
+  // D1032: `format` (virtual, in_person, hybrid) and `price` (free, paid); the reply carries an exact `total`.
+  list: ({ limit = 20, offset = 0, type, from, to, q, past, format, price } = {}) => {
     const qs = new URLSearchParams();
     qs.set('limit', String(limit));
     qs.set('offset', String(offset));
     if (type) qs.set('type', type);
+    if (format) qs.set('format', format);
+    if (price) qs.set('price', price);
     if (from) qs.set('from', from);
     if (to) qs.set('to', to);
     if (q) qs.set('q', q);
@@ -5650,19 +5804,29 @@ export const eventsPublic = {
 
 // Admin event review queue (§8.3).
 export const adminEvents = {
-  list: ({ status, limit = 50, offset = 0 } = {}) => {
+  // D918: status takes one word or a list; the other filters and the sort are
+  // the Worker's words (visibility, when, price, featured, q, sort, dir).
+  list: ({ status, visibility, when, price, featured, q, sort, dir, limit = 50, offset = 0 } = {}) => {
     const qs = new URLSearchParams();
-    if (status) qs.set('status', status);
+    if (status) qs.set('status', Array.isArray(status) ? status.join(',') : status);
+    for (const [k, v] of Object.entries({ visibility, when, price, q, sort, dir })) if (v) qs.set(k, v);
+    if (featured != null) qs.set('featured', featured ? '1' : '0');
     qs.set('limit', String(limit));
     qs.set('offset', String(offset));
     return request(`/admin/events?${qs.toString()}`);
   },
+  overview: (weeks = 12) => request(`/admin/events/overview?weeks=${encodeURIComponent(weeks)}`),
+  summary: (id) => request(`/admin/events/${id}/summary`),
+  history: (id) => request(`/admin/events/${id}/history`),
+  compPreview: (id) => request(`/admin/events/${id}/comp-preview`),
   get: (id) => request(`/admin/events/${id}`),
   approve: (id) => request(`/admin/events/${id}/approve`, { method: 'POST', body: '{}' }),
   reject: (id, reason) => request(`/admin/events/${id}/reject`, { method: 'POST', body: JSON.stringify({ reason }) }),
-  unpublish: (id) => request(`/admin/events/${id}/unpublish`, { method: 'POST', body: '{}' }),
+  // D917: the host is told, with the optional note (D922 sends it).
+  unpublish: (id, note = '') => request(`/admin/events/${id}/unpublish`, { method: 'POST', body: JSON.stringify(note ? { note } : {}) }),
   feature: (id, featured) => request(`/admin/events/${id}/feature`, { method: 'POST', body: JSON.stringify({ featured }) }),
-  cancel: (id) => request(`/admin/events/${id}/cancel`, { method: 'POST', body: '{}' }),
+  // D917: registrants with an account are told, with the optional note (D922 sends it).
+  cancel: (id, note = '') => request(`/admin/events/${id}/cancel`, { method: 'POST', body: JSON.stringify(note ? { note } : {}) }),
   // capacity: null clears the cap (unlimited). Promotes the waitlist server-side.
   setCapacity: (id, capacity) =>
     request(`/admin/events/${id}/capacity`, { method: 'POST', body: JSON.stringify({ capacity }) }),

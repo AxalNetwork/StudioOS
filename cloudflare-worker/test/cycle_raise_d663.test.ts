@@ -1,3 +1,4 @@
+import { raiseEvidenceTables } from './_raise_evidence_fixture.ts';
 /**
  * D663 (#1476) — `/api/cycles/raise` on real SQLite: the baseline's own
  * tables, migration 442 applied over them, the routes mounted on a bare Hono.
@@ -55,6 +56,7 @@ function fixture() {
   db.exec(sqlOf('249_project_metrics.sql'));
   db.exec(MIG442);
   db.exec(MIG463);
+  raiseEvidenceTables(db);
   personalMatchTables(db); // D752: Capital relationships reads a raise receipt's posted date
   const u = db.prepare('INSERT INTO users (id, role, name, email, is_active, founder_id) VALUES (?, ?, ?, ?, 1, ?)');
   u.run(FOUNDER, 'founder', 'Fay Founder', 'fay@example.test', 1001);
@@ -162,8 +164,9 @@ test('readiness with no items returns empty, with the action that starts it', as
   assert.equal(bars.items.length, 7);
   assert.equal(bars.items.find((i: any) => i.label === 'Use of funds').value, 10);
   assert.equal(bars.items.find((i: any) => i.label === 'Team').value, null, 'no check measures the team: Not recorded, never 0');
-  // Mean of the six computed scores (use of funds 10, the rest 0) out of 100.
-  assert.equal(fig((await overview(db)).body, 'readiness_score').value, Math.round((10 / 6) * 10));
+  assert.equal(bars.items.find((i: any) => i.label === 'Investor narrative').value, null, 'nothing compared is unscored');
+  // The narrative has no comparison and stays unscored; mean of five numeric checks.
+  assert.equal(fig((await overview(db)).body, 'readiness_score').value, Math.round((10 / 5) * 10));
   // D691 decision 12: one row on each re-scored item's record.
   assert.deepEqual(db.prepare("SELECT entity_id FROM activity_logs WHERE entity_type = 'raise.fundraising-readiness' AND action = 'readiness_rescored' AND user_id = ? ORDER BY entity_id").all(FOUNDER).map((r: any) => r.entity_id),
     ['cap_table', 'data_room', 'deck', 'narrative', 'traction', 'use_of_funds']);
@@ -211,26 +214,26 @@ test('every mismatch cites both of its figures', async () => {
   assert.equal(res.status, 201);
   assert.equal(res.body.version, 1);
   const found = res.body.mismatches;
-  // The deck's MRR (40,000 against 38,000), and the narrative's MRR, customers and raise.
-  // The deck's customers (12) and raise ($1M) agree with the stores and are not listed.
-  assert.deepEqual(found.map((m: any) => `${m.figure}:${m.stated_value}`).sort(), ['mrr:40000', 'mrr:45000', 'paying_customers:15', 'raise:1500000']);
+  // Only the version states figures: project columns are not a deck binding.
+  assert.deepEqual(found.map((m: any) => `${m.figure}:${m.stated_value}`).sort(), ['mrr:45000', 'paying_customers:15', 'raise:1500000']);
   for (const m of found) {
     assert.ok(Number.isFinite(m.stated_value) && Number.isFinite(m.metric_value), 'both values');
     assert.ok(m.stated_source && m.metric_source && m.stated_source !== m.metric_source, 'both sources, and they differ');
   }
-  assert.equal(found.find((m: any) => m.stated_value === 40000).metric_source, 'Metrics · project_metrics.mrr on 2026-10-01', 'the newest snapshot');
+  assert.equal(found.find((m: any) => m.stated_value === 45000).metric_source, 'Metrics (stated: manual) · project_metrics.mrr on 2026-10-01', 'the newest snapshot');
   // Stored for the version, and drawn on the card as a sentence naming both sides.
-  assert.equal(db.prepare('SELECT COUNT(*) AS n FROM narrative_checks WHERE project_id = ? AND version = 1').get(P).n, 4);
+  assert.equal(db.prepare('SELECT COUNT(*) AS n FROM narrative_checks WHERE project_id = ? AND version = 1').get(P).n, 3);
   const c = card((await overview(db)).body, 'investor-narrative');
-  const lines = c.series.find((s: any) => s.kind === 'rows').items.filter((i: any) => i.tone === 'warn' && i.label !== 'Mismatches');
-  assert.equal(lines.length, 4);
+  const lines = c.series.find((s: any) => s.kind === 'rows').items.filter((i: any) => i.tone === 'warn' && i.label !== 'Comparison');
+  assert.equal(lines.length, 3);
   for (const l of lines) assert.match(String(l.value), /^.+ in .+, .+ in .+$/);
-  assert.ok(lines.some((l: any) => l.value === 'MRR: $40,000 in Deck · projects.mrr, $38,000 in Metrics · project_metrics.mrr on 2026-10-01'));
+  assert.ok(lines.some((l: any) => l.value === 'MRR: $45,000 in Narrative · traction.takeaway, $38,000 in Metrics (stated: manual) · project_metrics.mrr on 2026-10-01'));
+  assert.equal(c.next.href, `/raise/investor-narrative/check?project_id=${P}`);
   // The version is the deck wording copied, plus its marker; the live wording is untouched.
   assert.equal(db.prepare('SELECT COUNT(*) AS n FROM spinout_deck_overrides WHERE project_id = ? AND version = 0').get(P).n, 2);
   assert.equal(db.prepare("SELECT COUNT(*) AS n FROM spinout_deck_overrides WHERE project_id = ? AND version = 1 AND investor_type = 'seed_fund'").get(P).n, 3);
   const rec = await moduleRead(db, 'investor-narrative');
-  assert.deepEqual(rec.body.records.rows[0].cells.mismatches, { text: '4', tone: 'warn' });
+  assert.deepEqual(rec.body.records.rows[0].cells.mismatches, { text: '3', tone: 'warn' });
   assert.equal(rec.body.records.rows[0].cells.investor_type, 'Seed fund');
   assert.equal((await call(db, FOUNDER, 'POST', `/narrative-versions?project=${P}`, { investor_type: 'whale' })).status, 400);
 });
@@ -383,6 +386,7 @@ test('funnelOf counts each prospect at every stage it reached', () => {
 
 test('data room: checklist coverage by area, a file matched through the writer, views by user', async () => {
   const db = fixture();
+  db.exec(`INSERT INTO data_room_grants(uid,project_id,investor_user_id,granted_by_user_id) VALUES('grant-live',${P},${INVESTOR},${FOUNDER}); INSERT INTO pairwise_ndas(party_a_user_id,party_b_user_id,status) VALUES(${FOUNDER},${INVESTOR},'active')`);
   db.exec(`INSERT INTO data_room_folders (id, uid, project_id, name) VALUES (1, 'f1', ${P}, 'Legal')`);
   db.exec(`INSERT INTO data_room_files (id, uid, project_id, folder_id, name, r2_key, visibility) VALUES
            (1, 'x1', ${P}, 1, 'COI.pdf', 'k1', 'nda'), (2, 'x2', ${P}, NULL, 'Model.xlsx', 'k2', 'open')`);
@@ -449,7 +453,7 @@ test('use of funds: the split, cash over 18 months, and monthly per category not
 test('committed against target: the pair when a round has a target', async () => {
   const db = fixture();
   db.exec(`INSERT INTO raise_rounds (uid, project_id, name, target_amount, status) VALUES ('r1', ${P}, 'Seed', 1000000, 'active')`);
-  db.exec(`INSERT INTO raise_prospects (uid, project_id, name, stage, amount) VALUES ('a', ${P}, 'A', 'committed', 250000), ('b', ${P}, 'B', 'meeting', 400000)`);
+  db.exec(`INSERT INTO raise_prospects (uid, project_id, name, stage, commit_status, amount) VALUES ('a', ${P}, 'A', 'committed', 'signed', 250000), ('b', ${P}, 'B', 'meeting', NULL, 400000)`);
   const f = fig((await overview(db)).body, 'committed');
   assert.deepEqual([f.unit, f.value], ['of', [250000, 1000000]]);
 });
@@ -579,7 +583,7 @@ test('D686 #1594: Calls history is scoped, newest first, with independent recipi
     assert.deepEqual([calls.items[0].recipients,calls.items[0].committed_cents,calls.items[0].unanswered_questions],[0,0,0]);
     assert.equal(JSON.stringify(calls).includes('rhea@example.test')||JSON.stringify(calls).includes('Quinn Quiet'),false);
     assert.equal((await moduleRead(db,'capital-relationships','',OTHER)).status,403);
-    assert.equal(Object.hasOwn((await moduleRead(db,'use-of-funds')).body,'parts'),false,'only Capital relationships gains Calls');
+    assert.equal((await moduleRead(db,'use-of-funds')).body.parts?.calls,undefined,'only Capital relationships gains Calls');
   } finally {FLAGS={};}
   assert.deepEqual((await moduleRead(db,'capital-relationships')).body.parts.calls,{enabled:false});
 });
@@ -643,4 +647,50 @@ test('D686 #1594 Calls history mutations: flag, project scope, date, counts and 
     await check(real,which);
     await assert.rejects(()=>check(bad,which),{name:'AssertionError'});
   }
+});
+
+
+test('#2445: readiness coverage counts valid checks, never historical manual overrides',async()=>{
+ const db=fixture();
+ try {
+  assert.deepEqual(fig((await overview(db)).body,'readiness_score').coverage,{scored:0,total:7});
+  db.exec("INSERT INTO readiness_items(id,project_id,item_key,label,position) VALUES(900,1,'traction','Traction',5),(901,1,'team','Team',6)");
+  db.exec("INSERT INTO readiness_scores(item_id,project_id,score,evidence,source) VALUES(900,1,4,'measured','computed'),(900,1,10,'pattern','manual'),(901,1,10,'measured','manual')");
+  const {loadReadiness}=await import('../src/services/raiseCycle.ts');
+ assert.equal((await loadReadiness({env:env(db),projectId:P} as any)).scores.length,1);
+ let f=fig((await overview(db)).body,'readiness_score');
+  assert.deepEqual(f.coverage,{scored:1,total:7}); assert.equal(f.value,40);
+  db.exec("INSERT INTO readiness_scores(item_id,project_id,score,evidence,source) VALUES(901,1,6,'pattern','manual')");
+  f=fig((await overview(db)).body,'readiness_score');
+  assert.deepEqual(f.coverage,{scored:2,total:7}); assert.equal(f.value,50);
+ }finally{db.close();}
+});
+
+test('#2445: benchmark explicitly identifies the separate Lab score',async()=>{
+ const {benchmarkRows}=await import('../src/services/raiseCycle.ts');
+ assert.equal(benchmarkRows({state:'empty',own_score:7,reason:'Not enough peers'} as any)[0].label,'Your Lab score');
+});
+
+
+test('#2691: an unstated project figure is never compared, and no comparisons are explicit', async () => {
+  const db = fixture();
+  try {
+    db.exec(`UPDATE projects SET mrr=90000, paying_customers=200, funding_needed=9000000 WHERE id=${P}`);
+    db.exec(`INSERT INTO project_metrics(project_id,snapshot_date,mrr,paying_accounts) VALUES(${P},'2026-10-01',0,0)`);
+    const saved = await call(db, FOUNDER, 'POST', `/narrative-versions?project=${P}`, { investor_type:'angel', start_from:'blank', one_liner:'Words without a figure' });
+    assert.equal(saved.status,201);
+    assert.deepEqual(saved.body.mismatches,[]);
+    const {checkInputs, computeReadiness}=await import('../src/services/raiseCycle.ts');
+    const env={DB:d1Over(db)} as any;
+    assert.equal((await checkInputs(env,P,1)).compared,0);
+    const input=(await computeReadiness(env,P)).find(c=>c.key==='narrative')!;
+    assert.equal(input.compared_count,0);
+    assert.equal(input.missing,'Not enough recorded');
+    assert.match(input.reads.find(r=>r.a==='Consistency check')!.b,/nothing compared yet/i);
+    const c=card((await overview(db)).body,'investor-narrative');
+    assert.equal(c.series.find((s:any)=>s.kind==='rows').items.find((i:any)=>i.label==='Comparison').value,'Nothing compared yet');
+    db.prepare("UPDATE spinout_deck_overrides SET value=? WHERE project_id=? AND version=1 AND field_key='cover.thesis'").run('We have $0 MRR',P);
+    assert.equal((await checkInputs(env,P,1)).compared,1,'a recorded zero can be compared');
+    assert.equal((await computeReadiness(env,P)).find(c=>c.key==='narrative')!.missing,null);
+  } finally {db.close();}
 });

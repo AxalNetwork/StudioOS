@@ -13,7 +13,7 @@ const SIZE = {
 };
 
 export default function TrustScoreBadge({
-  score = 0,
+  score = null,
   size = 'md',
   label,
   missing,
@@ -23,14 +23,17 @@ export default function TrustScoreBadge({
   const c = 2 * Math.PI * r;
   const dash = (Math.max(0, Math.min(100, score)) / 100) * c;
   const tone =
+    score == null ? 'text-slate-500 dark:text-slate-400' :
     score >= 90 ? 'text-emerald-600'  :
     score >= 60 ? 'text-amber-600'    :
                   'text-red-600';
   const ring =
+    score == null ? 'stroke-slate-300 dark:stroke-slate-600' :
     score >= 90 ? 'stroke-emerald-500' :
     score >= 60 ? 'stroke-amber-500'   :
                   'stroke-red-500';
   const tooltip =
+    score == null ? 'Trust score not recorded' :
     missing && missing.length
       ? `Missing: ${missing.slice(0, 6).join(', ')}${missing.length > 6 ? '…' : ''}`
       : 'All required obligations satisfied';
@@ -55,7 +58,7 @@ export default function TrustScoreBadge({
           />
         </svg>
         <span className={`absolute inset-0 flex items-center justify-center font-semibold ${s.font} ${tone}`}>
-          {score}
+          {score ?? '—'}
         </span>
       </span>
       {label !== false && (

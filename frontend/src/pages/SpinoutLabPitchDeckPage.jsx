@@ -165,7 +165,9 @@ export default function SpinoutLabPitchDeckPage() {
     } catch (e) {
       if (e?.status === 405 || e?.status === 404) {
         if (current) return api.deckGet(current.id);
+        // D897: /generate proposes the deck; this fallback keeps every card as the version it presents.
         const gen = await api.deckGenerate(projectId);
+        if (gen?.proposal?.id) return (await api.deckKeepProposal(gen.proposal.id))?.deck;
         return gen?.deck || gen;
       }
       throw e;

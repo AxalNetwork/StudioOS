@@ -8,7 +8,7 @@
  * Public endpoints (auth-required, user-facing):
  *   GET  /api/catalog/products[?kind=]   read mirrored catalog
  *
- * Admin endpoints (requireAdmin, admin perimeter):
+ * HQ endpoints (D1009: Super Admin reads/sync; fresh TOTP step-up and reason for product/price writes):
  *   POST /api/admin/catalog/sync                        re-pull from Stripe → D1
  *   GET  /api/admin/catalog/mode                        Stripe Test vs Live flag
  *   GET  /api/admin/catalog/products                    list all products (admin view)
@@ -18,6 +18,17 @@
  *   POST /api/admin/catalog/products/:id/prices         add price + re-sync
  *   PATCH /api/admin/catalog/prices/:priceId            update price nickname/metadata
  *   POST /api/admin/catalog/prices/:priceId/archive     set price active=false + re-sync
+ *
+ * D1010 Payments part 2 (#2829):
+ *   GET  /api/admin/catalog/products      also returns `checks`, `keys` (the two
+ *                                         keys' modes, never a key), and per
+ *                                         product `plan`, `shows_on`, and per
+ *                                         price `allowance_microusd`
+ *   GET  /api/admin/catalog/members       requireSuperAdmin: live members per
+ *                                         price and per plan family and interval
+ *   POST /api/admin/catalog/prices/:priceId/change
+ *        requireSuperAdminWriteBar        {unit_amount, reason, idempotency_key, nickname?}
+ *                                         add the new price, archive the old
  *
  * D755 token packs (requireSuperAdmin, #1919):
  *   POST  /api/admin/catalog/token-packs                {amount_usd, idempotency_key}  create product + price + row
@@ -29,7 +40,7 @@
  */
 import { Hono } from 'hono';
 import type { Env } from '../types';
-import { requireAuth, requireAdmin, requireSuperAdmin } from '../auth';
+import { requireAuth, requireSuperAdmin, requireSuperAdminWriteBar } from '../auth';
 import {
   getCatalog,
   syncCatalog,
@@ -39,6 +50,7 @@ import {
   AUDIENCE_CATEGORIES,
   stripeMode,
   validateProductMetadata,
+  paymentChangeReason,
   createProduct,
   updateProduct,
   archiveProduct,
@@ -47,6 +59,8 @@ import {
   archivePrice,
   findCatalogProductByPriceId,
   fetchAndMirrorPrice,
+  getPublishableKey,
+  publishableKeyMode,
   type ProductKind,
   type UpdateProductBody,
   type CreatePriceBody,
@@ -54,6 +68,8 @@ import {
 import { ensureAdminAuditLogTable } from './admin';
 import { isTokenPackPrice, isTokenPackProduct, packLabel, TOKEN_PACK_LIMITS } from '../services/aiCredits';
 import { refuse } from '../util/refusal';
+import { annotateCatalog, catalogChecks, changePrice, membersPerPlan, packProductIds } from '../services/paymentsCatalog';
+import { StripeApiError } from '../util/stripeError';
 
 // ---------- public read ----------
 const catalog = new Hono<{ Bindings: Env }>();
@@ -113,8 +129,14 @@ async function productIsPack(env: Env, productId: string): Promise<boolean> {
   return mirrored?.kind === 'token_pack';
 }
 
+/** What a failed sync records (D1011): Stripe's HTTP status and error code when Stripe refused, else that it was not Stripe. */
+export function syncFailureOf(e: unknown): Record<string, unknown> {
+  if (e instanceof StripeApiError) return { failure: 'stripe', stripe_status: e.status, stripe_code: e.code };
+  return { failure: 'other' };
+}
+
 adminCatalog.post('/sync', async (c) => {
-  const admin = await requireAdmin(c);
+  const admin = await requireSuperAdmin(c);
   try {
     const result = await syncCatalog(c.env);
     await writeAdminAudit(c.env, admin.id, 'catalog_sync', {
@@ -122,30 +144,62 @@ adminCatalog.post('/sync', async (c) => {
     });
     return c.json({ ok: true, ...result });
   } catch (e) {
+    // D1011 (PAY6 C): a failed sync is recorded too, with who started it and
+    // what kind of failure it was. Stripe's status and code only, never its
+    // text, so nothing the call carried can reach the log.
+    await writeAdminAudit(c.env, admin.id, 'catalog_sync_failed', syncFailureOf(e));
     return refuse(c, 502, { code: 'catalog_sync_failed', message: 'The catalogue could not be synced with Stripe. Nothing changed; try again in a moment.', raw: e, audience: 'admin' });
   }
 });
 
 // GET /mode — Stripe Test vs Live flag (never returns the secret key value).
 adminCatalog.get('/mode', async (c) => {
-  await requireAdmin(c);
+  await requireSuperAdmin(c);
   return c.json({ mode: stripeMode(c.env) });
 });
 
 // GET /products — full catalog list (admin view: all kinds, active + inactive).
+// D1010: with the catalogue's checks, the two keys' modes (never a key), and
+// per product its plan, where it shows and its yearly saving, per price the AI
+// allowance it gives. The pack store failing fails the read: without it a
+// pack would be called an add-on.
 adminCatalog.get('/products', async (c) => {
-  await requireAdmin(c);
+  await requireSuperAdmin(c);
+  let products;
+  let packs;
   try {
-    const products = await getCatalog(c.env);
-    return c.json({ products, mode: stripeMode(c.env), audience_categories: AUDIENCE_CATEGORIES });
+    products = await getCatalog(c.env);
+    packs = await packProductIds(c.env);
   } catch (e) {
     return refuse(c, 502, { code: 'catalog_read_failed', message: 'The catalogue could not be read. Try again in a moment.', raw: e, audience: 'admin' });
+  }
+  const accountMode = stripeMode(c.env);
+  // `getPublishableKey` reads KV, then the environment, and answers null for neither.
+  const publishableMode = publishableKeyMode(await getPublishableKey(c.env));
+  return c.json({
+    products: annotateCatalog(products, packs), mode: accountMode, audience_categories: AUDIENCE_CATEGORIES,
+    keys: { account_mode: accountMode, publishable_mode: publishableMode }, checks: catalogChecks(products, { accountMode, publishableMode }),
+  });
+});
+
+// GET /members — D1010: live members per price, and per plan family and
+// interval, from the charges the subscription webhook recorded. HQ's: Super
+// Admin only. A failed read is a 502 with a sentence, never an empty count.
+adminCatalog.get('/members', async (c) => {
+  await requireSuperAdmin(c);
+  try {
+    const products = await getCatalog(c.env);
+    return c.json(await membersPerPlan(c.env, products));
+  } catch (e) {
+    return refuse(c, 502, { code: 'members_read_failed', message: 'The members per plan could not be read. That is not a claim that there are none.', raw: e, audience: 'admin' });
   }
 });
 
 // POST /products — create a Stripe Product + mirror. Validates metadata taxonomy.
 adminCatalog.post('/products', async (c) => {
-  const admin = await requireAdmin(c);
+  const admin = await requireSuperAdminWriteBar(c);
+  const reason = paymentChangeReason(await c.req.json().catch(() => null));
+  if (!reason) return c.json({ error: 'reason_required', message: 'Give a reason of 1 to 500 characters for this payment change.' }, 400);
   if (!c.env.STRIPE_SECRET_KEY) return c.json({ error: 'stripe_not_configured' }, 503);
 
   let body: Record<string, unknown> = {};
@@ -182,6 +236,7 @@ adminCatalog.post('/products', async (c) => {
   try {
     const product = await createProduct(c.env, { name, kind, metadata, description });
     await writeAdminAudit(c.env, admin.id, 'catalog_product_create', {
+      reason,
       product_id: product.id,
       name,
       kind,
@@ -194,7 +249,9 @@ adminCatalog.post('/products', async (c) => {
 
 // PATCH /products/:id — update name/metadata/description.
 adminCatalog.patch('/products/:id', async (c) => {
-  const admin = await requireAdmin(c);
+  const admin = await requireSuperAdminWriteBar(c);
+  const reason = paymentChangeReason(await c.req.json().catch(() => null));
+  if (!reason) return c.json({ error: 'reason_required', message: 'Give a reason of 1 to 500 characters for this payment change.' }, 400);
   if (!c.env.STRIPE_SECRET_KEY) return c.json({ error: 'stripe_not_configured' }, 503);
   const id = c.req.param('id');
   if (await productIsPack(c.env, id)) return c.json(PACK_MANAGED, 409);
@@ -237,6 +294,7 @@ adminCatalog.patch('/products/:id', async (c) => {
   try {
     await updateProduct(c.env, id, update);
     await writeAdminAudit(c.env, admin.id, 'catalog_product_update', {
+      reason,
       product_id: id,
       update,
     });
@@ -248,13 +306,15 @@ adminCatalog.patch('/products/:id', async (c) => {
 
 // POST /products/:id/archive — set active=false on the Stripe Product.
 adminCatalog.post('/products/:id/archive', async (c) => {
-  const admin = await requireAdmin(c);
+  const admin = await requireSuperAdminWriteBar(c);
+  const reason = paymentChangeReason(await c.req.json().catch(() => null));
+  if (!reason) return c.json({ error: 'reason_required', message: 'Give a reason of 1 to 500 characters for this payment change.' }, 400);
   if (!c.env.STRIPE_SECRET_KEY) return c.json({ error: 'stripe_not_configured' }, 503);
   const id = c.req.param('id');
   if (await productIsPack(c.env, id)) return c.json(PACK_MANAGED, 409);
   try {
     await archiveProduct(c.env, id);
-    await writeAdminAudit(c.env, admin.id, 'catalog_product_archive', { product_id: id });
+    await writeAdminAudit(c.env, admin.id, 'catalog_product_archive', { reason, product_id: id });
     return c.json({ ok: true });
   } catch (e) {
     return refuse(c, 502, { code: 'archive_failed', message: 'The product could not be archived in Stripe. Nothing changed; try again in a moment.', raw: e, audience: 'admin' });
@@ -263,7 +323,9 @@ adminCatalog.post('/products/:id/archive', async (c) => {
 
 // POST /products/:id/prices — add a Price to an existing Product.
 adminCatalog.post('/products/:id/prices', async (c) => {
-  const admin = await requireAdmin(c);
+  const admin = await requireSuperAdminWriteBar(c);
+  const reason = paymentChangeReason(await c.req.json().catch(() => null));
+  if (!reason) return c.json({ error: 'reason_required', message: 'Give a reason of 1 to 500 characters for this payment change.' }, 400);
   if (!c.env.STRIPE_SECRET_KEY) return c.json({ error: 'stripe_not_configured' }, 503);
   const productId = c.req.param('id');
   if (await productIsPack(c.env, productId)) return c.json(PACK_MANAGED, 409);
@@ -300,6 +362,7 @@ adminCatalog.post('/products/:id/prices', async (c) => {
   try {
     const price = await createPrice(c.env, productId, priceBody);
     await writeAdminAudit(c.env, admin.id, 'catalog_price_create', {
+      reason,
       product_id: productId,
       price_id: price.id,
     });
@@ -312,7 +375,9 @@ adminCatalog.post('/products/:id/prices', async (c) => {
 // PATCH /prices/:priceId — update a price's mutable fields (nickname, metadata).
 // Stripe Prices are mostly immutable; only nickname and metadata can change.
 adminCatalog.patch('/prices/:priceId', async (c) => {
-  const admin = await requireAdmin(c);
+  const admin = await requireSuperAdminWriteBar(c);
+  const reason = paymentChangeReason(await c.req.json().catch(() => null));
+  if (!reason) return c.json({ error: 'reason_required', message: 'Give a reason of 1 to 500 characters for this payment change.' }, 400);
   if (!c.env.STRIPE_SECRET_KEY) return c.json({ error: 'stripe_not_configured' }, 503);
   const priceId = c.req.param('priceId');
   if (await isTokenPackPrice(c.env, priceId)) return c.json(PACK_MANAGED, 409);
@@ -334,7 +399,7 @@ adminCatalog.patch('/prices/:priceId', async (c) => {
 
   try {
     await updatePrice(c.env, priceId, patch);
-    await writeAdminAudit(c.env, admin.id, 'catalog_price_update', { price_id: priceId, patch });
+    await writeAdminAudit(c.env, admin.id, 'catalog_price_update', { reason, price_id: priceId, patch });
     return c.json({ ok: true });
   } catch (e) {
     return refuse(c, 502, { code: 'update_price_failed', message: 'The price could not be updated in Stripe. Nothing changed; try again in a moment.', raw: e, audience: 'admin' });
@@ -343,17 +408,72 @@ adminCatalog.patch('/prices/:priceId', async (c) => {
 
 // POST /prices/:priceId/archive — set Stripe Price active=false.
 adminCatalog.post('/prices/:priceId/archive', async (c) => {
-  const admin = await requireAdmin(c);
+  const admin = await requireSuperAdminWriteBar(c);
+  const reason = paymentChangeReason(await c.req.json().catch(() => null));
+  if (!reason) return c.json({ error: 'reason_required', message: 'Give a reason of 1 to 500 characters for this payment change.' }, 400);
   if (!c.env.STRIPE_SECRET_KEY) return c.json({ error: 'stripe_not_configured' }, 503);
   const priceId = c.req.param('priceId');
   if (await isTokenPackPrice(c.env, priceId)) return c.json(PACK_MANAGED, 409);
   try {
     await archivePrice(c.env, priceId);
-    await writeAdminAudit(c.env, admin.id, 'catalog_price_archive', { price_id: priceId });
+    await writeAdminAudit(c.env, admin.id, 'catalog_price_archive', { reason, price_id: priceId });
     return c.json({ ok: true });
   } catch (e) {
     return refuse(c, 502, { code: 'archive_price_failed', message: 'The price could not be archived in Stripe. Nothing changed; try again in a moment.', raw: e, audience: 'admin' });
   }
+});
+
+// POST /prices/:priceId/change — D1010: change what a price charges. Stripe
+// prices cannot be edited, so the new one is added to the same product (same
+// currency, interval and count) and the old one archived; if the archive
+// fails the new one is archived again. It changes what members pay, so it is
+// behind the Super Admin write bar and needs a reason, which is audited.
+const CHANGE_KEY = /^[A-Za-z0-9_-]{8,64}$/;
+const REASON_MIN = 10;
+adminCatalog.post('/prices/:priceId/change', async (c) => {
+  const admin = await requireSuperAdminWriteBar(c);
+  if (!c.env.STRIPE_SECRET_KEY) return refuse(c, 503, { code: 'stripe_not_configured', message: 'No Stripe secret key is set, so no price can be changed.', audience: 'admin' });
+  const priceId = c.req.param('priceId');
+  if (!/^price_[A-Za-z0-9]+$/.test(priceId)) return refuse(c, 400, { code: 'price_id_invalid', message: 'That is not a Stripe price id.', audience: 'admin' });
+  if (await isTokenPackPrice(c.env, priceId)) return c.json(PACK_MANAGED, 409);
+  const body = (await c.req.json().catch(() => ({}))) as Record<string, unknown>;
+  const unitAmount = Number(body.unit_amount);
+  if (!Number.isSafeInteger(unitAmount) || unitAmount <= 0) {
+    return refuse(c, 400, { code: 'unit_amount_invalid', message: 'The new amount is a whole number of the currency’s smallest unit, above zero.', audience: 'admin' });
+  }
+  const reason = typeof body.reason === 'string' ? body.reason.trim().slice(0, 500) : '';
+  if (reason.length < REASON_MIN) {
+    return refuse(c, 400, { code: 'reason_required', message: 'Say why the price changes, in at least 10 characters. It is kept in the audit log.', audience: 'admin' });
+  }
+  const key = typeof body.idempotency_key === 'string' ? body.idempotency_key : '';
+  if (!CHANGE_KEY.test(key)) return refuse(c, 400, { code: 'idempotency_key_invalid', message: 'The change carries no usable idempotency key, so a retry could make two prices. Reload and try again.', audience: 'admin' });
+  const nickname = typeof body.nickname === 'string' && body.nickname.trim() ? body.nickname.trim().slice(0, 120) : null;
+
+  let found;
+  try { found = await findCatalogProductByPriceId(c.env, priceId); } catch (e) {
+    return refuse(c, 502, { code: 'catalog_read_failed', message: 'The catalogue could not be read, so nothing was changed. Try again in a moment.', raw: e, audience: 'admin' });
+  }
+  if (!found) return refuse(c, 404, { code: 'price_not_found', message: 'That price is not in the catalogue. Sync the catalogue and try again.', audience: 'admin' });
+  if (found.product.kind === 'token_pack') return c.json(PACK_MANAGED, 409);
+  if (!found.price.active) return refuse(c, 409, { code: 'price_archived', message: 'That price is archived. Change a live price.', audience: 'admin' });
+  if (found.price.unit_amount === unitAmount && !nickname) return refuse(c, 409, { code: 'price_unchanged', message: 'The new amount is the same as the old one. Nothing changed.', audience: 'admin' });
+
+  const out = await changePrice(c.env, found.product, found.price, { unit_amount: unitAmount, nickname }, key);
+  const audit = { product_id: found.product.id, old_price_id: priceId, currency: found.price.currency, interval: found.price.interval,
+    interval_count: found.price.interval_count, old_unit_amount: found.price.unit_amount, new_unit_amount: unitAmount, reason };
+  if (out.ok) {
+    await writeAdminAudit(c.env, admin.id, 'catalog_price_change', { ...audit, new_price_id: out.price.id });
+    return c.json({ ok: true, old_price_id: priceId, price: out.price });
+  }
+  if (out.stage === 'create') {
+    return refuse(c, 502, { code: 'price_change_failed', message: 'The new price could not be created in Stripe. Nothing changed; try again in a moment.', audience: 'admin' });
+  }
+  if (out.rolled_back) {
+    await writeAdminAudit(c.env, admin.id, 'catalog_price_change_rolled_back', { ...audit, new_price_id: out.new_price_id });
+    return refuse(c, 502, { code: 'price_change_failed', message: 'The old price could not be archived, so the new one was archived again. The old price is still the live one; try again in a moment.', audience: 'admin' });
+  }
+  await writeAdminAudit(c.env, admin.id, 'catalog_price_change_incomplete', { ...audit, new_price_id: out.new_price_id });
+  return refuse(c, 502, { code: 'price_change_incomplete', message: `Both prices are live: the new one (${out.new_price_id}) was created, and neither the old one (${priceId}) nor the new one could be archived. Archive one of them in Stripe, then sync the catalogue.`, audience: 'admin' });
 });
 
 // ---------- D755 token packs (Super Admin only; #1919) ----------

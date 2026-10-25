@@ -123,13 +123,15 @@ test('D816\'s read: `monthly`, `yearly` and `yearly_saving_percent` are used as 
   assert.equal(priceOf({ prices: [price(100, 'year')], yearly: null }, 'year'), null);
 });
 
-test('the buttons: a visitor registers; a member\'s own plan is "Current plan"; another plan opens its product', () => {
+test('the buttons: a visitor registers; a member\'s own plan is "Current plan"; another plan opens the checkout sheet (D1048)', () => {
   const visitor = cardsOf('founder', {});
   assert.deepEqual(byId(visitor, 'growth').button, { label: 'Get started', to: '/register?lane=founder', disabled: false });
   const member = cardsOf('founder', { held: 'growth', signedIn: true });
   assert.equal(byId(member, 'growth').current, true);
   assert.deepEqual(byId(member, 'growth').button, { label: 'Current plan', to: null, disabled: true });
-  assert.deepEqual(byId(member, 'studio').button, { label: 'Upgrade', to: '/pricing/products/prod_studio', disabled: false });
+  // D1048 (#2451): Upgrade opens the checkout sheet in place, never a second pricing page.
+  assert.deepEqual(byId(member, 'studio').button, { label: 'Upgrade', to: null, checkout: true, disabled: false });
+  assert.equal(byId(member, 'studio').plan.product_id, 'prod_studio', 'the sheet reads the card\'s own plan');
   assert.deepEqual(byId(member, 'free').button, { label: 'Manage plan', to: '/account/billing', disabled: false });
 });
 
@@ -140,7 +142,9 @@ test('heldCard reads the session\'s own tier, for the member\'s own role\'s tab 
   assert.equal(heldCard({ subscription_tier: 'studio' }, 'founder', 'investor'), null);
   assert.equal(heldCard({ subscription_tier: 'growth' }, 'investor', 'founder'), null, 'an investor holds no founder plan');
   assert.equal(heldCard({ investor_tier: 'professional' }, 'investor', 'investor'), 'professional');
-  assert.equal(heldCard({}, 'partner', 'operating-partner'), 'free');
+  // D1049 (#2900): an Operating Partner's plan is read from their plan status, not assumed Basic.
+  assert.equal(heldCard({}, 'partner', 'operating-partner'), null, 'nothing marked before the plan status is read');
+  assert.equal(heldCard({}, 'partner', 'operating-partner', { status: 'ready', body: { plan_group: 'partner', status: 'free' } }), 'free');
 });
 
 test('an unreadable read is "Prices unavailable", not an empty tab', () => {

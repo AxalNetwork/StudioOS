@@ -422,7 +422,7 @@ test('under the overlay the HQ-only card is absent and the admin card says whose
   assert.ok(!hrefs(OVERLAY).includes('/admin/security'), 'the Security link survives with the card it belongs to gone');
   assert.ok(OVERLAY.includes('data-testid="hq-team-actions-admin"'), 'the admin card must still be drawn');
   const note = text(OVERLAY);
-  assert.match(note, /These are fr's own, on its Admin Console\./, 'the admin card does not name the branch it describes');
+  assert.match(note, /These are fr's own, on its own admin pages\./, 'the admin card does not name the branch it describes');
   // D260 — the reason changed, not the rule: the branch hit now carries the
   // three states, so the card says they are shown read-only and whose the
   // decision is, and it keeps no sentence claiming the search lacks them.
@@ -448,15 +448,13 @@ test('every link is literal and lands on a registered route', () => {
   assert.ok(count(ACTIONS, 'to="') >= 3, 'the action cards lost a link');
 
   const all = [...new Set([...hrefs(PLAIN), ...hrefs(OVERLAY)])].sort();
-  assert.deepEqual(all, ['/admin/licences', '/admin/security', '/admin?tab=kyc']);
+  assert.deepEqual(all, ['/admin/kyc', '/admin/licences', '/admin/security']);
   for (const href of all) {
     const path = href.split('?')[0];
     assert.ok(APP.includes(`<Route path="${path}" element=`), `${path} is not a registered route`);
   }
-  // `?tab=kyc` resolves to /admin and opens its KYC section only if the Admin
-  // Console knows the section by that value.
-  assert.match(ADMIN, /\{ value: 'kyc', label: 'KYC Queue'/, 'the Admin Console has no kyc section for the link to open');
-  assert.match(ADMIN, /get\('tab'\);\s*return t && ADMIN_SECTION_VALUES\.has\(t\)/, 'the Admin Console no longer honours ?tab=');
+  // D938: the KYC link opens KYC & KYB's own page, which mounts the KYC console.
+  assert.match(ADMIN, /export function KycPage\(\) \{[\s\S]*?<KycConsole \/>/, 'the KYC page no longer mounts the KYC console');
 });
 
 test('drawsAccountControls: an admin row is the Super Admin\'s alone, and the viewer\'s own row draws neither', () => {

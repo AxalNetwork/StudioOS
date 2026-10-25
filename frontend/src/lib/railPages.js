@@ -124,7 +124,7 @@ const FOUNDER = [
     ['data-room', 'Data room'], ['cap-table', 'Cap table'], ['use-of-funds', 'Use of funds'], ['capital-relationships', 'Capital relationships'],
   ]),
   alias('/raise/status', key(F, 'Raise', 'Fundraising readiness'), 'The legacy Status zone: where the raise stands.'),
-  alias('/raise/pitch', key(F, 'Raise', 'Pitch deck'), 'The legacy Pitch zone and its workspace.'),
+  alias('/raise/pitch', key(F, 'Raise', 'Pitch deck'), 'The Pitch deck studio, its tabs and the deck builder (D894).'),
   alias('/raise/capital', key(F, 'Raise', 'Capital relationships'), 'The legacy Capital zone: investors and rounds.'),
   alias('/raise/capital-match', key(F, 'Raise', 'Capital relationships'), 'Investor match finds capital relationships.'),
   alias('/raise/calls', key(F, 'Raise', 'Capital relationships'), 'A call with an investor is a capital relationship’s record.'),
@@ -249,8 +249,10 @@ const PARTNER = [
   ...SHARED(O).filter((p) => p.route !== '/perks'),
 ];
 
-// The plain Admin shell: HQ's held consoles (`/admin/held/*`, `/admin?tab=…`)
-// and a branch's own pages (`/branch/*`), one profile (sidebarConfig.js).
+// The plain Admin shell: HQ's held consoles (`/admin/held/*` and the Admin
+// Console's tools at their own addresses, D938) and a branch's own pages
+// (`/branch/*`), one profile (sidebarConfig.js). The keys keep their canvas
+// names (#2375); only the routes moved.
 const AD = 'Admin';
 const ADMIN = [
   // The canvas draws no Admin home; D720 §5's overrides add one.
@@ -259,35 +261,54 @@ const ADMIN = [
   alias('/admin/fund-admin', key(AD, 'Home'), 'Fund admin has no board yet; it takes Admin · Home (D720 §11).'),
   own('/admin/held/accounts', key(AD, 'Accounts')),
   alias('/branch/accounts', key(AD, 'Accounts'), 'The branch’s Accounts page.'),
-  own('/admin?tab=users', key(AD, 'Accounts', 'Users')),
+  own('/admin/accounts/all', key(AD, 'Accounts', 'Users')),
   own('/admin/exploring', key(AD, 'Accounts', 'Exploring members')),
   own('/admin/trash', key(AD, 'Accounts', 'Trash')),
-  own('/admin/held/approvals', key(AD, 'Approvals')),
+  own('/admin/approvals', key(AD, 'Approvals')),
   alias('/branch/approvals', key(AD, 'Approvals'), 'The branch’s Approvals page.'),
-  own('/admin?tab=kyc', key(AD, 'Approvals', 'Identity checks')),
-  own('/admin?tab=profiles', key(AD, 'Approvals', 'Entity profiles')),
+  own('/admin/kyc', key(AD, 'Approvals', 'Identity checks')),
+  own('/admin/partner-profiles', key(AD, 'Approvals', 'Entity profiles')),
   own('/admin/lp-applications', key(AD, 'Approvals', 'LP applications')),
   own('/admin/refer-earn', key(AD, 'Approvals', 'Referrals')),
   own('/admin/best-fit', key(AD, 'Approvals', 'Best fit')),
   own('/admin/due-diligence', key(AD, 'Approvals', 'Due diligence')),
   alias('/due-diligence', key(AD, 'Approvals', 'Due diligence'), 'The same Due diligence list and cases at the path the other profiles share (D774).'),
-  own('/admin?tab=lab-applications', key(AD, 'Approvals', 'Spin-Out applications')),
+  // D937 (#2374): the Lab left the Admin Console for Programs. The keys keep
+  // their canvas names (#2375); the addresses are the Lab's.
+  own('/admin/programs/spinout-lab/applications', key(AD, 'Approvals', 'Spin-Out applications')),
   own('/admin/spinout-moderation', key(AD, 'Approvals', 'Spin-Out moderation')),
   own('/admin/events', key(AD, 'Approvals', 'Events')),
   own('/admin/jobs', key(AD, 'Approvals', 'Jobs')),
   own('/admin/circles', key(AD, 'Approvals', 'Communities')),
   own('/admin/advisor-cohorts', key(AD, 'Approvals', 'Advisor cohort access')),
-  own('/admin/held/programs', key(AD, 'Programs')),
+  // D953 (#2371): the catalogue owns Admin · Programs, exactly: the Lab's
+  // sub-path (#2374) has no rail (D317), so the owner does not answer the
+  // pages below it. `/admin/held/programs` only redirects, so it draws no rail.
+  // The two programs whose boards are on the canvas keep those boards' keys,
+  // whose owners stay on the old addresses; the other five take Programs'.
+  exact(own('/admin/programs', key(AD, 'Programs'))),
   alias('/branch/programs', key(AD, 'Programs'), 'The branch’s Programs page.'),
-  own('/admin/spinout-lab', key(AD, 'Programs', 'Spin-Out Lab')),
+  alias('/admin/programs/mentor-cohorts', key(AD, 'Approvals', 'Advisor cohort access'), 'Programs › Mentor cohort access is the assignments console’s page and tabs (D953).'),
+  alias('/admin/programs/refer-and-earn', key(AD, 'Approvals', 'Referrals'), 'Programs › Refer & Earn is the referral review’s page and tabs (D953).'),
+  alias('/admin/programs/perks', key(AD, 'Programs'), 'Perks, one program page under Programs (D953).'),
+  alias('/admin/programs/learning', key(AD, 'Programs'), 'Learning, one program page under Programs (D953).'),
+  alias('/admin/programs/referral-partners', key(AD, 'Programs'), 'Referral partners, one program page under Programs (D953).'),
+  alias('/admin/programs/investor-cohorts', key(AD, 'Programs'), 'Investor cohort access, one program page under Programs (D953).'),
+  alias('/admin/programs/ai-native-venture', key(AD, 'Programs'), 'AI-native Venture, one program page under Programs (D953).'),
+  alias('/admin/programs/propose', key(AD, 'Programs'), 'Programs › Propose a program, a studio’s proposal (D964).'),
+  alias('/admin/programs/proposals', key(AD, 'Programs'), 'Programs › Proposals, HQ’s queue of studio proposals (D964).'),
+  own('/admin/programs/spinout-lab', key(AD, 'Programs', 'Spin-Out Lab')),
   own('/admin/profiling-trends', key(AD, 'Programs', 'Profiling trends')),
-  own('/admin/held/community', key(AD, 'Community')),
+  own('/admin/community', key(AD, 'Community')),
   alias('/branch/community', key(AD, 'Community'), 'The branch’s Community page.'),
-  own('/admin?tab=wellbeing', key(AD, 'Community', 'Wellbeing experts')),
-  alias('/admin/wellbeing', key(AD, 'Community', 'Wellbeing experts'), 'The wellbeing resource library, Wellbeing experts’ own page.'),
-  own('/admin?tab=network-profiles', key(AD, 'Community', 'Advisors and partners')),
-  own('/admin?tab=directory', key(AD, 'Community', 'Directory')),
-  own('/admin/partners', key(AD, 'Community', 'Partner invitations')),
+  // D938: the roster's own address; the prefix covers its resource library.
+  own('/admin/wellbeing', key(AD, 'Community', 'Wellbeing experts')),
+  // D972 (#2369): re-rooted at the page's address; the prefix covers its tabs.
+  own('/admin/advisors-partners', key(AD, 'Community', 'Advisors and partners')),
+  own('/admin/directory', key(AD, 'Community', 'Directory')),
+  // D923 (#2370): re-rooted at the new address; the prefix covers the tabs and
+  // the records. `/admin/partners` only redirects, so it draws no rail.
+  own('/admin/partner-invitations', key(AD, 'Community', 'Partner invitations')),
   own('/admin/contracts', key(AD, 'Contracts')),
   alias('/branch/contracts', key(AD, 'Contracts'), 'The branch’s Contracts page.'),
   own('/admin/contracts?tab=agreements', key(AD, 'Contracts', 'Agreements')),
@@ -295,7 +316,7 @@ const ADMIN = [
   own('/admin/contracts?tab=partner-deals', key(AD, 'Contracts', 'Partner deals')),
   own('/admin/contracts?tab=templates', key(AD, 'Contracts', 'Templates')),
   own('/admin/contracts?tab=forms', key(AD, 'Contracts', 'Forms')),
-  own('/admin/held/insights', key(AD, 'Insights')),
+  own('/admin/insights', key(AD, 'Insights')),
   alias('/branch/insights', key(AD, 'Insights'), 'The branch’s Insights page and its analytics.'),
   // D796 (#2229): the Admin's "Settings" board is "Licences"; runs logged before keep `Admin · Settings`.
   own('/admin/my-licence', key(AD, 'Licences')),
@@ -303,6 +324,7 @@ const ADMIN = [
   alias('/admin/my-licence/contract', key(AD, 'Licences'), 'The Licences board’s Contract tab.'),
   alias('/admin/my-licence/statements', key(AD, 'Licences'), 'The Licences board’s Statements tab.'),
   alias('/admin/my-licence/requests', key(AD, 'Licences'), 'The Licences board’s Requests tab.'),
+  alias('/admin/my-licence/programs', key(AD, 'Licences'), 'The Licences board’s Programs tab (D981).'),
   alias('/branch/settings', key(AD, 'Licences'), 'The branch’s settings, which the Licences row stays lit on.'),
   off('/admin/accounts/credits', key(AD, 'Member credits')),
   exact(off('/admin', key(AD, 'Admin console'))),
@@ -317,6 +339,7 @@ const SUPER = [
   off('/hq', key(SA, 'Home')),
   off('/admin/analytics', key(SA, 'Analytics')),
   own('/admin/licences', key(SA, 'Licences')),
+  alias('/admin/licences/programs', key(SA, 'Licences'), 'Program grants, the Licences strip’s second item (D981).'),
   own('/admin/funds', key(SA, 'Funds')),
   alias('/admin/fund-admin', key(SA, 'Funds'), 'HQ’s Fund admin row sits after Funds and has no board yet.'),
   own('/admin/contracts', key(SA, 'Contracts')),
@@ -327,7 +350,7 @@ const SUPER = [
   own('/admin/contracts?tab=forms', key(SA, 'Contracts', 'Forms')),
   own('/admin/contracts?tab=document-types', key(SA, 'Contracts', 'Document types')),
   own('/admin/accounts', key(SA, 'Team')),
-  own('/admin?tab=users', key(SA, 'Team', 'Users')),
+  own('/admin/accounts/all', key(SA, 'Team', 'Users')),
   off('/admin/accounts/credits', key(SA, 'Member credits')),
   own('/admin/revenue', key(SA, 'Revenue')),
   own('/admin/revenue#disputes', key(SA, 'Revenue', 'Disputes')),
@@ -338,9 +361,9 @@ const SUPER = [
   own('/admin/content', key(SA, 'Content')),
   own('/admin/articles', key(SA, 'Content', 'Content queue')),
   own('/admin/publications', key(SA, 'Content', 'Publications')),
-  own('/admin?tab=personas', key(SA, 'Content', 'Personas')),
-  own('/admin?tab=network-profiles', key(SA, 'Content', 'Advisors and partners')),
-  own('/admin?tab=directory', key(SA, 'Content', 'Directory')),
+  own('/admin/persona-segments', key(SA, 'Content', 'Personas')),
+  own('/admin/advisors-partners', key(SA, 'Content', 'Advisors and partners')),
+  own('/admin/directory', key(SA, 'Content', 'Directory')),
   own('/admin/team', key(SA, 'Content', 'Public team page')),
   own('/admin/platform', key(SA, 'Platform')),
   alias('/admin/platform/switches', key(SA, 'Platform'), 'Platform’s Switches item, on its overview.'),
@@ -348,8 +371,8 @@ const SUPER = [
   // One Super Admin page since the owner's ruling of 2026-10-20; GitHub sync is its #github section.
   own('/admin/integration-keys', key(SA, 'Platform', 'Integration keys')),
   own('/admin/integration-keys#github', key(SA, 'Platform', 'GitHub sync')),
-  own('/admin?tab=payments', key(SA, 'Platform', 'Payments catalogue')),
-  own('/admin?tab=promos', key(SA, 'Platform', 'Promo codes')),
+  own('/admin/platform/payments', key(SA, 'Platform', 'Payments catalogue')),
+  own('/admin/platform/promo-codes', key(SA, 'Platform', 'Promo codes')),
   own('/admin/credit-rules', key(SA, 'Platform', 'Credit rules')),
   own('/admin/platform/allowances', key(SA, 'Platform', 'AI allowances')),
   alias('/admin/platform/ai-usage', key(SA, 'Platform', 'AI allowances'), 'HQ › AI usage (D791) is AI allowances’ platform-wide read, and docks the same rail.'),
@@ -384,7 +407,7 @@ export const RAIL_BOARD_ALIASES = [
   { board: key(I, 'Fund', 'Overview'), to: key(I, 'Fund'), why: 'I13 maps to I12: the fund page is its overview (D720 §11).' },
   { board: key(SA, 'Revenue', 'Overview'), to: key(SA, 'Revenue'), why: 'H13 maps to H12: the Revenue page is its overview (D720 §11).' },
   { board: key(AD, 'Approvals', 'Exploring members'), to: key(AD, 'Accounts', 'Exploring members'), why: 'One console, /admin/exploring; Accounts is listed first.' },
-  { board: key(AD, 'Programs', 'Advisor cohorts'), to: key(AD, 'Approvals', 'Advisor cohort access'), why: 'One console, /admin/advisor-cohorts; Approvals is listed first.' },
+  { board: key(AD, 'Programs', 'Advisor cohorts'), to: key(AD, 'Approvals', 'Advisor cohort access'), why: 'One console, Programs › Mentor cohort access › People (D953); Approvals is listed first.' },
   { board: key(AD, 'Community', 'Events'), to: key(AD, 'Approvals', 'Events'), why: 'One console, /admin/events; Approvals is listed first.' },
   { board: key(AD, 'Community', 'Jobs'), to: key(AD, 'Approvals', 'Jobs'), why: 'One console, /admin/jobs; Approvals is listed first.' },
   { board: key(AD, 'Community', 'Communities'), to: key(AD, 'Approvals', 'Communities'), why: 'One console, /admin/circles; Approvals is listed first.' },
@@ -441,6 +464,7 @@ export const NO_RAIL_ROUTES = [
   { route: '/perks', railCount: 0, pageTestIds: ['perks-desk'], roles: ['founder', 'investor', 'advisor', 'admin', 'exploring'], why: 'Owner request: the standalone Perks page has no AI rail on desktop or phone. Partner Perk deals remains in its own workspace.' },
   { route: '/learning', railCount: 0, pageTestIds: ['learning-home'], roles: ['founder', 'investor', 'advisor', 'partner', 'admin'], why: 'Owner request: Learning home has no AI rail on desktop or phone. Learning subpages retain their rails.' },
   { route: '/studio', roles: ['admin'], why: 'Admin · Studio has no rail (D598).' },
+  { route: '/raise/pitch', railCount: 0, pageTestIds: ['pitch-studio-boundary'], roles: ['advisor', 'partner'], why: 'D905 (#2684), PD22: an Advisor or an Operating Partner opening the Pitch deck studio reads its boundary inside their own shell, with no rail and nothing from a deck.' },
   { route: '/studio', railCount: 0, pageTestIds: ['advisor-studio-home'], roles: ['advisor'], why: 'Owner request: Advisor Studio has no AI side rail; its interview and practice modules remain.' },
   { route: '/studio/tickets/new', roles: ['admin'], why: 'Studio’s own form; Admin · Studio has no rail (D598).' },
   { route: '/spinout-lab/investor-workspace', railCount: 0, pageTestIds: ['investor-workspace-axal-vc-fund'], roles: ['investor'], why: 'Owner request: the LP investor workspace has no AI side rail; its content and access gates remain.' },
@@ -451,14 +475,15 @@ export const NO_RAIL_ROUTES = [
   { route: '/attest/:token', roles: [], why: 'A consent link a guest opens.' },
   { route: '/attest/partner/:token', roles: [], why: 'A partner’s consent link a guest opens.' },
   { route: '/join/:token', roles: [], why: 'A branch invitation a guest opens.' },
+  { route: '/share/captable/venture/:token', roles: [], why: 'A cap table venture link a guest opens, at its level (D1019 §6, D1026).' },
+  { route: '/cap-tables/:projectId', roles: ['admin', 'advisor', 'partner'], why: 'D1026 (CT17, CT18): the cap table an Advisor, an Operating Partner or an Admin reads through D1019’s levels has no board on the AI rail canvas; part 14 (#2866) places it under each profile’s own page.' },
   { route: '/admin/due-diligence', roles: ['partner', 'investor', 'advisor'], why: 'Due diligence’s rail is the Admin board’s (D774, AdminBoardFrame); a partner, investor or advisor on it gets the page alone until their profile’s rollout gives them one.' },
   { route: '/admin/due-diligence/:uid', roles: ['partner', 'investor', 'advisor'], why: 'Due diligence’s rail is the Admin board’s (D774, AdminBoardFrame); a partner, investor or advisor on it gets the page alone until their profile’s rollout gives them one.' },
   { route: '/due-diligence', roles: ['partner', 'investor', 'advisor'], why: 'Due diligence’s rail is the Admin board’s (D774, AdminBoardFrame); a partner, investor or advisor on it gets the page alone until their profile’s rollout gives them one.' },
   { route: '/due-diligence/:uid', roles: ['partner', 'investor', 'advisor'], why: 'Due diligence’s rail is the Admin board’s (D774, AdminBoardFrame); a partner, investor or advisor on it gets the page alone until their profile’s rollout gives them one.' },
   { route: '/partner/insights', roles: ['investor'], why: 'Demand’s rail is the operating partner’s (D773: PartnerWorkspaceTabs draws it for a partner only); an investor on it gets the page alone until their profile’s rollout gives them one.' },
   { route: '/comarketing', roles: ['founder', 'investor'], why: 'Visibility’s rail is the operating partner’s (D773: PartnerWorkspaceTabs draws it for a partner only); a founder gets the Grow editor and an investor the page alone, and neither profile’s map has a co-marketing board.' },
-  { route: '/admin/spinout-lab', roles: ['admin'], why: 'A Spin-Out Lab console: D317 keeps Eadwyn out of the Lab (D774). The board keeps its key; `/admin`’s Spin-Out Lab tab draws the page alone too.' },
-  { route: '/admin/spinout-lab/preview', roles: ['admin'], why: 'A Spin-Out Lab console: D317 keeps Eadwyn out of the Lab (D774). The board keeps its key; `/admin`’s Spin-Out Lab tab draws the page alone too.' },
+  { route: '/admin/programs/spinout-lab', prefix: true, roles: ['admin'], why: 'A Spin-Out Lab page: D317 keeps Eadwyn out of the Lab (D774), and D937 (#2374) keeps it so at the Lab’s address under Programs. The boards keep their keys.' },
   { route: '/admin/spinout-moderation', roles: ['admin'], why: 'A Spin-Out Lab console: D317 keeps Eadwyn out of the Lab (D774). The board keeps its key; `/admin`’s Spin-Out Lab tab draws the page alone too.' },
 ];
 

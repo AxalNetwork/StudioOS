@@ -24,6 +24,7 @@ import { deleteInterview } from '../src/services/interviewWriters.ts';
 import { deleteSession } from '../src/services/interviewSessions.ts';
 import { withdrawDigest } from '../src/services/validateEngine.ts';
 import { TOOLS } from '../src/services/assistantInterviews.ts';
+import { applySessionTranslationColumns } from './_session_translation_columns.mjs';
 
 const BASELINE = readFileSync(new URL('../sql/schema_baseline.sql', import.meta.url), 'utf8');
 const mig = (name: string) => readFileSync(new URL(`../sql/migrations/${name}`, import.meta.url), 'utf8');
@@ -66,6 +67,7 @@ function world({ findings = true } = {}) {
   db.exec(mig('460_validate_record_stores.sql'));
   for (const m of ['214_validate_proposals.sql', '246_fills_the_blanks_everywhere.sql', '438_interview_sessions.sql', '439_validate_proposals_structuring.sql', '446_interview_structure_receipts.sql',
     '447_assistant_interviews.sql', '452_record_session_setup.sql', '453_interview_processing.sql']) db.exec(mig(m));
+    applySessionTranslationColumns(db); // D857: migration 527's segment columns
   db.exec(mig('449_interview_channels.sql').split(';')
     .filter((sql) => /CREATE TABLE IF NOT EXISTS channel_threads \(/.test(sql)).map((sql) => `${sql};`).join('\n'));
   db.exec(mig('488_channel_consents.sql'));

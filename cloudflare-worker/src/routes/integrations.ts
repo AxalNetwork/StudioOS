@@ -18,14 +18,16 @@
  * refresh_token into D1.
  */
 import { Hono } from 'hono';
+import { cartaAudience } from '../integrations/cartaScopes';
 import type { Context } from 'hono';
 import type { Env, User } from '../types';
 import { getSQL } from '../db';
-import { requireAuth } from '../auth';
+import { requireAuth, selectJwt } from '../auth';
 import { ensureTier, userMeetsTier, tierUpsell } from '../middleware/requireTier';
 import { hashEmail } from '../util/hashEmail';
 import {
   REGISTRY,
+  descriptorForRole,
   publicDescriptor,
   ensureIntegrationsSchema,
   getDescriptor,
@@ -57,10 +59,12 @@ import {
 } from '../integrations/secrets';
 import { buildPkce, issueOauthState, consumeOauthState } from '../integrations/oauth';
 import { refuse } from '../util/refusal';
+import { mcpDisconnect } from '../integrations/mcpSignIn';
 import { MANAGED_PROVIDERS, PROVIDER_ENV_VARS, type ManagedProviderKey } from '../services/providerOauthKeys';
 import { activeCompanyFor } from '../middleware/activeCompany';
 import { companyEnabled, enabledCompanyIds, projectEnabled, writesProjectData } from '../integrations/companyScope';
-import { hasScopeOverreach, validateConnectorSettings } from '../integrations/connectorRules';
+import { extraScopes, hasScopeOverreach, validateConnectorSettings } from '../integrations/connectorRules';
+import { stripTrailingSlashes } from '../util/url';
 import { fedCounts } from '../integrations/fed';
 import { accessToken, accessibleRepositories, checkChoice, grantedPermissions, githubInstallUrl, readProgress } from '../integrations/providers/github';
 
@@ -79,11 +83,12 @@ export function ensureRole(c: Context<{ Bindings: Env }>, user: User) {
 
 /**
  * D710 (#1775): how this caller may see a provider. A provider with no
- * audience fields is `open`, as before. Mercury is an `entity` connection for
- * an admin on HQ, `personal` for a founder or partner on either host and an
- * investor on HQ (D713, D752), and `none` for everyone else, who is answered
- * as if the key did not exist. An investor off HQ is `none` too, but
- * `/connect` tells them it is HQ only (403 `purpose_not_allowed`, D752).
+ * audience fields is `open`, as before. Mercury is `personal` for a founder or
+ * partner on either host and an investor on HQ (D713, D752), a read-only
+ * `preview` of the founder's page for an admin on HQ (D879), and `none` for
+ * everyone else, who is answered as if the key did not exist. An investor off
+ * HQ is `none` too, but `/connect` tells them it is HQ only (403
+ * `purpose_not_allowed`, D752).
  */
 function audienceOf(c: Context<{ Bindings: Env }>, user: User, desc: ProviderDescriptor) {
   return audienceFor(desc, viewerOf(c, user));
@@ -223,6 +228,12 @@ async function catalogueEntry(c: Context<{ Bindings: Env }>, user: User, p: Prov
   };
 }
 
+/** Existing Carta grants owned by a former audience keep their Disconnect path. */
+const LEGACY_CARTA_NOTICE = 'Your current role cannot create or sync a Carta connection. You can disconnect this existing connection.';
+function legacyCartaFields() {
+  return { legacy_only: true, legacy_notice: LEGACY_CARTA_NOTICE, description: LEGACY_CARTA_NOTICE, tagline: LEGACY_CARTA_NOTICE, long_description: [LEGACY_CARTA_NOTICE], has_implementation: false };
+}
+
 /** LinkedIn's card: its facts (`FIRST_PARTY_CARDS`) and its page fields. Never in `items`. */
 function linkedinCard(viewer: Viewer) {
   const page = pageDescriptor({ key: 'linkedin' }, viewer);
@@ -323,13 +334,15 @@ integrations.get('/available', async (c) => {
     if (await c.env.DB.prepare('SELECT 1 AS connected FROM microsoft_oauth_tokens WHERE user_id = ?').bind(user.id).first()) connectedSet.add('microsoft_365');
   } catch { unreadableSources.push('microsoft_365'); }
   const viewer = viewerOf(c, user);
-  const listed = REGISTRY.filter(p => audienceOf(c, user, p) !== 'none');
+  const listed = REGISTRY.filter(p => audienceOf(c, user, p) !== 'none' || (p.key === 'carta' && connectedSet.has('carta')));
   const providers = await Promise.all(listed.map(async (p) => {
-    const entityOnly = audienceOf(c, user, p) === 'entity';
+    // D879: a preview reads no connection, the caller's own included.
+    const preview = audienceOf(c, user, p) === 'preview';
+    const legacyCarta = p.key === 'carta' && audienceOf(c, user, p) === 'none';
     return {
-      ...(await catalogueEntry(c, user, p, viewer)),
-      // An entity connection is read from its own store, never the caller's rows.
-      already_connected: entityOnly ? false : p.key === 'google_calendar' || p.key === 'microsoft_365'
+      ...(await catalogueEntry(c, user, p, legacyCarta ? { ...viewer, role: 'founder' } : viewer)),
+      ...(legacyCarta ? legacyCartaFields() : {}),
+      already_connected: preview ? false : p.key === 'google_calendar' || p.key === 'microsoft_365'
         ? unreadableSources.includes(p.key) ? null : connectedSet.has(p.key)
         : connectionsReadable ? connectedSet.has(p.key) : null,
     };
@@ -440,10 +453,14 @@ integrations.get('/directory/:key', async (c) => {
     return c.json({ ok: true, connector: { key: k.key, ...pageFields(channel), ...pageBody(channel) } });
   }
   const p = getDescriptor(k.key);
-  if (!p || audienceOf(c, user, p) === 'none') return c.json({ error: 'unknown_provider' }, 404);
-  const page = pageDescriptor(p, viewer);
+  if (!p) return c.json({ error: 'unknown_provider' }, 404);
+  const legacyCarta = p.key === 'carta' && audienceOf(c, user, p) === 'none' &&
+    !!await c.env.DB.prepare("SELECT 1 FROM integrations WHERE user_id = ? AND provider_key = 'carta'").bind(user.id).first();
+  if (audienceOf(c, user, p) === 'none' && !legacyCarta) return c.json({ error: 'unknown_provider' }, 404);
+  const pageViewer = legacyCarta ? { ...viewer, role: 'founder' } : viewer;
+  const page = pageDescriptor(p, pageViewer);
   if (!page) return c.json({ error: 'unknown_provider' }, 404);
-  return c.json({ ok: true, connector: { ...(await catalogueEntry(c, user, p, viewer)), ...pageBody(page) } });
+  return c.json({ ok: true, connector: { ...(await catalogueEntry(c, user, p, pageViewer)), ...pageBody(page), ...(legacyCarta ? legacyCartaFields() : {}) } });
 });
 
 integrations.post('/requests', async (c) => {
@@ -593,10 +610,8 @@ integrations.post('/connect', async (c) => {
     return refuse(c, 403, { code: 'purpose_not_allowed', message: personalHqOnlySentence(desc.display_name) });
   }
   if (!desc || audienceOf(c, user, desc) === 'none') return c.json({ error: 'unknown_provider', provider_key: key }, 404);
-  // D710: an entity connection is added in its own console, never here.
-  if (audienceOf(c, user, desc) === 'entity') {
-    return c.json({ error: 'entity_connection_only', message: `${desc.display_name} is connected per Axal entity by the Super Admin, not from here.` }, 409);
-  }
+  if (desc.auth_type === 'none') return c.json({ error: 'sign_in_not_required' }, 409);
+  // D879: a preview connects nothing; Mercury's own connect answers it 403 `purpose_not_allowed` (no personal connection).
   const activeCompanyId = await activeCompanyFor(c, user);
   if (!activeCompanyId && writesProjectData(key)) return c.json({ error: 'active_company_required' }, 400);
 
@@ -638,12 +653,12 @@ integrations.post('/connect', async (c) => {
     if (e instanceof ConnectRefusal) return refuse(c, e.status, { code: e.code, message: e.sentence });
     return refuse(c, 400, { code: 'connect_failed', message: 'The connection could not be made. Check the credentials and try again.', raw: e, audience: 'owner' });
   }
-  if (desc.auth_type === 'oauth2' && hasScopeOverreach(desc, result.scopes || [])) {
+  if (desc.auth_type === 'oauth2' && hasScopeOverreach(descriptorForRole(desc, user.role), result.scopes || [])) {
     try { await impl.revokeGranted?.(c.env, result); } catch { /* refusal still wins */ }
     await logEvent(c.env, {
       integration_id: 0, user_id: user.id, provider_key: key,
       direction: 'internal', event_type: 'overreach', status: 'error',
-      response_summary: 'Provider granted permissions beyond the requested set; connection refused.',
+      response_summary: `Provider granted permissions beyond the requested set (${extraScopes(descriptorForRole(desc, user.role), result.scopes || []).join(', ')}); connection refused.`,
     });
     return c.json({ error: 'scope_overreach', message: 'The provider granted permissions beyond those requested. The connection was refused.' }, 403);
   }
@@ -762,6 +777,10 @@ integrations.delete('/:uid', async (c) => {
   if (impl?.disconnect) {
     try { await impl.disconnect(c, user, row); }
     catch (e) { console.warn('[integrations] provider disconnect threw:', (e as Error).message); }
+  } else {
+    // D1080: a member's MCP sign-in is revoked at the provider before its row is deleted.
+    try { await mcpDisconnect(c.env, row); }
+    catch { console.warn('[integrations] mcp revoke failed'); }
   }
 
   await c.env.DB.prepare('DELETE FROM integration_companies WHERE integration_id = ?').bind(row.id).run();
@@ -783,6 +802,7 @@ integrations.post('/:uid/sync', async (c) => {
   const uid = c.req.param('uid');
   const row = await loadRow(c.env, uid, user.id);
   if (!row) return c.json({ error: 'not_found' }, 404);
+  if (row.provider_key === 'carta' && !cartaAudience(user.role)) return refuse(c, 403, { code: 'purpose_not_allowed', message: LEGACY_CARTA_NOTICE });
   if (writesProjectData(row.provider_key)) {
     const selectedCompany = await activeCompanyFor(c, user);
     if (!selectedCompany || !(await companyEnabled(c.env, row.id, selectedCompany))) {
@@ -1447,6 +1467,7 @@ integrations.get('/oauth/:provider/start', async (c) => {
       extra: { provider },
     });
   }
+  if (provider === 'carta' && (await selectJwt(c))?.payload.impersonated_by) return refuse(c, 403, { code: 'support_session_refused', message: 'A support session cannot connect a member’s Carta account.' });
   // PKCE + signed state. The state token is bound to (user, provider) and
   // single-use; we hand it to the provider as the OAuth `state` param so
   // the callback can replay both userId and PKCE verifier.
@@ -1456,6 +1477,7 @@ integrations.get('/oauth/:provider/start', async (c) => {
   // callback recovers it from state.extra and passes through to connect()
   // so we never trust the query string at callback time.
   const extra: Record<string, unknown> = { challenge: pkce.challenge, company_id: selectedCompany };
+  if (provider === 'carta') extra.carta_audience = cartaAudience(user.role);
   if (c.req.query('return_to') === 'build') {
     extra.return_to = 'build';
     // The venture rides in the state, not in per-origin storage: the callback is
@@ -1467,8 +1489,9 @@ integrations.get('/oauth/:provider/start', async (c) => {
     const sb = c.req.query('sandbox');
     extra.is_sandbox = sb === '1' || sb === 'true';
   }
-  if (provider === 'docusign') {
-    // DocuSign has separate demo (account-d.docusign.com) and prod
+  if (provider === 'docusign' || provider === 'carta') {
+    // Carta and DocuSign each have separate test and production hosts.
+    // DocuSign uses demo (account-d.docusign.com) and prod
     // (account.docusign.com) auth hosts. The frontend passes ?demo=1
     // for sandbox connects. The callback recovers this from state.extra
     // and feeds it into connect()'s config so we never trust the query
@@ -1512,6 +1535,18 @@ export function returnQuery(extra: Record<string, unknown> | null | undefined, o
   return `${returnBase(extra)}?${outcome}${venture}`;
 }
 
+// The callback answers on OAUTH_CALLBACK_BASE_URL's host (app.axal.vc), but the
+// SPA keeps its signed-in state per origin, on APP_URL's host (axal.vc). A
+// relative return left the member on app.axal.vc with no cached session, so the
+// route guard sent them to /login and the outcome was never shown. Every return
+// goes to APP_URL instead, as Calendar's `destFor` does.
+integrations.use('/oauth/:provider/callback', async (c, next) => {
+  await next();
+  const base = stripTrailingSlashes(c.env.APP_URL || '');
+  const loc = c.res.headers.get('location');
+  if (base && loc && loc.startsWith('/') && !loc.startsWith('//')) c.res.headers.set('location', `${base}${loc}`);
+});
+
 integrations.get('/oauth/:provider/callback', async (c) => {
   await ensureIntegrationsSchema(c.env);
   const user = await requireAuth(c);
@@ -1552,12 +1587,12 @@ integrations.get('/oauth/:provider/callback', async (c) => {
       oauth_state: state,
       config: { pkce_verifier: consumed.pkce_verifier ?? undefined, ...providerExtra },
     });
-    if (hasScopeOverreach(desc, result.scopes || [])) {
+    if (hasScopeOverreach(descriptorForRole(desc, user.role), result.scopes || [])) {
       try { await impl.revokeGranted?.(c.env, result); } catch { /* refusal still wins */ }
       await logEvent(c.env, {
         integration_id: 0, user_id: user.id, provider_key: provider,
         direction: 'internal', event_type: 'overreach', status: 'error',
-        response_summary: 'Provider granted permissions beyond the requested set; connection refused.',
+        response_summary: `Provider granted permissions beyond the requested set (${extraScopes(descriptorForRole(desc, user.role), result.scopes || []).join(', ')}); connection refused.`,
       });
       return c.redirect(returnQuery(consumed?.extra, `oauth=error&provider=${encodeURIComponent(provider)}&reason=scope_overreach`));
     }

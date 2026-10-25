@@ -33,19 +33,20 @@ import {
   isPrincipalCompEligible,
   mintCompInvitations,
   parseAudienceRules,
-  serializeAudienceRules,
   type AudienceRules,
 } from '../services/eventAudience';
+import { isEventType } from '../services/eventTypes';
 import { deliverEventInvite } from '../services/eventMessaging';
 import { createEventTicketPaymentIntent } from '../services/eventTickets';
 import {
   buildEventIcs,
-  EVENT_TYPES,
   EVENT_VISIBILITIES,
   LOCATION_KINDS,
   ensureUniqueEventSlug,
   shapeAgendaItem,
   shapeEvent,
+  hasConfirmedEventSeat,
+  isInPersonEvent,
 } from '../services/eventsCommon';
 import {
   loadUserVectors,
@@ -57,6 +58,8 @@ import {
   awardAgendaSpeakerBadge,
 } from '../services/eventBadges';
 import { archetypeAccess } from '../services/archetypeEntitlement';
+import { refuse } from '../util/refusal';
+import { memberEventLink } from '../services/eventLinks';
 
 const events = new Hono<{ Bindings: Env }>();
 
@@ -87,12 +90,29 @@ export async function canViewEvent(env: Env, event: any, user: User): Promise<bo
     (event.visibility === 'public' && Number(event.admin_published) === 1)
   );
   if (published) return true;
+  // D1031 (#2872): a member who holds a registration may read the event their
+  // notices point at, also once it is cancelled or back to draft. They get no
+  // private fields, and the join link still needs a confirmed seat.
+  const reg = await env.DB.prepare(
+    `SELECT id FROM event_registrations WHERE event_id = ? AND user_id = ? LIMIT 1`,
+  ).bind(event.id, user.id).first();
+  if (reg) return true;
   const inv = await env.DB.prepare(
     `SELECT id FROM event_invitations
        WHERE event_id = ? AND (invited_user_id = ? OR lower(invited_email) = lower(?))
          AND status != 'revoked' LIMIT 1`,
   ).bind(event.id, user.id, user.email).first();
   return !!inv;
+}
+
+// This lookup is always for the authenticated member, never an email supplied
+// by a public caller or an invitation token.
+async function canReadJoinLink(env: Env, event: any, user: User): Promise<boolean> {
+  if (canManage(event, user) || isInPersonEvent(event)) return true;
+  const registration = await env.DB.prepare(
+    `SELECT status, payment_status FROM event_registrations WHERE event_id = ? AND user_id = ?`,
+  ).bind(event.id, user.id).first();
+  return hasConfirmedEventSeat(registration);
 }
 
 async function loadEvent(env: Env, id: number): Promise<any | null> {
@@ -163,26 +183,181 @@ events.use('*', async (c, next) => {
   await next();
 });
 
-// ── GET / — the caller's events (hosting + attending) ──────────────────────
+// D1032 (#2873): where a free seat came from. Only an invitation records it
+// (`event_invitations.source`); a seat an audience rule made free at
+// registration does not store which rule, so its source is null, not a guess.
+const COMP_SOURCE_OF_INVITATION: Record<string, string> = {
+  manual: 'invitation',
+  auto_partner: 'official_partner',
+  auto_lp: 'invested_lp',
+  auto_investor: 'investor',
+  auto_founder: 'startup_founder',
+  auto_connection: 'host_contact',
+};
+
+// The registration fields My events reads (D1032), shared by Upcoming and Past.
+// Every field is the row's own; nothing missing is drawn as 0.
+function placeFields(r: any) {
+  const fromInvitation = r.comp === 1 && r.inv_comp === 1 ? COMP_SOURCE_OF_INVITATION[String(r.inv_source)] ?? null : null;
+  return {
+    registration_id: Number(r.reg_id),
+    reg_status: r.reg_status,
+    payment_status: r.reg_payment_status ?? null,
+    amount_cents: r.reg_amount_cents != null ? Number(r.reg_amount_cents) : null,
+    comp: r.comp === 1,
+    comp_source: fromInvitation,
+    comp_source_recorded: r.comp === 1 ? fromInvitation !== null : null,
+    checked_in_at: r.checked_in_at ?? null,
+    decision_reason: r.decision_reason ?? null,
+    is_speaker: Number(r.is_speaker) === 1,
+  };
+}
+
+
+
+function pastOutcome(r: any): 'cancelled' | 'declined' | 'event_cancelled' | 'attended' | 'ended' {
+  if (r.reg_status === 'cancelled') return 'cancelled';
+  if (r.reg_status === 'declined') return 'declined';
+  if (r.status === 'cancelled') return 'event_cancelled';
+  if (r.reg_status === 'attended' || r.checked_in_at) return 'attended';
+  return 'ended';
+}
+
+function pageParam(v: string | undefined, def: number, max: number): number {
+  if (v === undefined || v === '') return def;
+  const n = Number(v);
+  return Number.isInteger(n) && n >= 0 ? Math.min(n, max) : def;
+}
+
+// ── GET / — the caller's events (hosting + attending + past) ───────────────
+// D1032 (#2873): each place carries its registration, payment, comp source,
+// check-in and decision. Past is every place whose event has ended or been
+// cancelled, or that was itself cancelled or declined, newest first, paged
+// (`past_limit`, `past_offset`) with an exact total. Each hosted event carries
+// its counts. A read that fails throws, so no list is drawn empty unread. The
+// place columns are written out in each statement rather than shared through
+// a template: `check-sql-prepare` allows no new interpolation.
 events.get('/', async (c) => {
   const u = await auth(c);
   if (u instanceof Response) return u;
+  const pastLimit = pageParam(c.req.query('past_limit'), 20, 100);
+  const pastOffset = pageParam(c.req.query('past_offset'), 0, 100000);
   const hosting = await c.env.DB.prepare(
     `SELECT * FROM events WHERE host_user_id = ? ORDER BY starts_at DESC`,
   ).bind(u.id).all();
   const attending = await c.env.DB.prepare(
-    `SELECT e.*, r.status AS reg_status, r.waitlist_position AS reg_waitlist_position
+    `SELECT e.*, r.id AS reg_id, r.status AS reg_status, r.payment_status AS reg_payment_status,
+            r.amount_cents AS reg_amount_cents, r.waitlist_position AS reg_waitlist_position, r.comp,
+            r.decision_reason, inv.source AS inv_source, inv.comp AS inv_comp, cx.checked_in_at,
+            EXISTS (SELECT 1 FROM event_agenda_items a WHERE a.event_id = e.id AND a.speaker_user_id = r.user_id) AS is_speaker, ch.code AS checkin_code
        FROM events e
        JOIN event_registrations r ON r.event_id = e.id
+       LEFT JOIN event_invitations inv ON inv.id = r.invitation_id
+       LEFT JOIN event_checkins cx ON cx.event_id = e.id AND cx.registration_id = r.id
+       LEFT JOIN event_checkins ch ON ch.event_id = e.id AND ch.registration_id = r.id
+         AND r.status != 'waitlisted' AND r.payment_status != 'pending'
       WHERE r.user_id = ? AND r.status IN ('registered','confirmed','attended','waitlisted')
       ORDER BY e.starts_at ASC`,
   ).bind(u.id).all();
+  const past = await c.env.DB.prepare(
+    `SELECT e.*, r.id AS reg_id, r.status AS reg_status, r.payment_status AS reg_payment_status,
+            r.amount_cents AS reg_amount_cents, r.waitlist_position AS reg_waitlist_position, r.comp,
+            r.decision_reason, inv.source AS inv_source, inv.comp AS inv_comp, cx.checked_in_at,
+            EXISTS (SELECT 1 FROM event_agenda_items a WHERE a.event_id = e.id AND a.speaker_user_id = r.user_id) AS is_speaker
+       FROM events e
+       JOIN event_registrations r ON r.event_id = e.id
+       LEFT JOIN event_invitations inv ON inv.id = r.invitation_id
+       LEFT JOIN event_checkins cx ON cx.event_id = e.id AND cx.registration_id = r.id
+      WHERE r.user_id = ? AND (r.status IN ('cancelled','declined') OR e.status = 'cancelled'
+         OR datetime(COALESCE(e.ends_at, e.starts_at)) < datetime('now'))
+      ORDER BY e.starts_at DESC, r.id DESC LIMIT ? OFFSET ?`,
+  ).bind(u.id, pastLimit, pastOffset).all();
+  const pastTotal: any = await c.env.DB.prepare(
+    `SELECT COUNT(*) AS n FROM events e JOIN event_registrations r ON r.event_id = e.id
+      WHERE r.user_id = ? AND (r.status IN ('cancelled','declined') OR e.status = 'cancelled'
+         OR datetime(COALESCE(e.ends_at, e.starts_at)) < datetime('now'))`,
+  ).bind(u.id).first();
+  // Counts per hosted event, in three grouped reads. An event with no row in a
+  // read has none of that thing: the read succeeded, so its 0 is a count.
+  const regCounts = await c.env.DB.prepare(
+    `SELECT r.event_id,
+            SUM(CASE WHEN r.status IN ('registered','confirmed','attended') THEN 1 ELSE 0 END) AS seats_taken,
+            SUM(CASE WHEN r.status = 'waitlisted' THEN 1 ELSE 0 END) AS waitlisted,
+            SUM(CASE WHEN r.status = 'registered' THEN 1 ELSE 0 END) AS pending_approvals
+       FROM event_registrations r JOIN events e ON e.id = r.event_id
+      WHERE e.host_user_id = ? GROUP BY r.event_id`,
+  ).bind(u.id).all();
+  const checkinCounts = await c.env.DB.prepare(
+    `SELECT ch.event_id, COUNT(*) AS n FROM event_checkins ch JOIN events e ON e.id = ch.event_id
+      WHERE e.host_user_id = ? AND ch.checked_in_at IS NOT NULL GROUP BY ch.event_id`,
+  ).bind(u.id).all();
+  const inviteCounts = await c.env.DB.prepare(
+    `SELECT i.event_id, COUNT(*) AS n FROM event_invitations i JOIN events e ON e.id = i.event_id
+      WHERE e.host_user_id = ? AND i.status = 'pending' GROUP BY i.event_id`,
+  ).bind(u.id).all();
+  const byEvent = (rows: any[], key: string) => new Map(rows.map((r: any) => [Number(r.event_id), Number(r[key])]));
+  const regs = new Map((regCounts.results || []).map((r: any) => [Number(r.event_id), r]));
+  const checkins = byEvent(checkinCounts.results || [], 'n');
+  const invites = byEvent(inviteCounts.results || [], 'n');
+  const joinLink = (r: any) => canManage(r, u) || hasConfirmedEventSeat({ status: r.reg_status, payment_status: r.reg_payment_status });
   return c.json({
-    hosting: (hosting.results || []).map((r) => shapeEvent(r, { includePrivate: true })),
+    hosting: (hosting.results || []).map((r: any) => {
+      const reg: any = regs.get(Number(r.id));
+      return {
+        ...shapeEvent(r, { includePrivate: true }),
+        counts: {
+          seats_taken: Number(reg?.seats_taken ?? 0),
+          waitlisted: Number(reg?.waitlisted ?? 0),
+          pending_approvals: Number(reg?.pending_approvals ?? 0),
+          checked_in: checkins.get(Number(r.id)) ?? 0,
+          invitations_open: invites.get(Number(r.id)) ?? 0,
+        },
+      };
+    }),
     attending: (attending.results || []).map((r: any) => ({
-      ...shapeEvent(r),
-      reg_status: r.reg_status,
+      ...shapeEvent(r, { includeJoinLink: joinLink(r) }),
+      ...placeFields(r),
       reg_waitlist_position: r.reg_waitlist_position ?? null,
+      checkin_code: r.checkin_code ?? null,
+    })),
+    past: {
+      places: (past.results || []).map((r: any) => ({
+        ...shapeEvent(r, { includeJoinLink: joinLink(r) }),
+        ...placeFields(r),
+        outcome: pastOutcome(r),
+      })),
+      total: Number(pastTotal?.n ?? 0),
+      limit: pastLimit,
+      offset: pastOffset,
+    },
+  });
+});
+
+// ── GET /invitations — the caller's pending invitations, signed in ─────────
+// D1032 (#2873). By user id or email, for events not cancelled and not ended.
+// The RSVP token never travels: a signed-in answer needs none.
+events.get('/invitations', async (c) => {
+  const u = await auth(c);
+  if (u instanceof Response) return u;
+  const rows = await c.env.DB.prepare(
+    `SELECT e.*, i.id AS invitation_id, i.comp AS inv_comp, i.personal_message, i.created_at AS invited_at,
+            host.name AS host_name
+       FROM event_invitations i
+       JOIN events e ON e.id = i.event_id
+       LEFT JOIN users host ON host.id = e.host_user_id
+      WHERE (i.invited_user_id = ? OR lower(i.invited_email) = lower(?))
+        AND i.status = 'pending' AND e.status != 'cancelled'
+        AND datetime(COALESCE(e.ends_at, e.starts_at)) >= datetime('now')
+      ORDER BY e.starts_at ASC, i.id ASC`,
+  ).bind(u.id, u.email).all();
+  return c.json({
+    invitations: (rows.results || []).map((r: any) => ({
+      invitation_id: Number(r.invitation_id),
+      comp: r.inv_comp === 1,
+      personal_message: r.personal_message ?? null,
+      invited_at: r.invited_at,
+      host_name: r.host_name ?? null,
+      event: shapeEvent(r),
     })),
   });
 });
@@ -196,13 +371,13 @@ events.post('/', async (c) => {
   if (!title) return c.json({ error: 'title_required' }, 400);
   if (!body.starts_at) return c.json({ error: 'starts_at_required' }, 400);
 
-  const type = EVENT_TYPES.includes(body.type) ? body.type : 'meetup';
+  const type = isEventType(body.type) ? body.type : 'meetup';
   const visibility = EVENT_VISIBILITIES.includes(body.visibility) ? body.visibility : 'private';
   const locationKind = LOCATION_KINDS.includes(body.location_kind) ? body.location_kind : 'virtual';
   const slug = await ensureUniqueEventSlug(c.env, title);
-  const audienceRules = serializeAudienceRules(parseAudienceRules(
-    body.audience_rules ? JSON.stringify(body.audience_rules) : null,
-  ));
+  let audienceRules;
+  try { audienceRules = JSON.stringify(validateRegistrationRules(body.audience_rules_json ?? body.audience_rules ?? {})); }
+  catch { return c.json({ error: 'invalid_audience_rules' }, 400); }
 
   const ins: any = await c.env.DB.prepare(
     `INSERT INTO events
@@ -292,9 +467,9 @@ events.get('/suggested', async (c) => {
     archetype,
     track,
     events: scored.slice(0, 8).map((s) => ({
-      ...shapeEvent(s.e),
+      ...shapeEvent(s.e, { includeJoinLink: canManage(s.e, u) }),
       suggestion_reason: prefer.has(s.e.type)
-        ? (archetype?.label ? `Recommended for ${archetype.label}` : 'Matches your track')
+        ? (archetype?.label ? `Suits ${archetype.label}` : 'Matches your track')
         : null,
     })),
   });
@@ -390,11 +565,11 @@ events.get('/:id', async (c) => {
   const agenda = await c.env.DB.prepare(
     `SELECT * FROM event_agenda_items WHERE event_id = ? ORDER BY display_order ASC, id ASC`,
   ).bind(id).all();
-  const registration = await c.env.DB.prepare(`SELECT id, status, waitlist_position, decision_reason, decided_at FROM event_registrations WHERE event_id = ? AND user_id = ?`).bind(id, u.id).first();
+  const registration = await c.env.DB.prepare(`SELECT id, status, payment_status, waitlist_position, decision_reason, decided_at FROM event_registrations WHERE event_id = ? AND user_id = ?`).bind(id, u.id).first();
   return c.json({
     registration,
-    event: shapeEvent(event, { includePrivate: manage }),
-    agenda: (agenda.results || []).map(shapeAgendaItem),
+    event: shapeEvent(event, { includePrivate: manage, includeJoinLink: hasConfirmedEventSeat(registration) }),
+    agenda: (agenda.results || []).map((row) => shapeAgendaItem(row, { includeJoinLink: manage || isInPersonEvent(event) || hasConfirmedEventSeat(registration) })),
   });
 });
 
@@ -411,17 +586,18 @@ events.patch('/:id', async (c) => {
   const body = await c.req.json().catch(() => ({} as any));
   const sets: string[] = [];
   const binds: unknown[] = [];
-  const str = (k: string) => { if (k in body) { sets.push(`${k} = ?`); binds.push(body[k] ?? null); } };
-  const num = (k: string) => { if (k in body) { sets.push(`${k} = ?`); binds.push(body[k] != null ? Number(body[k]) : null); } };
+  const reviewValues = new Map<string, unknown>();
+  const str = (k: string) => { if (k in body) { sets.push(`${k} = ?`); binds.push(body[k] ?? null); reviewValues.set(k, body[k] ?? null); } };
+  const num = (k: string) => { if (k in body) { sets.push(`${k} = ?`); const value = body[k] != null ? Number(body[k]) : null; binds.push(value); reviewValues.set(k, value); } };
   const bool = (k: string) => { if (k in body) { sets.push(`${k} = ?`); binds.push(body[k] ? 1 : 0); } };
 
   str('title'); str('summary'); str('description'); str('cover_url');
   str('starts_at'); str('ends_at'); str('timezone'); str('location_text'); str('location_url');
-  if ('type' in body && EVENT_TYPES.includes(body.type)) { sets.push('type = ?'); binds.push(body.type); }
+  if ('type' in body && isEventType(body.type)) { sets.push('type = ?'); binds.push(body.type); }
   if ('visibility' in body && EVENT_VISIBILITIES.includes(body.visibility)) { sets.push('visibility = ?'); binds.push(body.visibility); }
-  if ('location_kind' in body && LOCATION_KINDS.includes(body.location_kind)) { sets.push('location_kind = ?'); binds.push(body.location_kind); }
+  if ('location_kind' in body && LOCATION_KINDS.includes(body.location_kind)) { sets.push('location_kind = ?'); binds.push(body.location_kind); reviewValues.set('location_kind', body.location_kind); }
   num('capacity'); num('price_cents'); num('project_id');
-  if ('currency' in body) { sets.push('currency = ?'); binds.push(body.currency || 'usd'); }
+  if ('currency' in body) { sets.push('currency = ?'); binds.push(body.currency || 'usd'); reviewValues.set('currency', body.currency || 'usd'); }
   bool('waitlist_enabled'); bool('approval_required');
   if ('audience_rules' in body || 'audience_rules_json' in body) {
     let rules;
@@ -432,6 +608,15 @@ events.patch('/:id', async (c) => {
   }
 
   if (!sets.length) return c.json({ event: shapeEvent(event, { includePrivate: true }) });
+  // D917: material host edits flag an approved event; its status stays as it is.
+  const reviewFields = ['title', 'starts_at', 'ends_at', 'timezone', 'location_kind', 'location_text', 'location_url', 'price_cents', 'currency'];
+  const changed = reviewFields.some((key) => reviewValues.has(key) && (key === 'price_cents'
+    ? reviewValues.get(key) !== (event[key] != null ? Number(event[key]) : null)
+    : reviewValues.get(key) !== (event[key] ?? null)));
+  if (Number(event.host_user_id) === u.id && changed) {
+    sets.push('changed_after_approval_at = CASE WHEN approved_at IS NOT NULL OR admin_published = 1 THEN ? ELSE changed_after_approval_at END');
+    binds.push(new Date().toISOString());
+  }
   sets.push(`updated_at = datetime('now')`);
   binds.push(id);
   await c.env.DB.prepare(`UPDATE events SET ${sets.join(', ')} WHERE id = ?`).bind(...binds).run();
@@ -443,8 +628,9 @@ events.patch('/:id', async (c) => {
     const cur = await loadEvent(c.env, id);
     if (Number(cur.admin_published) !== 1 && cur.status === 'published') {
       await c.env.DB.prepare(
-        `UPDATE events SET status = 'pending_review', updated_at = datetime('now') WHERE id = ?`,
-      ).bind(id).run();
+        `UPDATE events SET status = 'pending_review', submitted_at = ?, updated_at = datetime('now')
+           WHERE id = ? AND status = 'published' AND admin_published = 0`,
+      ).bind(new Date().toISOString(), id).run();
     }
   }
 
@@ -457,7 +643,7 @@ events.patch('/:id', async (c) => {
         await notify(c.env, {
           userId: p.user_id, type: 'event_promoted', category: 'events',
           title: `You're off the waitlist: ${updated.title}`,
-          link: `/events/${updated.slug}`, payload: { event_id: id },
+          link: memberEventLink(id), payload: { event_id: id },
         }).catch(() => {});
       }
     }
@@ -478,17 +664,130 @@ events.post('/:id/submit-review', async (c) => {
   if (!event) return c.json({ error: 'not_found' }, 404);
   if (!canManage(event, u)) return c.json({ error: 'forbidden' }, 403);
 
-  if (event.visibility === 'public') {
-    await c.env.DB.prepare(
-      `UPDATE events SET status = 'pending_review', updated_at = datetime('now') WHERE id = ?`,
-    ).bind(id).run();
-  } else {
-    await c.env.DB.prepare(
-      `UPDATE events SET status = 'published', updated_at = datetime('now') WHERE id = ?`,
-    ).bind(id).run();
+  // Repeated submissions must not reset queue age or revive a cancelled event.
+  if (event.status === 'pending_review' || (event.status === 'published'
+      && Number(event.admin_published) !== 1 && event.visibility !== 'public')) {
+    return c.json({ event: shapeEvent(event, { includePrivate: true }) });
   }
+  if (!['draft', 'rejected'].includes(event.status)) return c.json({ error: 'not_submittable' }, 409);
+
+  let submitted: unknown;
+  if (event.visibility === 'public') {
+    submitted = await c.env.DB.prepare(
+      `UPDATE events SET status = 'pending_review', submitted_at = ?, updated_at = datetime('now') WHERE id = ? AND status IN ('draft', 'rejected') RETURNING id`,
+    ).bind(new Date().toISOString(), id).first();
+  } else {
+    submitted = await c.env.DB.prepare(
+      `UPDATE events SET status = 'published', updated_at = datetime('now') WHERE id = ? AND status IN ('draft', 'rejected') RETURNING id`,
+    ).bind(id).first();
+  }
+  if (!submitted) return c.json({ error: 'not_submittable' }, 409);
   await logAdminAction(c.env, u.id, u.email, 'event_submitted', { event_id: id });
   return c.json({ event: shapeEvent(await loadEvent(c.env, id), { includePrivate: true }) });
+});
+
+// ── POST /:id/cancel — the host cancels their event ────────────────────────
+// D1032 (#2873). The desk's cancel (`routes/admin_events.ts`) for whoever
+// `canManage`: the event closes and leaves the public feed, the change is
+// audited, every place holder is told (with the host's note, if any). A ticket
+// is a platform charge, never paid to the host (`services/eventTickets.ts`),
+// so the paid tickets are counted, read before anything changes, and handed
+// to the Events desk, which refunds them (#2368).
+events.post('/:id/cancel', async (c) => {
+  const u = await auth(c);
+  if (u instanceof Response) return u;
+  const id = intParam(c.req.param('id'));
+  if (!id) return refuse(c, 404, { code: 'not_found', message: 'This event could not be found.' });
+  const event = await loadEvent(c.env, id);
+  if (!event) return refuse(c, 404, { code: 'not_found', message: 'This event could not be found.' });
+  if (!canManage(event, u)) return refuse(c, 403, { code: 'forbidden', message: 'Only the host can cancel this event.' });
+  if (event.status === 'cancelled') return refuse(c, 409, { code: 'already_cancelled', message: 'This event is already cancelled.' });
+  const body = await c.req.json().catch(() => ({} as any));
+  const note = typeof body.note === 'string' ? body.note.trim().slice(0, 1000) : '';
+  // Read before changing state: an unreadable payment ledger must not look like zero.
+  const paid = await c.env.DB.prepare(
+    `SELECT e.currency, COUNT(*) AS count, SUM(r.amount_cents) AS amount_cents
+       FROM event_registrations r JOIN events e ON e.id = r.event_id
+       WHERE r.event_id = ? AND r.payment_status = 'paid'
+       GROUP BY e.currency ORDER BY e.currency`,
+  ).bind(id).all<{ currency: string; count: number; amount_cents: number }>();
+  const paidRows = paid.results || [];
+  const cancelled = await c.env.DB.prepare(
+    `UPDATE events SET status = 'cancelled', admin_published = 0, updated_at = datetime('now')
+       WHERE id = ? AND status != 'cancelled' RETURNING id`,
+  ).bind(id).first();
+  if (!cancelled) return refuse(c, 409, { code: 'already_cancelled', message: 'This event is already cancelled.' });
+  const paidCount = paidRows.reduce((total, row) => total + Number(row.count), 0);
+  await logAdminAction(c.env, u.id, u.email, 'event_cancelled_by_host', { event_id: id, paid_tickets: paidCount });
+  const seated = await c.env.DB.prepare(
+    `SELECT DISTINCT user_id FROM event_registrations
+       WHERE event_id = ? AND user_id IS NOT NULL AND status IN ('registered','confirmed','attended','waitlisted')`,
+  ).bind(id).all();
+  for (const r of (seated.results || []) as any[]) {
+    await notify(c.env, {
+      userId: Number(r.user_id), type: 'event_cancelled', category: 'events',
+      title: `Event cancelled: ${event.title}`, body: note || undefined, link: memberEventLink(id), payload: { event_id: id },
+    }).catch(() => {});
+  }
+  return c.json({
+    event: shapeEvent(await loadEvent(c.env, id), { includePrivate: true }),
+    paid_tickets: {
+      count: paidCount,
+      by_currency: paidRows.map((row) => ({ currency: row.currency, amount_cents: Number(row.amount_cents) })),
+      refunds_by: 'events_desk',
+    },
+  });
+});
+
+// ── POST /:id/invitation — answer my invitation, signed in ─────────────────
+// D1032 (#2873). `{ action: 'accept' | 'decline' }`, no token: the caller's
+// own non-revoked invitation, by user id or email. Accept registers through
+// `registerPrincipal`, as `/register` does (an audience rule may also make the
+// seat free), and records the acceptance only once the seat is held.
+events.post('/:id/invitation', async (c) => {
+  const u = await auth(c);
+  if (u instanceof Response) return u;
+  const id = intParam(c.req.param('id'));
+  if (!id) return refuse(c, 404, { code: 'not_found', message: 'This event could not be found.' });
+  const body = await c.req.json().catch(() => ({} as any));
+  const action = String(body.action || '').toLowerCase();
+  if (action !== 'accept' && action !== 'decline') {
+    return refuse(c, 400, { code: 'invalid_action', message: 'Choose accept or decline.' });
+  }
+  const event = await loadEvent(c.env, id);
+  if (!event) return refuse(c, 404, { code: 'not_found', message: 'This event could not be found.' });
+  const inv: any = await c.env.DB.prepare(
+    `SELECT * FROM event_invitations
+       WHERE event_id = ? AND (invited_user_id = ? OR lower(invited_email) = lower(?))
+       ORDER BY (status = 'revoked') ASC, id DESC LIMIT 1`,
+  ).bind(id, u.id, u.email).first();
+  if (!inv) return refuse(c, 404, { code: 'no_invitation', message: 'You have no invitation to this event.' });
+  if (inv.status === 'revoked') return refuse(c, 409, { code: 'invite_revoked', message: 'The host withdrew this invitation.' });
+
+  if (action === 'decline') {
+    await c.env.DB.prepare(
+      `UPDATE event_invitations SET status = 'declined', responded_at = datetime('now') WHERE id = ?`,
+    ).bind(inv.id).run();
+    return c.json({ ok: true, status: 'declined' });
+  }
+
+  if (event.status !== 'published') return refuse(c, 400, { code: 'not_open', message: 'This event is not open for registration.' });
+  const rules: AudienceRules = parseAudienceRules(event.audience_rules_json);
+  const compRule = await isPrincipalCompEligible(c.env, rules, { userId: u.id, email: u.email }, event.host_user_id ?? null);
+  const comp = compRule.eligible || inv.comp === 1;
+  const paid = Number(event.price_cents || 0) > 0 && !comp;
+  const res = await registerPrincipal(c, event, {
+    userId: u.id, email: u.email, name: u.name,
+    comp, paid, source: 'invite', invitationId: Number(inv.id), answers: body.answers ?? null,
+    // The caller is the signed-in invitee, so a paid ticket may mint its PaymentIntent.
+    selfPay: true,
+  });
+  if (res.status < 400) {
+    await c.env.DB.prepare(
+      `UPDATE event_invitations SET status = 'accepted', responded_at = datetime('now') WHERE id = ? AND status != 'revoked'`,
+    ).bind(inv.id).run();
+  }
+  return res;
 });
 
 // ── POST /:id/invitations — send manual invites (+ mint comp) ──────────────
@@ -662,7 +961,7 @@ events.post('/:id/registrations/:rid/approve', async (c) => {
   if (reg.user_id) {
     await notify(c.env, {
       userId: reg.user_id, type: 'event_confirmed', category: 'events',
-      title: `You're confirmed: ${event.title}`, link: `/events/${event.slug}`, payload: { event_id: id },
+      title: `You're confirmed: ${event.title}`, link: memberEventLink(id), payload: { event_id: id },
     }).catch(() => {});
   }
   return c.json({ registration: { ...(await loadReg(c.env, id, rid)) } });
@@ -694,7 +993,7 @@ events.post('/:id/registrations/:rid/decline', async (c) => {
       if (p.user_id) {
         await notify(c.env, {
           userId: p.user_id, type: 'event_promoted', category: 'events',
-          title: `You're off the waitlist: ${event.title}`, link: `/events/${event.slug}`, payload: { event_id: id },
+          title: `You're off the waitlist: ${event.title}`, link: memberEventLink(id), payload: { event_id: id },
         }).catch(() => {});
       }
     }
@@ -703,7 +1002,7 @@ events.post('/:id/registrations/:rid/decline', async (c) => {
   if (reg.user_id) {
     await notify(c.env, {
       userId: reg.user_id, type: 'event_declined', category: 'events',
-      title: `Registration update: ${event.title}`, link: `/events/${event.slug}`, payload: { event_id: id },
+      title: `Registration update: ${event.title}`, link: memberEventLink(id), payload: { event_id: id },
     }).catch(() => {});
   }
   return c.json({ registration: { ...(await loadReg(c.env, id, rid)) } });
@@ -738,7 +1037,7 @@ events.post('/:id/registrations/:rid/promote', async (c) => {
   if (reg.user_id) {
     await notify(c.env, {
       userId: reg.user_id, type: 'event_promoted', category: 'events',
-      title: `You're off the waitlist: ${event.title}`, link: `/events/${event.slug}`, payload: { event_id: id },
+      title: `You're off the waitlist: ${event.title}`, link: memberEventLink(id), payload: { event_id: id },
     }).catch(() => {});
   }
   return c.json({ registration: { ...(await loadReg(c.env, id, rid)) } });
@@ -834,7 +1133,7 @@ events.delete('/:id/registration', async (c) => {
       if (p.user_id) {
         await notify(c.env, {
           userId: p.user_id, type: 'event_promoted', category: 'events',
-          title: `You're off the waitlist: ${event.title}`, link: `/events/${event.slug}`, payload: { event_id: id },
+          title: `You're off the waitlist: ${event.title}`, link: memberEventLink(id), payload: { event_id: id },
         }).catch(() => {});
       }
     }
@@ -894,7 +1193,7 @@ events.get('/:id/ics', async (c) => {
   const event = await loadEvent(c.env, id);
   if (!event) return c.json({ error: 'not_found' }, 404);
   if (!(await canViewEvent(c.env, event, u))) return c.json({ error: 'forbidden' }, 403);
-  const ics = buildEventIcs(event);
+  const ics = buildEventIcs(shapeEvent(event, { includeJoinLink: await canReadJoinLink(c.env, event, u) }));
   return new Response(ics, {
     headers: {
       'content-type': 'text/calendar; charset=utf-8',
@@ -944,7 +1243,8 @@ events.get('/:id/agenda', async (c) => {
   const rows = await c.env.DB.prepare(
     `SELECT * FROM event_agenda_items WHERE event_id = ? ORDER BY display_order ASC, id ASC`,
   ).bind(id).all();
-  return c.json({ agenda: (rows.results || []).map(shapeAgendaItem) });
+  const includeJoinLink = await canReadJoinLink(c.env, event, u);
+  return c.json({ agenda: (rows.results || []).map((row) => shapeAgendaItem(row, { includeJoinLink })) });
 });
 
 events.post('/:id/agenda', async (c) => {
@@ -973,7 +1273,7 @@ events.post('/:id/agenda', async (c) => {
   // Task #7 — a founder speaker on a Demo Day agenda earns Demo Day Presenter.
   if (body.speaker_user_id) await awardAgendaSpeakerBadge(c.env, Number(body.speaker_user_id), event.type);
   await logAdminAction(c.env, u.id, u.email, 'event_agenda_created', { event_id: id, agenda_item_id: row?.id });
-  return c.json({ item: shapeAgendaItem(row) }, 201);
+  return c.json({ item: shapeAgendaItem(row, { includeJoinLink: true }) }, 201);
 });
 
 events.post('/:id/agenda/reorder', async (c) => {
@@ -1024,7 +1324,7 @@ events.patch('/:id/agenda/:aid', async (c) => {
     await awardAgendaSpeakerBadge(c.env, Number(body.speaker_user_id), event.type);
   }
   await logAdminAction(c.env, u.id, u.email, 'event_agenda_updated', { event_id: id, agenda_item_id: aid });
-  return c.json({ item: shapeAgendaItem(row) });
+  return c.json({ item: shapeAgendaItem(row, { includeJoinLink: true }) });
 });
 
 events.delete('/:id/agenda/:aid', async (c) => {
@@ -1058,6 +1358,8 @@ export async function registerPrincipal(
     source: string;
     invitationId: number | null;
     answers: unknown;
+    /** D1032: `userId` is the signed-in caller, so a paid seat may mint its PaymentIntent (as `source: 'self'` may). */
+    selfPay?: boolean;
   },
 ): Promise<Response> {
   const env: Env = c.env;
@@ -1082,7 +1384,7 @@ export async function registerPrincipal(
     // needs_payment and must sign in to pay.
     if (seated && existing.payment_status === 'pending') {
       let clientSecret: string | null = null;
-      if (p.source === 'self' && p.userId) {
+      if ((p.source === 'self' || p.selfPay) && p.userId) {
         try {
           const payer: any = await env.DB.prepare(
             `SELECT id, uid, email, name, stripe_customer_id FROM users WHERE id = ?`,
@@ -1183,7 +1485,7 @@ export async function registerPrincipal(
   // member's customer. Those surface needs_payment WITHOUT a client_secret and
   // the SPA gates them behind login.
   let clientSecret: string | null = null;
-  if (p.paid && landed !== 'waitlisted' && p.userId && p.source === 'self') {
+  if (p.paid && landed !== 'waitlisted' && p.userId && (p.source === 'self' || p.selfPay)) {
     try {
       const payer: any = await env.DB.prepare(
         `SELECT id, uid, email, name, stripe_customer_id FROM users WHERE id = ?`,

@@ -197,8 +197,8 @@ export function NoPartnerProfile() {
       </span>
       <span>
         Everything in this workspace hangs off a firm record and this sign-in is not attached to
-        one, so the zone below is showing you nobody’s. An admin can attach it under Partners →
-        Firm links.
+        one, so the zone below is showing you nobody’s. An admin can attach it under Advisors &amp;
+        Partners → Firms.
       </span>
       {/* THE SENTENCE FOR THE OTHER READER, and for a long time the more common
           one. An admin previewing the Partner role resolves to no firm and never

@@ -2,6 +2,7 @@ import React, { Suspense, lazy, useCallback, useEffect, useMemo, useRef, useStat
 import { useLocation, useNavigate, Link } from 'react-router-dom';
 import { api, refusalError } from '../lib/api';
 import { EXPLAINERS } from '../lib/explainers';
+import { normalizePhoneInput, phoneCountry, phonePlaceholder, PHONE_COUNTRIES, PHONE_ERROR } from '../lib/phoneNumber';
 import { useToast } from '../components/useToast';
 import {
   User, ShieldCheck,
@@ -30,6 +31,7 @@ import AutoReloadCard from './account/AutoReloadCard';
 import { BuyTokensCard, PaymentDetailsCard, PlanAllowanceCard, TokenBalanceCard, useBillingReads } from './account/BillingCards';
 import FollowingSection from './account/AccountFollowing';
 import UsageSection from './account/UsageOverview';
+import CompaniesProjects from './account/companies/CompaniesProjects';
 import CostPage from './account/CostPage';
 // D807 (#2246) — `/account/usage/limits`, Usage's Limits page.
 import LimitsPage from './account/LimitsPage';
@@ -44,6 +46,7 @@ import ColleagueSeatsPanel from './ColleagueSeatsPanel';
 // Task #4 — Axal-branded embedded checkout (Stripe Elements, no redirect).
 import AxalCheckout from '../components/AxalCheckout';
 import { TIER_PLANS } from '../components/PaywallModal';
+import { FREE, priceText, usePlansRead } from '../lib/planPrices';
 import BillingDashboard from '../components/BillingDashboard';
 import AuthorCard from '../components/AuthorCard';
 // Task #11 — shared first-time optional TOTP enrolment wizard (also used on
@@ -104,7 +107,7 @@ function ComplianceBridge() {
       <div className="flex-1 min-w-[200px] text-sm text-gray-700 dark:text-gray-300" data-testid="compliance-line">
         {line}{' '}Trust Center reports on the data held here.
       </div>
-      <Link to="/trust" className="text-xs px-3 py-1.5 rounded-lg border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 hover:border-violet-400 whitespace-nowrap">
+      <Link to="/trust/me" className="text-xs px-3 py-1.5 rounded-lg border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 hover:border-violet-400 whitespace-nowrap">
         Open Trust Center →
       </Link>
     </div>
@@ -230,6 +233,8 @@ const ActivityPage = lazy(() => import('./ActivityPage'));
 // than dropped with the screens they hold.
 const SECTIONS = [
   { id: 'account', label: 'Profile and identity' },
+  // D1134 (#2422) — Companies and projects, second, as the owner asked ("below Profile and identity").
+  { id: 'companies', label: 'Companies and projects' },
   { id: 'notifications', label: 'Notifications' },
   { id: 'security-privacy', label: 'Sign-in and security' },
   { id: 'billing', label: 'Billing and orders' },
@@ -500,6 +505,7 @@ function AccountPanes({ safeActive, data, setData, flash, patch, reloadAccount, 
           <DigestQuietHoursCard flash={flash} />
         </>
       )}
+      {safeActive === 'companies' && <CompaniesProjects role={role} />}
       {safeActive === 'following' && <FollowingSection />}
       {safeActive === 'usage' && (usagePage === 'limits' ? <LimitsPage /> : usagePage === 'cost' ? <CostPage role={role} /> : <UsageSection role={role} />)}
       {safeActive === 'developer' && allowedIds.has('developer') && <DeveloperSection role={data.role} />}
@@ -727,6 +733,7 @@ function PersonalIdentityCard({ flash, onPctChange }) {
   if (!row) return <Card title="Identity"><div className="text-sm text-gray-500">Loading…</div></Card>;
 
   const r = row;
+  const normalizedPhone = normalizePhoneInput(phoneInput, r.country);
   const set = (k, v) => setRow({ ...r, [k]: v });
   const onBlurSave = (k) => {
     const v = r[k] ?? null;
@@ -780,11 +787,11 @@ function PersonalIdentityCard({ flash, onPctChange }) {
           {fe('tax_id_number')}
         </Field>
         <Field label={`Phone${r.has_phone ? ' (saved · ••••' + (r.phone_last4 || '••••') + ')' : ''}`}
-          hint="E.164 format, e.g. +14155551234.">
+          hint="Your mobile number, any country. National numbers use your Country below.">
           <div className="flex gap-2">
-            <input value={phoneInput} onChange={e => setPhoneInput(e.target.value)}
-              disabled={busy} className={inputCls} placeholder={r.has_phone ? 'Replace…' : '+1…'} />
-            <button onClick={() => phoneInput && save({ phone_e164: phoneInput })}
+            <input data-testid="identity-phone-input" type="tel" value={phoneInput} onChange={e => setPhoneInput(e.target.value)}
+              disabled={busy} className={inputCls} placeholder={phonePlaceholder(r.country)} />
+            <button data-testid="identity-phone-save" onClick={() => { if (!normalizedPhone) { setFieldErrors(previous => ({ ...previous, phone_e164: PHONE_ERROR })); return; } save({ phone_e164: normalizedPhone.e164 }); }}
               disabled={busy || !phoneInput}
               className="px-3 py-2 text-xs bg-violet-600 hover:bg-violet-700 disabled:bg-gray-300 text-white rounded-lg">Save</button>
             {r.has_phone && (
@@ -792,6 +799,7 @@ function PersonalIdentityCard({ flash, onPctChange }) {
                 className="px-3 py-2 text-xs border border-gray-300 dark:border-gray-600 rounded-lg">Clear</button>
             )}
           </div>
+          {normalizedPhone && <p className="text-xs text-gray-500 mt-1" role="status">We'll save {normalizedPhone.international}.</p>}
           {fe('phone_e164')}
         </Field>
       </div>
@@ -2135,6 +2143,8 @@ function SmsPanel({ data, flash, onChanged }) {
   const [status, setStatus] = useState(null);
   const [step, setStep] = useState('idle');           // idle | enroll | verify
   const [country, setCountry] = useState('US');
+  const [countryReady, setCountryReady] = useState(false);
+  const [countryReadError, setCountryReadError] = useState(false);
   const [phone, setPhone] = useState('');
   const [session, setSession] = useState(null);
   const [code, setCode] = useState('');
@@ -2146,13 +2156,22 @@ function SmsPanel({ data, flash, onChanged }) {
   };
   useEffect(() => { refresh(); }, []);
 
+  useEffect(() => {
+    let cancelled = false;
+    api.getPersonalProfile().then(profile => {
+      if (!cancelled) setCountry(phoneCountry(profile?.country));
+    }).catch(() => { if (!cancelled) setCountryReadError(true); })
+      .finally(() => { if (!cancelled) setCountryReady(true); });
+    return () => { cancelled = true; };
+  }, []);
+
+  const normalizedPhone = normalizePhoneInput(phone, country);
   const start = async () => {
-    if (!/^\+[1-9]\d{6,14}$/.test(phone)) {
-      flash('Phone must be E.164 format, e.g. +14155551234.', 'error'); return;
-    }
+    if (!countryReady) return;
+    if (!normalizedPhone) { flash(PHONE_ERROR, 'error'); return; }
     setBusy(true);
     try {
-      const res = await api.smsStartEnrollment(phone, country, null);
+      const res = await api.smsStartEnrollment(normalizedPhone.e164, normalizedPhone.country, null);
       setSession(res.session_info);
       setStep('verify');
       flash('Verification code sent.');
@@ -2251,16 +2270,20 @@ function SmsPanel({ data, flash, onChanged }) {
 
       {step === 'enroll' && (
         <div className="space-y-3">
-          <Field label="Country (ISO 2-letter, e.g. US, GB, CA)">
-            <input value={country} onChange={e => setCountry(e.target.value.toUpperCase().slice(0, 2))}
-              className={inputCls} maxLength={2} />
+          <Field label="Country">
+            <select value={country} onChange={e => setCountry(e.target.value)} disabled={busy || !countryReady}
+              className={inputCls} data-testid="sms-phone-country">
+              {PHONE_COUNTRIES.map(option => <option key={option.country} value={option.country}>{option.label}</option>)}
+            </select>
+            {countryReadError && <p className="text-xs text-amber-700">Profile country unreadable. Choose the country for this number.</p>}
           </Field>
-          <Field label="Phone (E.164 format, including +)">
-            <input value={phone} onChange={e => setPhone(e.target.value.replace(/[^\d+]/g, '').slice(0, 16))}
-              placeholder="+14155551234" className={`${inputCls} font-mono`} />
+          <Field label="Phone" hint="Your mobile number, any country">
+            <input type="tel" value={phone} onChange={e => setPhone(e.target.value)} disabled={busy || !countryReady}
+              placeholder={phonePlaceholder(country)} className={`${inputCls} font-mono`} data-testid="sms-phone-input" />
+            {normalizedPhone && <p className="text-xs text-gray-500 mt-1" role="status">We'll text {normalizedPhone.international}.</p>}
           </Field>
           <div className="flex gap-2">
-            <button onClick={start} disabled={busy || !phone || country.length !== 2}
+            <button onClick={start} disabled={busy || !phone || !countryReady}
               className="px-4 py-2 bg-violet-600 hover:bg-violet-700 disabled:bg-gray-300 text-white rounded-lg text-sm font-medium">
               {busy ? 'Sending…' : 'Send verification code'}
             </button>
@@ -4642,26 +4665,28 @@ function GenericBillingPanel({ flash }) {
   );
 }
 
-// Persona plan catalog (display copy). Names / prices / features mirror the
+// Persona plan catalog (display copy). Names / features mirror the
 // marketing pricing pages; the paid "Pro" tier resolves its real Stripe price
 // server-side at checkout (or a keyless dev-upgrade), so this stays display-only
 // and never hardcodes a price id. Keyed by the plan_group the backend derives
 // from the role (partner → 'partner', advisor → 'advisor').
+// D1050 (#2901): no price is typed here. Pro's price is the plans read's
+// (`lib/planPrices.js`), under the plan group's licence key; Starter is free.
 const PERSONA_PLANS = {
   partner: {
     label: 'Partner',
-    starter: { name: 'Starter', price: '$0', tagline: 'Get listed and answer posted needs.',
+    starter: { name: 'Starter', tagline: 'Get listed and answer posted needs.',
       features: ['Marketplace + directory listing', 'Manage up to 3 service offers', 'Respond to Needs Board posts', 'Stripe Connect payouts'] },
-    pro: { name: 'Pro', price: '$99', tagline: 'For partners who want inbound demand on tap.',
+    pro: { name: 'Pro', tagline: 'For partners who want inbound demand on tap.',
       features: ['Unlimited service offers', 'Priority placement in search + directory', 'Full partner analytics dashboard', 'Verified partner badge', 'Partner deal portal access'] },
     enterprise: { name: 'Enterprise / Custom', tagline: 'Firms and agencies scaling across the network.',
       features: ['Featured marketplace placement', 'Multiple seats + team profiles', 'Dedicated partner manager'] },
   },
   advisor: {
     label: 'Advisor',
-    starter: { name: 'Starter', price: '$0', tagline: 'Publish a profile and take founder matches.',
+    starter: { name: 'Starter', tagline: 'Publish a profile and take founder matches.',
       features: ['Public advisor profile + expertise tags', 'Founder matching', 'Office Hours workspace', 'Ratings + trust badge'] },
-    pro: { name: 'Pro', price: '$29', tagline: 'For advisors who want more reach and better matches.',
+    pro: { name: 'Pro', tagline: 'For advisors who want more reach and better matches.',
       features: ['Priority founder matching', 'Boosted directory visibility', 'Featured advisor placement'] },
     enterprise: { name: 'Enterprise / Custom', tagline: 'Advisory firms and expert networks.',
       features: ['Multiple advisor seats + team profiles', 'Programmatic founder matching', 'Dedicated relationship manager'] },
@@ -4684,6 +4709,7 @@ function PersonaBillingPanel({ flash, billing }) {
   const refresh = billing.reload;
   const [checkout, setCheckout] = useState(null); // { clientSecret } once checkout starts
   const [busy, setBusy] = useState(false);
+  const prices = usePlansRead();
 
   // Flash on return from a (dev-upgrade) redirect, mirroring the other panels.
   useEffect(() => {
@@ -4768,7 +4794,7 @@ function PersonaBillingPanel({ flash, billing }) {
                   className={`rounded-lg border p-4 flex flex-col ${key === 'pro' ? 'border-violet-600 bg-violet-50/50 dark:bg-violet-900/20' : 'border-gray-200 dark:border-gray-700'}`}>
                   <div className="font-semibold text-gray-900 dark:text-gray-100">{plan.name}</div>
                   <div className="text-sm text-gray-900 dark:text-gray-100 mt-0.5">
-                    {plan.price ? <><span className="font-semibold">{plan.price}</span><span className="text-gray-500 dark:text-gray-400 text-xs"> / mo</span></> : <span className="font-semibold">Custom</span>}
+                    <span className="font-semibold" data-testid={`persona-price-${key}`}>{key === 'starter' ? FREE : key === 'pro' ? priceText(prices, group) : 'Custom'}</span>
                   </div>
                   <div className="text-xs text-gray-500 dark:text-gray-400 mt-1">{plan.tagline}</div>
                   <ul className="mt-3 space-y-1.5 flex-1">
@@ -4804,7 +4830,7 @@ function PersonaBillingPanel({ flash, billing }) {
           {checkout?.clientSecret && (
             <div className="mt-4 rounded-lg border border-gray-200 dark:border-gray-700 p-4">
               <div className="flex items-center justify-between mb-3">
-                <div className="text-sm font-medium text-gray-900 dark:text-gray-100">{defs.pro.name} — {defs.pro.price}/mo</div>
+                <div className="text-sm font-medium text-gray-900 dark:text-gray-100">{defs.pro.name} — {priceText(prices, group)}</div>
                 <button type="button" onClick={() => setCheckout(null)} className="text-xs text-gray-500 dark:text-gray-400 hover:underline">Cancel</button>
               </div>
               <AxalCheckout
@@ -4833,6 +4859,7 @@ function FounderBillingPanel({ flash, billing }) {
   // it could not be read and offers a retry.
   const status = billing.status === 'ready' ? billing.data : null;
   const [busy, setBusy] = useState(null);
+  const prices = usePlansRead();
 
   // Auto-flash when the URL carries an upgrade-completion param.
   useEffect(() => {
@@ -4872,7 +4899,11 @@ function FounderBillingPanel({ flash, billing }) {
 
   const refreshStatus = billing.reload;
 
-  const TIER_LABEL = { free: 'Free', growth: `${TIER_PLANS.growth.label} — ${TIER_PLANS.growth.price}/mo`, studio: `${TIER_PLANS.studio.label} — ${TIER_PLANS.studio.price}/mo` };
+  const TIER_LABEL = {
+    free: FREE,
+    growth: `${TIER_PLANS.growth.label} — ${priceText(prices, TIER_PLANS.growth.key)}`,
+    studio: `${TIER_PLANS.studio.label} — ${priceText(prices, TIER_PLANS.studio.key)}`,
+  };
   const ladder = ['free', 'growth', 'studio'];
   const RANK = { free: 0, growth: 1, studio: 2 };
 
@@ -4966,8 +4997,8 @@ function FounderBillingPanel({ flash, billing }) {
                     <div className="font-semibold text-gray-900 dark:text-gray-100">{t === 'free' ? 'Free' : TIER_PLANS[t].label}</div>
                     <div className="text-xs text-gray-500 dark:text-gray-400 mt-1">
                       {t === 'free' && '1 project · 5 interviews · 3 OKRs'}
-                      {t === 'growth' && `${TIER_PLANS.growth.price}/mo · Unlimited startups, interviews and OKRs, scoring`}
-                      {t === 'studio' && `${TIER_PLANS.studio.price}/mo · + Pitch deck, cap table, capital, legal, partner tools`}
+                      {t === 'growth' && `${priceText(prices, TIER_PLANS.growth.key)} · Unlimited startups, interviews and OKRs, scoring`}
+                      {t === 'studio' && `${priceText(prices, TIER_PLANS.studio.key)} · + Pitch deck, cap table, capital, legal, partner tools`}
                     </div>
                     <div className="mt-3">
                       {current && (
@@ -5104,6 +5135,7 @@ function InvestorBillingPanel({ flash, billing }) {
   const refresh = billing.reload;
   const [billingCycle, setBillingCycle] = useState('monthly');
   const [busy, setBusy] = useState(null);
+  const prices = usePlansRead();
 
   // Stripe-redirect flash banners (mirrors FounderBillingPanel).
   useEffect(() => {
@@ -5137,8 +5169,9 @@ function InvestorBillingPanel({ flash, billing }) {
 
   const TIER_LABEL = {
     free: 'Free',
-    professional: billingCycle === 'yearly' ? 'Professional — $1,490/yr' : 'Professional — $149/mo',
-    institutional: billingCycle === 'yearly' ? 'Institutional — $5,990/yr' : 'Institutional — $599/mo',
+    // D1050: the names are the plan catalogue's and the prices the plans read's, per the cycle shown.
+    professional: `${TIER_PLANS.professional.label} — ${priceText(prices, TIER_PLANS.professional.key, billingCycle === 'yearly' ? 'year' : 'month')}`,
+    institutional: `${TIER_PLANS.institutional.label} — ${priceText(prices, TIER_PLANS.institutional.key, billingCycle === 'yearly' ? 'year' : 'month')}`,
   };
   const ladder = ['free', 'professional', 'institutional'];
   const RANK = { free: 0, professional: 1, institutional: 2 };

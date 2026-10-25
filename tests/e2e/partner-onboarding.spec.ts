@@ -5,10 +5,12 @@ import { test, expect, type APIRequestContext, type Page } from '@playwright/tes
  *
  * Walks the full happy-path the X-2 spec ships:
  *
- *   1. Admin signs in, opens /admin/partners, opens "New Invitation",
- *      enters a unique recipient email, leaves the default
- *      `equity_partnership` deal-type checked, submits.
- *   2. Captures the magic link from the success-state input.
+ *   1. Admin signs in, opens /admin/partner-invitations/invitations (D923;
+ *      /admin/partners redirects there), opens "New invitation", enters a
+ *      unique recipient email, picks the `equity_partnership` deal type,
+ *      submits.
+ *   2. Captures the magic link from the result, which stays in the dialog
+ *      until Done (D923: no timer closes it).
  *   3. Opens the magic link in a fresh, cookie-less context (the
  *      `/partner-onboarding/:token` route is unauthenticated).
  *   4. Walks the partner through the chatbot — answers every
@@ -134,18 +136,19 @@ test.describe('Partner onboarding — admin → chatbot → finalize → revoke 
 
     /* ----- 1. Admin: open the partner-invitations panel ------------- */
     await loginAsAdmin(request, page);
-    await page.goto('/admin/partners');
+    await page.goto('/admin/partner-invitations/invitations');
     await expect(
-      page.getByRole('heading', { name: /Partner Invitations/i }),
+      page.getByRole('heading', { name: /Partner invitations/i }),
     ).toBeVisible();
 
     /* ----- 2. Admin: create a new invitation ------------------------ */
-    await page.getByRole('button', { name: /New Invitation/i }).click();
-    const modal = page.getByRole('heading', { name: /New Partner Invitation/i });
+    await page.getByRole('button', { name: /New invitation/i }).first().click();
+    const modal = page.getByRole('heading', { name: /^New invitation$/i });
     await expect(modal).toBeVisible();
-    // Recipient email is the only required field; equity_partnership
-    // is checked by default.
+    // The email and at least one deal type are required; no type is
+    // picked for the admin (D923, O-CAP allows up to three).
     await page.locator('input[type="email"]').first().fill(recipient);
+    await page.getByRole('checkbox', { name: /Equity partnership/i }).check();
 
     const createResponse = page.waitForResponse(
       (r) =>
@@ -159,14 +162,15 @@ test.describe('Partner onboarding — admin → chatbot → finalize → revoke 
       `createInvitation failed (${created.status()}): ${await created.text().catch(() => '')}`,
     ).toBeTruthy();
 
-    // Modal flips to a success view containing a readonly input with
-    // the magic link. Capture it before the modal auto-closes (1.5s).
+    // The dialog flips to its result, with a readonly input holding the
+    // magic link. It stays until Done (D923: no timer closes it).
     const linkInput = page.locator('input[readonly]').first();
     await expect(linkInput).toBeVisible({ timeout: 5_000 });
     const magicLink = await linkInput.inputValue();
     expect(magicLink, 'magic link should be a partners/onboard URL').toMatch(
       /\/partners\/onboard\?token=[0-9a-f]{16,}/,
     );
+    await page.getByRole('button', { name: /^Done$/i }).click();
 
     /* ----- 3. Partner: open the magic link in a fresh context ------- */
     // Fresh context = no admin cookies. The onboarding route is
@@ -236,22 +240,22 @@ test.describe('Partner onboarding — admin → chatbot → finalize → revoke 
     /* ----- 7. Admin: revoke + assert cascade ------------------------ */
     // The deal is in status='awaiting_signature' and the envelope is
     // in status='sent' — both should be voided by the revoke path.
-    await page.goto('/admin/partners');
-    // Filter to this recipient so the row is unambiguous.
+    await page.goto('/admin/partner-invitations/invitations');
+    // Filter to this recipient so the row is unambiguous (the search runs
+    // over the loaded rows, by name or email).
     await page
       .getByPlaceholder(/email/i)
       .first()
       .fill(recipient);
-    // Wait a tick for the debounce / re-render.
-    await page.waitForTimeout(500);
 
-    // Each row carries a Revoke button (Ban icon). We narrow by the
-    // recipient email to the right row, then trigger revoke.
-    const row = page.locator('div', { hasText: recipient }).first();
+    // Each row's menu is labelled "Actions for [name]" (D923); it holds
+    // Copy link, Resend and Revoke.
+    const row = page.locator('tr', { hasText: recipient }).first();
     await expect(row).toBeVisible();
-    await page.getByRole('button', { name: /^Revoke$/i }).first().click();
+    await row.getByRole('button', { name: /^Actions for /i }).click();
+    await page.getByRole('menuitem', { name: /^Revoke$/i }).click();
 
-    const revokeModal = page.getByRole('heading', { name: /Revoke invitation/i });
+    const revokeModal = page.getByRole('heading', { name: /^Revoke .*invitation\?$/i });
     await expect(revokeModal).toBeVisible();
 
     const revokeResponse = page.waitForResponse(
@@ -259,11 +263,10 @@ test.describe('Partner onboarding — admin → chatbot → finalize → revoke 
         /\/api\/admin\/partners\/invitations\/\d+\/revoke$/.test(r.url()) &&
         r.request().method() === 'POST',
     );
-    // The confirm button inside the revoke modal — the only red
-    // primary CTA in the modal.
+    // The confirm button inside the revoke dialog.
     await page
+      .getByRole('dialog')
       .getByRole('button', { name: /^Revoke$/i })
-      .last()
       .click();
     const revoked = await revokeResponse;
     expect(
@@ -392,22 +395,22 @@ test.describe('Partner onboarding — admin → chatbot → finalize → revoke 
     expect(myDeal, 'just-signed deal should appear under status=active').toBeTruthy();
 
     // ---- Drive Terminate from the admin UI ---------------------------
-    await page.goto('/admin/partners');
-    await page.getByRole('button', { name: /^Deals/i }).first().click();
+    await page.goto('/admin/partner-invitations');
+    await page.getByRole('link', { name: /^Deals/i }).first().click();
     // Scope the Terminate click to the <tr> for THIS recipient so the
     // test stays deterministic in shared/non-isolated environments.
     const dealRow = page.locator('tr', { hasText: recipient }).first();
     await expect(dealRow).toBeVisible({ timeout: 10_000 });
-    const terminateRow = dealRow.getByRole('button', { name: /^Terminate$/i });
-    await expect(terminateRow).toBeVisible();
-    await terminateRow.click();
+    await dealRow.getByRole('button', { name: /^Actions for /i }).click();
+    await page.getByRole('menuitem', { name: /^Terminate$/i }).click();
 
     await expect(
-      page.getByRole('heading', { name: /Terminate deal/i }),
+      page.getByRole('heading', { name: /^Terminate the .* with /i }),
     ).toBeVisible();
-    // Reason is required — the modal disables the confirm CTA when blank.
+    // Reason is required — the dialog disables the confirm CTA when blank.
     await page
-      .getByPlaceholder(/Reason \(required/i)
+      .getByRole('dialog')
+      .locator('textarea')
       .fill('e2e termination');
 
     const terminateResponse = page.waitForResponse(

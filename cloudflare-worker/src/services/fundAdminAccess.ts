@@ -93,7 +93,7 @@ export const FUND_ACTS: readonly FundAct[] = Object.freeze([
   act({ act: 'capital_call.issue', label: 'Issue a capital call', tier: 'super_admin', owner: '#1779',
     sentence: 'A Super Admin issues capital calls.',
     routes: ['POST /api/funds/:id/capital-call', 'POST /api/funds/:id/lps (first_call_cents > 0)',
-      'POST /api/capital/calls', 'POST /api/capital/capitalCall'] }),
+      'POST /api/capital/calls'] }),
   act({ act: 'capital_call.receipt', label: 'Record a receipt', tier: 'admin', owner: '#1779', sentence: null,
     routes: ['POST /api/funds/:id/capital-calls/lines/:lineId/receipts'] }),
   act({ act: 'distribution.preview', label: 'Preview a distribution', tier: 'admin', owner: '#1779', sentence: null,

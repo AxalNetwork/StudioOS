@@ -166,6 +166,8 @@ test('checkRendered catches every way a rendered config can be undeployable', ()
   breaks((s) => s.replace(/database_id = "[^"]+"/, `database_id = "${[...hqIds(TOML)][0]}"`), "HQ's id");
   breaks((s) => s.replace('workers_dev = false', 'workers_dev = true'), 'workers_dev');
   breaks((s) => s.replace(/\n\[\[migrations\]\][^[]*/, '\n'), 'Durable Object');
+  assert.ok(good.includes('new_sqlite_classes = ["MeetingBotRun"]'));
+  breaks((s) => s.replace('new_sqlite_classes = ["MeetingBotRun"]', 'new_sqlite_classes = ["WrongClass"]'), 'Durable Object migration');
   breaks((s) => s.replace(/\n\[\[r2_buckets\]\]\nbinding = "BACKUPS"[^[]*/, '\n'), 'table r2_buckets');
   breaks((s) => s.replace('BRANCH_CODE = "fr"', 'BRANCH_CODE = "dach"'), 'BRANCH_CODE');
   breaks((s) => s.replace('APP_URL = "https://fr.axal.vc"', 'APP_URL = "https://axal.vc"'), 'APP_URL');

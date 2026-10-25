@@ -39,6 +39,7 @@ import { insertHypothesis } from '../src/routes/_founder_validate_writes.ts';
 import { hardDeleteProject } from '../src/services/projectTrash.ts';
 import { tableFromBaseline, splitStatements, stripForeignKeys } from './_baseline.mjs';
 import { d1Over } from './_d1_sqlite.mjs';
+import { applySessionTranslationColumns } from './_session_translation_columns.mjs';
 
 const JWT_SECRET = 'unit-test-jwt-secret-d690-writes-0123456789';
 const ROOT = process.cwd();
@@ -77,6 +78,7 @@ function fixture(opts: { fk?: boolean } = {}) {
   db.exec(sqlOf('249_project_metrics.sql'));
   db.exec(sqlOf('228_research_company_directory.sql'));
   db.exec(sqlOf('438_interview_sessions.sql'));
+  applySessionTranslationColumns(db); // D857: migration 527's segment columns
   const u = db.prepare('INSERT INTO users (id, role, name, email, is_active, founder_id, spinout_lab_active) VALUES (?, ?, ?, ?, 1, ?, 0)');
   u.run(FOUNDER, 'founder', 'Fay Founder', 'fay@example.test', 1001);
   u.run(OTHER, 'founder', 'Bo Other', 'bo@example.test', 1002);

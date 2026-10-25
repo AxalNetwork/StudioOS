@@ -1,3 +1,4 @@
+import { raiseEvidenceTables } from './_raise_evidence_fixture.ts';
 /**
  * #1524 item 1 — the peer-group benchmark (D663 follow-up), on real SQLite.
  *
@@ -154,6 +155,7 @@ test('Fundraising readiness draws the benchmark beside the founder\'s own score,
   for (const t of ['spinout_deck_overrides', 'pitch_decks', 'pitch_deck_share_tokens', 'deck_share_views', 'data_room_folders', 'data_room_files',
     'data_room_access_log', 'cap_table_scenarios', 'raise_prospects', 'raise_rounds', 'contacts']) db.exec(tableFromBaseline(BASELINE, t));
   db.exec(sqlOf('442_raise_cycle_stores.sql'));
+  raiseEvidenceTables(db);
   db.exec("INSERT INTO readiness_items (id, project_id, item_key, label) VALUES (1, 1, 'team', 'Team')");
   db.exec("INSERT INTO readiness_scores (item_id, project_id, score, evidence, source) VALUES (1, 1, 7, 'pattern', 'manual')");
   await official(db, OWN, 60);
@@ -164,7 +166,7 @@ test('Fundraising readiness draws the benchmark beside the founder\'s own score,
   const card = await read();
   const rows = card.series.find((s: any) => s.kind === 'rows').items;
   assert.deepEqual(rows.map((r: any) => [r.label, r.value]), [
-    ['Your venture score', 60], ['Peer median · 5 ventures at the seed stage', 60], ['Middle half of peers', '50–70'], ['Your percentile', '50th'],
+    ['Your Lab score', 60], ['Peer median · 5 ventures at the seed stage', 60], ['Middle half of peers', '50–70'], ['Your percentile', '50th'],
   ]);
   db.exec('DROP TABLE score_snapshots');
   const broken = await read();
@@ -174,8 +176,8 @@ test('Fundraising readiness draws the benchmark beside the founder\'s own score,
 
 test('benchmarkRows: too_little and not_recorded say why, beside the own score (or Not recorded)', () => {
   assert.deepEqual(benchmarkRows({ state: 'too_little', group: { kind: 'stage', label: 'x', size: 3 }, own_score: 55, percentile: null, p25: null, p50: null, p75: null, reason: 'Only 3.' }),
-    [{ label: 'Your venture score', value: 55 }, { label: 'Peer benchmark', value: 'Only 3.', tone: 'muted' }]);
-  assert.deepEqual(benchmarkRows({ state: 'not_recorded', group: null, own_score: null, percentile: null, p25: null, p50: null, p75: null, reason: 'No score.' })[0], { label: 'Your venture score', value: null });
+    [{ label: 'Your Lab score', value: 55 }, { label: 'Peer benchmark', value: 'Only 3.', tone: 'muted' }]);
+  assert.deepEqual(benchmarkRows({ state: 'not_recorded', group: null, own_score: null, percentile: null, p25: null, p50: null, p75: null, reason: 'No score.' })[0], { label: 'Your Lab score', value: null });
 });
 
 test('the quartiles are the 25th and 75th, and every figure is coarsened (median and quartiles to 5, rank to 10)', async () => {

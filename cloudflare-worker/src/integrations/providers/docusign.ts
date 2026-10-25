@@ -649,6 +649,16 @@ async function reconcileEnvelope(env: Env, row: IntegrationRow, dsEnvelopeId: st
       const { satisfyObligationFromEnvelope } = await import('../../services/trust');
       await satisfyObligationFromEnvelope(env, local.id);
     } catch (e) { console.warn('[docusign] satisfyObligationFromEnvelope failed', e); }
+    // D1120 — a program schedule signed through DocuSign records its signature
+    // as the in-house route does. Idempotent: a later sweep changes nothing.
+    try {
+      const { onProgramScheduleEnvelopeCompleted } = await import('../../services/programSchedule');
+      const signed = await onProgramScheduleEnvelopeCompleted(env, local.envelope_uuid);
+      if (signed?.changed) {
+        const { pushLicenceToBranch } = await import('../../services/licencePush');
+        await pushLicenceToBranch(env, signed.licence_id);
+      }
+    } catch (e) { console.warn('[docusign] program_schedule_sign_failed', (e as Error)?.name || 'error'); }
   } else {
     // For terminal non-completed states (rejected/void), persist the
     // provider-supplied reason on the envelope row so the admin

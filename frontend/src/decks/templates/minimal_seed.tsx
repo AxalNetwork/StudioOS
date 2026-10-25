@@ -1174,12 +1174,7 @@ const Slide5Team: React.FC<SlideProps> = ({ data = {}, editable, onEdit }) => {
 const Slide6Ask: React.FC<SlideProps> = ({ data = {}, editable, onEdit }) => {
   const uof = data.use_of_funds?.length
     ? data.use_of_funds
-    : [
-        { label: 'Engineering', pct: 45 },
-        { label: 'GTM', pct: 30 },
-        { label: 'Operations + Infra', pct: 15 },
-        { label: 'Reserve', pct: 10 },
-      ];
+    : [];
   const roadmap = data.roadmap?.length
     ? data.roadmap
     : [
@@ -1303,7 +1298,7 @@ const Slide6Ask: React.FC<SlideProps> = ({ data = {}, editable, onEdit }) => {
               USE OF FUNDS
             </div>
             <div className="mt-4">
-              <Donut data={uof} />
+              <>{uof.length ? <Donut data={uof} /> : <p>Use of funds not recorded</p>}</>
             </div>
           </div>
           <div className="p-5 rounded-2xl flex-1" style={{ background: PAPER, border: `1px solid ${HAIRLINE}` }}>
@@ -1629,7 +1624,7 @@ export const Deck_minimal_seed: React.FC<RegistryDeckProps> = ({ data, editable,
 );
 
 const Deck_minimal_seed_inner: React.FC<RegistryDeckProps> = ({ data, editable, onEdit }) => {
-  const merged = mergeWithSample(data);
+  const merged = { ...mergeWithSample(data), use_of_funds: data?.use_of_funds ?? [] };
   return (
     <>
       <Slide1Company data={merged} editable={editable} onEdit={onEdit} />

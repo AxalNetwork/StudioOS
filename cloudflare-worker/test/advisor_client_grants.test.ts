@@ -95,7 +95,8 @@ test('the data room stays behind its NDA for an advisor too', () => {
   const at = access.indexOf('FROM data_room_files');
   assert.ok(at > -1);
   const stmt = access.slice(access.lastIndexOf('prepare(', at), access.indexOf(')', at) + 1);
-  assert.match(stmt, /SELECT visibility, access_tier, access_expires_at FROM data_room_files WHERE project_id = \?/);
+  // D1103 (#2983) — `folder_id` too, for a grant's folder scope; still no name.
+  assert.match(stmt, /SELECT visibility, access_tier, access_expires_at, folder_id FROM data_room_files WHERE project_id = \?/);
   assert.doesNotMatch(stmt, /name|uid|r2_key/);
 });
 

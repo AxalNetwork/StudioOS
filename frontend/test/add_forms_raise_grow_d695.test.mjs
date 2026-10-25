@@ -497,13 +497,15 @@ const RAISE_COPY = {
   'investor-narrative': {
     title: 'New version', cta: 'Create version', button: 'New version',
     sub: 'One narrative per investor type. Each is checked for consistency.', foot: 'Start from a version or blank; you edit.',
-    labels: ['Investor type', 'Start from', 'One-liner', 'Why now', 'The ask', 'Check against'],
+    // D909 (NAR11): Audience; the Spin-Out wording only for a Spin-Out venture, so not here.
+    labels: ['Audience', 'Start from', 'One-liner', 'Why now', 'The ask', 'Check against'],
     chips: {
       investor_type: [['Angel', 'Pre-seed fund', 'Seed fund', 'Series A fund', 'Strategic', 'Grant', 'Other'], 'seed_fund'],
-      start_from: [['v3 · seed fund', 'v2 · angel', 'The live deck', 'Blank'], 'version-3'],
+      start_from: [['v3 · seed fundCopies its words, sections and positioning.', 'v2 · angelCopies its words, sections and positioning.', 'BlankSections only, nothing written.'], 'version-3'],
     },
     checks: { check_against: [['Pitch deck', true], ['Metrics', true]] },
-    metas: [], placeholders: ['One line', 'Line', '$1.5M for n months'],
+    // NAR11's line: what the dialog creates, and that the version it starts from does not change.
+    metas: ['Creates v4 for seed funds. Nothing in v3 changes.'], placeholders: ['One line', 'Line', '$1.5M for n months'],
   },
   'pitch-deck': {
     title: 'New link', cta: 'Create link', button: 'New link',
@@ -592,8 +594,8 @@ test('1 (Raise): each Raise form draws the canvas copy, with D691.md decision 11
     ["{ kind: 'CH', name: 'group', k: 'Group', opts: GROUP, def: 1, required: true },", "{ kind: 'CH', name: 'group', k: 'Group', opts: GROUP, def: 0, required: true },"],
     ["{ kind: 'CH', name: 'runway', k: 'Runway it buys', opts: RUNWAY, def: 1 },", "{ kind: 'CH', name: 'runway', k: 'Runway it buys', opts: RUNWAY, def: 0 },"],
     ["def: 'seed_fund', required: true },", "def: 0, required: true },"],
-    ["return [...saved.map((o) => ({ value: VERSION + o.value, label: o.label })), { value: LIVE, label: 'The live deck' }, { value: BLANK, label: 'Blank' }];",
-      "return [{ value: LIVE, label: 'The live deck' }, ...saved.map((o) => ({ value: VERSION + o.value, label: o.label })), { value: BLANK, label: 'Blank' }];"],
+    ["...(spinout ? [{ value: LIVE, label: 'The Spin-Out deck wording', meta: 'Starts from the wording of your Spin-Out deck.' }] : []),",
+      "{ value: LIVE, label: 'The Spin-Out deck wording', meta: 'Starts from the wording of your Spin-Out deck.' },"],
     ["const CHECK_AGAINST = [{ value: 'deck', label: 'Pitch deck', checked: true }, { value: 'metrics', label: 'Metrics', checked: true }];",
       "const CHECK_AGAINST = [{ value: 'deck', label: 'Pitch deck', checked: true }, { value: 'data_room', label: 'Data room', checked: true }, { value: 'metrics', label: 'Metrics', checked: true }];"],
     ["const CANVAS_FOLDERS = ['Financials', 'Legal', 'Team', 'Product', 'Customers'];", "const CANVAS_FOLDERS = ['Financials', 'Legal', 'Team', 'Product', 'Customers', 'Watermark downloads'];"],
@@ -619,9 +621,16 @@ async function assertRescore(m) {
 }
 
 async function assertNarrative(m) {
+  // D909 (owner question 5 on #2454, read as A): the Spin-Out deck wording is offered to a Spin-Out venture only.
   let ui = await mountRaise(raiseForm(m, 'investor-narrative'), 'investor-narrative', { replies: { ...REPLIES, 'investor-narrative': { versions: [] } } });
   try {
-    assert.deepEqual(ui.radios('start_from').filter((n) => propsOf(n).checked).map((n) => propsOf(n).value), ['live'], 'no saved version: the live deck');
+    assert.deepEqual(ui.radios('start_from').map((n) => propsOf(n).value), ['blank'], 'not a Spin-Out venture: no live wording');
+    await ui.submit();
+    assert.equal(ui.sends('narrativeVersion')[0][2].start_from, 'blank');
+  } finally { await ui.unmount(); }
+  ui = await mountRaise(raiseForm(m, 'investor-narrative'), 'investor-narrative', { replies: { ...REPLIES, 'investor-narrative': { versions: [], spinout: true } } });
+  try {
+    assert.deepEqual(ui.radios('start_from').filter((n) => propsOf(n).checked).map((n) => propsOf(n).value), ['live'], 'a Spin-Out venture with no saved version: the Spin-Out wording');
     await ui.input('one_liner', 'Kestrel finds the leak'); await ui.input('why_now', 'Rules changed'); await ui.input('ask', '$1.5M for 18 months');
     await ui.submit();
     assert.deepEqual(ui.sends('narrativeVersion'), [['narrativeVersion', P, {

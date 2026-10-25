@@ -77,17 +77,20 @@ export interface AccountSubRow {
   updated_at: string | null;
 }
 
-/** Read the caller's account-plan row (or null when they've never subscribed). */
+/**
+ * Read the caller's account-plan row (or null when they've never subscribed).
+ * A failed read throws (D1049): "never subscribed" and "could not be read"
+ * are different answers, and a paying member must not read as free.
+ */
 export async function readAccountSubscription(
   env: Env,
   userId: number | string,
 ): Promise<AccountSubRow | null> {
   await ensureAccountPlanSchema(env);
-  return env.DB
+  return (await env.DB
     .prepare('SELECT * FROM account_subscriptions WHERE user_id = ?')
     .bind(userId)
-    .first<AccountSubRow>()
-    .catch(() => null);
+    .first<AccountSubRow>()) ?? null;
 }
 
 /** Normalise the fields we mirror from a Stripe subscription webhook object. */

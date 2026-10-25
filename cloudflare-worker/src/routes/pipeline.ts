@@ -402,7 +402,10 @@ pipeline.post('/decision-gate/review', async (c) => {
   await sql.end();
 
   const km = latestMetric ? safeJson(latestMetric.key_metrics, {}) : {};
-  const traction = latestMetric?.traction_score ?? 0;
+  if (latestMetric?.traction_score == null || !Number.isFinite(Number(latestMetric.traction_score))) {
+    return c.json({ traction_score: null, recommendation: null, ai_recommendation: null, status: 'not_recorded', reason: 'No traction metrics snapshot recorded' });
+  }
+  const traction = Number(latestMetric.traction_score);
 
   // Rule-based recommendation as fallback / safety floor
   let ruleRec: 'continue' | 'iterate' | 'spinout_ready';

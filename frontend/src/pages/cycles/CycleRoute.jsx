@@ -42,6 +42,9 @@ import MercuryRaiseFeed from './MercuryRaiseFeed';
 import RoadmapFromGithub from './RoadmapFromGithub';
 import MvpFromGithub from './MvpFromGithub';
 import UpdatesHistory from './UpdatesHistory';
+import ReportingDesk from './ReportingDesk';
+import BuildPlan, { BuildPlanDoor } from './BuildPlan';
+import { PmfPart, ReadinessDoor } from './PmfPart';
 import UpdateAskReplies from './UpdateAskReplies';
 import CallsHistory from './CallsHistory';
 import RaiseReceiptMatches from '../../components/RaiseReceiptMatches';
@@ -56,6 +59,14 @@ import { cellView, cycleOf } from './cycleModel';
 import { MODULES } from './modules';
 import { useAuth } from '../../hooks/useAuthSync';
 import { moduleToolLinks } from './founderToolNavigation.js';
+import { NarrativeHome, NarrativeTabBar, NarrativeTabPage } from '../raise/narrative/NarrativeTool';
+import { isNarrativeAdmin, isNarrativeTab, SLUG as NARRATIVE, tabSearch } from '../raise/narrative/narrativeModel';
+import { NarrativeAdminGate } from '../raise/narrative/NarrativeAdmin';
+import { CapTableHomeNav, CapTableTabPage } from '../raise/captable/CapTableTool';
+import { isCapTableTab, SLUG as CAP_TABLE } from '../raise/captable/capTableModel';
+import { DataRoomHomeNav, DataRoomTabPage } from '../raise/dataroom/DataRoomTool';
+import { isDataRoomTab, SLUG as DATA_ROOM } from '../raise/dataroom/dataRoomModel';
+
 
 /** D840 part 3 (#2348): a Grow module's "From Mercury" part, from its read's `parts.from_mercury`. */
 const fromMercury = (slug, data, ctx) => <GrowFromMercury slug={slug} part={data?.parts?.from_mercury} projectId={ctx.projectId} reload={ctx.reload} />;
@@ -160,6 +171,20 @@ const CYCLE_DEFS = {
     // D840 part 2 (#2347): every Raise module's From Mercury, the founder's alone, anchored at #from-mercury.
     parts: toFnMap({
       ...Object.fromEntries(MODULES.raise.map((m) => [m.slug, (data, ctx) => mercuryPart(m.slug, data, ctx)])),
+      // D909 (#2693, NAR1): Home's tiles, Needs you and footer, from the module read's `parts.narrative`.
+      'investor-narrative': (data, ctx) => (
+        <>
+          <NarrativeHome data={data} />
+          {mercuryPart('investor-narrative', data, ctx)}
+        </>
+      ),
+      // D1141 (#2433): Product-market fit, not scored yet, with model v1; then From Mercury.
+      'fundraising-readiness': (data, ctx) => (
+        <>
+          <PmfPart projectId={ctx.projectId} />
+          {mercuryPart('fundraising-readiness', data, ctx)}
+        </>
+      ),
       'capital-relationships': (data, ctx) => (
         <>
           <CallsHistory calls={data?.parts?.calls} />
@@ -169,7 +194,7 @@ const CYCLE_DEFS = {
       ),
     }),
     tools: toFnMap({
-      'investor-narrative': () => ({ label: 'Open the positioning workspace', href: '/raise/pitch/positioning' }),
+      'investor-narrative': (q) => ({ label: 'Open positioning', href: `/raise/investor-narrative/positioning${q || ''}` }),
       'pitch-deck': () => ({ label: 'Open the pitch deck', href: '/raise/pitch' }),
       'cap-table': () => ({ label: 'Open the cap table', href: '/raise/capital/cap-table' }),
       'use-of-funds': () => ({ label: 'Open the financial model', href: '/raise/capital/model' }),
@@ -214,7 +239,7 @@ const CYCLE_DEFS = {
       // narrative states differently from the stored metrics; on request,
       // Eadwyn phrases the fix for the first one, citing both sides.
       ['investor-narrative', [{
-        surface: 'raise/narrative-fix', tone: 'warn', label: 'Mismatch · phrase the fix', run: 'Phrase the fix', accept: 'Keep this wording',
+        surface: 'raise/narrative-fix', tone: 'warn', label: 'Mismatch · phrase the fix', run: 'Phrase the fix', accept: 'Save reading to copy',
         empty: 'Nothing proposed yet. Eadwyn will phrase the fix for the first mismatch the consistency check found in your newest narrative version, naming both figures and where each was read.',
         nothingToDraft: 'The consistency check found no mismatch in your newest narrative version.',
         foot: 'Neither figure is taken as the right one. Keeping the wording changes neither the narrative nor the metrics.',
@@ -478,6 +503,7 @@ export function underSlug(path, cycle = 'validate', action = 'record') {
  */
 export function finishPath(session, where, projectId) {
   if (where === 'live') return `/validate/record/live?session=${encodeURIComponent(session?.id)}`;
+  if (session?.submitted_via === 'meeting_bot') return `/validate/session/${encodeURIComponent(session?.id)}`;
   if (openingStep(session) === 'channel') return `/validate/session/${encodeURIComponent(session?.id)}`;
   return reviewPath({ ...session, project_id: session?.project_id ?? projectId });
 }
@@ -651,8 +677,8 @@ function RecordCrumb({ title, type = null, id = null }) {
   return null;
 }
 
-export default function CycleRoute({ cycle, lightbox = false, adding = false, record = false, slug: suppliedSlug }) {
-  const { slug: routeSlug, id: recordId } = useParams();
+export default function CycleRoute({ cycle, lightbox = false, adding = false, record = false, slug: suppliedSlug, reporting = null, buildPlan = null, capTableProposal = false }) {
+  const { slug: routeSlug, id: recordId, proposal: proposalId } = useParams();
   const location = useLocation();
   const { user } = useAuth() || {};
   const def = Object.prototype.hasOwnProperty.call(CYCLE_DEFS, cycle) ? CYCLE_DEFS[cycle] : null;
@@ -689,7 +715,9 @@ export default function CycleRoute({ cycle, lightbox = false, adding = false, re
   // (`state.editing`), so Back closes it as it closes an Add.
   const forms = useMemo(() => (slug && def ? formsFor(cycle, slug) : []), [cycle, slug, def]);
   const edit = slug && def ? editFor(cycle, slug) : null;
-  const formOpen = adding && forms.length ? forms.find((f) => f.key === searchParams.get('form')) || forms[0] : null;
+  // D1025 (#2862): Cap table's `/new` is Record an issuance (CT12a), not the old Add holder form.
+  const capTableAdding = adding && cycle === 'raise' && slug === CAP_TABLE;
+  const formOpen = adding && forms.length && !capTableAdding ? forms.find((f) => f.key === searchParams.get('form')) || forms[0] : null;
   const editingId = !adding && edit && location.state?.editing != null ? String(location.state.editing) : null;
   const phone = usePhoneWidth();
   // #1652's `?add=1` (the Worker's card hrefs) is the first Add's address: the
@@ -703,8 +731,10 @@ export default function CycleRoute({ cycle, lightbox = false, adding = false, re
     const rest = params.toString();
     navigate(`/${cycle}/${slug}/new${rest ? `?${rest}` : ''}`, { replace: true });
   }, [record, adding, lightbox, slug, forms, searchParams, cycle, navigate]);
-  const drafts = !record && slug && def?.drafts instanceof Map && Array.isArray(def.drafts.get(slug)) ? def.drafts.get(slug) : [];
-  const fillKind = !record && slug && def?.fills && Object.prototype.hasOwnProperty.call(def.fills, slug) ? def.fills[slug] : null;
+  // D914 (#2698): an admin reads the Investor narrative read only, after giving a reason; no Add, edit, fill or draft.
+  const narrativeAdmin = cycle === 'raise' && slug === NARRATIVE && isNarrativeAdmin(user);
+  const drafts = !record && slug && !narrativeAdmin && def?.drafts instanceof Map && Array.isArray(def.drafts.get(slug)) ? def.drafts.get(slug) : [];
+  const fillKind = !record && slug && !narrativeAdmin && def?.fills && Object.prototype.hasOwnProperty.call(def.fills, slug) ? def.fills[slug] : null;
   // The cost before a run (D424), read only while a band is drawn: a draft
   // band or a fill band, which quotes its own kind's task from the same read.
   const ai = useAiSpend({ enabled: Boolean(fillsOn && projectId && (drafts.length || fillKind)) });
@@ -733,7 +763,20 @@ export default function CycleRoute({ cycle, lightbox = false, adding = false, re
   useEffect(() => { setDialog(null); }, [cycle, slug, recordId]);
   const known = !slug || (def?.modules || []).some((m) => m.slug === slug);
   const validRecord = RECORD_ID.test(recordId ?? '') && recordId !== 'new';
-  const recordState = useCycleRecord({ enabled: record && known && validRecord && !!projectId && !!def,
+  // D906 (#2454): under Investor narrative a record id that is a tab word
+  // (`/story`, `/check`, …) is the tool's tab, never a version (versions are numbers).
+  const narrativeTab = record && cycle === 'raise' && isNarrativeTab(slug, recordId) ? recordId : null;
+  // D1015 (#2432): under Cap table a record id that is a tab word (`/instruments`, …)
+  // is the tool's tab, never a row (rows are `h-<n>`, `e-<n>` and `pool`).
+  // D1022 (#2859): `h-<n>` is the tool's too, the holder drawer over Overview.
+  // D1025 (#2862): `/new` opens Record an issuance over Overview, and
+  // `/raise/cap-table/proposal/<id>` a proposal's drawer (CT11), both the tool's own.
+  const capTableTab = capTableProposal && cycle === 'raise' ? 'proposal'
+    : capTableAdding ? 'new'
+      : record && cycle === 'raise' && isCapTableTab(slug, recordId) ? recordId : null;
+  // D1101 (#2456): the Data room tool's tabs are words under its module, never file records.
+  const dataRoomTab = record && cycle === 'raise' && isDataRoomTab(slug, recordId) ? recordId : null;
+  const recordState = useCycleRecord({ enabled: record && known && validRecord && !narrativeTab && !capTableTab && !dataRoomTab && !!projectId && !!def,
     cycle, projectId, slug, id: recordId, reload, edit, navigate, back: `/${cycle}/${slug}${q}` });
   useScrollToHash(record ? recordState.status !== 'ready' : moduleStatus !== 'ready');
   // The page re-reads once the lightbox is gone, however it went: ×, Escape and
@@ -753,7 +796,8 @@ export default function CycleRoute({ cycle, lightbox = false, adding = false, re
   useEffect(() => { setQuery({ q: '', filter: {}, sort: '', page: 1 }); }, [slug]);
 
   useEffect(() => {
-    if (record || slug || !projectId || !def) return undefined;
+    // D1056, D1063: the Reporting desk and Build's plan make their own reads, never the overview's.
+    if (record || slug || reporting || buildPlan || !projectId || !def) return undefined;
     let alive = true;
     setOverviewStatus('loading');
     cyclesApi.overview(cycle, projectId)
@@ -764,7 +808,7 @@ export default function CycleRoute({ cycle, lightbox = false, adding = false, re
       })
       .catch(() => { if (alive) setOverviewStatus('unreadable'); });
     return () => { alive = false; };
-  }, [record, cycle, slug, projectId, reload, def]);
+  }, [record, cycle, slug, reporting, buildPlan, projectId, reload, def]);
 
   useEffect(() => {
     if (record || !slug || !known || !projectId || !def) return undefined;
@@ -916,6 +960,33 @@ export default function CycleRoute({ cycle, lightbox = false, adding = false, re
           : <Link className={createBtn} to="/build?new=1" data-testid="cycle-create-venture">Create your startup</Link>}
       </div>
     );
+  } else if (narrativeTab) {
+    body = (
+      <NarrativeTabPage tab={narrativeTab} projectId={projectId} projectStatus={projectStatus} onRetryProject={() => setProjectsKey((n) => n + 1)}
+        fixOn={fillsOn} search={location.search} cards={tabs} action={action} phone={phone} admin={narrativeAdmin} />
+    );
+  } else if (reporting && cycle === 'grow') {
+    // D1056 (#2427): Grow's Reporting desk, under the tab row with Reporting lit.
+    body = (
+      <ReportingDesk tab={reporting} projectId={projectId} projectStatus={projectStatus} onRetryProject={() => setProjectsKey((n) => n + 1)}
+        search={location.search} cards={tabs} action={action} phone={phone} />
+    );
+  } else if (buildPlan && cycle === 'build') {
+    // D1063 (#2426): Validate → Build's plan, under Build's header and tab row.
+    body = (
+      <BuildPlan tab={buildPlan} projectId={projectId} projectStatus={projectStatus} onRetryProject={() => setProjectsKey((n) => n + 1)}
+        search={location.search} cards={tabs} action={action} phone={phone} />
+    );
+  } else if (capTableTab) {
+    body = (
+      <CapTableTabPage tab={capTableTab} proposal={proposalId} projectId={projectId} projectStatus={projectStatus} onRetryProject={() => setProjectsKey((n) => n + 1)}
+        search={location.search} cards={tabs} action={action} phone={phone} />
+    );
+  } else if (dataRoomTab) {
+    body = (
+      <DataRoomTabPage tab={dataRoomTab} projectId={projectId} projectStatus={projectStatus} onRetryProject={() => setProjectsKey((n) => n + 1)}
+        search={location.search} cards={tabs} action={action} phone={phone} />
+    );
   } else if (record) {
     const recordTitle = recordState.data?.title || moduleName;
     body = <div className="space-y-4" data-testid="cycle-record-page">
@@ -958,6 +1029,10 @@ export default function CycleRoute({ cycle, lightbox = false, adding = false, re
           action={action}
           search={q}
         />
+        {/* D1063 (#2426): the door to the plan, under Build's overview. */}
+        {cycle === 'build' && <BuildPlanDoor search={q} />}
+        {/* D1141 (#2433, RD12): Validate's records feed Product-market fit on Fundraising readiness. */}
+        {cycle === 'validate' && <ReadinessDoor search={q} />}
         <AlsoIn role="founder" row={name} />
       </>
     );
@@ -981,10 +1056,10 @@ export default function CycleRoute({ cycle, lightbox = false, adding = false, re
         query={query}
         onQuery={setQuery}
         action={action}
-        add={forms.length && projectId
+        add={narrativeAdmin ? undefined : forms.length && projectId
           ? forms.map((entry, i) => ({ text: entry.button, href: addHref(entry, i), state: { under: `${location.pathname}${location.search}` } }))
           : fnOf(def.add, slug)?.(q, openAction)}
-        rowAction={edit && projectId && !edit.hiddenFor?.(module) ? (row) => (edit.idOf(row) == null ? null : {
+        rowAction={!narrativeAdmin && edit && projectId && !edit.hiddenFor?.(module) ? (row) => (edit.idOf(row) == null ? null : {
           text: edit.button,
           label: `${edit.button} ${((v) => (v.nr ? 'this row' : v.text))(cellView(row?.cells?.[recs?.cols?.[0]?.key]))}`,
           onClick: () => navigate(`${location.pathname}${location.search}`, { state: { editing: String(row.id) } }),
@@ -992,13 +1067,16 @@ export default function CycleRoute({ cycle, lightbox = false, adding = false, re
         tool={fnOf(def.tools, slug)?.(q)}
         tools={moduleToolLinks(cycle, slug, user, q)}
         search={q}
+        subnav={cycle === 'raise' && slug === NARRATIVE ? <NarrativeTabBar active="home" search={tabSearch(q, searchParams.get('version'))} />
+          : cycle === 'raise' && slug === CAP_TABLE ? <CapTableHomeNav search={q} projectId={projectId} />
+          : cycle === 'raise' && slug === DATA_ROOM ? <DataRoomHomeNav search={q} /> : undefined}
       >
         {fillKind && projectId && (
           <FillProposals key={`${slug}-${fillKind}`} projectId={projectId} kind={fillKind} enabled={fillsOn} ai={ai} workspace={name} onApplied={() => setReload((n) => n + 1)}
             railOption={`fill:${fillKind}`} />
         )}
         {fillsOn && projectId ? drafts.map((draft) => (
-          <ZoneDraft key={`${slug}-${draft.surface}`} {...draft} scopeKey={String(projectId)} ai={ai} accent="violet" railOption={`draft:${draft.surface}`} />
+          <ZoneDraft key={`${slug}-${draft.surface}`} {...draft} scopeKey={String(projectId)} scoped={cycle === 'raise' && slug === 'investor-narrative'} ai={ai} accent="violet" railOption={`draft:${draft.surface}`} />
         )) : null}
         {/* D757 §2.7 (#1928): each Validate module's interview suggestions, writers only. Verdict takes none. */}
         {moduleStatus === 'ready' && cycle === 'validate' && slug !== 'verdict' && (
@@ -1010,6 +1088,10 @@ export default function CycleRoute({ cycle, lightbox = false, adding = false, re
         {moduleStatus === 'ready' && fnOf(def.parts, slug)?.(module, { projectId, reload: () => setReload((n) => n + 1), openAction, query, openDialog, role: user?.role ?? null })}
       </ModulePage>
     );
+  }
+  // D914: nothing of the narrative is drawn for an admin before their reason; then it is read only.
+  if (narrativeAdmin && projectStatus !== 'none' && !actionPage) {
+    body = <NarrativeAdminGate projectId={projectId} onOpened={() => setReload((n) => n + 1)}>{body}</NarrativeAdminGate>;
   }
 
   // D698 — where the rail is: the cycle, and on a module route the module, so
@@ -1059,7 +1141,7 @@ export default function CycleRoute({ cycle, lightbox = false, adding = false, re
           onChanged={() => { dirty.current = true; }} />
       )}
       {dialog && !(phone && dialog.page) && dialog.element}
-      <RecordCrumb title={record && recordState.status === 'ready' ? recordState.data?.title : null} type={`${cycle}/${slug}`} id={recordId ?? null} />
+      <RecordCrumb title={record && recordState.status === 'ready' ? recordState.data?.title : null} type={`${cycle}/${slug}`} id={narrativeTab || capTableTab || dataRoomTab ? null : recordId ?? null} />
     </RailFrame>
     </RailCrumbsProvider>
   );

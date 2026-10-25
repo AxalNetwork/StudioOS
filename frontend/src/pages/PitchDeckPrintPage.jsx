@@ -9,6 +9,9 @@ import { downloadDeckPdf } from '../lib/deckPdf.jsx';
 import { downloadRasterDeckPdf } from '../lib/deckRasterPdf';
 import ShareDeckCTA from '../components/ShareDeckCTA';
 import { ReviewDealSlotContext } from '../decks/templates/reviewDealSlot';
+import { ClosedLink, FigureSources, NdaGate } from './raise/pitch/ShareViewerParts';
+import { viewerNote } from './raise/pitch/shareModel';
+import { offersDealPack } from '../lib/shareDeckAudience';
 
 // Task #25 — public viewer for an investor share link, plus an authenticated
 // preview at /deck/:id/print. Task #6 expanded the advanced (live React
@@ -296,6 +299,10 @@ export default function PitchDeckPrintPage({ shareMode = false, exportMode = fal
     : null;
   const [deck, setDeck] = useState(null);
   const [error, setError] = useState('');
+  // D902 — a closed link (PD22) answers with who to ask and nothing from the
+  // deck; an NDA accepted on the gate reads the share again.
+  const [closed, setClosed] = useState(null);
+  const [readTick, setReadTick] = useState(0);
   const [exporting, setExporting] = useState(false);
   const [exportProgress, setExportProgress] = useState(null); // {current,total} | null
   const [Template, setTemplate] = useState(null);
@@ -341,11 +348,12 @@ export default function PitchDeckPrintPage({ shareMode = false, exportMode = fal
           startedAtRef.current = Date.now();
         }
       } catch (e) {
+        if (shareMode && e?.status === 410) { setClosed(e); return; }
         setError(e?.message || 'Failed to load');
         reportError('PitchDeckPrintPage:load', e);
       }
     })();
-  }, [id, token, shareMode, exportMode]);
+  }, [id, token, shareMode, exportMode, readTick]);
 
   const methodId = useMemo(() => detectMethodId(deck), [deck]);
 
@@ -660,7 +668,12 @@ export default function PitchDeckPrintPage({ shareMode = false, exportMode = fal
       )}
     </div>
   );
+  if (shareMode && closed) return <ClosedLink error={closed} />;
   if (!deck) return <div className="p-8 text-gray-500">Loading…</div>;
+  // D902 — the link asks for the NDA: no card was sent, only what the NDA names.
+  if (shareMode && deck.gate === 'nda') {
+    return <NdaGate token={token} gate={deck} onAccepted={() => { setDeck(null); setReadTick((t) => t + 1); }} />;
+  }
   if (methodId && !registryReady) return <div className="p-8 text-gray-500">Loading template…</div>;
 
   // Task #2 — headless export branch. No chrome, no CTA, no scaling
@@ -752,7 +765,10 @@ export default function PitchDeckPrintPage({ shareMode = false, exportMode = fal
   const ctaCategory = templateMeta?.category || null;
   // `deck` is proven truthy by the `if (!deck) return ...` guard above —
   // this render path is unreachable without it.
-  const shareCtaProps = (shareMode && ctaCategory) ? {
+  // D902 — a studio link offers no deal pack, so a fundraising deck's card,
+  // whose only step after the NDA is the deal pack, is not drawn on one.
+  const dealPackWithheld = deck.offers_deal_pack === false && offersDealPack(ctaCategory);
+  const shareCtaProps = (shareMode && ctaCategory && !dealPackWithheld) ? {
     category: ctaCategory,
     shareToken: token,
     deckId: deck.id,
@@ -778,7 +794,12 @@ export default function PitchDeckPrintPage({ shareMode = false, exportMode = fal
 
   const Header = (
     <div className="deck-print-chrome sticky top-0 z-10 bg-white border-b border-gray-200 px-4 py-3 flex items-center justify-between">
-      <div className="text-sm text-gray-700 font-medium truncate">{deck.title || 'Pitch deck'} · v{deck.version}</div>
+      <div className="flex min-w-0 flex-col">
+        <div className="text-sm text-gray-700 font-medium truncate">{deck.title || 'Pitch deck'} · v{deck.version}</div>
+        {shareMode && viewerNote(deck.frozen) ? (
+          <div className="text-[11px] text-gray-500 truncate" data-testid="share-frozen-note">{viewerNote(deck.frozen)}</div>
+        ) : null}
+      </div>
       <div className="flex items-center gap-2">
         {exporting && exportProgress && (
           <div className="text-xs text-gray-600 tabular-nums hidden sm:block">
@@ -847,6 +868,7 @@ export default function PitchDeckPrintPage({ shareMode = false, exportMode = fal
           onSlideCount={setSlideCount}
           reviewSlot={reviewDealSlot}
         />
+        {!isFullscreen && shareMode ? <FigureSources slides={deck.slides} /> : null}
         {!isFullscreen && cta && <div className="deck-print-cta">{cta}</div>}
         {isFullscreen && slideCount > 0 && (
           <>
@@ -940,6 +962,7 @@ export default function PitchDeckPrintPage({ shareMode = false, exportMode = fal
             <div className="mt-auto pt-2 text-[11px] text-violet-200">{i + 1} / {deck.slides.length}</div>
           </div>
         ))}
+        {shareMode ? <FigureSources slides={deck.slides} /> : null}
         {cta}
       </div>
     </div>

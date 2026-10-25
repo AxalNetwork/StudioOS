@@ -524,6 +524,14 @@ test('escalate validates kind and subject against the migration\'s vocabulary', 
     delegate: { email: 'delegate@example.com' },
   };
   for (const kind of ESCALATION_KINDS) {
+    // D983 — a program request is checked against HQ's grants (migration 553),
+    // which this fixture does not build; program_requests_d983.test.ts records
+    // each one on the full schema. Here it is refused without its request.
+    if (kind.startsWith('program_')) {
+      const refused = await recordEscalation(env, 'fr', { kind, subject: `a ${kind} item` });
+      assert.equal((refused as { refused?: string }).refused, 'request_required', `${kind} needs its request`);
+      continue;
+    }
     const detail = REQUEST[kind] ? encodeRequestDetail(REQUEST[kind] as Record<string, unknown>, null) : undefined;
     const ok = await recordEscalation(env, 'fr', { kind, subject: `a ${kind} item`, detail });
     assert.equal((ok as { status?: string }).status, 'open', `${kind} must be accepted`);

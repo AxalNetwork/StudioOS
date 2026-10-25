@@ -292,6 +292,10 @@ export function renderBranchConfig(tomlSrc, entry) {
     const table = s.name.slice('env.production.'.length);
     const kv = new Map(s.kv);
     switch (table) {
+      case 'durable_objects.bindings':
+        // B8's host has HQ callback origin/key; branches need their own host.
+        if (kv.get('name') === q('MEETING_BOT_CONTAINER')) continue;
+        break;
       case 'routes':
         continue; // replaced above
       case 'services':
@@ -451,7 +455,9 @@ export function checkRendered(tomlSrc, entry, rendered) {
     // D681: the one HQ-only OAuth binding is intentionally absent on branches.
     const list = table === 'kv_namespaces'
       ? declared.filter((s) => s.kv.get('binding') !== q('OAUTH_KV'))
-      : declared;
+      : table === 'durable_objects.bindings'
+        ? declared.filter((s) => s.kv.get('name') !== q('MEETING_BOT_CONTAINER'))
+        : declared;
     // `services` is checked on its own below, and must never be matched
     // against HQ's: HQ's service bindings are its lines to branches, so a
     // branch config carrying the same set is exactly the defect (D207).
@@ -488,11 +494,15 @@ export function checkRendered(tomlSrc, entry, rendered) {
   }
 
   // Durable Objects need their migration tag, or a new script has no DO bindings at all.
-  const mig = byName('migrations')[0];
-  const hqMig = prodTables.get('migrations')?.[0];
-  if (!mig) bad.push('the DO migration tag is missing — a new Worker script would have no Durable Object bindings');
-  else if (hqMig && mig.kv.get('new_sqlite_classes') !== hqMig.kv.get('new_sqlite_classes')) {
-    bad.push('the DO migration classes differ from HQ\'s');
+  const migrations = byName('migrations');
+  const hqMigrations = prodTables.get('migrations') || [];
+  for (const expected of hqMigrations) {
+    const tag = expected.kv.get('tag');
+    const found = migrations.find(m => m.kv.get('tag') === tag);
+    if (!found) bad.push(`Durable Object migration ${tag} is missing`);
+    else for (const [key, value] of expected.kv) {
+      if (found.kv.get(key) !== value) bad.push(`Durable Object migration ${tag}: ${key} differs from HQ's`);
+    }
   }
 
   const assets = byName('assets')[0];

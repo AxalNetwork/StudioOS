@@ -37,7 +37,7 @@ export const ACCOUNT_PHONE_PAGES = {
     sections: ['Yours', 'Suggested for you'],
   },
   trust: {
-    route: '/trust', title: 'Trust Center', sub: 'Your obligations and verification, for your role.',
+    route: '/trust/me', title: 'Trust Center', sub: 'Your obligations and verification, for your role.',
     sections: ['Trust score', 'Obligations'],
   },
   perks: {
@@ -101,6 +101,8 @@ export const PATH_TO_SECTION = {
   onboarding: 'onboarding',
   profile: 'account',
   account: 'account',
+  // D1134 (#2422) — Companies and projects.
+  companies: 'companies',
   security: 'security-privacy',
   privacy: 'security-privacy',
   'security-privacy': 'security-privacy',
@@ -198,10 +200,11 @@ export function followingLine(follows) {
 }
 
 /**
- * The Billing row's description. A founder's paid tier reads by D683's name,
- * price and period (`TIER_PLANS`); the free tier reads "Free". Every other
- * role reads `planSummary`'s plan and tier, with no price, or the Billing
- * pane's own words when no plan applies.
+ * The Billing row's description. A founder's paid tier reads by D683's name
+ * (`TIER_PLANS`); the free tier reads "Free". Every other role reads
+ * `planSummary`'s plan and tier, or the Billing pane's own words when no plan
+ * applies. D1050 (#2901): no row here carries a price; the Billing pane reads
+ * it from the plans read.
  */
 export function planLine(role, billing) {
   if (billing?.status !== 'ready' || !billing.data || typeof billing.data !== 'object') return PLAN_FALLBACK;
@@ -210,7 +213,7 @@ export function planLine(role, billing) {
     const tier = String(billing.data.tier || 'free').toLowerCase();
     if (tier === 'free') return 'Free';
     const plan = TIER_PLANS[tier];
-    if (plan) return `${plan.label} · ${plan.price} ${plan.period}`;
+    if (plan) return plan.label;
   }
   const s = planSummary(r, billing.data);
   if (!s) return PLAN_FALLBACK;
@@ -230,6 +233,7 @@ export function accountIndexGroups({ role, follows, billing } = {}) {
       label: 'Settings',
       rows: [
         { title: 'Profile and identity', description: 'Personal details, identity, company profile', to: accountPathFor({ section: 'account', phone: true }) },
+        { title: 'Companies and projects', description: 'Your companies, projects and invitations', to: '/account/companies' },
         { title: 'Notifications', description: 'Each type, in-app, email and push', to: '/account/notifications' },
         { title: 'Sign-in and security', description: 'Password, authenticator app, SMS', to: '/account/security-privacy' },
         { title: 'Billing and orders', description: planLine(role, billing), to: '/account/billing' },

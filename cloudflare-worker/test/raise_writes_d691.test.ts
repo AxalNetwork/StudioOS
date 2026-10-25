@@ -1,3 +1,4 @@
+import { raiseEvidenceTables } from './_raise_evidence_fixture.ts';
 /**
  * D691 (S19-B, #1699 and #1700) — Raise's writes on real SQLite.
  *
@@ -61,6 +62,11 @@ function fixture() {
   db.exec(sqlOf('410_safe_issuances.sql'));
   db.exec(sqlOf('442_raise_cycle_stores.sql'));
   db.exec(sqlOf('463_raise_record_stores.sql'));
+  // D1020: vesting rows carry their venture (migration 574's column).
+  db.exec('ALTER TABLE cap_table_vesting ADD COLUMN project_id INTEGER');
+  db.exec(sqlOf('567_deck_share_nda_include.sql')); // D902: a link's NDA and what it includes
+  raiseEvidenceTables(db);
+  db.exec(sqlOf('544_narrative_sections.sql')); // D908: a version based on another copies its narrative stores
   addColumnsFrom(db, sqlOf('441_build_cycle_stores.sql'), 'cap_table_holders');
   db.prepare('INSERT INTO users (id, role, name, email, is_active) VALUES (?, ?, ?, ?, 1)').run(ADMIN, 'admin', 'Ada Admin', 'ada@example.test');
   db.exec(`INSERT INTO projects (id, name, founder_id) VALUES (${P}, 'Kestrel Labs', 1001)`);
@@ -451,6 +457,8 @@ function linksFixture() {
   }
   db.exec(sqlOf('248_deck_share_revoked_at.sql'));
   addColumnsFrom(db, stripForeignKeys(sqlOf('463_raise_record_stores.sql')), 'pitch_deck_share_tokens');
+  db.exec(sqlOf('549_deck_share_nullable_view_limit.sql'));
+  db.exec(sqlOf('567_deck_share_nda_include.sql')); // D902, after 549's rebuild
   db.exec(`INSERT INTO projects (id, name, founder_id) VALUES (${P}, 'Kestrel Labs', 1001)`);
   db.exec(`INSERT INTO pitch_decks (id, project_id, version, slides) VALUES (${DECK}, ${P}, 1, '[]')`);
   return db;
@@ -589,7 +597,9 @@ function roomFixture() {
     db.exec(stripForeignKeys(tableFromBaseline(BASELINE, t)));
   }
   addColumnsFrom(db, stripForeignKeys(sqlOf('463_raise_record_stores.sql')), 'data_room_files');
+  addColumnsFrom(db, stripForeignKeys(sqlOf('596_data_room_file_source.sql')), 'data_room_files');
   addColumnsFrom(db, stripForeignKeys(sqlOf('442_raise_cycle_stores.sql')), 'data_room_files');
+  withGrantFolders(db); // D1103: migration 594
   const u = db.prepare('INSERT INTO users (id, role, founder_id, name, email) VALUES (?,?,?,?,?)');
   u.run(R_FOUNDER, 'founder', 300, 'Fen Founder', 'fen@example.test');
   u.run(COMMITTED, 'investor', null, 'Cal Committed', 'Cal@Example.test');
@@ -776,6 +786,11 @@ function cycleFixture() {
   db.exec(sqlOf('442_raise_cycle_stores.sql'));
   db.exec(sqlOf('459_cycle_activity_convention.sql'));
   db.exec(sqlOf('463_raise_record_stores.sql'));
+  db.exec('ALTER TABLE cap_table_vesting ADD COLUMN project_id INTEGER'); // D1020, migration 574
+  raiseEvidenceTables(db);
+  db.exec(sqlOf('549_deck_share_nullable_view_limit.sql'));
+  db.exec(sqlOf('567_deck_share_nda_include.sql')); // D902, after 549's rebuild
+  db.exec(sqlOf('544_narrative_sections.sql'));
   personalMatchTables(db); // D752: the trigger on raise_prospects
   addColumnsFrom(db, sqlOf('441_build_cycle_stores.sql'), 'cap_table_holders');
   // The fund directory: the CREATE statements only, and 406 whole, with made-up funds.
@@ -1224,6 +1239,7 @@ import {
   saveNarrativeVersion, WriterError as RaiseWriterError,
 } from '../src/services/raiseWriters.ts';
 import { replaceDataRoomFile, removeDataRoomFile } from '../src/routes/data_room.ts';
+import { withGrantFolders } from './_data_room_scope.mjs';
 
 async function refused2(p: Promise<unknown>): Promise<{ status: number; sentence: string }> {
   try { await p; } catch (e: any) {
@@ -1380,4 +1396,50 @@ test('D752: the D691 writer\'s stage change withdraws a committed prospect\'s ra
   assert.equal(state().state, 'confirmed', 'a notes edit leaves it');
   assert.equal((await cyc(db, C_FOUNDER, 'PATCH', q('/prospects/77'), { stage: 'passed' })).status, 200);
   assert.deepEqual({ ...state() }, { state: 'withdrawn', withdraw_reason: "The prospect's amount or stage changed after the match (D752)." });
+});
+
+
+test('#2445: computed scores and measured personal evidence are refused without writing', async () => {
+  const db = cycleFixture();
+  try {
+    for (const key of ['narrative','deck','data_room','cap_table','use_of_funds','traction']) {
+      const r = await cyc(db,C_FOUNDER,'PUT',q('/readiness/'+key),{score:10,evidence:'pattern'});
+      assert.equal(r.status,400,key);
+    }
+    assert.equal((await cyc(db,C_FOUNDER,'PUT',q('/readiness/team'),{score:10,evidence:'measured'})).status,400);
+    assert.equal(n(db,'SELECT COUNT(*) AS n FROM readiness_scores'),0);
+    assert.equal((await cyc(db,C_FOUNDER,'PUT',q('/readiness/team'),{score:6,evidence:'pattern'})).status,200);
+    assert.equal(n(db,"SELECT COUNT(*) AS n FROM readiness_scores WHERE source='manual' AND evidence='pattern'"),1);
+  } finally { db.close(); }
+});
+
+
+test('#2445: a hidden newer manual override cannot suppress since-last rescoring',async()=>{
+ const db=cycleFixture();
+ try{
+  assert.equal((await cyc(db,C_FOUNDER,'POST',q('/readiness/rescore'),{items:['deck']})).status,200);
+  db.exec("UPDATE readiness_scores SET scored_at='2026-01-01'; UPDATE pitch_decks SET created_at='2025-12-01'");
+  db.exec("INSERT INTO pitch_decks(project_id,version,slides,created_at) VALUES(1,99,'[]','2026-02-01')");
+  db.exec("INSERT INTO readiness_scores(item_id,project_id,score,evidence,missing,source,scored_at) SELECT item_id,project_id,score,'pattern',missing,'manual','2026-03-01' FROM readiness_scores LIMIT 1");
+  const r=await cyc(db,C_FOUNDER,'POST',q('/readiness/rescore'),{items:['deck'],since:'last'});
+  assert.equal(r.status,200);assert.deepEqual(r.body.items,['deck']);
+ }finally{db.close();}
+});
+
+
+test('#2691: copies preserve version metadata, explicit overrides win, and saving never claims deck use',async()=>{
+ const db=cycleFixture(); const env=envOf(db);
+ try {
+  db.exec(`INSERT INTO pitch_decks(project_id,version,slides) VALUES(${C_P},77,'[]')`);
+  const original=await saveNarrativeVersion(env,{projectId:C_P,userId:C_FOUNDER,investorType:'angel',startFrom:'blank',oneLiner:'A story',whyNow:'Timing matters',checkAgainst:['metrics']});
+  const based=await saveNarrativeVersion(env,{projectId:C_P,userId:C_FOUNDER,investorType:'seed_fund',startFrom:'version',basedOnVersion:original.version});
+  const duplicate=await duplicateNarrativeVersion(env,{projectId:C_P,userId:C_FOUNDER,version:original.version});
+  for(const v of [based.version,duplicate.version]) {
+   assert.deepEqual({...db.prepare('SELECT why_now,check_against_json FROM narrative_version_meta WHERE project_id=? AND version=?').get(C_P,v)}, {why_now:'Timing matters',check_against_json:'["metrics"]'});
+   assert.equal(db.prepare('SELECT deck_version FROM spinout_deck_overrides WHERE project_id=? AND version=? LIMIT 1').get(C_P,v)?.deck_version,null);
+  }
+  const override=await saveNarrativeVersion(env,{projectId:C_P,userId:C_FOUNDER,investorType:'angel',startFrom:'version',basedOnVersion:original.version,whyNow:null,checkAgainst:['deck']});
+  assert.deepEqual({...db.prepare('SELECT why_now,check_against_json FROM narrative_version_meta WHERE project_id=? AND version=?').get(C_P,override.version)}, {why_now:null,check_against_json:'["deck"]'});
+  assert.equal(logs(db,"entity_type='raise.investor-narrative'").length,4,'one cycle write per save/duplicate');
+ }finally{db.close();}
 });

@@ -16,6 +16,7 @@ import { verifyTurnstile } from '../services/turnstile';
 import { ipPrefix } from '../services/securityEvents';
 import { applyMergeFields, mergeTokensIn } from '../services/mergeFields';
 import { refuse } from '../util/refusal';
+import { upsertPairwiseNda, activatePairwiseNda, hasActivePairwiseNda } from '../services/trust';
 import { bindingKey } from '../util/schemaBootstrap';
 
 const deckShareActions = new Hono<{ Bindings: Env }>();
@@ -97,6 +98,21 @@ async function verifyShareToken(env: Env, token: string, c: any): Promise<{ deck
   return { deckId, tokenId: live.id };
 }
 
+/**
+ * D902 — a studio link: one made by the one link writer, which always names
+ * its investor. The studio's links do not offer the deal pack (bug 12; its
+ * terms are CAPITAL's, #2424). A link with no investor is the Spin-Out Lab's.
+ */
+async function studioLink(env: Env, tokenId: number | null): Promise<boolean> {
+  if (tokenId == null) return false;
+  const r = await env.DB.prepare(
+    "SELECT 1 AS yes FROM pitch_deck_share_tokens WHERE id = ? AND (prospect_id IS NOT NULL OR (investor_label IS NOT NULL AND investor_label <> ''))",
+  ).bind(tokenId).first<{ yes: number }>();
+  return !!r;
+}
+
+export const DEAL_PACK_NOT_OFFERED = 'This link does not offer a deal pack. Ask the venture about terms.';
+
 async function logConversion(
   env: Env,
   opts: {
@@ -118,7 +134,7 @@ async function logConversion(
           WHERE deck_id = ? AND user_id = ? AND type = 'deal_signed' LIMIT 1`
       ).bind(opts.deckId, opts.userId).first<any>();
       if (exists?.id) return;
-    } else if (opts.viewId) {
+    } else if (opts.viewId && opts.type !== 'deal_pack_opened') {
       const exists = await env.DB.prepare(
         `SELECT id FROM deck_share_conversions
           WHERE deck_id = ? AND view_id = ? AND type = ? LIMIT 1`
@@ -175,13 +191,58 @@ deckShareActions.get('/share/:token/context', async (c) => {
   if (!tok) return c.json({ error: 'invalid_token' }, 401);
   const ctx = await loadDeckContext(c.env, tok.deckId);
   if (!ctx) return c.json({ error: 'deck_not_found' }, 404);
+  const link = tok.tokenId == null ? null : await c.env.DB.prepare('SELECT nda_required FROM pitch_deck_share_tokens WHERE id = ?')
+    .bind(tok.tokenId).first<{ nda_required: number | null }>();
   return c.json({
     deck_id: tok.deckId,
     project_id: ctx.project_id,
     project_name: ctx.project_name,
     deck_title: ctx.deck_title,
     nda_template_key: DECK_SHARE_NDA_SLUG,
+    // D902 — whether the viewer must accept the NDA first, and whether this link offers the deal pack.
+    nda_required: Number(link?.nda_required ?? 0) === 1,
+    offers_deal_pack: !(await studioLink(c.env, tok.tokenId)),
   });
+});
+
+// ─────────────────────────────────────────────────────────────────────
+// GET /nda — D902: the NDA's text, before anyone accepts it (PD20 A). Only
+// the POST built it before. Signed in, it is merged for this person; not
+// signed in, the person's own fields read as what they will be filled with.
+// A text that cannot be read or still has a field nobody filled answers as
+// the POST does, and the gate stays shut.
+// ─────────────────────────────────────────────────────────────────────
+export const NDA_YOUR_NAME = '[Your name]';
+export const NDA_YOUR_EMAIL = '[Your email]';
+
+deckShareActions.get('/share/:token/nda', async (c) => {
+  const tok = await verifyShareToken(c.env, c.req.param('token'), c);
+  if (!tok) return c.json({ error: 'invalid_token' }, 401);
+  const ctx = await loadDeckContext(c.env, tok.deckId);
+  if (!ctx) return c.json({ error: 'deck_not_found' }, 404);
+  let user: { name: string | null; email: string } | null = null;
+  try {
+    const u = await requireAuth(c);
+    const row = await c.env.DB.prepare('SELECT email, name FROM users WHERE id = ?').bind(Number(u.id)).first<{ email: string; name: string | null }>();
+    if (row?.email) user = { name: row.name ?? null, email: row.email };
+  } catch { /* not signed in */ }
+  const name = user?.name || NDA_YOUR_NAME;
+  const email = user?.email || NDA_YOUR_EMAIL;
+  let text: string | null = null;
+  try {
+    text = await deckShareNdaBody(c.env, {
+      recipient_name: name, recipient_email: email, investor_name: name, investor_email: email,
+      counterparty_name: ctx.project_name || 'the Project',
+      effective_date: new Date().toISOString().slice(0, 10),
+    });
+  } catch (e) {
+    if ((e as Error)?.message === 'unfilled_fields') {
+      return refuse(c, 409, { code: 'template_fields_unfilled', message: 'This NDA is not ready to sign yet. Try again later.', raw: e });
+    }
+    return refuse(c, 503, { code: 'template_unreadable', message: 'The NDA could not be read. Try again in a moment.', raw: e });
+  }
+  if (!text) return refuse(c, 503, { code: 'template_unreadable', message: 'The NDA could not be read. Try again in a moment.' });
+  return c.json({ template_key: DECK_SHARE_NDA_SLUG, venture: ctx.project_name, text, filled_for_you: user != null });
 });
 
 // ─────────────────────────────────────────────────────────────────────
@@ -392,6 +453,10 @@ deckShareActions.post('/share/:token/nda', async (c) => {
     return refuse(c, 503, { code: 'template_unreadable', message: 'The NDA could not be read, so nothing was recorded. Try again in a moment.' });
   }
 
+  const founder = ctx.project_id ? await c.env.DB.prepare("SELECT u.id FROM users u JOIN projects p ON p.founder_id = u.founder_id WHERE p.id = ? AND u.role = 'founder' ORDER BY u.id LIMIT 1").bind(ctx.project_id).first<{ id: number }>() : null;
+  if (!founder) return c.json({ error: 'The venture founder could not be resolved. Nothing was signed.' }, 503);
+  if (Number(founder.id) === userId) return c.json({ error: 'The venture founder cannot sign as the outside viewer.' }, 403);
+
   // Persist as nda_acceptance (non-contract type — safe to insert).
   let docId: number | null = null;
   try {
@@ -403,20 +468,38 @@ deckShareActions.post('/share/:token/nda', async (c) => {
       `NDA — ${ctx.project_name || ('Deck ' + tok.deckId)}`,
       ndaBody,
       DECK_SHARE_NDA_SLUG,
-      signedBy,
+      user.name || user.email,
     ).run();
     docId = Number((ins as any)?.meta?.last_row_id || 0) || null;
   } catch (e) {
     console.error('[deck_share] nda doc insert failed', (e as Error).message);
   }
 
+  if (!docId) return c.json({ error: 'NDA acceptance could not be recorded. Try again.' }, 503);
+  try {
+    const acceptance = await c.env.DB.prepare('SELECT uid FROM documents WHERE id = ?').bind(docId).first<{ uid: string }>();
+    if (!acceptance?.uid) throw new Error('acceptance_uid_missing');
+    await upsertPairwiseNda(c.env, Number(founder.id), userId, acceptance.uid);
+    await activatePairwiseNda(c.env, acceptance.uid);
+    const linked = await c.env.DB.prepare('SELECT nda_envelope_uuid FROM pairwise_ndas WHERE party_a_user_id = ? AND party_b_user_id = ?').bind(Number(founder.id), userId).first<{ nda_envelope_uuid: string }>();
+    if (linked?.nda_envelope_uuid !== acceptance.uid || !await hasActivePairwiseNda(c.env, Number(founder.id), userId)) throw new Error('pairwise_link_incomplete');
+  } catch (e) {
+    // Compensate only this request's unfinished acceptance. A completed active
+    // agreement is retained if a later read failed; never remove another NDA.
+    try {
+      await c.env.DB.prepare("DELETE FROM pairwise_ndas WHERE nda_envelope_uuid = (SELECT uid FROM documents WHERE id = ?) AND status = 'pending'").bind(docId).run();
+      await c.env.DB.prepare("DELETE FROM documents WHERE id = ? AND NOT EXISTS (SELECT 1 FROM pairwise_ndas WHERE nda_envelope_uuid = documents.uid AND status = 'active')").bind(docId).run();
+    } catch { console.error('[deck_share] incomplete NDA cleanup failed'); }
+    console.error('[deck_share] NDA link incomplete', (e as Error).message);
+    return c.json({ error: 'The NDA could not be completed. Try again.' }, 503);
+  }
   await logConversion(c.env, {
     deckId: tok.deckId, tokenId: tok.tokenId, viewId,
     projectId: ctx.project_id, userId,
     type: 'nda_signed', refId: docId ? String(docId) : null,
   });
 
-  return c.json({ ok: true, document_id: docId, template_key: DECK_SHARE_NDA_SLUG });
+  return c.json({ ok: true, document_id: docId, template_key: DECK_SHARE_NDA_SLUG, data_room_access_granted: false, message: 'NDA recorded with the venture founder. This does not grant data-room access; a separate founder grant is required.' });
 });
 
 // ─────────────────────────────────────────────────────────────────────
@@ -516,12 +599,12 @@ deckShareActions.post('/share/:token/feedback', async (c) => {
 // in the modal; sign-action calls back into POST /deal-pack/sign.
 // We persist the docs as 'deal_pack_safe' / 'deal_pack_term_sheet' /
 // 'deal_pack_side_letter' (non-contract types so the legal.ts guard
-// stays satisfied). A real e-sign envelope round-trip is overkill for
-// MVP — these rows function as the auditable artifact.
+// stays satisfied). Signing requires a linked completed e-sign envelope.
 // ─────────────────────────────────────────────────────────────────────
 deckShareActions.post('/share/:token/deal-pack', async (c) => {
   const tok = await verifyShareToken(c.env, c.req.param('token'), c);
   if (!tok) return c.json({ error: 'invalid_token' }, 401);
+  if (await studioLink(c.env, tok.tokenId)) return c.json({ code: 'deal_pack_not_offered', detail: DEAL_PACK_NOT_OFFERED }, 404);
   await ensureDeckShareConversionSchema(c.env);
 
   let authUser;
@@ -531,9 +614,11 @@ deckShareActions.post('/share/:token/deal-pack', async (c) => {
 
   const body = await c.req.json().catch(() => null) as any;
   const viewId = body?.view_id ? Number(body.view_id) : null;
-  const checkSize = body?.check_size ? String(body.check_size).slice(0, 60) : 'TBD';
-  const valuationCap = body?.valuation_cap ? String(body.valuation_cap).slice(0, 60) : '$8M';
-  const discount = body?.discount ? String(body.discount).slice(0, 20) : '20%';
+  const missing = ['check_size', 'valuation_cap', 'discount'].filter(k => body?.[k] == null || String(body[k]).trim() === '');
+  if (missing.length) return c.json({ error: 'Missing deal terms', missing_fields: missing }, 400);
+  const checkSize = String(body.check_size).slice(0, 60);
+  const valuationCap = String(body.valuation_cap).slice(0, 60);
+  const discount = String(body.discount).slice(0, 20);
 
   const ctx = await loadDeckContext(c.env, tok.deckId);
   if (!ctx) return c.json({ error: 'deck_not_found' }, 404);
@@ -593,6 +678,7 @@ deckShareActions.post('/share/:token/deal-pack', async (c) => {
 deckShareActions.post('/share/:token/deal-pack/sign', async (c) => {
   const tok = await verifyShareToken(c.env, c.req.param('token'), c);
   if (!tok) return c.json({ error: 'invalid_token' }, 401);
+  if (await studioLink(c.env, tok.tokenId)) return c.json({ code: 'deal_pack_not_offered', detail: DEAL_PACK_NOT_OFFERED }, 404);
   await ensureDeckShareConversionSchema(c.env);
 
   let authUser;
@@ -625,8 +711,15 @@ deckShareActions.post('/share/:token/deal-pack/sign', async (c) => {
             SET status = 'signed', signed_by = ?, signed_at = datetime('now'), updated_at = datetime('now')
           WHERE id = ?
             AND project_id IS ?
-            AND doc_type IN ('deal_pack_safe','deal_pack_term_sheet','deal_pack_side_letter')`
-      ).bind(signedBy, id, ctx.project_id).run();
+            AND doc_type IN ('deal_pack_safe','deal_pack_term_sheet','deal_pack_side_letter')
+            AND EXISTS (SELECT 1 FROM deck_share_conversions conv
+              WHERE conv.user_id = ? AND conv.deck_id = ? AND conv.share_token_id IS ?
+                AND conv.type = 'deal_pack_opened'
+                AND (',' || conv.ref_id || ',') LIKE ('%,' || documents.id || ',%'))
+            AND EXISTS (SELECT 1 FROM esign_envelopes e WHERE e.id = documents.migrated_to_esign_id
+              AND e.status = 'completed' AND e.completed_at IS NOT NULL AND e.signed_r2_key IS NOT NULL
+              AND e.user_id = ? AND e.document_body = documents.content)`
+      ).bind(authUser.name || authUser.email, id, ctx.project_id, userId, tok.deckId, tok.tokenId, userId).run();
       const changes = Number((res as any)?.meta?.changes || 0);
       if (changes >= 1) signedIds.push(id);
       else notSignedIds.push(id);

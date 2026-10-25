@@ -42,7 +42,7 @@ export default function ShareDeckCTA({
   // card out of the dark Slide 10 frame; the standalone card keeps the full name.
   const makeBody = (name) => isCommercial
     ? `Share structured feedback with ${name || 'the founders'} — what resonates, what doesn't, and whether you'd buy. Join the Axal VC network in 30 seconds; everything you share stays under NDA.`
-    : `Open the deal pack for ${name || 'this startup'} — the SAFE, term sheet, and side letters are ready for your review. Join the Axal VC network in 30 seconds; everything is under NDA.`;
+    : `Open the deal pack for ${name || 'this startup'} — the SAFE, term sheet, and side letters require recorded agreed terms before they can be generated. Join the Axal VC network in 30 seconds; everything is under NDA.`;
   const body = makeBody(projectName);
   const buttonLabel = isCommercial ? 'Join & give feedback' : 'Join & open the deal';
   const Icon = isCommercial ? MessageSquare : FileSignature;

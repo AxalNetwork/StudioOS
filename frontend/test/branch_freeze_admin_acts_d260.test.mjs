@@ -44,7 +44,8 @@ test('D260: S7 has an Access row naming admin.ts and kyc.ts, and it says the rev
   assert.match(access.note, /Spin-Out Lab/);
   assert.match(access.note, /Revoking limited access still works/,
     'the takedown half is the one that is easy to lose, and FREEZE_RULE promises it');
-  assert.match(FREEZE_RULE, /Taking something down still works/);
+  assert.match(FREEZE_RULE, /Taking something down in Community still works/);
+  assert.match(FREEZE_RULE, /Partner administration changes, including deal termination, remain frozen/);
 });
 
 test('D260: Approvals no longer claims every queue is frozen — it names the frozen lanes and the ones that are not', () => {

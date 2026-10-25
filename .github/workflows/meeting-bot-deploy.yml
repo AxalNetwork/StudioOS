@@ -1,0 +1,48 @@
+name: Meeting bot deploy
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'meeting-bot/**'
+      - 'wrangler.meeting-bot.toml'
+      - '.github/workflows/meeting-bot-deploy.yml'
+      - 'cloudflare-worker/src/services/meetingBotRuntime.ts'
+      - 'cloudflare-worker/src/util/doNamespace.ts'
+      - 'cloudflare-worker/src/types.ts'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: meeting-bot-production-deploy
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    # Owner enables this only after the isolated first-deploy steps in PRODUCTION.md.
+    if: github.ref == 'refs/heads/main' && vars.MEETING_BOT_DEPLOY_ENABLED == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v6
+        with:
+          node-version: '22'
+      - run: npm ci --prefix cloudflare-worker
+      - name: Build and verify image before any deployment
+        env:
+          GITHUB_REPOSITORY: ${{ github.repository }}
+          GITHUB_SHA: ${{ github.sha }}
+        run: node scripts/build-meeting-bot-image.mjs
+      - name: Deploy private bot hosts only
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.MEETING_BOT_CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          WRANGLER_SEND_METRICS: 'false'
+        run: |
+          cloudflare-worker/node_modules/.bin/wrangler deploy --config wrangler.meeting-bot.toml --env preview
+          cloudflare-worker/node_modules/.bin/wrangler deploy --config wrangler.meeting-bot.toml --env ""

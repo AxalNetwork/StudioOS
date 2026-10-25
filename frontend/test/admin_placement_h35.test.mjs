@@ -14,9 +14,11 @@
  * array would make this guard shrink its own question the day the sidebar
  * changes. Fifty routes, copied once, is the question.
  *
- * The tabs ARE read live, from `ADMIN_SECTIONS` in AdminPage.jsx: a tab added
- * there is a new console with no placement, which is exactly what this guard
- * should name.
+ * The tabs ARE read live, from the redirect map that retired the Admin
+ * Console (`ADMIN_TAB_MOVES`, D938): a tab added there is a new console with
+ * no placement, which is exactly what this guard should name. Integration
+ * keys and GitHub Sync are in that map only to forward; they left the
+ * console for HQ's own row before the map was drawn.
  */
 import test from 'node:test';
 import assert from 'node:assert/strict';
@@ -30,12 +32,12 @@ import {
 } from '../src/lib/adminPlacement.js';
 // D528 — App.jsx plus every module under frontend/src/routes/, so a route in a module is checked like one in App.jsx.
 import { readRoutesSource } from './_routesSource.mjs';
-import { adminConsoleSource } from './_adminConsoles.mjs';
+import { ADMIN_TAB_MOVES } from '../src/pages/admin/LegacyContractsRedirect.jsx';
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '../..');
 const read = (rel) => readFileSync(resolve(root, rel), 'utf8');
 const APP = readRoutesSource();
-const ADMIN_PAGE = adminConsoleSource();
+const CONSOLE_PAGES = read('frontend/src/pages/admin/ConsolePages.jsx');
 const SIDEBAR_RAW = read('frontend/src/sidebarConfig.js');
 
 /* ------------------------------------------------------------------ *
@@ -77,13 +79,9 @@ const LEGACY_ROWS = [
   '/incorporate/cofounder-agreement', '/spinout-lab/83b', '/perks',
 ];
 
-/** The tab values, read out of ADMIN_SECTIONS itself rather than assumed. */
-const TABS = (() => {
-  const start = ADMIN_PAGE.indexOf('const ADMIN_SECTIONS = [');
-  const end = ADMIN_PAGE.indexOf('];', start);
-  assert.ok(start >= 0 && end > start, 'ADMIN_SECTIONS is no longer where this guard reads it');
-  return [...ADMIN_PAGE.slice(start, end).matchAll(/\{ value: '([\w-]+)'/g)].map((m) => m[1]);
-})();
+/** The tab values, read out of the redirect map itself rather than assumed. */
+const LEFT_FOR_HQ = ['integration-keys', 'github'];
+const TABS = Object.keys(ADMIN_TAB_MOVES).filter((t) => !LEFT_FOR_HQ.includes(t));
 
 /** The parked row is present in the text and commented out — the reachability guard's own reading. */
 const X_ROW_PARKED = SIDEBAR_RAW.split('\n').some((l) => /^\s*\/\/\s*\{\s*to: '\/admin\/x'/.test(l));
@@ -126,7 +124,7 @@ test('the question is the size it was measured at', () => {
   // Fourteen tabs when the map was drawn. Integration keys and GitHub Sync
   // left for HQ's own Super Admin page (the owner's ruling, 2026-10-20);
   // D708's Bank accounts and D815's Product testing joined.
-  assert.ok(TABS.length >= 14, `ADMIN_SECTIONS read ${TABS.length} tabs; the map was drawn for 14`);
+  assert.ok(TABS.length >= 14, `the redirect map holds ${TABS.length} tabs; the map was drawn for 14`);
   assert.ok(X_ROW_PARKED, 'the commented-out /admin/x row is gone from sidebarConfig.js');
   assert.ok(ROUTES.size >= 300, `App.jsx parsed to ${ROUTES.size} routes — the route reader is broken`);
   // The floor, so an empty map cannot pass: rows + tabs + X, minus the
@@ -170,21 +168,21 @@ test('nothing is placed twice, and nothing outside the legacy set is placed at a
   }
 });
 
-test('every placed route is registered in App.jsx, and every ?tab= is a section', () => {
+test('every placed route is registered in App.jsx, and every tab opens the page its old address forwards to', () => {
   const unregistered = [];
   for (const e of [...ADMIN_PLACEMENT, ...UNPLACED]) {
     if (!ROUTES.has(routePath(e.route))) unregistered.push(`${e.key} → ${e.route}`);
   }
   assert.deepEqual(unregistered, [], 'these placements open a route App.jsx does not register');
-  const badTab = [];
-  for (const e of ADMIN_PLACEMENT) {
-    const q = e.route.split('?')[1];
-    if (!q) continue;
-    const value = new URLSearchParams(q).get('tab');
-    if (!value || !TABS.includes(value)) badTab.push(`${e.key} → ${e.route}`);
-    if (e.kind === 'tab') assert.equal(e.tabValue, value, `${e.key} names one tab and links another`);
+  // D938: no placement deep-links an /admin tab any more; each tab's route is
+  // the address `/admin?tab=<value>` forwards to.
+  const stale = ADMIN_PLACEMENT.filter((e) => /^\/admin\?/.test(e.route)).map((e) => e.key);
+  assert.deepEqual(stale, [], 'these placements still open the retired console');
+  for (const e of ADMIN_PLACEMENT.filter((x) => x.kind === 'tab')) {
+    // A forward may open one tab of the page (Advisors & Partners' Deck roster, D972).
+    const to = ADMIN_TAB_MOVES[e.tabValue].to;
+    assert.ok(to === e.route || to.startsWith(`${e.route}/`), `${e.key} opens ${e.route} and its old address forwards to ${to}`);
   }
-  assert.deepEqual(badTab, [], 'these placements deep-link a tab ADMIN_SECTIONS does not offer');
 });
 
 test('hqOnly restates App.jsx: derived from the hqOnly( wrappers, never believed', () => {
@@ -240,14 +238,14 @@ test('the three decided placements hold: Wellbeing, X, Trash', () => {
   assert.ok(!ADMIN_PLACEMENT.some((e) => e.tier !== 'parked' && e.route === '/admin/x'), 'X has been given a home');
 
   // "The Trash proposal is not adopted: /admin/trash gets a literal door on
-  // the Admin Console." Not HQ · Security, and the door is a literal <Link>
-  // in AdminPage.jsx — the reachability walk reads exactly that syntax.
+  // the Admin Console." Not HQ · Security. Since D938 the door is an item of
+  // All accounts' More menu, a literal `to` the reachability walk reads.
   const trash = byKey('/admin/trash');
   assert.equal(trash.tier, 'Admin', 'Trash is placed on the Admin shell, not on HQ · Security');
   assert.ok(!(trash.also || []).some((a) => a.row === 'Security'), 'the Security proposal crept back in as a second placement');
-  const header = ADMIN_PAGE.slice(ADMIN_PAGE.indexOf('{!section && ('), ADMIN_PAGE.indexOf('<AdminSectionNav'));
-  assert.ok(header.includes('<Link to="/admin/trash"'),
-    'the Admin Console header no longer carries a literal <Link to="/admin/trash">; the door is gone');
+  const accounts = CONSOLE_PAGES.slice(CONSOLE_PAGES.indexOf('export function AllAccountsPage('), CONSOLE_PAGES.indexOf('export function KycPage('));
+  assert.ok(/<HeaderMenuItem to="\/admin\/trash"/.test(accounts),
+    'All accounts\' More menu no longer carries a literal <HeaderMenuItem to="/admin/trash">; the door is gone');
 });
 
 test('Messages is a top-bar button on both shells', () => {

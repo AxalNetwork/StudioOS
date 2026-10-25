@@ -463,7 +463,7 @@ test('6. investors: figures and card equal the public startup read and the maske
   assert.deepEqual(p.body.addresses.venture.url, 'https://axal.vc/startups/testventure');
 });
 
-test('6b. founders: the app read refuses, so MRR is left out; partners: every figure from the whole row', async () => {
+test('6b. founders: the app read refuses, so MRR is left out; partners: none until on the team, then every figure (D889)', async () => {
   const db = freshDb();
   const f = await preview(db, 'founders');
   assert.equal((await get(db, OLI, `/api/projects/${V}`)).status, 403);
@@ -471,12 +471,19 @@ test('6b. founders: the app read refuses, so MRR is left out; partners: every fi
   assert.equal(fig(f, 'revenue').value, 1200);
   assert.ok(f.body.notes.includes('Other founders cannot open your venture in the app.'));
 
-  const pa = await preview(db, 'partners');
+  // D889 (#2438): a partner with no tie opens nothing, and the preview says so.
+  const untied = await preview(db, 'partners');
+  assert.equal((await get(db, PIA, `/api/projects/${V}`)).status, 403);
+  assert.equal(fig(untied, 'mrr'), undefined);
+  assert.ok(untied.body.notes.includes('Partners cannot open your venture in the app unless you add them to its team.'));
+  assert.ok(!untied.body.notes.includes('Partners can open your venture in the app and read every figure.'));
+  // The preview reads as a partner who matches no row, so it stays the same once one partner joins the team;
+  // that partner opens the whole row.
+  db.prepare(`INSERT INTO project_members (project_id, user_id, role, status) VALUES (?, ?, 'cofounder', 'accepted')`).run(V, PIA);
   const whole = await get(db, PIA, `/api/projects/${V}`);
   assert.equal(whole.status, 200);
-  assert.equal(fig(pa, 'mrr').value, whole.body.mrr);
-  assert.equal(fig(pa, 'mrr').display, 'value');
-  assert.ok(pa.body.notes.includes('Partners can open your venture in the app and read every figure.'));
+  assert.equal(whole.body.__masked, undefined);
+  assert.deepEqual((await preview(db, 'partners')).body.notes, untied.body.notes);
 });
 
 test('6c. intake: the public rows drop out and the note names the status; findable 0: the investor note says so', async () => {
@@ -589,9 +596,11 @@ test('7d. a watchlist item made before the flag turned 0 stays in that investor\
   assert.ok((r.body.items || []).some((i: any) => i.uid === 'w-wes'));
 });
 
-test('7e. admins, partners and the founder are unaffected by the flag', async () => {
+test('7e. admins, partners on the team and the founder are unaffected by the flag', async () => {
   const db = freshDb();
   findable(db, 0);
+  // D889 (#2438): a partner reaches the venture as a team member.
+  db.prepare(`INSERT INTO project_members (project_id, user_id, role, status) VALUES (?, ?, 'advisor', 'accepted')`).run(V, PIA);
   for (const as of [ADA, PIA]) {
     assert.ok((await get(db, as, '/api/projects')).body.some((p: any) => p.id === V), `${ROLE[as]} lost the list`);
     assert.equal((await get(db, as, `/api/projects/${V}`)).status, 200);

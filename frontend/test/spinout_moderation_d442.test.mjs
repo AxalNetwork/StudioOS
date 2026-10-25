@@ -12,7 +12,8 @@ const APP = raw('frontend/src/App.jsx');
 const API = raw('frontend/src/lib/api.js');
 const ROUTE = raw('cloudflare-worker/src/routes/spinout_moderation.ts');
 const BOARD = raw('frontend/src/pages/branch/BranchApprovals.jsx');
-const HELD = raw('frontend/src/pages/admin/HeldApprovals.jsx');
+// D1038 (#2390): Approvals' page moved to /admin/approvals.
+const HELD = raw('frontend/src/pages/admin/approvals/AdminApprovals.jsx');
 
 test('the list method, the route, and the page agree', () => {
   assert.match(API, /adminSpinoutModerationOpen:\s*\(\)\s*=>\s*request\('\/admin\/spinout-moderation'\)/);
@@ -43,7 +44,7 @@ test('a failed read is unreadable and an empty read says the list was read', () 
 test('the board door is literal, and the HQ-held row links the console too (D506)', () => {
   assert.match(BOARD, /to="\/admin\/spinout-moderation"/);
   assert.match(BOARD, /moderation: \{ to: '\/admin\/spinout-moderation'/);
-  // D506 inverted the two lines below: HeldApprovals lane 4 is the HQ door.
+  // D506 inverted the two lines below: Approvals' moderation lane is the HQ door.
   assert.doesNotMatch(HELD, /No console exists anywhere yet/);
   assert.match(HELD, /to="\/admin\/spinout-moderation"/);
 });

@@ -5,7 +5,7 @@ The corpus the first integration pass worked from. Sorted by one question:
 
 | Folder | Count | Meaning |
 | --- | --- | --- |
-| `integrated/` | 100 | A route is running on main. Graded `CURRENT`, `UPGRADE` or `RESKIN` — the surface exists, and for `UPGRADE`/`RESKIN` the canvas is a *diff against* something already live. |
+| `integrated/` | 102 | A route is running on main. Graded `CURRENT`, `UPGRADE` or `RESKIN` — the surface exists, and for `UPGRADE`/`RESKIN` the canvas is a *diff against* something already live. |
 | `backlog/` | 28 | Graded `NEW` or `DEFERRED`. No route yet. |
 | `out-of-scope/` | 26 | Deliberately not being built. The `ROUTE_MAP.md` row says why. |
 | `shared/` | 6 | The dc-runtime bundle every canvas loads, plus two standalone pitch-deck exports. Generated — both code scanners ignore this tree. Every canvas asks for it as `src="./support.js"`, which resolves next to the canvas and **not** to this folder, so opening one straight from `integrated/` in a browser gets a blank page: copy `shared/support.js` beside it first. Nothing runs these at runtime, so the reference is nominal — it is a convention marking "the shared runtime, not an inlined 69KB copy", and `scripts/read-canvas.mjs` reproduces it when it decodes a new export. |

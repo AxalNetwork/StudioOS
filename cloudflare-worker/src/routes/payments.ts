@@ -18,6 +18,7 @@ import { captureAndResolveAttribution, readRefCookie } from '../services/referra
 import { automaticTaxParams, stripeTaxEnabled } from '../util/stripeTax';
 import { refuse } from '../util/refusal';
 import { moneyKindForCatalogPrice, type StripeMoneyKind } from '../services/moneyRails';
+import { heldPlanSubscription, planMetaForProduct, planMetaParams } from '../services/planSubscription';
 
 // PaymentIntent + SetupIntent surface for the Axal-branded embedded card UI.
 //
@@ -132,8 +133,34 @@ payments.post('/intent', async (c) => {
     // first invoice's PaymentIntent client_secret. The SPA confirms the card
     // against that secret; the webhook flips the subscription active.
     if (price.type === 'recurring') {
+      // D892 (#2453): a plan product's subscription carries the plan, as the
+      // Billing checkouts stamp it, so the webhook grants what was paid for.
+      const plan = planMetaForProduct(found.product, price);
+      let subCustomer = customer;
+      if (plan) {
+        // One subscription per plan family: an upgrade goes through the swap route, which prorates.
+        const existing = await heldPlanSubscription(c.env, user.id, plan);
+        if (existing) {
+          return refuse(c, 409, {
+            code: 'subscription_exists',
+            message: 'You already pay for a plan of this kind. Change it from Billing, which charges or credits only the difference.',
+            audience: 'member',
+            extra: { subscription_id: existing, swap: '/api/billing/subscription/swap/preview' },
+          });
+        }
+        // The investor webhook matches on the investor customer, as the investor checkout does.
+        if (plan.kind === 'investor') {
+          const inv = await c.env.DB.prepare('SELECT investor_stripe_customer_id FROM users WHERE id = ?')
+            .bind(user.id).first<{ investor_stripe_customer_id: string | null }>();
+          if (inv?.investor_stripe_customer_id) subCustomer = inv.investor_stripe_customer_id;
+          else {
+            await c.env.DB.prepare('UPDATE users SET investor_stripe_customer_id = ? WHERE id = ? AND investor_stripe_customer_id IS NULL')
+              .bind(customer, user.id).run();
+          }
+        }
+      }
       const subParams: Record<string, string> = {
-        customer,
+        customer: subCustomer,
         'items[0][price]': price.id,
         'items[0][quantity]': String(quantity),
         payment_behavior: 'default_incomplete',
@@ -142,6 +169,7 @@ payments.post('/intent', async (c) => {
         'metadata[user_id]': String(user.id),
         'metadata[uid]': user.uid,
         'metadata[price_id]': price.id,
+        ...(plan ? planMetaParams(plan) : {}),
         // Task #12 — Stripe Tax on the subscription (flag-gated; no-op when
         // STRIPE_TAX_ENABLED is unset). Valid on Subscriptions; the customer
         // must carry a tax-determinable address once the flag is on.

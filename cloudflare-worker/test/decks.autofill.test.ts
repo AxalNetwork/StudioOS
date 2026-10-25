@@ -205,3 +205,12 @@ for (const methodId of ['yc_seed', 'series_a_growth', 'series_b_diligence']) {
     );
   });
 }
+
+test('D895: an AI-only filled field contributes no recorded coverage', async () => {
+  const env = makeEnv({ project: FULL_PROJECT, financials: FULL_FINANCIALS, holders: FULL_HOLDERS });
+  const method = { ...getMethod('yc_seed')!, slides: [{ id: 'only-ai', title: 'Only AI', fields: [{ key: 'copy', label: 'Copy', kind: 'paragraph' as const, sources: ['ai.problem_body'] }] }] };
+  const filled = await autofillDeck(env, method, FULL_PROJECT.id, WHO);
+  assert.equal(filled.slides[0].fields.copy.source, 'ai');
+  assert.equal(filled.slides[0].coverage_pct, 0);
+  assert.equal(filled.total_coverage_pct, 0);
+});

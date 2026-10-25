@@ -12,10 +12,8 @@ import { CONSOLE_LOADING, ConsoleUnreadable } from './shared';
  * D648 (#1448) — the Partner Profiles console: every captured entity profile
  * and its review drawer. It reads the profiles list only when this console is
  * open (the read writes an audit row), and a failed read says so rather than
- * drawing "No profiles captured yet".
- *
- * `onPendingCount` tells the Admin Console's section dropdown how many
- * profiles wait for review, once this console has read them.
+ * drawing "No profiles captured yet". D938: it is the Partner profiles
+ * page's body, at /admin/partner-profiles.
  */
 
 const STATUS_BADGES = {
@@ -58,7 +56,7 @@ const TRACK_BADGES = {
   'Strategic Scale (Existing)': 'bg-indigo-100 text-indigo-700',
 };
 
-export default function PartnerProfilesConsole({ onPendingCount }) {
+export default function PartnerProfilesConsole() {
   const [profiles, setProfiles] = useState([]);
   const [loading, setLoading] = useState(true);
   const [failed, setFailed] = useState(false);
@@ -71,19 +69,18 @@ export default function PartnerProfilesConsole({ onPendingCount }) {
       const rows = Array.isArray(p) ? p : [];
       setProfiles(rows);
       setFailed(false);
-      onPendingCount?.(rows.filter(r => r.admin_status === 'pending').length);
     } catch (e) {
-      reportError('AdminPage:loadProfiles', e);
+      reportError('PartnerProfilesConsole:loadProfiles', e);
       setFailed(true);
     } finally { setLoading(false); }
-  }, [onPendingCount]);
+  }, []);
   useEffect(() => { load(); }, [load]);
 
   const openPartnerProfile = async (p) => {
     try {
       setOpenProfile(await api.adminGetProfile(p.email));
     } catch (e) {
-      reportError('AdminPage:partnerProfile', e);
+      reportError('PartnerProfilesConsole:partnerProfile', e);
       alert(e.message || 'The partner profile could not be read.');
     }
   };
@@ -179,10 +176,14 @@ export default function PartnerProfilesConsole({ onPendingCount }) {
   );
 }
 
-function ProfileReviewModal({ profile, onClose, onSaved }) {
+/** D989 — Partner profiles (`../profiles/PartnerProfiles.jsx`) opens the same review until its part 6 redraws it. */
+export function ProfileReviewModal({ profile, onClose, onSaved }) {
   useEscapeClose(onClose);
   const [agreement, setAgreement] = useState(profile.agreement_type || '');
   const [notes, setNotes] = useState(profile.admin_notes || '');
+  // D991 — a rejection carries a reason the member reads, at least 10 characters.
+  const [rejectReason, setRejectReason] = useState('');
+  const rejectReady = rejectReason.trim().length >= 10;
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
 
@@ -272,6 +273,7 @@ function ProfileReviewModal({ profile, onClose, onSaved }) {
         agreement_type: agreement,
         admin_notes: notes,
         status,
+        ...(status === 'rejected' ? { reject_reason: rejectReason.trim() } : {}),
         provider: viaDocusign && docusignAvailable ? 'docusign' : 'native',
       });
       if (res?.esign_refusal) {
@@ -458,6 +460,12 @@ function ProfileReviewModal({ profile, onClose, onSaved }) {
                 placeholder="Any context for the legal engine or follow-up..."
                 className="w-full bg-white border border-gray-300 rounded-lg px-3 py-2 text-sm text-gray-900 focus:border-violet-500 focus:outline-none resize-none dark:bg-gray-900 dark:border-gray-700 dark:text-gray-100" />
             </div>
+            <div>
+              <label htmlFor="pp-reject-reason" className="text-xs text-gray-700 font-medium block mb-1 dark:text-gray-300">Reason if you reject (the member reads it)</label>
+              <textarea id="pp-reject-reason" value={rejectReason} onChange={(e) => setRejectReason(e.target.value)} rows={2} maxLength={2000}
+                placeholder="At least 10 characters. Only needed to reject."
+                className="w-full bg-white border border-gray-300 rounded-lg px-3 py-2 text-sm text-gray-900 focus:border-violet-500 focus:outline-none resize-none dark:bg-gray-900 dark:border-gray-700 dark:text-gray-100" />
+            </div>
             {/* Task #2 — DocuSign provider picker. Renders for Studio-tier
                 admins (or impersonating super-admins) when an active
                 DocuSign integration is connected; on non-Studio plans we
@@ -516,7 +524,8 @@ function ProfileReviewModal({ profile, onClose, onSaved }) {
         </div>
 
         <div className="px-6 py-4 border-t border-gray-200 flex items-center justify-between gap-2 dark:border-gray-800">
-          <button onClick={() => submit('rejected')} disabled={saving}
+          <button onClick={() => submit('rejected')} disabled={saving || !rejectReady}
+            title={rejectReady ? undefined : 'Write a reason of at least 10 characters to reject.'}
             className="px-4 py-2 text-sm font-medium text-red-700 bg-red-50 hover:bg-red-100 rounded-lg disabled:opacity-50 transition-colors">
             Reject
           </button>

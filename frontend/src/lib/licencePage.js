@@ -18,12 +18,14 @@ export { NOT_RECORDED };
 export const LICENCE_PATH = '/admin/my-licence';
 
 /**
- * The six tabs, as sub-paths of `/admin/my-licence` (board L1's tab row). The
+ * The seven tabs, as sub-paths of `/admin/my-licence` (board L1's tab row). The
  * Licences row stays lit on each (`sidebarConfig.js`'s `match`).
  */
 export const LICENCE_TABS = [
   { key: 'summary', label: 'Summary', path: LICENCE_PATH },
   { key: 'terms', label: 'Terms', path: `${LICENCE_PATH}/terms` },
+  // D981 (#2376): what HQ lets the studio run (board GR7).
+  { key: 'programs', label: 'Programs', path: `${LICENCE_PATH}/programs` },
   { key: 'contract', label: 'Contract', path: `${LICENCE_PATH}/contract` },
   { key: 'statements', label: 'Statements', path: `${LICENCE_PATH}/statements` },
   { key: 'requests', label: 'Requests', path: `${LICENCE_PATH}/requests` },

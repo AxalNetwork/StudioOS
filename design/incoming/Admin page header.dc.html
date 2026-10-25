@@ -1,0 +1,189 @@
+<!DOCTYPE html>
+<html><head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <link href="https://fonts.googleapis.com/css2?family=Roboto+Mono:wght@400;500;600;700&family=Space+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <style>body{margin:0}a{color:#7c3aed;text-decoration:none}a:hover{color:#6d28d9}button:focus-visible,a:focus-visible,[tabindex]:focus-visible{outline:2px solid #7c3aed;outline-offset:2px}</style>
+</helmet>
+<div style="{{ v.root }}">
+  <sc-if value="{{ v.side }}" hint-placeholder-val="{{ true }}">
+    <aside style="{{ v.asideS }}">
+      <div style="padding:4px 16px 12px;display:flex;align-items:center;gap:8px"><span style="{{ v.logoS }}"></span><span style="font-weight:800;font-size:14px;letter-spacing:-.01em">Axal VC</span></div>
+      <sc-if value="{{ v.group }}" hint-placeholder-val="{{ true }}"><span style="{{ v.groupS }}">{{ v.group }}</span></sc-if>
+      <nav aria-label="Main" style="display:flex;flex-direction:column;gap:2px">
+        <sc-for list="{{ v.rows }}" as="s" hint-placeholder-count="9"><a href="{{ s.href }}" aria-current="{{ s.cur }}" style="{{ s.st }}">{{ s.t }}</a></sc-for>
+      </nav>
+    </aside>
+  </sc-if>
+  <main style="{{ v.mainS }}">
+    <a href="#content" style="{{ v.srS }}">Skip to content</a>
+    <sc-if value="{{ v.top }}" hint-placeholder-val="{{ true }}">
+      <div style="{{ v.topS }}">
+        <sc-if value="{{ v.phone }}" hint-placeholder-val="{{ false }}"><button type="button" aria-label="Menu" style="{{ v.picoS }}">☰</button><b style="font-size:14px">Partner invitations</b><button type="button" aria-label="Open Eadwyn" style="{{ v.picoS }}"><span style="{{ v.eadS }}">E</span></button></sc-if>
+        <sc-if value="{{ v.desk }}" hint-placeholder-val="{{ true }}"><div style="{{ v.searchS }}"><span aria-hidden="true">⌕</span>Search StudioOS</div><div style="display:flex;align-items:center;gap:12px"><span style="{{ v.badgeS }}">{{ v.badge }}</span><button type="button" aria-label="Notifications" style="{{ v.iconS }}" dangerouslySetInnerHTML="{{ v.bell }}"></button><span aria-label="Account" style="{{ v.avS }}">[N]</span></div></sc-if>
+      </div>
+    </sc-if>
+    <sc-if value="{{ v.strip }}" hint-placeholder-val="{{ false }}">
+      <nav aria-label="Platform" style="{{ v.stripS }}"><sc-for list="{{ v.strip }}" as="x" hint-placeholder-count="11"><a href="{{ x.href }}" aria-current="{{ x.cur }}" style="{{ x.s }}">{{ x.t }}</a></sc-for></nav>
+    </sc-if>
+    <div style="{{ v.bodyS }}">
+      <sc-for list="{{ v.heads }}" as="h" hint-placeholder-count="1">
+        <div style="display:flex;flex-direction:column;gap:14px">
+          <header style="{{ h.wrap }}">
+            <sc-if value="{{ h.crumb }}" hint-placeholder-val="{{ true }}">
+              <nav aria-label="Breadcrumb" style="{{ v.crumbS }}"><a href="{{ h.crumbHref }}" style="{{ v.crumbLS }}">{{ h.crumbT }}</a><sc-if value="{{ h.crumbC }}" hint-placeholder-val="{{ true }}"><span aria-hidden="true">›</span><span aria-current="page">{{ h.crumbC }}</span></sc-if></nav>
+            </sc-if>
+            <div style="{{ v.rowS }}">
+              <div style="display:flex;align-items:center;gap:9px;flex-wrap:wrap;min-width:0"><h1 style="{{ v.h1S }}">{{ h.title }}</h1><sc-if value="{{ h.pill }}" hint-placeholder-val="{{ false }}"><span style="{{ v.pillS }}">{{ h.pill }}</span></sc-if></div>
+              <div style="display:flex;gap:8px;align-items:center">
+                <sc-if value="{{ h.prim }}" hint-placeholder-val="{{ true }}"><button type="button" style="{{ v.btnP }}">{{ h.prim }}</button></sc-if>
+                <button type="button" aria-label="More" aria-haspopup="menu" aria-expanded="{{ h.moreExp }}" style="{{ h.moreS }}">⋯</button>
+              </div>
+              <sc-if value="{{ h.menu }}" hint-placeholder-val="{{ false }}"><div role="menu" aria-label="More" style="{{ v.menuS }}"><sc-for list="{{ h.menu }}" as="m" hint-placeholder-count="2"><span role="menuitem" tabindex="-1" style="{{ m.s }}">{{ m.t }}</span></sc-for></div></sc-if>
+            </div>
+            <p style="{{ v.lineS }}">{{ h.line }}</p>
+            <sc-if value="{{ h.primW }}" hint-placeholder-val="{{ false }}"><button type="button" style="{{ v.btnPW }}">{{ h.primW }}</button></sc-if>
+            <sc-if value="{{ h.scope }}" hint-placeholder-val="{{ false }}"><div><span tabindex="0" title="No subsidiary is deployed yet, so these are the accounts HQ holds directly." style="{{ v.scopeS }}">HQ-held accounts · axal.vc</span></div></sc-if>
+            <sc-if value="{{ h.notice }}" hint-placeholder-val="{{ false }}">
+              <div role="status" aria-live="polite" style="{{ v.noticeS }}"><span aria-hidden="true" style="{{ v.infoS }}">i</span><span style="flex:1;min-width:0;line-height:1.45">{{ h.notice }}</span><button type="button" style="{{ h.dismissS }}">Dismiss</button></div>
+            </sc-if>
+            <sc-if value="{{ h.tabs }}" hint-placeholder-val="{{ false }}">
+              <nav aria-label="{{ h.title }}" style="{{ v.tabRowS }}"><sc-for list="{{ h.tabs }}" as="t" hint-placeholder-count="4"><a href="{{ t.href }}" aria-current="{{ t.cur }}" style="{{ t.s }}">{{ t.t }}<span title="{{ t.tip }}" style="{{ t.ns }}">{{ t.n }}</span><span style="{{ v.srS }}">{{ t.sr }}</span></a></sc-for></nav>
+            </sc-if>
+          </header>
+          <sc-if value="{{ h.ph }}" hint-placeholder-val="{{ false }}"><div style="{{ v.phOneS }}">Page content, drawn on its own canvas</div></sc-if>
+        </div>
+      </sc-for>
+      <div id="content" style="{{ v.gridS }}">
+        <sc-for list="{{ v.blocks }}" as="k" hint-placeholder-count="2">
+          <section style="{{ k.s }}">
+            <sc-if value="{{ k.glyph }}" hint-placeholder-val="{{ false }}"><span aria-hidden="true" style="{{ k.gs }}">{{ k.glyph }}</span></sc-if>
+            <sc-if value="{{ k.eye }}" hint-placeholder-val="{{ false }}"><span style="{{ v.eyeS }}">{{ k.eye }}</span></sc-if>
+            <sc-if value="{{ k.t }}" hint-placeholder-val="{{ false }}"><sc-if value="{{ k.h1 }}" hint-placeholder-val="{{ false }}"><h1 style="{{ v.h2S }}">{{ k.t }}</h1></sc-if><sc-if value="{{ k.h2 }}" hint-placeholder-val="{{ true }}"><h2 style="{{ v.h2S }}">{{ k.t }}</h2></sc-if></sc-if>
+            <sc-if value="{{ k.line }}" hint-placeholder-val="{{ false }}"><p style="{{ v.bodyLineS }}">{{ k.line }}</p></sc-if>
+            <sc-for list="{{ k.rows }}" as="r" hint-placeholder-count="0"><div style="{{ v.prowS }}">{{ r.t }}</div></sc-for>
+            <sc-if value="{{ k.btns }}" hint-placeholder-val="{{ false }}">
+              <div style="{{ k.bs }}"><sc-for list="{{ k.btns }}" as="b" hint-placeholder-count="1"><sc-if value="{{ b.link }}" hint-placeholder-val="{{ false }}"><a href="{{ b.href }}" style="{{ b.s }}">{{ b.t }}</a></sc-if><sc-if value="{{ b.btn }}" hint-placeholder-val="{{ true }}"><button type="button" style="{{ b.s }}">{{ b.t }}</button></sc-if></sc-for></div>
+            </sc-if>
+            <sc-if value="{{ k.det }}" hint-placeholder-val="{{ false }}"><details style="{{ v.detS }}"><summary style="cursor:pointer;font-weight:700;font-size:12.5px">Details</summary><code style="{{ v.codeS }}">{{ k.det }}</code></details></sc-if>
+          </section>
+        </sc-for>
+      </div>
+    </div>
+  </main>
+  <sc-if value="{{ v.rail }}" hint-placeholder-val="{{ false }}">
+    <aside aria-label="Eadwyn" style="{{ v.railS }}">
+      <div style="display:flex;align-items:center;gap:9px"><span style="{{ v.eadS }}">E</span><b style="font-size:14px;flex:1">Eadwyn</b><button type="button" aria-label="Collapse Eadwyn" style="{{ v.iconS }}">›</button></div>
+      <p style="{{ v.bodyLineS }}">Eadwyn reads the invitations listed here. An invitation goes out only when you send it.</p>
+      <div style="flex:1"></div>
+      <div style="{{ v.composerS }}">Ask Eadwyn about this page…</div>
+    </aside>
+  </sc-if>
+  <sc-if value="{{ v.spine }}" hint-placeholder-val="{{ true }}">
+    <aside aria-label="Eadwyn" style="{{ v.spineS }}"><span style="{{ v.eadS }}">E</span><sc-if value="{{ v.reading }}" hint-placeholder-val="{{ false }}"><span title="Reading" style="{{ v.readS }}"></span><span style="{{ v.srS }}">Reading</span></sc-if><span style="{{ v.spineT }}">Eadwyn</span></aside>
+  </sc-if>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script="" data-props="{&quot;$preview&quot;:{&quot;width&quot;:&quot;1440px&quot;,&quot;height&quot;:&quot;900px&quot;},&quot;board&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;default&quot;:&quot;SHL1&quot;,&quot;options&quot;:[&quot;SHL1&quot;,&quot;SHL2&quot;,&quot;SHL3&quot;,&quot;SHL4&quot;,&quot;SHL5&quot;,&quot;SHL6&quot;,&quot;SHL7a&quot;,&quot;SHL7b&quot;,&quot;SHL8&quot;,&quot;SHL9&quot;],&quot;tsType&quot;:&quot;string&quot;}}">
+class Component extends DCLogic {
+  renderVals() {
+    const B = this.props.board || 'SHL1';
+    const dark = B === 'SHL9', phone = B === 'SHL8', stack = B === 'SHL3';
+    const c = dark
+      ? { bg: '#0b1220', card: '#111827', raised: '#1f2937', ink: '#e5e7eb', mu: '#9ca3af', fa: '#6b7280', hair: '#374151', hairD: '#4b5563', vi: '#a78bfa', vt: '#a78bfa', lav: '#211f3d', lavE: '#4c3a8a', neg: '#f87171', negE: 'rgba(248,113,113,.5)', skel: '#1f2937', hqT: '#fda4af', hqBg: 'rgba(136,19,55,.28)', hqE: 'rgba(253,164,175,.4)' }
+      : { bg: '#f4f3f7', card: '#ffffff', raised: '#f8f7fb', ink: '#18181b', mu: '#6b6577', fa: '#a1a1aa', hair: '#ececf1', hairD: '#d9d6e2', vi: '#7c3aed', vt: '#6d28d9', lav: '#f4f0fe', lavE: '#ddd0fb', neg: '#b91c1c', negE: '#fecaca', skel: '#e7e5ee', hqT: '#881337', hqBg: '#fdf2f4', hqE: '#fbcfe8' };
+    const MO = "'Roboto Mono',ui-monospace,monospace", SG = "'Space Grotesk',system-ui,sans-serif";
+    const eyeS = 'font:700 10px ' + MO + ';letter-spacing:.07em;text-transform:uppercase;color:' + c.mu;
+    const BTN = 'display:inline-flex;align-items:center;justify-content:center;gap:6px;min-height:' + (phone ? 44 : 40) + 'px;padding:0 16px;border-radius:9px;font:700 13px ' + SG + ';cursor:pointer;white-space:nowrap;box-sizing:border-box;text-decoration:none;';
+    const btnP = BTN + 'border:1px solid #7c3aed;background:#7c3aed;color:#fff';
+    const btnS = BTN + 'border:1px solid ' + c.hair + ';background:' + c.card + ';color:' + c.ink;
+    const btnL = BTN + 'border:1px solid transparent;background:transparent;color:' + c.vt + ';padding:0 8px';
+    const shell = { SHL2: 'hq', SHL5: 'hq', SHL7b: 'member' }[B] || (stack ? 'none' : 'admin');
+    const lit = { SHL1: 'Community', SHL4: 'Community', SHL6: 'Community', SHL8: 'Community', SHL9: 'Community', SHL2: 'Platform', SHL5: 'Platform' }[B] || '';
+    const tab = (t, p, kind, n, cur) => ({ t, href: '/admin/partner-invitations' + p, cur: cur ? 'page' : 'false', n: kind === 'num' ? n : kind === 'dash' || kind === 'err' ? '—' : '', tip: kind === 'dash' ? 'Not recorded: no referral source is linked yet.' : kind === 'err' ? 'Could not be read' : kind === 'dot' ? 'Waiting on you' : '', sr: kind === 'dot' ? 'waiting' : kind === 'load' ? 'Reading' : '',
+      s: 'display:inline-flex;align-items:center;gap:6px;flex:none;min-height:' + (phone ? 44 : 40) + 'px;padding:0 2px;margin-bottom:-1px;font-size:13px;text-decoration:none;white-space:nowrap;border-bottom:2px solid ' + (cur ? c.vi : 'transparent') + ';color:' + (cur ? c.ink : c.mu) + ';font-weight:' + (cur ? 800 : 600),
+      ns: kind === 'dot' ? 'display:inline-block;width:8px;height:8px;border-radius:999px;background:#fcd34d;border:1px solid #92400e' : kind === 'load' ? 'display:inline-block;width:20px;height:8px;border-radius:4px;background:' + c.skel : 'font:600 11.5px ' + MO + ';color:' + (cur ? c.ink : c.mu) });
+    const piTabs = (st) => { const k = (d) => st === 'load' ? 'load' : d; return [tab('Overview', '', k('dot')), tab('Invitations', '/invitations', k('num'), '[18]', true), tab('Deals', '/deals', st === 'err' ? 'err' : k('num'), '[7]'), tab('Referrals', '/referrals', k('dash'))]; };
+    const moreS = (exp) => BTN + 'width:40px;padding:0;font-size:18px;border:1px solid ' + (exp ? c.lavE : c.hair) + ';background:' + (exp ? c.lav : c.card) + ';color:' + c.ink;
+    const HD = (base, o) => { o = o || {}; const h = Object.assign({ crumb: true, back: false, pill: false, prim: false, primW: false, menu: false, scope: false, notice: false, focusDismiss: false, tabs: false, ph: false }, base, o);
+      h.crumbT = h.back ? '‹ ' + h.crumbA : h.crumbA; if (h.back) h.crumbC = false;
+      h.moreExp = h.menu ? 'true' : 'false'; h.moreS = moreS(!!h.menu);
+      h.menu = h.menu ? ['Copy page link', 'Download (CSV)'].map((t, i) => ({ t, s: 'display:flex;align-items:center;min-height:40px;padding:0 12px;border-radius:8px;font:600 13px ' + SG + ';color:' + c.ink + ';cursor:pointer' + (i ? '' : ';background:' + c.raised) })) : false;
+      h.dismissS = 'display:inline-flex;align-items:center;flex:none;min-height:' + (phone ? 44 : 40) + 'px;padding:0 10px;border-radius:9px;border:0;background:transparent;color:' + c.vt + ';font:700 13px ' + SG + ';cursor:pointer' + (h.focusDismiss ? ';outline:2px solid ' + c.vi + ';outline-offset:1px' : '');
+      h.wrap = 'display:flex;flex-direction:column;gap:10px' + (stack ? ';padding:22px 26px;border-radius:12px;border:1px solid ' + c.hair + ';background:' + c.bg : ''); return h; };
+    const PI = (o) => HD({ crumbA: 'Community', crumbHref: '/admin/community', crumbC: 'Partner invitations', title: 'Partner invitations', prim: 'New invitation', line: 'Bring operating partners in, see where each invitee stands, and keep their deals healthy.', scope: true, tabs: piTabs(o && o.tabState) }, o);
+    const BA = (o) => HD({ crumbA: 'Platform', crumbHref: '/admin/platform', crumbC: 'Bank accounts', title: 'Bank accounts', pill: 'HQ only', prim: 'Add an account', line: 'The registry of each entity’s bank accounts.' }, o);
+    const AP = (o) => HD({ crumbA: 'Community', crumbHref: '/admin/community', crumbC: 'Advisors & Partners', title: 'Advisors & Partners', line: 'The advisors and partners shown on decks and public pages.', scope: true }, o);
+    const span = (n) => phone ? 'grid-column:1/-1' : 'grid-column:span ' + n;
+    const CARD = 'background:' + c.card + ';border:1px solid ' + c.hair + ';border-radius:12px;padding:28px;display:flex;flex-direction:column;gap:10px;box-sizing:border-box';
+    const GL = 'display:grid;place-items:center;width:44px;height:44px;border-radius:999px;font:700 18px ' + SG + ';background:' + c.lav + ';color:' + c.vt + ';border:1px solid ' + c.lavE;
+    const BL = (o) => Object.assign({ s: '', glyph: false, gs: GL, eye: false, h1: false, h2: true, t: false, line: false, rows: [], btns: false, bs: 'display:flex;gap:8px;flex-wrap:wrap', det: false }, o, { btns: o.btns ? o.btns.map(b => Object.assign({ link: false, btn: !b.link, href: '#' }, b)) : false });
+    const PH = (n, h, rows) => BL({ s: span(n) + ';min-height:' + h + 'px;padding:14px 16px;border-radius:12px;border:1.5px dashed ' + c.hairD + ';background:' + c.raised + ';display:flex;flex-direction:column;gap:8px;box-sizing:border-box', eye: 'Page content, drawn on its own canvas', rows: (rows || []).map(t => ({ t })) });
+    const SK = (n, h) => BL({ s: span(n) + ';height:' + h + 'px;border-radius:12px;background:' + c.skel });
+    const CTR = 'align-items:center;text-align:center';
+    let heads = [], blocks = [], strip = false, rail = false, reading = false;
+    const PHS = [PH(1, 92), PH(1, 92), PH(1, 92), PH(1, 92), PH(4, 320)];
+    if (B === 'SHL1' || B === 'SHL9') { heads = [PI()]; blocks = PHS; rail = B === 'SHL1'; }
+    else if (B === 'SHL2') { heads = [BA({ menu: true })]; strip = true; blocks = [PH(4, 260, ['[Fund I] · operating · ending 4821', '[Studio Holdings Ltd] · payroll · ending 1937'])]; }
+    else if (B === 'SHL3') heads = [BA({ notice: 'The Admin Console has moved: Bank accounts now lives under Platform.', ph: true }), AP({ notice: 'Mentor & partner network is now Advisors & Partners, under Community.', ph: true }), PI({ notice: 'Partner invitations has a new address. Update your bookmark.', focusDismiss: true, ph: true })];
+    else if (B === 'SHL4') { heads = [PI({ tabState: 'load' })]; blocks = [SK(4, 96), SK(2, 260), SK(2, 260)]; reading = true; }
+    else if (B === 'SHL5') { heads = [BA()]; strip = true; blocks = [BL({ s: span(4) + ';' + CARD + ';' + CTR + ';padding:44px 28px', glyph: '+', t: 'No bank accounts recorded yet.', line: 'Add the first account an entity holds. HQ checks it before money moves.', btns: [{ t: 'Add an account', s: btnS }], bs: 'display:flex;gap:8px;justify-content:center' })]; }
+    else if (B === 'SHL6') { heads = [PI({ tabState: 'err' })]; blocks = [BL({ s: span(4) + ';' + CARD + ';border-color:' + c.negE, glyph: '!', gs: GL + ';color:' + c.neg + ';background:' + (dark ? 'rgba(248,113,113,.12)' : '#fef2f2') + ';border-color:' + c.negE, t: 'We could not load Partner invitations.', line: 'The rest of the admin still works. Try again in a moment.', btns: [{ t: 'Try again', s: btnS }], det: '[ref 7F3A-21C9]' })]; }
+    else if (B === 'SHL7a') blocks = [BL({ s: span(4) + ';' + CARD + ';border:1.5px dashed ' + c.hairD + ';max-width:600px;width:100%;margin:56px auto 0', eye: 'HQ only', h1: true, h2: false, t: 'This page belongs to the Super Admin', line: 'HQ manages bank accounts. You are signed in as a studio admin, so this page stays closed rather than opening and refusing each action.', btns: [{ t: 'Go to Studio', s: btnS, link: true, href: '/studio' }, { t: 'My licence', s: btnL, link: true, href: '/admin/my-licence' }] })];
+    else if (B === 'SHL7b') blocks = [BL({ s: span(4) + ';' + CARD + ';' + CTR + ';max-width:520px;width:100%;margin:56px auto 0', glyph: '⊘', h1: true, h2: false, t: 'This page is for studio admins', line: 'If you run a studio, ask HQ for admin access.', btns: [{ t: 'Go to your home', s: btnP, link: true, href: '/studio' }], bs: 'display:flex;gap:8px;justify-content:center' })];
+    else if (B === 'SHL8') { heads = [PI({ back: true, prim: false, primW: 'New invitation', notice: 'Partner invitations has a new address. Update your bookmark.' })]; blocks = [PH(1, 92), PH(1, 260)]; }
+    const SIDES = { admin: ['Studio', 'Accounts', 'Approvals', 'Programs', 'Community', 'Contracts', 'Fund admin', 'Insights', 'Licences'], hq: ['Home', 'Licences', 'Programs', 'Funds', 'Fund admin', 'Contracts', 'Team', 'Revenue', 'Content', 'Platform', 'Integration keys', 'Support', 'Security', 'Settings'], member: ['Studio', 'Spin-Out Lab', 'Validate', 'Build', 'Raise', 'Grow', 'Network', 'Research'], none: [] };
+    const rows = SIDES[shell].map(t => ({ t, href: (shell === 'member' ? '/' : '/admin/') + t.toLowerCase().replace(/ /g, '-'), cur: t === lit ? 'page' : 'false', st: 'display:flex;align-items:center;min-height:36px;padding:0 12px;margin:0 8px;border-radius:9px;font-size:13px;text-decoration:none;' + (t === lit ? 'background:' + c.lav + ';color:' + c.vt + ';font-weight:800' : 'color:' + c.ink + ';font-weight:600') }));
+    const STR = ['Overview', 'Switches', 'Topology', 'AI allowances', 'AI usage', 'Payments', 'Bank accounts', 'Product testing', 'Promo codes', 'Monitoring', 'Telegram'];
+    const desk = !phone && !stack, spine = desk && !rail && shell !== 'member';
+    const acc = { admin: '#334155', hq: '#881337', member: '#7c3aed', none: '#7c3aed' }[shell];
+    const FONT = 'font-family:' + SG + ';background:' + c.bg + ';color:' + c.ink + ';font-variant-numeric:tabular-nums;-webkit-font-smoothing:antialiased;position:relative;box-sizing:border-box';
+    const v = {
+      eyeS, btnP, btnPW: btnP + ';width:100%',
+      root: desk ? FONT + ';display:grid;grid-template-columns:196px minmax(0,1fr)' + (rail ? ' 320px' : spine ? ' 44px' : '') + ';min-height:900px' : phone ? FONT + ';width:390px;height:844px;display:flex;flex-direction:column;overflow:hidden' : FONT + ';padding:28px;background:' + (dark ? '#060a14' : '#e6e4eb'),
+      side: desk, asideS: 'background:' + c.card + ';border-right:1px solid ' + c.hair + ';padding:14px 0;display:flex;flex-direction:column;gap:2px',
+      logoS: 'width:20px;height:20px;border-radius:6px;flex:none;background:' + acc, group: shell === 'admin' ? 'Admin' : shell === 'hq' ? 'HQ' : false, groupS: 'padding:6px 20px 4px;' + eyeS, rows,
+      mainS: 'min-width:0;display:flex;flex-direction:column;position:relative' + (phone ? ';flex:1;min-height:0' : ''),
+      srS: 'position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap',
+      top: !stack, phone, desk, topS: phone ? 'height:56px;flex:none;display:flex;align-items:center;justify-content:space-between;padding:0 4px;border-bottom:1px solid ' + c.hair + ';background:' + c.card : 'height:52px;border-bottom:1px solid ' + c.hair + ';background:' + c.card + ';display:flex;align-items:center;justify-content:space-between;padding:0 30px;gap:14px',
+      picoS: 'display:grid;place-items:center;width:44px;height:44px;border:0;background:transparent;color:' + c.ink + ';font-size:18px;cursor:pointer',
+      searchS: 'display:flex;align-items:center;gap:8px;min-height:34px;padding:0 12px;border:1px solid ' + c.hair + ';border-radius:7px;background:' + c.card + ';color:' + c.mu + ';font-size:12.5px;width:280px;box-sizing:border-box',
+      badge: { admin: '[Studio Lisbon]', hq: 'HQ', member: '[Northwind Labs]', none: '' }[shell], badgeS: 'padding:4px 9px;border-radius:999px;font:700 10px ' + MO + ';letter-spacing:.06em;color:#fff;background:' + acc,
+      iconS: 'display:grid;place-items:center;width:40px;height:40px;border-radius:9px;border:1px solid ' + c.hair + ';background:' + c.card + ';color:' + c.ink + ';cursor:pointer',
+      bell: { __html: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9"/><path d="M10.3 21a1.94 1.94 0 0 0 3.4 0"/></svg>' },
+      avS: 'display:grid;place-items:center;width:30px;height:30px;border-radius:999px;background:' + c.lav + ';color:' + c.vt + ';font:700 10px ' + MO,
+      strip: strip ? STR.map(t => ({ t, href: '/admin/platform' + (t === 'Overview' ? '' : '/' + t.toLowerCase().replace(/ /g, '-')), cur: t === 'Bank accounts' ? 'page' : 'false', s: 'display:inline-flex;align-items:center;flex:none;min-height:30px;padding:0 11px;border-radius:999px;font-size:12.5px;text-decoration:none;white-space:nowrap;' + (t === 'Bank accounts' ? 'background:' + c.lav + ';border:1px solid ' + c.lavE + ';color:' + c.vt + ';font-weight:800' : 'border:1px solid transparent;color:' + c.mu + ';font-weight:600') })) : false,
+      stripS: 'display:flex;align-items:center;gap:4px;padding:6px 26px;border-bottom:1px solid ' + c.hair + ';background:' + c.card + ';overflow-x:auto',
+      bodyS: desk ? 'padding:22px 30px 30px;display:flex;flex-direction:column;gap:14px;min-width:0' : phone ? 'padding:14px 14px 18px;display:flex;flex-direction:column;gap:14px;flex:1;min-width:0;min-height:0;overflow-y:auto' : 'display:flex;flex-direction:column;gap:22px;min-width:0',
+      heads, crumbS: 'display:flex;gap:6px;align-items:center;flex-wrap:wrap;font:700 11px ' + MO + ';letter-spacing:.07em;text-transform:uppercase;color:' + c.mu,
+      crumbLS: 'color:' + c.mu + ';text-decoration:underline;text-underline-offset:3px' + (phone ? ';display:inline-flex;align-items:center;min-height:44px' : ''),
+      rowS: 'position:relative;display:flex;align-items:flex-start;justify-content:space-between;gap:14px;flex-wrap:wrap',
+      h1S: 'margin:0;font-size:' + (phone ? 20 : 24) + 'px;font-weight:800;letter-spacing:-.02em;line-height:1.25',
+      pillS: 'display:inline-flex;align-items:center;padding:2px 10px;border-radius:999px;font:700 11px ' + SG + ';line-height:1.5;color:' + c.hqT + ';background:' + c.hqBg + ';border:1px solid ' + c.hqE,
+      menuS: 'position:absolute;right:0;top:48px;z-index:5;min-width:210px;display:flex;flex-direction:column;padding:6px;border-radius:12px;background:' + c.card + ';border:1px solid ' + c.hair + ';box-shadow:0 16px 40px rgba(24,24,27,.16)',
+      lineS: 'margin:0;font-size:13px;line-height:1.5;color:' + c.mu + ';max-width:720px',
+      scopeS: 'display:inline-flex;align-items:center;min-height:26px;padding:0 10px;border-radius:999px;border:1px solid ' + c.hair + ';background:' + c.card + ';font:600 11px ' + MO + ';color:' + c.mu,
+      noticeS: 'display:flex;align-items:center;gap:10px;padding:4px 6px 4px 12px;border-radius:10px;background:' + c.lav + ';border:1px solid ' + c.lavE + ';font-size:13px;font-weight:600;color:' + c.ink,
+      infoS: 'display:grid;place-items:center;width:18px;height:18px;border-radius:999px;background:#7c3aed;color:#fff;font:700 11px ' + SG + ';flex:none',
+      tabRowS: 'display:flex;gap:22px;border-bottom:1px solid ' + c.hair + (phone ? ';overflow-x:auto;-webkit-mask-image:linear-gradient(90deg,#000 78%,transparent);mask-image:linear-gradient(90deg,#000 78%,transparent)' : ''),
+      phOneS: 'display:flex;align-items:center;min-height:120px;padding:14px 16px;border-radius:12px;border:1.5px dashed ' + c.hairD + ';background:' + c.raised + ';box-sizing:border-box;' + eyeS,
+      gridS: 'display:grid;grid-template-columns:repeat(' + (phone ? 1 : 4) + ',minmax(0,1fr));gap:14px;align-items:start', blocks,
+      h2S: 'margin:0;font-size:16px;font-weight:800;letter-spacing:-.01em;line-height:1.35', bodyLineS: 'margin:0;font-size:13px;line-height:1.55;color:' + c.mu,
+      prowS: 'padding:10px 12px;border-radius:10px;border:1px solid ' + c.hair + ';background:' + c.card + ';font:600 12.5px ' + MO + ';color:' + c.ink,
+      detS: 'margin-top:4px;padding:10px 12px;border-radius:10px;background:' + c.raised + ';border:1px solid ' + c.hair + ';color:' + c.mu, codeS: 'display:block;margin-top:8px;font:600 12px ' + MO + ';color:' + c.ink,
+      rail, railS: 'border-left:1px solid ' + c.hair + ';background:' + c.card + ';display:flex;flex-direction:column;gap:12px;padding:16px',
+      composerS: 'display:flex;align-items:center;min-height:44px;padding:0 12px;border-radius:10px;border:1px solid ' + c.hair + ';background:' + c.raised + ';color:' + c.fa + ';font-size:13px',
+      spine, reading, spineS: 'border-left:1px solid ' + c.hair + ';background:' + c.card + ';display:flex;flex-direction:column;align-items:center;gap:12px;padding:16px 0',
+      eadS: 'display:grid;place-items:center;width:28px;height:28px;border-radius:9px;background:#7c3aed;color:#fff;font-weight:800;font-size:13px', readS: 'width:8px;height:8px;border-radius:999px;background:#7c3aed;box-shadow:0 0 0 4px ' + c.lav,
+      spineT: 'writing-mode:vertical-rl;transform:rotate(180deg);font:700 10px ' + MO + ';letter-spacing:.07em;text-transform:uppercase;color:' + c.mu
+    };
+    return { v };
+  }
+}
+</script>
+</body></html>

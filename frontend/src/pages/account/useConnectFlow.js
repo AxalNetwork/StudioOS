@@ -3,11 +3,12 @@ import { useNavigate } from 'react-router-dom';
 import { api } from '../../lib/api';
 import { connectorsApi } from '../../lib/api/connectors';
 import { mercuryPersonalApi } from '../../lib/api/mercuryPersonal';
+import { mcpOauthApi } from '../../lib/api/mcpOauth';
 import { safeWriteJSON } from '../../lib/storage';
 import { PENDING_LINKEDIN_IMPORT_KEY } from '../../lib/linkedinCsv';
 import { successBanner } from './githubSync';
 import {
-  INTEGRATION_KEYS_HREF, adminKeysHref, authKind, connectFailure, isPersonalMercury, keepBuildProject,
+  INTEGRATION_KEYS_HREF, adminKeysHref, authKind, connectFailure, isMcpSignIn, isPersonalMercury, keepBuildProject,
 } from './connectorsModel';
 
 /**
@@ -66,19 +67,18 @@ export function useConnectFlow(p, { setView, onChanged, onClose, returnTo = null
   const [confirming, setConfirming] = useState(false);
   const [syncing, setSyncing] = useState(false);
   const [syncNote, setSyncNote] = useState('');
-  const [confirmReadOnly, setConfirmReadOnly] = useState(false);
   const [apiKey, setApiKey] = useState('');
   const [webhookSecret, setWebhookSecret] = useState('');
   const [configText, setConfigText] = useState(conn?.config && !conn.first_party ? JSON.stringify(conn.config, null, 2) : '');
   const [advanced, setAdvanced] = useState(false);
   const [sfSandbox, setSfSandbox] = useState(false);
-  const [dsDemo, setDsDemo] = useState(true);
+  const [dsDemo, setDsDemo] = useState(() => p.key === 'carta' && conn ? conn.config?.is_demo === true : true);
   const [tool, setTool] = useState(null);
 
   const go = (v) => { setMessage(''); setView(v); };
 
   const startOauth = async () => {
-    if (blocked) return;
+    if (blocked || p.auth_type === 'none') return;
     setBusy(true); setMessage('');
     setView('signin');
     try {
@@ -90,11 +90,14 @@ export function useConnectFlow(p, { setView, onChanged, onClose, returnTo = null
       } else if (personalMercury) {
         // D840 (#2346): Mercury's own sign-in route; it returns to /account/connectors/mercury.
         url = (await mercuryPersonalApi.oauthStart())?.authorize_url;
+      } else if (isMcpSignIn(p)) {
+        // D1080 (#2945): the generic MCP sign-in; it returns to /account/connectors/<key>.
+        url = (await mcpOauthApi.start(p.key))?.authorize_url;
       } else {
         const params = returnTo === 'build' ? { return_to: 'build', ...(Number(projectId) > 0 ? { project_id: String(Number(projectId)) } : {}) } : {};
         if (p.key === 'salesforce') params.sandbox = sfSandbox ? '1' : '';
         // Always demo=0|1: a missing query makes the Worker default to demo.
-        if (p.key === 'docusign') params.demo = dsDemo ? '1' : '0';
+        if (p.key === 'docusign' || p.key === 'carta') params.demo = dsDemo ? '1' : '0';
         const r = await connectorsApi.oauthStart(p.key, params, opts);
         url = r?.authorize_url;
       }
@@ -117,10 +120,6 @@ export function useConnectFlow(p, { setView, onChanged, onClose, returnTo = null
     if (configText.trim() && p.key !== 'mercury') {
       try { config = JSON.parse(configText); } catch { setMessage('Settings must be valid JSON.'); return; }
     }
-    if (p.key === 'mercury') {
-      if (!confirmReadOnly) { setMessage('Confirm this is a Read Only token.'); return; }
-      config = { confirm_read_only: true };
-    }
     setBusy(true);
     try {
       await connectorsApi.connect({ provider_key: p.key, display_name: conn?.display_name || name, api_key: apiKey || undefined, webhook_secret: p.key === 'mercury' ? undefined : webhookSecret || undefined, config }, opts);
@@ -129,10 +128,8 @@ export function useConnectFlow(p, { setView, onChanged, onClose, returnTo = null
       onChanged?.();
     } catch (err) {
       setMessage(err?.message || '');
-      // D715 decision 8: a refused Mercury token prints only the Worker's sentence, on the key form, with the token cleared.
-      if (personalMercury && err?.status !== 402) { setApiKey(''); if (!err?.message) setMessage('Mercury could not be connected.'); }
       // The key form's refusal is about the key, so it reads `badkey`, never `refused` (D751 #1881).
-      else setView(connectFailure(err, { ...p, auth_type: 'api_key' }));
+      setView(connectFailure(err, { ...p, auth_type: 'api_key' }));
     } finally { setBusy(false); }
   };
 
@@ -164,6 +161,6 @@ export function useConnectFlow(p, { setView, onChanged, onClose, returnTo = null
     sfSandbox, setSfSandbox, dsDemo, setDsDemo,
     // The key form's fields.
     apiKey, setApiKey, webhookSecret, setWebhookSecret, configText, setConfigText,
-    advanced, setAdvanced, confirmReadOnly, setConfirmReadOnly,
+    advanced, setAdvanced,
   };
 }

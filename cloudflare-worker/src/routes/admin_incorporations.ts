@@ -3,7 +3,7 @@
  * hand. Mounted at /api/admin/incorporations. Every endpoint gates on
  * requireAdmin, and every write is recorded through logAdminAction.
  *
- *   GET  /                    → paid orders, each with its project's documents
+ *   GET  /?scope=lab|all      → paid orders, each with its project's documents; lab keeps Lab ventures (D946)
  *   POST /:id/packet-ready    → { document_id } — the packet, a document of the order's project
  *   POST /:id/filed           → { filed_on: 'YYYY-MM-DD' } — the date it was filed with the state
  *
@@ -20,7 +20,9 @@ const r = new Hono<{ Bindings: Env }>();
 
 r.get('/', async (c) => {
   await requireAdmin(c);
-  return c.json({ orders: await listPaidOrders(c.env) });
+  const scope = c.req.query('scope') || 'all';
+  if (scope !== 'all' && scope !== 'lab') return c.json({ error: 'bad_scope', code: 'bad_scope', detail: 'scope is lab or all.' }, 400);
+  return c.json({ orders: await listPaidOrders(c.env, { labOnly: scope === 'lab' }), scope });
 });
 
 r.post('/:id/packet-ready', async (c) => {

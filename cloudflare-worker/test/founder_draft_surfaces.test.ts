@@ -817,3 +817,15 @@ test('D778 part 10: each shared draft waits for its owner to Accept, preserving 
     } finally { db.close(); }
   }
 });
+
+test('#2447: the room brief counts downloads and only unexpired grants',async()=>{
+ const db=freshDb();
+ db.prepare("UPDATE data_room_grants SET expires_at='2000-01-01T12:00:00Z' WHERE project_id=?").run(MY_PROJECT);
+ db.prepare("DELETE FROM data_room_access_log WHERE project_id=?").run(MY_PROJECT);
+ const file=db.prepare('SELECT id FROM data_room_files WHERE project_id=? LIMIT 1').get(MY_PROJECT) as any;
+ db.prepare("INSERT INTO data_room_access_log(project_id,file_id,user_id,action) VALUES(?,?,?,'blocked')").run(MY_PROJECT,file.id,MINE.user);
+ let r=await draft(db,MINE,'raise/data-room',String(MY_PROJECT));assert.equal(r.status,201);assert.match(r.prompt!,/never opened/);assert.match(r.prompt!,/0 investors currently have access/);
+ db.prepare('UPDATE data_room_grants SET expires_at=NULL WHERE project_id=?').run(MY_PROJECT);
+ db.prepare("INSERT INTO data_room_access_log(project_id,file_id,user_id,action) VALUES(?,?,?,'download')").run(MY_PROJECT,file.id,MINE.user);
+ r=await draft(db,MINE,'raise/data-room',String(MY_PROJECT));assert.equal(r.status,201);assert.match(r.prompt!,/opened by 1 investor/);assert.match(r.prompt!,/1 investor currently have access/);
+});

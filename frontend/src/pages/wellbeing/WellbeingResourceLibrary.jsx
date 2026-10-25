@@ -356,7 +356,7 @@ export default function WellbeingResourceLibrary() {
     >
       <section className="min-w-0 space-y-4" aria-label="Resource library">
         <PageHeader
-          back={{ to: '/admin?tab=wellbeing', label: 'Wellbeing' }}
+          back={{ to: '/admin/wellbeing', label: 'Wellbeing' }}
           title="Resource library"
           sub="What members see under Wellbeing, in the order they see it. Publish and delete."
           action={(

@@ -1,3 +1,4 @@
+import { raiseEvidenceTables } from './_raise_evidence_fixture.ts';
 /**
  * D661 (#1474) — Validate's REAL read, through the page's adapter.
  *
@@ -54,6 +55,7 @@ function fixture() {
   // `validate_proposals` column is left out: the tests that read proposals
   // create that table themselves.
   db.exec(sqlOf('438_interview_sessions.sql'));
+  applySessionTranslationColumns(db); // D857: migration 527's segment columns
   db.exec(sqlOf('447_assistant_interviews.sql').replace(/ALTER TABLE validate_proposals[^;]*;/, ''));
   db.exec(sqlOf('453_interview_processing.sql'));
   // D690 (#1692): the tracked list and Experiments' links read 460's stores.
@@ -226,6 +228,7 @@ function raiseFixture() {
   db.exec(sqlOf('442_raise_cycle_stores.sql'));
   personalMatchTables(db); // D752: Capital relationships reads a raise receipt's posted date
   db.exec(sqlOf('463_raise_record_stores.sql'));
+  raiseEvidenceTables(db);
   db.prepare('INSERT INTO users (id, role, name, email, is_active, founder_id) VALUES (?, ?, ?, ?, 1, ?)').run(FOUNDER, 'founder', 'Fay Founder', 'fay@example.test', 1001);
   db.exec(`INSERT INTO projects (id, name, founder_id) VALUES (${P}, 'Acme', 1001)`);
   return db;
@@ -733,6 +736,7 @@ test('D661: every Build module page\'s records are {key,label} columns and {id,c
 import { EDITS, FORMS, editFor, formFor, initialValues, validate, toCents, toScore, thisMonth } from '../../frontend/src/pages/cycles/forms.js';
 import { makeCycleWrites } from '../../frontend/src/lib/api/cycleWrites.js';
 import progress from '../src/routes/progress.ts';
+import { applySessionTranslationColumns } from './_session_translation_columns.mjs';
 
 // MVP scope (`progress.ts`) adds the feature a must-have marks.
 const progressApp = new Hono<any>();

@@ -326,9 +326,7 @@ const Deck_yc_seed_inner: React.FC<DeckProps> = ({ data, editable, onEdit }) => 
     { quarter: '+12 mo', goal: '[Expand to Y]' },
     { quarter: '+24 mo', goal: '[Define the category]' },
   ];
-  const uof: { label: string; pct: number }[] = (Array.isArray(data?.use_of_funds) && data.use_of_funds.length) ? data.use_of_funds : [
-    { label: 'Engineering', pct: 45 }, { label: 'GTM', pct: 30 }, { label: 'Ops + Infra', pct: 15 }, { label: 'Reserve', pct: 10 },
-  ];
+  const uof: { label: string; pct: number }[] = Array.isArray(data?.use_of_funds) ? data.use_of_funds : [];
 
   return <>
     {/* ── 01 Cover ─────────────────────────────────────────────── */}
@@ -771,7 +769,7 @@ const Deck_yc_seed_inner: React.FC<DeckProps> = ({ data, editable, onEdit }) => 
         </div>
         <div style={{ borderRadius: 16, border: `1px solid ${HAIRLINE}`, padding: 20, display: 'flex', flexDirection: 'column' }}>
           <div style={{ fontSize: 11, textTransform: 'uppercase', letterSpacing: 3, color: '#A3A3A3', marginBottom: 12 }}>Use of funds</div>
-          <Donut data={uof} />
+          <>{uof.length ? <Donut data={uof} /> : <p>Use of funds not recorded</p>}</>
         </div>
       </div>
     </Frame>

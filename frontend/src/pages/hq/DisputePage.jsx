@@ -101,7 +101,7 @@ export function DisputeView({ disputeId, state, onRetry }) {
                 <p className="mt-1 text-gray-500">{DISPUTE.noEvidence}</p>
               )}
               <p className="mt-1 text-xs text-gray-500">
-                Evidence is filed on the <Link to="/admin?tab=billing" className="underline">Billing tab</Link>.
+                Evidence is filed on the <Link to="/admin/revenue/billing" className="underline">Billing tab</Link>.
               </p>
             </div>
           </>

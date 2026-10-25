@@ -17,6 +17,7 @@ import { daysBefore, INTERVIEW_STATES, QUOTE_WITHHELD } from '../src/services/cy
 import { validateContext } from '../src/mcp/tools/context.ts';
 import { tableFromBaseline } from './_baseline.mjs';
 import { d1Over } from './_d1_sqlite.mjs';
+import { applySessionTranslationColumns } from './_session_translation_columns.mjs';
 
 const KEY = ['fixture', 'key', 'for', 'd690', 'lists'].join('-');
 const BASELINE = readFileSync(resolve(process.cwd(), 'cloudflare-worker/sql/schema_baseline.sql'), 'utf8');
@@ -40,6 +41,7 @@ function fixture() {
   db.exec(sqlOf('311_revenue_entries.sql').replace(/REFERENCES documents\(id\)/, ''));
   for (const m of ['440_validate_cycle_stores.sql', '438_interview_sessions.sql', '447_assistant_interviews.sql',
     '453_interview_processing.sql', '459_cycle_activity_convention.sql', '460_validate_record_stores.sql']) db.exec(sqlOf(m));
+    applySessionTranslationColumns(db); // D857: migration 527's segment columns
   const u = db.prepare('INSERT INTO users (id, role, name, email, is_active, founder_id, spinout_lab_active) VALUES (?, ?, ?, ?, 1, ?, 0)');
   u.run(FOUNDER, 'founder', 'Fern Founder', 'fern@example.test', 1001);
   u.run(ADMIN, 'admin', 'Ash Admin', 'ash@example.test', null);

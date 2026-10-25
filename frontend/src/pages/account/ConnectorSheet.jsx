@@ -8,7 +8,7 @@ import { BrandIcon, Pill, Unrecorded, Unreadable } from '../../ui';
 import { BTN, INPUT, LoadingRows } from './AccountCenter';
 import { HubspotConfigModal, LinkedInCsvImportModal, SalesforceConfigModal } from './connectorTools';
 import GithubSyncSheet from './GithubSyncSheet';
-import { MercuryEntityPanel, MercuryLandsGroup, MercuryReadsGroup, MercuryUsesGroups } from './MercurySheet';
+import { MercuryLandsGroup, MercuryReadsGroup, MercuryUsesGroups } from './MercurySheet';
 import { MEMBER_REPLACE } from './mercuryModel';
 import { useAuth } from '../../hooks/useAuthSync';
 import { isSuperAdminUser } from '../../lib/shellRole';
@@ -16,7 +16,7 @@ import { disconnect, startFirstParty, useConnectFlow } from './useConnectFlow';
 import {
   TIER_LABEL, agoLabel, authKind, buildCatalogue, companiesLabel, connectionStatus,
   disconnectNote, feedsLabel, flowBanner, lastSyncLabel, moduleLabel,
-  coreSystemOffer, isEntityRow, isPersonalMercury,
+  coreSystemOffer, isPersonalMercury,
   FREE_KEEPS_CONNECTORS, connectorPagePath, patOnly,
 } from './connectorsModel';
 import { cyclesWrite } from '../../lib/api/cycles';
@@ -120,7 +120,7 @@ export const SheetFrame = createContext(null);
 /** A centred dialog of its own; inside a `SheetFrame`, the frame's content. `action` sits in the head, before its ×. */
 export function Sheet({ eyebrow, title, sub, onClose, children, footer, provider = null, providerName = '', action = null, 'data-testid': testId }) {
   const frame = useContext(SheetFrame);
-  // With no frame (the Bank accounts console's entity sheet), open Build's one:
+  // With no frame (a sheet opened on its own, as HQ's Bank accounts console does), open Build's one:
   // a centred Lightbox, whose Escape stack a nested dialog shares.
   if (!frame) {
     return (
@@ -375,8 +375,8 @@ export function ToolModals({ conn, flow, onChanged }) {
 export function SettingsGroup({ p, onTool, onReplace }) {
   const conn = p.connection;
   const kind = authKind(p);
-  // D840: a member's Mercury connected with a token keeps its token row, though it signs in by default.
-  const token = conn?.uid && (kind !== 'oauth' || (isPersonalMercury(p) && conn.auth_type === 'api_key'));
+  // D881 (#2554): a member's Mercury signs in only, so a token row kept from before D881 has no Replace here.
+  const token = conn?.uid && kind !== 'oauth';
   if (!conn || !(p.key === 'hubspot' || p.key === 'salesforce' || p.key === 'linkedin' || token)) return null;
   return (
     <Group label="Settings">
@@ -468,7 +468,7 @@ export function ConnectorPanel({ p, view, setView, ret = {}, onChanged, onClose,
   const [teammate, setTeammate] = useState(null);
   const [ownChosen, setOwnChosen] = useState(false);
   // From Build, a project whose company this member cannot connect for (D686 §5.4): no flow starts, whatever path opened the panel.
-  const askTeammate = !blocked && view === 'pre' && !conn && !p.first_party && !!p.key;
+  const askTeammate = p.auth_type !== 'none' && !blocked && view === 'pre' && !conn && !p.first_party && !!p.key;
   useEffect(() => {
     if (!askTeammate) return undefined;
     let live = true;
@@ -517,7 +517,10 @@ export function ConnectorPanel({ p, view, setView, ret = {}, onChanged, onClose,
   let footer = null;
   let title = name;
 
-  if (view === 'detail' && conn) {
+  if (p.auth_type === 'none') {
+    body = <Group label="Works without signing in"><Row a="No account is connected. See this connector’s page for what is built." /><Link to={connectorPagePath(p.key)} className={BTN.link} onClick={dismiss}>Open page</Link></Group>;
+    footer = backBtn;
+  } else if (view === 'detail' && conn) {
     sub = `by ${p.by || name} · ${status.label}${p.verified ? ' · Verified by Axal' : ''}${conn.external_account_name ? ` · ${conn.external_account_name}` : ''}`;
     if (status.why && personalMercury) {
       // Decision 8: the attention words and the fix; never "sync", never the raw `last_error`.
@@ -538,14 +541,14 @@ export function ConnectorPanel({ p, view, setView, ret = {}, onChanged, onClose,
             <Row a="What StudioOS reads" b="Choose the repositories, and sync them." action={<button type="button" className={BTN.link} onClick={() => go('sync')} data-testid="button-choose-repositories">Choose</button>} />
           </Group>
         )}
-        {personalMercury ? <MercuryReadsGroup /> : (
+        {personalMercury ? <MercuryReadsGroup conn={conn} /> : (
           <Group label="Sync">
             <Row a="How often" b={syncFrequencyLabel(conn)} />
             <Row a="Last sync" b={syncNote || lastSyncLabel(conn)}
-              action={conn.uid ? <button type="button" className={BTN.link} disabled={syncing} onClick={syncNow} data-testid="button-sync-now">{syncing ? 'Syncing…' : 'Sync now'}</button> : null} />
+              action={conn.uid && !p.legacy_only ? <button type="button" className={BTN.link} disabled={syncing} onClick={syncNow} data-testid="button-sync-now">{syncing ? 'Syncing…' : 'Sync now'}</button> : null} />
           </Group>
         )}
-        <SettingsGroup p={p} onTool={setTool} onReplace={() => go('key')} />
+        {p.legacy_only ? <Banner tone="neutral">{p.legacy_notice}</Banner> : <SettingsGroup p={p} onTool={setTool} onReplace={() => go('key')} />}
         {conn.uid
           ? <ActivityGroup conn={conn} />
           : <Group label="Activity"><Row a={<Unrecorded reason={`${name} keeps no activity log in StudioOS.`}>Not recorded</Unrecorded>} /></Group>}
@@ -562,7 +565,7 @@ export function ConnectorPanel({ p, view, setView, ret = {}, onChanged, onClose,
       <>
         {backBtn}
         <span className="mr-auto text-[11.5px] text-axal-muted dark:text-gray-400">On disconnect: {disconnectNote(p, viewerRole)}</span>
-        {status.why && <button type="button" className={BTN.primary} onClick={() => go('pre')}>Reconnect</button>}
+        {status.why && !p.legacy_only && <button type="button" className={BTN.primary} onClick={() => go('pre')}>Reconnect</button>}
         <button type="button" className={BTN.danger} onClick={() => setConfirming(true)} data-testid="button-disconnect">Disconnect</button>
       </>
     );
@@ -607,23 +610,17 @@ export function ConnectorPanel({ p, view, setView, ret = {}, onChanged, onClose,
             <label className="flex items-center gap-2 px-3 py-2 text-[13px]"><input type="radio" name="sf_env" checked={sfSandbox} onChange={() => setSfSandbox(true)} /> Sandbox</label>
           </Group>
         )}
-        {p.key === 'docusign' && (
+        {(p.key === 'docusign' || p.key === 'carta') && (
           <Group label="Account">
-            <div data-testid="docusign-env-picker">
+            <div data-testid={`${p.key}-env-picker`}>
               <label className="flex items-center gap-2 px-3 py-2 text-[13px]"><input type="radio" name="ds_env" checked={!dsDemo} onChange={() => setDsDemo(false)} /> Production</label>
-              <label className="flex items-center gap-2 px-3 py-2 text-[13px]"><input type="radio" name="ds_env" checked={dsDemo} onChange={() => setDsDemo(true)} /> Demo</label>
+              <label className="flex items-center gap-2 px-3 py-2 text-[13px]"><input type="radio" name="ds_env" checked={dsDemo} onChange={() => setDsDemo(true)} /> {p.key === 'carta' ? 'Playground' : 'Demo'}</label>
             </div>
           </Group>
         )}
         {p.supports_pat && kind === 'oauth' && !tokenOnly && !personalMercury && (
           <p className="mx-5 mt-3 text-[12px] text-axal-muted dark:text-gray-400">
             Your workspace blocks outside apps? <button type="button" className={BTN.link} onClick={() => go('key')}>Use a personal access token instead</button>
-          </p>
-        )}
-        {/* D840 (#2346): a member signs in with Mercury; the Read Only token is the other way in. */}
-        {personalMercury && (
-          <p className="mx-5 mt-3 text-[12px] text-axal-muted dark:text-gray-400">
-            <button type="button" className={BTN.link} onClick={() => go('key')} data-testid="connector-mercury-token">Use a Read Only API token instead</button>
           </p>
         )}
         {tokenOnly && kind === 'oauth' && (
@@ -732,10 +729,6 @@ export function ConnectorPanel({ p, view, setView, ret = {}, onChanged, onClose,
     footer = <button type="button" className={BTN.primary} onClick={() => go(p.locked ? 'pro' : 'pre')}>Connect</button>;
   }
 
-  // D715 (#1780): the Axal entities' Mercury is its own sheet, never this flow. Its one
-  // audited read happens there, on open; nothing above fetches for it (`openingView` is `entity`).
-  if (isEntityRow(p)) return <MercuryEntityPanel p={p} onClose={onClose} eyebrow={eyebrow} />;
-
   // GitHub's choice of repositories is its own sheet (D686 §5.4).
   if (syncView) {
     return <GithubSyncSheet p={p} conn={conn} projectId={projectId} companyId={companyId} eyebrow={eyebrow} onClose={onClose} onChanged={onChanged} back={() => go('detail')} />;
@@ -772,17 +765,10 @@ export function KeyFields({ p, flow, updating = false, keyHelp = null }) {
   const kind = authKind(p);
   const {
     startOauth, apiKey, setApiKey, webhookSecret, setWebhookSecret, configText, setConfigText,
-    advanced, setAdvanced, confirmReadOnly, setConfirmReadOnly,
+    advanced, setAdvanced,
   } = flow;
   return (
     <>
-      {p.key === 'mercury' && <>
-        <Banner tone="neutral">Create a <strong>Read Only</strong> API token in your own Mercury organization, never Read and Write.</Banner>
-        <label className="mx-5 mt-4 flex items-center gap-2 text-sm">
-          <input type="checkbox" required checked={confirmReadOnly} onChange={(e) => setConfirmReadOnly(e.target.checked)} />
-          This is a Read Only token
-        </label>
-      </>}
       {p.key === 'crunchbase' && !updating && (
         <Banner tone="neutral">
           <span className="font-semibold">Crunchbase Basic user key.</span> Create one at data.crunchbase.com → API and paste the user_key below. Connect runs a live search to check it before saving. Daily Basic quota is 200 calls.
@@ -841,8 +827,6 @@ const CONNECT_VIEWS = new Set(['pre', 'signin', 'key', 'badkey', 'cancelled', 'r
  * cannot connect, D751 #1881); the plan when locked; else the flow's first step.
  */
 export function openingView(p) {
-  // The entity row opens the entity sheet, so the `pre` view's teammate read never fires for it (D715).
-  if (isEntityRow(p)) return 'entity';
   if (p.connection) return 'detail';
   if (p.oauthOff && !p.supports_pat) return 'unconfigured';
   if (p.locked) return 'pro';

@@ -1,0 +1,63 @@
+<!DOCTYPE html>
+<html><head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <meta name="design_doc_mode" content="canvas">
+  <link href="https://fonts.googleapis.com/css2?family=Roboto+Mono:wght@400;500;600;700&family=Space+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <style>body{margin:0;background:#eeedf2}a{color:#7c3aed;text-decoration:none}a:hover{color:#6d28d9}</style>
+</helmet>
+<div style="display:flex;flex-direction:column;font-family:'Space Grotesk',system-ui,sans-serif;color:#18181b">
+  <header style="padding:40px 44px 8px;display:flex;flex-direction:column;gap:6px">
+    <span style="font:700 11px 'Roboto Mono',monospace;letter-spacing:.07em;text-transform:uppercase;color:#6b6577">HQ · Platform › Payments</span>
+    <h1 style="margin:0;font-size:28px;font-weight:800;letter-spacing:-.02em">Payments</h1>
+    <p style="margin:0;font-size:14px;color:#6b6577;max-width:840px;line-height:1.55">HQ’s price list: every product and price members can buy, where each shows, what it costs, and whether Stripe and the platform agree. Drawn for the Super Admin; a studio admin meets only the closed card on PAY11. The product drawer is drawn as a centred lightbox. Every amount is a bracketed placeholder, and Stripe is in Live mode, so no Test mode pill appears.</p>
+  </header>
+  <sc-for list="{{ boards }}" as="b" hint-placeholder-count="13">
+    <section id="{{ b.id }}" style="padding:36px 44px;border-bottom:1px solid rgba(0,0,0,.08);display:flex;flex-direction:column;gap:12px;scroll-margin-top:16px">
+      <div style="display:flex;align-items:baseline;gap:10px;flex-wrap:wrap">
+        <a href="#{{ b.id }}" style="font:700 11px 'Roboto Mono',monospace;padding:3px 8px;background:#18181b;color:#fff;border-radius:5px">{{ b.id }}</a>
+        <h2 style="margin:0;font-size:16px;font-weight:800;letter-spacing:-.01em">{{ b.t }}</h2>
+      </div>
+      <p style="margin:0;font-size:13px;line-height:1.55;color:#4a4553;max-width:920px">{{ b.cap }}</p>
+      <div style="display:flex;gap:28px;flex-wrap:wrap;align-items:flex-start">
+        <sc-for list="{{ b.frames }}" as="f" hint-placeholder-count="1">
+          <div style="display:flex;flex-direction:column;gap:8px;flex:none">
+            <sc-if value="{{ f.lab }}" hint-placeholder-val="{{ false }}"><span style="font:600 11px 'Roboto Mono',monospace;color:#6b6577">{{ f.lab }}</span></sc-if>
+            <div style="{{ f.box }}"><dc-import name="Payments Page" board="{{ f.b }}" hint-size="{{ f.hint }}"></dc-import></div>
+          </div>
+        </sc-for>
+      </div>
+    </section>
+  </sc-for>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script="">
+class Component extends DCLogic {
+  renderVals() {
+    const D = (b, lab, w, h, r) => ({ b, lab: lab || false, hint: '100%,' + (h || 900) + 'px', box: 'width:' + (w || 1440) + 'px;' + (h ? 'height:' + h + 'px;' : '') + 'overflow:hidden;border-radius:' + (r || 12) + 'px;border:1px solid rgba(24,24,27,.12);background:#f4f3f7;box-shadow:0 1px 3px rgba(0,0,0,.06)' });
+    const P = (b, lab) => D(b, lab, 390, 844, 28);
+    const boards = [
+      ['PAY1', 'Catalogue · Super Admin · desktop 1440 · light', 'What needs HQ, four tiles, and every product grouped as plans, one-time products, token packs and archived. Eadwyn is open here and collapsed on every other board. The moved notice is for an old Admin Console link.', [D('PAY1')]],
+      ['PAY2', 'Product · lightbox over the catalogue', 'A centred lightbox, not a right-side drawer: where members see the plan, its prices, who is on it, promo codes, checks and recent changes. The second frame shows a failed check and the technical details opened.', [D('PAY2'), D('PAY2c', 'Checks and technical details', 760)]],
+      ['PAY3', 'New product', 'Step 1 picks what is sold. Step 2 for a plan shows the /pricing card live beside the fields: a clash for Founder [Raise + Grow], the checkout gap for Investor [Plus]. Step 2 for an add-on.', [D('PAY3a', 'Step 1', 700), D('PAY3b', 'Step 2 · Founder, clash', 1000), D('PAY3c', 'Step 2 · Investor [Plus]', 1000), D('PAY3d', 'Step 2 · Add-on', 700)]],
+      ['PAY4', 'Price dialogs', 'Add a price, change one (Stripe adds a new price and archives the old), and archive a product. Writes that change what members pay go on to the step-up on PAY6.', [D('PAY4a', 'A · Add a price', 700), D('PAY4b', 'B · Change a price', 700), D('PAY4c', 'C · Archive a product', 700)]],
+      ['PAY5', 'Stripe connection · desktop 1440 · light', 'The account, the publishable key with its mismatch variant beside it, the webhook with the events the platform acts on, deliveries per hour with the hour that has no log, and the catalogue mirror.', [D('PAY5')]],
+      ['PAY6', 'Stripe dialogs', 'Replacing the key (a match, and a Test key pasted), registering an endpoint, the sync result and its failure, and the authenticator step-up, shown once.', [D('PAY6a', 'A · Replace key', 700), D('PAY6b', 'A · Test key pasted', 700), D('PAY6c', 'B · Register', 700), D('PAY6d', 'C · Sync result', 700), D('PAY6e', 'C · Sync failed', 700), D('PAY6f', 'D · Step-up', 700)]],
+      ['PAY7', 'Change log', 'Every change, newest first, with who made it. Failed syncs are recorded too.', [D('PAY7')]],
+      ['PAY8', 'Empty', 'Stripe not connected, with no fake tiles; and connected with no products yet.', [D('PAY8a', 'Not connected', 1440, 640), D('PAY8b', 'No products yet', 1440, 640)]],
+      ['PAY9', 'Loading', 'Header, strip, tabs and toolbar at once. Tiles read, the table shows eight skeleton rows, and the spine shows a Reading dot.', [D('PAY9')]],
+      ['PAY10', 'Error and partial', 'The Stripe tile could not be read while the catalogue loads, with a refused write as a toast; then the webhook card and the whole catalogue failing on their own.', [D('PAY10'), D('PAY10b', 'Webhook and catalogue failures', 1200)]],
+      ['PAY11', 'No permission', 'A studio admin opens the address and meets one closed card, never a page of disabled buttons.', [D('PAY11', false, 1440, 720)]],
+      ['PAY12', 'Phone · 390 wide', 'The catalogue stacked, a product as a full-screen sheet, a price dialog as a bottom sheet, and Stripe connection with the chart as a table.', [P('PAY12a', 'Catalogue'), P('PAY12b', 'Product'), P('PAY12c', 'Change a price'), P('PAY12d', 'Stripe connection')]],
+      ['PAY13', 'Stripe connection · dark', 'PAY5 in the dark colours; violet becomes #a78bfa and the dashed no-log hour stays visible.', [D('PAY13')]]
+    ].map(([id, t, cap, frames]) => ({ id, t, cap, frames }));
+    return { boards };
+  }
+}
+</script>
+</body></html>

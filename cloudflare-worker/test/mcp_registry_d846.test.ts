@@ -143,9 +143,9 @@ test('three principals list three different tool sets: by scope, by plan, and by
   const bo = await names(await session(env, grant(BO, [P_BO]), READS));
   // Fay again, with only validate:read.
   const narrow = await names(await session(env, grant(FAY, [P, P2]), ['validate:read']));
-  assert.deepEqual(fay, ['d846_studio_only', 'get_build_progress', 'get_interview_guide', 'get_validate_context', 'list_companies', 'list_connections']);
-  assert.deepEqual(bo, ['get_interview_guide', 'get_validate_context', 'list_companies', 'list_connections'], 'no plan, no switched-on GitHub');
-  assert.deepEqual(narrow, ['get_interview_guide', 'get_validate_context', 'list_companies'], 'scope decides');
+  assert.deepEqual(fay, ['d846_studio_only', 'get_build_progress', 'get_interview_guide', 'get_meeting_transcript', 'get_session_insights', 'get_validate_context', 'list_channel_chats', 'list_companies', 'list_connections', 'list_meetings']);
+  assert.deepEqual(bo, ['get_interview_guide', 'get_meeting_transcript', 'get_session_insights', 'get_validate_context', 'list_channel_chats', 'list_companies', 'list_connections', 'list_meetings'], 'no plan, no switched-on GitHub');
+  assert.deepEqual(narrow, ['get_interview_guide', 'get_meeting_transcript', 'get_session_insights', 'get_validate_context', 'list_channel_chats', 'list_companies', 'list_meetings'], 'scope decides');
   assert.ok(!fay.includes('submit_interview'), 'a write tool needs validate:write');
 });
 
@@ -160,9 +160,13 @@ test('a connection that is not active does not list its tool', async () => {
   assert.ok(!(await names(await session(env, grant(FAY, [P, P2]), READS))).includes('get_build_progress'));
 });
 
-test('a plan past due drops a plan-gated tool', async () => {
+test('an unpaid plan drops a plan-gated tool; one Stripe is still retrying keeps it (D1052)', async () => {
   const { env, db } = fixture();
-  db.exec(`UPDATE users SET subscription_status = 'past_due' WHERE id = ${FAY}`);
+  db.exec(`UPDATE users SET subscription_status = 'unpaid' WHERE id = ${FAY}`);
+  assert.ok(!(await names(await session(env, grant(FAY, [P]), READS))).includes('d846_studio_only'));
+  db.exec(`UPDATE users SET subscription_status = 'past_due', subscription_renews_at = datetime('now') WHERE id = ${FAY}`);
+  assert.ok((await names(await session(env, grant(FAY, [P]), READS))).includes('d846_studio_only'));
+  db.prepare("UPDATE users SET subscription_renews_at = ? WHERE id = ?").run(new Date(Date.now()-22*86_400_000).toISOString(),FAY);
   assert.ok(!(await names(await session(env, grant(FAY, [P]), READS))).includes('d846_studio_only'));
 });
 
@@ -205,7 +209,8 @@ test('callTool re-checks the scope, the plan and the connection on every call', 
   // Connection: switched off since the list was drawn.
   db.exec('UPDATE integration_companies SET enabled = 0 WHERE integration_id = 1');
   const off = await server.callTool(env, grant(FAY, [P]), null, counted, { company: P }, READS);
-  assert.deepEqual(body(off), { error: server.NOT_AVAILABLE });
+  // D842 (#2470): every refusal also carries its structured code.
+  assert.deepEqual(body(off), { error: server.NOT_AVAILABLE, code: 'refused' });
   db.exec('UPDATE integration_companies SET enabled = 1 WHERE integration_id = 1');
   // A granted company the connection is not switched on for.
   const second = await server.callTool(env, grant(FAY, [P, P2]), null, counted, { company: P2 }, READS);
@@ -214,7 +219,7 @@ test('callTool re-checks the scope, the plan and the connection on every call', 
   let studioRan = 0;
   const studio = { ...STUDIO_TOOL, run: async () => { studioRan += 1; return {}; } };
   db.exec(`UPDATE users SET subscription_tier = 'growth' WHERE id = ${FAY}`);
-  assert.deepEqual(body(await server.callTool(env, grant(FAY, [P]), null, studio, {}, READS)), { error: server.NOT_AVAILABLE });
+  assert.deepEqual(body(await server.callTool(env, grant(FAY, [P]), null, studio, {}, READS)), { error: server.NOT_AVAILABLE, code: 'refused' });
   assert.deepEqual([ran, studioRan], [0, 0], 'nothing ran');
   // And with all of it in place, it runs.
   const ok = await server.callTool(env, grant(FAY, [P]), null, counted, { company: P }, READS);
@@ -307,7 +312,9 @@ test('each tool\'s version is reported in _meta, on the listing and on every res
   assert.equal(listed.find((t) => t.name === 'd846_studio_only')!._meta![server.META.version], '2.1.0');
   const r = await client.callTool({ name: 'list_companies', arguments: {} });
   // D843 adds the per-call execution id beside D846's tool metadata.
-  const { execution_id: _executionId, ...toolMetadata } = r._meta ?? {};
+  const { execution_id: executionId, [server.EXECUTION_META]: namespacedId, ...toolMetadata } = r._meta ?? {};
+  assert.equal(namespacedId, executionId);
+  assert.match(String(executionId), /^[0-9a-f-]{36}$/);
   assert.deepEqual(toolMetadata, { [server.META.version]: '1.0.0', [server.META.source]: 'axal' });
 });
 

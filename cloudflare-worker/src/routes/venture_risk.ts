@@ -1,9 +1,10 @@
+import { mayReadProjectDeal } from '../services/scoreAccess';
 /**
  * Task #9 — Venture Risk surface.
  *
  * Mounted at /api/venture-risk. The 10-layer Venture Risk rating system is for
- * the INTERNAL DEAL TEAM only. Reads are gated to admin / partner / investor
- * (same privileged set as the founder-risk route); analyst writes (overrides,
+ * the INTERNAL DEAL TEAM only. Portfolio reads are gated to admin / partner; investors
+ * may read a single project only through an existing readable deal; analyst writes (overrides,
  * recompute) are gated to admin / partner — the deal-team analysts.
  *
  * Endpoints:
@@ -32,7 +33,7 @@ import {
 
 const ventureRisk = new Hono<{ Bindings: Env }>();
 
-/** Internal deal-team READ set — admin / partner / investor. */
+/** Single-project roles; investors additionally require a readable deal. */
 function canRead(role: User['role']): boolean {
   return role === 'admin' || role === 'partner' || role === 'investor';
 }
@@ -50,8 +51,8 @@ function parseProjectId(raw: string): number | null {
 ventureRisk.get('/matrix', async (c) => {
   try {
     const user = await requireAuth(c);
-    if (!canRead(user.role)) return c.json({ detail: 'Forbidden' }, 403);
-    const companies = await buildMatrix(c.env);
+    if (!canWrite(user.role)) return c.json({ detail: 'Forbidden' }, 403);
+    const companies = await buildMatrix(c.env, 200, { role: user.role, userId: user.id });
     return c.json({
       layer_meta: LAYERS,
       layers: LAYER_KEYS,
@@ -69,7 +70,10 @@ ventureRisk.get('/by-project/:projectId', async (c) => {
     if (!canRead(user.role)) return c.json({ detail: 'Forbidden' }, 403);
     const projectId = parseProjectId(c.req.param('projectId'));
     if (projectId == null) return c.json({ detail: 'Invalid project_id' }, 400);
-    const assessment = await buildAssessment(c.env, projectId);
+    if (user.role === 'investor' && !await mayReadProjectDeal(c.env, user, projectId)) {
+      return c.json({ detail: 'Forbidden' }, 403);
+    }
+    const assessment = await buildAssessment(c.env, projectId, { role: user.role, userId: user.id });
     if (!assessment) return c.json({ detail: 'Project not found' }, 404);
     return c.json(assessment);
   } catch (e) {
@@ -84,7 +88,7 @@ ventureRisk.post('/:projectId/recompute', async (c) => {
     const projectId = parseProjectId(c.req.param('projectId'));
     if (projectId == null) return c.json({ detail: 'Invalid project_id' }, 400);
     // Auto scores are always computed live, so a recompute is a fresh build.
-    const assessment = await buildAssessment(c.env, projectId);
+    const assessment = await buildAssessment(c.env, projectId, { role: user.role, userId: user.id });
     if (!assessment) return c.json({ detail: 'Project not found' }, 404);
     return c.json(assessment);
   } catch (e) {
@@ -139,7 +143,7 @@ ventureRisk.put('/:projectId/layers/:layerKey', async (c) => {
       user.id,
     );
 
-    const assessment = await buildAssessment(c.env, projectId);
+    const assessment = await buildAssessment(c.env, projectId, { role: user.role, userId: user.id });
     return c.json(assessment);
   } catch (e) {
     return mapError(c, e);
@@ -157,7 +161,7 @@ ventureRisk.delete('/:projectId/layers/:layerKey', async (c) => {
     const project = await loadProject(c.env, projectId);
     if (!project) return c.json({ detail: 'Project not found' }, 404);
     await deleteOverride(c.env, projectId, layerKey);
-    const assessment = await buildAssessment(c.env, projectId);
+    const assessment = await buildAssessment(c.env, projectId, { role: user.role, userId: user.id });
     return c.json(assessment);
   } catch (e) {
     return mapError(c, e);

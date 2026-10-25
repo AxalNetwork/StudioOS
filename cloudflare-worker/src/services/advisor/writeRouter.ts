@@ -16,6 +16,7 @@
  * the user types "delete my project" the LLM is instructed (in the
  * advisor system prompt) to deep-link them to the page instead.
  */
+import { inGrace } from '../../middleware/planSubscription';
 import type { Env } from '../../types';
 import type { User } from '../../types';
 import { questionById, mapRoleAnswer, DYNAMIC_ID_RE, FIT_ID_RE } from './questionBank.ts';
@@ -23,6 +24,7 @@ import { ensureTaxonomyVersionColumns, getTaxonomyVersion } from '../taxonomyVer
 import { parseArchetypeSex } from '../archetypePresentation.ts';
 import { normalizeFitAnswer } from './banks/fitShared.ts';
 import { upsertUserSettings } from '../userSettings.ts';
+import { recordCapture } from '../partnerProfileReview';
 
 export type WriteStatus = 'saved' | 'skipped' | 'paywalled' | 'failed' | 'noop' | 'needs_evidence' | 'invalid';
 
@@ -46,12 +48,14 @@ export interface WriteResult {
 interface UserSubscriptionFields {
   investor_subscription_status?: string | null;
   subscription_status?: string | null;
+  investor_subscription_renews_at?: string | null;
+  subscription_renews_at?: string | null;
   advisor_id?: number | null;
 }
 
 async function loadSubscriptionFields(env: Env, userId: number): Promise<UserSubscriptionFields> {
   const row = await env.DB.prepare(
-    `SELECT investor_subscription_status, subscription_status, advisor_id
+    `SELECT investor_subscription_status, investor_subscription_renews_at, subscription_status, subscription_renews_at, advisor_id
        FROM users WHERE id = ?`,
   ).bind(userId).first<UserSubscriptionFields>().catch(() => null);
   return row || {};
@@ -450,6 +454,7 @@ const SLOT_INDEXES_READY = new WeakMap<object, boolean>();
 // the advisor scenario test under --experimental-strip-types).
 import { MILESTONES, weekMet as canonicalWeekMet } from '../spinoutLabCatalog.ts';
 import { bindingKey } from '../../util/schemaBootstrap';
+import { ensureDeckVersionColumns } from '../decks/deckVersionColumns';
 
 function weekForMilestoneKey(key: string): number | null {
   for (const w of MILESTONES) {
@@ -523,7 +528,8 @@ async function tierForInvestorThesis(env: Env, user: User): Promise<{ ok: boolea
   // Anything tied to investor_subscription_status='active' or the
   // generic subscription_status='active' is treated as paid here.
   const subs = await loadSubscriptionFields(env, user.id);
-  const active = subs.investor_subscription_status === 'active' || subs.subscription_status === 'active';
+  const active = inGrace(subs.investor_subscription_status, subs.investor_subscription_renews_at)
+    || inGrace(subs.subscription_status, subs.subscription_renews_at);
   if (active) return { ok: true };
   return { ok: false, upgrade_link: '/billing/investor-upgrade' };
 }
@@ -1061,6 +1067,7 @@ export async function routeAnswer(
         await env.DB.exec(
           "CREATE TABLE IF NOT EXISTS pitch_decks (id INTEGER PRIMARY KEY AUTOINCREMENT, project_id INTEGER NOT NULL, version INTEGER NOT NULL DEFAULT 1, slides TEXT NOT NULL, title TEXT, is_current INTEGER DEFAULT 1, created_by INTEGER, created_at TEXT DEFAULT (datetime('now')))",
         );
+        await ensureDeckVersionColumns(env);
         const cur = await env.DB.prepare(
           `SELECT id, slides FROM pitch_decks WHERE project_id = ? AND is_current = 1 ORDER BY version DESC LIMIT 1`,
         ).bind(ctx.project_id).first<{ id: number; slides: string }>();
@@ -1088,7 +1095,8 @@ export async function routeAnswer(
         }
         const slidesJson = JSON.stringify(slides);
         if (cur?.id) {
-          await env.DB.prepare(`UPDATE pitch_decks SET slides = ? WHERE id = ?`).bind(slidesJson, cur.id).run();
+          // D898: the slides change in place, so the version's content hash no longer holds.
+          await env.DB.prepare(`UPDATE pitch_decks SET slides = ?, content_hash = NULL WHERE id = ?`).bind(slidesJson, cur.id).run();
           return { status: 'saved', saved_to: { table: 'pitch_decks', column: 'slides', id: cur.id, page_url: '/build/deck' } };
         }
         const ins = await env.DB.prepare(
@@ -1404,6 +1412,8 @@ export async function routeAnswer(
       await env.DB.prepare(
         `UPDATE partner_profiles SET ${pcol} = ?, updated_at = CURRENT_TIMESTAMP WHERE LOWER(email) = LOWER(?)`,
       ).bind(value, profile.email).run();
+      // D991 — the capture joins the profile's history, by source.
+      await recordCapture(env, profile.email, 'eadwyn');
       return {
         status: 'saved',
         saved_to: { table: 'partner_profiles', column: pcol, id: profile.email, page_url: '/studio' },

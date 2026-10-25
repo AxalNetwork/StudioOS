@@ -50,6 +50,8 @@ export const cyclesApi = {
     if (!WIRED_CYCLES.includes(cycle)) return Promise.reject(new Error('No such cycle'));
     return request(`/cycles/${cycle}/modules/${encodeURIComponent(slug)}/records/${encodeURIComponent(id)}/activity?project=${encodeURIComponent(projectId)}&page=${encodeURIComponent(page)}`);
   },
+  // D909 (#2693): D908's section-by-section compare of two narrative versions.
+  narrativeCompare: (projectId, a, b) => request(`/cycles/raise/narrative/compare?project=${encodeURIComponent(projectId)}&a=${encodeURIComponent(a)}&b=${encodeURIComponent(b)}`),
   // One implementation with the write table's, which Add filing's Proof calls (D695 #1656).
   recordAction: (cycle, projectId, slug, id, key, body = {}) => {
     if (!WIRED_CYCLES.includes(cycle)) return Promise.reject(new Error('No such cycle'));

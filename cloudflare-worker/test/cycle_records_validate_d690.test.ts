@@ -13,6 +13,7 @@ import { RECORD_SPECS } from '../src/services/records/index.ts';
 import { MODULES, QUOTE_WITHHELD } from '../src/services/cycleValidate.ts';
 import { tableFromBaseline } from './_baseline.mjs';
 import { d1Over } from './_d1_sqlite.mjs';
+import { applySessionTranslationColumns } from './_session_translation_columns.mjs';
 
 const BASE = readFileSync(resolve('cloudflare-worker/sql/schema_baseline.sql'), 'utf8');
 const migration = (name: string) => readFileSync(resolve('cloudflare-worker/sql/migrations', name), 'utf8');
@@ -31,6 +32,7 @@ function fixture() {
   db.exec(migration('311_revenue_entries.sql'));
   db.exec(migration('440_validate_cycle_stores.sql'));
   db.exec(migration('438_interview_sessions.sql'));
+  applySessionTranslationColumns(db); // D857: migration 527's segment columns
   db.exec(migration('447_assistant_interviews.sql'));
   db.exec(migration('453_interview_processing.sql'));
   db.exec(migration('459_cycle_activity_convention.sql'));
@@ -383,7 +385,7 @@ function seeded() {
 const RECORDS: Record<string, { a: string; b: string; main: string[]; side: string[] }> = {
   'problem-discovery': { a: '11', b: '22', main: ['Quotes', 'Hypotheses it feeds'], side: ['Segments'] },
   // D757 (#1924) adds Summary after the placements.
-  'customer-research': { a: '1', b: '22', main: ['Transcript', 'Eadwyn’s placements', 'Summary'], side: ['What it fed', 'Cost', 'Session'] },
+  'customer-research': { a: '1', b: '22', main: ['Transcript', 'Eadwyn’s placements', 'Summary'], side: ['What it fed', 'From this conversation', 'Cost', 'Session'] },
   'ideal-customer-profile': { a: '3', b: '22', main: ['Five steps', 'Interviews scored against it'], side: ['Pain themes', 'Persona card', 'From interviews'] },
   'market-intelligence': { a: 'candidate1', b: 'candidate22', main: ['Signals', 'Positioning'], side: ['Research › Companies', 'Watching for', 'From interviews'] },
   'demand-signals': { a: 'signal-7', b: 'signal-22', main: ['Evidence', 'Feeds'], side: ['Who', 'From the interview'] },
@@ -439,10 +441,10 @@ test('#1692 test 4: a partner gets no session section, no withheld quote and no 
   const db = seeded();
   const founder = await real(db, 10, 'GET', rec('customer-research', '1'));
   const partner = await real(db, 40, 'GET', rec('customer-research', '1'));
-  assert.deepEqual(founder.body.side.map((s: any) => s.key), ['fed', 'cost', 'session']);
+  assert.deepEqual(founder.body.side.map((s: any) => s.key), ['fed', 'findings', 'cost', 'session']);
   // D757 (#1924): a partner sees the Summary section, empty until a writer keeps one.
   assert.deepEqual(partner.body.main.map((s: any) => [s.key, s.rows.length, s.empty]), [['summary', 0, 'No summary kept yet.']]);
-  assert.deepEqual(partner.body.side.map((s: any) => s.key), ['fed']);
+  assert.deepEqual(partner.body.side.map((s: any) => s.key), ['fed', 'findings']);
   assert.deepEqual(partner.body.facts, founder.body.facts);
   assert.equal(JSON.stringify(partner.body).includes('We miss jobs'), false);
   assert.equal(founder.body.main[0].rows[0].b, '"We miss jobs every week."');

@@ -8,12 +8,13 @@ import { canAccessFounderResource } from '../src/auth';
 const mk = (role: string, founder_id: number | null = null) =>
   ({ id: 1, role, founder_id }) as any;
 
-test('admin and partner retain broad founder-resource access', () => {
+test('only admin retains broad founder-resource access (#2460)', () => {
   assert.equal(canAccessFounderResource(mk('admin'), 42), true);
-  assert.equal(canAccessFounderResource(mk('partner'), 42), true);
+  assert.equal(canAccessFounderResource(mk('partner'), 42), false);
   // staff pass even when the resource has no owner founder
   assert.equal(canAccessFounderResource(mk('admin'), null), true);
-  assert.equal(canAccessFounderResource(mk('partner'), null), true);
+  assert.equal(canAccessFounderResource(mk('partner'), null), false);
+  assert.equal(canAccessFounderResource(mk('partner', 42), 42), false, 'a residual founder id grants no partner access');
 });
 
 test('founder may only access their own founder row', () => {

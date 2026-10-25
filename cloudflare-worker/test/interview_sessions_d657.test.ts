@@ -52,6 +52,7 @@ function fixture({ dayMicro = 50_000_000, monthMicro = 500_000_000 } = {}) {
       sort_order INTEGER NOT NULL DEFAULT 0, retired_at TEXT);
   `);
   db.exec(MIGRATION);
+  applySessionTranslationColumns(db); // D857: migration 527's segment columns
   // 447 adds submitted_via (an assistant's or a channel's session); 452 is D685's setup.
   db.exec('ALTER TABLE interview_sessions ADD COLUMN submitted_via TEXT');
   db.exec(readFileSync(new URL('../sql/migrations/452_record_session_setup.sql', import.meta.url), 'utf8'));
@@ -805,6 +806,7 @@ import { runInterviewProcessJob, isStale, recoverSession, NO_CONSENT_SENTENCE, R
 import { checkSummary } from '../src/services/interviewStructuring.ts';
 
 import { withGuard } from './_guard_stub.mjs';
+import { applySessionTranslationColumns } from './_session_translation_columns.mjs';
 /** A recorded, stopped session with `n` chunks, the queue captured. */
 async function recordedForProcessing(f: any, n: number, opts: { consent?: boolean } = {}) {
   // structureSession re-checks the member's account (D684's writableSession).

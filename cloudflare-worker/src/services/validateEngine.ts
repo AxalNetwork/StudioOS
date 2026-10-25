@@ -48,13 +48,15 @@ import { enqueueJob } from './queue';
 import { MIN_HOURS_BETWEEN, structureSession, type StructureOutcome, type StructureTrigger } from './sessionAutoStructure';
 import type { Segment } from './interviewStructuring';
 import { finalSegments, refusedBody } from '../routes/founder_validate_structure';
+import { MESSAGING_PROVIDERS } from './channels/types';
+import { CALL_CHANNELS } from './conversationAnalytics';
 
 export type DigestStage = 'summarise' | 'structure';
 
 export type DigestOutcome =
   | { ok: true; status: 'done'; summary: SummaryResult | null; structure: StructureOutcome | null; note: string | null }
   | { ok: true; status: 'unchanged' }
-  | { ok: false; status: 'skipped'; reason: 'manual_mode' | 'no_final_transcript' | 'quiet_window'; note: string }
+  | { ok: false; status: 'skipped'; reason: 'manual_mode' | 'no_final_transcript' | 'quiet_window' | 'source_changed'; note: string }
   | {
     ok: false; status: 'refused'; reason: 'consent_not_recorded' | 'transcript_too_large' | 'refused' | 'busy';
     refusal: string | null; note: string;
@@ -81,6 +83,8 @@ export const NOTES = {
   budgetTail: ' The transcript is kept; summarise it when the allowance allows.',
   withdrawn: 'The interviewee withdrew consent, so the summary and its suggestions were removed. Decisions you already made are kept, without the quote.',
   passB: 'Axal suggested what it heard about the problem, the person and the market, but not yet about demand and evidence:',
+  // D859 (#2504): a chat's structure stood, and its actions and data points did not run.
+  extract: 'Axal did not yet list the actions and data points in this conversation:',
 } as const;
 
 /** The sentence a refusal code reads as. Never the code itself. */
@@ -254,6 +258,14 @@ export async function digestSession(env: Env, opts: {
       if (!structure.ok && refusal === undefined) refusal = structure.reason === 'refused' ? structure.refusal ?? null : null;
       // D757 (#1923): pass B refused keeps pass A's suggestions; the note says what is missing and why.
       if (structure.ok && structure.passBRefusal !== undefined) notes.push(`${NOTES.passB} ${refusalNote(structure.passBRefusal)}`);
+      // D859 (#2504): a customer chat's actions, data points and prototype asks, as more
+      // suggestions. D873 (#2520): a call's too, with its decisions and action items.
+      // A refusal is a note; the structure stands.
+      if (structure.ok && ((MESSAGING_PROVIDERS as readonly string[]).includes(String(session.submitted_via)) || CALL_CHANNELS.has(String(session.submitted_via ?? '')))) {
+        const { extractConversationItems } = await import('./conversationItems');
+        const items = await extractConversationItems(env, { sessionId: session.id, userId: opts.userId, model: prefs.models.structure, rail: opts.rails?.structure });
+        if (!items.ok && items.reason === 'refused') notes.push(`${NOTES.extract} ${refusalNote(items.refusal ?? null)}`);
+      }
     }
   } catch (err) {
     // Release the claim so a retry is not told it is busy; the error is the caller's.
@@ -265,6 +277,16 @@ export async function digestSession(env: Env, opts: {
   if ((await loadSession(env, session.id))?.consent_status === 'declined') {
     await withdrawDigest(env, session.id, opts.userId, { onlyDeclined: true });
     return { ok: false, status: 'refused', reason: 'consent_not_recorded', refusal: null, note: NOTES.withdrawn };
+  }
+  // D866: source edits/deletions can arrive during a provider call. Stores
+  // reject stale snapshots; keep a fresh run due instead of sealing the old hash.
+  if (session.submitted_via === 'telegram' && await transcriptHash(await finalSegments(env, session.id)) !== hash) {
+    const note = 'The Telegram source changed. Processing will use the current transcript.';
+    await env.DB.prepare("UPDATE interview_sessions SET status = 'transcribed' WHERE id = ? AND status = 'structured'")
+      .bind(session.id).run();
+    await writeOutcome(env, session.id, { status: 'queued', note, trigger: opts.trigger });
+    await enqueueDigest(env, session.id, opts.userId, 'chat_text_added');
+    return { ok: false, status: 'skipped', reason: 'source_changed', note };
   }
   if (prefs.dropped) notes.push(NOTES.modelDropped);
   const runId = structure?.ok ? structure.runId : undefined;

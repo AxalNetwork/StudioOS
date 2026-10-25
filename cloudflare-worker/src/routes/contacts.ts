@@ -12,6 +12,7 @@
  * is applied; the migration is the canonical record.
  */
 import { Hono } from 'hono';
+import { logCycleWriteStatement } from '../services/cycleActivity';
 import { projectInActiveCompany } from '../services/tenancyScope';
 import { resolveActiveCompany, ACTIVE_COMPANY_HEADER } from '../middleware/activeCompany';
 import type { Context } from 'hono';
@@ -457,7 +458,7 @@ function resolveProjectId(scope: 'all' | number[], pidRaw: string | undefined | 
 export async function createProspect(
   env: Env,
   projectId: number,
-  input: { name?: unknown; email?: unknown; firm?: unknown; amount?: unknown; stage?: unknown; notes?: unknown },
+  input: { name?: unknown; email?: unknown; firm?: unknown; amount?: unknown; stage?: unknown; notes?: unknown; commit_status?: unknown },
 ): Promise<{ prospect: any } | 'duplicate' | 'invalid'> {
   const name = input.name ? String(input.name).trim().slice(0, 200) : null;
   const email = input.email ? String(input.email).trim().toLowerCase() : null;
@@ -475,9 +476,9 @@ export async function createProspect(
   }
 
   const res = await env.DB.prepare(
-    `INSERT INTO raise_prospects (uid, project_id, contact_id, name, email, firm, stage, amount, notes, created_at, updated_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-  ).bind(newUid(), projectId, null, name, email, firm, stage, amount, notes, nowIso(), nowIso()).run();
+    `INSERT INTO raise_prospects (uid, project_id, contact_id, name, email, firm, stage, amount, notes, commit_status, created_at, updated_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+  ).bind(newUid(), projectId, null, name, email, firm, stage, amount, notes, stage === 'committed' && COMMIT_STATUSES.includes(String(input.commit_status)) ? String(input.commit_status) : null, nowIso(), nowIso()).run();
   const prospectId = lastInsertId(res);
   let contactId: number | null = null;
 
@@ -696,9 +697,11 @@ r.put('/raise-prospects/:id', async (c) => {
       ).bind(closeId, Number(row.project_id)).first();
       if (!own) return c.json({ detail: 'close_id does not belong to this project' }, 400);
     }
-    await c.env.DB.prepare(
+    await c.env.DB.batch([c.env.DB.prepare(
       `UPDATE raise_prospects SET stage=?, notes=?, firm=?, name=?, amount=?, commit_status=?, instrument=?, close_id=?, updated_at=? WHERE id=?`,
-    ).bind(stage, notes, firm, name, amount, commitStatus, instrument, closeId, nowIso(), id).run();
+    ).bind(stage, notes, firm, name, amount, commitStatus, instrument, closeId, nowIso(), id),
+      logCycleWriteStatement(c.env, { projectId: Number(row.project_id), userId: user.id, cycle: 'raise', module: 'capital-relationships', entityId: id, action: 'prospect_updated', summary: 'Investor prospect updated' }),
+    ]);
     const fresh = await c.env.DB.prepare('SELECT * FROM raise_prospects WHERE id = ?').bind(id).first<any>();
     return c.json(fresh);
   } catch (e) { return mapError(c, e); }
@@ -786,13 +789,10 @@ r.get('/raise-round', async (c) => {
       `SELECT * FROM raise_rounds WHERE project_id = ? AND status = 'active'`,
     ).bind(pid).first<any>();
     const agg = await c.env.DB.prepare(
-      `SELECT COALESCE(SUM(amount), 0) AS raised, COUNT(*) AS n FROM raise_prospects WHERE project_id = ? AND stage = 'committed'`,
+      `SELECT COALESCE(SUM(amount), 0) AS raised, COUNT(*) AS n FROM raise_prospects WHERE project_id = ? AND stage = 'committed' AND commit_status IN ('signed','wired')`,
     ).bind(pid).first<{ raised: number; n: number }>();
-    // Round Manager (#129) — the funnel split alongside the legacy
-    // `raised` total. `progress.committed` equals `raised` until a
-    // founder starts marking rows soft/wired, so nothing moves on the
-    // deploy that ships this (see migration 169's note on commit_status).
-    const allocations = await loadAllocations(c.env, pid).catch(() => []);
+    // The legacy header and round funnel both count explicitly signed/wired allocations.
+    const allocations = await loadAllocations(c.env, pid);
     return c.json({
       round: round || null,
       raised: Number(agg?.raised || 0),
@@ -870,20 +870,19 @@ function ymd(v: unknown): string | null {
 
 /**
  * Allocations for the round funnel. A prospect at stage='committed' IS
- * an allocation; `commit_status` refines it. NULL maps to 'signed' so
- * the new committed total exactly reproduces the legacy `raised` figure
- * on the deploy that introduces this — no number moves under founders.
+ * an allocation; only an explicitly recorded status contributes to totals.
+ * Missing amounts remain null and are reported separately from zero.
  */
 async function loadAllocations(env: Env, projectId: number): Promise<Array<{
-  amount: number; status: 'soft' | 'signed' | 'wired'; close_id: number | null;
+  amount: number | null; status: 'soft' | 'signed' | 'wired' | null; close_id: number | null;
 }>> {
   const rows = await env.DB.prepare(
     `SELECT amount, commit_status, close_id FROM raise_prospects
       WHERE project_id = ? AND stage = 'committed'`,
   ).bind(projectId).all<any>();
   return (rows.results || []).map((x: any) => ({
-    amount: Number(x.amount) || 0,
-    status: (COMMIT_STATUSES.includes(String(x.commit_status)) ? x.commit_status : 'signed') as 'soft' | 'signed' | 'wired',
+    amount: x.amount == null ? null : Number(x.amount),
+    status: (COMMIT_STATUSES.includes(String(x.commit_status)) ? x.commit_status : null) as 'soft' | 'signed' | 'wired' | null,
     close_id: x.close_id == null ? null : Number(x.close_id),
   }));
 }
@@ -1187,6 +1186,21 @@ r.put('/raise-pro-rata/:id', async (c) => {
   } catch (e) { return mapError(c, e); }
 });
 
+// D1057 (#2927, #2427 finding 7): ONE UPDATES STORE. An investor update posted
+// from the Raise pipeline is a `portfolio_updates` row with status `pipeline`,
+// beside Grow's Share an update rows, instead of a row in a second table that
+// nothing else read. Its pipeline recipients are `update_recipients` rows with
+// no account and no delivery, the way Share an update records a pipeline
+// investor it cannot send to. Nothing here emails anyone, as before:
+//   · status `pipeline` is not `submitted`, so no investor inbox, compliance
+//     read, deck or focus count reads it as a report sent;
+//   · its audience grants nobody (`audience_json` null), so D889's rule shows
+//     it to its founder and admins only.
+// `raise_investor_updates` takes no new rows. The rows already there stay
+// where they are and are read here, marked `pipeline_legacy`, so no history
+// goes missing; D1057 says how they move.
+const PIPELINE_NOT_SENT = 'Recorded on the Raise pipeline; not emailed';
+
 // GET /api/contacts/raise-updates — investor updates posted from the pipeline.
 r.get('/raise-updates', async (c) => {
   try {
@@ -1197,9 +1211,20 @@ r.get('/raise-updates', async (c) => {
     if (pid === 'forbidden') return c.json({ detail: 'Forbidden' }, 403);
     if (pid === 'ambiguous') return c.json({ detail: 'project_id is required' }, 400);
     if (pid === null) return c.json({ items: [] });
-    const rows = await c.env.DB.prepare(
-      `SELECT * FROM raise_investor_updates WHERE project_id = ? ORDER BY created_at DESC, id DESC LIMIT 100`,
+    const posted = await c.env.DB.prepare(
+      `SELECT u.uid, u.project_id, u.title AS subject, u.body, u.author_user_id AS created_by, u.created_at,
+              (SELECT COUNT(*) FROM update_recipients r WHERE r.update_id = u.id) AS recipients_count
+         FROM portfolio_updates u WHERE u.project_id = ? AND u.status = 'pipeline'
+        ORDER BY u.created_at DESC, u.id DESC LIMIT 100`,
     ).bind(pid).all<any>();
+    const legacy = await c.env.DB.prepare(
+      `SELECT uid, project_id, subject, body, created_by, created_at, recipients_count
+         FROM raise_investor_updates WHERE project_id = ? ORDER BY created_at DESC, id DESC LIMIT 100`,
+    ).bind(pid).all<any>();
+    const items = [
+      ...(posted.results || []).map((x: any) => ({ ...x, recipients_count: Number(x.recipients_count) || 0, source: 'pipeline' })),
+      ...(legacy.results || []).map((x: any) => ({ ...x, source: 'pipeline_legacy' })),
+    ].sort((x, y) => String(y.created_at).localeCompare(String(x.created_at))).slice(0, 100);
     // D654: an update sent from Grow › Share an update is also an investor
     // update sent, read from its own `portfolio_updates` row — never copied.
     let shared: any[] = [];
@@ -1212,14 +1237,15 @@ r.get('/raise-updates', async (c) => {
       ).bind(pid).all<any>();
       shared = (s.results || []).map((x: any) => ({ ...x, source: 'share_update', link: `/updates/${x.uid}` }));
     } catch { shared = []; }
-    return c.json({ items: rows.results || [], shared_updates: shared });
+    return c.json({ items, shared_updates: shared });
   } catch (e) { return mapError(c, e); }
 });
 
 // POST /api/contacts/raise-updates — record an investor update. The update is
-// stored on the pipeline and logged to every linked contact's timeline as an
-// outbound reply (mirrors the invite precedent). It is NOT emailed — the UI
-// says so explicitly rather than pretending delivery happened.
+// a `portfolio_updates` row (status `pipeline`, D1057) and is logged to every
+// linked contact's timeline as an outbound reply (mirrors the invite
+// precedent). It is NOT emailed — the UI says so explicitly rather than
+// pretending delivery happened.
 r.post('/raise-updates', async (c) => {
   try {
     const user = await requireRaiseUser(c);
@@ -1233,19 +1259,24 @@ r.post('/raise-updates', async (c) => {
     if (!subject) return c.json({ detail: 'subject is required' }, 400);
     const text = body.body ? String(body.body).slice(0, 10000) : null;
 
-    const round = await c.env.DB.prepare(
-      `SELECT id FROM raise_rounds WHERE project_id = ? AND status = 'active'`,
-    ).bind(pid).first<{ id: number }>();
     const recipients = await c.env.DB.prepare(
-      `SELECT id, contact_id FROM raise_prospects WHERE project_id = ? AND stage != 'passed'`,
-    ).bind(pid).all<{ id: number; contact_id: number | null }>();
+      `SELECT id, contact_id, name, email FROM raise_prospects WHERE project_id = ? AND stage != 'passed'`,
+    ).bind(pid).all<{ id: number; contact_id: number | null; name: string | null; email: string | null }>();
     const recips = recipients.results || [];
 
+    const uid = newUid();
+    const at = nowIso();
     const res = await c.env.DB.prepare(
-      `INSERT INTO raise_investor_updates (uid, project_id, round_id, subject, body, recipients_count, created_by, created_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-    ).bind(newUid(), pid, round?.id ?? null, subject, text, recips.length, user.id, nowIso()).run();
+      `INSERT INTO portfolio_updates (uid, project_id, author_user_id, period, title, body, status, created_at, updated_at)
+       VALUES (?, ?, ?, NULL, ?, ?, 'pipeline', ?, ?)`,
+    ).bind(uid, pid, user.id, subject, text, at, at).run();
     const updateId = lastInsertId(res);
+    if (recips.length > 0) {
+      await c.env.DB.batch(recips.map((p) => c.env.DB.prepare(
+        `INSERT INTO update_recipients (update_id, audience, user_id, email, label, delivered_via, not_delivered_reason, created_at)
+         VALUES (?, 'investor', NULL, ?, ?, NULL, ?, ?)`,
+      ).bind(updateId, p.email ? String(p.email).toLowerCase() : null, p.name || null, PIPELINE_NOT_SENT, at)));
+    }
 
     // Best-effort timeline log on each linked contact — batched into one D1
     // round-trip; a logging failure never rolls back the update itself.
@@ -1263,8 +1294,10 @@ r.post('/raise-updates', async (c) => {
       } catch (e) { console.warn('[contacts] raise-update timeline log failed', e); }
     }
 
-    const update = await c.env.DB.prepare('SELECT * FROM raise_investor_updates WHERE id = ?').bind(updateId).first<any>();
-    return c.json({ ...update, logged_contacts: loggedContacts }, 201);
+    return c.json({
+      uid, project_id: pid, subject, body: text, recipients_count: recips.length, created_by: user.id, created_at: at,
+      source: 'pipeline', logged_contacts: loggedContacts,
+    }, 201);
   } catch (e) { return mapError(c, e); }
 });
 

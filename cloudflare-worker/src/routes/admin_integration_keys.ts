@@ -17,6 +17,22 @@
  *  POST   /:provider/test    → dry-run probe against the provider
  *  DELETE /:provider         → delete both Worker secrets + cascade-disconnect
  *
+ * D885 (#2561) — THE INTERVIEW CHANNELS. `GET /` also carries `channels`:
+ * WhatsApp (way A, members' own numbers), WhatsApp through Axal's number
+ * (way B) and the Telegram interview bot (not the news bot, which is the
+ * managed `telegram` row above). Each row names its Worker secrets with set or
+ * not set measured from env, the webhook to register, the rollout var's value
+ * (changed by a PR, so read-only here), the runbook, and whether the channel
+ * is configured by the same check the Worker uses.
+ *
+ *  PUT    /channels/:channel          → { <SECRET_NAME>: value, ... }, that channel's names only
+ *  POST   /channels/:channel/rotate   → { name, value } or { name, generate: true } for one secret;
+ *                                       a generated value is returned once, to the caller only
+ *  DELETE /channels/:channel          → delete every one of that channel's Worker secrets
+ *
+ * The same bar and audit as the provider keys: `requireSuperAdminWriteBar`,
+ * one `logAdminAction` row per request naming the secrets, never a value.
+ *
  * D223 — WHO MAY WRITE. PUT, rotate and DELETE write (or delete) Worker
  * secrets on production's own `studioos` script, so they sit behind
  * `requireSuperAdminWriteBar` (a TOTP session, a recent step-up, the holder):
@@ -67,6 +83,9 @@ import { redirectUri as stripeCallback } from '../integrations/providers/stripe'
 import { redirectUri as salesforceCallback } from '../integrations/providers/salesforce';
 import { redirectUri as zoomCallback, zoomConfigured, ZOOM_CLIENT_ENV_VARS } from '../services/channels/zoom';
 import { linkedinRedirectUri } from './linkedin';
+import { providerAvailable, channelRollout } from '../services/channels/connections';
+import { axalNumberReady } from '../services/channels/whatsappLink';
+import { TELEGRAM_SECRET_RE } from '../services/channels/telegram';
 import {
   googleRedirectUri, microsoftRedirectUri, googleOAuthAvailable, microsoftOAuthAvailable,
   GOOGLE_CAL_ENV_VARS, GOOGLE_CAL_FALLBACK_ENV_VARS, MICROSOFT_CAL_ENV_VARS, MICROSOFT_CAL_FALLBACK_ENV_VARS,
@@ -141,6 +160,10 @@ const REPO_BLOB = 'https://github.com/AxalNetwork/StudioOS/blob/main/';
 export const SETUP_GUIDES: Readonly<Record<string, string>> = Object.freeze({
   github: 'documentation/operations/GITHUB_CONNECTOR_APP.md',
   zoom: 'documentation/architecture/PRODUCTION.md',
+  // D885: the interview channels' runbooks.
+  whatsapp: 'documentation/operations/WHATSAPP.md',
+  whatsapp_axal: 'documentation/operations/WHATSAPP.md',
+  telegram_channel: 'documentation/operations/TELEGRAM.md',
 });
 
 type ConnectorRef = { display_name: string; status: string; tier: string };
@@ -190,6 +213,130 @@ function otherOauthClients(env: Env) {
   ];
 }
 
+// ───────────────────────────────────────────── D885: the interview channels
+
+export const CHANNEL_KEYS = ['whatsapp', 'whatsapp_axal', 'telegram_channel'] as const;
+export type ChannelKey = typeof CHANNEL_KEYS[number];
+
+interface ChannelSpec {
+  label: string;
+  /** The Worker secrets this console may write for the channel, and only these. */
+  secrets: readonly string[];
+  /** Public `wrangler.toml` vars the channel also needs, changed by a PR. */
+  vars: readonly string[];
+  /** The secrets the console can generate (a token Axal chooses and the owner copies into the provider). */
+  generate: readonly string[];
+  webhookPath: string;
+  rollout: { var: 'WHATSAPP_CHANNEL' | 'TELEGRAM_CHANNEL'; provider: 'whatsapp' | 'telegram' };
+  /** The admin page that registers the webhook, when Axal does it rather than the owner. */
+  registerHref: string | null;
+  configured: (env: Env) => boolean;
+}
+
+export const CHANNEL_SPECS: Readonly<Record<ChannelKey, ChannelSpec>> = Object.freeze({
+  whatsapp: {
+    label: 'WhatsApp · members\' own numbers (way A)',
+    secrets: ['WHATSAPP_APP_ID', 'WHATSAPP_APP_SECRET', 'WHATSAPP_VERIFY_TOKEN', 'WHATSAPP_EMBEDDED_SIGNUP_CONFIG_ID'],
+    vars: [],
+    generate: ['WHATSAPP_VERIFY_TOKEN'],
+    webhookPath: '/api/channels/whatsapp/webhook',
+    rollout: { var: 'WHATSAPP_CHANNEL', provider: 'whatsapp' },
+    registerHref: null,
+    configured: (env) => providerAvailable(env, 'whatsapp'),
+  },
+  whatsapp_axal: {
+    label: 'WhatsApp · through Axal\'s number (way B)',
+    secrets: ['WHATSAPP_AXAL_ACCESS_TOKEN', 'WHATSAPP_AXAL_PHONE_NUMBER_ID', 'WHATSAPP_AXAL_WABA_ID'],
+    vars: ['WHATSAPP_AXAL_DISPLAY_NUMBER'],
+    generate: [],
+    webhookPath: '/api/channels/whatsapp/webhook',
+    rollout: { var: 'WHATSAPP_CHANNEL', provider: 'whatsapp' },
+    registerHref: null,
+    configured: (env) => axalNumberReady(env),
+  },
+  telegram_channel: {
+    label: 'Telegram · interview bot (not the news bot)',
+    secrets: ['TELEGRAM_CHANNEL_BOT_TOKEN', 'TELEGRAM_CHANNEL_BOT_USERNAME', 'TELEGRAM_CHANNEL_WEBHOOK_SECRET'],
+    vars: [],
+    generate: ['TELEGRAM_CHANNEL_WEBHOOK_SECRET'],
+    webhookPath: '/api/channels/telegram/webhook',
+    rollout: { var: 'TELEGRAM_CHANNEL', provider: 'telegram' },
+    registerHref: '/admin/telegram',
+    configured: (env) => providerAvailable(env, 'telegram'),
+  },
+});
+
+const isChannelKey = (k: string): k is ChannelKey => (CHANNEL_KEYS as readonly string[]).includes(k);
+const MAX_SECRET_LENGTH = 4096;
+
+/** Set or not set, measured from env. Never a value, a length or a preview. */
+function isSet(env: Env, name: string): boolean {
+  const v = (env as unknown as Record<string, unknown>)[name];
+  return typeof v === 'string' && v.trim() !== '';
+}
+
+/** The webhook address on this deployment, or null without an https base. */
+function channelWebhookUrl(env: Env, path: string): string | null {
+  const base = String(env.PUBLIC_BASE_URL || env.APP_URL || '').trim().replace(/\/+$/, '');
+  return /^https:\/\/[^/]+$/.test(base) ? `${base}${path}` : null;
+}
+
+export function channelRows(env: Env) {
+  return CHANNEL_KEYS.map((key) => {
+    const spec = CHANNEL_SPECS[key];
+    return {
+      key,
+      label: spec.label,
+      configured: spec.configured(env),
+      secrets: spec.secrets.map((name) => ({ name, set: isSet(env, name), generate: spec.generate.includes(name) })),
+      vars: spec.vars.map((name) => ({ name, set: isSet(env, name), changed_by: 'pr' as const })),
+      webhook_url: channelWebhookUrl(env, spec.webhookPath),
+      register_webhook_href: spec.registerHref,
+      rollout: { var: spec.rollout.var, value: channelRollout(env, spec.rollout.provider), changed_by: 'pr' as const },
+      guide_href: guideHref(key),
+    };
+  });
+}
+
+/** Why a value cannot be a given secret, or null. Formats only where the Worker already checks them. */
+export function channelSecretRefusal(name: string, value: string): string | null {
+  if (!value) return 'value_required';
+  if (value.length > MAX_SECRET_LENGTH) return 'value_too_long';
+  if (/[\r\n]/.test(value)) return 'value_has_line_break';
+  if (name === 'TELEGRAM_CHANNEL_WEBHOOK_SECRET' && !TELEGRAM_SECRET_RE.test(value)) return 'secret_format';
+  return null;
+}
+
+const CHANNEL_REFUSALS: Record<string, string> = {
+  unknown_channel: 'That is not one of the interview channels.',
+  unknown_secret_name: 'Only this channel\'s own secret names can be written here.',
+  nothing_to_set: 'Send at least one of this channel\'s secret names with a value.',
+  value_required: 'Each secret needs a value.',
+  value_too_long: 'A secret is at most 4096 characters.',
+  value_has_line_break: 'A secret cannot contain a line break.',
+  secret_format: 'TELEGRAM_CHANNEL_WEBHOOK_SECRET may use only letters, digits, _ and -, up to 256 characters.',
+  not_generated: 'Axal does not generate this secret: paste the value the provider gave you.',
+};
+const channelRefusal = (c: any, status: number, code: string, extra: Record<string, unknown> = {}) =>
+  c.json({ error: code, detail: CHANNEL_REFUSALS[code] ?? code, ...extra }, status);
+
+/** A random token in Telegram's secret alphabet (base64url), which Meta's verify token also accepts. */
+function generatedToken(): string {
+  const bytes = crypto.getRandomValues(new Uint8Array(32));
+  return btoa(String.fromCharCode(...bytes)).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+}
+
+/** The one audit row for a channel write: the secret NAMES, the outcome and Cloudflare's status. Never a value. */
+async function channelAudit(
+  env: Env, actor: { id: number; email: string }, action: string, channel: ChannelKey,
+  opts: { envVars: string[]; outcome: 'ok' | 'failed'; cfStatus?: number; cfCode?: string; extra?: Record<string, unknown> },
+): Promise<void> {
+  await logAdminAction(env, actor.id, actor.email, action, {
+    channel, env_vars: opts.envVars, outcome: opts.outcome,
+    cf_status: opts.cfStatus ?? null, cf_code: opts.cfCode ?? null, ...(opts.extra || {}),
+  });
+}
+
 /** Map a CF helper failure into a structured 502 JSON body. */
 function cfErrorJson(c: any, res: CfSecretResult, fallback = 'cf_api_failed') {
   const code = res.code || fallback;
@@ -221,6 +368,7 @@ r.get('/', async (c) => {
   return c.json({
     providers: status.items.map((item) => ({ ...item, ...setupFields(c.env, item.provider_key as ManagedProviderKey) })),
     other_oauth: otherOauthClients(c.env),
+    channels: channelRows(c.env),
     db_readable: status.db_readable,
     ...(status.db_readable ? {} : {
       unreadable_reason:
@@ -228,6 +376,92 @@ r.get('/', async (c) => {
         + 'secret it is unknown whether a key is kept there.',
     }),
   });
+});
+
+// D885 — the interview channels' secrets. Registered before `/:provider`
+// for readability; the paths differ in depth, so neither can take the other's.
+r.put('/channels/:channel', async (c) => {
+  const admin = await requireSuperAdminWriteBar(c);
+  const channel = c.req.param('channel');
+  if (!isChannelKey(channel)) return channelRefusal(c, 404, 'unknown_channel', { allowed: CHANNEL_KEYS });
+  const spec = CHANNEL_SPECS[channel];
+  let body: Record<string, unknown> = {};
+  try { body = await c.req.json(); } catch { /* empty body → 400 below */ }
+  const names = Object.keys(body && typeof body === 'object' && !Array.isArray(body) ? body : {});
+  const foreign = names.filter((n) => !spec.secrets.includes(n));
+  if (foreign.length) return channelRefusal(c, 400, 'unknown_secret_name', { allowed: spec.secrets, refused: foreign });
+  if (!names.length) return channelRefusal(c, 400, 'nothing_to_set', { allowed: spec.secrets });
+  const values: Array<[string, string]> = [];
+  for (const name of spec.secrets.filter((n) => names.includes(n))) {
+    const value = typeof body[name] === 'string' ? (body[name] as string).trim() : '';
+    const refused = channelSecretRefusal(name, value);
+    if (refused) return channelRefusal(c, 400, refused, { name });
+    values.push([name, value]);
+  }
+  // One at a time, stopping at the first refusal. Nothing is rolled back: a
+  // secret set before the refusal held its new value, and deleting it would
+  // take away a value that may have worked before. The answer says which.
+  const set: string[] = [];
+  for (const [name, value] of values) {
+    const res = await setSecret(c.env, name, value);
+    if (!res.ok) {
+      await channelAudit(c.env, admin, 'channel_key_set', channel, {
+        envVars: values.map(([n]) => n), outcome: 'failed', cfStatus: res.status, cfCode: res.code, extra: { set, failed_at: name },
+      });
+      const out = cfErrorJson(c, res);
+      return set.length ? c.json({ ...(await out.json() as Record<string, unknown>), set, failed_at: name }, out.status as any) : out;
+    }
+    set.push(name);
+  }
+  await channelAudit(c.env, admin, 'channel_key_set', channel, { envVars: set, outcome: 'ok' });
+  return c.json({ ok: true, channel, set });
+});
+
+r.post('/channels/:channel/rotate', async (c) => {
+  const admin = await requireSuperAdminWriteBar(c);
+  const channel = c.req.param('channel');
+  if (!isChannelKey(channel)) return channelRefusal(c, 404, 'unknown_channel', { allowed: CHANNEL_KEYS });
+  const spec = CHANNEL_SPECS[channel];
+  let body: { name?: unknown; value?: unknown; generate?: unknown } = {};
+  try { body = await c.req.json(); } catch { /* empty body → 400 below */ }
+  const name = String(body.name ?? '');
+  if (!spec.secrets.includes(name)) return channelRefusal(c, 400, 'unknown_secret_name', { allowed: spec.secrets });
+  const generate = body.generate === true;
+  if (generate && !spec.generate.includes(name)) return channelRefusal(c, 400, 'not_generated', { name });
+  const value = generate ? generatedToken() : (typeof body.value === 'string' ? body.value.trim() : '');
+  const refused = channelSecretRefusal(name, value);
+  if (refused) return channelRefusal(c, 400, refused, { name });
+  const res = await setSecret(c.env, name, value);
+  await channelAudit(c.env, admin, 'channel_key_rotate', channel, {
+    envVars: [name], outcome: res.ok ? 'ok' : 'failed', cfStatus: res.status, cfCode: res.ok ? undefined : res.code,
+    extra: { generated: generate },
+  });
+  if (!res.ok) return cfErrorJson(c, res);
+  // The generated value goes back once, to this caller, to copy into Meta's or
+  // Telegram's dashboard. It is in no log, no audit row and no later read.
+  return c.json({ ok: true, channel, name, rotated_at: new Date().toISOString(), ...(generate ? { generated_value: value } : {}) });
+});
+
+r.delete('/channels/:channel', async (c) => {
+  const admin = await requireSuperAdminWriteBar(c);
+  const channel = c.req.param('channel');
+  if (!isChannelKey(channel)) return channelRefusal(c, 404, 'unknown_channel', { allowed: CHANNEL_KEYS });
+  const spec = CHANNEL_SPECS[channel];
+  // Each delete is idempotent (404 is ok), so a retry after a partial failure finishes the job.
+  const removed: string[] = [];
+  for (const name of spec.secrets) {
+    const res = await deleteSecret(c.env, name);
+    if (!res.ok) {
+      await channelAudit(c.env, admin, 'channel_key_delete', channel, {
+        envVars: [...spec.secrets], outcome: 'failed', cfStatus: res.status, cfCode: res.code, extra: { removed, failed_at: name },
+      });
+      const out = cfErrorJson(c, res);
+      return removed.length ? c.json({ ...(await out.json() as Record<string, unknown>), removed, failed_at: name }, out.status as any) : out;
+    }
+    removed.push(name);
+  }
+  await channelAudit(c.env, admin, 'channel_key_delete', channel, { envVars: removed, outcome: 'ok' });
+  return c.json({ ok: true, channel, removed, vars_kept: spec.vars });
 });
 
 r.put('/:provider', async (c) => {

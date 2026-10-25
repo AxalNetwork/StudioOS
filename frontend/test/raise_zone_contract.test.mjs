@@ -11,8 +11,9 @@
  *     `legal_documents` both carry `created_at` and `updated_at` and both routes
  *     `SELECT *`. The refusal described this page's own mapper.
  *   · `raise/pitch` → `Shares` — "share links are held by the deck builder and
- *     are not returned to this page". `GET /decks/:id/engagement` returns a
- *     `shares` array and this page was already reading it.
+ *     are not returned to this page", which was false. The Pitch section page and
+ *     its zone toolbar were replaced by the Pitch deck studio (D894, #2434), whose
+ *     Share & analytics tab reads every link, so those assertions left with it.
  *   · `raise/liquidity` → `Restrictions` and `History` — "no restriction, tender
  *     or liquidity-event ledger is connected", which was false. The owner removed
  *     the Liquidity zone on 2026-10-20, so its assertions left with it.
@@ -35,8 +36,6 @@ const read = (p) => codeOnly(raw(p));
 
 const FILTERS = raw('frontend/src/workspaces/founderZoneFilters.js');
 const STATUS = read('frontend/src/pages/founder/FounderRaiseStatus.jsx');
-const PITCH = read('frontend/src/pages/founder/FounderRaisePitch.jsx');
-const DECKS_ROUTE = raw('cloudflare-worker/src/routes/decks.ts');
 
 /** One zone's chips: `{ key }` for live, `{ canvas }` for refused. */
 function chips(zone) {
@@ -65,17 +64,6 @@ test('raise/status Timeline is live, and the row it sorts carries a date', () =>
   assert.match(STATUS, /Number\.isFinite\(t\) \? t : -Infinity/);
 });
 
-test('raise/pitch Shares is live, and reads the array the engagement route returns', () => {
-  const { live } = chips('raise/pitch');
-  assert.ok(live.includes('shares'), 'the Shares chip went back to being a refusal');
-  // The claim's other half: the route really does return them. Checked against
-  // the route, so this fails if the field is ever dropped there.
-  assert.match(DECKS_ROUTE, /shares: tokRows\.map\(/, 'the engagement route stopped returning shares');
-  assert.ok(PITCH.includes("view === 'shares'"), 'nothing branches on the shares view');
-  assert.match(PITCH, /const links = rawRows\.map\(/, 'the share links are no longer derived');
-  assert.ok(PITCH.includes('api.deckEngagement('), 'the page stopped calling the endpoint that carries them');
-});
-
 test('the shared liquidity reason is gone, not reworded', () => {
   // The D88/D90 pattern: delete the CONSTANT, not just the entries that used it.
   // A shared reason that outlives its truth gets cited again by the next chip —
@@ -92,9 +80,8 @@ test('the refusal that survived says something the code agrees with', () => {
   // (owner, 2026-10-20).
   assert.ok(!code.includes("'raise/liquidity'"), 'the removed Liquidity zone is back in the filter table');
 
-  // `Variants` — genuinely absent: `pitch_decks` has version, is_current and no
-  // variant column anywhere.
-  assert.match(code, /canvas: 'Variants',\s*\n?\s*unbuilt: 'a deck stores versions; no narrative variant is a separate record'/);
+  // The Pitch zone's chips left with its page (D894): the studio has no zone toolbar.
+  assert.ok(!code.includes("'raise/pitch'"), 'the retired Pitch zone is back in the filter table');
 });
 
 test('no Raise page reads a field its own source does not carry', () => {
@@ -102,7 +89,7 @@ test('no Raise page reads a field its own source does not carry', () => {
   // filters on a name nothing returns draws a control over nothing. These are the
   // three names that bug was made of; none of them is a column on any Raise
   // source, so none of them may be read off a row here.
-  for (const [name, src] of [['status', STATUS], ['pitch', PITCH]]) {
+  for (const [name, src] of [['status', STATUS]]) {
     for (const dead of ['.dependency', '.dependencies', '.holds_up_date', '.restriction_count']) {
       assert.ok(!src.includes(dead), `the raise/${name} page reads ${dead}, which nothing returns`);
     }

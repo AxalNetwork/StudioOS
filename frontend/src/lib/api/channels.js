@@ -5,6 +5,7 @@
 //   overview         GET    /channels                      availability, the member's connections, pending counts
 //   linkTelegram     POST   /channels/telegram/link        → { code, url, expires_at }
 //   telegramClaim    GET    /channels/telegram/link        → { claim }: the member's latest code and who claimed it (#1625)
+//   telegramSetup    GET    /channels/telegram/setup       D863 (#2509): → { account, prerequisites, steps, next, ready }
 //   confirmTelegram  POST   /channels/telegram/link/:uid/confirm  Axal's half of the two-sided confirm → { linked, claim }
 //   whatsappLink     POST   /channels/whatsapp/link        D754 way B (#1937): → { code, wa_link, expires_at }
 //   whatsappLinkView GET    /channels/whatsapp/link        → { claim, link }: the newest claim and the member's own WhatsApp
@@ -29,6 +30,8 @@
 //   cancelMeeting    DELETE /founder/validate/interviews/:id/meetings/:refUid
 //   importMeeting    POST   /founder/validate/interviews/:id/meetings/:refUid/import
 //   attachMeeting    POST   /founder/validate/interviews/:id/meetings  { attach: { join_url }, session_id, provider } (D685 §5.3.2, #1588)
+//   attachCalendarMeet POST /founder/validate/interviews/:id/meetings  { attach: { event_id | meeting_code | join_url }, consent } (D871)
+//   meetingRecording GET    /founder/validate/interviews/:id/meetings/:refUid/recording  → { recordings: [{ url, started_at }] } (D871)
 //   googleStatus     GET    /calendar/google/status        → { connected, meet_transcripts: 'granted' | 'available' | 'not_set_up', … } (D757, #1926)
 //   allowMeetTranscripts POST /calendar/google/meet-transcripts/connect?return_to=  then the page goes to Google's consent (D757, #1926)
 //
@@ -108,6 +111,7 @@ export const channelsApi = {
   overview: () => request('/channels'),
   linkTelegram: () => request('/channels/telegram/link', { method: 'POST', body: JSON.stringify({}) }),
   telegramClaim: () => request('/channels/telegram/link'),
+  telegramSetup: () => request('/channels/telegram/setup'),
   confirmTelegram: (uid) => request(`/channels/telegram/link/${enc(uid)}/confirm`, { method: 'POST', body: JSON.stringify({}) }),
   whatsappLink: () => request('/channels/whatsapp/link', { method: 'POST', body: JSON.stringify({}) }),
   whatsappLinkView: () => request('/channels/whatsapp/link'),
@@ -142,12 +146,12 @@ export const channelsApi = {
     method: 'POST', body: JSON.stringify({}),
   }),
   meetings: (interviewId) => request(`/founder/validate/interviews/${enc(interviewId)}/meetings`),
-  scheduleMeeting: (interviewId, { provider: p, starts_at, duration_min, topic, consent, auto_record }) => {
+  scheduleMeeting: (interviewId, { provider: p, starts_at, duration_min, topic, consent, auto_record, auto_send_bot }) => {
     if (!MEETING_PROVIDERS.has(p)) throw new Error(`Unknown meeting provider: ${p}`);
     return request(`/founder/validate/interviews/${enc(interviewId)}/meetings`, {
       method: 'POST',
       body: JSON.stringify({
-        provider: p, starts_at, duration_min: Number(duration_min), ...(topic ? { topic } : {}), consent,
+        provider: p, starts_at, auto_send_bot: auto_send_bot !== false, duration_min: Number(duration_min), ...(topic ? { topic } : {}), consent,
         ...(auto_record === true ? { auto_record: true } : {}),
       }),
     });
@@ -163,6 +167,19 @@ export const channelsApi = {
       method: 'POST', body: JSON.stringify({ attach: { join_url }, session_id: Number(session_id), provider: p }),
     });
   },
+  /**
+   * D871: attach a Google Meet call from the member's own Calendar, by event id, Meet code or link. It opens its
+   * own session, with the interviewee's consent as scheduling takes it, and imports after the call.
+   */
+  attachCalendarMeet: (interviewId, { event_id, meeting_code, join_url, consent }) => {
+    const attach = event_id ? { event_id } : meeting_code ? { meeting_code } : { join_url };
+    return request(`/founder/validate/interviews/${enc(interviewId)}/meetings`, {
+      method: 'POST', body: JSON.stringify({ attach, consent, provider: 'google_meet' }),
+    });
+  },
+  /** D871: a Meet call's Drive recordings, for "Download it, then upload it here". Never the file itself. */
+  meetingRecording: (interviewId, refUid) =>
+    request(`/founder/validate/interviews/${enc(interviewId)}/meetings/${enc(refUid)}/recording`),
 };
 
 /** The Telegram Business interview bot, for Super Admins (D756): its health, and registering its webhook. */

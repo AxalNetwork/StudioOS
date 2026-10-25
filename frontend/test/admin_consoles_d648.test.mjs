@@ -10,7 +10,8 @@
  *   · empty: the read answered with nothing, and the console says so;
  *   · unreadable: the read failed, and the console says it could not be read
  *     and offers Try again, never the empty list a failed read used to draw.
- * And for the shell: opening one tab calls that console's reads and no other.
+ * And for the pages (D938 retired the shell; each console is a page at its
+ * own address): opening one calls that console's reads and no other.
  *
  *   node --import ./frontend/test/_deck-loader.mjs --test frontend/test/admin_consoles_d648.test.mjs
  */
@@ -22,9 +23,7 @@ import React, { act } from 'react';
 import { createRoot } from 'react-dom/client';
 import { MemoryRouter } from 'react-router-dom';
 import { api } from '../src/lib/api.js';
-import AdminPage from '../src/pages/AdminPage.jsx';
-import { LegalPanel, TemplateUsageModal } from '../src/pages/admin/consoles/LegalConsole.jsx';
-import { renderToStaticMarkup } from 'react-dom/server';
+import * as PAGES from '../src/pages/admin/ConsolePages.jsx';
 import UsersConsole from '../src/pages/admin/consoles/UsersConsole.jsx';
 import PartnerProfilesConsole from '../src/pages/admin/consoles/PartnerProfilesConsole.jsx';
 import KycConsole from '../src/pages/admin/consoles/KycConsole.jsx';
@@ -33,7 +32,6 @@ import DirectoryPanel from '../src/pages/admin/consoles/DirectoryConsole.jsx';
 import IntegrationKeysPanel from '../src/pages/admin/consoles/IntegrationKeysConsole.jsx';
 import GithubSyncPanel from '../src/pages/admin/consoles/GithubSyncConsole.jsx';
 import PromoCodesPanel from '../src/pages/admin/consoles/PromoCodesConsole.jsx';
-import PaymentsPanel from '../src/pages/admin/consoles/PaymentsConsole.jsx';
 import WellbeingExpertsPanel from '../src/pages/admin/consoles/WellbeingConsole.jsx';
 
 // ── A DOM just large enough for React to mount into ─────────────────────────
@@ -106,13 +104,13 @@ function stubApi(answers) {
 }
 function restoreApi() { Object.assign(api, ORIGINAL); }
 
-async function mount(element, search = '') {
+async function mount(element, search = '', path = '/admin') {
   const restoreDoc = installDocument(search);
   const container = globalThis.document.createElement('div');
   globalThis.document.body.appendChild(container);
   const root = createRoot(container);
   await act(async () => {
-    root.render(React.createElement(MemoryRouter, { initialEntries: [`/admin${search}`] }, element));
+    root.render(React.createElement(MemoryRouter, { initialEntries: [`${path}${search}`] }, element));
   });
   // Let a resolved or rejected read settle into state.
   await act(async () => { await new Promise((r) => setTimeout(r, 0)); });
@@ -135,15 +133,12 @@ const UNREADABLE = /could not be read\. This is not a sign that there are none\.
 
 /** Each console: its reads, what an empty answer is, and what it then says. */
 const CONSOLES = [
-  { name: 'Contracts', el: () => React.createElement(LegalPanel), reads: ['adminContractStats', 'adminListContracts'],
-    empty: { adminContractStats: async () => ({ total: 0, by_type: [] }), adminListContracts: async () => ({ items: [], total: 0 }) },
-    says: /No contracts found/, loading: /Loading…/ },
   { name: 'Users', el: () => React.createElement(UsersConsole), reads: ['adminListUsers'],
-    empty: { adminListUsers: async () => ({ results: [], total: 0, by_role: {} }) }, says: /No users found/, loading: /Loading admin console\.\.\./ },
+    empty: { adminListUsers: async () => ({ results: [], total: 0, by_role: {} }) }, says: /No users found/, loading: /Loading…/ },
   { name: 'Partner Profiles', el: () => React.createElement(PartnerProfilesConsole), reads: ['adminListProfiles'],
-    empty: { adminListProfiles: async () => [] }, says: /No profiles captured yet/, loading: /Loading admin console\.\.\./ },
+    empty: { adminListProfiles: async () => [] }, says: /No profiles captured yet/, loading: /Loading…/ },
   { name: 'KYC', el: () => React.createElement(KycConsole), reads: ['kycAdminQueue'],
-    empty: { kycAdminQueue: async () => [] }, says: /No submissions in pending status/, loading: /Loading admin console\.\.\./ },
+    empty: { kycAdminQueue: async () => [] }, says: /No submissions in pending status/, loading: /Loading…/ },
   { name: 'Personas', el: () => React.createElement(PersonasPanel), reads: ['listPersonasAdmin'],
     empty: { listPersonasAdmin: async () => ({ users: [] }) }, says: /No users\./, loading: /Loading/ },
   { name: 'Directory', el: () => React.createElement(DirectoryPanel), reads: ['adminListDirectoryPartners'],
@@ -154,12 +149,6 @@ const CONSOLES = [
     empty: { adminGetGithubConfig: async () => ({}) }, says: /Repository · set at deploy time/, loading: /Loading GitHub settings/ },
   { name: 'Promo codes', el: () => React.createElement(PromoCodesPanel), reads: ['adminListPromos'],
     empty: { adminListPromos: async () => ({ promos: [] }), catalogProducts: async () => ({ products: [] }) }, says: /No promo codes yet\./, loading: /Loading/ },
-  { name: 'Payments', el: () => React.createElement(PaymentsPanel), reads: ['adminCatalogList'],
-    empty: { adminCatalogList: async () => ({ products: [] }) }, says: /No products yet/, loading: /Loading catalog/,
-    // A failed read also raises a toast, and Payments draws `{toast}` as a
-    // child: that crash is #1437's (PR #1443 draws it through ToastMessage),
-    // not this split's. Its Unreadable branch is pinned from source below.
-    skipFailedRender: '#1437' },
   { name: 'Wellbeing', el: () => React.createElement(WellbeingExpertsPanel), reads: ['wellbeingExperts'],
     empty: { wellbeingExperts: async () => ({ matches: [] }) }, says: /No experts match the current filter\./, loading: /Loading experts/ },
 ];
@@ -197,16 +186,6 @@ for (const c of CONSOLES) {
   });
 }
 
-test('Payments: a failed catalog read draws Unreadable, never "No products yet"', () => {
-  const src = readFileSync(resolve(process.cwd(), 'frontend/src/pages/admin/consoles/PaymentsConsole.jsx'), 'utf8');
-  const load = src.slice(src.indexOf('const loadProducts'), src.indexOf('const loadWebhooks'));
-  assert.match(load, /catch \(e\) \{[\s\S]*?setFailed\(true\);\s*\} finally/);
-  assert.match(load, /setProducts\(r\.products \|\| \[\]\);\s*setFailed\(false\);/);
-  const list = src.slice(src.indexOf('{productsLoading ? ('));
-  assert.ok(list.indexOf('<ConsoleUnreadable') > 0 && list.indexOf('<ConsoleUnreadable') < list.indexOf('No products yet'),
-    'the failed branch is not drawn before the empty one');
-});
-
 test('Billing: a failed disputes read draws Unreadable, never "No disputes loaded"', () => {
   // Billing reads its disputes on a click, not on mount, so this is pinned
   // from source: the click handler is not reachable on this minimal DOM.
@@ -219,107 +198,58 @@ test('Billing: a failed disputes read draws Unreadable, never "No disputes loade
     && list.indexOf('<ConsoleUnreadable') < list.indexOf('No disputes loaded'), 'the failed branch is not drawn before the empty one');
 });
 
-// ── The shell fetches only the open console's data ──────────────────────────
-const OWN = {
-  users: ['adminListUsers', 'trustScoreBatch'],
-  profiles: ['adminListProfiles'],
-  kyc: ['kycAdminQueue'],
-  personas: ['listPersonasAdmin'],
-  directory: ['adminListDirectoryPartners'],
+// ── Each page fetches only its own console's data (D938) ────────────────────
+const OWN = [
+  ['AllAccountsPage', '/admin/accounts/all', ['adminListUsers', 'trustScoreBatch']],
+  ['KycPage', '/admin/kyc', ['kycAdminQueue']],
+  ['DirectoryPage', '/admin/directory', ['adminListDirectoryPartners']],
   // Integration keys and GitHub Sync left the console for HQ's own page
   // (the owner's ruling, 2026-10-20); `integration_keys_hq_only.test.mjs`.
-  promos: ['adminListPromos', 'catalogProducts'],
-  payments: ['adminCatalogList', 'adminStripeGetConfig', 'adminStripeListWebhooks'],
-  wellbeing: ['wellbeingExperts'],
-};
+  ['PromoCodesPage', '/admin/platform/promo-codes', ['adminListPromos', 'catalogProducts']],
+  ['AdminWellbeingPage', '/admin/wellbeing', ['wellbeingExperts']],
+];
 /** The reads every tab used to make before it rendered anything. */
 const SHARED_BEFORE = ['adminListUsers', 'adminListProfiles', 'kycAdminQueue', 'trustScoreBatch'];
 
-for (const [tab, own] of Object.entries(OWN)) {
-  test(`opening ?tab=${tab} reads that console's data and nothing else`, async () => {
+for (const [name, path, own] of OWN) {
+  test(`opening ${path} reads that console's data and nothing else`, async () => {
     const calls = stubApi({});
-    const v = await mount(React.createElement(AdminPage), `?tab=${tab}`);
+    const v = await mount(React.createElement(PAGES[name]), '', path);
     try {
       const made = [...new Set(calls)];
-      assert.ok(made.length > 0, `${tab} made no read at all`);
-      for (const k of made) assert.ok(own.includes(k), `${tab} called ${k}, which is not its own read`);
+      assert.ok(made.length > 0, `${path} made no read at all`);
+      for (const k of made) assert.ok(own.includes(k), `${path} called ${k}, which is not its own read`);
       for (const k of SHARED_BEFORE) {
-        if (!own.includes(k)) assert.ok(!made.includes(k), `${tab} still reads ${k} before it renders`);
+        if (!own.includes(k)) assert.ok(!made.includes(k), `${path} still reads ${k} before it renders`);
       }
     } finally { await v.unmount(); restoreApi(); }
   });
 }
 
-test('the shell keeps its tabs, its ?tab= links and its admin-tab-* hooks', async () => {
+test('a console page draws its header at once, with no "Admin Console" title and no section dropdown (D938)', async () => {
   stubApi({});
-  const v = await mount(React.createElement(AdminPage), '?tab=directory');
+  const v = await mount(React.createElement(PAGES.DirectoryPage), '?moved=directory', '/admin/directory');
   try {
-    assert.match(v.text(), /Admin Console/);
-    assert.match(v.text(), /Directory/, 'the dropdown does not name the open console');
+    assert.match(v.text(), /Community/, 'the crumb does not name the section');
+    assert.match(v.text(), /Directory/);
+    assert.match(v.text(), /The Admin Console has moved: Directory now lives under Community\./, 'the moved notice is missing');
+    assert.doesNotMatch(v.text(), /Admin Console[^ ]|Select admin section/);
   } finally { await v.unmount(); restoreApi(); }
-  const shell = readFileSync(resolve(process.cwd(), 'frontend/src/pages/AdminPage.jsx'), 'utf8');
-  assert.match(shell, /data-testid=\{`admin-tab-\$\{s\.value\}`\}/);
-  assert.ok(shell.split('\n').length < 300, 'the shell is a shell: the consoles live in their own files');
+  const code = readFileSync(resolve(process.cwd(), 'frontend/src/pages/admin/ConsolePages.jsx'), 'utf8');
+  assert.doesNotMatch(code, /admin-tab-|ADMIN_SECTIONS|<h1/, 'a page draws the old shell\'s hooks or a title of its own');
+  assert.equal([...code.matchAll(/<AdminPageHeader\b/g)].length, 1, 'the pages share one header');
 });
 
 test('HQ · Accounts mounts the Users console alone, not the whole Admin Console', () => {
   const page = readFileSync(resolve(process.cwd(), 'frontend/src/pages/hq/AccountsPage.jsx'), 'utf8');
   assert.match(page, /<UsersConsole onImpersonate=\{onImpersonate\} \/>/);
-  assert.doesNotMatch(page, /<AdminPage\b/);
+  assert.doesNotMatch(page, /<AdminPage\b|<AllAccountsPage\b/);
   assert.doesNotMatch(page, /from '\.\.\/AdminPage'/);
 });
 
-
-test('D647: Contracts has a real formation-orders destination and no dead Incorporation tab', () => {
-  const markup = renderToStaticMarkup(React.createElement(MemoryRouter, null, React.createElement(LegalPanel)));
-  assert.match(markup, /href="\/admin\/spinout-lab"/);
-  assert.match(markup, /Programs › Spin-Out Lab/);
-  assert.match(markup, /Open its Formation orders tab/);
-  assert.doesNotMatch(markup, /legal-sub-incorporation|legal-incorporation-placeholder|Incorporation packets will appear/);
-});
-
-test('D647: empty agreements and template usage point at the visible envelope action', async () => {
-  for (const [element, answers, expected] of [
-    [React.createElement(LegalPanel), {
-      adminContractStats: async () => ({ total: 0, by_type: [] }),
-      adminListContracts: async () => ({ items: [], total: 0 }),
-    }, /No contracts found\. Use New envelope to send an agreement\./],
-    [React.createElement(TemplateUsageModal, { docType: 'safe', onClose() {} }), {
-      adminContractTemplateUsage: async () => ({ items: [], stats: { total: 0, by_status: { signed: 0, sent: 0, void: 0 } } }),
-    }, /This template hasn't been used yet\. Use New envelope in Contracts to send an agreement\./],
-  ]) {
-    stubApi(answers);
-    const v = await mount(element);
-    try {
-      assert.match(v.text(), expected);
-      assert.doesNotMatch(v.text(), /Profiles tab/);
-    } finally { await v.unmount(); restoreApi(); }
-  }
-});
 
 test('D647: Contracts imports its own desk without the Admin Console module', () => {
   const page = readFileSync(resolve(process.cwd(), 'frontend/src/pages/hq/ContractsPage.jsx'), 'utf8');
   assert.match(page, /export \{ default \} from '\.\.\/admin\/contracts\/ContractsDesk\.jsx'/);
   assert.doesNotMatch(page, /from '\.\.\/AdminPage'/);
-});
-
-
-test('D647: retrying an unreadable agreement list loads again and clears the failed state', async () => {
-  let calls = 0;
-  let finish;
-  stubApi({
-    adminContractStats: async () => ({ total: 0, by_type: [] }),
-    adminListContracts: () => ++calls === 1 ? fail() : new Promise((resolve) => { finish = resolve; }),
-  });
-  const v = await mount(React.createElement(LegalPanel));
-  try {
-    assert.match(v.text(), UNREADABLE);
-    await v.click('Try again');
-    assert.equal(calls, 2);
-    assert.match(v.text(), /Loading…/);
-    assert.doesNotMatch(v.text(), /could not be read|No contracts found/);
-    await act(async () => { finish({ items: [], total: 0 }); });
-    assert.match(v.text(), /No contracts found/);
-    assert.doesNotMatch(v.text(), /could not be read|Loading…/);
-  } finally { await v.unmount(); restoreApi(); }
 });

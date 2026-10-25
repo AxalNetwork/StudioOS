@@ -12,9 +12,10 @@ import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 
 import {
-  studioGlance, HQ_SCOPE_LABEL, ACTIVE_ACCOUNTS_REASON, HQ_BENCHMARK_REASON, CONTENT_TO_HQ_REASON,
+  studioGlance, HQ_SCOPE_LABEL, HQ_BENCHMARK_REASON, CONTENT_TO_HQ_REASON,
 } from '../src/services/studioGlance.ts';
 import { NOT_LANED } from '../src/services/approvalSources.ts';
+import { ACTIVE_ACCOUNT_BASIS } from '../src/services/activeAccounts.ts';
 
 const NOW = Date.parse('2026-10-07T12:00:00Z'); // a Wednesday
 const BASELINE = readFileSync(resolve(process.cwd(), 'cloudflare-worker/sql/schema_baseline.sql'), 'utf8');
@@ -43,7 +44,9 @@ const ago = (days: number) => new Date(NOW - days * 86_400_000).toISOString().sl
 
 function seeded() {
   const db = new DatabaseSync(':memory:', { enableForeignKeyConstraints: false, enableDoubleQuotedStringLiterals: true });
-  for (const t of ['users', 'user_role_review', 'partner_profiles', 'projects', 'tickets', 'ai_usage_logs']) db.exec(ddl(t));
+  for (const t of ['users', 'user_role_review', 'partner_profiles', 'projects', 'tickets', 'ai_usage_logs', 'activity_logs', 'esign_envelopes']) db.exec(ddl(t));
+  // D990: a Draft is read off migration 275's answer columns too.
+  db.exec(readFileSync(resolve(process.cwd(), 'cloudflare-worker/sql/migrations/275_partner_profiles_columns.sql'), 'utf8'));
   const u = db.prepare(`INSERT INTO users (id, role, name, email, is_active, created_at, kyc_status, kyc_submitted_at)
                         VALUES (?, ?, ?, ?, ?, ?, ?, ?)`);
   u.run(1, 'admin', 'Ada Admin', 'ada@secret.example', 1, ago(400), 'approved', null);
@@ -51,6 +54,10 @@ function seeded() {
   u.run(3, 'founder', 'Finn Founder', 'finn@secret.example', 1, ago(20), 'approved', null);
   u.run(4, 'investor', 'Ivy Investor', 'ivy@secret.example', 1, ago(2), 'approved', null);
   u.run(5, 'exploring', 'Eve Explorer', 'eve@secret.example', 1, ago(10), 'approved', null);
+  // D1039: the Exploring lane counts an Explorer whose binding agreement is signed.
+  db.prepare(`INSERT INTO esign_envelopes (id, envelope_uuid, user_id, document_type, document_title, document_body, body_sha256, status, created_by, completed_at)
+              VALUES (70, 'env-70', 5, 'binding_agreement', 'Binding agreement', 'Synthetic', 'synthetic', 'completed', 1, ?)`).run(ago(2));
+  db.prepare('INSERT INTO user_role_review (user_id, binding_envelope_id) VALUES (5, 70)').run();
   u.run(6, 'investor', 'Gone Person', 'gone@secret.example', 0, ago(1), 'approved', null);
   db.prepare(`INSERT INTO partner_profiles (email, persona, admin_status, created_at) VALUES (?, ?, 'pending', ?)`)
     .run('pp@secret.example', 'agency', ago(9));
@@ -60,6 +67,14 @@ function seeded() {
   ai.run(2, 0.25, '2026-10-02 10:00:00');
   ai.run(3, 0.5, '2026-10-06 10:00:00');
   ai.run(4, 9, '2026-09-30 23:00:00'); // last month
+  // D893: last week (Mon 2026-09-28) had users 2 and 3 active; user 4's row is not a middleware row.
+  const act = db.prepare(`INSERT INTO activity_logs (user_id, action, endpoint, created_at) VALUES (?, 'request', ?, ?)`);
+  act.run(2, '/api/projects', '2026-09-20 09:00:00');
+  act.run(2, '/api/projects', '2026-09-29 09:00:00');
+  act.run(3, '/api/inbox', '2026-10-04 23:59:59');
+  act.run(3, '/api/inbox', '2026-10-01 10:00:00');
+  act.run(4, null, '2026-09-30 10:00:00');
+  act.run(4, '/api/inbox', '2026-10-06 10:00:00'); // this week, not last
   return db;
 }
 
@@ -75,7 +90,7 @@ test('HQ accounts: counts by role over active accounts, new in 7 and 30 days, ex
     { role: 'founder', count: 2 }, { role: 'admin', count: 1 }, { role: 'exploring', count: 1 }, { role: 'investor', count: 1 },
   ]);
   assert.deepEqual([a.new_7d, a.new_30d, a.deactivated], [2, 4, 1]);
-  assert.equal(a.exploring, 1, 'the Exploring lane\'s own count');
+  assert.equal(a.exploring, 1, 'every account in the holding role, from the Exploring lane\'s `holding` figure (D1039)');
   assert.equal(a.trash_projects, 1);
 });
 
@@ -107,9 +122,16 @@ test('HQ approvals: when every lane answers, the total is their sum', async () =
   const db = seeded();
   for (const t of ['lp_applications', 'referral_submissions', 'cohort_applicants',
     'job_postings', 'events', 'admin_consultation_bookings', 'dd_cases']) db.exec(ddl(t));
+  db.exec(readFileSync(new URL('../sql/migrations/546_events_review_columns.sql', import.meta.url), 'utf8'));
   // Declared by migration 287, not the baseline; the lane reads these three columns.
   db.exec('CREATE TABLE spinout_moderation_cases (id INTEGER PRIMARY KEY, status TEXT, resolved_at TEXT, created_at TEXT)');
   db.prepare(`INSERT INTO spinout_moderation_cases (status, resolved_at, created_at) VALUES ('under_review', NULL, ?), ('active', NULL, ?)`).run(ago(30), ago(31));
+  // D1041 (#2889): the stores the canvas's new lanes read, empty here.
+  for (const t of ['company_profiles', 'comarketing_pitches', 'partners', 'experts', 'perks',
+    'referral_strategic_access', 'score_snapshots', 'articles']) db.exec(ddl(t));
+  for (const m of ['220_company_kyb.sql', '313_lab_host_applications.sql']) {
+    db.exec(readFileSync(new URL(`../sql/migrations/${m}`, import.meta.url), 'utf8'));
+  }
   const g: any = await studioGlance({ DB: makeD1(db) } as any, NOW);
   assert.deepEqual(g.approvals.unreadable, []);
   assert.equal(g.approvals.pending_total, 4, 'KYC, partner profile, exploring, one moderation case under review');
@@ -131,21 +153,25 @@ test('HQ insights: eight weeks of sign-ups, this month\'s AI spend, open tickets
   assert.equal(weeks[0].count, 0, 'a week with nobody is a measured zero');
   assert.deepEqual([i.ai_spend_month.month, i.ai_spend_month.usd, i.ai_spend_month.calls], ['2026-10', 0.75, 2]);
   assert.equal(i.open_tickets.open, 2, 'open and in_progress');
-  assert.equal(i.active_accounts.recorded, false);
-  assert.equal(i.active_accounts.reason, ACTIVE_ACCOUNTS_REASON);
+  assert.deepEqual(i.active_accounts, {
+    available: true, week: '2026-09-28', value: 2, basis: ACTIVE_ACCOUNT_BASIS,
+  }, 'D893: distinct signed-in accounts last week, middleware rows only');
   assert.equal(i.benchmark.recorded, false);
   assert.equal(i.benchmark.reason, HQ_BENCHMARK_REASON);
 });
 
 test('each insight answers alone: an unreadable store is that figure\'s own gap, never zero', async () => {
   const db = seeded();
-  db.exec('DROP TABLE ai_usage_logs; DROP TABLE tickets;');
+  db.exec('DROP TABLE ai_usage_logs; DROP TABLE tickets; DROP TABLE activity_logs;');
   const g: any = await studioGlance({ DB: makeD1(db) } as any, NOW);
   assert.equal(g.insights.ai_spend_month.available, false);
   assert.equal(g.insights.ai_spend_month.usd, undefined);
   assert.match(g.insights.ai_spend_month.reason, /not the same as no spend/);
   assert.equal(g.insights.open_tickets.available, false);
   assert.equal(g.insights.open_tickets.open, undefined);
+  assert.equal(g.insights.active_accounts.available, false);
+  assert.equal(g.insights.active_accounts.value, undefined);
+  assert.match(g.insights.active_accounts.reason, /not the same as nobody active/);
   assert.equal(g.insights.signups_by_week.available, true, 'the others still answer');
   assert.equal(g.accounts.recorded, true);
 });

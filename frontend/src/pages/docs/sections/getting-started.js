@@ -60,11 +60,11 @@ export default {
         'Investor — limited partner or co-investor; sees the Investor Portal, Pipeline, and Portfolio Health.',
         'Partner — service provider; lists services in the Marketplace, responds to Needs Board RFPs, runs Office Hours.',
         'Advisor — domain expert; books office-hour slots, takes mentee engagements, writes reflections.',
-        'Admin — studio operator; sees everything plus the Admin Console and a “View as” role switcher.',
+        'Admin — studio operator; sees everything plus the admin pages and a “View as” role switcher.',
       ],
       tips: [
         'A role change requires admin approval today — open a support ticket if you need one.',
-        'Admins can impersonate any user from the Admin Console for support and debugging.',
+        'Admins can impersonate any user from All accounts, under Accounts, for support and debugging.',
       ],
       pitfalls: [
         'Multi-role accounts default to a single primary role; switching roles can hide data you expect to see.',
@@ -79,7 +79,7 @@ export default {
       id: 'personas',
       title: 'Personas (New Founder, Existing Company, Investor, Advisor)',
       overview:
-        "Personas are tighter slices of a role that tune your dashboard, the Personal Advisor’s opening questions, and which “quick action” cards appear first. Founders pick between New Founder (idea stage) and Existing Company; Investors and Advisors each have one persona today.",
+        "Personas are tighter slices of a role that tune your dashboard, the Personal Advisor’s opening questions, and which “quick action” cards appear first. Founders pick between New Founder (idea stage) and Existing Company; Investors have six segments: LP — Individual, LP — Institutional, GP — External Fund, Angel / Scout, Corporate VC, and Sovereign / Family Office. Advisors can choose Operator / Advisor; Service Provider maps to Operating Partner, and Academic / Lab and Press / Analyst map to Explorer. A segment does not change your account profile.",
       howto: [
         'During onboarding, pick the persona that matches what you’re doing this quarter.',
         'Re-open Settings → Profile → Re-run onboarding to switch personas later.',

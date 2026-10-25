@@ -41,6 +41,11 @@ paths = [
   '''(?i)cloudflare-worker/test/calendar\.google-oauth\.test\.ts$''',
 ]
 regexes = [
+  # D1135: this exact synthetic signing seed belongs only to the SQLite test's
+  # locally minted JWTs. It is no deployed credential. Pin the literal rather
+  # than exempting the test file or rewriting published branch history.
+  '''\bsynthetic-d1135-secret\b''',
+
   # Tailwind / Vite generated content hashes that look like secrets but aren't.
   '''[a-f0-9]{8}\.(js|css|woff2?)''',
   # Known synthetic test JWTs (signed with the literal "test" key).
@@ -92,6 +97,12 @@ regexes = [
   # characters; this is twelve zeros and a word, and verifyKey refuses its
   # shape. Pinned to the exact literal so nothing looser rides on it.
   '''\baxk_000000000000_placeholder\b''',
+  # D1000 (#2815): the synthetic JWT signing key in
+  # cloudflare-worker/test/segment_profiles_d1000.test.ts, which signs the
+  # test's own tokens against an in-memory database. Not a credential and
+  # not the Worker's JWT_SECRET; pinned to the exact literal so nothing
+  # looser rides on it.
+  '''\bsegment-test-secret-0123456789-abcdef\b''',
   '''dG9rZW4tMjAxNw''',
   '''webgate\.ec\.europa\.eu/fsd/fsf/public/files/jsonFullSanctionsList[^'"\s]+''',
 ]

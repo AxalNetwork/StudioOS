@@ -192,11 +192,16 @@ const EXPECTED: Record<string, string[]> = {
   'routes/research.ts': ['AI_SURFACE.researchAsk'],
   'routes/brand.ts': ['AI_SURFACE.buildBrand', 'AI_SURFACE.buildBrand', 'AI_SURFACE.buildBrand', 'AI_SURFACE.buildBrand'], // D766: + the logo
   'services/competitorAnalysis.ts': ['AI_SURFACE.researchCompanies'],
+  'services/conversationItems.ts': ['AI_SURFACE.validateInterviews'], // D859: a chat's items
   'services/deckExtract.ts': ['AI_SURFACE.raisePitchReview', 'AI_SURFACE.raisePitchReview'],
+  'services/deckVersionReview.ts': ['AI_SURFACE.raisePitchReview'],
   // D767 (#2096): the deck draft and the slide fill.
-  // D778 part 2: positioning joins the deck draft on the same surface.
-  'routes/decks.ts': ['AI_SURFACE.raisePitch', 'AI_SURFACE.raisePitch'],
+  // D1113 retired decks.ts's old positioning call; the active deck/narrative calls remain below.
+  'routes/deck_new.ts': ['AI_SURFACE.raisePitch', 'AI_SURFACE.raisePitch'], // D897: the outline and the build; /generate moved here
+  'routes/deck_assist.ts': ['AI_SURFACE.raisePitch'], // D899: the card tools
   'services/decks/autofill.ts': ['AI_SURFACE.raisePitch'],
+  'routes/cycle_raise.ts': ['AI_SURFACE.raiseNarrative', 'AI_SURFACE.raiseNarrative'], // D911: the narrative's positioning proposal; D1114: Story's Ask Eadwyn
+  'services/capTableDocumentRead.ts': ['AI_SURFACE.raiseCapTable'], // D1021: Eadwyn's read of a signed document
   'services/publications.ts': ['AI_SURFACE.adminPublications'],
   // D766 (#2094) — system calls moved into the router.
   'routes/monitoring.ts': ['AI_SURFACE.monitoring'],
@@ -209,6 +214,7 @@ const EXPECTED: Record<string, string[]> = {
   'services/updateShare.ts': ['AI_SURFACE.growUpdate'],
   'services/fills/citations.ts': ['AI_SURFACE.validate'],
   'services/interviewStructuring.ts': ['AI_SURFACE.validateInterviews', 'AI_SURFACE.validateInterviews', 'AI_SURFACE.validateInterviews'], // D658: structure, ask; D685: summarise
+  'services/sessionTranslation.ts': ['AI_SURFACE.validateInterviews', 'AI_SURFACE.validateInterviews'], // D857: detect a language, translate a segment
   'services/advisor/rerank.ts': ['AI_SURFACE.studio'],
   'routes/profiling.ts': ['AI_SURFACE.onboardingChat', 'AI_SURFACE.onboardingChat'],
   'routes/advisor.ts': ['AI_SURFACE.studio', 'AI_SURFACE.studio', 'AI_SURFACE.studio'],

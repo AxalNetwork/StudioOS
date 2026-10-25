@@ -61,11 +61,13 @@ export const BUCKETS = [
   { key: 'eng', name: 'Engineering', color: '#4f46e5', section: 'Product & engineering' },
   { key: 'gtm', name: 'GTM', color: '#0891b2', section: 'GTM: sales and marketing' },
   { key: 'ops', name: 'Operations', color: '#7c3aed', section: 'Operations, legal & compliance' },
+  { key: 'infra', name: 'Infrastructure & data', color: '#d97706', section: FUND_SECTIONS[2] },
+  { key: 'hiring', name: 'Hiring / runway reserve', color: '#059669', section: FUND_SECTIONS[4] },
 ];
 
 // Collapse a stored use_of_funds value into [eng, gtm, ops] percentages.
 export function allocToBuckets(raw) {
-  const out = [0, 0, 0];
+  const out = BUCKETS.map(() => 0);
   const s = (raw ?? '').toString().trim();
   if (!s.startsWith('[')) return out;
   try {
@@ -74,9 +76,8 @@ export function allocToBuckets(raw) {
     for (const x of arr) {
       const label = String(x?.label ?? '').trim();
       const pct = Math.max(0, Math.min(100, Math.round(Number(x?.pct) || 0)));
-      if (label === FUND_SECTIONS[0] || label === FUND_SECTIONS[2]) out[0] += pct; // product + infra → eng
-      else if (label === FUND_SECTIONS[1]) out[1] += pct; // gtm
-      else if (label === FUND_SECTIONS[3] || label === FUND_SECTIONS[4]) out[2] += pct; // ops + hiring → ops
+      const index = BUCKETS.findIndex(b => b.section === label);
+      if (index >= 0) out[index] += pct;
     }
   } catch { /* legacy free-text → zeros */ }
   return out;
@@ -89,21 +90,25 @@ export function bucketsToUseOfFunds(pcts) {
   return alloc.length ? JSON.stringify(alloc) : '';
 }
 
+// An unrelated edit must omit the allocation field entirely.
+export function allocationPatch(changed, pcts, extras) {
+  return changed ? { use_of_funds: JSON.stringify([...JSON.parse(bucketsToUseOfFunds(pcts) || '[]'), ...extras]) } : {};
+}
+
 // Rebalance the other two buckets proportionally so the total stays 100.
-export function rebalance(pcts, idx, value) {
-  const MIN = 3;
-  const v = Math.max(MIN, Math.min(100 - 2 * MIN, Math.round(value)));
-  const others = [0, 1, 2].filter((i) => i !== idx);
-  const rest = 100 - v;
-  const otherSum = pcts[others[0]] + pcts[others[1]];
-  let a;
-  if (otherSum <= 0) a = Math.round(rest / 2);
-  else a = Math.round((pcts[others[0]] / otherSum) * rest);
-  a = Math.max(MIN, Math.min(rest - MIN, a));
+export function rebalance(pcts, idx, value, budget = 100) {
+  const total = pcts.reduce((sum, p) => sum + p, 0) || budget;
+  const v = Math.max(0, Math.min(total, Math.round(value)));
+  const others = pcts.map((_, i) => i).filter(i => i !== idx);
+  const sum = others.reduce((n, i) => n + pcts[i], 0);
   const next = [...pcts];
   next[idx] = v;
-  next[others[0]] = a;
-  next[others[1]] = rest - a;
+  let remaining = total - v;
+  others.forEach((i, n) => {
+    const amount = n === others.length - 1 ? remaining : Math.min(remaining, Math.round(sum ? pcts[i] / sum * (total - v) : (total - v) / others.length));
+    next[i] = amount;
+    remaining -= amount;
+  });
   return next;
 }
 
@@ -280,7 +285,7 @@ export default function SpinoutLabUseOfFundsPage() {
   const [project, setProject] = useState(null);
   const [okrs, setOkrs] = useState([]);
 
-  const [pcts, setPcts] = useState([40, 35, 25]);
+  const [pcts, setPcts] = useState(BUCKETS.map(() => 0));
   const [raise, setRaise] = useState(1_000_000);
   const [meta, setMeta] = useState({});
   const [, setHasAlloc] = useState(false);
@@ -295,6 +300,8 @@ export default function SpinoutLabUseOfFundsPage() {
   const [previewOpen, setPreviewOpen] = useState(false);
   const [, forceTick] = useState(0);
 
+  const allocationDirty = useRef(false);
+  const extraSections = useRef([]);
   const saveTimer = useRef(null);
   const pendingRef = useRef(null);
   const projectRef = useRef(null);
@@ -321,7 +328,8 @@ export default function SpinoutLabUseOfFundsPage() {
         if (proj) {
           // Legacy/rounded allocations may not total exactly 100; normalize
           // before they can reach any save path (server requires exact 100).
-          const b = normalizeBuckets(allocToBuckets(proj.use_of_funds));
+          const b = allocToBuckets(proj.use_of_funds);
+          try { extraSections.current = JSON.parse(proj.use_of_funds || '[]').filter(x => !BUCKETS.some(b => b.section === x.label)); } catch { extraSections.current = []; }
           if (b) { setPcts(b); setHasAlloc(true); }
           const fn = num(proj.funding_needed);
           if (fn && fn > 0) setRaise(fn);
@@ -370,6 +378,7 @@ export default function SpinoutLabUseOfFundsPage() {
         try {
           await api.updateProject(proj.id, payload);
           if (seq !== saveSeqRef.current) return;
+          if ('use_of_funds' in payload) allocationDirty.current = false;
           setSaveState('saved'); setSaveError('');
           markMilestone(userRef.current, 'use_of_funds_filled');
         } catch (e) {
@@ -383,6 +392,7 @@ export default function SpinoutLabUseOfFundsPage() {
     return saveChainRef.current;
   }, []);
 
+
   const scheduleSave = useCallback((nextPcts, nextRaise, nextMeta) => {
     pendingRef.current = { pcts: nextPcts, raise: nextRaise, meta: nextMeta };
     if (saveTimer.current) clearTimeout(saveTimer.current);
@@ -391,7 +401,7 @@ export default function SpinoutLabUseOfFundsPage() {
       const p = pendingRef.current;
       if (!p) return;
       runSave({
-        use_of_funds: bucketsToUseOfFunds(p.pcts) || null,
+        ...allocationPatch(allocationDirty.current, p.pcts, extraSections.current),
         funding_needed: p.raise > 0 ? p.raise : null,
         use_of_funds_meta: JSON.stringify(p.meta || {}),
       });
@@ -402,6 +412,7 @@ export default function SpinoutLabUseOfFundsPage() {
 
   const applyAlloc = (next) => {
     if (!canEdit) return;
+    allocationDirty.current = true;
     setPcts(next); setHasAlloc(true);
     const m = { ...meta, deck_synced_at: null }; // allocation change → deck out of sync
     setMeta(m);
@@ -428,7 +439,7 @@ export default function SpinoutLabUseOfFundsPage() {
     const m = { ...meta, ...patch };
     setMeta(m); setSaveState('saving');
     await runSave({
-      use_of_funds: bucketsToUseOfFunds(pcts) || null,
+      ...allocationPatch(allocationDirty.current, pcts, extraSections.current),
       funding_needed: raise > 0 ? raise : null,
       use_of_funds_meta: JSON.stringify(m),
     });
@@ -634,7 +645,7 @@ export default function SpinoutLabUseOfFundsPage() {
               </span>
             </div>
             <div className="flex justify-center mb-3">
-              <Donut pcts={pcts} centerLabel={fmtMoney(raise)} onChange={applyAlloc} editable={canEdit} size={190} />
+              <Donut pcts={pcts} centerLabel={fmtMoney(raise)} onChange={applyAlloc} editable={false} size={190} />
             </div>
             <p className="text-[10px] text-gray-400 text-center mb-3">{canEdit ? 'Drag the handles on the ring, or use the sliders.' : 'Read-only — you don\'t own this startup record.'}</p>
             <div className="space-y-3 mb-4">
@@ -647,8 +658,8 @@ export default function SpinoutLabUseOfFundsPage() {
                     <span className="text-gray-400 tabular-nums w-9 text-right">{pcts[i]}%</span>
                   </div>
                   <input
-                    type="range" min={3} max={94} value={pcts[i]} disabled={!canEdit}
-                    onChange={(e) => applyAlloc(rebalance(pcts, i, Number(e.target.value)))}
+                    type="range" min={0} max={100} value={pcts[i]} disabled={!canEdit}
+                    onChange={(e) => applyAlloc(rebalance(pcts, i, Number(e.target.value), 100 - extraSections.current.reduce((sum, x) => sum + (Number(x?.pct) || 0), 0)))}
                     className="w-full" style={{ accentColor: b.color }}
                     data-testid={`slider-${b.key}`}
                   />

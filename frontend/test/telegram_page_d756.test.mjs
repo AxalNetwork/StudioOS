@@ -205,12 +205,9 @@ test('/account/connectors/telegram-business lands on telegram, with replace', ()
   for (const p of ['/account/connectors/a-b', '/account/connectors/telegram-businesses']) assert.equal(connectorKeyFor(p), null, p);
 });
 
-test('the news-bot card stays a hub card with no page', () => {
+test('the news-bot Community card is gone from Connectors (#2559)', () => {
   const src = read('frontend/src/pages/account/AccountConnectors.jsx');
-  const start = src.indexOf('function TelegramCard()');
-  const card = src.slice(start, src.indexOf('\n}\n', start));
-  assert.ok(card.includes('Telegram · Axal VC channels'));
-  // F6 (#1877, decision 13): the Community card's id, so connector-card-<key> is the catalogue's alone.
-  assert.ok(card.includes('data-testid="connector-community-telegram"'));
-  assert.equal(/connectorPagePath|<Link|\/account\/connectors\/telegram/.test(card), false, 'the news-bot card links a page');
+  assert.equal(src.includes('function TelegramCard()'), false, 'the Community card component is removed');
+  assert.equal(src.includes('Telegram · Axal VC channels'), false, 'its title is gone');
+  assert.equal(src.includes('connector-community-telegram'), false, 'its test id is gone');
 });

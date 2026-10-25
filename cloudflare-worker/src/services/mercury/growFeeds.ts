@@ -43,6 +43,7 @@ import { MERCURY_INSERT } from '../../routes/revenue';
 import { INTERNAL_KINDS, POSTED_STATUSES, VOID_STATUSES } from './parse';
 import { openMercuryReads, type Customer, type Invoice, type McpTransaction, type MercuryReads } from './reads';
 import { mercuryAccessFor, MERCURY_AUTH_TYPE } from './oauth';
+import { memberMercury, type MemberMercury } from './memberConnection';
 
 /** How many full months a sync reads and writes. */
 export const GROW_MONTHS = 12;
@@ -675,7 +676,35 @@ async function customersByChannel(env: Env, projectId: number, month: string): P
 export async function growFromMercury(env: Env, projectId: number, slug: GrowFeedSlug, viewer: { id: number; founder_id?: number | null }, today: string) {
   const team = await isTeamViewer(env, viewer, projectId);
   if (!team) return { state: 'team_only' as const, reason: TEAM_ONLY };
-  return { ...(await teamPart(env, projectId, slug, viewer, today)), can_sync: await isVentureFounder(env, viewer, projectId) };
+  const founder = await isVentureFounder(env, viewer, projectId);
+  const connection = await founderConnection(env, projectId, founder);
+  const part = await teamPart(env, projectId, slug, viewer, today);
+  // D882: nothing recorded and no usable sign-in says how to connect, never an empty figure.
+  if (part.state === 'not_recorded' && connection.state !== 'connected') {
+    return { state: connection.state, reason: connection.sentence, connection, can_sync: false };
+  }
+  return { ...part, connection, can_sync: founder && connection.state === 'connected' };
+}
+
+/** What the founder's teammates read about a connection that is the founder's own. */
+export const FOUNDER_MERCURY_SENTENCES: Readonly<Record<Exclude<MemberMercury['state'], 'connected'>, string>> = Object.freeze({
+  not_connected: 'Not recorded: the founder has not connected Mercury.',
+  sign_in_required: 'Not recorded: the founder has not signed in with Mercury.',
+  reconnect: 'Not recorded: the founder needs to sign in with Mercury again.',
+});
+
+/**
+ * D882: the venture founder's own Mercury connection (D840's one row per
+ * member), from the row alone. Only the founder gets "Connect Mercury"; a
+ * teammate is told whose move it is, since the bank account is not theirs.
+ */
+async function founderConnection(env: Env, projectId: number, viewerIsFounder: boolean): Promise<MemberMercury> {
+  const u = await env.DB.prepare(
+    `SELECT u.id FROM users u JOIN projects p ON p.founder_id = u.founder_id WHERE p.id = ? ORDER BY u.id LIMIT 1`,
+  ).bind(projectId).first<{ id: number }>();
+  const own = await memberMercury(env, u ? Number(u.id) : null);
+  if (viewerIsFounder || own.state === 'connected') return own;
+  return { state: own.state, connect_href: null, connect_label: null, sentence: FOUNDER_MERCURY_SENTENCES[own.state] };
 }
 
 async function teamPart(env: Env, projectId: number, slug: GrowFeedSlug, viewer: { id: number; founder_id?: number | null }, today: string) {

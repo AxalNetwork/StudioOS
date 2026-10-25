@@ -190,17 +190,18 @@ const ROSTER = {
     rosterRow({ id: 1, name: 'Mia', role: null, deck_role: 'Advisor', company: null }),
     rosterRow({ id: 7, name: 'Gus', role: 'CFO', deck_role: null, reach: 'named' }),
     rosterRow({ id: 9, name: 'Ivy', role: 'Counsel', deck_role: null, reach: 'counted' }),
-    rosterRow({ id: 4, name: 'Old', role: 'Partner', deck_role: null, active: false, reach: 'archived' }),
+    rosterRow({ id: 4, name: 'Old', role: 'Partner', deck_role: null, active: false, state: 'archived', reach: 'archived' }),
     rosterRow({ id: 5, name: '', role: null, deck_role: 'Advisor', reach: 'profile' }),
   ],
   truncated: false,
   active: 4,
+  hidden: 0,
   archived: 1,
   by_kind: [
-    { kind: 'mentor', active: 0, archived: 0, known: true },
-    { kind: 'partner', active: 0, archived: 0, known: true },
-    { kind: 'advisor', active: 4, archived: 1, known: true },
-    { kind: 'investor', active: 0, archived: 0, known: true },
+    { kind: 'mentor', active: 0, hidden: 0, archived: 0, known: true },
+    { kind: 'partner', active: 0, hidden: 0, archived: 0, known: true },
+    { kind: 'advisor', active: 4, hidden: 0, archived: 1, known: true },
+    { kind: 'investor', active: 0, hidden: 0, archived: 0, known: true },
   ],
   reach_note: 'What the deck built on HQ does with each active row, in its own order.',
   nominations: { recorded: false, reason: 'Nothing records who put a person on the roster.' },
@@ -263,7 +264,7 @@ test('the route builds its six lanes in the canvas\'s order, with the canvas\'s 
 });
 
 test('every console is linked by a literal path, once, and the network-profiles route is never linked', () => {
-  for (const to of ['/admin/articles', '/admin/publications', '/admin?tab=personas', '/admin?tab=network-profiles']) {
+  for (const to of ['/admin/articles', '/admin/publications', '/admin/persona-segments', '/admin/advisors-partners/deck']) {
     assert.equal(count(P, `to="${to}"`), 1, `${to} is linked ${count(P, `to="${to}"`)} times`);
   }
   // Its reachability exemption says nothing links it; a link here would make that stale.
@@ -503,7 +504,7 @@ test('C2: loading, the summary failing and the block failing draw no list, and a
   for (const [html, expected] of states) {
     assert.match(text(html), expected);
     assert.ok(!html.includes('data-testid="hq-personas-list"'));
-    assert.deepEqual(hrefs(html), ['/admin?tab=personas']);
+    assert.deepEqual(hrefs(html), ['/admin/persona-segments']);
   }
 });
 
@@ -546,7 +547,7 @@ test('C4: loading, the summary failing and the block failing draw no table, and 
   for (const [html, expected] of states) {
     assert.match(text(html), expected);
     assert.ok(!html.includes('data-testid="hq-roster-rows"'));
-    assert.deepEqual(hrefs(html), ['/admin?tab=network-profiles']);
+    assert.deepEqual(hrefs(html), ['/admin/advisors-partners/deck']);
   }
 });
 
@@ -569,7 +570,7 @@ test('C4: each row says what the deck does with it, in the deck\'s words', () =>
   assert.match(rows[3], /^Old advisor · Partner · Acme not printed Not on the deck Archived$/);
   assert.match(rows[4], /^No name advisor · Acme Advisor Team & Network slide Active$/);
   const seen = text(html);
-  assert.match(seen, /4 active · 1 archived · mentor 0 · partner 0 · advisor 4 · investor 0/);
+  assert.match(seen, /4 active · 0 hidden · 1 archived · mentor 0 · partner 0 · advisor 4 · investor 0/);
   assert.match(seen, /A branch authors its own roster in its own database/);
   assert.ok(!html.includes('data-testid="hq-roster-unknown-kind"'), 'a known kind was reported as unknown');
 });
@@ -585,11 +586,21 @@ test('C4: an empty roster says so, an unknown kind is reported, and a cut list s
     /The first 5 rows are listed, in the deck’s own order\./);
 });
 
-test('REACH_LABEL names exactly the route\'s four states, and none in a word the platform retired', () => {
+test('D1125: a hidden row is labelled Hidden, not Archived, and counted apart', () => {
+  // D974's three states: hidden keeps the card on the roster, off the deck.
+  const roster = { ...ROSTER, hidden: 1, rows: [...ROSTER.rows, rosterRow({ id: 8, name: 'Kept', active: false, state: 'hidden', reach: 'hidden', deck_role: null })] };
+  const html = render(RosterPanel, { roster });
+  const rows = [...html.matchAll(/<tr class="border-t[^"]*">([\s\S]*?)<\/tr>/g)].map((m) => text(m[1]).trim());
+  assert.match(rows[5], /^Kept .* Not on the deck Hidden$/);
+  assert.match(rows[3], /Archived$/);
+  assert.match(text(html), /4 active · 1 hidden · 1 archived/);
+});
+
+test('REACH_LABEL names exactly the route\'s five states, and none in a word the platform retired', () => {
   const union = ROSTER_RULE.match(/export type DeckReach = ([^;]+);/);
   assert.ok(union, 'deckRoster.ts no longer exports its reach type');
   const states = [...union[1].matchAll(/'([a-z]+)'/g)].map((m) => m[1]);
-  assert.deepEqual(Object.keys(REACH_LABEL), [...states, 'archived']);
+  assert.deepEqual(Object.keys(REACH_LABEL), [...states, 'hidden', 'archived']);
   for (const [state, label] of Object.entries(REACH_LABEL)) {
     assert.ok(!/mentor/i.test(label), `the ${state} label says "mentor", a role the platform renamed`);
   }

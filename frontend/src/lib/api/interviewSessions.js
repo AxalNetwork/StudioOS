@@ -49,6 +49,10 @@ export const interviewSessionsApi = {
     method: 'POST', body: JSON.stringify(data),
   }),
   list: (interviewId) => request(`${P}/interviews/${enc(interviewId)}/sessions`),
+  getBot: (id) => request(`${P}/sessions/${enc(id)}/bot`),
+  sendBot: (id, body) => request(`${P}/sessions/${enc(id)}/bot`, {method:'POST',body:JSON.stringify(body)}),
+  stopBot: (id) => request(`${P}/sessions/${enc(id)}/bot/stop`, {method:'POST'}),
+  botParticipants: (id) => request(`${P}/sessions/${enc(id)}/bot/participants`),
   get: (id) => request(`${P}/sessions/${enc(id)}`),
   setConsent: (id, status, method) => request(`${P}/sessions/${enc(id)}/consent`, {
     method: 'PATCH', body: JSON.stringify({ status, method }),

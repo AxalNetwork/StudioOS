@@ -28,25 +28,16 @@ import { codeOnly } from './_codeOnly.mjs';
 import { SIDEBAR_GROUPS } from '../src/sidebarConfig.js';
 
 const read = (p) => readFileSync(resolve(process.cwd(), p), 'utf8');
-const HELD_RAW = read('frontend/src/pages/admin/HeldApprovals.jsx');
+// D1038 (#2390): Approvals moved to /admin/approvals; the lane's door moved with it.
+const HELD_RAW = read('frontend/src/pages/admin/approvals/AdminApprovals.jsx');
 const HELD = codeOnly(HELD_RAW);
 const APP = codeOnly(read('frontend/src/App.jsx'));
 const BOARD = codeOnly(read('frontend/src/pages/branch/BranchApprovals.jsx'));
 const CONSOLE = '/admin/spinout-moderation';
 
-const lane4 = () => {
-  const m = HELD.match(/<tr data-lane="4">([\s\S]*?)<\/tr>/);
-  assert.ok(m, 'lane 4 is drawn');
-  return m[1];
-};
-
-test('lane 4 links the moderation console, literally, and says it does', () => {
-  const row = lane4();
-  assert.match(row, /Spinout moderation/);
-  assert.match(row, new RegExp(`<Link to="${CONSOLE}" className=\\{CONSOLE\\}>${CONSOLE}</Link>`), 'the console cell is a literal Link, as the other lanes are');
-  // D555: its State cell is now the lane's pending count from the glance.
-  assert.match(row, /<LaneState glance=\{glance\} laneKey="moderation" \/>/);
-  assert.doesNotMatch(row, /No console/);
+test('the moderation lane links the console, literally, once', () => {
+  assert.match(HELD, new RegExp(`case 'moderation': return <Link to="${CONSOLE}" className=\\{LINK\\}>Spin-Out moderation</Link>;`), 'the door is a literal Link, as the other lanes are');
+  assert.doesNotMatch(HELD, /No console/);
   assert.equal((HELD.match(new RegExp(`to="${CONSOLE}"`, 'g')) || []).length, 1, 'one door, not two');
 });
 
@@ -59,22 +50,13 @@ test('the console the door opens is a registered admin route both HQ-held shells
   assert.match(BOARD, new RegExp(`to="${CONSOLE}"`));
 });
 
-test('the page no longer says no console exists, in its rail or its header', () => {
-  const unavailable = HELD.slice(HELD.indexOf('unavailable={['), HELD.indexOf(']}', HELD.indexOf('unavailable={[')));
-  assert.doesNotMatch(unavailable, /Spinout moderation/, 'the rail still lists moderation as unavailable');
+test('the page never says no console exists, and every door is literal, none under /branch/', () => {
   assert.doesNotMatch(HELD_RAW, /No console exists anywhere yet/);
   assert.doesNotMatch(HELD_RAW, /SPINOUT MODERATION LINKS NOWHERE/);
-  assert.match(HELD_RAW, /D442 built the console/, 'the header comment names where the console came from');
-  assert.match(HELD_RAW, /FIFTEEN LITERAL ROWS/, 'the row count in the header comment is the drawn count');
-});
-
-test('Approvals draws fifteen literal doors, none under /branch/, and the two no-link lanes say why', () => {
+  assert.match(HELD_RAW, /EVERY DOOR IS A LITERAL LINK/, 'the header comment says why the doors are written out');
   const doors = [...HELD.matchAll(/<Link to="([^"]+)"/g)].map((m) => m[1]);
-  assert.equal(doors.length, 15);
   assert.ok(doors.includes(CONSOLE));
   for (const d of doors) assert.ok(!d.startsWith('/branch'), `${d} is under /branch/`);
-  const lane5 = HELD.match(/<tr data-lane="5">([\s\S]*?)<\/tr>/)[1];
-  assert.match(lane5, /Not applicable to HQ-held accounts/);
   assert.doesNotMatch(HELD, /\.map\([^)]*<Link/, 'a mapped link is invisible to the reachability walk');
 });
 
@@ -84,7 +66,7 @@ test('the Approvals row stays lit inside the console (Codex on #1042)', () => {
   // the listed paths lights it. A door drawn on the landing with no `match`
   // entry therefore opens a page where no row is lit, which is what the
   // first draft of this door did.
-  const row = SIDEBAR_GROUPS.admin.flatMap((g) => g.items || []).find((r) => r.to === '/admin/held/approvals');
+  const row = SIDEBAR_GROUPS.admin.flatMap((g) => g.items || []).find((r) => r.to === '/admin/approvals');
   assert.ok(row && Array.isArray(row.match), 'the Approvals row has no match list');
   assert.ok(row.match.includes(CONSOLE), `${CONSOLE} is not in the Approvals row's match list, so the row goes dark inside the console`);
   assert.equal(row.match.filter((p) => p === CONSOLE).length, 1, 'listed once');

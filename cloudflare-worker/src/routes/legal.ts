@@ -918,8 +918,8 @@ legal.get('/documents', async (c) => {
   const sql = getSQL(c.env);
   // D639 — the one document access rule, `canAccessFounderResource`, decides
   // every row, the same as `GET /documents/:id`, so the list never holds a
-  // document its own read would refuse. Admins and partners see every
-  // document; a founder those of their own projects; an investor none (this
+  // document its own read would refuse. Admins see every
+  // document; a founder those of their own projects; outside roles none (this
   // list used to give investors every document, unmasked). The SQL reads; it
   // does not restate the rule.
   const pid = projectId ? parseInt(projectId) : null;
@@ -1158,7 +1158,7 @@ legal.put('/cofounder-agreement/:docId{[0-9]+}/positions/:clauseKey', async (c) 
  *
  * `entities` carries no owner column; the link is `projects.entity_id`, so an
  * entity belongs to the founder whose project points at it. Scoping therefore
- * mirrors `canAccessFounderResource`: admin/partner are studio-wide staff and
+ * uses the separate `entityListScope` policy: admin/partner currently
  * keep the full list, a founder sees only entities reachable from their own
  * projects, and every other role sees none — unlike the projects list there is
  * no masked entity view to fall back on, so the safe default is empty.

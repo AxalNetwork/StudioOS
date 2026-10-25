@@ -36,25 +36,6 @@ const RAIL = 'frontend/src/ui/WorkerRail.jsx';
 const COPY = 'frontend/src/ui/railModels.js';
 const ROUTER = 'cloudflare-worker/src/services/aiRouter.ts';
 
-/** `alternates` per ROUTE task, constants resolved — the router's own list. */
-function alternatesByTask() {
-  const src = read(ROUTER);
-  const consts = new Map(
-    [...src.matchAll(/const (SMALL_LLAMA|MID_LLAMA)\s*=\s*'(@cf\/[^']+)'/g)].map((m) => [m[1], m[2]]),
-  );
-  const body = src.slice(src.indexOf('export const ROUTE'));
-  const entries = [...body.matchAll(/^ {2}([a-z_]+):\s*\{/gm)];
-  const out = new Map();
-  for (let i = 0; i < entries.length; i += 1) {
-    const to = i + 1 < entries.length ? entries[i + 1].index : body.length;
-    const chunk = body.slice(entries[i].index, to);
-    const alt = /alternates:\s*\[([^\]]*)\]/.exec(chunk);
-    out.set(entries[i][1], !alt ? [] : alt[1].split(',').map((x) => x.trim()).filter(Boolean)
-      .map((n) => (consts.has(n) ? consts.get(n) : n.replace(/^'|'$/g, ''))));
-  }
-  return out;
-}
-
 /** Every model id ROUTE can send work to: primaries, fallbacks and alternates. */
 function routeModelIds() {
   const src = read(ROUTER);

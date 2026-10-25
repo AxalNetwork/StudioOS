@@ -413,6 +413,51 @@ async function spinoutLabBilling(
   }
 }
 
+// D1052 (#2903): the caller's open billing alerts (a failed renewal, a bank's
+// confirmation, a disputed plan payment), for the banner. Ids, counts, dates
+// and an amount, never card data. Before migration 578 there are none.
+billing.get('/alerts', async (c) => {
+  const user = await requireAuth(c);
+  const { openAlerts } = await import('../services/billingAlerts');
+  let alerts: Awaited<ReturnType<typeof openAlerts>> = [];
+  try { alerts = await openAlerts(c.env, Number(user.id)); }
+  catch (e) { if (!/no such table:\s*billing_alerts/i.test(String((e as Error)?.message ?? e))) throw e; }
+  c.header('Cache-Control', 'private, no-store');
+  return c.json({ alerts });
+});
+
+// D1052: Confirm pressed on a `needs_confirmation` alert. The client secret is
+// fetched from Stripe now, for the caller's own open alert only, and is never
+// stored; the page hands it to Stripe.js to finish the bank's check.
+billing.post('/alerts/:id/confirm', async (c) => {
+  const user = await requireAuth(c);
+  const { confirmationFor } = await import('../services/billingAlerts');
+  const r = await confirmationFor(c.env, Number(user.id), Number(c.req.param('id')));
+  c.header('Cache-Control', 'private, no-store');
+  if (!r.ok) return c.json({ error: r.error }, r.status);
+  return c.json({ client_secret: r.client_secret, payment_intent: r.payment_intent });
+});
+
+// D1133: failed-renewal actions prepare Stripe Elements only after a fresh TOTP.
+const renewalAction = (action: 'pay' | 'update-card') => async (c: Context<{ Bindings: Env }>) => {
+  await requireFactor(c, 'totp');
+  await requireStepUp(c);
+  const user = await requireAuth(c);
+  c.header('Cache-Control', 'private, no-store');
+  if (!c.env.STRIPE_SECRET_KEY) return c.json({ error: 'stripe_not_configured' }, 503);
+  try {
+    const { prepareRenewal } = await import('../services/billingRecovery');
+    const body = await c.req.json<{ nonce?: unknown }>().catch(() => null);
+    const r = await prepareRenewal(c.env, Number(user.id), Number(c.req.param('id')), action, body?.nonce);
+    if (!r.ok) return c.json({ error: r.error }, r.status);
+    return c.json({ kind: r.kind, client_secret: r.client_secret, scope: r.scope });
+  } catch {
+    return refuse(c, 503, { code: 'renewal_unreadable', message: 'The renewal payment could not be read. Try again.', audience: 'member' });
+  }
+};
+billing.post('/alerts/:id/pay', renewalAction('pay'));
+billing.post('/alerts/:id/update-card', renewalAction('update-card'));
+
 billing.get('/tier/status', async (c) => {
   const user = (await requireAuth(c)) as TierUser;
   await ensureTierSchema(c.env);
@@ -683,7 +728,15 @@ billing.get('/plan/status', async (c) => {
   if (!group) {
     return c.json({ plan_group: null, status: 'free', has_customer: !!user.stripe_customer_id });
   }
-  const row = await readAccountSubscription(c.env, user.id);
+  // D1049 (#2900): a store that cannot be read says so, so the pricing page
+  // marks no plan rather than marking a paying member on Basic.
+  let row;
+  try {
+    row = await readAccountSubscription(c.env, user.id);
+  } catch (e) {
+    console.error('[billing] plan status', (e as Error)?.message);
+    return c.json({ error: 'unreadable', detail: 'Your plan could not be read. That is not the same as no plan.' }, 503);
+  }
   // Best-effort: is there a live Stripe price for this persona's Pro plan? Lets
   // the UI show a real "Subscribe" button vs a "coming soon / contact" state.
   let hasPaidPrice = false;
@@ -1478,7 +1531,7 @@ billing.post('/stripe/webhook', async (c) => {
     const ok = await verifyStripeSignature(raw, sig, secret);
     if (!ok) return c.json({ error: 'invalid_signature' }, 400);
   }
-  let event: { type: string; data: { object: Record<string, unknown> } };
+  let event: { id?: string; type: string; data: { object: Record<string, unknown> } };
   try {
     event = JSON.parse(raw);
   } catch {
@@ -1526,14 +1579,17 @@ billing.post('/stripe/webhook', async (c) => {
 
 async function handleStripeEvent(
   env: Env,
-  event: { type: string; data: { object: Record<string, unknown> } },
+  event: { id?: string; type: string; data: { object: Record<string, unknown> } },
 ): Promise<void> {
   const obj = event.data.object;
   // Task #6 — `metadata.kind === 'tier'` routes the event into the founder
   // tier columns (subscription_tier / stripe_customer_id) instead of the MI
   // Pro columns. Both pipes share the same Stripe webhook because Stripe
   // only delivers to one endpoint per env.
-  const meta = (obj.metadata as Record<string, string> | undefined) ?? {};
+  // D892 (#2453): a subscription event with no `kind` — one the payments intent
+  // made before the fix — takes its plan from its price's catalog product.
+  const { subscriptionMetadata } = await import('../services/planSubscription');
+  const meta = await subscriptionMetadata(env, event.type, obj);
   const isTier = meta.kind === 'tier'
     || (typeof obj.client_reference_id === 'string' && (obj.client_reference_id as string).startsWith('tier:'));
   const isInvestor = meta.kind === 'investor'
@@ -1546,6 +1602,14 @@ async function handleStripeEvent(
   // kind='plan' + plan_group + user_id at /plan/checkout. Routed into the
   // account_subscriptions side table, never the founder/investor/MI columns.
   const isPlan = meta.kind === 'plan';
+
+  // D1052 (#2903): a subscription active again, or ended, closes its open
+  // payment alerts; `unpaid` keeps them open with no next try. Before the
+  // switch, because the plan cases below return early. Idempotent.
+  if (event.type === 'customer.subscription.updated' || event.type === 'customer.subscription.deleted') {
+    const { syncSubscriptionAlerts } = await import('../services/billingAlerts');
+    await syncSubscriptionAlerts(env, event.type, obj);
+  }
 
   switch (event.type) {
     case 'checkout.session.completed': {
@@ -1647,11 +1711,11 @@ async function handleStripeEvent(
         ).bind(invTier, status, periodEnd, INVESTOR_QUOTAS[invTier].dealroom_max, obj.id as string, customer).run();
         // Cascade tier change to accepted seat colleagues.
         await env.DB.prepare(
-          `UPDATE users SET investor_tier = ?, investor_subscription_status = ?
+          `UPDATE users SET investor_tier = ?, investor_subscription_status = ?, investor_subscription_renews_at = ?
            WHERE investor_seat_primary_user_id IN (
              SELECT id FROM users WHERE investor_stripe_customer_id = ?
            )`,
-        ).bind(invTier, status, customer).run();
+        ).bind(invTier, status, periodEnd, customer).run();
       } else if (isInvestor) {
         // Investor sub event without explicit metadata.tier — only run when
         // we know it's an investor event (avoid clobbering rows that share
@@ -1829,10 +1893,15 @@ async function handleStripeEvent(
       return;
     }
     // D794 (#2219): an auto-reload's charge that failed after it was confirmed
-    // turns auto-reload off and tells the member. Every other payment is untouched.
+    // turns auto-reload off and tells the member. D1133 also audits a plan refusal,
+    // with only its reason family, through its caller-bound invoice.
     case 'payment_intent.payment_failed': {
       const { onReloadPaymentFailed } = await import('../services/aiAutoReload');
       await onReloadPaymentFailed(env, obj);
+      if (meta.kind !== 'cart_order' || meta.auto_reload !== '1') {
+        const { recordCheckoutRefusal } = await import('../services/billingRecovery');
+        await recordCheckoutRefusal(env, event.id, obj);
+      }
       return;
     }
     case 'payment_intent.succeeded': {
@@ -1977,8 +2046,30 @@ async function handleStripeEvent(
     // so buyers only ever see Axal branding.
     case 'invoice.paid':
     case 'invoice.finalized': {
+      // D1052: a paid invoice closes its open payment alerts.
+      if (event.type === 'invoice.paid') {
+        const { closeInvoiceAlerts } = await import('../services/billingAlerts');
+        await closeInvoiceAlerts(env, obj);
+      }
       const { handleInvoiceEvent } = await import('../services/invoiceEmails');
       await handleInvoiceEvent(env, obj);
+      return;
+    }
+    // D892 (#2453): a renewal whose payment failed tells the member, once per
+    // attempt. D1052 (#2903): it also opens the alert the banner reads, and
+    // the plan keeps its access while Stripe retries (`past_due`).
+    case 'invoice.payment_failed': {
+      const { recordPaymentFailedAlert } = await import('../services/billingAlerts');
+      await recordPaymentFailedAlert(env, obj);
+      const { recordRenewalFailure } = await import('../services/planSubscription');
+      await recordRenewalFailure(env, obj);
+      return;
+    }
+    // D1052: the bank asks the member to confirm a renewal. The alert holds the
+    // invoice id; the client secret is fetched only when they press Confirm.
+    case 'invoice.payment_action_required': {
+      const { recordConfirmationAlert } = await import('../services/billingAlerts');
+      await recordConfirmationAlert(env, obj);
       return;
     }
     case 'charge.succeeded': {
@@ -1990,19 +2081,27 @@ async function handleStripeEvent(
     // back, up to the balance, and records the rest. Each acts only on a charge
     // whose PaymentIntent has an ai_topup_purchases row; every other charge is
     // untouched. A case that cannot act throws, so Stripe retries.
+    // D1052 (#2903): a charge that is no token pack's may be a plan payment's:
+    // it is recorded and the member is told (owner question 9).
     case 'charge.refunded': {
       const { reverseRefund } = await import('../services/aiCreditReversals');
-      await reverseRefund(env, obj);
+      if (await reverseRefund(env, obj)) return;
+      const { recordPlanRefund } = await import('../services/billingAlerts');
+      await recordPlanRefund(env, obj);
       return;
     }
     case 'charge.dispute.created': {
       const { reverseDispute } = await import('../services/aiCreditReversals');
-      await reverseDispute(env, obj);
+      if (await reverseDispute(env, obj)) return;
+      const { recordPlanDispute } = await import('../services/billingAlerts');
+      await recordPlanDispute(env, obj);
       return;
     }
     case 'charge.dispute.closed': {
       const { closeDispute } = await import('../services/aiCreditReversals');
-      await closeDispute(env, obj);
+      if (await closeDispute(env, obj)) return;
+      const { closePlanDispute } = await import('../services/billingAlerts');
+      await closePlanDispute(env, obj);
       return;
     }
     default:

@@ -155,6 +155,8 @@ fallthrough = true
 
 # ---------- Public (non-secret) variables ----------
 [vars]
+# D886 B9: meeting bot rollout; B1 enforces Super-Admin-only canary.
+MEETING_BOT = "canary"
 # Task #5 — canonical-host flip complete. APP_URL / PUBLIC_BASE_URL
 # now point at axal.vc (the canonical host). All post-login redirects
 # and user-facing links (email verification, magic links, etc.) will
@@ -212,6 +214,8 @@ AI_BILLING = "charged"
 # these until D754 w1 (#1892) merges.
 WHATSAPP_CHANNEL = "canary"
 TELEGRAM_CHANNEL = "canary"
+# D867: private forwarded audio waits for member attestation.
+TELEGRAM_CAPTURE = "off"
 # D754 way B — Axal's own WhatsApp number in E.164, for the wa.me link a member
 # opens to link their WhatsApp and send recordings. Empty until the owner has
 # set up the number (#1008 item 31); S01 then sets it in BOTH vars blocks.
@@ -226,7 +230,8 @@ ZOOM_APP_AUDIENCE = "own_account"
 # hides "Allow transcript import" and the connect route answers 503. "on" only
 # after the owner has added the meetings.space.readonly scope to the Calendar
 # OAuth client, passed Google's verification and enabled the Meet REST API.
-MEET_TRANSCRIPTS_ENABLED = "off"
+# Switched on once all three were done (ZOOM_AND_MEET_TRANSCRIPTS.md §2).
+MEET_TRANSCRIPTS_ENABLED = "on"
 # D681 (#1555): StudioOS MCP and OAuth; a missing OAUTH_KV still keeps them off.
 # The lasting switch-off is one PR to main that sets this flag and production's
 # MCP_SERVER_ENABLED to "false", and HQ_MCP_FLAG in
@@ -239,6 +244,8 @@ MEET_TRANSCRIPTS_ENABLED = "off"
 MCP_SERVER_ENABLED = "true"
 # D841 (#2464): member API keys for /mcp; off until the owner switches them on (MCP_API_RUNBOOK, #2473).
 API_KEYS_ENABLED = "false"
+# D860 (#2505): WhatsApp calls groundwork; off until the owner answers #2505 and a live build ships.
+WHATSAPP_CALLS = "false"
 # Feature flag for the Queues migration. While "true" the worker enqueues
 # new jobs onto the native CF Queue (`JOB_QUEUE`); the legacy D1
 # `queue_jobs` cron drain stays alive in parallel so any in-flight legacy
@@ -372,12 +379,20 @@ class_name = "PipelineRoom"
 name       = "ONBOARDING_CHAT"
 class_name = "OnboardingChat"
 
+[[durable_objects.bindings]]
+name       = "MEETING_BOT_RUN"
+class_name = "MeetingBotRun"
+
 [[migrations]]
 tag                = "v1-realtime"
 # Cloudflare requires `new_sqlite_classes` for all newly created Durable
 # Object namespaces (the legacy `new_classes` is no longer accepted).
 # SQLite-backed storage is the default and only supported mode going forward.
 new_sqlite_classes = ["PipelineRoom", "OnboardingChat"]
+
+[[migrations]]
+tag = "v2-meeting-bot"
+new_sqlite_classes = ["MeetingBotRun"]
 
 # ---------- Vectorize (semantic search) ----------
 # Index `axal-search` (768-dim, cosine) backs the global search bar on the
@@ -546,6 +561,8 @@ pattern        = "app.axal.vc"
 custom_domain  = true
 
 [env.production.vars]
+# D886 B9: vars do not inherit into named environments.
+MEETING_BOT = "canary"
 # Task #5 — canonical-host flip. APP_URL/PUBLIC_BASE_URL now point at
 # axal.vc. OAUTH_CALLBACK_BASE_URL keeps OAuth redirect_uri registrations
 # pinned to app.axal.vc until all provider dashboards are updated.
@@ -570,9 +587,11 @@ AI_BILLING = "charged"
 # don't inherit.
 WHATSAPP_CHANNEL = "canary"
 TELEGRAM_CHANNEL = "canary"
+# D867: private forwarded audio waits for member attestation.
+TELEGRAM_CAPTURE = "off"
 WHATSAPP_AXAL_DISPLAY_NUMBER = ""
 ZOOM_APP_AUDIENCE = "own_account"
-MEET_TRANSCRIPTS_ENABLED = "off"
+MEET_TRANSCRIPTS_ENABLED = "on"
 # D681 (#1555): StudioOS MCP and OAuth; a missing OAUTH_KV still keeps them off.
 # The lasting switch-off is one PR to main that sets this flag and the top-level
 # MCP_SERVER_ENABLED to "false", and HQ_MCP_FLAG in
@@ -585,6 +604,8 @@ MEET_TRANSCRIPTS_ENABLED = "off"
 MCP_SERVER_ENABLED = "true"
 # D841 (#2464): member API keys for /mcp; off until the owner switches them on (MCP_API_RUNBOOK, #2473).
 API_KEYS_ENABLED = "false"
+# D860 (#2505): WhatsApp calls groundwork; off until the owner answers #2505 and a live build ships.
+WHATSAPP_CALLS = "false"
 USE_CF_QUEUE      = "true"
 # Set at deploy time by cloudflare-worker-deploy.yml (--var WORKER_DEPLOY_VERSION).
 # branchOps health returns it so HQ can persist licence_deployments.last_version.
@@ -656,9 +677,17 @@ class_name = "PipelineRoom"
 name       = "ONBOARDING_CHAT"
 class_name = "OnboardingChat"
 
+[[env.production.durable_objects.bindings]]
+name       = "MEETING_BOT_RUN"
+class_name = "MeetingBotRun"
+
 [[env.production.migrations]]
 tag                = "v1-realtime"
 new_sqlite_classes = ["PipelineRoom", "OnboardingChat"]
+
+[[env.production.migrations]]
+tag = "v2-meeting-bot"
+new_sqlite_classes = ["MeetingBotRun"]
 
 [[env.production.vectorize]]
 binding    = "VECTORIZE"
@@ -745,6 +774,10 @@ name = "studioos-preview"
 workers_dev = true
 
 [env.preview.vars]
+# D886: preview needs its own explicit enablement.
+MEETING_BOT = "off"
+# D867: private captures require explicit enablement in each environment.
+TELEGRAM_CAPTURE = "off"
 APP_URL           = "https://studioos-preview.workers.dev"
 ENVIRONMENT       = "preview"
 # D653: owner and counsel must authorize enablement (#1008).
@@ -753,6 +786,8 @@ ROUND_CALLS_ENABLED = "false"
 MCP_SERVER_ENABLED = "false"
 # D841 (#2464): member API keys for /mcp; off until the owner switches them on (MCP_API_RUNBOOK, #2473).
 API_KEYS_ENABLED = "false"
+# D860 (#2505): WhatsApp calls groundwork; off until the owner answers #2505 and a live build ships.
+WHATSAPP_CALLS = "false"
 USE_CF_QUEUE      = "true"
 # Task #4 (CG) — preview env can use a separate gateway slug (e.g.
 # `advisor-ongoing-preview`) created in the dashboard. Defaults to the
@@ -812,9 +847,17 @@ class_name = "PipelineRoom"
 name       = "ONBOARDING_CHAT"
 class_name = "OnboardingChat"
 
+[[env.preview.durable_objects.bindings]]
+name       = "MEETING_BOT_RUN"
+class_name = "MeetingBotRun"
+
 [[env.preview.migrations]]
 tag                = "v1-realtime"
 new_sqlite_classes = ["PipelineRoom", "OnboardingChat"]
+
+[[env.preview.migrations]]
+tag = "v2-meeting-bot"
+new_sqlite_classes = ["MeetingBotRun"]
 
 [[env.preview.r2_buckets]]
 binding     = "FILES"

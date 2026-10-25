@@ -28,6 +28,7 @@ import { IntakeError, appendSegments, importTranscript, openSession, writableInt
 import { JOB_TRIGGERS, runSessionStructureJob, sweepQuietChats } from '../src/services/sessionAutoStructure.ts';
 import { NOTES, digestSession, transcriptHash } from '../src/services/validateEngine.ts';
 import { FREE_TIER_LIMITS } from '../src/middleware/requireTier.ts';
+import { applySessionTranslationColumns } from './_session_translation_columns.mjs';
 
 const BASELINE = readFileSync(new URL('../sql/schema_baseline.sql', import.meta.url), 'utf8');
 const mig = (name: string) => readFileSync(new URL(`../sql/migrations/${name}`, import.meta.url), 'utf8');
@@ -80,13 +81,16 @@ function world() {
   for (const t of ['waitlist_signups', 'metric_targets', 'competitor_analyses', 'competitor_candidates',
     'competitor_sources', 'competitor_signals']) db.exec(tableFromBaseline(BASELINE, t));
   for (const m of ['106_pain_groups.sql', '211_founder_validate_evidence.sql', '214_validate_proposals.sql',
-    '246_fills_the_blanks_everywhere.sql', '438_interview_sessions.sql', '439_validate_proposals_structuring.sql',
+    '246_fills_the_blanks_everywhere.sql', '438_interview_sessions.sql', '533_telegram_transcript_source.sql', '439_validate_proposals_structuring.sql',
     '440_validate_cycle_stores.sql', '446_interview_structure_receipts.sql', '447_assistant_interviews.sql',
     '449_interview_channels.sql', '450_channel_events_delete_kind.sql', '451_channel_review_fixes.sql',
+    // D870: interview_channel_refs.transcript_source, call_lang and stt_reservation_uid.
+    '529_meeting_transcript_source.sql',
     '452_record_session_setup.sql', '453_interview_processing.sql', '454_channel_voice_failures.sql',
     '457_integrations_last_error_at.sql', '458_channel_link_consent.sql',
     // D754 (#1893): the consent store, which assign and the voice job now read.
     '488_channel_consents.sql']) db.exec(mig(m));
+    applySessionTranslationColumns(db); // D857: migration 527's segment columns
   applyEngineSchema(db);
   db.exec(`INSERT INTO telegram_business_connections (uid, business_connection_id, telegram_user_id, user_id, is_enabled, can_reply)
            VALUES ('bc-1', 'BC-ME', '555001', ${ME}, 1, 1)`);
@@ -275,7 +279,7 @@ test('a chat\'s text and the quiet sweep queue a digest on their own; the other 
 // ── One transcript, one automatic digest ─────────────────────────────────────
 
 test('the same VTT imported twice bills once, and the session ends structured', async () => {
-  // Mutation checked: skipping the hash comparison makes the second drain bill again (AI calls 4).
+  // Mutation checked: skipping the hash comparison makes the second drain bill again (its calls are counted too).
   const f = world();
   const scoped = await writableInterview(f.env, ME, INTERVIEW);
   const s = await openSession(f.env, scoped, 'zoom', 'video', { method: 'verbal' });
@@ -293,8 +297,8 @@ test('the same VTT imported twice bills once, and the session ends structured', 
   const second = await runSessionStructureJob(f.env, { session_id: s.id, user_id: ME, trigger: 'call_imported' });
   assert.equal(first.status, 'done');
   assert.deepEqual(second, { ok: true, status: 'unchanged' });
-  // D757 (#1923): one summary call, and one structure call per pass.
-  assert.equal(f.ai.length, 3, 'once per task, structure in its two passes');
+  // D757 (#1923): one summary call, and one structure call per pass. D873 (#2520): a call's items too.
+  assert.equal(f.ai.length, 4, 'once per task, structure in its two passes, and the call\'s extraction');
   assert.equal(summaryReceipts(f.db, s.id).length, 1);
   assert.equal(structureRuns(f.db, s.id).length, 1);
   assert.equal(row(f.db, s.id).status, 'structured', 'not left transcribed for the quiet sweep');
@@ -307,7 +311,7 @@ test('the same VTT imported twice bills once, and the session ends structured', 
   f.db.exec(`UPDATE interview_sessions SET status = 'transcribed' WHERE id = ${s.id}`);
   assert.deepEqual(await runSessionStructureJob(f.env, { session_id: s.id, user_id: ME, trigger: 'call_imported' }), { ok: true, status: 'unchanged' });
   assert.deepEqual([row(f.db, s.id).status, row(f.db, s.id).digest_status], ['structured', 'done']);
-  assert.equal(f.ai.length, 3);
+  assert.equal(f.ai.length, 4, 'nothing more: the unchanged run calls no model');
 });
 
 test('a button always runs (re_summarised, re_structured), and never moves the automatic hash', async () => {
@@ -611,11 +615,11 @@ test('busy: a running claim refuses a second run until it is stale', async () =>
 
   const g = world();
   const gid = await importedCall(g);
-  // Mutation checked: dropping the claim's hash condition bills the second run (AI calls 4).
+  // Mutation checked: dropping the claim's hash condition bills the second run (its calls are counted too).
   const both = await Promise.all([1, 2].map(() => digestSession(g.env, { sessionId: gid, userId: ME, trigger: 'call_imported' })));
   const said = both.map((o: any) => o.reason ?? o.status).sort();
   assert.ok(said.includes('done') && (said.includes('busy') || said.includes('unchanged')), said.join());
-  assert.equal(g.ai.length, 3, 'one run\'s calls: the summary, and structure\'s two passes');
+  assert.equal(g.ai.length, 4, 'one run\'s calls: the summary, structure\'s two passes, and the call\'s extraction (D873)');
 });
 
 test('a member who lost the venture gets not_writable, and nothing is written or run', async () => {

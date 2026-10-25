@@ -209,7 +209,7 @@ export function PainThemesSection({ parts, onExport, onAssign, newThemeHref = nu
       ]} />
       {writer && (
         <div className="flex flex-wrap items-start gap-2">
-          <Link to="/raise/pitch?mode=workspace" title={PROBLEM_SLIDE_NOTE} className={BUTTON} data-testid="validate-problem-slide">Open the Problem slide</Link>
+          <Link to="/raise/pitch/edit" title={PROBLEM_SLIDE_NOTE} className={BUTTON} data-testid="validate-problem-slide">Open the Problem slide</Link>
           <ExportButton label="Export map" run={onExport} testid="validate-export-map" />
         </div>
       )}

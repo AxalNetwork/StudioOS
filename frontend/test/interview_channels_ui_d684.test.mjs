@@ -623,7 +623,7 @@ test('Schedule a call: Zoom or Meet, the body the Worker reads, and a refusal th
   try {
     await m.flush();
     await m.click('button-schedule-meeting');
-    assert.deepEqual(sent, [[7, { provider: 'zoom', starts_at: new Date('2099-01-05T10:00:00').toISOString(), duration_min: 30, consent: { status: 'given', method: 'verbal' } }]]);
+    assert.deepEqual(sent, [[7, { provider: 'zoom', starts_at: new Date('2099-01-05T10:00:00').toISOString(), duration_min: 30, auto_send_bot: true, consent: { status: 'given', method: 'verbal' } }]]);
     assert.match(m.text(), /Zoom no longer accepts Axal’s access\. .* Open Connectors/);
   } finally { await m.unmount(); }
 });
@@ -634,7 +634,7 @@ test('Schedule a call: Zoom’s transcript is promised only with Record in the c
     meetings: async () => ({ meetings: [], providers: [{ provider: 'zoom', available: true, connected: true }, { provider: 'google_meet', available: true, connected: true }] }),
     scheduleMeeting: async (id, body) => { sent.push(body); return { meeting: { uid: 'r9' }, session_id: 50, notice: null }; },
   };
-  const form = { provider: 'zoom', date: '2099-01-05', time: '10:00', duration: 30, topic: '', consent: 'verbal', record: false };
+  const form = { provider: 'zoom', date: '2099-01-05', time: '10:00', duration: 30, topic: '', consent: 'verbal', record: false, autoSend: false };
   const m = await mount(h(SchedulePanel, { interview: { id: 7 }, api, initialForm: form }));
   try {
     await m.flush();

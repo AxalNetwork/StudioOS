@@ -2,7 +2,7 @@
  * `/projects` and `/partners` are retired, and the capability moved first.
  *
  * Task #101 asked for both pages to be removed. `/partners` could just go —
- * browsing is `/directory`, and getting a partner in is `/admin/partners` or
+ * browsing is `/directory`, and getting a partner in is `/admin/partner-invitations` or
  * `/partners/onboard`, both of which run the onboarding its four-field
  * `createPartner` skipped. `/projects` could not: it held the ONLY
  * `api.createProject` caller in the SPA, so deleting it would have deleted the
@@ -38,7 +38,7 @@ test('both pages are gone and cannot come back unnoticed', () => {
   assert.ok(!existsSync(resolve(process.cwd(), 'frontend/src/pages/ProjectsPage.jsx')),
     'ProjectsPage.jsx is retired — its create form lives in components/CreateStartupForm.jsx');
   assert.ok(!existsSync(resolve(process.cwd(), 'frontend/src/pages/PartnersPage.jsx')),
-    'PartnersPage.jsx is retired — /directory and /admin/partners inherited it');
+    'PartnersPage.jsx is retired — /directory and /admin/partner-invitations inherited it');
 });
 
 test('both routes redirect rather than 404, so every bookmark survives', () => {

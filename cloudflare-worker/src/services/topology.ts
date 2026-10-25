@@ -95,6 +95,7 @@ export const BINDINGS: readonly BindingSpec[] = [
   { name: 'BACKUPS', kind: 'R2 bucket', hq: 'studioos-backups', branch: (c) => branchResourceNames(c).r2.BACKUPS, shared: false },
   { name: 'JOB_QUEUE', kind: 'Queue', hq: 'studioos-job-queue', branch: (c) => branchResourceNames(c).queue, shared: false },
   { name: 'PIPELINE_ROOM', kind: 'Durable Object namespace', hq: 'PipelineRoom', branch: () => 'PipelineRoom', shared: false },
+  { name: 'MEETING_BOT_RUN', kind: 'Durable Object namespace', hq: 'MeetingBotRun', branch: () => 'MeetingBotRun', shared: false },
   { name: 'ONBOARDING_CHAT', kind: 'Durable Object namespace', hq: 'OnboardingChat', branch: () => 'OnboardingChat', shared: false },
   { name: 'VECTORIZE', kind: 'Vectorize index', hq: 'axal-search', branch: (c) => branchResourceNames(c).vectorize, shared: false },
   { name: 'ANALYTICS', kind: 'Analytics Engine dataset', hq: 'studioos_metrics', branch: () => 'studioos_metrics', shared: true },
@@ -148,6 +149,10 @@ export const RPC_SURFACE: { hqCallsBranch: RpcSide; branchCallsHq: RpcSide } = {
       m('openTickets', true),
       // D486 — H15's activation funnel fans out to it (admin_hq.ts). A read of counts, no secret.
       m('activation', true),
+      // D893 — Admin › Insights' Super Admin scope reads one branch (insightsScope.ts). A read of counts, no secret.
+      m('insights', true),
+      // D954 — Admin › Programs' Super Admin scope reads one branch (programCatalogue.ts). A read of counts, no secret.
+      m('programs', true),
       // D487 — H18's games card fans out to it (admin_content.ts). A read, no secret.
       m('gameHoldings', true),
       m('applyLicence', true),
@@ -213,6 +218,11 @@ export const DEPLOY_WORKFLOWS = [
     file: 'branch-provision.yml',
     trigger: 'by hand, or when HQ\'s Deploy step dispatches it',
     deploys: 'one new branch; it refuses a code that is already provisioned',
+  },
+  {
+    file: 'meeting-bot-deploy.yml',
+    trigger: 'on bot changes in a push to main, or by hand; owner deployment gate required',
+    deploys: 'the private studioos-meeting-bot Worker and its runtime image, independently of HQ and branches',
   },
   {
     file: 'pr-preview.yml',

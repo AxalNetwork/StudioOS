@@ -399,7 +399,7 @@ async function notifyAdmins(env: Env, type: string, title: string, body: string)
     const admins = await env.DB.prepare(`SELECT id FROM users WHERE role = 'admin' AND is_active = 1`).all<{ id: number }>();
     const { notify } = await import('./notify');
     for (const a of admins.results || []) {
-      await notify(env, { userId: a.id, type, title, body, link: '/admin/spinout-lab', channels: ['in_app', 'email'], category: 'deals' });
+      await notify(env, { userId: a.id, type, title, body, link: '/admin/programs/spinout-lab/cohorts', channels: ['in_app', 'email'], category: 'deals' });
     }
   } catch (e) { console.warn('[cohort] admin notify failed', e); }
 }
@@ -667,8 +667,29 @@ export async function getCohortGate(env: Env, userId: number, nowMs = Date.now()
   const statusRows = await env.DB.prepare(
     `SELECT week_number, status, grace_until FROM company_week_status WHERE user_id = ? AND cohort_cycle_id = ?`,
   ).bind(userId, cycle.id).all<{ week_number: number; status: string; grace_until: string | null }>();
+  return {
+    in_cohort: true,
+    cycle_id: cycle.id,
+    cycle_label: `${cycle.year}-${String(cycle.month).padStart(2, '0')}`,
+    ...gateFromRows(windows.results || [], statusRows.results || [], nowMs),
+    server_time: new Date(nowMs).toISOString(),
+  };
+}
+
+/**
+ * D946 (#2751) — the gate's week arithmetic, from rows already read: one
+ * cycle's windows and one founder's week statuses. `getCohortGate` and the
+ * admin participants read (`services/labParticipants.ts`) both call it, so the
+ * founder's workspace and the admin table cannot disagree about a week.
+ */
+export function gateFromRows(
+  windowRows: Array<{ week_number: number; unlock_at: string; deadline_at: string }>,
+  statusRows: Array<{ week_number: number; status: string; grace_until: string | null }>,
+  nowMs: number,
+): Omit<CohortGate, 'in_cohort' | 'cycle_id' | 'cycle_label' | 'server_time'> {
   const statusByWeek = new Map<number, { status: string; grace_until: string | null }>();
-  for (const s of statusRows.results || []) statusByWeek.set(s.week_number, s);
+  for (const s of statusRows) statusByWeek.set(Number(s.week_number), s);
+  const windows = { results: [...windowRows].sort((x, y) => Number(x.week_number) - Number(y.week_number)) };
 
   let frozen = false;
   let frozenWeek: number | null = null;
@@ -676,9 +697,9 @@ export async function getCohortGate(env: Env, userId: number, nowMs = Date.now()
   let currentDeadline: string | null = null;
   let graceUntil: string | null = null;
   const weeks: CohortGate['weeks'] = [];
-  for (const w of windows.results || []) {
+  for (const w of windows.results) {
     const unlockMs = sqliteUtcToMs(w.unlock_at) ?? Infinity;
-    const st = statusByWeek.get(w.week_number);
+    const st = statusByWeek.get(Number(w.week_number));
     const status = st?.status ?? 'pending';
     const unlocked = unlockMs <= nowMs;
     if (unlocked) {
@@ -705,9 +726,6 @@ export async function getCohortGate(env: Env, userId: number, nowMs = Date.now()
     if (fw) currentDeadline = fw.deadline_at;
   }
   return {
-    in_cohort: true,
-    cycle_id: cycle.id,
-    cycle_label: `${cycle.year}-${String(cycle.month).padStart(2, '0')}`,
     max_week: maxWeek,
     frozen,
     frozen_week: frozenWeek,
@@ -715,6 +733,5 @@ export async function getCohortGate(env: Env, userId: number, nowMs = Date.now()
     current_deadline_at: currentDeadline,
     grace_until: graceUntil,
     weeks,
-    server_time: new Date(nowMs).toISOString(),
   };
 }

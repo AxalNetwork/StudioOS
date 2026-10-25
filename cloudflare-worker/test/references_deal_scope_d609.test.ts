@@ -48,6 +48,7 @@ function freshDb() {
                           VALUES (?, ?, ?, ?, ?, 'scheduled', 'transcript text', '2026-10-07', '2026-10-07')`);
   ref.run(101, 'r101', 1, 'Rita Reference', 'rita@example.test');
   ref.run(201, 'r201', 2, 'Other Deal Ref', 'other@example.test');
+  db.exec("UPDATE reference_checks SET created_by = 2 WHERE id = 101");
   return db;
 }
 

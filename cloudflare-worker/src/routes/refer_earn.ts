@@ -1,3 +1,5 @@
+import { refuse } from '../util/refusal';
+import { logAdminAction } from '../services/adminAudit';
 import { Hono } from 'hono';
 import type { Context } from 'hono';
 import type { ContentfulStatusCode } from 'hono/utils/http-status';
@@ -15,6 +17,9 @@ import {
   addReferrerContext,
   requestStrategicAccess,
   strategicAccessState,
+  listStrategicAccess,
+  decideStrategicAccess,
+  referralWeekly,
   parseCsv,
   toWire,
   isCategory,
@@ -253,33 +258,91 @@ refer.post('/strategic-access', async (c) => {
 // Admin review
 // ---------------------------------------------------------------------------
 
+function pageInt(value: string | null, fallback: number, maximum = Number.MAX_SAFE_INTEGER) {
+  if (value === null) return fallback;
+  const n = Number(value);
+  return Number.isSafeInteger(n) && n >= 0 ? Math.min(n, maximum) : fallback;
+}
+
+refer.get('/admin/strategic-access', async (c) => {
+  await requireAdmin(c);
+  await ensureReferralSubmissionsSchema(c.env);
+  const q = new URL(c.req.url).searchParams;
+  const status = q.get('status') || 'requested';
+  if (!['requested', 'granted', 'declined', 'all'].includes(status)) return refuse(c, 400, { code: 'bad_status', message: 'Choose requested, granted, declined or all.' });
+  return c.json(await listStrategicAccess(c.env, { status, limit: Math.max(1, pageInt(q.get('limit'), 100, 200)), offset: pageInt(q.get('offset'), 0) }));
+});
+
+refer.post('/admin/strategic-access/:userId/decision', async (c) => {
+  const admin = await requireAdmin(c);
+  await requireBranchNotSuspended(c);
+  await ensureReferralSubmissionsSchema(c.env);
+  const body = await c.req.json().catch(() => ({}));
+  const userId = Number(c.req.param('userId'));
+  if (!Number.isSafeInteger(userId) || userId <= 0) return refuse(c, 400, { code: 'bad_user', message: 'Name a member by their user id.' });
+  try {
+    const row = await decideStrategicAccess(c.env, userId, body?.decision);
+    await logAdminAction(c.env, admin.id, admin.email, `referral_strategic_access.${row.status}`, {
+      target_user_id: userId, note: typeof body?.note === 'string' ? body.note.trim().slice(0, 4000) : null,
+    });
+    return c.json(row);
+  } catch (e) {
+    if (e instanceof ReferralError) {
+      // ReferralError carries only the service's authored refusal sentences.
+      const { code, message, httpStatus } = e;
+      return refuse(c, httpStatus as ContentfulStatusCode, { code, message });
+    }
+    throw e;
+  }
+});
+
+refer.get('/admin/submissions/weekly', async (c) => {
+  await requireAdmin(c);
+  const weeks = Number(c.req.query('weeks') || 12);
+  if (![4, 12, 52].includes(weeks)) return refuse(c, 400, { code: 'bad_weeks', message: 'Choose 4, 12 or 52 weeks.' });
+  await ensureReferralSubmissionsSchema(c.env);
+  return c.json(await referralWeekly(c.env, weeks));
+});
+
 refer.get('/admin/submissions', async (c) => {
   await requireAdmin(c);
   await ensureReferralSubmissionsSchema(c.env);
-  const url = new URL(c.req.url);
-  const status = url.searchParams.get('status');
-  const category = url.searchParams.get('category');
-  const limit = Math.min(Math.max(parseInt(url.searchParams.get('limit') || '100', 10) || 100, 1), 200);
-
-  const where: string[] = [];
-  const binds: unknown[] = [];
-  if (status && isStatus(status)) { where.push('s.status = ?'); binds.push(status); }
-  if (category && isCategory(category)) { where.push('s.category = ?'); binds.push(category); }
-
+  const q = new URL(c.req.url).searchParams;
+  const statuses = (q.get('status') || '').split(',').filter(Boolean);
+  const category = q.get('category');
+  const sort = q.get('sort') || 'newest';
+  if (statuses.some((x) => !isStatus(x))) return refuse(c, 400, { code: 'bad_status', message: 'Choose known referral statuses.' });
+  if (category && !isCategory(category)) return refuse(c, 400, { code: 'bad_category', message: 'Choose a known referral category.' });
+  if (!['newest', 'oldest'].includes(sort)) return refuse(c, 400, { code: 'bad_sort', message: 'Choose newest or oldest.' });
+  const limit = Math.max(1, pageInt(q.get('limit'), 100, 200));
+  const offset = pageInt(q.get('offset'), 0);
+  const filter = JSON.stringify(statuses);
   const rows = await c.env.DB.prepare(
     `SELECT s.*, u.email AS referrer_email, u.name AS referrer_name
-       FROM referral_submissions s
-       LEFT JOIN users u ON u.id = s.referrer_user_id
-      ${where.length ? `WHERE ${where.join(' AND ')}` : ''}
-      ORDER BY s.created_at DESC
-      LIMIT ${limit}`,
-  ).bind(...binds).all<Record<string, unknown>>();
+       FROM referral_submissions s LEFT JOIN users u ON u.id = s.referrer_user_id
+      WHERE (? = '[]' OR s.status IN (SELECT value FROM json_each(?))) AND (? IS NULL OR s.category = ?)
+      ORDER BY CASE WHEN ? = 'oldest' THEN datetime(s.created_at) END ASC,
+               CASE WHEN ? = 'newest' THEN datetime(s.created_at) END DESC,
+               CASE WHEN ? = 'oldest' THEN s.id END ASC, s.id DESC LIMIT ? OFFSET ?`,
+  ).bind(filter, filter, category, category, sort, sort, sort, limit, offset).all<Record<string, unknown>>();
+  const items = (rows.results || []).map((row) => ({ ...toWire(row as never), referrer_user_id: row.referrer_user_id,
+    referrer_email: row.referrer_email ?? null, referrer_name: row.referrer_name ?? null }));
+  if (!q.has('offset')) return c.json(items);
+  const total = await c.env.DB.prepare(
+    `SELECT COUNT(*) AS n FROM referral_submissions s
+      WHERE (? = '[]' OR s.status IN (SELECT value FROM json_each(?))) AND (? IS NULL OR s.category = ?)`,
+  ).bind(filter, filter, category, category).first<{ n: number }>();
+  return c.json({ items, total: Number(total?.n || 0) });
+});
 
-  return c.json((rows.results || []).map((r) => ({
-    ...toWire(r as never),
-    referrer_email: r.referrer_email ?? null,
-    referrer_name: r.referrer_name ?? null,
-  })));
+refer.get('/admin/submissions/:uid', async (c) => {
+  await requireAdmin(c);
+  await ensureReferralSubmissionsSchema(c.env);
+  const row = await getByUid(c.env, c.req.param('uid'), null);
+  if (!row) return errorResponse(c, new ReferralError('not_found', 'No such referral.', 404));
+  const member = await c.env.DB.prepare('SELECT name, email FROM users WHERE id = ?').bind(row.referrer_user_id).first<{ name: string | null; email: string | null }>();
+  return c.json({ ...toWire(row, await listEvents(c.env, row.id)), referrer_user_id: row.referrer_user_id,
+    referrer_name: member?.name ?? null, referrer_email: member?.email ?? null });
 });
 
 refer.patch('/admin/submissions/:uid', async (c) => {

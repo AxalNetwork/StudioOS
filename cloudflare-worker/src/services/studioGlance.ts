@@ -19,8 +19,9 @@
  *     with no pending notion (`NOT_LANED`) says so; Content to HQ is not
  *     applicable; a lane whose read fails is unreadable and the rest answer.
  *   · `insights` — sign-ups per week, AI spend this month, open tickets
- *     (`ticketBacklog`, HQ Support's read). Active accounts are not recorded:
- *     nothing on this database records a sign-in per account.
+ *     (`ticketBacklog`, HQ Support's read), and the accounts active last week
+ *     on `ACTIVE_ACCOUNT_BASIS` (D893: `activity_logs` records every signed-in
+ *     request, so the old "not recorded" sentence was no longer true).
  *
  * WHAT STAYS UNREAD ON HQ. Seat use and the share rate are terms of one
  * subsidiary's licence, and no row on HQ names a licence (U1). They stay
@@ -63,8 +64,10 @@ import { readBranchTemplateCopy } from '../routes/branch_templates';
 import { readBranchBenchmarks } from '../routes/branch_insights';
 import { listTemplates } from './legalTemplateStore';
 import { queuePressure } from './branchHome';
-import { NOT_LANED } from './approvalSources';
+import { NOT_COUNTED_YET, NOT_LANED, SUB_COUNTS_NOT_YET } from './approvalSources';
+import { hqLanes } from './hqApprovalSources';
 import { ticketBacklog } from './supportQueues';
+import { ACTIVE_ACCOUNT_BASIS, loadBranchWeeklyActives, weekAxis } from './activeAccounts';
 
 export const HQ_SEATS_REASON =
   'Seat use is a subsidiary figure. No account on HQ names the licence it sits under (U1), '
@@ -83,10 +86,6 @@ export const HQ_LICENCE_REASON =
 
 export const HQ_BENCHMARK_REASON =
   'HQ pushes the territory median and keeps no copy (D148).';
-
-export const ACTIVE_ACCOUNTS_REASON =
-  'No store on this database records a sign-in per account, so active accounts are not counted here. '
-  + '`users.last_active` is written only on a path that fails before it reaches that column.';
 
 export const CONTENT_TO_HQ_REASON =
   'Not applicable to HQ-held accounts: there is no branch to raise content from.';
@@ -209,6 +208,23 @@ export function hqApprovals(pressure: Awaited<ReturnType<typeof queuePressure>>[
     unreadable,
     no_queue: NOT_LANED.map((n) => ({ label: n.label, reason: n.reason })),
     not_applicable: [{ label: 'Content to HQ', reason: CONTENT_TO_HQ_REASON }],
+    // D1041 — the canvas's lanes and sub-counts no store can answer yet.
+    not_counted: NOT_COUNTED_YET,
+    sub_counts_not_yet: SUB_COUNTS_NOT_YET,
+  };
+}
+
+/**
+ * D1041 — HQ decides (APR9), for a Super Admin only. The lanes are HQ's own
+ * stores (`hqApprovalSources.ts`); their total is apart from `pending_total`,
+ * which stays the lanes every studio has. A failed lane is `count: null` with
+ * the reason, as above.
+ */
+async function hqDecides(env: Env, now: number) {
+  const hq = await hqLanes(env, now);
+  return {
+    ...hq,
+    lanes: hq.lanes.map((l) => (l.count === null ? { ...l, reason: LANE_UNREADABLE } : l)),
   };
 }
 
@@ -228,7 +244,8 @@ export async function hqInsights(env: Env, now: number) {
   for (let i = SIGNUP_WEEKS - 1; i >= 0; i -= 1) weeks.push(weekStart(Date.parse(`${thisWeek}T00:00:00Z`) - i * 7 * 86_400_000));
   const monthKey = new Date(now).toISOString().slice(0, 7);
 
-  const [signups, spend, tickets] = await Promise.all([
+  const activeAxis = weekAxis(new Date(now).toISOString(), 2);
+  const [signups, spend, tickets, active] = await Promise.all([
     env.DB.prepare(
       `SELECT date(created_at, '-6 days', 'weekday 1') AS wk, COUNT(*) AS n
          FROM users WHERE datetime(created_at) >= datetime(?) GROUP BY wk`,
@@ -254,12 +271,16 @@ export async function hqInsights(env: Env, now: number) {
     ticketBacklog(env)
       .then((b) => ({ available: true as const, open: b.open, by_status: b.by_status }))
       .catch(() => ({ available: false as const, reason: 'The support ticket table could not be read on this database. That is not the same as no open tickets.' })),
+    // The last complete week, on the branch line's own rule (D210), which runs on any D1.
+    loadBranchWeeklyActives(env, activeAxis).then((r) => (r.available
+      ? { available: true as const, week: activeAxis.last_complete, value: r.values[0], basis: ACTIVE_ACCOUNT_BASIS }
+      : { available: false as const, reason: 'The request log could not be read on this database. That is not the same as nobody active.' })),
   ]);
   return {
     recorded: true as const,
     label: HQ_SCOPE_LABEL,
     signups_by_week: signups,
-    active_accounts: { recorded: false as const, reason: ACTIVE_ACCOUNTS_REASON },
+    active_accounts: active,
     ai_spend_month: spend,
     open_tickets: tickets,
     benchmark: { recorded: false as const, reason: HQ_BENCHMARK_REASON },
@@ -287,22 +308,28 @@ async function branchLicenceTableReadable(env: Env): Promise<boolean> {
  * Seats, the share rate and the licence summary are not (U1), and neither is
  * the benchmark copy: HQ pushes it and keeps none.
  */
-async function hqGlance(env: Env, now: number) {
-  const [programme, agreements, templates, pressure, insights] = await Promise.all([
+async function hqGlance(env: Env, now: number, superAdmin: boolean) {
+  const [programme, agreements, templates, pressure, insights, decides] = await Promise.all([
     programmeClock(env, now),
     agreementsExpiring(env, now),
     hqLibrary(env),
     queuePressure(env, now),
     hqInsights(env, now),
+    superAdmin ? hqDecides(env, now) : Promise.resolve(null),
   ]);
   const exploringLane = pressure.lanes.find((l) => l.key === 'exploring');
-  const accounts = await hqAccounts(env, exploringLane ? exploringLane.count : null, now);
+  // D1039: the lane counts signed Explorers only; the Accounts tile still
+  // counts every account in the holding role, from the lane's `holding` figure.
+  const explorerFigures = exploringLane?.sub;
+  const holding = exploringLane?.count == null || !explorerFigures || !('holding' in explorerFigures)
+    ? null : explorerFigures.holding;
+  const accounts = await hqAccounts(env, holding, now);
   return {
     tier: 'hq' as const,
     branch: null,
     ...hqPerSubsidiary(),
     accounts,
-    approvals: hqApprovals(pressure.queue_pressure),
+    approvals: { ...hqApprovals(pressure.queue_pressure), ...(decides ? { hq_decides: decides } : {}) },
     programme: { recorded: true as const, ...programme },
     agreements: { recorded: true as const, ...agreements },
     templates,
@@ -378,8 +405,9 @@ async function branchGlance(env: Env, code: string, now: number) {
   };
 }
 
-export async function studioGlance(env: Env, now = Date.now()) {
+export async function studioGlance(env: Env, now = Date.now(), opts: { superAdmin?: boolean } = {}) {
   const code = branchOf(env);
-  if (!code) return hqGlance(env, now);
+  // D1041 — HQ decides is read only on HQ, and only for a Super Admin.
+  if (!code) return hqGlance(env, now, opts.superAdmin === true);
   return branchGlance(env, code, now);
 }
