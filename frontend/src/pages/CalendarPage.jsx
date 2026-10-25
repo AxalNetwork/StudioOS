@@ -61,6 +61,13 @@
  * ticket's place ("Waitlist · #3", "Pay to confirm") is in its title and notes,
  * and its join link is present only when the Worker gave it (#2623).
  *
+ * NINE SINCE D1190 (#3124). A founder's meeting or call with an investor,
+ * logged with a start in Capital relationships (`investor_meeting`,
+ * `services/calendar/investorMeetings.ts`), in the same idiom: a shape no other
+ * kind uses (a leaf, round but for its top right) and emerald, the Meetings
+ * family's colour in #2420's Calendar canvas. It invites nobody and carries no
+ * place, so its row is its title and its note.
+ *
  * A PUSH RECORD SURVIVES A DISCONNECT, which is the third and smallest place
  * this page departs from the canvas. The canvas suppresses its "Pushed to …"
  * pill when no provider was ever connected, reasoning that such a record could
@@ -106,6 +113,7 @@ const KINDS = [
   { id: 'expert_booking', label: 'Expert session', src: 'expert_bookings' },
   { id: 'event_ticket', label: 'Event ticket', src: 'event_registrations' },
   { id: 'event_hosted', label: 'Hosting', src: 'events' },
+  { id: 'investor_meeting', label: 'Investor meeting', src: 'raise_prospect_events' },
 ];
 const KIND_LABEL = Object.fromEntries(KINDS.map((k) => [k.id, k.label]));
 

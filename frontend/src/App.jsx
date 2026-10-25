@@ -2581,6 +2581,7 @@ function AppInner() {
           `:section` above matches one segment only, so without this every
           Usage sub-page answered 404; SettingsPage reads the page from the path. */}
       <Route path="/account/usage/:page" element={guard(['admin', 'founder', 'partner', 'investor', 'advisor', 'exploring'], <SettingsPage />)} />
+      <Route path="/account/companies/:tab" element={guard(['admin', 'founder', 'partner', 'investor', 'advisor', 'exploring'], <SettingsPage />)} />
       <Route path="/settings/:section" element={<SettingsSectionRedirect />} />
 
       {/* Phase 0.1 — investor role added to every guard a partner currently

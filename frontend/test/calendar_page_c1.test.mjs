@@ -86,7 +86,7 @@ const pageKinds = [...(codeOnly(pageRaw).match(/const KINDS = \[([\s\S]*?)\n\];/
 
 test('the canvas and the page were both parsed, so a silent zero-match cannot pass', () => {
   assert.equal(canvasKinds.length, 5, 'the canvas kind table no longer parses as five entries');
-  assert.equal(pageKinds.length, 8, 'the page kind table no longer parses as eight entries');
+  assert.equal(pageKinds.length, 9, 'the page kind table no longer parses as nine entries');
 });
 
 test('the page draws a chip for every kind the worker can emit, and no others', () => {
@@ -95,7 +95,7 @@ test('the page draws a chip for every kind the worker can emit, and no others', 
   // is added — which is exactly how partner_office_hour lost its chip.
   const union = service.match(/\n {2}kind: ((?:'\w+'(?:\s*\|\s*)?)+);/)?.[1] || '';
   const emitted = [...union.matchAll(/'(\w+)'/g)].map((m) => m[1]).sort();
-  assert.equal(emitted.length, 8, 'the CalendarEvent kind union did not parse');
+  assert.equal(emitted.length, 9, 'the CalendarEvent kind union did not parse');
   assert.deepEqual(pageKinds.map((k) => k.id).sort(), emitted,
     'a kind the worker can emit has no chip on /calendar, or a chip names a kind it cannot');
 
@@ -156,17 +156,20 @@ test('D1033: the two My events kinds are derived in the same idiom, apart from e
     expert_booking: /\.cal-dot\[data-kind='expert_booking'\] \{([^}]*)\}/,
     event_ticket: /\.cal-dot\[data-kind='event_ticket'\] \{([^}]*)\}/,
     event_hosted: /\.cal-dot\[data-kind='event_hosted'\] \{([^}]*)\}/,
+    investor_meeting: /\.cal-dot\[data-kind='investor_meeting'\] \{([^}]*)\}/,
   };
   const HUE = {
     expert_booking: /--k-expert_booking: (#[0-9a-f]{6});/g,
     event_ticket: /--k-event_ticket: (#[0-9a-f]{6});/g,
     event_hosted: /--k-event_hosted: (#[0-9a-f]{6});/g,
+    investor_meeting: /--k-investor_meeting: (#[0-9a-f]{6});/g,
   };
   const shapeOf = (id) => css.match(DOT[id])?.[1]?.match(/border-radius: ([^;]+);/)?.[1];
   const huesOf = (id) => [...css.matchAll(HUE[id])].map((m) => m[1]);
   const taken = new Set([...drawnShapes, shapeOf('expert_booking')]);
   const takenHues = new Set([...drawnHues, ...huesOf('expert_booking'), '#6d28d9']);
-  for (const id of ['event_ticket', 'event_hosted']) {
+  // D1190 (#3124): the investor meeting joins in the same idiom, after them.
+  for (const id of ['event_ticket', 'event_hosted', 'investor_meeting']) {
     const shape = shapeOf(id);
     assert.ok(shape, `${id} has no dot`);
     assert.ok(!taken.has(shape), `${id} reuses a shape another kind has`);
@@ -182,6 +185,9 @@ test('D1033: the two My events kinds are derived in the same idiom, apart from e
   assert.deepEqual(pageKinds.filter((k) => k.id.startsWith('event_')).map((k) => [k.id, k.label, k.src]), [
     ['event_ticket', 'Event ticket', 'event_registrations'],
     ['event_hosted', 'Hosting', 'events'],
+  ]);
+  assert.deepEqual(pageKinds.filter((k) => k.id === 'investor_meeting').map((k) => [k.id, k.label, k.src]), [
+    ['investor_meeting', 'Investor meeting', 'raise_prospect_events'],
   ]);
 });
 
