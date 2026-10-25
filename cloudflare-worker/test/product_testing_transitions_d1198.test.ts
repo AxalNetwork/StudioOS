@@ -109,8 +109,6 @@ const PROGRAMME = {
   product_name: 'Ledger beta', summary: 'A new close process', tester_tasks: 'Run one month-end close',
   time_needed: '2 hours a week', places: 2, eligible_roles: ['founder'], questions: ['What do you use today?'],
 };
-const events = (w: any) => w.db.prepare('SELECT action, actor_user_id FROM testing_events ORDER BY id').all().map((r: any) => `${r.action}:${r.actor_user_id}`);
-const bell = (w: any, user: number) => w.db.prepare('SELECT type FROM notifications_inbox WHERE user_id = ? ORDER BY id').all(user).map((r: any) => r.type);
 
 /** A partner programme through submit, approve and open; returns its uid. */
 async function openPartnerProgramme(w: any, extra: Record<string, unknown> = {}) {
