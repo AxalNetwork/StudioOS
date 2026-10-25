@@ -1,6 +1,8 @@
 /** D1167 (#3080): the owner's storage table. Allowances are never added. */
 import type { Env, User } from '../types';
 import { inGrace } from '../middleware/planSubscription';
+import { LPs } from '../models/funds';
+import { claimLpRowsByEmail } from './lpClaim';
 
 export const STORAGE_GB = 1024 ** 3;
 export type StoragePlan = Readonly<{
@@ -73,15 +75,25 @@ export async function storagePlanKey(env: Env, user: User): Promise<StoragePlanK
       if ((sub.plan_group === 'advisor' || sub.plan_group === 'partner') && sub.plan === `${sub.plan_group}_pro`
           && inGrace(sub.status, sub.period_end)) candidates.push(`${sub.plan_group}:pro`);
     }
-    // Same self-membership rule as tenancyScope.lpSelfScope, written with only
-    // bound values (no SQL interpolation). A linked LP never matches another
-    // member's email; an empty email never matches an unclaimed LP.
-    const email = user.email?.trim() || '';
+    // The existing LP reader owns membership (lpSelfScope), including legacy
+    // verified-email matches. Pair its grant with the canonical one-time claim
+    // so an email address never becomes a standing transferable entitlement.
+    await claimLpRowsByEmail(env, user.id, user.email);
+    const membership = await LPs.listByUser(env, user);
+    if (membership.success !== true) throw new Error('Storage plan unreadable');
+    const ids = (membership.results ?? []).map((lp: any) => {
+      // The canonical claim is best-effort for document reads. Storage is an
+      // entitlement: an unpersisted email link must retry, never stand as one.
+      if (lp.user_id !== user.id) throw new Error('Storage plan unreadable');
+      if (!Number.isSafeInteger(lp.id) || lp.id <= 0 || !Number.isSafeInteger(lp.fund_id) || lp.fund_id <= 0)
+        throw new Error('Storage plan unreadable');
+      return [lp.id, lp.fund_id];
+    });
     const lps = await env.DB.prepare(`SELECT 1 AS admitted FROM fund_lp_admissions a
-      JOIN limited_partners lp ON lp.id = a.limited_partner_id AND lp.fund_id = a.fund_id
-      WHERE (lp.user_id = ? OR (lp.user_id IS NULL AND ? <> '' AND LOWER(lp.email) = LOWER(?)))
-        AND date(a.admitted_on) <= date('now') LIMIT 1`)
-      .bind(user.id, email, email).all<{ admitted: number }>();
+      JOIN json_each(?) own ON a.limited_partner_id = json_extract(own.value, '$[0]')
+        AND a.fund_id = json_extract(own.value, '$[1]')
+      WHERE date(a.admitted_on) <= date('now') LIMIT 1`)
+      .bind(JSON.stringify(ids)).all<{ admitted: number }>();
     if (lps.success !== true) throw new Error('Storage plan unreadable');
     if (lps.results?.length) candidates.push('lp_access');
     for (const candidate of candidates) {

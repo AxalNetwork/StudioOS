@@ -6,7 +6,8 @@ not return a `Response`.
 
 `storagePlans.ts` (D1167, #3080) holds the owner's storage allowances and exact
 Best suited for copy. `storagePlanKey` resolves the caller's effective profile,
-persona subscription and LP admission without summing allowances; failed reads
+persona subscription and LP admission (the shared LP reader and one-time
+account claim) without summing allowances; failed reads
 throw fixed words. `planCatalogue.ts` and the public plans rows project the same
 table. Negotiated and staff values stay null with distinct reasons. Later
 storage readers and guards must consume it rather than copy figures.

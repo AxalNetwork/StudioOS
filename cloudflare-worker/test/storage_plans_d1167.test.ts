@@ -15,7 +15,7 @@ const admission = readFileSync(new URL('../sql/migrations/473_fund_management_fe
 const account = readFileSync(new URL('../sql/migrations/134_account_subscriptions.sql', import.meta.url), 'utf8');
 const member = (fields: Record<string, unknown> = {}) => ({ id: 7, role: 'exploring', email: 'member@example.test', ...fields } as any);
 function world() {
-  const f = makeD1(account + ['vc_funds', 'limited_partners'].map((t) => stripForeignKeys(tableFromBaseline(baseline, t))).join('\n')
+  const f = makeD1(account + ['users', 'vc_funds', 'limited_partners'].map((t) => stripForeignKeys(tableFromBaseline(baseline, t))).join('\n')
     + stripForeignKeys(tableFromBaseline(admission, 'fund_lp_admissions')));
   f.db.exec("INSERT INTO vc_funds(id,name) VALUES(1,'Fixture fund'),(2,'Other fixture fund')");
   const env = { DB: f.DB } as any;
@@ -147,7 +147,16 @@ test('LP eligibility uses only a dated admission in the same fund and the caller
   try { f.lp(null, ''); assert.equal(await storagePlanKey(f.env, member({ email: '' })), 'other'); }
   finally { f.db.close(); }
   const legacy = world();
-  try { legacy.lp(null); assert.equal(await storagePlanKey(legacy.env, member({ email: ' MEMBER@example.test ' })), 'lp_access'); }
+  try {
+    legacy.lp(null);
+    const before = legacy.db.prepare('SELECT total_changes() AS n').get()!.n;
+    assert.equal(await storagePlanKey(legacy.env, member({ email: ' MEMBER@example.test ' })), 'lp_access');
+    assert.equal(legacy.db.prepare('SELECT user_id FROM limited_partners').get()!.user_id, 7, 'the shared claim makes the link permanent');
+    assert.equal(legacy.db.prepare('SELECT total_changes() AS n').get()!.n, Number(before) + 1);
+    assert.equal(await storagePlanKey(legacy.env, member({ id: 8 })), 'other', 'the same address cannot transfer the recorded link');
+    assert.equal(await storagePlanKey(legacy.env, member({ email: 'changed@example.test' })), 'lp_access', 'the account link survives an address change');
+    assert.equal(legacy.db.prepare('SELECT total_changes() AS n').get()!.n, Number(before) + 1, 'later reads do not relink');
+  }
   finally { legacy.db.close(); }
 });
 
@@ -164,6 +173,33 @@ test('staff (including HQ) have null allowance without reading anyone’s subscr
   } finally { f.db.close(); }
 });
 
+test('malformed scoped LP ids are Unreadable, never used as entitlement keys', async () => {
+  for (const malformed of ['lp', 'fund']) {
+    const f = world();
+    try {
+      if (malformed === 'lp') f.db.exec("INSERT INTO limited_partners(id,user_id,fund_id) VALUES(-1,7,1)");
+      else {
+        f.db.exec("INSERT INTO vc_funds(id,name) VALUES(-1,'Malformed fixture fund')");
+        f.db.exec('INSERT INTO limited_partners(user_id,fund_id) VALUES(7,-1)');
+      }
+      await assert.rejects(storagePlanKey(f.env, member()), /^Error: Storage plan unreadable$/);
+    } finally { f.db.close(); }
+  }
+});
+
+test('a failed legacy account link is Unreadable, never a standing email entitlement', async () => {
+  const f = world(); const warn = console.warn;
+  try {
+    f.lp(null);
+    const prepare = f.DB.prepare.bind(f.DB);
+    f.DB.prepare = (sql: string) => sql.includes('UPDATE limited_partners')
+      ? { bind: () => ({ run: async () => { throw new Error('Claim unavailable'); } }) } : prepare(sql);
+    console.warn = () => {}; // the existing best-effort claim logs its failure
+    await assert.rejects(storagePlanKey(f.env, member()), /^Error: Storage plan unreadable$/);
+    assert.equal(f.db.prepare('SELECT user_id FROM limited_partners').get()!.user_id, null);
+  } finally { console.warn = warn; f.db.close(); }
+});
+
 test('unreadable entitlement tables refuse with fixed words, never Free or raw database detail', async () => {
   for (const drop of ['DROP TABLE account_subscriptions', 'DROP TABLE fund_lp_admissions', 'DROP TABLE limited_partners']) {
     const f = world();
@@ -172,7 +208,7 @@ test('unreadable entitlement tables refuse with fixed words, never Free or raw d
   }
   const env = { DB: { prepare: () => ({ bind: () => ({ all: async () => ({ success: false, results: [] }) }) }) } } as any;
   await assert.rejects(storagePlanKey(env, member()), /^Error: Storage plan unreadable$/);
-  for (const table of ['account_subscriptions', 'fund_lp_admissions']) {
+  for (const table of ['account_subscriptions', 'fund_lp_admissions', 'FROM limited_partners']) {
     const f = world();
     try {
       const prepare = f.DB.prepare.bind(f.DB);
@@ -234,7 +270,7 @@ test('mounted public read, existing catalogue and resolver accessor agree; no pr
     assert.doesNotMatch(text, /"(?:name|user_id|email|recorded_by)":/);
     assert.equal(f.db.prepare('SELECT total_changes() AS n').get()!.n, before, 'a public read writes nothing');
     assert.equal(await storagePlanKey(f.env, member()), 'other');
-    assert.equal(f.db.prepare('SELECT total_changes() AS n').get()!.n, before, 'a plan resolution writes nothing');
+    assert.equal(f.db.prepare('SELECT total_changes() AS n').get()!.n, before, 'a resolution with no legacy LP claim changes no row');
   } finally { globalThis.fetch = fetchBefore; f.db.close(); }
 });
 
