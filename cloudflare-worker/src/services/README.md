@@ -27,6 +27,11 @@ screening snapshots use `scoreIntegrity.ts` verification and read auditing.
 Bulk reads deduplicate projects, select snapshots once, and batch per-score
 audit entries without weakening approval or signature checks.
 
+`eventTimes.ts` (D1115, #2995) validates and converts the event writer’s local
+clock inputs in the selected IANA zone, preserving explicit instants and refusing
+invalid or ambiguous wall times. Its instant comparison keeps formatting-only
+normalization out of the changed-after-approval flag.
+
 ## The ones worth knowing
 
 `personaSegments.ts` is D999's segment counts (#2814) behind
@@ -123,6 +128,7 @@ no new schema, runtime or billing path is introduced.
 | `fundAdminLps.ts` | D1158 (#3065): `GET /api/fund-admin/lps`, every LP of every administered fund in one table. Money from the call ledger (`readFundCalls`), paid distributions, the last D716 notice and the booklet through the LP's application. Writes the fail-closed `fund_lps_read` audit row first. A figure no store holds is null with its reason in the row's `unavailable`; a store that cannot be read makes only its own figures Unreadable. Filters, search, sort, pages and totals run here, after the bound read. |
 | `fundPositionsHistory.ts` | D1158 (#3065): `readFundPositions`, each position with its latest dated mark or `marked: false` and a reason; `readFundHistory`, `readFundPerformance` point in time at each quarter end since the first call. Computed on every read, never stored. |
 | `mercury/` | D710: Mercury for fund administration, read-only. A GET-only client, the boundary parser that drops account numbers, the gates and read audit, the entity connections' store, the hourly sync and the reconciliation matches. Its README has the rules. |
+| `notion/` | D1085: a founder's own Notion, read-only, through Notion's MCP server. `reads.ts` is the only file that opens a Notion session: search, a page with its fingerprint, children, a data source's schema and its rows, each id checked before it is sent, never SQL. Its README has the rules. |
 | `referrals/` | Referral submissions. |
 | `records/` | D690's scoped cycle record contract, registry and ownership checks. |
 | `scoring/` | D1143 (#3029): the Product-market fit score, defined once (#2433). `pmf.ts` is model v1 as data and the pure `scorePmf` (value, band, confidence, coverage and the next steps ranked by gain); `pmfCollector.ts` reads Validate's stores for it with bound SQL, after the latest Pivot, and reads no interviewee name or quote. |
@@ -133,6 +139,7 @@ no new schema, runtime or billing path is introduced.
 | `programGrants.ts` | D982 (#2773): program grants. The nine programs and their readiness (held equal to `frontend/src/lib/programGrants.js`), `TERM_FIELDS` (which grant terms apply to which program, and which are defaultable), `validateTerms` (an unknown or inapplicable term is refused; `null` clears), `presentGrant` (the in-force rule and what a grant waits on), `readGrid`, `readDefaults` and `readHistory`. The store is migration 553; `../routes/admin_program_grants.ts` and `licencePrograms.ts` call it. D983 adds the grid's requests tile and series. D956 adds the `draft` state (migration 562), `programNamed` (the nine or a registry key), the terms every program carries for a program D955 added, and `openDraftStatements`. |
 | `programGrantStates.ts` | D956 (#2789): what each viewer reads of a program's grant (`grantViewerOf`, `grantStates`): a Super Admin's count or HQ only, a deployed studio's licence state in the canvas's words (`requested` from both request lanes), the held mode for an admin with no licence or an undeployed studio, and a branch's state from D984's copy; a failed read is unreadable, never a state. Also Offer to studios (`offerToStudios`, `offerRefusal`: D982's switch, on only with a published playbook). Callers: `../routes/admin_programs.ts`, `programCatalogue.ts`, `../routes/admin_program_grants.ts`. |
 | `licencePrograms.ts` | D984 (#2775): the Administrator's programs. `programCopy` (the licence's grant rows and which programs HQ grants, as the licence push carries them to the branch, migration 554), `parseProgramCopy`, `studioPrograms` (the nine programs in the studio's words, in force by `presentGrant` and the day) and `unlinkedPrograms` (HQ runs every program). Callers: `../routes/licence_programs.ts` and `licencePush.ts`. |
+| `programGrantsHistory.ts` | D1126 (#3006): HQ's History tab, every licence's `program_changed` events newest first a page at a time (`readAllHistory`), and Download CSV, one row per studio and program with every term in its own column (`exportCsv`). Read by `../routes/admin_program_grants.ts`. |
 | `programRequests.ts` | D983 (#2774): the program requests checked against HQ's grants where HQ records them (`checkProgramRequest`: offered, held, a term that applies, one open request per question, what the term stands at read from the grant), the open-request counts per lane, a request's licence, and the draft an approval leaves (`draftOf`). Called by `../rpc/hqOps.ts` and `../routes/admin_program_requests.ts`. |
 | `trustContent.ts` | D1075 (#2967): the public trust center's content store (migration 584): the seven blocks, each line a fact or a gap with its reason (`parseBody`), a certification only with its auditor's report on file, Publish in one batch with one change note (`publish`), the subprocessors (ten days' notice), the change log, and the public matrix from `trust.ts`'s `obligationsForRole` (`publicMatrix`). |
 | `subprocessorNotices.ts` | D1075: the subprocessor notices: double opt-in (an encrypted address, a hashed single-use confirm token), a signed unsubscribe link that works once, and the sweep that emails confirmed subscribers once per new subprocessor before it starts. |
@@ -190,6 +197,8 @@ only its card unreadable) and paging. `growCycle.ts` computes the Grow figures
 and seven cards for `../routes/cycle_grow.ts`. `revenueMovements.ts` splits the
 revenue ledger into new, expansion and churned by month (only when customers can
 be told apart; churn needs two billings) and rewrites `revenue_movements`.
+
+D1150: `raiseCycle.ts` also owns the stored-receipt projection `receivedCommitment`: investor/commitment owner/company checked, only receipt id/time returned, no bank fields or provider read. It stays beside D752’s `receivedDates` boundary.
 
 D663: `raiseCycle.ts` computes the Raise figures, seven cards and records, plus D686's independently readable, project-scoped Calls history, for
 `../routes/cycle_raise.ts`, including the computed readiness checks, the
@@ -256,6 +265,11 @@ D1103 (#2983) adds a grant's folder scope (migration 594): `grantFolderScope()`
 reads it as the named folders with their subfolders, or null for every folder,
 and `tierAdmits()` takes it as its fourth argument. A scope that cannot be read
 opens nothing.
+`dataRoomRequests.ts` (D1104, #2984) is the access-request queue (migration
+595): `roundCallRequestStatement()` (the round call's request, in its response
+batch under its claim), `dealPageRequestStatement()` (for DEAL's DL9) and
+`readRequests()`. One open request per investor and venture, and none for an
+investor who already has the room.
 `deckSlideDwell.ts` stores a share-link view's seconds per slide, bounded so
 they never add up to more than the view's read time.
 `peerBenchmark.ts` (#1524) is the peer-group benchmark for every founder:
@@ -440,6 +454,11 @@ D886 B8: `meetingBotRuntime.ts` routes commands to a private cross-script DO
 host and derives run-scoped keys. `meetingBotZoom.ts` mints credentials from
 the reauthorized stored run, with a run-bounded SDK JWT. No credentials log.
 
+D1119 (#2999): `programCatalogue.ts` reads part 4's shared claim and requested
+strategic-access counts, including a claim weekly series and independent failure
+states. `programActivity.ts` includes its six audited review actions, naming
+Perk listings without exposing member ids or review notes.
+
 `perkClaims.ts` (D957) gives the admin Perks page and program catalogue one
 UTC Monday window for claim totals, listing ranks and weekly price-kind counts.
 `raiseEvidence.ts` reads active Mercury runway facts and the files current data-room grants can download, for Raise and deck readiness.
@@ -453,6 +472,8 @@ hourly buckets that are null for an hour the log was silent.
 `google/` holds D1091’s bounded, GET-only Workspace readers over Calendar’s single Google token store. See `google/README.md`.
 
 D1065 (#2935): `buildPlanner.ts` reads accepted Validate labels/counts and applies the ten fixed mapping rules, then batches a plan and source proposals; acceptance stays with D1066. It never runs AI or writes a Build record.
+
+D1066 (#2936): `buildPlanAccept.ts` decides plan items: Accept (with an optional edit) claims the proposal and lands the row through `buildCreates.ts` in one batch with its evidence links, `fill_provenance` rows and activity line, handing the claim back if the batch fails; Dismiss, Accept all in a module (at most 50) and each Build row's evidence trail. `buildCreates.ts` gains the risk, formation-step and prototype-test builders.
 
 D971 completes `programRegistry.ts`'s Lab draft path: its canonical section
 catalogue contains headings only. The existing Super Admin edit route creates a

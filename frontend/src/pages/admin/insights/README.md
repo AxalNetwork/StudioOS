@@ -20,7 +20,11 @@ keeps the query and hash and adds `?moved=held-insights` for the one-line notice
 
 - The page makes one read, `GET /api/admin/insights` (#2660, any admin), with
   the URL's range, profile, country and compare; the group lightbox makes the
-  same read with `group=<role>`. A Super Admin's page also reads the Scope
+  same read with `group=<role>`, and the Worker keeps the page's country for it
+  (D1110). Every chart mark that is a profile opens that group (`groupKeyOf`):
+  Who's bars, Growth's stacked parts and legend, AI spend's bars. A mark that is
+  no profile opens nothing. "See all countries" lists every country the read
+  counted (`allCountries`), where the block's chart keeps twelve. A Super Admin's page also reads the Scope
   select's list, once. A plain Admin asking for another scope sees INS10 and
   no read is made.
 - A read that failed or has not answered is never drawn as zero. A block whose

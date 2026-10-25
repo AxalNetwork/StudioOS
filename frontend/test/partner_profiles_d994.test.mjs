@@ -192,7 +192,8 @@ async function render(url) {
     root.render(h(MemoryRouter, { initialEntries: [url] },
       h(Routes, null,
         h(Route, { path: '/admin/partner-profiles', element: h(PartnerProfiles) }),
-        h(Route, { path: '/admin/partner-profiles/all', element: h(PartnerProfiles) }))));
+        h(Route, { path: '/admin/partner-profiles/all', element: h(PartnerProfiles) }),
+        h(Route, { path: '/admin/partner-profiles/:ref', element: h(PartnerProfiles) }))));
   });
   const settle = async () => { for (let i = 0; i < 10; i += 1) await act(async () => { await new Promise((r) => setTimeout(r, 0)); }); };
   await settle();
@@ -244,6 +245,8 @@ function stub({ list = (u) => json(serveList(u, ALL)), counts = () => json(COUNT
     seen.push(`${u.pathname}${u.search}`);
     if (u.pathname === '/api/admin/partner-profiles') return list(u);
     if (u.pathname === '/api/admin/partner-profiles/counts') return counts(u);
+    // D995: a profile is read by its reference, at its own address.
+    if (/^\/api\/admin\/partner-profiles\/pp_\w+$/.test(u.pathname)) return record(u);
     if (u.pathname.startsWith('/api/profiling/admin/')) return record(u);
     return json({});
   };

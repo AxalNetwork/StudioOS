@@ -1,13 +1,16 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Link, useLocation } from 'react-router-dom';
+import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { RefreshCw } from 'lucide-react';
-import { api } from '../../../lib/api';
 import { partnerProfilesApi } from '../../../lib/api/partnerProfiles';
 import { reportError } from '../../../lib/log';
-import { AdminPageHeader, HeaderMenuItem, HeaderTab, Lightbox, useMovedNotice } from '../../../ui';
+import { AdminPageHeader, HeaderMenuItem, HeaderTab, useMovedNotice } from '../../../ui';
 import { ChartTable, GroupedColumns, Legend, StackBars } from '../../../ui/Charts';
 import AdminBoardFrame from '../AdminBoardFrame';
-import { ProfileReviewModal } from '../consoles/PartnerProfilesConsole';
+import { useAuth } from '../../../hooks/useAuthSync';
+import { isSuperAdminUser } from '../../../lib/shellRole';
+import ProfileRecord from './ProfileRecord';
+import { ReopenDialog } from './ProfileDialogs';
+import { neighbours, recordPath, refOfPath } from './profileModel';
 import {
   APPROVALS_PATH, COLUMNS, COUNTS_FAILED, IDENTITY_STATES, LIST_FAILED, LIST_FAILED_SUB, MOVED_NOTICES, NOT_GIVEN, NOT_RECORDED,
   PAGE_LINE, PAGE_SIZE, PAGE_SIZES, PP_TITLE, RAIL_NOTE, REOPEN, REVIEWED_BEFORE, SORTS, SOURCES, STATUS_CHIPS, SUMMARY_CAP,
@@ -38,8 +41,9 @@ import {
  * board), the row checkboxes and each row's "⋯" (Open, Reopen for review,
  * Export), the Columns picker, Rows per page, an Explorer's binding agreement,
  * and part 2's Reviewed column, changed dot, filter and sort. The review is today's dialog
- * (`ProfileReviewModal`) until part 6; a failed record read says so in the
- * page, never in a browser pop-up.
+ * D995 (#2806): one profile opens as PRF3's lightbox at its own address,
+ * `/admin/partner-profiles/<ref>`, over the list it was opened from
+ * (`ProfileRecord.jsx`), with Previous and Next through that list.
  */
 
 const BTN = 'inline-flex min-h-[36px] items-center justify-center gap-2 whitespace-nowrap rounded-[9px] px-3.5 text-[12.5px] font-bold';
@@ -630,51 +634,13 @@ function AllProfiles({ list, summary, counts, f, set, reset, onReview, onReopen,
 
 const BLANK = { q: '', sort: null, page: 1, page_size: PAGE_SIZE, status: 'all', source: null, category: null, founder_track: null, entity_type: null, agreement: null, has_account: null, identity: null, captured_from: null, captured_to: null, reviewed_by: null };
 
-/**
- * PRF5d: put a decided profile back in the queue, with an optional reason
- * (D991's Reopen). The verdict stays in its history; nobody is told. A
- * refusal is said in place, in the Worker's words.
- */
-function ReopenDialog({ row, onClose, onDone }) {
-  const v = rowView(row);
-  const [reason, setReason] = useState('');
-  const [busy, setBusy] = useState(false);
-  const [refusal, setRefusal] = useState('');
-  const go = async () => {
-    setBusy(true);
-    setRefusal('');
-    try {
-      await partnerProfilesApi.reopen(row.ref, reason.trim() || null);
-      onDone();
-    } catch (e) {
-      reportError('partner-profiles:reopen', e);
-      setRefusal(refusalLine(e, 'The profile could not be reopened. Nothing was changed.'));
-      setBusy(false);
-    }
-  };
-  return (
-    <Lightbox label={REOPEN.title(v.name || v.email)} title={REOPEN.title(v.name || v.email)} onClose={onClose} testId="pp-reopen-dialog">
-      <div className="flex flex-col gap-3 px-5 py-4">
-        <p className={`m-0 ${SUB}`}>{REOPEN.sub}</p>
-        <label className="flex flex-col gap-1.5">
-          <span className={EYE}>Reason · optional</span>
-          <textarea value={reason} maxLength={REOPEN.max} onChange={(e) => setReason(e.target.value)} placeholder="Write a reason…" rows={3}
-            className="rounded-[7px] border border-axal-hairline px-3 py-2 text-[13px] dark:border-gray-700 dark:bg-gray-900 dark:text-gray-100" data-testid="pp-reopen-reason" />
-        </label>
-        <p className={`m-0 ${SUB}`}>{REOPEN.foot}</p>
-        {refusal ? <p role="alert" className="m-0 text-[13px] font-semibold text-axal-destructive dark:text-red-300" data-testid="pp-reopen-refusal">{refusal}</p> : null}
-        <div className="flex justify-end gap-2">
-          <button type="button" className={GHOST} onClick={onClose}>Cancel</button>
-          <button type="button" className={`${BTN} border border-axal-violet bg-axal-violet text-white disabled:opacity-50 dark:border-violet-500 dark:bg-violet-600`} disabled={busy} onClick={go} data-testid="pp-reopen-go">Reopen</button>
-        </div>
-      </div>
-    </Lightbox>
-  );
-}
-
 function PartnerProfilesPage() {
   const loc = useLocation();
-  const tab = tabOf(loc.pathname) || 'review';
+  const navigate = useNavigate();
+  const { user: viewer } = useAuth();
+  // D995 — a record's address keeps the tab it was opened from under it.
+  const ref = refOfPath(loc.pathname);
+  const tab = tabOf(loc.pathname) || (ref && loc.state?.from === 'all' ? 'all' : 'review');
   const notice = useMovedNotice(MOVED_NOTICES);
   const [tick, setTick] = useState(0);
   const reload = useCallback(() => setTick((t) => t + 1), []);
@@ -699,18 +665,20 @@ function PartnerProfilesPage() {
   const [asOf, setAsOf] = useState(null);
   useEffect(() => { if (counts.status === 'ready') setAsOf(Date.now()); }, [counts.status]);
 
-  const [open, setOpen] = useState(null);
-  const [openFailed, setOpenFailed] = useState(null);
-  // The record read is the logged one (D612). A failure is said in the page.
-  const onReview = useCallback(async (row) => {
-    setOpenFailed(null);
-    try {
-      setOpen(await api.adminGetProfile(row.email));
-    } catch (e) {
-      reportError('partner-profiles:record', e);
-      setOpenFailed(row);
-    }
-  }, []);
+  // D995 — Review and Open go to the profile's own address; the record reads it (logged, D612).
+  const listPath = tab === 'all' ? '/admin/partner-profiles/all' : '/admin/partner-profiles';
+  const onReview = useCallback((row) => {
+    // A literal door, so the reachability walk finds the record's address.
+    if (row?.ref) navigate(`/admin/partner-profiles/${row.ref}`, { state: { from: tab } });
+  }, [navigate, tab]);
+  const rows = list.data?.rows || [];
+  const onDecided = useCallback((result, advance) => {
+    setNote({ tone: 'ok', text: result.text });
+    // PRF6: on the queue, the next waiting profile opens; the list keeps its filters.
+    const next = advance && tab === 'review' ? neighbours(rows, ref).next : null;
+    if (next) navigate(recordPath(next), { state: { from: tab }, replace: true });
+    else navigate(listPath, { replace: true });
+  }, [navigate, rows, ref, tab, listPath]);
 
   // D1127 — Reopen for review (PRF5d) and the exports, each said in the page.
   const [reopening, setReopening] = useState(null);
@@ -772,13 +740,6 @@ function PartnerProfilesPage() {
         data-testid="pp-header"
       />
       <span className={SUB}>Reading this list, a profile and its tax ID are each recorded under your name.</span>
-      {openFailed && (
-        <div role="alert" className={`${CARD} flex flex-wrap items-center gap-2.5 px-[18px] py-3 text-[13px] text-axal-destructive dark:text-red-300`} data-testid="pp-record-failed">
-          <span>This profile could not be read.</span>
-          <button type="button" className={GHOST} onClick={() => onReview(openFailed)}>Try again</button>
-          <button type="button" className={GHOST} onClick={() => setOpenFailed(null)}>Dismiss</button>
-        </div>
-      )}
       {note && (
         <div role={note.tone === 'bad' ? 'alert' : 'status'} className={`${CARD} flex flex-wrap items-center gap-2.5 px-[18px] py-3 text-[13px] ${note.tone === 'bad' ? 'text-axal-destructive dark:text-red-300' : 'text-axal-ink dark:text-gray-100'}`} data-testid="pp-note">
           <span>{note.text}</span>
@@ -796,7 +757,11 @@ function PartnerProfilesPage() {
       {tab === 'review' && !none && <Queue list={list} options={summary.data?.options || list.data?.options} f={f} set={set} drafts={tiles?.drafts ?? null} onReview={onReview} reload={reload} />}
       {tab === 'all' && <AllProfiles list={list} summary={summary} counts={counts} f={f} set={set} reset={reset} onReview={onReview} onReopen={onReopen} onExport={onExport} reload={reload} />}
       {reopening && <ReopenDialog row={reopening} onClose={() => setReopening(null)} onDone={() => { setReopening(null); setNote({ tone: 'ok', text: REOPEN.done }); reload(); }} />}
-      {open && <ProfileReviewModal profile={open} onClose={() => setOpen(null)} onSaved={() => { setOpen(null); reload(); }} />}
+      {ref && (
+        <ProfileRecord refId={ref} rows={rows} viewerSuper={isSuperAdminUser(viewer)}
+          onGo={(to) => navigate(recordPath(to), { state: { from: tab }, replace: true })}
+          onClose={() => navigate(listPath)} onChanged={reload} onDecided={onDecided} />
+      )}
     </div>
   );
 }
