@@ -32,7 +32,8 @@ Firm links, D923) forwards to the Firms tab with `?moved=firm-links`, in
   deck drafts and the drawer's controls and dialog copy.
 - `apModel.js` — pure. The address and tabs, the moved sentence, and the
   tiles and Needs you from the reads, each `ready`, `loading`, `unreadable`
-  or `notyet`.
+  or `notyet`. D1125: `tabCountOf` (each header tab's count from the tabs
+  read) and `PAUSED` (AP12b's words, and the two refusal events that raise it).
 - `ApRedirect.jsx` — the old bare address.
 - `FirmLinks.jsx` — on the Firms tab, below the table: attaching a partner
   account to its firm, or detaching it, with a confirm before every save and

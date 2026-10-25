@@ -25,6 +25,12 @@ D979's Firms reads live in `admin_partner_firms.ts`, mounted at
 sort and pages with an exact total) and `/firms/:id` (one firm's drawer). Both
 are read only; the tab's writes stay in `admin_partners.ts`.
 
+D1131's `_eventCalendar.ts` schedules connected-calendar cleanup after successful
+member, host or admin event cancellations. The existing queue durably continues
+bounded immediate work; provider failures do not undo local cancellation, and
+failed mappings remain retryable. `/events/suggested` now includes
+the authenticated caller's actual registration eligibility.
+
 ## Mount map
 
 `index.ts` mounts each router under `/api/<prefix>`. **This is a selected list,
@@ -331,10 +337,6 @@ use legacy investor grants through `/shared` instead. The data-room spec in
 `../services/records/raise.ts` uses the same owner-only gate. File uploads default
 to NDA when visibility is omitted; explicit Open remains allowed for the owner.
 
-D1131's `_eventCalendar.ts` schedules connected-calendar cleanup after successful
-member, host or admin event cancellations. The existing queue durably continues
-bounded immediate work; provider failures do not undo local cancellation, and
-failed mappings remain retryable. `/events/suggested` now includes
-the authenticated caller's actual registration eligibility.
+D1133: `billing.ts` mounts `/alerts/:id/pay` and `/alerts/:id/update-card` under `/api/billing`, both recent-TOTP gated. They prepare in-page Stripe forms for the caller’s open failed renewal; opening neither confirms a charge nor changes the default card.
 
 D1135: `company.ts` adds member self-leave and validates create/rename; `projects.ts` counts live ventures, adds owner restore within 30 days and sends email-mode team invitations.

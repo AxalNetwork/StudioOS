@@ -34,6 +34,14 @@
  * first agreement went out in, joined from `esign_envelopes`, and the counts
  * read fills "envelopes out" from the same join. A profile with no agreement
  * or no envelope has `envelope: null`, which reads "Not sent".
+ *
+ * THE EXPLORING BOARD'S AGREEMENT (D1127). An Explorer's account carries the
+ * binding agreement the Exploring board sent it (`user_role_review`, migration
+ * 147): not sent, sent on a day, or signed. Every other account has none.
+ *
+ * EXPORT (D1127). `exportPartnerProfiles` answers the list's own filters, or
+ * the chosen references, as a CSV of what the page draws, never the tax ID.
+ * It refuses a set larger than EXPORT_MAX rather than cut it short.
  */
 import type { Env } from '../types';
 
@@ -136,10 +144,12 @@ const ROWS_SUBQUERY = `(
            CASE WHEN ${SRC_EADWYN_SQL} THEN 1 ELSE 0 END AS src_eadwyn,
            u.id AS account_id, u.name AS user_name, u.role AS account_role, u.kyc_status,
            rr.suggested_role, rr.assigned_role, rr.assigned_at,
+           rr.binding_sent_at, be.status AS binding_status, be.completed_at AS binding_completed_at,
            ${ENVELOPE_ID_SQL} AS envelope_id
     FROM partner_profiles p
     LEFT JOIN users u ON u.id = p.user_id OR (p.user_id IS NULL AND u.email = p.email)
     LEFT JOIN user_role_review rr ON rr.user_id = u.id
+    LEFT JOIN esign_envelopes be ON be.id = rr.binding_envelope_id
     LEFT JOIN users rv ON rv.id = p.reviewed_by
   ) AS l
   LEFT JOIN esign_envelopes e ON e.id = l.envelope_id
@@ -233,6 +243,19 @@ const sourcesOf = (r: any): string[] => [
   r.src_invitation ? 'invitation' : null, r.src_chat ? 'chat' : null, r.src_eadwyn ? 'eadwyn' : null,
 ].filter(Boolean) as string[];
 
+/**
+ * D1127 — the binding agreement the Exploring board sent an Explorer: signed
+ * once its envelope completed, sent with its day, or not sent. A sent day the
+ * board did not store is null, never a guess.
+ */
+function bindingOf(r: any): { state: 'not_sent' | 'sent' | 'signed'; sent_at: string | null; signed_at: string | null } {
+  if (String(r.binding_status || '').toLowerCase() === 'completed') {
+    return { state: 'signed', sent_at: r.binding_sent_at ?? null, signed_at: r.binding_completed_at ?? null };
+  }
+  if (r.binding_sent_at || r.binding_status) return { state: 'sent', sent_at: r.binding_sent_at ?? null, signed_at: null };
+  return { state: 'not_sent', sent_at: null, signed_at: null };
+}
+
 /** A row as the list returns it. */
 export function listRow(r: any) {
   const account = r.account_id == null ? null : {
@@ -243,6 +266,7 @@ export function listRow(r: any) {
     suggested_role: r.suggested_role ?? null,
     assigned_role: r.assigned_role ?? null,
     assigned_at: r.assigned_at ?? null,
+    binding: r.account_role === 'exploring' ? bindingOf(r) : null,
   };
   const kyc = r.account_id == null ? null : (r.kyc_status || 'not_started');
   return {
@@ -316,6 +340,89 @@ export async function listPartnerProfiles(env: Env, query: ListQuery): Promise<L
   };
 }
 
+/** D1127 — an export holds at most this many profiles; a larger set is refused, never cut short. */
+export const EXPORT_MAX = 5000;
+/** D1127 — at most this many chosen references in one export. */
+export const EXPORT_REFS_MAX = 100;
+
+/** The CSV's columns: what the page draws. Never the tax ID, a note or the chat. */
+export const EXPORT_HEADER = [
+  'Reference', 'Name', 'Email', 'Status', 'Source', 'Onboarding category', 'Founder track', 'Entity', 'Entity type',
+  'Agreement', 'Agreement envelope', 'Account', 'Binding agreement', 'Identity check', 'Reviewed at', 'Reviewed by',
+  'Changed after review', 'Captured',
+] as const;
+
+const SOURCE_WORDS: Record<string, string> = { chat: 'Onboarding chat', invitation: 'Partner invitation', eadwyn: 'Eadwyn questions' };
+const STATUS_WORDS: Record<string, string> = { draft: 'Draft', pending: 'Waiting', verified: 'Verified', rejected: 'Rejected' };
+
+/**
+ * A cell with a leading formula character neutralised (as insightsExport's
+ * `cell`): names and entities are typed by members, and a spreadsheet must
+ * read them as text.
+ */
+export function exportCell(v: unknown): string | null {
+  if (v == null || v === '') return null;
+  const s = String(v);
+  return /^[=+\-@\t\r]/.test(s) && !/^-?\d/.test(s) ? `'${s}` : s;
+}
+
+/** One listed row as the CSV's cells. Unknown is an empty cell, never a zero. */
+export function exportCells(row: ReturnType<typeof listRow>): (string | null)[] {
+  const a = row.account;
+  const binding = a?.binding;
+  return [
+    row.ref,
+    row.user_name || row.full_name,
+    row.email,
+    row.status ? (STATUS_WORDS[row.status] ?? row.status) : 'Not recorded',
+    row.sources.length ? row.sources.map((x) => SOURCE_WORDS[x] ?? x).join('; ') : 'None recorded',
+    row.persona,
+    row.founder_track,
+    row.legal_entity_name,
+    row.entity_type,
+    row.agreement_type,
+    row.envelope?.label ?? null,
+    a ? (a.role ?? 'Not recorded') : 'No account yet',
+    !binding ? null : binding.state === 'signed' ? 'Signed' : binding.state === 'sent' ? 'Sent' : 'Not sent',
+    row.identity_check?.label ?? null,
+    row.reviewed_at,
+    row.reviewed_by ? (row.reviewed_by.name || `Account ${row.reviewed_by.user_id}`) : null,
+    row.changed_after_review_at,
+    row.created_at,
+  ].map(exportCell);
+}
+
+/**
+ * D1127 — the export: the list's filters and sort (the view on the page), or
+ * the chosen references within them. Throws on a D1 error; the route answers
+ * 503. A set past EXPORT_MAX is a refusal with the count, so the admin can
+ * narrow it.
+ */
+export async function exportPartnerProfiles(env: Env, query: ListQuery & { refs?: string }) {
+  const filters = listFilters(query);
+  if ('error' in filters) return filters;
+  const sort = one(query.sort) || 'newest';
+  const orderBy = ORDER_BY[sort];
+  if (!orderBy) return { error: 'bad_sort', message: 'Sort by waiting, newest, reviewed or name.' };
+  const refsRaw = one(query.refs);
+  const refs = refsRaw ? [...new Set(refsRaw.split(',').map((x) => x.trim()).filter(Boolean))] : [];
+  if (refs.length > EXPORT_REFS_MAX) return { error: 'too_many_refs', message: `Choose at most ${EXPORT_REFS_MAX} profiles to export at once.` };
+  if (refs.some((x) => !PROFILE_REF.test(x))) return { error: 'bad_ref', message: 'A chosen profile is not a reference this list knows.' };
+  const where = [...filters.where];
+  const binds = [...filters.binds];
+  if (refs.length) { where.push('ref IN (' + refs.map(() => '?').join(', ') + ')'); binds.push(...refs); }
+  const whereSql = where.length ? ' WHERE ' + where.join(' AND ') : '';
+  const countSql = 'SELECT COUNT(*) AS n FROM ' + ROWS_SUBQUERY + whereSql;
+  const total = Number((await env.DB.prepare(countSql).bind(...binds).first<any>())?.n ?? 0);
+  if (total > EXPORT_MAX) {
+    return { error: 'export_too_large', message: `This view holds ${total.toLocaleString('en-US')} profiles; an export holds at most ${EXPORT_MAX.toLocaleString('en-US')}. Narrow it with a filter.` };
+  }
+  const rowsSql = 'SELECT * FROM ' + ROWS_SUBQUERY + whereSql + orderBy + ' LIMIT ?';
+  const result = await env.DB.prepare(rowsSql).bind(...binds, EXPORT_MAX).all<any>();
+  const rows = (result.results || []).map(listRow);
+  return { header: EXPORT_HEADER, rows: rows.map(exportCells), count: rows.length, chosen: refs.length };
+}
+
 /** One profile as the list draws it, by reference; null when none has it. */
 export async function listedByRef(env: Env, ref: string) {
   const row = await env.DB.prepare(ROW_BY_REF_SQL).bind(ref).first<any>();
@@ -335,7 +442,13 @@ export async function listOptions(env: Env) {
     const r = await env.DB.prepare(sql).all<any>();
     return (r.results || []).map((x: any) => String(x.v));
   };
+  // D991 / D1127 — the admins who gave a current verdict, for the Reviewed by filter.
+  const reviewers = await env.DB.prepare(
+    'SELECT DISTINCT p.reviewed_by AS id, u.name AS name FROM partner_profiles p JOIN users u ON u.id = p.reviewed_by'
+    + ' WHERE p.reviewed_by IS NOT NULL ORDER BY LOWER(COALESCE(u.name, \'\')), p.reviewed_by',
+  ).all<any>();
   return {
+    reviewed_by: (reviewers.results || []).map((x: any) => ({ id: Number(x.id), name: x.name ?? null })),
     category: await distinct('persona'),
     founder_track: await distinct('founder_track'),
     entity_type: await distinct('entity_type'),
