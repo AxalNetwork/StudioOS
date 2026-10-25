@@ -300,7 +300,7 @@ test('wellbeing gained the admin gate the wave brief asked for (D303)', () => {
     const body = src.slice(at, src.indexOf('\n});', at));
     assert.ok(!/role\(user\) !== 'admin'\)/.test(body),
       `${route} still checks role(user) directly instead of requireAdmin`);
-    assert.ok(/await admin\(c\)/.test(body), `${route} never adopted the requireAdmin-backed gate`);
+    assert.ok(/await (?:admin|requireAdmin)\(c\)/.test(body), `${route} never adopted the requireAdmin-backed gate`);
   }
   assert.ok(/requireBranchNotSuspended/.test(src),
     'wellbeing.ts never adopted the branch-suspension gate for its publishing writes');

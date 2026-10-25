@@ -130,12 +130,13 @@ test('fund money crosses the wire as integer cents', () => {
 
 // --- the pages stay reachable -------------------------------------------
 
-test('Performance is still a FundOpsWorkspace tab; Accounting and LP Reporting are gone (owner, 2026-10-20)', () => {
-  const ws = scan(read('frontend/src/pages/FundOpsWorkspace.jsx'));
-  assert.match(ws, /<FundPerformancePage embedded/);
-  assert.doesNotMatch(ws, /FundAccountingPage|LPReportingPage/);
+test('Performance stays an investor\'s page and Fund admin\'s tab; Accounting and LP Reporting are gone (owner, 2026-10-20)', () => {
+  // D1160 (#3067): Fund Ops is retired. An investor's /funds/performance draws the page itself; an admin's forwards to Fund admin.
+  assert.ok(!existsSync('frontend/src/pages/FundOpsWorkspace.jsx'));
   const app = scan(read('frontend/src/App.jsx'));
-  assert.match(app, /path="\/funds\/performance"/);
+  assert.match(app, /path="\/funds\/performance" element=\{guard\(\['admin', 'investor'\], effectiveRole === 'investor' \? investorFundWorkspace\(<FundPerformancePage embedded \/>\) : <FundOpsRedirect \/>\)\}/);
+  assert.match(scan(read('frontend/src/pages/admin/fundAdmin/FundAdminConsole.jsx')), /<FundPerformanceView /);
+  assert.doesNotMatch(app, /FundAccountingPage|LPReportingPage/);
   assert.doesNotMatch(app, /path="\/funds\/accounting"|path="\/lp-reports"/);
   // Portfolio Growth stays a tab; withdrawing two sections is not withdrawing
   // the surface, and the nav must not point at a hole.

@@ -155,9 +155,8 @@ test('Issue sends the amount whose split is on screen; changing the amount drops
   // The due date the modal and the API dropped now travels.
   const api = codeOnly(read('frontend/src/lib/api.js'));
   assert.match(api, /fundsCapitalCallV2: \(id, amount_cents, note, due_date\) =>[\s\S]{0,200}?due_date: due_date \|\| undefined/);
-  const modal = codeOnly(read('frontend/src/pages/FundsPage.jsx'));
-  assert.match(modal, /api\.fundsCapitalCallV2\(fund\.id, [^\n]*, note, dueDate \|\| null\)/);
-  assert.match(modal, /<Field label="Due date \(optional\)" type="date"/);
+  // D1160 (#3067): Fund Ops' second call modal is retired with Fund Ops; the call ledger above is the one issue path.
+  assert.doesNotMatch(codeOnly(read('frontend/src/pages/FundsPage.jsx')), /fundsCapitalCallV2/);
 });
 
 test('a receipt posts whole cents, the date it landed and the reference — nothing else', () => {

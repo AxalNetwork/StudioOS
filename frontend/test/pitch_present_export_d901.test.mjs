@@ -20,7 +20,7 @@ import { resolve, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 import {
-  FORMATS, NO_EXPORT_YET, NO_NOTES, NOTHING_SHARED, OPTIONS_HTML_ONLY, PRESENT_PATH, SOURCE_NOT_RECORDED,
+  FORMATS, NO_EXPORT_YET, NO_NOTES, NOTHING_SHARED, OPTIONS_WHERE, PRESENT_PATH, SOURCE_NOT_RECORDED,
   cardOf, cardsOf, clock, countLabel, dotsOf, exitHref, exportButton, exportFailure, exportFileName, exportedLine,
   lastExportLine, moveTo, notesOf, optionsApply, presentHref, stepFor, swipeLine, swipeStep, whatExportDoes,
 } from '../src/pages/raise/pitch/presentExportModel.js';
@@ -106,9 +106,12 @@ test('the export dialog: four formats, Google Slides unavailable with its reason
   assert.match(FORMATS.find((f) => f.id === 'google_slides').reason, /^Not available yet: /);
   assert.equal(FORMATS.find((f) => f.id === 'html').line, 'One file, offline');
   assert.deepEqual(['pdf', 'pptx', 'html'].map(exportButton), ['Export PDF', 'Export PowerPoint', 'Export HTML']);
+  // D1112 (#2992): the two options apply to every format the dialog offers, and say where they go.
   assert.equal(optionsApply('html'), true);
-  assert.equal(optionsApply('pdf'), false);
-  assert.match(OPTIONS_HTML_ONLY, /HTML file/);
+  assert.equal(optionsApply('pdf'), true);
+  assert.equal(optionsApply('pptx'), true);
+  assert.equal(optionsApply('google_slides'), false, 'Google Slides is not offered yet');
+  assert.match(OPTIONS_WHERE.pdf, /notes are a page after the cards/);
   assert.equal(whatExportDoes(DECK), "This makes a file of v4 and records the export in this venture's history: the format, the version and the file's fingerprint. Nothing is shared.");
   assert.equal(exportFailure('pdf', 502, { error: 'pdf_render_failed' }), 'The PDF could not be produced. Try again in a moment. Nothing was shared.');
   assert.equal(exportFailure('pdf', 503, { error: 'browser_binding_unavailable' }), 'The PDF could not be produced. Try again in a moment. Nothing was shared.');

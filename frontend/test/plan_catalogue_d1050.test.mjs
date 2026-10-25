@@ -16,8 +16,9 @@ import React from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 
 const {
-  PLAN_CATALOGUE, PLAN_KEYS, FAMILY_COLOUR, NOT_SOLD, STORAGE_NOT_DECIDED, planByKey, planByLicenceKey, catalogueFields, publicCatalogue,
+  PLAN_CATALOGUE, PLAN_KEYS, FAMILY_COLOUR, NOT_SOLD, planByKey, planByLicenceKey, catalogueFields, publicCatalogue,
 } = await import('../../cloudflare-worker/src/services/planCatalogue.ts');
+const { storagePlan } = await import('../../cloudflare-worker/src/services/storagePlans.ts');
 const { planOf, plansAndPacks } = await import('../../cloudflare-worker/src/services/aiCredits.ts');
 const { PLAN_CARDS, LP_ACCESS } = await import('../src/lib/sitePricing.js');
 const { TIER_PLANS, PlanPrice } = await import('../src/components/PaywallModal.jsx');
@@ -67,9 +68,10 @@ test('the catalogue has every plan key the issue names, once, and no price', () 
     assert.doesNotMatch(JSON.stringify(p), TYPED, `${p.key} types an amount`);
     assert.equal(p.colour, FAMILY_COLOUR[p.family], `${p.key}: its family's colour`);
     assert.equal(p.sellable === (p.sellable_reason === null), true, `${p.key}: a reason exactly when it is not sold`);
-    // #2449 decides storage and "Best suited for": none is a figure yet, each says why.
-    assert.deepEqual(p.storage, { bytes: null, reason: STORAGE_NOT_DECIDED }, p.key);
-    assert.equal(p.best_suited_for, null, p.key);
+    // D1167: the existing catalogue projects the one storage table.
+    const storage = storagePlan(p.key);
+    assert.deepEqual(p.storage, { bytes: storage.allowance_bytes, reason: storage.allowance_reason }, p.key);
+    assert.equal(p.best_suited_for, storage.best_suited, p.key);
   }
   assert.equal(planByKey('investor:plus').sellable, false, 'Investor Plus is not sold (D786)');
   assert.equal(planByKey('investor:plus').sellable_reason, NOT_SOLD.plus);
@@ -135,12 +137,12 @@ test('the checkout sheet\'s Included lines and storage come from the catalogue t
   const plan = { family: 'founder', prices: [], catalogue: catalogueFields(entry) };
   const lines = includedLines(plan, { feats: ['an old card line'] }, 'monthly');
   assert.deepEqual(lines.slice(2).map((l) => l.text), [...entry.included], 'the catalogue\'s lines, not the card\'s');
-  assert.equal(lines[1].text, STORAGE_NOT_DECIDED, 'storage says why it is not a figure');
-  assert.equal(lines[1].measured, false);
+  assert.equal(lines[1].text, '10 GB of storage', 'the catalogue now holds the owner’s allowance');
+  assert.equal(lines[1].measured, true);
   // A read from before the catalogue still draws the card's lines.
   assert.deepEqual(includedLines({ prices: [] }, { feats: ['a line'] }, 'monthly').map((l) => l.text).slice(1), [STORAGE_WAITS, 'a line']);
   // A storage figure is drawn only when the catalogue holds one.
-  const sized = { ...plan, catalogue: { ...plan.catalogue, storage: { bytes: 5e9, reason: null } } };
+  const sized = { ...plan, catalogue: { ...plan.catalogue, storage: { bytes: 5 * 1024 ** 3, reason: null } } };
   assert.equal(includedLines(sized, null, 'monthly')[1].text, '5 GB of storage');
 });
 

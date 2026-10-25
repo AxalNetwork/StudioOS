@@ -35,6 +35,7 @@ export * from './api/capTableHolder.js';
 export * from './api/capTableRecord.js';
 export * from './api/capTableRegister.js';
 export * from './api/capTableScenarios.js';
+export * from './api/capitalRelationships.js';
 export * from './api/channelKeys.js';
 export * from './api/channels.js';
 export * from './api/community.js';
@@ -2883,7 +2884,8 @@ export const api = {
   // Task #2 — server-side export, format ∈ {pdf, pptx}. PNG cover was
   // removed end-to-end (PDF + PPTX are both driven by Cloudflare Browser
   // Rendering against the live SPA print template).
-  deckExport: (id, format) =>
+  // D1112 (#2992): `{ notes, sources }`, PD17's two options, for PDF and PowerPoint too.
+  deckExport: (id, format, { notes = false, sources = false } = {}) =>
     fetch(`${BASE}/decks/${id}/export`, {
       method: 'POST',
       credentials: 'include',
@@ -2892,7 +2894,7 @@ export const api = {
         ...getAuthHeaders(),
         ...getCsrfHeader('POST'),
       },
-      body: JSON.stringify({ format }),
+      body: JSON.stringify({ format, notes, sources }),
     }),
   // D901 (#2680) — the version as one self-contained HTML file; the Worker
   // records it (`deck_exports` plus an audit row) before answering. Raw
@@ -5813,11 +5815,11 @@ export const eventsPublic = {
 // Admin event review queue (§8.3).
 export const adminEvents = {
   // D918: status takes one word or a list; the other filters and the sort are
-  // the Worker's words (visibility, when, price, featured, q, sort, dir).
-  list: ({ status, visibility, when, price, featured, q, sort, dir, limit = 50, offset = 0 } = {}) => {
+  // the Worker's words (visibility, type (D1121), when, price, featured, q, sort, dir).
+  list: ({ status, visibility, type, when, price, featured, q, sort, dir, limit = 50, offset = 0 } = {}) => {
     const qs = new URLSearchParams();
     if (status) qs.set('status', Array.isArray(status) ? status.join(',') : status);
-    for (const [k, v] of Object.entries({ visibility, when, price, q, sort, dir })) if (v) qs.set(k, v);
+    for (const [k, v] of Object.entries({ visibility, type, when, price, q, sort, dir })) if (v) qs.set(k, v);
     if (featured != null) qs.set('featured', featured ? '1' : '0');
     qs.set('limit', String(limit));
     qs.set('offset', String(offset));
