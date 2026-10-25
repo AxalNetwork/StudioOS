@@ -274,7 +274,7 @@ test('the ticket at /my/events/ticket/1: the code, when and where, Add to calend
     assert.match(ui.textIn('my-events-ticket-code'), /Show this at the door\. The host scans it to check you in\./);
     assert.equal(ui.textIn('my-events-ticket-place'), 'Going');
     assert.ok(ui.has('my-events-ticket-join'), 'an online seat holder gets the join link');
-    assert.ok(ui.hrefs().includes('https://calendar.google.test/x') && ui.hrefs().includes('https://outlook.test/x'));
+    assert.deepEqual(ui.hrefs().filter((u) => u.startsWith('https://') && u.endsWith('.test/x')).sort(), ['https://calendar.google.test/x', 'https://outlook.test/x']);
     assert.ok(ui.hrefs().includes('/api/events/1/ics'));
     assert.equal(ui.textIn('my-events-ticket-seat'), 'Your seatPaid ticket · $40Paid.');
     assert.equal(ui.textIn('my-events-ticket-agenda-row').replace(/\d\d:\d\d/, 'HH:MM'), 'HH:MMWelcomeAna');
