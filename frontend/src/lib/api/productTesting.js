@@ -22,6 +22,8 @@
 //   approve / reject POST  /admin/testing/programmes/:uid/approve|reject { note } (reject needs one)
 //   open / close     POST  /admin/testing/programmes/:uid/open|close
 //   create, edit, applicants, pick, decline: as the partner's, on HQ's own programmes.
+//   overview         GET   /admin/testing/overview → D1196: { weekly, by_profile: { pool, applicants }, withdrawn,
+//                    mail_reach }, each block { available: true, … } or { available: false, reason }; counts only.
 //
 // Every path is written out in full so the drift check (scripts/check-api-drift.mjs)
 // reads each one against the Worker.
@@ -65,4 +67,5 @@ export const adminTestingApi = {
   applicants: (uid) => request(`/admin/testing/programmes/${enc(uid)}/applicants`),
   pick: (uid) => request(`/admin/testing/applications/${enc(uid)}/pick`, { method: 'POST' }),
   decline: (uid) => request(`/admin/testing/applications/${enc(uid)}/decline`, { method: 'POST' }),
+  overview: () => request('/admin/testing/overview'),
 };
