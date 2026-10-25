@@ -27,7 +27,7 @@ import { parseStamp } from '../../../ui/parseStamp.js';
 
 export const LAB_PATH = '/admin/programs/spinout-lab';
 export const LAB_PREVIEW_PATH = '/admin/programs/spinout-lab/preview';
-export const PROGRAMS_PATH = '/admin/held/programs';
+export const PROGRAMS_PATH = '/admin/programs';
 export const LAB_TITLE = 'Spin-Out Lab';
 export const PAGE_LINE = 'A four-week sprint from idea to incorporated company. A new cohort starts on the 1st of each month.';
 export const FACTS = 'Who: Founders and Explorers · Join: By application · Cycle: monthly, four weeks · Times: ET';

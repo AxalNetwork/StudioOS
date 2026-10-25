@@ -8,6 +8,7 @@ import { AdminPageHeader, HeaderTab, useMovedNotice } from '../../../ui';
 import { glancesFromStudioGlance, loadStudioGlance } from '../adminStudioOverview';
 import AdminSpinoutLab from '../AdminSpinoutLab';
 import LabFormation from './LabFormation';
+import LabGrantBoundary from './LabGrantBoundary';
 import LabGraduation from './LabGraduation';
 import LabHosts from './LabHosts';
 import LabHowItRuns from './LabHowItRuns';
@@ -223,7 +224,7 @@ const SECTIONS = {
 /** D970: the tabs drawn to the canvas (SL9–SL11), each its own file. */
 const DESKS = { hosts: LabHosts, formation: LabFormation, graduation: LabGraduation, 'how-it-runs': LabHowItRuns, settings: LabSettings, activity: LabActivity };
 
-export default function AdminLab({ onImpersonate }) {
+function AdminLabBody({ onImpersonate }) {
   const { user } = useAuth();
   const superAdmin = isSuperAdminUser(user);
   const loc = useLocation();
@@ -286,4 +287,9 @@ export default function AdminLab({ onImpersonate }) {
       {SECTIONS[tab] ? SECTIONS[tab].map((s) => <AdminSpinoutLab key={s} section={s} onImpersonate={onImpersonate} />) : null}
     </div>
   );
+}
+
+/** D1123: branch tools mount only after the dated grant copy is readable. */
+export default function AdminLab(props) {
+  return <LabGrantBoundary><AdminLabBody {...props} /></LabGrantBoundary>;
 }

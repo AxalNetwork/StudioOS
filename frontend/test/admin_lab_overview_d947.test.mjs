@@ -196,7 +196,7 @@ test('SL6: one cohort’s line, tiles, pool, capacity and weeks; messages and hi
   assert.deepEqual(p.weeks.rows.map((w) => [w.label, w.passed, w.failed, w.grace, w.waiting]), [
     ['Week 1', '20', '2', '0', '0'], ['Week 2', '18', '1', '1', '0'], ['Week 3', '17', '0', '1', '0'], ['Week 4 · now', '—', '—', '0', '17'],
   ]);
-  assert.deepEqual([p.messages.state, p.history.state], ['not_read', 'not_read']);
+  assert.deepEqual([p.messages.state, p.history.state], ['separate_read', 'separate_read']);
   const nov = buildCohortPage(READ, APPS, '2026-11', NOW);
   assert.deepEqual(nov.tiles.map((t) => t.text), ['24', '9', 'Not started', 'Not decided yet']);
   assert.equal(nov.pool.alt, 'Pool of 24: 9 approved, 3 waitlisted, 7 waiting, 5 declined, 0 withdrawn, 0 carried forward.');
@@ -242,6 +242,9 @@ function worker(fail = [], overview = overviewFixture(), hold = false) {
     if (p === '/api/admin/cohort/applications/list') return down('list') ? json({ detail: 'down' }, 503) : json(APPLICANTS);
     if (p === '/api/admin/cohort/applications') return down('applications') ? json({ detail: 'down' }, 503) : json({ settings: { min: 1, max: 25 }, settings_unreadable: false, cycles: [] });
     if (p === '/api/admin/cohort/timeline') return json({ cycles: [], server_time: '2026-10-24T12:00:00.000Z' });
+    if (p.endsWith('/capacity')) return json({ recorded: true, outcome: 'capacity_ok', at: '2026-10-01 00:00:00', approved: 22, minimum: 1 });
+    if (p === '/api/admin/cohort/activity') return json({ total: 0, items: [], coverage: 'Recorded cohort history.' });
+    if (p === '/api/admin/cohort/participants') return json({ available: true, items: [], total: 0, counts: { needs: 0, everyone: 0 }, standing: null });
     if (p === '/api/admin/cohort/review') return json({ at_risk: [], review: [] });
     if (p === '/api/admin/studio/glance') return json({ tier: 'hq', approvals: { lanes: [] } });
     if (p === '/api/admin/lab-hosts') return json({ items: [], counts: { pending: 0 } });
@@ -397,12 +400,14 @@ test('mounted SL6: its own address draws one cohort, its applicants and today’
     assert.match(m.of('lab-cohort-tile-passed_w1'), /Passed Week 1.*20.*of 22 started/s);
     assert.match(m.of('lab-cohort-capacity'), /22 approved of 25 places.*Minimum 1 met/s);
     assert.match(m.of('lab-cohort-week-4'), /Week 4 · now/);
-    assert.match(m.of('lab-cohort-messages'), /Not read here yet/);
-    assert.match(m.of('lab-cohort-history'), /Not read here yet/);
+    assert.match(m.of('lab-cohort-messages'), /No recorded events/);
+    assert.ok(m.seen.some(p => p.includes('/activity?type=messages&cohort=2026-10')));
+    assert.match(m.of('lab-cohort-history'), /No recorded events/);
+    assert.match(m.of('lab-cohort-capacity-result'), /Run the cohort.*22 approved.*minimum 1/s);
     assert.match(m.of('lab-cohort-applicants'), /Synthetic Labs.*Synthetic Founder.*Approved.*4 Sep/s);
     assert.match(m.of('lab-applicants-pager'), /1–1 of 1/);
     assert.ok(m.seen.includes('/api/admin/cohort/applications/list?cohort=2026-10&limit=25&offset=0'), 'one page of this cohort’s applicants');
-    assert.ok(m.within('lab-cohort-grace').some((n) => m.props(n)?.['data-testid'] === 'admin-cohort-timing'), 'today’s grace and override console is mounted');
+    assert.ok(m.within('lab-cohort-grace').some((n) => m.props(n)?.['data-testid'] === 'lab-participants'), 'the reasoned participant decision desk is mounted for this cohort');
     assert.equal(m.props(m.byTestId('lab-cohort-back')).href, `${LAB_PATH}/cohorts`);
   } finally { await m.unmount(); }
   const missing = await mount(`${LAB_PATH}/cohorts/2031-01`);

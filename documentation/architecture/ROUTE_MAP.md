@@ -1567,3 +1567,5 @@ is added. See `services/channels/telegramCapture.ts` and D867.
 - `POST /api/calendar/push/event_ticket/:registration_id` and `/push/event_hosted/:event_id` copy one to the member's connected calendars. Google and Outlook sync carries both kinds, with no attendees, and on each sync removes the copies whose place or event has left (`removed` in the summary).
 - `GET /api/calendar/event-links/:event_id` (`requireAuth`, then `canViewEvent`'s rule as `eventVisibleTo`): `{ event_id, ics, google, outlook, office365, join_link_included }`. 404 for an unknown event, 403 for one the caller cannot see.
 - Not yet: the token feed for "Subscribe to my events" waits on a migration number (D1033 §4).
+
+D1123 (#3003): SL6 reads Messages/History from `/api/admin/cohort/activity?cohort=YYYY-MM` and capacity from `GET /api/admin/cohort/cohorts/:cohort/capacity`. Formation sends the D946 Lab/all scope to both desks; Users admits through D945’s structured route and in-page dialog. The Lab crumb names `/admin/programs` directly. Branch grant and member refusal cards follow SL16e/SL19a.

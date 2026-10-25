@@ -312,3 +312,5 @@ D971 (#2756): `admin_lab_operations.ts` is mounted by `admin_cohort.ts` under
 The latter filters/paginates one safe projection of existing stores and never
 returns staff identities or free-form audit payloads. An unavailable source is
 503, never an empty successful log. Reads create no schema or data.
+
+D1123: `admin_lab_operations.ts` adds `/cohorts/:cohort/capacity`, the latest stored capacity event for SL6, separately from current Settings. It never returns free-form event details.

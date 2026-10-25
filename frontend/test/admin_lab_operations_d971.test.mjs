@@ -1,3 +1,6 @@
+import LabAdmitDialog from '../src/pages/admin/lab/LabAdmitDialog.jsx';
+import { BranchGrant } from '../src/pages/admin/lab/LabGrantBoundary.jsx';
+import LabOnlyNotice from '../src/pages/admin/lab/LabOnlyNotice.jsx';
 /** D971: mounted tabs against fetch, SQL contracts tested in the Worker suite. */
 import test from 'node:test';
 import assert from 'node:assert/strict';
@@ -198,4 +201,34 @@ test('Super Admin grant failure is independent of operative size and does not tu
 test('an invalid negative size in a successful response is unreadable, never drawn as an operative value', async () => {
   const m = await mount(LabSettings, { '/api/admin/cohort/settings': { settings: { min: -1, max: 25 } } });
   try { assert.match(m.of('lab-size-unreadable'), /Unreadable/); assert.equal(m.has('lab-size-edit-min'), false); } finally { await m.close(); }
+});
+
+test('D1123: Users admits through a cohort and reason dialog, no label or browser popup', async () => {
+  const m = await mount(LabAdmitDialog, {
+    '/api/admin/cohort/applications': { cycles: [{ id: 12, year: 2026, month: 11, app_status: 'open' }, { id: 13, year: 2026, month: 12, app_status: 'closed' }] },
+    'POST /api/admin/cohort/applications/admit': { cohort: 'November 2026', emailed: false },
+  }, { user: { id: 41, name: 'Fixture founder' }, onClose() {}, onChanged() {} });
+  try {
+    assert.equal(m.props('lab-users-admit-go').disabled, true);
+    assert.equal(m.props('lab-admit-cycle').value, '');
+    assert.equal(m.props('lab-admit-over-places').checked, false);
+    assert.doesNotMatch(m.text(), /2026-12/);
+    await m.type('lab-admit-cycle', '12'); await m.type('lab-admit-reason', 'Verified eligible through the studio.');
+    await m.click('lab-users-admit-go');
+    const post = m.calls.find(x => x.method === 'POST' && x.path.endsWith('/admit'));
+    assert.deepEqual(post.body, { user_id: 41, cycle_id: 12, reason: 'Verified eligible through the studio.', confirm_over_places: false });
+    assert.match(m.text(), /Email delivery was not confirmed/);
+  } finally { await m.close(); }
+});
+test('D1123: a branch without a Lab grant never mounts tools; a failed copy is Unreadable', async () => {
+  const m = await mount(BranchGrant, { '/api/licence/mine/programs': { programs: [{ program_key: 'spinout-lab', standing: 'not_recorded' }] } }, { children: h('div', { 'data-testid': 'private-lab-tools' }, 'Lab tools') });
+  try { assert.match(m.text(), /has not been granted/); assert.match(m.text(), /Request it/); assert.equal(m.has('private-lab-tools'), false); } finally { await m.close(); }
+  const failed = await mount(BranchGrant, { '/api/licence/mine/programs': json({ error: 'unreadable' }, 503) }, { children: h('div', { 'data-testid': 'private-lab-tools' }, 'Lab tools') });
+  try { assert.match(failed.text(), /Unreadable/); assert.match(failed.text(), /Try again/); assert.equal(failed.has('private-lab-tools'), false); } finally { await failed.close(); }
+  const granted = await mount(BranchGrant, { '/api/licence/mine/programs': { programs: [{ program_key: 'spinout-lab', standing: 'in_force' }] } }, { children: h('div', { 'data-testid': 'private-lab-tools' }, 'Lab tools') });
+  try { assert.equal(granted.has('private-lab-tools'), true); } finally { await granted.close(); }
+});
+test('D1123: Lab refusal names its audience and keeps the member Lab and home doors', async () => {
+  const m = await mount(LabOnlyNotice, {}, { home: '/founder' });
+  try { assert.match(m.text(), /This page is for studio admins/); assert.match(m.text(), /See the Spin-Out Lab/); assert.match(m.text(), /Go to your home/); } finally { await m.close(); }
 });

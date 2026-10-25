@@ -88,3 +88,5 @@ finite editor caps, concurrent claims and unchanged expiry/revocation/browser gu
 D992: `partner_profile_verdicts_d992.test.ts` holds profile verdict validation,
 explicit clearing, omission, audit recipients and route refusals to the full
 migrated SQLite schema; it also records the shared plan policy's admin exemption.
+
+D1123 extends admin_lab_operations_d971.test.ts with real SQLite capacity-result tests: cohort scoping, last event, absent vs unreadable, and admin-only reads.

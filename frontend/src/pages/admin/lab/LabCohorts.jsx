@@ -3,7 +3,8 @@ import { Link } from 'react-router-dom';
 import { api } from '../../../lib/api';
 import { adminLabApi } from '../../../lib/api/adminLab.js';
 import { Chart, Legend } from '../../../ui/Charts.jsx';
-import AdminCohortTiming from '../AdminCohortTiming';
+import LabCohortDetails from './LabCohortDetails';
+import LabParticipants from './LabParticipants';
 import { Block, CalendarBlock, ViewSwitch } from './LabOverviewBlocks';
 import { CARD, EYE, H2, INPUT, LINK, MONO, SUB, TD, TH, Pill, Select, useRead } from './labParts';
 import { LIST_SORTS, buildApplicants, buildCohortList, buildCohortPage, buildTimeline, settingsOf } from './labOverviewModel';
@@ -99,16 +100,6 @@ function Value({ t }) {
       {t.sub ? <span className={SUB}>{t.sub}</span> : null}
       {t.reason ? <span className={SUB}>{t.reason}</span> : null}
     </div>
-  );
-}
-
-function NotRead({ id, title, text }) {
-  return (
-    <section className={`${CARD} col-span-12 flex flex-col gap-2 px-[18px] py-4 lg:col-span-6`} data-testid={`lab-cohort-${id}`}>
-      <h2 className={H2}>{title}</h2>
-      <span className="self-start rounded-full border border-dashed border-axal-muted px-2 py-0.5 text-[11px] font-semibold text-axal-muted dark:text-gray-400">Not read here yet</span>
-      <span className={SUB}>{text}</span>
-    </section>
   );
 }
 
@@ -222,14 +213,13 @@ function CohortPage({ ym, overview, apps, reload, now }) {
             </div>
           )}
         </Block>
-        <NotRead id="messages" title="Messages sent" text={page.messages.text} />
-        <NotRead id="history" title="History" text={page.history.text} />
+
         <Applicants ym={ym} />
       </div>
       <section className="flex flex-col gap-2" data-testid="lab-cohort-grace">
         <h2 className={H2}>Grace and outcome overrides</h2>
-        <span className={SUB}>Today’s tools, until the Lab’s part 7 redraws them for one cohort. They act on every cohort.</span>
-        <AdminCohortTiming />
+        <span className={SUB}>Give grace or change a week’s outcome for a participant in this cohort. Each decision requires a reason.</span>
+        <LabParticipants key={ym} cohort={ym} />
       </section>
     </div>
   );
@@ -243,6 +233,6 @@ export default function LabCohorts({ ym }) {
   const apps = useRead('cohorts-settings', tick, () => api.adminCohortApplications());
   const reload = () => setTick((t) => t + 1);
   return ym
-    ? <CohortPage ym={ym} overview={overview} apps={apps} reload={reload} now={now} />
+    ? <><CohortPage ym={ym} overview={overview} apps={apps} reload={reload} now={now} /><LabCohortDetails key={ym} cohort={ym} /></>
     : <CohortsHome overview={overview} apps={apps} reload={reload} now={now} />;
 }
