@@ -312,3 +312,13 @@ D971 (#2756): `admin_lab_operations.ts` is mounted by `admin_cohort.ts` under
 The latter filters/paginates one safe projection of existing stores and never
 returns staff identities or free-form audit payloads. An unavailable source is
 503, never an empty successful log. Reads create no schema or data.
+
+D1102 (#2982, part): `data_room.ts` keeps founder details and mutations owner-only.
+The ordinary admin GET returns scoped aggregate counts and checklist coverage,
+with unavailable blocks explicit and no file names, investor identities or access
+rows. `POST /:projectUid/support-read` takes an admin's required reason and must
+write a founder-visible activity row before loading read-only details; it also
+calls `logAdminAction`. It grants no subsequent write permission. Admins cannot
+use legacy investor grants through `/shared` instead. The data-room spec in
+`../services/records/raise.ts` uses the same owner-only gate. File uploads default
+to NDA when visibility is omitted; explicit Open remains allowed for the owner.
