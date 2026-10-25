@@ -10,7 +10,7 @@ import DataRoomFile from './DataRoomFile.jsx';
 import DataRoomHome from './DataRoomHome.jsx';
 import {
   HOME_PATH, LINE, TABS, TITLE, WAITS, WORKSPACE_LINE,
-  activityRows, day, fileRows, grantRows, projectUidOf, tabHref, tabSearch, weekTiles, workspaceHref,
+  activityRows, day, grantRows, projectUidOf, tabHref, tabSearch, weekTiles, workspaceHref,
 } from './dataRoomModel';
 
 /**
