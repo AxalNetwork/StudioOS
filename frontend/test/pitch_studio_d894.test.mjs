@@ -73,16 +73,19 @@ const cardNoDeck = { slug: 'pitch-deck', state: 'empty', series: null, reason: '
 // safeCard's answer when the card's store throws, inside a module read that answers 200 (cycleCards.ts).
 const cardUnreadable = { slug: 'pitch-deck', state: 'unreadable', series: null, next: null, reason: 'Deck share views could not be read' };
 // … → records (raiseCycle.ts pitchRecords): 11 live, 12 withdrawn, 13 expired,
-// 14 used up (the records cannot say so), 15 opened on another version, 16 never opened.
-const link = (id, expires, views, extra = {}) => ({ id, cells: { link: `[Fund ${id}]`, expires, views, time: `${views} min`, most_read: views ? 'Slide 5' : null, ...extra } });
+// 14 used up since the records were read (the engagement read says so), 15 used
+// up on another version (the records say so, D1111), 16 never opened.
+// Time on deck is the seconds the viewer reported, or null (D1111).
+const secs = (n) => ({ text: `${Math.floor(n / 60)}:${String(n % 60).padStart(2, '0')}`, seconds: n });
+const link = (id, expires, views, extra = {}) => ({ id, cells: { link: `[Fund ${id}]`, expires, views, time: views ? secs(views * 60) : null, most_read: views ? 'Slide 5' : null, ...extra } });
 const records = {
   cols: [], total: 6, page: 1, page_size: 25,
   rows: [
-    link(11, { text: '2026-11-04', tone: 'ok' }, 14, { link: '[Fund A]', time: '7 min' }),
-    link(12, { text: 'Revoked', tone: 'muted' }, 0, { link: 'Link created 2 Oct', time: '0 min' }),
-    link(13, { text: 'Expired', tone: 'muted' }, 1, { link: '', time: '0 min', most_read: 'Slide 1' }),
+    link(11, { text: '2026-11-04', tone: 'ok' }, 14, { link: '[Fund A]', time: secs(426) }),
+    link(12, { text: 'Revoked', tone: 'muted' }, 0, { link: 'Link created 2 Oct' }),
+    link(13, { text: 'Expired', tone: 'muted' }, 1, { link: '', time: null, most_read: 'Slide 1' }),
     link(14, { text: '2026-10-25', tone: 'ok' }, 1),
-    link(15, { text: '2026-11-30', tone: 'ok' }, 2),
+    link(15, { text: 'Used up', tone: 'muted' }, 2),
     link(16, { text: 'Never', tone: 'ok' }, 0),
   ],
   add: { text: 'New link', href: '/raise/pitch-deck/new?project=7' },
@@ -271,32 +274,35 @@ test('a link is live only when it has not expired and is not used up, and only a
     [12, false, 'Revoked'],
     [13, false, 'Expired'],
     [14, false, 'Used up'],
-    [15, null, '2026-11-30'],
+    [15, false, 'Used up'],
     [16, true, 'Never'],
   ]);
   assert.equal(rows[0].investor, '[Fund A]');
   assert.equal(rows[2].investor, 'Investor not recorded');
   assert.equal(rows[1].mostRead, null);
-  assert.equal(linkRows(records)[0].live, null, 'with no engagement read, an opened link\'s views left are not known');
+  // D1111: the records answer for every version's links, with or without the engagement read.
+  assert.deepEqual(linkRows(records).map((r) => r.live), [true, false, false, true, false, true], 'with no engagement read, a link the records call live is not live');
+  assert.deepEqual(linkRows(records).map((r) => r.time), ['7:06', null, null, '1:00', '2:00', null], 'time on deck is not drawn from the seconds');
+  assert.equal(linkRows({ rows: [link(1, { text: 'Never', tone: 'ok' }, 3, { time: '3 min' })] })[0].time, null, 'a time in whole minutes is drawn');
+  assert.equal(linkRows({ rows: [link(1, { text: 'Never', tone: 'ok' }, 3, { time: { text: '0:00', seconds: 0 } })] })[0].time, null, 'no seconds is drawn as 0:00');
   assert.equal(newLinkHref(records), '/raise/pitch-deck/new?project=7');
   assert.equal(newLinkHref({ add: { href: 'https://elsewhere.test/x' } }), null, 'only the module\'s own form');
   assert.equal(newLinkHref({ add: { text: 'Build your deck', href: '/raise/pitch' } }), null);
 
   const a = analytics(reads());
-  // 2026-10-24 (D894 review, R1): a link whose views left are not known (15)
-  // keeps Withdraw, as before the fix: only a link known to be dead loses it.
-  for (const id of [11, 15, 16]) assert.match(a, new RegExp(`data-testid="pitch-studio-withdraw-${id}"`), `link ${id}, live or not known, has no Withdraw`);
-  for (const id of [12, 13, 14]) assert.doesNotMatch(a, new RegExp(`data-testid="pitch-studio-withdraw-${id}"`), `dead link ${id} offers Withdraw`);
+  // Only a live link offers Withdraw (D1111: the records say used up, so no link is unknown).
+  for (const id of [11, 16]) assert.match(a, new RegExp(`data-testid="pitch-studio-withdraw-${id}"`), `live link ${id} has no Withdraw`);
+  for (const id of [12, 13, 14, 15]) assert.doesNotMatch(a, new RegExp(`data-testid="pitch-studio-withdraw-${id}"`), `dead link ${id} offers Withdraw`);
   assert.match(renderedText(between(a, 'pitch-studio-link-14', 'pitch-studio-link-15')), /\[Fund 14\]\s*Used up/);
-  assert.match(renderedText(between(a, 'pitch-studio-link-15', 'pitch-studio-link-16')), /Views left not read/);
-  assert.doesNotMatch(between(a, 'pitch-studio-link-15', 'pitch-studio-link-16'), /emerald/, 'a link not known to be live is drawn live');
-  // While the engagement read runs, and after it fails, the row says so instead.
+  assert.match(renderedText(between(a, 'pitch-studio-link-15', 'pitch-studio-link-16')), /\[Fund 15\]\s*Used up\s*2\s*2:00/);
+  assert.match(renderedText(between(a, 'pitch-studio-link-11', 'pitch-studio-link-12')), /\[Fund A\]\s*2026-11-04\s*14\s*7:06/, 'time on deck is not m:ss');
+  assert.doesNotMatch(between(a, 'pitch-studio-link-15', 'pitch-studio-link-16'), /emerald/, 'a link the records call used up is drawn live');
+  // While the engagement read runs, and after it fails, a link the records call live keeps Withdraw.
   const running = analytics(reads({ engagement: { status: 'loading', data: null } }));
-  assert.match(renderedText(between(running, 'pitch-studio-link-11', 'pitch-studio-link-12')), /Reading views left…/);
-  assert.match(running, /data-testid="pitch-studio-withdraw-11"/, 'an opened link loses Withdraw while the engagement read runs');
+  assert.match(running, /data-testid="pitch-studio-withdraw-11"/, 'a live link loses Withdraw while the engagement read runs');
   const failedEng = analytics(reads({ engagement: { status: 'error', data: null } }));
-  assert.match(renderedText(between(failedEng, 'pitch-studio-link-11', 'pitch-studio-link-12')), /Views left could not be read/);
-  assert.doesNotMatch(renderedText(failedEng), /Views left not read/, 'a failed engagement read is drawn as views left not read');
+  assert.match(failedEng, /data-testid="pitch-studio-withdraw-11"/, 'a live link loses Withdraw when the engagement read fails');
+  assert.doesNotMatch(renderedText(failedEng), /Views left/, 'a views-left state is drawn');
   assert.doesNotMatch(between(a, 'pitch-studio-link-14', 'pitch-studio-link-15'), /emerald/, 'a used-up link is drawn live');
 });
 
@@ -607,8 +613,8 @@ test('the cover and the links table never draw a bare dash for a value nobody wr
   assert.match(renderedText(between(running, 'pitch-studio-funnel')), /Opened\s*Reading…/);
 });
 
-test('Withdraw on a link whose views left are unknown says it may already be closed', async () => {
-  // 2026-10-24 (D894 review, R1): link 15 is another version's, opened; link 11 is live.
+test('Withdraw on a live link says it stops at once; a used-up link offers none', async () => {
+  // D1111: link 15 is another version's, used up, and the records say so; link 11 is live.
   const m = await mount(h(PitchStudio, { tab: 'analytics' }), '/raise/pitch/analytics?project_id=7', {
     listProjects: async () => [{ id: 7, name: 'Acme' }],
     deckListVersions: async () => versions,
@@ -617,9 +623,7 @@ test('Withdraw on a link whose views left are unknown says it may already be clo
     'cycles.module': async () => ({ card: cardOk, records }),
   });
   try {
-    await m.press(m.by('pitch-studio-withdraw-15'));
-    assert.match(m.text(), /If \[Fund 15\]\s*'s link still opens, it stops at once\. Its views stay listed, and the link then reads Revoked\./);
-    await m.press(m.all().find((n) => n.nodeName === 'BUTTON' && /^Cancel$/.test((n.textContent || '').trim())));
+    assert.equal(m.by('pitch-studio-withdraw-15'), undefined, 'a used-up link offers Withdraw');
     await m.press(m.by('pitch-studio-withdraw-11'));
     assert.match(m.text(), /\[Fund A\]\s*'s link stops opening at once\. Its views stay listed\./);
     assert.doesNotMatch(m.text(), /If \[Fund A\]\s*'s link still opens/);
