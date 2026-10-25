@@ -22,6 +22,7 @@ import type { Env } from '../types';
 import { notify } from './notify';
 import { ensureEventsSchema } from './eventsSchema';
 import { wrap, type EmailTemplate } from '../templates/email/layout';
+import { memberEventLink } from './eventLinks';
 
 type ReminderKind = 'reminder_24h' | 'reminder_1h';
 
@@ -93,7 +94,7 @@ async function deliverReminder(
       category: 'events',
       title,
       body: when,
-      link: `/events/${event.slug}`,
+      link: memberEventLink(event.id),
       payload: { event_id: event.id, kind },
     }).catch(() => {});
     return;

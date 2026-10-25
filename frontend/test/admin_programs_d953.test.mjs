@@ -937,9 +937,10 @@ test('the sidebars: the Admin row and its match, Approvals without /admin/refer-
 });
 
 test('Approvals: lane 16 says No queue at People, lane 2 and the branch console take the Queue, and the placement map follows', () => {
-  const held = read('frontend/src/pages/admin/HeldApprovals.jsx');
-  assert.match(held, /<tr data-lane="2">.*<Link to="\/admin\/programs\/refer-and-earn\/queue" className=\{CONSOLE\}>\/admin\/programs\/refer-and-earn\/queue<\/Link>/);
-  assert.match(held, /<tr data-lane="16">.*<Link to="\/admin\/programs\/mentor-cohorts\/people" className=\{CONSOLE\}>\/admin\/programs\/mentor-cohorts\/people<\/Link>.*noQueue="Advisor cohort access"/);
+  // D1038 (#2390): Approvals moved to /admin/approvals; the lane and the Not-a-queue card keep the doors.
+  const held = read('frontend/src/pages/admin/approvals/AdminApprovals.jsx');
+  assert.match(held, /case 'referrals': return <Link to="\/admin\/programs\/refer-and-earn\/queue" className=\{LINK\}>Refer & Earn › Queue<\/Link>;/);
+  assert.match(held, /<Link to="\/admin\/programs\/mentor-cohorts\/people" className=\{LINK\}>Mentor cohort access<\/Link>: \{NOT_A_QUEUE\[3\]\.reason\}/);
   assert.equal(LANE_CONSOLES.referrals, '/admin/programs/refer-and-earn/queue');
   assert.equal(NO_QUEUE_CONSOLES['Advisor cohort access'], '/admin/programs/mentor-cohorts/people');
   assert.match(read('frontend/src/pages/branch/BranchApprovals.jsx'), /referrals: \{ to: '\/admin\/programs\/refer-and-earn\/queue'/);
