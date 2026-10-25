@@ -93,7 +93,7 @@ test('mounted desk: History from the Durable company-building read, each duty bl
     await t.settle();
     assert.deepEqual(calls, [['grow', 7, 'durable-company-building', {}]]);
     assert.match(t.text(t.byId('reporting-history')), /Update · Sep 2026.*Sent 2 Oct · 3 investors/s);
-    for (const w of DESK_WAITS) assert.match(t.text(t.byId(`reporting-wait-${w.key}`)), new RegExp(`${w.title}${NOT_YET}`));
+    for (const w of DESK_WAITS) assert.ok(t.text(t.byId(`reporting-wait-${w.key}`)).startsWith(`${w.title}${NOT_YET}`), w.key);
     assert.ok(!/\b0 (due|late|duties)\b/.test(t.text(t.container)), 'no zero is claimed');
     const tabs = t.walk(t.byId('cycle-tabs')).filter((n) => n.tagName === 'A');
     assert.equal(t.props(tabs.find((n) => t.text(n) === 'Reporting'))['aria-current'], 'page');
@@ -155,7 +155,8 @@ test('wiring: the routes sit ahead of /grow/:slug, /grow/updates forwards to the
   }
   assert.match(app, /<Route path="\/grow\/updates" element=\{guard\(\['admin', 'founder'\], <HistoryRedirect to="\/grow\/reporting" hash="" \/>\)\} \/>/);
   for (const p of ['/portfolio/companies/:uid', '/portfolio/companies/:uid/reports', '/portfolio/companies/:uid/terms']) {
-    assert.match(app, new RegExp(`<Route path="${p.replace(/\//g, '\\/')}" element=\\{guard\\(\\['admin', 'investor'\\], investorWorkspace\\('portfolio', <PortfolioCompanyPage \\/>\\)\\)\\} \\/>`), p);
+    const line = `<Route path="${p}" element={guard(['admin', 'investor'], investorWorkspace('portfolio', <PortfolioCompanyPage />))} />`;
+    assert.ok(app.split('\n').some((l) => l.trim() === line), p);
   }
   const route = read('frontend/src/pages/cycles/CycleRoute.jsx');
   assert.match(route, /\} else if \(reporting && cycle === 'grow'\) \{/);

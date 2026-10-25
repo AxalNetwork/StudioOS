@@ -66,7 +66,7 @@ test('mounted plan: What Validate proved from the Validate overview, each module
     const proved = t.text(t.byId('plan-proved'));
     assert.match(proved, /What Validate proved.*Problem discovery.*No pain theme accepted yet.*Demand and urgency signals/s);
     assert.doesNotMatch(proved, /Customer research/, 'only the four modules the plan rests on');
-    for (const s of SECTIONS) assert.match(t.text(t.byId(`plan-section-${s.slug}`)), new RegExp(`${s.name.replace(/[/]/g, '\\/')}${NOT_YET}`));
+    for (const s of SECTIONS) assert.ok(t.text(t.byId(`plan-section-${s.slug}`)).startsWith(`${s.name}${NOT_YET}`), s.slug);
     assert.match(t.text(t.byId('plan-wait')), /not a claim that there is nothing to build/);
     assert.match(t.text(t.byId('plan-founding-team')), /Founding team takes no proposals/);
     assert.equal(t.props(t.byId('plan-tab-progress')).href, '/build/plan/progress?project_id=7');
