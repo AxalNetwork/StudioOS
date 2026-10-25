@@ -258,6 +258,9 @@ import adminRevenue from './routes/admin_revenue';
 import adminContent from './routes/admin_content';
 import adminPlatform from './routes/admin_platform';
 import adminSecurity from './routes/admin_security';
+import adminTrustCenter from './routes/admin_trust_center';
+import trustPublic from './routes/trust_public';
+import { securityReports, adminSecurityReports } from './routes/security_reports';
 import adminHqSupport from './routes/admin_hq_support';
 import adminStudioGlance from './routes/admin_studio_glance';
 import adminInsights from './routes/admin_insights';
@@ -1135,6 +1138,11 @@ app.route('/api/admin/revenue', adminRevenue);
 // piece at a time. This is the cross-tenant pipeline view above it.
 app.route('/api/admin/content', adminContent);
 app.route('/api/admin/platform', adminPlatform);
+// D1075 — the public trust center's content store (Super Admin writes) and
+// members' security reports. Mounted before the desk below so the desk's
+// router never answers for them.
+app.route('/api/admin/security/trust-center', adminTrustCenter);
+app.route('/api/admin/security/reports', adminSecurityReports);
 // HQ · Security — the cross-tenant security desk. Super-admin-only.
 app.route('/api/admin/security', adminSecurity);
 // HQ · Support — the three queues as one read (D204, canvas H22). Super-admin-
@@ -1300,6 +1308,8 @@ app.route('/api/profile', founderProfileRoutes);
 app.route('/api/admin/profiling', adminProfilingRoutes);
 // D990 — Partner profiles: the list, the counts and one profile by reference (routes/admin_partner_profiles.ts).
 app.route('/api/admin/partner-profiles', adminPartnerProfilesRoutes);
+// D1075 — Help's Security category: a private report only HQ's Super Admins read.
+app.route('/api/help/security-reports', securityReports);
 // D603 — the Help Center's guide views and yes/no answers (routes/help_center.ts).
 app.route('/api/help', helpCenterRoutes);
 app.route('/api/admin/help', adminHelpCenter);
@@ -1432,6 +1442,8 @@ app.route('/api/public', circlesPublicRoutes);
 // certificate verifier rather than falling through.
 app.route('/api/public', publicCertificateRoutes);
 app.route('/api/public', publicRoutes);
+// D1075 — the public trust center's reads and subprocessor notices (routes/trust_public.ts).
+app.route('/api/public', trustPublic);
 // Task #10 (LD) — Public team roster. Mounted under /api/public so it
 // sits OUTSIDE auth and outside the admin routers' requireAdmin gates. /api/public/team
 // was written for the Jekyll marketing build that used to curl it into
@@ -1740,6 +1752,10 @@ const ROLE_SCHEMA_SAFE_ANONYMOUS_READS: readonly (string | RegExp)[] = [
   '/api/public/partners',
   '/api/public/status',
   '/api/public/changelog',
+  // D1075: the trust center's reads touch only migration 584's tables.
+  '/api/public/trust',
+  '/api/public/trust/changes',
+  '/api/public/trust/matrix',
   /^\/api\/public\/events(?:\.ics|\/[^/]+(?:\/ics)?)?$/,
   /^\/api\/public\/invite\/[^/]+$/,
   /^\/api\/public\/jobs(?:\/[^/]+)?$/,
@@ -1930,6 +1946,17 @@ export default {
         // remediation, notification flushes and the score audits all act on
         // this deployment's own rows and would be wrong to centralise.
         const hqCadences = branchOf(env) === null;
+        // D1075: subprocessor notices left by a Publish (a send that failed is
+        // retried after an hour). HQ only: the trust center is axal.vc's.
+        if (hqCadences && now.getUTCMinutes() % 5 === 4) {
+          try {
+            const { sendSubprocessorNotices } = await import('./services/subprocessorNotices');
+            const r = await sendSubprocessorNotices(env, { now: now.getTime() });
+            if (r.sent || r.failed) console.info(`[cron] subprocessor notices sent=${r.sent} failed=${r.failed}`);
+          } catch {
+            console.error('[cron] subprocessor notices unreadable');
+          }
+        }
         // D886 B10: counts-only alerts in the existing HQ notification inbox.
         if (hqCadences && now.getUTCMinutes() % 5 === 3) {
           try {
