@@ -41,7 +41,7 @@ reviews.get('/admin/experts', async (c) => {
       .bind(SAMPLE_EXPERT_UID_PREFIX.length, SAMPLE_EXPERT_UID_PREFIX, state, state, elevated, actor.id, limit, offset).all<any>();
     if (!count || !Number.isSafeInteger(count.n) || ('success' in rows && !rows.success) || !Array.isArray(rows.results)) throw new Error('Review rows were not returned');
     const files = await credentialFilesFor(c.env, rows.results.map((r) => Number(r.id)));
-    return c.json({ items: await Promise.all(rows.results.map((r) => reviewDto(c.env, r, files.get(Number(r.id)) ?? []))), total: Number(count.n), limit, offset });
+    return c.json({ items: await Promise.all(rows.results.map((r) => reviewDto(c.env, r, files.get(Number(r.id)) ?? [], true))), total: Number(count.n), limit, offset });
   });
 });
 
@@ -52,7 +52,7 @@ reviews.get('/admin/experts/:uid/review', async (c) => {
     const history = await c.env.DB.prepare(`SELECT decision, decided_by, decided_at, reason, credentials_checked, review_version
       FROM expert_review_decisions WHERE expert_id = ? ORDER BY review_version DESC`).bind(row.id).all();
     if (('success' in history && !history.success) || !Array.isArray(history.results)) throw new Error('Decision history was not returned');
-    return c.json({ expert: await reviewDto(c.env, row), history: history.results });
+    return c.json({ expert: await reviewDto(c.env, row, undefined, true), history: history.results });
   });
 });
 

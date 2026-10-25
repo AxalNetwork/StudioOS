@@ -172,6 +172,11 @@ test('decline reason is mandatory, stored on the expert and trail, and visible i
   assert.match(one(f, 'SELECT body FROM notifications_inbox').body, /Please supply the issuing board/);
   const mine = await call(f, 3, 'GET', `${wb}/experts/me/credentials`);
   assert.equal(mine.body.decline_reason, expert(f).decline_reason); assert.equal(sent.length, 1);
+  assert.equal(Object.hasOwn(mine.body, 'decided_by'), false);
+  const admin = await call(f, 1, 'GET', `${wb}/admin/experts/expert-a/review`);
+  assert.equal(admin.body.expert.decided_by, 1); assert.equal(admin.body.history[0].decided_by, 1);
+  const queue = await call(f, 1, 'GET', `${wb}/admin/experts?state=declined`);
+  assert.equal(queue.body.items[0].decided_by, 1);
   assert.equal(one(f, source.countSql).n, 0);
   assert.equal(f.db.prepare(source.rowsSql).all(100).length, 0);
 }));
@@ -184,7 +189,7 @@ test('credential edits invalidate verification, preserve history, reject invalid
   const saved = await call(f, 3, 'PATCH', path, { licence_number: 'SYNTHETIC-123', issuer: 'Synthetic board', expires_on: '2099-12-31' });
   assert.equal(saved.status, 200); assert.equal(saved.body.verified, false); assert.equal(saved.body.decision_state, 'pending');
   assert.equal(saved.body.credentials.licence_number, 'SYNTHETIC-123'); assert.equal(saved.body.review_version, 2);
-  assert.equal(saved.body.decided_by, null); assert.equal(saved.body.decided_at, null); assert.equal(saved.body.decline_reason, null);
+  assert.equal(Object.hasOwn(saved.body, 'decided_by'), false); assert.equal(expert(f).decided_by, null); assert.equal(saved.body.decided_at, null); assert.equal(saved.body.decline_reason, null);
   assert.equal(one(f, 'SELECT COUNT(*) AS n FROM expert_review_decisions').n, 1);
   assert.equal((await call(f, 4, 'PATCH', path, { licence_number: 'OTHER' })).status, 404);
   assert.equal((await call(f, 1, 'POST', `${wb}/admin/experts/expert-a/verify`, { verified: true, credentials_checked: true, expected_version: 1 })).status, 409);

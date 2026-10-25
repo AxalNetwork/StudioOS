@@ -49,12 +49,12 @@ export async function credentialFiles(env: Env, id: number) {
   return (await credentialFilesFor(env, [id])).get(id) ?? [];
 }
 
-export async function reviewDto(env: Env, row: any, files?: any[]) {
+export async function reviewDto(env: Env, row: any, files?: any[], includeActor = false) {
   return {
     uid: row.uid, name: row.name, headline: row.headline, bio: row.bio, is_sample: isSampleExpert(row.uid),
     verified: !!row.verified, hidden: !!row.hidden_by_admin, created_at: row.created_at ?? null,
     profile_completion_pct: row.profile_completion_pct ?? null,
-    decision_state: row.decision_state, decided_by: row.decided_by ?? null, decided_at: row.decided_at ?? null,
+    decision_state: row.decision_state, ...(includeActor ? { decided_by: row.decided_by ?? null } : {}), decided_at: row.decided_at ?? null,
     decline_reason: row.decline_reason ?? null, review_version: row.review_version,
     credentials: { licence_number: row.licence_number ?? null, issuer: row.licence_issuer ?? null,
       expires_on: row.licence_expires_on ?? null, files: files ?? await credentialFiles(env, row.id) },
