@@ -206,7 +206,7 @@ test('the venture rule leaves other providers and Carta’s own audience rule in
   const f = fixture();
   const keysFor = async (who: string) => (await call(f.env, who, 'GET', '/api/connectors/available')).body.items.map((p: any) => p.key).filter((k: string) => k !== 'mercury');
   const founder = await keysFor('founder');
-  for (const who of CONNECTORS_NOT_VENTURE) assert.deepEqual(await keysFor(who), founder.filter((k: string) => k !== 'zoom' && (k !== 'carta' || who === 'investor')), who);
+  for (const who of CONNECTORS_NOT_VENTURE) assert.deepEqual(await keysFor(who), founder.filter((k: string) => getDescriptor(k)?.audience_rule !== 'venture' && (k !== 'carta' || who === 'investor')), who);
 });
 
 // 4 ───────────────────────────────────────────────────────────────────────────

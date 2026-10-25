@@ -371,3 +371,103 @@ test('HQ · Platform reads the same block, hours included', async () => {
   assert.equal(r.body.payments_catalog.webhook.available, true);
   assert.equal(r.body.payments_catalog.webhook.hours.length, WEBHOOK_WINDOW_HOURS);
 });
+
+
+// D1129 (#3009): the search and complete Who choices, without a new store.
+test('D1129 search finds product names through price rows and recorded detail; count, page and CSV agree', async () => {
+  const db = freshDb(); seed(db);
+  try {
+    const product = await call(payments, db, '/change-log?q=STUDIO&limit=1');
+    assert.equal(product.status, 200);
+    assert.equal(product.body.total, 2);
+    assert.deepEqual(product.body.entries.map((e: any) => e.action), ['catalog_price_update']);
+    const next = await call(payments, db, '/change-log?q=studio&limit=1&offset=1');
+    assert.deepEqual(next.body.entries.map((e: any) => e.action), ['catalog_product_create']);
+    const detail = await call(payments, db, '/change-log?q=Monthly&who=802');
+    assert.equal(detail.body.total, 1);
+    assert.equal(detail.body.entries[0].price_id, 'price_A1');
+    const csv = await call(payments, db, '/change-log.csv?q=Monthly&reason=Quarterly%20payments%20audit');
+    assert.equal(csv.status, 200);
+    assert.equal(csv.headers.get('X-Export-Rows'), '1');
+    assert.match(csv.text, /price_A1/);
+    assert.doesNotMatch(csv.text, /price_B1/);
+    const recorded = JSON.parse(db.prepare('SELECT filters_json FROM admin_audit_log WHERE action = ? ORDER BY id DESC LIMIT 1').get(CHANGE_LOG_EXPORT_ACTION).filters_json as string);
+    assert.equal(recorded.search_applied, true);
+    assert.equal(recorded.filters.q, undefined, 'the query text is not copied to the audit row');
+    const literal = await call(payments, db, '/change-log?q=' + encodeURIComponent("%' OR 1=1 --"));
+    const wildcard = await call(payments, db, '/change-log?q=%25');
+    assert.equal(wildcard.body.total, 0, 'a percent sign is literal, not a match-all wildcard');
+    assert.equal(literal.status, 200);
+    assert.equal(literal.body.total, 0, 'search punctuation stays a bound literal');
+    assert.equal((await call(payments, db, '/change-log?q=' + 'x'.repeat(201))).status, 400);
+  } finally { db.close(); }
+});
+
+test('D1129 Who lists every admin, including one with no log row, with no email or other role', async () => {
+  const db = freshDb(); seed(db);
+  db.prepare('INSERT INTO users (id, role, name, email) VALUES (?, ?, ?, ?)').run(804, 'admin', 'Quiet Admin', 'quiet@example.test');
+  db.prepare('INSERT INTO users (id, role, name, email) VALUES (?, ?, ?, ?)').run(805, 'founder', 'Founder fixture', 'founder@example.test');
+  try {
+    const out = await call(payments, db, '/change-log/admins');
+    assert.equal(out.status, 200);
+    assert.deepEqual(out.body.admins.map((a: any) => a.id).sort(), [801, 802, 803, 804]);
+    assert.ok(out.body.admins.every((a: any) => Object.keys(a).sort().join() === 'id,name'));
+    assert.doesNotMatch(out.text, /@|Founder fixture/);
+    assert.equal((await call(payments, db, '/change-log/admins', { as: ADMIN })).status, 403);
+    assert.equal((await call(payments, db, '/change-log/admins', { as: 0 })).status, 401);
+    const base = makeD1(db);
+    const d1 = { ...base, prepare(sql: string) { if (sql.includes('SELECT actor.id, u.name')) throw new Error('private database detail'); return base.prepare(sql); } };
+    const failed = await call(payments, db, '/change-log/admins', { d1 });
+    assert.equal(failed.status, 503);
+    assert.doesNotMatch(failed.text, /private database detail/);
+  } finally { db.close(); }
+});
+
+
+test('D1129 search reads decoded detail values, never JSON keys, with matching count and CSV', async () => {
+  const db = freshDb();
+  try {
+    audit(db, SUPER, 'catalog_price_update', { price_id: 'px_A', product_id: 'prod_A', reason: 'Monthly' }, '2026-10-01 09:00:00');
+    audit(db, SUPER, 'catalog_price_update', { patch: { nickname: 'A "quoted" \\path 25%' } }, '2026-10-01 10:00:00');
+    for (const q of ['price', 'product', 'reason']) {
+      const out = await call(payments, db, '/change-log?q=' + q);
+      assert.equal(out.body.total, 0, 'JSON key matched: ' + q);
+      assert.deepEqual(out.body.entries, []);
+    }
+    for (const q of ['"quoted"', '\\path', '25%']) {
+      const out = await call(payments, db, '/change-log?q=' + encodeURIComponent(q));
+      assert.equal(out.body.total, 1, 'decoded detail did not match: ' + q);
+      assert.equal(out.body.entries.length, 1);
+      const csv = await call(payments, db, '/change-log.csv?q=' + encodeURIComponent(q) + '&reason=Quarterly%20payments%20audit');
+      assert.equal(csv.headers.get('X-Export-Rows'), '1');
+    }
+  } finally { db.close(); }
+});
+
+test('D1129 Who retains demoted and deleted payment actors, but excludes unrelated audit actors', async () => {
+  const db = freshDb();
+  try {
+    db.prepare('INSERT INTO users (id, role, name, email) VALUES (?, ?, ?, ?)').run(806, 'founder', 'Former Admin', 'former@example.test');
+    db.prepare('INSERT INTO users (id, role, name, email) VALUES (?, ?, ?, ?)').run(808, 'founder', 'Unrelated', 'unrelated@example.test');
+    audit(db, 806, 'catalog_product_update', { product_id: 'prod_A' }, '2026-10-01 09:00:00');
+    audit(db, 807, 'catalog_price_update', { price_id: 'price_A' }, '2026-10-01 10:00:00');
+    audit(db, 808, 'role_changed', {}, '2026-10-01 11:00:00');
+    const out = await call(payments, db, '/change-log/admins');
+    assert.deepEqual(out.body.admins.map((a: any) => a.id).sort(), [801, 802, 803, 806, 807]);
+    assert.deepEqual(out.body.admins.find((a: any) => a.id === 807), { id: 807, name: null });
+    assert.equal((await call(payments, db, '/change-log?who=806')).body.total, 1);
+    const csv = await call(payments, db, '/change-log.csv?who=807&reason=Quarterly%20payments%20audit');
+    assert.equal(csv.headers.get('X-Export-Rows'), '1');
+  } finally { db.close(); }
+});
+
+
+test('D1129 Who choices exclude system actor ids that the filter cannot accept', async () => {
+  const db = freshDb();
+  try {
+    for (const id of [0, -1]) audit(db, id, 'catalog_sync_failed', { failure: 'stripe' }, '2026-10-01 09:00:00');
+    const out = await call(payments, db, '/change-log/admins');
+    assert.ok(out.body.admins.every((a: any) => Number.isSafeInteger(a.id) && a.id > 0));
+    assert.equal(out.body.admins.length, 3);
+  } finally { db.close(); }
+});

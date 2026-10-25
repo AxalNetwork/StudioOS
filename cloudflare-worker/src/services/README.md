@@ -126,7 +126,8 @@ no new schema, runtime or billing path is introduced.
 | `vercel/` | D1096: `api.ts`, the only caller of `api.vercel.com`: a read-only client for the planned reads, uninstall and the OAuth code exchange. Its README has the rules. |
 | `wellbeing/` | Wellbeing check-ins. |
 | `productTesters.ts` | D1042 (#2890): the product tester store (migration 576). `TRANSITIONS` (approve, decline, pause, resume, remove and the status each needs), `messageFor` (what the member is told), `listTesters`, `testerDetail`, `isAdminAccount` (admins cannot test) and `applyTransition` (one conditional UPDATE and one append-only event row in a batch). `reapplyAfter` is the decision day plus 90 days. `../routes/admin_product_testers.ts` is its only caller. |
-| `programGrants.ts` | D982 (#2773): program grants. The nine programs and their readiness (held equal to `frontend/src/lib/programGrants.js`), `TERM_FIELDS` (which grant terms apply to which program, and which are defaultable), `validateTerms` (an unknown or inapplicable term is refused; `null` clears), `presentGrant` (the in-force rule and what a grant waits on), `readGrid`, `readDefaults` and `readHistory`. The store is migration 553; `../routes/admin_program_grants.ts` and `licencePrograms.ts` call it. D983 adds the grid's requests tile and series. |
+| `programGrants.ts` | D982 (#2773): program grants. The nine programs and their readiness (held equal to `frontend/src/lib/programGrants.js`), `TERM_FIELDS` (which grant terms apply to which program, and which are defaultable), `validateTerms` (an unknown or inapplicable term is refused; `null` clears), `presentGrant` (the in-force rule and what a grant waits on), `readGrid`, `readDefaults` and `readHistory`. The store is migration 553; `../routes/admin_program_grants.ts` and `licencePrograms.ts` call it. D983 adds the grid's requests tile and series. D956 adds the `draft` state (migration 562), `programNamed` (the nine or a registry key), the terms every program carries for a program D955 added, and `openDraftStatements`. |
+| `programGrantStates.ts` | D956 (#2789): what each viewer reads of a program's grant (`grantViewerOf`, `grantStates`): a Super Admin's count or HQ only, a deployed studio's licence state in the canvas's words (`requested` from both request lanes), the held mode for an admin with no licence or an undeployed studio, and a branch's state from D984's copy; a failed read is unreadable, never a state. Also Offer to studios (`offerToStudios`, `offerRefusal`: D982's switch, on only with a published playbook). Callers: `../routes/admin_programs.ts`, `programCatalogue.ts`, `../routes/admin_program_grants.ts`. |
 | `licencePrograms.ts` | D984 (#2775): the Administrator's programs. `programCopy` (the licence's grant rows and which programs HQ grants, as the licence push carries them to the branch, migration 554), `parseProgramCopy`, `studioPrograms` (the nine programs in the studio's words, in force by `presentGrant` and the day) and `unlinkedPrograms` (HQ runs every program). Callers: `../routes/licence_programs.ts` and `licencePush.ts`. |
 | `programRequests.ts` | D983 (#2774): the program requests checked against HQ's grants where HQ records them (`checkProgramRequest`: offered, held, a term that applies, one open request per question, what the term stands at read from the grant), the open-request counts per lane, a request's licence, and the draft an approval leaves (`draftOf`). Called by `../rpc/hqOps.ts` and `../routes/admin_program_requests.ts`. |
 | `trustContent.ts` | D1075 (#2967): the public trust center's content store (migration 584): the seven blocks, each line a fact or a gap with its reason (`parseBody`), a certification only with its auditor's report on file, Publish in one batch with one change note (`publish`), the subprocessors (ten days' notice), the change log, and the public matrix from `trust.ts`'s `obligationsForRole` (`publicMatrix`). |
@@ -229,6 +230,13 @@ assumptions state. Mercury's accepted SAFEs explicitly pass `post_money` through
 `capTableWrites.ts`; manual missing basis retains the legacy pre-money default.
 The [YC post-money user guide](https://bookface-static.ycombinator.com/assets/ycdc/Website%20User%20Guide%20Feb%202023%20-%20final-28acf9a3b938e643cc270b7da514194d5c271359be25b631b025605673fa9f95.pdf)
 explains exclusion of cash-outs and the unissued pool from liquidity capitalization.
+`dataRoomActivity.ts` (D1105, #2985) is the data room's activity and checklist
+reads: `activityRead()` (a period's daily figures against the period before, per
+investor, the paged log), `activityCsv()` (the same rows; 413 past 10,000) and
+`checklistRead()` (per diligence item, its files and how many grants in force can
+open each, by `tierAdmits()` with each grant's folder scope and the NDA gate). A
+refusal (`blocked`) is never counted as an open, and a reader is named only through
+one of the venture's own grants. Its routes are `../routes/data_room.ts`'s.
 `dataRoomAccess.ts` (D691 decision 6, #1700) is the data room's one access
 predicate, `tierAdmits()`: a file's `access_tier` (`invited`, `committed`,
 `nobody`) and `access_expires_at`, with `investorCommitted()` (a committed
@@ -428,7 +436,8 @@ UTC Monday window for claim totals, listing ranks and weekly price-kind counts.
 `raiseEvidence.ts` reads active Mercury runway facts and the files current data-room grants can download, for Raise and deck readiness.
 
 `paymentsChangeLog.ts` (D1011) names the fifteen catalogue and Stripe audit
-actions and reads them back as the Payments change log; `stripeWebhookDeliveries.ts`
+actions and reads them back as the Payments change log (D1129: bound literal
+search before count/page/export, and the complete admin filter list); `stripeWebhookDeliveries.ts`
 is the webhook's request-log reader, shared by HQ · Platform and Payments, with
 hourly buckets that are null for an hour the log was silent.
 
@@ -439,3 +448,7 @@ catalogue contains headings only. The existing Super Admin edit route creates a
 missing allowed draft section after validation, in the same batch as its edit;
 reads do not seed content. Published versions and audit behavior stay in D954's
 store; no migration or canvas sample text is introduced.
+
+D1129 searches decoded audit detail values, never JSON keys, and includes demoted/deleted payment actors in Who alongside current admins.
+
+D1133: `billingRecovery.ts` prepares caller-owned renewal invoice intents or card-only SetupIntents behind Billing’s fresh-TOTP routes, and records only allowlisted payment-refusal families. `billingAlerts.ts` atomically couples renewal history with alert transitions. No card/client secret is stored.

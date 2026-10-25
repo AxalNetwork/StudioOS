@@ -82,7 +82,7 @@ test('on HQ, /available lists mercury to an admin as a preview of the founder\'s
     assert.equal(r.status, 200, role);
     const keys = r.body.items.map((p: any) => p.key);
     // D757 §2.11: Zoom is a Validate source, listed only to who can hold a venture.
-    assert.deepEqual(keys.filter((k: string) => k !== 'mercury'), OTHERS.filter((k) => (k !== 'zoom' || role === 'admin' || role === 'founder') && (k !== 'carta' || role === 'founder' || role === 'investor')), `${role}: the other providers, in order`);
+    assert.deepEqual(keys.filter((k: string) => k !== 'mercury'), OTHERS.filter((k) => (REGISTRY.find(p => p.key === k)?.audience_rule !== 'venture' || role === 'admin' || role === 'founder') && (k !== 'carta' || role === 'founder' || role === 'investor')), `${role}: the other providers, in order`);
     assert.equal(keys.includes('mercury'), role === 'admin' || PERSONAL.includes(role), role);
     for (const p of r.body.items.filter((x: any) => x.key !== 'mercury')) {
       const desc = REGISTRY.find((d) => d.key === p.key)!;

@@ -23,6 +23,7 @@
  */
 import type { Env } from '../types';
 import { PROPOSAL_ACTIONS, REGISTRY_ACTIONS, type ProgramKey } from './programRegistry';
+import { GRANT_ACTIONS } from './programGrantStates';
 
 /** Mentor cohort access's audited writes (D960, `routes/advisors.ts`): giving a mentor a cohort, and ending it. */
 export const MENTOR_ACCESS_ACTIONS = ['advisor_cohort.assigned', 'advisor_cohort.ended'] as const;
@@ -58,8 +59,11 @@ export const NOT_AUDITED_YET: Partial<Record<ProgramKey, string>> = {
 export const ACTIVITY_LIMIT_MAX = 50;
 
 // Matched on each row's program_key. D955 adds the decision on a proposal and New program,
-// whose rows name the program they made; a send names none.
-const REGISTRY_ACTION_LIST = [...Object.values(REGISTRY_ACTIONS), PROPOSAL_ACTIONS.decide, PROPOSAL_ACTIONS.create];
+// whose rows name the program they made; a send names none. D956 adds Offer to studios and
+// D982's defaults write, which both name the program and flip its "can be granted" switch.
+const REGISTRY_ACTION_LIST = [
+  ...Object.values(REGISTRY_ACTIONS), PROPOSAL_ACTIONS.decide, PROPOSAL_ACTIONS.create, ...Object.values(GRANT_ACTIONS),
+];
 const SOURCES = ['a', 'r'] as const; // admin audit, referral review
 type Source = typeof SOURCES[number];
 
@@ -198,6 +202,7 @@ export async function programActivity(
           ...(typeof d.section === 'string' ? { section: d.section } : {}),
           ...(typeof d.version === 'number' ? { version: d.version } : {}),
           ...(typeof d.outcome === 'string' ? { outcome: d.outcome } : {}),
+          ...(typeof d.grantable === 'boolean' ? { grantable: d.grantable } : {}),
           ...(Array.isArray(d.fields) ? { fields: d.fields.filter((x) => typeof x === 'string') } : {}),
         };
       } else if (typeof d.uid === 'string') {

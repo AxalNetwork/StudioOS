@@ -89,3 +89,8 @@ not one provider's goes in this folder; anything with HTTP belongs in
 `../routes/`.
 
 A KV TTL is at least 60 seconds, KV's minimum: a shorter `expirationTtl` makes the `put` throw in production. `cloudflare-worker/test/kv_refresh_lease.test.ts` fails on a literal under 60 anywhere in `cloudflare-worker/src`, and `cloudflare-worker/test/_mem_kv.mjs` refuses one as KV does.
+
+D1081 (#2946): `lovableFeeds.ts` holds Lovable's four planned launch/app-link
+landings. Only shipped inbound entries become metadata pulls and feeds; none
+have shipped in part 1. Lovable is a directory page with `auth_type: 'none'`,
+not a provider implementation or an account connection.

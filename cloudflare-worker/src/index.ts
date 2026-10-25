@@ -38,6 +38,7 @@ import { recoveryCoolOff } from './middleware/recoveryCoolOff';
 import scoring from './routes/scoring';
 import labReportShares from './routes/lab_report_shares';
 import projects from './routes/projects';
+import accountCompanies from './routes/account_companies';
 import legal from './routes/legal';
 import legalcap from './routes/legalcap';
 import partners from './routes/partners';
@@ -211,6 +212,7 @@ import financialsRoutes from './routes/financials';
 import progressRoutes from './routes/progress';
 import cycleBuildRoutes from './routes/cycle_build';
 import buildPlanRoutes from './routes/build_plan';
+import buildPlanStateRoutes from './routes/build_plan_state';
 import metricsRoutes from './routes/metrics';
 import revenueRoutes from './routes/revenue';
 import wellbeingRoutes from './routes/wellbeing';
@@ -875,6 +877,9 @@ for (const p of INVESTOR_PRO_PREFIXES) {
 app.route('/api/scoring', scoring);
 // D588 (#1215) — a founder shares one official scoring run with one named account.
 app.route('/api/lab-report-shares', labReportShares);
+// D1136 (#3016): the caller's own companies, ventures and invitations, and answering an invitation signed in.
+// Before `projects` and `companyRoutes`; the answer paths are literal `invitations/<id>/accept|decline`.
+app.route('/api', accountCompanies);
 // D1137 — a venture's move to a company and its owner transfer.
 app.route('/api/projects', projectLifecycle);
 app.route('/api/projects', projects);
@@ -1373,6 +1378,8 @@ app.route('/api/founder-risk', founderRiskRoutes);
 // Task #9 — Venture Risk (internal deal-team 10-layer rating).
 app.route('/api/venture-risk', ventureRiskRoutes);
 app.route('/api/progress', progressRoutes);
+// D1067: pause, resume and "new evidence since" before D1065's plan router.
+app.route('/api/cycles/build/plan', buildPlanStateRoutes);
 app.route('/api/cycles/build/plan', buildPlanRoutes);
 app.route('/api/cycles/build', cycleBuildRoutes);
 // Task #3 (DF) — `/api/metrics/*` alias of /api/progress/metrics/* + /series.

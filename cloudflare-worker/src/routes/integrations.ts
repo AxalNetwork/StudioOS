@@ -610,6 +610,7 @@ integrations.post('/connect', async (c) => {
     return refuse(c, 403, { code: 'purpose_not_allowed', message: personalHqOnlySentence(desc.display_name) });
   }
   if (!desc || audienceOf(c, user, desc) === 'none') return c.json({ error: 'unknown_provider', provider_key: key }, 404);
+  if (desc.auth_type === 'none') return c.json({ error: 'sign_in_not_required' }, 409);
   // D879: a preview connects nothing; Mercury's own connect answers it 403 `purpose_not_allowed` (no personal connection).
   const activeCompanyId = await activeCompanyFor(c, user);
   if (!activeCompanyId && writesProjectData(key)) return c.json({ error: 'active_company_required' }, 400);

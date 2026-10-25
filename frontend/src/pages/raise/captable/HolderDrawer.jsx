@@ -4,6 +4,7 @@ import { cyclesApi } from '../../../lib/api/cycles';
 import { Lightbox, Unreadable } from '../../../ui';
 import { Tag } from './CapTableTag';
 import { filingsOf, holderView } from './overviewModel';
+import { correctable, voidable } from './historyModel';
 
 /**
  * D1022 (#2859) — the holder drawer (CT2, with CT2p for people) at
@@ -11,7 +12,8 @@ import { filingsOf, holderView } from './overviewModel';
  * from the record CapTableOverview already read; a person's vesting from the
  * venture's equity plan (D1020) and their 83(b) from Build's company-creation
  * read; what they can see from the access grants (D1019). Each read answers
- * alone. Void is part 10's dialog (#2862), drawn only when `onVoid` is given.
+ * alone. D1025 (#2862): each recorded row offers Void (CT12b) when `onVoid` is
+ * given (the owner) and Correct (CT12c) when `onCorrect` is (an admin).
  */
 
 const INK = 'text-axal-ink dark:text-gray-100';
@@ -19,7 +21,7 @@ const MUTED = 'text-axal-muted dark:text-gray-400';
 const EYEBROW = 'text-[10.5px] font-extrabold uppercase tracking-[.07em] text-axal-muted dark:text-gray-400';
 const BTN = 'inline-flex min-h-[32px] items-center justify-center rounded-[9px] px-3 text-[12.5px] font-bold';
 const GHOST = `${BTN} border border-axal-hairline bg-white text-axal-ink hover:bg-axal-ground dark:border-gray-700 dark:bg-gray-900 dark:text-gray-100 dark:hover:bg-gray-800`;
-const DANGER = `${BTN} border border-red-200 text-red-700 hover:bg-red-50 dark:border-red-900 dark:text-red-300 dark:hover:bg-red-950/30`;
+const ROWLINK = 'text-[11.5px] font-semibold text-axal-violet hover:text-axal-violet-deep dark:text-violet-300';
 const AMBER = 'inline-flex w-fit items-center rounded-full border border-amber-200 bg-amber-50 px-2 py-0.5 text-[10.5px] font-bold text-amber-800 dark:border-amber-900 dark:bg-amber-950/30 dark:text-amber-300';
 
 function useOptional(load, projectId) {
@@ -44,7 +46,7 @@ function Section({ title, children, testId }) {
   );
 }
 
-export default function HolderDrawer({ projectId, holderId, record, grants, onClose, onVoid }) {
+export default function HolderDrawer({ projectId, holderId, record, grants, onClose, onVoid = null, onCorrect = null }) {
   const plan = useOptional(() => capTableHolderApi.equityPlan(projectId), projectId);
   const build = useOptional(() => cyclesApi.module('build', projectId, 'company-creation'), projectId);
   const ready = record.status === 'ready';
@@ -54,11 +56,11 @@ export default function HolderDrawer({ projectId, holderId, record, grants, onCl
     filings: build.status === 'ready' ? filingsOf(build.data) : null,
   }) : null;
   const title = v?.found ? v.name : 'Holder';
+  const rawOf = (uid) => (ready ? (record.data?.issuances?.rows || []).find((r) => r.uid === uid) : null) || null;
   return (
     <Lightbox label={title} eyebrow="Holder" title={title} width={600} onClose={onClose} testId="captable-holder-drawer"
       footer={(
-        <div className="flex justify-between gap-2">
-          {onVoid && v?.found ? <button type="button" className={DANGER} onClick={() => onVoid(holderId)} data-testid="captable-holder-void">Void an issuance</button> : <span />}
+        <div className="flex justify-end gap-2">
           <button type="button" className={GHOST} onClick={onClose}>Close</button>
         </div>
       )}>
@@ -86,6 +88,8 @@ export default function HolderDrawer({ projectId, holderId, record, grants, onCl
                         <span className="flex flex-wrap items-center gap-2 text-[11.5px]">
                           <span className={MUTED}>{i.source}</span>
                           {i.document ? <span className={`font-mono ${INK}`} data-testid="captable-holder-document">{i.document}</span> : <span className={AMBER} data-testid="captable-holder-no-document">! No document</span>}
+                          {onVoid && voidable(rawOf(i.uid)) ? <button type="button" className={ROWLINK} onClick={() => onVoid(rawOf(i.uid))} data-testid="captable-holder-void">Void</button> : null}
+                          {onCorrect && correctable(rawOf(i.uid)) ? <button type="button" className={ROWLINK} onClick={() => onCorrect(rawOf(i.uid))} data-testid="captable-holder-correct">Correct</button> : null}
                         </span>
                       </li>
                     ))}
