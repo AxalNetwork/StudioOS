@@ -5075,6 +5075,206 @@
   },
   {
    "pageKey": "Founder · Raise · Pitch deck",
+   "optionKey": "deck:rewrite",
+   "optionLabel": "Rewrite",
+   "kind": "write",
+   "handler": "draft",
+   "routeTask": "rail_write",
+   "models": [
+    {
+     "id": "@cf/meta/llama-3.3-70b-instruct-fp8-fast",
+     "role": "Default",
+     "line": "Drafts in your voice, cited"
+    },
+    {
+     "id": "@cf/mistralai/mistral-small-3.1-24b-instruct",
+     "role": "Polished",
+     "line": "Tighter, more formal drafts"
+    },
+    {
+     "id": "@cf/zai-org/glm-4.7-flash",
+     "role": "Faster",
+     "line": "Short drafts and replies"
+    }
+   ]
+  },
+  {
+   "pageKey": "Founder · Raise · Pitch deck",
+   "optionKey": "deck:shorten",
+   "optionLabel": "Shorten",
+   "kind": "write",
+   "handler": "draft",
+   "routeTask": "rail_write",
+   "models": [
+    {
+     "id": "@cf/meta/llama-3.3-70b-instruct-fp8-fast",
+     "role": "Default",
+     "line": "Drafts in your voice, cited"
+    },
+    {
+     "id": "@cf/mistralai/mistral-small-3.1-24b-instruct",
+     "role": "Polished",
+     "line": "Tighter, more formal drafts"
+    },
+    {
+     "id": "@cf/zai-org/glm-4.7-flash",
+     "role": "Faster",
+     "line": "Short drafts and replies"
+    }
+   ]
+  },
+  {
+   "pageKey": "Founder · Raise · Pitch deck",
+   "optionKey": "deck:expand",
+   "optionLabel": "Expand",
+   "kind": "write",
+   "handler": "draft",
+   "routeTask": "rail_write",
+   "models": [
+    {
+     "id": "@cf/meta/llama-3.3-70b-instruct-fp8-fast",
+     "role": "Default",
+     "line": "Drafts in your voice, cited"
+    },
+    {
+     "id": "@cf/mistralai/mistral-small-3.1-24b-instruct",
+     "role": "Polished",
+     "line": "Tighter, more formal drafts"
+    },
+    {
+     "id": "@cf/zai-org/glm-4.7-flash",
+     "role": "Faster",
+     "line": "Short drafts and replies"
+    }
+   ]
+  },
+  {
+   "pageKey": "Founder · Raise · Pitch deck",
+   "optionKey": "deck:tone",
+   "optionLabel": "Change tone",
+   "kind": "write",
+   "handler": "draft",
+   "routeTask": "rail_write",
+   "models": [
+    {
+     "id": "@cf/meta/llama-3.3-70b-instruct-fp8-fast",
+     "role": "Default",
+     "line": "Drafts in your voice, cited"
+    },
+    {
+     "id": "@cf/mistralai/mistral-small-3.1-24b-instruct",
+     "role": "Polished",
+     "line": "Tighter, more formal drafts"
+    },
+    {
+     "id": "@cf/zai-org/glm-4.7-flash",
+     "role": "Faster",
+     "line": "Short drafts and replies"
+    }
+   ]
+  },
+  {
+   "pageKey": "Founder · Raise · Pitch deck",
+   "optionKey": "deck:translate",
+   "optionLabel": "Translate",
+   "kind": "write",
+   "handler": "draft",
+   "routeTask": "rail_write",
+   "models": [
+    {
+     "id": "@cf/meta/llama-3.3-70b-instruct-fp8-fast",
+     "role": "Default",
+     "line": "Drafts in your voice, cited"
+    },
+    {
+     "id": "@cf/mistralai/mistral-small-3.1-24b-instruct",
+     "role": "Polished",
+     "line": "Tighter, more formal drafts"
+    },
+    {
+     "id": "@cf/zai-org/glm-4.7-flash",
+     "role": "Faster",
+     "line": "Short drafts and replies"
+    }
+   ]
+  },
+  {
+   "pageKey": "Founder · Raise · Pitch deck",
+   "optionKey": "deck:chart",
+   "optionLabel": "Chart from your records",
+   "kind": "write",
+   "handler": "draft",
+   "routeTask": "rail_write",
+   "models": [
+    {
+     "id": "@cf/meta/llama-3.3-70b-instruct-fp8-fast",
+     "role": "Default",
+     "line": "Drafts in your voice, cited"
+    },
+    {
+     "id": "@cf/mistralai/mistral-small-3.1-24b-instruct",
+     "role": "Polished",
+     "line": "Tighter, more formal drafts"
+    },
+    {
+     "id": "@cf/zai-org/glm-4.7-flash",
+     "role": "Faster",
+     "line": "Short drafts and replies"
+    }
+   ]
+  },
+  {
+   "pageKey": "Founder · Raise · Pitch deck",
+   "optionKey": "deck:table",
+   "optionLabel": "Table from your records",
+   "kind": "write",
+   "handler": "draft",
+   "routeTask": "rail_write",
+   "models": [
+    {
+     "id": "@cf/meta/llama-3.3-70b-instruct-fp8-fast",
+     "role": "Default",
+     "line": "Drafts in your voice, cited"
+    },
+    {
+     "id": "@cf/mistralai/mistral-small-3.1-24b-instruct",
+     "role": "Polished",
+     "line": "Tighter, more formal drafts"
+    },
+    {
+     "id": "@cf/zai-org/glm-4.7-flash",
+     "role": "Faster",
+     "line": "Short drafts and replies"
+    }
+   ]
+  },
+  {
+   "pageKey": "Founder · Raise · Pitch deck",
+   "optionKey": "deck:timeline",
+   "optionLabel": "Timeline from your records",
+   "kind": "write",
+   "handler": "draft",
+   "routeTask": "rail_write",
+   "models": [
+    {
+     "id": "@cf/meta/llama-3.3-70b-instruct-fp8-fast",
+     "role": "Default",
+     "line": "Drafts in your voice, cited"
+    },
+    {
+     "id": "@cf/mistralai/mistral-small-3.1-24b-instruct",
+     "role": "Polished",
+     "line": "Tighter, more formal drafts"
+    },
+    {
+     "id": "@cf/zai-org/glm-4.7-flash",
+     "role": "Faster",
+     "line": "Short drafts and replies"
+    }
+   ]
+  },
+  {
+   "pageKey": "Founder · Raise · Pitch deck",
    "optionKey": "review:deck-file",
    "optionLabel": "Drop your deck here or click to browse",
    "kind": "vision",

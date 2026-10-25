@@ -11,6 +11,11 @@ import LabFormation from './LabFormation';
 import LabGraduation from './LabGraduation';
 import LabApplications from './LabApplications';
 import LabHosts from './LabHosts';
+import LabHowItRuns from './LabHowItRuns';
+import LabSettings from './LabSettings';
+import LabActivity from './LabActivity';
+import { useAuth } from '../../../hooks/useAuthSync';
+import { isSuperAdminUser } from '../../../lib/shellRole';
 import LabParticipants from './LabParticipants';
 import { participantsCount } from './participantsModel';
 import LabCohorts from './LabCohorts';
@@ -221,9 +226,11 @@ const SECTIONS = {
 };
 
 /** D970: the tabs drawn to the canvas (SL9–SL11), each its own file. */
-const DESKS = { hosts: LabHosts, formation: LabFormation, graduation: LabGraduation };
+const DESKS = { hosts: LabHosts, formation: LabFormation, graduation: LabGraduation, 'how-it-runs': LabHowItRuns, settings: LabSettings, activity: LabActivity };
 
 export default function AdminLab({ onImpersonate }) {
+  const { user } = useAuth();
+  const superAdmin = isSuperAdminUser(user);
   const loc = useLocation();
   const tab = tabOf(loc.pathname) || 'overview';
   const { reads, asOf, reload } = useLabReads(tab === 'overview');
@@ -240,6 +247,9 @@ export default function AdminLab({ onImpersonate }) {
       <HeaderTab to="/admin/programs/spinout-lab/hosts" count={counts.hosts} data-testid="lab-tab-hosts">Hosts</HeaderTab>
       <HeaderTab to="/admin/programs/spinout-lab/formation" data-testid="lab-tab-formation">Formation</HeaderTab>
       <HeaderTab to="/admin/programs/spinout-lab/graduation" data-testid="lab-tab-graduation">Graduation</HeaderTab>
+      <HeaderTab to="/admin/programs/spinout-lab/how-it-runs" data-testid="lab-tab-how-it-runs">How it runs</HeaderTab>
+      <HeaderTab to="/admin/programs/spinout-lab/settings" data-testid="lab-tab-settings">Settings</HeaderTab>
+      <HeaderTab to="/admin/programs/spinout-lab/activity" data-testid="lab-tab-activity">Activity</HeaderTab>
     </>
   );
 
@@ -275,7 +285,7 @@ export default function AdminLab({ onImpersonate }) {
         data-testid="lab-header"
       />
       {tab === 'overview' ? <Overview reads={reads} reload={reload} /> : null}
-      {DESKS[tab] ? React.createElement(DESKS[tab]) : null}
+      {DESKS[tab] ? React.createElement(DESKS[tab], { superAdmin }) : null}
       {tab === 'applications' ? <LabApplications /> : null}
       {tab === 'participants' ? <LabParticipants onImpersonate={onImpersonate} /> : null}
       {tab === 'cohorts' ? <LabCohorts ym={cohortOf(loc.pathname)} /> : null}

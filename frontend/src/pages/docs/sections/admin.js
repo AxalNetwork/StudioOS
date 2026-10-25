@@ -10,15 +10,15 @@ export default {
       id: 'overview',
       title: 'Admin overview',
       overview:
-        "Admins are studio operators with full visibility and the ability to act on behalf of users for support. The Admin Console organizes everything into Users, Startups, Deals, Trust, Audit, and Settings.",
+        "Admins are studio operators with full visibility and the ability to act on behalf of users for support. Each admin tool is a page at its own address, under the row of the admin sidebar it belongs to: Accounts (All accounts, Persona segments), Approvals (KYC & KYB, Partner profiles), Programs, Community (Directory, Wellbeing), Contracts, Fund admin, Insights and Licences. The Super Admin also has HQ's rows, such as Platform, Revenue and Security.",
       howto: [
-        'Open Admin Console from the sidebar (admins only).',
-        'Use the left rail to switch between sections.',
+        'Open a row of the admin sidebar (admins only); its page lists the tools under it.',
+        'Each page has its own header with a breadcrumb back to its row, and its own tabs where it has them.',
         'Use "View as" to step into a user’s view; exit from the violet bar at the top.',
       ],
       tips: [
-        'Bookmark the section you use most — Users, Trust, and Audit are the common entry points.',
-        'Use the global search at the top of the console to jump to any user, startup, or deal.',
+        'Bookmark the page you use most — every tool has its own address, so a bookmark opens it directly.',
+        'An old /admin?tab= link still works: it forwards to the tool’s page, which says once where it now lives.',
       ],
       pitfalls: [
         'Forgetting to exit "View as" before reading reports causes scoped data — exit first.',
@@ -34,9 +34,9 @@ export default {
       id: 'users',
       title: 'Users & roles',
       overview:
-        "The Users section lists every account in the studio with role, tier, status, and last-active timestamp. From here you can edit profile fields, suspend accounts, trigger a passwordless re-invite, or impersonate for support.",
+        "All accounts, under Accounts, lists every account in the studio with role, tier, status, and last-active timestamp. From here you can edit profile fields, suspend accounts, trigger a passwordless re-invite, or impersonate for support.",
       howto: [
-        'Open Admin Console → Users.',
+        'Open Accounts → All accounts (/admin/accounts/all).',
         'Filter by role, tier, or status.',
         'Click any user to see their full record and recent actions.',
         'Use "Impersonate" to support; it routes through the audit log.',
@@ -60,7 +60,7 @@ export default {
       overview:
         "Trust management is where admins approve, revoke, or escalate badges and trust signals visible in the Trust Center. Each badge has a documented checklist of evidence; admins must accept or reject each item before granting a badge.",
       howto: [
-        'Open Admin Console → Trust.',
+        'Each account’s trust score is a column of All accounts, under Accounts.',
         'Pick a pending badge request; review the supporting evidence.',
         'Approve, reject (with a reason), or request more evidence.',
         'Revoke a previously granted badge from the same screen if circumstances change.',
@@ -81,12 +81,11 @@ export default {
       id: 'audit',
       title: 'Audit log',
       overview:
-        "The platform-wide audit log records every meaningful action with a hashed actor ID, timestamp, target, and action type. It’s the source of truth for compliance and security investigations.",
+        "The platform-wide audit log records every meaningful action with a hashed actor ID, timestamp, target, and action type. It’s the source of truth for compliance and security investigations. The Super Admin reads it on HQ → Security, merged newest-first with refusals, step-ups, impersonations and licence events.",
       howto: [
-        'Open Admin Console → Audit.',
-        'Filter by actor (user ID), action type, target type, or date range.',
-        'Click any row to see the full payload.',
-        'Export a date range as CSV for compliance review.',
+        'Open HQ → Security (/admin/security; Super Admin only).',
+        'Use the ledger’s filter bar to narrow it to an actor, an event or an outcome.',
+        'Refused sign-ins, impersonations and suspensions carry a tint, so they can be scanned for.',
       ],
       tips: [
         'Combine actor and target filters to investigate a specific incident.',
