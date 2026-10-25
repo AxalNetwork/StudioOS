@@ -21,6 +21,9 @@ import { request } from '../api.js';
 //                  → { weeks, week_axis, current_week, total, by_week, programs: [{ uid, name, weeks, total }], rule }
 //   learner        GET  /learning/programs/:uid/learners/:userUid  (assigned admin or Super Admin)
 //                  → { program, contents, learner }; 403 `not_assigned`, 404 `not_enrolled`.
+//   exportCsv      POST /admin/programs/:key/export { weeks }  (requireAdmin, D1124)
+//                  → { download_url, expires_in_seconds, format: 'csv', program, weeks, rows }; 409 `nothing_to_export`,
+//                  503 `export_not_logged` (nothing is made when the audit row cannot be written).
 function query(params = {}) {
   const q = new URLSearchParams();
   for (const [k, v] of Object.entries(params)) {
@@ -41,4 +44,6 @@ export const programsApi = {
   mentorSessions: () => request('/admin/programs/mentor-cohorts/sessions'),
   learningWeekly: (weeks = 12) => request(`/learning/programs/mine/enrolments${query({ weeks })}`),
   learner: (programUid, userUid) => request(`/learning/programs/${encodeURIComponent(programUid)}/learners/${encodeURIComponent(userUid)}`),
+  // D1124 (#3004): the page's Download (CSV), counts only and logged → { download_url, expires_in_seconds, rows }.
+  exportCsv: (key, weeks = 12) => request(`${at(key)}/export`, { method: 'POST', body: JSON.stringify({ weeks }) }),
 };

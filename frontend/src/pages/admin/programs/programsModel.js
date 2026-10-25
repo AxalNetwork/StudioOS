@@ -224,6 +224,40 @@ export const STATUS_PILL = Object.freeze({
 /** The grant badge, in the canvas's held mode. Only `HQ-held` stands for a grant. */
 export const GRANT_GLYPH = Object.freeze({ 'HQ-held': '⌂', 'HQ only': '⌂', 'Runs at HQ': '⌂', 'Not offered yet': '–' });
 
+/**
+ * D1124 (#3004): the badge drawn from D956's `grant` field (#2789), what this
+ * viewer reads of the program's grant, in the canvas's words and tones
+ * (`dc:324`, PG2's "Granted to [n] studios" at `dc:341-349`). No field (the
+ * read has not answered, or HQ's fan-out names no viewer) is `null`, and the
+ * held mode's constant stands; a field the Worker could not read is
+ * "Grant unreadable" with its reason, never a state.
+ */
+export const GRANT_UNREADABLE = 'Grant unreadable';
+const GRANT_WORDS = Object.freeze({
+  granted: { word: 'Granted to your studio', glyph: '◆', tone: 'violet' },
+  requested: { word: 'Requested', glyph: '◷', tone: 'amber' },
+  paused: { word: 'Paused by HQ', glyph: '‖', tone: 'amber' },
+  ended: { word: 'Ended', glyph: '–', tone: 'muted' },
+  not_granted: { word: 'Not granted', glyph: '○', tone: 'muted' },
+  runs_at_hq: { word: 'Runs at HQ', glyph: '⌂', tone: 'muted' },
+  not_offered: { word: 'Not offered yet', glyph: '–', tone: 'muted' },
+  hq_held: { word: 'HQ-held', glyph: '⌂', tone: 'muted' },
+  hq_only: { word: 'HQ only', glyph: '⌂', tone: 'muted' },
+});
+export function grantBadgeOf(field) {
+  if (!field || typeof field !== 'object') return null;
+  if (field.available === false) return { word: GRANT_UNREADABLE, glyph: '!', tone: 'muted', reason: typeof field.reason === 'string' ? field.reason : null };
+  if (field.state === 'granted_to') {
+    const n = Number(field.granted_count);
+    if (field.granted_count === null || field.granted_count === undefined || !Number.isFinite(n)) return { word: GRANT_UNREADABLE, glyph: '!', tone: 'muted', reason: 'The studio count was not read.' };
+    return { word: `Granted to ${n} ${n === 1 ? 'studio' : 'studios'}`, glyph: '◆', tone: n > 0 ? 'violet' : 'muted', reason: null };
+  }
+  const w = GRANT_WORDS[field.state];
+  if (!w) return { word: GRANT_UNREADABLE, glyph: '!', tone: 'muted', reason: 'The grant answered a state this page does not know.' };
+  const reason = field.state === 'granted' && field.in_force === false ? 'Granted, but not in force today.' : null;
+  return { ...w, reason };
+}
+
 /* ------------------------------------------------------------------ *
  * The program pages: header, facts and tabs (D953 §3)
  * ------------------------------------------------------------------ */
