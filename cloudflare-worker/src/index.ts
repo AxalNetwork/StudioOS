@@ -213,12 +213,16 @@ import revenueRoutes from './routes/revenue';
 import wellbeingRoutes from './routes/wellbeing';
 import complianceRoutes from './routes/compliance';
 import captableRoutes from './routes/captable';
+import captableAccessRoutes from './routes/captable_access';
 import dataRoomRoutes from './routes/data_room';
 import advisorGrantRoutes from './routes/advisor_grants';
 import messagesRoutes from './routes/messages';
 import perksRoutes from './routes/perks';
 import adminLicences from './routes/admin_licences';
 import adminProgramGrants from './routes/admin_program_grants';
+// D986 (#2776) — partner deal types per licence: HQ's reads and write, and the studio's own read.
+import adminPartnerDealTypes from './routes/admin_partner_deal_types';
+import licencePartnerDealTypes from './routes/licence_partner_deal_types';
 import adminDeployments from './routes/admin_deployments';
 import adminStatements from './routes/admin_statements';
 import adminEscalations from './routes/admin_escalations';
@@ -1099,6 +1103,7 @@ app.route('/api/branch', branchSupportSessionRoutes);
 app.route('/api/admin/licences', adminLicences);
 // D982 (#2773): which programs HQ grants each licensed studio, on what terms.
 app.route('/api/admin/program-grants', adminProgramGrants);
+app.route('/api/admin/partner-deal-types', adminPartnerDealTypes);
 // Migrations 199/207 — who holds the Super Admin elevation. Mount BEFORE the
 // catch-all for the same reason as the licence ledger above.
 app.route('/api/admin/super-admins', adminSuperAdmins);
@@ -1137,6 +1142,7 @@ app.route('/api/admin/insights', adminInsights);
 // D955: proposals before the programs router, whose `/:key` would otherwise answer `proposals`.
 app.route('/api/admin/programs/proposals', adminProgramProposals);
 app.route('/api/admin/programs', adminPrograms);
+app.route('/api/licence', licencePartnerDealTypes);
 app.route('/api/licence', licenceRequests);
 app.route('/api/licence', licence);
 app.route('/api/best-fit', bestFitSelf);
@@ -1341,6 +1347,8 @@ app.route('/api/revenue', revenueRoutes);
 app.route('/api/wellbeing', wellbeingRoutes);
 // T12 — Compliance calendar + Cap-table simulator + Co-founder matching.
 app.route('/api/compliance', complianceRoutes);
+// D1019 (#2856): who sees what. Before /api/captable, whose `/:projectId` would take "access".
+app.route('/api/captable/access', captableAccessRoutes);
 app.route('/api/captable', captableRoutes);
 app.route('/api/data-room', dataRoomRoutes);
 // Task #55 — a founder opens a client record to a named advisor, scope by

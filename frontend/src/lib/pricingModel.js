@@ -175,7 +175,9 @@ export function planCards(read, specs, { billing = 'monthly', held = null, signe
     else if (spec.custom) card.button = { label: spec.cta || 'Contact Sales', to: '/contact', disabled: false };
     else if (!signedIn) card.button = { label: spec.cta || 'Get started', to: REGISTER(spec.lane), disabled: false };
     else if (spec.free) card.button = { label: held ? 'Manage plan' : 'Get started', to: held ? '/account/billing' : REGISTER(spec.lane), disabled: false };
-    else card.button = { label: held ? 'Upgrade' : spec.cta || 'Get started', to: `/pricing/products/${encodeURIComponent(plan.product_id)}`, disabled: false };
+    // D1048 (#2451): a signed-in member's paid card opens the checkout sheet in place,
+    // never a second pricing page; `plan` is what the sheet reads.
+    else { card.button = { label: held ? 'Upgrade' : spec.cta || 'Get started', to: null, checkout: true, disabled: false }; card.plan = plan; }
     return card;
   });
   return { cards, saving: yearlySaving(sold), sells: sold.length > 0 };

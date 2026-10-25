@@ -45,7 +45,7 @@ export const ADMIN_BOARDS = [
   { id: 'S2', section: 'Accounts', module: 'Users', route: '/admin/accounts/all', files: ['pages/admin/consoles/UsersConsole.jsx'], rail: FRAME, host: CONSOLE_PAGES },
   { id: 'S3', section: 'Accounts', module: 'Exploring members', route: '/admin/exploring', files: ['pages/admin/AdminExploring.jsx'], rail: FRAME },
   { id: 'S4', section: 'Accounts', module: 'Trash', route: '/admin/trash', files: ['pages/AdminTrashPage.jsx'], rail: FRAME },
-  { id: 'S5', section: 'Approvals', module: null, route: '/admin/held/approvals', files: ['pages/admin/HeldApprovals.jsx'], rail: HELD },
+  { id: 'S5', section: 'Approvals', module: null, route: '/admin/approvals', files: ['pages/admin/approvals/AdminApprovals.jsx', 'pages/admin/approvals/LaneBoards.jsx'], rail: FRAME },
   { id: 'S6', section: 'Approvals', module: 'Identity checks', route: '/admin/kyc', files: ['pages/admin/consoles/KycConsole.jsx'], rail: FRAME, host: CONSOLE_PAGES },
   { id: 'S7', section: 'Approvals', module: 'Entity profiles', route: '/admin/partner-profiles', files: ['pages/admin/consoles/PartnerProfilesConsole.jsx'], rail: FRAME, host: 'pages/admin/profiles/PartnerProfiles.jsx' },
   { id: 'S8', section: 'Approvals', module: 'LP applications', route: '/admin/lp-applications', files: ['pages/admin/AdminLpApplications.jsx'], rail: FRAME },
