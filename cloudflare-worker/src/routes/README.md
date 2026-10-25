@@ -16,6 +16,10 @@ D973 reads live in `admin_network_reads.ts`, mounted before D976’s
 `admin_network.ts` at `/api/admin/network`. Opaque person refs use the
 read-only drawer; numeric account IDs continue to the standing router.
 
+D1136's reads of the caller's own companies, ventures and invitations, and
+answering an invitation while signed in, live in `account_companies.ts`,
+mounted at `/api` with full paths before `projects.ts` and `company.ts`.
+
 D979's Firms reads live in `admin_partner_firms.ts`, mounted at
 `/api/admin/partners` before `admin_partners.ts`: `/firms` (search, filters,
 sort and pages with an exact total) and `/firms/:id` (one firm's drawer). Both
@@ -242,6 +246,8 @@ D982 (#2773): `admin_program_grants.ts` mounts `/api/admin/program-grants`: HQ's
 
 D983 (#2774): `admin_program_requests.ts` mounts `/api/admin/program-grants/requests`, ahead of part 1's routes: the studios' program requests (a grant, a terms change, an end) from HQ's lane and every branch's, under `requireSuperAdmin`, and HQ's approve and decline under `requireSuperAdminWriteBar` with a reason of at least 10 characters. An approval records a draft as a `program_changed` event (`request_approved`); Grant stays `admin_program_grants.ts`'s write. The generic `PATCH /api/admin/escalations/:uid` refuses these kinds. The checks are `../services/programRequests.ts`. See `documentation/architecture/decisions/D983.md`.
 
+D956 (#2789): `admin_programs.ts` adds `PUT /:key/grantable`, Offer to studios, under `requireSuperAdminWriteBar` with a reason: D982's "can be granted" switch, switched on only with a published playbook, as `admin_program_grants.ts`'s defaults write now also requires. The catalogue and `/:key` carry each program's `grant` for the viewer (`../services/programGrantStates.ts`). An approval for one studio (`admin_program_proposals.ts`) opens a `draft` grant (migration 562), which `admin_program_grants.ts`'s grant write takes to `granted`; every other move from a draft is refused. See `documentation/architecture/decisions/D956.md`.
+
 D984 (#2775): `licence_programs.ts` mounts `GET /api/licence/mine/programs` at `/api/licence`, beside `licence_requests.ts`: the nine programs HQ grants the caller's licence, read only, with each grant's terms. On HQ it binds the caller through `licence_admins` and reads the store; an account no licence binds reads `linked: false`, "On HQ-held accounts, HQ runs every program." On a branch it answers, to an admin only, from HQ's dated copy (`branch_licence.program_grants_json`, migration 554) with `as_of`. A D1 error or an unreadable copy is a 503. Since D984, `admin_program_grants.ts`'s grant writes push the licence to its branch and answer `pushed`. See `documentation/architecture/decisions/D984.md`.
 
 D986 (#2776): `admin_partner_deal_types.ts` mounts `/api/admin/partner-deal-types`: which partner deal types each licence may offer, read under `requireSuperAdmin` and set under `requireSuperAdminWriteBar` with a reason (one `program_changed` licence event, action `deal_types_changed`, then a push to the branch). `licence_partner_deal_types.ts` mounts `GET /api/licence/mine/partner-deal-types` ahead of `licence.ts`: the bound Administrator on HQ, or a branch admin reading its copy. The branch's partner invitation write (`admin_partners.ts`) refuses a type the copy does not allow. The store is migration 555 and `../services/partnerDealTypes.ts`. See `documentation/architecture/decisions/D986.md`.
@@ -303,7 +309,9 @@ operator's own consented session; status events supply content-free timings.
 D1011 (#2830): `admin_payments.ts` is the Payments page's Super Admin reads,
 mounted at `/api/admin/payments`: the change log over the catalogue's and
 Stripe's audit rows, its CSV export (a recorded reason, failing closed), and the
-webhook's deliveries by hour. `catalog.ts` records a failed sync.
+webhook's deliveries by hour. D1129 adds bounded `q` search to the log and
+CSV, plus `/change-log/admins` (all admin ids/names, no email). `catalog.ts`
+records a failed sync.
 
 D1065 (#2935): `build_plan.ts` mounts at `/api/cycles/build/plan` before the Build router. GET reads a scoped plan; POST prepares/updates only for the venture’s founder or admitted Lab owner. Admins read; company-linked partners read only landed accepted items without a decision or pending proposal.
 
@@ -312,5 +320,21 @@ D971 (#2756): `admin_lab_operations.ts` is mounted by `admin_cohort.ts` under
 The latter filters/paginates one safe projection of existing stores and never
 returns staff identities or free-form audit payloads. An unavailable source is
 503, never an empty successful log. Reads create no schema or data.
+
+D1105 (#2985): `data_room.ts` adds the owner's and a co-founder's `GET /:projectUid/activity` (any period, by investor, paged), `GET /:projectUid/activity.csv` and `GET /:projectUid/checklist`, from `../services/dataRoomActivity.ts`; migration 596 records each file's source (`document`, `connector`, `signed`). See `documentation/architecture/decisions/D1105.md`.
+
+D1102 (#2982, part): `data_room.ts` keeps founder details and mutations owner-only.
+The ordinary admin GET returns scoped aggregate counts and checklist coverage,
+with unavailable blocks explicit and no file names, investor identities or access
+rows. `POST /:projectUid/support-read` takes an admin's required reason and must
+write a founder-visible activity row before loading read-only details; it also
+calls `logAdminAction`. It grants no subsequent write permission. Admins cannot
+use legacy investor grants through `/shared` instead. The data-room spec in
+`../services/records/raise.ts` uses the same owner-only gate. File uploads default
+to NDA when visibility is omitted; explicit Open remains allowed for the owner.
+
+D1133: `billing.ts` mounts `/alerts/:id/pay` and `/alerts/:id/update-card` under `/api/billing`, both recent-TOTP gated. They prepare in-page Stripe forms for the caller’s open failed renewal; opening neither confirms a charge nor changes the default card.
+
+D1135: `company.ts` adds member self-leave and validates create/rename; `projects.ts` counts live ventures, adds owner restore within 30 days and sends email-mode team invitations.
 
 D1123: `admin_lab_operations.ts` adds `/cohorts/:cohort/capacity`, the latest stored capacity event for SL6, separately from current Settings. It never returns free-form event details.

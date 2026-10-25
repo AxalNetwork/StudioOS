@@ -19,12 +19,26 @@
  * 403; 400 for the decision; 400 for a malformed `for`, evidence, reasoning or
  * a `pivot_claim` without Pivot; 404 "Hypothesis not found."; 404 "Evidence
  * not found.".
+ *
+ * THE BUILD PLAN (D1067). After the decision commits, a given Proceed or
+ * Pivot prepares the build plan for its scope by rule, and a given Stop
+ * pauses it (`services/buildPlanState.ts`), in `waitUntil`. A withheld
+ * decision prepares nothing. Only the venture's own founder's decision
+ * prepares a plan: an admin never prepares one for them (D1065); an admin's
+ * Stop still pauses. Nothing about the plan can fail the decision.
  */
 import { Hono } from 'hono';
 import type { Env, User } from '../types';
 import { requireAuth } from '../auth';
-import { canWrite, type ProjectRef } from './_founder_validate_helpers';
+import { canWrite, ownsVenture, type ProjectRef } from './_founder_validate_helpers';
 import { recordDecision, isDecisionKind, VerdictError, type Scope } from '../services/verdict';
+import { onDecision } from '../services/buildPlanState';
+
+/** Work that runs after the response, or inline where there is no execution context (tests). */
+async function later(c: any, work: Promise<unknown>) {
+  const safe = work.catch(() => {});
+  try { c.executionCtx.waitUntil(safe); } catch { await safe; }
+}
 
 const cycleVerdict = new Hono<{ Bindings: Env }>();
 
@@ -65,6 +79,9 @@ cycleVerdict.post('/', async (c) => {
     const out = await recordDecision(c.env, s.user, { id: s.projectId }, {
       decision: b.decision, for: forScope, reasoning: b.reasoning, evidence: b.evidence, pivot_claim: b.pivot_claim,
     });
+    if (out.state === 'given' && (b.decision === 'stop' || ownsVenture(s.project, s.user))) {
+      await later(c, onDecision(c.env, s.projectId, s.user.id, { kind: b.decision, state: out.state, for: forScope }));
+    }
     return c.json(out, 201);
   } catch (e) {
     if (e instanceof VerdictError) return c.json({ detail: e.sentence }, e.status as any);

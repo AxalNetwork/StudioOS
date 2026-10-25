@@ -24,8 +24,6 @@ import { createRoot } from 'react-dom/client';
 import { MemoryRouter } from 'react-router-dom';
 import { api } from '../src/lib/api.js';
 import * as PAGES from '../src/pages/admin/ConsolePages.jsx';
-import { LegalPanel, TemplateUsageModal } from '../src/pages/admin/consoles/LegalConsole.jsx';
-import { renderToStaticMarkup } from 'react-dom/server';
 import UsersConsole from '../src/pages/admin/consoles/UsersConsole.jsx';
 import PartnerProfilesConsole from '../src/pages/admin/consoles/PartnerProfilesConsole.jsx';
 import KycConsole from '../src/pages/admin/consoles/KycConsole.jsx';
@@ -135,9 +133,6 @@ const UNREADABLE = /could not be read\. This is not a sign that there are none\.
 
 /** Each console: its reads, what an empty answer is, and what it then says. */
 const CONSOLES = [
-  { name: 'Contracts', el: () => React.createElement(LegalPanel), reads: ['adminContractStats', 'adminListContracts'],
-    empty: { adminContractStats: async () => ({ total: 0, by_type: [] }), adminListContracts: async () => ({ items: [], total: 0 }) },
-    says: /No contracts found/, loading: /Loading…/ },
   { name: 'Users', el: () => React.createElement(UsersConsole), reads: ['adminListUsers'],
     empty: { adminListUsers: async () => ({ results: [], total: 0, by_role: {} }) }, says: /No users found/, loading: /Loading…/ },
   { name: 'Partner Profiles', el: () => React.createElement(PartnerProfilesConsole), reads: ['adminListProfiles'],
@@ -253,57 +248,8 @@ test('HQ · Accounts mounts the Users console alone, not the whole Admin Console
 });
 
 
-test('D647: Contracts has a real formation-orders destination and no dead Incorporation tab', () => {
-  const markup = renderToStaticMarkup(React.createElement(MemoryRouter, null, React.createElement(LegalPanel)));
-  // D937 (#2374): the Lab's Formation tab, at the Lab's own address.
-  assert.match(markup, /href="\/admin\/programs\/spinout-lab\/formation"/);
-  assert.match(markup, /Programs › Spin-Out Lab/);
-  assert.match(markup, /on its Formation tab/);
-  assert.doesNotMatch(markup, /legal-sub-incorporation|legal-incorporation-placeholder|Incorporation packets will appear/);
-});
-
-test('D647: empty agreements and template usage point at the visible envelope action', async () => {
-  for (const [element, answers, expected] of [
-    [React.createElement(LegalPanel), {
-      adminContractStats: async () => ({ total: 0, by_type: [] }),
-      adminListContracts: async () => ({ items: [], total: 0 }),
-    }, /No contracts found\. Use New envelope to send an agreement\./],
-    [React.createElement(TemplateUsageModal, { docType: 'safe', onClose() {} }), {
-      adminContractTemplateUsage: async () => ({ items: [], stats: { total: 0, by_status: { signed: 0, sent: 0, void: 0 } } }),
-    }, /This template hasn't been used yet\. Use New envelope in Contracts to send an agreement\./],
-  ]) {
-    stubApi(answers);
-    const v = await mount(element);
-    try {
-      assert.match(v.text(), expected);
-      assert.doesNotMatch(v.text(), /Profiles tab/);
-    } finally { await v.unmount(); restoreApi(); }
-  }
-});
-
 test('D647: Contracts imports its own desk without the Admin Console module', () => {
   const page = readFileSync(resolve(process.cwd(), 'frontend/src/pages/hq/ContractsPage.jsx'), 'utf8');
   assert.match(page, /export \{ default \} from '\.\.\/admin\/contracts\/ContractsDesk\.jsx'/);
   assert.doesNotMatch(page, /from '\.\.\/AdminPage'/);
-});
-
-
-test('D647: retrying an unreadable agreement list loads again and clears the failed state', async () => {
-  let calls = 0;
-  let finish;
-  stubApi({
-    adminContractStats: async () => ({ total: 0, by_type: [] }),
-    adminListContracts: () => ++calls === 1 ? fail() : new Promise((resolve) => { finish = resolve; }),
-  });
-  const v = await mount(React.createElement(LegalPanel));
-  try {
-    assert.match(v.text(), UNREADABLE);
-    await v.click('Try again');
-    assert.equal(calls, 2);
-    assert.match(v.text(), /Loading…/);
-    assert.doesNotMatch(v.text(), /could not be read|No contracts found/);
-    await act(async () => { finish({ items: [], total: 0 }); });
-    assert.match(v.text(), /No contracts found/);
-    assert.doesNotMatch(v.text(), /could not be read|Loading…/);
-  } finally { await v.unmount(); restoreApi(); }
 });

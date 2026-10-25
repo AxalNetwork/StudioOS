@@ -192,8 +192,9 @@ test('2462: a Stripe-only row is not a model saved by a person', async () => {
  assert.equal(data.exists,false); assert.equal(data.assumptions,null); assert.equal(data.computed,null);
 });
 
-test('2462: both deck readers exclude models nobody saved', () => {
- for (const path of ['../src/routes/decks.ts','../src/services/decks/autofill.ts']) {
+// D1113 retired the other reader with the positioning generator.
+test('2462: deck autofill excludes models nobody saved', () => {
+ for (const path of ['../src/services/decks/autofill.ts']) {
   const source = readFileSync(new URL(path, import.meta.url), 'utf8');
   const query = source.match(/SELECT computed_json, assumptions_json FROM financial_models WHERE[^'\n]+/)[0];
   const db = new DatabaseSync(':memory:');
