@@ -57,7 +57,6 @@ type SubscriberRow = {
   id: number; uid: string; email_enc: string; status: 'pending' | 'confirmed' | 'unsubscribed';
   confirm_token_hash: string | null; confirm_expires_at: string | null; token_version: number; last_email_at: string | null;
 };
-const COLS = 'id, uid, email_enc, status, confirm_token_hash, confirm_expires_at, token_version, last_email_at';
 
 async function send(env: Env, to: string, m: mail.TrustEmail, unsubscribeUrl?: string): Promise<boolean> {
   if (!mailReady(env)) return false;
@@ -81,7 +80,7 @@ export async function subscribe(env: Env, rawEmail: unknown, now = Date.now()): 
   if (!email) return false;
   if (await isSuppressed(env, email, 'transactional')) return true;
   const hash = await indexHmac(env, TABLE, 'email', email);
-  const row = await env.DB.prepare(`SELECT ${COLS} FROM ${TABLE} WHERE email_hash = ?`).bind(hash).first<SubscriberRow>();
+  const row = await env.DB.prepare(`SELECT id, uid, email_enc, status, confirm_token_hash, confirm_expires_at, token_version, last_email_at FROM subprocessor_subscribers WHERE email_hash = ?`).bind(hash).first<SubscriberRow>();
   if (row?.status === 'confirmed') return true;
   if (row && tooSoon(row, now)) return true;
 
@@ -90,13 +89,13 @@ export async function subscribe(env: Env, rawEmail: unknown, now = Date.now()): 
   const sentAt = new Date(now).toISOString();
   if (row) {
     await env.DB.prepare(
-      `UPDATE ${TABLE} SET status = 'pending', confirm_token_hash = ?, confirm_expires_at = ?, last_email_at = ? WHERE id = ?`,
+      `UPDATE subprocessor_subscribers SET status = 'pending', confirm_token_hash = ?, confirm_expires_at = ?, last_email_at = ? WHERE id = ?`,
     ).bind(confirm.hash, expires, sentAt, row.id).run();
   } else {
     const uid = `sps_${crypto.randomUUID().replace(/-/g, '').slice(0, 20)}`;
     const enc = await encryptColumn(env, TABLE, 'email', uid, email);
     await env.DB.prepare(
-      `INSERT INTO ${TABLE} (uid, email_hash, email_enc, status, confirm_token_hash, confirm_expires_at, last_email_at)
+      `INSERT INTO subprocessor_subscribers (uid, email_hash, email_enc, status, confirm_token_hash, confirm_expires_at, last_email_at)
        VALUES (?, ?, ?, 'pending', ?, ?, ?)`,
     ).bind(uid, hash, enc, confirm.hash, expires, sentAt).run();
   }
@@ -110,7 +109,7 @@ export type TokenRefusal = 'token_invalid' | 'token_expired';
 /** The pending row a confirm token names while it is usable, or why not. Reads only. */
 export async function confirmRow(env: Env, token: string, now = Date.now()): Promise<SubscriberRow | TokenRefusal> {
   if (token.length < 20 || token.length > 200) return 'token_invalid';
-  const row = await env.DB.prepare(`SELECT ${COLS} FROM ${TABLE} WHERE confirm_token_hash = ?`)
+  const row = await env.DB.prepare(`SELECT id, uid, email_enc, status, confirm_token_hash, confirm_expires_at, token_version, last_email_at FROM subprocessor_subscribers WHERE confirm_token_hash = ?`)
     .bind(await confirmTokenHash(token)).first<SubscriberRow>();
   if (!row) return 'token_invalid';
   if (!row.confirm_expires_at || Date.parse(row.confirm_expires_at) < now) return 'token_expired';
@@ -122,7 +121,7 @@ export async function confirm(env: Env, token: string, now = Date.now()): Promis
   const row = await confirmRow(env, token, now);
   if (typeof row === 'string') return row;
   const claimed = await env.DB.prepare(
-    `UPDATE ${TABLE} SET status = 'confirmed', confirmed_at = ?, unsubscribed_at = NULL,
+    `UPDATE subprocessor_subscribers SET status = 'confirmed', confirmed_at = ?, unsubscribed_at = NULL,
             confirm_token_hash = NULL, confirm_expires_at = NULL
       WHERE id = ? AND confirm_token_hash = ?`,
   ).bind(new Date(now).toISOString(), row.id, row.confirm_token_hash).run();
@@ -144,7 +143,7 @@ export async function unsubscribe(env: Env, token: unknown, now = Date.now()): P
   const expected = await indexHmac(env, TABLE, 'unsubscribe', `${uid}.${v}`);
   if (!constantTimeEqual(sig, expected)) return 'token_invalid';
   const done = await env.DB.prepare(
-    `UPDATE ${TABLE} SET status = 'unsubscribed', unsubscribed_at = ?, token_version = token_version + 1
+    `UPDATE subprocessor_subscribers SET status = 'unsubscribed', unsubscribed_at = ?, token_version = token_version + 1
       WHERE uid = ? AND token_version = ? AND status = 'confirmed'`,
   ).bind(new Date(now).toISOString(), uid, Number(v)).run();
   return Number((done as any)?.meta?.changes ?? 0) === 1 ? true : 'token_invalid';
@@ -152,7 +151,7 @@ export async function unsubscribe(env: Env, token: unknown, now = Date.now()): P
 
 /** Counts by status, for HQ. Never an address. */
 export async function subscriberCounts(env: Env) {
-  const rows = (await env.DB.prepare(`SELECT status, COUNT(*) AS n FROM ${TABLE} GROUP BY status`).all<{ status: string; n: number }>()).results || [];
+  const rows = (await env.DB.prepare(`SELECT status, COUNT(*) AS n FROM subprocessor_subscribers GROUP BY status`).all<{ status: string; n: number }>()).results || [];
   const out = { confirmed: 0, pending: 0, unsubscribed: 0 };
   for (const r of rows) if (r.status in out) (out as any)[r.status] = Number(r.n);
   return out;

@@ -203,12 +203,11 @@ export type SubprocessorRow = {
   created_at: string; updated_at: string;
 };
 
-const SUB_COLS = 'id, uid, name, purpose, data_seen, location, state, starts_at, published_at, removed_at, created_at, updated_at';
 
 /** The subprocessors visitors see: published, and those being removed until the removal is published. */
 export async function publicSubprocessors(env: Env, now = Date.now()) {
   const rows = (await env.DB.prepare(
-    `SELECT ${SUB_COLS} FROM trust_subprocessors WHERE state IN ('published', 'removing') ORDER BY starts_at, name, id`,
+    `SELECT id, uid, name, purpose, data_seen, location, state, starts_at, published_at, removed_at, created_at, updated_at FROM trust_subprocessors WHERE state IN ('published', 'removing') ORDER BY starts_at, name, id`,
   ).all<SubprocessorRow>()).results || [];
   const day = today(now);
   const last = await env.DB.prepare(
@@ -226,7 +225,7 @@ export async function publicSubprocessors(env: Env, now = Date.now()) {
 
 /** Every subprocessor, every state, for HQ. */
 export async function allSubprocessors(env: Env) {
-  return (await env.DB.prepare(`SELECT ${SUB_COLS} FROM trust_subprocessors ORDER BY created_at, id`).all<SubprocessorRow>()).results || [];
+  return (await env.DB.prepare(`SELECT id, uid, name, purpose, data_seen, location, state, starts_at, published_at, removed_at, created_at, updated_at FROM trust_subprocessors ORDER BY created_at, id`).all<SubprocessorRow>()).results || [];
 }
 
 /** The change log, newest first, at most `limit` rows, and whether it was cut. */

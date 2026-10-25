@@ -56,14 +56,14 @@ export function parseReport(raw: unknown):
 export async function fileReport(env: Env, userId: number, r: { affected: string; what: string; how: string | null }):
   Promise<{ ok: true; uid: string } | { ok: false; code: 'too_many' }> {
   const recent = await env.DB.prepare(
-    `SELECT COUNT(*) AS n FROM ${TABLE} WHERE user_id = ? AND created_at > datetime('now', '-1 day')`,
+    `SELECT COUNT(*) AS n FROM security_reports WHERE user_id = ? AND created_at > datetime('now', '-1 day')`,
   ).bind(userId).first<{ n: number }>();
   if (Number(recent?.n ?? 0) >= REPORTS_PER_DAY) return { ok: false, code: 'too_many' };
   const uid = `sec_${crypto.randomUUID().replace(/-/g, '').slice(0, 20)}`;
   const what = await encryptColumn(env, TABLE, 'what', uid, r.what);
   const how = r.how ? await encryptColumn(env, TABLE, 'how', uid, r.how) : null;
   await env.DB.prepare(
-    `INSERT INTO ${TABLE} (uid, user_id, affected, what_enc, how_enc) VALUES (?, ?, ?, ?, ?)`,
+    `INSERT INTO security_reports (uid, user_id, affected, what_enc, how_enc) VALUES (?, ?, ?, ?, ?)`,
   ).bind(uid, userId, r.affected, what, how).run();
   return { ok: true, uid };
 }
@@ -91,7 +91,7 @@ async function shaped(env: Env, r: Row, withReporter: boolean) {
 export async function reportsOf(env: Env, userId: number) {
   const rows = (await env.DB.prepare(
     `SELECT uid, user_id, affected, what_enc, how_enc, status, created_at, updated_at, acknowledged_at, resolved_at
-       FROM ${TABLE} WHERE user_id = ? ORDER BY created_at DESC, id DESC LIMIT 100`,
+       FROM security_reports WHERE user_id = ? ORDER BY created_at DESC, id DESC LIMIT 100`,
   ).bind(userId).all<Row>()).results || [];
   return Promise.all(rows.map((r) => shaped(env, r, false)));
 }
@@ -101,7 +101,7 @@ export async function allReports(env: Env, status: SecurityReportStatus | null) 
   const rows = (await env.DB.prepare(
     `SELECT r.uid, r.user_id, r.affected, r.what_enc, r.how_enc, r.status, r.created_at, r.updated_at, r.acknowledged_at, r.resolved_at,
             u.name AS reporter_name, u.email AS reporter_email
-       FROM ${TABLE} r LEFT JOIN users u ON u.id = r.user_id
+       FROM security_reports r LEFT JOIN users u ON u.id = r.user_id
       WHERE (? IS NULL OR r.status = ?)
       ORDER BY CASE r.status WHEN 'open' THEN 0 WHEN 'acknowledged' THEN 1 ELSE 2 END, r.created_at, r.id LIMIT 501`,
   ).bind(status, status).all<Row>()).results || [];
@@ -111,7 +111,7 @@ export async function allReports(env: Env, status: SecurityReportStatus | null) 
 /** Moves a report to a status, stamping when it was first acknowledged or resolved. */
 export async function setStatus(env: Env, uid: string, status: SecurityReportStatus, by: number): Promise<boolean> {
   const done = await env.DB.prepare(
-    `UPDATE ${TABLE} SET status = ?, updated_at = datetime('now'), answered_by = ?,
+    `UPDATE security_reports SET status = ?, updated_at = datetime('now'), answered_by = ?,
             acknowledged_at = CASE WHEN ? != 'open' AND acknowledged_at IS NULL THEN datetime('now') ELSE acknowledged_at END,
             resolved_at = CASE WHEN ? IN ('resolved', 'closed') AND resolved_at IS NULL THEN datetime('now') ELSE resolved_at END
       WHERE uid = ?`,
