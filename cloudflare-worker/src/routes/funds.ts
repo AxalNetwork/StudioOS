@@ -14,7 +14,7 @@ import { requireAuth, requireApprovedKyc, selectJwt } from '../auth';
 import { FundReportRefusal,reportId,readFundPage,readFundPeriod,saveFundPeriod } from '../services/fundReports';
 import { AUTH_ERROR_STATUSES } from '../util/authErrors';
 import { requireFundGp, requireFundCreator } from '../services/fundGpAccess';
-import { assertFundAct, auditFundAct, type FundActKey } from '../services/fundAdminAccess';
+import { assertFundAct, assertAdminAct, auditFundAct, type FundActKey } from '../services/fundAdminAccess';
 import { DISTRIBUTION_LPS_SQL, splitDistribution } from '../services/fundDistributionSplit';
 import { Funds, LPs } from '../models/funds';
 import { Jobs } from '../models/jobs';
@@ -646,6 +646,7 @@ funds.post('/', async (c) => {
   // of a GP leaves gp_user_id unset for them to fill in, rather than silently
   // making the operator the fiduciary of record.
   const { user: creator, viaAdmin, companyId } = await requireFundCreator(c);
+  await assertAdminAct(c, creator, 'fund.create');
   const body = await c.req.json<Partial<{
     name: string; vintage_year: number; total_commitment: number;
     fund_size_cents: number; carried_interest: number; management_fee: number;
@@ -677,6 +678,7 @@ funds.post('/', async (c) => {
     (f as any).gp_user_id = creator.id;
     (f as any).company_id = companyId;
   }
+  await auditFundAct(c.env, creator, 'fund.create', { fund_id: f.id });
   // NO GP OF RECORD, NO LPA (D370, the Fabric canvas's F10 rule). The LPA is
   // the document a GP signs as fiduciary; generating one for a fund with no
   // GP of record puts an agreement with nobody's name behind it into the LP
@@ -1408,10 +1410,12 @@ funds.post('/:id/distributions/preview', async (c) => {
     return refuse(c, 400, { code: 'invalid_amount', message: 'A distribution needs proceeds above zero, in whole cents.' });
   }
   const lps = (await c.env.DB.prepare(DISTRIBUTION_LPS_SQL).bind(fundId)
-    .all<{ id: number; commitment_amount: number; invested_amount: number }>()).results || [];
+    .all<{ id: number; lp_name: string | null; commitment_amount: number; invested_amount: number }>()).results || [];
   const split = splitDistribution(proceeds, gp.fund?.carried_interest, lps);
   await auditFundAct(c.env, gp.user, 'distribution.preview', { fund_id: fundId, proceeds_cents: proceeds });
-  return c.json({ ok: true, fund_id: fundId, ...split });
+  return c.json({ ok: true, fund_id: fundId, ...split,
+    lines: split.lines.map((line) => ({ ...line, lp_name: lps.find((lp) => Number(lp.id) === line.lp_id)?.lp_name ?? null })),
+  });
 });
 
 funds.post('/distributions/:id/mark-paid', async (c) => {

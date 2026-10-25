@@ -12,6 +12,12 @@ the meantime. Deal-room reads retain their separate partner rule. Legacy legal
 entity listing and other routes with independent role gates are separate
 policies, not grants from the founder-resource guard.
 
+D1159 (#3066): `funds.ts` adds LP names to distribution previews and enforces
+and audits `fund.create`. `fund_performance.ts` enforces and audits
+`fund.valuation` for marks and fund attribution. Admin controls use the shared
+act table; existing institutional GP ownership/tier scope remains. The overview
+also returns an independent per-fund booklet waiting block.
+
 D973 reads live in `admin_network_reads.ts`, mounted before D976’s
 `admin_network.ts` at `/api/admin/network`. Opaque person refs use the
 read-only drawer; numeric account IDs continue to the standing router.
