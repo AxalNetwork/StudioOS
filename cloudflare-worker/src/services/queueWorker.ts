@@ -581,6 +581,11 @@ async function handle(env: Env, job: QueueJob): Promise<void> {
       console.info(`[mi.reducer] cells=${r.cells_written} suppressed=${r.cells_suppressed} fit_pairs=${r.fit_pairs_written} purged=${r.optout_purged}`);
       return;
     }
+    case 'event_calendar_cleanup': {
+      const { runEventCalendarCleanup } = await import('./calendar/cancelEvents');
+      await runEventCalendarCleanup(env, payload);
+      return;
+    }
     case 'email_send': {
       // Task #2 (IB) — transactional email delivery. Payload is the
       // rendered envelope produced by services/email/send.ts (subject,

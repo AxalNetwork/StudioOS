@@ -96,6 +96,7 @@ const SOURCES: Record<string, string[]> = {
   mercury: ['services/mercury/client.ts', 'services/mercury/mcp.ts', 'integrations/mcpClient.ts', 'services/mercury/reads.ts', 'services/mercury/oauth.ts'],
   slack: ['integrations/providers/slack.ts', 'services/notify.ts'],
   zoom: ['services/channels/zoom.ts'],
+  google_workspace: ['services/google/workspace.ts', 'routes/google_workspace.ts'],
   google_calendar: ['services/calendar.ts', 'services/channels/googleMeet.ts'],
   microsoft_365: ['services/calendar.ts'],
   linkedin: ['routes/linkedin.ts'],
@@ -287,6 +288,8 @@ const ADDED: Record<string, string | null> = {
   hubspot: '2026-05', calendly: '2026-05', slack: '2026-05', stripe: '2026-05', linkedin: '2026-05',
   carta: '2026-09', docusign: '2026-09', crunchbase: '2026-09',
   github: '2026-10', zoom: '2026-10', google_calendar: '2026-10', microsoft_365: '2026-10', mercury: '2026-10',
+  google_workspace: null,
+
   lovable: null,
   figma: null, salesforce: null, affinity: null,
   // D754 and D756 switch them on; until then nothing connects on production.
@@ -332,6 +335,7 @@ const ENDPOINTS: Record<string, { file: string; sign_in: [string, string] | null
   stripe: { file: 'integrations/providers/stripe.ts', sign_in: ['STRIPE_CONNECT', '/oauth/authorize'], api: 'STRIPE_API' },
   github: { file: 'integrations/providers/github.ts', sign_in: null, api: 'API' },
   zoom: { file: 'services/channels/zoom.ts', sign_in: ['ZOOM_AUTH', '/oauth/authorize'], api: 'ZOOM_API' },
+  google_workspace: { file: 'services/calendar.ts', sign_in: ['GOOGLE_AUTH_URL', ''], api: null },
   google_calendar: { file: 'services/calendar.ts', sign_in: ['GOOGLE_AUTH_URL', ''], api: 'GOOGLE_CALENDAR_API' },
   microsoft_365: { file: 'services/calendar.ts', sign_in: ['MICROSOFT_AUTHORITY', '/common/oauth2/v2.0/authorize'], api: 'MICROSOFT_GRAPH' },
   mercury: { file: 'services/mercury/client.ts', sign_in: null, api: 'MERCURY_API_BASE' },
@@ -384,7 +388,7 @@ test('10. sign-in kinds', () => {
     const kind = e.page.sign_in.kind;
     if (row?.auth_type === 'none') assert.equal(kind, 'none', e.id);
     else if (CHANNELS.has(e.key)) assert.equal(kind, 'channel', e.id);
-    else if (['google_calendar', 'microsoft_365', 'linkedin'].includes(e.key)) assert.equal(kind, 'first_party', e.id);
+    else if (['google_workspace', 'google_calendar', 'microsoft_365', 'linkedin'].includes(e.key)) assert.equal(kind, 'first_party', e.id);
     // D881 (#2554): a member connects Mercury only by signing in through its MCP server.
     else if (e.key === 'mercury') assert.equal(kind, 'mcp', e.id);
     else if (row!.auth_type === 'api_key') assert.equal(kind, 'key', e.id);

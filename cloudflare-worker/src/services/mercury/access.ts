@@ -31,7 +31,7 @@ import { ensureAdminAuditLogTable } from '../../routes/admin';
 
 type C = Context<{ Bindings: Env }>;
 
-export const READ_AUDIT_ACTIONS = ['mercury_connections_read', 'mercury_accounts_read', 'mercury_transactions_read', 'mercury_matches_read', 'capital_attestations_read'] as const;
+export const READ_AUDIT_ACTIONS = ['mercury_connections_read', 'mercury_accounts_read', 'mercury_transactions_read', 'mercury_matches_read', 'capital_attestations_read', 'fund_lps_read'] as const;
 export type ReadAuditAction = typeof READ_AUDIT_ACTIONS[number];
 
 async function supportSession(c: C): Promise<boolean> {
