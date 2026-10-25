@@ -87,6 +87,7 @@ export function HqDoor({ lane }) {
     case 'ai_runs': return <Link to="/admin/platform/allowances" className={LINK}>Platform › AI allowances</Link>;
     case 'notices': return <Link to="/admin/licences" className={LINK}>Licences</Link>;
     case 'support': return <Link to="/admin/hq-support" className={LINK}>Support</Link>;
+    case 'grants': return <Link to="/admin/licences/programs/requests" className={LINK}>Licences › Program grants › Requests</Link>;
     default: return <span className={SUB}>{lane.waits}</span>;
   }
 }

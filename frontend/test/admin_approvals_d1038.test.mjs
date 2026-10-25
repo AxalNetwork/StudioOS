@@ -45,7 +45,8 @@ const GLANCE = {
       { key: 'moderation', label: 'Spinout moderation', count: 1, oldest_age_hours: 9, sla: 'ok' },
       { key: 'best_fit', label: 'Best-Fit consultations', count: 1, oldest_age_hours: 20, sla: 'ok' },
       // D1041 (#2889): part 3's eight lanes, measured empty here so the sums above hold.
-      ...['kyb', 'comarketing', 'wellbeing_experts', 'perk_listings', 'strategic_access', 'lab_hosts', 'score_flags', 'articles']
+      // D1132 (#3012): and Product testers, counted once part 4's store landed.
+      ...['kyb', 'comarketing', 'wellbeing_experts', 'perk_listings', 'strategic_access', 'lab_hosts', 'score_flags', 'articles', 'product_testers']
         .map((key) => ({ key, label: key, count: 0, oldest_age_hours: null, sla: 'ok' })),
     ],
     no_queue: [],
@@ -69,12 +70,12 @@ test('the addresses, the tabs, the boards, and the redirect\'s key', () => {
   assert.equal(filtersOf('?group=nope').group, null, 'an unknown group is no filter');
 });
 
-test('the twenty lanes in four groups; nine new; the nineteen the glance counts (D1041); HQ\'s nine', () => {
+test('the twenty lanes in four groups; nine new; all twenty the glance counts (D1041, D1132); HQ\'s nine', () => {
   assert.equal(LANES.length, 20);
   assert.deepEqual([...new Set(LANES.map((l) => l.group))], ['people', 'programs', 'community', 'deals']);
   assert.equal(LANES.filter((l) => l.isNew).length, 9);
-  assert.equal(LANES.filter((l) => l.glance).length, 19);
-  assert.deepEqual(LANES.filter((l) => !l.glance).map((l) => l.key), ['product_testers'], 'only the lane with no store is uncounted');
+  assert.equal(LANES.filter((l) => l.glance).length, 20, 'D1132: every lane is counted');
+  assert.deepEqual(LANES.filter((l) => !l.glance).map((l) => l.key), [], 'D1132: Product testers is counted now that its store exists');
   assert.deepEqual(LANES.filter((l) => l.here).map((l) => l.key), ['product_testers', 'wellbeing_experts', 'comarketing']);
   assert.equal(HQ_LANES.length, 9);
 });
@@ -96,7 +97,7 @@ test('a lane is a number, unreadable (never 0), not counted yet (never 0), or lo
   assert.deepEqual([v('kyc').state, v('kyc').count, v('kyc').age, v('kyc').band.tone], ['ready', 10, '4 d 7 h', 'bad']);
   assert.deepEqual([v('lp').state, v('lp').count], ['unreadable', null]);
   assert.deepEqual([v('events').state, v('events').count, v('events').band], ['ready', 0, null], 'a measured 0 is fine');
-  assert.deepEqual([v('product_testers').state, v('product_testers').count], ['unrecorded', undefined]);
+  assert.deepEqual([v('product_testers').state, v('product_testers').count], ['ready', 0], 'D1132: Product testers reads its count');
   assert.deepEqual([v('comarketing').state, v('comarketing').count], ['ready', 0], 'D1041: a part 3 lane reads its count');
   const pitched = { ...GLANCE, approvals: { ...GLANCE.approvals, lanes: GLANCE.approvals.lanes.map((l) => (l.key === 'comarketing' ? { ...l, count: 2, oldest_age_hours: 80 } : l)) } };
   const c = laneViews(ready(pitched)).find((x) => x.key === 'comarketing');
@@ -111,7 +112,7 @@ test('the Waiting tile: "92 +" when a lane failed and which; the full sum and th
   const partial = waitingTile(laneViews(ready(GLANCE)));
   assert.deepEqual([partial.value, partial.sub], ['92 +', 'LP applications could not be read']);
   const whole = waitingTile(laneViews(ready(ALL_READ)));
-  assert.deepEqual([whole.value, whole.sub], ['95', 'across 19 of 20 lanes; 1 is not counted yet']);
+  assert.deepEqual([whole.value, whole.sub], ['95', 'across 20 of 20 lanes'], 'D1132: nothing is uncounted, so no "0 are not counted yet"');
   assert.equal(waitingTile(laneViews({ status: 'unreadable', hq: null })).state, 'unreadable');
   assert.equal(oldestLine(laneViews(ready(GLANCE))), 'oldest 6 d 2 h, Due diligence');
 });
@@ -240,9 +241,9 @@ test('mounted, Lanes: each group\'s lanes with New pills, Could not be read with
   let v = await render('/admin/approvals/lanes', h(ApprovalsPage, { viewer: { role: 'admin', is_super_admin: 0 } }));
   try {
     assert.match(v.of('approvals-lane-lp'), /LP applications\s*Could not be read Try again/);
-    // D1041: KYB is counted now (the stub's glance answers 0); Product testers has no store.
+    // D1041: KYB is counted now (the stub's glance answers 0); D1132: so is Product testers.
     assert.match(v.of('approvals-lane-kyb'), /KYB\s*New\s*0/);
-    assert.match(v.of('approvals-lane-product_testers'), /Product testers\s*New\s*Not read here yet/);
+    assert.match(v.of('approvals-lane-product_testers'), /Product testers\s*New\s*0\s*—\s*Here/);
     assert.match(v.of('approvals-lane-events'), /Events\s*0\s*—\s*Events › Review/);
     assert.match(v.of('approvals-not-a-queue'), /Partner invitations: An open invitation waits on the invitee, not an admin\./);
     assert.ok(!v.has('approvals-hq-lanes'), 'an Admin never sees the HQ group');
@@ -251,6 +252,10 @@ test('mounted, Lanes: each group\'s lanes with New pills, Could not be read with
   try {
     assert.match(v.of('approvals-hq-lanes'), /HQ decides/);
     assert.match(v.of('approvals-hq-proposals'), /not built yet/);
+    // D1132: Program-grant requests opens HQ's Requests page (D987), not "not built yet".
+    assert.match(v.of('approvals-hq-grants'), /Licences › Program grants › Requests/);
+    assert.doesNotMatch(v.of('approvals-hq-grants'), /not built yet/);
+    assert.ok(v.hrefs().includes('/admin/licences/programs/requests'));
   } finally { await v.unmount(); s.restore(); }
 });
 
@@ -277,7 +282,7 @@ test('mounted, boards: co-marketing reads its five states alone and decides nowh
   s = stub();
   v = await render('/admin/approvals/product-testers', h(LaneBoards));
   try {
-    assert.match(v.of('approvals-testers-none'), /No product tester application is stored yet/);
+    assert.match(v.of('approvals-testers-none'), /counted on the Inbox, under Product testers/);
     assert.deepEqual(reads(s), [], 'no store, no read');
   } finally { await v.unmount(); s.restore(); }
 });

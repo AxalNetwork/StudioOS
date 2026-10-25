@@ -4771,6 +4771,8 @@ export const api = {
     request(`/comarketing/me/pitches/${uid}/withdraw`, { method: 'POST' }),
   adminCoMarketingQueue: (status) =>
     request(`/comarketing/admin/queue${status ? `?status=${status}` : ''}`),
+  // D1132 — one pitch for the board's item address, with who decided it.
+  adminCoMarketingPitch: (uid) => request(`/comarketing/admin/pitches/${encodeURIComponent(uid)}`),
   approveCoMarketingPitch: (uid, notes) =>
     request(`/comarketing/admin/pitches/${uid}/approve`, { method: 'POST', body: JSON.stringify({ notes }) }),
   rejectCoMarketingPitch: (uid, notes) =>
