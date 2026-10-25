@@ -1,6 +1,5 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { api } from '../../../lib/api';
 import { capTableHolderApi } from '../../../lib/api/capTableHolder';
 import { capTableRecordApi } from '../../../lib/api/capTableRecord';
 import { useAuth } from '../../../hooks/useAuthSync';
@@ -16,9 +15,10 @@ import { CapTableOverview } from './CapTableOverview';
 import { holderIdOf } from './overviewModel';
 import InstrumentsTab from './InstrumentsTab';
 import OptionPoolTab from './OptionPoolTab';
+import { ScenarioRoute, ScenariosList } from './ScenariosPages';
 import {
   HOME_NOTE, HOME_PATH, LINE, SLUG, TABS, TITLE,
-  scenarioCards, simulatorHref, tabHref, tabSearch, variantHref, variantsHref,
+  tabHref, tabSearch,
 } from './capTableModel';
 
 /**
@@ -94,7 +94,6 @@ export function useRead(load, projectId, reload) {
   return state;
 }
 
-const readCompare = (id) => api.getCapTableCompare(id);
 const readRecordOf = (id) => capTableRecordApi.read(id);
 const readGrantsOf = (id) => capTableHolderApi.grants(id);
 
@@ -152,40 +151,14 @@ export function Table({ cols, rows, testId }) {
   );
 }
 
-function ScenariosTab({ projectId, reload, retry, search }) {
-  const read = useRead(readCompare, projectId, reload);
-  const cards = read.status === 'ready' ? scenarioCards(read.data) : [];
-  return (
-    <Section title="Scenarios" tag={<Tag kind="modelled" />} testId="captable-scenarios"
-      aside={<span className="flex gap-3 text-[12px]"><Link className={LINK} to={simulatorHref(search)}>Open the simulator</Link><Link className={LINK} to={variantsHref(search)}>Draft variants</Link></span>}>
-      <ReadState read={read} what="Your scenarios" claim="This is not a claim that none are saved." onRetry={retry} testId="captable-scenarios">
-        {cards.length === 0
-          ? <p className={`m-0 text-[12.5px] ${MUTED}`} data-testid="captable-scenarios-none">No scenarios yet. A scenario starts from your saved model.</p>
-          : (
-            <div className="grid gap-2.5 md:grid-cols-2">
-              {cards.map((s) => (
-                <Link key={s.uid || s.name} to={s.model ? simulatorHref(search) : variantHref(s.uid)}
-                  className={`${CARD} flex flex-col gap-1 px-3.5 py-3 hover:border-axal-violet`} data-testid="captable-scenario-card">
-                  <span className={`text-[13.5px] font-extrabold ${INK}`}>{s.name}</span>
-                  <span className={`text-[12px] ${MUTED}`}>{s.round}</span>
-                  <span className={`text-[12px] ${INK}`}>Founders after <span className={MONO}>{s.founders}</span></span>
-                  <span className={`text-[11.5px] ${MUTED}`}>Changed {s.changed}{s.computed ? '' : ' · not computed'}</span>
-                </Link>
-              ))}
-            </div>
-          )}
-      </ReadState>
-    </Section>
-  );
-}
-
-export function CapTableTabPage({ tab, proposal = null, instrument = null, projectId, projectStatus = 'ready', onRetryProject, search = '', cards, action, phone = false }) {
+export function CapTableTabPage({ tab, proposal = null, instrument = null, scenario = null, projectId, projectStatus = 'ready', onRetryProject, search = '', cards, action, phone = false }) {
   const [reload, setReload] = useState(0);
   const retry = useCallback(() => setReload((n) => n + 1), []);
   const overlay = tab === 'new' || tab === 'proposal';
   // D1023: `/instrument/<uid>` is the instrument drawer, over Instruments.
   const onInstruments = tab === 'instrument';
-  const here = TABS.find((t) => t.id === (tab === 'instrument' ? 'instruments' : tab)) || TABS[0];
+  const under = tab === 'instrument' ? 'instruments' : tab === 'scenario' ? 'scenarios' : tab;
+  const here = TABS.find((t) => t.id === under) || TABS[0];
   // D1022: `h-<n>` is the holder drawer, over Overview's record blocks.
   const holder = holderIdOf(tab);
   let body;
@@ -201,13 +174,15 @@ export function CapTableTabPage({ tab, proposal = null, instrument = null, proje
   else if (tab === 'option-pool') body = <OptionPoolTab projectId={projectId} reload={reload} retry={retry} search={search} />;
   else if (tab === 'access') body = <AccessTab projectId={projectId} reload={reload} retry={retry} />;
   else if (tab === 'import-export') body = <ImportExportTab projectId={projectId} reload={reload} retry={retry} search={search} />;
-  else body = <ScenariosTab projectId={projectId} reload={reload} retry={retry} search={search} />;
+  // D1024: `/scenarios/<uid>` is one scenario and `/scenarios/compare` the compare page, under the Scenarios tab.
+  else if (tab === 'scenario') body = <ScenarioRoute id={scenario} projectId={projectId} reload={reload} retry={retry} search={search} />;
+  else body = <ScenariosList projectId={projectId} reload={reload} retry={retry} search={search} />;
   return (
     <div className="flex min-w-0 flex-col gap-4" data-testid={holder != null ? 'captable-holder-page' : overlay ? `captable-${tab}-over-overview` : onInstruments ? 'captable-instrument-over-instruments' : `captable-${tab}-page`}>
       {phone
         ? <CycleBar back={{ label: TITLE, to: `${HOME_PATH}${tabSearch(search)}` }} title={here.label} eadwynLabel={`Raise · ${TITLE}`} />
         : <CycleHeader cycle="raise" cards={cards} active={SLUG} action={action} title={TITLE} sub={LINE} search={tabSearch(search)} />}
-      <CapTableTabBar active={holder != null || overlay ? 'overview' : onInstruments ? 'instruments' : tab} search={search} />
+      <CapTableTabBar active={holder != null || overlay ? 'overview' : onInstruments ? 'instruments' : tab === 'scenario' ? 'scenarios' : tab} search={search} />
       {body}
     </div>
   );

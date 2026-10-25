@@ -16,7 +16,8 @@
  *     `pool`, or a use-of-funds section key.
  *
  *   PUT   /readiness/:key            { score, evidence, missing? }
- *   POST  /readiness/rescore         { items?, since? }
+ *   POST  /readiness/rescore         { items?, since?, pmf? }
+ *   GET   /pmf/history?project=&limit=&before=  stored Product-market fit points
  *   POST  /narrative-versions        { investor_type, start_from?, based_on_version?, one_liner?, why_now?, ask?, check_against? }
  *   PATCH /narrative-versions/:version   the same fields but start_from
  *   D908 (#2692): the narrative's own stores (`services/narrative/store.ts`).
@@ -87,7 +88,7 @@
  */
 import { Hono } from 'hono';
 import type { Env, User } from '../types';
-import { requireAuth } from '../auth';
+import { requireAuth, selectJwt } from '../auth';
 import { canWrite, canWritePitchDeck, type ProjectRef } from './_founder_validate_helpers';
 import { CYCLE, QUESTION, MODULES, CARD_FOR, RECORDS_FOR, INVESTOR_TYPE_LABEL, figures, cards, callsHistory, narrativeHome, recordQuery, type Ctx, type ModuleSlug } from '../services/raiseCycle';
 import {
@@ -119,6 +120,7 @@ import { resolveActiveCompany, ACTIVE_COMPANY_HEADER } from '../middleware/activ
 import { projectInActiveCompany } from '../services/tenancyScope';
 import { HolderError } from '../services/capTableWrites';
 import { MatchQueryError, commitmentsRead, matchRead } from '../services/capRelReads';
+import { recomputePmf, pmfHistory } from '../services/scoring/pmfStore';
 
 const cycleRaise = new Hono<{ Bindings: Env }>();
 
@@ -147,6 +149,11 @@ async function narrativeScope(c: any, mode: Mode): Promise<{ user: User; project
   const s = await scope(c);
   if (s instanceof Response) return s;
   return (await narrativeAdminGate(c, s.user, s.projectId, mode)) ?? s;
+}
+
+async function pmfActor(c: any, user: User): Promise<number> {
+  const actor = (await selectJwt(c))?.payload.impersonated_by;
+  return typeof actor === 'number' && Number.isSafeInteger(actor) && actor > 0 ? actor : Number(user.id);
 }
 
 const ctxOf = (c: any, projectId: number): Ctx => ({ env: c.env, projectId, today: today() });
@@ -186,6 +193,11 @@ cycleRaise.get('/modules/:slug', async (c) => {
   if (s instanceof Response) return s;
   const ctx = ctxOf(c, s.projectId);
   const rq = recordQuery({ q: c.req.query('q'), filter: c.req.query('filter'), sort: c.req.query('sort'), page: c.req.query('page') });
+  let pmf: unknown;
+  if (slug === 'fundraising-readiness') {
+    try { pmf = await recomputePmf(c.env, s.projectId, await pmfActor(c, s.user), 'module_read', ctx.today); }
+    catch { pmf = { state: 'unreadable', reason: 'Product-market fit could not be read' }; }
+  }
   const card = await CARD_FOR[slug](ctx);
   // The records fail on their own too: a table that cannot be read says so
   // beside a card that could.
@@ -198,6 +210,7 @@ cycleRaise.get('/modules/:slug', async (c) => {
     records = { state: 'unreadable', reason: `${mod.name} records could not be read`, cols: [], rows: [], total: null, page: rq.page, page_size: null };
   }
   const parts: Record<string, unknown> = slug === 'capital-relationships' ? { calls: await callsHistory(ctx) } : {};
+  if (pmf) parts.pmf = pmf;
   // D909 (#2693): Home's tiles, Needs you and the Versions tab. It fails on its own, never the module.
   if (slug === 'investor-narrative') {
     parts.narrative = await narrativeHome(ctx).catch((e) => {
@@ -247,6 +260,17 @@ cycleRaise.get('/capital-relationships/match', async (c) => {
   }
 });
 
+cycleRaise.get('/pmf/history', async (c) => {
+  const s = await scope(c);
+  if (s instanceof Response) return s;
+  const limit = Number(c.req.query('limit') ?? 200);
+  const raw = c.req.query('before');
+  const before = raw == null ? null : idParam(raw);
+  if (!Number.isInteger(limit) || limit < 1 || limit > 500 || (raw != null && before == null)) return c.json({ detail: 'Invalid history page' }, 400);
+  try { return c.json(await pmfHistory(c.env, s.projectId, limit, before)); }
+  catch { return c.json({ state: 'unreadable', detail: 'Product-market fit history could not be read', reason: 'Product-market fit history could not be read' }, 503); }
+});
+
 // ---------------------------------------------------------------------------
 // Writes — each through its one writer
 // ---------------------------------------------------------------------------
@@ -266,7 +290,7 @@ cycleRaise.post('/readiness/rescore', async (c) => {
   // #1652's caller sends no body: every computed item.
   const b = await body(c);
   try {
-    return c.json(await rescoreReadiness(c.env, { projectId: s.projectId, userId: Number(s.user.id), items: b.items, since: b.since }));
+    return c.json(await rescoreReadiness(c.env, { projectId: s.projectId, userId: b.pmf === true ? await pmfActor(c, s.user) : Number(s.user.id), items: b.items, since: b.since, pmf: b.pmf }));
   } catch (e) { return writeFailed(c, e); }
 });
 

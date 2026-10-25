@@ -49,20 +49,14 @@ const LABEL = 'text-[11.5px] font-semibold text-zinc-700 dark:text-gray-200';
  * The tab's Section carries the chooser in its heading, as the canvas's
  * segmented control sits beside a tab's title.
  */
-function FundFrame({ title, sub, testId, funds, fund, overview, onFund, children }) {
-  const chooser = fund && funds.length > 1 ? (
-    <label className={`${LABEL} flex items-center gap-2`}>Fund
-      <select className={`${INPUT} w-auto min-w-[12rem]`} value={String(fund.id)} onChange={(e) => onFund(e.target.value)} data-testid="fund-select">
-        {funds.map((f) => <option key={f.id} value={String(f.id)}>{f.name}</option>)}
-      </select>
-    </label>
-  ) : null;
+// D1160 (FND2): the fund is chosen in the header's fund filter, kept across tabs as `?fund=`.
+function FundFrame({ title, sub, testId, fund, overview, children }) {
   let body = children;
   if (overview.status === 'loading' || overview.status === 'idle') body = <LoadingRows lines={3} />;
   else if (overview.status === 'unreadable' || overview.data?.funds?.state !== 'ok') {
     body = <div data-testid="funds-unreadable"><Unreadable what="The administered funds" claim="This is not a claim that there is none." onRetry={overview.reload} /></div>;
   } else if (!fund) body = <Banner tone="neutral" data-testid="no-administered-fund">{NO_FUND}</Banner>;
-  return <Section title={fund ? `${title} · ${fund.name}` : title} sub={sub} aside={chooser} testId={testId}>{body}</Section>;
+  return <Section title={fund ? `${title} · ${fund.name}` : title} sub={sub} testId={testId}>{body}</Section>;
 }
 
 /**
@@ -213,7 +207,7 @@ export function DistributionsTab({ apis, access, funds, fund, overview, onFund }
         <div className="grid grid-cols-1 items-start gap-4 lg:grid-cols-[300px_1fr]">
           <div className="rounded-axal-xl border border-axal-hairline bg-white px-4 py-4 sm:px-5 dark:border-gray-800 dark:bg-gray-900">
             <div className={TH}>Net proceeds</div>
-            <form className="mt-3 flex flex-col gap-2.5" onSubmit={preview}>
+            <form id="distribution-form" className="mt-3 flex flex-col gap-2.5" onSubmit={preview}>
               <label className={LABEL}>Proceeds (USD)
                 <input className={`${INPUT} mt-1 ${NUM}`} inputMode="decimal" value={proceeds} onChange={(e) => { setProceeds(e.target.value); setSplit(null); }} disabled={busy} data-testid="distribution-proceeds" />
               </label>
@@ -289,6 +283,7 @@ export function FeesTab({ apis, access, funds, fund, overview, onFund }) {
                 {(s?.periods || []).length === 0 ? <Note><Unrecorded>No fee period yet</Unrecorded></Note>
                   : <Table cols={periodCols} rows={s.periods} rowKey={(p) => p.quarter} template="1.4fr 1.4fr 1fr .8fr" rowTestId={(p) => `fee-period-${p.quarter}`} />}
               </Panel>
+              <div id="fee-prepare" />
               <Panel label="Prepare a quarter" testId="fee-prepare">
                 <form className="flex flex-wrap items-end gap-2 px-4 py-3 sm:px-5" onSubmit={(e) => {
                   e.preventDefault();

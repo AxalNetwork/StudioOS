@@ -40,6 +40,7 @@ function db() {
   // D990: a Draft is read off migration 275's answer columns too.
   d.exec(readFileSync(new URL('../sql/migrations/275_partner_profiles_columns.sql', import.meta.url), 'utf8'));
   d.exec(readFileSync(new URL('../sql/migrations/546_events_review_columns.sql', import.meta.url), 'utf8'));
+  d.exec(readFileSync(new URL('../sql/migrations/577_expert_review_records.sql', import.meta.url), 'utf8'));
   // D1041: the KYB and host stores are migrations 220's and 313's, above the baseline's cutoff.
   d.exec(readFileSync(new URL('../sql/migrations/220_company_kyb.sql', import.meta.url), 'utf8'));
   d.exec(readFileSync(new URL('../sql/migrations/313_lab_host_applications.sql', import.meta.url), 'utf8'));

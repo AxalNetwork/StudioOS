@@ -69,7 +69,8 @@ function seed(opts: { drop?: string[] } = {}) {
   reg.run(10, null, 'rae@reg.example', 'Rae Registrant', 'registered', '2026-10-24 09:30:00');
   reg.run(10, null, 'x@reg.example', 'X Y', 'cancelled', '2026-10-24 10:15:00');
   reg.run(10, null, 'z@reg.example', 'Z W', 'registered', '2026-10-23 07:00:00');
-  db.prepare(`INSERT INTO experts (uid, name, verified) VALUES ('exp-2', 'Dr Elena Expert', 0)`).run();
+  db.exec(read('cloudflare-worker/sql/migrations/577_expert_review_records.sql'));
+  db.prepare(`INSERT INTO experts (uid, user_id, name, verified) VALUES ('exp-2', 2, 'Dr Elena Expert', 0)`).run();
   for (const t of opts.drop || []) db.exec(`DROP TABLE ${t}`);
   return db;
 }
@@ -136,7 +137,7 @@ test('every source answers: events, jobs, circles, daily registration counts and
   assert.deepEqual(Object.keys(first).sort(), ['actor', 'at', 'count', 'href', 'icon', 'kind', 'sentence', 'title']);
   assert.equal(first.count, 3, 'a day\'s registrations are one row, counted, whatever their status now');
   assert.equal(first.href, '/admin/events');
-  assert.equal(body.rows.find((r: any) => r.kind === 'wellbeing').href, '/admin?tab=wellbeing');
+  assert.equal(body.rows.find((r: any) => r.kind === 'wellbeing').href, '/admin/wellbeing');
   assert.equal(body.rows.find((r: any) => r.kind === 'wellbeing').title, null, 'an expert is not named');
   assert.equal(body.rows.find((r: any) => r.sentence.includes('Product Designer')).dated_by, 'last_change');
   assertNoPerson(body);
@@ -242,17 +243,20 @@ test('a bad filter is a 400, and a member is refused', async () => {
 
 test('verifying and hiding an expert are recorded as admin actions, without the expert\'s name', async () => {
   const db = seed();
-  await call(db, '/wb/admin/experts/exp-2/verify', { method: 'POST', body: { verified: true } });
+  await call(db, '/wb/admin/experts/exp-2/verify', { method: 'POST', body: { verified: true, credentials_checked: true, expected_version: 0 } });
   await call(db, '/wb/admin/experts/exp-2/hide', { method: 'POST', body: { hidden: true } });
   await call(db, '/wb/admin/experts/exp-2/hide', { method: 'POST', body: { hidden: false } });
   await call(db, '/wb/admin/experts/exp-2/verify', { method: 'POST', body: { verified: false } });
+  const declined = await call(db, '/wb/admin/experts/exp-2/decline', { method: 'POST', body: { reason: 'Please attach the issuing board evidence.' } });
+  assert.equal(declined.status, 200);
   await call(db, '/wb/admin/experts/nobody/verify', { method: 'POST', body: { verified: true } });
   await call(db, '/wb/admin/experts/nobody/hide', { method: 'POST', body: { hidden: true } });
   const rows = db.prepare(`SELECT action, filters_json FROM admin_audit_log WHERE report_type = 'wellbeing' ORDER BY id`).all() as any[];
-  assert.deepEqual(rows.map((r) => r.action), ['expert_verified', 'expert_verified', 'expert_hidden', 'expert_restored', 'expert_unverified'],
-    'the seeded row, then the four acts; an unknown uid changes nothing and writes nothing');
+  assert.deepEqual(rows.map((r) => r.action), ['expert_verified', 'expert_verified', 'expert_hidden', 'expert_restored', 'expert_unverified', 'expert_declined'],
+    'the seeded row, then the five acts; an unknown uid changes nothing and writes nothing');
   const { body } = await get(db, '?kind=wellbeing&limit=50');
   assert.deepEqual(body.rows.map((r: any) => r.sentence).sort(), [
+    'An admin declined a wellbeing expert.',
     'An admin hid a wellbeing expert from the directory.',
     'An admin removed a wellbeing expert’s verification.',
     'An admin restored a wellbeing expert to the directory.',

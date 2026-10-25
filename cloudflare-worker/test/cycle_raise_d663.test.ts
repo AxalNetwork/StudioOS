@@ -155,13 +155,13 @@ test('readiness with no items returns empty, with the action that starts it', as
   assert.equal(fig(r.body, 'readiness_score').state, 'empty');
   assert.equal(db.prepare('SELECT COUNT(*) AS n FROM readiness_items').get().n, 0, 'reading creates no item');
 
-  // That action — the computed rescore — creates the seven items and scores the six it can measure.
+  // That action — the computed rescore — creates the eight items and scores the six it can measure.
   db.exec(`UPDATE projects SET use_of_funds = '[{"label":"Product & engineering","pct":100}]', funding_needed = 500000 WHERE id = ${P}`);
   assert.equal((await call(db, FOUNDER, 'POST', `/readiness/rescore?project=${P}`)).status, 200);
   const after = card((await overview(db)).body, 'fundraising-readiness');
   assert.notEqual(after.state, 'empty');
   const bars = after.series.find((s: any) => s.kind === 'hbar');
-  assert.equal(bars.items.length, 7);
+  assert.equal(bars.items.length, 8);
   assert.equal(bars.items.find((i: any) => i.label === 'Use of funds').value, 10);
   assert.equal(bars.items.find((i: any) => i.label === 'Team').value, null, 'no check measures the team: Not recorded, never 0');
   assert.equal(bars.items.find((i: any) => i.label === 'Investor narrative').value, null, 'nothing compared is unscored');
@@ -653,16 +653,16 @@ test('D686 #1594 Calls history mutations: flag, project scope, date, counts and 
 test('#2445: readiness coverage counts valid checks, never historical manual overrides',async()=>{
  const db=fixture();
  try {
-  assert.deepEqual(fig((await overview(db)).body,'readiness_score').coverage,{scored:0,total:7});
+  assert.deepEqual(fig((await overview(db)).body,'readiness_score').coverage,{scored:0,total:8});
   db.exec("INSERT INTO readiness_items(id,project_id,item_key,label,position) VALUES(900,1,'traction','Traction',5),(901,1,'team','Team',6)");
   db.exec("INSERT INTO readiness_scores(item_id,project_id,score,evidence,source) VALUES(900,1,4,'measured','computed'),(900,1,10,'pattern','manual'),(901,1,10,'measured','manual')");
   const {loadReadiness}=await import('../src/services/raiseCycle.ts');
  assert.equal((await loadReadiness({env:env(db),projectId:P} as any)).scores.length,1);
  let f=fig((await overview(db)).body,'readiness_score');
-  assert.deepEqual(f.coverage,{scored:1,total:7}); assert.equal(f.value,40);
+  assert.deepEqual(f.coverage,{scored:1,total:8}); assert.equal(f.value,40);
   db.exec("INSERT INTO readiness_scores(item_id,project_id,score,evidence,source) VALUES(901,1,6,'pattern','manual')");
   f=fig((await overview(db)).body,'readiness_score');
-  assert.deepEqual(f.coverage,{scored:2,total:7}); assert.equal(f.value,50);
+  assert.deepEqual(f.coverage,{scored:2,total:8}); assert.equal(f.value,50);
  }finally{db.close();}
 });
 

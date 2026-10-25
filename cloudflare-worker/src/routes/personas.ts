@@ -28,7 +28,8 @@ import { PERSONAS, PERSONA_BY_ID, isAllowedPersonaOverlap, type PersonaId } from
 import { classifyPersona } from '../../ai-workers/persona-router';
 import { bindingKey } from '../util/schemaBootstrap';
 import { readPersonaSegments } from '../services/personaSegments';
-import { NOT_OFFERED, retiredSentence, statusesOf } from '../services/segmentProfiles';
+import { NOT_OFFERED, statusesOf } from '../services/segmentProfiles';
+import { MembersError, movableSegment, moveOne } from '../services/personaMembers';
 
 const personas = new Hono<{ Bindings: Env }>();
 
@@ -272,97 +273,17 @@ personas.post('/admin/:user_id/retag', async (c) => {
   const body = await c.req.json().catch(() => ({} as { persona_id?: unknown }));
   if (!isPersonaId(body.persona_id)) return c.json({ error: 'invalid persona_id' }, 400);
 
-  const db = c.env.DB;
-
-  // D255 — user_personas.user_id names no foreign key, so nothing stopped a
-  // retag from being recorded against an id that joins to nobody. The target
-  // is read first, and an act recorded against a row that does not exist is
-  // refused rather than silently written.
-  const target = await db.prepare(`SELECT id, role FROM users WHERE id = ?`).bind(userId).first<{ id: number; role: string }>();
-  if (!target) return c.json({ error: 'user_not_found' }, 404);
-
-  // D255 — AN ADMIN TARGET TAKES THE SAME BAR D132 SET FOR TOGGLE-ACTIVE: a
-  // peer admin cannot re-tag another admin's persona, only a super admin can.
-  // `isSuperAdmin` reads the elevation `requireAdmin`'s `getCurrentUser`
-  // hydrates from `super_admins`, the same check the role and toggle-active
-  // routes use.
-  if (target.role === 'admin' && !isSuperAdmin(admin as any)) {
-    return c.json({
-      error: 'Only a super admin can re-tag an admin account.',
-      code: 'super_admin_required',
-    }, 403);
+  // D255, D1000: the single move's rules, shared with the bulk move (D1002, services/personaMembers.ts).
+  try {
+    const outcome = await moveOne(c.env, admin as any, isSuperAdmin(admin as any), userId, body.persona_id,
+      () => movableSegment(c.env, body.persona_id).then(() => undefined));
+    if (outcome === 'user_not_found') return c.json({ error: 'user_not_found' }, 404);
+    if (outcome === 'super_admin_required') return c.json({ error: 'Only a super admin can re-tag an admin account.', code: 'super_admin_required' }, 403);
+    if (outcome === 'unchanged') return c.json({ ok: true, unchanged: true });
+  } catch (e) {
+    if (e instanceof MembersError) return c.json(e.code === 'segments_unreadable' ? STATUSES_UNREADABLE : { detail: e.sentence, code: e.code }, e.status as any);
+    throw e;
   }
-
-  // D255 — read the CURRENT primary persona before writing anything, so the
-  // audit row can name what it was changed FROM (previously the row never
-  // read it, so `metadata.from` did not exist), and so a retag to the
-  // persona already stored is a no-op that writes nothing rather than a
-  // manual_override row identical to what was already there.
-  const current = await db.prepare(
-    `SELECT persona_id FROM user_personas WHERE user_id = ? AND is_primary = 1`,
-  ).bind(userId).first<{ persona_id: string } | null>();
-  if (current?.persona_id === body.persona_id) {
-    return c.json({ ok: true, unchanged: true });
-  }
-
-  // D1000: an admin may place a member in an Active or a Draft segment; a
-  // Retired one takes no new members.
-  let statuses: Awaited<ReturnType<typeof statusesOf>>;
-  try { statuses = await statusesOf(c.env); } catch (e) {
-    console.error('[personas] segment statuses unreadable:', (e as Error)?.message);
-    return c.json(STATUSES_UNREADABLE, 503);
-  }
-  if (statuses.get(body.persona_id) === 'retired') {
-    const named = await db.prepare(`SELECT name FROM segment_profiles WHERE key = ?`).bind(body.persona_id).first<{ name: string }>().catch(() => null);
-    return c.json({ detail: retiredSentence(named?.name || PERSONA_BY_ID[body.persona_id as PersonaId].label), code: 'segment_retired' }, 409);
-  }
-
-  // D255 — the demote-and-insert used to be two separate D1 round-trips; a
-  // failure between them could leave every row demoted and none primary.
-  // One batch, one outcome.
-  await db.batch([
-    db.prepare(`UPDATE user_personas SET is_primary = 0 WHERE user_id = ?`).bind(userId),
-    db.prepare(`
-      INSERT INTO user_personas (user_id, persona_id, confidence, manual_override, source, is_primary)
-      VALUES (?, ?, 1, 1, 'admin_retag', 1)
-      ON CONFLICT(user_id, persona_id) DO UPDATE SET
-        manual_override = 1,
-        source = 'admin_retag',
-        is_primary = 1,
-        updated_at = CURRENT_TIMESTAMP
-    `).bind(userId, body.persona_id),
-  ]);
-
-  // D255 — the audit row now NAMES ITS SUBJECT. It used to be
-  // `INSERT INTO activity_logs (action, details, actor, user_id)` with
-  // `user_id` holding the ADMIN's id and the target reachable only inside
-  // free-text `details` — the row could not be queried by who was retagged.
-  // `entity_type`/`entity_id` already exist on `activity_logs`
-  // (schema_baseline.sql) and were unused here.
-  const sql = getSQL(c.env);
-  await sql`
-    INSERT INTO activity_logs (action, details, actor, user_id, entity_type, entity_id, metadata)
-    VALUES (
-      'persona_retagged',
-      ${`Admin ${admin.name} re-tagged user ${userId} as ${body.persona_id}`},
-      ${admin.email},
-      ${admin.id},
-      'user',
-      ${String(userId)},
-      ${JSON.stringify({ from: current?.persona_id ?? null, to: body.persona_id })}
-    )
-  `;
-  await sql.end();
-
-  // D255 — also fed through `logAdminAction` with `target_user_id`, so
-  // Security's governance feed (which reads this store) names who was
-  // retagged. Never `user_id` for the target: D159's `targetUserIdOf` guard
-  // in services/adminAudit.ts refuses that key on purpose.
-  const { logAdminAction } = await import('../services/adminAudit');
-  await logAdminAction(c.env, admin.id, admin.email, 'persona_retagged', {
-    target_user_id: userId, from: current?.persona_id ?? null, to: body.persona_id,
-  });
-
   return c.json({ ok: true });
 });
 

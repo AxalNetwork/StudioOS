@@ -3,8 +3,8 @@
 // NOTE: the admin/circles routes are worker-only; the dev FastAPI backend does
 // not implement them, so this page 404s in local dev (takes effect on deploy).
 // gray palette, useToast, no nav wrapper (rendered inside the admin layout).
-import React, { useCallback, useEffect, useState } from 'react';
-import { Link } from 'react-router-dom';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
+import { Link, useSearchParams } from 'react-router-dom';
 import {
   Users, Star, Eye, EyeOff, Pencil, Trash2, Plus, Loader2, X, Globe, Lock,
 } from 'lucide-react';
@@ -89,6 +89,19 @@ function AdminCirclesPageBody() {
 
   const openNew = () => { setForm(EMPTY_FORM); setEditing('new'); };
   const openEdit = (c) => { setForm(circleToForm(c)); setEditing(c); };
+
+  // D1121: Community's CM5 opens one circle, `?circle=<id>`: its editor, once, when the list has it.
+  const [params] = useSearchParams();
+  const asked = /^\d+$/.test(params.get('circle') || '') ? Number(params.get('circle')) : null;
+  const opened = useRef(null);
+  useEffect(() => {
+    if (asked == null || loading || opened.current === asked) return;
+    const c = rows.find((r) => Number(r.id) === asked);
+    if (!c) return;
+    opened.current = asked;
+    setForm(circleToForm(c));
+    setEditing(c);
+  }, [asked, loading, rows]);
   const closeForm = () => { setEditing(null); setForm(EMPTY_FORM); };
 
   const setField = (k, v) => setForm((f) => ({ ...f, [k]: v }));
