@@ -251,6 +251,11 @@ D1103 (#2983) adds a grant's folder scope (migration 594): `grantFolderScope()`
 reads it as the named folders with their subfolders, or null for every folder,
 and `tierAdmits()` takes it as its fourth argument. A scope that cannot be read
 opens nothing.
+`dataRoomRequests.ts` (D1104, #2984) is the access-request queue (migration
+595): `roundCallRequestStatement()` (the round call's request, in its response
+batch under its claim), `dealPageRequestStatement()` (for DEAL's DL9) and
+`readRequests()`. One open request per investor and venture, and none for an
+investor who already has the room.
 `deckSlideDwell.ts` stores a share-link view's seconds per slide, bounded so
 they never add up to more than the view's read time.
 `peerBenchmark.ts` (#1524) is the peer-group benchmark for every founder:
