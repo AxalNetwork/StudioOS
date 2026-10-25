@@ -316,7 +316,7 @@ it, where in their nav, and how do they get there.*
 | Canvas | Route | Nav section | Surface | Entry point | Status | Confidence |
 | --- | --- | --- | --- | --- | --- | --- |
 | Brand & Landing Page copy | — | — (not routed) | Full page (Spin-Out Lab — frozen) | Not reachable yet | OUT OF SCOPE | High |
-| My events | `/my/events` · `/my/events/hosting` · `/my/events/discover` · `/my/events/past` | — (not routed) | Full page (proposed) | Not reachable yet | UPGRADE | Low |
+| My events | `/my/events` · `/my/events/hosting` · `/my/events/discover` · `/my/events/past` · `/my/events/ticket/:eventId` · `/my/events/hosting/:eventId` | — (not routed) | Full page (proposed) | Not reachable yet | UPGRADE | Low |
 
 ## Confidence tally
 
