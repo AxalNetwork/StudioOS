@@ -374,3 +374,5 @@ D1150: `dealContext.js` reads the investor’s `/deals/:id/stage`, `/whats-new`
 and paged `/notes`; add/edit/delete notes use the same Worker scope. Only
 the author edits and deletes, firm colleagues read, and staff have no bypass.
 Reading whats-new advances that user/firm’s visit marker. #3057 consumes it.
+
+D1135's `companyActions.js` holds self-service company leave and venture restore.

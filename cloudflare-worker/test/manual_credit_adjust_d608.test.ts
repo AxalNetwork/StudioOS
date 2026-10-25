@@ -121,10 +121,10 @@ test('the change is a non-zero whole number within the bound, and the note at mo
     assert.equal(r.status, 400, String(delta));
     assert.equal(r.body.error, 'invalid_delta');
   }
-  assert.equal((await adjust(env, SUPER, { user_id: FOUNDER, delta: 100_000, reason: REASON })).status, 200, 'the bound itself is allowed');
+  assert.equal((await adjust(env, SUPER, { user_id: FOUNDER, delta: 100_000, reason: REASON, source_ref: 'bounds:amount' })).status, 200, 'the bound itself is allowed');
   const long = await adjust(env, SUPER, { user_id: FOUNDER, delta: 1, reason: REASON, note: 'x'.repeat(501) });
   assert.deepEqual([long.status, long.body.error], [400, 'note_too_long']);
-  assert.equal((await adjust(env, SUPER, { user_id: FOUNDER, delta: 1, reason: REASON, note: 'x'.repeat(500) })).status, 200);
+  assert.equal((await adjust(env, SUPER, { user_id: FOUNDER, delta: 1, reason: REASON, note: 'x'.repeat(500), source_ref: 'bounds:note' })).status, 200);
   const ref = await adjust(env, SUPER, { user_id: FOUNDER, delta: 1, reason: REASON, source_ref: 'r'.repeat(121) });
   assert.deepEqual([ref.status, ref.body.error], [400, 'invalid_source_ref']);
   const nobody = await adjust(env, SUPER, { user_id: 9999, delta: 1, reason: REASON });
@@ -154,10 +154,10 @@ test('a repeated source_ref is a 409 naming the existing row, of either sign, an
 
 test('a deduction past the balance is refused with the balance, and writes nothing', async () => {
   const { db, env } = setup();
-  await adjust(env, SUPER, { user_id: FOUNDER, delta: 20, reason: REASON });
-  const r = await adjust(env, SUPER, { user_id: FOUNDER, delta: -21, reason: REASON });
+  await adjust(env, SUPER, { user_id: FOUNDER, delta: 20, reason: REASON, source_ref: 'overdraw:seed' });
+  const r = await adjust(env, SUPER, { user_id: FOUNDER, delta: -21, reason: REASON, source_ref: 'overdraw:refused' });
   assert.deepEqual([r.status, r.body.error, r.body.balance], [400, 'would_overdraw', 20]);
-  assert.equal((await adjust(env, SUPER, { user_id: FOUNDER, delta: -20, reason: REASON })).body.balance, 0, 'down to zero is allowed');
+  assert.equal((await adjust(env, SUPER, { user_id: FOUNDER, delta: -20, reason: REASON, source_ref: 'overdraw:zero' })).body.balance, 0, 'down to zero is allowed');
   assert.deepEqual(rowCounts(db), [2, 2, 2]);
 });
 
@@ -176,8 +176,10 @@ test('two deductions racing cannot both pass the balance: the check is inside th
 test('the Super Admin\'s grants list shows manual lines beside rule grants, marked manual, and not a revoke line', async () => {
   const { env } = setup();
   const rule = await grantCredits(env, { userId: FOUNDER, ruleKey: 'bug_low', sourceRef: 'ticket:1', actor: { kind: 'system', source: 'test' } });
-  const plus = await adjust(env, SUPER, { user_id: FOUNDER, delta: 50, reason: REASON });
-  const minus = await adjust(env, SUPER, { user_id: FOUNDER, delta: -5, reason: REASON });
+  // These are distinct adjustments even when both calls share a millisecond.
+  // Default timestamp references are covered by the single-grant test above.
+  const plus = await adjust(env, SUPER, { user_id: FOUNDER, delta: 50, reason: REASON, source_ref: 'manual-list:add' });
+  const minus = await adjust(env, SUPER, { user_id: FOUNDER, delta: -5, reason: REASON, source_ref: 'manual-list:deduct' });
   await revokeGrant(env, { ledgerId: plus.body.ledger_id, actor: { id: SUPER, email: 'super@example.test' }, reason: 'Granted to the wrong account' });
   for (const path of ['/grants', `/grants?user_id=${FOUNDER}`]) {
     const list = await call(creditRules, env, 'GET', path, SUPER);

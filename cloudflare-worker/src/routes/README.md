@@ -330,3 +330,5 @@ to NDA when visibility is omitted; explicit Open remains allowed for the owner.
 D1150: `deal_context.ts`, mounted before the deal router at `/api/deals`,
 provides investor-owned stage/visit metadata and author/firm-private notes.
 No admin bypass; migration 600; writes and audit rows share a batch.
+
+D1135: `company.ts` adds member self-leave and validates create/rename; `projects.ts` counts live ventures, adds owner restore within 30 days and sends email-mode team invitations.
