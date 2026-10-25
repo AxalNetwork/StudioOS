@@ -59,6 +59,7 @@ import {
 } from '../services/eventBadges';
 import { archetypeAccess } from '../services/archetypeEntitlement';
 import { refuse } from '../util/refusal';
+import { memberEventLink } from '../services/eventLinks';
 
 const events = new Hono<{ Bindings: Env }>();
 
@@ -89,6 +90,13 @@ export async function canViewEvent(env: Env, event: any, user: User): Promise<bo
     (event.visibility === 'public' && Number(event.admin_published) === 1)
   );
   if (published) return true;
+  // D1031 (#2872): a member who holds a registration may read the event their
+  // notices point at, also once it is cancelled or back to draft. They get no
+  // private fields, and the join link still needs a confirmed seat.
+  const reg = await env.DB.prepare(
+    `SELECT id FROM event_registrations WHERE event_id = ? AND user_id = ? LIMIT 1`,
+  ).bind(event.id, user.id).first();
+  if (reg) return true;
   const inv = await env.DB.prepare(
     `SELECT id FROM event_invitations
        WHERE event_id = ? AND (invited_user_id = ? OR lower(invited_email) = lower(?))
@@ -461,7 +469,7 @@ events.get('/suggested', async (c) => {
     events: scored.slice(0, 8).map((s) => ({
       ...shapeEvent(s.e, { includeJoinLink: canManage(s.e, u) }),
       suggestion_reason: prefer.has(s.e.type)
-        ? (archetype?.label ? `Recommended for ${archetype.label}` : 'Matches your track')
+        ? (archetype?.label ? `Suits ${archetype.label}` : 'Matches your track')
         : null,
     })),
   });
@@ -635,7 +643,7 @@ events.patch('/:id', async (c) => {
         await notify(c.env, {
           userId: p.user_id, type: 'event_promoted', category: 'events',
           title: `You're off the waitlist: ${updated.title}`,
-          link: `/events/${updated.slug}`, payload: { event_id: id },
+          link: memberEventLink(id), payload: { event_id: id },
         }).catch(() => {});
       }
     }
@@ -718,7 +726,7 @@ events.post('/:id/cancel', async (c) => {
   for (const r of (seated.results || []) as any[]) {
     await notify(c.env, {
       userId: Number(r.user_id), type: 'event_cancelled', category: 'events',
-      title: `Event cancelled: ${event.title}`, body: note || undefined, link: `/events/${event.slug}`, payload: { event_id: id },
+      title: `Event cancelled: ${event.title}`, body: note || undefined, link: memberEventLink(id), payload: { event_id: id },
     }).catch(() => {});
   }
   return c.json({
@@ -953,7 +961,7 @@ events.post('/:id/registrations/:rid/approve', async (c) => {
   if (reg.user_id) {
     await notify(c.env, {
       userId: reg.user_id, type: 'event_confirmed', category: 'events',
-      title: `You're confirmed: ${event.title}`, link: `/events/${event.slug}`, payload: { event_id: id },
+      title: `You're confirmed: ${event.title}`, link: memberEventLink(id), payload: { event_id: id },
     }).catch(() => {});
   }
   return c.json({ registration: { ...(await loadReg(c.env, id, rid)) } });
@@ -985,7 +993,7 @@ events.post('/:id/registrations/:rid/decline', async (c) => {
       if (p.user_id) {
         await notify(c.env, {
           userId: p.user_id, type: 'event_promoted', category: 'events',
-          title: `You're off the waitlist: ${event.title}`, link: `/events/${event.slug}`, payload: { event_id: id },
+          title: `You're off the waitlist: ${event.title}`, link: memberEventLink(id), payload: { event_id: id },
         }).catch(() => {});
       }
     }
@@ -994,7 +1002,7 @@ events.post('/:id/registrations/:rid/decline', async (c) => {
   if (reg.user_id) {
     await notify(c.env, {
       userId: reg.user_id, type: 'event_declined', category: 'events',
-      title: `Registration update: ${event.title}`, link: `/events/${event.slug}`, payload: { event_id: id },
+      title: `Registration update: ${event.title}`, link: memberEventLink(id), payload: { event_id: id },
     }).catch(() => {});
   }
   return c.json({ registration: { ...(await loadReg(c.env, id, rid)) } });
@@ -1029,7 +1037,7 @@ events.post('/:id/registrations/:rid/promote', async (c) => {
   if (reg.user_id) {
     await notify(c.env, {
       userId: reg.user_id, type: 'event_promoted', category: 'events',
-      title: `You're off the waitlist: ${event.title}`, link: `/events/${event.slug}`, payload: { event_id: id },
+      title: `You're off the waitlist: ${event.title}`, link: memberEventLink(id), payload: { event_id: id },
     }).catch(() => {});
   }
   return c.json({ registration: { ...(await loadReg(c.env, id, rid)) } });
@@ -1125,7 +1133,7 @@ events.delete('/:id/registration', async (c) => {
       if (p.user_id) {
         await notify(c.env, {
           userId: p.user_id, type: 'event_promoted', category: 'events',
-          title: `You're off the waitlist: ${event.title}`, link: `/events/${event.slug}`, payload: { event_id: id },
+          title: `You're off the waitlist: ${event.title}`, link: memberEventLink(id), payload: { event_id: id },
         }).catch(() => {});
       }
     }

@@ -62,7 +62,7 @@ export const SUPER_ADMIN_BOARDS = [
   { id: 'H20', section: 'Content', module: 'Publications', route: '/admin/publications', files: ['pages/admin/Publications.jsx', 'pages/admin/PublicationNew.jsx', 'pages/admin/PublicationDetail.jsx'], rail: 'pages/admin/PublicationsFrame.jsx' },
   // H21: Assessment Studio was removed at the owner's request (2026-10-21); its ID stays retired.
   { id: 'H22', section: 'Content', module: 'Personas', route: '/admin/persona-segments', files: ['pages/admin/consoles/PersonasConsole.jsx'], rail: FRAME, host: 'pages/admin/segments/PersonaSegments.jsx' },
-  { id: 'H23', section: 'Content', module: 'Advisors and partners', route: '/admin/advisors-partners', files: ['pages/admin/AdminNetworkProfiles.jsx'], rail: FRAME, host: 'pages/admin/advisors/AdvisorsPartners.jsx' },
+  { id: 'H23', section: 'Content', module: 'Advisors and partners', route: '/admin/advisors-partners', files: ['pages/admin/AdminNetworkProfiles.jsx', 'pages/admin/advisors/DeckRosterDialogs.jsx'], rail: FRAME, host: 'pages/admin/advisors/AdvisorsPartners.jsx' },
   { id: 'H24', section: 'Content', module: 'Directory', route: '/admin/directory', files: ['pages/admin/consoles/DirectoryConsole.jsx'], rail: FRAME, host: CONSOLE_PAGES },
   { id: 'H25', section: 'Content', module: 'Public team page', route: '/admin/team', files: ['pages/admin/AdminTeam.jsx'], rail: 'pages/admin/AdminTeam.jsx' },
   { id: 'H26', section: 'Platform', module: null, route: '/admin/platform', files: ['pages/hq/PlatformPage.jsx'], rail: 'pages/hq/PlatformPage.jsx' },

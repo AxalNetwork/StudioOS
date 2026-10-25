@@ -2,14 +2,18 @@ import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import { RefreshCw } from 'lucide-react';
 import { api } from '../../../lib/api';
+import { paymentsApi } from '../../../lib/api/payments';
 import { reportError } from '../../../lib/log';
 import { AdminPageHeader, HeaderTab, useMovedNotice } from '../../../ui';
 import AdminBoardFrame from '../AdminBoardFrame';
 import { PaymentsPanel } from '../consoles/PaymentsConsole';
 import {
-  CATALOG_FAILED, MOVED_NOTICES, NOT_YET, PAGE_LINE, PAY_TITLE, PLATFORM_PATH, RAIL_NOTE, STRIPE_UNREAD, WEBHOOK_UNREAD,
+  CATALOG_FAILED, MOVED_NOTICES, NOT_YET, PAGE_LINE, PAY_TITLE, PLATFORM_PATH, RAIL_NOTE, STRIPE_UNREAD,
   catalogueCounts, catalogueGroups, keysMatch, kindWord, modeWord, needsYou, priceText, searchProducts, stampText, tabOf,
 } from './payModel';
+import { AMBER, BIG, CARD, EYE, GHOST, H2, LINK, MONO, PILL, SUB, PayDialog, Reading, Technical, Unread, usePayPhone } from './payUi';
+import StripeConnection, { keysLine } from './StripeConnection';
+import ChangeLog from './ChangeLog';
 
 /**
  * D1008 (#2386) — Payments at /admin/platform/payments, the Super Admin's
@@ -24,25 +28,20 @@ import {
  * per plan, the product lightbox, the dialogs, the step-up and the change log
  * wait for D1008's parts. Until the dialogs land, today's editor opens on
  * request at the foot of Catalogue, so nothing HQ can do today is lost.
+ *
+ * D1014 (#2833, part 6): Stripe connection is complete (`StripeConnection.jsx`:
+ * deliveries per hour, the part-5 buttons), the Change log tab is drawn
+ * (`ChangeLog.jsx`), and the page has its dark colours (PAY13) and its phone
+ * form (PAY12): the catalogue stacks into cards and a product opens as a
+ * sheet, the chart is a table, and every dialog is a bottom sheet.
  */
-
-const BTN = 'inline-flex min-h-[36px] items-center justify-center gap-2 whitespace-nowrap rounded-[9px] px-3.5 text-[12.5px] font-bold';
-const GHOST = `${BTN} border border-axal-hairline bg-white text-axal-ink hover:bg-axal-ground dark:border-gray-700 dark:bg-gray-900 dark:text-gray-100 dark:hover:bg-gray-800`;
-const DANGER = `${BTN} self-start border border-axal-destructive-edge bg-white text-axal-destructive dark:border-red-900 dark:bg-gray-900 dark:text-red-400`;
-const CARD = 'rounded-[12px] border border-axal-hairline bg-white dark:border-gray-700 dark:bg-gray-900';
-const EYE = 'text-[10.5px] font-bold uppercase tracking-[.07em] text-axal-muted dark:text-gray-400';
-const SUB = 'text-[12px] leading-[1.45] text-axal-muted dark:text-gray-400';
-const TAG = 'self-start rounded-full border border-dashed border-axal-muted px-2 py-0.5 text-[11px] font-semibold text-axal-muted dark:text-gray-400';
-const H2 = 'm-0 text-[15px] font-extrabold tracking-[-.02em] text-axal-ink dark:text-gray-100';
-const MONO = 'font-mono tabular-nums';
-const PILL = 'inline-flex items-center rounded-full border border-axal-hairline px-2 py-0.5 text-[11px] font-semibold text-axal-ink dark:border-gray-700 dark:text-gray-100';
-const AMBER = 'rounded-[10px] border border-amber-300 bg-axal-amber/30 px-3.5 py-2.5 text-[12.5px] text-axal-amber-deep dark:border-amber-800 dark:bg-amber-900/30 dark:text-amber-200';
-const LINK = 'font-bold text-axal-violet hover:text-axal-violet-deep dark:text-violet-300 dark:hover:text-violet-200';
 
 const idle = { status: 'loading', data: null };
 const READS = {
   catalogue: ['catalog', 'config', 'summary', 'webhook'],
-  stripe: ['config', 'summary', 'webhook'],
+  stripe: ['config', 'summary', 'webhook', 'deliveries'],
+  // The change log reads itself (its filters drive it); the catalogue names its products.
+  log: ['catalog'],
 };
 
 /** The tab's reads. Each settles alone, so a slow or failed read holds back only its blocks. */
@@ -65,6 +64,7 @@ function usePayReads(tab) {
       config: () => api.adminStripeGetConfig(),
       summary: () => api.hqPlatform().then((d) => d?.payments_catalog ?? null),
       webhook: () => api.adminStripeListWebhooks(),
+      deliveries: () => paymentsApi.webhookDeliveries(),
     };
     for (const k of want) settle(k, work[k]());
     return () => { live = false; };
@@ -73,36 +73,8 @@ function usePayReads(tab) {
   return { reads, asOf, reload };
 }
 
-function Skeleton() {
-  return <span className="block h-2.5 w-[70%] rounded-full bg-axal-hairline dark:bg-gray-700" />;
-}
-
-function Reading() {
-  return <><span className="font-mono text-[13px] text-axal-muted">Reading…</span><Skeleton /></>;
-}
-
-function Unread({ text, onRetry, testId }) {
-  return (
-    <div role="alert" className="flex flex-col gap-2 text-[12.5px] text-axal-destructive dark:text-red-300" data-testid={testId}>
-      <span>{text}</span>
-      <button type="button" className={DANGER} onClick={onRetry}>Try again</button>
-    </div>
-  );
-}
-
 function Tile({ id, label, children }) {
   return <div className={`${CARD} flex flex-col gap-1.5 px-4 py-3.5`} data-testid={`pay-tile-${id}`}><span className={EYE}>{label}</span>{children}</div>;
-}
-
-const big = `${MONO} text-[22px] font-medium text-axal-ink dark:text-gray-100`;
-
-function keysLine(k) {
-  if (k.state === 'match') return 'Keys match';
-  if (k.state === 'differ') return `Keys differ: the publishable key is ${modeWord(k.key)}`;
-  if (k.state === 'nokey') return 'No publishable key set';
-  if (k.state === 'unknownkey') return 'The publishable key is in no known mode';
-  if (k.state === 'noaccount') return 'No secret key at deploy';
-  return 'The key\'s mode was not checked';
 }
 
 function Tiles({ reads, reload }) {
@@ -116,12 +88,12 @@ function Tiles({ reads, reload }) {
       <Tile id="stripe" label="Stripe">
         {config?.status === 'loading' && <Reading />}
         {config?.status === 'error' && <Unread text={STRIPE_UNREAD} onRetry={reload} testId="pay-stripe-unread" />}
-        {config?.status === 'ready' && <><span className={big}>{modeWord(config.data?.mode)}</span><span className={SUB}>{keysLine(k)}</span></>}
+        {config?.status === 'ready' && <><span className={BIG}>{modeWord(config.data?.mode)}</span><span className={SUB}>{keysLine(k)}</span></>}
       </Tile>
       <Tile id="products" label="Active products">
         {catalog?.status === 'loading' && <Reading />}
         {catalog?.status === 'error' && <span className={SUB}>Could not be read.</span>}
-        {counts && <><span className={big}>{counts.active.toLocaleString('en-US')} <span className="text-[13px] text-axal-muted">of {counts.all.toLocaleString('en-US')}</span></span><span className={SUB}>{counts.activePrices.toLocaleString('en-US')} active prices</span></>}
+        {counts && <><span className={BIG}>{counts.active.toLocaleString('en-US')} <span className="text-[13px] text-axal-muted">of {counts.all.toLocaleString('en-US')}</span></span><span className={SUB}>{counts.activePrices.toLocaleString('en-US')} active prices</span></>}
       </Tile>
       <Tile id="sync" label="Last sync">
         {summary?.status === 'loading' && <Reading />}
@@ -134,7 +106,7 @@ function Tiles({ reads, reload }) {
         {summary?.status === 'loading' && <Reading />}
         {summary?.status === 'error' && <span className={SUB}>Could not be read.</span>}
         {summary?.status === 'ready' && (hook?.available
-          ? <><span className={big}>{Number(hook.deliveries).toLocaleString('en-US')}</span><span className={SUB}>{Number(hook.not_2xx).toLocaleString('en-US')} not accepted</span></>
+          ? <><span className={BIG}>{Number(hook.deliveries).toLocaleString('en-US')}</span><span className={SUB}>{Number(hook.not_2xx).toLocaleString('en-US')} not accepted</span></>
           : <span className={SUB}>Not recorded: {hook?.reason || 'the request log was not in the summary.'}</span>)}
       </Tile>
     </div>
@@ -158,10 +130,68 @@ function Needs({ reads }) {
   );
 }
 
+/** PAY12a: the catalogue on a phone, one card per product in its group; a tap opens the product as a sheet. */
+function PhoneCatalogue({ groups, onOpen }) {
+  return (
+    <div className="flex flex-col gap-3" data-testid="pay-phone-catalogue">
+      {groups.map((g) => (
+        <section key={g.key} aria-label={g.label} data-testid={`pay-group-${g.key}`}>
+          <h3 className={`m-0 mb-1.5 ${EYE}`}>{g.label} · {g.rows.length}</h3>
+          {g.rows.length === 0 && <span className={SUB}>None.</span>}
+          <ul className="m-0 flex list-none flex-col gap-2 p-0">
+            {g.rows.map((p) => {
+              const prices = (p.prices || []).filter((x) => x.active);
+              return (
+                <li key={p.id}>
+                  <button type="button" onClick={() => onOpen(p)} data-testid="pay-row"
+                    className={`flex w-full flex-col items-start gap-1 rounded-[10px] border border-axal-hairline bg-white px-3.5 py-3 text-left dark:border-gray-700 dark:bg-gray-900 ${p.active ? '' : 'opacity-60'}`}>
+                    <span className="flex w-full items-center justify-between gap-2">
+                      <span className="font-bold text-axal-ink dark:text-gray-100">{p.name}</span>
+                      <span className={PILL}>{kindWord(p.kind)}</span>
+                    </span>
+                    <span className={`${MONO} text-[12px] text-axal-ink dark:text-gray-100`}>
+                      {g.key === 'packs' ? 'Managed on AI allowances' : prices.length ? prices.map(priceText).join(' · ') : 'No active price'}
+                    </span>
+                    <span className={SUB}>{p.active ? 'Active' : 'Archived'}</span>
+                  </button>
+                </li>
+              );
+            })}
+          </ul>
+        </section>
+      ))}
+    </div>
+  );
+}
+
+/** PAY12b: one product, read only, as a sheet. Changing it is part 4's lightbox; today's editor sits on this page. */
+function ProductSheet({ product: p, labels, onClose }) {
+  const prices = p.prices || [];
+  return (
+    <PayDialog title={p.name} sub={`${kindWord(p.kind)} · ${p.active ? 'Active' : 'Archived'}`} onClose={onClose} testId="pay-product">
+      <div className="flex flex-col gap-1">
+        <span className={EYE}>Prices</span>
+        {p.kind === 'token_pack' ? <Link to="/admin/platform/allowances" className={LINK}>Managed on AI allowances →</Link>
+          : prices.length ? prices.map((x) => (
+            <span key={x.id} className={`${MONO} text-[13px] ${x.active ? 'text-axal-ink dark:text-gray-100' : 'text-axal-muted line-through dark:text-gray-500'}`}>{priceText(x)}{x.active ? '' : ' · archived'}</span>
+          )) : <span className={SUB}>No price</span>}
+      </div>
+      <div className="flex flex-col gap-1">
+        <span className={EYE}>For</span>
+        {(p.categories || []).length ? <span className="flex flex-wrap gap-1">{p.categories.map((c) => <span key={c} className={PILL}>{labels[c] || c}</span>)}</span> : <span className={SUB}>Not set</span>}
+      </div>
+      <span className={SUB}>Changing a product opens with D1008 part 4. Until then, use the editor at the foot of Catalogue.</span>
+      <Technical testId="pay-product-tech">{[p.id, ...prices.map((x) => x.id)].join(' · ')}</Technical>
+    </PayDialog>
+  );
+}
+
 function Catalogue({ reads, reload }) {
   const [q, setQ] = useState('');
   const [group, setGroup] = useState('all');
   const [editor, setEditor] = useState(false);
+  const [open, setOpen] = useState(null);
+  const phone = usePayPhone();
   const catalog = reads.catalog;
   const products = catalog?.status === 'ready' ? catalog.data?.products || [] : [];
   const labels = Object.fromEntries((catalog?.data?.audience_categories || []).map((a) => [a.value, a.label]));
@@ -199,6 +229,7 @@ function Catalogue({ reads, reload }) {
               <span className={`${MONO} text-[12px] text-axal-muted dark:text-gray-400`} data-testid="pay-count">{shown ? `1–${shown} of ${shown}` : '0 of 0'}</span>
             </div>
             {q.trim().length === 1 && <span className={SUB}>Type at least two characters.</span>}
+            {phone ? <PhoneCatalogue groups={groups} onOpen={setOpen} /> : (
             <div className="overflow-x-auto">
               <table className="w-full min-w-[820px] border-collapse text-left text-[12.5px]">
                 <thead>
@@ -238,6 +269,8 @@ function Catalogue({ reads, reload }) {
                 ))}
               </table>
             </div>
+            )}
+            {open && <ProductSheet product={open} labels={labels} onClose={() => setOpen(null)} />}
             <span className={SUB}>Where each product shows, its AI allowance and the members on it arrive with D1008 part 2.</span>
           </>
         )}
@@ -250,97 +283,6 @@ function Catalogue({ reads, reload }) {
       </section>
       <p className={`m-0 ${SUB}`}>Money received, refunds and disputes are on <Link to="/admin/revenue" className={LINK}>Revenue</Link>. Promo codes have their own page.</p>
     </>
-  );
-}
-
-function Stripe({ reads, reload }) {
-  const { config, summary, webhook } = reads;
-  const k = keysMatch(config?.data, summary?.data);
-  const mirror = summary?.data?.catalog;
-  const hook = summary?.data?.webhook;
-  return (
-    <div className="grid grid-cols-12 gap-3.5">
-      <section className={`${CARD} col-span-12 flex flex-col gap-2 px-[18px] py-4 lg:col-span-6`} data-testid="pay-account">
-        <h2 className={H2}>Account</h2>
-        {config?.status === 'loading' && <Reading />}
-        {config?.status === 'error' && <Unread text={STRIPE_UNREAD} onRetry={reload} testId="pay-account-unread" />}
-        {config?.status === 'ready' && (
-          <>
-            <span className={big}>{modeWord(config.data?.mode)}</span>
-            <span className={SUB}>{config.data?.mode === 'unconfigured' ? 'Stripe is not connected on this platform yet. HQ adds the account\'s keys at deploy.' : 'Payments go to HQ\'s Stripe account. The mode is read from the secret key, which this page never shows.'}</span>
-          </>
-        )}
-      </section>
-      <section className={`${CARD} col-span-12 flex flex-col gap-2 px-[18px] py-4 lg:col-span-6`} data-testid="pay-key">
-        <h2 className={H2}>Publishable key</h2>
-        {config?.status === 'loading' && <Reading />}
-        {config?.status === 'error' && <Unread text={STRIPE_UNREAD} onRetry={reload} testId="pay-key-unread" />}
-        {config?.status === 'ready' && (
-          <>
-            <span className={`${MONO} text-[14px] text-axal-ink dark:text-gray-100`}>{config.data?.configured ? config.data?.publishable_key : 'Not set'}</span>
-            <span className={k.state === 'differ' ? AMBER : SUB} data-testid="pay-key-match">{k.state === 'differ' ? `The publishable key is ${modeWord(k.key)}, the account is ${modeWord(k.account)}. Checkout and token packs will fail until they match.` : keysLine(k)}</span>
-          </>
-        )}
-      </section>
-
-      <section className={`${CARD} col-span-12 flex flex-col gap-3 px-[18px] py-4`} aria-labelledby="pay-h-webhook" data-testid="pay-webhook">
-        <h2 id="pay-h-webhook" className={H2}>Webhook</h2>
-        {webhook?.status === 'loading' && <Reading />}
-        {webhook?.status === 'error' && <Unread text={WEBHOOK_UNREAD} onRetry={reload} testId="pay-webhook-unread" />}
-        {webhook?.status === 'ready' && (
-          <>
-            <span className={`${MONO} text-[12.5px] text-axal-ink dark:text-gray-100`}>{webhook.data?.our_url}</span>
-            {(webhook.data?.endpoints || []).length === 0 && <span className={AMBER}>Stripe has no webhook endpoint yet.</span>}
-            {(webhook.data?.endpoints || []).map((e) => (
-              <div key={e.id} className={`rounded-[10px] border border-axal-hairline px-3.5 py-3 dark:border-gray-700 ${e.is_ours ? '' : 'opacity-70'}`} data-testid={`pay-endpoint-${e.is_ours ? 'ours' : 'other'}`}>
-                <div className="flex flex-wrap items-center gap-2">
-                  <span className={`${MONO} text-[12px] text-axal-ink dark:text-gray-100`}>{e.url}</span>
-                  <span className={PILL}>{e.status === 'enabled' ? 'Enabled' : e.status === 'disabled' ? 'Disabled' : 'Not recorded'}</span>
-                  {e.is_ours ? <span className={PILL}>This platform&apos;s endpoint</span> : <span className={SUB}>Not used by this platform.</span>}
-                </div>
-                {e.is_ours && (
-                  <>
-                    <ul className="m-0 mt-2 grid list-none grid-cols-1 gap-1 p-0 sm:grid-cols-2">
-                      {(webhook.data?.required_events || []).map((ev) => {
-                        const miss = (e.missing_events || []).includes(ev);
-                        return <li key={ev} className={`text-[12px] ${miss ? 'text-axal-amber-deep dark:text-amber-200' : 'text-axal-ink dark:text-gray-100'}`}><span aria-hidden="true">{miss ? '✕' : '✓'}</span> <span className={MONO}>{ev}</span>{miss ? ' — missing' : ''}</li>;
-                      })}
-                    </ul>
-                    {(e.missing_events || []).length > 0 && <span className={`mt-1 block ${SUB}`}>{e.missing_events.length} missing. Add them from the editor on Catalogue until D1008 part 6.</span>}
-                  </>
-                )}
-              </div>
-            ))}
-          </>
-        )}
-      </section>
-
-      <section className={`${CARD} col-span-12 flex flex-col gap-2 px-[18px] py-4 lg:col-span-6`} data-testid="pay-deliveries">
-        <h2 className={H2}>Deliveries, last 24 hours</h2>
-        {summary?.status === 'loading' && <Reading />}
-        {summary?.status === 'error' && <span className={SUB}>Could not be read.</span>}
-        {summary?.status === 'ready' && (hook?.available ? (
-          <>
-            <span className={SUB}>{Number(hook.deliveries).toLocaleString('en-US')} deliveries · {Number(hook.not_2xx).toLocaleString('en-US')} not accepted</span>
-            <span className={SUB}>{hook.last ? `Last: ${stampText(hook.last.at) || hook.last.at} · ${hook.last.status_code ?? 'no status'} · ${hook.last.latency_ms ?? '—'} ms` : 'No delivery logged yet.'}</span>
-            <span className={TAG}>Per hour: {NOT_YET}</span>
-            <span className={SUB}>Read from the request log: the time this platform took, not Stripe&apos;s round trip.</span>
-          </>
-        ) : <span className={SUB}>Not recorded: {hook?.reason}</span>)}
-      </section>
-      <section className={`${CARD} col-span-12 flex flex-col gap-2 px-[18px] py-4 lg:col-span-6`} data-testid="pay-mirror">
-        <h2 className={H2}>Catalogue mirror</h2>
-        {summary?.status === 'loading' && <Reading />}
-        {summary?.status === 'error' && <span className={SUB}>Could not be read.</span>}
-        {summary?.status === 'ready' && (mirror?.available ? (
-          <>
-            <span className={`${MONO} text-[12.5px] text-axal-ink dark:text-gray-100`}>{mirror.products.active} active of {mirror.products.all} products · {mirror.prices.active} active of {mirror.prices.all} prices</span>
-            <span className={SUB}>Last written {stampText(mirror.last_written_at) || 'never'}.</span>
-            <span className={SUB}>{mirror.sync_basis}</span>
-          </>
-        ) : <span className={SUB}>Not recorded: {mirror?.reason}</span>)}
-      </section>
-    </div>
   );
 }
 
@@ -359,6 +301,7 @@ function PaymentsPage() {
     <>
       <HeaderTab to="/admin/platform/payments" count={catalogCount} data-testid="pay-tab-catalogue">Catalogue</HeaderTab>
       <HeaderTab to="/admin/platform/payments/stripe" count={stripeDot} data-testid="pay-tab-stripe">Stripe connection</HeaderTab>
+      <HeaderTab to="/admin/platform/payments/log" data-testid="pay-tab-log">Change log</HeaderTab>
     </>
   );
   const actions = (
@@ -366,7 +309,7 @@ function PaymentsPage() {
       <span className="font-mono text-[11.5px] text-axal-muted dark:text-gray-400" data-testid="pay-asof">
         {asOf ? `Updated ${new Date(asOf).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit', hourCycle: 'h23' })}` : 'Reading…'}
       </span>
-      <button type="button" aria-label="Refresh" onClick={reload} className="grid h-9 w-9 place-items-center rounded-[9px] border border-axal-hairline text-axal-muted dark:border-gray-700"><RefreshCw size={16} aria-hidden="true" /></button>
+      <button type="button" aria-label="Refresh" onClick={reload} className="grid h-9 w-9 place-items-center rounded-[9px] border border-axal-hairline text-axal-muted dark:border-gray-700 dark:text-gray-400"><RefreshCw size={16} aria-hidden="true" /></button>
     </>
   );
   return (
@@ -382,7 +325,8 @@ function PaymentsPage() {
         data-testid="pay-header"
       />
       {tab === 'catalogue' && <Catalogue reads={reads} reload={reload} />}
-      {tab === 'stripe' && <Stripe reads={reads} reload={reload} />}
+      {tab === 'stripe' && <StripeConnection reads={reads} reload={reload} />}
+      {tab === 'log' && <ChangeLog reads={reads} />}
     </div>
   );
 }
