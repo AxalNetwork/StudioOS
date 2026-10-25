@@ -201,6 +201,7 @@ const EXPECTED: Record<string, string[]> = {
   'routes/deck_assist.ts': ['AI_SURFACE.raisePitch'], // D899: the card tools
   'services/decks/autofill.ts': ['AI_SURFACE.raisePitch'],
   'routes/cycle_raise.ts': ['AI_SURFACE.raiseNarrative', 'AI_SURFACE.raiseNarrative'], // D911: the narrative's positioning proposal; D1114: Story's Ask Eadwyn
+  'routes/build_plan.ts': ['AI_SURFACE.buildPlan'], // D1071: Eadwyn words the build plan
   'services/capTableDocumentRead.ts': ['AI_SURFACE.raiseCapTable'], // D1021: Eadwyn's read of a signed document
   'services/publications.ts': ['AI_SURFACE.adminPublications'],
   // D766 (#2094) — system calls moved into the router.

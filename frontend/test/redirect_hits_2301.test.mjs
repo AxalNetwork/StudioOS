@@ -11,7 +11,7 @@ import { readFileSync, readdirSync } from 'node:fs';
 import React, { act } from 'react';
 import { createRoot } from 'react-dom/client';
 import { installDocument } from './_contracts_dom.mjs';
-import { ADMIN_TAB_REDIRECTS, REDIRECT_ROUTES } from '../../cloudflare-worker/src/services/redirectRoutes.ts';
+import { ADMIN_TAB_REDIRECTS, REDIRECT_ROUTES, ROLE_REDIRECTS, isRedirectKey } from '../../cloudflare-worker/src/services/redirectRoutes.ts';
 import { redirectPatternFor, useRedirectBeacon } from '../src/lib/redirectBeacon.js';
 
 const h = React.createElement;
@@ -39,7 +39,7 @@ test('the list is App.jsx\'s redirect-only routes, no more and no fewer', () => 
   const files = [new URL('../src/App.jsx', import.meta.url),
     ...readdirSync(new URL('../src/routes/', import.meta.url)).filter((f) => f.endsWith('.jsx')).map((f) => new URL(`../src/routes/${f}`, import.meta.url))];
   const routes = files.flatMap((f) => redirectOnlyRoutes(readFileSync(f, 'utf8')));
-  assert.deepEqual([...new Set(routes)].sort(), REDIRECT_ROUTES.filter((r) => !r.path.includes('?')).map((r) => r.path).sort(),
+  assert.deepEqual([...new Set(routes)].sort(), REDIRECT_ROUTES.filter((r) => !r.path.includes('?') && !r.role).map((r) => r.path).sort(),
     'a redirect route added, removed or turned into a page: update cloudflare-worker/src/services/redirectRoutes.ts');
   // A route that redirects for some roles only is a page, and is not listed.
   for (const page of ['/raise/data-room', '/build', '/raise', '/profile']) assert.equal(routes.includes(page), false, page);
@@ -130,4 +130,28 @@ test('the mounted default beacon sends canonical tab keys through fetch and tole
     if (navigatorDescriptor) Object.defineProperty(globalThis, 'navigator', navigatorDescriptor); else delete globalThis.navigator;
     restore();
   }
+});
+
+test('D1160: a role\'s forward is counted by the forward itself, never by the address bar, since the address is another role\'s page', async () => {
+  assert.deepEqual(ROLE_REDIRECTS.map((r) => r.path), ['/funds', '/funds/performance']);
+  for (const { path } of ROLE_REDIRECTS) {
+    assert.ok(isRedirectKey(`redirect:${path}`), `${path} is countable`);
+    assert.equal(redirectPatternFor(path), null, `an investor at ${path} is not counted`);
+  }
+  const app = readFileSync(new URL('../src/App.jsx', import.meta.url), 'utf8');
+  for (const path of ['/funds', '/funds/performance']) {
+    const line = app.split('\n').find((l) => l.includes(`<Route path="${path}" element=`));
+    assert.match(line, /effectiveRole === 'investor' \? [\s\S]+ : <FundOpsRedirect \/>\)\} \/>$/, path);
+  }
+  const { default: FundOpsRedirect } = await import('../src/pages/admin/fundAdmin/FundOpsRedirect.jsx');
+  const { MemoryRouter, Routes, Route } = await import('react-router-dom');
+  const restore = installDocument();
+  const sent = [];
+  const root = createRoot(document.createElement('div'));
+  try {
+    await act(async () => { root.render(h(MemoryRouter, { initialEntries: ['/funds/performance?x=1#h'] }, h(Routes, null,
+      h(Route, { path: '/funds/performance', element: h(FundOpsRedirect, { send: (k) => sent.push(k) }) }),
+      h(Route, { path: '*', element: null })))); });
+    assert.deepEqual(sent, ['redirect:/funds/performance']);
+  } finally { await act(async () => root.unmount()); restore(); }
 });

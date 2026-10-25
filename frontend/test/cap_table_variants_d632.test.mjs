@@ -11,6 +11,8 @@ import { MemoryRouter } from 'react-router-dom';
 import {
   CapTableVariantsView, VariantEditor, draftFromScenario, inputsFromDraft, variantSaveErrors, variantHref,
 } from '../src/pages/CapTableVariantsPage.jsx';
+import * as scenarios from '../src/pages/raise/captable/scenariosModel.js';
+import * as editor from '../src/pages/raise/captable/ScenarioModelEditor.jsx';
 import { ScenarioComparePanel } from '../src/pages/CapTablePage.jsx';
 
 const html = (el) => renderToStaticMarkup(h(MemoryRouter, null, el));
@@ -78,7 +80,8 @@ test('the form round-trips the stored inputs, keeping fields it does not edit', 
 test('a refused save reads as the route\'s sentences', () => {
   const e = Object.assign(new Error('x'), { status: 400, data: { code: 'invalid_inputs', errors: ['At least one founder is required.'] } });
   assert.deepEqual(variantSaveErrors(e), ['At least one founder is required.']);
-  assert.deepEqual(variantSaveErrors({ status: 402 }), ['Editing a variant needs the Growth plan.']);
+  // D1024: scenarios are on the Raise + Grow plan (`studio`, D683), as the route's tier gate says.
+  assert.deepEqual(variantSaveErrors({ status: 402 }), ['Editing a scenario needs the Raise + Grow plan.']);
   assert.deepEqual(variantSaveErrors({ status: 403 }), ['You can read this cap table, but not change it.']);
   const shown = words(html(h(VariantEditor, { draft: draftFromScenario(VARIANT), setDraft: () => {}, errors: ['At least one founder is required.'] })));
   assert.match(shown, /At least one founder is required\. Save variant/);
@@ -133,4 +136,14 @@ test('the page saves through the in-place edit, never the main-table upsert', ()
   assert.doesNotMatch(src, /createCapTableScenario|project_id: /, 'no write that could replace the main cap table');
   const app = readFileSync(new URL('../src/App.jsx', import.meta.url), 'utf8');
   assert.match(app, /path="\/raise\/cap-table\/variants\/:variant" element=\{guard\(\['admin', 'founder'\]/);
+});
+
+test('D1024: the form and the editor live in the Cap table tool now; this page reads them from there until part 14', () => {
+  assert.equal(draftFromScenario, scenarios.draftFromScenario);
+  assert.equal(inputsFromDraft, scenarios.inputsFromDraft);
+  assert.equal(variantSaveErrors, scenarios.variantSaveErrors);
+  assert.equal(VariantEditor, editor.VariantEditor);
+  const named = words(html(h(VariantEditor, { draft: draftFromScenario(VARIANT), setDraft: () => {}, naming: false })));
+  assert.doesNotMatch(named, /Variant name/, 'Scenarios renames in a dialog');
+  assert.match(named, /Save scenario/);
 });

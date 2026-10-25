@@ -320,6 +320,7 @@ test('every lane says who it tells and where it is decided; the gaps are named, 
     Object.fromEntries(Object.entries(by).filter(([, s]) => s.notifies !== 'Nobody yet').map(([k, s]) => [k, s.notifies])),
     {
       cohort: 'The member', partner_profiles: 'The partner, when an agreement is sent', jobs: 'The host', events: 'The host',
+      comarketing: 'The partner', wellbeing_experts: 'The expert',
       articles: 'The author', testing_programs: 'The partner', tickets: 'The member', notices: 'The studio', support: 'The studio',
       // D1132: the Product testers routes email the member; a program request's answer rings the studio's bell.
       product_testers: 'The member', grants: 'The studio',
