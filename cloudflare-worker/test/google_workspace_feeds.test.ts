@@ -18,6 +18,7 @@ test('Workspace exposes the read foundation honestly, with no module feed or ver
  assert.equal(page.sign_in.kind,'first_party');assert.equal(page.sign_in.label,'Allow Google files');
  assert.equal(page.verified_on,null);assert.equal(page.added,null);assert.deepEqual(page.prompts,[]);
  assert.match(page.long_description.join(' '),/await their approved design/);
+ assert.match(pageDescriptor(getDescriptor('google_calendar')!,{role:'founder',hq:true,venture:true})!.long_description.join(' '),/file choosing is coming soon.*\/account\/connectors\/google_workspace/);
  assert.equal(page.tools.length,8);
  const fragments=page.tools.flatMap(t=>t.calls);
  for(const call of Object.keys(GOOGLE_WORKSPACE_READS)) assert.ok(fragments.includes("'"+call+"'"),call);

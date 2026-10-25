@@ -593,7 +593,7 @@ export const CONNECTOR_PAGES: Record<string, ConnectorPage | VariantPages> = {
       'Calendar events and interview slots from your Google sign-in.',
       'Axal VC adds, updates and removes the events it schedules on your primary calendar, including Google Meet interview calls. It reads your events, and the Meet transcripts you allow, into Customer research.',
       'A Meet call that ends without a transcript can still reach Customer research: upload its recording file in Record a Session, and Workers AI transcribes it on your AI tokens.',
-      'Google Docs, Sheets, Slides, Forms and Drive files: choose them on the Google Workspace page (/account/connectors/google_workspace). If an earlier connection granted Gmail access, use Remove Gmail access to revoke the old Google grant and reconnect without Gmail.',
+      'Google Docs, Sheets, Slides, Forms and Drive file choosing is coming soon on the Google Workspace page (/account/connectors/google_workspace). If an earlier connection granted Gmail access, use Remove Gmail access to revoke the old Google grant and reconnect without Gmail.',
     ],
     tools: [
       tool('remove_gmail_access', 'Google account access', 'account', 'Revokes an earlier Google grant that included Gmail, then starts a fresh consent without Gmail.', null, ['https://oauth2.googleapis.com/revoke']),
