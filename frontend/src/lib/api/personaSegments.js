@@ -21,6 +21,18 @@ import { request } from '../api.js';
 //   segmentSuggestions(status?)   GET   /personas/segments/suggestions?status= → { suggestions, scope: 'all' | 'mine' }
 //   decideSegmentSuggestion(uid, b) POST /personas/segments/suggestions/:uid/decide { decision, reason? } → { suggestion, edit, notice }
 // `edit` (on accept) is what part 3's edit opens on: { segment_key, expected_version, field, text }.
+
+// D1002 (#2817) — Persona segments part 5, on routes/persona_members.ts at /api/personas/admin:
+//   members(params)          GET  /personas/admin/members?segment=<key>|none&q=&profile=&how_set=&band=&sub=&answered=&active=&differs=&why=&sort=&dir=&page=
+//                            → { total, page, page_size, rows, why_counts, unreadable }
+//   moveMembers(ids, key)    POST /personas/admin/members/move { user_ids, persona_id } → { segment, results, moved }
+//   askToFinish(ids)         POST /personas/admin/members/ask-to-finish { user_ids } → { results, asked, every_days }
+//   activity(params)         GET  /personas/admin/activity?kind=&q=&page= → { total, page, page_size, sources, rows }
+const qs = (params = {}) => {
+  const s = new URLSearchParams(Object.entries(params).filter(([, v]) => v !== undefined && v !== null && v !== '').map(([k, v]) => [k, String(v)])).toString();
+  return s ? `?${s}` : '';
+};
+
 export const personaSegmentsApi = {
   read: () => request('/personas/admin/segments'),
   segmentProfiles: () => request('/personas/segments'),
@@ -30,4 +42,8 @@ export const personaSegmentsApi = {
   suggestSegmentChange: (body) => request('/personas/segments/suggestions', { method: 'POST', body: JSON.stringify(body) }),
   segmentSuggestions: (status) => request(`/personas/segments/suggestions${status ? `?status=${encodeURIComponent(status)}` : ''}`),
   decideSegmentSuggestion: (uid, body) => request(`/personas/segments/suggestions/${encodeURIComponent(uid)}/decide`, { method: 'POST', body: JSON.stringify(body) }),
+  members: (params = {}) => request(`/personas/admin/members${qs(params)}`),
+  moveMembers: (userIds, personaId) => request('/personas/admin/members/move', { method: 'POST', body: JSON.stringify({ user_ids: userIds, persona_id: personaId }) }),
+  askToFinish: (userIds) => request('/personas/admin/members/ask-to-finish', { method: 'POST', body: JSON.stringify({ user_ids: userIds }) }),
+  activity: (params = {}) => request(`/personas/admin/activity${qs(params)}`),
 };

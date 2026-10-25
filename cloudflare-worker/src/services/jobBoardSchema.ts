@@ -88,6 +88,8 @@ const STATEMENTS: string[] = [
   `ALTER TABLE job_postings ADD COLUMN comp_public INTEGER NOT NULL DEFAULT 0 CHECK (comp_public IN (0, 1))`,
   // D931 (migration 550): when a posting entered the review queue, written by submitForReview.
   `ALTER TABLE job_postings ADD COLUMN submitted_at TEXT`,
+  // D1121 (migration 609): when an admin last approved a posting onto the board.
+  `ALTER TABLE job_postings ADD COLUMN published_at TEXT`,
 ];
 
 export async function ensureJobBoardSchema(env: Env): Promise<boolean> {
