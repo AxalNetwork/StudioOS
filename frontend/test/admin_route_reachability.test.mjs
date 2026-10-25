@@ -315,9 +315,11 @@ const COMPOSED = new Map([
   ['frontend/src/pages/admin/advisors/AdvisorsPartners.jsx', [
     'frontend/src/pages/admin/advisors/People.jsx',
   ]],
-  // D947/D949: Overview, Cohorts and Participants hold the doors to one cohort
-  // (`/cohorts/:ym`) and one founder (`/participants/:uid`).
+  // D947/D948/D949: Overview, Cohorts, Applications and Participants hold the
+  // doors to one cohort (`/cohorts/:ym`), one application (`/applications/:id`)
+  // and one founder (`/participants/:uid`).
   ['frontend/src/pages/admin/lab/AdminLab.jsx', [
+    'frontend/src/pages/admin/lab/LabApplications.jsx',
     'frontend/src/pages/admin/lab/LabParticipants.jsx',
     'frontend/src/pages/admin/lab/LabCohorts.jsx',
     'frontend/src/pages/admin/lab/LabOverviewBlocks.jsx',
