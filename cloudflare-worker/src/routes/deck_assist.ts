@@ -170,7 +170,8 @@ deckAssist.post('/:id/cards/:card/assist', async (c) => {
   if ('refused' in got) return got.refused;
   const p = got.press;
   const userId = Number(user.id) || 0;
-  const res = await run(c.env, { ...runOptions(c, user, p), surface: AI_SURFACE.raisePitch });
+  const opts = runOptions(c, user, p);
+  const res = await run(c.env, { ...opts, surface: AI_SURFACE.raisePitch, rail: opts.rail });
   if (!res.ok) {
     const stop = refuseRun(c, res);
     if (stop) return stop;
