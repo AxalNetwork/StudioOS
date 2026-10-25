@@ -141,11 +141,13 @@ export function requireInvestorTier(required: Exclude<InvestorTier, 'free'>) {
 }
 
 /**
- * D614 — the routes under a gated prefix that stay open on every plan. Leaving
- * a deal room is the one: an investor who drops to Free must still be able to
- * leave the rooms they joined, while listing and joining stay Professional.
+ * D614/D1149 — Free investors may leave a room and read an authorized deal
+ * header/key strip. The detail handler returns a restricted projection; all
+ * other deal and diligence reads remain Professional.
  */
 export const INVESTOR_PRO_EXEMPT: ReadonlyArray<{ method: string; path: RegExp }> = [
+  // D1149: the handler restricts Free investors to an authorized header/key strip.
+  { method: 'GET', path: /^\/api\/deals\/[1-9][0-9]*\/?$/ },
   { method: 'DELETE', path: /^\/api\/deals\/[^/]+\/dealroom\/leave\/?$/ },
 ];
 

@@ -1568,6 +1568,16 @@ is added. See `services/channels/telegramCapture.ts` and D867.
 - `GET /api/calendar/event-links/:event_id` (`requireAuth`, then `canViewEvent`'s rule as `eventVisibleTo`): `{ event_id, ics, google, outlook, office365, join_link_included }`. 404 for an unknown event, 403 for one the caller cannot see.
 - Not yet: the token feed for "Subscribe to my events" waits on a migration number (D1033 §4).
 
+### D1149 — deal access and Free-plan view (#3054)
+
+`GET /api/deals/:id` and DD case creation share the invited-or-committed investor
+rule. An invited Free investor gets only the header/key strip and DL22b plan
+card; all other deal and DD reads stay Professional. Legacy Join records an
+invitation request and grants no access. Missing progress/age says Not recorded.
+Deal amounts use migration 599's currency. A founder returns to Raise's Capital
+relationships. The existing main page consumes the DL22b component independently
+of D1148's pending integration.
+
 ### D1102 — data-room owner and support access (#2982, part)
 
 `GET /api/data-room/:projectUid` (`data_room.ts`) returns full details only to the

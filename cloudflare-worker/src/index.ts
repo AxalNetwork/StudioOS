@@ -856,6 +856,7 @@ for (const p of STUDIO_PREFIXES) {
 // non-investor callers (admin/partner/mentor bypass; founder/etc. pass
 // through unchanged) and only enforces tier when caller.role === 'investor'.
 const INVESTOR_PRO_PREFIXES = [
+  '/api/dd',
   '/api/pipeline',
   '/api/deals',
   '/api/calendar',

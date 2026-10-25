@@ -4,6 +4,9 @@ Everything a route needs that is not request parsing or response shaping. A file
 here takes `env` and plain values; it does not take a Hono `Context` and does
 not return a `Response`.
 
+`dealAccess.ts` is D1149's shared invited-or-committed investor predicate, used
+by the deal reader and diligence opener. A room request is not a grant.
+
 The split matters because it is what makes the logic testable: the worker suite
 runs these directly against an in-process SQLite, with no request at all.
 

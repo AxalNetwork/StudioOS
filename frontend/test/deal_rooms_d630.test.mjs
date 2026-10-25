@@ -77,7 +77,7 @@ test('a join refused by a full quota says so inline and names the plan that rais
 
   const markup = html(h(JoinLeaveButton, { dealId: 2, member: false, quotaState: ok(QUOTA_FULL_PRO) }));
   assert.match(markup, /<button[^>]*disabled=""[^>]*data-testid="dr-join"/, 'the join is refused before it is pressed');
-  assert.match(renderedText(markup), /Join deal room\s*Your Professional plan is full: you are in 5 of 5 deal rooms\. Leave one, or change plan\. Institutional is unlimited\./);
+  assert.match(renderedText(markup), /Request an invitation\s*Your Professional plan is full: you are in 5 of 5 deal rooms\. Leave one, or change plan\. Institutional is unlimited\./);
   // A member can always leave, full or not.
   const leave = html(h(JoinLeaveButton, { dealId: 1, member: true, quotaState: ok(QUOTA_FULL_PRO) }));
   assert.match(leave, /data-testid="dr-leave"/);
@@ -91,13 +91,13 @@ test('dr-pipeline: each live deal with Join or Leave, the quota, and what joinin
   const t = renderedText(markup);
   assert.match(t, /3 of 5 deal rooms/);
   assert.ok(t.includes(JOIN_NOTE), 'the join note is drawn');
-  assert.match(JOIN_NOTE, /It does not open the room’s documents; only an invited or committed investor reads them\./);
+  assert.match(JOIN_NOTE, /Only an invited or committed investor can read them\./);
   assert.equal((markup.match(/data-testid="dr-pipeline-row"/g) || []).length, 2, 'a passed deal is not offered');
   assert.match(t, /Acme\s*Diligence\s*Member\s*Logistics\s*·\s*\$1,500,000\s*Leave/);
-  assert.match(t, /Birch\s*Screening\s*Fintech\s*·\s*Round size: the company has not recorded one\.\s*Join deal room/);
+  assert.match(t, /Birch\s*Screening\s*Fintech\s*·\s*Round size: the company has not recorded one\.\s*Request an invitation/);
 
   const full = renderedText(html(h(DealRoomsList, { dealsState: { loading: false, error: false, deals: DEALS }, quotaState: ok(QUOTA_FULL_PRO) })));
-  assert.match(full, /Birch[\s\S]*Join deal room\s*Your Professional plan is full/);
+  assert.match(full, /Birch[\s\S]*Request an invitation\s*Your Professional plan is full/);
 });
 
 test('dr-pipeline states: loading, empty, and an unreadable list that is never an empty one', () => {
@@ -268,8 +268,8 @@ test('the deal room adds Invitations (admin), Transfers (admin, partner) and Ref
   assert.deepEqual(dealRoomTabs('founder'), ['Overview', 'Documents', 'Commitments', 'Activity']);
   const page = codeOnly(read('pages/DealRoomPage.jsx'));
   assert.match(page, /\{isInvestor && <DealRoomMembership dealId=\{deal\.id\} \/>\}/, 'the header carries Join and Leave for an investor');
-  assert.match(page, /<DealSyndicates projectId=\{deal\.project_id\} user=\{user\} \/>/);
-  assert.match(page, /<DealTransfersTab dealId=\{deal\.id\} canRecord=\{isAdmin \|\| role === 'partner'\} \/>/);
+  assert.match(page, /<DealSyndicates projectId=\{deal\.project_id\} currency=\{deal\.currency\} user=\{user\} \/>/);
+  assert.match(page, /<DealTransfersTab dealId=\{deal\.id\} currency=\{deal\.currency\} canRecord=\{isAdmin \|\| role === 'partner'\} \/>/);
   const routes = codeOnly(read('workspaces/investor/InvestorDealsRoutes.jsx'));
   assert.match(routes, /<DealRoomsPanel \/>/, '/deals carries the deal rooms to join');
 });
