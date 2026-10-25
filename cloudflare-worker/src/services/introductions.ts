@@ -155,7 +155,8 @@ export function monthlyAllowanceFor(user: AllowanceUser): number {
   if (role === 'admin') return 25;
   if (role === 'investor') {
     const status = String(user?.investor_subscription_status || 'free').toLowerCase();
-    const lapsed = status === 'past_due' || status === 'unpaid' || status === 'cancelled';
+    // D1052: past_due is Stripe still retrying, and keeps the plan's allowance.
+    const lapsed = status === 'unpaid' || status === 'cancelled';
     const tier = lapsed ? 'free' : String(user?.investor_tier || 'free').toLowerCase();
     if (tier === 'institutional') return 25;
     if (tier === 'professional') return 10;

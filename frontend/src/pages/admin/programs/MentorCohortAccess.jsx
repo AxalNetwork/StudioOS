@@ -18,7 +18,7 @@ import { MentorTabs } from './ProgramTabs';
 import { BlockFailed, Card, EYE, HowItRuns, LINK, Pill, Skeleton, SUB, Tile, Unread } from './parts';
 import { useMentorReads } from './useProgramReads';
 import {
-  CYCLE_FIXED, DEACTIVATED_LINE, ET, HOW_IT_RUNS, MENTOR_MEASURES, NOT_READ_YET, WITHIN_500, cohortName, coveredLine,
+  ACTIVE_MENTORS_LINE, CYCLE_FIXED, ET, HOW_IT_RUNS, MENTOR_MEASURES, NOT_READ_YET, WITHIN_500, cohortName, coveredLine,
   cycleForStrip, hostsFrom, hostsLine, isFailed, mentorFigures, mentorNeeds, routeFor, weekLines,
 } from './programsModel';
 
@@ -32,7 +32,7 @@ function MentorOverview({ reads }) {
   const failedWhat = isFailed(reads.assignments) ? 'The mentor assignments' : 'The cohort cycles';
   const tiles = f.state === 'ready'
     ? [
-      { key: 'mentors', label: 'Active mentors', state: 'ready', value: f.mentors.toLocaleString('en-US'), sub: DEACTIVATED_LINE, cover: f.capped ? `Counted ${WITHIN_500} assignments.` : null },
+      { key: 'mentors', label: 'Active mentors', state: 'ready', value: f.mentors.toLocaleString('en-US'), sub: ACTIVE_MENTORS_LINE, cover: f.capped ? `Counted ${WITHIN_500} assignments.` : null },
       { key: 'covered', label: 'Cohorts covered', state: 'ready', value: f.total ? `${f.covered.toLocaleString('en-US')} of ${f.total.toLocaleString('en-US')}` : '0', sub: coveredLine(f), cover: f.capped ? `Counted ${WITHIN_500} assignments.` : null },
     ]
     : [

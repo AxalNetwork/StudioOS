@@ -37,19 +37,25 @@ import {
   CONCERN_KIND, parseRelation, BAD_RELATION, RELATION_NEEDS_ITEM, RELATION_NOT_FOR_KIND,
 } from '../services/escalationConcerns';
 import {
-  parseRequest, parseNote, decodeRequestDetail, encodeRequestDetail, withNoticeDate, isRequestKind,
-  type RequestRefusalCode,
+  parseRequest, parseNoteFor, decodeRequestDetail, encodeRequestDetail, withNoticeDate, isRequestKind,
+  isProgramRequestKind, type RequestRefusalCode,
 } from '../services/escalationRequests';
+import {
+  checkProgramRequest, openFromBranch, openOnHqTier, openProgramRequestsFromBranch, type ProgramRefusalCode,
+} from '../services/programRequests';
 
 /**
  * What a branch, or an Administrator on HQ, cannot decide for itself. The
  * first four are migration 259's. D799 added the Administrator's requests:
  * a renewal, a term change, a delegate admin and notice of non-renewal, beside
- * the older `seat_increase` (`services/escalationRequests.ts`).
+ * the older `seat_increase` (`services/escalationRequests.ts`). D983 added
+ * the three program requests: a grant, a terms change and an end
+ * (`services/programRequests.ts`).
  */
 export const ESCALATION_KINDS = [
   'moderation', 'content', 'seat_increase', 'other',
   'renewal', 'terms_change', 'delegate', 'non_renewal',
+  'program_grant', 'program_terms_change', 'program_end',
 ] as const;
 export type EscalationKind = (typeof ESCALATION_KINDS)[number];
 
@@ -63,6 +69,10 @@ export const SLA_HOURS: Record<EscalationKind, number> = {
   terms_change: 120,
   delegate: 72,
   non_renewal: 72,
+  // GR9: "HQ answers within 3 days."
+  program_grant: 72,
+  program_terms_change: 72,
+  program_end: 72,
 };
 
 /**
@@ -146,7 +156,8 @@ export type EscalationRefusal = {
  * unknown or out of range. Returned, never thrown, for D206's reason.
  */
 export type EscalationRequestRefusal = {
-  refused: RequestRefusalCode;
+  /** D983 adds HQ's own program checks and the open-request cap beside the field refusals. */
+  refused: RequestRefusalCode | ProgramRefusalCode | 'too_many_open';
   kind: EscalationKind;
   reason: string;
 };
@@ -344,7 +355,23 @@ export async function recordEscalation(
   if (isRequestKind(kind)) {
     const parsed = parseRequest(kind, decoded.request ?? undefined);
     if (!parsed.ok) return { refused: parsed.error, kind, reason: parsed.message };
-    if (parsed.request) detail = encodeRequestDetail(withNoticeDate(kind, parsed.request)!, decoded.request ? decoded.note : detail);
+    let request = parsed.request;
+    // D983 — A PROGRAM REQUEST, checked against HQ's grants for the licence
+    // this branch runs under, inside the same open-request cap as HQ's lane.
+    if (request && isProgramRequestKind(kind)) {
+      const note = parseNoteFor(kind, decoded.note);
+      if (!note.ok) return { refused: note.error, kind, reason: note.message };
+      if (await openProgramRequestsFromBranch(env, code) >= LICENCE_REQUESTS_OPEN_MAX) {
+        return { refused: 'too_many_open', kind, reason: LICENCE_REQUEST_REFUSALS.too_many_open };
+      }
+      const licence = await env.DB.prepare('SELECT id FROM territory_licences WHERE uid = ?')
+        .bind(deployment.licence_uid).first<{ id: number }>();
+      const checked = await checkProgramRequest(env, licence?.id ?? null, kind, request,
+        await openFromBranch(env, code, kind, request));
+      if (!checked.ok) return { refused: checked.error, kind, reason: checked.message };
+      request = checked.request;
+    }
+    if (request) detail = encodeRequestDetail(withNoticeDate(kind, request)!, decoded.request ? decoded.note : detail);
   }
 
   const uid = newUid();
@@ -902,9 +929,19 @@ export async function recordLicenceRequest(
   if (!parsed.ok) return { ok: false, status: 400, error: parsed.error, message: parsed.message, kind };
   let detail: string | null;
   if (parsed.request) {
-    const note = parseNote(item?.detail);
+    const note = parseNoteFor(kind, item?.detail);
     if (!note.ok) return { ok: false, status: 400, error: note.error, message: note.message, kind };
-    detail = encodeRequestDetail(withNoticeDate(kind, parsed.request)!, note.note);
+    let request = parsed.request;
+    // D983 — a program request, checked against this licence's grants.
+    if (isProgramRequestKind(kind)) {
+      const row = await env.DB.prepare('SELECT id FROM territory_licences WHERE uid = ?')
+        .bind(licence.uid).first<{ id: number }>();
+      const checked = await checkProgramRequest(env, row?.id ?? null, kind, request,
+        await openOnHqTier(env, licence.uid, kind, request));
+      if (!checked.ok) return { ok: false, status: 409, error: checked.error, message: checked.message, kind };
+      request = checked.request;
+    }
+    detail = encodeRequestDetail(withNoticeDate(kind, request)!, note.note);
   } else {
     const raw = item?.detail === undefined || item?.detail === null ? '' : String(item.detail).trim();
     if (raw.length > 4000) return say('detail_too_long');

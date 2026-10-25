@@ -621,6 +621,16 @@ const LANE_CONSOLE = {
   events: { to: '/admin/events', label: 'Events console' },
   best_fit: { to: '/admin/best-fit', label: 'Best-Fit console' },
   due_diligence: { to: '/admin/due-diligence', label: 'Due diligence' },
+  // D1041 (#2889). KYB has no console: no admin route decides a business
+  // verification yet, so the row says so rather than linking to KYC's.
+  kyb: null,
+  comarketing: { to: '/comarketing', label: 'Co-marketing review' },
+  wellbeing_experts: { to: '/admin/wellbeing', label: 'Wellbeing' },
+  perk_listings: { to: '/admin/programs/perks/queue', label: 'Perks queue' },
+  strategic_access: { to: '/admin/programs/refer-and-earn', label: 'Refer & Earn' },
+  lab_hosts: { to: '/admin/programs/spinout-lab/hosts', label: 'Spin-Out Lab hosts' },
+  score_flags: { to: '/monitoring', label: 'Monitoring' },
+  articles: { to: '/admin/articles', label: 'Content queue' },
 };
 
 /** Predicates over what the server already sent. "Assigned to me" needs the side record. */

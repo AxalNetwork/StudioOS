@@ -188,6 +188,10 @@ test('every status the WORKER writes has a tone', () => {
   const NOT_A_PILL = new Set([
     'already_active',   // POST /nda/request idempotency reply, not a row status
     'envelope_issued',  // ditto — the shape of a response, not of a record
+    // D1074 (#2966): whether a score read found obligation rows — a property of
+    // the /score answer, drawn by TrustScoreBadge, never a pill on a row.
+    'recorded',
+    'not_recorded',
   ]);
 
   const unmapped = [...written].filter(s => !mapped.has(s) && !NOT_A_PILL.has(s));
@@ -573,7 +577,7 @@ test('an agreement expands into the timeline the canvas draws', () => {
 
 test('the expander exists only where there is an envelope to expand', () => {
   const s = CODE.indexOf('function AgreementsTab(');
-  const e = CODE.indexOf('function SanctionsTab(', s);
+  const e = CODE.indexOf('function CompanyKybCard(', s);
   assert.ok(s > 0 && e > s, 'could not read AgreementsTab');
   const tab = CODE.slice(s, e);
   assert.match(tab, /\{a\.nda_envelope_uuid && \(/,

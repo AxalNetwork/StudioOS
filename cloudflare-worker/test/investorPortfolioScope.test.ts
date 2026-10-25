@@ -21,7 +21,10 @@ test('every investor portfolio read applies the shared project scope', () => {
   // the old literal `investorProjectIds(c.env, user)`: a call that dropped the
   // argument would still have matched that, silently reverting the scoping to
   // portfolio-wide while this test stayed green.
-  assert.match(positions, /investorProjectIds\(c\.env, user, await investorActiveCompany\(c, user\)\)/);
+  // D1057: positions read the HELD scope, the relationship scope narrowed to confirmed commitments.
+  assert.match(positions, /investorHeldProjectIds\(c\.env, user, await investorActiveCompany\(c, user\)\)/);
+  assert.doesNotMatch(positions, /[^d]investorProjectIds\(/, 'no positions read falls back to the relationship scope alone');
+  assert.match(scope, /const related = await investorProjectIds\(env, user, companyId\);[\s\S]*t\.status = 'confirmed'/);
   assert.match(positions, /projectIds != null && !projectIds\.includes/);
   assert.match(health, /isInvestor\(user\)\) return investorProjectIds\(env, user, await investorActiveCompany\(c, user\)\)/);
   assert.match(health, /visible != null && !visible\.includes\(Number\(project\.id\)\)/);

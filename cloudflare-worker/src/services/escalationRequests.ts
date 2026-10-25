@@ -26,10 +26,23 @@
  * kind's fields. The notice date of a non-renewal is the one field the person
  * may not send: it is the day HQ records the notice, set by the door that
  * writes the row (`withNoticeDate`).
+ *
+ * D983 (#2774) — THE THREE PROGRAM REQUESTS. A studio asks HQ for a program
+ * (`program_grant`), for a change to one term of a program it holds
+ * (`program_terms_change`), or to end one (`program_end`). Each names its
+ * program by D982's key; a terms change names the term and what it asks
+ * instead. What the term stands at is HQ's to fill from its own store, so it
+ * is never sent (`withProgramCurrent` in `services/programRequests.ts`). Each
+ * needs the note: the canvas's "Why your studio needs it" is required (GR9).
+ * Whether the program can be asked for, given the store, is checked at HQ's
+ * door (`checkProgramRequest`), because only HQ holds the grants.
  */
 
 /** The kinds that carry a structured request. */
-export const REQUEST_KINDS = ['renewal', 'terms_change', 'seat_increase', 'delegate', 'non_renewal'] as const;
+export const REQUEST_KINDS = [
+  'renewal', 'terms_change', 'seat_increase', 'delegate', 'non_renewal',
+  'program_grant', 'program_terms_change', 'program_end',
+] as const;
 export type RequestKind = (typeof REQUEST_KINDS)[number];
 
 /**
@@ -38,7 +51,22 @@ export type RequestKind = (typeof REQUEST_KINDS)[number];
  * drawer has raised it as text since D112, so on the branch path its fields
  * are checked when sent and a text-only raise is still accepted.
  */
-export const NEW_REQUEST_KINDS: readonly RequestKind[] = ['renewal', 'terms_change', 'delegate', 'non_renewal'];
+export const NEW_REQUEST_KINDS: readonly RequestKind[] = [
+  'renewal', 'terms_change', 'delegate', 'non_renewal', 'program_grant', 'program_terms_change', 'program_end',
+];
+
+/** D983: the program requests. Each needs its note, and each is checked against HQ's grants where it is recorded. */
+export const PROGRAM_REQUEST_KINDS: readonly RequestKind[] = ['program_grant', 'program_terms_change', 'program_end'];
+export const isProgramRequestKind = (kind: string) => (PROGRAM_REQUEST_KINDS as readonly string[]).includes(kind);
+
+/**
+ * D982's program keys, repeated here so this file stays free of the store.
+ * `program_requests_d983.test.ts` holds it equal to `services/programGrants.ts`.
+ */
+export const REQUESTABLE_PROGRAMS = [
+  'spinout-lab', 'ai-native-venture', 'mentor-cohorts', 'investor-cohorts', 'referral-partners',
+  'refer-and-earn', 'perks', 'learning', 'product-testing',
+] as const;
 
 export const isRequestKind = (kind: string): kind is RequestKind =>
   (REQUEST_KINDS as readonly string[]).includes(kind);
@@ -72,6 +100,9 @@ const FIELDS: Record<RequestKind, readonly string[]> = {
   seat_increase: ['seat_type', 'seats'],
   delegate: ['email', 'name'],
   non_renewal: [],
+  program_grant: ['program'],
+  program_terms_change: ['program', 'term', 'asked'],
+  program_end: ['program'],
 };
 
 export const REQUEST_REFUSALS = {
@@ -106,6 +137,18 @@ export const REQUEST_REFUSALS = {
     'The notice date is the day HQ records the notice, so it is set for you and cannot be sent.',
   note_too_long:
     `The note beside a request is at most ${REQUEST_NOTE_MAX} characters.`,
+  program_required:
+    'A program request names the program it is about.',
+  bad_program:
+    'That is not one of the programs HQ grants.',
+  program_term_required:
+    'A program terms change names the one term it is about.',
+  program_asked_required:
+    'A program terms change says what you are asking for instead.',
+  program_current_not_accepted:
+    'What the term stands at is read from HQ\'s grant, so it is filled in for you and cannot be sent.',
+  program_note_required:
+    'Say why your studio needs it. HQ reads the note to decide.',
 } as const;
 
 export type RequestRefusalCode = keyof typeof REQUEST_REFUSALS;
@@ -144,6 +187,7 @@ export function parseRequest(kind: string, raw: unknown, opts: { required?: bool
   if (typeof raw !== 'object' || Array.isArray(raw)) return refuse('bad_request');
   const r = raw as Record<string, unknown>;
   if (kind === 'non_renewal' && 'notice_given_on' in r) return refuse('notice_date_not_accepted');
+  if (kind === 'program_terms_change' && 'current' in r) return refuse('program_current_not_accepted');
   if (Object.keys(r).some((k) => !FIELDS[kind].includes(k))) return refuse('unknown_request_field');
 
   switch (kind) {
@@ -178,7 +222,39 @@ export function parseRequest(kind: string, raw: unknown, opts: { required?: bool
     }
     case 'non_renewal':
       return { ok: true, request: {} };
+    case 'program_grant':
+    case 'program_end': {
+      const program = programOf(r.program);
+      return program.ok ? { ok: true, request: { program: program.key } } : program;
+    }
+    case 'program_terms_change': {
+      const program = programOf(r.program);
+      if (!program.ok) return program;
+      const term = text(r.term, 60);
+      if (!term) return refuse('program_term_required');
+      const asked = text(r.asked, TERM_VALUE_MAX);
+      if (!asked) return refuse('program_asked_required');
+      if (asked.length > TERM_VALUE_MAX) return refuse('term_value_too_long');
+      return { ok: true, request: { program: program.key, term, asked } };
+    }
   }
+}
+
+/** A program key, checked against the nine. Which of them a studio may ask for is HQ's check. */
+function programOf(v: unknown): { ok: true; key: string } | RequestRefusal {
+  const key = text(v, 40);
+  if (!key) return refuse('program_required');
+  return (REQUESTABLE_PROGRAMS as readonly string[]).includes(key) ? { ok: true, key } : refuse('bad_program');
+}
+
+/**
+ * A program request's note is required (GR9's "Why your studio needs it").
+ * Every other kind keeps D799's rule, where the note may be blank.
+ */
+export function parseNoteFor(kind: string, raw: unknown): { ok: true; note: string | null } | RequestRefusal {
+  const note = parseNote(raw);
+  if (note.ok && isProgramRequestKind(kind) && !note.note) return refuse('program_note_required');
+  return note;
 }
 
 /** The request a kind with no required field records when none is sent. */

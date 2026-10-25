@@ -241,7 +241,11 @@ const raise = (kind: string, subject = 'A localised launch post') =>
  * ------------------------------------------------------------------ */
 
 // D799 added the Administrator's four request kinds; a white-label hides none of them.
-const WHITE_LABEL_OFFERED = ['moderation', 'seat_increase', 'other', 'renewal', 'terms_change', 'delegate', 'non_renewal'];
+// D983 adds the three program requests, which a white-label is offered as any studio is.
+const WHITE_LABEL_OFFERED = [
+  'moderation', 'seat_increase', 'other', 'renewal', 'terms_change', 'delegate', 'non_renewal',
+  'program_grant', 'program_terms_change', 'program_end',
+];
 
 test('a white-label is offered every kind but content; content is hidden with canvas H30’s sentence', () => {
   const g = escalationKindsFor('white_label');

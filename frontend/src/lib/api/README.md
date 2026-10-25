@@ -160,6 +160,11 @@ D764 (#2089) adds `page`, `setPagePick` and `setPageMode` to `railPrefs.js`:
 member's pick and switch for that page, and the two `PUT`s write them. The
 page key is the canvas's, in the query or the body.
 
+D1080 (#2945): `mcpOauth.js` starts Sign in with <Provider> for a connector
+whose MCP server signs members in (`GET /api/integrations/mcp/<key>/start`,
+`cloudflare-worker/src/routes/connector_mcp_oauth.ts`); Mercury keeps
+`mercuryPersonal.js`'s own start.
+
 D715 (#1780) PR 3b: `mercuryPersonal.js` calls `GET /api/mercury/personal/status`
 (`cloudflare-worker/src/routes/mercury_personal.ts`, D713): the caller's own
 Mercury connection and the uses their role holds, each with `available` and a
@@ -197,6 +202,11 @@ D986 (#2776): `partnerDealTypes.js` calls `/api/admin/partner-deal-types`
 (HQ's list, one licence with its history, and the write, which takes the money
 bar and a reason) and `GET /api/licence/mine/partner-deal-types` (the studio's
 own read). A licence HQ has not set reads "Not recorded", never "every type".
+
+D1052 (#2903): `billingAlerts.js` calls `GET /api/billing/alerts` (the
+member's open billing alerts: a failed renewal, a bank's confirmation, a
+disputed plan payment; no card data) and `POST /api/billing/alerts/:id/confirm`,
+which fetches the client secret from Stripe only when Confirm is pressed.
 
 D806 (#2245): `billingInvoices.js` calls `GET /api/billing/invoices?page&per`
 (`cloudflare-worker/src/routes/billing.ts`): the member's own paid orders and
@@ -293,6 +303,11 @@ D797 (#2230): `licenceTerms.js` reads and saves a licence's terms schedule
 (`GET`/`PUT /api/admin/licences/:uid/terms`, Super Admin; the save takes a
 reason and a recent step-up). The Administrator reads the same terms on
 `/api/licence/mine`. D800 and D801 draw them.
+
+D984 (#2775): `licencePrograms.js` is the Administrator's own programs
+(`GET /api/licence/mine/programs`): the nine programs with HQ's grant and its
+terms, read from HQ's store on HQ and from HQ's dated copy on a branch. An
+account no licence binds reads "On HQ-held accounts, HQ runs every program."
 D798 (#2231): `licenceAccount.js` is the territory licence Administrator's own
 `/api/licence/mine/*`. It covers the contract (in force, pending, earlier, and
 the caller's own signing link), the statements (with each period's usage
@@ -328,8 +343,25 @@ and the weekly series, and one profile by its reference (`pp_…`), never by
 email. The older `/api/profiling/admin/*` calls stay on `api.js` for the pages
 that read them.
 
+D971 (#2756): `labOperations.js` reads the Lab's playbook, operative cohort size
+and filtered/paged history, and calls the existing Super Admin draft/publish
+routes and audited size write. Support sessions reuse `adminLab.js`; grant
+terms reuse `programGrants.js`. No Admin is sent to either Super Admin read.
+
 D993 (#2804): `partnerProfiles.js` also reads the first-agreement options
 (`GET /api/admin/partner-profiles/agreements`, each Ready or "Not ready: no
 text in the library yet") and sends Unbind (`POST …/:ref/unbind`, Super Admin
 with a recent step-up and a reason). Each list row and profile carries its
 agreement's envelope state on `envelope`.
+
+D1000 (#2815): `personaSegments.js` is Persona segments' profile store on
+`/api/personas/segments`: every profile, one with its history, the needs read
+(members, needs met and gaps, offers by kind, links' reach), and the Super
+Admin's write, which names the version it read. Counts leave admins out and
+come back suppressed from 1 to 4.
+
+D1075 (#2967): `trustContent.js` is the public trust center's store: `trustPublicApi` (the
+published blocks, the change log, the matrix and the subprocessor subscribe, no session),
+`trustCenterAdminApi` (HQ › Security › Trust center content: drafts, subprocessors, the
+auditor's reports and Publish with its note, Super Admin) and `securityReportsApi` (Help's
+private Security reports, and HQ's read of them).

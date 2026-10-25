@@ -25,11 +25,11 @@ import learningPrograms from '../src/routes/learning_programs.ts';
 import adminLearningPrograms from '../src/routes/admin_learning_programs.ts';
 import { branchPrograms } from '../src/rpc/branchOps.ts';
 import {
-  HQ_READS_REASON, PART4_CLAIMS_REASON, PART4_STRATEGIC_REASON, REFERRAL_REWARDS_REASON, DEACTIVATED_NOT_LEFT_OUT,
+  HQ_READS_REASON, PART4_CLAIMS_REASON, PART4_STRATEGIC_REASON, REFERRAL_REWARDS_REASON,
   loadProgramsForBranch, programCatalogue,
 } from '../src/services/programCatalogue.ts';
 import { PROGRAM_KEYS, PAUSE_NOT_DECIDED } from '../src/services/programRegistry.ts';
-import { NOT_AUDITED_YET } from '../src/services/programActivity.ts';
+import { MENTOR_ACCESS_ACTIONS, NOT_AUDITED_YET } from '../src/services/programActivity.ts';
 import { d1Over } from './_d1_sqlite.mjs';
 import { splitStatements } from './_baseline.mjs';
 import { BASELINE_CUTOFF, migrationNumber, compareMigrations } from '../../scripts/lib/migrationPlan.mjs';
@@ -371,6 +371,21 @@ test('the catalogue: the queues, their bands and the Waiting total, exact', asyn
   assert.deepEqual(tile.left_out.map((x: any) => x.queue), ['strategic']);
 });
 
+test('the catalogue leaves a deactivated Advisor out (D960): no mentor, no cohort covered', async () => {
+  const db = fresh();
+  catalogueFixture(db);
+  // A third Advisor holds the running cycle B, which only FORMER held, on a deactivated account.
+  db.exec(`INSERT INTO users (id, uid, email, name, role, is_active) VALUES (9, 'u-9', 'person9@example.test', 'Ola Off', 'advisor', 0);
+    INSERT INTO advisor_cohort_assignments (uid, advisor_user_id, cohort_cycle_id, assigned_at, unassigned_at, is_active) VALUES ('as-9', 9, 2, '2026-10-02 10:00:00', NULL, 1);`);
+  const mentor = rowOf(await programCatalogue(envOf(db), { id: SUPER, superAdmin: true }, 4, NOW), 'mentor-cohorts');
+  assert.deepEqual(mentor.figures.mentors, { available: true, count: 1 }, 'ADV1 only: the deactivated Advisor is not an active mentor');
+  assert.deepEqual(mentor.figures.coverage, { available: true, cohorts: 2, covered: 1, uncovered: 1 }, 'B stays uncovered');
+  db.exec('UPDATE users SET is_active = 1 WHERE id = 9');
+  const back = rowOf(await programCatalogue(envOf(db), { id: SUPER, superAdmin: true }, 4, NOW), 'mentor-cohorts');
+  assert.deepEqual(back.figures.mentors, { available: true, count: 2 }, 'reactivated, they count again');
+  assert.deepEqual(back.figures.coverage, { available: true, cohorts: 2, covered: 2, uncovered: 0 });
+});
+
 test('the catalogue: each card\'s figures and Needs you, and Programs running', async () => {
   const db = fresh();
   catalogueFixture(db);
@@ -384,7 +399,7 @@ test('the catalogue: each card\'s figures and Needs you, and Programs running', 
   assert.deepEqual(lab.needs_you, { available: true, count: 3, cohort_applications: 2, hosts: 1 });
 
   const mentor = rowOf(sa, 'mentor-cohorts');
-  assert.deepEqual(mentor.figures.mentors, { available: true, count: 1, reason: DEACTIVATED_NOT_LEFT_OUT });
+  assert.deepEqual(mentor.figures.mentors, { available: true, count: 1 }, 'no reason: deactivated accounts are left out (D960)');
   assert.deepEqual(mentor.figures.coverage, { available: true, cohorts: 2, covered: 1, uncovered: 1 });
   assert.deepEqual(mentor.needs_you, { available: true, count: 2, cohorts_without_mentor: 1, holders_not_advisor: 1 });
 
@@ -717,11 +732,33 @@ test('activity: the program\'s own rows, newest first, paged, by hq or admin; Le
   assert.equal((await progs(db, SUPER, '/learning/activity?limit=51')).body.code, 'bad_limit');
 
   const mentor = await progs(db, ADMIN, '/mentor-cohorts/activity');
-  assert.deepEqual(mentor.body.not_audited, { recorded: false, reason: NOT_AUDITED_YET['mentor-cohorts'] });
+  assert.equal(mentor.body.not_audited, null, 'D960 audits assign and end, so nothing is said to be missing');
+  assert.equal(NOT_AUDITED_YET['mentor-cohorts'], undefined);
   assert.deepEqual(mentor.body.rows, []);
   const perks = await progs(db, ADMIN, '/perks/activity');
   assert.deepEqual(perks.body.rows.map((x: any) => x.concerns.program), ['perks']);
   assert.equal(perks.body.not_audited.recorded, false);
+});
+
+test('activity: Mentor reads D960\'s assign and end rows, naming the cohort and never the mentor', async () => {
+  const db = fresh();
+  catalogueFixture(db);
+  const audit = (who: number, action: string, details: Record<string, unknown>, when: string) =>
+    db.prepare('INSERT INTO admin_audit_log (admin_user_id, action, filters_json, exported_at) VALUES (?, ?, ?, ?)').run(who, action, JSON.stringify(details), when);
+  // The shape routes/advisors.ts writes.
+  audit(ADMIN, 'advisor_cohort.assigned', { target_user_id: ADV1, assignment_id: 1, cohort_cycle_id: 1 }, '2026-10-05 10:00:00');
+  audit(SUPER, 'advisor_cohort.ended', { target_user_id: ADV1, assignment_id: 3, cohort_cycle_id: 4 }, '2026-10-06 10:00:00');
+  audit(SUPER, 'learning.program.enrol', { uid: 'lp-1', user_uid: `u-${LEARNER}` }, '2026-10-07 10:00:00');
+  const r = await progs(db, ADMIN, '/mentor-cohorts/activity');
+  assert.equal(r.status, 200, JSON.stringify(r.body));
+  assert.deepEqual(r.body.rows.map((x: any) => [x.kind, x.by, x.concerns]), [
+    ['advisor_cohort.ended', 'hq', { cohort_cycle_id: 4 }],
+    ['advisor_cohort.assigned', 'admin', { cohort_cycle_id: 1 }],
+  ], 'Learning\'s row is Learning\'s');
+  assert.ok(!JSON.stringify(r.body).includes('target_user_id'), 'the mentor is a person and is never named');
+  // The action names are the ones the route writes.
+  const route = readFileSync(resolve(process.cwd(), 'cloudflare-worker/src/routes/advisors.ts'), 'utf8');
+  for (const a of MENTOR_ACCESS_ACTIONS) assert.ok(route.includes(`'${a}'`), a);
 });
 
 test('activity: Refer & Earn reads the admin review timeline, never the referrer\'s own rows', async () => {

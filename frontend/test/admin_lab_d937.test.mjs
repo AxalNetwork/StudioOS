@@ -238,6 +238,10 @@ function worker(fail = []) {
 
 async function mount(url, fail) {
   const original = globalThis.fetch;
+  // The fixtures are production's calendar on 2026-10-24 ("Week 4, day 24 of
+  // 28"), so the page reads that day, not the machine's.
+  const realNow = Date.now;
+  Date.now = () => NOW;
   const seen = worker(fail);
   const v = await render(h(AdminLab), url);
   for (let i = 0; i < 6; i += 1) await act(async () => { await new Promise((r) => setTimeout(r, 0)); });
@@ -246,7 +250,7 @@ async function mount(url, fail) {
     seen,
     of: (id) => { const n = v.byTestId(id); assert.ok(n, `no ${id}`); return v.textOf(n); },
     has: (id) => Boolean(v.byTestId(id)),
-    async unmount() { await v.unmount(); globalThis.fetch = original; },
+    async unmount() { await v.unmount(); globalThis.fetch = original; Date.now = realNow; },
   };
 }
 

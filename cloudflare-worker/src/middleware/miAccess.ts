@@ -57,7 +57,8 @@ export function userHasMiPro(user: User | null): boolean {
   if (!user) return false;
   if (user.role === 'admin') return true;
   const status = (user as User & { mi_subscription_status?: string }).mi_subscription_status;
-  return status === 'active' || status === 'trialing';
+  // D1052 (#2903): a renewal Stripe is still retrying keeps Pro, as every plan does.
+  return status === 'active' || status === 'trialing' || status === 'past_due';
 }
 
 /**

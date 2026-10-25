@@ -125,7 +125,8 @@ export const RAIL_NOTE = 'Eadwyn reads the program figures on this page. Nothing
 
 export const TITLE = 'Programs';
 export const LINE_ADMIN = 'Every program on the accounts HQ holds, and what it needs from you now.';
-export const LINE_SUPER = 'Every program on StudioOS, and what needs HQ now.';
+// D964 (#2797): the line regains "…and what studios propose." with HQ's Proposals tab.
+export const LINE_SUPER = 'Every program on StudioOS, what needs HQ now, and what studios propose.';
 export const FOOT_PROFILING = 'Profiling trends is not a program. It stays here until its home is decided.';
 export const PAGE_UNREADABLE = 'Could not be read';
 
@@ -676,6 +677,8 @@ export function etTime(stamp) {
 export const etStamp = (stamp) => (parseStamp(stamp) === null ? null : `${etDay(stamp)} ${etTime(stamp)} ET`);
 
 const isAdvisor = (row) => String(row?.advisor_role || '').toLowerCase() === 'advisor';
+/** D960's account rule: the holder's account is active (`advisor_is_active`, true only when `users.is_active` is 1). */
+const isActiveAccount = (row) => row?.advisor_is_active === true;
 const isOpen = (row) => row?.is_active === true || row?.is_active === 1;
 
 /** An open row whose holder's current role is no longer Advisor (the body's own rule). */
@@ -690,9 +693,10 @@ export const needsMentor = (c) => (c?.status === 'scheduled' || c?.status === 'a
 
 /**
  * The mentor figures, one rule for the card, Overview and Needs you:
- *   mentors   distinct holders of an open row whose current role is Advisor;
+ *   mentors   distinct holders of an open row whose current role is Advisor
+ *             and whose account is active (D960);
  *   cycles    R7's cycles that need a mentor ([b]);
- *   covered   those with at least one open row held by a current Advisor ([a]);
+ *   covered   those with at least one open row held by a current, active Advisor ([a]);
  *   uncovered the rest, each a Needs-you row;
  *   stale     open rows whose holder is no longer an Advisor.
  * `capped` when R5 returned its 500 rows: the counts cover the newest 500.
@@ -702,7 +706,7 @@ export function mentorFigures(assignRead, timelineRead) {
   if (state !== 'ready') return { state };
   const rows = Array.isArray(assignRead.data?.items) ? assignRead.data.items : [];
   const cycles = Array.isArray(timelineRead.data?.cycles) ? timelineRead.data.cycles : [];
-  const live = rows.filter((r) => isOpen(r) && isAdvisor(r));
+  const live = rows.filter((r) => isOpen(r) && isAdvisor(r) && isActiveAccount(r));
   const mentors = new Set(live.map((r) => Number(r.advisor_user_id))).size;
   const staffed = new Set(live.map((r) => Number(r.cohort_cycle_id)));
   const due = cycles.filter(needsMentor);
@@ -739,7 +743,8 @@ export function mentorNeeds(f) {
   return [...cohorts, ...roles];
 }
 
-export const DEACTIVATED_LINE = 'Deactivated accounts are not left out yet.';
+/** Active mentors' line: a deactivated account is left out (D960). */
+export const ACTIVE_MENTORS_LINE = 'Advisors with an active account.';
 /** People's Assign success line, which agrees with How it runs (the map's F2, until O-FND). */
 export const ASSIGNED_LINE = 'Assigned. The advisor sees a founder in that cohort once that founder’s first week is recorded.';
 export const WITHIN_500 = 'within the newest 500';
@@ -904,7 +909,7 @@ export function testingFrom(read) {
 
 export const SCOPE_READING = 'Reading the scope…';
 export const SCOPE_UNREAD = 'The deployments could not be read, so whether a subsidiary is deployed is not known here.';
-export const SCOPE_NOT_PER_STUDIO = 'Programs reads the accounts HQ holds. No Programs read is per studio yet, so a deployed studio is not shown here.';
+export const SCOPE_PICK_STUDIO = 'These are the accounts HQ holds directly. Pick a studio under Studio to read its own.';
 
 /**
  * The scope chip (D893). For a Super Admin it is keyed on R12. R12 answers 200
@@ -919,7 +924,7 @@ export function scopeChip(superAdmin, scopes) {
   const reason = typeof scopes.data?.reason === 'string' && scopes.data.reason.trim() ? scopes.data.reason.trim() : null;
   if (reason) return { label: SCOPE_LABEL, title: reason };
   const branch = (Array.isArray(scopes.data?.scopes) ? scopes.data.scopes : []).some((s) => s?.kind === 'branch');
-  return { label: SCOPE_LABEL, title: branch ? SCOPE_NOT_PER_STUDIO : SCOPE_TITLE };
+  return { label: SCOPE_LABEL, title: branch ? SCOPE_PICK_STUDIO : SCOPE_TITLE };
 }
 
 /* ------------------------------------------------------------------ *

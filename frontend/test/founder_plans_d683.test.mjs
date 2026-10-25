@@ -4,8 +4,9 @@
  * the first. The tier ids stay `growth` and `studio`.
  *
  * This pins:
- *   - the catalogue's names, prices and Free's lines;
- *   - the Worker quoting the same names and prices as the catalogue;
+ *   - the catalogue's names and Free's lines (D1050: no price is typed; a
+ *     paid tier is priced from the plans read);
+ *   - the Worker quoting the same names as the catalogue, and no price;
  *   - the Raise and Grow gates asking for `studio`, and the Validate and Build
  *     gates still asking for `growth`;
  *   - no old founder price ($79, $249) left anywhere in the source.
@@ -26,34 +27,26 @@ const { FOUNDER_TIERS } = await import('../src/data/pricing.js');
 
 test('the catalogue sells Free, Validate + Build, and Raise + Grow', () => {
   assert.deepEqual(FOUNDER_TIERS.map((t) => [t.id, t.name, t.priceMonthly]),
-    [['free', 'Free', 0], ['growth', 'Validate + Build', 20], ['studio', 'Raise + Grow', 100]]);
-  assert.equal(TIER_PLANS.studio.features[0], 'Everything in Validate + Build', 'the second group keeps the first');
+    [['free', 'Free', 0], ['growth', 'Validate + Build', null], ['studio', 'Raise + Grow', null]],
+    'D1050: a paid tier carries no typed price until the plans read prices it');
+  assert.equal(TIER_PLANS.studio.lead, 'Everything in Validate + Build, plus:', 'the second group keeps the first');
   const free = FOUNDER_TIERS[0].features.join(' | ');
   for (const line of ['1 active startup', 'Start Validate', 'Apply to the Spin-Out Lab', 'Public profile', 'proposed introductions a month']) {
     assert.ok(free.includes(line), `Free includes "${line}"`);
   }
 });
 
-test('the Worker quotes the catalogue\'s names and prices', () => {
+test('the Worker quotes the catalogue\'s names, and no price', async () => {
   const src = W('middleware/requireTier.ts');
-  // The body of the first `{ … }` after `export const <name>`, found by string
-  // search rather than a RegExp built from `name`.
-  const table = (name) => {
-    const at = src.indexOf(`export const ${name}`);
-    assert.ok(at >= 0, `${name} is exported`);
-    const open = src.indexOf('{', at);
-    const close = open < 0 ? -1 : src.indexOf('}', open);
-    assert.ok(open >= 0 && close > open, `${name} is an object`);
-    return Object.fromEntries([...src.slice(open + 1, close).matchAll(/(growth|studio):\s*'([^']*)'/g)].map((x) => [x[1], x[2]]));
-  };
-  const names = table('PLAN_NAME');
-  const prices = table('PLAN_PRICE_LABEL');
+  const { planByKey } = await import('../../cloudflare-worker/src/services/planCatalogue.ts');
+  // D1050: the names are the plan catalogue's, and the Worker types no price.
+  assert.match(src, /growth: planByKey\('founder:growth'\)!\.name,\n  studio: planByKey\('founder:studio'\)!\.name,/);
   for (const tier of ['growth', 'studio']) {
-    assert.equal(names[tier], TIER_PLANS[tier].label, `${tier}: one name in the Worker and the catalogue`);
-    assert.equal(prices[tier], `${TIER_PLANS[tier].price} / month`, `${tier}: one price in the Worker and the catalogue`);
+    assert.equal(planByKey(TIER_PLANS[tier].key).name, TIER_PLANS[tier].label, `${tier}: one name in the Worker and the catalogue`);
   }
-  assert.match(src, /plan: \{ tier: required, name: PLAN_NAME\[required\], price_label: PLAN_PRICE_LABEL\[required\] \}/,
-    'a 402 names the plan');
+  assert.doesNotMatch(src, /PLAN_PRICE_LABEL|\$\d/, 'no typed price in the Worker');
+  assert.match(src, /plan: \{ tier: required, name: PLAN_NAME\[required\], plan_key: PLAN_KEY\[required\] \}/,
+    'a 402 names the plan by its catalogue key');
   assert.match(W('routes/wellbeing.ts'), /plan: tierUpsell\('growth'\)\.plan/, 'wellbeing quotes the table, not a typed price');
 });
 

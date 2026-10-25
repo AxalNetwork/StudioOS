@@ -21,6 +21,7 @@
  * 402 Response (the global error handler returns it as-is).
  */
 import type { Context } from 'hono';
+import { planByKey } from '../services/planCatalogue';
 import type { Env, User } from '../types';
 import { requireAuth } from '../auth';
 import { bindingKey, runSchemaBootstrap } from '../util/schemaBootstrap';
@@ -32,9 +33,10 @@ const TIER_RANK: Record<Tier, number> = { free: 0, growth: 1, studio: 2 };
 const BYPASS_ROLES = new Set<string>(['admin', 'partner', 'investor', 'advisor']);
 
 /** What a member reads for each paid tier (D683). */
+/** D1050: the plan names are the plan catalogue's (`services/planCatalogue.ts`). */
 export const PLAN_NAME: Record<Exclude<Tier, 'free'>, string> = {
-  growth: 'Validate + Build',
-  studio: 'Raise + Grow',
+  growth: planByKey('founder:growth')!.name,
+  studio: planByKey('founder:studio')!.name,
 };
 
 const TIER_COPY: Record<Exclude<Tier, 'free'>, string> = {
@@ -42,10 +44,14 @@ const TIER_COPY: Record<Exclude<Tier, 'free'>, string> = {
   studio: 'This is on the Raise + Grow plan. Upgrade for the pitch deck, cap table, capital, legal, and partner tooling.',
 };
 
-/** The monthly price a member is quoted. It must match the active Stripe price on the tier's product. */
-export const PLAN_PRICE_LABEL: Record<Exclude<Tier, 'free'>, string> = {
-  growth: '$20 / month',
-  studio: '$100 / month',
+/**
+ * D1050 (#2901): no price is typed here. The upsell names the plan by its
+ * catalogue key (`plan_key`), and the price is read from Stripe's D1 mirror
+ * on `GET /api/public/plans-and-packs`, as the paywall and Pricing read it.
+ */
+export const PLAN_KEY: Record<Exclude<Tier, 'free'>, string> = {
+  growth: 'founder:growth',
+  studio: 'founder:studio',
 };
 
 export interface TierUserCols {
@@ -72,7 +78,10 @@ export function userMeetsTier(user: User | null | undefined, required: Tier): bo
   const status = (user as TierUser).subscription_status ?? 'active';
   // Cancelled subs keep tier until renews_at; we read tier as-is and rely on
   // the Stripe webhook to flip tier→'free' on subscription.deleted.
-  if (status === 'past_due' || status === 'unpaid') return false;
+  // D1052 (#2903): `past_due` is a renewal Stripe is still retrying, and the
+  // plan keeps its access meanwhile (#2451's owner question 4, as #2453
+  // proposed). `unpaid` is Stripe giving up: the plan's access ends.
+  if (status === 'unpaid') return false;
   // X-1: partner-granted/referred tiers are time-bounded. The cron sweep
   // resets tier→'free' at expiry, but enforce on read too so a stale
   // session can't bypass an expired grant before the cron runs.
@@ -89,7 +98,7 @@ export function tierUpsell(required: Exclude<Tier, 'free'>) {
     error: 'tier_required',
     required,
     message: TIER_COPY[required],
-    plan: { tier: required, name: PLAN_NAME[required], price_label: PLAN_PRICE_LABEL[required] },
+    plan: { tier: required, name: PLAN_NAME[required], plan_key: PLAN_KEY[required] },
     checkout_path: '/api/billing/tier/checkout',
   };
 }

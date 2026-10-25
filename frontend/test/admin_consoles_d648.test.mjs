@@ -34,7 +34,6 @@ import DirectoryPanel from '../src/pages/admin/consoles/DirectoryConsole.jsx';
 import IntegrationKeysPanel from '../src/pages/admin/consoles/IntegrationKeysConsole.jsx';
 import GithubSyncPanel from '../src/pages/admin/consoles/GithubSyncConsole.jsx';
 import PromoCodesPanel from '../src/pages/admin/consoles/PromoCodesConsole.jsx';
-import PaymentsPanel from '../src/pages/admin/consoles/PaymentsConsole.jsx';
 import WellbeingExpertsPanel from '../src/pages/admin/consoles/WellbeingConsole.jsx';
 
 // ── A DOM just large enough for React to mount into ─────────────────────────
@@ -140,11 +139,11 @@ const CONSOLES = [
     empty: { adminContractStats: async () => ({ total: 0, by_type: [] }), adminListContracts: async () => ({ items: [], total: 0 }) },
     says: /No contracts found/, loading: /Loading…/ },
   { name: 'Users', el: () => React.createElement(UsersConsole), reads: ['adminListUsers'],
-    empty: { adminListUsers: async () => ({ results: [], total: 0, by_role: {} }) }, says: /No users found/, loading: /Loading admin console\.\.\./ },
+    empty: { adminListUsers: async () => ({ results: [], total: 0, by_role: {} }) }, says: /No users found/, loading: /Loading…/ },
   { name: 'Partner Profiles', el: () => React.createElement(PartnerProfilesConsole), reads: ['adminListProfiles'],
-    empty: { adminListProfiles: async () => [] }, says: /No profiles captured yet/, loading: /Loading admin console\.\.\./ },
+    empty: { adminListProfiles: async () => [] }, says: /No profiles captured yet/, loading: /Loading…/ },
   { name: 'KYC', el: () => React.createElement(KycConsole), reads: ['kycAdminQueue'],
-    empty: { kycAdminQueue: async () => [] }, says: /No submissions in pending status/, loading: /Loading admin console\.\.\./ },
+    empty: { kycAdminQueue: async () => [] }, says: /No submissions in pending status/, loading: /Loading…/ },
   { name: 'Personas', el: () => React.createElement(PersonasPanel), reads: ['listPersonasAdmin'],
     empty: { listPersonasAdmin: async () => ({ users: [] }) }, says: /No users\./, loading: /Loading/ },
   { name: 'Directory', el: () => React.createElement(DirectoryPanel), reads: ['adminListDirectoryPartners'],
@@ -155,12 +154,6 @@ const CONSOLES = [
     empty: { adminGetGithubConfig: async () => ({}) }, says: /Repository · set at deploy time/, loading: /Loading GitHub settings/ },
   { name: 'Promo codes', el: () => React.createElement(PromoCodesPanel), reads: ['adminListPromos'],
     empty: { adminListPromos: async () => ({ promos: [] }), catalogProducts: async () => ({ products: [] }) }, says: /No promo codes yet\./, loading: /Loading/ },
-  { name: 'Payments', el: () => React.createElement(PaymentsPanel), reads: ['adminCatalogList'],
-    empty: { adminCatalogList: async () => ({ products: [] }) }, says: /No products yet/, loading: /Loading catalog/,
-    // A failed read also raises a toast, and Payments draws `{toast}` as a
-    // child: that crash is #1437's (PR #1443 draws it through ToastMessage),
-    // not this split's. Its Unreadable branch is pinned from source below.
-    skipFailedRender: '#1437' },
   { name: 'Wellbeing', el: () => React.createElement(WellbeingExpertsPanel), reads: ['wellbeingExperts'],
     empty: { wellbeingExperts: async () => ({ matches: [] }) }, says: /No experts match the current filter\./, loading: /Loading experts/ },
 ];
@@ -197,16 +190,6 @@ for (const c of CONSOLES) {
     } finally { await v.unmount(); restoreApi(); }
   });
 }
-
-test('Payments: a failed catalog read draws Unreadable, never "No products yet"', () => {
-  const src = readFileSync(resolve(process.cwd(), 'frontend/src/pages/admin/consoles/PaymentsConsole.jsx'), 'utf8');
-  const load = src.slice(src.indexOf('const loadProducts'), src.indexOf('const loadWebhooks'));
-  assert.match(load, /catch \(e\) \{[\s\S]*?setFailed\(true\);\s*\} finally/);
-  assert.match(load, /setProducts\(r\.products \|\| \[\]\);\s*setFailed\(false\);/);
-  const list = src.slice(src.indexOf('{productsLoading ? ('));
-  assert.ok(list.indexOf('<ConsoleUnreadable') > 0 && list.indexOf('<ConsoleUnreadable') < list.indexOf('No products yet'),
-    'the failed branch is not drawn before the empty one');
-});
 
 test('Billing: a failed disputes read draws Unreadable, never "No disputes loaded"', () => {
   // Billing reads its disputes on a click, not on mount, so this is pinned

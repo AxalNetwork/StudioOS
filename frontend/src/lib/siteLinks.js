@@ -55,6 +55,9 @@ export const LEGAL_FOOTER_LINKS = [
   { label: 'Privacy', to: '/privacy' },
   { label: 'Cookie preferences', action: 'cookies' },
   { label: 'Risk Disclosures', to: '/risk-disclosures' },
+  // D1072 (#2425): the public trust center and the status page, new in the legal row.
+  { label: 'Trust center', to: '/trust' },
+  { label: 'Status', to: '/status' },
 ];
 
 /** Where the shell's buttons go. */

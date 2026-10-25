@@ -19,12 +19,18 @@ export * from './api/adminLearning.js';
 export * from './api/adminMeetingBots.js';
 export * from './api/adminMercury.js';
 export * from './api/adminNetwork.js';
+export * from './api/adminPartnerFirms.js';
 export * from './api/adminPayments.js';
+export * from './api/adminPrograms.js';
 export * from './api/aiBudget.js';
 export * from './api/assistants.js';
 export * from './api/bankAccounts.js';
+export * from './api/billingAlerts.js';
 export * from './api/billingInvoices.js';
+export * from './api/capTableAccess.js';
+export * from './api/capTableHolder.js';
 export * from './api/capTableRecord.js';
+export * from './api/capTableRegister.js';
 export * from './api/channelKeys.js';
 export * from './api/channels.js';
 export * from './api/community.js';
@@ -38,6 +44,7 @@ export * from './api/creditRules.js';
 export * from './api/cycleValidate.js';
 export * from './api/cycleWrites.js';
 export * from './api/cycles.js';
+export * from './api/deckAssist.js';
 export * from './api/deckEditor.js';
 export * from './api/deckSources.js';
 export * from './api/developerKeys.js';
@@ -56,12 +63,15 @@ export * from './api/googleSignIn.js';
 export * from './api/helpCenter.js';
 export * from './api/insights.js';
 export * from './api/interviewSessions.js';
+export * from './api/labOperations.js';
 export * from './api/labReportShares.js';
 export * from './api/learning.js';
 export * from './api/licenceAccount.js';
 export * from './api/licenceFeeInvoices.js';
+export * from './api/licencePrograms.js';
 export * from './api/licenceRequests.js';
 export * from './api/licenceTerms.js';
+export * from './api/mcpOauth.js';
 export * from './api/memberCredits.js';
 export * from './api/mercuryAttestations.js';
 export * from './api/mercuryInvestor.js';
@@ -75,9 +85,11 @@ export * from './api/partnerDealTypes.js';
 export * from './api/partnerProfiles.js';
 export * from './api/partnerSettlements.js';
 export * from './api/payments.js';
+export * from './api/personaSegments.js';
 export * from './api/productTesting.js';
 export * from './api/profile.js';
 export * from './api/programGrants.js';
+export * from './api/programProposals.js';
 export * from './api/publicAiModels.js';
 export * from './api/publicPricing.js';
 export * from './api/railPrefs.js';
@@ -93,6 +105,7 @@ export * from './api/section83bReview.js';
 export * from './api/shareUpdate.js';
 export * from './api/ticketReviews.js';
 export * from './api/tokenPacks.js';
+export * from './api/trustContent.js';
 export * from './api/usage.js';
 export * from './api/verdict.js';
 // api-modules:end
@@ -212,6 +225,8 @@ export function isPublicPath(pathname) {
     || currentPath.startsWith('/authors/')
     || /^\/advisors\/[^/]+$/.test(currentPath)
     || currentPath === '/spinout-lab'
+    // D1072 (#2425): the public trust center and its tabs; /trust/me is the member's own and stays auth-only.
+    || ['/trust', '/trust/security', '/trust/data', '/trust/subprocessors', '/trust/documents', '/trust/disclosure'].includes(currentPath)
     // Printable Program Brief — public brochure page; /spinout-lab/apply
     // is intentionally NOT listed (auth-only, a 401 there should bounce).
     || currentPath === '/spinout-lab/brief'
@@ -2055,16 +2070,16 @@ export const api = {
   //   adminCatalogSync()                       → { ok, synced }
   //   adminCatalogCreateProduct(body)          → { ok, product }
   //   adminCatalogUpdateProduct(id, body)      → { ok }
-  //   adminCatalogArchiveProduct(id)           → { ok }
+  //   adminCatalogArchiveProduct(id, reason)   → { ok }
   //   adminCatalogAddPrice(productId, body)    → { ok, price }
-  //   adminCatalogArchivePrice(priceId)        → { ok }
+  //   adminCatalogArchivePrice(priceId, reason) → { ok }
   // Webhook:
   //   adminStripeListWebhooks()                → { endpoints, required_events, our_url }
   //   adminStripeRegisterWebhook()             → { ok, endpoint_id, url, secret_stored }
   //   adminStripeUpdateWebhookEvents(epId)     → { ok, endpoint_id, url }
   // Config (publishable key):
   //   adminStripeGetConfig()                   → { publishable_key, mode, configured }
-  //   adminStripeSetConfig(pk)                 → { ok, mode }
+  //   adminStripeSetConfig(pk, reason)         → { ok, mode }
   // D232 — `adminCatalogMode` went: no caller, and the mode already rides on
   // `adminCatalogList` and `adminStripeGetConfig`. The route stays.
   adminCatalogList: () => request('/admin/catalog/products'),
@@ -2076,10 +2091,13 @@ export const api = {
       method: 'PATCH',
       body: JSON.stringify(body || {}),
     }),
-  adminCatalogArchiveProduct: (id) =>
+  // D1009: every product and price write carries the admin's `reason` (1 to
+  // 500 characters), recorded with the change; the bodies above take it as a
+  // field, the two archives and the key take it here (D1013).
+  adminCatalogArchiveProduct: (id, reason) =>
     request(`/admin/catalog/products/${encodeURIComponent(id)}/archive`, {
       method: 'POST',
-      body: '{}',
+      body: JSON.stringify({ reason }),
     }),
   adminCatalogAddPrice: (productId, body) =>
     request(`/admin/catalog/products/${encodeURIComponent(productId)}/prices`, {
@@ -2091,10 +2109,10 @@ export const api = {
       method: 'PATCH',
       body: JSON.stringify(body || {}),
     }),
-  adminCatalogArchivePrice: (priceId) =>
+  adminCatalogArchivePrice: (priceId, reason) =>
     request(`/admin/catalog/prices/${encodeURIComponent(priceId)}/archive`, {
       method: 'POST',
-      body: '{}',
+      body: JSON.stringify({ reason }),
     }),
   adminStripeListWebhooks: () => request('/admin/stripe/webhook'),
   adminStripeRegisterWebhook: () =>
@@ -2108,10 +2126,10 @@ export const api = {
       body: JSON.stringify({ action: 'update', endpoint_id: endpointId }),
     }),
   adminStripeGetConfig: () => request('/admin/stripe/config'),
-  adminStripeSetConfig: (publishableKey) =>
+  adminStripeSetConfig: (publishableKey, reason) =>
     request('/admin/stripe/config', {
       method: 'PUT',
-      body: JSON.stringify({ publishable_key: publishableKey }),
+      body: JSON.stringify({ publishable_key: publishableKey, reason }),
     }),
 
   adminDownloadContractUrl: (uid) => `/api/admin/contracts/${uid}/download`,
@@ -4068,8 +4086,9 @@ export const api = {
   trustScore: (userId) => request(`/trust/score/${encodeURIComponent(userId)}`),
   // Task #40 — batch the per-row trust-score lookups on AdminPage / DealsPage
   // into a single request. Returns { scores: [{ user_id, score, missing[],
-  // required_total }] } in the same order the ids were sent. Admin/partner/
-  // investor only; founders should keep using `trustScore(userId)` for self.
+  // required_total }] } in the same order the ids were sent. D1074: the single
+  // read's rule for every id (self, this territory's admin, an open intro or
+  // deal's counterparty); one id the caller may not read refuses the batch.
   trustScoreBatch: (userIds) => request('/trust/score/batch', {
     method: 'POST',
     body: JSON.stringify({ user_ids: userIds }),
