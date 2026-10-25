@@ -92,7 +92,8 @@ test('Past, the counts and Discover\'s action', () => {
   assert.deepEqual(rows.map((r) => [r.key, r.result]), [['t-4', 'Checked in'], ['h-16', 'Hosted']]);
   assert.deepEqual(tabCounts({ attending: ATTENDING, hosting: HOSTING, ok: true }, NOW), { upcoming: 3, hosting: 7, past: 2 });
   assert.deepEqual(tabCounts({ attending: [], hosting: [], ok: false }, NOW), { upcoming: null, hosting: null, past: null }, 'a failed read is a dash, never 0');
-  assert.equal(discoverAction({ id: 1, slug: 's' }, new Set([1])).label, 'Going');
+  // D1035: a place you hold opens its ticket (MEV8's "Show ticket").
+  assert.deepEqual(discoverAction({ id: 1, slug: 's' }, new Set([1])), { label: 'Show ticket', to: '/my/events/ticket/1' });
   assert.deepEqual(discoverAction({ id: 9, slug: 'demo-day' }, new Set()), { label: 'Open event', to: '/events/demo-day' });
 });
 
@@ -192,7 +193,7 @@ test('Discover reads the public calendar from now, marks what you hold, and answ
     assert.equal(ui.count('my-events-discover-row'), 2);
     assert.ok(globalThis[key].calls[0].from, 'only upcoming events');
     assert.equal(globalThis[key].calls[0].limit, 25);
-    assert.match(ui.text(), /Going/);
+    assert.match(ui.text(), /Show ticket/, 'D1035: the place you hold opens its ticket');
     assert.match(ui.text(), /\$40/);
     assert.ok(ui.hrefs().includes('/events/demo-day'));
   } finally { await ui.unmount(); }
