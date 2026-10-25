@@ -152,6 +152,7 @@ test('expert verification requires the explicit credentials check and current ve
   assert.equal(expert(f).decision_state, 'verified'); assert.equal(expert(f).decided_by, 1);
   const h = one(f, 'SELECT * FROM expert_review_decisions');
   assert.ok(Date.parse(h.decided_at) >= startedAt && Date.parse(h.decided_at) <= Date.now());
+  assert.equal(expert(f).decided_at, h.decided_at); assert.equal(r.body.decided_at, h.decided_at);
   assert.equal(h.credentials_checked, 1); assert.equal(h.decision, 'verified'); assert.equal(h.review_version, 1);
   assert.equal(one(f, 'SELECT user_id FROM notifications_inbox').user_id, 3);
   assert.equal(one(f, 'SELECT type FROM notifications_inbox').type, 'wellbeing_expert_verified'); assert.equal(sent.length, 1);
@@ -491,3 +492,55 @@ test('failed decision history rolls back the expert update and sends no notice; 
   f.db.exec('DROP TABLE comarketing_attributions');
   assert.ok((await call(f, 1, 'GET', `${cm}/admin/queue`)).status >= 500);
 });
+
+test('visibility decisions preserve the review actor and time, with their own actors in the trail', async () => captureMail(async () => {
+  const f = fixture();
+  await call(f, 1, 'POST', `${wb}/admin/experts/expert-a/verify`, { verified: true, credentials_checked: true, expected_version: 0 });
+  for (const state of ['verified', 'declined']) {
+    if (state === 'declined') await call(f, 1, 'POST', `${wb}/admin/experts/expert-a/decline`, { reason: 'Synthetic credential evidence is incomplete.' });
+    const reviewed = expert(f);
+    for (const hidden of [true, false]) {
+      const response = await call(f, 6, 'POST', `${wb}/admin/experts/expert-a/hide`, { hidden });
+      assert.equal(response.status, 200); assert.equal(response.body.decided_by, reviewed.decided_by);
+      assert.equal(response.body.decided_at, reviewed.decided_at);
+      const row = expert(f); assert.equal(row.decision_state, state); assert.equal(row.decided_by, reviewed.decided_by);
+      assert.equal(row.decided_at, reviewed.decided_at); assert.equal(row.decline_reason, reviewed.decline_reason);
+      const last = one(f, 'SELECT * FROM expert_review_decisions ORDER BY review_version DESC LIMIT 1');
+      assert.equal(last.decision, hidden ? 'hidden' : 'restored'); assert.equal(last.decided_by, 6); assert.ok(last.decided_at);
+    }
+  }
+}));
+
+test('removing verification cannot undo a decline, including an ordinary admin’s own declined profile', async () => captureMail(async (sent) => {
+  const f = fixture(); f.db.exec("UPDATE experts SET user_id=6 WHERE uid='expert-a'");
+  const decline = await call(f, 7, 'POST', `${wb}/admin/experts/expert-a/decline`, { reason: 'Synthetic credential evidence is incomplete.' });
+  assert.equal(decline.status, 200); const before = expert(f);
+  for (const actor of [6, 7]) {
+    const response = await call(f, actor, 'POST', `${wb}/admin/experts/expert-a/verify`, { verified: false });
+    assert.equal(response.status, 409); assert.equal(response.body.error, 'already_decided');
+    assert.deepEqual(expert(f), before);
+  }
+  assert.equal(one(f, 'SELECT COUNT(*) AS n FROM expert_review_decisions').n, 1); assert.equal(sent.length, 1);
+  const other = fixture();
+  await call(other, 1, 'POST', `${wb}/admin/experts/expert-a/verify`, { verified: true, credentials_checked: true, expected_version: 0 });
+  assert.equal((await call(other, 1, 'POST', `${wb}/admin/experts/expert-a/verify`, { verified: false })).status, 200);
+  assert.equal(expert(other).verified, 0); assert.equal(expert(other).decision_state, 'pending');
+}));
+
+test('unchanged normalized credential saves preserve both verification and decline records', async () => captureMail(async (sent) => {
+  const f = fixture(); const values = { licence_number: 'SYNTHETIC-123', issuer: 'Synthetic board', expires_on: '2099-12-31' };
+  await call(f, 3, 'PATCH', `${wb}/experts/me/credentials`, values);
+  await call(f, 1, 'POST', `${wb}/admin/experts/expert-a/verify`, { verified: true, credentials_checked: true, expected_version: 1 });
+  for (const state of ['verified', 'declined']) {
+    if (state === 'declined') await call(f, 1, 'POST', `${wb}/admin/experts/expert-a/decline`, { reason: 'Synthetic credential evidence is incomplete.' });
+    const before = expert(f); const history = one(f, 'SELECT COUNT(*) AS n FROM expert_review_decisions').n;
+    const mail = sent.length;
+    for (const body of [{}, values, { ...values, issuer: '  Synthetic board  ' }]) {
+      const response = await call(f, 3, 'PATCH', `${wb}/experts/me/credentials`, body);
+      assert.equal(response.status, 200); assert.equal(response.body.decision_state, state);
+      assert.equal(response.body.verified, state === 'verified'); assert.equal(response.body.review_version, before.review_version);
+      assert.equal(response.body.decline_reason, before.decline_reason); assert.deepEqual(expert(f), before);
+    }
+    assert.equal(one(f, 'SELECT COUNT(*) AS n FROM expert_review_decisions').n, history); assert.equal(sent.length, mail);
+  }
+}));

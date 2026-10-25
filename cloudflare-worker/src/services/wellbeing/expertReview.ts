@@ -83,18 +83,24 @@ export async function expertDecision(env: Env, row: any, actor: ReviewActor, dec
   if (body.expected_version !== undefined && body.expected_version !== row.review_version) {
     throw new ExpertReviewError('review_changed', 'The profile or credentials changed. Read them again before deciding.', 409);
   }
+  if (decision === 'unverified' && !row.verified) {
+    throw new ExpertReviewError('already_decided', 'This expert is not currently verified.', 409);
+  }
   const verified = decision === 'verified' ? 1 : ['unverified', 'declined'].includes(decision) ? 0 : row.verified;
   const hidden = decision === 'hidden' ? 1 : decision === 'restored' ? 0 : row.hidden_by_admin;
-  const state = decision === 'verified' ? 'verified' : decision === 'declined' ? 'declined' : decision === 'unverified' ? 'pending' : row.decision_state;
+  const state = decision === 'verified' ? 'verified' : decision === 'declined' ? 'declined' : decision === 'unverified' && row.decision_state === 'verified' ? 'pending' : row.decision_state;
   if (verified === row.verified && hidden === row.hidden_by_admin && state === row.decision_state) {
     throw new ExpertReviewError('already_decided', 'This expert is already in that state.', 409);
   }
   const token = crypto.randomUUID(); const at = new Date().toISOString();
+  const visibilityOnly = decision === 'hidden' || decision === 'restored';
+  const decidedBy = visibilityOnly ? row.decided_by : actor.id;
+  const decidedAt = visibilityOnly ? row.decided_at : at;
   const version = Number(row.review_version) + 1;
   const results = await env.DB.batch([
     env.DB.prepare(`UPDATE experts SET verified = ?, hidden_by_admin = ?, decision_state = ?, decided_by = ?, decided_at = ?,
       decline_reason = ?, review_version = ?, decision_token = ? WHERE id = ? AND review_version = ?`)
-      .bind(verified, hidden, state, actor.id, at, decision === 'declined' ? reason : ['hidden', 'restored'].includes(decision) ? row.decline_reason : null, version, token, row.id, row.review_version),
+      .bind(verified, hidden, state, decidedBy, decidedAt, decision === 'declined' ? reason : ['hidden', 'restored'].includes(decision) ? row.decline_reason : null, version, token, row.id, row.review_version),
     env.DB.prepare(`INSERT INTO expert_review_decisions(uid, expert_id, decision, decided_by, decided_at, reason, credentials_checked, review_version)
       SELECT ?, id, ?, ?, ?, ?, ?, ? FROM experts WHERE id = ? AND decision_token = ?`)
       .bind(token, decision, actor.id, at, reason || null, decision === 'verified' ? 1 : 0, version, row.id, token),
@@ -106,7 +112,7 @@ export async function expertDecision(env: Env, row: any, actor: ReviewActor, dec
     body: `Your wellbeing expert profile was ${decision}.${decision === 'declined' ? ` Reason: ${reason}` : ''}`,
     link: '/wellbeing/expert-dashboard', channels: ['in_app', 'email'], payload: { expert_uid: row.uid, decision },
   });
-  return { ok: true, verified: !!verified, hidden: !!hidden, decision_state: state, decided_by: actor.id, decided_at: at, review_version: version };
+  return { ok: true, verified: !!verified, hidden: !!hidden, decision_state: state, decided_by: decidedBy, decided_at: decidedAt, review_version: version };
 }
 
 export async function saveCredentials(env: Env, row: any, body: any) {
@@ -121,6 +127,8 @@ export async function saveCredentials(env: Env, row: any, body: any) {
   if (expiry && (!/^\d{4}-\d{2}-\d{2}$/.test(expiry) || !Number.isFinite(Date.parse(expiry)) || new Date(expiry).toISOString().slice(0, 10) !== expiry)) {
     throw new ExpertReviewError('invalid_expiry', 'Use a real expiry date in YYYY-MM-DD format, or null when none is recorded.');
   }
+  if (values.licence_number === (row.licence_number ?? null) && values.issuer === (row.licence_issuer ?? null)
+      && expiry === (row.licence_expires_on ?? null)) return;
   const changed = await env.DB.prepare(`UPDATE experts SET licence_number = ?, licence_issuer = ?, licence_expires_on = ?,
     verified = 0, decision_state = 'pending', decided_by = NULL, decided_at = NULL, decline_reason = NULL, decision_token = NULL,
     review_version = review_version + 1 WHERE id = ? AND review_version = ?`)
