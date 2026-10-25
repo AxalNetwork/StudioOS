@@ -13,7 +13,7 @@ export default function LabAdmitDialog({ user, onClose, onChanged }) {
   const w = useWrite(onChanged, {}, refusalText);
   const choices = (read.data?.cycles || []).filter(c => c.app_status === 'open');
   return <Dialog title={`Admit to the Spin-Out Lab · ${user.name || 'Member'}`} sub="This admits the member without an application into the chosen cohort. They start on its scheduled start date. Your reason is recorded and the founder is notified. Nothing is preselected."
-    w={w} onClose={onClose} action="Admit" disabled={!cycle || !reason.trim() || read.status !== 'ready'} testId="lab-users-admit"
+    pageBelow={null} w={w} onClose={onClose} action="Admit" disabled={!cycle || !reason.trim() || read.status !== 'ready'} testId="lab-users-admit"
     onAction={() => w.run(() => adminLabApi.admit({ user_id: user.id, cycle_id: Number(cycle), reason: reason.trim(), confirm_over_places: confirm }))}
     done={w.reply ? `Admitted to ${w.reply.cohort}. ${w.reply.emailed ? 'Notification email sent.' : 'Email delivery was not confirmed.'}` : ''}>
     <ReadState read={read} what="Open cohorts" claim="A cohort must be read before admitting this member." onRetry={() => setTick(n => n + 1)} testId="lab-admit-cohorts" />

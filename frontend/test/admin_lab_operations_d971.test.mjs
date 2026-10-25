@@ -23,7 +23,7 @@ const flush = () => act(async () => { for (let i = 0; i < 8; i++) await new Prom
 async function mount(Component, o = {}, props = {}) {
   const original = { fetch: globalThis.fetch, matchMedia: globalThis.matchMedia, prompt: globalThis.prompt, confirm: globalThis.confirm };
   const restore = installDocument();
-  globalThis.matchMedia = () => ({ matches: false, addEventListener() {}, removeEventListener() {} });
+  globalThis.matchMedia = () => ({ matches: !!props.phone, addEventListener() {}, removeEventListener() {} });
   globalThis.prompt = globalThis.confirm = () => { throw new Error('Browser popup used'); };
   document.body.style = { overflow: 'auto', paddingRight: '' };
   const calls = [];
@@ -207,8 +207,10 @@ test('D1123: Users admits through a cohort and reason dialog, no label or browse
   const m = await mount(LabAdmitDialog, {
     '/api/admin/cohort/applications': { cycles: [{ id: 12, year: 2026, month: 11, app_status: 'open' }, { id: 13, year: 2026, month: 12, app_status: 'closed' }] },
     'POST /api/admin/cohort/applications/admit': { cohort: 'November 2026', emailed: false },
-  }, { user: { id: 41, name: 'Fixture founder' }, onClose() {}, onChanged() {} });
+  }, { user: { id: 41, name: 'Fixture founder' }, onClose() {}, onChanged() {}, phone: true });
   try {
+    assert.equal(m.has('lab-users-admit-layer'), true, 'Users admission stays a modal on a phone');
+    assert.equal(m.has('lab-users-admit-page'), false);
     assert.equal(m.props('lab-users-admit-go').disabled, true);
     assert.equal(m.props('lab-admit-cycle').value, '');
     assert.equal(m.props('lab-admit-over-places').checked, false);
