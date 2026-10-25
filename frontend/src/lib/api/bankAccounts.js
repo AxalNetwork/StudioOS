@@ -9,6 +9,13 @@ const account = (uid) => `/admin/bank-accounts/${encodeURIComponent(uid)}`;
 
 export const bankAccountsApi = {
   list: () => request('/admin/bank-accounts'),
+  history: (filters = {}) => {
+    const query = new URLSearchParams();
+    for (const key of ['q','kind','entity','actor','range','from','to','page','per','snapshot']) {
+      if (filters[key] !== undefined && filters[key] !== null && filters[key] !== '') query.set(key,String(filters[key]));
+    }
+    return request(`/admin/bank-accounts/history?${query}`);
+  },
   add: (body) => request('/admin/bank-accounts', { method: 'POST', body: JSON.stringify(body) }),
   /** The label and the purposes only; any other field is refused. */
   update: (uid, { label, purposes } = {}) => request(account(uid), {

@@ -390,6 +390,12 @@ export const DECISION_LANES: readonly DecisionLane[] = [
       + 'LEFT JOIN users u ON u.id = pp.created_by_user_id '
       + "WHERE pp.status IN ('approved', 'declined', 'sent_back') AND pp.decided_at IS NOT NULL",
   },
+  {
+    // D1132 (#3012) added program-grant requests to HQ's inbox after this log
+    // was built; their answers are on `hq_escalations`, not yet read here.
+    key: 'grants', scope: 'hq', recorded: false, since: null,
+    reason: 'Program-grant requests joined the inbox after this log was built; reading their answers into it is not wired yet.',
+  },
 ];
 
 const LABELS = new Map<string, string>([

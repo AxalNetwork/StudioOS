@@ -53,7 +53,7 @@ widened guard on this very sentence, which is the rule working.)
 
 ```
 /api/admin/partner-profiles → admin_partner_profiles.ts (D990: HQ's partner profile list with search, filters, sort and pages, the counts, and one profile by its pp_ reference; Admin, each read logged by reference. D993: agreement readiness, each row's envelope state, and Unbind for a Super Admin with a step-up)
-/api/admin/product-testers → admin_product_testers.ts (D1042: the product tester pool, migration 576: list per status with the member's name, email, role, email verification and identity check, one tester with their programs and history, and approve, decline, pause, resume and remove, each telling the member; Admin)
+/api/admin/product-testers → admin_product_testers.ts (D1042: the product tester pool, migration 576: list per status with the member's name, email, role, email verification and identity check, one tester with their programs and history, and approve, decline, pause, resume and remove, each telling the member; D1132: a removal ends the member's open program places; Admin)
 /api/admin/partner-settlements → partner_settlements.ts (HQ drafts; Super Admin issue/void, D713)
 /api/partner-settlements → partner_settlements.ts (own non-draft settlements, D713)
 /api/mercury/personal → mercury_personal.ts (a member's own Mercury (founders, partners, and investors on HQ): status, payment matches and raise receipts, read-only, D713, D752; connected only by Sign in with Mercury since D881. Never Axal VC's own accounts: D879, guarded by D883's `check-mercury-member-surfaces.mjs`)
@@ -136,7 +136,7 @@ widened guard on this very sentence, which is the rule working.)
 /api/validate → validate_conversations.ts (D858: a session's and a venture's conversation analytics, read only; `canReadBoard`, else 404; the venture read is aggregates only; D873: calls, `kind=chats|calls|all`)
 /api/channels         → founder_validate_meetings.ts `zoomWebhook` (the public Zoom webhook, mounted first), then channels.ts (D684: Telegram and WhatsApp connections, the conversation inbox, replies, and their public webhooks; D754: consent requests in the chat and the member's word)
 /api/admin/channels   → channels.ts `channelsAdmin` (D684: the channels bot's setWebhook and its health read, D756; super admin)
-/api/admin/bank-accounts → admin_bank_accounts.ts (D708: each Axal entity's bank accounts, masked, with add, relabel, purposes, retire and a recorded reveal; Super Admin, HQ only; mounted beside /api/admin/stripe, before the /api/admin catch-all)
+/api/admin/bank-accounts → admin_bank_accounts.ts (D1182: audited masked history, stable snapshot pages and recorder names; failed read/audit returns 503. D708: each Axal entity's bank accounts, masked, with add, relabel, purposes, retire and a recorded reveal; Super Admin, HQ only; mounted beside /api/admin/stripe, before the /api/admin catch-all)
 /api/admin/fund-structure → admin_fund_structure.ts (D717: the entity and money map, read-only; masked accounts for the Super Admin, and each entity's active accounts masked (#1855); #1773's sentence for a plain Admin; HQ only; mounted beside /api/admin/bank-accounts, before the /api/admin catch-all)
 /api/admin/mercury    → admin_mercury.ts (D710: each Axal entity's read-only Mercury connection, its accounts, transactions and reconciliation matches, and D749's Not ours marks; connect is the Super Admin's behind the write bar, the rest an Admin's on HQ. The only home of Axal VC's own accounts, drawn in HQ › Fund administration › Bank accounts, never on a member connector: D879, D880, D883)
 /api/eadwyn       → eadwyn.ts          (the Worker AI rail's conversations, their connector switches, and Send/Cancel for a write Eadwyn proposed; D652)
@@ -147,6 +147,12 @@ widened guard on this very sentence, which is the rule working.)
 Prefixes mirror the FastAPI routers in `backend/app/api/routes/*.py` so the
 local FastAPI dev backend exposes the same `/api/...` paths the frontend
 calls in production.
+
+D1159 (#3066): `funds.ts` adds LP names to distribution previews and enforces
+and audits `fund.create`. `fund_performance.ts` enforces and audits
+`fund.valuation` for marks and fund attribution. Admin controls use the shared
+act table; existing institutional GP ownership/tier scope remains. The overview
+also returns an independent per-fund booklet waiting block.
 
 ### Build operating systems (D686)
 

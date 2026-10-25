@@ -17,7 +17,7 @@
  * (`AUDIT_UNAVAILABLE`).
  *
  * EACH BLOCK STANDS ALONE. `entities`, `funds`, `fees`, `drafts` and
- * `matches` each carry `state`: `ok`, or `unreadable` when its own store
+ * `matches` and `booklets` each carry `state`: `ok`, or `unreadable` when its own store
  * failed, so one missing table does not blank the page. Inside a block, a
  * value nobody has recorded is `not_recorded` with its reason, never 0.
  *
@@ -157,6 +157,22 @@ async function drafts(env: Env, list: Array<{ id: number }>) {
   ];
 }
 
+/** Applicant signature complete, and no GP stage has ever been sent (D759). */
+async function booklets(env: Env, list: Array<{ id: number }>) {
+  const counts = await rows<{ fund_id: number; n: number }>(env,
+    `SELECT f.id AS fund_id, COUNT(*) AS n
+       FROM vc_funds f JOIN fund_subscription_booklets b ON b.fund_slug = f.slug
+       JOIN lp_applications a ON a.id = b.application_id AND a.fund_slug = f.slug
+      WHERE f.id IN (SELECT value FROM json_each(?)) AND b.status = 'submitted'
+        AND EXISTS (
+          SELECT 1 FROM fund_booklet_envelopes be JOIN esign_envelopes e ON e.envelope_uuid = be.envelope_uuid
+           WHERE be.booklet_id = b.id AND be.stage = 'applicant' AND e.status = 'completed'
+             AND EXISTS (SELECT 1 FROM esign_recipients er WHERE er.envelope_id = e.id AND er.status = 'signed' AND er.signed_at IS NOT NULL))
+        AND NOT EXISTS (SELECT 1 FROM fund_booklet_envelopes gp WHERE gp.booklet_id = b.id AND gp.stage = 'gp')
+      GROUP BY f.id`, JSON.stringify(list.map((f) => Number(f.id))));
+  return list.map((f) => ({ fund_id: Number(f.id), waiting: Number(counts.find((r) => Number(r.fund_id) === Number(f.id))?.n ?? 0) }));
+}
+
 async function matches(env: Env, list: Array<{ id: number }>) {
   // A match's fund: a call line's LP's fund, or the fee period's fund.
   const counts = await rows<{ fund_id: number | null; state: string; n: number }>(env,
@@ -179,6 +195,7 @@ export type FundAdminOverview = {
   fees: Block<Awaited<ReturnType<typeof fees>>[number]>;
   drafts: Block<Awaited<ReturnType<typeof drafts>>[number]>;
   matches: Block<Awaited<ReturnType<typeof matches>>[number]>;
+  booklets: Block<Awaited<ReturnType<typeof booklets>>[number]>;
 };
 
 /**
@@ -200,6 +217,7 @@ export async function fundAdminOverview(env: Env, user: User, today: string): Pr
     fees: await scoped('fees', () => fees(env, list)),
     drafts: await block('drafts', () => drafts(env, list)),
     matches: await scoped('matches', () => matches(env, list)),
+    booklets: await scoped('booklets', () => booklets(env, list)),
   };
 }
 

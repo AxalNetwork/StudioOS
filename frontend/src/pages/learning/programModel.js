@@ -33,14 +33,13 @@ export const SUBJECT_KIND_LABEL = {
 export const subjectKindLabel = (kind) => SUBJECT_KIND_LABEL[kind] || titleCase(kind) || 'Content';
 
 /**
- * The kinds `PUT /programs/:uid/contents` takes. A webinar is refused
- * (`webinar_not_built`) until webinars are a store a program can check, so it
- * is drawn disabled rather than offered and refused.
+ * The kinds `PUT /programs/:uid/contents` takes. D1124 (#3004): a program
+ * holds webinars too (D560's store), so a webinar is offered like the rest.
  */
-export const CONTENT_KINDS = ['course', 'item', 'exam', 'exercise'];
+export const CONTENT_KINDS = ['course', 'item', 'exam', 'exercise', 'webinar'];
 
-/** The status that means "done" for each kind: a course or item completed, an exercise accepted, an exam passed. */
-const DONE_STATUS = { course: 'completed', item: 'completed', exercise: 'accepted', exam: 'passed' };
+/** The status that means "done" for each kind: a course or item completed, an exercise accepted, an exam passed, a webinar attended. */
+const DONE_STATUS = { course: 'completed', item: 'completed', exercise: 'accepted', exam: 'passed', webinar: 'attended' };
 
 export const isComplete = (entry) => Boolean(entry) && DONE_STATUS[entry.subject_kind] === entry.status;
 
@@ -98,6 +97,12 @@ export function completionCell(entry) {
         label: `${word}${best === null ? '' : `, best score ${best}%`}${tries}`,
       };
     }
+    case 'webinar':
+      // D1124: the host records attendance; until then a registration waits.
+      if (s === 'attended') return { mark: '✓', tone: 'ok', label: 'Attended' };
+      if (s === 'not_attended') return { mark: 'Missed', tone: 'warn', label: 'Did not attend' };
+      if (s === 'registered') return { mark: 'Registered', tone: 'info', label: 'Registered, not attended yet' };
+      return dash('Not registered');
     default:
       // A kind the route cannot measure yet (`not_built`): said, never guessed.
       return NOT_RECORDED;
@@ -215,7 +220,8 @@ export function movedContent(contents, kind, uid, step) {
 export function contentChoices(rows, kind, held) {
   const taken = new Set((held || []).filter((c) => c.subject_kind === kind).map((c) => c.subject_uid));
   return (rows || [])
-    .filter((r) => r?.uid && r.status !== 'archived' && !taken.has(r.uid))
+    // D1124: a cancelled webinar is not offered.
+    .filter((r) => r?.uid && r.status !== 'archived' && !(kind === 'webinar' && r.status === 'cancelled') && !taken.has(r.uid))
     .map((r) => {
       const tags = [kind === 'item' ? r.kind : null, r.status && r.status !== 'published' ? r.status : null].filter(Boolean);
       return { uid: r.uid, label: `${r.title || 'Untitled'}${tags.length ? ` (${tags.join(', ')})` : ''}` };
