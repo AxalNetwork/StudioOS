@@ -230,6 +230,7 @@ test('no access-control gate compares a bare timestamp column', () => {
   // having lost their gates altogether.
   const wrapped = FILES.reduce((n, f) => n + (src(f).match(/datetime\([a-z_]*\.?(?:expires_at|valid_until)\)/g) || []).length, 0);
   // D891 adds research's current room-grant expiry check to #2461's
-  // project-founder NDA gates: fifteen normalised comparisons, all required.
-  assert.equal(wrapped, 15, `expected 15 normalised comparisons across the gated files, found ${wrapped}`);
+  // project-founder NDA gates. D1102 adds the active/expired grant summary:
+  // seventeen normalised comparisons, all required.
+  assert.equal(wrapped, 17, `expected 17 normalised comparisons across the gated files, found ${wrapped}`);
 });

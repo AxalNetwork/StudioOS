@@ -359,8 +359,9 @@ export function logRange(offset, shown, total) {
 }
 
 /** The filters the read is sent, without the empty ones. */
-export function logFilters({ what, who, product, from, to } = {}) {
+export function logFilters({ q, what, who, product, from, to } = {}) {
   const out = {};
+  if (q?.trim()) out.q = q.trim();
   if (what) out.what = what;
   if (who) out.who = who;
   if (product) out.product = product;
