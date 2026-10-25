@@ -88,3 +88,8 @@ Learning home's image hero around its existing phone bar; other sections retain 
 Carta grants kept from a previous role (#2634) use the existing connection
 page and panel with `legacy_only`: Disconnect stays visible, while sync,
 replace and reconnect are absent. The Worker returns its static reason.
+
+D1081 (#2946): the shared connector body draws optional Works without signing
+in and What Axal VC never does sections. An `auth_type: 'none'` entry is browsed,
+never connected, and excluded from Build's connect-tool picker. Lovable is its
+first use; launch links and app checks remain future parts.

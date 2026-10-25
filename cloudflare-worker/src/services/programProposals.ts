@@ -23,6 +23,7 @@
  */
 import type { Env } from '../types';
 import { logAdminAction } from './adminAudit';
+import { openDraftStatements } from './programGrants';
 import {
   PROGRAM_GROUPS, PROPOSAL_ACTIONS, ProgramError, checkNewKey, checkTemplates, insertProgramStatements, isKeyTaken,
   keyFromName, type Actor, type NewProgram, type ProgramReader,
@@ -477,6 +478,11 @@ export function reviewSections(v: ReturnType<typeof proposalView>): NewProgram['
  * need a note. An approval writes the registry row and its draft in the same
  * batch as the decision, and the decision's UPDATE is guarded on `sent`, so a
  * second decision racing the first changes nothing.
+ *
+ * D956 (#2789): an approval for this studio only also opens a `draft` grant of
+ * the new program for the studio's licence, with its history event, in the
+ * same batch (`openDraftStatements`). A studio whose licence row is gone gets
+ * no draft; the approval still lands, and its audit row says so (`draft_grant: false`).
  */
 export async function decide(env: Env, uid: string, body: unknown, actor: Actor) {
   const b = body && typeof body === 'object' && !Array.isArray(body) ? body as Record<string, unknown> : {};
@@ -499,6 +505,8 @@ export async function decide(env: Env, uid: string, body: unknown, actor: Actor)
   const status: ProposalStatus = outcome === 'send_back' ? 'sent_back' : outcome === 'decline' ? 'declined' : 'approved';
   const decision = outcome === 'approve_studio' ? 'studio' : outcome === 'approve_catalogue' ? 'catalogue' : null;
   let programKey: string | null = null;
+  let draftLicence: number | null = null;
+  const t = new Date().toISOString();
   const stmts = [];
   if (decision) {
     if (decision === 'studio' && !row.licence_uid) {
@@ -511,8 +519,14 @@ export async function decide(env: Env, uid: string, body: unknown, actor: Actor)
       key: programKey, grp: v.group!, name: v.name!, purpose: v.purpose, who: whoLine(v.who ?? []), join_method: v.join_method,
       licence_uid: decision === 'studio' ? row.licence_uid : null, sections: reviewSections(v),
     }, actor.id));
+    if (decision === 'studio') {
+      const lic = await env.DB.prepare('SELECT id FROM territory_licences WHERE uid = ?').bind(row.licence_uid).first<{ id: number }>();
+      if (lic) {
+        draftLicence = Number(lic.id);
+        stmts.push(...openDraftStatements(env, { licenceId: draftLicence, programKey, proposalUid: row.uid, actorId: actor.id, at: t }));
+      }
+    }
   }
-  const t = new Date().toISOString();
   stmts.push(env.DB.prepare(
     `UPDATE program_proposals SET status = ?, decision = ?, hq_note = ?, decided_by_user_id = ?, decided_at = ?, program_key = ?, updated_at = ?
       WHERE id = ? AND status = 'sent'`,
@@ -529,6 +543,7 @@ export async function decide(env: Env, uid: string, body: unknown, actor: Actor)
   }
   await logAdminAction(env, actor.id, actor.email, PROPOSAL_ACTIONS.decide, {
     uid, outcome, note: note || null, ...(programKey ? { program_key: programKey } : {}),
+    ...(decision === 'studio' ? { draft_grant: draftLicence !== null } : {}),
   });
   const after = await env.DB.prepare('SELECT * FROM program_proposals WHERE id = ?').bind(row.id).first<Row>();
   return proposalView(after!, await studioName(env, after!.licence_uid));

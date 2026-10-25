@@ -13,6 +13,7 @@ const query = (params) => {
 
 export const paymentsApi = {
   // `{ what?, who?, product?, from?, to?, limit?, offset? }` → `{ entries, total, limit, offset, filters, kinds }`.
+  changeLogAdmins: () => request('/admin/payments/change-log/admins'),
   changeLog: (filters) => request(`/admin/payments/change-log${query(filters)}`),
   // The same filters as a CSV; `reason` (10 to 500 characters) is recorded before the file is sent.
   changeLogCsv: (filters, reason) =>

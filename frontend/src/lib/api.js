@@ -10,6 +10,7 @@ import { railBody } from './railPages.js';
 // this file. See lib/api/README.md. scripts/check-api-drift.mjs fails if this
 // block does not name exactly the files in lib/api/.
 // api-modules:begin
+export * from './api/accountCompanies.js';
 export * from './api/adminAiUsage.js';
 export * from './api/adminApprovals.js';
 export * from './api/adminCapitalAttestations.js';
@@ -36,6 +37,7 @@ export * from './api/channelKeys.js';
 export * from './api/channels.js';
 export * from './api/community.js';
 export * from './api/communityTasks.js';
+export * from './api/companyActions.js';
 export * from './api/companyEin.js';
 export * from './api/companySheet.js';
 export * from './api/connectors.js';

@@ -13,6 +13,7 @@
  *   - the capability list shown as chips on each card,
  *   - the auth flow (api_key | oauth2 | webhook) the connect modal renders.
  */
+import { lovablePulls, lovableFedModules } from './lovableFeeds';
 import { cartaAudience, cartaScopesFor } from './cartaScopes';
 import type { Context } from 'hono';
 import type { Env, User } from '../types';
@@ -23,9 +24,9 @@ import { bindingKey } from '../util/schemaBootstrap';
 
 export type ProviderStatus = 'live' | 'beta' | 'coming_soon';
 /** `oauth_mcp`: a member's sign-in through a provider's MCP server (D840's Mercury, D847's shared client). */
-export type AuthType = 'api_key' | 'oauth2' | 'webhook' | 'oauth_mcp';
+export type AuthType = 'none' | 'api_key' | 'oauth2' | 'webhook' | 'oauth_mcp';
 export type IntegrationType = 'crm' | 'scheduling' | 'cap_table' | 'messaging' | 'e_sign' | 'data_feed' | 'custom';
-export type ConnectorCategory = 'CRM' | 'Payments' | 'Calendar' | 'Messaging' | 'Signing' | 'Cap table' | 'Data' | 'Code' | 'Design' | 'Docs' | 'Accounting and banking' | 'Payroll' | 'Calendar and workspace';
+export type ConnectorCategory = 'CRM' | 'Payments' | 'Calendar' | 'Messaging' | 'Signing' | 'Cap table' | 'Data' | 'Code' | 'Design' | 'Docs' | 'Accounting and banking' | 'Payroll' | 'Calendar and workspace' | 'Design and build';
 export interface ConnectorMetadata {
   category: ConnectorCategory;
   verified: boolean;
@@ -252,6 +253,13 @@ export function getProviderImpl(key: string): ProviderImpl | null {
  * their entry's `status` from 'coming_soon' to 'live'/'beta' when shipping.
  */
 export const REGISTRY: ProviderDescriptor[] = [
+  {
+    key: 'lovable', display_name: 'Lovable', integration_type: 'data_feed',
+    description: 'Build in Lovable and app links, without connecting a Lovable account. Module tools are being built.',
+    status: 'beta', tier: 'free', auth_type: 'none', capabilities: ['Works without signing in'],
+    audience_rule: 'venture', docs_url: 'https://docs.lovable.dev/integrations/build-with-url', icon: 'Sparkles',
+  },
+
   { key: 'figma', display_name: 'Figma', integration_type: 'data_feed', description: 'Design files for Prototype / MVP.', status: 'coming_soon', tier: 'free', auth_type: 'oauth2', capabilities: [], docs_url: null, icon: 'Figma' },
   {
     key: 'hubspot',
@@ -487,6 +495,7 @@ export const REGISTRY: ProviderDescriptor[] = [
 // Calendar connections are read from calendar.ts; they do not create a second
 // integrations row or a second OAuth flow.
 export const CONNECTOR_METADATA: Record<string, ConnectorMetadata> = {
+  lovable: { category: 'Design and build', verified: false, pulls: lovablePulls(), sends: [], feeds: lovableFedModules(), permissions: [] },
   figma: { category: 'Design', verified: false, pulls: [{ what: 'Designs', module: 'prototype_mvp' }], sends: [], feeds: ['prototype_mvp'], permissions: [] },
   hubspot: { category: 'CRM', verified: false, pulls: [{ what: 'Deals and contacts', module: 'capital_relationships' }], sends: [{ what: 'New company', target: 'HubSpot company', default_mode: 'ask' }, { what: 'Deal stage change', target: 'HubSpot deal', default_mode: 'auto' }], feeds: ['capital_relationships', 'network'], permissions: ['Connect to your HubSpot account.', 'Read your HubSpot deals.', 'Update your HubSpot deals.', 'Read your HubSpot contacts.', 'Update your HubSpot contacts.', 'Read your HubSpot companies.', 'Update your HubSpot companies.', 'Read your HubSpot deal fields.'] },
   calendly: { category: 'Calendar', verified: false, pulls: [{ what: 'Booked meetings', module: 'customer_research' }], sends: [], feeds: ['customer_research'], permissions: ['Read your Calendly calendar through its default grant.', 'Read your Calendly profile and scheduled events.'] },

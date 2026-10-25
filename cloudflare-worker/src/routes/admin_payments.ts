@@ -35,6 +35,7 @@ import {
   changeLogCsvRows,
   parseChangeLogFilters,
   readChangeLog,
+  readChangeLogAdmins,
   readChangeLogForExport,
   type ChangeLogFilters,
 } from '../services/paymentsChangeLog';
@@ -49,6 +50,15 @@ function filtersOf(c: any): ChangeLogFilters | Response {
   return parsed.ok ? parsed.filters : c.json(parsed.refusal, 400);
 }
 
+// D1129: names and ids only, independent of the change-log page and filters.
+r.get('/change-log/admins', async (c) => {
+  await requireSuperAdmin(c);
+  try { return c.json({ admins: await readChangeLogAdmins(c.env) }); }
+  catch {
+    return refuse(c, 503, { code: 'payment_admins_unreadable', message: 'The admin list could not be read. Try again.', audience: 'admin' });
+  }
+});
+
 r.get('/change-log', async (c) => {
   await requireSuperAdmin(c);
   const f = filtersOf(c);
@@ -58,8 +68,8 @@ r.get('/change-log', async (c) => {
   try {
     const { entries, total } = await readChangeLog(c.env, f, { limit, offset });
     return c.json({ entries, total, limit, offset, filters: f, kinds: CHANGE_KINDS });
-  } catch (e) {
-    return refuse(c, 503, { code: 'change_log_unreadable', message: UNREADABLE, raw: e, audience: 'admin' });
+  } catch {
+    return refuse(c, 503, { code: 'change_log_unreadable', message: UNREADABLE, audience: 'admin' });
   }
 });
 
@@ -77,8 +87,8 @@ r.get('/change-log.csv', async (c) => {
   let out: Awaited<ReturnType<typeof readChangeLogForExport>>;
   try {
     out = await readChangeLogForExport(c.env, f);
-  } catch (e) {
-    return refuse(c, 503, { code: 'change_log_unreadable', message: UNREADABLE, raw: e, audience: 'admin' });
+  } catch {
+    return refuse(c, 503, { code: 'change_log_unreadable', message: UNREADABLE, audience: 'admin' });
   }
   // The export is recorded, with its reason, before the file leaves. Unlike
   // `logAdminAction`, which never fails the act it records, this write fails
@@ -88,9 +98,9 @@ r.get('/change-log.csv', async (c) => {
     await c.env.DB.prepare(
       'INSERT INTO admin_audit_log (admin_user_id, action, report_type, format, filters_json) VALUES (?, ?, ?, ?, ?)',
     ).bind(admin.id, CHANGE_LOG_EXPORT_ACTION, 'billing', 'csv',
-      JSON.stringify({ reason, filters: f, rows: out.entries.length, capped: out.capped })).run();
-  } catch (e) {
-    return refuse(c, 503, { code: 'export_not_recorded', message: 'The export could not be recorded, so it was not sent. Try again in a moment.', raw: e, audience: 'admin' });
+      JSON.stringify({ reason, filters: { ...f, q: undefined }, ...(f.q ? { search_applied: true } : {}), rows: out.entries.length, capped: out.capped })).run();
+  } catch {
+    return refuse(c, 503, { code: 'export_not_recorded', message: 'The export could not be recorded, so it was not sent. Try again in a moment.', audience: 'admin' });
   }
   return csvResponse(toCsv(CHANGE_LOG_CSV_HEADER, changeLogCsvRows(out.entries)), `payments-change-log-${stamp()}.csv`, {
     'X-Export-Rows': String(out.entries.length),
