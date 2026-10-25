@@ -10,6 +10,7 @@
  */
 import { Hono } from 'hono';
 import type { Env, User } from '../types';
+import { refuse } from '../util/refusal';
 import { requireAuth } from '../auth';
 import { ownsVenture, type ProjectRef } from './_founder_validate_helpers';
 import { BuildPlanError, PLAN_MODULES, preparePlan, readPlan } from '../services/buildPlanner';
@@ -63,7 +64,8 @@ async function decide(c: any, run: (user: User) => Promise<unknown>) {
   try {
     return c.json(await run(user));
   } catch (e) {
-    if (e instanceof PlanItemError) return c.json({ code: e.code, detail: e.message }, e.status);
+    // Our own sentence, keyed on `code`; `error` carries the same code (D278).
+    if (e instanceof PlanItemError) return refuse(c, e.status, { code: e.code, message: e.message, extra: { code: e.code } });
     console.warn('[build-plan] a decision could not be read or written');
     return c.json({ code: 'unreadable', detail: 'The build plan could not be read or saved. Try again.' }, 503);
   }

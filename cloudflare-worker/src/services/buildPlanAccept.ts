@@ -37,6 +37,7 @@ import {
 } from './buildCreates';
 import { logCycleWriteStatement, type BuildModuleSlug } from './cycleActivity';
 import { canReadDecision, ownsVenture, type ProjectRef } from '../routes/_founder_validate_helpers';
+import { decisionById } from './verdict';
 
 type Prepared = ReturnType<Env['DB']['prepare']>;
 type Ref = { kind: string; ref: string; label: string; source_label?: string };
@@ -349,10 +350,9 @@ export async function evidenceTrail(env: Env, user: User, project: ProjectRef & 
   }));
   let decision: { decision: string; state: string; decided_at: string } | null | undefined;
   if (decisionReader) {
-    decision = item?.decision_id
-      ? await env.DB.prepare('SELECT decision, state, decided_at FROM validation_decisions WHERE id = ? AND project_id = ?')
-        .bind(item.decision_id, project.id).first<{ decision: string; state: string; decided_at: string }>()
-      : null;
+    // Through the Verdict's own reader (D693): only `services/verdict.ts` reads its tables.
+    const d = item?.decision_id ? await decisionById(env, project.id, Number(item.decision_id)) : null;
+    decision = d ? { decision: d.decision, state: d.state, decided_at: d.decided_at } : null;
   }
   const fed = (await env.DB.prepare(`SELECT f.kind, f.module, f.first_seen_at, f.last_seen_at, g.provider_key
     FROM connector_fed_items f LEFT JOIN integrations g ON g.id = f.integration_id
