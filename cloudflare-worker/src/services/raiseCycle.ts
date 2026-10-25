@@ -1121,7 +1121,7 @@ export function parseAllocation(raw: unknown): number[] | null {
 /** Cash at the end of each of the next `months` months, from cash now and a monthly burn. Null with either missing. */
 export function cashPath(cash: number | null, burn: number | null, months = 18, extra = 0, closeMonth: number | null = null): number[] | null {
   if (cash == null || burn == null || !Number.isFinite(cash) || !Number.isFinite(burn)) return null;
-  if (extra !== 0 && (closeMonth == null || !Number.isInteger(closeMonth) || closeMonth < 0)) return null;
+  if (extra !== 0 && (closeMonth == null || !Number.isInteger(closeMonth) || closeMonth < 0 || closeMonth > months)) return null;
   return Array.from({ length: months + 1 }, (_, m) => Math.max(0, Math.round(cash + (closeMonth != null && m >= closeMonth ? extra : 0) - burn * m)));
 }
 
@@ -1179,6 +1179,7 @@ export async function useOfFundsCard(ctx: Ctx): Promise<Card> {
         ? `Modelled · Raise enters in ${f.closeDate?.slice(0, 7)} (month ${f.closeMonth}); cash and burn from the recorded snapshot.`
         : f.closeUnreadable ? 'Modelled · Without raise only. With raise is Unreadable: the close date could not be read. Try again.'
           : !f.target ? 'Modelled · Without raise only. With raise is Not recorded: no raise target.'
+          : f.closeMonth != null && f.closeMonth > 18 ? 'Modelled · Without raise only. The recorded close date is beyond the 18-month horizon; no raise enters this chart.'
           : 'Modelled · Without raise only. With raise is Not recorded: record an active round close date in this or a future month.' }] });
     } else {
       series.push({ kind: 'rows', items: [{ label: 'Cash over 18 months', value: null }] });

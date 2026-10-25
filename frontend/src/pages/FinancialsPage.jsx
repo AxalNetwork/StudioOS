@@ -168,7 +168,7 @@ export default function FinancialsPage({ embedded = false }) {
   }
 
   async function handleExport() {
-    if (!projectId || !model) return;
+    if (!projectId || !modelMatchesVenture || !model.exists) return;
     setError(null);
     try {
       await api.downloadFinancialModelXlsx(projectId);
@@ -226,8 +226,8 @@ export default function FinancialsPage({ embedded = false }) {
           </select>
           <button
             onClick={handleExport}
-            disabled={!projectId || !modelMatchesVenture}
-            title={!model ? 'Load a startup model first' : 'Download as XLSX'}
+            disabled={!projectId || !modelMatchesVenture || !model?.exists}
+            title={!modelMatchesVenture ? 'Load a startup model first' : !model.exists ? 'Save the model before exporting' : 'Download as XLSX'}
             className="flex items-center gap-2 px-3 py-2 text-sm border border-gray-300 rounded-lg hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed dark:border-gray-700"
           >
             <Download size={14} /> Export XLSX

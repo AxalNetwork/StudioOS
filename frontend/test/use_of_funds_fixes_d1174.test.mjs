@@ -22,7 +22,7 @@ const { tabHref } = await import('../src/pages/CapitalWorkspacePage.jsx');
 const h = React.createElement;
 const response = body => ({ ok: true, status: 200, headers: { get: () => 'application/json' }, json: async () => body, text: async () => JSON.stringify(body) });
 
-async function mounted(url) {
+async function mounted(url, exists = false) {
   const restore = installDocument();
   const oldFetch = globalThis.fetch, oldObserver = globalThis.ResizeObserver;
   globalThis.ResizeObserver = class { observe() {} unobserve() {} disconnect() {} };
@@ -33,7 +33,7 @@ async function mounted(url) {
     const path = String(input); requests.push(path);
     if (/\/projects(?:\?|$)/.test(path)) return response([{ id: 1, name: 'One' }, { id: 2, name: 'Two' }]);
     const id = path.match(/\/financials\/(\d+)$/)?.[1];
-    if (id) return response({ project_id: Number(id), exists: false, assumptions: null, computed: null, sensitivity: null,
+    if (id) return response({ project_id: Number(id), exists, assumptions: null, computed: null, sensitivity: null,
       capital_recompute: { total: 9, max: 10, factors: {} } });
     return response({ sources: [] });
   };
@@ -49,6 +49,7 @@ async function mounted(url) {
   const textOf = n => n.nodeType === 3 ? n.textContent : n.childNodes?.length ? n.childNodes.map(textOf).join('') : n.textContent || '';
   return {
     requests, text: () => textOf(container), search: () => location.search,
+    exportButton: () => props(walk(container).find(n => n.tagName === 'BUTTON' && textOf(n).includes('Export XLSX'))),
     async select(id) { const node = walk(container).find(n => n.tagName === 'SELECT'); await act(async () => props(node).onChange({ target: { value: String(id) } })); await flush(); },
     async back() { await act(async () => navigate(-1)); await flush(); },
     async close() { await act(async () => root.unmount()); globalThis.fetch = oldFetch; globalThis.ResizeObserver = oldObserver; restore(); },
@@ -92,4 +93,15 @@ test('D1174: changing venture and browser Back keep model reads on the URL ventu
     assert.equal(modelRequests(page).at(-1), '/api/financials/2');
     assert.equal(new URLSearchParams(page.search()).get('project_id'), '2');
   } finally { await page.close(); }
+});
+
+
+test('D1174: export needs a person-saved model and explains the disabled action', async () => {
+  for (const exists of [false, true]) {
+    const page = await mounted('/raise/capital/model?project_id=2', exists);
+    try {
+      assert.equal(page.exportButton().disabled, !exists);
+      assert.equal(page.exportButton().title, exists ? 'Download as XLSX' : 'Save the model before exporting');
+    } finally { await page.close(); }
+  }
 });

@@ -717,6 +717,7 @@ test('D1174: readiness, card and deck reject the same noncanonical split', async
 test('D1174: the with-raise cash path enters only at a recorded close month, labelled Modelled', async () => {
   assert.deepEqual(cashPath(1000, 100, 4, 500, 2), [1000, 900, 1300, 1200, 1100]);
   assert.equal(cashPath(1000, 100, 4, 500), null);
+  assert.equal(cashPath(1000, 100, 4, 500, 5), null);
   assert.equal(cashPath(null, 100), null);
   assert.equal(cashPath(1000, null), null);
   assert.deepEqual(cashPath(0, 0, 2), [0, 0, 0]);
@@ -733,6 +734,11 @@ test('D1174: the with-raise cash path enters only at a recorded close month, lab
   const line = c.series.find((r: any) => r.kind === 'line');
   assert.deepEqual([line.plan[0], line.plan[1], line.plan[2]], [300000, 250000, 1200000]);
   assert.match(JSON.stringify(c), /Modelled.*month 2/);
+  const later = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() + 30, 1)).toISOString().slice(0, 10);
+  db.prepare("UPDATE raise_rounds SET close_date = ? WHERE uid = 'd1174'").run(later);
+  const distant = card((await overview(db)).body, 'use-of-funds');
+  assert.equal(distant.series.find((r: any) => r.kind === 'line').plan, undefined);
+  assert.match(JSON.stringify(distant), /beyond the 18-month horizon/);
   db.exec('DROP TABLE raise_rounds');
   const failed = card((await overview(db)).body, 'use-of-funds');
   assert.equal(failed.state, 'ok');
