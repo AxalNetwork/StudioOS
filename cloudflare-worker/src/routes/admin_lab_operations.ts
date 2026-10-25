@@ -106,7 +106,7 @@ const HISTORY = `WITH params(wanted_type, wanted_cohort, wanted_by, search) AS (
     WHEN 'program.playbook.edit' THEN 'Playbook draft edited'
     WHEN 'program.playbook.publish' THEN 'Playbook published'
     WHEN 'program.registry.update' THEN 'Program updated'
-    ELSE replace(event, '_', ' ') END AS event_label FROM history
+    ELSE replace(coalesce(event, 'Not recorded'), '_', ' ') END AS event_label FROM history
 ), filtered AS (
   SELECT h.* FROM labelled h CROSS JOIN params p WHERE (p.wanted_type = '' OR h.type = p.wanted_type)
     AND (p.wanted_cohort = '' OR h.cohort = p.wanted_cohort)

@@ -178,6 +178,9 @@ test('one mounted Lab log: exact count, source separation, filters, literal sear
 });
 test('interview attribution is not guessed when an application has two cohorts; missing names remain null', async () => {
   const db = fresh(); eventsFixture(db);
+  db.exec('UPDATE stage_transition_log SET week_number=NULL');
+  assert.equal((await call(adminOperations, db, ADMIN, '/activity?q=Fay')).body.total, 3, 'missing event text must not hide a matching subject from search');
+  assert.equal((await call(adminOperations, db, ADMIN, '/activity?type=weeks')).body.items[0].label, 'Not recorded');
   db.exec(`INSERT INTO cohort_applicants (application_id,user_id,cohort_cycle_id,status) VALUES (99,${FOUNDER},2,'rolled_forward');
     DELETE FROM users WHERE id=${FOUNDER}`);
   const reply = await call(adminOperations, db, ADMIN, '/activity?type=interviews');
