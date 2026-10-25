@@ -84,6 +84,7 @@ export * from './api/personaSegments.js';
 export * from './api/productTesting.js';
 export * from './api/profile.js';
 export * from './api/programGrants.js';
+export * from './api/programProposals.js';
 export * from './api/publicAiModels.js';
 export * from './api/publicPricing.js';
 export * from './api/railPrefs.js';
@@ -99,6 +100,7 @@ export * from './api/section83bReview.js';
 export * from './api/shareUpdate.js';
 export * from './api/ticketReviews.js';
 export * from './api/tokenPacks.js';
+export * from './api/trustContent.js';
 export * from './api/usage.js';
 export * from './api/verdict.js';
 // api-modules:end
