@@ -236,7 +236,8 @@ test('4. SettingsPage reads its section from the address on every change, and wr
   assert.match(page, /\n  const active = accountViewFor\(\{ pathname: location\.pathname, hash: location\.hash, phone \}\);/);
   assert.doesNotMatch(page, /initialSection|useState\(initial/);
   // D753 — the canonicalising call keeps a connector's key.
-  assert.match(page, /const want = accountPathFor\(\{ section: active, phone, key: connectorKey, usagePage \}\);/);
+  // D1138 — and a Companies and projects tab.
+  assert.match(page, /const want = accountPathFor\(\{ section: active, phone, key: connectorKey, usagePage, companiesTab \}\);/);
   assert.match(page, /\}, \[active, phone, location\.pathname\]\);/, 'the URL effect re-runs when the path moves');
   assert.doesNotMatch(src, /const PATH_TO_SECTION/, 'the map moved to accountPhone.js');
   // On a phone a section is pushed, so Back returns to the index; desktop replaces, as before.
