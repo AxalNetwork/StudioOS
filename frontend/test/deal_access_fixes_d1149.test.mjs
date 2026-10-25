@@ -18,7 +18,7 @@ const header = { id: 100, project_name: 'Synthetic venture', project_sector: 'Sy
 test('Free header and key strip show recorded figures and DL22b copy without private sections', () => {
   const result = html(h(DealFreePlan, { deal: { ...header, notes: 'PRIVATE NOTE', description: 'PRIVATE DESCRIPTION' } }));
   assert.match(result, /Synthetic venture/); assert.match(result, /€100,000/); assert.match(result, /€25,000/);
-  assert.match(result, /Deal pages are on the Professional plan/); assert.match(result, /See plans/);
+  assert.match(result, /Deal pages are on the Professional plan/); assert.match(result, /See plans/); assert.match(result, /href="\/pricing\?for=investor"/);
   assert.match(result, /Not committed yet/); assert.match(result, /Not recorded/);
   assert.doesNotMatch(result, /PRIVATE NOTE|PRIVATE DESCRIPTION|Commit Capital|deal-tab/);
   const missing = html(h(DealFreePlan, { deal: { ...header, target_raise: null, progress_pct: null } }));

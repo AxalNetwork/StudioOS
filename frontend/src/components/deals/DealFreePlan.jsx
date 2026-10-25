@@ -23,7 +23,7 @@ export default function DealFreePlan({ deal, onRetry = () => window.location.rel
     <section className="mx-auto max-w-xl rounded-xl border border-gray-200 bg-white p-8 text-center dark:border-gray-800 dark:bg-gray-900">
       <h2 className="text-lg font-bold text-gray-900 dark:text-gray-100">Deal pages are on the Professional plan.</h2>
       <p className="mt-3 text-sm text-gray-600 dark:text-gray-400">The header and key figures show on every plan. Evidence, diligence, terms and commitments are on Professional.</p>
-      <Link to="/pricing/investor" className="mt-5 inline-flex min-h-11 items-center rounded-lg bg-violet-600 px-4 py-2 text-sm font-semibold text-white dark:bg-violet-500">See plans</Link>
+      <Link to="/pricing?for=investor" className="mt-5 inline-flex min-h-11 items-center rounded-lg bg-violet-600 px-4 py-2 text-sm font-semibold text-white dark:bg-violet-500">See plans</Link>
     </section>
   </div>;
 }
