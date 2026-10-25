@@ -136,7 +136,7 @@ test('Activity sends type, cohort, actor, literal search and sort to the Worker;
     assert.match(m.text(), /Application approved/); assert.match(m.text(), /31 Oct 2026, 23:30 ET/); assert.match(m.text(), /A Super Admin reads every admin/);
     assert.equal(m.calls.some((c) => c.path.includes('impersonation')), false);
     await m.clickText('Next'); assert.equal(m.calls.at(-1).query.get('offset'), '25');
-    for (const [id, value] of [['type', 'decisions'], ['cohort', '2026-11'], ['by', 'admin'], ['search', 'Fay %'], ['sort', 'oldest']]) await m.type('lab-activity-' + id, value);
+    for (const [id, value] of [['type', 'decisions'], ['cohort', '2026-11'], ['by', 'admin'], ['sort', 'oldest']]) await m.type('lab-activity-' + id, value);
     const beforeSearch = m.calls.filter((c) => c.path.endsWith('/activity')).length;
     await m.type('lab-activity-search', 'Fay %');
     assert.equal(m.calls.filter((c) => c.path.endsWith('/activity')).length, beforeSearch, 'typing does not query D1');
