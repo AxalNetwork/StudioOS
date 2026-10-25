@@ -53,7 +53,7 @@ import {
   saveScenario, logScenarioAct, loadScenarioByUid as loadByUid, type ScenarioRow,
 } from '../services/capTableWrites';
 import {
-  RecordError, acceptProposal, createClass, dismissProposal, historyPage, propose, proposeImport, readHistory, readRecord, recordCsv,
+  RecordError, acceptProposal, createClass, dismissProposal, historyPage, historyQuery, propose, proposeImport, readHistory, readHistorySection, readRecord, recordCsv,
   recordIssuance, setCurrency, updateClass, voidIssuance, type RecordActor,
 } from '../services/capTableRecord';
 import { proposeFromClose, readClose } from '../services/capTableClose';
@@ -1100,6 +1100,7 @@ captable.get('/live', async (c) => {
  *
  *   GET   /record/:projectId                              by holder, by class, outstanding, fully diluted, instruments, proposals
  *   GET   /record/:projectId/history?page=&page_size=     issuances and the cap table's activity rows, newest first, exact total
+ *         …&section=record|changes&q=&kind=&source=&has_document=&from=&to=   D1025: History's two blocks, each paged and filtered
  *   POST  /record/:projectId/proposals                    propose (owner, co-founder, admin)
  *   POST  /record/:projectId/proposals/:uid/accept        record a proposal (owner, admin)
  *   POST  /record/:projectId/proposals/:uid/dismiss       dismiss one (owner, admin)
@@ -1171,6 +1172,9 @@ captable.get('/record/:projectId/history', async (c) => {
   try {
     const projectId = await recordReader(c);
     const { page, size } = historyPage({ page: c.req.query('page'), page_size: c.req.query('page_size') });
+    // D1025: History's two blocks, each paged and filtered on its own.
+    const { section, filters } = historyQuery(c.req.query());
+    if (section) return c.json(await readHistorySection(c.env, projectId, section, filters, page, size));
     return c.json(await readHistory(c.env, projectId, page, size));
   } catch (e) { return recordError(c, e); }
 });
@@ -1423,9 +1427,10 @@ captable.post('/register/:projectId/snapshot', async (c) => {
   try {
     await c.env.DB.batch([
       c.env.DB.prepare(
+        // D1105 (migration 596): a paper the platform made and filed is a document, named by its source.
         `INSERT INTO data_room_files (uid, project_id, folder_id, name, r2_key, content_type, size_bytes, visibility, uploaded_by_user_id,
-           created_at, updated_at, access_tier)
-         VALUES (?, ?, NULL, ?, ?, 'application/pdf', ?, 'nda', ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, 'nobody')`,
+           created_at, updated_at, access_tier, source_kind, source_ref)
+         VALUES (?, ?, NULL, ?, ?, 'application/pdf', ?, 'nda', ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, 'nobody', 'document', 'cap_table')`,
       ).bind(uid, projectId, name, key, bytes.byteLength, user.id),
       auditStatement(c.env, user, await actorHash(user as { email?: string | null }), projectId, 'cap_table_snapshot_filed', {
         format: 'pdf', as_of: asOf, file_uid: uid, ...counts,

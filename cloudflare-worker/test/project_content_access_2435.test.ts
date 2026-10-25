@@ -17,7 +17,6 @@ import { __resetForTest } from '../src/services/aiRouter.ts';
 const BASELINE = readFileSync(new URL('../sql/schema_baseline.sql', import.meta.url), 'utf8');
 const SECRET = 'synthetic-project-content-secret-2435'.repeat(2);
 const SLIDES = [{ title: 'Synthetic problem', method_id: 'yc_seed', spec_id: 'problem', body: 'Synthetic founder text.', fields: [] }];
-const POSITIONING = { one_liner: 'Synthetic dispatch', elevator_pitch: 'Synthetic team coordinates shipments.', positioning_lines: ['Synthetic shared dispatch'] };
 const principals = [
   [1, 'admin', null], [2, 'founder', 20], [3, 'investor', null], [4, 'partner', null], [5, 'advisor', null],
   [6, 'founder', 60], [7, 'founder', 70], [8, 'founder', 80], [9, 'explorer', null], [10, 'founder', 30],
@@ -51,18 +50,13 @@ async function fixture() {
   for (const [id, role, founder] of principals) f.db.prepare("UPDATE users SET name = ?, role = ?, founder_id = ?, subscription_tier = 'studio', is_active = 1 WHERE id = ?")
     .run(id === 2 ? 'Synthetic owner' : 'Synthetic member ' + id, role, founder, id);
   const prompts: any[] = [];
-  const promptTexts: string[] = [];
   const env: any = { DB: f.DB, JWT_SECRET: SECRET, ENVIRONMENT: 'development', AI: withGuard({ run: async (_model: string, input: any) => {
     const content = input?.messages?.map((m: any) => m.content).join('\n') ?? '';
-    if (content.includes('Startup data (JSON):')) {
-      promptTexts.push(content);
-      prompts.push(JSON.parse(content.split('Startup data (JSON):\n')[1].split('\n\nReturn ONLY')[0]));
-      return { response: JSON.stringify(POSITIONING), usage: { prompt_tokens: 30, completion_tokens: 20 } };
-    }
+    prompts.push(content);
     return { response: '{}', usage: { prompt_tokens: 10, completion_tokens: 10 } };
   } }) };
   const app = new Hono<any>().route('/api/decks', deckNew).route('/api/decks', decks).route('/api/brand', brand);
-  const out = { ...f, app, env, prompts, promptTexts, shareId: 0, token: '', slug: '' };
+  const out = { ...f, app, env, prompts, shareId: 0, token: '', slug: '' };
   // Owner controls initialize the exact runtime schema before hostile calls.
   assert.equal((await request(out, 2, 'GET', '/api/decks/by-project/1')).status, 200);
   const landing = await request(out, 2, 'PUT', '/api/brand/landing/by-project/1', { name: 'Synthetic venture' });
@@ -95,7 +89,7 @@ const writes = (f: Fixture): Array<[string, string, any?]> => [
 const otherWrites = (): Array<[string, string, any?]> => [
   ['POST', '/api/decks/proposals/40/keep'], ['DELETE', '/api/decks/proposals/40'],
   ['POST', '/api/brand/custom-templates', { name: 'Synthetic template', from_page_id: 1 }],
-  ['POST', '/api/decks/generate', { project_id: 1 }], ['POST', '/api/decks/positioning', { project_id: 1 }],
+  ['POST', '/api/decks/generate', { project_id: 1 }],
   // D897 (#2677): New deck's outline, quote and card-by-card keep.
   ['POST', '/api/decks/outline', { project_id: 1, audience: 'seed_fund', length: 'standard' }],
   ['POST', '/api/decks/new/quote', { project_id: 1, step: 'build', audience: 'seed_fund' }],
@@ -174,39 +168,6 @@ test('a valid public deck share and published landing page remain readable witho
     assert.equal((await request(f, null, 'GET', '/api/brand/landing/' + f.slug)).status, 200);
   } finally { f.db.close(); }
 });
-for (const empty of [false, true]) test('positioning uses recorded team only; empty=' + empty, async () => {
-  const f = await fixture();
-  try {
-    f.db.exec("INSERT INTO cap_table_holders(user_id,project_id,name,kind) VALUES(2,1,'Synthetic cap investor','investor'),(2,1,'Synthetic cap employee','employee')");
-    if (empty) f.db.exec("UPDATE users SET name = '' WHERE id = 2; UPDATE project_members SET status = 'pending' WHERE project_id = 1;");
-    const r = await request(f, 2, 'POST', '/api/decks/positioning', { project_id: 1 });
-    assert.equal(r.status, 200, JSON.stringify(r.body));
-    assert.equal(f.prompts.length, 1);
-    const team = f.prompts[0].team;
-    assert.equal(JSON.stringify(f.prompts).includes('Synthetic cap'), false);
-    assert.equal(team.includes('Synthetic member 7'), false); assert.equal(team.includes('Synthetic member 8'), false);
-    assert.equal(team.includes('Synthetic member 14'), false);
-    assert.equal(team.includes('Synthetic member 15'), false);
-    assert.equal(team.includes('Synthetic member 11'), false); assert.equal(team.includes('Synthetic member 12'), false);
-    assert.deepEqual(team, empty ? [] : ['Synthetic owner', 'Synthetic member 6', 'Synthetic member 13', 'Synthetic member 16', 'Synthetic member 17']);
-    assert.deepEqual(f.prompts[0].advisors, empty ? [] : ['Synthetic member 11']);
-    assert.equal(team.length + f.prompts[0].advisors.length, empty ? 0 : 6);
-    assert.equal(r.body.sourced_from.advisors, empty ? 0 : 1);
-    assert.equal(r.body.sourced_from.team, team.length);
-    assert.equal(r.body.sourced_from.team_status, empty ? 'not_recorded' : 'recorded');
-  } finally { f.db.close(); }
-});
-test('an unreadable team store sends no names and reports unreadable rather than no team', async () => {
-  const f = await fixture(); const prepare = f.env.DB.prepare.bind(f.env.DB);
-  f.env.DB.prepare = (sql: string) => { if (sql.includes('WITH target AS')) throw new Error('synthetic store unavailable'); return prepare(sql); };
-  try {
-    const r = await request(f, 2, 'POST', '/api/decks/positioning', { project_id: 1 });
-    assert.equal(r.status, 200); assert.deepEqual(f.prompts[0].team, []); assert.deepEqual(f.prompts[0].advisors, []);
-    assert.equal(r.body.sourced_from.advisors, null);
-    assert.equal(r.body.sourced_from.team, null); assert.equal(r.body.sourced_from.team_status, 'unreadable');
-  } finally { f.db.close(); }
-});
-
 test('a missing actor audit refuses a new member write before business rows change', async () => {
   const f = await fixture(); const before = snapshot(f);
   try {
@@ -292,19 +253,6 @@ for (const who of [1, 2, 6, 13, 11, 12]) test('waitlist contact access is limite
     }
     assert.equal(snapshot(f), before);
     assert.equal(Number(f.db.prepare("SELECT count(*) AS n FROM activity_logs WHERE action = 'project_content_write_authorized'").get().n), auditBefore);
-  } finally { f.db.close(); }
-});
-
-test('recorded advisors are separate from an absent founding team', async () => {
-  const f = await fixture();
-  try {
-    f.db.exec("UPDATE users SET name = '' WHERE id = 2; UPDATE project_members SET status = 'pending' WHERE project_id = 1 AND role IN ('owner', 'cofounder')");
-    const r = await request(f, 2, 'POST', '/api/decks/positioning', { project_id: 1 });
-    assert.equal(r.status, 200); assert.deepEqual(f.prompts[0].team, []);
-    assert.deepEqual(f.prompts[0].advisors, ['Synthetic member 11', 'Synthetic member 12']);
-    assert.equal(r.body.sourced_from.team, 0); assert.equal(r.body.sourced_from.team_status, 'not_recorded');
-    assert.equal(r.body.sourced_from.advisors, 2);
-    assert.ok(f.promptTexts[0].includes("Never describe them as founders or members of the operating team"));
   } finally { f.db.close(); }
 });
 

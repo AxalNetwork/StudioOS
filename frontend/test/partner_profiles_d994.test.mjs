@@ -172,7 +172,7 @@ test('the categories chart: Founder split by track, one bar each other category,
 test('the list\'s parameters: To review is the waiting profiles only, oldest first; All profiles takes the chip and every filter', () => {
   assert.deepEqual(listParams('review', { q: 'a', page: 1 }), { q: null, sort: 'waiting', page: null, page_size: 25, source: null, category: null, founder_track: null, status: 'pending' });
   const all = listParams('all', { q: ' ada ', page: 3, status: 'draft', source: 'invitation', category: 'Founder', founder_track: 'not_recorded', entity_type: 'Delaware LLC', agreement: 'not_recorded', has_account: 'no', identity: 'no_account', captured_from: '2026-10-01', captured_to: '2026-10-24' });
-  assert.deepEqual(all, { q: 'ada', sort: 'newest', page: 3, page_size: 25, source: 'invitation', category: 'Founder', founder_track: 'not_recorded', status: 'draft', entity_type: 'Delaware LLC', agreement: 'not_recorded', has_account: 'no', identity: 'no_account', captured_from: '2026-10-01', captured_to: '2026-10-24' });
+  assert.deepEqual(all, { q: 'ada', sort: 'newest', page: 3, page_size: 25, source: 'invitation', category: 'Founder', founder_track: 'not_recorded', status: 'draft', entity_type: 'Delaware LLC', agreement: 'not_recorded', has_account: 'no', identity: 'no_account', captured_from: '2026-10-01', captured_to: '2026-10-24', reviewed_by: null });
   assert.equal(listParams('all', { status: 'all' }).status, null);
   assert.equal(filtersSet('review', { source: 'chat', entity_type: 'x' }), 1, 'To review has three filters');
   assert.equal(filtersSet('all', { source: 'chat', entity_type: 'x', captured_to: '2026-10-01' }), 3);
@@ -192,7 +192,8 @@ async function render(url) {
     root.render(h(MemoryRouter, { initialEntries: [url] },
       h(Routes, null,
         h(Route, { path: '/admin/partner-profiles', element: h(PartnerProfiles) }),
-        h(Route, { path: '/admin/partner-profiles/all', element: h(PartnerProfiles) }))));
+        h(Route, { path: '/admin/partner-profiles/all', element: h(PartnerProfiles) }),
+        h(Route, { path: '/admin/partner-profiles/:ref', element: h(PartnerProfiles) }))));
   });
   const settle = async () => { for (let i = 0; i < 10; i += 1) await act(async () => { await new Promise((r) => setTimeout(r, 0)); }); };
   await settle();
@@ -244,6 +245,8 @@ function stub({ list = (u) => json(serveList(u, ALL)), counts = () => json(COUNT
     seen.push(`${u.pathname}${u.search}`);
     if (u.pathname === '/api/admin/partner-profiles') return list(u);
     if (u.pathname === '/api/admin/partner-profiles/counts') return counts(u);
+    // D995: a profile is read by its reference, at its own address.
+    if (/^\/api\/admin\/partner-profiles\/pp_\w+$/.test(u.pathname)) return record(u);
     if (u.pathname.startsWith('/api/profiling/admin/')) return record(u);
     return json({});
   };

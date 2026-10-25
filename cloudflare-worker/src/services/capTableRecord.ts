@@ -196,7 +196,7 @@ const unavailable = (reason: string) => ({ available: false, reason, sentence: R
 function issuanceOut(r: IssuanceRow, classes: Map<number, ClassRow>, related: Map<number, string>) {
   const linked = r.safe_issuance_uid != null;
   return {
-    uid: r.uid, kind: r.kind, status: r.status, source: r.source, origin: r.origin,
+    uid: r.uid, kind: r.kind, status: r.status, source: r.source, origin: r.origin, origin_ref: r.origin_ref,
     holder: { holder_id: r.holder_id, name: r.holder_row_name ?? r.holder_name },
     from_holder: r.from_holder_id != null || r.from_holder_name != null ? { holder_id: r.from_holder_id, name: r.from_holder_row_name ?? r.from_holder_name } : null,
     class_uid: r.class_id != null ? classes.get(r.class_id)?.uid ?? null : null,
@@ -304,6 +304,7 @@ export async function readRecord(env: Env, projectId: number) {
   }
 
   const out = rows.map((r) => issuanceOut(r, byId, related));
+  await withCloseUids(env, projectId, out);
   return {
     project_id: projectId,
     currency: { code: currency.code, source: currency.set ? 'set' : 'default' },
@@ -317,6 +318,27 @@ export async function readRecord(env: Env, projectId: number) {
     issuances: { available: true, reason: null, rows: out.filter((r) => r.status === 'recorded' || r.status === 'void') },
     proposals: { available: true, reason: null, rows: out.filter((r) => r.status === 'proposed') },
   };
+}
+
+// ───────────────────────────────────────────────────────────── a close's proposals
+
+/**
+ * D1025 (#2862): a close's proposal names its close (`close_uid`), so its drawer
+ * reads the close's investors together (CT11b). The key is the prospect
+ * (`raise_prospect:<uid>`, D1021); its close is read only when such a row is in
+ * hand, so a venture with no close reads no raise table.
+ */
+async function withCloseUids(env: Env, projectId: number, rows: Array<{ origin: string; status: string; close_uid?: string | null; [k: string]: unknown }>) {
+  const refs = rows.filter((r) => r.origin === 'close').map((r) => String((r as { origin_ref?: string | null }).origin_ref ?? ''));
+  for (const r of rows) if (r.origin === 'close') r.close_uid = null;
+  const keys = refs.filter((x) => x.startsWith('raise_prospect:')).map((x) => x.slice('raise_prospect:'.length));
+  if (!keys.length) return;
+  const found = (await env.DB.prepare(
+    `SELECT p.uid AS prospect_uid, c.uid AS close_uid FROM raise_prospects p JOIN raise_closes c ON c.id = p.close_id AND c.project_id = p.project_id
+      WHERE p.project_id = ? AND p.uid IN (SELECT value FROM json_each(?))`,
+  ).bind(projectId, JSON.stringify(keys)).all<{ prospect_uid: string; close_uid: string }>()).results || [];
+  const by = new Map(found.map((f) => [`raise_prospect:${f.prospect_uid}`, f.close_uid]));
+  for (const r of rows) if (r.origin === 'close') r.close_uid = by.get(String((r as { origin_ref?: string | null }).origin_ref ?? '')) ?? null;
 }
 
 // ───────────────────────────────────────────────────────────── the history
@@ -367,6 +389,115 @@ export async function readHistory(env: Env, projectId: number, page: number, pag
     return { type: 'activity', at: s.at, activity: { action: a.action, user_id: a.user_id, user_name: a.user_name, entity_uid: a.entity_id, details } };
   });
   return { rows, total: Number(counts?.issuances ?? 0) + Number(counts?.activity ?? 0), page, page_size: pageSize };
+}
+
+/**
+ * D1025 (#2862): History's two blocks (CT10), each paged with its own exact total.
+ *
+ *   section=record   the venture's issuances (recorded, void and dismissed;
+ *                    a proposal waits in Needs you), newest first by the date
+ *                    issued, narrowed by bound optional filters: `q` (the
+ *                    holder's name or the note), `kind`, `source`,
+ *                    `has_document` (a document or a linked SAFE), and `from`
+ *                    / `to` on the date issued. Each row says who recorded it,
+ *                    an admin as "an admin".
+ *   section=changes  "Changes to scenarios and access": the scenario, variant,
+ *                    grant and share-link rows the cap table logs.
+ *
+ * With no section the read is D1017's, unchanged (the export pages it).
+ */
+export const HISTORY_SECTIONS = ['record', 'changes'] as const;
+export const CHANGE_ACTIONS = [
+  'captable_scenario_updated', 'captable_scenario_deleted', 'captable_variant_created',
+  'captable_access_granted', 'captable_access_revoked', 'captable_link_created', 'captable_link_revoked',
+] as const;
+
+// The timeline's fixed text: every filter is a bound optional value (`? IS NULL OR …`).
+const TIMELINE_FROM = `FROM cap_table_issuances i LEFT JOIN cap_table_holders h ON h.id = i.holder_id
+  WHERE i.project_id = ? AND i.status <> 'proposed'
+    AND (? IS NULL OR i.kind = ?) AND (? IS NULL OR i.source = ?)
+    AND (? IS NULL OR (CASE WHEN i.document_ref IS NOT NULL OR i.safe_issuance_uid IS NOT NULL THEN 1 ELSE 0 END) = ?)
+    AND (? IS NULL OR COALESCE(i.issued_on, date(i.created_at)) >= ?) AND (? IS NULL OR COALESCE(i.issued_on, date(i.created_at)) <= ?)
+    AND (? IS NULL OR lower(COALESCE(h.name, i.holder_name, '')) LIKE ? ESCAPE '\\' OR lower(COALESCE(i.note, '')) LIKE ? ESCAPE '\\')`;
+const TIMELINE_COUNT = `SELECT COUNT(*) AS n ${TIMELINE_FROM}`;
+const TIMELINE_PAGE = `SELECT i.id ${TIMELINE_FROM} ORDER BY COALESCE(i.issued_on, date(i.created_at)) DESC, i.id DESC LIMIT ? OFFSET ?`;
+
+export interface HistoryFilters {
+  q: string | null; kind: string | null; source: string | null; has_document: 0 | 1 | null; from: string | null; to: string | null;
+}
+
+export async function readHistorySection(env: Env, projectId: number, section: typeof HISTORY_SECTIONS[number], f: HistoryFilters, page: number, pageSize: number) {
+  const offset = (page - 1) * pageSize;
+  if (section === 'changes') {
+    const actions = JSON.stringify(CHANGE_ACTIONS);
+    const total = await env.DB.prepare(
+      'SELECT COUNT(*) AS n FROM activity_logs WHERE project_id = ? AND action IN (SELECT value FROM json_each(?))',
+    ).bind(projectId, actions).first<{ n: number }>();
+    const rows = (await env.DB.prepare(
+      `SELECT a.id, a.action, a.details, a.user_id, u.name AS user_name, datetime(a.created_at) AS at
+         FROM activity_logs a LEFT JOIN users u ON u.id = a.user_id
+        WHERE a.project_id = ? AND a.action IN (SELECT value FROM json_each(?))
+        ORDER BY a.created_at DESC, a.id DESC LIMIT ? OFFSET ?`,
+    ).bind(projectId, actions, pageSize, offset).all<{ id: number; action: string; details: string | null; user_id: number | null; user_name: string | null; at: string }>()).results || [];
+    return {
+      section, page, page_size: pageSize, total: Number(total?.n ?? 0),
+      rows: rows.map((a) => {
+        let details: unknown = null;
+        try { details = a.details ? JSON.parse(a.details) : null; } catch { details = null; }
+        return { type: 'activity', at: a.at, activity: { action: a.action, user_id: a.user_id, user_name: a.user_name, details } };
+      }),
+    };
+  }
+  const like = f.q ? `%${f.q.toLowerCase().replace(/[\\%_]/g, (m) => `\\${m}`)}%` : null;
+  const binds = [projectId, f.kind, f.kind, f.source, f.source, f.has_document, f.has_document, f.from, f.from, f.to, f.to, like, like, like];
+  const total = await env.DB.prepare(TIMELINE_COUNT).bind(...binds).first<{ n: number }>();
+  const slice = (await env.DB.prepare(TIMELINE_PAGE).bind(...binds, pageSize, offset).all<{ id: number }>()).results || [];
+  const ids = slice.map((x) => x.id);
+  const [classes, issuances] = await Promise.all([classesOf(env, projectId), issuancesOf(env, projectId, { ids })]);
+  const byId = new Map(classes.map((c) => [c.id, c]));
+  const related = new Map<number, string>();
+  const relatedIds = issuances.filter((r) => r.related_issuance_id != null).map((r) => r.related_issuance_id);
+  if (relatedIds.length) {
+    for (const r of (await env.DB.prepare('SELECT id, uid FROM cap_table_issuances WHERE project_id = ? AND id IN (SELECT value FROM json_each(?))')
+      .bind(projectId, JSON.stringify(relatedIds)).all<{ id: number; uid: string }>()).results || []) related.set(r.id, r.uid);
+  }
+  const people = new Map<number, { name: string | null; role: string | null }>();
+  const who = [...new Set(issuances.flatMap((r) => [r.recorded_by, r.voided_by, r.dismissed_by]).filter((x): x is number => x != null))];
+  if (who.length) {
+    for (const u of (await env.DB.prepare('SELECT id, name, role FROM users WHERE id IN (SELECT value FROM json_each(?))')
+      .bind(JSON.stringify(who)).all<{ id: number; name: string | null; role: string | null }>()).results || []) people.set(u.id, { name: u.name, role: u.role });
+  }
+  // An admin is named as "an admin" (CT10); a founder or co-founder by name.
+  const by = (id: number | null) => {
+    if (id == null) return null;
+    const p = people.get(id);
+    if (!p) return null;
+    return { name: p.role === 'admin' ? null : p.name, admin: p.role === 'admin' };
+  };
+  const iss = new Map(issuances.map((r) => [r.id, r]));
+  const rows = ids.map((id) => {
+    const r = iss.get(id)!;
+    const out = issuanceOut(r, byId, related);
+    return { type: 'issuance', at: r.issued_on ?? String(r.created_at).slice(0, 10), issuance: { ...out, recorded_by_who: by(r.recorded_by), voided_by_who: by(r.voided_by), dismissed_by_who: by(r.dismissed_by) } };
+  });
+  return { section, page, page_size: pageSize, total: Number(total?.n ?? 0), rows };
+}
+
+/** History's section and filters from the query; a bad one is 400, never ignored. */
+export function historyQuery(raw: Record<string, string | undefined>): { section: typeof HISTORY_SECTIONS[number] | null; filters: HistoryFilters } {
+  const section = raw.section == null || raw.section === '' ? null : oneOf(raw.section, 'section', HISTORY_SECTIONS);
+  const hd = raw.has_document == null || raw.has_document === '' ? null : raw.has_document === '1' ? 1 : raw.has_document === '0' ? 0 : (() => { throw bad('has_document', 'has_document is 1 or 0.'); })();
+  const from = day(raw.from, 'from'), to = day(raw.to, 'to');
+  if (from && to && from > to) throw bad('to', 'to is on or after from.');
+  return {
+    section,
+    filters: {
+      q: text(raw.q, 'q', NAME_MAX),
+      kind: oneOf(raw.kind, 'kind', ISSUANCE_KINDS),
+      source: oneOf(raw.source, 'source', SOURCES),
+      has_document: hd as 0 | 1 | null, from, to,
+    },
+  };
 }
 
 // ───────────────────────────────────────────────────────────── the fields

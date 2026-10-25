@@ -2,18 +2,15 @@
  * D919 (#2702) — All events made complete (EV6, EV17d): the filters, the
  * views, the sorts, rows per page and the CSV. Pure: no React, no fetch.
  *
- * EVERYTHING IS WORKED OUT IN THE BROWSER from R1 (every page) and R2's rows
- * under Guard G, as D915 reads them; no read is added. A filter or a sort that
- * needs a count it cannot trust (Guard G says the counts could not be read, or
- * an event is not in R2's rows) never guesses: the event is not counted as
- * Full, and in a count sort it goes last.
+ * D1115 uses D918's counts on each paged list row. Missing counts never
+ * match Full, and sort last when a sort needs that count. No analytics read.
  *
  * THE ADDRESS HOLDS THE FILTERS, the view, the sort and the page size, so a
  * filtered list can be shared and the browser's back button undoes a choice:
  *   status=draft,published  visibility=public  when=upcoming|past|week|month|range
  *   from=YYYY-MM-DD  to=YYYY-MM-DD  price=free|paid  featured=yes|no
  *   host=<the host's name>
- *   view=week|full|attention|paid_cancelled  sort=starts|created|taken|fill|showup  per=25|50|100
+ *   view=week|full|attention|paid_cancelled  sort=starts|created|taken|fill|showup|waiting  per=25|50|100
  * The old `?status=published` (one status, the Overview strip's door) still reads.
  *
  * PART 3 (D918, #2701) gives each list row its host line (`host: { name, role }`,
@@ -64,6 +61,7 @@ export const SORTS = [
   { key: 'taken', label: 'Seats taken' },
   { key: 'fill', label: 'Fill' },
   { key: 'showup', label: 'Show-up' },
+  { key: 'waiting', label: 'Waiting time' },
 ];
 export const PAGE_SIZES = [25, 50, 100];
 
@@ -306,6 +304,7 @@ export function filteredRows(events, { q = '', query, join, now, paid = null }) 
   // Not read yet, or unreadable: no rows, and the page says why; never "none".
   if (f.view === 'paid_cancelled') rows = paid?.state === 'ready' ? rows.filter((ev) => ev?.status === 'cancelled' && paid.byId.has(String(ev.id))) : [];
   const fig = (ev) => figures(ev, join, now);
+  if (f.sort === 'waiting') return byFigure(rows, (ev) => ev.status === 'pending_review' && ev.waiting_hours !== null && ev.waiting_hours !== undefined && Number.isFinite(Number(ev.waiting_hours)) ? Number(ev.waiting_hours) : null, now);
   if (f.sort === 'created') return [...rows].sort((a, b) => (parseStamp(b.created_at) ?? -Infinity) - (parseStamp(a.created_at) ?? -Infinity));
   if (f.sort === 'taken') return byFigure(rows, (ev) => fig(ev).taken, now);
   if (f.sort === 'fill') return byFigure(rows, (ev) => fig(ev).fill, now);

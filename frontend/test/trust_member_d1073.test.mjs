@@ -47,7 +47,7 @@ for (const phone of [false, true]) test(`failed requirements are Unreadable with
       assert.equal(v.seen.filter(([, p]) => p === '/api/trust/me').length, 2);
     } finally { await v.unmount(); }
   }, [
-    ["if (m.status === 'fulfilled') setMatrix(m.value); else setMatrix({ obligations: [], role, failed: true });", "setMatrix(m.status === 'fulfilled' ? m.value : { obligations: [], role });"],
+    ["if (m.status === 'fulfilled' && Array.isArray(m.value?.obligations)) setMatrix(m.value); else setMatrix({ obligations: [], role, failed: true, unauthorized: m.status === 'rejected' && (m.reason?.status === 401 || m.reason?.message === 'Session expired') });", "setMatrix(m.status === 'fulfilled' ? m.value : { obligations: [], role });"],
     ['onClick={reload} className="ml-2 underline"', 'onClick={() => {}} className="ml-2 underline"'],
     ['Your requirements could not be read.', 'Everything is complete.'],
   ]);
@@ -58,12 +58,13 @@ test('only the authoritative investor role gets Identity, including with stale n
     for (const role of ['founder', 'partner', 'admin', 'advisor', 'exploring', 'investor']) for (const obligations of [[], [obligation('kyc_v1', 'waived')]]) {
       const v = await mounted(Page, { role, obligations });
       try {
-        assert.equal(!!v.by('trust-tab-identity'), role === 'investor', role);
+        await v.click('Verifications'); await v.flush();
+        assert.equal(v.text().includes('Your recorded identity verification status.'), role === 'investor', role);
       } finally { await v.unmount(); }
     }
   }, [
     ["new Set(['investor'])", "new Set(['founder', 'partner', 'investor', 'admin'])"],
-    ['if (KYC_ELIGIBLE_ROLES.has(role))', "if (has('identity') || KYC_ELIGIBLE_ROLES.has(role))"],
+    ['KYC_ELIGIBLE_ROLES.has(role) && (kycFailed', 'true && (kycFailed'],
     ["new Set(['investor'])", 'new Set([])'],
   ]);
 });
@@ -93,15 +94,15 @@ for (const phone of [false, true]) test(`admin tools are links without global re
       assert.ok(links().includes('/admin/contracts?tab=ndas'));
       assert.ok(links().includes('/admin/kyc'));
       await v.click('Agreements'); await v.flush();
-      assert.doesNotMatch(v.text(), /Synthetic counterparty|Run screening|Resend|Void/);
-      assert.ok(v.seen.every(([method, p]) => method === 'GET' && !p.includes('pairwise-ndas') && !p.includes('/sanctions')));
+      assert.doesNotMatch(v.text(), /Run screening|Resend|Void/);
+      assert.ok(v.seen.every(([method, p]) => method === 'GET' && !p.includes('/sanctions') && !p.includes('/admin/')));
     } finally { await v.unmount(); }
   }, [
     ['{role === \'admin\' && <TrustAdminTools />}', '{false && <TrustAdminTools />}'],
     ['href="/admin/contracts?tab=ndas"', 'href="/admin/contracts"'],
     ['href="/admin/kyc"', 'href="/kyc"'],
-    ['isAdmin ? Promise.resolve({ items: [] }) : api.trustListPairwiseNdas()', 'api.trustListPairwiseNdas()'],
-    ["  tabs.push({ key: 'agreements', label: 'Agreements', icon: FileSignature });", "  tabs.push({ key: 'agreements', label: 'Agreements', icon: FileSignature }); if (role === 'admin') tabs.push({key:'sanctions',label:'Sanctions',icon:Globe});"],
+    ['api.trustListPairwiseNdas()', 'api.trustListSanctions()'],
+
   ]);
 });
 
@@ -117,7 +118,7 @@ test('members keep their own pairwise signing and never get admin tools', async 
     } finally { await v.unmount(); }
   }, [
     ["{role === 'admin' && <TrustAdminTools />}", '{true && <TrustAdminTools />}'],
-    ['{!isAdmin && <Section icon={Lock}', '{false && <Section icon={Lock}'],
+    ['{<Section icon={Lock}', '{false && <Section icon={Lock}'],
     ['{canSign && <PairwiseSignButton', '{false && <PairwiseSignButton'],
   ]);
 });

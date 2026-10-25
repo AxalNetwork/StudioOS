@@ -468,7 +468,7 @@ export function ConnectorPanel({ p, view, setView, ret = {}, onChanged, onClose,
   const [teammate, setTeammate] = useState(null);
   const [ownChosen, setOwnChosen] = useState(false);
   // From Build, a project whose company this member cannot connect for (D686 §5.4): no flow starts, whatever path opened the panel.
-  const askTeammate = !blocked && view === 'pre' && !conn && !p.first_party && !!p.key;
+  const askTeammate = p.auth_type !== 'none' && !blocked && view === 'pre' && !conn && !p.first_party && !!p.key;
   useEffect(() => {
     if (!askTeammate) return undefined;
     let live = true;
@@ -517,7 +517,10 @@ export function ConnectorPanel({ p, view, setView, ret = {}, onChanged, onClose,
   let footer = null;
   let title = name;
 
-  if (view === 'detail' && conn) {
+  if (p.auth_type === 'none') {
+    body = <Group label="Works without signing in"><Row a="No account is connected. See this connector’s page for what is built." /><Link to={connectorPagePath(p.key)} className={BTN.link} onClick={dismiss}>Open page</Link></Group>;
+    footer = backBtn;
+  } else if (view === 'detail' && conn) {
     sub = `by ${p.by || name} · ${status.label}${p.verified ? ' · Verified by Axal' : ''}${conn.external_account_name ? ` · ${conn.external_account_name}` : ''}`;
     if (status.why && personalMercury) {
       // Decision 8: the attention words and the fix; never "sync", never the raw `last_error`.

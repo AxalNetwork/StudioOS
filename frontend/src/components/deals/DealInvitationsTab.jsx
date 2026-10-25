@@ -54,13 +54,13 @@ export function InvitationsList({ state, onRetry, onInvite }) {
                 </div>
                 <div className="text-xs text-gray-500">{r.investor_email || 'No email on the account'}</div>
                 <p className="mt-1 text-sm text-gray-700 dark:text-gray-300">
-                  {r.message ? `“${r.message}”` : 'No message was written.'}
+                  {r.status === 'requested' ? 'This investor requested an invitation. No access has been granted.' : r.message ? `“${r.message}”` : 'No message was written.'}
                 </p>
               </div>
               <dl className="grid shrink-0 grid-cols-2 gap-x-4 gap-y-1 text-xs md:text-right">
                 <dt className="text-gray-500">Email</dt>
                 <dd data-testid="dr-invite-email">{Number(r.email_opt_in) ? 'Email requested' : 'No email'}</dd>
-                <dt className="text-gray-500">Invited</dt>
+                <dt className="text-gray-500">{r.status === 'requested' ? 'Requested' : 'Invited'}</dt>
                 <dd>{whenLine(r.created_at) || <NotRecorded reason="Not recorded: no invitation time is stored." />}</dd>
                 <dt className="text-gray-500">Answered</dt>
                 <dd>{answered || <NotRecorded reason={STATES.invites.nrAnswered} />}</dd>

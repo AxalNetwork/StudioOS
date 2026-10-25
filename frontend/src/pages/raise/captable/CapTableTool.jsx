@@ -1,21 +1,24 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { api } from '../../../lib/api';
-import { safeIssuancesApi } from '../../../lib/api/safeIssuances';
-import { Unreadable } from '../../../ui';
-import AccessTab from './AccessTab';
 import { capTableHolderApi } from '../../../lib/api/capTableHolder';
 import { capTableRecordApi } from '../../../lib/api/capTableRecord';
+import { useAuth } from '../../../hooks/useAuthSync';
+import { Unreadable } from '../../../ui';
+import AccessTab from './AccessTab';
 import ImportExportTab from './ImportExportTab';
+import HistoryTab from './HistoryTab';
+import { CorrectDialog, VoidDialog } from './IssuanceDialogs';
 import { CycleHeader } from '../../cycles/CycleOverview';
 import { CycleBar } from '../../cycles/PhoneModulePage';
 import { Tag } from './CapTableTag';
 import { CapTableOverview } from './CapTableOverview';
 import { holderIdOf } from './overviewModel';
+import InstrumentsTab from './InstrumentsTab';
+import OptionPoolTab from './OptionPoolTab';
 import {
-  BASIS_CHECK, CANNOT_CONVERT, HOME_NOTE, HOME_PATH, LINE, SLUG, TABS, TITLE,
-  conversionLines, harbour, harbourTone, issuedSafes, modelInstruments, modelPool, scenarioCards,
-  simulatorHref, tabHref, tabSearch, variantHref, variantsHref,
+  HOME_NOTE, HOME_PATH, LINE, SLUG, TABS, TITLE,
+  scenarioCards, simulatorHref, tabHref, tabSearch, variantHref, variantsHref,
 } from './capTableModel';
 
 /**
@@ -35,12 +38,6 @@ export const TH = 'px-3 py-2 text-left text-[10.5px] font-extrabold uppercase tr
 export const TD = 'px-3 py-2 align-top text-[12.5px] text-axal-ink dark:text-gray-100';
 export const MONO = 'font-mono tabular-nums';
 export const AMBER = 'rounded-[10px] border border-amber-200 bg-amber-50 px-2.5 py-1.5 text-[11.5px] text-amber-800 dark:border-amber-900 dark:bg-amber-950/30 dark:text-amber-300';
-const TONE = {
-  good: 'border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-900 dark:bg-emerald-950/30 dark:text-emerald-300',
-  warn: 'border-amber-200 bg-amber-50 text-amber-800 dark:border-amber-900 dark:bg-amber-950/30 dark:text-amber-300',
-  bad: 'border-red-200 bg-red-50 text-red-700 dark:border-red-900 dark:bg-red-950/30 dark:text-red-300',
-  muted: 'border-axal-hairline bg-axal-ground text-axal-muted dark:border-gray-700 dark:bg-gray-800 dark:text-gray-400',
-};
 
 /** The tool's own tabs, a second level under the Raise modules: text with an underline. */
 export function CapTableTabBar({ active, search = '' }) {
@@ -98,8 +95,31 @@ export function useRead(load, projectId, reload) {
 }
 
 const readCompare = (id) => api.getCapTableCompare(id);
-const readSafes = (id) => safeIssuancesApi.list(id);
-const read409a = (id) => api.get409a(id);
+const readRecordOf = (id) => capTableRecordApi.read(id);
+const readGrantsOf = (id) => capTableHolderApi.grants(id);
+
+/**
+ * D1025 (#2862, CT10): History, with the record (for the classes and the
+ * currency its lines name) and the grants (who may void) read beside it. The
+ * owner voids a recorded row (CT12b); an admin corrects one (CT12c).
+ */
+function HistoryPage({ projectId, reload, retry }) {
+  const { user } = useAuth() || {};
+  const record = useRead(readRecordOf, projectId, reload);
+  const grants = useRead(readGrantsOf, projectId, reload);
+  const [voiding, setVoiding] = useState(null);
+  const [correcting, setCorrecting] = useState(null);
+  const owner = grants.status === 'ready' && !!grants.data?.can_change;
+  const admin = String(user?.role || '').toLowerCase() === 'admin';
+  const done = () => { setVoiding(null); setCorrecting(null); retry(); };
+  return (
+    <>
+      <HistoryTab projectId={projectId} record={record} owner={owner || admin} admin={admin} reload={reload} onVoid={setVoiding} onCorrect={setCorrecting} />
+      {voiding && record.status === 'ready' ? <VoidDialog projectId={projectId} record={record.data} row={voiding} admin={admin && !owner} onClose={() => setVoiding(null)} onDone={done} /> : null}
+      {correcting && record.status === 'ready' ? <CorrectDialog projectId={projectId} record={record.data} row={correcting} onClose={() => setCorrecting(null)} onDone={done} /> : null}
+    </>
+  );
+}
 
 export function Section({ title, tag, children, testId, aside }) {
   return (
@@ -132,144 +152,6 @@ export function Table({ cols, rows, testId }) {
   );
 }
 
-function InstrumentsTab({ projectId, reload, retry, search }) {
-  const safes = useRead(readSafes, projectId, reload);
-  const model = useRead(readCompare, projectId, reload);
-  const issued = safes.status === 'ready' ? issuedSafes(safes.data) : [];
-  const canonical = model.status === 'ready' ? model.data?.canonical || null : null;
-  const instruments = modelInstruments(canonical);
-  const conv = conversionLines(canonical);
-  return (
-    <div className="flex flex-col gap-3.5">
-      <Section title="Sent through StudioOS" testId="captable-issued">
-        <ReadState read={safes} what="Your SAFEs" claim="This is not a claim that none were sent." onRetry={retry} testId="captable-issued">
-          {issued.length === 0
-            ? <p className={`m-0 text-[12.5px] ${MUTED}`} data-testid="captable-issued-none">No SAFE has been sent through StudioOS for this venture.</p>
-            : (
-              <Table testId="captable-issued-table"
-                cols={[{ key: 'h', label: 'Holder' }, { key: 'a', label: 'Amount' }, { key: 'c', label: 'Cap' }, { key: 'd', label: 'Discount' }, { key: 'b', label: 'Basis' }, { key: 's', label: 'Status' }, { key: 'r', label: '' }]}
-                rows={issued.map((s) => (
-                  <tr key={s.uid} className="border-b border-axal-ground last:border-b-0 dark:border-gray-800" data-testid="captable-issued-row">
-                    <td className={TD}>{s.holder}</td>
-                    <td className={`${TD} ${MONO}`}>{s.amount}</td>
-                    <td className={`${TD} ${MONO}`}>{s.cap}</td>
-                    <td className={`${TD} ${MONO}`}>{s.discount}</td>
-                    <td className={TD}>{s.basis}</td>
-                    <td className={TD}>{s.status}</td>
-                    <td className={TD}>{s.onRecord ? <Tag kind="record" /> : null}</td>
-                  </tr>
-                ))} />
-            )}
-        </ReadState>
-      </Section>
-      <Section title="In your model" tag={<Tag kind="modelled" />} testId="captable-model-instruments">
-        <ReadState read={model} what="Your model" claim="This is not a claim that it holds no instruments." onRetry={retry} testId="captable-model">
-          {!canonical
-            ? <p className={`m-0 text-[12.5px] ${MUTED}`} data-testid="captable-model-none">No model is saved for this venture yet. <Link className={LINK} to={simulatorHref(search)}>Open the simulator</Link></p>
-            : instruments.length === 0
-              ? <p className={`m-0 text-[12.5px] ${MUTED}`} data-testid="captable-model-instruments-none">Your model holds no SAFE or note.</p>
-              : (
-                <div className="flex flex-col gap-3">
-                  <Table testId="captable-model-instruments-table"
-                    cols={[{ key: 'h', label: 'Holder' }, { key: 't', label: 'Type' }, { key: 'a', label: 'Amount' }, { key: 'c', label: 'Cap' }, { key: 'd', label: 'Discount' }, { key: 'b', label: 'Basis' }, { key: 'i', label: 'Interest' }, { key: 's', label: 'Signed' }]}
-                    rows={instruments.map((m) => (
-                      <tr key={m.key} className="border-b border-axal-ground last:border-b-0 dark:border-gray-800" data-testid="captable-model-instrument">
-                        <td className={TD}>{m.holder}</td>
-                        <td className={TD}>{m.type}</td>
-                        <td className={`${TD} ${MONO}`}>{m.amount}</td>
-                        <td className={`${TD} ${MONO}`}>{m.cap}</td>
-                        <td className={`${TD} ${MONO}`}>{m.discount}</td>
-                        <td className={TD}>
-                          <span className="flex flex-col gap-1">{m.basis}{m.check ? <span className={AMBER} data-testid="captable-basis-check">{BASIS_CHECK}</span> : null}</span>
-                          {m.cannotConvert ? <span className={`mt-1 block text-[11.5px] ${MUTED}`} data-testid="captable-cannot-convert">{CANNOT_CONVERT}</span> : null}
-                        </td>
-                        <td className={`${TD} ${MONO}`}>{m.interest ?? '—'}</td>
-                        <td className={`${TD} ${MONO}`}>{m.signed}</td>
-                      </tr>
-                    ))} />
-                  {conv ? (
-                    <div className="flex flex-col gap-1" data-testid="captable-conversion">
-                      <span className={EYEBROW}>How they convert in {conv.round}</span>
-                      {conv.lines.length
-                        ? conv.lines.map((l, i) => <span key={i} className={`font-mono text-[12px] ${INK}`}>{l}</span>)
-                        : <span className={`text-[12px] ${MUTED}`}>The model’s round converts nothing.</span>}
-                    </div>
-                  ) : <p className={`m-0 text-[12px] ${MUTED}`} data-testid="captable-no-round">No round is planned, so nothing converts yet. Plan one in Scenarios.</p>}
-                </div>
-              )}
-        </ReadState>
-      </Section>
-    </div>
-  );
-}
-
-const readEquity = (id) => capTableHolderApi.equityPlan(id);
-const readGrantHolders = (id) => capTableRecordApi.read(id);
-function RecordedGrants({ projectId, reload, retry }) {
-  const plan = useRead(readEquity, projectId, reload);
-  const holders = useRead(readGrantHolders, projectId, reload);
-  const holderName = id => holders.status === 'ready' ? holders.data?.by_holder?.rows?.find(h => h.holder_id === id)?.name || 'Not recorded' : holders.status === 'loading' ? 'Reading…' : 'Unreadable';
-  const election = id => {
-    if (!plan.data?.elections?.available) return 'Unreadable · Try again';
-    const row = plan.data.elections.rows.find(e => e.holder_id === id);
-    return row ? row.state === 'done' ? `Filed · ${row.has_document ? 'Proof on file' : 'No document'} · Filing date not recorded` : `Not filed yet${row.due_date ? ` · due ${row.due_date}` : ''}` : 'Not recorded';
-  };
-  const value = n => typeof n === 'number' ? n.toLocaleString('en-US') : 'Not recorded';
-  return <Section title="Grants and vesting" tag={<Tag kind="record" />} testId="captable-grants">
-    <ReadState read={plan} what="Grants and vesting" claim="This is not a claim that none are recorded." onRetry={retry} testId="captable-grants">
-      {!plan.data?.grants?.length ? <p className={`m-0 text-[12.5px] ${MUTED}`} data-testid="captable-grants-none">No grants are recorded for this venture.</p> : <>
-        <Table testId="captable-grants-table" cols={[{key:'h',label:'Holder'},{key:'s',label:'Shares'},{key:'v',label:'Vesting'},{key:'d',label:'Vested'},{key:'e',label:'Holder’s 83(b)'}]}
-          rows={plan.data.grants.map(g => <tr key={g.id} data-testid="captable-grant-row">
-            <td className={TD}>{holderName(g.holder_id)}</td><td className={`${TD} ${MONO}`}>{value(g.total_shares)}</td>
-            <td className={TD}>{g.start_date || 'Start not recorded'} · {value(g.cliff_months)} month cliff · {value(g.total_months)} months</td>
-            <td className={`${TD} ${MONO}`}>{value(g.vested_shares)}</td><td className={TD}>{election(g.holder_id)}</td>
-          </tr>)} />
-        <Link className={`${LINK} text-[12px]`} to={`/build/company-creation?project=${encodeURIComponent(projectId)}`}>Record an 83(b) filing and its proof in Company creation</Link>
-        <p className={`m-0 text-[11.5px] ${MUTED}`}>The filing is linked to the holder. A separate election for each grant is not recorded.</p>
-        {plan.data?.elections?.available === false ? <button type="button" className={LINK} onClick={retry}>Try again</button> : null}
-      </>}
-    </ReadState>
-  </Section>;
-}
-
-function OptionPoolTab({ projectId, reload, retry, search }) {
-  const valuation = useRead(read409a, projectId, reload);
-  const model = useRead(readCompare, projectId, reload);
-  const h = valuation.status === 'ready' ? harbour(valuation.data) : null;
-  const pool = model.status === 'ready' ? modelPool(model.data?.canonical || null) : null;
-  return (
-    <div className="flex flex-col gap-3.5">
-      <Section title="409A safe harbour" testId="captable-409a">
-        <ReadState read={valuation} what="The 409A" claim="This is not a claim that none is on file." onRetry={retry} testId="captable-409a">
-          {h ? (
-            <div className="flex flex-col gap-2">
-              <span className={`w-fit rounded-full border px-2.5 py-0.5 text-[11.5px] font-bold ${TONE[harbourTone(h.state)]}`} data-testid="captable-409a-status">{h.reason}</span>
-              <dl className="m-0 grid grid-cols-2 gap-x-6 gap-y-1 text-[12.5px] sm:grid-cols-4">
-                {[['FMV per common share', h.fmv], ['Valuation date', h.valued], ['Valid until', h.expires], ['Provider', h.provider]].map(([k, v]) => (
-                  <div key={k} className="flex flex-col"><dt className={EYEBROW}>{k}</dt><dd className={`m-0 ${MONO} ${INK}`}>{v}</dd></div>
-                ))}
-              </dl>
-              <Link className={`${LINK} text-[12px]`} to={simulatorHref(search)}>Record a valuation or an event on the cap table page</Link>
-            </div>
-          ) : <div data-testid="captable-409a-unreadable"><Unreadable what="The 409A" claim="This is not a claim that none is on file." onRetry={retry} /></div>}
-        </ReadState>
-      </Section>
-      <Section title="The pool in your model" tag={<Tag kind="modelled" />} testId="captable-pool">
-        <ReadState read={model} what="Your model" claim="This is not a claim that it has no pool." onRetry={retry} testId="captable-pool-model">
-          {pool ? (
-            <dl className="m-0 grid grid-cols-3 gap-x-6 text-[12.5px]">
-              {[['Target', pool.target], ['Shares', pool.shares], ['Fully diluted', pool.pct]].map(([k, v]) => (
-                <div key={k} className="flex flex-col"><dt className={EYEBROW}>{k}</dt><dd className={`m-0 ${MONO} ${INK}`}>{v}</dd></div>
-              ))}
-            </dl>
-          ) : <p className={`m-0 text-[12.5px] ${MUTED}`} data-testid="captable-pool-none">No model is saved for this venture yet.</p>}
-        </ReadState>
-      </Section>
-      <RecordedGrants projectId={projectId} reload={reload} retry={retry} />
-    </div>
-  );
-}
-
 function ScenariosTab({ projectId, reload, retry, search }) {
   const read = useRead(readCompare, projectId, reload);
   const cards = read.status === 'ready' ? scenarioCards(read.data) : [];
@@ -297,10 +179,13 @@ function ScenariosTab({ projectId, reload, retry, search }) {
   );
 }
 
-export function CapTableTabPage({ tab, projectId, projectStatus = 'ready', onRetryProject, search = '', cards, action, phone = false }) {
+export function CapTableTabPage({ tab, proposal = null, instrument = null, projectId, projectStatus = 'ready', onRetryProject, search = '', cards, action, phone = false }) {
   const [reload, setReload] = useState(0);
   const retry = useCallback(() => setReload((n) => n + 1), []);
-  const here = TABS.find((t) => t.id === tab) || TABS[0];
+  const overlay = tab === 'new' || tab === 'proposal';
+  // D1023: `/instrument/<uid>` is the instrument drawer, over Instruments.
+  const onInstruments = tab === 'instrument';
+  const here = TABS.find((t) => t.id === (tab === 'instrument' ? 'instruments' : tab)) || TABS[0];
   // D1022: `h-<n>` is the holder drawer, over Overview's record blocks.
   const holder = holderIdOf(tab);
   let body;
@@ -308,17 +193,21 @@ export function CapTableTabPage({ tab, projectId, projectStatus = 'ready', onRet
   if (projectStatus === 'unreadable') body = <Unreadable what="Your ventures" claim="This is not a claim that you have none." onRetry={onRetryProject} />;
   else if (!projectId) body = <Skeleton testId="captable-loading" />;
   else if (holder != null) body = <CapTableOverview projectId={projectId} search={search} holderId={holder} />;
-  else if (tab === 'instruments') body = <InstrumentsTab projectId={projectId} reload={reload} retry={retry} search={search} />;
+  // D1025: `/new` is Record an issuance and `/proposal/<id>` a proposal's drawer, each over Overview.
+  else if (tab === 'new') body = <CapTableOverview projectId={projectId} search={search} open={{ kind: 'record' }} />;
+  else if (tab === 'proposal') body = <CapTableOverview projectId={projectId} search={search} open={{ kind: 'proposal', id: proposal }} />;
+  else if (tab === 'history') body = <HistoryPage projectId={projectId} reload={reload} retry={retry} />;
+  else if (tab === 'instruments' || onInstruments) body = <InstrumentsTab projectId={projectId} reload={reload} retry={retry} search={search} openUid={onInstruments ? instrument : null} />;
   else if (tab === 'option-pool') body = <OptionPoolTab projectId={projectId} reload={reload} retry={retry} search={search} />;
   else if (tab === 'access') body = <AccessTab projectId={projectId} reload={reload} retry={retry} />;
   else if (tab === 'import-export') body = <ImportExportTab projectId={projectId} reload={reload} retry={retry} search={search} />;
   else body = <ScenariosTab projectId={projectId} reload={reload} retry={retry} search={search} />;
   return (
-    <div className="flex min-w-0 flex-col gap-4" data-testid={holder != null ? 'captable-holder-page' : `captable-${tab}-page`}>
+    <div className="flex min-w-0 flex-col gap-4" data-testid={holder != null ? 'captable-holder-page' : overlay ? `captable-${tab}-over-overview` : onInstruments ? 'captable-instrument-over-instruments' : `captable-${tab}-page`}>
       {phone
         ? <CycleBar back={{ label: TITLE, to: `${HOME_PATH}${tabSearch(search)}` }} title={here.label} eadwynLabel={`Raise · ${TITLE}`} />
         : <CycleHeader cycle="raise" cards={cards} active={SLUG} action={action} title={TITLE} sub={LINE} search={tabSearch(search)} />}
-      <CapTableTabBar active={holder != null ? 'overview' : tab} search={search} />
+      <CapTableTabBar active={holder != null || overlay ? 'overview' : onInstruments ? 'instruments' : tab} search={search} />
       {body}
     </div>
   );

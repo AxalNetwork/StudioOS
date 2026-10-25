@@ -19,7 +19,7 @@ import { MemoryRouter, useLocation } from 'react-router-dom';
 import { installDocument } from './_contracts_dom.mjs';
 import {
   NOT_RECORDED, UNREADABLE, cell, controlsOf, csvField, csvOf, deckDraftOf, deckDrafts, dialogCopy, effectsLine,
-  pageLine, personPath, queryOf, refusalWord, rowOf, searchOf, standingCell, stateOf,
+  historyLine, pageLine, personPath, queryOf, refusalWord, rowOf, searchOf, standingCell, stateOf,
 } from '../src/pages/admin/advisors/peopleModel.js';
 import { cardOf } from '../src/pages/admin/advisors/deckRosterModel.js';
 import { tabOf } from '../src/pages/admin/advisors/apModel.js';
@@ -187,7 +187,7 @@ function worker(fail = [], writes = {}) {
       if (is('people')) return json({ available: false, detail: 'A requested search/filter source could not be read. Try again.', reason: 'A requested search/filter source could not be read. Try again.' }, 503);
       return json(typeof writes.list === 'function' ? writes.list(u.searchParams) : LIST);
     }
-    if (p === '/api/admin/network/people/user%3A7' || p === '/api/admin/network/people/user:7') return is('person') ? json({ detail: 'down' }, 503) : json(DRAWER);
+    if (p === '/api/admin/network/people/user%3A7' || p === '/api/admin/network/people/user:7') return is('person') ? json({ detail: 'down' }, 503) : json(writes.drawer ? writes.drawer() : DRAWER);
     if (p === '/api/admin/network/people/user%3A99' || p === '/api/admin/network/people/user:99') return json({ detail: 'Person not found.' }, 404);
     if (p === '/api/admin/network/people/7') return is('standing') ? json({ detail: 'down' }, 503) : json(writes.standing ? writes.standing() : STANDING);
     if (p === '/api/admin/network-profiles') return is('roster') ? json({ detail: 'down' }, 503) : json(ROSTER);
@@ -242,7 +242,7 @@ test('mounted People: the tab, each row from its blocks, a failed block Unreadab
     assert.match(m.of('people-row-roster:3'), /Deck only.*On the slide · 1/s);
     assert.equal(m.of('people-pageline'), '1–3 of 3');
     const paths = [...new Set(m.seen.map((s) => s.split('?')[0]))].filter((s) => !s.includes('/api/ai'));
-    assert.deepEqual(paths, ['GET /api/admin/network/people'], 'People makes no Overview reads');
+    assert.deepEqual(paths.sort(), ['GET /api/admin/network/people', 'GET /api/admin/network/tabs'], 'People makes no Overview reads; the header\'s tab counts are one read (D1125)');
   } finally { await m.unmount(); }
 });
 
@@ -443,4 +443,27 @@ test('the wiring: routes for People and a person, the tab door, no browser pop-u
     assert.ok(!/window\.(confirm|alert|prompt)\(|\b(confirm|alert|prompt)\(/.test(src), `${f} uses an in-page dialog`);
     assert.ok(!/credits/i.test(src));
   }
+});
+
+test('D1125: the drawer\'s History lists what admins did, newest first, in words; none recorded says so; unread stays unread', () => {
+  const l = historyLine({ id: 1, action: 'network.paused', at: '2026-10-20 09:00:00', by: { id: 1, name: 'Admin One' }, reason: 'Two weeks off', cohort_cycle_id: null });
+  assert.deepEqual(l, { what: 'Paused in the network', when: '20 Oct 2026', who: 'Admin One', extra: 'Reason: Two weeks off' });
+  assert.equal(historyLine({ action: 'advisor_cohort.assigned', at: null, by: {}, cohort_cycle_id: 77 }).extra, 'Cohort 77');
+  assert.equal(historyLine({ action: 'advisor_cohort.assigned', at: null, by: {} }).who, 'an admin whose name is not recorded');
+});
+
+test('mounted D1125: the drawer draws its History list, and an empty History says nothing is recorded', async (t) => {
+  pin(t);
+  const items = [
+    { id: 2, action: 'network.resumed', at: '2026-10-22 09:00:00', by: { id: 1, name: 'Admin One' }, reason: 'Back', cohort_cycle_id: null },
+    { id: 1, action: 'network_profile_shown', at: '2026-10-19 09:00:00', by: { id: 1, name: 'Admin One' }, reason: null, cohort_cycle_id: null },
+  ];
+  const m = await mount(`${PEOPLE}/user%3A7`, { writes: { drawer: () => ({ ...DRAWER, history: ok({ truncated: false, items }) }) } });
+  try {
+    assert.match(m.of('person-history-list'), /Resumed in the network · 22 Oct 2026 · by Admin One.*Reason: Back.*Shown on the deck · 19 Oct 2026/s);
+  } finally { await m.unmount(); }
+  const none = await mount(`${PEOPLE}/user%3A7`, { writes: { drawer: () => ({ ...DRAWER, history: ok({ truncated: false, items: [] }) }) } });
+  try { assert.ok(none.has('person-history-none')); } finally { await none.unmount(); }
+  const bad = await mount(`${PEOPLE}/user%3A7`, { writes: { drawer: () => ({ ...DRAWER, history: down('history could not be read. Try again.') }) } });
+  try { assert.match(bad.of('person-history'), /Unreadable/); } finally { await bad.unmount(); }
 });

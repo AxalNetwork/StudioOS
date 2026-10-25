@@ -5,9 +5,9 @@ reports from researchers, customers, and the public as a first-class
 operational priority. This document tells you how to reach us, what to
 expect, and what we ask of you.
 
-> **Last updated:** 2026-09-03
+> **Last updated:** 2026-10-25
 > **Contact:** `security@axal.vc`
-> **PGP fingerprint:** _to be added — see "Encrypted reports" below_
+> **Public policy page:** `https://axal.vc/trust/disclosure`
 
 ## Supported versions
 
@@ -33,10 +33,14 @@ We strongly prefer private disclosure. Pick whichever channel is easiest:
    `https://github.com/AxalNetwork/StudioOS/security/advisories/new`.
    This is private to maintainers; do not file a public issue.
 2. **Email** `security@axal.vc`. We monitor this address 24/7.
-   For sensitive payloads use the PGP key below.
-3. **In-app report.** Logged-in users can use the "Report a security
-   issue" link in the footer; submissions route to the same triage
-   queue.
+   No PGP key is published (see "Encrypted reports" below), so send
+   sensitive detail through the advisory rather than by email.
+3. **In-app report, for members.** Signed in, open the trust center's
+   Disclosure tab (`/trust/disclosure`) and choose "Report a security
+   issue". It files a private report (`POST /api/help/security-reports`).
+   A report's text is encrypted, only HQ's Super Admins can read it, and
+   it never becomes a Help ticket, a GitHub issue or a Slack post. It
+   takes no attachments; send files through the advisory.
 
 Please include:
 
@@ -47,10 +51,10 @@ Please include:
 - Your environment (browser, OS, account role if any).
 - Whether the issue is already public; if so, where.
 
-If you need an encrypted channel before disclosing, email
-`security@axal.vc` with subject `PGP key request` and we will reply with
-our current public key. Do not send sensitive payloads in plaintext if
-you suspect prior compromise.
+If you need an encrypted channel before disclosing, use a GitHub
+Security Advisory, which is private to maintainers. Do not send
+sensitive payloads by plain email, least of all if you suspect prior
+compromise.
 
 ## Response SLAs
 
@@ -201,20 +205,16 @@ After remediation we will:
 
 ## Recognition
 
-We do not yet operate a paid bug bounty program. We do maintain a
-**Hall of Recognition** at `https://axal.vc/security/hall` listing
-researchers who have responsibly disclosed valid issues, with their
-permission. Critical and high-severity reports may receive a discretionary
-acknowledgement (swag, account credit, or a referral bonus on the Refer
-& Earn program). Reach out to discuss before publishing.
+We do not operate a paid bug bounty program, and there is no public list
+of researchers yet: no report has been credited so far. With your
+permission, we credit you in the advisory that announces the fix, as
+"Coordinated disclosure" above says. Reach out to discuss before
+publishing.
 
 ## Encrypted reports
 
-If you need encrypted communication, request our current PGP public
-key by emailing `security@axal.vc` from any address. We rotate the key
-periodically; the fingerprint is published at
-`https://axal.vc/security/pgp.txt` and the key is also discoverable on
-`keys.openpgp.org`.
+No PGP key is published. Until one is, the encrypted channel is a
+GitHub Security Advisory, which is private to maintainers.
 
 ## Reporting credential exposure
 
@@ -222,8 +222,8 @@ If you believe an Axal-issued credential (API key, OAuth token, service
 account, signed cookie) has leaked publicly — for example on a public
 GitHub repo, in a paste site, or in a third-party tool — please notify
 us immediately at `security@axal.vc` with subject `Credential exposure`.
-We will rotate within the SLA windows above and credit you in the
-Hall of Recognition.
+We will rotate within the SLA windows above and, with your permission,
+credit you in the advisory.
 
 ## What we ask you not to do
 
@@ -237,5 +237,7 @@ Hall of Recognition.
 ---
 
 This policy is a living document. We will update it as our platform and
-threat model evolve. Material changes will be announced via the GitHub
-repository and the in-app Trust Center.
+threat model evolve. Every change to this file is in the repository's
+history. Each change HQ publishes to the public trust center
+(`https://axal.vc/trust`) is dated and kept with its note in the trust
+center's change log (`GET /api/public/trust/changes`).

@@ -7,8 +7,18 @@
  *   GET /counts     the tiles (waiting and its 24h / 72h bands; verified in 30
  *                   days and envelopes out once parts 2 and 4 land) and the
  *                   weekly series, each block with `available` and `reason`.
+ *   GET /export     D1127: the list's filters and sort, or the chosen `refs`
+ *                   (comma-separated, at most 100), as a CSV of what the page
+ *                   draws, never the tax ID. At most 5,000 profiles: a larger
+ *                   set is refused 413 `export_too_large` with its count. Each
+ *                   export is logged (`partner_profile_export`, counts only);
+ *                   if the log cannot be written nothing is handed out (503
+ *                   `export_not_logged`).
  *   GET /:ref       one profile by its reference, `ein` masked, logged as the
  *                   D612 profile read (`partner_profile_access`) by reference.
+ *                   D995: it also says whether Unbind applies (`unbind`), by
+ *                   the unbind route's own rule, so the page offers it only
+ *                   when the write would take it.
  *   GET /:ref/history   D991: the profile's captures and decisions, newest
  *                   first, paged. A decision names the admin who made it.
  *   POST /:ref/reopen   D991: back in the queue, with an optional reason. The
@@ -41,9 +51,10 @@ import { hashEmail } from '../util/hashEmail';
 import { maskPartnerProfile } from '../services/sensitiveFields';
 import { logAdminAction } from '../services/adminAudit';
 import { agreementOptions } from '../services/partnerAgreements';
+import { csvResponse, stamp, toCsv } from '../services/csv';
 import { HISTORY_LIMIT_MAX, REOPEN_REASON_MAX, profileHistory, reopenProfile } from '../services/partnerProfileReview';
 import {
-  PROFILE_REF, listOptions, listPartnerProfiles, listedByRef, partnerProfileCounts, type ListQuery,
+  PROFILE_REF, exportPartnerProfiles, listOptions, listPartnerProfiles, listedByRef, partnerProfileCounts, type ListQuery,
 } from '../services/partnerProfiles';
 
 const r = new Hono<{ Bindings: Env }>();
@@ -92,6 +103,31 @@ r.get('/agreements', async (c) => {
   }
 });
 
+r.get('/export', async (c) => {
+  const admin = await requireAdmin(c);
+  const query: ListQuery & { refs?: string } = {};
+  for (const k of LIST_PARAMS) { const v = c.req.query(k); if (v != null) query[k] = v; }
+  const refs = c.req.query('refs');
+  if (refs != null) query.refs = refs;
+  let result: Awaited<ReturnType<typeof exportPartnerProfiles>>;
+  try {
+    result = await exportPartnerProfiles(c.env, query);
+  } catch (e) {
+    return refuse(c, 503, { code: 'partner_profiles_unreadable', message: 'The partner profiles could not be read. Try again in a moment.', raw: e });
+  }
+  if ('error' in result) {
+    return refuse(c, result.error === 'export_too_large' ? 413 : 400, { code: result.error, message: result.message });
+  }
+  // Every export is recorded before it is handed out: counts only, never a name or address.
+  try {
+    await logRead(c.env, admin, 'partner_profile_export',
+      `Partner profile export rows=${result.count} chosen=${result.chosen}`);
+  } catch (e) {
+    return refuse(c, 503, { code: 'export_not_logged', message: 'The export could not be recorded, so it was not made. Try again in a moment.', raw: e });
+  }
+  return csvResponse(toCsv(result.header, result.rows), `partner-profiles-${stamp()}.csv`, { 'X-Export-Rows': String(result.count) });
+});
+
 r.get('/:ref', async (c) => {
   const admin = await requireAdmin(c);
   const ref = c.req.param('ref');
@@ -103,8 +139,18 @@ r.get('/:ref', async (c) => {
     const memberId = listed?.account?.user_id ?? null;
     await logRead(c.env, admin, 'partner_profile_access',
       memberId ? `Admin read partner profile ref=${ref} user_id=${memberId}` : `Admin read partner profile ref=${ref}; no user account`);
+    // D995 — Unbind applies, by POST /:ref/unbind's own rule, when the profile is
+    // bound and its address now belongs to another account, or to none.
+    let unbind: { eligible: boolean; reason: string | null; holder: { user_id: number; name: string | null } | null };
+    if (row.user_id == null) unbind = { eligible: false, reason: 'not_bound', holder: null };
+    else {
+      const h = await c.env.DB.prepare('SELECT id, name FROM users WHERE LOWER(email) = LOWER(?) ORDER BY id LIMIT 1').bind(row.email).first<any>();
+      unbind = h != null && Number(h.id) === Number(row.user_id)
+        ? { eligible: false, reason: 'address_still_theirs', holder: null }
+        : { eligible: true, reason: null, holder: h == null ? null : { user_id: Number(h.id), name: h.name ?? null } };
+    }
     // D634 — the tax ID leaves masked. The list's derived fields ride beside the row.
-    return c.json({ ...maskPartnerProfile(row), listed });
+    return c.json({ ...maskPartnerProfile(row), listed, unbind });
   } catch (e) {
     return refuse(c, 503, { code: 'partner_profiles_unreadable', message: 'The partner profile could not be read. Try again in a moment.', raw: e });
   }

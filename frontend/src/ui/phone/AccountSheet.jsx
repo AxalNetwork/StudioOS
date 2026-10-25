@@ -1,3 +1,5 @@
+import { useLocation } from 'react-router-dom';
+import { isMyEventsPath } from '../../pages/events/myEventsModel';
 import React, { useEffect, useState } from 'react';
 import { api } from '../../lib/api.js';
 import { useActiveCompany } from '../../contexts/ActiveCompanyContext.js';
@@ -22,6 +24,7 @@ export function initialsOf(user) {
 
 export function AccountSheet({ user, branchFact, onLogout, onClose, opener }) {
   const { company } = useActiveCompany();
+  const eventsCurrent = isMyEventsPath(useLocation().pathname);
   const [check, setCheck] = useState({ status: 'loading', submittedToday: false });
   useEffect(() => {
     let alive = true;
@@ -40,7 +43,7 @@ export function AccountSheet({ user, branchFact, onLogout, onClose, opener }) {
           {branchFact.status && branchFact.status !== 'active' && ` · ${String(branchFact.status).toUpperCase()}`}</p>}
       </div>
     </div>
-    {ACCOUNT_ROWS.map(([title, to]) => <SheetRow key={to} title={title} to={to} onClose={onClose} />)}
+    {ACCOUNT_ROWS.map(([title, to]) => <SheetRow key={to} title={title} right={to === '/my/events' && eventsCurrent ? 'Current' : undefined} to={to} onClose={onClose} />)}
     <SheetRow title="Founder Wellbeing" to="/wellbeing" onClose={onClose}
       description={check.status === 'unreadable' ? 'Unreadable' : <CheckInStatus {...check} />} />
     <SheetRow title="Refer & Earn" to="/referrals" onClose={onClose} />
