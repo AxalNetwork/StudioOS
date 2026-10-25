@@ -44,12 +44,15 @@ test('cap-table vesting readers remain scoped to their intended audience', () =>
   // and the page says so) rather than duplicating this per-caller endpoint.
   // It is a SELECT joined through the membership, names only the pools table,
   // and writes nothing — pinned below so the list can grow only that way.
+  // D1020 (#2857) moved the equity plan's queries into services/capTableRegister.ts,
+  // with a venture read beside the account one; routes/captable.ts re-tags
+  // Carta's rows when the founder names the venture.
   // D896 (#2675) added one more on purpose: the pitch deck's sources count
   // the venture's vesting schedules through its own cap-table holders, as a
   // number for a card, read only — pinned below.
   assert.deepEqual(
     readers.sort(),
-    ['integrations/providers/carta.ts', 'routes/captable.ts', 'routes/company.ts', 'routes/cycle_build.ts', 'services/capTableWrites.ts', 'services/decks/sources.ts', 'services/records/build.ts'],
+    ['integrations/providers/carta.ts', 'routes/captable.ts', 'routes/company.ts', 'routes/cycle_build.ts', 'services/capTableRegister.ts', 'services/capTableWrites.ts', 'services/decks/sources.ts', 'services/records/build.ts'],
     'only the Carta importer, the four reviewed readers and the one reviewed writer should touch these tables',
   );
   const deck = read('cloudflare-worker/src/services/decks/sources.ts');
@@ -79,41 +82,48 @@ test('cap-table vesting readers remain scoped to their intended audience', () =>
   assert.doesNotMatch(writes, /cap_table_option_pools/, 'the holder writer touches no pool');
   // addHolder: the vesting row's holder is the register row it just inserted for args.projectId, on the same user.
   assert.match(writes, /INSERT INTO cap_table_holders \(user_id, project_id,[\s\S]*?RETURNING id`,\s*\)\.bind\(owner\.id, args\.projectId,/);
-  assert.match(writes, /INSERT INTO cap_table_vesting \(user_id, holder_id,[\s\S]*?\)\.bind\(owner\.id, holderId,/,
-    'the vesting row carries the user_id and holder_id of the register row just written');
+  assert.match(writes, /INSERT INTO cap_table_vesting \(user_id, project_id, holder_id,[\s\S]*?\)\.bind\(owner\.id, args\.projectId, holderId,/,
+    'the vesting row carries the user_id, venture and holder_id of the register row just written (D1020)');
   // updateHolder: the holder is read back for args.projectId first, and its own user_id keys the vesting.
   assert.match(writes, /FROM cap_table_holders WHERE id = \? AND project_id = \?'\)\s*\.bind\(holderId, args\.projectId\)/);
   assert.match(writes, /WHERE holder_id = \? AND user_id = \?`,\s*\)\.bind\([^)]*holderId, reg\.user_id\)/);
-  assert.match(writes, /INSERT INTO cap_table_vesting \(user_id, holder_id,[\s\S]*?\)\.bind\(reg\.user_id, holderId,/);
+  assert.match(writes, /INSERT INTO cap_table_vesting \(user_id, project_id, holder_id,[\s\S]*?\)\.bind\(reg\.user_id, args\.projectId, holderId,/);
   // The only delete is the compensating one, scoped to the same pair.
   assert.deepEqual([...writes.matchAll(/DELETE FROM cap_table_vesting[^']*/g)].map((m) => m[0]),
     ['DELETE FROM cap_table_vesting WHERE holder_id = ? AND user_id = ?']);
 });
 
-test('the endpoint is scoped to the caller', () => {
+test('the endpoint is scoped to one venture or to the caller (D1020)', () => {
   const w = read('cloudflare-worker/src/routes/captable.ts');
   const i = w.indexOf("captable.get('/equity-plan'");
   assert.ok(i > 0, 'GET /captable/equity-plan must exist');
-  // Bounded to the handler (D366 lengthened it with its refusal branch).
   const body = w.slice(i, w.indexOf("captable.post('/simulate'", i));
   assert.match(body, /requireAuth\(c\)/, 'must authenticate');
-  // Both tables key on user_id and carry no project_id, so this is a per-account
-  // view — every query must bind the caller.
-  const wheres = body.match(/WHERE user_id = \?/g) || [];
-  assert.equal(wheres.length, 2, 'both reads must filter on user_id');
-  assert.match(body, /\.bind\(user\.id\)/, 'the bound value must be the caller');
-  assert.ok(!/req\.query\('user_id'\)|body\.user_id/.test(body),
-    'the user must never come from the request');
+  assert.match(body, /registerScope\(c, user\)/, 'the scope comes from the one helper');
+  assert.ok(!/req\.query\('user_id'\)|body\.user_id/.test(w), 'the user must never come from the request');
+  // The helper: no parameter is the caller's own account; a venture passes its read gate first.
+  const helper = w.slice(w.indexOf('async function registerScope('), w.indexOf('const scopeBody ='));
+  assert.match(helper, /return \{ kind: 'account', userId: user\.id \}/);
+  assert.match(helper, /await ensureProjectReadAccess\(c, projectId, user\);\s*return \{ kind: 'venture', projectId \}/);
+  // The queries: each table is read by the venture or by the account, never both, never unbound.
+  const svc = read('cloudflare-worker/src/services/capTableRegister.ts');
+  const plan = svc.slice(svc.indexOf('export async function readEquityPlan('), svc.indexOf('export function equityPlanBody('));
+  assert.equal((plan.match(/WHERE project_id = \?/g) || []).length, 2, 'both venture reads filter on project_id');
+  assert.equal((plan.match(/WHERE user_id = \?/g) || []).length, 2, 'both account reads filter on user_id');
+  assert.equal((plan.match(/\.bind\(scope\.projectId\)/g) || []).length, 2);
+  assert.equal((plan.match(/\.bind\(scope\.userId\)/g) || []).length, 2);
 });
 
 test('totals are null when nothing is recorded, never a confident zero', () => {
   // The fund-honesty rule: an unset fiduciary fact reads "Not recorded", not 0.
-  const w = read('cloudflare-worker/src/routes/captable.ts');
-  const i = w.indexOf("captable.get('/equity-plan'");
-  // Bounded to the handler (D366 lengthened it with its refusal branch).
-  const body = w.slice(i, w.indexOf("captable.post('/simulate'", i));
-  assert.match(body, /poolRows\.length \? sum\(poolRows, 'shares_authorized'\) : null/);
-  assert.match(body, /vestRows\.length \? totalGranted : null/);
+  // D1020: and a total over a partly recorded column is null too (`knownSum`).
+  const svc = read('cloudflare-worker/src/services/capTableRegister.ts');
+  const body = svc.slice(svc.indexOf('export function equityPlanBody('), svc.indexOf('/** Where a row came from'));
+  for (const k of ['shares_authorized', 'shares_issued', 'shares_available']) assert.match(body, new RegExp(`${k}: knownSum\\(pools, '${k}'\\)`));
+  assert.match(body, /granted != null && vested != null \? Math\.max\(0, granted - vested\) : null/);
+  const sum = svc.slice(svc.indexOf('export function knownSum'), svc.indexOf('/** Each holder'));
+  assert.match(sum, /if \(!rows\.length\) return null;/);
+  assert.match(sum, /if \(v == null\) return null;/);
 
   const ui = read('frontend/src/pages/captable/EquityPlanPanel.jsx');
   assert.match(ui, /return 'Not recorded'/, 'the panel must render absence as "Not recorded"');
