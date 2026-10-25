@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import { reportError } from '../../lib/log';
 import { Unreadable, Unrecorded } from '../../ui';
 import { glancesFromStudioGlance, loadStudioGlance } from './adminStudioOverview';
@@ -8,12 +8,15 @@ import { glancesFromStudioGlance, loadStudioGlance } from './adminStudioOverview
  * from the same glance (`GET /api/admin/studio/glance`), so a card here and
  * the overview line it opens from cannot disagree.
  *
- * `useHeldGlance()` → `{ status: 'loading' | 'unreadable' | 'ready', hq }`,
+ * `useHeldGlance()` → `{ status: 'loading' | 'unreadable' | 'ready', hq, reload }`,
  * where `hq` is `glancesFromStudioGlance(...).hq` (accounts, approvals,
  * insights views). Off HQ there is no `hq` block, and the pages say so.
  */
 export function useHeldGlance() {
   const [state, setState] = useState({ status: 'loading', hq: null });
+  // D1038: `reload()` reads the glance again, for a page's Try again.
+  const [tick, setTick] = useState(0);
+  const reload = useCallback(() => { setState({ status: 'loading', hq: null }); setTick((t) => t + 1); }, []);
   useEffect(() => {
     let cancelled = false;
     loadStudioGlance().then(
@@ -28,8 +31,8 @@ export function useHeldGlance() {
       },
     );
     return () => { cancelled = true; };
-  }, []);
-  return state;
+  }, [tick]);
+  return { ...state, reload };
 }
 
 /** The sentence for a glance that could not be read, or carried no HQ block. */

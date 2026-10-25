@@ -187,13 +187,19 @@ test('3. Accept lands each row in its module, with its ledger row; Dismiss write
   const safe = f.one(`SELECT id FROM mercury_raise_proposals WHERE kind = 'safe'`);
   assert.equal((await accept(f.env, safe.id)).status, 400);
   assert.equal(f.one('SELECT status FROM mercury_raise_proposals WHERE id = ?', safe.id).status, 'pending');
+  assert.equal(f.one('SELECT COUNT(*) AS n FROM cap_table_issuances').n, 0, 'the refused Accept takes its record row back');
+  assert.equal(f.one(`SELECT COUNT(*) AS n FROM activity_logs WHERE action = 'captable.issuance.recorded'`).n, 0, 'and its audit row');
   const founder = await call(f.env, '/api/cycles/raise/holders?project=101', 1, 'POST', { name: 'One', group: 'founders', instrument: 'common', shares: 1000000 });
   assert.equal(founder.status, 201, founder.text);
   const s = await accept(f.env, safe.id);
   assert.equal(s.status, 200, s.text);
   const inputs = JSON.parse(f.one('SELECT inputs_json FROM cap_table_scenarios WHERE project_id = 101').inputs_json);
   assert.deepEqual(inputs.safes.map((e: any) => [e.name, e.amount, e.cap]), [['Angel Fixture', 25000, 5000000]]);
-  assert.equal(f.one(`SELECT local_table FROM connector_fed_items WHERE kind = 'safe'`).local_table, 'cap_table_scenarios');
+  // D1017: the SAFE is on the record, post-money, from Mercury, with one audit row; the model keeps its entry beside it.
+  assert.equal(f.one(`SELECT local_table FROM connector_fed_items WHERE kind = 'safe'`).local_table, 'cap_table_issuances');
+  assert.deepEqual({ ...f.one(`SELECT kind, status, holder_name, amount_cents, cap_cents, basis, discount_bps, issued_on, source, origin, shares FROM cap_table_issuances WHERE project_id = 101`) },
+    { kind: 'safe', status: 'recorded', holder_name: 'Angel Fixture', amount_cents: 2500000, cap_cents: 500000000, basis: 'post_money', discount_bps: null, issued_on: null, source: 'connector_mercury', origin: 'mercury', shares: null });
+  assert.equal(f.one(`SELECT COUNT(*) AS n FROM activity_logs WHERE action = 'captable.issuance.recorded' AND project_id = 101`).n, 1);
 
   // Capital relationships: the match commits the prospect and records the receipt; the new investor is added at Committed.
   const match = proposal(f, 'investor_credit', fakeTx(6));

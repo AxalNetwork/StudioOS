@@ -52,6 +52,15 @@
  * (some sources answered; the banner names which did not and its chip count is
  * disclosed as stale), and a failed request (nothing answered at all).
  *
+ * EIGHT KINDS SINCE D1033 (#2874). A member's event tickets (`event_ticket`,
+ * one per registration) and the events they host (`event_hosted`) come from
+ * `services/calendar/myEvents.ts`. The canvas predates them, so their marks are
+ * derived as `expert_booking`'s was: two shapes no other kind uses (a dome and
+ * a bowl) and two hues apart from the drawn six and the violet accent — sky for
+ * hosting, as the My events canvas draws it (MEV1), and lime for a ticket. A
+ * ticket's place ("Waitlist · #3", "Pay to confirm") is in its title and notes,
+ * and its join link is present only when the Worker gave it (#2623).
+ *
  * A PUSH RECORD SURVIVES A DISCONNECT, which is the third and smallest place
  * this page departs from the canvas. The canvas suppresses its "Pushed to …"
  * pill when no provider was ever connected, reasoning that such a record could
@@ -93,6 +102,8 @@ const KINDS = [
   { id: 'partner_office_hour', label: 'Office hour', src: 'office_hours' },
   { id: 'calendly_event', label: 'Calendly', src: 'calendly' },
   { id: 'expert_booking', label: 'Expert session', src: 'expert_bookings' },
+  { id: 'event_ticket', label: 'Event ticket', src: 'event_registrations' },
+  { id: 'event_hosted', label: 'Hosting', src: 'events' },
 ];
 const KIND_LABEL = Object.fromEntries(KINDS.map((k) => [k.id, k.label]));
 
@@ -104,6 +115,7 @@ const KIND_LABEL = Object.fromEntries(KINDS.map((k) => [k.id, k.label]));
  */
 const PUSHABLE_KINDS = new Set([
   'advisor_booking', 'ic_meeting', 'founder_checkin', 'partner_office_hour',
+  'event_ticket', 'event_hosted',
 ]);
 
 const RANGES = [['week', 'Week'], ['month', 'Month'], ['agenda', 'Agenda']];
@@ -207,8 +219,9 @@ function locationOf(ev) {
         : 'No location was recorded when this was scheduled.',
     };
   }
-  const word = kind === 'video' ? 'Video' : kind === 'room' ? 'Room' : kind ? kind : 'Video';
-  const host = ev.location_uri ? hostWord(ev.location_uri) : null;
+  const word = kind === 'video' ? 'Video' : kind === 'room' ? 'Room' : kind === 'hybrid' ? 'Hybrid' : kind ? kind : 'Video';
+  // D1033: an event's venue words, when the Worker sends them, come before the link's host.
+  const host = ev.place || (ev.location_uri ? hostWord(ev.location_uri) : null);
   return { text: host ? `${word} · ${host}` : word, missing: false, why: null, uri: ev.location_uri || null };
 }
 
@@ -936,6 +949,7 @@ function EventRow({ ev, myEmail, role, canPush, pushRemedy, onChanged }) {
             : <span>{where.text}</span>}
           {where.missing && <span className="cal-nr">Not recorded</span>}
           {rsvp && <span>{rsvp}</span>}
+          {ev.url && <a href={ev.url}>Event page</a>}
         </div>
         {where.why && <p className="cal-ev-why">{where.why}</p>}
         {ev.notes && <p className="cal-ev-why">{ev.notes}</p>}

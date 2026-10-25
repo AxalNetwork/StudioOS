@@ -30,6 +30,7 @@ function prepare(overrides = {}) {
       { ...event, id: 43, title: 'Waiting fixture', reg_status: 'waitlisted', comp: false, checkin_code: null },
     ] }),
     suggested: async () => ({ events: [] }),
+    icsUrl: (id) => `/api/events/${id}/ics`,
     update: async (id, payload) => fixture.updates.push([id, payload]),
     register: async () => ({ status: 'confirmed' }),
     ...overrides.api,
@@ -62,7 +63,7 @@ async function editorScenario(source = editor) {
     for (const value of ['Fixture talk', 'workshop', 'Stored summary', 'Stored description', 'UTC', 'hybrid', 'Fixture room', 'https://example.test/meeting', 'https://example.test/cover', 12, 'public']) assert.ok(values.some(p => p.value === value), String(value));
     assert.equal(values.filter(p => p.type === 'datetime-local' && p.value).length, 2);
     assert.ok(values.some(p => p.type === 'checkbox' && p.checked === true));
-    assert.equal(ui.text().includes('Submit for review'), false, 'published status is retained');
+    assert.equal(ui.text().includes('Send for review'), false, 'published status is retained');
     await ui.click('Save changes');
     assert.equal(fixture.updates.length, 1);
     const [id, payload] = fixture.updates[0];
@@ -93,10 +94,10 @@ async function ticketScenario(source = tickets) {
     const ui = await mount(source, ticketsPath, '/my/events', '/my/events');
     try {
       await ui.flush();
-      if (!phone) await ui.click('Attending (2)');
+      // D1030 (#2387): on a desktop the tickets are Upcoming's, the next event with its code and the rest in Going.
       const text = ui.text();
-      assert.match(text, phone ? /Going/ : /confirmed/);
-      assert.match(text, phone ? /Waitlist/ : /waitlisted/);
+      assert.match(text, /Going/);
+      assert.match(text, /Waitlist/);
       assert.doesNotMatch(text, /published/);
       assert.match(text, /Free seat/);
       assert.equal(ui.nodes().filter(n => ui.props(n)['data-ticket-code'] === 'own-code').length, 1);
@@ -146,9 +147,9 @@ test('#2395: behavioral checks reject editor, ticket and calendar regressions th
     [editor, failureScenario, [['if (loadError)', 'if (false)']]],
     [tickets, ticketScenario, [
       ['ticketPill(t.reg_status, ahead)', 'ticketPill(t.status, ahead)'],
-      ['status={t.reg_status}', 'status={t.status}'],
-      ['const code = t.checkin_code || t.code || t.qr_code;', 'const code = null;'],
-      ['{t.comp ? (', '{false ? ('],
+      ['const place = placeOf(t);', 'const place = placeOf({ ...t, reg_status: t.status });'],
+      ['const code = ticket.checkin_code || null;', 'const code = null;'],
+      ['{ticket.comp ? <Pill', '{false ? <Pill'],
     ]],
     [detail, calendarScenario, [['user ? events.icsUrl(event.id) : eventsPublic.icsUrl(slug)', 'eventsPublic.icsUrl(slug)']]],
   ];

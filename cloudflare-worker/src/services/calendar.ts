@@ -14,6 +14,7 @@
 import type { Env } from '../types';
 import { getSQL } from '../db';
 import { encryptString, decryptString } from './cryptoBox';
+import { hostedEvents, staleMyEventCopies, ticketEvents } from './calendar/myEvents';
 
 /**
  * Refresh tokens were originally written in plaintext and migrated to
@@ -419,7 +420,7 @@ export async function fetchMicrosoftUserinfo(accessToken: string): Promise<any> 
 // ===========================================================================
 export interface CalendarEvent {
   id: string;
-  kind: 'ic_meeting' | 'founder_checkin' | 'advisor_booking' | 'partner_office_hour' | 'calendly_event' | 'expert_booking';
+  kind: 'ic_meeting' | 'founder_checkin' | 'advisor_booking' | 'partner_office_hour' | 'calendly_event' | 'expert_booking' | 'event_ticket' | 'event_hosted';
   source_id: number;
   source_uid: string;
   title: string;
@@ -433,6 +434,17 @@ export interface CalendarEvent {
   notes: string | null;
   deal_id?: number | null;
   project_id?: number | null;
+  /**
+   * D1033 — set only by the two My events kinds (`calendar/myEvents.ts`). The
+   * venue words (`location_text`), the event row the copy came from, its page,
+   * and whether a calendar client should show it as held or tentative. The
+   * other six kinds leave them unset, so their .ics and provider payloads are
+   * unchanged.
+   */
+  place?: string | null;
+  event_id?: number;
+  url?: string;
+  ics_status?: 'CONFIRMED' | 'TENTATIVE';
   /**
    * Providers this exact event has already been copied to, from
    * `calendar_sync_records`. Only `GET /calendar/events` fills it in
@@ -783,11 +795,13 @@ const READERS: Readonly<Record<CalendarEvent['kind'], CalendarReader>> = {
   partner_office_hour: partnerOfficeHourEvents,
   calendly_event: calendlyEvents,
   expert_booking: (env, userId, from, to) => directEvents(env, userId, from, to, 'expert_booking'),
+  event_ticket: ticketEvents,
+  event_hosted: hostedEvents,
 };
 
 export const KNOWN_KINDS = Object.keys(READERS) as readonly CalendarEvent['kind'][];
 
-/** Whether one source answered, so a page can say which of the six did not. */
+/** Whether one source answered, so a page can say which of the eight did not. */
 export interface CalendarSourceStatus {
   kind: CalendarEvent['kind'];
   ok: boolean;
@@ -915,6 +929,16 @@ function icsEscape(s: string | null | undefined): string {
   return s.replace(/\\/g, '\\\\').replace(/,/g, '\\,').replace(/;/g, '\\;').replace(/\n/g, '\\n');
 }
 
+/** The venue words and the URI together (D1033); for the six older kinds, the URI alone as before. */
+function locationLine(ev: CalendarEvent): string {
+  return [ev.place, ev.location_uri].filter(Boolean).join(' — ');
+}
+
+/** The notes, then the event page when the copy has one (D1033). */
+function bodyText(ev: CalendarEvent): string {
+  return [ev.notes || '', ev.url ? `Event page: ${ev.url}` : ''].filter(Boolean).join('\n\n');
+}
+
 export function eventsToIcs(events: CalendarEvent[], calendarName = 'Axal StudioOS'): string {
   const lines = [
     'BEGIN:VCALENDAR',
@@ -933,7 +957,10 @@ export function eventsToIcs(events: CalendarEvent[], calendarName = 'Axal Studio
     lines.push(`DTEND:${icsDt(ev.end_at)}`);
     lines.push(`SUMMARY:${icsEscape(ev.title)}`);
     if (ev.notes) lines.push(`DESCRIPTION:${icsEscape(ev.notes)}`);
-    if (ev.location_uri) lines.push(`LOCATION:${icsEscape(ev.location_uri)}`);
+    const where = locationLine(ev);
+    if (where) lines.push(`LOCATION:${icsEscape(where)}`);
+    if (ev.url) lines.push(`URL:${icsEscape(ev.url)}`);
+    if (ev.ics_status) lines.push(`STATUS:${ev.ics_status}`);
     for (const a of ev.attendees) {
       if (a.email) lines.push(`ATTENDEE;CN=${icsEscape(a.name || a.email)}:mailto:${a.email}`);
     }
@@ -949,12 +976,14 @@ export function eventsToIcs(events: CalendarEvent[], calendarName = 'Axal Studio
 function googlePayload(ev: CalendarEvent): any {
   const body: any = {
     summary: ev.title,
-    description: ev.notes || '',
+    description: bodyText(ev),
     start: { dateTime: ev.start_at, timeZone: 'UTC' },
     end: { dateTime: ev.end_at, timeZone: 'UTC' },
-    source: { title: 'Axal StudioOS', url: 'https://axal.vc' },
+    source: { title: 'Axal StudioOS', url: ev.url || 'https://axal.vc' },
   };
-  if (ev.location_uri) body.location = ev.location_uri;
+  const where = locationLine(ev);
+  if (where) body.location = where;
+  if (ev.ics_status === 'TENTATIVE') body.status = 'tentative';
   const att = ev.attendees
     .filter(a => a.email && a.email !== ev.organizer_email)
     .map(a => ({ email: a.email, displayName: a.name }));
@@ -1016,11 +1045,13 @@ export async function deleteEventFromGoogle(accessToken: string, googleEventId: 
 function microsoftPayload(ev: CalendarEvent): any {
   const body: any = {
     subject: ev.title,
-    body: { contentType: 'text', content: ev.notes || '' },
+    body: { contentType: 'text', content: bodyText(ev) },
     start: { dateTime: ev.start_at, timeZone: 'UTC' },
     end: { dateTime: ev.end_at, timeZone: 'UTC' },
   };
-  if (ev.location_uri) body.location = { displayName: ev.location_uri };
+  const where = locationLine(ev);
+  if (where) body.location = { displayName: where };
+  if (ev.ics_status === 'TENTATIVE') body.showAs = 'tentative';
   const att = ev.attendees
     .filter(a => a.email && a.email !== ev.organizer_email)
     .map(a => ({
@@ -1085,6 +1116,8 @@ export async function deleteEventFromMicrosoft(accessToken: string, eventId: str
 // ===========================================================================
 export interface SyncSummary {
   pushed: number; updated: number; failed: number; skipped: number; total: number;
+  /** D1033 — My events copies taken off the provider because their place or event left. */
+  removed: number;
 }
 
 export async function syncUserToGoogle(
@@ -1148,11 +1181,46 @@ async function syncUserToProvider(
       }
     }
   }
+  const removed = await removeStaleMyEventCopies(env, userId, provider, accessToken);
   const nowIso = new Date().toISOString();
   const tokenTable = provider === 'google' ? 'google_oauth_tokens' : 'microsoft_oauth_tokens';
   await sql.unsafe(
     `UPDATE ${tokenTable} SET last_synced_at = ? WHERE user_id = ?`,
     [nowIso, userId],
   );
-  return { pushed, updated, failed, skipped: 0, total: events.length };
+  return { pushed, updated, failed, skipped: 0, total: events.length, removed };
+}
+
+/**
+ * D1033 — a cancelled place or event leaves Google and Outlook on the next sync.
+ *
+ * The push above only ever adds and updates. For the six older kinds a cancel
+ * route calls `onAxalSessionCancelled`; nothing in the event routes does, so
+ * without this a ticket the member cancelled would sit on their Google calendar
+ * for good. The copies are found from the source rows (`staleMyEventCopies`),
+ * not from this sync's window. A refused delete keeps its mapping and records
+ * the error, as `onAxalSessionCancelled` does, so the next sync tries again.
+ */
+async function removeStaleMyEventCopies(
+  env: Env, userId: number, provider: 'google' | 'microsoft', accessToken: string,
+): Promise<number> {
+  const stale = await staleMyEventCopies(env, userId, provider);
+  let removed = 0;
+  for (const r of stale) {
+    const ok = provider === 'google'
+      ? await deleteEventFromGoogle(accessToken, r.external_event_id)
+      : await deleteEventFromMicrosoft(accessToken, r.external_event_id);
+    if (ok) {
+      await env.DB.prepare(
+        'DELETE FROM calendar_sync_records WHERE user_id = ? AND provider = ? AND source_kind = ? AND source_id = ?',
+      ).bind(userId, provider, r.source_kind, r.source_id).run();
+      removed++;
+    } else {
+      await env.DB.prepare(
+        `UPDATE calendar_sync_records SET last_error = ?, last_synced_at = ?
+          WHERE user_id = ? AND provider = ? AND source_kind = ? AND source_id = ?`,
+      ).bind('delete_refused', new Date().toISOString(), userId, provider, r.source_kind, r.source_id).run();
+    }
+  }
+  return removed;
 }
