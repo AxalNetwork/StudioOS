@@ -184,7 +184,7 @@ test('two small cells stay hidden without hiding an unrelated large cell', async
   assert.deepEqual(question(r, 'accreditation').answered, hidden);
 });
 
-test('a whole segment under five hides a zero companion too, since D999 exposes its total', async () => {
+test('a whole segment under five hides every cell, since D999 exposes its total', async () => {
   const db = fixture();
   for (let id = 2; id < 6; id++) {
     member(db, id); answer(db, id, 'check_size_usd', '1');
@@ -193,12 +193,25 @@ test('a whole segment under five hides a zero companion too, since D999 exposes 
   const answers = await read(db);
   for (const q of answers.body.questions) {
     const cells = q.type === 'text' ? [q.answered, q.not_recorded] : [...q.buckets, q.not_recorded];
-    assert.ok(cells.filter((c: any) => c.suppressed).length >= 2, q.key);
+    assert.ok(cells.every((c: any) => c.suppressed && c.count === null), q.key);
     assert.deepEqual(q.answered, hidden);
   }
   const archetypes = await read(db, 'archetypes');
-  assert.ok([...archetypes.body.archetypes, archetypes.body.not_recorded].filter((c: any) => c.suppressed).length >= 2);
+  assert.ok([...archetypes.body.archetypes, archetypes.body.not_recorded].every((c: any) => c.suppressed && c.count === null));
   assert.deepEqual(archetypes.body.profiled, hidden);
+});
+
+test('small-segment suppression patterns are identical whichever bucket or missing value holds the members', async () => {
+  let previous: any;
+  for (const value of ['0', '10000', '25000', '50000', null]) {
+    const db = fixture();
+    for (let id = 2; id < 6; id++) { member(db, id); answer(db, id, 'check_size_usd', value); }
+    const r = question(await read(db), 'check_size_usd');
+    if (previous) assert.deepEqual(r, previous);
+    previous = r;
+    assert.deepEqual(r.buckets.map(({ count, suppressed }: any) => ({ count, suppressed })), [hidden, hidden, hidden, hidden]);
+    assert.deepEqual(r.not_recorded, { label: 'Not recorded', ...hidden });
+  }
 });
 
 test('archetypes count the latest snapshot once per member, displayed rather than computed, joined to current primary', async () => {
@@ -239,6 +252,11 @@ test('null latest display never falls back to an old or computed slug; unknown s
   r = await read(db, 'archetypes', 'lp_individual');
   assert.deepEqual(r.body.not_recorded, { label: 'Not recorded', ...visible(5) });
   assert.doesNotMatch(JSON.stringify(r.body), /PRIVATE UNKNOWN/);
+  for (let id = 30; id < 35; id++) member(db, id, 'investor', 1, 'gp_external');
+  r = await read(db, 'archetypes', 'gp_external');
+  assert.deepEqual(r.body.not_recorded, { label: 'Not recorded', ...visible(5) });
+  assert.deepEqual(r.body.profiled, visible(0));
+  assert.ok(r.body.archetypes.every((a: any) => a.count === 0 && !a.suppressed));
 });
 
 for (const suffix of ['answers', 'archetypes']) {

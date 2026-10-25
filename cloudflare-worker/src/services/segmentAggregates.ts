@@ -32,13 +32,12 @@ function bucketsFor(key: string): Bucket[] {
 const hidden = (): Cell => ({ count: null, suppressed: true });
 function partition(counts: number[]) {
   const { cells } = suppressGroup(counts);
-  // D999 already exposes the segment's member total. When the entire group
-  // is under five, suppressGroup has no other positive companion to hide.
-  // Hide a zero companion here too, or those visible zeros reveal the lone
-  // suppressed count from D999's total. Complementary cells may be zero.
-  if (cells.filter((c) => c.suppressed).length === 1) {
-    const companion = cells.findIndex((c) => !c.suppressed);
-    if (companion >= 0) cells[companion] = hidden();
+  // D999 exposes the member total. For a whole segment under five, hide
+  // every cell, including zeros. Choosing just one zero companion by
+  // position would reveal which hidden cell actually held the members.
+  const total = counts.reduce((a, b) => a + b, 0);
+  if (total > 0 && total < SMALL_CELL_MIN) {
+    cells.forEach((_, i) => { cells[i] = hidden(); });
   }
   // An answered/profiled subtotal would undo complementary suppression when
   // the missing cell or one constituent was hidden. Publish no such subtotal.
