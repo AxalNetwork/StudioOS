@@ -80,7 +80,7 @@ async function upsertInvoiceAlert(env: Env, kind: 'payment_failed' | 'needs_conf
   const r = await renewalOf(env, invoice);
   if (!r) return false;
   const attempt = Number(invoice.attempt_count);
-  return (await changed(env.DB.prepare(
+  const write = env.DB.prepare(
     `INSERT INTO billing_alerts (user_id, kind, object_id, subscription_id, invoice_id, plan_family, attempt_count, next_attempt_at, amount_cents, currency)
      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
      ON CONFLICT (kind, object_id) DO UPDATE SET
@@ -93,7 +93,19 @@ async function upsertInvoiceAlert(env: Env, kind: 'payment_failed' | 'needs_conf
     Number.isSafeInteger(attempt) && attempt > 0 ? attempt : null,
     stamp(invoice.next_payment_attempt),
     cents(invoice.amount_due), currencyOf(invoice.currency),
-  ))) > 0;
+  );
+  if (kind !== 'payment_failed') return (await changed(write)) > 0;
+  const { activityKey } = await import('./billingRecovery');
+  const uid = await activityKey('renewal_failed', `${r.invoiceId}:${Number.isSafeInteger(attempt) && attempt > 0 ? attempt : 0}`);
+  try {
+    const results = await env.DB.batch([
+      write,
+      env.DB.prepare(`INSERT OR IGNORE INTO activity_logs (uid, user_id, action, actor, details)
+        SELECT ?, user_id, ?, ?, ? FROM billing_alerts WHERE kind = ? AND object_id = ?`)
+        .bind(uid, 'renewal_failed', 'stripe', '{}', kind, r.invoiceId),
+    ]);
+    return Number(results[0].meta?.changes ?? 0) > 0;
+  } catch (e) { if (missingTable(e)) return false; throw e; }
 }
 
 export const recordPaymentFailedAlert = (env: Env, invoice: Record<string, unknown>) => upsertInvoiceAlert(env, 'payment_failed', invoice);
@@ -104,11 +116,19 @@ export async function closeInvoiceAlerts(env: Env, invoice: Record<string, unkno
   const invoiceId = idOf(invoice.id, 'in');
   if (!invoiceId) return 0;
   try {
-    const res = await env.DB.prepare(
+    const eligible = await env.DB.prepare("SELECT id FROM billing_alerts WHERE invoice_id = ? AND kind IN ('payment_failed', 'needs_confirmation') AND state = 'open' LIMIT 1").bind(invoiceId).first();
+    if (!eligible) return 0;
+    const results = await env.DB.batch([
+      env.DB.prepare(`INSERT OR IGNORE INTO activity_logs (uid, user_id, action, actor, details)
+        SELECT ? || id, user_id, ?, ?, ? FROM billing_alerts
+        WHERE invoice_id = ? AND kind = 'payment_failed' AND state = 'open'`)
+        .bind('renewal_recovered:', 'renewal_recovered', 'stripe', '{}', invoiceId),
+      env.DB.prepare(
       `UPDATE billing_alerts SET state = 'closed', closed_reason = 'paid', closed_at = datetime('now'), updated_at = datetime('now')
         WHERE invoice_id = ? AND kind IN ('payment_failed', 'needs_confirmation') AND state = 'open'`,
-    ).bind(invoiceId).run();
-    return Number(res.meta?.changes ?? 0);
+    ).bind(invoiceId),
+    ]);
+    return Number(results[1].meta?.changes ?? 0);
   } catch (e) { if (missingTable(e)) return 0; throw e; }
 }
 
@@ -125,11 +145,19 @@ export async function syncSubscriptionAlerts(env: Env, eventType: string, sub: R
     ? 'ended' : status === 'active' || status === 'trialing' ? 'recovered' : null;
   try {
     if (reason) {
-      const res = await env.DB.prepare(
+      const eligible = await env.DB.prepare("SELECT id FROM billing_alerts WHERE subscription_id = ? AND kind IN ('payment_failed', 'needs_confirmation') AND state = 'open' LIMIT 1").bind(subId).first();
+      if (!eligible) return 0;
+      const results = await env.DB.batch([
+        env.DB.prepare(`INSERT OR IGNORE INTO activity_logs (uid, user_id, action, actor, details)
+          SELECT ? || id, user_id, ?, ?, ? FROM billing_alerts
+          WHERE subscription_id = ? AND kind = 'payment_failed' AND state = 'open' AND ? = 'recovered'`)
+          .bind('renewal_recovered:', 'renewal_recovered', 'stripe', '{}', subId, reason),
+        env.DB.prepare(
         `UPDATE billing_alerts SET state = 'closed', closed_reason = ?, closed_at = datetime('now'), updated_at = datetime('now')
           WHERE subscription_id = ? AND kind IN ('payment_failed', 'needs_confirmation') AND state = 'open'`,
-      ).bind(reason, subId).run();
-      return Number(res.meta?.changes ?? 0);
+      ).bind(reason, subId),
+      ]);
+      return Number(results[1].meta?.changes ?? 0);
     }
     if (status === 'unpaid') {
       const res = await env.DB.prepare(

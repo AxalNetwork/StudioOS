@@ -15,10 +15,37 @@
  *   POST   /:projectUid/files                 upload (base64 data URI → R2)
  *   PATCH  /:projectUid/files/:uid            rename / move / change visibility
  *   DELETE /:projectUid/files/:uid            delete row + object
- *   POST   /:projectUid/grants                open the room to an investor
+ *   POST   /:projectUid/grants                open the room to an investor, with an
+ *                                             end date and the folders it opens
+ *   PATCH  /:projectUid/grants/:uid           change a grant's end date or folders
  *   DELETE /:projectUid/grants/:uid           revoke
+ *   POST   /:projectUid/files/:uid/download   the founder's own one-time link (D1103)
+ *   GET    /:projectUid/files/:uid/versions   the file's versions, current first
+ *   POST   /:projectUid/files/:uid/versions/:n/download   one earlier version
+ *   POST   /:projectUid/files/:uid/versions/:n/current    make it current (a swap)
+ *   GET    /:projectUid/preview?grant=<uid>   the room as that grant sees it; no log
+ *   GET    /:projectUid/activity?from&to&investor&action&page   daily figures against the
+ *                                             period before, per investor, and the log (D1105)
+ *   GET    /:projectUid/activity.csv?from&to&investor&action    the same rows as CSV (D1105)
+ *   GET    /:projectUid/checklist             per diligence item, its files and who can
+ *                                             open them (D1105)
  *
- * INVESTOR SIDE (holder of a grant)
+ * WHO ON THE FOUNDER SIDE (D1103, owner question 2, answer A). The owner — the
+ * account that owns the venture — does everything; admins use D1102 summary/support reads. A co-founder
+ * (an accepted `project_members` row with role `cofounder`) reads the room,
+ * uploads, moves and renames files and folders, matches a file to a request
+ * or checklist item, opens any version and makes one current. Only the owner
+ * shares, revokes, changes a grant, changes a gate (a file's or folder's
+ * `visibility`, `access_tier`, `access_expires_at`) or deletes a file. A
+ * co-founder's upload takes its folder's visibility and the default tier.
+ * Anyone else gets 404, as before.
+ *
+ * ADMIN SIDE (D1102; no owner writes)
+ *   GET    /:projectUid                       aggregate summary, no names/identities
+ *   POST   /:projectUid/support-read          required reason; founder-visible audit
+ *                                             before read-only details
+ *
+ * INVESTOR SIDE (holder of a grant; admins use support-read instead)
  *   GET    /shared                            rooms shared with me
  *   GET    /shared/:projectUid                the room as I may see it
  *   POST   /shared/:projectUid/files/:uid/download   one-time signed URL
@@ -49,13 +76,18 @@
  */
 import { Hono } from 'hono';
 import type { Env } from '../types';
-import { requireAuth } from '../auth';
+import { requireAuth, requireAdmin } from '../auth';
+import { logAdminAction } from '../services/adminAudit';
+import { refuse } from '../util/refusal';
 import { mapError, newUid, nowIso } from './_t13t14t15_helpers';
 import { companyScope } from '../services/tenancyScope';
 import { ACTIVE_COMPANY_HEADER, resolveActiveCompany } from '../middleware/activeCompany';
 import { mintDownloadToken } from '../services/signedDownload';
-import { tierAdmits, investorCommitted, admittedCounts, isAccessTier, expiryMs } from '../services/dataRoomAccess';
+import {
+  tierAdmits, investorCommitted, admittedCounts, isAccessTier, expiryMs, grantFolderScope, folderInScope, type FolderScope,
+} from '../services/dataRoomAccess';
 import { CHECKLIST_KEYS } from '../services/raiseCycle';
+import { activityCsv, activityRead, checklistRead, investorOfGrant, parseActivityQuery, CSV_MAX_ROWS } from '../services/dataRoomActivity';
 import { logCycleWrite } from '../services/cycleActivity';
 import { WriterError } from '../services/validateWriters';
 
@@ -73,7 +105,23 @@ type GrantRow = {
   id: number; uid: string; project_id: number;
   investor_user_id: number; granted_by_user_id: number;
   status: string; expires_at: string | null; created_at: string;
+  folders_scoped?: number | null;
 };
+
+/** D1102 — the same owner-only policy for the room and its shared record door. */
+export function dataRoomOwner(project: { founder_id: number | null }, user: { role: string; founder_id?: number | null }): boolean {
+  return user.role === 'founder' && typeof user.founder_id === 'number'
+    && Number.isSafeInteger(user.founder_id) && user.founder_id > 0 && project.founder_id === user.founder_id;
+}
+
+/** D1103 — who the caller is in this room. */
+type RoomRole = 'owner' | 'cofounder';
+type RoomAccess = { project: ProjectRow; role: RoomRole };
+
+const OWNER_ONLY = { detail: 'Only the room’s owner can do this.', code: 'owner_only' } as const;
+/** The fields that are a gate: only the owner sets them (D1103). */
+const GATE_FIELDS = ['visibility', 'access_tier', 'access_expires_at', 'apply_to_contents'] as const;
+const namesGate = (body: any) => GATE_FIELDS.some((k) => body?.[k] !== undefined);
 
 /**
  * The caller's project, or null. Ownership goes through the tenancy module.
@@ -86,6 +134,8 @@ type GrantRow = {
 async function ownedProject(
   env: Env, user: any, projectUid: string, companyId: number | null,
 ): Promise<ProjectRow | null> {
+  // D1102 — this is the venture owner's workspace, never an admin wildcard.
+  if (user.role !== 'founder') return null;
   const scope = companyScope(user, companyId, 'p');
   const row = await env.DB.prepare(
     `SELECT p.id, p.uid, p.name FROM projects p WHERE p.uid = ? AND ${scope.sql}`,
@@ -96,6 +146,28 @@ async function ownedProject(
 /** The verified active company for this request, or null. */
 function activeCompany(c: any, user: any): Promise<number | null> {
   return resolveActiveCompany(c.env, user, c.req.header(ACTIVE_COMPANY_HEADER));
+}
+
+/**
+ * D1103 — the caller's room and their role in it: `owner` through the tenancy
+ * scope above, else `cofounder` through an accepted `project_members` row of
+ * that role. Null for anyone else, which every route answers as 404. A
+ * membership store that cannot be read is no membership.
+ */
+async function roomProject(c: any, user: any, projectUid: string): Promise<RoomAccess | null> {
+  if (user.role === 'admin') return null;
+  const owned = await ownedProject(c.env, user, projectUid, await activeCompany(c, user));
+  if (owned) return { project: owned, role: 'owner' };
+  try {
+    const row = await c.env.DB.prepare(
+      `SELECT p.id, p.uid, p.name FROM projects p
+         JOIN project_members pm ON pm.project_id = p.id AND pm.user_id = ? AND pm.status = 'accepted' AND pm.role = 'cofounder'
+        WHERE p.uid = ? AND p.deleted_at IS NULL`,
+    ).bind(user.id, projectUid).first() as ProjectRow | null;
+    return row ? { project: row, role: 'cofounder' } : null;
+  } catch {
+    return null;
+  }
 }
 
 /** An active, unexpired grant for this investor on this project, or null. */
@@ -216,8 +288,9 @@ function badVisibility(v: unknown): boolean {
 r.get('/shared', async (c) => {
   try {
     const user = await requireAuth(c);
+    if (user.role === 'admin') return refuse(c, 403, { code: 'support_read_required', message: 'Use an audited support read to open this room.' });
     const rows = await c.env.DB.prepare(
-      `SELECT g.uid AS grant_uid, g.created_at, g.expires_at, g.project_id,
+      `SELECT g.id AS grant_id, g.uid AS grant_uid, g.created_at, g.expires_at, g.project_id,
               p.uid AS project_uid, p.name AS project_name
          FROM data_room_grants g
          JOIN projects p ON p.id = g.project_id
@@ -228,9 +301,11 @@ r.get('/shared', async (c) => {
     // D691 decision 6 — the count is what this investor's tier admits, so a
     // committed-only, private or expired file is never counted.
     const items = [];
-    for (const { project_id, ...r } of rows.results || []) {
+    for (const { project_id, grant_id, ...r } of rows.results || []) {
       const committed = await investorCommitted(c.env, Number(project_id), user.id);
-      items.push({ ...r, file_count: (await admittedCounts(c.env, Number(project_id), committed, true)).total });
+      // D1103 — and only what the grant's folders hold.
+      const folders = await grantFolderScope(c.env, Number(grant_id));
+      items.push({ ...r, file_count: (await admittedCounts(c.env, Number(project_id), committed, true, folders)).total });
     }
     return c.json({ items });
   } catch (e) { return mapError(c, e); }
@@ -239,6 +314,7 @@ r.get('/shared', async (c) => {
 r.get('/shared/:projectUid', async (c) => {
   try {
     const user = await requireAuth(c);
+    if (user.role === 'admin') return refuse(c, 403, { code: 'support_read_required', message: 'Use an audited support read to open this room.' });
     const project = await c.env.DB.prepare('SELECT id, uid, name FROM projects WHERE uid = ?')
       .bind(c.req.param('projectUid')).first<ProjectRow>();
     // A project with no grant and a project that does not exist answer the
@@ -247,40 +323,62 @@ r.get('/shared/:projectUid', async (c) => {
     const grant = project ? await activeGrant(c.env, project.id, user.id) : null;
     if (!project || !grant) return c.json({ detail: 'Data room not found' }, 404);
 
-    const nda = await projectNdaActive(c.env, project.id, user.id);
-    const folders = await c.env.DB.prepare(
-      `SELECT uid, name, parent_id, id, visibility, display_order
-         FROM data_room_folders WHERE project_id = ? ORDER BY display_order, name`,
-    ).bind(project.id).all<any>();
-    const files = await c.env.DB.prepare(
-      `SELECT uid, name, folder_id, content_type, size_bytes, visibility, created_at, access_tier, access_expires_at
-         FROM data_room_files WHERE project_id = ? ORDER BY name`,
-    ).bind(project.id).all<any>();
-
-    // D691 decision 6 — the tier and expiry first: a file they hide is neither
-    // listed nor counted. The NDA gate then applies to what is left.
-    const committed = await investorCommitted(c.env, project.id, user.id);
-    const now = Date.now();
-    const admitted = (files.results || []).filter((f) => tierAdmits(f, committed, now))
-      .map(({ access_tier, access_expires_at, ...rest }) => rest);
-    const visible = (v: string) => v === 'open' || nda;
-    // Filenames are withheld, not greyed out — see the header note.
-    const openFiles = admitted.filter((f) => visible(f.visibility));
-    const openFolders = (folders.results || []).filter((f) => visible(f.visibility));
-    const withheld = admitted.length - openFiles.length;
-
+    const view = await investorView(c.env, project, grant, user.id);
     await logAccess(c.env, project.id, user.id, 'open_room', null);
-    return c.json({
-      project: { uid: project.uid, name: project.name },
-      nda_signed: nda,
-      folders: openFolders.map(({ id, ...rest }) => rest),
-      files: openFiles.map((f) => ({ ...f, folder_uid: folderUid(folders.results || [], f.folder_id) })),
-      // A count, never the names. The investor is told something is behind the
-      // NDA so the gate is not invisible; what it is stays private.
-      withheld_behind_nda: withheld,
-    });
+    // The investor never learns how much the grant hides.
+    const room: Partial<typeof view> = { ...view };
+    delete room.hidden_from_grant;
+    return c.json(room);
   } catch (e) { return mapError(c, e); }
 });
+
+/**
+ * The room as one grant's investor may see it: the investor read's whole
+ * filter, in one place, so `/shared/:projectUid` and the founder's preview
+ * (D1103) cannot drift apart. The tier and expiry first, then the grant's
+ * folders, then the NDA gate. Writes nothing.
+ *
+ * `hidden_from_grant` counts the files the tier, the expiry or the folders
+ * hide. Only the preview returns it, and as a number: a file the grant cannot
+ * open is never named.
+ */
+async function investorView(env: Env, project: ProjectRow, grant: GrantRow, investorUserId: number) {
+  const nda = await projectNdaActive(env, project.id, investorUserId);
+  const folders = await env.DB.prepare(
+    `SELECT uid, name, parent_id, id, visibility, display_order
+       FROM data_room_folders WHERE project_id = ? ORDER BY display_order, name`,
+  ).bind(project.id).all<any>();
+  const files = await env.DB.prepare(
+    `SELECT uid, name, folder_id, content_type, size_bytes, visibility, created_at, access_tier, access_expires_at
+       FROM data_room_files WHERE project_id = ? ORDER BY name`,
+  ).bind(project.id).all<any>();
+
+  // D691 decision 6 — the tier and expiry first: a file they hide is neither
+  // listed nor counted. D1103 — then the grant's folders. The NDA gate then
+  // applies to what is left.
+  const committed = await investorCommitted(env, project.id, investorUserId);
+  const scope: FolderScope = await grantFolderScope(env, grant.id);
+  const now = Date.now();
+  const all = files.results || [];
+  const admitted = all.filter((f) => tierAdmits(f, committed, now, scope))
+    .map(({ access_tier, access_expires_at, ...rest }) => rest);
+  const visible = (v: string) => v === 'open' || nda;
+  // Filenames are withheld, not greyed out — see the header note.
+  const openFiles = admitted.filter((f) => visible(f.visibility));
+  const openFolders = (folders.results || []).filter((f) => visible(f.visibility) && folderInScope(f.id, scope));
+  const withheld = admitted.length - openFiles.length;
+
+  return {
+    project: { uid: project.uid, name: project.name },
+    nda_signed: nda,
+    folders: openFolders.map(({ id, ...rest }) => rest),
+    files: openFiles.map((f) => ({ ...f, folder_uid: folderUid(folders.results || [], f.folder_id) })),
+    // A count, never the names. The investor is told something is behind the
+    // NDA so the gate is not invisible; what it is stays private.
+    withheld_behind_nda: withheld,
+    hidden_from_grant: all.length - admitted.length,
+  };
+}
 
 function folderUid(folders: any[], folderId: number | null): string | null {
   if (folderId == null) return null;
@@ -291,6 +389,7 @@ function folderUid(folders: any[], folderId: number | null): string | null {
 r.post('/shared/:projectUid/files/:uid/download', async (c) => {
   try {
     const user = await requireAuth(c);
+    if (user.role === 'admin') return refuse(c, 403, { code: 'support_read_required', message: 'Use an audited support read to open this room.' });
     if (!c.env.FILES) return c.json({ detail: 'storage_not_configured' }, 503);
     const project = await c.env.DB.prepare('SELECT id, uid, name FROM projects WHERE uid = ?')
       .bind(c.req.param('projectUid')).first<ProjectRow>();
@@ -298,11 +397,12 @@ r.post('/shared/:projectUid/files/:uid/download', async (c) => {
     if (!project || !grant) return c.json({ detail: 'Data room not found' }, 404);
 
     const file = await c.env.DB.prepare(
-      'SELECT id, uid, name, r2_key, visibility, access_tier, access_expires_at FROM data_room_files WHERE uid = ? AND project_id = ?',
+      'SELECT id, uid, name, r2_key, visibility, access_tier, access_expires_at, folder_id FROM data_room_files WHERE uid = ? AND project_id = ?',
     ).bind(c.req.param('uid'), project.id).first<any>();
     // D691 decision 6 — a file the tier or its expiry hides answers as one that
-    // is not there: its existence is not confirmed.
-    if (!file || !tierAdmits(file, await investorCommitted(c.env, project.id, user.id))) {
+    // is not there: its existence is not confirmed. D1103 — so does a file
+    // outside the grant's folders.
+    if (!file || !tierAdmits(file, await investorCommitted(c.env, project.id, user.id), Date.now(), await grantFolderScope(c.env, grant.id))) {
       return c.json({ detail: 'File not found' }, 404);
     }
 
@@ -330,27 +430,23 @@ r.post('/shared/:projectUid/files/:uid/download', async (c) => {
  * Founder side                                                         *
  * ------------------------------------------------------------------ */
 
-r.get('/:projectUid', async (c) => {
-  try {
-    const user = await requireAuth(c);
-    const project = await ownedProject(c.env, user, c.req.param('projectUid'), await activeCompany(c, user));
-    if (!project) return c.json({ detail: 'Project not found' }, 404);
-
-    const folders = await c.env.DB.prepare(
+/** The same detail read for the owner and a reasoned, audited support read. */
+async function roomDetails(env: Env, project: ProjectRow, role: RoomRole | 'support' = 'owner') {
+    const folders = await env.DB.prepare(
       `SELECT id, uid, name, parent_id, visibility, display_order
          FROM data_room_folders WHERE project_id = ? ORDER BY display_order, name`,
     ).bind(project.id).all<any>();
     // `downloads` is counted from the log, per file. It is a download count
     // and never a view count — no per-file view is logged (header note).
-    const files = await c.env.DB.prepare(
+    const files = await env.DB.prepare(
       `SELECT f.id, f.uid, f.name, f.folder_id, f.content_type, f.size_bytes, f.visibility, f.created_at,
-              f.access_tier, f.access_expires_at,
+              f.access_tier, f.access_expires_at, f.source_kind, f.source_ref,
               (SELECT COUNT(*) FROM data_room_access_log l
                 WHERE l.file_id = f.id AND l.project_id = f.project_id AND l.action = 'download') AS downloads
          FROM data_room_files f WHERE f.project_id = ? ORDER BY f.name`,
     ).bind(project.id).all<any>();
-    const grants = await c.env.DB.prepare(
-      `SELECT g.uid, g.status, g.created_at, g.expires_at,
+    const grants = await env.DB.prepare(
+      `SELECT g.id, g.uid, g.status, g.created_at, g.expires_at, g.folders_scoped,
               u.email AS investor_email, u.name AS investor_name,
               granter.name AS granted_by_name, granter.role AS granted_by_role,
               EXISTS (
@@ -374,8 +470,8 @@ r.get('/:projectUid', async (c) => {
          LEFT JOIN users granter ON granter.id = g.granted_by_user_id
         WHERE g.project_id = ? ORDER BY g.created_at DESC`,
     ).bind(project.id).all<any>();
-    const reportShares = await reportSharesOf(c.env, project.id);
-    const access = await c.env.DB.prepare(
+    const reportShares = await reportSharesOf(env, project.id);
+    const access = await env.DB.prepare(
       `SELECT l.action, l.created_at, u.email AS user_email, u.name AS user_name,
               f.name AS file_name, f.visibility AS file_visibility
          FROM data_room_access_log l
@@ -387,7 +483,7 @@ r.get('/:projectUid', async (c) => {
     // of the fifty rows above, which would stop at fifty. `created_at` is
     // written as an ISO string (`nowIso`), so the column is normalised with
     // datetime() before it is compared (D124).
-    const weekRows = await c.env.DB.prepare(
+    const weekRows = await env.DB.prepare(
       `SELECT action, COUNT(*) AS n FROM data_room_access_log
         WHERE project_id = ? AND datetime(created_at) > datetime('now', '-7 days')
         GROUP BY action`,
@@ -397,29 +493,156 @@ r.get('/:projectUid', async (c) => {
       return hit ? Number(hit.n) : 0;
     };
 
-    return c.json({
+    const scopes = await grantScopesOf(env, project.id);
+
+    return {
       project: { uid: project.uid, name: project.name },
+      // D1103 — what the caller may do here: `owner` shares and sets gates.
+      role,
       folders: folders.results || [],
       files: files.results || [],
-      grants: (grants.results || []).map((g) => ({ ...g, nda_signed: !!g.nda_signed })),
+      grants: (grants.results || []).map(({ id, folders_scoped, ...g }) => ({
+        ...g, nda_signed: !!g.nda_signed,
+        // D1103 — null opens every folder; else the uids it opens. Unreadable
+        // is said, never drawn as every folder or none.
+        ...(Number(folders_scoped) !== 1 ? { folders: null }
+          : scopes ? { folders: scopes.get(Number(id)) ?? [] } : { folders: null, folders_unreadable: true }),
+      })),
       report_shares: reportShares,
       recent_access: access.results || [],
       // A real count of a table this route owns: an action with no row in the
       // window is zero events, not an unknown.
       week: { opened: weekOf('open_room'), downloaded: weekOf('download'), blocked: weekOf('blocked') },
-    });
+    };
+}
+
+/** Admin reads load identifiers and aggregates only, never file or investor names. */
+async function summaryProject(env: Env, uid: string) {
+  return env.DB.prepare('SELECT id, uid, founder_id FROM projects WHERE uid = ? AND deleted_at IS NULL')
+    .bind(uid).first<{ id: number; uid: string; founder_id: number | null }>();
+}
+
+async function summaryBlock(read: () => Promise<Record<string, unknown>>) {
+  try { return { available: true, ...await read() }; }
+  catch { return { available: false, reason: 'This part of the data room summary could not be read.' }; }
+}
+function countOf(value: unknown): number {
+  if (typeof value !== 'number' || !Number.isSafeInteger(value) || value < 0) throw new Error('Invalid summary count');
+  return value;
+}
+async function roomSummary(env: Env, project: { id: number; uid: string }) {
+  const [files, folders, grants] = await Promise.all([
+    summaryBlock(async () => {
+      const result: { success?: boolean; results?: { visibility: string; checklist_item: string | null; n: number }[] } = await env.DB.prepare(
+        'SELECT visibility, checklist_item, COUNT(*) AS n FROM data_room_files WHERE project_id = ? GROUP BY visibility, checklist_item',
+      ).bind(project.id).all();
+      if (result.success === false || !Array.isArray(result.results)) throw new Error('Summary unavailable');
+      let total = 0, open = 0, nda = 0, matched = 0;
+      const covered = new Set<string>();
+      for (const row of result.results) {
+        const n = countOf(row.n); total += n;
+        if (row.visibility === 'open') open += n;
+        if (row.visibility === 'nda') nda += n;
+        if (row.checklist_item && CHECKLIST_KEYS.has(row.checklist_item)) { matched += n; covered.add(row.checklist_item); }
+      }
+      return { total, open, nda, other_gates: total - open - nda,
+        coverage: { covered_items: covered.size, total_items: CHECKLIST_KEYS.size, matched_files: matched,
+          definition: 'Recorded checklist tags; this does not claim an investor can open the files.' } };
+    }),
+    summaryBlock(async () => {
+      const row = await env.DB.prepare('SELECT COUNT(*) AS total FROM data_room_folders WHERE project_id = ?')
+        .bind(project.id).first<{ total: number }>();
+      return { total: countOf(row?.total) };
+    }),
+    summaryBlock(async () => {
+      const result: { success?: boolean; results?: { bucket: string; n: number }[] } = await env.DB.prepare(
+        `SELECT CASE
+           WHEN status = 'active' AND (expires_at IS NULL OR datetime(expires_at) > datetime('now')) THEN 'active'
+           WHEN status = 'active' AND datetime(expires_at) <= datetime('now') THEN 'expired'
+           WHEN status = 'revoked' THEN 'revoked' ELSE 'unknown' END AS bucket, COUNT(*) AS n
+         FROM data_room_grants WHERE project_id = ? GROUP BY bucket`,
+      ).bind(project.id).all();
+      if (result.success === false || !Array.isArray(result.results)) throw new Error('Summary unavailable');
+      const counts = { total: 0, active: 0, expired: 0, revoked: 0, unknown: 0 };
+      for (const row of result.results) {
+        if (!['active', 'expired', 'revoked', 'unknown'].includes(row.bucket)) throw new Error('Summary unavailable');
+        const n = countOf(row.n); counts.total += n; counts[row.bucket as 'active' | 'expired' | 'revoked' | 'unknown'] += n;
+      }
+      return counts;
+    }),
+  ]);
+  const coverage = files.available && 'coverage' in files ? { available: true, ...files.coverage as Record<string, unknown> }
+    : { available: false, reason: 'Checklist coverage could not be read.' };
+  // Do not return checklist keys, file identifiers, contact details or activity rows.
+  const { coverage: _coverage, ...fileCounts } = files as typeof files & { coverage?: unknown };
+  return { mode: 'summary', read_only: true, project: { uid: project.uid }, files: fileCounts, folders, coverage, grants };
+}
+
+r.get('/:projectUid', async (c) => {
+  try {
+    const user = await requireAuth(c);
+    if (user.role === 'admin') {
+      await requireAdmin(c);
+      const project = await summaryProject(c.env, c.req.param('projectUid'));
+      if (!project) return c.json({ detail: 'Project not found' }, 404);
+      return c.json(await roomSummary(c.env, project));
+    }
+    const room = await roomProject(c, user, c.req.param('projectUid'));
+    if (!room) return c.json({ detail: 'Project not found' }, 404);
+    return c.json(await roomDetails(c.env, room.project, room.role));
   } catch (e) { return mapError(c, e); }
+});
+
+r.post('/:projectUid/support-read', async (c) => {
+  try {
+    const admin = await requireAdmin(c);
+    const body = await c.req.json().catch(() => ({}));
+    const reason = typeof body?.reason === 'string' ? body.reason.trim() : '';
+    if (!reason || reason.length > 500) return refuse(c, 400, {
+      code: 'support_reason_required', message: 'Give a support reason between 1 and 500 characters. The founder will see it.',
+    });
+    const project = await summaryProject(c.env, c.req.param('projectUid'));
+    if (!project) return c.json({ detail: 'Project not found' }, 404);
+    const owners: { success?: boolean; results?: { id: number }[] } = await c.env.DB.prepare(
+      "SELECT id FROM users WHERE founder_id = ? AND role = 'founder'",
+    ).bind(project.founder_id).all();
+    if (owners.success === false || !Array.isArray(owners.results)) throw new Error('Support owner unreadable');
+    if (owners.results.length !== 1) return refuse(c, 409, {
+      code: 'support_owner_unresolved', message: 'Support access cannot be recorded for this venture owner.',
+    });
+    const ownerId = Number(owners.results[0].id);
+    // Fail closed: /activity is per-user, so this row belongs to the founder.
+    // Its actor still names the admin. Record it BEFORE loading private detail.
+    const audit = await c.env.DB.prepare(
+      `INSERT INTO activity_logs (project_id, user_id, entity_type, entity_id, action, details, actor)
+       VALUES (?, ?, 'raise.data-room', NULL, 'data_room_support_read', ?, ?)`,
+    ).bind(project.id, ownerId, JSON.stringify({ admin_user_id: admin.id, reason, read_only: true }), `user:${admin.id}`).run();
+    if (!audit.success || audit.meta.changes !== 1) throw new Error('Support audit unavailable');
+    await logAdminAction(c.env, Number(admin.id), admin.email || '', 'data_room_support_read', {
+      project_id: project.id, target_user_id: ownerId, reason, read_only: true,
+    });
+    const detail = await roomDetails(c.env, { ...project, name: '' }, 'support');
+    // Fetching the name belongs to the audited detail read, not the summary.
+    const named = await c.env.DB.prepare('SELECT name FROM projects WHERE id = ?').bind(project.id).first<{ name: string }>();
+    return c.json({ ...detail, project: { uid: project.uid, name: named?.name ?? null }, mode: 'support', read_only: true });
+  } catch (e) {
+    if (e instanceof Response) return e;
+    if (e instanceof Error && (e.message === 'Unauthorized' || e.message === 'Admin required')) return mapError(c, e);
+    return refuse(c, 503, { code: 'support_read_unavailable', message: 'Support access could not be recorded or the room could not be read. Try again.' });
+  }
 });
 
 r.post('/:projectUid/folders', async (c) => {
   try {
     const user = await requireAuth(c);
-    const project = await ownedProject(c.env, user, c.req.param('projectUid'), await activeCompany(c, user));
-    if (!project) return c.json({ detail: 'Project not found' }, 404);
+    const room = await roomProject(c, user, c.req.param('projectUid'));
+    if (!room) return c.json({ detail: 'Project not found' }, 404);
+    const { project } = room;
     const body = await c.req.json().catch(() => ({} as any));
     const name = String(body.name || '').trim();
     if (!name) return c.json({ detail: 'name is required' }, 400);
     if (badVisibility(body.visibility)) return c.json({ detail: 'invalid visibility' }, 400);
+    if (room.role !== 'owner' && namesGate(body)) return c.json(OWNER_ONLY, 403);
 
     // A parent must belong to the SAME project, or a folder could be re-homed
     // into another founder's tree by uid.
@@ -447,10 +670,13 @@ r.post('/:projectUid/folders', async (c) => {
 r.patch('/:projectUid/folders/:uid', async (c) => {
   try {
     const user = await requireAuth(c);
-    const project = await ownedProject(c.env, user, c.req.param('projectUid'), await activeCompany(c, user));
-    if (!project) return c.json({ detail: 'Project not found' }, 404);
+    const room = await roomProject(c, user, c.req.param('projectUid'));
+    if (!room) return c.json({ detail: 'Project not found' }, 404);
+    const { project } = room;
     const body = await c.req.json().catch(() => ({} as any));
     if (badVisibility(body.visibility)) return c.json({ detail: 'invalid visibility' }, 400);
+    // D1103 — a co-founder organises; only the owner changes a gate.
+    if (room.role !== 'owner' && namesGate(body)) return c.json(OWNER_ONLY, 403);
 
     const sets: string[] = []; const params: any[] = [];
     if (body.name !== undefined) { sets.push('name = ?'); params.push(String(body.name).slice(0, NAME_MAX)); }
@@ -510,11 +736,21 @@ r.patch('/:projectUid/folders/:uid', async (c) => {
 r.delete('/:projectUid/folders/:uid', async (c) => {
   try {
     const user = await requireAuth(c);
-    const project = await ownedProject(c.env, user, c.req.param('projectUid'), await activeCompany(c, user));
-    if (!project) return c.json({ detail: 'Project not found' }, 404);
-    const res = await c.env.DB.prepare(
-      'DELETE FROM data_room_folders WHERE uid = ? AND project_id = ?',
-    ).bind(c.req.param('uid'), project.id).run();
+    const room = await roomProject(c, user, c.req.param('projectUid'));
+    if (!room) return c.json({ detail: 'Project not found' }, 404);
+    const { project } = room;
+    // D1103 — the folder leaves every grant's scope with it, by hand, since D1
+    // may run with foreign keys off. A scoped grant left naming nothing opens
+    // nothing (migration 594).
+    const [, res] = await c.env.DB.batch([
+      c.env.DB.prepare(
+        `DELETE FROM data_room_grant_folders
+          WHERE folder_id IN (SELECT id FROM data_room_folders WHERE uid = ? AND project_id = ?)`,
+      ).bind(c.req.param('uid'), project.id),
+      c.env.DB.prepare(
+        'DELETE FROM data_room_folders WHERE uid = ? AND project_id = ?',
+      ).bind(c.req.param('uid'), project.id),
+    ]);
     if (!(res as any).meta?.changes) return c.json({ detail: 'Folder not found' }, 404);
     // Migration 184 sets data_room_files.folder_id ON DELETE SET NULL, so the
     // files land at the room root rather than disappearing with the folder.
@@ -525,14 +761,17 @@ r.delete('/:projectUid/folders/:uid', async (c) => {
 r.post('/:projectUid/files', async (c) => {
   try {
     const user = await requireAuth(c);
+    const room = await roomProject(c, user, c.req.param('projectUid'));
+    if (!room) return c.json({ detail: 'Project not found' }, 404);
+    const { project } = room;
+
     if (!c.env.FILES) return c.json({ detail: 'storage_not_configured' }, 503);
-    const project = await ownedProject(c.env, user, c.req.param('projectUid'), await activeCompany(c, user));
-    if (!project) return c.json({ detail: 'Project not found' }, 404);
 
     const body = await c.req.json().catch(() => ({} as any));
     const name = String(body.name || '').trim();
     if (!name) return c.json({ detail: 'name is required' }, 400);
     if (badVisibility(body.visibility)) return c.json({ detail: 'invalid visibility' }, 400);
+    if (room.role !== 'owner' && namesGate(body)) return c.json(OWNER_ONLY, 403);
 
     const dataUri = String(body.data || '');
     const comma = dataUri.indexOf(',');
@@ -554,12 +793,15 @@ r.post('/:projectUid/files', async (c) => {
     if ('refusal' in access) return c.json({ detail: access.refusal }, access.status as any);
 
     let folderId: number | null = null;
+    // D1103 — a co-founder's upload takes its folder's visibility, never a gate of its own.
+    let folderVisibility = 'open';
     if (body.folder_uid) {
       const folder = await c.env.DB.prepare(
-        'SELECT id FROM data_room_folders WHERE uid = ? AND project_id = ?',
-      ).bind(String(body.folder_uid), project.id).first<{ id: number }>();
+        'SELECT id, visibility FROM data_room_folders WHERE uid = ? AND project_id = ?',
+      ).bind(String(body.folder_uid), project.id).first<{ id: number; visibility: string }>();
       if (!folder) return c.json({ detail: 'Folder not found' }, 404);
       folderId = folder.id;
+      folderVisibility = VISIBILITY.has(String(folder.visibility)) ? String(folder.visibility) : 'nda';
     } else if (typeof body.folder_name === 'string' && body.folder_name.trim()) {
       // D691 — Upload names a top-level folder, created on first use.
       folderId = await topFolder(c.env, project.id, body.folder_name.trim().slice(0, NAME_MAX));
@@ -581,7 +823,7 @@ r.post('/:projectUid/files', async (c) => {
           access_tier, access_expires_at, dd_request_id, checklist_item)
        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     ).bind(uid, project.id, folderId, name.slice(0, NAME_MAX), key, declaredMime,
-           bytes.byteLength, body.visibility ? String(body.visibility) : 'open',
+           bytes.byteLength, body.visibility ? String(body.visibility) : room.role === 'owner' ? 'nda' : folderVisibility,
            user.id, nowIso(), nowIso(),
            access.values.access_tier ?? 'invited', access.values.access_expires_at ?? null,
            access.values.dd_request_id ?? null, access.values.checklist_item ?? null).run();
@@ -644,10 +886,13 @@ export async function replaceDataRoomFile(
 r.patch('/:projectUid/files/:uid', async (c) => {
   try {
     const user = await requireAuth(c);
-    const project = await ownedProject(c.env, user, c.req.param('projectUid'), await activeCompany(c, user));
-    if (!project) return c.json({ detail: 'Project not found' }, 404);
+    const room = await roomProject(c, user, c.req.param('projectUid'));
+    if (!room) return c.json({ detail: 'Project not found' }, 404);
+    const { project } = room;
     const body = await c.req.json().catch(() => ({} as any));
     if (badVisibility(body.visibility)) return c.json({ detail: 'invalid visibility' }, 400);
+    // D1103 — a co-founder renames, moves and matches; only the owner changes a gate.
+    if (room.role !== 'owner' && namesGate(body)) return c.json(OWNER_ONLY, 403);
     const access = await accessFields(c.env, project.id, body);
     if ('refusal' in access) return c.json({ detail: access.refusal }, access.status as any);
 
@@ -686,11 +931,175 @@ r.patch('/:projectUid/files/:uid', async (c) => {
 r.delete('/:projectUid/files/:uid', async (c) => {
   try {
     const user = await requireAuth(c);
-    const project = await ownedProject(c.env, user, c.req.param('projectUid'), await activeCompany(c, user));
-    if (!project) return c.json({ detail: 'Project not found' }, 404);
+    const room = await roomProject(c, user, c.req.param('projectUid'));
+    if (!room) return c.json({ detail: 'Project not found' }, 404);
+    const { project } = room;
+    if (room.role !== 'owner') return c.json(OWNER_ONLY, 403);
     const removed = await removeDataRoomFile(c.env, { project, userId: Number(user.id), uid: c.req.param('uid') });
     if (!removed) return c.json({ detail: 'File not found' }, 404);
     return c.json({ ok: true });
+  } catch (e) { return mapError(c, e); }
+});
+
+/* ------------------------------------------------------------------ *
+ * D1103 (#2983) — the founder's own files: download, versions, preview *
+ * ------------------------------------------------------------------ */
+
+const FOUNDER_LINK_TTL_SEC = 120;
+type FileRow = { id: number; uid: string; name: string; r2_key: string; content_type: string | null; size_bytes: number | null; uploaded_by_user_id: number | null; updated_at: string | null };
+
+async function roomFile(env: Env, projectId: number, uid: string): Promise<FileRow | null> {
+  return (await env.DB.prepare(
+    `SELECT id, uid, name, r2_key, content_type, size_bytes, uploaded_by_user_id, updated_at
+       FROM data_room_files WHERE uid = ? AND project_id = ?`,
+  ).bind(uid, projectId).first<FileRow>()) || null;
+}
+
+/** A version number from the path: a positive integer, else null. */
+const versionOf = (raw: string): number | null => (/^[1-9]\d{0,8}$/.test(raw) ? Number(raw) : null);
+
+/**
+ * The founder's one-time link: the investor download's 120-second, single-use
+ * token, for an object inside this venture's prefix only. It is logged on the
+ * file's record as the founder's own event (`logCycleWrite`), never in
+ * `data_room_access_log`, so it is never counted as an investor's download.
+ */
+async function founderLink(env: Env, project: ProjectRow, userId: number, file: FileRow, key: string, version: number | null) {
+  // Null for an object outside this venture's prefix: the route answers 404.
+  if (!key.startsWith(`data-room/${project.uid}/`)) return null;
+  const { token, expires_at } = await mintDownloadToken(env, {
+    key, audience: `data_room_founder:${project.uid}`, userId, ttlSec: FOUNDER_LINK_TTL_SEC,
+  });
+  await logCycleWrite(env, { projectId: project.id, userId, cycle: 'raise', module: 'data-room',
+    entityId: file.id, action: 'file_downloaded', summary: version == null ? 'Current version downloaded by the venture' : `Version ${version} downloaded by the venture` });
+  return { url: `/api/files/dl/${token}`, expires_at, name: file.name, version };
+}
+
+r.post('/:projectUid/files/:uid/download', async (c) => {
+  try {
+    const user = await requireAuth(c);
+    if (!c.env.FILES) return c.json({ detail: 'storage_not_configured' }, 503);
+    const room = await roomProject(c, user, c.req.param('projectUid'));
+    if (!room) return c.json({ detail: 'Project not found' }, 404);
+    const file = await roomFile(c.env, room.project.id, c.req.param('uid'));
+    if (!file) return c.json({ detail: 'File not found' }, 404);
+    const link = await founderLink(c.env, room.project, Number(user.id), file, file.r2_key, null);
+    return link ? c.json(link) : c.json({ detail: 'File not found' }, 404);
+  } catch (e) { return mapError(c, e); }
+});
+
+/**
+ * The file's versions, the current one first. The current one is the file's
+ * own row; each earlier one is a `data_room_file_versions` row (Replace keeps
+ * the bytes it replaced). A size or uploader nobody recorded is null, never 0.
+ */
+r.get('/:projectUid/files/:uid/versions', async (c) => {
+  try {
+    const user = await requireAuth(c);
+    const room = await roomProject(c, user, c.req.param('projectUid'));
+    if (!room) return c.json({ detail: 'Project not found' }, 404);
+    const file = await roomFile(c.env, room.project.id, c.req.param('uid'));
+    if (!file) return c.json({ detail: 'File not found' }, 404);
+    const rows = await c.env.DB.prepare(
+      `SELECT v.version, v.content_type, v.size_bytes, v.created_at, u.name AS uploaded_by_name
+         FROM data_room_file_versions v LEFT JOIN users u ON u.id = v.uploaded_by
+        WHERE v.file_id = ? ORDER BY v.version DESC`,
+    ).bind(file.id).all<any>();
+    const uploader = file.uploaded_by_user_id == null ? null : await c.env.DB.prepare('SELECT name FROM users WHERE id = ?')
+      .bind(file.uploaded_by_user_id).first<{ name: string | null }>();
+    return c.json({
+      file: { uid: file.uid, name: file.name },
+      current: { content_type: file.content_type, size_bytes: file.size_bytes, uploaded_by_name: uploader?.name ?? null, updated_at: file.updated_at },
+      versions: (rows.results || []).map((v) => ({
+        version: Number(v.version), content_type: v.content_type ?? null, size_bytes: v.size_bytes ?? null,
+        uploaded_by_name: v.uploaded_by_name ?? null, created_at: v.created_at,
+      })),
+    });
+  } catch (e) { return mapError(c, e); }
+});
+
+r.post('/:projectUid/files/:uid/versions/:n/download', async (c) => {
+  try {
+    const user = await requireAuth(c);
+    if (!c.env.FILES) return c.json({ detail: 'storage_not_configured' }, 503);
+    const room = await roomProject(c, user, c.req.param('projectUid'));
+    if (!room) return c.json({ detail: 'Project not found' }, 404);
+    const file = await roomFile(c.env, room.project.id, c.req.param('uid'));
+    const n = versionOf(c.req.param('n'));
+    const version = file && n != null ? await c.env.DB.prepare(
+      'SELECT r2_key FROM data_room_file_versions WHERE file_id = ? AND version = ?',
+    ).bind(file.id, n).first<{ r2_key: string }>() : null;
+    if (!file || !version) return c.json({ detail: 'Version not found' }, 404);
+    const link = await founderLink(c.env, room.project, Number(user.id), file, version.r2_key, n);
+    return link ? c.json(link) : c.json({ detail: 'Version not found' }, 404);
+  } catch (e) { return mapError(c, e); }
+});
+
+/**
+ * Make an earlier version current: a SWAP, so nothing is lost. The file's row
+ * takes version n's object, type, size and uploader, and version n's row takes
+ * what was current. Both writes are one batch, guarded on the key each row
+ * held when read, so two swaps at once cannot leave one object on both rows.
+ * Logged on the file's record.
+ */
+r.post('/:projectUid/files/:uid/versions/:n/current', async (c) => {
+  try {
+    const user = await requireAuth(c);
+    const room = await roomProject(c, user, c.req.param('projectUid'));
+    if (!room) return c.json({ detail: 'Project not found' }, 404);
+    const { project } = room;
+    const file = await roomFile(c.env, project.id, c.req.param('uid'));
+    const n = versionOf(c.req.param('n'));
+    const version = file && n != null ? await c.env.DB.prepare(
+      'SELECT id, r2_key, content_type, size_bytes, uploaded_by FROM data_room_file_versions WHERE file_id = ? AND version = ?',
+    ).bind(file.id, n).first<{ id: number; r2_key: string; content_type: string | null; size_bytes: number | null; uploaded_by: number | null }>() : null;
+    if (!file || !version) return c.json({ detail: 'Version not found' }, 404);
+    if (!version.r2_key.startsWith(`data-room/${project.uid}/`)) return c.json({ detail: 'Version not found' }, 404);
+    const at = nowIso();
+    const [toFile, toVersion] = await c.env.DB.batch([
+      c.env.DB.prepare(
+        `UPDATE data_room_files SET r2_key = ?, content_type = ?, size_bytes = ?, uploaded_by_user_id = ?, updated_at = ?
+          WHERE id = ? AND project_id = ? AND r2_key = ?`,
+      ).bind(version.r2_key, version.content_type, version.size_bytes, version.uploaded_by, at, file.id, project.id, file.r2_key),
+      c.env.DB.prepare(
+        `UPDATE data_room_file_versions SET r2_key = ?, content_type = ?, size_bytes = ?, uploaded_by = ?, updated_at = ?
+          WHERE id = ? AND r2_key = ?
+            AND EXISTS (SELECT 1 FROM data_room_files WHERE id = ? AND r2_key = ?)`,
+      ).bind(file.r2_key, file.content_type, file.size_bytes, file.uploaded_by_user_id, at, version.id, version.r2_key, file.id, version.r2_key),
+    ]);
+    if (!(toFile as any).meta?.changes || !(toVersion as any).meta?.changes) {
+      return c.json({ detail: 'The file changed while this was saved. Read it again and retry.', code: 'version_conflict' }, 409);
+    }
+    await logCycleWrite(c.env, { projectId: project.id, userId: Number(user.id), cycle: 'raise', module: 'data-room',
+      entityId: file.id, action: 'version_made_current', summary: `Version ${n} made current; the one it replaced is kept as version ${n}` });
+    return c.json({ ok: true, version: n });
+  } catch (e) { return mapError(c, e); }
+});
+
+/**
+ * The room exactly as one investor sees it: the investor read's own filter
+ * (`investorView`) for that grant, with the files it hides counted, never
+ * named. It writes no log row: a founder looking is not the investor opening
+ * the room. A revoked or ended grant is previewed as what it opens now:
+ * nothing.
+ */
+r.get('/:projectUid/preview', async (c) => {
+  try {
+    const user = await requireAuth(c);
+    const room = await roomProject(c, user, c.req.param('projectUid'));
+    if (!room) return c.json({ detail: 'Project not found' }, 404);
+    const { project } = room;
+    const grantUid = String(c.req.query('grant') || '');
+    const row = grantUid ? await c.env.DB.prepare(
+      'SELECT investor_user_id FROM data_room_grants WHERE uid = ? AND project_id = ?',
+    ).bind(grantUid, project.id).first<{ investor_user_id: number }>() : null;
+    if (!row) return c.json({ detail: 'Grant not found' }, 404);
+    const grant = await activeGrant(c.env, project.id, Number(row.investor_user_id));
+    if (!grant || grant.uid !== grantUid) {
+      return c.json({ grant_uid: grantUid, open: false, reason: 'This grant is revoked or has ended, so it opens nothing.' });
+    }
+    const view = await investorView(c.env, project, grant, Number(row.investor_user_id));
+    return c.json({ grant_uid: grantUid, open: true, ...view });
   } catch (e) { return mapError(c, e); }
 });
 
@@ -732,6 +1141,85 @@ export async function removeDataRoomFile(
   await logCycleWrite(env, { projectId: project.id, userId: a.userId, cycle: 'raise', module: 'data-room',
     entityId: file.id, action: 'file_removed', summary: `File removed with ${(versions.results || []).length} earlier versions` });
   return { id: file.id };
+}
+
+/** D1103 — each scoped grant's named folders, by grant id; null when the store cannot be read. */
+// ─────────────────────────────────────────────── activity and checklist (D1105)
+
+/**
+ * The room and the investor a query names, for the activity reads: the
+ * owner's or a co-founder's room (404 otherwise, as every founder route), and
+ * a grant uid of this venture (404 `unknown_investor` otherwise).
+ */
+async function activityTarget(c: any) {
+  const user = await requireAuth(c);
+  const room = await roomProject(c, user, c.req.param('projectUid'));
+  if (!room) return { refused: c.json({ detail: 'Project not found' }, 404) };
+  const parsed = parseActivityQuery((k) => c.req.query(k), nowIso().slice(0, 10));
+  if (!parsed.ok) return { refused: c.json({ code: parsed.code, detail: parsed.detail }, 400) };
+  let userId: number | null = null;
+  if (parsed.q.investor) {
+    const g = await investorOfGrant(c.env, room.project.id, parsed.q.investor);
+    if (!g) return { refused: c.json({ code: 'unknown_investor', detail: 'This room has no such grant.' }, 404) };
+    userId = Number(g.investor_user_id);
+  }
+  return { room, q: parsed.q, userId };
+}
+
+r.get('/:projectUid/activity', async (c) => {
+  try {
+    const t = await activityTarget(c);
+    if ('refused' in t) return t.refused;
+    return c.json(await activityRead(c.env, t.room.project.id, t.q, t.userId));
+  } catch (e) { return mapError(c, e); }
+});
+
+r.get('/:projectUid/activity.csv', async (c) => {
+  try {
+    const t = await activityTarget(c);
+    if ('refused' in t) return t.refused;
+    const out = await activityCsv(c.env, t.room.project.id, t.q, t.userId);
+    if ('tooMany' in out) {
+      return refuse(c, 413, {
+        code: 'too_many_rows',
+        message: `This period holds ${out.tooMany} events, more than one file takes (${CSV_MAX_ROWS}). Choose a shorter period, an investor or an action.`,
+        extra: { code: 'too_many_rows' },
+      });
+    }
+    return new Response(out.csv, {
+      headers: {
+        'Content-Type': 'text/csv; charset=utf-8',
+        'Content-Disposition': `attachment; filename="data-room-activity-${t.q.from}-to-${t.q.to}.csv"`,
+        'Cache-Control': 'no-store',
+      },
+    });
+  } catch (e) { return mapError(c, e); }
+});
+
+r.get('/:projectUid/checklist', async (c) => {
+  try {
+    const user = await requireAuth(c);
+    const room = await roomProject(c, user, c.req.param('projectUid'));
+    if (!room) return c.json({ detail: 'Project not found' }, 404);
+    return c.json(await checklistRead(c.env, room.project.id));
+  } catch (e) { return mapError(c, e); }
+});
+
+async function grantScopesOf(env: Env, projectId: number): Promise<Map<number, string[]> | null> {
+  try {
+    const rows = await env.DB.prepare(
+      `SELECT gf.grant_id, f.uid FROM data_room_grant_folders gf
+         JOIN data_room_grants g ON g.id = gf.grant_id AND g.project_id = ?
+         JOIN data_room_folders f ON f.id = gf.folder_id AND f.project_id = ?
+        ORDER BY f.display_order, f.name`,
+    ).bind(projectId, projectId).all<{ grant_id: number; uid: string }>();
+    const out = new Map<number, string[]>();
+    for (const r of rows.results || []) out.set(Number(r.grant_id), [...(out.get(Number(r.grant_id)) || []), String(r.uid)]);
+    return out;
+  } catch (e) {
+    console.warn('[data_room] grant folders unreadable:', (e as Error)?.message);
+    return null;
+  }
 }
 
 /**
@@ -783,14 +1271,82 @@ async function reportSharesOf(env: Env, projectId: number): Promise<ReportShare[
   }
 }
 
+/**
+ * D1103 — a grant's end date and folders, checked. `expires_at` is a day
+ * (`YYYY-MM-DD`), today or later, stored as the end of that day UTC so the
+ * grant is open through it; null or '' clears it. `folders` is null for every
+ * folder, or a non-empty list of this venture's folder uids (an unknown one is
+ * 404). Only the fields the body names are returned.
+ */
+type GrantFields = { expires_at?: string | null; folders?: number[] | null };
+async function grantFields(env: Env, projectId: number, body: any): Promise<{ values: GrantFields } | { refusal: string; status: 400 | 404 }> {
+  const values: GrantFields = {};
+  if (body.expires_at !== undefined) {
+    if (body.expires_at === null || body.expires_at === '') values.expires_at = null;
+    else {
+      const day = typeof body.expires_at === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(body.expires_at) ? body.expires_at : null;
+      const at = day ? expiryMs(`${day} 23:59:59`) : null;
+      if (!day || at == null || new Date(at).toISOString().slice(0, 10) !== day) return { refusal: 'expires_at must be a date (YYYY-MM-DD)', status: 400 };
+      if (at <= Date.now()) return { refusal: 'expires_at must be today or later', status: 400 };
+      values.expires_at = `${day} 23:59:59`;
+    }
+  }
+  if (body.folders !== undefined) {
+    if (body.folders === null) values.folders = null;
+    else {
+      if (!Array.isArray(body.folders) || !body.folders.length || body.folders.length > 200
+        || !body.folders.every((u: unknown) => typeof u === 'string' && u.length > 0 && u.length <= 64)) {
+        return { refusal: 'folders must be null for every folder, or a list of folder uids', status: 400 };
+      }
+      const ids: number[] = [];
+      for (const uid of new Set<string>(body.folders)) {
+        const row = await env.DB.prepare('SELECT id FROM data_room_folders WHERE uid = ? AND project_id = ?')
+          .bind(uid, projectId).first<{ id: number }>();
+        if (!row) return { refusal: 'Folder not found', status: 404 };
+        ids.push(Number(row.id));
+      }
+      values.folders = ids;
+    }
+  }
+  return { values };
+}
+
+/**
+ * The statements that set a grant's folders (migration 594): its flag, then
+ * its rows replaced. The grant is named by its project and either its
+ * investor or its uid, the same two binds in every statement, each a literal.
+ */
+function scopeStatements(env: Env, by: 'investor' | 'uid', key: [number, number | string], folders: number[] | null) {
+  const flag = by === 'investor'
+    ? env.DB.prepare('UPDATE data_room_grants SET folders_scoped = ? WHERE project_id = ? AND investor_user_id = ?')
+    : env.DB.prepare('UPDATE data_room_grants SET folders_scoped = ? WHERE project_id = ? AND uid = ?');
+  const clear = by === 'investor'
+    ? env.DB.prepare('DELETE FROM data_room_grant_folders WHERE grant_id IN (SELECT id FROM data_room_grants WHERE project_id = ? AND investor_user_id = ?)')
+    : env.DB.prepare('DELETE FROM data_room_grant_folders WHERE grant_id IN (SELECT id FROM data_room_grants WHERE project_id = ? AND uid = ?)');
+  const add = by === 'investor'
+    ? 'INSERT INTO data_room_grant_folders (grant_id, folder_id, created_at) SELECT id, ?, ? FROM data_room_grants WHERE project_id = ? AND investor_user_id = ?'
+    : 'INSERT INTO data_room_grant_folders (grant_id, folder_id, created_at) SELECT id, ?, ? FROM data_room_grants WHERE project_id = ? AND uid = ?';
+  return [
+    flag.bind(folders === null ? 0 : 1, ...key),
+    clear.bind(...key),
+    ...(folders || []).map((id) => env.DB.prepare(add).bind(id, nowIso(), ...key)),
+  ];
+}
+
 r.post('/:projectUid/grants', async (c) => {
   try {
     const user = await requireAuth(c);
-    const project = await ownedProject(c.env, user, c.req.param('projectUid'), await activeCompany(c, user));
-    if (!project) return c.json({ detail: 'Project not found' }, 404);
+    const room = await roomProject(c, user, c.req.param('projectUid'));
+    if (!room) return c.json({ detail: 'Project not found' }, 404);
+    const { project } = room;
+    // D1103 — only the owner shares.
+    if (room.role !== 'owner') return c.json(OWNER_ONLY, 403);
     const body = await c.req.json().catch(() => ({} as any));
     const email = String(body.email || '').trim().toLowerCase();
     if (!email) return c.json({ detail: 'email is required' }, 400);
+    // Checked before the address is looked up, so a refusal says nothing about who has an account.
+    const fields = await grantFields(c.env, project.id, body);
+    if ('refusal' in fields) return c.json({ detail: fields.refusal }, fields.status);
 
     // Resolves to an EXISTING account. No invitation is sent and no row is
     // written for an unknown address. Both outcomes return the same response.
@@ -801,25 +1357,60 @@ r.post('/:projectUid/grants', async (c) => {
 
     const uid = newUid();
     // Re-granting a revoked investor reactivates the existing row rather than
-    // failing on the UNIQUE(project_id, investor_user_id) constraint.
-    await c.env.DB.prepare(
-      `INSERT INTO data_room_grants
-         (uid, project_id, investor_user_id, granted_by_user_id, status, expires_at, created_at, updated_at)
-       VALUES (?, ?, ?, ?, 'active', ?, ?, ?)
-       ON CONFLICT (project_id, investor_user_id) DO UPDATE SET
-         status = 'active', granted_by_user_id = excluded.granted_by_user_id,
-         expires_at = excluded.expires_at, updated_at = excluded.updated_at`,
-    ).bind(uid, project.id, investor.id, user.id,
-           body.expires_at ? String(body.expires_at) : null, nowIso(), nowIso()).run();
+    // failing on the UNIQUE(project_id, investor_user_id) constraint. A
+    // re-grant that names no `folders` keeps the scope the row had.
+    await c.env.DB.batch([
+      c.env.DB.prepare(
+        `INSERT INTO data_room_grants
+           (uid, project_id, investor_user_id, granted_by_user_id, status, expires_at, created_at, updated_at)
+         VALUES (?, ?, ?, ?, 'active', ?, ?, ?)
+         ON CONFLICT (project_id, investor_user_id) DO UPDATE SET
+           status = 'active', granted_by_user_id = excluded.granted_by_user_id,
+           expires_at = excluded.expires_at, updated_at = excluded.updated_at`,
+      ).bind(uid, project.id, investor.id, user.id, fields.values.expires_at ?? null, nowIso(), nowIso()),
+      ...(fields.values.folders !== undefined ? scopeStatements(c.env, 'investor', [project.id, investor.id], fields.values.folders) : []),
+    ]);
     return c.json({ ok: true }, 201);
+  } catch (e) { return mapError(c, e); }
+});
+
+/** D1103 — the owner changes a grant's end date or folders from the page. */
+r.patch('/:projectUid/grants/:uid', async (c) => {
+  try {
+    const user = await requireAuth(c);
+    const room = await roomProject(c, user, c.req.param('projectUid'));
+    if (!room) return c.json({ detail: 'Project not found' }, 404);
+    const { project } = room;
+    if (room.role !== 'owner') return c.json(OWNER_ONLY, 403);
+    const body = await c.req.json().catch(() => ({} as any));
+    const fields = await grantFields(c.env, project.id, body);
+    if ('refusal' in fields) return c.json({ detail: fields.refusal }, fields.status);
+    const { values } = fields;
+    if (values.expires_at === undefined && values.folders === undefined) return c.json({ detail: 'nothing to update' }, 400);
+    const grantUid = c.req.param('uid');
+    const found = await c.env.DB.prepare('SELECT id FROM data_room_grants WHERE uid = ? AND project_id = ?')
+      .bind(grantUid, project.id).first<{ id: number }>();
+    if (!found) return c.json({ detail: 'Grant not found' }, 404);
+    await c.env.DB.batch([
+      values.expires_at !== undefined
+        ? c.env.DB.prepare('UPDATE data_room_grants SET expires_at = ?, updated_at = ? WHERE uid = ? AND project_id = ?')
+          .bind(values.expires_at, nowIso(), grantUid, project.id)
+        : c.env.DB.prepare('UPDATE data_room_grants SET updated_at = ? WHERE uid = ? AND project_id = ?')
+          .bind(nowIso(), grantUid, project.id),
+      ...(values.folders !== undefined ? scopeStatements(c.env, 'uid', [project.id, grantUid], values.folders) : []),
+    ]);
+    return c.json({ ok: true });
   } catch (e) { return mapError(c, e); }
 });
 
 r.delete('/:projectUid/grants/:uid', async (c) => {
   try {
     const user = await requireAuth(c);
-    const project = await ownedProject(c.env, user, c.req.param('projectUid'), await activeCompany(c, user));
-    if (!project) return c.json({ detail: 'Project not found' }, 404);
+    const room = await roomProject(c, user, c.req.param('projectUid'));
+    if (!room) return c.json({ detail: 'Project not found' }, 404);
+    const { project } = room;
+    // D1103 — only the owner revokes.
+    if (room.role !== 'owner') return c.json(OWNER_ONLY, 403);
     // Revoked, not deleted: the access log points at a user whose grant is
     // gone, and the founder still needs to read what that investor opened.
     const res = await c.env.DB.prepare(

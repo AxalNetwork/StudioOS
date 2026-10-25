@@ -617,20 +617,14 @@ export function StudioAnalytics({ reads, readOnly }) {
                       <td className={`px-4 py-2.5 font-semibold ${INK}`}>{l.investor}</td>
                       <td className="px-4 py-2.5"><span className={l.live ? PILL_OK : PILL_MU}>{l.expires}</span></td>
                       <td className={`px-4 py-2.5 font-mono ${INK}`}>{l.views ?? NOT_RECORDED}</td>
-                      <td className="px-4 py-2.5 font-mono text-axal-muted dark:text-gray-400">{l.views ? (l.time && !/^0\s*min$/.test(l.time) ? l.time : NOT_RECORDED) : l.views === 0 ? 'Not opened' : NOT_RECORDED}</td>
+                      <td className="px-4 py-2.5 font-mono text-axal-muted dark:text-gray-400">{l.views ? (l.time ?? NOT_RECORDED) : l.views === 0 ? 'Not opened' : NOT_RECORDED}</td>
                       <td className="px-4 py-2.5 text-axal-muted dark:text-gray-400">{l.mostRead ?? (l.views === 0 ? 'Not opened' : NOT_RECORDED)}</td>
                       <td className="px-4 py-2.5 text-axal-muted dark:text-gray-400" data-testid={`pitch-studio-link-nda-${l.id}`}>{ndaCell(shares.get(String(l.id)))}</td>
                       <td className="px-4 py-2.5 text-[11.5px] text-axal-muted dark:text-gray-400" data-testid={`pitch-studio-link-settings-${l.id}`}>{settingsLine(shares.get(String(l.id)))}</td>
                       <td className="px-4 py-2.5 font-mono text-axal-muted dark:text-gray-400">{shares.get(String(l.id))?.last_viewed_at ? dayLabel(shares.get(String(l.id)).last_viewed_at) : l.views === 0 ? 'Not opened' : NOT_RECORDED}</td>
                       <td className="px-4 py-2.5 text-right">
                         <div className="flex items-center justify-end gap-3">
-                          {l.live === null ? (
-                            // Opened, and not a link the engagement read answered for.
-                            <span className="text-[11.5px] text-axal-muted dark:text-gray-400" data-testid={`pitch-studio-link-unknown-${l.id}`}>
-                              {engState === 'error' ? 'Views left could not be read' : engState === 'ok' ? 'Views left not read' : 'Reading views left…'}
-                            </span>
-                          ) : null}
-                          {!readOnly && l.live !== false ? <button type="button" className={DANGER_TEXT} onClick={() => { setFailed(false); setWithdraw(l); }} data-testid={`pitch-studio-withdraw-${l.id}`}>Withdraw</button> : null}
+                          {!readOnly && l.live ? <button type="button" className={DANGER_TEXT} onClick={() => { setFailed(false); setWithdraw(l); }} data-testid={`pitch-studio-withdraw-${l.id}`}>Withdraw</button> : null}
                         </div>
                       </td>
                     </tr>
@@ -681,13 +675,7 @@ export function StudioAnalytics({ reads, readOnly }) {
             </div>
           )}
         >
-          {withdraw.live === null ? (
-            // Its views left were not read: it may already be used up. Withdrawing
-            // it then marks it Revoked, which the dialog says.
-            <p className={`m-0 text-[13px] leading-[1.55] ${INK}`}>If {withdraw.investor}&apos;s link still opens, it stops at once. Its views stay listed, and the link then reads Revoked.</p>
-          ) : (
-            <p className={`m-0 text-[13px] leading-[1.55] ${INK}`}>{withdraw.investor}&apos;s link stops opening at once. Its views stay listed.</p>
-          )}
+          <p className={`m-0 text-[13px] leading-[1.55] ${INK}`}>{withdraw.investor}&apos;s link stops opening at once. Its views stay listed.</p>
           {failed ? <p role="alert" className="m-0 mt-2 text-[12.5px] font-semibold text-axal-destructive dark:text-red-400">The link could not be withdrawn. Try again.</p> : null}
         </Lightbox>
       ) : null}

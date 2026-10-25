@@ -9,6 +9,9 @@ import { Lightbox, Unreadable } from '../../../ui';
 import { Tag } from './CapTableTag';
 import { HOME_PATH, harbour, tabSearch } from './capTableModel';
 import HolderDrawer from './HolderDrawer';
+import ProposalDrawer from './ProposalDrawer';
+import { CorrectDialog, RecordDialog, VoidDialog } from './IssuanceDialogs';
+import { proposalHref } from './historyModel';
 import {
   AS_OF_NONE, COFOUNDER_LINE, EMPTY_LINE, EMPTY_TITLE, EXPLORER_LINE, EXPLORER_TITLE, FD_LEGEND, MODEL_LINE, MODEL_TITLE,
   OTHER_LINE, OTHER_TITLE, PLANS_PATH, PLAN_LINE, SAVE_BLOCKED, UNREADABLE_LINE,
@@ -22,9 +25,12 @@ import {
  * `overviewModel.js`. Each read answers alone: a failed one says so where its
  * block would be, and a failed record read offers nothing to save.
  *
- * Record an issuance and Void are part 10's dialogs (#2862): the tool bar and
- * the drawer take them as `onRecord` and `onVoid` and draw nothing until they
- * are given one.
+ * D1025 (#2862, part 10): the tool bar's Record an issuance (a co-founder's
+ * Propose) opens `/raise/cap-table/new`, the dialog over Overview (CT12a);
+ * Needs you opens each proposal's drawer at `/raise/cap-table/proposal/<id>`
+ * (CT11); the holder drawer's rows offer Void (CT12b) to the owner and
+ * Correct (CT12c) to an admin. `open` says which of the first two the address
+ * asks for.
  */
 
 const CARD = 'rounded-xl border border-axal-hairline bg-white dark:border-gray-800 dark:bg-gray-900';
@@ -167,45 +173,6 @@ function NeedsYou({ need, role, onReview }) {
       </ul>
       {need.count > need.rows.length ? <p className={`m-0 mt-2 text-[11.5px] ${MUTED}`}>{need.count - need.rows.length} more wait in the record.</p> : null}
     </Block>
-  );
-}
-
-/** A proposal opened from Needs you: what it records, who sees it, then Accept or Dismiss (the owner's). */
-function ProposalDialog({ projectId, item, role, onClose, onDone }) {
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState(null);
-  const [reason, setReason] = useState('');
-  const act = (what) => {
-    setBusy(true); setError(null);
-    const call = what === 'accept' ? capTableRecordApi.accept(projectId, item.uid, {}) : capTableRecordApi.dismiss(projectId, item.uid, reason.trim() ? { reason: reason.trim() } : {});
-    call.then(() => { setBusy(false); onDone(); }, (e) => {
-      setBusy(false);
-      const missing = Array.isArray(e?.data?.missing) && e.data.missing.length ? ` It still needs: ${e.data.missing.join(', ')}.` : '';
-      setError(`${e?.message || 'That did not go through. Nothing changed.'}${missing}`);
-    });
-  };
-  const owner = role === 'owner';
-  return (
-    <Lightbox label="Proposal" title="A proposal waits" width={540} onClose={() => !busy && onClose()} testId="captable-proposal-dialog"
-      footer={(
-        <div className="flex flex-wrap justify-end gap-2">
-          <button type="button" className={GHOST} onClick={onClose} disabled={busy}>Close</button>
-          {owner ? <button type="button" className={GHOST} onClick={() => act('dismiss')} disabled={busy} data-testid="captable-proposal-dismiss">Dismiss</button> : null}
-          {owner ? <button type="button" className={PRIMARY} onClick={() => act('accept')} disabled={busy} data-testid="captable-proposal-accept">Record it</button> : null}
-        </div>
-      )}>
-      <div className="flex flex-col gap-2.5 text-[13px]">
-        <p className={`m-0 ${INK}`}>{item.lead} {item.text}</p>
-        {item.reason ? <p className={`m-0 ${MUTED}`}>Reason given: {item.reason}</p> : null}
-        <p className={`m-0 ${MUTED}`} data-testid="captable-proposal-says">
-          {owner
-            ? 'Record it puts this issuance on the record: it counts in who owns and in every figure tagged On record. You, your co-founders and anyone you have granted Investor or Full see it. Dismiss keeps it in the history and changes nothing.'
-            : 'Only the owner records or dismisses a proposal. It changes nothing until then.'}
-        </p>
-        {owner ? <input className="rounded-[9px] border border-axal-hairline px-2.5 py-1.5 text-[12.5px] dark:border-gray-700 dark:bg-gray-950" value={reason} maxLength={500} onChange={(e) => setReason(e.target.value)} placeholder="Why you dismiss it (optional)" aria-label="Reason to dismiss" /> : null}
-        {error ? <p role="alert" className="m-0 text-[12.5px] font-semibold text-red-700 dark:text-red-300" data-testid="captable-proposal-error">{error}</p> : null}
-      </div>
-    </Lightbox>
   );
 }
 
@@ -417,7 +384,7 @@ function FromModel({ projectId, scenario, onClose, onDone }) {
   );
 }
 
-export function CapTableOverview({ projectId, search = '', holderId = null, onRecord = null, onVoid = null }) {
+export function CapTableOverview({ projectId, search = '', holderId = null, open = null }) {
   const { user } = useAuth() || {};
   const navigate = useNavigate();
   const [reload, setReload] = useState(0);
@@ -431,8 +398,9 @@ export function CapTableOverview({ projectId, search = '', holderId = null, onRe
   const grants = useRead(readGrants, key, reload);
   const [view, setView] = useState('holder');
   const [basis, setBasis] = useState('fd');
-  const [review, setReview] = useState(null);
   const [fromModel, setFromModel] = useState(false);
+  const [voiding, setVoiding] = useState(null);
+  const [correcting, setCorrecting] = useState(null);
 
   if (explorer) {
     return (
@@ -448,6 +416,13 @@ export function CapTableOverview({ projectId, search = '', holderId = null, onRe
   const plan = hasTier(user, 'studio');
   const need = record.status === 'ready' ? needsYou(record.data) : null;
   const closeDrawer = () => navigate(`${HOME_PATH}${tabSearch(search)}`);
+  // An admin (not viewing as someone else) corrects; the owner records; a co-founder proposes.
+  const admin = String(user?.role || '').toLowerCase() === 'admin';
+  const onRecord = () => navigate(`${HOME_PATH}/new${tabSearch(search)}`);
+  const writes = (role === 'owner' || role === 'cofounder') && plan;
+  const recordMode = role === 'cofounder' ? 'propose' : 'record';
+  const done = () => { setVoiding(null); setCorrecting(null); retry(); };
+  const leave = () => { closeDrawer(); retry(); };
 
   let body;
   if (record.status === 'loading') body = <Reading />;
@@ -471,7 +446,7 @@ export function CapTableOverview({ projectId, search = '', holderId = null, onRe
     body = (
       <div className="flex flex-col gap-3.5">
         {role === 'cofounder' ? <p className={`m-0 rounded-[10px] border border-axal-hairline bg-axal-ground px-3 py-2 text-[12.5px] ${INK} dark:border-gray-700 dark:bg-gray-800`} data-testid="captable-cofounder">{COFOUNDER_LINE}</p> : null}
-        <NeedsYou need={need} role={role} onReview={setReview} />
+        <NeedsYou need={need} role={role} onReview={(r) => navigate(proposalHref(r.uid, tabSearch(search)))} />
         {empty ? (
           model ? (
             <Center mark="◇" title={MODEL_TITLE} line={MODEL_LINE} testId="captable-empty-model">
@@ -479,7 +454,7 @@ export function CapTableOverview({ projectId, search = '', holderId = null, onRe
             </Center>
           ) : (
             <Center mark="+" title={EMPTY_TITLE} line={EMPTY_LINE} testId="captable-empty">
-              {onRecord && role === 'owner' && plan ? <button type="button" className={PRIMARY} onClick={() => onRecord('founding')}>Record founding shares</button> : null}
+              {role === 'owner' && plan ? <button type="button" className={PRIMARY} onClick={onRecord} data-testid="captable-record-founding">Record founding shares</button> : null}
             </Center>
           )
         ) : (
@@ -494,12 +469,25 @@ export function CapTableOverview({ projectId, search = '', holderId = null, onRe
 
   return (
     <div className="flex min-w-0 flex-col gap-3.5" data-testid="captable-overview">
-      <ToolBar record={record} harbourRead={harbourRead} cartaRead={cartaRead} need={need} role={role} plan={plan} onRecord={onRecord} />
+      <ToolBar record={record} harbourRead={harbourRead} cartaRead={cartaRead} need={need} role={role} plan={plan} onRecord={writes ? onRecord : null} />
       {body}
-      {review ? <ProposalDialog projectId={projectId} item={review} role={role} onClose={() => setReview(null)} onDone={() => { setReview(null); retry(); }} /> : null}
+      {open?.kind === 'record' && record.status === 'ready' && (writes || admin) ? (
+        <RecordDialog projectId={projectId} record={record.data} mode={recordMode} admin={admin && role !== 'owner'} onClose={closeDrawer} onDone={leave} />
+      ) : null}
+      {open?.kind === 'record' && record.status === 'ready' && !(writes || admin) ? (
+        <Lightbox label="Record an issuance" title="Record an issuance" onClose={closeDrawer} testId="captable-record-closed">
+          <p className={`m-0 text-[13px] ${INK}`}>{plan ? 'Only the owner records, and a co-founder proposes. You can read this cap table.' : PLAN_LINE}</p>
+        </Lightbox>
+      ) : null}
+      {open?.kind === 'proposal' ? (
+        <ProposalDrawer projectId={projectId} id={open.id} role={role} record={{ ...record, retry }} onClose={closeDrawer} onDone={leave} />
+      ) : null}
+      {voiding ? <VoidDialog projectId={projectId} record={record.data} row={voiding} admin={admin && role !== 'owner'} onClose={() => setVoiding(null)} onDone={done} /> : null}
+      {correcting ? <CorrectDialog projectId={projectId} record={record.data} row={correcting} onClose={() => setCorrecting(null)} onDone={done} /> : null}
       {fromModel ? <FromModel projectId={projectId} scenario={compare.data?.canonical} onClose={() => setFromModel(false)} onDone={() => { setFromModel(false); retry(); }} /> : null}
       {holderId != null ? (
-        <HolderDrawer projectId={projectId} holderId={holderId} record={record} grants={grants} role={role} onClose={closeDrawer} onVoid={onVoid} />
+        <HolderDrawer projectId={projectId} holderId={holderId} record={record} grants={grants} role={role} onClose={closeDrawer}
+          onVoid={role === 'owner' || admin ? setVoiding : null} onCorrect={admin ? setCorrecting : null} />
       ) : null}
     </div>
   );

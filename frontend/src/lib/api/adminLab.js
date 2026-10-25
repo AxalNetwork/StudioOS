@@ -17,6 +17,9 @@ export const adminLabApi = {
     const { cohort, status, origin, tech_transfer, stage, incorporated, interview, carried_forward, sort, q, limit, offset } = params;
     return request(`/admin/cohort/applications/list${query({ cohort, status, origin, tech_transfer, stage, incorporated, interview, carried_forward, sort, q, limit, offset })}`);
   },
+  /** D948 (#2753): SL3, one application — D944's row, what the founder was told,
+   * the latest interview, its cohort and the next one, and the Week 1 plan, each alone. 404 when none. */
+  application: (applicantId) => request(`/admin/cohort/applications/${encodeURIComponent(applicantId)}`),
   /** D946 (#2751): SL7's participants, filtered, sorted and paged by the Worker.
    * {cohort,status,week,this_week,incorporated,needs,q,sort,limit,offset} -> page, total, standing. */
   participants: (params = {}) => {

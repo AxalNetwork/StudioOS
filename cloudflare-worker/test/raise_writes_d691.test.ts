@@ -597,7 +597,9 @@ function roomFixture() {
     db.exec(stripForeignKeys(tableFromBaseline(BASELINE, t)));
   }
   addColumnsFrom(db, stripForeignKeys(sqlOf('463_raise_record_stores.sql')), 'data_room_files');
+  addColumnsFrom(db, stripForeignKeys(sqlOf('596_data_room_file_source.sql')), 'data_room_files');
   addColumnsFrom(db, stripForeignKeys(sqlOf('442_raise_cycle_stores.sql')), 'data_room_files');
+  withGrantFolders(db); // D1103: migration 594
   const u = db.prepare('INSERT INTO users (id, role, founder_id, name, email) VALUES (?,?,?,?,?)');
   u.run(R_FOUNDER, 'founder', 300, 'Fen Founder', 'fen@example.test');
   u.run(COMMITTED, 'investor', null, 'Cal Committed', 'Cal@Example.test');
@@ -1237,6 +1239,7 @@ import {
   saveNarrativeVersion, WriterError as RaiseWriterError,
 } from '../src/services/raiseWriters.ts';
 import { replaceDataRoomFile, removeDataRoomFile } from '../src/routes/data_room.ts';
+import { withGrantFolders } from './_data_room_scope.mjs';
 
 async function refused2(p: Promise<unknown>): Promise<{ status: number; sentence: string }> {
   try { await p; } catch (e: any) {

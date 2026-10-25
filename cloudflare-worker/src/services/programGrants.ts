@@ -15,6 +15,7 @@
  * is refused rather than stored.
  */
 import type { Env } from '../types';
+import { isRegistryKey } from './programRegistry';
 
 export type ProgramReadiness = 'yes' | 'hq' | 'notready';
 export const PROGRAMS: Array<{ key: string; name: string; group: string; readiness: ProgramReadiness }> = [
@@ -30,6 +31,27 @@ export const PROGRAMS: Array<{ key: string; name: string; group: string; readine
 ];
 export const PROGRAM_KEYS = PROGRAMS.map((p) => p.key);
 export const programOf = (key: string) => PROGRAMS.find((p) => p.key === key) || null;
+
+/**
+ * D956 (#2789): a grant's states. `draft` is HQ's: a proposal approved for one
+ * studio only opens one (migration 562), nothing runs on it, and D982's grant
+ * write is its one way out.
+ */
+export const GRANT_STATES = ['draft', 'granted', 'paused', 'ended'] as const;
+export type GrantState = typeof GRANT_STATES[number];
+
+/**
+ * A program the store may hold: one of the nine, or a key the registry holds
+ * (a program D955 added). `nine` says which, because only the nine have
+ * defaults, readiness and a "can be granted" switch.
+ */
+export async function programNamed(env: Env, key: string): Promise<{ key: string; name: string; nine: boolean } | null> {
+  const p = programOf(key);
+  if (p) return { key, name: p.name, nine: true };
+  if (!isRegistryKey(key) || !key) return null;
+  const row = await env.DB.prepare('SELECT key, name FROM programs WHERE key = ?').bind(key).first<{ key: string; name: string }>();
+  return row ? { key: row.key, name: row.name, nine: false } : null;
+}
 
 /** Why a program can never be granted, whatever its defaults say. */
 export function readinessRefusal(key: string): string | null {
@@ -63,7 +85,10 @@ export const TERM_FIELDS: Array<{ key: string; kind: Kind; values?: string[]; ap
 ];
 export const TERM_KEYS = TERM_FIELDS.map((f) => f.key);
 export const DEFAULT_KEYS = TERM_FIELDS.filter((f) => f.defaultable).map((f) => f.key);
-export const termsFor = (programKey: string) => TERM_FIELDS.filter((f) => f.applies.includes(programKey)).map((f) => f.key);
+/** A program D955 added carries the terms every program carries, and none of the nine's own (D956). */
+export const termsFor = (programKey: string) => TERM_FIELDS
+  .filter((f) => f.applies.includes(programKey) || (f.applies === ALL && !programOf(programKey)))
+  .map((f) => f.key);
 
 export type Terms = Record<string, string | number | null>;
 export type TermError = { field: string; message: string };
@@ -137,6 +162,15 @@ export function termsDiff(before: Terms, after: Terms) {
 
 const addDays = (day: string, n: number) => new Date(Date.parse(`${day}T00:00:00Z`) + n * 86_400_000).toISOString().slice(0, 10);
 
+export type ScheduleStatus = 'not_sent' | 'sent' | 'signed';
+
+/** D1120 — where a grant's schedule stands: signed once its time is set, sent once an envelope is named. */
+export function scheduleStatus(row: { schedule_contract_uid?: unknown; schedule_signed_at?: unknown }): ScheduleStatus {
+  if (row.schedule_signed_at) return 'signed';
+  if (row.schedule_contract_uid) return 'sent';
+  return 'not_sent';
+}
+
 export type LicenceLite = { id: number; uid: string; licence_ref: string | null; brand_name: string | null; kind: string | null; status: string; renews_on: string | null };
 
 /**
@@ -163,12 +197,17 @@ export function presentGrant(row: Record<string, any>, licence: LicenceLite, tod
     uid: row.uid,
     licence_uid: licence.uid,
     program_key: key,
-    state: row.state as 'granted' | 'paused' | 'ended',
+    state: row.state as GrantState,
     terms,
     effective_end: end,
     in_force: row.state === 'granted' && waiting.length === 0,
     waiting_on: waiting,
-    schedule: { contract_uid: row.schedule_contract_uid ?? null, signed_at: row.schedule_signed_at ?? null },
+    // D1120: not sent, sent (an envelope is named) or signed (its time is set).
+    schedule: {
+      status: scheduleStatus(row),
+      contract_uid: (row.schedule_contract_uid ?? null) as string | null,
+      signed_at: (row.schedule_signed_at ?? null) as string | null,
+    },
     note: row.note ?? null,
     paused_at: row.paused_at ?? null,
     ended_at: row.ended_at ?? null,
@@ -322,3 +361,31 @@ export async function readHistory(env: Env, licenceId: number, programKey?: stri
     };
   }).filter((e) => !programKey || e.program_key === programKey);
 }
+
+/**
+ * D956: the statements that open a draft grant for a proposal approved for one
+ * studio only, for the decision's `DB.batch`, and its one `program_changed`
+ * event (`draft_opened`), as migration 562's backfill writes it. The licence
+ * is addressed by id, read by the caller; the draft's key is the program the
+ * approval wrote.
+ */
+export function openDraftStatements(env: Env, d: { licenceId: number; programKey: string; proposalUid: string; actorId: number; at: string }) {
+  const uid = crypto.randomUUID().replace(/-/g, '');
+  const detail = {
+    action: 'draft_opened', program_key: d.programKey, proposal_uid: d.proposalUid,
+    changed: [{ key: 'state', before: null, after: 'draft' }],
+  };
+  return [
+    env.DB.prepare(
+      `INSERT INTO program_grants (uid, licence_id, program_key, state, proposal_uid, set_by_user_id, set_at)
+       VALUES (?, ?, ?, 'draft', ?, ?, ?)`,
+    ).bind(uid, d.licenceId, d.programKey, d.proposalUid, d.actorId, d.at),
+    env.DB.prepare(
+      `INSERT INTO licence_events (licence_id, event, detail_json, note, actor_user_id, created_at)
+       VALUES (?, 'program_changed', ?, ?, ?, ?)`,
+    ).bind(d.licenceId, JSON.stringify(detail), DRAFT_NOTE, d.actorId, d.at),
+  ];
+}
+
+/** The line the licence's history keeps for a draft opened by an approval. */
+export const DRAFT_NOTE = 'HQ approved this studio\'s proposal for this studio only. The grant is a draft until HQ grants it.';

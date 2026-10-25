@@ -90,6 +90,11 @@ export const MCP_CLIENT_METADATA = /^\/api\/integrations\/mcp\/[A-Za-z0-9_]{1,64
 export const LP_PAY_INSTRUCTIONS = /^\/api\/funds\/[^/]+\/capital-calls\/lines\/[^/]+\/pay-instructions$/;
 
 const BUCKETS: Bucket[] = [
+  // D1100: Confirm can read a payment intent from Stripe; budget all alert IDs together.
+  {
+    name: 'billing_alert_confirm', limit: 10, windowSec: 60, scope: 'user', failClosed: true,
+    test: (p, m) => m === 'POST' && /^\/api\/billing\/alerts\/[^/]+\/confirm\/?$/.test(p),
+  },
   // D573: public link resolution records one accepted open request.
   {
     name: 'advisor_booking_link', limit: 20, windowSec: 60, scope: 'ip', failClosed: true,

@@ -43,9 +43,10 @@ export const MOVED_NOTICES = {
   'firm-links': 'Firm links moved here: attach a partner account to its firm under Firms.',
 };
 
-/** The tabs this integration draws (D972 §1). People waits for its read. */
+/** The tabs this integration draws (D972 §1). People (D978) reads D973's people read. */
 export const TABS = [
   { key: 'overview', label: 'Overview', path: '' },
+  { key: 'people', label: 'People', path: '/people' },
   { key: 'firms', label: 'Firms', path: '/firms' },
   { key: 'deck', label: 'Deck roster', path: '/deck' },
 ];
@@ -54,7 +55,9 @@ export function tabOf(pathname) {
   const p = String(pathname || '').replace(/\/+$/, '');
   if (p === AP_PATH) return 'overview';
   const t = TABS.find((x) => x.path && p === `${AP_PATH}${x.path}`);
-  return t ? t.key : null;
+  if (t) return t.key;
+  // D978: one person opens over People at /people/:ref.
+  return /^\/admin\/advisors-partners\/people\/[^/]+$/.test(p) ? 'people' : null;
 }
 
 export function movedTarget(pathname, search, hash, key) {
@@ -71,7 +74,6 @@ export const WAITS = {
   c2: 'Sessions per week waits for the network overview read (D972 part 1).',
   c3: 'Skills against founder demand waits for a demand store; nothing records what founders ask for yet (D972 part 1).',
   c4: 'Active deals by type waits for the network overview read (D972 part 1).',
-  people: 'People, one table of every advisor, operating partner and deck-only name, waits for the people read (D972 part 1).',
 };
 
 const nf = (n) => Number(n).toLocaleString('en-US');
@@ -204,3 +206,34 @@ export function buildNeeds(reads, now) {
 export function pageFailed(reads) {
   return ['advisors', 'assignments', 'links', 'directory', 'deals', 'hosts', 'roster'].every((k) => failed(reads[k]));
 }
+
+// ---------------------------------------------------------------- D1125
+
+/**
+ * One header tab's count from `GET /api/admin/network/tabs` (AP1), in the
+ * shape `HeaderTab` draws: a number, a dash that says why (never a zero for a
+ * count nobody could read), or the reading bar.
+ */
+export function tabCountOf(read, key) {
+  if (!read || read.status === 'loading') return { kind: 'load' };
+  if (read.status === 'error') return { kind: 'dash', tip: 'The count could not be read.' };
+  const block = read.data?.[key];
+  if (!block || block.available === false) return { kind: 'dash', tip: block?.reason || 'The count could not be read.' };
+  if (block.recorded === false) return { kind: 'dash', tip: block.reason || 'Not recorded.' };
+  const n = Number(block.value);
+  return Number.isFinite(n) ? { kind: 'num', value: n.toLocaleString('en-US') } : { kind: 'dash', tip: 'The count could not be read.' };
+}
+
+/**
+ * AP12b — HQ has paused this studio's admin access. Said when a write on the
+ * page is refused for it (a 423 `admin_frozen` or `branch_suspended`, which
+ * `lib/api.js` announces). Reading is never paused (D107, D142), so the page
+ * keeps its data and says only what is true: changes wait for HQ.
+ */
+export const PAUSED = {
+  title: 'HQ has paused this studio’s admin access.',
+  line: 'You can still read everything here. Changes wait until HQ lifts the pause.',
+  action: 'Contact HQ',
+  to: '/admin/my-licence',
+};
+export const PAUSE_EVENTS = ['studioos:admin_frozen', 'studioos:branch_suspended'];

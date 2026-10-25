@@ -141,14 +141,35 @@ export const EMPTY_CARD = {
   name: '', kind: 'advisor', role: '', company: '', bio: '', linkedin_url: '', skills: [], is_active: true, linked_user: null,
 };
 
-/** The editor's form for a row, or a new one. */
+/**
+ * The editor's form for a row, or a new one. A new card may start from a
+ * `draft` (D978: People's "Add to deck roster" fills it from the person).
+ */
 export function cardOf(row) {
-  if (!row?.id) return { ...EMPTY_CARD, skills: [] };
+  if (!row?.id) return { ...EMPTY_CARD, ...(row?.draft || {}), skills: [...(row?.draft?.skills || [])] };
   return {
     name: row.name || '', kind: kindOf(row.kind || 'advisor'), role: row.role || '', company: row.company || '',
     bio: row.bio || '', linkedin_url: row.linkedin_url || '', skills: Array.isArray(row.skills) ? [...row.skills] : [],
     is_active: row.state ? row.state === 'shown' : Boolean(row.is_active), linked_user: row.linked_user || null,
   };
+}
+
+/**
+ * D1125 (AP8b): what a linked card's account says, read only, beside the
+ * card's own fields. A value the account does not hold reads "Not recorded on
+ * the account"; a roster read without the account's columns draws nothing.
+ */
+const ON_ACCOUNT = 'Not recorded on the account';
+export function accountFacts(linked) {
+  const a = linked?.account;
+  if (!a) return null;
+  const word = (v) => (typeof v === 'string' && v.trim() ? v.trim() : ON_ACCOUNT);
+  return [
+    { key: 'name', label: 'Name', text: word(a.name) },
+    { key: 'headline', label: 'Role', text: word(a.headline) },
+    { key: 'company', label: 'Company', text: word(a.company) },
+    { key: 'photo', label: 'Photo', text: a.has_photo === true ? 'On the account' : a.has_photo === false ? 'None on the account' : ON_ACCOUNT },
+  ];
 }
 
 /** The Worker keeps a URL only when it matches this, and drops anything else silently, so the dialog says so first. */

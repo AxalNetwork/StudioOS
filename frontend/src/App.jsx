@@ -307,6 +307,7 @@ const ReviewQueuePage = lazy(() => import('./pages/hq/ReviewQueuePage'));
 const CreditRulesPage = lazy(() => import('./pages/hq/CreditRulesRegistryPage'));
 const MemberCreditsPage = lazy(() => import('./pages/hq/MemberCreditsPage'));
 const TrustObligationsPage = lazy(() => import('./pages/hq/TrustObligationsPage'));
+const TrustContentPage = lazy(() => import('./pages/hq/TrustContentPage'));
 const HqFundsPage = lazy(() => import('./pages/hq/HqFundsPage'));
 // D714 (#1779) PR 4a — fund administration for the Super Admin and every Admin on HQ.
 const FundAdminConsole = lazy(() => import('./pages/admin/fundAdmin/FundAdminConsole'));
@@ -2382,7 +2383,9 @@ function AppInner() {
   // Build's root owns its overview, as Raise, Grow and Network do: founder,
   // and not asking for the editor. Validate's root no longer branches at all
   // (D704, decision 2): every role its guard admits gets the cycle page.
-  const founderBuildLanding = effectiveRole === 'founder'
+  // D1064 (#2934): a Spin-Out Lab founder's /build is the overview too, as
+  // their /validate is, whatever their account role; `labRoles` admits them.
+  const founderBuildLanding = (effectiveRole === 'founder' || (user?.spinout_lab_active === 1 && effectiveRole !== 'admin'))
     && new URLSearchParams(location.search).get('mode') !== 'workspace';
   const networkParams = new URLSearchParams(location.search);
   const founderNetworkLanding = effectiveRole === 'founder'
@@ -2813,6 +2816,9 @@ function AppInner() {
       <Route path="/admin/licences" element={guard(['admin'], hqOnly(<AdminLicences />))} />
       {/* D981 (#2376) — Program grants: which programs each licensed studio may run. */}
       <Route path="/admin/licences/programs" element={guard(['admin'], hqOnly(<ProgramGrants />))} />
+      <Route path="/admin/licences/programs/requests" element={guard(['admin'], hqOnly(<ProgramGrants />))} />
+      <Route path="/admin/licences/programs/defaults" element={guard(['admin'], hqOnly(<ProgramGrants />))} />
+      <Route path="/admin/licences/programs/studio/:uid" element={guard(['admin'], hqOnly(<ProgramGrants />))} />
       <Route path="/admin/funds" element={guard(['admin'], hqOnly(<HqFundsPage />))} />
       {/* D714 decision 7: guard(['admin']), not hqOnly — that wrapper admits the Super Admin alone. On a branch the console says so and reads nothing. */}
       <Route path="/admin/fund-admin" element={guard(['admin'], <FundAdminConsole />)} />
@@ -2972,10 +2978,14 @@ function AppInner() {
       <Route path="/admin/security" element={guard(['admin'], hqOnly(<HqSecurityPage />))} />
       {/* D633 (#1391, Q3) — trust obligations by role, read-only; HQ Security links to it. */}
       <Route path="/admin/security/obligations" element={guard(['admin'], hqOnly(<TrustObligationsPage />))} />
+      {/* D1079 (#2971) — TRU14, the public trust center's content: Super Admin only (hqOnly, and the Worker's requireSuperAdmin). */}
+      <Route path="/admin/security/trust-center" element={guard(['admin'], hqOnly(<TrustContentPage />))} />
       {/* D972 (#2369) — Advisors & Partners under Community, its tabs as
           sub-paths (D936's header). /admin/network-profiles and the Admin
           Console's ?tab=network-profiles forward to the Deck roster tab. */}
       <Route path="/admin/advisors-partners" element={guard(['admin'], <AdvisorsPartners />)} />
+      <Route path="/admin/advisors-partners/people" element={guard(['admin'], <AdvisorsPartners />)} />
+      <Route path="/admin/advisors-partners/people/:ref" element={guard(['admin'], <AdvisorsPartners />)} />
       <Route path="/admin/advisors-partners/firms" element={guard(['admin'], <AdvisorsPartners />)} />
       <Route path="/admin/advisors-partners/deck" element={guard(['admin'], <AdvisorsPartners />)} />
       {/* D989 (#2380): Partner profiles, its two tabs as sub-paths; /admin?tab=profiles forwards here (LegacyContractsRedirect). */}
@@ -2990,6 +3000,7 @@ function AppInner() {
           Console's ?tab=lab-applications forward here with the moved notice. */}
       <Route path="/admin/programs/spinout-lab" element={guard(['admin'], <AdminLab onImpersonate={handleImpersonate} />)} />
       <Route path="/admin/programs/spinout-lab/applications" element={guard(['admin'], <AdminLab onImpersonate={handleImpersonate} />)} />
+      <Route path="/admin/programs/spinout-lab/applications/:id" element={guard(['admin'], <AdminLab onImpersonate={handleImpersonate} />)} />
       <Route path="/admin/programs/spinout-lab/cohorts" element={guard(['admin'], <AdminLab onImpersonate={handleImpersonate} />)} />
       <Route path="/admin/programs/spinout-lab/cohorts/:ym" element={guard(['admin'], <AdminLab onImpersonate={handleImpersonate} />)} />
       <Route path="/admin/programs/spinout-lab/participants" element={guard(['admin'], <AdminLab onImpersonate={handleImpersonate} />)} />
@@ -3080,18 +3091,20 @@ function AppInner() {
           read, and /build/<module> its module pages. Every Build page above
           and below is a static route and wins over /build/:slug; no module
           slug is one of them. */}
+      {/* D1064 (#2934): Build's cycle pages admit a Spin-Out Lab founder, as
+          Validate's do; the Worker admits them on their own venture (ownsVenture). */}
       <Route path="/build" element={founderBuildLanding
-        ? guard(['admin', 'founder'], <CycleRoute cycle="build" />)
+        ? guard(labRoles(['admin', 'founder']), <CycleRoute cycle="build" />)
         : <Navigate to="/build/this-week" replace />} />
       {/* D686 §5.1: Connect a tool, the Build page with its lightbox open; /build/tools is the history's address. */}
-      <Route path="/build/connect" element={guard(['admin', 'founder'], <CycleRoute cycle="build" lightbox />)} />
+      <Route path="/build/connect" element={guard(labRoles(['admin', 'founder']), <CycleRoute cycle="build" lightbox />)} />
       <Route path="/build/tools" element={guard(['admin', 'founder'], <HistoryRedirect to="/build/operating-systems" hash="#tools" />)} />
       {/* D1063 (#2426): Validate → Build's plan and its progress, ahead of /build/:slug. */}
-      <Route path="/build/plan" element={guard(['admin', 'founder'], <CycleRoute cycle="build" buildPlan="plan" />)} />
-      <Route path="/build/plan/progress" element={guard(['admin', 'founder'], <CycleRoute cycle="build" buildPlan="progress" />)} />
-      <Route path="/build/:slug" element={guard(['admin', 'founder'], <CycleRoute cycle="build" />)} />
-      <Route path="/build/:slug/:id" element={guard(['admin', 'founder'], <CycleRoute cycle="build" record />)} />
-      <Route path="/build/:slug/new" element={guard(['admin', 'founder'], <CycleRoute cycle="build" adding />)} />
+      <Route path="/build/plan" element={guard(labRoles(['admin', 'founder']), <CycleRoute cycle="build" buildPlan="plan" />)} />
+      <Route path="/build/plan/progress" element={guard(labRoles(['admin', 'founder']), <CycleRoute cycle="build" buildPlan="progress" />)} />
+      <Route path="/build/:slug" element={guard(labRoles(['admin', 'founder']), <CycleRoute cycle="build" />)} />
+      <Route path="/build/:slug/:id" element={guard(labRoles(['admin', 'founder']), <CycleRoute cycle="build" record />)} />
+      <Route path="/build/:slug/new" element={guard(labRoles(['admin', 'founder']), <CycleRoute cycle="build" adding />)} />
       <Route path="/execution" element={guard(['admin', 'founder'], effectiveRole === 'founder' && !founderExecutionEditor
         ? <Navigate to={`/build${location.search}`} replace />
         : founderWorkspace('build', founderEditor(<ExecutionPage />)))} />
@@ -3698,6 +3711,8 @@ function AppInner() {
       {/* D686 §5.1: Call for Capital, the Raise page with its lightbox open; /raise/calls is the history's address. */}
       <Route path="/raise/call" element={guard(labRoles(['admin', 'founder']), <CycleRoute cycle="raise" lightbox />)} />
       <Route path="/raise/calls" element={guard(labRoles(['admin', 'founder']), <HistoryRedirect to="/raise/capital-relationships" hash="#calls" />)} />
+      {/* D1025 (#2862, CT11): a Cap table proposal's drawer, over the tool; its id is a record proposal's uid or `mercury-<n>`. */}
+      <Route path="/raise/cap-table/proposal/:proposal" element={guard(labRoles(['admin', 'founder']), <CycleRoute cycle="raise" slug="cap-table" capTableProposal />)} />
       <Route path="/raise/:slug" element={guard(labRoles(['admin', 'founder']), <CycleRoute cycle="raise" />)} />
       <Route path="/raise/:slug/:id" element={guard(labRoles(['admin', 'founder']), <CycleRoute cycle="raise" record />)} />
       <Route path="/raise/:slug/new" element={guard(labRoles(['admin', 'founder']), <CycleRoute cycle="raise" adding />)} />

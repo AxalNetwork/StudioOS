@@ -41,18 +41,20 @@ const SECRET = 'pi_conf1' + '_secret_' + 'fixture';
 type Answer = { status?: number; body: unknown };
 let stripe: Record<string, Answer> = {};
 let calls: string[] = [];
+let requestBodies: { path: string; body: URLSearchParams; key: string | null }[] = [];
 const realFetch = globalThis.fetch;
 globalThis.fetch = (async (input: any, init: any = {}) => {
   const url = String(typeof input === 'string' ? input : input?.url);
   calls.push(`${String(init?.method || 'GET').toUpperCase()} ${url.replace('https://api.stripe.com/v1', '')}`);
   const path = url.replace('https://api.stripe.com/v1', '').split('?')[0];
+  requestBodies.push({ path, body: new URLSearchParams(init.body || ''), key: new Headers(init.headers).get('Idempotency-Key') });
   const a = stripe[path];
   if (a) return new Response(JSON.stringify(a.body), { status: a.status ?? 200 });
   if (url.startsWith('https://api.stripe.com/')) return new Response(JSON.stringify({ error: { message: 'no stub' } }), { status: 404 });
   return new Response('unexpected call in test', { status: 599 });
 }) as typeof fetch;
 process.on('exit', () => { globalThis.fetch = realFetch; });
-beforeEach(() => { stripe = {}; calls = []; });
+beforeEach(() => { stripe = {}; calls = []; requestBodies = []; });
 
 // ── A database: users and the plan tables as production has them, and 578 ──
 function database({ alerts = true } = {}) {
@@ -271,20 +273,305 @@ test('a disputed plan payment opens an alert, told once, and closes with its out
 // ── grace ───────────────────────────────────────────────────────────────────
 
 test('grace: a renewal Stripe is still retrying keeps the plan’s access; unpaid ends it', () => {
-  const founder = (status: string) => ({ id: 1, role: 'founder', subscription_tier: 'studio', subscription_status: status } as any);
+  const founder = (status: string) => ({ id: 1, role: 'founder', subscription_tier: 'studio', subscription_status: status, subscription_renews_at: new Date().toISOString() } as any);
   assert.equal(userMeetsTier(founder('past_due'), 'studio'), true);
   assert.equal(userMeetsTier(founder('unpaid'), 'growth'), false);
   assert.equal(userMeetsTier(founder('active'), 'studio'), true);
-  const investor = (status: string) => ({ role: 'investor', investor_tier: 'professional', investor_subscription_status: status } as any);
+  const investor = (status: string) => ({ role: 'investor', investor_tier: 'professional', investor_subscription_status: status, investor_subscription_renews_at: new Date().toISOString() } as any);
   assert.equal(effectiveInvestorTier(investor('past_due')), 'professional');
   assert.equal(effectiveInvestorTier(investor('unpaid')), 'free');
   assert.equal(effectiveInvestorTier(investor('cancelled')), 'free');
-  assert.equal(userHasMiPro({ role: 'investor', mi_subscription_status: 'past_due' } as any), true);
+  assert.equal(userHasMiPro({ role: 'investor', mi_subscription_status: 'past_due', mi_subscription_period_end: new Date().toISOString() } as any), true);
   assert.equal(userHasMiPro({ role: 'investor', mi_subscription_status: 'unpaid' } as any), false);
-  for (const f of ['cloudflare-worker/src/services/introductions.ts', 'cloudflare-worker/src/routes/investor_seats.ts']) {
-    assert.doesNotMatch(read(f), /status === 'past_due'/, `${f} still treats past_due as lapsed`);
-  }
-  for (const f of ['cloudflare-worker/src/services/advisor/writeRouter.ts', 'cloudflare-worker/src/routes/advisor.ts']) {
-    assert.match(read(f), /s === 'active' \|\| s === 'past_due'/, `${f} drops a plan Stripe is retrying`);
-  }
+
+});
+
+test('D1100: a subscription update carries its period end to accepted seat colleagues', async () => {
+  const db=database();
+  const period=new Date(Date.now()-20*86_400_000).toISOString();
+  db.prepare("UPDATE users SET role='investor',investor_stripe_customer_id='cus_grace',investor_stripe_subscription_id='sub_grace',investor_tier='institutional',investor_subscription_status='active' WHERE id=?").run(ADA);
+  db.prepare("UPDATE users SET role='investor',investor_seat_primary_user_id=?,investor_tier='institutional',investor_subscription_status='active' WHERE id=?").run(ADA,IRA);
+  const res=await hook(db,'customer.subscription.updated',{id:'sub_grace',customer:'cus_grace',status:'past_due',current_period_end:Date.parse(period)/1000,metadata:{kind:'investor',investor_tier:'institutional'}});
+  assert.equal(res.status,200);
+  const seat=db.prepare('SELECT * FROM users WHERE id=?').get(IRA) as any;
+  assert.equal(seat.investor_subscription_status,'past_due');assert.equal(seat.investor_subscription_renews_at,period);
+  assert.equal(effectiveInvestorTier(seat),'institutional');
+  db.close();
+});
+
+// D1133: authenticated preparation, never a new subscription or a server-side charge.
+async function strong(db: DatabaseSync, path: string, who = ADA, recent = true, factor = 'totp', body?: unknown) {
+  const jti = crypto.randomUUID();
+  const now = new Date().toISOString().replace('T', ' ').slice(0, 19);
+  db.prepare("INSERT INTO user_sessions (jti,user_id,factor,created_at,last_step_up_at) VALUES (?,?,?,?,?)")
+    .run(jti, who, factor, recent ? now : '2020-01-01 00:00:00', recent ? now : null);
+  const jwt = await new SignJWT({ user_id: who, role: who === PAT ? 'partner' : 'founder', jti }).setProtectedHeader({ alg: 'HS256' })
+    .setIssuedAt().setExpirationTime('1h').sign(new TextEncoder().encode(JWT_SECRET));
+  if (body === undefined && path.endsWith('/update-card')) body = { nonce: 'fixture_nonce_1' };
+  const res = await app.request(path, { method: 'POST', headers: { Authorization: `Bearer ${jwt}`, 'Content-Type': 'application/json' }, ...(body === undefined ? {} : { body: JSON.stringify(body) }) }, env(db));
+  const text = await res.text();
+  return { status: res.status, body: JSON.parse(text), text, headers: res.headers };
+}
+const recoveryInvoice = (over = {}) => ({ id: 'in_ada1', subscription: 'sub_ada', customer: 'cus_ada', status: 'open', paid: false,
+  payment_intent: { id: 'pi_recover', client_secret: SECRET, customer: 'cus_ada', status: 'requires_payment_method' }, ...over });
+const activity = (db: DatabaseSync) => db.prepare("SELECT user_id, action, details FROM activity_logs WHERE action IN ('payment_refused','renewal_failed','renewal_recovered') ORDER BY id").all().map((r: any) => ({ ...r })) as any[];
+
+test('D1133 renewal actions require fresh TOTP, caller ownership and an open failed alert before Stripe', async () => {
+  const db = database();
+  try {
+    await hook(db, 'invoice.payment_failed', renewal()); const id = alerts(db)[0].id;
+    for (const action of ['pay', 'update-card']) {
+      const path = `/api/billing/alerts/${id}/${action}`;
+      assert.equal((await hit(db, 'POST', path, null)).status, 401);
+      assert.equal((await hit(db, 'POST', path, [ADA, 'founder'])).status, 403);
+      assert.equal((await strong(db, path, ADA, false)).status, 403);
+      assert.equal((await strong(db, path, ADA, true, 'passkey')).status, 403);
+      assert.equal((await strong(db, path, IRA)).status, 404);
+      assert.equal((await strong(db, `/api/billing/alerts/0/${action}`)).status, 404);
+      assert.equal(calls.length, 0);
+    }
+    db.prepare("UPDATE billing_alerts SET state='closed'").run();
+    assert.equal((await strong(db, `/api/billing/alerts/${id}/pay`)).status, 404);
+    assert.equal(calls.length, 0);
+  } finally { db.close(); }
+});
+
+test('D1133 Pay now reuses the existing invoice intent; Update card prepares a SetupIntent only', async () => {
+  const db = database();
+  try {
+    await hook(db, 'invoice.payment_failed', renewal()); const id = alerts(db)[0].id;
+    stripe['/invoices/in_ada1'] = { body: recoveryInvoice() };
+    const paid = await strong(db, `/api/billing/alerts/${id}/pay`);
+    assert.equal(paid.status, 200); assert.equal(paid.body.kind, 'payment'); assert.equal(paid.body.client_secret, SECRET);
+    assert.equal(paid.headers.get('Cache-Control'), 'private, no-store');
+    assert.ok(calls.every((c) => c.startsWith('GET /invoices/')));
+    stripe['/setup_intents'] = { body: { client_secret: 'seti_fixture_secret_synthetic' } };
+    const card = await strong(db, `/api/billing/alerts/${id}/update-card`);
+    assert.equal(card.status, 200); assert.equal(card.body.kind, 'setup'); assert.equal(card.body.scope, 'founder');
+    assert.ok(calls.includes('POST /setup_intents'));
+    const setup = requestBodies.find((r) => r.path === '/setup_intents')!.body;
+    assert.equal(setup.get('customer'), 'cus_ada');
+    assert.equal(setup.get('usage'), 'off_session');
+    assert.equal(setup.get('confirm'), null);
+    assert.ok(!calls.some((c) => /\/pay$|\/confirm$|POST \/subscriptions/.test(c)));
+    assert.doesNotMatch(JSON.stringify(db.prepare('SELECT * FROM activity_logs').all()), /secret|last4|card_number/);
+    assert.equal(alerts(db)[0].state, 'open', 'only the verified webhook clears the renewal');
+  } finally { db.close(); }
+});
+
+test('D1133 stale, mismatched and failed Stripe reads never yield a usable payment secret', async () => {
+  const db = database();
+  try {
+    await hook(db, 'invoice.payment_failed', renewal()); const id = alerts(db)[0].id;
+    for (const [invoice, status] of [[recoveryInvoice({ paid: true }), 409], [recoveryInvoice({ status: 'void' }), 409],
+      [recoveryInvoice({ payment_intent: { id: 'pi_x', client_secret: SECRET, customer: 'cus_ada', status: 'succeeded' } }), 409],
+      [recoveryInvoice({ customer: 'cus_foreign' }), 404], [recoveryInvoice({ subscription: 'sub_foreign' }), 404],
+      [recoveryInvoice({ payment_intent: { id: 'pi_x', client_secret: SECRET, customer: 'cus_foreign', status: 'requires_action' } }), 409]]) {
+      stripe['/invoices/in_ada1'] = { body: invoice };
+      const out = await strong(db, `/api/billing/alerts/${id}/pay`); assert.equal(out.status, status); assert.doesNotMatch(out.text, /secret/);
+    }
+    stripe['/invoices/in_ada1'] = { status: 502, body: { error: { message: 'private provider text' } } };
+    const failed = await strong(db, `/api/billing/alerts/${id}/pay`);
+    assert.equal(failed.status, 503); assert.doesNotMatch(failed.text, /private provider text|stripe_error/);
+  } finally { db.close(); }
+});
+
+test('D1133 recovery supports account plans and investor customers without crossing families', async () => {
+  const db = database();
+  try {
+    await hook(db, 'invoice.payment_failed', renewal({ id: 'in_pat1', subscription: 'sub_pat', customer: 'cus_pat' }));
+    const id = alerts(db)[0].id;
+    stripe['/invoices/in_pat1'] = { body: recoveryInvoice({ id: 'in_pat1', subscription: 'sub_pat', customer: 'cus_pat', payment_intent: { id: 'pi_pat', client_secret: SECRET, customer: 'cus_pat', status: 'requires_action' } }) };
+    assert.equal((await strong(db, `/api/billing/alerts/${id}/pay`, PAT)).status, 200);
+    db.prepare("UPDATE users SET investor_stripe_customer_id='cus_inv',investor_stripe_subscription_id='sub_inv' WHERE id=?").run(ADA);
+    await hook(db, 'invoice.payment_failed', renewal({ id: 'in_inv', subscription: 'sub_inv', customer: 'cus_inv' }));
+    stripe['/invoices/in_inv'] = { body: recoveryInvoice({ id: 'in_inv', subscription: 'sub_inv', customer: 'cus_inv', payment_intent: { id: 'pi_inv', client_secret: SECRET, customer: 'cus_inv', status: 'requires_action' } }) };
+    const out = await strong(db, `/api/billing/alerts/${alerts(db)[1].id}/pay`);
+    assert.equal(out.status, 200); assert.equal(out.body.scope, 'investor');
+  } finally { db.close(); }
+});
+
+test('D1133 renewal activity records each attempt and recovery once; ending is not recovery', async () => {
+  const db = database();
+  try {
+    await hook(db, 'invoice.payment_failed', renewal()); await hook(db, 'invoice.payment_failed', renewal());
+    await hook(db, 'invoice.payment_failed', renewal({ attempt_count: 2 }));
+    assert.equal(activity(db).filter((r) => r.action === 'renewal_failed').length, 2);
+    await hook(db, 'invoice.paid', { id: 'in_ada1', paid: true }); await hook(db, 'invoice.paid', { id: 'in_ada1', paid: true });
+    await hook(db, 'customer.subscription.updated', { id: 'sub_ada', status: 'active', metadata: { kind: 'tier' } });
+    assert.equal(activity(db).filter((r) => r.action === 'renewal_recovered').length, 1);
+    await hook(db, 'invoice.payment_failed', renewal({ id: 'in_ada2' }));
+    await hook(db, 'customer.subscription.updated', { id: 'sub_ada', status: 'active', metadata: { kind: 'tier' } });
+    assert.equal(activity(db).filter((r) => r.action === 'renewal_recovered').length, 2);
+    await hook(db, 'invoice.payment_failed', renewal({ id: 'in_ada3' }));
+    await hook(db, 'customer.subscription.deleted', { id: 'sub_ada', metadata: { kind: 'tier' } });
+    assert.equal(activity(db).filter((r) => r.action === 'renewal_recovered').length, 2);
+    assert.ok(activity(db).every((r) => r.user_id === ADA && r.details === '{}'));
+  } finally { db.close(); }
+});
+
+test('D1133 an activity failure rolls back alert changes; a redelivery recovers both', async () => {
+  const db = database();
+  try {
+    db.exec("CREATE TRIGGER refuse_activity BEFORE INSERT ON activity_logs BEGIN SELECT RAISE(ABORT,'fixture refusal'); END;");
+    assert.equal((await hook(db, 'invoice.payment_failed', renewal())).status, 500);
+    assert.equal(alerts(db).length, 0);
+    db.exec('DROP TRIGGER refuse_activity');
+    assert.equal((await hook(db, 'invoice.payment_failed', renewal())).status, 200);
+    db.exec("CREATE TRIGGER refuse_activity BEFORE INSERT ON activity_logs BEGIN SELECT RAISE(ABORT,'fixture refusal'); END;");
+    assert.equal((await hook(db, 'invoice.paid', { id: 'in_ada1', paid: true })).status, 500);
+    assert.equal(alerts(db)[0].state, 'open');
+    db.exec('DROP TRIGGER refuse_activity');
+    await hook(db, 'invoice.paid', { id: 'in_ada1', paid: true });
+    assert.equal(alerts(db)[0].state, 'closed');
+    assert.equal(activity(db).length, 2);
+  } finally { db.close(); }
+});
+
+test('D1133 a verified refusal records only its reason family and deduplicates event redelivery', async () => {
+  const db = database();
+  try {
+    stripe['/invoices/in_ada1'] = { body: { subscription: 'sub_ada', billing_reason: 'subscription_create' } };
+    const event = { id: 'evt_refused', type: 'payment_intent.payment_failed', data: { object: { id: 'pi_declined', invoice: 'in_ada1', last_payment_error: { type: 'card_error', message: 'private detail 4242', decline_code: 'private_code' } } } };
+    for (let n = 0; n < 2; n++) assert.equal((await hit(db, 'POST', '/api/billing/stripe/webhook', null, event)).status, 200);
+    assert.deepEqual(activity(db), [{ user_id: ADA, action: 'payment_refused', details: '{"reason_family":"declined"}' }]);
+    event.id = 'evt_auth'; event.data.object.last_payment_error = { code: 'authentication_required' } as any;
+    await hit(db, 'POST', '/api/billing/stripe/webhook', null, event);
+    assert.equal(JSON.parse(activity(db)[1].details).reason_family, 'authentication');
+    assert.doesNotMatch(JSON.stringify(activity(db)), /4242|private|pi_declined|in_ada/);
+  } finally { db.close(); }
+});
+
+
+test('D1133 a first decline arriving before subscription.created still records its owner, without trusting a foreign customer', async () => {
+  const db = database();
+  try {
+    stripe['/invoices/in_first'] = { body: { billing_reason: 'subscription_create', subscription: 'sub_first', customer: 'cus_ada' } };
+    stripe['/subscriptions/sub_first'] = { body: { customer: 'cus_ada', metadata: { kind: 'tier', user_id: String(ADA) } } };
+    const event = { id: 'evt_first', type: 'payment_intent.payment_failed', data: { object: { id: 'pi_first', invoice: 'in_first' } } };
+    assert.equal((await hit(db, 'POST', '/api/billing/stripe/webhook', null, event)).status, 200);
+    assert.equal(activity(db).length, 1); assert.equal(activity(db)[0].user_id, ADA);
+    event.id = 'evt_wrong'; stripe['/subscriptions/sub_first'] = { body: { customer: 'cus_ira', metadata: { kind: 'tier', user_id: String(ADA) } } };
+    await hit(db, 'POST', '/api/billing/stripe/webhook', null, event); assert.equal(activity(db).length, 1);
+    event.id = 'evt_wrongInvoice'; stripe['/subscriptions/sub_first'] = { body: { customer: 'cus_ada', metadata: { kind: 'tier', user_id: String(ADA) } } };
+    stripe['/invoices/in_first'] = { body: { billing_reason: 'subscription_create', subscription: 'sub_first', customer: 'cus_ira' } };
+    await hit(db, 'POST', '/api/billing/stripe/webhook', null, event); assert.equal(activity(db).length, 1);
+    event.id = 'evt_retry'; stripe['/invoices/in_first'] = { status: 503, body: { error: { message: 'private provider text' } } };
+    const out = await hit(db, 'POST', '/api/billing/stripe/webhook', null, event);
+    assert.equal(out.status, 500); assert.doesNotMatch(out.text, /private provider text/);
+  } finally { db.close(); }
+});
+
+test('D1133 a failed renewal is recorded once as renewal_failed, never as a checkout refusal', async () => {
+  const db = database();
+  try {
+    stripe['/invoices/in_ada1'] = { body: { subscription: 'sub_ada', billing_reason: 'subscription_cycle' } };
+    await hook(db, 'payment_intent.payment_failed', { invoice: 'in_ada1', last_payment_error: { type: 'card_error' } });
+    await hook(db, 'invoice.payment_failed', renewal());
+    assert.deepEqual(activity(db).map((r) => r.action), ['renewal_failed']);
+  } finally { db.close(); }
+});
+
+
+test('D1133 normal-customer account plans and shared-customer founder plans update the correct existing card endpoint', async () => {
+  const db = database();
+  try {
+    db.prepare("UPDATE users SET investor_stripe_customer_id='cus_ada', investor_stripe_subscription_id='sub_inv' WHERE id=?").run(ADA);
+    await hook(db, 'invoice.payment_failed', renewal());
+    stripe['/invoices/in_ada1'] = { body: recoveryInvoice() };
+    stripe['/setup_intents'] = { body: { client_secret: 'seti_fixture_secret_synthetic' } };
+    const out = await strong(db, `/api/billing/alerts/${alerts(db)[0].id}/update-card`);
+    assert.equal(out.status, 200); assert.equal(out.body.scope, 'founder');
+    // The normal/founder selector is also the existing account-plan customer
+    // endpoint; it has no founder-role gate. Exercise its real handler.
+    await hook(db, 'invoice.payment_failed', renewal({ id: 'in_pat1', subscription: 'sub_pat', customer: 'cus_pat' }));
+    stripe['/invoices/in_pat1'] = { body: recoveryInvoice({ id: 'in_pat1', subscription: 'sub_pat', customer: 'cus_pat' }) };
+    const setup = await strong(db, `/api/billing/alerts/${alerts(db)[1].id}/update-card`, PAT);
+    assert.equal(setup.body.scope, 'founder');
+    stripe['/payment_methods/pm_new'] = { body: { id: 'pm_new', customer: 'cus_pat' } };
+    stripe['/customers/cus_pat'] = { body: { id: 'cus_pat' } };
+    stripe['/subscriptions'] = { body: { data: [{ id: 'sub_pat', status: 'active' }] } };
+    stripe['/subscriptions/sub_pat'] = { body: { id: 'sub_pat' } };
+    assert.equal((await strong(db, '/api/billing/payment-method/default', PAT, true, 'totp', { scope: setup.body.scope, payment_method_id: 'pm_new' })).status, 200);
+    assert.ok(calls.includes('POST /customers/cus_pat'));
+    assert.ok(calls.includes('POST /subscriptions/sub_pat'));
+    assert.ok(!calls.some((c) => c.includes('cus_ada') && c.startsWith('POST')));
+  } finally { db.close(); }
+});
+
+
+test('D1133 late renewal attempts retain history without moving the alert backwards', async () => {
+  const db = database();
+  try {
+    await hook(db, 'invoice.payment_failed', renewal({ attempt_count: 2 }));
+    await hook(db, 'invoice.payment_failed', renewal({ attempt_count: 1 }));
+    await hook(db, 'invoice.payment_failed', renewal({ attempt_count: 1 }));
+    assert.equal(alerts(db)[0].attempt_count, 2);
+    assert.equal(activity(db).filter((r) => r.action === 'renewal_failed').length, 2);
+    await hook(db, 'invoice.paid', { id: 'in_ada1', paid: true });
+    await hook(db, 'invoice.payment_failed', renewal({ attempt_count: 1 }));
+    assert.equal(alerts(db)[0].state, 'closed');
+    assert.equal(activity(db).filter((r) => r.action === 'renewal_failed').length, 2);
+    await hook(db, 'invoice.payment_failed', renewal({ attempt_count: 3 }));
+    assert.equal(alerts(db)[0].state, 'closed');
+    assert.equal(activity(db).filter((r) => r.action === 'renewal_failed').length, 3, 'a late event after recovery still retains its historical attempt');
+  } finally { db.close(); }
+});
+
+test('D1133 card setup retries reuse their validated member/alert request key', async () => {
+  const db = database();
+  try {
+    await hook(db, 'invoice.payment_failed', renewal()); const id = alerts(db)[0].id;
+    stripe['/invoices/in_ada1'] = { body: recoveryInvoice() };
+    stripe['/setup_intents'] = { body: { client_secret: 'seti_fixture_secret_synthetic' } };
+    const path = `/api/billing/alerts/${id}/update-card`;
+    for (let n = 0; n < 2; n++) assert.equal((await strong(db, path)).status, 200);
+    let setup = requestBodies.filter((r) => r.path === '/setup_intents');
+    assert.ok(setup[0].key); assert.equal(setup[0].key, setup[1].key);
+    await strong(db, path, ADA, true, 'totp', { nonce: 'fixture_nonce_2' });
+    setup = requestBodies.filter((r) => r.path === '/setup_intents'); assert.notEqual(setup[2].key, setup[1].key);
+    const before = calls.length;
+    for (const nonce of [undefined, 'bad space', '../unsafe', 'x'.repeat(65)]) {
+      assert.equal((await strong(db, path, ADA, true, 'totp', { nonce })).status, 400);
+    }
+    assert.equal(calls.length, before, 'invalid request keys never reach Stripe');
+  } finally { db.close(); }
+});
+
+test('D1133 permanent provider object refusals are acknowledged without invented history', async () => {
+  const db = database();
+  try {
+    for (const status of [400, 404]) {
+      stripe['/invoices/in_missing'] = { status, body: { error: { type: 'invalid_request_error', code: 'resource_missing', message: 'private provider context' } } };
+      const event = { id: `evt_missing${status}`, type: 'payment_intent.payment_failed', data: { object: { invoice: 'in_missing' } } };
+      const out = await hit(db, 'POST', '/api/billing/stripe/webhook', null, event);
+      assert.equal(out.status, 200); assert.doesNotMatch(out.text, /private provider context/);
+      stripe['/invoices/in_missing'] = { body: { subscription: 'sub_missing', customer: 'cus_ada', billing_reason: 'subscription_create' } };
+      stripe['/subscriptions/sub_missing'] = { status, body: { error: { type: 'invalid_request_error', code: 'resource_missing' } } };
+      event.id = `evt_missingSub${status}`;
+      assert.equal((await hit(db, 'POST', '/api/billing/stripe/webhook', null, event)).status, 200);
+    }
+    assert.deepEqual(activity(db), []);
+    stripe['/invoices/in_missing'] = { status: 400, body: { error: { type: 'invalid_request_error', code: 'parameter_unknown' } } };
+    assert.equal((await hit(db, 'POST', '/api/billing/stripe/webhook', null, { id: 'evt_badParameter', type: 'payment_intent.payment_failed', data: { object: { invoice: 'in_missing' } } })).status, 500, 'configuration errors are not silently discarded');
+  } finally { db.close(); }
+});
+
+test('D1133 a separate investor customer used by an account plan selects that same default-card customer', async () => {
+  const db = database();
+  try {
+    db.prepare("UPDATE users SET investor_stripe_customer_id='cus_patInvestor' WHERE id=?").run(PAT);
+    await hook(db, 'invoice.payment_failed', renewal({ id: 'in_patInvestor', subscription: 'sub_pat', customer: 'cus_patInvestor' }));
+    stripe['/invoices/in_patInvestor'] = { body: recoveryInvoice({ id: 'in_patInvestor', subscription: 'sub_pat', customer: 'cus_patInvestor' }) };
+    stripe['/setup_intents'] = { body: { client_secret: 'seti_fixture_secret_synthetic' } };
+    const setup = await strong(db, `/api/billing/alerts/${alerts(db)[0].id}/update-card`, PAT);
+    assert.equal(setup.status, 200); assert.equal(setup.body.scope, 'investor');
+    stripe['/payment_methods/pm_new'] = { body: { id: 'pm_new', customer: 'cus_patInvestor' } };
+    stripe['/customers/cus_patInvestor'] = { body: { id: 'cus_patInvestor' } };
+    stripe['/subscriptions'] = { body: { data: [{ id: 'sub_pat', status: 'active' }] } };
+    stripe['/subscriptions/sub_pat'] = { body: { id: 'sub_pat' } };
+    assert.equal((await strong(db, '/api/billing/payment-method/default', PAT, true, 'totp', { scope: setup.body.scope, payment_method_id: 'pm_new' })).status, 200);
+    assert.ok(calls.includes('POST /customers/cus_patInvestor'));
+    assert.ok(!calls.includes('POST /customers/cus_pat'));
+  } finally { db.close(); }
 });

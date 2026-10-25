@@ -269,6 +269,7 @@ async function mounted(url, o = {}) {
   const container = document.createElement('div'); document.body.appendChild(container);
   const root = createRoot(container);
   await act(async () => root.render(h(MemoryRouter, { initialEntries: [url] }, h(AuthProvider, null, h(Routes, null,
+    h(Route, { path: '/raise/cap-table/proposal/:proposal', element: h(CycleRoute, { cycle: 'raise', slug: 'cap-table', capTableProposal: true }) }),
     h(Route, { path: '/raise/:slug', element: h(CycleRoute, { cycle: 'raise' }) }),
     h(Route, { path: '/raise/:slug/:id', element: h(CycleRoute, { cycle: 'raise', record: true }) }),
   )))));
@@ -298,7 +299,8 @@ test('Overview: the tool bar, Needs you, who owns, the tiles, the bars, the inst
     assert.match(bar, /Carta · synced 20 Oct 2026/);
     assert.match(bar, /409A · Valid until 3 Mar 2027/);
     assert.match(bar, /5 proposals waiting/);
-    assert.ok(!v.by('captable-record'), 'Record an issuance waits for part 10\'s dialog');
+    // D1025 (#2862): Record an issuance is the owner's, in the tool bar.
+    assert.match(v.text(v.by('captable-record')), /Record an issuance/);
     assert.equal(v.all('captable-need').length, 4);
     assert.match(v.text(v.by('captable-needs')), /A SAFE request from Mercury\. A SAFE for Harbor Seed Fund, \$250,000/);
     assert.equal(v.all('captable-group').length, 5);
@@ -326,22 +328,23 @@ test('the switches: Outstanding leaves options out, and By class draws the class
   } finally { await v.close(); }
 });
 
-test('Needs you: the owner records a proposal from its dialog, and a refusal names what it lacks', async () => {
+// D1025 (#2862): Review opens the proposal's drawer (CT11), which replaced D1022's dialog.
+test('Needs you: the owner records a proposal from its drawer, and a refusal names what it lacks', async () => {
   let fail = false;
   const v = await mounted('/raise/cap-table?project_id=3', {
     decide: () => (fail ? response({ error: 'incomplete', message: 'Say which class it is in.', missing: ['class', 'issued_on'] }, 400) : response({ issuance: {} })),
   });
   try {
     await v.press(v.all('captable-need-review')[0]);
-    assert.match(v.text(v.by('captable-proposal-says')), /puts this issuance on the record.*anyone you have granted Investor or Full see it/);
+    assert.match(v.text(v.by('captable-proposal-record-confirm')), /Co-founders see it at once; investors as their access allows\./);
     assert.equal(v.requests.filter(([u]) => /\/accept$/.test(u)).length, 0, 'opening it writes nothing');
     await v.press(v.by('captable-proposal-accept'));
     assert.ok(v.requests.some(([u, m]) => u.endsWith('/captable/record/3/proposals/p1/accept') && m === 'POST'));
-    assert.ok(!v.by('captable-proposal-dialog'), 'the dialog closes and the record reads again');
+    assert.ok(!v.by('captable-proposal-record'), 'the drawer closes and the record reads again');
     fail = true;
     await v.press(v.all('captable-need-review')[1]);
     await v.press(v.by('captable-proposal-accept'));
-    assert.match(v.text(v.by('captable-proposal-error')), /It still needs: class, issued_on\./);
+    assert.match(v.text(v.by('captable-proposal-record-refusal')), /It still needs: class, issued_on\./);
   } finally { await v.close(); }
 });
 
@@ -351,7 +354,7 @@ test('CT16: a co-founder reads the line, opens a proposal, and cannot record it'
     assert.match(v.text(v.by('captable-cofounder')), /You are a co-founder\. Issuances you propose wait for the owner to accept\./);
     await v.press(v.all('captable-need-review')[0]);
     assert.ok(!v.by('captable-proposal-accept') && !v.by('captable-proposal-dismiss'));
-    assert.match(v.text(v.by('captable-proposal-says')), /Only the owner records or dismisses/);
+    assert.match(v.text(v.by('captable-proposal-owner-only')), /Only the owner records or dismisses/);
   } finally { await v.close(); }
 });
 
@@ -420,7 +423,9 @@ test('CT2: the holder drawer at /raise/cap-table/h-<n>, its reads each answering
     assert.match(v.text(v.by('captable-holder-vesting')), /Vested 75,000 of 300,000/);
     assert.match(v.text(v.by('captable-holder-83b')), /83\(b\) · Not recorded/);
     assert.match(v.text(v.by('captable-holder-level')), /Not shared/);
-    assert.ok(!v.by('captable-holder-void'), 'Void waits for part 10\'s dialog');
+    // D1025 (#2862): each recorded row offers the owner Void (CT12b); Correct is an admin's.
+    assert.ok(v.by('captable-holder-void'), 'the owner voids a recorded row');
+    assert.ok(!v.by('captable-holder-correct'), 'only an admin corrects');
   } finally { await v.close(); }
   const w = await mounted('/raise/cap-table/h-12?project_id=3', { plan: 500, build: 500 });
   try {
