@@ -12,6 +12,7 @@ import React, { useEffect, useState, useCallback } from 'react';
 import { Lock, Check, X } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { api } from '../lib/api';
+import { checkoutRefusal } from '../lib/pricingModel';
 import QuotaCard from './QuotaCard';
 import { useEscapeClose } from './useEscapeClose';
 
@@ -103,6 +104,7 @@ export default function PaywallModal({ user }) {
   const [required, setRequired] = useState('growth');
   const [message, setMessage] = useState('');
   const [busy, setBusy] = useState(null);
+  const [refusal, setRefusal] = useState(null);
 
   useEffect(() => {
     function onEvt(e) {
@@ -128,6 +130,7 @@ export default function PaywallModal({ user }) {
       }
       setRequired(norm);
       setMessage(typeof detail.message === 'string' ? detail.message : '');
+      setRefusal(null);
       setOpen(true);
     }
     window.addEventListener('studioos:tier_required', onEvt);
@@ -141,15 +144,18 @@ export default function PaywallModal({ user }) {
 
   const startCheckout = useCallback(async (key) => {
     setBusy(key);
+    setRefusal(null);
     try {
       const plan = TIER_PLANS[key]?.plan;
       const res = isInvestorMode && plan
         ? await api.investorCheckout(plan)
         : await api.tierCheckout(key);
+      // An answer with no checkout address opened nothing, so it is a refusal too.
       if (res?.url) window.location.href = res.url;
+      else setRefusal(checkoutRefusal(null));
     } catch (e) {
-      // eslint-disable-next-line no-alert
-      alert(e?.message || 'Checkout failed. Please try again.');
+      // D1049 (#2900): an in-page line, never a browser pop-up, saying no money moved.
+      setRefusal(checkoutRefusal(e));
     } finally {
       setBusy(null);
     }
@@ -213,6 +219,12 @@ export default function PaywallModal({ user }) {
           <div className="px-5 sm:px-6 pt-5">
             <QuotaCard user={{ role: 'investor' }} />
           </div>
+        )}
+        {refusal && (
+          <p role="alert" data-testid="paywall-refusal"
+            className="mx-5 sm:mx-6 mt-5 mb-0 rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-sm font-medium text-amber-900 dark:border-amber-800 dark:bg-amber-950/40 dark:text-amber-200">
+            {refusal}
+          </p>
         )}
         <div className={`grid gap-4 p-5 sm:p-6 ${tiersToShow.length > 1 ? 'sm:grid-cols-2' : 'sm:grid-cols-1'}`}>
           {tiersToShow.map((tier) => {
