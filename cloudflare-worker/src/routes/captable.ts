@@ -51,6 +51,9 @@ import {
   RecordError, acceptProposal, createClass, dismissProposal, historyPage, propose, readHistory, readRecord, recordIssuance,
   setCurrency, updateClass, voidIssuance, type RecordActor,
 } from '../services/capTableRecord';
+import { proposeFromClose, readClose } from '../services/capTableClose';
+import { DOCUMENT_OPTION, DOCUMENT_PAGE, documentRecord, readDocumentTerms } from '../services/capTableDocumentRead';
+import { railFor, refuseRun } from '../util/railContext';
 import {
   actorHash, auditStatement, equityPlanBody, num, readEquityPlan, readRegister, registerCsv, snapshotPdf, withOwnership,
   type RegisterScope,
@@ -1122,6 +1125,41 @@ captable.put('/record/:projectId/currency', async (c) => {
   try {
     const { projectId, actor } = await recordWriter(c, true);
     return c.json({ currency: await setCurrency(c.env, projectId, actor, await recordBody(c)) });
+  } catch (e) { return recordError(c, e); }
+});
+
+/**
+ * D1021 (#2858) — part 6: a close's proposals, and Eadwyn's read of a signed document.
+ *
+ *   GET   /record/:projectId/closes/:closeUid             CT11b: the close's investors, each proposal, signed or not
+ *   POST  /record/:projectId/closes/:closeUid/proposals   a closed close proposes one issuance per investor (owner, co-founder, admin)
+ *   POST  /record/:projectId/document-read                CT11c: non-money terms with their page; money fields their page only
+ *
+ * A close's proposal is part 2's row (origin 'close'): Accept and Dismiss are
+ * part 2's routes, and Accept refuses an investor whose document is not signed.
+ * The document read writes nothing on the record; it is one metered run.
+ */
+captable.get('/record/:projectId/closes/:closeUid', async (c) => {
+  try { return c.json(await readClose(c.env, await recordReader(c), c.req.param('closeUid'))); }
+  catch (e) { return recordError(c, e); }
+});
+
+captable.post('/record/:projectId/closes/:closeUid/proposals', async (c) => {
+  try {
+    const { projectId, actor } = await recordWriter(c, false);
+    return c.json(await proposeFromClose(c.env, projectId, actor, c.req.param('closeUid'), await recordBody(c)));
+  } catch (e) { return recordError(c, e); }
+});
+
+captable.post('/record/:projectId/document-read', async (c) => {
+  try {
+    const { projectId, actor } = await recordWriter(c, false);
+    const rail = railFor(c, { page: DOCUMENT_PAGE, option: DOCUMENT_OPTION }, documentRecord(projectId));
+    const { result, draft } = await readDocumentTerms(c.env, projectId, actor.id, await recordBody(c), rail);
+    if (!draft) {
+      return refuseRun(c, result) || refuse(c, 503, { code: 'ai_unavailable', message: 'Eadwyn could not read that document just now. Try again.' });
+    }
+    return c.json({ draft });
   } catch (e) { return recordError(c, e); }
 });
 
