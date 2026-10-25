@@ -364,10 +364,10 @@ test('no colour carries meaning alone: every series is named in a legend or a la
 
 test('the charts live in ui/ (D915 §6): one palette, Insights and Community import them from the barrel, no second copy', () => {
   const charts = read('frontend/src/ui/Charts.jsx');
-  for (const part of ['HBars', 'Columns', 'GroupedColumns', 'StackBars', 'WeekLine', 'WeekLines', 'Bar100', 'Donut', 'Legend', 'ChartTable', 'Chart']) {
+  for (const part of ['HBars', 'Columns', 'GroupedColumns', 'StackBars', 'WeekLine', 'WeekLines', 'Bar100', 'Donut', 'Legend', 'ChartTable', 'Chart', 'RunningTotal']) {
     assert.match(charts, new RegExp(`export function ${part}\\(`), part);
   }
-  assert.match(read('frontend/src/ui/index.js'), /GroupedColumns, HBars, Legend, StackBars, WeekLine, WeekLines/);
+  assert.match(read('frontend/src/ui/index.js'), /GroupedColumns, HBars, Legend, RunningTotal, StackBars, WeekLine, WeekLines/);
   for (const f of ['frontend/src/pages/admin/insights/AdminInsights.jsx', 'frontend/src/pages/admin/community/AdminCommunity.jsx', 'frontend/src/pages/admin/partners/PartnersOverview.jsx']) {
     assert.doesNotMatch(read(f), /InsightsCharts/, f);
   }

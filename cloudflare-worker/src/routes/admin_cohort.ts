@@ -8,6 +8,7 @@
  *   POST /override              → { user_id, cycle_id, week, decision: pass|fail, reason } — reason REQUIRED,
  *                                 logged to stage_transition_log with triggered_by='admin'
  *   GET  /impersonation-audit   → recent impersonation_sessions rows
+ *   GET  /participants, /participants/:uid → D946's participants read (admin_lab_participants.ts)
  *
  * All admin decisions write stage_transition_log (audit) and notify the
  * founder instantly. Grace extensions defer the scheduler's decision until
@@ -15,6 +16,7 @@
  */
 import { Hono, type Context } from 'hono';
 import adminLabReads from './admin_lab';
+import adminLabParticipants from './admin_lab_participants';
 import type { Env } from '../types';
 import { requireAdmin, requireSuperAdmin, requireBranchNotSuspended } from '../auth';
 import { hashEmail } from '../util/hashEmail';
@@ -28,6 +30,8 @@ import { MILESTONES } from '../services/spinoutLabCatalog';
 
 const r = new Hono<{ Bindings: Env }>();
 r.route('/', adminLabReads);
+// D946 (#2751): the participants read, SL7 and SL8.
+r.route('/', adminLabParticipants);
 
 const isoNow = (): string => new Date().toISOString().replace('T', ' ').slice(0, 19);
 

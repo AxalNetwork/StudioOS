@@ -44,7 +44,8 @@ test('the list is closed and well formed', () => {
   assert.equal(isRedirectKey('/dashboard'), false, 'a bare path is not a redirect key');
   const keep = REDIRECT_ROUTES.filter((r) => r.keep).map((r) => r.path).sort();
   // D937: sent cohort notices keep the old Lab address working permanently.
-  assert.deepEqual(keep, ['/admin/spinout-lab', '/help/:id', '/integrations', '/notifications', '/notifications/*', '/plans-and-pricing', '/product-testing', '/settings', '/settings/:section', '/support', '/tickets/:id']);
+  // D938: /admin forwards every old console tab, and #2375 keeps it for good.
+  assert.deepEqual(keep, ['/admin', '/admin/spinout-lab', '/help/:id', '/integrations', '/notifications', '/notifications/*', '/plans-and-pricing', '/product-testing', '/settings', '/settings/:section', '/support', '/tickets/:id']);
 });
 
 
@@ -55,7 +56,11 @@ test('each fixed admin tab has its own persisted counter; unknown or extra query
   assert.ok(rows(env).some(([path]: any[]) => path === 'redirect:/admin?tab=kyc'));
   await beacon(env, 'redirect:/admin?tab=kyc');
   assert.equal(env.db.prepare("SELECT views FROM public_pageviews WHERE path = 'redirect:/admin?tab=kyc'").get()?.views, 2);
-  for (const path of ['redirect:/admin?tab=unknown', 'redirect:/admin?tab=kyc&email=private@example.test', 'redirect:/admin?tab=kyc#secret', 'redirect:/admin?tab=private@example.test', 'redirect:/admin', '/admin?tab=kyc']) await beacon(env, path);
+  for (const path of ['redirect:/admin?tab=unknown', 'redirect:/admin?tab=kyc&email=private@example.test', 'redirect:/admin?tab=kyc#secret', 'redirect:/admin?tab=private@example.test', '/admin?tab=kyc']) await beacon(env, path);
   assert.equal(rows(env).length, ADMIN_TAB_REDIRECTS.length);
   assert.equal(rows(env).reduce((n: number, [, views]: any[]) => n + views, 0), ADMIN_TAB_REDIRECTS.length + 1);
+  // D938's bare redirect is kept in addition to D939's per-tab counters.
+  assert.equal((await beacon(env, 'redirect:/admin')).status, 204);
+  assert.equal(rows(env).length, ADMIN_TAB_REDIRECTS.length + 1);
+  assert.equal(env.db.prepare("SELECT views FROM public_pageviews WHERE path = 'redirect:/admin'").get()?.views, 1);
 });

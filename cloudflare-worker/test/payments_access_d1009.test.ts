@@ -148,7 +148,15 @@ test('provider and mirror failures remain refusals, never successful empty lists
       const response = await call(f, withReason(r));
       assert.ok(response.status >= 500, `${r.path}: ${response.status}`);
       assert.ok((await response.json() as any).message);
-      assert.equal(audits(f).length, 0);
+      const rows = audits(f);
+      if (r === reads[2]) {
+        // D1011 records the failed sync, while its response remains a refusal.
+        assert.equal(rows.length, 1);
+        assert.equal(rows[0].action, 'catalog_sync_failed');
+        assert.equal(JSON.parse(rows[0].filters_json).failure, 'stripe');
+      } else {
+        assert.equal(rows.length, 0);
+      }
     } finally { f.db.close(); }
   }
 });

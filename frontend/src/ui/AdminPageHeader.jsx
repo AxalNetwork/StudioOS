@@ -1,4 +1,4 @@
-import React, { useCallback, useRef } from 'react';
+import React, { createContext, useCallback, useContext, useEffect, useId, useRef, useState } from 'react';
 import { Link, NavLink, useLocation, useNavigate } from 'react-router-dom';
 import { Info } from 'lucide-react';
 
@@ -14,9 +14,15 @@ import { Info } from 'lucide-react';
  *   2. the title row: the h1, its pills, and on the right the page's actions
  *      (at most one primary button, D936 §2);
  *   3. one muted line saying what the page is for, and an optional facts strip;
- *   4. the scope chip, on the Admin shell only;
+ *   4. the scope chip, on the Admin shell only (`scope`); a page whose chip
+ *      says something else (Insights' subsidiary scope) passes its own `chip`
+ *      node, drawn in the same place;
  *   5. the moved notice, only after an old address forwarded here;
  *   6. the tab bar, only when the page has tabs: `HeaderTab`s, passed as `tabs`.
+ *
+ * The title row's right side ends with the More menu (SHL1) when the page
+ * passes `more`: `HeaderMenuItem`s, each a literal link (`to`) or an action
+ * (`onSelect`), for everything that is not the page's one primary button.
  *
  * THE HEADER RENDERS AT ONCE. Its title, line and tabs come from the page,
  * never from a read, so a slow or failed read never blanks it (SHL4, SHL6).
@@ -44,9 +50,10 @@ const PILL_TONES = {
  * violet and carries aria-current="page" (NavLink sets it); `end` is on by
  * default, so a page's Overview is open only at its own address.
  */
-export function HeaderTab({ to, end = true, count = null, children, 'data-testid': testId }) {
+export function HeaderTab({ linkRef, to, end = true, count = null, children, 'data-testid': testId }) {
   return (
     <NavLink
+      ref={linkRef}
       to={to}
       end={end}
       data-testid={testId}
@@ -99,14 +106,79 @@ export function useMovedNotice(notices) {
   return { text, dismiss };
 }
 
+const MenuClose = createContext(() => {});
+
+/**
+ * One item of the More menu: a link when given `to` (a literal door the
+ * reachability walk can read), else a button that runs `onSelect`. Either
+ * closes the menu.
+ */
+export function HeaderMenuItem({ to = null, onSelect = null, children, 'data-testid': testId }) {
+  const close = useContext(MenuClose);
+  const cls = 'flex min-h-[44px] items-center rounded-[8px] px-3 text-left text-[13px] font-semibold text-axal-ink hover:bg-axal-ground focus:bg-axal-ground focus:outline-none dark:text-gray-100 dark:hover:bg-gray-800 dark:focus:bg-gray-800 sm:min-h-[40px]';
+  if (to) {
+    return <Link to={to} role="menuitem" tabIndex={-1} onClick={() => close(false)} className={cls} data-testid={testId}>{children}</Link>;
+  }
+  return (
+    <button type="button" role="menuitem" tabIndex={-1} onClick={() => { onSelect?.(); close(true); }} className={cls} data-testid={testId}>{children}</button>
+  );
+}
+
+/**
+ * SHL1's More menu: "⋯", then a menu of `HeaderMenuItem`s. Opening it moves
+ * focus to the first item; the arrow keys, Home and End move between items;
+ * Escape and an outside click close it, Escape returning focus to "⋯".
+ */
+function MoreMenu({ children }) {
+  const [open, setOpen] = useState(false);
+  const wrap = useRef(null);
+  const button = useRef(null);
+  const menu = useId();
+  const items = () => [...(wrap.current?.querySelectorAll?.('[role="menuitem"]') || [])];
+  const close = useCallback((refocus) => {
+    setOpen(false);
+    if (refocus && typeof button.current?.focus === 'function') button.current.focus();
+  }, []);
+  useEffect(() => {
+    if (!open) return undefined;
+    const first = items()[0];
+    if (typeof first?.focus === 'function') first.focus();
+    const away = (e) => { if (!wrap.current?.contains(e.target)) setOpen(false); };
+    document.addEventListener('mousedown', away);
+    return () => document.removeEventListener('mousedown', away);
+  }, [open]);
+  const onKey = (e) => {
+    if (!open) return;
+    if (e.key === 'Escape') { e.preventDefault(); close(true); return; }
+    const all = items();
+    const at = all.indexOf(document.activeElement);
+    const to = { ArrowDown: at + 1, ArrowUp: at - 1, Home: 0, End: all.length - 1 }[e.key];
+    if (to === undefined || !all.length) return;
+    e.preventDefault();
+    all[(to + all.length) % all.length]?.focus?.();
+  };
+  return (
+    <div ref={wrap} className="relative" onKeyDown={onKey}>
+      <button ref={button} type="button" aria-label="More" aria-haspopup="menu" aria-expanded={open} aria-controls={open ? menu : undefined} onClick={() => setOpen((o) => !o)} className="grid h-11 w-11 place-items-center rounded-[9px] border border-axal-hairline bg-white text-[16px] font-bold text-axal-ink dark:border-gray-700 dark:bg-gray-900 dark:text-gray-100 sm:h-10 sm:w-10" data-testid="admin-page-more">⋯</button>
+      {open ? (
+        <div id={menu} role="menu" aria-label="More" className="absolute right-0 top-full z-30 mt-1.5 flex min-w-[210px] flex-col rounded-[12px] border border-axal-hairline bg-white p-1.5 shadow-lg dark:border-gray-700 dark:bg-gray-900" data-testid="admin-page-more-menu">
+          <MenuClose.Provider value={close}>{children}</MenuClose.Provider>
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
 export default function AdminPageHeader({
   crumb = null,
   title,
   pills = [],
   actions = null,
+  more = null,
   line,
   facts = null,
   scope = false,
+  chip = null,
   notice = null,
   tabs = null,
   'data-testid': testId = 'admin-page-header',
@@ -115,7 +187,8 @@ export default function AdminPageHeader({
   const onDismiss = () => {
     notice?.onDismiss?.();
     // SHL3: Dismiss returns focus to the title, never to the top of the page.
-    titleRef.current?.focus();
+    // (Guarded: the tests' small DOM has no `focus`.)
+    if (typeof titleRef.current?.focus === 'function') titleRef.current.focus();
   };
   return (
     <header className="flex flex-col gap-2.5" data-testid={testId}>
@@ -137,7 +210,7 @@ export default function AdminPageHeader({
             <span key={p.label} title={p.title} className={`inline-flex items-center rounded-full border px-2.5 py-0.5 text-[11.5px] font-bold ${PILL_TONES[p.tone] || PILL_TONES.hq}`}>{p.label}</span>
           ))}
         </div>
-        {actions ? <div className="flex flex-wrap items-center gap-2">{actions}</div> : null}
+        {actions || more ? <div className="flex flex-wrap items-center gap-2">{actions}{more ? <MoreMenu>{more}</MoreMenu> : null}</div> : null}
       </div>
       {line ? <p className="m-0 max-w-[72ch] text-[13px] leading-normal text-axal-muted dark:text-gray-400">{line}</p> : null}
       {facts ? <p className="m-0 font-mono text-[11.5px] text-axal-muted dark:text-gray-400" data-testid="admin-page-facts">{facts}</p> : null}
@@ -146,6 +219,7 @@ export default function AdminPageHeader({
           <span tabIndex={0} title={HELD_SCOPE_TITLE} className="inline-flex cursor-help rounded-full border border-axal-hairline bg-white px-3 py-1 font-mono text-[11.5px] font-medium text-axal-ink dark:border-gray-700 dark:bg-gray-900 dark:text-gray-100" data-testid="admin-page-scope">{HELD_SCOPE_LABEL}</span>
         </div>
       ) : null}
+      {chip && !scope ? <div>{chip}</div> : null}
       {notice?.text ? (
         <div role="status" aria-live="polite" className="flex items-center gap-2.5 rounded-[10px] border border-axal-lavender-edge bg-axal-lavender px-3 py-1.5 text-[13px] text-axal-ink dark:border-violet-800 dark:bg-violet-950/40 dark:text-gray-100" data-testid="admin-page-moved">
           <Info size={15} aria-hidden="true" className="shrink-0 text-axal-violet-deep dark:text-violet-300" />

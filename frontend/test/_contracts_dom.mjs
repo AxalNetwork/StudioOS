@@ -26,7 +26,28 @@ function makeNode(tag) {
     get firstChild() { return this.childNodes[0] || null; },
   };
 }
-export function installDocument(search = '') {
+/**
+ * `{ focus: true }` (opt-in, so no other suite changes) gives each node what a
+ * focus-return test reads: `focus()` and `blur()` that move
+ * `document.activeElement`, `isConnected` (still under <body>), and a real
+ * `contains`. A removed node keeps focus here, where a browser would move it
+ * to <body>; `isConnected === false` is how a page tells the two apart.
+ */
+function withFocus(n, document) {
+  // Defined, not assigned: a suite may put a non-writable `focus` on Object.prototype.
+  const own = (key, value) => Object.defineProperty(n, key, { value, configurable: true, writable: true });
+  own('focus', function focus() { document.activeElement = this; });
+  own('blur', function blur() { if (document.activeElement === this) document.activeElement = document.body; });
+  own('contains', function contains(other) { for (let p = other; p; p = p.parentNode) if (p === this) return true; return false; });
+  Object.defineProperty(n, 'isConnected', {
+    configurable: true,
+    get() { let p = this; while (p.parentNode) p = p.parentNode; return p === document.body || p === document.documentElement; },
+  });
+  return n;
+}
+export function installDocument(search = '', options = {}) {
+  // Exactly `true`: a destructured default would read an inherited `Object.prototype.focus`.
+  const focus = options?.focus === true;
   const keys = ['window', 'document', 'HTMLElement', 'Element', 'Node', 'HTMLIFrameElement', 'location', 'localStorage', 'addEventListener', 'removeEventListener'];
   const previous = Object.fromEntries(keys.map((k) => [k, globalThis[k]]));
   globalThis.window = globalThis;
@@ -34,7 +55,7 @@ export function installDocument(search = '') {
   globalThis.removeEventListener = () => {};
   const document = {
     nodeType: 9, nodeName: '#document', activeElement: null, defaultView: globalThis,
-    createElement(tag) { const n = makeNode(tag); n.ownerDocument = document; return n; },
+    createElement(tag) { const n = makeNode(tag); n.ownerDocument = document; return focus ? withFocus(n, document) : n; },
     createElementNS(_ns, tag) { return document.createElement(tag); },
     // React updates a text node through `nodeValue`, so it reads and writes the same text.
     createTextNode(text) {
