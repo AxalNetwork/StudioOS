@@ -34,7 +34,8 @@ export type ProgramCopy = { grants: Array<Record<string, unknown>>; offered: Rec
 
 /** The copy of one licence's programs, read fresh from HQ's store. Throws when a read fails. */
 export async function programCopy(env: Env, licenceId: number): Promise<ProgramCopy> {
-  const rows = ((await env.DB.prepare('SELECT * FROM program_grants WHERE licence_id = ? ORDER BY id')
+  // A draft (D956) is HQ's, so it is not sent: the studio reads Not granted until HQ grants it.
+  const rows = ((await env.DB.prepare("SELECT * FROM program_grants WHERE licence_id = ? AND state <> 'draft' ORDER BY id")
     .bind(licenceId).all<Record<string, unknown>>()).results || [])
     .map((row) => Object.fromEntries(COPY_COLUMNS.map((k) => [k, row[k] ?? null])));
   const offered = Object.fromEntries((await readDefaults(env)).map((d) => [d.program_key, d.grantable]));
@@ -76,9 +77,10 @@ export function studioPrograms(copy: ProgramCopy, licence: LicenceLite, today: s
     if (p.readiness === 'hq') return entry(p, 'hq_only', null);
     if (p.readiness === 'notready') return entry(p, 'not_offered', null);
     const row = byKey.get(p.key);
-    if (!row) return entry(p, copy.offered[p.key] === false ? 'switched_off' : 'not_recorded', null);
+    // A draft (D956) is HQ's: the studio reads it as no grant at all.
+    if (!row || row.state === 'draft') return entry(p, copy.offered[p.key] === false ? 'switched_off' : 'not_recorded', null);
     const { set_by_user_id: _by, licence_uid: _l, ...grant } = presentGrant(row as Record<string, any>, licence, today);
-    const standing: Standing = grant.state === 'granted' ? (grant.in_force ? 'in_force' : 'granted') : grant.state;
+    const standing: Standing = grant.state === 'granted' ? (grant.in_force ? 'in_force' : 'granted') : grant.state as 'paused' | 'ended';
     return entry(p, standing, grant);
   });
 }

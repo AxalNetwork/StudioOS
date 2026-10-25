@@ -15,8 +15,8 @@ forwards here with `?moved=payments`, in `../LegacyContractsRedirect.jsx`.
   retired editor (`PaymentsPanel`) is gone; `?new=product` is the storefront's
   door to New product.
 - `ProductLightbox.jsx` — PAY2 (D1012): one product as a lightbox over
-  Catalogue, at `/admin/platform/payments/products/[id]` (a bottom sheet on a
-  phone). Where members see it, its prices, the members on the plan, the
+  Catalogue, at `/admin/platform/payments/products/[id]` (a full page with price cards and persistent actions on a
+  phone, D1129). Where members see it, its prices, the members on the plan, the
   promo codes that apply, its checks, its recent changes and Technical
   details. It reads members (plans only), promo codes and the product's
   change log when open, each answering alone. Its buttons open the price
@@ -25,7 +25,7 @@ forwards here with `?moved=payments`, in `../LegacyContractsRedirect.jsx`.
   deliveries per hour (the no-log hour dashed; a table on request and on a
   phone) and the mirror, with the doors to the Stripe dialogs (D1013).
 - `ChangeLog.jsx` — PAY7 (D1014): the change log, its filters and pages, and
-  the CSV export behind an in-page reason dialog.
+  the CSV export behind an in-page reason dialog. D1129 adds submitted text search and an independent read of every current admin and historical payment actor for Who.
 - `ProductDialogs.jsx` — PAY3 and PAY4 (D1013): New product, Add a price,
   Change a price (part 2's route), Archive a price or a product, and Edit
   details.
@@ -58,3 +58,7 @@ forwards here with `?moved=payments`, in `../LegacyContractsRedirect.jsx`.
   members pay meets the step-up through the platform's own prompt
   (`StepUpModal`); cancelling it changes nothing.
 - Only the Super Admin is drawn a change; anyone else is told who can make it.
+
+D1129 (#3009) completes the shared header’s New product and More actions and
+PAY12b’s full phone product page. The phone page steps aside for D1013’s
+existing dialogs. Read/search failures never return database details.
