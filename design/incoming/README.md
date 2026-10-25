@@ -109,6 +109,23 @@ strength of a live route would empty the queue of the work it exists to track.
    `Trust Center v2.dc.html` to `backlog/` for a day, next to the `NEW` canvases
    that have no route, and away from the v1 of its own page.
 
+## Landed 2026-10-25 — Deals · the deal page (#2421)
+
+The owner's artifacts `SG1gbgTjsbqyatvYDyhj1Z` (the board grid) and
+`7ji9JjHGCXCFHbJPjM6T3s` (the page) came from S21's prompt on #2421, each
+decoded by `scripts/read-canvas.mjs` as is:
+- `Deal page · Boards.dc.html` is the board grid (DL1 to DL24, with the
+  lettered boards); it imports the page by name;
+- `Investor Deal Page.dc.html` is the page.
+
+No value was edited.
+
+**Grade: UPGRADE.** The page is `/deals/:dealId`, with each tab at
+`/deals/:dealId/<tab>`. S21's integration (D1148) draws today's reads on their
+tabs and says Not read here yet on the rest; the stage track, the reading tabs
+and the dialogs wait for D1148's seven parts, so this canvas stays in the queue
+until they land.
+
 ## Landed 2026-10-25 — Raise · Fundraising readiness (#2433)
 
 The owner's artifacts `XDZ4YKmUxUwBpLEPLYzx8i` (the board grid) and
