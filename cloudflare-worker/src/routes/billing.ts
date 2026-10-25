@@ -1691,11 +1691,11 @@ async function handleStripeEvent(
         ).bind(invTier, status, periodEnd, INVESTOR_QUOTAS[invTier].dealroom_max, obj.id as string, customer).run();
         // Cascade tier change to accepted seat colleagues.
         await env.DB.prepare(
-          `UPDATE users SET investor_tier = ?, investor_subscription_status = ?
+          `UPDATE users SET investor_tier = ?, investor_subscription_status = ?, investor_subscription_renews_at = ?
            WHERE investor_seat_primary_user_id IN (
              SELECT id FROM users WHERE investor_stripe_customer_id = ?
            )`,
-        ).bind(invTier, status, customer).run();
+        ).bind(invTier, status, periodEnd, customer).run();
       } else if (isInvestor) {
         // Investor sub event without explicit metadata.tier — only run when
         // we know it's an investor event (avoid clobbering rows that share

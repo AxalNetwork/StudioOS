@@ -11,275 +11,238 @@
  *
  * D953 (#2371): the queue now lives at Programs › Refer & Earn › Queue, which
  * mounts `ReferralReviewBody`; `/admin/refer-earn` only redirects there.
+ *
+ * D962 (#2795, PG9q, PG9d): the Queue reads part 4's paged list with its
+ * total (D957), opening on the open statuses, waiting longest first, 25 a
+ * page. A row opens the referral as a dialog, which reads its timeline from
+ * the single-referral read, offers only D957's allowed moves, sends `status`
+ * only when it moved, and shows its result in place. There is no toast.
  */
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { Loader2, AlertCircle, RefreshCw } from 'lucide-react';
+import { Lightbox, PhoneRows, usePhoneWidth } from '../../ui';
 import { api } from '../../lib/api';
 import { useAuth } from '../../hooks/useAuthSync';
 import { isSuperAdminUser } from '../../lib/shellRole';
-import { NOT_RECORDED } from '../../lib/absence';
 import AdminBoardFrame from './AdminBoardFrame';
+import { BlockFailed, CARD, DIALOG_BODY, DialogButtons, EYE, FIELD_LABEL, Field, INPUT, Pill, SUB, Skeleton, TD, TH } from './programs/parts';
+import { useRead } from './programs/useProgramReads';
 import {
-  CAPS, HQ_READS_COMMISSIONS, NOTHING_WAITING, REFERRALS_EMPTY, openReferrals, refusalText,
-} from './programs/programsModel';
+  CATEGORY_WORD, LIMITS, PAGE_SIZE, QUEUE_OPEN, QUEUE_STATUSES, REVIEW_SAVED as SAVED, REVIEW_TOLD, categoryWord, countLine,
+  queueParams, queueStatusWord, refusalSentence, reviewPatch, shortDay, statusChoices, statusWord, timelineRow,
+} from './programs/programPagesModel';
+import { HQ_READS_COMMISSIONS, NOTHING_WAITING, NOT_RECORDED, REFERRALS_EMPTY, ageText, hoursSince, isReady } from './programs/programsModel';
 
-const STATUSES = [
-  'submitted', 'under_review', 'more_info_needed', 'qualified',
-  'in_conversation', 'converted', 'reward_eligible', 'reward_issued',
-  'rejected', 'closed',
-];
+export const REVIEW_SAVED = SAVED;
 
-const LABELS = {
-  draft: 'Draft',
-  submitted: 'Submitted',
-  under_review: 'Under review',
-  more_info_needed: 'More info needed',
-  qualified: 'Qualified',
-  in_conversation: 'In conversation',
-  converted: 'Converted',
-  reward_eligible: 'Reward eligible',
-  reward_issued: 'Reward issued',
-  rejected: 'Rejected',
-  closed: 'Closed',
-};
+const STATUS_TONE = { more_info_needed: 'amber', qualified: 'violet', in_conversation: 'violet', converted: 'green', reward_eligible: 'green', reward_issued: 'green', rejected: 'red', closed: 'muted' };
 
-/** The open statuses, merged: the Refer & Earn Queue's default view (D953 §3). */
-const OPEN = 'open';
+const referrer = (r) => [r.referrer_name || r.referrer_email || NOT_RECORDED, r.your_role].filter(Boolean).join(' · ');
+const referred = (r) => [r.referred_name || NOT_RECORDED, r.referred_org].filter(Boolean).join(' · ');
 
-export const REVIEW_SAVED = 'Referral updated. The referrer sees it on their page.';
+function paged(reply) {
+  if (!Array.isArray(reply?.items) || !Number.isFinite(Number(reply?.total))) throw new Error('The referrals did not come back with a total.');
+  return reply;
+}
 
 /**
- * The review console's body. Mounted alone by this file's default export, and
- * by Programs › Refer & Earn › Queue (D953), which passes `embedded` (the
- * program header replaces this heading) and `open`: the three open-status
- * reads Overview counts, so the Queue's default rows and the tab's count are
- * one set. Every other chip reads its own status, 200 rows at a time.
- *
- * N6, fixed in both halves: a failed read never also says the queue is empty,
- * and a referrer with no name or email reads "Not recorded", never the
- * submission's id. The commissions door is drawn for a Super Admin only,
- * because that route is `hqOnly`.
+ * The review console's body: Programs › Refer & Earn › Queue mounts it with
+ * `embedded` (the program header replaces this heading) and `onChanged`,
+ * which re-reads the tab's count after a save. The commissions door is drawn
+ * for a Super Admin only, because that route is `hqOnly`.
  */
-export function ReferralReviewBody({ embedded = false, open = null } = {}) {
+export function ReferralReviewBody({ embedded = false, onChanged } = {}) {
   const superAdmin = isSuperAdminUser(useAuth()?.user ?? null);
-  const [own, setOwn] = useState({ loading: true, error: '', rows: [] });
-  const [filter, setFilter] = useState(open ? OPEN : '');
+  const phone = usePhoneWidth();
+  const [status, setStatus] = useState(QUEUE_OPEN);
+  const [category, setCategory] = useState('');
+  const [sort, setSort] = useState('oldest');
+  const [page, setPage] = useState(0);
+  const [tick, setTick] = useState(0);
   const [openUid, setOpenUid] = useState(null);
-  const [done, setDone] = useState('');
-  const merged = filter === OPEN && open ? openReferrals(open.sets) : null;
-
-  const load = useCallback(async () => {
-    if (filter === OPEN) return;
-    setOwn((c) => ({ ...c, loading: true, error: '' }));
-    try {
-      const data = await api.adminReferralSubmissions({ ...(filter ? { status: filter } : {}), limit: CAPS.referrals });
-      if (!Array.isArray(data)) throw new Error('The referrals did not come back as a list.');
-      setOwn({ loading: false, error: '', rows: data });
-    } catch (e) {
-      setOwn({ loading: false, error: e?.message || 'Could not load the review queue.', rows: [] });
-    }
-  }, [filter]);
-
-  useEffect(() => { load(); }, [load]);
-
-  // The open sets feed the Queue tab's count and Overview's figures, so a save
-  // or refresh under any chip re-reads them; the chip's own list follows.
-  const reload = () => { if (open) open.reload(); if (!merged) load(); };
-  const loading = merged ? merged.state === 'loading' : own.loading;
-  const error = merged
-    ? (merged.state === 'unreadable' ? 'One of the open statuses could not be read, so the open referrals are not listed.' : '')
-    : own.error;
-  const rows = merged ? (merged.state === 'ready' ? merged.rows : []) : own.rows;
-  const full = merged ? merged.state === 'ready' && merged.capped : rows.length >= CAPS.referrals;
-  const chips = open ? [OPEN, '', ...STATUSES] : ['', ...STATUSES];
-  const chipLabel = (s) => (s === OPEN ? 'Open' : s ? LABELS[s] : 'All');
-  const emptyLine = filter === OPEN
-    ? `${NOTHING_WAITING} ${REFERRALS_EMPTY}`
-    : filter ? `No referral is ${LABELS[filter].toLowerCase()} now.` : 'No referral has been submitted yet.';
-  const fullLine = filter === OPEN
-    ? 'The newest 200 in each open status. Older ones are not listed here.'
-    : filter ? 'The newest 200 in this status. Older ones are not listed here.' : 'The newest 200, in every status. Older ones are not listed here.';
+  const params = queueParams({ status, category, sort, page });
+  const what = JSON.stringify(params);
+  const list = useRead('referrals:queue', what, tick, true, () => api.adminReferralSubmissions(params).then(paged));
+  const reload = () => { setTick((t) => t + 1); onChanged?.(); };
+  const now = Date.now();
+  const rows = isReady(list) ? list.data.items : [];
+  const total = isReady(list) ? Number(list.data.total) : null;
+  const pages = total === null ? 1 : Math.max(1, Math.ceil(total / PAGE_SIZE));
+  const reset = (fn) => (e) => { fn(e.target.value); setPage(0); };
+  const emptyLine = status === QUEUE_OPEN ? `${NOTHING_WAITING} ${REFERRALS_EMPTY}` : 'No referral matches these filters.';
 
   return (
-    <div className={embedded ? 'space-y-5' : 'p-6 max-w-6xl mx-auto space-y-5'} data-testid="admin-referral-review">
+    <div className={embedded ? 'flex flex-col gap-4' : 'mx-auto flex max-w-6xl flex-col gap-4 p-6'} data-testid="admin-referral-review">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
-          {embedded ? null : <h1 className="text-2xl font-bold text-gray-900 dark:text-gray-100">Referral review</h1>}
-          <p className="text-sm text-gray-600 dark:text-gray-400">
-            Move referrals through the pipeline. What you write here is what the referrer sees.
-          </p>
+          {embedded ? null : <h1 className="m-0 text-2xl font-bold text-axal-ink dark:text-gray-100">Referral review</h1>}
+          <p className={`m-0 ${SUB}`}>Move referrals through the pipeline. What you write here is what the referrer sees.</p>
         </div>
-        <div className="flex flex-wrap items-center gap-2">
-          {/* D569 — the other referral programme's ledger. A sign-up with a
-              partner's code accrues commissions there, and its payouts are
-              processed there; this queue settles its rewards off-platform.
-              D953: that route is hqOnly, so the door is the Super Admin's. */}
-          {superAdmin ? (
-            <Link
-              to="/admin/commissions"
-              className="inline-flex items-center gap-1.5 rounded-lg border border-gray-300 px-3 py-1.5 text-sm font-semibold text-gray-700 hover:bg-gray-50 dark:border-gray-700 dark:text-gray-200 dark:hover:bg-gray-800"
-              data-testid="link-admin-commissions"
-            >
-              Commissions and payouts
-            </Link>
-          ) : (
-            <span className="text-sm text-gray-600 dark:text-gray-400" data-testid="referral-review-commissions-hq">{HQ_READS_COMMISSIONS}</span>
-          )}
-          <button
-            type="button"
-            onClick={reload}
-            className="inline-flex items-center gap-1.5 rounded-lg border border-gray-300 px-3 py-1.5 text-sm font-semibold text-gray-700 hover:bg-gray-50 dark:border-gray-700 dark:text-gray-200 dark:hover:bg-gray-800"
-          >
-            <RefreshCw size={14} /> Refresh
-          </button>
-        </div>
+        {/* D569 — the other referral programme's ledger, which is hqOnly: the door is the Super Admin's. */}
+        {superAdmin ? (
+          <Link to="/admin/commissions" className="text-[12.5px] font-bold text-axal-violet dark:text-violet-300" data-testid="link-admin-commissions">Commissions and payouts</Link>
+        ) : <span className={SUB} data-testid="referral-review-commissions-hq">{HQ_READS_COMMISSIONS}</span>}
       </div>
 
-      <div className="flex flex-wrap gap-1.5">
-        {chips.map((s) => (
-          <button
-            key={s || 'all'}
-            type="button"
-            aria-pressed={filter === s}
-            onClick={() => { setFilter(s); setOpenUid(null); }}
-            data-testid={`referral-review-chip-${s || 'all'}`}
-            className={`rounded-full px-3 py-1 text-xs font-semibold ${
-              filter === s
-                ? 'bg-violet-600 text-white'
-                : 'bg-gray-100 text-gray-600 hover:bg-gray-200 dark:hover:bg-gray-700 dark:bg-gray-800 dark:text-gray-300'
-            }`}
-          >
-            {chipLabel(s)}
-          </button>
-        ))}
+      <div className="flex flex-wrap items-center gap-2" data-testid="referral-review-toolbar">
+        <select className={INPUT} value={status} onChange={reset(setStatus)} aria-label="Status" data-testid="referral-review-status">
+          {QUEUE_STATUSES.map((x) => <option key={x} value={x}>{`Status: ${queueStatusWord(x)}`}</option>)}
+        </select>
+        <select className={INPUT} value={category} onChange={reset(setCategory)} aria-label="Category" data-testid="referral-review-category">
+          <option value="">Every category</option>
+          {Object.entries(CATEGORY_WORD).map(([k, w]) => <option key={k} value={k}>{w}</option>)}
+        </select>
+        <select className={INPUT} value={sort} onChange={reset(setSort)} aria-label="Sort" data-testid="referral-review-sort">
+          <option value="oldest">Sort: Waiting longest</option>
+          <option value="newest">Sort: Newest</option>
+        </select>
       </div>
 
-      {done ? (
-        <p role="status" className="rounded-lg border border-violet-200 bg-violet-50 p-3 text-sm font-semibold text-violet-900 dark:border-violet-900 dark:bg-violet-950/40 dark:text-violet-200" data-testid="referral-review-done">{done}</p>
-      ) : null}
-
-      {error ? (
-        <div className="flex flex-wrap items-start gap-2 rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700 dark:border-red-900 dark:bg-red-900/20 dark:text-red-300" role="alert" data-testid="referral-review-error">
-          <AlertCircle size={16} className="mt-0.5 shrink-0" /> {error} That is not the same as none.
-          <button type="button" onClick={reload} className="font-semibold underline">Try again</button>
-        </div>
-      ) : loading ? (
-        <div className="flex items-center gap-2 py-10 text-sm text-gray-500 dark:text-gray-400">
-          <Loader2 size={16} className="animate-spin" /> Reading…
-        </div>
-      ) : rows.length === 0 ? (
-        <p className="py-10 text-center text-sm text-gray-500 dark:text-gray-400" data-testid="referral-review-empty">
-          {emptyLine}
-        </p>
-      ) : (
+      {list.status === 'loading' ? <Skeleton lines={4} testId="referral-review-loading" /> : null}
+      {list.status === 'error' ? <BlockFailed what="The referrals" onRetry={reload} testId="referral-review-error" /> : null}
+      {isReady(list) ? (
         <>
-          {full ? <p className="text-xs font-semibold text-amber-800 dark:text-amber-300" data-testid="referral-review-full">{fullLine}</p> : null}
-          <ul className="divide-y divide-gray-200 rounded-xl border border-gray-200 bg-white dark:divide-gray-800 dark:border-gray-800 dark:bg-gray-900" data-testid="referral-review-rows">
-            {rows.map((r) => (
-              <li key={r.uid} className="p-4" data-testid={`referral-review-row-${r.uid}`}>
-                <div className="flex flex-wrap items-start justify-between gap-3">
-                  <div className="min-w-0">
-                    <p className="text-sm font-semibold text-gray-900 dark:text-gray-100">
-                      {r.referred_name}
-                      {r.referred_org ? <span className="font-normal text-gray-500 dark:text-gray-400"> · {r.referred_org}</span> : null}
-                    </p>
-                    <p className="mt-0.5 text-xs text-gray-500 dark:text-gray-400" data-testid={`referral-review-row-${r.uid}-meta`}>
-                      {r.category_name} · {LABELS[r.status] || r.status} · from {r.referrer_name || r.referrer_email || NOT_RECORDED}
-                    </p>
-                    {r.context && (
-                      <p className="mt-1 whitespace-pre-wrap text-xs text-gray-600 dark:text-gray-400">{r.context}</p>
-                    )}
-                  </div>
-                  <button
-                    type="button"
-                    onClick={() => setOpenUid(openUid === r.uid ? null : r.uid)}
-                    className="shrink-0 rounded-lg border border-gray-300 px-3 py-1.5 text-xs font-semibold text-gray-700 dark:border-gray-700 dark:text-gray-200"
-                    data-testid={`referral-review-open-${r.uid}`}
-                  >
-                    {openUid === r.uid ? 'Close' : 'Review'}
-                  </button>
-                </div>
-                {openUid === r.uid && (
-                  <ReviewForm
-                    row={r}
-                    onDone={() => { setDone(REVIEW_SAVED); setOpenUid(null); reload(); }}
-                  />
-                )}
-              </li>
-            ))}
-          </ul>
+          <p className="m-0 font-mono text-[12px] font-semibold text-axal-muted dark:text-gray-400" data-testid="referral-review-count">{countLine(page * PAGE_SIZE, rows.length, total)}</p>
+          {!rows.length ? <p className={`m-0 ${SUB}`} data-testid="referral-review-empty">{emptyLine}</p> : null}
+          {rows.length && phone ? (
+            <PhoneRows groups={[{ label: null, rows: rows.map((r) => ({
+              key: r.uid, title: referred(r), description: `${categoryWord(r.category)} · ${statusWord(r.status)} · ${ageText(hoursSince(r.created_at, now)) || NOT_RECORDED}`,
+              onClick: () => setOpenUid(r.uid), testid: `referral-review-row-${r.uid}`,
+            })) }]} />
+          ) : null}
+          {rows.length && !phone ? (
+            <div className={`${CARD} overflow-x-auto`}>
+              <table className="w-full min-w-[960px] border-collapse text-[12.5px] text-axal-ink dark:text-gray-100" data-testid="referral-review-rows">
+                <thead>
+                  <tr className="border-b border-axal-hairline dark:border-gray-700">
+                    {['Referred', 'Category', 'Referrer', 'Status', 'Next step', 'Waiting', ''].map((h) => <th key={h || 'open'} className={TH}>{h}</th>)}
+                  </tr>
+                </thead>
+                <tbody>
+                  {rows.map((r) => {
+                    const h = hoursSince(r.created_at, now);
+                    return (
+                      <tr key={r.uid} className="border-b border-axal-hairline last:border-0 dark:border-gray-800" data-testid={`referral-review-row-${r.uid}`}>
+                        <td className={`${TD} font-bold`}>{referred(r)}</td>
+                        <td className={TD}>{categoryWord(r.category)}</td>
+                        <td className={TD} data-testid={`referral-review-row-${r.uid}-meta`}>{referrer(r)}</td>
+                        <td className={TD}><Pill tone={STATUS_TONE[r.status] || 'muted'}>{statusWord(r.status)}</Pill></td>
+                        <td className={TD}>{r.next_step || '—'}</td>
+                        <td className={`${TD} font-mono`}>{ageText(h) || NOT_RECORDED}</td>
+                        <td className={`${TD} text-right`}>
+                          <button type="button" onClick={() => setOpenUid(r.uid)} className="rounded-[9px] border border-axal-hairline px-3 py-1.5 text-[12px] font-semibold hover:bg-axal-ground dark:border-gray-700 dark:hover:bg-gray-800" data-testid={`referral-review-open-${r.uid}`}>Open</button>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          ) : null}
+          {pages > 1 ? (
+            <div className="flex items-center justify-end gap-2 text-[12px]">
+              <button type="button" className="rounded-[9px] border border-axal-hairline px-2.5 py-1 font-semibold disabled:opacity-50 dark:border-gray-700" disabled={page <= 0} onClick={() => setPage(page - 1)}>Previous</button>
+              <span className={SUB}>{`Page ${page + 1} of ${pages}`}</span>
+              <button type="button" className="rounded-[9px] border border-axal-hairline px-2.5 py-1 font-semibold disabled:opacity-50 dark:border-gray-700" disabled={page >= pages - 1} onClick={() => setPage(page + 1)} data-testid="referral-review-next">Next</button>
+            </div>
+          ) : null}
+          <p className={`m-0 ${SUB}`}>This tab replaces Referral review; the Approvals lane Refer & Earn reviews opens it. A row opens the referral.</p>
         </>
-      )}
+      ) : null}
+      {openUid ? <ReferralDialog uid={openUid} onClose={() => setOpenUid(null)} onSaved={reload} /> : null}
     </div>
   );
 }
 
-/** One referral's review. A refusal is one sentence under its own Save, keyed on its code (D953 §3). */
-function ReviewForm({ row, onDone }) {
-  const [status, setStatus] = useState(row.status);
-  const [nextStep, setNextStep] = useState(row.next_step || '');
-  const [rewardLabel, setRewardLabel] = useState(row.reward_label || '');
-  const [fitNotes, setFitNotes] = useState(row.fit_notes || '');
-  const [note, setNote] = useState('');
-  const [saving, setSaving] = useState(false);
+/**
+ * PG9d: one referral, opened. Its timeline is the single-referral read's,
+ * and a save replaces it with the `history` the PATCH returns.
+ */
+export function ReferralDialog({ uid, onClose, onSaved }) {
+  const [read, setRead] = useState({ status: 'loading', data: null });
+  const [draft, setDraft] = useState(null);
+  const [busy, setBusy] = useState(false);
   const [refusal, setRefusal] = useState('');
-
+  const [done, setDone] = useState('');
+  useEffect(() => {
+    let live = true;
+    api.adminReferralSubmission(uid).then(
+      (data) => {
+        if (!live) return;
+        setRead({ status: 'ready', data });
+        setDraft({ status: data.status, nextStep: data.next_step || '', rewardLabel: data.reward_label || '', fitNotes: data.fit_notes || '', note: '' });
+      },
+      (error) => { if (live) setRead({ status: 'error', data: null, error }); },
+    );
+    return () => { live = false; };
+  }, [uid]);
+  const row = read.data;
+  const patch = row && draft ? reviewPatch(row, draft) : null;
+  const set = (k) => (v) => { setDone(''); setDraft((d) => ({ ...d, [k]: v })); };
   const save = async () => {
-    setSaving(true);
+    if (!patch) return;
+    setBusy(true);
     setRefusal('');
     try {
-      await api.adminReferralReview(row.uid, { status, nextStep, rewardLabel, fitNotes, note });
-      onDone();
+      const next = await api.adminReferralReview(uid, patch);
+      // The timeline is replaced with the history the PATCH returns, and the form starts from the saved row.
+      setRead({ status: 'ready', data: { ...row, ...next, history: Array.isArray(next?.history) ? next.history : row.history } });
+      setDraft({ status: next?.status || draft.status, nextStep: next?.next_step || '', rewardLabel: next?.reward_label || '', fitNotes: next?.fit_notes || '', note: '' });
+      setDone(SAVED);
+      onSaved?.();
     } catch (e) {
-      setRefusal(refusalText(e, e?.message || 'Could not update that referral.'));
+      setRefusal(refusalSentence(e, 'That referral was not saved. Try again.'));
     } finally {
-      setSaving(false);
+      setBusy(false);
     }
   };
-
-  const cls =
-    'w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100';
-
+  const label = row ? referred(row) : 'Referral';
+  const sub = row ? `${categoryWord(row.category)} · referred by ${referrer(row)}` : null;
   return (
-    <div className="mt-3 space-y-2 rounded-lg bg-gray-50 p-3 dark:bg-gray-800/50" data-testid={`referral-review-form-${row.uid}`}>
-      <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
-        <label className="block">
-          <span className="mb-1 block text-xs font-semibold text-gray-700 dark:text-gray-300">Status</span>
-          <select value={status} onChange={(e) => setStatus(e.target.value)} className={cls}>
-            {STATUSES.map((s) => <option key={s} value={s}>{LABELS[s]}</option>)}
-          </select>
-        </label>
-        <label className="block">
-          <span className="mb-1 block text-xs font-semibold text-gray-700 dark:text-gray-300">Reward label</span>
-          <input value={rewardLabel} onChange={(e) => setRewardLabel(e.target.value)} className={cls} placeholder="Eligible on acceptance" />
-        </label>
+    <Lightbox label={label} title={label} sub={sub} onClose={onClose} width={640} testId="referral-dialog"
+      footer={read.status === 'ready' ? <DialogButtons onClose={onClose} action="Save changes" busy={busy} disabled={!patch} onAction={save} refusal={refusal} testId="referral-dialog-save" /> : null}>
+      <div className={DIALOG_BODY}>
+        {read.status === 'loading' ? <Skeleton lines={4} /> : null}
+        {read.status === 'error' ? <p role="alert" className="m-0 text-[13px] font-semibold text-red-700 dark:text-red-300" data-testid="referral-dialog-unreadable">{refusalSentence(read.error, 'This referral could not be read. That is not the same as none.')}</p> : null}
+        {read.status === 'ready' && draft ? (
+          <>
+            {done ? <p role="status" className="m-0 rounded-[10px] border border-axal-lavender-edge bg-axal-lavender px-3.5 py-2.5 text-[13px] font-semibold text-axal-ink dark:border-violet-800 dark:bg-violet-950/40 dark:text-gray-100" data-testid="referral-dialog-done">{done}</p> : null}
+            <section className="flex flex-col gap-1.5" data-testid="referral-dialog-timeline">
+              <span className={EYE}>Timeline</span>
+              {(row.history || []).length ? (
+                <ul className="m-0 flex list-none flex-col p-0">
+                  {row.history.map((e, i) => {
+                    const t = timelineRow(e);
+                    return (
+                      <li key={i} className="flex flex-wrap items-baseline justify-between gap-2 border-t border-axal-hairline py-1.5 first:border-t-0 dark:border-gray-700" data-testid={`referral-dialog-event-${i}`}>
+                        <span className="flex flex-col">
+                          <span className="text-[13px] font-semibold text-axal-ink dark:text-gray-100">{t.label}</span>
+                          {t.note ? <span className={SUB}>{t.note}</span> : null}
+                        </span>
+                        <span className="font-mono text-[12px] font-semibold text-axal-muted dark:text-gray-400">{t.when}</span>
+                      </li>
+                    );
+                  })}
+                </ul>
+              ) : <span className={SUB}>No status has been recorded yet.</span>}
+            </section>
+            <label className="flex flex-col gap-1">
+              <span className={FIELD_LABEL}>Status</span>
+              <select className={`${INPUT} w-full`} value={draft.status} onChange={(e) => set('status')(e.target.value)} data-testid="referral-dialog-status">
+                {statusChoices(row.status).map((x) => <option key={x} value={x}>{x === row.status ? `${statusWord(x)} · now` : statusWord(x)}</option>)}
+              </select>
+              {statusChoices(row.status).length === 1 ? <span className={SUB}>This referral is final. Its notes can still be edited.</span> : null}
+            </label>
+            <Field label="Next step" value={draft.nextStep} onChange={set('nextStep')} max={LIMITS.nextStep} testId="referral-dialog-next" />
+            <Field label="Reward · a note, never an amount" value={draft.rewardLabel} onChange={set('rewardLabel')} max={LIMITS.reward} testId="referral-dialog-reward" />
+            <Field label="Fit notes · the referrer sees them" value={draft.fitNotes} onChange={set('fitNotes')} max={LIMITS.fitNotes} rows={3} testId="referral-dialog-fit" />
+            <Field label="Note to the referrer" value={draft.note} onChange={set('note')} max={LIMITS.note} rows={3} sub="Added to the timeline the referrer sees." testId="referral-dialog-note" />
+            <p className={`m-0 ${SUB}`} data-testid="referral-dialog-told">{REVIEW_TOLD}</p>
+            {row.created_at ? <p className={`m-0 ${SUB}`}>{`Submitted ${shortDay(row.created_at) || NOT_RECORDED}.`}</p> : null}
+          </>
+        ) : null}
       </div>
-      <label className="block">
-        <span className="mb-1 block text-xs font-semibold text-gray-700 dark:text-gray-300">Next step</span>
-        <input value={nextStep} onChange={(e) => setNextStep(e.target.value)} className={cls} placeholder="Cohort interview scheduled Aug 14" />
-      </label>
-      <label className="block">
-        <span className="mb-1 block text-xs font-semibold text-gray-700 dark:text-gray-300">Fit notes (visible to the referrer)</span>
-        <textarea value={fitNotes} onChange={(e) => setFitNotes(e.target.value)} rows={2} className={cls} />
-      </label>
-      <label className="block">
-        <span className="mb-1 block text-xs font-semibold text-gray-700 dark:text-gray-300">Timeline note</span>
-        <input value={note} onChange={(e) => setNote(e.target.value)} className={cls} placeholder="Appended to the history the referrer sees" />
-      </label>
-      <div className="flex flex-wrap items-center justify-end gap-3">
-        {refusal ? <p role="alert" className="m-0 text-sm font-semibold text-red-700 dark:text-red-300" data-testid={`referral-review-refusal-${row.uid}`}>{refusal}</p> : null}
-        <button
-          type="button"
-          onClick={save}
-          disabled={saving}
-          className="rounded-lg bg-violet-600 px-4 py-2 text-sm font-semibold text-white hover:bg-violet-700 disabled:opacity-60"
-          data-testid={`referral-review-save-${row.uid}`}
-        >
-          {saving ? 'Saving…' : 'Save'}
-        </button>
-      </div>
-    </div>
+    </Lightbox>
   );
 }
 

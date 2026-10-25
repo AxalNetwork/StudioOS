@@ -613,7 +613,7 @@ test('5: a record never claims what no store holds', async () => {
   // A pitch link's views have no city: only a hashed IP is stored.
   db.exec(`INSERT INTO deck_share_views (deck_id, share_token_id, read_seconds, created_at) VALUES (5, 41, 125, '2026-10-12 10:00:00')`);
   const views = (await rec(db, 'pitch-deck', 41)).body.main.find((x: any) => x.key === 'views').rows;
-  assert.deepEqual(views, [{ a: '2026-10-12 · 10:00', b: '2 min' }]);
+  assert.deepEqual(views, [{ a: '2026-10-12 · 10:00', b: '2:05' }]);
 });
 
 

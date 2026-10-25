@@ -44,6 +44,7 @@ import {
 import { checkVideoLink } from '../services/decks/videoLink';
 import { ensureDeckVersionColumns, ensureProposalOutlineColumns } from '../services/decks/deckVersionColumns';
 import { isSupportSession } from '../integrations/providers/mercury';
+import { deckShareMetrics, LEGACY_SHARE_NO_VIEW_LIMIT } from '../services/deckShareUse';
 
 /** D895 applies only to deck operations, not other project-content routes. */
 export async function projectOwned(c: any, user: any, projectId: number, opts: { write?: boolean; audit?: boolean; contactData?: boolean } = {}) {
@@ -1039,12 +1040,8 @@ decks.post('/share/:token/heartbeat', async (c) => {
   return c.json({ ok: true });
 });
 
-/** D895: unknown counts and an unlimited cap are distinct from measured zero. */
-export function deckShareMetrics(token: { view_limit?: number | null; view_count?: number | null; used_at?: string | null }) {
-  const limit = token.view_limit == null || token.view_limit === LEGACY_SHARE_NO_VIEW_LIMIT ? null : Number(token.view_limit);
-  const count = token.view_count == null ? null : Number(token.view_count);
-  return { view_limit: limit, view_count: count, exhausted: !!token.used_at || (limit !== null && count !== null && count >= limit) };
-}
+/** D895: unknown counts and an unlimited cap are distinct from measured zero. One rule, shared with the link records (D1111). */
+export { deckShareMetrics };
 
 /**
  * GET /api/decks/:id/engagement — founder-facing roll-up of share-link
@@ -1547,7 +1544,6 @@ export const SHARE_NEVER_EXPIRES = '9999-12-31 23:59:59';
 const SHARE_NEVER_EPOCH = Math.floor(Date.parse('9999-12-31T23:59:59Z') / 1000);
 /** No view cap on a new link; old links keep theirs. */
 export const SHARE_NO_VIEW_LIMIT = null;
-const LEGACY_SHARE_NO_VIEW_LIMIT = 2147483647;
 export const SHARE_SENT_TO_SOMEONE_ELSE = 'This link was sent to someone else.';
 /** The browser's id for bound links: random, HttpOnly, never readable by the page. */
 export const SHARE_VIEWER_COOKIE = 'axal_deck_viewer';
