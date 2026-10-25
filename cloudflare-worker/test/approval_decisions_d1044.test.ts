@@ -151,7 +151,7 @@ test('every lane is in the log, in the canvas\'s order, and every recorded lane 
     db.prepare(countSql(l)).get(null, null, null, null, null, null, null, null);
   }
   assert.deepEqual(DECISION_LANES.filter((l) => !l.recorded).map((l) => l.key),
-    ['jobs', 'best_fit', 'due_diligence', 'kyb', 'wellbeing_experts', 'ai_runs', 'grants']);
+    ['jobs', 'best_fit', 'due_diligence', 'kyb', 'wellbeing_experts', 'ai_runs']);
 });
 
 test('a referral\'s verdicts are the store\'s own list', () => {
