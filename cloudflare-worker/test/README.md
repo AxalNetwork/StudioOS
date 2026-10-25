@@ -41,6 +41,10 @@ an assertion that bans a shape fails on the comment explaining why that shape is
 gone, and the argument list of `fetch(url, { headers: { … } })` does not end at
 the first `)`.
 
+D1119: `admin_programs_d954.test.ts` also checks part 4's six audit actions,
+claim window/kind counts, strategic requests, successful zeroes and independent
+failed reads against the migrated SQLite schema.
+
 ## Conventions
 
 - Build the database from the migration the feature actually ships with, so the
@@ -88,3 +92,5 @@ finite editor caps, concurrent claims and unchanged expiry/revocation/browser gu
 D992: `partner_profile_verdicts_d992.test.ts` holds profile verdict validation,
 explicit clearing, omission, audit recipients and route refusals to the full
 migrated SQLite schema; it also records the shared plan policy's admin exemption.
+
+D1091: `google_workspace_connection.test.ts` tests consent, file scope, previews and disconnect using `_google_workspace_fake.mjs`; `fed_ownership.test.ts` holds the shared ledger-owner helper; `google_workspace_feeds.test.ts` pins the empty feed registry, audience and eight read fragments. No real Google host is called.

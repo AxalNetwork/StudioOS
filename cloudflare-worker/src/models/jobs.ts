@@ -47,7 +47,9 @@ export type JobType =
   | 'interview_process'
   // D794 — one member's auto-reload of AI tokens, queued when a settled run takes
   // the top-up balance below their threshold (services/aiAutoReload.ts).
-  | 'ai_auto_reload';
+  | 'ai_auto_reload'
+  // D1131 — bounded event-calendar cleanup and provider retry.
+  | 'event_calendar_cleanup';
 
 export type JobStatus = 'pending' | 'processing' | 'completed' | 'failed';
 
