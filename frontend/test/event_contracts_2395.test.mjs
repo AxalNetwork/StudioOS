@@ -63,7 +63,7 @@ async function editorScenario(source = editor) {
     for (const value of ['Fixture talk', 'workshop', 'Stored summary', 'Stored description', 'UTC', 'hybrid', 'Fixture room', 'https://example.test/meeting', 'https://example.test/cover', 12, 'public']) assert.ok(values.some(p => p.value === value), String(value));
     assert.equal(values.filter(p => p.type === 'datetime-local' && p.value).length, 2);
     assert.ok(values.some(p => p.type === 'checkbox' && p.checked === true));
-    assert.equal(ui.text().includes('Submit for review'), false, 'published status is retained');
+    assert.equal(ui.text().includes('Send for review'), false, 'published status is retained');
     await ui.click('Save changes');
     assert.equal(fixture.updates.length, 1);
     const [id, payload] = fixture.updates[0];
