@@ -3,6 +3,7 @@ import type { Env } from '../../types';
 import { isSuperAdmin } from '../../auth';
 import { notify } from '../notify';
 import { isSampleExpert } from './seedExperts';
+import { ensureAdminAuditLogTable } from '../../routes/admin';
 
 export class ExpertReviewError extends Error {
   code: string; status: number; sentence: string;
@@ -29,14 +30,26 @@ export async function ownExpert(env: Env, userId: number) {
   return row;
 }
 
-export async function credentialFiles(env: Env, id: number) {
-  const result = await env.DB.prepare(`SELECT uid, file_name, file_type, file_size, created_at FROM expert_credential_files WHERE expert_id = ? ORDER BY created_at, uid`)
-    .bind(id).all<any>();
+export async function credentialFilesFor(env: Env, ids: number[]) {
+  const result = await env.DB.prepare(`SELECT expert_id, uid, file_name, file_type, file_size, created_at FROM expert_credential_files
+    WHERE expert_id IN (SELECT value FROM json_each(?)) ORDER BY expert_id, created_at, uid`)
+    .bind(JSON.stringify(ids)).all<any>();
   if (('success' in result && !result.success) || !Array.isArray(result.results)) throw new Error('Credential files were not returned');
-  return result.results.map((r) => ({ ...r, url: `/api/wellbeing/experts/credentials/files/${encodeURIComponent(r.uid)}` }));
+  const grouped = new Map<number, any[]>();
+  for (const r of result.results) {
+    const files = grouped.get(Number(r.expert_id)) ?? [];
+    files.push({ uid: r.uid, file_name: r.file_name, file_type: r.file_type, file_size: r.file_size, created_at: r.created_at,
+      url: `/api/wellbeing/experts/credentials/files/${encodeURIComponent(r.uid)}` });
+    grouped.set(Number(r.expert_id), files);
+  }
+  return grouped;
 }
 
-export async function reviewDto(env: Env, row: any) {
+export async function credentialFiles(env: Env, id: number) {
+  return (await credentialFilesFor(env, [id])).get(id) ?? [];
+}
+
+export async function reviewDto(env: Env, row: any, files?: any[]) {
   return {
     uid: row.uid, name: row.name, headline: row.headline, bio: row.bio, is_sample: isSampleExpert(row.uid),
     verified: !!row.verified, hidden: !!row.hidden_by_admin, created_at: row.created_at ?? null,
@@ -44,12 +57,15 @@ export async function reviewDto(env: Env, row: any) {
     decision_state: row.decision_state, decided_by: row.decided_by ?? null, decided_at: row.decided_at ?? null,
     decline_reason: row.decline_reason ?? null, review_version: row.review_version,
     credentials: { licence_number: row.licence_number ?? null, issuer: row.licence_issuer ?? null,
-      expires_on: row.licence_expires_on ?? null, files: await credentialFiles(env, row.id) },
+      expires_on: row.licence_expires_on ?? null, files: files ?? await credentialFiles(env, row.id) },
   };
 }
 
 export async function expertDecision(env: Env, row: any, actor: ReviewActor, decision: ReviewAction, body: any) {
   if (!body || typeof body !== 'object' || Array.isArray(body)) throw new ExpertReviewError('invalid_body', 'Send the decision as an object.');
+  if (row.user_id === actor.id && !isSuperAdmin(actor) && ['verified', 'declined', 'restored'].includes(decision)) {
+    throw new ExpertReviewError('independent_review_required', 'The Super Admin must decide on your own expert profile.', 403);
+  }
   const reason = typeof body.reason === 'string' ? body.reason.trim() : '';
   if (decision === 'declined' && (reason.length < 10 || reason.length > 4000)) {
     throw new ExpertReviewError('reason_required', 'A decline needs a reason of 10 to 4000 characters. The expert sees it.');
@@ -110,4 +126,14 @@ export async function saveCredentials(env: Env, row: any, body: any) {
     review_version = review_version + 1 WHERE id = ? AND review_version = ?`)
     .bind(values.licence_number, values.issuer, expiry, row.id, row.review_version).run();
   if (Number(changed.meta?.changes) !== 1) throw new ExpertReviewError('review_changed', 'The credentials changed. Read them again.', 409);
+}
+
+/** Same governance feed for every expert decision; the atomic history above
+ * remains authoritative if this best-effort activity copy cannot be written. */
+export async function auditExpert(env: Env, adminId: number, action: string, uid: string) {
+  try {
+    await ensureAdminAuditLogTable(env);
+    await env.DB.prepare(`INSERT INTO admin_audit_log (admin_user_id, action, report_type, filters_json) VALUES (?, ?, 'wellbeing', ?)`)
+      .bind(adminId, action, JSON.stringify({ expert_uid: uid })).run();
+  } catch (e) { console.warn('[wellbeing] audit write failed', action, (e as Error).message); }
 }

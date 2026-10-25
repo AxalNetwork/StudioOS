@@ -5,10 +5,9 @@ import type { Env } from '../types';
 import { requireAdmin, requireAuth, isSuperAdmin } from '../auth';
 import { refuse } from '../util/refusal';
 import { AUTH_ERROR_STATUSES } from '../util/authErrors';
-import { logAdminAction } from '../services/adminAudit';
 import { SAMPLE_EXPERT_UID_PREFIX } from '../services/wellbeing/seedExperts';
 import {
-  CREDENTIAL_FILE_MAX, CREDENTIAL_TYPES, ExpertReviewError, credentialFiles, expertDecision,
+  CREDENTIAL_FILE_MAX, CREDENTIAL_TYPES, ExpertReviewError, auditExpert, credentialFiles, credentialFilesFor, expertDecision,
   ownExpert, reviewDto, reviewTarget, saveCredentials,
 } from '../services/wellbeing/expertReview';
 
@@ -41,7 +40,8 @@ reviews.get('/admin/experts', async (c) => {
       ORDER BY datetime(e.created_at), e.id LIMIT ? OFFSET ?`)
       .bind(SAMPLE_EXPERT_UID_PREFIX.length, SAMPLE_EXPERT_UID_PREFIX, state, state, elevated, actor.id, limit, offset).all<any>();
     if (!count || !Number.isSafeInteger(count.n) || ('success' in rows && !rows.success) || !Array.isArray(rows.results)) throw new Error('Review rows were not returned');
-    return c.json({ items: await Promise.all(rows.results.map((r) => reviewDto(c.env, r))), total: Number(count.n), limit, offset });
+    const files = await credentialFilesFor(c.env, rows.results.map((r) => Number(r.id)));
+    return c.json({ items: await Promise.all(rows.results.map((r) => reviewDto(c.env, r, files.get(Number(r.id)) ?? []))), total: Number(count.n), limit, offset });
   });
 });
 
@@ -61,7 +61,7 @@ reviews.post('/admin/experts/:uid/decline', async (c) => {
   return result(c, async () => {
     const row = await reviewTarget(c.env, c.req.param('uid'), actor);
     const saved = await expertDecision(c.env, row, actor, 'declined', await c.req.json().catch(() => ({})));
-    await logAdminAction(c.env, actor.id, actor.email, 'expert_declined', { expert_uid: row.uid });
+    await auditExpert(c.env, actor.id, 'expert_declined', row.uid);
     return c.json(saved);
   });
 });
@@ -148,12 +148,14 @@ reviews.delete('/experts/me/credentials/files/:fileUid', async (c) => {
     const file = await c.env.DB.prepare('SELECT file_key FROM expert_credential_files WHERE uid = ? AND expert_id = ?')
       .bind(c.req.param('fileUid'), row.id).first<{ file_key: string }>();
     if (!file) return refuse(c, 404, { code: 'file_not_found', message: 'Credential file not found.' });
+    // Keep the key available for retries if storage fails. R2 deletion is
+    // idempotent, so a later D1 failure can also be retried with this row.
+    await c.env.FILES.delete(file.file_key);
     await c.env.DB.batch([
       c.env.DB.prepare('DELETE FROM expert_credential_files WHERE uid = ? AND expert_id = ?').bind(c.req.param('fileUid'), row.id),
       c.env.DB.prepare(`UPDATE experts SET verified = 0, decision_state = 'pending', decided_by = NULL, decided_at = NULL,
         decline_reason = NULL, decision_token = NULL, review_version = review_version + 1 WHERE id = ?`).bind(row.id),
     ]);
-    await c.env.FILES.delete(file.file_key);
     return c.json({ deleted: true });
   });
 });

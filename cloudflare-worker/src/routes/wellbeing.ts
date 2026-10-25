@@ -60,9 +60,8 @@ import { hasFeatureUnlock } from '../services/featureUnlocks';
 import { stripeCall } from './billing';
 import { clampLimit } from '../util/pagination';
 import { bindingKey } from '../util/schemaBootstrap';
-import { ensureAdminAuditLogTable } from './admin';
 import expertReviews, { expertReviewResult } from './wellbeing_expert_review';
-import { expertDecision, reviewTarget } from '../services/wellbeing/expertReview';
+import { auditExpert, expertDecision, reviewTarget } from '../services/wellbeing/expertReview';
 
 const wellbeing = new Hono<{ Bindings: Env }>();
 
@@ -2040,23 +2039,6 @@ wellbeing.post('/bookings/:uid/cancel', async (c) => {
   await fanoutBookingNotifications(c.env, booking.id, 'cancelled');
   return c.json({ ok: true, status: 'cancelled' });
 });
-
-/**
- * D932 (#2716) — an admin's verify or hide, recorded so Admin · Community's
- * Recent activity can say "An admin verified a wellbeing expert". The row
- * carries the expert's uid for the governance feed and nothing that names
- * them. Best-effort, as every audit write here: the act has happened.
- */
-async function auditExpert(env: Env, adminId: number, action: string, uid: string) {
-  try {
-    await ensureAdminAuditLogTable(env);
-    await env.DB.prepare(
-      `INSERT INTO admin_audit_log (admin_user_id, action, report_type, filters_json) VALUES (?, ?, 'wellbeing', ?)`,
-    ).bind(adminId, action, JSON.stringify({ expert_uid: uid })).run();
-  } catch (e) {
-    console.warn('[wellbeing] audit write failed', action, (e as Error).message);
-  }
-}
 
 // --- admin review-hide ---
 wellbeing.post('/admin/experts/:uid/hide', async (c) => {

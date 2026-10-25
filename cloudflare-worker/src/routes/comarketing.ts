@@ -44,11 +44,11 @@ type Pitch = {
   created_at: string; updated_at: string;
 };
 
-async function attribCounts(env: Env, pitchId: number, since: string | null = null) {
+async function attribCounts(env: Env, pitchId: number) {
   const rows = await env.DB.prepare(
     `SELECT event_kind, COUNT(*) c FROM comarketing_attributions
-     WHERE pitch_id = ? AND (? IS NULL OR (datetime(created_at) >= datetime(?) AND datetime(created_at) <= datetime('now'))) GROUP BY event_kind`
-  ).bind(pitchId, since, since).all<{ event_kind: string; c: number }>();
+     WHERE pitch_id = ? GROUP BY event_kind`
+  ).bind(pitchId).all<{ event_kind: string; c: number }>();
   if (('success' in rows && !rows.success) || !Array.isArray(rows.results)) throw new Error('Attribution counts were not returned');
   const out = { visit: 0, signup: 0, lead: 0, conversion: 0, total: 0 } as Record<string, number>;
   for (const row of rows.results || []) {
@@ -286,9 +286,12 @@ r.get('/admin/queue', async (c) => {
     if (!['proposed', 'approved', 'rejected', 'published', 'withdrawn', 'all'].includes(status)) {
       return refuse(c, 400, { code: 'invalid_status', message: 'Choose a pitch status or all.' });
     }
-    const limit = Number(c.req.query('limit') ?? 25);
+    // Legacy consoles request only status and expect the complete list.
+    // Explicit paging opts in to the bounded page contract.
+    const paged = c.req.query('limit') !== undefined || c.req.query('offset') !== undefined;
+    const limit = paged ? Number(c.req.query('limit') ?? 25) : null;
     const offset = Number(c.req.query('offset') ?? 0);
-    if (!Number.isSafeInteger(limit) || limit < 1 || limit > 200 || !Number.isSafeInteger(offset) || offset < 0) {
+    if ((limit !== null && (!Number.isSafeInteger(limit) || limit < 1 || limit > 200)) || !Number.isSafeInteger(offset) || offset < 0) {
       return refuse(c, 400, { code: 'invalid_page', message: 'Use a limit from 1 to 200 and a nonnegative offset.' });
     }
     const since = new Date(Date.now() - 30 * 86400000).toISOString();
@@ -296,9 +299,10 @@ r.get('/admin/queue', async (c) => {
       .bind(status, status).first<{ n: number }>();
     if (!total || !Number.isSafeInteger(total.n)) throw new Error('Pitch total was not returned');
     const rows = await c.env.DB.prepare(
-      `SELECT * FROM comarketing_pitches WHERE (? = 'all' OR status = ?)
-       ORDER BY datetime(created_at) ASC, id ASC LIMIT ? OFFSET ?`
-    ).bind(status, status, limit, offset).all<Pitch>();
+      `SELECT p.*, pt.name AS partner_name, pt.company AS partner_company FROM comarketing_pitches p
+       LEFT JOIN partners pt ON pt.id = p.partner_id WHERE (? = 'all' OR p.status = ?)
+       ORDER BY datetime(p.created_at) ASC, p.id ASC LIMIT ? OFFSET ?`
+    ).bind(status, status, limit ?? -1, offset).all<Pitch & { partner_name: string | null; partner_company: string | null }>();
     if (('success' in rows && !rows.success) || !Array.isArray(rows.results)) throw new Error('Pitch rows were not returned');
     const summary = await c.env.DB.prepare(
       `SELECT a.event_kind, COUNT(*) AS n FROM comarketing_attributions a
@@ -308,15 +312,25 @@ r.get('/admin/queue', async (c) => {
     if (('success' in summary && !summary.success) || !Array.isArray(summary.results)) throw new Error('Attribution summary was not returned');
     const attribution30d: Record<string, number> = { visit: 0, signup: 0, lead: 0, conversion: 0, total: 0 };
     for (const row of summary.results) { attribution30d[row.event_kind] = Number(row.n); attribution30d.total += Number(row.n); }
-    const items: any[] = [];
-    for (const p of rows.results || []) {
-      const partner = await c.env.DB.prepare('SELECT name, company FROM partners WHERE id = ?').bind(p.partner_id).first<any>();
-      const d = pitchDto(p, await attribCounts(c.env, p.id));
-      d.attribution_30d = await attribCounts(c.env, p.id, since);
-      d.partner_name = partner?.name || null;
-      d.partner_company = partner?.company || null;
-      items.push(d);
+    const pageCounts = await c.env.DB.prepare(
+      `SELECT pitch_id, event_kind, COUNT(*) AS lifetime_count,
+        SUM(CASE WHEN datetime(created_at) >= datetime(?) AND datetime(created_at) <= datetime('now') THEN 1 ELSE 0 END) AS recent_count
+       FROM comarketing_attributions WHERE pitch_id IN (SELECT value FROM json_each(?)) GROUP BY pitch_id, event_kind`,
+    ).bind(since, JSON.stringify(rows.results.map((p) => p.id))).all<{ pitch_id: number; event_kind: string; lifetime_count: number; recent_count: number }>();
+    if (('success' in pageCounts && !pageCounts.success) || !Array.isArray(pageCounts.results)) throw new Error('Pitch attribution was not returned');
+    const zero = () => ({ visit: 0, signup: 0, lead: 0, conversion: 0, total: 0 } as Record<string, number>);
+    const byPitch = new Map<number, { lifetime: Record<string, number>; recent: Record<string, number> }>();
+    for (const row of pageCounts.results) {
+      const counts = byPitch.get(Number(row.pitch_id)) ?? { lifetime: zero(), recent: zero() };
+      counts.lifetime[row.event_kind] = Number(row.lifetime_count); counts.lifetime.total += Number(row.lifetime_count);
+      counts.recent[row.event_kind] = Number(row.recent_count); counts.recent.total += Number(row.recent_count);
+      byPitch.set(Number(row.pitch_id), counts);
     }
+    const items = rows.results.map((p) => {
+      const counts = byPitch.get(Number(p.id)) ?? { lifetime: zero(), recent: zero() };
+      return { ...pitchDto(p, counts.lifetime), attribution_30d: counts.recent,
+        partner_name: p.partner_name ?? null, partner_company: p.partner_company ?? null };
+    });
     return c.json({ items, total: Number(total.n), limit, offset, attribution_30d: attribution30d, attribution_since: since });
   } catch (e) {
     if (e instanceof Response || (e instanceof Error && AUTH_ERROR_STATUSES[e.message])) return mapError(c, e);

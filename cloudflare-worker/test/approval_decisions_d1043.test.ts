@@ -112,6 +112,8 @@ test('co-marketing: stable oldest-first pages, full total, per-pitch and full fi
   assert.equal(r.status, 200); assert.equal(r.body.total, 3);
   assert.deepEqual(r.body.items.map((x: any) => x.uid), ['pitch-2']);
   assert.deepEqual(r.body.items[0].attribution_30d, { visit: 0, signup: 0, lead: 1, conversion: 0, total: 1 });
+  assert.deepEqual(r.body.items[0].attribution, { visit: 1, signup: 0, lead: 2, conversion: 0, total: 3 });
+  assert.equal(r.body.items[0].partner_name, 'Synthetic partner');
   assert.deepEqual(r.body.attribution_30d, { visit: 1, signup: 0, lead: 1, conversion: 0, total: 2 });
   assert.equal((await call(f, 1, 'GET', `${cm}/admin/queue?status=all`)).body.total, 4);
   for (const query of ['limit=0', 'limit=201', 'offset=-1', 'status=unknown']) assert.equal((await call(f, 1, 'GET', `${cm}/admin/queue?${query}`)).status, 400);
@@ -297,14 +299,14 @@ test('malformed decisions are coded refusals and a failed D1 result cannot look 
   const original = f.env.DB.prepare.bind(f.env.DB);
   f.env.DB.prepare = (sql: string) => {
     const statement = original(sql);
-    if (sql.includes('ORDER BY datetime(created_at) ASC')) statement.all = async () => ({ success: false, results: [] });
+    if (sql.includes('ORDER BY datetime(p.created_at) ASC')) statement.all = async () => ({ success: false, results: [] });
     return statement;
   };
   const failed = await call(f, 1, 'GET', `${cm}/admin/queue`);
   assert.equal(failed.status, 503); assert.equal(failed.body.error, 'queue_unreadable'); assert.ok(!('items' in failed.body));
   f.env.DB.prepare = (sql: string) => {
     const statement = original(sql);
-    if (sql.includes('FROM expert_credential_files WHERE expert_id')) statement.all = async () => ({ success: false, results: [] });
+    if (sql.includes('FROM expert_credential_files')) statement.all = async () => ({ success: false, results: [] });
     return statement;
   };
   assert.equal((await call(f, 1, 'GET', `${wb}/admin/experts`)).status, 503);
@@ -326,9 +328,82 @@ test('file validation and unavailable storage never create a credential record',
 test('unavailable storage cannot report that a credential file was removed', async () => {
   const f = fixture(); const put = await upload(f); const uid = put.body.files[0].uid;
   f.env.FILES = undefined;
-  assert.equal((await call(f, 3, 'DELETE', `${wb}/experts/me/credentials/files/${uid}`)).status, 503);
+  const removed = await call(f, 3, 'DELETE', `${wb}/experts/me/credentials/files/${uid}`);
+  assert.equal(removed.status, 503); assert.equal(removed.body.error, 'storage_unavailable');
   assert.equal(one(f, 'SELECT COUNT(*) AS n FROM expert_credential_files').n, 1);
   assert.equal(expert(f).review_version, 1);
+});
+
+test('failed R2 deletion keeps the credential key and review version available for a successful retry', async () => {
+  const f = fixture(); const put = await upload(f); const uid = put.body.files[0].uid;
+  const remove = f.env.FILES.delete; let attempts = 0;
+  f.env.FILES.delete = async (key: string) => { if (++attempts === 1) throw new Error('Synthetic storage outage'); await remove(key); };
+  assert.equal((await call(f, 3, 'DELETE', `${wb}/experts/me/credentials/files/${uid}`)).status, 503);
+  assert.equal(one(f, 'SELECT COUNT(*) AS n FROM expert_credential_files').n, 1);
+  assert.equal(expert(f).review_version, 1); assert.equal(f.objects.size, 1);
+  assert.equal((await call(f, 3, 'DELETE', `${wb}/experts/me/credentials/files/${uid}`)).status, 200);
+  assert.equal(one(f, 'SELECT COUNT(*) AS n FROM expert_credential_files').n, 0); assert.equal(f.objects.size, 0);
+});
+
+test('a failed metadata deletion can retry the already removed R2 object without losing its key', async () => {
+  const f = fixture(); const put = await upload(f); const uid = put.body.files[0].uid;
+  const batch = f.env.DB.batch.bind(f.env.DB); let attempts = 0;
+  f.env.DB.batch = async (stmts: any[]) => { if (++attempts === 1) throw new Error('Synthetic database outage'); return batch(stmts); };
+  assert.equal((await call(f, 3, 'DELETE', `${wb}/experts/me/credentials/files/${uid}`)).status, 503);
+  assert.equal(one(f, 'SELECT COUNT(*) AS n FROM expert_credential_files').n, 1); assert.equal(f.objects.size, 0);
+  assert.equal((await call(f, 3, 'DELETE', `${wb}/experts/me/credentials/files/${uid}`)).status, 200);
+  assert.equal(one(f, 'SELECT COUNT(*) AS n FROM expert_credential_files').n, 0);
+});
+
+test('an ordinary admin can read but cannot verify, decline or restore their own expert profile', async () => captureMail(async (sent) => {
+  const f = fixture(); f.db.exec("UPDATE experts SET user_id=6, hidden_by_admin=1 WHERE uid='expert-a'");
+  assert.equal((await call(f, 6, 'GET', `${wb}/admin/experts/expert-a/review`)).status, 200);
+  for (const [suffix, body] of [
+    ['verify', { verified: true, credentials_checked: true, expected_version: 0 }],
+    ['decline', { reason: 'Synthetic decline reason.' }], ['hide', { hidden: false }],
+  ] as const) assert.equal((await call(f, 6, 'POST', `${wb}/admin/experts/expert-a/${suffix}`, body)).status, 403);
+  assert.equal(sent.length, 0); assert.equal(one(f, 'SELECT COUNT(*) AS n FROM expert_review_decisions').n, 0);
+  assert.equal((await call(f, 7, 'POST', `${wb}/admin/experts/expert-a/verify`, { verified: true, credentials_checked: true, expected_version: 0 })).status, 200);
+  assert.equal(expert(f).decided_by, 7); assert.equal(sent.length, 1);
+}));
+
+function limitedBusinessReads(f: F) {
+  const prepare = f.env.DB.prepare.bind(f.env.DB); let reads = 0;
+  f.env.DB.prepare = (sql: string) => {
+    const statement = prepare(sql);
+    if (/comarketing_|FROM partners|FROM experts|expert_credential_files/.test(sql)) {
+      for (const method of ['all', 'first']) {
+        const execute = statement[method].bind(statement);
+        statement[method] = async (...args: any[]) => { if (++reads > 8) throw new Error('Page exceeded bounded business-read budget'); return execute(...args); };
+      }
+    }
+    return statement;
+  };
+  return () => reads;
+}
+
+test('legacy co-marketing callers keep all rows, and explicit pages use bounded bulk reads', async () => {
+  const f = fixture(); for (let n = 1; n <= 70; n++) pitch(f, n);
+  const reads = limitedBusinessReads(f);
+  const legacy = await call(f, 1, 'GET', `${cm}/admin/queue`);
+  assert.equal(legacy.status, 200); assert.equal(legacy.body.items.length, 70); assert.equal(legacy.body.total, 70);
+  assert.equal(legacy.body.limit, null); assert.ok(reads() <= 8);
+  const other = fixture(); for (let n = 1; n <= 70; n++) pitch(other, n);
+  const pageReads = limitedBusinessReads(other);
+  const page = await call(other, 1, 'GET', `${cm}/admin/queue?limit=25&offset=25`);
+  assert.equal(page.status, 200); assert.equal(page.body.items.length, 25); assert.equal(page.body.items[0].uid, 'pitch-26');
+  assert.equal(page.body.total, 70); assert.ok(pageReads() <= 8);
+});
+
+test('large expert pages batch their private credential metadata within a bounded read budget', async () => {
+  const f = fixture();
+  for (let n = 0; n < 100; n++) f.db.prepare("INSERT INTO experts(uid,name) VALUES(?, 'Synthetic expert')").run(`batch-${n}`);
+  const file = await upload(f); assert.equal(file.status, 201);
+  const reads = limitedBusinessReads(f);
+  const response = await call(f, 1, 'GET', `${wb}/admin/experts?limit=200`);
+  assert.equal(response.status, 200); assert.equal(response.body.total, 101); assert.equal(response.body.items.length, 101);
+  assert.equal(response.body.items.find((r: any) => r.uid === 'expert-a').credentials.files[0].uid, file.body.files[0].uid);
+  assert.ok(reads() <= 8);
 });
 
 test('admin review reads have complete totals, allow more than fifty and keep other admins’ credentials for Super Admin', async () => {

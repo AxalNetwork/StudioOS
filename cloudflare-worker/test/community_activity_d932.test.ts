@@ -247,13 +247,16 @@ test('verifying and hiding an expert are recorded as admin actions, without the 
   await call(db, '/wb/admin/experts/exp-2/hide', { method: 'POST', body: { hidden: true } });
   await call(db, '/wb/admin/experts/exp-2/hide', { method: 'POST', body: { hidden: false } });
   await call(db, '/wb/admin/experts/exp-2/verify', { method: 'POST', body: { verified: false } });
+  const declined = await call(db, '/wb/admin/experts/exp-2/decline', { method: 'POST', body: { reason: 'Please attach the issuing board evidence.' } });
+  assert.equal(declined.status, 200);
   await call(db, '/wb/admin/experts/nobody/verify', { method: 'POST', body: { verified: true } });
   await call(db, '/wb/admin/experts/nobody/hide', { method: 'POST', body: { hidden: true } });
   const rows = db.prepare(`SELECT action, filters_json FROM admin_audit_log WHERE report_type = 'wellbeing' ORDER BY id`).all() as any[];
-  assert.deepEqual(rows.map((r) => r.action), ['expert_verified', 'expert_verified', 'expert_hidden', 'expert_restored', 'expert_unverified'],
-    'the seeded row, then the four acts; an unknown uid changes nothing and writes nothing');
+  assert.deepEqual(rows.map((r) => r.action), ['expert_verified', 'expert_verified', 'expert_hidden', 'expert_restored', 'expert_unverified', 'expert_declined'],
+    'the seeded row, then the five acts; an unknown uid changes nothing and writes nothing');
   const { body } = await get(db, '?kind=wellbeing&limit=50');
   assert.deepEqual(body.rows.map((r: any) => r.sentence).sort(), [
+    'An admin declined a wellbeing expert.',
     'An admin hid a wellbeing expert from the directory.',
     'An admin removed a wellbeing expert’s verification.',
     'An admin restored a wellbeing expert to the directory.',
