@@ -6,12 +6,16 @@ D930 (#2367): Admin › Community at `/admin/community`, built to the owner's
 keeps the query and hash and adds `?moved=held-community` for CM13's notice.
 
 - `AdminCommunity.jsx` — the page: header, scope chip, the period control
-  (drawn, and waiting for the Community read), eight tiles, the cards, the two
+  (`?weeks=4|12|52`, 12 by default, D933), eight tiles, the cards, the two
   "Not recorded" figures and the consoles strip. It mounts its own
-  `WorkerRail` in a `RailFrame`.
-- `communityModel.js` — pure. Turns the six reads into tiles and cards, each
-  `ready`, `loading`, `unreadable`, `notyet` or `unrecorded`; the copy the
-  canvas fixes; D915's Guard G for seats taken.
+  `WorkerRail` in a `RailFrame`. The Recent activity card makes its own read
+  of D932's activity, so a filter chip reads only that card again.
+- `communityModel.js` — pure. Turns the seven reads into tiles and cards, each
+  `ready`, `loading`, `unreadable` or `unrecorded`; the copy the canvas fixes;
+  D915's Guard G for seats taken. D933 (#2717) adds the Community read's
+  blocks (D931): the period tiles and their deltas, the weekly chart and its
+  table, the funnel and events by type, who takes part, wellbeing, and the
+  waits in Needs a decision.
 - `HeldCommunityRedirect.jsx` — the old address.
 - D934 (#2718), the four lightboxes (CM3–CM6), opened from the cards or by
   `?open=events|jobs|circles|activity`:
@@ -33,9 +37,12 @@ Community landing is retired. It has no pending queue; no count is invented.
 
 ## Rules
 
-- Every figure comes from a read that exists today (D930 §2), and each read
-  answers alone. A block that waits for a part says "Not read here yet" and
-  which part brings it. It is never a zero and never a sample.
+- Every figure comes from a read that exists today (D930 §2, D933), and each
+  read answers alone; so does each block of the Community read. A block that
+  could not be read says so, and one no store records says "Not recorded".
+  It is never a zero and never a sample.
+- The check-in band is a range of founders, withheld under seven. No mood or
+  stress figure is drawn here.
 - The events analytics read is drawn only under Guard G. Its `summary` is all
   time and never feeds a figure here.
 - Counts only. The roster read carries names; the page keeps the kind and
