@@ -136,7 +136,7 @@ test('D630: a full quota reads full, and the join it predicts is refused with th
   assert.equal(j.body.used, q.body.used);
   assert.equal(j.body.cap, q.body.cap);
   assert.equal(j.body.upgrade_to, q.body.upgrade_to);
-  assert.equal(logs(db, 'dealroom_joined').length, 0, 'a refused join records no join');
+  assert.equal(logs(db, 'deal_invitation_requested').length, 0, 'a refused join records no join');
 });
 
 test('D630: a Free plan names Professional and its cap; Institutional and a partner read Unlimited', async () => {
@@ -182,10 +182,10 @@ test('D630: join and leave are recorded with their actor; a leave that changed n
   const db = freshDb();
   const j = await call(db, PRO, '/api/deals/43/dealroom/join', { method: 'POST' });
   assert.equal(j.status, 200);
-  assert.deepEqual(logs(db, 'dealroom_joined').map((l) => [l.user_id, l.entity_type, l.entity_id]), [[PRO, 'deal', '43']]);
+  assert.deepEqual(logs(db, 'deal_invitation_requested').map((l) => [l.user_id, l.entity_type, l.entity_id]), [[PRO, 'deal', '43']]);
   const again = await call(db, PRO, '/api/deals/43/dealroom/join', { method: 'POST' });
-  assert.equal(again.body.already_member, true);
-  assert.equal(logs(db, 'dealroom_joined').length, 1, 'an idempotent re-join records nothing new');
+  assert.equal(again.body.already_requested, true);
+  assert.equal(logs(db, 'deal_invitation_requested').length, 1, 'an idempotent re-join records nothing new');
 
   await call(db, PRO, '/api/deals/43/dealroom/leave', { method: 'DELETE' });
   assert.deepEqual(logs(db, 'dealroom_left').map((l) => [l.user_id, l.entity_id]), [[PRO, '43']]);

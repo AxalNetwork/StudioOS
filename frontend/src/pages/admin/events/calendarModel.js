@@ -286,7 +286,7 @@ export function monthList(events, month) {
 }
 
 /**
- * The chip card's seats line, under Guard G: 'Seats 12 / 20', '9 taken · No
+ * The chip card's seats line, from D918's paged counts: 'Seats 12 / 20', '9 taken · No
  * cap', or what stops the count ("Seats taken: Not in this read").
  */
 export function seatsLine(ev, join) {

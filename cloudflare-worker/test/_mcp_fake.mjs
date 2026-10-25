@@ -48,13 +48,22 @@ export function defaultNotesTools() {
   ];
 }
 
+/**
+ * D1085: another provider's fake reuses this one. `opts.hosts` names its MCP
+ * and authorization hosts (the same host for both is allowed), `opts.resource`
+ * its server URL, `opts.tools` its `tools/list`, `opts.scope` the scope a grant
+ * reports (null: none), and `opts.answer(name, args)` a tool's structured
+ * answer. The defaults are the notes provider above, unchanged.
+ */
 export function notesFake(opts = {}) {
+  const H = { mcp: opts.hosts?.mcp ?? 'mcp.notes.example', auth: opts.hosts?.auth ?? 'auth.notes.example' };
+  const RESOURCE = opts.resource ?? NOTES_MCP;
   const state = {
     era: opts.era ?? 'modern',
-    tools: defaultNotesTools(),
-    scope: 'notes.read',
+    tools: opts.tools ?? defaultNotesTools(),
+    scope: opts.scope === undefined ? 'notes.read' : opts.scope,
     /** Metadata switches: `serverIssuer` is the issuer the server's own metadata names, when not `issuer`. */
-    meta: { serverIssuer: null, issuer: NOTES_ISSUER, s256: true, iss: false, cimd: false, registration: true, revocation: true, endpointHost: 'auth.notes.example', resource: NOTES_MCP },
+    meta: { serverIssuer: null, issuer: opts.hosts ? `https://${H.auth}` : NOTES_ISSUER, s256: true, iss: false, cimd: false, registration: true, revocation: true, endpointHost: H.auth, resource: RESOURCE },
     clients: new Map(),
     codes: new Map(),
     access: new Set(),
@@ -80,11 +89,11 @@ export function notesFake(opts = {}) {
     const refresh = token('fake-refresh');
     state.access.add(access);
     state.refresh.add(refresh);
-    return { access_token: access, refresh_token: refresh, token_type: 'Bearer', expires_in: 3600, scope: state.scope };
+    return { access_token: access, refresh_token: refresh, token_type: 'Bearer', expires_in: 3600, ...(state.scope == null ? {} : { scope: state.scope }) };
   }
 
   function mcp(init, headers, bearer, call) {
-    if (!state.access.has(bearer)) return json({ error: 'invalid_token' }, 401, { 'WWW-Authenticate': `Bearer resource_metadata="https://mcp.notes.example/.well-known/oauth-protected-resource/mcp"` });
+    if (!state.access.has(bearer)) return json({ error: 'invalid_token' }, 401, { 'WWW-Authenticate': `Bearer resource_metadata="https://${H.mcp}/.well-known/oauth-protected-resource/mcp"` });
     if (state.redirect) return new Response(null, { status: 302, headers: { Location: 'https://elsewhere.example/mcp' } });
     if (state.status) return json({ error: 'stub' }, state.status);
     const msg = JSON.parse(String(init.body || '{}'));
@@ -134,7 +143,8 @@ export function notesFake(opts = {}) {
     if (msg.method === 'tools/call') {
       call.tool = msg.params?.name;
       if (call.tool === FAKE_WRITE_TOOL) return json({ jsonrpc: '2.0', id: msg.id, result: { isError: true, content: [{ type: 'text', text: 'This fake answers no write.' }] } });
-      return json({ jsonrpc: '2.0', id: msg.id, result: { structuredContent: { tool: call.tool, arguments: msg.params?.arguments ?? {} }, content: [], ...(modern ? { resultType: 'complete' } : {}) } });
+      const answer = opts.answer ? opts.answer(call.tool, msg.params?.arguments ?? {}) : { tool: call.tool, arguments: msg.params?.arguments ?? {} };
+      return json({ jsonrpc: '2.0', id: msg.id, result: { structuredContent: answer, content: [], ...(modern ? { resultType: 'complete' } : {}) } });
     }
     return json({ jsonrpc: '2.0', id: msg.id, error: { code: -32601, message: 'Method not found' } }, modern ? 404 : 200);
   }
@@ -150,12 +160,12 @@ export function notesFake(opts = {}) {
     const m = state.meta;
     const form = () => new URLSearchParams(typeof init.body === 'string' ? init.body : String(init.body ?? ''));
 
-    if (u.host === 'mcp.notes.example') {
+    if (u.host === H.mcp) {
       if (method === 'GET' && u.pathname === '/.well-known/oauth-protected-resource/mcp') {
-        return json({ resource: m.resource, authorization_servers: [m.issuer], scopes_supported: ['notes.read'] });
+        return json({ resource: m.resource, authorization_servers: [m.issuer], ...(state.scope == null ? {} : { scopes_supported: [state.scope] }) });
       }
       if (method === 'POST' && u.pathname === '/mcp') return mcp(init, headers, bearer, call);
-      return new Response('not found', { status: 404 });
+      if (H.mcp !== H.auth) return new Response('not found', { status: 404 });
     }
     if (method === 'GET' && u.pathname === '/.well-known/oauth-authorization-server') {
       const at = `https://${m.endpointHost}`;
@@ -181,7 +191,7 @@ export function notesFake(opts = {}) {
       const f = form();
       call.grant_type = f.get('grant_type');
       call.resource = f.get('resource');
-      if (f.get('resource') !== NOTES_MCP) return json({ error: 'invalid_target' }, 400);
+      if (f.get('resource') !== RESOURCE) return json({ error: 'invalid_target' }, 400);
       const known = state.clients.has(f.get('client_id') || '') || String(f.get('client_id')).startsWith('https://axal.vc/') || f.get('client_id') === 'pre-registered-id';
       if (!known) return json({ error: 'invalid_client' }, 401);
       if (f.get('grant_type') === 'authorization_code') {
@@ -216,7 +226,7 @@ export function notesFake(opts = {}) {
     fetch: async (input, init = {}) => {
       const url = String(input?.url ?? input);
       const host = new URL(url).host;
-      if (!NOTES_HOSTS.includes(host)) { calls.push({ host, method: String(init.method || 'GET'), path: new URL(url).pathname, foreign: true }); return new Response('unexpected host', { status: 599 }); }
+      if (!(opts.hosts ? [H.mcp, H.auth] : NOTES_HOSTS).includes(host)) { calls.push({ host, method: String(init.method || 'GET'), path: new URL(url).pathname, foreign: true }); return new Response('unexpected host', { status: 599 }); }
       return handle(url, init);
     },
     /** The browser's leg: the consent screen approves and returns a code for the redirect. */
