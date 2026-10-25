@@ -262,6 +262,7 @@ import adminInsightsExport from './routes/admin_insights_export';
 import licence from './routes/licence';
 // D799 — the Administrator's requests to HQ, under the same prefix.
 import licenceRequests from './routes/licence_requests';
+import licencePrograms from './routes/licence_programs';
 import cofounderRoutes from './routes/cofounder';
 import skillsRoutes from './routes/skills';
 import valuesRoutes from './routes/values';
@@ -1137,6 +1138,7 @@ app.route('/api/admin/insights', adminInsights);
 app.route('/api/admin/programs/proposals', adminProgramProposals);
 app.route('/api/admin/programs', adminPrograms);
 app.route('/api/licence', licenceRequests);
+app.route('/api/licence', licencePrograms);
 app.route('/api/licence', licence);
 app.route('/api/best-fit', bestFitSelf);
 app.route('/api/admin', admin);

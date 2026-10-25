@@ -412,6 +412,15 @@ export async function applyLicenceCopy(
       console.warn('[branchOps] branch_licence.terms_json not written', (e as Error).message);
     }
   }
+  // D984 — the program grants (migration 554) ride the same way, on the same rule.
+  if (Object.prototype.hasOwnProperty.call(record, 'program_grants_json')) {
+    try {
+      await env.DB.prepare('UPDATE branch_licence SET program_grants_json = ? WHERE id = 1 AND pushed_at = ?')
+        .bind(s('program_grants_json'), pushedAt).run();
+    } catch (e) {
+      console.warn('[branchOps] branch_licence.program_grants_json not written', (e as Error).message);
+    }
+  }
   return { applied: true, branch, as_of: pushedAt };
 }
 
