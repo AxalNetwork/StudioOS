@@ -36,13 +36,15 @@ export function canSeeLearning(user: unknown, subject: LearningSubject | null | 
 // ---- programs (D558, #1159) -----------------------------------------------------------
 
 export const PROGRAM_SUBJECT_KINDS = ['course', 'item', 'exam', 'exercise', 'webinar'] as const;
-export type ProgramSubjectKind = 'course' | 'item' | 'exam' | 'exercise';
+export type ProgramSubjectKind = 'course' | 'item' | 'exam' | 'exercise' | 'webinar';
 
 /** The lesson kinds through which a course carries a subject of each kind. */
 const LESSON_KINDS_FOR: Record<Exclude<ProgramSubjectKind, 'course'>, string> = {
   item: "'video', 'reading'",
   exam: "'exam'",
   exercise: "'exercise'",
+  // D1124 (#3004): a program holds a webinar directly, or through a course's webinar lesson.
+  webinar: "'webinar'",
 };
 
 /**

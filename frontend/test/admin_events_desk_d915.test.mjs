@@ -30,7 +30,7 @@ import { codeOnly } from './_codeOnly.mjs';
 import AdminEventsPage from '../src/pages/admin/AdminEventsPage.jsx';
 import {
   ALL_PATH, COMMUNITY_PATH, DAY_MS, DESK_PATH, FROZEN, GONE, LINE, NOT_HELD, NOT_IN_READ, NO_CAP, QUICK_REASONS, REVIEW_PATH,
-  SCOPE_LABEL, STATUSES, SUSPENDED, TABS, TITLE, allRows, analyticsJoin, approveLine3, approveLines, approvedLine,
+  SCOPE_LABEL, STATUSES, SUSPENDED, TABS, TITLE, allRows, listCounts, approveLine3, approveLines, approvedLine,
   attendedText, cancelCopy, capacityPreview, clockLabel, countText, countsFor, eventIdFor, factsOf, featureCopy, fillText, hasEnded,
   isEventId, money, moneyTotals, onPublicCalendar, overviewTiles, pageOf, publishGate, queueFlags, rangeText,
   readEveryPage, refusalText, showUpText, statusCounts, statusFromSearch, statusWord, tabFor, unpublishCopy, whenLine,
@@ -57,7 +57,7 @@ const ev = (id, o = {}) => ({
   ...o,
 });
 // GET /api/admin/events/analytics — one per-event row
-const row = (id, registrations, attended = 0, waitlisted = 0) => ({ id, slug: `ev-${id}`, title: `Event ${id}`, status: 'published', starts_at: iso(10), featured: false, capacity: 40, registrations, attended, waitlisted, cancelled: 0, capacity_util: null, conversion: 0 });
+const row = (id, registrations, attended = 0, waitlisted = 0) => ({ id, slug: `ev-${id}`, title: `Event ${id}`, status: 'published', starts_at: iso(10), featured: false, capacity: 40, seats_taken: registrations, registrations, attended, waitlisted, cancelled: 0, capacity_util: null, conversion: 0 });
 const ready = (data) => ({ status: 'ready', data });
 
 /* ------------------------------------------------------------------ *
@@ -106,23 +106,8 @@ test('the status words are the canvas\'s, and the stored `rejected` reads "Sent 
     'counted from R1, real zeros, Sent back its own bucket, and a stored status the canvas does not name is still counted');
 });
 
-test('Guard G (a): R1 has events and R2\'s rows are empty, so the per-event counts could not be read', () => {
-  const join = analyticsJoin(ready({ summary: {}, events: [] }), 3);
-  assert.equal(join.state, 'unreadable');
-  assert.equal(countText(countsFor(join, 1), 'taken'), 'Could not be read');
-  assert.equal(analyticsJoin(ready({ events: [] }), 0).state, 'ready', 'no events at all: an empty list is the truth');
-});
-
-test('Guard G (b) and (c): rows that are not a list, a `{}` reply, or R2 naming its own failure', () => {
-  for (const data of [{}, { events: null }, { events: 'x' }, null]) assert.equal(analyticsJoin(ready(data), 2).state, 'unreadable', JSON.stringify(data));
-  assert.equal(analyticsJoin(ready({ events: [row(1, 4)], unreadable: ['events'] }), 1).state, 'unreadable', '(c): part 1 says so itself');
-  assert.equal(analyticsJoin(ready({ events: [row(1, 4)], unreadable: ['summary'] }), 1).state, 'ready', 'a failed summary does not touch the rows');
-  assert.equal(analyticsJoin({ status: 'error', data: null }, 1).state, 'unreadable');
-  assert.equal(analyticsJoin({ status: 'loading', data: null }, 1).state, 'loading');
-});
-
-test('Guard G: an R1 event missing from R2\'s 200 rows reads "Not in this read", never 0', () => {
-  const join = analyticsJoin(ready({ events: [row(1, 4, 1, 2)] }), 2);
+test('an id absent from the list reads "Not in this read", never 0', () => {
+  const join = listCounts(ready([row(1, 4, 1, 2)]));
   assert.equal(join.state, 'ready');
   assert.deepEqual(countsFor(join, 1), { state: 'ready', taken: 4, attended: 1, waitlisted: 2 });
   const missing = countsFor(join, 2);
@@ -130,7 +115,7 @@ test('Guard G: an R1 event missing from R2\'s 200 rows reads "Not in this read",
   for (const k of ['taken', 'waitlisted', 'attended']) assert.equal(countText(missing, k), NOT_IN_READ);
   assert.equal(fillText(40, missing), NOT_IN_READ);
   assert.equal(countText(countsFor(join, 1), 'taken'), '4', 'a real count is drawn');
-  assert.equal(countText(countsFor(analyticsJoin(ready({ events: [row(1, 0)] }), 1), 1), 'taken'), '0', 'a real zero is a zero');
+  assert.equal(countText(countsFor(listCounts(ready([row(1, 0)])), 1), 'taken'), '0', 'a real zero is a zero');
 });
 
 test('an event has ended once ends_at has passed, or a day after its start when there is no ends_at', () => {
@@ -143,7 +128,7 @@ test('an event has ended once ends_at has passed, or a day after its start when 
 });
 
 test('show-up only once an event has ended; fill, attended and No cap in words', () => {
-  const join = analyticsJoin(ready({ events: [row(1, 20, 15), row(2, 20, 0), row(3, 0, 0)] }), 3);
+  const join = listCounts(ready([row(1, 20, 15), row(2, 20, 0), row(3, 0, 0)]));
   const upcoming = ev(1, { starts_at: iso(5) });
   assert.equal(showUpText(upcoming, countsFor(join, 1), NOW), NOT_HELD, 'never 0% or a dash before it is held');
   assert.equal(attendedText(ev(2, { starts_at: iso(5) }), countsFor(join, 2), NOW), NOT_HELD);
@@ -153,7 +138,7 @@ test('show-up only once an event has ended; fill, attended and No cap in words',
   assert.equal(showUpText(ev(2, { starts_at: iso(-5) }), countsFor(join, 2), NOW), '0%', 'an ended event nobody came to is a real 0%');
   assert.equal(showUpText(ev(3, { starts_at: iso(-5) }), countsFor(join, 3), NOW), 'No seats taken');
   assert.equal(showUpText(ev(1, { starts_at: iso(-5), status: 'cancelled' }), countsFor(join, 1), NOW), 'Not held');
-  assert.equal(showUpText(ended, countsFor(analyticsJoin(ready({ events: [] }), 1), 1), NOW), 'Could not be read');
+  assert.equal(showUpText(ended, countsFor(listCounts({ status: 'error' }), 1), NOW), 'Could not be read');
   assert.equal(fillText(40, countsFor(join, 1)), '50%');
   assert.equal(fillText(null, countsFor(join, 1)), NO_CAP);
   assert.equal(fillText(0, countsFor(join, 1)), 'No seats');
@@ -243,7 +228,7 @@ test('the Overview tiles: real zeros on a read that succeeded, and words for eve
   ];
   const all = ready(list);
   const queue = ready([list[1]]);
-  const join = analyticsJoin(ready({ events: [row(1, 10, 0, 3), row(2, 0, 0, 1), row(3, 8, 6), row(4, 0), row(5, 9), row(6, 5, 0, 2), row(7, 1, 0, 1), row(8, 4, 0, 2)] }), list.length);
+  const join = listCounts(ready([row(1, 10, 0, 3), row(2, 0, 0, 1), row(3, 8, 6), row(4, 0), row(5, 9), row(6, 5, 0, 2), row(7, 1, 0, 1), row(8, 4, 0, 2)]));
   const t = Object.fromEntries(overviewTiles({ all, queue, join, now: NOW }).map((x) => [x.key, x]));
   assert.equal(t.waiting.value, '1');
   assert.equal(t.waiting.note.text, 'Waiting time not recorded yet', 'waiting time counts from submission, which part 2 records');
@@ -252,23 +237,23 @@ test('the Overview tiles: real zeros on a read that succeeded, and words for eve
   assert.equal(t.waitlists.value, '4', 'waitlisted on upcoming live events only');
   assert.equal(t.showup.value, '75%', 'ended and not cancelled');
   // R2 failed: every count says so, R1's own counts still answer.
-  const failed = Object.fromEntries(overviewTiles({ all, queue, join: analyticsJoin(ready({ events: [] }), list.length), now: NOW }).map((x) => [x.key, x]));
+  const failed = Object.fromEntries(overviewTiles({ all, queue, join: listCounts({ status: 'error' }), now: NOW }).map((x) => [x.key, x]));
   assert.equal(failed.next30.value, '2');
   assert.equal(failed.next30.sub, 'Seats taken could not be read');
   assert.equal(failed.waitlists.state, 'unreadable');
   assert.equal(failed.showup.state, 'unreadable');
   // Nothing upcoming: the waitlists sum is a real 0 from R1 alone, whatever R2 says.
-  const quiet = Object.fromEntries(overviewTiles({ all: ready([list[2]]), queue, join: analyticsJoin({ status: 'error' }, 1), now: NOW }).map((x) => [x.key, x]));
+  const quiet = Object.fromEntries(overviewTiles({ all: ready([list[2]]), queue, join: listCounts({ status: 'error' }), now: NOW }).map((x) => [x.key, x]));
   assert.equal(quiet.waitlists.value, '0');
   assert.equal(quiet.showup.state, 'unreadable', 'the ended event\'s counts could not be read');
   // An ended event missing from R2: not summed as 0.
-  const partial = Object.fromEntries(overviewTiles({ all, queue, join: analyticsJoin(ready({ events: [row(1, 10, 0, 3), row(2, 0, 0, 1)] }), list.length), now: NOW }).map((x) => [x.key, x]));
+  const partial = Object.fromEntries(overviewTiles({ all, queue, join: listCounts(ready([row(1, 10, 0, 3), row(2, 0, 0, 1)])), now: NOW }).map((x) => [x.key, x]));
   assert.equal(partial.showup.state, 'missing');
   // R1 failed.
-  const down = overviewTiles({ all: { status: 'error' }, queue: { status: 'error' }, join: analyticsJoin({ status: 'error' }, 0), now: NOW });
+  const down = overviewTiles({ all: { status: 'error' }, queue: { status: 'error' }, join: listCounts({ status: 'error' }), now: NOW });
   assert.deepEqual(down.map((x) => x.state), ['unreadable', 'unreadable', 'unreadable', 'unreadable']);
   // No events at all: real zeros, and words where a rate has nothing to divide.
-  const none = Object.fromEntries(overviewTiles({ all: ready([]), queue: ready([]), join: analyticsJoin(ready({ events: [] }), 0), now: NOW }).map((x) => [x.key, x]));
+  const none = Object.fromEntries(overviewTiles({ all: ready([]), queue: ready([]), join: listCounts(ready([])), now: NOW }).map((x) => [x.key, x]));
   assert.deepEqual([none.waiting.value, none.next30.value, none.waitlists.value, none.showup.value], ['0', '0', '0', 'No event has ended yet']);
 });
 
@@ -382,7 +367,7 @@ test('the desk reads only R1, R2, R3 and R5, never the roster, R2\'s summary or 
   // The comments say why each of these is not read; the code must not read it.
   const src = DESK_FILES.map((f) => codeOnly(read(f))).join('\n');
   // D921 adds the selected review event's history and free-seat preview (D918 §6, §7).
-  for (const call of ['adminEvents.list(', 'adminEvents.analytics()', 'adminEvents.get(', 'eventsApi.agenda(', 'adminEvents.history(', 'adminEvents.compPreview(']) assert.ok(src.includes(call), `the desk no longer calls ${call}`);
+  for (const call of ['adminEvents.list(', 'adminEvents.get(', 'eventsApi.agenda(', 'adminEvents.history(', 'adminEvents.compPreview(']) assert.ok(src.includes(call), `the desk no longer calls ${call}`);
   for (const write of ['adminEvents.approve(', 'adminEvents.reject(', 'adminEvents.feature(', 'adminEvents.unpublish(', 'adminEvents.cancel(', 'adminEvents.setCapacity(']) assert.ok(src.includes(write), write);
   assert.doesNotMatch(src, /\.roster\(|roster\(/, 'the roster carries names and emails');
   assert.doesNotMatch(src, /analytics[\w.?]*\.summary\b/, 'R2\'s summary is all-time and hides its failure');
@@ -417,7 +402,7 @@ const response = (body, status = 200) => ({ ok: status < 400, status, headers: {
 const LIVE = Date.now();
 const liveIso = (days) => new Date(LIVE + days * DAY_MS).toISOString();
 
-function worker({ list = [], queue = [], analytics = { summary: {}, events: [] }, event = null, agenda = { agenda: [] }, summary = {}, history = null, overview = overviewFixture(), writes = {} } = {}) {
+function worker({ list = [], queue = [], analytics = { summary: {}, events: [] }, event = null, agenda = { agenda: [] }, summary = null, history = null, overview = overviewFixture(), writes = {} } = {}) {
   return (url, options = {}) => {
     const method = String(options.method || 'GET').toUpperCase();
     const m = url.match(/\/api\/admin\/events\/(\d+)\/(\w+)$/);
@@ -429,12 +414,12 @@ function worker({ list = [], queue = [], analytics = { summary: {}, events: [] }
       const source = q.get('status') === 'pending_review' ? queue : list;
       if (source instanceof Function) return source(q);
       const offset = Number(q.get('offset'));
-      return response({ events: source.slice(offset, offset + Number(q.get('limit'))) });
+      return response({ events: source.slice(offset, offset + Number(q.get('limit'))).map(e => { const c = analytics?.events?.find(r => r.id === e.id); return c ? { ...e, seats_taken: c.registrations, attended: c.attended, waitlisted: c.waitlisted } : e; }) });
     }
     if (/\/api\/admin\/events\/\d+$/.test(url)) return event ? response({ event }) : response({ error: 'not_found' }, 404);
     if (/\/api\/events\/\d+\/agenda$/.test(url)) return response(agenda);
     // D922: the event's own summary and history (D918).
-    if (/\/api\/admin\/events\/\d+\/summary$/.test(url)) return summary instanceof Function ? summary() : response(summary);
+    if (/\/api\/admin\/events\/\d+\/summary$/.test(url)) return summary instanceof Function ? summary() : response(summary || { registrations: (() => { const c = analytics?.events?.find(r => r.id === event?.id); return c ? { available: true, seats_taken: c.registrations, by_status: { attended: c.attended, waitlisted: c.waitlisted } } : { available: false }; })() });
     if (/\/api\/admin\/events\/\d+\/history$/.test(url)) return history instanceof Function ? history() : response(history || { history: { created_at: event?.created_at, items: [] } });
     return response({});
   };
@@ -575,16 +560,16 @@ test('Send back needs a reason; a quick reason fills it, and a suspended licence
   } finally { await view.close(); }
 });
 
-test('All events joins R2 under Guard G: an empty analytics read is "Could not be read", never 0', async () => {
+test('All events uses paged counts; a missing field is Not recorded, never 0', async () => {
   const list = [ev(31, { title: 'Breakfast', starts_at: liveIso(4) }), ev(32, { title: 'Roundtable', starts_at: liveIso(-4), capacity: null })];
   const view = await mounted('/admin/events/all', worker({ list, analytics: { summary: { total_events: 0 }, events: [] } }));
   try {
     assert.ok(view.requests.some((r) => r.url === '/api/admin/events?limit=200&offset=0'));
-    assert.ok(view.requests.some((r) => r.url === '/api/admin/events/analytics'));
+    assert.equal(view.requests.some((r) => r.url === '/api/admin/events/analytics'), false);
     const rowText = view.textOf('events-all-row-31');
-    assert.match(rowText, /Could not be read/);
+    assert.match(rowText, /Not recorded/);
     assert.doesNotMatch(rowText, /\b0%/);
-    assert.match(view.text(), /Seat counts could not be read\./);
+    assert.doesNotMatch(view.text(), /Seat counts could not be read\./);
     assert.match(view.textOf('events-all-row-32'), /No cap/);
     assert.equal(view.textOf('events-all-range'), '1–2 of 2');
     assert.ok(view.hrefs().includes('/admin/events/31'), 'each title opens its event');
@@ -595,7 +580,7 @@ test('All events joins R2 under Guard G: an empty analytics read is "Could not b
     assert.match(r31, /12/);
     assert.match(r31, /30%/, 'fill = 12 of 40');
     assert.match(r31, /Not held yet/);
-    assert.match(counted.textOf('events-all-row-32'), new RegExp(NOT_IN_READ), 'missing from R2\'s rows');
+    assert.match(counted.textOf('events-all-row-32'), /Not recorded/, 'a missing count field is not an invented zero');
   } finally { await counted.close(); }
 });
 
@@ -640,7 +625,7 @@ test('one event: R3, R2\'s row and R5; Not held yet before it ends; the roster s
   const agenda = { agenda: [{ id: 1, event_id: 41, title: 'Doors', starts_at: liveIso(6), display_order: 0, speaker_name: null, location_text: 'Room A' }] };
   const view = await mounted('/admin/events/41', worker({ event, agenda, analytics: { events: [row(41, 42, 0, 6)] } }));
   try {
-    for (const path of ['/api/admin/events/41', '/api/events/41/agenda', '/api/admin/events/analytics']) assert.ok(view.requests.some((r) => r.url === path), path);
+    for (const path of ['/api/admin/events/41', '/api/events/41/agenda', '/api/admin/events/41/summary']) assert.ok(view.requests.some((r) => r.url === path), path);
     assert.ok(!view.requests.some((r) => r.url.includes('/roster')), 'never the roster');
     const t = view.text();
     assert.match(t, /Demo night/);
@@ -695,25 +680,24 @@ test('one event\'s cancel waits for the refund box on a paid event, and the capa
  * The review (2026-10-24): D915 §7
  * ------------------------------------------------------------------ */
 
-test('coming back from an event\'s page reads the list, R2 and the queue again together, so a new event has its counts', async () => {
+test('coming back from an event\'s page reads the enriched list and the queue again together, so a new event has its counts', async () => {
   const base = [ev(31, { title: 'Breakfast', starts_at: liveIso(4) }), ev(32, { title: 'Roundtable', starts_at: liveIso(8) })];
   let lists = 0;
-  let counts = 0;
-  // Event 33 is created while the admin is on event 31's page.
-  const list = () => { lists += 1; return response({ events: lists === 1 ? base : [ev(33, { title: 'Supper', starts_at: liveIso(2) }), ...base] }); };
-  const analytics = () => { counts += 1; return response({ events: [row(31, 4), row(32, 5), ...(counts === 1 ? [] : [row(33, 7)])] }); };
-  const view = await mounted('/admin/events/all', worker({ list, analytics, event: base[0] }));
+  // Event 33 is created while the admin is on event 31's page. D918 returns its counts in the same row.
+  const enriched = base.map((e, i) => ({ ...e, seats_taken: i + 4, attended: 0, waitlisted: 0 }));
+  const list = () => { lists += 1; return response({ events: lists === 1 ? enriched : [ev(33, { title: 'Supper', starts_at: liveIso(2), seats_taken: 7, attended: 0, waitlisted: 0 }), ...enriched] }); };
+  const view = await mounted('/admin/events/all', worker({ list, event: base[0] }));
   const made = (path) => view.requests.filter((r) => r.url === path).length;
   const R1 = '/api/admin/events?limit=200&offset=0';
   const R2 = '/api/admin/events/analytics';
   const QUEUE_READ = '/api/admin/events?status=pending_review&limit=200&offset=0';
   try {
-    assert.deepEqual([made(R1), made(R2), made(QUEUE_READ)], [1, 1, 1]);
+    assert.deepEqual([made(R1), made(R2), made(QUEUE_READ)], [1, 0, 1]);
     await view.follow('/admin/events/31');
     assert.ok(view.testIds().includes('events-event'));
     await view.follow('/admin/events/all');
     assert.equal(made(R1), 2, 'the list is read again on the way back');
-    assert.equal(made(R2), 3, 'and R2 with it, as it was with the event page');
+    assert.equal(made(R2), 0, 'counts travel with the list or the event summary');
     assert.equal(made(QUEUE_READ), 3, 'and the queue');
     const r33 = view.textOf('events-all-row-33');
     assert.doesNotMatch(r33, new RegExp(NOT_IN_READ), 'a new event is joined to counts read at the same moment');

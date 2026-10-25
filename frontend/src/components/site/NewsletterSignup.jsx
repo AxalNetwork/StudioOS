@@ -30,7 +30,7 @@ const TURNSTILE_SITE_KEY =
   (typeof import.meta !== 'undefined' && import.meta.env && import.meta.env.VITE_TURNSTILE_SITE_KEY) || '';
 
 /** The Turnstile widget's lifecycle, as ContactPage runs it, started only while `active`. */
-function useTurnstile(active) {
+export function useTurnstile(active) {
   const ref = useRef(null);
   const widget = useRef(null);
   const [token, setToken] = useState('');

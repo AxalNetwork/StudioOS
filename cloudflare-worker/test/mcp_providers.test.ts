@@ -26,6 +26,7 @@ import { MANAGED_PROVIDERS } from '../src/services/providerOauthKeys.ts';
 /** Where each record's typed reads live. A new record adds its line here. */
 const TYPED_READS: Record<string, string> = {
   mercury: 'cloudflare-worker/src/services/mercury/reads.ts',
+  notion: 'cloudflare-worker/src/services/notion/reads.ts',
 };
 
 const records = Object.entries(MCP_PROVIDERS) as Array<[string, McpProvider]>;
