@@ -41,13 +41,13 @@ const SECRET = 'pi_conf1' + '_secret_' + 'fixture';
 type Answer = { status?: number; body: unknown };
 let stripe: Record<string, Answer> = {};
 let calls: string[] = [];
-let requestBodies: { path: string; body: URLSearchParams }[] = [];
+let requestBodies: { path: string; body: URLSearchParams; key: string | null }[] = [];
 const realFetch = globalThis.fetch;
 globalThis.fetch = (async (input: any, init: any = {}) => {
   const url = String(typeof input === 'string' ? input : input?.url);
   calls.push(`${String(init?.method || 'GET').toUpperCase()} ${url.replace('https://api.stripe.com/v1', '')}`);
   const path = url.replace('https://api.stripe.com/v1', '').split('?')[0];
-  requestBodies.push({ path, body: new URLSearchParams(init.body || '') });
+  requestBodies.push({ path, body: new URLSearchParams(init.body || ''), key: new Headers(init.headers).get('Idempotency-Key') });
   const a = stripe[path];
   if (a) return new Response(JSON.stringify(a.body), { status: a.status ?? 200 });
   if (url.startsWith('https://api.stripe.com/')) return new Response(JSON.stringify({ error: { message: 'no stub' } }), { status: 404 });
@@ -307,6 +307,7 @@ async function strong(db: DatabaseSync, path: string, who = ADA, recent = true, 
     .run(jti, who, factor, recent ? now : '2020-01-01 00:00:00', recent ? now : null);
   const jwt = await new SignJWT({ user_id: who, role: who === PAT ? 'partner' : 'founder', jti }).setProtectedHeader({ alg: 'HS256' })
     .setIssuedAt().setExpirationTime('1h').sign(new TextEncoder().encode(JWT_SECRET));
+  if (body === undefined && path.endsWith('/update-card')) body = { nonce: 'fixture_nonce_1' };
   const res = await app.request(path, { method: 'POST', headers: { Authorization: `Bearer ${jwt}`, 'Content-Type': 'application/json' }, ...(body === undefined ? {} : { body: JSON.stringify(body) }) }, env(db));
   const text = await res.text();
   return { status: res.status, body: JSON.parse(text), text, headers: res.headers };
@@ -495,5 +496,44 @@ test('D1133 normal-customer account plans and shared-customer founder plans upda
     assert.ok(calls.includes('POST /customers/cus_pat'));
     assert.ok(calls.includes('POST /subscriptions/sub_pat'));
     assert.ok(!calls.some((c) => c.includes('cus_ada') && c.startsWith('POST')));
+  } finally { db.close(); }
+});
+
+
+test('D1133 late renewal attempts retain history without moving the alert backwards', async () => {
+  const db = database();
+  try {
+    await hook(db, 'invoice.payment_failed', renewal({ attempt_count: 2 }));
+    await hook(db, 'invoice.payment_failed', renewal({ attempt_count: 1 }));
+    await hook(db, 'invoice.payment_failed', renewal({ attempt_count: 1 }));
+    assert.equal(alerts(db)[0].attempt_count, 2);
+    assert.equal(activity(db).filter((r) => r.action === 'renewal_failed').length, 2);
+    await hook(db, 'invoice.paid', { id: 'in_ada1', paid: true });
+    await hook(db, 'invoice.payment_failed', renewal({ attempt_count: 1 }));
+    assert.equal(alerts(db)[0].state, 'closed');
+    assert.equal(activity(db).filter((r) => r.action === 'renewal_failed').length, 2);
+    await hook(db, 'invoice.payment_failed', renewal({ attempt_count: 3 }));
+    assert.equal(alerts(db)[0].state, 'closed');
+    assert.equal(activity(db).filter((r) => r.action === 'renewal_failed').length, 3, 'a late event after recovery still retains its historical attempt');
+  } finally { db.close(); }
+});
+
+test('D1133 card setup retries reuse their validated member/alert request key', async () => {
+  const db = database();
+  try {
+    await hook(db, 'invoice.payment_failed', renewal()); const id = alerts(db)[0].id;
+    stripe['/invoices/in_ada1'] = { body: recoveryInvoice() };
+    stripe['/setup_intents'] = { body: { client_secret: 'seti_fixture_secret_synthetic' } };
+    const path = `/api/billing/alerts/${id}/update-card`;
+    for (let n = 0; n < 2; n++) assert.equal((await strong(db, path)).status, 200);
+    let setup = requestBodies.filter((r) => r.path === '/setup_intents');
+    assert.ok(setup[0].key); assert.equal(setup[0].key, setup[1].key);
+    await strong(db, path, ADA, true, 'totp', { nonce: 'fixture_nonce_2' });
+    setup = requestBodies.filter((r) => r.path === '/setup_intents'); assert.notEqual(setup[2].key, setup[1].key);
+    const before = calls.length;
+    for (const nonce of [undefined, 'bad space', '../unsafe', 'x'.repeat(65)]) {
+      assert.equal((await strong(db, path, ADA, true, 'totp', { nonce })).status, 400);
+    }
+    assert.equal(calls.length, before, 'invalid request keys never reach Stripe');
   } finally { db.close(); }
 });

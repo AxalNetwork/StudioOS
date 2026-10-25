@@ -101,9 +101,8 @@ async function upsertInvoiceAlert(env: Env, kind: 'payment_failed' | 'needs_conf
     const results = await env.DB.batch([
       write,
       env.DB.prepare(`INSERT OR IGNORE INTO activity_logs (uid, user_id, action, actor, details)
-        SELECT ?, user_id, ?, ?, ? FROM billing_alerts WHERE kind = ? AND object_id = ?
-        AND state = 'open' AND COALESCE(attempt_count, 0) = ?`)
-        .bind(uid, 'renewal_failed', 'stripe', '{}', kind, r.invoiceId, Number.isSafeInteger(attempt) && attempt > 0 ? attempt : 0),
+        SELECT ?, user_id, ?, ?, ? FROM billing_alerts WHERE kind = ? AND object_id = ?`)
+        .bind(uid, 'renewal_failed', 'stripe', '{}', kind, r.invoiceId),
     ]);
     return Number(results[0].meta?.changes ?? 0) > 0;
   } catch (e) { if (missingTable(e)) return false; throw e; }

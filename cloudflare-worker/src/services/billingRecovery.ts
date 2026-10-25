@@ -10,9 +10,9 @@ const subscriptionId = /^sub_[A-Za-z0-9]+$/;
 const customerId = /^cus_[A-Za-z0-9]+$/;
 const ref = (v: unknown): string | null => typeof v === 'string' ? v : v && typeof v === 'object' && typeof (v as { id?: unknown }).id === 'string' ? (v as { id: string }).id : null;
 export type RecoveryResult = { ok: true; client_secret: string; kind: 'payment' | 'setup'; scope: 'founder' | 'investor' }
-  | { ok: false; status: 404 | 409; error: 'alert_not_found' | 'payment_not_needed' };
+  | { ok: false; status: 400 | 404 | 409; error: 'alert_not_found' | 'payment_not_needed' | 'invalid_nonce' };
 
-export async function prepareRenewal(env: Env, userId: number, alertId: number, action: 'pay' | 'update-card'): Promise<RecoveryResult> {
+export async function prepareRenewal(env: Env, userId: number, alertId: number, action: 'pay' | 'update-card', nonce?: unknown): Promise<RecoveryResult> {
   if (!Number.isSafeInteger(alertId) || alertId <= 0) return { ok: false, status: 404, error: 'alert_not_found' };
   const row = await env.DB.prepare(
     `SELECT invoice_id, subscription_id FROM billing_alerts
@@ -20,6 +20,7 @@ export async function prepareRenewal(env: Env, userId: number, alertId: number, 
   ).bind(alertId, userId).first<{ invoice_id: string; subscription_id: string }>();
   if (!row || !invoiceId.test(row.invoice_id) || !subscriptionId.test(row.subscription_id)
     || await subscriptionOwner(env, row.subscription_id) !== userId) return { ok: false, status: 404, error: 'alert_not_found' };
+  if (action === 'update-card' && (typeof nonce !== 'string' || !/^[A-Za-z0-9_-]{8,64}$/.test(nonce))) return { ok: false, status: 400, error: 'invalid_nonce' };
   const user = await env.DB.prepare('SELECT stripe_customer_id, investor_stripe_customer_id, investor_stripe_subscription_id FROM users WHERE id = ?')
     .bind(userId).first<{ stripe_customer_id: string | null; investor_stripe_customer_id: string | null; investor_stripe_subscription_id: string | null }>();
   const { stripeCall } = await import('../routes/billing');
@@ -39,7 +40,7 @@ export async function prepareRenewal(env: Env, userId: number, alertId: number, 
   }
   const setup = await stripeCall<{ client_secret?: string }>(env, '/setup_intents', {
     customer, usage: 'off_session', 'payment_method_types[0]': 'card',
-  });
+  }, { idempotencyKey: `renewal_card:${userId}:${alertId}:${nonce}` });
   if (!setup.client_secret) throw new Error('renewal_setup_unavailable');
   return { ok: true, kind: 'setup', client_secret: setup.client_secret, scope };
 }

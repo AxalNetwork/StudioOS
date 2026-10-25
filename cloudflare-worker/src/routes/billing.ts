@@ -447,7 +447,8 @@ const renewalAction = (action: 'pay' | 'update-card') => async (c: Context<{ Bin
   if (!c.env.STRIPE_SECRET_KEY) return c.json({ error: 'stripe_not_configured' }, 503);
   try {
     const { prepareRenewal } = await import('../services/billingRecovery');
-    const r = await prepareRenewal(c.env, Number(user.id), Number(c.req.param('id')), action);
+    const body = await c.req.json<{ nonce?: unknown }>().catch(() => null);
+    const r = await prepareRenewal(c.env, Number(user.id), Number(c.req.param('id')), action, body?.nonce);
     if (!r.ok) return c.json({ error: r.error }, r.status);
     return c.json({ kind: r.kind, client_secret: r.client_secret, scope: r.scope });
   } catch {

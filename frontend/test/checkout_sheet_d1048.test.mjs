@@ -170,9 +170,9 @@ test('D1133 Pricing passes the Advisor and Partner plan read to the open sheet, 
 
 test('D1133 renewal clients prepare the mounted alert actions with explicit POSTs', async () => {
   const restore = installDocument(); const original = globalThis.fetch; const calls = [];
-  globalThis.fetch = async (url, init) => { calls.push([String(url), init.method]); return new Response('{}', { status: 200 }); };
+  globalThis.fetch = async (url, init) => { calls.push([String(url), init.method, init.body]); return new Response('{}', { status: 200 }); };
   try {
-    await billingAlertsApi.pay(17); await billingAlertsApi.updateCard(17);
-    assert.deepEqual(calls, [['/api/billing/alerts/17/pay', 'POST'], ['/api/billing/alerts/17/update-card', 'POST']]);
+    await billingAlertsApi.pay(17); await billingAlertsApi.updateCard(17, 'fixture_nonce_1');
+    assert.deepEqual(calls, [['/api/billing/alerts/17/pay', 'POST', undefined], ['/api/billing/alerts/17/update-card', 'POST', JSON.stringify({ nonce: 'fixture_nonce_1' })]]);
   } finally { globalThis.fetch = original; restore(); }
 });
