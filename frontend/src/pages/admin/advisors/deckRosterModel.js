@@ -141,9 +141,12 @@ export const EMPTY_CARD = {
   name: '', kind: 'advisor', role: '', company: '', bio: '', linkedin_url: '', skills: [], is_active: true, linked_user: null,
 };
 
-/** The editor's form for a row, or a new one. */
+/**
+ * The editor's form for a row, or a new one. A new card may start from a
+ * `draft` (D978: People's "Add to deck roster" fills it from the person).
+ */
 export function cardOf(row) {
-  if (!row?.id) return { ...EMPTY_CARD, skills: [] };
+  if (!row?.id) return { ...EMPTY_CARD, ...(row?.draft || {}), skills: [...(row?.draft?.skills || [])] };
   return {
     name: row.name || '', kind: kindOf(row.kind || 'advisor'), role: row.role || '', company: row.company || '',
     bio: row.bio || '', linkedin_url: row.linkedin_url || '', skills: Array.isArray(row.skills) ? [...row.skills] : [],

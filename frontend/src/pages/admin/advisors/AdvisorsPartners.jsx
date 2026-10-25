@@ -7,6 +7,7 @@ import { AdminPageHeader, HeaderTab, useMovedNotice } from '../../../ui';
 import AdminBoardFrame from '../AdminBoardFrame';
 import AdminNetworkProfiles from '../AdminNetworkProfiles';
 import FirmLinks from './FirmLinks';
+import People from './People';
 import {
   AP_TITLE, COMMUNITY_PATH, MOVED_NOTICES, NOT_YET, PAGE_LINE, RAIL_NOTE, TABS, WAITS,
   buildFirms, buildNeeds, buildTiles, pageFailed, tabOf,
@@ -21,7 +22,7 @@ import {
  *
  * THE INTEGRATION, NOT THE WHOLE CANVAS (D972 §3). The header, the tabs whose
  * reads exist, and the Overview and Firms blocks drawn from them, each
- * truthfully. People waits for its read. The Deck roster is today's roster,
+ * truthfully. People (D978) is its own read, in `People.jsx`. The Deck roster is today's roster,
  * embedded. Nothing is decided here that is decided elsewhere: attaching a
  * firm, a deal and a host decision each open the page that decides.
  */
@@ -40,6 +41,7 @@ const idle = { status: 'loading', data: null };
 const READS = {
   overview: ['advisors', 'assignments', 'links', 'directory', 'deals', 'hosts', 'roster'],
   firms: ['links', 'directory', 'deals'],
+  people: [],
   deck: [],
 };
 
@@ -163,7 +165,6 @@ function Overview({ reads, reload }) {
         <WaitCard id="c3" title="Skills: who can help, and what founders ask for" reason={WAITS.c3} />
         <WaitCard id="c4" title="Active partner deals by type" reason={WAITS.c4} />
       </div>
-      <p className={SUB}>{WAITS.people}</p>
     </div>
   );
 }
@@ -247,11 +248,12 @@ function AdvisorsPartnersPage() {
   const tabs = (
     <>
       <HeaderTab to="/admin/advisors-partners" data-testid="ap-tab-overview">Overview</HeaderTab>
+      <HeaderTab to="/admin/advisors-partners/people" data-testid="ap-tab-people">People</HeaderTab>
       <HeaderTab to="/admin/advisors-partners/firms" data-testid="ap-tab-firms">Firms</HeaderTab>
       <HeaderTab to="/admin/advisors-partners/deck" data-testid="ap-tab-deck">Deck roster</HeaderTab>
     </>
   );
-  const actions = tab === 'deck' ? null : (
+  const actions = tab === 'deck' || tab === 'people' ? null : (
     <>
       <span className="font-mono text-[11.5px] text-axal-muted dark:text-gray-400" data-testid="ap-asof">
         {asOf ? `Updated ${new Date(asOf).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit', hourCycle: 'h23' })}` : 'Reading…'}
@@ -273,6 +275,7 @@ function AdvisorsPartnersPage() {
         data-testid="ap-header"
       />
       {tab === 'overview' && <Overview reads={reads} reload={reload} />}
+      {tab === 'people' && <People />}
       {tab === 'firms' && <FirmsTab reads={reads} reload={reload} />}
       {tab === 'deck' && <AdminNetworkProfiles embedded />}
     </div>

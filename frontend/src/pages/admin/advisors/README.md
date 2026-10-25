@@ -3,8 +3,8 @@
 D972 (#2369): Advisors & Partners at `/admin/advisors-partners`, built to the
 owner's canvas (AP1–AP14, `design/incoming/Advisors Partners Page.dc.html`)
 under the shared admin page header (D936, `../../../ui/AdminPageHeader.jsx`).
-Its tabs are sub-paths: Overview, `/firms` and `/deck`. People waits for its
-read (D972 part 1).
+Its tabs are sub-paths: Overview, `/people` (D978), `/firms` and `/deck`. One
+person opens over People at `/people/:ref`.
 
 Two old doors forward to the Deck roster tab, keeping the query and hash and
 adding `?moved=network-profiles` ("Mentor & partner network is now Advisors &
@@ -19,6 +19,15 @@ Firm links, D923) forwards to the Firms tab with `?moved=firm-links`, in
 - `AdvisorsPartners.jsx` — the page inside `AdminBoardFrame` (its rail): the
   header, Overview's tiles, Needs you and the charts waiting, the Firms table,
   and the Deck roster, `../AdminNetworkProfiles.jsx` embedded.
+- `People.jsx` — the People tab (D978, AP3): D973's people read as a table
+  (cards on a phone), its search, filters, sort and page in the address, the
+  bulk add to the deck roster and the CSV export. Mounts the drawer for
+  `/people/:ref`.
+- `PersonDrawer.jsx` — one person (D978, AP4): D973's person, D976's
+  standing and the roster's account link, each its own block; Pause in
+  network and the advisor directory switch, each behind an in-page dialog.
+- `peopleModel.js` — pure (D978). People's cells, words, address state, CSV,
+  deck drafts and the drawer's controls and dialog copy.
 - `apModel.js` — pure. The address and tabs, the moved sentence, and the
   tiles, Needs you and the firms table from the reads, each `ready`,
   `loading`, `unreadable` or `notyet`.

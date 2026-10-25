@@ -43,9 +43,10 @@ export const MOVED_NOTICES = {
   'firm-links': 'Firm links moved here: attach a partner account to its firm under Firms.',
 };
 
-/** The tabs this integration draws (D972 §1). People waits for its read. */
+/** The tabs this integration draws (D972 §1). People (D978) reads D973's people read. */
 export const TABS = [
   { key: 'overview', label: 'Overview', path: '' },
+  { key: 'people', label: 'People', path: '/people' },
   { key: 'firms', label: 'Firms', path: '/firms' },
   { key: 'deck', label: 'Deck roster', path: '/deck' },
 ];
@@ -54,7 +55,9 @@ export function tabOf(pathname) {
   const p = String(pathname || '').replace(/\/+$/, '');
   if (p === AP_PATH) return 'overview';
   const t = TABS.find((x) => x.path && p === `${AP_PATH}${x.path}`);
-  return t ? t.key : null;
+  if (t) return t.key;
+  // D978: one person opens over People at /people/:ref.
+  return /^\/admin\/advisors-partners\/people\/[^/]+$/.test(p) ? 'people' : null;
 }
 
 export function movedTarget(pathname, search, hash, key) {
@@ -71,7 +74,6 @@ export const WAITS = {
   c2: 'Sessions per week waits for the network overview read (D972 part 1).',
   c3: 'Skills against founder demand waits for a demand store; nothing records what founders ask for yet (D972 part 1).',
   c4: 'Active deals by type waits for the network overview read (D972 part 1).',
-  people: 'People, one table of every advisor, operating partner and deck-only name, waits for the people read (D972 part 1).',
 };
 
 const nf = (n) => Number(n).toLocaleString('en-US');

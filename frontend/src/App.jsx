@@ -2955,6 +2955,8 @@ function AppInner() {
           sub-paths (D936's header). /admin/network-profiles and the Admin
           Console's ?tab=network-profiles forward to the Deck roster tab. */}
       <Route path="/admin/advisors-partners" element={guard(['admin'], <AdvisorsPartners />)} />
+      <Route path="/admin/advisors-partners/people" element={guard(['admin'], <AdvisorsPartners />)} />
+      <Route path="/admin/advisors-partners/people/:ref" element={guard(['admin'], <AdvisorsPartners />)} />
       <Route path="/admin/advisors-partners/firms" element={guard(['admin'], <AdvisorsPartners />)} />
       <Route path="/admin/advisors-partners/deck" element={guard(['admin'], <AdvisorsPartners />)} />
       {/* D989 (#2380): Partner profiles, its two tabs as sub-paths; /admin?tab=profiles forwards here (LegacyContractsRedirect). */}
