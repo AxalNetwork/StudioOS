@@ -73,6 +73,7 @@ test('Hosting: the counts in the canvas\'s words, a missing read never a zero, f
   assert.equal(hostCounts({ capacity: null, counts: { seats_taken: 14, pending_approvals: 2 } }).line, 'No cap · 14 taken');
   assert.equal(hostCounts({ capacity: 60, counts: { seats_taken: 0 } }).line, '0 of 60 taken', 'the read\'s 0 is a count');
   assert.equal(hostCounts({ capacity: 60 }), null, 'no counts sent: not read, never 0');
+  assert.equal(hostCounts({ capacity: 60, counts: { waitlisted: 2 } }), null, 'counts with no seats figure: not read, never 0 taken');
   const ev = (id, days, o = {}) => ({ id, title: `Event ${id}`, starts_at: iso(NOW + days * DAY), status: 'published', visibility: 'public', ...o });
   const hosting = [ev(1, 5), ev(2, -5), ev(3, 9, { status: 'draft', visibility: 'private' }), ev(4, -20, { status: 'draft' }), ev(5, 2, { status: 'cancelled' })];
   const ids = (v) => v.groups.flatMap((g) => g.rows.map((e) => e.id));
@@ -188,7 +189,8 @@ const PAST = { places: [
   { id: 22, registration_id: 23, title: 'Founders’ Circle', starts_at: soon(-25), timezone: 'UTC', outcome: 'declined' },
   { id: 24, registration_id: 25, title: 'SAFE basics', starts_at: soon(-30), timezone: 'UTC', outcome: 'cancelled' },
 ], total: 3 };
-const INVITATION = { invitation_id: 70, comp: true, host_name: 'Ada Host', event: { id: 70, slug: 'lp-briefing', title: 'LP Briefing', starts_at: soon(5), timezone: 'UTC', price_cents: 0 } };
+// The invitation's own id differs from its event's, so answering by the wrong one is caught.
+const INVITATION = { invitation_id: 77, comp: true, host_name: 'Ada Host', event: { id: 70, slug: 'lp-briefing', title: 'LP Briefing', starts_at: soon(5), timezone: 'UTC', price_cents: 0 } };
 
 function prepare(o = {}) {
   const calls = { list: [], public: [], answers: [], register: [], feed: [], links: [], elig: [] };
