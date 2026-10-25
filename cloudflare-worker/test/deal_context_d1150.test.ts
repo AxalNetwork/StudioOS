@@ -170,3 +170,13 @@ test('a slow older visit cannot replace the newer visit snapshot',async()=>{
     assert.deepEqual((await call(1,'whats-new')).body.changes,[]);
   }finally{db.close();}
 });
+
+for (const method of ['PUT','DELETE']) test(`a raced ${method} does not audit a successful note change`,async()=>{
+  const {db,call,DB}=world();try{
+    const added=await call(1,'notes','POST',{body:'PRIVATE'});assert.equal(added.status,201);
+    const batch=DB.batch;
+    DB.batch=async (stmts:any[])=>{db.exec('DELETE FROM deal_notes');return batch(stmts);};
+    assert.equal((await call(1,`notes/${added.body.uid}`,method,method==='PUT'?{body:'EDIT'}:undefined)).status,404);
+    const logs=db.prepare('SELECT action FROM activity_logs').all() as any[];assert.deepEqual(logs.map(r=>r.action),['deal_note_added']);
+  }finally{db.close();}
+});

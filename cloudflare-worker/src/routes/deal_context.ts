@@ -146,7 +146,7 @@ function noteInput(b: any) {
     ? { body: b.body.trim(), tag: (b.tag ?? '').trim() } : null;
 }
 function audit(db: D1Database, x: any, action: string, uid: string) {
-  return db.prepare(`INSERT INTO activity_logs (action, details, user_id, entity_type, entity_id) VALUES (?,?,?,'deal',?)`)
+  return db.prepare(`INSERT INTO activity_logs (action, details, user_id, entity_type, entity_id) SELECT ?,?,?,'deal',? WHERE changes() > 0`)
     .bind(action, JSON.stringify({ note_uid: uid, company_id: x.company }),x.user.id,String(x.id));
 }
 r.post('/:id/notes', async c => {
@@ -176,7 +176,8 @@ function changeNote(method: 'put' | 'delete') {
       const stmt = method === 'put'
         ? c.env.DB.prepare("UPDATE deal_notes SET body = ?, tag = ?, updated_at = strftime('%Y-%m-%dT%H:%M:%fZ','now') WHERE uid = ? AND deal_id = ? AND company_id IS ? AND author_user_id = ?").bind(b!.body,b!.tag,uid,x.id,x.company,x.user.id)
         : c.env.DB.prepare('DELETE FROM deal_notes WHERE uid = ? AND deal_id = ? AND company_id IS ? AND author_user_id = ?').bind(uid,x.id,x.company,x.user.id);
-      await c.env.DB.batch([stmt,audit(c.env.DB,x,method === 'put' ? 'deal_note_edited':'deal_note_deleted',uid)]);
+      const changed = await c.env.DB.batch([stmt,audit(c.env.DB,x,method === 'put' ? 'deal_note_edited':'deal_note_deleted',uid)]);
+      if (Number(changed[0].meta.changes) === 0) return c.json({error:'note_not_found'},404);
       return c.json({ok:true});
     } catch { return c.json({error:'note_write_failed',message:'The note could not be changed. Try again.'},503); }
   };
