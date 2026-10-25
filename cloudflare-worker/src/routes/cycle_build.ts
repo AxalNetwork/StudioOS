@@ -1,5 +1,6 @@
 /** D662 — Build overview and six module reads, from the founder's project. */
 import { Hono } from 'hono';
+import { readCapTable } from '../services/capTableToday';
 import type { Env } from '../types';
 import { requireAuth } from '../auth';
 import { CONNECTOR_METADATA, getDescriptor } from '../integrations/registry';
@@ -411,18 +412,24 @@ async function roadmapGithub(env: Env, p: Project) {
 }
 
 /**
- * The option pool is not a founder (#1693 decision 14): it is the base
- * scenario's `inputs_json.option_pool_pct`, the newest scenario that is not a
- * variant, as Raise's cap table reads it. Null with no such row or no value.
+ * The option pool is not a founder (#1693 decision 14). D1018 (#2855): read
+ * through the one cap table reader. On record, it is the pool's share of the
+ * fully diluted count: options granted and unallocated. Otherwise it is the
+ * saved model's `inputs_json.option_pool_pct` (the newest scenario that is not
+ * a variant), marked Modelled. Null with neither, or no value.
  */
-async function optionPool(env: Env, p: Project): Promise<number | null> {
-  const base = await env.DB.prepare(
-    'SELECT inputs_json FROM cap_table_scenarios WHERE project_id = ? AND COALESCE(is_variant, 0) = 0 ORDER BY updated_at DESC LIMIT 1',
-  ).bind(p.id).first<{ inputs_json: string | null }>();
-  let inputs: any = null;
-  try { inputs = base?.inputs_json ? JSON.parse(base.inputs_json) : null; } catch { inputs = null; }
-  const pool = inputs?.option_pool_pct;
-  return pool == null || pool === '' || !Number.isFinite(Number(pool)) ? null : Number(pool);
+async function optionPool(env: Env, p: Project): Promise<{ pct: number | null; source: 'record' | 'model' | null }> {
+  const cap = await readCapTable(env, p.id);
+  if (cap.source === 'record') {
+    const total = cap.today.totals.shares_outstanding;
+    const pool = (cap.start.start.pool_shares ?? 0) + cap.start.start.holders.filter(h => h.type === 'options').reduce((n, h) => n + h.shares, 0);
+    // No pool class and no grant on record: no pool is recorded, which is not a pool of 0.
+    if (cap.start.start.pool_shares == null && pool === 0) return { pct: null, source: 'record' };
+    return { pct: total > 0 ? Math.round(10000 * pool / total) / 100 : null, source: 'record' };
+  }
+  if (cap.source === 'none') return { pct: null, source: null };
+  const pool = (cap.model.inputs as any)?.option_pool_pct;
+  return pool == null || pool === '' || !Number.isFinite(Number(pool)) ? { pct: null, source: null } : { pct: Number(pool), source: 'model' };
 }
 
 async function founding(env: Env, p: Project, viewer: Viewer): Promise<ModuleRead> {
@@ -460,7 +467,7 @@ async function founding(env: Env, p: Project, viewer: Viewer): Promise<ModuleRea
     cols: [['founder', 'Founder'], ['role', 'Role'], ['equity', 'Equity'], ['vesting', 'Vesting'], ['agreement', 'Agreement']].map(([key, label]) => ({ key, label })),
     rows: holderRows,
     list: { filters: [{ key: 'role', label: 'Role', options: optionsOf(holderRows, 'role') }], sort: { key: '-equity', label: 'Equity' } },
-    facts: { cofounder_decision: p.cofounder_decision_meta ? JSON.parse(p.cofounder_decision_meta) : null, option_pool_pct: await optionPool(env, p),
+    facts: { cofounder_decision: p.cofounder_decision_meta ? JSON.parse(p.cofounder_decision_meta) : null, ...(await optionPool(env, p).then(o => ({ option_pool_pct: o.pct, option_pool_source: o.source }))),
       agreement_reason: 'The latest document status for a founder is recorded; individual signing status is not.' },
     parts: { github: await fromGithub('founding_team', async () => foundingTeamFromCode(env, p.id, await projectMember(env, p, viewer),
       founderRows.map(h => ({ id: Number(h.id), name: h.name ?? null })))) } };
@@ -1295,7 +1302,7 @@ function vestingOf(body: Record<string, unknown>): { start_date: string; total_m
 export async function unallocated(env: Env, p: Project, exceptHolder: number | null): Promise<number> {
   const held = await env.DB.prepare('SELECT COALESCE(SUM(ownership_pct), 0) AS n FROM cap_table_holders WHERE project_id = ? AND id IS NOT ?')
     .bind(p.id, exceptHolder).first<{ n: number }>();
-  return Math.round((100 - Number(held?.n ?? 0) - (await optionPool(env, p) ?? 0)) * 100) / 100;
+  return Math.round((100 - Number(held?.n ?? 0) - ((await optionPool(env, p)).pct ?? 0)) * 100) / 100;
 }
 async function equityChecked(c: any, p: Project, pct: unknown, exceptHolder: number | null): Promise<number | null | undefined | Response> {
   if (pct === undefined) return undefined;

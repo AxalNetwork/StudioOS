@@ -22,6 +22,7 @@ import { isSuperAdmin, requireAdmin, requireBranchNotSuspended } from '../auth';
 import { mapError } from './_t13t14t15_helpers';
 import { refuse } from '../util/refusal';
 import { sourcesFor } from '../services/approvalSources';
+import { inboxSources } from '../services/hqApprovalSources';
 import {
   INBOX_LANE_CAP, assignFromBody, assignmentHistory, hqInbox, readHistoryQuery,
 } from '../services/approvalAssignments';
@@ -30,7 +31,8 @@ const r = new Hono<{ Bindings: Env }>();
 
 async function reader(c: Context<{ Bindings: Env }>) {
   const admin = await requireAdmin(c);
-  return { admin, sources: sourcesFor(isSuperAdmin(admin as any)) };
+  // D1041: HQ's own lanes ride the list; `sourcesFor` keeps them a Super Admin's.
+  return { admin, sources: sourcesFor(isSuperAdmin(admin as any), inboxSources()) };
 }
 
 r.get('/', async (c) => {

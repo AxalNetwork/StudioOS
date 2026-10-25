@@ -114,7 +114,8 @@ test('1. A1m: a founder\'s index draws the Settings rows in order, the plan by D
     ['/account/profile', 'Profile and identity Personal details, identity, company profile ›'],
     ['/account/notifications', 'Notifications Each type, in-app, email and push ›'],
     ['/account/security-privacy', 'Sign-in and security Password, authenticator app, SMS ›'],
-    ['/account/billing', 'Billing and orders Validate + Build · $20 / month ›'],
+    // D1050: the row names the plan; its price is the Billing pane's, read from the plans read.
+    ['/account/billing', 'Billing and orders Validate + Build ›'],
     ['/account/following', 'Following 3 people and companies ›'],
     ['/account/onboarding', 'Onboarding ›'],
     ['/account/appearance', 'Appearance ›'],
@@ -150,7 +151,7 @@ test('2. the Following and plan lines hold no number while their read loads or f
   }
   assert.equal(PLAN_FALLBACK, 'Your plan, orders and invoices');
   assert.equal(planLine('founder', ready({ ...GROWTH, tier: 'free' })), 'Free');
-  assert.equal(planLine('founder', ready({ ...GROWTH, tier: 'studio' })), 'Raise + Grow · $100 / month');
+  assert.equal(planLine('founder', ready({ ...GROWTH, tier: 'studio' })), 'Raise + Grow', 'D1050: the name, no typed price');
   assert.equal(planLine('admin', ready({ plan_group: null, status: 'free', has_customer: false })), NO_PLAN);
   assert.equal(NO_PLAN, 'No subscription plan applies');
   assert.equal(planLine('investor', ready({ tier: 'professional', raw_tier: 'professional', status: 'active', has_customer: true, quotas: {} })), 'Investor · Professional');
@@ -693,7 +694,7 @@ test('8. Trust lists only what /trust/me returns: no 83(b) row, and the pill is 
   assert.doesNotMatch(text(markup), /\bPartial\b/);
   // A failed matrix is Unreadable, never an empty list.
   const failed = text(html(h(TrustPhoneView, { status: 'unreadable' })));
-  assert.match(failed, /Your obligations could not be read\./);
+  assert.match(failed, /Unreadable.*Your requirements could not be read\./);
   assert.doesNotMatch(failed, /No obligations outstanding/);
   assert.match(read('frontend/src/pages/TrustCenterPage.jsx'), /setMatrix\(\{ obligations: \[\], role, failed: true \}\)/);
 });

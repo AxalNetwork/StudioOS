@@ -1,3 +1,11 @@
+// D999 (#2814) — Persona segments part 2: the segment counts behind
+// /admin/persona-segments. Worker: routes/personas.ts (`GET /admin/segments`),
+// built in services/personaSegments.ts.
+//
+// `personaSegmentsApi.read()` → counts only, over every account but admins
+// (deactivated ones counted apart). Each block is `{ available: true, … }` or
+// `{ available: false, unreadable: true, reason }`: members, segments,
+// sub_accounts, by_profile, how_set, confidence, weekly and moves_30d.
 import { request } from '../api.js';
 
 // D1000 (#2815) — Persona segments part 3: the segment profiles HQ writes
@@ -14,6 +22,7 @@ import { request } from '../api.js';
 //   decideSegmentSuggestion(uid, b) POST /personas/segments/suggestions/:uid/decide { decision, reason? } → { suggestion, edit, notice }
 // `edit` (on accept) is what part 3's edit opens on: { segment_key, expected_version, field, text }.
 export const personaSegmentsApi = {
+  read: () => request('/personas/admin/segments'),
   segmentProfiles: () => request('/personas/segments'),
   segmentCoverage: () => request('/personas/segments/coverage'),
   segmentProfile: (key) => request(`/personas/segments/${encodeURIComponent(key)}`),

@@ -139,7 +139,7 @@ export const ADMIN_ACTIONS = [
   {
     key: 'kyc_decide',
     name: 'KYC decide',
-    gate: 'Approve or reject on the Admin Console’s KYC queue, or approve through Grant Access. Approvals shows the outcome and offers no decision.',
+    gate: 'Approve or reject on KYC & KYB, under Approvals, or approve through Grant Access. Approvals shows the outcome and offers no decision.',
     link: 'kyc',
     recorded: 'Yes — both approvals and rejections.',
   },
@@ -231,8 +231,8 @@ export default function HqTeamActions({ viewAs = null }) {
         </ul>
         <p className="mt-3 text-[11px] leading-relaxed text-axal-faint" data-testid="hq-team-actions-admin-note">
           {viewAs
-            ? `These are ${viewAs}'s own, on its Admin Console. From here they are not drawn as row actions: HQ is reading ${viewAs}'s answer. Each account it returns shows its KYC, access and Lab state, read-only — deciding them is ${viewAs}'s, and while its licence is suspended it can only revoke limited access.`
-            : 'Every admin has these four, HQ included — on the Admin Console’s Users table and on the directory below. On a branch they are the branch admin’s, on its own Admin Console.'}
+            ? `These are ${viewAs}'s own, on its own admin pages. From here they are not drawn as row actions: HQ is reading ${viewAs}'s answer. Each account it returns shows its KYC, access and Lab state, read-only — deciding them is ${viewAs}'s, and while its licence is suspended it can only revoke limited access.`
+            : 'Every admin has these four, HQ included — on All accounts, under Accounts, and on the directory below. On a branch they are the branch admin’s, on its own admin pages.'}
         </p>
       </Card>
     </div>

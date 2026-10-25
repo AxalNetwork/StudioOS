@@ -109,7 +109,7 @@ test('the worker serves the names the label reads, on both caller branches', () 
 // ---------------------------------------------------------------------------
 
 test('the company card has a failed state and draws Unreadable with a retry', () => {
-  const card = slice(CODE, 'function CompanyKybCard()', 'function SanctionsTab()');
+  const card = slice(CODE, 'function CompanyKybCard()', 'function TrustAdminTools()');
   assert.match(card, /phase: 'failed'/, 'a third state, distinct from empty');
   assert.match(card, /\.catch\(\(e\) => \{[^}]*phase: 'failed'/, 'the catch sets it, instead of pretending the list loaded');
   assert.match(card, /data-testid="company-kyb-unreadable"/);
@@ -135,7 +135,7 @@ test('the worker refuses the read with a code the page could branch on', () => {
 
 test('the Role agreements rows carry Open to sign, fed by /nda/required', () => {
   assert.match(CODE, /<AgreementsTab[^>]*requiredNdas=\{requiredNdas\}/);
-  assert.match(CODE, /function ObligationList\(\{ obligations, emptyText, onStart, rowAction = null \}\)/);
+  assert.match(CODE, /function ObligationList\(\{ obligations, emptyText, rowAction = null \}\)/);
   assert.match(CODE, /\{rowAction \? rowAction\(o\) : null\}/);
   const tab = slice(CODE, 'function AgreementsTab(', 'function CompanyKybCard()');
   assert.match(tab, /const ndaByKey = new Map\(\(requiredNdas \|\| \[\]\)\.map\(\(it\) => \[it\.obligation_key, it\]\)\);/);
