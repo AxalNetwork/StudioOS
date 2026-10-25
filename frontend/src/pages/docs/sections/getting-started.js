@@ -60,11 +60,11 @@ export default {
         'Investor — limited partner or co-investor; sees the Investor Portal, Pipeline, and Portfolio Health.',
         'Partner — service provider; lists services in the Marketplace, responds to Needs Board RFPs, runs Office Hours.',
         'Advisor — domain expert; books office-hour slots, takes mentee engagements, writes reflections.',
-        'Admin — studio operator; sees everything plus the Admin Console and a “View as” role switcher.',
+        'Admin — studio operator; sees everything plus the admin pages and a “View as” role switcher.',
       ],
       tips: [
         'A role change requires admin approval today — open a support ticket if you need one.',
-        'Admins can impersonate any user from the Admin Console for support and debugging.',
+        'Admins can impersonate any user from All accounts, under Accounts, for support and debugging.',
       ],
       pitfalls: [
         'Multi-role accounts default to a single primary role; switching roles can hide data you expect to see.',

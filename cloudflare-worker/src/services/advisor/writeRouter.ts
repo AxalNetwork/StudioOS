@@ -23,6 +23,7 @@ import { ensureTaxonomyVersionColumns, getTaxonomyVersion } from '../taxonomyVer
 import { parseArchetypeSex } from '../archetypePresentation.ts';
 import { normalizeFitAnswer } from './banks/fitShared.ts';
 import { upsertUserSettings } from '../userSettings.ts';
+import { recordCapture } from '../partnerProfileReview';
 
 export type WriteStatus = 'saved' | 'skipped' | 'paywalled' | 'failed' | 'noop' | 'needs_evidence' | 'invalid';
 
@@ -1409,6 +1410,8 @@ export async function routeAnswer(
       await env.DB.prepare(
         `UPDATE partner_profiles SET ${pcol} = ?, updated_at = CURRENT_TIMESTAMP WHERE LOWER(email) = LOWER(?)`,
       ).bind(value, profile.email).run();
+      // D991 — the capture joins the profile's history, by source.
+      await recordCapture(env, profile.email, 'eadwyn');
       return {
         status: 'saved',
         saved_to: { table: 'partner_profiles', column: pcol, id: profile.email, page_url: '/studio' },
