@@ -399,7 +399,7 @@ export function PlanBoard({ projectId, scope = 'venture', search = '', readOnly 
     const toSend = sendable(plan);
     const tools = !readOnly && plan?.plan && v.kind !== 'stop' ? (
       <span className="flex flex-wrap gap-1.5" data-testid="plan-tools">
-        {!paused ? <button type="button" className={BTN_P} onClick={() => setDialog({ kind: 'send', items: toSend })} data-testid="plan-send-open">Send to…{toSend.length ? ` · ${toSend.length}` : ''}</button> : null}
+        {!paused ? <button type="button" className={BTN_P} onClick={() => setDialog({ kind: 'send', items: toSend })} data-testid="plan-send-door">Send to…{toSend.length ? ` · ${toSend.length}` : ''}</button> : null}
         {!paused ? <button type="button" className={BTN} onClick={() => setDialog({ kind: 'update' })} data-testid="plan-update">Update the plan</button> : null}
         {!paused ? <button type="button" className={BTN} onClick={() => setDialog({ kind: 'pause' })} data-testid="plan-pause">Pause the plan</button> : null}
       </span>
