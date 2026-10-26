@@ -272,6 +272,14 @@ accepted co-founders work the pipeline; the local D1 binding is the studio
 boundary. Staff summary SQL reads counts only. A private support response first
 persists the reason on the founder's activity, failing closed, and grants no
 later GET or write access. The same rule gates the capital record sections.
+The wider Raise overview preserves the other tools' cards; `raiseCycle.ts`'s
+`nonCapitalFigures` omits pipeline figures without reading them. Legacy create
+and import batch their prospect insert with the actor audit; an interrupted
+import reports saved and unsaved row counts through its existing response.
+`raiseProspectWriters.ts` is the narrow canonical leaf for legacy prospect
+create/edit/promotion, re-exported by `raiseWriters.ts`. Contacts imports the
+leaf directly so admin/cron consumers of Contacts do not acquire the broader
+Raise dependency graph or any member-bank module. No permission guard is relaxed.
 `raiseWriters.ts` has one writer per migration 442 record and, since D691
 (#1700), one behind each Raise Add and Edit form (migration 463's stores)
 and one per record action: `duplicateNarrativeVersion`, `revokeDeckLink`,

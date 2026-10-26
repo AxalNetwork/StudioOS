@@ -91,7 +91,7 @@ export async function capitalStudioSummary(env: Env, projectId: number | null, p
 }
 
 /** Fail closed, before private SQL. This row is visible in the founder's /activity. */
-export async function recordCapitalSupport(env: Env, user: User, project: ProjectRef, rawReason: unknown): Promise<number> {
+export async function recordCapitalSupport(env: Env, user: User, project: ProjectRef, rawReason: unknown, target: { page: number; prospect_id: number | null }): Promise<number> {
   if (!capitalStaff(user)) throw new CapitalAccessError(403, 'admin_required', 'Admin role required');
   const reason = typeof rawReason === 'string' ? rawReason.trim() : '';
   if (!reason || reason.length > 500) throw new CapitalAccessError(400, 'support_reason_required', 'Give a support reason between 1 and 500 characters. The founder will see it.');
@@ -103,13 +103,13 @@ export async function recordCapitalSupport(env: Env, user: User, project: Projec
     const ownerId = Number(owners.results[0].id);
     const row = await env.DB.prepare(
       "INSERT INTO activity_logs (project_id, user_id, entity_type, entity_id, action, details, actor) VALUES (?, ?, 'raise.capital-relationships', NULL, ?, ?, ?)",
-    ).bind(project.id, ownerId, CAPITAL_SUPPORT_ACTION, JSON.stringify({ admin_user_id: user.id, reason, read_only: true }), `user:${user.id}`).run();
+    ).bind(project.id, ownerId, CAPITAL_SUPPORT_ACTION, JSON.stringify({ admin_user_id: user.id, reason, read_only: true, ...target }), `user:${user.id}`).run();
     if (row.success !== true || row.meta.changes !== 1) throw new Error('Unavailable');
     // Secondary staff governance copy is best-effort. The founder row above
     // is mandatory; never log a database exception containing bound details.
     try {
       await env.DB.prepare('INSERT INTO admin_audit_log (admin_user_id, action, viewed_user_id, filters_json) VALUES (?, ?, ?, ?)')
-        .bind(user.id, CAPITAL_SUPPORT_ACTION, ownerId, JSON.stringify({ project_id: project.id, reason, read_only: true })).run();
+        .bind(user.id, CAPITAL_SUPPORT_ACTION, ownerId, JSON.stringify({ project_id: project.id, reason, read_only: true, ...target })).run();
     } catch { /* The mandatory founder audit is already persisted. */ }
     return Number(row.meta.last_row_id);
   } catch (error) {
@@ -135,8 +135,12 @@ export async function capitalSupportHistory(env: Env, projectId: number, page: n
   ).bind(projectId, CAPITAL_SUPPORT_ACTION, 26, (page - 1) * 25).all<{ id: number; details: string; created_at: string; reader_name: string | null }>();
   if (failed(rows) || !Array.isArray(rows.results)) throw new CapitalAccessError(503, 'support_history_unreadable', 'Support reads could not be read. Try again.');
   return { page, page_size: 25, has_more: rows.results.length > 25, reads: rows.results.slice(0, 25).map(row => {
-    let reason: string | null = null;
-    try { const details = JSON.parse(row.details); reason = typeof details.reason === 'string' ? details.reason : null; } catch { /* Historical invalid detail stays unrecorded. */ }
-    return { id: row.id, reader: { name: row.reader_name }, reason, created_at: row.created_at, read_only: true };
+    let reason: string | null = null; let page: number | null = null; let prospectId: number | null = null;
+    try {
+      const details = JSON.parse(row.details); reason = typeof details.reason === 'string' ? details.reason : null;
+      page = Number.isSafeInteger(details.page) && details.page > 0 ? details.page : null;
+      prospectId = Number.isSafeInteger(details.prospect_id) && details.prospect_id > 0 ? details.prospect_id : null;
+    } catch { /* Historical invalid detail stays unrecorded. */ }
+    return { id: row.id, reader: { name: row.reader_name }, reason, page, prospect_id: prospectId, created_at: row.created_at, read_only: true };
   }) };
 }

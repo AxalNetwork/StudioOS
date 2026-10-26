@@ -50,7 +50,7 @@ function fixture() {
       (3,'contact-linked',101,'Fixture Linked Investor','linked@example.test','customer','new',NULL,NULL);
     UPDATE raise_prospects SET contact_id=3 WHERE id=1;`);
   const trace: Array<{ sql: string; args: any[] }> = [];
-  let poison = ''; let auditFailure = ''; let requireAudit = false; let losePromotion = false;
+  let poison = ''; let auditFailure = ''; let requireAudit = false; let losePromotion = false; let legacyAuditFailure = 0;
   const privateRead = (sql: string) => /^\s*SELECT\s+\*/i.test(sql) && /FROM raise_(?:prospects|rounds)/i.test(sql);
   function before(sql: string, args: any[]) {
     trace.push({ sql, args });
@@ -66,6 +66,7 @@ function fixture() {
         async all() { before(sql,args); return { success: true, results: db.prepare(sql).all(...args) }; },
         async run() {
           before(sql,args);
+          if (legacyAuditFailure > 0 && sql.includes("'prospect_created'") && sql.includes('INSERT INTO activity_logs') && --legacyAuditFailure === 0) throw new Error('Synthetic private legacy audit error');
           if (losePromotion && sql.includes("UPDATE contacts SET promoted_to='raise'") && args[3]===4) {
             losePromotion=false;
             db.prepare("INSERT INTO raise_prospects (id,uid,project_id,contact_id,name,stage) VALUES (1001,'fixture-winner',101,4,'Fixture winner','to_contact')").run();
@@ -97,7 +98,7 @@ function fixture() {
     const response = await app.request('https://axal.vc'+path,{method,headers,...(body===undefined?{}:{body:JSON.stringify(body)})},env,{waitUntil(){},passThroughOnException(){}} as any);
     const text = await response.text(); let data: any; try { data=JSON.parse(text); } catch { data={ detail:text }; } return { status: response.status, data };
   }
-  return { db,env,request,trace,privateReads:()=>trace.filter(row=>privateRead(row.sql)),reset(){trace.length=0;},poison(value:string){poison=value;},auditFailure(value:string){auditFailure=value;},requireAudit(){requireAudit=true;},losePromotion(){losePromotion=true;},close(){db.close();} };
+  return { db,env,request,trace,privateReads:()=>trace.filter(row=>privateRead(row.sql)),reset(){trace.length=0;},poison(value:string){poison=value;},auditFailure(value:string){auditFailure=value;},requireAudit(){requireAudit=true;},losePromotion(){losePromotion=true;},failLegacyAuditAt(value:number){legacyAuditFailure=value;},close(){db.close();} };
 }
 
 const originalFetch = globalThis.fetch;
@@ -156,6 +157,8 @@ test('D1191: Admin and Super Admin receive local summaries with no investor deta
         f.reset();const result=await f.request(path,actor);assert.equal(result.status,200,JSON.stringify({path,...result}));assert.equal(result.data.mode,'summary');
         assert.doesNotMatch(JSON.stringify(result.data),/Fixture Private Investor|private@example|Fixture private notes|123456|456789/);assert.equal(f.privateReads().length,0);
         if(result.data.ventures){assert.equal(result.data.ventures[0].project.id,101);assert.equal(result.data.ventures[0].total,1);assert.equal(result.data.ventures[0].stages.find((row:any)=>row.stage==='meeting').count,1);}
+        if(result.data.cards){assert.equal(result.data.cards.length,7);assert.deepEqual(result.data.figures.map((figure:any)=>figure.key),['readiness_score','runway_months']);}
+        if(result.data.records){assert.equal(result.data.module.records_title,'Pipeline counts');assert.equal(result.data.records.state,'ok');assert.equal(result.data.records.linkable,false);assert.equal(result.data.records.rows.length,7);assert.equal(result.data.records.rows.find((row:any)=>row.id==='summary-meeting').cells.count,1);}
       }
       for(const path of ['/api/contacts/raise-prospects/1','/api/contacts/raise-round?project_id=101','/api/contacts/raise-closes?project_id=101','/api/contacts/raise-pro-rata?project_id=101','/api/cycles/raise/modules/capital-relationships/records/1?project=101','/api/cycles/raise/capital-relationships/commitments?project=101','/api/cycles/raise/capital-relationships/match?project=101']) {
         f.reset();assert.equal((await f.request(path,actor)).status,403,path);assert.equal(f.privateReads().length,0,path);
@@ -194,9 +197,9 @@ test('D1191: each private support read persists its founder-visible reason first
       assert.equal(result.status,200,JSON.stringify(result));assert.equal(result.data.read_only,true);assert.equal(result.data.mode,'support');assert.deepEqual(result.data.actions,[]);
       assert.equal(result.data.items.length,1);assert.equal(result.data.items[0].name,'Fixture Private Investor');assert.equal(result.data.round.target_amount,456789);
       const audit=f.db.prepare('SELECT user_id,actor,details FROM activity_logs WHERE id=?').get(result.data.audit_id) as any;
-      assert.equal(audit.user_id,1);assert.equal(audit.actor,`user:${actor}`);assert.deepEqual(JSON.parse(audit.details),{admin_user_id:actor,reason:'Fixture support reason',read_only:true});
+      assert.equal(audit.user_id,1);assert.equal(audit.actor,`user:${actor}`);assert.deepEqual(JSON.parse(audit.details),{admin_user_id:actor,reason:'Fixture support reason',read_only:true,page:1,prospect_id:null});
       const staffAudit=f.db.prepare('SELECT viewed_user_id,filters_json FROM admin_audit_log WHERE admin_user_id=? AND action=? ORDER BY id DESC LIMIT 1').get(actor,CAPITAL_SUPPORT_ACTION) as any;
-      assert.ok(staffAudit);assert.equal(staffAudit.viewed_user_id,1);assert.deepEqual(JSON.parse(staffAudit.filters_json),{project_id:101,reason:'Fixture support reason',read_only:true});
+      assert.ok(staffAudit);assert.equal(staffAudit.viewed_user_id,1);assert.deepEqual(JSON.parse(staffAudit.filters_json),{project_id:101,reason:'Fixture support reason',read_only:true,page:1,prospect_id:null});
       const history=await f.request('/api/cycles/raise/capital-relationships/support-reads?project=101',1);assert.equal(history.status,200);assert.equal(history.data.reads.length,1);assert.equal(history.data.reads[0].reason,'Fixture support reason');assert.match(history.data.reads[0].reader.name,/Fixture/);assert.doesNotMatch(JSON.stringify(history.data),/@example/);
       assert.equal((await f.request('/api/cycles/raise/capital-relationships/support-reads?project=101',2)).status,200);
       assert.deepEqual((await f.request('/api/cycles/raise/capital-relationships/support-reads?project=202',2)).data.reads,[]);
@@ -242,7 +245,23 @@ test('D1191: missing summary data is unreadable, summaries and support reads are
     for(let id=10;id<40;id++)f.db.prepare('INSERT INTO raise_prospects (id,uid,project_id,name) VALUES (?,?,?,?)').run(id,`paged-investor-${id}`,101,'Fixture paged investor');
     const read=await f.request('/api/cycles/raise/capital-relationships/support-read?project=101',30,'POST',{reason:'Fixture paged reason'});assert.equal(read.status,200);assert.equal(read.data.items.length,25);assert.equal(read.data.has_more,true);
     assert.equal((await f.request('/api/cycles/raise/capital-relationships/support-read?project=101',30,'POST',{reason:'Fixture detail reason',prospect_id:2})).status,404);
-    const own=await f.request('/api/cycles/raise/capital-relationships/support-read?project=101',30,'POST',{reason:'Fixture detail reason',prospect_id:1});assert.equal(own.status,200);assert.equal(own.data.items.length,1);assert.equal(own.data.items[0].id,1);
+    const own=await f.request('/api/cycles/raise/capital-relationships/support-read?project=101',30,'POST',{reason:'Fixture detail reason',prospect_id:1,page:2});assert.equal(own.status,200);assert.equal(own.data.items.length,1);assert.equal(own.data.items[0].id,1);
+    const detail=f.db.prepare('SELECT details FROM activity_logs WHERE id=?').get(own.data.audit_id) as any;assert.deepEqual(JSON.parse(detail.details),{admin_user_id:30,reason:'Fixture detail reason',read_only:true,page:2,prospect_id:1});
+    const history=await f.request('/api/cycles/raise/capital-relationships/support-reads?project=101',1);assert.equal(history.data.reads[0].page,2);assert.equal(history.data.reads[0].prospect_id,1);
+  }finally{f.close();}
+});
+
+test('D1191: a legacy create audit failure rolls back its prospect and import reports prior rows accurately',async()=>{
+  const f=fixture();try {
+    f.failLegacyAuditAt(1);
+    const create=await f.request('/api/contacts/raise-prospects',2,'POST',{project_id:101,name:'Fixture failed creation'});
+    assert.equal(create.status,503);assert.match(create.data.detail,/could not be saved/);assert.doesNotMatch(JSON.stringify(create.data),/Synthetic private/);
+    assert.equal(f.db.prepare('SELECT COUNT(*) AS n FROM raise_prospects').get()?.n,2);
+    f.failLegacyAuditAt(2);
+    const imported=await f.request('/api/contacts/raise-prospects/import',2,'POST',{project_id:101,rows:[{name:'Fixture first saved'},{name:'Fixture failed second'},{name:'Fixture unprocessed third'}]});
+    assert.equal(imported.status,200);assert.equal(imported.data.created,1);assert.deepEqual(imported.data.skipped.map((row:any)=>row.row),[2,3]);assert.doesNotMatch(JSON.stringify(imported.data),/Synthetic private/);
+    assert.equal(f.db.prepare('SELECT COUNT(*) AS n FROM raise_prospects').get()?.n,3);
+    assert.equal(f.db.prepare("SELECT COUNT(*) AS n FROM activity_logs WHERE user_id=2 AND action='prospect_created'").get()?.n,1);
   }finally{f.close();}
 });
 

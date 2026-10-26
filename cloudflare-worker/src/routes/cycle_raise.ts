@@ -107,7 +107,7 @@ import { Hono } from 'hono';
 import type { Env, User } from '../types';
 import { requireAuth, selectJwt } from '../auth';
 import { canWrite, canWritePitchDeck, type ProjectRef } from './_founder_validate_helpers';
-import { CYCLE, QUESTION, MODULES, CARD_FOR, RECORDS_FOR, INVESTOR_TYPE_LABEL, figures, cards, callsHistory, narrativeHome, recordQuery, type Ctx, type ModuleSlug } from '../services/raiseCycle';
+import { CYCLE, QUESTION, MODULES, CARD_FOR, RECORDS_FOR, INVESTOR_TYPE_LABEL, figures, nonCapitalFigures, cards, callsHistory, narrativeHome, recordQuery, type Ctx, type ModuleSlug } from '../services/raiseCycle';
 import {
   WriterError, scoreReadinessItem, rescoreReadiness, saveNarrativeVersion, updateNarrativeVersion, createDeckLink, updateDeckLink,
   addCapHolder, updateCapHolder, saveUseOfFunds, addProspect, updateProspect, setFileChecklistItem, setProspectNextStep,
@@ -285,9 +285,13 @@ const body = async (c: any): Promise<Record<string, unknown>> => {
 cycleRaise.get('/overview', async (c) => {
   const s = await scope(c);
   if (s instanceof Response) return s;
-  if (capitalStaff(s.user)) return c.json({ cycle: CYCLE, question: QUESTION, mode: 'summary', read_only: true,
-    figures: [], cards: [await capitalSummaryCard(c.env, s.projectId), await roomSummaryCard(c.env, s.projectId)] });
   const ctx = ctxOf(c, s.projectId);
+  if (capitalStaff(s.user)) {
+    const [figs, cs] = await Promise.all([nonCapitalFigures(ctx), Promise.all(MODULES.map(m =>
+      m.slug === 'capital-relationships' ? capitalSummaryCard(c.env, s.projectId)
+        : m.slug === 'data-room' ? roomSummaryCard(c.env, s.projectId) : CARD_FOR[m.slug](ctx)))]);
+    return c.json({ cycle: CYCLE, question: QUESTION, mode: 'summary', read_only: true, figures: figs, cards: cs });
+  }
   // D1102: the data-room card is the owner's; anyone else reads the room's summary there.
   // The other six cards are built as `cards()` builds them.
   const cardsRead = isRoomOwner(s) ? cards(ctx)
@@ -302,9 +306,15 @@ cycleRaise.get('/modules/:slug', async (c) => {
   if (!mod) return c.json({ detail: 'No such module', modules: MODULES.map((m) => m.slug) }, 404);
   const s = slug === 'investor-narrative' ? await narrativeScope(c, 'read') : await scope(c);
   if (s instanceof Response) return s;
-  if (slug === 'capital-relationships' && capitalStaff(s.user)) return c.json({ module: mod, mode: 'summary', read_only: true,
-    card: await capitalSummaryCard(c.env, s.projectId), summary: await capitalSummary(c.env, s.projectId),
-    records: { state: 'summary', reason: 'Investor details require a reasoned support read.', cols: [], rows: [], total: null, page: 1, page_size: 25 } });
+  if (slug === 'capital-relationships' && capitalStaff(s.user)) {
+    const summary = await capitalSummary(c.env, s.projectId);
+    const rows = summary.stages.map(row => ({ id: `summary-${row.stage}`, cells: { stage: row.stage.replace(/_/g, ' '), count: row.count } }));
+    if (summary.state === 'ok') rows.push({ id: 'summary-unrecorded', cells: { stage: 'Status not recorded', count: summary.status_not_recorded } });
+    return c.json({ module: { slug: mod.slug, name: mod.name, records_title: 'Pipeline counts' }, mode: 'summary', read_only: true,
+      card: await capitalSummaryCard(c.env, s.projectId), summary,
+      records: { state: summary.state, reason: summary.reason, cols: [{ key: 'stage', label: 'Stage' }, { key: 'count', label: 'Investors' }],
+        rows, total: summary.state === 'ok' ? rows.length : null, page: 1, page_size: 25, linkable: false } });
+  }
   // D1102: the room's files and who opened it are its owner's; refused before anything is read.
   if (slug === 'data-room') {
     const refused = roomReadRefused(c, s);
@@ -372,8 +382,9 @@ cycleRaise.post('/capital-relationships/support-read', async (c) => {
     const input = await body(c);
     const prospectId = input.prospect_id == null ? null : idParam(String(input.prospect_id));
     if (input.prospect_id != null && prospectId == null) return c.json({ detail: 'Invalid investor' }, 400);
-    const auditId = await recordCapitalSupport(c.env, s.user, s.project, input.reason);
-    return c.json({ ...(await capitalSupportDetails(c.env, s.projectId, capitalPage(input.page), prospectId)), audit_id: auditId });
+    const page = capitalPage(input.page);
+    const auditId = await recordCapitalSupport(c.env, s.user, s.project, input.reason, { page, prospect_id: prospectId });
+    return c.json({ ...(await capitalSupportDetails(c.env, s.projectId, page, prospectId)), audit_id: auditId });
   } catch (error) { return capitalFailure(c, error); }
 });
 

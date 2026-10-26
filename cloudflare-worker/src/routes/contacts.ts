@@ -37,7 +37,7 @@ function mapError(c: Context<{ Bindings: Env }>, error: unknown) {
   if (error instanceof CapitalAccessError) return c.json({ detail: error.sentence, code: error.code }, error.status as any);
   if (/\/raise-(?:prospects|round|closes|pro-rata|updates)(?:\/|$)/.test(capitalRequestPath(c.req.path)) &&
       !(error instanceof Response) && !(error instanceof Error && ['Unauthorized', 'Forbidden'].includes(error.message))) {
-    return c.json({ detail: 'Capital relationships could not be read. Try again.', code: 'capital_unreadable' }, 503);
+    return c.json({ detail: c.req.method === 'GET' ? 'Capital relationships could not be read. Try again.' : 'Capital relationships could not be saved. Try again.', code: 'capital_unreadable' }, 503);
   }
   return baseMapError(c, error);
 }
@@ -519,6 +519,7 @@ export async function createProspect(
   env: Env,
   projectId: number,
   input: { name?: unknown; email?: unknown; firm?: unknown; amount?: unknown; stage?: unknown; notes?: unknown; commit_status?: unknown },
+  auditUserId?: number,
 ): Promise<{ prospect: any } | 'duplicate' | 'invalid'> {
   const name = input.name ? String(input.name).trim().slice(0, 200) : null;
   const email = input.email ? String(input.email).trim().toLowerCase() : null;
@@ -535,10 +536,24 @@ export async function createProspect(
     if (dup) return 'duplicate';
   }
 
-  const res = await env.DB.prepare(
+  const uid = newUid();
+  const insert = env.DB.prepare(
     `INSERT INTO raise_prospects (uid, project_id, contact_id, name, email, firm, stage, amount, notes, commit_status, created_at, updated_at)
      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-  ).bind(newUid(), projectId, null, name, email, firm, stage, amount, notes, stage === 'committed' && COMMIT_STATUSES.includes(String(input.commit_status)) ? String(input.commit_status) : null, nowIso(), nowIso()).run();
+  ).bind(uid, projectId, null, name, email, firm, stage, amount, notes, stage === 'committed' && COMMIT_STATUSES.includes(String(input.commit_status)) ? String(input.commit_status) : null, nowIso(), nowIso());
+  // D1191: the legacy writer's new actor audit cannot fail after committing
+  // its prospect. Other callers keep their existing writer-specific audit.
+  let res;
+  if (auditUserId == null) res = await insert.run();
+  else {
+    try {
+      [res] = await env.DB.batch([
+        insert,
+        env.DB.prepare("INSERT INTO activity_logs (project_id, user_id, entity_type, entity_id, action, details, actor) SELECT ?, ?, 'raise.capital-relationships', CAST(id AS TEXT), 'prospect_created', 'Investor prospect added', ? FROM raise_prospects WHERE uid = ? AND project_id = ?")
+          .bind(projectId, auditUserId, `user:${auditUserId}`, uid, projectId),
+      ]);
+    } catch { throw new CapitalAccessError(503, 'capital_write_unavailable', 'The investor could not be saved. Try again.'); }
+  }
   const prospectId = lastInsertId(res);
   let contactId: number | null = null;
 
@@ -731,9 +746,8 @@ r.put('/raise-prospects/:id', async (c) => {
     const scope = await ownedProjectScope(c, user);
     if (scope !== 'all' && !scope.includes(Number(ref.project_id))) return c.json({ detail: 'Forbidden' }, 403);
     const body = await c.req.json().catch(() => ({} as any));
-    const { updateLegacyProspect, WriterError } = await import('../services/raiseWriters');
-    try { return c.json(await updateLegacyProspect(c.env, { projectId: ref.project_id, userId: user.id, prospectId: id, body })); }
-    catch (error) { if (error instanceof WriterError) return c.json({ detail: error.sentence }, error.status as any); throw error; }
+    const { updateLegacyProspect } = await import('../services/raiseProspectWriters');
+    return c.json(await updateLegacyProspect(c.env, { projectId: ref.project_id, userId: user.id, prospectId: id, body }));
   } catch (e) { return mapError(c, e); }
 });
 
@@ -748,7 +762,7 @@ r.post('/raise-prospects', async (c) => {
     if (!Number.isFinite(projectId)) return c.json({ detail: 'project_id is required' }, 400);
     const scope = await ownedProjectScope(c, user);
     if (scope !== 'all' && !scope.includes(projectId)) return c.json({ detail: 'Forbidden' }, 403);
-    const { addLegacyProspect } = await import('../services/raiseWriters');
+    const { addLegacyProspect } = await import('../services/raiseProspectWriters');
     const out = await addLegacyProspect(c.env, { projectId, userId: user.id, body });
     if (out === 'invalid') return c.json({ detail: 'A name or a valid email is required' }, 400);
     if (out === 'duplicate') return c.json({ detail: 'This project already tracks a prospect with that email' }, 409);
@@ -774,8 +788,16 @@ r.post('/raise-prospects/import', async (c) => {
     let created = 0;
     const skipped: { row: number; reason: string }[] = [];
     for (let i = 0; i < rows.length; i++) {
-      const { addLegacyProspect } = await import('../services/raiseWriters');
-      const out = await addLegacyProspect(c.env, { projectId, userId: user.id, body: rows[i] || {} });
+      const { addLegacyProspect } = await import('../services/raiseProspectWriters');
+      let out;
+      try { out = await addLegacyProspect(c.env, { projectId, userId: user.id, body: rows[i] || {} }); }
+      catch (error) {
+        if (!(error instanceof CapitalAccessError) || error.code !== 'capital_write_unavailable') throw error;
+        // Earlier rows have saved successfully. Report their exact count and
+        // every unsaved row through the import's existing skipped-row contract.
+        for (let remaining = i; remaining < rows.length; remaining++) skipped.push({ row: remaining + 1, reason: 'Not saved: storage is unavailable. Try again.' });
+        break;
+      }
       if (out === 'invalid') { skipped.push({ row: i + 1, reason: 'A name or a valid email is required' }); continue; }
       if (out === 'duplicate') { skipped.push({ row: i + 1, reason: 'Already in the pipeline' }); continue; }
       created++;
@@ -1533,9 +1555,8 @@ r.post('/:uid/promote', async (c) => {
 
     // ---- Investor → the canonical prospect writer ----
     if (row.audience === 'investor') {
-      const { promoteLegacyInvestor, WriterError } = await import('../services/raiseWriters');
-      try { return c.json(await promoteLegacyInvestor(c.env, { projectId: row.project_id, userId: user.id, contactId: row.id })); }
-      catch (error) { if (error instanceof WriterError) return c.json({ detail: error.sentence }, error.status as any); throw error; }
+      const { promoteLegacyInvestor } = await import('../services/raiseProspectWriters');
+      return c.json(await promoteLegacyInvestor(c.env, { projectId: row.project_id, userId: user.id, contactId: row.id }));
     }
 
     // ---- Advisor → Advisory Suite directory profile ----
