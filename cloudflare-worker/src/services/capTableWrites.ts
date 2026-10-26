@@ -50,8 +50,8 @@ export type ScenarioRow = {
 export const KEYED_LISTS = ['founders', 'safes', 'rounds'] as const;
 /** The highest `e-<n>` this scenario has issued, kept beside the lists. */
 export const ENTRY_KEY_SEQ = 'entry_key_seq';
-/** `e-<n>`, n from 1. Nine digits at most, so the number stays exact. */
-const ENTRY_KEY = /^e-([1-9][0-9]{0,8})$/;
+/** `e-<n>`, n from 1. Nine digits at most, so the number stays exact. D966's repair reads keys with it too. */
+export const ENTRY_KEY = /^e-([1-9][0-9]{0,8})$/;
 
 const keyNumber = (key: unknown): number | null => {
   const m = typeof key === 'string' ? ENTRY_KEY.exec(key) : null;

@@ -111,6 +111,8 @@ import adminContractDocRegistry from './routes/admin_contract_doc_registry';
 import adminForms from './routes/admin_forms';
 import adminIntegrationKeys from './routes/admin_integration_keys';
 import adminMercury from './routes/admin_mercury';
+// D966 (#2630): the owner's repair of Mercury SAFEs accepted before #2629.
+import adminMercurySafeBasis from './routes/admin_mercury_safe_basis';
 import adminGithub from './routes/admin_github';
 import githubWebhook from './routes/github';
 // Task #4 (AW) — Admin reader for advisor_turn_audit (L6) + lock/shadow controls (L7).
@@ -984,6 +986,8 @@ app.route('/api/admin/closings', adminClosings);
 // Task #9 — IRS-style forms catalog + PDF preview/download (admin-only).
 app.route('/api/admin/forms', adminForms);
 app.route('/api/admin/integration-keys', adminIntegrationKeys);
+// D966 (#2630): POST /safe-basis-repair, founders' Raise SAFEs; it reads no entity account.
+app.route('/api/admin/mercury', adminMercurySafeBasis);
 // D710 (#1775): Mercury, read-only, for fund administration.
 app.route('/api/admin/mercury', adminMercury);
 app.route('/api/admin/github', adminGithub);
