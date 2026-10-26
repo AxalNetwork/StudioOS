@@ -1,5 +1,10 @@
 # cloudflare-worker/test — what the worker guarantees
 
+`admin_promos_d1271.test.ts` checks all four HQ Super Admin promo gates,
+branch refusal even with an elevation row, stale/non-TOTP sessions, the
+production cool-off prefix, and successful billing-audited writes over
+canonical SQLite tables with Stripe stubbed.
+
 `program_usage_d1156.test.ts` exercises migration 601, count-only branch reports,
 newest-wins HQ storage, monthly source counts, partial failures, roles,
 throttling and the dated in-use read with synthetic SQLite records.
