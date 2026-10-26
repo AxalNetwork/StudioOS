@@ -10,7 +10,7 @@ import { SignJWT } from 'jose';
 import cycleRaise from '../src/routes/cycle_raise.ts';
 import contacts from '../src/routes/contacts.ts';
 import records from '../src/routes/cycle_records.ts';
-import { capitalCanWork, capitalMemberProjectIds, capitalOwner, capitalPage, capitalRequestPath, CAPITAL_SUPPORT_ACTION } from '../src/services/capRelAccess.ts';
+import { capitalCanWork, capitalMemberProjectIds, capitalOwner, capitalPage, capitalRequestPath, capitalStaffRequestAllowed, CAPITAL_SUPPORT_ACTION } from '../src/services/capRelAccess.ts';
 import { BASELINE_CUTOFF, migrationNumber, compareMigrations } from '../../scripts/lib/migrationPlan.mjs';
 
 const SECRET = 'synthetic-capital-access-d1191-'.repeat(3);
@@ -195,6 +195,8 @@ test('D1191: each private support read persists its founder-visible reason first
       assert.equal(result.data.items.length,1);assert.equal(result.data.items[0].name,'Fixture Private Investor');assert.equal(result.data.round.target_amount,456789);
       const audit=f.db.prepare('SELECT user_id,actor,details FROM activity_logs WHERE id=?').get(result.data.audit_id) as any;
       assert.equal(audit.user_id,1);assert.equal(audit.actor,`user:${actor}`);assert.deepEqual(JSON.parse(audit.details),{admin_user_id:actor,reason:'Fixture support reason',read_only:true});
+      const staffAudit=f.db.prepare('SELECT viewed_user_id,filters_json FROM admin_audit_log WHERE admin_user_id=? AND action=? ORDER BY id DESC LIMIT 1').get(actor,CAPITAL_SUPPORT_ACTION) as any;
+      assert.ok(staffAudit);assert.equal(staffAudit.viewed_user_id,1);assert.deepEqual(JSON.parse(staffAudit.filters_json),{project_id:101,reason:'Fixture support reason',read_only:true});
       const history=await f.request('/api/cycles/raise/capital-relationships/support-reads?project=101',1);assert.equal(history.status,200);assert.equal(history.data.reads.length,1);assert.equal(history.data.reads[0].reason,'Fixture support reason');assert.match(history.data.reads[0].reader.name,/Fixture/);assert.doesNotMatch(JSON.stringify(history.data),/@example/);
       assert.equal((await f.request('/api/cycles/raise/capital-relationships/support-reads?project=101',2)).status,200);
       assert.deepEqual((await f.request('/api/cycles/raise/capital-relationships/support-reads?project=202',2)).data.reads,[]);
@@ -310,4 +312,20 @@ test('D1191: encoded access paths and page bounds are normalized before classifi
   assert.equal(capitalRequestPath('/api/contacts/%broken'),'');
   for(const raw of [null,undefined,'',0,-1,1.2,100001,'invalid'])assert.equal(capitalPage(raw),1);
   for(const raw of [2,'3',100000])assert.equal(capitalPage(raw),Number(raw));
+  const base='/api/cycles/raise';
+  assert.equal(capitalStaffRequestAllowed('GET',base+'/modules/capital-relationships'),true);
+  assert.equal(capitalStaffRequestAllowed('POST',base+'/capital-relationships/support-read'),true);
+  for(const [method,path] of [['GET','/capital-relationships/commitments'],['GET','/capital-relationships/match'],['GET','/capital-relationships/future-private-read'],['GET','/prospects/future-private-read'],['POST','/prospects/other/support-read'],['PUT','/modules/capital-relationships'],['GET','/capital-relationships/support-read']])assert.equal(capitalStaffRequestAllowed(method,base+path),false);
+});
+
+test('D1191: a failed secondary staff audit preserves the mandatory founder audit without logging private errors',async()=>{
+  const f=fixture();const originalWarn=console.warn;const originalError=console.error;const logs:unknown[][]=[];
+  console.warn=(...args)=>logs.push(args);console.error=(...args)=>logs.push(args);
+  try {
+    f.poison('INSERT INTO admin_audit_log');f.requireAudit();
+    const result=await f.request('/api/cycles/raise/capital-relationships/support-read?project=101',30,'POST',{reason:'Fixture secondary audit reason'});
+    assert.equal(result.status,200);assert.equal(result.data.items.length,1);assert.ok(f.privateReads().length>0);
+    assert.equal(f.db.prepare('SELECT COUNT(*) AS n FROM activity_logs WHERE user_id=1 AND action=?').get(CAPITAL_SUPPORT_ACTION)?.n,1);
+    assert.deepEqual(logs,[]);assert.doesNotMatch(JSON.stringify(result.data),/Synthetic private/);
+  }finally{console.warn=originalWarn;console.error=originalError;f.close();}
 });

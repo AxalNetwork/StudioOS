@@ -144,7 +144,7 @@ import { dataRoomOwner, roomSummary } from './data_room';
 import { safeCard, type Card } from '../services/cycleCards';
 import { refuse } from '../util/refusal';
 import {
-  CapitalAccessError, capitalCanWork, capitalPage, capitalRequestPath, capitalStaff, capitalStudioSummary,
+  CapitalAccessError, capitalCanWork, capitalPage, capitalRequestPath, capitalStaff, capitalStaffRequestAllowed, capitalStudioSummary,
   capitalSummary, capitalSupportDetails, capitalSupportHistory, recordCapitalSupport,
 } from '../services/capRelAccess';
 
@@ -179,7 +179,9 @@ async function scope(c: any): Promise<{ user: User; projectId: number; project: 
   }
   if (capitalPath(c.req.path)) {
     if (capitalStaff(user)) {
-      if (c.req.method !== 'GET' && !capitalRequestPath(c.req.path).endsWith('/support-read')) return refuse(c, 403, { code: 'admin_read_only', message: 'Staff read a summary or make a reasoned support read. They do not change the pipeline.' });
+      if (!capitalStaffRequestAllowed(c.req.method, c.req.path)) return refuse(c, 403, c.req.method === 'GET'
+        ? { code: 'support_read_required', message: 'Give a reason for a read-only support view.' }
+        : { code: 'admin_read_only', message: 'Staff read a summary or make a reasoned support read. They do not change the pipeline.' });
     } else {
       try { if (!await capitalCanWork(c.env, project, user)) return c.json({ detail: 'Forbidden' }, 403); }
       catch (error) { return capitalFailure(c, error); }

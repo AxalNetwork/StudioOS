@@ -2,7 +2,6 @@
 import type { Env, User } from '../types';
 import { ownsVenture, type ProjectRef } from '../routes/_founder_validate_helpers';
 import { ensureProjectMembershipSchema, getProjectMembershipRole } from './projectAccess';
-import { logAdminAction } from './adminAudit';
 
 const role = (user: Pick<User, 'role'>) => String(user.role || '').trim().toLowerCase();
 export const capitalStaff = (user: Pick<User, 'role'>) => role(user) === 'admin';
@@ -11,6 +10,12 @@ export const capitalOwner = (project: ProjectRef, user: User) => !capitalStaff(u
 export const CAPITAL_SUPPORT_ACTION = 'capital_relationships_support_read';
 export function capitalRequestPath(path: string): string {
   try { return decodeURIComponent(path); } catch { return ''; }
+}
+/** Every other capital request is refused, including future private GETs. */
+export function capitalStaffRequestAllowed(method: string, rawPath: string): boolean {
+  const path = capitalRequestPath(rawPath);
+  return (method === 'GET' && path === '/api/cycles/raise/modules/capital-relationships') ||
+    (method === 'POST' && path === '/api/cycles/raise/capital-relationships/support-read');
 }
 const failed = (result: { success?: boolean }) => result.success === false;
 
@@ -100,7 +105,12 @@ export async function recordCapitalSupport(env: Env, user: User, project: Projec
       "INSERT INTO activity_logs (project_id, user_id, entity_type, entity_id, action, details, actor) VALUES (?, ?, 'raise.capital-relationships', NULL, ?, ?, ?)",
     ).bind(project.id, ownerId, CAPITAL_SUPPORT_ACTION, JSON.stringify({ admin_user_id: user.id, reason, read_only: true }), `user:${user.id}`).run();
     if (row.success !== true || row.meta.changes !== 1) throw new Error('Unavailable');
-    await logAdminAction(env, user.id, user.email, CAPITAL_SUPPORT_ACTION, { project_id: project.id, target_user_id: ownerId, reason, read_only: true });
+    // Secondary staff governance copy is best-effort. The founder row above
+    // is mandatory; never log a database exception containing bound details.
+    try {
+      await env.DB.prepare('INSERT INTO admin_audit_log (admin_user_id, action, viewed_user_id, filters_json) VALUES (?, ?, ?, ?)')
+        .bind(user.id, CAPITAL_SUPPORT_ACTION, ownerId, JSON.stringify({ project_id: project.id, reason, read_only: true })).run();
+    } catch { /* The mandatory founder audit is already persisted. */ }
     return Number(row.meta.last_row_id);
   } catch (error) {
     if (error instanceof CapitalAccessError) throw error;
