@@ -62,6 +62,7 @@ test('D1214: a live person-bound holder grant returns only that holder; recorder
   const own=await call(f,1,'/api/captable/1',undefined,'GET');assert.equal(own.status,200);assert.deepEqual(own.body.holders.map((r:any)=>[r.name,r.shares]),[['Synthetic holder',100]]);assert.deepEqual(own.body.securities,[]);assert.equal(JSON.stringify(own.body).includes('@'),false);
   assert.equal((await call(f,2,'/api/captable/1',undefined,'GET')).status,403);
   assert.equal((await call(f,1,'/api/captable/2',undefined,'GET')).status,403);
+  f.db.exec("UPDATE cap_table_access_grants SET level='none' WHERE id=1");assert.equal((await call(f,1,'/api/captable/1',undefined,'GET')).status,200);
   f.db.exec("UPDATE cap_table_access_grants SET revoked_at=CURRENT_TIMESTAMP WHERE id=1");assert.equal((await call(f,1,'/api/captable/1',undefined,'GET')).status,403);
   for(const id of [3,4]) assert.equal((await call(f,id,'/api/captable/1',undefined,'GET')).body.holders.length,2);
  }finally{f.db.close();}
@@ -100,7 +101,7 @@ test('D1214: names and pledged figures stay out of syndicate and commitment audi
   assert.equal(f.db.prepare('SELECT status FROM syndicates').get()?.status,'open');
   assert.equal((await call(f,1,'/api/deals/1/commitments',{amount:12345})).status,200);
   const audit=f.db.prepare("SELECT details FROM activity_logs WHERE action='deal_commitment_pending' UNION ALL SELECT details FROM shared_services_log WHERE action_type IN ('syndicate_created','syndicate_joined')").all();
-  assert.equal(audit.length,3);const text=JSON.stringify(audit);assert.doesNotMatch(text,/Private synthetic syndicate|54321|12345|@/);
+  assert.equal(audit.length,3);const commitment=f.db.prepare("SELECT uid FROM commitments").get();assert.equal(JSON.parse(audit[0].details as string).commitment_uid,commitment?.uid);const text=JSON.stringify(audit);assert.doesNotMatch(text,/Private synthetic syndicate|54321|12345|@/);
  }finally{f.db.close();}
 });
 

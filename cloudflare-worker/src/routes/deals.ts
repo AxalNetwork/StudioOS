@@ -1168,8 +1168,8 @@ deals.post('/:id/commitments', async (c) => {
     db.prepare(`UPDATE deals SET capital_committed = (SELECT COALESCE(SUM(amount), 0) FROM commitments WHERE deal_id = ? AND status = 'confirmed') WHERE id = ?`).bind(id, id),
   ]);
   if (!results[0].meta?.changes && !results[1].meta?.changes) return c.json({ detail: 'Deal or commitment changed; refresh before retrying' }, 409);
-  await logDealRoomAction(c.env, user, 'deal_commitment_pending', id, { company_id: companyId });
   const saved = await db.prepare(`SELECT uid FROM commitments WHERE deal_id = ? AND investor_user_id = ? AND company_id IS ? AND status = 'pending' ORDER BY id LIMIT 1`).bind(id, user.id, companyId).first<any>();
+  await logDealRoomAction(c.env, user, 'deal_commitment_pending', id, { company_id: companyId, commitment_uid: saved?.uid ?? null });
   const total = await db.prepare(`SELECT COALESCE(SUM(amount), 0) AS total FROM commitments WHERE deal_id = ? AND status = 'confirmed'`).bind(id).first<any>();
   return c.json({ ok: true, uid: saved?.uid, capital_committed: total?.total ?? 0 });
 });
