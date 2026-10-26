@@ -39,6 +39,7 @@ export * from './api/capTableScenarios.js';
 export * from './api/capitalRelationships.js';
 export * from './api/channelKeys.js';
 export * from './api/channels.js';
+export * from './api/closings.js';
 export * from './api/community.js';
 export * from './api/communityTasks.js';
 export * from './api/companyActions.js';
@@ -76,6 +77,7 @@ export * from './api/helpCenter.js';
 export * from './api/insights.js';
 export * from './api/interviewSessions.js';
 export * from './api/kycHq.js';
+export * from './api/kycPeople.js';
 export * from './api/labOperations.js';
 export * from './api/labReportShares.js';
 export * from './api/learning.js';
@@ -122,6 +124,7 @@ export * from './api/ticketReviews.js';
 export * from './api/tokenPacks.js';
 export * from './api/trustContent.js';
 export * from './api/usage.js';
+export * from './api/useOfFunds.js';
 export * from './api/verdict.js';
 // api-modules:end
 
