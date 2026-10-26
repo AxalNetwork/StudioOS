@@ -5,10 +5,15 @@ import WorkspaceShell from '../WorkspaceShell';
 import BucketBoard from '../BucketBoard';
 import BucketOverview from '../BucketOverview';
 import { boardFor } from '../boards';
-import { bucketForPath, bucketTitle, zoneForPath } from '../shellConfig';
+import { bucketForPath, zoneForPath } from '../shellConfig';
 import { api } from '../../lib/api';
+import { COMPARE, PAGE_LINE as DEAL_FLOW_LINE, TITLE as DEAL_FLOW_TITLE, compareIds, viewOf as dealFlowViewOf } from '../../pages/investor/dealflow/dealFlowModel';
 
+const COMPARE_TITLE = 'Compare';
 const DealRoomsPanel = lazy(() => import('../../components/deals/DealRoomsPanel'));
+// D1236 (#2423): Deal flow at the root and Compare at /deals/compare.
+const DealFlow = lazy(() => import('../../pages/investor/dealflow/DealFlow'));
+const DealCompare = lazy(() => import('../../pages/investor/dealflow/DealFlow').then((m) => ({ default: m.DealCompare })));
 const InvestorDealsWorkspace = lazy(() => import('../../pages/investor/InvestorDealsWorkspace'));
 /**
  * ONE ZONE AT A TIME, AS EACH ARTBOARD LANDS.
@@ -101,6 +106,7 @@ export default function InvestorDealsRoutes() {
   // root with its FIRST zone, so without this a reader landing on `/deals`
   // would get Pipeline lit in the pill row as if they had asked for it.
   const isRoot = Boolean(bucket) && location.pathname === bucket.prefix;
+  const isCompare = location.pathname === COMPARE;
   const zone = zoneForPath(bucket, location.pathname);
 
   const Zone = ZONES[zone?.slug];
@@ -113,9 +119,9 @@ export default function InvestorDealsRoutes() {
   return (
     <WorkspaceShell
       role="investor"
-      title={isRoot ? bucketTitle(bucket) : undefined}
-      activeSlug={isRoot ? null : undefined}
-      intro={ZONE_LINES[zone?.slug] || ZONE_LINES.pipeline}
+      title={isRoot ? DEAL_FLOW_TITLE : isCompare ? COMPARE_TITLE : undefined}
+      activeSlug={isRoot || isCompare ? null : undefined}
+      intro={isRoot ? DEAL_FLOW_LINE : (ZONE_LINES[zone?.slug] || ZONE_LINES.pipeline)}
       rail={(
         <WorkerRail
           workspace="Deals"
@@ -158,8 +164,10 @@ export default function InvestorDealsRoutes() {
           the rail. Without it the workspace drew all three again inside them —
           two h1s, two pill rows and two Worker AI rails on one page. */}
       <Suspense fallback={<div className="space-y-3"><Skeleton className="h-8" /><Skeleton className="h-64" /></div>}>
-        {isRoot
-          ? <DealsRoot bucket={bucket} />
+        {isCompare
+          ? <DealCompare ids={compareIds(location.search)} />
+          : isRoot
+          ? <DealsRoot bucket={bucket} search={location.search} />
           : (Zone ? <Zone /> : <InvestorDealsWorkspace embedded zone={zone?.slug} />)}
       </Suspense>
     </WorkspaceShell>
@@ -173,12 +181,14 @@ export default function InvestorDealsRoutes() {
  * prints above a zone — so the two overviews cannot describe one zone twice and
  * differently.
  */
-function DealsRoot({ bucket }) {
+function DealsRoot({ bucket, search }) {
   const board = boardFor('investor', bucket.prefix, api);
+  const { view, scope } = dealFlowViewOf(search);
   // D630 (#1388) — canvas `dr-pipeline`: the deal rooms to join, with the
   // quota, under the board. `/deals` already serves this page, so the screen
   // is a panel here rather than a new address.
-  return (
+  // D1236: the canvas's Deal flow, with today's zone board and the rooms under its Board view.
+  const today = (
     <>
       {board
         ? <BucketBoard bucket={bucket} role="investor" board={board} />
@@ -186,4 +196,5 @@ function DealsRoot({ bucket }) {
       <DealRoomsPanel />
     </>
   );
+  return <DealFlow view={view} scope={scope} board={today} />;
 }

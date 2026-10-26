@@ -3363,6 +3363,8 @@ function AppInner() {
           workspace still renders all four sections and the route scrolls to
           one. Splitting it into four pages is a content decision, not a
           routing one. */}
+      {/* D1236 (#2423): compare up to four ventures from Deal flow. */}
+      <Route path="/deals/compare" element={guard(['admin', 'investor'], <InvestorDealsRoutes />)} />
       <Route path="/deals/pipeline" element={guard(['admin', 'investor'], <InvestorDealsRoutes />)} />
       <Route path="/deals/screening" element={guard(['admin', 'investor'], <InvestorDealsRoutes />)} />
       <Route path="/deals/commit" element={guard(['admin', 'investor'], <InvestorDealsRoutes />)} />

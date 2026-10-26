@@ -109,6 +109,21 @@ strength of a live route would empty the queue of the work it exists to track.
    `Trust Center v2.dc.html` to `backlog/` for a day, next to the `NEW` canvases
    that have no route, and away from the v1 of its own page.
 
+## Landed 2026-10-26 — Deals › Deal flow (#2423)
+
+The owner's artifacts `4HugYQDAekRjwmbtv9Lkje` (the board grid) and
+`A4SCd6ZjqoA5s3MSyaKhRP` (the page) came from S21's prompt on #2423. Each was
+decoded by `scripts/read-canvas.mjs` as is:
+- `Deal flow · Boards.dc.html` is the board grid (DLS1 to DLS18); it imports
+  the page by name;
+- `Deal Flow List Page.dc.html` is the page.
+
+No value was edited.
+
+**Grade: UPGRADE.** S21's integration (D1236) makes the Deals root Deal flow
+for an Investor, with Board and Table, Mine, All deals and New for you in the
+address, and Compare at `/deals/compare`. The rest is D1237–D1243.
+
 ## Landed 2026-10-26 — Approvals › KYC & KYB (#2384)
 
 The owner's artifacts `9U6YH5eduDN6bpd5k4Tucm` (the board grid) and

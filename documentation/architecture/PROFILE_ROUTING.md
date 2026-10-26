@@ -13,8 +13,8 @@ Nothing here is typed by hand, so nothing here can disagree with them.
 each canvas and why. This document answers a different question: *who sees
 it, where in their nav, and how do they get there.*
 
-**Corpus:** 173 canonical canvases at `design/canvases/`, listed
-252 times below — a canvas serving two workspaces appears under both.
+**Corpus:** 174 canonical canvases at `design/canvases/`, listed
+256 times below — a canvas serving two workspaces appears under both.
 
 ## Column meanings
 
@@ -136,7 +136,7 @@ it, where in their nav, and how do they get there.*
 | Signals | `/signals` · `/research` | Headerless | Full page | Sidebar → Headerless → Research | RETIRED | High |
 | Trust center (public) | `/trust/me` · `/admin/security/trust-center` | — (no nav entry) | Full page | Deep link / in-page action | NEW | Medium |
 
-## LP / Investor — 32 canvases
+## LP / Investor — 33 canvases
 
 | Canvas | Route | Nav section | Surface | Entry point | Status | Confidence |
 | --- | --- | --- | --- | --- | --- | --- |
@@ -145,6 +145,7 @@ it, where in their nav, and how do they get there.*
 | Closing room | `/raise/capital-relationships/closing` · `/deals/:dealId/closing` · `/admin/contracts/closings` · `/admin/contracts/closings/:dealId` | Headerless | Full page (proposed) | Sidebar → Headerless → Deals | NEW | Low |
 | Data Room | `/raise/data-room?mode=workspace` · `/raise/data-room?mode=access` · `/raise/data-room/:id` · `/research/diligence` · `/research/diligence/:grantUid` · `/files/:fileUid` · `/raise/data-room/access` · `/requests` | Headerless | Full page | Sidebar → Headerless → Deals | CURRENT | High |
 | Deal Flow | `/pipeline` · `/deals` · `/deals/:dealId` · `/pipeline/screening\|commit\|transactions` · `/deals/screening\|commit\|closing` | Headerless | Full page | Sidebar → Headerless → Deals | UPGRADE | High |
+| Deal flow list | `/deals` · `/deals?view=table` · `/deals?scope=all\|new` · `/deals/compare?ids=` | Headerless | Full page (proposed) | Sidebar → Headerless → Deals | UPGRADE | Low |
 | Detail Layer Canvas | — | — (not routed) | Full page (proposed) | Not reachable yet | NEW | Low |
 | Due Diligence | `/admin/due-diligence*` | — (no nav entry) | Full page | Deep link / in-page action | UPGRADE | Medium |
 | Explore the Spin-Out Lab | `/spinout-lab` | Headerless | Full page (Spin-Out Lab — frozen) | Sidebar → Headerless → Spin-Out Lab | OUT OF SCOPE | High |
@@ -173,7 +174,7 @@ it, where in their nav, and how do they get there.*
 | Scoring Engine v2 | `/scoring` | — (no nav entry) | Full page | Deep link / in-page action | UPGRADE | Medium |
 | Trust center (public) | `/trust/me` · `/admin/security/trust-center` | Headerless | Full page | Sidebar → Headerless → Trust | NEW | High |
 
-## Partner / Operator — 16 canvases
+## Partner / Operator — 17 canvases
 
 | Canvas | Route | Nav section | Surface | Entry point | Status | Confidence |
 | --- | --- | --- | --- | --- | --- | --- |
@@ -181,6 +182,7 @@ it, where in their nav, and how do they get there.*
 | Checkout | `/pricing` | — (no nav entry) | Full page | Deep link / in-page action | UPGRADE | Medium |
 | Closing room | `/raise/capital-relationships/closing` · `/deals/:dealId/closing` · `/admin/contracts/closings` · `/admin/contracts/closings/:dealId` | — (not routed) | Full page (proposed) | Not reachable yet | NEW | Low |
 | Co-marketing | `/comarketing` · `/comarketing/:pitch` | Headerless | Full page | Sidebar → Headerless → Offers | UPGRADE | High |
+| Deal flow list | `/deals` · `/deals?view=table` · `/deals?scope=all\|new` · `/deals/compare?ids=` | — (not routed) | Full page (proposed) | Not reachable yet | UPGRADE | Low |
 | Detail Layer Canvas II | — | — (not routed) | Full page (proposed) | Not reachable yet | NEW | Low |
 | Get Paid & Invoicing | `/payouts` · `/referrals` | — (no nav entry) | Full page | Deep link / in-page action | RESKIN | Medium |
 | Pages · Partner Pipeline | `/needs` · `/partner/operations/*` | — (no nav entry) | Full page | Deep link / in-page action | UPGRADE | Medium |
@@ -194,7 +196,7 @@ it, where in their nav, and how do they get there.*
 | Scoring Engine v2 | `/scoring` | — (no nav entry) | Full page | Deep link / in-page action | UPGRADE | Medium |
 | Trust center (public) | `/trust/me` · `/admin/security/trust-center` | — (no nav entry) | Full page | Deep link / in-page action | NEW | Medium |
 
-## Subsidiary Admin — 34 canvases
+## Subsidiary Admin — 35 canvases
 
 | Canvas | Route | Nav section | Surface | Entry point | Status | Confidence |
 | --- | --- | --- | --- | --- | --- | --- |
@@ -209,6 +211,7 @@ it, where in their nav, and how do they get there.*
 | Checkout | `/pricing` | — (no nav entry) | Full page | Deep link / in-page action | UPGRADE | Medium |
 | Closing room | `/raise/capital-relationships/closing` · `/deals/:dealId/closing` · `/admin/contracts/closings` · `/admin/contracts/closings/:dealId` | Admin | Full page (proposed) | Sidebar → Admin → Contracts | NEW | Low |
 | Contracts · Subsidiary | `/admin/contracts` · `/admin?tab=legal` · `/esign/:token` | Admin | Full page | Sidebar → Admin → Contracts | UPGRADE | High |
+| Deal flow list | `/deals` · `/deals?view=table` · `/deals?scope=all\|new` · `/deals/compare?ids=` | — (not routed) | Full page (proposed) | Not reachable yet | UPGRADE | Low |
 | Events Console | `/admin/events` · `/admin/events/review` · `/admin/events/all` · `/admin/events/:id` · `/admin/events/calendar` | Admin | Full page | Sidebar → Admin → Community | UPGRADE | High |
 | GP Application Review | `/admin/lp-applications` | Admin | Full page + review drawer | Sidebar → Admin → Approvals | UPGRADE | High |
 | Investor narrative | `/raise/investor-narrative` · `/raise/investor-narrative/story` · `/positioning` · `/check` · `/versions` · `/raise/investor-narrative/:version` · `/new` | — (not routed) | Full page (proposed) | Not reachable yet | UPGRADE | Low |
@@ -233,7 +236,7 @@ it, where in their nav, and how do they get there.*
 | Validate · Record a session | `/validate/record` · `/validate/interviews?new=record` · `/cycles/validate/modules/customer-research` · `/sessions` · `/channels/threads?status=pending` · `/channels/threads/:uid/assign` · `/validate/record/live` · `/sessions/active` · `/validate/session/:id` | — (not routed) | Full page (proposed) | Not reachable yet | NEW | Low |
 | Validate → Build plan | `/build/plan` · `/build/plan/progress` | — (not routed) | Full page (proposed) | Not reachable yet | NEW | Low |
 
-## Super Admin — 25 canvases
+## Super Admin — 26 canvases
 
 | Canvas | Route | Nav section | Surface | Entry point | Status | Confidence |
 | --- | --- | --- | --- | --- | --- | --- |
@@ -245,6 +248,7 @@ it, where in their nav, and how do they get there.*
 | Advisors & Partners | `/admin?tab=network-profiles` · `/admin/network-profiles` · `/deck` · `/admin/partner-invitations/firm-links` · `/firms` | — (no nav entry) | Full page | Deep link / in-page action | UPGRADE | Medium |
 | Approvals (admin) | `/admin/held/approvals` | — (no nav entry) | Full page | Deep link / in-page action | UPGRADE | Medium |
 | Contracts · Super | `/admin/contracts` · `/admin/contracts/registry` | HQ | Full page | Sidebar → HQ → Contracts | UPGRADE | High |
+| Deal flow list | `/deals` · `/deals?view=table` · `/deals?scope=all\|new` · `/deals/compare?ids=` | — (not routed) | Full page (proposed) | Not reachable yet | UPGRADE | Low |
 | Eadwyn Tickets · Review queue (T1, T1b, D606) | `/hq/review` | HQ | Full page | Sidebar → HQ → Support | CURRENT | High |
 | Events Console | `/admin/events` · `/admin/events/review` · `/admin/events/all` · `/admin/events/:id` · `/admin/events/calendar` | — (no nav entry) | Full page | Deep link / in-page action | UPGRADE | Medium |
 | Founder Journey Map | — | — (not routed) | Full page (proposed) | Not reachable yet | NEW | Low |
@@ -335,7 +339,7 @@ it, where in their nav, and how do they get there.*
 | --- | ---: | --- |
 | High | 116 | Live route, reachable from that workspace’s sidebar. |
 | Medium | 76 | Live route, but no sidebar row for that role — reached by deep link or an in-page action. |
-| Low | 60 | Not routed. Proposed route only. |
+| Low | 64 | Not routed. Proposed route only. |
 
 A Medium row is not a defect. Detail pages (`/deals/:id`), print artefacts
 and wizards are reached from the surface above them by design; the brief’s
