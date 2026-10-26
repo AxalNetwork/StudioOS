@@ -107,6 +107,7 @@ import activity from './routes/activity';
 import admin from './routes/admin';
 import adminBilling from './routes/admin_billing';
 import adminPromos from './routes/admin_promos';
+import ventureScoreModels from './routes/venture_score_models';
 import adminContracts from './routes/admin_contracts';
 import adminContractDocRegistry from './routes/admin_contract_doc_registry';
 // Task #9 — Hardcoded IRS-style forms (SS-4, 8821, Faxed-EIN, Confirmation).
@@ -1092,6 +1093,8 @@ app.route('/api/admin/bank-accounts', adminBankAccounts);
 app.route('/api/admin/fund-structure', adminFundStructure);
 // Task #9 — promo-code admin CRUD; mount before the `/api/admin` catch-all.
 app.route('/api/admin/promos', adminPromos);
+// D1259: HQ › Scoring's model versions, Publish and country indices; part 3's venture_scores.ts shares the prefix.
+app.route('/api/venture-scores', ventureScoreModels);
 // Task #39 — Event engine admin (§8.3). Mount BEFORE the catch-all /api/admin
 // so /api/admin/events/* resolves here, not in the generic admin router.
 app.route('/api/admin/events', adminEventsRoutes);
@@ -2042,6 +2045,18 @@ export default {
             if (r.sent || r.failed) console.info(`[cron] subprocessor notices sent=${r.sent} failed=${r.failed}`);
           } catch {
             console.error('[cron] subprocessor notices unreadable');
+          }
+        }
+        // D1259: a published venture model rescores the next batch of ventures
+        // each minute until every venture has its new rows. HQ only: only HQ
+        // publishes.
+        if (hqCadences) {
+          try {
+            const { continuePublication } = await import('./services/ventureScoring/publish');
+            const r = await continuePublication(env, now.toISOString().slice(0, 10));
+            if (r.scored || r.failed) cronSummary.push(`venture model recompute scored=${r.scored} failed=${r.failed}`);
+          } catch {
+            console.error('[cron] venture model recompute unreadable');
           }
         }
         // D886 B10: counts-only alerts in the existing HQ notification inbox.
