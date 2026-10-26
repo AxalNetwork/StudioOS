@@ -145,3 +145,5 @@ studio/role/step-up/freeze refusals, masked/audited showings, private Access-gat
 R2 streams, rejection purge/retry, atomic audit/upload rollback, source discovery,
 imports and licensed studios. Twenty injected route faults run against the same
 scenarios before and after restoration. All external fetches are refused.
+
+D1231 follow-up: company member reads reflect expiry and legal edits; company submitter/membership self-review and unsubmitted corporate profiles are covered. Twenty-three injected faults cover routes, the member status projection and submission-state derivation, each checked before and after restoration.

@@ -36,6 +36,7 @@ import {
   latestAcceptances,
 } from '../services/trust';
 import { getSQL } from '../db';
+import { branchOf } from '../util/branch';
 import { companyKybScope } from '../services/tenancyScope';
 import { ACTIVE_COMPANY_HEADER, resolveActiveCompany } from '../middleware/activeCompany';
 import { refusalBody, refuse } from '../util/refusal';
@@ -932,14 +933,15 @@ trust.get('/companies/kyb', async (c) => {
     rows = await c.env.DB.prepare(
       `SELECT cp.id AS company_id, cp.uid AS company_uid, cp.company_name,
               ucl.role_in_company, ucl.is_primary_admin,
-              k.uid AS kyb_uid, k.status, k.entity_name, k.entity_type,
-              k.jurisdiction, k.registration_number, k.submitted_at, k.reviewed_at
+              k.uid AS kyb_uid, reviewed.status, k.entity_name, k.entity_type,
+              k.jurisdiction, k.registration_number, k.submitted_at, reviewed.reviewed_at
          FROM user_company_links ucl
          JOIN company_profiles cp ON cp.id = ucl.company_id
          LEFT JOIN company_kyb_records k ON k.company_id = ucl.company_id
-        WHERE ucl.user_id = ?
+         LEFT JOIN kyb_businesses reviewed ON reviewed.uid = 'company-' || cp.id
+        WHERE ucl.user_id = ? AND (reviewed.studio_code IS NULL OR reviewed.studio_code = ?)
         ORDER BY cp.company_name`,
-    ).bind(user.id).all<any>();
+    ).bind(user.id, branchOf(c.env) || 'hq').all<any>();
   } catch (e) {
     return refuse(c, 503, {
       code: 'company_kyb_unreadable',

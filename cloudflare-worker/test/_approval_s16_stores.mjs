@@ -150,7 +150,7 @@ export function addExpertReviewStore(d) {
 export function addKybCaseStores(d) {
   const baseline = readFileSync(new URL('../sql/schema_baseline.sql', import.meta.url), 'utf8');
   const canonical = new DatabaseSync(':memory:', { enableForeignKeyConstraints: false });
-  const sources = ['company_profiles', 'corporate_profiles', 'kyc_partner_imports', 'territory_licences'];
+  const sources = ['company_profiles', 'corporate_profiles', 'kyc_partner_imports', 'territory_licences', 'legal_obligations'];
   for (const table of sources) canonical.exec(tableFromBaseline(baseline, table));
   canonical.exec(readFileSync(new URL('../sql/migrations/220_company_kyb.sql', import.meta.url), 'utf8'));
   for (const table of [...sources, 'company_kyb_records']) {

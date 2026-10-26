@@ -8,6 +8,7 @@ import { stripTypeScriptTypes } from 'node:module';
 import { Hono } from 'hono';
 import { SignJWT } from 'jose';
 import kyb from '../src/routes/kyb_admin.ts';
+import trust from '../src/routes/trust.ts';
 import { resyncKycKyb } from '../src/services/trust.ts';
 import { APPROVAL_SOURCES, approvalBoard, laneCounts } from '../src/services/approvalSources.ts';
 import { AUTH_ERROR_STATUSES } from '../src/util/authErrors.ts';
@@ -28,7 +29,7 @@ const originalFetch = globalThis.fetch;
 globalThis.fetch = async () => { throw new Error('No external provider may be reached by KYB tests'); };
 test.after(() => { globalThis.fetch = originalFetch; });
 
-function fixture(router = kyb) {
+function fixture(router = kyb, memberRouter = trust) {
   const db = new DatabaseSync(':memory:', { enableForeignKeyConstraints: false, enableDoubleQuotedStringLiterals: true });
   ddl.forEach(s => db.exec(s));
   db.exec(`INSERT INTO users (id, role, name, email, kyc_status) VALUES
@@ -38,7 +39,7 @@ function fixture(router = kyb) {
     INSERT INTO super_admins (user_id) VALUES (1);
     INSERT INTO user_sessions (user_id,jti,factor,created_at) VALUES
       (1,'fresh-1','totp',datetime('now')), (2,'fresh-2','totp',datetime('now')), (3,'fresh-3','totp',datetime('now')),
-      (2,'stale','totp',datetime('now','-2 days'));
+      (5,'fresh-5','totp',datetime('now')), (2,'stale','totp',datetime('now','-2 days'));
     INSERT INTO company_profiles (id,uid,company_name) VALUES (1,'cp1','Company One'),(2,'cp2','Company Two');
     INSERT INTO company_kyb_records (uid,company_id,started_by_user_id,status,entity_name,registration_number,registered_address,submitted_at)
       VALUES ('old-company',1,5,'in_review','Company One Ltd','secret-registration-5577','secret-address',datetime('now','-7 days'));
@@ -62,6 +63,7 @@ function fixture(router = kyb) {
     async delete(key: string) { if (deletesFail) throw new Error('secret-storage-error'); objects.delete(key); },
   } };
   const app = new Hono<any>();
+  app.route('/businesses/member/trust', memberRouter);
   app.route('/businesses', router);
   app.onError((e, c) => c.json({ detail: e.message }, AUTH_ERROR_STATUSES[e.message] || 500));
   const call = async (path: string, method = 'GET', body?: unknown, as = 2, jti = `fresh-${as}`, headers: Record<string, string> = {}) => {
@@ -271,13 +273,13 @@ test('Approvals counts all waiting business kinds and links to the business queu
   try {
     const source = APPROVAL_SOURCES.filter(s => s.key === 'kyb');
     const counts = await laneCounts(f.env,source), board = await approvalBoard(f.env,100,Date.now(),source);
-    assert.equal(counts[0].count,4);
-    assert.equal(board.items.length,4);
+    assert.equal(counts[0].count,3);
+    assert.equal(board.items.length,3);
     assert.equal(counts[0].decided_on,'KYC & KYB › Businesses');
     assert.equal(counts[0].decision_path,'/admin/kyc/businesses');
     assert.equal(board.items[0].who,'Company One');
     f.db.exec("INSERT OR REPLACE INTO kyb_cases (uid,studio_code,status,source_revision) SELECT 'account-3','other-studio','in_review',source_revision FROM kyb_business_sources WHERE uid='account-3'");
-    assert.equal((await laneCounts(f.env,source))[0].count,3);
+    assert.equal((await laneCounts(f.env,source))[0].count,2);
   } finally { f.db.close(); }
 });
 
@@ -378,10 +380,67 @@ async function staffBoundaryScenario(router = kyb) {
 }
 test('another administrator in the verified owner links remains Super Admin data', () => staffBoundaryScenario());
 
+async function companySelfScenario(router = kyb) {
+  const f = fixture(router);
+  try {
+    for (const relation of ['membership', 'submitter']) {
+      if (relation === 'membership') f.db.exec("INSERT INTO user_company_links (uid,company_id,user_id) VALUES ('staff-member',1,2)");
+      else f.db.exec("DELETE FROM user_company_links WHERE user_id=2; UPDATE company_kyb_records SET started_by_user_id=2 WHERE company_id=1");
+      assert.equal((await f.call('/company-1')).body.can_review,false,relation);
+      assert.equal((await f.call('/')).body.items.find((r: any) => r.uid === 'company-1').can_review,false,relation);
+      assert.equal((await f.call('/company-1/request-documents','PATCH',{kinds:['incorporation']})).status,403,relation);
+    }
+  } finally { f.db.close(); }
+}
+test('a company submitter or member cannot review their company', () => companySelfScenario());
+
+async function memberStatusScenario(memberRouter = trust) {
+  const f = fixture(kyb,memberRouter);
+  try {
+    f.db.exec("INSERT INTO user_company_links (uid,company_id,user_id) VALUES ('founder-member',1,5)");
+    assert.equal((await f.call('/company-1/owners','PUT',{owners:[{name:'Founder',ownership_pct:100,user_id:5}],disclosed:true})).status,200);
+    assert.equal((await approve(f,'company-1')).status,200);
+    const member = async () => {
+      const r = await f.call('/member/trust/companies/kyb','GET',undefined,5);
+      assert.equal(r.status,200,r.text); return r.body.items[0].kyb.status;
+    };
+    assert.equal(await member(),'approved');
+    f.db.exec("UPDATE kyb_cases SET expires_at=datetime('now','-1 day') WHERE uid='company-1'");
+    assert.equal(await member(),'expired');
+    f.db.exec("UPDATE company_profiles SET company_name='Updated legal name' WHERE id=1");
+    assert.equal(await member(),'in_review');
+  } finally { f.db.close(); }
+}
+test('members see current company expiry and invalidated decisions', () => memberStatusScenario());
+
+async function submissionScenario(inventSubmission = false) {
+  const f = fixture();
+  try {
+    if (inventSubmission) {
+      const sql = String(f.db.prepare("SELECT sql FROM sqlite_master WHERE name='kyb_business_sources'").get()?.sql);
+      f.db.exec('DROP VIEW kyb_business_sources');
+      f.db.exec(sql.replace("lo.status = 'in_review'", '1 = 1'));
+    }
+    const originalRevision = f.db.prepare("SELECT source_revision FROM kyb_business_sources WHERE uid='account-4'").get()?.source_revision;
+    assert.equal((await f.call('/account-4')).body.status,'not_started');
+    assert.equal((await f.call('/account-4')).body.submitted_at,null);
+    f.db.exec("UPDATE legal_obligations SET status='in_review' WHERE user_id=4 AND obligation_key='kyb_v1'");
+    assert.equal((await f.call('/account-4')).body.status,'in_review');
+    assert.ok((await f.call('/account-4')).body.submitted_at);
+    assert.equal(f.db.prepare("SELECT source_revision FROM kyb_business_sources WHERE uid='account-4'").get()?.source_revision,originalRevision,'syncing the obligation must not change the source fingerprint');
+    assert.equal((await f.call('/import-1')).body.status,'in_review','pending_review imports are explicit review requests');
+  } finally { f.db.close(); }
+}
+test('corporate creation does not invent a review submission; an explicit request queues it', async () => {
+  await submissionScenario();
+  await assert.rejects(() => submissionScenario(true), {code:'ERR_ASSERTION'});
+  await submissionScenario();
+});
+
 // Exercise the same behavioural assertions with faults injected, then restored.
 // Data-URL modules keep mutations out of the working tree and concurrent tests.
-async function mutated(from: string, to: string) {
-  const file = resolve(ROOT,'cloudflare-worker/src/routes/kyb_admin.ts'), original = readFileSync(file,'utf8');
+async function mutated(from: string, to: string, route = 'kyb_admin') {
+  const file = resolve(ROOT,`cloudflare-worker/src/routes/${route}.ts`), original = readFileSync(file,'utf8');
   assert.ok(original.includes(from), `mutation target missing: ${from}`);
   let code = stripTypeScriptTypes(original.replace(from,to));
   code = code.replace(/from '([^']+)'/g, (_, spec) => `from '${spec.startsWith('.') ? new URL(spec + '.ts', 'file://' + file).href : import.meta.resolve(spec)}'`);
@@ -410,10 +469,17 @@ test('D1231 mutation checks: the guards, audit, redaction and decision paths fai
     ['if (target) await requireSuperAdmin(c);', 'if (false) await requireSuperAdmin(c);', staffBoundaryScenario],
     ['u.id = b.linked_user_id OR u.id IN', 'u.id = b.linked_user_id AND u.id IN', staffBoundaryScenario],
   ];
+  mutations.push(['companySelfReview(row, user) ||', 'false ||', companySelfScenario]);
   for (const [from,to,scenario] of mutations) {
     await scenario();
     const router = await mutated(from,to);
     await assert.rejects(() => scenario(router), { code: 'ERR_ASSERTION' }, `survived: ${from}`);
     await scenario();
   }
+});
+
+test('the member status assertion catches legacy status projection', async () => {
+  await memberStatusScenario();
+  await assert.rejects(() => mutated('reviewed.status, k.entity_name','k.status, k.entity_name','trust').then(memberStatusScenario), {code:'ERR_ASSERTION'});
+  await memberStatusScenario();
 });

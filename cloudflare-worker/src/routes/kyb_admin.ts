@@ -56,9 +56,13 @@ async function find(c: Ctx, user: User): Promise<Row | null> {
   if (!refOk(ref)) return null;
   const row = await c.env.DB.prepare('SELECT * FROM kyb_businesses WHERE source_id = ? AND uid = ? AND (studio_code IS NULL OR studio_code = ?)')
     .bind(Number(ref.split('-')[1]), ref, scope(c.env)).first<Row>();
+  if (row?.kind === 'founder_company') {
+    row.actor_company_member = !!await c.env.DB.prepare('SELECT 1 FROM user_company_links WHERE company_id = ? AND user_id = ? LIMIT 1')
+      .bind(row.company_id, user.id).first();
+  }
   if (row?.kind === 'licensed_studio') await requireSuperAdmin(c);
   if (row && !['GET', 'HEAD'].includes(c.req.method)
-    && (row.linked_user_id === user.id || declaredOwners(row)?.some(p => p.user_id === user.id))) {
+    && (companySelfReview(row, user) || row.linked_user_id === user.id || declaredOwners(row)?.some(p => p.user_id === user.id))) {
     throw new Error('Forbidden');
   }
   // Another administrator's entity or verified owner link is Super Admin data.
@@ -152,13 +156,16 @@ async function owners(env: Env, row: Row) {
     };
   }));
 }
+function companySelfReview(row: Row, user: User): boolean {
+  return row.kind === 'founder_company' && (row.submitted_by_user_id === user.id || !!row.actor_company_member);
+}
 function summary(row: Row, user: User) {
   return { id: row.id, uid: row.uid, kind: row.kind, entity_name: row.entity_name, entity_type: row.entity_type,
     jurisdiction: row.jurisdiction, status: row.status, registration_number: maskFor('id_number', row.registration_number),
     submitted_at: row.submitted_at, reviewed_at: row.reviewed_at, expires_at: row.expires_at,
     company_id: row.company_id, linked_user_id: row.linked_user_id, licence_ref: row.licence_ref,
     owners_disclosed: !!(row.case_owners_disclosed ?? row.owners_disclosed), high_risk_country: row.high_risk_country,
-    version: row.version, can_review: row.linked_user_id !== user.id && !declaredOwners(row)?.some(p => p.user_id === user.id) };
+    version: row.version, can_review: !companySelfReview(row, user) && row.linked_user_id !== user.id && !declaredOwners(row)?.some(p => p.user_id === user.id) };
 }
 
 kyb.get('/', async c => {
@@ -191,6 +198,9 @@ kyb.get('/', async c => {
        AND (? = '' OR instr(lower(b.entity_name), lower(?)) > 0 OR lower(COALESCE(b.registration_number,'')) = lower(?))
      GROUP BY b.status`,
   ).bind(scope(c.env), sup, sup, user.id, status, status, kind, kind, jurisdiction, jurisdiction, q, q, q).all<Row>();
+  const memberships = await c.env.DB.prepare('SELECT company_id FROM user_company_links WHERE user_id = ?').bind(user.id).all<{ company_id: number }>();
+  const companyIds = new Set((memberships.results || []).map(r => r.company_id));
+  for (const row of result.results || []) row.actor_company_member = companyIds.has(row.company_id);
   await audit(c.env, user, await hashEmail(user.email), 'kyb_queue_access', null).run();
   return c.json({ items: (result.results || []).map(row => summary(row, user)), page, limit,
     total: (counts.results || []).reduce((n, r) => n + Number(r.n), 0), counts: counts.results || [] });

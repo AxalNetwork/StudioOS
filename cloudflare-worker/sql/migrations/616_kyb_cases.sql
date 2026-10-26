@@ -64,6 +64,8 @@ CREATE TABLE IF NOT EXISTS kyb_case_events (
 CREATE INDEX IF NOT EXISTS idx_kyb_events_case ON kyb_case_events(case_uid, id);
 
 -- The numeric id (source id * 4 + kind) is stable for the Approvals inbox.
+-- A corporate profile is not a submission; an obligation or staff case must request review.
+-- Import pending_review is an explicit imported review request.
 -- uid is the public case address. No copied PII or fictitious approval is backfilled.
 CREATE VIEW IF NOT EXISTS kyb_business_sources AS
 SELECT cp.id * 4 AS id, 'company-' || cp.id AS uid, 'founder_company' AS kind,
@@ -88,14 +90,17 @@ SELECT p.user_id * 4 + 1, 'account-' || p.user_id,
   p.tax_id_last4, p.signing_authority_name, p.signing_authority_title,
   p.ubos_json, p.directors_json, p.ubo_disclosed,
   p.aml_high_risk_jurisdiction, p.sanctions_last_checked_at,
-  'in_review', p.created_at, NULL, NULL, json_array(p.updated_at, p.entity_name, p.entity_type, p.registration_number, p.registered_country, p.registered_address_line1, p.registered_address_line2, p.registered_city, p.registered_state, p.registered_postal, p.tax_id_last4, p.signing_authority_name, p.signing_authority_title, p.ubos_json, p.directors_json, p.ubo_disclosed, p.aml_high_risk_jurisdiction, p.sanctions_last_checked_at), p.created_at, NULL
-FROM corporate_profiles p JOIN users u ON u.id = p.user_id WHERE NULLIF(trim(p.entity_name),'') IS NOT NULL
+  CASE WHEN lo.status = 'in_review' THEN 'in_review' ELSE 'not_started' END,
+  CASE WHEN lo.status = 'in_review' THEN lo.updated_at END, NULL, NULL, json_array(p.updated_at, p.entity_name, p.entity_type, p.registration_number, p.registered_country, p.registered_address_line1, p.registered_address_line2, p.registered_city, p.registered_state, p.registered_postal, p.tax_id_last4, p.signing_authority_name, p.signing_authority_title, p.ubos_json, p.directors_json, p.ubo_disclosed, p.aml_high_risk_jurisdiction, p.sanctions_last_checked_at), p.created_at, NULL
+FROM corporate_profiles p JOIN users u ON u.id = p.user_id
+LEFT JOIN legal_obligations lo ON lo.user_id = p.user_id AND lo.obligation_key = 'kyb_v1'
+WHERE NULLIF(trim(p.entity_name),'') IS NOT NULL
 UNION ALL
 SELECT i.id * 4 + 2, 'import-' || i.id, 'imported_partner', i.id, NULL, NULL, i.user_id,
   i.legal_name, i.legal_name, i.entity_type, i.jurisdiction, NULL, NULL,
   NULL, NULL, NULL, NULL, NULL, 0, NULL, NULL,
-  CASE WHEN i.status = 'dismissed' THEN 'dismissed' ELSE 'in_review' END,
-  i.created_at, NULL, NULL, json_array(i.created_at,i.legal_name,i.entity_type,i.jurisdiction,i.status), i.created_at, NULL
+  CASE WHEN i.status = 'dismissed' THEN 'dismissed' WHEN i.status IN ('pending_review','in_review') THEN 'in_review' ELSE 'not_started' END,
+  CASE WHEN i.status IN ('pending_review','in_review') THEN i.created_at END, NULL, NULL, json_array(i.created_at,i.legal_name,i.entity_type,i.jurisdiction,i.status), i.created_at, NULL
 FROM kyc_partner_imports i
 UNION ALL
 SELECT s.id * 4 + 3, 'studio-' || s.id, 'licensed_studio', s.id, NULL, NULL, NULL,
@@ -110,7 +115,7 @@ SELECT s.*,
   COALESCE(s.account_user_id, c.linked_user_id) AS linked_user_id,
   CASE WHEN c.source_revision = s.source_revision THEN
     CASE WHEN c.status = 'approved' AND julianday(c.expires_at) <= julianday('now') THEN 'expired' ELSE c.status END
-    ELSE CASE WHEN s.source_status = 'pending' OR (c.uid IS NOT NULL AND s.source_status IN ('approved','rejected','needs_info','expired')) THEN 'in_review' ELSE s.source_status END END AS status,
+    ELSE CASE WHEN s.source_status = 'pending' OR (c.uid IS NOT NULL AND s.source_status IN ('not_started','approved','rejected','needs_info','expired')) THEN 'in_review' ELSE s.source_status END END AS status,
   CASE WHEN c.source_revision = s.source_revision THEN c.reviewed_at ELSE s.source_reviewed_at END AS reviewed_at,
   CASE WHEN c.source_revision = s.source_revision THEN c.reviewed_by ELSE s.source_reviewed_by END AS reviewed_by,
   CASE WHEN c.source_revision = s.source_revision THEN c.expires_at ELSE NULL END AS expires_at,
