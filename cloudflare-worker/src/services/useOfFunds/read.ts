@@ -1,11 +1,14 @@
 /** D1176: each independently readable source retains its state, origin and date. */
 import type { Env } from '../../types';
 import { runwayMonths } from '../raiseCycle';
-import { base, json, obj, scenario, view, type Scope } from './store';
+import { base, json, obj, scenario, view, PlanError, type Scope } from './store';
 
 export async function block<T>(read: () => Promise<T>) {
   try { return { state: 'ok' as const, value: await read(), reason: null }; }
-  catch { return { state: 'unreadable' as const, value: null, reason: 'This block is Unreadable. Try again.' }; }
+  catch(e) {
+    if(e instanceof PlanError&&e.code==='plan_not_initialized') return {state:'not_initialized' as const,value:null,reason:e.sentence};
+    return { state: 'unreadable' as const, value: null, reason: 'This block is Unreadable. Try again.' };
+  }
 }
 const cents = (n: unknown): number | null => n == null || typeof n !== 'number' || !Number.isFinite(n) || n < 0 || !Number.isSafeInteger(Math.round(n * 100)) ? null : Math.round(n * 100);
 const integer = (n: unknown): number | null => typeof n === 'number' && Number.isSafeInteger(n) ? n : null;
@@ -53,7 +56,13 @@ export async function runwayToday(env:Env,s:Scope,mercuryAllowed:boolean) {
     WHERE f.project_id=? AND f.kind='runway' AND f.fact_key='runway' AND i.user_id=? AND i.provider_key='mercury' AND i.status='active'
     ORDER BY f.as_of DESC,f.id DESC LIMIT 1`).bind(s.projectId,s.user.id).first<any>())
     : {state:'founder_only' as const,value:null,reason:'Mercury figures are visible to the founder only.'};
-  const metrics=await block(async ()=>(await env.DB.prepare(`SELECT id,cash_balance,net_burn,source,snapshot_date FROM project_metrics WHERE project_id=? AND (?=1 OR lower(COALESCE(source,''))<>'mercury') ORDER BY snapshot_date DESC,id DESC`).bind(s.projectId,mercuryAllowed?1:0).all<any>()).results??[]);
+  // Bound the response to one usable snapshot per class (or its latest missing row).
+  const metrics=await block(async ()=>(await Promise.all([1,0].map(connectorClass=>env.DB.prepare(`SELECT id,cash_balance,net_burn,source,snapshot_date FROM project_metrics
+    WHERE project_id=? AND (?=1 OR lower(COALESCE(source,''))<>'mercury')
+      AND (lower(COALESCE(source,'')) IN ('stripe','mercury','quickbooks','xero'))=?
+    ORDER BY CASE WHEN typeof(cash_balance) IN ('integer','real') AND typeof(net_burn) IN ('integer','real')
+      AND cash_balance>=0 AND round(net_burn*100)>0 AND round(cash_balance*100)<=9007199254740991 AND round(net_burn*100)<=9007199254740991 THEN 0 ELSE 1 END,
+      snapshot_date DESC,id DESC LIMIT 1`).bind(s.projectId,mercuryAllowed?1:0,connectorClass).first<any>()))).filter(Boolean));
   const candidates:any[]=[];
   if (mercury.value) {
     const m=mercury.value; const cash=integer(m.amount_cents),burn=integer(m.burn_cents);
@@ -89,6 +98,7 @@ export async function planRead(env:Env,s:Scope,mercuryAllowed:boolean) {
   ]);
   const needs_you:{code:string;reason:string}[]=[];
   if (baseBlock.state==='unreadable') needs_you.push({code:'plan_unreadable',reason:baseBlock.reason!});
+  if (baseBlock.state==='not_initialized') needs_you.push({code:'plan_not_initialized',reason:baseBlock.reason!});
   if (round.disagreements.length) needs_you.push({code:'round_disagreement',reason:'Recorded round sizes differ. Choose the size for this plan.'});
   if (!runway.chosen) needs_you.push({code:'runway_missing',reason:runway.reason!});
   if (deck.value?.state==='out_of_sync') needs_you.push({code:'deck_out_of_sync',reason:'The deck Ask slide has not been marked in sync with this plan.'});
@@ -97,6 +107,6 @@ export async function planRead(env:Env,s:Scope,mercuryAllowed:boolean) {
   if (model?.milestones.value?.some((m:any)=>m.state==='Not costed')) needs_you.push({code:'milestones_not_costed',reason:'Some milestones are Not costed. Their affordability is unknown.'});
   if (model?.milestones.value?.some((m:any)=>m.state==='At risk')) needs_you.push({code:'milestones_at_risk',reason:'Some milestone costs exceed their section allocation.'});
   if (model?.runway.value?.relation==='exact'&&model.runway.value.months<baseBlock.value.target_runway_months) needs_you.push({code:'target_shortfall',reason:'The modelled cash runs out before your target.'});
-  return {project_id:s.projectId,viewer:{kind:s.user.role==='admin'?'admin':'founder',can_write:true,mercury:mercuryAllowed},base:projection,round,
+  return {project_id:s.projectId,viewer:{kind:s.user.role==='admin'?'admin':'founder',can_write:!s.readOnly,mercury:mercuryAllowed},base:projection,round,
     runway_today:runway,forecast,ties:{deck,cap_table:round.sources.cap_table},needs_you};
 }

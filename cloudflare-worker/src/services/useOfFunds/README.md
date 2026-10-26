@@ -20,6 +20,8 @@ The original JSON is never modified by a copy. Unknown/stale OKRs or malformed
 legacy data refuse the copy atomically for correction; they are never omitted.
 Legacy dollars become cents; no source is invented: copied rows carry the
 original module reference and the #2431 `recorded` provenance label.
+An optional `onCreate(uid)` statement lets the route include its conditional
+creation audit inside that same copy transaction. Support reads do not copy.
 
 `saveBaseSplit` remains the lower-level founder-only dual writer from D1175.
 D1176's `store.ts` extends the dual-write boundary to admin attribution and an

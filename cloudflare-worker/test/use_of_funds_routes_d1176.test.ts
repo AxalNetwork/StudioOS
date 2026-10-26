@@ -243,11 +243,12 @@ test('D1176 a conflicting later legacy edit refuses before changing Base or its 
   const f=fixture();
   f.db.prepare('UPDATE projects SET use_of_funds_meta=? WHERE id=1').run(JSON.stringify({milestone_costs:{'1':{cost:1,bucket:'eng'}}}));
   const base=(await call(f,'GET','/scenarios')).body.items[0];
+  const auditBefore=rows(f,'SELECT * FROM activity_logs');
   const changed={milestone_costs:{'1':{cost:2,bucket:'eng'}}};
   f.db.prepare('UPDATE projects SET use_of_funds_meta=? WHERE id=1').run(JSON.stringify(changed));
   const r=await call(f,'PATCH',`/scenarios/${base.id}`,{name:'Must not replace the other edit'});
   assert.equal(r.status,409);assert.equal(r.body.code,'legacy_plan_changed');
-  assert.equal(rows(f,'SELECT name FROM uof_scenarios WHERE is_base=1')[0].name,'Base');assert.equal(rows(f,'SELECT id FROM activity_logs').length,0);
+  assert.equal(rows(f,'SELECT name FROM uof_scenarios WHERE is_base=1')[0].name,'Base');assert.deepEqual(rows(f,'SELECT * FROM activity_logs'),auditBefore);
   assert.deepEqual(JSON.parse(rows(f,'SELECT use_of_funds_meta FROM projects WHERE id=1')[0].use_of_funds_meta),changed);
 });
 test('D1176 a milestone can be removed after its roadmap OKR disappears, including its Base projection and audit',async()=>{
@@ -258,6 +259,66 @@ test('D1176 a milestone can be removed after its roadmap OKR disappears, includi
   assert.equal(rows(f,'SELECT id FROM uof_milestones').length,0);
   assert.deepEqual(JSON.parse(rows(f,'SELECT use_of_funds_meta FROM projects WHERE id=1')[0].use_of_funds_meta).milestone_costs,{});
   assert.equal(rows(f,"SELECT id FROM activity_logs WHERE action='uof_milestone_deleted'").length,1);
+});
+test('D1176 support reads never initialize Base and advertise read-only controls',async()=>{
+  const f=fixture();const extra={impersonated_by:3};
+  const plan=await call(f,'GET','/plan',undefined,1,extra);
+  assert.equal(plan.status,200);assert.equal(plan.body.viewer.can_write,false);assert.equal(plan.body.base.state,'not_initialized');
+  assert.equal(plan.body.needs_you.some((x:any)=>x.code==='plan_not_initialized'),true);
+  for(const path of ['/scenarios','/milestones'])assert.equal((await call(f,'GET',path,undefined,1,extra)).status,409);
+  assert.equal(rows(f,'SELECT id FROM uof_scenarios').length,0);assert.equal(rows(f,'SELECT id FROM activity_logs').length,0);
+  const founder=await call(f,'GET','/plan');assert.equal(founder.body.viewer.can_write,true);
+  const supported=await call(f,'GET','/plan',undefined,1,extra);assert.equal(supported.body.base.value.id,founder.body.base.value.id);assert.equal(supported.body.viewer.can_write,false);
+  assert.equal(rows(f,'SELECT id FROM uof_scenarios').length,1);
+});
+test('D1176 runway responses bound history to the latest usable connector and other snapshot',async()=>{
+  const f=fixture();
+  f.db.exec("INSERT INTO project_metrics(project_id,cash_balance,net_burn,snapshot_date,source) VALUES(1,100,10,'2024-01-01','stripe'),(1,900,100,'2023-01-01',NULL),(1,100,0.001,'2026-10-26','stripe')");
+  const insert=f.db.prepare('INSERT INTO project_metrics(project_id,snapshot_date,source) VALUES(1,?,?)');
+  for(let i=0;i<500;i++)insert.run(new Date(Date.UTC(2025,0,1)+i*86400000).toISOString().slice(0,10),i%2?'stripe':null);
+  const plan=(await call(f,'GET','/plan')).body;
+  assert.equal(plan.runway_today.chosen.value,10);assert.equal(plan.runway_today.chosen.as_of,'2024-01-01');
+  assert.equal(plan.runway_today.sources.metrics.value.length,2);assert.equal(plan.runway_today.candidates.length,2);
+  assert.deepEqual(plan.runway_today.sources.metrics.value.map((r:any)=>r.cash_balance),[100,900]);
+  const base=plan.base.value.id;
+  const compare=(await call(f,'GET',`/compare?ids=${base}`)).body;assert.equal(compare.today.sources.metrics.value.length,2);assert.equal(compare.today.chosen.value,10);
+});
+test('D1176 hire uid is schema-backed and a concurrent removal produces no false hire audit',async()=>{
+  for(const method of ['PATCH','DELETE']) {
+    const f=fixture();f.db.exec("INSERT INTO use_of_funds_hires(id,project_id,category_key,role) VALUES(1,1,'product','Engineer')");
+    assert.match(rows(f,'SELECT uid FROM use_of_funds_hires')[0].uid,/^[a-f0-9]{32}$/);
+    const original=f.env.DB.batch;
+    f.env.DB.batch=async(stmts:any[])=>{f.db.exec('DELETE FROM use_of_funds_hires WHERE id=1');return original(stmts);};
+    const r=await call(f,method,'/hires/1',method==='PATCH'?{role:'Must not save'}:undefined);
+    assert.equal(r.status,409);assert.equal(r.body.code,'hire_changed');assert.equal(rows(f,'SELECT id FROM activity_logs').length,0);
+  }
+});
+test('D1176 a legacy write between preflight and batch rolls back every Base mutation and audit',async()=>{
+  for(const mode of ['split','scenario','milestone','promotion']) {
+    const f=fixture();const alternative=await created(f);const base=rows(f,'SELECT id FROM uof_scenarios WHERE is_base=1')[0].id;
+    const milestone=await call(f,'POST','/milestones',{scenario_id:base,label:'Keep',okr_id:1,cost_cents:100});assert.equal(milestone.status,201);
+    const snapshot=()=>['uof_scenarios','uof_scenario_lines','uof_milestones','activity_logs'].map(t=>rows(f,`SELECT * FROM ${t}`));
+    const before=snapshot();const original=f.env.DB.batch;let external:any;
+    f.env.DB.batch=async(stmts:any[])=>{
+      const current=JSON.parse(rows(f,'SELECT use_of_funds_meta FROM projects WHERE id=1')[0].use_of_funds_meta);external={...current,keep:'Concurrent project writer'};
+      f.db.prepare('UPDATE projects SET use_of_funds_meta=? WHERE id=1').run(JSON.stringify(external));return original(stmts);
+    };
+    const r=mode==='split'?await call(f,'PUT','',{sections:[{key:'reserve',pct:100}]}):mode==='scenario'?await call(f,'PATCH',`/scenarios/${base}`,{name:'Must roll back'}):mode==='milestone'?await call(f,'PATCH',`/milestones/${milestone.body.id}`,{cost_cents:999}):await call(f,'POST',`/scenarios/${alternative.id}/make-base`,{});
+    assert.equal(r.status,409,mode);assert.equal(r.body.code,'legacy_plan_changed',mode);assert.deepEqual(snapshot(),before,mode);
+    assert.deepEqual(JSON.parse(rows(f,'SELECT use_of_funds_meta FROM projects WHERE id=1')[0].use_of_funds_meta),external,mode);
+    assert.equal(rows(f,'SELECT funding_needed FROM projects WHERE id=1')[0].funding_needed,null);
+  }
+});
+test('D1176 founder and admin initialization is audited once in the copy transaction and failed audit leaves no Base',async()=>{
+  for(const who of [1,3]) {
+    const f=fixture();assert.equal((await call(f,'GET','/plan',undefined,who)).status,200);
+    const logs=rows(f,"SELECT user_id,details FROM activity_logs WHERE action='uof_scenario_created'");assert.equal(logs.length,1);assert.equal(logs[0].user_id,who);
+    assert.equal(logs[0].details,who===3?'Studio admin: uof scenario created.':'uof scenario created.');
+    await call(f,'GET','/plan',undefined,who);assert.equal(rows(f,'SELECT id FROM activity_logs').length,1);
+  }
+  const f=fixture();f.db.exec('DROP TABLE activity_logs');
+  const r=await call(f,'GET','/plan');assert.equal(r.status,200);assert.equal(r.body.base.state,'unreadable');
+  assert.equal(rows(f,'SELECT id FROM uof_scenarios').length,0);assert.equal(rows(f,'SELECT id FROM uof_scenario_lines').length,0);
 });
 test('D1176 invalid financial and AI provenance payloads refuse without writes; explicit zero cash/raise survives',async()=>{
   const f=fixture();const a=await created(f);

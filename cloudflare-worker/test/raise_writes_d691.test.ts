@@ -1137,7 +1137,7 @@ test('11: Edit split round-trips the five sections, the milestones and the runwa
     { sections: [{ key: 'product', pct: 100, milestone_label: 'x', milestone_by: 'soon' }] },
   ]) assert.equal((await cyc(db, C_FOUNDER, 'PUT', q('/use-of-funds'), b)).status, 400, JSON.stringify(b));
   assert.equal((db.prepare('SELECT use_of_funds_meta FROM projects WHERE id = ?').get(C_P) as any).use_of_funds_meta, p.use_of_funds_meta, 'a refused split writes nothing');
-  assert.deepEqual(logs(db, "entity_type = 'raise.use-of-funds'").map((x) => x.entity_id), ['product', 'go-to-market', 'infrastructure', 'operations', 'reserve']);
+  assert.deepEqual(logs(db, "entity_type = 'raise.use-of-funds' AND action = 'split_saved'").map((x) => x.entity_id), ['product', 'go-to-market', 'infrastructure', 'operations', 'reserve']);
 });
 
 test('12: Add investor stores Identified as to_contact, a fund by its name, answers a duplicate with 409, and never takes a withdrawn fund', async () => {

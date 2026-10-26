@@ -23,7 +23,7 @@ r.use('*',async(c,next)=>{
   if (!projectInActiveCompany(company,project)) return c.json({code:'not_found',detail:'Project not found.'},404);
   const owner=await c.env.DB.prepare("SELECT id FROM users WHERE founder_id=? AND role='founder' AND is_active=1 ORDER BY id LIMIT 1").bind(project.founder_id).first<{id:number}>();
   if (!owner) return c.json({code:'owner_unavailable',detail:'The active founder for this plan is Not recorded.'},409);
-  c.set('uof',{projectId:pid,user,founderUserId:owner.id});
+  c.set('uof',{projectId:pid,user,founderUserId:owner.id,readOnly:support});
   c.set('mercury',user.role==='founder'&&Number(user.founder_id)===Number(project.founder_id)&&!support);
   await next();
 });

@@ -1,10 +1,9 @@
 /** D1176: scoped, bound scenario writes. Each change and its audit commit together. */
 import type { Env, User } from '../../types';
-import { logCycleWriteStatement } from '../cycleActivity';
 import { copyLegacyBase, SECTION_LABELS, UofStoreError } from './legacy';
 import { plan, SECTION_KEYS, type PlanInputs, type SectionKey, type Source } from './plan';
 
-export type Scope = { projectId: number; user: User; founderUserId: number };
+export type Scope = { projectId: number; user: User; founderUserId: number; readOnly?: boolean };
 export class PlanError extends Error {
   status:number; code:string; sentence:string;
   constructor(status: number, code: string, sentence: string) { super(sentence); this.status=status;this.code=code;this.sentence=sentence; }
@@ -53,10 +52,6 @@ const currency = (v: unknown): string => {
 export function fields(b: Record<string, unknown>, allowed: string[]) {
   if (Object.keys(b).some(k => !allowed.includes(k))) throw bad();
 }
-export function audit(env: Env, s: Scope, action: string, entityId: string | number | null) {
-  return logCycleWriteStatement(env, { projectId: s.projectId, userId: Number(s.user.id), cycle: 'raise', module: 'use-of-funds', entityId,
-    action, summary: `${s.user.role === 'admin' ? 'Studio admin: ' : ''}${action.replace(/_/g, ' ')}.` });
-}
 /** Conditional audit shares the mutation's Base-state guard inside its transaction. */
 function scenarioAudit(env:Env,s:Scope,action:string,uid:string,isBase:number,entityId=uid) {
   return env.DB.prepare(`INSERT INTO activity_logs(project_id,user_id,entity_type,entity_id,action,details,actor)
@@ -64,7 +59,12 @@ function scenarioAudit(env:Env,s:Scope,action:string,uid:string,isBase:number,en
     .bind(s.projectId,s.user.id,entityId,action,`${s.user.role==='admin'?'Studio admin: ':''}${action.replace(/_/g,' ')}.`,`user:${s.user.id}`,uid,s.projectId,isBase);
 }
 export async function base(env: Env, s: Scope) {
-  try { return (await copyLegacyBase(env.DB, s.projectId, s.founderUserId)).scenarioId; }
+  if (s.readOnly) {
+    const existing=await env.DB.prepare('SELECT id FROM uof_scenarios WHERE project_id=? AND is_base=1').bind(s.projectId).first<{id:number}>();
+    if (!existing) throw new PlanError(409,'plan_not_initialized','The founder must initialize this plan before a support session can read its Base.');
+    return existing.id;
+  }
+  try { return (await copyLegacyBase(env.DB, s.projectId, s.founderUserId,uid=>scenarioAudit(env,s,'uof_scenario_created',uid,1))).scenarioId; }
   catch (e) {
     if (e instanceof UofStoreError) {
       if (e.code === 'unreadable') throw legacyRepair();
@@ -76,6 +76,14 @@ export async function base(env: Env, s: Scope) {
 function legacyRepair(conflict=false) {
   return new PlanError(409, conflict ? 'legacy_plan_changed' : 'legacy_plan_repair_required',
     'Review and correct the legacy Use of funds fields with PUT /api/projects/:id before retrying. Existing data was kept.');
+}
+async function planBatch(env:Env,statements:D1PreparedStatement[]) {
+  try { return await env.DB.batch(statements); }
+  catch(e) {
+    // Only the fixed JSON assertion below parses JSON inside these batches.
+    if(e instanceof Error && /malformed JSON/i.test(e.message)) throw legacyRepair(true);
+    throw e;
+  }
 }
 export async function scenario(env: Env, s: Scope, id: number) {
   const r = await env.DB.prepare('SELECT * FROM uof_scenarios WHERE project_id = ? AND id = ?').bind(s.projectId, id).first<any>();
@@ -151,7 +159,13 @@ async function legacyStatements(env: Env, s: Scope, r: any, lines: any[], milest
     }
     meta[field]=merged;
   }
-  return [env.DB.prepare(`UPDATE projects SET use_of_funds = ?, funding_needed = ?, use_of_funds_meta = ?, updated_at = datetime('now') WHERE id = ?
+  return [
+    // CASE is lazy in SQLite. A changed snapshot evaluates fixed invalid JSON,
+    // aborting and rolling back the WHOLE D1 batch, including earlier statements.
+    // No project content is parsed or placed in the database error.
+    env.DB.prepare("SELECT json(CASE WHEN EXISTS(SELECT 1 FROM projects WHERE id=? AND deleted_at IS NULL AND use_of_funds_meta IS ?) THEN 'true' ELSE '' END)")
+      .bind(s.projectId,project?.use_of_funds_meta??null),
+    env.DB.prepare(`UPDATE projects SET use_of_funds = ?, funding_needed = ?, use_of_funds_meta = ?, updated_at = datetime('now') WHERE id = ?
     AND EXISTS(SELECT 1 FROM uof_scenarios WHERE id=? AND project_id=? AND is_base=1)`)
     .bind(split === null ? null : JSON.stringify(split), r.amount_to_raise_cents === null ? null : r.amount_to_raise_cents / 100, JSON.stringify(meta), s.projectId,r.id,s.projectId)];
 }
@@ -210,7 +224,7 @@ export async function saveScenario(env: Env, s: Scope, id: number | null, b: Rec
     SELECT id,?,?,?,?,?,?,?,?,? FROM uof_scenarios WHERE uid=? AND project_id=?`).bind(m.category_key,m.label,m.due_on,m.cost_cents,m.okr_id,m.source_label,m.source_kind,m.source_ref,s.user.id,uid,s.projectId));
   if (r.is_base) stmts.push(...await legacyStatements(env, s, r, lines, parts.milestones));
   stmts.push(scenarioAudit(env, s, id === null ? 'uof_scenario_created' : 'uof_scenario_updated',uid,r.is_base));
-  const written=await env.DB.batch(stmts);
+  const written=await planBatch(env,stmts);
   if (!written[0].meta.changes) throw new PlanError(409,'scenario_changed','The scenario changed. Read it again.');
   const saved = await env.DB.prepare('SELECT * FROM uof_scenarios WHERE uid=? AND project_id=?').bind(uid,s.projectId).first<any>();
   return view(env, s, saved);
@@ -219,7 +233,7 @@ export async function makeBase(env: Env, s: Scope, id: number) {
   const r = await scenario(env, s, id); const parts = await scenarioParts(env, id);
   if (r.currency !== 'usd') throw new PlanError(409, 'base_currency', 'The Base uses USD because its legacy readers record dollars.');
   // Clearing and assigning the unique Base happen in the same transaction.
-  const written=await env.DB.batch([
+  const written=await planBatch(env,[
     env.DB.prepare('UPDATE uof_scenarios SET is_base=0 WHERE project_id=? AND is_base=1 AND EXISTS(SELECT 1 FROM uof_scenarios target WHERE target.id=? AND target.project_id=?)').bind(s.projectId,id,s.projectId),
     env.DB.prepare("UPDATE uof_scenarios SET is_base=1,updated_by=?,updated_at=datetime('now') WHERE id=? AND project_id=?").bind(s.user.id,id,s.projectId),
     ...await legacyStatements(env,s,r,parts.lines,parts.milestones), scenarioAudit(env,s,'uof_scenario_made_base',r.uid,1),
@@ -268,7 +282,7 @@ export async function saveMilestone(env:Env,s:Scope,id:number|null,b:Record<stri
     stmts.push(...await legacyStatements(env,s,sc,parts.lines,ms));
   }
   stmts.push(scenarioAudit(env,s,remove?'uof_milestone_deleted':id===null?'uof_milestone_created':'uof_milestone_updated',sc.uid,sc.is_base,r.uid));
-  const written=await env.DB.batch(stmts);
+  const written=await planBatch(env,stmts);
   if (!written[0].meta.changes) throw new PlanError(409,'scenario_changed','The scenario changed. Read it again.');
   if (remove) return {ok:true};
   const saved=await env.DB.prepare('SELECT * FROM uof_milestones WHERE uid=? AND scenario_id=?').bind(r.uid,sc.id).first<any>();
@@ -283,11 +297,14 @@ export async function saveHire(env:Env,s:Scope,id:number,b:Record<string,unknown
   if (has(b,'start_month')) r.start_month=month(b.start_month);
   if (has(b,'annual_cents')) r.annual_cents=number(b.annual_cents);
   if (has(b,'currency')) r.currency=currency(b.currency);
-  await env.DB.batch([
+  const written=await env.DB.batch([
+    env.DB.prepare(`INSERT INTO activity_logs(project_id,user_id,entity_type,entity_id,action,details,actor)
+      SELECT ?,?,'raise.use-of-funds',uid,?,?,? FROM use_of_funds_hires WHERE id=? AND project_id=?`)
+      .bind(s.projectId,s.user.id,remove?'uof_hire_deleted':'uof_hire_updated',`${s.user.role==='admin'?'Studio admin: ':''}${remove?'uof hire deleted.':'uof hire updated.'}`,`user:${s.user.id}`,id,s.projectId),
     remove ? env.DB.prepare('DELETE FROM use_of_funds_hires WHERE id=? AND project_id=?').bind(id,s.projectId)
       : env.DB.prepare("UPDATE use_of_funds_hires SET category_key=?,role=?,start_month=?,annual_cents=?,currency=?,updated_at=datetime('now') WHERE id=? AND project_id=?").bind(r.category_key,r.role,r.start_month,r.annual_cents,r.currency,id,s.projectId),
-    audit(env,s,remove?'uof_hire_deleted':'uof_hire_updated',old.uid),
   ]);
+  if (!written[1].meta.changes) throw new PlanError(409,'hire_changed','The hire changed. Read it again.');
   return remove?{ok:true}:{...r,source:'Typed'};
 }
 
@@ -326,7 +343,7 @@ export async function saveSplit(env:Env,s:Scope,b:Record<string,unknown>) {
   }
   stmts.push(...await legacyStatements(env,s,r,lines,ms));
   for (const section of sections) stmts.push(scenarioAudit(env,s,'split_saved',sc.uid,1,section.key));
-  const written=await env.DB.batch(stmts);
+  const written=await planBatch(env,stmts);
   if (!written[0].meta.changes) throw new PlanError(409,'scenario_changed','The scenario changed. Read it again.');
   return {ok:true,use_of_funds:SECTION_KEYS.map(k=>({label:SECTION_LABELS[k],pct:lines.find(l=>l.category_key===k)!.share_pct})),runway_months:r.target_runway_months};
 }
