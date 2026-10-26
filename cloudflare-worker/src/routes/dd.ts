@@ -20,11 +20,10 @@ import { hashEmail } from '../util/hashEmail';
 import { mintDownloadToken, verifyAndConsumeToken } from '../services/signedDownload';
 import { notify } from '../services/notify';
 import {
-  SECTION_CATALOG, CONNECTORS, sectionsFor, runConnector,
-  checklistFor,
+  SECTION_CATALOG, CONNECTORS, runConnector,
   computeScore, worstSeverity,
   encField, decField,
-  DD_DECISIONS, BLOCKING_FLAG_REFUSAL, blockingSectionsWithOpenSevereFlags, stampNewCase,
+  DD_DECISIONS, BLOCKING_FLAG_REFUSAL, blockingSectionsWithOpenSevereFlags, seedNewCase,
   TEMPLATE_DEPTHS, DEPTH_RANK, builtInTemplate, checkTemplateBody, latestTemplate, seedFromTemplate, CHECKLIST_CATALOG,
   renderReportArtifact,
   type DDSubjectType, type ReportCase, type ReportSection, type ChecklistDepth, type TemplateBody,
@@ -37,6 +36,24 @@ const dd = new Hono<{ Bindings: Env }>();
 type AppContext = Context<{ Bindings: Env }>;
 
 // ---------- helpers ----------
+
+/**
+ * D1245 (#3260): where a case address sends its reader. An admin's notice and
+ * email open the admin base, everyone else's the member base: both draw the
+ * same page, but `/admin/due-diligence` admits admins only, so a reviewer,
+ * lead or investor sent there met a refusal. `rest` starts with the case uid.
+ */
+export function ddCaseBase(role: unknown): string {
+  return String(role) === 'admin' ? '/admin/due-diligence' : '/due-diligence';
+}
+/** The same, for a recipient known by id; a failed read takes the member base, which admits an admin too. */
+async function ddCaseHref(env: Env, userId: number | null | undefined, rest: string): Promise<string> {
+  let role: unknown = null;
+  if (userId) {
+    try { role = (await env.DB.prepare('SELECT role FROM users WHERE id = ?').bind(userId).first<{ role: string }>())?.role; } catch { role = null; }
+  }
+  return `${ddCaseBase(role)}/${rest}`;
+}
 
 function genUid(): string {
   const bytes = new Uint8Array(16);
@@ -64,6 +81,46 @@ function leadOf(cs: Record<string, unknown>): number {
 const isLead = (user: AppUser, cs: Record<string, unknown>) => leadOf(cs) === user.id;
 /** The opener keeps the access they had; the lead has the same. */
 const leadsOrOpened = (user: AppUser, cs: Record<string, unknown>) => isLead(user, cs) || Number(cs.owner_user_id) === user.id;
+
+/**
+ * D1245 (#3260): what this reader may do on this case. Each flag is true only
+ * where its route would accept the call, read from the same rules:
+ *   scan, assign, report   a case writer (admin, lead or opener, or a reviewer
+ *                          on the case) who is an Admin or a partner;
+ *   requests               an Admin, or the case's lead or opener;
+ *   verdict                per section id: an Admin or the lead on every
+ *                          section; otherwise that section's reviewer, never
+ *                          an observer;
+ *   notify_founder         an Admin, on a project or founder case
+ *                          (`POST /report/share`);
+ *   audit                  an Admin, the lead or opener, or any reviewer.
+ * A flag says who may ask, not that the call succeeds: `report` still asks for
+ * a recent TOTP step-up, and a reviewer's verdict still needs their signed NDA.
+ * Pure, so the tests hold it against each route's gate.
+ */
+export function caseAllowed(
+  user: { id: number; role: unknown }, cs: Record<string, unknown>,
+  mine: ReadonlyArray<{ section_id: unknown; role: unknown }>, sectionIds: ReadonlyArray<number>,
+) {
+  const role = String(user.role);
+  const admin = role === 'admin';
+  const reviewer = mine.length > 0;
+  const runsIt = leadsOrOpened(user as AppUser, cs);
+  const writerStaff = (admin || runsIt || reviewer) && (admin || role === 'partner');
+  const lead = isLead(user as AppUser, cs);
+  const works = new Set(mine.filter((r) => String(r.role ?? 'reviewer') !== 'observer').map((r) => Number(r.section_id)));
+  const verdict: Record<string, boolean> = {};
+  for (const id of sectionIds) verdict[String(id)] = admin || lead || works.has(Number(id));
+  return {
+    scan: writerStaff,
+    assign: writerStaff,
+    verdict,
+    requests: admin || runsIt,
+    report: writerStaff,
+    notify_founder: admin && (cs.subject_type === 'project' || cs.subject_type === 'founder'),
+    audit: admin || runsIt || reviewer,
+  };
+}
 
 async function requireDdReader(c: AppContext): Promise<AppUser> {
   const user = await requireAuth(c);
@@ -306,36 +363,9 @@ dd.post('/cases', async (c) => {
       await sql`UPDATE dd_cases SET subject_legal_name_enc = ${enc} WHERE id = ${caseId}`;
     }
 
-    // D1249: the depth's latest template version, or the built-in catalog
-    // (version 0) when HQ has saved none. The case keeps the version.
-    const template = await latestTemplate(c.env, templateDepth);
-    const seed = template ? seedFromTemplate(subjectType, template.body) : null;
-    const sections = seed ? seed.sections : sectionsFor(subjectType).map((s) => ({ ...s, blocking: false }));
-    const sectionIdByKey = new Map<string, number>();
-    for (const s of sections) {
-      const secIns: any[] = await sql`
-        INSERT INTO dd_sections (case_id, section_key, title, weight, blocking)
-        VALUES (${caseId}, ${s.key}, ${s.title}, ${s.weight}, ${s.blocking ? 1 : 0})
-        RETURNING id`;
-      sectionIdByKey.set(s.key, Number(secIns[0].id));
-    }
-    if (template) await sql`UPDATE dd_cases SET template_id = ${template.id} WHERE id = ${caseId}`;
-    // Seed the working checklist at the chosen depth. Items land
-    // 'pending'; reviewers work them to pass/flag/fail and the
-    // flagged/failed severities feed the composite score alongside
-    // connector findings (see recomputeAndStoreScore).
-    const checklist = seed ? seed.checklist : checklistFor(subjectType, templateDepth);
-    let itemsSeeded = 0;
-    for (const it of checklist) {
-      const sid = sectionIdByKey.get(it.section_key);
-      if (!sid) continue;
-      await sql`
-        INSERT INTO dd_checklist_items (case_id, section_id, item_key, title, depth)
-        VALUES (${caseId}, ${sid}, ${it.key}, ${it.title}, ${it.depth})`;
-      itemsSeeded++;
-    }
-    // D1246: the opener leads it, and its blocking sections are stamped.
-    await stampNewCase(c.env, caseId, { blocking: !template });
+    // D1245: sections, template version, checklist and stamps, through the
+    // one seed the partner-deal opener uses too.
+    const seeded = await seedNewCase(c.env, caseId, subjectType, templateDepth);
     if (ctx.changed.length) {
       const n = ctx.next;
       await c.env.DB.prepare(
@@ -350,11 +380,11 @@ dd.post('/cases', async (c) => {
         type: 'dd_case_lead',
         title: `You lead the due diligence on ${subjectLabel}`,
         body: 'You can now record the decision and send the case to IC.',
-        link: `/due-diligence/${uid}`,
+        link: await ddCaseHref(c.env, ctx.next.lead_user_id, uid),
         channels: ['in_app'],
       }).catch(() => null);
     }
-    return c.json({ ...row, template_version: template ? template.version : 0, sections_seeded: sections.length, checklist_seeded: itemsSeeded }, 201);
+    return c.json({ ...row, template_version: seeded.templateVersion, sections_seeded: seeded.sections, checklist_seeded: seeded.items }, 201);
   } finally { await sql.end(); }
 });
 
@@ -517,6 +547,8 @@ dd.get('/cases/:uid', async (c) => {
     };
     return c.json({
       case: caseOut,
+      // D1245: the controls this reader may use; the page draws only these.
+      allowed: caseAllowed(user, cs, reviewersAll.filter((r) => Number(r.user_id) === user.id), sections.map((s) => Number(s.id))),
       sections: decryptedSections,
       findings: decryptedFindings,
       flags,
@@ -568,7 +600,7 @@ async function processConnector(env: Env, sourceId: number, caseId: number, meta
           type: 'dd_high_severity_finding',
           title: `[${f.severity.toUpperCase()}] DD finding on ${subjectLabel}`,
           body: f.title,
-          link: `/admin/due-diligence/${caseUid}`,
+          link: await ddCaseHref(env, ownerUserId, caseUid),
           channels: ['in_app', 'email'],
         }).catch(() => null);
       }
@@ -687,7 +719,7 @@ dd.post('/cases/:uid/sections/:sectionId/assign', async (c) => {
         role = excluded.role, expires_at = excluded.expires_at`;
 
     const baseUrl = c.env.APP_URL || 'https://axal.vc';
-    const link = `${baseUrl.replace(/\/+$/, '')}/admin/due-diligence/${cs.uid}?section=${sectionId}&inv=${jti}`;
+    const link = `${baseUrl.replace(/\/+$/, '')}${ddCaseBase(u[0].role)}/${cs.uid}?section=${sectionId}&inv=${jti}`;
     await notify(c.env, {
       userId: assigneeId,
       type: 'dd_section_assigned',
@@ -762,7 +794,7 @@ dd.post('/cases/:uid/sections/:sectionId/verdict', async (c) => {
       type: 'dd_section_completed',
       title: `Section completed on ${cs.subject_label}`,
       body: `${user.email} returned verdict "${verdict}".`,
-      link: `/admin/due-diligence/${cs.uid}`,
+      link: await ddCaseHref(c.env, Number(cs.owner_user_id), String(cs.uid)),
       channels: ['in_app','email'],
     }).catch(() => null);
     const score = await recomputeAndStoreScore(c.env, caseId);
@@ -1371,7 +1403,7 @@ dd.patch('/requests/:id/respond', async (c) => {
       type: 'dd_request_responded',
       title: `Response received: ${req.title}`,
       body: `${req.subject_label} responded to your information request.`,
-      link: `/admin/due-diligence/${req.case_uid}`,
+      link: await ddCaseHref(c.env, Number(req.owner_user_id), req.case_uid),
       channels: ['in_app', 'email'],
     }).catch(() => null);
     return c.json({ ok: true, id: requestId, state: 'received' });
@@ -2010,7 +2042,7 @@ dd.patch('/cases/:uid', async (c) => {
       type: 'dd_case_lead',
       title: `You lead the due diligence on ${cs.subject_label}`,
       body: 'You can now record the decision and send the case to IC.',
-      link: `/due-diligence/${cs.uid}`,
+      link: await ddCaseHref(c.env, next.lead_user_id, String(cs.uid)),
       channels: ['in_app'],
     }).catch(() => null);
   }
@@ -2062,7 +2094,7 @@ dd.post('/cases/:uid/decision', async (c) => {
       type: 'dd_case_decided',
       title: `Decision recorded on ${cs.subject_label}: ${words[decision]}`,
       body: 'The case is decided. Thank you for your review.',
-      link: `/due-diligence/${cs.uid}`,
+      link: await ddCaseHref(c.env, Number(r.user_id), String(cs.uid)),
       channels: ['in_app'],
     }).then(() => { told += 1; }).catch(() => null);
   }
@@ -2416,7 +2448,7 @@ dd.post('/cases/:uid/sections/:sectionId/conflicts', async (c) => {
       type: 'dd_conflict_declared',
       title: `A reviewer declared a conflict on ${cs.subject_label}`,
       body: 'Open the case team to read it.',
-      link: `/due-diligence/${cs.uid}/team`,
+      link: await ddCaseHref(c.env, leadOf(cs), `${cs.uid}/team`),
       channels: ['in_app'],
     }).catch(() => null);
   }
