@@ -23,7 +23,7 @@ const reasons = [
   ['solution-design', 'Solution design', 'No features yet. Linked and unlinked features appear here.', 'Add feature', '/build/solution-design?project=7&add=1'],
   ['prototype-mvp', 'Prototype / MVP', 'No must-haves yet. The burn-up toward the ship date appears here.', 'Add must-have', '/build/prototype-mvp?project=7&add=1'],
   ['product-roadmap', 'Product roadmap', 'No roadmap items yet. Now, Next and Later appear here.', 'Add item', '/build/roadmap?project_id=7'],
-  ['founding-team', 'Founding team', 'No founders yet. The equity split and vesting appear here.', 'Add founder', '/raise/capital/cap-table'],
+  ['founding-team', 'Founding team', 'No founders yet. The equity split and vesting appear here.', 'Add founder', '/raise/cap-table'],
   ['company-creation', 'Company creation', 'No filings yet. Formation steps and their dates appear here.', 'Add filing', '/build/company-creation?project=7&add=1'],
   ['operating-systems', 'Operating systems', 'No systems connected yet. Each system and its state appear here.', 'Connect a system', '/build/connect?project_id=7'],
 ];

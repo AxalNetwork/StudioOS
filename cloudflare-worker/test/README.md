@@ -33,6 +33,12 @@ fixture is the schema production has rather than a hand-copy that drifts from it
 three tests had each grown their own copy of that reader, and one of the copies
 had already been caught reading a column name production does not use.
 `baseline_reader.test.mjs` holds it to what the regex it replaced returned.
+D1174 regressions live in the use-of-funds, Raise card/record, financial
+integrity and access suites. Synthetic Mercury rows prove accepted mappings,
+private owner/session/company scope, missing versus zero, and local read
+failure; the provider is forbidden. Cash timing and the shared split reader
+are checked against the actual Worker services.
+
 `_engine_schema.mjs` (D757) gives a world whose sessions reach the Validate engine
 what it reads: migrations 453, 465 and 487, `queue_jobs`, and the member and venture
 columns `writableSession` checks.
@@ -120,3 +126,15 @@ derived stages, per-user/firm visit markers and private notes, including audit
 rollback, no admin bypass, NDA exclusion and anonymous change metadata.
 
 D1123 extends admin_lab_operations_d971.test.ts with real SQLite capacity-result tests: cohort scoping, last event, absent vs unreadable, and admin-only reads.
+
+`calendar_d1206.test.ts` checks mounted Free-investor reads and subscriptions,
+Professional-only IC creation, advisor fallback ownership, partial-source error
+codes and safe diagnostics, and Calendly exclusion from both provider copies.
+It also checks local-licence scopes, HQ elevation, constant-query populated memberships, private-kind exclusions,
+unavailable remote coverage and personal sync/export isolation after a scope
+read. `my_events_feed_d1033.test.ts` also verifies Free and lapsed subscriptions
+with token ownership, revocation and join-link boundaries intact.
+Staff-view audit tests verify both existing stores contain only scope/window
+details, repeated views are recorded, and personal/refused/invalid reads create
+no staff-view audit entry.
+Every provider call is stubbed or refused; all rows are synthetic.

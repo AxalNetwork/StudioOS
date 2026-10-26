@@ -12,7 +12,8 @@ const src = (f) => readFileSync(new URL(`../src/${f}`, import.meta.url), 'utf8')
 
 const LINKS = [
   ['pages/ProjectDetail.jsx', 'crunchbase', /Connect it in Account → Connectors/],
-  ['pages/CapTablePage.jsx', 'carta', /Connect Carta/],
+  // D1029: the old cap table page is gone; the tool's Import and export tab holds Connect Carta.
+  ['pages/raise/captable/ImportExportTab.jsx', 'carta', /Connect Carta/],
   ['pages/SettingsPage.jsx', 'slack', /Slack joins this table once it is connected in/],
   ['pages/admin/profiles/ProfileRecord.jsx', 'docusign', /connect DocuSign/],
   ['components/MercuryMatch.jsx', 'mercury', /Open Connectors/],
@@ -27,8 +28,6 @@ test('each provider link opens that connector\'s page', () => {
     assert.ok(s.includes(`/account/connectors/${key}"`), `${file}: no link to /account/connectors/${key}`);
     assert.doesNotMatch(s, /["']\/account\/connectors["']/, `${file}: a provider link still opens the hub`);
   }
-  // Carta has two: Connect and Manage.
-  assert.equal(src('pages/CapTablePage.jsx').split('href="/account/connectors/carta"').length - 1, 2);
 });
 
 test('proof of funds\' "Connectors › Mercury" opens Mercury\'s page', () => {

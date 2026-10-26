@@ -322,6 +322,7 @@ import cycleValidate from './routes/cycle_validate';
 import cycleRecords from './routes/cycle_records';
 import cycleVerdict from './routes/cycle_verdict';
 import cycleRaise from './routes/cycle_raise';
+import pmfExplain from './routes/pmf_explain';
 import founderValidateStructure from './routes/founder_validate_structure';
 import founderValidateSessions from './routes/founder_validate_sessions';
 import meetingBotCallbacks from './routes/meeting_bot_callbacks';
@@ -867,11 +868,11 @@ const INVESTOR_PRO_PREFIXES = [
   '/api/dd',
   '/api/pipeline',
   '/api/deals',
-  '/api/calendar',
   '/api/ic',
 ];
-// D614/D1149: precise exemptions allow leaving a room and an authorized
-// deal header/key strip. Child deal reads and diligence stay Professional.
+// D614/D1149/D1237: precise exemptions allow Free room quota, join/leave,
+// and an authorized header/key strip. The deal list, child reads and diligence
+// stay Professional; join enforces its one-room allowance in the INSERT.
 const investorPro = requireInvestorTierExcept('professional');
 for (const p of INVESTOR_PRO_PREFIXES) {
   app.use(p, investorPro);
@@ -1555,6 +1556,7 @@ app.route('/api/channels', channels);
 app.route('/api/cycles/validate/decisions', cycleVerdict);
 app.route('/api/cycles/validate', cycleValidate);
 app.route('/api/cycles', cycleRecords);
+app.route('/api/cycles/raise/pmf/explain', pmfExplain);
 app.route('/api/cycles/raise', cycleRaise);
 // D658 (#1471) — a structured interview's placements, decided one at a time.
 app.route('/api/founder/validate', founderValidateStructure);

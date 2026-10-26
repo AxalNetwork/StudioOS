@@ -17,7 +17,7 @@
  */
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { readFileSync, readdirSync } from 'node:fs';
+import { existsSync, readFileSync, readdirSync } from 'node:fs';
 import { resolve, join } from 'node:path';
 
 const root = resolve(process.cwd());
@@ -124,9 +124,6 @@ test('totals are null when nothing is recorded, never a confident zero', () => {
   const sum = svc.slice(svc.indexOf('export function knownSum'), svc.indexOf('/** Each holder'));
   assert.match(sum, /if \(!rows\.length\) return null;/);
   assert.match(sum, /if \(v == null\) return null;/);
-
-  const ui = read('frontend/src/pages/captable/EquityPlanPanel.jsx');
-  assert.match(ui, /return 'Not recorded'/, 'the panel must render absence as "Not recorded"');
 });
 
 test('no money column is introduced — these are share counts', () => {
@@ -159,12 +156,9 @@ test('vested amounts are reported, not recomputed', () => {
     'the endpoint must not derive vesting from the clock');
 });
 
-test('the panel says SAFE conversion is absent, and why', () => {
-  const ui = read('frontend/src/pages/captable/EquityPlanPanel.jsx');
-  assert.match(ui, /not shown/i);
-  assert.match(ui, /not stored/i, 'the reason must be stated, not just the absence');
-
-  // And the premise, as D1017 (#2854) moved it: the discount and MFN are
+test('SAFE conversion terms are stored on the record only', () => {
+  // D1029 (#2866) deleted the panel that said conversion was not shown; the
+  // premise, as D1017 (#2854) moved it: the discount and MFN are
   // stored now, but only on the record (`cap_table_issuances`, migration 573),
   // which this panel does not read. It reads Carta's per-account pools and
   // vesting; a cap-table security still carries neither term, and the
@@ -192,9 +186,9 @@ test('the panel says SAFE conversion is absent, and why', () => {
   assert.ok(!mfnColumn.test(baseline) && !discountColumn.test(baseline), 'the baseline, Carta\'s securities among it, has neither');
 });
 
-test('the panel is mounted and the api method exists on both sides', () => {
-  assert.match(read('frontend/src/pages/CapTablePage.jsx'), /<EquityPlanPanel \/>/,
-    'defining the panel is not shipping it');
+test('the api method exists on both sides; the old panel is gone (D1029)', () => {
+  // Option pool (D1023) draws the pool and the grants from the record and the plan, so the panel went with CapTablePage.
+  assert.equal(existsSync(resolve(root, 'frontend/src/pages/captable/EquityPlanPanel.jsx')), false);
   assert.match(read('frontend/src/lib/api.js'), /getEquityPlan: \(\) => request\('\/captable\/equity-plan'\)/);
   assert.match(read('cloudflare-worker/src/routes/captable.ts'), /captable\.get\('\/equity-plan'/);
 });

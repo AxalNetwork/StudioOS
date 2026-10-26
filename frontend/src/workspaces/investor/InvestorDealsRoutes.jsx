@@ -127,7 +127,7 @@ export default function InvestorDealsRoutes() {
           workspace="Deals"
           role="investor"
           stance="Manual workspace"
-          note="Your pipeline, deal rooms, votes and invitations work without AI. Scores and recommendations appear only when they exist in the live deal record. This view never invents a memo, cost, model, or result."
+          note="Your pipeline, deal rooms, votes and invitations work without AI. Scores appear only when they exist in the live deal record. Eadwyn drafts only when you ask. This view never invents a memo, cost, model, or result."
           coverage={[`${zone?.label || 'Pipeline'} · live deal records only`]}
           coverageNote="Founder-sourced and shared objects retain their provenance. Existing server access controls remain authoritative."
           unavailable={[

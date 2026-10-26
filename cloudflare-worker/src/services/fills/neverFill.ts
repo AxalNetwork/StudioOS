@@ -1,6 +1,6 @@
 /**
  * The fields Eadwyn never fills — the Worker's copy of
- * `frontend/src/lib/neverFill.js` (D777). Read that file's header for the four
+ * `frontend/src/lib/neverFill.js` (D777, D1147). Read that file's header for the five
  * kinds and how a rule matches; this one carries the same rules and the same
  * matcher, and `test/never_fill.test.ts` fails when the two disagree.
  *
@@ -15,7 +15,7 @@
  * the first two still cannot record Eadwyn as the author of a signature.
  */
 
-export type NeverFillCategory = 'signature_consent' | 'payment_amount' | 'identity_number' | 'legal_attestation';
+export type NeverFillCategory = 'signature_consent' | 'payment_amount' | 'identity_number' | 'legal_attestation' | 'score_rating';
 export interface NeverFillRule {
   category: NeverFillCategory;
   label: string;
@@ -24,6 +24,12 @@ export interface NeverFillRule {
 }
 
 export const NEVER_FILL_RULES: readonly NeverFillRule[] = Object.freeze([
+  {
+    category: 'score_rating',
+    label: 'Scores and ratings',
+    tables: ['readiness_scores', 'venture_scorecards'],
+    columns: ['score', 'scores', 'rating', 'ratings'],
+  },
   {
     category: 'signature_consent',
     label: 'Signatures and consents',
