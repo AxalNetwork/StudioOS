@@ -12,6 +12,7 @@ The founder's Capital relationships tool at `/raise/capital-relationships` (D118
 The tool is the Capital relationships module, not a page beside it.
 - Overview is CycleRoute's module page, which already draws the round card, the Investors table, the Calls section and Mercury's parts.
 - The tab words (`/pipeline`, `/match`, `/outreach`, `/commitments`, `/calls`, `/activity`) arrive on the module's record route, `/raise/:slug/:id`. CycleRoute draws `CapRelTabPage` for them instead of a record (`isCapRelTab`).
+- `/calls` (D1221, #2458) draws Calls for Capital, `../calls/CallsTab.jsx`; one sent call is at `/calls/:uid`, the one route `App.jsx` adds under this tool.
 - `/closing` (D1213, #2424) is the round's closing room, `CLOSING` in `capRelModel.js`: not one of the seven tabs, so the tab bar keeps Commitments lit, and Commitments holds its door. It draws `../../closing/ClosingRoom.jsx`'s `FounderClosing`.
 - An investor's own page is still its number, and `/new` is still Add investor.
 - No route is added.

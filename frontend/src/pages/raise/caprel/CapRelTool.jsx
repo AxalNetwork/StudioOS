@@ -6,7 +6,7 @@ import { CycleHeader } from '../../cycles/CycleOverview';
 import { CycleBar } from '../../cycles/PhoneModulePage';
 import { RecordsTable } from '../../cycles/CycleModulePage';
 import { recordHref, recordId, rowLinks } from '../../cycles/recordModel';
-import CallsHistory from '../../cycles/CallsHistory';
+import CallsTab from '../calls/CallsTab';
 import { ProRataPanel, RoundClosesPanel } from '../RoundClosesPanel';
 import { FounderClosing } from '../../closing/ClosingRoom';
 import { CLOSING, HOME_PATH, LINE, NOT_YET, SLUG, TABS, TITLE, WAITS, tabHref, tabSearch } from './capRelModel';
@@ -85,7 +85,8 @@ function Calls({ projectId }) {
   const read = useModule(projectId);
   if (read.status === 'loading') return <div className="h-24 animate-pulse rounded-xl bg-axal-ground dark:bg-gray-800" data-testid="caprel-calls-loading" />;
   if (read.status === 'unreadable') return <Unreadable what="Your calls for capital" claim="This is not a claim that you have run none." onRetry={read.retry} />;
-  return <div data-testid="caprel-calls"><CallsHistory calls={read.data?.parts?.calls} /></div>;
+  // D1221 (#2458): the Calls for Capital page, off and on (CLS1–CLS3).
+  return <div data-testid="caprel-calls"><CallsTab calls={read.data?.parts?.calls} onRetry={read.retry} /></div>;
 }
 
 /** Commitments: today's closes and pro-rata, as the old pipeline page draws them. */

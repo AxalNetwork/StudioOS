@@ -13,8 +13,8 @@ Nothing here is typed by hand, so nothing here can disagree with them.
 each canvas and why. This document answers a different question: *who sees
 it, where in their nav, and how do they get there.*
 
-**Corpus:** 171 canonical canvases at `design/canvases/`, listed
-248 times below — a canvas serving two workspaces appears under both.
+**Corpus:** 172 canonical canvases at `design/canvases/`, listed
+250 times below — a canvas serving two workspaces appears under both.
 
 ## Column meanings
 
@@ -27,7 +27,7 @@ it, where in their nav, and how do they get there.*
 | Entry point | The sidebar path, or how the surface is reached when it has no nav row |
 | Confidence | High = live route reachable from that role’s nav. Medium = live route, no nav row. Low = not routed. |
 
-## Founder — 78 canvases
+## Founder — 79 canvases
 
 | Canvas | Route | Nav section | Surface | Entry point | Status | Confidence |
 | --- | --- | --- | --- | --- | --- | --- |
@@ -35,6 +35,7 @@ it, where in their nav, and how do they get there.*
 | Advisors | `/spinout-lab/advisors` | Headerless | Full page (Spin-Out Lab — frozen) | Sidebar → Headerless → Spin-Out Lab | OUT OF SCOPE | High |
 | Apply and Status | `/spinout-lab/apply` | Headerless | Full page (Spin-Out Lab — frozen) | Sidebar → Headerless → Spin-Out Lab | OUT OF SCOPE | High |
 | Brand & Landing Page | `/spinout-lab/brand` | Headerless | Full page (Spin-Out Lab — frozen) | Sidebar → Headerless → Spin-Out Lab | OUT OF SCOPE | High |
+| Calls for Capital | `/raise/calls` · `/raise/calls/:uid` | Headerless | Full page | Sidebar → Headerless → Raise | NEW | High |
 | Cap table | `/raise/cap-table` · `/raise/cap-table/instruments` · `/option-pool` · `/scenarios` · `/history` · `/raise/cap-table/h-<n>` · `/new` · `/raise/cap-table/proposal/<id>` · `/raise/cap-table/instrument/<uid>` · `/raise/cap-table/scenarios/<uid>` · `/raise/cap-table/scenarios/compare?ids=` | Headerless | Full page (proposed) | Sidebar → Headerless → Raise | UPGRADE | Low |
 | Cap Table | `/spinout-lab/captable` | Headerless | Full page (Spin-Out Lab — frozen) | Sidebar → Headerless → Spin-Out Lab | OUT OF SCOPE | High |
 | Cap Table Pro | `/raise/capital/cap-table` · `/share/captable/:token` · `/raise/cap-table/variants` · `/raise/cap-table/variants/:variant` | Headerless | Full page | Sidebar → Headerless → Raise | UPGRADE | High |
@@ -135,10 +136,11 @@ it, where in their nav, and how do they get there.*
 | Signals | `/signals` · `/research` | Headerless | Full page | Sidebar → Headerless → Research | RETIRED | High |
 | Trust center (public) | `/trust/me` · `/admin/security/trust-center` | — (no nav entry) | Full page | Deep link / in-page action | NEW | Medium |
 
-## LP / Investor — 31 canvases
+## LP / Investor — 32 canvases
 
 | Canvas | Route | Nav section | Surface | Entry point | Status | Confidence |
 | --- | --- | --- | --- | --- | --- | --- |
+| Calls for Capital | `/raise/calls` · `/raise/calls/:uid` | — (no nav entry) | Full page | Deep link / in-page action | NEW | Medium |
 | Checkout | `/pricing` | — (no nav entry) | Full page | Deep link / in-page action | UPGRADE | Medium |
 | Closing room | `/raise/capital-relationships/closing` · `/deals/:dealId/closing` · `/admin/contracts/closings` · `/admin/contracts/closings/:dealId` | Headerless | Full page (proposed) | Sidebar → Headerless → Deals | NEW | Low |
 | Data Room | `/raise/data-room?mode=workspace` · `/raise/data-room?mode=access` · `/raise/data-room/:id` · `/research/diligence` · `/research/diligence/:grantUid` · `/files/:fileUid` | Headerless | Full page | Sidebar → Headerless → Deals | CURRENT | High |
@@ -329,8 +331,8 @@ it, where in their nav, and how do they get there.*
 
 | Confidence | Rows | Meaning |
 | --- | ---: | --- |
-| High | 115 | Live route, reachable from that workspace’s sidebar. |
-| Medium | 75 | Live route, but no sidebar row for that role — reached by deep link or an in-page action. |
+| High | 116 | Live route, reachable from that workspace’s sidebar. |
+| Medium | 76 | Live route, but no sidebar row for that role — reached by deep link or an in-page action. |
 | Low | 58 | Not routed. Proposed route only. |
 
 A Medium row is not a defect. Detail pages (`/deals/:id`), print artefacts

@@ -109,6 +109,22 @@ strength of a live route would empty the queue of the work it exists to track.
    `Trust Center v2.dc.html` to `backlog/` for a day, next to the `NEW` canvases
    that have no route, and away from the v1 of its own page.
 
+## Landed 2026-10-26 — Raise › Calls for Capital (#2458)
+
+The owner's artifacts `J62CXhkW7Q3roPvNQKN9YD` (the page) and
+`6WLiACF5362SF4bmKh1Zsb` (the board grid) came from S21's prompt on #2458. Each
+was decoded by `scripts/read-canvas.mjs` as is:
+- `Calls for Capital · Boards.dc.html` is the board grid (CLS1 to CLS15); it
+  imports the page by name;
+- `Calls for Capital Page.dc.html` is the page.
+
+No value was edited.
+
+**Grade: NEW.** S21's integration (D1221) makes Raise's "Calls" tab open
+Calls for Capital at `/raise/capital-relationships/calls`, off and on, and puts
+one sent call at `/raise/capital-relationships/calls/:uid`. The rest is
+D1222–D1227.
+
 ## Landed 2026-10-26 — The closing room (#2424)
 
 The owner's artifacts `N3XUV6g4U2NAnLovRYYy96` (the page) and

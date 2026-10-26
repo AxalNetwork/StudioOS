@@ -3750,9 +3750,11 @@ function AppInner() {
         : <Navigate to="/raise/capital/pipeline" replace />} />
       {/* D686 §3.1 item 14: a founder's call inside the Raise shell; investors and counsel stay on /round-calls/:uid. */}
       <Route path="/raise/calls/:uid" element={guard(labRoles(['admin', 'founder']), <RaiseCallPage />)} />
+      {/* D1221 (#2458): one call at its address under Capital relationships › Calls (CLS8); /raise/calls/:uid stays until part 6 counts its redirect. */}
+      <Route path="/raise/capital-relationships/calls/:uid" element={guard(labRoles(['admin', 'founder']), <RaiseCallPage />)} />
       {/* D686 §5.1: Call for Capital, the Raise page with its lightbox open; /raise/calls is the history's address. */}
       <Route path="/raise/call" element={guard(labRoles(['admin', 'founder']), <CycleRoute cycle="raise" lightbox />)} />
-      <Route path="/raise/calls" element={guard(labRoles(['admin', 'founder']), <HistoryRedirect to="/raise/capital-relationships" hash="#calls" />)} />
+      <Route path="/raise/calls" element={guard(labRoles(['admin', 'founder']), <HistoryRedirect to="/raise/capital-relationships/calls" hash="" />)} />
       {/* D1025 (#2862, CT11): a Cap table proposal's drawer, over the tool; its id is a record proposal's uid or `mercury-<n>`. */}
       <Route path="/raise/cap-table/proposal/:proposal" element={guard(labRoles(['admin', 'founder']), <CycleRoute cycle="raise" slug="cap-table" capTableProposal />)} />
       {/* D1023 (#2860, CT4): an instrument's drawer, over Instruments; its id is the record's SAFE or note uid. */}

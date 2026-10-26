@@ -122,7 +122,8 @@ test('ROUTE_MAP still parses to the full canvas corpus', () => {
   // 169 (D1188, #2457): `Capital relationships`, /raise/capital-relationships and its tab words.
   // 170 (D1195, #2382): `Product testing`, /admin/platform/product-testing and its tabs.
   // 171 (D1213, #2424): `Closing room`, the founder's and the deal's rooms and Contracts › Closings.
-  assert.equal(recs.length, 171);
+  // 172 (D1221, #2458): `Calls for Capital`, Capital relationships' Calls tab and one call.
+  assert.equal(recs.length, 172);
 
   for (const r of recs) {
     assert.ok(r.canvas.length > 0, 'every row names a canvas');
