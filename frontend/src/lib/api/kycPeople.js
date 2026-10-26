@@ -43,6 +43,11 @@ async function documentBlob(userId, docId = null, { signal } = {}) {
   const path = docId == null
     ? `/api${one(userId)}/document`
     : `/api${one(userId)}/documents/${encodeURIComponent(docId)}`;
+  return fetchKycDocument(path, { signal });
+}
+
+/** D1234: the same binary read for any KYC document path (a business's too, `kybApi.documentBlob`). */
+export async function fetchKycDocument(path, { signal } = {}) {
   const deadline = armDeadline(DEFAULT_TIMEOUT_MS, signal);
   const access = () => { const e = new Error('Your HQ staff sign-in is needed to open this document.'); e.code = 'access_required'; return e; };
   try {
