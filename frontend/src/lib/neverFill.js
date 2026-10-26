@@ -1,7 +1,7 @@
 /**
  * The fields Eadwyn never fills (D777, from D720 §9: "Eadwyn drafts; you send").
  *
- * FIVE KINDS OF FIELD, and a fill that names one is refused — in this file for
+ * SIX KINDS OF FIELD, and a fill that names one is refused — in this file for
  * the SPA, and in `cloudflare-worker/src/services/fills/neverFill.ts` for the
  * Worker, which carries the same rules. `cloudflare-worker/test/never_fill.test.ts`
  * fails when the two disagree, so a field added here and not there (or the other
@@ -20,6 +20,8 @@
  *                      making it can make it.
  *   score_rating       Scores and ratings come from their model or human rater,
  *                      never from an Eadwyn fill (D1147).
+ *
+ *   money_term         Use of funds financial inputs and forecast drivers are never filled.
  *
  * HOW A FIELD IS NAMED. Either `table.column` — what a fill kind's `target()`
  * and `fill_provenance` record — or a bare form-field name, for a form that

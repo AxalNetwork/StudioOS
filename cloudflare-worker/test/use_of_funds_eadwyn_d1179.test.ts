@@ -113,7 +113,7 @@ test('Keep refuses tampering and a failed audit rolls back the reading; failed r
   f.db.exec("CREATE TRIGGER fail_reading_audit BEFORE INSERT ON activity_logs BEGIN SELECT RAISE(ABORT,'private-business-diagnostic'); END");
   const k=await call(f,'POST','/keep',{receipt:p.body.receipt});assert.equal(k.status,503);assert.equal(count(f,'research_zone_drafts'),0);assert.doesNotMatch(JSON.stringify(k.body),/private-business-diagnostic/);
   f.db.exec('DROP TRIGGER fail_reading_audit');await call(f,'POST','/keep',{receipt:p.body.receipt});const altered=JSON.parse(f.db.prepare('SELECT body FROM research_zone_drafts').get().body);altered.payload=altered.payload.replace('The recorded plans differ.','Tampered reading.');f.db.prepare('UPDATE research_zone_drafts SET body=?').run(JSON.stringify(altered));
-  assert.equal((await call(f,'GET','')).status,503);
+  const unreadable=await call(f,'GET','');assert.equal(unreadable.status,200);assert.equal(unreadable.body.unreadable,1);assert.deepEqual(unreadable.body.items,[]);assert.doesNotMatch(JSON.stringify(unreadable.body),/Tampered reading/);
   f.db.exec('DROP TABLE research_zone_drafts');assert.equal((await call(f,'GET','')).status,503);
 });
 test('the production cycle mount exposes the new read without a new index mount or client fallback',async()=>{
@@ -165,4 +165,15 @@ test('a check with no supported mismatch still cites the sources it read, withou
  const f=fixture();seed(f);output=()=>({items:[]});const p=await call(f,'POST','',{mode:'check'});assert.equal(p.status,200);
  assert.deepEqual(p.body.reading.items,[]);assert.deepEqual(p.body.reading.source_refs.map((s:any)=>s.ref),['plan','deck','narrative']);
  await call(f,'POST','/keep',{receipt:p.body.receipt});const r=await call(f,'GET','');assert.deepEqual(r.body.items[0].source_refs,p.body.reading.source_refs);
+});
+test('one corrupted kept row does not hide a verified row, and signing-key changes stay explicitly unreadable',async()=>{
+ const f=fixture();seed(f);const a=await call(f,'POST','',{mode:'check'});await call(f,'POST','/keep',{receipt:a.body.receipt});
+ const b=await call(f,'POST','',{mode:'check'});await call(f,'POST','/keep',{receipt:b.body.receipt});
+ f.db.prepare("UPDATE research_zone_drafts SET body='{}' WHERE uid=?").run(JSON.parse(a.body.receipt.payload).uid);
+ const mixed=await call(f,'GET','');assert.equal(mixed.status,200);assert.equal(mixed.body.unreadable,1);assert.deepEqual(mixed.body.items.map((r:any)=>r.uid),[JSON.parse(b.body.receipt.payload).uid]);
+ f.env.SCORING_HMAC_SECRET='synthetic-rotated-signing-key';const rotated=await call(f,'GET','');assert.equal(rotated.status,200);assert.equal(rotated.body.unreadable,2);assert.deepEqual(rotated.body.items,[]);
+});
+test('Keep rejects unknown receipt fields rather than storing unsigned arbitrary content',async()=>{
+ const f=fixture();seed(f);const p=await call(f,'POST','',{mode:'check'});
+ const r=await call(f,'POST','/keep',{receipt:{...p.body.receipt,extra:'unsigned extra content'}});assert.equal(r.status,400);assert.equal(count(f,'research_zone_drafts'),0);assert.equal(count(f,'activity_logs'),0);
 });

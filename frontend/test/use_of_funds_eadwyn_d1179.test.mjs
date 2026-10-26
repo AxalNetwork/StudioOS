@@ -24,7 +24,7 @@ async function mounted(overrides = {}) {
   useOfFundsApi.readingRoadmap=async p=>{calls.push(['roadmap',p]);return {items:[{id:1,objective:'Product milestone'}]};};
   const container = document.createElement('div'); document.body.appendChild(container); const root = createRoot(container);
   const flush = async () => { await act(async () => { for (let i = 0; i < 5; i++) await new Promise(resolve => setTimeout(resolve, 0)); }); };
-  const fields=[{parts:[{name:'milestone_label.product'},{name:'milestone_label.reserve'}]}];
+  const fields=overrides.fields??[{parts:[{name:'milestone_label.product'},{name:'milestone_label.reserve'}]}];
   const render=async(projectId,values={})=>{await act(async()=>root.render(React.createElement(overrides.wording?UseOfFundsMilestoneWording:UseOfFundsEadwyn,{projectId,fields,values,setValue:(...a)=>calls.push(['placed',...a])})));await flush();};
   await render(7);
   const walk = n => [n, ...(n.childNodes || []).flatMap(walk)];
@@ -85,4 +85,15 @@ test('missing source reasons survive a failed preview without showing an invente
 test('a check without a supported mismatch names its sources and never certifies the plan',async()=>{
  const ui=await mounted({preview:async()=>({...proposal,reading:{...proposal.reading,items:[],source_refs:[{ref:'plan',label:'Base plan source',source:'Typed',href:'/raise/use-of-funds',as_of:'2026-10-25'}]}})});
  try{await ui.click('Check this plan');assert.match(ui.text(),/does not certify the plan/);assert.match(ui.text(),/Sources read/);assert.match(ui.text(),/Base plan source/);}finally{await ui.close();}
+});
+test('forms without a milestone name mount no helper, fetch no roadmap and offer no paid wording run',async()=>{
+ const ui=await mounted({wording:true,fields:[{name:'amount_to_raise'},{name:'role'}]});
+ try{assert.deepEqual(ui.calls,[]);assert.doesNotMatch(ui.text(),/Suggest wording|milestone name/);}finally{await ui.close();}
+});
+test('one damaged saved reading is explicit without hiding a valid saved reading',async()=>{
+ const ui=await mounted({read:async()=>({items:[{...proposal.reading,uid:'good',captured_at:'2026-10-25'}],unreadable:1})});
+ try{assert.match(ui.text(),/Some saved readings are Unreadable/);assert.match(ui.text(),/The recorded plans differ/);assert.match(ui.text(),/Kept plan check/);}finally{await ui.close();}
+});
+test('a stale or invalid milestone field cannot start a paid run',async()=>{
+ const ui=await mounted({wording:true});try{await ui.choose('Build roadmap item','1');await ui.choose('Milestone section','amount_to_raise');await ui.click('Suggest wording from your roadmap');assert.equal(ui.calls.some(c=>c[0]==='preview'),false);}finally{await ui.close();}
 });

@@ -1,6 +1,6 @@
 /**
  * The fields Eadwyn never fills — the Worker's copy of
- * `frontend/src/lib/neverFill.js` (D777, D1147). Read that file's header for the five
+ * `frontend/src/lib/neverFill.js` (D777, D1147). Read that file's header for the six
  * kinds and how a rule matches; this one carries the same rules and the same
  * matcher, and `test/never_fill.test.ts` fails when the two disagree.
  *

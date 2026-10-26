@@ -39,13 +39,14 @@ export default function UseOfFundsEadwyn({ projectId, ai }) {
   const [mode, setMode] = useState(null), [proposal, setProposal] = useState(null), [busy, setBusy] = useState(false);
   const [error, setError] = useState(''), [kept, setKept] = useState(null), [readError, setReadError] = useState(false);
   const [failedGaps, setFailedGaps] = useState([]);
+  const [unreadableCount, setUnreadableCount] = useState(0);
   const serial = useRef(0), readSerial = useRef(0);
   useRailOption(mode === 'check' ? 'draft:raise/use-of-funds-check' : null, 'Check this plan');
   useRailOption(mode === 'runway' ? 'draft:raise/use-of-funds-runway' : null, 'Explain the runway');
   async function load() {
     const token = ++readSerial.current;
-    setKept(null); setReadError(false);
-    try { const r = await useOfFundsApi.readings(projectId); if (token === readSerial.current) setKept(r.items); }
+    setKept(null); setReadError(false); setUnreadableCount(0);
+    try { const r = await useOfFundsApi.readings(projectId); if (token === readSerial.current) { setKept(r.items); setUnreadableCount(r.unreadable ?? 0); } }
     catch { if (token === readSerial.current) setReadError(true); }
   }
   useEffect(() => { serial.current++; setMode(null); setProposal(null); setError(''); setBusy(false); load(); return () => { serial.current++; readSerial.current++; }; }, [projectId]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -73,6 +74,7 @@ export default function UseOfFundsEadwyn({ projectId, ai }) {
     <RunEstimate ai={ai} task="workspace_explain" />
     <div className="mt-3 flex flex-wrap gap-2"><button className={BUTTON} disabled={busy} onClick={() => run('check')}>Check this plan</button><button className={BUTTON} disabled={busy} onClick={() => run('runway')}>Explain the runway</button></div>
     {readError && <p className={`mt-3 text-sm ${MUTED}`} role="status">Kept readings · Unreadable. <button className={BUTTON} onClick={load}>Try again</button></p>}
+    {unreadableCount > 0 && <p className={`mt-3 text-sm ${MUTED}`} role="status">Some saved readings are Unreadable. Verified readings remain available. <button className={BUTTON} onClick={load}>Try again</button></p>}
     {kept?.map((reading, i) => <details key={reading.uid ?? i} className="mt-3"><summary className={`cursor-pointer text-sm font-bold ${INK}`}>Kept {reading.mode === 'check' ? 'plan check' : 'runway reading'}</summary><p className={`my-2 text-xs ${MUTED}`}>Sources captured {reading.captured_at}. They may have changed since this reading.</p><ReadingCitations reading={reading} /></details>)}
     {mode && <Lightbox label={mode === 'check' ? 'Check this plan' : 'Explain the runway'} onClose={close} width={720} pageBelow="lg">
       <div className="max-h-[85vh] space-y-4 overflow-y-auto p-5" data-testid="uof-reading-dialog">
@@ -94,8 +96,11 @@ export function milestonePlacement(field, label, current) {
     ? { field, value: label.trim() } : null;
 }
 /** UF6's name-only proposal, placed in the unsaved split form; its Save remains human. */
-export function UseOfFundsMilestoneWording({ projectId, fields, values, setValue, busy: formBusy }) {
-  const labels = fields.flatMap(f => f.parts ?? [f]).filter(f => LABEL_FIELD.test(f.name));
+export function UseOfFundsMilestoneWording(props) {
+  const labels = props.fields.flatMap(f => f.parts ?? [f]).filter(f => LABEL_FIELD.test(f.name));
+  return labels.length ? <MilestoneWordingFields {...props} labels={labels} /> : null;
+}
+function MilestoneWordingFields({ projectId, labels, values, setValue, busy: formBusy }) {
   const [roadmap, setRoadmap] = useState(null), [readError, setReadError] = useState(false), [okr, setOkr] = useState('');
   const [field, setField] = useState(labels[0]?.name ?? ''), [proposal, setProposal] = useState(null), [busy, setBusy] = useState(false), [error, setError] = useState('');
   const serial = useRef(0);
@@ -107,6 +112,7 @@ export function UseOfFundsMilestoneWording({ projectId, fields, values, setValue
   }
   useEffect(() => { setRoadmap(null); setOkr(''); setProposal(null); setError(''); setBusy(false); load(); return () => { serial.current++; }; }, [projectId]); // eslint-disable-line react-hooks/exhaustive-deps
   async function run() {
+    if (!labels.some(f => f.name === field) || !okr || String(values[field] ?? '').trim() || formBusy || busy) return;
     const token = ++serial.current; setProposal(null); setError(''); setBusy(true);
     try { const r = await useOfFundsApi.previewReading(projectId, { mode: 'wording', okr_id: Number(okr) }, railPressHeaders(OPTIONS.wording)); if (token === serial.current) setProposal({ ...r, field }); }
     catch (e) { if (token === serial.current) setError(readingError(e)); }
@@ -125,7 +131,7 @@ export function UseOfFundsMilestoneWording({ projectId, fields, values, setValue
     {readError && <p className={`text-xs ${MUTED}`}>Roadmap · Unreadable. <button type="button" onClick={load}>Try again</button></p>}
     {roadmap?.length === 0 && <p className={`text-xs ${MUTED}`}>Not recorded: add a Build roadmap item first.</p>}
     {String(values[field] ?? '').trim() && <p className={`text-xs ${MUTED}`}>Your milestone name stays. Clear it yourself to request new wording.</p>}
-    <button type="button" className={BUTTON} disabled={formBusy || busy || !okr || !!String(values[field] ?? '').trim()} onClick={run}>{busy ? 'Reading the roadmap…' : 'Suggest wording from your roadmap'}</button>
+    <button type="button" className={BUTTON} disabled={formBusy || busy || !labels.some(f => f.name === field) || !okr || !!String(values[field] ?? '').trim()} onClick={run}>{busy ? 'Reading the roadmap…' : 'Suggest wording from your roadmap'}</button>
     {error && <p className={`text-xs ${MUTED}`} role="alert">{error}</p>}
     {proposal && <><ReadingCitations reading={proposal.reading} /><div className="flex gap-2"><button type="button" className={PRIMARY} disabled={!placement || formBusy} onClick={() => { if (placement) { setValue(placement.field, placement.value); setProposal(null); } }}>Accept</button><button type="button" className={BUTTON} onClick={() => setProposal(null)}>Dismiss</button></div></>}
   </section>;

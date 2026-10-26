@@ -51,15 +51,17 @@ export function createUseOfFundsEadwyn(runner: typeof runAI = runAI) {
       AND surface IN ('raise/use-of-funds-check','raise/use-of-funds-runway') AND accepted_at IS NOT NULL ORDER BY id DESC LIMIT 20`)
       .bind(s.user.id, String(s.projectId)).all<{ body: string }>();
     if (!rows.success || !Array.isArray(rows.results)) return failure(c);
-    const items = [];
+    const items = []; let unreadable = 0;
     for (const row of rows.results) {
-      const kept = JSON.parse(row.body);
-      if (!kept || typeof kept.payload !== 'string' || !same(kept.signature, await sign(c.env, kept.payload))) return failure(c);
-      const p = JSON.parse(kept.payload);
-      if (p.user !== s.user.id || p.project !== s.projectId || !['check','runway'].includes(p.mode)) return failure(c);
-      items.push(p);
+      try {
+        const kept = JSON.parse(row.body);
+        if (!kept || typeof kept.payload !== 'string' || !same(kept.signature, await sign(c.env, kept.payload))) throw new Error('unreadable');
+        const p = JSON.parse(kept.payload);
+        if (p.user !== s.user.id || p.project !== s.projectId || !['check','runway'].includes(p.mode)) throw new Error('unreadable');
+        items.push(p);
+      } catch { unreadable++; }
     }
-    return c.json({ items });
+    return c.json({ items, unreadable });
   });
   r.post('/', async c => {
     const s = c.get('readingScope');
@@ -90,10 +92,10 @@ export function createUseOfFundsEadwyn(runner: typeof runAI = runAI) {
   r.post('/keep', async c => {
     const s = c.get('readingScope');
     const b = await c.req.json().catch(() => null), receipt = b?.receipt;
-    if (!b || Object.keys(b).join() !== 'receipt' || !receipt || typeof receipt.payload !== 'string' || receipt.payload.length > 140000 || !same(receipt.signature, await sign(c.env, receipt.payload))) return refuse(c, 400, { code: 'invalid_reading', message: 'Run a reading before keeping it.' });
+    if (!b || Object.keys(b).join() !== 'receipt' || !receipt || Object.keys(receipt).sort().join() !== 'payload,signature' || typeof receipt.payload !== 'string' || receipt.payload.length > 140000 || !same(receipt.signature, await sign(c.env, receipt.payload))) return refuse(c, 400, { code: 'invalid_reading', message: 'Run a reading before keeping it.' });
     const p = JSON.parse(receipt.payload);
     if (p.user !== s.user.id || p.project !== s.projectId || !['check', 'runway'].includes(p.mode) || !Number.isFinite(p.expires) || p.expires < Date.now()) return refuse(c, 409, { code: 'reading_expired', message: 'Run a fresh reading before keeping it.' });
-    const body = JSON.stringify(receipt), surface = p.mode === 'check' ? 'raise/use-of-funds-check' : 'raise/use-of-funds-runway';
+    const body = JSON.stringify({ payload: receipt.payload, signature: receipt.signature }), surface = p.mode === 'check' ? 'raise/use-of-funds-check' : 'raise/use-of-funds-runway';
     await c.env.DB.batch([
       c.env.DB.prepare(`INSERT INTO research_zone_drafts (uid, owner_user_id, surface, scope_key, body, cost_micro_usd, accepted_at)
         VALUES (?, ?, ?, ?, ?, ?, datetime('now')) ON CONFLICT(uid) DO NOTHING`).bind(p.uid, s.user.id, surface, String(s.projectId), body, p.cost_micro_usd),
