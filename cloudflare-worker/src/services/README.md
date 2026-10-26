@@ -1,5 +1,9 @@
 # cloudflare-worker/src/services — logic, not HTTP
 
+`programUsage.ts` (D1156) collects month-to-date program counts locally, sends
+only aggregates to HQ, validates authenticated reports and reads dated per-grant
+figures. Missing and unreadable metrics stay distinct from measured zero.
+
 Everything a route needs that is not request parsing or response shaping. A file
 here takes `env` and plain values; it does not take a Hono `Context` and does
 not return a `Response`.
@@ -66,6 +70,12 @@ completed discovery to recover later retained uploads; an active scan keeps its
 cursor. No object content or deletion.
 
 ## The ones worth knowing
+
+`segmentMembership.ts` (D1128, #3008) resolves stored segment identities,
+the active sign-up catalog, an admin-moved member's missing questions, and the
+suppressed per-segment all-question completion count. Questions remain defined
+in code. `segmentProfiles.ts` also creates an authored profile and its first
+history version atomically. Events resolves its audience IDs from this store.
 
 `personaSegments.ts` is D999's segment counts (#2814) behind
 `GET /api/personas/admin/segments`: one grouped pass over every account but
@@ -168,6 +178,8 @@ no new schema, runtime or billing path is introduced.
 | `notion/` | D1085: a founder's own Notion, read-only, through Notion's MCP server. `reads.ts` is the only file that opens a Notion session: search, a page with its fingerprint, children, a data source's schema and its rows, each id checked before it is sent, never SQL. Its README has the rules. |
 | `referrals/` | Referral submissions. |
 | `records/` | D690's scoped cycle record contract, registry and ownership checks. |
+| `scoring/` | D1143 (#3029): the Product-market fit score, defined once (#2433). `pmf.ts` is model v1 as data and the pure `scorePmf` (value, band, confidence, coverage and the next steps ranked by gain); `pmfCollector.ts` reads Validate's stores for it with bound SQL, after the latest Pivot, and reads no interviewee name or quote. |
+| `testingOverview.ts` | D1196 (#3146): Product testing's overview read behind `GET /api/admin/testing/overview` (Super Admin): applications and picks per Monday week from `testing_events` (not recorded before the first programme opened), the tester pool and open programmes' applicants by profile, withdrawn counts, and Mail reach per open programme on `testerRecipients`' rule. Each block answers alone; counts only, never an address. |
 | `scoring/` | D1143 (#3029): the Product-market fit score, defined once (#2433). `pmf.ts` is model v1 as data and the pure `scorePmf` (value, band, confidence, coverage and the next steps ranked by gain); `pmfCollector.ts` reads Validate's stores for it with bound SQL, after the latest Pivot, and reads no interviewee name or quote. D1144 adds `pmfStore.ts`: signed, change-only snapshots, history and the atomic PMF checklist/audit update in shared migration 598. See `scoring/README.md`. |
 | `signals/` | Signal ingestion and evidence. |
 | `vercel/` | D1096: `api.ts`, the only caller of `api.vercel.com`: a read-only client for the planned reads, uninstall and the OAuth code exchange. Its README has the rules. |

@@ -1,5 +1,8 @@
 # frontend/src/lib/api — one file per new API domain
 
+D1156: `programGrants.js` adds the dated HQ `inUse(uid)` read and the branch
+`sendProgramReport()` action, with no caller-supplied counts.
+
 `../api.js` is the SPA's client for the Worker. It is also the file most likely
 to conflict: on `main` from 2 August to 3 October 2026 it changed in 113 of
 624 commits, because every new client method landed at the bottom of it. From
@@ -369,6 +372,9 @@ text in the library yet") and sends Unbind (`POST …/:ref/unbind`, Super Admin
 with a recent step-up and a reason). Each list row and profile carries its
 agreement's envelope state on `envelope`.
 
+D1128 extends `personaSegments.js` with mounted Worker paths for creation,
+completion counts, Events segment choices, and expected-primary follow-up answers.
+
 D1000 (#2815): `personaSegments.js` is Persona segments' profile store on
 `/api/personas/segments`: every profile, one with its history, the needs read
 (members, needs met and gaps, offers by kind, links' reach), and the Super
@@ -400,3 +406,5 @@ to the mounted HQ Super Admin POST `/api/admin/platform/storage/backfill-sizes`.
 The operator sends a bounded batch size and optional rescan flag; discovery cursors stay server-side. A rescan restarts completed discovery and resumes an active scan.
 
 D1199 (#3149): `productTesting.js` adds the programme logo: `partnerTestingApi.uploadLogo(uid, file)` and `.removeLogo(uid)`, the same on `adminTestingApi` for HQ's own programmes, and `productTestingApi.logoSrc(uid)`, the `<img>` path (a 404 there means no logo: draw the initial letter).
+
+D1207 (#3173): `calendarItems.js` holds the Calendar's Reschedule (`PATCH /calendar/ic-meetings/:id` and `/calendar/founder-checkins/:id`) and its pickers (`/calendar/people`, `/calendar/deals`). A person comes back as a uid and a name, never an email or a user number.

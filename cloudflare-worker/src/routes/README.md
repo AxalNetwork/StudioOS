@@ -264,6 +264,10 @@ heartbeat also takes `slides`, the viewer's seconds per slide, stored through
 
 D982 (#2773): `admin_program_grants.ts` mounts `/api/admin/program-grants`: HQ's program grants per licence (the grid, one licence, its history, the default terms) under `requireSuperAdmin`, and grant, change terms, pause, resume, end and the defaults under `requireSuperAdminWriteBar` with a reason of at least 10 characters. Each grant write appends one `licence_events` `program_changed` row; the store is migration 553 and `../services/programGrants.ts`. See `documentation/architecture/decisions/D982.md`.
 
+D1156 adds `GET /api/admin/program-grants/licences/:uid/in-use` (HQ Super
+Admin) and `POST /api/licence/mine/programs/report` (local branch Admin).
+Both delegate to `../services/programUsage.ts`; neither accepts member data.
+
 D983 (#2774): `admin_program_requests.ts` mounts `/api/admin/program-grants/requests`, ahead of part 1's routes: the studios' program requests (a grant, a terms change, an end) from HQ's lane and every branch's, under `requireSuperAdmin`, and HQ's approve and decline under `requireSuperAdminWriteBar` with a reason of at least 10 characters. An approval records a draft as a `program_changed` event (`request_approved`); Grant stays `admin_program_grants.ts`'s write. The generic `PATCH /api/admin/escalations/:uid` refuses these kinds. The checks are `../services/programRequests.ts`. See `documentation/architecture/decisions/D983.md`.
 
 D956 (#2789): `admin_programs.ts` adds `PUT /:key/grantable`, Offer to studios, under `requireSuperAdminWriteBar` with a reason: D982's "can be granted" switch, switched on only with a published playbook, as `admin_program_grants.ts`'s defaults write now also requires. The catalogue and `/:key` carry each program's `grant` for the viewer (`../services/programGrantStates.ts`). An approval for one studio (`admin_program_proposals.ts`) opens a `draft` grant (migration 562), which `admin_program_grants.ts`'s grant write takes to `granted`; every other move from a draft is refused. See `documentation/architecture/decisions/D956.md`.
@@ -327,6 +331,12 @@ D886 B10 (#2588): `admin_platform.ts` mounts Super Admin-only
 `/meeting-bots` count/charge reads and `/meeting-bots/test` dispatch/timing reads.
 Dispatch requires TOTP plus recent step-up and calls B1's service with the
 operator's own consented session; status events supply content-free timings.
+
+D1128 (#3008): `persona_segments.ts` adds HQ-only `POST /` creation and the
+admin `GET /:key/completion` count. `personas.ts` exposes authenticated
+`GET /audience-segments` (names/statuses only); `/me` includes the member’s
+missing segment questions. Its existing answer route accepts an expected-primary
+check for follow-up; custom stored segment IDs work in sign-up and retag.
 
 D1011 (#2830): `admin_payments.ts` is the Payments page's Super Admin reads,
 mounted at `/api/admin/payments`: the change log over the catalogue's and
