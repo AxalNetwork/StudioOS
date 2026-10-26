@@ -432,5 +432,7 @@ D1207 (#3173): `calendarItems.js` holds the Calendar's Reschedule (`PATCH /calen
 D1176: `useOfFunds.js` holds the venture-scoped plan, scenarios/compare, milestones, hires and split calls, plus the retained financial-model read/save. The Worker routes land first; the UI follows in #3104/#3105.
 
 | File | Purpose |
+|---|---|
+| `raiseEvidence.js` | D1263: founder evidence reads, refresh and versioned decisions against the mounted Worker routes. |
 | --- | --- |
 | `dealInsights.js` | D1151: per-deal Team, Market and Traction read clients. |
