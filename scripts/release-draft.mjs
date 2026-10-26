@@ -49,7 +49,8 @@ export function draftPayload(row, repo) {
   };
 }
 
-async function gh(path, { method = 'GET', body } = {}) {
+/** The GitHub REST call both release scripts use; `allow404` answers null for a missing ref. */
+export async function gh(path, { method = 'GET', body, allow404 = false } = {}) {
   const r = await fetch(`${API}${path}`, {
     method,
     headers: {
@@ -60,6 +61,7 @@ async function gh(path, { method = 'GET', body } = {}) {
     },
     body: body ? JSON.stringify(body) : undefined,
   });
+  if (allow404 && r.status === 404) return null;
   if (!r.ok) throw new Error(`${method} ${path}: HTTP ${r.status} ${(await r.text()).slice(0, 300)}`);
   return r.status === 204 ? null : r.json();
 }
