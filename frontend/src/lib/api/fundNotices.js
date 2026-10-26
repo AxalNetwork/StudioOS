@@ -5,6 +5,11 @@
 //
 // D1162 — an Admin's reads on HQ (routes/fund_notices.ts): the notices of a
 // fund or one LP, one notice's figures, and its kept PDF.
+//
+// D1163 — the Capital calls and Distributions tabs' notices: a call's notices
+// previewed and issued together (`/calls/:callUid/preview|issue`, one digest),
+// and one notice (a distribution's) previewed and issued by its figures.
+// Issue is the Super Admin's; the request helper answers the step-up.
 import { request, refusalError } from '../api.js';
 
 // A kept PDF (binary endpoint, not typed drift), read only when the viewer
@@ -37,4 +42,12 @@ export const fundNoticesApi = {
   list: ({ fundId, lpId } = {}) => request(`/fund-notices${query({ fund_id: fundId, lp_id: lpId })}`),
   one: (uid) => request(`/fund-notices/${encodeURIComponent(uid)}`),
   pdfBlob: (uid) => pdfBlob(`/api/fund-notices/${encodeURIComponent(uid)}/pdf`, uid),
+  /** `{ type, source, inputs, page_size }` → the draft's HTML, figures, `figures_sha256` and `refusal`. */
+  preview: (body) => request('/fund-notices/preview', { method: 'POST', body: JSON.stringify(body) }),
+  /** The previewed notice, issued by the figures it showed (`figures_sha256`). */
+  issue: (body) => request('/fund-notices/issue', { method: 'POST', body: JSON.stringify(body) }),
+  /** Every line's notice of one call, and one digest over them. */
+  callPreview: (callUid) => request(`/fund-notices/calls/${encodeURIComponent(callUid)}/preview`, { method: 'POST', body: '{}' }),
+  /** Every line's notice of one call, all or none, by the preview's digest. */
+  callIssue: (callUid, { page_size, digest }) => request(`/fund-notices/calls/${encodeURIComponent(callUid)}/issue`, { method: 'POST', body: JSON.stringify({ page_size, digest }) }),
 };

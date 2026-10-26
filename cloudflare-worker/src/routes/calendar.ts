@@ -37,6 +37,7 @@ import {
 } from '../services/calendar/syncState';
 import { removeProviderCopies } from '../services/calendar/sync';
 import { describeItems } from '../services/calendar/items';
+import { adoptMeetCopy, makeMeetLink, readItem } from '../services/calendar/itemRead';
 import { investorUpsell, userMeetsInvestorTier } from '../middleware/requireInvestorTier';
 import { logAdminAction } from '../services/adminAudit';
 import { requireAuth, isSuperAdmin } from '../auth';
@@ -236,6 +237,16 @@ calendar.get('/events', safe('events', 'Could not list calendar events', async (
     google_connected: !!tok,
     sources,
   });
+}));
+
+// D1211 (#3177) — one item for the drawer at /calendar/item/:kind/:id (CAL4,
+// CAL5). The page read's own reader and description; a meeting the reader is
+// not part of answers as one that does not exist (CAL18).
+calendar.get('/item/:kind/:id', safe('item', 'Could not read this calendar item', async (c) => {
+  const user = await requireAuth(c);
+  const out = await readItem(c.env, user, c.req.param('kind'), c.req.param('id'));
+  if (!out.ok) return c.json({ error: out.error, detail: out.detail }, out.status);
+  return c.json({ item: out.item });
 }));
 
 calendar.get('/events.ics', safe('ics', 'Could not export calendar', async (c) => {
@@ -484,6 +495,16 @@ function rescheduleOf(body: any, current: number, min: number, max: number):
   return { ok: true, start: start.toISOString(), duration };
 }
 
+/**
+ * D1211 — the Meet event is the creator's Google copy, so the copy hook that
+ * runs next PATCHes it instead of writing a second one. If that record cannot
+ * be written the meeting still stands; the creator may then see two events.
+ */
+async function keepMeetCopy(env: Env, userId: number, kind: 'ic_meeting' | 'founder_checkin', id: number, externalRef: string) {
+  try { await adoptMeetCopy(env, userId, kind, id, externalRef); }
+  catch { console.warn('[calendar] meet copy not recorded', { kind }); }
+}
+
 calendar.post('/ic-meetings', safe('ic_create', 'Could not create IC meeting', async (c) => {
   const user = await requireAuth(c);
   if (!userMeetsInvestorTier(user, 'professional')) return c.json(investorUpsell('professional'), 402);
@@ -518,18 +539,31 @@ calendar.post('/ic-meetings', safe('ic_create', 'Could not create IC meeting', a
     if (!attendee || !(await isDealParty(c.env, attendee, dealId))) return c.json({ detail: 'Attendee is not on this deal' }, 403);
   }
   attendeeIds.add(user.id);
+  // D1211 (CAL7): "Add a Google Meet link" makes it on the organiser's own
+  // Google account before anything is saved, so a refusal leaves nothing.
+  const meet = body.add_meet === true
+    ? await makeMeetLink(c.env, user.id, { topic: title, startsAt: startAt.toISOString(), durationMin: duration })
+    : null;
+  if (meet && !meet.ok) return refuse(c, meet.refusal.status, { code: meet.refusal.code, message: meet.refusal.message });
   const uid = crypto.randomUUID();
-  const r = await sql`
-    INSERT INTO ic_meetings
-      (uid, title, agenda, start_at, duration_min, deal_id, organizer_user_id,
-       location_kind, location_uri)
-    VALUES
-      (${uid}, ${title}, ${body.agenda || null}, ${startAt.toISOString()}, ${duration},
-       ${dealId}, ${user.id},
-       ${body.location_kind || 'video'}, ${body.location_uri || null})
-    RETURNING *
-  ` as any[];
+  let r: any[];
+  try {
+    r = await sql`
+      INSERT INTO ic_meetings
+        (uid, title, agenda, start_at, duration_min, deal_id, organizer_user_id,
+         location_kind, location_uri)
+      VALUES
+        (${uid}, ${title}, ${body.agenda || null}, ${startAt.toISOString()}, ${duration},
+         ${dealId}, ${user.id},
+         ${meet?.ok ? 'video' : body.location_kind || 'video'}, ${meet?.ok ? meet.joinUrl : body.location_uri || null})
+      RETURNING *
+    ` as any[];
+  } catch (e) {
+    if (meet?.ok) await meet.undo();
+    throw e;
+  }
   const meeting = r[0];
+  if (meet?.ok) await keepMeetCopy(c.env, user.id, 'ic_meeting', meeting.id, meet.externalRef);
   await logAdminAction(c.env, user.id, user.email, 'calendar_ic_created', { meeting_id: meeting.id, deal_id: dealId, attendees: attendeeIds.size });
   for (const uid2 of attendeeIds) {
     const u = (await sql`SELECT 1 FROM users WHERE id = ${uid2}` as any[])[0];
@@ -710,6 +744,9 @@ calendar.post('/founder-checkins', safe('ck_create', 'Could not create check-in'
     if (id === null) return c.json({ detail: 'Invalid counterpart' }, 400);
     body.counterpart_user_id = id;
   }
+  // D1211 (CAL8): a founder booking from New check-in picks only who it is
+  // with; the founder is themselves.
+  if (body.founder_user_id == null && lc(user.role) === 'founder') body.founder_user_id = user.id;
   const founderId = parseInt(body.founder_user_id, 10);
   if (!Number.isFinite(founderId)) return c.json({ detail: 'founder_user_id required' }, 400);
   const title = String(body?.title || '').trim().slice(0, 240);
@@ -741,18 +778,30 @@ calendar.post('/founder-checkins', safe('ck_create', 'Could not create check-in'
     }
   }
   const duration = Math.min(240, Math.max(10, parseInt(body.duration_min, 10) || 30));
+  // D1211 (CAL8): the Meet link is the booker's, made before the save.
+  const meet = body.add_meet === true
+    ? await makeMeetLink(c.env, user.id, { topic: title, startsAt: startAt.toISOString(), durationMin: duration })
+    : null;
+  if (meet && !meet.ok) return refuse(c, meet.refusal.status, { code: meet.refusal.code, message: meet.refusal.message });
   const uid = crypto.randomUUID();
-  const r = await sql`
-    INSERT INTO founder_checkins
-      (uid, founder_user_id, counterpart_user_id, project_id, title, notes,
-       start_at, duration_min, location_kind, location_uri)
-    VALUES
-      (${uid}, ${founderId}, ${counterId}, ${projectId},
-       ${title}, ${body.notes || null}, ${startAt.toISOString()}, ${duration},
-       ${body.location_kind || 'video'}, ${body.location_uri || null})
-    RETURNING *
-  ` as any[];
+  let r: any[];
+  try {
+    r = await sql`
+      INSERT INTO founder_checkins
+        (uid, founder_user_id, counterpart_user_id, project_id, title, notes,
+         start_at, duration_min, location_kind, location_uri)
+      VALUES
+        (${uid}, ${founderId}, ${counterId}, ${projectId},
+         ${title}, ${body.notes || null}, ${startAt.toISOString()}, ${duration},
+         ${meet?.ok ? 'video' : body.location_kind || 'video'}, ${meet?.ok ? meet.joinUrl : body.location_uri || null})
+      RETURNING *
+    ` as any[];
+  } catch (e) {
+    if (meet?.ok) await meet.undo();
+    throw e;
+  }
   const checkin = r[0];
+  if (meet?.ok) await keepMeetCopy(c.env, user.id, 'founder_checkin', checkin.id, meet.externalRef);
   await logAdminAction(c.env, user.id, user.email, 'calendar_checkin_created', { checkin_id: checkin.id, target_user_id: founderId, project_id: projectId });
   // Task #52 — push founder check-in to attendees' external calendars
   // (deferred via waitUntil so the response returns immediately).

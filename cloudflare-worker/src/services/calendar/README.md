@@ -15,6 +15,9 @@ when adding a kind.
   dates and deal closings as read-only calendar sources; no provider calls.
 - `items.ts`: page-only drawer fields for calendar items. Feed and provider
   projections keep their separate, smaller event shape.
+- `itemRead.ts`: one item for the drawer (the page read's own reader and
+  description, people by name only), and a Meet link made at create that becomes
+  the creator's Google copy.
 - `sync.ts`: create, update and cancellation hooks for copies of Axal-booked
   sessions on the member's connected Google or Outlook calendar.
 - `cancelEvents.ts`: bounded immediate cleanup and durable continuation for a

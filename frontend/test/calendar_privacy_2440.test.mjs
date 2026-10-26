@@ -4,46 +4,48 @@ import { readFileSync } from 'node:fs';
 import { act } from 'react';
 import { h, mountForm, mutationCheck } from './_form_d695.mjs';
 
-const page = readFileSync(new URL('../src/pages/CalendarPage.jsx', import.meta.url), 'utf8');
-// Mount the actual modal and its two presentational helpers, with only API I/O
-// substituted. No page-level network/effects are needed to schedule a meeting.
-const source = `import React, { useState } from 'react';
-const X = () => null;
-export const calls = [];
-const api = { async createIcMeeting(body) { calls.push(body); } };
-` + page.slice(page.indexOf('function ModalShell('), page.indexOf('function CheckinModal('))
-  + page.slice(page.indexOf('function Field(')) + '\nexport { IcMeetingModal };';
+// #2440 held that an IC meeting is never created without its deal. Since
+// D1211 (#3177) the deal is chosen by name in New IC meeting (CAL7) from the
+// deals the caller can open, never typed as a number; the rule is the same.
+// The real dialog is mounted with only its fetch stubbed.
+const source = readFileSync(new URL('../src/pages/CalendarNewDialogs.jsx', import.meta.url), 'utf8');
+const response = (body, status = 200) => ({ ok: status < 400, status, statusText: String(status), headers: { get: () => 'application/json' }, json: async () => body, text: async () => JSON.stringify(body) });
+
 async function verify(module) {
+  const posted = [];
+  const previous = globalThis.fetch;
+  globalThis.fetch = async (url, options = {}) => {
+    const u = String(url);
+    if ((options.method || 'GET') === 'POST') { posted.push(JSON.parse(options.body)); return response({ id: 1 }); }
+    if (u.includes('/calendar/deals')) return response({ items: [{ id: 200, name: 'Fixture venture', status: 'open' }] });
+    return response({ for: 'ic', items: [] });
+  };
   let saved = 0;
-  const f = await mountForm(h(module.IcMeetingModal, { me: { id: 4 }, onClose() {}, onSaved() { saved++; } }));
+  const f = await mountForm(h(module.NewIcDialog, { meetAvailable: false, onClose() {}, onSaved() { saved++; } }), { modal: true });
+  const settle = async () => { for (let i = 0; i < 5; i += 1) await f.flush(); };
+  const type = async (id, value) => { await act(async () => f.props(f.by(id)).onChange({ target: { value } })); await settle(); };
   try {
-    const inputs = () => f.nodes().filter(n => n.tagName === 'INPUT');
-    const change = async (index, value) => { await act(async () => f.props(inputs()[index]).onChange({ target: { value } })); };
-    const schedule = () => f.nodes().find(n => n.tagName === 'BUTTON' && f.props(n).children === 'Schedule');
-    assert.ok(f.text().includes('Deal id (required)'));
-    assert.equal(f.props(inputs()[3]).required, true);
-    await change(0, 'Fixture IC');
-    await change(1, '2099-01-01T12:00');
-    for (const value of ['', '-1', '1.5']) {
-      await change(3, value);
-      assert.equal(f.props(schedule()).disabled, true, value || 'empty deal');
-    }
+    await type('cal-ic-title', 'Fixture IC');
+    await type('cal-ic-start', '2999-01-01T12:00');
+    assert.equal(f.props(f.by('cal-ic-save')).disabled, true, 'no deal, no meeting');
     // The handler also refuses invalid state if invoked programmatically.
-    await act(async () => f.props(schedule()).onClick());
-    assert.equal(module.calls.length, 0);
-    await change(3, '200');
-    assert.equal(f.props(schedule()).disabled, false);
-    await f.click('Schedule');
-    assert.equal(module.calls[0].deal_id, 200);
+    await act(async () => f.props(f.by('cal-ic-save')).onClick());
+    assert.equal(posted.length, 0);
+    await act(async () => { await new Promise((r) => setTimeout(r, 260)); });
+    await settle();
+    await act(async () => f.props(f.by('cal-ic-deal-option')).onClick());
+    await settle();
+    assert.equal(f.props(f.by('cal-ic-save')).disabled, false);
+    await act(async () => f.props(f.by('cal-ic-save')).onClick());
+    await settle();
+    assert.equal(posted[0].deal_id, 200);
     assert.equal(saved, 1);
-  } finally { await f.unmount(); }
+  } finally { await f.unmount(); globalThis.fetch = previous; }
 }
-test('#2440: IC modal requires a positive integer deal and sends it; each validation/payload mutation is rejected', async () => {
-  await mutationCheck(source, 'pages/CalendarPage.jsx', verify, [
-    ['Deal id (required)', 'Deal id (optional)'],
-    ['step={1} required', 'step={1}'],
-    [' || !validDeal}', '}'],
-    ["if (!validDeal) { setErr('Enter a valid deal id.'); return; }", ''],
-    ['deal_id: dealId,', 'deal_id: null,'],
+test('#2440: New IC meeting requires a chosen deal and sends it; each validation/payload mutation is rejected', async () => {
+  await mutationCheck(source, 'pages/CalendarNewDialogs.jsx', verify, [
+    ["const ready = title.trim().length >= 2 && deal && startOf(start)", "const ready = title.trim().length >= 2 && startOf(start)"],
+    ['deal_id: deal.id,', 'deal_id: null,'],
+    ['onChoose={setDeal}', 'onChoose={() => {}}'],
   ]);
 });

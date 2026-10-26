@@ -30,7 +30,8 @@ test('Legal console and only its dedicated test references are retired; Contract
   for (const file of ['frontend/test/_adminConsoles.mjs', 'frontend/test/admin_consoles_d648.test.mjs', 'frontend/test/_toast_render_child.mjs', 'frontend/test/admin_console_copy_d942.test.mjs', 'frontend/test/admin_route_reachability.test.mjs']) {
     assert.doesNotMatch(read(file), /LegalConsole|LegalPanel|SignedDocLightbox|TemplateUsageModal/, file);
   }
-  assert.match(read('frontend/src/pages/hq/ContractsPage.jsx'), /export \{ default \} from '\.\.\/admin\/contracts\/ContractsDesk\.jsx'/);
+  // D1213: an import rather than a re-export, so the reachability guard reads the desk as composed here.
+  assert.match(read('frontend/src/pages/hq/ContractsPage.jsx'), /import ContractsDesk from '\.\.\/admin\/contracts\/ContractsDesk';\s+export default ContractsDesk;/);
 });
 
 test('headers without a breadcrumb start at the title, including scope and tabs', async () => {

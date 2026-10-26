@@ -9,7 +9,8 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { DatabaseSync } from 'node:sqlite';
-import { readFileSync } from 'node:fs';
+import { readFileSync, readdirSync } from 'node:fs';
+import { BASELINE_CUTOFF, compareMigrations, migrationNumber } from '../../scripts/lib/migrationPlan.mjs';
 import { Hono } from 'hono';
 import { SignJWT } from 'jose';
 import kycGovernance from '../src/routes/kyc_governance.ts';
@@ -21,7 +22,6 @@ import { d1Over } from './_d1_sqlite.mjs';
 
 const JWT_SECRET = 'unit-test-jwt-secret-0123456789-kyc-d1232';
 const BASELINE = readFileSync('cloudflare-worker/sql/schema_baseline.sql', 'utf8');
-const ddl = (name: string) => { const at = `\n${BASELINE}`.indexOf(`\nCREATE TABLE ${name} (`); assert.ok(at >= 0, name); return BASELINE.slice(at, BASELINE.indexOf(');', at) + 2); };
 const DAY = 86_400_000;
 const iso = (ms: number) => new Date(ms).toISOString();
 
@@ -30,13 +30,12 @@ const REASON_TEXT = 'Photo shows a private address on Secret Road';
 
 async function fixture() {
   const db = new DatabaseSync(':memory:', { enableForeignKeyConstraints: false });
-  db.exec(`CREATE TABLE users (
-    id INTEGER PRIMARY KEY, email TEXT NOT NULL, name TEXT, role TEXT NOT NULL, is_active INTEGER NOT NULL DEFAULT 1,
-    jwt_min_iat INTEGER, kyc_status TEXT, kyc_data TEXT, kyc_provider TEXT, kyc_submitted_at TEXT, kyc_reviewed_at TEXT,
-    kyc_reviewed_by INTEGER, kyc_rejection_reason TEXT
-  ); CREATE TABLE super_admins (user_id INTEGER PRIMARY KEY);`);
-  for (const t of ['activity_logs', 'admin_audit_log', 'user_sessions']) db.exec(ddl(t));
-  db.exec(readFileSync('cloudflare-worker/sql/migrations/617_kyc_renewal_periods.sql', 'utf8'));
+  db.exec(BASELINE);
+  for (const file of readdirSync('cloudflare-worker/sql/migrations').filter(f => /^\d+_.*\.sql$/.test(f)).sort(compareMigrations)) {
+    if (migrationNumber(file) > BASELINE_CUTOFF) db.exec(readFileSync('cloudflare-worker/sql/migrations/' + file, 'utf8'));
+  }
+  // Keep the explicit missing-store cases below while using real KYB tables.
+  db.exec('DROP TABLE IF EXISTS kyc_case_events; DROP TABLE IF EXISTS sanctions_screenings;');
   const u = db.prepare('INSERT INTO users (id, email, name, role, kyc_status) VALUES (?, ?, ?, ?, ?)');
   u.run(SUPER, 'sue@axal.test', 'Sue Super', 'admin', null);
   u.run(ADMIN, 'ada@axal.test', 'Ada Admin', 'admin', null);

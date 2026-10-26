@@ -52,6 +52,8 @@ import adminPublications from './routes/admin_publications';
 import adminTeam from './routes/admin_team';
 import adminNetworkProfiles from './routes/admin_network_profiles';
 import adminNetwork from './routes/admin_network';
+import adminInvestorCohorts from './routes/admin_investor_cohorts';
+import investorCohorts from './routes/investor_cohorts';
 import profileHistoryRoutes from './routes/profile_history';
 import founderProfileRoutes from './routes/founder_profile';
 import adminProfilingRoutes from './routes/admin_profiling';
@@ -82,6 +84,7 @@ import tickets from './routes/tickets';
 import deals from './routes/deals';
 import dealFlow from './routes/deal_flow';
 import dealContext from './routes/deal_context';
+import dealViews from './routes/deal_views';
 import users from './routes/users';
 import marketIntel from './routes/market_intel';
 import marketIntelPublic from './routes/market_intel_public';
@@ -134,6 +137,7 @@ import email from './routes/email';
 import pipeline from './routes/pipeline';
 import search, { ensureAcademySchema } from './routes/search';
 import kyc from './routes/kyc';
+import kybAdmin from './routes/kyb_admin';
 import kycGovernance from './routes/kyc_governance';
 import esign from './routes/esign';
 import trust from './routes/trust';
@@ -497,7 +501,7 @@ app.use(
     // alongside the `studioos_csrf` cookie on cookie-authenticated mutating
     // requests. Without it in the allowlist, the browser preflight blocks
     // every POST/PUT/PATCH/DELETE from the SPA in production.
-    allowHeaders: ['Content-Type', 'Authorization', 'X-CSRF-Token', 'X-Rail-Page', 'X-Rail-Option', 'X-Rail-Record'],
+    allowHeaders: ['Content-Type', 'Authorization', 'If-Match', 'X-CSRF-Token', 'X-Rail-Page', 'X-Rail-Option', 'X-Rail-Record'],
   }),
 );
 
@@ -906,6 +910,9 @@ app.route('/api/admin/partners', adminPartners);
 // D976 (#2762) — the advisor and partner network's pause, directory switch and standing read.
 app.route('/api/admin/network', adminNetworkReads);
 app.route('/api/admin/network', adminNetwork);
+// D959 (#2792) — Investor cohort access: the admin's grants, and the investor's and founder's routes.
+app.route('/api/admin/investor-cohorts', adminInvestorCohorts);
+app.route('/api/investor-cohorts', investorCohorts);
 app.route('/api/admin/publications', adminPublications);
 app.route('/api/partner-onboard', partnerOnboarding);
 app.route('/api/partner-portal', partnerPortal);
@@ -916,6 +923,7 @@ app.route('/api/capital', capital);
 app.route('/api/tickets', tickets);
 // D1238 (#3251): an investor firm's own deal flow. Before dealContext and deals, so `flow` is never a deal id.
 app.route('/api/deals/flow', dealFlow);
+app.route('/api/deals', dealViews);
 app.route('/api/deals', dealContext);
 app.route('/api/deals', deals);
 app.route('/api/users', users);
@@ -1319,6 +1327,7 @@ app.use('/api/kyc/admin/:userId/document/*', requireCfAccess());
 // endpoint is wired (downstream task), it should also carry the same
 // requireCfAccess() middleware (it's admin-only, so safe to gate).
 
+app.route('/api/kyc/businesses', kybAdmin);
 // D1232 (#3240): renewals, periods and the audit, ahead of kyc.ts's `/admin/:userId`.
 app.route('/api/kyc', kycGovernance);
 app.route('/api/kyc', kyc);
@@ -2463,6 +2472,12 @@ export default {
             const r = await syncCohortAdvisorNotices(env, { limit: 2000 });
             if (r.started || r.ended) console.info(`[cron] cohort advisor notices started=${r.started} ended=${r.ended}`);
           } catch (e) { console.error('[cron] cohort advisor notices failed', e); }
+          // D959 — investor cohort access: closes grants past their last day, then tells founders.
+          try {
+            const { syncInvestorCohortNotices } = await import('./services/investorCohortAccess');
+            const r = await syncInvestorCohortNotices(env, { limit: 2000 });
+            if (r.started || r.ended || r.expired) console.info(`[cron] investor cohort notices started=${r.started} ended=${r.ended} expired=${r.expired}`);
+          } catch (e) { console.error('[cron] investor cohort notices failed', e); }
           try {
             const { noticeLegacyRelationships } = await import('./routes/partnernet');
             const r = await noticeLegacyRelationships(env, 500);
