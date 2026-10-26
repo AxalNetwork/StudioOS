@@ -1513,7 +1513,13 @@ the Raise shell at `/raise/calls/:uid` (`RaiseCallPage`: responses with search,
 filters and paging, the closed and paused banners, Extend the date and Close
 the call); a founder opening `/round-calls/:uid` is sent there, while
 investors and counsel keep `/round-calls/:uid`, and drafts stay on it for
-"Continue draft". `/round-calls?project_id=…` lists owned calls. With S19-A
+"Continue draft". D1226 (#3225) redrew the investor's view to CLS13
+(`InvestorCallView`), under Deals ("Deals › Round calls › [company]", and the
+investor sidebar's Deals row lights on `/round-calls`): the terms with "In plain
+words", the frozen deck, the data room behind the NDA and the founder's grant,
+"Indicate an amount" (Indicated, never committed) and "Ask a question". It names
+the company (`company.name` on the investor's read) and no other investor.
+Counsel's view is unchanged. `/round-calls?project_id=…` lists owned calls. With S19-A
 (#1594, migration 456): The round takes the instrument's own structured terms
 (a SAFE's cap, a note's cap and discount, equity's pre-money), seeded from the
 context's `term_seeds`; the audience preview names sector, stage and cheque

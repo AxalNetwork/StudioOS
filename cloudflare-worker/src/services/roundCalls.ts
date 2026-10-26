@@ -282,7 +282,9 @@ export async function investorPage(env: Env, call: CallRow, investor: User) {
   const nda=call.data_room_project_uid!=null && await ndaActive(env,active?.granted_by_user_id ?? call.created_by,investor.id);
   const grant=nda?active:null;
   const questions=await env.DB.prepare('SELECT uid,question,answer,asked_at,answered_at FROM round_call_questions WHERE call_id=? AND investor_user_id=? ORDER BY asked_at,id').bind(call.id,investor.id).all();
-  return { viewer:'investor',call:{uid:call.uid,name:call.name,amount_cents:call.amount_cents,instrument:call.instrument,
+  // D1226: the company whose call this is, for CLS13's header. Its name only, never the founder's.
+  const company=await env.DB.prepare('SELECT name FROM projects WHERE id=? AND deleted_at IS NULL').bind(call.project_id).first<{name:string|null}>();
+  return { viewer:'investor',company:{name:company?.name ?? null},call:{uid:call.uid,name:call.name,amount_cents:call.amount_cents,instrument:call.instrument,
       terms:call.terms,minimum_cheque_cents:call.minimum_cheque_cents,target_close:call.target_close,
       valuation_cap_cents:call.valuation_cap_cents ?? null,discount_bps:call.discount_bps ?? null,pre_money_cents:call.pre_money_cents ?? null,
       deck_version:call.deck_version,state:call.state,sent_at:call.sent_at},
