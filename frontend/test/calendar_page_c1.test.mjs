@@ -244,19 +244,22 @@ test('the canvas layout is built: header, gate strip, controls, agenda beside a 
   }
 });
 
-test('the header carries the three canvas actions and the IC gate matches canScheduleIc', () => {
+// D1211 (#3177): the two New buttons are one New menu (CAL8 A); IC meeting is
+// in it only for the roles canScheduleIc allows (`newMenu`).
+test('the header carries New and Subscribe, and the IC gate matches canScheduleIc', () => {
   assert.match(TEMPLATE, /New IC meeting/);
   assert.match(TEMPLATE, /New check-in/);
   assert.match(TEMPLATE, /Subscribe · \.ics/);
-  for (const label of ['New IC meeting', 'New check-in', 'Subscribe · .ics']) {
-    assert.ok(page.includes(label), `the header lost "${label}"`);
-  }
+  assert.match(page, /<NewMenu role=\{role\}/, 'the header lost New');
+  assert.ok(page.includes('Subscribe · .ics'), 'the header lost "Subscribe · .ics"');
   assert.match(page, /const canIC = role === 'admin' \|\| role === 'investor';/,
     'the IC gate no longer mirrors canScheduleIc');
   assert.match(route, /return r === 'admin' \|\| r === 'investor';/,
     'canScheduleIc changed — the page gate must follow it');
   // Absent, not disabled — and the reason where the control would have been.
-  assert.match(page, /\{canIC && \(/, 'the IC control is being disabled rather than withheld');
+  const model = readFileSync(new URL('../src/pages/calendarItemModel.js', import.meta.url), 'utf8');
+  assert.match(model, /if \(r === 'admin' \|\| r === 'investor'\) out\.push\(\{ key: 'ic', label: 'IC meeting' \}\);/,
+    'the IC item is being disabled rather than withheld');
   assert.match(pageRaw, /Creating an IC meeting is limited to admins and investors, so the control is not/,
     'the gate strip lost the canvas\'s wording');
 });
