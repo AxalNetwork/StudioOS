@@ -331,6 +331,7 @@ import partnerPipeline from './routes/partner_pipeline';
 import partnerOffers from './routes/partner_offers';
 import { testing, partnerTesting, adminTesting } from './routes/testing';
 import adminProductTesters from './routes/admin_product_testers';
+import adminSubAccounts from './routes/admin_sub_accounts';
 import adminReferralPartners from './routes/admin_referral_partners';
 import partnerDelivery from './routes/partner_delivery';
 import founderValidate from './routes/founder_validate';
@@ -1579,6 +1580,8 @@ app.route('/api/partner/testing', partnerTesting);
 app.route('/api/admin/testing', adminTesting);
 // D1042 (#2890): the product tester pool — HQ approves, declines, pauses, resumes and removes.
 app.route('/api/admin/product-testers', adminProductTesters);
+// D1302 (#3399): an account's sub-accounts (Product tester, LP), read where each lives, for Admin › Accounts.
+app.route('/api/admin/sub-accounts', adminSubAccounts);
 // D958 (#2791): referral partners and their custom terms, HQ only.
 app.route('/api/admin/referral-partners', adminReferralPartners);
 // #45 — what the firm records about work in flight: milestones, blockers,
