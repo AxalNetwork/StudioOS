@@ -8,6 +8,7 @@
 import React from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import { CASE_TABS, NOT_YET, ON_OVERVIEW, WAITS } from './ddModel';
+import DdMyReviews from './DdMyReviews';
 
 const tabCls = (on) => `whitespace-nowrap border-b-2 px-1 pb-2 text-[13.5px] font-semibold ${on ? 'border-violet-600 text-gray-900 dark:border-violet-400 dark:text-gray-100' : 'border-transparent text-axal-muted hover:text-gray-900 dark:text-gray-400 dark:hover:text-gray-100'}`;
 const box = 'flex flex-col gap-2 rounded-xl border border-axal-hairline bg-white p-4 dark:border-gray-800 dark:bg-gray-900';
@@ -34,8 +35,9 @@ export function DdListTabs({ active }) {
   );
 }
 
-/** My reviews (DDL12) waits for part 8 (#3267). D1250 draws Templates (`DdTemplates.jsx`). */
+/** D1252 (#3267) draws My reviews (DDL12a, `DdMyReviews.jsx`); D1250 draws Templates (`DdTemplates.jsx`). */
 export function DdListTabBody({ tab }) {
+  if (tab === 'my-reviews') return <DdMyReviews />;
   return (
     <section className={box} data-testid={`dd-list-${tab}`}>
       <DdWait id={tab} />

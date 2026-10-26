@@ -43,7 +43,8 @@ import {
   ChevronDown, Eye, Sparkles,
   Gift, Mail, Globe
 } from 'lucide-react';
-import { SIDEBAR_GROUPS, filterItemsByTier, hasInvestorTier, FOUNDER_FULL_BLEED, INVESTOR_FULL_BLEED, ADVISOR_FULL_BLEED, PARTNER_FULL_BLEED, SHARED_FULL_BLEED, SHARED_FULL_BLEED_PREFIXES, ONBOARDING_CANVAS_PATHS } from './sidebarConfig';
+import { SIDEBAR_GROUPS, filterItemsByTier, hasInvestorTier, withDiligenceRow, FOUNDER_FULL_BLEED, INVESTOR_FULL_BLEED, ADVISOR_FULL_BLEED, PARTNER_FULL_BLEED, SHARED_FULL_BLEED, SHARED_FULL_BLEED_PREFIXES, ONBOARDING_CANVAS_PATHS } from './sidebarConfig';
+import { useDiligenceInvolvement } from './pages/duediligence/useDiligenceInvolvement';
 import { isCyclePath } from './pages/cycles/cyclePaths';
 import { BOUNDARY_ROLES as NARRATIVE_BOUNDARY_ROLES } from './pages/raise/narrative/narrativeModel';
 import { adminRefusal } from './pages/hq/hqNoticeModel';
@@ -1143,7 +1144,9 @@ function ProtectedLayout({ children, user, onLogout, viewMode, onViewModeChange,
   // Padding and the footer are the gaps around it; both have to go, or the
   // landscape stops short of the sidebar and the bottom of the body.
   const onboardingCanvas = ONBOARDING_CANVAS_PATHS.includes(location.pathname);
-  const sidebarGroups = getSidebarGroups(activeRole || 'founder', primaryPersonaId, user, hqView);
+  // D1252 (#3267): "Diligence" for a partner, investor or advisor who leads or reviews a case.
+  const ddInvolved = useDiligenceInvolvement(user, shellRole);
+  const sidebarGroups = withDiligenceRow(getSidebarGroups(activeRole || 'founder', primaryPersonaId, user, hqView), shellRole, ddInvolved);
   // D285 / H36 — which sub-navigation strip this location sits under, in the
   // HQ shell only. The strips are written below as LITERAL links rather than
   // mapped from `HQ_STRIPS`, because the reachability guard reads navigation
