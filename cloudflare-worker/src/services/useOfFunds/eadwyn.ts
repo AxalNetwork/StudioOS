@@ -98,12 +98,13 @@ export function readingPrompt(material: Material, mode: ReadingMode): string {
     'Return JSON only: {"items":[{"text":"plain words", "citations":[{"ref":"source ref", "quote":"exact non-empty passage from that source text"}]}]}. No other keys.',
     mode === 'check' ? 'Every mismatch must cite at least two different sources. If no supported mismatch can be stated, return items: []; that does not certify the plan.'
       : mode === 'runway' ? 'Every item must cite its source. Across the reading cite both plan and cash-path, so inputs and the path are both supported.' : 'Return exactly one item citing the roadmap.',
-    'Use no numerical quantities in prose: the UI quotes the actual figures verbatim in citations. Neutral references such as "one record" are allowed. Give no advice or recommendation. Do not fill or change any financial value.',
+    'Use no digits or numerical quantities in prose: the UI quotes the actual figures verbatim in citations. Neutral references such as "one record" are allowed. In wording mode only, a name with numbers is allowed when the entire name appears verbatim in its cited roadmap passage. Give no advice or recommendation. Do not fill or change any financial value.',
     'Never infer a zero or a fact from a missing/unreadable source. At most six items, each at most two sentences; a milestone name is at most two hundred characters.',
     JSON.stringify(material),
   ].join('\n');
 }
-const unsafeWords = /\d|\b(?:zero|one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve|thirteen|fourteen|fifteen|sixteen|seventeen|eighteen|nineteen|twenty|thirty|forty|fifty|sixty|seventy|eighty|ninety|hundred|thousand|million|billion|percent|recommend\w*|advice|advisor|fiduciary)\b/i;
+const numericalWords = /\d|\b(?:zero|one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve|thirteen|fourteen|fifteen|sixteen|seventeen|eighteen|nineteen|twenty|thirty|forty|fifty|sixty|seventy|eighty|ninety|hundred|thousand|million|billion|percent)\b/i;
+const prohibitedWords = /\b(?:recommend\w*|advice|advisor|fiduciary)\b/i;
 export function parseReading(raw: unknown, material: Material, mode: ReadingMode): ReadingItem[] | null {
   if (typeof raw !== 'string' || raw.length > 14000) return null;
   let value: any; try { value = JSON.parse(raw); } catch { return null; }
@@ -112,7 +113,7 @@ export function parseReading(raw: unknown, material: Material, mode: ReadingMode
   for (const item of value.items) {
     if (!item || Object.keys(item).sort().join() !== 'citations,text' || typeof item.text !== 'string' || !clean(item.text) || item.text.length > (mode === 'wording' ? 200 : 650) || !Array.isArray(item.citations)) return null;
     // "One record" identifies a cited side, not a new financial quantity.
-    if (unsafeWords.test(item.text.replace(/\bone(?=\s+(?:record|source|side)\b)/gi, 'the'))) return null;
+    if (prohibitedWords.test(item.text)) return null;
     const citations: ReadingItem['citations'] = [];
     for (const c of item.citations) {
       if (!c || Object.keys(c).sort().join() !== 'quote,ref' || typeof c.quote !== 'string' || !clean(c.quote) || c.quote.length > 1200) return null;
@@ -121,6 +122,8 @@ export function parseReading(raw: unknown, material: Material, mode: ReadingMode
       citations.push({ ref: source.ref, label: source.label, source: source.source, href: source.href, as_of: source.as_of, quote: c.quote });
     }
     if (citations.length < (mode === 'check' ? 2 : 1) || citations.length > material.sources.length) return null;
+    if (numericalWords.test(item.text.replace(/\bone(?=\s+(?:record|source|side)\b)/gi, 'the'))
+      && !(mode === 'wording' && citations.some(c => c.ref === 'roadmap' && c.quote.includes(item.text.trim())))) return null;
     out.push({ text: item.text.trim(), citations });
   }
   if (mode === 'runway' && !['plan','cash-path'].every(ref => out.some(i => i.citations.some(c => c.ref === ref)))) return null;

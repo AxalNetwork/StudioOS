@@ -97,3 +97,8 @@ test('one damaged saved reading is explicit without hiding a valid saved reading
 test('a stale or invalid milestone field cannot start a paid run',async()=>{
  const ui=await mounted({wording:true});try{await ui.choose('Build roadmap item','1');await ui.choose('Milestone section','amount_to_raise');await ui.click('Suggest wording from your roadmap');assert.equal(ui.calls.some(c=>c[0]==='preview'),false);}finally{await ui.close();}
 });
+
+test('verification failure explains possible billing without displaying private provider text',async()=>{
+ const ui=await mounted({preview:async()=>{throw Object.assign(new Error('private-provider-output'),{status:503,code:'uof_reading_ungrounded'});}});
+ try{await ui.click('Check this plan');assert.match(ui.text(),/could not be verified/);assert.match(ui.text(),/may still be charged/);assert.doesNotMatch(ui.text(),/private-provider-output/);}finally{await ui.close();}
+});

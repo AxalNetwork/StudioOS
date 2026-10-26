@@ -189,3 +189,17 @@ test('neutral one-record phrasing is allowed without permitting a numerical quan
  assert.equal(parseReading(value('The plan costs one dollar.'),material,'check'),null);
  assert.equal(parseReading(value('One record says twenty months.'),material,'check'),null);
 });
+
+test('numeric milestone names must appear verbatim in the cited roadmap passage',async()=>{
+ const f=fixture();f.db.exec("UPDATE roadmap_okrs SET objective='Ship v2 and reach 1,000 users' WHERE id=1");
+ output=m=>({items:[{text:'Ship v2',citations:[{ref:'roadmap',quote:m.sources[0].text}]}]});
+ const p=await call(f,'POST','',{mode:'wording',okr_id:1});assert.equal(p.status,200);assert.equal(p.body.reading.items[0].text,'Ship v2');
+ output=m=>({items:[{text:'Ship v3',citations:[{ref:'roadmap',quote:m.sources[0].text}]}]});
+ const refused=await call(f,'POST','',{mode:'wording',okr_id:1});assert.equal(refused.status,503);assert.equal(refused.body.error,'uof_reading_ungrounded');assert.match(refused.body.message,/may still be charged/i);
+ output=m=>({items:[{text:'Ship v2 to reach 1,000 users',citations:[{ref:'roadmap',quote:m.sources[0].text}]}]});
+ assert.equal((await call(f,'POST','',{mode:'wording',okr_id:1})).status,503);
+ f.db.exec("UPDATE roadmap_okrs SET objective='I recommend Ship v2' WHERE id=1");
+ output=m=>({items:[{text:'I recommend Ship v2',citations:[{ref:'roadmap',quote:m.sources[0].text}]}]});
+ assert.equal((await call(f,'POST','',{mode:'wording',okr_id:1})).status,503);
+ assert.equal(count(f,'research_zone_drafts'),0);assert.equal(count(f,'activity_logs'),0);
+});

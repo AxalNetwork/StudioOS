@@ -14,7 +14,7 @@ import { railFor, refuseRun } from '../util/railContext';
 import { refuse } from '../util/refusal';
 
 type Bindings = { Bindings: Env; Variables: { readingScope: Scope } };
-const failure = (c: any, code = 'uof_reading_unreadable', status = 503) => refuse(c, status, { code, message: 'This reading is Unreadable. Try again.' });
+const failure = (c: any, code = 'uof_reading_unreadable', status = 503) => refuse(c, status, { code, message: code === 'uof_reading_ungrounded' ? 'This reading could not be verified. The run may still be charged.' : 'This reading is Unreadable. Try again.' });
 const validId = (n: unknown) => /^[1-9][0-9]{0,9}$/.test(String(n ?? ''));
 const sign = (env: Env, payload: string) => signHmac(env, 'uof-reading:v1:' + payload);
 const same = (a: unknown, b: string) => {

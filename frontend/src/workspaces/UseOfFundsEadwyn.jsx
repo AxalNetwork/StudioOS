@@ -12,6 +12,7 @@ const INK = 'text-gray-900 dark:text-gray-100';
 const MUTED = 'text-gray-600 dark:text-gray-300';
 const SECTION_NAMES = { product: 'Product & engineering', 'go-to-market': 'GTM: sales and marketing', infrastructure: 'Infrastructure & data', operations: 'Operations, legal & compliance', reserve: 'Hiring / runway reserve' };
 export function readingError(error) {
+  if (error?.code === 'uof_reading_ungrounded') return 'This reading could not be verified. The run may still be charged.';
   if (error?.code === 'assist_off') return 'Eadwyn is off for this page. Switch to AI to run a reading.';
   if (error?.status === 402) return 'Your AI allowance cannot cover this run. Add AI tokens to continue.';
   if (error?.status === 409) return 'Not recorded: the required sources are missing, or this reading has expired. Read the current sources and try again.';
