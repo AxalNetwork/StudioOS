@@ -4,6 +4,7 @@
  * Mounted at /api/calendar. Twenty-three endpoints across:
  *   - unified events feed + ICS export
  *   - "Subscribe to my events": its token (make, read, remove) and the feed (D1033)
+ *   - "Subscribe to my whole calendar": the same, on a token of its own (D1209)
  *   - IC meetings CRUD + RSVP + Reschedule (D1207)
  *   - founder check-ins CRUD + Reschedule (D1207)
  *   - the people and deal pickers for New IC meeting and New check-in (D1207)
@@ -14,7 +15,11 @@
  * surfaces as a friendly JSON 500 with the cause logged to Cloudflare. The
  * two callbacks intentionally skip requireAuth — the user_id comes from the
  * single-use HMAC-signed state token persisted in oauth_state_tokens. So does
- * the my-events feed, whose member comes from its token (migration 603).
+ * the two feeds, whose member comes from their token (migrations 603, 610).
+ *
+ * D1209: each sync leaves its failure on the token row for the status reads,
+ * and a disconnect keeps the copies it made unless the member removes them
+ * first (migration 610).
  */
 import { Hono } from 'hono';
 import { prepareWorkspaceConnect } from './google_workspace';
@@ -25,7 +30,12 @@ import { getSQL } from '../db';
 import { canAccessProject, getProjectMembershipRole } from '../services/projectAccess';
 import { userMayReadDeal } from './deals';
 import { addToCalendarLinks, eventVisibleTo, joinLinkAllowed, MY_EVENT_KINDS } from '../services/calendar/myEvents';
-import { feedStatus, mintFeedToken, resolveFeedToken, revokeFeedToken } from '../services/calendar/feedTokens';
+import { CALENDAR_FEED_SCOPE, FEED_SCOPE, feedStatus, mintFeedToken, resolveFeedToken, revokeFeedToken, type FeedScope } from '../services/calendar/feedTokens';
+import {
+  accountMarker, clearSyncError, forgetRetained, readSyncError, recordSyncError, retainCopies, takeRetainedMarker,
+  type SyncProvider,
+} from '../services/calendar/syncState';
+import { removeProviderCopies } from '../services/calendar/sync';
 import { describeItems } from '../services/calendar/items';
 import { investorUpsell, userMeetsInvestorTier } from '../middleware/requireInvestorTier';
 import { logAdminAction } from '../services/adminAudit';
@@ -261,10 +271,12 @@ calendar.get('/events.ics', safe('ics', 'Could not export calendar', async (c) =
 // it is shown once, and making a new one or removing it stops the old one.
 // The token rides in the query, never the path: see `feedTokens.ts`.
 const FEED_PATH = '/api/calendar/feed/my-events.ics';
+// D1209 (#3175): the whole calendar, Mine only, at its own token (migration 610).
+const CALENDAR_FEED_PATH = '/api/calendar/feed/calendar.ics';
 
-function feedUrls(c: any, token: string): { url: string; webcal_url: string } {
+function feedUrls(c: any, token: string, path = FEED_PATH): { url: string; webcal_url: string } {
   const origin = new URL(c.req.url).origin;
-  const url = `${origin}${FEED_PATH}?token=${encodeURIComponent(token)}`;
+  const url = `${origin}${path}?token=${encodeURIComponent(token)}`;
   return { url, webcal_url: url.replace(/^https?:/, 'webcal:') };
 }
 
@@ -289,24 +301,62 @@ calendar.delete('/my-events/feed', safe('feed_revoke', 'Could not remove your ca
   return c.json({ revoked: await revokeFeedToken(c.env, user.id) });
 }));
 
-// NO SESSION: the token is the credential. Calendar reads and subscriptions
-// are available on every plan; only IC creation is Professional (D1206).
-calendar.get('/feed/my-events.ics', safe('feed_ics', 'Could not export calendar', async (c) => {
-  const user = await resolveFeedToken(c.env, new URL(c.req.url).searchParams.get('token'));
+// NO SESSION: the token is the credential. Calendar reads and both
+// subscriptions are available on every plan; only IC creation is Professional
+// (D1206). A token answers only its own feed (D1209).
+async function serveFeed(c: any, scope: FeedScope): Promise<Response> {
+  const user = await resolveFeedToken(c.env, new URL(c.req.url).searchParams.get('token'), new Date(), scope);
   if (!user) return c.json({ detail: 'Calendar feed not found' }, 404);
-  const fromDt = new Date(Date.now() - 7 * 86_400_000);
+  const whole = scope === CALENDAR_FEED_SCOPE;
+  const fromDt = new Date(Date.now() - (whole ? 30 : 7) * 86_400_000);
   const toDt = new Date(Date.now() + 180 * 86_400_000);
-  const events = await fetchUserEvents(c.env, user.id, lc(user.role), fromDt.toISOString(), toDt.toISOString(), [...MY_EVENT_KINDS]);
-  const body = eventsToIcs(events, `Axal StudioOS — my events — ${user.name}`);
+  // MINE ONLY. Every reader is keyed on the member's own id and none widens
+  // for a role (`gather` ignores it), so an admin's feed holds what the admin
+  // is party to, never a studio's or every studio's calendar. Every kind the
+  // calendar reads, by name, so a kind added later joins the feed on purpose.
+  const kinds = whole ? [...KNOWN_KINDS] : [...MY_EVENT_KINDS];
+  const events = await fetchUserEvents(c.env, user.id, lc(user.role), fromDt.toISOString(), toDt.toISOString(), kinds);
+  const body = eventsToIcs(events, whole ? `Axal StudioOS — ${user.name}` : `Axal StudioOS — my events — ${user.name}`);
   return new Response(body, {
     headers: {
       'content-type': 'text/calendar; charset=utf-8',
-      'content-disposition': 'inline; filename="axal-my-events.ics"',
+      'content-disposition': `inline; filename="${whole ? 'axal-calendar.ics' : 'axal-my-events.ics'}"`,
       // The body carries join links: never kept by a shared cache.
       'cache-control': 'private, no-store',
     },
   });
+}
+
+calendar.get('/feed/my-events.ics', safe('feed_ics', 'Could not export calendar', (c) => serveFeed(c, FEED_SCOPE)));
+
+// ===========================================================================
+// D1209 (#3175) — "Subscribe to my whole calendar" (migration 610)
+// ===========================================================================
+// The same three verbs as the my-events address, on a token of its own.
+// POST makes the address, or replaces it (`replaced: true`): the old URL stops
+// at once. DELETE removes it.
+calendar.get('/subscription', safe('cal_feed_status', 'Could not read your calendar subscription', async (c) => {
+  const user = await requireAuth(c);
+  return c.json(await feedStatus(c.env, user.id, CALENDAR_FEED_SCOPE));
 }));
+
+calendar.post('/subscription', safe('cal_feed_mint', 'Could not make your calendar subscription', async (c) => {
+  const user = await requireAuth(c);
+  const minted = await mintFeedToken(c.env, user.id, new Date(), CALENDAR_FEED_SCOPE);
+  return c.json({
+    ...feedUrls(c, minted.token, CALENDAR_FEED_PATH),
+    created_at: minted.created_at,
+    replaced: minted.replaced,
+    note: 'This address is shown once. Anyone who has it can read your calendar, with the join links of your sessions and events. Make a new one to stop the old one.',
+  }, 201);
+}));
+
+calendar.delete('/subscription', safe('cal_feed_revoke', 'Could not remove your calendar subscription', async (c) => {
+  const user = await requireAuth(c);
+  return c.json({ revoked: await revokeFeedToken(c.env, user.id, CALENDAR_FEED_SCOPE) });
+}));
+
+calendar.get('/feed/calendar.ics', safe('cal_feed_ics', 'Could not export calendar', (c) => serveFeed(c, CALENDAR_FEED_SCOPE)));
 
 // ===========================================================================
 // IC meetings
@@ -1089,6 +1139,8 @@ async function ensureCalendarOAuthSchema(env: Env): Promise<void> {
   if (calendarOAuthSchemaChecked.has(env as unknown as object)) return;
   try {
     const sql = getSQL(env);
+    // `last_sync_error` and `last_sync_error_at` are migration 610's (D1209),
+    // declared here too so a fresh table matches the migrated one.
     await sql`
       CREATE TABLE IF NOT EXISTS google_oauth_tokens (
         id              INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -1098,6 +1150,8 @@ async function ensureCalendarOAuthSchema(env: Env): Promise<void> {
         google_email    TEXT,
         google_sub      TEXT,
         last_synced_at  TEXT,
+        last_sync_error TEXT,
+        last_sync_error_at TEXT,
         created_at      TEXT    NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
         updated_at      TEXT    NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
       )
@@ -1123,6 +1177,8 @@ async function ensureCalendarOAuthSchema(env: Env): Promise<void> {
         microsoft_email TEXT,
         microsoft_sub   TEXT,
         last_synced_at  TEXT,
+        last_sync_error TEXT,
+        last_sync_error_at TEXT,
         created_at      TEXT    NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
         updated_at      TEXT    NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
       )
@@ -1149,6 +1205,69 @@ export function meetTranscriptsState(env: Env, scope: string | null | undefined)
   return meetTranscriptsEnabled(env) ? 'available' : 'not_set_up';
 }
 
+/**
+ * D1209 — the last sync's failure, on both status reads. `sync_error` is null
+ * when the last sync completed (or nothing is connected); `sync_error_read` is
+ * false when the state itself could not be read, so the page says
+ * "Unreadable" rather than claiming a clean sync.
+ */
+async function syncErrorFields(env: Env, userId: number, provider: SyncProvider, connected: boolean) {
+  if (!connected) return { sync_error: null, sync_error_read: true };
+  const r = await readSyncError(env, userId, provider);
+  return { sync_error: r.error, sync_error_read: r.read };
+}
+
+/** Write what a full sync left: a refused copy, a refused connection, or a clean run. */
+async function settleSync(env: Env, userId: number, provider: SyncProvider,
+  outcome: { failed: number } | { error: any }): Promise<void> {
+  if ('error' in outcome) {
+    if (outcome.error?.message === 'not_connected') return;
+    await recordSyncError(env, userId, provider,
+      outcome.error?.code === 'connection_refused' ? 'connection_refused' : 'sync_failed');
+  } else if (outcome.failed > 0) {
+    await recordSyncError(env, userId, provider, 'copy_refused');
+  } else {
+    await clearSyncError(env, userId, provider);
+  }
+}
+
+/**
+ * D1209 — the disconnect's one choice: "Remove the copies first"
+ * (`remove_copies`, in the query or the JSON body). Without it the copies stay
+ * on the provider and their mappings stay here.
+ */
+async function wantsCopiesRemoved(c: any): Promise<boolean> {
+  const q = String(new URL(c.req.url).searchParams.get('remove_copies') || '').toLowerCase();
+  if (q === '1' || q === 'true') return true;
+  if (c.req.method !== 'POST') return false;
+  const body: any = await c.req.json().catch(() => null);
+  return body?.remove_copies === true;
+}
+
+/**
+ * After the token row is gone: remember whose account the kept copies belong
+ * to, or forget it when none is kept. A connection with no account id (rows
+ * from before Task #70) keeps its copies with no marker, and the next connect
+ * treats them as an unknown account's.
+ */
+async function settleRetained(env: Env, userId: number, provider: SyncProvider, accountId: string | null): Promise<void> {
+  const left = await env.DB.prepare('SELECT COUNT(*) AS n FROM calendar_sync_records WHERE user_id = ? AND provider = ?')
+    .bind(userId, provider).first<{ n: number }>();
+  try {
+    if (Number(left?.n || 0) > 0 && accountId) await retainCopies(env, userId, provider, await accountMarker(env.JWT_SECRET, provider, accountId));
+    else await forgetRetained(env, userId, provider);
+  } catch (e) {
+    // Before migration 610 there is no table to hold the marker: the copies
+    // stay, and the next connect decides as it did before.
+    if (!/no such table/i.test(String((e as Error)?.message || e))) throw e;
+  }
+}
+
+const COPIES_NOT_REMOVED = {
+  code: 'copies_not_removed',
+  message: 'Some copies could not be removed from your calendar, so nothing was disconnected. Try again, or disconnect and keep them.',
+};
+
 calendar.get('/google/status', safe('g_status', 'Could not load Google status', async (c) => {
   const user = await requireAuth(c);
   await ensureCalendarOAuthSchema(c.env);
@@ -1165,6 +1284,7 @@ calendar.get('/google/status', safe('g_status', 'Could not load Google status', 
     last_synced_at: row?.last_synced_at || null,
     scope: row?.scope || null,
     meet_transcripts: meetTranscriptsState(c.env, row?.scope),
+    ...await syncErrorFields(c.env, user.id, 'google', !!row),
   });
 }));
 
@@ -1727,7 +1847,14 @@ calendar.get('/google/callback', async (c) => {
       // a different Calendar identity is confirmed, remove only that old link.
       await clearGoogleIdentityLink(c.env, userId, previousGoogleIdentityLink);
     }
-    if (shouldResetGoogleSyncMappings(identityChanged ? false : retainedIdentityMatches, !!previousGoogleConnection)) {
+    // D1209: a disconnect that kept the copies left a marker of their account.
+    // With no Gmail-removal marker and no live connection, it decides.
+    let mappingsMatch = identityChanged ? false : retainedIdentityMatches;
+    if (mappingsMatch === null && !previousGoogleConnection) {
+      const kept = await takeRetainedMarker(c.env, userId, 'google');
+      if (kept) mappingsMatch = !!googleSub && kept === await accountMarker(c.env.JWT_SECRET, 'google', googleSub);
+    }
+    if (shouldResetGoogleSyncMappings(mappingsMatch, !!previousGoogleConnection)) {
       // Gmail removal retained Calendar event mappings so reconnecting the
       // same account remains idempotent. A different account clears them; an
       // unmarked callback clears them only when no previous connection exists
@@ -1755,19 +1882,36 @@ calendar.get('/google/callback', async (c) => {
   }
 });
 
-calendar.delete('/google', safe('g_disconnect', 'Could not disconnect Google', async (c) => {
+/**
+ * D1209 — ONE GOOGLE DISCONNECT, for `DELETE /google` and
+ * `POST /google/disconnect`. The grant is revoked at Google first (#2413);
+ * a refused revocation keeps everything, so the member can retry. The copies
+ * on Google and their mappings stay, unless the member chose "Remove the
+ * copies first": then every copy is deleted at Google before anything else,
+ * and a copy Google refuses stops the disconnect.
+ */
+async function disconnectGoogle(c: any) {
   const user = await requireAuth(c);
   await ensureCalendarOAuthSchema(c.env);
+  const removeCopies = await wantsCopiesRemoved(c);
+  if (removeCopies && !(await removeProviderCopies(c.env, user.id, 'google')).ok) {
+    return c.json({ error: COPIES_NOT_REMOVED }, 502);
+  }
+  const sub = (await c.env.DB.prepare('SELECT google_sub FROM google_oauth_tokens WHERE user_id = ?').bind(user.id)
+    .first() as { google_sub: string | null } | null)?.google_sub || null;
   try {
-    await revokeAndDisconnectGoogle(c.env, user.id);
-    return c.json({ ok: true });
+    await revokeAndDisconnectGoogle(c.env, user.id, undefined, { preserveCalendarSync: true });
   } catch (e: any) {
     if (e?.code === 'google_revocation_failed') {
       return c.json({ error: { code: 'google_revocation_failed', message: 'Google did not confirm revocation. Your saved connection is still available to retry.' } }, 502);
     }
     throw e;
   }
-}));
+  await settleRetained(c.env, user.id, 'google', sub);
+  return c.json({ ok: true, copies: removeCopies ? 'removed' : 'kept' });
+}
+
+calendar.delete('/google', safe('g_disconnect', 'Could not disconnect Google', disconnectGoogle));
 
 calendar.post('/google/sync', safe('g_sync', 'Google sync failed', async (c) => {
   const user = await requireAuth(c);
@@ -1781,8 +1925,11 @@ calendar.post('/google/sync', safe('g_sync', 'Google sync failed', async (c) => 
   const fromDt = fromQ ? new Date(fromQ) : new Date(Date.now() - 86_400_000);
   const toDt = toQ ? new Date(toQ) : new Date(Date.now() + 60 * 86_400_000);
   try {
-    return c.json(await syncUserToGoogle(c.env, user.id, lc(user.role), fromDt.toISOString(), toDt.toISOString()));
+    const summary = await syncUserToGoogle(c.env, user.id, lc(user.role), fromDt.toISOString(), toDt.toISOString());
+    await settleSync(c.env, user.id, 'google', summary);
+    return c.json(summary);
   } catch (e: any) {
+    await settleSync(c.env, user.id, 'google', { error: e });
     if (e?.message === 'not_connected') return c.json({ detail: 'Connect a Google account first' }, 409);
     return refuse(c, 502, { code: 'google_sync_failed', message: 'The Google calendar sync did not complete. Check the connection and try again.', raw: e, audience: 'owner' });
   }
@@ -1806,6 +1953,7 @@ calendar.get('/microsoft/status', safe('m_status', 'Could not load Microsoft sta
     microsoft_email: row?.microsoft_email || null,
     last_synced_at: row?.last_synced_at || null,
     scope: row?.scope || null,
+    ...await syncErrorFields(c.env, user.id, 'microsoft', !!row),
   });
 }));
 
@@ -1872,6 +2020,12 @@ calendar.get('/microsoft/callback', async (c) => {
         VALUES
           (${userId}, ${refreshEnc}, ${tokens.scope || ''}, ${email}, ${subId})
       `;
+      // D1209: copies a disconnect kept stay for the same account. Another
+      // account's are dropped here; they stay on that account's calendar.
+      const kept = await takeRetainedMarker(c.env, userId, 'microsoft');
+      if (kept && !(subId && kept === await accountMarker(c.env.JWT_SECRET, 'microsoft', subId))) {
+        await sql`DELETE FROM calendar_sync_records WHERE user_id = ${userId} AND provider = 'microsoft'`;
+      }
     }
     return successRedirect(c.env, 'microsoft', returnTo);
   } catch (e: any) {
@@ -1881,14 +2035,26 @@ calendar.get('/microsoft/callback', async (c) => {
   }
 });
 
-calendar.delete('/microsoft', safe('m_disconnect', 'Could not disconnect Microsoft', async (c) => {
+/**
+ * D1209 — one Microsoft disconnect, for `DELETE /microsoft` and
+ * `POST /microsoft/disconnect`, with the same choice as Google's. Microsoft
+ * has no grant revocation the Worker can call, so only the saved token goes.
+ */
+async function disconnectMicrosoft(c: any) {
   const user = await requireAuth(c);
   await ensureCalendarOAuthSchema(c.env);
-  const sql = getSQL(c.env);
-  await sql`DELETE FROM microsoft_oauth_tokens WHERE user_id = ${user.id}`;
-  await sql`DELETE FROM calendar_sync_records WHERE user_id = ${user.id} AND provider = 'microsoft'`;
-  return c.json({ ok: true });
-}));
+  const removeCopies = await wantsCopiesRemoved(c);
+  if (removeCopies && !(await removeProviderCopies(c.env, user.id, 'microsoft')).ok) {
+    return c.json({ error: COPIES_NOT_REMOVED }, 502);
+  }
+  const sub = (await c.env.DB.prepare('SELECT microsoft_sub FROM microsoft_oauth_tokens WHERE user_id = ?').bind(user.id)
+    .first() as { microsoft_sub: string | null } | null)?.microsoft_sub || null;
+  await c.env.DB.prepare('DELETE FROM microsoft_oauth_tokens WHERE user_id = ?').bind(user.id).run();
+  await settleRetained(c.env, user.id, 'microsoft', sub);
+  return c.json({ ok: true, copies: removeCopies ? 'removed' : 'kept' });
+}
+
+calendar.delete('/microsoft', safe('m_disconnect', 'Could not disconnect Microsoft', disconnectMicrosoft));
 
 calendar.post('/microsoft/sync', safe('m_sync', 'Microsoft sync failed', async (c) => {
   const user = await requireAuth(c);
@@ -1902,8 +2068,11 @@ calendar.post('/microsoft/sync', safe('m_sync', 'Microsoft sync failed', async (
   const fromDt = fromQ ? new Date(fromQ) : new Date(Date.now() - 86_400_000);
   const toDt = toQ ? new Date(toQ) : new Date(Date.now() + 60 * 86_400_000);
   try {
-    return c.json(await syncUserToMicrosoft(c.env, user.id, lc(user.role), fromDt.toISOString(), toDt.toISOString()));
+    const summary = await syncUserToMicrosoft(c.env, user.id, lc(user.role), fromDt.toISOString(), toDt.toISOString());
+    await settleSync(c.env, user.id, 'microsoft', summary);
+    return c.json(summary);
   } catch (e: any) {
+    await settleSync(c.env, user.id, 'microsoft', { error: e });
     if (e?.message === 'not_connected') return c.json({ detail: 'Connect a Microsoft account first' }, 409);
     return refuse(c, 502, { code: 'microsoft_sync_failed', message: 'The Microsoft calendar sync did not complete. Check the connection and try again.', raw: e, audience: 'owner' });
   }
@@ -1977,36 +2146,22 @@ calendar.delete('/events/:id', async (c) => {
 
 // POST aliases for the existing DELETE /google and /microsoft disconnects —
 // both verbs are valid per the spec contract.
-calendar.post('/google/disconnect', safe('g_disconnect_post', 'Could not disconnect Google', async (c) => {
-  const user = await requireAuth(c);
-  await ensureCalendarOAuthSchema(c.env);
-  try {
-    await revokeAndDisconnectGoogle(c.env, user.id);
-    return c.json({ ok: true });
-  } catch (e: any) {
-    if (e?.code === 'google_revocation_failed') {
-      return c.json({ error: { code: 'google_revocation_failed', message: 'Google did not confirm revocation. Your saved connection is still available to retry.' } }, 502);
-    }
-    throw e;
-  }
-}));
+calendar.post('/google/disconnect', safe('g_disconnect_post', 'Could not disconnect Google', disconnectGoogle));
+// After a refused revocation: the local connection only. The copies stay, as
+// every disconnect now keeps them (D1209).
 calendar.post('/google/force-disconnect', safe('g_force_disconnect', 'Could not disconnect Google locally', async (c) => {
   const user = await requireAuth(c);
   await ensureCalendarOAuthSchema(c.env);
-  await clearGoogleLocalConnection(c.env, user.id);
+  const sub = (await c.env.DB.prepare('SELECT google_sub FROM google_oauth_tokens WHERE user_id = ?').bind(user.id)
+    .first() as { google_sub: string | null } | null)?.google_sub || null;
+  await clearGoogleLocalConnection(c.env, user.id, { preserveCalendarSync: true });
+  await settleRetained(c.env, user.id, 'google', sub);
   return c.json({
     ok: true,
     revoked: false,
     warning: 'Google did not confirm revocation. Remove Axal VC from your Google Account access settings if it still appears there.',
   });
 }));
-calendar.post('/microsoft/disconnect', safe('m_disconnect_post', 'Could not disconnect Microsoft', async (c) => {
-  const user = await requireAuth(c);
-  await ensureCalendarOAuthSchema(c.env);
-  const sql = getSQL(c.env);
-  await sql`DELETE FROM microsoft_oauth_tokens WHERE user_id = ${user.id}`;
-  await sql`DELETE FROM calendar_sync_records WHERE user_id = ${user.id} AND provider = 'microsoft'`;
-  return c.json({ ok: true });
-}));
+calendar.post('/microsoft/disconnect', safe('m_disconnect_post', 'Could not disconnect Microsoft', disconnectMicrosoft));
 
 export default calendar;

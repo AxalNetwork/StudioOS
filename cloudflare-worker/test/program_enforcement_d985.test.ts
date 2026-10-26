@@ -254,7 +254,7 @@ const OPEN: Array<Omit<Act, 'program'>> = [
   { name: 'host revoke', method: 'POST', path: '/api/admin/lab-hosts/no-such-host/decision', body: { decision: 'revoke' } },
   { name: 'certificate revoke', method: 'POST', path: '/api/spinout-lab/certificates/no-such-cert/revoke', body: { reason: 'Synthetic' } },
   { name: 'mentor unassign', method: 'DELETE', path: '/api/advisors/admin/cohort-assignments/999', body: {} },
-  { name: 'strategic access decline', method: 'POST', path: `/api/refer-earn/admin/strategic-access/${FOUNDER}/decision`, body: { decision: 'declined' } },
+  { name: 'strategic access decline', method: 'POST', path: `/api/refer-earn/admin/strategic-access/${FOUNDER}/decision`, body: { decision: 'declined', note: 'Synthetic decline reason.' } },
   { name: 'submission rejected', method: 'PATCH', path: '/api/refer-earn/admin/submissions/no-such-sub', body: { status: 'rejected', note: 'Synthetic' } },
   { name: 'submission reward issued', method: 'PATCH', path: '/api/refer-earn/admin/submissions/no-such-sub', body: { status: 'reward_issued' } },
   { name: 'perk reject', method: 'POST', path: `/api/perks/admin/${PERK}/review`, body: { action: 'reject', review_note: 'Synthetic' } },

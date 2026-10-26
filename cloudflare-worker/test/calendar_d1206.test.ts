@@ -6,7 +6,7 @@ import { DatabaseSync } from 'node:sqlite';
 import { SignJWT } from 'jose';
 import calendar from '../src/routes/calendar.ts';
 import * as service from '../src/services/calendar.ts';
-import { mintFeedToken } from '../src/services/calendar/feedTokens.ts';
+import { mintFeedToken, CALENDAR_FEED_SCOPE } from '../src/services/calendar/feedTokens.ts';
 import { encryptString } from '../src/services/cryptoBox.ts';
 
 const SECRET = 'synthetic-calendar-d1206-'.repeat(3);
@@ -18,7 +18,7 @@ const window = `from=${FROM}&to=${TO}`;
 function fixture() {
   const db = new DatabaseSync(':memory:', { enableForeignKeyConstraints: false });
   db.exec(readFileSync(new URL('../sql/schema_baseline.sql', import.meta.url), 'utf8'));
-  for (const name of ['235_calendar_events_kind.sql', '277_user_recovery_state.sql', '603_calendar_feed_tokens.sql', '256_branch_local_copies.sql', '258_licence_deployments.sql', '463_raise_record_stores.sql', '607_raise_money_cents.sql']) {
+  for (const name of ['235_calendar_events_kind.sql', '277_user_recovery_state.sql', '603_calendar_feed_tokens.sql', '256_branch_local_copies.sql', '258_licence_deployments.sql', '463_raise_record_stores.sql', '607_raise_money_cents.sql', '610_calendar_feed_scope_sync_errors.sql']) {
     db.exec(readFileSync(new URL(`../sql/migrations/${name}`, import.meta.url), 'utf8'));
   }
   for (const [id, role] of [[1,'admin'],[2,'founder'],[3,'advisor'],[4,'investor'],[5,'investor']] as const) {
@@ -60,13 +60,16 @@ test.afterEach(() => { globalThis.fetch = realFetch; });
 test('D1206: Free investor reads mounted calendar and subscriptions; only IC creation requires Professional', async () => {
   const f = fixture();
   try {
-    for (const path of [`/events?${window}`, `/events.ics?${window}`, '/ic-meetings', '/my-events/feed']) {
+    for (const path of [`/events?${window}`, `/events.ics?${window}`, '/ic-meetings', '/my-events/feed', '/subscription']) {
       const res = await f.request(path, 4, undefined, true);
       assert.equal(res.status, 200, `${path}: ${await res.clone().text()}`);
     }
     const feed = await mintFeedToken(f.env, 4);
     const res = await f.request(`/feed/my-events.ics?token=${feed.token}`, 4, undefined, true);
     assert.equal(res.status, 200, await res.clone().text());
+    const whole=await mintFeedToken(f.env,4,new Date(),CALENDAR_FEED_SCOPE);
+    const wholeRead=await f.request(`/feed/calendar.ics?token=${whole.token}&scope=all`,4,undefined,true);
+    assert.equal(wholeRead.status,200,await wholeRead.clone().text());
     const body = { title: 'Fixture IC', start_at: START, deal_id: 200, attendee_user_ids: [2] };
     const denied = await f.request('/ic-meetings', 4, body, true);
     assert.equal(denied.status, 402);
@@ -220,6 +223,12 @@ test('D1206: Studio reads only the licensed deployment, deduplicates participant
     assert.equal(download.status, 200);
     assert.ok(file.includes('Private check-in 11')); assert.equal(file.includes('Private check-in 22'), false);
     assert.equal((await f.request('/push/founder_checkin/22?scope=studio',1,{})).status, 404);
+    f.db.prepare('INSERT INTO founder_checkins (uid,founder_user_id,title,start_at) VALUES (?,?,?,?)').run('foreign-feed-item',2,'Foreign whole-feed item',START);
+    const wholeToken=await mintFeedToken(f.env,1,new Date(),CALENDAR_FEED_SCOPE);
+    const wholeRead=await f.request(`/feed/calendar.ics?token=${wholeToken.token}&scope=studio`);
+    const wholeText=await wholeRead.text();
+    assert.equal(wholeRead.status,200); assert.ok(wholeText.includes('Private check-in 11'));
+    assert.equal(wholeText.includes('Foreign whole-feed item'),false);
     const payloads: any[] = [];
     globalThis.fetch = async (url: any, init: any) => {
       const u = new URL(String(url));
