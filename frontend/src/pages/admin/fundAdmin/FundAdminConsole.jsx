@@ -122,7 +122,7 @@ export function FundAdminConsoleView({ user, apis = DEFAULT_APIS }) {
             : <HeaderTab key={t.key} to={`/admin/fund-admin${keep}`} count={null} data-testid={`fund-admin-tab-${t.key}`}>{t.label}</HeaderTab>))}
           data-testid="fund-admin-header"
         />
-        {funds.length > 0 && <FundFilter filter={filter} pathname={location.pathname} search={location.search} />}
+        {funds.length > 0 && view !== 'books' && <FundFilter filter={filter} pathname={location.pathname} search={location.search} />}
       </div>
       {access.status === 'unreadable' && (
         <div className="mx-4 mt-4 sm:mx-6">

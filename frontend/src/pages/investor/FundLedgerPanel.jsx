@@ -41,6 +41,7 @@ export function FundLedgerView({items=[],loading=false,error=null,reload=()=>{},
   </div>;
 }
 function LedgerTable({rows}) {
+  if (!rows.length) return <EmptyState>Not recorded: no ledger lines were returned for this view.</EmptyState>;
   return <div className="rounded-xl border border-gray-200 dark:border-gray-800"><table className="w-full text-sm">
     <thead className="hidden sm:table-header-group bg-gray-50 dark:bg-gray-900/60 text-gray-500 dark:text-gray-400"><tr>{['Line','Amount','State','Note'].map(label=><th key={label} className="text-left font-medium px-4 py-2.5">{label}</th>)}</tr></thead>
     <tbody className="divide-y divide-gray-100 dark:divide-gray-800">{rows.map(([label,value,state,note],index)=><tr key={`${label}-${index}`} className="block border-b last:border-b-0 sm:table-row bg-white dark:bg-gray-900">

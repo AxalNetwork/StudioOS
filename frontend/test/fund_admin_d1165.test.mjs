@@ -47,6 +47,7 @@ test('D1165: Books replaces the wait, keeps debit and credit, and never runs on 
     assert.equal(m.calls.filter(([n]) => n === 'ledgerList').length, 1);
     assert.ok(m.by('books-journal'));
     assert.ok(!m.by('fund-admin-wait-books'));
+    assert.ok(!m.by('fund-admin-filter')); // Books uses the ledger’s entitled-fund selector.
     assert.match(m.text(), /Debit \$123\.45 Credit \$0\.00/);
     assert.ok(!m.calls.some(([n]) => n === 'connections'));
   } finally { await m.close(); }
