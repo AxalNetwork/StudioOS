@@ -75,6 +75,7 @@ export * from './api/helpCenter.js';
 export * from './api/insights.js';
 export * from './api/interviewSessions.js';
 export * from './api/kycHq.js';
+export * from './api/kycPeople.js';
 export * from './api/labOperations.js';
 export * from './api/labReportShares.js';
 export * from './api/learning.js';
