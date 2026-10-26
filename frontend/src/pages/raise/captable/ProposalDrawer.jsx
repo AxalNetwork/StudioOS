@@ -24,11 +24,11 @@ import { MERCURY_ID, closeView, mercuryView, proposalView, toBps } from './histo
  */
 
 const MUTED = 'text-axal-muted dark:text-gray-400';
-const INK = 'text-axal-ink dark:text-gray-100';
-const INPUT = 'w-full rounded-[9px] border border-axal-hairline bg-white px-2.5 py-1.5 text-[13px] text-axal-ink dark:border-gray-700 dark:bg-gray-950 dark:text-gray-100';
+const INK = 'text-axal-ink dark:text-gray-200';
+const INPUT = 'w-full rounded-[9px] border border-axal-hairline bg-white px-2.5 py-1.5 text-[13px] text-axal-ink dark:border-gray-700 dark:bg-gray-950 dark:text-gray-200';
 const PILL = 'rounded-full border px-2 py-0.5 text-[11px] font-bold';
-const GOOD = 'border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-900 dark:bg-emerald-950/30 dark:text-emerald-300';
-const AMBER = 'border-amber-200 bg-amber-50 text-amber-800 dark:border-amber-900 dark:bg-amber-950/30 dark:text-amber-300';
+const GOOD = 'border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-400/45 dark:bg-emerald-400/10 dark:text-emerald-400';
+const AMBER = 'border-amber-200 bg-amber-50 text-amber-800 dark:border-amber-300/55 dark:bg-amber-300/10 dark:text-amber-300';
 
 /** One read, answering alone. */
 function useRead(load, key) {
@@ -58,12 +58,12 @@ function Facts({ rows, testId }) {
 
 function Shell({ eyebrow, title, onClose, write, confirm, buttons, children, testId }) {
   return (
-    <Lightbox label={title} eyebrow={eyebrow} title={title} width={600} onClose={() => !write?.busy && onClose()} testId={testId}
+    <Lightbox label={title} eyebrow={eyebrow} title={title} width={600} onClose={() => !write?.busy && onClose()} testId={testId} phone="sheet"
       footer={(
         <div className="flex flex-col gap-2">
           {confirm ? <p className={`m-0 rounded-[10px] border border-axal-hairline bg-axal-ground px-3 py-2 text-[12.5px] font-semibold ${INK} dark:border-gray-700 dark:bg-gray-800`} data-testid={`${testId}-confirm`}>{confirm}</p> : null}
           <div className="flex flex-wrap justify-end gap-2">{buttons}</div>
-          {write?.refusal ? <p role="alert" className="m-0 text-[12px] font-semibold text-red-700 dark:text-red-300" data-testid={`${testId}-refusal`}>{write.refusal}</p> : null}
+          {write?.refusal ? <p role="alert" className="m-0 text-[12px] font-semibold text-red-700 dark:text-red-400" data-testid={`${testId}-refusal`}>{write.refusal}</p> : null}
         </div>
       )}>
       <div className="flex flex-col gap-3 text-[13px]">{children}</div>
@@ -150,7 +150,7 @@ function CloseProposal({ projectId, closeUid, record, role, onClose, onDone }) {
               {v.closed !== 'Not recorded' ? <p className={`m-0 ${MUTED}`}>Closed {v.closed}</p> : null}
               <ul className="m-0 flex list-none flex-col gap-2 p-0" data-testid="captable-proposal-close-rows">
                 {v.rows.map((r) => (
-                  <li key={r.key} className="flex flex-wrap items-center justify-between gap-2 border-b border-axal-ground pb-2 last:border-b-0 dark:border-gray-800" data-testid="captable-proposal-close-row">
+                  <li key={r.key} className="flex flex-wrap items-center justify-between gap-2 border-b border-axal-ground pb-2 last:border-b-0 dark:border-gray-700" data-testid="captable-proposal-close-row">
                     <span className="flex min-w-0 flex-col">
                       <span className={`font-semibold ${INK}`}>{r.holder} · {r.amount}</span>
                       <span className={`text-[12px] ${MUTED}`}>{r.sub}{r.status && r.status !== 'proposed' ? ` · ${r.status}` : ''}{r.skipped ? ` · not proposed (${r.skipped})` : ''}</span>

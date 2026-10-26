@@ -12,6 +12,7 @@ import {
 import StoryTab from './StoryTab';
 import { NarrativeNotes, NarrativeOtherVenture, NarrativeReads } from './NarrativeAdmin';
 import PositioningTab from './PositioningTab';
+import { ObjectionsCard } from './ObjectionsPanel';
 
 
 /**
@@ -306,10 +307,11 @@ function VersionsTab({ projectId, versions, search, reload, onChanged, admin = f
 
 /**
  * Home's own parts (NAR1), under the module page's card and table: the four
- * tiles, "Needs you" and the footer, from the module read's `parts.narrative`.
+ * tiles, "Needs you", "Objections heard" (D913) and the footer, from the module
+ * read's `parts.narrative`. An admin (`admin`) gets no Answer it.
  * CycleRoute draws it as the module's part (D909); it reads nothing itself.
  */
-export function NarrativeHome({ data, search }) {
+export function NarrativeHome({ data, search, admin = false }) {
   // The module page's address: the venture is kept on Needs you's links.
   const here = useLocation().search;
   if (homeUnreadable(data)) {
@@ -349,6 +351,8 @@ export function NarrativeHome({ data, search }) {
             </div>
           ))}
       </section>
+      {/* D913 (#2697): the objections investors raised, from the part. */}
+      <ObjectionsCard part={part} search={search ?? here} admin={admin} />
       <p className={`m-0 text-[12.5px] ${MUTED}`} data-testid="narrative-home-footer">{homeFooter(part)}</p>
     </div>
   );

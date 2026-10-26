@@ -9,6 +9,8 @@ import { fundFeesApi } from '../../../lib/api/fundFees';
 import { fundReportingApi } from '../../../lib/api/fundReporting';
 import { adminCapitalAttestationsApi } from '../../../lib/api/adminCapitalAttestations';
 import { fundPerformanceApi } from '../../../lib/api/fundPerformance';
+import { fundNoticesApi } from '../../../lib/api/fundNotices';
+import { fundBookletsApi } from '../../../lib/api/fundBooklets';
 import { Banner } from '../../account/ConnectorSheet';
 import {
   BANKING_PARTS, LEGACY_TABS, LINE, MOVED_NOTICES, NOT_YET, TABS, TITLE, WAITS, administeredFunds, fundFilter, fundsCsv,
@@ -20,6 +22,8 @@ import { OverviewTab } from './OverviewTab';
 import { BankingTab, ReconciliationTab } from './BankingTabs';
 import { CallsTab, DistributionsTab, FeesTab, ReportsTab } from './FundTabs';
 import { PerformanceTab } from './PerformanceTab';
+import { LpsTab } from './LpsTab';
+import { withQuery } from './lpsModel';
 
 /**
  * D714 (#1779) PR 4a — the fund administration console at `/admin/fund-admin`,
@@ -46,6 +50,18 @@ export const DEFAULT_APIS = {
   capitalAttestations: adminCapitalAttestationsApi,
   // D1164 (#3071): NAV & performance (FND10–FND12): the list, the quarterly history, positions, and the mark and move writes.
   performance: fundPerformanceApi,
+  // D1162 (#3069): FND5's roster is `fundAdmin.lps`; FND6's drawer reads and acts per fund.
+  notices: fundNoticesApi,
+  booklets: fundBookletsApi,
+  lps: {
+    add: (fundId, body) => api.fundsAddLpV2(fundId, body),
+    setType: (fundId, lpId, lpType) => api.fundsSetLpType(fundId, lpId, lpType),
+    ledger: (fundId) => api.fundsCallLedger(fundId),
+    receipt: (fundId, lineId, body) => api.fundsRecordReceipt(fundId, lineId, body),
+    distributions: (fundId) => api.fundsDistributions(fundId),
+    contacts: (fundId, lpId) => api.fundsCommsList(fundId, lpId),
+    logContact: (fundId, body) => api.fundsLogComm(fundId, body),
+  },
   funds: {
     distributions: (fundId) => api.fundsDistributions(fundId),
     execute: (body) => api.fundsExecuteDistribution(body),
@@ -92,6 +108,8 @@ export function FundAdminConsoleView({ user, apis = DEFAULT_APIS }) {
   const asOf = overview.status === 'ready' && overview.data?.as_of ? `As of ${overview.data.as_of}` : null;
   const pill = profilePill(acts);
   const primary = headerPrimary(view, acts, PER_FUND_VIEWS.includes(tab) ? fund : null);
+  // D1162: Add LP keeps the roster's filters, so the list under the dialog is the one the admin was reading.
+  if (primary && view === 'lps') primary.to = `/admin/fund-admin/lps${withQuery(location.search, 'add', true)}`;
   const filter = fundFilter(funds, location.search, tab);
   const exportCsv = () => downloadCsv(fundsCsv(overview.status === 'ready' ? overview.data : null));
 
@@ -147,7 +165,8 @@ export function FundAdminConsoleView({ user, apis = DEFAULT_APIS }) {
         {view === 'performance' && (
           <PerformanceTab apis={apis} access={acts} funds={funds} fundId={filter.pills.find((p) => p.on && p.id != null)?.id ?? null} onChanged={overview.reload} />
         )}
-        {(view === 'funds' || view === 'lps' || view === 'books') && <WaitCard view={view} />}
+        {view === 'lps' && <LpsTab apis={apis} access={acts} funds={funds} />}
+        {(view === 'funds' || view === 'books') && <WaitCard view={view} />}
       </div>
     </main>
   );

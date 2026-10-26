@@ -7,7 +7,7 @@
  *
  * THE ADDRESS HOLDS THE FILTERS, the view, the sort and the page size, so a
  * filtered list can be shared and the browser's back button undoes a choice:
- *   status=draft,published  visibility=public  when=upcoming|past|week|month|range
+ *   status=draft,published  type=workshop  visibility=public  format=online  when=upcoming|past|week|month|range
  *   from=YYYY-MM-DD  to=YYYY-MM-DD  price=free|paid  featured=yes|no
  *   host=<the host's name>
  *   view=week|full|attention|paid_cancelled  sort=starts|created|taken|fill|showup|waiting  per=25|50|100
@@ -20,14 +20,34 @@
  * ticket count, so "Cancelled with paid tickets" reads the overview's
  * `needs_attention` items of kind `paid_on_cancelled` (`paidOnCancelled`).
  *
- * WHAT IS NOT HERE, AND WHY: Type and Format wait for part 1 (#2699). "Studio
- * team" as a host waits for the owner's O-STU.
+ * D1116 (#2996) adds Type (`type=`, one of the twelve stored types, `events.type`)
+ * and Format (`format=online|in_person|hybrid`, from `location_kind`) to the
+ * filters, the table and the CSV. An event whose type or format is not one
+ * the desk knows matches no Type or Format filter and reads "Not recorded".
+ *
+ * WHAT IS NOT HERE, AND WHY: "Studio team" as a host waits for the owner's O-STU.
  */
 
 import {
   DAY_MS, STATUSES, countsFor, defaultOrder, hasEnded, isPaid, parseStamp, roleWord, tableRow, titleOf,
 } from './eventsDeskModel.js';
 import { addDays, clashMap, isDayKey, mondayOf, monthOf, placeOf, todayKey } from './calendarModel.js';
+import { EVENT_TYPES } from '../../../lib/eventTypes.js';
+
+/** D1116: the twelve stored types (`lib/eventTypes.js`), and the three formats `location_kind` holds. */
+export const TYPES = EVENT_TYPES.map((t) => ({ key: t.id, label: t.label }));
+export const FORMATS = [
+  { key: 'online', label: 'Online' },
+  { key: 'in_person', label: 'In person' },
+  { key: 'hybrid', label: 'Hybrid' },
+];
+const FORMAT_OF = { virtual: 'online', physical: 'in_person', in_person: 'in_person', hybrid: 'hybrid' };
+/** The format's key from `location_kind` (the legacy `physical` is in person), or null when it is none of the three. */
+export const formatKey = (ev) => FORMAT_OF[String(ev?.location_kind ?? '').trim()] || null;
+/** The type's word, or "Not recorded" for a type the desk does not know. */
+export const typeLabel = (ev) => TYPES.find((t) => t.key === ev?.type)?.label || 'Not recorded';
+/** The format's word, or "Not recorded". */
+export const formatLabel = (ev) => FORMATS.find((x) => x.key === formatKey(ev))?.label || 'Not recorded';
 
 export const VISIBILITIES = [
   { key: 'public', label: 'Public' },
@@ -76,6 +96,8 @@ export function readQuery(search) {
   return {
     statuses,
     visibility: one(q.get('visibility'), VISIBILITIES),
+    type: one(q.get('type'), TYPES),
+    format: one(q.get('format'), FORMATS),
     when,
     from: when === 'range' && isDayKey(q.get('from')) ? q.get('from') : null,
     to: when === 'range' && isDayKey(q.get('to')) ? q.get('to') : null,
@@ -107,7 +129,7 @@ export function writeQuery(search, patch) {
 }
 
 /** How many filters are set, for the phone's "Filters · [n]". The view and the sort are not filters. */
-export const filterCount = (f) => (f.statuses.length ? 1 : 0) + ['visibility', 'when', 'price', 'featured', 'host'].filter((k) => f[k]).length;
+export const filterCount = (f) => (f.statuses.length ? 1 : 0) + ['type', 'visibility', 'format', 'when', 'price', 'featured', 'host'].filter((k) => f[k]).length;
 
 /* ------------------------------------------------------------------ *
  * The host line (D918's list rows)
@@ -269,6 +291,8 @@ export const matchesSearch = (ev, q) => {
 export function matchesFilters(ev, f, now) {
   return (!f.statuses?.length || f.statuses.includes(ev?.status))
     && (!f.visibility || ev?.visibility === f.visibility)
+    && (!f.type || ev?.type === f.type)
+    && (!f.format || formatKey(ev) === f.format)
     && whenMatches(ev, f.when, f, now)
     && priceMatches(ev, f.price)
     && (!f.featured || Boolean(ev?.featured) === (f.featured === 'yes'))
@@ -322,7 +346,7 @@ export function reasonsFor(rows, events, join, now) {
  * The CSV: the rows on screen, counts only, made in the browser
  * ------------------------------------------------------------------ */
 
-export const CSV_COLUMNS = ['Event', 'Featured', 'Starts', 'Time zone', 'Status', 'Visibility', 'Capacity', 'Taken', 'Waitlisted', 'Attended', 'Fill', 'Show-up', 'Price'];
+export const CSV_COLUMNS = ['Event', 'Featured', 'Type', 'Starts', 'Time zone', 'Status', 'Visibility', 'Format', 'Capacity', 'Taken', 'Waitlisted', 'Attended', 'Fill', 'Show-up', 'Price'];
 export const CSV_NOTE = 'Counts only: no attendee names or emails.';
 
 /**
@@ -341,7 +365,7 @@ export function csvFor(rows, join, now, { statusWord }) {
   const lines = [CSV_COLUMNS.map(csvCell).join(',')];
   for (const ev of rows) {
     const r = tableRow(ev, join, now);
-    lines.push([r.title, r.featured ? 'Yes' : 'No', r.starts.text, r.starts.zone, statusWord(r.status), r.visibility, r.capacity, r.taken, r.waitlisted, r.attended, r.fill, r.showUp, r.price].map(csvCell).join(','));
+    lines.push([r.title, r.featured ? 'Yes' : 'No', typeLabel(ev), r.starts.text, r.starts.zone, statusWord(r.status), r.visibility, formatLabel(ev), r.capacity, r.taken, r.waitlisted, r.attended, r.fill, r.showUp, r.price].map(csvCell).join(','));
   }
   return `${lines.join('\r\n')}\r\n`;
 }

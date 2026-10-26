@@ -6,6 +6,7 @@ import { Hono } from 'hono';
 import { SignJWT } from 'jose';
 import build from '../src/routes/cycle_build.ts';
 import { d1Over } from './_d1_sqlite.mjs';
+import { addColumnsFrom } from './_baseline.mjs';
 import { cardView, figureValue } from '../../frontend/src/pages/cycles/cycleModel.js';
 
 const JWT_SECRET = 'x'.repeat(64); // synthetic test fixture
@@ -47,6 +48,9 @@ function fixture() {
   db.exec(readFileSync('cloudflare-worker/sql/migrations/455_core_systems_workspace.sql', 'utf8'));
   db.exec(readFileSync('cloudflare-worker/sql/migrations/459_cycle_activity_convention.sql', 'utf8'));
   db.exec(readFileSync('cloudflare-worker/sql/migrations/461_build_record_stores.sql', 'utf8'));
+  const sizes = readFileSync('cloudflare-worker/sql/migrations/605_member_file_sizes.sql', 'utf8');
+  addColumnsFrom(db, sizes, 'formation_steps');
+  addColumnsFrom(db, sizes, 'entity_obligations');
   db.exec('CREATE TABLE google_oauth_tokens(user_id INTEGER PRIMARY KEY); CREATE TABLE microsoft_oauth_tokens(user_id INTEGER PRIMARY KEY)');
   const env = { DB: d1Over(db), JWT_SECRET, ENVIRONMENT: 'development' } as any;
   return { db, env };

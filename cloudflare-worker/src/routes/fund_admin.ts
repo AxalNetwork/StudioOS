@@ -13,7 +13,8 @@
  *
  * `GET /lps` (D1158) is FND5: every LP of every administered fund, filtered,
  * searched, sorted and paged on the Worker, behind the same gate, audited
- * first (`services/fundAdminLps.ts`).
+ * first (`services/fundAdminLps.ts`). D1162 adds `?lp=<id>`, one LP's row for
+ * FND6's drawer, and each row's booklet uid.
  */
 import { Hono } from 'hono';
 import type { Env } from '../types';

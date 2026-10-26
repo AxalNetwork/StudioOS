@@ -53,7 +53,10 @@ function stubs({ sa = false, access = null, overview = null } = {}) {
   return {
     calls,
     apis: {
-      fundAdmin: { access: rec('access', access || (async () => ACCESS(sa))), overview: rec('overview', overview || (async () => OVERVIEW())) },
+      fundAdmin: {
+        access: rec('access', access || (async () => ACCESS(sa))), overview: rec('overview', overview || (async () => OVERVIEW())),
+        lps: rec('lps', async () => ({ funds: [], page: 1, per_page: 25, pages: 1, total_rows: 0, totals: { rows: 0, not_recorded: {} }, tally: { by_type: [] }, items: [] })),
+      },
       performance: { list: rec('performance', async () => ({ items: [] })) },
       mercury: {
         connections: rec('connections', async () => ({ ok: true, entities: [] })),
@@ -108,14 +111,15 @@ test('the primary button is the act table\'s: the Super Admin\'s "New capital ca
   assert.deepEqual(headerPrimary('distributions', ACCESS(true), fund), { label: 'New distribution', to: '/admin/fund-admin/distributions?fund=7#distribution-form' });
   assert.equal(headerPrimary('distributions', ACCESS(false), fund).label, 'Preview a distribution');
   assert.deepEqual(headerPrimary('fees', ACCESS(false), fund), { label: 'Preview period', to: '/admin/fund-admin/fees?fund=7#fee-prepare' });
-  for (const v of ['funds', 'lps', 'performance', 'reports', 'banking', 'reconciliation', 'books']) assert.equal(headerPrimary(v, ACCESS(true), fund), null, `${v} has no act page yet`);
+  assert.deepEqual(headerPrimary('lps', ACCESS(false), null), { label: 'Add LP', to: '/admin/fund-admin/lps?add=1' }, 'D1162: Add LP is an Admin\'s act');
+  for (const v of ['funds', 'performance', 'reports', 'banking', 'reconciliation', 'books']) assert.equal(headerPrimary(v, ACCESS(true), fund), null, `${v} has no act page yet`);
 });
 
 test('the tab counts: a number read, a dash with its reason, the amber flag with what waits — never a zero', () => {
   const c = tabCounts(OVERVIEW());
   assert.deepEqual(c.funds, { kind: 'num', value: 2 });
   assert.equal(c.lps.kind, 'dash');
-  assert.match(c.lps.tip, /no read lists the LPs across funds/);
+  assert.match(c.lps.tip, /the LPs tab reads its own roster/);
   assert.deepEqual(c.calls, { kind: 'flag', value: 3, testId: 'fund-admin-flag-calls' });
   assert.deepEqual(c.banking, { kind: 'flag', value: 5, testId: 'fund-admin-flag-banking' });
   assert.deepEqual(c.reports, { kind: 'flag', value: 2, testId: 'fund-admin-flag-reports' });
@@ -197,7 +201,8 @@ test('the fund filter survives a tab change, and a per-fund tab reads the fund i
   try {
     assert.equal(lps.text('fund-admin-filter-note'), FILTER_KEPT);
     assert.equal(lps.href('fund-admin-filter-all'), '/admin/fund-admin/lps');
-    assert.ok(lps.by('fund-admin-wait-lps'), 'the tab and its panel are kept');
+    assert.ok(lps.by('fund-admin-panel-lps'), 'the tab and its panel are kept');
+    assert.ok(lps.by('lps-section') && !lps.by('fund-admin-wait-lps'), 'D1162: the roster replaces the wait card');
   } finally { await lps.close(); }
 });
 
