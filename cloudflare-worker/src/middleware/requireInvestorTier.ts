@@ -141,7 +141,8 @@ export function requireInvestorTier(required: Exclude<InvestorTier, 'free'>) {
 }
 
 /**
- * D614/D1149 — Free investors may leave a room and read an authorized deal
+ * D614/D1149/D1237 — Free investors may request/leave their one room, read its
+ * quota and read an authorized deal
  * header/key strip. The detail handler returns a restricted projection; all
  * other deal and diligence reads remain Professional.
  * D1033 adds the my-events feed, and D1209 the whole-calendar feed: neither has
@@ -152,6 +153,9 @@ export const INVESTOR_PRO_EXEMPT: ReadonlyArray<{ method: string; path: RegExp }
   { method: 'GET', path: /^\/api\/dd\/reports\/download\/[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\/?$/ },
   // D1149: the handler restricts Free investors to an authorized header/key strip.
   { method: 'GET', path: /^\/api\/deals\/[1-9][0-9]*\/?$/ },
+  // D1237: Free's one room is a request, not access to the deal listing or contents.
+  { method: 'GET', path: /^\/api\/deals\/dealroom\/quota\/?$/ },
+  { method: 'POST', path: /^\/api\/deals\/[1-9][0-9]*\/dealroom\/join\/?$/ },
   { method: 'DELETE', path: /^\/api\/deals\/[^/]+\/dealroom\/leave\/?$/ },
   // D1033 (#2874): the my-events subscription feed. A calendar client fetches
   // it with no session, so the session gate cannot run; the route applies the

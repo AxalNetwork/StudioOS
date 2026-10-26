@@ -107,7 +107,10 @@ deals.get('/', async (c) => {
         ? await sql`SELECT deal_id FROM investor_dealroom_members WHERE investor_user_id = ${user.id}`
         : await sql`SELECT deal_id FROM investor_dealroom_members WHERE investor_user_id = ${user.id} AND (company_id = ${companyId} OR company_id IS NULL)`;
       const memberSet = new Set<number>((memberRows as any[]).map((r) => Number(r.deal_id)));
-      rows = (rows as any[]).map((d) => ({ ...d, is_member: memberSet.has(Number(d.id)) ? 1 : 0 }));
+      // D1237: a room request is not deal access. Reuse the deal reader's
+      // invited-or-committed predicate in one batch; never infer it from membership.
+      const readableIds = await userReadableDealIds(c.env, user, (rows as any[]).map((d) => Number(d.id)));
+      rows = (rows as any[]).map((d) => ({ ...d, is_member: memberSet.has(Number(d.id)) ? 1 : 0, can_read: readableIds.has(Number(d.id)) }));
       if (scope === 'mine') {
         const invitedRows = companyId === null
           ? await sql`SELECT deal_id FROM deal_invitations WHERE investor_user_id = ${user.id}`
@@ -1655,7 +1658,10 @@ const DEALROOM_BYPASS_ROLES = new Set<string>(['admin', 'partner', 'advisor']);
 function dealroomCap(user: InvestorUser): number {
   if (DEALROOM_BYPASS_ROLES.has(String(user.role))) return Number.POSITIVE_INFINITY;
   const colCap = (user as { investor_dealroom_max?: number | null }).investor_dealroom_max;
-  const tierCap = INVESTOR_QUOTAS[effectiveInvestorTier(user)].dealroom_max;
+  const tier = effectiveInvestorTier(user);
+  const tierCap = INVESTOR_QUOTAS[tier].dealroom_max;
+  // A stale paid-plan column cannot enlarge Free's one-room allowance.
+  if (tier === 'free') return tierCap;
   return Number.isFinite(colCap as number) && (colCap as number) > 0 ? Number(colCap) : tierCap;
 }
 
@@ -1687,43 +1693,49 @@ deals.post('/:id/dealroom/join', async (c) => {
   const deal = await c.env.DB.prepare(`SELECT id FROM deals WHERE id = ?`).bind(dealId).first<{ id: number }>();
   if (!deal) return c.json({ error: 'deal_not_found' }, 404);
 
-  // An existing legacy room row is an idempotent invitation request.
-  const existing = await c.env.DB.prepare(
-    `SELECT 1 AS x FROM investor_dealroom_members
-     WHERE investor_user_id = ? AND deal_id = ?`
-  ).bind(user.id, dealId).first<{ x: number }>();
-  if (existing) return c.json({ ok: true, requested: true, already_requested: true });
+  const companyId = await investorActiveCompany(c, user);
+  const existingRequest = () => c.env.DB.prepare(
+    `SELECT company_id FROM investor_dealroom_members WHERE investor_user_id = ? AND deal_id = ?`
+  ).bind(user.id, dealId).first<{ company_id: number | null }>();
+  const alreadyRequested = (row: { company_id: number | null }) => {
+    if (companyId !== null && row.company_id != null && Number(row.company_id) !== companyId) {
+      return c.json({ error: 'room_requested_for_other_firm', message: 'This room was requested under another firm. Leave it from that firm before requesting it here.' }, 409);
+    }
+    return c.json({ ok: true, requested: true, already_requested: true });
+  };
+  // The schema has one request per investor/deal. Never claim another firm's
+  // row as a successful join; legacy NULL rows retain their existing visibility.
+  const existing = await existingRequest();
+  if (existing) return alreadyRequested(existing);
 
   const tier = effectiveInvestorTier(user);
   const cap = dealroomCap(user);
   const used = await dealroomsUsed(c.env, user.id);
-  if (used >= cap) {
-    return c.json(
-      {
-        error: 'quota_exceeded',
-        code: 'quota_dealrooms_exhausted',
-        message: `You have requested the maximum of ${cap} dealroom${cap === 1 ? '' : 's'} on the ${tier} plan.`,
-        used,
-        cap,
-        tier,
-        upgrade_to: tier === 'free' ? 'professional' : 'institutional',
-        checkout_path: '/api/billing/investor/checkout',
-      },
-      402,
-    );
-  }
+  const quotaRefusal = (count: number) => c.json({
+    error: 'quota_exceeded', code: 'quota_dealrooms_exhausted',
+    message: `You have requested the maximum of ${cap} dealroom${cap === 1 ? '' : 's'} on the ${tier} plan.`,
+    used: count, cap, tier, upgrade_to: tier === 'free' ? 'professional' : 'institutional',
+    checkout_path: '/api/billing/investor/checkout',
+  }, 402);
+  if (used >= cap) return quotaRefusal(used);
   try {
-    await c.env.DB.prepare(
-      `INSERT INTO investor_dealroom_members (investor_user_id, deal_id) VALUES (?, ?)`
-    ).bind(user.id, dealId).run();
+    // D1237: record the verified firm and check the global allowance in the
+    // INSERT itself, so concurrent requests cannot both consume the final slot.
+    const inserted = await c.env.DB.prepare(
+      `INSERT INTO investor_dealroom_members (investor_user_id, deal_id, company_id)
+       SELECT ?, ?, ? WHERE ? = 1 OR
+         (SELECT COUNT(*) FROM investor_dealroom_members WHERE investor_user_id = ?) < ?`
+    ).bind(user.id, dealId, companyId, isBypass ? 1 : 0, user.id, isBypass ? 0 : cap).run();
+    if (Number(inserted.meta?.changes ?? 0) === 0) return quotaRefusal(await dealroomsUsed(c.env, user.id));
   } catch (e) {
     if (/UNIQUE/i.test((e as Error).message || '')) {
-      return c.json({ ok: true, requested: true, already_requested: true });
+      const raced = await existingRequest();
+      if (raced) return alreadyRequested(raced);
     }
     throw e;
   }
   // The request is recorded with its actor, beside the legacy room row.
-  await logDealRoomAction(c.env, user, 'deal_invitation_requested', dealId);
+  await logDealRoomAction(c.env, user, 'deal_invitation_requested', dealId, { company_id: companyId });
   return c.json({ ok: true, requested: true, used: used + 1, cap, tier });
 });
 
@@ -1736,13 +1748,15 @@ deals.delete('/:id/dealroom/leave', async (c) => {
   }
   const dealId = Number(c.req.param('id'));
   if (!Number.isFinite(dealId)) return c.json({ error: 'bad_id' }, 400);
+  const companyId = await investorActiveCompany(c, user);
   const del = await c.env.DB.prepare(
-    `DELETE FROM investor_dealroom_members WHERE investor_user_id = ? AND deal_id = ?`
-  ).bind(user.id, dealId).run();
+    `DELETE FROM investor_dealroom_members WHERE investor_user_id = ? AND deal_id = ?
+       AND (? IS NULL OR company_id = ? OR company_id IS NULL)`
+  ).bind(user.id, dealId, companyId, companyId).run();
   // D630 — a leave that removed a membership is recorded with its actor. A
   // leave of a room the caller was not in changed nothing, so it logs nothing.
   if (Number((del as any)?.meta?.changes ?? 0) > 0) {
-    await logDealRoomAction(c.env, user, 'dealroom_left', dealId);
+    await logDealRoomAction(c.env, user, 'dealroom_left', dealId, { company_id: companyId });
   }
   return c.json({ ok: true });
 });

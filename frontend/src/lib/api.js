@@ -1466,7 +1466,7 @@ export const api = {
   retryTicketMirror: (id) => request(`/tickets/${id}/mirror`, { method: 'POST' }),
 
   // Task #82 — `scope='mine'` narrows the funnel to deals the investor has a
-  // relationship with (dealroom member / introduced / converted watchlist).
+  // relationship with: invited or committed. A room request alone is not access.
   listDeals: (status, scope) => {
     const q = new URLSearchParams();
     if (status) q.set('status', status);
