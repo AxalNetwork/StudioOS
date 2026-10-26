@@ -93,6 +93,10 @@ export function ruleReason(key: string): string {
   if (key === 'task_approved') return 'A task you suggested was approved for the community task list';
   if (key === 'lab:graduation') return 'You graduated from the Spin-Out Lab';
   if (key.startsWith('lab:')) return `Spin-Out Lab milestone completed: ${key.slice(4).replace(/_/g, ' ')}`;
+  // D965 (#2798): the referral rewards migration 566 seeds.
+  if (key === 'referral:startup_accepted') return 'A startup you referred was accepted';
+  if (key === 'referral:startup_formed') return 'A startup you referred formed its company';
+  if (key === 'referral:customer_onboarded') return 'A platform user you referred was onboarded';
   return `Reward: ${key}`;
 }
 
