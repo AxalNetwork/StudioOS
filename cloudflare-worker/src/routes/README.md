@@ -389,7 +389,7 @@ D1135: `company.ts` adds member self-leave and validates create/rename; `project
 
 D1123: `admin_lab_operations.ts` adds `/cohorts/:cohort/capacity`, the latest stored capacity event for SL6, separately from current Settings. It never returns free-form event details.
 
-D892 §6 (#2673): `admin_billing.ts` mounts `POST /subscriptions/reconcile-incomplete` under `/api/admin/billing`, the owner-run repair of founder and investor rows left at `incomplete`. A dry run unless `dry_run: false`; a dry run needs a Super Admin, a write the write bar and a reason; every run is audited. The owner runs it against production.
+D892 §6 (#2673): `admin_billing.ts` mounts `POST /subscriptions/reconcile-incomplete` under `/api/admin/billing`, the owner-run repair of founder and investor rows left at `incomplete`. A dry run unless `dry_run: false`; a dry run needs a Super Admin, a write the write bar and a reason; every run is audited, one that fails part-way included. The owner runs it against production, straight after the deploy.
 
 D1206 (#3172): `calendar.ts` applies Investor Professional only to
 IC creation; calendar reads, including the token subscription, remain available

@@ -1023,10 +1023,11 @@ async function fetchOwnedSub(env: Env, subId: string, customer: string): Promise
 // customer check above is not enough on its own: a member whose investor
 // customer is their general customer (a plan the payments intent sold before
 // D892) holds both families on one customer. A subscription of no known family
-// keeps today's behaviour.
+// keeps today's behaviour. The family is read strictly: a catalog that cannot
+// be read throws, and the caller refuses the swap rather than call it in scope.
 async function subscriptionInScope(env: Env, sub: StripeSubscription, scope: BillingScope): Promise<boolean> {
   const { planKindOfSubscription } = await import('../services/planSubscription');
-  const kind = await planKindOfSubscription(env, sub as unknown as Record<string, unknown>);
+  const kind = await planKindOfSubscription(env, sub as unknown as Record<string, unknown>, { strict: true });
   if (!kind) return true;
   return scope === 'investor' ? kind === 'investor' : kind === 'tier';
 }
@@ -1292,7 +1293,13 @@ billing.post('/subscription/swap/preview', async (c) => {
     return c.json({ error: 'invalid_price' }, 400);
   }
   const sub = await fetchOwnedSub(c.env, subId, customer);
-  if (!(await subscriptionInScope(c.env, sub, scope))) return c.json({ error: 'invalid_scope' }, 400);
+  let inScope: boolean;
+  try {
+    inScope = await subscriptionInScope(c.env, sub, scope);
+  } catch (e) {
+    return refuse(c, 502, { code: 'preview_failed', message: 'The plan change could not be previewed. Nothing changed; try again in a moment.', raw: e, audience: 'member' });
+  }
+  if (!inScope) return c.json({ error: 'invalid_scope' }, 400);
   const itemId = sub.items?.data?.[0]?.id;
   if (!itemId) return c.json({ error: 'no_subscription_item' }, 400);
   try {
@@ -1340,7 +1347,13 @@ billing.post('/subscription/swap/confirm', async (c) => {
   if (!mapped) return c.json({ error: 'invalid_price' }, 400);
 
   const sub = await fetchOwnedSub(c.env, subId, customer);
-  if (!(await subscriptionInScope(c.env, sub, scope))) return c.json({ error: 'invalid_scope' }, 400);
+  let inScope: boolean;
+  try {
+    inScope = await subscriptionInScope(c.env, sub, scope);
+  } catch (e) {
+    return refuse(c, 502, { code: 'swap_failed', message: 'The plan could not be changed. Nothing was charged; try again in a moment.', raw: e, audience: 'member' });
+  }
+  if (!inScope) return c.json({ error: 'invalid_scope' }, 400);
   const itemId = sub.items?.data?.[0]?.id;
   if (!itemId) return c.json({ error: 'no_subscription_item' }, 400);
 

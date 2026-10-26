@@ -24,7 +24,7 @@ import { Hono } from 'hono';
 import { SignJWT } from 'jose';
 
 import { userMeetsTier } from '../src/middleware/requireTier.ts';
-import { effectiveInvestorTier } from '../src/middleware/requireInvestorTier.ts';
+import { effectiveInvestorTier, INVESTOR_QUOTAS } from '../src/middleware/requireInvestorTier.ts';
 import payments from '../src/routes/payments.ts';
 import billing from '../src/routes/billing.ts';
 import adminBilling from '../src/routes/admin_billing.ts';
@@ -32,7 +32,7 @@ import { primaryCover } from '../src/routes/investor_seats.ts';
 import { monthlyAllowanceFor } from '../src/services/introductions.ts';
 import {
   planMetaForProduct, planMetaParams, subscriptionPriceId, subscriptionMetadata, heldPlanSubscription, recordRenewalFailure,
-  isUnpaidStatus, planKindOfSubscription,
+  isUnpaidStatus, planKindOfSubscription, settleIncompleteRow,
 } from '../src/services/planSubscription.ts';
 import { AUTH_ERROR_STATUSES } from '../src/util/authErrors.ts';
 import { tableFromBaseline } from './_baseline.mjs';
@@ -121,6 +121,23 @@ function database() {
   return db;
 }
 const env = (db: DatabaseSync) => ({ JWT_SECRET, ENVIRONMENT: 'test', STRIPE_SECRET_KEY: KEY, DB: d1Over(db) } as any);
+/**
+ * The same database behind a D1 binding whose statements throw when `fails`
+ * says so, as a transient D1 error does. `fails` is asked once for each
+ * statement, when the code prepares it; a batch holding one rolls back whole.
+ */
+function flakyD1(db: DatabaseSync, fails: (sql: string) => boolean) {
+  const base = d1Over(db);
+  return {
+    ...base,
+    prepare(sql: string) {
+      if (!fails(sql)) return base.prepare(sql);
+      const boom = () => { throw new Error('D1_ERROR: synthetic failure'); };
+      const stmt: any = { bind: () => stmt, all: async () => boom(), first: async () => boom(), run: async () => boom(), runSync: boom };
+      return stmt;
+    },
+  };
+}
 const app = (() => {
   const a = new Hono<any>();
   a.route('/api/payments', payments);
@@ -364,12 +381,16 @@ test('§6 an unpaid subscription grants nothing; one that expires unpaid takes b
 
 test('§6 the quantity is a whole number of at least one, and a plan is always one', async () => {
   const db = database();
-  for (const quantity of [0.5, 0, -1, 'x']) {
-    const r = await hit(db, '/api/payments/intent', FOUNDER, 'founder', { price_id: 'price_growth_m', nonce: 'n1', quantity });
-    assert.equal(r.status, 400, `${quantity}: ${r.text}`);
-    assert.equal(r.body.error, 'invalid_quantity');
+  // A fraction above one is refused too, never floored or charged as sent: for a plan, and for a price that is no plan.
+  for (const priceId of ['price_growth_m', 'price_svc_m']) {
+    for (const quantity of [0.5, 1.5, 2.5, 0, -1, 'x']) {
+      calls = [];
+      const r = await hit(db, '/api/payments/intent', FOUNDER, 'founder', { price_id: priceId, nonce: 'n1', quantity });
+      assert.equal(r.status, 400, `${priceId} × ${quantity}: ${r.text}`);
+      assert.equal(r.body.error, 'invalid_quantity');
+      assert.equal(calls.filter((c) => c.url.startsWith('https://api.stripe.com/')).length, 0, 'a refused quantity never reaches Stripe');
+    }
   }
-  assert.equal(subCalls().length, 0, 'a refused quantity never reaches Stripe');
   assert.equal((await hit(db, '/api/payments/intent', FOUNDER, 'founder', { price_id: 'price_growth_m', nonce: 'n1', quantity: 3 })).status, 200);
   assert.equal(new URLSearchParams(subCalls()[0].body).get('items[0][quantity]'), '1');
   calls = [];
@@ -397,16 +418,80 @@ test('§6 an event for another subscription never takes over a plan the member s
   // A live subscription with its kind, made through a checkout, still moves the row.
   assert.equal((await hook(db, 'customer.subscription.updated', ev('sub_D', 'active', { kind: 'tier', tier: 'growth' }))).status, 200);
   assert.deepEqual(row(), ['growth', 'active', 'sub_D']);
+  // One with its kind but no tier, for another subscription that is not live, leaves the row as it is.
+  assert.equal((await hook(db, 'customer.subscription.updated', ev('sub_E', 'canceled', { kind: 'tier', user_id: String(FOUNDER) }))).status, 200);
+  assert.deepEqual(row(), ['growth', 'active', 'sub_D']);
+
   // MI Pro and persona plans follow the same rule.
   db.prepare("INSERT INTO mi_pro_subscriptions (user_id, status, subscription_id, plan) VALUES (?, 'active', 'sub_mi_A', 'mi_pro_annual')").run(FOUNDER);
+  const mi = () => ({ ...(db.prepare('SELECT status, subscription_id FROM mi_pro_subscriptions WHERE user_id = ?').get(FOUNDER) as any) });
   assert.equal((await hook(db, 'customer.subscription.created', ev('sub_mi_B', 'incomplete', { kind: 'mi', plan: 'mi_pro_monthly', user_id: String(FOUNDER) }, 'price_mi_y'))).status, 200);
-  assert.deepEqual({ ...(db.prepare('SELECT status, subscription_id FROM mi_pro_subscriptions WHERE user_id = ?').get(FOUNDER) as any) }, { status: 'active', subscription_id: 'sub_mi_A' });
+  assert.deepEqual(mi(), { status: 'active', subscription_id: 'sub_mi_A' });
+  // A duplicate made before D892, read from the catalog and live, stays inert, so its own end drops nothing.
+  const miDuplicate = ev('sub_mi_C', 'active', { user_id: String(FOUNDER), price_id: 'price_mi_y' }, 'price_mi_y');
+  assert.equal((await hook(db, 'customer.subscription.updated', miDuplicate)).status, 200);
+  assert.deepEqual(mi(), { status: 'active', subscription_id: 'sub_mi_A' });
+  assert.equal((await hook(db, 'customer.subscription.deleted', { ...miDuplicate, status: 'canceled' })).status, 200);
+  assert.deepEqual(mi(), { status: 'active', subscription_id: 'sub_mi_A' });
+  // A live one with its kind, made through a checkout, moves the row.
+  assert.equal((await hook(db, 'customer.subscription.updated', ev('sub_mi_D', 'active', { kind: 'mi', plan: 'mi_pro_annual', user_id: String(FOUNDER) }, 'price_mi_y'))).status, 200);
+  assert.deepEqual(mi(), { status: 'active', subscription_id: 'sub_mi_D' });
+  // A catalog-read one still takes a row that holds no live plan.
+  db.prepare("UPDATE mi_pro_subscriptions SET status = 'cancelled' WHERE user_id = ?").run(FOUNDER);
+  assert.equal((await hook(db, 'customer.subscription.updated', ev('sub_mi_E', 'active', { user_id: String(FOUNDER), price_id: 'price_mi_y' }, 'price_mi_y'))).status, 200);
+  assert.deepEqual(mi(), { status: 'active', subscription_id: 'sub_mi_E' });
+
   db.prepare("INSERT INTO account_subscriptions (user_id, plan_group, plan, status, subscription_id) VALUES (?, 'partner', 'partner_pro', 'active', 'sub_p_A')").run(PARTNER);
+  const plan = () => ({ ...(db.prepare('SELECT status, subscription_id FROM account_subscriptions WHERE user_id = ?').get(PARTNER) as any) });
   const persona = { ...ev('sub_p_B', 'incomplete', { kind: 'plan', plan_group: 'partner', user_id: String(PARTNER) }, 'price_partner_m'), customer: 'cus_partner' };
   assert.equal((await hook(db, 'customer.subscription.created', persona)).status, 200);
-  assert.deepEqual({ ...(db.prepare('SELECT status, subscription_id FROM account_subscriptions WHERE user_id = ?').get(PARTNER) as any) }, { status: 'active', subscription_id: 'sub_p_A' });
+  assert.deepEqual(plan(), { status: 'active', subscription_id: 'sub_p_A' });
+  const personaDuplicate = { ...ev('sub_p_C', 'active', { user_id: String(PARTNER), price_id: 'price_partner_m' }, 'price_partner_m'), customer: 'cus_partner' };
+  assert.equal((await hook(db, 'customer.subscription.updated', personaDuplicate)).status, 200);
+  assert.deepEqual(plan(), { status: 'active', subscription_id: 'sub_p_A' });
+  assert.equal((await hook(db, 'customer.subscription.deleted', { ...personaDuplicate, status: 'canceled' })).status, 200);
+  assert.deepEqual(plan(), { status: 'active', subscription_id: 'sub_p_A' });
   assert.equal((await hook(db, 'customer.subscription.updated', { ...persona, status: 'active' })).status, 200);
-  assert.deepEqual({ ...(db.prepare('SELECT status, subscription_id FROM account_subscriptions WHERE user_id = ?').get(PARTNER) as any) }, { status: 'active', subscription_id: 'sub_p_B' });
+  assert.deepEqual(plan(), { status: 'active', subscription_id: 'sub_p_B' });
+  db.prepare("UPDATE account_subscriptions SET status = 'cancelled' WHERE user_id = ?").run(PARTNER);
+  assert.equal((await hook(db, 'customer.subscription.updated', { ...personaDuplicate, id: 'sub_p_E' })).status, 200);
+  assert.deepEqual(plan(), { status: 'active', subscription_id: 'sub_p_E' });
+});
+
+test('§6 the same rules hold an investor row and its accepted seat colleagues', async () => {
+  const db = database();
+  const COLLEAGUE = 54;
+  db.prepare("INSERT INTO users (id, role, name, email, uid, is_active) VALUES (?, 'investor', 'Sam Seat', 'sam@example.com', 'uid-54', 1)").run(COLLEAGUE);
+  db.prepare("UPDATE users SET investor_stripe_customer_id = 'cus_inv52', investor_tier = 'institutional', investor_subscription_status = 'active', investor_stripe_subscription_id = 'sub_A' WHERE id = ?").run(INVESTOR);
+  db.prepare("UPDATE users SET investor_seat_primary_user_id = ?, investor_tier = 'institutional', investor_subscription_status = 'active' WHERE id = ?").run(INVESTOR, COLLEAGUE);
+  const ev = (id: string, status: string, metadata: Record<string, string>) => ({
+    id, object: 'subscription', status, customer: 'cus_inv52', current_period_end: 1_800_000_000, metadata: { user_id: String(INVESTOR), ...metadata },
+    items: { data: [{ quantity: 1, price: { id: 'price_pro_m', unit_amount: 14900, currency: 'usd', recurring: { interval: 'month', interval_count: 1 } } }] },
+  });
+  const rows = () => {
+    const p = userRow(db, INVESTOR), s = userRow(db, COLLEAGUE);
+    return [p.investor_tier, p.investor_subscription_status, p.investor_stripe_subscription_id, s.investor_tier, s.investor_subscription_status];
+  };
+  const held = ['institutional', 'active', 'sub_A', 'institutional', 'active'];
+  // An abandoned one, with its kind and tier or its kind alone: neither row moves.
+  for (const metadata of [{ kind: 'investor', investor_tier: 'professional' }, { kind: 'investor' }]) {
+    assert.equal((await hook(db, 'customer.subscription.updated', ev('sub_B', 'canceled', metadata))).status, 200);
+    assert.deepEqual(rows(), held, JSON.stringify(metadata));
+  }
+  // One that expires unpaid takes back only the row that points at it.
+  assert.equal((await hook(db, 'customer.subscription.updated', ev('sub_B', 'incomplete_expired', { kind: 'investor', investor_tier: 'professional' }))).status, 200);
+  assert.deepEqual(rows(), held);
+  // A duplicate made before D892, read from the catalog and live, stays inert, so its own end drops nothing.
+  assert.equal((await hook(db, 'customer.subscription.updated', ev('sub_C', 'active', { price_id: 'price_pro_m' }))).status, 200);
+  assert.deepEqual(rows(), held);
+  assert.equal((await hook(db, 'customer.subscription.deleted', ev('sub_C', 'canceled', { price_id: 'price_pro_m' }))).status, 200);
+  assert.deepEqual(rows(), held);
+  // A live one with its kind, made through a checkout, moves the row, and the colleague follows…
+  assert.equal((await hook(db, 'customer.subscription.updated', ev('sub_D', 'active', { kind: 'investor', investor_tier: 'professional' }))).status, 200);
+  assert.deepEqual(rows(), ['professional', 'active', 'sub_D', 'professional', 'active']);
+  // …and when the one the row holds expires unpaid, both are let go.
+  assert.equal((await hook(db, 'customer.subscription.updated', ev('sub_D', 'incomplete_expired', { kind: 'investor', investor_tier: 'professional' }))).status, 200);
+  assert.deepEqual(rows(), ['free', 'incomplete_expired', null, 'free', 'incomplete_expired']);
 });
 
 test('§6 an investor plan made before D892 on the general customer is granted, and the member adopts that customer', async () => {
@@ -426,6 +511,10 @@ test('§6 an investor plan made before D892 on the general customer is granted, 
   assert.equal((await hook(db, 'customer.subscription.updated', legacy)).status, 200);
   assert.equal(userRow(db, INVESTOR).investor_stripe_customer_id, 'cus_inv_own');
   assert.equal(userRow(db, INVESTOR).investor_tier, 'free');
+  // Only the member's own general customer is adopted: a plan on another customer that names them is not.
+  db.prepare("UPDATE users SET investor_stripe_customer_id = NULL WHERE id = ?").run(INVESTOR);
+  assert.equal((await hook(db, 'customer.subscription.updated', { ...legacy, customer: 'cus_elsewhere' })).status, 200);
+  assert.deepEqual([userRow(db, INVESTOR).investor_stripe_customer_id, userRow(db, INVESTOR).investor_tier], [null, 'free']);
 });
 
 test('§6 a plan Stripe holds that D1 never saw blocks a second one; a check that cannot be made charges nothing', async () => {
@@ -440,6 +529,23 @@ test('§6 a plan Stripe holds that D1 never saw blocks a second one; a check tha
   assert.equal(subCalls().length, 0);
   // Another family does not count: an MI Pro plan is still sold.
   assert.equal((await intent(db, FOUNDER, 'founder', 'price_mi_y')).status, 200);
+  // A trial, or a renewal Stripe is retrying (D1052's grace), is held too; one Stripe gave up on, or never paid, is not.
+  const legacyAt = (status: string) => [{ id: 'sub_legacy_9', status, metadata: { user_id: String(FOUNDER), price_id: 'price_growth_m' } }];
+  for (const status of ['past_due', 'trialing']) {
+    calls = [];
+    stripeSubs.cus_founder = legacyAt(status);
+    const held = await intent(db, FOUNDER, 'founder', 'price_studio_m');
+    assert.equal(held.status, 409, `${status}: ${held.text}`);
+    assert.equal(held.body.subscription_id, 'sub_legacy_9');
+    assert.equal(subCalls().length, 0, status);
+  }
+  for (const status of ['unpaid', 'incomplete_expired']) {
+    calls = [];
+    stripeSubs.cus_founder = legacyAt(status);
+    const sold = await intent(db, FOUNDER, 'founder', 'price_studio_m');
+    assert.equal(sold.status, 200, `${status}: ${sold.text}`);
+    assert.equal(subCalls().length, 1, status);
+  }
   calls = [];
   stripeSubs = {};
   listFails = true;
@@ -476,6 +582,17 @@ test('§6 a plan change acts on a subscription of its own scope only', async () 
     assert.equal(r.status, 400, `${path}: ${JSON.stringify(r.body)}`);
     assert.equal(r.body.error, 'invalid_scope');
   }
+  // The other way round: an investor-scope swap of a founder plan on that same customer, stamped or made before D892.
+  addInstitutional(db);
+  for (const metadata of [{ kind: 'tier', tier: 'growth' }, { user_id: String(INVESTOR), price_id: 'price_growth_m' }]) {
+    stripeSub = { id: 'sub_inv_1', customer: 'cus_general_52', status: 'active', metadata, items: { data: [{ id: 'si_1', price: { id: 'price_growth_m' } }] } };
+    for (const path of ['/api/billing/subscription/swap/preview', '/api/billing/subscription/swap/confirm']) {
+      const r = await swap(path, 'investor', 'price_inst_m');
+      assert.equal(r.status, 400, `${path} ${JSON.stringify(metadata)}: ${JSON.stringify(r.body)}`);
+      assert.equal(r.body.error, 'invalid_scope');
+    }
+  }
+  assert.equal(userRow(db, INVESTOR).investor_tier, 'professional');
   assert.equal(calls.filter((c) => c.method === 'POST' && /\/v1\/subscriptions\/sub_inv_1$/.test(c.url)).length, 0, 'nothing was changed in Stripe');
   assert.equal(await planKindOfSubscription(env(db), { metadata: { user_id: '51', price_id: 'price_growth_m' } }), 'tier', 'a subscription with no kind is read from its price');
   assert.equal(await planKindOfSubscription(env(db), { metadata: { kind: 'expert_booking' } }), null);
@@ -494,12 +611,12 @@ async function sessionToken(db: DatabaseSync, id: number, role: string, opts: { 
   return new SignJWT({ user_id: id, role, jti }).setProtectedHeader({ alg: 'HS256' })
     .setIssuedAt().setExpirationTime('1h').sign(new TextEncoder().encode(JWT_SECRET));
 }
-/** A POST as the holder of `jwt` (or nobody). */
-async function send(db: DatabaseSync, path: string, jwt: string | null, body: unknown) {
+/** A POST as the holder of `jwt` (or nobody), against `e` (the database's own binding unless given). */
+async function send(db: DatabaseSync, path: string, jwt: string | null, body: unknown, e: any = env(db)) {
   const saved = [console.warn, console.error]; console.warn = () => {}; console.error = () => {};
   try {
     const headers: Record<string, string> = { 'Content-Type': 'application/json', ...(jwt ? { Authorization: `Bearer ${jwt}` } : {}) };
-    const res = await app.request(path, { method: 'POST', headers, body: JSON.stringify(body) }, env(db));
+    const res = await app.request(path, { method: 'POST', headers, body: JSON.stringify(body) }, e);
     const text = await res.text();
     let json: any = null; try { json = JSON.parse(text); } catch { /* not JSON */ }
     return { status: res.status, body: json, text };
@@ -702,13 +819,15 @@ test('§6 finding 2: the owner’s reconciliation is a dry run unless asked, Sup
   assert.equal(dry.status, 200, dry.text);
   assert.equal(dry.body.dry_run, true);
   assert.deepEqual(outcomes(dry.body), { sub_recA: 'granted', sub_recB: 'granted', sub_recC: 'ended', sub_recD: 'missing', sub_recE: 'unchanged', sub_recF: 'mismatch' });
-  assert.deepEqual(dry.body.counts, { granted: 2, ended: 1, unpaid: 0, unchanged: 1, mismatch: 1, missing: 1, unreadable: 0 });
+  assert.deepEqual(dry.body.counts, { granted: 2, ended: 1, unpaid: 0, unchanged: 1, mismatch: 1, missing: 1, unreadable: 0, failed: 0 });
   assert.ok(dry.body.results.every((r: any) => r.written === false));
   assert.equal(calls.filter((c) => c.method !== 'GET').length, 0, 'a dry run only reads');
   assert.deepEqual(rows(), before, 'a dry run writes nothing');
   assert.equal(audits().length, 1);
   assert.equal(audits()[0].action, 'billing_incomplete_reconcile_dry_run');
-  assert.equal(JSON.parse(audits()[0].filters_json).dry_run, true);
+  const dryAudit = JSON.parse(audits()[0].filters_json);
+  assert.equal(dryAudit.dry_run, true);
+  assert.deepEqual([dryAudit.written, dryAudit.results.length], [0, 6]);
 
   // Writing takes the write bar and a reason.
   assert.equal((await send(db, path, holderStale, { dry_run: false, reason: 'Repair the plan rows' })).status, 403);
@@ -735,7 +854,10 @@ test('§6 finding 2: the owner’s reconciliation is a dry run unless asked, Sup
   assert.deepEqual(after[58], before.find((r) => r.id === 58), 'another family’s subscription is never written to this row');
   assert.equal(audits().length, 2);
   assert.equal(audits()[1].action, 'billing_incomplete_reconcile');
-  assert.equal(JSON.parse(audits()[1].filters_json).reason, 'Rows left at incomplete before D892 §6');
+  const doneAudit = JSON.parse(audits()[1].filters_json);
+  assert.equal(doneAudit.reason, 'Rows left at incomplete before D892 §6');
+  assert.equal(doneAudit.written, 3, 'two granted, one ended');
+  assert.deepEqual(doneAudit.results.find((r: any) => r.subscription_id === 'sub_recB'), { target_user_id: INVESTOR, family: 'investor', subscription_id: 'sub_recB', outcome: 'granted', written: true });
 
   // Again: only what Stripe did not settle is left, a page at a time; a failed read is reported and left.
   readFailFor.sub_recE = { status: 500 };
@@ -744,6 +866,184 @@ test('§6 finding 2: the owner’s reconciliation is a dry run unless asked, Sup
   const second = await send(db, path, holder, { limit: 1, after: 56 });
   assert.deepEqual([second.body.checked, outcomes(second.body)], [1, { sub_recE: 'unreadable' }]);
   assert.deepEqual(byId()[57], before.find((r) => r.id === 57));
+});
+
+/** The Super Admin who holds the write bar, user 1, with a TOTP session stepped up now, and its token. */
+async function holderToken(db: DatabaseSync) {
+  db.prepare("INSERT INTO users (id, role, name, email, uid, is_active) VALUES (1, 'admin', 'Hal Holder', 'holder@example.com', 'uid-1', 1)").run();
+  db.prepare('INSERT INTO super_admins (user_id) VALUES (1)').run();
+  return sessionToken(db, 1, 'admin');
+}
+const RECONCILE = '/api/admin/billing/subscriptions/reconcile-incomplete';
+/** The reconciliation's audit rows, oldest first, each with its details spread in. */
+const reconcileAudits = (db: DatabaseSync) => (db.prepare("SELECT action, filters_json FROM admin_audit_log WHERE action LIKE 'billing_incomplete%' ORDER BY id").all() as any[])
+  .map((a) => ({ action: a.action, ...JSON.parse(a.filters_json) }));
+/** Each result's outcome and whether it was written, by subscription. */
+const settledOf = (body: any) => Object.fromEntries(body.results.map((r: any) => [r.subscription_id, [r.outcome, r.written]]));
+const settleSub = (id: string, customer: string, status: string, metadata: Record<string, string>) => ({
+  id, object: 'subscription', status, customer, current_period_end: 1_800_000_000, metadata, items: { data: [{ id: `si_${id}`, price: { id: 'price_growth_m' } }] },
+});
+const founderCols = (db: DatabaseSync, id: number) => { const u = userRow(db, id); return [u.subscription_tier, u.subscription_status, u.stripe_subscription_id]; };
+const investorCols = (db: DatabaseSync, id: number) => { const u = userRow(db, id); return [u.investor_tier, u.investor_subscription_status, u.investor_stripe_subscription_id]; };
+
+test('§6 finding 2: the reconciliation writes each row of its table, seat colleagues with it, and never a row that moved', async () => {
+  const db = database();
+  const holder = await holderToken(db);
+  db.prepare("INSERT INTO users (id, role, name, email, uid, is_active, stripe_customer_id) VALUES (55, 'founder', 'Founder 55', 'f55@example.com', 'uid-55', 1, 'cus_f55')").run();
+  db.prepare("INSERT INTO users (id, role, name, email, uid, is_active) VALUES (56, 'investor', 'Investor 56', 'i56@example.com', 'uid-56', 1)").run();
+  const seat = db.prepare("INSERT INTO users (id, role, name, email, uid, is_active, investor_seat_primary_user_id, investor_tier, investor_subscription_status) VALUES (?, 'investor', ?, ?, ?, 1, ?, ?, 'incomplete')");
+  seat.run(54, 'Sam Seat', 'sam@example.com', 'uid-54', INVESTOR, 'institutional');
+  seat.run(57, 'Sid Seat', 'sid@example.com', 'uid-57', 56, 'professional');
+  const founder = db.prepare("UPDATE users SET subscription_tier = 'growth', subscription_status = 'incomplete', stripe_subscription_id = ? WHERE id = ?");
+  founder.run('sub_u1', FOUNDER); // Stripe: unpaid
+  founder.run('sub_c1', 55); // Stripe: canceled
+  const investor = db.prepare("UPDATE users SET investor_stripe_customer_id = ?, investor_tier = ?, investor_subscription_status = 'incomplete', investor_stripe_subscription_id = ?, investor_dealroom_max = 999 WHERE id = ?");
+  investor.run('cus_inv52', 'institutional', 'sub_x1', INVESTOR); // Stripe: incomplete_expired
+  investor.run('cus_inv56', 'professional', 'sub_u2', 56); // Stripe: unpaid
+  stripeById = {
+    sub_u1: settleSub('sub_u1', 'cus_founder', 'unpaid', { kind: 'tier', tier: 'growth' }),
+    sub_c1: settleSub('sub_c1', 'cus_f55', 'canceled', { kind: 'tier', tier: 'growth' }),
+    sub_x1: settleSub('sub_x1', 'cus_inv52', 'incomplete_expired', { kind: 'investor', investor_tier: 'institutional' }),
+    sub_u2: settleSub('sub_u2', 'cus_inv56', 'unpaid', { kind: 'investor', investor_tier: 'professional' }),
+  };
+  const r = await send(db, RECONCILE, holder, { dry_run: false, reason: 'Settle the rows Stripe has decided' });
+  assert.equal(r.status, 200, r.text);
+  assert.deepEqual(settledOf(r.body), { sub_u1: ['unpaid', true], sub_c1: ['ended', true], sub_x1: ['ended', true], sub_u2: ['unpaid', true] });
+  // Unpaid keeps its tier and takes the status, as its own event would write it; colleagues follow.
+  assert.deepEqual(founderCols(db, FOUNDER), ['growth', 'unpaid', 'sub_u1']);
+  assert.deepEqual(investorCols(db, 56), ['professional', 'unpaid', 'sub_u2']);
+  assert.deepEqual(investorCols(db, 57).slice(0, 2), ['professional', 'unpaid']);
+  // Canceled and expired let the plan go, canceled with the spelling the deletion writes; colleagues are let go too.
+  assert.deepEqual(founderCols(db, 55), ['free', 'cancelled', null]);
+  assert.deepEqual([...investorCols(db, INVESTOR), userRow(db, INVESTOR).investor_dealroom_max], ['free', 'incomplete_expired', null, INVESTOR_QUOTAS.free.dealroom_max]);
+  assert.deepEqual(investorCols(db, 54).slice(0, 2), ['free', 'incomplete_expired']);
+  assert.equal(effectiveInvestorTier(userRow(db, 54)), 'free');
+
+  // A row an event moved after the page was read is never overwritten, and neither are its colleagues.
+  const settle = (userId: number, family: 'tier' | 'investor', subscriptionId: string, customer: string, sub: Record<string, unknown>) =>
+    settleIncompleteRow(env(db), { user_id: userId, family, subscription_id: subscriptionId, customer }, sub, { write: true })
+      .then((x) => [x.outcome, x.written]);
+  const founderPaid = settleSub('sub_m1', 'cus_founder', 'active', { kind: 'tier', tier: 'studio' });
+  db.prepare("UPDATE users SET subscription_tier = 'growth', subscription_status = 'past_due', stripe_subscription_id = 'sub_m1' WHERE id = ?").run(FOUNDER);
+  assert.deepEqual(await settle(FOUNDER, 'tier', 'sub_m1', 'cus_founder', founderPaid), ['granted', false]);
+  assert.deepEqual(founderCols(db, FOUNDER), ['growth', 'past_due', 'sub_m1'], 'moved on to another status');
+  db.prepare("UPDATE users SET subscription_status = 'incomplete', stripe_subscription_id = 'sub_m2' WHERE id = ?").run(FOUNDER);
+  assert.deepEqual(await settle(FOUNDER, 'tier', 'sub_m1', 'cus_founder', founderPaid), ['granted', false]);
+  assert.deepEqual(founderCols(db, FOUNDER), ['growth', 'incomplete', 'sub_m2'], 'holding another subscription');
+  const investorPaid = settleSub('sub_m3', 'cus_inv52', 'active', { kind: 'investor', investor_tier: 'institutional' });
+  db.prepare("UPDATE users SET investor_tier = 'professional', investor_subscription_status = 'past_due', investor_stripe_subscription_id = 'sub_m3' WHERE id = ?").run(INVESTOR);
+  db.prepare("UPDATE users SET investor_tier = 'professional', investor_subscription_status = 'incomplete' WHERE id = 54").run();
+  assert.deepEqual(await settle(INVESTOR, 'investor', 'sub_m3', 'cus_inv52', investorPaid), ['granted', false]);
+  assert.deepEqual([...investorCols(db, INVESTOR), ...investorCols(db, 54).slice(0, 2)], ['professional', 'past_due', 'sub_m3', 'professional', 'incomplete']);
+  db.prepare("UPDATE users SET investor_subscription_status = 'incomplete', investor_stripe_subscription_id = 'sub_m4' WHERE id = ?").run(INVESTOR);
+  assert.deepEqual(await settle(INVESTOR, 'investor', 'sub_m3', 'cus_inv52', investorPaid), ['granted', false]);
+  assert.deepEqual([...investorCols(db, INVESTOR), ...investorCols(db, 54).slice(0, 2)], ['professional', 'incomplete', 'sub_m4', 'professional', 'incomplete']);
+  // Back at incomplete on that subscription, the same call writes the row and its colleague, with the row's period end.
+  db.prepare("UPDATE users SET investor_stripe_subscription_id = 'sub_m3' WHERE id = ?").run(INVESTOR);
+  assert.deepEqual(await settle(INVESTOR, 'investor', 'sub_m3', 'cus_inv52', investorPaid), ['granted', true]);
+  assert.deepEqual([...investorCols(db, INVESTOR), userRow(db, INVESTOR).investor_subscription_renews_at], ['institutional', 'active', 'sub_m3', PERIOD_END]);
+  assert.deepEqual([...investorCols(db, 54).slice(0, 2), userRow(db, 54).investor_subscription_renews_at], ['institutional', 'active', PERIOD_END]);
+  // A row with no colleagues is written alone, and reported written.
+  db.prepare('UPDATE users SET investor_seat_primary_user_id = NULL WHERE id = 57').run();
+  db.prepare("UPDATE users SET investor_subscription_status = 'incomplete', investor_stripe_subscription_id = 'sub_m5' WHERE id = 56").run();
+  assert.deepEqual(await settle(56, 'investor', 'sub_m5', 'cus_inv56', settleSub('sub_m5', 'cus_inv56', 'active', { kind: 'investor', investor_tier: 'institutional' })), ['granted', true]);
+  assert.deepEqual(investorCols(db, 56), ['institutional', 'active', 'sub_m5']);
+});
+
+test('§6 finding 2: a reconciliation that fails part-way says which rows it wrote, leaves each failed row whole, and is audited', async () => {
+  const db = database();
+  const holder = await holderToken(db);
+  db.prepare("INSERT INTO users (id, role, name, email, uid, is_active, stripe_customer_id) VALUES (55, 'founder', 'Founder 55', 'f55@example.com', 'uid-55', 1, 'cus_f55')").run();
+  db.prepare(`INSERT INTO users (id, role, name, email, uid, is_active, investor_seat_primary_user_id, investor_tier, investor_subscription_status, investor_subscription_renews_at)
+    VALUES (54, 'investor', 'Sam Seat', 'sam@example.com', 'uid-54', 1, ?, 'professional', 'incomplete', '2026-01-01T00:00:00.000Z')`).run(INVESTOR);
+  const founder = db.prepare("UPDATE users SET subscription_tier = 'growth', subscription_status = 'incomplete', stripe_subscription_id = ? WHERE id = ?");
+  founder.run('sub_wA', FOUNDER);
+  founder.run('sub_wB', 55);
+  db.prepare("UPDATE users SET subscription_renews_at = '2026-01-01T00:00:00.000Z' WHERE id = 55").run();
+  db.prepare("UPDATE users SET investor_stripe_customer_id = 'cus_inv52', investor_tier = 'professional', investor_subscription_status = 'incomplete', investor_stripe_subscription_id = 'sub_wC' WHERE id = ?").run(INVESTOR);
+  stripeById = {
+    sub_wA: settleSub('sub_wA', 'cus_founder', 'active', { kind: 'tier', tier: 'studio' }),
+    sub_wB: settleSub('sub_wB', 'cus_f55', 'active', { kind: 'tier', tier: 'studio' }),
+    sub_wC: settleSub('sub_wC', 'cus_inv52', 'active', { kind: 'investor', investor_tier: 'institutional' }),
+  };
+  const body = { dry_run: false, reason: 'Rows left at incomplete before D892 §6' };
+  const investorWhole = () => [...investorCols(db, INVESTOR), ...investorCols(db, 54).slice(0, 2)];
+  const stuckInvestor = ['professional', 'incomplete', 'sub_wC', 'professional', 'incomplete'];
+
+  // D1 fails on the second founder's write, and on the investor's own write, after its colleagues' statement ran in the same batch.
+  let founderWrites = 0;
+  const first = await send(db, RECONCILE, holder, body, {
+    ...env(db),
+    DB: flakyD1(db, (sql) => (/SET subscription_tier = COALESCE/.test(sql) && ++founderWrites === 2) || /SET investor_tier = COALESCE\(\?, investor_tier\)/.test(sql)),
+  });
+  assert.equal(first.status, 200, first.text);
+  assert.deepEqual(settledOf(first.body), { sub_wA: ['granted', true], sub_wC: ['failed', false], sub_wB: ['failed', false] });
+  assert.deepEqual([first.body.checked, first.body.counts.granted, first.body.counts.failed], [3, 1, 2]);
+  assert.deepEqual(founderCols(db, FOUNDER), ['studio', 'active', 'sub_wA'], 'the row written before the failure stays written, and is reported so');
+  assert.deepEqual(founderCols(db, 55), ['growth', 'incomplete', 'sub_wB']);
+  assert.deepEqual(investorWhole(), stuckInvestor, 'the colleague’s statement is rolled back with the row’s');
+  let audits = reconcileAudits(db);
+  assert.equal(audits.length, 1, 'a run that failed part-way is audited');
+  assert.deepEqual([audits[0].action, audits[0].written, audits[0].counts.failed, audits[0].reason], ['billing_incomplete_reconcile', 1, 2, body.reason]);
+  assert.deepEqual(audits[0].results.map((x: any) => [x.target_user_id, x.subscription_id, x.outcome, x.written]),
+    [[FOUNDER, 'sub_wA', 'granted', true], [INVESTOR, 'sub_wC', 'failed', false], [55, 'sub_wB', 'failed', false]]);
+
+  // Again, with D1 failing on the colleagues' statement: the row is not written without them.
+  const second = await send(db, RECONCILE, holder, body, { ...env(db), DB: flakyD1(db, (sql) => /WHERE investor_seat_primary_user_id = \?/.test(sql)) });
+  assert.equal(second.status, 200, second.text);
+  assert.deepEqual(settledOf(second.body), { sub_wC: ['failed', false], sub_wB: ['granted', true] });
+  assert.deepEqual(founderCols(db, 55), ['studio', 'active', 'sub_wB']);
+  assert.equal(userRow(db, 55).subscription_renews_at, PERIOD_END, 'Stripe’s period end replaces the row’s');
+  assert.deepEqual(investorWhole(), stuckInvestor);
+
+  // Once D1 answers, the row left whole is walked again and written with its colleague.
+  const third = await send(db, RECONCILE, holder, body);
+  assert.deepEqual(settledOf(third.body), { sub_wC: ['granted', true] });
+  assert.deepEqual(investorWhole(), ['institutional', 'active', 'sub_wC', 'institutional', 'active']);
+  assert.equal(userRow(db, 54).investor_subscription_renews_at, PERIOD_END);
+
+  // A page that cannot be read answers 503 before any row is touched, and the run is still audited.
+  const down = await send(db, RECONCILE, holder, body, { ...env(db), DB: flakyD1(db, (sql) => /ORDER BY id LIMIT/.test(sql)) });
+  assert.equal(down.status, 503, down.text);
+  assert.equal(down.body.error, 'reconcile_unavailable');
+  audits = reconcileAudits(db);
+  assert.equal(audits.length, 4);
+  assert.deepEqual([audits[3].failed, audits[3].written, audits[3].checked, audits[3].results], ['page_unreadable', 0, 0, []]);
+});
+
+test('§6 a family the catalog cannot read is never taken for another: the intent and the swap refuse, the webhook reads on', async () => {
+  const db = database();
+  addInstitutional(db);
+  // The catalog fails once Stripe has been read: after the reads that priced the request, at the family check.
+  const stripeRead = () => calls.some((c) => c.method === 'GET' && new URL(c.url).pathname.startsWith('/v1/subscriptions'));
+  const failing = { ...env(db), DB: flakyD1(db, (sql) => /stripe_products/.test(sql) && stripeRead()) };
+
+  // The intent: a plan made before D892, with no kind, that Stripe holds and D1 never saw.
+  stripeSubs.cus_founder = [{ id: 'sub_legacy_9', status: 'active', customer: 'cus_founder', metadata: { user_id: String(FOUNDER), price_id: 'price_growth_m' } }];
+  const r = await send(db, '/api/payments/intent', await token(FOUNDER, 'founder'), { price_id: 'price_studio_m', nonce: 'n1' }, failing);
+  assert.equal(r.status, 503, r.text);
+  assert.equal(r.body.error, 'plan_check_unavailable');
+  assert.equal(subCalls().length, 0, 'no second subscription reached Stripe');
+
+  // The swap: a founder plan made before D892, on the customer the investor scope shares, is refused rather than taken as in scope.
+  db.prepare("UPDATE users SET investor_stripe_customer_id = 'cus_general_52', investor_tier = 'professional', investor_subscription_status = 'active', investor_stripe_subscription_id = 'sub_inv_1' WHERE id = ?").run(INVESTOR);
+  const jwt = await sessionToken(db, INVESTOR, 'investor');
+  stripeSub = { id: 'sub_g0', customer: 'cus_general_52', status: 'active', metadata: { user_id: String(INVESTOR), price_id: 'price_growth_m' }, items: { data: [{ id: 'si_g0', price: { id: 'price_growth_m' } }] } };
+  for (const [path, code] of [['/api/billing/subscription/swap/preview', 'preview_failed'], ['/api/billing/subscription/swap/confirm', 'swap_failed']]) {
+    calls = [];
+    const s = await send(db, path, jwt, { subscription_id: 'sub_g0', price_id: 'price_inst_m', scope: 'investor' }, failing);
+    assert.equal(s.status, 502, `${path}: ${s.text}`);
+    assert.equal(s.body.error, code);
+    assert.equal(calls.filter((c) => c.method === 'POST' || new URL(c.url).pathname === '/v1/invoices/upcoming').length, 0, 'nothing was previewed or changed');
+  }
+  assert.equal(userRow(db, INVESTOR).investor_tier, 'professional');
+
+  // Read leniently the same subscription has no family; read strictly the failure is thrown. The webhook reads leniently.
+  const legacy = { metadata: { user_id: String(FOUNDER), price_id: 'price_growth_m' } };
+  assert.equal(stripeRead(), true);
+  assert.equal(await planKindOfSubscription(failing, legacy), null);
+  await assert.rejects(planKindOfSubscription(failing, legacy, { strict: true }), /D1_ERROR/);
+  assert.equal((await subscriptionMetadata(failing, 'customer.subscription.updated', legacy)).kind, undefined);
 });
 
 test('§6 finding 4: a plan change in its own scope goes through, previewed and confirmed', async () => {

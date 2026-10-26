@@ -605,8 +605,13 @@ function summarizeDispute(d: StripeDispute) {
 // A DRY RUN UNLESS `dry_run: false`. A dry run only reads Stripe and needs a
 // Super Admin. Writing takes the write bar (a TOTP session, a recent step-up,
 // the holder) and a written reason, as the other payment writes do (D1009).
-// Every run, dry or written, is audited once through `logAdminAction`. The
-// owner runs it against production; no deploy or cron runs it.
+// Every run, dry or written, is audited once through `logAdminAction`, with
+// each row's outcome and whether it was written, and that includes a run that
+// fails: a row whose write fails is `failed` and the walk goes on, so the
+// answer is 200 and says which rows were written. Only a page that cannot be
+// read answers 503, and nothing has been written then. The audit write itself
+// stays best-effort (D159). The owner runs it against production; no deploy
+// or cron runs it.
 adminBilling.post('/subscriptions/reconcile-incomplete', async (c) => {
   const body = (await c.req.json().catch(() => ({}))) as Record<string, unknown>;
   const write = body?.dry_run === false;
@@ -620,21 +625,30 @@ adminBilling.post('/subscriptions/reconcile-incomplete', async (c) => {
   const whole = (v: unknown, fallback: number) => (Number.isSafeInteger(v) && (v as number) >= 0 ? (v as number) : fallback);
   const after = whole(body?.after, 0);
   const limit = Math.max(1, Math.min(RECONCILE_LIMIT_MAX, whole(body?.limit, 25)));
-  let result: Awaited<ReturnType<typeof reconcileIncompleteRows>>;
+  let result: Awaited<ReturnType<typeof reconcileIncompleteRows>> | null = null;
   try {
     result = await reconcileIncompleteRows(c.env, { write, after, limit });
   } catch (e) {
+    // Only the page read throws, before any row is touched.
     console.warn('[admin/billing] incomplete reconcile failed', (e as Error).message);
+  }
+  const results = result?.results ?? [];
+  await logAdminAction(c.env, admin.id, admin.email, write ? 'billing_incomplete_reconcile' : 'billing_incomplete_reconcile_dry_run', {
+    dry_run: !write, after, limit, checked: result?.checked ?? 0, counts: result?.counts ?? null, next_after: result?.next_after ?? null,
+    written: results.filter((r) => r.written).length,
+    // Each row names its member with D159's one spelling. A run spans many
+    // members, so the action itself names none at the top level.
+    results: results.map((r) => ({ target_user_id: r.user_id, family: r.family, subscription_id: r.subscription_id, outcome: r.outcome, written: r.written })),
+    ...(result ? {} : { failed: 'page_unreadable' }),
+    ...(reason ? { reason } : {}),
+  });
+  if (!result) {
     return c.json(refusalBody({
       code: 'reconcile_unavailable',
       message: 'The plan rows could not be read. Nothing was written; try again in a moment.',
       audience: 'admin',
     }), 503);
   }
-  await logAdminAction(c.env, admin.id, admin.email, write ? 'billing_incomplete_reconcile' : 'billing_incomplete_reconcile_dry_run', {
-    dry_run: !write, after, limit, checked: result.checked, counts: result.counts, next_after: result.next_after,
-    ...(reason ? { reason } : {}),
-  });
   return c.json({ dry_run: !write, ...result });
 });
 
