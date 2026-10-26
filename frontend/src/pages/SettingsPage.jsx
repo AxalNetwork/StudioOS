@@ -307,7 +307,7 @@ export default function SettingsPage() {
   useEffect(() => {
     const want = accountPathFor({ section: active, phone, key: connectorKey, usagePage, companiesTab });
     if (location.pathname !== want && /^\/(?:account|settings)\b/.test(location.pathname)) {
-      navigate({ pathname: want, search: location.search, hash: location.hash }, { replace: true });
+      navigate({ pathname: want, search: location.search, hash: location.hash }, { replace: true, state: location.state });
     }
   }, [active, phone, location.pathname]); // eslint-disable-line react-hooks/exhaustive-deps
   // T19 — useToast handles cleanup on unmount; replaces inline `window.setTimeout(setToast, 4500)`.

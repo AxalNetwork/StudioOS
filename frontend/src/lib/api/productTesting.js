@@ -8,6 +8,7 @@
 //                                                                 409 not_open | programme_full | already_applied, 403 not_eligible
 //   withdraw         POST /testing/applications/:uid/withdraw     → { application }
 //   summary          GET  /testing/summary                        → { open_count, picked: [...] }
+//   logoSrc          GET  /testing/programmes/:uid/logo            the image for an <img>; 404 when there is none (D1199)
 //
 // `partnerTestingApi`, a partner on their firm's programmes:
 //   programmes       GET   /partner/testing/programmes            → { items }
@@ -16,6 +17,8 @@
 //   submit           POST  /partner/testing/programmes/:uid/submit → { programme } (waiting for HQ)
 //   applicants       GET   /partner/testing/programmes/:uid/applicants → { programme, items }
 //   pick / decline   POST  /partner/testing/applications/:uid/pick|decline → { application }; 409 programme_full
+//   uploadLogo       PUT   /partner/testing/programmes/:uid/logo   multipart `file`, a square PNG or SVG → { logo } (D1199)
+//   removeLogo       DELETE /partner/testing/programmes/:uid/logo  → { logo: { logo_key: null } }
 //
 // `adminTestingApi`, Super Admin:
 //   programmes       GET   /admin/testing/programmes?status=
@@ -28,7 +31,7 @@
 //                                                                 400 invalid_request, 409 not_withdrawable (D1198)
 //   `told` is counts only: `owner` is null for HQ's own programme, `mail_reach`
 //   how many Mail's testers:<uid> rule would write to. StudioOS sends no email.
-//   create, edit, pick, decline: as the partner's, on HQ's own programmes.
+//   create, edit, pick, decline, uploadLogo, removeLogo: as the partner's, on HQ's own programmes.
 //   applicants       GET   /admin/testing/programmes/:uid/applicants → { programme, items, can_decide }:
 //                         any programme's (D1197); a partner's is read only, `can_decide: false`
 //   events           GET   /admin/testing/programmes/:uid/events?page=&page_size= → { programme, events: { available, page, total, items } }
@@ -39,11 +42,16 @@
 // D1195's Tester pool tab):
 //   list             GET   /admin/product-testers?status=&page=   → { rows, page, page_size, matching, totals }
 //
+// `adminProductTestersApi`, the tester pool (D1042's store, migration 576; read by
+// D1195's Tester pool tab):
+//   list             GET   /admin/product-testers?status=&page=   → { rows, page, page_size, matching, totals }
+//
 // Every path is written out in full so the drift check (scripts/check-api-drift.mjs)
 // reads each one against the Worker.
 import { request } from '../api.js';
 
 const enc = encodeURIComponent;
+const logoForm = (file) => { const form = new FormData(); form.set('file', file); return form; };
 export const TESTING_STATUSES = ['draft', 'submitted', 'approved', 'open', 'testing', 'closed', 'rejected'];
 
 export const productTestingApi = {
@@ -55,6 +63,7 @@ export const productTestingApi = {
     }) }),
   withdraw: (uid) => request(`/testing/applications/${enc(uid)}/withdraw`, { method: 'POST' }),
   summary: () => request('/testing/summary'),
+  logoSrc: (uid) => `/api/testing/programmes/${enc(uid)}/logo`,
 };
 
 export const partnerTestingApi = {
@@ -65,6 +74,8 @@ export const partnerTestingApi = {
   applicants: (uid) => request(`/partner/testing/programmes/${enc(uid)}/applicants`),
   pick: (uid) => request(`/partner/testing/applications/${enc(uid)}/pick`, { method: 'POST' }),
   decline: (uid) => request(`/partner/testing/applications/${enc(uid)}/decline`, { method: 'POST' }),
+  uploadLogo: (uid, file) => request(`/partner/testing/programmes/${enc(uid)}/logo`, { method: 'PUT', body: logoForm(file) }),
+  removeLogo: (uid) => request(`/partner/testing/programmes/${enc(uid)}/logo`, { method: 'DELETE' }),
 };
 
 export const adminTestingApi = {
@@ -96,6 +107,8 @@ export const adminTestingApi = {
   },
   pick: (uid) => request(`/admin/testing/applications/${enc(uid)}/pick`, { method: 'POST' }),
   decline: (uid) => request(`/admin/testing/applications/${enc(uid)}/decline`, { method: 'POST' }),
+  uploadLogo: (uid, file) => request(`/admin/testing/programmes/${enc(uid)}/logo`, { method: 'PUT', body: logoForm(file) }),
+  removeLogo: (uid) => request(`/admin/testing/programmes/${enc(uid)}/logo`, { method: 'DELETE' }),
 };
 
 export const TESTER_STATUSES = ['applied', 'active', 'paused', 'declined', 'removed'];

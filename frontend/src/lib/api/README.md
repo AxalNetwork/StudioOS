@@ -369,6 +369,9 @@ text in the library yet") and sends Unbind (`POST …/:ref/unbind`, Super Admin
 with a recent step-up and a reason). Each list row and profile carries its
 agreement's envelope state on `envelope`.
 
+D1128 extends `personaSegments.js` with mounted Worker paths for creation,
+completion counts, Events segment choices, and expected-primary follow-up answers.
+
 D1000 (#2815): `personaSegments.js` is Persona segments' profile store on
 `/api/personas/segments`: every profile, one with its history, the needs read
 (members, needs met and gaps, offers by kind, links' reach), and the Super
@@ -394,3 +397,5 @@ D1133 adds `billingAlertsApi.pay(id)` and `.updateCard(id, nonce)` for the mount
 D1135's `companyActions.js` holds self-service company leave and venture restore.
 
 D1123 adds the cohort capacity read to `labOperations.js`; the mounted Worker route is in admin_lab_operations.ts.
+
+D1199 (#3149): `productTesting.js` adds the programme logo: `partnerTestingApi.uploadLogo(uid, file)` and `.removeLogo(uid)`, the same on `adminTestingApi` for HQ's own programmes, and `productTestingApi.logoSrc(uid)`, the `<img>` path (a 404 there means no logo: draw the initial letter).
