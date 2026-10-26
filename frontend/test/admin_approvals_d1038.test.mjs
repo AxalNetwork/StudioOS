@@ -24,7 +24,11 @@ import { SIDEBAR_GROUPS } from '../src/sidebarConfig.js';
 import {
   HQ_LANES, LANES, MOVED_KEY, ageText, bandOf, boardOf, expertBoard, expertState, laneViews,
   oldestLine, pitchRows, tabOf, attributionTotals,
+  answerPairs, credentialsText, decisionCopy, doneLine, profileChart, publishUrlOk, reasonReady, refusalLine, tabPath, testerActions, testerHistory, testerRows,
 } from '../src/pages/admin/approvals/approvalsModel.js';
+import { filterTesters, readAllTesters } from '../src/pages/admin/approvals/TesterBoard.jsx';
+import { readAllExperts } from '../src/pages/admin/approvals/ExpertBoard.jsx';
+import { oldestApproved } from '../src/pages/admin/approvals/PitchBoard.jsx';
 import {
   assigneeOf, assignChoices, assignTitle, decidedNotes, decidedPageLine, decidedQueryOf, decidedRows, errorRef, hasNextPage,
   hqBandLine, hqLaneViews, inboxGroupCounts, inboxQueryOf, inboxRows, inboxTiles, itemOfPath, itemPath, itemView, laneAgeChart,
@@ -302,22 +306,29 @@ test('pitches oldest first in the canvas\'s words; attribution summed over the p
   assert.deepEqual(attributionTotals([{ attribution: { visit: 3, signup: 1 } }, { attribution: { visit: 2 } }]), { visits: 5, signups: 1, leads: 0, conversions: 0 });
 });
 
-test('experts by the directory\'s bar; a sample is no item; counts are not drawn when the read stopped short', () => {
-  assert.equal(expertState({ verified: false, profile_completion_pct: 92 }), 'verify');
-  assert.equal(expertState({ verified: false, profile_completion_pct: 41 }), 'incomplete');
+test('experts on part 5\'s review read: Declined is a tab, a sample is no item, counts are not drawn when the read stopped short (D1046)', () => {
+  assert.equal(expertState({ decision_state: 'pending', profile_completion_pct: 92 }), 'verify');
+  assert.equal(expertState({ decision_state: 'pending', profile_completion_pct: 41 }), 'incomplete');
   assert.equal(expertState({ verified: true, hidden: true }), 'hidden');
-  assert.equal(expertState({ verified: false, profile_completion_pct: 99, is_sample: true }), null);
-  const reply = { matches: [
-    { uid: 'e1', name: 'Expert A', verified: false, profile_completion_pct: 92, hourly_rate_usd: 120, categories: ['Coaching'] },
-    { uid: 'e2', name: 'Expert B', verified: false, profile_completion_pct: 74, first_session_free: true },
-    { uid: 'e3', name: 'Expert C', verified: false, profile_completion_pct: 41 },
-    { uid: 'e4', name: 'Expert D', verified: true },
-  ], total_active: 4 };
-  const b = expertBoard(reply, 'verify');
-  assert.deepEqual(b.counts, { verify: 2, incomplete: 1, verified: 1, hidden: 0 });
-  assert.deepEqual(b.rows.map((r) => [r.name, r.pricing]), [['Expert A', '$120 an hour'], ['Expert B', 'Free first session']]);
+  assert.equal(expertState({ decision_state: 'declined', profile_completion_pct: 90 }), 'declined');
+  assert.equal(expertState({ decision_state: 'verified', verified: true }), 'verified');
+  assert.equal(expertState({ decision_state: 'pending', profile_completion_pct: 99, is_sample: true }), null);
+  const now = Date.parse('2026-10-21T16:00:00Z');
+  const reply = { items: [
+    { uid: 'e2', name: 'Expert B', decision_state: 'pending', profile_completion_pct: 74, created_at: '2026-10-20 10:00:00', credentials: { files: [] } },
+    { uid: 'e1', name: 'Expert A', decision_state: 'pending', profile_completion_pct: 92, created_at: '2026-10-19 07:00:00', credentials: { licence_number: 'WB-4821', files: [{ uid: 'f1' }, { uid: 'f2' }] } },
+    { uid: 'e3', name: 'Expert C', decision_state: 'pending', profile_completion_pct: 41, credentials: {} },
+    { uid: 'e4', name: 'Expert D', decision_state: 'verified', verified: true, decided_at: '2026-10-10 09:00:00', credentials: { files: [{ uid: 'f3' }] } },
+    { uid: 'e5', name: 'Expert E', decision_state: 'declined', credentials: {} },
+  ], total: 5 };
+  const b = expertBoard(reply, 'verify', now);
+  assert.deepEqual(b.counts, { verify: 2, incomplete: 1, verified: 1, declined: 1, hidden: 0 });
+  assert.deepEqual(b.rows.map((r) => [r.name, r.age, r.credentials]), [['Expert A', '2 d 9 h', 'Licence and 2 files'], ['Expert B', '1 d 6 h', null]]);
+  assert.equal(b.oldest, '2 d 9 h');
   assert.equal(b.partial, false);
-  assert.equal(expertBoard({ ...reply, total_active: 80 }, 'verify').partial, true);
+  assert.equal(expertBoard(reply, 'verified', now).rows[0].decidedOn, '10 Oct 2026');
+  assert.equal(expertBoard({ ...reply, total: 80 }, 'verify').partial, true);
+  assert.equal(expertBoard({ items: [] }, 'verify').partial, true, 'no total, no counts');
 });
 
 // ---------------------------------------------------------------- mounted
@@ -634,32 +645,399 @@ test('mounted, Lanes: each group\'s lanes with New pills, Could not be read with
   } finally { await v.unmount(); s.restore(); }
 });
 
-test('mounted, boards: co-marketing reads its five states alone and decides nowhere; wellbeing\'s partial read draws no counts; testers read nothing', async () => {
-  const items = { proposed: [{ uid: 'p1', title: 'Hiring your first engineer', asset_type: 'webinar', partner_company: 'Partner A', created_at: '2026-10-18 13:00:00' }] };
-  let s = stub({ queue: (st) => (st === 'withdrawn' ? json({ detail: 'down' }, 503) : json({ items: items[st] || [] })) });
-  let v = await render('/admin/approvals/co-marketing', h(LaneBoards));
+// ---------------------------------------------------------------- D1046: the boards decide
+
+/**
+ * A board with every read it makes and every POST recorded. `route` answers
+ * `(path, params, method, body)` with a Response, or null for `{}`.
+ */
+async function board(url, route) {
+  const restore = installDocument('', { focus: true });
+  const original = globalThis.fetch;
+  const seen = [];
+  const posts = [];
+  globalThis.fetch = async (u, opts = {}) => {
+    const x = new URL(String(u), 'http://x');
+    const method = String(opts.method || 'GET');
+    const body = method === 'POST' ? JSON.parse(opts.body || '{}') : null;
+    seen.push(`${method} ${x.pathname}${x.search}`);
+    if (method === 'POST' && x.pathname !== '/api/client-error') posts.push({ path: x.pathname, body });
+    return (await route(x.pathname, x.searchParams, method, body)) || json({});
+  };
+  document.body.style = { overflow: 'auto', paddingRight: '' };
+  const container = document.createElement('div');
+  document.body.appendChild(container);
+  const root = createRoot(container);
+  const at = { path: url };
+  function Probe() { const l = useLocation(); at.path = l.pathname; return null; }
+  await act(async () => { root.render(h(MemoryRouter, { initialEntries: [url] }, h(Routes, null, h(Route, { path: '*', element: h(LaneBoards) })), h(Probe))); });
+  const flush = () => act(async () => { for (let i = 0; i < 14; i += 1) await new Promise((r) => setTimeout(r, 0)); });
+  await flush();
+  const walk = (n) => [n, ...(n.childNodes || []).flatMap(walk)];
+  const textOf = (n) => (n?.nodeType === 3 ? n.textContent || '' : n?.childNodes?.length ? n.childNodes.map(textOf).join('') : n?.textContent || '');
+  const props = (n) => Object.entries(n).find(([k]) => k.startsWith('__reactProps$'))?.[1] || {};
+  const byId = (id) => walk(container).find((n) => props(n)['data-testid'] === id);
+  const event = { button: 0, preventDefault() {}, stopPropagation() {}, defaultPrevented: false };
+  return {
+    seen, posts, at, flush,
+    of: (id) => { const n = byId(id); assert.ok(n, `no ${id}`); return textOf(n); },
+    has: (id) => Boolean(byId(id)),
+    props: (id) => props(byId(id)),
+    async click(id) { const p = props(byId(id)); assert.ok(p.onClick, `no ${id} to click`); assert.ok(!p.disabled, `${id} is disabled`); await act(async () => { await p.onClick(event); }); await flush(); },
+    async change(id, value, checked = true) { const p = props(byId(id)); assert.ok(p.onChange, `no ${id} to change`); await act(async () => { p.onChange({ target: { value, checked } }); }); await flush(); },
+    async unmount() { await act(async () => root.unmount()); globalThis.fetch = original; restore(); },
+  };
+}
+const gets = (v, prefix) => v.seen.filter((p) => p.startsWith(`GET ${prefix}`));
+
+const TOTALS = { applied: 2, active: 1, paused: 0, declined: 0, removed: 0, total: 3 };
+const member = (id, name, role, verified = true) => ({ id, name, email: `${name.split(' ')[0].toLowerCase()}@example.com`, role, email_verified: verified, kyc_status: 'approved' });
+const TESTERS = [
+  { id: 1, user_id: 11, status: 'applied', applied_at: '2026-10-17 09:00:00', availability: '3 hours a week', consent_email_at: '2026-10-17 09:00:00', consent_version: 'v2', answers: [{ question: 'What do you want to test?', answer: 'B2B tools for small funds.' }], member: member(11, 'Gus Demo', 'investor') },
+  { id: 3, user_id: 13, status: 'applied', applied_at: '2026-10-20 09:00:00', availability: null, consent_email_at: null, answers: [], member: member(13, 'Ben Sample', 'founder', false) },
+  { id: 2, user_id: 12, status: 'active', applied_at: '2026-07-01 09:00:00', decided_at: '2026-08-14 10:00:00', decided_by_name: 'Admin B', answers: [], programmes: { applied: 1, picked: 1 }, member: member(12, 'Eva Demo', 'advisor') },
+];
+const testerRoute = (over = {}) => async (path, q, method, body) => {
+  if (path === '/api/admin/product-testers' && q.get('in_programme') === 'yes') return json({ rows: [], matching: 1, totals: TOTALS, page: 1, page_size: 1 });
+  if (path === '/api/admin/product-testers') return json({ rows: TESTERS, matching: 3, totals: TOTALS, page: 1, page_size: 100 });
+  const m = /^\/api\/admin\/product-testers\/(\d+)(?:\/(\w+))?$/.exec(path);
+  if (m && method === 'POST') return over.decide ? over.decide(m[2], body) : json({ ok: true, places_ended: m[2] === 'remove' ? 2 : 0 });
+  if (m) {
+    const t = TESTERS.find((x) => String(x.id) === m[1]);
+    return t ? json({ tester: t, programs: [{ application_uid: 'a1', application_status: 'picked', applied_at: '2026-09-01', product_name: 'Product Alpha' }], events: [{ id: 9, action: 'approve', actor_name: 'Admin B', created_at: '2026-08-14 10:00:00' }] })
+      : json({ code: 'tester_not_found', message: 'No product tester has that number.' }, 404);
+  }
+  return null;
+};
+
+test('the board model: item addresses, tabs, tester rows, the chart, answers, history and actions (D1046)', () => {
+  assert.deepEqual(boardOf('/admin/approvals/product-testers/active'), { board: 'product-testers', tab: 'active' });
+  assert.deepEqual(boardOf('/admin/approvals/product-testers/12'), { board: 'product-testers', tab: 'waiting', item: '12' });
+  assert.deepEqual(boardOf('/admin/approvals/co-marketing/pitch%20one'), { board: 'co-marketing', tab: 'proposed', item: 'pitch one' });
+  assert.deepEqual(boardOf('/admin/approvals/wellbeing-experts/declined'), { board: 'wellbeing-experts', tab: 'declined' });
+  assert.deepEqual(boardOf('/admin/approvals/wellbeing-experts/e1'), { board: 'wellbeing-experts', tab: 'verify', item: 'e1' });
+  assert.equal(boardOf('/admin/approvals/co-marketing/a/b'), null, 'two segments past a board is nothing');
+  assert.equal(tabPath('product-testers', 'removed'), '/admin/approvals/product-testers/removed');
+  assert.equal(tabPath('co-marketing', 'proposed'), '/admin/approvals/co-marketing');
+  const now = Date.parse('2026-10-21T09:00:00Z');
+  const rows = testerRows(TESTERS, now);
+  assert.deepEqual(rows.map((r) => [r.name, r.profile, r.age, r.consent, r.emailVerified]), [
+    ['Gus Demo', 'Investor', '4 d 0 h', 'Given · v2', true], ['Ben Sample', 'Founder', '1 d 0 h', null, false], ['Eva Demo', 'Advisor', '112 d 0 h', null, true],
+  ]);
+  assert.deepEqual([rows[2].decidedBy, rows[2].decidedOn, rows[2].programmes], ['Admin B', '14 Aug 2026', { applied: 1, picked: 1 }]);
+  assert.deepEqual(filterTesters(rows, { q: 'ben', sort: 'waiting' }).map((r) => r.id), [3]);
+  assert.deepEqual(filterTesters(rows, { q: 'b', sort: 'waiting' }).map((r) => r.id), [1, 3, 2], 'one character does not filter');
+  assert.deepEqual(filterTesters(rows, { verified: 'no' }).map((r) => r.id), [3]);
+  assert.deepEqual(filterTesters(rows, { consent: 'yes' }).map((r) => r.id), [1]);
+  assert.deepEqual(filterTesters(rows, { profile: 'advisor' }).map((r) => r.id), [2]);
+  assert.deepEqual(filterTesters(rows, { sort: 'newest' }).map((r) => r.id), [3, 1, 2]);
+  const chart = profileChart(TESTERS, { now });
+  assert.equal(chart.sentence, 'Applications to test products in the last 12 weeks: founders 1, investors 1, advisors 0, operating partners 0, explorers 0.');
+  assert.equal(chart.total, 2, 'July is older than twelve weeks');
+  assert.equal(profileChart(TESTERS, { complete: false }).partial, true);
+  assert.deepEqual(answerPairs([{ question: 'Q', answer: 'A' }, 'plain', '']), [{ q: 'Q', a: 'A' }, { q: 'Answer 2', a: 'plain' }]);
+  assert.deepEqual(answerPairs({ Setup: 'Laptop' }), [{ q: 'Setup', a: 'Laptop' }]);
+  assert.deepEqual(testerHistory([{ id: 1, action: 'decline', actor_name: 'Admin A', created_at: '2026-10-21 10:00:00', reason: 'Not this time.' }]), [{ key: 1, line: 'Declined by Admin A', on: '21 Oct 2026', reason: 'Not this time.' }]);
+  assert.deepEqual([testerActions('applied'), testerActions('active'), testerActions('paused'), testerActions('removed')], [['decline', 'approve'], ['pause-remove'], ['remove', 'resume'], []]);
+  assert.equal(credentialsText({ licence_number: 'X', files: [{}] }), 'Licence and 1 file');
+  assert.equal(credentialsText({}), null);
+});
+
+test('every decision says what changes, who is told and what is recorded; reasons and links are checked as the Worker does (D1046)', () => {
+  const kinds = ['tester_approve', 'tester_decline', 'tester_pause', 'tester_remove', 'tester_resume', 'pitch_approve', 'pitch_reject', 'pitch_publish',
+    'expert_verify', 'expert_decline', 'expert_hide', 'expert_restore', 'expert_unverify'];
+  for (const k of kinds) {
+    const c = decisionCopy(k, { who: 'Gus Demo', partner: 'Partner A', profile: 'Investor', version: 3 });
+    assert.ok(c.title && c.changes && c.button, k);
+    assert.match(c.told, /told/, `${k} says who is told`);
+    assert.match(c.recorded, /^Recorded/, `${k} says what is recorded`);
+    assert.notEqual(doneLine(k, 'Gus Demo'), 'Saved.', k);
+  }
+  assert.equal(decisionCopy('nope'), null);
+  assert.equal(decisionCopy('tester_approve', { who: 'Gus Demo', profile: 'Investor' }).changes, 'They join the tester pool, and testing programs can pick them. They keep their Investor profile.');
+  assert.match(decisionCopy('expert_verify', { who: 'A', version: 3 }).recorded, /review version 3/);
+  for (const k of ['tester_decline', 'pitch_reject', 'expert_decline']) {
+    assert.match(decisionCopy(k, { who: 'A' }).told, /with your reason/, `${k}: the reason reaches them`);
+    assert.equal(reasonReady(k, '  too short '), false);
+    assert.equal(reasonReady(k, 'Long enough now.'), true);
+  }
+  assert.equal(reasonReady('tester_pause', ''), false);
+  assert.equal(reasonReady('tester_pause', 'x'), true);
+  assert.match(doneLine('tester_remove', 'Eva', { places_ended: 2 }), /2 open program places ended/);
+  assert.deepEqual(['https://example.com/post', 'http://example.com', 'https://u:p@example.com', 'not a url', `https://e.com/${'a'.repeat(500)}`].map(publishUrlOk), [true, false, false, false, false]);
+  assert.equal(refusalLine(Object.assign(new Error('Gus’s email is not verified, so they cannot be told.'), { status: 409 })), 'Gus’s email is not verified, so they cannot be told.');
+  assert.match(refusalLine(Object.assign(new Error('Internal'), { status: 503 })), /Nothing changed/);
+  assert.match(refusalLine(new Error('Network down')), /Nothing changed/, 'no status is never shown as saved');
+});
+
+test('the boards read every page: testers to a thousand, experts to a thousand, and say when they stopped (D1046)', async () => {
+  let calls = 0;
+  const one = await readAllTesters({ testers: async () => { calls += 1; return { rows: [{ id: calls }], matching: 2, totals: TOTALS }; } });
+  assert.deepEqual([one.rows.length, one.complete, calls], [2, true, 2]);
+  calls = 0;
+  const cut = await readAllTesters({ testers: async () => { calls += 1; return { rows: [{ id: calls }], matching: 5000, totals: TOTALS }; } });
+  assert.deepEqual([cut.rows.length, cut.complete, calls], [10, false, 10]);
+  const ex = await readAllExperts({ experts: async ({ offset }) => ({ items: offset < 400 ? Array.from({ length: 200 }, (_, i) => ({ uid: `${offset}-${i}` })) : [{ uid: 'last' }], total: 401 }) });
+  assert.deepEqual([ex.items.length, ex.total], [401, 401]);
+  assert.equal(oldestApproved({ items: [{ reviewed_at: '2026-10-10 09:00:00' }], total: 1 }, Date.parse('2026-10-21T09:00:00Z')), '11 d 0 h');
+  assert.equal(oldestApproved({ items: [{ reviewed_at: '2026-10-10 09:00:00' }], total: 30 }), null, 'not every approval is on the page');
+});
+
+test('mounted, Product testers (APR4): five tabs with counts, the facts, intake paused, three tiles, the chart, the table; nothing is a 0 for a gap', async () => {
+  const v = await board('/admin/approvals/product-testers', testerRoute());
   try {
-    assert.match(v.of('approvals-board-header'), /Approvals.*Co-marketing pitches.*New lane/s);
+    assert.match(v.of('approvals-board-header'), /Approvals.*Product testers.*New lane/s);
+    assert.match(v.of('testers-tab-waiting'), /Waiting\s*2/);
+    assert.match(v.of('testers-tab-active'), /Active\s*1/);
+    assert.match(v.of('testers-tab-removed'), /Removed\s*0/);
+    assert.match(v.of('testers-facts'), /Admins cannot apply/);
+    assert.match(v.of('testers-intake-paused'), /Member intake is paused\. Nobody can apply now\./);
+    assert.match(v.of('testers-tile-waiting'), /Waiting\s*2\s*oldest/);
+    assert.match(v.of('testers-tile-active'), /Active testers\s*1/);
+    assert.match(v.of('testers-tile-in-program'), /In a testing program now\s*1/);
+    assert.match(v.props('testers-chart-bars')['aria-label'], /^Applications to test products in the last 12 weeks: /);
+    assert.match(v.of('tester-1'), /Gus Demo\s*gus@example\.com\s*Investor.*3 hours a week\s*Given · v2\s*Approved\s*Verified/s);
+    assert.match(v.of('tester-3'), /Ben Sample.*Not given.*! Not given.*! Not verified/s);
+    assert.ok(!v.has('tester-2'), 'an active tester is not on Waiting');
+    assert.ok(gets(v, '/api/admin/product-testers?').some((p) => p.includes('in_programme=yes')), 'the in-program tile is the Worker\'s count');
+  } finally { await v.unmount(); }
+  const failed = await board('/admin/approvals/product-testers/active', async (path) => (path === '/api/admin/product-testers' ? json({ code: 'product_testers_unreadable' }, 503) : null));
+  try {
+    assert.match(failed.of('testers-failed'), /could not be read\. That is not the same as having none\./);
+    assert.match(failed.of('testers-tab-active'), /Active\s*—/);
+    assert.match(failed.of('testers-tile-active'), /Active testers\s*—/);
+  } finally { await failed.unmount(); }
+});
+
+test('mounted, a tester (APR5): the row opens their address over the board; A approves, says who is told and what is recorded, and the board reads again', async () => {
+  const v = await board('/admin/approvals/product-testers', testerRoute());
+  try {
+    await v.click('tester-open-1');
+    assert.equal(v.at.path, '/admin/approvals/product-testers/1');
+    assert.match(v.of('tester-drawer-content'), /Investor.*Applied\s*17 Oct 2026.*Email\s*Verified\s*gus@example\.com.*What do you want to test\?\s*B2B tools for small funds\..*Email consent: given on 17 Oct 2026, version v2\..*Product Alpha · picked.*Approved by Admin B · 14 Aug 2026/s);
+    assert.ok(v.has('testers-tab-waiting'), 'the board stays under the drawer');
+    assert.ok(v.has('tester-assign'), 'Assign is the inbox\'s');
+    assert.equal(v.props('tester-assign').href, '/admin/approvals/items/product_testers-1');
+    await v.click('tester-action-approve');
+    assert.match(v.of('tester-dialog-approve-told'), /They are told by email and in their inbox\./);
+    assert.match(v.of('tester-dialog-approve-recorded'), /Recorded in their history: who approved them and when/);
+    const before = gets(v, '/api/admin/product-testers?').length;
+    await v.change('tester-dialog-note', 'Strong fit');
+    await v.click('tester-dialog-approve-send');
+    assert.deepEqual(v.posts, [{ path: '/api/admin/product-testers/1/approve', body: { note: 'Strong fit', reason: null } }]);
+    assert.match(v.of('board-done'), /Gus Demo is a product tester now\. They are told\./);
+    assert.ok(!v.has('tester-dialog-approve'), 'the dialog closes');
+    assert.ok(gets(v, '/api/admin/product-testers?').length > before, 'the board reads again');
+    await v.click('tester-drawer-close');
+    assert.equal(v.at.path, '/admin/approvals/product-testers', 'closing returns to the tab it came from');
+    assert.ok(!v.has('tester-drawer-content'));
+  } finally { await v.unmount(); }
+});
+
+test('mounted, a tester: an unverified email is refused before sending (APR5r); B needs a reason they see; a refusal is the Worker\'s sentence', async () => {
+  let v = await board('/admin/approvals/product-testers/3', testerRoute());
+  try {
+    await v.click('tester-action-approve');
+    assert.match(v.of('tester-dialog-approve-blocked'), /Ben Sample’s email is not verified, so they cannot be told\. Ask them to verify it first\./);
+    assert.equal(v.props('tester-dialog-approve-send').disabled, true);
+    assert.deepEqual(v.posts, []);
+  } finally { await v.unmount(); }
+  v = await board('/admin/approvals/product-testers/1', testerRoute({ decide: () => json({ code: 'tester_changed', message: 'This tester changed while you were looking at it. Reload and try again.' }, 409) }));
+  try {
+    await v.click('tester-action-decline');
+    assert.match(v.of('tester-dialog-decline'), /Decline Gus Demo’s application\?.*They can apply again after 90 days\./s);
+    await v.change('tester-dialog-reason', 'Too short');
+    assert.equal(v.props('tester-dialog-decline-send').disabled, true, 'nine characters is not a reason');
+    await v.change('tester-dialog-reason', 'We are full for this quarter.');
+    await v.click('tester-dialog-decline-send');
+    assert.deepEqual(v.posts, [{ path: '/api/admin/product-testers/1/decline', body: { note: null, reason: 'We are full for this quarter.' } }]);
+    assert.match(v.of('tester-dialog-decline-refused'), /This tester changed while you were looking at it/);
+    assert.ok(!v.has('board-done'), 'a refusal is never shown as done');
+  } finally { await v.unmount(); }
+});
+
+test('mounted, a tester: C pauses or removes an active tester, with a reason; a removal says the places it ended; a missing tester says so', async () => {
+  const v = await board('/admin/approvals/product-testers/2', testerRoute());
+  try {
+    assert.match(v.of('tester-drawer-content'), /Advisor/);
+    await v.click('tester-action-pause-remove');
+    assert.match(v.of('tester-dialog-pause-remove'), /Pause or remove Eva Demo\?.*Pause: no new programs; current ones carry on.*Remove: they leave the pool; their open program places end/s);
+    await v.change('tester-choice-remove');
+    await v.change('tester-dialog-reason', 'Left the company.');
+    assert.match(v.of('tester-dialog-pause-remove-send'), /Remove/);
+    await v.click('tester-dialog-pause-remove-send');
+    assert.deepEqual(v.posts, [{ path: '/api/admin/product-testers/2/remove', body: { note: null, reason: 'Left the company.' } }]);
+    assert.match(v.of('board-done'), /Eva Demo is removed from the pool, and 2 open program places ended\./);
+  } finally { await v.unmount(); }
+  const fromActive = await board('/admin/approvals/product-testers/active', testerRoute());
+  try {
+    await fromActive.click('tester-open-2');
+    assert.equal(fromActive.at.path, '/admin/approvals/product-testers/2');
+    assert.ok(fromActive.has('tester-2') && fromActive.has('tester-drawer-content'), 'the Active tab stays under the drawer it opened');
+    await fromActive.click('tester-drawer-close');
+    assert.equal(fromActive.at.path, '/admin/approvals/product-testers/active');
+  } finally { await fromActive.unmount(); }
+  const gone = await board('/admin/approvals/product-testers/99', testerRoute());
+  try { assert.match(gone.of('tester-drawer-missing'), /No product tester has that number\./); } finally { await gone.unmount(); }
+});
+
+const PITCHES = {
+  proposed: [{ uid: 'p1', title: 'Hiring your first engineer', asset_type: 'webinar', partner_company: 'Partner A', created_at: '2026-10-18 13:00:00', proposed_date: '2026-11-14', target_audience: 'Seed founders, Europe' }],
+  approved: [{ uid: 'p2', title: 'Fundraising in a down market', asset_type: 'podcast', partner_company: 'Firm Name', attribution_code: 'CM-7Q2K', reviewed_at: '2026-10-10 09:00:00', attribution_30d: { visit: 0 } }],
+  published: [{ uid: 'p3', title: 'Seed pricing', asset_type: 'webinar', partner_company: 'Partner A', attribution_30d: { visit: 188, signup: 4, lead: 2, conversion: 1 } }],
+};
+const pitchRoute = (over = {}) => async (path, q, method, body) => {
+  if (path === '/api/comarketing/admin/queue') {
+    const st = q.get('status');
+    if (over.failState === st) return json({ code: 'queue_unreadable' }, 503);
+    const items = PITCHES[st] || [];
+    return json({ items, total: items.length, limit: Number(q.get('limit')), offset: Number(q.get('offset')), attribution_30d: st === 'published' ? { visit: 412, signup: 9, lead: 3, conversion: 1 } : { visit: 0, signup: 0 } });
+  }
+  const m = /^\/api\/comarketing\/admin\/pitches\/([^/]+)(?:\/(\w+))?$/.exec(path);
+  if (m && method === 'POST') return over.decide ? over.decide(m[2], body) : json({ ok: true });
+  if (m) {
+    const p = Object.values(PITCHES).flat().find((x) => x.uid === decodeURIComponent(m[1]));
+    return p ? json({ ...p, status: Object.keys(PITCHES).find((k) => PITCHES[k].includes(p)), summary: 'A one-hour webinar.', angle: 'The first hire sets the bar', what_you_bring: 'Two hiring managers', distribution_channels: 'Webinar, newsletter', created_at: '2026-10-18 13:00:00', decided: null })
+      : json({ code: 'pitch_not_found', message: 'That pitch does not exist.' }, 404);
+  }
+  return null;
+};
+
+test('mounted, Co-marketing (APR6): five states read alone and paged, the tiles over 30 days, a failed state a dash; the pitch opens over the board', async () => {
+  const v = await board('/admin/approvals/co-marketing', pitchRoute({ failState: 'withdrawn' }));
+  try {
+    assert.equal(gets(v, '/api/comarketing/admin/queue').length, 5);
+    assert.ok(gets(v, '/api/comarketing/admin/queue').every((p) => /limit=25/.test(p) && /offset=0/.test(p)), 'part 5\'s pages');
     assert.match(v.of('pitches-tab-proposed'), /Proposed\s*1/);
     assert.match(v.of('pitches-tab-withdrawn'), /Withdrawn\s*—/, 'a failed state is a dash, never 0');
-    assert.match(v.of('pitch-p1'), /Hiring your first engineer\s*Webinar\s*Partner A/);
-    assert.match(v.of('pitches-decide-line'), /stay on Co-marketing/);
-    assert.equal(s.seen.filter((p) => p.startsWith('/api/comarketing/admin/queue')).length, 5);
-    assert.ok(!s.seen.some((p) => /\/admin\/pitches\//.test(p)), 'nothing is decided from this board');
-  } finally { await v.unmount(); s.restore(); }
-  s = stub({ experts: () => json({ matches: [{ uid: 'e1', name: 'Expert A', verified: false, profile_completion_pct: 92 }], total_active: 80 }) });
-  v = await render('/admin/approvals/wellbeing-experts', h(LaneBoards));
+    assert.match(v.of('pitches-tile-visits'), /Visits from published pitches, 30 days\s*412/);
+    assert.match(v.of('pitches-tile-signups'), /Sign-ups\s*9\s*from published pitches, 30 days/);
+    assert.match(v.of('pitches-tile-approved'), /Approved, not yet published\s*1\s*oldest/);
+    assert.match(v.of('pitch-p1'), /Hiring your first engineer\s*Webinar\s*Partner A\s*14 Nov 2026\s*Seed founders, Europe/);
+    await v.click('pitch-open-p1');
+    assert.equal(v.at.path, '/admin/approvals/co-marketing/p1');
+    assert.match(v.of('pitch-drawer-content'), /Summary\s*A one-hour webinar\..*Angle\s*The first hire sets the bar.*What they bring\s*Two hiring managers.*Attribution code: issued on approval\..*Proposed by Partner A · 18 Oct 2026/s);
+    await v.click('pitch-action-approve');
+    assert.match(v.of('pitch-dialog-approve'), /Approve Partner A’s pitch\?.*An attribution code is issued.*Partner A is told by email and in their inbox\..*Recorded on the pitch: who approved it and when\./s);
+    await v.click('pitch-dialog-approve-send');
+    assert.deepEqual(v.posts, [{ path: '/api/comarketing/admin/pitches/p1/approve', body: { notes: null } }]);
+    assert.match(v.of('board-done'), /Hiring your first engineer is approved, with an attribution code\. The partner is told\./);
+  } finally { await v.unmount(); }
+});
+
+test('mounted, Co-marketing (APR7): Decline needs a reason they see; Publish needs an https link and sends it', async () => {
+  let v = await board('/admin/approvals/co-marketing/p1', pitchRoute());
+  try {
+    await v.click('pitch-action-reject');
+    await v.change('pitch-dialog-notes', 'Short');
+    assert.equal(v.props('pitch-dialog-reject-send').disabled, true);
+    await v.change('pitch-dialog-notes', 'Not a fit for this quarter.');
+    await v.click('pitch-dialog-reject-send');
+    assert.deepEqual(v.posts, [{ path: '/api/comarketing/admin/pitches/p1/reject', body: { notes: 'Not a fit for this quarter.' } }]);
+  } finally { await v.unmount(); }
+  v = await board('/admin/approvals/co-marketing/approved', pitchRoute());
+  try {
+    assert.match(v.of('pitch-p2'), /Fundraising in a down market.*Firm Name\s*CM-7Q2K\s*0\s*10 Oct 2026/s);
+    await v.click('pitch-publish-p2');
+    await v.change('pitch-dialog-url', 'http://example.com/ep');
+    assert.equal(v.props('pitch-dialog-publish-send').disabled, true, 'http is not enough');
+    assert.match(v.of('pitch-dialog-url-bad'), /complete https address/);
+    await v.change('pitch-dialog-url', 'https://example.com/ep');
+    await v.click('pitch-dialog-publish-send');
+    assert.deepEqual(v.posts, [{ path: '/api/comarketing/admin/pitches/p2/publish', body: { published_url: 'https://example.com/ep', notes: null } }]);
+    assert.match(v.of('board-done'), /is published\. The partner is told\./);
+  } finally { await v.unmount(); }
+});
+
+const EXPERTS = [
+  { uid: 'e1', name: 'Expert A', headline: 'Founder coach', bio: 'Coaches first-time founders.', decision_state: 'pending', profile_completion_pct: 92, review_version: 3, created_at: '2026-10-19 07:00:00', credentials: { licence_number: 'WB-4821', issuer: 'Board Name', expires_on: '2028-03-31', files: [{ uid: 'f1', file_name: 'Licence.pdf', url: '/api/wellbeing/experts/credentials/files/f1' }] } },
+  { uid: 'e2', name: 'Expert B', decision_state: 'pending', profile_completion_pct: 74, review_version: 1, created_at: '2026-10-20 07:00:00', credentials: { licence_number: 'OLD-1', expires_on: '2020-01-01', files: [] } },
+  { uid: 'e3', name: 'Expert C', decision_state: 'declined', profile_completion_pct: 80, review_version: 2, decline_reason: 'Add a licence.', credentials: { files: [] } },
+  { uid: 'e4', name: 'Expert D', decision_state: 'verified', verified: true, hidden: true, review_version: 5, credentials: { files: [] } },
+];
+const expertRoute = (over = {}) => async (path, q, method, body) => {
+  if (path === '/api/wellbeing/admin/experts') return over.list ? over.list(q) : json({ items: EXPERTS, total: EXPERTS.length, limit: 200, offset: 0 });
+  const r = /^\/api\/wellbeing\/admin\/experts\/([^/]+)\/(review|verify|hide|decline)$/.exec(path);
+  if (r && method === 'POST') return json({ ok: true });
+  if (r) { const e = EXPERTS.find((x) => x.uid === r[1]); return e ? json({ expert: e, history: [] }) : json({ code: 'expert_not_found' }, 404); }
+  const pub = /^\/api\/wellbeing\/experts\/([^/]+)$/.exec(path);
+  if (pub) return pub[1] === 'e1' ? json({ uid: 'e1', categories: ['Coaching'], languages: ['English', 'Portuguese'], timezones: ['Europe/Lisbon'], hourly_rate_usd: 120, booking_url: 'https://book.example.com' }) : json({ detail: 'Expert not found' }, 404);
+  return null;
+};
+
+test('mounted, Wellbeing experts (APR8): five tabs with Declined, the tiles, the credentials column; a short read draws no counts', async () => {
+  let v = await board('/admin/approvals/wellbeing-experts', expertRoute());
+  try {
+    assert.ok(gets(v, '/api/wellbeing/admin/experts').some((p) => /state=all/.test(p) && /limit=200/.test(p)));
+    assert.match(v.of('experts-tab-verify'), /To verify\s*2/);
+    assert.match(v.of('experts-tab-declined'), /Declined\s*1/);
+    assert.match(v.of('experts-tab-hidden'), /Hidden\s*1/);
+    assert.match(v.of('experts-tile-verify'), /To verify\s*2\s*oldest/);
+    assert.match(v.of('expert-e1'), /Expert A\s*Founder coach\s*92%\s*Licence and 1 file/);
+    assert.match(v.of('expert-e2'), /Expert B.*Licence/s);
+  } finally { await v.unmount(); }
+  v = await board('/admin/approvals/wellbeing-experts/declined', expertRoute());
+  try { assert.match(v.of('expert-e3'), /Expert C.*! None given/s); } finally { await v.unmount(); }
+  v = await board('/admin/approvals/wellbeing-experts', expertRoute({ list: (q) => json({ items: q.get('offset') === '0' ? EXPERTS.slice(0, 1) : [], total: 80 }) }));
   try {
     assert.match(v.of('experts-tab-verify'), /To verify\s*—/);
+    assert.match(v.of('experts-tile-verify'), /To verify\s*—/);
     assert.match(v.of('experts-partial'), /first 1 of 80/);
-    assert.match(v.of('expert-e1'), /Expert A/);
-  } finally { await v.unmount(); s.restore(); }
-  s = stub();
-  v = await render('/admin/approvals/product-testers', h(LaneBoards));
+  } finally { await v.unmount(); }
+});
+
+test('mounted, an expert (APR8d, APR8a, APR8b): credentials and profile; Verify needs "I checked their credentials" and sends the version; Decline needs a reason; an expired licence is refused first', async () => {
+  let v = await board('/admin/approvals/wellbeing-experts/e1', expertRoute());
   try {
-    assert.match(v.of('approvals-testers-none'), /counted on the Inbox, under Product testers/);
-    assert.deepEqual(reads(s), [], 'no store, no read');
-  } finally { await v.unmount(); s.restore(); }
+    assert.match(v.of('expert-drawer-content'), /92% complete\s*Coaching.*Languages\s*English, Portuguese.*Pricing\s*\$120 an hour.*Licence number WB-4821 · issued by Board Name · expires 31 Mar 2028.*Licence\.pdf/s);
+    assert.equal(v.props('expert-file-f1').href, '/api/wellbeing/experts/credentials/files/f1');
+    await v.click('expert-action-verify');
+    assert.equal(v.props('expert-dialog-verify-send').disabled, true, 'not until they say they checked');
+    assert.match(v.of('expert-dialog-verify-recorded'), /that you checked their credentials \(review version 3\)/);
+    await v.change('expert-dialog-checked', null, true);
+    await v.click('expert-dialog-verify-send');
+    assert.deepEqual(v.posts, [{ path: '/api/wellbeing/admin/experts/e1/verify', body: { verified: true, credentials_checked: true, expected_version: 3 } }]);
+    assert.match(v.of('board-done'), /Expert A is verified and listed\. They are told\./);
+    await v.click('expert-action-decline');
+    await v.change('expert-dialog-reason', 'Please add your licence.');
+    await v.click('expert-dialog-decline-send');
+    assert.deepEqual(v.posts.at(-1), { path: '/api/wellbeing/admin/experts/e1/decline', body: { reason: 'Please add your licence.' } });
+    await v.click('expert-action-hide');
+    await v.click('expert-dialog-hide-send');
+    assert.deepEqual(v.posts.at(-1), { path: '/api/wellbeing/admin/experts/e1/hide', body: { hidden: true } });
+  } finally { await v.unmount(); }
+  v = await board('/admin/approvals/wellbeing-experts/e2', expertRoute());
+  try {
+    assert.match(v.of('expert-expired'), /This credential expired on 1 Jan 2020\./);
+    assert.match(v.of('expert-profile-none'), /No active directory profile/);
+    await v.click('expert-action-verify');
+    await v.change('expert-dialog-checked', null, true);
+    assert.match(v.of('expert-dialog-verify-blocked'), /The recorded credential has expired\. Ask the expert to update it\./);
+    assert.equal(v.props('expert-dialog-verify-send').disabled, true);
+  } finally { await v.unmount(); }
+  v = await board('/admin/approvals/wellbeing-experts/e4', expertRoute());
+  try {
+    assert.ok(!v.has('expert-action-verify') && !v.has('expert-action-hide'), 'a hidden expert can only be restored');
+    await v.click('expert-action-restore');
+    await v.click('expert-dialog-restore-send');
+    assert.deepEqual(v.posts, [{ path: '/api/wellbeing/admin/experts/e4/hide', body: { hidden: false } }]);
+  } finally { await v.unmount(); }
+});
+
+test('the retired doors: Co-marketing has no Review queue and points here; the Wellbeing roster decides nothing and points here; no board uses alert or confirm', () => {
+  const cm = read('frontend/src/pages/CoMarketingPage.jsx');
+  assert.ok(!cm.includes("label: 'Review queue'") && !cm.includes('function AdminView') && !cm.includes('approveCoMarketingPitch'), 'the Review queue is retired');
+  assert.ok(cm.includes('<Link to="/admin/approvals/co-marketing"'));
+  const wb = read('frontend/src/pages/admin/consoles/WellbeingConsole.jsx');
+  assert.ok(!/wellbeingAdmin(Verify|Hide)/.test(wb), 'the roster decides nothing');
+  assert.ok(wb.includes('<Link to={`/admin/approvals/wellbeing-experts/${encodeURIComponent(e.uid)}`}'));
+  for (const f of ['TesterBoard.jsx', 'PitchBoard.jsx', 'ExpertBoard.jsx', 'boardParts.jsx']) {
+    assert.doesNotMatch(read(`frontend/src/pages/admin/approvals/${f}`), /window\.(alert|confirm)|\balert\(|\bconfirm\(/, f);
+  }
+  // Every item link is a literal template one segment past its board, which the reachability walk resolves.
+  assert.ok(read('frontend/src/pages/admin/approvals/TesterBoard.jsx').includes('to={`/admin/approvals/product-testers/${r.id}`}'));
+  assert.ok(read('frontend/src/pages/admin/approvals/PitchBoard.jsx').includes('to={`/admin/approvals/co-marketing/${encodeURIComponent(r.key)}`}'));
+  assert.ok(read('frontend/src/pages/admin/approvals/ExpertBoard.jsx').includes('to={`/admin/approvals/wellbeing-experts/${encodeURIComponent(r.key)}`}'));
 });
 
 // ---------------------------------------------------------------- the wiring
@@ -669,7 +1047,10 @@ test('the routes under one guard, the redirect, the row lit on every sub-path, a
   for (const p of ['/admin/approvals', '/admin/approvals/lanes', '/admin/approvals/decided', '/admin/approvals/items/:ref']) {
     assert.ok(app.includes(`<Route path="${p}" element={guard(['admin'], <AdminApprovals />)} />`), p);
   }
-  for (const p of ['/admin/approvals/product-testers', '/admin/approvals/co-marketing', '/admin/approvals/co-marketing/declined', '/admin/approvals/wellbeing-experts/hidden']) {
+  for (const p of ['/admin/approvals/product-testers', '/admin/approvals/co-marketing', '/admin/approvals/co-marketing/declined', '/admin/approvals/wellbeing-experts/hidden',
+    // D1046: the testers' tabs, wellbeing's Declined, and one item's address on each board.
+    '/admin/approvals/product-testers/active', '/admin/approvals/product-testers/paused', '/admin/approvals/product-testers/declined', '/admin/approvals/product-testers/removed',
+    '/admin/approvals/wellbeing-experts/declined', '/admin/approvals/product-testers/:item', '/admin/approvals/co-marketing/:item', '/admin/approvals/wellbeing-experts/:item']) {
     assert.ok(app.includes(`<Route path="${p}" element={guard(['admin'], <ApprovalsLaneBoards />)} />`), p);
   }
   assert.ok(app.includes('<Route path="/admin/held/approvals" element={<HeldApprovalsRedirect />} />'));

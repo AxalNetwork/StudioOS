@@ -11,7 +11,10 @@
  * answer; another venture's feedback never shows; no version is needed; a
  * failed read says so on its own; the run is metered under
  * `draft:narrative-objection`, reads every figure masked, drops a sentence
- * with a digit and writes nothing; the refusals.
+ * with a digit and writes nothing; the refusals. Option A (migration 624):
+ * which saved version and section answers an objection is recorded, replaced
+ * and cleared, each with a log row that names no objection or investor, and a
+ * failed answers read never hides the objections.
  *
  *   node --experimental-strip-types --no-warnings --import ./cloudflare-worker/test/_ts-loader.mjs \
  *     --test cloudflare-worker/test/narrative_objections_d913.test.ts
@@ -63,6 +66,7 @@ function readFixture() {
   db.exec(sqlOf('463_raise_record_stores.sql'));
   db.exec(sqlOf('544_narrative_sections.sql'));
   db.exec(sqlOf('545_narrative_notes.sql'));
+  db.exec(sqlOf('624_narrative_objection_answers.sql'));
   raiseEvidenceTables(db);
   const u = db.prepare('INSERT INTO users (id, role, name, email, is_active, founder_id) VALUES (?, ?, ?, ?, 1, ?)');
   u.run(FOUNDER, 'founder', 'Fay Founder', 'fay@example.test', 1001);
@@ -159,6 +163,107 @@ test('parts.narrative.objections: Home reads them with no version saved, and a f
     const broken = await home();
     assert.equal(broken.state, 'ok', 'the versions still read');
     assert.deepEqual(broken.objections, { state: 'unreadable' });
+  } finally { db.close(); }
+});
+
+// ---------------------------------------------------------------------------
+// Option A (migration 624): which section answers an objection
+// ---------------------------------------------------------------------------
+
+/** The read fixture with saved versions: 7 is this venture's, 8 the other's. */
+function answerFixture() {
+  const db = readFixture();
+  db.exec(`INSERT INTO spinout_deck_overrides (id, project_id, field_key, value, version) VALUES
+    (7, ${P}, '__version__', 'seed_fund', 7), (8, ${PB}, '__version__', 'seed_fund', 8)`);
+  return db;
+}
+const answerPath = (key: string) => `/raise/narrative/objections/${key}/answer`;
+const logs = (db: DatabaseSync) => db.prepare("SELECT action, details, entity_id FROM activity_logs WHERE action LIKE 'narrative_objection_%' ORDER BY id").all() as any[];
+
+test('PUT /narrative/objections/:objection/answer records the version and section, replaces it, and the read carries it', async () => {
+  const db = answerFixture();
+  try {
+    const key = await objectionKey('too small a market');
+    const before = await call(db, FOUNDER, 'GET', '/raise/narrative/objections');
+    assert.equal(before.body.answers, 'ok');
+    assert.deepEqual(before.body.objections.map((o: any) => o.answered), [null, null], 'nothing answered yet');
+    const r = await call(db, FOUNDER, 'PUT', answerPath(key), { version: 7, section: 'market', how: 'eadwyn' });
+    assert.equal(r.status, 200, JSON.stringify(r.body));
+    assert.deepEqual([r.body.objection, r.body.answered.version, r.body.answered.section, r.body.answered.how, r.body.answered.by],
+      [key, 7, 'market', 'eadwyn', { id: FOUNDER, name: 'Fay Founder' }]);
+    const read = await call(db, FOUNDER, 'GET', '/raise/narrative/objections');
+    assert.deepEqual(read.body.objections.map((o: any) => o.answered && [o.answered.version, o.answered.section, o.answered.how]), [[7, 'market', 'eadwyn'], null]);
+    // One row per objection: a second answer replaces the first.
+    assert.equal((await call(db, FOUNDER, 'PUT', answerPath(key), { version: '7', section: 'competition', how: 'picked' })).status, 200);
+    assert.deepEqual(db.prepare('SELECT project_id, version, section_key, how FROM narrative_objection_answers').all().map((x: any) => ({ ...x })),
+      [{ project_id: P, version: 7, section_key: 'competition', how: 'picked' }]);
+    // The module read carries it too.
+    const home = (await call(db, FOUNDER, 'GET', '/raise/modules/investor-narrative')).body.parts.narrative.objections;
+    assert.equal(home.answers, 'ok');
+    assert.equal(home.items[0].answered.section, 'competition');
+    // Each write logged, naming the section and version, never the objection or an investor.
+    const rows = logs(db);
+    assert.deepEqual(rows.map((x) => [x.action, x.entity_id]), [['narrative_objection_answered', '7'], ['narrative_objection_answered', '7']]);
+    assert.match(rows[0].details, /Market, version 7/);
+    assert.match(rows[1].details, /Competition, version 7 \(picked by hand\)/);
+    for (const x of rows) assert.doesNotMatch(x.details, /small|North|South|\$/i);
+  } finally { db.close(); }
+});
+
+test('DELETE /narrative/objections/:objection/answer clears it, logged; nothing to clear is a 404', async () => {
+  const db = answerFixture();
+  try {
+    const key = await objectionKey('too small a market');
+    assert.equal((await call(db, FOUNDER, 'DELETE', answerPath(key))).status, 404, 'not answered yet');
+    await call(db, FOUNDER, 'PUT', answerPath(key), { version: 7, section: 'market', how: 'picked' });
+    assert.equal((await call(db, OTHER, 'PUT', answerPath(key), { version: 8, section: 'team', how: 'picked' }, PB)).status, 200, 'the other venture\'s same words');
+    const r = await call(db, FOUNDER, 'DELETE', answerPath(key));
+    assert.equal(r.status, 200, JSON.stringify(r.body));
+    assert.deepEqual(r.body, { objection: key, answered: null });
+    assert.deepEqual(db.prepare('SELECT project_id FROM narrative_objection_answers').all().map((x: any) => x.project_id), [PB], 'only this venture\'s answer is cleared');
+    const last = logs(db).at(-1);
+    assert.deepEqual([last.action, last.entity_id], ['narrative_objection_unanswered', '7']);
+    assert.match(last.details, /Market, version 7/);
+    assert.doesNotMatch(last.details, /small|North|South/i);
+  } finally { db.close(); }
+});
+
+test('the answer write refuses: the objection, the section, the version, how, another venture and an admin', async () => {
+  const db = answerFixture();
+  try {
+    const key = await objectionKey('too small a market');
+    const put = (body: unknown, who = FOUNDER, k = key, pid = P) => call(db, who, 'PUT', answerPath(k), body, pid);
+    const ok = { version: 7, section: 'market', how: 'picked' };
+    assert.equal((await put(ok, FOUNDER, 'not-a-key')).status, 404);
+    assert.equal((await put(ok, FOUNDER, '0'.repeat(16))).status, 404, 'no such objection here');
+    assert.equal((await put({ ...ok, how: 'typed' })).status, 400);
+    assert.equal((await put({ ...ok, section: 'nope' })).status, 404);
+    assert.equal((await put({ ...ok, version: 0 })).status, 409, 'version 0 is the live deck');
+    assert.equal((await put({ ...ok, version: 8 })).status, 404, 'another venture\'s version');
+    assert.equal((await put({ section: 'market', how: 'picked' })).status, 404, 'no version');
+    assert.equal((await put(ok, OTHER)).status, 403, 'not the venture\'s');
+    // The other venture's own objection with the same words is its own: this one is not found there.
+    assert.equal((await put({ ...ok, version: 8 }, OTHER, key, PB)).status, 200);
+    assert.deepEqual((await call(db, FOUNDER, 'GET', '/raise/narrative/objections')).body.objections.map((o: any) => o.answered), [null, null], 'another venture\'s answer never reads here');
+    assert.equal((await call(db, ADMIN, 'POST', '/raise/narrative/reads', { reason: 'Reviewing the raise with the founder' })).status, 201);
+    const admin = await put(ok, ADMIN);
+    assert.equal(admin.status, 403);
+    assert.equal(admin.body.code, 'admin_read_only');
+    assert.equal((await call(db, ADMIN, 'DELETE', answerPath(key))).status, 403);
+    assert.deepEqual(db.prepare('SELECT project_id FROM narrative_objection_answers').all().map((x: any) => x.project_id), [PB], 'only the other venture\'s own answer');
+  } finally { db.close(); }
+});
+
+test('a failed answers read leaves every objection unanswered-unknown, never hides the objections', async () => {
+  const db = answerFixture();
+  try {
+    db.exec('DROP TABLE narrative_objection_answers');
+    const r = await call(db, FOUNDER, 'GET', '/raise/narrative/objections');
+    assert.equal(r.status, 200);
+    assert.equal(r.body.answers, 'unreadable');
+    assert.deepEqual(r.body.objections.map((o: any) => [o.count, o.answered]), [[3, null], [1, null]]);
+    const home = (await call(db, FOUNDER, 'GET', '/raise/modules/investor-narrative')).body.parts.narrative.objections;
+    assert.deepEqual([home.state, home.answers], ['ok', 'unreadable']);
   } finally { db.close(); }
 });
 

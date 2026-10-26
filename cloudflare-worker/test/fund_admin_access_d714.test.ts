@@ -86,6 +86,9 @@ test('the table: unique keys, the decision\'s tiers, and a sentence on every Sup
     'bank_account.see': 'super_admin', 'bank_account.change': 'super_admin', 'bank_account.reveal': 'super_admin',
     'fee_terms.confirm': 'super_admin', 'fee_period.issue': 'super_admin', 'fee.write': 'admin',
     'mercury.connection': 'super_admin', 'mercury.sync': 'admin', 'mercury.reconcile': 'admin',
+    // D1215 (#3212, #2424 owner question 5).
+    'closing.evidence': 'admin', 'position.record': 'admin',
+    'closing.countersign': 'super_admin', 'fund_investment.commit': 'super_admin', 'fund_investment.release': 'super_admin',
   });
   for (const a of FUND_ACTS) assert.equal(a.sentence !== null, a.tier === 'super_admin', a.act);
 });
@@ -103,6 +106,9 @@ const ROUTERS: Record<string, { file: string; name: string }> = {
   '/api/fund-fees': { file: 'routes/fund_fees.ts', name: 'app' },
   '/api/admin/bank-accounts': { file: 'routes/admin_bank_accounts.ts', name: 'r' },
   '/api/admin/mercury': { file: 'routes/admin_mercury.ts', name: 'r' },
+  '/api/closings': { file: 'routes/closings.ts', name: 'r' },
+  '/api/positions': { file: 'routes/positions.ts', name: 'r' },
+  '/api/deals': { file: 'routes/deals.ts', name: 'deals' },
 };
 
 /** #1773's and #1775's rows keep their own gates: each handler is held to the call it makes. */

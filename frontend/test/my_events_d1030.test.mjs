@@ -235,12 +235,14 @@ test('Past: places and hosted events, newest first, with Replay "Not recorded"; 
  * The source
  * ------------------------------------------------------------------ */
 
-test('the wiring: four routes under one guard with Explorers in, the phone view kept, and the canvas in incoming', () => {
+test('the wiring: four routes under one guard with Explorers in, MEV18 on a phone, and the canvas in incoming', () => {
   const app = read('frontend/src/App.jsx');
   for (const p of ['/my/events', '/my/events/hosting', '/my/events/discover', '/my/events/past']) {
     assert.ok(app.split('\n').some((line) => line.trim() === `<Route path="${p}" element={guard(['admin', 'founder', 'partner', 'investor', 'advisor', 'exploring'], <MyEventsPage />)} />`), p);
   }
-  assert.match(page, /if \(phone\) \{[\s\S]*?<EventsPhoneView /, 'the phone keeps A7m until the phone part');
+  // D1037 (#2878): the phone part replaced A7m with MEV18 (MyEventsPhone.jsx).
+  assert.match(page, /if \(phone\) \{[\s\S]*?<PhoneBar back=\{\{ label: 'Back' \}\}[\s\S]*?\{nav\}[\s\S]*?\{body\}/, 'the phone draws the account bar, the tabs and the tab');
+  assert.doesNotMatch(page, /EventsPhoneView|AccountPhonePage /, 'A7m is retired on this page');
   assert.doesNotMatch(page, /\b(alert|confirm)\(/);
   for (const f of ['My Events Page.dc.html', 'My Events · Boards.dc.html']) {
     const src = read(`design/incoming/${f}`);

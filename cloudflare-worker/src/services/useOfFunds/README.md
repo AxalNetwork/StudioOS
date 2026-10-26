@@ -20,13 +20,22 @@ The original JSON is never modified by a copy. Unknown/stale OKRs or malformed
 legacy data refuse the copy atomically for correction; they are never omitted.
 Legacy dollars become cents; no source is invented: copied rows carry the
 original module reference and the #2431 `recorded` provenance label.
+An optional `onCreate(uid)` statement lets the route include its conditional
+creation audit inside that same copy transaction. Support reads do not copy.
 
-`saveBaseSplit` is the part-3 writer contract: it writes both the new Base and
-the deck's existing `projects.use_of_funds`, `funding_needed` and
-`use_of_funds_meta.runway_months` in one batch, preserving unrelated metadata.
-It accepts only the authenticated founder, never an AI payload. The existing
-Raise writer/routes are unchanged; part 3 (#3103) mounts and audits these
-services. No read of this service reaches Mercury or another user's records.
+`saveBaseSplit` remains the lower-level founder-only dual writer from D1175.
+D1176's `store.ts` extends the dual-write boundary to admin attribution and an
+atomic activity row, sharing it between the module PUT and record drawer.
+It also projects milestones/OKR costs when Base changes, retaining legacy-only
+entries and refusing conflicting edits of the same key. A failed legacy copy
+names the existing projects PUT correction route; it never drops stale costs.
+Deleting a milestone does not require its old OKR still to exist. No read
+reaches a provider or another user's Mercury records.
+An unrelated Base edit retains a historical split with omitted sections;
+promotion/replacement requires a complete split. Later legacy financial edits
+must be explicitly reconciled rather than overwritten by a rename.
 
 Migration 606 creates the three new stores. Hires remain in
 `use_of_funds_hires` (migration 463); part 3 scopes and supplies that list.
+
+D1176: `store.ts` supplies scoped scenario/milestone/hire writes, the shared module and record-drawer split writer, Base projection and atomic activity rows. `read.ts` supplies independent Home blocks, round precedence, founder-only cached Mercury, measured runway precedence, ties and Needs you. Neither uses a forecast as runway today. See D1176 for the API contract.

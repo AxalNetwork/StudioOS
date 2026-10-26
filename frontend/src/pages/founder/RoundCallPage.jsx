@@ -38,7 +38,7 @@ export default function RoundCallPage() {
     edit:()=>setShowSheet(true),
   };
   // D686: a founder's call lives in the Raise shell; investors and counsel keep this page.
-  if(read.data?.viewer==='founder'&&read.data.call.state!=='draft')return <Navigate to={'/raise/calls/'+encodeURIComponent(uid)} replace/>;
+  if(read.data?.viewer==='founder'&&read.data.call.state!=='draft')return <Navigate to={'/raise/capital-relationships/calls/'+encodeURIComponent(uid)} replace/>;
   return <main className="p-5 space-y-4 text-axal-ink dark:text-gray-100"><CallReadState read={read}>{read.data&&<RoundCallPageView state={{data:read.data,busy,error,message,amount,question,answers,target,reference,recipientPage}} on={on}/>}</CallReadState>
     {showSheet&&<RoundCallSheet projectId={read.data.call.project_id} initialCall={read.data.call.state==='draft'?read.data.call:null} onClose={()=>{setShowSheet(false);read.retry();}}/>}</main>;
 }

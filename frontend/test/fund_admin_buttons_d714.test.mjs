@@ -103,12 +103,12 @@ test('a GP of record and a branch admin make no access read; an HQ admin makes o
 
 test('the pages draw Capital call, Distribute and Issue through FundActControl with their acts', () => {
   // D1160 (#3067): Fund Ops' funds view and its call and distribution dialogs are retired; the
-  // console's tabs draw both acts through FundActControl (FundTabs.jsx), and FundsPage keeps the LPA drawer only.
+  // console's tabs draw both acts through FundActControl, and FundsPage keeps the LPA drawer only.
+  // D1163 (#3070): New capital call's Issue is in callDialogs.jsx, Execute in DistributionsTab.jsx.
   const fundsPage = src('pages/FundsPage.jsx');
   assert.doesNotMatch(fundsPage, /function AdminFundsView|setShowCC|setShowDist|fundsCapitalCallV2\(/);
-  const tabs = src('pages/admin/fundAdmin/FundTabs.jsx');
-  assert.match(tabs, /<FundActControl access=\{access\} act="capital_call\.issue"/);
-  assert.match(tabs, /<FundActControl access=\{access\} act="distribution\.execute"[^>]*>\s*<button type="button"[^>]*data-testid="distribution-execute"/);
+  assert.match(src('pages/admin/fundAdmin/callDialogs.jsx'), /<FundActControl access=\{access\} act="capital_call\.issue"[^>]*>\s*<button type="button"[^>]*data-testid="calls-preview-issue"/);
+  assert.match(src('pages/admin/fundAdmin/DistributionsTab.jsx'), /<FundActControl access=\{access\} act="distribution\.execute"[^>]*>\s*<button type="button"[^>]*data-testid="distribution-execute"/);
   const calls = src('pages/investor/InvestorFundCalls.jsx');
   assert.match(calls, /<FundActControl access=\{acts\} act="capital_call\.issue"[^>]*>\s*<button type="button" className="if2-issue" data-testid="button-issue-call"/);
   assert.equal(calls.split('data-testid="button-issue-call"').length, 2);
