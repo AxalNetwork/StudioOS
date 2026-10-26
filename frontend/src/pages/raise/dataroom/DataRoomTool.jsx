@@ -10,26 +10,28 @@ import DataRoomFile from './DataRoomFile.jsx';
 import DataRoomHome from './DataRoomHome.jsx';
 import DataRoomAccess from './DataRoomAccess.jsx';
 import DataRoomRequests from './DataRoomRequests.jsx';
+import DataRoomActivity from './DataRoomActivity.jsx';
+import DataRoomChecklist from './DataRoomChecklist.jsx';
+import DataRoomPreview from './DataRoomPreview.jsx';
 import { noPermission } from './accessModel';
 import { useAuth } from '../../../hooks/useAuthSync';
 import {
-  HOME_PATH, LINE, TABS, TITLE, WAITS, WORKSPACE_LINE,
-  activityRows, day, projectUidOf, tabHref, tabSearch, weekTiles, workspaceHref,
+  HOME_PATH, LINE, TABS, TITLE, WORKSPACE_LINE, projectUidOf, tabHref, tabSearch, workspaceHref,
 } from './dataRoomModel';
 
 /**
  * D1101 (#2456) — the Data room tool's tab bar and its tab pages. CycleRoute
  * draws Home (the module page) with `DataRoomHomeNav` under its header, and
  * `DataRoomTabPage` for the tab words under the module. Every row comes from
- * a read on `main`; see `dataRoomModel.js`.
+ * a read on `main`; see `dataRoomModel.js`. D1108 (#2988): Activity, Checklist
+ * and Preview draw D1105's and D1103's reads (`DataRoomActivity.jsx`,
+ * `DataRoomChecklist.jsx`, `DataRoomPreview.jsx`).
  */
 
 const CARD = 'rounded-xl border border-axal-hairline bg-white dark:border-gray-800 dark:bg-gray-900';
 const INK = 'text-axal-ink dark:text-gray-100';
 const MUTED = 'text-axal-muted dark:text-gray-400';
-const EYEBROW = 'text-[10.5px] font-extrabold uppercase tracking-[.07em] text-axal-muted dark:text-gray-400';
 const LINK = 'font-semibold text-axal-violet hover:text-axal-violet-deep dark:text-violet-300 dark:hover:text-violet-200';
-const MONO = 'font-mono tabular-nums';
 
 /** The tool's own tabs, a second level under the Raise modules: text with an underline. */
 export function DataRoomTabBar({ active, search = '' }) {
@@ -70,18 +72,6 @@ export function DataRoomHomeNav({ search = '' }) {
 
 function Skeleton({ testId }) {
   return <div className="h-24 w-full animate-pulse rounded-xl bg-axal-ground dark:bg-gray-800" aria-hidden="true" data-testid={testId} />;
-}
-
-function Section({ title, children, testId, aside }) {
-  return (
-    <section className={CARD} data-testid={testId}>
-      <div className="flex flex-wrap items-center justify-between gap-2 border-b border-axal-hairline px-4 py-3 dark:border-gray-800">
-        <h2 className={`m-0 text-[15px] font-extrabold tracking-[-.015em] ${INK}`}>{title}</h2>
-        {aside}
-      </div>
-      <div className="px-4 py-3">{children}</div>
-    </section>
-  );
 }
 
 /**
@@ -155,52 +145,27 @@ function RequestsTab({ read, retry }) {
   );
 }
 
-function ActivityTab({ read, retry }) {
-  const ready = read.status === 'ready';
-  const tiles = ready ? weekTiles(read.room) : [];
-  const rows = ready ? activityRows(read.room) : [];
+function ActivityTab({ read, retry, phone }) {
   return (
-    <div className="flex flex-col gap-4">
-      <Section title="This week" testId="dataroom-week">
-        <RoomState read={read} onRetry={retry} testId="dataroom-week">
-          <div className="grid gap-3 sm:grid-cols-3">
-            {tiles.map((t) => (
-              <div key={t.k} className="flex flex-col gap-0.5" data-testid="dataroom-week-tile">
-                <span className={EYEBROW}>{t.k}</span>
-                <span className={`text-[20px] font-extrabold ${MONO} ${INK}`}>{t.v}</span>
-                {t.sub && <span className={`text-[11.5px] ${MUTED}`}>{t.sub}</span>}
-              </div>
-            ))}
-          </div>
-        </RoomState>
-      </Section>
-      <Section title="The last fifty events" testId="dataroom-log">
-        <RoomState read={read} onRetry={retry} testId="dataroom-log">
-          {rows.length === 0
-            ? <p className={`m-0 text-[12.5px] ${MUTED}`} data-testid="dataroom-log-none">Nothing in the log yet.</p>
-            : (
-              <ul className="m-0 flex list-none flex-col p-0" data-testid="dataroom-log-list">
-                {rows.map((r) => (
-                  <li key={r.key} className="flex flex-wrap items-center gap-2 border-b border-axal-hairline py-2 text-[12.5px] last:border-0 dark:border-gray-800">
-                    <span className={INK}><strong className="font-semibold">{r.who}</strong> {r.verb}{r.what ? ` ${r.what}` : ''}</span>
-                    {r.tag && <span className={`rounded-full border border-axal-hairline px-2 py-0.5 text-[10.5px] font-bold ${MUTED}`}>{r.tag}</span>}
-                    <span className={`ml-auto text-[11.5px] ${MONO} ${MUTED}`}>{r.when ? day(r.when) : 'Not recorded'}</span>
-                  </li>
-                ))}
-              </ul>
-            )}
-        </RoomState>
-      </Section>
-    </div>
+    <RoomState read={read} onRetry={retry} testId="dataroom-activity">
+      <DataRoomActivity projectUid={read.uid} phone={phone} />
+    </RoomState>
   );
 }
 
-function Waits({ tab }) {
-  const titles = { checklist: 'Checklist', preview: 'Preview as an investor' };
+function ChecklistTab({ read, retry, search }) {
   return (
-    <Section title={titles[tab]} testId={`dataroom-${tab}`}>
-      <p className={`m-0 text-[12.5px] ${MUTED}`} data-testid={`dataroom-${tab}-wait`}>{WAITS[tab]}</p>
-    </Section>
+    <RoomState read={read} onRetry={retry} testId="dataroom-checklist">
+      <DataRoomChecklist projectUid={read.uid} search={search} />
+    </RoomState>
+  );
+}
+
+function PreviewTab({ read, retry }) {
+  return (
+    <RoomState read={read} onRetry={retry} testId="dataroom-preview">
+      <DataRoomPreview room={read.room} projectUid={read.uid} />
+    </RoomState>
   );
 }
 
@@ -208,8 +173,7 @@ export function DataRoomTabPage({ tab, projectId, projectStatus = 'ready', onRet
   const navigate = useNavigate();
   const [reload, setReload] = useState(0);
   const retry = useCallback(() => setReload((n) => n + 1), []);
-  const reads = tab === 'files' || tab === 'access' || tab === 'requests' || tab === 'activity';
-  const read = useRoom(reads ? projectId : null, reload);
+  const read = useRoom(projectId, reload);
   const here = TABS.find((t) => t.id === tab) || TABS[0];
   let body;
   // No venture means no read is made: say the venture list failed, never a skeleton.
@@ -219,8 +183,9 @@ export function DataRoomTabPage({ tab, projectId, projectStatus = 'ready', onRet
   else if (tab === 'files') body = <FilesTab read={read} retry={retry} search={search} projectId={projectId} />;
   else if (tab === 'access') body = <AccessTab read={read} retry={retry} phone={phone} />;
   else if (tab === 'requests') body = <RequestsTab read={read} retry={retry} />;
-  else if (tab === 'activity') body = <ActivityTab read={read} retry={retry} />;
-  else body = <Waits tab={tab} />;
+  else if (tab === 'activity') body = <ActivityTab read={read} retry={retry} phone={phone} />;
+  else if (tab === 'checklist') body = <ChecklistTab read={read} retry={retry} search={search} />;
+  else body = <PreviewTab read={read} retry={retry} />;
   return (
     <div className="flex min-w-0 flex-col gap-4" data-testid={`dataroom-${tab}-page`}>
       {phone

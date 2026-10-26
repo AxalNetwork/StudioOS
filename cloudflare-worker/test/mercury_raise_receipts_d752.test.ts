@@ -294,7 +294,7 @@ test('commitment writers are explicit and investor feeds update only sender meta
   const root = 'cloudflare-worker/src';
   const walk = (p: string): string[] => readdirSync(p, { withFileTypes: true }).flatMap((e) => (e.isDirectory() ? walk(join(p, e.name)) : [join(p, e.name)]));
   const writers = walk(root).filter((f) => /\.[cm]?[jt]s$/.test(f) && /UPDATE\s+commitments\b/i.test(readFileSync(f, 'utf8'))).map((f) => relative(root, f));
-  assert.deepEqual(writers, ['routes/deals.ts', 'services/mercury/investorFeeds.ts', 'services/mercuryPersonal.ts']);
+  assert.deepEqual(writers, ['routes/deal_workroom.ts', 'routes/deals.ts', 'services/mercury/investorFeeds.ts', 'services/mercuryPersonal.ts']);
   // D1217 permits Sent metadata; it cannot edit receiving-side fields.
   const senderSource = readFileSync(join(root, 'services/mercury/investorFeeds.ts'), 'utf8');
   const updates = [...senderSource.matchAll(/UPDATE\s+commitments\b/gi)];
@@ -307,4 +307,7 @@ test('commitment writers are explicit and investor feeds update only sender meta
   }
   const dealSource = readFileSync(join(root, 'routes/deals.ts'), 'utf8');
   assert.doesNotMatch(dealSource, /UPDATE\s+commitments\s+SET\s+status\s*=\s*'confirmed'/i, 'deal pledges never confirm a receipt');
+  // D1153: the reasoned withdrawal sets the status to withdrawn and nothing else.
+  const workroom = readFileSync(join(root, 'routes/deal_workroom.ts'), 'utf8');
+  assert.deepEqual([...workroom.matchAll(/UPDATE\s+commitments\s+SET\s+([^\n]*?)\s+WHERE/gi)].map((m) => m[1]), ["status = 'withdrawn'"]);
 });

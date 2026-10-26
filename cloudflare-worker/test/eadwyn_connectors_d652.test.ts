@@ -108,6 +108,8 @@ function world(opts: { reply?: string; verdict?: string } = {}) {
     CREATE TABLE integration_waitlist (id INTEGER PRIMARY KEY);
     CREATE TABLE project_members (id INTEGER PRIMARY KEY, project_id INTEGER, user_id INTEGER, role TEXT, status TEXT);
     CREATE TABLE user_company_links (user_id INTEGER, company_id INTEGER);
+    -- D1137 (migration 597): resolveActiveCompany reads an archived company as none.
+    CREATE TABLE IF NOT EXISTS company_profiles (id INTEGER PRIMARY KEY, archived_at TEXT);
     INSERT INTO user_company_links VALUES (${ME}, ${COMPANY});
     CREATE TABLE integration_companies (integration_id INTEGER, company_id INTEGER, enabled INTEGER);
     INSERT INTO integration_companies VALUES (1, ${COMPANY}, 1), (2, ${COMPANY}, 1);

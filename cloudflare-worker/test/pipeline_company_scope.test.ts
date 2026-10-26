@@ -67,6 +67,8 @@ function freshDb() {
     CREATE TABLE user_company_links (
       id INTEGER PRIMARY KEY AUTOINCREMENT, company_id INTEGER NOT NULL, user_id INTEGER NOT NULL
     );
+    -- D1137 (migration 597): resolveActiveCompany reads an archived company as none.
+    CREATE TABLE IF NOT EXISTS company_profiles (id INTEGER PRIMARY KEY, archived_at TEXT);
     CREATE TABLE project_stages (
       id INTEGER PRIMARY KEY AUTOINCREMENT, deal_id INTEGER NOT NULL,
       stage_name TEXT NOT NULL, status TEXT NOT NULL DEFAULT 'active',

@@ -181,7 +181,7 @@ export function buildNeeds(reads, now) {
   if (failed(reads.advisors)) unread.push('Advisor accounts with no profile');
   else {
     const n = (reads.advisors.data?.items || []).filter((i) => !i.has_advisor_profile).length;
-    if (n > 0) rows.push({ key: 'no-profile', text: `${plural(n, 'advisor account')} ${n === 1 ? 'has' : 'have'} no advisor profile.`, action: 'Open accounts', to: '/admin/held/accounts' });
+    if (n > 0) rows.push({ key: 'no-profile', text: `${plural(n, 'advisor account')} ${n === 1 ? 'has' : 'have'} no advisor profile.`, action: 'Open accounts', to: '/admin/accounts' });
   }
   if (failed(reads.deals)) unread.push('Partner deals ending soon');
   else {

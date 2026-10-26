@@ -87,6 +87,7 @@ const STORAGE = {
   areas: [
     area('data_room', 64, 859_832_320), area('diligence_files', 31, null, 3), area('research_library', 22, 50_331_648),
     area('message_attachments', 27, 100_663_296), area('interview_recordings', 4, 32_505_856),
+    ...['data_room_versions', 'session_audio', 'deck_reviews', 'validate_evidence', 'build_proofs', 'grow_minutes', 'brand_files', 'csv_imports'].map((k) => area(k, 1, 1024)),
   ],
 };
 
@@ -324,7 +325,7 @@ test('U6 renders the total or its absence, unknown sizes, an unreadable place, e
   const ok = html(h(StorageCard, { storage: ready(STORAGE) }));
   assert.match(ok, /data-testid="usage-storage-total"[\s\S]*Total not recorded/);
   assert.match(ok, /data-testid="usage-storage-diligence_files"[\s\S]*31 files[\s\S]*Not recorded[\s\S]*3 files with no size recorded/);
-  assert.match(ok, /Other files you keep on StudioOS are not counted yet\. No plan sets a storage limit\./);
+  assert.match(ok, /Identity documents, signed legal copies and fund documents do not count\. No plan sets a storage limit\./);
   assert.doesNotMatch(ok, /0 B/, 'an unknown size is never 0 bytes');
   const exact = html(h(StorageCard, { storage: ready({ ...STORAGE, total_bytes: 1_288_490_189, unknown_size_files: 0, areas: STORAGE.areas.map((a) => (a.bytes == null ? area(a.key, a.files, 1000) : a)) }) }));
   assert.match(exact, /1\.2 GB <span[^>]*>in 148 files/);

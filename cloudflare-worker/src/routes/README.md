@@ -35,6 +35,11 @@ D1150: `deal_context.ts`, mounted before the deal router at `/api/deals`,
 provides investor-owned stage/visit metadata and author/firm-private notes.
 No admin bypass; migration 600; writes and audit rows share a batch.
 
+D1153: `deal_workroom.ts`, mounted before `deals.ts` at `/api/deals`, serves
+the investor's working tabs: the data room's door and a request to the founder,
+the round as a count and a total, and a withdrawal with a required reason kept
+in the same batch as the withdrawal. Investors on the deal only; no migration.
+
 D973 reads live in `admin_network_reads.ts`, mounted before D976’s
 `admin_network.ts` at `/api/admin/network`. Opaque person refs use the
 read-only drawer; numeric account IDs continue to the standing router.
@@ -86,6 +91,8 @@ widened guard on this very sentence, which is the rule working.)
 /api/mail-link     → mail_link.ts (D811: Mail HMAC only, before session middleware; audiences, recipients, feedback and health)
 /api/auth          → auth.ts
 /api/scoring       → scoring.ts
+/api/company/…     → company_lifecycle.ts (D1137: archive, restore and the primary-admin transfer in one batch, primary admin only, each with its membership event; mounted at /api before company.ts)
+/api/projects      → project_lifecycle.ts (D1137: POST /:id/move to a company the owner belongs to, or out of one; POST /:id/transfer the owner seat to a co-founder with a founder account; each with its membership event; mounted before projects.ts)
 /api/projects      → projects.ts
 /api/cycles/build  → cycle_build.ts      (Build overview, six module reads, D662 field writes, and D686 system mappings)
 /api/legal         → legal.ts
@@ -126,6 +133,7 @@ widened guard on this very sentence, which is the rule working.)
 /api/fund-fees     → fund_fees.ts       (D709: the management fee's terms, admissions, net invested capital, offsets, and fee periods the GP previews and issues; moves no money)
 /api/fund-admin    → fund_admin.ts      (D714: GET /access, which fund acts this admin may take, from FUND_ACTS; D1158: GET /lps, the LP roster)
 /api/closings      → closings.ts        (D1215: a closing as a record — open, lines, route, evidence, the cap-table proposal, complete; the admin desk `adminClosings` is mounted at /api/admin/closings)
+/api/reporting     → reporting.ts       (D1058: reporting duties and periods — the founder's desk, the expected date and reminders; the investor's own duties, ask and waive)
 /api/fund-reporting → fund_reporting.ts
 /api/fund-booklets → fund_booklets.ts (D716: the Subscription Booklet, the applicant's ticks, paper and submit, HQ's read, PDF and withdraw; the e-sign send and the GP's acceptance (D759))
 /api/fund-notices  → fund_notices.ts    (D716: an Admin previews, the Super Admin issues, the LP reads their own; kept PDFs through Browser Run)
@@ -133,7 +141,7 @@ widened guard on this very sentence, which is the rule working.)
 /api/email         → email.ts
 /api/pipeline      → pipeline.ts
 /api/search        → search.ts
-/api/kyc           → kyc.ts
+/api/kyc           → kyc_governance.ts, kyc.ts  (D1232: renewals, renewal periods, the audit read and its export, mounted first so `/admin/:userId` does not read them as ids)
 /api/legal/esign   → esign.ts            (frontend calls /api/legal/esign/*)
 /api/network       → network.ts
 /api/networkfx     → networkfx.ts

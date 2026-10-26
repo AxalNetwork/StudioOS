@@ -166,6 +166,14 @@ const ledgerRow = (h) => ({
 });
 const GROUP = { founder: 'Founder', preferred: 'Investor', safe: 'Investor', option_pool: 'Option pool', common: 'Common' };
 
+const instrumentRow = (i) => ({
+  holder: i.holder || null,
+  type: i.instrument === 'note' ? 'Convertible note' : 'SAFE',
+  basis: i.basis === 'post_money' ? 'Post-money' : i.basis === 'pre_money' ? 'Pre-money' : NOT_RECORDED,
+  signed: day(i.issue_date),
+  amount: typeof i.amount === 'number' ? `${i.currency || 'Currency not recorded'} ${new Intl.NumberFormat('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(i.amount)}` : NOT_RECORDED,
+});
+
 /**
  * A view the Worker sent, in the shape a page draws. Summary: the split by
  * group and the rounds. Investor and Full: the positions after the last round
@@ -179,22 +187,33 @@ export function sharedView(read) {
   const split = Array.isArray(v.summary) ? v.summary.map((g) => ({ group: g.group, pct: pct(g.pct) })) : [];
   if (v.level === 'own_position') {
     return {
-      kind: 'own', holder: v.holder, split, disclosure: v.disclosure || null,
+      kind: 'own', holder: v.holder, split, splitReason: v.split_reason || null, disclosure: v.disclosure || null,
       rows: (v.position || []).map(ledgerRow),
-      instruments: (v.instruments || []).map((i) => ({ type: i.instrument === 'note' ? 'Convertible note' : 'SAFE', basis: i.basis === 'post_money' ? 'Post-money' : i.basis === 'pre_money' ? 'Pre-money' : NOT_RECORDED, signed: day(i.issue_date) })),
+      instruments: (v.instruments || []).map(instrumentRow),
       documents: (v.documents || []).map((d) => ({ title: d.title || NOT_RECORDED, status: d.status || NOT_RECORDED })),
     };
   }
   if (v.audience === 'summary') {
-    return { kind: 'summary', split, rounds: Number.isFinite(Number(v.rounds_completed)) ? Number(v.rounds_completed) : null, disclosure: v.disclosure || null };
+    return { kind: 'summary', split, splitReason: v.split_reason || null, rounds: v.rounds_completed != null && Number.isFinite(Number(v.rounds_completed)) ? Number(v.rounds_completed) : null, disclosure: v.disclosure || null };
   }
   const rounds = Array.isArray(v.rounds) ? v.rounds : [];
   const ledger = rounds.length ? rounds[rounds.length - 1]?.ledger : v.founding;
   return {
     kind: v.audience === 'full' ? 'full' : 'investor',
     name: v.scenario_name || null,
+    instruments: (v.instruments || []).map(instrumentRow),
     rows: (Array.isArray(ledger) ? ledger : []).map(ledgerRow),
     rounds: rounds.map((r) => ({ name: String(r?.name || 'Round'), price: typeof r?.price_per_share === 'number' ? `$${r.price_per_share.toFixed(2)} a share` : NOT_RECORDED })),
     disclosure: v.disclosure || null,
   };
+}
+
+/** Identities from recorded issuances include SAFE-only holders; pending proposals never grant access. */
+export function recordedHolderChoices(read) {
+  const rows = new Map();
+  for (const i of read?.issuances?.rows || []) {
+    if (i.status !== 'recorded') continue;
+    for (const h of [i.holder, i.from_holder]) if (h?.holder_id != null) rows.set(h.holder_id, { ref: `holder:${h.holder_id}`, name: h.name || 'Not recorded' });
+  }
+  return [...rows.values()];
 }

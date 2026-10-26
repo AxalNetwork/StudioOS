@@ -5,6 +5,7 @@ import { schedulePush } from '../integrations/autopush';
 import { getSQL } from '../db';
 import { requireAuth, requireRole, generateToken } from '../auth';
 import { resolveActiveCompany, ACTIVE_COMPANY_HEADER } from '../middleware/activeCompany';
+import { membershipEvent } from '../services/companyMembershipEvents';
 import {
   canAccessProject,
   getProjectMembershipRole,
@@ -1540,13 +1541,18 @@ projects.post('/:id/members', async (c) => {
       VALUES (${id}, ${role}, 'accepted', ${mode}, ${targetUserId}, ${connectionId}, ${user.id}, ${targetUserId}, datetime('now'))
       RETURNING id`;
 
-    await sql`INSERT INTO project_members
-        (project_id, user_id, role, status, source, invitation_id, cofounder_connection_id, added_by_user_id, accepted_at)
-      VALUES (${id}, ${targetUserId}, ${role}, 'accepted', ${mode}, ${inv.id}, ${connectionId}, ${user.id}, datetime('now'))
-      ON CONFLICT(project_id, user_id) DO UPDATE SET
-        role=excluded.role, status='accepted', source=excluded.source,
-        invitation_id=excluded.invitation_id, cofounder_connection_id=excluded.cofounder_connection_id,
-        accepted_at=datetime('now'), removed_at=NULL, updated_at=datetime('now')`;
+    // D1137: the seat and its membership event, in one batch.
+    await c.env.DB.batch([
+      c.env.DB.prepare(`INSERT INTO project_members
+          (project_id, user_id, role, status, source, invitation_id, cofounder_connection_id, added_by_user_id, accepted_at)
+        VALUES (?, ?, ?, 'accepted', ?, ?, ?, ?, datetime('now'))
+        ON CONFLICT(project_id, user_id) DO UPDATE SET
+          role=excluded.role, status='accepted', source=excluded.source,
+          invitation_id=excluded.invitation_id, cofounder_connection_id=excluded.cofounder_connection_id,
+          accepted_at=datetime('now'), removed_at=NULL, updated_at=datetime('now')`)
+        .bind(id, targetUserId, role, mode, inv.id, connectionId, user.id),
+      membershipEvent(c.env, { kind: 'seat_add', projectId: id, actorUserId: user.id, targetUserId, after: { role } }),
+    ]);
 
     return c.json({ ok: true, user_id: targetUserId, role });
   } finally {
@@ -1655,11 +1661,17 @@ projects.delete('/:id/members/:userId', async (c) => {
     if (ownerUserId != null && memberUserId === ownerUserId) {
       return c.json({ detail: 'The project owner cannot be removed' }, 400);
     }
-    await sql`UPDATE project_members SET status='removed', removed_at=datetime('now'), updated_at=datetime('now')
-      WHERE project_id = ${id} AND user_id = ${memberUserId} AND role <> 'owner'`;
-    // Cancel any still-pending invitations for that user.
-    await sql`UPDATE project_member_invitations SET status='revoked', updated_at=datetime('now')
-      WHERE project_id = ${id} AND invitee_user_id = ${memberUserId} AND status='pending'`;
+    const seat = await sql`SELECT role FROM project_members WHERE project_id = ${id} AND user_id = ${memberUserId} AND status = 'accepted' AND role <> 'owner' LIMIT 1`;
+    // D1137: the removal, the pending invitations it cancels and its
+    // membership event (when there was a seat to remove), in one batch.
+    await c.env.DB.batch([
+      c.env.DB.prepare(`UPDATE project_members SET status='removed', removed_at=datetime('now'), updated_at=datetime('now')
+        WHERE project_id = ? AND user_id = ? AND role <> 'owner'`).bind(id, memberUserId),
+      // Cancel any still-pending invitations for that user.
+      c.env.DB.prepare(`UPDATE project_member_invitations SET status='revoked', updated_at=datetime('now')
+        WHERE project_id = ? AND invitee_user_id = ? AND status='pending'`).bind(id, memberUserId),
+      ...(seat.length ? [membershipEvent(c.env, { kind: 'seat_remove', projectId: id, actorUserId: user.id, targetUserId: memberUserId, before: { role: seat[0].role } })] : []),
+    ]);
     return c.json({ ok: true });
   } finally {
     await sql.end();
@@ -1709,13 +1721,19 @@ projects.post('/invitations/accept', async (c) => {
 
     await seedOwnerMember(c.env, project);
     const role = sanitizeMemberRole(inv.role);
-    await sql`INSERT INTO project_members
-        (project_id, user_id, role, status, source, invitation_id, cofounder_connection_id, added_by_user_id, accepted_at)
-      VALUES (${project.id}, ${user.id}, ${role}, 'accepted', ${inv.source}, ${inv.id}, ${inv.cofounder_connection_id}, ${inv.invited_by_user_id}, datetime('now'))
-      ON CONFLICT(project_id, user_id) DO UPDATE SET
-        role=excluded.role, status='accepted', source=excluded.source,
-        invitation_id=excluded.invitation_id, accepted_at=datetime('now'), removed_at=NULL, updated_at=datetime('now')`;
-    await sql`UPDATE project_member_invitations SET status='accepted', invitee_user_id=COALESCE(invitee_user_id, ${user.id}), accepted_by_user_id=${user.id}, accepted_at=datetime('now'), updated_at=datetime('now') WHERE id = ${inv.id}`;
+    // D1137: the seat, the accepted invitation and the membership event, in one batch.
+    await c.env.DB.batch([
+      c.env.DB.prepare(`INSERT INTO project_members
+          (project_id, user_id, role, status, source, invitation_id, cofounder_connection_id, added_by_user_id, accepted_at)
+        VALUES (?, ?, ?, 'accepted', ?, ?, ?, ?, datetime('now'))
+        ON CONFLICT(project_id, user_id) DO UPDATE SET
+          role=excluded.role, status='accepted', source=excluded.source,
+          invitation_id=excluded.invitation_id, accepted_at=datetime('now'), removed_at=NULL, updated_at=datetime('now')`)
+        .bind(project.id, user.id, role, inv.source ?? null, inv.id, inv.cofounder_connection_id ?? null, inv.invited_by_user_id ?? null),
+      c.env.DB.prepare(`UPDATE project_member_invitations SET status='accepted', invitee_user_id=COALESCE(invitee_user_id, ?), accepted_by_user_id=?, accepted_at=datetime('now'), updated_at=datetime('now') WHERE id = ?`)
+        .bind(user.id, user.id, inv.id),
+      membershipEvent(c.env, { kind: 'seat_add', projectId: Number(project.id), actorUserId: user.id, targetUserId: user.id, after: { role } }),
+    ]);
     return c.json({ ok: true, project_id: project.id, role });
   } finally {
     await sql.end();

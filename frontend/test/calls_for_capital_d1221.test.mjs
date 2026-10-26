@@ -12,7 +12,7 @@ import React from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { MemoryRouter } from 'react-router-dom';
 import CallsTab from '../src/pages/raise/calls/CallsTab.jsx';
-import { LIST_PATH, NOT_YET, READINESS, WAITS, callHref, callRow, callsState, stateWord } from '../src/pages/raise/calls/callsModel.js';
+import { LIST_PATH, READINESS, callHref, callRow, callsState, stateWord } from '../src/pages/raise/calls/callsModel.js';
 import { CYCLES } from '../src/pages/cycles/cycleModel.js';
 
 const h = React.createElement;
@@ -36,16 +36,16 @@ test('the page state: off, unreadable, empty or the list; a count the read did n
   assert.equal(callsState({ state: 'unreadable' }).kind, 'unreadable');
   assert.equal(callsState(undefined).kind, 'unreadable', 'no read is never "none"');
   assert.equal(callsState({ enabled: true, items: [] }).kind, 'empty');
-  const r = callRow({ uid: 'a', name: 'Seed', state: 'sent', effective_state: 'open', amount_cents: 150000000, committed_cents: 10000000, recipients: 12, opened: null });
+  const r = callRow({ uid: 'a', name: 'Seed', state: 'sent', effective_state: 'open', sent_at: '2026-10-01', amount_cents: 150000000, committed_cents: 10000000, recipients: 12, opened: null });
   assert.equal(r.state, 'Open', 'the effective state wins');
   assert.equal(r.opened, null);
   assert.equal(r.indicatedCents, 10000000);
   assert.equal(callRow({ uid: 'b' }).name, 'Untitled call');
 });
 
-test('the readiness list is the canvas’s seven, and no wait says zero', () => {
+test('the readiness list is the canvas’s seven', () => {
+  // D1223 (#3222): readiness, delivery and co-founders are read now (D1222), so the waits are gone.
   assert.deepEqual(READINESS, ['Round target', 'Round terms', 'Pitch deck version', 'Data room', 'Use of funds', 'Traction', 'Target close']);
-  for (const [k, w] of Object.entries(WAITS)) assert.ok(!/\b0\b|\bnone\b/i.test(w), k);
 });
 
 /* ------------------------------------------------------------------ *
@@ -59,8 +59,8 @@ test('switched off (CLS1): what a call is, why it is off, New call disabled with
   assert.match(out, /#1008, item 19/);
   assert.match(out, /<button[^>]*disabled=""[^>]*data-testid="calls-new"/);
   assert.ok(!out.includes('Coming soon'), 'the one-line "Coming soon" is gone');
-  for (const r of READINESS) assert.ok(out.includes(r), r);
-  assert.ok(out.includes(NOT_YET) && out.includes('data-testid="calls-wait-readiness"'));
+  // D1223: the readiness card draws D1222's read (calls_page_d1223 holds its items).
+  assert.ok(out.includes('data-testid="calls-readiness"'));
 });
 
 test('the list (CLS2): every count the read carries, Indicated never Committed, each sent call at its address', () => {
@@ -70,11 +70,10 @@ test('the list (CLS2): every count the read carries, Indicated never Committed, 
   ] });
   assert.ok(out.includes('href="/raise/capital-relationships/calls/c1"'));
   assert.ok(out.includes('href="/raise/capital-relationships/calls/d1"'));
-  assert.match(out, /Indicated of target/);
+  assert.match(out, /Indicated/);
   assert.ok(!/committed/i.test(out.replace(/not payments or commitments/, '')), 'no amount is called committed');
-  assert.match(out, /12 · 9 · 4 · 3/);
-  assert.ok(out.includes('data-testid="calls-wait-delivery"'));
-  assert.ok(out.includes('href="/raise/call"'), 'New call opens Raise’s action while calls are on');
+  // D1223: the canvas's table (CLS2); an open call keeps New call off until it closes.
+  assert.match(out, /One call at a time\. Seed round is open\./);
 });
 
 test('empty and unreadable say so; neither draws a list', () => {

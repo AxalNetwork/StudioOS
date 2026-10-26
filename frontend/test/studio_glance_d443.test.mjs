@@ -85,7 +85,7 @@ test('the strip and the cards render that HQ glance, and neither links under /br
   assert.doesNotMatch(strip, /data-testid="studio-decide-seats"/);
   assert.match(strip, /U1/);
   assert.match(strip, /HQ-held/);
-  assert.match(strip, /href="\/admin\/held\/accounts"/);
+  assert.match(strip, /href="\/admin\/accounts"/); // D941: Accounts is /admin/accounts
   assert.doesNotMatch(strip, /href="\/branch\//);
   assert.match(cards, /admin-studio-hq/);
   assert.match(cards, /1 HQ template/);

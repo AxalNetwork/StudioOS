@@ -85,6 +85,18 @@ function fixture() {
   db.exec(`INSERT INTO cap_table_access_grants (project_id, user_id, holder_ref, level, granted_by) VALUES
     (${P}, ${INV}, NULL, 'investor', ${OWNER}), (${P}, ${INV_UNRELATED}, NULL, 'full', ${OWNER}),
     (${P}, ${OP}, NULL, 'summary', ${OWNER}), (${P}, ${HOLDER}, 'Harbor Seed Fund', 'none', ${OWNER});`);
+  db.exec(`INSERT INTO cap_table_share_classes(id,project_id,name,kind,authorized_shares) VALUES
+    (1,10,'Common','common',NULL),(2,10,'Options','option_pool',1000);
+    INSERT INTO cap_table_holders(id,user_id,project_id,name,kind) VALUES
+    (101,3,10,'Founder A','founder'),(102,3,10,'Founder B','founder'),(103,3,10,'Harbor Seed Fund','investor'),(104,3,10,'Private Employee','employee');
+    INSERT INTO cap_table_issuances(project_id,kind,holder_id,class_id,shares,source,origin,status,note) VALUES
+    (10,'founding',101,1,8000,'typed','owner','recorded','Private note'),
+    (10,'founding',102,1,2000,'typed','owner','recorded',NULL),
+    (10,'priced',103,1,1000,'typed','owner','recorded',NULL),
+    (10,'grant',104,2,100,'typed','owner','recorded',NULL),
+    (10,'grant',104,2,900,'typed','cofounder','proposed','Pending private');
+    INSERT INTO cap_table_issuances(project_id,kind,holder_id,amount_cents,source,origin,status) VALUES
+    (10,'safe',103,50000000,'typed','owner','recorded');`);
   return db;
 }
 
@@ -123,18 +135,19 @@ test('each level returns only its fields', async () => {
   const full = await call(db, OWNER, `/${P}`);
   assert.equal(full.status, 200, full.text);
   assert.deepEqual({ l: full.body.level, v: full.body.via, ro: full.body.read_only }, { l: 'full', v: 'owner', ro: false });
-  assert.equal(full.body.source, 'model');
-  assert.ok(full.text.includes('Founder B') && full.text.includes('"events"'));
+  assert.equal(full.body.source, 'record');
+  assert.ok(full.text.includes('Founder B') && full.text.includes('Private Employee'));
+  assert.ok(!full.text.includes('Private note') && !full.text.includes('Pending private'));
 
   const inv = await call(db, INV, `/${P}`);
   assert.equal(inv.body.level, 'investor');
   assert.ok(inv.text.includes('Founder A'), 'every investor and founder position');
   assert.ok(!inv.text.includes('"events"'), 'no free-text narration');
-  assert.equal(inv.body.view.rounds[0].ledger.filter((h: any) => h.type === 'option_pool').length, 1, 'the pool as one line');
+  assert.equal(inv.body.view.founding.filter((h: any) => h.type === 'option_pool').length, 1, 'the pool as one line');
 
   const sum = await call(db, OP, `/${P}`);
   assert.equal(sum.body.level, 'summary');
-  assert.deepEqual(Object.keys(sum.body.view).sort(), ['audience', 'disclosure', 'rounds_completed', 'scenario_name', 'summary']);
+  assert.deepEqual(Object.keys(sum.body.view).sort(), ['audience', 'disclosure', 'rounds_completed', 'scenario_name', 'split_reason', 'summary']);
   for (const name of ['Founder A', 'Harbor Seed Fund', 'shares']) assert.ok(!sum.text.includes(name), `summary shows no ${name}`);
 
   const own = await call(db, HOLDER, `/${P}`);
@@ -224,16 +237,16 @@ test('every open is logged, and an open that cannot be logged is refused', async
 
 test('a read that fails is a 5xx, never an empty level', async () => {
   const db = fixture();
-  db.exec('DROP TABLE cap_table_scenarios');
+  db.exec('DROP TABLE cap_table_issuances');
   const r = await call(db, OWNER, `/${P}`);
   assert.ok(r.status >= 500, String(r.status));
   const db2 = fixture();
   db2.exec('DROP TABLE cap_table_access_grants');
   assert.ok((await call(db2, INV, `/${P}`)).status >= 500, 'a broken grant store is not "not shared"');
   const empty = fixture();
-  empty.exec('DELETE FROM cap_table_scenarios');
+  empty.exec('DELETE FROM cap_table_issuances');
   const none = await call(empty, OWNER, `/${P}`);
-  assert.deepEqual(none.body.view, { recorded: false, reason: 'No cap table is saved for this venture yet.' });
+  assert.deepEqual(none.body.view, { recorded: false, reason: 'No issuance of shares is on record yet.' });
 });
 
 test('grants and revokes are the owner\'s only, each with one audit row; a changed level keeps the old row', async () => {
@@ -338,4 +351,13 @@ test('the views are built by copying: Summary and Own position carry nothing the
   const o = ownPositionView(result, inputs as any, 'harbor seed fund ');
   assert.ok(o.position.length >= 1, 'the holder is matched by name, case and spacing aside');
   assert.ok(!JSON.stringify(o).includes('Founder A') && !JSON.stringify(o).includes('Founder B'), 'no other holder named; the group label "Founders" is the split');
+});
+
+test('D1130 review: Investor reads SAFE-only investors from recorded holder kind, with no employee instruments', async () => {
+  const db=fixture();
+  db.exec("INSERT INTO cap_table_holders(id,user_id,project_id,name,kind) VALUES (105,3,10,'SAFE-only fund','investor'); INSERT INTO cap_table_issuances(project_id,kind,holder_id,amount_cents,currency,source,origin,status) VALUES (10,'safe',105,12345,'EUR','typed','owner','recorded'),(10,'safe',104,99999,'EUR','typed','owner','recorded')");
+  const r=await call(db,INV,`/${P}`);assert.equal(r.status,200);
+  assert.ok(r.body.view.instruments.some((i:any)=>i.holder==='SAFE-only fund' && i.amount===123.45 && i.currency==='EUR'));
+  assert.ok(!r.body.view.instruments.some((i:any)=>i.holder==='Private Employee'));
+  db.close();
 });
