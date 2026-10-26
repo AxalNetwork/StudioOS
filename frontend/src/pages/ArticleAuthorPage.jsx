@@ -14,7 +14,8 @@ import ReactMarkdown from 'react-markdown';
 import { wordsAndMinutes, slugify } from '../lib/articleMarkdown';
 import { appOrigin } from '../lib/branchHost';
 import { isSuperAdminUser } from '../lib/shellRole';
-import { Lightbox, actionGhost, actionPrimary } from '../ui';
+import Lightbox from '../ui/Lightbox';
+import { ghost as actionGhost, primary as actionPrimary } from '../ui/ActionSheet';
 
 // Task #1 — Article author dashboard, scoped to the /articles surface
 // (role-aware list, dynamic sector taxonomy from `/api/articles/sectors`,
