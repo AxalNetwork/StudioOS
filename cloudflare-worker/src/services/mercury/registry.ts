@@ -19,11 +19,12 @@ const money = (value: number | null, readAt: string | null) => value === null
   : Number.isSafeInteger(value) ? { cents: value, reason: null } : { cents: null, reason: 'unreadable' };
 
 export const absentMercury = (reason: 'unmatched' | 'ambiguous' | 'unreadable') => ({
-  account_uid: null, current: { cents: null, reason }, available: { cents: null, reason }, read_at: null, reason,
+  account_uid: null, kind: null, connected: null,
+  current: { cents: null, reason }, available: { cents: null, reason }, read_at: null, reason,
 });
 
 type StoredAccount = {
-  uid: string; entity_key: string; last_four: string;
+  uid: string; entity_key: string; last_four: string; kind: string; connection_status: string;
   current_cents: number | null; available_cents: number | null; balance_read_at: string | null;
 };
 
@@ -31,7 +32,8 @@ type StoredAccount = {
 export async function registryMercury(env: Env, accounts: ConsoleAccount[]) {
   if (!accounts.length) return [];
   const result = await env.DB.prepare(
-    `SELECT a.uid, a.entity_key, a.last_four, a.current_cents, a.available_cents, a.balance_read_at
+    `SELECT a.uid, a.entity_key, a.last_four, a.kind, c.status AS connection_status,
+            a.current_cents, a.available_cents, a.balance_read_at
        FROM mercury_accounts a JOIN mercury_entity_connections c ON c.id = a.connection_id AND c.entity_key = a.entity_key
        WHERE a.entity_key IN (SELECT value FROM json_each(?))`,
   ).bind(JSON.stringify([...new Set(accounts.map(a => a.entity_key))])).all<StoredAccount>();
@@ -40,7 +42,8 @@ export async function registryMercury(env: Env, accounts: ConsoleAccount[]) {
     const matches = (result.results || []).filter(a => a.entity_key === account.entity_key && a.last_four === account.account_last4);
     if (matches.length !== 1) return absentMercury(matches.length ? 'ambiguous' : 'unmatched');
     const a = matches[0];
-    return { account_uid: a.uid, current: money(a.current_cents, a.balance_read_at), available: money(a.available_cents, a.balance_read_at), read_at: a.balance_read_at, reason: null };
+    return { account_uid: a.uid, kind: a.kind, connected: a.connection_status === 'active',
+      current: money(a.current_cents, a.balance_read_at), available: money(a.available_cents, a.balance_read_at), read_at: a.balance_read_at, reason: null };
   });
 }
 
