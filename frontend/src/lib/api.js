@@ -29,6 +29,7 @@ export * from './api/approvalBoards.js';
 export * from './api/assistants.js';
 export * from './api/bankAccounts.js';
 export * from './api/billingAlerts.js';
+export * from './api/billingCheckout.js';
 export * from './api/billingInvoices.js';
 export * from './api/buildPlan.js';
 export * from './api/calendarItems.js';

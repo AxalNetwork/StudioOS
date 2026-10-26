@@ -125,6 +125,24 @@ export function inboxRows(reply) {
   }));
 }
 
+/**
+ * D1047 (APR15): a row as a phone card's pill: the age with its band. An
+ * unknown age is the row's "Age not recorded", whose band has no tone, so no
+ * band is drawn for it.
+ */
+export function cardAge(row) {
+  if (!row) return { text: 'Age not recorded', tone: null };
+  return { text: row.band?.tone ? `${row.age} · ${row.band.label}` : row.age, tone: row.band?.tone || null };
+}
+
+/** D1047 (APR15): what the phone's "Filters · [n]" counts: every filter the sheet sets, not the order. */
+export function filterCount(filters = {}) {
+  return ['q', 'group', 'lane', 'age', 'assigned'].filter((k) => filters[k] != null && filters[k] !== '').length;
+}
+
+/** The order's words for the phone's Sort button. */
+export const sortLabel = (key) => (SORTS.find((s) => s.key === (key || 'oldest')) || SORTS[0]).label;
+
 /** "1–25 of 133", "1–25 of 123 +" when a lane failed, "1–25 of —" when the total is not known. */
 export function pageLine(reply) {
   const n = Array.isArray(reply?.items) ? reply.items.length : 0;
