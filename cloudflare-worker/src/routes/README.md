@@ -377,3 +377,9 @@ D1133: `billing.ts` mounts `/alerts/:id/pay` and `/alerts/:id/update-card` under
 D1135: `company.ts` adds member self-leave and validates create/rename; `projects.ts` counts live ventures, adds owner restore within 30 days and sends email-mode team invitations.
 
 D1123: `admin_lab_operations.ts` adds `/cohorts/:cohort/capacity`, the latest stored capacity event for SL6, separately from current Settings. It never returns free-form event details.
+
+D1206 (#3172): `calendar.ts` applies Investor Professional only to
+IC creation; calendar reads, including the token subscription, remain available
+on every plan. Studio/All studios are separate read-only Admin/Super Admin
+scopes with explicit availability; personal ownership and deal-party gates
+still govern every sync, push and export.

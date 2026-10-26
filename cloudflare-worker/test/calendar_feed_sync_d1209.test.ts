@@ -19,7 +19,6 @@ import { DatabaseSync } from 'node:sqlite';
 import { Hono } from 'hono';
 import { SignJWT } from 'jose';
 import calendar from '../src/routes/calendar.ts';
-import { requireInvestorTierExcept } from '../src/middleware/requireInvestorTier.ts';
 import { onAxalSessionCreated } from '../src/services/calendar/sync.ts';
 import { accountMarker, takeRetainedMarker, retainCopies, SYNC_ERRORS } from '../src/services/calendar/syncState.ts';
 
@@ -93,9 +92,7 @@ function fixture() {
     MICROSOFT_CALENDAR_REDIRECT_URI: 'https://app.example.test/api/calendar/microsoft/callback',
   };
   const app = new Hono<any>();
-  const gate = requireInvestorTierExcept('professional');
-  app.use('/api/calendar', gate);
-  app.use('/api/calendar/*', gate);
+  // D1206: match index.ts; calendar reads/subscriptions have no broad tier gate.
   app.route('/api/calendar', calendar);
   app.onError((e, c) => (e.message === 'Unauthorized' ? c.json({ detail: 'Not authenticated' }, 401) : c.json({ error: e.message }, 500)));
   const ctx = { waitUntil() {}, passThroughOnException() {} };
@@ -224,14 +221,15 @@ test('a rotated token stops at once, a removed one too, and each token answers o
   assert.equal((await f.anonymous('https://axal.example.test/api/calendar/feed/calendar.ics')).status, 404);
 });
 
-test('the feed is outside the session gate, and a Free investor\'s token gets the paywall\'s 402', async () => {
+test('D1206: both subscriptions remain readable for a Free or lapsed investor', async () => {
   const f = fixture();
   const free = (await f.signedIn('/api/calendar/subscription', 4, 'POST'));
-  assert.equal(free.status, 402, 'the signed-in route stays behind the plan gate');
+  assert.equal(free.status, 201, 'subscription creation is available on Free');
+  assert.equal((await f.anonymous(free.body.url)).status,200);
   // A token made while on Professional, after the plan lapsed.
   const made = (await f.signedIn('/api/calendar/subscription', 3, 'POST')).body;
   f.db.prepare("UPDATE users SET investor_tier = 'free', investor_subscription_status = 'free' WHERE id = 3").run();
-  assert.equal((await f.anonymous(made.url)).status, 402);
+  assert.equal((await f.anonymous(made.url)).status, 200);
 });
 
 // ─────────────────────────────────────────────── the sync error state

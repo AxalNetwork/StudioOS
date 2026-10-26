@@ -33,6 +33,7 @@ function fixture() {
   // 13 an investor account on Fixture venture's founder record (not a founder).
   for (let i = 1; i <= 13; i++) db.prepare('INSERT INTO users (id,uid,email,name,role,founder_id) VALUES (?,?,?,?,?,?)')
     .run(i, uidOf(i), `member-${i}@example.test`, `Fixture ${i}`, i === 1 ? 'admin' : i === 2 || i === 3 ? 'founder' : 'investor', i === 2 ? 102 : i === 3 ? 103 : null);
+  db.exec("UPDATE users SET investor_tier='professional' WHERE role='investor'");
   db.exec(`INSERT INTO projects (id,name,founder_id) VALUES (20,'Fixture venture',102),(30,'Other venture',103);
     INSERT INTO deals (id,project_id) VALUES (200,20),(300,30);
     INSERT INTO deal_invitations (deal_id,investor_user_id) VALUES (200,4),(300,5);
