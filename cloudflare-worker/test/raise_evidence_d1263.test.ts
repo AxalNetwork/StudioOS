@@ -245,9 +245,26 @@ test('an unreadable interview dependency cannot become an empty theme; missing-s
 
 
 test('mutation replies redact bank values for another Lab founder just like reads and omit internal write fields',async()=>{
- const w=world();try{sources(w);const i=await pin(w,'bank-runway');assert.equal(i.value_num,8);assert.equal('mutation_uid' in i,false);assert.equal('accepted_by' in i,false);
- const other=await raiseEvidenceContext(w.env,w.db.prepare('SELECT * FROM users WHERE id=6').get() as any,1,10);const page=await readRaiseEvidence(other);assert.equal(page.items.rows?.find(r=>r.uid===i.uid)?.value_num,null);
- const hidden=await setSharing(other,i.uid,{version:1,visibility:'private',state:'unpinned'});assert.equal(hidden.state,'unpinned');assert.equal(hidden.value_num,null);assert.equal(hidden.value_unit,null);assert.equal(hidden.currency,null);assert.equal('mutation_uid' in hidden,false);assert.equal('accepted_by' in hidden,false);
- const owned=await setSharing(w.ctx,i.uid,{version:2,visibility:'private',state:'pinned'});assert.equal(owned.value_num,8);assert.equal(owned.version,3);
+ const w=world();try{sources(w);const i=await pin(w,'bank-runway');assert.equal(i.value_num,8);assert.match(i.snapshot_hash??'',/^[a-f0-9]{64}$/);assert.equal('mutation_uid' in i,false);assert.equal('accepted_by' in i,false);
+ const other=await raiseEvidenceContext(w.env,w.db.prepare('SELECT * FROM users WHERE id=6').get() as any,1,10);const page=await readRaiseEvidence(other);assert.equal(page.items.rows?.find(r=>r.uid===i.uid)?.value_num,null);assert.equal(page.items.rows?.find(r=>r.uid===i.uid)?.snapshot_hash,null);assert.equal(page.proposals.rows?.find(r=>r.kind==='bank-revenue')?.snapshot_hash,null);
+ const hidden=await setSharing(other,i.uid,{version:1,visibility:'private',state:'unpinned'});assert.equal(hidden.state,'unpinned');assert.equal(hidden.value_num,null);assert.equal(hidden.value_unit,null);assert.equal(hidden.currency,null);assert.equal(hidden.snapshot_hash,null);assert.equal('mutation_uid' in hidden,false);assert.equal('accepted_by' in hidden,false);
+ const owned=await setSharing(w.ctx,i.uid,{version:2,visibility:'private',state:'pinned'});assert.equal(owned.value_num,8);assert.equal(owned.snapshot_hash,i.snapshot_hash);assert.equal(owned.version,3);
+ }finally{w.db.close();}
+});
+
+
+test('confirming a newly bank-derived source starts it Private, and an explicit sharing choice is honored',async()=>{
+ const w=world();try{sources(w);const i=await pin(w);await setSharing(w.ctx,i.uid,{version:1,visibility:'summary'});
+ w.db.exec("UPDATE project_metrics SET source='mercury'");seed(w,'connector_fed_items',{integration_id:1,project_id:1,module:'grow',kind:'metric_month',external_id:'changed-metric',local_table:'project_metrics',local_id:1});
+ const bank=await setSharing(w.ctx,i.uid,{version:2,confirm_current:true});assert.equal(bank.private_reason,'bank');assert.equal(bank.visibility,'private');
+ const shared=await setSharing(w.ctx,i.uid,{version:3,visibility:'summary'});assert.equal(shared.visibility,'summary');assert.equal(shared.private_reason,'bank');
+ }finally{w.db.close();}
+});
+
+
+test('snapshot fingerprints depend on the private server key, remain deterministic, and never fall back to public hashes',async()=>{
+ const w=world();try{sources(w);const first=await collectEvidenceSources(w.env,1,1),again=await collectEvidenceSources(w.env,1,1);assert.deepEqual(first.candidates.map(c=>c.snapshot_hash),again.candidates.map(c=>c.snapshot_hash));
+ const rotated=await collectEvidenceSources({...w.env,JWT_SECRET:'u'.repeat(64)},1,1);assert.equal(first.candidates.length,rotated.candidates.length);assert.ok(first.candidates.every((c,i)=>c.snapshot_hash!==rotated.candidates[i].snapshot_hash));
+ const missing=await collectEvidenceSources({...w.env,JWT_SECRET:''},1,1);assert.equal(missing.candidates.length,0);assert.ok(missing.blocks.some(b=>b.state==='unreadable'));
  }finally{w.db.close();}
 });

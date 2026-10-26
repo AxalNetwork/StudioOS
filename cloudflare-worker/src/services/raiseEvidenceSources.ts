@@ -154,8 +154,15 @@ export function evidenceStale(date: string | null, days: number, now: string): b
   if(date.length===7){const start=Date.parse(date+'-01T00:00:00Z');const end=new Date(start);end.setUTCMonth(end.getUTCMonth()+1);return end.getTime()<=cutoff?true:start>=cutoff?false:null;}
   return Date.parse(date+'T00:00:00Z')<cutoff;
 }
-export async function evidenceHash(value: unknown): Promise<string> {
-  const bytes=await crypto.subtle.digest('SHA-256',new TextEncoder().encode(JSON.stringify(value)));
+/** Domain-separated HMAC: public fingerprints must not allow guessing low-entropy private figures. */
+async function snapshotKey(env:Env):Promise<CryptoKey>{
+  if(typeof env.JWT_SECRET!=='string'||!env.JWT_SECRET)throw new Error('source_unreadable');
+  const root=await crypto.subtle.importKey('raw',new TextEncoder().encode(env.JWT_SECRET),{name:'HMAC',hash:'SHA-256'},false,['sign']);
+  const derived=await crypto.subtle.sign('HMAC',root,new TextEncoder().encode('studioos:raise-evidence:snapshot-key:v1'));
+  return crypto.subtle.importKey('raw',derived,{name:'HMAC',hash:'SHA-256'},false,['sign']);
+}
+export async function evidenceHash(value:unknown,key:CryptoKey):Promise<string>{
+  const bytes=await crypto.subtle.sign('HMAC',key,new TextEncoder().encode(JSON.stringify(value)));
   return Array.from(new Uint8Array(bytes),b=>b.toString(16).padStart(2,'0')).join('');
 }
 export const candidateKey = (c: Pick<EvidenceCandidate,'area'|'source_table'|'source_ref'>) => JSON.stringify([c.area,c.source_table,c.source_ref]);
@@ -254,14 +261,16 @@ export async function collectEvidenceSources(env:Env, projectId:number, bankUser
       data.set('themes',data.get('themes')!.map(row=>({...row,mentions:mentions.get(Number(row.id))?.length??0,observed_on:mentions.get(Number(row.id))?.filter(Boolean).sort().at(-1)??null})));
     }catch{data.delete('themes');const b=blocks.find(b=>b.dataset==='themes')!;b.state='unreadable';b.count=null;b.reason='This source could not be read. Try again.';}
   }
+  const key=await snapshotKey(env).catch(()=>null);
   const candidates:EvidenceCandidate[]=[];
   for(const rule of EVIDENCE_RULES){if(onlyKinds&&!onlyKinds.includes(rule.kind))continue;const rows=data.get(rule.dataset);if(!rows)continue;
     try{for(const m of materials(rule,rows)){
+      if(!key)throw new Error('source_unreadable');
       if(!/^[A-Za-z0-9_:./-]{1,200}$/.test(m.ref))throw new Error('source_unreadable');
       const origin=provenance(m.row), label=m.source??(rule.source==='record'?origin.label:rule.source);
       const provider=m.provider??(label==='connector'?(origin.provider??(rule.private_reason==='bank'?'mercury':null)):null);
       const observed=evidenceDate(m.date), strength=m.strength??(label==='typed'?'anecdote':num(m.value)!=null||label==='signed'?'measured':label==='document'?'pattern':'anecdote');
-      for(const area of rule.areas){const snapshot_hash=await evidenceHash({kind:rule.kind,area,source_table:rule.source_table,source_ref:m.ref,source_label:label,provider,observed_on:observed,material:m.row});
+      for(const area of rule.areas){const snapshot_hash=await evidenceHash({project_id:projectId,kind:rule.kind,area,source_table:rule.source_table,source_ref:m.ref,source_label:label,provider,observed_on:observed,material:m.row},key);
         candidates.push({kind:rule.kind,area,source_table:rule.source_table,source_ref:m.ref,provider,source_label:label,strength,observed_on:observed,summary:rule.summary,
           value_num:num(m.value),value_unit:m.unit??null,currency:string(m.row.currency),snapshot_hash,private_reason:m.privateReason??rule.private_reason??null,backs:rule.backs,
           stale:evidenceStale(observed,rule.days,now),date_reason:observed?null:'The source has no recorded observation date; a sync timestamp is not used.'});}

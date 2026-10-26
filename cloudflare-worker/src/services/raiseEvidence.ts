@@ -139,7 +139,7 @@ function itemMetadata(row:RaiseEvidenceItem){
 }
 function founderItem(row:RaiseEvidenceItem,found:EvidenceCandidate|undefined,failed=false){
   const changed=found?found.snapshot_hash!==row.snapshot_hash:null,bankUnavailable=row.private_reason==='bank'&&(!found||failed);
-  return {...itemMetadata(row),id:row.id,private_reason:row.private_reason,source_table:row.source_table,source_ref:row.source_ref,snapshot_hash:row.snapshot_hash,
+  return {...itemMetadata(row),id:row.id,private_reason:row.private_reason,source_table:row.source_table,source_ref:row.source_ref,snapshot_hash:bankUnavailable?null:row.snapshot_hash,
     value_num:bankUnavailable?null:row.value_num,value_unit:bankUnavailable?null:row.value_unit,currency:bankUnavailable?null:row.currency,
     source_state:failed?'unreadable':!found?'not_recorded':changed?'changed':'recorded',source_changed:changed,
     stale:found?.stale??null,date_reason:found?.date_reason??'The source observation date is not recorded.'};
@@ -257,12 +257,13 @@ export async function setSharing(ctx:RaiseEvidenceContext,uid:string,data:Record
   if(data.visibility!==undefined&&!['private','summary','after_nda'].includes(String(data.visibility)))throw new RaiseEvidenceError('invalid',400);
   if(data.state!==undefined&&!['pinned','unpinned'].includes(String(data.state)))throw new RaiseEvidenceError('invalid',400);
   if(data.confirm_current!==undefined&&typeof data.confirm_current!=='boolean')throw new RaiseEvidenceError('invalid',400);
-  const visibility=(data.visibility??old.visibility) as RaiseEvidenceItem['visibility'],state=(data.state??old.state) as RaiseEvidenceItem['state'];
+  let visibility=(data.visibility??old.visibility) as RaiseEvidenceItem['visibility'];const state=(data.state??old.state) as RaiseEvidenceItem['state'];
   // Unpin and make-private remain possible when the source is gone or unreadable.
   let current:Omit<EvidenceCandidate,'backs'|'stale'|'date_reason'>=old;
   if(state==='pinned'&&(visibility!=='private'||data.confirm_current===true||old.state!=='pinned')){
     current=await live(ctx,old);if(current.snapshot_hash!==old.snapshot_hash&&data.confirm_current!==true)throw new RaiseEvidenceError('changed',409);
   }else if(data.confirm_current===true)current=await live(ctx,old);
+  if(current.private_reason&&current.private_reason!==old.private_reason&&data.visibility===undefined)visibility='private';
   const token=nonce();
   const change=ctx.env.DB.prepare(`UPDATE raise_evidence_items SET visibility=?,state=?,snapshot_hash=?,source_label=?,provider=?,strength=?,observed_on=?,summary=?,value_num=?,value_unit=?,currency=?,private_reason=?,version=version+1,mutation_uid=?,updated_by=?,updated_at=CURRENT_TIMESTAMP
     WHERE uid=? AND project_id=? AND version=? AND EXISTS(SELECT 1 FROM projects p JOIN users u ON u.id=? AND u.is_active=1
@@ -374,9 +375,10 @@ export async function readRaiseEvidence(ctx:RaiseEvidenceContext,query:{limit?:n
     return {state:'recorded',rows:rows.results.slice(0,limit).map(q=>{const offered=plain(q.payload_json);if(!offered)throw new Error('proposal_unreadable');
       const found=current.get(q.source_ref),fresh=found?.snapshot_hash===offered.snapshot_hash;
       const rule=EVIDENCE_RULES.find(r=>r.kind===offered.kind),failed=rule&&sources?.blocks.some(b=>b.dataset===rule.dataset&&b.state==='unreadable');
+      const bankUnavailable=offered.private_reason==='bank'&&(!found||failed);
       const metadata={uid:q.uid,area:offered.area,kind:offered.kind,source_label:offered.source_label,provider:offered.provider,strength:offered.strength,observed_on:offered.observed_on,summary:offered.summary,status:q.status};
       if(!ctx.founder)return metadata;
-      return {...metadata,source_table:offered.source_table,source_ref:offered.source_ref,snapshot_hash:offered.snapshot_hash,value_num:fresh?found?.value_num??null:null,
+      return {...metadata,source_table:offered.source_table,source_ref:offered.source_ref,snapshot_hash:bankUnavailable?null:offered.snapshot_hash,value_num:fresh?found?.value_num??null:null,
         value_unit:fresh?found?.value_unit??null:null,currency:fresh?found?.currency??null:null,can_accept:!!fresh,source_state:failed?'unreadable':fresh?'recorded':found?'changed':'not_recorded',
         date_reason:found?.date_reason??'The source observation date is not recorded.',stale:found?.stale??null};
     }),has_more:rows.results.length>limit};
