@@ -14,7 +14,7 @@ import { DatabaseSync } from 'node:sqlite';
 import { SignJWT } from 'jose';
 import calendar from '../src/routes/calendar.ts';
 import * as service from '../src/services/calendar.ts';
-import { canOf, hrefOf } from '../src/services/calendar/items.ts';
+import { canOf, COPYABLE_KINDS, hrefOf } from '../src/services/calendar/items.ts';
 import { encryptString } from '../src/services/cryptoBox.ts';
 
 const SECRET = 'synthetic-calendar-1207-'.repeat(3);
@@ -154,6 +154,14 @@ test('D1207: each item carries its family, role, actions, page, names and reason
     const founderStrict = await service.fetchUserEvents(f.env, 2, 'founder', FROM, TO);
     assert.equal(founderStrict.some((e) => e.status === 'cancelled'), false);
   } finally { await f.close(); }
+});
+
+test('D1207: an item offers Copy for exactly the kinds the push route accepts', () => {
+  const route = readFileSync(new URL('../src/routes/calendar.ts', import.meta.url), 'utf8');
+  const set = route.match(/const PUSHABLE_KINDS = new Set\(\[([\s\S]*?)\]\);/)?.[1] || '';
+  const kinds = [...set.matchAll(/'(\w+)'/g)].map((m) => m[1]).sort();
+  assert.equal(kinds.length, 6, 'the route PUSHABLE_KINDS set did not parse');
+  assert.deepEqual([...COPYABLE_KINDS].sort(), kinds);
 });
 
 test('D1207: the item rules, case by case', () => {

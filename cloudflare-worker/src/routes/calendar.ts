@@ -26,7 +26,7 @@ import { canAccessProject, getProjectMembershipRole } from '../services/projectA
 import { userMayReadDeal } from './deals';
 import { addToCalendarLinks, eventVisibleTo, joinLinkAllowed, MY_EVENT_KINDS } from '../services/calendar/myEvents';
 import { feedStatus, mintFeedToken, resolveFeedToken, revokeFeedToken } from '../services/calendar/feedTokens';
-import { COPYABLE_KINDS, describeItems } from '../services/calendar/items';
+import { describeItems } from '../services/calendar/items';
 import { investorUpsell, userMeetsInvestorTier } from '../middleware/requireInvestorTier';
 import { logAdminAction } from '../services/adminAudit';
 import { requireAuth } from '../auth';
@@ -938,8 +938,12 @@ calendar.get('/deals', safe('deal_pick', 'Could not search deals', async (c) => 
 // user's OAuth connection. POST /api/calendar/push/:kind/:source_id pushes
 // one specific Axal session to whichever providers the caller has connected.
 // ===========================================================================
-// The same list an item's `can.copy` reads (D1207, services/calendar/items.ts).
-const PUSHABLE_KINDS = new Set<string>(COPYABLE_KINDS);
+// An item's `can.copy` reads the same six (COPYABLE_KINDS in
+// services/calendar/items.ts); calendar_items_d1207 holds the two lists equal.
+const PUSHABLE_KINDS = new Set([
+  'advisor_booking', 'ic_meeting', 'founder_checkin', 'partner_office_hour',
+  'event_ticket', 'event_hosted',
+]);
 calendar.post('/push/:kind/:source_id', safe('push_one', 'Could not push event', async (c) => {
   const user = await requireAuth(c);
   const kind = String(c.req.param('kind') || '');
