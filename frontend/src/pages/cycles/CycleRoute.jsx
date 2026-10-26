@@ -44,7 +44,7 @@ import RoadmapFromGithub from './RoadmapFromGithub';
 import MvpFromGithub from './MvpFromGithub';
 import UpdatesHistory from './UpdatesHistory';
 import ReportingDesk from './ReportingDesk';
-import BuildPlan, { BuildPlanDoor } from './BuildPlan';
+import BuildPlan, { BuildPlanDoor, VerdictRecordWithPlan } from './BuildPlan';
 import { PmfPart, ReadinessDoor } from './PmfPart';
 import UpdateAskReplies from './UpdateAskReplies';
 import CallsHistory from './CallsHistory';
@@ -150,6 +150,11 @@ const CYCLE_DEFS = {
     // what the read sends, with the session's working parts inside it.
     recordPage: toFnMap({
       'customer-research': (read, ctx) => <InterviewRecord read={read} {...ctx} />,
+      // D1069 (#2939, VB2a): after a given Proceed or Pivot, "Plan the build" above the record.
+      verdict: (read, ctx) => <VerdictRecordWithPlan read={read} render={(record) => (
+        <RecordView record={record} activity={ctx.activity} cycleName={ctx.cycleName} moduleName={ctx.moduleName} onLink={ctx.onLink}
+          onForm={ctx.onForm} onWrite={ctx.onWrite} onClient={ctx.onClient} onShowAll={ctx.onShowAll} />
+      )} />,
     }),
   },
   /**
@@ -177,10 +182,11 @@ const CYCLE_DEFS = {
     // D840 part 2 (#2347): every Raise module's From Mercury, the founder's alone, anchored at #from-mercury.
     parts: toFnMap({
       ...Object.fromEntries(MODULES.raise.map((m) => [m.slug, (data, ctx) => mercuryPart(m.slug, data, ctx)])),
-      // D909 (#2693, NAR1): Home's tiles, Needs you and footer, from the module read's `parts.narrative`.
+      // D909 (#2693, NAR1): Home's tiles, Needs you and footer, from the module read's `parts.narrative`;
+      // D913: its Objections heard, with no Answer it for an admin.
       'investor-narrative': (data, ctx) => (
         <>
-          <NarrativeHome data={data} />
+          <NarrativeHome data={data} admin={isNarrativeAdmin({ role: ctx.role })} />
           {mercuryPart('investor-narrative', data, ctx)}
         </>
       ),
@@ -993,7 +999,7 @@ export default function CycleRoute({ cycle, lightbox = false, adding = false, re
     // D1063 (#2426): Validate → Build's plan, under Build's header and tab row.
     body = (
       <BuildPlan tab={buildPlan} projectId={projectId} projectStatus={projectStatus} onRetryProject={() => setProjectsKey((n) => n + 1)}
-        search={location.search} cards={tabs} action={action} phone={phone} />
+        search={location.search} cards={tabs} action={action} phone={phone} role={user?.role ?? null} lab={user?.spinout_lab_active === 1 && user?.role !== 'admin'} />
     );
   } else if (capTableTab) {
     body = (

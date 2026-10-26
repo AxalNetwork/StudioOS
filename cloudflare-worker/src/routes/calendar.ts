@@ -1,11 +1,13 @@
 /**
  * Calendar routes — port of backend/app/api/routes/calendar.py.
  *
- * Mounted at /api/calendar. Nineteen endpoints across:
+ * Mounted at /api/calendar. Twenty-three endpoints across:
  *   - unified events feed + ICS export
  *   - "Subscribe to my events": its token (make, read, remove) and the feed (D1033)
- *   - IC meetings CRUD + RSVP
- *   - founder check-ins CRUD
+ *   - "Subscribe to my whole calendar": the same, on a token of its own (D1209)
+ *   - IC meetings CRUD + RSVP + Reschedule (D1207)
+ *   - founder check-ins CRUD + Reschedule (D1207)
+ *   - the people and deal pickers for New IC meeting and New check-in (D1207)
  *   - Google Calendar OAuth + sync (status, connect, callback, sync, disconnect)
  *   - Microsoft 365 / Outlook OAuth + sync (same five)
  *
@@ -13,17 +15,28 @@
  * surfaces as a friendly JSON 500 with the cause logged to Cloudflare. The
  * two callbacks intentionally skip requireAuth — the user_id comes from the
  * single-use HMAC-signed state token persisted in oauth_state_tokens. So does
- * the my-events feed, whose member comes from its token (migration 603).
+ * the two feeds, whose member comes from their token (migrations 603, 610).
+ *
+ * D1209: each sync leaves its failure on the token row for the status reads,
+ * and a disconnect keeps the copies it made unless the member removes them
+ * first (migration 610).
  */
 import { Hono } from 'hono';
 import { prepareWorkspaceConnect } from './google_workspace';
 import { DRIVE_FILE_SCOPE, WorkspaceError, clearWorkspaceConnection, ensureWorkspaceIntegration } from '../services/google/workspace';
 import type { Env, User } from '../types';
+import type { CalendarEvent } from '../services/calendar';
 import { getSQL } from '../db';
 import { canAccessProject, getProjectMembershipRole } from '../services/projectAccess';
 import { userMayReadDeal } from './deals';
 import { addToCalendarLinks, eventVisibleTo, joinLinkAllowed, MY_EVENT_KINDS } from '../services/calendar/myEvents';
-import { feedStatus, mintFeedToken, resolveFeedToken, revokeFeedToken } from '../services/calendar/feedTokens';
+import { CALENDAR_FEED_SCOPE, FEED_SCOPE, feedStatus, mintFeedToken, resolveFeedToken, revokeFeedToken, type FeedScope } from '../services/calendar/feedTokens';
+import {
+  accountMarker, clearSyncError, forgetRetained, readSyncError, recordSyncError, retainCopies, takeRetainedMarker,
+  type SyncProvider,
+} from '../services/calendar/syncState';
+import { removeProviderCopies } from '../services/calendar/sync';
+import { describeItems } from '../services/calendar/items';
 import { investorUpsell, userMeetsInvestorTier } from '../middleware/requireInvestorTier';
 import { logAdminAction } from '../services/adminAudit';
 import { requireAuth } from '../auth';
@@ -191,10 +204,14 @@ calendar.get('/events', safe('events', 'Could not list calendar events', async (
   // nothing in the response could say which one. `sources` reports every kind
   // that was asked for and whether it answered, so the page can render the four
   // that loaded and name the fifth instead of blanking.
+  //
+  // D1207: this read alone asks for cancelled rows, so the page can strike
+  // them through with their reason; and each item carries what the drawer
+  // draws (`describeItems`). The feed, the sync and the push never see either.
   const { events, sources } = await fetchUserEventsWithSources(
-    c.env, user.id, lc(user.role), fromDt.toISOString(), toDt.toISOString(), kinds,
+    c.env, user.id, lc(user.role), fromDt.toISOString(), toDt.toISOString(), kinds, { withCancelled: true },
   );
-  const items = await attachPushRecords(c.env, user.id, events);
+  const items = await describeItems(c.env, user, await attachPushRecords(c.env, user.id, events));
   await ensureCalendarOAuthSchema(c.env);
   const sql = getSQL(c.env);
   const tok = (await sql`SELECT 1 FROM google_oauth_tokens WHERE user_id = ${user.id}` as any[])[0];
@@ -243,10 +260,12 @@ calendar.get('/events.ics', safe('ics', 'Could not export calendar', async (c) =
 // it is shown once, and making a new one or removing it stops the old one.
 // The token rides in the query, never the path: see `feedTokens.ts`.
 const FEED_PATH = '/api/calendar/feed/my-events.ics';
+// D1209 (#3175): the whole calendar, Mine only, at its own token (migration 610).
+const CALENDAR_FEED_PATH = '/api/calendar/feed/calendar.ics';
 
-function feedUrls(c: any, token: string): { url: string; webcal_url: string } {
+function feedUrls(c: any, token: string, path = FEED_PATH): { url: string; webcal_url: string } {
   const origin = new URL(c.req.url).origin;
-  const url = `${origin}${FEED_PATH}?token=${encodeURIComponent(token)}`;
+  const url = `${origin}${path}?token=${encodeURIComponent(token)}`;
   return { url, webcal_url: url.replace(/^https?:/, 'webcal:') };
 }
 
@@ -272,26 +291,65 @@ calendar.delete('/my-events/feed', safe('feed_revoke', 'Could not remove your ca
 }));
 
 // NO SESSION: the token is the credential. `index.ts`'s investor paywall on
-// `/api/calendar` needs a session, so `INVESTOR_PRO_EXEMPT` lets this one path
-// past it and the same rule is applied here to the member the token names: an
-// investor whose plan lapsed gets the paywall's 402, as `/events.ics` gives it.
-calendar.get('/feed/my-events.ics', safe('feed_ics', 'Could not export calendar', async (c) => {
-  const user = await resolveFeedToken(c.env, new URL(c.req.url).searchParams.get('token'));
+// `/api/calendar` needs a session, so `INVESTOR_PRO_EXEMPT` lets the two feed
+// paths past it and the same rule is applied here to the member the token
+// names: an investor whose plan lapsed gets the paywall's 402, as `/events.ics`
+// gives it. A token answers only its own feed: a my-events token is refused by
+// the whole-calendar feed, and the other way round.
+async function serveFeed(c: any, scope: FeedScope): Promise<Response> {
+  const user = await resolveFeedToken(c.env, new URL(c.req.url).searchParams.get('token'), new Date(), scope);
   if (!user) return c.json({ detail: 'Calendar feed not found' }, 404);
   if (!userMeetsInvestorTier(user, 'professional')) return c.json(investorUpsell('professional'), 402);
-  const fromDt = new Date(Date.now() - 7 * 86_400_000);
+  const whole = scope === CALENDAR_FEED_SCOPE;
+  const fromDt = new Date(Date.now() - (whole ? 30 : 7) * 86_400_000);
   const toDt = new Date(Date.now() + 180 * 86_400_000);
-  const events = await fetchUserEvents(c.env, user.id, lc(user.role), fromDt.toISOString(), toDt.toISOString(), [...MY_EVENT_KINDS]);
-  const body = eventsToIcs(events, `Axal StudioOS — my events — ${user.name}`);
+  // MINE ONLY. Every reader is keyed on the member's own id and none widens
+  // for a role (`gather` ignores it), so an admin's feed holds what the admin
+  // is party to, never a studio's or every studio's calendar. Every kind the
+  // calendar reads, by name, so a kind added later joins the feed on purpose.
+  const kinds = whole ? [...KNOWN_KINDS] : [...MY_EVENT_KINDS];
+  const events = await fetchUserEvents(c.env, user.id, lc(user.role), fromDt.toISOString(), toDt.toISOString(), kinds);
+  const body = eventsToIcs(events, whole ? `Axal StudioOS — ${user.name}` : `Axal StudioOS — my events — ${user.name}`);
   return new Response(body, {
     headers: {
       'content-type': 'text/calendar; charset=utf-8',
-      'content-disposition': 'inline; filename="axal-my-events.ics"',
+      'content-disposition': `inline; filename="${whole ? 'axal-calendar.ics' : 'axal-my-events.ics'}"`,
       // The body carries join links: never kept by a shared cache.
       'cache-control': 'private, no-store',
     },
   });
+}
+
+calendar.get('/feed/my-events.ics', safe('feed_ics', 'Could not export calendar', (c) => serveFeed(c, FEED_SCOPE)));
+
+// ===========================================================================
+// D1209 (#3175) — "Subscribe to my whole calendar" (migration 610)
+// ===========================================================================
+// The same three verbs as the my-events address, on a token of its own.
+// POST makes the address, or replaces it (`replaced: true`): the old URL stops
+// at once. DELETE removes it.
+calendar.get('/subscription', safe('cal_feed_status', 'Could not read your calendar subscription', async (c) => {
+  const user = await requireAuth(c);
+  return c.json(await feedStatus(c.env, user.id, CALENDAR_FEED_SCOPE));
 }));
+
+calendar.post('/subscription', safe('cal_feed_mint', 'Could not make your calendar subscription', async (c) => {
+  const user = await requireAuth(c);
+  const minted = await mintFeedToken(c.env, user.id, new Date(), CALENDAR_FEED_SCOPE);
+  return c.json({
+    ...feedUrls(c, minted.token, CALENDAR_FEED_PATH),
+    created_at: minted.created_at,
+    replaced: minted.replaced,
+    note: 'This address is shown once. Anyone who has it can read your calendar, with the join links of your sessions and events. Make a new one to stop the old one.',
+  }, 201);
+}));
+
+calendar.delete('/subscription', safe('cal_feed_revoke', 'Could not remove your calendar subscription', async (c) => {
+  const user = await requireAuth(c);
+  return c.json({ revoked: await revokeFeedToken(c.env, user.id, CALENDAR_FEED_SCOPE) });
+}));
+
+calendar.get('/feed/calendar.ics', safe('cal_feed_ics', 'Could not export calendar', (c) => serveFeed(c, CALENDAR_FEED_SCOPE)));
 
 // ===========================================================================
 // IC meetings
@@ -366,6 +424,56 @@ async function isDealParty(env: Env, user: User, dealId: number): Promise<boolea
   return isProjectParty(env, user, deal, false);
 }
 
+/** A person's id from the uid the people picker gave, or null. */
+async function userIdByUid(env: Env, ref: unknown): Promise<number | null> {
+  if (typeof ref !== 'string') return null;
+  const row = await env.DB.prepare('SELECT id FROM users WHERE uid = ? AND is_active = 1').bind(ref).first<{ id: number }>();
+  return row ? Number(row.id) : null;
+}
+
+/**
+ * The copy each attendee's Google or Outlook calendar holds of an IC meeting:
+ * the organiser first, then everyone else invited. Create and Reschedule send
+ * the same event, so a reschedule PATCHes the copies the create made.
+ */
+async function icSyncEvent(env: Env, meetingId: number): Promise<CalendarEvent | null> {
+  const sql = getSQL(env);
+  const m = (await sql`SELECT * FROM ic_meetings WHERE id = ${meetingId}` as any[])[0];
+  if (!m) return null;
+  const att = await sql`
+    SELECT u.email, u.name FROM ic_meeting_attendees a
+    LEFT JOIN users u ON u.id = a.user_id WHERE a.meeting_id = ${meetingId}
+  ` as any[];
+  const me = (await sql`SELECT email, name FROM users WHERE id = ${m.organizer_user_id}` as any[])[0];
+  return {
+    id: `ic_meeting:${meetingId}`, kind: 'ic_meeting', source_id: meetingId,
+    source_uid: m.uid, title: m.title, start_at: m.start_at,
+    end_at: new Date(new Date(m.start_at).getTime() + Number(m.duration_min) * 60_000).toISOString(),
+    status: 'confirmed', location_kind: m.location_kind, location_uri: m.location_uri,
+    organizer_email: me?.email || null, notes: m.agenda || null,
+    attendees: [
+      { email: me?.email || null, name: me?.name || null, role: 'organizer' },
+      ...att.filter((a: any) => a.email && a.email !== me?.email)
+            .map((a: any) => ({ email: a.email, name: a.name, role: 'invitee' })),
+    ],
+  };
+}
+
+/**
+ * D1207 — a Reschedule's new start and length (CAL19). The start must be
+ * ahead, as at create; a length outside the kind's range is held to it, as
+ * create holds it; no length keeps the current one.
+ */
+function rescheduleOf(body: any, current: number, min: number, max: number):
+  { ok: true; start: string; duration: number } | { ok: false; detail: string } {
+  if (!body?.start_at) return { ok: false, detail: 'start_at required' };
+  const start = new Date(body.start_at);
+  if (Number.isNaN(start.getTime()) || start.getTime() <= Date.now()) return { ok: false, detail: 'start_at must be in the future' };
+  const asked = body.duration_min == null ? current : parseInt(body.duration_min, 10);
+  const duration = Math.min(max, Math.max(min, Number.isFinite(asked) ? asked : current));
+  return { ok: true, start: start.toISOString(), duration };
+}
+
 calendar.post('/ic-meetings', safe('ic_create', 'Could not create IC meeting', async (c) => {
   const user = await requireAuth(c);
   if (!canScheduleIc(lc(user.role))) return c.json({ detail: 'Investor or admin role required' }, 403);
@@ -384,7 +492,14 @@ calendar.post('/ic-meetings', safe('ic_create', 'Could not create IC meeting', a
   if (!(await userMayReadDeal(c.env, user, dealId))) return c.json({ detail: 'Not allowed to schedule for this deal' }, 403);
   if (user.role === 'investor' && !(await isDealParty(c.env, user, dealId))) return c.json({ detail: 'Current deal relationship required' }, 403);
   if (body.attendee_user_ids != null && !Array.isArray(body.attendee_user_ids)) return c.json({ detail: 'Invalid attendees' }, 400);
+  if (body.attendee_uids != null && !Array.isArray(body.attendee_uids)) return c.json({ detail: 'Invalid attendees' }, 400);
   const attendeeIds = new Set<number>((body.attendee_user_ids || []).map(Number));
+  // D1207: the people picker gives each person's uid, so the page never asks for a number.
+  for (const ref of body.attendee_uids || []) {
+    const id = await userIdByUid(c.env, ref);
+    if (id === null) return c.json({ detail: 'Invalid attendee' }, 400);
+    attendeeIds.add(id);
+  }
   for (const attendeeId of attendeeIds) {
     if (!Number.isSafeInteger(attendeeId) || attendeeId <= 0) return c.json({ detail: 'Invalid attendee' }, 400);
     if (attendeeId === user.id) continue;
@@ -420,32 +535,11 @@ calendar.post('/ic-meetings', safe('ic_create', 'Could not create IC meeting', a
   // (attendee lookup + event assembly + dynamic import) happens inside
   // the waitUntil closure so the IC-create response returns immediately.
   const meetingId = meeting.id;
-  const meetingStart = meeting.start_at;
-  const meetingTitle = meeting.title;
-  const meetingLocKind = meeting.location_kind;
-  const meetingLocUri = meeting.location_uri;
-  const meetingAgenda = meeting.agenda;
-  const endIso = new Date(startAt.getTime() + duration * 60_000).toISOString();
   const icSyncP = (async () => {
     try {
       const { onAxalSessionCreated } = await import('../services/calendar/sync');
-      const att = await sql`
-        SELECT u.email, u.name FROM ic_meeting_attendees a
-        LEFT JOIN users u ON u.id = a.user_id WHERE a.meeting_id = ${meetingId}
-      ` as any[];
-      const me = (await sql`SELECT email, name FROM users WHERE id = ${user.id}` as any[])[0];
-      const ev = {
-        id: `ic_meeting:${meetingId}`, kind: 'ic_meeting' as const, source_id: meetingId,
-        source_uid: uid, title: meetingTitle, start_at: meetingStart, end_at: endIso,
-        status: 'confirmed', location_kind: meetingLocKind, location_uri: meetingLocUri,
-        organizer_email: me?.email || null, notes: meetingAgenda || null,
-        attendees: [
-          { email: me?.email || null, name: me?.name || null, role: 'organizer' as const },
-          ...att.filter((a: any) => a.email && a.email !== me?.email)
-                .map((a: any) => ({ email: a.email, name: a.name, role: 'invitee' as const })),
-        ],
-      };
-      await onAxalSessionCreated(c.env, ev);
+      const ev = await icSyncEvent(c.env, meetingId);
+      if (ev) await onAxalSessionCreated(c.env, ev);
     } catch (e) { console.warn('[calendar] IC sync hook failed', e); }
   })();
   if (c.executionCtx?.waitUntil) c.executionCtx.waitUntil(icSyncP);
@@ -512,6 +606,40 @@ calendar.delete('/ic-meetings/:id', safe('ic_cancel', 'Could not cancel IC meeti
   return c.json({ ok: true });
 }));
 
+// D1207 — Reschedule (CAL19): "Everyone invited is told, and their calendar
+// copies move." The organiser's or an admin's, as Cancel is.
+calendar.patch('/ic-meetings/:id', safe('ic_reschedule', 'Could not reschedule IC meeting', async (c) => {
+  const user = await requireAuth(c);
+  const id = parseInt(c.req.param('id'), 10);
+  const body = await c.req.json().catch(() => ({}));
+  const sql = getSQL(c.env);
+  const m = (await sql`SELECT id, organizer_user_id, status, duration_min FROM ic_meetings WHERE id = ${id}` as any[])[0];
+  if (!m) return c.json({ detail: 'IC meeting not found' }, 404);
+  if (!(isAdmin(lc(user.role)) || m.organizer_user_id === user.id)) {
+    return c.json({ detail: 'Only the organiser or an admin can reschedule' }, 403);
+  }
+  if (m.status === 'cancelled') return c.json({ error: 'cancelled', detail: 'A cancelled meeting cannot be moved.' }, 409);
+  const next = rescheduleOf(body, Number(m.duration_min), 10, 600);
+  if (!next.ok) return c.json({ detail: next.detail }, 400);
+  const nowIso = new Date().toISOString();
+  await sql`
+    UPDATE ic_meetings SET start_at = ${next.start}, duration_min = ${next.duration}, updated_at = ${nowIso}
+     WHERE id = ${id} AND status != 'cancelled'
+  `;
+  await logAdminAction(c.env, user.id, user.email, 'calendar_ic_rescheduled', { meeting_id: id, duration_min: next.duration });
+  // Moves each attendee's Google or Outlook copy (deferred, best-effort).
+  const icMoveP = (async () => {
+    try {
+      const { onAxalSessionUpdated } = await import('../services/calendar/sync');
+      const ev = await icSyncEvent(c.env, id);
+      if (ev) await onAxalSessionUpdated(c.env, ev);
+    } catch (e) { console.warn('[calendar] IC reschedule sync hook failed', e); }
+  })();
+  if (c.executionCtx?.waitUntil) c.executionCtx.waitUntil(icMoveP);
+  const row = (await sql`SELECT * FROM ic_meetings WHERE id = ${id}` as any[])[0];
+  return c.json(await serializeIc(c.env, row));
+}));
+
 // ===========================================================================
 // Founder check-ins
 // ===========================================================================
@@ -532,6 +660,26 @@ async function serializeCheckin(env: Env, c: any): Promise<any> {
   };
 }
 
+/** A check-in's calendar copy: the founder and the counterpart. Create and Reschedule send the same. */
+async function checkinSyncEvent(env: Env, checkinId: number): Promise<CalendarEvent | null> {
+  const sql = getSQL(env);
+  const ck = (await sql`SELECT * FROM founder_checkins WHERE id = ${checkinId}` as any[])[0];
+  if (!ck) return null;
+  const f = (await sql`SELECT email, name FROM users WHERE id = ${ck.founder_user_id}` as any[])[0];
+  const co = ck.counterpart_user_id ? (await sql`SELECT email, name FROM users WHERE id = ${ck.counterpart_user_id}` as any[])[0] : null;
+  return {
+    id: `founder_checkin:${checkinId}`, kind: 'founder_checkin', source_id: checkinId,
+    source_uid: ck.uid, title: ck.title, start_at: ck.start_at,
+    end_at: new Date(new Date(ck.start_at).getTime() + Number(ck.duration_min) * 60_000).toISOString(),
+    status: 'confirmed', location_kind: ck.location_kind, location_uri: ck.location_uri,
+    organizer_email: co?.email || f?.email || null, notes: ck.notes || null,
+    attendees: [
+      { email: f?.email || null, name: f?.name || null, role: 'founder' },
+      ...(co ? [{ email: co.email, name: co.name, role: 'counterpart' }] : []),
+    ],
+  };
+}
+
 calendar.post('/founder-checkins', safe('ck_create', 'Could not create check-in', async (c) => {
   const user = await requireAuth(c);
   const body = await c.req.json().catch(() => ({}));
@@ -539,6 +687,17 @@ calendar.post('/founder-checkins', safe('ck_create', 'Could not create check-in'
   const startAt = new Date(body.start_at);
   if (Number.isNaN(startAt.getTime()) || startAt.getTime() <= Date.now()) {
     return c.json({ detail: 'start_at must be in the future' }, 400);
+  }
+  // D1207: the people picker gives a uid; a number is still taken as before.
+  if (body.founder_uid != null) {
+    const id = await userIdByUid(c.env, body.founder_uid);
+    if (id === null) return c.json({ detail: 'founder user not found' }, 404);
+    body.founder_user_id = id;
+  }
+  if (body.counterpart_uid != null) {
+    const id = await userIdByUid(c.env, body.counterpart_uid);
+    if (id === null) return c.json({ detail: 'Invalid counterpart' }, 400);
+    body.counterpart_user_id = id;
   }
   const founderId = parseInt(body.founder_user_id, 10);
   if (!Number.isFinite(founderId)) return c.json({ detail: 'founder_user_id required' }, 400);
@@ -587,27 +746,11 @@ calendar.post('/founder-checkins', safe('ck_create', 'Could not create check-in'
   // Task #52 — push founder check-in to attendees' external calendars
   // (deferred via waitUntil so the response returns immediately).
   const ckId = checkin.id;
-  const ckStart = checkin.start_at;
-  const ckLocKind = checkin.location_kind;
-  const ckLocUri = checkin.location_uri;
-  const ckNotes = body.notes || null;
-  const ckEndIso = new Date(startAt.getTime() + duration * 60_000).toISOString();
   const ckSyncP = (async () => {
     try {
-      const f = (await sql`SELECT email, name FROM users WHERE id = ${founderId}` as any[])[0];
-      const co = counterId ? (await sql`SELECT email, name FROM users WHERE id = ${counterId}` as any[])[0] : null;
-      const ev = {
-        id: `founder_checkin:${ckId}`, kind: 'founder_checkin' as const, source_id: ckId,
-        source_uid: uid, title, start_at: ckStart, end_at: ckEndIso,
-        status: 'confirmed', location_kind: ckLocKind, location_uri: ckLocUri,
-        organizer_email: co?.email || f?.email || null, notes: ckNotes,
-        attendees: [
-          { email: f?.email || null, name: f?.name || null, role: 'founder' as const },
-          ...(co ? [{ email: co.email, name: co.name, role: 'counterpart' as const }] : []),
-        ],
-      };
+      const ev = await checkinSyncEvent(c.env, ckId);
       const { onAxalSessionCreated } = await import('../services/calendar/sync');
-      await onAxalSessionCreated(c.env, ev);
+      if (ev) await onAxalSessionCreated(c.env, ev);
     } catch (e) { console.warn('[calendar] checkin sync hook failed', e); }
   })();
   if (c.executionCtx?.waitUntil) c.executionCtx.waitUntil(ckSyncP);
@@ -656,11 +799,198 @@ calendar.delete('/founder-checkins/:id', safe('ck_cancel', 'Could not cancel che
   return c.json({ ok: true });
 }));
 
+// D1207 — Reschedule a check-in. A check-in stores no booker, so either of
+// its two people may move it, or an admin: its Cancel's rule.
+calendar.patch('/founder-checkins/:id', safe('ck_reschedule', 'Could not reschedule check-in', async (c) => {
+  const user = await requireAuth(c);
+  const id = parseInt(c.req.param('id'), 10);
+  const body = await c.req.json().catch(() => ({}));
+  const sql = getSQL(c.env);
+  const row = (await sql`
+    SELECT founder_user_id, counterpart_user_id, status, duration_min FROM founder_checkins WHERE id = ${id}
+  ` as any[])[0];
+  if (!row) return c.json({ detail: 'Check-in not found' }, 404);
+  if (!(isAdmin(lc(user.role)) || row.founder_user_id === user.id || row.counterpart_user_id === user.id)) {
+    return c.json({ detail: 'Only attendees or admin can reschedule' }, 403);
+  }
+  if (row.status === 'cancelled') return c.json({ error: 'cancelled', detail: 'A cancelled check-in cannot be moved.' }, 409);
+  const next = rescheduleOf(body, Number(row.duration_min), 10, 240);
+  if (!next.ok) return c.json({ detail: next.detail }, 400);
+  const nowIso = new Date().toISOString();
+  await sql`
+    UPDATE founder_checkins SET start_at = ${next.start}, duration_min = ${next.duration}, updated_at = ${nowIso}
+     WHERE id = ${id} AND status != 'cancelled'
+  `;
+  await logAdminAction(c.env, user.id, user.email, 'calendar_checkin_rescheduled', { checkin_id: id, duration_min: next.duration });
+  const ckMoveP = (async () => {
+    try {
+      const { onAxalSessionUpdated } = await import('../services/calendar/sync');
+      const ev = await checkinSyncEvent(c.env, id);
+      if (ev) await onAxalSessionUpdated(c.env, ev);
+    } catch (e) { console.warn('[calendar] checkin reschedule sync hook failed', e); }
+  })();
+  if (c.executionCtx?.waitUntil) c.executionCtx.waitUntil(ckMoveP);
+  const ck = (await sql`SELECT * FROM founder_checkins WHERE id = ${id}` as any[])[0];
+  return c.json(await serializeCheckin(c.env, ck));
+}));
+
+// ===========================================================================
+// D1207 — the people and deal pickers (CAL7, CAL8). New IC meeting and New
+// check-in search by name, so nobody types a user number or an email.
+//
+// ONLY PEOPLE YOU WORK WITH. A person is offered only when they share the
+// deal (IC) or a venture (check-in) with the caller, by the same rule the
+// create applies (`isDealParty`, `isProjectParty`). So the picker never offers
+// someone a create would refuse, and never another studio's people. Each
+// person carries their uid (the create takes it), their name, their profile
+// and how the caller knows them; never an email and never a user number.
+// ===========================================================================
+const PROFILE_WORDS: Readonly<Record<string, string>> = {
+  admin: 'Admin', founder: 'Founder', partner: 'Operating Partner',
+  investor: 'Investor', advisor: 'Advisor', exploring: 'Member',
+};
+const PICK_MAX = 20;
+
+type Venture = { id: number; name: string; founder_id: number | null };
+type Picked = { how: string[]; ventures: Map<number, string> };
+
+function note(into: Map<number, Picked>, userId: unknown, how: string, venture: Venture) {
+  const id = Number(userId);
+  if (!Number.isSafeInteger(id) || id <= 0) return;
+  const p: Picked = into.get(id) || { how: [], ventures: new Map() };
+  if (!p.how.includes(how)) p.how.push(how);
+  p.ventures.set(venture.id, venture.name);
+  into.set(id, p);
+}
+
+/** Everyone on one venture, each with how they are on it. */
+async function ventureCandidates(env: Env, v: Venture, into: Map<number, Picked>, withDealId?: number) {
+  const sql = getSQL(env);
+  const deals = withDealId
+    ? await sql`SELECT id, lead_partner_id FROM deals WHERE id = ${withDealId}` as any[]
+    : await sql`SELECT id, lead_partner_id FROM deals WHERE project_id = ${v.id}` as any[];
+  for (const d of deals) {
+    note(into, d.lead_partner_id, `Lead partner on ${v.name}`, v);
+    for (const r of await sql`SELECT investor_user_id AS id FROM deal_invitations WHERE deal_id = ${d.id} AND status IN ('invited','interested')` as any[]) note(into, r.id, `Invited to ${v.name}`, v);
+    for (const r of await sql`SELECT investor_user_id AS id FROM commitments WHERE deal_id = ${d.id} AND status IN ('pending','confirmed')` as any[]) note(into, r.id, `Committed to ${v.name}`, v);
+  }
+  if (v.founder_id) {
+    for (const r of await sql`SELECT id FROM users WHERE founder_id = ${v.founder_id} AND role = 'founder'` as any[]) note(into, r.id, `Founder of ${v.name}`, v);
+  }
+  // A removed or pending member is dropped by the create's rule in `presentPicked`.
+  for (const r of await sql`SELECT user_id AS id FROM project_members WHERE project_id = ${v.id}` as any[]) note(into, r.id, `On the ${v.name} team`, v);
+  for (const r of await sql`SELECT advisor_user_id AS id FROM advisor_client_grants
+      WHERE project_id = ${v.id} AND status = 'active' AND scope_sessions = 1
+        AND (expires_at IS NULL OR datetime(expires_at) > datetime('now'))` as any[]) note(into, r.id, `Advisor to ${v.name}`, v);
+}
+
+/** The ventures a person is on, by any of the ties `isProjectParty` reads. */
+async function venturesOf(env: Env, user: User): Promise<Venture[]> {
+  const r = await env.DB.prepare(
+    `SELECT DISTINCT p.id, p.name, p.founder_id FROM projects p
+      WHERE p.deleted_at IS NULL AND (
+        (? IS NOT NULL AND p.founder_id = ?)
+        OR p.id IN (SELECT project_id FROM project_members WHERE user_id = ? AND status = 'accepted' AND removed_at IS NULL)
+        OR p.id IN (SELECT project_id FROM advisor_client_grants WHERE advisor_user_id = ? AND status = 'active')
+        OR p.id IN (SELECT project_id FROM deals WHERE lead_partner_id = ?)
+        OR p.id IN (SELECT d.project_id FROM deal_invitations i JOIN deals d ON d.id = i.deal_id WHERE i.investor_user_id = ?)
+        OR p.id IN (SELECT d.project_id FROM commitments k JOIN deals d ON d.id = k.deal_id WHERE k.investor_user_id = ?)
+      ) ORDER BY p.name, p.id`,
+  ).bind(user.founder_id ?? null, user.founder_id ?? null, user.id, user.id, user.id, user.id, user.id).all<Venture>();
+  const out: Venture[] = [];
+  for (const v of r.results || []) if (await isProjectParty(env, user, v)) out.push(v);
+  return out;
+}
+
+async function presentPicked(env: Env, picked: Map<number, Picked>, keep: (u: User) => Promise<boolean>, q: string) {
+  const items: any[] = [];
+  for (const [id, p] of picked) {
+    const u = await env.DB.prepare('SELECT * FROM users WHERE id = ? AND is_active = 1').bind(id).first<User & { uid: string; display_name?: string | null; headline?: string | null }>();
+    if (!u || !(await keep(u))) continue;
+    const name = String(u.display_name || u.name || '').trim();
+    if (!name || (q && !name.toLowerCase().includes(q))) continue;
+    items.push({
+      uid: u.uid, name, profile: PROFILE_WORDS[String(u.role)] || 'Member', headline: u.headline || null,
+      how: p.how, ventures: [...p.ventures].map(([vid, vname]) => ({ id: vid, name: vname })),
+    });
+  }
+  items.sort((a, b) => a.name.localeCompare(b.name));
+  return items.slice(0, PICK_MAX);
+}
+
+calendar.get('/people', safe('people_pick', 'Could not search people', async (c) => {
+  const user = await requireAuth(c);
+  const url = new URL(c.req.url);
+  const purpose = url.searchParams.get('for') || '';
+  const q = (url.searchParams.get('q') || '').trim().slice(0, 80).toLowerCase();
+  const sql = getSQL(c.env);
+  const picked = new Map<number, Picked>();
+  if (purpose === 'ic') {
+    if (!canScheduleIc(lc(user.role))) return c.json({ detail: 'Investor or admin role required' }, 403);
+    const dealId = Number(url.searchParams.get('deal_id'));
+    if (!Number.isSafeInteger(dealId) || dealId <= 0) {
+      return c.json({ error: 'deal_required', detail: 'Choose the deal first: the people come from it.' }, 400);
+    }
+    if (!(await userMayReadDeal(c.env, user, dealId))) return c.json({ detail: 'Not allowed to schedule for this deal' }, 403);
+    if (user.role === 'investor' && !(await isDealParty(c.env, user, dealId))) return c.json({ detail: 'Current deal relationship required' }, 403);
+    const v = (await sql`SELECT p.id, p.name, p.founder_id FROM deals d JOIN projects p ON p.id = d.project_id
+      WHERE d.id = ${dealId} AND p.deleted_at IS NULL` as Venture[])[0];
+    if (v) await ventureCandidates(c.env, v, picked, dealId);
+    picked.delete(user.id);
+    // The create's own rule for each attendee.
+    return c.json({ for: 'ic', items: await presentPicked(c.env, picked, (u) => isDealParty(c.env, u, dealId), q) });
+  }
+  if (purpose === 'checkin') {
+    const ventures = await venturesOf(c.env, user);
+    const mine = ventures.filter((v) => user.role === 'founder' && user.founder_id && v.founder_id === user.founder_id);
+    if (mine.length) {
+      // A founder books with anyone on their ventures, as the counterpart.
+      for (const v of mine) await ventureCandidates(c.env, v, picked);
+      picked.delete(user.id);
+      return c.json({ for: 'checkin', items: await presentPicked(c.env, picked, async (u) => {
+        for (const v of mine) if (await isProjectParty(c.env, u, v)) return true;
+        return false;
+      }, q) });
+    }
+    // Anyone else books with the founders of the ventures they are on.
+    for (const v of ventures) {
+      if (!v.founder_id) continue;
+      for (const r of await sql`SELECT id FROM users WHERE founder_id = ${v.founder_id}` as any[]) note(picked, r.id, `Founder of ${v.name}`, v);
+    }
+    picked.delete(user.id);
+    // The create books only a founder (`Target must be a founder`).
+    return c.json({ for: 'checkin', items: await presentPicked(c.env, picked, async (u) => u.role === 'founder', q) });
+  }
+  return c.json({ error: 'for_required', detail: "Say who the search is for: 'ic' or 'checkin'." }, 400);
+}));
+
+/** D1207 — the deals the caller can open, by venture name, for New IC meeting's Deal field. */
+calendar.get('/deals', safe('deal_pick', 'Could not search deals', async (c) => {
+  const user = await requireAuth(c);
+  const q = (new URL(c.req.url).searchParams.get('q') || '').trim().slice(0, 80).toLowerCase();
+  const rows = await c.env.DB.prepare(
+    `SELECT d.id, d.status, p.name FROM deals d JOIN projects p ON p.id = d.project_id
+      WHERE p.deleted_at IS NULL AND (? = '' OR instr(lower(p.name), ?) > 0)
+      ORDER BY p.name, d.id LIMIT 200`,
+  ).bind(q, q).all() as { results?: { id: number; status: string; name: string }[] };
+  const items: any[] = [];
+  for (const d of rows.results || []) {
+    if (items.length >= PICK_MAX) break;
+    if (!(await userMayReadDeal(c.env, user, d.id))) continue;
+    // An investor schedules only on a deal they are still on (the create's rule).
+    if (user.role === 'investor' && !(await isDealParty(c.env, user, d.id))) continue;
+    items.push({ id: d.id, name: d.name, status: d.status });
+  }
+  return c.json({ items });
+}));
+
 // ===========================================================================
 // Task #52 — "Add to my external calendar" for events that pre-date the
 // user's OAuth connection. POST /api/calendar/push/:kind/:source_id pushes
 // one specific Axal session to whichever providers the caller has connected.
 // ===========================================================================
+// An item's `can.copy` reads the same six (COPYABLE_KINDS in
+// services/calendar/items.ts); calendar_items_d1207 holds the two lists equal.
 const PUSHABLE_KINDS = new Set([
   'advisor_booking', 'ic_meeting', 'founder_checkin', 'partner_office_hour',
   'event_ticket', 'event_hosted',
@@ -801,6 +1131,8 @@ async function ensureCalendarOAuthSchema(env: Env): Promise<void> {
   if (calendarOAuthSchemaChecked.has(env as unknown as object)) return;
   try {
     const sql = getSQL(env);
+    // `last_sync_error` and `last_sync_error_at` are migration 610's (D1209),
+    // declared here too so a fresh table matches the migrated one.
     await sql`
       CREATE TABLE IF NOT EXISTS google_oauth_tokens (
         id              INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -810,6 +1142,8 @@ async function ensureCalendarOAuthSchema(env: Env): Promise<void> {
         google_email    TEXT,
         google_sub      TEXT,
         last_synced_at  TEXT,
+        last_sync_error TEXT,
+        last_sync_error_at TEXT,
         created_at      TEXT    NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
         updated_at      TEXT    NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
       )
@@ -835,6 +1169,8 @@ async function ensureCalendarOAuthSchema(env: Env): Promise<void> {
         microsoft_email TEXT,
         microsoft_sub   TEXT,
         last_synced_at  TEXT,
+        last_sync_error TEXT,
+        last_sync_error_at TEXT,
         created_at      TEXT    NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
         updated_at      TEXT    NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
       )
@@ -861,6 +1197,69 @@ export function meetTranscriptsState(env: Env, scope: string | null | undefined)
   return meetTranscriptsEnabled(env) ? 'available' : 'not_set_up';
 }
 
+/**
+ * D1209 — the last sync's failure, on both status reads. `sync_error` is null
+ * when the last sync completed (or nothing is connected); `sync_error_read` is
+ * false when the state itself could not be read, so the page says
+ * "Unreadable" rather than claiming a clean sync.
+ */
+async function syncErrorFields(env: Env, userId: number, provider: SyncProvider, connected: boolean) {
+  if (!connected) return { sync_error: null, sync_error_read: true };
+  const r = await readSyncError(env, userId, provider);
+  return { sync_error: r.error, sync_error_read: r.read };
+}
+
+/** Write what a full sync left: a refused copy, a refused connection, or a clean run. */
+async function settleSync(env: Env, userId: number, provider: SyncProvider,
+  outcome: { failed: number } | { error: any }): Promise<void> {
+  if ('error' in outcome) {
+    if (outcome.error?.message === 'not_connected') return;
+    await recordSyncError(env, userId, provider,
+      outcome.error?.code === 'connection_refused' ? 'connection_refused' : 'sync_failed');
+  } else if (outcome.failed > 0) {
+    await recordSyncError(env, userId, provider, 'copy_refused');
+  } else {
+    await clearSyncError(env, userId, provider);
+  }
+}
+
+/**
+ * D1209 — the disconnect's one choice: "Remove the copies first"
+ * (`remove_copies`, in the query or the JSON body). Without it the copies stay
+ * on the provider and their mappings stay here.
+ */
+async function wantsCopiesRemoved(c: any): Promise<boolean> {
+  const q = String(new URL(c.req.url).searchParams.get('remove_copies') || '').toLowerCase();
+  if (q === '1' || q === 'true') return true;
+  if (c.req.method !== 'POST') return false;
+  const body: any = await c.req.json().catch(() => null);
+  return body?.remove_copies === true;
+}
+
+/**
+ * After the token row is gone: remember whose account the kept copies belong
+ * to, or forget it when none is kept. A connection with no account id (rows
+ * from before Task #70) keeps its copies with no marker, and the next connect
+ * treats them as an unknown account's.
+ */
+async function settleRetained(env: Env, userId: number, provider: SyncProvider, accountId: string | null): Promise<void> {
+  const left = await env.DB.prepare('SELECT COUNT(*) AS n FROM calendar_sync_records WHERE user_id = ? AND provider = ?')
+    .bind(userId, provider).first<{ n: number }>();
+  try {
+    if (Number(left?.n || 0) > 0 && accountId) await retainCopies(env, userId, provider, await accountMarker(env.JWT_SECRET, provider, accountId));
+    else await forgetRetained(env, userId, provider);
+  } catch (e) {
+    // Before migration 610 there is no table to hold the marker: the copies
+    // stay, and the next connect decides as it did before.
+    if (!/no such table/i.test(String((e as Error)?.message || e))) throw e;
+  }
+}
+
+const COPIES_NOT_REMOVED = {
+  code: 'copies_not_removed',
+  message: 'Some copies could not be removed from your calendar, so nothing was disconnected. Try again, or disconnect and keep them.',
+};
+
 calendar.get('/google/status', safe('g_status', 'Could not load Google status', async (c) => {
   const user = await requireAuth(c);
   await ensureCalendarOAuthSchema(c.env);
@@ -877,6 +1276,7 @@ calendar.get('/google/status', safe('g_status', 'Could not load Google status', 
     last_synced_at: row?.last_synced_at || null,
     scope: row?.scope || null,
     meet_transcripts: meetTranscriptsState(c.env, row?.scope),
+    ...await syncErrorFields(c.env, user.id, 'google', !!row),
   });
 }));
 
@@ -1439,7 +1839,14 @@ calendar.get('/google/callback', async (c) => {
       // a different Calendar identity is confirmed, remove only that old link.
       await clearGoogleIdentityLink(c.env, userId, previousGoogleIdentityLink);
     }
-    if (shouldResetGoogleSyncMappings(identityChanged ? false : retainedIdentityMatches, !!previousGoogleConnection)) {
+    // D1209: a disconnect that kept the copies left a marker of their account.
+    // With no Gmail-removal marker and no live connection, it decides.
+    let mappingsMatch = identityChanged ? false : retainedIdentityMatches;
+    if (mappingsMatch === null && !previousGoogleConnection) {
+      const kept = await takeRetainedMarker(c.env, userId, 'google');
+      if (kept) mappingsMatch = !!googleSub && kept === await accountMarker(c.env.JWT_SECRET, 'google', googleSub);
+    }
+    if (shouldResetGoogleSyncMappings(mappingsMatch, !!previousGoogleConnection)) {
       // Gmail removal retained Calendar event mappings so reconnecting the
       // same account remains idempotent. A different account clears them; an
       // unmarked callback clears them only when no previous connection exists
@@ -1467,19 +1874,36 @@ calendar.get('/google/callback', async (c) => {
   }
 });
 
-calendar.delete('/google', safe('g_disconnect', 'Could not disconnect Google', async (c) => {
+/**
+ * D1209 — ONE GOOGLE DISCONNECT, for `DELETE /google` and
+ * `POST /google/disconnect`. The grant is revoked at Google first (#2413);
+ * a refused revocation keeps everything, so the member can retry. The copies
+ * on Google and their mappings stay, unless the member chose "Remove the
+ * copies first": then every copy is deleted at Google before anything else,
+ * and a copy Google refuses stops the disconnect.
+ */
+async function disconnectGoogle(c: any) {
   const user = await requireAuth(c);
   await ensureCalendarOAuthSchema(c.env);
+  const removeCopies = await wantsCopiesRemoved(c);
+  if (removeCopies && !(await removeProviderCopies(c.env, user.id, 'google')).ok) {
+    return c.json({ error: COPIES_NOT_REMOVED }, 502);
+  }
+  const sub = (await c.env.DB.prepare('SELECT google_sub FROM google_oauth_tokens WHERE user_id = ?').bind(user.id)
+    .first() as { google_sub: string | null } | null)?.google_sub || null;
   try {
-    await revokeAndDisconnectGoogle(c.env, user.id);
-    return c.json({ ok: true });
+    await revokeAndDisconnectGoogle(c.env, user.id, undefined, { preserveCalendarSync: true });
   } catch (e: any) {
     if (e?.code === 'google_revocation_failed') {
       return c.json({ error: { code: 'google_revocation_failed', message: 'Google did not confirm revocation. Your saved connection is still available to retry.' } }, 502);
     }
     throw e;
   }
-}));
+  await settleRetained(c.env, user.id, 'google', sub);
+  return c.json({ ok: true, copies: removeCopies ? 'removed' : 'kept' });
+}
+
+calendar.delete('/google', safe('g_disconnect', 'Could not disconnect Google', disconnectGoogle));
 
 calendar.post('/google/sync', safe('g_sync', 'Google sync failed', async (c) => {
   const user = await requireAuth(c);
@@ -1493,8 +1917,11 @@ calendar.post('/google/sync', safe('g_sync', 'Google sync failed', async (c) => 
   const fromDt = fromQ ? new Date(fromQ) : new Date(Date.now() - 86_400_000);
   const toDt = toQ ? new Date(toQ) : new Date(Date.now() + 60 * 86_400_000);
   try {
-    return c.json(await syncUserToGoogle(c.env, user.id, lc(user.role), fromDt.toISOString(), toDt.toISOString()));
+    const summary = await syncUserToGoogle(c.env, user.id, lc(user.role), fromDt.toISOString(), toDt.toISOString());
+    await settleSync(c.env, user.id, 'google', summary);
+    return c.json(summary);
   } catch (e: any) {
+    await settleSync(c.env, user.id, 'google', { error: e });
     if (e?.message === 'not_connected') return c.json({ detail: 'Connect a Google account first' }, 409);
     return refuse(c, 502, { code: 'google_sync_failed', message: 'The Google calendar sync did not complete. Check the connection and try again.', raw: e, audience: 'owner' });
   }
@@ -1518,6 +1945,7 @@ calendar.get('/microsoft/status', safe('m_status', 'Could not load Microsoft sta
     microsoft_email: row?.microsoft_email || null,
     last_synced_at: row?.last_synced_at || null,
     scope: row?.scope || null,
+    ...await syncErrorFields(c.env, user.id, 'microsoft', !!row),
   });
 }));
 
@@ -1584,6 +2012,12 @@ calendar.get('/microsoft/callback', async (c) => {
         VALUES
           (${userId}, ${refreshEnc}, ${tokens.scope || ''}, ${email}, ${subId})
       `;
+      // D1209: copies a disconnect kept stay for the same account. Another
+      // account's are dropped here; they stay on that account's calendar.
+      const kept = await takeRetainedMarker(c.env, userId, 'microsoft');
+      if (kept && !(subId && kept === await accountMarker(c.env.JWT_SECRET, 'microsoft', subId))) {
+        await sql`DELETE FROM calendar_sync_records WHERE user_id = ${userId} AND provider = 'microsoft'`;
+      }
     }
     return successRedirect(c.env, 'microsoft', returnTo);
   } catch (e: any) {
@@ -1593,14 +2027,26 @@ calendar.get('/microsoft/callback', async (c) => {
   }
 });
 
-calendar.delete('/microsoft', safe('m_disconnect', 'Could not disconnect Microsoft', async (c) => {
+/**
+ * D1209 — one Microsoft disconnect, for `DELETE /microsoft` and
+ * `POST /microsoft/disconnect`, with the same choice as Google's. Microsoft
+ * has no grant revocation the Worker can call, so only the saved token goes.
+ */
+async function disconnectMicrosoft(c: any) {
   const user = await requireAuth(c);
   await ensureCalendarOAuthSchema(c.env);
-  const sql = getSQL(c.env);
-  await sql`DELETE FROM microsoft_oauth_tokens WHERE user_id = ${user.id}`;
-  await sql`DELETE FROM calendar_sync_records WHERE user_id = ${user.id} AND provider = 'microsoft'`;
-  return c.json({ ok: true });
-}));
+  const removeCopies = await wantsCopiesRemoved(c);
+  if (removeCopies && !(await removeProviderCopies(c.env, user.id, 'microsoft')).ok) {
+    return c.json({ error: COPIES_NOT_REMOVED }, 502);
+  }
+  const sub = (await c.env.DB.prepare('SELECT microsoft_sub FROM microsoft_oauth_tokens WHERE user_id = ?').bind(user.id)
+    .first() as { microsoft_sub: string | null } | null)?.microsoft_sub || null;
+  await c.env.DB.prepare('DELETE FROM microsoft_oauth_tokens WHERE user_id = ?').bind(user.id).run();
+  await settleRetained(c.env, user.id, 'microsoft', sub);
+  return c.json({ ok: true, copies: removeCopies ? 'removed' : 'kept' });
+}
+
+calendar.delete('/microsoft', safe('m_disconnect', 'Could not disconnect Microsoft', disconnectMicrosoft));
 
 calendar.post('/microsoft/sync', safe('m_sync', 'Microsoft sync failed', async (c) => {
   const user = await requireAuth(c);
@@ -1614,8 +2060,11 @@ calendar.post('/microsoft/sync', safe('m_sync', 'Microsoft sync failed', async (
   const fromDt = fromQ ? new Date(fromQ) : new Date(Date.now() - 86_400_000);
   const toDt = toQ ? new Date(toQ) : new Date(Date.now() + 60 * 86_400_000);
   try {
-    return c.json(await syncUserToMicrosoft(c.env, user.id, lc(user.role), fromDt.toISOString(), toDt.toISOString()));
+    const summary = await syncUserToMicrosoft(c.env, user.id, lc(user.role), fromDt.toISOString(), toDt.toISOString());
+    await settleSync(c.env, user.id, 'microsoft', summary);
+    return c.json(summary);
   } catch (e: any) {
+    await settleSync(c.env, user.id, 'microsoft', { error: e });
     if (e?.message === 'not_connected') return c.json({ detail: 'Connect a Microsoft account first' }, 409);
     return refuse(c, 502, { code: 'microsoft_sync_failed', message: 'The Microsoft calendar sync did not complete. Check the connection and try again.', raw: e, audience: 'owner' });
   }
@@ -1689,36 +2138,22 @@ calendar.delete('/events/:id', async (c) => {
 
 // POST aliases for the existing DELETE /google and /microsoft disconnects —
 // both verbs are valid per the spec contract.
-calendar.post('/google/disconnect', safe('g_disconnect_post', 'Could not disconnect Google', async (c) => {
-  const user = await requireAuth(c);
-  await ensureCalendarOAuthSchema(c.env);
-  try {
-    await revokeAndDisconnectGoogle(c.env, user.id);
-    return c.json({ ok: true });
-  } catch (e: any) {
-    if (e?.code === 'google_revocation_failed') {
-      return c.json({ error: { code: 'google_revocation_failed', message: 'Google did not confirm revocation. Your saved connection is still available to retry.' } }, 502);
-    }
-    throw e;
-  }
-}));
+calendar.post('/google/disconnect', safe('g_disconnect_post', 'Could not disconnect Google', disconnectGoogle));
+// After a refused revocation: the local connection only. The copies stay, as
+// every disconnect now keeps them (D1209).
 calendar.post('/google/force-disconnect', safe('g_force_disconnect', 'Could not disconnect Google locally', async (c) => {
   const user = await requireAuth(c);
   await ensureCalendarOAuthSchema(c.env);
-  await clearGoogleLocalConnection(c.env, user.id);
+  const sub = (await c.env.DB.prepare('SELECT google_sub FROM google_oauth_tokens WHERE user_id = ?').bind(user.id)
+    .first() as { google_sub: string | null } | null)?.google_sub || null;
+  await clearGoogleLocalConnection(c.env, user.id, { preserveCalendarSync: true });
+  await settleRetained(c.env, user.id, 'google', sub);
   return c.json({
     ok: true,
     revoked: false,
     warning: 'Google did not confirm revocation. Remove Axal VC from your Google Account access settings if it still appears there.',
   });
 }));
-calendar.post('/microsoft/disconnect', safe('m_disconnect_post', 'Could not disconnect Microsoft', async (c) => {
-  const user = await requireAuth(c);
-  await ensureCalendarOAuthSchema(c.env);
-  const sql = getSQL(c.env);
-  await sql`DELETE FROM microsoft_oauth_tokens WHERE user_id = ${user.id}`;
-  await sql`DELETE FROM calendar_sync_records WHERE user_id = ${user.id} AND provider = 'microsoft'`;
-  return c.json({ ok: true });
-}));
+calendar.post('/microsoft/disconnect', safe('m_disconnect_post', 'Could not disconnect Microsoft', disconnectMicrosoft));
 
 export default calendar;

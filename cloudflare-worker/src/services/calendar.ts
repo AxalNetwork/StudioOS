@@ -453,6 +453,34 @@ export interface CalendarEvent {
    * the push lookup have no use for it and it costs a query.
    */
   pushed_to?: string[];
+  /**
+   * D1207 — the reader's own words about this row for the person reading it:
+   * where they stand (`my_role`, see `services/calendar/items.ts`) and, on a
+   * cancelled row, why (`cancel_reason`, null when nothing recorded one). The
+   * organiser's time zone where a row records one (`time_zone`), else null.
+   */
+  my_role?: string;
+  cancel_reason?: string | null;
+  time_zone?: string | null;
+  /** D1207 — the booked advisor's uid, for the booking's page. */
+  advisor_uid?: string | null;
+}
+
+/**
+ * D1207 — what a reader is asked for beyond its window. Only the page read
+ * (`GET /calendar/events`) asks for cancelled rows: the .ics feed, the
+ * Google and Outlook sync and the one-event push never see one, so a
+ * cancelled meeting is never copied back into anyone's calendar.
+ */
+export interface ReadOptions { withCancelled?: boolean }
+
+/** A booking's stored cancel code, in words; free text passes as written. */
+export function bookingCancelReason(code: string | null | undefined): string | null {
+  const v = String(code ?? '').trim();
+  if (!v) return null;
+  if (v === 'slot_cancelled') return 'The host cancelled this time.';
+  if (v === 'capacity_race') return 'The time filled up before this booking was confirmed.';
+  return v;
 }
 
 function addMinutes(iso: string, mins: number): string {
@@ -460,12 +488,13 @@ function addMinutes(iso: string, mins: number): string {
 }
 
 async function icEvents(env: Env, userId: number,
-                        fromIso: string, toIso: string): Promise<CalendarEvent[]> {
+                        fromIso: string, toIso: string, opts: ReadOptions = {}): Promise<CalendarEvent[]> {
   const sql = getSQL(env);
+  const withCancelled = opts.withCancelled ? 1 : 0;
   const rows = await sql`
     SELECT m.* FROM ic_meetings m
     WHERE m.start_at >= ${fromIso} AND m.start_at <= ${toIso}
-      AND m.status != 'cancelled'
+      AND (m.status != 'cancelled' OR ${withCancelled} = 1)
   ` as any[];
   const out: CalendarEvent[] = [];
   for (const m of rows) {
@@ -495,17 +524,21 @@ async function icEvents(env: Env, userId: number,
       })),
       notes: m.agenda || null,
       deal_id: m.deal_id,
+      my_role: m.organizer_user_id === userId ? 'organiser' : 'invited',
+      cancel_reason: m.status === 'cancelled' ? (m.cancel_reason || null) : null,
+      time_zone: null,
     });
   }
   return out;
 }
 
 async function checkinEvents(env: Env, userId: number,
-                             fromIso: string, toIso: string): Promise<CalendarEvent[]> {
+                             fromIso: string, toIso: string, opts: ReadOptions = {}): Promise<CalendarEvent[]> {
   const sql = getSQL(env);
+  const withCancelled = opts.withCancelled ? 1 : 0;
   const rows = await sql`
     SELECT * FROM founder_checkins
-    WHERE start_at >= ${fromIso} AND start_at <= ${toIso} AND status != 'cancelled'
+    WHERE start_at >= ${fromIso} AND start_at <= ${toIso} AND (status != 'cancelled' OR ${withCancelled} = 1)
       AND (founder_user_id = ${userId} OR counterpart_user_id = ${userId})
   ` as any[];
   const out: CalendarEvent[] = [];
@@ -532,6 +565,12 @@ async function checkinEvents(env: Env, userId: number,
       attendees,
       notes: c.notes || null,
       project_id: c.project_id,
+      // A check-in stores no booker: the organiser is the one this reader
+      // has always named (`organizer_email`), the counterpart, else the founder.
+      my_role: (c.counterpart_user_id ? c.counterpart_user_id === userId : c.founder_user_id === userId) ? 'organiser' : 'invited',
+      // founder_checkins has no reason column (D1207 §2).
+      cancel_reason: null,
+      time_zone: null,
     });
   }
   return out;
@@ -560,7 +599,7 @@ function isMissingColumnError(e: any): boolean {
 }
 
 async function advisorBookingEvents(env: Env, userId: number,
-                                   fromIso: string, toIso: string): Promise<CalendarEvent[]> {
+                                   fromIso: string, toIso: string, opts: ReadOptions = {}): Promise<CalendarEvent[]> {
   const sql = getSQL(env);
   try {
     // Visibility: requester or advisor (via users.advisor_id).
@@ -572,12 +611,13 @@ async function advisorBookingEvents(env: Env, userId: number,
     // questions / project_id this function used to read exist on no table.
     // The first SELECT threw, isMissingColumnError caught it, and office-hour
     // bookings have therefore never appeared on anyone's calendar.
+    const withCancelled = opts.withCancelled ? 1 : 0;
     const rows = await sql`
       SELECT b.*, s.starts_at, s.ends_at, s.meeting_url
         FROM advisor_bookings b
         JOIN advisor_office_hour_slots s ON s.id = b.slot_id
        WHERE s.starts_at >= ${fromIso} AND s.starts_at <= ${toIso}
-         AND b.status IN ('pending', 'confirmed', 'completed')
+         AND (b.status IN ('pending', 'confirmed', 'completed') OR (b.status = 'cancelled' AND ${withCancelled} = 1))
     ` as any[];
     const out: CalendarEvent[] = [];
     for (const b of rows) {
@@ -586,7 +626,7 @@ async function advisorBookingEvents(env: Env, userId: number,
       const isRequester = b.founder_user_id === userId;
       const isAdvisor = !!(myAdvisorId && b.advisor_id === myAdvisorId);
       if (!(isRequester || isAdvisor)) continue;
-      const advisor = (await sql`SELECT email, display_name AS name FROM advisors WHERE id = ${b.advisor_id}` as any[])[0];
+      const advisor = (await sql`SELECT uid, email, display_name AS name, timezone FROM advisors WHERE id = ${b.advisor_id}` as any[])[0];
       const requester = (await sql`SELECT email, name FROM users WHERE id = ${b.founder_user_id}` as any[])[0];
       out.push({
         id: `advisor_booking:${b.id}`,
@@ -608,6 +648,10 @@ async function advisorBookingEvents(env: Env, userId: number,
         // Nothing links an office-hour booking to a project, so this is null
         // rather than a value invented to fill the field.
         project_id: null,
+        my_role: isAdvisor ? 'giving' : 'booked',
+        cancel_reason: b.status === 'cancelled' ? bookingCancelReason(b.cancel_reason) : null,
+        time_zone: advisor?.timezone || null,
+        advisor_uid: advisor?.uid || null,
       });
     }
     return out;
@@ -618,7 +662,7 @@ async function advisorBookingEvents(env: Env, userId: number,
 }
 
 async function partnerOfficeHourEvents(env: Env, userId: number,
-                                       fromIso: string, toIso: string): Promise<CalendarEvent[]> {
+                                       fromIso: string, toIso: string, opts: ReadOptions = {}): Promise<CalendarEvent[]> {
   const sql = getSQL(env);
   try {
     const me = (await sql`SELECT partner_id FROM users WHERE id = ${userId}` as any[])[0];
@@ -626,12 +670,13 @@ async function partnerOfficeHourEvents(env: Env, userId: number,
     // Same shape, same defects as advisorBookingEvents above: the time lives
     // on partner_office_hour_slots, the requester is founder_user_id, and
     // bookings are written 'pending' (routes/partner_office_hours.ts).
+    const withCancelled = opts.withCancelled ? 1 : 0;
     const rows = await sql`
       SELECT b.*, s.starts_at, s.ends_at, s.meeting_url
         FROM partner_bookings b
         JOIN partner_office_hour_slots s ON s.id = b.slot_id
        WHERE s.starts_at >= ${fromIso} AND s.starts_at <= ${toIso}
-         AND b.status IN ('pending', 'confirmed', 'completed')
+         AND (b.status IN ('pending', 'confirmed', 'completed') OR (b.status = 'cancelled' AND ${withCancelled} = 1))
     ` as any[];
     const out: CalendarEvent[] = [];
     for (const b of rows) {
@@ -658,6 +703,9 @@ async function partnerOfficeHourEvents(env: Env, userId: number,
         ],
         notes: b.notes || null,
         project_id: null,
+        my_role: isPartnerSide ? 'giving' : 'booked',
+        cancel_reason: b.status === 'cancelled' ? bookingCancelReason(b.cancel_reason) : null,
+        time_zone: null,
       });
     }
     return out;
@@ -775,7 +823,7 @@ async function directEvents(env: Env, userId: number,
  * rather than from a list someone remembered to update.
  */
 type CalendarReader = (
-  env: Env, userId: number, fromIso: string, toIso: string,
+  env: Env, userId: number, fromIso: string, toIso: string, opts?: ReadOptions,
 ) => Promise<CalendarEvent[]>;
 
 /**
@@ -832,7 +880,7 @@ export interface CalendarSourceStatus {
  */
 async function gather(
   env: Env, userId: number, _role: string, fromIso: string, toIso: string,
-  kinds?: string[],
+  kinds?: string[], opts: ReadOptions = {},
 ): Promise<{ events: CalendarEvent[]; sources: CalendarSourceStatus[] }> {
   const wanted = new Set<string>(kinds && kinds.length ? kinds : KNOWN_KINDS);
   const events: CalendarEvent[] = [];
@@ -840,7 +888,7 @@ async function gather(
   for (const kind of KNOWN_KINDS) {
     if (!wanted.has(kind)) continue;
     try {
-      events.push(...await READERS[kind](env, userId, fromIso, toIso));
+      events.push(...await READERS[kind](env, userId, fromIso, toIso, opts));
       sources.push({ kind, ok: true, error: null });
     } catch (e) {
       console.warn('[calendar] source failed', { kind, user_id: userId }, e);
@@ -851,12 +899,15 @@ async function gather(
   return { events, sources };
 }
 
-/** The degrading read: whatever loaded, plus which sources answered. */
+/**
+ * The degrading read: whatever loaded, plus which sources answered. Only the
+ * page asks it for cancelled rows (`opts.withCancelled`, D1207).
+ */
 export async function fetchUserEventsWithSources(
   env: Env, userId: number, role: string, fromIso: string, toIso: string,
-  kinds?: string[],
+  kinds?: string[], opts: ReadOptions = {},
 ): Promise<{ events: CalendarEvent[]; sources: CalendarSourceStatus[] }> {
-  return gather(env, userId, role, fromIso, toIso, kinds);
+  return gather(env, userId, role, fromIso, toIso, kinds, opts);
 }
 
 /** The strict read: a source that failed is an error, not a shorter list. */
@@ -1123,12 +1174,24 @@ export interface SyncSummary {
   removed: number;
 }
 
+/**
+ * D1209 — a refused token refresh is the one failure the page words
+ * differently ("Reconnect"), so it is thrown as `connection_refused`.
+ */
+async function refreshOrRefuse(refresh: () => Promise<string>): Promise<string> {
+  try {
+    return await refresh();
+  } catch {
+    throw Object.assign(new Error('connection_refused'), { code: 'connection_refused' });
+  }
+}
+
 export async function syncUserToGoogle(
   env: Env, userId: number, role: string, fromIso: string, toIso: string,
 ): Promise<SyncSummary> {
   const tok = await loadRefreshToken(env, 'google_oauth_tokens', userId);
   if (!tok) throw new Error('not_connected');
-  const accessToken = await refreshGoogleAccessToken(env, tok.raw);
+  const accessToken = await refreshOrRefuse(() => refreshGoogleAccessToken(env, tok.raw));
   if (tok.wasPlaintext) await reencryptRefreshToken(env, 'google_oauth_tokens', userId, tok.raw);
   return syncUserToProvider(env, userId, role, fromIso, toIso, 'google', accessToken);
 }
@@ -1138,7 +1201,7 @@ export async function syncUserToMicrosoft(
 ): Promise<SyncSummary> {
   const tok = await loadRefreshToken(env, 'microsoft_oauth_tokens', userId);
   if (!tok) throw new Error('not_connected');
-  const accessToken = await refreshMicrosoftAccessToken(env, tok.raw);
+  const accessToken = await refreshOrRefuse(() => refreshMicrosoftAccessToken(env, tok.raw));
   if (tok.wasPlaintext) await reencryptRefreshToken(env, 'microsoft_oauth_tokens', userId, tok.raw);
   return syncUserToProvider(env, userId, role, fromIso, toIso, 'microsoft', accessToken);
 }

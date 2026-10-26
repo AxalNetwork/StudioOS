@@ -23,7 +23,11 @@ strip, then the tab the address names.
   Clashes card, the History card and approve's counted third line.
 - `EventsAll.jsx` — All events (EV6, EV17d): the table, searched by title, with
   D919's filters, views, sorts, 25, 50 or 100 rows a page, the CSV of the rows
-  on screen and the phone cards; each title opens the event's page.
+  on screen and the phone cards; each title opens the event's page. D1116 adds
+  the Type and Format columns and filters, and each row's ⋯ menu.
+- `RowActions.jsx` — D1116: All events' per-row ⋯ menu (`RowMenu`), with the
+  event page's rules and items, and the dialog it opens (`RowDialog`), which
+  runs the event page's own write and says what it did.
 - `EventsCalendar.jsx` — Calendar (EV8, EV8w, EV17e, D919): Month (Monday to
   Sunday, three chips a day, "+n more"), Week (a time grid, overlaps side by
   side) and List (the phone's default); the chip card; the address keeps the
@@ -36,7 +40,8 @@ strip, then the tab the address names.
   actions", a disclosure of links (not an ARIA menu). Each card draws its
   own block of D918's summary, and its own failure.
 - `EventDialogs.jsx` — the dialogs (EV4, EV5, EV9–EV11), each a `Lightbox`;
-  Cancel and Unpublish carry an optional note (D922).
+  Cancel and Unpublish carry an optional note (D922). On a phone each is a
+  bottom sheet (D1116, EV17f).
 - `parts.jsx` — the card, pills, tile, refusal line and confirmation line the
   tabs share.
 - `useEventsDesk.js` — the reads, each made alone; `useReviewReads` reads the
