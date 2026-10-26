@@ -1,5 +1,8 @@
 # frontend/src/lib/api — one file per new API domain
 
+D1156: `programGrants.js` adds the dated HQ `inUse(uid)` read and the branch
+`sendProgramReport()` action, with no caller-supplied counts.
+
 `../api.js` is the SPA's client for the Worker. It is also the file most likely
 to conflict: on `main` from 2 August to 3 October 2026 it changed in 113 of
 624 commits, because every new client method landed at the bottom of it. From
@@ -399,3 +402,5 @@ D1135's `companyActions.js` holds self-service company leave and venture restore
 D1123 adds the cohort capacity read to `labOperations.js`; the mounted Worker route is in admin_lab_operations.ts.
 
 D1199 (#3149): `productTesting.js` adds the programme logo: `partnerTestingApi.uploadLogo(uid, file)` and `.removeLogo(uid)`, the same on `adminTestingApi` for HQ's own programmes, and `productTestingApi.logoSrc(uid)`, the `<img>` path (a 404 there means no logo: draw the initial letter).
+
+D1207 (#3173): `calendarItems.js` holds the Calendar's Reschedule (`PATCH /calendar/ic-meetings/:id` and `/calendar/founder-checkins/:id`) and its pickers (`/calendar/people`, `/calendar/deals`). A person comes back as a uid and a name, never an email or a user number.

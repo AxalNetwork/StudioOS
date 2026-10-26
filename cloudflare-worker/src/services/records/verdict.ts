@@ -202,6 +202,13 @@ export function verdictSpec({ evidenceSource = evidenceFor }: { evidenceSource?:
           }),
         },
       ];
+      // D1069 (#2939, VB2a): after a given Proceed or Pivot, the venture's founder plans the build from it.
+      if (d.state === 'given' && !d.superseded_at && (d.decision === 'proceed' || d.decision === 'pivot') && ownsVenture(ctx.project, ctx.user)) {
+        actions.push({
+          key: 'plan-build', label: 'Plan the build', kind: 'link',
+          href: `/build/plan?project_id=${ctx.projectId}${d.hypothesis_id == null ? '' : `&scope=h-${d.hypothesis_id}`}`,
+        });
+      }
       const open = await openCommitments(ctx.env, ctx.projectId, d.id);
       if (open.length) {
         actions.push({

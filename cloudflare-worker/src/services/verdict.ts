@@ -507,6 +507,23 @@ export async function latestDecision(env: Env, projectId: number, scope: Scope):
   ).bind(projectId, scopeBind(scope)).first<LatestDecision>();
 }
 
+/**
+ * D1069 (#2939) — the scope's newest unsuperseded decision as the plan page
+ * draws it (VB1's strip, VB14's Withheld and Stop): its word, state, day and
+ * evidence count. No reasoning and no name. `latestDecision` stays as it is,
+ * because D1065 hashes what it answers.
+ */
+export type PlanVerdict = { id: number; decision: DecisionKind; state: DecisionState; decided_at: string | null; evidence_count: number; bar: number };
+export async function planVerdict(env: Env, projectId: number, scope: Scope): Promise<PlanVerdict | null> {
+  const row = await env.DB.prepare(
+    `SELECT d.id, d.decision, d.state, d.decided_at,
+            (SELECT COUNT(*) FROM validation_decision_evidence e WHERE e.decision_id = d.id) AS evidence_count
+       FROM validation_decisions d
+      WHERE d.project_id = ? AND d.hypothesis_id IS ? AND d.superseded_at IS NULL ORDER BY d.id DESC LIMIT 1`,
+  ).bind(projectId, scopeBind(scope)).first<{ id: number; decision: DecisionKind; state: DecisionState; decided_at: string | null; evidence_count: number }>();
+  return row ? { id: Number(row.id), decision: row.decision, state: row.state, decided_at: row.decided_at ?? null, evidence_count: Number(row.evidence_count) || 0, bar: DECISION_EVIDENCE_BAR } : null;
+}
+
 /** The ref ids of the evidence a decision rests on as support. */
 export async function supportingRefIds(env: Env, decisionId: number): Promise<string[]> {
   const rows = (await env.DB.prepare(

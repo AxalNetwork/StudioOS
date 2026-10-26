@@ -23,6 +23,7 @@
  * against `licence_deployments`. See the header of `hqOps.ts` for what that
  * does and does not establish.
  */
+import { recordProgramUsage, type ProgramFigure } from '../services/programUsage';
 import { WorkerEntrypoint } from 'cloudflare:workers';
 import type { Env } from '../types';
 import type { GameSet } from '../services/gameLibrary';
@@ -181,6 +182,11 @@ export class BranchEntrypoint extends WorkerEntrypoint<Env> {
   // attribution and not authentication.
   reportUsage(callerCode: string, secret: string, period: string, figures: UsageFigure[]) {
     return reportUsage(this.env, callerCode, secret, period, figures);
+  }
+
+  // D1156: authenticated, aggregate-only program figures from this branch.
+  reportProgramUsage(callerCode: string, secret: string, period: string, reportedAt: string, figures: ProgramFigure[]) {
+    return recordProgramUsage(this.env, callerCode, secret, period, reportedAt, figures);
   }
 
   // D266 — NO `promoCeiling` HERE. The ceiling already travels the other way:
