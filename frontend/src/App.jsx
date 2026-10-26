@@ -2897,6 +2897,7 @@ function AppInner() {
       <Route path="/admin/approvals" element={guard(['admin'], <AdminApprovals />)} />
       <Route path="/admin/approvals/lanes" element={guard(['admin'], <AdminApprovals />)} />
       <Route path="/admin/approvals/decided" element={guard(['admin'], <AdminApprovals />)} />
+      <Route path="/admin/approvals/items/:ref" element={guard(['admin'], <AdminApprovals />)} />
       <Route path="/admin/approvals/product-testers" element={guard(['admin'], <ApprovalsLaneBoards />)} />
       <Route path="/admin/approvals/co-marketing" element={guard(['admin'], <ApprovalsLaneBoards />)} />
       <Route path="/admin/approvals/co-marketing/approved" element={guard(['admin'], <ApprovalsLaneBoards />)} />
