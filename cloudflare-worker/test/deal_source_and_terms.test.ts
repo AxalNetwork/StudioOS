@@ -110,8 +110,10 @@ function freshDb() {
   u.run(ADMIN, 'admin', 'Ada Admin');
   u.run(INVESTOR, 'investor', 'Ingrid Investor');
   db.prepare('INSERT INTO projects (id, name) VALUES (?, ?)').run(PROJ, 'Alpha');
-  db.prepare(`INSERT INTO deals (id, uid, project_id, status, target_raise) VALUES (?, 'd-alpha', ?, 'applied', 1000000)`)
-    .run(DEAL, PROJ);
+  // D1242: an Operating Partner writes only to a round they lead, so the
+  // partner below leads this one.
+  db.prepare(`INSERT INTO deals (id, uid, project_id, status, target_raise, lead_partner_id) VALUES (?, 'd-alpha', ?, 'applied', 1000000, ?)`)
+    .run(DEAL, PROJ, PARTNER);
   return db;
 }
 

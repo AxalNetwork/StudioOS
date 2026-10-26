@@ -15,6 +15,7 @@ import { ensureDealPassSchema, recordStageEvent, stageRecordingStartedAt } from 
 import { newUid, nowIso } from './_t13t14t15_helpers';
 import { logAdminAction } from '../services/adminAudit';
 import { logDealRoomAction } from '../services/dealRoomAudit';
+import { INTAKE_LINE, LEAD_ADMIN_ONLY, NOT_YOUR_ROUND, canMoveRound, readStudioLens } from '../services/dealStudioLens';
 
 const deals = new Hono<{ Bindings: Env }>();
 
@@ -179,6 +180,16 @@ deals.get('/funnel', async (c) => {
 });
 
 // ---------------------------------------------------------------------------
+// D1242 (#3255) — the Studio lens: every round for an admin or an Operating
+// Partner, with its lead, its investors and who set a Not raising round so.
+// Registered above `/:id`.
+// ---------------------------------------------------------------------------
+deals.get('/studio', async (c) => {
+  const user = await requireRole(c, 'partner');
+  return c.json(await readStudioLens(c.env, user));
+});
+
+// ---------------------------------------------------------------------------
 // Task #127 — pass + stage analytics. Registered above `/:id` so the literal
 // paths are not swallowed by the id route.
 // ---------------------------------------------------------------------------
@@ -194,14 +205,29 @@ deals.get('/pass-analytics', async (c) => {
   await ensureDealPassSchema(c.env);
   const sql = getSQL(c.env);
 
+  // D1242 (#2423 item 6): a round intake scoring set to Not raising is not a
+  // pass, so it is counted apart, never as a pass "before a reason was
+  // required". `services/dealStudioLens.ts` reads the same evidence.
   const counts = await sql`
     SELECT d.pass_reason AS pass_reason, COUNT(*) AS count
       FROM deals d
       LEFT JOIN projects p ON p.id = d.project_id
      WHERE d.status = ${PASSED_STATUS}
        AND (p.id IS NULL OR p.deleted_at IS NULL)
+       AND NOT (d.passed_by_user_id IS NULL
+                AND NOT EXISTS (SELECT 1 FROM deal_stage_events e WHERE e.deal_id = d.id AND e.to_stage = ${PASSED_STATUS} AND e.actor_user_id IS NOT NULL)
+                AND EXISTS (SELECT 1 FROM activity_logs a WHERE a.project_id = d.project_id AND a.action = 'auto_scored' AND a.details LIKE ${INTAKE_LINE}))
      GROUP BY d.pass_reason`;
   const breakdown = buildPassBreakdown(counts as any[]);
+  const [intake] = await sql`
+    SELECT COUNT(*) AS n
+      FROM deals d
+      LEFT JOIN projects p ON p.id = d.project_id
+     WHERE d.status = ${PASSED_STATUS}
+       AND (p.id IS NULL OR p.deleted_at IS NULL)
+       AND d.passed_by_user_id IS NULL
+       AND NOT EXISTS (SELECT 1 FROM deal_stage_events e WHERE e.deal_id = d.id AND e.to_stage = ${PASSED_STATUS} AND e.actor_user_id IS NOT NULL)
+       AND EXISTS (SELECT 1 FROM activity_logs a WHERE a.project_id = d.project_id AND a.action = 'auto_scored' AND a.details LIKE ${INTAKE_LINE})`;
 
   // A reason the caller did not ask about returns no deals rather than all of
   // them — an unfiltered dump of every pass is a different, larger disclosure.
@@ -229,6 +255,9 @@ deals.get('/pass-analytics', async (c) => {
         LEFT JOIN users u ON u.id = d.passed_by_user_id
        WHERE d.status = ${PASSED_STATUS} AND d.pass_reason IS NULL
          AND (p.id IS NULL OR p.deleted_at IS NULL)
+         AND NOT (d.passed_by_user_id IS NULL
+                  AND NOT EXISTS (SELECT 1 FROM deal_stage_events e WHERE e.deal_id = d.id AND e.to_stage = ${PASSED_STATUS} AND e.actor_user_id IS NOT NULL)
+                  AND EXISTS (SELECT 1 FROM activity_logs a WHERE a.project_id = d.project_id AND a.action = 'auto_scored' AND a.details LIKE ${INTAKE_LINE}))
        ORDER BY COALESCE(d.passed_at, d.updated_at) DESC
        LIMIT 100`) as any[];
   }
@@ -243,6 +272,8 @@ deals.get('/pass-analytics', async (c) => {
     unrecorded_note: breakdown.unrecorded > 0
       ? 'These deals were passed before a reason was required. They are not backfilled — a guessed reason would corrupt the record.'
       : null,
+    // D1242: rounds intake scoring set to Not raising, which are not passes.
+    intake_not_raising: Number((intake as any)?.n ?? 0),
     reason: reason || null,
     deals: matches,
   });
@@ -726,6 +757,14 @@ deals.put('/:id', async (c) => {
   const rows = await sql`SELECT id, status, stage_changed_at, amount, lead_partner_id FROM deals WHERE id = ${id}`;
   if (rows.length === 0) { await sql.end(); return c.json({ error: 'Deal not found' }, 404); }
 
+  // D1242: an Operating Partner writes only to a round they lead, and only an
+  // admin changes who leads it; refused before anything is written.
+  if (!canMoveRound(user, (rows[0] as any).lead_partner_id)) { await sql.end(); return c.json(NOT_YOUR_ROUND, 403); }
+  if (data.lead_partner_id !== undefined && String((user as any)?.role) !== 'admin') {
+    await sql.end();
+    return c.json(LEAD_ADMIN_ONLY, 403);
+  }
+
   // A denomination change would relabel historical commitments/transfers.
   if (data.currency !== undefined) {
     await sql.end();
@@ -910,8 +949,10 @@ deals.post('/:id/advance', async (c) => {
   const id = parseInt(c.req.param('id'));
   await ensureDealPassSchema(c.env);
   const sql = getSQL(c.env);
-  const rows = await sql`SELECT status, stage_changed_at FROM deals WHERE id = ${id}`;
+  const rows = await sql`SELECT status, stage_changed_at, lead_partner_id FROM deals WHERE id = ${id}`;
   if (rows.length === 0) { await sql.end(); return c.json({ error: 'Deal not found' }, 404); }
+  // D1242: an Operating Partner moves only the rounds they lead.
+  if (!canMoveRound(user, (rows[0] as any).lead_partner_id)) { await sql.end(); return c.json(NOT_YOUR_ROUND, 403); }
   const cur = String((rows[0] as any).status);
   const idx = PIPELINE.indexOf(cur);
   if (idx < 0 || idx >= PIPELINE.length - 1) {
@@ -977,8 +1018,11 @@ deals.post('/:id/pass', async (c) => {
 
   await ensureDealPassSchema(c.env);
   const sql = getSQL(c.env);
-  const rows = await sql`SELECT status, stage_changed_at FROM deals WHERE id = ${id}`;
+  const rows = await sql`SELECT status, stage_changed_at, lead_partner_id FROM deals WHERE id = ${id}`;
   if (rows.length === 0) { await sql.end(); return c.json({ error: 'Deal not found' }, 404); }
+  // D1242: a studio pass closes the round for every investor, so an Operating
+  // Partner records one only on a round they lead.
+  if (!canMoveRound(user, (rows[0] as any).lead_partner_id)) { await sql.end(); return c.json(NOT_YOUR_ROUND, 403); }
   const cur = String((rows[0] as any).status);
   if (cur === PASSED_STATUS) {
     await sql.end();

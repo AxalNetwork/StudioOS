@@ -139,8 +139,13 @@ test('the bands fire on the canvas thresholds', () => {
 
 // ---------- the page ----------
 
+// D1242 (#3255): the Studio lens replaced DealsPage; its dialogs and panels
+// moved to StudioParts.jsx as they were, and the lens opens them.
+const LENS = ['frontend/src/pages/investor/dealflow/StudioLens.jsx', 'frontend/src/pages/investor/dealflow/StudioParts.jsx']
+  .map((f) => code(f)).join('\n');
+
 test('the page reaches the terminal stage only through the pass route', () => {
-  const src = code('frontend/src/pages/DealsPage.jsx');
+  const src = LENS;
   assert.match(src, /api\.passDeal\(/, 'the Pass control must call the pass route');
   // updateDeal({status:'rejected'}) would bypass the reason entirely. The
   // worker refuses it, but the UI must not be written to try.
@@ -149,14 +154,14 @@ test('the page reaches the terminal stage only through the pass route', () => {
 });
 
 test('the pass modal cannot submit without a reason', () => {
-  const src = code('frontend/src/pages/DealsPage.jsx');
+  const src = LENS;
   assert.match(src, /disabled=\{!reason \|\| saving\}/, 'the confirm button must require a reason');
   assert.match(src, /if \(!reason \|\| saving\) return;/,
     'and the handler must refuse too — a disabled button is a suggestion');
 });
 
 test('the page renders every taxonomy reason and the unrecorded bucket', () => {
-  const src = code('frontend/src/pages/DealsPage.jsx');
+  const src = LENS;
   assert.match(src, /PASS_TAXONOMY\.map/, 'the modal lists the taxonomy rather than hardcoding it');
   assert.match(src, /PASS_REASON_UNRECORDED/, 'and the panel names the unrecorded bucket');
   assert.match(src, /unrecorded_note/, 'and explains why it is not backfilled');
@@ -165,7 +170,7 @@ test('the page renders every taxonomy reason and the unrecorded bucket', () => {
 test('the SLA preference stays in the browser', () => {
   // It changes which cards look urgent, never what is true about them. Sending
   // it to the server would let one partner repaint everyone else's board.
-  const src = code('frontend/src/pages/DealsPage.jsx');
+  const src = LENS;
   assert.match(src, /safeWriteJSON\('dealFlowSla'/);
   assert.doesNotMatch(src, /api\.[a-zA-Z]*[Ss]la/, 'the SLA must never be sent to an endpoint');
 });
@@ -219,7 +224,7 @@ function unusedImports(raw) {
   return unused;
 }
 
-for (const path of ['pages/DealsPage.jsx', 'lib/dealFlow.js']) {
+for (const path of ['pages/investor/dealflow/StudioLens.jsx', 'pages/investor/dealflow/StudioParts.jsx', 'lib/dealFlow.js']) {
   test(`every name ${path} uses resolves to an import or a declaration`, () => {
     assert.deepEqual(freeNames(code(`frontend/src/${path}`)), []);
   });
