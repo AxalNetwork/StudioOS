@@ -491,7 +491,7 @@ const RAISE_COPY = {
     sub: 'Re-reads the evidence of each item you tick and rescores it.', foot: 'Scores now, from what is recorded. Earlier scores are kept.',
     labels: ['Items to re-score', 'Evidence read'],
     chips: { since: [['Everything', 'Since the last score'], 'last'] },
-    checks: { items: [['Narrative', true], ['Deck', true], ['Data room', true], ['Cap table', true], ['Use of funds', true], ['Traction', true], ['Team', false]] },
+    checks: { items: [['Narrative', true], ['Deck', true], ['Data room', true], ['Cap table', true], ['Use of funds', true], ['Traction', true], ['Product-market fit · from Validate', true], ['Team', false]] },
     metas: ['last 12 Oct', 'last 9 Oct', 'last 1 Oct', 'last 3 Oct', 'never scored', 'last 1 Oct · scored on its record'], placeholders: [],
   },
   'investor-narrative': {
@@ -611,12 +611,14 @@ async function assertRescore(m) {
     assert.ok(propsOf(team).disabled, 'Team is drawn disabled');
     await ui.tick('items', 'deck');
     await ui.submit();
-    assert.deepEqual(ui.sends('rescore'), [['rescore', P, { items: ['narrative', 'data_room', 'cap_table', 'use_of_funds', 'traction'], since: 'last' }]]);
+    // D1145 (#3031, RD6): Product-market fit is ticked with them, and sends its flag.
+    assert.deepEqual(ui.sends('rescore'), [['rescore', P, { items: ['narrative', 'data_room', 'cap_table', 'use_of_funds', 'traction', 'pmf'], since: 'last', pmf: true }]]);
     await ui.choose('since', 'all');
     await ui.submit();
     assert.equal(ui.sends('rescore')[1][2].since, 'all');
   } finally { await ui.unmount(); }
   assert.deepEqual(raiseForm(m, 'fundraising-readiness').toBody({ items: ['team', 'deck'], since: 'last' }).items, ['deck'], 'Team is never sent');
+  assert.equal(raiseForm(m, 'fundraising-readiness').toBody({ items: ['deck'], since: 'last' }).pmf, undefined, 'no flag without Product-market fit');
   assert.equal(m.rescoreRows([]).find((r) => r.value === 'narrative').meta, 'never scored');
 }
 
