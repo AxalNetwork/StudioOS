@@ -17,7 +17,8 @@
  */
 import React, { useCallback, useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { api, kycPeopleApi } from '../../../lib/api';
+import { api } from '../../../lib/api';
+import { kycPeopleApi } from '../../../lib/api/kycPeople.js';
 import { reportError } from '../../../lib/log';
 import { useAuth } from '../../../hooks/useAuthSync';
 import { Unrecorded } from '../../../ui';

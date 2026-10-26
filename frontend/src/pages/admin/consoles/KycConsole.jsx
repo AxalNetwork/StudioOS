@@ -1,7 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { reportError } from '../../../lib/log';
 import { Link } from 'react-router-dom';
-import { kycPeopleApi } from '../../../lib/api';
+import { kycPeopleApi } from '../../../lib/api/kycPeople.js';
 import { useAuth } from '../../../hooks/useAuthSync';
 import { Lightbox, actionGhost, actionPrimary } from '../../../ui';
 import { CONSOLE_LOADING, ConsoleUnreadable } from './shared';

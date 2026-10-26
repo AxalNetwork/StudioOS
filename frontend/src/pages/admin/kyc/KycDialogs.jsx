@@ -10,7 +10,9 @@
  * so the Worker asks no code for them.
  */
 import React, { useEffect, useRef, useState } from 'react';
-import { api, kycHqApi, kycPeopleApi } from '../../../lib/api';
+import { api } from '../../../lib/api';
+import { kycHqApi } from '../../../lib/api/kycHq.js';
+import { kycPeopleApi } from '../../../lib/api/kycPeople.js';
 import { reportError } from '../../../lib/log';
 import { Lightbox, actionDanger, actionGhost, actionPrimary } from '../../../ui';
 import {

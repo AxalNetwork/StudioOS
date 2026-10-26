@@ -7,7 +7,7 @@
  * Full screen on a phone (the Lightbox's own rule).
  */
 import React, { useCallback, useEffect, useRef, useState } from 'react';
-import { kycPeopleApi } from '../../../lib/api';
+import { kycPeopleApi } from '../../../lib/api/kycPeople.js';
 import { reportError } from '../../../lib/log';
 import { Lightbox, actionGhost } from '../../../ui';
 import { timeLabel } from './peopleModel';
