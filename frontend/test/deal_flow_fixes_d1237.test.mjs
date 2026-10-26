@@ -1,7 +1,7 @@
 /** D1237 (#3250): deal access is explicit, room changes are confirmed. */
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import React,{act,createElement as h} from 'react';
+import {act,createElement as h} from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { MemoryRouter } from 'react-router-dom';
 import { readFileSync } from 'node:fs';
