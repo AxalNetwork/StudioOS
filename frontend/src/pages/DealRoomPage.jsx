@@ -6,18 +6,15 @@ import { reportError } from '../lib/log';
 import { safeReadJSON } from '../lib/storage';
 import { useAuth } from '../hooks/useAuthSync';
 import { api } from '../lib/api';
-import { adminCapitalAttestationsApi } from '../lib/api/adminCapitalAttestations';
 import { branchOfUser } from '../lib/shellRole';
-import { ProofStatement } from '../components/ProofOfFunds';
 import { mercuryAttestationsApi } from '../lib/api/mercuryAttestations';
-import { ProofDoor, ProofOfFundsSheet, useProofTargets } from './investor/ProofOfFunds';
-import { COMMIT_RECORDED, SHARE_BUTTON, newestDealTarget, ownDealTarget, showsProof } from './investor/proofOfFundsModel';
+import { ProofOfFundsSheet } from './investor/ProofOfFunds';
+import { COMMIT_RECORDED, SHARE_BUTTON, newestDealTarget, showsProof } from './investor/proofOfFundsModel';
 import { Unreadable } from '../ui';
 import { useDealroomQuota, QuotaLine, JoinNote, JoinLeaveButton } from '../components/deals/DealRoomJoin';
 import DealInvitationsTab from '../components/deals/DealInvitationsTab';
 import DealTransfersTab from '../components/deals/DealTransfersTab';
 import DealSyndicates from '../components/deals/DealSyndicates';
-import MercuryMatch from '../components/MercuryMatch';
 import { NOT_YET, TAB_DEFS, WAITS, dealTabsFor, tabHref, tabOf } from './dealPageModel';
 import ClosingRoom from './closing/ClosingRoom';
 import VentureScorecard from '../components/scoring/scorecard/Scorecard';
@@ -28,6 +25,8 @@ import { BTN_P, BTN_S, DealLoading, DealNotFound, DealUnreadable, KeyStrip, NoPe
 import DealOverview from './deal/DealOverview';
 import DealNotes, { DealActivity } from './deal/DealNotes';
 import { DealCommitment, DealDiligence, DealDocuments, DealTerms } from './deal/DealWorkTabs';
+import DealCommitmentsStaff from './deal/DealCommitmentsStaff';
+import { READ_ONLY, viewerOf } from './deal/dealAudienceModel';
 import {
   ArrowLeft, FileText, Loader2, X, DollarSign, Send, Check, Users,
 } from 'lucide-react';
@@ -67,6 +66,8 @@ export default function DealRoomPage() {
   const back = dealBackLink(role);
   const isInvestor = role === 'investor';
   const isAdmin = role === 'admin';
+  // D1155 (DL15–DL17): the founder's, an Admin's and an Operating Partner's views.
+  const isPartner = role === 'partner';
   const tabs = dealTabsFor(role);
   const tab = tabOf(tabParam, role);
   // D1152 (DL22): an Advisor and an Explorer get their words, and nothing is read.
@@ -157,6 +158,7 @@ export default function DealRoomPage() {
               {deal.project_sector && <span className={PILL_N}>{deal.project_sector}</span>}
               <span className={`${PILL_N} capitalize`} data-testid="deal-status">{deal.status || 'Status not recorded'}</span>
               {deal.lead_partner_name && <span className="text-[12.5px] font-semibold text-axal-muted dark:text-gray-400">Lead: {deal.lead_partner_name}</span>}
+              {isPartner && <span className={PILL_N} data-testid="deal-read-only">◉ {READ_ONLY}</span>}
             </div>
           </div>
           <div className="flex flex-wrap items-center gap-2">
@@ -195,9 +197,9 @@ export default function DealRoomPage() {
       {tab === 'documents' && (isInvestor ? <DealDocuments deal={deal} /> : <DocumentsTab dealId={deal.id} />)}
       {tab === 'terms' && <DealTerms deal={deal} investor={isInvestor} />}
       {/* D1213 (#2424): the round's closing room, its own address under the deal. */}
-      {tab === 'commitment' && isInvestor && <DealCommitment key={proofKey} deal={deal} user={user} onChangeAmount={() => setCommitOpen(true)} />}
+      {tab === 'commitment' && isInvestor && <DealCommitment key={proofKey} deal={deal} user={user} onChangeAmount={() => setCommitOpen(true)} onShare={openProof} />}
       {tab === 'commitment' && !isInvestor && <p className="m-0 text-sm"><Link to={tabHref(deal.id, 'closing')} className="font-semibold underline" data-testid="deal-closing-door">Open the closing room</Link> for the round's lines, checklist and what is received.</p>}
-      {tab === 'commitment' && !isInvestor && <CommitmentsTab key={proofKey} dealId={deal.id} currency={deal.currency} proof={isAdmin && !branchOfUser(user)} user={user} onShare={openProof} founderMatch={isDealFounder(role, user, deal)} />}
+      {tab === 'commitment' && !isInvestor && <DealCommitmentsStaff dealId={deal.id} currency={deal.currency} viewer={viewerOf(role, user, deal)} proof={isAdmin && !branchOfUser(user)} />}
       {tab === 'closing' && <ClosingRoom dealId={deal.id} role={role} deal={deal} />}
       {/* DL14: an investor's Notes tab: their firm's notes, Eadwyn's draft slot and the activity. */}
       {tab === 'notes' && <DealNotes dealId={deal.id} userId={user?.id} />}
@@ -205,7 +207,8 @@ export default function DealRoomPage() {
       {tab === 'invitations' && (
         <DealInvitationsTab dealId={deal.id} onInvite={canInvite ? () => setInviteOpen(true) : undefined} />
       )}
-      {tab === 'transfers' && <DealTransfersTab dealId={deal.id} currency={deal.currency} canRecord={isAdmin || role === 'partner'} />}
+      {/* D1215: an Admin records transfers; an Operating Partner reads them. */}
+      {tab === 'transfers' && <DealTransfersTab dealId={deal.id} currency={deal.currency} canRecord={isAdmin} />}
 
       {respondTo && <RespondDialog answer={respondTo} onConfirm={respond} onClose={() => setRespondTo(null)} />}
       {commitOpen && <CommitModal deal={deal} user={user} onClose={() => setCommitOpen(false)} onDone={async (opts) => {
@@ -277,89 +280,6 @@ function DocumentsTab({ dealId }) {
         </div>
       )}
     </div>
-  );
-}
-
-/**
- * D752 (#1989): the deal's own founder, the only viewer offered "Match to my
- * Mercury" on its commitments. An investor, an admin or a partner sees each
- * commitment's status only, never the bank line behind it.
- */
-export function isDealFounder(role, user, deal) {
-  return role === 'founder' && user?.founder_id != null && deal?.project_founder_id != null
-    && Number(user.founder_id) === Number(deal.project_founder_id);
-}
-
-/** D752: a pending commitment can be matched; a confirmed one keeps its door so the founder can withdraw. */
-export const COMMITMENT_MATCH_STATUSES = Object.freeze(['pending', 'confirmed']);
-
-// D752 (#1890): an admin on HQ (`proof`) also reads each commitment's shared
-// proof of funds, once, after the commitments load: an audited request that
-// counts a view. It comes from its own route, never from `dealCommitments`,
-// which other invited investors read. Every other viewer makes no proof read.
-export function CommitmentTotal({ total, currency = 'USD' }) {
-  return <div className="text-sm text-gray-700 dark:text-gray-300" data-testid="commitments-total">Total committed: {fmtMoney(total, currency)}</div>;
-}
-
-export function CommitmentsTab({ dealId, currency = 'USD', proof = false, user = null, onShare, founderMatch = false }) {
-  // D752 (#1891): an investor on HQ sees a door on their own row only.
-  const own = useProofTargets({ enabled: showsProof(user) });
-  const [items, setItems] = useState(null);
-  const [failed, setFailed] = useState(false);
-  const [proofs, setProofs] = useState(null); // { byTarget } | { error }
-  const load = () => {
-    setFailed(false);
-    api.dealCommitments(dealId).then(setItems).catch(() => setFailed(true));
-  };
-  useEffect(() => { load(); /* eslint-disable-next-line */ }, [dealId]);
-  const loaded = items != null;
-  useEffect(() => {
-    if (!proof || !loaded) return undefined;
-    let alive = true;
-    adminCapitalAttestationsApi.forDeal(dealId)
-      .then((r) => { if (alive) setProofs({ byTarget: Object.fromEntries((r?.items || []).map((i) => [i.target_id, i])) }); })
-      .catch((e) => { reportError('proof-of-funds:deal', e); if (alive) setProofs({ error: e }); });
-    return () => { alive = false; };
-  }, [proof, loaded, dealId]);
-  if (failed) return <Unreadable what="The commitments" claim="That is not a claim that none is recorded." onRetry={load} />;
-  if (items == null) return <div className="text-center text-gray-500 py-8"><Loader2 className="animate-spin inline" size={16} /></div>;
-  if (!Array.isArray(items)) return <CommitmentTotal currency={currency} total={items.total} />;
-  if (items.length === 0) return <div className="text-center text-gray-500 py-8">No commitments recorded yet</div>;
-  return (
-    <>
-    {proof && proofs?.error && (
-      <div className="mb-2" data-testid="deal-proofs-failed">
-        {proofs.error?.status
-          ? <p role="alert" className="text-[12px] text-red-700 dark:text-red-300">{proofs.error.message || 'The proofs of funds could not be read.'}</p>
-          : <Unreadable what="The proofs of funds" claim="This is not a claim that none was shared." />}
-      </div>
-    )}
-    <div className="bg-white border border-gray-200 rounded-xl divide-y divide-gray-50 dark:bg-gray-900 dark:border-gray-800 dark:divide-gray-800">
-      {items.map(c => (
-        <div key={c.id} className="flex items-center justify-between gap-3 p-3">
-          <div className="min-w-0 flex-1">
-            <div className="text-sm font-medium text-gray-900 dark:text-gray-100">{c.investor_name || `Investor #${c.investor_user_id}`}</div>
-            {c.notes && <div className="text-xs text-gray-500">{c.notes}</div>}
-            {proof && proofs?.byTarget && (
-              <div className="mt-1.5" data-testid={`deal-proof-${c.id}`}>
-                {proofs.byTarget[c.id]
-                  ? <ProofStatement item={proofs.byTarget[c.id]} figureDollars={c.amount} />
-                  : <span className="text-xs text-gray-500 dark:text-gray-400">No proof of funds shared</span>}
-              </div>
-            )}
-          </div>
-          <div className="flex-none text-right">
-            <div className="text-sm font-semibold text-gray-900 dark:text-gray-100">{fmtMoney(c.amount, currency)}</div>
-            <div className="text-xs text-gray-500 capitalize">{c.status}</div>
-            {founderMatch && COMMITMENT_MATCH_STATUSES.includes(c.status) && (
-              <div className="mt-1"><MercuryMatch target="commitment" targetId={c.id} matched={c.status === 'confirmed' ? {} : null} onChanged={load} /></div>
-            )}
-            {own.status === 'ready' && <ProofDoor target={ownDealTarget(own.read, c, user)} onShare={(t) => onShare?.(t, own.read)} />}
-          </div>
-        </div>
-      ))}
-    </div>
-    </>
   );
 }
 

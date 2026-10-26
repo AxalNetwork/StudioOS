@@ -238,12 +238,14 @@ export function myCommitment(read, currency = 'USD') {
     confirmed: live.status === 'confirmed',
     recorded: `Recorded ${dayOf(live.created_at) || 'on a date not recorded'}`,
     note: live.notes ? String(live.notes) : null,
+    // D1155: the row itself, for D752's proof door on your own commitment.
+    row: live,
     history,
   };
 }
 
-/** Who reads a commitment's note today: the Worker returns it to the deal's founder and the studio too. */
-export const NOTE_READERS = 'You, your firm, the founder and the studio read this note.';
+/** Who reads a commitment's note: since D1155 the Worker returns it to you alone (DL15); the founder and the studio see the amount and status. */
+export const NOTE_READERS = 'Only you read this note. The founder and the studio see your amount and status, never the note.';
 
 /** The round as a count of investors and a total; never a name, never another investor's amount. */
 export function roundLines(read, deal) {
