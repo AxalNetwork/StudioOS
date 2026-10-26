@@ -287,6 +287,7 @@ const BranchAnalytics = lazy(() => import('./pages/branch/BranchAnalytics'));
 // The Super Admin's HQ-only surfaces (migrations 199/207). `hqOnly` below
 // renders the notice for an admin without the elevation.
 const SuperAdminOnlyNotice = lazy(() => import('./pages/hq/SuperAdminOnlyNotice'));
+const PlanNotFounder = lazy(() => import('./pages/cycles/BuildPlan').then((m) => ({ default: m.PlanNotFounder })));
 const LabOnlyNotice = lazy(() => import('./pages/admin/lab/LabOnlyNotice'));
 const AdminOnlyNotice = lazy(() => import('./pages/hq/AdminOnlyNotice'));
 const HqContractsPage = lazy(() => import('./pages/hq/ContractsPage'));
@@ -2316,6 +2317,8 @@ function AppInner() {
   // Admin users browsing via the "View as" switcher (not impersonation) have
   // effectiveRole = viewMode, not 'admin'. We add viewMode to the list so
   // RoleGuard doesn't redirect them while they're previewing another role.
+  // D1070: who meets VB20a's card on the plan's two addresses.
+  const planNotFounder = ['investor', 'advisor', 'exploring'].includes(user?.role) && user?.spinout_lab_active !== 1;
   const labRoles = (roles) => {
     const result = [...roles];
     if (user && user.spinout_lab_active === 1 && !result.includes(user.role)) {
@@ -3136,8 +3139,10 @@ function AppInner() {
       <Route path="/build/connect" element={guard(labRoles(['admin', 'founder']), <CycleRoute cycle="build" lightbox />)} />
       <Route path="/build/tools" element={guard(['admin', 'founder'], <HistoryRedirect to="/build/operating-systems" hash="#tools" />)} />
       {/* D1063 (#2426): Validate → Build's plan and its progress, ahead of /build/:slug. */}
-      <Route path="/build/plan" element={guard(labRoles(['admin', 'founder']), <CycleRoute cycle="build" buildPlan="plan" />)} />
-      <Route path="/build/plan/progress" element={guard(labRoles(['admin', 'founder']), <CycleRoute cycle="build" buildPlan="progress" />)} />
+      {/* D1070 (#2940): an Operating Partner opens Progress (VB15); an investor, advisor or explorer
+          meets "This plan belongs to the venture's founders" (VB20a), never a silent bounce. A Lab member is spared it. */}
+      <Route path="/build/plan" element={guard(labRoles(['admin', 'founder', 'partner', 'investor', 'advisor', 'exploring']), planNotFounder ? <PlanNotFounder /> : <CycleRoute cycle="build" buildPlan="plan" />)} />
+      <Route path="/build/plan/progress" element={guard(labRoles(['admin', 'founder', 'partner', 'investor', 'advisor', 'exploring']), planNotFounder ? <PlanNotFounder /> : <CycleRoute cycle="build" buildPlan="progress" />)} />
       <Route path="/build/:slug" element={guard(labRoles(['admin', 'founder']), <CycleRoute cycle="build" />)} />
       <Route path="/build/:slug/:id" element={guard(labRoles(['admin', 'founder']), <CycleRoute cycle="build" record />)} />
       <Route path="/build/:slug/new" element={guard(labRoles(['admin', 'founder']), <CycleRoute cycle="build" adding />)} />
