@@ -537,7 +537,8 @@ const APPLICATIONS_WHERE = `
     AND (? IS NULL OR u.role = ?)
     AND (? IS NULL OR (CASE WHEN a.consent_email_at IS NULL THEN 0 ELSE 1 END) = ?)
     AND (? IS NULL OR EXISTS (SELECT 1 FROM product_testers t WHERE t.user_id = a.user_id AND t.status = 'active') = ?)
-    AND (? IS NULL OR COALESCE(u.display_name, u.name) LIKE ? ESCAPE '\\')`;
+    AND (? IS NULL OR COALESCE(u.display_name, u.name) LIKE ? ESCAPE '\\')
+    AND (? IS NULL OR p.status IN ('open', 'testing'))`;
 const APPLICATIONS_FROM = `FROM testing_applications a
   JOIN testing_programmes p ON p.id = a.programme_id
   JOIN users u ON u.id = a.user_id
@@ -548,12 +549,17 @@ const APPLICATIONS_COLS = `a.uid, a.status, a.consent_email_at, a.answers, a.ava
   EXISTS (SELECT 1 FROM product_testers t WHERE t.user_id = a.user_id AND t.status = 'active') AS in_pool`;
 const APPLICATIONS_COUNT = `SELECT COUNT(*) AS n ${APPLICATIONS_FROM} ${APPLICATIONS_WHERE}`;
 const APPLICATIONS_BY_APPLIED = `SELECT ${APPLICATIONS_COLS} ${APPLICATIONS_FROM} ${APPLICATIONS_WHERE} ORDER BY a.created_at DESC, a.id DESC LIMIT ? OFFSET ?`;
+// D1203: TST8's status chips, one count per status under every other filter (status bound as 'all').
+const APPLICATIONS_COUNTS = `SELECT a.status, COUNT(*) AS n ${APPLICATIONS_FROM} ${APPLICATIONS_WHERE} GROUP BY a.status`;
 const APPLICATIONS_BY_NAME = `SELECT ${APPLICATIONS_COLS} ${APPLICATIONS_FROM} ${APPLICATIONS_WHERE} ORDER BY COALESCE(u.display_name, u.name) COLLATE NOCASE, a.id LIMIT ? OFFSET ?`;
 
 export type ApplicationsQuery = {
   programme?: unknown; owner?: unknown; status?: unknown; role?: unknown; consented?: unknown;
-  tester?: unknown; q?: unknown; sort?: unknown; page?: unknown; page_size?: unknown;
+  tester?: unknown; q?: unknown; sort?: unknown; page?: unknown; page_size?: unknown; scope?: unknown;
 };
+
+/** D1203: TST8's scope switch. `open` keeps programmes taking applicants or in testing; `all` (the default) every programme. */
+export const APPLICATION_SCOPES = ['all', 'open'] as const;
 
 /**
  * TST8: every application across programmes, for HQ, paged. Never an email.
@@ -579,15 +585,22 @@ export async function allApplications(env: Env, query: ApplicationsQuery = {}) {
   const needle = qRaw ? likeNeedle(qRaw) : null;
   if (qRaw && needle == null) throw refuse(400, 'invalid_request', 'Search with at least two characters.');
   const role = roleRaw || null;
-  const binds = [programme, programme, owner.kind, owner.kind, owner.firm, owner.firm, status, status, status,
-    role, role, consented, consented, tester, tester, needle, needle];
+  const scopeRaw = query.scope == null || query.scope === '' ? 'all' : String(query.scope);
+  if (!(APPLICATION_SCOPES as readonly string[]).includes(scopeRaw)) throw refuse(400, 'invalid_request', 'scope is all or open.');
+  const open = scopeRaw === 'open' ? 1 : null;
+  const bindsFor = (st: string) => [programme, programme, owner.kind, owner.kind, owner.firm, owner.firm, st, st, st,
+    role, role, consented, consented, tester, tester, needle, needle, open];
+  const binds = bindsFor(status);
   return readOrRefuse('Applications', async () => {
     const total = await env.DB.prepare(APPLICATIONS_COUNT).bind(...binds).first<{ n: number }>();
     const { results } = await env.DB.prepare(sortRaw === 'name' ? APPLICATIONS_BY_NAME : APPLICATIONS_BY_APPLIED)
       .bind(...binds, size, offset).all();
+    const byStatus = (await env.DB.prepare(APPLICATIONS_COUNTS).bind(...bindsFor('all')).all<{ status: string; n: number }>()).results || [];
+    // Every status named, a measured 0 where none: the chips count what the other filters keep.
+    const counts = Object.fromEntries(APPLICATION_STATUSES.map((st) => [st, Number(byStatus.find((r) => r.status === st)?.n ?? 0)]));
     return {
       applications: {
-        available: true, reason: null, page, page_size: size, total: Number(total?.n ?? 0), sort: sortRaw,
+        available: true, reason: null, page, page_size: size, total: Number(total?.n ?? 0), sort: sortRaw, scope: scopeRaw, counts,
         items: (results || []).map((r: any) => ({
           uid: r.uid, name: r.name ?? null, role: r.role ?? null, status: r.status,
           consented: !!r.consent_email_at, in_pool: !!r.in_pool,
