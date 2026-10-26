@@ -23,8 +23,9 @@ number on screen traces back to a column.
 
 `use_of_funds_fixes_d1174.test.mjs` mounts Financials with real router and API
 effects: both venture aliases, invalid/missing selection, Back and score
-removal. Only chart drawing is stubbed for the minimal DOM. The cap-table suite
-also exercises a `project_id` deep link.
+removal. Only chart drawing is stubbed for the minimal DOM.
+`captable_retire_d1029.test.mjs` and `captable_fixes_d1016.test.mjs` check both
+venture aliases through the live redirects and Capital tabs.
 
 ## Conventions
 
