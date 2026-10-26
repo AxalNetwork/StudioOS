@@ -2,7 +2,7 @@ import { Hono } from 'hono';
 import type { Env } from '../types';
 import { requireAuth, requireFactor, requireHqAdmin, requireStepUp, requireSuperAdmin } from '../auth';
 import { AI_LICENCE_KEYS, AiBudgetReviewConflict, AiBudgetReviewNotFound, listAiBudgetReviews,
-  listAiLicenceCaps, loadAiBudget, planView, resolveAiCaps, settleAiBudgetReview, TYPED_CAP_LICENCES, usdToMicro } from '../services/aiBudget';
+  listAiLicenceCaps, loadAiBudget, memberHolds, planView, resolveAiCaps, settleAiBudgetReview, TYPED_CAP_LICENCES, usdToMicro } from '../services/aiBudget';
 import { parseSpendLimit, readSpendLimit, writeSpendLimit } from '../services/aiSpendLimit';
 import { PLAN_AI_SHARE } from '../services/planAllowance';
 import { aiTopupStatus, memberTopupReading, readAiTopupProduct } from '../services/aiTopups';
@@ -13,6 +13,7 @@ import { CONSUMPTION_GROUPS, memberConsumption, memberMonth, monthBounds, monthK
 import { refuse } from '../util/refusal';
 import { AUTH_ERROR_STATUSES, STEP_UP_REQUIRED, stepUpRefusalBody } from '../util/authErrors';
 import { recoveryCoolOffBody } from '../middleware/recoveryCoolOff';
+import { priceList } from '../services/metering';
 
 const r=new Hono<{Bindings:Env}>();
 r.onError((error,c)=>{
@@ -26,6 +27,26 @@ r.get('/me',async c=>{
   const user=await requireAuth(c);
   try { return c.json(await loadAiBudget(c.env,user.id)); }
   catch(error) { return refuse(c,503,{code:'ai_budget_unreadable',message:'Unreadable: your AI allowance and top-up balance could not be read.',raw:error,audience:'member'}); }
+});
+/**
+ * D1278 (#3304, #2482's contract gap 1): what things cost, read from the
+ * metering policy (`METERING_POLICY`), never copied into the page. A free
+ * operation is listed as a known 0. Members only (#2482 owner question 3).
+ */
+r.get('/prices',async c=>{
+  await requireAuth(c);
+  return c.json(priceList());
+});
+/**
+ * D1278 (#2482's contract gap 2): the caller's own holds in progress, pending
+ * or in review, each with what took it (operation, surface, key, execution)
+ * and the Worker's own `expires_at`. Never another member's; no id in the
+ * address.
+ */
+r.get('/holds',async c=>{
+  const user=await requireAuth(c);
+  try { return c.json({ holds: await memberHolds(c.env,user.id) }); }
+  catch(error) { return refuse(c,503,{code:'ai_holds_unreadable',message:'Unreadable: your AI token holds could not be read.',raw:error,audience:'member'}); }
 });
 /**
  * D755 (#1919): the packs on sale, the hold and the latest purchase, with the

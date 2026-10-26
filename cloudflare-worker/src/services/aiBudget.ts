@@ -280,6 +280,26 @@ async function releaseExpired(env:Env,userId:number,now:Date) {
   if (rows.success !== true) throw new Error('AI reservations unreadable');
   for (const r of rows.results) await settleAiReservation(env,{uid:r.uid,userId},0,true);
 }
+/** How long a pending hold lives before the next read releases it: the five-minute rule `reserveAiBudget` writes. */
+export const HOLD_TTL_MS = 300000;
+/**
+ * D1278 (#3304): `GET /api/ai-budget/holds`, the caller's own holds in
+ * progress (pending, or in review), oldest first. An expired pending hold is
+ * released first, as every read of the budget does, so it is never listed.
+ * `expires_at` is the stored one, never computed here. Amounts are integer
+ * micro-USD.
+ */
+export async function memberHolds(env:Env,userId:number,now=new Date()) {
+  await releaseExpired(env,userId,now);
+  const rows=await env.DB.prepare(`SELECT uid,created_at,expires_at,status,included_microusd,topup_microusd,surface,operation,api_key_uid,execution_id
+      FROM ai_budget_reservations WHERE user_id=? AND status IN ('pending','review') ORDER BY created_at,uid LIMIT 200`).bind(userId)
+    .all<{uid:string;created_at:string;expires_at:string;status:'pending'|'review';included_microusd:number;topup_microusd:number;
+      surface:string|null;operation:string|null;api_key_uid:string|null;execution_id:string|null}>();
+  if (rows.success!==true) throw new Error('AI reservations unreadable');
+  return (rows.results||[]).map((r)=>({uid:r.uid,created_at:r.created_at,expires_at:r.expires_at,status:r.status,
+    included_microusd:Number(r.included_microusd),topup_microusd:Number(r.topup_microusd),
+    surface:r.surface??null,operation:r.operation??null,api_key_uid:r.api_key_uid??null,execution_id:r.execution_id??null}));
+}
 export async function loadAiBudget(env:Env,userId:number,now=new Date()) {
   const caps=await resolveAiCaps(env,userId);
   await releaseExpired(env,userId,now);
@@ -373,9 +393,26 @@ function holdStatement(env:Env,key:string|null,values:unknown[],where:unknown[])
  * (`replayed: true`, with that hold's `status`). Without one, every call takes
  * its own hold, as before.
  */
-export async function reserveAiBudget(env:Env,userId:number,quoteMicrousd:number,now=new Date(),opts?:{idempotencyKey?:string|null}) {
+/**
+ * D1278 (#3304): what a hold is for, written with it so `memberHolds` can say
+ * so. Names only: the operation, where it ran, the key and the execution,
+ * never a prompt or an answer. Each is a short id or NULL.
+ */
+export type HoldContext = { operation?:string|null; surface?:HoldSurface|null; apiKeyUid?:string|null; executionId?:string|null };
+export const HOLD_SURFACES = ['mcp','flow','ai'] as const;
+export type HoldSurface = typeof HOLD_SURFACES[number];
+const CONTEXT_ID = /^[A-Za-z0-9._:-]{1,120}$/;
+function holdContext(c?:HoldContext|null) {
+  if (!c) return null;
+  const id=(v:unknown)=>(typeof v==='string'&&CONTEXT_ID.test(v)?v:null);
+  const surface=c.surface&&(HOLD_SURFACES as readonly string[]).includes(c.surface)?c.surface:null;
+  const out={operation:id(c.operation),surface,api_key_uid:id(c.apiKeyUid),execution_id:id(c.executionId)};
+  return Object.values(out).some((v)=>v!=null)?out:null;
+}
+export async function reserveAiBudget(env:Env,userId:number,quoteMicrousd:number,now=new Date(),opts?:{idempotencyKey?:string|null;context?:HoldContext|null}) {
   amount(quoteMicrousd);
   const key=idempotencyKey(opts);
+  const context=holdContext(opts?.context);
   if (key) {
     const held=await heldUnder(env,userId,key);
     if (held) return {ok:true as const,reservation:{uid:held.uid,userId},replayed:true as const,status:held.status};
@@ -384,7 +421,7 @@ export async function reserveAiBudget(env:Env,userId:number,quoteMicrousd:number
   if (await aiPaused(env,userId)) return {ok:false as const,refusal:'ai_paused' as const};
   const report=await loadAiBudget(env,userId,now);
   if (report.held_for_review.length) return {ok:false as const,refusal:'budget_review' as const};
-  const uid=crypto.randomUUID(), t=clock(now),expires=clock(new Date(now.getTime()+300000)).at;
+  const uid=crypto.randomUUID(), t=clock(now),expires=clock(new Date(now.getTime()+HOLD_TTL_MS)).at;
   // Compute the split from current counters inside the write transaction, never from a stale read.
   // D788: the member's own monthly limit is the insert's last clause (`aiSpendLimit.ts`), so two holds
   // racing cannot both pass a limit that only one fits: the second insert counts the first hold.
@@ -413,6 +450,15 @@ export async function reserveAiBudget(env:Env,userId:number,quoteMicrousd:number
     const monthRemaining=Math.max(0,current.monthly_microusd-current.month_spend_microusd-current.month_reserved_microusd);
     // D783: a member has no daily cap, so a member's refusal is always the month's.
     return {ok:false as const,refusal:current.daily_capped && dayRemaining<=monthRemaining?'budget_user_day' as const:'budget_user_month' as const};
+  }
+  // D1278: what the hold is for, written once the hold is taken. A label never
+  // decides a hold: if it cannot be written, the hold stands and the holds read
+  // says "Not recorded". Counts only in the log, never a value.
+  if (context) {
+    try {
+      await env.DB.prepare('UPDATE ai_budget_reservations SET operation=?,surface=?,api_key_uid=?,execution_id=? WHERE uid=? AND user_id=?')
+        .bind(context.operation,context.surface,context.api_key_uid,context.execution_id,uid,userId).run();
+    } catch { console.warn('[ai-budget] hold context not recorded'); }
   }
   return { ok:true as const,reservation:{uid,userId} };
 }

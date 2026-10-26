@@ -8,6 +8,9 @@ const body = (b) => JSON.stringify(b ?? {});
 
 export const aiBudgetApi = {
   mine: () => request('/ai-budget/me'),
+  // D1278 (#3304): what things cost, from the Worker's metering policy, and the caller's own holds in progress.
+  prices: () => request('/ai-budget/prices'),
+  holds: () => request('/ai-budget/holds'),
   // D755 — the packs on sale, the hold and the latest purchase; D750's `configured`/`product` stay until CR4 and CR7.
   topUp: () => request('/ai-budget/top-up'),
   // D755 — the member's own top-up history, newest first; `runs` adds each run's hold, release and spend.
