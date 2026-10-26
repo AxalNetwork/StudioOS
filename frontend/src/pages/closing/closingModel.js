@@ -102,7 +102,7 @@ export const NOT_YET = 'Not read here yet';
 
 /** What the canvas draws that no read carries yet. Never a zero, never "none". */
 export const WAITS = Object.freeze({
-  closings: 'Closings are not recorded yet: a closing is read from its deal until the closings store lands. Lines waiting, who acts next and the owner of each closing are not read here yet.',
+  closings: 'This deal has no closing in the store yet: the room is read from its deal until the studio team opens one. Lines waiting, who acts next and the owner are read once it does.',
   paper: 'The paper for each line is not read here yet: the template, its filled fields with their sources, and the signing order with Axal’s countersign.',
   route: 'The capital route for each line is not read here yet: direct, a syndicate SPV, an Axal VC fund, or a third-party fund.',
   instructions: 'Payment instructions are not read here yet. The company’s receiving account has no store; nothing here tells anyone where to pay.',

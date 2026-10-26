@@ -1,6 +1,6 @@
 # Deal page frame
 
-D1152 (#3057, part 4 of #2421): the deal page's frame, drawn to the owner's
+D1152 (#3057, part 4 of #2421) and D1153 and D1155 (parts 5 and 7): the deal page's frame, drawn to the owner's
 "Investor Deal Page" canvas (DL1, DL2, DL14, DL18–DL23, DL24a;
 `design/incoming/Investor Deal Page.dc.html`). The page itself is
 `../DealRoomPage.jsx`, which keeps the shell and the tabs part 6 owns
@@ -34,6 +34,16 @@ addresses are `../dealPageModel.js` (D1148).
 - `DealWorkTabs.jsx` — D1153 (#3058, part 5): Diligence (DL7), Documents and
   data room (DL8, DL9), Terms (DL10) and Commitment and closing (DL11–DL13),
   each change behind an in-page dialog.
+- `dealAudienceModel.js` — D1155 (#3060, part 7): DL15's table of who sees
+  what (twelve kinds against seven viewers, each with the read that holds it
+  and each place today's Worker departs from the canvas, said), `viewerOf`,
+  and the staff commitments table's rules: the closing room's status words,
+  search, status, sort and pages of 25, the heading that never counts a
+  missing amount, who may act on a row, and the IC gate's words.
+- `DealCommitmentsStaff.jsx` — D1155: the Commitment tab for the founder
+  (DL16, Match to my Mercury), an Admin (DL17a, Record a wire behind the IC
+  gate, and D752's shared proof of funds on HQ) and an Operating Partner
+  (DL17b, read only). Never an investor's note.
 - `dealInsightsModel.js` — D1154's pure model of the reading tabs over
   D1151's reads: masked before the NDA, unreadable, or open block by block;
   each person as they published themselves; coverage as a band per axis,
