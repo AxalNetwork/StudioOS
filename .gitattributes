@@ -149,3 +149,12 @@ attached_assets/**        linguist-generated=true
 spin-out-lab-pipeline/**  linguist-generated=true
 design/canvases/**        linguist-generated=true
 design/incoming/**        linguist-generated=true
+
+# ---- README.md: union merges -------------------------------------------------
+# Many branches append a row or a paragraph at the same spot of the same
+# README (a folder's file table, design/incoming/README.md's landings), and a
+# plain merge stops on every one of them. `union` keeps both sides' lines. It
+# keeps BOTH versions of a line two branches rewrote differently, so
+# scripts/check-folder-docs.mjs refuses a README where that happened (rule 4,
+# scripts/lib/readmeUnion.mjs): pick one version and delete the other.
+README.md merge=union

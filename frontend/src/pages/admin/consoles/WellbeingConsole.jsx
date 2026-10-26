@@ -6,7 +6,8 @@ import { useToast } from '../../../components/useToast';
 import { ConsoleUnreadable } from './shared';
 
 /**
- * D648 (#1448) — the Wellbeing experts roster.
+ * D648 (#1448) — the Wellbeing experts roster. D1046 (#2894): it reads; the
+ * decisions moved to Approvals › Wellbeing experts.
  */
 
 /**
@@ -32,7 +33,6 @@ export function WellbeingExpertsPanel() {
   const [loading, setLoading] = useState(true);
   // D648 — a failed read is said, never drawn as an empty list.
   const [failed, setFailed] = useState(false);
-  const [busyId, setBusyId] = useState(null);
   const [q, setQ] = useState('');
   const [filter, setFilter] = useState('all'); // all | hidden | unverified | verified
   const { toast, showToast } = useToast(3000);
@@ -54,34 +54,6 @@ export function WellbeingExpertsPanel() {
   }, [showToast]);
 
   useEffect(() => { load(); }, [load]);
-
-  const toggleHide = async (expert) => {
-    setBusyId(expert.uid);
-    try {
-      const next = !expert.hidden;
-      const r = await api.wellbeingAdminHide(expert.uid, next);
-      setRows((prev) => prev.map((e) => e.uid === expert.uid ? { ...e, hidden: !!r.hidden } : e));
-      showToast({ kind: 'ok', msg: `${expert.name}: ${r.hidden ? 'Hidden from directory' : 'Restored to directory'}` });
-    } catch (e) {
-      showToast({ kind: 'err', msg: e.message || 'Update failed' });
-    } finally {
-      setBusyId(null);
-    }
-  };
-
-  const toggleVerify = async (expert) => {
-    setBusyId(expert.uid);
-    try {
-      const next = !expert.verified;
-      const r = await api.wellbeingAdminVerify(expert.uid, next);
-      setRows((prev) => prev.map((e) => e.uid === expert.uid ? { ...e, verified: !!r.verified } : e));
-      showToast({ kind: 'ok', msg: `${expert.name}: ${r.verified ? 'Verified' : 'Verification removed'}` });
-    } catch (e) {
-      showToast({ kind: 'err', msg: e.message || 'Update failed' });
-    } finally {
-      setBusyId(null);
-    }
-  };
 
   const verifiedCount = rows.filter((r) => r.verified).length;
   const hiddenCount = rows.filter((r) => r.hidden).length;
@@ -139,7 +111,8 @@ export function WellbeingExpertsPanel() {
       </div>
       <div className="px-4 py-2 text-xs text-gray-500 border-b border-gray-100 bg-gray-50/50">
         Hidden experts are removed from the public directory. Only <strong>verified</strong> experts with profile
-        completion ≥ 70% appear to founders.
+        completion ≥ 70% appear to founders. Verify, decline, hide and restore on{' '}
+        <Link to="/admin/approvals/wellbeing-experts" className="font-semibold text-violet-700 hover:underline dark:text-violet-300" data-testid="link-admin-wellbeing-approvals">Approvals › Wellbeing experts</Link>.
       </div>
       {loading ? (
         <div className="p-8 text-center text-gray-500 text-sm inline-flex items-center justify-center gap-2 w-full">
@@ -160,12 +133,11 @@ export function WellbeingExpertsPanel() {
                 <th className="text-center px-4 py-2.5 text-gray-600 font-medium text-xs">Rating</th>
                 <th className="text-center px-4 py-2.5 text-gray-600 font-medium text-xs">Verified</th>
                 <th className="text-center px-4 py-2.5 text-gray-600 font-medium text-xs">Hidden</th>
-                <th className="text-right px-4 py-2.5 text-gray-600 font-medium text-xs">Actions</th>
+                <th className="text-right px-4 py-2.5 text-gray-600 font-medium text-xs">Decide</th>
               </tr>
             </thead>
             <tbody>
               {visible.map((e) => {
-                const busy = busyId === e.uid;
                 const cats = Array.isArray(e.categories) ? e.categories : [];
                 return (
                   <tr key={e.uid} className="border-b border-gray-100 hover:bg-gray-50/50" data-testid={`admin-wellbeing-row-${e.uid}`}>
@@ -195,30 +167,10 @@ export function WellbeingExpertsPanel() {
                         : <Eye size={16} className="text-gray-300 inline" />}
                     </td>
                     <td className="px-4 py-3 text-right">
-                      <div className="inline-flex gap-1.5">
-                        <button
-                          disabled={busy}
-                          onClick={() => toggleVerify(e)}
-                          data-testid={`admin-wellbeing-verify-${e.uid}`}
-                          className={`px-2 py-1 text-xs rounded-md font-medium transition-colors disabled:opacity-50 ${
-                            e.verified
-                              ? 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-                              : 'bg-emerald-50 text-emerald-700 hover:bg-emerald-100'
-                          }`}>
-                          {e.verified ? 'Unverify' : 'Verify'}
-                        </button>
-                        <button
-                          disabled={busy}
-                          onClick={() => toggleHide(e)}
-                          data-testid={`admin-wellbeing-hide-${e.uid}`}
-                          className={`px-2 py-1 text-xs rounded-md font-medium transition-colors disabled:opacity-50 ${
-                            e.hidden
-                              ? 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-                              : 'bg-rose-50 text-rose-700 hover:bg-rose-100'
-                          }`}>
-                          {e.hidden ? 'Unhide' : 'Hide'}
-                        </button>
-                      </div>
+                      {/* D1046 (#2894): verify, decline, hide and restore are decided on Approvals, in a dialog that tells the expert. */}
+                      <Link to={`/admin/approvals/wellbeing-experts/${encodeURIComponent(e.uid)}`} className="text-xs font-semibold text-violet-700 hover:underline dark:text-violet-300" data-testid={`admin-wellbeing-decide-${e.uid}`}>
+                        Decide on Approvals
+                      </Link>
                     </td>
                   </tr>
                 );

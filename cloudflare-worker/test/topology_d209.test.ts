@@ -369,10 +369,14 @@ test('the screens that write Worker secrets are the three setSecret callers, and
 
 test('Cloudflare Access is mounted on the paths the page lists and nowhere else', () => {
   const sites = callSites('requireCfAccess');
-  assert.deepEqual([...new Set(sites.map((s) => s.file))], ['index.ts'], 'requireCfAccess is mounted outside index.ts');
+  assert.deepEqual([...new Set(sites.map((s) => s.file))].sort(), ['index.ts', 'routes/kyb_admin.ts'], 'Access is limited to the declared identity/business document routers');
   const index = CODE.find((f) => f.file === 'index.ts')!.code;
   const mounts = [...index.matchAll(/app\.use\('([^']+)',\s*requireCfAccess\(\)\)/g)].map((mt) => mt[1]);
-  assert.equal(mounts.length, sites.length, 'every requireCfAccess() is an app.use mount the page can name');
+  const prefix = /app\.route\('([^']+)', kybAdmin\)/.exec(index)?.[1];
+  assert.equal(prefix, '/api/kyc/businesses');
+  const business = CODE.find(f => f.file === 'routes/kyb_admin.ts')!.code;
+  for (const m of business.matchAll(/kyb\.use\('([^']+)',\s*requireCfAccess\(\)\)/g)) mounts.push(prefix + m[1]);
+  assert.equal(mounts.length, sites.length, 'every Access gate has a full path the page can name');
   assert.deepEqual(mounts, [...CF_ACCESS_PATHS]);
 });
 

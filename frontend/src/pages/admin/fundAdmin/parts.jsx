@@ -69,9 +69,10 @@ export function Line({ a, b = null, figure = null, chip = null, action = null, t
   );
 }
 
-export function Tiles({ items, testId }) {
+/** `cols` sets the wide-screen columns: four by default, three for FND7's six tiles. */
+export function Tiles({ items, testId, cols = 'lg:grid-cols-4' }) {
   return (
-    <div className="grid grid-cols-2 gap-3 lg:grid-cols-4" data-testid={testId}>
+    <div className={`grid grid-cols-2 gap-3 ${cols}`} data-testid={testId}>
       {items.map((t) => (
         <div key={t.k} className={`${SURFACE} px-4 py-3.5`} data-testid={t.testId}>
           <div className={TH}>{t.k}</div>

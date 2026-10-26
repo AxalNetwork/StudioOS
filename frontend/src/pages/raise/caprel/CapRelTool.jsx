@@ -4,18 +4,21 @@ import { cyclesApi } from '../../../lib/api/cycles';
 import { Unreadable } from '../../../ui';
 import { CycleHeader } from '../../cycles/CycleOverview';
 import { CycleBar } from '../../cycles/PhoneModulePage';
-import { RecordsTable } from '../../cycles/CycleModulePage';
-import { recordHref, recordId, rowLinks } from '../../cycles/recordModel';
-import CallsHistory from '../../cycles/CallsHistory';
+import CallsTab from '../calls/CallsTab';
 import { ProRataPanel, RoundClosesPanel } from '../RoundClosesPanel';
-import { HOME_PATH, LINE, NOT_YET, SLUG, TABS, TITLE, WAITS, tabHref, tabSearch } from './capRelModel';
+import { FounderClosing } from '../../closing/ClosingRoom';
+import { CLOSING, HOME_PATH, LINE, NOT_YET, SLUG, TABS, TITLE, WAITS, tabHref, tabSearch } from './capRelModel';
+import CapRelPipeline from './CapRelPipeline';
+import { CapRelOverviewBlocks, MovedNotice } from './CapRelOverview';
 
 /**
  * D1188 (#2457) — the Capital relationships tool's tab bar and tab pages.
  * CycleRoute draws Overview (the module page) with `CapRelHomeNav` under its
  * header, and `CapRelTabPage` for the tab words under the module. Pipeline and
  * Calls draw the module read; Commitments draws today's closes and pro-rata;
- * Match, Outreach and Activity say what they wait for.
+ * Match, Outreach and Activity say what they wait for. D1192 (#3126): Pipeline
+ * is the board and list (`CapRelPipeline.jsx`), and Overview draws its blocks
+ * (`CapRelOverview.jsx`) above the module page's own.
  */
 
 const MUTED = 'text-axal-muted dark:text-gray-400';
@@ -39,9 +42,15 @@ export function CapRelTabBar({ active, search = '' }) {
   );
 }
 
-/** Overview's tab bar. */
-export function CapRelHomeNav({ search = '' }) {
-  return <CapRelTabBar active="overview" search={search} />;
+/** Overview's tab bar, the moved notice, and Overview's blocks (D1192, CRL1) above the module page's own. */
+export function CapRelHomeNav({ search = '', projectId = null }) {
+  return (
+    <div className="flex flex-col gap-4">
+      <MovedNotice />
+      <CapRelTabBar active="overview" search={search} />
+      {projectId ? <CapRelOverviewBlocks projectId={projectId} search={search} /> : null}
+    </div>
+  );
 }
 
 function Wait({ tab }) {
@@ -69,30 +78,24 @@ function useModule(projectId) {
   return { ...read, query, setQuery, retry: () => setReload((n) => n + 1) };
 }
 
-/** Pipeline: the investors, each opening its record. CRL2's board is part 4's. */
-function Pipeline({ projectId, search }) {
-  const read = useModule(projectId);
-  const recs = read.data?.records;
-  return (
-    <RecordsTable title="Investors" records={recs} status={read.status} query={read.query} onQuery={read.setQuery} onRetry={read.retry}
-      rowHref={(row) => (rowLinks(recs, row) ? recordHref('raise', SLUG, recordId(row), tabSearch(search)) : null)} />
-  );
-}
 
 /** Calls: the calls for capital this venture has run, from the module read. */
 function Calls({ projectId }) {
   const read = useModule(projectId);
   if (read.status === 'loading') return <div className="h-24 animate-pulse rounded-xl bg-axal-ground dark:bg-gray-800" data-testid="caprel-calls-loading" />;
   if (read.status === 'unreadable') return <Unreadable what="Your calls for capital" claim="This is not a claim that you have run none." onRetry={read.retry} />;
-  return <div data-testid="caprel-calls"><CallsHistory calls={read.data?.parts?.calls} /></div>;
+  // D1221 (#2458): the Calls for Capital page, off and on (CLS1–CLS3).
+  return <div data-testid="caprel-calls"><CallsTab calls={read.data?.parts?.calls} onRetry={read.retry} /></div>;
 }
 
 /** Commitments: today's closes and pro-rata, as the old pipeline page draws them. */
-function Commitments({ projectId }) {
+function Commitments({ projectId, search = '' }) {
   const [err, setErr] = useState('');
   return (
     <div className="flex flex-col gap-4" data-testid="caprel-commitments">
       {err && <p role="alert" className="m-0 text-[12.5px] text-red-700 dark:text-red-300" data-testid="caprel-commitments-error">{err}</p>}
+      {/* D1213 (#2424): the round's closing room (CP1). */}
+      <p className="m-0 text-[13px]"><Link to={tabHref(CLOSING, search)} className="font-semibold underline" data-testid="caprel-closing-door">Open the closing room</Link> for the paper, the lines and what is received.</p>
       <RoundClosesPanel projectId={projectId} onError={setErr} />
       <ProRataPanel projectId={projectId} onError={setErr} />
     </div>
@@ -100,21 +103,23 @@ function Commitments({ projectId }) {
 }
 
 export function CapRelTabPage({ tab, projectId, projectStatus = 'ready', onRetryProject, search = '', cards, action, phone = false }) {
-  const here = TABS.find((t) => t.id === tab) || TABS[0];
+  const here = TABS.find((t) => t.id === tab) || (tab === CLOSING.id ? CLOSING : TABS[0]);
   let body;
   // No venture means no read is made: say the venture list failed, never a skeleton.
   if (projectStatus === 'unreadable') body = <Unreadable what="Your ventures" claim="This is not a claim that you have none." onRetry={onRetryProject} />;
   else if (!projectId) body = <div className="h-24 animate-pulse rounded-xl bg-axal-ground dark:bg-gray-800" data-testid="caprel-loading" />;
-  else if (tab === 'pipeline') body = <Pipeline projectId={projectId} search={search} />;
+  else if (tab === 'pipeline') body = <CapRelPipeline projectId={projectId} search={search} />;
   else if (tab === 'calls') body = <Calls projectId={projectId} />;
-  else if (tab === 'commitments') body = <Commitments projectId={projectId} />;
+  else if (tab === 'commitments') body = <Commitments projectId={projectId} search={search} />;
+  else if (tab === 'closing') body = <FounderClosing projectId={projectId} search={search} />;
   else body = <Wait tab={tab} />;
   return (
     <div className="flex min-w-0 flex-col gap-4" data-testid={`caprel-${tab}-page`}>
       {phone
         ? <CycleBar back={{ label: TITLE, to: `${HOME_PATH}${tabSearch(search)}` }} title={here.label} eadwynLabel={`Raise · ${TITLE}`} />
         : <CycleHeader cycle="raise" cards={cards} active={SLUG} action={action} title={TITLE} sub={LINE} search={tabSearch(search)} />}
-      <CapRelTabBar active={tab} search={search} />
+      <MovedNotice />
+      <CapRelTabBar active={tab === CLOSING.id ? 'commitments' : tab} search={search} />
       {body}
     </div>
   );

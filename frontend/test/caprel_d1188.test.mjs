@@ -34,8 +34,15 @@ const MODULE = {
   parts: { calls: { state: 'ok', items: [] } },
 };
 
+// D1192: Pipeline is the board, from the pipeline's own prospects read.
+const PROSPECTS = { items: [
+  { id: 41, name: 'Bluefern Capital', stage: 'meeting', updated_at: '2026-10-20' },
+  { id: 42, name: 'Northwind Ventures', stage: 'to_contact', updated_at: '2026-10-19' },
+] };
+
 function handler(url) {
   if (/\/api\/projects(\?|$)/.test(url)) return response(PROJECTS);
+  if (/\/contacts\/raise-prospects\?/.test(url)) return response(PROSPECTS);
   if (/\/records\/[^/?]+\?/.test(url)) return response({ title: 'Bluefern Capital', sections: [], actions: [] });
   if (/\/contacts\/raise-closes/.test(url)) return response({ closes: [], round: null });
   if (/\/contacts\/raise-pro-rata/.test(url)) return response({ items: [] });
@@ -95,14 +102,13 @@ test('every waiting tab says why, never zero or none', () => {
  * Mounted
  * ------------------------------------------------------------------ */
 
-test('Pipeline draws the module read\'s investors, each opening its record, never a record called "pipeline"', async () => {
+test('Pipeline draws the venture\'s investors on the board (D1192), each opening its lightbox, never a record called "pipeline"', async () => {
   const v = await mounted('/raise/capital-relationships/pipeline?project_id=3');
   try {
-    assert.ok(v.requests.some((u) => u.includes('/cycles/raise/modules/capital-relationships?project=3')));
+    assert.ok(v.requests.some((u) => u.includes('/contacts/raise-prospects?project_id=3')));
     assert.ok(!v.requests.some((u) => /\/records\/pipeline/.test(u)), 'a tab word is not a record');
-    assert.ok(v.testIds().includes('caprel-pipeline-page') && v.testIds().includes('caprel-tabs'));
-    assert.match(v.text(), /Bluefern Capital[\s\S]*Northwind Ventures/);
-    assert.ok(v.hrefs().includes('/raise/capital-relationships/41?project_id=3'));
+    assert.ok(v.testIds().includes('caprel-pipeline-page') && v.testIds().includes('caprel-tabs') && v.testIds().includes('caprel-board'));
+    assert.match(v.text(), /Northwind Ventures[\s\S]*Bluefern Capital/, 'Identified before Meeting');
   } finally { await v.close(); }
 });
 
@@ -140,10 +146,10 @@ test('Overview is the module page with the tabs; an investor is still its record
   try { assert.ok(!other.testIds().includes('caprel-tabs')); } finally { await other.close(); }
 });
 
-test('a failed module read says so where the investors would be', async () => {
-  const fail = await mounted('/raise/capital-relationships/pipeline?project_id=3', { handle: (u) => (u.includes('/cycles/raise/modules/') ? response({ detail: 'boom' }, 500) : handler(u)) });
+test('a failed investors read says so where the board would be (D1192)', async () => {
+  const fail = await mounted('/raise/capital-relationships/pipeline?project_id=3', { handle: (u) => (u.includes('/contacts/raise-prospects') ? response({ detail: 'boom' }, 500) : handler(u)) });
   try {
-    assert.match(fail.text(), /This is not a claim that there are none\./);
+    assert.match(fail.text(), /This is not a claim that you have none\./);
     assert.doesNotMatch(fail.text(), /Bluefern Capital/);
   } finally { await fail.close(); }
 });
@@ -155,7 +161,9 @@ test('a failed module read says so where the investors would be', async () => {
 test('the wiring: no route is added, CycleRoute branches on the tab word, and the canvas sits in incoming', () => {
   const route = read('frontend/src/pages/cycles/CycleRoute.jsx');
   assert.ok(route.includes('isCapRelTab(slug, recordId)') && route.includes('!capRelTab && !!projectId'));
-  assert.ok(!read('frontend/src/App.jsx').includes('path="/raise/capital-relationships'), 'no route is added');
+  // D1221 (#2458) adds the one route a tab word cannot carry: one call, below the Calls tab.
+  const app = read('frontend/src/App.jsx').replace(`<Route path="/raise/capital-relationships/calls/:uid" element={guard(labRoles(['admin', 'founder']), <RaiseCallPage />)} />`, '');
+  assert.ok(!app.includes('path="/raise/capital-relationships'), 'no other route is added');
   for (const f of ['Capital Relationships Page.dc.html', 'Capital relationships · Boards.dc.html']) assert.ok(existsSync(`design/incoming/${f}`), f);
   assert.ok(read('design/incoming/Capital relationships · Boards.dc.html').includes('Capital Relationships Page'), 'the boards import the page by name');
   assert.ok(existsSync('documentation/architecture/decisions/D1188.md'));

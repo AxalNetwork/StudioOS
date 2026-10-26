@@ -371,9 +371,10 @@ retry. Provider response text and credentials are not logged or returned. This
 covers copies StudioOS created and tracks; a manually imported `.ics` or an
 untracked calendar compose link is not an externally editable copy.
 
-The phone still uses D700's A7m My events view until D1037's replacement; this
-patch does not claim that the full MEV18 phone redesign is built. The phone
-account sheet does carry Events' Current marker.
+D1037 (#2878) replaces D700's A7m My events view on a phone with MEV18: the
+same four tabs under the account bar, Upcoming's week strip and cards, the
+ticket full screen, and Hosting's Check in as a camera sheet on the event's day.
+The phone account sheet carries Events' Current marker.
 
 Acceptance remains the owner's live check: register and promote a place,
 observe the recorded free-seat source, cancel a place/event against connected

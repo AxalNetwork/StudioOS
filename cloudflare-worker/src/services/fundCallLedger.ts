@@ -372,6 +372,8 @@ export async function readFundCalls(env: Env, fundId: number, today: string) {
     const own = (byCall.get(Number(h.id)) || []).sort((a, b) => Number(b.commitment_cents ?? 0) - Number(a.commitment_cents ?? 0));
     return {
       id: h.id,
+      // D1163: the call's uid, which its notices are previewed and issued by (`/api/fund-notices/calls/:callUid`).
+      uid: h.uid,
       call_number: h.call_number,
       amount_cents: Number(h.amount_cents),
       purpose: h.purpose ?? null,

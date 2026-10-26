@@ -40,7 +40,7 @@ async function ownedProject(db: Env['DB'], projectId: number, founderUserId: num
 }
 
 /** Safe to retry/concurrently call; an existing base (including founder edits) is never overwritten. */
-export async function copyLegacyBase(db: Env['DB'], projectId: number, founderUserId: number): Promise<{ scenarioId: number; copied: boolean }> {
+export async function copyLegacyBase(db: Env['DB'], projectId: number, founderUserId: number, onCreate?: (uid:string)=>D1PreparedStatement): Promise<{ scenarioId: number; copied: boolean }> {
   const p = await ownedProject(db, projectId, founderUserId);
   const existing = await db.prepare('SELECT id FROM uof_scenarios WHERE project_id = ? AND is_base = 1').bind(projectId).first<{ id: number }>();
   if (existing) return { scenarioId: existing.id, copied: false };
@@ -89,6 +89,7 @@ export async function copyLegacyBase(db: Env['DB'], projectId: number, founderUs
     (scenario_id, category_key, label, due_on, cost_cents, okr_id, legacy_ref, source_kind, source_ref, source_label, updated_by)
     SELECT id, ?, ?, ?, ?, ?, ?, 'module', ?, 'recorded', ? FROM uof_scenarios WHERE uid = ? AND project_id = ?`)
     .bind(m.key, m.label, m.due, m.cost, m.okrId, m.ref, `projects:${projectId}:use_of_funds_meta:${m.ref}`, founderUserId, uid, projectId));
+  if (onCreate) statements.push(onCreate(uid));
   const written = await db.batch(statements);
   const base = await db.prepare('SELECT id FROM uof_scenarios WHERE project_id = ? AND is_base = 1').bind(projectId).first<{ id: number }>();
   if (!base) throw new UofStoreError('unreadable');

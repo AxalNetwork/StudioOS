@@ -36,6 +36,7 @@ import {
   latestAcceptances,
 } from '../services/trust';
 import { getSQL } from '../db';
+import { branchOf } from '../util/branch';
 import { companyKybScope } from '../services/tenancyScope';
 import { ACTIVE_COMPANY_HEADER, resolveActiveCompany } from '../middleware/activeCompany';
 import { refusalBody, refuse } from '../util/refusal';
@@ -170,6 +171,7 @@ trust.get('/agreements', async (c) => {
 // GET /score/:userId — Task #4 (Y-2), scoped by D1074 (#2966).
 // Returns {score, missing[]}. Readable by the member, an admin of this
 // territory, and a counterparty in an open intro or deal (`mayReadTrustScores`);
+// D1254 requires a shared open deal for investor callers, not just an intro.
 // anyone else is 403, whatever their role. Only the member and an admin get the
 // missing items. A member with no obligation rows reads `not_recorded`, never 100.
 // ---------------------------------------------------------------------------
@@ -932,14 +934,16 @@ trust.get('/companies/kyb', async (c) => {
     rows = await c.env.DB.prepare(
       `SELECT cp.id AS company_id, cp.uid AS company_uid, cp.company_name,
               ucl.role_in_company, ucl.is_primary_admin,
-              k.uid AS kyb_uid, k.status, k.entity_name, k.entity_type,
-              k.jurisdiction, k.registration_number, k.submitted_at, k.reviewed_at
+              COALESCE(k.uid, CASE WHEN reviewed.version > 0 THEN reviewed.uid END) AS kyb_uid, reviewed.status,
+              COALESCE(k.entity_name, reviewed.entity_name) AS entity_name, k.entity_type,
+              k.jurisdiction, k.registration_number, k.submitted_at, reviewed.reviewed_at
          FROM user_company_links ucl
          JOIN company_profiles cp ON cp.id = ucl.company_id
          LEFT JOIN company_kyb_records k ON k.company_id = ucl.company_id
-        WHERE ucl.user_id = ?
+         LEFT JOIN kyb_businesses reviewed ON reviewed.uid = 'company-' || cp.id
+        WHERE ucl.user_id = ? AND (reviewed.studio_code IS NULL OR reviewed.studio_code = ?)
         ORDER BY cp.company_name`,
-    ).bind(user.id).all<any>();
+    ).bind(user.id, branchOf(c.env) || 'hq').all<any>();
   } catch (e) {
     return refuse(c, 503, {
       code: 'company_kyb_unreadable',
