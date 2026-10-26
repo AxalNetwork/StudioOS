@@ -21,6 +21,7 @@ import { capTableAccessApi } from '../../../lib/api/capTableAccess';
 import { Unreadable, actionGhost } from '../../../ui';
 import { CARD, EYEBROW, INK, MONO, MUTED, Skeleton, TD, Table } from './CapTableTool';
 import CapTableDialog, { useWrite } from './CapTableDialog';
+import { DARK } from './capTableModel';
 import {
   ASK_DIALOG, NO_ACCESS, PAYOUT_NOT_SHARED, READ_ONLY, ROUNDS_NOT_RECORDED, askLine, askOutcome, headerLine, ownLines, panelOf,
 } from './investorPanelModel';
@@ -31,8 +32,9 @@ const TONE = {
   'Option pool': 'bg-amber-500 dark:bg-amber-400',
   Other: 'bg-gray-400 dark:bg-gray-500',
 };
-const LAV_ROW = 'bg-axal-lavender dark:bg-violet-950/40';
-const MINE_PILL = 'ml-2 inline-flex items-center gap-1 rounded-full border border-axal-lavender-edge bg-white px-2 py-0.5 text-[10.5px] font-bold text-axal-violet-deep dark:border-violet-800 dark:bg-gray-900 dark:text-violet-300';
+// CT8's dark pairs come from `capTableModel.js`'s DARK, as every Cap table board's do (D1028).
+const LAV_ROW = `bg-axal-lavender ${DARK.lavender}`;
+const MINE_PILL = `ml-2 inline-flex items-center gap-1 rounded-full border border-axal-lavender-edge bg-white px-2 py-0.5 text-[10.5px] font-bold text-axal-violet-deep ${DARK.lavenderEdge} ${DARK.card} ${DARK.violet}`;
 
 function GroupBar({ bar, testId }) {
   return (
