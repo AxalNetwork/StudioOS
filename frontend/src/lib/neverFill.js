@@ -40,7 +40,8 @@ export const NEVER_FILL_RULES = Object.freeze([
   {
     category: 'score_rating',
     label: 'Scores and ratings',
-    tables: ['readiness_scores', 'venture_scorecards'],
+    // D1256: a review, a weighting and the sharing switch are a person's acts too.
+    tables: ['readiness_scores', 'venture_scorecards', 'venture_score_reviews', 'investor_scope_weights', 'venture_score_sharing'],
     columns: ['score', 'scores', 'rating', 'ratings'],
   },
   {
