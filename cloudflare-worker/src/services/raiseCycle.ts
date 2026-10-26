@@ -160,10 +160,77 @@ export type ReadRow = { a: string; b: string; c: 'Counted' | 'Partial' | 'Missin
 export type ComputedScore = { compared_count?: number; key: ReadinessKey; score: number | null; evidence: 'measured' | 'stated' | 'pattern' | null; missing: string | null; reads: ReadRow[] };
 const met = (ok: boolean, partial = false): Pick<ReadRow, 'c' | 'tone'> => (ok ? { c: 'Counted', tone: 'ok' } : partial ? { c: 'Partial', tone: 'amb' } : { c: 'Missing', tone: 'bad' });
 
+type MetricProof = { figure: 'mrr' | 'paying_customers'; value: number; source: string; connector: boolean; measured: boolean; fresh: boolean; observed_on: string };
+type RevenueProof = { source: string; verification: string; has_document: number; month: string; observed_on: string; cents: number };
+const revenueSource = (r: RevenueProof) => (r.source === 'stripe' && r.verification === 'verified') || (r.source === 'mercury' && ['verified', 'supported'].includes(r.verification))
+  ? `Connector · ${r.source === 'stripe' ? 'Stripe' : 'Mercury'}`
+  : r.verification === 'supported' && r.has_document ? 'Document · revenue proof' : `Typed · ${r.source} · Founder's figure`;
+
+/** Latest recorded value of each kind, separately for every stored source. */
+async function metricProofs(env: Env, projectId: number): Promise<MetricProof[]> {
+  const today = new Date().toISOString().slice(0, 10);
+  const cutoff = daysBefore(today, 90);
+  const mrr = await env.DB.prepare(`SELECT mrr, snapshot_date, source FROM (
+    SELECT mrr, snapshot_date, source, ROW_NUMBER() OVER (PARTITION BY source ORDER BY snapshot_date DESC, id DESC) AS position
+    FROM project_metrics WHERE project_id = ? AND mrr IS NOT NULL AND snapshot_date <= ?
+  ) WHERE position = 1 ORDER BY CASE WHEN source = 'stripe' THEN 0 ELSE 1 END, snapshot_date DESC, source`)
+    .bind(projectId, today).all<{ mrr: number; snapshot_date: string; source: string }>();
+  const paying = await env.DB.prepare(`SELECT paying_accounts, snapshot_date, source FROM (
+    SELECT paying_accounts, snapshot_date, source, ROW_NUMBER() OVER (PARTITION BY source ORDER BY snapshot_date DESC, id DESC) AS position
+    FROM project_metrics WHERE project_id = ? AND paying_accounts IS NOT NULL AND snapshot_date <= ?
+  ) WHERE position = 1 ORDER BY CASE WHEN source = 'stripe' THEN 0 ELSE 1 END, snapshot_date DESC, source`)
+    .bind(projectId, today).all<{ paying_accounts: number; snapshot_date: string; source: string }>();
+  const fact = (figure: MetricProof['figure'], value: number, row: { source: string; snapshot_date: string }): MetricProof => ({
+    figure, value: Number(value), connector: ['stripe', 'mercury'].includes(row.source), measured: row.source === 'stripe', fresh: row.snapshot_date >= cutoff, observed_on: row.snapshot_date,
+    source: `${row.source === 'stripe' ? 'Stripe (measured)' : row.source === 'mercury' ? 'Mercury (stated)' : `Metrics (stated: ${row.source || 'source not recorded'})`} · project_metrics.${figure === 'mrr' ? 'mrr' : 'paying_accounts'} on ${row.snapshot_date}`,
+  });
+  return [...(mrr.results || []).map(r => fact('mrr', r.mrr, r)), ...(paying.results || []).map(r => fact('paying_customers', r.paying_accounts, r))];
+}
+
+/** Last complete month's receipts, without reading customers, notes or bank lines. */
+async function revenueProofs(env: Env, projectId: number): Promise<RevenueProof[]> {
+  return (await env.DB.prepare(`SELECT source, verification, CASE WHEN proof_document_id IS NULL THEN 0 ELSE 1 END AS has_document,
+    substr(received_on, 1, 7) AS month, MAX(received_on) AS observed_on, SUM(amount_cents) AS cents
+    FROM revenue_entries WHERE project_id = ? AND currency = 'usd'
+      AND received_on >= date('now', 'start of month', '-1 month') AND received_on < date('now', 'start of month')
+    GROUP BY source, verification, CASE WHEN proof_document_id IS NULL THEN 0 ELSE 1 END, substr(received_on, 1, 7)
+    ORDER BY source, verification, has_document`).bind(projectId).all<RevenueProof>()).results || [];
+}
+
+/** Team facts accompany the person's assessment; counts do not invent a competence score. */
+export async function teamReadiness(env: Env, projectId: number): Promise<ComputedScore> {
+  const reads: ReadRow[] = [];
+  try {
+    const team = await env.DB.prepare(`SELECT COUNT(DISTINCT h.id) AS founders,
+      COUNT(DISTINCT CASE WHEN v.start_date IS NOT NULL AND v.total_months > 0 THEN h.id END) AS vesting
+      FROM cap_table_holders h LEFT JOIN cap_table_vesting v ON v.holder_id = h.id AND v.user_id = h.user_id
+      WHERE h.project_id = ? AND h.founder_role IS NOT NULL`).bind(projectId).first<{ founders: number; vesting: number }>();
+    reads.push({ a: 'Build · Founding team', b: `${Number(team?.founders ?? 0)} founders recorded · cap_table_holders`, ...met(Number(team?.founders ?? 0) > 0) });
+    reads.push({ a: 'Founders with vesting', b: `${Number(team?.vesting ?? 0)} recorded · cap_table_vesting`, ...met(Number(team?.vesting ?? 0) > 0) });
+  } catch {
+    reads.push({ a: 'Build · Founding team and vesting', b: 'Unreadable · Try again', ...met(false) });
+  }
+  try {
+    const github = await env.DB.prepare(`SELECT COUNT(DISTINCT login) AS contributors, SUM(commits) AS commits FROM (
+      SELECT LOWER(g.login) AS login, g.repository, g.commits_90d AS commits,
+        ROW_NUMBER() OVER (PARTITION BY LOWER(g.login), g.repository ORDER BY g.updated_at DESC, g.id DESC) AS position
+      FROM github_contributors g JOIN integrations i ON i.id = g.integration_id
+      WHERE g.project_id = ? AND i.provider_key = 'github' AND i.status = 'active'
+        AND EXISTS (SELECT 1 FROM projects p JOIN users u ON u.id = i.user_id AND u.is_active = 1
+          WHERE p.id = g.project_id AND ((p.founder_id IS NOT NULL AND u.founder_id = p.founder_id)
+            OR EXISTS (SELECT 1 FROM project_members pm WHERE pm.project_id = p.id AND pm.user_id = u.id AND pm.status = 'accepted')))
+    ) WHERE position = 1`).bind(projectId).first<{ contributors: number; commits: number | null }>();
+    reads.push({ a: 'Connector · GitHub contributors', b: `${Number(github?.contributors ?? 0)} contributors · ${Number(github?.commits ?? 0)} commits in the stored 90-day snapshot · activity dates Not recorded`, ...met(Number(github?.contributors ?? 0) > 0) });
+  } catch {
+    reads.push({ a: 'Connector · GitHub contributors', b: 'Unreadable · Try again', ...met(false) });
+  }
+  return { key: 'team', score: null, evidence: null, missing: 'Team is assessed by a person; recorded counts are not a score.', reads };
+}
+
 /**
  * The computed readiness checks — the Lab capital page's data-room readiness
  * rules (`SpinoutLabCapitalPage.jsx` `buildDataroom`), now stored. Each reads
- * one store; `team` has no store to read and is scored by a person.
+ * its recorded stores. Team facts accompany the person's assessment.
  */
 export async function computeReadiness(env: Env, projectId: number): Promise<ComputedScore[]> {
   const p = await env.DB.prepare(
@@ -209,17 +276,24 @@ export async function computeReadiness(env: Env, projectId: number): Promise<Com
 
   const fieldOf = (v: unknown) => (num(v) ?? 0) > 0;
   const verifiedRevenue = await verifiedMonthlyRevenue(env, projectId);
-  const measuredRevenue = verifiedRevenue != null && Number(verifiedRevenue.cents) > 0;
-  const traction = measuredRevenue || fieldOf(p?.revenue) || fieldOf(p?.mrr) || fieldOf(p?.paying_customers);
+  const metricRows = await metricProofs(env, projectId);
+  const revenueRows = await revenueProofs(env, projectId);
+  const measuredRevenue = revenueRows.some(r => r.cents > 0 && r.verification === 'verified' && revenueSource(r).startsWith('Connector'));
+  const measured = measuredRevenue || metricRows.some(r => r.measured && r.fresh && r.value > 0);
+  const documented = revenueRows.some(r => r.cents > 0 && r.verification === 'supported' && (r.has_document || r.source === 'mercury'));
+  const traction = measured || revenueRows.some(r => r.cents > 0) || metricRows.some(r => r.fresh && r.value > 0) || fieldOf(p?.revenue) || fieldOf(p?.mrr) || fieldOf(p?.paying_customers);
   out.push({
-    key: 'traction', score: traction ? 10 : 0, evidence: measuredRevenue ? 'measured' : 'stated', missing: traction ? null : 'Log revenue or update your proof fields.',
+    key: 'traction', score: traction ? 10 : 0, evidence: measured ? 'measured' : documented ? 'pattern' : 'stated', missing: traction ? null : 'Log revenue or update your proof fields.',
     reads: [
-      { a: 'Verified revenue', b: verifiedRevenue ? `${usd(verifiedRevenue.cents / 100)} · ${verifiedRevenue.month}` : 'not recorded', ...met(measuredRevenue) },
-      { a: 'Revenue (stated)', b: fieldOf(p?.revenue) ? usd(Number(p!.revenue)) : 'not recorded', ...met(fieldOf(p?.revenue), traction) },
-      { a: 'MRR (stated)', b: fieldOf(p?.mrr) ? usd(Number(p!.mrr)) : 'not recorded', ...met(fieldOf(p?.mrr), traction) },
-      { a: 'Paying customers (stated)', b: fieldOf(p?.paying_customers) ? String(Math.round(Number(p!.paying_customers))) : 'not recorded', ...met(fieldOf(p?.paying_customers), traction) },
+      { a: 'Verified revenue', b: verifiedRevenue ? `${usd(verifiedRevenue.cents / 100)} · ${verifiedRevenue.month} · ${[...new Set(revenueRows.filter(r => r.verification === 'verified').map(revenueSource))].join(', ')}` : 'not recorded', ...met(measuredRevenue) },
+      ...revenueRows.map(r => ({ a: `Revenue entries · ${revenueSource(r)}`, b: `${usd(r.cents / 100)} · ${r.month} · received_on ${r.observed_on} · ${r.verification} · ${r.has_document ? 'proof document recorded' : 'no proof document recorded'}`, ...met(r.cents > 0) })),
+      ...metricRows.map(r => ({ a: `${r.figure === 'mrr' ? 'MRR' : 'Paying customers'} · ${r.connector ? 'Connector' : 'Typed'}`, b: `${r.figure === 'mrr' ? usd(r.value) : r.value} · ${r.source}${r.fresh ? '' : ' · Outside the current 90-day window'}`, ...met(r.fresh && r.value > 0, true) })),
+      { a: 'Revenue (stated)', b: num(p?.revenue) != null ? `${usd(Number(p!.revenue))} · Typed · Founder's figure` : 'not recorded', ...met(fieldOf(p?.revenue), num(p?.revenue) != null) },
+      { a: 'MRR (stated)', b: num(p?.mrr) != null ? `${usd(Number(p!.mrr))} · Typed · Founder's figure` : 'not recorded', ...met(fieldOf(p?.mrr), num(p?.mrr) != null) },
+      { a: 'Paying customers (stated)', b: num(p?.paying_customers) != null ? `${Math.round(Number(p!.paying_customers))} · Typed · Founder's figure` : 'not recorded', ...met(fieldOf(p?.paying_customers), num(p?.paying_customers) != null) },
     ],
   });
+  out.push(await teamReadiness(env, projectId));
 
   const known = new Set((mapped.results || []).map((r) => r.checklist_item).filter((k) => CHECKLIST_KEYS.has(k)));
   const open = DILIGENCE_CHECKLIST.length - known.size;
@@ -319,6 +393,8 @@ export async function readinessCard(ctx: Ctx): Promise<Card> {
       });
     }
     series.push(await benchmarkSpec(ctx));
+    const team = await teamReadiness(ctx.env, ctx.projectId);
+    series.push({ kind: 'rows', items: team.reads.map(r => ({ label: r.a, value: r.b, tone: r.tone })) });
     const unscored = items.filter((i) => !latest.has(Number(i.id)));
     const gap = items.map((i) => latest.get(Number(i.id))).find((s) => s && s.missing);
     const next = gap
@@ -477,20 +553,20 @@ export async function checkInputs(env: Env, projectId: number, version: number) 
 /** Read the common metric side once when several versions are listed. */
 async function narrativeMetrics(env: Env, projectId: number) {
   const metrics: Partial<Record<FigureKey, { value: number; source: string }>> = {};
-  const mrr = await env.DB.prepare(
-    `SELECT mrr, snapshot_date, source FROM project_metrics WHERE project_id = ? AND mrr IS NOT NULL ORDER BY CASE WHEN source = 'stripe' THEN 0 ELSE 1 END, snapshot_date DESC, id DESC LIMIT 1`,
-  ).bind(projectId).first<{ mrr: number; snapshot_date: string; source: string | null }>();
-  if (mrr) metrics.mrr = { value: Number(mrr.mrr), source: `${mrr.source === 'stripe' ? 'Stripe (measured)' : 'Metrics (stated: ' + (mrr.source || 'manual') + ')'} · project_metrics.mrr on ${mrr.snapshot_date}` };
-  const pay = await env.DB.prepare(
-    `SELECT paying_accounts, snapshot_date, source FROM project_metrics WHERE project_id = ? AND paying_accounts IS NOT NULL ORDER BY CASE WHEN source = 'stripe' THEN 0 ELSE 1 END, snapshot_date DESC, id DESC LIMIT 1`,
-  ).bind(projectId).first<{ paying_accounts: number; snapshot_date: string; source: string | null }>();
-  if (pay) metrics.paying_customers = { value: Number(pay.paying_accounts), source: `${pay.source === 'stripe' ? 'Stripe (measured)' : 'Metrics (stated: ' + (pay.source || 'manual') + ')'} · project_metrics.paying_accounts on ${pay.snapshot_date}` };
+  const proofs = await metricProofs(env, projectId);
+  for (const key of ['mrr', 'paying_customers'] as const) {
+    const proof = proofs.find(r => r.figure === key);
+    if (proof) metrics[key] = { value: proof.value, source: proof.source };
+  }
   const round = await env.DB.prepare(
     `SELECT target_amount FROM raise_rounds WHERE project_id = ? AND status = 'active' AND target_amount IS NOT NULL LIMIT 1`,
   ).bind(projectId).first<{ target_amount: number }>();
   if (round) metrics.raise = { value: Number(round.target_amount), source: 'Pipeline · raise_rounds.target_amount (active round)' };
   const verified = await verifiedMonthlyRevenue(env, projectId);
-  if (verified) metrics.revenue = { value: verified.cents / 100, source: `Verified revenue · ${verified.month}` };
+  if (verified) {
+    const sources = (await revenueProofs(env, projectId)).filter(r => r.verification === 'verified').map(revenueSource);
+    metrics.revenue = { value: verified.cents / 100, source: `Verified revenue · ${[...new Set(sources)].join(', ')} · ${verified.month}` };
+  }
   else {
     const bank = (await mercuryFacts(env, projectId, 'revenue')).filter(f => f.fact_key !== 'revenue:growth' && f.amount_cents != null).sort((a,b) => String(b.label).localeCompare(String(a.label)))[0];
     if (bank) metrics.revenue = { value: Number(bank.amount_cents) / 100, source: `Mercury revenue credits · ${bank.label} · measured ${bank.as_of}` };
@@ -836,7 +912,7 @@ export async function dataRoomCard(ctx: Ctx): Promise<Card> {
     const mapped = { results: accessible.filter(f => f.checklist_item != null) };
     const viewers = await ctx.env.DB.prepare(
       `SELECT l.user_id, u.name, COUNT(*) AS n FROM data_room_access_log l LEFT JOIN users u ON u.id = l.user_id
-        WHERE l.project_id = ? AND l.action = 'download' AND substr(l.created_at, 1, 10) > ?
+        WHERE l.project_id = ? AND l.action IN ('open_room', 'download') AND substr(l.created_at, 1, 10) > ?
         GROUP BY l.user_id ORDER BY n DESC, l.user_id LIMIT 6`,
     ).bind(ctx.projectId, daysBefore(ctx.today, 90)).all<{ user_id: number; name: string | null; n: number }>();
     const coverage = checklistCoverage((mapped.results || []).map((r) => r.checklist_item));
@@ -1516,25 +1592,49 @@ async function readinessFigure(ctx: Ctx): Promise<Figure> {
 }
 
 async function committedFigure(ctx: Ctx): Promise<Figure> {
-  return safeFigure({ key: 'committed', label: 'Signed or received against target', unit: 'of', source: 'raise_prospects · raise_rounds' }, async () => {
-    const c = await ctx.env.DB.prepare(
-      `SELECT COUNT(*) AS n, SUM(CASE WHEN commit_status = 'signed' THEN amount END) AS amt, SUM(CASE WHEN commit_status = 'soft' THEN amount END) AS soft, SUM(CASE WHEN commit_status = 'wired' THEN amount END) AS received, SUM(CASE WHEN commit_status IS NULL OR commit_status NOT IN ('signed','soft','wired') THEN amount END) AS unclassified, SUM(CASE WHEN commit_status IS NULL OR commit_status NOT IN ('signed','soft','wired') THEN 1 ELSE 0 END) AS unclassified_n, SUM(CASE WHEN commit_status IN ('signed','wired') AND amount IS NULL THEN 1 ELSE 0 END) AS firm_missing, SUM(CASE WHEN amount IS NULL OR commit_status IS NULL OR commit_status NOT IN ('signed','soft','wired') THEN 1 ELSE 0 END) AS unrecorded FROM raise_prospects WHERE project_id = ? AND stage = 'committed'`,
-    ).bind(ctx.projectId).first<{ n: number; amt: number|null; soft:number|null; received:number|null; unclassified:number|null; unclassified_n:number; firm_missing:number; unrecorded:number }>();
+  return safeFigure({ key: 'committed', label: 'Received, wired and signed against target', unit: 'of', source: 'Confirmed raise receipts · typed raise_prospects · raise_rounds' }, async () => {
+    // The confirmed target index permits only one receipt for each prospect.
+    const res = await ctx.env.DB.prepare(`SELECT p.commit_status, p.amount, m.id AS receipt_id
+      FROM raise_prospects p LEFT JOIN mercury_personal_matches m ON m.target_kind = 'raise_prospect' AND m.target_id = p.id AND m.state = 'confirmed'
+        AND p.amount > 0 AND p.amount = ROUND(p.amount, 2) AND m.amount_cents = ROUND(p.amount * 100)
+        AND EXISTS (SELECT 1 FROM users owner JOIN projects own ON own.id = p.project_id
+          WHERE owner.id = m.user_id AND owner.founder_id IS NOT NULL AND owner.founder_id = own.founder_id)
+        AND NOT EXISTS (SELECT 1 FROM integrations i WHERE i.id = m.integration_id
+          AND (i.user_id != m.user_id OR i.provider_key != 'mercury'))
+      WHERE p.project_id = ? AND p.stage = 'committed'`).bind(ctx.projectId)
+      .all<{ commit_status: string | null; amount: number | null; receipt_id: number | null }>();
+    const commitments = res.results || [];
+    const breakdown: Record<'received' | 'wired' | 'signed' | 'soft' | 'unclassified', number | null> = { received: 0, wired: 0, signed: 0, soft: 0, unclassified: 0 };
+    let firmRows = 0, firmMissing = 0, incomplete = 0, unclassified = 0;
+    for (const c of commitments) {
+      // A matched receipt supersedes the typed status. It is counted once,
+      // from the matching prospect amount, never again as wired, signed or
+      // soft. The receipt's bank amount is compared in SQL, not projected.
+      // A removed connection does not erase a previously confirmed receipt.
+      const category = c.receipt_id != null ? 'received' : c.commit_status === 'wired' ? 'wired'
+        : c.commit_status === 'signed' ? 'signed' : c.commit_status === 'soft' ? 'soft' : 'unclassified';
+      const value = num(c.amount);
+      const firm = ['received', 'wired', 'signed'].includes(category);
+      if (firm) firmRows++;
+      if (category === 'unclassified') unclassified++;
+      if (value == null || category === 'unclassified') incomplete++;
+      if (value == null && firm) firmMissing++;
+      if (value == null) breakdown[category] = null;
+      else if (breakdown[category] != null) breakdown[category] += value;
+    }
     const r = await ctx.env.DB.prepare(
       `SELECT target_amount FROM raise_rounds WHERE project_id = ? AND status = 'active' LIMIT 1`,
     ).bind(ctx.projectId).first<{ target_amount: number | null }>();
-    const amt = Number(c?.firm_missing ?? 0) > 0 ? null
-      : c?.amt == null && c?.received == null
-        ? Number(c?.unclassified_n ?? 0) > 0 ? null : 0
-        : Number(c?.amt ?? 0) + Number(c?.received ?? 0);
-    const split = `Soft: ${c?.soft == null ? "Not recorded" : usd(c.soft)} · Signed: ${c?.amt == null ? "Not recorded" : usd(c.amt)} · Received: ${c?.received == null ? "Not recorded" : usd(c.received)} · Status not recorded: ${c?.unclassified == null ? 'Not recorded' : usd(c.unclassified)} · Firm amounts not recorded: ${c?.firm_missing ?? 0} · Incomplete commitments: ${c?.unrecorded ?? 0}`;
+    const amt = firmMissing > 0 || (firmRows === 0 && unclassified > 0) ? null : Number(breakdown.received) + Number(breakdown.wired) + Number(breakdown.signed);
+    const valueOf = (key: keyof typeof breakdown) => breakdown[key] == null ? 'Not recorded' : usd(breakdown[key]);
+    const split = `Received: ${valueOf('received')} (bank-matched) · Wired: ${valueOf('wired')} (Founder's figure) · Signed: ${valueOf('signed')} (Founder's figure) · Soft: ${valueOf('soft')} (Founder's figure) · Status not recorded: ${valueOf('unclassified')} · Firm amounts not recorded: ${firmMissing} · Incomplete commitments: ${incomplete}`;
     const target = num(r?.target_amount);
     if (target == null || target <= 0) {
-      if (Number(c?.n ?? 0) === 0) return { value: null, delta_30d: null, spark: [], state: 'empty', as_of: ctx.today, reason: 'No active round and no commitment yet' };
-      return { value: amt, unit: 'usd', delta_30d: null, spark: [], state: amt == null ? 'not_recorded' : 'ok', as_of: ctx.today, reason: `${split}; no active round target is recorded` };
+      if (commitments.length === 0) return { value: null, breakdown, delta_30d: null, spark: [], state: 'empty', as_of: ctx.today, reason: 'No active round and no commitment yet' };
+      return { value: amt, breakdown, unit: 'usd', delta_30d: null, spark: [], state: amt == null ? 'not_recorded' : 'ok', as_of: ctx.today, reason: `${split}; no active round target is recorded` };
     }
-    if (amt == null) return { value: null, delta_30d: null, spark: [], state: 'not_recorded', as_of: ctx.today, reason: split };
-    return { value: [Math.round(amt), Math.round(target)] as any, delta_30d: null, spark: [], state: 'ok', as_of: ctx.today, reason: split };
+    if (amt == null) return { value: null, breakdown, delta_30d: null, spark: [], state: 'not_recorded', as_of: ctx.today, reason: split };
+    return { value: [Math.round(amt), Math.round(target)] as any, breakdown, delta_30d: null, spark: [], state: 'ok', as_of: ctx.today, reason: split };
   });
 }
 
@@ -1559,20 +1659,31 @@ export function runwayMonths(cash: number | null, burn: number | null): number |
 async function runwayFigure(ctx: Ctx): Promise<Figure> {
   return safeFigure({ key: 'runway_months', label: 'Months of runway', unit: 'months', source: 'project_metrics · stated' }, async () => {
     const bank = await mercuryRunway(ctx.env, ctx.projectId);
-    if (bank) {
+    if (bank && bank.as_of >= daysBefore(ctx.today, 90) && bank.as_of.slice(0, 10) <= ctx.today) {
       const value = runwayMonths(bank.amount_cents, bank.burn_cents);
-      return { value, source: 'Mercury · measured cash and net burn', delta_30d: null, spark: [], state: value == null ? 'not_recorded' : 'ok', as_of: bank.as_of, reason: value == null ? 'Mercury has no positive recorded net burn' : null };
+      return { value, source: 'Connector · Mercury · measured cash and net burn', delta_30d: null, spark: [], state: value == null ? 'not_recorded' : 'ok', as_of: bank.as_of, reason: value == null ? 'Mercury has no positive recorded net burn' : null };
     }
     const res = await ctx.env.DB.prepare(
-      `SELECT cash_balance, net_burn, snapshot_date FROM project_metrics
-        WHERE project_id = ? AND cash_balance IS NOT NULL AND net_burn IS NOT NULL ORDER BY snapshot_date DESC, id DESC LIMIT 8`,
-    ).bind(ctx.projectId).all<{ cash_balance: number; net_burn: number; snapshot_date: string }>();
-    const snaps = res.results || [];
-    if (snaps.length === 0) return { value: null, delta_30d: null, spark: [], state: 'not_recorded', as_of: null, reason: 'No metrics snapshot records cash and net burn' };
+      `WITH chosen AS (SELECT source FROM project_metrics
+        WHERE project_id = ? AND cash_balance IS NOT NULL AND net_burn IS NOT NULL AND snapshot_date <= ?
+        ORDER BY CASE WHEN source = 'mercury' AND snapshot_date >= ? THEN 0 ELSE 1 END, snapshot_date DESC, id DESC LIMIT 1)
+        SELECT cash_balance, net_burn, snapshot_date, source FROM project_metrics
+        WHERE project_id = ? AND source IS (SELECT source FROM chosen)
+          AND cash_balance IS NOT NULL AND net_burn IS NOT NULL AND snapshot_date <= ?
+        ORDER BY snapshot_date DESC, id DESC LIMIT 8`,
+    ).bind(ctx.projectId, ctx.today, daysBefore(ctx.today, 90), ctx.projectId, ctx.today).all<{ cash_balance: number; net_burn: number; snapshot_date: string; source: string }>();
+    const rows = res.results || [];
+    const snaps = rows.filter(r => r.source === rows[0]?.source);
+    if (bank && bank.as_of.slice(0, 10) <= ctx.today && (!snaps.length || bank.as_of.slice(0, 10) >= snaps[0].snapshot_date)) {
+      const value = runwayMonths(bank.amount_cents, bank.burn_cents);
+      return { value, source: 'Connector · Mercury · measured cash and net burn', delta_30d: null, spark: [], state: value == null ? 'not_recorded' : 'ok', as_of: bank.as_of, reason: `Stale · the newest runway observation is older than 90 days.${value == null ? ' Mercury has no positive recorded net burn.' : ''}` };
+    }
+    if (snaps.length === 0) return { value: null, delta_30d: null, spark: [], state: 'not_recorded', as_of: bank?.as_of ?? null, reason: bank ? 'Stored Mercury runway fact is outside the current 90-day window; no eligible metrics snapshot records cash and net burn' : 'No metrics snapshot records cash and net burn' };
+    const source = snaps[0].source === 'mercury' ? 'Connector · Mercury · project_metrics (measured cash and net burn)' : `project_metrics · stated: ${snaps[0].source || 'source not recorded'} · Founder's figure`;
     const now = runwayMonths(Number(snaps[0].cash_balance), Number(snaps[0].net_burn));
-    if (now == null) return { value: null, delta_30d: null, spark: [], state: 'not_recorded', as_of: snaps[0].snapshot_date, reason: 'Net burn is zero or negative, so burn sets no runway' };
+    if (now == null) return { value: null, source, delta_30d: null, spark: [], state: 'not_recorded', as_of: snaps[0].snapshot_date, reason: 'Net burn is zero or negative, so burn sets no runway' };
     const spark = snaps.map((s) => runwayMonths(Number(s.cash_balance), Number(s.net_burn))).filter((v): v is number => v != null).reverse();
-    return { value: now, delta_30d: null, spark: sparkOrNone(spark), state: 'ok', as_of: snaps[0].snapshot_date, reason: null };
+    return { value: now, source, delta_30d: null, spark: sparkOrNone(spark), state: 'ok', as_of: snaps[0].snapshot_date, reason: snaps[0].snapshot_date < daysBefore(ctx.today, 90) ? 'Stale · the newest runway snapshot is older than 90 days.' : null };
   });
 }
 
