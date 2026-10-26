@@ -442,8 +442,6 @@ async function activateSignedPartnerDeal(
   // (compliance_aml) is always active because every partner needs
   // sanctions screening regardless of deal type.
   try {
-    const { sectionsFor } = await import('./dueDiligence');
-    const sections = sectionsFor('partner');
     const isCapital = deal.deal_type === 'capital_partnership';
     const naForNonCapital = new Set(['kyc_individual', 'accreditation']);
     const uidBytes = new Uint8Array(16);
@@ -454,24 +452,14 @@ async function activateSignedPartnerDeal(
        VALUES (?, 'partner', ?, ?, ?) RETURNING id`,
     ).bind(ddUid, userId, deal.organization || deal.full_name || deal.recipient_email, deal.invited_by_user_id).first();
     if (ddIns?.id) {
-      const ddCaseId = Number(ddIns.id);
-      for (const s of sections) {
-        const skipForNonCapital = !isCapital && naForNonCapital.has(s.key);
-        if (skipForNonCapital) {
-          await env.DB.prepare(
-            `INSERT INTO dd_sections (case_id, section_key, title, weight, status, verdict, completed_at)
-             VALUES (?, ?, ?, ?, 'completed', 'n_a', CURRENT_TIMESTAMP)`,
-          ).bind(ddCaseId, s.key, s.title, s.weight).run();
-        } else {
-          await env.DB.prepare(
-            `INSERT INTO dd_sections (case_id, section_key, title, weight)
-             VALUES (?, ?, ?, ?)`,
-          ).bind(ddCaseId, s.key, s.title, s.weight).run();
-        }
-      }
-      // D1246: the opener leads it, and its blocking sections are stamped.
-      const { stampNewCase } = await import('./dueDiligence');
-      await stampNewCase(env, ddCaseId);
+      // D1245 (#3260): the same seed as a case opened from the desk —
+      // sections, template version and the checklist at the case's depth
+      // (the column's default, Standard) — with KYC and Accreditation
+      // seeded n/a, and no items, for a non-capital deal.
+      const { seedNewCase } = await import('./dueDiligence');
+      await seedNewCase(env, Number(ddIns.id), 'partner', 'standard', {
+        notApplicable: isCapital ? new Set<string>() : naForNonCapital,
+      });
     }
   } catch (e) { console.warn('[partnerDeals] DD case open failed', (e as Error).message); }
 

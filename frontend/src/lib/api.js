@@ -64,6 +64,7 @@ export * from './api/ddLifecycle.js';
 export * from './api/dealContext.js';
 export * from './api/dealFlow.js';
 export * from './api/dealInsights.js';
+export * from './api/dealStaff.js';
 export * from './api/dealViews.js';
 export * from './api/dealWorkroom.js';
 export * from './api/deckAssist.js';
