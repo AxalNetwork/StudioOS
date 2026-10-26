@@ -55,9 +55,12 @@ test('cap-table vesting readers remain scoped to their intended audience', () =>
   // aggregate-only projection; it returns no personal vesting schedule.
   // D1263 adds the founder-scoped evidence candidate reader. Its route and
   // cross-project privacy gates are exercised by raise_evidence_d1263.test.ts.
+  // D1255 (#3278) added one more on purpose: Governance's founder-vesting input
+  // counts the venture's founder holders with a vesting schedule, as two
+  // numbers, read only — pinned below.
   assert.deepEqual(
     readers.sort(),
-    ['integrations/providers/carta.ts', 'routes/captable.ts', 'routes/company.ts', 'routes/cycle_build.ts', 'services/capTableRegister.ts', 'services/capTableWrites.ts', 'services/decks/sources.ts', 'services/raiseCycle.ts', 'services/raiseEvidenceSources.ts', 'services/records/build.ts'],
+    ['integrations/providers/carta.ts', 'routes/captable.ts', 'routes/company.ts', 'routes/cycle_build.ts', 'services/capTableRegister.ts', 'services/capTableWrites.ts', 'services/decks/sources.ts', 'services/raiseCycle.ts', 'services/raiseEvidenceSources.ts', 'services/records/build.ts', 'services/ventureScoring/collectors.ts'],
     'only the importer, declared readers and reviewed writer should touch these tables',
   );
   const raise = read('cloudflare-worker/src/services/raiseCycle.ts');
@@ -67,6 +70,9 @@ test('cap-table vesting readers remain scoped to their intended audience', () =>
   const deck = read('cloudflare-worker/src/services/decks/sources.ts');
   assert.doesNotMatch(deck, /cap_table_option_pools/, 'the deck counts vesting rows, not pools');
   assert.doesNotMatch(deck, /(INSERT INTO|UPDATE|DELETE FROM)\s+cap_table_/, 'a read, never a write');
+  const scorecard = read('cloudflare-worker/src/services/ventureScoring/collectors.ts');
+  assert.doesNotMatch(scorecard, /cap_table_option_pools/, 'the scorecard counts vesting rows, not pools');
+  assert.doesNotMatch(scorecard, /(INSERT INTO|UPDATE|DELETE FROM)\s+cap_table_/, 'the scorecard reads, never writes');
   assert.match(deck, /FROM cap_table_vesting v\s*WHERE v\.holder_id IN \(SELECT h\.id FROM cap_table_holders h WHERE h\.project_id = \?/,
     'vesting is reached only through this venture\u2019s holders');
   const company = read('cloudflare-worker/src/routes/company.ts');
