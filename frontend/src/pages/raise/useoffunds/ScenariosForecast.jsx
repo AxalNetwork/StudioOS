@@ -5,7 +5,7 @@ import { useOfFundsApi } from '../../../lib/api/useOfFunds';
 import { Lightbox } from '../../../ui';
 import { NOT_RECORDED, SECTIONS, TABS, money, sourceText, tabHref } from './useOfFundsModel';
 import {
-  BTN, BTN_GHOST, BlockError, Card, CashLine, ChartToggle, Columns, EYEBROW, FIELD, H3, LINK, MONO, MUTED, NotRecorded, Pill, SECTION_BG,
+  BTN, BTN_GHOST, BlockError, Card, CashLine, ChartToggle, Columns, EYEBROW, FIELD, H3, MONO, MUTED, NotRecorded, Pill, SECTION_BG,
   Skeleton, Source, useRead,
 } from './UseOfFundsParts';
 import {
@@ -95,7 +95,7 @@ export function DriversDialog({ projectId, read, onClose, onSaved, api = useOfFu
       goLabel="Save forecast" disabled={!!out.errors || !changed.length} go={() => w.run(() => api.saveForecast(projectId, out.assumptions))}>
       <div className="grid gap-3 sm:grid-cols-2">
         {DRIVERS.map((d) => {
-          const e = driverError(d.kind, values[d.key]);
+          const e = driverError(d.kind, values[d.key], d);
           return (
             <label key={d.key} className="flex flex-col gap-1 text-[12px] font-semibold text-axal-ink dark:text-gray-200">
               {d.label}{d.kind === 'pct' ? ' (%)' : d.kind === 'money' ? ' (US dollars)' : ''}
@@ -219,7 +219,7 @@ export function Forecast({ projectId, search = '', api = useOfFundsApi }) {
               <button type="button" className={BTN_GHOST} onClick={exportIt} disabled={d.exists === false} data-testid="uof-forecast-export">Export</button>
               <button type="button" className={BTN} onClick={() => setDialog(true)} data-testid="uof-forecast-save">Save forecast</button>
             </div>
-            <p className={`m-0 text-[11.5px] ${MUTED}`}>The forecast is a model you set. It is not your runway today. No Capital score is drawn.</p>
+            <p className={`m-0 text-[11.5px] ${MUTED}`}>The forecast is a model you set. It is not your runway today.</p>
           </div>
         </div>
       ) : null}

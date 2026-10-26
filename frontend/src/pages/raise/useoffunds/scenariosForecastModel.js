@@ -72,7 +72,7 @@ export const DRIVERS = [
   { key: 'starting_cash', label: 'Starting cash', kind: 'money' },
   { key: 'price_per_unit', label: 'Price per customer a month', kind: 'money' },
   { key: 'units_month_0', label: 'Starting customers', kind: 'count' },
-  { key: 'monthly_growth_pct', label: 'Monthly growth', kind: 'pct' },
+  { key: 'monthly_growth_pct', label: 'Monthly growth', kind: 'pct', min: -100, max: 200 },
   { key: 'monthly_churn_pct', label: 'Monthly churn', kind: 'pct' },
   { key: 'cac', label: 'CAC', kind: 'money' },
   { key: 'gross_margin_pct', label: 'Gross margin', kind: 'pct' },
@@ -170,12 +170,15 @@ export function sensitivityRows(read) {
 }
 
 /** Each driver's rule in the Edit drivers dialog, as the store's strict validation reads it. */
-export function driverError(kind, raw) {
+export function driverError(kind, raw, bounds = {}) {
   const t = String(raw ?? '').trim().replace(/[$,\s]/g, '').replace(/%$/, '');
   if (t === '') return 'An empty driver stops the forecast.';
   const n = Number(t);
-  if (!Number.isFinite(n) || n < 0) return 'Type a number, 0 or more.';
-  if (kind === 'pct' && n > 100) return 'A percentage is 100 at most.';
+  // Growth alone may shrink: the store takes −100% to 200% (`routes/financials.ts`).
+  const min = bounds.min ?? 0;
+  if (!Number.isFinite(n) || n < min) return min < 0 ? `Type a number from ${min} to ${bounds.max}.` : 'Type a number, 0 or more.';
+  if (bounds.max != null && n > bounds.max) return `Type a number from ${min} to ${bounds.max}.`;
+  if (kind === 'pct' && bounds.max == null && n > 100) return 'A percentage is 100 at most.';
   if (kind === 'months' && (!Number.isInteger(n) || n < 3 || n > 60)) return 'The forecast runs 3 to 60 whole months.';
   if (kind === 'count' && !Number.isInteger(n)) return 'Type a whole number.';
   return null;
@@ -186,7 +189,7 @@ export function driversBody(values) {
   const errors = {};
   const assumptions = {};
   for (const d of DRIVERS) {
-    const e = driverError(d.kind, values[d.key]);
+    const e = driverError(d.kind, values[d.key], d);
     if (e) errors[d.key] = e;
     else assumptions[d.key] = Number(String(values[d.key]).trim().replace(/[$,\s]/g, '').replace(/%$/, ''));
   }

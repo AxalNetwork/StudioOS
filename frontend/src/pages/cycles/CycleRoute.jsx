@@ -212,7 +212,7 @@ const CYCLE_DEFS = {
       'pitch-deck': () => ({ label: 'Open the pitch deck', href: '/raise/pitch' }),
       // D1029: the Cap table module page is the tool, so it has no door to itself.
       // D1173 (#2455): the venture travels with the link (broken item 8).
-      'use-of-funds': (q) => ({ label: 'Open the financial model', href: forecastHref(q) }),
+      'use-of-funds': (q) => ({ label: 'Open the forecast', href: forecastHref(q) }),
       'capital-relationships': () => ({ label: 'Open the investor pipeline', href: '/raise/capital/pipeline' }),
       // D1109 (#2989): the Data room module page is the tool, so it has no door to the retired access view.
     }),
@@ -691,7 +691,10 @@ function RecordCrumb({ title, type = null, id = null }) {
   return null;
 }
 
-export default function CycleRoute({ cycle, lightbox = false, adding = false, record = false, slug: suppliedSlug, reporting = null, buildPlan = null, dataRoomFile = false, capTableProposal = false, capTableScenario = false }) {
+/** D1178: a Use of funds page under a tab, and the tab it sits under. */
+const UOF_SUB_TAB = { forecast: 'runway', compare: 'scenarios' };
+
+export default function CycleRoute({ cycle, lightbox = false, adding = false, record = false, slug: suppliedSlug, reporting = null, buildPlan = null, dataRoomFile = false, capTableProposal = false, capTableScenario = false, uofSub = null }) {
   const { slug: routeSlug, id: recordId, proposal: proposalId, instrument: instrumentId, scenario: scenarioId } = useParams();
   const location = useLocation();
   const { user } = useAuth() || {};
@@ -797,7 +800,9 @@ export default function CycleRoute({ cycle, lightbox = false, adding = false, re
   // D1109 (#2989): a file's number was its record page; it forwards to its window over Files, counted.
   const dataRoomOldFile = record && cycle === 'raise' && !dataRoomFile && isOldFileAddress(slug, recordId) ? recordId : null;
   // D1173 (#2455): the Use of funds tool's tabs are words under its module, never section records.
-  const uofTab = record && cycle === 'raise' && isUseOfFundsTab(slug, recordId) ? recordId : null;
+  // D1178 (#3105): `/runway/forecast` and `/scenarios/compare` are pages under a tab, given as `uofSub`.
+  const uofTab = uofSub && cycle === 'raise' ? UOF_SUB_TAB[uofSub] || null
+    : record && cycle === 'raise' && isUseOfFundsTab(slug, recordId) ? recordId : null;
   // D1188 (#2457): the Capital relationships tool's tabs are words under its module, never investor records.
   const capRelTab = record && cycle === 'raise' && isCapRelTab(slug, recordId) ? recordId : null;
   const recordState = useCycleRecord({ enabled: record && known && validRecord && !narrativeTab && !capTableTab && !dataRoomTab && !dataRoomOldFile && !uofTab && !capRelTab && !!projectId && !!def,
@@ -1018,7 +1023,7 @@ export default function CycleRoute({ cycle, lightbox = false, adding = false, re
     );
   } else if (uofTab) {
     body = (
-      <UseOfFundsTabPage tab={uofTab} projectId={projectId} projectStatus={projectStatus} onRetryProject={() => setProjectsKey((n) => n + 1)}
+      <UseOfFundsTabPage tab={uofTab} sub={uofSub} projectId={projectId} projectStatus={projectStatus} onRetryProject={() => setProjectsKey((n) => n + 1)}
         search={location.search} cards={tabs} action={action} phone={phone} />
     );
   } else if (capRelTab) {
@@ -1183,7 +1188,7 @@ export default function CycleRoute({ cycle, lightbox = false, adding = false, re
           onChanged={() => { dirty.current = true; }} />
       )}
       {dialog && !(phone && dialog.page) && dialog.element}
-      <RecordCrumb title={record && recordState.status === 'ready' ? recordState.data?.title : null} type={`${cycle}/${slug}`} id={narrativeTab || capTableTab || dataRoomTab ? null : recordId ?? null} />
+      <RecordCrumb title={record && recordState.status === 'ready' ? recordState.data?.title : null} type={`${cycle}/${slug}`} id={narrativeTab || capTableTab || dataRoomTab || uofSub ? null : recordId ?? null} />
     </RailFrame>
     </RailCrumbsProvider>
   );
