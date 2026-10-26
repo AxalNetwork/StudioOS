@@ -85,6 +85,14 @@
  * table and data-room tools already keep to the venture and admins. An
  * investor or a partner reaches nothing here.
  *
+ * THE DATA ROOM IS ITS OWNER'S (D1102, #2982). Its paths here take D1102's
+ * owner-only rule (`dataRoomOwner`), so an admin is not treated as the owner:
+ * the overview's data-room card is the room's summary for anyone but the owner
+ * (counts and recorded checklist coverage, no file names, investors or access
+ * rows); `GET /modules/data-room` answers an admin 403 `support_read_required`
+ * (the audited `POST /api/data-room/:projectUid/support-read`) and anyone else
+ * 403; `PUT /data-room/files/:id/checklist` answers anyone but the owner 403.
+ *
  * MERCURY IS THE FOUNDER'S ALONE (D840). Its parts and its routes answer only
  * the project's own founder (`founder_id`, not an admin), in their active
  * company, outside a support session, from their own connection. Anyone
@@ -127,13 +135,16 @@ import { projectInActiveCompany } from '../services/tenancyScope';
 import { HolderError } from '../services/capTableWrites';
 import { MatchQueryError, commitmentsRead, matchRead } from '../services/capRelReads';
 import { recomputePmf, pmfHistory } from '../services/scoring/pmfStore';
+import { dataRoomOwner, roomSummary } from './data_room';
+import { safeCard, type Card } from '../services/cycleCards';
+import { refuse } from '../util/refusal';
 
 const cycleRaise = new Hono<{ Bindings: Env }>();
 
 const today = () => new Date().toISOString().slice(0, 10);
 
 /** The project in `?project=`, and the caller, or the Response that refuses them. */
-async function scope(c: any): Promise<{ user: User; projectId: number } | Response> {
+async function scope(c: any): Promise<{ user: User; projectId: number; project: ProjectRef } | Response> {
   let user: User;
   try {
     user = (await requireAuth(c)) as User;
@@ -147,11 +158,60 @@ async function scope(c: any): Promise<{ user: User; projectId: number } | Respon
     .bind(projectId).first()) as ProjectRef | null;
   if (!project) return c.json({ detail: 'Project not found' }, 404);
   if (!(/\/deck-links(?:\/|$)/.test(c.req.path) ? canWritePitchDeck(project, user) : canWrite(project, user))) return c.json({ detail: 'Forbidden' }, 403);
-  return { user, projectId };
+  return { user, projectId, project };
+}
+
+// ---------------------------------------------------------------------------
+// D1102 (#2982): the data room's own paths here answer its owner alone
+// ---------------------------------------------------------------------------
+
+/**
+ * `canWrite` admits an admin, so `scope` alone would treat one as the room's
+ * owner. The data-room paths below add D1102's owner-only rule
+ * (`dataRoomOwner`, the helper `routes/data_room.ts` and the shared record
+ * module use): the overview's data-room card, the module read and the
+ * checklist write. Every other path in this file keeps `scope`'s rule.
+ */
+const isRoomOwner = (s: { user: User; project: ProjectRef }) => dataRoomOwner(s.project, s.user as any);
+
+/** The module read's refusal: an admin is pointed at the audited support read, as `/data-room/shared` does. */
+function roomReadRefused(c: any, s: { user: User; project: ProjectRef }): Response | null {
+  if (isRoomOwner(s)) return null;
+  if (isAdmin(s.user)) return refuse(c, 403, { code: 'support_read_required', message: 'Use an audited support read to open this room.' });
+  return c.json({ detail: 'Forbidden' }, 403);
+}
+
+const SUMMARY_ROWS: Array<[string, (s: any) => unknown, 'files' | 'coverage' | 'grants']> = [
+  ['Files', (b) => b.total, 'files'],
+  ['Files gated by NDA', (b) => b.nda, 'files'],
+  ['Checklist items with a tagged file', (b) => `${b.covered_items} of ${b.total_items}`, 'coverage'],
+  ['Active grants', (b) => b.active, 'grants'],
+];
+
+/**
+ * The data-room card for anyone the overview admits who is not the room's
+ * owner: D1102's summary (counts and recorded checklist coverage), never the
+ * owner's card, which names who opened the room. A block that could not be
+ * read says "Unreadable" on its own row; all of them failing is an
+ * unreadable card. It proposes no action: the room's actions are the owner's.
+ */
+function roomSummaryCard(env: Env, projectId: number): Promise<Card> {
+  return safeCard({
+    slug: 'data-room', name: 'Data room', range: 'All files', source: 'The data room summary',
+    caption: 'Counts and checklist tags only. File names, investors and access rows stay with the founder.',
+  }, async () => {
+    const summary: any = await roomSummary(env, { id: projectId, uid: '' });
+    const blocks = [summary.files, summary.coverage, summary.grants];
+    if (!blocks.some((b) => b?.available === true)) throw new Error('Data room summary unavailable');
+    const items = SUMMARY_ROWS.map(([label, value, block]) => ({
+      label, value: summary[block]?.available === true ? value(summary[block]) : 'Unreadable',
+    }));
+    return { state: 'ok', series: [{ kind: 'rows', items }], next: null, reason: null };
+  });
 }
 
 /** D914: `scope`, then the narrative's rule for an admin (read only, and only with a reason). */
-async function narrativeScope(c: any, mode: Mode): Promise<{ user: User; projectId: number } | Response> {
+async function narrativeScope(c: any, mode: Mode): Promise<{ user: User; projectId: number; project: ProjectRef } | Response> {
   const s = await scope(c);
   if (s instanceof Response) return s;
   return (await narrativeAdminGate(c, s.user, s.projectId, mode)) ?? s;
@@ -187,7 +247,11 @@ cycleRaise.get('/overview', async (c) => {
   const s = await scope(c);
   if (s instanceof Response) return s;
   const ctx = ctxOf(c, s.projectId);
-  const [figs, cs] = await Promise.all([figures(ctx), cards(ctx)]);
+  // D1102: the data-room card is the owner's; anyone else reads the room's summary there.
+  // The other six cards are built as `cards()` builds them.
+  const cardsRead = isRoomOwner(s) ? cards(ctx)
+    : Promise.all(MODULES.map((m) => (m.slug === 'data-room' ? roomSummaryCard(c.env, s.projectId) : CARD_FOR[m.slug](ctx))));
+  const [figs, cs] = await Promise.all([figures(ctx), cardsRead]);
   return c.json({ cycle: CYCLE, question: QUESTION, figures: figs, cards: cs, ...(await raisePhone(ctx, figs, cs)) });
 });
 
@@ -197,6 +261,11 @@ cycleRaise.get('/modules/:slug', async (c) => {
   if (!mod) return c.json({ detail: 'No such module', modules: MODULES.map((m) => m.slug) }, 404);
   const s = slug === 'investor-narrative' ? await narrativeScope(c, 'read') : await scope(c);
   if (s instanceof Response) return s;
+  // D1102: the room's files and who opened it are its owner's; refused before anything is read.
+  if (slug === 'data-room') {
+    const refused = roomReadRefused(c, s);
+    if (refused) return refused;
+  }
   const ctx = ctxOf(c, s.projectId);
   const rq = recordQuery({ q: c.req.query('q'), filter: c.req.query('filter'), sort: c.req.query('sort'), page: c.req.query('page') });
   let pmf: unknown;
@@ -735,6 +804,8 @@ cycleRaise.patch('/prospects/:id', async (c) => {
 cycleRaise.put('/data-room/files/:id/checklist', async (c) => {
   const s = await scope(c);
   if (s instanceof Response) return s;
+  // D1102: a room's writes are its owner's. The shared record door refuses the same way.
+  if (!isRoomOwner(s)) return c.json({ detail: 'Forbidden' }, 403);
   const id = idParam(c.req.param('id'));
   if (id == null) return c.json({ detail: 'Invalid file id' }, 400);
   const b = await body(c);

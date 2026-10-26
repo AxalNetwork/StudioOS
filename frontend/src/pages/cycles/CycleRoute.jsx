@@ -189,10 +189,10 @@ const CYCLE_DEFS = {
           {mercuryPart('investor-narrative', data, ctx)}
         </>
       ),
-      // D1141 (#2433): Product-market fit, not scored yet, with model v1; then From Mercury.
+      // D1141 (#2433), D1145 (#3031): Product-market fit from `parts.pmf`, beside the raise kit; then From Mercury.
       'fundraising-readiness': (data, ctx) => (
         <>
-          <PmfPart projectId={ctx.projectId} />
+          <PmfPart part={data?.parts?.pmf} card={data?.card} records={data?.records} projectId={ctx.projectId} reload={ctx.reload} />
           {mercuryPart('fundraising-readiness', data, ctx)}
         </>
       ),

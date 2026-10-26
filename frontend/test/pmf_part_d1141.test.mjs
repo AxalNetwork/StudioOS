@@ -1,7 +1,9 @@
-// D1141 (#2433) — Product-market fit on Fundraising readiness: the part says
-// it is not scored yet and shows model v1 (RD4), and Validate's overview opens
-// the readiness page (RD12). Nothing computes the score on main, so nothing
-// here draws a number.
+// D1141 (#2433) — Product-market fit on Fundraising readiness: model v1
+// (RD4), and Validate's overview opens the readiness page (RD12). D1145
+// (#3031) replaced the "Not scored yet" part with the stored score; its tests
+// are `pmf_page_d1145.test.mjs`, and the two here that drew the placeholder now
+// hold what stays: the model's fold, and a read that carries no part never
+// reading as "no score".
 //
 // Run with:
 //   node --import ./frontend/test/_deck-loader.mjs --test frontend/test/pmf_part_d1141.test.mjs
@@ -90,20 +92,19 @@ test('every link keeps the venture, and only a real venture id', () => {
  * Mounted
  * ------------------------------------------------------------------ */
 
-test('the readiness module draws Product-market fit as Not scored yet: no figure, no band, no 0, and no read of its own', async () => {
+test('a module read with no Product-market fit part draws Unreadable, never a score or "Not scored yet"; model v1 stays folded', async () => {
+  // D1145: the placeholder is gone. A read that carries no `parts.pmf` is not "no score".
   const t = await mounted('/raise/fundraising-readiness?project_id=3');
   try {
     assert.equal(t.count('pmf-part'), 1);
-    assert.equal(t.count('pmf-not-yet'), 1);
+    assert.equal(t.count('pmf-not-yet'), 0);
+    assert.equal(t.count('pmf-unreadable'), 1);
     assert.equal(t.count('pmf-input'), 10, 'model v1 is shown, folded');
     const part = t.textOf('pmf-part');
-    assert.ok(part.includes(NOT_YET));
-    assert.ok(part.includes('not a claim that the venture has no fit'));
+    assert.ok(!part.includes(NOT_YET));
     assert.ok(!/\b(Strong|Fair|Weak)\b/.test(part.replace(BANDS, '')), 'no band is given outside the model\'s legend');
-    assert.ok(!/\d+\s*(\/|of|out of)\s*100/.test(part), 'no score is drawn');
-    assert.ok(t.hrefs().includes('/validate?project_id=3'));
+    assert.equal(t.count('pmf-value'), 0, 'no score is drawn');
     assert.ok(t.hrefs().includes('/validate/demand-signals?project_id=3'));
-    assert.ok(t.requests.every((u) => !/pmf|scorecard/i.test(u)), 'the part makes no read of its own');
   } finally { await t.close(); }
 });
 
@@ -130,10 +131,12 @@ test('Validate\'s overview opens Fundraising readiness, keeping the venture; Bui
 test('the wiring: the readiness part beside From Mercury, the door under Validate\'s overview, no API, and the canvas in incoming', () => {
   const route = read('frontend/src/pages/cycles/CycleRoute.jsx');
   assert.match(route, /import \{ PmfPart, ReadinessDoor \} from '\.\/PmfPart';/);
-  assert.match(route, /'fundraising-readiness': \(data, ctx\) => \(\s*<>\s*<PmfPart projectId=\{ctx\.projectId\} \/>\s*\{mercuryPart\('fundraising-readiness', data, ctx\)\}/);
+  assert.match(route, /'fundraising-readiness': \(data, ctx\) => \(\s*<>\s*<PmfPart part=\{data\?\.parts\?\.pmf\} card=\{data\?\.card\} records=\{data\?\.records\} projectId=\{ctx\.projectId\} reload=\{ctx\.reload\} \/>\s*\{mercuryPart\('fundraising-readiness', data, ctx\)\}/);
   assert.match(route, /\{cycle === 'validate' && <ReadinessDoor search=\{q\} \/>\}/);
+  // D1145: the part reads its history through the cycle client only, and writes nothing.
   const part = read('frontend/src/pages/cycles/PmfPart.jsx') + read('frontend/src/pages/cycles/pmfModel.js');
-  assert.ok(!/lib\/api|fetch\(|useEffect/.test(part), 'the part reads nothing and writes nothing');
+  assert.ok(!/fetch\(|method: 'POST'|\.rescore\(/.test(part), 'the part writes nothing');
+  assert.deepEqual([...part.matchAll(/cyclesWrite\.raise\.(\w+)/g)].map((m) => m[1]).filter((v, i, a) => a.indexOf(v) === i), ['pmfHistory']);
   for (const f of ['Fundraising Readiness Page.dc.html', 'Fundraising readiness · Boards.dc.html']) assert.ok(existsSync(`design/incoming/${f}`), f);
   const boards = read('design/incoming/Fundraising readiness · Boards.dc.html');
   assert.ok(boards.includes('Fundraising Readiness Page'), 'the boards import the page by name');

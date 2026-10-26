@@ -934,7 +934,8 @@ export function mapToSpinoutDeckData(src: SpinoutDemoDayData): SpinoutDeckBundle
     ['Financial model', 'On request'],
     ['Cap table & legal docs', holders.length ? 'Included' : 'Pending'],
     ['Customer references', interviewN > 0 ? 'On request' : 'Pending'],
-    ['NDA', da.nda_required ? 'Required' : 'Not required'],
+    // D1102 (#2982): null is a room that could not be read, never "Not required".
+    ['NDA', da.nda_required === null ? 'Unreadable' : da.nda_required ? 'Required' : 'Not required'],
   ];
   if (!has(contactEmail)) gap('Review the deal: add a contact email / deal-room link in the Compliance module.', null, 'deal');
 
