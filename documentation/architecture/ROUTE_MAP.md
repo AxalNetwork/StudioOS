@@ -1,5 +1,11 @@
 # ROUTE_MAP.md — canvas → route → backend, with implementation status
 
+D1156 (#3061): HQ Super Admin reads dated studio aggregates at
+`GET /api/admin/program-grants/licences/:uid/in-use`; a local branch Admin
+requests its own report with `POST /api/licence/mine/programs/report`. The
+authenticated `reportProgramUsage` RPC and daily 05:15 UTC branch job share
+`services/programUsage.ts`. No new page layout is introduced.
+
 Produced by the P−1 audit (§16 step 2). Every "Live route today" cell was read
 from `frontend/src/App.jsx` with its guard; every backend cell names a file that
 exists under `cloudflare-worker/src/routes/`. CURRENT vs UPGRADE calls come from
