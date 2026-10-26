@@ -534,3 +534,15 @@ test('a hiring plan labelled by quarter or half is drawn at its month', async ()
   assert.equal(card.series.plan[card.series.months.indexOf(quarterEnd)], 4, 'the quarter\'s target is drawn at its last month');
   assert.equal(card.series.plan.filter((v: any) => v != null).length, 1);
 });
+
+test('D969: a feedback row carries its roadmap item\'s id, so Edit feedback\'s chip opens on it', async () => {
+  const f = await fixture();
+  const fb = { project: PID, body: 'Export to CSV please', source: 'customer', theme: 'Exports' };
+  const linked = await call(f, FOUNDER, 'POST', '/api/cycles/grow/feedback', fb);
+  f.db.prepare('UPDATE product_feedback SET roadmap_item_ref = ?, roadmap_item_label = ? WHERE uid = ?').run('12', 'CSV export', linked.body.uid);
+  const typed = await call(f, FOUNDER, 'POST', '/api/cycles/grow/feedback', { ...fb, body: 'Faster sync', roadmap_item_label: 'Sync' });
+  const rows = (await module_(f, 'product-improvement')).body.records.rows;
+  const of = (uid: string) => rows.find((r: any) => r.id === uid);
+  assert.deepEqual([of(linked.body.uid).roadmap_item_ref, of(linked.body.uid).roadmap_item_label], ['12', 'CSV export']);
+  assert.deepEqual([of(typed.body.uid).roadmap_item_ref, of(typed.body.uid).roadmap_item_label], [null, 'Sync'], 'a typed item has no id');
+});

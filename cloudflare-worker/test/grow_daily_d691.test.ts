@@ -135,3 +135,18 @@ test('8: a Stripe row that crosses an alert is caught by the daily run', async (
   assert.equal((await runGrowDaily(env, NOW)).alerts, 0);
   assert.equal(inbox(db, 'grow_kpi_alert').length, 1);
 });
+
+test('D969: a typed KPI is entered by hand; a connected source is refused and nothing is written', async () => {
+  const { db, env } = fixture();
+  await ensureProjectMetricsSchema(env);
+  const count = () => (db.prepare('SELECT COUNT(*) AS n FROM project_metrics').get() as any).n as number;
+  const before = count();
+  for (const source of ['stripe', 'bank']) {
+    await assert.rejects(enterKpi(env, A, FOUNDER, { kpi: 'mrr', value: 4000, as_of: day(0), source }),
+      (e: any) => e.status === 400 && e.field === 'source' && e.message === 'A figure typed here is entered by hand. A connected source writes its own figures.');
+  }
+  assert.equal(count(), before, 'nothing written');
+  await enterKpi(env, A, FOUNDER, { kpi: 'mrr', value: 4000, as_of: day(0), source: 'manual' });
+  await enterKpi(env, A, FOUNDER, { kpi: 'mrr', value: 4100, as_of: day(1) });
+  assert.equal(count(), before + 2, 'manual, or no source, is a hand entry');
+});
