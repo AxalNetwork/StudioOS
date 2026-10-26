@@ -281,6 +281,66 @@ test('Approvals counts all waiting business kinds and links to the business queu
   } finally { f.db.close(); }
 });
 
+test('company source edits cannot preserve a projected approval or suppress its next review', async () => {
+  const f = fixture();
+  try {
+    f.db.exec("UPDATE users SET kyc_status='approved' WHERE id=6");
+    assert.equal((await f.call('/company-1/owners','PUT',{ owners: preparedOwners, disclosed: true })).status,200);
+    assert.equal((await approve(f,'company-1')).status,200);
+    f.db.exec("UPDATE company_profiles SET company_name='Company changed in the same second' WHERE id=1");
+    const changed = await f.call('/company-1');
+    assert.equal(changed.body.status,'in_review');
+    assert.equal(changed.body.expires_at,null);
+    assert.equal((await f.call('/company-1/owners','PUT',{ owners: preparedOwners, disclosed: true })).status,200);
+    assert.equal((await approve(f,'company-1')).status,200);
+    f.db.exec("UPDATE kyb_cases SET expires_at = datetime('now','-1 day') WHERE uid='company-1'");
+    assert.equal((await f.call('/company-1')).body.status,'expired');
+  } finally { f.db.close(); }
+});
+
+async function selfReviewScenario(router = kyb) {
+  const f = fixture(router);
+  try {
+    f.db.exec("INSERT INTO corporate_profiles (user_id,entity_name) VALUES (2,'Admin entity')");
+    const own = await f.call('/account-2');
+    assert.equal(own.status,200,'own read is allowed'); assert.equal(own.body.can_review,false);
+    for (const [path,method,body] of [['/account-2/approve','PATCH',checks],['/account-2/owners','PUT',{owners:[],disclosed:true}],
+      ['/import-1/link-account','PATCH',{user_id:2}],['/company-1/owners','PUT',{owners:[{name:'Admin',ownership_pct:100,user_id:2}],disclosed:true}]] as const) {
+      assert.equal((await f.call(path,method,body)).status,403);
+    }
+    assert.equal((await f.call('/account-2/owners','PUT',{owners:[{name:'Independent owner',ownership_pct:100,user_id:5}],disclosed:true},1)).status,200);
+    assert.equal((await f.call('/account-2/approve','PATCH',checks,1)).status,200,'a different Super Admin can review the entity');
+    assert.equal((await f.call('/company-1/owners','PUT',{owners:[{name:'Admin owner',ownership_pct:100,user_id:2}],disclosed:true},1)).status,200);
+    assert.equal((await f.call('/company-1/approve','PATCH',checks)).status,403,'an actor linked as owner cannot review');
+  } finally { f.db.close(); }
+}
+test('staff cannot review their own entity or introduce their own owner/account link', () => selfReviewScenario());
+
+test('reconciliation preserves satisfied obligations backed by other evidence', async () => {
+  const f = fixture();
+  try {
+    f.db.exec(`UPDATE legal_obligations SET status='satisfied',expires_at='2099-01-01',evidence_meta='{"source":"manual_review"}' WHERE user_id=3`);
+    await resyncKycKyb(f.env);
+    assert.equal(statusOf(f).status,'satisfied'); assert.equal(statusOf(f).expires_at,'2099-01-01');
+    assert.equal((await approve(f,'account-3',{ ...checks,unchecked_owner_reason:'A separate review covers this owner.' } as any)).status,200);
+    await resyncKycKyb(f.env);
+    assert.equal(statusOf(f).expires_at,'2099-01-01','a case must not replace independent evidence');
+    assert.equal((await f.call('/account-3/reject','PATCH',{reason:'Registry needs a new review.'})).status,200);
+    await resyncKycKyb(f.env);
+    assert.equal(statusOf(f).status,'satisfied');
+  } finally { f.db.close(); }
+});
+
+test('registration search requires the full value and does not reveal substrings', async () => {
+  const f = fixture();
+  try {
+    assert.equal((await f.call('/?q=number-99')).body.total,0);
+    const exact = await f.call('/?q=secret-number-9988');
+    assert.equal(exact.body.total,1);
+    assert.equal(exact.text.includes('secret-number-9988'),false);
+  } finally { f.db.close(); }
+});
+
 // Exercise the same behavioural assertions with faults injected, then restored.
 // Data-URL modules keep mutations out of the working tree and concurrent tests.
 async function mutated(from: string, to: string) {
@@ -305,6 +365,9 @@ test('D1231 mutation checks: the guards, audit, redaction and decision paths fai
     ["kyb.use('/:id/documents/:documentId', requireCfAccess());",'',documentScenario],
     ["await c.env.FILES!.delete(doc.file_key);",';',documentScenario],
     ["'kyb_document_access'", "'kyb_wrong_document_action'",documentScenario],
+    ['row.linked_user_id === user.id', 'false', selfReviewScenario],
+    ['if (ids.includes(user.id))', 'if (false)', selfReviewScenario],
+    ['if (account.id === user.id)', 'if (false)', selfReviewScenario],
   ];
   for (const [from,to,scenario] of mutations) {
     await scenario();

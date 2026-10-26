@@ -110,7 +110,7 @@ SELECT s.*,
   COALESCE(s.account_user_id, c.linked_user_id) AS linked_user_id,
   CASE WHEN c.source_revision = s.source_revision THEN
     CASE WHEN c.status = 'approved' AND julianday(c.expires_at) <= julianday('now') THEN 'expired' ELSE c.status END
-    ELSE CASE WHEN s.source_status = 'pending' THEN 'in_review' ELSE s.source_status END END AS status,
+    ELSE CASE WHEN s.source_status = 'pending' OR (c.uid IS NOT NULL AND s.source_status IN ('approved','rejected','needs_info','expired')) THEN 'in_review' ELSE s.source_status END END AS status,
   CASE WHEN c.source_revision = s.source_revision THEN c.reviewed_at ELSE s.source_reviewed_at END AS reviewed_at,
   CASE WHEN c.source_revision = s.source_revision THEN c.reviewed_by ELSE s.source_reviewed_by END AS reviewed_by,
   CASE WHEN c.source_revision = s.source_revision THEN c.expires_at ELSE NULL END AS expires_at,

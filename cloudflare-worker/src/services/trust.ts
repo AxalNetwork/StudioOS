@@ -513,33 +513,40 @@ export async function resyncKycKyb(env: Env): Promise<{ scanned: number; updated
   // D1231: the real decision store, scoped to this deployment's studio.
   try {
     const pendingKyb = await env.DB.prepare(
-      `SELECT lo.id AS oblig_id, lo.status AS obligation_status, b.uid AS case_uid,
-              b.status AS kyb_status, b.expires_at
-         FROM legal_obligations lo
-         LEFT JOIN kyb_businesses b ON b.uid = COALESCE(
-           (SELECT a.uid FROM kyb_businesses a WHERE a.uid = 'account-' || lo.user_id),
-           (SELECT i.uid FROM kyb_businesses i WHERE i.kind = 'imported_partner'
-              AND i.linked_user_id = lo.user_id AND i.studio_code = ?
-              AND i.status != 'dismissed' ORDER BY julianday(i.reviewed_at) DESC, i.id DESC LIMIT 1))
-           AND b.studio_code = ?
-        WHERE lo.obligation_key = 'kyb_v1'
-          AND lo.status IN ('pending','in_review','expired','satisfied')`,
-    ).bind(branchOf(env) || 'hq', branchOf(env) || 'hq').all<{
-      oblig_id: number; obligation_status: string; case_uid: string | null; kyb_status: string | null; expires_at: string | null;
-    }>();
+      `SELECT lo.id AS oblig_id, lo.user_id, lo.status AS obligation_status, lo.evidence_meta,
+          EXISTS (SELECT 1 FROM corporate_profiles p WHERE p.user_id = lo.user_id AND NULLIF(trim(p.entity_name),'') IS NOT NULL) AS has_account_entity
+       FROM legal_obligations lo WHERE lo.obligation_key = 'kyb_v1'
+         AND lo.status IN ('pending','in_review','expired','satisfied')`,
+    ).all<{ oblig_id: number; user_id: number; obligation_status: string; evidence_meta: string | null; has_account_entity: number }>();
+    // One source pass, not one UNION-view lookup per obligation.
+    const businesses = await env.DB.prepare(
+      `SELECT uid, kind, linked_user_id, status, expires_at FROM kyb_businesses
+       WHERE studio_code = ? AND kind IN ('investing_entity','partner_firm','imported_partner')
+       ORDER BY julianday(reviewed_at) DESC, id DESC`,
+    ).bind(branchOf(env) || 'hq').all<{ uid: string; kind: string; linked_user_id: number | null; status: string; expires_at: string | null }>();
+    const byRef = new Map((businesses.results || []).map(b => [b.uid, b]));
+    const imports = new Map<number, NonNullable<typeof businesses.results>[number]>();
+    for (const b of businesses.results || []) {
+      if (b.kind === 'imported_partner' && b.linked_user_id && b.status !== 'dismissed' && !imports.has(b.linked_user_id)) imports.set(b.linked_user_id, b);
+    }
     const rows = pendingKyb.results || [];
     scanned += rows.length;
     for (const r of rows) {
-      if (r.kyb_status === 'approved' && r.expires_at) {
+      let evidence: { source?: string } | null = null;
+      try { evidence = r.evidence_meta ? JSON.parse(r.evidence_meta) : null; } catch { /* preserve other or unreadable evidence */ }
+      if (r.obligation_status === 'satisfied' && evidence?.source !== 'kyb_case') continue;
+      const business = r.has_account_entity ? byRef.get(`account-${r.user_id}`) : imports.get(r.user_id);
+      const kybStatus = business?.status ?? null, caseUid = business?.uid ?? null, expiresAt = business?.expires_at ?? null;
+      if (kybStatus === 'approved' && expiresAt) {
         const upd = await env.DB.prepare(
           `UPDATE legal_obligations SET status = 'satisfied', expires_at = ?,
              evidence_meta = json_object('source','kyb_case','case_uid',?), updated_at = CURRENT_TIMESTAMP
            WHERE id = ? AND (status != 'satisfied' OR expires_at IS NOT ?
              OR json_extract(evidence_meta,'$.case_uid') IS NOT ?)`,
-        ).bind(r.expires_at, r.case_uid, r.oblig_id, r.expires_at, r.case_uid).run();
+        ).bind(expiresAt, caseUid, r.oblig_id, expiresAt, caseUid).run();
         updated += Number(upd.meta?.changes || 0);
-      } else if (r.obligation_status === 'satisfied' || r.kyb_status === 'rejected' || r.kyb_status === 'expired') {
-        const next = r.kyb_status === 'expired' ? 'expired' : 'pending';
+      } else if (r.obligation_status === 'satisfied' || kybStatus === 'rejected' || kybStatus === 'expired') {
+        const next = kybStatus === 'expired' ? 'expired' : 'pending';
         const upd = await env.DB.prepare(
           `UPDATE legal_obligations SET status = ?, expires_at = NULL, evidence_meta = NULL,
              updated_at = CURRENT_TIMESTAMP WHERE id = ? AND status != ?`,

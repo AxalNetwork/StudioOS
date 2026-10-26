@@ -54,9 +54,13 @@ function audit(env: Env, user: User, actor: string, action: string, ref: string 
 async function find(c: Ctx, user: User): Promise<Row | null> {
   const ref = c.req.param('id') || '';
   if (!refOk(ref)) return null;
-  const row = await c.env.DB.prepare('SELECT * FROM kyb_businesses WHERE uid = ? AND (studio_code IS NULL OR studio_code = ?)')
-    .bind(ref, scope(c.env)).first<Row>();
+  const row = await c.env.DB.prepare('SELECT * FROM kyb_businesses WHERE source_id = ? AND uid = ? AND (studio_code IS NULL OR studio_code = ?)')
+    .bind(Number(ref.split('-')[1]), ref, scope(c.env)).first<Row>();
   if (row?.kind === 'licensed_studio') await requireSuperAdmin(c);
+  if (row && !['GET', 'HEAD'].includes(c.req.method)
+    && (row.linked_user_id === user.id || declaredOwners(row)?.some(p => p.user_id === user.id))) {
+    throw new Error('Forbidden');
+  }
   // Another administrator's legal entity is Super Admin data.
   if (row?.linked_user_id && row.linked_user_id !== user.id && !isSuperAdmin(user)) {
     const target = await c.env.DB.prepare('SELECT role FROM users WHERE id = ?').bind(row.linked_user_id).first<{ role: string }>();
@@ -131,13 +135,13 @@ async function owners(env: Env, row: Row) {
     };
   }));
 }
-function summary(row: Row) {
+function summary(row: Row, user: User) {
   return { id: row.id, uid: row.uid, kind: row.kind, entity_name: row.entity_name, entity_type: row.entity_type,
     jurisdiction: row.jurisdiction, status: row.status, registration_number: maskFor('id_number', row.registration_number),
     submitted_at: row.submitted_at, reviewed_at: row.reviewed_at, expires_at: row.expires_at,
     company_id: row.company_id, linked_user_id: row.linked_user_id, licence_ref: row.licence_ref,
     owners_disclosed: !!(row.case_owners_disclosed ?? row.owners_disclosed), high_risk_country: row.high_risk_country,
-    version: row.version };
+    version: row.version, can_review: row.linked_user_id !== user.id && !declaredOwners(row)?.some(p => p.user_id === user.id) };
 }
 
 kyb.get('/', async c => {
@@ -155,7 +159,7 @@ kyb.get('/', async c => {
      WHERE (b.studio_code IS NULL OR b.studio_code = ?) AND (b.kind != 'licensed_studio' OR ? = 1)
        AND (? = 1 OR NOT EXISTS (SELECT 1 FROM users u WHERE u.id = b.linked_user_id AND u.role = 'admin' AND u.id != ?))
        AND (? = '' OR b.status = ?) AND (? = '' OR b.kind = ?) AND (? = '' OR b.jurisdiction = ?)
-       AND (? = '' OR instr(lower(b.entity_name), lower(?)) > 0 OR instr(lower(COALESCE(b.registration_number,'')), lower(?)) > 0)
+       AND (? = '' OR instr(lower(b.entity_name), lower(?)) > 0 OR lower(COALESCE(b.registration_number,'')) = lower(?))
      ORDER BY julianday(COALESCE(b.submitted_at,b.created_at)), b.id LIMIT ? OFFSET ?`,
   ).bind(scope(c.env), sup, sup, user.id, status, status, kind, kind, jurisdiction, jurisdiction, q, q, q, limit, (page - 1) * limit).all<Row>();
   const counts = await c.env.DB.prepare(
@@ -163,11 +167,11 @@ kyb.get('/', async c => {
      WHERE (b.studio_code IS NULL OR b.studio_code = ?) AND (b.kind != 'licensed_studio' OR ? = 1)
        AND (? = 1 OR NOT EXISTS (SELECT 1 FROM users u WHERE u.id = b.linked_user_id AND u.role = 'admin' AND u.id != ?))
        AND (? = '' OR b.status = ?) AND (? = '' OR b.kind = ?) AND (? = '' OR b.jurisdiction = ?)
-       AND (? = '' OR instr(lower(b.entity_name), lower(?)) > 0 OR instr(lower(COALESCE(b.registration_number,'')), lower(?)) > 0)
+       AND (? = '' OR instr(lower(b.entity_name), lower(?)) > 0 OR lower(COALESCE(b.registration_number,'')) = lower(?))
      GROUP BY b.status`,
   ).bind(scope(c.env), sup, sup, user.id, status, status, kind, kind, jurisdiction, jurisdiction, q, q, q).all<Row>();
   await audit(c.env, user, await hashEmail(user.email), 'kyb_queue_access', null).run();
-  return c.json({ items: (result.results || []).map(summary), page, limit,
+  return c.json({ items: (result.results || []).map(row => summary(row, user)), page, limit,
     total: (counts.results || []).reduce((n, r) => n + Number(r.n), 0), counts: counts.results || [] });
 });
 
@@ -209,7 +213,7 @@ kyb.get('/:id', async c => {
     return cases.results?.length ? ok(cases.results.map(item => ({ ...item, read_only: true }))) : missing('No due-diligence case is recorded for this account entity.');
   });
   await audit(c.env, user, await hashEmail(user.email), 'kyb_record_access', row.uid).run();
-  return c.json({ ...summary(row), entity: {
+  return c.json({ ...summary(row, user), entity: {
     registered_address: maskFor('address', row.registered_address), tax_id: row.tax_id_last4 ? `••••${row.tax_id_last4}` : null,
     signing_authority_name: row.signing_authority_name, signing_authority_title: row.signing_authority_title,
   }, owners: ownerBlock, directors: parse(row.case_directors_json ?? row.directors_json)?.map(p => ({ name: p.name ?? null, title: p.title ?? null })) ?? missing('Directors have not been recorded.'),
@@ -250,6 +254,7 @@ kyb.put('/:id/owners', async c => {
     return c.json({ error: 'invalid_owners', detail: 'Record valid owners, percentages, account links and directors.' }, 400);
   }
   const ids = [...new Set(people.map(p => p.user_id).filter(positive))];
+  if (ids.includes(user.id)) return c.json({ error: 'self_review_refused', detail: 'Another reviewer must record an owner link to your account.' }, 403);
   const accounts = await c.env.DB.prepare('SELECT id, role FROM users WHERE id IN (SELECT value FROM json_each(?))').bind(JSON.stringify(ids)).all<Row>();
   if ((accounts.results || []).length !== ids.length) return absent(c);
   if ((accounts.results || []).some(a => a.role === 'admin' && a.id !== user.id)) await requireSuperAdmin(c);
@@ -356,6 +361,7 @@ kyb.patch('/:id/link-account', async c => {
   if (row.kind !== 'imported_partner' || row.status === 'dismissed' || row.linked_user_id || !positive(b.user_id)) return c.json({ error: 'invalid_import_link', detail: 'Choose an unlinked import and an account in this studio.' }, 400);
   const account = await c.env.DB.prepare('SELECT id, role FROM users WHERE id = ?').bind(b.user_id).first<Row>();
   if (!account) return absent(c);
+  if (account.id === user.id) return c.json({ error: 'self_review_refused', detail: 'Another reviewer must link a business to your account.' }, 403);
   if (account.role === 'admin' && account.id !== user.id) await requireSuperAdmin(c);
   await materialize(c, row);
   const changed = await commit(c, user, row, c.env.DB.prepare(

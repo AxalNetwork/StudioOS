@@ -105,6 +105,8 @@ export type ApprovalSource = {
   decidedOn: string | null;
   /** Canonical destination when a lane provides its own address. */
   decisionPath?: string;
+  /** Bound values before a rows LIMIT, shared by every query executor. */
+  bindings?: (env: Env) => unknown[];
   undecidedReason?: string;
   /**
    * D1041 — a second count inside the lane (APR2's line under it), literal like
@@ -361,6 +363,7 @@ export const APPROVAL_SOURCES: readonly ApprovalSource[] = [
     notifies: 'Nobody yet',
     decidedOn: 'KYC & KYB › Businesses',
     decisionPath: '/admin/kyc/businesses',
+    bindings: env => [branchOf(env) || 'hq'],
   },
   {
     key: 'comarketing',
@@ -635,7 +638,7 @@ export async function approvalBoard(
   for (const src of sources) {
     try {
       const rows = await env.DB.prepare(src.rowsSql)
-        .bind(...(src.key === 'kyb' ? [branchOf(env) || 'hq'] : []), Math.max(1, Math.trunc(Number(limit) || 100)))
+        .bind(...(src.bindings?.(env) || []), Math.max(1, Math.trunc(Number(limit) || 100)))
         .all<{ id: number; who: string; what: string; created_at: string }>();
       const got = rows.results || [];
       for (const r of got) {
@@ -782,7 +785,7 @@ export async function countLanes<K extends string>(
   for (const s of sources) {
     const meta = laneMeta(s as ApprovalSource);
     try {
-      const row = await env.DB.prepare(s.countSql).bind(...(s.key === 'kyb' ? [branchOf(env) || 'hq'] : [])).first<{ n: number; oldest: string | null }>();
+      const row = await env.DB.prepare(s.countSql).bind(...(s.bindings?.(env) || [])).first<{ n: number; oldest: string | null }>();
       const sub = s.subSql ? await subCounts(env, s.subSql) : await subCount(env, s as ApprovalSource);
       out.push({
         key: s.key,
