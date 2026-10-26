@@ -315,8 +315,9 @@ test('the CSV: the rows given, the table\'s own words, counts only, safe in a sp
   const lines = csv.trim().split('\r\n');
   assert.equal(lines.length, 4, 'a header and the rows given');
   assert.equal(lines[0], CSV_COLUMNS.join(','));
-  assert.deepEqual(CSV_COLUMNS, ['Event', 'Featured', 'Starts', 'Time zone', 'Status', 'Visibility', 'Capacity', 'Taken', 'Waitlisted', 'Attended', 'Fill', 'Show-up', 'Price']);
-  assert.equal(lines[1], `"Breakfast, Lisbon",No,14 Mar 2027 12:00,UTC,Published,Public,10,6,2,${NOT_HELD},60%,${NOT_HELD},Free`);
+  // D1116 adds Type and Format, as the table draws them; a format not stored reads "Not recorded".
+  assert.deepEqual(CSV_COLUMNS, ['Event', 'Featured', 'Type', 'Starts', 'Time zone', 'Status', 'Visibility', 'Format', 'Capacity', 'Taken', 'Waitlisted', 'Attended', 'Fill', 'Show-up', 'Price']);
+  assert.equal(lines[1], `"Breakfast, Lisbon",No,Meetup,14 Mar 2027 12:00,UTC,Published,Public,Not recorded,10,6,2,${NOT_HELD},60%,${NOT_HELD},Free`);
   assert.match(lines[2], /^"'=HYPERLINK\(""x""\)",/, 'a formula is defused and quoted');
   assert.match(lines[2], /,No cap,5,0,4,No cap,80%,Free$/);
   assert.match(lines[3], new RegExp(`,${NOT_IN_READ},${NOT_IN_READ},`), 'an event not in R2 says so, never 0');
@@ -335,7 +336,8 @@ test('the new files read nothing new, upload nothing and draw no chart', () => {
   const src = files.map((f) => codeOnly(read(f))).join('\n');
   for (const control of ['type="file"', '.draft(', 'dd.generateReport(']) assert.ok(!src.includes(control), `rail_options_admin_d774 lists ${control}`);
   assert.doesNotMatch(src, /lib\/api|fetch\(|roster|\.summary\b|conversion/, 'the tabs read through useEventsDesk only');
-  assert.doesNotMatch(src, /<svg|recharts|location_kind|\bev\.type\b/, 'no chart, no type or format until part 1');
+  // D1116 (#2996) adds Type and Format from the rows' own `type` and `location_kind`.
+  assert.doesNotMatch(src, /<svg|recharts/, 'no chart');
   assert.doesNotMatch(src, /host_user_id|\.email\b|Studio team/, 'the host line is D918\'s name and role; Studio team waits for O-STU');
   const hook = codeOnly(read('frontend/src/pages/admin/events/useEventsDesk.js'));
   assert.match(hook, /const wantPaid = tab === 'all' && paidView;\n\s*const paid = useRead\('overview', 'paid', withList, wantPaid, \(\) => adminEvents\.overview\(\)\);/, 'the overview is read only for the paid-tickets view');
@@ -520,7 +522,9 @@ test('All events: filters, a view, a sort and the page size in the address; the 
 test('All events on a phone: the cards are 44 px targets and the filters fold behind "Filters · [n]"', () => {
   const src = read('frontend/src/pages/admin/events/EventsAll.jsx');
   assert.match(src, /<ul className="m-0 flex list-none flex-col gap-1\.5 p-0 sm:hidden" data-testid="events-all-cards">/);
-  assert.match(src, /className="flex min-h-\[44px\] flex-col/, 'each card is at least 44 px');
+  // D1116: the card shares its row with the ⋯ menu, which is a 44 px target too.
+  assert.match(src, /className="flex min-h-\[44px\] min-w-0 flex-1 flex-col/, 'each card is at least 44 px');
+  assert.match(read('frontend/src/pages/admin/events/RowActions.jsx'), /max-sm:min-h-\[44px\] max-sm:min-w-\[44px\]/, 'and so is its ⋯');
   assert.match(src, /max-sm:hidden/, 'the table gives way to the cards');
   assert.match(read('frontend/src/pages/admin/events/EventFilters.jsx'), /export const CONTROL = `\$\{INPUT\} max-sm:min-h-\[44px\]`;/);
   assert.match(read('frontend/src/pages/admin/events/EventsCalendar.jsx'), /flex min-h-\[44px\] items-center gap-3 rounded-\[10px\]/, 'the list rows too');
