@@ -17,10 +17,11 @@
  * THE RULES. Never an email address. A value nothing recorded reads "Not
  * recorded", never 0. A read that failed says so where its figure would be.
  */
+import { NOT_RECORDED } from '../../../lib/absence.js';
 import { APPLICATION_LABEL, ROLE_OPTIONS } from '../../testing/programmeModel';
 import { profileWord } from './productTestingModel';
 
-export const NOT_RECORDED = 'Not recorded';
+export { NOT_RECORDED };
 export const PARTNER_LINE = (firm) => `${firm || 'The partner firm'} picks its testers. HQ can read this list, not change it.`;
 export const MAIL_LINE = 'Testers hear from you through Axal VC Mail. No email address is shown here.';
 export const BOTH_LINE = 'An applicant applied to one program. A tester is in the pool. Someone can be both.';
