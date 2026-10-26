@@ -52,6 +52,17 @@ export const ADMIN_TAB_REDIRECTS: readonly RedirectRoute[] = Object.freeze([
   { path: '/admin?tab=github' },
 ]);
 
+/**
+ * D1160 (#3067): addresses that forward one role and stay a page for another.
+ * `/funds` and `/funds/performance` forward an admin to Fund administration
+ * and remain an investor's pages, so the address-bar beacon skips them; the
+ * forward itself (`FundOpsRedirect`) sends the key, counted until #2319.
+ */
+export const ROLE_REDIRECTS: readonly (RedirectRoute & { role: 'admin' })[] = Object.freeze([
+  { path: '/funds', role: 'admin' },
+  { path: '/funds/performance', role: 'admin' },
+]);
+
 export const REDIRECT_ROUTES: readonly RedirectRoute[] = Object.freeze([
   { path: '/for-mentors' },
   { path: '/pricing/investor' },
@@ -172,6 +183,7 @@ export const REDIRECT_ROUTES: readonly RedirectRoute[] = Object.freeze([
   { path: '/admin/network-profiles' }, // D972 (#2369): the roster is Advisors & Partners › Deck roster
   { path: '/admin/partner-invitations/firm-links' }, // D952 (#2728): Firm links moved to Advisors & Partners › Firms
   ...ADMIN_TAB_REDIRECTS,
+  ...ROLE_REDIRECTS,
   { path: '/admin', keep: true }, // D938 (#2743): the Admin Console is retired; every ?tab= forwards to its own page (#2375 keeps /admin)
 
 ]);

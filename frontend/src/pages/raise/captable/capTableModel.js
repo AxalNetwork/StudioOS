@@ -159,6 +159,8 @@ export function scenarioCard(s, { model = false } = {}) {
     uid: s?.uid,
     name: model ? 'Cap table · model' : (String(s?.name || '').trim() || NOT_RECORDED),
     model,
+    // D1024: where the scenario starts — the record (D1018's `start`), or a model typed by hand.
+    start: model ? 'Your saved model' : s?.inputs?.start ? 'Starts from Today' : 'Starts from your model',
     round: round
       ? `${String(round.name || 'Round').trim()} · pre-money ${dollars(round.pre_money)} · raise ${dollars(round.investment)}${num(round.post_round_pool_pct) != null ? ` · pool ${round.post_round_pool_pct}% post` : ''}`
       : 'No round is planned.',
