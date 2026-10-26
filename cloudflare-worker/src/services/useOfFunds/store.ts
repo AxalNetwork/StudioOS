@@ -66,9 +66,16 @@ function scenarioAudit(env:Env,s:Scope,action:string,uid:string,isBase:number,en
 export async function base(env: Env, s: Scope) {
   try { return (await copyLegacyBase(env.DB, s.projectId, s.founderUserId)).scenarioId; }
   catch (e) {
-    if (e instanceof UofStoreError) throw new PlanError(e.code === 'not_found' ? 404 : 503, e.code, e.message);
+    if (e instanceof UofStoreError) {
+      if (e.code === 'unreadable') throw legacyRepair();
+      throw new PlanError(e.code === 'not_found' ? 404 : 503, e.code, e.message);
+    }
     throw e;
   }
+}
+function legacyRepair(conflict=false) {
+  return new PlanError(409, conflict ? 'legacy_plan_changed' : 'legacy_plan_repair_required',
+    'Review and correct the legacy Use of funds fields with PUT /api/projects/:id before retrying. Existing data was kept.');
 }
 export async function scenario(env: Env, s: Scope, id: number) {
   const r = await env.DB.prepare('SELECT * FROM uof_scenarios WHERE project_id = ? AND id = ?').bind(s.projectId, id).first<any>();
@@ -104,20 +111,45 @@ export async function view(env: Env, s: Scope, r: any) {
     hires: hireRows === null ? { state: 'unreadable', reason: 'Hires are Unreadable. Try again.', items: null } : { state: 'ok', items: hireRows }, model: plan(inputs) };
 }
 
-/** Keep every legacy reader on the new Base. No alternative writes these fields. */
+const legacyBucket = { product: 'eng', 'go-to-market': 'gtm', infrastructure: 'infra', operations: 'ops', reserve: 'hiring' };
+function milestoneProjection(milestones:any[]) {
+  const projected:Record<string,Record<string,any>>={milestones:{},milestone_costs:{}};
+  for (const m of milestones) {
+    if (m.okr_id != null) projected.milestone_costs[String(m.okr_id)]={cost:m.cost_cents===null?null:m.cost_cents/100,bucket:m.category_key?legacyBucket[m.category_key as SectionKey]:null};
+    else if(m.category_key&&!projected.milestones[m.category_key]) projected.milestones[m.category_key]={label:m.label,by:m.due_on};
+  }
+  return projected;
+}
+function sameMilestoneEntry(a:any,b:any,cost:boolean) {
+  if (!obj(a)||!obj(b)) return false;
+  if (!cost) return a.label===b.label&&(a.by||null)===(b.by||null);
+  const amount=(v:any)=>v==null||(typeof v==='string'&&!v.trim())?null:Math.round(Number(v)*100);
+  const bucket=(v:any)=>v==null||v===''?null:legacyBucket[v as SectionKey]??v;
+  return amount(a.cost)===amount(b.cost)&&bucket(a.bucket)===bucket(b.bucket);
+}
+/** Replace only the old Base's projection; other legacy writers' entries survive. */
 async function legacyStatements(env: Env, s: Scope, r: any, lines: any[], milestones: any[]) {
   const project = await env.DB.prepare('SELECT use_of_funds_meta FROM projects WHERE id = ?').bind(s.projectId).first<any>();
-  const meta = json(project?.use_of_funds_meta, {});
-  if (!obj(meta)) throw new PlanError(503, 'unreadable', 'Stored plan metadata is Unreadable. Try again.');
+  let meta:any;
+  try { meta=json(project?.use_of_funds_meta,{}); } catch { throw legacyRepair(); }
+  if (!obj(meta)) throw legacyRepair();
   const complete = lines.length === 5 && lines.every(l => l.share_pct !== null) && lines.reduce((sum, l) => sum + l.share_pct, 0) === 100;
   const split = complete ? SECTION_KEYS.map(k => ({ label: SECTION_LABELS[k], pct: lines.find(l => l.category_key === k).share_pct })) : null;
   meta.deck_synced_at = null;
   if (r.target_runway_months === null) delete meta.runway_months; else meta.runway_months = r.target_runway_months;
-  meta.milestones = {}; meta.milestone_costs = {};
-  const bucket = { product: 'eng', 'go-to-market': 'gtm', infrastructure: 'infra', operations: 'ops', reserve: 'hiring' };
-  for (const m of milestones) {
-    if (m.okr_id != null) meta.milestone_costs[String(m.okr_id)] = { cost: m.cost_cents === null ? null : m.cost_cents / 100, bucket: m.category_key ? bucket[m.category_key as SectionKey] : null };
-    else if (m.category_key && !meta.milestones[m.category_key]) meta.milestones[m.category_key] = { label: m.label, by: m.due_on };
+  const previous=await env.DB.prepare('SELECT id FROM uof_scenarios WHERE project_id=? AND is_base=1').bind(s.projectId).first<{id:number}>();
+  const before=milestoneProjection(previous?(await scenarioParts(env,previous.id)).milestones:[]);
+  const after=milestoneProjection(milestones);
+  for (const field of ['milestones','milestone_costs']) {
+    const current=meta[field]??{};
+    if (!obj(current)) throw legacyRepair();
+    const merged={...current};
+    for (const [k,value] of Object.entries(before[field])) if (sameMilestoneEntry(merged[k],value,field==='milestone_costs')) delete merged[k];
+    for (const [k,value] of Object.entries(after[field])) {
+      if (has(merged,k)&&!sameMilestoneEntry(merged[k],value,field==='milestone_costs')) throw legacyRepair(true);
+      merged[k]={...(obj(current[k])?current[k]:{}),...value};
+    }
+    meta[field]=merged;
   }
   return [env.DB.prepare(`UPDATE projects SET use_of_funds = ?, funding_needed = ?, use_of_funds_meta = ?, updated_at = datetime('now') WHERE id = ?
     AND EXISTS(SELECT 1 FROM uof_scenarios WHERE id=? AND project_id=? AND is_base=1)`)
@@ -225,7 +257,7 @@ export async function saveMilestone(env:Env,s:Scope,id:number|null,b:Record<stri
   if (has(b,'cost_cents')) r.cost_cents=number(b.cost_cents);
   if (has(b,'okr_id')) r.okr_id=b.okr_id===null?null:idOf(b.okr_id);
   if (!r.label) throw bad();
-  if (r.okr_id !== null && !await env.DB.prepare('SELECT id FROM roadmap_okrs WHERE id=? AND project_id=?').bind(r.okr_id,s.projectId).first()) throw new PlanError(404,'not_found','Roadmap item not found.');
+  if (!remove && r.okr_id !== null && !await env.DB.prepare('SELECT id FROM roadmap_okrs WHERE id=? AND project_id=?').bind(r.okr_id,s.projectId).first()) throw new PlanError(404,'not_found','Roadmap item not found.');
   if (!remove && r.okr_id !== null && await env.DB.prepare('SELECT id FROM uof_milestones WHERE scenario_id=? AND okr_id=? AND id<>?').bind(sc.id,r.okr_id,id??-1).first()) throw new PlanError(409,'duplicate_okr','This roadmap item is already in the scenario.');
   const stmts = remove ? [env.DB.prepare('DELETE FROM uof_milestones WHERE id=? AND scenario_id=? AND EXISTS(SELECT 1 FROM uof_scenarios WHERE id=? AND project_id=? AND is_base=?)').bind(id,sc.id,sc.id,s.projectId,sc.is_base)] : id === null
     ? [env.DB.prepare("INSERT INTO uof_milestones(uid,scenario_id,category_key,label,due_on,cost_cents,okr_id,source_label,updated_by) SELECT ?,id,?,?,?,?,?,'typed',? FROM uof_scenarios WHERE id=? AND project_id=? AND is_base=?").bind(r.uid,r.category_key,r.label,r.due_on,r.cost_cents,r.okr_id,s.user.id,sc.id,s.projectId,sc.is_base)]

@@ -209,7 +209,55 @@ test('D1176 a failed Mercury block falls back to dated metrics; unrelated failur
 test('D1176 unreadable legacy metadata stays unreadable instead of overwriting it or hiding good source blocks',async()=>{
   const f=fixture();f.db.exec("UPDATE projects SET use_of_funds_meta='corrupt' WHERE id=1; INSERT INTO project_metrics(project_id,cash_balance,net_burn,snapshot_date) VALUES(1,100,10,'2026-10-01')");
   const r=(await call(f,'GET','/plan')).body;assert.equal(r.base.state,'unreadable');assert.equal(r.runway_today.chosen.value,10);
-  assert.equal((await call(f,'POST','/scenarios',input())).status,503);assert.equal(rows(f,'SELECT id FROM uof_scenarios').length,0);
+  assert.equal((await call(f,'POST','/scenarios',input())).status,409);assert.equal(rows(f,'SELECT id FROM uof_scenarios').length,0);
+});
+test('D1176 stale legacy costs give a correction route and keep data until an explicit repair permits the split',async()=>{
+  const f=fixture();const legacy={milestone_costs:{m1:{bucket:'eng',cost:400}},keep:'Recorded outside this tool'};
+  f.db.prepare('UPDATE projects SET use_of_funds_meta=? WHERE id=1').run(JSON.stringify(legacy));
+  const r=await call(f,'PUT','',{sections:[{key:'product',pct:100}]});
+  assert.equal(r.status,409);assert.equal(r.body.code,'legacy_plan_repair_required');assert.match(r.body.detail,/PUT \/api\/projects\/:id/);
+  assert.deepEqual(JSON.parse(rows(f,'SELECT use_of_funds_meta FROM projects WHERE id=1')[0].use_of_funds_meta),legacy);
+  assert.equal(rows(f,'SELECT id FROM uof_scenarios').length,0);assert.equal(rows(f,'SELECT id FROM activity_logs').length,0);
+  // The existing authenticated projects PUT accepts this explicit metadata correction.
+  f.db.prepare('UPDATE projects SET use_of_funds_meta=? WHERE id=1').run(JSON.stringify({...legacy,milestone_costs:{}}));
+  assert.equal((await call(f,'PUT','',{sections:[{key:'product',pct:100}]})).status,200);
+  assert.equal(rows(f,'SELECT share_pct FROM uof_scenario_lines WHERE category_key=\'product\'')[0].share_pct,100);
+  assert.equal(rows(f,"SELECT id FROM activity_logs WHERE action='split_saved'").length,1);
+});
+test('D1176 projection keeps later legacy-only entries and extra fields while retiring the old Base projection',async()=>{
+  const f=fixture();
+  f.db.exec("INSERT INTO roadmap_okrs(id,project_id,objective) VALUES(3,1,'Uncosted roadmap item')");
+  f.db.prepare('UPDATE projects SET use_of_funds_meta=? WHERE id=1').run(JSON.stringify({milestones:{product:{label:'Copied',by:''}},milestone_costs:{'1':{cost:'1.23',bucket:'product'},'3':{cost:' ',bucket:''}}}));
+  await call(f,'GET','/scenarios');
+  const external={milestones:{product:{label:'Copied',by:''},operations:{label:'Later legacy',by:'2027-04'}},milestone_costs:{'1':{cost:'1.23',bucket:'product',note:'Keep extra'},'3':{cost:' ',bucket:''},m1:{cost:77,bucket:'ops'}},keep:'Unrelated'};
+  f.db.prepare('UPDATE projects SET use_of_funds_meta=? WHERE id=1').run(JSON.stringify(external));
+  assert.equal((await call(f,'PUT','',{sections:[{key:'product',pct:100}]})).status,200);
+  let meta=JSON.parse(rows(f,'SELECT use_of_funds_meta FROM projects WHERE id=1')[0].use_of_funds_meta);
+  assert.deepEqual(meta.milestones.operations,external.milestones.operations);assert.deepEqual(meta.milestone_costs.m1,external.milestone_costs.m1);assert.equal(meta.milestone_costs['1'].note,'Keep extra');
+  const other=await created(f,{name:'No copied milestones'});
+  assert.equal((await call(f,'POST',`/scenarios/${other.id}/make-base`,{})).status,200);
+  meta=JSON.parse(rows(f,'SELECT use_of_funds_meta FROM projects WHERE id=1')[0].use_of_funds_meta);
+  assert.deepEqual(meta.milestones,{operations:external.milestones.operations});assert.deepEqual(meta.milestone_costs,{m1:external.milestone_costs.m1});assert.equal(meta.keep,'Unrelated');
+});
+test('D1176 a conflicting later legacy edit refuses before changing Base or its audit',async()=>{
+  const f=fixture();
+  f.db.prepare('UPDATE projects SET use_of_funds_meta=? WHERE id=1').run(JSON.stringify({milestone_costs:{'1':{cost:1,bucket:'eng'}}}));
+  const base=(await call(f,'GET','/scenarios')).body.items[0];
+  const changed={milestone_costs:{'1':{cost:2,bucket:'eng'}}};
+  f.db.prepare('UPDATE projects SET use_of_funds_meta=? WHERE id=1').run(JSON.stringify(changed));
+  const r=await call(f,'PATCH',`/scenarios/${base.id}`,{name:'Must not replace the other edit'});
+  assert.equal(r.status,409);assert.equal(r.body.code,'legacy_plan_changed');
+  assert.equal(rows(f,'SELECT name FROM uof_scenarios WHERE is_base=1')[0].name,'Base');assert.equal(rows(f,'SELECT id FROM activity_logs').length,0);
+  assert.deepEqual(JSON.parse(rows(f,'SELECT use_of_funds_meta FROM projects WHERE id=1')[0].use_of_funds_meta),changed);
+});
+test('D1176 a milestone can be removed after its roadmap OKR disappears, including its Base projection and audit',async()=>{
+  const f=fixture();const base=(await call(f,'GET','/scenarios')).body.items[0];
+  const m=await call(f,'POST','/milestones',{scenario_id:base.id,label:'Linked',cost_cents:123,okr_id:1});assert.equal(m.status,201);
+  f.db.exec('DELETE FROM roadmap_okrs WHERE id=1');
+  assert.equal((await call(f,'DELETE',`/milestones/${m.body.id}`)).status,200);
+  assert.equal(rows(f,'SELECT id FROM uof_milestones').length,0);
+  assert.deepEqual(JSON.parse(rows(f,'SELECT use_of_funds_meta FROM projects WHERE id=1')[0].use_of_funds_meta).milestone_costs,{});
+  assert.equal(rows(f,"SELECT id FROM activity_logs WHERE action='uof_milestone_deleted'").length,1);
 });
 test('D1176 invalid financial and AI provenance payloads refuse without writes; explicit zero cash/raise survives',async()=>{
   const f=fixture();const a=await created(f);

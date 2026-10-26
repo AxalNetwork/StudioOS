@@ -24,8 +24,11 @@ original module reference and the #2431 `recorded` provenance label.
 `saveBaseSplit` remains the lower-level founder-only dual writer from D1175.
 D1176's `store.ts` extends the dual-write boundary to admin attribution and an
 atomic activity row, sharing it between the module PUT and record drawer.
-It also projects milestones/OKR costs when Base changes. No read reaches a
-provider or another user's Mercury records.
+It also projects milestones/OKR costs when Base changes, retaining legacy-only
+entries and refusing conflicting edits of the same key. A failed legacy copy
+names the existing projects PUT correction route; it never drops stale costs.
+Deleting a milestone does not require its old OKR still to exist. No read
+reaches a provider or another user's Mercury records.
 
 Migration 606 creates the three new stores. Hires remain in
 `use_of_funds_hires` (migration 463); part 3 scopes and supplies that list.
