@@ -23,8 +23,17 @@
 // `adminTestingApi`, Super Admin:
 //   programmes       GET   /admin/testing/programmes?status=
 //   approve / reject POST  /admin/testing/programmes/:uid/approve|reject { note } (reject needs one)
-//   open / close     POST  /admin/testing/programmes/:uid/open|close
+//   open / close     POST  /admin/testing/programmes/:uid/open|close → { programme, told: { owner } }
+//   startTesting     POST  /admin/testing/programmes/:uid/testing   → { programme, told: { owner, testers, mail_reach } };
+//                                                                 open or closed only, else 409 not_testable (D1198)
+//   withdraw         POST  /admin/testing/applications/:uid/withdraw { reason } (10 to 500 characters)
+//                                                               → { application, freed_place, told: { member } };
+//                                                                 400 invalid_request, 409 not_withdrawable (D1198)
+//   `told` is counts only: `owner` is null for HQ's own programme, `mail_reach`
+//   how many Mail's testers:<uid> rule would write to. StudioOS sends no email.
 //   create, edit, pick, decline, uploadLogo, removeLogo: as the partner's, on HQ's own programmes.
+//   overview         GET   /admin/testing/overview → D1196: { weekly, by_profile: { pool, applicants }, withdrawn,
+//                    mail_reach }, each block { available: true, … } or { available: false, reason }; counts only.
 //   applicants       GET   /admin/testing/programmes/:uid/applicants → { programme, items, can_decide }:
 //                         any programme's (D1197); a partner's is read only, `can_decide: false`
 //   events           GET   /admin/testing/programmes/:uid/events?page=&page_size= → { programme, events: { available, page, total, items } }
@@ -80,6 +89,8 @@ export const adminTestingApi = {
   reject: (uid, note) => request(`/admin/testing/programmes/${enc(uid)}/reject`, { method: 'POST', body: JSON.stringify({ note }) }),
   open: (uid) => request(`/admin/testing/programmes/${enc(uid)}/open`, { method: 'POST' }),
   close: (uid) => request(`/admin/testing/programmes/${enc(uid)}/close`, { method: 'POST' }),
+  startTesting: (uid) => request(`/admin/testing/programmes/${enc(uid)}/testing`, { method: 'POST' }),
+  withdraw: (uid, reason) => request(`/admin/testing/applications/${enc(uid)}/withdraw`, { method: 'POST', body: JSON.stringify({ reason }) }),
   create: (programme) => request('/admin/testing/programmes', { method: 'POST', body: JSON.stringify(programme) }),
   edit: (uid, changes) => request(`/admin/testing/programmes/${enc(uid)}`, { method: 'PATCH', body: JSON.stringify(changes) }),
   applicants: (uid) => request(`/admin/testing/programmes/${enc(uid)}/applicants`),
@@ -98,6 +109,7 @@ export const adminTestingApi = {
   },
   pick: (uid) => request(`/admin/testing/applications/${enc(uid)}/pick`, { method: 'POST' }),
   decline: (uid) => request(`/admin/testing/applications/${enc(uid)}/decline`, { method: 'POST' }),
+  overview: () => request('/admin/testing/overview'),
   uploadLogo: (uid, file) => request(`/admin/testing/programmes/${enc(uid)}/logo`, { method: 'PUT', body: logoForm(file) }),
   removeLogo: (uid) => request(`/admin/testing/programmes/${enc(uid)}/logo`, { method: 'DELETE' }),
 };
