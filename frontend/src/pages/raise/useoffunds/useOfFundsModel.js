@@ -76,7 +76,9 @@ export const SECTIONS = [
 ];
 export const sectionOf = (key) => SECTIONS.find((s) => s.key === key) || null;
 
-export const NOT_RECORDED = 'Not recorded';
+import { NOT_RECORDED } from '../../../lib/absence.js';
+
+export { NOT_RECORDED };
 
 /** "$1,500,000" from whole cents; null when the value is missing (never $0 for missing). */
 export function money(cents, currency = 'usd') {
