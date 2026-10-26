@@ -11,8 +11,7 @@ import { installDocument } from './_contracts_dom.mjs';
 import CycleRoute from '../src/pages/cycles/CycleRoute.jsx';
 import {
   BASIS_CHECK, HOME_NOTE, TABS, dollars, foundersAfter, harbour, isCapTableTab,
-  money, pct, scenarioCard, scenarioCards, simulatorHref, tabHref, tabSearch,
-  variantHref, variantsHref,
+  money, pct, scenarioCard, scenarioCards, tabHref, tabSearch,
 } from '../src/pages/raise/captable/capTableModel.js';
 
 const h = React.createElement;
@@ -105,10 +104,6 @@ test('the tabs are the canvas\'s with a read, and only their words are tabs; a r
   assert.equal(tabSearch('?project=7&mode=workspace#x'), '?project_id=7');
   assert.equal(tabSearch('?project_id=0'), '');
   assert.equal(tabHref(TABS[2], '?project_id=3&version=2'), '/raise/cap-table/option-pool?project_id=3');
-  // The two old pages read the venture as ?project= (CapTablePage, CapTableVariantsPage).
-  assert.equal(simulatorHref('?project_id=3'), '/raise/capital/cap-table?project=3');
-  assert.equal(variantsHref('?project_id=3'), '/raise/cap-table/variants?project=3');
-  assert.equal(variantHref('a b'), '/raise/cap-table/variants/a%20b');
 });
 
 test('money in its own unit and currency; a missing value is "Not recorded", never zero', () => {
@@ -180,10 +175,10 @@ test('Scenarios lists the model and its variants, each opening its scenario page
     assert.match(v.text(), /Cap table · model/);
     assert.match(v.text(), /Founders after 48\.20%/);
     const hrefs = v.hrefs();
-    // D1024 (#2861): every card opens its scenario under the tool, the venture kept; the simulator stays a link.
+    // D1024 (#2861): every card opens its scenario under the tool, the venture kept. D1029: the simulator is gone.
     assert.ok(hrefs.includes('/raise/cap-table/scenarios/v1?project_id=3'), 'a variant opens its scenario page');
     assert.ok(hrefs.some((u) => /^\/raise\/cap-table\/scenarios\/[^/?]+\?project_id=3$/.test(u) && !u.includes('/v1')), 'the model opens its own page too');
-    assert.ok(hrefs.includes('/raise/capital/cap-table?project=3'), 'the simulator, with the venture');
+    assert.ok(!hrefs.some((u) => u.startsWith('/raise/capital/cap-table') || u.startsWith('/raise/cap-table/variants')), 'no link to a retired page');
   } finally { await v.close(); }
 });
 

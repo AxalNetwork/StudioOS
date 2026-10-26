@@ -121,7 +121,8 @@ test('ROUTE_MAP still parses to the full canvas corpus', () => {
   // 168 (D1173, #2455): `Use of funds`, /raise/use-of-funds and its tab words.
   // 169 (D1188, #2457): `Capital relationships`, /raise/capital-relationships and its tab words.
   // 170 (D1195, #2382): `Product testing`, /admin/platform/product-testing and its tabs.
-  assert.equal(recs.length, 170);
+  // 169 (D1029, #2866): the Cap Table Pro row folds into the Cap table row; its old page is retired.
+  assert.equal(recs.length, 169);
 
   for (const r of recs) {
     assert.ok(r.canvas.length > 0, 'every row names a canvas');

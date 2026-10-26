@@ -46,7 +46,6 @@ export const RETURNS = [
   ['/raise/pitch/analytics','/raise/pitch-deck','← Raise › Pitch deck'],
   ['/raise/capital','/raise/use-of-funds','← Raise › Use of funds'],
   ['/raise/capital/model','/raise/use-of-funds','← Raise › Use of funds'],
-  ['/raise/capital/cap-table','/raise/cap-table','← Raise › Cap table'],
   ['/raise/capital/pipeline','/raise/capital-relationships','← Raise › Capital relationships'],
   ['/raise/data-room','/raise/data-room','← Raise › Data room'],
   ['/raise/legal-engine','/build/company-creation','← Build › Company creation'],

@@ -62,6 +62,11 @@ clock inputs in the selected IANA zone, preserving explicit instants and refusin
 invalid or ambiguous wall times. Its instant comparison keeps formatting-only
 normalization out of the changed-after-approval flag.
 
+D1174 (#3101): `raiseCycle.ts` shares the five-section split reader in
+`../util/useOfFunds.ts` with readiness, records and decks. The Modelled cash
+line injects the raise only at the recorded active-round close month; an
+unreadable close read leaves the baseline available. No date is assumed.
+
 `memberFiles.ts` (D1168, #3081) writes measured headshot/brand-logo metadata
 with its authoritative key. `memberFileSizeBackfill.ts` measures missing sizes
 for five record stores and profile files with HEAD only, using migration 605's

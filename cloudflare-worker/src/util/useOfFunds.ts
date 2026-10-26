@@ -4,25 +4,35 @@
 // objects (only non-zero sections, in canonical order). We store JSON rather
 // than a delimited string because the canonical section labels contain colons
 // (e.g. "GTM: sales and marketing"), which a delimiter parser would mis-split.
-// Legacy projects still carry free-text, so every reader falls back to the old
-// "Eng 55%, GTM 30%" text parser for backward compatibility.
+// Legacy text remains stored. A split read accepts only the five fixed
+// sections; unrecognised labels are Not recorded until the founder records a split.
+
+/** D1174: the fixed section keys used by every stored-split reader. */
+export const FUND_SECTIONS = [
+  { key: 'product', label: 'Product & engineering', bucket: 'eng' },
+  { key: 'go-to-market', label: 'GTM: sales and marketing', bucket: 'gtm' },
+  { key: 'infrastructure', label: 'Infrastructure & data', bucket: null },
+  { key: 'operations', label: 'Operations, legal & compliance', bucket: 'ops' },
+  { key: 'reserve', label: 'Hiring / runway reserve', bucket: null },
+] as const;
 
 export type FundUse = { label: string; pct: number };
 
-/** Legacy free-text parser: "Eng 55%, GTM 30%" / "engineering:50, gtm:30". */
+/** Parse legacy text without correcting, dropping or truncating its figures. */
 function parseFreeText(raw: string): FundUse[] {
-  const parts = raw.split(/[,;\n]/).map((s) => s.trim()).filter(Boolean);
+  let remaining = raw.trim();
   const out: FundUse[] = [];
-  for (const part of parts) {
-    const m = part.match(/^(.+?)[:\s]+(\d{1,3})\s*%?$/);
-    if (m) {
-      const pct = Math.max(0, Math.min(100, parseInt(m[2], 10)));
-      out.push({ label: m[1].trim(), pct });
-    }
+  while (remaining) {
+    // Match a complete fixed label before consuming a separator: one label
+    // contains a comma and another contains a colon.
+    const section = FUND_SECTIONS.find((s) => remaining.startsWith(s.label));
+    if (!section) return [];
+    const match = remaining.slice(section.label.length).match(/^(?:\s*:\s*|\s+)(\d{1,3}(?:\.\d+)?)\s*%?\s*(?:[,;\n]|$)/);
+    if (!match) return [];
+    out.push({ label: section.label, pct: Number(match[1]) });
+    remaining = remaining.slice(section.label.length + match[0].length).trim();
   }
-  const sum = out.reduce((a, b) => a + b.pct, 0);
-  if (out.length >= 2 && sum >= 80 && sum <= 120) return out.slice(0, 5);
-  return [];
+  return out;
 }
 
 /** Coerce a parsed JSON array into clean, non-zero FundUse[] (cap 5). */
@@ -34,22 +44,28 @@ function cleanJsonAlloc(arr: unknown[]): FundUse[] {
 }
 
 /**
- * Parse a stored use_of_funds value into FundUse[] for deck rendering.
+ * Read a stored split consistently for readiness, cards, records and decks.
  * JSON-first (the structured allocator), then legacy free-text fallback.
  */
 export function parseUseOfFundsValue(raw: string | null | undefined): FundUse[] {
-  const s = (raw ?? '').toString().trim();
+  const s = String(raw ?? '').trim();
   if (!s) return [];
-  if (s.startsWith('[')) {
-    try {
-      const arr = JSON.parse(s);
-      if (Array.isArray(arr)) {
-        const cleaned = cleanJsonAlloc(arr);
-        if (cleaned.length) return cleaned;
-      }
-    } catch { /* fall through to free-text */ }
+  let arr: unknown;
+  try { arr = s.startsWith('[') ? JSON.parse(s) : parseFreeText(s); } catch { return []; }
+  if (!Array.isArray(arr) || !arr.length) return [];
+  const values = new Map<string, number>();
+  for (const row of arr) {
+    const section = row?.key != null
+      ? FUND_SECTIONS.find((f) => row.key === f.key)
+      : FUND_SECTIONS.find((f) => String(row?.label ?? '').trim() === f.label);
+    const rawPct = row?.pct;
+    if (!section || values.has(section.key) || (typeof rawPct !== 'number' && typeof rawPct !== 'string') || String(rawPct).trim() === '') return [];
+    const pct = Number(rawPct);
+    if (!Number.isFinite(pct) || pct < 0 || pct > 100) return [];
+    values.set(section.key, pct);
   }
-  return parseFreeText(s);
+  if (Math.abs([...values.values()].reduce((sum, pct) => sum + pct, 0) - 100) > 1e-9) return [];
+  return FUND_SECTIONS.filter((f) => (values.get(f.key) ?? 0) > 0).map((f) => ({ label: f.label, pct: values.get(f.key)! }));
 }
 
 /**
@@ -83,11 +99,5 @@ export function normalizeUseOfFunds(raw: string | null | undefined): { value: st
 
 /** Human-readable one-line rendering for non-ASK text surfaces. */
 export function formatUseOfFundsText(raw: string | null | undefined): string {
-  const s = (raw ?? '').toString().trim();
-  if (!s) return '';
-  if (s.startsWith('[')) {
-    const parsed = parseUseOfFundsValue(s);
-    if (parsed.length) return parsed.map((f) => `${f.label} ${f.pct}%`).join('; ');
-  }
-  return s;
+  return parseUseOfFundsValue(raw).map((f) => `${f.label} ${f.pct}%`).join('; ');
 }

@@ -76,7 +76,7 @@ const emptyBuild = [
   ['solution-design', 'No features yet. Linked and unlinked features appear here.', 'Add feature', '/build/solution-design?project=101&add=1'],
   ['prototype-mvp', 'No must-haves yet. The burn-up toward the ship date appears here.', 'Add must-have', '/build/prototype-mvp?project=101&add=1'],
   ['product-roadmap', 'No roadmap items yet. Now, Next and Later appear here.', 'Add item', '/build/roadmap?project_id=101'],
-  ['founding-team', 'No founders yet. The equity split and vesting appear here.', 'Add founder', '/raise/capital/cap-table'],
+  ['founding-team', 'No founders yet. The equity split and vesting appear here.', 'Add founder', '/raise/cap-table'],
   ['company-creation', 'No filings yet. Formation steps and their dates appear here.', 'Add filing', '/build/company-creation?project=101&add=1'],
   ['operating-systems', 'No systems connected yet. Each system and its state appear here.', 'Connect a system', '/build/connect?project_id=101'],
 ] as const;
@@ -228,7 +228,7 @@ test('D688: new Raise cards pin the seven lines and actions; figures stay null',
     // D695 (#1657): each module with a form opens its address; a link needs a deck, so Pitch deck builds one first.
     ['empty', 'No files are currently downloadable by a granted investor.', 'Upload', '/raise/data-room/new?project=1'],
     ['empty', 'No holders yet. Ownership before and after the round appears here.', 'Add holder', '/raise/cap-table/new?project=1'],
-    ['empty', 'No split yet. The planned split and runway appear here.', 'Edit split', '/raise/use-of-funds/new?project=1'],
+    ['empty', 'Not recorded: no valid five-section split. Record a 100% allocation.', 'Edit split', '/raise/use-of-funds/new?project=1'],
     ['empty', 'No investors yet. The pipeline by stage appears here.', 'Add investor', '/raise/capital-relationships/new?project=1'],
   ]);
   // D695 test 13 (#1657): a card that opens an Add opens a module that has a form.
