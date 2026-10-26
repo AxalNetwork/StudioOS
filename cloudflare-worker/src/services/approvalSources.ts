@@ -353,12 +353,13 @@ export const APPROVAL_SOURCES: readonly ApprovalSource[] = [
   {
     key: 'kyb',
     label: 'KYB',
-    // D1231: all business sources, including newly submitted records discovered by the view.
+    // D1231: submitted business sources. Staff-linked identity cases, like licensed
+    // studios, stay in the Super Admin business queue rather than the shared inbox.
     countSql:
-      "SELECT COUNT(*) AS n, MIN(datetime(COALESCE(submitted_at, created_at))) AS oldest FROM kyb_businesses WHERE status IN ('in_review') AND kind != 'licensed_studio' AND (studio_code IS NULL OR studio_code = ?)",
+      "SELECT COUNT(*) AS n, MIN(datetime(COALESCE(submitted_at, created_at))) AS oldest FROM kyb_businesses b WHERE status IN ('in_review') AND kind != 'licensed_studio' AND (studio_code IS NULL OR studio_code = ?) AND NOT EXISTS (SELECT 1 FROM users guard WHERE guard.role = 'admin' AND (guard.id = b.linked_user_id OR guard.id IN (SELECT json_extract(o.value,'$.user_id') FROM json_each(CASE WHEN json_valid(b.case_owners_json) THEN b.case_owners_json ELSE '[]' END) o)))",
     rowsSql:
       "SELECT id, display_name AS who, 'KYB · ' || entity_name AS what, COALESCE(submitted_at, created_at) AS created_at "
-      + "FROM kyb_businesses WHERE status IN ('in_review') AND kind != 'licensed_studio' AND (studio_code IS NULL OR studio_code = ?) "
+      + "FROM kyb_businesses b WHERE status IN ('in_review') AND kind != 'licensed_studio' AND (studio_code IS NULL OR studio_code = ?) AND NOT EXISTS (SELECT 1 FROM users guard WHERE guard.role = 'admin' AND (guard.id = b.linked_user_id OR guard.id IN (SELECT json_extract(o.value,'$.user_id') FROM json_each(CASE WHEN json_valid(b.case_owners_json) THEN b.case_owners_json ELSE '[]' END) o))) "
       + 'ORDER BY julianday(COALESCE(submitted_at, created_at)), id LIMIT ?',
     notifies: 'Nobody yet',
     decidedOn: 'KYC & KYB › Businesses',

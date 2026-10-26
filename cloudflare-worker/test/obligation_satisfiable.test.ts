@@ -223,6 +223,7 @@ function makeEnv() {
   db.exec("CREATE TABLE users (id INTEGER PRIMARY KEY, kyc_status TEXT, role TEXT DEFAULT 'investor')");
   for (const name of ['company_profiles', 'kyc_partner_imports', 'territory_licences']) db.exec(tableDDL(name));
   db.exec(read('cloudflare-worker/sql/migrations/220_company_kyb.sql'));
+  db.exec(read('cloudflare-worker/sql/migrations/341_approval_assignments.sql'));
   db.exec(read('cloudflare-worker/sql/migrations/616_kyb_cases.sql'));
   const coerce = (a: any[]) => a.map((v) => (v === undefined ? null : v === true ? 1 : v === false ? 0 : v));
   const DB = {

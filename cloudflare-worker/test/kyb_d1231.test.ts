@@ -518,6 +518,27 @@ test('migration preserves legacy KYB assignments and history without id collisio
   legacyAssignmentsScenario();
 });
 
+async function approvalPrivacyScenario(fault = false) {
+  const f = fixture();
+  try {
+    f.db.exec(`UPDATE kyb_cases SET owners_json='[{"name":"Staff owner","ownership_pct":100,"user_id":1}]' WHERE uid='account-3'`);
+    if (fault) {
+      const prepare = f.env.DB.prepare.bind(f.env.DB);
+      f.env.DB.prepare = (sql: string) => prepare(sql.replaceAll("guard.role = 'admin'",'0 = 1'));
+    }
+    const sources = APPROVAL_SOURCES.filter(s=>s.key==='kyb');
+    assert.equal((await laneCounts(f.env,sources))[0].count,2);
+    const board = await approvalBoard(f.env,100,Date.now(),sources);
+    assert.ok(!board.items.some(r=>r.who==='Investor Ltd'));
+    assert.equal((await f.call('/account-3','GET',undefined,1)).status,200,'Super Admin retains the case in Businesses');
+  } finally { f.db.close(); }
+}
+test('the shared Approvals inbox cannot expose staff-linked identity cases', async () => {
+  await approvalPrivacyScenario();
+  await assert.rejects(()=>approvalPrivacyScenario(true),{code:'ERR_ASSERTION'});
+  await approvalPrivacyScenario();
+});
+
 // Exercise the same behavioural assertions with faults injected, then restored.
 // Data-URL modules keep mutations out of the working tree and concurrent tests.
 async function mutated(from: string, to: string, route = 'kyb_admin') {
