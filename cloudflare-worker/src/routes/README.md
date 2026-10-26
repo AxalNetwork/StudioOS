@@ -388,6 +388,8 @@ IC creation; calendar reads, including the token subscription, remain available
 on every plan. Studio/All studios are separate read-only Admin/Super Admin
 scopes with explicit availability; personal ownership and deal-party gates
 still govern every sync, push and export.
+Each authorized staff-scope view calls the existing admin audit helper with
+only its scope and normalized date window; no event content is recorded.
 
 D1237 (#3250): `deals.ts` records the verified firm on a room request; the
 unique investor/deal row cannot be claimed or removed from another selected

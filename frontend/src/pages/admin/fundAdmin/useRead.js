@@ -7,20 +7,21 @@ import { useCallback, useEffect, useRef, useState } from 'react';
  */
 export function useRead(reader, deps, { enabled = true } = {}) {
   const [state, setState] = useState({ status: enabled ? 'loading' : 'idle', data: null, error: null });
-  const alive = useRef(true);
-  useEffect(() => () => { alive.current = false; }, []);
+  const generation = useRef(0);
+  useEffect(() => () => { generation.current += 1; }, []);
   // eslint-disable-next-line react-hooks/exhaustive-deps
   const run = useCallback(reader, deps);
   const reload = useCallback(async () => {
     if (!enabled) return;
-    setState((s) => ({ ...s, status: s.data == null ? 'loading' : s.status }));
+    const current = ++generation.current;
+    setState({ status: 'loading', data: null, error: null });
     try {
       const data = await run();
-      if (alive.current) setState({ status: 'ready', data, error: null });
+      if (current === generation.current) setState({ status: 'ready', data, error: null });
     } catch (error) {
-      if (alive.current) setState({ status: 'unreadable', data: null, error });
+      if (current === generation.current) setState({ status: 'unreadable', data: null, error });
     }
   }, [run, enabled]);
-  useEffect(() => { reload(); }, [reload]);
+  useEffect(() => { reload(); return () => { generation.current += 1; }; }, [reload]);
   return { ...state, reload };
 }
