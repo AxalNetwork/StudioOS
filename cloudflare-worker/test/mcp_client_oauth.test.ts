@@ -287,6 +287,8 @@ test('4. who the start refuses: signed out, a support session, no company, an un
   assert.equal((await req(personal, env, 20, `${BASE}/start`)).status, 404, 'a partner, a founders-only provider');
   // With a company, the start goes ahead.
   db.exec('CREATE TABLE IF NOT EXISTS user_company_links (user_id INTEGER NOT NULL, company_id INTEGER NOT NULL)');
+  // D1137 (migration 597): resolveActiveCompany reads an archived company as none.
+  db.exec('CREATE TABLE IF NOT EXISTS company_profiles (id INTEGER PRIMARY KEY, archived_at TEXT)');
   db.exec('INSERT INTO user_company_links (user_id, company_id) VALUES (10, 77)');
   const ok = await req(writes, env, 10, `${BASE}/start`, { company: 77 });
   assert.equal(ok.status, 200, ok.text);

@@ -20,6 +20,8 @@ function fixture() {
   const db = new DatabaseSync(':memory:', { enableForeignKeyConstraints: false, enableDoubleQuotedStringLiterals: true });
   for (const name of ['users', 'projects', 'documents', 'deals', 'deal_invitations', 'commitments', 'activity_logs']) db.exec(tableFromBaseline(baseline, name));
   db.exec('CREATE TABLE user_company_links (id INTEGER PRIMARY KEY, company_id INTEGER, user_id INTEGER)');
+  // D1137 (migration 597): resolveActiveCompany reads an archived company as none.
+  db.exec('CREATE TABLE IF NOT EXISTS company_profiles (id INTEGER PRIMARY KEY, archived_at TEXT)');
   const user = db.prepare('INSERT INTO users (id, role, founder_id, email, name, is_active) VALUES (?, ?, ?, ?, ?, 1)');
   // All external roles carry a residual matching founder_id: role must still gate access.
   roles.forEach((role, i) => user.run(i + 1, role, i === 7 ? 200 : i === 6 ? null : 100, `fixture-${i}@example.invalid`, `Synthetic member ${i}`));

@@ -11,6 +11,8 @@ import {
   fulfilFreeUnlock,
   computeDiscount,
   normalizeCode,
+  reserveMemberUse,
+  releaseMemberUse,
   STRIPE_MIN_CHARGE_CENTS,
   type PromoRow,
 } from '../services/promos';
@@ -131,12 +133,14 @@ payments.post('/intent', async (c) => {
     const promoCode = typeof body.promo_code === 'string' ? body.promo_code.trim() : '';
     let promo: PromoRow | undefined;
     if (promoCode) {
+      // D1273: the member and, for a subscription, its interval.
       const v = await validatePromoForProduct(
         c.env,
         promoCode,
         found.product.id,
         price.unit_amount ?? 0,
         price.currency,
+        { userId: user.id, interval: price.type === 'recurring' ? price.interval : null },
       );
       if (!v.ok) return c.json({ error: 'promo_invalid', reason: v.reason }, 400);
       promo = v.promo;
@@ -216,6 +220,12 @@ payments.post('/intent', async (c) => {
         subParams['discounts[0][promotion_code]'] = promo.id;
         subParams['metadata[promo_code_id]'] = promo.id;
       }
+      // D1273: a once-per-member code is the member's from the moment Stripe applies it,
+      // so the use is reserved first; two checkouts at once cannot both take it.
+      const reserved = !!promo && promo.once_per_member === 1;
+      if (reserved && !(await reserveMemberUse(c.env, promo!.id, user.id))) {
+        return c.json({ error: 'promo_invalid', reason: 'already_used' }, 400);
+      }
       try {
         const sub = await stripeCall<{
           id: string;
@@ -248,6 +258,8 @@ payments.post('/intent', async (c) => {
           price_id: price.id,
         });
       } catch (e) {
+        // Stripe made no subscription, so the member did not use the code.
+        if (reserved) await releaseMemberUse(c.env, promo!.id, user.id);
         return refuse(c, 502, { code: 'intent_failed', message: 'The payment could not be started. Nothing was charged; try again in a moment.', raw: e, audience: 'member' });
       }
     }
@@ -350,7 +362,7 @@ async function createPaymentIntent(
 // reason } on rejection so the SPA can render a friendly message; never applies
 // or reserves anything.
 payments.post('/promo/validate', async (c) => {
-  await requireAuth(c);
+  const user = await requireAuth(c);
   if (!c.env.STRIPE_SECRET_KEY) return c.json({ error: 'stripe_not_configured' }, 503);
   const body = (await c.req.json().catch(() => ({}))) as { code?: string; price_id?: string };
   const code = typeof body.code === 'string' ? body.code.trim() : '';
@@ -362,7 +374,8 @@ payments.post('/promo/validate', async (c) => {
     return c.json({ error: 'invalid_price' }, 400);
   }
   const amount = found.price.unit_amount ?? 0;
-  const v = await validatePromoForProduct(c.env, code, found.product.id, amount, found.price.currency);
+  const v = await validatePromoForProduct(c.env, code, found.product.id, amount, found.price.currency,
+    { userId: user.id, interval: found.price.type === 'recurring' ? found.price.interval : null });
   if (!v.ok || !v.promo) return c.json({ valid: false, reason: v.reason });
   return c.json({
     valid: true,
@@ -515,6 +528,7 @@ payments.post('/alacarte/intent', async (c) => {
       found.product.id,
       found.price.unit_amount,
       found.price.currency,
+      { userId: user.id, interval: null },
     );
     if (!v.ok || !v.promo) return c.json({ error: 'promo_invalid', reason: v.reason }, 400);
     promo = v.promo;

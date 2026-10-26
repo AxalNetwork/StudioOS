@@ -29,6 +29,7 @@ export * from './api/approvalBoards.js';
 export * from './api/assistants.js';
 export * from './api/bankAccounts.js';
 export * from './api/billingAlerts.js';
+export * from './api/billingCheckout.js';
 export * from './api/billingInvoices.js';
 export * from './api/buildPlan.js';
 export * from './api/calendarItems.js';
@@ -55,9 +56,11 @@ export * from './api/cycleWrites.js';
 export * from './api/cycles.js';
 export * from './api/dataRoom.js';
 export * from './api/ddDesk.js';
+export * from './api/ddFlags.js';
 export * from './api/ddLifecycle.js';
 export * from './api/dealContext.js';
 export * from './api/dealFlow.js';
+export * from './api/dealInsights.js';
 export * from './api/dealViews.js';
 export * from './api/dealWorkroom.js';
 export * from './api/deckAssist.js';
@@ -118,6 +121,8 @@ export * from './api/publicAiModels.js';
 export * from './api/publicPricing.js';
 export * from './api/railPrefs.js';
 export * from './api/railProposals.js';
+export * from './api/raiseEvidence.js';
+export * from './api/reporting.js';
 export * from './api/researchCompanies.js';
 export * from './api/researchFunds.js';
 export * from './api/researchMarkets.js';
@@ -2575,6 +2580,8 @@ export const api = {
     return request(`/refer-earn/admin/submissions${qs ? `?${qs}` : ''}`);
   },
   adminReferralSubmission: (uid) => request(`/refer-earn/admin/submissions/${encodeURIComponent(uid)}`),
+  // D965 (#2798): the referral reward rules, and what they paid (a Super Admin's).
+  adminReferralRewards: () => request('/refer-earn/admin/rewards'),
   // D1124 (#3004): the referral funnel, the furthest stage each referral reached.
   adminReferralFunnel: () => request('/refer-earn/admin/submissions/funnel'),
   adminReferralWeekly: (weeks = 12) => request(`/refer-earn/admin/submissions/weekly?${new URLSearchParams({ weeks })}`),

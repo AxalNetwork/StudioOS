@@ -21,13 +21,13 @@ export const LIST_PATH = '/raise/capital-relationships/calls';
 const UID = /^[A-Za-z0-9_-]{1,64}$/;
 
 /**
- * Where a call opens: a sent call at its address under Calls, a draft where
- * drafts are still edited (`/round-calls/:uid`) until the sheet moves (part 3).
+ * Where a call opens: under Calls in the Raise shell, a draft as well as a
+ * sent call (D1224, #3223). A draft there opens the new-call sheet on it.
  */
 export function callHref(c) {
   const uid = String(c?.uid ?? '');
   if (!UID.test(uid)) return LIST_PATH;
-  return c.state === 'draft' ? `/round-calls/${uid}` : `${LIST_PATH}/${uid}`;
+  return `${LIST_PATH}/${uid}`;
 }
 
 export const STATE_WORD = Object.freeze({ draft: 'Draft', awaiting_counsel: 'Awaiting counsel', open: 'Open', expired: 'Expired', closed: 'Closed' });

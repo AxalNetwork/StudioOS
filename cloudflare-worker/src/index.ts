@@ -84,6 +84,7 @@ import tickets from './routes/tickets';
 import deals from './routes/deals';
 import dealFlow from './routes/deal_flow';
 import dealContext from './routes/deal_context';
+import dealInsights from './routes/deal_insights';
 import dealWorkroom from './routes/deal_workroom';
 import dealViews from './routes/deal_views';
 import users from './routes/users';
@@ -129,6 +130,7 @@ import fundLedger from './routes/fund_ledger';
 import fundFees from './routes/fund_fees';
 import fundAdmin from './routes/fund_admin';
 import closings, { adminClosings } from './routes/closings';
+import reporting from './routes/reporting';
 import fundReporting from './routes/fund_reporting';
 import fundBooklets from './routes/fund_booklets';
 import fundNotices from './routes/fund_notices';
@@ -315,6 +317,8 @@ import portfolioRoutes from './routes/portfolio';
 import referencesRoutes from './routes/references';
 import comarketingRoutes from './routes/comarketing';
 import companyRoutes from './routes/company';
+import companyLifecycle from './routes/company_lifecycle';
+import projectLifecycle from './routes/project_lifecycle';
 import needsRoutes, { quotesRouter, engagementsRouter } from './routes/needs';
 // #45 — the partner workspace's own stores (migrations 208/209). Mounted under
 // `/api/partner/…` singular, which is a free first segment: `/api/partners` is
@@ -385,6 +389,7 @@ import { processQueueBatch } from './services/queueWorker';
 // import was missed in the first pass and left tier checkout/webhook 404.
 import { requireTier } from './middleware/requireTier';
 import billing from './routes/billing';
+import billingCheckout from './routes/billing_checkout';
 // Task — Stripe-backed product catalog (read + admin sync over the D1 mirror).
 import catalog, { adminCatalog } from './routes/catalog';
 // Task #16 — Admin Stripe management (webhook endpoints + publishable key).
@@ -808,6 +813,8 @@ const COOL_OFF_ROUTES = [
 ];
 for (const p of COOL_OFF_ROUTES) app.use(p, recoveryCoolOff);
 // Task #6 — Stripe billing surface (tier checkout/portal/webhook + MI Pro).
+// D1051 (#2902): the checkout quote, start and status. Before `billing` so `/checkout/*` is its.
+app.route('/api/billing', billingCheckout);
 app.route('/api/billing', billing);
 
 // Task — Stripe-backed product catalog read surface. Authenticated read of
@@ -894,6 +901,8 @@ app.route('/api/lab-report-shares', labReportShares);
 // D1136 (#3016): the caller's own companies, ventures and invitations, and answering an invitation signed in.
 // Before `projects` and `companyRoutes`; the answer paths are literal `invitations/<id>/accept|decline`.
 app.route('/api', accountCompanies);
+// D1137 — a venture's move to a company and its owner transfer.
+app.route('/api/projects', projectLifecycle);
 app.route('/api/projects', projects);
 app.route('/api/legal', legal);
 app.route('/api/legalcap', legalcap);
@@ -927,6 +936,7 @@ app.route('/api/tickets', tickets);
 app.route('/api/deals/flow', dealFlow);
 app.route('/api/deals', dealViews);
 app.route('/api/deals', dealContext);
+app.route('/api/deals', dealInsights);
 // D1153 (#3058): the working tabs' room access, round summary and reasoned withdrawal. Before deals.
 app.route('/api/deals', dealWorkroom);
 app.route('/api/deals', deals);
@@ -1236,6 +1246,8 @@ app.route('/api/fund-fees', fundFees); // D709 (#1774): the management fee; reco
 app.route('/api/fund-admin', fundAdmin);
 // D1215 (#3212): closings as a record; the admin desk is mounted before the /api/admin catch-all.
 app.route('/api/closings', closings);
+// D1058 (#2928): reporting duties and periods, the founder's desk and the investor's view.
+app.route('/api/reporting', reporting);
 app.route('/api/fund-reporting', fundReporting);
 // D716 — the Subscription Booklet: the applicant's ticks and submit, and HQ's read and withdraw.
 app.route('/api/fund-booklets', fundBooklets);
@@ -1535,6 +1547,8 @@ app.route('/api/services', servicesRoutes);
 // T15 — Co-marketing, Company Profiles, Founder Needs / Quotes / Engagements,
 // Insights. companyRoutes mounts /company/* + /companies (root /api).
 app.route('/api/comarketing', comarketingRoutes);
+// D1137 — archive, restore and the primary-admin transfer.
+app.route('/api', companyLifecycle);
 app.route('/api', companyRoutes);
 app.route('/api/needs', needsRoutes);
 app.route('/api/quotes', quotesRouter);
@@ -2104,6 +2118,19 @@ export default {
             cronSummary.push(`grow daily reminders=${r.reminders} alerts=${r.alerts}`);
           } catch (e) {
             console.error('[cron] grow daily failed', e instanceof Error ? e.message : 'error');
+          }
+        }
+        // D1058 (#2928) — Reporting's daily step: duties a closing missed, the
+        // periods that have come, and the team's reminders, each claimed
+        // before it is sent so a second run the same day sends nothing.
+        if (now.getUTCHours() === 5 && now.getUTCMinutes() === 40) {
+          try {
+            const { runReportingDaily } = await import('./services/reportingDuties');
+            const r = await runReportingDaily(env, now.getTime());
+            if (r.duties || r.periods || r.reminders) console.info(`[cron] reporting daily duties=${r.duties} periods=${r.periods} reminders=${r.reminders}`);
+            cronSummary.push(`reporting daily duties=${r.duties} periods=${r.periods} reminders=${r.reminders}`);
+          } catch (e) {
+            console.error('[cron] reporting daily failed', e instanceof Error ? e.message : 'error');
           }
         }
         if (now.getUTCHours() === 5 && now.getUTCMinutes() === 25) {

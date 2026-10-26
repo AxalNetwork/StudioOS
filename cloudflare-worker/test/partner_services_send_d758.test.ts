@@ -25,6 +25,8 @@ async function setup(body: string) {
   const db = freshDb();
   const e: any = envFor(db);
   db.exec(read('cloudflare-worker/sql/migrations/028_partner_deals.sql'));
+  // D1118: onboarding reads the invitation's own terms (migration 634), which production applies before the Worker ships.
+  db.exec(read('cloudflare-worker/sql/migrations/634_partner_invitation_terms.sql'));
   await ensureLegalTemplatesSchema(e);
   db.prepare("INSERT INTO legal_templates (slug, title, category, body_md, is_stub) VALUES ('partner_services', 'Partner Services / MSA v1', 'partner', ?, 0)").run(body);
   const expires = new Date(Date.now() + 86_400_000).toISOString();

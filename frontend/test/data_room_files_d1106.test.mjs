@@ -133,6 +133,8 @@ function handlerFor(room = ROOM, fail = {}) {
     const method = opts.method || 'GET';
     if (method !== 'GET') return response({ ok: true, partner: {} });
     if (/\/api\/projects(\?|$)/.test(url)) return response([{ id: 3, uid: 'p3uid', name: 'Harbor Ledger' }]);
+    // D1284: D1104's queue, read by Home's Needs you.
+    if (/\/data-room\/p3uid\/requests$/.test(url)) return fail.requests ? response({ detail: 'x' }, 503) : response(fail.requestsBody || { requests: [], open: 2, can_answer: true });
     if (/\/data-room\/p3uid\/files\/[^/]+\/versions/.test(url)) return fail.versions ? response({ detail: 'x' }, 500) : response(VERSIONS);
     if (/\/data-room\/p3uid(\?|$)/.test(url)) return fail.room ? response({ detail: 'x' }, 500) : response(room);
     if (/\/form-options/.test(url)) return response({ project_uid: 'p3uid', folders: [], requests: [{ value: 7, label: 'Burn and runway' }], checklist: [{ value: 'financial_model', label: 'Financial model' }] });
@@ -308,7 +310,10 @@ test('Home: Needs you, who has access, what was added; a failed room read is Unr
   const v = await mounted('/raise/data-room?project_id=3');
   try {
     assert.match(v.of('dataroom-needs'), /Bluefern Capital’s access ends 30 Oct 2026.*1 investor needs an NDA/s);
-    assert.match(v.of('dataroom-needs-requests'), /not read here yet/);
+    // D1284: the open access requests from D1104's queue, the caller's to answer, with the door to Requests.
+    assert.equal(v.of('dataroom-needs-requests'), '2 access requests wait for your answerShare the room or decline, on Requests.Open Requests');
+    assert.equal(v.prop('dataroom-needs-requests-open', 'href'), '/raise/data-room/requests?project_id=3');
+    assert.ok(!v.of('dataroom-needs').includes('not read here yet'), 'the wait that named the gap is gone');
     assert.match(v.of('dataroom-who'), /Juniper Angels.*NDA needed · Legal · No end date/s);
     assert.match(v.of('dataroom-recent'), /Contract\.pdf/);
     assert.match(v.of('dataroom-90-wait'), /part 4/);
@@ -318,6 +323,32 @@ test('Home: Needs you, who has access, what was added; a failed room read is Unr
   try {
     assert.ok(f.has('dataroom-home-unreadable') && f.has('cycle-module'));
   } finally { await f.close(); }
+});
+
+test('Home (D1284): Needs you reads the access requests: one, none, a failed read alone, and a viewer who cannot answer', async () => {
+  const one = await mounted('/raise/data-room?project_id=3', { handle: handlerFor(ROOM, { requestsBody: { requests: [], open: 1, can_answer: true } }) });
+  try { assert.match(one.of('dataroom-needs-requests'), /^1 access request waits for your answer/); } finally { await one.close(); }
+  const none = await mounted('/raise/data-room?project_id=3', { handle: handlerFor(ROOM, { requestsBody: { requests: [], open: 0, can_answer: true } }) });
+  try {
+    assert.equal(none.of('dataroom-needs-requests'), 'No access request waits.');
+    assert.ok(!none.has('dataroom-needs-requests-open'));
+  } finally { await none.close(); }
+  const failed = await mounted('/raise/data-room?project_id=3', { handle: handlerFor(ROOM, { requests: true }) });
+  try {
+    assert.ok(failed.has('dataroom-needs-requests-unreadable'));
+    assert.match(failed.of('dataroom-needs-requests-unreadable'), /This is not a claim that nobody asked\./);
+    assert.ok(!failed.has('dataroom-needs-requests'), 'no count, and no "none", from a failed read');
+    // The rest of Home still draws.
+    assert.match(failed.of('dataroom-needs'), /Bluefern Capital’s access ends 30 Oct 2026/);
+    assert.match(failed.of('dataroom-who'), /Juniper Angels/);
+  } finally { await failed.close(); }
+  const shapeless = await mounted('/raise/data-room?project_id=3', { handle: handlerFor(ROOM, { requestsBody: { requests: [] } }) });
+  try { assert.ok(shapeless.has('dataroom-needs-requests-unreadable'), 'a reply with no count is unreadable, never none'); } finally { await shapeless.close(); }
+  const co = await mounted('/raise/data-room?project_id=3', { handle: handlerFor(ROOM, { requestsBody: { requests: [], open: 3, can_answer: false } }) });
+  try {
+    assert.equal(co.of('dataroom-needs-requests'), '3 access requests openThe venture’s owner answers them. You can read them on Requests.Open Requests');
+    assert.doesNotMatch(co.of('dataroom-needs-requests'), /your answer/);
+  } finally { await co.close(); }
 });
 
 test('the source: no browser pop-up anywhere in the tool, and the file route is the one added', () => {

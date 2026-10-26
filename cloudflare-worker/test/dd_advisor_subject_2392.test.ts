@@ -187,16 +187,20 @@ async function constraints(sql=REBUILD) {
 }
 test('#2392 the rebuild retains unrelated constraints and defaults',()=>constraints());
 
-const PAGE=readFileSync(new URL('../../frontend/src/pages/AdminDueDiligencePage.jsx',import.meta.url),'utf8');
+// D1250 (#3265): the page's subject choices are one list, `SUBJECT_TYPES` in
+// ddListModel.js, which Open a case's chips and the Filters select both read.
+const PAGE=readFileSync(new URL('../../frontend/src/pages/duediligence/ddListModel.js',import.meta.url),'utf8');
+const USES=['DdListDialogs.jsx','DdCasesTab.jsx'].map((f)=>readFileSync(new URL(`../../frontend/src/pages/duediligence/${f}`,import.meta.url),'utf8'));
 const ROUTE=readFileSync(new URL('../src/routes/dd.ts',import.meta.url),'utf8');
 const tokens=(s:string)=>[...s.matchAll(/'([^']+)'/g)].map(m=>m[1]).sort();
 function contract(page=PAGE,route=ROUTE,baseline=BASELINE) {
-  const open=page.match(/<select value=\{form.subject_type\}[\s\S]*?<\/select>/)?.[0]??'';
-  const filter=page.match(/<select value=\{filter.subject_type\}[\s\S]*?<\/select>/)?.[0]??'';
-  const choices=(s:string)=>[...s.matchAll(/<option value="([^"]+)"/g)].map(m=>m[1]).sort();
+  const list=page.match(/export const SUBJECT_TYPES = Object\.freeze\(\[([\s\S]*?)\]\);/)?.[1]??'';
+  const choices=[...list.matchAll(/key: '([^']+)'/g)].map(m=>m[1]).sort();
   const expected=[...SUBJECTS].sort();
-  assert.deepEqual(choices(open),expected);
-  assert.deepEqual(choices(filter),expected);
+  assert.deepEqual(choices,expected);
+  // Open a case draws its chips from the list, and the Filters select its options.
+  assert.ok(USES[0].includes('{SUBJECT_TYPES.map((t) => ('),'Open a case no longer draws SUBJECT_TYPES');
+  assert.ok(USES[1].includes("sel('subject_type', 'Subject type', SUBJECT_TYPES.map((t) => [t.key, t.label]))"),'the Filters select no longer draws SUBJECT_TYPES');
   const accepted=route.match(/if \(!\[([^\]]+)\]\.includes\(subjectType\)\)/)?.[1]??'';
   assert.deepEqual(tokens(accepted),expected);
   const check=tableFromBaseline(baseline,'dd_cases').match(/CHECK\(subject_type IN \(([^)]+)\)\)/)?.[1]??'';
@@ -205,7 +209,7 @@ function contract(page=PAGE,route=ROUTE,baseline=BASELINE) {
 test('#2392 page choices, Worker validation and schema stay in step with legacy mentor read support',()=>contract());
 
 for(const [name,page,route,baseline] of [
-  ['page changes advisor to mentor',PAGE.replaceAll('value="advisor"','value="mentor"'),ROUTE,BASELINE],
+  ['page changes advisor to mentor',PAGE.replace("{ key: 'advisor', label: 'Advisor' }","{ key: 'mentor', label: 'Advisor' }"),ROUTE,BASELINE],
   ['Worker loses advisor',PAGE,ROUTE.replace("'project','founder','advisor','investor','partner'","'project','founder','investor','partner'"),BASELINE],
   ['baseline loses advisor',PAGE,ROUTE,BASELINE.replace("'mentor','advisor','investor'","'mentor','investor'")],
 ] as const) test('#2392 contract mutation: '+name,()=>{

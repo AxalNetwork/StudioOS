@@ -3,9 +3,12 @@ import { Link, useNavigate } from 'react-router-dom';
 import { partnerDealTypesApi } from '../../../lib/api/partnerDealTypes';
 import { api } from '../../../lib/api';
 import { Lightbox, actionGhost, actionPrimary } from '../../../ui';
+import { useAuth } from '../../../hooks/useAuthSync';
+import { isSuperAdminUser } from '../../../lib/shellRole';
 import {
   CAPITAL_NOTE, DEAL_TYPES, DEAL_TYPES_UNREADABLE, dealTypesAllowed, isTypeLocked, notGranted, LINK_FOOT, MESSAGE_HINT, MESSAGE_MAX, NAME_MAX, NEW_SUB, NEW_TITLE, READING, TYPE_CAP,
   TYPE_FULL, TYPE_NOTE, counter, createdLines, invitationHref, isCompleteEmail, refusalText, toggleType,
+  TERMS_ADMIN, TERMS_NOTE, TERMS_NOTE_MAX, TERMS_TITLE, termsApply, termsInput,
 } from './partnersDeskModel';
 import { PREVIEW_ASKS, PREVIEW_FAILED, PREVIEW_NOTE, lookupChecks, previewFor, previewReply } from './invitationsModel';
 import { useRead } from './usePartnerDesk';
@@ -30,12 +33,20 @@ import { AMBER, CopyButton, EYE, INPUT, Refusal, SUB } from './parts';
  * nothing. Three types at most (O-CAP). The result stays in the dialog until
  * Done: "Invitation sent to …" only when the Worker reports the email went,
  * the link in a field with Copy, and Open invitation. No timer closes it.
+ *
+ * D1118 (#2998): "Adjust terms", the owner's A. A Super Admin offering
+ * Deal-sourcing revenue share or Custom can open it and set the invitation's
+ * own terms; sending them is the approval. Every figure is required once it
+ * is open. An Admin sees one sentence: the standard terms go.
  */
 
 export const CHECK_DELAY_MS = 400;
 
 export default function NewInvitationDialog({ reads, onClose }) {
   const navigate = useNavigate();
+  const superAdmin = isSuperAdminUser(useAuth()?.user);
+  const [termsForm, setTermsForm] = useState({ open: false, pct: '', days: '', months: '', note: '' });
+  const setTerm = (k) => (e) => setTermsForm((f) => ({ ...f, [k]: e.target.value }));
   const [email, setEmail] = useState('');
   const [name, setName] = useState('');
   const [types, setTypes] = useState([]);
@@ -68,7 +79,9 @@ export default function NewInvitationDialog({ reads, onClose }) {
   // PI10b (D1117): the types this studio's licence allows (D986 §6); a type HQ has not granted is locked.
   const allowedRead = useRead('deal-types', 'deal-types', 0, true, () => partnerDealTypesApi.mine());
   const allowed = dealTypesAllowed(allowedRead);
-  const ready = isCompleteEmail(typed) && types.length > 0 && !busy;
+  // An Admin never sees the fields, so their form stays closed: the standard terms.
+  const terms = termsInput(termsForm, types);
+  const ready = isCompleteEmail(typed) && types.length > 0 && !busy && terms.state !== 'invalid';
   const close = () => { if (busy) return; if (created) reads.reload(); onClose(); };
 
   const send = async () => {
@@ -79,6 +92,7 @@ export default function NewInvitationDialog({ reads, onClose }) {
         recipient_name: name.trim() || undefined,
         allowed_deal_types: types,
         personal_message: message.trim() || undefined,
+        ...(terms.state === 'own' ? { terms: terms.terms } : {}),
       });
       setCreated({ reply, email: typed });
     } catch (e) {
@@ -206,6 +220,38 @@ export default function NewInvitationDialog({ reads, onClose }) {
             );
           })}
         </fieldset>
+        {termsApply(types) && !superAdmin ? <p className={`m-0 ${SUB}`} data-testid="partners-new-terms-admin">{TERMS_ADMIN}</p> : null}
+        {termsApply(types) && superAdmin ? (
+          <section className="flex flex-col gap-2 rounded-[10px] border border-axal-hairline px-3 py-2.5 dark:border-gray-700" data-testid="partners-new-terms">
+            <button type="button" aria-expanded={termsForm.open} onClick={() => setTermsForm((f) => ({ ...f, open: !f.open }))}
+              className={`${EYE} flex items-center justify-between text-left`} data-testid="partners-new-terms-toggle">
+              <span>{TERMS_TITLE}</span><span aria-hidden="true">{termsForm.open ? '▴' : '▾'}</span>
+            </button>
+            <p className={`m-0 ${SUB}`}>{TERMS_NOTE}</p>
+            {termsForm.open ? (
+              <div className="grid gap-3 sm:grid-cols-3" data-testid="partners-new-terms-fields">
+                <label className="flex flex-col gap-1.5">
+                  <span className={EYE}>Rev-share percentage</span>
+                  <input type="text" inputMode="decimal" value={termsForm.pct} onChange={setTerm('pct')} className={INPUT} data-testid="partners-new-terms-pct" />
+                </label>
+                <label className="flex flex-col gap-1.5">
+                  <span className={EYE}>Attribution window · days</span>
+                  <input type="text" inputMode="numeric" value={termsForm.days} onChange={setTerm('days')} className={INPUT} data-testid="partners-new-terms-days" />
+                </label>
+                <label className="flex flex-col gap-1.5">
+                  <span className={EYE}>Term · months</span>
+                  <input type="text" inputMode="numeric" value={termsForm.months} onChange={setTerm('months')} className={INPUT} data-testid="partners-new-terms-months" />
+                </label>
+                <label className="flex flex-col gap-1.5 sm:col-span-3">
+                  <span className={EYE}>Terms note</span>
+                  <textarea value={termsForm.note} maxLength={TERMS_NOTE_MAX} rows={2} onChange={setTerm('note')} className={`${INPUT} py-2 leading-normal`} data-testid="partners-new-terms-note" />
+                  <span className={SUB}>{counter(termsForm.note.length, TERMS_NOTE_MAX)}</span>
+                </label>
+                {terms.state === 'invalid' ? <p className={`m-0 text-[12.5px] font-semibold ${AMBER} sm:col-span-3`} data-testid="partners-new-terms-invalid">{terms.text}</p> : null}
+              </div>
+            ) : null}
+          </section>
+        ) : null}
         <label className="flex flex-col gap-1.5">
           <span className={EYE}>Message to the invitee</span>
           <textarea value={message} maxLength={MESSAGE_MAX} rows={3} onChange={(e) => setMessage(e.target.value.slice(0, MESSAGE_MAX))} className={`${INPUT} py-2 leading-normal`} data-testid="partners-new-message" />

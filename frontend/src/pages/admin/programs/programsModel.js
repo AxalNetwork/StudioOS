@@ -184,7 +184,7 @@ export const PROGRAMS = Object.freeze([
   },
   {
     key: 'refer-and-earn', group: 'Network and referrals', name: 'Refer & Earn',
-    purpose: 'Members refer founders and platform users. A sign-up through a member’s link earns them an introduction credit.',
+    purpose: 'Members refer founders and platform users, and earn perk credits when a referral is accepted, forms or is onboarded. A sign-up through a member’s link earns them an introduction credit.',
     status: 'Live', grant: 'HQ-held', hqGrant: 'HQ-held', who: 'Founders, investors, advisors and partners', join: 'Open',
   },
   {
@@ -415,7 +415,7 @@ export const HOW_IT_RUNS = Object.freeze({
     },
     {
       title: 'Rewards',
-      lines: ['No referral pays perk credits. A sign-up through a member’s referral link earns them one introduction credit once the new member verifies their email. Other rewards are milestone labels, settled off the platform.'],
+      lines: ['A startup referral pays its referrer perk credits when it moves to Converted (on acceptance) and again when it moves to Reward issued (on formation). A platform user referral pays when it moves to Reward issued (once onboarded). The amounts are the referral rules in Credit rules, and the Rewards card on Overview shows them. Strategic introductions are agreed case by case. Partner referrers are not paid perk credits. A sign-up through a member’s referral link also earns them one introduction credit once the new member verifies their email; introduction credits are not perk credits.'],
     },
   ],
   perks: [

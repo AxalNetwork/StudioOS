@@ -71,12 +71,10 @@ test('the list tabs are links on the caller’s base, the open one marked', () =
   assert.ok(member.includes('href="/due-diligence/my-reviews"') && !member.includes('/admin/'), 'a member never gets an /admin link');
 });
 
-test('My reviews and Templates wait, with their reason', () => {
+test('My reviews waits, with its reason; Templates is drawn (D1250)', () => {
   const mine = html('/due-diligence/my-reviews', h(DdListTabBody, { tab: 'my-reviews' }));
   assert.ok(mine.includes('data-testid="dd-wait-my-reviews"') && mine.includes(NOT_YET));
-  const tpl = html('/admin/due-diligence/templates', h(DdListTabBody, { tab: 'templates' }));
-  assert.match(tpl, /HQ edits templates\. You choose one when you open a case\./);
-  assert.ok(tpl.includes('data-testid="dd-wait-templates"'));
+  assert.equal(WAITS.templates, undefined, 'D1250 reads the template store');
 });
 
 test('the case tabs: nine links on the caller’s base; a tab says where its blocks are today and what waits', () => {
@@ -99,15 +97,19 @@ test('the case tabs: nine links on the caller’s base; a tab says where its blo
 test('the wiring: the routes under both bases, the pages mounting the tabs, the band, the canvas and the docs', () => {
   const app = read('frontend/src/App.jsx');
   const G = "guard(['admin', 'partner', 'investor', 'advisor'], ";
+  // D1250: a founder on the member base's list addresses is sent to their requests (DDL17).
+  const F = "user?.role === 'founder' ? <Navigate to=\"/due-diligence/requests\" replace /> : guard(['admin', 'partner', 'investor', 'advisor'], ";
   for (const b of ['/admin/due-diligence', '/due-diligence']) {
     for (const [p, c] of [['my-reviews', 'AdminDueDiligencePage'], ['templates', 'AdminDueDiligencePage'], [':uid/:tab', 'AdminDueDiligenceCasePage']]) {
-      assert.ok(app.includes(`<Route path="${b}/${p}" element={${G}<${c} />)} />`), `${b}/${p}`);
+      const g = b === '/due-diligence' && c === 'AdminDueDiligencePage' ? F : G;
+      assert.ok(app.includes(`<Route path="${b}/${p}" element={${g}<${c} />)} />`), `${b}/${p}`);
     }
     assert.ok(app.indexOf(`path="${b}/my-reviews"`) < app.indexOf(`path="${b}/:uid"`), `${b}/my-reviews is declared before the case`);
   }
   const list = read('frontend/src/pages/AdminDueDiligencePage.jsx');
-  assert.ok(list.includes('<DdListTabs active="cases" />'));
-  assert.match(list, /return listTab && listTab !== 'cases'\s*\n\s*\? <div><DdListHeader \/><DdListTabs active=\{listTab\} \/><DdListTabBody tab=\{listTab\} \/><\/div>\s*\n\s*: <AdminDueDiligencePageBody \/>;/);
+  // D1250: each list tab draws its own body under the one header and tab row.
+  assert.ok(list.includes('<DdListTabs active={tab} />'));
+  assert.ok(list.includes(`{tab === 'my-reviews' ? <DdListTabBody tab="my-reviews" /> : null}`));
   assert.match(list, /<AdminBoardFrame [^>]*>\s*<DdListPage \/>\s*<\/AdminBoardFrame>/);
   assert.ok(!list.includes('>Due Diligence</h1>'), 'the title is the canvas’s');
   const cs = read('frontend/src/pages/AdminDueDiligenceCasePage.jsx');

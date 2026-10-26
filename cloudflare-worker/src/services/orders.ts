@@ -243,6 +243,7 @@ export async function resolveCartPromo(
   env: Env,
   code: string,
   cart: PricedCart,
+  userId: number,
 ): Promise<CartPromo | PriceError> {
   // Validate against EVERY distinct product in the cart. A promo restricted to
   // a subset of products must not discount the whole subtotal — otherwise an
@@ -251,7 +252,8 @@ export async function resolveCartPromo(
   const productIds = [...new Set(cart.lines.map((l) => l.product_id))];
   let promoRow: PromoRow | null = null;
   for (const productId of productIds) {
-    const v = await validatePromoForProduct(env, code, productId, cart.subtotal, cart.currency);
+    // D1273: the member, for a code's per-member limits. A cart is one-time, so no interval.
+    const v = await validatePromoForProduct(env, code, productId, cart.subtotal, cart.currency, { userId, interval: null });
     if (!v.ok || !v.promo) return { error: v.reason || 'promo_invalid' };
     promoRow = v.promo;
   }

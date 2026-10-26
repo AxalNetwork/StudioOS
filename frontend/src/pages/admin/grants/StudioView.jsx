@@ -17,7 +17,9 @@ import {
  * Schedule, In use and the row's acts), its partner deal types (D986), its
  * requests and its recent changes. Reads: the licence (D982), the defaults
  * (D982), the page's requests (D983) and the deal types (D986), each its own
- * block. "In use" waits on the studios' program figures (#3061).
+ * block. "In use" reads the studio's own program reports once (D1156,
+ * `programGrantsApi.inUse`; D1281): a failed read says so with Try again and
+ * the rest of the view still draws.
  */
 
 const CARD = 'rounded-[12px] border border-axal-hairline bg-white dark:border-gray-700 dark:bg-gray-900';
@@ -116,20 +118,21 @@ export default function StudioView({ uid, requests, reloadAll }) {
   const [now] = useState(() => Date.now());
   const [licence, reloadLicence] = useRead(() => programGrantsApi.licence(uid), [uid]);
   const [defaults, reloadDefaults] = useRead(() => programGrantsApi.defaults(), []);
+  const [usage, reloadUsage] = useRead(() => programGrantsApi.inUse(uid), [uid]);
   const [act, setAct] = useState(null);
   const [done, setDone] = useState('');
   const [historyOf, setHistoryOf] = useState(null);
   const read = licence.data;
   const items = requests.status === 'ready' ? requests.data?.items || [] : [];
   const list = defaults.data?.programs || [];
-  const rows = useMemo(() => (read ? studioRows(read, list, items) : []), [read, list, items]);
+  const rows = useMemo(() => (read ? studioRows(read, list, items, usage) : []), [read, list, items, usage]);
   const tiles = useMemo(() => (read ? studioTiles(rows, items, read.licence.uid, now) : null), [read, rows, items, now]);
   const lic = read?.licence;
   const studio = lic?.brand_name || lic?.licence_ref || 'This studio';
   const frozen = lic?.status === 'suspended' ? FROZEN_LINE : null;
   const mine = items.filter((r) => r.licence?.uid === uid && r.status === 'open').map((r) => requestRow(r, now));
   const history = (read?.history || []).filter((e) => !historyOf || e.program_key === historyOf).map(historyRow);
-  const after = (line) => { setAct(null); setDone(line); reloadLicence(); reloadAll(); };
+  const after = (line) => { setAct(null); setDone(line); reloadLicence(); reloadUsage(); reloadAll(); };
   const defaultsOf = (key) => list.find((d) => d.program_key === key);
 
   if (licence.status === 'missing') {
@@ -216,7 +219,8 @@ export default function StudioView({ uid, requests, reloadAll }) {
                   </table>
                 </div>
               )}
-              <span className={SUB}>HQ only and not-ready programs show their reason and no action. In use waits for the studios’ program figures.</span>
+              {usage.status === 'error' || usage.status === 'missing' ? <BlockUnreadable text="This studio’s program figures could not be read." onRetry={reloadUsage} testId="studio-inuse-unreadable" /> : null}
+              <span className={SUB}>HQ only and not-ready programs show their reason and no action. In use is each program’s latest report from the studio: counts only, never a person.</span>
             </section>
 
             <div className="col-span-12 flex flex-col gap-3.5 xl:col-span-4">

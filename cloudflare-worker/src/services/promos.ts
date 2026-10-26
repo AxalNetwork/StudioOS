@@ -46,6 +46,11 @@ export interface PromoRow {
   created_by: number | null;
   created_at: string;
   synced_at: string;
+  /** D1273 (migration 630). Absent on a store built before it: read as no scope and no limits. */
+  plan_keys_json?: string | null;
+  intervals_json?: string | null;
+  once_per_member?: number | null;
+  first_purchase_only?: number | null;
 }
 
 export interface PromoView {
@@ -65,7 +70,30 @@ export interface PromoView {
   expires_at: string | null;
   created_by: number | null;
   created_at: string;
+  /** D1273: the plans HQ chose ([] for none); they resolved to products at create. */
+  plan_keys: string[];
+  /** D1273: the intervals a subscription may use it on; null for a code made before 630 (every interval). */
+  intervals: PromoInterval[] | null;
+  once_per_member: boolean;
+  first_purchase_only: boolean;
 }
+
+/** D1273: the billing intervals a code can be scoped to. */
+export const PROMO_INTERVALS = ['month', 'year'] as const;
+export type PromoInterval = (typeof PROMO_INTERVALS)[number];
+/** #2381 owner question 3: a new code applies to monthly billing only unless HQ chooses yearly too. */
+export const DEFAULT_PROMO_INTERVALS: PromoInterval[] = ['month'];
+
+/**
+ * Migration 630's columns, for a store that never ran it. Each ALTER is a
+ * literal (check-sql-prepare.mjs), added only when PRAGMA says it is missing.
+ */
+const SCOPE_COLUMNS: Array<[string, string]> = [
+  ['plan_keys_json', "ALTER TABLE promo_codes ADD COLUMN plan_keys_json TEXT NOT NULL DEFAULT '[]'"],
+  ['intervals_json', 'ALTER TABLE promo_codes ADD COLUMN intervals_json TEXT'],
+  ['once_per_member', 'ALTER TABLE promo_codes ADD COLUMN once_per_member INTEGER NOT NULL DEFAULT 0'],
+  ['first_purchase_only', 'ALTER TABLE promo_codes ADD COLUMN first_purchase_only INTEGER NOT NULL DEFAULT 0'],
+];
 
 const SCHEMA_READY = new WeakMap<object, boolean>();
 
@@ -115,6 +143,13 @@ export async function ensurePromoSchema(env: Env): Promise<void> {
     await env.DB.exec(
       'CREATE INDEX IF NOT EXISTS idx_promo_redemptions_promo ON promo_redemptions(promo_id)',
     );
+    // D1273: migration 630, for a store that never ran it.
+    const cols = await env.DB.prepare('PRAGMA table_info(promo_codes)').all<{ name: string }>();
+    const have = new Set((cols.results ?? []).map((r) => r.name));
+    for (const [name, ddl] of SCOPE_COLUMNS) if (!have.has(name)) await env.DB.prepare(ddl).run();
+    await env.DB.exec(
+      'CREATE INDEX IF NOT EXISTS idx_promo_redemptions_promo_user ON promo_redemptions(promo_id, user_id)',
+    );
     SCHEMA_READY.set(bindingKey(env), true);
   } catch (e) {
     console.warn('[promos] ensurePromoSchema failed:', (e as Error).message);
@@ -144,8 +179,39 @@ export function readProductIds(json: string): { ok: true; ids: string[] } | { ok
   return { ok: true, ids: v };
 }
 
+/**
+ * D1273: a code's interval scope. NULL (or a store before 630) is a code made
+ * before interval scope existed, which applies to every interval, as it did.
+ * Anything else must be a list of known intervals; a list that is not one
+ * applies to none, never to all.
+ */
+export function readIntervals(json: string | null | undefined): { ok: true; intervals: PromoInterval[] | null } | { ok: false } {
+  if (json == null) return { ok: true, intervals: null };
+  let v: unknown;
+  try { v = JSON.parse(json); } catch { return { ok: false }; }
+  if (!Array.isArray(v) || !v.length || v.some((x) => !(PROMO_INTERVALS as readonly string[]).includes(x as string))) return { ok: false };
+  return { ok: true, intervals: [...new Set(v as PromoInterval[])] };
+}
+
+/**
+ * D1273: the plan a catalog product sells, as a scope key, or null when it is
+ * not a plan. The keys follow `planMetaForProduct`'s kinds; the market
+ * intelligence plan is one key whatever its interval, which the interval
+ * scope decides.
+ */
+export function planKeyOf(product: { metadata?: Record<string, string> | null } | null | undefined): string | null {
+  const m = product?.metadata || {};
+  if (m.tier === 'growth' || m.tier === 'studio') return `tier:${m.tier}`;
+  if (m.investor_tier === 'professional' || m.investor_tier === 'institutional') return `investor:${m.investor_tier}`;
+  if (typeof m.plan_group === 'string' && m.plan_group.trim()) return `plan:${m.plan_group.trim()}`;
+  if (m.plan === 'mi_pro') return 'mi:mi_pro';
+  return null;
+}
+
 export function rowToView(row: PromoRow): PromoView {
   const products = readProductIds(row.product_ids_json);
+  const plans = readProductIds(row.plan_keys_json ?? '[]');
+  const intervals = readIntervals(row.intervals_json);
   return {
     id: row.id,
     code: row.code,
@@ -162,6 +228,11 @@ export function rowToView(row: PromoRow): PromoView {
     expires_at: row.expires_at,
     created_by: row.created_by,
     created_at: row.created_at,
+    plan_keys: plans.ok ? plans.ids : [],
+    // An interval list that cannot be read is shown as no interval, as checkout refuses it.
+    intervals: intervals.ok ? intervals.intervals : [],
+    once_per_member: row.once_per_member === 1,
+    first_purchase_only: row.first_purchase_only === 1,
   };
 }
 
@@ -182,6 +253,11 @@ export async function mirrorPromo(
     active: boolean;
     expires_at: string | null;
     created_by: number | null;
+    /** D1273. A code's terms are fixed once made, so these are written at create. */
+    plan_keys?: string[];
+    intervals?: PromoInterval[] | null;
+    once_per_member?: boolean;
+    first_purchase_only?: boolean;
   },
 ): Promise<void> {
   await ensurePromoSchema(env);
@@ -189,8 +265,9 @@ export async function mirrorPromo(
     `INSERT INTO promo_codes
        (id, code, code_normalized, coupon_id, percent_off, amount_off, currency,
         duration, product_ids_json, max_redemptions, times_redeemed, active,
-        expires_at, created_by, synced_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))
+        expires_at, created_by, plan_keys_json, intervals_json, once_per_member,
+        first_purchase_only, synced_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))
      ON CONFLICT(id) DO UPDATE SET
        code = excluded.code,
        code_normalized = excluded.code_normalized,
@@ -203,6 +280,10 @@ export async function mirrorPromo(
        max_redemptions = excluded.max_redemptions,
        active = excluded.active,
        expires_at = excluded.expires_at,
+       plan_keys_json = excluded.plan_keys_json,
+       intervals_json = excluded.intervals_json,
+       once_per_member = excluded.once_per_member,
+       first_purchase_only = excluded.first_purchase_only,
        synced_at = datetime('now')`,
   )
     .bind(
@@ -220,6 +301,10 @@ export async function mirrorPromo(
       p.active ? 1 : 0,
       p.expires_at,
       p.created_by,
+      JSON.stringify(p.plan_keys ?? []),
+      p.intervals == null ? null : JSON.stringify(p.intervals),
+      p.once_per_member ? 1 : 0,
+      p.first_purchase_only ? 1 : 0,
     )
     .run();
 }
@@ -325,7 +410,12 @@ export type PromoRejectReason =
   | 'product_not_eligible'
   | 'product_list_unreadable'
   | 'usage_limit_reached'
-  | 'currency_mismatch';
+  | 'currency_mismatch'
+  // D1273 (#3299)
+  | 'interval_not_eligible'
+  | 'already_used'
+  | 'not_first_purchase'
+  | 'first_purchase_unreadable';
 
 export interface PromoValidation {
   ok: boolean;
@@ -359,9 +449,84 @@ async function totalRedeemed(env: Env, promo: PromoRow): Promise<number> {
 }
 
 /**
+ * D1273: who is buying, and on what interval. `interval` is the recurring
+ * price's interval ('month', 'year'), or null for a one-time price, which the
+ * interval scope does not touch. Every checkout path passes the member; a
+ * code that limits members and is asked without one is refused, never let by.
+ */
+export interface PromoBuyer { userId: number | null; interval: string | null }
+
+/** D1273: has this member used this code already? Any recorded use counts. */
+export async function memberHasUsed(env: Env, promoId: string, userId: number): Promise<boolean> {
+  await ensurePromoSchema(env);
+  const row = await env.DB.prepare('SELECT 1 AS hit FROM promo_redemptions WHERE promo_id = ? AND user_id = ? LIMIT 1')
+    .bind(promoId, userId).first<{ hit: number }>();
+  return !!row;
+}
+
+const PAID = 'succeeded';
+/**
+ * D1273: has this member ever paid? Stripe's own reading, which its
+ * `first_time_transaction` restriction applies to a subscription: a succeeded
+ * PaymentIntent on either of the member's Stripe customers (a plan's invoice
+ * is paid through one too). A paid order here answers first, without asking
+ * Stripe. `null` when Stripe could not be asked: unknown, never "first".
+ */
+export async function memberHasPaid(env: Env, userId: number): Promise<boolean | null> {
+  // A 100%-off order is stored `paid` with nothing taken: not a payment.
+  const paidOrder = await env.DB.prepare("SELECT 1 AS hit FROM orders WHERE user_id = ? AND status = 'paid' AND total_cents > 0 LIMIT 1")
+    .bind(userId).first<{ hit: number }>().catch(() => null);
+  if (paidOrder) return true;
+  const u = await env.DB.prepare('SELECT stripe_customer_id, investor_stripe_customer_id FROM users WHERE id = ?')
+    .bind(userId).first<{ stripe_customer_id: string | null; investor_stripe_customer_id: string | null }>();
+  const customers = [...new Set([u?.stripe_customer_id, u?.investor_stripe_customer_id].filter((x): x is string => !!x))];
+  for (const customer of customers) {
+    try {
+      const page = await stripeCall<{ data?: Array<{ status?: string }>; has_more?: boolean }>(
+        env, '/payment_intents', { customer, limit: '100' }, { method: 'GET' },
+      );
+      if ((page.data ?? []).some((pi) => pi.status === PAID)) return true;
+      // A hundred intents and none paid, with more behind them: not known to be a first purchase.
+      if (page.has_more) return null;
+    } catch {
+      return null;
+    }
+  }
+  return false;
+}
+
+/**
+ * D1273: a subscription's use of a once-per-member code, reserved before
+ * Stripe is asked. Stripe applies the coupon and counts the redemption when
+ * the subscription is made, so the member's use is taken then too. The row is
+ * one per member (`member:<promo>:<user>`), so two checkouts at once cannot
+ * both take it; it does not move `times_redeemed`, which Stripe's own counter
+ * already carries for a subscription. `false` when the member had used it.
+ */
+export async function reserveMemberUse(env: Env, promoId: string, userId: number): Promise<boolean> {
+  await ensurePromoSchema(env);
+  const ins = await env.DB.prepare(
+    'INSERT OR IGNORE INTO promo_redemptions (promo_id, user_id, payment_intent_id) VALUES (?, ?, ?)',
+  ).bind(promoId, userId, memberUseRef(promoId, userId)).run();
+  return (ins.meta?.changes ?? 0) === 1;
+}
+
+/** D1273: Stripe refused the subscription, so the member did not use the code. */
+export async function releaseMemberUse(env: Env, promoId: string, userId: number): Promise<void> {
+  await env.DB.prepare('DELETE FROM promo_redemptions WHERE payment_intent_id = ?')
+    .bind(memberUseRef(promoId, userId)).run();
+}
+
+export const memberUseRef = (promoId: string, userId: number) => `member:${promoId}:${userId}`;
+
+/**
  * Validate a code for a specific product + base amount. Recomputes the discount
  * server-side (never trusts a client-supplied amount). Returns the rejection
  * reason on failure so the UI can render a precise message.
+ *
+ * D1273: `buyer` adds the interval scope and the per-member limits. The
+ * checks run cheapest first, and Stripe is asked only once the code's own
+ * terms pass.
  */
 export async function validatePromoForProduct(
   env: Env,
@@ -369,6 +534,7 @@ export async function validatePromoForProduct(
   productId: string,
   amountCents: number,
   currency?: string,
+  buyer: PromoBuyer = { userId: null, interval: null },
 ): Promise<PromoValidation> {
   const promo = await getPromoByCode(env, code);
   if (!promo) return { ok: false, reason: 'not_found' };
@@ -394,9 +560,25 @@ export async function validatePromoForProduct(
   // D755 §5: a token pack is never discounted.
   const { isTokenPackProduct } = await import('./aiCredits');
   if (await isTokenPackProduct(env, productId)) return { ok: false, reason: 'product_not_eligible' };
+  // D1273: a subscription's interval. A one-time price has none, and the scope does not touch it.
+  if (buyer.interval != null) {
+    const scope = readIntervals(promo.intervals_json);
+    if (!scope.ok) return { ok: false, reason: 'interval_not_eligible' };
+    if (scope.intervals && !(scope.intervals as string[]).includes(buyer.interval)) {
+      return { ok: false, reason: 'interval_not_eligible' };
+    }
+  }
+  if (promo.once_per_member === 1) {
+    if (buyer.userId == null || await memberHasUsed(env, promo.id, buyer.userId)) return { ok: false, reason: 'already_used' };
+  }
   if (promo.max_redemptions != null) {
     const used = await totalRedeemed(env, promo);
     if (used >= promo.max_redemptions) return { ok: false, reason: 'usage_limit_reached' };
+  }
+  if (promo.first_purchase_only === 1) {
+    const paid = buyer.userId == null ? null : await memberHasPaid(env, buyer.userId);
+    if (paid === null) return { ok: false, reason: 'first_purchase_unreadable' };
+    if (paid) return { ok: false, reason: 'not_first_purchase' };
   }
   const { discountedAmount, discountCents } = computeDiscount(promo, amountCents);
   return {

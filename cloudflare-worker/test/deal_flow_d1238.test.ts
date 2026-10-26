@@ -33,9 +33,11 @@ const baseline = readFileSync('cloudflare-worker/sql/schema_baseline.sql', 'utf8
 
 function fixture() {
   const db = new DatabaseSync(':memory:', { enableForeignKeyConstraints: false });
-  for (const t of ['entities', 'users', 'founders', 'user_sessions', 'user_company_links', 'projects', 'deals', 'deal_invitations', 'commitments',
+  for (const t of ['entities', 'users', 'founders', 'user_sessions', 'user_company_links', 'company_profiles', 'projects', 'deals', 'deal_invitations', 'commitments',
     'investor_dealroom_members', 'intro_propositions', 'syndicates', 'watchlist_items']) db.exec(tableFromBaseline(baseline, t));
   db.exec(readFileSync('cloudflare-worker/sql/migrations/618_deal_flow.sql', 'utf8'));
+  // D1137: resolveActiveCompany refuses an archived company, so the firm needs 597's archived_at.
+  db.exec(readFileSync('cloudflare-worker/sql/migrations/597_company_archive_and_events.sql', 'utf8'));
   db.exec(`
     INSERT INTO founders(id,name,email) VALUES (40,'Fay','fay@example.test');
     INSERT INTO users(id,name,email,role,founder_id,kyc_status,is_active) VALUES

@@ -82,6 +82,55 @@ export const METERING_POLICY: MeteringPolicy = Object.freeze({
   }) as Record<string, MeteredOperation>,
 });
 
+/**
+ * D1278 (#3304): what each priced operation is, for `GET /api/ai-budget/prices`.
+ * Kept beside the policy, and the test fails on an operation one lists and the
+ * other does not. `source` is where the call reaches: Axal's own records, a
+ * member's connected tool, or a member's own MCP server. `ai` marks a tool
+ * whose model run is charged at that run's own cost (the composite rule), on
+ * top of its price here.
+ */
+export type PriceSource = 'axal' | 'connector' | 'remote_mcp';
+export const OPERATION_INFO: Readonly<Record<string, { label: string; source: PriceSource; ai: boolean }>> = Object.freeze({
+  [toolOperation('list_companies')]: { label: 'List your companies', source: 'axal', ai: false },
+  [toolOperation('get_validate_context')]: { label: 'Read a venture’s Validate context', source: 'axal', ai: false },
+  [toolOperation('get_interview_guide')]: { label: 'Read an interview guide', source: 'axal', ai: false },
+  [toolOperation('submit_interview')]: { label: 'Submit an interview', source: 'axal', ai: false },
+  [toolOperation('propose_placements')]: { label: 'Propose where findings go', source: 'axal', ai: false },
+  [toolOperation('structure_with_studioos')]: { label: 'Structure an interview with Eadwyn', source: 'axal', ai: true },
+  [toolOperation('get_build_progress')]: { label: 'Read Build progress', source: 'connector', ai: false },
+  [toolOperation('list_connections')]: { label: 'List your connections', source: 'connector', ai: false },
+  [toolOperation('list_channel_chats')]: { label: 'List customer chats', source: 'axal', ai: false },
+  [toolOperation('get_session_insights')]: { label: 'Read a chat’s insights', source: 'axal', ai: false },
+  [toolOperation('assign_chat_to_interview')]: { label: 'Assign a chat to an interview', source: 'axal', ai: false },
+  [toolOperation('list_meetings')]: { label: 'List your meetings', source: 'axal', ai: false },
+  [toolOperation('get_meeting_transcript')]: { label: 'Read a meeting transcript', source: 'axal', ai: false },
+  [toolOperation('summarize_meeting')]: { label: 'Summarize a meeting', source: 'axal', ai: true },
+  [toolOperation('extract_action_items')]: { label: 'Extract action items', source: 'axal', ai: true },
+});
+
+/**
+ * D1278: the price list a member reads, from the policy itself. Every
+ * operation the policy lists, in its order; a free one is a known 0, never
+ * left out. Amounts are integer micro-USD.
+ */
+export function priceList(policy: MeteringPolicy = METERING_POLICY) {
+  return {
+    version: policy.version,
+    operations: Object.entries(policy.operations).map(([operation, op]) => {
+      const info = OPERATION_INFO[operation];
+      return {
+        operation,
+        label: info?.label ?? operation,
+        source: info?.source ?? 'axal',
+        price_microusd: Number.isSafeInteger(op.price_microusd) && op.price_microusd >= 0 ? op.price_microusd : null,
+        unit: op.unit,
+        ai: info?.ai ?? false,
+      };
+    }),
+  };
+}
+
 const integer = (n: unknown) => typeof n === 'number' && Number.isSafeInteger(n) && n >= 0;
 
 /** Whether the policy prices `operation` at all. */
@@ -155,6 +204,8 @@ export interface MeteredCallInput {
   quoteMicrousd: number;
   /** The member key the call came through: its holds are tagged with it, and its own monthly cap applies (D849). */
   apiKeyUid?: string | null;
+  /** D1278: where the call ran, written on the hold so the member's holds say what took them. */
+  surface?: 'mcp' | 'flow';
   pricingVersion?: string;
   timeoutMs?: number;
   signal?: AbortSignal;
@@ -200,7 +251,8 @@ export async function meteredCall<T>(env: Env, input: MeteredCallInput, run: (me
   if (keyUid && keyLimit != null && overCap(await keyMonthSpend(env, input.userId, keyUid, now, key), input.quoteMicrousd, keyLimit)) {
     throw new MeteringRefused('key_limit_reached', KEY_LIMIT_SENTENCE);
   }
-  const hold = await reserveAiBudget(env, input.userId, input.quoteMicrousd, now, { idempotencyKey: key });
+  const hold = await reserveAiBudget(env, input.userId, input.quoteMicrousd, now, { idempotencyKey: key,
+    context: { operation: input.operation, surface: input.surface ?? null, apiKeyUid: keyUid, executionId: input.executionId } });
   if (!hold.ok) throw refusalFor(hold.refusal);
   // A replay of an execution that already finished never runs again: running it
   // would be free, and charging it would be twice.

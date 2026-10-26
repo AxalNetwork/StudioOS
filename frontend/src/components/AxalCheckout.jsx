@@ -44,6 +44,11 @@ const PROMO_REASONS = {
   usage_limit_reached: 'This code has reached its usage limit.',
   currency_mismatch: "This code can't be used for this purchase.",
   amount_below_minimum: 'This code lowers the total below the minimum we can process.',
+  // D1273 (#3299): a code's billing period and its per-member limits.
+  interval_not_eligible: "This code doesn't apply to this billing period.",
+  already_used: "You've already used this code.",
+  not_first_purchase: 'This code is for a first purchase only.',
+  first_purchase_unreadable: "We couldn't confirm this is your first purchase. Try again in a moment.",
 };
 function promoReasonText(reason) {
   return PROMO_REASONS[reason] || "That code can't be applied to this purchase.";

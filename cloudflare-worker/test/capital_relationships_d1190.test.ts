@@ -53,7 +53,8 @@ function schema(db: DatabaseSync) {
   db.exec(mig('376_research_taxonomy.sql'));
   db.exec(ddl('229_research_market_directory.sql'));
   db.exec(`CREATE TABLE IF NOT EXISTS integrations(id INTEGER PRIMARY KEY, uid TEXT, user_id INTEGER, provider_key TEXT, status TEXT DEFAULT 'active', auth_type TEXT, credentials_enc TEXT);
-           CREATE TABLE IF NOT EXISTS user_company_links(user_id INTEGER, company_id INTEGER);`);
+           CREATE TABLE IF NOT EXISTS user_company_links(user_id INTEGER, company_id INTEGER);
+           CREATE TABLE IF NOT EXISTS company_profiles(id INTEGER PRIMARY KEY, archived_at TEXT);`);
 }
 
 function fixture(o: { before607?: (db: DatabaseSync) => void } = {}) {

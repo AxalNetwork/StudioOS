@@ -4,7 +4,8 @@ import { Lightbox, Unreadable, actionGhost } from '../../ui';
 import { buildPlanApi } from '../../lib/api/buildPlan';
 import {
   BACK_IN_FOOT, BUCKETS, BUILT_UNREAD, CHART_FOOT, MODULE_FILTERS, NOT_RECORDED_FOOT, PER_PAGE, PROGRESS_FILTERS, SORTS, STAGES, STAGE_FILTERS, STAGE_WORD,
-  TOOL_FILTERS, TRAIL_FOOT, asOfLine, chartLabel, filterRows, pageRows, phoneStatus, progressRows, stageChart, stageLead, trailNodes, trailTable, waitingLinks,
+  TOOL_FILTERS, TRAIL_FOOT, asOfLine, builtPerWeek, chartLabel, filterRows, pageRows, phoneStatus, progressRows, stageChart, stageLead, trailNodes, trailTable,
+  waitingLinks, weekLine,
 } from './buildProgressModel';
 import { ventureSearch } from './buildPlanModel';
 
@@ -47,23 +48,37 @@ const DOT = {
 };
 const dotClass = (stage, cell) => `inline-block h-3 w-3 shrink-0 rounded-full ${cell.state === 'done' ? DOT.done[stage] : DOT[cell.state]}`;
 
-/** The three reads; the sends and links answer alone, and null means that read failed. */
+/** D968: every page of the states read, up to ten; one failed page fails the read (null), never a short list. */
+export const STATES_PAGE = 500;
+export async function readAllStates(projectId, scope, client = buildPlanApi) {
+  let out = [];
+  for (let page = 0; page < 10; page += 1) {
+    const r = await client.states(projectId, scope, { limit: STATES_PAGE, offset: page * STATES_PAGE });
+    const got = Array.isArray(r?.states) ? r.states : [];
+    out = out.concat(got);
+    if (!got.length || out.length >= Number(r?.total || 0)) break;
+  }
+  return out;
+}
+
+/** The four reads; the sends, links and states answer alone, and null means that read failed. */
 function useProgress(projectId, scope) {
-  const [state, setState] = useState({ status: 'loading', plan: null, handoffs: null, links: null });
+  const [state, setState] = useState({ status: 'loading', plan: null, handoffs: null, links: null, states: null });
   const [tick, setTick] = useState(0);
   useEffect(() => {
     if (!projectId) return undefined;
     let alive = true;
-    Promise.allSettled([buildPlanApi.read(projectId, scope), buildPlanApi.handoffs(projectId, scope), buildPlanApi.links(projectId, scope)]).then(([p, h, l]) => {
+    Promise.allSettled([buildPlanApi.read(projectId, scope), buildPlanApi.handoffs(projectId, scope), buildPlanApi.links(projectId, scope), readAllStates(projectId, scope)]).then(([p, h, l, st]) => {
       if (!alive) return;
       if (p.status === 'rejected') {
-        setState({ status: Number(p.reason?.status) === 404 ? 'refused' : 'unreadable', plan: null, handoffs: null, links: null });
+        setState({ status: Number(p.reason?.status) === 404 ? 'refused' : 'unreadable', plan: null, handoffs: null, links: null, states: null });
         return;
       }
       setState({
         status: 'ready', plan: p.value,
         handoffs: h.status === 'fulfilled' ? h.value?.handoffs || [] : null,
         links: l.status === 'fulfilled' ? l.value?.links || [] : null,
+        states: st.status === 'fulfilled' ? st.value : null,
       });
     });
     return () => { alive = false; };
@@ -125,6 +140,7 @@ function Cell({ stage, cell }) {
     <span className="flex flex-col gap-0.5">
       <span className={`flex items-center gap-1.5 ${MONO} text-[12px] text-axal-ink dark:text-gray-100`}><span className={dotClass(stage, cell)} />{cell.text}</span>
       <span className="text-[11px] text-axal-muted dark:text-gray-400">{cell.source}</span>
+      {cell.note ? <span className="text-[11px] text-axal-muted dark:text-gray-400" data-testid="plan-progress-cell-note">{cell.note}</span> : null}
     </span>
   );
 }
@@ -196,8 +212,12 @@ function ItemsTable({ rows, onOpen }) {
   );
 }
 
-/** VB10's "Built per week": no read carries a built day, so every week is the dashed not-recorded line. */
-function BuiltPerWeek() {
+/**
+ * VB10's "Built per week", from each item's Built day (D968). With no source
+ * reporting Built, it stays the dashed not-recorded line; an item built on a
+ * day its row does not store is counted under the bars, never in a week.
+ */
+function BuiltPerWeek({ series }) {
   return (
     <section className={CARD} aria-labelledby="plan-progress-week" data-testid="plan-progress-week">
       <h2 id="plan-progress-week" className={H2}>Built per week</h2>
@@ -205,10 +225,25 @@ function BuiltPerWeek() {
         <li className="flex items-center gap-1.5"><span aria-hidden="true" className="inline-block h-2.5 w-3.5 rounded-[2px] bg-axal-violet dark:bg-violet-400" />Since the plan began</li>
         <li className="flex items-center gap-1.5"><span aria-hidden="true" className="inline-block w-4 border-t-2 border-dashed border-axal-muted dark:border-gray-400" />Not recorded</li>
       </ul>
-      <div role="img" aria-label={BUILT_UNREAD} className="flex h-[96px] items-end border-b border-axal-hairline pb-2 dark:border-gray-800" data-testid="plan-progress-week-chart">
-        <span className="w-full border-t-2 border-dashed border-axal-muted dark:border-gray-400" />
-      </div>
-      <p className={MUTED} data-testid="plan-progress-week-unread">{BUILT_UNREAD}</p>
+      {!series.reported ? (
+        <>
+          <div role="img" aria-label={BUILT_UNREAD} className="flex h-[96px] items-end border-b border-axal-hairline pb-2 dark:border-gray-800" data-testid="plan-progress-week-chart">
+            <span className="w-full border-t-2 border-dashed border-axal-muted dark:border-gray-400" />
+          </div>
+          <p className={MUTED} data-testid="plan-progress-week-unread">{BUILT_UNREAD}</p>
+        </>
+      ) : (
+        <>
+          <div role="img" aria-label={weekLine(series)} className="flex h-[96px] items-end gap-1 border-b border-axal-hairline pb-0 dark:border-gray-800" data-testid="plan-progress-week-bars">
+            {series.weeks.map((w) => (
+              <span key={w.week} className="flex h-full min-w-0 flex-1 flex-col justify-end" title={`${w.label}${w.current ? ' (to date)' : ''}: ${w.n}`} data-testid={`plan-progress-week-${w.week}`}>
+                <span className={`block w-full rounded-t-[2px] ${w.current ? 'bg-axal-violet/60 dark:bg-violet-400/60' : 'bg-axal-violet dark:bg-violet-400'}`} style={{ height: `${(w.n / series.max) * 100}%`, minHeight: w.n ? 3 : 0 }} />
+              </span>
+            ))}
+          </div>
+          <p className={MUTED} data-testid="plan-progress-week-line">{weekLine(series)}</p>
+        </>
+      )}
     </section>
   );
 }
@@ -325,7 +360,8 @@ export default function PlanProgress({ projectId, scope = 'venture', search = ''
   const p = useProgress(projectId, scope);
   const [open, setOpen] = useState(null);
   const [backIn, setBackIn] = useState(false);
-  const rows = useMemo(() => (p.status === 'ready' ? progressRows(p.plan, p.handoffs, p.links) : []), [p.status, p.plan, p.handoffs, p.links]);
+  const rows = useMemo(() => (p.status === 'ready' ? progressRows(p.plan, p.handoffs, p.links, p.states) : []), [p.status, p.plan, p.handoffs, p.links, p.states]);
+  const weeks = useMemo(() => builtPerWeek(rows, nowIso), [rows, nowIso]);
   const chart = useMemo(() => stageChart(rows), [rows]);
   const waiting = p.status === 'ready' && actions ? waitingLinks(p.links, p.plan) : [];
 
@@ -341,6 +377,7 @@ export default function PlanProgress({ projectId, scope = 'venture', search = ''
       {!phone ? <p className={`${MONO} m-0 text-[12px] text-axal-muted dark:text-gray-400`} data-testid="plan-progress-asof">{asOfLine(nowIso, tools)}</p> : null}
       {p.handoffs == null ? <Unreadable what="Your sends" claim="This is not a claim that nothing was sent. Sent shows as not recorded." onRetry={p.reload} /> : null}
       {p.links == null ? <Unreadable what="What came back from your tools" claim="This is not a claim that nothing came back. In progress shows as not recorded." onRetry={p.reload} /> : null}
+      {p.states == null ? <Unreadable what="Built, live and tested" claim="This is not a claim that nothing was built. Those stages show as not recorded." onRetry={p.reload} /> : null}
       {waiting.length ? (
         <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-axal-lavender-edge bg-axal-lavender px-3.5 py-3 text-[13px] font-semibold text-axal-ink dark:border-violet-800 dark:bg-violet-900/30 dark:text-gray-100" data-testid="plan-back-in-door">
           <span>Arrived from your tools · {waiting.length}. Nothing is linked until you press Link.</span>
@@ -355,7 +392,7 @@ export default function PlanProgress({ projectId, scope = 'venture', search = ''
           {chart.length ? <StageChart chart={chart} phone={phone} /> : null}
           <p className={MUTED}>{CHART_FOOT}</p>
         </section>
-        {!phone ? <BuiltPerWeek /> : null}
+        {!phone ? <BuiltPerWeek series={weeks} /> : null}
       </div>
       {phone ? <PhoneItems rows={filterRows(rows)} onOpen={setOpen} /> : <ItemsTable rows={rows} onOpen={setOpen} />}
       {open ? <ItemTrail projectId={projectId} row={open} handoffs={p.handoffs} links={p.links} search={search} onClose={() => setOpen(null)} /> : null}

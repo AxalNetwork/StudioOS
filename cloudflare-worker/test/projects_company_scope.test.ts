@@ -88,6 +88,8 @@ function freshDb() {
     CREATE TABLE user_company_links (
       id INTEGER PRIMARY KEY AUTOINCREMENT, company_id INTEGER NOT NULL, user_id INTEGER NOT NULL
     );
+    -- D1137 (migration 597): resolveActiveCompany reads an archived company as none.
+    CREATE TABLE IF NOT EXISTS company_profiles (id INTEGER PRIMARY KEY, archived_at TEXT);
     -- The shape ensureProjectMembershipSchema would create, verbatim. A table
     -- that merely resembles it blocks its CREATE TABLE IF NOT EXISTS and then
     -- fails one of its three index statements.
