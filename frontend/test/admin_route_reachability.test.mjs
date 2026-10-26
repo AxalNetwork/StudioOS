@@ -171,7 +171,7 @@ function doorsIn(src) {
   // literal segment equals, so only a `:param` in that place matches it.
   for (const m of withoutNavigate.matchAll(/\b(?:to|href)=\{`(\/[^`$]*\/)\$\{[^}`]*\}(\/[^`$?#]+)/g)) doors.add(`${m[1]}\${}${m[2]}`);
 
-  // Computed-base links. `AdminDueDiligencePage.jsx:34` builds
+  // Computed-base links. `duediligence/DdCasesTab.jsx` (D1250; before it, `AdminDueDiligencePage.jsx`) builds
   //   const base = pathname.startsWith('/admin') ? '/admin/due-diligence' : '/due-diligence';
   // and links `${base}/${c.uid}`, so the literal never appears anywhere. Resolve
   // by substitution rather than by pattern: plain indexOf and slicing, no regex
@@ -564,7 +564,7 @@ test('a redirect-only /admin route is excluded, and its target is reachable', ()
   // Derived, not hardcoded: a route whose element is <Navigate> is not a surface.
   // But a redirect INTO an orphan is still a dead end, so the target is checked.
   // D953's Programs redirects and D937/D972's Lab/network redirects coexist.
-  assert.deepEqual(REDIRECTS, ['/admin', '/admin/refer-earn', '/admin/partners', '/admin/partner-invitations/firm-links', '/admin/held/programs', '/admin/held/approvals', '/admin/held/community', '/admin/held/insights', '/admin/network-profiles', '/admin/spinout-lab', '/admin/spinout-lab/preview', '/admin/news', '/admin/advisor-cohorts'],
+  assert.deepEqual(REDIRECTS, ['/admin', '/admin/refer-earn', '/admin/partners', '/admin/partner-invitations/firm-links', '/admin/held/accounts', '/admin/held/programs', '/admin/held/approvals', '/admin/held/community', '/admin/held/insights', '/admin/network-profiles', '/admin/spinout-lab', '/admin/spinout-lab/preview', '/admin/news', '/admin/advisor-cohorts'],
 
     'the set of /admin redirect routes changed; confirm each is still a redirect and not a page');
   // A `*Redirect` component names its target in its own file, not in App.jsx
@@ -585,6 +585,8 @@ test('a redirect-only /admin route is excluded, and its target is reachable', ()
     LabPreviewRedirect: ['/admin/programs/spinout-lab/preview', 'frontend/src/pages/admin/lab/labModel.js', 'LAB_PREVIEW_PATH'],
     // D972 (#2369): the roster is Advisors & Partners' Deck roster tab.
     ApRedirect: ['/admin/advisors-partners/deck', 'frontend/src/pages/admin/advisors/apModel.js', 'AP_DECK_PATH'],
+    // D941 (#2746): the Accounts page's old held address forwards to /admin/accounts.
+    HeldAccountsRedirect: ['/admin/accounts', 'frontend/src/pages/admin/accountsAddress.js', 'ACCOUNTS_PATH'],
     // D952 (#2728): Partner invitations' Firm links moved to the Firms tab.
     FirmLinksRedirect: ['/admin/advisors-partners/firms', 'frontend/src/pages/admin/advisors/apModel.js', 'AP_FIRMS_PATH'],
   };
@@ -725,7 +727,8 @@ test('the computed-base resolver still sees the due-diligence case links', () =>
   // If this regresses, /admin/due-diligence/:uid stops looking reachable from that
   // page — it stays reachable via AdminPage's raw anchor, so only this test would
   // notice, which is the point of pinning the mechanism separately.
-  const dd = doorsIn(read('frontend/src/pages/AdminDueDiligencePage.jsx')).doors;
+  // D1250 (#3265): the case links moved with the Cases tab into DdCasesTab.jsx.
+  const dd = doorsIn(read('frontend/src/pages/duediligence/DdCasesTab.jsx')).doors;
   assert.ok(dd.includes('/admin/due-diligence/'),
     'the computed base no longer resolves; template links through a const are unread');
   // D1244 (#2385): the case tabs, `${base}/${uid}/${t.key}`, reach only `:uid/:tab`.

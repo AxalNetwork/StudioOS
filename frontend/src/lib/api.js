@@ -55,9 +55,13 @@ export * from './api/cycleWrites.js';
 export * from './api/cycles.js';
 export * from './api/dataRoom.js';
 export * from './api/ddDesk.js';
+export * from './api/ddFlags.js';
 export * from './api/ddLifecycle.js';
 export * from './api/dealContext.js';
 export * from './api/dealFlow.js';
+export * from './api/dealInsights.js';
+export * from './api/dealViews.js';
+export * from './api/dealWorkroom.js';
 export * from './api/deckAssist.js';
 export * from './api/deckEditor.js';
 export * from './api/deckSources.js';
@@ -78,6 +82,8 @@ export * from './api/googleWorkspace.js';
 export * from './api/helpCenter.js';
 export * from './api/insights.js';
 export * from './api/interviewSessions.js';
+export * from './api/kyb.js';
+export * from './api/kycGovernance.js';
 export * from './api/kycHq.js';
 export * from './api/kycPeople.js';
 export * from './api/labOperations.js';
@@ -113,6 +119,8 @@ export * from './api/publicAiModels.js';
 export * from './api/publicPricing.js';
 export * from './api/railPrefs.js';
 export * from './api/railProposals.js';
+export * from './api/raiseEvidence.js';
+export * from './api/reporting.js';
 export * from './api/researchCompanies.js';
 export * from './api/researchFunds.js';
 export * from './api/researchMarkets.js';
@@ -5366,6 +5374,22 @@ export const dd = {
     request(`/dd/cases/${uid}/requests`, { method: 'POST', body: JSON.stringify(data) }),
   reviewRequest: (uid, id) =>
     request(`/dd/cases/${uid}/requests/${id}`, { method: 'PATCH', body: JSON.stringify({ state: 'reviewed' }) }),
+  // D1248 (#3263) — due dates, reminders, withdraw, item evidence and document links.
+  setRequestDue: (uid, id, dueDate) =>
+    request(`/dd/cases/${uid}/requests/${id}`, { method: 'PATCH', body: JSON.stringify({ due_date: dueDate || null }) }),
+  remindRequest: (uid, id) => request(`/dd/cases/${uid}/requests/${id}/remind`, { method: 'POST' }),
+  withdrawRequest: (uid, id, reason) =>
+    request(`/dd/cases/${uid}/requests/${id}/withdraw`, { method: 'POST', body: JSON.stringify(reason ? { reason } : {}) }),
+  addEvidenceLink: (uid, itemId, url, label) =>
+    request(`/dd/cases/${uid}/items/${itemId}/evidence`, { method: 'POST', body: JSON.stringify({ url, label }) }),
+  addEvidenceFile: (uid, itemId, file) => {
+    const fd = new FormData();
+    fd.append('file', file);
+    return request(`/dd/cases/${uid}/items/${itemId}/evidence`, { method: 'POST', body: fd });
+  },
+  /** A single-use, two-minute link for the caller alone: `kind` is `attachment` or `request_file`. */
+  documentLink: (uid, kind, id) =>
+    request(`/dd/cases/${uid}/documents/download`, { method: 'POST', body: JSON.stringify({ kind, id }) }),
   // Subject-facing surface: the ONLY dd calls a founder may make. The
   // payload carries no case internals — see routes/dd.ts invariant.
   myRequests: () => request('/dd/requests/mine'),

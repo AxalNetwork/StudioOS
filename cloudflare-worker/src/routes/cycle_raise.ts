@@ -82,7 +82,11 @@
  * Share links and holders keep their tool's plan gate (`ensureTier` 'studio',
  * decision 13), whose 402 the writer throws as a Response.
  *
- * WHO. Reading and writing are both the venture's own or an admin's
+ * D1191: Capital relationships instead admits accepted co-founder editors.
+ * Staff get a count-only summary; a separate reasoned support response records
+ * the founder-visible audit before private SQL and never grants later access.
+ *
+ * WHO (the other modules). Reading and writing are both the venture's own or an admin's
  * (`canWrite`). Unlike Validate's board, the Raise cards carry the cap table,
  * the investor pipeline and who opened the data room: what the pipeline, cap
  * table and data-room tools already keep to the venture and admins. An
@@ -105,10 +109,11 @@ import { Hono } from 'hono';
 import type { Env, User } from '../types';
 import { requireAuth, selectJwt } from '../auth';
 import { canWrite, canWritePitchDeck, type ProjectRef } from './_founder_validate_helpers';
-import { CYCLE, QUESTION, MODULES, CARD_FOR, RECORDS_FOR, INVESTOR_TYPE_LABEL, figures, cards, callsHistory, narrativeHome, recordQuery, type Ctx, type ModuleSlug } from '../services/raiseCycle';
+import { CYCLE, QUESTION, MODULES, CARD_FOR, RECORDS_FOR, INVESTOR_TYPE_LABEL, figures, nonCapitalFigures, cards, callsHistory, narrativeHome, recordQuery, type Ctx, type ModuleSlug } from '../services/raiseCycle';
 import {
   WriterError, scoreReadinessItem, rescoreReadiness, saveNarrativeVersion, updateNarrativeVersion, createDeckLink, updateDeckLink,
   addCapHolder, updateCapHolder, addProspect, updateProspect, setFileChecklistItem, setProspectNextStep,
+  importProspects,
 } from '../services/raiseWriters';
 import { hasRecords } from '../services/records';
 import { NARRATIVE_SECTIONS, compareNarrative, readNarrative, readPositioning, readableVersion, saveNarrativeSection, savePositioning } from '../services/narrative/store';
@@ -141,12 +146,24 @@ import { recomputePmf, pmfHistory, pmfModelRead } from '../services/scoring/pmfS
 import { dataRoomOwner, roomSummary } from './data_room';
 import { safeCard, type Card } from '../services/cycleCards';
 import { refuse } from '../util/refusal';
+import {
+  CapitalAccessError, capitalCanWork, capitalPage, capitalRequestPath, capitalStaff, capitalStaffRequestAllowed, capitalStudioSummary,
+  capitalSummary, capitalSupportDetails, capitalSupportHistory, recordCapitalSupport,
+} from '../services/capRelAccess';
 import useOfFunds from './cycle_use_of_funds';
+import { RaiseEvidenceError, raiseEvidenceContext, readRaiseEvidence, acceptItem as acceptEvidenceItem, dismissItem as dismissEvidenceItem, setSharing as setEvidenceSharing, linkClaim as linkEvidenceClaim, type RaiseEvidenceContext } from '../services/raiseEvidence';
 
 const cycleRaise = new Hono<{ Bindings: Env }>();
 cycleRaise.route('/use-of-funds', useOfFunds);
 
 const today = () => new Date().toISOString().slice(0, 10);
+const capitalPath = (path: string) => /\/(?:capital-relationships|prospects)(?:\/|$)/.test(path);
+
+function capitalFailure(c: any, error: unknown): Response {
+  if (error instanceof Error && error.message === 'Unauthorized') return c.json({ detail: 'Unauthorized' }, 401);
+  if (error instanceof CapitalAccessError) return refuse(c, error.status as any, { code: error.code, message: error.sentence });
+  return refuse(c, 503, { code: 'capital_unreadable', message: 'Capital relationships could not be read. Try again.' });
+}
 
 /** The project in `?project=`, and the caller, or the Response that refuses them. */
 async function scope(c: any): Promise<{ user: User; projectId: number; project: ProjectRef } | Response> {
@@ -159,9 +176,26 @@ async function scope(c: any): Promise<{ user: User; projectId: number; project: 
   const raw = String(c.req.query('project') ?? '');
   if (!/^[1-9][0-9]{0,9}$/.test(raw)) return c.json({ detail: 'project is required' }, 400);
   const projectId = Number(raw);
-  const project = (await c.env.DB.prepare('SELECT id, founder_id FROM projects WHERE id = ?')
+  let path: string;
+  try { path = capitalRequestPath(c.req.path); } catch (error) { return capitalFailure(c, error); }
+  const project = (await c.env.DB.prepare(capitalPath(path) || path.endsWith('/overview')
+    ? 'SELECT id, founder_id FROM projects WHERE id = ? AND deleted_at IS NULL' : 'SELECT id, founder_id FROM projects WHERE id = ?')
     .bind(projectId).first()) as ProjectRef | null;
   if (!project) return c.json({ detail: 'Project not found' }, 404);
+  if ((capitalPath(path) || path.endsWith('/overview')) && await isSupportSession(c)) {
+    return refuse(c, 403, { code: 'support_session_refused', message: 'Use your own staff account and give a reason for a support read.' });
+  }
+  if (capitalPath(path)) {
+    if (capitalStaff(user)) {
+      if (!capitalStaffRequestAllowed(c.req.method, c.req.path)) return refuse(c, 403, c.req.method === 'GET'
+        ? { code: 'support_read_required', message: 'Give a reason for a read-only support view.' }
+        : { code: 'admin_read_only', message: 'Staff read a summary or make a reasoned support read. They do not change the pipeline.' });
+    } else {
+      try { if (!await capitalCanWork(c.env, project, user)) return c.json({ detail: 'Forbidden' }, 403); }
+      catch (error) { return capitalFailure(c, error); }
+    }
+    return { user, projectId, project };
+  }
   if (!(/\/deck-links(?:\/|$)/.test(c.req.path) ? canWritePitchDeck(project, user) : canWrite(project, user))) return c.json({ detail: 'Forbidden' }, 403);
   return { user, projectId, project };
 }
@@ -215,6 +249,14 @@ function roomSummaryCard(env: Env, projectId: number): Promise<Card> {
   });
 }
 
+async function capitalSummaryCard(env: Env, projectId: number): Promise<Card> {
+  const summary = await capitalSummary(env, projectId);
+  return { slug: 'capital-relationships', name: 'Capital relationships', range: 'This venture', source: 'Pipeline counts',
+    caption: 'Summary only. A support read needs a reason the founder can see.', next: null,
+    state: summary.state === 'unreadable' ? 'unreadable' : summary.total === 0 ? 'empty' : 'ok', reason: summary.reason,
+    series: summary.state === 'unreadable' ? null : [{ kind: 'rows', items: summary.stages.map(row => ({ label: row.stage.replace(/_/g, ' '), value: row.count })) }] };
+}
+
 /** D914: `scope`, then the narrative's rule for an admin (read only, and only with a reason). */
 async function narrativeScope(c: any, mode: Mode): Promise<{ user: User; projectId: number; project: ProjectRef } | Response> {
   const s = await scope(c);
@@ -252,6 +294,12 @@ cycleRaise.get('/overview', async (c) => {
   const s = await scope(c);
   if (s instanceof Response) return s;
   const ctx = ctxOf(c, s.projectId);
+  if (capitalStaff(s.user)) {
+    const [figs, cs] = await Promise.all([nonCapitalFigures(ctx), Promise.all(MODULES.map(m =>
+      m.slug === 'capital-relationships' ? capitalSummaryCard(c.env, s.projectId)
+        : m.slug === 'data-room' ? roomSummaryCard(c.env, s.projectId) : CARD_FOR[m.slug](ctx)))]);
+    return c.json({ cycle: CYCLE, question: QUESTION, mode: 'summary', read_only: true, figures: figs, cards: cs });
+  }
   // D1102: the data-room card is the owner's; anyone else reads the room's summary there.
   // The other six cards are built as `cards()` builds them.
   const cardsRead = isRoomOwner(s) ? cards(ctx)
@@ -266,6 +314,15 @@ cycleRaise.get('/modules/:slug', async (c) => {
   if (!mod) return c.json({ detail: 'No such module', modules: MODULES.map((m) => m.slug) }, 404);
   const s = slug === 'investor-narrative' ? await narrativeScope(c, 'read') : await scope(c);
   if (s instanceof Response) return s;
+  if (slug === 'capital-relationships' && capitalStaff(s.user)) {
+    const summary = await capitalSummary(c.env, s.projectId);
+    const rows = summary.stages.map(row => ({ id: `summary-${row.stage}`, cells: { stage: row.stage.replace(/_/g, ' '), count: row.count } }));
+    if (summary.state === 'ok') rows.push({ id: 'summary-unrecorded', cells: { stage: 'Status not recorded', count: summary.status_not_recorded } });
+    return c.json({ module: { slug: mod.slug, name: mod.name, records_title: 'Pipeline counts' }, mode: 'summary', read_only: true,
+      card: await capitalSummaryCard(c.env, s.projectId), summary,
+      records: { state: summary.state, reason: summary.reason, cols: [{ key: 'stage', label: 'Stage' }, { key: 'count', label: 'Investors' }],
+        rows, total: summary.state === 'ok' ? rows.length : null, page: 1, page_size: 25, linkable: false } });
+  }
   // D1102: the room's files and who opened it are its owner's; refused before anything is read.
   if (slug === 'data-room') {
     const refused = roomReadRefused(c, s);
@@ -315,9 +372,44 @@ cycleRaise.get('/modules/:slug', async (c) => {
 });
 
 // D1190 (#3124): Commitments and Match, each one read. The module's gate (`scope`) applies.
+cycleRaise.get('/capital-relationships/summary', async (c) => {
+  try {
+    const user = await requireAuth(c);
+    if (!capitalStaff(user) || await isSupportSession(c)) return c.json({ detail: 'Forbidden' }, 403);
+    const raw = c.req.query('project');
+    const projectId = raw == null ? null : idParam(raw);
+    if (raw != null && projectId == null) return c.json({ detail: 'Invalid project' }, 400);
+    return c.json(await capitalStudioSummary(c.env, projectId, capitalPage(c.req.query('page'))));
+  } catch (error) { return capitalFailure(c, error); }
+});
+
+cycleRaise.post('/capital-relationships/support-read', async (c) => {
+  try {
+    const s = await scope(c);
+    if (s instanceof Response) return s;
+    const input = await body(c);
+    const prospectId = input.prospect_id == null ? null : idParam(String(input.prospect_id));
+    if (input.prospect_id != null && prospectId == null) return c.json({ detail: 'Invalid investor' }, 400);
+    if (prospectId != null && !await c.env.DB.prepare('SELECT 1 FROM raise_prospects WHERE id = ? AND project_id = ?').bind(prospectId, s.projectId).first()) return c.json({ detail: 'Investor not found' }, 404);
+    const page = capitalPage(input.page);
+    const auditId = await recordCapitalSupport(c.env, s.user, s.project, input.reason, { page, prospect_id: prospectId });
+    return c.json({ ...(await capitalSupportDetails(c.env, s.projectId, page, prospectId)), audit_id: auditId });
+  } catch (error) { return capitalFailure(c, error); }
+});
+
+cycleRaise.get('/capital-relationships/support-reads', async (c) => {
+  try {
+    const s = await scope(c);
+    if (s instanceof Response) return s;
+    if (!await capitalCanWork(c.env, s.project, s.user)) return c.json({ detail: 'Forbidden' }, 403);
+    return c.json(await capitalSupportHistory(c.env, s.projectId, capitalPage(c.req.query('page'))));
+  } catch (error) { return capitalFailure(c, error); }
+});
+
 cycleRaise.get('/capital-relationships/commitments', async (c) => {
   const s = await scope(c);
   if (s instanceof Response) return s;
+  if (capitalStaff(s.user)) return refuse(c, 403, { code: 'support_read_required', message: 'Give a reason for a read-only support view.' });
   // Mercury is the founder's alone: an owner check that cannot be read reads as not the founder.
   const founderOnly = await mercuryFounderOnly(c, s).catch(() => undefined);
   try {
@@ -331,6 +423,7 @@ cycleRaise.get('/capital-relationships/commitments', async (c) => {
 cycleRaise.get('/capital-relationships/match', async (c) => {
   const s = await scope(c);
   if (s instanceof Response) return s;
+  if (capitalStaff(s.user)) return refuse(c, 403, { code: 'support_read_required', message: 'Give a reason for a read-only support view.' });
   try {
     return c.json(await matchRead(c.env, { projectId: s.projectId, callerUserId: Number(s.user.id), get: (k) => c.req.query(k) }));
   } catch (e) {
@@ -861,6 +954,16 @@ cycleRaise.post('/prospects', async (c) => {
   } catch (e) { return writeFailed(c, e); }
 });
 
+// D1192 (#3126, CRL5): Import, at most 50 rows a request, each through the one writer.
+cycleRaise.post('/prospects/import', async (c) => {
+  const s = await scope(c);
+  if (s instanceof Response) return s;
+  const b = await body(c);
+  try {
+    return c.json(await importProspects(c.env, { projectId: s.projectId, userId: Number(s.user.id), rows: b.rows }));
+  } catch (e) { return writeFailed(c, e); }
+});
+
 cycleRaise.patch('/prospects/:id', async (c) => {
   const s = await scope(c);
   if (s instanceof Response) return s;
@@ -993,6 +1096,63 @@ cycleRaise.delete('/mercury/facts/:id', async (c) => {
   if (own instanceof Response) return own;
   if (!(await deleteRaiseFact(c.env, { integrationId: own.integrationId, projectId: s.projectId, id }))) return c.json({ detail: 'Fact not found' }, 404);
   return c.json({ ok: true });
+});
+
+// D1263: the evidence paths use scope(), then active-company and founder-only decision gates.
+async function evidenceScope(c: any, write: boolean): Promise<RaiseEvidenceContext | Response> {
+  c.header('Cache-Control', 'no-store');
+  const s = await scope(c);
+  if (s instanceof Response) return s;
+  if (await isSupportSession(c)) return c.json({ error: 'support_session_refused', message: 'Evidence decisions and source details are unavailable in a support session.' }, 403);
+  const company = await resolveActiveCompany(c.env, s.user, c.req.header(ACTIVE_COMPANY_HEADER));
+  if (c.req.header(ACTIVE_COMPANY_HEADER) && company == null) return c.json({ error: 'company_selection_refused', message: 'Switch to this venture’s company first.' }, 403);
+  const ctx = await raiseEvidenceContext(c.env, s.user, s.projectId, company);
+  if (write && !ctx.founder) throw new RaiseEvidenceError('forbidden', 403);
+  return ctx;
+}
+function evidenceFailure(c: any, error: unknown) {
+  if (error instanceof RaiseEvidenceError) return c.json({ error: error.code, message: error.sentence }, error.status);
+  return c.json({ error: 'evidence_unreadable', message: 'Evidence could not be read or saved. Try again.' }, 503);
+}
+async function evidenceBody(c: any): Promise<Record<string, unknown>> {
+  const body: unknown = await c.req.json().catch(() => null);
+  if (!body || typeof body !== 'object' || Array.isArray(body)) throw new RaiseEvidenceError('invalid', 400);
+  return body as Record<string, unknown>;
+}
+const evidencePage = (c: any) => {
+  const limit = c.req.query('limit') ?? '50', offset = c.req.query('offset') ?? '0';
+  if (!/^[0-9]{1,7}$/.test(limit) || !/^[0-9]{1,7}$/.test(offset)) throw new RaiseEvidenceError('invalid', 400);
+  return { limit: Number(limit), offset: Number(offset) };
+};
+cycleRaise.get('/evidence', async c => {
+  try { const ctx = await evidenceScope(c, false); if (ctx instanceof Response) return ctx; return c.json(await readRaiseEvidence(ctx, evidencePage(c))); }
+  catch (error) { return evidenceFailure(c, error); }
+});
+cycleRaise.post('/evidence/refresh', async c => {
+  try { const ctx = await evidenceScope(c, true); if (ctx instanceof Response) return ctx; return c.json(await readRaiseEvidence(ctx, { ...evidencePage(c), refresh: true })); }
+  catch (error) { return evidenceFailure(c, error); }
+});
+cycleRaise.post('/evidence/items/:id/accept', async c => {
+  try { const ctx = await evidenceScope(c, true); if (ctx instanceof Response) return ctx; const body = await evidenceBody(c);
+    if (Object.keys(body).some(k => k !== 'snapshot_hash')) throw new RaiseEvidenceError('invalid', 400);
+    return c.json(await acceptEvidenceItem(ctx, c.req.param('id'), body.snapshot_hash)); }
+  catch (error) { return evidenceFailure(c, error); }
+});
+cycleRaise.post('/evidence/items/:id/dismiss', async c => {
+  try { const ctx = await evidenceScope(c, true); if (ctx instanceof Response) return ctx; return c.json(await dismissEvidenceItem(ctx, c.req.param('id'))); }
+  catch (error) { return evidenceFailure(c, error); }
+});
+cycleRaise.patch('/evidence/items/:id', async c => {
+  try { const ctx = await evidenceScope(c, true); if (ctx instanceof Response) return ctx; return c.json(await setEvidenceSharing(ctx, c.req.param('id'), await evidenceBody(c))); }
+  catch (error) { return evidenceFailure(c, error); }
+});
+cycleRaise.post('/evidence/claims/:id/link', async c => {
+  try { const ctx = await evidenceScope(c, true); if (ctx instanceof Response) return ctx; return c.json(await linkEvidenceClaim(ctx, c.req.param('id'), await evidenceBody(c))); }
+  catch (error) { return evidenceFailure(c, error); }
+});
+cycleRaise.delete('/evidence/claims/:id/link', async c => {
+  try { const ctx = await evidenceScope(c, true); if (ctx instanceof Response) return ctx; return c.json(await linkEvidenceClaim(ctx, c.req.param('id'), await evidenceBody(c), true)); }
+  catch (error) { return evidenceFailure(c, error); }
 });
 
 export default cycleRaise;

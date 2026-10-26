@@ -16,7 +16,6 @@ import { Unreadable } from '../ui';
 import { useDealroomQuota, QuotaLine, JoinNote, JoinLeaveButton } from '../components/deals/DealRoomJoin';
 import DealInvitationsTab from '../components/deals/DealInvitationsTab';
 import DealTransfersTab from '../components/deals/DealTransfersTab';
-import DealReferencesTab from '../components/deals/DealReferencesTab';
 import DealSyndicates from '../components/deals/DealSyndicates';
 import MercuryMatch from '../components/MercuryMatch';
 import { NOT_YET, TAB_DEFS, WAITS, dealTabsFor, tabHref, tabOf } from './dealPageModel';
@@ -28,6 +27,7 @@ import { blockedRole, keyStrip, readFailure, trackOf } from './deal/dealFrameMod
 import { BTN_P, BTN_S, DealLoading, DealNotFound, DealUnreadable, KeyStrip, NoPermission, RespondDialog, StageTrack } from './deal/DealFrame';
 import DealOverview from './deal/DealOverview';
 import DealNotes, { DealActivity } from './deal/DealNotes';
+import { DealCommitment, DealDiligence, DealDocuments, DealTerms } from './deal/DealWorkTabs';
 import {
   ArrowLeft, FileText, Loader2, X, DollarSign, Send, Check, Users,
 } from 'lucide-react';
@@ -189,17 +189,15 @@ export default function DealRoomPage() {
       {tab === 'scorecard' && <VentureScorecard />}
       {/* D1261 (#2430): VR8, VR9's investor block; its read is PIPE-RAISE part 4. */}
       {tab === 'evidence' && <EvidenceSummary />}
-      {['team', 'market', 'traction', 'terms'].includes(tab) && <WaitCard tab={tab} />}
-      {tab === 'diligence' && (
-        <>
-          <WaitCard tab="diligence" />
-          <DealReferencesTab dealId={deal.id} />
-        </>
-      )}
-      {tab === 'documents' && <DocumentsTab dealId={deal.id} />}
+      {['team', 'market', 'traction'].includes(tab) && <WaitCard tab={tab} />}
+      {/* D1153 (#3058): the working tabs, DL7–DL13. An investor's Documents and Commitment are theirs; a founder and staff keep today's. */}
+      {tab === 'diligence' && <DealDiligence deal={deal} userId={user?.id} />}
+      {tab === 'documents' && (isInvestor ? <DealDocuments deal={deal} /> : <DocumentsTab dealId={deal.id} />)}
+      {tab === 'terms' && <DealTerms deal={deal} investor={isInvestor} />}
       {/* D1213 (#2424): the round's closing room, its own address under the deal. */}
-      {tab === 'commitment' && <p className="m-0 text-sm"><Link to={tabHref(deal.id, 'closing')} className="font-semibold underline" data-testid="deal-closing-door">Open the closing room</Link> for the round's lines, checklist and what is received.</p>}
-      {tab === 'commitment' && <CommitmentsTab key={proofKey} dealId={deal.id} currency={deal.currency} proof={isAdmin && !branchOfUser(user)} user={user} onShare={openProof} founderMatch={isDealFounder(role, user, deal)} />}
+      {tab === 'commitment' && isInvestor && <DealCommitment key={proofKey} deal={deal} user={user} onChangeAmount={() => setCommitOpen(true)} />}
+      {tab === 'commitment' && !isInvestor && <p className="m-0 text-sm"><Link to={tabHref(deal.id, 'closing')} className="font-semibold underline" data-testid="deal-closing-door">Open the closing room</Link> for the round's lines, checklist and what is received.</p>}
+      {tab === 'commitment' && !isInvestor && <CommitmentsTab key={proofKey} dealId={deal.id} currency={deal.currency} proof={isAdmin && !branchOfUser(user)} user={user} onShare={openProof} founderMatch={isDealFounder(role, user, deal)} />}
       {tab === 'closing' && <ClosingRoom dealId={deal.id} role={role} deal={deal} />}
       {/* DL14: an investor's Notes tab: their firm's notes, Eadwyn's draft slot and the activity. */}
       {tab === 'notes' && <DealNotes dealId={deal.id} userId={user?.id} />}
@@ -211,7 +209,7 @@ export default function DealRoomPage() {
 
       {respondTo && <RespondDialog answer={respondTo} onConfirm={respond} onClose={() => setRespondTo(null)} />}
       {commitOpen && <CommitModal deal={deal} user={user} onClose={() => setCommitOpen(false)} onDone={async (opts) => {
-        setCommitOpen(false); loadDeal(); navigate(tabHref(deal.id, 'commitment'));
+        setCommitOpen(false); loadDeal(); loadMine(); setProofKey((k) => k + 1); navigate(tabHref(deal.id, 'commitment'));
         if (!opts?.share || !showsProof(user)) return;
         try {
           const read = await mercuryAttestationsApi.targets();

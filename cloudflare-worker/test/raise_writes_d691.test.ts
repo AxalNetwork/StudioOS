@@ -48,6 +48,7 @@ const BASELINE = readFileSync(resolve(process.cwd(), 'cloudflare-worker/sql/sche
 const sqlOf = (file: string) => readFileSync(resolve(process.cwd(), `cloudflare-worker/sql/migrations/${file}`), 'utf8');
 
 const ADMIN = 30;
+const CALLER = 31;
 const P = 1;
 
 function fixture() {
@@ -69,13 +70,16 @@ function fixture() {
   db.exec(sqlOf('544_narrative_sections.sql')); // D908: a version based on another copies its narrative stores
   addColumnsFrom(db, sqlOf('441_build_cycle_stores.sql'), 'cap_table_holders');
   db.prepare('INSERT INTO users (id, role, name, email, is_active) VALUES (?, ?, ?, ?, 1)').run(ADMIN, 'admin', 'Ada Admin', 'ada@example.test');
+  // D1130: an admin no longer reaches the legacy cap-table routes, so a
+  // studio-tier account on Kestrel's founder makes the cap-table calls below.
+  db.prepare("INSERT INTO users (id, role, name, email, is_active, founder_id, subscription_tier, subscription_status) VALUES (?, 'founder', 'Cal Caller', 'cal@example.test', 1, 1001, 'studio', 'active')").run(CALLER);
   db.exec(`INSERT INTO projects (id, name, founder_id) VALUES (${P}, 'Kestrel Labs', 1001)`);
   return db;
 }
 
 let wrap: ((db: any) => any) | null = null;
 async function call(db: DatabaseSync, method: string, path: string, body?: unknown) {
-  const tok = await new SignJWT({ user_id: ADMIN, role: 'admin' }).setProtectedHeader({ alg: 'HS256' })
+  const tok = await new SignJWT({ user_id: CALLER, role: 'founder' }).setProtectedHeader({ alg: 'HS256' })
     .setIssuedAt().setExpirationTime('1h').sign(new TextEncoder().encode(JWT_SECRET));
   const DB = wrap ? wrap(d1Over(db)) : d1Over(db);
   const res = await captable.request(path, {
@@ -600,6 +604,7 @@ function roomFixture() {
   addColumnsFrom(db, stripForeignKeys(sqlOf('596_data_room_file_source.sql')), 'data_room_files');
   addColumnsFrom(db, stripForeignKeys(sqlOf('442_raise_cycle_stores.sql')), 'data_room_files');
   withGrantFolders(db); // D1103: migration 594
+  addColumnsFrom(db, stripForeignKeys(sqlOf('622_dd_documents_due_reminders.sql')), 'dd_requests'); // D1248: withdrawn requests take no file
   const u = db.prepare('INSERT INTO users (id, role, founder_id, name, email) VALUES (?,?,?,?,?)');
   u.run(R_FOUNDER, 'founder', 300, 'Fen Founder', 'fen@example.test');
   u.run(COMMITTED, 'investor', null, 'Cal Committed', 'Cal@Example.test');
@@ -1447,4 +1452,61 @@ test('#2691: copies preserve version metadata, explicit overrides win, and savin
   assert.deepEqual({...db.prepare('SELECT why_now,check_against_json FROM narrative_version_meta WHERE project_id=? AND version=?').get(C_P,override.version)}, {why_now:null,check_against_json:'["deck"]'});
   assert.equal(logs(db,"entity_type='raise.investor-narrative'").length,4,'one cycle write per save/duplicate');
  }finally{db.close();}
+});
+
+// ---------------------------------------------------------------------------
+// D1192 (#3126) — the board's status and Import, through the one writer
+// ---------------------------------------------------------------------------
+
+test('D1192: a committed investor takes Soft, Signed or Wired, none on another stage, and a stage moved away clears it', async () => {
+  // Mutation checked: the stage guard dropped → a status lands on Meeting; the clear on a move away dropped → Wired stays at Passed.
+  const db = cycleFixture();
+  db.exec(`INSERT INTO raise_prospects (id, uid, project_id, name, stage) VALUES (7, 'rp-k', ${C_P}, 'Harbour Angels', 'meeting')`);
+  const st = () => ({ ...(db.prepare('SELECT stage, commit_status FROM raise_prospects WHERE id = 7').get() as any) });
+  assert.equal((await cyc(db, C_FOUNDER, 'PATCH', q('/prospects/7'), { commit_status: 'signed' })).status, 400, 'no status before Committed');
+  const moved = await cyc(db, C_FOUNDER, 'PATCH', q('/prospects/7'), { stage: 'committed', commit_status: 'Signed' });
+  assert.equal(moved.status, 200, moved.raw);
+  assert.deepEqual(st(), { stage: 'committed', commit_status: 'signed' });
+  assert.equal((await cyc(db, C_FOUNDER, 'PATCH', q('/prospects/7'), { commit_status: 'wired' })).status, 200, 'a status alone on a committed card');
+  assert.equal(st().commit_status, 'wired');
+  assert.equal((await cyc(db, C_FOUNDER, 'PATCH', q('/prospects/7'), { commit_status: 'promised' })).status, 400, 'an unknown status');
+  assert.equal((await cyc(db, C_FOUNDER, 'PATCH', q('/prospects/7'), { commit_status: null })).status, 200, 'Status not recorded');
+  assert.deepEqual(st(), { stage: 'committed', commit_status: null });
+  await cyc(db, C_FOUNDER, 'PATCH', q('/prospects/7'), { commit_status: 'soft' });
+  assert.equal((await cyc(db, C_FOUNDER, 'PATCH', q('/prospects/7'), { stage: 'passed' })).status, 200);
+  assert.deepEqual(st(), { stage: 'passed', commit_status: null }, 'a status never outlives Committed');
+  assert.equal((await cyc(db, C_OTHER, 'PATCH', q('/prospects/7'), { stage: 'committed', commit_status: 'wired' })).status, 403);
+  const details = logs(db, "entity_type = 'raise.capital-relationships'").map((x) => x.details);
+  assert.deepEqual(details, ['Investor edited: stage, status', 'Investor edited: status', 'Investor edited: status', 'Investor edited: status', 'Investor edited: stage']);
+});
+
+test('D1192: Import adds at most 50 rows a request through createProspect, logs each, and reports every skipped row with its number', async () => {
+  // Mutation checked: the 50-row cap dropped → 51 rows accepted; a skipped row not reported → `skipped` short; the log per row dropped.
+  const db = cycleFixture();
+  db.exec(`INSERT INTO raise_prospects (uid, project_id, name, email, stage) VALUES ('rp-dup', ${C_P}, 'Harbour Angels', 'deals@harbour.example.test', 'meeting')`);
+  const was = n(db, 'SELECT COUNT(*) AS n FROM raise_prospects');
+  const res = await cyc(db, C_FOUNDER, 'POST', q('/prospects/import'), { rows: [
+    { name: 'Northwind Angels', firm: 'Northwind', stage: 'Identified' },
+    { name: 'Juno Capital', stage: 'hot' },
+    { email: 'not-an-email' },
+    { name: 'Harbour Again', email: 'Deals@Harbour.example.test' },
+    { name: 'Kite Partner Fund', stage: 'meeting', amount: 25000 },
+  ] });
+  assert.equal(res.status, 200, res.raw);
+  assert.deepEqual(res.body, { created: 2, total: 5, skipped: [
+    { row: 2, reason: 'The stage is not one of the pipeline’s' },
+    { row: 3, reason: 'A name or a valid email is required' },
+    { row: 4, reason: 'Already in the pipeline' },
+  ] });
+  assert.equal(n(db, 'SELECT COUNT(*) AS n FROM raise_prospects'), was + 2);
+  assert.deepEqual((db.prepare(`SELECT name, stage FROM raise_prospects WHERE name IN ('Northwind Angels', 'Kite Partner Fund') ORDER BY id`).all() as any[]).map((r) => [r.name, r.stage]),
+    [['Northwind Angels', 'to_contact'], ['Kite Partner Fund', 'meeting']]);
+  assert.deepEqual(logs(db, "entity_type = 'raise.capital-relationships'").map((x) => [x.action, x.details]),
+    [['prospect_created', 'Investor imported at Identified'], ['prospect_created', 'Investor imported at Meeting']]);
+  assert.ok(logs(db).every((x) => !NAMES.test(String(x.details))), 'no investor name in a log');
+  const big = Array.from({ length: 51 }, (_, i) => ({ name: `Fund ${i}` }));
+  assert.equal((await cyc(db, C_FOUNDER, 'POST', q('/prospects/import'), { rows: big })).status, 400, 'at most 50 rows a request');
+  assert.equal((await cyc(db, C_FOUNDER, 'POST', q('/prospects/import'), { rows: [] })).status, 400);
+  assert.equal((await cyc(db, C_OTHER, 'POST', q('/prospects/import'), { rows: [{ name: 'Juno' }] })).status, 403);
+  assert.equal(n(db, 'SELECT COUNT(*) AS n FROM raise_prospects'), was + 2, 'a refused import adds nothing');
 });

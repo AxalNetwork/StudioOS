@@ -1,3 +1,4 @@
+import { addKybCaseStores } from './_approval_s16_stores.mjs';
 /**
  * Task #108 — a company's KYB, beside the account's rather than instead of it.
  *
@@ -88,7 +89,8 @@ function freshDb() {
       jwt_min_iat INTEGER, name TEXT, email TEXT
     );
     CREATE TABLE company_profiles (
-      id INTEGER PRIMARY KEY AUTOINCREMENT, uid TEXT NOT NULL UNIQUE, company_name TEXT NOT NULL
+      id INTEGER PRIMARY KEY AUTOINCREMENT, uid TEXT NOT NULL UNIQUE, company_name TEXT NOT NULL,
+      archived_at TEXT
     );
     CREATE TABLE user_company_links (
       id INTEGER PRIMARY KEY AUTOINCREMENT, uid TEXT, company_id INTEGER NOT NULL,
@@ -106,6 +108,7 @@ function freshDb() {
   // because the test's own table still had it. A schema the test writes for
   // itself is a schema the test cannot check.
   db.exec(readFileSync(resolve(process.cwd(), MIGRATION_220), 'utf8'));
+  addKybCaseStores(db);
 
   const u = db.prepare('INSERT INTO users (id, role, name, email) VALUES (?,?,?,?)');
   u.run(ALICE, 'founder', 'Alice', 'alice@example.com');

@@ -24,6 +24,9 @@
  * 10. Revoke: the provider's endpoint is called when it has one, and the
  *     stored tokens are deleted either way.
  * 11. No token reaches a log, an error or the drift line.
+ * 13. D856's setup lock: a setup tool is called only with a live one-time
+ *     ticket for its provider and its step, once; a destructive or changed
+ *     setup tool is not offered; a ticket cannot name a read or write tool.
  *
  *   node --experimental-strip-types --no-warnings --import ./cloudflare-worker/test/_ts-loader.mjs \
  *     --test cloudflare-worker/test/mcp_client_d847.test.ts
@@ -34,7 +37,7 @@ import { readFileSync, readdirSync, statSync } from 'node:fs';
 import { join, relative, resolve } from 'node:path';
 import { createHash, randomBytes } from 'node:crypto';
 import {
-  discoverMcp, exchangeMcpCode, onProviderHosts, headerParams, headerValue, issuerAccepted, LEASE_POLL_MS, MAX_TOOL_PAGES, mcpAccessFor, mcpClientFor,
+  discoverMcp, exchangeMcpCode, mintMcpSetupTicket, onProviderHosts, headerParams, headerValue, issuerAccepted, LEASE_POLL_MS, MAX_TOOL_PAGES, mcpAccessFor, mcpClientFor,
   mcpCredentialsOf, MCP_MAX_BODY_BYTES, openMcpSession, refreshMcpCredentials, revokeMcpConnection, toolFingerprint, authorizeMcpUrl,
   type McpCredentials,
 } from '../src/integrations/mcpClient.ts';
@@ -111,12 +114,16 @@ async function storeRow(env: any, db: any, creds: McpCredentials | Record<string
 test('1. records are frozen, write tools need a publishing issue, resources sit on their hosts, Mercury equals D840', async () => {
   assert.ok(Object.isFrozen(MCP_PROVIDERS));
   // D1085 (#2950): Notion is the second, and the first the generic sign-in (D1080) serves.
-  assert.deepEqual(Object.keys(MCP_PROVIDERS), ['mercury', 'notion'], 'Mercury, then Notion');
+  // D856 (#2501): WhatsApp Business is the third, for its guided setup only.
+  assert.deepEqual(Object.keys(MCP_PROVIDERS), ['mercury', 'notion', 'whatsapp_business'], 'Mercury, then Notion, then WhatsApp Business');
   for (const [key, p] of Object.entries(MCP_PROVIDERS)) {
     assert.equal(p.key, key);
-    for (const f of ['resources', 'hosts', 'scopes', 'accepted_scopes', 'read_tools', 'write_tools', 'registration', 'headers'] as const) assert.ok(Object.isFrozen(p[f]), `${key}.${f}`);
+    for (const f of ['resources', 'hosts', 'scopes', 'accepted_scopes', 'read_tools', 'write_tools', 'setup_tools', 'registration', 'headers'] as const) assert.ok(Object.isFrozen(p[f]), `${key}.${f}`);
     assert.ok(Object.isFrozen(p));
     if (p.publish_issue === null) assert.deepEqual([...p.write_tools], [], `${key} lists a write tool without a publishing issue`);
+    // D856: a setup tool needs the issue that asked for a guided setup, and is never also a read or a write tool.
+    if (p.setup_issue == null) assert.deepEqual([...p.setup_tools!], [], `${key} lists a setup tool without a setup issue`);
+    for (const t of p.setup_tools!) assert.ok(!p.read_tools.includes(t) && !p.write_tools.includes(t), `${key}: ${t} is a setup tool and another kind`);
     for (const r of p.resources) assert.ok(p.hosts.some((h) => new URL(r).hostname.endsWith(h)), `${key}: ${r} is off its hosts`);
     for (const s of p.scopes) assert.ok(p.accepted_scopes.includes(s), `${key}: asks for ${s} but would refuse it`);
     assert.ok(p.budget > 0 && p.budget <= 24, key);
@@ -152,10 +159,12 @@ test('2. the client\'s callers are named; the client, the records and src/mcp/ n
   // D852 (#2475): a member's custom servers are the client's second caller.
   // D1080 (#2945): the generic sign-in (its route and its helpers) is the third.
   // D1085 (#2950): Notion's provider (its disconnect and revoke) and its typed reads are the fourth.
-  assert.deepEqual(importers(/from\s+['"][^'"]*integrations\/mcpClient['"]|from\s+['"]\.\/mcpClient['"]|from\s+['"]\.\.\/mcpClient['"]/), ['cloudflare-worker/src/integrations/customMcp.ts', 'cloudflare-worker/src/integrations/mcpSignIn.ts', 'cloudflare-worker/src/integrations/providers/notion.ts', 'cloudflare-worker/src/routes/connector_mcp_oauth.ts', 'cloudflare-worker/src/services/mercury/mcp.ts', 'cloudflare-worker/src/services/notion/reads.ts']);
+  assert.deepEqual(importers(/from\s+['"][^'"]*integrations\/mcpClient['"]|from\s+['"]\.\/mcpClient['"]|from\s+['"]\.\.\/mcpClient['"]/), ['cloudflare-worker/src/integrations/customMcp.ts', 'cloudflare-worker/src/integrations/mcpSignIn.ts', 'cloudflare-worker/src/integrations/providers/notion.ts', 'cloudflare-worker/src/routes/channels.ts', 'cloudflare-worker/src/routes/connector_mcp_oauth.ts', 'cloudflare-worker/src/services/channels/whatsappSetup.ts', 'cloudflare-worker/src/services/mercury/mcp.ts', 'cloudflare-worker/src/services/notion/reads.ts']);
+  // D856 (#2501): the setup route is the only minter of a setup ticket, and mints one only after the founder's confirm.
+  assert.deepEqual(importers(/\bmintMcpSetupTicket\(/), ['cloudflare-worker/src/integrations/mcpClient.ts', 'cloudflare-worker/src/routes/channels.ts']);
   // #2549: public status reads provider metadata only. The transport importer
   // assertion above still permits only the two actual client callers.
-  assert.deepEqual(importers(/from\s+['"][^'"]*integrations\/mcpProviders['"]|from\s+['"]\.\/mcpProviders['"]|from\s+['"]\.\.\/mcpProviders['"]/), ['cloudflare-worker/src/integrations/customMcp.ts', 'cloudflare-worker/src/integrations/mcpClient.ts', 'cloudflare-worker/src/integrations/mcpSignIn.ts', 'cloudflare-worker/src/integrations/providers/notion.ts', 'cloudflare-worker/src/routes/connector_mcp_oauth.ts', 'cloudflare-worker/src/routes/public.ts', 'cloudflare-worker/src/services/mercury/mcp.ts', 'cloudflare-worker/src/services/notion/reads.ts']);
+  assert.deepEqual(importers(/from\s+['"][^'"]*integrations\/mcpProviders['"]|from\s+['"]\.\/mcpProviders['"]|from\s+['"]\.\.\/mcpProviders['"]/), ['cloudflare-worker/src/integrations/customMcp.ts', 'cloudflare-worker/src/integrations/mcpClient.ts', 'cloudflare-worker/src/integrations/mcpSignIn.ts', 'cloudflare-worker/src/integrations/providers/notion.ts', 'cloudflare-worker/src/routes/channels.ts', 'cloudflare-worker/src/routes/connector_mcp_oauth.ts', 'cloudflare-worker/src/routes/public.ts', 'cloudflare-worker/src/services/channels/whatsappSetup.ts', 'cloudflare-worker/src/services/mercury/mcp.ts', 'cloudflare-worker/src/services/notion/reads.ts']);
   const client = files.find((f) => f.path.endsWith('integrations/mcpClient.ts'))!.text;
   const records = files.find((f) => f.path.endsWith('integrations/mcpProviders.ts'))!.text;
   assert.doesNotMatch(client, /from\s+['"][^'"]*\/mcp\/|from\s+['"]\.\.\/mcp['"]/, 'the client imports StudioOS\'s own MCP server');
@@ -592,4 +601,47 @@ test('12. Mercury\'s wrapper keeps D710\'s words for the shared client\'s new on
     await assert.rejects(() => openMercuryMcp({ accessToken: 't', fetcher }), (e: any) => e instanceof MercuryClientError && e.code === code && e.status === status, `${code} ${status}`);
   }
   await assert.rejects(() => openMercuryMcp({ accessToken: 't', fetcher: answer(200), url: 'https://mcp.mercury.com.evil.example/mcp' }), (e: any) => e instanceof MercuryClientError && e.code === 'path_not_allowed');
+});
+
+test('13. D856: a setup tool needs a live ticket for its provider and step, once; annotations and pins still narrow', async () => {
+  // Mutations checked: the ticket check skipped; a ticket reusable; another provider's ticket accepted;
+  // a destructive setup tool offered; a pinned schema not compared; a read tool mintable.
+  const TAG = 'tag_note';
+  const ARCHIVE = 'archive_note';
+  const tools = () => [...defaultNotesTools(), { name: TAG, inputSchema: { type: 'object', properties: { id: { type: 'string' } } } }, { name: ARCHIVE, inputSchema: { type: 'object' } }];
+  const setup = notes({ setup_tools: [TAG, ARCHIVE], setup_issue: 9998 });
+  const fake = notesFake({ tools: tools() });
+  const s = await openMcpSession(setup, { accessToken: fake.signedIn(), fetcher: fake.fetch, ...quiet });
+  assert.deepEqual([...s.setup_offered], [TAG, ARCHIVE]);
+  assert.deepEqual([...s.offered], ['search_notes', 'get_note'], 'a setup tool is not a read');
+  assert.equal(s.drift.some((d) => d.tool === TAG), false, 'a recorded setup tool is not unknown');
+
+  const before = fake.calls.length;
+  const other = mintMcpSetupTicket(notes({ key: 'other_fake', setup_tools: [TAG], setup_issue: 9998 }), [TAG]);
+  for (const ticket of [undefined, { provider: 'notes_fake', tools: [TAG] }, other, mintMcpSetupTicket(setup, [ARCHIVE])]) {
+    await assert.rejects(() => s.callTool(TAG, { id: 'n1' }, ticket as any), (e: any) => e.code === 'path_not_allowed', JSON.stringify(ticket));
+  }
+  assert.equal(fake.calls.length, before, 'refused before any request');
+
+  const ticket = mintMcpSetupTicket(setup, [TAG]);
+  assert.deepEqual(await s.callTool(TAG, { id: 'n1' }, ticket), { tool: TAG, arguments: { id: 'n1' } });
+  await assert.rejects(() => s.callTool(TAG, { id: 'n1' }, ticket), (e: any) => e.code === 'path_not_allowed', 'a ticket is spent');
+  assert.deepEqual(fake.toolCalls(), [TAG]);
+
+  // Only setup tools of the record are mintable: never a read, a write or a name off it.
+  for (const names of [[], ['get_note'], [FAKE_WRITE_TOOL], ['not_listed']]) {
+    assert.throws(() => mintMcpSetupTicket(notes({ write_tools: [FAKE_WRITE_TOOL], publish_issue: 9999, setup_tools: [TAG], setup_issue: 9998 }), names), (e: any) => e.code === 'path_not_allowed', names.join());
+  }
+  // The write lock is unchanged by a ticket: a write tool is never callable.
+  const both = notes({ write_tools: [FAKE_WRITE_TOOL], publish_issue: 9999, setup_tools: [TAG], setup_issue: 9998 });
+  const w = await openMcpSession(both, { accessToken: fake.signedIn(), fetcher: fake.fetch, ...quiet });
+  await assert.rejects(() => w.callTool(FAKE_WRITE_TOOL, {}, mintMcpSetupTicket(both, [TAG])), (e: any) => e.code === 'path_not_allowed');
+
+  // A destructive setup tool, and a setup tool whose schema left its pin, are not offered.
+  const f = notesFake({ tools: tools().map((t: any) => t.name === ARCHIVE ? { ...t, annotations: { destructiveHint: true } } : t) });
+  const pinned = notes({ setup_tools: [TAG, ARCHIVE], setup_issue: 9998, tool_pins: { search_notes: await toolFingerprint(defaultNotesTools()[0]), get_note: await toolFingerprint(defaultNotesTools()[1]), [TAG]: 'not-the-schema' } });
+  const a = await openMcpSession(pinned, { accessToken: f.signedIn(), fetcher: f.fetch, ...quiet });
+  assert.deepEqual([...a.setup_offered], []);
+  assert.deepEqual(a.drift.filter((d) => d.tool === TAG || d.tool === ARCHIVE), [{ tool: TAG, why: 'changed' }, { tool: ARCHIVE, why: 'annotated' }]);
+  await assert.rejects(() => a.callTool(TAG, {}, mintMcpSetupTicket(pinned, [TAG])), (e: any) => e.code === 'path_not_allowed');
 });

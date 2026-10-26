@@ -17,6 +17,16 @@
  * before any request; and a read tool the server annotates as not read-only
  * or destructive is refused. Annotations can only narrow the list.
  *
+ * A NARROWER LOCK FOR SETUP (D856, #2501). `setup_tools` is empty unless
+ * `setup_issue` names the provider issue that asked for a guided setup. A
+ * setup tool changes the member's own account at the provider (register a
+ * number, subscribe a webhook, create a template), so it is callable only
+ * with a one-time setup ticket (`mintMcpSetupTicket`), which the setup route
+ * mints after the member confirms that one step, for that provider and that
+ * step's tools alone, each once. A setup tool the server annotates as
+ * destructive is refused. The write lock above stays as it is, and #2400's
+ * publish ticket stays a separate thing.
+ *
  * THE SESSION (D847 decision 3). `per_request`: a session lives for one
  * Worker request. A `legacy` server's `Mcp-Session-Id` is kept in memory for
  * that request only and the server expires it; a `modern` server
@@ -53,6 +63,10 @@ export interface McpProvider {
   readonly write_tools: readonly string[];
   /** The provider issue that asked for publishing, or null. */
   readonly publish_issue: number | null;
+  /** D856: tools that change the member's own account at the provider, each callable once per setup ticket. Empty unless `setup_issue` is set. */
+  readonly setup_tools?: readonly string[];
+  /** D856: the provider issue that asked for a guided setup, or null. */
+  readonly setup_issue?: number | null;
   /** Tried in this order. */
   readonly registration: readonly McpRegistration[];
   /** The client ID metadata document's https URL on axal.vc, or null when none is published. */
@@ -85,6 +99,8 @@ export function mcpProvider(p: McpProvider): McpProvider {
     accepted_scopes: list(p.accepted_scopes),
     read_tools: list(p.read_tools),
     write_tools: list(p.write_tools),
+    setup_tools: list(p.setup_tools ?? []),
+    setup_issue: p.setup_issue ?? null,
     registration: Object.freeze([...p.registration]),
     headers: Object.freeze({ ...p.headers }),
     tool_pins: p.tool_pins ? Object.freeze({ ...p.tool_pins }) : null,
@@ -170,10 +186,54 @@ const NOTION = mcpProvider({
   callback_path: '/api/integrations/mcp/notion/callback',
 });
 
+/**
+ * D856 (#2501, #2500): Meta's WhatsApp Business Tools MCP, for the guided
+ * setup only (`services/channels/whatsappSetup.ts`). Conversations keep
+ * arriving by the Cloud API webhook (D684); no tool here reads one.
+ *
+ * EVERY META FACT HERE IS UNVERIFIED (D856.md §1). Meta's page did not resolve
+ * from the build environment, so the server URL, the scopes and the tool
+ * names come from search coverage, read 2026-10-22, and wait for the first
+ * live sign-in:
+ * - `read_tools` are the setup's reads: the prerequisites, the account's
+ *   numbers and its templates.
+ * - `setup_tools` register a number, subscribe Axal's app to the account, and
+ *   create the consent-notice template. Each is called only with the
+ *   founder's one-time ticket for that step.
+ * - No message-sending tool is listed, the test message included, and no
+ *   tool that creates an account or adds a number: Meta's OTP stays in
+ *   Meta's own flow.
+ * - `write_tools` is empty, as every record's is without #2400.
+ */
+const WHATSAPP_BUSINESS = mcpProvider({
+  key: 'whatsapp_business',
+  resources: ['https://mcp.facebook.com/whatsapp_business_tools'],
+  hosts: ['facebook.com'],
+  scopes: ['whatsapp_business_management', 'whatsapp_business_messaging'],
+  accepted_scopes: ['whatsapp_business_management', 'whatsapp_business_messaging'],
+  read_tools: ['check_prerequisites', 'list_phone_numbers', 'list_message_templates'],
+  write_tools: [],
+  publish_issue: null,
+  setup_tools: ['register_phone_number', 'subscribe_app', 'create_message_template'],
+  setup_issue: 2501,
+  registration: ['dcr'],
+  cimd_url: null,
+  era: 'auto',
+  budget: 12,
+  headers: {},
+  session: 'per_request',
+  tool_pins: null,
+  lease: 'mcp:whatsapp_business',
+  state_provider: 'mcp_whatsapp_business',
+  client_key_prefix: 'mcp_client:whatsapp_business:',
+  callback_path: '/api/integrations/mcp/whatsapp_business/callback',
+});
+
 /** Every MCP provider, Mercury first. */
 export const MCP_PROVIDERS: Readonly<Record<string, McpProvider>> = Object.freeze({
   mercury: MERCURY,
   notion: NOTION,
+  whatsapp_business: WHATSAPP_BUSINESS,
 });
 
 export function mcpProviderFor(key: string): McpProvider | null {

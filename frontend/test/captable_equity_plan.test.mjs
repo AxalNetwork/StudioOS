@@ -50,11 +50,20 @@ test('cap-table vesting readers remain scoped to their intended audience', () =>
   // D896 (#2675) added one more on purpose: the pitch deck's sources count
   // the venture's vesting schedules through its own cap-table holders, as a
   // number for a card, read only — pinned below.
+  // D1262 (#3285) adds project/holder/user-scoped Team counts in Raise.
+  // Real SQLite tests in raise_evidence_fixes_d1262 cover its scope and
+  // aggregate-only projection; it returns no personal vesting schedule.
+  // D1263 adds the founder-scoped evidence candidate reader. Its route and
+  // cross-project privacy gates are exercised by raise_evidence_d1263.test.ts.
   assert.deepEqual(
     readers.sort(),
-    ['integrations/providers/carta.ts', 'routes/captable.ts', 'routes/company.ts', 'routes/cycle_build.ts', 'services/capTableRegister.ts', 'services/capTableWrites.ts', 'services/decks/sources.ts', 'services/records/build.ts'],
-    'only the Carta importer, the four reviewed readers and the one reviewed writer should touch these tables',
+    ['integrations/providers/carta.ts', 'routes/captable.ts', 'routes/company.ts', 'routes/cycle_build.ts', 'services/capTableRegister.ts', 'services/capTableWrites.ts', 'services/decks/sources.ts', 'services/raiseCycle.ts', 'services/raiseEvidenceSources.ts', 'services/records/build.ts'],
+    'only the importer, declared readers and reviewed writer should touch these tables',
   );
+  const raise = read('cloudflare-worker/src/services/raiseCycle.ts');
+  assert.match(raise, /v\.holder_id = h\.id AND v\.user_id = h\.user_id[\s\S]*WHERE h\.project_id = \?/,
+    'Raise reads vesting through the requested project’s holders and their own users');
+  assert.doesNotMatch(raise, /(INSERT INTO|UPDATE|DELETE FROM)\s+cap_table_/, 'Raise cannot write the personal cap-table stores');
   const deck = read('cloudflare-worker/src/services/decks/sources.ts');
   assert.doesNotMatch(deck, /cap_table_option_pools/, 'the deck counts vesting rows, not pools');
   assert.doesNotMatch(deck, /(INSERT INTO|UPDATE|DELETE FROM)\s+cap_table_/, 'a read, never a write');
@@ -108,9 +117,9 @@ test('the endpoint is scoped to one venture or to the caller (D1020)', () => {
   // The queries: each table is read by the venture or by the account, never both, never unbound.
   const svc = read('cloudflare-worker/src/services/capTableRegister.ts');
   const plan = svc.slice(svc.indexOf('export async function readEquityPlan('), svc.indexOf('export function equityPlanBody('));
-  assert.equal((plan.match(/WHERE project_id = \?/g) || []).length, 2, 'both venture reads filter on project_id');
+  assert.equal((plan.match(/WHERE project_id = \?/g) || []).length, 3, 'pools, grants and holder filings each filter on project_id');
   assert.equal((plan.match(/WHERE user_id = \?/g) || []).length, 2, 'both account reads filter on user_id');
-  assert.equal((plan.match(/\.bind\(scope\.projectId\)/g) || []).length, 2);
+  assert.equal((plan.match(/\.bind\(scope\.projectId\)/g) || []).length, 3);
   assert.equal((plan.match(/\.bind\(scope\.userId\)/g) || []).length, 2);
 });
 

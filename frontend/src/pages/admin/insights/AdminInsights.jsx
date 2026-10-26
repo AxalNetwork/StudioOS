@@ -543,7 +543,7 @@ export default function AdminInsights() {
               <>
                 <div className={`${CARD} flex flex-col items-start gap-3 p-[30px]`} data-testid="insights-empty">
                   <span className="text-[17px] font-extrabold tracking-[-.02em] text-axal-ink dark:text-gray-100">{EMPTY_LINE}</span>
-                  <Link to="/admin/held/accounts" className={PRIMARY}>Go to Accounts</Link>
+                  <Link to="/admin/accounts" className={PRIMARY}>Go to Accounts</Link>
                 </div>
                 <div className={`${CARD} flex flex-col gap-1.5 px-[18px] py-4`}>
                   <span className="text-[15px] font-extrabold text-axal-ink dark:text-gray-100">Activation</span>

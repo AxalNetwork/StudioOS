@@ -30,10 +30,11 @@ import { projectInActiveCompany } from '../services/tenancyScope';
 import { resolveActiveCompany, ACTIVE_COMPANY_HEADER } from '../middleware/activeCompany';
 import { ensureTier } from '../middleware/requireTier';
 import type { Env } from '../types';
-import { requireAuth } from '../auth';
+import { requireAuth, isSuperAdmin } from '../auth';
 import { simulate, validateInputs, toCsv, type Inputs, type SimulateResult } from '../services/captable';
 import {
   canReadProject, canWriteProject, canReadScenario, canWriteScenario, liveGrantFor,
+  CAPTABLE_SUPPORT_REASON_MIN, CAPTABLE_SUPPORT_REASON_MAX,
   type AccessUser, type AccessProject,
 } from '../services/captableAccess';
 import { ensureCapTableVariantColumn } from '../services/captableSchema';
@@ -58,7 +59,7 @@ import {
 import { proposeFromClose, readClose } from '../services/capTableClose';
 import { DOCUMENT_OPTION, DOCUMENT_PAGE, documentRecord, readDocumentTerms } from '../services/capTableDocumentRead';
 import { railFor, refuseRun } from '../util/railContext';
-import { MODEL_SCENARIO_NAME, inputsFrom, offerFromModel, startFromRecord } from '../services/capTableToday';
+import { MODEL_SCENARIO_NAME, NO_PRICE_SENTENCE, inputsFrom, offerFromModel, priceOnRecord, startFromRecord } from '../services/capTableToday';
 import {
   actorHash, auditStatement, csvCell, equityPlanBody, num, readEquityPlan, readRegister, registerCsv, snapshotPdf, withOwnership,
   type RegisterScope,
@@ -121,6 +122,19 @@ const captable = new Hono<{ Bindings: Env }>();
 // queries it (prod migrations can lag behind the deploy). Cached after the
 // first call per isolate, so this is a no-op on the warm path.
 captable.use('*', async (c, next) => {
+  // D1130: an old URL cannot bypass the level/support read. Public capability
+  // links retain their own token gate; the simulator is stateless.
+  if (!/\/share\/[^/]+$/.test(c.req.path)) {
+    let user;
+    try { user = await requireAuth(c); } catch (e) { if (e instanceof Response) return e; throw e; }
+    if (String(user.role).toLowerCase() === 'admin') {
+      const stateless = c.req.method === 'POST' && /\/simulate$/.test(c.req.path) && !c.req.path.includes('/by-project/');
+      const correction = !['GET', 'HEAD'].includes(c.req.method) && /\/record\/[1-9][0-9]*\//.test(c.req.path) && !c.req.path.endsWith('/document-read');
+      if (!stateless && !(correction && !isSuperAdmin(user))) {
+        return refuse(c, 403, { code: 'scoped_cap_table_required', message: 'Open the cap table through its shared access view. Studio support requires a reason; HQ reads only.' });
+      }
+    }
+  }
   await ensureCapTableVariantColumn(c.env);
   return next();
 });
@@ -163,7 +177,7 @@ function isCompanyExempt(user: AuthUser, project: ProjectRow): boolean {
 }
 async function computeProjectPermissions(env: Env, user: AuthUser, project: ProjectRow): Promise<ProjectRow> {
   const principal = { ...user, role: user.role.toLowerCase() } as any;
-  if (principal.role === 'admin') return { ...project, capRead: true, capWrite: true };
+  if (principal.role === 'admin') return { ...project, capRead: false, capWrite: false };
   if (principal.role === 'investor') return { ...project, capRead: false, capWrite: false };
   const owner = principal.role === 'founder' && !!principal.founder_id && principal.founder_id === project.founder_id;
   // A recorded membership first, for every non-owner. Since D889 (#2438)
@@ -358,7 +372,7 @@ captable.get('/equity-plan', async (c) => {
   }
   // D1020: totals are sums of what is recorded, nothing modelled, and null
   // unless every row records the figure (`knownSum`).
-  return c.json({ scope: scopeBody(scope), ...equityPlanBody(plan.pools, plan.vesting) });
+  return c.json({ scope: scopeBody(scope), ...equityPlanBody(plan.pools, plan.vesting), elections: plan.elections });
 });
 
 captable.post('/simulate', async (c) => {
@@ -499,7 +513,8 @@ async function readableVenture(c: Ctx, user: AuthUser): Promise<number> {
  * D1018 — Today from the record, and the saved model beside it. A venture
  * with nothing recorded answers `today.available: false` with the record's
  * reason; its model is "Cap table · model" and its rows are offered as
- * part 2's proposals, never written here.
+ * part 2's proposals, never written here. D1283: `today.price` is the
+ * record's price per share (`priceOnRecord`), or null with `price_sentence`.
  */
 captable.get('/scenarios/by-project/:projectId/today', async (c) => {
   const user = await requireAuth(c);
@@ -512,10 +527,13 @@ captable.get('/scenarios/by-project/:projectId/today', async (c) => {
   ).bind(projectId).first<ScenarioRow>();
   const modelInputs = model ? safeJson<Inputs | null>(model.inputs_json, null) : null;
   let today: Record<string, unknown>;
+  // D1283 (#3341): today's price per share from the record, or why there is none.
+  const price = priceOnRecord(record);
+  const priced = { price, price_sentence: price ? null : NO_PRICE_SENTENCE };
   if (start.available) {
     const inputs = inputsFrom(start);
-    today = { available: true, reason: null, source: 'record', inputs, result: simulate(inputs), not_modelled: start.not_modelled };
-  } else today = { available: false, reason: start.reason, sentence: start.sentence };
+    today = { available: true, reason: null, source: 'record', inputs, result: simulate(inputs), not_modelled: start.not_modelled, ...priced };
+  } else today = { available: false, reason: start.reason, sentence: start.sentence, ...priced };
   return c.json({
     project_id: projectId,
     currency: record.currency,
@@ -1041,11 +1059,13 @@ captable.get('/live', async (c) => {
   } catch (e) { return asJsonError(c, e); }
   let integration: { uid: string; status: string; last_synced_at: string | null; external_account_name: string | null; last_error: string | null; config_json: string | null } | null;
   let register: Awaited<ReturnType<typeof readRegister>>;
+  let cartaRecorded = false;
   try {
     integration = await c.env.DB.prepare(
       "SELECT uid, status, last_synced_at, external_account_name, last_error, config_json FROM integrations WHERE provider_key = 'carta' AND user_id = ? ORDER BY id DESC LIMIT 1",
     ).bind(user.id).first();
     register = await readRegister(c.env, scope);
+    if (scope.kind === 'venture') cartaRecorded = !!await c.env.DB.prepare("SELECT 1 AS present FROM cap_table_issuances WHERE project_id = ? AND status = 'recorded' AND source = 'connector_carta' LIMIT 1").bind(scope.projectId).first<{ present: number }>();
   } catch (e) {
     return refuse(c, 500, {
       code: 'cap_register_read_failed',
@@ -1055,20 +1075,24 @@ captable.get('/live', async (c) => {
   }
   // D1020: a holder with no recorded shares is null, never 0%, and while any
   // holder's shares are missing no one's share of the total is known.
-  const owned = withOwnership(register.holders);
+  const owned = withOwnership(register.holders, register.fully_diluted);
   const venture = integration ? cartaVenture(integration.config_json) : null;
   return c.json({
     scope: scopeBody(scope),
     connected: !!integration && integration.status === 'active',
     integration_uid: integration?.uid || null,
     provider: 'carta',
-    // D1020 §4: while Carta is connected for this venture, its rows are the record, read only here.
+    // D1130: a connection is metadata; only accepted recorded Carta issuances are the record.
     carta_project_id: venture,
-    carta_is_record: !!integration && integration.status === 'active' && scope.kind === 'venture' && venture === scope.projectId,
+    carta_is_record: !!integration && integration.status === 'active' && scope.kind === 'venture' && venture === scope.projectId && cartaRecorded,
+    source: scope.kind === 'venture' ? 'record' : 'connector_register',
     issuer_name: integration?.external_account_name || null,
     last_synced_at: integration?.last_synced_at || null,
     last_error: integration?.last_error || null,
     total_shares: owned.total_shares,
+    fully_diluted: register.fully_diluted ?? null,
+    fully_diluted_reason: register.fully_diluted_reason ?? null,
+    ownership_basis: scope.kind === 'venture' ? 'fully_diluted' : 'outstanding',
     holders: owned.holders.map((h) => (showEmail ? h : { ...h, email: undefined })),
     securities: register.securities.map((s) => ({ ...s, shares_authorized: num(s.shares_authorized), shares_issued: num(s.shares_issued) })),
   });
@@ -1114,8 +1138,14 @@ async function recordWriter(c: Ctx, records: boolean): Promise<{ projectId: numb
   const user = await requireAuth(c);
   ensureTier(user, 'studio');
   const { projectId, proj } = await recordProject(c, user);
-  if (!canWriteProject(user, proj)) throw new HttpError(403, "You don't have access to that project");
   const role = user.role.toLowerCase();
+  const correction = role === 'admin' && !isSuperAdmin(user);
+  if (!canWriteProject(user, proj) && !correction) throw new HttpError(403, "You don't have access to that project");
+  if (correction) {
+    const b = await recordBody(c);
+    const reason = typeof (b.reason ?? b.correction_reason) === 'string' ? String(b.reason ?? b.correction_reason).trim() : '';
+    if (reason.length < CAPTABLE_SUPPORT_REASON_MIN || reason.length > CAPTABLE_SUPPORT_REASON_MAX) throw new RecordError(400, 'reason_required', 'A studio correction needs a support reason the founder can read.', { missing: ['reason'] });
+  }
   const founderOwns = role === 'founder' && !!user.founder_id && user.founder_id === proj.founder_id;
   const actorRole: RecordActor['role'] = role === 'admin' ? 'admin'
     : founderOwns || (await getProjectMembershipRole(c.env, projectId, user.id)) === 'owner' ? 'owner' : 'cofounder';
@@ -1418,8 +1448,8 @@ captable.post('/register/:projectId/snapshot', async (c) => {
 });
 
 // Task #1 (AG) — spec-contract aliases. Read-only project-scoped views over
-// the existing cap_table_holders / cap_table_securities tables. Founders see
-// only their venture; admins and accepted cofounders read it too. A recorded
+// the existing cap_table_holders / cap_table_securities tables. Founders and
+// accepted cofounders read their venture. Admins use the scoped read. A recorded
 // person-bound holder grant exposes that holder only, never the full register.
 captable.get('/:projectId', async (c) => {
   const user = await requireAuth(c);

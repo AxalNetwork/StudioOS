@@ -590,7 +590,22 @@ export interface ReportSection {
   // than a guessed signer.
   signed_off_by_name?: string | null;
   completed_at?: string | null;
-  findings: Array<{ severity: string; title: string; detail: string | null; evidence_url: string | null }>;
+  // D1247 — a flag's state travels into the report: a closed flag leaves the
+  // score but stays here, marked closed with its resolution. Absent on a
+  // caller that predates migration 621.
+  findings: Array<{ severity: string; title: string; detail: string | null; evidence_url: string | null; state?: string | null; resolution?: string | null }>;
+}
+
+/** D1247 — a flag's state in words, for the report. */
+export const FLAG_STATE_WORD: Record<string, string> = {
+  open: 'Open', in_progress: 'In progress', condition_to_close: 'Condition to close', accepted: 'Accepted', closed: 'Closed',
+};
+
+/** D1247 — the report's line under a flag: its state, then its resolution. Null before migration 621. */
+export function flagStateLine(f: { state?: string | null; resolution?: string | null }): string | null {
+  const word = f.state ? FLAG_STATE_WORD[f.state] : undefined;
+  if (!word) return null;
+  return f.resolution ? `${word} — ${f.resolution}` : word;
 }
 
 const BAND_COLOR: Record<string, string> = {
@@ -615,6 +630,7 @@ export function renderReportHtml(cs: ReportCase, sections: ReportSection[]): str
         </td>
         <td style="padding:6px 10px;border-bottom:1px solid #e5e7eb;font-size:13px;color:#111827;">
           <div style="font-weight:600;">${esc(f.title)}</div>
+          ${flagStateLine(f) ? `<div style="color:#6b7280;font-size:11px;margin-top:2px;">${esc(flagStateLine(f)!)}</div>` : ''}
           ${f.detail ? `<div style="color:#4b5563;font-size:12px;margin-top:2px;">${esc(f.detail)}</div>` : ''}
           ${f.evidence_url ? `<a href="${esc(f.evidence_url)}" style="color:#7c3aed;font-size:11px;">${esc(f.evidence_url)}</a>` : ''}
         </td>
@@ -772,6 +788,10 @@ export async function renderReportPdf(cs: ReportCase, sections: ReportSection[])
         page.drawRectangle({ x: MARGIN, y: y - 2, width: 4, height: 12, color: sevColor });
         page.drawText(`[${f.severity.toUpperCase()}] ${f.title}`, { x: MARGIN + 10, y, size: 10, font: bold, color: rgb(0.067, 0.094, 0.153) });
         y -= 13;
+        const stateLine = flagStateLine(f);
+        if (stateLine) {
+          for (const line of wrap(stateLine, 92)) { ensure(11); page.drawText(line, { x: MARGIN + 10, y, size: 8, font, color: rgb(0.42, 0.447, 0.502) }); y -= 11; }
+        }
         if (f.detail) {
           for (const line of wrap(f.detail, 92)) { ensure(11); page.drawText(line, { x: MARGIN + 10, y, size: 9, font, color: rgb(0.298, 0.337, 0.404) }); y -= 11; }
         }

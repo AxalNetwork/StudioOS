@@ -17,15 +17,15 @@ test('canReadProject: founder reads only their own project', () => {
   assert.equal(canReadProject(OTHER_FOUNDER, PROJ), false);
 });
 
-test('canReadProject: only admin has blanket project reads', () => {
-  assert.equal(canReadProject(ADMIN, PROJ), true);
+test('canReadProject: legacy reads never grant a blanket admin role', () => {
+  assert.equal(canReadProject(ADMIN, PROJ), false);
   assert.equal(canReadProject(PARTNER, PROJ), false);
   assert.equal(canReadProject(INVESTOR, PROJ), false);
 });
 
-test('canWriteProject: founder-owner and admin write; unrelated partner/investor cannot', () => {
+test('canWriteProject: only the owner or verified member writes through the legacy gate', () => {
   assert.equal(canWriteProject(OWNER_FOUNDER, PROJ), true);
-  assert.equal(canWriteProject(ADMIN, PROJ), true);
+  assert.equal(canWriteProject(ADMIN, PROJ), false);
   assert.equal(canWriteProject(PARTNER, PROJ), false);
   assert.equal(canWriteProject(INVESTOR, PROJ), false);
   assert.equal(canWriteProject(OTHER_FOUNDER, PROJ), false);
@@ -45,7 +45,7 @@ test('canReadScenario: a scenario with no project stays private to its owner', (
   const scen = { owner_user_id: 100, project_id: null };
   assert.equal(canReadScenario(OWNER_FOUNDER, scen, null), true);
   assert.equal(canReadScenario(PARTNER, scen, null), false);
-  assert.equal(canReadScenario(ADMIN, scen, null), true); // admin override
+  assert.equal(canReadScenario(ADMIN, scen, null), false); // D1130: use the scoped read
 });
 
 test('canWriteScenario: unrelated partner and investor cannot write a project-bound scenario', () => {

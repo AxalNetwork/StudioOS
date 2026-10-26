@@ -90,6 +90,7 @@ async function mounted(url, events) {
     nodes: () => walk(container), pr,
     text: (id) => txt(id ? by(id) : container).replace(/\s+/g, ' ').trim(),
     current: () => walk(container).filter((n) => pr(n)['aria-current'] === 'page').map((n) => pr(n)['data-testid']).filter(Boolean),
+    async click(id) { await act(async () => pr(by(id)).onClick?.({ preventDefault() {} })); },
     async close() { await act(async () => root.unmount()); Object.assign(globalThis, previous); localStorage.removeItem('user'); restore(); },
   };
 }
@@ -114,10 +115,10 @@ test('a source that did not answer: its chip says a dash with why, never 0; the 
   const sources = ALL_OK(PAGE_KINDS).map((s) => (s.kind === 'calendly_event' ? { ...s, ok: false, error: 'down' } : s));
   const v = await mounted('/calendar', { items: [{ id: 'ic_meeting:1', kind: 'ic_meeting', title: 'IC', start_at: new Date().toISOString(), end_at: null }], sources });
   try {
-    const bolds = v.nodes().filter((n) => n.tagName === 'B');
-    const dash = bolds.find((n) => (n.textContent || '') === '—');
-    assert.ok(dash, 'the failed kind shows a dash');
-    assert.match(String(v.pr(dash).title), /did not answer/);
+    // D1210: the counts live in the Kinds panel (CAL6), a dash with why beside the kind.
+    await v.click('cal-kinds');
+    assert.ok(v.text('cal-fam-other').includes('— · Could not be read'), 'the failed kind shows a dash with why');
+    assert.ok(v.text('cal-fam-other').includes('and 1 unread'), 'its family says one is unread');
     assert.ok(!/read 0/.test(v.text()), 'the banner no longer says the chip reads 0');
     assert.equal(v.text('cal-waits').startsWith(NOT_YET), true);
     for (const k of ['deadlines', 'interviews', 'feed']) assert.ok(v.text(`cal-wait-${k}`).includes(WAITS[k].slice(0, 30)), k);
@@ -131,7 +132,7 @@ test('a source that did not answer: its chip says a dash with why, never 0; the 
 test('the wiring: the two view routes beside /calendar with its guard, and the canvas in incoming', () => {
   const app = read('frontend/src/App.jsx');
   for (const p of ['', '/week', '/agenda']) {
-    assert.ok(app.includes(`<Route path="/calendar${p}" element={guard(['admin', 'founder', 'partner', 'investor', 'advisor'], <CalendarPage />)} />`), p || 'base');
+    assert.ok(app.includes(`<Route path="/calendar${p}" element={guard(['admin', 'founder', 'partner', 'investor', 'advisor', 'exploring'], <CalendarPage />)} />`), p || 'base');
   }
   for (const f of ['Calendar Page.dc.html', 'Calendar · Boards.dc.html']) assert.ok(existsSync(`design/incoming/${f}`), f);
   assert.ok(read('design/incoming/Calendar · Boards.dc.html').includes('Calendar Page'), 'the boards import the page by name');

@@ -11,6 +11,8 @@ import {
   fulfilFreeUnlock,
   computeDiscount,
   normalizeCode,
+  reserveMemberUse,
+  releaseMemberUse,
   STRIPE_MIN_CHARGE_CENTS,
   type PromoRow,
 } from '../services/promos';
@@ -18,7 +20,10 @@ import { captureAndResolveAttribution, readRefCookie } from '../services/referra
 import { automaticTaxParams, stripeTaxEnabled } from '../util/stripeTax';
 import { refuse } from '../util/refusal';
 import { moneyKindForCatalogPrice, type StripeMoneyKind } from '../services/moneyRails';
-import { heldPlanSubscription, planMetaForProduct, planMetaParams } from '../services/planSubscription';
+import {
+  adoptInvestorCustomer, ensureInvestorCustomer, heldPlanInStripe, heldPlanSubscription, planMetaForProduct, planMetaParams,
+  storedInvestorCustomer,
+} from '../services/planSubscription';
 
 // PaymentIntent + SetupIntent surface for the Axal-branded embedded card UI.
 //
@@ -96,9 +101,11 @@ payments.post('/intent', async (c) => {
   }
   // D755 §9: a token pack is bought only through the order intent, which credits it.
   if (await isTokenPackPrice(c.env, body.price_id)) return c.json({ error: 'token_pack_checkout_only' }, 400);
-  const quantity = Number.isFinite(body.quantity) && (body.quantity as number) > 0
-    ? Math.floor(body.quantity as number)
-    : 1;
+  // D892 §6: a whole number of at least one. A fraction is refused, not floored.
+  const quantity = body.quantity == null ? 1 : Number(body.quantity);
+  if (!Number.isSafeInteger(quantity) || quantity < 1) {
+    return refuse(c, 400, { code: 'invalid_quantity', message: 'The quantity must be a whole number of at least one.', audience: 'member' });
+  }
   const nonce = safeNonce(body.nonce);
   const customer = await ensurePaymentsCustomer(c.env, user);
 
@@ -117,12 +124,14 @@ payments.post('/intent', async (c) => {
     const promoCode = typeof body.promo_code === 'string' ? body.promo_code.trim() : '';
     let promo: PromoRow | undefined;
     if (promoCode) {
+      // D1273: the member and, for a subscription, its interval.
       const v = await validatePromoForProduct(
         c.env,
         promoCode,
         found.product.id,
         price.unit_amount ?? 0,
         price.currency,
+        { userId: user.id, interval: price.type === 'recurring' ? price.interval : null },
       );
       if (!v.ok) return c.json({ error: 'promo_invalid', reason: v.reason }, 400);
       promo = v.promo;
@@ -138,31 +147,52 @@ payments.post('/intent', async (c) => {
       const plan = planMetaForProduct(found.product, price);
       let subCustomer = customer;
       if (plan) {
-        // One subscription per plan family: an upgrade goes through the swap route, which prorates.
-        const existing = await heldPlanSubscription(c.env, user.id, plan);
-        if (existing) {
-          return refuse(c, 409, {
-            code: 'subscription_exists',
-            message: 'You already pay for a plan of this kind. Change it from Billing, which charges or credits only the difference.',
-            audience: 'member',
-            extra: { subscription_id: existing, swap: '/api/billing/subscription/swap/preview' },
-          });
-        }
-        // The investor webhook matches on the investor customer, as the investor checkout does.
-        if (plan.kind === 'investor') {
-          const inv = await c.env.DB.prepare('SELECT investor_stripe_customer_id FROM users WHERE id = ?')
-            .bind(user.id).first<{ investor_stripe_customer_id: string | null }>();
-          if (inv?.investor_stripe_customer_id) subCustomer = inv.investor_stripe_customer_id;
-          else {
-            await c.env.DB.prepare('UPDATE users SET investor_stripe_customer_id = ? WHERE id = ? AND investor_stripe_customer_id IS NULL')
-              .bind(customer, user.id).run();
+        // The investor customer is read here, never made: one is made only once
+        // nothing is held, below, so a refused intent leaves the member's
+        // customers as they were (D892 §6).
+        const investorCustomer = plan.kind === 'investor' ? await storedInvestorCustomer(c.env, user.id) : null;
+        // One subscription per plan family: what D1 holds, then what Stripe
+        // holds that D1 never saw (a subscription made before D892), on the
+        // general customer and on the investor customer when there is one.
+        let existing = await heldPlanSubscription(c.env, user.id, plan);
+        if (!existing) {
+          let inStripe: Awaited<ReturnType<typeof heldPlanInStripe>>;
+          try {
+            inStripe = await heldPlanInStripe(c.env, { general: customer, investor: investorCustomer }, plan);
+          } catch (e) {
+            return refuse(c, 503, { code: 'plan_check_unavailable', message: 'Your current plan could not be checked, so nothing was charged. Try again in a moment.', raw: e, audience: 'member' });
+          }
+          existing = inStripe?.subscription ?? null;
+          // An investor plan made before D892 sits on the general customer. A
+          // member with no investor customer adopts it now, so the plan's next
+          // event grants it and the swap route the refusal points to finds it.
+          if (inStripe && plan.kind === 'investor' && !investorCustomer && inStripe.customer === customer) {
+            await adoptInvestorCustomer(c.env, user.id, customer);
           }
         }
+        if (existing) {
+          // A founder or investor plan changes through the swap route, which
+          // prorates. That route takes no other family's price.
+          const swappable = plan.kind === 'tier' || plan.kind === 'investor';
+          return refuse(c, 409, {
+            code: 'subscription_exists',
+            message: swappable
+              ? 'You already pay for a plan of this kind. Change it from Billing, which charges or credits only the difference.'
+              : 'You already pay for a plan of this kind. Cancel it in Billing first; the new plan can start when it ends.',
+            audience: 'member',
+            extra: { subscription_id: existing, ...(swappable ? { swap: '/api/billing/subscription/swap/preview' } : {}) },
+          });
+        }
+        // The investor webhook matches on the investor customer, as the investor
+        // checkout does. It is the member's own investor customer, never the
+        // general one: made now when they have none.
+        if (plan.kind === 'investor') subCustomer = investorCustomer ?? await ensureInvestorCustomer(c.env, user);
       }
       const subParams: Record<string, string> = {
         customer: subCustomer,
         'items[0][price]': price.id,
-        'items[0][quantity]': String(quantity),
+        // A plan is one seat of one plan, as the Billing checkouts sell it.
+        'items[0][quantity]': plan ? '1' : String(quantity),
         payment_behavior: 'default_incomplete',
         'payment_settings[save_default_payment_method]': 'on_subscription',
         'expand[0]': 'latest_invoice.payment_intent',
@@ -180,6 +210,12 @@ payments.post('/intent', async (c) => {
       if (promo) {
         subParams['discounts[0][promotion_code]'] = promo.id;
         subParams['metadata[promo_code_id]'] = promo.id;
+      }
+      // D1273: a once-per-member code is the member's from the moment Stripe applies it,
+      // so the use is reserved first; two checkouts at once cannot both take it.
+      const reserved = !!promo && promo.once_per_member === 1;
+      if (reserved && !(await reserveMemberUse(c.env, promo!.id, user.id))) {
+        return c.json({ error: 'promo_invalid', reason: 'already_used' }, 400);
       }
       try {
         const sub = await stripeCall<{
@@ -213,6 +249,8 @@ payments.post('/intent', async (c) => {
           price_id: price.id,
         });
       } catch (e) {
+        // Stripe made no subscription, so the member did not use the code.
+        if (reserved) await releaseMemberUse(c.env, promo!.id, user.id);
         return refuse(c, 502, { code: 'intent_failed', message: 'The payment could not be started. Nothing was charged; try again in a moment.', raw: e, audience: 'member' });
       }
     }
@@ -314,7 +352,7 @@ async function createPaymentIntent(
 // reason } on rejection so the SPA can render a friendly message; never applies
 // or reserves anything.
 payments.post('/promo/validate', async (c) => {
-  await requireAuth(c);
+  const user = await requireAuth(c);
   if (!c.env.STRIPE_SECRET_KEY) return c.json({ error: 'stripe_not_configured' }, 503);
   const body = (await c.req.json().catch(() => ({}))) as { code?: string; price_id?: string };
   const code = typeof body.code === 'string' ? body.code.trim() : '';
@@ -326,7 +364,8 @@ payments.post('/promo/validate', async (c) => {
     return c.json({ error: 'invalid_price' }, 400);
   }
   const amount = found.price.unit_amount ?? 0;
-  const v = await validatePromoForProduct(c.env, code, found.product.id, amount, found.price.currency);
+  const v = await validatePromoForProduct(c.env, code, found.product.id, amount, found.price.currency,
+    { userId: user.id, interval: found.price.type === 'recurring' ? found.price.interval : null });
   if (!v.ok || !v.promo) return c.json({ valid: false, reason: v.reason });
   return c.json({
     valid: true,
@@ -479,6 +518,7 @@ payments.post('/alacarte/intent', async (c) => {
       found.product.id,
       found.price.unit_amount,
       found.price.currency,
+      { userId: user.id, interval: null },
     );
     if (!v.ok || !v.promo) return c.json({ error: 'promo_invalid', reason: v.reason }, 400);
     promo = v.promo;

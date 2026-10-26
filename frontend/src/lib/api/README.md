@@ -1,5 +1,8 @@
 # frontend/src/lib/api — one file per new API domain
 
+D1239: `dealViews.js` reads personal thesis fit and saves, edits or removes private/firm view settings. The server rechecks deal and accepted-seat access.
+
+
 D1156: `programGrants.js` adds the dated HQ `inUse(uid)` read and the branch
 `sendProgramReport()` action, with no caller-supplied counts.
 
@@ -427,3 +430,9 @@ D1199 (#3149): `productTesting.js` adds the programme logo: `partnerTestingApi.u
 D1207 (#3173): `calendarItems.js` holds the Calendar's Reschedule (`PATCH /calendar/ic-meetings/:id` and `/calendar/founder-checkins/:id`) and its pickers (`/calendar/people`, `/calendar/deals`). A person comes back as a uid and a name, never an email or a user number.
 
 D1176: `useOfFunds.js` holds the venture-scoped plan, scenarios/compare, milestones, hires and split calls, plus the retained financial-model read/save. The Worker routes land first; the UI follows in #3104/#3105.
+
+| File | Purpose |
+|---|---|
+| `raiseEvidence.js` | D1263: founder evidence reads, refresh and versioned decisions against the mounted Worker routes. |
+| --- | --- |
+| `dealInsights.js` | D1151: per-deal Team, Market and Traction read clients. |

@@ -41,7 +41,7 @@
  */
 import { Hono } from 'hono';
 import type { Env } from '../types';
-import { requireAuth } from '../auth';
+import { requireAuth, requireStepUp, requireSuperAdmin } from '../auth';
 import { templatesFor, mayOriginate, notOfferedFor, originatorName, SEND_ABSENCES, ENVELOPE_ABSENCES } from '../services/esignOriginators';
 import { esignEnvelopeScope } from '../services/tenancyScope';
 import { sendAgreementAssignedEmail, sendAgreementAssignedEmailResult, type EmailSendResult } from '../services/email';
@@ -939,6 +939,70 @@ esign.post('/send', async (c) => {
 // requireAdmin, so non-admins could sign a document and not send one. This is
 // the picker for everyone else; see services/esignOriginators.ts for why the
 // list is as short as it is.
+// ---------------------------------------------------------------------------
+// D1216 (#3213, Closing part 3) — one document signed in order by several
+// parties, with Axal's countersign last (`services/stagedSigning.ts`).
+//   POST /staged/preview             the text a stage would sign; a counsel draft previews, never sends
+//   POST /staged                     record the stages and send stage 1 (the closing's founder or an admin)
+//   GET  /staged/line/:commitmentId  every staged envelope on one closing line
+//   GET  /staged/:uid                the status per signer (founder, the line's investor, admins)
+//   POST /staged/:uid/countersign    closing.countersign: a Super Admin, with a fresh step-up
+// ---------------------------------------------------------------------------
+
+async function stagedAnswer(c: any, run: () => Promise<unknown>, status = 200) {
+  const { StagedRefusal } = await import('../services/stagedSigning');
+  try {
+    return c.json(await run(), status);
+  } catch (e) {
+    if (e instanceof StagedRefusal) {
+      return refuse(c, e.status, { code: e.code, message: e.sentence, audience: 'member', extra: e.extra });
+    }
+    throw e;
+  }
+}
+
+esign.post('/staged/preview', async (c) => {
+  await requireAuth(c);
+  await ensureSchema(c.env);
+  const body = await c.req.json().catch(() => ({}));
+  const { previewText } = await import('../services/stagedSigning');
+  const fields = body?.fields && typeof body.fields === 'object' ? body.fields as Record<string, string> : {};
+  return stagedAnswer(c, () => previewText(c.env, String(body?.document_type || ''), fields, { title: body?.title, body: body?.body }));
+});
+
+esign.post('/staged', async (c) => {
+  const user = await requireAuth(c);
+  await ensureSchema(c.env);
+  const body = await c.req.json().catch(() => ({}));
+  const { createStaged } = await import('../services/stagedSigning');
+  return stagedAnswer(c, () => createStaged(c.env, user as any, body, c.env.APP_URL || 'https://axal.vc'), 201);
+});
+
+esign.get('/staged/line/:commitmentId', async (c) => {
+  const user = await requireAuth(c);
+  const id = Number(c.req.param('commitmentId'));
+  const { readLine } = await import('../services/stagedSigning');
+  if (!Number.isInteger(id) || id <= 0) return refuse(c, 404, { code: 'staged_not_found', message: 'No envelope here.', audience: 'member' });
+  return stagedAnswer(c, () => readLine(c.env, user as any, id));
+});
+
+esign.get('/staged/:uid', async (c) => {
+  const user = await requireAuth(c);
+  const { readStaged } = await import('../services/stagedSigning');
+  return stagedAnswer(c, () => readStaged(c.env, user as any, c.req.param('uid')));
+});
+
+// The countersign is a Super Admin's act, with a step-up minted in the last
+// few minutes; the stage is sent to that Super Admin, and its token is
+// returned to them alone.
+esign.post('/staged/:uid/countersign', async (c) => {
+  const superAdmin = await requireSuperAdmin(c);
+  await requireStepUp(c);
+  await ensureSchema(c.env);
+  const { releaseCountersign } = await import('../services/stagedSigning');
+  return stagedAnswer(c, () => releaseCountersign(c.env, superAdmin as any, c.req.param('uid'), c.env.APP_URL || 'https://axal.vc'));
+});
+
 esign.get('/templates', async (c) => {
   const user = await requireAuth(c);
   // `not_offered` is what the canvas draws for this role that cannot be sent
@@ -1575,6 +1639,15 @@ esign.post('/sign/:token', async (c) => {
           bookletStage = await onBookletEnvelopeCompleted(c.env, envelopeRow.envelope_uuid, c.env.APP_URL || 'https://axal.vc');
         } catch (e) { console.warn('[esign] booklet_gp_stage_failed', (e as Error)?.name || 'error'); }
       }
+      // D1216 — a staged envelope's stage records its signature and sends the
+      // next stage (never Axal's: a Super Admin releases that one). Its own
+      // try, so it never fails the signature.
+      if (envelopeRow?.envelope_uuid) {
+        try {
+          const { onStagedEnvelopeCompleted } = await import('../services/stagedSigning');
+          await onStagedEnvelopeCompleted(c.env, envelopeRow.envelope_uuid, c.env.APP_URL || 'https://axal.vc');
+        } catch (e) { console.warn('[esign] staged_next_stage_failed', (e as Error)?.name || 'error'); }
+      }
       // Task #3 (Y-1) — Trust Center hook: when a 3-way Founder ↔ Investor
       // ↔ Axal NDA reaches `completed`, flip the matching `pairwise_ndas`
       // row to `active` and stamp a 12-month `valid_until`. Without this,
@@ -1633,6 +1706,13 @@ esign.post('/sign/:token', async (c) => {
           await recordPartnerActivationFailure(c.env, rec.envelope_id);
         } catch { console.warn('[esign] partner activation failure could not be recorded'); }
       }
+      // D958 — a referral partner's terms: the row that names this envelope
+      // records its signature and reads `signed`, then `active` from its
+      // start date. Its own try, so it never fails the signature.
+      try {
+        const { onReferralTermsEnvelopeCompleted } = await import('../services/referralPartnerTerms');
+        await onReferralTermsEnvelopeCompleted(c.env, rec.envelope_id);
+      } catch { console.warn('[esign] referral_terms_sign_failed'); }
       // Record the signature against the obligation it satisfies — the three
       // NDAs and the advisor disclaimer. Until this hook existed, all four had
       // a signable document, a wired template and a send route, and nothing

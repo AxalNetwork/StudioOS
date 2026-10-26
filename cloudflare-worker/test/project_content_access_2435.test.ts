@@ -45,6 +45,8 @@ async function fixture() {
   f.db.exec(`CREATE TABLE mi_pro_subscriptions(user_id INTEGER PRIMARY KEY, status TEXT, subscription_id TEXT, plan TEXT, period_end TEXT, stripe_customer_id TEXT);
     CREATE TABLE user_recovery_state(user_id INTEGER PRIMARY KEY, cooling_off_until TEXT, step_up_due_at TEXT);
     CREATE TABLE user_company_links(user_id INTEGER, company_id INTEGER);
+    -- D1137 (migration 597): resolveActiveCompany reads an archived company as none.
+    CREATE TABLE IF NOT EXISTS company_profiles (id INTEGER PRIMARY KEY, archived_at TEXT);
     INSERT INTO user_company_links VALUES(2,101),(2,102),(4,101);
     INSERT INTO projects(id,name,founder_id,company_id) VALUES(1,'Synthetic venture',20,101),(2,'Synthetic unrelated venture',30,102);`);
   for (const [id, role, founder] of principals) f.db.prepare("UPDATE users SET name = ?, role = ?, founder_id = ?, subscription_tier = 'studio', is_active = 1 WHERE id = ?")

@@ -164,8 +164,9 @@ test('Q6: the KYC window masks date of birth, ID number, address and phone, says
   assert.equal((markup.match(/data-testid="hq-sensitive-show"/g) || []).length, 3);
   assert.equal(SENSITIVE.line, 'Sensitive fields are masked by default. Each showing is logged with your name and the time.');
   // The window draws the masks and calls the logged route; the clear values are gone from it.
-  const admin = codeOnly(adminConsoleSource());
-  assert.match(admin, /<KycSensitiveFields\s*masked=\{kycDetail\.kyc_data\.masked\}\s*onShow=\{\(field\) => api\.kycAdminShowField\(kycDetail\.id, field\)\}/);
+  // D1233: the window is the person's case page now (KycCase.jsx).
+  const admin = codeOnly(adminConsoleSource() + read('pages/admin/kyc/KycCase.jsx'));
+  assert.match(admin, /<KycSensitiveFields\s*masked=\{r\.kyc_data\.masked\}\s*onShow=\{\(field\) => api\.kycAdminShowField\(r\.id, field\)\}/);
   assert.doesNotMatch(admin, /kyc_data\.(date_of_birth|id_number|phone|address_line1)/);
   // D995: a partner profile's tax ID is shown by its record, through the same logged route.
   const record = codeOnly(read('pages/admin/profiles/ProfileRecord.jsx'));

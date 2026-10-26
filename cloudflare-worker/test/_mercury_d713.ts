@@ -18,6 +18,8 @@ export function fixture(migrate: boolean | '477' = true) {
   db.exec(`CREATE TABLE projects (id INTEGER PRIMARY KEY, name TEXT, founder_id INTEGER, company_id INTEGER);
     CREATE TABLE documents (id INTEGER PRIMARY KEY, project_id INTEGER);
     CREATE TABLE user_company_links (id INTEGER PRIMARY KEY, user_id INTEGER, company_id INTEGER);
+    -- D1137 (migration 597): resolveActiveCompany reads an archived company as none.
+    CREATE TABLE IF NOT EXISTS company_profiles (id INTEGER PRIMARY KEY, archived_at TEXT);
     CREATE TABLE integrations (id INTEGER PRIMARY KEY, uid TEXT, user_id INTEGER, provider_key TEXT, status TEXT, credentials_enc TEXT, config_json TEXT, updated_at TEXT, last_error TEXT, last_error_at TEXT, last_synced_at TEXT);
     INSERT INTO users (id, role, name, email, founder_id, partner_id) VALUES
     (1, 'admin', 'Holder', 'holder@example.test', NULL, NULL), (2, 'admin', 'Admin', 'admin@example.test', NULL, NULL),

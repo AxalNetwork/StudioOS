@@ -5,7 +5,8 @@
  * holds each rule.
  *
  * WHAT IS READ TODAY. D642's `GET /api/usage/storage`: the member's total,
- * file count and five places. No plan carries a storage allowance yet, and the
+ * file count and places (thirteen since D1169, which also returns the plan,
+ * kinds, companies and largest files that part 5 draws). No plan carries a storage allowance yet, and the
  * read has no kinds, companies or largest files, so those blocks say "Not read
  * here yet" with their reason and never draw a zero, a bar or a figure from
  * the owner's table (D1166 §2).
@@ -24,7 +25,7 @@ export const WAITS = Object.freeze({
   kinds: 'Storage by kind (documents, data rooms, recordings, decks and exports, messages, images) is not read yet. Your files by place are below.',
   companies: 'Storage by company and venture is not read yet. This page counts every company at once; switching company does not change it.',
   largest: 'Your largest files are not read yet. When they are, Open takes you to where each file lives.',
-  counts: 'Earlier versions, Record a Session audio, deck reviews and six other places are not counted yet. Today only the five places below count.',
+  counts: 'The full list is drawn with the rest of this page. Every place below counts today, including earlier versions, Record a Session audio and deck reviews (D1169).',
 });
 
 /** STG1's "What counts", byte for byte from the canvas. */

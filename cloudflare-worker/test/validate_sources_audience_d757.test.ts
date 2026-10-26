@@ -75,7 +75,7 @@ function fixture(extraEnv: Record<string, string> = {}) {
     CREATE TABLE super_admins(user_id INTEGER PRIMARY KEY);
     CREATE TABLE mi_pro_subscriptions(user_id INTEGER PRIMARY KEY, status TEXT, subscription_id TEXT, plan TEXT, period_end TEXT, stripe_customer_id TEXT);
     CREATE TABLE user_recovery_state(user_id INTEGER PRIMARY KEY, cooling_off_until TEXT, step_up_due_at TEXT);
-    CREATE TABLE company_profiles(id INTEGER PRIMARY KEY);
+    CREATE TABLE company_profiles(id INTEGER PRIMARY KEY, archived_at TEXT);
     CREATE TABLE user_company_links(user_id INTEGER, company_id INTEGER);
     CREATE TABLE projects(id INTEGER PRIMARY KEY, company_id INTEGER, founder_id INTEGER, deleted_at TEXT);
     CREATE TABLE activity_logs(id INTEGER PRIMARY KEY, user_id INTEGER, actor TEXT, action TEXT, details TEXT, project_id INTEGER);
@@ -90,7 +90,7 @@ function fixture(extraEnv: Record<string, string> = {}) {
     CREATE TABLE provider_oauth_keys (provider_key TEXT PRIMARY KEY, client_id TEXT NOT NULL, client_secret_enc TEXT NOT NULL,
       created_by_user_id INTEGER, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP, updated_by_user_id INTEGER, updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP);
     CREATE TABLE google_oauth_tokens(user_id INTEGER, scope TEXT); CREATE TABLE microsoft_oauth_tokens(user_id INTEGER);
-    INSERT INTO company_profiles VALUES (10);`);
+    INSERT INTO company_profiles (id) VALUES (10);`);
   for (const [i, role, founderId, lab] of Object.values(PEOPLE)) {
     db.prepare('INSERT INTO users(id, role, name, email, founder_id, spinout_lab_active) VALUES (?, ?, ?, ?, ?, ?)')
       .run(i, role, `User ${i}`, `u${i}@example.test`, founderId, lab);
