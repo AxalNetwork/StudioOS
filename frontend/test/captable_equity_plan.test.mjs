@@ -58,6 +58,10 @@ test('cap-table vesting readers remain scoped to their intended audience', () =>
     ['integrations/providers/carta.ts', 'routes/captable.ts', 'routes/company.ts', 'routes/cycle_build.ts', 'services/capTableRegister.ts', 'services/capTableWrites.ts', 'services/decks/sources.ts', 'services/raiseCycle.ts', 'services/records/build.ts'],
     'only the importer, declared readers and reviewed writer should touch these tables',
   );
+  const raise = read('cloudflare-worker/src/services/raiseCycle.ts');
+  assert.match(raise, /v\.holder_id = h\.id AND v\.user_id = h\.user_id[\s\S]*WHERE h\.project_id = \?/,
+    'Raise reads vesting through the requested project’s holders and their own users');
+  assert.doesNotMatch(raise, /(INSERT INTO|UPDATE|DELETE FROM)\s+cap_table_/, 'Raise cannot write the personal cap-table stores');
   const deck = read('cloudflare-worker/src/services/decks/sources.ts');
   assert.doesNotMatch(deck, /cap_table_option_pools/, 'the deck counts vesting rows, not pools');
   assert.doesNotMatch(deck, /(INSERT INTO|UPDATE|DELETE FROM)\s+cap_table_/, 'a read, never a write');

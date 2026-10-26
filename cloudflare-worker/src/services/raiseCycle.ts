@@ -160,7 +160,7 @@ export type ReadRow = { a: string; b: string; c: 'Counted' | 'Partial' | 'Missin
 export type ComputedScore = { compared_count?: number; key: ReadinessKey; score: number | null; evidence: 'measured' | 'stated' | 'pattern' | null; missing: string | null; reads: ReadRow[] };
 const met = (ok: boolean, partial = false): Pick<ReadRow, 'c' | 'tone'> => (ok ? { c: 'Counted', tone: 'ok' } : partial ? { c: 'Partial', tone: 'amb' } : { c: 'Missing', tone: 'bad' });
 
-type MetricProof = { figure: 'mrr' | 'paying_customers'; value: number; source: string; measured: boolean; fresh: boolean; observed_on: string };
+type MetricProof = { figure: 'mrr' | 'paying_customers'; value: number; source: string; connector: boolean; measured: boolean; fresh: boolean; observed_on: string };
 type RevenueProof = { source: string; verification: string; has_document: number; month: string; observed_on: string; cents: number };
 const revenueSource = (r: RevenueProof) => (r.source === 'stripe' && r.verification === 'verified') || (r.source === 'mercury' && ['verified', 'supported'].includes(r.verification))
   ? `Connector · ${r.source === 'stripe' ? 'Stripe' : 'Mercury'}`
@@ -181,8 +181,8 @@ async function metricProofs(env: Env, projectId: number): Promise<MetricProof[]>
   ) WHERE position = 1 ORDER BY CASE WHEN source = 'stripe' THEN 0 ELSE 1 END, snapshot_date DESC, source`)
     .bind(projectId, today).all<{ paying_accounts: number; snapshot_date: string; source: string }>();
   const fact = (figure: MetricProof['figure'], value: number, row: { source: string; snapshot_date: string }): MetricProof => ({
-    figure, value: Number(value), measured: row.source === 'stripe', fresh: row.snapshot_date >= cutoff, observed_on: row.snapshot_date,
-    source: `${row.source === 'stripe' ? 'Stripe (measured)' : `Metrics (stated: ${row.source || 'source not recorded'})`} · project_metrics.${figure === 'mrr' ? 'mrr' : 'paying_accounts'} on ${row.snapshot_date}`,
+    figure, value: Number(value), connector: ['stripe', 'mercury'].includes(row.source), measured: row.source === 'stripe', fresh: row.snapshot_date >= cutoff, observed_on: row.snapshot_date,
+    source: `${row.source === 'stripe' ? 'Stripe (measured)' : row.source === 'mercury' ? 'Mercury (stated)' : `Metrics (stated: ${row.source || 'source not recorded'})`} · project_metrics.${figure === 'mrr' ? 'mrr' : 'paying_accounts'} on ${row.snapshot_date}`,
   });
   return [...(mrr.results || []).map(r => fact('mrr', r.mrr, r)), ...(paying.results || []).map(r => fact('paying_customers', r.paying_accounts, r))];
 }
@@ -287,7 +287,7 @@ export async function computeReadiness(env: Env, projectId: number): Promise<Com
     reads: [
       { a: 'Verified revenue', b: verifiedRevenue ? `${usd(verifiedRevenue.cents / 100)} · ${verifiedRevenue.month} · ${[...new Set(revenueRows.filter(r => r.verification === 'verified').map(revenueSource))].join(', ')}` : 'not recorded', ...met(measuredRevenue) },
       ...revenueRows.map(r => ({ a: `Revenue entries · ${revenueSource(r)}`, b: `${usd(r.cents / 100)} · ${r.month} · received_on ${r.observed_on} · ${r.verification} · ${r.has_document ? 'proof document recorded' : 'no proof document recorded'}`, ...met(r.cents > 0) })),
-      ...metricRows.map(r => ({ a: `${r.figure === 'mrr' ? 'MRR' : 'Paying customers'} · ${r.measured ? 'Connector' : 'Typed'}`, b: `${r.figure === 'mrr' ? usd(r.value) : r.value} · ${r.source}${r.fresh ? '' : ' · Outside the current 90-day window'}`, ...met(r.fresh && r.value > 0, true) })),
+      ...metricRows.map(r => ({ a: `${r.figure === 'mrr' ? 'MRR' : 'Paying customers'} · ${r.connector ? 'Connector' : 'Typed'}`, b: `${r.figure === 'mrr' ? usd(r.value) : r.value} · ${r.source}${r.fresh ? '' : ' · Outside the current 90-day window'}`, ...met(r.fresh && r.value > 0, true) })),
       { a: 'Revenue (stated)', b: num(p?.revenue) != null ? `${usd(Number(p!.revenue))} · Typed · Founder's figure` : 'not recorded', ...met(fieldOf(p?.revenue), num(p?.revenue) != null) },
       { a: 'MRR (stated)', b: num(p?.mrr) != null ? `${usd(Number(p!.mrr))} · Typed · Founder's figure` : 'not recorded', ...met(fieldOf(p?.mrr), num(p?.mrr) != null) },
       { a: 'Paying customers (stated)', b: num(p?.paying_customers) != null ? `${Math.round(Number(p!.paying_customers))} · Typed · Founder's figure` : 'not recorded', ...met(fieldOf(p?.paying_customers), num(p?.paying_customers) != null) },

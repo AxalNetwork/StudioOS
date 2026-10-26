@@ -262,3 +262,14 @@ test('runway keeps eight same-source history points even when other sources inte
     assert.deepEqual((await figure(f.ctx,'runway_months')).spark,[17,16,15,14,13,12,11,10]);
   }finally{f.db.close();}
 });
+
+
+test('Mercury metric provenance stays Connector independently of recurring-revenue evidence strength',async()=>{
+  const f=fixture();try{
+    f.db.prepare("INSERT INTO project_metrics(project_id,snapshot_date,source,mrr,paying_accounts) VALUES(1,?,'mercury',700,7)").run(ago(0));
+    const result=await proof(f.env);assert.equal(result.evidence,'stated');
+    assert.match(result.reads.find(r=>r.a==='MRR · Connector')!.b,/^\$700 · Mercury \(stated\)/);
+    assert.match(result.reads.find(r=>r.a==='Paying customers · Connector')!.b,/^7 · Mercury \(stated\)/);
+    assert.equal(result.reads.some(r=>r.a==='MRR · Typed'||r.a==='Paying customers · Typed'),false);
+  }finally{f.db.close();}
+});
