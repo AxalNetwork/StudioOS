@@ -172,5 +172,8 @@ test('the source: the commitments read never selects a note for staff or the fou
   assert.doesNotMatch(staff.slice(0, staff.indexOf('return c.json(rows);')), /c\.notes/, 'staff and the founder never read a note');
   const gate = src.slice(src.indexOf("deals.get('/:id/transfer-gate'"), src.indexOf("deals.post('/:id/transfers'"));
   assert.match(gate, /requireRole\(c, 'admin'\)/);
+  // An Admin is unscoped in `icDecisionScope`, so nothing is hidden from them today; the
+  // gate still holds on a hidden condition, as the record route does, should that change.
+  assert.match(gate, /held: gate\.visible > 0 \|\| gate\.hidden > 0/);
   assert.match(gate, /console\.error\('\[deals\] transfer gate read failed:', \(e as Error\)\?\.name\)/, 'the log names the error, never its text');
 });
