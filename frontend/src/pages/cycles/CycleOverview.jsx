@@ -28,7 +28,7 @@ import { MODULES } from './modules';
 const SECTION = 'text-[10px] font-extrabold uppercase tracking-[.09em]';
 const CARD = 'flex min-w-0 flex-col gap-2.5 rounded-xl border border-axal-hairline bg-white px-4 py-3.5 dark:border-gray-800 dark:bg-gray-900';
 
-export function CycleHeader({ cycle, cards, active = null, action, title, sub, record = false, moduleName, search = '' }) {
+export function CycleHeader({ cycle, cards, active = null, action, title, sub, record = false, moduleName, search = '', chip = null }) {
   const meta = cycleOf(cycle);
   const navigate = useNavigate();
   const tabs = cycleTabs(meta.key, cards, active, search, { back: record ? `‹ Back to ${moduleName}` : null });
@@ -40,7 +40,11 @@ export function CycleHeader({ cycle, cards, active = null, action, title, sub, r
     <header className="flex flex-col gap-1.5" data-testid="cycle-header">
       <span className={`${SECTION} text-axal-violet dark:text-violet-300`}>{meta.name} · {record ? moduleName : meta.question}</span>
       <div className="flex flex-wrap items-end justify-between gap-3">
-        <h1 className="m-0 text-[20px] font-extrabold leading-tight tracking-[-.025em] text-axal-ink sm:text-2xl dark:text-gray-100">{title || meta.name}</h1>
+        <div className="flex min-w-0 flex-wrap items-center gap-2.5">
+          <h1 className="m-0 text-[20px] font-extrabold leading-tight tracking-[-.025em] text-axal-ink sm:text-2xl dark:text-gray-100">{title || meta.name}</h1>
+          {/* D1146 (#3032): a header chip, such as Validate's Product-market fit (RD12). */}
+          {chip}
+        </div>
         {!record && action?.onClick
           ? <button type="button" className={btn} onClick={action.onClick} data-testid="cycle-action">{label}</button>
           : !record && href ? <Link className={btn} to={href} data-testid="cycle-action" aria-haspopup={action?.onOpen ? 'dialog' : undefined} onClick={action?.onOpen ? (e) => { if (isPlainClick(e)) { e.preventDefault(); action.onOpen(); } } : undefined}>{label}</Link> : null}
@@ -158,14 +162,14 @@ export function CycleCard({ cycle, card, slug, onRetry, search = '' }) {
 }
 
 // D693 decision 14: a loading overview draws one placeholder per module of its cycle.
-export default function CycleOverview({ cycle, data, status = data ? 'ready' : 'loading', message = '', onRetry, onRetryCard, action, placeholders = MODULES[cycle]?.length ?? 6, search = '' }) {
+export default function CycleOverview({ cycle, data, status = data ? 'ready' : 'loading', message = '', onRetry, onRetryCard, action, placeholders = MODULES[cycle]?.length ?? 6, search = '', chip = null }) {
   const meta = cycleOf(cycle);
   if (!meta) return null;
   const cards = Array.isArray(data?.cards) ? data.cards : [];
   const figures = Array.isArray(data?.figures) ? data.figures : [];
   return (
     <div className="flex min-w-0 flex-col gap-4" data-testid="cycle-overview" data-cycle={meta.key}>
-      <CycleHeader cycle={meta.key} cards={cards} action={action} search={search} />
+      <CycleHeader cycle={meta.key} cards={cards} action={action} search={search} chip={chip} />
       {status === 'unreadable' ? (
         <div className="rounded-xl border border-red-200 bg-red-50 p-4 dark:border-red-900 dark:bg-red-950/30" data-testid="cycle-overview-unreadable">
           <Unreadable what={`The ${meta.name} overview`} claim={message || 'This is not a claim that nothing is recorded.'} onRetry={onRetry} />

@@ -135,7 +135,9 @@ test('Performance stays an investor\'s page and Fund admin\'s tab; Accounting an
   assert.ok(!existsSync('frontend/src/pages/FundOpsWorkspace.jsx'));
   const app = scan(read('frontend/src/App.jsx'));
   assert.match(app, /path="\/funds\/performance" element=\{guard\(\['admin', 'investor'\], effectiveRole === 'investor' \? investorFundWorkspace\(<FundPerformancePage embedded \/>\) : <FundOpsRedirect \/>\)\}/);
-  assert.match(scan(read('frontend/src/pages/admin/fundAdmin/FundAdminConsole.jsx')), /<FundPerformanceView /);
+  // D1164 (#3071): Fund admin's tab is NAV & performance (FND10–FND12); FundPerformanceView stays the investor's page.
+  assert.match(scan(read('frontend/src/pages/admin/fundAdmin/FundAdminConsole.jsx')), /<PerformanceTab /);
+  assert.match(scan(read('frontend/src/pages/FundPerformancePage.jsx')), /export function FundPerformanceView/);
   assert.doesNotMatch(app, /FundAccountingPage|LPReportingPage/);
   assert.doesNotMatch(app, /path="\/funds\/accounting"|path="\/lp-reports"/);
   // Portfolio Growth stays a tab; withdrawing two sections is not withdrawing
