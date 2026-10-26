@@ -893,6 +893,9 @@ async function _analyticsRead(path) {
   }
 }
 
+/** D1300 — the filters, sort and scope `adminListUsers` passes through to `GET /api/admin/users`. */
+const ADMIN_USER_FILTERS = ['profile', 'sub', 'status', 'email', 'identity', 'limited', 'plan', 'country', 'persona', 'program', 'trust', 'joined', 'joined_from', 'joined_to', 'active', 'sort', 'scope'];
+
 export const api = {
   // Task #19 — Best-Fit consultations + admin report.
   bookConsultation: (data) =>
@@ -2028,12 +2031,24 @@ export const api = {
   // `SuperAdminHolders.jsx` reads. The envelope exists because the Users
   // panel's role tiles were counting the returned PAGE and rendering it as the
   // total — past 100 accounts, "All Users" read 100.
+  //
+  // D1300 — All accounts' filters, sort and paging. Each filter takes a value
+  // or a list (a list is "any of"): profile, sub, status, email, identity,
+  // limited, plan, country, persona, program, trust; and joined (7d, 30d) or
+  // joined_from / joined_to, active (7d, 30d, over_30d, never), sort and
+  // scope. The envelope then carries `matched` and `matched_by_role`, the
+  // totals over the filtered set, beside D128's whole-table `total`.
   adminListUsers: (opts = {}) => {
     const qs = new URLSearchParams();
     if (opts.q) qs.set('q', String(opts.q));
     if (opts.envelope) qs.set('envelope', '1');
     if (opts.limit) qs.set('limit', String(opts.limit));
     if (opts.offset) qs.set('offset', String(opts.offset));
+    for (const k of ADMIN_USER_FILTERS) {
+      const v = opts[k];
+      const list = Array.isArray(v) ? v.filter((x) => x != null && x !== '') : (v == null || v === '' ? [] : [v]);
+      if (list.length) qs.set(k, list.map(String).join(','));
+    }
     const s = qs.toString();
     return request(`/admin/users${s ? `?${s}` : ''}`);
   },
