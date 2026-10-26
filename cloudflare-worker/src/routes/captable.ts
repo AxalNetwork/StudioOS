@@ -58,7 +58,7 @@ import {
 import { proposeFromClose, readClose } from '../services/capTableClose';
 import { DOCUMENT_OPTION, DOCUMENT_PAGE, documentRecord, readDocumentTerms } from '../services/capTableDocumentRead';
 import { railFor, refuseRun } from '../util/railContext';
-import { MODEL_SCENARIO_NAME, inputsFrom, offerFromModel, startFromRecord } from '../services/capTableToday';
+import { MODEL_SCENARIO_NAME, NO_PRICE_SENTENCE, inputsFrom, offerFromModel, priceOnRecord, startFromRecord } from '../services/capTableToday';
 import {
   actorHash, auditStatement, csvCell, equityPlanBody, num, readEquityPlan, readRegister, registerCsv, snapshotPdf, withOwnership,
   type RegisterScope,
@@ -499,7 +499,8 @@ async function readableVenture(c: Ctx, user: AuthUser): Promise<number> {
  * D1018 — Today from the record, and the saved model beside it. A venture
  * with nothing recorded answers `today.available: false` with the record's
  * reason; its model is "Cap table · model" and its rows are offered as
- * part 2's proposals, never written here.
+ * part 2's proposals, never written here. D1283: `today.price` is the
+ * record's price per share (`priceOnRecord`), or null with `price_sentence`.
  */
 captable.get('/scenarios/by-project/:projectId/today', async (c) => {
   const user = await requireAuth(c);
@@ -512,10 +513,13 @@ captable.get('/scenarios/by-project/:projectId/today', async (c) => {
   ).bind(projectId).first<ScenarioRow>();
   const modelInputs = model ? safeJson<Inputs | null>(model.inputs_json, null) : null;
   let today: Record<string, unknown>;
+  // D1283 (#3341): today's price per share from the record, or why there is none.
+  const price = priceOnRecord(record);
+  const priced = { price, price_sentence: price ? null : NO_PRICE_SENTENCE };
   if (start.available) {
     const inputs = inputsFrom(start);
-    today = { available: true, reason: null, source: 'record', inputs, result: simulate(inputs), not_modelled: start.not_modelled };
-  } else today = { available: false, reason: start.reason, sentence: start.sentence };
+    today = { available: true, reason: null, source: 'record', inputs, result: simulate(inputs), not_modelled: start.not_modelled, ...priced };
+  } else today = { available: false, reason: start.reason, sentence: start.sentence, ...priced };
   return c.json({
     project_id: projectId,
     currency: record.currency,

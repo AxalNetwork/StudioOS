@@ -52,6 +52,33 @@ export type Start =
 const keyOf = (holderId: number | null | undefined, name: string | null | undefined) =>
   holderId != null ? `h-${holderId}` : `n:${String(name ?? '').trim().toLowerCase()}`;
 
+/** D1283 (#3341): today's price per share, as the record holds it. */
+export type PriceOnRecord = { micros: number; as_of: string | null; instrument: string; source: 'issuance' | 'class' };
+export const NO_PRICE_SENTENCE = 'No priced round is on record.';
+
+/**
+ * D1283 (#3341): today's price per share from the record. The last recorded
+ * priced issuance with a price (by its issue date, then when it was
+ * recorded), else the latest share class with a price. Null when nothing on
+ * record is priced, never 0.
+ */
+export function priceOnRecord(record: RecordRead): PriceOnRecord | null {
+  const classes = (record.classes as { rows?: any[] }).rows ?? [];
+  const nameOf = new Map<string, string>(classes.map((c: any) => [String(c.uid), String(c.name)]));
+  const priced = ((record.issuances as { rows?: any[] }).rows ?? [])
+    .filter((r: any) => r.kind === 'priced' && r.status === 'recorded' && Number.isSafeInteger(r.price_per_share_micros) && r.price_per_share_micros > 0);
+  const latest = (a: string | null | undefined, b: string | null | undefined) => String(b ?? '').localeCompare(String(a ?? ''));
+  priced.sort((a: any, b: any) => latest(a.issued_on, b.issued_on) || latest(a.recorded_at ?? a.created_at, b.recorded_at ?? b.created_at));
+  const top = priced[0];
+  if (top) {
+    return { micros: top.price_per_share_micros, as_of: top.issued_on ?? null, instrument: (top.class_uid && nameOf.get(top.class_uid)) || 'Priced round', source: 'issuance' };
+  }
+  const cls = classes
+    .filter((c: any) => c.kind !== 'option_pool' && Number.isSafeInteger(c.price_per_share_micros) && c.price_per_share_micros > 0)
+    .sort((a: any, b: any) => latest(a.created_at, b.created_at))[0];
+  return cls ? { micros: cls.price_per_share_micros, as_of: null, instrument: String(cls.name), source: 'class' } : null;
+}
+
 /**
  * The record as the engine's starting point. Holders take their recorded
  * shares by class kind: common, preferred, and options granted from a pool.

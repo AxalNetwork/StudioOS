@@ -19,7 +19,7 @@ import {
   MODEL_LOCKED, READ_SOURCE, SAVED, attachRead, attachedRead, beforeAfter, compareExits, compareHref, compareIds,
   compareRows, conversionPoints, dialogCopy, engineNotes, exitPanels, founderPanels, nameError, newScenarioInputs,
   nextName, paymentReadBack, roundEvents, roundReadBack, runRequest, sameInputs, scenarioCard, scenarioHref,
-  scenariosHead, short, shortName, todayBody, todayDraft, toggleCompare, waterfallTable, withNotes,
+  scenariosHead, short, shortName, todayBody, todayDraft, todayPrice, toggleCompare, waterfallTable, withNotes,
 } from '../src/pages/raise/captable/scenariosModel.js';
 
 const h = React.createElement;
@@ -348,7 +348,8 @@ test('compare: Today then each scenario, run at the same exits; a run that faile
   const by = Object.fromEntries(rows.map((r) => [r.label, r.cells]));
   assert.deepEqual(by.Founders, ['88.89%', '61.54%', '77.14%', 'Could not be read']);
   assert.deepEqual(by.Grace, ['Not in this scenario', 'Not in this scenario', '38.57%', 'Could not be read']);
-  assert.deepEqual(by['Price per share'].slice(0, 2), ['Not read here yet', '$1.0714']);
+  // D1283 (#3341): with no price passed, Today's price reads Not recorded, never "Not read here yet".
+  assert.deepEqual(by['Price per share'].slice(0, 2), ['Not recorded', '$1.0714']);
   assert.deepEqual(by['Bluefern Capital · shares'].slice(0, 3), ['Not converted', '600,000', 'Not converted']);
   const panels = founderPanels(cols);
   assert.equal(panels.length, 2, 'a failed run draws no panel');
@@ -629,4 +630,38 @@ test('the wiring: the scenario route under the module guard, the cycle path, the
   assert.match(client, /\/simulate`, \{ method: 'POST'/);
   assert.match(read('frontend/src/lib/api.js'), /export \* from '\.\/api\/capTableScenarios\.js';/);
   for (const f of ['ScenariosPages.jsx', 'scenariosModel.js', 'ScenarioModelEditor.jsx']) assert.doesNotMatch(read(`frontend/src/pages/raise/captable/${f}`), /\b(alert|confirm|prompt)\(/, f);
+});
+
+// ── D1283 (#3341): Before's price per share from the record ────────────────
+
+const PRICED = { micros: 2_500_000, as_of: '2026-04-01', instrument: 'Series A Preferred', source: 'issuance' };
+const ready = (today) => ({ status: 'ready', data: { ...TODAY, today: { ...TODAY.today, ...today } } });
+
+test('D1283: today\'s price per share from the record, Not recorded with its reason, and never "Not read here yet"', () => {
+  // Mutations checked: the micros not divided; the note dropped; a typed start given the record's price; 0 for none.
+  assert.deepEqual(todayPrice(ready({ price: PRICED, price_sentence: null })), { text: '$2.5000', note: 'On record · Series A Preferred · 1 Apr 2026' });
+  assert.deepEqual(todayPrice(ready({ price: { ...PRICED, as_of: null, source: 'class' }, price_sentence: null })), { text: '$2.5000', note: 'On record · Series A Preferred' });
+  assert.deepEqual(todayPrice(ready({ price: null, price_sentence: 'No priced round is on record.' })), { text: 'Not recorded', note: 'No priced round is on record.' });
+  assert.deepEqual(todayPrice(ready({ price: PRICED }), false), { text: 'Not recorded', note: null }, 'a typed start is not the record');
+  assert.deepEqual([todayPrice({ status: 'loading' }).text, todayPrice({ status: 'error' }).text], ['Reading…', 'Could not be read']);
+  assert.deepEqual(todayPrice(ready({ price: { ...PRICED, micros: 0 } })).text, 'Not recorded', 'a zero price is not a price');
+  const row = beforeAfter(RESULT, todayPrice(ready({ price: PRICED }))).find((r) => r.key === 'price');
+  assert.deepEqual([row.before, row.note, row.after], ['$2.5000', 'On record · Series A Preferred · 1 Apr 2026', '$1.0714']);
+  assert.equal(beforeAfter(RESULT).find((r) => r.key === 'price').before, 'Not recorded');
+  const cols = [{ name: 'Seed · base case', short: 'base case', fromToday: true, result: RESULT, status: 'ready' }];
+  assert.deepEqual(Object.fromEntries(compareRows({ founding: FOUNDING }, cols, todayPrice(ready({ price: PRICED }))).map((r) => [r.label, r.cells]))['Price per share'], ['$2.5000', '$1.0714']);
+  assert.doesNotMatch(readFileSync('frontend/src/pages/raise/captable/scenariosModel.js', 'utf8'), /Not read here yet/, 'the wait text that named the gap is gone');
+});
+
+test('D1283 mounted: a priced issuance on record, none priced, and a typed-model start', async () => {
+  const priceRow = (v) => v.all('captable-scenario-result-row').map((n) => v.text(n)).find((t) => t.startsWith('Price per share'));
+  let v = await mounted('/raise/cap-table/scenarios/s-today?project_id=3', { today: { ...TODAY, today: { ...TODAY.today, price: PRICED, price_sentence: null } } });
+  try { assert.match(priceRow(v), /^Price per share \$2\.5000 On record · Series A Preferred · 1 Apr 2026 \$1\.0714/); } finally { await v.close(); }
+  v = await mounted('/raise/cap-table/scenarios/s-today?project_id=3', { today: { ...TODAY, today: { ...TODAY.today, price: null, price_sentence: 'No priced round is on record.' } } });
+  try { assert.match(priceRow(v), /^Price per share Not recorded No priced round is on record\. \$1\.0714/); } finally { await v.close(); }
+  v = await mounted('/raise/cap-table/scenarios/s-model?project_id=3', { today: { ...TODAY, today: { ...TODAY.today, price: PRICED, price_sentence: null } } });
+  try {
+    assert.match(priceRow(v), /^Price per share Not recorded \$/, 'a typed start never takes the record\'s price');
+    assert.match(v.text(v.by('captable-scenario-results')), /The start is your typed model, not the record/);
+  } finally { await v.close(); }
 });
