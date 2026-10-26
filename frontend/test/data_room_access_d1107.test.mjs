@@ -212,6 +212,9 @@ test('Access mounted: the list (Active), the matrix, one investor, the NDA strip
     assert.ok(!v.has('nda-send-g2'), 'an NDA out for signature is not sent twice');
     assert.match(v.textOf('nda-files'), /1 NDA file\..*Model\.xlsx/s);
     assert.match(v.textOf('access-report-shares'), /Larch Capital/);
+    // D1109: the advisor grant moved here from the retired files tool, for the owner.
+    assert.ok(v.has('access-advisor-grants'), 'the owner lost the advisor grant');
+    assert.match(v.textOf('access-advisor-grants'), /Advisors/, 'the advisor grant section is drawn inside it');
     await v.click('access-view-matrix');
     assert.match(v.textOf('matrix-cell-a1-g2'), /Its access does not include this folder/);
     assert.match(v.textOf('matrix-cell-a1-g1'), /Can open/);
@@ -285,6 +288,7 @@ test('DR16: a co-founder reads Access with the owner-only line and no Share, Rev
   try {
     assert.match(v.textOf('access-cofounder'), /Only the venture’s owner shares the room/);
     assert.ok(!v.has('access-share') && !v.has('nda-send-g1'));
+    assert.ok(!v.has('access-advisor-grants'), 'only the owner grants an advisor');
     await v.click('grant-open-g1');
     assert.ok(!v.has('investor-revoke') && !v.has('investor-change'));
   } finally { await v.close(); }

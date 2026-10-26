@@ -14,7 +14,7 @@ import { MemoryRouter, Routes, Route } from 'react-router-dom';
 import { installDocument } from './_contracts_dom.mjs';
 import CycleRoute from '../src/pages/cycles/CycleRoute.jsx';
 import {
-  TABS, fileRows, grantRows, isDataRoomTab, projectUidOf, tabHref, tabSearch,
+  TABS, fileRows, grantRows, isDataRoomTab, isOldFileAddress, movedKind, projectUidOf, tabHref, tabSearch,
 } from '../src/pages/raise/dataroom/dataRoomModel.js';
 
 const h = React.createElement;
@@ -98,6 +98,15 @@ test('seven tabs, and only their words are tabs; a file is still a record; the v
   assert.equal(projectUidOf(PROJECTS, 3), 'p3uid');
   assert.equal(projectUidOf({ items: PROJECTS }, '4'), 'p4uid');
   assert.equal(projectUidOf(PROJECTS, 9), null);
+});
+
+test('D1109: only the two old modes forward, and only a file\'s number is its old page', () => {
+  assert.equal(movedKind('?mode=workspace&project_id=3'), 'workspace');
+  assert.equal(movedKind('?project_id=3&mode=access'), 'access');
+  for (const q of ['', '?project_id=3', '?mode=files', '?mode=Access', '?mode=constructor']) assert.equal(movedKind(q), null, q);
+  assert.ok(isOldFileAddress('data-room', '12'));
+  for (const id of ['files', '0', '012', '1e3', '-4', '']) assert.ok(!isOldFileAddress('data-room', id), id);
+  assert.ok(!isOldFileAddress('cap-table', '12'), 'only the Data room forwards a number');
 });
 
 test('who can open a file is the investor read\'s own predicate, and nobody is said with its reason', () => {
