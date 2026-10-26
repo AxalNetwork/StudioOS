@@ -41,11 +41,12 @@ function seed(w:World,table:string,values:Record<string,unknown>){
 function sources(w:World){
  seed(w,'integrations',{id:1,user_id:1,provider_key:'mercury',status:'active'});seed(w,'integrations',{id:2,user_id:1,provider_key:'github',status:'active'});
  seed(w,'data_room_files',{id:1,uid:'file-one',project_id:1,name:'PRIVATE NAME',r2_key:'PRIVATE KEY'});
- seed(w,'revenue_entries',{id:1,uid:'revenue-one',project_id:1,customer:'PRIVATE CUSTOMER',revenue_type:'recurring',amount_cents:100,currency:'usd',received_on:'2026-09-01',source:'mercury',verification:'verified',proof_document_id:1});
+ seed(w,'revenue_entries',{id:1,uid:'revenue-one',project_id:1,customer:'PRIVATE CUSTOMER',revenue_type:'recurring',amount_cents:100,currency:'usd',received_on:'2026-09-01',source:'mercury',verification:'supported',proof_document_id:1});
  for(const [id,kind,key,value,months] of [[1,'runway','runway',8,3],[2,'revenue','revenue:2026-09',null,3],[3,'spend','spend:product',null,6]])seed(w,'mercury_raise_facts',{id,integration_id:1,project_id:1,kind,fact_key:key,value,months,amount_cents:123400,label:'product',as_of:'2026-09-02'});
  seed(w,'mercury_raise_proposals',{id:1,integration_id:1,project_id:1,kind:'fund_mapping',source_key:'product',status:'accepted',target:'product'});
  seed(w,'mercury_raise_proposals',{id:2,integration_id:1,project_id:1,kind:'statement',source_key:'statement-one',status:'accepted',local_table:'data_room_files',local_id:1,payload_json:JSON.stringify({month:'2026-09',account_id:'PRIVATE ACCOUNT',last_four:'9876'})});
  seed(w,'mercury_raise_proposals',{id:3,integration_id:1,project_id:1,kind:'safe',source_key:'safe-one',status:'accepted',local_table:'cap_table_holders',local_id:1,payload_json:JSON.stringify({date:'2026-09-03',amount_cents:200000,investor_name:'PRIVATE INVESTOR'})});
+ seed(w,'connector_fed_items',{integration_id:1,project_id:1,module:'grow',kind:'revenue_entry',external_id:'revenue-entry-one',local_table:'revenue_entries',local_id:1});
  seed(w,'cap_table_holders',{id:1,user_id:1,project_id:1,kind:'founder',source:'manual',founder_role:'ceo',ownership_pct:50,created_at:'2026-09-04'});
  seed(w,'cap_table_vesting',{id:1,user_id:1,holder_id:1,project_id:1,source:'manual',total_shares:100,start_date:'2026-09-05'});
  seed(w,'github_login_map',{project_id:1,login:'PRIVATE LOGIN',holder_id:1,mapped_by:1});
@@ -222,10 +223,22 @@ test('all founder routes execute a complete accept/share/link/unlink/dismiss lif
 
 test('a cached page reads only its source IDs; bank privacy follows normalized provider labels',async()=>{
  const w=world();try{
+ seed(w,'integrations',{id:1,user_id:1,provider_key:'mercury',status:'active'});
  for(let id=1;id<=120;id++)seed(w,'project_metrics',{id,project_id:1,snapshot_date:new Date(Date.UTC(2026,0,id)).toISOString().slice(0,10),source:'connector:Mercury',mrr:id});
+ const forged=await collectEvidenceSources(w.env,1,1);assert.ok(forged.candidates.every(c=>c.source_label==='typed'));
+ for(let id=1;id<=120;id++)seed(w,'connector_fed_items',{integration_id:1,project_id:1,module:'grow',kind:'metric_month',external_id:'metric-'+id,local_table:'project_metrics',local_id:id});
  await buildCandidates(w.ctx);const page=await readRaiseEvidence(w.ctx,{limit:1});assert.equal(page.refresh.refreshed,false);assert.equal(page.proposals.rows?.length,1);assert.equal(page.proposals.rows?.[0].can_accept,true);
  assert.deepEqual(page.live_sources?.map(b=>[b.dataset,b.count]),[['metrics',1]]);assert.equal(page.sources?.find(b=>b.dataset==='metrics')?.count,120);
  const q=proposal(w);const i=await acceptItem(w.ctx,q.uid,JSON.parse(q.payload_json).snapshot_hash);assert.equal(i.source_label,'connector');assert.equal(i.private_reason,'bank');assert.equal(i.visibility,'private');
  const admin={...w.ctx,founder:false,user:w.db.prepare('SELECT * FROM users WHERE id=3').get()};const metadata=await readRaiseEvidence(admin);assert.equal(metadata.items.rows?.length,0);assert.equal(metadata.proposals.rows?.length,0);
+ }finally{w.db.close();}
+});
+
+
+test('an unreadable interview dependency cannot become an empty theme; missing-source candidates wait safely for the founder',async()=>{
+ const w=world();try{sources(w);await buildCandidates(w.ctx);const q=proposal(w,'pain-theme'),hash=JSON.parse(q.payload_json).snapshot_hash;w.db.exec('DROP TABLE discovery_interviews');
+ const pack=await collectEvidenceSources(w.env,1,1);assert.equal(pack.blocks.find(b=>b.dataset==='themes')?.state,'unreadable');assert.equal(pack.blocks.find(b=>b.dataset==='themes')?.count,null);
+ await assert.rejects(()=>acceptItem(w.ctx,q.uid,hash),{code:'unreadable',status:503});const page=await readRaiseEvidence(w.ctx);assert.equal(page.proposals.rows?.find(p=>p.uid===q.uid)?.source_state,'unreadable');
+ w.db.exec('DELETE FROM project_metrics');const missing=proposal(w);const after=await readRaiseEvidence(w.ctx,{refresh:true});const held=after.proposals.rows?.find(p=>p.uid===missing.uid);assert.equal(held?.source_state,'not_recorded');assert.equal(held?.can_accept,false);assert.equal(auditCount(w),0);
  }finally{w.db.close();}
 });

@@ -57,7 +57,9 @@ export const EVIDENCE_RULES: readonly EvidenceRule[] = [
 /** Static, venture-bound selectors. Sync timestamps are never observation dates. */
 const QUERIES = {
   revenue: `SELECT r.id,r.amount_cents,r.currency,r.received_on,r.source,r.verification,r.source_ref,
-    d.id AS proof_id,r.updated_at FROM revenue_entries r LEFT JOIN data_room_files d ON d.id=r.proof_document_id AND d.project_id=r.project_id WHERE r.project_id=?`,
+    d.id AS proof_id,r.updated_at,EXISTS(SELECT 1 FROM connector_fed_items l JOIN integrations i ON i.id=l.integration_id AND i.status='active'
+      WHERE l.project_id=r.project_id AND l.local_table='revenue_entries' AND l.local_id=r.id
+        AND i.provider_key=replace(replace(replace(lower(r.source),'connector_',''),'connector:',''),'connector-','')) AS connector_proof FROM revenue_entries r LEFT JOIN data_room_files d ON d.id=r.proof_document_id AND d.project_id=r.project_id WHERE r.project_id=?`,
   bank: `SELECT f.id,f.kind,f.fact_key,f.value,f.amount_cents,f.burn_cents,f.as_of,f.months FROM mercury_raise_facts f
     JOIN integrations i ON i.id=f.integration_id AND i.provider_key='mercury' AND i.status='active'
     JOIN users u ON u.id=i.user_id AND u.is_active=1 JOIN projects p ON p.id=f.project_id AND p.founder_id=u.founder_id
@@ -76,7 +78,11 @@ const QUERIES = {
   signals: `SELECT id,kind,status,signal_date,source_kind,interview_id,session_id,evidence_file_key,amount_cents,currency,updated_at FROM demand_signals WHERE project_id=? AND status IN ('confirmed','counted')`,
   experiments: `SELECT id,status,result,updated_at FROM hypothesis_experiments WHERE project_id=? AND result IS NOT NULL AND trim(result)<>''`,
   verdicts: `SELECT id,decision,decided_at FROM validation_decisions WHERE project_id=? AND state='given' AND superseded_at IS NULL`,
-  metrics: `SELECT id,snapshot_date,source,mrr,arr,cac,ltv,monthly_churn_pct,active_users,new_users,net_burn,headcount,nrr_pct,paying_accounts FROM project_metrics WHERE project_id=?`,
+  metrics: `SELECT m.id,m.snapshot_date,m.source,m.mrr,m.arr,m.cac,m.ltv,m.monthly_churn_pct,m.active_users,m.new_users,m.net_burn,m.headcount,m.nrr_pct,m.paying_accounts,
+    EXISTS(SELECT 1 FROM connector_fed_items l JOIN integrations i ON i.id=l.integration_id AND i.status='active'
+      WHERE l.project_id=m.project_id AND l.local_table='project_metrics' AND l.local_id=m.id
+        AND i.provider_key=replace(replace(replace(lower(m.source),'connector_',''),'connector:',''),'connector-','')) AS connector_proof
+    FROM project_metrics m WHERE m.project_id=?`,
   releases: `SELECT r.id,r.published_at,r.tag,r.commit_sha FROM roadmap_releases r WHERE r.project_id=? AND r.published_at IS NOT NULL AND r.prerelease=0 AND EXISTS
     (SELECT 1 FROM connector_fed_items l JOIN integrations i ON i.id=l.integration_id AND i.provider_key='github' AND i.status='active' WHERE l.project_id=r.project_id AND l.local_table='roadmap_releases' AND l.local_id=r.id AND l.kind='release')`,
   features: `SELECT f.id,f.done_at,f.updated_at,EXISTS(SELECT 1 FROM connector_fed_items l JOIN integrations i ON i.id=l.integration_id AND i.status='active' AND i.provider_key='github'
@@ -116,7 +122,7 @@ const SOURCE_IDS:Record<Dataset,string>={
  contributors:' AND g.id IN (SELECT value FROM json_each(?))',skills:" HAVING (s.axis || ':' || s.source) IN (SELECT value FROM json_each(?))",
  themes:' AND id IN (SELECT value FROM json_each(?))',interviews:' AND id IN (SELECT value FROM json_each(?))',
  signals:' AND id IN (SELECT value FROM json_each(?))',experiments:' AND id IN (SELECT value FROM json_each(?))',verdicts:' AND id IN (SELECT value FROM json_each(?))',
- metrics:' AND id IN (SELECT value FROM json_each(?))',releases:' AND r.id IN (SELECT value FROM json_each(?))',features:' AND f.id IN (SELECT value FROM json_each(?))',
+ metrics:' AND m.id IN (SELECT value FROM json_each(?))',releases:' AND r.id IN (SELECT value FROM json_each(?))',features:' AND f.id IN (SELECT value FROM json_each(?))',
  bankSpend:' AND f.id IN (SELECT value FROM json_each(?))',hires:' AND id IN (SELECT value FROM json_each(?))',milestones:' AND r.id IN (SELECT value FROM json_each(?))',
  formation:' AND id IN (SELECT value FROM json_each(?))',obligations:' AND o.id IN (SELECT value FROM json_each(?))',documents:' AND id IN (SELECT value FROM json_each(?))',
  ipSteps:' AND f.id IN (SELECT value FROM json_each(?))',bankDocuments:' AND d.id IN (SELECT value FROM json_each(?))',safes:' AND m.id IN (SELECT value FROM json_each(?))',
@@ -158,7 +164,8 @@ const sourceProvider=(row:DataRow)=>string(row.source)?.toLowerCase().replace(/^
 function provenance(row: DataRow): {label:EvidenceSourceLabel;provider:string|null} {
   const provider=sourceProvider(row);
   if(provider&&['mercury','stripe','carta'].includes(provider)) {
-    if(row.verification!==undefined&&row.verification!=='verified')return {label:row.proof_id!=null?'document':'typed',provider:null};
+    if((row.connector_proof!==undefined&&row.connector_proof!==1&&!(provider==='stripe'&&row.verification==='verified'))
+      ||(row.verification!==undefined&&row.verification!=='verified'&&!(provider==='mercury'&&row.verification==='supported'&&row.connector_proof===1)))return {label:row.proof_id!=null?'document':'typed',provider:null};
     return {label:'connector',provider};
   }
   if(row.proof_id!=null||row.evidence_file_key!=null)return {label:'document',provider:null};
@@ -235,6 +242,10 @@ export async function collectEvidenceSources(env:Env, projectId:number, bankUser
     const name=queries[i][0],result=reads[i];
     if(result.status==='fulfilled'){data.set(name,result.value);blocks.push({dataset:name,state:'recorded',count:result.value.length});}
     else blocks.push({dataset:name,state:'unreadable',count:null,reason:'This source could not be read. Try again.'});
+  }
+  if(data.has('themes')&&!data.has('interviews')){
+    data.delete('themes');const block=blocks.find(b=>b.dataset==='themes')!;
+    block.state='unreadable';block.count=null;block.reason='This source could not be read. Try again.';
   }
   if(data.has('themes')&&data.has('interviews')){
     try{const model=await loadPainGroupModel(env,projectId);const mentions=new Map<number,string[]>();

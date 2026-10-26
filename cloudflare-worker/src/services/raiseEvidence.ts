@@ -366,10 +366,11 @@ export async function readRaiseEvidence(ctx:RaiseEvidenceContext,query:{limit?:n
     if(!rawProposals)return unreadableBlock;const rows=rawProposals;
     return {state:'recorded',rows:rows.results.slice(0,limit).map(q=>{const offered=plain(q.payload_json);if(!offered)throw new Error('proposal_unreadable');
       const found=current.get(q.source_ref),fresh=found?.snapshot_hash===offered.snapshot_hash;
+      const rule=EVIDENCE_RULES.find(r=>r.kind===offered.kind),failed=rule&&sources?.blocks.some(b=>b.dataset===rule.dataset&&b.state==='unreadable');
       const metadata={uid:q.uid,area:offered.area,kind:offered.kind,source_label:offered.source_label,provider:offered.provider,strength:offered.strength,observed_on:offered.observed_on,summary:offered.summary,status:q.status};
       if(!ctx.founder)return metadata;
       return {...metadata,source_table:offered.source_table,source_ref:offered.source_ref,snapshot_hash:offered.snapshot_hash,value_num:fresh?found?.value_num??null:null,
-        value_unit:fresh?found?.value_unit??null:null,currency:fresh?found?.currency??null:null,can_accept:!!fresh,source_state:fresh?'recorded':'changed',
+        value_unit:fresh?found?.value_unit??null:null,currency:fresh?found?.currency??null:null,can_accept:!!fresh,source_state:failed?'unreadable':fresh?'recorded':found?'changed':'not_recorded',
         date_reason:found?.date_reason??'The source observation date is not recorded.',stale:found?.stale??null};
     }),has_more:rows.results.length>limit};
   }catch{return unreadableBlock;}})();
