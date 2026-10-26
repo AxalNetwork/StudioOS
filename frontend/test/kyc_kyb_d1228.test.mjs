@@ -12,7 +12,7 @@ import React from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { MemoryRouter } from 'react-router-dom';
 import { KycTabBody } from '../src/pages/admin/kyc/KycTabs.jsx';
-import { BASE, NOT_YET, TABS, WAITS, personHref, statusWord, viewOf } from '../src/pages/admin/kyc/kycModel.js';
+import { BASE, TABS, WAITS, personHref, statusWord, viewOf } from '../src/pages/admin/kyc/kycModel.js';
 
 const h = React.createElement;
 const read = (p) => readFileSync(p, 'utf8');
@@ -52,7 +52,7 @@ test('the canvas’s status words, with Waiting for pending and nothing unknown 
 
 test('no wait says zero or none', () => {
   for (const [k, w] of Object.entries(WAITS)) assert.ok(!/\b0\b|\bnone\b/i.test(w), k);
-  assert.deepEqual(Object.keys(WAITS), ['renewals', 'audit'], 'D1233 drew People’s waits; D1234 drew Businesses');
+  assert.deepEqual(Object.keys(WAITS), [], 'D1233–D1235 draw all four tabs');
 });
 
 /* ------------------------------------------------------------------ *
@@ -65,12 +65,13 @@ test('People draws the queue it is given, and no wait of its own (D1233)', () =>
   assert.ok(!out.includes('kyc-wait-'), 'part 1’s reads fill the figures and the queue');
 });
 
-test('Renewals and Audit say what is not read yet, never an empty table (D1234 drew Businesses)', () => {
-  for (const tab of ['renewals', 'audit']) {
-    const out = html(h(KycTabBody, { view: viewOf(`/admin/kyc/${tab}`), people: h('div', { 'data-testid': 'the-queue' }) }));
-    assert.ok(out.includes(`data-testid="kyc-wait-${tab}"`) && out.includes(NOT_YET), tab);
+test('Businesses, Renewals and Audit draw their live bodies without People or a waiting placeholder', () => {
+  for (const tab of ['businesses', 'renewals', 'audit']) {
+    const marker = tab === 'businesses' ? 'kyc-businesses-live' : `kyc-${tab}`;
+    const out = html(h(KycTabBody, { view: viewOf(`/admin/kyc/${tab}`), people: h('div', { 'data-testid': 'the-queue' }), businesses: h('div', { 'data-testid': 'kyc-businesses-live' }) }));
+    assert.ok(out.includes(`data-testid="${marker}"`), `${tab} draws its live body`);
+    assert.ok(!out.includes('kyc-wait-'), `${tab} is no longer a placeholder`);
     assert.ok(!out.includes('the-queue'), `${tab} does not draw People`);
-    assert.ok(!/<table/.test(out), `${tab} draws no table`);
   }
 });
 

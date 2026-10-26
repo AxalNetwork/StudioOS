@@ -16,9 +16,10 @@
  * ACTIVE ON THIS DEVICE. The active company lives in this browser only
  * (`active_company_id`); the switcher's context carries it. The page says so.
  *
- * WHAT IS NOT DRAWN HERE. The company and venture lightboxes and the
- * lifecycle dialogs (rename, invite, transfer, archive, leave, move, trash)
- * are part 5 (#3019); Archived waits on part 3's read (#3017). Each says so.
+ * PART 5 (D1139, #3019). The company lightbox at `/account/companies/<uid>`
+ * (CMP2), the venture lightbox (CMP4, CMP4b) and the lifecycle dialogs
+ * (CMP6–CMP8): their words and who may do what are below, under "lifecycle".
+ * Archived waits on part 3's read (#3017).
  */
 
 import { NOT_RECORDED } from '../../../lib/absence.js';
@@ -72,6 +73,16 @@ export function companiesTabFor(pathname = '') {
   return tab && TAB_PATHS[tab] ? tab : 'companies';
 }
 export const companiesPathFor = (tab) => TAB_PATHS[tab] || TAB_PATHS.companies;
+
+/**
+ * D1139 — `/account/companies/<uid>` opens that company's lightbox (CMP2): a
+ * segment that is not a tab is a company uid. Anything else is null.
+ */
+export function companyUidFor(pathname = '') {
+  const m = String(pathname).match(/^\/(?:account|settings)\/companies\/([A-Za-z0-9_-]{1,64})\/?$/);
+  return m && !TAB_PATHS[m[1].toLowerCase()] ? m[1] : null;
+}
+export const companyPathFor = (uid) => `/account/companies/${encodeURIComponent(uid)}`;
 
 /** Whether a profile may create a company (D1135: an Explorer may not). */
 export const canCreate = (profile) => profile !== 'explorer';
@@ -178,6 +189,7 @@ export function projectGroups(read, companies = []) {
     members: countLine(p.member_count, 'member', 'members'),
     cycles: cyclesLine(p.cycles_active),
     company: p.company_name || null,
+    companyUid: p.company_uid || null,
   });
   const groups = (Array.isArray(companies) ? companies : []).map((c) => ({
     key: `c-${c.uid}`, title: String(c.company_name || '').trim() || NOT_RECORDED,
@@ -287,4 +299,166 @@ export function tabCount(read, n) {
   if (read.status === 'error') return { kind: 'dash', tip: 'Could not be read.' };
   if (read.status !== 'ready') return null;
   return n == null ? { kind: 'dash', tip: 'Could not be read.' } : { kind: 'num', value: String(n) };
+}
+
+// ---------------------------------------------------------------- lifecycle (D1139: CMP2, CMP4, CMP6–CMP8)
+
+const DAY_MS = 86_400_000;
+/** The venture trash keeps a venture this long (`services/projectTrash.ts`'s sweep). */
+export const TRASH_DAYS = 30;
+/** The last day a venture moved to trash now can be restored. */
+export const trashUntil = (now = new Date()) => day(new Date(now.getTime() + TRASH_DAYS * DAY_MS).toISOString());
+
+/** The Worker's `canEdit` (company.ts): a primary admin, or an Owner, Admin or Founder. */
+const EDITOR_ROLES = ['owner', 'admin', 'founder'];
+
+/**
+ * Who the caller is in a company, from `GET /api/company/:uid`'s members:
+ * what they may do there, and the people a transfer can go to.
+ */
+export function companyPowers(detail, meId) {
+  const members = Array.isArray(detail?.members) ? detail.members : [];
+  const me = members.find((m) => Number(m.user_id) === Number(meId)) || null;
+  const primary = !!me?.is_primary_admin;
+  const admins = members.filter((m) => m.is_primary_admin);
+  return {
+    me,
+    member: !!me,
+    primary,
+    editor: primary || EDITOR_ROLES.includes(String(me?.role_in_company || '').toLowerCase()),
+    onlyPrimary: primary && admins.length === 1,
+    archived: !!detail?.archived_at,
+    others: members.filter((m) => Number(m.user_id) !== Number(meId)),
+  };
+}
+
+/** A company member's line: "Ana Example · Admin · Associate · joined 3 Oct 2026". */
+export function memberLine(m) {
+  return [
+    m.is_primary_admin ? 'Primary admin' : roleWord(m.role_in_company),
+    m.title || null,
+    m.authority ? roleWord(String(m.authority).toLowerCase()) : null,
+    m.joined_at ? `joined ${day(m.joined_at)}` : null,
+  ].filter(Boolean).join(' · ');
+}
+
+/** A company invitation this company sent, as an editor reads it. */
+export function sentInvitationLine(i) {
+  return [
+    roleWord(i.role_in_company),
+    i.email_sent ? null : 'email not sent',
+    i.created_at ? `sent ${day(i.created_at)}` : null,
+    i.expires_at ? `expires ${day(i.expires_at, { year: false })}` : null,
+  ].filter(Boolean).join(' · ');
+}
+
+/**
+ * A venture's team from `GET /api/projects/:id/members`: who sits where, and
+ * what the caller may do. The Lab lock is the Worker's own (`gate_reason`,
+ * from `evaluateTeamGate`), said as it says it, never worked out here.
+ */
+export function ventureTeam(read, meId) {
+  const members = (Array.isArray(read?.members) ? read.members : []).map((m) => ({
+    userId: m.user_id,
+    name: String(m.name || '').trim() || NOT_RECORDED,
+    you: Number(m.user_id) === Number(meId),
+    seat: seatWord(m.role),
+    role: m.role,
+    line: [seatWord(m.role), m.source ? String(m.source).replace(/_/g, ' ') : null, day(m.accepted_at || m.created_at)].filter(Boolean).join(' · '),
+  }));
+  const owner = read?.my_role === 'owner';
+  return {
+    members,
+    owner,
+    manage: !!read?.can_manage,
+    seated: !!read?.my_role,
+    cofounders: members.filter((m) => m.role === 'cofounder' && !m.you),
+    invitations: Array.isArray(read?.invitations) ? read.invitations : [],
+    lock: read?.locked ? (read.gate_reason || `Co-founder and advisor invites unlock in Week ${read.unlock_week} of the Spin-Out Lab.`) : null,
+  };
+}
+
+/** The Worker's refusal of a leave by the only primary admin (company.ts). */
+export const isLastPrimaryAdmin = (e) => (e?.code || e?.data?.code) === 'last_primary_admin';
+
+/** A name already used by one of your companies (the Worker's clash rule: trimmed, case-insensitive). */
+export function nameClash(name, companies = []) {
+  const want = String(name || '').trim().toLowerCase();
+  if (!want) return null;
+  const hit = (Array.isArray(companies) ? companies : []).find((c) => String(c.company_name || '').trim().toLowerCase() === want);
+  return hit ? String(hit.company_name).trim() : null;
+}
+
+/**
+ * What every lifecycle dialog says before it changes anything (the canvas's
+ * CMP6–CMP8). Each is `{ title, body, button, cancel, danger }`; `body` is a
+ * list of sentences, drawn as paragraphs.
+ */
+export const LIFECYCLE = {
+  rename: (name) => ({ title: `Rename ${name}`, body: [`Everyone in ${name} sees the new name.`], button: 'Rename', cancel: 'Cancel' }),
+  makeActive: (name) => ({
+    title: `Make ${name} your active company?`,
+    body: [`Studio, cycles, deals, funds and quotes will show ${name}’s work on this device. Nothing else changes.`],
+    button: 'Make active', cancel: 'Cancel',
+  }),
+  invite: (name) => ({
+    title: `Invite people to ${name}`,
+    body: ['They get an email with a link that works for 14 days. They join only when they accept.'],
+    button: 'Send invitation', cancel: 'Cancel',
+  }),
+  transferAdmin: (name, to) => ({
+    title: `Transfer primary admin of ${name}`,
+    body: [`${to || 'The person you pick'} takes over members and the lifecycle actions. This is recorded.`],
+    button: 'Transfer', cancel: 'Cancel',
+  }),
+  archive: (name) => ({
+    title: `Archive ${name}?`,
+    body: ['It leaves the switcher for every member.', 'Its ventures, deals and files are kept.', 'The primary admin can restore it. Archived, where every member will see it, is not built yet.'],
+    foot: 'Deleting a company is not self-serve. Ask the Axal VC team in the Help Center.',
+    button: 'Archive', cancel: 'Cancel', danger: true,
+  }),
+  leave: (name) => ({
+    title: `Leave ${name}?`,
+    body: ['You lose access to its workspaces. What you added stays with the company. Someone inside must invite you back.'],
+    button: 'Leave', cancel: 'Stay', danger: true,
+  }),
+  leaveRefused: (name) => ({
+    title: `Leave ${name}?`,
+    body: [`You are the only primary admin of ${name}. Transfer it first.`],
+    button: 'Transfer primary admin', cancel: 'Back',
+  }),
+  move: (name, loose) => ({
+    title: `Move ${name} to:`,
+    body: [loose ? 'It then shows only under that company. Today it shows under every company.' : 'It then shows only under that company.'],
+    button: 'Move', cancel: 'Cancel',
+  }),
+  transferVenture: (name, to) => ({
+    title: `Transfer ownership of ${name}`,
+    body: [`${to || 'The co-founder you pick'} becomes the owner. You stay on as Co-founder. Only a founder account can own a venture.`],
+    button: 'Transfer', cancel: 'Cancel',
+  }),
+  leaveVenture: (name, seat) => ({
+    title: `Leave ${name}?`,
+    body: [`You lose your ${seat || 'seat'} seat. The owner can invite you again.`],
+    button: 'Leave', cancel: 'Stay', danger: true,
+  }),
+  trash: (name, until) => ({
+    title: `Move ${name} to trash?`,
+    body: [`It is hidden at once and deleted for good after ${TRASH_DAYS} days.`, `It can be restored until ${until}. Archived, where you will restore it yourself, is not built yet.`],
+    button: 'Move to trash', cancel: 'Cancel', danger: true,
+  }),
+  removeMember: (name, venture) => ({
+    title: `Remove ${name} from ${venture}?`,
+    body: [`${name} loses their seat on ${venture}. You can invite them again.`],
+    button: 'Remove', cancel: 'Cancel', danger: true,
+  }),
+};
+
+/** A lifecycle refusal in words: the Worker's codes for these routes, else its own sentence. */
+export function lifecycleRefusal(e) {
+  const code = e?.code || e?.data?.code;
+  if (code === 'unchanged') return 'Nothing changed: it is already there.';
+  if (code === 'already_archived') return 'This company was archived a moment ago. Nothing changed.';
+  if (code === 'already_pending') return 'An invitation to that address is already waiting. Nothing was sent.';
+  return refusalWords(e);
 }

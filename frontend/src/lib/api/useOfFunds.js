@@ -19,6 +19,8 @@ export const useOfFundsApi = {
   hires: project => request(`/cycles/raise/use-of-funds/hires?${q(project)}`),
   updateHire: (project, id, body) => request(`/cycles/raise/use-of-funds/hires/${seg(id)}?${q(project)}`, { method: 'PATCH', body: JSON.stringify(body) }),
   deleteHire: (project, id) => request(`/cycles/raise/use-of-funds/hires/${seg(id)}?${q(project)}`, { method: 'DELETE' }),
+  // D1177 (#3104): the plan's history, 20 a page; Mercury rows are the founder's alone.
+  history: (project, page = 1) => request(`/cycles/raise/use-of-funds/history?${q(project, { page: String(page) })}`),
   saveSplit: (project, body) => request(`/cycles/raise/use-of-funds?${q(project)}`, { method: 'PUT', body: JSON.stringify(body) }),
   // Forecast retains its existing store and strict driver/source validation.
   forecast: project => request(`/financials/${seg(project)}`),

@@ -218,6 +218,24 @@ test('the subject answers with a data-room file of their own venture, by the req
   assert.equal(one(w, 'SELECT state FROM dd_requests WHERE id = 62').state, 'reviewed');
 });
 
+test('D1252 (DDL15): the subject\'s requests name their own venture\'s room and the files matched to each, and nothing of the case', async () => {
+  const w = world();
+  const before = await call(w, FOUNDER, 'GET', '/dd/requests/mine');
+  const r61 = before.body.items.find((r: any) => r.id === 61);
+  assert.equal(r61.project_uid, 'p-room', 'the venture the file picker reads');
+  assert.deepEqual(r61.file_names, ['Burn 2026.pdf'], 'the file already matched to it');
+  assert.deepEqual(before.body.items.find((r: any) => r.id === 63).file_names, [], 'no file is none, never null');
+  assert.equal((await call(w, FOUNDER, 'PATCH', '/dd/requests/63/respond', { file_uid: 'f-deck' })).status, 200);
+  const after = await call(w, FOUNDER, 'GET', '/dd/requests/mine');
+  assert.deepEqual(after.body.items.find((r: any) => r.id === 63).file_names, ['Contracts.pdf']);
+  for (const r of after.body.items) {
+    for (const k of ['case_uid', 'uid', 'risk_band', 'risk_score', 'case_id', 'subject_id']) assert.ok(!(k in r), `the subject saw ${k}`);
+  }
+  assert.ok(!JSON.stringify(after.body).includes('case-dd'), 'the case\'s uid reached the subject');
+  const other = await call(w, OTHER, 'GET', '/dd/requests/mine');
+  assert.ok(!JSON.stringify(other.body).includes('p-room'), 'another account saw this venture');
+});
+
 test('item evidence: a link or a file, by a writer of the item\'s section; another section is refused', async () => {
   const w = world();
   const link = await call(w, REV_A, 'POST', '/dd/cases/case-dd/items/21/evidence', { url: 'https://register.example.test/x', label: 'Register' });

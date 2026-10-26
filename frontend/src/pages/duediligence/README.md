@@ -12,7 +12,11 @@ The tabs of the Due diligence desk under `/admin/due-diligence` and `/due-dilige
 | `DdListDialogs.jsx` | D1250: Open a case (DDL2, DDL2b) and the row menu's Change lead, Set target IC date and Archive |
 | `DdTemplates.jsx` | D1250: Templates (DDL13) — the Super Admin's editor, read only for everyone else |
 | `DdUi.jsx` | D1250: the classes, the in-page dialog, the note and the refusal the list tabs share |
+| `ddReviewModel.js` | D1252: the reviewer's and the subject's rules, pure — My reviews' rows, the reviewer's banner and steps from a scoped case read, a request's due date and lateness, the answer's body and the data-room file choices |
+| `DdMyReviews.jsx` | D1252: My reviews (DDL12a) from `GET /api/dd/my-reviews`, a table from `md` up and cards on a phone |
+| `DdReviewer.jsx` | D1252: the reviewer's banner and steps on a case (DDL12b, DDL18c), with the NDA and conflicts dialogs; nothing for the deal team |
+| `useDiligenceInvolvement.js` | D1252: whether a partner, investor or advisor leads or reviews any case, for the sidebar's "Diligence" row (`withDiligenceRow` in `../../sidebarConfig.js`) |
 
-`../AdminDueDiligencePage.jsx` mounts the list tabs (and sends a founder to their requests), and `../AdminDueDiligenceCasePage.jsx` mounts the case tabs. Overview is today's whole case page.
+`../AdminDueDiligencePage.jsx` mounts the list tabs (and sends a founder to their requests), and `../AdminDueDiligenceCasePage.jsx` mounts the case tabs and the reviewer's panel. Overview is today's whole case page. `../DueDiligenceRequestsPage.jsx` is the subject's own page (DDL15): the requests addressed to them, never the case.
 
 **Adding to it:** every tab is an address, never `?tab=`. A block with no read says "Not read here yet" with its reason from `WAITS`, never a zero. A link stays on the caller's base, so a member never reaches an `/admin/…` address.
