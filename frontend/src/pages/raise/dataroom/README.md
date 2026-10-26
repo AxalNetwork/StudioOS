@@ -20,7 +20,7 @@ Activity, Checklist and Preview from their own reads (D1105, D1103).
 | `previewModel.js` | Pure (D1108): the grants to view as, and the room as one grant sees it, naming only what the preview read returns and counting the rest. |
 | `DataRoomPreview.jsx` | DR13 and DR13e: Preview from D1103's read, per grant; an ended grant's one sentence. |
 | `filesModel.js` | Pure (D1106): who can open a file (the investor rule, then each grant's folders), the tree and table, every dialog's words with who gains or loses, the upload queue, storage, and Home's blocks. |
-| `DataRoomHome.jsx` | DR1, Home's blocks: the counts, Needs you, who has access, what was added; access requests and the last ninety days say what they wait for. |
+| `DataRoomHome.jsx` | DR1, Home's blocks: the counts, Needs you (with the open access requests from D1104's queue, D1284), who has access, what was added; the last ninety days say what they wait for. |
 | `DataRoomFiles.jsx` | DR2, Files: the folder tree, search, the table and the bulk bar (Move, Set gate, Set end date, Match to checklist, Remove, Clear). |
 | `DataRoomFile.jsx` | DR3 and DR15, one file's lightbox at `/raise/data-room/file/<id>`: who can open it now and why, its gate, what it answers, its versions with Make current, and the links issued and refusals. |
 | `DataRoomFolders.jsx` | DR5: a folder's lightbox (its NDA switch, Rename, Delete folder) and New folder. |
