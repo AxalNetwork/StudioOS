@@ -57,7 +57,9 @@ and a quote with no consent reaches anyone else as withheld.
 CO:375-381 draws them: a readiness item (by key), a narrative version, a deck
 link, a data-room file (its `uid` beside its id), a cap-table holder (`h-`,
 `e-` or `pool`), a use-of-funds section (by key) and a prospect. Every section
-and action is a writer's (`canWrite`). Each action calls the writer its
+and action is a writer's (`canWrite`), except Capital relationships: D1191 uses
+its accepted editor-membership gate for every section/action and gives staff
+no record bypass. Each action calls the writer its
 `cycle_raise.ts` or `data_room.ts` route calls (`../raiseWriters.ts`), names
 every body id it takes in `references`, and logs one `raise.<slug>` row; its
 `formOptions` serve each Add form, Capital relationships' fund search through

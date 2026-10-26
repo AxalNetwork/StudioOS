@@ -1,5 +1,12 @@
 # cloudflare-worker/test — what the worker guarantees
 
+`capital_access_d1191.test.ts` exercises the real canonical schema and all
+post-baseline migrations, both route families and record drawers. It checks
+editor memberships, staff summaries, Contacts/impersonation bypasses, owner-only
+round changes, actor-audited legacy writes, and reasoned support reads whose
+founder-visible audit must persist before private SQL. Unknown/unreadable stores
+stay distinct from empty data; summaries and support snapshots are paged.
+
 `program_usage_d1156.test.ts` exercises migration 601, count-only branch reports,
 newest-wins HQ storage, monthly source counts, partial failures, roles,
 throttling and the dated in-use read with synthetic SQLite records.

@@ -1,7 +1,7 @@
 /** D690 — one gated record, activity, action and form-options route for cycles. */
 import { Hono } from 'hono';
 import type { Env, User } from '../types';
-import { requireAuth } from '../auth';
+import { requireAuth, selectJwt } from '../auth';
 import { canReadBoard, canWrite, canWritePitchDeck, type ProjectRef } from './_founder_validate_helpers';
 import { ADMIN_READ_ONLY, isAdmin, narrativeAdminGate } from '../services/narrative/adminRead';
 import { activityFor } from '../services/cycleActivity';
@@ -63,6 +63,7 @@ function scoped(c: any, registry: RecordRegistry, withId: boolean): Promise<
     if (!CYCLES.has(cycle)) return c.json({ detail: 'No such cycle' }, 404);
     if (!hasRecords(cycle, registry)) return c.json({ detail: `Records for ${cycle} are not built yet.` }, 404);
     const slug = String(c.req.param('slug') ?? '');
+    if (cycle === 'raise' && slug === 'capital-relationships' && (await selectJwt(c))?.payload.impersonated_by) return c.json({ detail: 'Use a reasoned support read from your own staff account.', code: 'support_session_refused' }, 403);
     const spec = specFor(cycle, slug, registry);
     if (!spec) return c.json({ detail: 'No such module' }, 404);
     const id = withId ? String(c.req.param('id') ?? '') : '';

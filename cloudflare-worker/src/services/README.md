@@ -262,6 +262,11 @@ and Match reads: one commitments read across typed prospects, round-call
 answers, deal-room commitments and the founder's Mercury matches, each investor
 counted once by their strongest line; and the fund directory with each fund's
 Fit, the caller's own warm paths and a count of verified investors who fit.
+`capRelAccess.ts` (D1191, #3125) keeps capital editors separate from staff:
+accepted co-founders work the pipeline; the local D1 binding is the studio
+boundary. Staff summary SQL reads counts only. A private support response first
+persists the reason on the founder's activity, failing closed, and grants no
+later GET or write access. The same rule gates the capital record sections.
 `raiseWriters.ts` has one writer per migration 442 record and, since D691
 (#1700), one behind each Raise Add and Edit form (migration 463's stores)
 and one per record action: `duplicateNarrativeVersion`, `revokeDeckLink`,

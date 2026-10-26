@@ -4,7 +4,8 @@ import { storedPmfChecklist } from '../scoring/pmfStore';
  * CO:375-381): Fundraising readiness, Investor narrative, Pitch deck, Data
  * room, Cap table, Use of funds and Capital relationships.
  *
- * WHO. Every gate is the module read's, `canWrite` (decision 2): the
+ * WHO. Except Capital relationships (D1191's accepted editor memberships and
+ * no staff bypass), every gate is the module read's, `canWrite` (decision 2): the
  * venture's owner, an admitted Lab member on their own venture, or an admin.
  * A partner, an advisor member or an investor gets 403; a foreign id 404s in
  * `ownedRow` before any of this runs.
@@ -34,6 +35,7 @@ import {
   loadVersions, prospectFunds, requestTitles, timeOnDeck,
 } from '../raiseCycle';
 import { deckShareMetrics } from '../deckShareUse';
+import { capitalCanWork } from '../capRelAccess';
 import {
   CHECK_SOURCES, EVENT_KINDS, LINK_EXPIRY_DAYS, START_FROM, WriterError, addProspectFeedback, addSectionHire, duplicateNarrativeVersion,
   logProspectEvent, markProspectPassed, rescoreReadiness, revokeDeckLink, saveUseOfFunds, scoreReadinessItem, updateCapHolder,
@@ -1050,6 +1052,12 @@ const capital = spec('raise_prospects', 'capital-relationships', async (rc, id) 
   });
   return actions;
 }, async (rc, query) => capitalOptions(rc, query));
+
+// Pipeline members use the same gate on every section and action. Staff use
+// the dedicated summary/support routes, never this mutable record surface.
+capital.read = (project, user, env) => capitalCanWork(env, project, user);
+capital.write = (project, user, env) => capitalCanWork(env, project, user);
+capital.sections = capital.sections.map(part => ({ ...part, gate: capital.read, publicGate: 'write' }));
 
 /** Raise's module specs, by slug, as `services/records/index.ts` registers them. */
 export const RAISE_RECORDS: Record<string, ModuleSpec> = {

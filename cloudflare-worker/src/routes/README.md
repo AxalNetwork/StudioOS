@@ -1,5 +1,16 @@
 # Worker route handlers — production source of truth
 
+D1191 (#3125): Capital relationships admits accepted owner/co-founder project
+members as editors. Admin and Super Admin have the same deployment-local,
+count-only summary. `GET /api/cycles/raise/capital-relationships/summary`
+lists local ventures (optional `project`, paged). `POST .../support-read?project=`
+takes a reason, writes the founder-visible audit before private SQL, and returns
+a paged read-only pipeline/round snapshot; it grants no later GET or write.
+`GET .../support-reads?project=` lets the venture's editors read the reasons.
+Legacy `contacts.ts` raise paths and capital record drawers follow the same
+boundary; generic Contacts cannot reveal the linked investor contacts to staff
+or impersonation sessions. The owner's round changes remain owner-only.
+
 
 D1144: `cycle_raise.ts` returns the stored Product-market fit part, its paged `/pmf/history` read and Re-score’s `pmf: true` flag. The founder/admin project gate is unchanged. `../services/scoring/README.md` names the shared snapshot/checklist/audit transaction.
 

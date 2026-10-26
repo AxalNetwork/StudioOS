@@ -12,13 +12,12 @@
  * is applied; the migration is the canonical record.
  */
 import { Hono } from 'hono';
-import { logCycleWriteStatement } from '../services/cycleActivity';
 import { projectInActiveCompany } from '../services/tenancyScope';
 import { resolveActiveCompany, ACTIVE_COMPANY_HEADER } from '../middleware/activeCompany';
 import type { Context } from 'hono';
 import type { Env, User } from '../types';
-import { requireAuth, requireRole } from '../auth';
-import { isAdmin, mapError, nowIso, newUid } from './_t13t14t15_helpers';
+import { requireAuth, requireRole, selectJwt } from '../auth';
+import { isAdmin, mapError as baseMapError, nowIso, newUid } from './_t13t14t15_helpers';
 import { sendContactInviteEmail } from '../services/email';
 import { ensureAdvisorProfilesSchema } from '../services/advisorProfilesSchema';
 import { FREE_TIER_LIMITS, userMeetsTier } from '../middleware/requireTier';
@@ -31,8 +30,43 @@ import {
   computeRoundProgress, rollUpTranches, computeProRata, postRoundStake,
 } from '../services/roundMath';
 import { bindingKey } from '../util/schemaBootstrap';
+import { CapitalAccessError, capitalInvestor, capitalMemberProjectIds, capitalOwner, capitalPage, capitalRequestPath, capitalStaff, capitalStudioSummary } from '../services/capRelAccess';
 
 const r = new Hono<{ Bindings: Env }>();
+function mapError(c: Context<{ Bindings: Env }>, error: unknown) {
+  if (error instanceof CapitalAccessError) return c.json({ detail: error.sentence, code: error.code }, error.status as any);
+  if (/\/raise-(?:prospects|round|closes|pro-rata|updates)(?:\/|$)/.test(capitalRequestPath(c.req.path)) &&
+      !(error instanceof Response) && !(error instanceof Error && ['Unauthorized', 'Forbidden'].includes(error.message))) {
+    return c.json({ detail: 'Capital relationships could not be read. Try again.', code: 'capital_unreadable' }, 503);
+  }
+  return baseMapError(c, error);
+}
+async function capitalRestricted(c: Context<{ Bindings: Env }>, user: User) {
+  return capitalStaff(user) || !!(await selectJwt(c))?.payload.impersonated_by;
+}
+
+// Legacy pipeline URLs inherit D1191 too; a reason never unlocks ordinary GETs.
+r.use('*', async (c, next) => {
+  if (!/\/raise-(?:prospects|round|closes|pro-rata|updates)(?:\/|$)/.test(capitalRequestPath(c.req.path))) return next();
+  try {
+    const user = await requireAuth(c);
+    if ((await selectJwt(c))?.payload.impersonated_by) return c.json({ detail: 'Use your own staff account and a reasoned support read.', code: 'support_session_refused' }, 403);
+    if (capitalStaff(user)) {
+      if (c.req.method === 'GET' && capitalRequestPath(c.req.path).endsWith('/raise-prospects')) {
+        const raw = c.req.query('project_id');
+        if (raw != null && !/^[1-9][0-9]{0,9}$/.test(raw)) return c.json({ detail: 'Invalid project' }, 400);
+        return c.json({ ...(await capitalStudioSummary(c.env, raw == null ? null : Number(raw), capitalPage(c.req.query('page')))), items: [] });
+      }
+      return c.json({ detail: c.req.method === 'GET' ? 'Give a reason for a read-only support view.' : 'Staff cannot change the pipeline.',
+        code: c.req.method === 'GET' ? 'support_read_required' : 'admin_read_only' }, 403);
+    }
+    return next();
+  } catch (error) {
+    if (error instanceof CapitalAccessError) return c.json({ detail: error.sentence, code: error.code }, error.status as any);
+    if (error instanceof Error && ['Unauthorized', 'Forbidden'].includes(error.message)) return mapError(c, error);
+    return c.json({ detail: 'Capital access could not be checked. Try again.', code: 'capital_access_unreadable' }, 503);
+  }
+});
 
 // mentor is a first-class landing-page audience (see PAGE_AUDIENCE_SET in
 // brand.ts) but was missing here, so mentor leads were coerced to 'customer' at
@@ -365,8 +399,9 @@ async function activeCompanyFor(c: Context<{ Bindings: Env }>, user: User): Prom
 const ACTIVE_COMPANY_KEY = '__activeCompanyId';
 
 /**
- * Project ids owned by the founder (or 'all' for admin), narrowed to the
- * caller's active company.
+ * Generic Contacts: founder-owned ids narrowed to the active company, or all
+ * non-pipeline contacts for staff. D1191's raise-* branch instead unions owned
+ * ventures with accepted editor memberships, and never gives staff `all`.
  *
  * Company scoping, stage 3. This is the one surface in the rollout that is not
  * a project LOADER — it is the id list twenty-one handlers filter by, so
@@ -388,6 +423,17 @@ const ACTIVE_COMPANY_KEY = '__activeCompanyId';
  * nothing inside the Lab itself.
  */
 async function ownedProjectScope(c: Context<{ Bindings: Env }>, user: User): Promise<'all' | number[]> {
+  if (/\/raise-(?:prospects|round|closes|pro-rata|updates)(?:\/|$)/.test(capitalRequestPath(c.req.path))) {
+    if (capitalStaff(user) || capitalInvestor(user)) return [];
+    const rows = user.founder_id && capitalOwner({ id: 0, founder_id: user.founder_id }, user)
+      ? await c.env.DB.prepare('SELECT id, company_id FROM projects WHERE founder_id = ? AND deleted_at IS NULL')
+        .bind(user.founder_id).all<{ id: number; company_id: number | null }>() : { results: [] };
+    const companyId = await activeCompanyFor(c, user);
+    const own = (rows.results || []).filter(project => projectInActiveCompany(companyId, project)).map(project => Number(project.id));
+    // Round terms, allocations and sending updates remain the venture owner's.
+    const ownerOnly = c.req.method === 'DELETE' || (c.req.method !== 'GET' && /\/raise-(?:round|closes|pro-rata|updates)(?:\/|$)/.test(capitalRequestPath(c.req.path)));
+    return ownerOnly ? own : [...new Set([...own, ...await capitalMemberProjectIds(c.env, user)])];
+  }
   if (isAdmin(user)) return 'all';
   if (!user.founder_id) return [];
   const rows = await c.env.DB.prepare(
@@ -412,10 +458,17 @@ async function requireRaiseUser(c: Context<{ Bindings: Env }>): Promise<User> {
   const user = await requireAuth(c);
   if (user.role === 'admin' || user.role === 'founder') return user;
   if (user.role === 'exploring' && Number((user as any).spinout_lab_active ?? 0) === 1) return user;
+  if (!capitalInvestor(user) && (await capitalMemberProjectIds(c.env, user)).length > 0) return user;
   throw new Error('Forbidden');
 }
 
 async function loadOwned(c: Context<{ Bindings: Env }>, uid: string, user: User): Promise<ContactRow | 'notfound' | 'forbidden'> {
+  if (await capitalRestricted(c, user)) {
+    const privateContact = await c.env.DB.prepare(
+      "SELECT 1 FROM contacts c WHERE c.uid = ? AND (c.audience = 'investor' OR c.promoted_to = 'raise' OR EXISTS (SELECT 1 FROM raise_prospects p WHERE p.contact_id = c.id))",
+    ).bind(uid).first();
+    if (privateContact) return 'forbidden';
+  }
   const row = await c.env.DB.prepare('SELECT * FROM contacts WHERE uid = ?').bind(uid).first<ContactRow>();
   if (!row) return 'notfound';
   if (isAdmin(user)) return row;
@@ -529,6 +582,7 @@ r.get('/', async (c) => {
     // landing_pages, which shares the project_id and audience column names.
     let where = '1=1';
     const params: any[] = [];
+    if (await capitalRestricted(c, user)) where += " AND c.audience != 'investor' AND COALESCE(c.promoted_to, '') != 'raise' AND NOT EXISTS (SELECT 1 FROM raise_prospects p WHERE p.contact_id = c.id)";
     if (scope !== 'all') {
       if (scope.length === 0) return c.json({ items: [], counts: {} });
       where += ` AND c.project_id IN (${scope.map(() => '?').join(',')})`;
@@ -576,6 +630,7 @@ r.post('/', async (c) => {
     const user = await requireRole(c, 'founder');
     await ensureSchema(c.env);
     const body = await c.req.json().catch(() => ({} as any));
+    if (await capitalRestricted(c, user) && body.audience === 'investor') return c.json({ detail: 'Staff cannot change the investor pipeline.', code: 'admin_read_only' }, 403);
     const projectId = Number(body.project_id);
     const email = String(body.email || '').trim().toLowerCase();
     if (!Number.isFinite(projectId) || !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) {
@@ -601,6 +656,7 @@ r.post('/invite', async (c) => {
     const user = await requireRole(c, 'founder');
     await ensureSchema(c.env);
     const body = await c.req.json().catch(() => ({} as any));
+    if (await capitalRestricted(c, user) && body.audience === 'investor') return c.json({ detail: 'Staff cannot change the investor pipeline.', code: 'admin_read_only' }, 403);
     const projectId = Number(body.project_id);
     const email = String(body.email || '').trim().toLowerCase();
     if (!Number.isFinite(projectId) || !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) {
@@ -670,47 +726,14 @@ r.put('/raise-prospects/:id', async (c) => {
     const user = await requireRaiseUser(c);
     await ensureSchema(c.env);
     const id = Number(c.req.param('id'));
-    const row = await c.env.DB.prepare('SELECT * FROM raise_prospects WHERE id = ?').bind(id).first<any>();
-    if (!row) return c.json({ detail: 'Not found' }, 404);
+    const ref = await c.env.DB.prepare('SELECT id, project_id FROM raise_prospects WHERE id = ?').bind(id).first<{ id: number; project_id: number }>();
+    if (!ref) return c.json({ detail: 'Not found' }, 404);
     const scope = await ownedProjectScope(c, user);
-    if (scope !== 'all' && !scope.includes(Number(row.project_id))) return c.json({ detail: 'Forbidden' }, 403);
+    if (scope !== 'all' && !scope.includes(Number(ref.project_id))) return c.json({ detail: 'Forbidden' }, 403);
     const body = await c.req.json().catch(() => ({} as any));
-    let stage = row.stage;
-    if (body.stage && RAISE_STAGES.includes(body.stage)) stage = body.stage;
-    const notes = body.notes !== undefined ? (body.notes ? String(body.notes).slice(0, 4000) : null) : row.notes;
-    const firm = body.firm !== undefined ? (body.firm ? String(body.firm).slice(0, 200) : null) : row.firm;
-    const name = body.name !== undefined ? (body.name ? String(body.name).slice(0, 200) : null) : row.name;
-    const amount = body.amount !== undefined ? normAmount(body.amount) : (row.amount ?? null);
-    // Round Manager (#129) — allocation fields. A prospect that is not
-    // committed carries no commit_status: a "wired" row sitting in the
-    // Meeting column would be a contradiction the funnel would then
-    // count as money.
-    const commitStatus = stage !== 'committed'
-      ? null
-      : (body.commit_status !== undefined
-        ? (COMMIT_STATUSES.includes(String(body.commit_status)) ? String(body.commit_status) : null)
-        : (row.commit_status ?? null));
-    const instrument = body.instrument !== undefined
-      ? (INSTRUMENTS.includes(String(body.instrument)) ? String(body.instrument) : null)
-      : (row.instrument ?? null);
-    const closeId = body.close_id !== undefined
-      ? (body.close_id == null ? null : Number(body.close_id))
-      : (row.close_id ?? null);
-    // A close must belong to this prospect's project — otherwise money
-    // could be slotted into another founder's tranche by id guess.
-    if (closeId != null) {
-      const own = await c.env.DB.prepare(
-        'SELECT 1 FROM raise_closes WHERE id = ? AND project_id = ? LIMIT 1',
-      ).bind(closeId, Number(row.project_id)).first();
-      if (!own) return c.json({ detail: 'close_id does not belong to this project' }, 400);
-    }
-    await c.env.DB.batch([c.env.DB.prepare(
-      `UPDATE raise_prospects SET stage=?, notes=?, firm=?, name=?, amount=?, commit_status=?, instrument=?, close_id=?, updated_at=? WHERE id=?`,
-    ).bind(stage, notes, firm, name, amount, commitStatus, instrument, closeId, nowIso(), id),
-      logCycleWriteStatement(c.env, { projectId: Number(row.project_id), userId: user.id, cycle: 'raise', module: 'capital-relationships', entityId: id, action: 'prospect_updated', summary: 'Investor prospect updated' }),
-    ]);
-    const fresh = await c.env.DB.prepare('SELECT * FROM raise_prospects WHERE id = ?').bind(id).first<any>();
-    return c.json(fresh);
+    const { updateLegacyProspect, WriterError } = await import('../services/raiseWriters');
+    try { return c.json(await updateLegacyProspect(c.env, { projectId: ref.project_id, userId: user.id, prospectId: id, body })); }
+    catch (error) { if (error instanceof WriterError) return c.json({ detail: error.sentence }, error.status as any); throw error; }
   } catch (e) { return mapError(c, e); }
 });
 
@@ -725,7 +748,8 @@ r.post('/raise-prospects', async (c) => {
     if (!Number.isFinite(projectId)) return c.json({ detail: 'project_id is required' }, 400);
     const scope = await ownedProjectScope(c, user);
     if (scope !== 'all' && !scope.includes(projectId)) return c.json({ detail: 'Forbidden' }, 403);
-    const out = await createProspect(c.env, projectId, body);
+    const { addLegacyProspect } = await import('../services/raiseWriters');
+    const out = await addLegacyProspect(c.env, { projectId, userId: user.id, body });
     if (out === 'invalid') return c.json({ detail: 'A name or a valid email is required' }, 400);
     if (out === 'duplicate') return c.json({ detail: 'This project already tracks a prospect with that email' }, 409);
     return c.json(out.prospect, 201);
@@ -750,7 +774,8 @@ r.post('/raise-prospects/import', async (c) => {
     let created = 0;
     const skipped: { row: number; reason: string }[] = [];
     for (let i = 0; i < rows.length; i++) {
-      const out = await createProspect(c.env, projectId, rows[i] || {});
+      const { addLegacyProspect } = await import('../services/raiseWriters');
+      const out = await addLegacyProspect(c.env, { projectId, userId: user.id, body: rows[i] || {} });
       if (out === 'invalid') { skipped.push({ row: i + 1, reason: 'A name or a valid email is required' }); continue; }
       if (out === 'duplicate') { skipped.push({ row: i + 1, reason: 'Already in the pipeline' }); continue; }
       created++;
@@ -766,15 +791,16 @@ r.get('/raise-prospects/:id', async (c) => {
     const user = await requireRaiseUser(c);
     await ensureSchema(c.env);
     const id = Number(c.req.param('id'));
-    const row = await c.env.DB.prepare('SELECT * FROM raise_prospects WHERE id = ?').bind(id).first<any>();
-    if (!row) return c.json({ detail: 'Not found' }, 404);
+    const ref = await c.env.DB.prepare('SELECT id, project_id FROM raise_prospects WHERE id = ?').bind(id).first<{ id: number; project_id: number }>();
+    if (!ref) return c.json({ detail: 'Not found' }, 404);
     const scope = await ownedProjectScope(c, user);
-    if (scope !== 'all' && !scope.includes(Number(row.project_id))) return c.json({ detail: 'Forbidden' }, 403);
+    if (scope !== 'all' && !scope.includes(Number(ref.project_id))) return c.json({ detail: 'Forbidden' }, 403);
+    const row = await c.env.DB.prepare('SELECT * FROM raise_prospects WHERE id = ? AND project_id = ?').bind(id, ref.project_id).first<any>();
     let contact: any = null;
     if (row.contact_id != null) {
       contact = await c.env.DB.prepare(
-        'SELECT uid, name, email, audience, status, source, last_activity_at, created_at FROM contacts WHERE id = ?',
-      ).bind(row.contact_id).first<any>();
+        'SELECT uid, name, email, audience, status, source, last_activity_at, created_at FROM contacts WHERE id = ? AND project_id = ?',
+      ).bind(row.contact_id, row.project_id).first<any>();
     }
     return c.json({ ...row, contact: contact || null });
   } catch (e) { return mapError(c, e); }
@@ -865,8 +891,8 @@ r.put('/raise-round', async (c) => {
 // ---------- Round Manager (#129): closes/tranches + pro-rata ----------
 
 const CLOSE_STATES = ['planned', 'open', 'closed'];
-const COMMIT_STATUSES = ['soft', 'signed', 'wired'];
-const INSTRUMENTS = ['safe', 'note', 'equity'];
+export const COMMIT_STATUSES = ['soft', 'signed', 'wired'];
+export const INSTRUMENTS = ['safe', 'note', 'equity'];
 const PRO_RATA_STATES = ['offered', 'taking', 'waived', 'expired'];
 
 function ymd(v: unknown): string | null {
@@ -1355,6 +1381,7 @@ r.put('/:uid', async (c) => {
     if (row === 'notfound') return c.json({ detail: 'Not found' }, 404);
     if (row === 'forbidden') return c.json({ detail: 'Forbidden' }, 403);
     const body = await c.req.json().catch(() => ({} as any));
+    if (await capitalRestricted(c, user) && body.audience === 'investor') return c.json({ detail: 'Staff cannot change the investor pipeline.', code: 'admin_read_only' }, 403);
     let status = row.status;
     if (body.status && CONTACT_STATUSES.includes(body.status)) status = body.status;
     let audience = row.audience;
@@ -1504,44 +1531,11 @@ r.post('/:uid/promote', async (c) => {
       return c.json({ ...fresh, record });
     }
 
-    // ---- Investor → raise-pipeline prospect ----
+    // ---- Investor → the canonical prospect writer ----
     if (row.audience === 'investor') {
-      if (row.promoted_to === 'raise' && row.promoted_ref_id) {
-        const existing = await db.prepare('SELECT * FROM raise_prospects WHERE id = ?')
-          .bind(row.promoted_ref_id).first<any>();
-        if (existing) {
-          const fresh = await db.prepare('SELECT * FROM contacts WHERE id = ?').bind(row.id).first<ContactRow>();
-          return c.json({ ...fresh, record: existing, already_promoted: true });
-        }
-      }
-
-      const res = await db.prepare(
-        `INSERT INTO raise_prospects (uid, project_id, contact_id, name, email, firm, stage, notes, created_at, updated_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-      ).bind(
-        newUid(), row.project_id, row.id, row.name || null, row.email, null,
-        'to_contact', row.message ? String(row.message).slice(0, 4000) : null,
-        nowIso(), nowIso(),
-      ).run();
-      const newId = lastInsertId(res);
-
-      const upd = await db.prepare(
-        `UPDATE contacts SET promoted_to='raise', promoted_ref_id=?, status='qualified', last_activity_at=?, updated_at=?
-          WHERE id=? AND (promoted_ref_id IS NULL OR promoted_ref_id = ?)`,
-      ).bind(newId, nowIso(), nowIso(), row.id, row.promoted_ref_id).run();
-      if (changedRows(upd) === 0) {
-        await db.prepare('DELETE FROM raise_prospects WHERE id = ?').bind(newId).run();
-        const winner = await db.prepare('SELECT * FROM contacts WHERE id = ?').bind(row.id).first<ContactRow>();
-        const winnerRec = winner?.promoted_ref_id
-          ? await db.prepare('SELECT * FROM raise_prospects WHERE id = ?').bind(winner.promoted_ref_id).first<any>()
-          : null;
-        return c.json({ ...winner, record: winnerRec, already_promoted: true });
-      }
-
-      await logPromotion(c.env, user, row.project_id, `promoted ${row.email} to the raise pipeline`);
-      const fresh = await db.prepare('SELECT * FROM contacts WHERE id = ?').bind(row.id).first<ContactRow>();
-      const record = await db.prepare('SELECT * FROM raise_prospects WHERE id = ?').bind(newId).first<any>();
-      return c.json({ ...fresh, record });
+      const { promoteLegacyInvestor, WriterError } = await import('../services/raiseWriters');
+      try { return c.json(await promoteLegacyInvestor(c.env, { projectId: row.project_id, userId: user.id, contactId: row.id })); }
+      catch (error) { if (error instanceof WriterError) return c.json({ detail: error.sentence }, error.status as any); throw error; }
     }
 
     // ---- Advisor → Advisory Suite directory profile ----
