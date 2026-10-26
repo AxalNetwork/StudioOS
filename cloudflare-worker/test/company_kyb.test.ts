@@ -1,3 +1,4 @@
+import { addKybCaseStores } from './_approval_s16_stores.mjs';
 /**
  * Task #108 — a company's KYB, beside the account's rather than instead of it.
  *
@@ -106,6 +107,7 @@ function freshDb() {
   // because the test's own table still had it. A schema the test writes for
   // itself is a schema the test cannot check.
   db.exec(readFileSync(resolve(process.cwd(), MIGRATION_220), 'utf8'));
+  addKybCaseStores(db);
 
   const u = db.prepare('INSERT INTO users (id, role, name, email) VALUES (?,?,?,?)');
   u.run(ALICE, 'founder', 'Alice', 'alice@example.com');
