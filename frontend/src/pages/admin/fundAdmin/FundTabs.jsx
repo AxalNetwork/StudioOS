@@ -3,14 +3,13 @@ import { Link } from 'react-router-dom';
 import { Pill, Unrecorded, Unreadable } from '../../../ui';
 import { FundActControl } from '../../../lib/fundActs';
 import { parseDollarsToCents } from '../../investor/fundCallsModel';
-import { bpsPercent } from '../../../lib/bps';
 import { BTN, INPUT, LoadingRows } from '../../account/AccountCenter';
 import { Banner } from '../../account/ConnectorSheet';
 import { BrandIcon } from '../../../ui';
 import { ProofStatement } from '../../../components/ProofOfFunds';
 import { CALLS_COMPARE, PILL_TONE, VIEW_NOTE } from '../../../lib/proofOfFunds';
 import { reportError } from '../../../lib/log';
-import { NO_FUND, QUARTER_RE, REJECT_REASON_MIN, money, refusalText } from './fundAdminModel';
+import { NO_FUND, money, refusalText } from './fundAdminModel';
 import { Line, NUM, Note, Panel, Section, TH, Table, Tiles } from './parts';
 import { useRead } from './useRead';
 
@@ -239,156 +238,5 @@ export function DistributionsTab({ apis, access, funds, fund, overview, onFund }
   );
 }
 
-export function FeesTab({ apis, access, funds, fund, overview, onFund }) {
-  const read = useRead(() => (fund ? apis.fees.state(fund.id) : Promise.resolve(null)), [apis, fund?.id]);
-  const [quarter, setQuarter] = useState('');
-  const [preview, setPreview] = useState(null);
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState('');
-  const run = async (fn, fallback) => {
-    setBusy(true); setError('');
-    try { await fn(); } catch (e) { setError(refusalText(e, fallback)); } finally { setBusy(false); }
-  };
-  const s = read.data;
-  const missing = (s?.lps || []).filter((l) => l.admission_missing).length;
-  const termCols = [
-    { key: 'rate', label: 'Terms', cell: (t) => `${bpsPercent(t.annual_bps) ?? 'Rate not recorded'} a year from ${t.effective_from}` },
-    { key: 'lpa', label: 'LPA', cell: (t) => t.lpa_reference || 'No LPA reference recorded' },
-    { key: 'status', label: 'Status', cell: (t) => <Pill tone={t.status === 'confirmed' ? 'ok' : 'neutral'}>{t.status}</Pill> },
-    { key: 'action', label: 'Action', align: 'right', cell: (t) => (t.status === 'draft' ? (
-      <FundActControl access={access} act="fee_terms.confirm" testId={`fee-terms-refused-${t.uid}`} className="text-[12px] text-axal-muted">
-        <button type="button" className={BTN.primary} disabled={busy} data-testid={`fee-terms-confirm-${t.uid}`}
-          onClick={() => run(async () => { await apis.fees.confirmTerms(fund.id, t.uid); await read.reload(); }, 'The terms could not be confirmed.')}>Confirm</button>
-      </FundActControl>) : <span className="text-axal-muted">—</span>) },
-  ];
-  const periodCols = [
-    { key: 'quarter', label: 'Period', mono: true, cell: (p) => `${p.quarter} · net ${amount(p.net_cents)}` },
-    { key: 'window', label: 'Window', mono: true, cell: (p) => `${p.window_start} to ${p.window_end}` },
-    { key: 'ref', label: 'Reference', mono: true, cell: (p) => p.remittance_reference || 'no reference yet' },
-    { key: 'status', label: 'Status', cell: (p) => <Pill tone={p.status === 'paid' ? 'ok' : 'neutral'}>{p.status}</Pill> },
-  ];
-  return (
-    <FundFrame title="Management fees" testId="fees-section" funds={funds} fund={fund} overview={overview} onFund={onFund}
-      sub="The fee terms, the LPs' admission dates and each quarter's period. A Super Admin confirms terms and issues a period; any Admin prepares and previews.">
-      {fund && <div className="flex flex-col gap-4" data-testid="fees">
-        {read.status === 'loading' ? <LoadingRows lines={3} />
-          : read.status === 'unreadable' ? <Unreadable what="This fund's management fee" claim="This is not a claim that no fee is due." onRetry={read.reload} />
-            : <>
-              <Panel label="Fee terms" testId="fee-terms">
-                {(s?.terms || []).length === 0 ? <Note><Unrecorded>No terms recorded</Unrecorded></Note>
-                  : <Table cols={termCols} rows={s.terms} rowKey={(t) => t.uid} template="1.6fr 1fr .8fr 1.2fr" rowTestId={(t) => `fee-terms-${t.uid}`} />}
-                {missing > 0 && <Line a="Admission dates" b={`${missing} LP${missing === 1 ? ' has' : 's have'} no admission date recorded.`} tone="danger" />}
-              </Panel>
-              <Panel label="Fee periods" testId="fee-periods">
-                {(s?.periods || []).length === 0 ? <Note><Unrecorded>No fee period yet</Unrecorded></Note>
-                  : <Table cols={periodCols} rows={s.periods} rowKey={(p) => p.quarter} template="1.4fr 1.4fr 1fr .8fr" rowTestId={(p) => `fee-period-${p.quarter}`} />}
-              </Panel>
-              <div id="fee-prepare" />
-              <Panel label="Prepare a quarter" testId="fee-prepare">
-                <form className="flex flex-wrap items-end gap-2 px-4 py-3 sm:px-5" onSubmit={(e) => {
-                  e.preventDefault();
-                  const q = quarter.trim().toUpperCase();
-                  if (!QUARTER_RE.test(q)) { setError('Enter a quarter as 2026Q3.'); return; }
-                  run(async () => setPreview(await apis.fees.previewPeriod(fund.id, q)), 'The quarter could not be previewed.');
-                }}>
-                  <label className={LABEL}>Quarter
-                    <input className={`${INPUT} mt-1 w-32 ${NUM}`} placeholder="2026Q3" value={quarter} onChange={(e) => { setQuarter(e.target.value); setPreview(null); }} disabled={busy} data-testid="fee-quarter" />
-                  </label>
-                  <FundActControl access={access} act="fee.write" testId="fee-preview-refused">
-                    <button type="submit" className={BTN.ghost} disabled={busy} data-testid="fee-preview-submit">Preview</button>
-                  </FundActControl>
-                </form>
-                {preview && <div data-testid="fee-preview">
-                  <Line a={`${preview.quarter} · net ${amount(preview.totals?.net_cents)}`} b={<span className={NUM}>Gross {amount(preview.totals?.gross_cents)} · catch-up {amount(preview.totals?.catch_up_cents)} · offset applied {amount(preview.totals?.applied_cents)}</span>} />
-                  <Line a="Issue this quarter" b="Issuing records the amounts and reference codes. Nothing moves money."
-                    action={<FundActControl access={access} act="fee_period.issue" testId="fee-issue-refused" className="text-[12px] text-axal-muted">
-                      <button type="button" className={BTN.primary} disabled={busy} data-testid="fee-issue"
-                        onClick={() => run(async () => { await apis.fees.issuePeriod(fund.id, preview.quarter, preview.digest); setPreview(null); await read.reload(); }, 'The quarter could not be issued.')}>Issue</button>
-                    </FundActControl>} />
-                </div>}
-                <Alert text={error} />
-              </Panel>
-            </>}
-      </div>}
-    </FundFrame>
-  );
-}
-
-function DraftRow({ d, apis, access, onChanged }) {
-  const [opened, setOpened] = useState(null);
-  const [text, setText] = useState('');
-  const [mode, setMode] = useState(null);
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState('');
-  const run = async (fn, fallback) => {
-    setBusy(true); setError('');
-    try { await fn(); } catch (e) { setError(refusalText(e, fallback)); } finally { setBusy(false); }
-  };
-  const done = async () => { setMode(null); setText(''); setOpened(null); await onChanged(); };
-  const sha = opened?.figures_sha256;
-  return (
-    <div data-testid={`draft-${d.uid}`}>
-      <Line a={`${d.period_label || 'Period not recorded'} · ${String(d.kind || '').replace(/_/g, ' ')}`} b={<span className={NUM}>{`Revision ${d.revision ?? 1}${d.prepared_at ? ` · prepared ${String(d.prepared_at).slice(0, 10)}` : ''}`}</span>}
-        chip={<Pill tone={d.status === 'prepared' ? 'warn' : d.status === 'issued' ? 'ok' : 'neutral'}>{d.status}</Pill>}
-        action={<>
-          {d.fund_id && d.report_period_id && <Link className={BTN.link} to={`/funds/${d.fund_id}/reporting/${d.report_period_id}`} data-testid={`draft-period-${d.uid}`}>Report period</Link>}
-          <button type="button" className={BTN.ghost} disabled={busy} data-testid={`draft-open-${d.uid}`}
-            onClick={() => run(async () => setOpened(await apis.reporting.read(d.uid)), 'The draft could not be opened.')}>Open</button>
-          <button type="button" className={BTN.ghost} disabled={busy} data-testid={`draft-export-${d.uid}`}
-            onClick={() => run(() => apis.reporting.exportCsv(d.uid), 'The draft could not be exported.')}>Export</button>
-        </>} />
-      {opened && (
-        <div className="border-b border-axal-hairline bg-[#faf9fc] px-4 py-3 sm:px-5 dark:border-gray-800 dark:bg-gray-950/40" data-testid={`draft-opened-${d.uid}`}>
-          <p className="text-[11.5px] text-axal-muted dark:text-gray-400">Opened, and recorded in the audit log. Figures <span className={NUM}>{String(sha || '').slice(0, 12)}…</span></p>
-          <div className="mt-2 flex flex-wrap gap-2">
-            {d.status === 'draft' && <button type="button" className={BTN.ghost} disabled={busy} onClick={() => setMode('prepare')} data-testid={`draft-prepare-${d.uid}`}>Prepare</button>}
-            {d.status === 'prepared' && <button type="button" className={BTN.ghost} disabled={busy} onClick={() => setMode('return')} data-testid={`draft-return-${d.uid}`}>Return</button>}
-            {d.status === 'prepared' && (
-              <FundActControl access={access} act="fund_report.issue" testId={`draft-issue-refused-${d.uid}`} className="text-[12px] text-axal-muted">
-                <button type="button" className={BTN.primary} disabled={busy} onClick={() => setMode('issue')} data-testid={`draft-issue-${d.uid}`}>Issue</button>
-              </FundActControl>
-            )}
-          </div>
-          {mode && (
-            <form className="mt-2 flex flex-col gap-2" onSubmit={(e) => {
-              e.preventDefault();
-              const t = text.trim();
-              if (mode === 'prepare') run(async () => { await apis.reporting.prepare(d.uid, { figures_sha256: sha, note: t || undefined }); await done(); }, 'The draft could not be prepared.');
-              if (mode === 'return') run(async () => { await apis.reporting.returnDraft(d.uid, t); await done(); }, 'The draft could not be returned.');
-              if (mode === 'issue') run(async () => { await apis.reporting.issue(d.uid, { figures_sha256: sha, acknowledgement: t || undefined }); await done(); }, 'The draft could not be issued.');
-            }}>
-              <label className={LABEL}>
-                {mode === 'prepare' ? 'A note for the reviewer (optional)' : mode === 'return' ? 'Why it goes back' : 'What you checked (needed when lines are unmatched)'}
-                <input className={`${INPUT} mt-1`} value={text} onChange={(e) => setText(e.target.value)} disabled={busy} data-testid={`draft-text-${d.uid}`} />
-              </label>
-              <div className="flex justify-end gap-2">
-                <button type="button" className={BTN.ghost} onClick={() => setMode(null)} disabled={busy}>Cancel</button>
-                <button type="submit" className={mode === 'return' ? BTN.danger : BTN.primary} data-testid={`draft-submit-${d.uid}`}
-                  disabled={busy || (mode === 'return' && text.trim().length < REJECT_REASON_MIN)}>{mode === 'prepare' ? 'Prepare' : mode === 'return' ? 'Return' : 'Issue'}</button>
-              </div>
-            </form>
-          )}
-        </div>
-      )}
-      <Alert text={error} />
-    </div>
-  );
-}
-
-export function ReportsTab({ apis, access, funds, fund, overview, onFund }) {
-  const read = useRead(() => (fund ? apis.reporting.list({ fund_id: fund.id }) : Promise.resolve({ items: [] })), [apis, fund?.id]);
-  const items = read.data?.items || [];
-  return (
-    <FundFrame title="Reports" testId="reports-section" funds={funds} fund={fund} overview={overview} onFund={onFund}
-      sub="The review queue: each draft built from the fund's records. Opening a draft is recorded. Any Admin prepares, returns and exports; a Super Admin who did not prepare it issues.">
-      {fund && <div data-testid="reports">
-        <Panel label={`${fund.name} · reporting queue`} sub={read.status === 'ready' ? `${items.length} draft${items.length === 1 ? '' : 's'}` : null}>
-          {read.status === 'loading' ? <Busy />
-            : read.status === 'unreadable' ? <Failed read={read} what="The reporting queue" claim="This is not a claim that nothing waits for review." />
-              : items.length === 0 ? <Note>No draft yet. A draft is built from the fund's ledger; issued periods stay on the fund's report pages.</Note>
-                : items.map((d) => <DraftRow key={d.uid} d={d} apis={apis} access={access} onChanged={read.reload} />)}
-        </Panel>
-      </div>}
-    </FundFrame>
-  );
-}
+// D1165: these tabs have their own layout module; existing imports keep working.
+export { FeesTab, ReportsTab } from './FeesReportsTabs';

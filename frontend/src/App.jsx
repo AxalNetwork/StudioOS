@@ -1510,7 +1510,7 @@ function ProtectedLayout({ children, user, onLogout, viewMode, onViewModeChange,
         <CommandPalette />
         <KeyboardShortcutsOverlay />
         <InstallPrompt />
-        <StepUpModal />
+        <StepUpModal phoneSheet={location.pathname.startsWith('/admin/fund-admin')} />
       </Suspense>
     </ViewAsBranchContext.Provider>
     </ViewModeContext.Provider>
@@ -2801,6 +2801,7 @@ function AppInner() {
       <Route path="/admin/platform/bank-accounts" element={guard(['admin'], hqOnly(<BankAccountsPage />))} />
       <Route path="/admin/platform/bank-accounts/cash" element={guard(['admin'], hqOnly(<BankAccountsPage />))} />
       <Route path="/admin/platform/bank-accounts/history" element={guard(['admin'], hqOnly(<BankAccountsPage />))} />
+      <Route path="/admin/platform/bank-accounts/account/:uid" element={guard(['admin'], hqOnly(<BankAccountsPage />))} />
       <Route path="/admin/platform/product-testing" element={guard(['admin'], hqOnly(<ProductTestingHqPage />))} />
       <Route path="/admin/platform/product-testing/:tab" element={guard(['admin'], hqOnly(<ProductTestingHqPage />))} />
       <Route path="/admin/platform/product-testing/programs/:uid" element={guard(['admin'], hqOnly(<ProductTestingHqPage />))} />

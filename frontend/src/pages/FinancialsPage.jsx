@@ -3,7 +3,7 @@ import PageExplainer from '../components/PageExplainer';
 import AdvisorFilledBanner from '../components/advisor/AdvisorFilledBanner';
 import { Link, useSearchParams } from 'react-router-dom';
 import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, ReferenceLine, CartesianGrid, Legend } from 'recharts';
-import { Save, Download, RefreshCw, AlertCircle, TrendingUp, Target, Wallet, Activity, FolderPlus, Plus } from 'lucide-react';
+import { Save, Download, RefreshCw, AlertCircle, Target, Wallet, Activity, FolderPlus, Plus } from 'lucide-react';
 import { api } from '../lib/api';
 
 export function driverValue(raw) {
@@ -54,7 +54,7 @@ function StatCard({ icon: Icon, label, value, sub, tone = 'violet' }) {
 export default function FinancialsPage({ embedded = false }) {
   const [searchParams, setSearchParams] = useSearchParams();
   const [projects, setProjects] = useState([]);
-  const [projectId, setProjectId] = useState(null);
+  const [projectsLoaded, setProjectsLoaded] = useState(false);
   const [model, setModel] = useState(null);
   const [assumptions, setAssumptions] = useState(null);
   const [loading, setLoading] = useState(false);
@@ -68,15 +68,8 @@ export default function FinancialsPage({ embedded = false }) {
       try {
         const list = await api.listProjects();
         if (cancelled) return;
-        const safeList = list || [];
+        const safeList = Array.isArray(list) ? list : [];
         setProjects(safeList);
-        const fromQuery = parseInt(searchParams.get('project_id'), 10);
-        if (fromQuery && safeList.find((p) => p.id === fromQuery)) {
-          setProjectId(fromQuery);
-        } else if (safeList.length > 0) {
-          if (fromQuery) setSearchParams({}, { replace: true });
-          setProjectId(safeList[0].id);
-        }
       } catch (e) {
         if (cancelled) return;
         // Defensive 404 — backend may return "Not found" when the user has no
@@ -88,16 +81,30 @@ export default function FinancialsPage({ embedded = false }) {
         } else {
           setError(e.message || 'Failed to load startups.');
         }
-      }
+      } finally { if (!cancelled) setProjectsLoaded(true); }
     })();
     return () => { cancelled = true; };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  // The URL is the venture selection, including browser back/forward.
+  const requestedProject = searchParams.get('project_id') ?? searchParams.get('project');
+  const requestedId = requestedProject && /^[1-9][0-9]*$/.test(requestedProject) ? Number(requestedProject) : null;
+  const projectId = requestedProject == null && projects.length === 1 ? Number(projects[0].id)
+    : Number.isSafeInteger(requestedId) && projects.some((p) => Number(p.id) === requestedId) ? requestedId : null;
+  const selectionError = projectsLoaded && requestedProject != null && projectId == null
+    ? 'The selected venture is unavailable. Choose a venture to read its model.' : null;
+  const modelMatchesVenture = model != null && Number(model.project_id) === projectId;
+
   // Load model when projectId changes
   useEffect(() => {
-    if (!projectId) return;
-    setSearchParams({ project_id: String(projectId) }, { replace: true });
+    if (!projectId) { setModel(null); setAssumptions(null); setLoading(false); return; }
+    setSearchParams((previous) => {
+      const next = new URLSearchParams(previous);
+      next.delete('project');
+      next.set('project_id', String(projectId));
+      return next;
+    }, { replace: true });
     let cancelled = false;
     (async () => {
       setLoading(true);
@@ -128,9 +135,9 @@ export default function FinancialsPage({ embedded = false }) {
   }, [projectId]);
 
   const dirty = useMemo(() => {
-    if (!model || !assumptions) return false;
+    if (!modelMatchesVenture || !assumptions) return false;
     return JSON.stringify(model.assumptions) !== JSON.stringify(assumptions);
-  }, [model, assumptions]);
+  }, [model, assumptions, modelMatchesVenture]);
 
   const missingDriver = Object.keys(DRIVER_LABELS).find(k => assumptions?.[k] === '' || assumptions?.[k] == null);
 
@@ -161,7 +168,7 @@ export default function FinancialsPage({ embedded = false }) {
   }
 
   async function handleExport() {
-    if (!projectId || !model) return;
+    if (!projectId || !modelMatchesVenture || !model.exists) return;
     setError(null);
     try {
       await api.downloadFinancialModelXlsx(projectId);
@@ -195,26 +202,32 @@ export default function FinancialsPage({ embedded = false }) {
             <h1 className="text-2xl font-semibold text-gray-900 dark:text-gray-100">Financial Model</h1>
             <PageExplainer pageKey="financials" />
             <p className="text-sm text-gray-500 mt-1">
-              3-statement-style drivers feed runway, breakeven, and the capital category of the scoring engine.
+              Recorded drivers model cash, runway and breakeven. This forecast is Modelled, not runway today.
             </p>
           </div>
         )}
         <div className="flex items-center gap-2">
           <select
             value={projectId || ''}
-            onChange={(e) => setProjectId(parseInt(e.target.value, 10))}
+            onChange={(e) => {
+              setError(null);
+              const next = new URLSearchParams(searchParams);
+              next.delete('project');
+              if (e.target.value) next.set('project_id', e.target.value); else next.delete('project_id');
+              setSearchParams(next);
+            }}
             disabled={!hasProjects}
             className="border border-gray-300 rounded-lg px-3 py-2 text-sm bg-white disabled:bg-gray-50 disabled:text-gray-400 dark:border-gray-700 dark:bg-gray-900"
           >
-            {!hasProjects && <option value="">No startups available</option>}
+            <option value="">{hasProjects ? 'Choose a venture' : 'No startups available'}</option>
             {projects.map((p) => (
               <option key={p.id} value={p.id}>{p.name}</option>
             ))}
           </select>
           <button
             onClick={handleExport}
-            disabled={!projectId || !model}
-            title={!model ? 'Load a startup model first' : 'Download as XLSX'}
+            disabled={!projectId || !modelMatchesVenture || !model?.exists}
+            title={!modelMatchesVenture ? 'Load a startup model first' : !model.exists ? 'Save the model before exporting' : 'Download as XLSX'}
             className="flex items-center gap-2 px-3 py-2 text-sm border border-gray-300 rounded-lg hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed dark:border-gray-700"
           >
             <Download size={14} /> Export XLSX
@@ -222,18 +235,18 @@ export default function FinancialsPage({ embedded = false }) {
         </div>
       </div>
 
-      {error && (
+      {(selectionError || error) && (
         <div className="flex items-start gap-2 bg-rose-50 border border-rose-200 text-rose-700 rounded-lg px-4 py-3 text-sm">
-          <AlertCircle size={16} className="mt-0.5" /> {error}
+          <AlertCircle size={16} className="mt-0.5" /> {selectionError || error}
         </div>
       )}
 
-      {!hasProjects && (
+      {!hasProjects && projectsLoaded && (
         <div className="bg-white border border-dashed border-gray-300 rounded-xl p-10 text-center dark:bg-gray-900 dark:border-gray-700">
           <FolderPlus size={32} className="mx-auto text-gray-400 mb-3" />
           <h2 className="text-base font-semibold text-gray-900 dark:text-gray-100">No startups yet</h2>
           <p className="text-sm text-gray-500 mt-1 max-w-md mx-auto">
-            The financial model is scoped to a startup. Create or join one first, then come back here to set drivers and see runway, breakeven, and capital scoring.
+            The financial model is scoped to a startup. Create or join one first, then come back here to set drivers and model runway and breakeven.
           </p>
           <Link
             to="/build?new=1"
@@ -246,12 +259,13 @@ export default function FinancialsPage({ embedded = false }) {
 
       {hasProjects && loading && <div className="text-gray-500 text-sm">Loading model…</div>}
 
-      {!loading && assumptions && model && (
+      {!loading && assumptions && modelMatchesVenture && (
         <>
           {!model.exists && <p>No model saved yet</p>}
           {missingDriver && <p role="status">{DRIVER_LABELS[missingDriver].label} is required.</p>}
+          <p className="text-xs text-gray-500">Source: Modelled · This forecast uses recorded drivers. It is not runway today.</p>
           {/* Top metrics */}
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+          <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
             <StatCard
               icon={Wallet}
               label="Runway"
@@ -270,13 +284,6 @@ export default function FinancialsPage({ embedded = false }) {
               label="Breakeven"
               value={model.computed.breakeven_month ? `Month ${model.computed.breakeven_month}` : model.exists ? 'Not in horizon' : 'Not recorded'}
               tone={model.computed.breakeven_month ? 'emerald' : 'rose'}
-            />
-            <StatCard
-              icon={TrendingUp}
-              label="Capital score"
-              value={`${model.capital_recompute?.total ?? '—'} / 10`}
-              sub={`LTV/CAC ${model.computed.ltv_cac_ratio ?? '—'}`}
-              tone="violet"
             />
           </div>
 
@@ -363,8 +370,8 @@ export default function FinancialsPage({ embedded = false }) {
             </div>
           </div>
 
-          {/* Sensitivity */}
-          <div className="bg-white rounded-xl border border-gray-200 p-5 dark:bg-gray-900 dark:border-gray-800">
+          {/* Sensitivity is absent until a model has recorded drivers. */}
+          {model.sensitivity && <div className="bg-white rounded-xl border border-gray-200 p-5 dark:bg-gray-900 dark:border-gray-800">
             <h2 className="text-sm font-semibold text-gray-900 mb-3 dark:text-gray-100">Sensitivity — runway months at ±20%</h2>
             <div className="overflow-x-auto">
               <table className="min-w-full text-sm">
@@ -404,36 +411,8 @@ export default function FinancialsPage({ embedded = false }) {
             <p className="text-xs text-gray-500 mt-3">
               Each cell shows runway months when the driver is shifted by the given percentage; all other drivers held constant.
             </p>
-          </div>
+          </div>}
 
-          {/* Capital score breakdown */}
-          {model.capital_recompute && (
-            <div className="bg-white rounded-xl border border-gray-200 p-5 dark:bg-gray-900 dark:border-gray-800">
-              <h2 className="text-sm font-semibold text-gray-900 mb-3 dark:text-gray-100">
-                Capital category recompute — {model.capital_recompute.total} / {model.capital_recompute.max}
-              </h2>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                {Object.entries(model.capital_recompute.factors).map(([key, f]) => (
-                  <div key={key} className="border border-gray-100 rounded-lg p-3">
-                    <div className="flex items-center justify-between text-sm">
-                      <span className="font-medium text-gray-900 dark:text-gray-100">{f.label}</span>
-                      <span className="text-violet-700 font-semibold">{f.points} / {f.max}</span>
-                    </div>
-                    <div className="mt-2 h-1.5 bg-gray-100 rounded-full overflow-hidden">
-                      <div className="h-full bg-violet-600" style={{ width: `${(f.points / f.max) * 100}%` }} />
-                    </div>
-                    <div className="text-[11px] text-gray-500 mt-1.5">
-                      Slider {f.raw} / 10 · derived from {f.source}
-                    </div>
-                  </div>
-                ))}
-              </div>
-              <p className="text-[11px] text-gray-500 mt-3">
-                Capital category fills two scoring sliders (`burn_efficiency`, `runway`) consumed by the v2 scoring engine.
-                Saving the model recomputes these values; the next official scoring run picks them up.
-              </p>
-            </div>
-          )}
         </>
       )}
     </div>

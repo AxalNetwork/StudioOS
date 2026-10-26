@@ -305,7 +305,7 @@ export default function BankCashTab({ api }) {
       )}
       <CashByEntity api={api} accounts={accounts} />
       <MoneyInOut api={api} />
-      <EntityAccounts apis={apis} read={accounts} label="Balances" />
+      <EntityAccounts apis={apis} reading={accounts} label="Balances" />
       <p className={`-mt-2 m-0 text-[11.5px] ${MUTED}`}>{CASH_WORDS.balancesFoot}</p>
       <Panel label="Reconcile receipts" testId="bank-cash-reconcile">
         <div className="flex flex-wrap items-center justify-between gap-3 px-4 py-3 sm:px-5">

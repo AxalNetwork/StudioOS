@@ -8,7 +8,7 @@
  * admin › Banking already makes; its 30-day series and monthly in and out
  * have no read yet. History (`/history`) has no read: the reveal ledger is
  * written and never read. One account's lightbox (`/account/:uid`, BNK2) is
- * part 5's.
+ * D1185's, drawn over Accounts, so that address is Accounts too.
  */
 
 export const BASE = '/admin/platform/bank-accounts';
