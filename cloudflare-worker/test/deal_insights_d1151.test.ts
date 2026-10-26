@@ -68,10 +68,17 @@ test('D1151: authentication and canonical deal ownership precede every section',
       for (const [path,who,status] of [[`/100/${section}`,4,404],[`/100/${section}`,6,404],[`/200/${section}`,3,404],[`/999/${section}`,1,404],[`/0/${section}`,3,400],[`/1e2/${section}`,3,400]] as const) {
         assert.equal((await read(f,path,who)).status,status);
       }
-      for (const who of [1,2,5]) {
+      const partner=await read(f,`/100/${section}`,5);
+      assert.deepEqual([partner.status,partner.body.masked],[200,true]);
+      for (const who of [1,2]) {
         const result=await read(f,`/100/${section}`,who);
         assert.deepEqual([result.status,result.body.masked],[200,false]);
       }
+    }
+    f.db.exec("INSERT INTO pairwise_ndas(party_a_user_id,party_b_user_id,status) VALUES(2,5,'active')");
+    for (const section of ['team','market','traction']) {
+      const partner=await read(f,`/100/${section}`,5);
+      assert.deepEqual([partner.status,partner.body.masked],[200,false]);
     }
     f.db.prepare('DELETE FROM deal_invitations').run();
     f.db.prepare("INSERT INTO commitments(deal_id,investor_user_id,amount,status) VALUES(100,3,100,'withdrawn')").run();

@@ -162,9 +162,9 @@ function handler(section: 'team' | 'market' | 'traction') {
       const project = await c.env.DB.prepare(`SELECT p.id, p.founder_id, p.name, p.sector, p.stage, p.tagline AS headline
         FROM deals d JOIN projects p ON p.id = d.project_id WHERE d.id = ? AND p.deleted_at IS NULL`).bind(id).first<any>();
       if (!project) return c.json({ error: 'deal_not_found' }, 404);
-      // D1149 deliberately retains partners' separate deal policy pending #2450;
-      // trust.ts masks investors. Do not silently redefine that shared role rule.
-      const ndaExempt = ['admin', 'partner', 'founder'].includes(user.role);
+      // Canonical deal access is necessary, but external partners also need an NDA
+      // for these new sections. Only staff and the venture's own founder are exempt.
+      const ndaExempt = ['admin', 'founder'].includes(user.role);
       // Founders reach here only for their own venture, through userMayReadDeal.
       if (!ndaExempt) {
         const founder = await c.env.DB.prepare(`SELECT id FROM users WHERE founder_id = ? AND COALESCE(is_active, 1) = 1 ORDER BY id LIMIT 1`)
