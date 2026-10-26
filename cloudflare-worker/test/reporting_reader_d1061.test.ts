@@ -184,7 +184,11 @@ test('the figures read: the frozen figures of each report received, cut to the c
   try {
     assert.equal((await call(env, 'GET', '/api/reporting/companies/proj-seven/figures', INV_A)).status, 404, 'before any report: none');
     const uid = await sent(env);
+    // Ben's duty now names gross margin; Ivy's does not. Ivy never reads a figure only another holder's duty requires.
+    db.exec(`UPDATE reporting_duties SET required_figures = '["gross_margin"]' WHERE uid = 'duty-b'`);
+    assert.ok(fig((await call(env, 'GET', '/api/reporting/companies/proj-seven/figures', INV_B)).body.reports[0].figures, 'gross_margin'), 'Ben’s duty names it');
     const r = await call(env, 'GET', '/api/reporting/companies/proj-seven/figures', INV_A);
+    assert.equal(fig(r.body.reports[0].figures, 'gross_margin'), undefined, 'cut to Ivy’s own duty');
     assert.equal(r.status, 200, r.text);
     assert.equal(r.body.reports.length, 1);
     const rep = r.body.reports[0];
