@@ -38,6 +38,8 @@ function world() {
   db.exec(read('../sql/migrations/339_dd_section_signoff.sql'));
   db.exec(read('../sql/migrations/620_dd_case_lifecycle.sql'));
   db.exec(read('../sql/migrations/302_push_subscriptions.sql'));
+  // D1249: the router also reads migration 623's template store.
+  db.exec(read('../sql/migrations/623_dd_team_templates.sql'));
   const u = db.prepare('INSERT INTO users (id, email, name, role, is_active) VALUES (?, ?, ?, ?, 1)');
   for (const [id, role, name] of [[ADMIN, 'admin', 'Ada Admin'], [LEAD, 'partner', 'Lee Lead'], [REVIEWER, 'partner', 'Rae Reviewer'],
     [OTHER, 'partner', 'Otto Other'], [ADVISOR, 'advisor', 'Avi Advisor'], [INVESTOR, 'investor', 'Ivy Investor']] as const) {

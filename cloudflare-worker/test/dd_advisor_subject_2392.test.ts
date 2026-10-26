@@ -15,7 +15,9 @@ const BASELINE=readFileSync(new URL('../sql/schema_baseline.sql',import.meta.url
 const REBUILD=readFileSync(new URL('../sql/migrations/535_dd_advisor_subject.sql',import.meta.url),'utf8');
 // D1246 (#3261): the router now reads and writes migration 620's columns, so a
 // database the router is mounted on carries it, as production does.
-const LIFECYCLE=readFileSync(new URL('../sql/migrations/620_dd_case_lifecycle.sql',import.meta.url),'utf8');
+const LIFECYCLE=readFileSync(new URL('../sql/migrations/620_dd_case_lifecycle.sql',import.meta.url),'utf8')
+  // D1249 (#3264): and migration 623's team and template columns.
+  +'\n'+readFileSync(new URL('../sql/migrations/623_dd_team_templates.sql',import.meta.url),'utf8');
 const OLD_CASE=tableFromBaseline(readFileSync(new URL('../sql/migrations/008_due_diligence.sql',import.meta.url),'utf8'),'dd_cases');
 const OLD_SCHEMA=BASELINE.replace(tableFromBaseline(BASELINE,'dd_cases'),OLD_CASE+"\nALTER TABLE dd_cases ADD COLUMN template_depth TEXT NOT NULL DEFAULT 'standard';");
 const SUBJECTS=['project','founder','advisor','investor','partner'] as const;

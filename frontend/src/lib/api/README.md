@@ -367,6 +367,12 @@ and paged `/notes`; add/edit/delete notes use the same Worker scope. Only
 the author edits and deletes, firm colleagues read, and staff have no bypass.
 Reading whats-new advances that user/firm’s visit marker. #3057 consumes it.
 
+D1249 (#3264): `ddDesk.js` is Due Diligence's desk on `/api/dd`: the list
+with its server-side search, filters, sort and pages, the overview's figures,
+My reviews, the subject and people searches (an email for an Admin only), the
+team's observer, conflicts and remove, widen, and HQ's versioned templates. No
+page reads it yet; parts 6–8 (#3265–#3267) draw it.
+
 D1246 (#3261): `ddLifecycle.js` is a Due Diligence case's lifecycle on
 `/api/dd/cases/:uid`: the deal context and archive (`PATCH`), the decision, the
 deal team's memo, the reports list and a report's re-download behind step-up,
