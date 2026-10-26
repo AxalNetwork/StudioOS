@@ -8,6 +8,9 @@
  *   GET  /items/:lane/:id                      D1132: one waiting item, its lane and its history
  *   GET  /history?lane=&item_id=               an item's assignment events
  *   POST /assignments                          { assignee_user_id, items: [{ lane, item_id }] }
+ *   GET  /decided?lane=&outcome=&decided_by=&from=&to=&page=
+ *                                              D1044: every lane's decided rows, newest first, 25 a page
+ *   GET  /decided/weekly                       D1044: arrived and decided per lane, eight weeks, and the tile
  *
  * The branch board's reads and write (D130, D470) without `requireBranchTier`,
  * on `requireAdmin`; the board itself is `approvalBoard`, shared, not copied.
@@ -28,6 +31,9 @@ import { inboxSources } from '../services/hqApprovalSources';
 import {
   INBOX_LANE_CAP, assignFromBody, assignmentHistory, hqInbox, inboxItem, readHistoryQuery,
 } from '../services/approvalAssignments';
+import {
+  DECIDED_MAX_PAGE, OUTCOMES, decidedLog, decidedWeekly, decisionLanesFor, type Filters, type Outcome,
+} from '../services/approvalDecisions';
 import { parseInboxQuery } from '../services/approvalInbox';
 
 const r = new Hono<{ Bindings: Env }>();
@@ -94,6 +100,53 @@ r.post('/assignments', async (c) => {
     const result = await assignFromBody(c.env, admin, body, { sources, boardLimit: INBOX_LANE_CAP });
     if (!result.ok) return refuse(c, result.status, { code: result.code, message: result.message, audience: 'member' });
     return c.json({ assigned: result.assigned });
+  } catch (e) { return mapError(c, e); }
+});
+
+const DAY = /^\d{4}-\d{2}-\d{2}$/;
+/** A `YYYY-MM-DD` day as the SQLite stamp of its midnight, or null for a day that is not one. */
+function dayStamp(raw: string, plusDays = 0): string | null {
+  if (!DAY.test(raw)) return null;
+  const ms = Date.parse(`${raw}T00:00:00Z`);
+  if (!Number.isFinite(ms) || new Date(ms).toISOString().slice(0, 10) !== raw) return null;
+  return new Date(ms + plusDays * 86_400_000).toISOString().replace('T', ' ').slice(0, 19);
+}
+
+r.get('/decided', async (c) => {
+  try {
+    const admin = await requireAdmin(c);
+    const visible = decisionLanesFor(isSuperAdmin(admin as any));
+    const q = (k: string) => String(c.req.query(k) ?? '').trim();
+    const bad = (code: string, message: string) => refuse(c, 400, { code, message, audience: 'member' });
+
+    const rawPage = q('page');
+    const page = rawPage === '' ? 1 : Number(rawPage);
+    if (!Number.isSafeInteger(page) || page < 1 || page > DECIDED_MAX_PAGE) {
+      return bad('bad_page', `page is a whole number from 1 to ${DECIDED_MAX_PAGE}.`);
+    }
+    const lane = q('lane');
+    const lanes = lane ? visible.filter((l) => l.key === lane) : visible;
+    if (lane && !lanes.length) return bad('bad_lane', 'There is no such lane.');
+    const outcome = q('outcome');
+    if (outcome && !OUTCOMES.includes(outcome as Outcome)) return bad('bad_outcome', 'outcome is approved, declined or other.');
+    const by = q('decided_by');
+    const decidedBy = by === '' ? null : Number(by);
+    if (decidedBy != null && (!Number.isSafeInteger(decidedBy) || decidedBy < 1)) return bad('bad_decided_by', 'decided_by is an account id.');
+    const from = q('from') ? dayStamp(q('from')) : null;
+    const to = q('to') ? dayStamp(q('to'), 1) : null;
+    if ((q('from') && !from) || (q('to') && !to)) return bad('bad_date', 'from and to are days, YYYY-MM-DD.');
+    if (from && to && from >= to) return bad('bad_date', 'from is on or before to.');
+
+    const filters: Filters = { from, to, outcome: (outcome || null) as Outcome | null, decidedBy };
+    return c.json(await decidedLog(c.env, { lanes, filters, page }));
+  } catch (e) { return mapError(c, e); }
+});
+
+r.get('/decided/weekly', async (c) => {
+  try {
+    const { admin, sources } = await reader(c);
+    const lanes = decisionLanesFor(isSuperAdmin(admin as any));
+    return c.json(await decidedWeekly(c.env, { lanes, sources, now: Date.now() }));
   } catch (e) { return mapError(c, e); }
 });
 

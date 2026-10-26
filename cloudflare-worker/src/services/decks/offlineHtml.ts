@@ -23,6 +23,13 @@
  * (D1111). A version with no binding says it records no source. It also names
  * the cards whose text was written with AI help, which the fields record.
  *
+ * D1112 (#2992): a card the editor laid out on D898's 12 × 6 grid is drawn
+ * from its blocks, each at its range, as the editor draws it: text, metric
+ * tiles ("Not recorded" for a tile with no figure), charts with their series
+ * (a typed series with its points), images, video, audio and link buttons by
+ * their label and address as text (the file asks for nothing, so no href),
+ * and graphics by name. A card with no blocks is drawn from its fields.
+ *
  * `services/decks/render.ts` was not this file: it loaded Tailwind from a CDN
  * and had no caller. Its renderer is gone; its slide types stay for pptx.ts.
  */
@@ -77,6 +84,8 @@ export function imageUrlsOf(slides: any[]): string[] {
   for (const s of slides || []) {
     add(s?.image_url);
     if (Array.isArray(s?.fields)) for (const f of s.fields) if (f?.kind === 'image') add(f.value);
+    // D1112: a block's image and a video's poster.
+    if (Array.isArray(s?.blocks)) for (const b of s.blocks) { if (b?.kind === 'image') add(b.image_url); if (b?.kind === 'video') add(b.poster_url); }
   }
   return out;
 }
@@ -135,8 +144,70 @@ function field(f: any, images: OfflineDeck['images'], cardTitle: string): string
   }
 }
 
+/** "Ranked bars": a chart type as the editor's library names it. */
+export const chartLabel = (t: unknown) => {
+  const v = String(t ?? '').replace(/_/g, ' ').trim();
+  return v ? `${v.charAt(0).toUpperCase()}${v.slice(1)}` : 'Chart';
+};
+
+/** A block's address, as text: the scheme dropped, so nothing reads it as a link to load. */
+const addr = (u: unknown) => (typeof u === 'string' && /^https:\/\//.test(u) ? `<p class="addr">${esc(u.replace(/^https:\/\//, ''))}</p>` : '');
+
+/** One D898 block's markup, or '' for an empty text block. */
+function block(b: any, images: OfflineDeck['images']): string {
+  switch (b?.kind) {
+    case 'text': {
+      const t = String(b.text ?? '').trim();
+      if (!t) return '';
+      if (b.style === 'heading') return `<h3>${text(t)}</h3>`;
+      if (b.style === 'list') return `<ul>${t.split(/\r?\n/).filter((l) => l.trim()).map((l) => `<li>${text(l)}</li>`).join('')}</ul>`;
+      return `<p>${text(t)}</p>`;
+    }
+    case 'metric': {
+      const v = String(b.value ?? '').trim();
+      return `<div class="tile"><span>${text(b.label || 'Metric')}</span>${v ? `<b>${text(v)}</b>` : `<b class="nr">${NOT_RECORDED}</b>`}</div>`;
+    }
+    case 'chart': {
+      const series = (Array.isArray(b.series) ? b.series : []).map((sr: any) => {
+        const label = text(sr?.label || sr?.binding?.source_key || 'Series');
+        const pts = Array.isArray(sr?.points) ? sr.points : null;
+        return pts && pts.length
+          ? `<li>${label}: ${pts.map((p: any) => `${text(p?.x)} ${text(p?.y)}`).join(' · ')}</li>`
+          : `<li>${label}</li>`;
+      });
+      return `<div class="chart"><b>${esc(chartLabel(b.chart_type))} chart</b>${series.length ? `<ul>${series.join('')}</ul>` : `<p class="nr">${NOT_RECORDED}</p>`}</div>`;
+    }
+    case 'image': return image(b.image_url, images, b.alt || '');
+    // The file asks for nothing (D901), so a link is its label and its address as text, never an href.
+    case 'video': {
+      const label = text(b.title || (b.provider === 'vimeo' ? 'Vimeo video' : 'YouTube video'));
+      return `<p class="btn">▶ ${label}</p>${addr(b.url)}`;
+    }
+    case 'audio':
+    case 'link': {
+      const label = text(b.label || (b.kind === 'audio' ? 'Audio clip' : 'Open'));
+      return `<p class="btn">${b.kind === 'audio' ? '▶ ' : ''}${label}</p>${addr(b.url)}`;
+    }
+    case 'graphic': return `<p class="nr">Graphic · ${text(b.graphic || 'none chosen')}</p>`;
+    default: return '';
+  }
+}
+
+/** A card laid out on the 12 × 6 grid: each block at its range (D898). */
+function blocksHtml(blocks: any[], images: OfflineDeck['images']): string {
+  const cells = blocks.map((b) => {
+    const g = b?.grid || {};
+    const ok = [g.c1, g.c2, g.r1, g.r2].every((n) => Number.isInteger(n));
+    const at = ok ? ` style="grid-column:${g.c1} / ${g.c2 + 1};grid-row:${g.r1} / ${g.r2 + 1}"` : '';
+    const inner = block(b, images);
+    return inner ? `<div class="cell"${at}>${inner}</div>` : '';
+  }).join('');
+  return `<div class="blocks">${cells}</div>`;
+}
+
 function cardBody(s: any, images: OfflineDeck['images']): string {
   const title = String(s?.title || '').trim();
+  if (Array.isArray(s?.blocks) && s.blocks.length) return blocksHtml(s.blocks, images);
   if (Array.isArray(s?.fields) && s.fields.length) {
     return s.fields.map((f: any) => field(f, images, title)).join('');
   }
@@ -187,10 +258,16 @@ export function sourceLines(slides: any[]): Array<{ card: number; title: string;
   return out;
 }
 
+/** The cards whose text was written with AI help, which their fields record. */
+export function aiCards(slides: any[]): Array<{ card: number; title: string }> {
+  return (slides || [])
+    .map((s, i) => ({ card: i + 1, title: String(s?.title || '').trim() || `Card ${i + 1}`, ai: Array.isArray(s?.fields) && s.fields.some((f: any) => f?.source === 'ai') }))
+    .filter((r) => r.ai)
+    .map(({ card, title }) => ({ card, title }));
+}
+
 function sourcesAppendix(d: OfflineDeck): string {
-  const ai = d.slides
-    .map((s, i) => ({ i, title: String(s?.title || '').trim() || `Card ${i + 1}`, ai: Array.isArray(s?.fields) && s.fields.some((f: any) => f?.source === 'ai') }))
-    .filter((r) => r.ai);
+  const ai = aiCards(d.slides).map((r) => ({ i: r.card - 1, title: r.title }));
   const aiLine = ai.length
     ? `<p>Written with AI help: ${ai.map((r) => `card ${r.i + 1} (${esc(r.title)})`).join(', ')}.</p>`
     : '';
@@ -230,6 +307,11 @@ const CSS = [
   "dt{font-size:12px;color:#475569}dd{margin:0;font-weight:700;font-size:clamp(16px,2vw,24px)}dd.cell-sub{font-weight:400;font-size:12px;color:#475569}",
   "img{max-width:100%;max-height:55%;object-fit:contain;align-self:flex-start;border-radius:8px}",
   ".nr,.missing{color:#64748b;font-style:normal}",
+  ".blocks{display:grid;grid-template-columns:repeat(12,minmax(0,1fr));grid-template-rows:repeat(6,minmax(40px,auto));gap:8px;flex:1}.cell{min-width:0;overflow:hidden}",
+  "h3{margin:0;font:700 clamp(18px,2.6vw,32px)/1.2 'Space Grotesk','Public Sans',sans-serif}",
+  ".tile{display:flex;flex-direction:column;gap:2px;border:1px solid #e5e7eb;border-radius:9px;padding:10px;height:100%;box-sizing:border-box}.tile span{font-size:12px;color:#475569}.tile b{font-size:clamp(16px,2vw,26px)}.tile b.nr{font-size:14px;font-weight:600}",
+  ".chart{border:1px solid #e5e7eb;border-radius:9px;padding:10px;height:100%;box-sizing:border-box}.chart li{font-size:13px}",
+  ".btn{display:inline-block;background:#6d28d9;color:#fff;border-radius:8px;padding:6px 12px;font-weight:700;font-size:14px}.addr{font-size:12px;color:#475569;word-break:break-all}",
   ".sources{display:flex;flex-direction:column;gap:6px;margin:0}.sources dd{font-weight:400;font-size:13px}",
   ".notes{margin-top:10px;background:#111827;color:#e5e7eb;border-radius:10px;padding:12px 14px}.notes .eye{color:#c4b5fd}.notes .nr{color:#9ca3af}",
   ".mark{position:absolute;right:4%;bottom:4%;max-height:8%;max-width:20%}",
