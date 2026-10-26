@@ -1,3 +1,5 @@
+import { readRecord } from '../services/capTableRecord';
+import { recordAccessView, recordHolder } from '../services/capTableAccessRecord';
 /**
  * D1019 (#2856) — Cap table: who sees what. Mounted at /api/captable/access,
  * before the /api/captable router (whose `/:projectId` would take "access").
@@ -16,8 +18,7 @@
  *
  * `services/captableAccess.ts` says who reads at which level, and
  * `services/captableShare.ts` what each level returns. Every view is built
- * from the venture's saved model, the only cap table on file until part 2's
- * record (D1015 §3), and says so (`source: 'model'`).
+ * from recorded issuances (D1130); saved scenarios and proposals are excluded.
  *
  * EVERY OPEN IS LOGGED, OR THE READ IS REFUSED. A view is returned only after
  * its log row is written; a log that cannot be written is a 503. No IP address
@@ -33,7 +34,7 @@ import { refuse } from '../util/refusal';
 import { mapError } from './_t13t14t15_helpers';
 import { NOT_SHARED, resolveAccess, type AccessVia } from '../services/captableAccess';
 import {
-  ATTESTED_LEVELS, LEVEL_SCOPE, LINK_LEVELS, isAccessLevel, ownPositionView, redactForAudience,
+  ATTESTED_LEVELS, LEVEL_SCOPE, LINK_LEVELS, isAccessLevel,
   type AccessLevel, type ShareAudience,
 } from '../services/captableShare';
 import { claimShareToken, mintShareToken, sha256Hex, verifyShareToken } from '../services/shareLink';
@@ -41,9 +42,6 @@ import { claimShareToken, mintShareToken, sha256Hex, verifyShareToken } from '..
 const r = new Hono<{ Bindings: Env }>();
 type C = Context<{ Bindings: Env }>;
 
-/** The words every view carries until part 2's record exists. */
-export const MODEL_SOURCE_NOTE =
-  'These figures come from the venture\'s saved model, not from a record of what was issued.';
 export const SIDE_LETTER_TEMPLATE = 'pro_rata_information_rights_side_letter';
 export const SUPPORT_REASON_MIN = 10;
 const REASON_MAX = 500;
@@ -77,35 +75,9 @@ async function projectOr404(c: C): Promise<Project> {
   return p;
 }
 
-type Model = { name: string; inputs: any; result: any } | null;
-
-/** The venture's saved model (its canonical scenario), or null when none is saved. A failed read throws. */
-async function loadModel(env: Env, projectId: number): Promise<Model> {
-  const row = await env.DB.prepare(
-    'SELECT name, inputs_json, result_json FROM cap_table_scenarios WHERE project_id = ? AND COALESCE(is_variant, 0) = 0 ORDER BY updated_at DESC LIMIT 1',
-  ).bind(projectId).first<{ name: string | null; inputs_json: string | null; result_json: string | null }>();
-  if (!row) return null;
-  const parse = (s: string | null) => { try { return s ? JSON.parse(s) : null; } catch { return null; } };
-  return { name: row.name || 'Cap table', inputs: parse(row.inputs_json), result: parse(row.result_json) };
-}
-
-/** The SAFEs sent through StudioOS in a holder's name: the documents Own position lists. */
-async function holderDocuments(env: Env, projectId: number, holderRef: string) {
-  const rows = await env.DB.prepare(
-    `SELECT COALESCE(e.document_title, 'SAFE') AS title, e.status AS status
-       FROM safe_issuances s LEFT JOIN esign_envelopes e ON e.id = s.envelope_id
-      WHERE s.project_id = ? AND lower(trim(s.investor_name)) = lower(trim(?)) ORDER BY s.id`,
-  ).bind(projectId, holderRef).all<{ title: string; status: string | null }>();
-  return rows.results || [];
-}
-
-/** What `level` shows of the model. Copy-built, so a field the level may not see is never in it. */
-async function viewAt(env: Env, projectId: number, level: Exclude<AccessLevel, 'none'>, holderRef: string | null, model: Model) {
-  if (!model) return { recorded: false as const, reason: 'No cap table is saved for this venture yet.' };
-  if (level === 'own_position') {
-    return ownPositionView(model.result, model.inputs, holderRef ?? '', holderRef ? await holderDocuments(env, projectId, holderRef) : []);
-  }
-  return redactForAudience(model.result, level, model.name);
+/** Copy only the fields allowed at this level, from the issuance record. */
+async function viewAt(_env: Env, _projectId: number, level: Exclude<AccessLevel, 'none'>, holderRef: string | null, record: Awaited<ReturnType<typeof readRecord>>) {
+  return recordAccessView(record, level, holderRef);
 }
 
 async function logOpen(env: Env, row: {
@@ -177,7 +149,7 @@ r.get('/log', async (c) => {
   }
 });
 
-/** PUBLIC. A venture link: the model at the link's level, read when opened, and logged. */
+/** PUBLIC. A venture link: the record at the link's level, read when opened, and logged. */
 r.get('/shared/:token', async (c) => {
   try {
     const token = c.req.param('token');
@@ -205,9 +177,9 @@ r.get('/shared/:token', async (c) => {
     if (!tok || tok.revoked_at || Number(tok.project_id) !== projectId || tok.level !== level) {
       throw new Refusal(403, 'link_invalid', 'This link is not valid.');
     }
-    const model = await loadModel(c.env, projectId);
+    const record = await readRecord(c.env, projectId);
     await logOpen(c.env, { project_id: projectId, user_id: null, share_token_id: tok.id, via: 'link', level });
-    return c.json({ level, scope: LEVEL_SCOPE[level], source: 'model', source_note: MODEL_SOURCE_NOTE, view: await viewAt(c.env, projectId, level, null, model) });
+    return c.json({ level, scope: LEVEL_SCOPE[level], source: 'record', source_note: 'These figures come from recorded issuances. Saved models and proposals are excluded.', view: await viewAt(c.env, projectId, level, null, record) });
   } catch (e) {
     return answer(c, e);
   }
@@ -223,13 +195,13 @@ r.get('/:projectId', async (c) => {
     const p = await projectOr404(c);
     const a = await resolveAccess(c.env, user as any, p);
     if (!a.ok) throw new Refusal(a.status, a.code, NOT_SHARED);
-    const model = await loadModel(c.env, p.id);
+    const record = await readRecord(c.env, p.id);
     await logOpen(c.env, { project_id: p.id, user_id: user.id, via: a.via, level: a.level });
     return c.json({
       project_id: p.id, level: a.level, via: a.via, read_only: a.read_only, scope: LEVEL_SCOPE[a.level],
-      source: 'model', source_note: MODEL_SOURCE_NOTE,
+      source: 'record', source_note: 'These figures come from recorded issuances. Saved models and proposals are excluded.',
       ...(a.via === 'studio' ? { support: 'Open for support asks for a reason first. The founder sees it.' } : {}),
-      view: await viewAt(c.env, p.id, a.level, a.holder_ref, model),
+      view: await viewAt(c.env, p.id, a.level, a.holder_ref, record),
     });
   } catch (e) {
     return answer(c, e);
@@ -247,13 +219,13 @@ r.post('/:projectId/support', async (c) => {
     if (reason.length < SUPPORT_REASON_MIN || reason.length > REASON_MAX) {
       throw new Refusal(400, 'reason_required', `Say why you are opening it, in ${SUPPORT_REASON_MIN} to ${REASON_MAX} characters. The founder sees it.`);
     }
-    const model = await loadModel(c.env, p.id);
+    const record = await readRecord(c.env, p.id);
     await logOpen(c.env, { project_id: p.id, user_id: user.id, via: 'support', level: 'full', reason });
     return c.json({
       project_id: p.id, level: 'full', via: 'support', read_only: true, scope: LEVEL_SCOPE.full, reason,
-      source: 'model', source_note: MODEL_SOURCE_NOTE,
+      source: 'record', source_note: 'These figures come from recorded issuances. Saved models and proposals are excluded.',
       corrections: 'A correction goes through the record\'s correction, with its reason (Cap table part 2).',
-      view: await viewAt(c.env, p.id, 'full', null, model),
+      view: await viewAt(c.env, p.id, 'full', null, record),
     });
   } catch (e) {
     return answer(c, e);
@@ -266,10 +238,11 @@ r.get('/:projectId/grants', async (c) => {
     const p = await projectOr404(c);
     const me = await teamOf(c, user, p);
     const rows = await c.env.DB.prepare(
-      `SELECT g.id, u.uid AS user_uid, u.name AS name, u.role AS role, g.holder_ref, g.level, g.source, g.since,
+      `SELECT g.id, u.uid AS user_uid, COALESCE(u.name, h.name) AS name, u.role AS role, g.holder_ref, g.level, g.source, g.since,
               gb.name AS granted_by,
               (SELECT MAX(l.opened_at) FROM cap_table_access_log l WHERE l.project_id = g.project_id AND l.user_id = g.user_id) AS last_viewed
          FROM cap_table_access_grants g LEFT JOIN users u ON u.id = g.user_id LEFT JOIN users gb ON gb.id = g.granted_by
+         LEFT JOIN cap_table_holders h ON g.holder_ref = ('holder:' || h.id) AND h.project_id = g.project_id
         WHERE g.project_id = ? AND g.revoked_at IS NULL ORDER BY g.since DESC, g.id DESC`,
     ).bind(p.id).all<Record<string, unknown>>();
     return c.json({ grants: rows.results || [], can_change: me.owner, levels: LEVEL_SCOPE });
@@ -319,6 +292,7 @@ r.put('/:projectId/grants', async (c) => {
       if (!target) throw new Refusal(404, 'no_such_user', 'No account has that uid.');
     }
     const holderRef = typeof body.holder_ref === 'string' && body.holder_ref.trim() ? body.holder_ref.trim().slice(0, 200) : null;
+    if (holderRef && !recordHolder(await readRecord(c.env, p.id), holderRef)) throw new Refusal(400, 'holder_not_recorded', 'Choose one recorded holder. A name shared by several holders needs a holder identity.');
     if (!target && !holderRef) throw new Refusal(400, 'no_grantee', 'Name the person (user_uid), the holder (holder_ref), or a signed side letter (from_envelope).');
     if (!level) throw new Refusal(400, 'bad_level', 'level is none, own_position, summary, investor or full.');
     if (target && target.id === user.id) throw new Refusal(400, 'owner_needs_no_grant', 'The owner always sees the full cap table.');

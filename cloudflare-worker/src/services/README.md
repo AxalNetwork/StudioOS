@@ -188,6 +188,7 @@ no new schema, runtime or billing path is introduced.
 | `market_intel/` | Sourcing, extraction and scoring for market intelligence. |
 | `fundAdminAccess.ts` / `fundAdminOverview.ts` | D1159 (#3066): Admin-tier fund creation and valuation acts, with existing institutional GP scope preserved; independent submitted/applicant-signed/not-yet-sent booklet counts per administered fund. Distribution preview LP names come from the shared LP selection in `fundDistributionSplit.ts`, without changing its arithmetic. |
 | `closings.ts` | D1215 (#3212): a closing as a record over migration 612 — `closings`, `closing_lines`, `closing_evidence` and the append-only `closing_events`. An admin or the venture's founder reads every line; anyone else only through a line of their own, and then their own lines and the round's total. A line is `received` only on receiving-side evidence; every write appends one event in its own batch, with no amount, name or account number. |
+| `reportingDuties.ts` | D1058 (#2928): reporting duties over migration 579 — `INFORMATION_RIGHTS` (the templates' information-rights clauses), `createReportingDuties(closingId)` called by `completeClosing`, the period arithmetic, `periodState` (late and missing worked out on read, never stored), reminder settings, and `runReportingDaily` (duties a closing missed, periods as they end, the team's reminders, each claimed once). No event holds a figure. |
 | `fundAdminLps.ts` | D1158 (#3065): `GET /api/fund-admin/lps`, every LP of every administered fund in one table. Money from the call ledger (`readFundCalls`), paid distributions, the last D716 notice and the booklet through the LP's application. Writes the fail-closed `fund_lps_read` audit row first. A figure no store holds is null with its reason in the row's `unavailable`; a store that cannot be read makes only its own figures Unreadable. Filters, search, sort, pages and totals run here, after the bound read. |
 | `fundPositionsHistory.ts` | D1158 (#3065): `readFundPositions`, each position with its latest dated mark or `marked: false` and a reason; `readFundHistory`, `readFundPerformance` point in time at each quarter end since the first call. Computed on every read, never stored. |
 | `mercury/` | D710: Mercury for fund administration, read-only. A GET-only client, the boundary parser that drops account numbers, the gates and read audit, the entity connections' store, the hourly sync and the reconciliation matches. Its README has the rules. |
@@ -196,6 +197,7 @@ no new schema, runtime or billing path is introduced.
 | `records/` | D690's scoped cycle record contract, registry and ownership checks. |
 | `testingOverview.ts` | D1196 (#3146): Product testing's overview read behind `GET /api/admin/testing/overview` (Super Admin): applications and picks per Monday week from `testing_events` (not recorded before the first programme opened), the tester pool and open programmes' applicants by profile, withdrawn counts, and Mail reach per open programme on `testerRecipients`' rule. Each block answers alone; counts only, never an address. |
 | `scoring/` | D1143 (#3029): the Product-market fit score, defined once (#2433). `pmf.ts` is model v1 as data and the pure `scorePmf` (value, band, confidence, coverage and the next steps ranked by gain); `pmfCollector.ts` reads Validate's stores for it with bound SQL, after the latest Pivot, and reads no interviewee name or quote. D1144 adds `pmfStore.ts`: signed, change-only snapshots, history and the atomic PMF checklist/audit update in shared migration 598. See `scoring/README.md`. |
+| `companyMembershipEvents.ts` | D1137 (#3017): the membership audit, `company_membership_events` (migration 597). `membershipEvent` returns the bound INSERT for a join, role change, removal, leave, primary-admin transfer, archive, restore, rename, venture move, owner transfer or seat change, so the route batches it with the change; before and after hold the fields the change touched, never a token or an email. |
 | `signals/` | Signal ingestion and evidence. |
 | `vercel/` | D1096: `api.ts`, the only caller of `api.vercel.com`: a read-only client for the planned reads, uninstall and the OAuth code exchange. Its README has the rules. |
 | `wellbeing/` | Wellbeing check-ins. |
@@ -564,6 +566,12 @@ catalogue contains headings only. The existing Super Admin edit route creates a
 missing allowed draft section after validation, in the same batch as its edit;
 reads do not seed content. Published versions and audit behavior stay in D954's
 store; no migration or canvas sample text is introduced.
+
+`capTableAccessRecord.ts` (D1130) copy-builds venture level views from the
+issuance record, with stable holder references and fail-closed ambiguous names.
+`capTableRegister.ts` now projects that record for venture exports and `/live`;
+its account view still reads unassigned connector imports. The venture equity
+plan also carries holder-linked filing states without exposing proof keys.
 
 D1129 searches decoded audit detail values, never JSON keys, and includes demoted/deleted payment actors in Who alongside current admins.
 

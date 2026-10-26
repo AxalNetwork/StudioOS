@@ -115,9 +115,9 @@ test('the endpoint is scoped to one venture or to the caller (D1020)', () => {
   // The queries: each table is read by the venture or by the account, never both, never unbound.
   const svc = read('cloudflare-worker/src/services/capTableRegister.ts');
   const plan = svc.slice(svc.indexOf('export async function readEquityPlan('), svc.indexOf('export function equityPlanBody('));
-  assert.equal((plan.match(/WHERE project_id = \?/g) || []).length, 2, 'both venture reads filter on project_id');
+  assert.equal((plan.match(/WHERE project_id = \?/g) || []).length, 3, 'pools, grants and holder filings each filter on project_id');
   assert.equal((plan.match(/WHERE user_id = \?/g) || []).length, 2, 'both account reads filter on user_id');
-  assert.equal((plan.match(/\.bind\(scope\.projectId\)/g) || []).length, 2);
+  assert.equal((plan.match(/\.bind\(scope\.projectId\)/g) || []).length, 3);
   assert.equal((plan.match(/\.bind\(scope\.userId\)/g) || []).length, 2);
 });
 

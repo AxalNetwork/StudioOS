@@ -20,6 +20,7 @@ function world() {
   const end = m.indexOf('\n);',start)+3;
   db.exec(m.slice(start,end).replace('mercury_personal_matches_490','mercury_personal_matches'));
   db.exec(migration); db.exec(migration); // re-runnable, no historical rows
+  db.exec(readFileSync('cloudflare-worker/sql/migrations/597_company_archive_and_events.sql','utf8')); // D1137: resolveActiveCompany reads archived_at
   db.exec(`INSERT INTO users(id,name,email,role,is_active) VALUES (1,'One','one@example.test','investor',1),(2,'Two','two@example.test','investor',1),(3,'Three','three@example.test','investor',1),(4,'Admin','admin@example.test','admin',1),(5,'Founder','founder@example.test','founder',1);
     INSERT INTO projects(id,name) VALUES(7,'Fixture'); INSERT INTO deals(id,project_id,status) VALUES(9,7,'active'),(10,7,'active');
     INSERT INTO company_profiles(id,uid,company_name) VALUES(11,'firm-a','Firm A'),(22,'firm-b','Firm B');

@@ -81,6 +81,8 @@ function freshDb() {
     CREATE TABLE user_company_links (
       id INTEGER PRIMARY KEY AUTOINCREMENT, company_id INTEGER NOT NULL, user_id INTEGER NOT NULL
     );
+    -- D1137 (migration 597): resolveActiveCompany reads an archived company as none.
+    CREATE TABLE IF NOT EXISTS company_profiles (id INTEGER PRIMARY KEY, archived_at TEXT);
     -- The admin arm of /portfolio/metrics counts these. Verbatim from
     -- sql/infrastructure.sql; without them that branch 500s and the
     -- "admin is not narrowed" half of the test cannot run.

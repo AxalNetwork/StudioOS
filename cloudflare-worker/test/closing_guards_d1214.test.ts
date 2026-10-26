@@ -22,6 +22,7 @@ function fixture() {
     db.exec(tableFromBaseline(baseline, table));
   }
   db.exec(tableFromBaseline(readFileSync(new URL('../sql/migrations/575_cap_table_access.sql',import.meta.url),'utf8'),'cap_table_access_grants'));
+  db.exec('CREATE TABLE IF NOT EXISTS company_profiles (id INTEGER PRIMARY KEY, archived_at TEXT)'); // D1137 (migration 597)
   for (const [id, role] of [[1,'investor'], [2,'investor'], [3,'founder'], [4,'admin'], [5,'partner'], [6,'advisor'], [7,'exploring']]) {
     db.prepare('INSERT INTO users(id,role,email,name,founder_id,is_active,kyc_status) VALUES(?,?,?,?,?,1,?)')
       .run(id,role,`synthetic${id}@example.invalid`,'Synthetic member',id === 3 ? 30 : null,'approved');
@@ -64,7 +65,8 @@ test('D1214: a live person-bound holder grant returns only that holder; recorder
   assert.equal((await call(f,1,'/api/captable/2',undefined,'GET')).status,403);
   f.db.exec("UPDATE cap_table_access_grants SET level='none' WHERE id=1");assert.equal((await call(f,1,'/api/captable/1',undefined,'GET')).status,200);
   f.db.exec("UPDATE cap_table_access_grants SET revoked_at=CURRENT_TIMESTAMP WHERE id=1");assert.equal((await call(f,1,'/api/captable/1',undefined,'GET')).status,403);
-  for(const id of [3,4]) assert.equal((await call(f,id,'/api/captable/1',undefined,'GET')).body.holders.length,2);
+  assert.equal((await call(f,3,'/api/captable/1',undefined,'GET')).body.holders.length,2);
+  assert.equal((await call(f,4,'/api/captable/1',undefined,'GET')).status,403,'D1130: admins use the scoped read, even on the legacy holder route');
  }finally{f.db.close();}
 });
 for(const [method,path] of [['POST','/api/legalcap/capital/call'],['PATCH','/api/legalcap/capital/call/1/send'],['POST','/api/legalcap/capital/call/1/respond'],['GET','/api/legalcap/capital/lp-portal'],['GET','/api/legalcap/capital/calls'],['POST','/api/capital/capitalCall']]) test(`D1214: retired ${method} ${path} cannot read or write money`,async()=>{
