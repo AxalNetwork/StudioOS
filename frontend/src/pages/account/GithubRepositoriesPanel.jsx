@@ -6,6 +6,7 @@ import { connectorsApi } from '../../lib/api/connectors';
 import { BTN, INPUT, LoadingRows } from './AccountCenter';
 import { Banner, FedGroup, Group, Row, SheetFrame } from './ConnectorSheet';
 import { emptyRepoSentence, githubLink, installHref, repoLine, successBanner, syncFinished, syncProgress, syncRefusal } from './githubSync';
+import { LOVABLE_HINT, LOVABLE_MARK, isLovable } from '../../lib/lovableMark';
 
 /**
  * D753 F4 (#1957) — GitHub's repositories, moved out of `GithubSyncSheet.jsx`
@@ -36,6 +37,12 @@ import { emptyRepoSentence, githubLink, installHref, repoLine, successBanner, sy
  *
  * `frame({ done, name, busy, body, footer })` lays the parts out; without one
  * they are drawn in a plain block, with the footer below the body.
+ *
+ * SYNCED WITH LOVABLE (D1084, #2949). A repository already saved as chosen
+ * carries the founder's mark control: setting or clearing it asks first, in
+ * place, then patches the connection's config (`synced_with`). Only the
+ * connection's owner reaches it, and a sync never changes it. The list ends
+ * with how a Lovable project comes in.
  */
 
 const POLL_MS = 1000;
@@ -56,6 +63,12 @@ export default function GithubRepositoriesPanel({ p, conn, projectId = null, com
   const dismiss = useContext(SheetFrame)?.onDismiss || onClose;
   const opts = companyId ? { companyId } : undefined;
   const [read, setRead] = useState({ status: 'loading', available: [], message: '', installUrl: null, needsInstall: false });
+  // D1084: the repositories saved as chosen, and the founder's marks on them.
+  const [saved, setSaved] = useState(new Set());
+  const [marks, setMarks] = useState({});
+  const [marking, setMarking] = useState(null); // { repo, set } while the founder confirms
+  const [markError, setMarkError] = useState('');
+  const [markBusy, setMarkBusy] = useState(false);
   // Each Refresh is one more read; the first takes the Worker's `selected`, later ones keep the member's choices.
   const [reads, setReads] = useState(0);
   const [chosen, setChosen] = useState(new Set());
@@ -75,6 +88,8 @@ export default function GithubRepositoriesPanel({ p, conn, projectId = null, com
       if (!live) return;
       const available = Array.isArray(r?.available) ? r.available : [];
       setRead({ status: 'ready', available, message: '', installUrl: installHref(r?.install_url), needsInstall: r?.needs_install === true });
+      setSaved(new Set((Array.isArray(r?.selected) ? r.selected : []).map(String)));
+      setMarks(r?.synced_with && typeof r.synced_with === 'object' && !Array.isArray(r.synced_with) ? r.synced_with : {});
       if (reads === 0) setChosen(new Set((Array.isArray(r?.selected) ? r.selected : []).map(String)));
       else {
         const listed = new Set(available.map((x) => String(x?.full_name)));
@@ -97,6 +112,17 @@ export default function GithubRepositoriesPanel({ p, conn, projectId = null, com
     projectsApi.listProjects().then((r) => { if (live) setProjects(Array.isArray(r) ? r : r?.items || r?.projects || []); }, () => { if (live) setProjects(false); });
     return () => { live = false; };
   }, [needsPicker, projects, projectsApi]);
+
+  const confirmMark = async () => {
+    if (!marking) return;
+    setMarkBusy(true); setMarkError('');
+    try {
+      const out = await api.patchConfig(uid, { synced_with: { [marking.repo]: marking.set ? 'lovable' : null } });
+      const next = out?.config?.synced_with;
+      setMarks(next && typeof next === 'object' && !Array.isArray(next) ? next : {});
+      setMarking(null);
+    } catch (e) { setMarkError(syncRefusal(e)); } finally { setMarkBusy(false); }
+  };
 
   const toggle = (name) => setChosen((s) => { const n = new Set(s); if (n.has(name)) n.delete(name); else n.add(name); return n; });
 
@@ -208,13 +234,22 @@ export default function GithubRepositoriesPanel({ p, conn, projectId = null, com
             )
             : read.available.map((r) => {
               const on = chosen.has(r.full_name);
+              const lovable = isLovable(marks[r.full_name]);
               return (
-                <Row key={r.full_name} a={r.full_name} b={repoLine(r)}
+                <Row key={r.full_name} a={r.full_name} b={lovable ? `${repoLine(r)} · ${LOVABLE_MARK}` : repoLine(r)}
                   action={(
-                    <button type="button" aria-pressed={on} onClick={() => toggle(r.full_name)} disabled={busy} data-testid={`repo-${r.full_name}`}
-                      className={`rounded-full border px-2.5 py-1 text-[12px] font-semibold ${on ? 'border-axal-violet/30 bg-axal-lavender text-axal-violet-deep dark:border-violet-700 dark:bg-violet-900/30 dark:text-violet-300' : 'border-axal-hairline bg-white text-axal-ink/80 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-300'}`}>
-                      {on ? 'Selected' : 'Not selected'}
-                    </button>
+                    <span className="flex flex-wrap items-center justify-end gap-1.5">
+                      {saved.has(r.full_name) && (
+                        <button type="button" aria-pressed={lovable} onClick={() => { setMarkError(''); setMarking({ repo: r.full_name, set: !lovable }); }} disabled={busy || markBusy}
+                          data-testid={`repo-lovable-${r.full_name}`} className={BTN.link}>
+                          {lovable ? 'Clear Lovable mark' : 'Mark synced with Lovable'}
+                        </button>
+                      )}
+                      <button type="button" aria-pressed={on} onClick={() => toggle(r.full_name)} disabled={busy} data-testid={`repo-${r.full_name}`}
+                        className={`rounded-full border px-2.5 py-1 text-[12px] font-semibold ${on ? 'border-axal-violet/30 bg-axal-lavender text-axal-violet-deep dark:border-violet-700 dark:bg-violet-900/30 dark:text-violet-300' : 'border-axal-hairline bg-white text-axal-ink/80 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-300'}`}>
+                        {on ? 'Selected' : 'Not selected'}
+                      </button>
+                    </span>
                   )} />
               );
             })}
@@ -230,7 +265,24 @@ export default function GithubRepositoriesPanel({ p, conn, projectId = null, com
           <button type="button" className={BTN.link} onClick={refresh} disabled={busy} data-testid="button-repos-refresh">Refresh</button>
         </div>
       )}
+      {marking && (
+        <div role="group" aria-label={marking.set ? `Mark ${marking.repo} synced with Lovable` : `Clear the Lovable mark on ${marking.repo}`}
+          className="mx-5 mt-3 flex flex-col gap-2 rounded-lg border border-axal-hairline bg-axal-ground px-3 py-2.5 dark:border-gray-700 dark:bg-gray-800/60" data-testid="repo-lovable-confirm">
+          <p className="m-0 text-[12.5px] font-semibold text-axal-ink dark:text-gray-100">
+            {marking.set ? `Mark ${marking.repo} as synced with Lovable?` : `Clear the Lovable mark on ${marking.repo}?`}
+          </p>
+          <p className="m-0 text-[12px] text-axal-muted dark:text-gray-400">
+            {marking.set ? `Build shows "${LOVABLE_MARK}" beside this repository. Only you can clear it; a sync never changes it.` : 'Build stops showing the mark. What GitHub feeds from this repository is unchanged.'}
+          </p>
+          {markError && <p role="alert" className="m-0 text-[12px] text-axal-destructive dark:text-red-300" data-testid="repo-lovable-error">{markError}</p>}
+          <span className="flex gap-2">
+            <button type="button" className={BTN.ghost} onClick={() => setMarking(null)} disabled={markBusy}>Back</button>
+            <button type="button" className={BTN.primary} onClick={confirmMark} disabled={markBusy} data-testid="repo-lovable-confirm-button">{marking.set ? 'Mark it' : 'Clear it'}</button>
+          </span>
+        </div>
+      )}
       {read.status === 'ready' && <p className="mx-5 mt-2 text-[11.5px] text-axal-muted dark:text-gray-400"><Pill tone="neutral">{chosen.size} selected</Pill></p>}
+      {(read.status === 'ready' || read.status === 'refused') && <p className="mx-5 mt-2 text-[11.5px] text-axal-muted dark:text-gray-400" data-testid="github-lovable-hint">{LOVABLE_HINT}</p>}
     </>
   );
 

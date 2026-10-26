@@ -67,7 +67,8 @@ test('the panel alone renders the list, the picker and the footer, and no Sheet'
     projectsApi: { listProjects: async () => [{ id: 3, name: 'Acme' }] } })));
   try {
     const t = m.text();
-    assert.ok(t.includes('Repositories acme/app Private · updated 3 Oct Selected acme/site Public · last update not recorded Not selected'), t);
+    // D1084: a saved repository carries its Lovable mark control.
+    assert.ok(t.includes('Repositories acme/app Private · updated 3 Oct Mark synced with Lovable Selected acme/site Public · last update not recorded Not selected'), t);
     assert.ok(t.includes(FOOTER_LINE));
     assert.ok(m.by('sync-project-select'), 'no project from the caller or GET: the picker');
     assert.ok(m.by('button-sync-selected'));
@@ -102,7 +103,7 @@ test('GithubSyncSheet renders the same text as before the move: listed, empty an
   // The strings main's GithubSyncSheet rendered at 075c82e51, captured from it.
   const a = await mount(h(MemoryRouter, null, h(GithubSyncSheet, props(fake().api))));
   try {
-    assert.equal(a.text(), 'Build Connect GitHub Choose what StudioOS reads. You can change this later. Repositories acme/app Private · updated 3 Oct Selected acme/site Public · last update not recorded Not selected 1 selected Back Reads issues, pull requests and releases only. Sync selected');
+    assert.equal(a.text(), 'Build Connect GitHub Choose what StudioOS reads. You can change this later. Repositories acme/app Private · updated 3 Oct Mark synced with Lovable Selected acme/site Public · last update not recorded Not selected 1 selected Built in Lovable? Sync it to GitHub in Lovable, then pick the repository here. Back Reads issues, pull requests and releases only. Sync selected');
     assert.ok(a.by('connector-sheet-sync'));
     await a.click('button-sync-selected');
     assert.ok(a.text().includes('Synced 2 issues and 1 pull request. Product roadmap and Prototype / MVP now show them. Now fed by GitHub'));
@@ -110,7 +111,7 @@ test('GithubSyncSheet renders the same text as before the move: listed, empty an
   } finally { await a.unmount(); }
   const b = await mount(h(MemoryRouter, null, h(GithubSyncSheet, props(fake([]).api))));
   try {
-    assert.equal(b.text(), `Build Connect GitHub Choose what StudioOS reads. You can change this later. Repositories ${EMPTY_WORDS} 0 selected Back ${FOOTER_LINE} Sync selected`);
+    assert.equal(b.text(), `Build Connect GitHub Choose what StudioOS reads. You can change this later. Repositories ${EMPTY_WORDS} 0 selected Built in Lovable? Sync it to GitHub in Lovable, then pick the repository here. Back ${FOOTER_LINE} Sync selected`);
   } finally { await b.unmount(); }
 });
 
@@ -183,7 +184,7 @@ test('GitHub\'s page draws #repositories for a connected row, reads them on moun
     assert.equal(m.pr(sec).id, 'repositories');
     assert.equal(m.pr(sec)['aria-label'], 'Repositories');
     assert.ok(m.calls.includes('GET /connectors/u-gh/repositories'), 'read on mount');
-    assert.ok(m.text().includes('acme/app Private · updated 3 Oct Selected'), m.text());
+    assert.ok(m.text().includes('acme/app Private · updated 3 Oct Mark synced with Lovable Selected'), m.text());
     assert.ok(m.text().includes(FOOTER_LINE) && m.by('button-sync-selected'), 'Sync, with its footer');
     assert.ok(!m.by('connector-sheet-sync'), 'no sync sheet');
     assert.ok(!m.by('connector-page-connect'), 'no interim panel: the section is GitHub\'s own (F4)');
