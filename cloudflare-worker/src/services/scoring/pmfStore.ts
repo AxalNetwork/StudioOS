@@ -51,6 +51,11 @@ export async function storedPmfChecklist(env: Env, projectId: number): Promise<C
   const row = await latest(env, projectId);
   return row ? pmfChecklist(payload(row).result) : null;
 }
+/** D1147: verified inputs only. Explaining never recomputes or writes a scorecard. */
+export async function storedPmfInputs(env: Env, projectId: number) {
+  const row = await latest(env, projectId);
+  return row ? { inputs: payload(row).result.inputs, hash: row.inputs_hash, snapshot: row.uid } : null;
+}
 export async function recomputePmf(env: Env, projectId: number, userId: number, trigger: PmfTrigger, today: string) {
   if (!Number.isSafeInteger(projectId) || projectId < 1 || !Number.isSafeInteger(userId) || userId < 1
     || !['module_read','rescore'].includes(trigger)) throw new Error('invalid_pmf_context');

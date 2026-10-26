@@ -96,6 +96,7 @@ export * from './api/partnerProfiles.js';
 export * from './api/partnerSettlements.js';
 export * from './api/payments.js';
 export * from './api/personaSegments.js';
+export * from './api/pmfExplain.js';
 export * from './api/productTesting.js';
 export * from './api/profile.js';
 export * from './api/programGrants.js';

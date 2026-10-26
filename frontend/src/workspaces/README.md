@@ -1,5 +1,9 @@
 # `frontend/src/workspaces/` — the chrome every workspace subpage sits in
 
+`PmfExplain.jsx` (D1147) is Fundraising readiness's input-only Eadwyn proposal
+band: transient explanations/questions, cited input rows, explicit Keep and
+question Copy/Dismiss. It uses the shared Lightbox and run-cost estimate.
+
 A **bucket** is a route prefix that owns a group of pages (`/validate`, `/deals`,
 `/practice`, `/offers`). A **zone** is one page inside it (`/build/this-week`).
 This folder holds the shell those pages share, and the four per-licence route
