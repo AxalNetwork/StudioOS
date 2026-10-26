@@ -159,8 +159,9 @@ r.get('/views', async c => {
  */
 function finish(c: Ctx, x: Viewer, id: string, nonce: string, isDefault: number, action: string) {
   return [
-    c.env.DB.prepare(`UPDATE deal_saved_views SET is_default = 0 WHERE owner_user_id = ? AND firm_owner_user_id = ?
-      AND company_id IS ? AND uid != ? AND ? = 1 AND EXISTS
+    c.env.DB.prepare(`UPDATE deal_saved_views SET is_default = 0, version = version + 1, updated_at = datetime('now')
+      WHERE owner_user_id = ? AND firm_owner_user_id = ?
+      AND company_id IS ? AND uid != ? AND is_default = 1 AND ? = 1 AND EXISTS
       (SELECT 1 FROM deal_saved_views target WHERE target.uid = ? AND target.mutation_uid = ?)`)
       .bind(x.user.id, x.root, x.company, id, isDefault, id, nonce),
     c.env.DB.prepare('UPDATE deal_saved_views SET is_default = ? WHERE uid = ? AND mutation_uid = ?').bind(isDefault, id, nonce),

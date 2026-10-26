@@ -91,14 +91,14 @@ test('defaults stay personal and atomic, and stale edits cannot clear another de
  const w=world();try {
   const a=await create(w,1,{name:'First',is_default:true});const b=await create(w,1,{name:'Second',is_default:true});
   let list=await call(w,1);assert.equal(list.body.default_uid,b.body.uid);assert.equal(list.body.items.filter((v:any)=>v.is_default).length,1);
-  assert.equal((await call(w,1,'PATCH',url(a.body.uid),{is_default:false,version:1})).status,200);
+  assert.equal((await call(w,1,'PATCH',url(a.body.uid),{is_default:false,version:list.body.items.find((v:any)=>v.uid===a.body.uid).version})).status,200);
   const before=JSON.stringify(rows(w)),count=audits(w).length;
   assert.equal((await call(w,1,'PATCH',url(a.body.uid),{is_default:true,name:'Stale',version:1})).status,409);
   assert.equal(JSON.stringify(rows(w)),before);assert.equal(audits(w).length,count);
   const colleague=await create(w,2,{is_default:true});assert.equal(colleague.status,201);
   list=await call(w,1);assert.equal(list.body.default_uid,b.body.uid);
   assert.equal((await call(w,2)).body.default_uid,colleague.body.uid);
-  await Promise.all([call(w,1,'PATCH',url(a.body.uid),{is_default:true,version:2}),call(w,1,'PATCH',url(b.body.uid),{is_default:true,version:b.body.version})]);
+  await Promise.all([call(w,1,'PATCH',url(a.body.uid),{is_default:true,version:3}),call(w,1,'PATCH',url(b.body.uid),{is_default:true,version:b.body.version})]);
   assert.equal((await call(w,1)).body.items.filter((v:any)=>v.is_default).length,1);
  }finally{w.db.close();}
 });
@@ -278,5 +278,20 @@ test('a malformed venture input is unreadable without blanking another authorize
   w.db.exec('INSERT INTO deal_invitations(deal_id,investor_user_id) VALUES(2,1)');
   const prepare=w.env.DB.prepare.bind(w.env.DB);w.env.DB.prepare=(sql:string)=>{const stmt=prepare(sql);const bind=stmt.bind;stmt.bind=(...values:any[])=>{const bound=bind(...values);if(sql.includes('JOIN projects p')) {const all=bound.all;bound.all=async()=>{const result=await all();return {...result,results:result.results.map((row:any)=>row.id===1?{...row,sector:{invalid:'PRIVATE input 1234567'}}:row)};};}return bound;};return stmt;};
   const result=await call(w,1,'GET','/api/deals/fit?ids=1,2');assert.equal(result.status,200);assert.equal(result.body.items[0].state,'unreadable');assert.equal(result.body.items[0].score,null);assert.equal(result.body.items[1].state,'recorded');assert.doesNotMatch(JSON.stringify(result.body),/PRIVATE|1234567/);
+ }finally{w.db.close();}
+});
+
+test('replacing a default advances its version so a stale form cannot restore or delete it',async()=>{
+ const w=world();try {
+  const a=await create(w,1,{is_default:true});const untouched=await create(w);
+  const b=await create(w,1,{is_default:true});const list=await call(w,1);
+  const prior=list.body.items.find((v:any)=>v.uid===a.body.uid);assert.equal(prior.version,a.body.version+1);assert.equal(prior.is_default,false);
+  assert.equal(list.body.items.find((v:any)=>v.uid===untouched.body.uid).version,untouched.body.version);
+  const before=JSON.stringify(rows(w)),count=audits(w).length;
+  assert.equal((await call(w,1,'PATCH',url(a.body.uid),{version:a.body.version,is_default:true,name:'Stale'})).status,409);
+  assert.equal((await call(w,1,'DELETE',url(a.body.uid,a.body.version))).status,409);assert.equal(JSON.stringify(rows(w)),before);assert.equal(audits(w).length,count);
+  assert.equal((await call(w,1)).body.default_uid,b.body.uid);
+  assert.equal((await call(w,1,'PATCH',url(a.body.uid),{version:prior.version,is_default:true})).status,200);
+  assert.equal((await call(w,1)).body.default_uid,a.body.uid);
  }finally{w.db.close();}
 });
