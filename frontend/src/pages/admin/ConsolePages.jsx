@@ -24,6 +24,10 @@ import { ProductTestingPanel } from './consoles/ProductTestingConsole';
 import { ProductTestingTabBody, useTestingReads } from './productTesting/ProductTestingTabs';
 import { PAGE_LINE as TESTING_LINE, tabCounts as testingTabCounts, viewOf as testingViewOf } from './productTesting/productTestingModel';
 import { PromoCodesPanel } from './consoles/PromoCodesConsole';
+import { PromoDrawer, PromoNotes, PromoUsage } from './promos/PromoParts';
+import { PAGE_LINE as PROMO_LINE, viewOf as promoViewOf } from './promos/promoModel';
+import { KycTabBody } from './kyc/KycTabs';
+import { PAGE_LINE as KYC_LINE, viewOf as kycViewOf } from './kyc/kycModel';
 import { BillingPanel } from './consoles/BillingConsole';
 
 /**
@@ -117,10 +121,20 @@ export function AllAccountsPage({ onImpersonate }) {
   );
 }
 
+/** D1228 (#2384) — KYC & KYB's four tabs (KYC1, KYC6, KYC9, KYC10) and a person's case (KYC3). */
 export function KycPage() {
+  const { pathname } = useLocation();
+  const tabs = (
+    <>
+      <HeaderTab to="/admin/kyc" data-testid="kyc-tab-people">People</HeaderTab>
+      <HeaderTab to="/admin/kyc/businesses" data-testid="kyc-tab-businesses">Businesses</HeaderTab>
+      <HeaderTab to="/admin/kyc/renewals" data-testid="kyc-tab-renewals">Renewals</HeaderTab>
+      <HeaderTab to="/admin/kyc/audit" data-testid="kyc-tab-audit">Audit</HeaderTab>
+    </>
+  );
   return (
-    <ConsolePage crumb={{ ...APPROVALS, current: 'KYC & KYB' }} title="KYC & KYB" line="Identity checks waiting for review, and each one's record." testId="admin-kyc">
-      <KycConsole />
+    <ConsolePage crumb={{ ...APPROVALS, current: 'KYC & KYB' }} title="KYC & KYB" line={KYC_LINE} tabs={tabs} testId="admin-kyc">
+      <KycTabBody view={kycViewOf(pathname)} people={<KycConsole />} />
     </ConsolePage>
   );
 }
@@ -226,10 +240,28 @@ export function ProductTestingHqPage() {
   );
 }
 
+/**
+ * D1270 (#2381): Codes and Usage are addresses, and one code's drawer is
+ * `/admin/platform/promo-codes/:id` over the list (PRM1, PRM2, PRM7).
+ */
 export function PromoCodesPage() {
+  const { pathname, search } = useLocation();
+  const view = promoViewOf(pathname, search);
+  const tabs = (
+    <>
+      <HeaderTab to="/admin/platform/promo-codes" end={false} data-testid="promo-tab-codes">Codes</HeaderTab>
+      <HeaderTab to="/admin/platform/promo-codes/usage" data-testid="promo-tab-usage">Usage</HeaderTab>
+    </>
+  );
   return (
-    <ConsolePage crumb={{ ...PLATFORM, current: 'Promo codes' }} title="Promo codes" line="The codes members can use at checkout, and what each one takes off." testId="admin-platform-promo-codes">
-      <PromoCodesPanel />
+    <ConsolePage hqOnly crumb={{ ...PLATFORM, current: 'Promo codes' }} title="Promo codes" line={PROMO_LINE} tabs={tabs} testId="admin-platform-promo-codes">
+      {view.tab === 'usage' ? <PromoUsage /> : (
+        <div className="flex flex-col gap-4">
+          <PromoDrawer id={view.id} />
+          <PromoNotes />
+          <PromoCodesPanel />
+        </div>
+      )}
     </ConsolePage>
   );
 }

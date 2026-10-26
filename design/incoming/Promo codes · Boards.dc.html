@@ -1,0 +1,62 @@
+<!DOCTYPE html>
+<html><head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <meta name="design_doc_mode" content="canvas">
+  <link href="https://fonts.googleapis.com/css2?family=Roboto+Mono:wght@400;500;600;700&family=Space+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <style>body{margin:0;background:#eeedf2}a{color:#7c3aed;text-decoration:none}a:hover{color:#6d28d9}</style>
+</helmet>
+<div style="display:flex;flex-direction:column;font-family:'Space Grotesk',system-ui,sans-serif;color:#18181b">
+  <header style="padding:40px 44px 8px;display:flex;flex-direction:column;gap:6px">
+    <span style="font:700 11px 'Roboto Mono',monospace;letter-spacing:.07em;text-transform:uppercase;color:#6b6577">HQ · Platform › Promo codes</span>
+    <h1 style="margin:0;font-size:28px;font-weight:800;letter-spacing:-.02em">Promo codes</h1>
+    <p style="margin:0;font-size:14px;color:#6b6577;max-width:860px;line-height:1.55">Every discount members can enter at checkout: the list, a lightbox per code, dialogs to create, pause, end and replace, and the usage charts. Drawn for the Super Admin; a studio admin meets only the closed card on PRM12. The code drawer is drawn as a centred lightbox. Every board is dated 21 Oct 2026, and every name and price in brackets is a placeholder.</p>
+  </header>
+  <sc-for list="{{ boards }}" as="b" hint-placeholder-count="13">
+    <section id="{{ b.id }}" style="padding:36px 44px;border-bottom:1px solid rgba(0,0,0,.08);display:flex;flex-direction:column;gap:12px;scroll-margin-top:16px">
+      <div style="display:flex;align-items:baseline;gap:10px;flex-wrap:wrap">
+        <a href="#{{ b.id }}" style="font:700 11px 'Roboto Mono',monospace;padding:3px 8px;background:#18181b;color:#fff;border-radius:5px">{{ b.id }}</a>
+        <h2 style="margin:0;font-size:16px;font-weight:800;letter-spacing:-.01em">{{ b.t }}</h2>
+      </div>
+      <p style="margin:0;font-size:13px;line-height:1.55;color:#4a4553;max-width:920px">{{ b.cap }}</p>
+      <sc-if value="{{ b.data }}" hint-placeholder-val="{{ false }}"><p style="margin:0;font:500 11.5px/1.6 'Roboto Mono',monospace;color:#6b6577;max-width:920px">Data: {{ b.data }}</p></sc-if>
+      <div style="display:flex;gap:28px;flex-wrap:wrap;align-items:flex-start">
+        <sc-for list="{{ b.frames }}" as="f" hint-placeholder-count="1">
+          <div style="display:flex;flex-direction:column;gap:8px;flex:none">
+            <sc-if value="{{ f.lab }}" hint-placeholder-val="{{ false }}"><span style="font:600 11px 'Roboto Mono',monospace;color:#6b6577">{{ f.lab }}</span></sc-if>
+            <div style="{{ f.box }}"><dc-import name="Promo Codes Page" board="{{ f.b }}" hint-size="{{ f.hint }}"></dc-import></div>
+          </div>
+        </sc-for>
+      </div>
+    </section>
+  </sc-for>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script="">
+class Component extends DCLogic {
+  renderVals() {
+    const D = (b, lab, w, h, r) => ({ b, lab: lab || false, hint: '100%,' + (h || 900) + 'px', box: 'width:' + (w || 1440) + 'px;' + (h ? 'height:' + h + 'px;' : '') + 'overflow:hidden;border-radius:' + (r || 12) + 'px;border:1px solid rgba(24,24,27,.12);background:#f4f3f7;box-shadow:0 1px 3px rgba(0,0,0,.06)' });
+    const P = (b, lab) => D(b, lab, 390, 844, 28);
+    const boards = [['PRM1','Codes · Super Admin · desktop 1440 · light','Four tiles, the state chips and every code on one page, newest first. Eadwyn is open here and collapsed on every other board. The moved notice is for an old Admin Console link. The row menu is open on LAUNCH20; the second frame shows the menu each kind of row offers.','id, code, percent_off, amount_off, currency, duration, product_ids, product_ids_readable, max_redemptions, times_redeemed, active, expires_at, created_by, created_at; state from promoState. NEW: name, duration_in_months, plan and interval scope, paused and ended records, Stripe redemption count.',[D('PRM1'),D('PRM1m','Row menu by state',1060,360)]],
+      ['PRM2','Code · lightbox over the list','LAUNCH20 opens as a centred lightbox, not a right-side drawer, with its row tinted behind it. Overview, Redemptions and History are drawn as three frames.','promo_redemptions (promo_id, user_id, payment_intent_id, created_at); orders.discount_cents; admin_audit_log promo_create, promo_update, promo_delete. NEW: product, interval, amounts and source per redemption; reasons.',[D('PRM2','Overview',1440,1000),D('PRM2b','Redemptions',1440,1000),D('PRM2c','History',1440,1000)]],
+      ['PRM3','New code · steps 1 and 2','Step 1 picks plans with their intervals; One-time products is drawn beside it. Step 2 sets the discount, with the amount and 100% cases beside it.','',[D('PRM3a','Step 1 · Applies to',1440,820),D('PRM3b','Step 2 · Discount',1440,700)]],
+      ['PRM4','New code · steps 3 to 5 and the confirm','Duration (only when a plan is in scope), limits and dates, then the review. The authenticator check and a Stripe refusal sit beside the review; a taken code sits beside step 4.','NEW: once per member, first purchase only, name, note.',[D('PRM4a','Step 3 · Duration',1440,580),D('PRM4b','Step 4 · Limits and dates',1440,800),D('PRM4c','Step 5 · Review, the confirm and a refusal',1440,880)]],
+      ['PRM5','Edit and replace','Edit changes only the name and note. Replace makes a new code with the changed terms marked, and ends LAUNCH20.','',[D('PRM5',false,1440,880)]],
+      ['PRM6','Pause, resume and end','Pause and resume EVENT15, end LAUNCH20 for good, and the refused form for a code that has already ended.','NEW: pause and end reasons.',[D('PRM6',false,1440,940)]],
+      ['PRM7','Usage · desktop 1440 · light','Redemptions by source per week, discount by currency, top codes, plans and products, and codes near their end. Every chart has its table. Average saving divides by the 449 redemptions with a recorded USD discount, not all 512.','promo_redemptions.created_at, promo_id; orders.promo_code, discount_cents, currency, paid_at. NEW: source, product, interval and amounts per redemption; Stripe subscription redemptions.',[D('PRM7')]],
+      ['PRM8','Usage · dark','PRM7 in the dark colours. Violet becomes #a78bfa; the dashed Not recorded marks stay visible on #111827.','',[D('PRM8')]],
+      ['PRM9','Empty','No code yet, with measured zeros; filters that match nothing, with the chips kept; Usage with codes but no redemptions.','',[D('PRM9a','No code yet',1440,760),D('PRM9b','Filters match nothing',1440,880),D('PRM9c','Usage with no redemptions')]],
+      ['PRM10','Loading','Header, strip and tabs render at once. The tab count is a grey bar, tiles read Reading…, eight skeleton rows, and the spine shows a Reading dot.','',[D('PRM10')]],
+      ['PRM11','Error and partial','The whole list failing; a partial read with an unreadable product list, an unread Stripe count and a refused write as a toast; and Stripe not set up, with New code replaced by a sentence.','',[D('PRM11a','The list failed',1440,560),D('PRM11b','Partial, with a refused write',1440,1100),D('PRM11c','Stripe not set up',1440,1000)]],
+      ['PRM12','No permission','A studio admin opens the address and meets one closed card, never a disabled button.','',[D('PRM12',false,1440,640)]],
+      ['PRM13','Phone · 390 wide','Codes as cards, a code as a full-screen sheet, the create stepper with Back and Next pinned, and Usage one chart per screen width.','',[P('PRM13a','Codes'),P('PRM13b','A code'),P('PRM13c','New code · step 2'),P('PRM13d','Usage')]]].map(([id, t, cap, data, frames]) => ({ id, t, cap, data: data || false, frames }));
+    return { boards };
+  }
+}
+</script>
+</body></html>

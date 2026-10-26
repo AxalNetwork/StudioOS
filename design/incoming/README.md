@@ -109,6 +109,153 @@ strength of a live route would empty the queue of the work it exists to track.
    `Trust Center v2.dc.html` to `backlog/` for a day, next to the `NEW` canvases
    that have no route, and away from the v1 of its own page.
 
+## Landed 2026-10-26 — Deals › Deal flow (#2423)
+
+The owner's artifacts `4HugYQDAekRjwmbtv9Lkje` (the board grid) and
+`A4SCd6ZjqoA5s3MSyaKhRP` (the page) came from S21's prompt on #2423. Each was
+decoded by `scripts/read-canvas.mjs` as is:
+- `Deal flow · Boards.dc.html` is the board grid (DLS1 to DLS18); it imports
+  the page by name;
+- `Deal Flow List Page.dc.html` is the page.
+
+No value was edited.
+
+**Grade: UPGRADE.** S21's integration (D1236) makes the Deals root Deal flow
+for an Investor, with Board and Table, Mine, All deals and New for you in the
+address, and Compare at `/deals/compare`. The rest is D1237–D1243.
+
+## Landed 2026-10-26 — Approvals › Due diligence (#2385)
+
+The owner's artifacts `PCAvq4xfUyaregxd9yeQzX` (the page) and
+`5gehsd8xEv18KLhYwqx4tz` (the board grid) came from S21's prompt on #2385.
+Each was decoded by `scripts/read-canvas.mjs` as is:
+- `Due diligence · Boards.dc.html` is the board grid (DDL1 to DDL19); it
+  imports the page by name;
+- `Due Diligence Desk Page.dc.html` is the page.
+
+No value was edited.
+
+**Grade: UPGRADE.** S21's integration (D1244) makes the list's tabs and the
+case's nine tabs addresses under both bases, with Overview as today's case
+page and "Not scored yet" for a case with no band. The rest is D1245–D1252.
+
+## Landed 2026-10-26 — Venture scorecard (#2428)
+
+The owner's artifacts `KBDJEscuHJPbjGgfYGBurW` (the page) and
+`HHEn5qeKtrg74ebvLx3vH6` (the board grid) came from S21's prompt on #2428.
+Each was decoded by `scripts/read-canvas.mjs` as is:
+- `Venture scorecard · Boards.dc.html` is the board grid (SC1 to SC22); it
+  imports the page by name;
+- `Venture Scorecard Page.dc.html` is the page.
+
+No value was edited.
+
+**Grade: NEW.** S21's integration (D1253) puts the panel on the deal page's
+Scorecard tab and the scope strip in the Deal flow table, and adds
+`/scoring/method`, `/raise/scorecard` and `/admin/platform/scoring`, every
+scope unread until the Worker's read lands. The rest is D1254–D1260.
+
+## Landed 2026-10-26 — Raise evidence (#2430)
+
+The owner's artifacts `3LXQnLHL5GWqtZaTtJcrPB` (the page) and
+`4cnVeEUyzVAoBP5gCdTy4m` (the board grid) came from S21's prompt on #2430.
+Each was decoded by `scripts/read-canvas.mjs` as is:
+- `Raise evidence · Boards.dc.html` is the board grid (VR1 to VR19); it
+  imports the page by name;
+- `Raise Evidence Page.dc.html` is the page.
+
+No value was edited.
+
+**Grade: NEW.** S21's integration (D1261) adds `/raise/evidence` with its item
+and claim drawers, lights Evidence after Overview in Raise's tab rail, and puts
+the investor's evidence block on the deal page's Evidence tab, every block
+unread until its part lands. The rest is D1262–D1269.
+
+## Landed 2026-10-26 — Platform › Promo codes (#2381)
+
+The owner's artifacts `LNy4HFjYXBxN6GB9fKaEgC` (the page) and
+`SgbteJkN5UB6De4WGNHc5k` (the board grid) came from S21's prompt on #2381.
+Each was decoded by `scripts/read-canvas.mjs`:
+- `Promo codes · Boards.dc.html` is the board grid (PRM1 to PRM13); it imports
+  the page by name;
+- `Promo Codes Page.dc.html` is the page.
+
+**One edit, named.** The reader left two image asset uuids in the page: both are
+the Axal VC mark in the shell's header and sidebar (`alt="Axal VC"`). Both now
+point at `/axal-mark.png`, the mark `frontend/public/` serves. No other value was
+edited.
+
+**Grade: UPGRADE.** S21's integration (D1270) gives the page its Codes and Usage
+tabs and one code's drawer as addresses, under the HQ only pill. The rest is
+D1271–D1276.
+
+## Landed 2026-10-26 — Account › Usage › AI tokens (#2482)
+
+The owner's artifacts `4dVvhKMKyGTBMyNftUp29h` (the page) and
+`Rv7G6qKfmv8k4TzqW5DqeQ` (the board grid) came from S21's prompt on #2482.
+Each was decoded by `scripts/read-canvas.mjs`:
+- `AI tokens · Boards.dc.html` is the board grid (TOKB1 to TOKB13); it imports
+  the page by name;
+- `AI Tokens Page.dc.html` is the page.
+
+**One edit, named.** The reader left two image asset uuids in the page. The
+Axal VC mark (`alt="Axal VC"`) now points at `/axal-mark.png`. The other is a
+32px member avatar with no copy in the repository; it stays as the reader left
+it, so that image does not render. No other value was edited.
+
+**Grade: NEW.** S21's integration (D1277) puts AI tokens third in Usage's
+column at `/account/usage/ai-tokens`, each card waiting, and adds Overview's
+"Holds and prices ›". The build is #2482 itself (S20); the reads it waits on are
+D1278.
+
+## Landed 2026-10-26 — Approvals › KYC & KYB (#2384)
+
+The owner's artifacts `9U6YH5eduDN6bpd5k4Tucm` (the board grid) and
+`1GB2y5PhbYoTM3vaQ7iePE` (the page) came from S21's prompt on #2384. Each was
+decoded by `scripts/read-canvas.mjs` as is:
+- `KYC & KYB · Boards.dc.html` is the board grid (KYC1 to KYC17); it imports
+  the page by name;
+- `KYC KYB Page.dc.html` is the page.
+
+No value was edited.
+
+**Grade: UPGRADE.** S21's integration (D1228) gives `/admin/kyc` the canvas's
+four tabs, People, Businesses, Renewals and Audit, each at its own address,
+and one person's case at `/admin/kyc/people/:id`. The rest is D1229–D1235.
+
+## Landed 2026-10-26 — Raise › Calls for Capital (#2458)
+
+The owner's artifacts `J62CXhkW7Q3roPvNQKN9YD` (the page) and
+`6WLiACF5362SF4bmKh1Zsb` (the board grid) came from S21's prompt on #2458. Each
+was decoded by `scripts/read-canvas.mjs` as is:
+- `Calls for Capital · Boards.dc.html` is the board grid (CLS1 to CLS15); it
+  imports the page by name;
+- `Calls for Capital Page.dc.html` is the page.
+
+No value was edited.
+
+**Grade: NEW.** S21's integration (D1221) makes Raise's "Calls" tab open
+Calls for Capital at `/raise/capital-relationships/calls`, off and on, and puts
+one sent call at `/raise/capital-relationships/calls/:uid`. The rest is
+D1222–D1227.
+
+## Landed 2026-10-26 — The closing room (#2424)
+
+The owner's artifacts `N3XUV6g4U2NAnLovRYYy96` (the page) and
+`X79ZB6qGrE6DsL29pAhzyC` (the board grid) came from S21's prompt on #2424. Each
+was decoded by `scripts/read-canvas.mjs` as is:
+- `Closing room · Boards.dc.html` is the board grid (CP1 to CP21); it imports the
+  page by name;
+- `Closing Room Page.dc.html` is the page.
+
+No value was edited.
+
+**Grade: NEW.** S21's integration (D1213) puts the founder's room at
+`/raise/capital-relationships/closing`, the room under a deal at
+`/deals/:dealId/closing`, and Contracts › Closings at `/admin/contracts/closings`
+with one closing at `/admin/contracts/closings/:dealId`, drawn from today's
+reads. The rest is D1214–D1220.
+
 ## Landed 2026-10-25 — Account menu › Calendar (#2420)
 
 The owner's artifacts `Bj7uoUqbMzkksEDU1XdUYK` (the page) and

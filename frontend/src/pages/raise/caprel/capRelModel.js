@@ -31,7 +31,14 @@ export const TABS = [
   { id: 'calls', label: 'Calls', path: '/calls' },
   { id: 'activity', label: 'Activity', path: '/activity' },
 ];
-const TAB_WORDS = new Set(TABS.filter((t) => t.path).map((t) => t.id));
+/**
+ * D1213 (#2424): the round's closing room, the canvas's "Raise › Capital
+ * relationships › Closing" (CP1). An address under the tool, opened from
+ * Commitments; not one of the canvas's seven tabs.
+ */
+export const CLOSING = Object.freeze({ id: 'closing', label: 'Closing', path: '/closing' });
+
+const TAB_WORDS = new Set([...TABS.filter((t) => t.path).map((t) => t.id), CLOSING.id]);
 
 /** True when CycleRoute's record id under this module is a tab, not an investor. */
 export const isCapRelTab = (slug, id) => slug === SLUG && TAB_WORDS.has(String(id ?? ''));

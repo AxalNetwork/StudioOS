@@ -37,6 +37,7 @@ import CostPage from './account/CostPage';
 // D807 (#2246) — `/account/usage/limits`, Usage's Limits page.
 import LimitsPage from './account/LimitsPage';
 import StoragePage from './account/StoragePage';
+import AiTokensPage from './account/AiTokensPage';
 import { USAGE_PAGES, usagePageFor } from './account/limitsModel';
 import ConnectorsSection from './account/AccountConnectors';
 import ConnectorPage from './account/ConnectorPage';
@@ -511,7 +512,7 @@ function AccountPanes({ safeActive, data, setData, flash, patch, reloadAccount, 
       )}
       {safeActive === 'companies' && <CompaniesProjects role={role} />}
       {safeActive === 'following' && <FollowingSection />}
-      {safeActive === 'usage' && (usagePage === 'storage' ? <StoragePage role={role} /> : usagePage === 'limits' ? <LimitsPage /> : usagePage === 'cost' ? <CostPage role={role} /> : <UsageSection role={role} />)}
+      {safeActive === 'usage' && (usagePage === 'storage' ? <StoragePage role={role} /> : usagePage === 'ai-tokens' ? <AiTokensPage /> : usagePage === 'limits' ? <LimitsPage /> : usagePage === 'cost' ? <CostPage role={role} /> : <UsageSection role={role} />)}
       {safeActive === 'developer' && allowedIds.has('developer') && <DeveloperSection role={data.role} />}
       {safeActive === 'onboarding' && <OnboardingSettingsTab />}
       {safeActive === 'connectors' && <ConnectorsTab connectorKey={connectorKey} />}

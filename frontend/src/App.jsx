@@ -290,6 +290,9 @@ const SuperAdminOnlyNotice = lazy(() => import('./pages/hq/SuperAdminOnlyNotice'
 const LabOnlyNotice = lazy(() => import('./pages/admin/lab/LabOnlyNotice'));
 const AdminOnlyNotice = lazy(() => import('./pages/hq/AdminOnlyNotice'));
 const HqContractsPage = lazy(() => import('./pages/hq/ContractsPage'));
+// D1213 (#2424) — Contracts › Closings and one closing.
+const ClosingsDeskPage = lazy(() => import('./pages/closing/ClosingsPages').then((m) => ({ default: m.ClosingsDeskPage })));
+const AdminClosingPage = lazy(() => import('./pages/closing/ClosingsPages').then((m) => ({ default: m.AdminClosingPage })));
 const HqAccountsPage = lazy(() => import('./pages/hq/AccountsPage'));
 const HqHomePage = lazy(() => import('./pages/hq/HqHomePage'));
 const HqRevenuePage = lazy(() => import('./pages/hq/RevenuePage'));
@@ -301,6 +304,12 @@ const HqPlatformSwitchesPage = lazy(() => import('./pages/hq/PlatformSwitchesPag
 // D642 (#1435) — U7, each plan's AI allowance and the runs held for a check.
 const HqPlatformAllowancesPage = lazy(() => import('./pages/hq/PlatformAllowancesPage'));
 const HqAiUsagePage = lazy(() => import('./pages/hq/AiUsagePage'));
+// D1253 (#2428): the venture scorecard's method, the founder's page and HQ › Platform › Scoring.
+const ScoringMethodPage = lazy(() => import('./pages/scoring/ScoringMethodPage'));
+const FounderScorecardPage = lazy(() => import('./pages/scoring/FounderScorecardPage'));
+const HqScoringPage = lazy(() => import('./pages/scoring/HqScoringPage'));
+// D1261 (#2430): the founder's Evidence view and its drawers.
+const RaiseEvidence = lazy(() => import('./pages/cycles/evidence/RaiseEvidence'));
 const HqPlatformTopologyPage = lazy(() => import('./pages/hq/PlatformTopologyPage'));
 // The owner's ruling (2026-10-20): the providers' keys and GitHub Sync, one
 // Super Admin page and its own HQ row, no longer Admin Console tabs.
@@ -1153,6 +1162,7 @@ function ProtectedLayout({ children, user, onLogout, viewMode, onViewModeChange,
           <StripLink to="/admin/platform/payments">Payments</StripLink>
           <StripLink to="/admin/platform/bank-accounts">Bank accounts</StripLink>
           <StripLink to="/admin/platform/product-testing">Product testing</StripLink>
+          <StripLink to="/admin/platform/scoring">Scoring</StripLink>
           <StripLink to="/admin/platform/promo-codes">Promo codes</StripLink>
           <StripLink to="/monitoring">Monitoring</StripLink>
           <StripLink to="/admin/telegram">Telegram</StripLink>
@@ -2795,6 +2805,9 @@ function AppInner() {
           Partner, an Admin or the Super Admin reads it. The Worker decides the level. */}
       <Route path="/cap-tables/:projectId" element={guard(['admin', 'advisor', 'partner'], <CapTableReadPage />)} />
       <Route path="/admin/kyc" element={guard(['admin'], <KycPage />)} />
+      {/* D1228 (#2384) — KYC & KYB's other tabs and one person's case. */}
+      <Route path="/admin/kyc/:tab" element={guard(['admin'], <KycPage />)} />
+      <Route path="/admin/kyc/people/:id" element={guard(['admin'], <KycPage />)} />
       <Route path="/admin/directory" element={guard(['admin'], <DirectoryPage />)} />
       <Route path="/admin/wellbeing" element={guard(['admin'], <AdminWellbeingPage />)} />
       {/* Platform and Revenue pages are the Super Admin's, like every other (#2375). */}
@@ -2806,6 +2819,9 @@ function AppInner() {
       <Route path="/admin/platform/product-testing/:tab" element={guard(['admin'], hqOnly(<ProductTestingHqPage />))} />
       <Route path="/admin/platform/product-testing/programs/:uid" element={guard(['admin'], hqOnly(<ProductTestingHqPage />))} />
       <Route path="/admin/platform/promo-codes" element={guard(['admin'], hqOnly(<PromoCodesPage />))} />
+      {/* D1270 (#2381): Usage and one code's drawer are addresses; the static tab ranks above :id. */}
+      <Route path="/admin/platform/promo-codes/usage" element={guard(['admin'], hqOnly(<PromoCodesPage />))} />
+      <Route path="/admin/platform/promo-codes/:id" element={guard(['admin'], hqOnly(<PromoCodesPage />))} />
       <Route path="/admin/revenue/billing" element={guard(['admin'], hqOnly(<BillingPage />))} />
       <Route path="/admin/trash" element={guard(['admin'], <AdminTrashPage />)} />
       {/* D940 (#2745), SHL7b: an /admin address no route names. An admin reads Not found; a member reads that admin pages are for studio admins (RoleGuard's /admin boundary), not a silent bounce. Ranked below every named /admin route. */}
@@ -2971,6 +2987,9 @@ function AppInner() {
           Console already has (Legal templates; the Users table) for the
           franchisor, with the holder console above the accounts. */}
       <Route path="/admin/contracts" element={guard(['admin'], <HqContractsPage />)} />
+      {/* D1213 (#2424) — the Closings desk (CP13) and one closing (CP14); Contracts links here. */}
+      <Route path="/admin/contracts/closings" element={guard(['admin'], <ClosingsDeskPage />)} />
+      <Route path="/admin/contracts/closings/:dealId" element={guard(['admin'], <AdminClosingPage />)} />
       <Route path="/admin/accounts" element={guard(['admin'], hqOnly(<HqAccountsPage onImpersonate={handleImpersonate} />))} />
       {/* D633 (#1391, Q2) — one member's credits; the Team directory's drawer is its door. */}
       <Route path="/admin/accounts/credits/:userId" element={guard(['admin'], hqOnly(<MemberCreditsPage />))} />
@@ -3001,6 +3020,8 @@ function AppInner() {
       <Route path="/admin/platform/topology" element={guard(['admin'], hqOnly(<HqPlatformTopologyPage />))} />
       <Route path="/admin/platform/allowances" element={guard(['admin'], hqOnly(<HqPlatformAllowancesPage />))} />
       <Route path="/admin/platform/ai-usage" element={guard(['admin'], hqOnly(<HqAiUsagePage />))} />
+      <Route path="/admin/platform/scoring" element={guard(['admin'], hqOnly(<HqScoringPage />))} />
+      <Route path="/scoring/method" element={guard(['admin', 'founder', 'partner', 'investor', 'advisor', 'exploring'], <ScoringMethodPage />)} />
       {/* The owner's ruling (2026-10-20) — Integration keys, with GitHub Sync as
           its second section (#github), is a Super Admin row of its own. The
           old Admin Console tab links (integration-keys, github) redirect here. */}
@@ -3095,15 +3116,23 @@ function AppInner() {
       <Route path="/insights" element={<Navigate to="/articles#briefs" replace />} />
       <Route path="/insights/public/:slug" element={<PublicInsight />} />
       <Route path="/admin/due-diligence" element={guard(['admin', 'partner', 'investor', 'advisor'], <AdminDueDiligencePage />)} />
+      {/* D1244 (#2385) — the list's tabs and the case's tabs are addresses; the
+          static tabs rank above /:uid, and the bare case address opens Overview. */}
+      <Route path="/admin/due-diligence/my-reviews" element={guard(['admin', 'partner', 'investor', 'advisor'], <AdminDueDiligencePage />)} />
+      <Route path="/admin/due-diligence/templates" element={guard(['admin', 'partner', 'investor', 'advisor'], <AdminDueDiligencePage />)} />
       <Route path="/admin/due-diligence/:uid" element={guard(['admin', 'partner', 'investor', 'advisor'], <AdminDueDiligenceCasePage />)} />
+      <Route path="/admin/due-diligence/:uid/:tab" element={guard(['admin', 'partner', 'investor', 'advisor'], <AdminDueDiligenceCasePage />)} />
       {/* Task #83 — de-admin Due Diligence: investor/advisor-facing alias of the same pages (no /admin framing). */}
       <Route path="/due-diligence" element={guard(['admin', 'partner', 'investor', 'advisor'], <AdminDueDiligencePage />)} />
+      <Route path="/due-diligence/my-reviews" element={guard(['admin', 'partner', 'investor', 'advisor'], <AdminDueDiligencePage />)} />
+      <Route path="/due-diligence/templates" element={guard(['admin', 'partner', 'investor', 'advisor'], <AdminDueDiligencePage />)} />
       {/* Build queue #128 — subject-facing request inbox. Founders included by design:
           this surface exposes only the requests addressed to them, never case data
           (the "founders NEVER read DD" invariant lives in the worker). React Router
           ranks the static segment above /:uid, so this never shadows a case UID. */}
       <Route path="/due-diligence/requests" element={guard(['founder', 'admin', 'partner', 'investor', 'advisor'], <DueDiligenceRequestsPage />)} />
       <Route path="/due-diligence/:uid" element={guard(['admin', 'partner', 'investor', 'advisor'], <AdminDueDiligenceCasePage />)} />
+      <Route path="/due-diligence/:uid/:tab" element={guard(['admin', 'partner', 'investor', 'advisor'], <AdminDueDiligenceCasePage />)} />
       {/* /projects is RETIRED (task #101). It was the "Startups" list: a table
           of projects, a filter box, and the create form.
 
@@ -3364,6 +3393,8 @@ function AppInner() {
           workspace still renders all four sections and the route scrolls to
           one. Splitting it into four pages is a content decision, not a
           routing one. */}
+      {/* D1236 (#2423): compare up to four ventures from Deal flow. */}
+      <Route path="/deals/compare" element={guard(['admin', 'investor'], <InvestorDealsRoutes />)} />
       <Route path="/deals/pipeline" element={guard(['admin', 'investor'], <InvestorDealsRoutes />)} />
       <Route path="/deals/screening" element={guard(['admin', 'investor'], <InvestorDealsRoutes />)} />
       <Route path="/deals/commit" element={guard(['admin', 'investor'], <InvestorDealsRoutes />)} />
@@ -3761,15 +3792,23 @@ function AppInner() {
         : <Navigate to="/raise/capital/pipeline" replace />} />
       {/* D686 §3.1 item 14: a founder's call inside the Raise shell; investors and counsel stay on /round-calls/:uid. */}
       <Route path="/raise/calls/:uid" element={guard(labRoles(['admin', 'founder']), <RaiseCallPage />)} />
+      {/* D1221 (#2458): one call at its address under Capital relationships › Calls (CLS8); /raise/calls/:uid stays until part 6 counts its redirect. */}
+      <Route path="/raise/capital-relationships/calls/:uid" element={guard(labRoles(['admin', 'founder']), <RaiseCallPage />)} />
       {/* D686 §5.1: Call for Capital, the Raise page with its lightbox open; /raise/calls is the history's address. */}
       <Route path="/raise/call" element={guard(labRoles(['admin', 'founder']), <CycleRoute cycle="raise" lightbox />)} />
-      <Route path="/raise/calls" element={guard(labRoles(['admin', 'founder']), <HistoryRedirect to="/raise/capital-relationships" hash="#calls" />)} />
+      <Route path="/raise/calls" element={guard(labRoles(['admin', 'founder']), <HistoryRedirect to="/raise/capital-relationships/calls" hash="" />)} />
       {/* D1025 (#2862, CT11): a Cap table proposal's drawer, over the tool; its id is a record proposal's uid or `mercury-<n>`. */}
       <Route path="/raise/cap-table/proposal/:proposal" element={guard(labRoles(['admin', 'founder']), <CycleRoute cycle="raise" slug="cap-table" capTableProposal />)} />
       {/* D1023 (#2860, CT4): an instrument's drawer, over Instruments; its id is the record's SAFE or note uid. */}
       <Route path="/raise/cap-table/instrument/:instrument" element={guard(labRoles(['admin', 'founder']), <CycleRoute cycle="raise" slug="cap-table" capTableProposal />)} />
       {/* D1024 (#2861, CT6–CT9): a scenario, or `compare`, under the tool's Scenarios tab. */}
       <Route path="/raise/cap-table/scenarios/:scenario" element={guard(labRoles(['admin', 'founder']), <CycleRoute cycle="raise" slug="cap-table" capTableScenario />)} />
+      {/* D1253 (#2428): the founder's own scorecard (SC8); a static path ranks above /raise/:slug. */}
+      <Route path="/raise/scorecard" element={guard(labRoles(['admin', 'founder']), <FounderScorecardPage />)} />
+      {/* D1261 (#2430): Evidence (VR1) and its item and claim drawers (VR2, VR3) as addresses, before /raise/:slug. */}
+      <Route path="/raise/evidence" element={guard(labRoles(['admin', 'founder']), <RaiseEvidence />)} />
+      <Route path="/raise/evidence/item/:id" element={guard(labRoles(['admin', 'founder']), <RaiseEvidence />)} />
+      <Route path="/raise/evidence/claim/:id" element={guard(labRoles(['admin', 'founder']), <RaiseEvidence />)} />
       <Route path="/raise/:slug" element={guard(labRoles(['admin', 'founder']), <CycleRoute cycle="raise" />)} />
       {/* D1106 (#2986): a data-room file's lightbox over Files. */}
       <Route path="/raise/data-room/file/:id" element={guard(labRoles(['admin', 'founder']), <CycleRoute cycle="raise" slug="data-room" record dataRoomFile />)} />

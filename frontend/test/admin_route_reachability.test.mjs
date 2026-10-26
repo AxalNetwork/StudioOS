@@ -187,6 +187,10 @@ function doorsIn(src) {
       // as a link nobody wrote. A literal before the `?` is a test, not a value.
       const value = bind[2].includes('?') ? bind[2].slice(bind[2].indexOf('?')) : bind[2];
       for (const lit of value.matchAll(/'(\/[^']*)'/g)) doors.add(`${lit[1]}${tail}`);
+      // D1244 (#2385): a case's tab is `${base}/${uid}/${t.key}`: two whole
+      // segments after the base, each a value. Read as `/…/${}/${}`, which only
+      // a `:uid/:tab` route matches — the head alone (`/…/`) reaches `:uid`.
+      if (/^(?:\/\$\{[^}`]*\}){2}$/.test(rest)) for (const lit of value.matchAll(/'(\/[^']*)'/g)) doors.add(`${lit[1]}/\${}/\${}`);
     }
   }
   return { doors: [...doors], redirects };
@@ -277,8 +281,10 @@ const CONSOLE_PAGES = 'frontend/src/pages/admin/ConsolePages.jsx';
 // and D1005 retired PersonasConsole: Persona segments draws its own Move dialog.
 const COMPOSED = new Map([
   // D1195 (#2382): Product testing's tabs draw the doors to one program (`/programs/:uid`).
-  [CONSOLE_PAGES, [...ADMIN_CONSOLE_FILES.filter((f) => f !== CONSOLE_PAGES && !HQ_KEYS_CONSOLE_FILES.includes(f)), 'frontend/src/pages/admin/productTesting/ProductTestingTabs.jsx']],
+  [CONSOLE_PAGES, [...ADMIN_CONSOLE_FILES.filter((f) => f !== CONSOLE_PAGES && !HQ_KEYS_CONSOLE_FILES.includes(f)), 'frontend/src/pages/admin/productTesting/ProductTestingTabs.jsx', 'frontend/src/pages/admin/kyc/KycTabs.jsx']],
   ['frontend/src/pages/hq/AccountsPage.jsx', ['frontend/src/pages/admin/consoles/UsersConsole.jsx']],
+  // D1213 (#2424): Contracts draws its desk from the file beside it, which holds the door to Closings.
+  ['frontend/src/pages/hq/ContractsPage.jsx', ['frontend/src/pages/admin/contracts/ContractsDesk.jsx']],
   // The owner's ruling (2026-10-20): HQ's Integration keys page, Super Admin only.
   ['frontend/src/pages/hq/IntegrationKeysPage.jsx', HQ_KEYS_CONSOLE_FILES],
   // D800 (#2233): the Licences page draws its tab row and its tabs' links from
@@ -373,6 +379,9 @@ const COMPOSED = new Map([
   ['frontend/src/pages/admin/programs/ProposalsPage.jsx', [
     'frontend/src/pages/admin/programs/ProposalTables.jsx',
   ]],
+  // D1244 (#2385): Due diligence's list tabs and case tabs are drawn by DdTabs.
+  ['frontend/src/pages/AdminDueDiligencePage.jsx', ['frontend/src/pages/duediligence/DdTabs.jsx']],
+  ['frontend/src/pages/AdminDueDiligenceCasePage.jsx', ['frontend/src/pages/duediligence/DdTabs.jsx']],
 ]);
 
 /** path → the files whose doors that path can reach. */
@@ -719,6 +728,12 @@ test('the computed-base resolver still sees the due-diligence case links', () =>
   const dd = doorsIn(read('frontend/src/pages/AdminDueDiligencePage.jsx')).doors;
   assert.ok(dd.includes('/admin/due-diligence/'),
     'the computed base no longer resolves; template links through a const are unread');
+  // D1244 (#2385): the case tabs, `${base}/${uid}/${t.key}`, reach only `:uid/:tab`.
+  const tabs = doorsIn(read('frontend/src/pages/duediligence/DdTabs.jsx')).doors;
+  for (const d of ['/admin/due-diligence/${}/${}', '/due-diligence/${}/${}', '/admin/due-diligence/my-reviews', '/admin/due-diligence/templates']) {
+    assert.ok(tabs.includes(d), `DdTabs no longer yields the door ${d}`);
+  }
+  assert.equal(toRoute('/admin/due-diligence/${}/${}'), '/admin/due-diligence/:uid/:tab');
 });
 
 test('a component mounted at a second path is declared once', () => {
