@@ -180,6 +180,7 @@ test('D1176 unreadable legacy metadata stays unreadable instead of overwriting i
 });
 test('D1176 invalid financial and AI provenance payloads refuse without writes; explicit zero cash/raise survives',async()=>{
   const f=fixture();const a=await created(f);
+  const blank=await created(f,{name:'Blank'});assert.equal(blank.amount_to_raise_cents,null);assert.equal(blank.cash_cents,null);assert.equal(blank.model.runway.value,null);
   const bad=[{amount_to_raise_cents:-1},{amount_to_raise_cents:''},{amount_to_raise_cents:1.1},{target_runway_months:0},{start_month:'2027-13'},{currency:'US'},{source:'eadwyn'},{lines:lines.slice(1)},{lines:lines.map(x=>({...x,share_pct:10}))}];
   const before=rows(f,'SELECT * FROM uof_scenarios');const audit=rows(f,'SELECT * FROM activity_logs');
   for(const b of bad)assert.equal((await call(f,'PATCH',`/scenarios/${a.id}`,b)).status,400);
