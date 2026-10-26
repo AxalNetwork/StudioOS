@@ -26,10 +26,11 @@ const app=new Hono().route('/api/cycles/raise/use-of-funds/eadwyn',createUseOfFu
 
 function fixture(){
   const db=new DatabaseSync(':memory:',{enableForeignKeyConstraints:false,enableDoubleQuotedStringLiterals:true});dbs.push(db);
-  for(const name of ['founders','users','projects','activity_logs','user_company_links','super_admins','mi_pro_subscriptions',
+  for(const name of ['founders','users','projects','activity_logs','user_company_links','company_profiles','super_admins','mi_pro_subscriptions',
     'roadmap_okrs','integrations','cap_table_scenarios','financial_models','raise_rounds','raise_prospects','raise_pro_rata','raise_closes',
     'spinout_deck_overrides','pitch_decks','pitch_deck_share_tokens','data_room_files'])db.exec(tableFromBaseline(baseline,name));
   for(const m of migrations)db.exec(m);
+  db.exec(readFileSync(new URL('../sql/migrations/597_company_archive_and_events.sql',import.meta.url),'utf8')); // D1137: company scope reads archived_at
   db.exec("INSERT INTO founders(id,name,email) VALUES(11,'Synthetic owner','owner@example.test'),(22,'Other owner','other@example.test'); INSERT INTO projects(id,name,founder_id,company_id) VALUES(1,'Synthetic venture',11,10),(2,'Other venture',22,20); INSERT INTO roadmap_okrs(id,project_id,objective) VALUES(1,1,'Product milestone'),(2,2,'Other milestone');");
   roles.forEach((role,i)=>db.prepare('INSERT INTO users(id,role,name,email,founder_id,is_active) VALUES(?,?,?,?,?,1)').run(i+1,role,`Synthetic ${i+1}`,`member-${i+1}@example.test`,i===1?22:11));
   db.exec("INSERT INTO user_company_links(uid,user_id,company_id) VALUES('link-one',1,10),('link-two',1,20)");
