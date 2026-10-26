@@ -12,7 +12,7 @@ import { createRoot } from 'react-dom/client';
 import { MemoryRouter, Routes, Route, useLocation } from 'react-router-dom';
 import { installDocument } from './_contracts_dom.mjs';
 import CycleRoute from '../src/pages/cycles/CycleRoute.jsx';
-import { UseOfFundsMovedRedirect } from '../src/pages/raise/useoffunds/ScenariosForecast.jsx';
+import UseOfFundsMovedRedirect from '../src/pages/raise/useoffunds/UseOfFundsMovedRedirect.jsx';
 import { REDIRECT_ROUTES } from '../../cloudflare-worker/src/services/redirectRoutes.ts';
 import {
   DRIVERS, compareHref, compareIds, compareTable, driverError, driverRows, driversBody, forecastGap, forecastSeries, forecastTiles,
@@ -117,7 +117,7 @@ async function mounted(url, { phone = false, handle = handler } = {}) {
   return {
     requests, flush, by, all, pr, text: () => text(container), textOf: (id) => text(by(id)),
     ids: () => nodes().map((n) => pr(n)['data-testid']).filter(Boolean),
-    hrefs: () => nodes().filter((n) => String(n.tagName).toUpperCase() === 'A').map((n) => pr(n).href || pr(n).to).filter(Boolean),
+    hrefs: (under = container) => { const walk = (n) => [n, ...(n.childNodes || []).flatMap(walk)]; return walk(under).filter((n) => String(n.tagName).toUpperCase() === 'A').map((n) => pr(n).href || pr(n).to).filter(Boolean); },
     async click(node) { const n = typeof node === 'string' ? by(node) : node; assert.ok(n, `no ${node}`); await act(async () => pr(n).onClick?.({ preventDefault() {}, stopPropagation() {} })); await flush(); },
     async change(node, value) { const n = typeof node === 'string' ? by(node) : node; assert.ok(n, `no ${node}`); await act(async () => pr(n).onChange?.({ target: { value, checked: value } })); await flush(); },
     async close() { await act(async () => root.unmount()); Object.assign(globalThis, previous); restore(); },
@@ -380,8 +380,10 @@ test('Compare (UF10, UF11): Today and each scenario, both charts with a table; n
 test('on a phone, a page under a tab goes back to its tab', async () => {
   const v = await mounted('/raise/use-of-funds/runway/forecast?project_id=3', { phone: true });
   try {
-    assert.ok(v.hrefs().includes('/raise/use-of-funds/runway?project_id=3'));
-    assert.match(v.text(), /Forecast/);
+    const bar = v.by('cycle-bar');
+    assert.ok(bar, 'the phone bar');
+    assert.ok(v.hrefs(bar).includes('/raise/use-of-funds/runway?project_id=3'), 'its back is Runway, not Home');
+    assert.match(v.text.call(null), /Forecast/);
   } finally { await v.close(); }
 });
 

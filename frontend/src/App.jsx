@@ -527,7 +527,7 @@ import { signInPath as assistantSignInPath } from './pages/connect/assistantCons
 import { InvestorPricingRedirect, PlansAndPricingRedirect } from './pages/pricingRedirects.jsx';
 // D1029 (#2866): the old Cap table addresses forward into the tool.
 import CapTableMovedRedirect from './pages/raise/captable/CapTableMovedRedirect';
-import { UseOfFundsMovedRedirect } from './pages/raise/useoffunds/ScenariosForecast';
+import UseOfFundsMovedRedirect from './pages/raise/useoffunds/UseOfFundsMovedRedirect';
 import { DataRoomMovedRedirect } from './pages/raise/dataroom/DataRoomMoved';
 import { movedKind } from './pages/raise/dataroom/dataRoomModel';
 import {

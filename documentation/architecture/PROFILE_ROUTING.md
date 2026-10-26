@@ -106,7 +106,7 @@ it, where in their nav, and how do they get there.*
 | Studio Ops | — | — (not routed) | Full page (Spin-Out Lab — frozen) | Not reachable yet | OUT OF SCOPE | High |
 | Team | `/build/team?mode=workspace` | — (no nav entry) | Full page | Deep link / in-page action | CURRENT | Medium |
 | Trust center (public) | `/trust/me` · `/admin/security/trust-center` | — (no nav entry) | Full page | Deep link / in-page action | NEW | Medium |
-| Use of funds | `/raise/use-of-funds` · `/raise/capital/model?project_id=` | Headerless | Full page | Sidebar → Headerless → Raise | UPGRADE | High |
+| Use of funds | `/raise/use-of-funds` · `/runway/forecast` · `/scenarios/compare` · `/raise/capital/model` · `/build/financials` · `/runway/forecast?project_id=…&moved=capital-model` | Headerless | Full page | Sidebar → Headerless → Raise | UPGRADE | High |
 | Use of Funds | `/spinout-lab/use-of-funds` | Headerless | Full page (Spin-Out Lab — frozen) | Sidebar → Headerless → Spin-Out Lab | OUT OF SCOPE | High |
 | Validate · Record a session | `/validate/record` · `/validate/interviews?new=record` · `/cycles/validate/modules/customer-research` · `/sessions` · `/channels/threads?status=pending` · `/channels/threads/:uid/assign` · `/validate/record/live` · `/sessions/active` · `/validate/session/:id` | Headerless | Full page (proposed) | Sidebar → Headerless → Validate | NEW | Low |
 | Validate → Build plan | `/build/plan` · `/build/plan/progress` | — (not routed) | Full page (proposed) | Not reachable yet | NEW | Low |

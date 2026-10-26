@@ -25,7 +25,7 @@ export const HELP_SURFACES = {
   "/build/roadmap": {"label": "Roadmap", "roles": ["admin", "founder"], "lab": true},
   "/build/brand": {"label": "Brand Builder", "roles": ["admin", "founder"], "lab": true},
   "/raise/pitch": {"label": "Pitch Deck", "roles": ["admin", "founder", "advisor", "partner", "exploring"], "lab": true},
-  "/raise/use-of-funds/runway/forecast": {"label": "Forecast", "roles": ["admin", "founder"], "lab": false},
+  "/raise/use-of-funds/runway/forecast": {"label": "Forecast", "roles": ["admin", "founder"], "lab": true},
   "/trust/me": {"label": "Trust Center", "roles": ["admin", "founder", "partner", "investor", "advisor", "exploring"], "lab": false},
   "/raise/data-room": {"label": "Data Room", "roles": ["admin", "founder", "investor"], "lab": false},
   "/research/diligence": {"label": "Due Diligence", "roles": ["admin", "investor"], "lab": true},

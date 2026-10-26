@@ -1188,7 +1188,7 @@ export default function CycleRoute({ cycle, lightbox = false, adding = false, re
           onChanged={() => { dirty.current = true; }} />
       )}
       {dialog && !(phone && dialog.page) && dialog.element}
-      <RecordCrumb title={record && recordState.status === 'ready' ? recordState.data?.title : null} type={`${cycle}/${slug}`} id={narrativeTab || capTableTab || dataRoomTab || uofSub ? null : recordId ?? null} />
+      <RecordCrumb title={record && recordState.status === 'ready' ? recordState.data?.title : null} type={`${cycle}/${slug}`} id={narrativeTab || capTableTab || dataRoomTab ? null : recordId ?? null} />
     </RailFrame>
     </RailCrumbsProvider>
   );

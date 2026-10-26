@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Link, Navigate, useLocation, useNavigate } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { api as legacyApi } from '../../../lib/api';
 import { useOfFundsApi } from '../../../lib/api/useOfFunds';
 import { Lightbox } from '../../../ui';
@@ -10,13 +10,13 @@ import {
 } from './UseOfFundsParts';
 import {
   DRIVERS, MAX_COMPARE, cashPaths, cashSentence, changedDrivers, compareHref, compareIds, compareTable, driverError, driverRows, driversBody,
-  forecastGap, forecastSeries, forecastTiles, fundedBySection, makeBaseView, movedNotice, movedTo, scenarioBody, scenarioCard, sensitivityRows,
+  forecastGap, forecastSeries, forecastTiles, fundedBySection, makeBaseView, movedNotice, scenarioBody, scenarioCard, sensitivityRows,
 } from './scenariosForecastModel';
 
 /**
  * D1178 (#3105) — Use of funds part 5: Runway › Forecast (UF8), Scenarios
  * (UF9) and Scenarios compared (UF10, UF11), and the redirect that lands the
- * old financial model's addresses on Forecast.
+ * old financial model's addresses on Forecast (`UseOfFundsMovedRedirect.jsx`).
  *
  * READS. Forecast: the financial model's store (`useOfFundsApi.forecast`).
  * Scenarios: D1176's `GET /scenarios`. Compare: `GET /compare?ids=`.
@@ -30,12 +30,6 @@ import {
 const CHART_FILL = ['bg-violet-600 dark:bg-violet-400', 'bg-sky-500 dark:bg-sky-400', 'bg-amber-500 dark:bg-amber-400', 'bg-emerald-500 dark:bg-emerald-400'];
 const LINE_STROKE = ['stroke-violet-600 dark:stroke-violet-400', 'stroke-sky-500 dark:stroke-sky-400', 'stroke-amber-500 dark:stroke-amber-400', 'stroke-emerald-500 dark:stroke-emerald-400'];
 const DOT_FILL = ['bg-violet-600 dark:bg-violet-400', 'bg-sky-500 dark:bg-sky-400', 'bg-amber-500 dark:bg-amber-400', 'bg-emerald-500 dark:bg-emerald-400'];
-
-/** The old financial model's addresses: Runway › Forecast, with the venture and the moved notice. */
-export function UseOfFundsMovedRedirect() {
-  const loc = useLocation();
-  return <Navigate replace to={{ ...movedTo(loc.search), hash: loc.hash }} />;
-}
 
 /** The notice an old address shows once it lands (UF8). */
 export function ForecastMovedNotice({ search }) {
