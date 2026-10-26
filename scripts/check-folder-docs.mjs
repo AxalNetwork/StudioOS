@@ -26,9 +26,18 @@
  * Rule 3 deliberately checks the WHOLE repo, not just the folder: a README may
  * legitimately point at `index.ts` one level up, or at a sibling module. What
  * it may not do is name something that is not there at all.
+ *
+ *   4. ONE VERSION — every README.md merges with `union` (`.gitattributes`), so
+ *                   two branches appending at the same spot never conflict.
+ *                   When two branches rewrote the same line, union keeps both
+ *                   versions; a README with a conflict marker, two rows for one
+ *                   name in one table, or the same substantial line twice within
+ *                   a few lines fails here (`lib/readmeUnion.mjs`). Keep one.
  */
 import { readdirSync, readFileSync, existsSync } from 'node:fs';
 import { resolve, join, relative } from 'node:path';
+import { execFileSync } from 'node:child_process';
+import { unionArtifacts } from './lib/readmeUnion.mjs';
 
 const ROOT = resolve(process.cwd());
 
@@ -273,6 +282,19 @@ for (const [dir] of DOCUMENTED) {
 
   const words = src.split(/\s+/).length;
   if (words < 40) notes.push(`${dir}/README.md is very short (${words} words)`);
+}
+
+// Rule 4: every tracked README.md, not only the documented folders' — union
+// merges them all. Outside a git checkout there is nothing union could have done.
+let readmes = [];
+try { readmes = execFileSync('git', ['ls-files', '-z', '*README.md'], { cwd: ROOT, encoding: 'utf8' }).split('\0').filter(Boolean); } catch { readmes = []; }
+for (const file of readmes) {
+  if (!existsSync(join(ROOT, file))) continue;
+  for (const f of unionArtifacts(readFileSync(join(ROOT, file), 'utf8'))) {
+    errors.push(f.kind === 'marker' ? `${file}:${f.line} still holds a conflict marker (${f.text})`
+      : f.kind === 'row' ? `${file}:${f.line} lists ${f.text} a second time in the same table — a union merge kept two versions; keep one`
+        : `${file}:${f.line} repeats a line from just above — a union merge kept two versions; keep one: "${f.text}"`);
+  }
 }
 
 if (errors.length) {
