@@ -217,7 +217,7 @@ test('Limits lights Usage and Limits in the account navigation, and the address 
 
   const page = readFileSync(new URL('../src/pages/SettingsPage.jsx', import.meta.url), 'utf8');
   assert.match(page, /usagePage === 'limits' \? <LimitsPage \/> : usagePage === 'cost' \? <CostPage role=\{role\} \/> : <UsageSection role=\{role\} \/>/);
-  assert.match(page, /accountPathFor\(\{ section: active, phone, key: connectorKey, usagePage, companiesTab \}\)/, 'the canonical address keeps /limits');
+  assert.match(page, /accountPathFor\(\{ section: active, phone, key: connectorKey, usagePage, companiesTab, companyUid \}\)/, 'the canonical address keeps /limits');
 });
 
 // 7 ───────────────────────────────────────────────────────────────────────────
