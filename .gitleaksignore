@@ -121,3 +121,16 @@ a556b308533429691cb10b1e92092615b1364a82:cloudflare-worker/test/approvals_fixes_
 # run time instead, so no later commit carries the literal. Scoped to the one
 # finding, as D1039's entry is.
 d3e56a7ede0ae62ca9a133216acccd33d4506841:cloudflare-worker/test/segment_suggestions_d1003.test.ts:generic-api-key:37
+
+# D1156 (#3061): the first commit's clearly synthetic signing seed was used
+# only for this in-memory SQLite test's JWTs, never a deployed credential.
+# Current tests build a low-entropy seed at runtime. Keep the exception to
+# this exact historical finding, preserving published branch history.
+636df5d62dccfcf597f295674b03afd8bc196cbd:cloudflare-worker/test/program_usage_d1156.test.ts:generic-api-key:28
+
+# D1190 (#3124): the synthetic JWT signing string in the Capital relationships
+# test's first commit. It signs test tokens for an in-memory database only, and
+# was never a credential. The next commit uses the shared unit-test literal
+# instead, so no later commit carries this one. Scoped to the one finding, as
+# D482's entry is.
+805f80f743df531c959d5aa40bc86b53b1bf8177:cloudflare-worker/test/capital_relationships_d1190.test.ts:generic-api-key:26

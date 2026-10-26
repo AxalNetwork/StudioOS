@@ -55,6 +55,7 @@
  *
  * A D1 failure is a 5xx through `mapError`, never an empty list.
  */
+import { readProgramUsage } from '../services/programUsage';
 import { Hono } from 'hono';
 import type { Env } from '../types';
 import { requireSuperAdmin, requireSuperAdminWriteBar } from '../auth';
@@ -191,6 +192,15 @@ r.get('/licences/:uid', async (c) => {
       history: await readHistory(c.env, licence.id),
     });
   } catch (e) { return mapError(c, e); }
+});
+
+r.get('/licences/:uid/in-use', async (c) => {
+  await requireSuperAdmin(c);
+  try {
+    const licence = await licenceByUid(c.env, c.req.param('uid'));
+    if (!licence) return refuse(c, 404, 'not_found', 'There is no such licence.');
+    return c.json(await readProgramUsage(c.env, licence.id, licence.uid));
+  } catch { return c.json({ error: 'program_usage_unreadable', message: 'Program figures are unreadable. Try again.' }, 503); }
 });
 
 r.get('/licences/:uid/history', async (c) => {

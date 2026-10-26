@@ -60,6 +60,14 @@
  *   A module's read carries `parts.mercury` for the founder alone
  *   (`services/mercury/raiseFeeds.ts`).
  *
+ *   D1190 (#3124): Capital relationships' two reads (`services/capRelReads.ts`).
+ *   GET /capital-relationships/commitments?project=   one read across the stores:
+ *     → { currency, round, totals, investors: [{ key, prospect_id, name, chosen, lines }], sources, words, basis }
+ *     Mercury's matched credits only for the venture's founder (`mercuryFounderOnly`).
+ *   GET /capital-relationships/match?project=&q=&hq_country=&focus=&size_band=&fit=&warm=1&sort=&limit=&offset=
+ *     → the fund directory's answer, each fund with `fit`, `warm_paths`, `in_pipeline`;
+ *       `verified_investors: { count }`, never names. `stage` is refused (400), as the directory refuses it.
+ *
  * The reads are `services/raiseCycle.ts`; the writes are
  * `services/raiseWriters.ts` (D691, #1700), each logging one row per record
  * it writes through `logCycleWrite` (decision 12). Every id a route takes,
@@ -111,6 +119,7 @@ import { isSupportSession } from '../integrations/providers/mercury';
 import { resolveActiveCompany, ACTIVE_COMPANY_HEADER } from '../middleware/activeCompany';
 import { projectInActiveCompany } from '../services/tenancyScope';
 import { HolderError } from '../services/capTableWrites';
+import { MatchQueryError, commitmentsRead, matchRead } from '../services/capRelReads';
 import { recomputePmf, pmfHistory } from '../services/scoring/pmfStore';
 
 const cycleRaise = new Hono<{ Bindings: Env }>();
@@ -223,6 +232,32 @@ cycleRaise.get('/modules/:slug', async (c) => {
   }
   return c.json({ module: { slug: mod.slug, name: mod.name, records_title: mod.records_title }, card, records,
     ...(Object.keys(parts).length ? { parts } : {}) });
+});
+
+// D1190 (#3124): Commitments and Match, each one read. The module's gate (`scope`) applies.
+cycleRaise.get('/capital-relationships/commitments', async (c) => {
+  const s = await scope(c);
+  if (s instanceof Response) return s;
+  // Mercury is the founder's alone: an owner check that cannot be read reads as not the founder.
+  const founderOnly = await mercuryFounderOnly(c, s).catch(() => undefined);
+  try {
+    return c.json(await commitmentsRead(c.env, s.projectId, founderOnly === null ? Number(s.user.id) : null));
+  } catch (e) {
+    console.error('[cycle_raise] commitments unreadable:', (e as Error)?.name || 'error');
+    return c.json({ state: 'unreadable', detail: 'The commitments could not be read. Try again.' }, 500);
+  }
+});
+
+cycleRaise.get('/capital-relationships/match', async (c) => {
+  const s = await scope(c);
+  if (s instanceof Response) return s;
+  try {
+    return c.json(await matchRead(c.env, { projectId: s.projectId, callerUserId: Number(s.user.id), get: (k) => c.req.query(k) }));
+  } catch (e) {
+    if (e instanceof MatchQueryError) return c.json({ detail: e.sentence, field: e.field }, 400);
+    console.error('[cycle_raise] match unreadable:', (e as Error)?.name || 'error');
+    return c.json({ state: 'unreadable', detail: 'The fund directory could not be read. Try again.' }, 500);
+  }
 });
 
 cycleRaise.get('/pmf/history', async (c) => {

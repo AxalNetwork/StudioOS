@@ -1,5 +1,9 @@
 # cloudflare-worker/src/services — logic, not HTTP
 
+`programUsage.ts` (D1156) collects month-to-date program counts locally, sends
+only aggregates to HQ, validates authenticated reports and reads dated per-grant
+figures. Missing and unreadable metrics stay distinct from measured zero.
+
 Everything a route needs that is not request parsing or response shaping. A file
 here takes `env` and plain values; it does not take a Hono `Context` and does
 not return a `Response`.
@@ -17,6 +21,10 @@ by the deal reader and diligence opener. A room request is not a grant.
 
 The split matters because it is what makes the logic testable: the worker suite
 runs these directly against an in-process SQLite, with no request at all.
+
+`useOfFunds/` holds D1175's pure, versioned plan engine and founder-scoped,
+transactional legacy copy/Base writer. See its README for the part-3 contract;
+forecasts stay Modelled and never supply runway today.
 
 `bankAccountHistory.ts` (D1182, #3111) reads the masked reveal ledger and
 bank-account/Mercury audit history. It uses a successful read audit as its route
@@ -52,6 +60,12 @@ invalid or ambiguous wall times. Its instant comparison keeps formatting-only
 normalization out of the changed-after-approval flag.
 
 ## The ones worth knowing
+
+`segmentMembership.ts` (D1128, #3008) resolves stored segment identities,
+the active sign-up catalog, an admin-moved member's missing questions, and the
+suppressed per-segment all-question completion count. Questions remain defined
+in code. `segmentProfiles.ts` also creates an authored profile and its first
+history version atomically. Events resolves its audience IDs from this store.
 
 `personaSegments.ts` is D999's segment counts (#2814) behind
 `GET /api/personas/admin/segments`: one grouped pass over every account but
@@ -137,7 +151,7 @@ no new schema, runtime or billing path is introduced.
 | --- | --- |
 | `advisor/` | The advisor state machine and its question banks. |
 | `ai/` | D763: the AI router's pure parts. `guard.ts` holds Llama Guard's slicing, verdicts, category policy and refusal copy. Its README has the rule for adding here. |
-| `calendar/` | Calendar sync (`sync.ts`), cancellation-time removal of tracked copies (`cancelEvents.ts`, D1131), and My events in the calendar (`myEvents.ts`, D1033): tickets and hosted events as calendar kinds, the add-to links, and the copies a sync must remove. D1131 uses `queue.ts`, `queueWorker.ts` and `../models/jobs.ts` for two immediate copies, scan batches of five plus continuation, per-copy cancellation rechecks and independent retry/dead-letter handling. This idempotent job alone may fall back to D1 after an uncertain CF send; exact reads use the mapping primary key, scans use existing source/event indexes. `feedTokens.ts` (D1033, migration 603) is "Subscribe to my events": the per-member token, stored as its SHA-256 only, that lets a calendar client fetch the my-events feed with no session. |
+| `calendar/` | Calendar sync (`sync.ts`), cancellation-time removal of tracked copies (`cancelEvents.ts`, D1131), and My events in the calendar (`myEvents.ts`, D1033): tickets and hosted events as calendar kinds, the add-to links, and the copies a sync must remove. D1131 uses `queue.ts`, `queueWorker.ts` and `../models/jobs.ts` for two immediate copies, scan batches of five plus continuation, per-copy cancellation rechecks and independent retry/dead-letter handling. This idempotent job alone may fall back to D1 after an uncertain CF send; exact reads use the mapping primary key, scans use existing source/event indexes. `feedTokens.ts` (D1033, migration 603) is "Subscribe to my events": the per-member token, stored as its SHA-256 only, that lets a calendar client fetch the my-events feed with no session. `investorMeetings.ts` (D1190) is the `investor_meeting` kind: a founder's meeting or call with an investor, logged with a start in Capital relationships. |
 | `channels/` | D684: business Telegram and WhatsApp conversations, and Zoom and Google Meet calls, reaching Validate › Interviews. The contract, event dedupe, connection tenancy, link codes, outbound tracking and the pending-thread store. Its README has the rules. |
 | `ai/` | D761: the AI router's request and response shapes, per-class timeouts, context-window and paid-only fallbacks, session affinity and the units each attempt used. D760: `catalogue.ts`, every Workers AI model priced in each unit Cloudflare bills, and `pricing.ts`, cost and billed in exact decimals with `AI_MARKUP` written once. Pure; `aiRouter.ts` calls it. |
 | `decks/` | Deck assembly and export. |
@@ -154,11 +168,14 @@ no new schema, runtime or billing path is introduced.
 | `notion/` | D1085: a founder's own Notion, read-only, through Notion's MCP server. `reads.ts` is the only file that opens a Notion session: search, a page with its fingerprint, children, a data source's schema and its rows, each id checked before it is sent, never SQL. Its README has the rules. |
 | `referrals/` | Referral submissions. |
 | `records/` | D690's scoped cycle record contract, registry and ownership checks. |
+| `scoring/` | D1143 (#3029): the Product-market fit score, defined once (#2433). `pmf.ts` is model v1 as data and the pure `scorePmf` (value, band, confidence, coverage and the next steps ranked by gain); `pmfCollector.ts` reads Validate's stores for it with bound SQL, after the latest Pivot, and reads no interviewee name or quote. |
+| `testingOverview.ts` | D1196 (#3146): Product testing's overview read behind `GET /api/admin/testing/overview` (Super Admin): applications and picks per Monday week from `testing_events` (not recorded before the first programme opened), the tester pool and open programmes' applicants by profile, withdrawn counts, and Mail reach per open programme on `testerRecipients`' rule. Each block answers alone; counts only, never an address. |
 | `scoring/` | D1143 (#3029): the Product-market fit score, defined once (#2433). `pmf.ts` is model v1 as data and the pure `scorePmf` (value, band, confidence, coverage and the next steps ranked by gain); `pmfCollector.ts` reads Validate's stores for it with bound SQL, after the latest Pivot, and reads no interviewee name or quote. D1144 adds `pmfStore.ts`: signed, change-only snapshots, history and the atomic PMF checklist/audit update in shared migration 598. See `scoring/README.md`. |
 | `signals/` | Signal ingestion and evidence. |
 | `vercel/` | D1096: `api.ts`, the only caller of `api.vercel.com`: a read-only client for the planned reads, uninstall and the OAuth code exchange. Its README has the rules. |
 | `wellbeing/` | Wellbeing check-ins. |
 | `productTesters.ts` | D1042 (#2890): the product tester store (migration 576). `TRANSITIONS` (approve, decline, pause, resume, remove and the status each needs), `messageFor` (what the member is told), `listTesters`, `testerDetail`, `isAdminAccount` (admins cannot test) and `applyTransition` (one conditional UPDATE and one append-only event row in a batch). `reapplyAfter` is the decision day plus 90 days. D1132: a removal ends the member's open program places in the same batch (`withdrawn`, with a `place_ended` row in `testing_events`), never in a closed or rejected programme. `../routes/admin_product_testers.ts` is its only caller. |
+| `testingLogo.ts` | D1199 (#3149): a product-testing programme's logo. `checkLogo` sniffs the bytes (a PNG by its signature and IHDR, an SVG by its first element), caps the size (`LOGO_MAX_BYTES`), requires a square, refuses an SVG with script, a handler, a `javascript:` or external link, `<foreignObject>` or a DOCTYPE, and stores any other SVG as the brand route's `sanitizeSvg` rebuilds it. `putLogo` and `removeLogo` go through `testing.ts`'s `ownProgramme` and only while the programme is editable; the key `testing-logos/<uid>/<uuid>.<ext>` in `FILES` is the Worker's alone. `readLogo` serves only that prefix, to the owner, Super Admin, or any member once the programme is open. `../routes/testing.ts` is its only caller. |
 | `programGrants.ts` | D982 (#2773): program grants. The nine programs and their readiness (held equal to `frontend/src/lib/programGrants.js`), `TERM_FIELDS` (which grant terms apply to which program, and which are defaultable), `validateTerms` (an unknown or inapplicable term is refused; `null` clears), `presentGrant` (the in-force rule and what a grant waits on), `readGrid`, `readDefaults` and `readHistory`. The store is migration 553; `../routes/admin_program_grants.ts` and `licencePrograms.ts` call it. D983 adds the grid's requests tile and series. D956 adds the `draft` state (migration 562), `programNamed` (the nine or a registry key), the terms every program carries for a program D955 added, and `openDraftStatements`. |
 | `programGrantStates.ts` | D956 (#2789): what each viewer reads of a program's grant (`grantViewerOf`, `grantStates`): a Super Admin's count or HQ only, a deployed studio's licence state in the canvas's words (`requested` from both request lanes), the held mode for an admin with no licence or an undeployed studio, and a branch's state from D984's copy; a failed read is unreadable, never a state. Also Offer to studios (`offerToStudios`, `offerRefusal`: D982's switch, on only with a published playbook). Callers: `../routes/admin_programs.ts`, `programCatalogue.ts`, `../routes/admin_program_grants.ts`. |
 | `licencePrograms.ts` | D984 (#2775): the Administrator's programs. `programCopy` (the licence's grant rows and which programs HQ grants, as the licence push carries them to the branch, migration 554), `parseProgramCopy`, `studioPrograms` (the nine programs in the studio's words, in force by `presentGrant` and the day) and `unlinkedPrograms` (HQ runs every program). Callers: `../routes/licence_programs.ts` and `licencePush.ts`. |
@@ -230,6 +247,11 @@ model). Since D691 (#1699) each list carries the canvas's title, columns,
 filters and default sort (the first in `sorts`), and its row ids are addresses
 that never hold a name: an item key, a version, a link, file or prospect id, a
 cap-table `h-<n>`, `e-<n>` or `pool`, and a use-of-funds section key.
+`capRelReads.ts` (D1190, #3124) is Capital relationships' Commitments
+and Match reads: one commitments read across typed prospects, round-call
+answers, deal-room commitments and the founder's Mercury matches, each investor
+counted once by their strongest line; and the fund directory with each fund's
+Fit, the caller's own warm paths and a count of verified investors who fit.
 `raiseWriters.ts` has one writer per migration 442 record and, since D691
 (#1700), one behind each Raise Add and Edit form (migration 463's stores)
 and one per record action: `duplicateNarrativeVersion`, `revokeDeckLink`,
