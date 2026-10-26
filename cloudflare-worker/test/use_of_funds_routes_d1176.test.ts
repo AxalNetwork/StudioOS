@@ -123,6 +123,39 @@ test('D1176 a scenario promoted during a delete keeps its Base flag, children an
   assert.equal(rows(f,`SELECT id FROM uof_scenario_lines WHERE scenario_id=${a.id}`).length,5);
   assert.equal(rows(f,"SELECT id FROM activity_logs WHERE action='uof_scenario_deleted'").length,0);
 });
+test('D1176 promotion of a concurrently deleted scenario leaves the existing Base and legacy values intact',async()=>{
+  const f=fixture();const a=await created(f);const old=rows(f,'SELECT id FROM uof_scenarios WHERE is_base=1')[0].id;const original=f.env.DB.batch;
+  f.env.DB.batch=async(stmts:any[])=>{
+    f.db.prepare('DELETE FROM uof_scenario_lines WHERE scenario_id=?').run(a.id);
+    f.db.prepare('DELETE FROM uof_scenarios WHERE id=?').run(a.id);
+    return original(stmts);
+  };
+  assert.equal((await call(f,'POST',`/scenarios/${a.id}/make-base`,{})).status,409);
+  assert.deepEqual(rows(f,'SELECT id FROM uof_scenarios WHERE is_base=1'),[{id:old}]);
+  assert.equal(rows(f,'SELECT funding_needed FROM projects WHERE id=1')[0].funding_needed,null);
+  assert.equal(rows(f,"SELECT id FROM activity_logs WHERE action='uof_scenario_made_base'").length,0);
+});
+test('D1176 stale edits and copies refuse atomically when a competing Base promotion or deletion wins',async()=>{
+  for(const mode of ['scenario','milestone','split','copy']){
+    const f=fixture();const a=await created(f);const old=rows(f,'SELECT id FROM uof_scenarios WHERE is_base=1')[0].id;
+    const m=await call(f,'POST','/milestones',{scenario_id:a.id,label:'Keep',cost_cents:100});assert.equal(m.status,201);
+    const original=f.env.DB.batch;const before=rows(f,'SELECT id FROM activity_logs').length;
+    f.env.DB.batch=async(stmts:any[])=>{
+      if(mode==='copy'){
+        f.db.prepare('DELETE FROM uof_milestones WHERE scenario_id=?').run(a.id);f.db.prepare('DELETE FROM uof_scenario_lines WHERE scenario_id=?').run(a.id);f.db.prepare('DELETE FROM uof_scenarios WHERE id=?').run(a.id);
+      }else{f.db.prepare('UPDATE uof_scenarios SET is_base=0 WHERE id=?').run(old);f.db.prepare('UPDATE uof_scenarios SET is_base=1 WHERE id=?').run(a.id);}
+      return original(stmts);
+    };
+    const result=mode==='scenario'?await call(f,'PATCH',`/scenarios/${a.id}`,{currency:'eur',lines:lines.map(l=>({...l,share_pct:l.key==='reserve'?100:0}))}):mode==='milestone'?await call(f,'PATCH',`/milestones/${m.body.id}`,{label:'Must not change'}):mode==='split'?await call(f,'PUT','',{amount_to_raise_cents:99,sections:[{key:'reserve',pct:100}]}):await call(f,'POST','/scenarios',{from_id:a.id,name:'Must not copy'});
+    assert.equal(result.status,409,mode);assert.equal(rows(f,'SELECT id FROM activity_logs').length,before);
+    assert.equal(rows(f,'SELECT funding_needed FROM projects WHERE id=1')[0].funding_needed,null);
+    if(mode!=='copy'){
+      assert.equal(rows(f,`SELECT currency FROM uof_scenarios WHERE id=${a.id}`)[0].currency,'usd');
+      assert.equal(rows(f,`SELECT label FROM uof_milestones WHERE id=${m.body.id}`)[0].label,'Keep');
+      assert.equal(rows(f,`SELECT share_pct FROM uof_scenario_lines WHERE scenario_id=${a.id} AND category_key='product'`)[0].share_pct,100);
+    }else assert.equal(rows(f,'SELECT id FROM uof_scenarios').length,1);
+  }
+});
 test('D1176 milestones keep null distinct from free, validate dates and reject foreign OKRs or transfers',async()=>{
   const f=fixture();const a=await created(f);const b=await created(f,input('Other scenario'));
   const m=await call(f,'POST','/milestones',{scenario_id:a.id,label:'Not costed'});assert.equal(m.status,201);assert.equal(m.body.cost_cents,null);assert.equal(m.body.cost_state,'not_costed');

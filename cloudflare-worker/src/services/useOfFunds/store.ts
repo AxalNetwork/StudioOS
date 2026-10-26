@@ -57,6 +57,12 @@ export function audit(env: Env, s: Scope, action: string, entityId: string | num
   return logCycleWriteStatement(env, { projectId: s.projectId, userId: Number(s.user.id), cycle: 'raise', module: 'use-of-funds', entityId,
     action, summary: `${s.user.role === 'admin' ? 'Studio admin: ' : ''}${action.replace(/_/g, ' ')}.` });
 }
+/** Conditional audit shares the mutation's Base-state guard inside its transaction. */
+function scenarioAudit(env:Env,s:Scope,action:string,uid:string,isBase:number,entityId=uid) {
+  return env.DB.prepare(`INSERT INTO activity_logs(project_id,user_id,entity_type,entity_id,action,details,actor)
+    SELECT ?,?,'raise.use-of-funds',?,?,?,? FROM uof_scenarios WHERE uid=? AND project_id=? AND is_base=?`)
+    .bind(s.projectId,s.user.id,entityId,action,`${s.user.role==='admin'?'Studio admin: ':''}${action.replace(/_/g,' ')}.`,`user:${s.user.id}`,uid,s.projectId,isBase);
+}
 export async function base(env: Env, s: Scope) {
   try { return (await copyLegacyBase(env.DB, s.projectId, s.founderUserId)).scenarioId; }
   catch (e) {
@@ -158,19 +164,20 @@ export async function saveScenario(env: Env, s: Scope, id: number | null, b: Rec
   const uid = r.uid;
   const stmts = id === null
     ? [env.DB.prepare(`INSERT INTO uof_scenarios(uid,project_id,name,is_base,currency,amount_to_raise_cents,target_runway_months,start_month,raise_month,cash_cents,legacy_copied_at,created_by,updated_by)
-        VALUES (?,?,?,0,?,?,?,?,?,?,?,?,?)`).bind(uid, s.projectId, r.name, r.currency, r.amount_to_raise_cents, r.target_runway_months, r.start_month, r.raise_month, r.cash_cents, r.legacy_copied_at, s.user.id, s.user.id)]
-    : [env.DB.prepare(`UPDATE uof_scenarios SET name=?,currency=?,amount_to_raise_cents=?,target_runway_months=?,start_month=?,raise_month=?,cash_cents=?,legacy_copied_at=?,updated_by=?,updated_at=datetime('now') WHERE id=? AND project_id=?`)
-      .bind(r.name, r.currency, r.amount_to_raise_cents, r.target_runway_months, r.start_month, r.raise_month, r.cash_cents, r.legacy_copied_at, s.user.id, id, s.projectId)];
+        SELECT ?,?,?,0,?,?,?,?,?,?,?,?,? WHERE ? IS NULL OR EXISTS(SELECT 1 FROM uof_scenarios WHERE id=? AND project_id=?)`).bind(uid, s.projectId, r.name, r.currency, r.amount_to_raise_cents, r.target_runway_months, r.start_month, r.raise_month, r.cash_cents, r.legacy_copied_at, s.user.id, s.user.id,from?.id??null,from?.id??null,s.projectId)]
+    : [env.DB.prepare(`UPDATE uof_scenarios SET name=?,currency=?,amount_to_raise_cents=?,target_runway_months=?,start_month=?,raise_month=?,cash_cents=?,legacy_copied_at=?,updated_by=?,updated_at=datetime('now') WHERE id=? AND project_id=? AND is_base=?`)
+      .bind(r.name, r.currency, r.amount_to_raise_cents, r.target_runway_months, r.start_month, r.raise_month, r.cash_cents, r.legacy_copied_at, s.user.id, id, s.projectId,r.is_base)];
   if (id===null||has(input,'lines')) for (const l of lines) stmts.push(env.DB.prepare(`INSERT INTO uof_scenario_lines(scenario_id,category_key,share_pct,sublabel,source_label,source_kind,source_ref,updated_by)
-    SELECT id,?,?,?,?,?,?,? FROM uof_scenarios WHERE uid=? AND project_id=?
+    SELECT id,?,?,?,?,?,?,? FROM uof_scenarios WHERE uid=? AND project_id=? AND is_base=?
     ON CONFLICT(scenario_id,category_key) DO UPDATE SET prior_value=CAST(share_pct AS TEXT),share_pct=excluded.share_pct,sublabel=excluded.sublabel,
       source_kind=NULL,source_ref=NULL,source_label=excluded.source_label,updated_by=excluded.updated_by,updated_at=datetime('now')`)
-    .bind(l.category_key, l.share_pct, l.sublabel, l.source_label, l.source_kind??null,l.source_ref??null, s.user.id, uid, s.projectId));
+    .bind(l.category_key, l.share_pct, l.sublabel, l.source_label, l.source_kind??null,l.source_ref??null, s.user.id, uid, s.projectId,r.is_base));
   if (id === null) for (const m of parts.milestones) stmts.push(env.DB.prepare(`INSERT INTO uof_milestones(scenario_id,category_key,label,due_on,cost_cents,okr_id,source_label,source_kind,source_ref,updated_by)
     SELECT id,?,?,?,?,?,?,?,?,? FROM uof_scenarios WHERE uid=? AND project_id=?`).bind(m.category_key,m.label,m.due_on,m.cost_cents,m.okr_id,m.source_label,m.source_kind,m.source_ref,s.user.id,uid,s.projectId));
   if (r.is_base) stmts.push(...await legacyStatements(env, s, r, lines, parts.milestones));
-  stmts.push(audit(env, s, id === null ? 'uof_scenario_created' : 'uof_scenario_updated', uid));
-  await env.DB.batch(stmts);
+  stmts.push(scenarioAudit(env, s, id === null ? 'uof_scenario_created' : 'uof_scenario_updated',uid,r.is_base));
+  const written=await env.DB.batch(stmts);
+  if (!written[0].meta.changes) throw new PlanError(409,'scenario_changed','The scenario changed. Read it again.');
   const saved = await env.DB.prepare('SELECT * FROM uof_scenarios WHERE uid=? AND project_id=?').bind(uid,s.projectId).first<any>();
   return view(env, s, saved);
 }
@@ -178,11 +185,12 @@ export async function makeBase(env: Env, s: Scope, id: number) {
   const r = await scenario(env, s, id); const parts = await scenarioParts(env, id);
   if (r.currency !== 'usd') throw new PlanError(409, 'base_currency', 'The Base uses USD because its legacy readers record dollars.');
   // Clearing and assigning the unique Base happen in the same transaction.
-  await env.DB.batch([
-    env.DB.prepare('UPDATE uof_scenarios SET is_base=0 WHERE project_id=? AND is_base=1').bind(s.projectId),
+  const written=await env.DB.batch([
+    env.DB.prepare('UPDATE uof_scenarios SET is_base=0 WHERE project_id=? AND is_base=1 AND EXISTS(SELECT 1 FROM uof_scenarios target WHERE target.id=? AND target.project_id=?)').bind(s.projectId,id,s.projectId),
     env.DB.prepare("UPDATE uof_scenarios SET is_base=1,updated_by=?,updated_at=datetime('now') WHERE id=? AND project_id=?").bind(s.user.id,id,s.projectId),
-    ...await legacyStatements(env,s,r,parts.lines,parts.milestones), audit(env,s,'uof_scenario_made_base',r.uid),
+    ...await legacyStatements(env,s,r,parts.lines,parts.milestones), scenarioAudit(env,s,'uof_scenario_made_base',r.uid,1),
   ]);
+  if (!written[1].meta.changes) throw new PlanError(409,'scenario_changed','The scenario changed. Read it again.');
   return view(env,s,{...r,is_base:1});
 }
 export async function deleteScenario(env: Env, s: Scope, id: number) {
@@ -217,16 +225,17 @@ export async function saveMilestone(env:Env,s:Scope,id:number|null,b:Record<stri
   if (!r.label) throw bad();
   if (r.okr_id !== null && !await env.DB.prepare('SELECT id FROM roadmap_okrs WHERE id=? AND project_id=?').bind(r.okr_id,s.projectId).first()) throw new PlanError(404,'not_found','Roadmap item not found.');
   if (!remove && r.okr_id !== null && await env.DB.prepare('SELECT id FROM uof_milestones WHERE scenario_id=? AND okr_id=? AND id<>?').bind(sc.id,r.okr_id,id??-1).first()) throw new PlanError(409,'duplicate_okr','This roadmap item is already in the scenario.');
-  const stmts = remove ? [env.DB.prepare('DELETE FROM uof_milestones WHERE id=? AND scenario_id=?').bind(id,sc.id)] : id === null
-    ? [env.DB.prepare("INSERT INTO uof_milestones(uid,scenario_id,category_key,label,due_on,cost_cents,okr_id,source_label,updated_by) VALUES(?,?,?,?,?,?,?,'typed',?)").bind(r.uid,sc.id,r.category_key,r.label,r.due_on,r.cost_cents,r.okr_id,s.user.id)]
-    : [env.DB.prepare("UPDATE uof_milestones SET category_key=?,label=?,due_on=?,cost_cents=?,okr_id=?,prior_value=CAST(cost_cents AS TEXT),source_kind=NULL,source_ref=NULL,source_label='typed',updated_by=?,updated_at=datetime('now') WHERE id=? AND scenario_id=?").bind(r.category_key,r.label,r.due_on,r.cost_cents,r.okr_id,s.user.id,id,sc.id)];
+  const stmts = remove ? [env.DB.prepare('DELETE FROM uof_milestones WHERE id=? AND scenario_id=? AND EXISTS(SELECT 1 FROM uof_scenarios WHERE id=? AND project_id=? AND is_base=?)').bind(id,sc.id,sc.id,s.projectId,sc.is_base)] : id === null
+    ? [env.DB.prepare("INSERT INTO uof_milestones(uid,scenario_id,category_key,label,due_on,cost_cents,okr_id,source_label,updated_by) SELECT ?,id,?,?,?,?,?,'typed',? FROM uof_scenarios WHERE id=? AND project_id=? AND is_base=?").bind(r.uid,r.category_key,r.label,r.due_on,r.cost_cents,r.okr_id,s.user.id,sc.id,s.projectId,sc.is_base)]
+    : [env.DB.prepare("UPDATE uof_milestones SET category_key=?,label=?,due_on=?,cost_cents=?,okr_id=?,prior_value=CAST(cost_cents AS TEXT),source_kind=NULL,source_ref=NULL,source_label='typed',updated_by=?,updated_at=datetime('now') WHERE id=? AND scenario_id=? AND EXISTS(SELECT 1 FROM uof_scenarios WHERE id=? AND project_id=? AND is_base=?)").bind(r.category_key,r.label,r.due_on,r.cost_cents,r.okr_id,s.user.id,id,sc.id,sc.id,s.projectId,sc.is_base)];
   if (sc.is_base) {
     const parts=await scenarioParts(env,sc.id); const ms=parts.milestones.filter(m=>m.id!==id);
     if (!remove) ms.push(r);
     stmts.push(...await legacyStatements(env,s,sc,parts.lines,ms));
   }
-  stmts.push(audit(env,s,remove?'uof_milestone_deleted':id===null?'uof_milestone_created':'uof_milestone_updated',r.uid));
-  await env.DB.batch(stmts);
+  stmts.push(scenarioAudit(env,s,remove?'uof_milestone_deleted':id===null?'uof_milestone_created':'uof_milestone_updated',sc.uid,sc.is_base,r.uid));
+  const written=await env.DB.batch(stmts);
+  if (!written[0].meta.changes) throw new PlanError(409,'scenario_changed','The scenario changed. Read it again.');
   if (remove) return {ok:true};
   const saved=await env.DB.prepare('SELECT * FROM uof_milestones WHERE uid=? AND scenario_id=?').bind(r.uid,sc.id).first<any>();
   return {...saved,source:'Typed',cost_state:saved.cost_cents===null?'not_costed':'recorded'};
@@ -268,21 +277,22 @@ export async function saveSplit(env:Env,s:Scope,b:Record<string,unknown>) {
   if (has(b,'runway_months')) input.target_runway_months=b.runway_months;
   const r=mergeScenario(sc,input); const parts=await scenarioParts(env,sc.id);
   const ms=parts.milestones.slice();
-  const stmts=[env.DB.prepare("UPDATE uof_scenarios SET amount_to_raise_cents=?,target_runway_months=?,legacy_copied_at=?,updated_by=?,updated_at=datetime('now') WHERE id=? AND project_id=?")
+  const stmts=[env.DB.prepare("UPDATE uof_scenarios SET amount_to_raise_cents=?,target_runway_months=?,legacy_copied_at=?,updated_by=?,updated_at=datetime('now') WHERE id=? AND project_id=? AND is_base=1")
     .bind(r.amount_to_raise_cents,r.target_runway_months,r.legacy_copied_at,s.user.id,sc.id,s.projectId)];
-  for (const l of lines) stmts.push(env.DB.prepare("UPDATE uof_scenario_lines SET share_pct=?,source_kind=NULL,source_ref=NULL,source_label='typed',prior_value=CAST(share_pct AS TEXT),updated_by=?,updated_at=datetime('now') WHERE scenario_id=? AND category_key=?").bind(l.share_pct,s.user.id,sc.id,l.category_key));
+  for (const l of lines) stmts.push(env.DB.prepare("UPDATE uof_scenario_lines SET share_pct=?,source_kind=NULL,source_ref=NULL,source_label='typed',prior_value=CAST(share_pct AS TEXT),updated_by=?,updated_at=datetime('now') WHERE scenario_id=? AND category_key=? AND EXISTS(SELECT 1 FROM uof_scenarios WHERE id=? AND project_id=? AND is_base=1)").bind(l.share_pct,s.user.id,sc.id,l.category_key,sc.id,s.projectId));
   for (const section of sections) if (has(section,'milestone_label')) {
     const idx=ms.findIndex(m=>m.category_key===section.key&&m.okr_id===null);
     const existing=idx<0?null:ms[idx]; if (idx>=0) ms.splice(idx,1);
-    if (existing) stmts.push(env.DB.prepare('DELETE FROM uof_milestones WHERE id=? AND scenario_id=?').bind(existing.id,sc.id));
+    if (existing) stmts.push(env.DB.prepare('DELETE FROM uof_milestones WHERE id=? AND scenario_id=? AND EXISTS(SELECT 1 FROM uof_scenarios WHERE id=? AND project_id=? AND is_base=1)').bind(existing.id,sc.id,sc.id,s.projectId));
     if (section.milestone_label!=null&&section.milestone_label!=='') {
       const m={category_key:section.key,label:text(section.milestone_label),due_on:section.milestone_by||null,cost_cents:existing?.cost_cents??null,okr_id:null};
       ms.push(m);
-      stmts.push(env.DB.prepare("INSERT INTO uof_milestones(scenario_id,category_key,label,due_on,cost_cents,source_label,updated_by) VALUES(?,?,?,?,?,'typed',?)").bind(sc.id,m.category_key,m.label,m.due_on,m.cost_cents,s.user.id));
+      stmts.push(env.DB.prepare("INSERT INTO uof_milestones(scenario_id,category_key,label,due_on,cost_cents,source_label,updated_by) SELECT id,?,?,?,?,'typed',? FROM uof_scenarios WHERE id=? AND project_id=? AND is_base=1").bind(m.category_key,m.label,m.due_on,m.cost_cents,s.user.id,sc.id,s.projectId));
     }
   }
   stmts.push(...await legacyStatements(env,s,r,lines,ms));
-  for (const section of sections) stmts.push(audit(env,s,'split_saved',section.key));
-  await env.DB.batch(stmts);
+  for (const section of sections) stmts.push(scenarioAudit(env,s,'split_saved',sc.uid,1,section.key));
+  const written=await env.DB.batch(stmts);
+  if (!written[0].meta.changes) throw new PlanError(409,'scenario_changed','The scenario changed. Read it again.');
   return {ok:true,use_of_funds:SECTION_KEYS.map(k=>({label:SECTION_LABELS[k],pct:lines.find(l=>l.category_key===k)!.share_pct})),runway_months:r.target_runway_months};
 }
