@@ -1,8 +1,8 @@
 # frontend/src/pages — one component per route
 
 Every route declared in `App.jsx` resolves to a file here. Most are lazy-loaded,
-so the filename is usually the fastest way from a URL to its code: `/deals` →
-`DealsPage.jsx`.
+so the filename is usually the fastest way from a URL to its code: `/pricing` →
+`PricingPage.jsx`.
 
 ## Finding a page
 

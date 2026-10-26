@@ -53,6 +53,7 @@ export * from './api/cycleWrites.js';
 export * from './api/cycles.js';
 export * from './api/dataRoom.js';
 export * from './api/dealContext.js';
+export * from './api/dealFlow.js';
 export * from './api/deckAssist.js';
 export * from './api/deckEditor.js';
 export * from './api/deckSources.js';
@@ -4093,7 +4094,7 @@ export const api = {
   trustAgreementHistory: (envelope_uuid) =>
     request(`/trust/agreements/${encodeURIComponent(envelope_uuid)}/history`),
   trustScore: (userId) => request(`/trust/score/${encodeURIComponent(userId)}`),
-  // Task #40 — batch the per-row trust-score lookups on AdminPage / DealsPage
+  // Task #40 — batch the per-row trust-score lookups on AdminPage (DealsPage, which also used it, is retired: D1242)
   // into a single request. Returns { scores: [{ user_id, score, missing[],
   // required_total }] } in the same order the ids were sent. D1074: the single
   // read's rule for every id (self, this territory's admin, an open intro or

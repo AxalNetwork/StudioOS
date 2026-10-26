@@ -119,6 +119,7 @@ no new schema, runtime or billing path is introduced.
 | `tenancyScope.ts` | **The one place row-level scoping is decided.** Returns composable SQL clauses (`esignEnvelopeScope`, `fundGpScope`, `lpMembershipScope`) and fails closed — an actor it cannot identify gets `NO_ROWS`, not everything. |
 | `signedDownload.ts` | One-time, short-TTL, HMAC-signed R2 download tokens. Every private file download goes through it. |
 | `dealPassTaxonomy.ts` | The five pass reasons and the stage-event recorder. |
+| `dealStudioLens.ts` | D1242 (#3255): Deal flow's Studio lens read (`GET /api/deals/studio`), who may move a round (an admin any, an Operating Partner only the rounds they lead), and who set a Not raising round so: a person, intake scoring before #2643, or not recorded. |
 | `backup.ts` | The nightly D1 export to R2. |
 | `fundSheets.ts` | Super Admin fund research ↔ Google Sheets. Dedicated OAuth, never calendar tokens. Founders cannot Connect. |
 | `researchFundRead.ts` | The dossier overlap sentence. A missing cheque end stays open; a missing raise is not an overlap of zero. |

@@ -361,6 +361,11 @@ and paged `/notes`; add/edit/delete notes use the same Worker scope. Only
 the author edits and deletes, firm colleagues read, and staff have no bypass.
 Reading whats-new advances that user/firm’s visit marker. #3057 consumes it.
 
+D1242 (#3255): `dealFlow.js` reads Deal flow's Studio lens, `/deals/studio`:
+every round for an admin or an Operating Partner, with its lead, its
+investors (invited, interested, committed), its source, who set a Not raising
+round so, and whether the caller may move it.
+
 D971 (#2756): `labOperations.js` reads the Lab's playbook, operative cohort size
 and filtered/paged history, and calls the existing Super Admin draft/publish
 routes and audited size write. Support sessions reuse `adminLab.js`; grant

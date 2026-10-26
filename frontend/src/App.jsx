@@ -126,7 +126,8 @@ const WellbeingResourceLibrary = lazy(() => import('./pages/wellbeing/WellbeingR
 const ExpertProfilePage = lazy(() => import('./pages/ExpertProfilePage'));
 const ExpertEditorPage = lazy(() => import('./pages/ExpertEditorPage'));
 const TicketsPage = lazy(() => import('./pages/TicketsPage'));
-const DealsPage = lazy(() => import('./pages/DealsPage'));
+// D1242 (#3255): Deal flow's Studio lens, for an admin or an Operating Partner; DealsPage is retired.
+const StudioLensRoute = lazy(() => import('./pages/investor/dealflow/StudioLens').then((m) => ({ default: m.StudioLensRoute })));
 const DealRoomPage = lazy(() => import('./pages/DealRoomPage'));
 const PartnerOnboardPage = lazy(() => import('./pages/PartnerOnboardPage'));
 const AdminPartnerInvitations = lazy(() => import('./pages/admin/PartnerInvitations'));
@@ -3350,11 +3351,11 @@ function AppInner() {
           pill row and nothing. `InvestorDealsRoutes` answers the root with the
           bucket board, the same overview every partner and advisor root has.
 
-          The non-investor arm is untouched: `investorWorkspace` returned the
-          bare component for any other effective role, and a partner reading
-          /deals still gets `DealsPage` exactly as before. */}
+          The non-investor arm is Deal flow's Studio lens (D1242, #3255): the
+          same list for an admin or an Operating Partner, on the round's
+          status, which replaced the retired `DealsPage`. */}
       <Route path="/deals" element={guard(['admin', 'partner', 'investor'],
-        effectiveRole === 'investor' ? <InvestorDealsRoutes /> : <DealsPage />)} />
+        effectiveRole === 'investor' ? <InvestorDealsRoutes /> : <StudioLensRoute role={effectiveRole} />)} />
 
       {/* ── Deals · the four stages, as four routes ──────────────────────────
           The zone slugs are InvestorDealsWorkspace's own anchor ids with the
