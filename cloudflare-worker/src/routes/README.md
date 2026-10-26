@@ -394,3 +394,5 @@ The admin queue and case reads keep sensitive fields masked; each showing and
 R2 document view is audited. Decisions, owner links, import actions and uploads
 require step-up and an unsuspended studio. Licensed studios require Super Admin.
 Migration 616's views discover company, corporate and imported source records.
+Each authorized staff-scope view calls the existing admin audit helper with
+only its scope and normalized date window; no event content is recorded.

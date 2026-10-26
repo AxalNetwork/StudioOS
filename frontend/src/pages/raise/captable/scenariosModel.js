@@ -31,7 +31,7 @@ export const SAVED = 'Saved. The main cap table did not change.';
 export const NOT_READ = 'Not read here yet';
 export const NOT_CONVERTED = 'Not converted';
 export const NOT_IN = 'Not in this scenario';
-export const MODEL_LOCKED = 'This is your main cap table. Rename or change it on the cap table page; a scenario never writes it.';
+export const MODEL_LOCKED = 'This is your saved model. A scenario never writes it: duplicate it to change its inputs.';
 /** Who wrote a read-back: the engine's numbers, in words. Eadwyn's own reads of the model are on Overview. */
 export const READ_SOURCE = 'Read back from the engine’s numbers, every step shown. Eadwyn’s own read of your saved model is on Overview.';
 export const READ_ONLY = 'You can read these scenarios. Only the venture’s owner and co-founders change them.';

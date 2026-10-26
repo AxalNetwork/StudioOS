@@ -62,3 +62,7 @@ an unmodified PNG in `BrandIcon.jsx` (D687). Its source Apache-2.0 licence is
 included there; no logo host request is made.
 
 D1081: Lovable uses the existing initials tile, explicitly classified in `BRAND_MONOGRAM`; no vendor artwork or remote logo is added.
+
+D1165: `LightboxPhoneProvider` scopes the phone form to a page. Fund admin
+uses `phone="sheet"` for its nested drawers, including reused connection
+sheets. An explicit `phone` on a Lightbox wins; other pages keep `full`.

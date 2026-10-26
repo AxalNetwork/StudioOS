@@ -81,6 +81,14 @@ export const FROZEN = [
     gatedIn: ['admin.ts', 'kyc.ts'],
   },
   {
+    // D1230 (#3238): recording the review of a sanctions match is a compliance
+    // verdict, so it freezes as KYC's do. Sending a KYC case to HQ is in kyc.ts,
+    // already on the Access row; HQ's own decision is HQ's, not the branch's.
+    row: 'Compliance',
+    note: 'No review of a sanctions match is recorded, and no KYC case is sent to HQ. Screenings already recorded stay readable.',
+    gatedIn: ['trust.ts', 'kyc.ts'],
+  },
+  {
     // D303 — Wellbeing joined the other three Community consoles behind
     // this gate: a new resource, an un-hidden expert or a freshly verified
     // one are all "something new under the brand"; a takedown (delete a

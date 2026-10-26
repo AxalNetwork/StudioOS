@@ -72,7 +72,7 @@ const addHref = (ctx: Ctx, slug: string) => `/raise/${slug}/new?project=${ctx.pr
 export const TOOL_HREF = {
   pitch: '/raise/pitch',
   dataRoom: '/raise/data-room?mode=workspace',
-  capTable: '/raise/capital/cap-table',
+  capTable: '/raise/cap-table',
   pipeline: '/raise/capital/pipeline',
   model: '/raise/capital/model',
   metrics: '/build/kpi',

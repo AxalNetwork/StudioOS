@@ -427,7 +427,7 @@ screens['sy-close'] = {
   },
 };
 screens['ct-variants'] = {
-  area: 'Cap table', route: '/raise/cap-table/variants/[variant]', sideActive: 'Raise', role: 'member',
+  area: 'Cap table', route: '/raise/cap-table/scenarios/[scenario]', sideActive: 'Raise', role: 'member',
   head: { h1: 'Draft variants', sub: 'Model alternatives without touching the main cap table. The main table stays one per company.', back: 'Cap table', cta: 'New variant' },
   rail: { title: 'Variant read', body: 'Describe how [Variant name] differs from the main table, in plain words.', writes: 'Accept writes a note. It does not change a variant.' },
   states: { empty: 'No draft variants yet. The main cap table is the only table.', emptyCta: 'New variant', nr: 'Exit value: none has been set for this variant.', unread: 'Variants could not be read just now.' },

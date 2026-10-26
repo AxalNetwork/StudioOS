@@ -233,7 +233,7 @@ export const NEW_FOUNDER_SPINOUT_BANK: Question[] = [
     prompt: 'Roughly, who will own the company at incorporation? (e.g. "Founders 90%, ESOP 10%")',
     input_kind: 'long', importance: 'high',
     unlock_required: { week: 4, milestones: ['incorporation_completed'] },
-    page_target: '/raise/capital/cap-table', doc_anchor: 'capital/cap-table',
+    page_target: '/raise/cap-table', doc_anchor: 'capital/cap-table',
     validate: 'long' },
 
   // =====================================================================

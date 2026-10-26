@@ -2,7 +2,8 @@ import { MODULES } from './modules.js';
 
 /** Actions are routes in their own right, beside the cycle's module slugs. */
 export const ACTION_PATHS = { validate: 'record', build: 'connect', raise: 'call', grow: 'update' };
-export const STATIC_CHILDREN = ['/raise/cap-table/variants'];
+/** Static children outside the cycle gutter. D1029: the variants page was the last; it redirects now. */
+export const STATIC_CHILDREN = [];
 export const RECORD_ID = /^[a-z0-9][a-z0-9_-]*$/;
 
 /** Pages that draw the cycle's own gutter instead of the App shell's inset. */

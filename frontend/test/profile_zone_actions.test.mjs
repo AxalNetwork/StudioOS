@@ -905,7 +905,11 @@ for (const [name, profile] of Object.entries(PROFILES)) {
       `${name} declares a different number of page-supplied ops than it did`);
     for (const link of new Set(links)) {
       const path = link.split('?')[0];
-      const i = APP.indexOf(`path="${path}"`);
+      // D1029: a cycle module's tab (`/raise/cap-table/instruments`) is mounted by its
+      // cycle's `/<cycle>/:slug/:id` route, and a module page by `/<cycle>/:slug`.
+      const cycleRoute = (/^\/(validate|build|raise|grow)\/[a-z0-9-]+(\/[a-z0-9-]+)?$/.exec(path) || []);
+      const literal = APP.indexOf(`path="${path}"`);
+      const i = literal > 0 || !cycleRoute[1] ? literal : APP.indexOf(`path="/${cycleRoute[1]}/:slug${cycleRoute[2] ? '/:id' : ''}"`);
       assert.ok(i > 0, `${path} is not a route App.jsx mounts`);
       // The guard is the first `[...]` after the path — either a bare array or
       // one wrapped in labRoles(...), which only ever ADDS the caller's own role.
