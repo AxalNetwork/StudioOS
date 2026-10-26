@@ -87,9 +87,9 @@
  * rather than invented.
  */
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { Link, useLocation } from 'react-router-dom';
+import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { safeReadJSON } from '../lib/storage';
-import { AlertTriangle, Download, Plus, RefreshCw, X } from 'lucide-react';
+import { AlertTriangle, Download, RefreshCw } from 'lucide-react';
 import { api } from '../lib/api';
 import PageExplainer from '../components/PageExplainer';
 import BrandIcon from '../ui/BrandIcon.jsx';
@@ -97,6 +97,9 @@ import { usePhoneWidth } from '../ui';
 import { AccountPhonePage, phonePending } from './account/AccountPhonePage';
 import { ACCOUNT_PHONE_PAGES } from './account/accountPhone';
 import { FAMILIES, NOT_YET, VIEWS, WAITS, chipCount, viewOf, windowFor } from './calendarViews';
+import CalendarItemDrawer, { CancelDialog } from './CalendarItemDrawer';
+import { NewCheckinDialog, NewIcDialog, NewMenu } from './CalendarNewDialogs';
+import { itemOf, itemPath } from './calendarItemModel';
 import './calendarPage.css';
 
 /**
@@ -349,7 +352,13 @@ export default function CalendarPage() {
   const [error, setError] = useState(null);
   const [filter, setFilter] = useState(null);       // null = All
   // D1205: the view is the address (Month /calendar, /week, /agenda).
-  const { pathname } = useLocation();
+  // D1211: /calendar/item/:kind/:id opens the drawer over the view it came
+  // from (the link carries it in `state.from`), else over Month.
+  const location = useLocation();
+  const navigate = useNavigate();
+  const opened = itemOf(location.pathname);
+  const behind = opened ? (location.state?.from || '/calendar') : location.pathname;
+  const pathname = behind;
   const range = viewOf(pathname);
   const [google, setGoogle] = useState(null);
   const [microsoft, setMicrosoft] = useState(null);
@@ -614,14 +623,9 @@ export default function CalendarPage() {
           </div>
         )}
         <div className="cal-head-actions">
-          {canIC && (
-            <button type="button" className="cal-btn cal-btn-p" onClick={() => setShowIc(true)}>
-              <Plus className="w-4 h-4" aria-hidden="true" /> New IC meeting
-            </button>
-          )}
-          <button type="button" className="cal-btn cal-btn-o" onClick={() => setShowCk(true)}>
-            <Plus className="w-4 h-4" aria-hidden="true" /> New check-in
-          </button>
+          {/* D1211 (CAL8 A): one New menu. IC meeting is in it only where
+              canScheduleIc allows (`newMenu`), so the gate strip below says why. */}
+          <NewMenu role={role} onPick={(k) => (k === 'ic' && canIC ? setShowIc(true) : setShowCk(true))} />
           <a className="cal-btn cal-btn-o" href={api.calendarIcsUrl()}
              aria-label="Subscribe to or export this calendar as iCalendar">
             <Download className="w-4 h-4" aria-hidden="true" /> Subscribe · .ics
@@ -763,7 +767,7 @@ export default function CalendarPage() {
               </div>
               <div className="cal-day-rows">
                 {d.events.map((e) => (
-                  <EventRow key={e.id} ev={e} myEmail={myEmail} role={role}
+                  <EventRow key={e.id} ev={e} myEmail={myEmail} role={role} from={pathname}
                             canPush={anyConnected} pushRemedy={pushRemedy} onChanged={load} />
                 ))}
               </div>
@@ -833,8 +837,12 @@ export default function CalendarPage() {
         </aside>
       </div>
 
-      {showIc && <IcMeetingModal me={me} onClose={() => setShowIc(false)} onSaved={() => { setShowIc(false); load(); }} />}
-      {showCk && <CheckinModal me={me} onClose={() => setShowCk(false)} onSaved={() => { setShowCk(false); load(); }} />}
+      {showIc && <NewIcDialog meetAvailable={gState === 'connected'} onClose={() => setShowIc(false)} onSaved={() => { setShowIc(false); load(); }} />}
+      {showCk && <NewCheckinDialog role={role} meetAvailable={gState === 'connected'} onClose={() => setShowCk(false)} onSaved={() => { setShowCk(false); load(); }} />}
+      {opened && (
+        <CalendarItemDrawer kind={opened.kind} id={opened.id} canCopy={anyConnected} onChanged={load}
+                            onClose={() => navigate(behind)} />
+      )}
     </div>
   );
 
@@ -865,8 +873,9 @@ export default function CalendarPage() {
  *   · Push — `PUSHABLE_KINDS` plus at least one connected provider. With no
  *     provider the control is absent and the note names the remedy instead.
  */
-function EventRow({ ev, myEmail, role, canPush, pushRemedy, onChanged }) {
+function EventRow({ ev, myEmail, role, from, canPush, pushRemedy, onChanged }) {
   const [busy, setBusy] = useState('');
+  const [cancelling, setCancelling] = useState(false);
   const [said, setSaid] = useState('');
   const [rsvpOpen, setRsvpOpen] = useState(false);
 
@@ -916,13 +925,8 @@ function EventRow({ ev, myEmail, role, canPush, pushRemedy, onChanged }) {
     setRsvpOpen(false);
     onChanged();
   }
-  async function doCancel() {
-    if (!window.confirm(`Cancel "${ev.title}"? Everyone invited will lose it from their calendar.`)) return;
-    const r = await run('cancel', () => (ev.kind === 'ic_meeting'
-      ? api.cancelIcMeeting(ev.source_id)
-      : api.cancelCheckin(ev.source_id)));
-    if (r.ok) onChanged();
-  }
+  // D1211 (CAL19): Cancel opens its dialog, never a browser pop-up.
+  function doCancel() { setCancelling(true); }
 
   return (
     <div className="cal-row">
@@ -945,7 +949,7 @@ function EventRow({ ev, myEmail, role, canPush, pushRemedy, onChanged }) {
             </span>
           )}
         </div>
-        <h3>{ev.title}</h3>
+        <h3><Link to={itemPath(ev.kind, ev.source_id)} state={{ from }} data-testid={`calendar-open-${ev.id}`}>{ev.title}</Link></h3>
         <div className="cal-ev-where">
           {where.uri
             ? <a href={where.uri} target="_blank" rel="noreferrer">{where.text}</a>
@@ -993,6 +997,10 @@ function EventRow({ ev, myEmail, role, canPush, pushRemedy, onChanged }) {
         )}
         {said && <p className="cal-ev-said">{said}</p>}
       </div>
+      {cancelling && (
+        <CancelDialog item={{ ...ev, people: Array.isArray(ev.attendees) ? ev.attendees : [] }}
+                      onClose={() => setCancelling(false)} onDone={() => { setCancelling(false); onChanged(); }} />
+      )}
     </div>
   );
 }
@@ -1099,179 +1107,5 @@ function ProviderCard({ provider, name, state, status, result, busy, gmailRemova
       )}
       {result && <p className="cal-prov-said">{result.text}</p>}
     </div>
-  );
-}
-
-function ModalShell({ title, children, onClose }) {
-  return (
-    <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4" onClick={onClose}>
-      <div className="bg-white rounded-lg shadow-xl max-w-lg w-full dark:bg-gray-900" onClick={(e) => e.stopPropagation()}>
-        <div className="flex items-center justify-between border-b px-4 py-3">
-          <h3 className="font-semibold text-slate-900">{title}</h3>
-          <button onClick={onClose} className="text-slate-400 hover:text-slate-700"><X className="w-5 h-5" /></button>
-        </div>
-        <div className="p-4">{children}</div>
-      </div>
-    </div>
-  );
-}
-
-function IcMeetingModal({ me, onClose, onSaved }) {
-  const [form, setForm] = useState({
-    title: '', agenda: '', start_at: '', duration_min: 60,
-    deal_id: '', location_uri: '', attendee_user_ids: '',
-  });
-  const [busy, setBusy] = useState(false);
-  const [err, setErr] = useState(null);
-
-  const dealId = Number(form.deal_id);
-  const validDeal = Number.isSafeInteger(dealId) && dealId > 0;
-
-  async function submit() {
-    if (!validDeal) { setErr('Enter a valid deal id.'); return; }
-    setBusy(true); setErr(null);
-    try {
-      const ids = form.attendee_user_ids.split(',').map((s) => parseInt(s.trim(), 10)).filter((n) => Number.isFinite(n));
-      await api.createIcMeeting({
-        title: form.title,
-        agenda: form.agenda || null,
-        start_at: new Date(form.start_at).toISOString(),
-        duration_min: parseInt(form.duration_min, 10) || 60,
-        deal_id: dealId,
-        location_uri: form.location_uri || null,
-        attendee_user_ids: ids,
-      });
-      onSaved();
-    } catch (e) { setErr(e.message); }
-    setBusy(false);
-  }
-
-  return (
-    <ModalShell title="Schedule IC meeting" onClose={onClose}>
-      <div className="space-y-3">
-        {err && <div className="text-sm text-rose-700 bg-rose-50 border border-rose-200 rounded p-2">{err}</div>}
-        <Field label="Title">
-          <input className="w-full border border-slate-300 rounded px-2 py-1.5 text-sm"
-                 value={form.title} onChange={(e) => setForm({ ...form, title: e.target.value })} />
-        </Field>
-        <Field label="Start">
-          <input type="datetime-local" className="w-full border border-slate-300 rounded px-2 py-1.5 text-sm"
-                 value={form.start_at} onChange={(e) => setForm({ ...form, start_at: e.target.value })} />
-        </Field>
-        <div className="grid grid-cols-2 gap-3">
-          <Field label="Duration (min)">
-            <input type="number" min={10} max={600} className="w-full border border-slate-300 rounded px-2 py-1.5 text-sm"
-                   value={form.duration_min} onChange={(e) => setForm({ ...form, duration_min: e.target.value })} />
-          </Field>
-          <Field label="Deal id (required)">
-            <input type="number" min={1} step={1} required className="w-full border border-slate-300 rounded px-2 py-1.5 text-sm"
-                   value={form.deal_id} onChange={(e) => setForm({ ...form, deal_id: e.target.value })} />
-          </Field>
-        </div>
-        <Field label="Agenda">
-          <textarea rows={3} className="w-full border border-slate-300 rounded px-2 py-1.5 text-sm"
-                    value={form.agenda} onChange={(e) => setForm({ ...form, agenda: e.target.value })} />
-        </Field>
-        <Field label="Meeting link">
-          <input className="w-full border border-slate-300 rounded px-2 py-1.5 text-sm"
-                 placeholder="https://meet.google.com/…"
-                 value={form.location_uri} onChange={(e) => setForm({ ...form, location_uri: e.target.value })} />
-        </Field>
-        <Field label="Attendee user ids (comma-separated)">
-          <input className="w-full border border-slate-300 rounded px-2 py-1.5 text-sm"
-                 placeholder={`e.g. 12, 17, 23 (you (#${me?.id || '?'}) are auto-added)`}
-                 value={form.attendee_user_ids} onChange={(e) => setForm({ ...form, attendee_user_ids: e.target.value })} />
-        </Field>
-        <div className="flex justify-end gap-2 pt-2">
-          <button onClick={onClose} className="text-sm px-3 py-1.5 border border-slate-300 rounded">Cancel</button>
-          <button onClick={submit} disabled={busy || !form.title || !form.start_at || !validDeal}
-                  className="text-sm px-3 py-1.5 bg-purple-600 text-white rounded hover:bg-purple-700 disabled:opacity-50">
-            {busy ? 'Saving…' : 'Schedule'}
-          </button>
-        </div>
-      </div>
-    </ModalShell>
-  );
-}
-
-function CheckinModal({ me, onClose, onSaved }) {
-  const [form, setForm] = useState({
-    founder_user_id: '', counterpart_user_id: '', title: '', notes: '',
-    start_at: '', duration_min: 30, location_uri: '',
-  });
-  const [busy, setBusy] = useState(false);
-  const [err, setErr] = useState(null);
-
-  async function submit() {
-    setBusy(true); setErr(null);
-    try {
-      await api.createCheckin({
-        founder_user_id: parseInt(form.founder_user_id, 10),
-        counterpart_user_id: form.counterpart_user_id ? parseInt(form.counterpart_user_id, 10) : null,
-        title: form.title,
-        notes: form.notes || null,
-        start_at: new Date(form.start_at).toISOString(),
-        duration_min: parseInt(form.duration_min, 10) || 30,
-        location_uri: form.location_uri || null,
-      });
-      onSaved();
-    } catch (e) { setErr(e.message); }
-    setBusy(false);
-  }
-
-  return (
-    <ModalShell title="Schedule founder check-in" onClose={onClose}>
-      <div className="space-y-3">
-        {err && <div className="text-sm text-rose-700 bg-rose-50 border border-rose-200 rounded p-2">{err}</div>}
-        <Field label="Founder user id">
-          <input className="w-full border border-slate-300 rounded px-2 py-1.5 text-sm"
-                 placeholder={me?.role === 'founder' ? `e.g. ${me?.id || ''}` : 'e.g. 42'}
-                 value={form.founder_user_id} onChange={(e) => setForm({ ...form, founder_user_id: e.target.value })} />
-        </Field>
-        <Field label="Counterpart user id (optional)">
-          <input className="w-full border border-slate-300 rounded px-2 py-1.5 text-sm"
-                 placeholder={`leave blank to default to you (#${me?.id || '?'})`}
-                 value={form.counterpart_user_id} onChange={(e) => setForm({ ...form, counterpart_user_id: e.target.value })} />
-        </Field>
-        <Field label="Title">
-          <input className="w-full border border-slate-300 rounded px-2 py-1.5 text-sm"
-                 value={form.title} onChange={(e) => setForm({ ...form, title: e.target.value })} />
-        </Field>
-        <Field label="Start">
-          <input type="datetime-local" className="w-full border border-slate-300 rounded px-2 py-1.5 text-sm"
-                 value={form.start_at} onChange={(e) => setForm({ ...form, start_at: e.target.value })} />
-        </Field>
-        <div className="grid grid-cols-2 gap-3">
-          <Field label="Duration (min)">
-            <input type="number" min={10} max={240} className="w-full border border-slate-300 rounded px-2 py-1.5 text-sm"
-                   value={form.duration_min} onChange={(e) => setForm({ ...form, duration_min: e.target.value })} />
-          </Field>
-          <Field label="Meeting link">
-            <input className="w-full border border-slate-300 rounded px-2 py-1.5 text-sm"
-                   value={form.location_uri} onChange={(e) => setForm({ ...form, location_uri: e.target.value })} />
-          </Field>
-        </div>
-        <Field label="Notes">
-          <textarea rows={3} className="w-full border border-slate-300 rounded px-2 py-1.5 text-sm"
-                    value={form.notes} onChange={(e) => setForm({ ...form, notes: e.target.value })} />
-        </Field>
-        <div className="flex justify-end gap-2 pt-2">
-          <button onClick={onClose} className="text-sm px-3 py-1.5 border border-slate-300 rounded">Cancel</button>
-          <button onClick={submit} disabled={busy || !form.founder_user_id || !form.title || !form.start_at}
-                  className="text-sm px-3 py-1.5 bg-blue-600 text-white rounded hover:bg-blue-700 disabled:opacity-50">
-            {busy ? 'Saving…' : 'Schedule'}
-          </button>
-        </div>
-      </div>
-    </ModalShell>
-  );
-}
-
-function Field({ label, children }) {
-  return (
-    <label className="block">
-      <span className="block text-xs font-medium text-slate-600 mb-1">{label}</span>
-      {children}
-    </label>
   );
 }

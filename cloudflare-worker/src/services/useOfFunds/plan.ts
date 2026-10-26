@@ -1,7 +1,7 @@
 /** D1175: pure planning assumptions, never a measurement of runway today. */
 export const SECTION_KEYS = ['product', 'go-to-market', 'infrastructure', 'operations', 'reserve'] as const;
 export type SectionKey = typeof SECTION_KEYS[number];
-export type Source = 'Typed' | 'Connector' | 'Document' | 'Signed' | 'Modelled';
+export type Source = 'Typed' | 'Connector' | 'Document' | 'Signed' | 'Modelled' | 'Recorded';
 export type Fact<T> = { value: T | null; source: Source; ref?: string; asOf?: string };
 export const MODEL_V1 = Object.freeze({
   version: 1 as const,
