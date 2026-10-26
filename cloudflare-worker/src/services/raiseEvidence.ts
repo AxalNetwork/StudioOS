@@ -134,7 +134,7 @@ async function item(ctx:RaiseEvidenceContext,id:string){
   if(!row)throw new RaiseEvidenceError('not_found',404);return row;
 }
 async function live(ctx:RaiseEvidenceContext,ref:Pick<EvidenceCandidate,'kind'|'area'|'source_table'|'source_ref'>,collected?:CollectedEvidence){
-  const sources=collected??await collectEvidenceSources(ctx.env,ctx.projectId,ctx.user.id,new Date().toISOString(),[ref.kind]);
+  const sources=collected??await collectEvidenceSources(ctx.env,ctx.projectId,ctx.user.id,new Date().toISOString(),[ref.kind],[ref]);
   const rule=EVIDENCE_RULES.find(r=>r.kind===ref.kind);
   if(!rule)throw new RaiseEvidenceError('changed',409);
   const block=sources.blocks.find(b=>b.dataset===rule.dataset);
@@ -319,16 +319,35 @@ export async function linkClaim(ctx:RaiseEvidenceContext,claimUid:string,data:Re
   return {claim_id:claimUid,item_id:selected.uid,linked:!remove,how:remove?null:q?'eadwyn_accepted':'founder'};
 }
 
+async function evidenceRead<T>(read:()=>Promise<T>):Promise<T|null>{try{return await read();}catch{return null;}}
+function parseSourceBlocks(raw:string|undefined){
+  try{const blocks:unknown=JSON.parse(raw??'null');if(!Array.isArray(blocks))return null;
+    return blocks.map(b=>({dataset:b.dataset,state:b.state,count:b.count,...(b.state==='unreadable'?{reason:'This source could not be read. Try again.'}:{})}));
+  }catch{return null;}
+}
 const unreadableBlock={state:'unreadable',rows:null,has_more:null,reason:'This evidence block could not be read. Try again.'} as const;
 /** Each read block fails independently. Admins get metadata, never bank figures, quote bodies or claim text. */
 export async function readRaiseEvidence(ctx:RaiseEvidenceContext,query:{limit?:number;offset?:number;refresh?:boolean}={}){
   const limit=query.limit??50,offset=query.offset??0;if(!Number.isSafeInteger(limit)||limit<1||limit>100||!Number.isSafeInteger(offset)||offset<0||offset>1000000)throw new RaiseEvidenceError('invalid',400);
-  let sources:CollectedEvidence|null=null,refresh:unknown={refreshed:false,outcome:'founder_only'};
-  if(ctx.founder){sources=await collectEvidenceSources(ctx.env,ctx.projectId,ctx.user.id);
-    try{refresh=await buildCandidates(ctx,{force:query.refresh,sources});}catch{refresh={refreshed:false,outcome:'unreadable',reason:'Candidates could not be prepared. Try again.'};}}
+  let sources:CollectedEvidence|null=null,refresh:any={refreshed:false,outcome:'founder_only'};
+  if(ctx.founder){try{refresh=await buildCandidates(ctx,{force:query.refresh});}catch{refresh={refreshed:false,outcome:'unreadable',reason:'Candidates could not be prepared. Try again.'};}}
+  const rawItems=await evidenceRead(()=>ctx.env.DB.prepare(`SELECT * FROM raise_evidence_items WHERE project_id=? AND (?=1 OR private_reason IS NULL) ORDER BY id DESC LIMIT ? OFFSET ?`)
+    .bind(ctx.projectId,ctx.founder?1:0,limit+1,offset).all<RaiseEvidenceItem>());
+  const rawProposals=await evidenceRead(()=>ctx.env.DB.prepare(`SELECT id,uid,source_ref,source_kind,source_label,payload_json,status,usage_log_id,model FROM ai_rail_proposals
+    WHERE record_ref=? AND rail_option=? AND kind='proposal' AND status='proposed'
+      AND (?=1 OR json_extract(payload_json,'$.private_reason') IS NULL) ORDER BY id DESC LIMIT ? OFFSET ?`)
+    .bind(recordRef(ctx.projectId),EVIDENCE_OPTION,ctx.founder?1:0,limit+1,offset).all<EvidenceProposalRow>());
+  let sourceCoverage:{blocks_json:string;last_attempt_at:string|null}|null=null;
+  if(ctx.founder){
+    const refs=[...(rawItems?.results.slice(0,limit)??[]),...(rawProposals?.results.slice(0,limit).map(q=>plain(q.payload_json))??[])]
+      .filter((r):r is {kind:string;source_ref:string}=>!!r&&typeof r.kind==='string'&&typeof r.source_ref==='string')
+      .map(r=>({kind:r.kind,source_ref:r.source_ref}));
+    sources=await collectEvidenceSources(ctx.env,ctx.projectId,ctx.user.id,new Date().toISOString(),[...new Set(refs.map(r=>r.kind))],refs);
+    sourceCoverage=await evidenceRead(()=>ctx.env.DB.prepare('SELECT blocks_json,last_attempt_at FROM raise_evidence_refreshes WHERE project_id=?').bind(ctx.projectId).first<{blocks_json:string;last_attempt_at:string|null}>());
+  }
   const current=new Map(sources?.candidates.map(c=>[candidateKey(c),c])??[]);
   const items=await(async()=>{try{
-    const rows=await ctx.env.DB.prepare(`SELECT * FROM raise_evidence_items WHERE project_id=? AND (?=1 OR private_reason IS NULL) ORDER BY id DESC LIMIT ? OFFSET ?`).bind(ctx.projectId,ctx.founder?1:0,limit+1,offset).all<RaiseEvidenceItem>();
+    if(!rawItems) return unreadableBlock;const rows=rawItems;
     return {state:'recorded',rows:rows.results.slice(0,limit).map(row=>{
       const found=current.get(candidateKey(row));const rule=EVIDENCE_RULES.find(r=>r.kind===row.kind);
       const failed=rule&&sources?.blocks.some(b=>b.dataset===rule.dataset&&b.state==='unreadable');
@@ -344,10 +363,7 @@ export async function readRaiseEvidence(ctx:RaiseEvidenceContext,query:{limit?:n
     }),has_more:rows.results.length>limit};
   }catch{return unreadableBlock;}})();
   const proposals=await(async()=>{try{
-    const rows=await ctx.env.DB.prepare(`SELECT id,uid,source_ref,source_kind,source_label,payload_json,status,usage_log_id,model FROM ai_rail_proposals
-      WHERE record_ref=? AND rail_option=? AND kind='proposal' AND status='proposed'
-        AND (?=1 OR json_extract(payload_json,'$.private_reason') IS NULL) ORDER BY id DESC LIMIT ? OFFSET ?`)
-      .bind(recordRef(ctx.projectId),EVIDENCE_OPTION,ctx.founder?1:0,limit+1,offset).all<EvidenceProposalRow>();
+    if(!rawProposals)return unreadableBlock;const rows=rawProposals;
     return {state:'recorded',rows:rows.results.slice(0,limit).map(q=>{const offered=plain(q.payload_json);if(!offered)throw new Error('proposal_unreadable');
       const found=current.get(q.source_ref),fresh=found?.snapshot_hash===offered.snapshot_hash;
       const metadata={uid:q.uid,area:offered.area,kind:offered.kind,source_label:offered.source_label,provider:offered.provider,strength:offered.strength,observed_on:offered.observed_on,summary:offered.summary,status:q.status};
@@ -361,7 +377,7 @@ export async function readRaiseEvidence(ctx:RaiseEvidenceContext,query:{limit?:n
     const rows=await ctx.env.DB.prepare('SELECT id,uid,surface,surface_version,field_key,claim_kind,stated_value,state,checked_at FROM raise_claims WHERE project_id=? ORDER BY id DESC LIMIT ? OFFSET ?')
       .bind(ctx.projectId,limit+1,offset).all<{id:number;uid:string;surface:string;surface_version:string;field_key:string;claim_kind:string;stated_value:string|null;state:string;checked_at:string|null}>();
     const links=await ctx.env.DB.prepare(`SELECT c.uid AS claim_uid,i.uid AS item_uid,i.version AS item_version,l.how FROM raise_claim_evidence l JOIN raise_claims c ON c.id=l.claim_id AND c.project_id=l.project_id
-      JOIN raise_evidence_items i ON i.id=l.item_id AND i.project_id=l.project_id WHERE l.project_id=? AND (?=1 OR i.private_reason IS NULL)`).bind(ctx.projectId,ctx.founder?1:0).all<{claim_uid:string;item_uid:string;item_version:number;how:string}>();
+      JOIN raise_evidence_items i ON i.id=l.item_id AND i.project_id=l.project_id WHERE l.project_id=? AND (?=1 OR i.private_reason IS NULL) AND c.uid IN (SELECT value FROM json_each(?))`).bind(ctx.projectId,ctx.founder?1:0,JSON.stringify(rows.results.slice(0,limit).map(r=>r.uid))).all<{claim_uid:string;item_uid:string;item_version:number;how:string}>();
     return {state:'recorded',rows:rows.results.slice(0,limit).map(row=>ctx.founder?{...row,links:links.results.filter(l=>l.claim_uid===row.uid)}:
       {uid:row.uid,surface:row.surface,claim_kind:row.claim_kind,state:row.state,checked_at:row.checked_at}),has_more:rows.results.length>limit};
   }catch{return unreadableBlock;}})();
@@ -369,5 +385,5 @@ export async function readRaiseEvidence(ctx:RaiseEvidenceContext,query:{limit?:n
     WHERE project_id=? AND (?=1 OR private_reason IS NULL) GROUP BY area,source_label,state,visibility`).bind(ctx.projectId,ctx.founder?1:0)
       .all<{area:string;source_label:string;state:string;visibility:string;count:number}>();return {state:'recorded',groups:result.results};}
     catch{return {state:'unreadable',groups:null,reason:'Coverage could not be read. Try again.'};}})();
-  return {items,proposals,claims,coverage,sources:ctx.founder?sources?.blocks??null:null,refresh,permissions:{can_decide:ctx.founder,can_share:ctx.founder},limit,offset};
+  return {items,proposals,claims,coverage,sources:ctx.founder?parseSourceBlocks(sourceCoverage?.blocks_json):null,source_coverage_at:ctx.founder?sourceCoverage?.last_attempt_at??null:null,live_sources:ctx.founder?sources?.blocks??null:null,refresh,permissions:{can_decide:ctx.founder,can_share:ctx.founder},limit,offset};
 }

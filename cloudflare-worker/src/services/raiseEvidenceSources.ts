@@ -109,6 +109,21 @@ const QUERIES = {
   prospects: `SELECT id,amount_cents,currency,commit_status,created_at,updated_at FROM raise_prospects WHERE project_id=? AND stage='committed' AND commit_status IS NOT NULL`,
   models: `SELECT id,assumptions_json,updated_at FROM financial_models WHERE project_id=? AND updated_by IS NOT NULL`,
 } as const;
+/** Exact source IDs for a displayed page/decision; the hourly builder deliberately has no ID filter. */
+const SOURCE_IDS:Record<Dataset,string>={
+ revenue:' AND r.id IN (SELECT value FROM json_each(?))',bank:' AND f.id IN (SELECT value FROM json_each(?))',
+ holders:' AND h.id IN (SELECT value FROM json_each(?))',vesting:' AND v.id IN (SELECT value FROM json_each(?))',
+ contributors:' AND g.id IN (SELECT value FROM json_each(?))',skills:" HAVING (s.axis || ':' || s.source) IN (SELECT value FROM json_each(?))",
+ themes:' AND id IN (SELECT value FROM json_each(?))',interviews:' AND id IN (SELECT value FROM json_each(?))',
+ signals:' AND id IN (SELECT value FROM json_each(?))',experiments:' AND id IN (SELECT value FROM json_each(?))',verdicts:' AND id IN (SELECT value FROM json_each(?))',
+ metrics:' AND id IN (SELECT value FROM json_each(?))',releases:' AND r.id IN (SELECT value FROM json_each(?))',features:' AND f.id IN (SELECT value FROM json_each(?))',
+ bankSpend:' AND f.id IN (SELECT value FROM json_each(?))',hires:' AND id IN (SELECT value FROM json_each(?))',milestones:' AND r.id IN (SELECT value FROM json_each(?))',
+ formation:' AND id IN (SELECT value FROM json_each(?))',obligations:' AND o.id IN (SELECT value FROM json_each(?))',documents:' AND id IN (SELECT value FROM json_each(?))',
+ ipSteps:' AND f.id IN (SELECT value FROM json_each(?))',bankDocuments:' AND d.id IN (SELECT value FROM json_each(?))',safes:' AND m.id IN (SELECT value FROM json_each(?))',
+ filings83b:' AND id IN (SELECT value FROM json_each(?))',receipts:' AND m.id IN (SELECT value FROM json_each(?))',responses:' AND r.id IN (SELECT value FROM json_each(?))',
+ prospects:' AND id IN (SELECT value FROM json_each(?))',models:' AND id IN (SELECT value FROM json_each(?))',
+};
+export type EvidenceSourceRef=Pick<EvidenceCandidate,'kind'|'source_ref'>;
 const BANK_DATASETS = new Set<Dataset>(['bank','bankSpend','bankDocuments','safes','receipts']);
 export type EvidenceCandidate = {
   area: EvidenceArea; kind: string; source_table: string; source_ref: string; provider: string | null;
@@ -139,9 +154,9 @@ export async function evidenceHash(value: unknown): Promise<string> {
 }
 export const candidateKey = (c: Pick<EvidenceCandidate,'area'|'source_table'|'source_ref'>) => JSON.stringify([c.area,c.source_table,c.source_ref]);
 
+const sourceProvider=(row:DataRow)=>string(row.source)?.toLowerCase().replace(/^connector[_:-]/,'')??null;
 function provenance(row: DataRow): {label:EvidenceSourceLabel;provider:string|null} {
-  const source=string(row.source)?.toLowerCase();
-  const provider=source?.replace(/^connector[_:-]/,'');
+  const provider=sourceProvider(row);
   if(provider&&['mercury','stripe','carta'].includes(provider)) {
     if(row.verification!==undefined&&row.verification!=='verified')return {label:row.proof_id!=null?'document':'typed',provider:null};
     return {label:'connector',provider};
@@ -161,7 +176,7 @@ function materials(rule: EvidenceRule, rows: DataRow[]): Material[] {
     const id=String(row.id??'');
     const add=(date:unknown,value?:unknown,unit?:string,ref=id,extra:Partial<Material>={})=>out.push({row,ref,date,value,unit,...extra});
     switch(rule.kind){
-      case 'revenue-receipt': add(row.received_on,row.amount_cents,'cents',id,{privateReason:row.source==='mercury'?'bank':undefined});break;
+      case 'revenue-receipt': add(row.received_on,row.amount_cents,'cents',id,{privateReason:sourceProvider(row)==='mercury'?'bank':undefined});break;
       case 'bank-runway': if(row.kind==='runway'&&row.fact_key==='runway'&&num(row.value)!=null)add(row.as_of,row.value,'months');break;
       case 'founder-holding': add(provenance(row).label==='typed'?row.created_at:null,row.ownership_pct??row.shares,row.ownership_pct!=null?'percent':'shares');break;
       case 'vesting-schedule': add(row.start_date,row.total_shares,'shares');break;
@@ -173,7 +188,7 @@ function materials(rule: EvidenceRule, rows: DataRow[]): Material[] {
       case 'demand-signal': add(row.signal_date,row.amount_cents,'cents');break;
       case 'experiment-result': add(null);break;
       case 'validation-verdict': add(row.decided_at);break;
-      case 'kpi-snapshot': for(const [key,unit] of Object.entries(METRICS))if(num(row[key])!=null)add(row.snapshot_date,row[key],unit,id+':'+key,{privateReason:String(row.source).includes('mercury')?'bank':undefined});break;
+      case 'kpi-snapshot': for(const [key,unit] of Object.entries(METRICS))if(num(row[key])!=null)add(row.snapshot_date,row[key],unit,id+':'+key,{privateReason:sourceProvider(row)==='mercury'?'bank':undefined});break;
       case 'bank-revenue': if(row.kind==='revenue')add(row.as_of,row.fact_key==='revenue:growth'?row.value:row.amount_cents,row.fact_key==='revenue:growth'?'percent':'cents');break;
       case 'roadmap-release': add(row.published_at,null,undefined,id,{provider:'github'});break;
       case 'must-have-done': add(row.done_at);break;
@@ -186,7 +201,7 @@ function materials(rule: EvidenceRule, rows: DataRow[]): Material[] {
       case 'github-ip-step': add(null,null,undefined,id+':ip',{provider:'github'});break;
       case 'bank-statement': add(row.month);break;
       case 'loi-file': if(row.kind==='loi'&&row.evidence_file_key!=null)add(row.signal_date);break;
-      case 'revenue-proof': if(row.proof_id!=null)add(row.received_on,null,undefined,id,{privateReason:row.source==='mercury'?'bank':undefined});break;
+      case 'revenue-proof': if(row.proof_id!=null)add(row.received_on,null,undefined,id,{privateReason:sourceProvider(row)==='mercury'?'bank':undefined});break;
       case 'accepted-safe': add(row.date,row.amount_cents,'cents');break;
       case 'filed-83b': if(row.mailed_at!=null)add(row.mailed_at);break;
       case 'signed-founder-equity': if(/cofounder|co_founder|founder|equity_split/.test(String(row.doc_type)))add(row.signed_at);break;
@@ -200,14 +215,19 @@ function materials(rule: EvidenceRule, rows: DataRow[]): Material[] {
 }
 
 /** bankUserId is an authenticated founder's own connection owner, never an investor ID supplied in a request. */
-export async function collectEvidenceSources(env:Env, projectId:number, bankUserId:number, now=new Date().toISOString(),onlyKinds?:readonly string[]):Promise<CollectedEvidence>{
+export async function collectEvidenceSources(env:Env, projectId:number, bankUserId:number, now=new Date().toISOString(),onlyKinds?:readonly string[],selected?:readonly EvidenceSourceRef[]):Promise<CollectedEvidence>{
   const data=new Map<Dataset,DataRow[]>(); const blocks:SourceBlock[]=[];
   const requested = onlyKinds ? new Set(EVIDENCE_RULES.filter(r=>onlyKinds.includes(r.kind)).map(r=>r.dataset)) : null;
   if(requested?.has('themes')) requested.add('interviews');
   const queries=(Object.entries(QUERIES) as [Dataset,string][]).filter(([name])=>!requested||requested.has(name));
   const reads=await Promise.allSettled(queries.map(async ([name,sql])=>{
-    const statement=env.DB.prepare(sql);
-    const result=await (BANK_DATASETS.has(name)?statement.bind(projectId,bankUserId):statement.bind(projectId)).all<DataRow>();
+    // Pain-theme counts need the underlying interviews, not merely those also displayed as quotes.
+    const bounded=selected!==undefined&&!(name==='interviews'&&requested?.has('themes'));
+    const ids=selected?.filter(ref=>EVIDENCE_RULES.some(r=>r.kind===ref.kind&&r.dataset===name)).map(ref=>name==='skills'?ref.source_ref:ref.source_ref.split(':')[0])??[];
+    const statement=env.DB.prepare(bounded?sql+SOURCE_IDS[name]:sql);
+    const binds: (string|number)[]=BANK_DATASETS.has(name)?[projectId,bankUserId]:[projectId];
+    if(bounded)binds.push(JSON.stringify([...new Set(ids)]));
+    const result=await statement.bind(...binds).all<DataRow>();
     if(!Array.isArray(result.results))throw new Error('source_unreadable');
     return result.results;
   }));

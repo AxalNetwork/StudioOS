@@ -15,7 +15,7 @@ const read=(p:string)=>readFileSync(new URL(p,import.meta.url),'utf8');
 const DDL=(()=>{const db=new DatabaseSync(':memory:',{enableDoubleQuotedStringLiterals:true});db.exec(read('../sql/schema_baseline.sql'));
  for(const f of readdirSync(new URL('../sql/migrations/',import.meta.url)).filter(f=>/^\d+_.*\.sql$/.test(f)&&migrationNumber(f)>BASELINE_CUTOFF).sort(compareMigrations))db.exec(read('../sql/migrations/'+f));
  const ddl=db.prepare("SELECT sql FROM sqlite_master WHERE sql IS NOT NULL AND name NOT LIKE 'sqlite_%' ORDER BY CASE type WHEN 'table' THEN 0 WHEN 'index' THEN 1 ELSE 2 END").all().map((r:any)=>r.sql);db.close();return ddl;})();
-const secret='synthetic-evidence-secret-0123456789-abcdef';
+const secret='t'.repeat(64); // in-memory test signing seed only
 function world(){
  const db=new DatabaseSync(':memory:',{enableForeignKeyConstraints:false,enableDoubleQuotedStringLiterals:true});for(const sql of DDL)db.exec(sql);
  db.exec(`INSERT INTO users(id,name,email,role,founder_id,is_active,spinout_lab_active) VALUES
@@ -217,5 +217,15 @@ test('all founder routes execute a complete accept/share/link/unlink/dismiss lif
  seed(w,'raise_claims',{uid:'claim-one',project_id:1,surface:'deck',surface_version:'v1',field_key:'mrr',claim_kind:'mrr'});
  const path='/evidence/claims/claim-one/link?project=1';assert.equal((await call(w,1,'POST',path,{item_id:accepted.body.uid,item_version:2})).status,200);assert.equal((await call(w,1,'DELETE',path,{item_id:accepted.body.uid})).status,200);
  const remaining=proposal(w);assert.equal((await call(w,1,'POST',`/evidence/items/${remaining.uid}/dismiss?project=1`)).body.status,'discarded');assert.equal((await call(w,1,'PATCH',`/evidence/items/${accepted.body.uid}?project=1`,[])).status,400);
+ }finally{w.db.close();}
+});
+
+test('a cached page reads only its source IDs; bank privacy follows normalized provider labels',async()=>{
+ const w=world();try{
+ for(let id=1;id<=120;id++)seed(w,'project_metrics',{id,project_id:1,snapshot_date:new Date(Date.UTC(2026,0,id)).toISOString().slice(0,10),source:'connector:Mercury',mrr:id});
+ await buildCandidates(w.ctx);const page=await readRaiseEvidence(w.ctx,{limit:1});assert.equal(page.refresh.refreshed,false);assert.equal(page.proposals.rows?.length,1);assert.equal(page.proposals.rows?.[0].can_accept,true);
+ assert.deepEqual(page.live_sources?.map(b=>[b.dataset,b.count]),[['metrics',1]]);assert.equal(page.sources?.find(b=>b.dataset==='metrics')?.count,120);
+ const q=proposal(w);const i=await acceptItem(w.ctx,q.uid,JSON.parse(q.payload_json).snapshot_hash);assert.equal(i.source_label,'connector');assert.equal(i.private_reason,'bank');assert.equal(i.visibility,'private');
+ const admin={...w.ctx,founder:false,user:w.db.prepare('SELECT * FROM users WHERE id=3').get()};const metadata=await readRaiseEvidence(admin);assert.equal(metadata.items.rows?.length,0);assert.equal(metadata.proposals.rows?.length,0);
  }finally{w.db.close();}
 });
