@@ -47,10 +47,10 @@ test('strategic queue is exact, oldest first, paged, shared and without email; d
     assert.equal(after.body.categories.find((x:any)=>x.key==='strategic').locked,false);
     assert.equal(grant.status, 200); assert.equal(grant.body.status, 'granted'); assert.ok(grant.body.decided_at);
     assert.equal(h.db.prepare('SELECT note FROM referral_strategic_access WHERE user_id=?').get(FOUNDER)?.note, 'member note');
-    const again = await h.call(`/refer/admin/strategic-access/${FOUNDER}/decision`, 'POST', { decision: 'declined' });
+    const again = await h.call(`/refer/admin/strategic-access/${FOUNDER}/decision`, 'POST', { decision: 'declined', note: 'Synthetic decline reason.' });
     assert.equal(again.status, 409); assert.equal(again.body.error, 'already_decided'); assert.match(again.body.message, /granted/);
     assert.equal((await h.call('/refer/admin/strategic-access/9999/decision', 'POST', { decision: 'granted' })).status, 404);
-    assert.equal((await h.call(`/refer/admin/strategic-access/${PARTNER}/decision`, 'POST', { decision: 'declined' })).body.status, 'declined');
+    assert.equal((await h.call(`/refer/admin/strategic-access/${PARTNER}/decision`, 'POST', { decision: 'declined', note: 'Synthetic decline reason.' })).body.status, 'declined');
     const audit = h.db.prepare('SELECT admin_user_id, action, viewed_user_id, filters_json FROM admin_audit_log ORDER BY id').all();
     assert.deepEqual(audit.map((r) => r.action), ['referral_strategic_access.granted', 'referral_strategic_access.declined']);
     assert.equal(audit[0].admin_user_id, ADMIN); assert.equal(audit[0].viewed_user_id, FOUNDER);

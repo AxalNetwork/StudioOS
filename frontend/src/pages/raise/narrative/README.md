@@ -14,6 +14,7 @@ The founder's Investor narrative tool at `/raise/investor-narrative` (D906,
 | `StoryComponents.jsx` | NAR21: the bound-figure chip, the claim pills, the section dots, the source chips and the grade ramp, light and dark. |
 | `storyModel.js` | Pure: Story's derivations (sections, bound figures against the registry, typed numbers as claims, the dots, the order, the save plan and its dialog). |
 | `PositioningTab.jsx` | D911: the Positioning tab. NAR4's core positioning and "This version", NAR5's proposal lightbox (Accept or Discard, one at a time), and NAR18's moved notice. |
+| `ObjectionsPanel.jsx` | D913 (#2697): NAR10's Objections panel beside Story's writing surface, read on its own from `GET /narrative/objections`, whose "Answer it" asks Eadwyn to draft the open section (`draft:narrative-objection`, writes nothing); and `ObjectionsCard`, Home's "Objections heard" from `parts.narrative.objections`. |
 | `PitchPositioningRedirect.jsx` | D911: `/raise/pitch/positioning`, now a redirect to the tab that keeps the query and hash and adds `?moved=positioning`. |
 
 D909 (#2693) adds `NarrativeHome` to `NarrativeTool.jsx`: Home's tiles, Needs
@@ -47,9 +48,10 @@ added, so every cycle-route rule (`cyclePaths.js`, `cycle_spacing_d694`) holds.
 - **Every write opens a dialog that says what it changes.** Save version lists
   each section it saves and says when a section's words are the deck's.
 - **A tile with no store is a dash with its reason, never 0** (D909). Claims
-  backed waits for #2430 and Objections answered for #2457.
-- **A board waits for its store.** Claims' states (#2430), the deck side of the check (#2434) and
-  objections (#2457) need stores the Worker does not have. Each is a slot task
+  backed waits for #2430. Objections answered counts the objections heard
+  (D913), but which section answers each waits on the owner's call on #2697.
+- **A board waits for its store.** Claims' states (#2430) and the deck side of the check (#2434)
+  need stores the Worker does not have; objections are read since D913. Each is a slot task
   on #2454 (D906 §6). Build a board in the PR that builds its
   read, add its derivation to `narrativeModel.js`, and test it in
   `frontend/test/narrative_tool_d906.test.mjs` or its own file.

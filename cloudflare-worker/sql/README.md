@@ -39,3 +39,9 @@ and is not kept in sync.
   (D643) does this for the sample wellbeing experts.
 - Index what you filter on. The public-feed and per-owner lookups are the hot
   paths.
+
+D1168 (#3081), migration 605, adds measured sizes and missing-object markers to
+five existing record tables, profile-file metadata in `member_files`, and the
+resumable discovery checkpoints in `member_file_size_backfill_state`. It leaves
+legacy sizes NULL and adds no users column. The operator backfill measures R2
+HEAD metadata after deployment; the migration never reads or deletes objects.

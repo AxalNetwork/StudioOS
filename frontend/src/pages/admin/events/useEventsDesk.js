@@ -82,12 +82,14 @@ export function useEventsDesk(tab, eventId, { paidView = false, weeks = 12 } = {
 
 /**
  * D921 — the selected review event's own reads: its history (D918 §6) and what
- * approving it would invite (D918 §7). `tick` is the desk's, so they are read
+ * approving it would invite (D918 §7). D1116 adds its agenda (R5, as the event
+ * page reads it) for EV3's Agenda fact. `tick` is the desk's, so they are read
  * again with everything else after a write.
  */
 export function useReviewReads(id, tick) {
   const on = isEventId(id);
   const history = useRead('history', `history:${id}`, tick, on, () => adminEvents.history(id));
   const comp = useRead('comp-preview', `comp:${id}`, tick, on, () => adminEvents.compPreview(id));
-  return { history, comp };
+  const agenda = useRead('agenda', `agenda:${id}`, tick, on, () => eventsApi.agenda(id));
+  return { history, comp, agenda };
 }
