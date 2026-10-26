@@ -383,15 +383,13 @@ dd.get('/cases/:uid', async (c) => {
     })));
 
     const decryptedFindings = await Promise.all(findings.map(async f => ({
-      id: f.id, section_id: f.section_id, source_id: f.source_id, source_kind: f.source_kind,
-      severity: f.severity, title: f.title, evidence_url: f.evidence_url,
+      // D1247: id, section, severity, title and the dates, plus who works it,
+      // where it stands, and how it was resolved.
+      ...(await flagView(c.env, f)),
+      source_id: f.source_id, source_kind: f.source_kind, evidence_url: f.evidence_url,
       detail: await decField(c.env, 'dd_findings', 'detail', f.id, f.detail_enc),
       subject_name: await decField(c.env, 'dd_findings', 'subject_name', f.id, f.subject_name_enc),
       evidence_excerpt: await decField(c.env, 'dd_findings', 'evidence_excerpt', f.id, f.evidence_excerpt_enc),
-      resolved_at: f.resolved_at,
-      created_at: f.created_at,
-      // D1247: who works it, where it stands, and how it was resolved.
-      ...(await flagView(c.env, f)),
     })));
     // D1247: one list of flags — findings, and every checklist item marked
     // flag or fail (source 'checklist'), which the score already counts. An
