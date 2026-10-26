@@ -38,8 +38,8 @@ test('the addresses: four tabs, and one per article', () => {
 });
 
 test('App.jsx serves the sub-paths, and the review notices link one article', () => {
-  // Mutation checked: drop the wildcard route → /admin/articles/42 has no page.
-  assert.match(read('frontend/src/App.jsx'), /path="\/admin\/articles\/\*" element=\{guard\(\['admin'\], <ArticlesQueuePage \/>\)\}/);
+  // Mutation checked: drop the route → /admin/articles/42 has no page.
+  assert.match(read('frontend/src/App.jsx'), /path="\/admin\/articles\/:view" element=\{guard\(\['admin'\], <ArticlesQueuePage \/>\)\}/);
   for (const f of ['cloudflare-worker/src/services/articleNotify.ts', 'cloudflare-worker/src/services/newsNotify.ts']) {
     assert.match(read(f), /const link = `\/admin\/articles\/\$\{args\.articleId\}`;/, f);
   }
@@ -57,7 +57,7 @@ async function mount(path) {
   const root = createRoot(container);
   await act(async () => root.render(React.createElement(MemoryRouter, { initialEntries: [path] },
     React.createElement(Routes, null,
-      React.createElement(Route, { path: '/admin/articles/*', element: React.createElement(ArticlesQueuePage) }),
+      React.createElement(Route, { path: '/admin/articles/:view', element: React.createElement(ArticlesQueuePage) }),
       React.createElement(Route, { path: '/admin/articles', element: React.createElement(ArticlesQueuePage) })))));
   return {
     container, calls,

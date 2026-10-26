@@ -15,7 +15,7 @@ import { isSuperAdminUser } from '../../lib/shellRole';
 import { RailFrame, WorkerRail } from '../../ui';
 import useRecordCrumb from './useRecordCrumb';
 import AdminPageHeader, { HeaderTab } from '../../ui/AdminPageHeader';
-import { PAGE_LINE, QUEUE_BASE, QUEUE_TABS, WAITS, articleHref, viewOf } from './contentQueueModel';
+import { PAGE_LINE, QUEUE_BASE, QUEUE_TABS, WAITS, viewOf } from './contentQueueModel';
 
 // Admin /admin/articles review queue — the single "Content Queue" (Task #3
 // merged the former News + Articles admin queues). /admin/news redirects here.
@@ -150,7 +150,8 @@ export default function ArticlesQueuePage() {
   const navigate = useNavigate();
   const view = viewOf(useLocation().pathname);
   const selectedId = view.id;
-  const setSelectedId = (id) => navigate(id ? articleHref(id) : QUEUE_BASE);
+  // A literal, so the admin reachability walk sees the door to `/admin/articles/:view`.
+  const setSelectedId = (id) => (id ? navigate(`/admin/articles/${id}`) : navigate(QUEUE_BASE));
   const [detail, setDetail] = useState(null);
   // D634 — a failed article read is Unreadable, not "Select an article".
   const [detailFailed, setDetailFailed] = useState(false);

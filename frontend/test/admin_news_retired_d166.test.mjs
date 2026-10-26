@@ -159,10 +159,9 @@ test("the admin queue alert points at a route the SPA registers — a standalone
   const link = body.match(/const link = `([^`]+)`/);
   assert.ok(link, 'the admin alert no longer builds a link');
   // D1290 (#2383): the link names the article, `/admin/articles/${id}`, which
-  // App.jsx registers through `/admin/articles/*`. Mutation checked: drop that
+  // App.jsx registers through `/admin/articles/:view`. Mutation checked: drop that
   // route → this fails.
-  const target = link[1].replace(/\$\{[^}]+\}/g, '7');
-  const registered = APP.includes(`path="${link[1]}"`)
-    || [...APP.matchAll(/path="([^"]+)\/\*"/g)].some(([, base]) => target.startsWith(`${base}/`));
+  const shape = link[1].replace(/\$\{[^}]+\}/g, ':');
+  const registered = [...APP.matchAll(/path="([^"]+)"/g)].some(([, p]) => p.replace(/:\w+/g, ':') === shape);
   assert.ok(registered, `the admin alert links to ${link[1]}, which App.jsx does not register`);
 });
