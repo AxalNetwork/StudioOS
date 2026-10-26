@@ -1,5 +1,9 @@
 # cloudflare-worker/test — what the worker guarantees
 
+`program_usage_d1156.test.ts` exercises migration 601, count-only branch reports,
+newest-wins HQ storage, monthly source counts, partial failures, roles,
+throttling and the dated in-use read with synthetic SQLite records.
+
 ```
 node --experimental-strip-types --no-warnings \
      --import ./cloudflare-worker/test/_ts-loader.mjs \

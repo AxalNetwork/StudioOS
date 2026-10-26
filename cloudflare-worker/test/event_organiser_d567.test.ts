@@ -11,13 +11,14 @@ function fixture() {
   const db = new DatabaseSync(':memory:', { enableForeignKeyConstraints: false });
   for (const name of ['109_events_core.sql', '392_event_organiser.sql']) db.exec(readFileSync(new URL(`../sql/migrations/${name}`, import.meta.url), 'utf8'));
   db.exec(`CREATE TABLE users (id INTEGER PRIMARY KEY, uid TEXT, email TEXT, name TEXT, role TEXT, is_active INTEGER DEFAULT 1);
-    CREATE TABLE user_personas (user_id INTEGER, persona_id TEXT);
+    CREATE TABLE user_personas (user_id INTEGER, persona_id TEXT, is_primary INTEGER DEFAULT 1);
     CREATE TABLE activity_logs (action TEXT, details TEXT, actor TEXT, user_id INTEGER);
     INSERT INTO users VALUES (1, 'host', 'host@example.test', 'Host Fixture', 'founder', 1), (2, 'other', 'member@example.test', 'Member Fixture', 'investor', 1), (3, 'admin', 'admin@example.test', 'Admin Fixture', 'admin', 1);
-    INSERT INTO user_personas VALUES (2, 'angel_scout');
+    INSERT INTO user_personas VALUES (2, 'angel_scout', 1);
     INSERT INTO events (id, slug, host_user_id, title, starts_at, status, visibility, admin_published, capacity) VALUES (1, 'one', 1, 'Fixture event', '2099-01-01', 'published', 'public', 1, 2), (2, 'two', 2, 'Other fixture', '2099-01-01', 'published', 'public', 1, 2);
     INSERT INTO event_registrations (id, event_id, user_id, email, name, status, payment_status) VALUES (1, 1, 2, 'member@example.test', 'Member Fixture', 'registered', 'free'), (2, 1, NULL, 'waiting@example.test', 'Waiting Fixture', 'waitlisted', 'pending');
     INSERT INTO event_agenda_items (id, event_id, title, display_order) VALUES (1, 1, 'First', 0), (2, 1, 'Second', 1), (3, 2, 'Other event', 0);`);
+  db.exec(readFileSync(new URL('../sql/migrations/559_segment_profiles.sql', import.meta.url), 'utf8'));
   const DB = { prepare(sql: string) { let args: any[] = []; const statement: any = {
     bind(...values: any[]) { args = values.map(v => v ?? null); return statement; },
     async first() { return db.prepare(sql).get(...args) || null; },

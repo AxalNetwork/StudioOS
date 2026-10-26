@@ -38,6 +38,11 @@ export const eventsApi = {
   cancelPlace: (id) => request(`/events/${id}/registration`, { method: 'DELETE' }),
   // D1033's add-to links (GET /api/calendar/event-links/:id): Google, Outlook and the .ics path.
   calendarLinks: (id) => request(`/calendar/event-links/${encodeURIComponent(String(id))}`),
+  // D1033's "Subscribe to my events" (/api/calendar/my-events/feed): whether it is set up,
+  // make (or replace) the address, shown once, and remove it. D1034 draws them.
+  feedStatus: () => request('/calendar/my-events/feed'),
+  makeFeed: () => request('/calendar/my-events/feed', { method: 'POST', body: JSON.stringify({}) }),
+  removeFeed: () => request('/calendar/my-events/feed', { method: 'DELETE' }),
   // GET /:id — read one (host or admin).
   get: (id) => request(`/events/${id}`),
   // POST / — create an event (host).
