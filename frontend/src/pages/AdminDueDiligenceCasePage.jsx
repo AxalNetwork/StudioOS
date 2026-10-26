@@ -7,6 +7,8 @@ import { useToast } from '../components/useToast';
 import ToastMessage from '../components/ToastMessage';
 import { useEscapeClose } from '../components/useEscapeClose';
 import AdminBoardFrame from './admin/AdminBoardFrame';
+import { DdCaseTabBody, DdCaseTabs } from './duediligence/DdTabs';
+import { bandWord, viewOf } from './duediligence/ddModel';
 
 const SEV_STYLES = {
   critical: 'bg-red-600 text-white',
@@ -41,6 +43,8 @@ function AdminDueDiligenceCasePageBody() {
   const location = useLocation();
   // Task #83 — mounted at both /admin/due-diligence/:uid and /due-diligence/:uid.
   const base = location.pathname.startsWith('/admin') ? '/admin/due-diligence' : '/due-diligence';
+  // D1244 (#2385): each tab is its own address; the bare case address is Overview.
+  const { caseTab } = viewOf(location.pathname);
   const inv = searchParams.get('inv');
   const focusSection = searchParams.get('section');
   const [data, setData] = useState(null);
@@ -142,7 +146,8 @@ function AdminDueDiligenceCasePageBody() {
 
   const cs = data.case;
   const score = cs.risk_score != null ? Math.round(cs.risk_score * 100) : null;
-  const band = cs.risk_band || 'Not recorded';
+  // D1244: a case with no band says "Not scored yet", never a default colour.
+  const band = cs.risk_band || null;
   const scanInFlight = (data.sources || []).some(s => s.status === 'queued' || s.status === 'running');
 
   return (
@@ -193,10 +198,13 @@ function AdminDueDiligenceCasePageBody() {
         </div>
       </div>
 
+      <DdCaseTabs uid={uid} active={caseTab} />
+
+      {caseTab !== 'overview' ? <DdCaseTabBody uid={uid} tab={caseTab} /> : (<>
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
         <div className={`md:col-span-1 p-5 rounded-xl text-white ${BAND_STYLES[band] || 'bg-slate-600 dark:bg-slate-700'}`}>
           <div className="text-xs uppercase tracking-wider opacity-80">Risk band</div>
-          <div className="text-3xl font-bold mt-1">{band.toUpperCase()}</div>
+          <div className="text-3xl font-bold mt-1">{band ? bandWord(band).toUpperCase() : bandWord(band)}</div>
           <div className="text-sm opacity-90 mt-1">Score {score ?? '—'}/100</div>
         </div>
         <div className="md:col-span-2 grid grid-cols-3 gap-3">
@@ -322,6 +330,7 @@ function AdminDueDiligenceCasePageBody() {
             catch (e) { error(e.message || 'Failed'); }
           }} />
       )}
+      </>)}
 
       {composeOpen && (
         <ComposeRequestModal sections={data.sections} onClose={() => setComposeOpen(false)}

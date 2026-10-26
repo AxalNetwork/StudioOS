@@ -1227,6 +1227,8 @@ function voidedRefusal(c: any) {
 const BOOKLET_DOC_TYPE = 'subscription_booklet';
 /** D1120 — `services/programSchedule.ts`'s document type, repeated so the completion block needs no eager import. */
 const PROGRAM_SCHEDULE_DOC_TYPE = 'program_schedule';
+/** D959 — `services/investorCohortAccess.ts`'s cohort NDA document type, repeated for the same reason. */
+const INVESTOR_COHORT_NDA_DOC_TYPE = 'investor_cohort_nda';
 
 /** A booklet refusal as a response, or null for any other error. */
 async function bookletRefused(c: any, e: unknown): Promise<Response | null> {
@@ -1596,6 +1598,14 @@ esign.post('/sign/:token', async (c) => {
             await pushLicenceToBranch(c.env, signed.licence_id);
           }
         } catch (e) { console.warn('[esign] program_schedule_sign_failed', (e as Error)?.name || 'error'); }
+      }
+      // D959 — an investor's cohort NDA: the grant that names this envelope
+      // records its signature once. Its own try, so it never fails the signature.
+      if (envelopeRow?.document_type === INVESTOR_COHORT_NDA_DOC_TYPE && envelopeRow.envelope_uuid) {
+        try {
+          const { onCohortNdaEnvelopeCompleted } = await import('../services/investorCohortAccess');
+          await onCohortNdaEnvelopeCompleted(c.env, envelopeRow.envelope_uuid);
+        } catch (e) { console.warn('[esign] investor_cohort_nda_sign_failed', (e as Error)?.name || 'error'); }
       }
       // Task #8 (X-1) — Partner deal activation hook. Any envelope linked
       // to a `partner_deals` row by `envelope_id` triggers user creation,

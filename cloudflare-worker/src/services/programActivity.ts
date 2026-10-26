@@ -28,6 +28,9 @@ import { GRANT_ACTIONS } from './programGrantStates';
 /** Mentor cohort access's audited writes (D960, `routes/advisors.ts`): giving a mentor a cohort, and ending it. */
 export const MENTOR_ACCESS_ACTIONS = ['advisor_cohort.assigned', 'advisor_cohort.ended'] as const;
 
+/** Investor cohort access's audited writes (D959, `routes/admin_investor_cohorts.ts`): give, end, and send the cohort NDA. */
+export const INVESTOR_ACCESS_ACTIONS = ['investor_cohort.granted', 'investor_cohort.ended', 'investor_cohort.nda_sent'] as const;
+
 /** Learning's audited writes (`routes/admin_learning_programs.ts`). */
 export const LEARNING_PROGRAM_ACTIONS = [
   'learning.program.create', 'learning.program.update', 'learning.program.contents',
@@ -43,7 +46,7 @@ export const PROGRAM_ACTIVITY_ACTIONS: Record<ProgramKey, readonly string[]> = {
   'spinout-lab': [],
   'ai-native-venture': [],
   'mentor-cohorts': MENTOR_ACCESS_ACTIONS,
-  'investor-cohorts': [],
+  'investor-cohorts': INVESTOR_ACCESS_ACTIONS,
   // D958: the referral partners and their terms (routes/admin_referral_partners.ts).
   'referral-partners': [
     'referral_partner.added', 'referral_partner.updated',
@@ -219,7 +222,7 @@ export async function programActivity(
       } else if (r.kind.startsWith('referral_partner.') && typeof d.segment === 'string') {
         concerns = { segment: d.segment };
       } else if (typeof d.cohort_cycle_id === 'number') {
-        // D960's rows name the cohort; the mentor in `target_user_id` is a person, so is never named.
+        // D960's and D959's rows name the cohort; the mentor or investor in `target_user_id` is a person, so is never named.
         concerns = { cohort_cycle_id: d.cohort_cycle_id };
       }
     }

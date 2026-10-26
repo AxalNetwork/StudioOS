@@ -53,6 +53,8 @@ the generic route wrapper once a canvas has graduated.
   redirects to `/research`.
 - The CSS files beside each component are route-scoped for the same reason as
   `../founder/`'s: dense canvas layouts should not leak into shared tools.
+- `dealflow/` is D1236's Deal flow at the Deals root (`/deals`, `/deals/compare`),
+  from the canvas "Deal flow" (#2423) — see its own README.
 - `deals/` holds one file per Deals artboard (ID1–ID4), each a full
   composition — strip, instrument, note, AI band — rather than the single card
   `InvestorDealsWorkspace.jsx` draws for that zone. Its own README carries the

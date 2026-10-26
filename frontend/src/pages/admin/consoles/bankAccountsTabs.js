@@ -25,14 +25,9 @@ export function tabOf(pathname = '') {
   return TABS.find((t) => t.key !== 'accounts' && t.path === p)?.key || 'accounts';
 }
 
-export const NOT_YET = 'Not read here yet';
-
-/** Why a block draws nothing today. Never a zero, never "none". */
-export const WAITS = Object.freeze({
-  series: 'Each account’s daily balance over 30 days, 90 days or 12 months is not read yet. The sync keeps a daily snapshot; nothing reads it for this page.',
-  monthly: 'Money in and out per entity and month is not read yet. Transfers between Axal’s own accounts will be left out.',
-  history: 'The history of reveals and changes is not read yet. Every reveal is written to the ledger before a number is shown; the read that lists them comes next.',
-});
-
-/** An Admin's line on Cash and History: balances are on Fund admin, for every Admin on HQ. */
-export const ADMIN_CASH_LINE = 'Balances and transactions for every Admin on HQ are on Fund admin › Banking.';
+/**
+ * D1186 (#3115): Cash and History now read what they draw (D1182, D1183), so
+ * their "Not read here yet" blocks are gone. Cash is `BankCashTab.jsx` with
+ * `bankCashModel.js`; History is `BankHistoryTab.jsx` with
+ * `bankHistoryModel.js`.
+ */

@@ -165,10 +165,12 @@ test('both columns are writable on create and on edit, under the same caps', () 
 test('the review surface shows the field the review turns on', () => {
   // The canvas copy is explicit that approval favours specific angles. A
   // reviewer who cannot see the angle is reviewing on the summary instead.
+  // D1046: the review moved to Approvals › Co-marketing pitches; its drawer shows both.
   const s = read(PAGE);
-  const q = s.slice(s.indexOf('function AdminQueueRow'), s.indexOf('function AdminView'));
-  assert.match(q, /pitch\.angle/, 'the review queue must show the angle');
-  assert.match(q, /pitch\.what_you_bring/, 'the review queue must show what they bring');
+  const board = read('frontend/src/pages/admin/approvals/PitchBoard.jsx');
+  const q = board.slice(board.indexOf('function PitchDrawer'), board.indexOf('function PitchTable'));
+  assert.match(q, /<Fact k="Angle" v=\{p\.angle\}/, 'the review must show the angle');
+  assert.match(q, /<Fact k="What they bring" v=\{p\.what_you_bring\}/, 'the review must show what they bring');
 
   // And the form must collect them, or the columns stay empty forever.
   const f = s.slice(s.indexOf('function PitchForm'), s.indexOf('function AttributionBadge'));

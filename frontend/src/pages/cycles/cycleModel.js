@@ -27,7 +27,10 @@ export const CYCLES = {
   build: { key: 'build', name: 'Build', question: 'Can this become a real company?', outcome: 'From Concept → Company', action: 'Connect a tool',
     history: { key: 'tools', name: 'Tools', path: '/build/operating-systems', hash: '#tools', live: true } },
   raise: { key: 'raise', name: 'Raise', question: 'What resources does this venture need?', outcome: 'From Story → Capital', action: 'Call for Capital',
-    history: { key: 'calls', name: 'Calls', path: '/raise/capital-relationships', hash: '#calls', live: true } },
+    // D1221 (#2458): Raise's history is Calls for Capital, Capital relationships' Calls tab.
+    history: { key: 'calls', name: 'Calls', path: '/raise/capital-relationships/calls', hash: '', live: true },
+    // D1261 (#2430): Evidence is Raise's own tab, after Overview and before Calls.
+    lead: { key: 'evidence', name: 'Evidence', path: '/raise/evidence' } },
   grow: { key: 'grow', name: 'Grow', question: 'How does this venture become larger and more enduring?', outcome: 'From Traction → Impact', action: 'Share an update',
     // D1056 (#2427): Grow's history is the Reporting desk, its own page, in place of Updates.
     history: { key: 'reporting', name: 'Reporting', path: '/grow/reporting', hash: '', live: true } },
@@ -277,7 +280,9 @@ export function cycleTabs(cycle, cards, active = null, search = '', { back = nul
   const history = hist?.live && cardTabs.length && !cardTabs.some((t) => t.name === hist.name)
     ? [{ key: hist.key, name: hist.name, href: `${hist.path}${s}${hist.hash}`, active: active === hist.key }]
     : [];
-  return [{ key: '', name: 'Overview', href: `${base}${s}`, active: !active }].concat(history, cardTabs);
+  const lead = CYCLES[cycle]?.lead;
+  const leading = lead && cardTabs.length ? [{ key: lead.key, name: lead.name, href: `${lead.path}${s}`, active: active === lead.key }] : [];
+  return [{ key: '', name: 'Overview', href: `${base}${s}`, active: !active }].concat(leading, history, cardTabs);
 }
 
 /**

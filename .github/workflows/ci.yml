@@ -6,11 +6,17 @@ on:
   pull_request:
     branches: [main]
 
-# Cancel in-flight runs on a branch when a new commit arrives. Saves CI
-# minutes on rapid pushes.
+# A pull request's run is cancelled by its next push: only its head matters.
+# A push to main is NEVER cancelled, and each push is its own group (D1279).
+# With one group per ref, every merge cancelled the run before it, so main's
+# full suite had not finished once on 2026-10-26: #3165 and #3236 crossed and
+# left a README naming a deleted file, main went red unseen for an hour, and
+# every PR that merged main failed on it and wrote its own fix to the same
+# line, which then conflicted. A finished run per main commit names the merge
+# that broke it. Same rule as migration-immutability.yml.
 concurrency:
-  group: ci-${{ github.ref }}
-  cancel-in-progress: true
+  group: ci-${{ github.event_name == 'pull_request' && github.ref || github.sha }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 permissions:
   contents: read

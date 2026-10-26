@@ -158,6 +158,7 @@
     "scope.sql @ routes/fund_ledger.ts": 1,
     "scope.sql @ routes/fund_performance.ts": 1,
     "scope.sql @ routes/funds.ts": 1,
+    "scope.sql @ routes/ic.ts": 1,
     "scope.sql @ routes/liquidity.ts": 1,
     "scope.sql @ routes/lp_reports.ts": 2,
     "scope.sql @ routes/research.ts": 2,

@@ -14,7 +14,7 @@ import {
   audienceOf, bindingFromItem, bindingsBySection, boundChip, cannotInsert, draftOf, inlineSegments, insertAt, insertGroups, isLiveDeck,
   moveSection, runRefusal, saveDialog, savePlan, sectionDot, storySections, unplacedFigures,
 } from './storyModel';
-import { OBJECTION_OPTION, versionHref } from './narrativeModel';
+import { OBJECTION_OPTION, answerSaveLines, versionHref } from './narrativeModel';
 import { ObjectionsPanel } from './ObjectionsPanel';
 
 /**
@@ -27,7 +27,10 @@ import { ObjectionsPanel } from './ObjectionsPanel';
  * `storyModel.js` for every derivation. D913 (#2697) adds NAR10, the
  * Objections panel (`ObjectionsPanel.jsx`): its "Answer it" is Ask Eadwyn on
  * the open section, and lands in the same proposal, never in the words until
- * accepted. As Ask Eadwyn, it is not offered on a phone.
+ * accepted. As Ask Eadwyn, it is not offered on a phone. Option A (migration
+ * 624): an accepted "Answer it" draft is recorded as that objection's answer
+ * when Save version writes its section, and Save version's dialog says so;
+ * `?section=` opens Story on a section ("Answered in [Section] ›").
  */
 
 const CARD = 'rounded-xl border border-axal-hairline bg-white dark:border-gray-800 dark:bg-gray-900';
@@ -209,8 +212,9 @@ function InsertFigure({ sources, current, onInsert, onClose, only = null }) {
 }
 
 /** Save version: the dialog that says what it changes, then one write per changed section. */
-function SaveDialog({ writes, version, onSave, onClose, saving, error }) {
+function SaveDialog({ writes, version, answers = [], onSave, onClose, saving, error }) {
   const d = saveDialog(writes, version);
+  const lines = [...d.lines, ...answers];
   return (
     <Lightbox label={d.title} title={d.title} onClose={saving ? () => {} : onClose} width={500} testId="story-save"
       footer={(
@@ -220,7 +224,7 @@ function SaveDialog({ writes, version, onSave, onClose, saving, error }) {
         </div>
       )}>
       <div className="flex flex-col gap-2.5">
-        <ul className={`m-0 flex list-disc flex-col gap-1 pl-5 text-[13px] ${INK}`}>{d.lines.map((l) => <li key={l}>{l}</li>)}</ul>
+        <ul className={`m-0 flex list-disc flex-col gap-1 pl-5 text-[13px] ${INK}`}>{lines.map((l) => <li key={l}>{l}</li>)}</ul>
         {d.deck ? <p className={`m-0 text-[12.5px] leading-relaxed ${MUTED}`} data-testid="story-save-deck">{d.deck}</p> : null}
         <p className={`m-0 text-[12.5px] ${MUTED}`}>{d.keep}</p>
         {error ? <p role="alert" className="m-0 text-[12.5px] font-semibold text-red-700 dark:text-red-300" data-testid="story-save-failed">{error}</p> : null}
@@ -246,6 +250,11 @@ export default function StoryTab({ projectId, version, search = '', phone = fals
   const [onlyKey, setOnlyKey] = useState(insertOnly);
   // D913: Home's "Answer it" arrives as `?objection=<key>` and marks that objection in the panel.
   const focusObjection = useMemo(() => new URLSearchParams(search).get('objection') || null, [search]);
+  // D913 option A: "Answered in [Section] ›" arrives as `?section=<key>` and opens that section.
+  const sectionParam = useMemo(() => new URLSearchParams(search).get('section') || null, [search]);
+  // Objections an accepted "Answer it" draft answers, by key: { section, text }. Save version records them.
+  const [pending, setPending] = useState({});
+  const [answerNotice, setAnswerNotice] = useState(null);
   const [asking, setAsking] = useState(null);
   const [run, setRun] = useState(null);
   const [refusal, setRefusal] = useState(null);
@@ -261,6 +270,7 @@ export default function StoryTab({ projectId, version, search = '', phone = fals
     // A fresh read replaces the draft; the read's own identity is the key.
   }, [read.data]); // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => { if (insertOnly && !roleReadOnly) { setOnlyKey(insertOnly); setInserting(true); } }, [insertOnly, roleReadOnly]);
+  useEffect(() => { if (sectionParam) setActive(sectionParam); }, [sectionParam]);
 
   if (read.status === 'loading') return <div className="h-40 w-full animate-pulse rounded-xl bg-axal-ground dark:bg-gray-800" aria-hidden="true" data-testid="narrative-loading" />;
   if (read.status === 'refused') return <p className={`m-0 text-[13px] ${INK}`}>{read.message || 'This version could not be opened.'}</p>;
@@ -288,7 +298,21 @@ export default function StoryTab({ projectId, version, search = '', phone = fals
         return;
       }
     }
+    // An accepted "Answer it" draft, now saved, is that objection's answer (option A).
+    const written = new Set(writes.map((w) => w.section));
+    const failed = [];
+    for (const [key, p] of Object.entries(pending)) {
+      if (!written.has(p.section)) continue;
+      try {
+        await narrativeApi.recordAnswer(projectId, key, { version, section: p.section, how: 'eadwyn' });
+      } catch (e) {
+        failed.push(`“${p.text}” (${e?.message || 'the write was refused'})`);
+      }
+    }
+    setPending((now) => Object.fromEntries(Object.entries(now).filter(([, p]) => !written.has(p.section))));
+    setAnswerNotice(failed.length ? `Saved, but which section answers ${failed.join(' and ')} was not recorded. Mark it answered from Objections heard.` : null);
     setSaving({ open: false, busy: false, error: null });
+    // The read again remounts the panel, which reads the objections again.
     retry();
   };
 
@@ -302,16 +326,20 @@ export default function StoryTab({ projectId, version, search = '', phone = fals
     } finally { setAsking(null); }
   };
   // D913 (NAR10): "Answer it" drafts the open section so it answers one objection; it writes nothing.
-  const answer = async (key) => {
+  const answer = async (key, text) => {
     setAsking('objection'); setRun(null); setRefusal(null);
     try {
       const r = await narrativeApi.draftObjection(projectId, key, { version, section: active, words: cur.body }, railPressHeaders(OBJECTION_OPTION));
-      setRun({ section: active, text: r.text, removed: Number(r.removed) || 0 });
+      setRun({ section: active, text: r.text, removed: Number(r.removed) || 0, objection: { key, text } });
     } catch (e) {
       setRefusal(runRefusal(e));
     } finally { setAsking(null); }
   };
-  const accept = () => { patch(run.section, { body: run.text, source: 'eadwyn' }); setRun(null); };
+  const accept = () => {
+    patch(run.section, { body: run.text, source: 'eadwyn' });
+    if (run.objection) setPending((p) => ({ ...p, [run.objection.key]: { section: run.section, text: run.objection.text } }));
+    setRun(null);
+  };
   const insertFigure = (it) => {
     const b = bindingFromItem(it);
     const value = valueText(it);
@@ -365,6 +393,7 @@ export default function StoryTab({ projectId, version, search = '', phone = fals
             ) : null}
             {!readOnly && aiOn ? <span className={`text-[11.5px] ${MUTED}`} data-testid="story-ask-foot">{ASK_FOOT}</span> : null}
             {refusal && !readOnly ? <RunRefused refusal={refusal} /> : null}
+            {answerNotice && !readOnly ? <p role="alert" className="m-0 text-[12.5px] font-semibold text-red-700 dark:text-red-300" data-testid="story-answer-not-recorded">{answerNotice}</p> : null}
             {run && run.section === active && !readOnly ? <Proposal run={run} onAccept={accept} onDiscard={() => setRun(null)} /> : null}
             {readOnly ? <ReadsAs text={cur.body} figures={figures} /> : (
               <>
@@ -414,12 +443,13 @@ export default function StoryTab({ projectId, version, search = '', phone = fals
           </section>
         ) : null}
         <ObjectionsPanel projectId={projectId} canAnswer={!readOnly && !phone && Boolean(spec && cur)} aiOn={aiOn} busy={Boolean(asking)}
-          focusKey={focusObjection} sectionLabel={spec?.label ?? null} onAnswer={answer} offLine={AI_OFF_LINE} />
+          focusKey={focusObjection} sectionLabel={spec?.label ?? null} onAnswer={answer} offLine={AI_OFF_LINE}
+          canMark={!readOnly && Boolean(spec && cur)} version={version} section={active} unsaved={writes.some((w) => w.section === active)} search={search} />
       </div>
       {inserting ? (
         <InsertFigure sources={sources} current={cur?.bindings || []} only={onlyKey} onClose={() => { setInserting(false); setOnlyKey(null); }} onInsert={insertFigure} />
       ) : null}
-      {saving.open ? <SaveDialog writes={writes} version={version} saving={saving.busy} error={saving.error} onSave={doSave} onClose={() => setSaving({ open: false, busy: false, error: null })} /> : null}
+      {saving.open ? <SaveDialog writes={writes} version={version} answers={answerSaveLines(pending, writes)} saving={saving.busy} error={saving.error} onSave={doSave} onClose={() => setSaving({ open: false, busy: false, error: null })} /> : null}
     </div>
   );
 }

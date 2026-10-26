@@ -303,7 +303,7 @@ r.post('/', async (c) => {
       `INSERT INTO referral_partners (user_id, segment, note, added_by) VALUES (?, ?, ?, ?) ON CONFLICT(user_id) DO NOTHING RETURNING id, user_id, segment, added_at`,
     ).bind(userId, b.segment, note, admin.id).first<any>();
     if (!row) return refuse(c, 409, { code: 'already_referral_partner', message: 'That member is already a referral partner.' });
-    await logAdminAction(c.env, admin.id, admin.email, 'referral_partner.added', { user_id: userId, segment: b.segment });
+    await logAdminAction(c.env, admin.id, admin.email, 'referral_partner.added', { target_user_id: userId, segment: b.segment });
     return c.json({ ...row, segment_label: SEGMENT_LABEL[b.segment as keyof typeof SEGMENT_LABEL] }, 201);
   } catch (e) { return unreadable(c, e); }
 });
@@ -604,7 +604,7 @@ r.patch('/:userId', async (c) => {
          updated_at = datetime('now') WHERE user_id = ? RETURNING user_id, segment, note`,
     ).bind(hasSeg ? 1 : 0, hasSeg ? b.segment : null, hasNote ? 1 : 0, note, userId).first<any>();
     if (!row) return refuse(c, 404, PARTNER_NOT_FOUND);
-    await logAdminAction(c.env, admin.id, admin.email, 'referral_partner.updated', { user_id: userId, ...(hasSeg ? { segment: b.segment } : {}) });
+    await logAdminAction(c.env, admin.id, admin.email, 'referral_partner.updated', { target_user_id: userId, ...(hasSeg ? { segment: b.segment } : {}) });
     return c.json({ ...row, segment_label: SEGMENT_LABEL[row.segment as keyof typeof SEGMENT_LABEL] });
   } catch (e) { return unreadable(c, e); }
 });

@@ -17,8 +17,12 @@ an admin's `/funds` and `/funds/performance` forward here.
 | `BankingTabs.jsx` | Banking (#1834's `MercuryEntityConnections`, #1775's accounts and paged transactions, the payment-instructions link or sentence) and Reconciliation (#1775's matches, Confirm, Reject with a reason, a manual proposal). |
 | `PerformanceTab.jsx` | D1164 (#3071, FND10–FND12): NAV & performance. For the fund `?fund=` names: the NAV line, the seven tiles (each missing one Not recorded with its reason), the quarterly charts (`QuarterLines`: a quarter with no NAV is a dashed bridge, never a dip to 0) and the positions chart (`PairBars`: a position with no mark is a dashed "No mark" bar, never its cost), each with View as table, and the positions table with Record a mark and Move to another fund (act `fund.valuation`, through `FundActControl`, each an in-page `Lightbox`). For All funds: Funds side by side. Each block reads alone. |
 | `performanceModel.js` | D1164: NAV & performance, pure: `navTiles`, `quarterCharts`, `positionsChart`, `positionRows`, `sideBySide`, `checkMark` (a date not in the future, dollars to cents with 0 allowed, a source of 1 to 500 characters, before the call) and `moveOptions`. |
-| `FundTabs.jsx` | Capital calls and Distributions on one administered fund, chosen in the header’s fund filter (D1160), plus compatibility exports of Fees and Reports from `FeesReportsTabs.jsx` (D1165). The Calls tab's "Proof of funds shared by LPs" panel (D752) reads only on Show, because each read is audited and counts a view. |
-
+| `FundTabs.jsx` | What every per-fund tab shares: `FundFrame` (one administered fund, chosen in the header's fund filter, D1160), `Failed`, `Busy`, `Alert` and `LABEL`; plus compatibility exports of Fees and Reports from `FeesReportsTabs.jsx` (D1165). |
+| `CallsTab.jsx` | D1163 (#3070, FND7): Capital calls drawn in place from the call ledger (`GET /api/funds/:id/capital-calls`): the six tiles, "Outstanding by age", the latest call with its LP lines (Record receipt, Open LP, Call notices), the earlier calls opened in place, and "Proof of funds shared by LPs" (D752), which reads only on Show because each read is audited and counts a view. After Issue it checks the issued call against its preview. |
+| `callDialogs.jsx` | D1163 (FND8): New capital call (a due date the admin chooses, never filled in; the split by commitment; Issue, the Super Admin's, then the step-up), Record receipt, and Call notices (Letter or A4, every line's notice previewed, Issue by the digest; a line that cannot issue is L6, "This notice can't issue: …"). Each is an in-page `Lightbox`. |
+| `DistributionsTab.jsx` | D1163 (FND9): the proceeds card and "Where every cent goes", the per-LP preview by name, Execute (the Super Admin's) or its sentence, the distributions table with Mark paid (a dialog first) and each paid line's Notice (its tax character chosen, the Worker's HTML in a frame that runs no script, Issue by the figures previewed), and the cumulative chart. |
+| `callsModel.js` | D1163: Capital calls' and Distributions' arithmetic and words, pure: the tiles, `ageChart`, `checkNewCall` (no due date is refused), `previewRows`, `figuresMatch`, `receiptBody`, `refusedNotice`, `distributionRows`, `cumulativeDistributions` and `lpName` (a person by name, never by email or number). |
+| `ChartBlock.jsx` | D1163: a chart in a `Panel` with its one-line note and View as table. |
 | `MercuryEntitySheet.jsx` | D880 (#2553): Axal VC's own Mercury, the four entity connections (D710, D715), moved here from `pages/account/`. `MercuryEntityConnections` (the rows and their acts: the Super Admin connects, replaces and disconnects, any admin syncs; one audited read on mount, none on a branch) is drawn by this console's Banking tab; `MercuryEntitySheet` is opened by HQ's Bank accounts console. No member page imports it |
 | `mercuryEntityModel.js` | D880 (#2553): the entity rows' words, pure: `ENTITY_KEYS` (Holdings, Management, GP, Fund), `entityRows`, `entityState`, `entityErrorWords`, the sheet's sentences and `retryAfterSentence`. The Overview tab reads its state and error words. `accountLine` stays in `../../account/mercuryModel.js`, which the investor's proof of funds also reads |
 | `LpsTab.jsx` | D1162 (FND5): every LP of every administered fund from `GET /api/fund-admin/lps` — the tiles, commitment by LP type (Not recorded a dashed outline), the table with its filters, search, sort and pages kept in the address, the row menu and Add LP. It mounts the drawer at `/lps/:id`. |
@@ -35,9 +39,13 @@ an admin's `/funds` and `/funds/performance` forward here.
   `FundActControl` (`../../../lib/fundActs.js`): an act the viewer may not take is
   its sentence, never a disabled button. A failed access read keeps the
   controls and says so; the Worker decides every act.
-- **Reuse, never fork.** The call ledger (`/funds/calls`, `InvestorFundCalls.jsx`),
-  the books (`/funds/ledger`, `FundLedgerPanel.jsx`) and a report period's pack
-  (`FundReportPeriodPage.jsx`) are opened for the chosen fund, not copied.
+- **Reuse the Worker's reads, not a second page.** Capital calls and
+  Distributions are drawn here (D1163) from the same routes `/funds/calls`
+  reads; a report period's pack (`FundReportPeriodPage.jsx`) is opened for the
+  chosen fund, not copied.
+- **Every change is an in-page dialog** (`Lightbox`) that says what it
+  changes; never a browser pop-up. A person is named, never shown by email or
+  user number.
 - **Money is integer cents.** A value no store holds is Not recorded with its
   reason; a read that failed is Unreadable, never 0. Bank text is drawn as text.
 - **Laid out to S1's brief** for "Fund Administration · Admin" (#1779,
