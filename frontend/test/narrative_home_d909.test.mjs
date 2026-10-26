@@ -40,7 +40,7 @@ const PART = {
   deck: { version: 6, reads_narrative: true },
   spinout: false,
   // D913 (#2697): the objections investors raised, project-wide.
-  objections: { state: 'ok', items: [{ key: '0123456789abcdef', text: 'Too small a market', count: 3, prospects: 2, last_heard: '2026-10-09', answer: null }], capped: false },
+  objections: { state: 'ok', items: [{ key: 'a'.repeat(16), text: 'Too small a market', count: 3, prospects: 2, last_heard: '2026-10-09', answer: null }], capped: false },
 };
 const data = (part) => ({ parts: { narrative: part } });
 
