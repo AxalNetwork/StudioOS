@@ -14,7 +14,7 @@ each canvas and why. This document answers a different question: *who sees
 it, where in their nav, and how do they get there.*
 
 **Corpus:** 169 canonical canvases at `design/canvases/`, listed
-243 times below — a canvas serving two workspaces appears under both.
+246 times below — a canvas serving two workspaces appears under both.
 
 ## Column meanings
 
@@ -108,7 +108,7 @@ it, where in their nav, and how do they get there.*
 | Validate · Record a session | `/validate/record` · `/validate/interviews?new=record` · `/cycles/validate/modules/customer-research` · `/sessions` · `/channels/threads?status=pending` · `/channels/threads/:uid/assign` · `/validate/record/live` · `/sessions/active` · `/validate/session/:id` | Headerless | Full page (proposed) | Sidebar → Headerless → Validate | NEW | Low |
 | Validate → Build plan | `/build/plan` · `/build/plan/progress` | — (not routed) | Full page (proposed) | Not reachable yet | NEW | Low |
 
-## Advisor — 20 canvases
+## Advisor — 21 canvases
 
 | Canvas | Route | Nav section | Surface | Entry point | Status | Confidence |
 | --- | --- | --- | --- | --- | --- | --- |
@@ -132,8 +132,9 @@ it, where in their nav, and how do they get there.*
 | Research · Sector | `/research/markets/sector/:slug` | Headerless | Full page | Sidebar → Headerless → Research | CURRENT | High |
 | Signals | `/signals` · `/research` | Headerless | Full page | Sidebar → Headerless → Research | RETIRED | High |
 | Trust center (public) | `/trust/me` · `/admin/security/trust-center` | — (no nav entry) | Full page | Deep link / in-page action | NEW | Medium |
+| Validate → Build plan | `/build/plan` · `/build/plan/progress` | — (not routed) | Full page (proposed) | Not reachable yet | NEW | Low |
 
-## LP / Investor — 30 canvases
+## LP / Investor — 31 canvases
 
 | Canvas | Route | Nav section | Surface | Entry point | Status | Confidence |
 | --- | --- | --- | --- | --- | --- | --- |
@@ -167,8 +168,9 @@ it, where in their nav, and how do they get there.*
 | Research · Sector | `/research/markets/sector/:slug` | Headerless | Full page | Sidebar → Headerless → Research | CURRENT | High |
 | Scoring Engine v2 | `/scoring` | — (no nav entry) | Full page | Deep link / in-page action | UPGRADE | Medium |
 | Trust center (public) | `/trust/me` · `/admin/security/trust-center` | Headerless | Full page | Sidebar → Headerless → Trust | NEW | High |
+| Validate → Build plan | `/build/plan` · `/build/plan/progress` | — (not routed) | Full page (proposed) | Not reachable yet | NEW | Low |
 
-## Partner / Operator — 15 canvases
+## Partner / Operator — 16 canvases
 
 | Canvas | Route | Nav section | Surface | Entry point | Status | Confidence |
 | --- | --- | --- | --- | --- | --- | --- |
@@ -187,6 +189,7 @@ it, where in their nav, and how do they get there.*
 | Research · Sector | `/research/markets/sector/:slug` | Headerless | Full page | Sidebar → Headerless → Research | CURRENT | High |
 | Scoring Engine v2 | `/scoring` | — (no nav entry) | Full page | Deep link / in-page action | UPGRADE | Medium |
 | Trust center (public) | `/trust/me` · `/admin/security/trust-center` | — (no nav entry) | Full page | Deep link / in-page action | NEW | Medium |
+| Validate → Build plan | `/build/plan` · `/build/plan/progress` | — (not routed) | Full page (proposed) | Not reachable yet | NEW | Low |
 
 ## Subsidiary Admin — 32 canvases
 
@@ -326,7 +329,7 @@ it, where in their nav, and how do they get there.*
 | --- | ---: | --- |
 | High | 114 | Live route, reachable from that workspace’s sidebar. |
 | Medium | 75 | Live route, but no sidebar row for that role — reached by deep link or an in-page action. |
-| Low | 54 | Not routed. Proposed route only. |
+| Low | 57 | Not routed. Proposed route only. |
 
 A Medium row is not a defect. Detail pages (`/deals/:id`), print artefacts
 and wizards are reached from the surface above them by design; the brief’s

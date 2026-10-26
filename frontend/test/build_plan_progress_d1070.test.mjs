@@ -89,6 +89,8 @@ test('the stages: each read for what it carries, Not yet only where a read could
   assert.deepEqual(['sent', 'progress', 'built', 'tested'].map((k) => by[DOOR].stages[k].state), ['na', 'na', 'na', 'na'], 'a door is opened, never sent');
   assert.equal(by[DOOR].stages.live.state, 'unrecorded');
   assert.deepEqual(['live', 'tested'].map((k) => by[STEP].stages[k].state), ['na', 'na']);
+  const test_ = progressRows({ modules: { 'prototype-mvp': [accepted('t1', 'prototype-test', 'Setup in a day')] } }, [], [])[0];
+  assert.deepEqual(['built', 'live', 'tested'].map((k) => test_.stages[k].state), ['na', 'na', 'unrecorded'], 'a test is never built or live, only tested');
   // A failed sends or links read is "Not recorded" with its reason, never "Not yet".
   const blind = Object.fromEntries(progressRows(PLAN(), null, null).map((r) => [r.uid, r]));
   assert.deepEqual(blind[ROAD].stages.sent, { state: 'unrecorded', text: 'Not recorded', source: 'Sends could not be read' });
@@ -361,6 +363,9 @@ test('mounted Send to…: GitHub not connected still gives issues to copy; conne
     await con.click('plan-send-prepare');
     assert.deepEqual(writes(con)[0].body, { provider: 'github', items: [MUST], repository: 'northwind/app' });
     assert.equal(con.props('plan-send-issue-open').href, 'https://github.com/northwind/app/issues/new?title=x');
+    await con.click('plan-send-tab-notion');
+    await con.click('plan-send-prepare');
+    assert.deepEqual(writes(con)[1].body, { provider: 'notion', items: [MUST] }, 'a repository rides only with GitHub and Vercel');
   } finally { await con.close(); }
   const pii = await mounted({ props: { tab: 'plan' }, handle: handler({ '/plan/handoffs?': { method: 'POST', answer: () => response({ code: 'pii_found', message: 'x', findings: [{ kind: 'email', in: MUST }] }, 422) } }) });
   try {
