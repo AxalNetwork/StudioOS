@@ -92,6 +92,21 @@ async function commit(c: Ctx, user: User, row: Row, statement: D1PreparedStateme
       SELECT ?, ?, ?, ? WHERE EXISTS (SELECT 1 FROM kyb_case_events WHERE uid = ?)`)
       .bind(action, JSON.stringify({ case: row.uid, outcome: 'completed' }), actor, user.id, changeUid),
     ...after,
+    // A new source revision must never revive old staff owner links. The owners
+    // endpoint writes fresh links explicitly; other acts preserve only the links
+    // that were visible on the revision the actor just read.
+    c.env.DB.prepare(`UPDATE kyb_cases SET owners_json = ?, directors_json = ?, owners_disclosed = ?
+      WHERE uid = ? AND studio_code = ? AND ? != 'kyb_owners_updated'
+        AND EXISTS (SELECT 1 FROM kyb_case_events WHERE uid = ?)`)
+      .bind(row.case_owners_json ?? null, row.case_directors_json ?? null, row.case_owners_disclosed ?? 0,
+        row.uid, scope(c.env), action, changeUid),
+    c.env.DB.prepare(`UPDATE kyb_cases SET reviewed_at = NULL, reviewed_by = NULL,
+      registry_matches = NULL, good_standing = NULL, unchecked_owner_reason = NULL,
+      decision_reason = CASE WHEN ? = 'kyb_documents_requested' THEN decision_reason ELSE NULL END
+      WHERE uid = ? AND studio_code = ?
+        AND ? IN ('kyb_owners_updated','kyb_document_uploaded','kyb_documents_requested','kyb_import_linked')
+        AND EXISTS (SELECT 1 FROM kyb_case_events WHERE uid = ?)`)
+      .bind(action, row.uid, scope(c.env), action, changeUid),
     // Existing company members still read migration 220. Keep that projection in
     // the very same transaction, including an admin-started case with no submission.
     c.env.DB.prepare(`INSERT INTO company_kyb_records
@@ -261,7 +276,7 @@ kyb.put('/:id/owners', async c => {
   await materialize(c, row);
   const changed = await commit(c, user, row, c.env.DB.prepare(
     `UPDATE kyb_cases SET owners_json = ?, directors_json = ?, owners_disclosed = ?, source_revision = ?,
-      status = CASE WHEN status = 'approved' THEN 'needs_info' ELSE status END,
+      status = 'in_review',
       registry_matches = NULL, good_standing = NULL, expires_at = NULL,
       version = version + 1, updated_at = CURRENT_TIMESTAMP
      WHERE uid = ? AND studio_code = ? AND version = ?`,

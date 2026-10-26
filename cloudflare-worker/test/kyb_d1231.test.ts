@@ -341,6 +341,30 @@ test('registration search requires the full value and does not reveal substrings
   } finally { f.db.close(); }
 });
 
+async function resubmissionScenario(router = kyb) {
+  for (const [path,method,payload,status] of [
+    ['/account-3/owners','PUT',{ owners:[{name:'Current owner',ownership_pct:100,user_id:5}],disclosed:true },'in_review'],
+    ['/account-3/request-documents','PATCH',{kinds:['incorporation'],message:'Please provide the updated record.'},'needs_info'],
+    ['/account-3/documents','POST',{kind:'incorporation',data_uri:'data:application/pdf;base64,JVBERg=='},'in_review'],
+  ] as const) {
+    const f = fixture(router);
+    try {
+      assert.equal((await f.call('/account-3/reject','PATCH',{reason:'Old registry mismatch.'})).status,200);
+      f.db.exec("UPDATE corporate_profiles SET entity_name='Resubmitted current entity' WHERE user_id=3");
+      assert.equal((await f.call('/account-3')).body.status,'in_review');
+      const changed = await f.call(path,method,payload);
+      assert.ok(changed.status < 300,changed.text);
+      const after = await f.call('/account-3');
+      assert.equal(after.body.status,status);
+      assert.equal(after.body.reviewed_at,null);
+      assert.equal(after.body.registry.recorded,false);
+      assert.equal(after.body.decision_reason,method === 'PATCH' ? payload.message : null);
+      if (method !== 'PUT') assert.equal(after.body.owners.value[0].user_id,null,'stale staff links must not return on the new revision');
+    } finally { f.db.close(); }
+  }
+}
+test('non-decision edits cannot revive a prior rejection, review metadata or stale owner links', () => resubmissionScenario());
+
 // Exercise the same behavioural assertions with faults injected, then restored.
 // Data-URL modules keep mutations out of the working tree and concurrent tests.
 async function mutated(from: string, to: string) {
@@ -368,6 +392,8 @@ test('D1231 mutation checks: the guards, audit, redaction and decision paths fai
     ['row.linked_user_id === user.id', 'false', selfReviewScenario],
     ['if (ids.includes(user.id))', 'if (false)', selfReviewScenario],
     ['if (account.id === user.id)', 'if (false)', selfReviewScenario],
+    ["status = 'in_review',\n      registry_matches", "status = status,\n      registry_matches", resubmissionScenario],
+    ['row.case_owners_json ?? null', 'row.owners_json ?? null', resubmissionScenario],
   ];
   for (const [from,to,scenario] of mutations) {
     await scenario();
