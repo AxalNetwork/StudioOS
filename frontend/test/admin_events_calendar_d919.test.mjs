@@ -558,7 +558,7 @@ test('the search matches titles, hosts and ventures; the Host filter picks one h
   assert.equal(readQuery('?host=%20Ana%20Lee%20').host, 'Ana Lee');
   assert.equal(filterCount(readQuery('?host=Ana%20Lee&status=draft')), 2);
   assert.equal(writeQuery('?host=Ana%20Lee', { host: null }), '');
-  assert.match(read('frontend/src/pages/admin/events/EventsCalendar.jsx'), /fields=\{\['status', 'visibility', 'price', 'host'\]\}/, 'the Calendar filters by host too');
+  assert.match(read('frontend/src/pages/admin/events/EventsCalendar.jsx'), /fields=\{\['status', 'type', 'visibility', 'format', 'price', 'host'\]\}/, 'the Calendar filters by host too (and, since D1116, by type and format)');
 });
 
 test('Overdue joins Needs attention once a review has waited more than 72 hours (D918 §1), whatever the start', () => {
