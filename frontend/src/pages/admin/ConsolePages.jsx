@@ -6,8 +6,11 @@ import { PROFILE_OF_ROLE, crumbsOfKey, pageFor } from '../../lib/railPages';
 import { Link } from 'react-router-dom';
 import AdminPageHeader, { HeaderMenuItem, HeaderTab, useMovedNotice } from '../../ui/AdminPageHeader';
 import { adminMercuryApi } from '../../lib/api/adminMercury';
-import { Accounts as EntityAccounts } from './fundAdmin/BankingTabs';
-import { ADMIN_CASH_LINE, NOT_YET, WAITS, tabOf } from './consoles/bankAccountsTabs';
+import { tabOf } from './consoles/bankAccountsTabs';
+import BankCashTab from './consoles/BankCashTab';
+import BankHistoryTab from './consoles/BankHistoryTab';
+import { ADMIN_CARD } from './consoles/bankCashModel';
+import { bankAccountsApi } from '../../lib/api/bankAccounts';
 import AdminBoardFrame from './AdminBoardFrame';
 import { movedNoticesFor } from './LegacyContractsRedirect';
 // D648 (#1448) — one component per console, each in its own file under
@@ -139,36 +142,27 @@ export function AdminWellbeingPage() {
 
 /**
  * D1181 (#2389) — Bank accounts' three tabs (BNK1, BNK3, BNK5). Accounts is
- * today's registry; Cash draws the entity accounts' balances from the read
- * Fund admin › Banking makes, and says what waits; History waits for its read.
- * Cash and History are the Super Admin's here, as the registry is.
+ * the registry; Cash and History (D1186, #3115) read Mercury's stored
+ * balances and flows and the reveal-and-change history. Cash and History
+ * are the Super Admin's here, as the registry is; an Admin gets BNK11a's
+ * card and the page reads nothing for them.
  */
-const MERCURY_APIS = { mercury: adminMercuryApi };
-function Wait({ id, title }) {
+function AdminCard() {
   return (
-    <section className="flex flex-col gap-2 rounded-xl border border-axal-hairline bg-white px-4 py-3 dark:border-gray-800 dark:bg-gray-900" data-testid={`bank-wait-${id}`}>
-      <h3 className="m-0 text-[13px] font-bold text-axal-ink dark:text-gray-100">{title}</h3>
-      <span className="w-fit rounded-full border border-dashed border-gray-300 px-2 py-0.5 text-[11px] font-bold text-axal-muted dark:border-gray-600 dark:text-gray-400">{NOT_YET}</span>
-      <p className="m-0 text-[12.5px] text-axal-muted dark:text-gray-400">{WAITS[id]}</p>
+    <section className="mx-auto mt-6 flex w-full max-w-[620px] flex-col gap-2.5 rounded-axal-lg border border-dashed border-axal-hairline bg-white px-6 py-6 dark:border-gray-700 dark:bg-gray-900" data-testid="bank-admin-line">
+      <span className="text-[10px] font-bold uppercase tracking-axal-label text-axal-muted dark:text-gray-400">{ADMIN_CARD.eye}</span>
+      <h2 className="m-0 text-[20px] font-extrabold tracking-axal-heading text-axal-ink dark:text-gray-100">{ADMIN_CARD.title}</h2>
+      <p className="m-0 text-[12.5px] leading-relaxed text-axal-muted dark:text-gray-400">{ADMIN_CARD.line}</p>
+      <Link className="w-fit text-[12.5px] font-semibold text-axal-violet-deep hover:underline dark:text-violet-300" to="/admin/fund-admin/banking">Open Fund admin › Banking</Link>
     </section>
   );
 }
 function BankTabBody({ tab }) {
   const holder = isSuperAdminUser(useAuth()?.user ?? null);
   if (tab === 'accounts') return <BankAccountsPanel />;
-  if (!holder) {
-    return <p className="p-6 text-sm text-gray-700 dark:text-gray-300" data-testid="bank-admin-line">{ADMIN_CASH_LINE} <Link className="font-semibold text-axal-violet dark:text-violet-300" to="/admin/fund-admin/banking">Open Fund admin › Banking</Link></p>;
-  }
-  if (tab === 'cash') {
-    return (
-      <div className="flex flex-col gap-4" data-testid="bank-cash">
-        <EntityAccounts apis={MERCURY_APIS} />
-        <Wait id="series" title="Balance over time" />
-        <Wait id="monthly" title="Money in and out" />
-      </div>
-    );
-  }
-  return <Wait id="history" title="History" />;
+  if (!holder) return <AdminCard />;
+  if (tab === 'cash') return <BankCashTab api={adminMercuryApi} />;
+  return <BankHistoryTab api={bankAccountsApi} />;
 }
 
 export function BankAccountsPage() {

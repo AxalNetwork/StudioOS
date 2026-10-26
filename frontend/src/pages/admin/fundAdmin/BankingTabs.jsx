@@ -30,9 +30,14 @@ function ReadFailed({ read, what, claim }) {
   return <div className="px-4 py-3 sm:px-5"><Unreadable what={what} claim={audit ? 'Nothing was read, because its audit row could not be written.' : claim} onRetry={read.reload} /></div>;
 }
 
-/** The entity accounts with Current and Available; HQ › Platform › Bank accounts › Cash draws it too (D1181). */
-export function Accounts({ apis }) {
-  const read = useRead(() => apis.mercury.accounts(), [apis]);
+/**
+ * The entity accounts with Current and Available; HQ › Platform › Bank
+ * accounts › Cash draws it too (D1181), passing its own `read` of the same
+ * route so its tiles and this table share one read and one figure (D1186).
+ */
+export function Accounts({ apis, read: shared = null, label = 'Accounts' }) {
+  const own = useRead(() => apis.mercury.accounts(), [apis], { enabled: !shared });
+  const read = shared || own;
   const items = read.data?.items || [];
   const cols = [
     { key: 'account', label: 'Account', cell: (a) => `${a.nickname || a.kind} · ${ending(a.last_four)}` },
@@ -43,7 +48,7 @@ export function Accounts({ apis }) {
     { key: 'registry', label: 'Registry', cell: (a) => (a.registered ? <Pill tone="ok">Registered</Pill> : <Pill tone="warn">Not in the registry</Pill>) },
   ];
   return (
-    <Panel label="Accounts" testId="banking-accounts">
+    <Panel label={label} testId="banking-accounts">
       {read.status === 'loading' ? <div className="px-4 py-3 sm:px-5"><LoadingRows lines={2} /></div>
         : read.status === 'unreadable' ? <ReadFailed read={read} what="The entity accounts" claim="This is not a claim that there is none." />
           : items.length === 0 ? <Note>No account recorded. An account appears here after its entity's first sync.</Note>
