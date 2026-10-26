@@ -1,6 +1,6 @@
 import React, { useEffect, useId, useRef, useState } from 'react';
 import { STATUSES, statusWord } from './eventsDeskModel';
-import { FEATURED, PRICES, VISIBILITIES, WHENS } from './allEventsModel';
+import { FEATURED, FORMATS, PRICES, TYPES, VISIBILITIES, WHENS } from './allEventsModel';
 import { INPUT } from './parts';
 
 /**
@@ -13,8 +13,9 @@ import { INPUT } from './parts';
  * `fields` names the filters a tab draws: All events draws all six, the
  * Calendar draws Status, Visibility, Price and Host (When is the calendar
  * itself, and Featured is not on EV8). Host lists the host names in the list
- * (`hosts`, from part 3's rows); "Studio team" waits for O-STU. Type and
- * Format wait for part 1.
+ * (`hosts`, from part 3's rows); "Studio team" waits for O-STU. D1116 adds
+ * Type and Format, in the canvas's order (Status, Type, Visibility, Format, …),
+ * to both tabs.
  */
 
 export const CONTROL = `${INPUT} max-sm:min-h-[44px]`;
@@ -72,7 +73,9 @@ export default function EventFilters({ query, onChange, hosts = [], fields = ['s
   return (
     <div className="flex flex-wrap items-center gap-2" data-testid="events-filters">
       {has('status') ? <StatusPicker picked={query.statuses} onChange={(statuses) => onChange({ status: statuses })} /> : null}
+      {has('type') ? <Pick label="Type" value={query.type} options={TYPES} onChange={(v) => onChange({ type: v })} testId="events-filter-type" /> : null}
       {has('visibility') ? <Pick label="Visibility" value={query.visibility} options={VISIBILITIES} onChange={(v) => onChange({ visibility: v })} testId="events-filter-visibility" /> : null}
+      {has('format') ? <Pick label="Format" value={query.format} options={FORMATS} onChange={(v) => onChange({ format: v })} testId="events-filter-format" /> : null}
       {has('when') ? <Pick label="When" value={query.when} options={WHENS} onChange={(v) => onChange({ when: v })} testId="events-filter-when" /> : null}
       {has('when') && query.when === 'range' ? (
         <span className="flex flex-wrap items-center gap-1.5">

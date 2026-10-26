@@ -188,6 +188,24 @@ export async function isPrincipalCompEligible(
   return { eligible: false, source: null };
 }
 
+/**
+ * D1131 (#3011, migration 611): where a free seat came from, at the moment it
+ * is written. The audience rule that comps the principal now wins; otherwise a
+ * comp invitation's own source (`manual`, or the rule that minted it). A seat
+ * that is not free, or a source outside the known words, records NULL, never a
+ * guess.
+ */
+export const RECORDED_COMP_SOURCES = ['manual', 'auto_partner', 'auto_lp', 'auto_investor', 'auto_founder', 'auto_connection'] as const;
+export function compSourceOf(
+  rule: { eligible: boolean; source: CompSource | null } | null | undefined,
+  invitation: { comp?: number | null; source?: string | null } | null | undefined,
+): string | null {
+  const known = (s: unknown) => ((RECORDED_COMP_SOURCES as readonly string[]).includes(String(s)) ? String(s) : null);
+  if (rule?.eligible) return known(rule.source);
+  if (invitation && Number(invitation.comp) === 1) return known(invitation.source);
+  return null;
+}
+
 /** A comp invitation row created by `mintCompInvitations` this call (so the
  *  caller can deliver ONLY newly minted invites — never re-mailing existing
  *  rows on a re-approve / retry). */

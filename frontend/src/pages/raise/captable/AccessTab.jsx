@@ -19,7 +19,7 @@ import {
 const readGrants = (id) => capTableAccessApi.grants(id);
 const readLinks = (id) => capTableAccessApi.links(id);
 const readModel = (id) => capTableRecordApi.read(id);
-const INPUT = 'w-full rounded-[8px] border border-axal-hairline bg-white px-2.5 py-1.5 text-[13px] text-axal-ink dark:border-gray-700 dark:bg-gray-900 dark:text-gray-100';
+const INPUT = 'w-full rounded-[8px] border border-axal-hairline bg-white px-2.5 py-1.5 text-[13px] text-axal-ink dark:border-gray-700 dark:bg-gray-900 dark:text-gray-200';
 
 
 function LevelDialog({ projectId, row, holders, scope, onClose, onDone }) {
@@ -119,7 +119,7 @@ function AccessLog({ projectId, reload, retry }) {
         {all.length === 0 ? <p className={`m-0 text-[12.5px] ${MUTED}`} data-testid="captable-access-log-none">Nobody has opened the cap table or a link yet.</p> : (
           <Table testId="captable-access-log-table" cols={[{ key: 'w', label: 'When' }, { key: 'p', label: 'Who' }, { key: 'x', label: 'What' }]}
             rows={all.map((r) => (
-              <tr key={r.id} className="border-b border-axal-ground last:border-b-0 dark:border-gray-800" data-testid="captable-access-log-row">
+              <tr key={r.id} className="border-b border-axal-ground last:border-b-0 dark:border-gray-700" data-testid="captable-access-log-row">
                 <td className={`${TD} ${MONO}`}>{r.when}</td><td className={TD}>{r.who}</td><td className={TD}>{r.what}</td>
               </tr>
             ))} />
@@ -128,7 +128,7 @@ function AccessLog({ projectId, reload, retry }) {
           <span className={`text-[11.5px] ${MUTED}`}>Who opened the cap table or a link, and when. No IP address is kept.</span>
           {next ? <button type="button" className={actionGhost} onClick={loadMore} disabled={more.busy} data-testid="captable-access-log-more">{more.busy ? 'Reading…' : 'Show older'}</button> : null}
         </div>
-        {more.error ? <p role="alert" className="m-0 text-[12px] text-red-700 dark:text-red-300">{more.error}</p> : null}
+        {more.error ? <p role="alert" className="m-0 text-[12px] text-red-700 dark:text-red-400">{more.error}</p> : null}
       </ReadState>
     </Section>
   );
@@ -161,7 +161,7 @@ export default function AccessTab({ projectId, reload: outer, retry: outerRetry 
             <Table testId="captable-who-table"
               cols={[{ key: 'p', label: 'Person or firm' }, { key: 'r', label: 'Relationship' }, { key: 'l', label: 'Level' }, { key: 'g', label: 'Granted by' }, { key: 's', label: 'Since' }, { key: 'v', label: 'Last viewed' }, { key: 'x', label: '' }]}
               rows={rows.map((g) => (
-                <tr key={g.id} className="border-b border-axal-ground last:border-b-0 dark:border-gray-800" data-testid="captable-who-row">
+                <tr key={g.id} className="border-b border-axal-ground last:border-b-0 dark:border-gray-700" data-testid="captable-who-row">
                   <td className={`${TD} font-bold`}>{g.who}</td>
                   <td className={TD}>{g.role}</td>
                   <td className={TD}>
@@ -196,7 +196,7 @@ export default function AccessTab({ projectId, reload: outer, retry: outerRetry 
             <Table testId="captable-links-table"
               cols={[{ key: 'l', label: 'Label' }, { key: 'v', label: 'Level' }, { key: 'e', label: 'Expires' }, { key: 'n', label: 'Views' }, { key: 'w', label: 'Last viewed' }, { key: 'x', label: '' }]}
               rows={linkList.map((l) => (
-                <tr key={l.id} className="border-b border-axal-ground last:border-b-0 dark:border-gray-800" data-testid="captable-link-row">
+                <tr key={l.id} className="border-b border-axal-ground last:border-b-0 dark:border-gray-700" data-testid="captable-link-row">
                   <td className={`${TD} font-bold`}>{l.label}</td><td className={TD}>{l.level}</td>
                   <td className={`${TD} ${MONO}`}>{l.expires}</td><td className={`${TD} ${MONO}`}>{l.views}</td><td className={`${TD} ${MONO}`}>{l.lastViewed}</td>
                   <td className={TD}>{canChange && l.live ? <button type="button" className={LINK} onClick={() => setDialog({ kind: 'unlink', row: l })} data-testid="captable-link-revoke">Revoke</button> : null}</td>

@@ -7,7 +7,7 @@ import {
   sentBackLine, titleOf,
 } from './eventsDeskModel';
 import {
-  CLASH_CLAIM, COUNTING, DEFAULT_SORT, EMPTY_FILTERS, FIRST_TIME, HISTORY_CLAIM, NO_CLASH, PREVIEW_EYE, PREVIEW_FOOT,
+  CLASH_CLAIM, COUNTING, DEFAULT_SORT, EMPTY_FILTERS, agendaFact, FIRST_TIME, HISTORY_CLAIM, NO_CLASH, PREVIEW_EYE, PREVIEW_FOOT,
   PRICE_CHOICES, REVIEW_SORTS, STARTS_CHOICES, clashesFor, compPreviewOf, countedApproveLines, filterCount, historyOf,
   previewOf, queueRowView, reviewFacts, reviewRows, roleChoices, stepSelection, typeChoices,
 } from './reviewModel';
@@ -105,7 +105,39 @@ function Preview({ ev }) {
   );
 }
 
-function Facts({ ev }) {
+/** D1116 (EV3): "[n] items · [m] speakers", with "Show agenda ▾" listing each item. */
+function AgendaFact({ fact, onRetry }) {
+  const [open, setOpen] = useState(false);
+  return (
+    <div className="flex min-w-0 flex-col gap-0.5 sm:col-span-2" data-testid="events-fact-agenda">
+      <dt className={EYE}>{fact.label}</dt>
+      <dd className="m-0 text-[13px] font-semibold leading-snug text-axal-ink dark:text-gray-100">
+        {fact.unrecorded ? <Unrecorded reason={fact.unrecorded.reason}>{fact.unrecorded.text}</Unrecorded> : fact.value}
+      </dd>
+      {fact.failed && onRetry ? <dd className="m-0"><button type="button" className={LINK} onClick={onRetry} data-testid="events-fact-agenda-retry">Try again</button></dd> : null}
+      {fact.items?.length ? (
+        <dd className="m-0 flex flex-col gap-1.5">
+          <button type="button" className={`${LINK} self-start`} aria-expanded={open} onClick={() => setOpen((o) => !o)} data-testid="events-fact-agenda-toggle">
+            {open ? 'Hide agenda ▴' : 'Show agenda ▾'}
+          </button>
+          {open ? (
+            <ol className="m-0 flex list-none flex-col gap-1 p-0" data-testid="events-fact-agenda-list">
+              {fact.items.map((it) => (
+                <li key={it.id} className="flex flex-wrap gap-x-2 text-[12.5px] leading-snug text-axal-ink dark:text-gray-100">
+                  <span className="font-mono text-axal-muted dark:text-gray-400">{it.time}</span>
+                  <span className="font-semibold">{it.title}</span>
+                  {it.who ? <span className={SUB}>{it.who}</span> : null}
+                </li>
+              ))}
+            </ol>
+          ) : null}
+        </dd>
+      ) : null}
+    </div>
+  );
+}
+
+function Facts({ ev, agenda, onRetry }) {
   const [open, setOpen] = useState(false);
   const description = String(ev?.description || '').trim();
   return (
@@ -120,6 +152,7 @@ function Facts({ ev }) {
             {f.sub ? <dd className={`m-0 ${SUB}`}>{f.sub}</dd> : null}
           </div>
         ))}
+        {agenda ? <AgendaFact fact={agenda} onRetry={onRetry} /> : null}
       </dl>
       <div className="flex flex-col gap-1 border-t border-axal-hairline pt-3 dark:border-gray-700">
         <span className={EYE}>Description</span>
@@ -354,7 +387,7 @@ export default function EventsReview({ reads }) {
             <span className="flex flex-wrap gap-1.5"><StatusPill status={ev.status} />{previewOf(ev).type ? <Pill tone="violet">{previewOf(ev).type}</Pill> : null}</span>
           </div>
           <Preview ev={ev} />
-          <Facts ev={ev} />
+          <Facts ev={ev} agenda={agendaFact(own.agenda, ev)} onRetry={reads.reload} />
           <Card title="What approving does" className="!border-axal-lavender-edge !bg-axal-lavender dark:!border-violet-800 dark:!bg-violet-950/40" testId="events-approving-does">
             <ul className="m-0 flex list-disc flex-col gap-1.5 pl-5 text-[13px] leading-normal text-axal-ink marker:text-axal-violet dark:text-gray-100">
               {counted.lines.map((l) => <li key={l}>{l}</li>)}

@@ -10,7 +10,7 @@ import { Plus, Trash2 } from 'lucide-react';
  * (`ScenarioPage.jsx`). The draft's rules live in `scenariosModel.js`.
  */
 
-const INPUT = 'w-full min-w-0 rounded-md border border-gray-300 bg-white px-2 py-1.5 text-sm text-gray-900 dark:border-gray-600 dark:bg-gray-900 dark:text-gray-100';
+const INPUT = 'w-full min-w-0 rounded-md border border-gray-300 bg-white px-2 py-1.5 text-sm text-gray-900 dark:border-gray-600 dark:bg-gray-900 dark:text-gray-200';
 const NR = 'text-xs text-gray-400 dark:text-gray-500';
 
 const fmt = (v) => {
@@ -21,12 +21,12 @@ const fmt = (v) => {
 
 function Group({ title, cols, children, onAdd, addLabel }) {
   return (
-    <section className="rounded-xl border border-gray-200 bg-white p-4 dark:border-gray-800 dark:bg-gray-900" data-testid={`variant-group-${title}`}>
+    <section className="rounded-xl border border-gray-200 bg-white p-4 dark:border-gray-700 dark:bg-gray-900" data-testid={`variant-group-${title}`}>
       <div className="flex items-center justify-between gap-2">
-        <h2 className="text-sm font-semibold text-gray-900 dark:text-gray-100">{title}</h2>
+        <h2 className="text-sm font-semibold text-gray-900 dark:text-gray-200">{title}</h2>
         {onAdd ? (
           <button type="button" onClick={onAdd}
-            className="inline-flex items-center gap-1 text-xs font-medium text-violet-700 hover:underline dark:text-violet-300 dark:hover:underline">
+            className="inline-flex items-center gap-1 text-xs font-medium text-violet-700 hover:underline dark:text-violet-400 dark:hover:underline">
             <Plus size={12} aria-hidden="true" /> {addLabel}
           </button>
         ) : null}
@@ -45,7 +45,7 @@ function Row({ children, onRemove, label }) {
       {children}
       {onRemove ? (
         <button type="button" onClick={onRemove} aria-label={`Remove ${label}`}
-          className="justify-self-start text-gray-400 hover:text-rose-600 dark:text-gray-500 dark:hover:text-rose-400 sm:justify-self-center">
+          className="justify-self-start text-gray-400 hover:text-rose-600 dark:text-gray-500 dark:hover:text-red-400 sm:justify-self-center">
           <Trash2 size={14} aria-hidden="true" />
         </button>
       ) : <div className="w-6" />}
@@ -128,7 +128,7 @@ export function VariantEditor({ draft, setDraft, onSave, saving = false, errors 
       </Group>
 
       {errors.length ? (
-        <ul data-testid="variant-errors" className="space-y-1 rounded-lg border border-rose-200 bg-rose-50 p-3 text-sm text-rose-800 dark:border-rose-800 dark:bg-rose-950/30 dark:text-rose-200">
+        <ul data-testid="variant-errors" className="space-y-1 rounded-lg border border-rose-200 bg-rose-50 p-3 text-sm text-rose-800 dark:border-red-400/50 dark:bg-red-400/10 dark:text-red-400">
           {errors.map((m) => <li key={m}>{m}</li>)}
         </ul>
       ) : null}
@@ -137,7 +137,7 @@ export function VariantEditor({ draft, setDraft, onSave, saving = false, errors 
           className="w-full rounded-lg bg-violet-600 px-4 py-2 text-sm font-medium text-white hover:bg-violet-700 disabled:opacity-50 dark:hover:bg-violet-500 sm:w-auto">
           {saving ? 'Saving…' : naming ? 'Save variant' : 'Save scenario'}
         </button>
-        {saved ? <span className="text-xs text-emerald-700 dark:text-emerald-300" data-testid="variant-saved">Saved. The main cap table did not change.</span> : null}
+        {saved ? <span className="text-xs text-emerald-700 dark:text-emerald-400" data-testid="variant-saved">Saved. The main cap table did not change.</span> : null}
       </div>
     </form>
   );

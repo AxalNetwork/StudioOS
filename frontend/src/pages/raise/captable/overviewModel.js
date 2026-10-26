@@ -143,6 +143,33 @@ export function whoOwns(record, basis = 'fd', search = '') {
   };
 }
 
+/**
+ * D1028 (#2865, CT23a): Who owns as cards on a phone, from `whoOwns`. Each
+ * card is one holder (or the unallocated pool): its group as the pill, its
+ * classes and count as the line, and its share by the switch, fully diluted
+ * or outstanding. The first `limit` show; the foot counts the rest.
+ */
+export function holderCards(owns, basis = 'fd', limit = Infinity) {
+  if (!owns?.available) return { available: false, sentence: owns?.sentence || null, cards: [], total: 0, foot: null, more: false };
+  const all = owns.groups.flatMap((g) => g.rows.map((r) => ({
+    key: r.key,
+    name: r.name,
+    href: r.href,
+    pill: g.label,
+    line: `${r.classes} · ${shares(r.shares)} ${r.optionsOnly ? 'options' : 'shares'}`,
+    value: basis === 'out' ? r.pctOut : r.pctFd,
+  })));
+  const cards = all.slice(0, Math.max(0, limit));
+  return {
+    available: true,
+    cards,
+    total: all.length,
+    label: basis === 'out' ? '% outstanding' : '% fully diluted',
+    foot: all.length ? `1–${cards.length} of ${all.length}` : null,
+    more: cards.length < all.length,
+  };
+}
+
 // ─────────────────────────────────────────────────────────── by class (CT1c)
 
 /** A price per share, stored in millionths of the currency unit: up to six places, since a founder's common is often $0.0001. */

@@ -357,7 +357,10 @@ const SOURCES: Record<typeof ACTIVITY_KINDS[number], { table: string; sql: strin
 export function parseActivityQuery(get: (k: string) => string | undefined) {
   const kind = (get('kind') ?? '').trim();
   if (kind && !(ACTIVITY_KINDS as readonly string[]).includes(kind)) return { error: 'invalid_kind' } as const;
-  return { kind: kind || null, q: (get('q') ?? '').trim().toLowerCase().slice(0, 120), page: Math.max(1, Math.floor(Number(get('page') || 1)) || 1) };
+  // D1005 (#2820): one segment's Activity tab: the moves into or out of it, its sign-ups and its edits.
+  const segment = (get('segment') ?? '').trim();
+  if (segment && !/^[a-z0-9_]{1,64}$/.test(segment)) return { error: 'invalid_segment' } as const;
+  return { kind: kind || null, segment, q: (get('q') ?? '').trim().toLowerCase().slice(0, 120), page: Math.max(1, Math.floor(Number(get('page') || 1)) || 1) };
 }
 
 /**
@@ -366,7 +369,7 @@ export function parseActivityQuery(get: (k: string) => string | undefined) {
  * read is named in `sources` and left out, never an empty list in its place;
  * suggestions are not recorded until part 6.
  */
-export async function readActivity(env: Env, q: { kind: string | null; q: string; page: number }) {
+export async function readActivity(env: Env, q: { kind: string | null; segment?: string; q: string; page: number }) {
   const sources: Record<string, unknown> = {};
   const parts: string[] = [];
   for (const k of ACTIVITY_KINDS) {
@@ -376,9 +379,11 @@ export async function readActivity(env: Env, q: { kind: string | null; q: string
   sources.suggestion = { recorded: false, reason: SUGGESTIONS_REASON };
   if (!parts.length) throw new MembersError(503, 'activity_unreadable', 'The activity could not be read. Try again.');
   const like = q.q.length >= 2 ? `%${q.q}%` : '';
-  const where = ` WHERE (? = '' OR x.kind = ?) AND (? = '' OR lower(COALESCE(um.name, '')) LIKE ? OR lower(COALESCE(um.email, '')) LIKE ? OR lower(COALESCE(ua.name, '')) LIKE ?)`;
+  // A segment's own rows name it as where a member came from or went to; an ask to finish names none, so it is left out.
+  const where = ` WHERE (? = '' OR x.kind = ?) AND (? = '' OR x.seg_from = ? OR x.seg_to = ?) AND (? = '' OR lower(COALESCE(um.name, '')) LIKE ? OR lower(COALESCE(um.email, '')) LIKE ? OR lower(COALESCE(ua.name, '')) LIKE ?)`;
   const from = ' FROM (' + parts.join(' UNION ALL ') + ') x LEFT JOIN users ua ON ua.id = x.actor_id LEFT JOIN users um ON um.id = x.member_id';
-  const binds = [q.kind ?? '', q.kind ?? '', like, like, like, like];
+  const seg = q.segment ?? '';
+  const binds = [q.kind ?? '', q.kind ?? '', seg, seg, seg, like, like, like, like];
   const total = await env.DB.prepare('SELECT COUNT(*) AS n' + from + where).bind(...binds).first<{ n: number }>();
   const rows = (await env.DB.prepare(
     'SELECT x.kind, x.at, x.actor_id, ua.name AS actor_name, ua.role AS actor_role, x.member_id, um.name AS member_name, x.seg_from, x.seg_to, x.extra'

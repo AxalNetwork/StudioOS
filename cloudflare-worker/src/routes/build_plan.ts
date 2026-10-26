@@ -15,6 +15,15 @@
  *   POST  /word/:uid/keep?project=&scope=      { target: brief | prompt }
  *   POST  /word/:uid/discard?project=&scope=   { target: brief | prompt | <item uid> }
  *   An item's wording is kept by its Save: PATCH /items/:uid { wording }.
+ *
+ * D1068 (#2938): Send to… and Back in (`services/buildHandoffs.ts`).
+ *
+ *   POST  /handoffs?project=&scope=       { provider, items, repository? } → the link or the Markdown, recorded
+ *   GET   /handoffs?project=&scope=       the venture's handoffs; the text for its founders only
+ *   GET   /links?project=&scope=          link proposals and links from the tools (a partner: links only)
+ *   POST  /links/:uid/accept?project=&scope=   Link
+ *   POST  /links/:uid/dismiss?project=&scope=  Not this one: the next sync lands it as its own row
+ *   POST  /items/:uid/link                { fed: "issue:owner/repo#n" | "pull:owner/repo#n" } a link by hand
  */
 import { Hono } from 'hono';
 import type { Env, User } from '../types';
@@ -28,6 +37,7 @@ import { run as aiRouterRun } from '../services/aiRouter';
 import { AI_SURFACE } from '../services/aiSurfaces';
 import { parseJsonLoose } from '../services/decks/autofill';
 import { railFor, refuseRun } from '../util/railContext';
+import { acceptLink, dismissLink, linkByHand, listHandoffs, listLinks, sendHandoff } from '../services/buildHandoffs';
 
 const app = new Hono<{ Bindings: Env }>();
 type Project = ProjectRef & { company_id: number | null };
@@ -48,8 +58,10 @@ export async function context(c: any, write: boolean) {
     partner = Boolean(await c.env.DB.prepare('SELECT id FROM user_company_links WHERE company_id = ? AND user_id = ?').bind(project.company_id, user.id).first());
   }
   if (!(owner || (!write && (user.role === 'admin' || partner)))) return c.json({ code: 'not_this_project', detail: 'This plan belongs to the venture’s founders.' }, 404);
-  return { projectId, user, scope, partner };
+  return { projectId, user, scope, partner, owner };
 }
+/** Whether the reader is one of the venture's founders, who alone read a handoff's text. */
+const ownsVentureOf = (ctx: { owner?: boolean }) => Boolean(ctx.owner);
 /** A BuildPlanError as its answer, the same words for every plan route. */
 export function refusal(c: any, e: BuildPlanError) {
   const detail = e.code === 'no_evidence' ? 'Accept findings in Validate before preparing a plan.'
@@ -83,7 +95,7 @@ async function decide(c: any, run: (user: User) => Promise<unknown>) {
     return c.json(await run(user));
   } catch (e) {
     // Our own sentence, keyed on `code`; `error` carries the same code (D278).
-    if (e instanceof PlanItemError) return refuse(c, e.status, { code: e.code, message: e.message, extra: { code: e.code } });
+    if (e instanceof PlanItemError) return refuse(c, e.status, { code: e.code, message: e.message, extra: { ...(e.extra || {}), code: e.code } });
     console.warn('[build-plan] a decision could not be read or written');
     return c.json({ code: 'unreadable', detail: 'The build plan could not be read or saved. Try again.' }, 503);
   }
@@ -183,6 +195,24 @@ const wordingDecision = (how: 'kept' | 'discarded') => async (c: any) => {
 };
 app.post('/word/:uid/keep', wordingDecision('kept'));
 app.post('/word/:uid/discard', wordingDecision('discarded'));
+
+// ─────────────────────────────────────────────── D1068: Send to… and Back in
+
+/** A plan-scoped route: the context's refusal, else the run as a decision write. */
+const scoped = (write: boolean, run: (ctx: { projectId: number; user: User; scope: string; partner: boolean; owner: boolean }, c: any) => Promise<unknown>) => async (c: any) => {
+  const ctx = await context(c, write).catch(() => null);
+  if (!ctx) return c.json({ code: 'unreadable', detail: 'The build plan could not be read. Try again.' }, 503);
+  if (ctx instanceof Response) return ctx;
+  return decide(c, async () => run(ctx, c));
+};
+const linkUid = (c: any) => String(c.req.param('uid') ?? '');
+
+app.post('/handoffs', scoped(true, async (ctx, c) => sendHandoff(c.env, ctx.user, ctx.projectId, ctx.scope, await bodyOf(c))));
+app.get('/handoffs', scoped(false, async (ctx, c) => ({ handoffs: await listHandoffs(c.env, ctx.projectId, ownsVentureOf(ctx)) })));
+app.get('/links', scoped(false, async (ctx, c) => ({ links: await listLinks(c.env, ctx.projectId, ctx.partner) })));
+app.post('/links/:uid/accept', scoped(true, async (ctx, c) => acceptLink(c.env, ctx.user, ctx.projectId, linkUid(c))));
+app.post('/links/:uid/dismiss', scoped(true, async (ctx, c) => dismissLink(c.env, ctx.user, ctx.projectId, linkUid(c))));
+app.post('/items/:uid/link', c => decide(c, async user => linkByHand(c.env, user, itemUid(c), (await bodyOf(c))?.fed)));
 
 export default app;
 

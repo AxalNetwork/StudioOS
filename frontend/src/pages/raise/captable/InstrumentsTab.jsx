@@ -23,20 +23,20 @@ import {
  * says so where its block would be; the rest of the page still draws.
  */
 
-const CARD = 'rounded-xl border border-axal-hairline bg-white dark:border-gray-800 dark:bg-gray-900';
-const INK = 'text-axal-ink dark:text-gray-100';
+const CARD = 'rounded-xl border border-axal-hairline bg-white dark:border-gray-700 dark:bg-gray-900';
+const INK = 'text-axal-ink dark:text-gray-200';
 const MUTED = 'text-axal-muted dark:text-gray-400';
 const EYEBROW = 'text-[10.5px] font-extrabold uppercase tracking-[.07em] text-axal-muted dark:text-gray-400';
 const TH = 'px-3 py-2 text-left text-[10.5px] font-extrabold uppercase tracking-[.07em] text-axal-muted dark:text-gray-400';
-const TD = 'px-3 py-2 align-top text-[12.5px] text-axal-ink dark:text-gray-100';
+const TD = 'px-3 py-2 align-top text-[12.5px] text-axal-ink dark:text-gray-200';
 const MONO = 'font-mono tabular-nums';
-const INPUT = 'rounded-[9px] border border-axal-hairline bg-white px-2.5 py-1.5 text-[12.5px] text-axal-ink dark:border-gray-700 dark:bg-gray-950 dark:text-gray-100';
+const INPUT = 'rounded-[9px] border border-axal-hairline bg-white px-2.5 py-1.5 text-[12.5px] text-axal-ink dark:border-gray-700 dark:bg-gray-950 dark:text-gray-200';
 const PILL = 'inline-flex w-fit items-center gap-1 rounded-full border px-2 py-0.5 text-[11px] font-semibold';
-const NEUTRAL = 'border-axal-hairline bg-white text-axal-ink dark:border-gray-700 dark:bg-gray-900 dark:text-gray-100';
-const AMBER = 'border-amber-200 bg-amber-50 text-amber-800 dark:border-amber-900 dark:bg-amber-950/30 dark:text-amber-300';
-const VIOLET = 'border-violet-200 bg-violet-50 text-axal-violet dark:border-violet-900 dark:bg-violet-950/30 dark:text-violet-300';
-const RED = 'rounded-[10px] border border-red-200 bg-red-50 px-3 py-2 text-[12.5px] font-semibold text-red-700 dark:border-red-900 dark:bg-red-950/30 dark:text-red-300';
-const LINK = 'font-semibold text-axal-violet hover:text-axal-violet-deep dark:text-violet-300 dark:hover:text-violet-200';
+const NEUTRAL = 'border-axal-hairline bg-white text-axal-ink dark:border-gray-700 dark:bg-gray-900 dark:text-gray-200';
+const AMBER = 'border-amber-200 bg-amber-50 text-amber-800 dark:border-amber-300/55 dark:bg-amber-300/10 dark:text-amber-300';
+const VIOLET = 'border-violet-200 bg-violet-50 text-axal-violet dark:border-[#4c3a8a] dark:bg-[#211f3d] dark:text-violet-400';
+const RED = 'rounded-[10px] border border-red-200 bg-red-50 px-3 py-2 text-[12.5px] font-semibold text-red-700 dark:border-red-400/50 dark:bg-red-400/10 dark:text-red-400';
+const LINK = 'font-semibold text-axal-violet hover:text-axal-violet-deep dark:text-violet-400 dark:hover:text-violet-300';
 
 /** One read, answering alone: loading, ready, refused (403 or 404) or error. */
 function useRead(load, projectId, reload) {
@@ -60,7 +60,7 @@ const readCompare = (id) => api.getCapTableCompare(id);
 function Block({ title, tag, aside, testId, children }) {
   return (
     <section className={CARD} data-testid={testId}>
-      <div className="flex flex-wrap items-center justify-between gap-2 border-b border-axal-hairline px-4 py-3 dark:border-gray-800">
+      <div className="flex flex-wrap items-center justify-between gap-2 border-b border-axal-hairline px-4 py-3 dark:border-gray-700">
         <h2 className={`m-0 flex items-center gap-2 text-[15px] font-extrabold tracking-[-.015em] ${INK}`}>{title} {tag}</h2>
         {aside}
       </div>
@@ -84,7 +84,7 @@ function Toolbar({ value, onChange }) {
     </select>
   );
   return (
-    <div className="flex flex-wrap items-center gap-2 border-b border-axal-ground px-4 py-3 dark:border-gray-800" role="search" aria-label="Search instruments" data-testid="captable-inst-toolbar">
+    <div className="flex flex-wrap items-center gap-2 border-b border-axal-ground px-4 py-3 dark:border-gray-700" role="search" aria-label="Search instruments" data-testid="captable-inst-toolbar">
       <Tag kind="record" />
       <input className={`${INPUT} min-w-[160px] flex-1`} value={value.q} onChange={set('q')} placeholder="Search instruments" aria-label="Search instruments" maxLength={200} data-testid="captable-inst-q" />
       {select('type', TYPE_OPTIONS, 'Type')}
@@ -103,10 +103,10 @@ function RecordTable({ rows, all, search }) {
   return (
     <div className="overflow-x-auto">
       <table className="w-full border-collapse" data-testid="captable-inst-table">
-        <thead><tr className="border-b border-axal-hairline dark:border-gray-800">{COLS.map((c) => <th key={c} className={TH}>{c}</th>)}</tr></thead>
+        <thead><tr className="border-b border-axal-hairline dark:border-gray-700">{COLS.map((c) => <th key={c} className={TH}>{c}</th>)}</tr></thead>
         <tbody>
           {rows.map((r) => (
-            <tr key={r.uid} className="border-b border-axal-ground last:border-b-0 dark:border-gray-800" data-testid="captable-inst-row">
+            <tr key={r.uid} className="border-b border-axal-ground last:border-b-0 dark:border-gray-700" data-testid="captable-inst-row">
               <td className={TD}>
                 <Link className={`${LINK} text-[12.5px]`} to={instrumentHref(r.uid, tabSearch(search))} data-testid="captable-inst-open">{r.holder}</Link>
                 <span className={`block text-[11.5px] ${MUTED}`}>{r.type}</span>
@@ -120,7 +120,7 @@ function RecordTable({ rows, all, search }) {
               <td className={TD}>{r.mfn}</td>
               <td className={`${TD} ${MONO}`}>{r.interest ?? <span className={MUTED} title={NOTES_ONLY} data-testid="captable-inst-notes-only">—</span>}</td>
               <td className={`${TD} ${MONO}`}>{r.signed}</td>
-              <td className={TD}>{r.document ? <span className="text-[11.5px] text-axal-violet dark:text-violet-300">{r.document}</span> : <span className={`${PILL} ${AMBER}`} data-testid="captable-inst-nodoc">! No document</span>}</td>
+              <td className={TD}>{r.document ? <span className="text-[11.5px] text-axal-violet dark:text-violet-400">{r.document}</span> : <span className={`${PILL} ${AMBER}`} data-testid="captable-inst-nodoc">! No document</span>}</td>
               <td className={TD}><span className={`${PILL} ${r.status === 'converted' ? NEUTRAL : VIOLET}`}>{r.statusWord}</span></td>
               <td className={TD}><span className={`${PILL} ${NEUTRAL}`} data-testid="captable-inst-source">{r.source}</span></td>
             </tr>
@@ -182,7 +182,7 @@ function ConvertAt({ projectId, today, compare, instruments, onResult }) {
           <button type="button" className={actionPrimary} onClick={go} disabled={busy || today.status === 'loading'} data-testid="captable-convert-go">{busy ? 'Converting…' : 'Convert'}</button>
           <span className={`text-[11.5px] ${MUTED}`}>Runs a round from Today. Nothing is saved.</span>
         </div>
-        {sentence ? <p role="alert" className="m-0 text-[12px] font-semibold text-red-700 dark:text-red-300" data-testid="captable-convert-refusal">{sentence}</p> : null}
+        {sentence ? <p role="alert" className="m-0 text-[12px] font-semibold text-red-700 dark:text-red-400" data-testid="captable-convert-refusal">{sentence}</p> : null}
       </div>
     </Block>
   );
@@ -196,10 +196,10 @@ function Converted({ view }) {
           {view.notice ? <p role="alert" className={`m-0 ${RED}`} data-testid="captable-over-100">{view.notice}</p> : null}
           <div className="overflow-x-auto">
             <table className="w-full border-collapse" data-testid="captable-converted-table">
-              <thead><tr className="border-b border-axal-hairline dark:border-gray-800">{['Holder', 'Conversion price', 'Shares', '% after the round'].map((c) => <th key={c} className={TH}>{c}</th>)}</tr></thead>
+              <thead><tr className="border-b border-axal-hairline dark:border-gray-700">{['Holder', 'Conversion price', 'Shares', '% after the round'].map((c) => <th key={c} className={TH}>{c}</th>)}</tr></thead>
               <tbody>
                 {view.rows.map((r) => (
-                  <tr key={r.uid} className="border-b border-axal-ground last:border-b-0 dark:border-gray-800" data-testid="captable-converted-row">
+                  <tr key={r.uid} className="border-b border-axal-ground last:border-b-0 dark:border-gray-700" data-testid="captable-converted-row">
                     <td className={`${TD} font-bold`}>{r.holder}</td>
                     {r.converted ? (
                       <>
@@ -253,14 +253,14 @@ function InstrumentDrawer({ projectId, uid, record, today, onClose }) {
   }, [projectId, inst?.uid, inst?.status, today.status]); // eslint-disable-line react-hooks/exhaustive-deps
   const v = inst ? instrumentView(inst, { today: today.status === 'ready' ? today.data : null, sim: sim.status === 'ready' ? sim.data : null }) : null;
   const section = (title, children, testId, tag = null) => (
-    <section className="flex flex-col gap-1.5 border-t border-axal-hairline pt-3 dark:border-gray-800" data-testid={testId}>
+    <section className="flex flex-col gap-1.5 border-t border-axal-hairline pt-3 dark:border-gray-700" data-testid={testId}>
       <h3 className={`m-0 flex items-center gap-2 ${EYEBROW}`}>{title} {tag}</h3>
       {children}
     </section>
   );
   const footer = <div className="flex justify-end"><button type="button" className={actionGhost} onClick={onClose} data-testid="captable-instrument-close">Close</button></div>;
   return (
-    <Lightbox label={v?.title || 'Instrument'} eyebrow="Instrument" title={v?.title || 'Instrument'} width={600} onClose={onClose} testId="captable-instrument" footer={footer} pageBelow="lg">
+    <Lightbox label={v?.title || 'Instrument'} eyebrow="Instrument" title={v?.title || 'Instrument'} width={600} onClose={onClose} testId="captable-instrument" footer={footer} phone="sheet">
       {record.status === 'loading' ? <div className="h-24 animate-pulse rounded-xl bg-axal-ground dark:bg-gray-800" aria-hidden="true" data-testid="captable-instrument-loading" />
         : record.status !== 'ready' ? <div data-testid="captable-instrument-unreadable"><Unreadable what="This instrument" claim="This is not a claim that it does not exist." /></div>
           : !v ? <p className={`m-0 text-[13px] ${INK}`} data-testid="captable-instrument-missing">No SAFE or note on this venture’s record has that id.</p>
@@ -320,7 +320,7 @@ export default function InstrumentsTab({ projectId, reload, retry, search = '', 
   return (
     <div className="flex flex-col gap-3.5">
       <section className={CARD} data-testid="captable-instruments">
-        <div className="flex flex-wrap items-center justify-between gap-2 border-b border-axal-hairline px-4 py-3 dark:border-gray-800">
+        <div className="flex flex-wrap items-center justify-between gap-2 border-b border-axal-hairline px-4 py-3 dark:border-gray-700">
           <h2 className={`m-0 text-[15px] font-extrabold tracking-[-.015em] ${INK}`}>Instruments</h2>
           {record.status === 'ready' ? <span className={`font-mono text-[11.5px] ${MUTED}`} data-testid="captable-inst-count">{rows.length} of {all.length}</span> : null}
         </div>

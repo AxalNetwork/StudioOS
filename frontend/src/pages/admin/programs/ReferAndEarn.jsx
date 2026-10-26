@@ -107,16 +107,21 @@ function Funnel({ reads }) {
   );
 }
 
-function StrategicDialog({ row, decision, onClose, onDone }) {
+export function StrategicDialog({ row, decision, onClose, onDone }) {
   const [note, setNote] = useState('');
   const [busy, setBusy] = useState(false);
   const [refusal, setRefusal] = useState('');
   const [done, setDone] = useState('');
   const go = async () => {
+    const reason = note.trim();
+    if (decision === 'declined' && (reason.length < 10 || reason.length > 4000)) {
+      setRefusal('Enter a reason of 10 to 4,000 characters. It will be sent to the member.');
+      return;
+    }
     setBusy(true);
     setRefusal('');
     try {
-      await api.adminStrategicAccessDecision(row.id, { decision, ...(note.trim() ? { note: note.trim() } : {}) });
+      await api.adminStrategicAccessDecision(row.id, { decision, ...(reason ? { note: reason } : {}) });
       setDone(STRATEGIC_DONE[decision]);
       onDone?.();
     } catch (e) {
@@ -132,7 +137,7 @@ function StrategicDialog({ row, decision, onClose, onDone }) {
       <div className={DIALOG_BODY}>
         {row.note ? <p className="m-0 text-[13px] italic text-axal-ink dark:text-gray-100">{`“${row.note}”`}</p> : null}
         <ul className={DIALOG_LINES}><li>{decision === 'granted' ? STRATEGIC_GRANT : STRATEGIC_DECLINE}</li></ul>
-        <Field label="Note for the audit · optional" value={note} onChange={setNote} max={4000} rows={2} testId="programs-strategic-note" />
+        <Field label={decision === 'declined' ? 'Reason sent to the member · required' : 'Note for the audit · optional'} value={note} onChange={setNote} max={4000} rows={2} testId="programs-strategic-note" />
       </div>
     </Lightbox>
   );
