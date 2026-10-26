@@ -376,8 +376,8 @@ test('H · HQ withdraws an application with a reason; a partner has no Withdraw'
   } finally { await hq.unmount(); }
   const partner = await mount(h(ProgrammeApplicants, { uid: 'p1', api: base }));
   try { assert.ok(!partner.by('applicant-withdraw-a1') && partner.by('applicant-decline-a1')); } finally { await partner.unmount(); }
-  // Mutation checked: leave withdraw out of the one-program page's api → HQ has no Withdraw there.
-  assert.match(read('frontend/src/pages/admin/productTesting/ProductTestingTabs.jsx'), /applicantsApi = useMemo\(\(\) => \(\{[^}]*withdraw: api\.withdraw/);
+  // D1203 (#3153): the one-program page draws its own table; HQ's own rows open Withdraw (H) with the page's full api.
+  assert.match(read('frontend/src/pages/admin/productTesting/ProductTestingTabs.jsx'), /setAsking\(\{ kind: 'withdraw', a: r\.raw \}\)/);
 });
 
 test('wiring: the header action, no browser pop-up, no new /api method', () => {

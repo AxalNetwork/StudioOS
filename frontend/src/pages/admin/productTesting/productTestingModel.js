@@ -67,9 +67,7 @@ export const NOT_YET = 'Not read here yet';
 
 /** Why a block draws nothing today. Never a zero, never "none". */
 export const WAITS = Object.freeze({
-  applicants: 'The list of every applicant across programs is not read yet. Each Axal VC program’s applicants are on that program; a partner firm’s are not read here yet.',
-  activity: 'This program’s history is not read yet. Every change is written to it; the read that lists them comes next.',
-  partnerApplicants: 'A partner firm’s applicants are not read here yet. The firm picks its testers; HQ will read the list, not change it.',
+  // D1203 (#3153) filled one program's applicants and Activity, and the Applicants tab: their waits are retired.
   testerPrograms: 'Who approved each tester and how many programs they applied to are not read yet.',
 });
 
