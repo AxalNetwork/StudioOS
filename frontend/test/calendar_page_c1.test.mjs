@@ -86,7 +86,7 @@ const pageKinds = [...(codeOnly(pageRaw).match(/const KINDS = \[([\s\S]*?)\n\];/
 
 test('the canvas and the page were both parsed, so a silent zero-match cannot pass', () => {
   assert.equal(canvasKinds.length, 5, 'the canvas kind table no longer parses as five entries');
-  assert.equal(pageKinds.length, 8, 'the page kind table no longer parses as eight entries');
+  assert.equal(pageKinds.length, 9, 'the page kind table no longer parses as nine entries');
 });
 
 test('the page draws a chip for every kind the worker can emit, and no others', () => {
@@ -95,7 +95,7 @@ test('the page draws a chip for every kind the worker can emit, and no others', 
   // is added — which is exactly how partner_office_hour lost its chip.
   const union = service.match(/\n {2}kind: ((?:'\w+'(?:\s*\|\s*)?)+);/)?.[1] || '';
   const emitted = [...union.matchAll(/'(\w+)'/g)].map((m) => m[1]).sort();
-  assert.equal(emitted.length, 8, 'the CalendarEvent kind union did not parse');
+  assert.equal(emitted.length, 9, 'the CalendarEvent kind union did not parse');
   assert.deepEqual(pageKinds.map((k) => k.id).sort(), emitted,
     'a kind the worker can emit has no chip on /calendar, or a chip names a kind it cannot');
 
@@ -156,17 +156,20 @@ test('D1033: the two My events kinds are derived in the same idiom, apart from e
     expert_booking: /\.cal-dot\[data-kind='expert_booking'\] \{([^}]*)\}/,
     event_ticket: /\.cal-dot\[data-kind='event_ticket'\] \{([^}]*)\}/,
     event_hosted: /\.cal-dot\[data-kind='event_hosted'\] \{([^}]*)\}/,
+    investor_meeting: /\.cal-dot\[data-kind='investor_meeting'\] \{([^}]*)\}/,
   };
   const HUE = {
     expert_booking: /--k-expert_booking: (#[0-9a-f]{6});/g,
     event_ticket: /--k-event_ticket: (#[0-9a-f]{6});/g,
     event_hosted: /--k-event_hosted: (#[0-9a-f]{6});/g,
+    investor_meeting: /--k-investor_meeting: (#[0-9a-f]{6});/g,
   };
   const shapeOf = (id) => css.match(DOT[id])?.[1]?.match(/border-radius: ([^;]+);/)?.[1];
   const huesOf = (id) => [...css.matchAll(HUE[id])].map((m) => m[1]);
   const taken = new Set([...drawnShapes, shapeOf('expert_booking')]);
   const takenHues = new Set([...drawnHues, ...huesOf('expert_booking'), '#6d28d9']);
-  for (const id of ['event_ticket', 'event_hosted']) {
+  // D1190 (#3124): the investor meeting joins in the same idiom, after them.
+  for (const id of ['event_ticket', 'event_hosted', 'investor_meeting']) {
     const shape = shapeOf(id);
     assert.ok(shape, `${id} has no dot`);
     assert.ok(!taken.has(shape), `${id} reuses a shape another kind has`);
@@ -182,6 +185,9 @@ test('D1033: the two My events kinds are derived in the same idiom, apart from e
   assert.deepEqual(pageKinds.filter((k) => k.id.startsWith('event_')).map((k) => [k.id, k.label, k.src]), [
     ['event_ticket', 'Event ticket', 'event_registrations'],
     ['event_hosted', 'Hosting', 'events'],
+  ]);
+  assert.deepEqual(pageKinds.filter((k) => k.id === 'investor_meeting').map((k) => [k.id, k.label, k.src]), [
+    ['investor_meeting', 'Investor meeting', 'raise_prospect_events'],
   ]);
 });
 
@@ -207,7 +213,9 @@ test('every count on the page comes from the one fetched list', () => {
   // kind chip and each day group must all read from it, and nothing may count
   // a second list. This is the failure this codebase shipped twice.
   assert.match(page, /const inRange = items;/, 'the single list is gone');
-  assert.match(page, /out\[k\.id\] = Array\.isArray\(inRange\) \? inRange\.filter\(\(e\) => e\.kind === k\.id\)\.length : null;/,
+  // D1205: counted by chipCount (calendarViews.js), still over inRange, with a
+  // dash for a kind whose source did not answer.
+  assert.match(page, /for \(const k of KINDS\) out\[k\.id\] = chipCount\(inRange, k\.id, failedKinds\);/,
     'the kind counts no longer come from inRange');
   assert.match(page, /return filter \? inRange\.filter\(\(e\) => e\.kind === filter\) : inRange;/,
     'the rendered pool no longer comes from inRange');
@@ -253,16 +261,14 @@ test('the header carries the three canvas actions and the IC gate matches canSch
     'the gate strip lost the canvas\'s wording');
 });
 
-test('the range segment is Week / Month / Agenda with Agenda selected first', () => {
-  assert.match(SCRIPT, /const RANGES = \['Week','Month','Agenda'\];/, 'the canvas range list changed');
-  assert.match(SCRIPT, /const sel = o\.range \|\| 'Agenda';/, 'the canvas no longer defaults to Agenda');
-  assert.deepEqual(
-    [...(page.match(/const RANGES = \[([\s\S]*?)\];/)?.[1] || '').matchAll(/'(\w+)', '(\w+)'/g)].map((m) => m[2]),
-    ['Week', 'Month', 'Agenda'],
-    'the page no longer offers the canvas\'s three ranges',
-  );
-  assert.match(page, /useState\('agenda'\)/, 'the page no longer opens on Agenda');
-  assert.match(page, /aria-pressed=\{range === id\}/, 'the selected range is not announced');
+// D1205 (#2420): the Calendar canvas (CAL1–CAL21) replaced C1's range segment
+// with three views at their own addresses, Month first; calendar_views_d1205
+// holds the model.
+test('the views are links to their addresses, Month first, and the open one is announced', () => {
+  assert.match(page, /const range = viewOf\(pathname\);/, 'the view no longer comes from the address');
+  assert.match(page, /<nav className="cal-seg" aria-label="Calendar views">/, 'the views are not a labelled nav');
+  assert.match(page, /aria-current=\{range === v\.key \? 'page' : undefined\}/, 'the open view is not announced');
+  assert.doesNotMatch(page, /useState\('agenda'\)/, 'the view is component state again, not the address');
 });
 
 test('empty range, degraded source and failed request are three different states', () => {
@@ -301,8 +307,8 @@ test('nothing absent renders as a dash or a plausible zero', () => {
   assert.match(TEMPLATE, /Not recorded/);
   assert.doesNotMatch(page, /[>{]\s*[—–-]\s*[<}]/, 'a bare dash is being rendered as a value');
   // A chip with no readable list carries no number at all rather than a zero.
-  assert.match(page, /\{counts\[k\.id\] === null \? null : <b>\{counts\[k\.id\]\}<\/b>\}/,
-    'a chip prints a count when the list could not be read');
+  assert.match(page, /\{counts\[k\.id\] === null \? null\s*: <b title=\{counts\[k\.id\] === '—' \? 'This source did not answer, so its count is not known\.' : undefined\}>\{counts\[k\.id\]\}<\/b>\}/,
+    'a chip prints a count when the list could not be read, or a dash with no reason');
   // Every "Not recorded" on the rail is followed by the reason it is missing.
   const spec = page.match(/const SPEC = \{([\s\S]*?)\n  \};/)?.[1] || '';
   const states = [...spec.matchAll(/^ {4}(\w+): \{/gm)].map((m) => m[1]);

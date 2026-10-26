@@ -16,7 +16,7 @@ import type { Env } from '../types';
 import type { User } from '../types';
 import { requireAuth } from '../auth';
 import { logAdminAction } from '../services/adminAudit';
-import { agendaLocation, registrationEligibility, validateRegistrationRules } from '../services/eventOrganiser';
+import { agendaLocation, registrationEligibility, registrationRulesFromStore, AudienceSegmentsUnreadable } from '../services/eventOrganiser';
 import { notify } from '../services/notify';
 import { ensureEventsSchema } from '../services/eventsSchema';
 import { EventTimeError, eventTimeFields, eventTimeMessage, sameEventInstant } from '../services/eventTimes';
@@ -380,8 +380,10 @@ events.post('/', async (c) => {
   const locationKind = LOCATION_KINDS.includes(body.location_kind) ? body.location_kind : 'virtual';
   const slug = await ensureUniqueEventSlug(c.env, title);
   let audienceRules;
-  try { audienceRules = JSON.stringify(validateRegistrationRules(body.audience_rules_json ?? body.audience_rules ?? {})); }
-  catch { return c.json({ error: 'invalid_audience_rules' }, 400); }
+  try { audienceRules = JSON.stringify(await registrationRulesFromStore(c.env, body.audience_rules_json ?? body.audience_rules ?? {})); }
+  catch (error) { return error instanceof AudienceSegmentsUnreadable
+      ? c.json({ error: 'segments_unreadable', detail: 'Segment choices could not be read. Try again.' }, 503)
+      : c.json({ error: 'invalid_audience_rules' }, 400); }
 
   const ins: any = await c.env.DB.prepare(
     `INSERT INTO events
@@ -608,8 +610,10 @@ events.patch('/:id', async (c) => {
   bool('waitlist_enabled'); bool('approval_required');
   if ('audience_rules' in body || 'audience_rules_json' in body) {
     let rules;
-    try { rules = validateRegistrationRules(body.audience_rules_json ?? body.audience_rules); }
-    catch { return c.json({ error: 'invalid_audience_rules' }, 400); }
+    try { rules = await registrationRulesFromStore(c.env, body.audience_rules_json ?? body.audience_rules); }
+    catch (error) { return error instanceof AudienceSegmentsUnreadable
+      ? c.json({ error: 'segments_unreadable', detail: 'Segment choices could not be read. Try again.' }, 503)
+      : c.json({ error: 'invalid_audience_rules' }, 400); }
     sets.push('audience_rules_json = ?');
     binds.push(JSON.stringify(rules));
   }
