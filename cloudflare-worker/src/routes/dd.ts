@@ -28,6 +28,7 @@ import {
   type DDSubjectType, type ReportCase, type ReportSection, type ChecklistDepth,
 } from '../services/dueDiligence';
 import { encryptBytes, decryptBytes } from '../services/cryptoBox';
+import { DOWNLOAD_TTL_MS, REMINDER_GAP_MS, dueDateOf, markRequestAnsweredByFile, tokenHash } from '../services/ddRequests';
 
 const dd = new Hono<{ Bindings: Env }>();
 type AppContext = Context<{ Bindings: Env }>;
@@ -317,6 +318,45 @@ dd.get('/cases/:uid', async (c) => {
     // need to evaluate their assigned section, not the full subject
     // dossier. Owners + admins see everything.
     const isScoped = scopedSectionIds != null;
+    // D1248 — the case's documents, a block of its own: a failed read of it
+    // says so (`documents_unreadable`) and the rest of the case still answers.
+    // Request files and reminders follow the requests (owner and admin only);
+    // item evidence follows its item's section, as the checklist does.
+    let documents: { requestFiles: any[]; reminders: any[]; evidence: any[] } | null = null;
+    try {
+      const [requestFiles, reminders, evidenceAll] = await Promise.all([
+        isScoped ? Promise.resolve([]) : c.env.DB.prepare(
+          `SELECT f.id, f.uid, f.name, f.content_type, f.size_bytes, f.dd_request_id, f.created_at
+             FROM data_room_files f JOIN dd_requests r ON r.id = f.dd_request_id
+            WHERE r.case_id = ? ORDER BY f.created_at DESC, f.id DESC`,
+        ).bind(caseId).all<any>().then((r) => r.results || []),
+        isScoped ? Promise.resolve([]) : c.env.DB.prepare(
+          `SELECT request_id, COUNT(*) AS count, MAX(created_at) AS last_at FROM dd_request_reminders
+            WHERE case_id = ? GROUP BY request_id`,
+        ).bind(caseId).all<any>().then((r) => r.results || []),
+        c.env.DB.prepare(
+          `SELECT e.uid, e.item_id, e.kind, e.attachment_id, e.url, e.label, e.created_at,
+                  i.section_id, a.filename, a.mime_type, a.size_bytes, u.name AS added_by_name
+             FROM dd_item_evidence e
+             JOIN dd_checklist_items i ON i.id = e.item_id AND i.case_id = e.case_id
+             LEFT JOIN dd_attachments a ON a.id = e.attachment_id
+             LEFT JOIN users u ON u.id = e.added_by_user_id
+            WHERE e.case_id = ? ORDER BY e.created_at, e.id`,
+        ).bind(caseId).all<any>().then((r) => r.results || []),
+      ]);
+      documents = { requestFiles, reminders, evidence: evidenceAll.filter((e: any) => allowSection(e.section_id)) };
+    } catch (e) {
+      console.warn('[dd] documents read failed:', (e as Error).message);
+    }
+    const requestsOut = isScoped ? [] : requestsAll.map((r) => {
+      const reminded = documents?.reminders.find((m: any) => Number(m.request_id) === Number(r.id));
+      return {
+        ...r,
+        files: documents ? documents.requestFiles.filter((f: any) => Number(f.dd_request_id) === Number(r.id))
+          .map((f: any) => ({ id: f.id, uid: f.uid, name: f.name, content_type: f.content_type, size_bytes: f.size_bytes, created_at: f.created_at })) : null,
+        reminders: documents ? { count: Number(reminded?.count || 0), last_at: reminded?.last_at || null } : null,
+      };
+    });
     const caseOut: Record<string, unknown> = {
       ...cs,
       subject_email: isScoped ? null : await decField(c.env, 'dd_cases', 'subject_email', caseId, cs.subject_email_enc as string | null),
@@ -335,7 +375,9 @@ dd.get('/cases/:uid', async (c) => {
       checklist,
       // Requests are case-wide correspondence with the subject's founder
       // — owner/admin material, hidden from scoped reviewers like sources.
-      requests: isScoped ? [] : requestsAll,
+      requests: requestsOut,
+      evidence: documents ? documents.evidence : null,
+      documents_unreadable: documents == null,
     });
   } finally { await sql.end(); }
 });
@@ -728,6 +770,9 @@ dd.post('/cases/:uid/requests', async (c) => {
   if (!title) return c.json({ error: 'title is required' }, 400);
   const details = body.details ? String(body.details).trim().slice(0, 4000) : null;
   const sectionId = body.section_id == null ? null : parseInt(String(body.section_id), 10);
+  // D1248 — a due date is a real calendar day, today or later; none is null.
+  const dueDate = body.due_date == null || body.due_date === '' ? null : dueDateOf(body.due_date);
+  if (body.due_date != null && body.due_date !== '' && !dueDate) return c.json({ error: 'due_date must be a date (YYYY-MM-DD), today or later' }, 400);
 
   const sql = getSQL(c.env);
   try {
@@ -736,11 +781,11 @@ dd.post('/cases/:uid/requests', async (c) => {
       if (secOwn.length === 0) return c.json({ error: 'Section does not belong to this case' }, 404);
     }
     const inserted: any[] = await sql`
-      INSERT INTO dd_requests (case_id, section_id, title, details, created_by_user_id)
-      VALUES (${caseId}, ${sectionId}, ${title}, ${details}, ${user.id})
-      RETURNING id, case_id, section_id, title, details, state, created_at`;
+      INSERT INTO dd_requests (case_id, section_id, title, details, created_by_user_id, due_date)
+      VALUES (${caseId}, ${sectionId}, ${title}, ${details}, ${user.id}, ${dueDate})
+      RETURNING id, case_id, section_id, title, details, state, due_date, created_at`;
     const row = inserted[0];
-    await audit(c.env, caseId, user, 'request_created', { type: 'dd_request', id: Number(row.id) }, { title });
+    await audit(c.env, caseId, user, 'request_created', { type: 'dd_request', id: Number(row.id) }, { title, due_date: dueDate });
 
     const subjectUserId = await resolveSubjectUserId(c.env, cs);
     if (subjectUserId) {
@@ -769,19 +814,108 @@ dd.patch('/cases/:uid/requests/:id', async (c) => {
   const caseId = Number(cs.id);
   const requestId = parseInt(c.req.param('id'), 10);
   const body = await c.req.json().catch(() => ({}));
-  if (body.state !== 'reviewed') return c.json({ error: "state must be 'reviewed'" }, 400);
+  // D1248 — a request is marked reviewed, or its due date changes (null clears it).
+  const changingDue = body.due_date !== undefined;
+  if (body.state !== 'reviewed' && !changingDue) return c.json({ error: "state must be 'reviewed', or send due_date" }, 400);
+  if (body.state !== undefined && body.state !== 'reviewed') return c.json({ error: "state must be 'reviewed'" }, 400);
+  const dueDate = changingDue && body.due_date !== null && body.due_date !== '' ? dueDateOf(body.due_date) : null;
+  if (changingDue && body.due_date !== null && body.due_date !== '' && !dueDate) return c.json({ error: 'due_date must be a date (YYYY-MM-DD), today or later' }, 400);
 
   const sql = getSQL(c.env);
   try {
-    const rows: any[] = await sql`SELECT id, state FROM dd_requests WHERE id = ${requestId} AND case_id = ${caseId} LIMIT 1`;
+    const rows: any[] = await sql`SELECT id, state, withdrawn_at FROM dd_requests WHERE id = ${requestId} AND case_id = ${caseId} LIMIT 1`;
     if (rows.length === 0) return c.json({ error: 'Request not found on this case' }, 404);
-    await sql`
-      UPDATE dd_requests
-         SET state = 'reviewed', reviewed_at = CURRENT_TIMESTAMP, updated_at = CURRENT_TIMESTAMP
-       WHERE id = ${requestId} AND case_id = ${caseId}`;
-    await audit(c.env, caseId, user, 'request_reviewed', { type: 'dd_request', id: requestId });
-    return c.json({ ok: true, id: requestId, state: 'reviewed' });
+    if (rows[0].withdrawn_at) return c.json({ error: 'This request was withdrawn', code: 'withdrawn' }, 409);
+    if (changingDue) {
+      await sql`UPDATE dd_requests SET due_date = ${dueDate}, updated_at = CURRENT_TIMESTAMP WHERE id = ${requestId} AND case_id = ${caseId}`;
+      await audit(c.env, caseId, user, 'request_due_date_changed', { type: 'dd_request', id: requestId }, { due_date: dueDate });
+    }
+    if (body.state === 'reviewed') {
+      await sql`
+        UPDATE dd_requests
+           SET state = 'reviewed', reviewed_at = CURRENT_TIMESTAMP, updated_at = CURRENT_TIMESTAMP
+         WHERE id = ${requestId} AND case_id = ${caseId}`;
+      await audit(c.env, caseId, user, 'request_reviewed', { type: 'dd_request', id: requestId });
+    }
+    const out: any[] = await sql`SELECT id, state, due_date FROM dd_requests WHERE id = ${requestId}`;
+    return c.json({ ok: true, id: requestId, state: out[0]?.state, due_date: out[0]?.due_date ?? null });
   } finally { await sql.end(); }
+});
+
+/** D1248 — the case's owner or an admin, and the request on this case; else the refusal. */
+async function ownRequest(c: AppContext): Promise<{ user: AppUser; cs: Record<string, unknown>; req: any } | Response> {
+  const cs = await getCaseByUid(c.env, c.req.param('uid') ?? '');
+  if (!cs) return c.json({ error: 'Case not found' }, 404);
+  let user: AppUser;
+  try { user = await requireCaseWriter(c, cs); }
+  catch { return c.json({ error: 'Forbidden: not a case owner or reviewer' }, 403); }
+  if (user.role !== 'admin' && Number(cs.owner_user_id) !== user.id) {
+    return c.json({ error: 'Only the case owner or an admin may change requests' }, 403);
+  }
+  const requestId = parseInt(c.req.param('id') ?? '', 10);
+  const req = await c.env.DB.prepare(
+    'SELECT id, title, state, due_date, withdrawn_at FROM dd_requests WHERE id = ? AND case_id = ?',
+  ).bind(requestId, Number(cs.id)).first<any>();
+  if (!req) return c.json({ error: 'Request not found on this case' }, 404);
+  return { user, cs, req };
+}
+
+/**
+ * D1248 — remind the subject of a request still waiting for an answer. One
+ * reminder a day at most; each one is logged in `dd_request_reminders` and in
+ * the case's audit log.
+ */
+dd.post('/cases/:uid/requests/:id/remind', async (c) => {
+  const own = await ownRequest(c);
+  if (own instanceof Response) return own;
+  const { user, cs, req } = own;
+  if (req.withdrawn_at) return c.json({ error: 'This request was withdrawn', code: 'withdrawn' }, 409);
+  if (req.state !== 'requested') return c.json({ error: 'This request is already answered', code: 'answered' }, 409);
+  const last = await c.env.DB.prepare(
+    'SELECT created_at FROM dd_request_reminders WHERE request_id = ? ORDER BY created_at DESC, id DESC LIMIT 1',
+  ).bind(req.id).first<{ created_at: string }>();
+  const lastMs = last ? Date.parse(/[zZ]$/.test(last.created_at) ? last.created_at : `${last.created_at.replace(' ', 'T')}Z`) : NaN;
+  if (Number.isFinite(lastMs) && Date.now() - lastMs < REMINDER_GAP_MS) {
+    return c.json({ error: 'A reminder was sent in the last day', code: 'reminded_recently', last_at: last!.created_at }, 429);
+  }
+  const subjectUserId = await resolveSubjectUserId(c.env, cs);
+  if (!subjectUserId) return c.json({ error: 'The subject has no account to remind', code: 'no_subject_account' }, 409);
+  const at = new Date().toISOString();
+  await c.env.DB.prepare(
+    'INSERT INTO dd_request_reminders (uid, case_id, request_id, sent_by_user_id, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?)',
+  ).bind(genUid(), Number(cs.id), req.id, user.id, at, at).run();
+  await audit(c.env, Number(cs.id), user, 'request_reminded', { type: 'dd_request', id: Number(req.id) });
+  await notify(c.env, {
+    userId: subjectUserId,
+    type: 'dd_request_reminder',
+    title: `Reminder: ${req.title}`,
+    body: req.due_date ? `This information is due on ${req.due_date}. Open your requests to respond.` : 'This information is still requested. Open your requests to respond.',
+    link: '/due-diligence/requests',
+    channels: ['in_app', 'email'],
+  }).catch(() => null);
+  return c.json({ ok: true, id: Number(req.id), reminded_at: at });
+});
+
+/**
+ * D1248 — withdraw a request. It leaves the subject's page and takes no
+ * answer; a reviewed request stays as it is. The reason, when given, is kept
+ * in the case's encrypted audit details only, never on the request.
+ */
+dd.post('/cases/:uid/requests/:id/withdraw', async (c) => {
+  const own = await ownRequest(c);
+  if (own instanceof Response) return own;
+  const { user, cs, req } = own;
+  if (req.withdrawn_at) return c.json({ error: 'This request is already withdrawn', code: 'withdrawn' }, 409);
+  if (req.state === 'reviewed') return c.json({ error: 'A reviewed request cannot be withdrawn', code: 'reviewed' }, 409);
+  const body = await c.req.json().catch(() => ({}));
+  const reason = body.reason ? String(body.reason).trim().slice(0, 500) : null;
+  const at = new Date().toISOString();
+  const res = await c.env.DB.prepare(
+    'UPDATE dd_requests SET withdrawn_at = ?, withdrawn_by_user_id = ?, updated_at = ? WHERE id = ? AND withdrawn_at IS NULL',
+  ).bind(at, user.id, at, req.id).run();
+  if (!res.meta?.changes) return c.json({ error: 'This request is already withdrawn', code: 'withdrawn' }, 409);
+  await audit(c.env, Number(cs.id), user, 'request_withdrawn', { type: 'dd_request', id: Number(req.id) }, reason ? { reason } : undefined);
+  return c.json({ ok: true, id: Number(req.id), withdrawn_at: at });
 });
 
 // ---------- subject-facing request surface ----------
@@ -797,16 +931,16 @@ dd.get('/requests/mine', async (c) => {
   const sql = getSQL(c.env);
   try {
     const rows: any[] = await sql`
-      SELECT r.id, r.title, r.details, r.state, r.responded_at, r.response_note, r.response_url, r.created_at,
+      SELECT r.id, r.title, r.details, r.state, r.due_date, r.responded_at, r.response_note, r.response_url, r.created_at,
              c.subject_type, c.subject_label
         FROM dd_requests r
         JOIN dd_cases c ON c.id = r.case_id
-       WHERE (c.subject_type != 'project' AND c.subject_id = ${user.id})
+       WHERE r.withdrawn_at IS NULL AND ((c.subject_type != 'project' AND c.subject_id = ${user.id})
           OR (c.subject_type = 'project' AND c.subject_id IN (
                 SELECT p.id FROM projects p
                 JOIN founders f ON f.id = p.founder_id
                 JOIN users u ON LOWER(u.email) = LOWER(f.email)
-               WHERE u.id = ${user.id}))
+               WHERE u.id = ${user.id})))
        ORDER BY r.created_at DESC LIMIT 100`;
     return c.json({ items: rows });
   } finally { await sql.end(); }
@@ -818,14 +952,16 @@ dd.patch('/requests/:id/respond', async (c) => {
   const body = await c.req.json().catch(() => ({}));
   const responseNote = body.response_note ? String(body.response_note).trim().slice(0, 4000) : null;
   const responseUrl = body.response_url ? String(body.response_url).trim().slice(0, 2048) : null;
-  if (!responseNote && !responseUrl) return c.json({ error: 'response_note or response_url is required' }, 400);
+  // D1248 — or a data-room file of the subject's own venture (`file_uid`).
+  const fileUid = typeof body.file_uid === 'string' && body.file_uid.trim() ? body.file_uid.trim().slice(0, 64) : null;
+  if (!responseNote && !responseUrl && !fileUid) return c.json({ error: 'response_note, response_url or file_uid is required' }, 400);
   if (responseUrl && !/^https?:\/\//i.test(responseUrl)) return c.json({ error: 'response_url must be an http(s) URL' }, 400);
 
   const sql = getSQL(c.env);
   try {
     const rows: any[] = await sql`
-      SELECT r.id, r.state, r.title, r.case_id, c.uid AS case_uid, c.subject_type, c.subject_id,
-             c.subject_label, c.owner_user_id
+      SELECT r.id, r.state, r.title, r.case_id, r.withdrawn_at, r.response_note AS prior_note, r.response_url AS prior_url,
+             c.uid AS case_uid, c.subject_type, c.subject_id, c.subject_label, c.owner_user_id
         FROM dd_requests r JOIN dd_cases c ON c.id = r.case_id
        WHERE r.id = ${requestId} LIMIT 1`;
     if (rows.length === 0) return c.json({ error: 'Request not found' }, 404);
@@ -836,11 +972,26 @@ dd.patch('/requests/:id/respond', async (c) => {
     if (subjectUserId !== user.id) return c.json({ error: 'This request is not addressed to you' }, 403);
     // Founders may amend a response until the team marks it reviewed.
     if (req.state === 'reviewed') return c.json({ error: 'This request has already been reviewed' }, 409);
+    // D1248 — a withdrawn request takes no answer; it has left the subject's page.
+    if (req.withdrawn_at) return c.json({ error: 'This request was withdrawn', code: 'withdrawn' }, 409);
+    if (fileUid) {
+      // The file must be one of the venture's own data-room files: the subject is a project.
+      if (req.subject_type !== 'project') return c.json({ error: 'Only a venture answers with a data-room file', code: 'no_data_room' }, 400);
+      const file = await c.env.DB.prepare('SELECT id FROM data_room_files WHERE uid = ? AND project_id = ?')
+        .bind(fileUid, Number(req.subject_id)).first<{ id: number }>();
+      if (!file) return c.json({ error: 'File not found in your data room' }, 404);
+      await c.env.DB.prepare('UPDATE data_room_files SET dd_request_id = ?, updated_at = ? WHERE id = ?')
+        .bind(requestId, new Date().toISOString(), file.id).run();
+      await markRequestAnsweredByFile(c.env, requestId, user.id);
+    }
 
+    // A file alone keeps the note and link already given.
+    const note = fileUid && !responseNote && !responseUrl ? req.prior_note ?? null : responseNote;
+    const url = fileUid && !responseNote && !responseUrl ? req.prior_url ?? null : responseUrl;
     await sql`
       UPDATE dd_requests
          SET state = 'received', responded_at = CURRENT_TIMESTAMP,
-             response_note = ${responseNote}, response_url = ${responseUrl},
+             response_note = ${note}, response_url = ${url},
              updated_at = CURRENT_TIMESTAMP
        WHERE id = ${requestId}`;
     await audit(c.env, Number(req.case_id), user as unknown as AppUser, 'request_responded', { type: 'dd_request', id: requestId });
@@ -1175,6 +1326,158 @@ dd.post('/cases/:uid/sections/:sectionId/nda', async (c) => {
     await audit(c.env, caseId, user, 'nda_uploaded', { type: 'dd_section', id: sectionId }, { filename, size_bytes: size });
     return c.json({ ok: true, filename, size_bytes: size });
   } finally { await sql.end(); }
+});
+
+// ---------- D1248: item evidence and the case's documents ----------
+
+/** The sections a caller may see on a case: null for every section (admin, owner), else theirs. */
+async function visibleSections(env: Env, cs: Record<string, unknown>, user: AppUser): Promise<Set<number> | null> {
+  if (user.role === 'admin' || Number(cs.owner_user_id) === user.id) return null;
+  const rows = (await env.DB.prepare('SELECT DISTINCT section_id FROM dd_reviewers WHERE case_id = ? AND user_id = ?')
+    .bind(Number(cs.id), user.id).all<{ section_id: number }>()).results || [];
+  return new Set(rows.map((r) => Number(r.section_id)));
+}
+
+/**
+ * Evidence for one checklist item: a file (stored as a `dd_attachments` row on
+ * the item's section) or an http(s) link. The same writers as the item: an
+ * admin, the case owner, or a reviewer of the item's section.
+ */
+dd.post('/cases/:uid/items/:itemId/evidence', async (c) => {
+  const cs = await getCaseByUid(c.env, c.req.param('uid'));
+  if (!cs) return c.json({ error: 'Case not found' }, 404);
+  let user: AppUser;
+  try { user = await requireCaseWriter(c, cs); }
+  catch { return c.json({ error: 'Forbidden: not a case owner or reviewer' }, 403); }
+  const caseId = Number(cs.id);
+  const itemId = parseInt(c.req.param('itemId'), 10);
+  const item = await c.env.DB.prepare('SELECT id, section_id, item_key FROM dd_checklist_items WHERE id = ? AND case_id = ?')
+    .bind(itemId, caseId).first<{ id: number; section_id: number; item_key: string }>();
+  if (!item) return c.json({ error: 'Checklist item not found on this case' }, 404);
+  const seen = await visibleSections(c.env, cs, user);
+  if (seen && !seen.has(Number(item.section_id))) return c.json({ error: 'You are not assigned to this section' }, 403);
+
+  const uid = genUid();
+  const at = new Date().toISOString();
+  const type = c.req.header('content-type') || '';
+  if (type.startsWith('multipart/form-data')) {
+    const form = await c.req.formData().catch(() => null);
+    const file = form?.get('file');
+    if (!file || typeof file === 'string') return c.json({ error: 'Evidence file required (multipart field "file")' }, 400);
+    if (!c.env.FILES) return c.json({ error: 'Storage not configured', code: 'storage_not_configured' }, 503);
+    const buf = await (file as File).arrayBuffer();
+    if (buf.byteLength > 10 * 1024 * 1024) return c.json({ error: 'Evidence file too large (max 10MB)' }, 413);
+    const filename = ((file as File).name || 'evidence').slice(0, 200);
+    const mime = (file as File).type || 'application/octet-stream';
+    const key = `dd-evidence/${caseId}/${item.section_id}/${uid}`;
+    await c.env.FILES.put(key, buf, { httpMetadata: { contentType: mime } });
+    const attachment = await c.env.DB.prepare(
+      `INSERT INTO dd_attachments (case_id, section_id, file_key, filename, mime_type, size_bytes, uploaded_by_user_id)
+       VALUES (?, ?, ?, ?, ?, ?, ?) RETURNING id`,
+    ).bind(caseId, item.section_id, key, filename, mime, buf.byteLength, user.id).first<{ id: number }>();
+    await c.env.DB.prepare(
+      `INSERT INTO dd_item_evidence (uid, case_id, item_id, kind, attachment_id, added_by_user_id, created_at, updated_at)
+       VALUES (?, ?, ?, 'file', ?, ?, ?, ?)`,
+    ).bind(uid, caseId, item.id, attachment!.id, user.id, at, at).run();
+    await audit(c.env, caseId, user, 'item_evidence_added', { type: 'dd_checklist_item', id: item.id }, { kind: 'file', size_bytes: buf.byteLength });
+    return c.json({ ok: true, evidence: { uid, item_id: item.id, kind: 'file', attachment_id: attachment!.id, filename, created_at: at } }, 201);
+  }
+  const body = await c.req.json().catch(() => ({}));
+  const url = typeof body.url === 'string' ? body.url.trim().slice(0, 2048) : '';
+  if (!/^https?:\/\/\S+$/i.test(url)) return c.json({ error: 'url must be an http(s) URL, or send a file' }, 400);
+  const label = typeof body.label === 'string' && body.label.trim() ? body.label.trim().slice(0, 200) : null;
+  await c.env.DB.prepare(
+    `INSERT INTO dd_item_evidence (uid, case_id, item_id, kind, url, label, added_by_user_id, created_at, updated_at)
+     VALUES (?, ?, ?, 'link', ?, ?, ?, ?, ?)`,
+  ).bind(uid, caseId, item.id, url, label, user.id, at, at).run();
+  await audit(c.env, caseId, user, 'item_evidence_added', { type: 'dd_checklist_item', id: item.id }, { kind: 'link' });
+  return c.json({ ok: true, evidence: { uid, item_id: item.id, kind: 'link', url, label, created_at: at } }, 201);
+});
+
+/**
+ * A document link: single use, logged, issued to the caller alone, for two
+ * minutes. `kind` is `attachment` (an NDA or item evidence, seen as the
+ * attachment's section is seen) or `request_file` (a data-room file the
+ * subject gave a request, the owner's and an admin's only, as requests are).
+ * Only the token's SHA-256 is stored; the link is `/api/dd/documents/dl/<token>`.
+ */
+dd.post('/cases/:uid/documents/download', async (c) => {
+  const user = await requireDdReader(c);
+  const cs = await getCaseByUid(c.env, c.req.param('uid'));
+  if (!cs) return c.json({ error: 'Case not found' }, 404);
+  const caseId = Number(cs.id);
+  const seen = await visibleSections(c.env, cs, user);
+  if (seen && seen.size === 0) return c.json({ error: 'Forbidden' }, 403);
+  const body = await c.req.json().catch(() => ({}));
+  const id = Number(body.id);
+  if (!Number.isInteger(id) || id <= 0) return c.json({ error: 'id is required' }, 400);
+  let name: string;
+  if (body.kind === 'attachment') {
+    const a = await c.env.DB.prepare('SELECT id, section_id, file_key, filename FROM dd_attachments WHERE id = ? AND case_id = ?')
+      .bind(id, caseId).first<{ id: number; section_id: number | null; file_key: string; filename: string }>();
+    // A section the caller does not review answers as a document that is not there.
+    if (!a || (seen && (a.section_id == null || !seen.has(Number(a.section_id))))) return c.json({ error: 'Document not found' }, 404);
+    if (a.file_key.startsWith('inline:')) return c.json({ error: 'This file was not stored, so it cannot be downloaded', code: 'not_stored' }, 409);
+    name = a.filename;
+  } else if (body.kind === 'request_file') {
+    if (seen) return c.json({ error: 'Only the case owner or an admin may open request files' }, 403);
+    const f = await c.env.DB.prepare(
+      `SELECT f.id, f.name FROM data_room_files f JOIN dd_requests r ON r.id = f.dd_request_id WHERE f.id = ? AND r.case_id = ?`,
+    ).bind(id, caseId).first<{ id: number; name: string }>();
+    if (!f) return c.json({ error: 'Document not found' }, 404);
+    name = f.name;
+  } else {
+    return c.json({ error: "kind must be 'attachment' or 'request_file'" }, 400);
+  }
+  if (!c.env.FILES) return c.json({ error: 'Storage not configured', code: 'storage_not_configured' }, 503);
+  const bytes = new Uint8Array(32);
+  crypto.getRandomValues(bytes);
+  const token = Array.from(bytes).map((b) => b.toString(16).padStart(2, '0')).join('');
+  const now = new Date();
+  const expiresAt = new Date(now.getTime() + DOWNLOAD_TTL_MS).toISOString();
+  await c.env.DB.prepare(
+    `INSERT INTO dd_downloads (uid, token_hash, case_id, user_id, kind, target_id, expires_at, created_at, updated_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+  ).bind(genUid(), await tokenHash(token), caseId, user.id, body.kind, id, expiresAt, now.toISOString(), now.toISOString()).run();
+  await audit(c.env, caseId, user, 'document_link_issued', { type: body.kind === 'attachment' ? 'dd_attachment' : 'data_room_file', id });
+  return c.json({ ok: true, url: `/api/dd/documents/dl/${token}`, expires_at: expiresAt, name });
+});
+
+dd.get('/documents/dl/:token', async (c) => {
+  const user = await requireAuth(c);
+  const token = c.req.param('token');
+  const refused = () => c.json({ error: 'This link has expired or was already used' }, 403);
+  if (!/^[a-f0-9]{64}$/.test(token)) return refused();
+  const hash = await tokenHash(token);
+  const now = new Date().toISOString();
+  // One conditional UPDATE: the caller's own link, unused and in time. A second
+  // open, another user, or a late one changes no row and is refused.
+  const used = await c.env.DB.prepare(
+    `UPDATE dd_downloads SET consumed_at = ?, updated_at = ?
+      WHERE token_hash = ? AND user_id = ? AND consumed_at IS NULL AND expires_at > ?`,
+  ).bind(now, now, hash, Number(user.id), now).run();
+  if (!used.meta?.changes) return refused();
+  const row = await c.env.DB.prepare('SELECT case_id, kind, target_id FROM dd_downloads WHERE token_hash = ?')
+    .bind(hash).first<{ case_id: number; kind: string; target_id: number }>();
+  if (!row) return refused();
+  const doc = row.kind === 'attachment'
+    ? await c.env.DB.prepare('SELECT file_key AS key, filename AS name, mime_type AS type FROM dd_attachments WHERE id = ? AND case_id = ?')
+      .bind(row.target_id, row.case_id).first<{ key: string; name: string; type: string | null }>()
+    : await c.env.DB.prepare('SELECT r2_key AS key, name, content_type AS type FROM data_room_files WHERE id = ?')
+      .bind(row.target_id).first<{ key: string; name: string; type: string | null }>();
+  if (!doc || !c.env.FILES) return c.json({ error: 'Document not found' }, 404);
+  const obj = await c.env.FILES.get(doc.key);
+  if (!obj) return c.json({ error: 'Document not found' }, 404);
+  await audit(c.env, row.case_id, user as unknown as AppUser, 'document_downloaded',
+    { type: row.kind === 'attachment' ? 'dd_attachment' : 'data_room_file', id: row.target_id });
+  const filename = String(doc.name || 'document').replace(/["\r\n\\]/g, '_');
+  return new Response(obj.body as ReadableStream, {
+    headers: {
+      'content-type': doc.type || 'application/octet-stream',
+      'content-disposition': `attachment; filename="${filename}"`,
+      'cache-control': 'private, no-store',
+    },
+  });
 });
 
 export default dd;
