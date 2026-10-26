@@ -564,6 +564,12 @@ missing allowed draft section after validation, in the same batch as its edit;
 reads do not seed content. Published versions and audit behavior stay in D954's
 store; no migration or canvas sample text is introduced.
 
+`capTableAccessRecord.ts` (D1130) copy-builds venture level views from the
+issuance record, with stable holder references and fail-closed ambiguous names.
+`capTableRegister.ts` now projects that record for venture exports and `/live`;
+its account view still reads unassigned connector imports. The venture equity
+plan also carries holder-linked filing states without exposing proof keys.
+
 D1129 searches decoded audit detail values, never JSON keys, and includes demoted/deleted payment actors in Who alongside current admins.
 
 D1133: `billingRecovery.ts` prepares caller-owned renewal invoice intents or card-only SetupIntents behind Billing’s fresh-TOTP routes, and records only allowlisted payment-refusal families. `billingAlerts.ts` atomically couples renewal history with alert transitions. No card/client secret is stored.

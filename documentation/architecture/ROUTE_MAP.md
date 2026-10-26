@@ -1764,6 +1764,14 @@ Deal amounts use migration 599's currency. A founder returns to Raise's Capital
 relationships. The existing main page consumes the DL22b component independently
 of D1148's pending integration.
 
+### D1130 — cap-table recorded views (#3010, part)
+
+D1130 (#3010): `/cap-tables/:projectId` and `/share/captable/venture/:token`
+read recorded issuances at D1019's level; scenario links remain Modelled.
+`/raise/cap-table/option-pool` reads venture grants and holder-linked 83(b)
+filings, with the existing Company creation dialogs as the filing/proof writer.
+Legacy admin cap-table reads are refused; support uses the logged level read.
+
 ### D1102 — data-room owner and support access (#2982, part)
 
 `GET /api/data-room/:projectUid` (`data_room.ts`) returns full details only to the
