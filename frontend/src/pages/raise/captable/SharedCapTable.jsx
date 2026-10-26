@@ -35,7 +35,7 @@ export function SharedViewBody({ read, testId = 'shared-view' }) {
       <span className={EYEBROW}>By group</span>
       {v.split?.length
         ? v.split.map((g) => <div key={g.group} className="flex justify-between text-[13px]"><span className={INK}>{g.group}</span><span className={`${MONO} ${INK}`}>{g.pct}</span></div>)
-        : <span className={`text-[12.5px] ${MUTED}`}>No split could be worked out from the saved model.</span>}
+        : <span className={`text-[12.5px] ${MUTED}`}>{v.splitReason || 'No split could be worked out from the record.'}</span>}
     </div>
   );
   const ledger = (rows) => (
@@ -56,13 +56,17 @@ export function SharedViewBody({ read, testId = 'shared-view' }) {
         </>
       ) : v.kind === 'own' ? (
         <>
-          {v.rows.length ? ledger(v.rows) : <span className={`text-[12.5px] ${MUTED}`} data-testid={`${testId}-own-none`}>The saved model names no position for {v.holder}.</span>}
+          {v.rows.length ? ledger(v.rows) : <span className={`text-[12.5px] ${MUTED}`} data-testid={`${testId}-own-none`}>The record names no position for {v.holder}.</span>}
           {v.instruments.length ? <span className={`text-[12.5px] ${INK}`}>{v.instruments.map((i) => `${i.type} · ${i.basis} · signed ${i.signed}`).join(' · ')}</span> : null}
           {split}
         </>
       ) : (
         <>
-          {v.rows.length ? ledger(v.rows) : <span className={`text-[12.5px] ${MUTED}`}>The saved model holds no positions.</span>}
+          {v.rows.length ? ledger(v.rows) : <span className={`text-[12.5px] ${MUTED}`}>The record holds no positions.</span>}
+          {v.instruments.length ? <div className="flex flex-col gap-1" data-testid={`${testId}-instruments`}>
+            <span className={EYEBROW}>Recorded instruments</span>
+            {v.instruments.map((i, n) => <span key={n} className={`text-[12.5px] ${INK}`}>{i.holder || 'Holder not recorded'} · {i.type} · {i.amount} · {i.basis} · signed {i.signed}</span>)}
+          </div> : null}
           {v.rounds.length ? (
             <div className="flex flex-col gap-1" data-testid={`${testId}-round-list`}>
               <span className={EYEBROW}>Rounds and pricing</span>
@@ -164,7 +168,7 @@ export function CapTableReadPage() {
       {support ? <p className={`m-0 ${LAVENDER}`} data-testid="captable-support-line">You are viewing this cap table as a studio admin, for: ‘{support.reason}’. The founder sees why, and each correction.</p> : null}
       {via === 'studio' && !support ? <p className={`m-0 text-[12.5px] ${MUTED}`} data-testid="captable-support-note">{read.support || 'Open for support asks for a reason first. The founder sees it.'}</p> : null}
       <section className={`${CARD} px-4 py-3`}><SharedViewBody read={read} testId="captable-read-view" /></section>
-      {via === 'grant' || via === 'member' ? <p className={`m-0 text-[11.5px] ${MUTED}`} data-testid="captable-read-scenarios">Scenarios stay the founder’s: a shared level shows the saved model, not its drafts.</p> : null}
+      {via === 'grant' || via === 'member' ? <p className={`m-0 text-[11.5px] ${MUTED}`} data-testid="captable-read-scenarios">Scenarios stay the founder’s: a shared level shows the issuance record.</p> : null}
       {via === 'hq' ? <HqLog /> : null}
       {asking ? <SupportDialog projectId={projectId} onClose={() => setAsking(false)} onOpened={(out) => { setAsking(false); if (out) setSupport(out); }} /> : null}
     </Frame>

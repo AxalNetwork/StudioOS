@@ -84,6 +84,8 @@ function freshDb() {
     CREATE TABLE user_company_links (
       id INTEGER PRIMARY KEY AUTOINCREMENT, company_id INTEGER NOT NULL, user_id INTEGER NOT NULL
     );
+    -- D1137 (migration 597): resolveActiveCompany reads an archived company as none.
+    CREATE TABLE IF NOT EXISTS company_profiles (id INTEGER PRIMARY KEY, archived_at TEXT);
     CREATE TABLE mi_pro_subscriptions (
       user_id INTEGER PRIMARY KEY, status TEXT, subscription_id TEXT, plan TEXT,
       period_end TEXT, stripe_customer_id TEXT
@@ -212,7 +214,12 @@ test('contacts: a forged company id narrows nothing and widens nothing', async (
     ['pr-a', 'pr-b', 'pr-n']);
 });
 
-test('contacts: admin stays unscoped — the \'all\' branch is never narrowed', async () => {
-  assert.deepEqual(await uids(await get(contacts, '/raise-prospects', admin, COMPANY_A)),
-    ['pr-a', 'pr-b', 'pr-n'], "admin's 'all' must not become a company filter");
+test('D1191: staff pipeline summaries use the studio binding, not an admin company filter', async () => {
+  const response = await get(contacts, '/raise-prospects', admin, COMPANY_A);
+  assert.equal(response.status,200);
+  const body:any = await response.json();
+  assert.equal(body.mode,'summary');assert.deepEqual(body.items,[]);
+  assert.deepEqual(body.ventures.map((row:any)=>row.project.id),[PROJECT_A,PROJECT_B,PROJECT_NONE]);
+  assert.deepEqual(body.ventures.map((row:any)=>row.total),[1,1,1]);
+  assert.doesNotMatch(JSON.stringify(body),/Prospect in A|Prospect in B|Prospect unassigned/);
 });

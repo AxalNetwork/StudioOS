@@ -35,7 +35,7 @@ function fixture() {
     CREATE TABLE super_admins(user_id INTEGER PRIMARY KEY);
     CREATE TABLE mi_pro_subscriptions(user_id INTEGER PRIMARY KEY, status TEXT, subscription_id TEXT, plan TEXT, period_end TEXT, stripe_customer_id TEXT);
     CREATE TABLE user_recovery_state(user_id INTEGER PRIMARY KEY, cooling_off_until TEXT, step_up_due_at TEXT);
-    CREATE TABLE company_profiles(id INTEGER PRIMARY KEY);
+    CREATE TABLE company_profiles(id INTEGER PRIMARY KEY, archived_at TEXT);
     CREATE TABLE user_company_links(user_id INTEGER, company_id INTEGER);
     CREATE TABLE activity_logs(id INTEGER PRIMARY KEY, user_id INTEGER, actor TEXT, action TEXT, details TEXT);
     CREATE TABLE integrations(id INTEGER PRIMARY KEY, uid TEXT UNIQUE, user_id INTEGER, provider_key TEXT, status TEXT DEFAULT 'active', auth_type TEXT,
@@ -47,7 +47,7 @@ function fixture() {
       payload_json TEXT, created_at TEXT DEFAULT CURRENT_TIMESTAMP);
     CREATE TABLE integration_waitlist(id INTEGER PRIMARY KEY, user_id INTEGER, provider_key TEXT, notes TEXT, notified_at TEXT, created_at TEXT DEFAULT CURRENT_TIMESTAMP,
       UNIQUE(user_id, provider_key));
-    INSERT INTO company_profiles VALUES (10);`);
+    INSERT INTO company_profiles (id) VALUES (10);`);
   ROLES.forEach((role, i) => {
     db.prepare('INSERT INTO users(id, role, name, email) VALUES (?, ?, ?, ?)').run(i + 1, role, `User ${i + 1}`, `u${i + 1}@example.test`);
     db.prepare('INSERT INTO user_company_links VALUES (?, 10)').run(i + 1);

@@ -76,3 +76,8 @@ scenario and the compare page, `/raise/cap-table/scenarios/<uid>` and
 - **Every board works on a phone and in dark** (D1028).
   - **On a phone:** a page's root carries `PHONE_ROOT` below 1024px. A dialog or drawer is a bottom sheet (`Lightbox`'s `phone="sheet"`), except the holder, which is a page. A wide table either has a phone form (cards, the compare swipe) or scrolls sideways.
   - **In dark:** use CT8's pairs in `DARK` (`capTableModel.js`). `captable_phone_dark_d1028.test.mjs` fails on any other dark violet, status, hairline or ink class.
+
+D1130 moves venture access/share views and holder choices to recorded issuances.
+Option pool reads venture grants and holder-linked 83(b) filings; an unreadable
+filing block leaves the grants visible, and an unstored filing date stays Not
+recorded. Company creation's existing dialogs record the filing and proof.

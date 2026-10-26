@@ -37,3 +37,7 @@ which finds it in either place.
 
 Entries in `DECISIONS.md` stay where they are. Nothing is moved or rewritten,
 and citations by number keep working.
+
+| File | Purpose |
+| --- | --- |
+| `D1151.md` | Deal Team, Market and Traction read contracts and verification. |

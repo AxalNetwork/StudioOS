@@ -472,7 +472,7 @@ export async function runFlowStep(env: Env, raw: unknown, opts: FlowOptions = {}
   try {
     ({ usage } = await meteredCall(env, {
       userId: run.user_id, executionId: run.execution_id, operation: step.operation, component: row.idempotency_key,
-      quoteMicrousd: quote, pricingVersion: FLOW_POLICY.version, timeoutMs: STEP_TIMEOUT_MS, now,
+      quoteMicrousd: quote, pricingVersion: FLOW_POLICY.version, timeoutMs: STEP_TIMEOUT_MS, now, surface: 'flow',
     }, async (meter) => {
       let reported: number | null = null;
       const tracked: Meter = { reportCost(n: number) { meter.reportCost(n); reported = n; } };

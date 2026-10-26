@@ -46,23 +46,25 @@ The canvas never lets the two share a number without a tag. On `main`:
 
 | Board | Drawn by D1015 | Waits for |
 |---|---|---|
-| CT1 Overview | the module page as today, the tool's tab bar, and the Modelled line | the record (part 1), the class view, Needs you, the tiles and bars (part 5) |
-| CT2 Holder drawer | today's record page at `/raise/cap-table/h-<n>` | part 5 |
-| CT3 Instruments | SAFEs sent through StudioOS (On record when countersigned); the model's SAFEs and notes with basis, the pre-money check, interest, "Cannot convert", and the round's conversion lines (Modelled) | the convert-at card, the modelled columns, the chart and the over-100% notice (parts 3 and 6) |
-| CT4 Instrument drawer | — | parts 3 and 6 |
-| CT5 Option pool | the 409A in the Worker's words; the model's pool; "Grants and vesting: not read here yet" | per-venture pools and vesting (part 2), the burn-down (part 6) |
-| CT6 Scenarios | the model ("Cap table · model") and each draft variant as cards, opening the simulator or the variant's page | the editor, multi-exit and top-up payer (parts 3 and 7) |
-| CT7–CT9 Compared, dark, waterfall | — | parts 3 and 7, 11 |
-| CT10 History | — (no tab) | part 1's history read, part 8 |
-| CT11–CT12 Proposals, dialogs | — | parts 1 and 4, part 8 |
-| CT13 Access | — (no tab) | part 4's grants, part 9 |
-| CT14 Import and export | — (no tab) | part 4's export, part 9 |
-| CT15 Investor view | — | part 10, with DEAL (#2421) |
-| CT16–CT18 Co-founder, Advisor, OP, Admin | today's gates (#2651) | parts 4 and 9 |
-| CT19–CT22, CT24 States | each read's own loading, unreadable and refused state | part 5 |
-| CT23 Phone | CycleRoute's phone module page and `CycleBar` on each tab | part 11 |
+| CT1 Overview | the module page as today, the tool's tab bar, and the Modelled line | the record (part 2), the class view, Needs you, the tiles and bars (part 7) |
+| CT2 Holder drawer | today's record page at `/raise/cap-table/h-<n>` | part 7 |
+| CT3 Instruments | SAFEs sent through StudioOS (On record when countersigned); the model's SAFEs and notes with basis, the pre-money check, interest, "Cannot convert", and the round's conversion lines (Modelled) | the convert-at card, modelled columns, chart and over-100% notice (parts 3 and 8) |
+| CT4 Instrument drawer | — | parts 3 and 8 |
+| CT5 Option pool | the 409A in the Worker's words; the model's pool; "Grants and vesting: not read here yet" | per-venture pools and vesting (part 5), burn-down and grants (part 8) |
+| CT6 Scenarios | the model ("Cap table · model") and each draft variant as cards, opening the simulator or the variant's page | the editor, multi-exit and top-up payer (parts 3 and 9) |
+| CT7–CT9 Compared, dark, waterfall | — | parts 3 and 9, phone/dark part 13 |
+| CT10 History | — (no tab) | part 2's history read, part 10 |
+| CT11–CT12 Proposals, dialogs | — | parts 2 and 6, part 10 |
+| CT13 Access | — (no tab) | part 4's grants, part 11 |
+| CT14 Import and export | — (no tab) | part 5's export, part 11 |
+| CT15 Investor view | — | part 12, with DEAL (#2421) |
+| CT16–CT18 Co-founder, Advisor, OP, Admin | today's gates (#2651) | parts 4 and 11 |
+| CT19–CT22, CT24 States | each read's own loading, unreadable and refused state | part 7 |
+| CT23 Phone | CycleRoute's phone module page and `CycleBar` on each tab | part 13 |
 
 ## 5. Pins that move with the record
 
-- `frontend/test/captable_equity_plan.test.mjs` (~153-160) fails if a discount or an MFN column appears. Part 1 stores them and updates that pin.
-- `frontend/test/cap_table_variants_d632.test.mjs` pins the variants page that part 7 retires.
+- `frontend/test/captable_equity_plan.test.mjs` (~153-160) fails if a discount or an MFN column appears. Part 2 stores them and updates that pin.
+- `frontend/test/cap_table_variants_d632.test.mjs` pins the variants page that part 9 retires.
+
+D1130 (2026-10-25) corrected the Waits for part numbers against D1015 §6. The earlier findings above remain a dated snapshot.
