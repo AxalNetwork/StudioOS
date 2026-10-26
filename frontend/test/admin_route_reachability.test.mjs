@@ -360,6 +360,8 @@ const COMPOSED = new Map([
     'frontend/src/pages/admin/programs/ProgramFrame.jsx',
     'frontend/src/pages/admin/programs/ProgramTabs.jsx',
     'frontend/src/pages/admin/ReferralReview.jsx',
+    // D965 (#2798): Overview's Rewards card, with Open Perks and Edit in Credit rules.
+    'frontend/src/pages/admin/programs/ReferRewards.jsx',
   ]],
   ['frontend/src/pages/admin/programs/ProgramPage.jsx', [
     'frontend/src/pages/admin/programs/ProgramFrame.jsx',

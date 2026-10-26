@@ -2573,6 +2573,8 @@ export const api = {
     return request(`/refer-earn/admin/submissions${qs ? `?${qs}` : ''}`);
   },
   adminReferralSubmission: (uid) => request(`/refer-earn/admin/submissions/${encodeURIComponent(uid)}`),
+  // D965 (#2798): the referral reward rules, and what they paid (a Super Admin's).
+  adminReferralRewards: () => request('/refer-earn/admin/rewards'),
   // D1124 (#3004): the referral funnel, the furthest stage each referral reached.
   adminReferralFunnel: () => request('/refer-earn/admin/submissions/funnel'),
   adminReferralWeekly: (weeks = 12) => request(`/refer-earn/admin/submissions/weekly?${new URLSearchParams({ weeks })}`),

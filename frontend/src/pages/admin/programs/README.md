@@ -54,6 +54,10 @@ The pieces they draw with:
   the learner's record (D962).
 - `ReferralPartners.jsx` — Referral partners' Overview links and its header
   action.
+- `ReferRewards.jsx` — D965 (#2798): Refer & Earn Overview's Rewards issued
+  tile and Rewards card, each on its own read (part 4's paged total and
+  `GET /api/refer-earn/admin/rewards`), with the words from
+  `frontend/src/lib/referralRewards.js`.
 - `parts.jsx` — the tile, skeleton, Unreadable, placeholder, pills, moved
   notice and How it runs, over Partner invitations' card and chips; and
   D961's chart block (its skeleton, Unreadable and Chart/Table switch), the
