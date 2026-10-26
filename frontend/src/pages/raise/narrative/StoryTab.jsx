@@ -14,7 +14,8 @@ import {
   audienceOf, bindingFromItem, bindingsBySection, boundChip, cannotInsert, draftOf, inlineSegments, insertAt, insertGroups, isLiveDeck,
   moveSection, runRefusal, saveDialog, savePlan, sectionDot, storySections, unplacedFigures,
 } from './storyModel';
-import { versionHref } from './narrativeModel';
+import { OBJECTION_OPTION, versionHref } from './narrativeModel';
+import { ObjectionsPanel } from './ObjectionsPanel';
 
 /**
  * D910 (#2694) — NAR2, Story: the sections rail with its dots, reorderable by
@@ -23,7 +24,10 @@ import { versionHref } from './narrativeModel';
  * PITCH's registry (NAR3, Insert a figure); typed numbers shown as claims;
  * and Save version, which opens a dialog that says what it changes. Dark
  * (NAR20) and the phone frame (NAR19b) are the same component. See
- * `storyModel.js` for every derivation.
+ * `storyModel.js` for every derivation. D913 (#2697) adds NAR10, the
+ * Objections panel (`ObjectionsPanel.jsx`): its "Answer it" is Ask Eadwyn on
+ * the open section, and lands in the same proposal, never in the words until
+ * accepted. As Ask Eadwyn, it is not offered on a phone.
  */
 
 const CARD = 'rounded-xl border border-axal-hairline bg-white dark:border-gray-800 dark:bg-gray-900';
@@ -240,12 +244,14 @@ export default function StoryTab({ projectId, version, search = '', phone = fals
   // D1114: Home's From Mercury "Insert in Story" arrives as `?insert=<source_key>` and opens Insert a figure on it.
   const insertOnly = useMemo(() => new URLSearchParams(search).get('insert') || null, [search]);
   const [onlyKey, setOnlyKey] = useState(insertOnly);
+  // D913: Home's "Answer it" arrives as `?objection=<key>` and marks that objection in the panel.
+  const focusObjection = useMemo(() => new URLSearchParams(search).get('objection') || null, [search]);
   const [asking, setAsking] = useState(null);
   const [run, setRun] = useState(null);
   const [refusal, setRefusal] = useState(null);
   const words = useRef(null);
   const caret = useRef(null);
-  useRailOption(asking ? 'draft:narrative-section' : null, 'Draft this section');
+  useRailOption(asking === 'objection' ? 'draft:narrative-objection' : asking ? 'draft:narrative-section' : null, asking === 'objection' ? 'Answer an objection' : 'Draft this section');
 
   useEffect(() => {
     if (!sections) { setDraft(null); return; }
@@ -295,6 +301,16 @@ export default function StoryTab({ projectId, version, search = '', phone = fals
       setRefusal(runRefusal(e));
     } finally { setAsking(null); }
   };
+  // D913 (NAR10): "Answer it" drafts the open section so it answers one objection; it writes nothing.
+  const answer = async (key) => {
+    setAsking('objection'); setRun(null); setRefusal(null);
+    try {
+      const r = await narrativeApi.draftObjection(projectId, key, { version, section: active, words: cur.body }, railPressHeaders(OBJECTION_OPTION));
+      setRun({ section: active, text: r.text, removed: Number(r.removed) || 0 });
+    } catch (e) {
+      setRefusal(runRefusal(e));
+    } finally { setAsking(null); }
+  };
   const accept = () => { patch(run.section, { body: run.text, source: 'eadwyn' }); setRun(null); };
   const insertFigure = (it) => {
     const b = bindingFromItem(it);
@@ -317,7 +333,7 @@ export default function StoryTab({ projectId, version, search = '', phone = fals
   return (
     <div className="flex flex-col gap-3.5" data-testid="narrative-story">
       {isLiveDeck(read.data) ? <p role="status" className={`m-0 text-[12.5px] ${MUTED}`} data-testid="story-live-deck">{LIVE_DECK}</p> : roleReadOnly ? <p role="status" className={`m-0 text-[12.5px] ${MUTED}`} data-testid="story-read-only">Read only. Notes are visible to the founder.</p> : null}
-      <div className={phone ? 'flex flex-col gap-3' : 'grid grid-cols-1 gap-3.5 lg:grid-cols-[230px_minmax(0,1fr)]'}>
+      <div className={phone ? 'flex flex-col gap-3' : 'grid grid-cols-1 gap-3.5 lg:grid-cols-[230px_minmax(0,1fr)] xl:grid-cols-[230px_minmax(0,1fr)_280px]'}>
         {phone ? (
           <label className={`${CARD} flex items-center gap-2 px-3 py-2`}>
             <span className={EYEBROW}>Section</span>
@@ -397,6 +413,8 @@ export default function StoryTab({ projectId, version, search = '', phone = fals
             <Link className={`${LINK} text-[12.5px]`} to={versionHref(version, search)} data-testid="narrative-story-open">{roleReadOnly ? `Open v${version}` : `One-liner, investor type and what it checks against: open v${version}`}</Link>
           </section>
         ) : null}
+        <ObjectionsPanel projectId={projectId} canAnswer={!readOnly && !phone && Boolean(spec && cur)} aiOn={aiOn} busy={Boolean(asking)}
+          focusKey={focusObjection} sectionLabel={spec?.label ?? null} onAnswer={answer} offLine={AI_OFF_LINE} />
       </div>
       {inserting ? (
         <InsertFigure sources={sources} current={cur?.bindings || []} only={onlyKey} onClose={() => { setInserting(false); setOnlyKey(null); }} onInsert={insertFigure} />

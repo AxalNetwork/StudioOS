@@ -134,3 +134,9 @@ d3e56a7ede0ae62ca9a133216acccd33d4506841:cloudflare-worker/test/segment_suggesti
 # instead, so no later commit carries this one. Scoped to the one finding, as
 # D482's entry is.
 805f80f743df531c959d5aa40bc86b53b1bf8177:cloudflare-worker/test/capital_relationships_d1190.test.ts:generic-api-key:26
+# D913 (#2697): a sample objection key, '0123456789abcdef', in the D909 home
+# test's fixture, flagged by generic-api-key on the commit that added it. It is
+# the 16-hex shape of an objection's hash key, keys nothing and was never a
+# credential. The next commit writes it as 'a'.repeat(16), so no later commit
+# carries the literal. Scoped to the one finding, as D482's entry is.
+703c1b81192f64c2472bc39101c6106e766a0d9a:frontend/test/narrative_home_d909.test.mjs:generic-api-key:43

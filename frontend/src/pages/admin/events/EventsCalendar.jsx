@@ -7,7 +7,7 @@ import {
   CAL_VIEWS, LEGEND, WEEKDAYS, addMonths, blockBox, calendarSearch, calendarState, monthGrid, monthList, overlapText,
   seatsLine, timeText, unplacedLine, weekGrid, addDays,
 } from './calendarModel';
-import { hostOptions, matchesFilters, readQuery, writeQuery } from './allEventsModel';
+import { formatLabel, hostOptions, matchesFilters, readQuery, typeLabel, writeQuery } from './allEventsModel';
 import EventFilters, { CONTROL } from './EventFilters';
 import { CARD, H2, LINK, SUB, StatusPill } from './parts';
 
@@ -18,9 +18,10 @@ import { CARD, H2, LINK, SUB, StatusPill } from './parts';
  * Month runs Monday to Sunday, three chips a day and "+n more", which opens
  * the day. Week is a time grid where overlapping events sit side by side.
  * List is the phone's default. A day with a clash (D915 §2's rule) carries an
- * amber dot and "[n] overlap". A chip opens a small card: title, time, seats,
- * status and "Open event". The address keeps the month, the view and the
- * filters (Status, Visibility, Price and Host; Type and Format wait for part 1).
+ * amber dot and "[n] overlap". A chip opens a small card: title, time, type
+ * and format (D1116), seats, status and "Open event". The address keeps the
+ * month, the view and the filters (Status, Type, Visibility, Format, Price and
+ * Host; Type and Format are D1116's).
  */
 
 const PHONE = '(max-width: 639px)';
@@ -185,6 +186,7 @@ function Selected({ sel, join, onOpen, onClose }) {
         {close}
       </div>
       <p className={`m-0 font-mono ${SUB}`} data-testid="events-cal-card-when">{whenLine(ev)}</p>
+      <p className={`m-0 ${SUB}`} data-testid="events-cal-card-kind">{`${typeLabel(ev)} · ${formatLabel(ev)}`}</p>
       <p className="m-0 font-mono text-[12.5px] font-semibold text-axal-ink dark:text-gray-100" data-testid="events-cal-card-seats">{seatsLine(ev, join)}</p>
       {sel.e.clashes ? <p className="m-0 text-[12.5px] font-semibold text-amber-800 dark:text-amber-300" data-testid="events-cal-card-clash">{`Overlaps ${sel.e.clashes === 1 ? 'one other event' : `${sel.e.clashes} other events`}.`}</p> : null}
       <div className="flex flex-wrap items-center justify-between gap-2">
@@ -245,7 +247,7 @@ export default function EventsCalendar({ reads, now }) {
         </div>
       </div>
 
-      <EventFilters query={query} onChange={filter} hosts={hostOptions(list)} fields={['status', 'visibility', 'price', 'host']} />
+      <EventFilters query={query} onChange={filter} hosts={hostOptions(list)} fields={['status', 'type', 'visibility', 'format', 'price', 'host']} />
       <Legend />
 
       {reads.all.status === 'loading' ? <span className="font-mono text-[12px] text-axal-muted dark:text-gray-400">Reading…</span> : null}

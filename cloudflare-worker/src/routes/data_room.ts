@@ -546,7 +546,8 @@ function countOf(value: unknown): number {
   if (typeof value !== 'number' || !Number.isSafeInteger(value) || value < 0) throw new Error('Invalid summary count');
   return value;
 }
-async function roomSummary(env: Env, project: { id: number; uid: string }) {
+/** Also the data-room card an admin reads on the Raise overview (`cycle_raise.ts`, D1102 part 2). */
+export async function roomSummary(env: Env, project: { id: number; uid: string }) {
   const [files, folders, grants] = await Promise.all([
     summaryBlock(async () => {
       const result: { success?: boolean; results?: { visibility: string; checklist_item: string | null; n: number }[] } = await env.DB.prepare(

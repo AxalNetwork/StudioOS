@@ -382,6 +382,38 @@ function extractDeckMethodId(row: any): string | null {
   return null;
 }
 
+/** A deck's field values by key, the first slide's value winning (Task #2's write-back). */
+function deckFieldsByKey(slides: unknown[]): Record<string, any> {
+  const out: Record<string, any> = {};
+  for (const s of Array.isArray(slides) ? slides : []) {
+    if (!Array.isArray((s as any)?.fields)) continue;
+    for (const f of (s as any).fields) {
+      if (f && typeof f.key === 'string' && !(f.key in out)) out[f.key] = f.value;
+    }
+  }
+  return out;
+}
+
+/** The Review-the-deal slide's `contact_deal_access_json`, parsed, or null. */
+function dealAccessOf(fieldByKey: Record<string, any>): Record<string, any> | null {
+  let da: any = fieldByKey['contact_deal_access_json'];
+  if (typeof da === 'string') {
+    if (!da.trim()) return null;
+    try { da = JSON.parse(da); } catch { return null; }
+  }
+  return da && typeof da === 'object' ? da : null;
+}
+
+/** The NDA flag a demo-day deck carries: the legacy field, else the deal-access JSON's; undefined when neither says. */
+function slideNda(fieldByKey: Record<string, any>): boolean | undefined {
+  const v = fieldByKey['contact_deal_access_nda_required'];
+  if (typeof v === 'boolean') return v;
+  if (v === 0 || v === 1) return !!v;
+  if (v === 'true' || v === 'false') return v === 'true';
+  const da = dealAccessOf(fieldByKey);
+  return da && typeof da.nda_required === 'boolean' ? da.nda_required : undefined;
+}
+
 export function sanitizeImageUrl(input: string | null | undefined): string | null {
   if (!input) return null;
   const raw = String(input).trim();
@@ -1214,39 +1246,27 @@ decks.put('/:id', async (c) => {
       // Slides carry `fields` as an array of {key,value,...} descriptors
       // (see sanitizeFields). Build a key→value lookup across every slide
       // so we don't depend on slide id/spec_id staying stable.
-      const fieldByKey: Record<string, any> = {};
-      for (const s of slides) {
-        if (!Array.isArray((s as any)?.fields)) continue;
-        for (const f of (s as any).fields) {
-          if (f && typeof f.key === 'string' && !(f.key in fieldByKey)) {
-            fieldByKey[f.key] = f.value;
-          }
-        }
-      }
+      const fieldByKey = deckFieldsByKey(slides);
       let nextUrl: string | undefined;
-      let nextNda: boolean | undefined;
       const urlVal = fieldByKey['contact_deal_access_url'];
       if (typeof urlVal === 'string') nextUrl = urlVal.trim();
-      const ndaVal = fieldByKey['contact_deal_access_nda_required'];
-      if (typeof ndaVal === 'boolean') nextNda = ndaVal;
-      else if (ndaVal === 0 || ndaVal === 1) nextNda = !!ndaVal;
-      else if (ndaVal === 'true' || ndaVal === 'false') nextNda = ndaVal === 'true';
-      const daRaw = fieldByKey['contact_deal_access_json'];
-      let da: any = daRaw;
-      if (typeof daRaw === 'string' && daRaw.trim()) {
-        try { da = JSON.parse(daRaw); } catch { da = null; }
-      }
-      if (da && typeof da === 'object') {
-        if (typeof da.deal_room_url === 'string' && nextUrl === undefined) nextUrl = da.deal_room_url.trim();
-        if (typeof da.nda_required === 'boolean' && nextNda === undefined) nextNda = da.nda_required;
-      }
+      const da = dealAccessOf(fieldByKey);
+      if (da && typeof da.deal_room_url === 'string' && nextUrl === undefined) nextUrl = da.deal_room_url.trim();
+      // D1102 (#2982, migration 608): every save carries the NDA flag the
+      // deck was built with, so a value equal to the saved version's is that
+      // echo, not a choice. Only a changed value is the founder's choice.
+      let savedSlides: unknown[] = [];
+      try { savedSlides = JSON.parse(row.slides || '[]'); } catch { savedSlides = []; }
+      const shownNda = slideNda(fieldByKey);
+      const nextNda = shownNda !== undefined && shownNda !== slideNda(deckFieldsByKey(savedSlides)) ? shownNda : undefined;
       if (nextUrl !== undefined || nextNda !== undefined) {
         const { ensureProjectDataRoomColumns } = await import('./projects');
         await ensureProjectDataRoomColumns(c.env);
         const sets: string[] = [];
         const vals: any[] = [];
         if (nextUrl !== undefined) { sets.push('data_room_url = ?'); vals.push(nextUrl || null); }
-        if (nextNda !== undefined) { sets.push('data_room_nda_required = ?'); vals.push(nextNda ? 1 : 0); }
+        // The choice, and its mirror in the old column for a rolled-back Worker (migration 608).
+        if (nextNda !== undefined) { sets.push('data_room_nda_choice = ?', 'data_room_nda_required = ?'); vals.push(nextNda ? 1 : 0, nextNda ? 1 : 0); }
         vals.push(Number(row.project_id));
         await c.env.DB.prepare(`UPDATE projects SET ${sets.join(', ')} WHERE id = ?`).bind(...vals).run();
       }

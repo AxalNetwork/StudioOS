@@ -27,7 +27,7 @@
 import { EVENT_TYPES } from '../../../lib/eventTypes.js';
 import { NOT_RECORDED, titleCase } from '../../../lib/absence.js';
 import {
-  compFlags, dateLabel, factsOf, listJoin, parseStamp, queueFlags, roleWord, startShort, statusWord, titleOf, yourTimeLine, zoneOf,
+  agendaRows, compFlags, dateLabel, factsOf, listJoin, parseStamp, queueFlags, roleWord, startShort, statusWord, titleOf, yourTimeLine, zoneOf,
 } from './eventsDeskModel.js';
 import { OVERDUE_HOURS, hostLine, matchesSearch } from './allEventsModel.js';
 import { clashMap } from './calendarModel.js';
@@ -324,6 +324,22 @@ export function reviewFacts(ev) {
     else out.push(f);
   }
   return out;
+}
+
+/**
+ * D1116 (EV3): the Agenda fact, "[4] items · [3] speakers", from the event's
+ * agenda read (R5). Speakers are the distinct names the items record; an item
+ * with no speaker adds none. A failed read says so, never "no agenda".
+ * `items` are `agendaRows`, for "Show agenda ▾".
+ */
+export function agendaFact(read, ev) {
+  const base = { key: 'agenda', label: 'Agenda' };
+  if (!read || read.status === 'loading') return { ...base, value: 'Reading…', items: null };
+  const list = read.status === 'ready' && Array.isArray(read.data?.agenda) ? read.data.agenda : null;
+  if (!list) return { ...base, unrecorded: { text: 'Could not be read', reason: 'The agenda could not be read. That is not the same as none.' }, items: null, failed: true };
+  if (!list.length) return { ...base, value: 'No agenda items', items: [] };
+  const speakers = new Set(list.map((it) => String(it?.speaker_name ?? '').trim().toLowerCase()).filter(Boolean));
+  return { ...base, value: `${plural(list.length, 'item', 'items')} · ${plural(speakers.size, 'speaker', 'speakers')}`, items: agendaRows(read.data, ev) };
 }
 
 /* ------------------------------------------------------------------ *

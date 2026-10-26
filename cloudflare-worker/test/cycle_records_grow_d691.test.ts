@@ -438,8 +438,8 @@ test('7: Mark held moves a quarterly obligation three calendar months and resets
   // 30 Nov + 3 months is clamped to 28 Feb.
   assert.deepEqual({ ...db.prepare('SELECT id, due_date, completion_status, reminders_sent_json FROM compliance_events WHERE id = 51').get() as any },
     { id: 51, due_date: '2027-02-28', completion_status: 'pending', reminders_sent_json: '[]' });
-  assert.deepEqual({ ...db.prepare("SELECT held_on, notes, minutes_file_key FROM obligation_occurrences WHERE event_id = 51 ORDER BY id DESC LIMIT 1").get() as any },
-    { held_on: '2026-11-29', notes: 'Quorum met', minutes_file_key: null });
+  assert.deepEqual({ ...db.prepare("SELECT held_on, notes, minutes_file_key, size_bytes FROM obligation_occurrences WHERE event_id = 51 ORDER BY id DESC LIMIT 1").get() as any },
+    { held_on: '2026-11-29', notes: 'Quorum met', minutes_file_key: null, size_bytes: null });
   const once = await act(db, 'durable-company-building', 53, 'mark-held', { held_on: '2026-12-14' });
   assert.equal(once.status, 200);
   assert.deepEqual({ ...db.prepare('SELECT due_date, completion_status FROM compliance_events WHERE id = 53').get() as any }, { due_date: '2026-12-15', completion_status: 'completed' });
@@ -459,6 +459,7 @@ test('7: Mark held stores minutes under the venture\'s prefix, and a clash answe
   const ok = await act(db, 'durable-company-building', 51, 'mark-held', undefined, { form, env: { FILES } });
   assert.equal(ok.status, 200, JSON.stringify(ok.body));
   const key = (db.prepare('SELECT minutes_file_key AS k FROM obligation_occurrences WHERE event_id = 51 ORDER BY id DESC LIMIT 1').get() as any).k;
+  assert.equal(db.prepare('SELECT size_bytes FROM obligation_occurrences WHERE event_id=51 ORDER BY id DESC LIMIT 1').get()!.size_bytes,4);
   assert.match(key, /^grow-minutes\/1\/[0-9a-f]{32}\.pdf$/);
   assert.ok(files.has(key));
   assert.equal(key.toLowerCase().includes('ana'), false, 'the key carries no file name');

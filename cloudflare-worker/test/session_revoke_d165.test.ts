@@ -159,7 +159,9 @@ test('the floor has ONE definition, and every writer shares it', () => {
     `${writes.length} jwt_min_iat writes remain in settings.ts outside bumpJwtMinIat; exactly `
     + 'one is allowed, and only because it is transactionally combined with the step-up clear');
 
-  const batchAt = SETTINGS.indexOf('await c.env.DB.batch([');
+  // Select the recovery transaction even when earlier handlers add batches.
+  const floorAt = SETTINGS.indexOf('const nowSec = jwtMinIatFloor();');
+  const batchAt = SETTINGS.indexOf('await c.env.DB.batch([', floorAt);
   assert.ok(batchAt > 0, 'the combined write is no longer a batch, so it is no longer atomic');
   const batch = SETTINGS.slice(batchAt, SETTINGS.indexOf(']);', batchAt));
   assert.match(batch, /step_up_due_at\s*=\s*NULL/,
