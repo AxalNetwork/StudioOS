@@ -165,9 +165,15 @@ test('an Admin opens a closing with one line per live commitment; anyone else is
 
   const again = await call(db, 'POST', '/api/closings', ADMIN, { deal_id: DEAL });
   assert.deepEqual([again.status, again.body?.error], [409, 'closing_open']);
+  const badDate = await call(db, 'POST', '/api/closings', ADMIN, { deal_id: OTHER_DEAL, deadline: 'next Friday' });
+  assert.deepEqual([badDate.status, badDate.body?.error], [400, 'deadline_invalid']);
+  db.exec("UPDATE deals SET closing_deadline = 'end of Q4' WHERE id = 42");
+  const noGuess = await call(db, 'POST', '/api/closings', ADMIN, { deal_id: OTHER_DEAL });
+  assert.equal(noGuess.status, 201, noGuess.text);
+  assert.equal(noGuess.body.deadline, null, 'a deal deadline that is not a date is not guessed into one');
   const nodeal = await call(db, 'POST', '/api/closings', ADMIN, { deal_id: 999 });
   assert.deepEqual([nodeal.status, nodeal.body?.error], [404, 'deal_not_found']);
-  assert.equal(events(db), 1);
+  assert.equal(events(db), 2, 'two opens, two events; every refusal none');
 });
 
 // ---------------------------------------------------------------- who reads what
@@ -363,4 +369,12 @@ test('POST /api/positions is position.record and records the closing line it ser
   const wrong = await call(db, 'POST', '/api/positions', ADMIN, { ...body, project_id: OTHER_PROJECT, closing_line_uid: lines[INV_A] });
   assert.deepEqual([wrong.status, wrong.body?.code], [404, 'closing_line_not_found']);
   assert.equal((await call(db, 'POST', '/api/positions', ADMIN, body)).status, 201, 'with no line, as before');
+});
+
+test('index.ts mounts /api/closings, and the desk before the /api/admin catch-all that would shadow it', () => {
+  const index = read('cloudflare-worker/src/index.ts');
+  const desk = index.indexOf("app.route('/api/admin/closings', adminClosings);");
+  const catchAll = index.indexOf("app.route('/api/admin', admin);");
+  assert.ok(desk > 0 && catchAll > 0 && desk < catchAll, 'the desk is mounted before the catch-all');
+  assert.ok(index.includes("app.route('/api/closings', closings);"));
 });

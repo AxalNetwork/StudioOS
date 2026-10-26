@@ -296,8 +296,11 @@ export async function openClosing(env: Env, user: User, body: any) {
   if (!Number.isInteger(dealId) || dealId <= 0) throw new ClosingRefusal(400, 'deal_required', 'Say which deal this closing is for.');
   const deal = await env.DB.prepare('SELECT id, project_id, instrument, closing_deadline, currency FROM deals WHERE id = ?').bind(dealId).first<any>();
   if (!deal) throw new ClosingRefusal(404, 'deal_not_found', 'No deal here.');
-  const deadline = body?.deadline == null || body.deadline === '' ? (deal.closing_deadline ?? null) : String(body.deadline);
-  if (deadline !== null && !/^\d{4}-\d{2}-\d{2}/.test(deadline)) throw new ClosingRefusal(400, 'deadline_invalid', 'The deadline is a date, written YYYY-MM-DD.');
+  // A deadline given must be a date; the deal's own is taken only when it is one, never guessed from other text.
+  const given = body?.deadline == null || body.deadline === '' ? null : String(body.deadline);
+  if (given !== null && !/^\d{4}-\d{2}-\d{2}/.test(given)) throw new ClosingRefusal(400, 'deadline_invalid', 'The deadline is a date, written YYYY-MM-DD.');
+  const fallback = typeof deal.closing_deadline === 'string' && /^\d{4}-\d{2}-\d{2}/.test(deal.closing_deadline) ? deal.closing_deadline : null;
+  const deadline = given ?? fallback;
   const ownerId = body?.owner_user_id == null ? Number(user.id) : Number(body.owner_user_id);
   if (!Number.isInteger(ownerId) || ownerId <= 0) throw new ClosingRefusal(400, 'owner_invalid', 'The owner is a user id.');
   const open = await env.DB.prepare("SELECT uid FROM closings WHERE deal_id = ? AND status = 'open'").bind(dealId).first<any>();
