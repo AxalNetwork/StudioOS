@@ -10,7 +10,9 @@ import React, { useEffect, useId, useRef, useState } from 'react';
  * own colour for the current week), absolute stacked bars whose segments can
  * open a filtered list, and a weekly line with several series, where a dash
  * says which series it is and the current week is only a hollow point. D951
- * adds term bars on a day axis with a Today line (C5). Each chart sizes to its
+ * adds term bars on a day axis with a Today line (C5). D1164 adds lines by
+ * quarter that bridge a missing quarter with a dashed segment, and paired
+ * cost-and-mark bars (Fund admin, FND10). Each chart sizes to its
  * box, so a phone gets readable text rather than a scaled-down desktop drawing.
  *
  * COLOUR IS #2375's ONE PALETTE: violet, sky, amber, emerald, muted. Only
@@ -767,6 +769,108 @@ export function Legend({ items, onSelect }) {
           {g.label}
         </span>
       )))}
+    </div>
+  );
+}
+
+/**
+ * D1164 (#3071, FND10) — lines by quarter: `series` are `{ label, tone,
+ * values }`, `labels` the quarters, `format` how an axis value and the last
+ * point read (dollars, a multiple). A null value is a quarter with no figure:
+ * the line is BRIDGED across it with a dashed segment from the point before to
+ * the point after, never dropped to zero, and the quarter gets no dot. Every
+ * quarter here is complete, so no point is hollow.
+ */
+export function QuarterLines({ series, labels, format = (v) => nf(v), height = 240 }) {
+  const [ref, W] = useBoxWidth();
+  const Lx = 52;
+  const R = 70;
+  const B = 22;
+  const top = 16;
+  const ch = height - B - top;
+  const n = Math.max(2, labels.length);
+  const max = Math.max(1e-9, ...series.flatMap((s) => s.values.filter((v) => v !== null && v !== undefined)));
+  const X = (i) => Lx + ((W - Lx - R) * i) / (n - 1);
+  const Y = (v) => top + ch * (1 - v / max);
+  const every = W < 420 ? Math.ceil(labels.length / 4) : 1;
+  const pieces = (values) => {
+    const pts = values.map((v, i) => ({ v, i })).filter((p) => p.v !== null && p.v !== undefined);
+    const solid = []; const bridges = [];
+    let run = [];
+    pts.forEach((p, k) => {
+      const prev = pts[k - 1];
+      if (prev && p.i - prev.i > 1) { if (run.length) solid.push(run); run = []; bridges.push([prev, p]); }
+      run.push(p);
+    });
+    if (run.length) solid.push(run);
+    return { pts, solid, bridges };
+  };
+  return (
+    <div ref={ref} className="w-full">
+      <Svg width={W} height={height}>
+        {[0, 0.5, 1].map((f) => (
+          <g key={f}>
+            <line x1={Lx} x2={W - R} y1={Y(max * f)} y2={Y(max * f)} className={GRID} />
+            <text x={Lx - 5} y={Y(max * f) + 3} textAnchor="end" className={MUTE}>{format(max * f)}</text>
+          </g>
+        ))}
+        {series.map((s) => {
+          const { pts, solid, bridges } = pieces(s.values);
+          const last = pts[pts.length - 1];
+          return (
+            <g key={s.label} data-series={s.label}>
+              {solid.map((run) => (run.length > 1
+                ? <polyline key={run[0].i} points={run.map((p) => `${X(p.i)},${Y(p.v)}`).join(' ')} fill="none" strokeWidth="2.2" className={STROKE[s.tone] || STROKE_V} />
+                : null))}
+              {bridges.map(([a, b]) => (
+                <line key={`${a.i}-${b.i}`} x1={X(a.i)} y1={Y(a.v)} x2={X(b.i)} y2={Y(b.v)} strokeWidth="1.8" strokeDasharray="4 4" className={STROKE[s.tone] || STROKE_V} data-bridge="true" />
+              ))}
+              {pts.map((p) => <circle key={p.i} cx={X(p.i)} cy={Y(p.v)} r="3.2" className={FILL[s.tone] || FILL.violet} />)}
+              {last && <text x={X(last.i) + 7} y={Y(last.v) + 3} className={INK}>{format(last.v)}</text>}
+            </g>
+          );
+        })}
+        {labels.map((l, i) => (i % every === 0 || i === labels.length - 1
+          ? <text key={`${l}-${i}`} x={X(i)} y={height - 5} textAnchor="middle" className={MUTE}>{l}</text>
+          : null))}
+      </Svg>
+    </div>
+  );
+}
+
+/**
+ * D1164 (FND10) — two bars per row: `a` (cost) and `b` (latest mark), each
+ * `{ value, tone, text }`. A `b` with a null value is drawn as a dashed
+ * outline reading "No mark", never as a zero-length bar.
+ */
+export function PairBars({ rows, height: rowH = 34 }) {
+  const [ref, W] = useBoxWidth();
+  const LW = W < 420 ? 104 : 150;
+  const RW = 96;
+  const H = rows.length * rowH + 8;
+  const bw = Math.max(40, W - LW - RW);
+  const max = Math.max(1e-9, ...rows.flatMap((r) => [r.a?.value, r.b?.value]).filter(Number.isFinite));
+  return (
+    <div ref={ref} className="w-full">
+      <Svg width={W} height={H}>
+        {rows.map((r, i) => {
+          const y = i * rowH + 4;
+          const wa = Number.isFinite(r.a?.value) && r.a.value > 0 ? Math.max(2, (bw * r.a.value) / max) : 0;
+          const hasB = Number.isFinite(r.b?.value);
+          const wb = hasB && r.b.value > 0 ? Math.max(2, (bw * r.b.value) / max) : 0;
+          return (
+            <g key={r.key ?? `${r.label}-${i}`}>
+              <text x={LW - 8} y={y + 15} textAnchor="end" className={`${INK} font-display text-[11px]`}>{r.label.length > Math.floor((LW - 12) / 6) ? `${r.label.slice(0, Math.floor((LW - 12) / 6) - 1)}…` : r.label}</text>
+              <rect x={LW} y={y} width={wa} height={11} rx={2} className={FILL[r.a?.tone] || FILL.sky} />
+              <text x={LW + wa + 6} y={y + 9} className={MUTE}>{r.a?.text ?? ''}</text>
+              {hasB
+                ? <rect x={LW} y={y + 14} width={wb} height={11} rx={2} className={FILL[r.b?.tone] || FILL.violet} />
+                : <rect x={LW} y={y + 14} width={40} height={11} rx={2} fill="none" strokeDasharray="3 3" className="stroke-axal-muted" data-no-mark="true" />}
+              <text x={LW + (hasB ? wb : 40) + 6} y={y + 23} className={INK}>{hasB ? (r.b?.text ?? '') : 'No mark'}</text>
+            </g>
+          );
+        })}
+      </Svg>
     </div>
   );
 }

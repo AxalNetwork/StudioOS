@@ -9,7 +9,6 @@ import { fundFeesApi } from '../../../lib/api/fundFees';
 import { fundReportingApi } from '../../../lib/api/fundReporting';
 import { adminCapitalAttestationsApi } from '../../../lib/api/adminCapitalAttestations';
 import { fundPerformanceApi } from '../../../lib/api/fundPerformance';
-import { FundPerformanceView } from '../../FundPerformancePage';
 import { Banner } from '../../account/ConnectorSheet';
 import {
   BANKING_PARTS, LEGACY_TABS, LINE, MOVED_NOTICES, NOT_YET, TABS, TITLE, WAITS, administeredFunds, fundFilter, fundsCsv,
@@ -20,6 +19,7 @@ import { Refusal } from './Refusal';
 import { OverviewTab } from './OverviewTab';
 import { BankingTab, ReconciliationTab } from './BankingTabs';
 import { CallsTab, DistributionsTab, FeesTab, ReportsTab } from './FundTabs';
+import { PerformanceTab } from './PerformanceTab';
 
 /**
  * D714 (#1779) PR 4a — the fund administration console at `/admin/fund-admin`,
@@ -44,7 +44,7 @@ export const DEFAULT_APIS = {
   reporting: fundReportingApi,
   // D752 (#1890): the Calls tab's proofs of funds, read only on Show.
   capitalAttestations: adminCapitalAttestationsApi,
-  // D1157 (#2388): NAV & performance draws today's performance read until FND10 lands.
+  // D1164 (#3071): NAV & performance (FND10–FND12): the list, the quarterly history, positions, and the mark and move writes.
   performance: fundPerformanceApi,
   funds: {
     distributions: (fundId) => api.fundsDistributions(fundId),
@@ -65,7 +65,6 @@ export function FundAdminConsoleView({ user, apis = DEFAULT_APIS }) {
   const moved = useMovedNotice(MOVED_NOTICES);
   const access = useRead(() => apis.fundAdmin.access(), [apis], { enabled: !branch });
   const overview = useRead(() => apis.fundAdmin.overview(), [apis], { enabled: !branch });
-  const performance = useRead(() => apis.performance.list(), [apis], { enabled: !branch && !forward && view === 'performance' });
 
   if (forward) return <Navigate to={forward} replace />;
 
@@ -146,10 +145,7 @@ export function FundAdminConsoleView({ user, apis = DEFAULT_APIS }) {
         {view === 'fees' && <FeesTab {...fundProps} />}
         {view === 'reports' && <ReportsTab {...fundProps} />}
         {view === 'performance' && (
-          <div className="mx-4 mt-5 sm:mx-6">
-            <FundPerformanceView items={performance.data?.items || []} loading={performance.status === 'loading'}
-              error={performance.status === 'unreadable' ? (performance.error?.message || 'Fund performance could not be read.') : null} reload={performance.reload} />
-          </div>
+          <PerformanceTab apis={apis} access={acts} funds={funds} fundId={filter.pills.find((p) => p.on && p.id != null)?.id ?? null} onChanged={overview.reload} />
         )}
         {(view === 'funds' || view === 'lps' || view === 'books') && <WaitCard view={view} />}
       </div>
