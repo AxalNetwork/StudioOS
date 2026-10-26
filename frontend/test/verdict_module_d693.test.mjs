@@ -388,7 +388,8 @@ test('22: verdictApi holds record alone, a POST to the mounted decisions route, 
   assert.match(read('../cloudflare-worker/src/routes/cycle_verdict.ts'), /\.post\('\/'/);
   const api = read('src/lib/api.js');
   const block = api.slice(api.indexOf('// api-modules:begin'), api.indexOf('// api-modules:end'));
-  assert.match(block, /export \* from '\.\/api\/usage\.js';\nexport \* from '\.\/api\/useOfFunds\.js';\nexport \* from '\.\/api\/verdict\.js';\n$/);
+  // D527's block is alphabetical; verdict sorts last (D1259 added ventureScoreModels just before it).
+  assert.match(block, /export \* from '\.\/api\/useOfFunds\.js';\n(?:export \* from '\.\/api\/v[a-u][A-Za-z]*\.js';\n)*export \* from '\.\/api\/verdict\.js';\n$/);
   const sent = [];
   const mod = await sourceModule(mutate(src, "import { request } from '../api.js';", 'const request = (...a) => { globalThis.__d693Sent.push(a); return Promise.resolve({ ok: true }); };'), 'lib/api/verdict.js');
   globalThis.__d693Sent = sent;

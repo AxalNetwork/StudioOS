@@ -43,7 +43,8 @@ function useRead(load) {
   return [state.value, useCallback(() => setTick((t) => t + 1), [])];
 }
 
-function Unreadable({ what, onRetry, testId }) {
+/** A read that failed: Unreadable with Try again. Local, so it is not D126's shared `Unreadable` primitive. */
+function ReadFailed({ what, onRetry, testId }) {
   return (
     <div role="alert" className="flex flex-wrap items-center gap-2 text-[12.5px] text-red-700 dark:text-red-300" data-testid={testId}>
       <span><strong>Unreadable.</strong> {what} could not be read. That is not the same as none.</span>
@@ -159,7 +160,7 @@ export default function HqScoringPage() {
       <section className={box} data-testid="hq-scoring-models">
         <h2 className="m-0 text-[15px] font-bold">Model versions</h2>
         {models === undefined && <Reading testId="hq-scoring-models-loading" />}
-        {models === null && <Unreadable what="The model versions" onRetry={retryModels} testId="hq-scoring-models-unreadable" />}
+        {models === null && <ReadFailed what="The model versions" onRetry={retryModels} testId="hq-scoring-models-unreadable" />}
         {models && <div className="overflow-x-auto"><table className="w-full min-w-[520px] border-collapse">
           <thead><tr>{['Version', 'State', 'Date', 'By', 'Ventures'].map((c) => <th key={c} scope="col" className={TH}>{c}</th>)}</tr></thead>
           <tbody>{models.versions.map((v) => {
@@ -192,7 +193,7 @@ export default function HqScoringPage() {
         <h2 className="m-0 text-[15px] font-bold">Country index sources</h2>
         <p className={SUB}>Geographic and Political and regulatory read these from model v1.1, and only an edition imported under a recorded licence.</p>
         {indices === undefined && <Reading testId="hq-scoring-indices-loading" />}
-        {indices === null && <Unreadable what="The country index sources" onRetry={retryIndices} testId="hq-scoring-indices-unreadable" />}
+        {indices === null && <ReadFailed what="The country index sources" onRetry={retryIndices} testId="hq-scoring-indices-unreadable" />}
         {indices && indices.sources.map((s) => (
           <div key={s.key} className="flex flex-col gap-1 rounded-lg border border-gray-200 px-3 py-2.5 dark:border-gray-700" data-testid={`hq-scoring-source-${s.key}`}>
             <div className="flex flex-wrap items-center justify-between gap-2">
