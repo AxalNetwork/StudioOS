@@ -52,6 +52,8 @@ import adminPublications from './routes/admin_publications';
 import adminTeam from './routes/admin_team';
 import adminNetworkProfiles from './routes/admin_network_profiles';
 import adminNetwork from './routes/admin_network';
+import adminInvestorCohorts from './routes/admin_investor_cohorts';
+import investorCohorts from './routes/investor_cohorts';
 import profileHistoryRoutes from './routes/profile_history';
 import founderProfileRoutes from './routes/founder_profile';
 import adminProfilingRoutes from './routes/admin_profiling';
@@ -902,6 +904,9 @@ app.route('/api/admin/partners', adminPartners);
 // D976 (#2762) — the advisor and partner network's pause, directory switch and standing read.
 app.route('/api/admin/network', adminNetworkReads);
 app.route('/api/admin/network', adminNetwork);
+// D959 (#2792) — Investor cohort access: the admin's grants, and the investor's and founder's routes.
+app.route('/api/admin/investor-cohorts', adminInvestorCohorts);
+app.route('/api/investor-cohorts', investorCohorts);
 app.route('/api/admin/publications', adminPublications);
 app.route('/api/partner-onboard', partnerOnboarding);
 app.route('/api/partner-portal', partnerPortal);
@@ -2451,6 +2456,12 @@ export default {
             const r = await syncCohortAdvisorNotices(env, { limit: 2000 });
             if (r.started || r.ended) console.info(`[cron] cohort advisor notices started=${r.started} ended=${r.ended}`);
           } catch (e) { console.error('[cron] cohort advisor notices failed', e); }
+          // D959 — investor cohort access: closes grants past their last day, then tells founders.
+          try {
+            const { syncInvestorCohortNotices } = await import('./services/investorCohortAccess');
+            const r = await syncInvestorCohortNotices(env, { limit: 2000 });
+            if (r.started || r.ended || r.expired) console.info(`[cron] investor cohort notices started=${r.started} ended=${r.ended} expired=${r.expired}`);
+          } catch (e) { console.error('[cron] investor cohort notices failed', e); }
           try {
             const { noticeLegacyRelationships } = await import('./routes/partnernet');
             const r = await noticeLegacyRelationships(env, 500);
