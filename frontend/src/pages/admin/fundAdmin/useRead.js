@@ -11,10 +11,13 @@ export function useRead(reader, deps, { enabled = true } = {}) {
   useEffect(() => () => { generation.current += 1; }, []);
   // eslint-disable-next-line react-hooks/exhaustive-deps
   const run = useCallback(reader, deps);
-  const reload = useCallback(async () => {
-    if (!enabled) return;
+  const load = useCallback(async (reset) => {
+    if (!enabled) { setState({ status: 'idle', data: null, error: null }); return; }
     const current = ++generation.current;
-    setState({ status: 'loading', data: null, error: null });
+    // Refresh a recorded result in place; a new read identity must start empty.
+    setState(previous => reset || previous.data == null
+      ? { status: 'loading', data: null, error: null }
+      : { ...previous, error: null });
     try {
       const data = await run();
       if (current === generation.current) setState({ status: 'ready', data, error: null });
@@ -22,6 +25,7 @@ export function useRead(reader, deps, { enabled = true } = {}) {
       if (current === generation.current) setState({ status: 'unreadable', data: null, error });
     }
   }, [run, enabled]);
-  useEffect(() => { reload(); return () => { generation.current += 1; }; }, [reload]);
+  const reload = useCallback(() => load(false), [load]);
+  useEffect(() => { load(true); return () => { generation.current += 1; }; }, [load]);
   return { ...state, reload };
 }
