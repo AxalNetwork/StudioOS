@@ -1753,12 +1753,13 @@ deals.delete('/:id/dealroom/leave', async (c) => {
   const companyId = await investorActiveCompany(c, user);
   const del = await c.env.DB.prepare(
     `DELETE FROM investor_dealroom_members WHERE investor_user_id = ? AND deal_id = ?
-       AND (? IS NULL OR company_id = ? OR company_id IS NULL)`
-  ).bind(user.id, dealId, companyId, companyId).run();
+       AND (? IS NULL OR company_id = ? OR company_id IS NULL) RETURNING company_id`
+  ).bind(user.id, dealId, companyId, companyId).all<{ company_id: number | null }>();
   // D630 — a leave that removed a membership is recorded with its actor. A
   // leave of a room the caller was not in changed nothing, so it logs nothing.
-  if (Number((del as any)?.meta?.changes ?? 0) > 0) {
-    await logDealRoomAction(c.env, user, 'dealroom_left', dealId, { company_id: companyId });
+  const removed = del.results?.[0];
+  if (removed) {
+    await logDealRoomAction(c.env, user, 'dealroom_left', dealId, { company_id: removed.company_id });
   }
   return c.json({ ok: true });
 });

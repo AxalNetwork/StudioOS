@@ -59,6 +59,19 @@ test('a foreign-firm request is not claimed or removed; its own firm can leave i
   }finally{f.db.close();}
 });
 
+test('leave audits the removed row’s firm, retaining NULL history and logging no replay',async()=>{
+  const f=fixture();try {
+    f.db.exec('INSERT INTO investor_dealroom_members(investor_user_id,deal_id,company_id) VALUES(2,101,10)');
+    assert.equal((await call(f,2,'DELETE','/101/dealroom/leave')).status,200);
+    f.db.exec('INSERT INTO investor_dealroom_members(investor_user_id,deal_id,company_id) VALUES(2,101,NULL)');
+    assert.equal((await call(f,2,'DELETE','/101/dealroom/leave',20)).status,200);
+    await call(f,2,'DELETE','/101/dealroom/leave',20);
+    const audit=f.db.prepare("SELECT details FROM activity_logs WHERE action='dealroom_left' ORDER BY id").all();
+    assert.deepEqual(audit.map(r=>JSON.parse(String(r.details)).company_id),[10,null]);
+    assert.deepEqual(rows(f,2),[]);
+  }finally{f.db.close();}
+});
+
 test('Free reads its quota, requests one room across firms, replays it, leaves and reuses its slot; the list stays Professional',async()=>{
   const f=fixture();try {
     assert.equal((await call(f,1,'GET','/dealroom/quota',10)).body.cap,1,'a stale paid allowance of five must not enlarge Free');
