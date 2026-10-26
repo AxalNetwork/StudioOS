@@ -39,6 +39,7 @@ const DDL = (() => {
 })();
 
 const FOUNDER = 1, OTHER = 2, ADMIN = 3, PARTNER = 4;
+const THREE_ITEM = '33333333-3333-4333-8333-333333333333', THREE_LINK = '44444444-4444-4444-8444-444444444444', THREE_MARKER = `VB-${'B'.repeat(32)}`;
 const REPO = 'acme/app';
 
 function kv() {
@@ -72,6 +73,14 @@ async function fixture() {
   db.prepare(`INSERT INTO integrations(id, uid, user_id, provider_key, auth_type, credentials_enc, config_json) VALUES (31, 'gh-1', 1, 'github', 'oauth2', ?, ?)`)
     .run(enc, JSON.stringify({ repositories: [REPO], project_id: 1 }));
   db.exec('INSERT INTO integration_companies(integration_id, company_id, enabled) VALUES (31, 10, 1)');
+  // Venture 3 is the same founder's too, with one accepted, landed item and one link proposal of its own.
+  db.exec(`INSERT INTO projects(id,name,founder_id,company_id) VALUES(3,'Three',100,10);
+    INSERT INTO ai_rail_proposals(uid,user_id,rail_page,rail_option,record_ref,kind,payload_json,status) VALUES('p3',1,'Founder.Build.Plan','draft:build/plan','project:3','proposal','{"title":"Three item"}','accepted');
+    INSERT INTO build_plans(id,uid,project_id,scope,trigger,status,evidence_hash,created_by) VALUES(99,'plan-three',3,'venture','manual','open','h',1);
+    INSERT INTO build_plan_items(uid,plan_id,project_id,module,kind,item_key,proposal_uid,evidence_json,landed_table,landed_id,marker)
+      VALUES('${THREE_ITEM}',99,3,'product-roadmap','roadmap','k3','p3','[]','roadmap_okrs','1','${THREE_MARKER}');
+    INSERT INTO ai_rail_proposals(uid,user_id,rail_page,rail_option,record_ref,kind,payload_json,source_kind,source_ref,status)
+      VALUES('${THREE_LINK}',1,'Founder.Build.Plan','link:build/plan','project:3','proposal','{"plan_item_uid":"${THREE_ITEM}","fed_kind":"issue"}','connector','issue:acme/app#3','proposed');`);
   await preparePlan(env, 1, FOUNDER);
   return { db, env };
 }
@@ -90,7 +99,7 @@ async function call(env: any, user: number | null, method: string, path: string,
   } finally { [console.warn, console.error, console.info] = saved; }
 }
 const item = (db: DatabaseSync, kind: string) => db.prepare(`SELECT i.*, q.status FROM build_plan_items i JOIN ai_rail_proposals q ON q.uid = i.proposal_uid
-  WHERE i.kind = ? ORDER BY i.item_key LIMIT 1`).get(kind) as any;
+  WHERE i.kind = ? AND i.project_id = 1 ORDER BY i.item_key LIMIT 1`).get(kind) as any;
 /** Accepts the first item of a kind and returns it as it landed. */
 async function accepted(env: any, db: DatabaseSync, kind: string, payload?: unknown) {
   const it = item(db, kind);
@@ -141,6 +150,21 @@ test('GitHub: one pre-filled issue link per item into a picked repository, each 
   assert.equal(copy.body.issues[0].url, null);
   assert.match(copy.body.markdown, new RegExp(`^## ${copy.body.issues[0].title}\n\n`));
   assert.equal((db.prepare('SELECT target FROM build_handoffs ORDER BY id DESC LIMIT 1').get() as any).target, null);
+
+  // A formation step rests on the decision alone: its line never leaves StudioOS.
+  const step = await accepted(env, db, 'formation-step');
+  assert.ok(JSON.parse(step.evidence_json).some((e: any) => e.kind === 'decision'));
+  const stepOut = await send(env, { provider: 'github', items: [step.uid] });
+  assert.equal(stepOut.status, 200);
+  assert.equal(stepOut.body.issues[0].body.includes('Recorded Proceed'), false);
+  assert.equal(stepOut.body.issues[0].body, `${MARKER_LINE} ${step.marker}`);
+
+  // A repository picked for another venture is not this venture's.
+  db.prepare('UPDATE integrations SET config_json = ? WHERE id = 31').run(JSON.stringify({ repositories: [REPO], project_id: 2 }));
+  assert.equal((await send(env, { provider: 'github', items: [f.uid], repository: REPO })).body.code, 'repository_not_picked');
+  db.prepare('UPDATE integrations SET config_json = ? WHERE id = 31').run(JSON.stringify({ repositories: [REPO], project_id: 1 }));
+  // The same founder's item on another venture is not this plan's.
+  assert.equal((await send(env, { provider: 'github', items: [THREE_ITEM] })).body.code, 'not_this_project');
 
   // A repository the founder did not pick is refused, and nothing is recorded.
   const before = count(db, 'SELECT COUNT(*) n FROM build_handoffs');
@@ -280,7 +304,7 @@ async function sync(env: any, db: DatabaseSync, repo: { issues: any[]; pulls: an
   try { return await syncGithub(env, db.prepare('SELECT * FROM integrations WHERE id = 31').get() as any); }
   finally { restore(); [console.warn, console.info] = saved; }
 }
-const links = (db: DatabaseSync) => db.prepare("SELECT * FROM ai_rail_proposals WHERE rail_option = 'link:build/plan' ORDER BY id").all() as any[];
+const links = (db: DatabaseSync) => db.prepare("SELECT * FROM ai_rail_proposals WHERE rail_option = 'link:build/plan' AND record_ref = 'project:1' ORDER BY id").all() as any[];
 const ledger = (db: DatabaseSync, ext: string) => db.prepare('SELECT * FROM connector_fed_items WHERE external_id = ?').get(ext) as any;
 
 test('back in: a fed issue or pull request naming a known marker is a link proposal, never a second row; Link follows the plan’s row', async () => {
@@ -295,6 +319,7 @@ test('back in: a fed issue or pull request naming a known marker is a link propo
       issue(11, 'Spec for setup', `${MARKER_LINE} ${feat.marker}`), // a feature landed in mvp_features: an issue never re-points to it
       issue(12, 'Unrelated', 'No marker here'),
       issue(13, 'Stray marker', `${MARKER_LINE} VB-${'A'.repeat(32)}`),
+      issue(14, 'Another venture’s marker', `${MARKER_LINE} ${THREE_MARKER}`),
     ],
     pulls: [pull(20, 'Setup wizard', `Closes the plan item.\n\n${MARKER_LINE} ${must.marker}`), pull(21, 'Tidy', null)],
   };
@@ -302,7 +327,7 @@ test('back in: a fed issue or pull request naming a known marker is a link propo
   const featuresBefore = count(db, 'SELECT COUNT(*) n FROM mvp_features');
   const out = await sync(env, db, repo);
   assert.equal(out.counts.link_proposals, 3);
-  assert.equal(count(db, 'SELECT COUNT(*) n FROM roadmap_okrs'), roadmapBefore + 2, 'only the unmarked and unknown-marker issues land as rows');
+  assert.equal(count(db, 'SELECT COUNT(*) n FROM roadmap_okrs'), roadmapBefore + 3, 'the unmarked, unknown-marker and other-venture issues land as rows');
   assert.equal(count(db, 'SELECT COUNT(*) n FROM mvp_features'), featuresBefore + 1, 'only the unmarked pull request lands');
   const proposed = links(db);
   assert.deepEqual(proposed.map((l) => [l.source_ref, l.status, l.source_kind, l.source_label, l.user_id, l.record_ref]), [
@@ -314,10 +339,15 @@ test('back in: a fed issue or pull request naming a known marker is a link propo
     title: 'Pilot plan', landed_table: 'roadmap_okrs', landed_id: String(road.landed_id) });
   for (const ext of [`issue:${REPO}#10`, `issue:${REPO}#11`, `pull:${REPO}#20`]) assert.equal(ledger(db, ext).local_id, null);
 
-  // A second sync proposes nothing again and lands nothing.
+  // A second sync proposes nothing again, lands nothing, and reads no marker: every item is in the ledger.
+  const prepare = env.DB.prepare.bind(env.DB);
+  let markerReads = 0;
+  env.DB.prepare = (sql: string) => { if (sql.includes('i.marker IN')) markerReads++; return prepare(sql); };
   await sync(env, db, repo);
+  env.DB.prepare = prepare;
+  assert.equal(markerReads, 0);
   assert.equal(links(db).length, 3);
-  assert.equal(count(db, 'SELECT COUNT(*) n FROM roadmap_okrs'), roadmapBefore + 2);
+  assert.equal(count(db, 'SELECT COUNT(*) n FROM roadmap_okrs'), roadmapBefore + 3);
 
   const list = await call(env, FOUNDER, 'GET', `/api/cycles/build/plan/links${Q}`);
   assert.equal(list.status, 200);
@@ -326,6 +356,8 @@ test('back in: a fed issue or pull request naming a known marker is a link propo
 
   const accept = (uid: string, who = FOUNDER) => call(env, who, 'POST', `/api/cycles/build/plan/links/${uid}/accept${Q}`, {});
   assert.equal((await accept(proposed[0].uid, OTHER)).status, 404);
+  assert.equal((await accept(THREE_LINK)).status, 404, 'another venture’s link, even the same founder’s');
+  assert.equal((await call(env, FOUNDER, 'POST', `/api/cycles/build/plan/links/${THREE_LINK}/dismiss${Q}`, {})).status, 404);
   const linked = await accept(proposed[0].uid);
   assert.equal(linked.status, 200, JSON.stringify(linked.body));
   assert.equal(linked.body.status, 'accepted');
@@ -344,7 +376,7 @@ test('back in: a fed issue or pull request naming a known marker is a link propo
   repo.issues[0].title = 'Pilot plan, week 2';
   await sync(env, db, repo);
   assert.equal((db.prepare('SELECT objective FROM roadmap_okrs WHERE id = ?').get(Number(road.landed_id)) as any).objective, 'Pilot plan, week 2');
-  assert.equal(count(db, 'SELECT COUNT(*) n FROM roadmap_okrs'), roadmapBefore + 2);
+  assert.equal(count(db, 'SELECT COUNT(*) n FROM roadmap_okrs'), roadmapBefore + 3);
 });
 
 test('back in: Not this one lands the item as its own row on the next sync; a plan item no longer accepted is marker_unknown', async () => {
@@ -387,6 +419,17 @@ test('a link by hand: an accepted item and a fed item with no marker; a row the 
   assert.equal(r.status, 200, JSON.stringify(r.body));
   assert.deepEqual([r.body.status, r.body.by, r.body.plan_item_uid, r.body.fed], ['accepted', 'hand', must.uid, `pull:${REPO}#50`]);
   assert.equal(ledger(db, `pull:${REPO}#50`).local_id, fedRow.local_id, 'the feed’s own row keeps its ledger');
+  const lines = count(db, "SELECT COUNT(*) n FROM activity_logs WHERE action = 'build_plan_linked'");
   assert.equal((await link(must.uid, `pull:${REPO}#50`)).body.code, 'already_linked');
   assert.equal(links(db).length, 1);
+  assert.equal(count(db, "SELECT COUNT(*) n FROM activity_logs WHERE action = 'build_plan_linked'"), lines, 'a refused link writes no activity line');
+});
+
+test('back in: a fed item already waiting for a decision is never proposed twice', async () => {
+  const { db, env } = await fixture();
+  const road = await accepted(env, db, 'roadmap');
+  db.prepare(`INSERT INTO ai_rail_proposals(uid,user_id,rail_page,rail_option,record_ref,kind,payload_json,source_kind,source_ref,status)
+    VALUES('55555555-5555-4555-8555-555555555555',1,'Founder.Build.Plan','link:build/plan','project:1','proposal','{}','connector',?,'proposed')`).run(`issue:${REPO}#60`);
+  await sync(env, db, { issues: [issue(60, 'Pilot again', `${MARKER_LINE} ${road.marker}`)], pulls: [] });
+  assert.equal(count(db, "SELECT COUNT(*) n FROM ai_rail_proposals WHERE source_ref = ?", `issue:${REPO}#60`), 1);
 });

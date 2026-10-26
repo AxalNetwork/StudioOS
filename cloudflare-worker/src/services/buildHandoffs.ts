@@ -161,7 +161,7 @@ async function pickedRepositories(env: Env, userId: number, projectId: number): 
 }
 
 /** The accepted, landed items the founder named, on this venture's current plan, in the order named. */
-async function sendItems(env: Env, user: User, projectId: number, scope: string, uids: unknown): Promise<SendItem[]> {
+async function sendItems(env: Env, projectId: number, scope: string, uids: unknown): Promise<SendItem[]> {
   if (!Array.isArray(uids) || !uids.length || uids.length > HANDOFF_ITEMS_MAX || !uids.every(u => typeof u === 'string' && ITEM_UID.test(u))) {
     throw new PlanItemError('invalid_handoff', 400, `Choose between 1 and ${HANDOFF_ITEMS_MAX} accepted items to send.`);
   }
@@ -171,8 +171,8 @@ async function sendItems(env: Env, user: User, projectId: number, scope: string,
   const out: SendItem[] = [];
   for (const uid of [...new Set(uids as string[])]) {
     const item = await loadItem(env, uid);
+    // The route already admitted only this venture's founders; an item of another venture is refused.
     if (!item || item.project_id !== projectId) throw new PlanItemError('not_this_project', 404, 'This plan item does not belong to this venture.');
-    assertFounder(item, user);
     if (!['accepted', 'edited'].includes(item.status) || !item.landed_table || !item.landed_id) {
       throw new PlanItemError('not_accepted', 409, 'Only accepted items are sent. Accept this item first.');
     }
@@ -202,7 +202,7 @@ function handoffStatement(env: Env, userId: number, projectId: number, row: Hand
 export async function sendHandoff(env: Env, user: User, projectId: number, scope: string, body: any) {
   const provider = String(body?.provider ?? '') as Provider;
   if (!(PROVIDERS as readonly string[]).includes(provider)) throw new PlanItemError('invalid_handoff', 400, 'Choose Lovable, GitHub, Notion or Vercel.');
-  const items = await sendItems(env, user, projectId, scope, body?.items);
+  const items = await sendItems(env, projectId, scope, body?.items);
   let repository: string | null = null;
   if (body?.repository != null && body.repository !== '') {
     if (typeof body.repository !== 'string' || !REPO.test(body.repository)) throw new PlanItemError('invalid_handoff', 400, 'Choose a repository as owner/name.');
@@ -284,7 +284,7 @@ export type LinkTarget = { plan_item_uid: string; marker: string; module: string
 
 /**
  * The fed items on one page that name a known marker. A marker is known when
- * its item is on this venture, accepted and landed. An item whose link the
+ * its item is on this venture and landed, which only an accepted item is. An item whose link the
  * founder dismissed lands as its own row. One read, or two when a marker is
  * found; none when no body names one.
  */
@@ -296,7 +296,7 @@ export async function markerLinks(env: Env, projectId: number, items: FedItem[])
   const known = (await env.DB.prepare(`SELECT i.uid, i.marker, i.module, i.landed_table, i.landed_id,
       COALESCE(json_extract(q.decided_payload_json, '$.title'), json_extract(q.payload_json, '$.title')) AS title
     FROM build_plan_items i JOIN ai_rail_proposals q ON q.uid = i.proposal_uid
-    WHERE i.project_id = ? AND i.marker IN (SELECT value FROM json_each(?)) AND q.status IN ('accepted', 'edited')
+    WHERE i.project_id = ? AND i.marker IN (SELECT value FROM json_each(?))
       AND i.landed_table IS NOT NULL AND i.landed_id IS NOT NULL`).bind(projectId, JSON.stringify(markers)).all<any>()).results || [];
   if (!known.length) return { links, reads: 1 };
   const byMarker = new Map(known.map(k => [k.marker, k]));
@@ -391,12 +391,9 @@ export async function acceptLink(env: Env, user: User, projectId: number, uid: s
 }
 
 /** Not this one: never proposed again, and the next sync lands the item as its own row. */
-export async function dismissLink(env: Env, user: User, projectId: number, uid: string) {
+export async function dismissLink(env: Env, _user: User, projectId: number, uid: string) {
   const row = await linkOf(env, projectId, uid);
   if (row.status !== 'proposed') throw new PlanItemError('decided', 409, 'This link is already decided.');
-  const project = await env.DB.prepare('SELECT founder_id FROM projects WHERE id = ? AND deleted_at IS NULL').bind(projectId).first<{ founder_id: number | null }>();
-  if (!project) throw new PlanItemError('not_this_project', 404, 'This link does not belong to this venture.');
-  assertFounder(project, user);
   const [claim] = await env.DB.batch([
     env.DB.prepare(`UPDATE ai_rail_proposals SET status = 'discarded', decided_at = CURRENT_TIMESTAMP, updated_at = CURRENT_TIMESTAMP WHERE uid = ? AND status = 'proposed'`).bind(uid),
     env.DB.prepare('DELETE FROM connector_fed_items WHERE project_id = ? AND external_id = ? AND local_id IS NULL').bind(projectId, row.source_ref),
