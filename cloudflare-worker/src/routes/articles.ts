@@ -21,7 +21,7 @@
 import { Hono } from 'hono';
 import { cors } from 'hono/cors';
 import type { Env } from '../types';
-import { requireAuth, getCurrentUser } from '../auth';
+import { requireAuth, getCurrentUser, selectJwt } from '../auth';
 import { clampLimit, parseOffset } from '../util/pagination';
 import {
   ensureNewsSchema,
@@ -33,6 +33,7 @@ import { ensureArticleCovers } from '../services/articleCovers';
 import { computeAuthorTrust } from '../services/newsTrust';
 import { lintForSend } from '../services/telegramRedactCheck';
 import { notifyArticle } from '../services/articleNotify';
+import { countDailyView } from '../services/articleMetrics';
 import { renderMarkdown, slugify, snapshotRevision, wordsAndMinutes, isValidArticleImageName } from '../services/newsRender';
 import { SECTORS, isValidSector } from '../data/sectors';
 
@@ -319,6 +320,16 @@ articles.get('/:slug', async (c, next) => {
   c.executionCtx?.waitUntil?.(
     c.env.DB.prepare("UPDATE articles SET views = views + 1 WHERE slug = ? AND status = 'published'")
       .bind(slug).run().catch(() => {}),
+  );
+  // D1294 (#3390): the day's count, with no personal data (migration 637).
+  // The token is read only to leave an admin, the author and an impersonated
+  // session out; nothing of it is stored.
+  c.executionCtx?.waitUntil?.(
+    selectJwt(c)
+      .then((sel) => countDailyView(c.env, slug, sel ? {
+        userId: Number(sel.payload.user_id) || null, role: sel.payload.role ?? null, impersonated: !!sel.payload.impersonated_by,
+      } : null))
+      .catch(() => {}),
   );
   const cached = seededCover ? null : await cacheLookup(c);
   if (cached) return cached;
