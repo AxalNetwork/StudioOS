@@ -85,6 +85,18 @@ function facts(key: PmfInputFacts['key'], o: Partial<PmfInputFacts>): PmfInputFa
   };
 }
 
+/**
+ * D1145 (#3031, RD16 B): a store read that fails costs only the inputs it
+ * feeds. They say "Could not be read" and the others answer; the engine leaves
+ * them out of the value and lowers confidence. Only the read's name is logged.
+ */
+const DOWN = Symbol('unreadable');
+async function tryRead<T>(what: string, read: () => Promise<T>): Promise<T | typeof DOWN> {
+  try { return await read(); } catch { console.warn('[pmf] input read failed:', what); return DOWN; }
+}
+const unreadable = (key: PmfInputFacts['key']): PmfInputFacts =>
+  facts(key, { unreadable: true, words: 'Could not be read', reason: 'Could not be read' });
+
 /** Kept after the pivot: dated after its day. A record with no date is kept (it cannot be placed before it). */
 const afterPivot = (pivot: string | null, d: string | null) => !pivot || !d || d > pivot;
 
@@ -94,13 +106,14 @@ export async function collectPmfInputs(env: Env, projectId: number, today: strin
   const pivot = await latestVenturePivotDay(env, projectId);
   const verdict = await ventureVerdictHeader(env, projectId);
 
-  const ivRes = await DB.prepare(
+  const ivRes = await tryRead('interviews', () => DB.prepare(
     `SELECT i.id, i.icp_fit, i.segment_id, i.stage, i.done_at, i.interview_date, i.created_at, i.pains_json,
             (SELECT COUNT(*) FROM interview_sessions s
               WHERE s.interview_id = i.id AND s.status IN ('transcribed', 'structured', 'reviewed')) AS transcribed
        FROM discovery_interviews i WHERE i.project_id = ? ORDER BY i.id`,
-  ).bind(projectId).all<IvRow>();
-  const heldAll = (ivRes.results || []).filter(isHeld);
+  ).bind(projectId).all<IvRow>());
+  const ivDown = ivRes === DOWN;
+  const heldAll = ivDown ? [] : (ivRes.results || []).filter(isHeld);
   const held = heldAll.filter((iv) => afterPivot(pivot, heldDate(iv)));
   const ivBefore = heldAll.length - held.length;
   const icp = held.filter(ICP);
@@ -112,7 +125,7 @@ export async function collectPmfInputs(env: Env, projectId: number, today: strin
   const noInterview = 'No interview held yet';
 
   // 1 · ICP interviews held
-  inputs.push(held.length === 0
+  inputs.push(ivDown ? unreadable('icp_interviews') : held.length === 0
     ? facts('icp_interviews', { reason: noInterview, source: ivSource(0), before_pivot: ivBefore })
     : facts('icp_interviews', {
       recorded: true, raw: { n: icp.length }, ...meanGrade((icp.length ? icp : held).map(ivGrade)),
@@ -122,7 +135,7 @@ export async function collectPmfInputs(env: Env, projectId: number, today: strin
 
   // 2 · ICP coverage
   const covered = held.filter((iv) => iv.icp_fit != null && iv.segment_id != null);
-  inputs.push(held.length === 0
+  inputs.push(ivDown ? unreadable('icp_coverage') : held.length === 0
     ? facts('icp_coverage', { reason: noInterview, source: ivSource(0), before_pivot: ivBefore })
     : facts('icp_coverage', {
       recorded: true, raw: { n: covered.length, of: held.length }, ...meanGrade(held.map(ivGrade)),
@@ -131,7 +144,9 @@ export async function collectPmfInputs(env: Env, projectId: number, today: strin
     }));
 
   // 3 · Pain frequency — the pain map's own themes, over ICP interviews
-  const model = await loadPainGroupModel(env, projectId, { strict: true });
+  const modelRead = await tryRead('pain map', () => loadPainGroupModel(env, projectId, { strict: true }));
+  const painDown = ivDown || modelRead === DOWN;
+  const model = modelRead === DOWN ? null : modelRead;
   const asRows = (ivs: IvRow[]): InterviewRow[] => ivs.map((iv) => ({
     id: Number(iv.id), icp_fit: iv.icp_fit, pains_json: iv.pains_json, stage: iv.stage, segment_id: iv.segment_id,
     done_at: iv.done_at, interview_date: iv.interview_date, created_at: iv.created_at,
@@ -139,9 +154,8 @@ export async function collectPmfInputs(env: Env, projectId: number, today: strin
     hypotheses_json: null, notes: null, invited_at: null, booked_at: null, channel: null,
   }));
   const icpWithPains = icp.filter((iv) => safeParseStrings(iv.pains_json).some((p) => p.trim()));
-  const themes = themesOf(asRows(icp), model, [], today);
-  const top = themes[0];
-  inputs.push(icp.length === 0 || !top
+  const top = model ? themesOf(asRows(icp), model, [], today)[0] : undefined;
+  inputs.push(painDown ? unreadable('pain_frequency') : icp.length === 0 || !top
     ? facts('pain_frequency', {
       reason: icp.length === 0 ? 'No interview with someone who fits your ICP yet' : 'No pain logged on an ICP interview yet',
       source: ivSource(icp.length), before_pivot: ivBefore,
@@ -154,14 +168,15 @@ export async function collectPmfInputs(env: Env, projectId: number, today: strin
     }));
 
   // 4 · Pain severity — judged interviews with a pain judged Severe or Real
-  const sevRes = await DB.prepare(
+  const sevRes = await tryRead('pain severities', () => DB.prepare(
     `SELECT s.interview_id, s.severity
        FROM interview_pain_severities s JOIN discovery_interviews i ON i.id = s.interview_id
       WHERE i.project_id = ?`,
-  ).bind(projectId).all<{ interview_id: number; severity: string }>();
+  ).bind(projectId).all<{ interview_id: number; severity: string }>());
+  const sevDown = ivDown || sevRes === DOWN;
   const judged = new Set<number>(); const need = new Set<number>(); const judgedBefore = new Set<number>();
   const heldAllIds = new Set(heldAll.map((iv) => Number(iv.id)));
-  for (const s of sevRes.results || []) {
+  for (const s of sevRes === DOWN ? [] : sevRes.results || []) {
     const id = Number(s.interview_id);
     const lv = severityLevel(s.severity);
     if (!lv || !heldAllIds.has(id)) continue;
@@ -172,7 +187,7 @@ export async function collectPmfInputs(env: Env, projectId: number, today: strin
   const withPains = held.filter((iv) => safeParseStrings(iv.pains_json).some((p) => p.trim()));
   const unjudged = withPains.filter((iv) => !judged.has(Number(iv.id))).length;
   const judgedIvs = held.filter((iv) => judged.has(Number(iv.id)));
-  inputs.push(judged.size === 0
+  inputs.push(sevDown ? unreadable('pain_severity') : judged.size === 0
     ? facts('pain_severity', {
       reason: withPains.length ? 'No pain judged yet' : 'No pain logged yet',
       source: { table: 'interview_pain_severities', rows: 0 }, before_pivot: judgedBefore.size, meta: { unjudged },
@@ -185,20 +200,23 @@ export async function collectPmfInputs(env: Env, projectId: number, today: strin
     }));
 
   // 5 · Claims supported — the founder board's verdict over the interviews after the pivot
-  const hyps = (await DB.prepare(
+  const hypRead = await tryRead('claims', () => DB.prepare(
     `SELECT id, code, sort_order, retired_at, inconclusive_at, updated_at
        FROM hypotheses WHERE project_id = ? AND retired_at IS NULL ORDER BY sort_order, id`,
-  ).bind(projectId).all<{ id: number; code: string; sort_order: number; retired_at: string | null; inconclusive_at: string | null; updated_at: string | null }>()).results || [];
-  const links = (await DB.prepare(
+  ).bind(projectId).all<{ id: number; code: string; sort_order: number; retired_at: string | null; inconclusive_at: string | null; updated_at: string | null }>());
+  const linkRead = await tryRead('claim links', () => DB.prepare(
     `SELECT l.id, l.hypothesis_id, l.pain_group_id, l.direction, l.strength, l.created_at
        FROM hypothesis_pain_links l JOIN hypotheses h ON h.id = l.hypothesis_id
       WHERE h.project_id = ? AND h.retired_at IS NULL`,
-  ).bind(projectId).all<LinkRow>()).results || [];
+  ).bind(projectId).all<LinkRow>());
+  const claimsDown = painDown || hypRead === DOWN || linkRead === DOWN;
+  const hyps = hypRead === DOWN ? [] : hypRead.results || [];
+  const links = linkRead === DOWN ? [] : linkRead.results || [];
   const hypRows: HypRow[] = hyps.map((h) => ({
     id: h.id, code: h.code, claim: '', sort_order: h.sort_order, retired_at: h.retired_at, sprint: null,
     owner_user_id: null, owner_name: null, inconclusive_at: h.inconclusive_at, updated_at: h.updated_at,
   }));
-  const claims = claimsOf(hypRows, links, asRows(held), model);
+  const claims = model && !claimsDown ? claimsOf(hypRows, links, asRows(held), model) : [];
   const STRENGTH_WEIGHT: Record<string, number> = { measured: 1, pattern: 0.75 };
   const supported = claims.filter((c) => c.status === 'supported');
   const decided = claims.filter((c) => c.status === 'supported' || c.status === 'refuted');
@@ -216,7 +234,7 @@ export async function collectPmfInputs(env: Env, projectId: number, today: strin
     weakest: weakest?.code ?? null,
     decided_grade: ivMean.grade,
   };
-  inputs.push(claims.length === 0
+  inputs.push(claimsDown ? unreadable('claims_supported') : claims.length === 0
     ? facts('claims_supported', { reason: 'No claim written yet', source: { table: 'hypotheses', rows: 0 }, before_pivot: ivBefore, meta: claimMeta })
     : facts('claims_supported', {
       // Σ (each Supported claim × its strongest evidence) ÷ open claims, so 2 at pattern of 5 reads 30.
@@ -229,15 +247,18 @@ export async function collectPmfInputs(env: Env, projectId: number, today: strin
     }));
 
   // 6 · Paying demand, 7 · Would pay — demand signals and the revenue ledger's deposits and pilots
-  const sigAll = (await DB.prepare(
+  const sigRead = await tryRead('demand signals', () => DB.prepare(
     `SELECT kind, status, source_kind, amount_cents, signal_date,
             CASE WHEN evidence_file_key IS NULL OR evidence_file_key = '' THEN 0 ELSE 1 END AS has_file
        FROM demand_signals WHERE project_id = ?`,
-  ).bind(projectId).all<{ kind: string; status: string; source_kind: string | null; amount_cents: number | null; signal_date: string | null; has_file: number }>()).results || [];
-  const paidAll = (await DB.prepare(
+  ).bind(projectId).all<{ kind: string; status: string; source_kind: string | null; amount_cents: number | null; signal_date: string | null; has_file: number }>());
+  const paidRead = await tryRead('deposits and pilots', () => DB.prepare(
     `SELECT verification, received_on FROM revenue_entries
       WHERE project_id = ? AND revenue_type IN ('deposit', 'pilot')`,
-  ).bind(projectId).all<{ verification: string | null; received_on: string | null }>()).results || [];
+  ).bind(projectId).all<{ verification: string | null; received_on: string | null }>());
+  const sigDown = sigRead === DOWN;
+  const sigAll = sigRead === DOWN ? [] : sigRead.results || [];
+  const paidAll = paidRead === DOWN ? [] : paidRead.results || [];
   const sigs = sigAll.filter((s) => afterPivot(pivot, day(s.signal_date)));
   const paid = paidAll.filter((p) => afterPivot(pivot, day(p.received_on)));
   const demandBefore = sigAll.length - sigs.length + paidAll.length - paid.length;
@@ -247,7 +268,7 @@ export async function collectPmfInputs(env: Env, projectId: number, today: strin
   const paidGrade = (v: string | null): GradeLabel => (v === 'verified' ? 'measured' : v === 'supported' ? 'sourced' : 'stated');
   const payingN = paid.length + promises.length;
   const demandRows = sigs.length + paid.length;
-  inputs.push(demandRows === 0
+  inputs.push(sigDown || paidRead === DOWN ? unreadable('paying_demand') : demandRows === 0
     ? facts('paying_demand', { reason: 'No demand signal recorded', source: { table: 'demand_signals', rows: 0 }, before_pivot: demandBefore, meta: { to_confirm: 0, unsourced: 0, attach_grade: 0 } })
     : facts('paying_demand', {
       recorded: true, raw: { n: payingN },
@@ -267,7 +288,7 @@ export async function collectPmfInputs(env: Env, projectId: number, today: strin
   const wouldPay = sigs.filter((s) => s.kind === 'would_pay' && counted(s));
   const wouldPayWaiting = sigs.filter((s) => s.kind === 'would_pay' && s.status === 'to_confirm').length;
   const wpGrade = (k: string | null): GradeLabel => (k === 'session' ? 'measured' : k === 'interview' ? 'sourced' : 'stated');
-  inputs.push(icp.length === 0 || sigs.length === 0
+  inputs.push(ivDown || sigDown ? unreadable('would_pay') : icp.length === 0 || sigs.length === 0
     ? facts('would_pay', {
       reason: icp.length === 0 ? 'No interview with someone who fits your ICP yet' : 'No demand signal recorded',
       source: { table: 'demand_signals', rows: 0 }, before_pivot: demandBefore, meta: { to_confirm: wouldPayWaiting },
@@ -282,11 +303,14 @@ export async function collectPmfInputs(env: Env, projectId: number, today: strin
     }));
 
   // 8 · Waitlist against the bar — both stores, as the demand card counts them
-  const bar = await DB.prepare('SELECT target_value FROM metric_targets WHERE project_id = ? AND metric_key = ?')
-    .bind(projectId, WAITLIST_TARGET_KEY).first<{ target_value: number | null }>();
-  const platformAll = (await DB.prepare(
+  const barRead = await tryRead('waitlist bar', () => DB.prepare('SELECT target_value FROM metric_targets WHERE project_id = ? AND metric_key = ?')
+    .bind(projectId, WAITLIST_TARGET_KEY).first<{ target_value: number | null }>());
+  const platformRead = await tryRead('waitlist sign-ups', () => DB.prepare(
     `SELECT created_at FROM waitlist_signups WHERE project_id = ? AND (audience IS NULL OR audience = 'customer')`,
-  ).bind(projectId).all<{ created_at: string | null }>()).results || [];
+  ).bind(projectId).all<{ created_at: string | null }>());
+  const waitDown = sigDown || barRead === DOWN || platformRead === DOWN;
+  const bar = barRead === DOWN ? null : barRead;
+  const platformAll = platformRead === DOWN ? [] : platformRead.results || [];
   const platform = platformAll.filter((r) => afterPivot(pivot, day(r.created_at)));
   const typedAll = sigAll.filter((s) => s.kind === 'waitlist' && counted(s));
   const typed = typedAll.filter((s) => afterPivot(pivot, day(s.signal_date)));
@@ -294,7 +318,7 @@ export async function collectPmfInputs(env: Env, projectId: number, today: strin
   const waitBefore = platformAll.length - platform.length + typedAll.length - typed.length;
   const barValue = Number(bar?.target_value);
   const hasBar = Number.isFinite(barValue) && barValue > 0;
-  inputs.push(!hasBar
+  inputs.push(waitDown ? unreadable('waitlist') : !hasBar
     ? facts('waitlist', {
       reason: 'No bar set', words: `Not recorded: no bar set (${plural(signups, 'sign-up', 'sign-ups')})`,
       source: { table: 'waitlist_signups', rows: signups }, before_pivot: waitBefore, meta: { bar: null, signups },
@@ -309,16 +333,17 @@ export async function collectPmfInputs(env: Env, projectId: number, today: strin
     }));
 
   // 9 · Experiment outcomes — done experiments linked as evidence; supporting when every link supports
-  const expAll = (await DB.prepare(
+  const expRead = await tryRead('experiments', () => DB.prepare(
     `SELECT x.id, x.updated_at, MIN(CASE WHEN e.direction = 'supports' THEN 1 ELSE 0 END) AS supports
        FROM hypothesis_experiments x
        JOIN hypothesis_evidence_links e ON e.project_id = x.project_id AND e.kind = 'experiment' AND e.ref_id = CAST(x.id AS TEXT)
       WHERE x.project_id = ? AND x.status = 'done'
       GROUP BY x.id, x.updated_at`,
-  ).bind(projectId).all<{ id: number; updated_at: string | null; supports: number }>()).results || [];
+  ).bind(projectId).all<{ id: number; updated_at: string | null; supports: number }>());
+  const expAll = expRead === DOWN ? [] : expRead.results || [];
   const exps = expAll.filter((x) => afterPivot(pivot, day(x.updated_at)));
   const expSupport = exps.filter((x) => Number(x.supports) === 1).length;
-  inputs.push(exps.length === 0
+  inputs.push(expRead === DOWN ? unreadable('experiment_outcomes') : exps.length === 0
     ? facts('experiment_outcomes', { reason: 'No done experiment linked as evidence yet', source: { table: 'hypothesis_experiments', rows: 0 }, before_pivot: expAll.length })
     : facts('experiment_outcomes', {
       recorded: true, raw: { n: expSupport, of: exps.length }, ...meanGrade(exps.map((): GradeLabel => 'stated')),
@@ -328,11 +353,13 @@ export async function collectPmfInputs(env: Env, projectId: number, today: strin
     }));
 
   // 10 · Product pull — applies once a product is live (owner question 4 A): a published release.
-  const release = await DB.prepare(
+  const releaseRead = await tryRead('releases', () => DB.prepare(
     `SELECT COUNT(*) AS n FROM roadmap_releases WHERE project_id = ? AND prerelease = 0 AND published_at IS NOT NULL`,
-  ).bind(projectId).first<{ n: number }>();
+  ).bind(projectId).first<{ n: number }>());
+  const release = releaseRead === DOWN ? null : releaseRead;
   const live = Number(release?.n) > 0;
-  inputs.push(live
+  // Whether a product is live is itself unknown, so product pull is counted as applying and unread.
+  inputs.push(releaseRead === DOWN ? unreadable('product_pull') : live
     ? facts('product_pull', { reason: 'PostHog metrics are not read yet (#2409)', source: { table: 'roadmap_releases', rows: Number(release?.n) } })
     : facts('product_pull', {
       applies: false, words: 'Not expected yet', reason: 'It counts once a release is out or PostHog tracks a metric',

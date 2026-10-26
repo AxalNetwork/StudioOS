@@ -240,12 +240,12 @@ function autoMap(headers: string[], target: string): Record<string, string> {
 
 // ─────────────────────────────────────────────────────────────── R2 helpers
 
-async function maybeStoreRaw(env: Env, userId: number, csv: string, prefix: string): Promise<string | null> {
+async function maybeStoreRaw(env: Env, userId: number, csv: string, prefix: string): Promise<{key:string;size:number} | null> {
   if (!env.FILES) return null;
   const key = `imports/${userId}/${prefix}-${Date.now()}-${Math.random().toString(36).slice(2, 10)}.csv`;
   try {
     await env.FILES.put(key, csv, { httpMetadata: { contentType: 'text/csv' } });
-    return key;
+    return {key,size:new TextEncoder().encode(csv).byteLength};
   } catch { return null; }
 }
 
@@ -256,12 +256,12 @@ async function startImport(
   userId: number,
   source: string,
   target: string,
-  rawKey: string | null,
+  rawKey: {key:string;size:number} | null,
 ): Promise<number> {
   const res = await env.DB.prepare(
-    `INSERT INTO data_imports (user_id, source, target, raw_file_r2_key, status, started_at)
-     VALUES (?, ?, ?, ?, 'running', CURRENT_TIMESTAMP)`,
-  ).bind(userId, source, target, rawKey).run();
+    `INSERT INTO data_imports (user_id, source, target, raw_file_r2_key, size_bytes, status, started_at)
+     VALUES (?, ?, ?, ?, ?, 'running', CURRENT_TIMESTAMP)`,
+  ).bind(userId, source, target, rawKey?.key ?? null, rawKey?.size ?? null).run();
   return (res.meta as any)?.last_row_id ?? 0;
 }
 

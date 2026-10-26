@@ -51,7 +51,7 @@ it, where in their nav, and how do they get there.*
 | Customer Audience Landing Page | `/spinout-lab/brand` · `/build/brand` · `/p/:site/:page` · `/landing/:slug` | Headerless | Full page | Sidebar → Headerless → Grow | CURRENT | High |
 | Customer Discovery | `/spinout-lab/discovery` · `/build/discovery` | Headerless | Full page (Spin-Out Lab — frozen) | Sidebar → Headerless → Spin-Out Lab | OUT OF SCOPE | High |
 | Customer Templates | `/spinout-lab/brand` · `/build/brand` | Headerless | Full page (Spin-Out Lab — frozen) | Sidebar → Headerless → Grow | OUT OF SCOPE | High |
-| Data Room | `/raise/data-room?mode=workspace` · `/raise/data-room?mode=access` · `/raise/data-room/:id` · `/research/diligence` · `/research/diligence/:grantUid` · `/files/:fileUid` | Headerless | Full page | Sidebar → Headerless → Raise | CURRENT | High |
+| Data Room | `/raise/data-room?mode=workspace` · `/raise/data-room?mode=access` · `/raise/data-room/:id` · `/research/diligence` · `/research/diligence/:grantUid` · `/files/:fileUid` · `/raise/data-room/access` · `/requests` | Headerless | Full page | Sidebar → Headerless → Raise | CURRENT | High |
 | Detail Layer Canvas | — | — (not routed) | Full page (proposed) | Not reachable yet | NEW | Low |
 | Due Diligence | `/admin/due-diligence*` | — (no nav entry) | Full page | Deep link / in-page action | UPGRADE | Medium |
 | Founder Studio | `/studio` | Headerless | Full page | Sidebar → Headerless → Studio | UPGRADE | High |
@@ -143,7 +143,7 @@ it, where in their nav, and how do they get there.*
 | Calls for Capital | `/raise/calls` · `/raise/calls/:uid` | — (no nav entry) | Full page | Deep link / in-page action | NEW | Medium |
 | Checkout | `/pricing` | — (no nav entry) | Full page | Deep link / in-page action | UPGRADE | Medium |
 | Closing room | `/raise/capital-relationships/closing` · `/deals/:dealId/closing` · `/admin/contracts/closings` · `/admin/contracts/closings/:dealId` | Headerless | Full page (proposed) | Sidebar → Headerless → Deals | NEW | Low |
-| Data Room | `/raise/data-room?mode=workspace` · `/raise/data-room?mode=access` · `/raise/data-room/:id` · `/research/diligence` · `/research/diligence/:grantUid` · `/files/:fileUid` | Headerless | Full page | Sidebar → Headerless → Deals | CURRENT | High |
+| Data Room | `/raise/data-room?mode=workspace` · `/raise/data-room?mode=access` · `/raise/data-room/:id` · `/research/diligence` · `/research/diligence/:grantUid` · `/files/:fileUid` · `/raise/data-room/access` · `/requests` | Headerless | Full page | Sidebar → Headerless → Deals | CURRENT | High |
 | Deal Flow | `/pipeline` · `/deals` · `/deals/:dealId` · `/pipeline/screening\|commit\|transactions` · `/deals/screening\|commit\|closing` | Headerless | Full page | Sidebar → Headerless → Deals | UPGRADE | High |
 | Detail Layer Canvas | — | — (not routed) | Full page (proposed) | Not reachable yet | NEW | Low |
 | Due Diligence | `/admin/due-diligence*` | — (no nav entry) | Full page | Deep link / in-page action | UPGRADE | Medium |

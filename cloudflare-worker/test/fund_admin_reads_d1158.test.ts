@@ -155,7 +155,7 @@ test('lps: one row per LP of each administered fund, never the outside GP\'s; an
   assert.deepEqual([a.commitment_cents, a.called_cents, a.received_cents, a.outstanding_cents, a.distributed_cents, a.overdue_lines],
     [100000, 40000, 0, 40000, 7000, 1]);
   assert.deepEqual(a.last_notice, { uid: 'n-new', notice_type: 'capital_call_notice', reference: 'CALL-1-A', amount_cents: 40000, issued_at: '2026-02-01 00:00:00' });
-  assert.deepEqual(a.booklet, { state: 'submitted', application_status: 'approved', submitted_at: '2026-03-01 00:00:00' });
+  assert.deepEqual(a.booklet, { state: 'submitted', application_status: 'approved', submitted_at: '2026-03-01 00:00:00', uid: 'b-1' });
   assert.deepEqual(a.unavailable, {});
 
   const b = by[11];
@@ -176,7 +176,7 @@ test('lps: one row per LP of each administered fund, never the outside GP\'s; an
   db.exec(`INSERT INTO lp_applications (id, user_id, fund_slug, investor_type, status) VALUES (2, ${PARTNER}, 'spinout-fund-i', 'individual', 'approved');
            INSERT INTO limited_partners (id, fund_id, user_id, commitment_amount, status) VALUES (13, 1, ${PARTNER}, 100, 'committed');`);
   const again = (await lps(db, '?q=user904')).body.items.find((r: any) => r.limited_partner_id === 13);
-  assert.deepEqual(again.booklet, { state: 'not_started', application_status: 'approved', submitted_at: null });
+  assert.deepEqual(again.booklet, { state: 'not_started', application_status: 'approved', submitted_at: null, uid: null });
 });
 
 test('lps: totals equal the sum of the rows across every page, with the rows that hold no figure counted', async () => {
@@ -196,6 +196,22 @@ test('lps: totals equal the sum of the rows across every page, with the rows tha
   }
   assert.deepEqual([whole.totals.called_cents, whole.totals.distributed_cents], [90000, 7000]);
   assert.deepEqual(whole.totals.not_recorded, { commitment_cents: 1, called_cents: 1, received_cents: 1, outstanding_cents: 1, distributed_cents: 3 });
+
+  // D1162: FND5's tiles and chart count every row the filters keep.
+  assert.deepEqual(first.tally, whole.tally, 'the tally covers every page');
+  assert.deepEqual(whole.tally, {
+    lpa_pending: 2, identity_pending: 0, identity_not_recorded: 3, overdue_lines: 2,
+    by_type: [
+      { lp_type: 'individual', lps: 1, commitment_cents: 100000 },
+      { lp_type: 'corporate', lps: 1, commitment_cents: 30000 },
+      { lp_type: 'institution', lps: 1, commitment_cents: null },
+      { lp_type: null, lps: 1, commitment_cents: 50000 },
+    ],
+  });
+  db.exec(`UPDATE users SET kyc_status = 'pending' WHERE id = ${PARTNER}`);
+  assert.equal((await lps(db)).body.tally.identity_pending, 1, 'a recorded check that is not approved is pending');
+  assert.equal((await lps(db, '?fund=3')).body.tally.lpa_pending, 0, 'a signed LPA is not pending');
+  db.exec(`UPDATE users SET kyc_status = NULL WHERE id = ${PARTNER}`);
 
   // Totals follow the filters, not the page.
   const one3 = (await lps(db, '?fund=3&per_page=1')).body;
@@ -231,6 +247,22 @@ test('lps: filters, search, sort and pages run on the Worker; a bad filter is re
   const outside = await lps(db, '?fund=2');
   assert.deepEqual([outside.status, outside.body?.code], [404, 'fund_not_administered']);
   assert.doesNotMatch(outside.text, /outside@example/);
+});
+
+test('lps (D1162): ?lp= answers that one LP\'s row for the drawer, audited with its id; a bad id is refused', async () => {
+  const db = seeded();
+  const r = (await lps(db, '?lp=12')).body;
+  assert.deepEqual(ids(r), [12]);
+  assert.equal(r.items[0].called_cents, null, 'no ledger line is null, never 0');
+  assert.equal(r.items[0].unavailable.called_cents, NO_LEDGER_LINE);
+  assert.deepEqual(ids((await lps(db, '?lp=20')).body), [], 'an outside fund\'s LP is not in the roster');
+  assert.deepEqual(ids((await lps(db, '?lp=30&fund=1')).body), [], 'the fund filter still applies');
+  const audit = one(db, "SELECT filters_json FROM admin_audit_log WHERE action = 'fund_lps_read' ORDER BY id DESC LIMIT 1");
+  assert.match(String(audit.filters_json), /"lp_id":30/);
+  for (const bad of ['?lp=x', '?lp=0', '?lp=-1']) {
+    const res = await lps(db, bad);
+    assert.deepEqual([res.status, res.body?.code], [400, 'invalid_lp_query'], bad);
+  }
 });
 
 test('lps: a store that cannot be read makes only its own figures Unreadable', async () => {
