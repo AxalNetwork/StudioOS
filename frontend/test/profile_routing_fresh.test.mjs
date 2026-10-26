@@ -126,7 +126,9 @@ test('ROUTE_MAP still parses to the full canvas corpus', () => {
   // 173 (D1228, #2384): `KYC & KYB`, /admin/kyc's four tabs and one person's case.
   // 174 (D1236, #2423): `Deal flow list`, the Deals root and /deals/compare.
   // 175 (D1244, #2385): `Due diligence desk`, the list's and the case's tabs.
-  assert.equal(recs.length, 175);
+  // 169 (D1029, #2866): the Cap Table Pro row folds into the Cap table row; its old page is retired.
+  // 174 after D1029 (#2866) folded Cap Table Pro into Cap table.
+  assert.equal(recs.length, 174);
 
   for (const r of recs) {
     assert.ok(r.canvas.length > 0, 'every row names a canvas');

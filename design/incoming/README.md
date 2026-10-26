@@ -549,6 +549,17 @@ Access, Import and export, the drawers, the dialogs, the investor's panel, phone
 and dark wait for D1015's fourteen parts, so this canvas stays in the queue
 until they land. The `ROUTE_MAP.md` row says what is drawn today.
 
+**The old pages are retired (D1029, #2866, part 14).** `/raise/capital/cap-table`
+forwards to `/raise/cap-table?moved=cap-table`, `/build/captable` to
+`/raise/cap-table`, `/raise/cap-table/variants` to
+`/raise/cap-table/scenarios?moved=variants` and a variant to its scenario, each
+keeping its query and hash with `?project=` read as `?project_id=`. The tool
+says "Cap table has a new address. Update your bookmark." or "Draft variants is
+now Scenarios, under Cap table." once. The simulator, the variants page, its
+409A and equity-plan panels and Capital's Cap Table tab are deleted; the Lab's
+copy (`/spinout-lab/captable`) stays until #2297's Lab redesign. The Ops canvas's
+V1 board (`ct-variants`) now names `/raise/cap-table/scenarios/[scenario]`.
+
 ## Landed 2026-10-24 — HQ · Platform · Payments (#2386)
 
 The owner's artifacts `N9XiycCLan8HmGXX4ZoQYY` (the board grid) and
@@ -1527,7 +1538,7 @@ its own pages.
 | --- | --- | --- | --- | --- |
 | Deal rooms | D1–D4, M5 References, F3 Close a syndicate | `/deals`; `/deals/:dealId`, its header and three tabs | UPGRADE | #1388 (D630) |
 | Funds | F1 Fund page (phone), F2 Quarterly report editor | a fund's page and its reporting period | NEW | #1389 (D631) |
-| Cap table variants and colleague seats | V1, S1, S2 (phone) | the cap table's variants; seats; `/invite/:token` | NEW (V1, S1), UPGRADE (S2) | #1390 (D632) |
+| Cap table variants and colleague seats | V1, S1, S2 (phone) | the cap table's variants (Scenarios since D1029); seats; `/invite/:token` | NEW (V1, S1), UPGRADE (S2) | #1390 (D632) |
 | HQ: registry, credits, obligations | Q1–Q3 | `/admin/contracts`, `/admin/team`, `/admin/security` | UPGRADE | #1391 (D633) |
 | HQ: content, revenue, identity | Q4–Q6 | `/admin/articles`, `/admin/revenue`, the KYC and partner-profile review windows | UPGRADE | #1392 (D634) |
 | Founder Validate | M1 (phone), M2 (phone), M3 | `/validate/verdict`, `/validate/interviews`, `/validate/hypotheses` | UPGRADE | #1393 (D635) |

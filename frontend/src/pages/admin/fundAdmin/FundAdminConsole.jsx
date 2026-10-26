@@ -1,10 +1,12 @@
 import { Link, Navigate, useLocation, useNavigate, useSearchParams } from 'react-router-dom';
-import { AdminPageHeader, HeaderMenuItem, HeaderTab, actionPrimary, useMovedNotice } from '../../../ui';
+import { LightboxPhoneProvider, AdminPageHeader, HeaderMenuItem, HeaderTab, actionPrimary, useMovedNotice } from '../../../ui';
 import { useAuth } from '../../../hooks/useAuthSync';
 import { branchOfUser } from '../../../lib/shellRole';
 import { api } from '../../../lib/api';
 import { fundAdminApi } from '../../../lib/api/fundAdmin';
 import { adminMercuryApi } from '../../../lib/api/adminMercury';
+import { fundLedgerApi } from '../../../lib/api/fundLedger';
+import { BooksTab } from './BooksTab';
 import { fundFeesApi } from '../../../lib/api/fundFees';
 import { fundReportingApi } from '../../../lib/api/fundReporting';
 import { adminCapitalAttestationsApi } from '../../../lib/api/adminCapitalAttestations';
@@ -46,6 +48,8 @@ export const DEFAULT_APIS = {
   mercury: adminMercuryApi,
   fees: fundFeesApi,
   reporting: fundReportingApi,
+  ledger: fundLedgerApi,
+  reports: { periods: (id) => api.fundsReportPeriods(id) },
   // D752 (#1890): the Calls tab's proofs of funds, read only on Show.
   capitalAttestations: adminCapitalAttestationsApi,
   // D1164 (#3071): NAV & performance (FND10–FND12): the list, the quarterly history, positions, and the mark and move writes.
@@ -108,19 +112,22 @@ export function FundAdminConsoleView({ user, apis = DEFAULT_APIS }) {
   const asOf = overview.status === 'ready' && overview.data?.as_of ? `As of ${overview.data.as_of}` : null;
   const pill = profilePill(acts);
   const primary = headerPrimary(view, acts, PER_FUND_VIEWS.includes(tab) ? fund : null);
-  // D1162: Add LP keeps the roster's filters, so the list under the dialog is the one the admin was reading.
+  // D1162: Add LP keeps the roster’s filters.
   if (primary && view === 'lps') primary.to = `/admin/fund-admin/lps${withQuery(location.search, 'add', true)}`;
-  const filter = fundFilter(funds, location.search, tab);
+  const filterView = view === 'reports' && !/\/(periods|notices)\/?$/.test(location.pathname) ? 'reportPacks' : tab;
+  const filter = fundFilter(funds, location.search, filterView);
+
   const exportCsv = () => downloadCsv(fundsCsv(overview.status === 'ready' ? overview.data : null));
 
   return (
+    <LightboxPhoneProvider phone="sheet">
     <main className="mx-auto max-w-[1440px] pb-16" data-testid="fund-admin-console">
       <div className="px-4 pt-5 sm:px-6">
         <AdminPageHeader
           title={TITLE}
           pills={pill ? [{ ...pill, testId: 'fund-admin-role' }] : []}
           line={LINE}
-          actions={primary ? <Link className={actionPrimary} to={primary.to} data-testid="fund-admin-primary">{primary.label}</Link> : null}
+          actions={primary ? <Link className={`${actionPrimary} max-sm:w-full max-sm:justify-center`} to={primary.to} data-testid="fund-admin-primary">{primary.label}</Link> : null}
           more={moreItems(acts).map((m) => (m.to
             ? <HeaderMenuItem key={m.key} to={m.to} data-testid={`fund-admin-more-${m.key}`}>{m.label}</HeaderMenuItem>
             : <HeaderMenuItem key={m.key} onSelect={exportCsv} data-testid={`fund-admin-more-${m.key}`}>{m.label}</HeaderMenuItem>))}
@@ -132,12 +139,13 @@ export function FundAdminConsoleView({ user, apis = DEFAULT_APIS }) {
             : <HeaderTab key={t.key} to={`/admin/fund-admin${keep}`} count={null} data-testid={`fund-admin-tab-${t.key}`}>{t.label}</HeaderTab>))}
           data-testid="fund-admin-header"
         />
-        {funds.length > 0 && <FundFilter filter={filter} pathname={location.pathname} search={location.search} />}
+        {funds.length > 0 && view !== 'books' && <FundFilter filter={filter} pathname={location.pathname} search={location.search} />}
       </div>
       {access.status === 'unreadable' && (
         <div className="mx-4 mt-4 sm:mx-6">
           <Banner tone="warn" data-testid="fund-admin-access-unreadable">
             Which acts you may take could not be read, so every control is shown. The Worker still refuses an act you may not take.
+            <button type="button" className="ml-2 underline" onClick={access.reload} data-testid="fund-admin-access-retry">Try again</button>
           </Banner>
         </div>
       )}
@@ -160,15 +168,18 @@ export function FundAdminConsoleView({ user, apis = DEFAULT_APIS }) {
         {view === 'reconciliation' && <ReconciliationTab apis={apis} access={acts} />}
         {view === 'calls' && <CallsTab {...fundProps} />}
         {view === 'distributions' && <DistributionsTab {...fundProps} />}
-        {view === 'fees' && <FeesTab {...fundProps} />}
-        {view === 'reports' && <ReportsTab {...fundProps} />}
+        {view === 'fees' && <FeesTab key={fund?.id} {...fundProps} />}
+        {view === 'reports' && <ReportsTab key={fund?.id} {...fundProps} />}
         {view === 'performance' && (
           <PerformanceTab apis={apis} access={acts} funds={funds} fundId={filter.pills.find((p) => p.on && p.id != null)?.id ?? null} onChanged={overview.reload} />
         )}
         {view === 'lps' && <LpsTab apis={apis} access={acts} funds={funds} />}
-        {(view === 'funds' || view === 'books') && <WaitCard view={view} />}
+        {view === 'books' && <BooksTab key={params.get('fund') || 'first'} apis={apis} selectedFund={params.get('fund')} onFund={(id) => go({ fund: id })} />}
+        {view === 'funds' && <WaitCard view={view} />}
+
       </div>
     </main>
+    </LightboxPhoneProvider>
   );
 }
 

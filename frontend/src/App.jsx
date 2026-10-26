@@ -426,8 +426,6 @@ const OnboardingPartnerPage = lazy(() => import('./pages/OnboardingPartnerPage')
 const OnboardingChatPage = lazy(() => import('./pages/OnboardingChatPage'));
 const BrandBuilderPage = lazy(() => import('./pages/BrandBuilderPage'));
 const CompetitorAnalysisPage = lazy(() => import('./pages/CompetitorAnalysisPage'));
-// D632 — a draft variant, renamed and edited in place.
-const CapTableVariantsPage = lazy(() => import('./pages/CapTableVariantsPage'));
 const DataRoomPage = lazy(() => import('./pages/raise/DataRoomPage'));
 const MessagesPage = lazy(() => import('./pages/MessagesPage'));
 // D702 (#1664) — the founder's profile pages (Studio · Mobile S6m, S7m, S9m, S10m).
@@ -519,6 +517,8 @@ import { buildCompetitorsRedirect } from './lib/companyDirectoryView';
 import { connectorsRedirect } from './pages/account/connectorsModel';
 import { signInPath as assistantSignInPath } from './pages/connect/assistantConsentModel';
 import { InvestorPricingRedirect, PlansAndPricingRedirect } from './pages/pricingRedirects.jsx';
+// D1029 (#2866): the old Cap table addresses forward into the tool.
+import CapTableMovedRedirect from './pages/raise/captable/CapTableMovedRedirect';
 import {
   PREVIEW_SHELLS, PREVIEW_TRIGGER, PREVIEW_HEADER, PREVIEW_FOOTER,
   previewOptionsFor, selectedPreviewKey, homePreviewKey, previewChip, previewNote,
@@ -1513,7 +1513,7 @@ function ProtectedLayout({ children, user, onLogout, viewMode, onViewModeChange,
         <CommandPalette />
         <KeyboardShortcutsOverlay />
         <InstallPrompt />
-        <StepUpModal />
+        <StepUpModal phoneSheet={location.pathname.startsWith('/admin/fund-admin')} />
       </Suspense>
     </ViewAsBranchContext.Provider>
     </ViewModeContext.Provider>
@@ -2736,8 +2736,8 @@ function AppInner() {
           table, so an old link lands there for everyone, with its query kept
           as D422's redirects keep theirs (`?project_id=` lands where it did). */}
       <Route path="/signals" element={<Navigate to={`/research${location.search}`} replace />} />
-      {/* #2340 (the owner's "Remove", #2297): the cap table is Capital's tab. */}
-      <Route path="/build/captable" element={<Navigate replace to={{ pathname: '/raise/capital/cap-table', search: location.search, hash: location.hash }} />} />
+      {/* #2340 (the owner's "Remove", #2297); D1029: straight to the Cap table tool, no chain. */}
+      <Route path="/build/captable" element={<CapTableMovedRedirect to="/raise/cap-table" />} />
       {/* documentation/architecture/DECISIONS.md D11 — /marketplace was a partner-provider directory with
           inquiry threads and reviews whose backend exists only in the dev-only
           FastAPI: all 11 api.marketplace* calls hit /marketplace/* and the
@@ -3166,8 +3166,8 @@ function AppInner() {
           existing pages via an `embedded` prop; each guarded for the roles of
           the pages it wraps. Standalone routes (/incorporate, /incorporate/*,
           /compliance) stay intact for the investor/partner personas that share
-          them; /build/financials and /build/captable forward to Capital's tabs
-          (#2339, #2340). */}
+          them; /build/financials forwards to Capital's tab (#2339) and /build/captable
+          to the Cap table tool (#2340, D1029). */}
       {/* D894 (#2434) — the Pitch deck studio. Its home, Review and Share &
           analytics tabs are the studio's own; the deck builder moved to
           /raise/pitch/edit until #2434 part 4 builds the editor, and the old
@@ -3201,11 +3201,11 @@ function AppInner() {
           ? founderWorkspace('raise', founderEditor(<CapitalWorkspacePage />))
           : <FounderRaiseCapital />)} />
       <Route path="/raise/capital/model" element={guard(['admin', 'founder'], founderWorkspace('raise', founderEditor(<CapitalWorkspacePage />)))} />
-      <Route path="/raise/capital/cap-table" element={guard(['admin', 'founder'], founderWorkspace('raise', founderEditor(<CapitalWorkspacePage />)))} />
-      {/* D632 — the cap table's draft variants (Ops canvas `ct-variants`). The main
-          cap table stays one per company at /raise/capital/cap-table. */}
-      <Route path="/raise/cap-table/variants" element={guard(['admin', 'founder'], founderWorkspace('raise', <CapTableVariantsPage />))} />
-      <Route path="/raise/cap-table/variants/:variant" element={guard(['admin', 'founder'], founderWorkspace('raise', <CapTableVariantsPage />))} />
+      {/* D1029 (#2866): the old cap table and its draft variants (D632) are the
+          Cap table tool's Overview and Scenarios now. */}
+      <Route path="/raise/capital/cap-table" element={<CapTableMovedRedirect to="/raise/cap-table" moved="cap-table" />} />
+      <Route path="/raise/cap-table/variants" element={<CapTableMovedRedirect to="/raise/cap-table/scenarios" moved="variants" />} />
+      <Route path="/raise/cap-table/variants/:variant" element={<CapTableMovedRedirect to="/raise/cap-table/scenarios" />} />
       {/* D696 decision 12: /raise/data-room answers by mode, in this order. An investor's rooms are
           read by grant under Research · Diligence (D311): the investor branch is a redirect there, so a
           bookmark still lands, and the guard keeps admitting investor so the redirect can run. A founder's

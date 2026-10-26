@@ -203,7 +203,7 @@
       {
         "persona": "founder",
         "id": "founder.captable.ownership",
-        "page_target": "/raise/capital/cap-table",
+        "page_target": "/raise/cap-table",
         "doc_anchor": "capital/cap-table",
         "section": "CAPITAL"
       },
