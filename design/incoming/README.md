@@ -109,6 +109,25 @@ strength of a live route would empty the queue of the work it exists to track.
    `Trust Center v2.dc.html` to `backlog/` for a day, next to the `NEW` canvases
    that have no route, and away from the v1 of its own page.
 
+## Landed 2026-10-26 — HQ › Content › Content queue (#2383)
+
+The owner's artifacts `TLvMuife2sYnh4BtEpo39B` (the board grid) and
+`XBryVcPJkeVM6D3SQKeR4b` (the page) came from S21's prompt on #2383. Each was
+decoded by `scripts/read-canvas.mjs`:
+- `Content queue · Boards.dc.html` is the board grid (ART1 to ART18); it
+  imports the page by name;
+- `Content Queue Page.dc.html` is the page.
+
+**Two edits, named.** The reader left two image asset uuids in the page. The
+Axal VC mark now points at `/axal-mark.png` and the Eadwyn mark at
+`/eadwyn-ai.png`, both served from `frontend/public/`. No other value was
+edited.
+
+**Grade: UPGRADE.** S21's integration (D1290) gives the queue four tabs at
+their own addresses and one address per article, under the shared header, and
+the review notices open the article. The boards themselves wait for
+D1291–D1298, so this canvas stays in the queue until they land.
+
 ## Landed 2026-10-26 — Deals › Deal flow (#2423)
 
 The owner's artifacts `4HugYQDAekRjwmbtv9Lkje` (the board grid) and

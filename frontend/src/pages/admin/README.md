@@ -20,6 +20,11 @@ tiers. Until that glance arrives the first paint says it is reading, and a
 glance that is already in hand is not passed through the legacy props.
 `AdminStudioHome.jsx` does not call that route yet. It is not an `/admin/*` route.
 
+`ArticlesQueuePage.jsx` is HQ › Content › Content queue (D1290, #2383): four
+tabs at their own addresses and one address per article, all named in
+`contentQueueModel.js`. Pipeline is the review queue; Calendar, Authors and
+Performance say what they wait on until D1291–D1298 build them.
+
 Roughly grouped by what they administer: accounts and roles, the Spin-Out Lab
 cohort (applications, timing, journey preview, and `SpinoutModerationPage.jsx`
 at `/admin/spinout-moderation`, which lists cases awaiting a decision apart
