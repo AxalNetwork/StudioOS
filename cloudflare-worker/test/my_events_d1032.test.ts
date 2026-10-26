@@ -240,6 +240,23 @@ test('GET /api/events/invitations: my pending invitations by user id or email, f
   assert.equal(body.invitations[1].event.location_url, null, 'no join link before a seat');
 });
 
+test('D967: GET /api/events/:id carries the host\'s name and nothing else of theirs; null with no host or a removed account', async () => {
+  const f = fixture();
+  f.ev({ id: 1 });
+  f.ev({ id: 2, host_user_id: null });
+  f.ev({ id: 3, host_user_id: 99 });
+  const res = await f.call('/1', 3);
+  const text = await res.clone().text();
+  const { status, body } = await json(res);
+  assert.equal(status, 200);
+  assert.equal(body.host_name, 'Host fixture');
+  for (const secret of ['host@example.test', '"host"']) assert.ok(!text.includes(secret), `no other host field: ${secret}`);
+  assert.equal((await json(await f.call('/2', 3))).body.host_name, null, 'no host');
+  assert.equal((await json(await f.call('/3', 3))).body.host_name, null, 'a removed account');
+  const named = f.log.filter((l) => l.sql.includes('LEFT JOIN users host ON host.id = e.host_user_id'));
+  assert.ok(named.length && named.every((l) => l.args.length === 1), 'one bound statement');
+});
+
 test('POST /api/events/:id/invitation: decline, and accept registers and records the acceptance only once the seat is held', async () => {
   // Mutation checked: acceptance written before `registerPrincipal` → the full event leaves it "accepted";
   // the revoked check dropped → a revoked invitation registers.

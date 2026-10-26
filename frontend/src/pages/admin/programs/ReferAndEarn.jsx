@@ -12,6 +12,9 @@
 // funnel's current tags (D1124, #3004: and its bars), Referrals per week by category, and Strategic
 // referral access with Grant and Decline; the Queue paged with its total and
 // its referral dialog; Activity; and the phone pages.
+//
+// D965 (#2798): Overview's Rewards issued tile and Rewards card, from
+// `ReferRewards.jsx`, on the referral rewards paid in perk credits.
 import React, { useState } from 'react';
 import { useLocation } from 'react-router-dom';
 import { Lightbox } from '../../../ui';
@@ -24,6 +27,7 @@ import ActivityTab from './ActivityTab';
 import PlaybookEditor, { useProgramDetail } from './PlaybookEditor';
 import ProgramFrame from './ProgramFrame';
 import { ReferTabs } from './ProgramTabs';
+import { RewardsCard, RewardsIssuedTile, useRewardReads } from './ReferRewards';
 import {
   BlockFailed, Card, ChartCard, DIALOG_BODY, DIALOG_LINES, DialogButtons, Field, Pill, Skeleton, SUB, Tile,
 } from './parts';
@@ -176,7 +180,8 @@ function Strategic({ reads }) {
   );
 }
 
-function ReferOverview({ reads }) {
+function ReferOverview({ reads, superAdmin }) {
+  const rw = useRewardReads();
   const now = Date.now();
   const w = referWaiting(reads.totals, reads.oldest, now);
   const lane = laneFrom(reads.glance, 'referrals');
@@ -190,10 +195,11 @@ function ReferOverview({ reads }) {
     : { key: 'waiting', label: 'Waiting for review', state: w.state, reason: 'An open status could not be read, so no total is drawn.' };
   return (
     <div className="flex flex-col gap-4" data-testid="programs-refer-overview">
-      <div className="grid gap-3.5 sm:grid-cols-3">
+      <div className="grid gap-3.5 sm:grid-cols-2 lg:grid-cols-4">
         <Tile t={totalTile('referrals', 'Referrals', reads.all, ALL_TIME)} onRetry={reads.reload} />
         <Tile t={waitTile} onRetry={reads.reload} />
         <Tile t={totalTile('converted', 'Converted', reads.converted, `Converted, reward eligible or reward issued. ${ALL_TIME}`)} onRetry={reads.reload} />
+        <RewardsIssuedTile issued={rw.issued} rewards={rw.rewards} onRetry={rw.reload} />
       </div>
       <div className="grid gap-3.5 lg:grid-cols-2">
         <WaitingForReview reads={reads} w={w} lane={lane} />
@@ -204,6 +210,7 @@ function ReferOverview({ reads }) {
           b={weekly.state === 'ready' ? { ...weekly, window: WEEKS_LINE } : { state: weekly.state, what: 'The referrals per week' }} />
         <Strategic reads={reads} />
       </div>
+      <RewardsCard rewards={rw.rewards} superAdmin={superAdmin} onRetry={rw.reload} />
     </div>
   );
 }
@@ -226,7 +233,7 @@ function ReferBody() {
   const queue = open !== null ? { text: nf(open), amber: open > 0, title: 'Every open referral' } : null;
   return (
     <ProgramFrame program="refer-and-earn" superAdmin={superAdmin} tabs={<ReferTabs queue={queue} />}>
-      {tab === 'overview' ? <ReferOverview reads={reads} /> : null}
+      {tab === 'overview' ? <ReferOverview reads={reads} superAdmin={superAdmin} /> : null}
       {tab === 'how' ? <PlaybookEditor program="refer-and-earn" superAdmin={superAdmin} detail={detail} testId="programs-refer-how" /> : null}
       {tab === 'queue' ? <ReferralReviewBody embedded onChanged={reads.reload} /> : null}
       {tab === 'settings' ? <ReferSettings /> : null}

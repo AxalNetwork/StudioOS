@@ -13,6 +13,7 @@
  */
 import type { Env } from '../types';
 import { bindingKey } from '../util/schemaBootstrap';
+import { grantCredits, type GrantActor } from './creditGrants';
 
 export const CATEGORIES = ['startup', 'customer', 'strategic'] as const;
 export type Category = (typeof CATEGORIES)[number];
@@ -90,7 +91,7 @@ export const CATEGORY_META: Record<Category, {
     access: 'Open',
     qualifies:
       'A founder actively building, with a specific problem and early evidence — a fit for the Spin-Out Lab.',
-    reward: 'Milestone-based, on acceptance and formation.',
+    reward: 'Perk credits on acceptance and on formation.',
   },
   customer: {
     name: 'Platform user referrals',
@@ -98,7 +99,7 @@ export const CATEGORY_META: Record<Category, {
     access: 'Open',
     qualifies:
       'Advisors, service partners, or teams evaluating platform tools — anyone with a namable role and a clear next step.',
-    reward: 'Platform credit, issued once matched and onboarded with a founder.',
+    reward: 'Perk credits once matched and onboarded with a founder.',
   },
   strategic: {
     name: 'Strategic & capital introductions',
@@ -109,6 +110,62 @@ export const CATEGORY_META: Record<Category, {
     reward: 'Invite-only economics, negotiated case by case.',
   },
 };
+
+/**
+ * D965 (#2798) — the referral rewards paid in perk credits, O-CRD A. The
+ * amounts live in `credit_reward_rules` (migration 566), never here: this
+ * names only which rule each category has and the status that pays it.
+ * Strategic introductions are agreed case by case and have no rule.
+ * "On acceptance" is the move to Converted; "on formation" and "once
+ * onboarded" are the move to Reward issued, which no later move undoes.
+ */
+export const REFERRAL_REWARD_RULES: ReadonlyArray<{
+  key: string; category: Category; pays_at: Status; when: string;
+}> = [
+  { key: 'referral:startup_accepted', category: 'startup', pays_at: 'converted', when: 'on acceptance' },
+  { key: 'referral:startup_formed', category: 'startup', pays_at: 'reward_issued', when: 'on formation' },
+  { key: 'referral:customer_onboarded', category: 'customer', pays_at: 'reward_issued', when: 'once onboarded' },
+];
+
+export type ReferralRule = {
+  key: string; category: Category; pays_at: Status; when: string; credits: number | null; active: boolean;
+};
+
+/**
+ * Every referral rule with what `credit_reward_rules` holds for it now. A
+ * rule with no row reads `credits: null` and off: nothing pays it. The read
+ * is the prefix test `CAP_USED_SQL` uses, never LIKE.
+ */
+export async function readReferralRules(env: Env): Promise<ReferralRule[]> {
+  const rows = await env.DB.prepare(
+    `SELECT key, credits, active FROM credit_reward_rules WHERE substr(key, 1, 9) = 'referral:'`,
+  ).all<{ key: string; credits: number; active: number }>();
+  const byKey = new Map((rows.results || []).map((r) => [r.key, r]));
+  return REFERRAL_REWARD_RULES.map((r) => {
+    const row = byKey.get(r.key);
+    const credits = row ? Number(row.credits) : null;
+    return { ...r, credits, active: !!row && Number(row.active) === 1 && Number(credits) > 0 };
+  });
+}
+
+const creditWords = (n: number) => `${n} perk credit${n === 1 ? '' : 's'}`;
+
+/**
+ * The member's reward line for one category, from the rules that are on.
+ * None promises credits while its rule is off.
+ */
+export function rewardLine(category: Category, rules: ReferralRule[]): string {
+  if (category === 'strategic') return CATEGORY_META.strategic.reward;
+  const on = rules.filter((r) => r.category === category && r.active && r.credits !== null);
+  if (!on.length) return 'No perk credits are paid for this kind of referral now.';
+  return `${on.map((r) => `${creditWords(Number(r.credits))} ${r.when}`).join(', and ')}.`;
+}
+
+/** The overview's `rewards` for one category: one entry per rule that is on. */
+export function categoryRewards(category: Category, rules: ReferralRule[]) {
+  return rules.filter((r) => r.category === category && r.active)
+    .map((r) => ({ rule_key: r.key, credits: r.credits, pays_at: r.pays_at, when: r.when }));
+}
 
 export function isCategory(v: unknown): v is Category {
   return typeof v === 'string' && (CATEGORIES as readonly string[]).includes(v);
@@ -521,10 +578,48 @@ export async function appendEvent(
   ).bind(submissionId, label, status, clean(note, MAX_LEN.note), actorUserId).run();
 }
 
+/** D965: what a move paid. Null when the move pays no rule. */
+export type ReviewReward =
+  | { rule_key: string; paid: true; credits: number | null; ledger_id: number | null }
+  | { rule_key: string; paid: false; code: 'rule_inactive' | 'not_eligible' };
+
+/**
+ * D965 (#2798): pay the referrer the rule a move into `nextStatus` pays, if
+ * one does. It runs after the allowed-move check and before the move, so a
+ * referral whose reward is on never passes its paying status unpaid, and a
+ * retry after a failed move reads `already_granted` and pays nothing twice.
+ *
+ * Two refusals let the move through, unpaid: a rule HQ switched off
+ * (`rule_inactive`), and a referrer who never earns credits, a partner or an
+ * admin (`not_eligible`, O-CRD A: their referrals still move). Any other
+ * refusal refuses the move with 409 `reward_not_paid`.
+ */
+async function payReferralReward(env: Env, row: SubmissionRow, nextStatus: Status, actor: GrantActor): Promise<ReviewReward | null> {
+  const rule = REFERRAL_REWARD_RULES.find((r) => r.category === row.category && r.pays_at === nextStatus);
+  if (!rule) return null;
+  const result = await grantCredits(env, {
+    userId: row.referrer_user_id, ruleKey: rule.key, sourceRef: `referral:${row.uid}:${rule.key}`, actor,
+  });
+  if (result.status === 'granted') {
+    return { rule_key: rule.key, paid: true, credits: result.credits, ledger_id: result.ledger_id };
+  }
+  if (result.status === 'already_granted') {
+    const line = await env.DB.prepare('SELECT delta FROM perk_credit_ledger WHERE id = ?')
+      .bind(result.ledger_id).first<{ delta: number }>();
+    return { rule_key: rule.key, paid: true, credits: line ? Number(line.delta) : null, ledger_id: result.ledger_id };
+  }
+  if (result.code === 'rule_inactive' || result.code === 'not_eligible') {
+    return { rule_key: rule.key, paid: false, code: result.code };
+  }
+  throw new ReferralError('reward_not_paid',
+    `The ${rule.key} reward could not be paid (${result.code}), so the referral did not move.`, 409);
+}
+
 /**
  * Admin review action: move status and optionally set the reviewer-facing
  * fields. Appends to the timeline in the same call so a status can never
- * change without a history row.
+ * change without a history row. D965: a move into a paying status pays its
+ * reward first (`payReferralReward`), and the answer carries `reward`.
  */
 export async function reviewSubmission(
   env: Env,
@@ -537,7 +632,8 @@ export async function reviewSubmission(
     nextStep?: string | null;
     fitNotes?: string | null;
   },
-): Promise<SubmissionRow> {
+  actorEmail = '',
+): Promise<SubmissionRow & { reward: ReviewReward | null }> {
   const row = await getByUid(env, uid, null);
   if (!row) throw new ReferralError('not_found', 'No such referral.', 404);
 
@@ -556,6 +652,9 @@ export async function reviewSubmission(
       binds.push(nextStatus);
     }
   }
+  const reward = nextStatus
+    ? await payReferralReward(env, row, nextStatus, { kind: 'admin', id: actorUserId, email: actorEmail })
+    : null;
   if (patch.rewardLabel !== undefined) { sets.push('reward_label = ?'); binds.push(clean(patch.rewardLabel, 120)); }
   if (patch.nextStep !== undefined) { sets.push('next_step = ?'); binds.push(clean(patch.nextStep, 240)); }
   if (patch.fitNotes !== undefined) { sets.push('fit_notes = ?'); binds.push(clean(patch.fitNotes, 2000)); }
@@ -582,7 +681,7 @@ export async function reviewSubmission(
   }
 
   const fresh = await getByUid(env, uid, null);
-  return fresh || row;
+  return { ...(fresh || row), reward };
 }
 
 /**

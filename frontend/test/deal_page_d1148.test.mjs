@@ -14,7 +14,7 @@ import { MemoryRouter, Routes, Route, useLocation } from 'react-router-dom';
 import { installDocument } from './_contracts_dom.mjs';
 import { AuthProvider } from '../src/hooks/useAuthSync.jsx';
 import DealRoomPage from '../src/pages/DealRoomPage.jsx';
-import { NOT_YET, TAB_DEFS, WAITS, dealTabsFor, tabHref, tabOf } from '../src/pages/dealPageModel.js';
+import { TAB_DEFS, WAITS, dealTabsFor, tabHref, tabOf } from '../src/pages/dealPageModel.js';
 
 const h = React.createElement;
 const read = (p) => readFileSync(p, 'utf8');
@@ -89,7 +89,8 @@ test('the address names the tab; a word the role does not draw, or no word, is O
 });
 
 test('every tab with no read says why, and none says zero or none', () => {
-  for (const t of ['scorecard', 'evidence', 'team', 'market', 'traction']) assert.ok(WAITS[t], t);
+  for (const t of ['scorecard', 'evidence']) assert.ok(WAITS[t], t);
+  for (const t of ['team', 'market', 'traction']) assert.equal(WAITS[t], undefined, `D1154: ${t} reads D1151's section and no longer waits`);
   assert.equal(WAITS.notes, undefined, 'D1152: Notes reads its store and no longer waits');
   for (const t of ['terms', 'diligence']) assert.equal(WAITS[t], undefined, `D1153: ${t} is a working tab and no longer waits`);
   for (const w of Object.values(WAITS)) assert.ok(!/\b0\b|\$0|\bnone\b/i.test(w.replace('not a score of zero', '')), w);
@@ -110,13 +111,12 @@ test('an investor at /deals/4: Overview from the deal read, the eleven tabs as l
   } finally { await v.close(); }
 });
 
-test('a tab with no read draws its wait card and makes no read of its own', async () => {
+test('D1154: Traction reads its own section and draws no wait card', async () => {
   const v = await mounted('/deals/4/traction', INVESTOR);
   try {
     assert.deepEqual(v.current(), ['deal-tab-traction']);
-    assert.ok(v.textOf('deal-wait-traction').includes(NOT_YET));
-    assert.ok(v.textOf('deal-wait-traction').includes(WAITS.traction));
-    assert.ok(!v.requests.some((u) => /traction|metrics/.test(u)), 'nothing is read for Traction');
+    assert.ok(!v.ids().includes('deal-wait-traction'));
+    assert.ok(v.requests.some((u) => /\/api\/deals\/4\/traction$/.test(u)), 'Traction reads D1151\'s section');
   } finally { await v.close(); }
 });
 

@@ -158,16 +158,18 @@ test('one failed read costs one block; an Operating Partner gets no lines', asyn
   } finally { await p.close(); }
 });
 
-test('the desk links each closing; a failed deals read says so', async () => {
-  const deals = [DEAL, { id: 8, project_name: 'Orbit', closing_deadline: null }];
-  const v = await mount(h(ClosingsDeskPage), { '/deals': deals });
+// D1219 (#3216) moved the desk onto the closings store (`/api/admin/closings`);
+// its rows, tiles and failures are pinned in closings_desk_d1219.test.mjs. This
+// keeps D1213's two claims: the desk links each closing, and a failed read says so.
+test('the desk links each closing; a failed read says so', async () => {
+  const closings = [{ uid: 'c7', deal_id: 7, project_name: 'Acme Robotics', next_actor: { who: 'admin', why: 'x' } }];
+  const v = await mount(h(ClosingsDeskPage), { '/admin/closings': { closings }, '/closings': { closings: [] } });
   try {
-    assert.ok(v.has('closings-desk-row-7') && !v.has('closings-desk-row-8'));
+    assert.ok(v.has('closings-desk-row-7'));
     assert.ok(v.links().includes('/admin/contracts/closings/7'));
-    assert.ok(v.text('closing-wait-closings').startsWith(NOT_YET));
   } finally { await v.close(); }
-  const e = await mount(h(ClosingsDeskPage), { '/deals': new Error('down') });
-  try { assert.match(e.text(), /The deals could not be read/); } finally { await e.close(); }
+  const e = await mount(h(ClosingsDeskPage), { '/admin/closings': new Error('down') });
+  try { assert.match(e.text(), /The closings could not be read/); } finally { await e.close(); }
 });
 
 test('one closing at its address, and a malformed id reads nothing', async () => {
