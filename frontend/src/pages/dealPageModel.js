@@ -12,11 +12,12 @@
  * investor's tabs without Notes, with the tabs only they keep: Invitations
  * (admin) and Transfers (admin, Operating Partner), as D630 placed them (DL17).
  *
- * WHAT IS READ TODAY. Overview, Documents, Commitment, Activity, Diligence's
- * reference calls, Invitations and Transfers draw today's reads. Scorecard,
- * Evidence, Team, Market, Traction and Terms have no per-deal read on
- * `main`, so each says "Not read here yet" with its reason (D1148 §3).
- * Notes reads part 2's store since D1152 (`deal/DealNotes.jsx`).
+ * WHAT IS READ TODAY. Overview, Documents, Commitment, Activity, Invitations
+ * and Transfers draw today's reads. Team, Market and Traction have no per-deal
+ * read on `main`, so each says "Not read here yet" with its reason (D1148
+ * §3). Notes reads part 2's store since D1152 (`deal/DealNotes.jsx`), and
+ * Diligence, Documents, Terms and Commitment are part 5's working tabs since
+ * D1153 (`deal/DealWorkTabs.jsx`).
  */
 
 export const TAB_DEFS = {
@@ -84,6 +85,4 @@ export const WAITS = {
   team: 'No per-deal team read exists yet. Founders and key hires show here as they published themselves, once the read lands.',
   market: 'No per-deal market read exists yet. TAM, SAM and SOM show here with their sources, once the read lands.',
   traction: 'No per-deal traction read exists yet. Only the figures the founder shares will show here; until then nothing is shown.',
-  terms: 'No per-deal terms read exists yet. Proposed terms, the legal paper and the cap table panel (#2432) show here, handing off to the closing room (#2424).',
-  diligence: 'The diligence case for this deal is not read here yet. Your firm’s reference calls are below.',
 };
