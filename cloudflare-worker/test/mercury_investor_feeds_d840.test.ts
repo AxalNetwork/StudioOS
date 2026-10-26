@@ -43,6 +43,8 @@ function seed() {
   db.exec(migration('445_connector_fed_items.sql'));
   db.exec(migration('418_fund_ledger.sql'));
   db.exec(noFks(migration('522_mercury_investor_feeds.sql')));
+  db.exec(noFks(migration('599_deal_currency.sql')));
+  db.exec(noFks(migration('613_company_receiving_accounts.sql')));
   db.exec(`UPDATE users SET investor_tier = 'institutional', investor_subscription_status = 'active' WHERE id IN (${INVESTOR}, ${OTHER_INVESTOR})`);
   db.exec(`INSERT INTO integrations (id, uid, user_id, provider_key, status, auth_type) VALUES (${INTEGRATION}, 'int-own', ${INVESTOR}, 'mercury', 'active', 'oauth2')`);
   // A deal of a founder's project, with the investor's pending $25,000 commitment.
@@ -225,6 +227,12 @@ test('Closing: the wire is proposed against the commitment; nothing is recorded 
   const a = await h.call('POST', `/proposals/${p.uid}/accept`, INVESTOR);
   assert.equal(a.status, 200, a.text);
   assert.equal(a.body.result_ref, `mercury:${fakeTx(1)}`);
+  const sent = one(h.db, 'SELECT status,sent_at,sent_on,sent_amount_cents,sent_currency FROM commitments WHERE id=21');
+  assert.equal(sent.status, 'pending', 'the sender never confirms receipt');
+  assert.ok(sent.sent_at);
+  assert.equal(sent.sent_on, '2026-09-05');
+  assert.equal(sent.sent_amount_cents, 2500000);
+  assert.equal(sent.sent_currency, 'USD');
   assert.equal(one(h.db, 'SELECT state FROM mercury_investor_proposals WHERE uid = ?', p.uid).state, 'accepted');
   assert.equal((await h.call('POST', `/proposals/${p.uid}/accept`, INVESTOR)).status, 409);
 });

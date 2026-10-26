@@ -110,7 +110,7 @@ const FULL_PROJECT = {
   revenue: 420_000,
   growth_signals: '18% MoM, 3.2x net retention, 28 inbound demos/wk.',
   funding_needed: 3_000_000,
-  use_of_funds: 'Eng (60%), GTM (30%), G&A (10%).',
+  use_of_funds: JSON.stringify([{ label: 'Product & engineering', pct: 60 }, { label: 'GTM: sales and marketing', pct: 30 }, { label: 'Operations, legal & compliance', pct: 10 }]),
   cost_to_mvp: 250_000,
   cac: 220,
   gross_margin_pct: 78,
@@ -212,5 +212,17 @@ test('D895: an AI-only filled field contributes no recorded coverage', async () 
   const filled = await autofillDeck(env, method, FULL_PROJECT.id, WHO);
   assert.equal(filled.slides[0].fields.copy.source, 'ai');
   assert.equal(filled.slides[0].coverage_pct, 0);
+  assert.equal(filled.total_coverage_pct, 0);
+});
+
+
+test('D1174: an unknown stored split is missing in the deck data read', async () => {
+  const project = { ...FULL_PROJECT, use_of_funds: '[{"label":"Other","pct":100}]' };
+  const env = makeEnv({ project, financials: FULL_FINANCIALS, holders: FULL_HOLDERS });
+  const method = { ...getMethod('yc_seed')!, slides: [{ id: 'ask', title: 'The ask', fields: [
+    { key: 'use_of_funds', label: 'Use of funds', kind: 'bullets' as const, sources: ['project.use_of_funds'] },
+  ] }] };
+  const filled = await autofillDeck(env, method, project.id, WHO);
+  assert.equal(filled.slides[0].fields.use_of_funds.source, 'placeholder');
   assert.equal(filled.total_coverage_pct, 0);
 });

@@ -3,6 +3,11 @@
 
 D1144: `cycle_raise.ts` returns the stored Product-market fit part, its paged `/pmf/history` read and Re-score’s `pmf: true` flag. The founder/admin project gate is unchanged. `../services/scoring/README.md` names the shared snapshot/checklist/audit transaction.
 
+D1147: `pmf_explain.ts` mounts at `/api/cycles/raise/pmf/explain` before Raise.
+It previews input-only explanations/questions without saving a reading; only
+the founder's verified Keep writes accepted wording and its audit. It never
+writes a score or recomputes PMF.
+
 These files are the production API behind `https://axal.vc/api/*`. They are
 mounted by `cloudflare-worker/src/index.ts` and run on Cloudflare Workers
 against D1 (`env.DB`), KV, R2, Vectorize, AI, Queues and Durable Objects.
@@ -158,6 +163,12 @@ and audits `fund.create`. `fund_performance.ts` enforces and audits
 `fund.valuation` for marks and fund attribution. Admin controls use the shared
 act table; existing institutional GP ownership/tier scope remains. The overview
 also returns an independent per-fund booklet waiting block.
+
+D1174 (#3101): `financials.ts` no longer returns, writes or exports the Capital
+score; its column remains. Export/recompute require a person-saved model.
+`cycle_records.ts` supplies a verified founder/session/company marker before a
+Use of funds section may read private accepted Mercury actuals. Missing and
+unreadable bank data stay distinct, with no provider call.
 
 ### Build operating systems (D686)
 
@@ -378,3 +389,18 @@ D1133: `billing.ts` mounts `/alerts/:id/pay` and `/alerts/:id/update-card` under
 D1135: `company.ts` adds member self-leave and validates create/rename; `projects.ts` counts live ventures, adds owner restore within 30 days and sends email-mode team invitations.
 
 D1123: `admin_lab_operations.ts` adds `/cohorts/:cohort/capacity`, the latest stored capacity event for SL6, separately from current Settings. It never returns free-form event details.
+
+D1206 (#3172): `calendar.ts` applies Investor Professional only to
+IC creation; calendar reads, including the token subscription, remain available
+on every plan. Studio/All studios are separate read-only Admin/Super Admin
+scopes with explicit availability; personal ownership and deal-party gates
+still govern every sync, push and export.
+Each authorized staff-scope view calls the existing admin audit helper with
+only its scope and normalized date window; no event content is recorded.
+
+D1237 (#3250): `deals.ts` records the verified firm on a room request; the
+unique investor/deal row cannot be claimed or removed from another selected
+firm. The Free quota and join/leave exceptions live in
+`../middleware/requireInvestorTier.ts`; the deal listing stays Professional.
+The INSERT enforces the global allowance atomically. Investor list rows carry
+`can_read` from the existing invited-or-committed reader for safe room links.

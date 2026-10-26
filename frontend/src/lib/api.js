@@ -74,6 +74,7 @@ export * from './api/googleWorkspace.js';
 export * from './api/helpCenter.js';
 export * from './api/insights.js';
 export * from './api/interviewSessions.js';
+export * from './api/kycHq.js';
 export * from './api/labOperations.js';
 export * from './api/labReportShares.js';
 export * from './api/learning.js';
@@ -97,6 +98,7 @@ export * from './api/partnerProfiles.js';
 export * from './api/partnerSettlements.js';
 export * from './api/payments.js';
 export * from './api/personaSegments.js';
+export * from './api/pmfExplain.js';
 export * from './api/productTesting.js';
 export * from './api/profile.js';
 export * from './api/programGrants.js';
@@ -1466,7 +1468,7 @@ export const api = {
   retryTicketMirror: (id) => request(`/tickets/${id}/mirror`, { method: 'POST' }),
 
   // Task #82 — `scope='mine'` narrows the funnel to deals the investor has a
-  // relationship with (dealroom member / introduced / converted watchlist).
+  // relationship with: invited or committed. A room request alone is not access.
   listDeals: (status, scope) => {
     const q = new URLSearchParams();
     if (status) q.set('status', status);
@@ -1477,9 +1479,10 @@ export const api = {
   createDeal: (data) => request('/deals', { method: 'POST', body: JSON.stringify(data) }),
   getDeal: (id) => request(`/deals/${id}`),
   updateDeal: (id, data) => request(`/deals/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
-  // Task #82 — deal-room membership. join() is idempotent ({ok, already_member});
-  // both may 402 with code:'quota_dealrooms_exhausted' (no `required` field, so
-  // the global PaywallModal does NOT auto-open — callers surface it inline).
+  // D1237 — room requests. Join returns {ok, requested, already_requested?};
+  // another firm's request is 409; a non-live/unknown deal is 404. Quota is
+  // 402 with code:'quota_dealrooms_exhausted' and no `required` field, so callers
+  // surface it inline. Leave is idempotent and grants no new deal access.
   dealroomJoin: (id) => request(`/deals/${id}/dealroom/join`, { method: 'POST' }),
   dealroomLeave: (id) => request(`/deals/${id}/dealroom/leave`, { method: 'DELETE' }),
   // D630 — used against cap ("Unlimited" when `unlimited`), the plan that
@@ -3005,7 +3008,7 @@ export const api = {
   voteLeaderboard: (limit = 10) => request(`/pipeline/votes/leaderboard?limit=${limit}`),
   // D370: no `.catch(() => [])`. That turned a failed read into "no capital
   // calls", which is a claim; a caller that wants a fallback writes its own.
-  capitalCalls: () => request('/legalcap/capital/calls'),
+  capitalCalls: () => request('/capital/calls'),
   complianceFor: (dealId) => request(`/legalcap/compliance/${dealId}`),
 
   spinoutExecute: (data) => request('/legalcap/spinout/execute', { method: 'POST', body: JSON.stringify(data) }),

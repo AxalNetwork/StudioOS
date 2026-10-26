@@ -39,14 +39,15 @@ import { removeProviderCopies } from '../services/calendar/sync';
 import { describeItems } from '../services/calendar/items';
 import { investorUpsell, userMeetsInvestorTier } from '../middleware/requireInvestorTier';
 import { logAdminAction } from '../services/adminAudit';
-import { requireAuth } from '../auth';
+import { requireAuth, isSuperAdmin } from '../auth';
+import { branchOf } from '../util/branch';
 import {
   googleOAuthAvailable, microsoftOAuthAvailable,
   buildGoogleAuthUrl, buildMicrosoftAuthUrl, GOOGLE_MEET_TRANSCRIPT_SCOPE,
   revokeGoogleOAuthGrant, loadRefreshTokenExport,
   exchangeGoogleCode, exchangeMicrosoftCode,
   fetchGoogleUserinfo, fetchMicrosoftUserinfo,
-  fetchUserEvents, fetchUserEventsWithSources, attachPushRecords, eventsToIcs, KNOWN_KINDS,
+  fetchUserEvents, fetchUserEventsWithSources, fetchCalendarScope, attachPushRecords, eventsToIcs, KNOWN_KINDS, SCOPED_EXCLUDED_KINDS, validScopeWindow,
   syncUserToGoogle, syncUserToMicrosoft,
   preflightOAuthSecrets,
 } from '../services/calendar';
@@ -193,12 +194,25 @@ calendar.get('/events', safe('events', 'Could not list calendar events', async (
   const fromQ = url.searchParams.get('from');
   const toQ = url.searchParams.get('to');
   const kindsQ = url.searchParams.get('kinds');
+  const scope = url.searchParams.get('scope') || 'mine';
+  if (!['mine', 'studio', 'all'].includes(scope)) return c.json({ detail: 'Invalid calendar scope' }, 400);
+  if (scope !== 'mine' && user.role !== 'admin') return c.json({ detail: 'Admin role required' }, 403);
+  if (scope === 'all' && (branchOf(c.env) || !isSuperAdmin(user))) return c.json({ detail: 'Super admin required' }, 403);
   const fromDt = fromQ ? new Date(fromQ) : new Date(Date.now() - 86_400_000);
   const toDt = toQ ? new Date(toQ) : new Date(Date.now() + 90 * 86_400_000);
   if (Number.isNaN(fromDt.getTime()) || Number.isNaN(toDt.getTime())) {
     return c.json({ detail: 'Invalid from/to ISO datetime' }, 400);
   }
   const kinds = kindsQ ? kindsQ.split(',').map(s => s.trim()).filter(Boolean) : undefined;
+  if (scope === 'studio' || scope === 'all') {
+    if (!validScopeWindow(fromDt.toISOString(),toDt.toISOString())) return c.json({ detail: 'Staff calendar windows must be ordered and at most 180 days.' }, 400);
+    const result = await fetchCalendarScope(c.env, user, scope, fromDt.toISOString(), toDt.toISOString(), kinds);
+    await logAdminAction(c.env, user.id, user.email, 'calendar_scope_read', {
+      scope, from: fromDt.toISOString(), to: toDt.toISOString(),
+    });
+    return c.json({ items: result.events, sources: result.sources, coverage: result.coverage,
+      scope, read_only: true, excluded_kinds: SCOPED_EXCLUDED_KINDS, from: fromDt.toISOString(), to: toDt.toISOString() });
+  }
   // THE DEGRADING READ, deliberately — see `gather` in services/calendar.ts.
   // Until now one unreadable source turned the whole agenda into a 500 and
   // nothing in the response could say which one. `sources` reports every kind
@@ -290,16 +304,12 @@ calendar.delete('/my-events/feed', safe('feed_revoke', 'Could not remove your ca
   return c.json({ revoked: await revokeFeedToken(c.env, user.id) });
 }));
 
-// NO SESSION: the token is the credential. `index.ts`'s investor paywall on
-// `/api/calendar` needs a session, so `INVESTOR_PRO_EXEMPT` lets the two feed
-// paths past it and the same rule is applied here to the member the token
-// names: an investor whose plan lapsed gets the paywall's 402, as `/events.ics`
-// gives it. A token answers only its own feed: a my-events token is refused by
-// the whole-calendar feed, and the other way round.
+// NO SESSION: the token is the credential. Calendar reads and both
+// subscriptions are available on every plan; only IC creation is Professional
+// (D1206). A token answers only its own feed (D1209).
 async function serveFeed(c: any, scope: FeedScope): Promise<Response> {
   const user = await resolveFeedToken(c.env, new URL(c.req.url).searchParams.get('token'), new Date(), scope);
   if (!user) return c.json({ detail: 'Calendar feed not found' }, 404);
-  if (!userMeetsInvestorTier(user, 'professional')) return c.json(investorUpsell('professional'), 402);
   const whole = scope === CALENDAR_FEED_SCOPE;
   const fromDt = new Date(Date.now() - (whole ? 30 : 7) * 86_400_000);
   const toDt = new Date(Date.now() + 180 * 86_400_000);
@@ -476,6 +486,7 @@ function rescheduleOf(body: any, current: number, min: number, max: number):
 
 calendar.post('/ic-meetings', safe('ic_create', 'Could not create IC meeting', async (c) => {
   const user = await requireAuth(c);
+  if (!userMeetsInvestorTier(user, 'professional')) return c.json(investorUpsell('professional'), 402);
   if (!canScheduleIc(lc(user.role))) return c.json({ detail: 'Investor or admin role required' }, 403);
   const body = await c.req.json().catch(() => ({}));
   const title = String(body?.title || '').trim().slice(0, 240);

@@ -455,12 +455,12 @@ test('create call: the Super Admin with a fresh step-up is allowed (201)', async
 });
 
 for (const [id, role, jti] of [[OWNER_ID, 'investor', undefined], [ADMIN_ID, 'admin', undefined], [SUPER_ID, 'admin', SUPER_JTI]] as const) {
-  test(`retired issue-to-all: ${role} ${id} gets 404 and no call is written`, async () => {
+  test(`retired issue-to-all: ${role} ${id} gets 410 and no call is written`, async () => {
     const token = await mintToken(id, role, jti);
     const env = makeEnv({ id, role, is_active: 1 });
     const before = env.__db.prepare('SELECT COUNT(*) AS n FROM capital_calls').get().n;
     const res = await issueToAllInvestors(env, token, { startup_id: 1, amount: 1000 });
-    assert.equal(res.status, 404);
+    assert.equal(res.status, 410);
     assert.equal(env.__db.prepare('SELECT COUNT(*) AS n FROM capital_calls').get().n, before);
   });
 }

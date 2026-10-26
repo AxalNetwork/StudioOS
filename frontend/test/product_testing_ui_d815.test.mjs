@@ -12,7 +12,8 @@
  *   · Pick past the places shows the Worker's sentence; the owner reads no
  *     email address; the Mail note is there.
  *   · HQ approves; Send back needs a reason and sends it; New programme makes
- *     HQ's own; a plain admin is refused.
+ *     HQ's own; a plain admin is refused. D1202 (#3152) puts each step behind
+ *     its dialog and New programme in the page header.
  *
  *   node --import ./frontend/test/_deck-loader.mjs --test frontend/test/product_testing_ui_d815.test.mjs
  */
@@ -81,7 +82,7 @@ test('the form checks what D812 checks and sends its body', () => {
 
 // ── mounting ───────────────────────────────────────────────────────────────
 
-async function mount(element, { phone = false } = {}) {
+async function mount(element, { phone = false, url = '/' } = {}) {
   const restoreDoc = installDocument();
   if (!document.documentElement?.classList) document.documentElement = { ...(document.documentElement || {}), classList: { contains: () => false } };
   globalThis.window.addEventListener = () => {};
@@ -93,7 +94,7 @@ async function mount(element, { phone = false } = {}) {
   const container = document.createElement('div');
   document.body.appendChild(container);
   const root = createRoot(container);
-  await act(async () => { root.render(h(MemoryRouter, null, h(Routes, null, h(Route, { path: '*', element })))); });
+  await act(async () => { root.render(h(MemoryRouter, { initialEntries: [url] }, h(Routes, null, h(Route, { path: '*', element })))); });
   const settle = () => act(async () => { for (let i = 0; i < 6; i += 1) await new Promise((r) => setTimeout(r, 0)); });
   await settle();
   const walk = (n) => [n, ...(n.childNodes || []).flatMap(walk)];
@@ -198,7 +199,6 @@ test('the partner zone: Unreadable with Try again, the empty state, and the phon
 });
 
 test('applicants: the counter, the Mail note, no email, and a pick past the places in the Worker\'s words', async () => {
-  // Mutation checked: show the error's code instead of its sentence → "programme_full" reaches the page.
   const full = Object.assign(new Error('Every place is taken. Decline someone first.'), { status: 409, code: 'programme_full' });
   const api = {
     applicants: async () => ({
@@ -218,10 +218,22 @@ test('applicants: the counter, the Mail note, no email, and a pick past the plac
     assert.ok(v.text().includes('Spreadsheets') && v.text().includes('What do you use today?'));
     assert.ok(!/@/.test(v.text()), 'no email address');
     assert.ok(!v.by('applicant-pick-a1') && v.by('applicant-decline-a1'), 'a picked tester is declined, not picked again');
+    // D1202: Pick opens dialog F. Every place taken, it says so before any request, and its button is off.
     await v.click('applicant-pick-a2');
-    assert.equal(v.textIn('applicants-refusal'), 'Every place is taken. Decline someone first.');
+    assert.ok(v.by('testing-dialog-F'));
+    assert.equal(v.textIn('testing-dialog-refusal'), 'Every place is taken. Decline someone first.');
+    assert.equal(v.prop('testing-dialog-confirm', 'disabled'), true);
     assert.ok(!v.text().includes('programme_full'));
   } finally { await v.unmount(); }
+  // A pick the Worker refuses after the dialog asked: its sentence, inside the dialog, never the code.
+  const raced = await mount(h(ProgrammeApplicants, { uid: 'p1', api: { ...api, applicants: async () => ({ programme: prog({ status: 'open', places: 2, picked_count: 1 }), items: [{ uid: 'a2', name: 'Finn Oak', role: 'founder', status: 'applied', answers: [] }] }) } }));
+  try {
+    await raced.click('applicant-pick-a2');
+    await raced.click('testing-dialog-confirm');
+    // Mutation checked: show the error's code instead of its sentence → "programme_full" reaches the page.
+    assert.equal(raced.textIn('testing-dialog-refusal'), 'Every place is taken. Decline someone first.');
+    assert.ok(!raced.text().includes('programme_full') && raced.by('testing-dialog-F'), 'the dialog stays open');
+  } finally { await raced.unmount(); }
   // Before it opens, nobody is picked.
   const closed = await mount(h(ProgrammeApplicants, { uid: 'p1', api: { ...api, applicants: async () => ({ programme: prog({ status: 'approved' }), items: [{ uid: 'a2', name: 'Finn', role: 'founder', status: 'applied', answers: [] }] }) } }));
   try {
@@ -239,11 +251,12 @@ function adminApi(items) {
   return {
     calls,
     programmes: async () => ({ items: list.map((p) => ({ ...p })) }),
-    approve: async (uid) => { calls.push(['approve', uid]); set(uid, 'approved'); return {}; },
+    approve: async (uid, note) => { calls.push(['approve', uid, note]); set(uid, 'approved'); return {}; },
     reject: async (uid, note) => { calls.push(['reject', uid, note]); set(uid, 'rejected', { review_note: note }); return {}; },
     open: async (uid) => { calls.push(['open', uid]); set(uid, 'open'); return {}; },
     close: async (uid) => { calls.push(['close', uid]); set(uid, 'closed'); return {}; },
-    create: async (body) => { calls.push(['create', body]); list.push(prog({ uid: 'hq1', owner_kind: 'hq', owner_name: 'Axal VC', ...body })); return {}; },
+    create: async (body) => { calls.push(['create', body]); list.push(prog({ uid: 'hq1', owner_kind: 'hq', owner_name: 'Axal VC', ...body })); return { programme: { uid: 'hq1' } }; },
+    events: async () => ({ events: { available: true, items: [] } }),
     edit: async () => ({}),
     applicants: async () => ({ programme: prog({ owner_kind: 'hq', status: 'open' }), items: [] }),
     pick: async () => ({}),
@@ -254,36 +267,48 @@ function adminApi(items) {
 test('HQ approves, sends back only with a reason, and makes its own programme', async () => {
   // Mutation checked: let Send back go with an empty reason → reject is called with ''.
   const api = adminApi([prog({ status: 'submitted' }), prog({ uid: 'p2', product_name: 'Payroll beta', status: 'submitted' })]);
-  const v = await mount(h(ProductTestingConsole, { api }));
+  const v = await mount(h(ProductTestingConsole, { api, view: 'review' }));
   try {
     assert.ok(v.textIn('testing-waiting').includes('Ledger beta'));
     assert.ok(v.text().includes('What do you use today?'), 'the screening questions are reviewed');
+    // D1202: each step is a dialog (A, B); nothing is sent until its button.
     await v.click('testing-approve-p1');
-    assert.deepEqual(api.calls[0], ['approve', 'p1']);
+    assert.equal(api.calls.length, 0);
+    await v.click('testing-dialog-confirm');
+    assert.deepEqual(api.calls[0], ['approve', 'p1', null]);
     assert.ok(v.by('testing-open-p1'), 'approved, it can now be opened');
     await v.click('testing-reject-p2');
-    assert.equal(v.prop('testing-reject-send', 'disabled'), true, 'no reason, no send');
-    await v.click('testing-reject-send');
+    assert.equal(v.prop('testing-dialog-confirm', 'disabled'), true, 'no reason, no send');
+    await v.click('testing-dialog-confirm');
     assert.equal(api.calls.length, 1);
-    await v.type('testing-reject-reason', 'Add the dates');
-    await v.click('testing-reject-send');
+    await v.type('testing-dialog-field', 'Add the dates');
+    await v.click('testing-dialog-confirm');
     assert.deepEqual(api.calls[1], ['reject', 'p2', 'Add the dates']);
     assert.ok(v.by('testing-waiting-empty'));
-    // HQ's own.
-    await v.click('testing-new-programme');
-    await v.type('programme-product_name', 'Axal Mail beta');
-    await v.type('programme-places', '10');
-    await v.type('programme-role-investor', true);
-    await v.submitForm('programme-form');
-    assert.equal(api.calls[2][0], 'create');
-    assert.ok(v.by('testing-applicants-hq1') && v.by('testing-open-hq1'), "HQ's own draft opens without review and has its Pick screen");
-    // Mutation checked: let the waiting list take HQ's own drafts → Axal Mail beta waits for approval.
-    assert.ok(v.by('testing-waiting-empty') && !v.textIn('testing-waiting').includes('Axal Mail beta'), "HQ's own never waits for approval");
   } finally { await v.unmount(); }
+  // HQ's own, from Programs: the header's New program opens the form over it.
+  const own = await mount(h(ProductTestingConsole, { api, view: 'programs' }), { url: '/admin/platform/product-testing/programs?new=1' });
+  try {
+    assert.ok(own.by('testing-form-dialog'));
+    await own.type('programme-product_name', 'Axal Mail beta');
+    await own.type('programme-places', '10');
+    await own.type('programme-role-investor', true);
+    await own.submitForm('programme-form');
+    assert.equal(api.calls[2][0], 'create');
+    assert.ok(!own.by('testing-form-dialog'));
+    await own.click('testing-menu-hq1');
+    assert.ok(own.by('testing-menu-hq1-edit') && own.by('testing-menu-hq1-open'), "HQ's own draft opens without review");
+    assert.ok(!own.by('testing-menu-hq1-approve'), "HQ's own never waits for approval");
+  } finally { await own.unmount(); }
+  const review = await mount(h(ProductTestingConsole, { api, view: 'review' }));
+  // Mutation checked: let the waiting list take HQ's own drafts → Axal Mail beta waits for approval.
+  try { assert.ok(review.by('testing-waiting-empty') && !review.textIn('testing-waiting').includes('Axal Mail beta'), "HQ's own never waits for approval"); } finally { await review.unmount(); }
   const broken = await mount(h(ProductTestingConsole, { api: { ...adminApi([]), programmes: async () => { throw new Error('down'); } } }));
   try { assert.ok(broken.by('admin-console-unreadable') && broken.by('admin-console-retry')); } finally { await broken.unmount(); }
   const none = await mount(h(ProductTestingConsole, { api: adminApi([]) }));
-  try { assert.ok(none.by('testing-all-empty') && none.by('testing-waiting-empty')); } finally { await none.unmount(); }
+  try { assert.ok(none.by('testing-all-empty')); } finally { await none.unmount(); }
+  const noneReview = await mount(h(ProductTestingConsole, { api: adminApi([]), view: 'review' }));
+  try { assert.ok(noneReview.by('testing-waiting-empty')); } finally { await noneReview.unmount(); }
 });
 
 test('a plain admin is refused HQ › Product testing', () => {
