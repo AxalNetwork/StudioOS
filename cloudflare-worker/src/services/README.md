@@ -520,3 +520,9 @@ store; no migration or canvas sample text is introduced.
 D1129 searches decoded audit detail values, never JSON keys, and includes demoted/deleted payment actors in Who alongside current admins.
 
 D1133: `billingRecovery.ts` prepares caller-owned renewal invoice intents or card-only SetupIntents behind Billing’s fresh-TOTP routes, and records only allowlisted payment-refusal families. `billingAlerts.ts` atomically couples renewal history with alert transitions. No card/client secret is stored.
+
+D1206 (#3172, partial): `calendar.ts` retains personal readers, resolves the
+account-owned advisor fallback, reports fixed source error codes without raw
+diagnostics, and skips Calendly when copying to Google/Outlook. Missing schema
+is not an empty source. Studio/All studios aggregation awaits the membership
+and remote-reader decision recorded in D1206.

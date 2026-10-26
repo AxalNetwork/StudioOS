@@ -866,7 +866,6 @@ const INVESTOR_PRO_PREFIXES = [
   '/api/dd',
   '/api/pipeline',
   '/api/deals',
-  '/api/calendar',
   '/api/ic',
 ];
 // D614/D1149: precise exemptions allow leaving a room and an authorized

@@ -415,9 +415,9 @@ export async function fetchMicrosoftUserinfo(accessToken: string): Promise<any> 
 }
 
 // ===========================================================================
-// Aggregator — IC meetings + founder check-ins. The worker D1 has no
-// advisor_bookings or partner_bookings tables, so those kinds are skipped
-// (the FastAPI version reads them when present).
+// Calendar readers use the Worker D1 stores, including advisor/partner slots.
+// Missing schema is not an empty calendar: the agenda reports not_configured
+// for that source; strict exports refuse an incomplete answer.
 // ===========================================================================
 export interface CalendarEvent {
   id: string;
@@ -537,23 +537,13 @@ async function checkinEvents(env: Env, userId: number,
   return out;
 }
 
-// Advisor + partner office-hour bookings live in tables that may not yet
-// exist in worker D1 (the FastAPI backend owns them). Wrap each query in
-// a try/catch so a missing table degrades to an empty list instead of a
-// 500. Any *other* error is rethrown so genuine bugs are still surfaced.
+// Schema failures are classified at the aggregator; source errors never carry
+// database messages or member content to a page or a log.
 function isMissingTableError(e: any): boolean {
   const msg = String(e?.message || e || '').toLowerCase();
   return msg.includes('no such table') || msg.includes('does not exist');
 }
 
-// Some D1 deployments have `advisor_bookings`/`partner_bookings` from an
-// older schema variant (migration 034) that does NOT include the
-// scheduled_start/scheduled_end/requester_user_id/meeting_uri columns this
-// service expects (those live on a related slots table in that variant).
-// Treat a missing-column error the same as missing-table — return [] so
-// the rest of the calendar sync still runs instead of 500-ing the whole
-// Google sync. The "real" fix is a migration that adds those columns or
-// rewrites these queries to join through slots; until then, fail-soft.
 function isMissingColumnError(e: any): boolean {
   const msg = String(e?.message || e || '').toLowerCase();
   return msg.includes('no such column');
@@ -563,9 +553,14 @@ async function advisorBookingEvents(env: Env, userId: number,
                                    fromIso: string, toIso: string): Promise<CalendarEvent[]> {
   const sql = getSQL(env);
   try {
-    // Visibility: requester or advisor (via users.advisor_id).
+    // Match the linked advisor only when it belongs to this account, then
+    // fall back to advisors.user_id, as the advisor router does.
     const me = (await sql`SELECT advisor_id FROM users WHERE id = ${userId}` as any[])[0];
-    const myAdvisorId = me?.advisor_id || null;
+    const linked = me?.advisor_id
+      ? (await sql`SELECT id FROM advisors WHERE id = ${me.advisor_id} AND user_id = ${userId}` as any[])[0]
+      : null;
+    const fallback = linked || (await sql`SELECT id FROM advisors WHERE user_id = ${userId}` as any[])[0];
+    const myAdvisorId = fallback?.id || null;
     // A booking carries no time of its own — the slot does. `advisor_bookings`
     // has (slot_id, advisor_id, founder_user_id, topic, notes, status); the
     // scheduled_start / scheduled_end / requester_user_id / meeting_uri /
@@ -612,7 +607,6 @@ async function advisorBookingEvents(env: Env, userId: number,
     }
     return out;
   } catch (e) {
-    if (isMissingTableError(e) || isMissingColumnError(e)) return [];
     throw e;
   }
 }
@@ -662,7 +656,6 @@ async function partnerOfficeHourEvents(env: Env, userId: number,
     }
     return out;
   } catch (e) {
-    if (isMissingTableError(e) || isMissingColumnError(e)) return [];
     throw e;
   }
 }
@@ -703,7 +696,6 @@ async function calendlyEvents(env: Env, userId: number,
       project_id: null,
     }));
   } catch (e) {
-    if (isMissingTableError(e) || isMissingColumnError(e)) return [];
     throw e;
   }
 }
@@ -758,7 +750,6 @@ async function directEvents(env: Env, userId: number,
       };
     });
   } catch (e) {
-    if (isMissingTableError(e) || isMissingColumnError(e)) return [];
     throw e;
   }
 }
@@ -808,15 +799,14 @@ export const KNOWN_KINDS = Object.keys(READERS) as readonly CalendarEvent['kind'
 export interface CalendarSourceStatus {
   kind: CalendarEvent['kind'];
   ok: boolean;
-  error: string | null;
+  error: 'unreadable' | 'not_configured' | null;
 }
 
 /**
  * ONE SOURCE FAILING USED TO BLANK THE WHOLE CALENDAR.
  *
- * Each reader swallows only "the table is not there yet" and rethrows anything
- * else, which is right — but the aggregator awaited them in a row with no catch
- * of its own, so a single unreadable source turned the entire agenda into a 500.
+ * The aggregator used to await readers in a row with no catch of its own, so
+ * a single unreadable source turned the entire agenda into a 500.
  * A founder with five working sources saw nothing at all, and nothing on the
  * page could say which one was at fault.
  *
@@ -843,8 +833,8 @@ async function gather(
       events.push(...await READERS[kind](env, userId, fromIso, toIso));
       sources.push({ kind, ok: true, error: null });
     } catch (e) {
-      console.warn('[calendar] source failed', { kind, user_id: userId }, e);
-      sources.push({ kind, ok: false, error: String((e as Error)?.message || e).slice(0, 200) });
+      console.warn('[calendar] source failed', { kind, outcome: 'unreadable' });
+      sources.push({ kind, ok: false, error: isMissingTableError(e) || isMissingColumnError(e) ? 'not_configured' : 'unreadable' });
     }
   }
   events.sort((a, b) => a.start_at.localeCompare(b.start_at));
@@ -997,6 +987,7 @@ function googlePayload(ev: CalendarEvent): any {
 export async function pushEventToGoogle(
   accessToken: string, ev: CalendarEvent, googleEventId: string | null,
 ): Promise<string | null> {
+  if (ev.kind === 'calendly_event') return null;
   const headers = { Authorization: `Bearer ${accessToken}`, 'Content-Type': 'application/json' };
   const payload = JSON.stringify(googlePayload(ev));
   try {
@@ -1068,6 +1059,7 @@ function microsoftPayload(ev: CalendarEvent): any {
 export async function pushEventToMicrosoft(
   accessToken: string, ev: CalendarEvent, eventId: string | null,
 ): Promise<string | null> {
+  if (ev.kind === 'calendly_event') return null;
   const headers = { Authorization: `Bearer ${accessToken}`, 'Content-Type': 'application/json' };
   const payload = JSON.stringify(microsoftPayload(ev));
   try {
@@ -1149,8 +1141,9 @@ async function syncUserToProvider(
 ): Promise<SyncSummary> {
   const sql = getSQL(env);
   const events = await fetchUserEvents(env, userId, role, fromIso, toIso);
-  let pushed = 0, updated = 0, failed = 0;
+  let pushed = 0, updated = 0, failed = 0, skipped = 0;
   for (const ev of events) {
+    if (ev.kind === 'calendly_event') { skipped++; continue; }
     const rec = (await sql`
       SELECT external_event_id FROM calendar_sync_records
       WHERE user_id = ${userId} AND provider = ${provider}
@@ -1191,7 +1184,7 @@ async function syncUserToProvider(
     `UPDATE ${tokenTable} SET last_synced_at = ? WHERE user_id = ?`,
     [nowIso, userId],
   );
-  return { pushed, updated, failed, skipped: 0, total: events.length, removed };
+  return { pushed, updated, failed, skipped, total: events.length, removed };
 }
 
 /**

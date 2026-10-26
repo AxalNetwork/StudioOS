@@ -22,6 +22,7 @@ function fixture(route = calendar, failAudit = false) {
   for (const name of ['235_calendar_events_kind.sql', '277_user_recovery_state.sql']) db.exec(readFileSync(new URL(`../sql/migrations/${name}`, import.meta.url), 'utf8'));
   for (let i = 1; i <= 12; i++) db.prepare('INSERT INTO users (id,email,name,role,founder_id) VALUES (?,?,?,?,?)')
     .run(i, `member-${i}@example.test`, `Fixture ${i}`, i === 1 ? 'admin' : i === 2 || i === 3 ? 'founder' : 'investor', i === 2 ? 102 : i === 3 ? 103 : null);
+  db.exec("UPDATE users SET investor_tier='professional' WHERE role='investor'");
   db.exec(`INSERT INTO projects (id,name,founder_id) VALUES (20,'Fixture venture',102),(30,'Other venture',103);
     INSERT INTO deals (id,project_id) VALUES (200,20),(300,30);
     INSERT INTO deal_invitations (deal_id,investor_user_id) VALUES (200,4),(300,5);
@@ -92,8 +93,8 @@ async function personal(api = service, route = calendar) {
       f.db.prepare(`INSERT INTO ${provider === 'Google' ? 'google_oauth_tokens' : 'microsoft_oauth_tokens'} (user_id,refresh_token) VALUES (1,?)`).run(encrypted);
       pushed.length = 0;
       const summary = await api[`syncUserTo${provider}`](f.env, 1, 'admin', FROM, TO);
-      assert.deepEqual([summary.total, summary.pushed, summary.failed], [7,7,0]);
-      assert.deepEqual(new Set(pushed.map(e => e.summary ?? e.subject)), new Set(own.map(e => e.title)));
+      assert.deepEqual([summary.total, summary.pushed, summary.failed], [7,6,0]);
+      assert.deepEqual(new Set(pushed.map(e => e.summary ?? e.subject)), new Set(own.filter(e => e.kind !== 'calendly_event').map(e => e.title)));
     }
   } finally { globalThis.fetch = oldFetch; await f.close(); }
 }

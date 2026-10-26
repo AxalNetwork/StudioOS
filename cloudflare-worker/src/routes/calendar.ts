@@ -271,14 +271,11 @@ calendar.delete('/my-events/feed', safe('feed_revoke', 'Could not remove your ca
   return c.json({ revoked: await revokeFeedToken(c.env, user.id) });
 }));
 
-// NO SESSION: the token is the credential. `index.ts`'s investor paywall on
-// `/api/calendar` needs a session, so `INVESTOR_PRO_EXEMPT` lets this one path
-// past it and the same rule is applied here to the member the token names: an
-// investor whose plan lapsed gets the paywall's 402, as `/events.ics` gives it.
+// NO SESSION: the token is the credential. Calendar reads and subscriptions
+// are available on every plan; only IC creation is Professional (D1206).
 calendar.get('/feed/my-events.ics', safe('feed_ics', 'Could not export calendar', async (c) => {
   const user = await resolveFeedToken(c.env, new URL(c.req.url).searchParams.get('token'));
   if (!user) return c.json({ detail: 'Calendar feed not found' }, 404);
-  if (!userMeetsInvestorTier(user, 'professional')) return c.json(investorUpsell('professional'), 402);
   const fromDt = new Date(Date.now() - 7 * 86_400_000);
   const toDt = new Date(Date.now() + 180 * 86_400_000);
   const events = await fetchUserEvents(c.env, user.id, lc(user.role), fromDt.toISOString(), toDt.toISOString(), [...MY_EVENT_KINDS]);
@@ -368,6 +365,7 @@ async function isDealParty(env: Env, user: User, dealId: number): Promise<boolea
 
 calendar.post('/ic-meetings', safe('ic_create', 'Could not create IC meeting', async (c) => {
   const user = await requireAuth(c);
+  if (!userMeetsInvestorTier(user, 'professional')) return c.json(investorUpsell('professional'), 402);
   if (!canScheduleIc(lc(user.role))) return c.json({ detail: 'Investor or admin role required' }, 403);
   const body = await c.req.json().catch(() => ({}));
   const title = String(body?.title || '').trim().slice(0, 240);
