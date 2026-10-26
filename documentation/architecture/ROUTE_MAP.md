@@ -1696,3 +1696,5 @@ company control in the switcher. `POST /api/projects/:id/restore` is a founder's
 owner-only undo within 30 days and available plan space; no new page is added.
 
 D1123 (#3003): SL6 reads Messages/History from `/api/admin/cohort/activity?cohort=YYYY-MM` and capacity from `GET /api/admin/cohort/cohorts/:cohort/capacity`. Formation sends the D946 Lab/all scope to both desks; Users admits through D945’s structured route and in-page dialog. The Lab crumb names `/admin/programs` directly. Branch grant and member refusal cards follow SL16e/SL19a.
+
+D1176 (#3103): Worker `/api/cycles/raise/use-of-funds` now serves GET `/plan`, scenario CRUD and make-base, `/compare`, milestone CRUD and hire edits; the existing module PUT and record drawer share its Base dual writer. The retained `/api/financials/:projectId` save logs `forecast_saved`. Clients are in `useOfFunds.js`. No page change is claimed; #3104/#3105 draw these reads.

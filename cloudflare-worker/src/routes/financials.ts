@@ -23,6 +23,7 @@ import { resolveActiveCompany, ACTIVE_COMPANY_HEADER } from '../middleware/activ
 import type { Env } from '../types';
 import { requireAuth, canAccessFounderResource } from '../auth';
 import { bindingKey } from '../util/schemaBootstrap';
+import { logCycleWriteStatement } from '../services/cycleActivity';
 
 const financials = new Hono<{ Bindings: Env }>();
 
@@ -541,7 +542,7 @@ financials.put('/:projectId', async (c) => {
   if (legacy.has('inputs_json')) { cols.push('inputs_json'); vals.push(JSON.stringify(a)); }
   const placeholders = cols.map(() => '?').join(', ');
   try {
-    await c.env.DB.prepare(
+    await c.env.DB.batch([c.env.DB.prepare(
       `INSERT INTO financial_models (${cols.join(', ')})
        VALUES (${placeholders})
        ON CONFLICT(project_id) DO UPDATE SET
@@ -551,10 +552,10 @@ financials.put('/:projectId', async (c) => {
          capital_recompute_json = excluded.capital_recompute_json,
          updated_by             = excluded.updated_by,
          updated_at             = excluded.updated_at`,
-    ).bind(...vals).run();
+    ).bind(...vals), logCycleWriteStatement(c.env, { projectId, userId: Number(user.id), cycle: 'raise', module: 'use-of-funds', entityId: null, action: 'forecast_saved', summary: user.role === 'admin' ? 'Studio admin: forecast saved.' : 'Forecast saved.' })]);
   } catch (e) {
     const msg = (e as Error).message || '';
-    console.error('[financials] PUT upsert:', msg);
+    console.error('[financials] PUT upsert failed');
     const drift = /no such (table|column)|constraint|unique/i.test(msg);
     return c.json(
       { detail: drift ? 'Financial model store not ready, please retry.' : 'Failed to save financial model', code: drift ? 'schema_drift' : 'write_failed' },
@@ -562,20 +563,6 @@ financials.put('/:projectId', async (c) => {
     );
   }
 
-  // Activity log — match the Python message shape (best-effort).
-  try {
-    await c.env.DB.prepare(
-      `INSERT INTO activity_logs (action, details, actor, user_id, created_at)
-         VALUES (?, ?, ?, ?, datetime('now'))`,
-    ).bind(
-      'financial_model_saved',
-      `Project ${project.name}: runway=${computed.runway_months}mo, breakeven=${computed.breakeven_month}, capital_score=${capital.total}/10`,
-      String(user.id),
-      user.id,
-    ).run();
-  } catch {
-    // activity_logs schema drift — never fail the save on a log write.
-  }
 
   return c.json({
     exists: true,

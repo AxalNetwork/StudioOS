@@ -32,6 +32,8 @@ import { DatabaseSync } from 'node:sqlite';
 import { SignJWT } from 'jose';
 
 import financials from '../src/routes/financials.ts';
+import { d1Over as makeD1 } from './_d1_sqlite.mjs';
+import { tableFromBaseline } from './_baseline.mjs';
 
 
 
@@ -48,34 +50,12 @@ const FUND = 88;          // the investor's own firm
 const PROJECT_A = 7;
 const PROJECT_B = 9;
 
-function coerce(args: any[]): any[] {
-  return args.map((v) => (v === undefined ? null : v === true ? 1 : v === false ? 0 : v));
-}
-function makeD1(db: InstanceType<typeof DatabaseSync>) {
-  return {
-    prepare(sql: string) {
-      let binds: any[] = [];
-      const api: any = {
-        bind: (...a: any[]) => { binds = coerce(a); return api; },
-        async first() { return db.prepare(sql).get(...binds) ?? null; },
-        async all() { return { results: db.prepare(sql).all(...binds) }; },
-        async run() {
-          const r = db.prepare(sql).run(...binds);
-          return { meta: { last_row_id: Number(r.lastInsertRowid), changes: Number(r.changes) } };
-        },
-      };
-      return api;
-    },
-    async exec(sql: string) { db.exec(sql); return { count: 0, duration: 0 }; },
-    async batch(stmts: any[]) { return stmts; },
-  };
-}
-
 function freshDb() {
   const db = new DatabaseSync(':memory:', {
     enableForeignKeyConstraints: false,
     enableDoubleQuotedStringLiterals: true,
   });
+  db.exec(tableFromBaseline(readFileSync(new URL('../sql/schema_baseline.sql', import.meta.url),'utf8'), 'activity_logs'));
   db.exec(`
     CREATE TABLE users (
       id INTEGER PRIMARY KEY, role TEXT NOT NULL, founder_id INTEGER,

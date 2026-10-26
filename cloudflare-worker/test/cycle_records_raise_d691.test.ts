@@ -705,7 +705,7 @@ test('1: each declared action runs its handler, writes its store and logs one ro
   });
   const p = db.prepare(`SELECT funding_needed, use_of_funds, use_of_funds_meta FROM projects WHERE id = ${P}`).get() as any;
   assert.equal(p.funding_needed, 1_500_000);
-  assert.deepEqual(JSON.parse(p.use_of_funds).map((x: any) => x.pct), [40, 40, 20]);
+  assert.deepEqual(JSON.parse(p.use_of_funds).map((x: any) => x.pct), [40, 40, 0, 0, 20]);
   assert.deepEqual(JSON.parse(p.use_of_funds_meta).milestones.product, { label: 'Launch v3', by: '2027-06' });
   assert.equal(JSON.parse(p.use_of_funds_meta).runway_months, 18);
   const off = await act(db, 'use-of-funds', 'product', 'edit-split', { 'pct.product': '40', 'pct.reserve': '20' });

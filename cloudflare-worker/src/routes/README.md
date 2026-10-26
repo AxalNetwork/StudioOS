@@ -377,3 +377,5 @@ D1133: `billing.ts` mounts `/alerts/:id/pay` and `/alerts/:id/update-card` under
 D1135: `company.ts` adds member self-leave and validates create/rename; `projects.ts` counts live ventures, adds owner restore within 30 days and sends email-mode team invitations.
 
 D1123: `admin_lab_operations.ts` adds `/cohorts/:cohort/capacity`, the latest stored capacity event for SL6, separately from current Settings. It never returns free-form event details.
+
+D1176: `cycle_use_of_funds.ts`, mounted by `cycle_raise.ts` under `/api/cycles/raise/use-of-funds`, serves the plan, scenarios/compare, milestones, hire edits and Base split. Founder/admin and company scoped; support is read only, Mercury stays the founder's own.

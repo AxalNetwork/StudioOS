@@ -120,3 +120,5 @@ derived stages, per-user/firm visit markers and private notes, including audit
 rollback, no admin bypass, NDA exclusion and anonymous change metadata.
 
 D1123 extends admin_lab_operations_d971.test.ts with real SQLite capacity-result tests: cohort scoping, last event, absent vs unreadable, and admin-only reads.
+
+D1176: `use_of_funds_routes_d1176.test.ts` mounts the real Use of funds and financial routers over canonical SQLite DDL. It covers roles/company scope, cross-venture ids, Base projection, copies, racing deletion, zero/missing values, precedence, founder-only Mercury, partial reads and audit rollback. Providers are stubbed.
