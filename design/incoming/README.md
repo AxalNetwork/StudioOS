@@ -14,8 +14,8 @@ exists for each — not by how far each has been built. Counts as of 2026-10-20:
 
 | Folder | Meaning |
 | --- | --- |
-| `canvases/integrated/` | 102 — a live route exists for this canvas. **Not "it is finished"** — most are `UPGRADE`, meaning the route runs and the canvas asks for more than it does. `design/canvases/README.md` has a section on exactly this misreading; the gloss here read "the canvas is built" until 2026-09-07, which is what caused it. |
-| `canvases/backlog/` | 28 — graded `NEW` or `DEFERRED`: no route yet. |
+| `canvases/integrated/` | 104 — a live route exists for this canvas. **Not "it is finished"** — most are `UPGRADE`, meaning the route runs and the canvas asks for more than it does. `design/canvases/README.md` has a section on exactly this misreading; the gloss here read "the canvas is built" until 2026-09-07, which is what caused it. |
+| `canvases/backlog/` | 27 — graded `NEW` or `DEFERRED`: no route yet. |
 | `canvases/out-of-scope/` | 26 — deliberately not being built. |
 
 (`canvases/uploads/` holds 3 more that were never part of the triage split, and
@@ -55,7 +55,9 @@ action pages built on a phone (D703), and 97 / 28 / 26 until
 `Legal Documents · Templates` moved there on 2026-10-19, with D717's screens
 built (#1782), and 100 / 28 / 26 until `Admin Insights Page` and
 `Admin Insights · Boards` arrived on 2026-10-24 with their page built (D893,
-#2366).
+#2366), and 102 / 28 / 26 until `Data Room · Boards` and
+`Raise Data Room Page` moved there on 2026-10-26 with the Data room tool's
+eight parts built and `Data Room` left `backlog/` for `scraps/` (D1109).
 **If you move a file, move the number.**)
 
 **A canvas whose bodies are built does not belong in this folder.** Move it to
@@ -446,9 +448,10 @@ No value was edited.
 
 **Grade: UPGRADE.** The tool is the Data room module at `/raise/data-room`,
 with six tab words under it. S21's integration (D1101) draws Files, Access and
-Activity from the founder's room read; writes stay in the files tool until
-D1101's parts land, so this canvas stays in the queue until then. It replaces
-`design/canvases/backlog/Data Room.dc.html` once part 8 lands.
+Activity from the founder's room read; writes stayed in the files tool until
+D1101's parts landed. **Graduated 2026-10-26 (D1109, #2989, part 8):** both
+files moved to `design/canvases/integrated/`, unedited, and
+`design/canvases/backlog/Data Room.dc.html` moved to `scraps/`, superseded.
 
 ## Landed 2026-10-25 — Account · Trust center (#2425)
 

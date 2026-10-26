@@ -31,16 +31,16 @@ export default {
       id: 'data-room',
       title: 'Data Room',
       overview:
-        "Your data room is one route with two audiences. A founder sees their own project's room — folders, files, who it is shared with and what those people opened. An investor sees the rooms shared with them. Nothing shows two companies at once.",
+        "Your data room is one tool at Raise › Data room, with seven tabs: Home, Files, Access, Requests, Activity, Checklist and Preview. A founder sees their own venture's room — folders, files, who it is shared with and what happened in it. An investor sees the rooms shared with them on their deals. Nothing shows two companies at once.",
       howto: [
-        'Founders — open Data Room from Raise, create folders, and upload files (20 MB each).',
+        'Founders — open Data room from Raise, create folders in Files, and upload files (20 MB each).',
         'Set each file to "Open to invited" or "NDA required". An NDA file stays hidden — not greyed out, hidden — until that investor has an active NDA with you.',
-        'Share by email address. The address must already have an account here: sharing does NOT send an invitation, and an unknown address is rejected.',
+        'Share from Access, picking an investor from Capital relationships. They must already have an account at that address: sharing does NOT send an invitation.',
         'A grant can carry an expiry. Once it lapses the room disappears for that investor without you having to revoke it.',
         'Investors — open Data Room to see the rooms shared with you, and download from there.',
       ],
       tips: [
-        'The access log is the point of the room. It records who opened which file and when, which is what tells you an investor is actually reading.',
+        'Activity is the room\'s log: who opened the room, who was issued a download link for which file, and who was blocked by the NDA, with when. A link issued is not proof the file was read.',
         'Put the documents the DD checklist asks for in the room before you share it — the first visit is the one that counts.',
       ],
       pitfalls: [

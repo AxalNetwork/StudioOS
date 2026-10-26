@@ -14,7 +14,7 @@ import { MemoryRouter, Routes, Route } from 'react-router-dom';
 import { installDocument } from './_contracts_dom.mjs';
 import CycleRoute from '../src/pages/cycles/CycleRoute.jsx';
 import {
-  TABS, fileRows, grantRows, isDataRoomTab, projectUidOf, tabHref, tabSearch, workspaceHref,
+  TABS, fileRows, grantRows, isDataRoomTab, projectUidOf, tabHref, tabSearch,
 } from '../src/pages/raise/dataroom/dataRoomModel.js';
 
 const h = React.createElement;
@@ -68,6 +68,7 @@ async function mounted(url, { phone = false, handle = handler } = {}) {
   await act(async () => root.render(h(MemoryRouter, { initialEntries: [url] }, h(Routes, null,
     h(Route, { path: '/raise/:slug', element: h(CycleRoute, { cycle: 'raise' }) }),
     h(Route, { path: '/raise/:slug/:id', element: h(CycleRoute, { cycle: 'raise', record: true }) }),
+    h(Route, { path: '/raise/data-room/file/:id', element: h(CycleRoute, { cycle: 'raise', slug: 'data-room', record: true, dataRoomFile: true }) }),
   ))));
   const flush = () => act(async () => { for (let i = 0; i < 6; i += 1) await new Promise((r) => setTimeout(r, 0)); });
   await flush();
@@ -94,8 +95,6 @@ test('seven tabs, and only their words are tabs; a file is still a record; the v
   assert.ok(!isDataRoomTab('cap-table', 'files'), 'only the Data room has these words');
   assert.equal(tabSearch('?project=7&mode=workspace#x'), '?project_id=7');
   assert.equal(tabHref(TABS[2], '?project_id=3&version=2'), '/raise/data-room/access?project_id=3');
-  assert.equal(workspaceHref('?project_id=3'), '/raise/data-room?mode=workspace&project_id=3');
-  assert.equal(workspaceHref(''), '/raise/data-room?mode=workspace');
   assert.equal(projectUidOf(PROJECTS, 3), 'p3uid');
   assert.equal(projectUidOf({ items: PROJECTS }, '4'), 'p4uid');
   assert.equal(projectUidOf(PROJECTS, 9), null);
@@ -158,16 +157,21 @@ test('D1108: Checklist and Preview read their own routes for the venture\'s uid,
   }
 });
 
-test('Home is the module page with the tabs; a file is still its record page; another module is not this tool', async () => {
+test('Home is the module page with the tabs; a file\'s old page forwards to its window over Files; another module is not this tool', async () => {
   const home = await mounted('/raise/data-room?project_id=3');
   try {
     assert.ok(home.requests.some((u) => u.includes('/cycles/raise/modules/data-room?project=3')));
-    assert.ok(home.testIds().includes('cycle-module') && home.testIds().includes('dataroom-tabs') && home.testIds().includes('dataroom-home-note'));
+    assert.ok(home.testIds().includes('cycle-module') && home.testIds().includes('dataroom-tabs'));
+    // D1109 (#2989): the old files tool is retired, so Home links to no other page.
+    assert.ok(!home.testIds().includes('dataroom-home-note'));
   } finally { await home.close(); }
+  // D1109: a file's number was its record page; it lands on its window over Files with the moved notice.
   const row = await mounted('/raise/data-room/12?project_id=3');
   try {
-    assert.ok(row.requests.some((u) => u.includes('/records/12?project=3')));
-    assert.ok(row.testIds().includes('cycle-record-page') && !row.testIds().includes('dataroom-tabs'));
+    // The window over Files reads the file's record itself (D1106); the old record page is never drawn.
+    assert.ok(!row.testIds().includes('cycle-record-page'), 'the old record page was drawn');
+    assert.ok(row.testIds().includes('dataroom-files-page') && row.testIds().includes('dataroom-moved'));
+    assert.match(row.text(), /A file’s page is now its window over Data room › Files\./);
   } finally { await row.close(); }
   const other = await mounted('/raise/use-of-funds?project_id=3');
   try { assert.ok(!other.testIds().includes('dataroom-tabs')); } finally { await other.close(); }
@@ -198,17 +202,19 @@ test('the wiring: no route is added, CycleRoute branches on the tab word, and th
   // D1106 (#2986): the same line also takes a file's lightbox (`/raise/data-room/file/<id>`) to Files.
   assert.ok(route.includes("const dataRoomTab = record && cycle === 'raise' && (dataRoomFile ? 'files' : isDataRoomTab(slug, recordId) ? recordId : null);"));
   // D1173 (#2455) adds Use of funds' tab words beside these.
-  assert.ok(route.includes('!narrativeTab && !capTableTab && !dataRoomTab && !uofTab && !capRelTab && !!projectId'));
+  // D1109 (#2989): a file's number forwards to its window over Files, so it reads no record either.
+  assert.ok(route.includes('!narrativeTab && !capTableTab && !dataRoomTab && !dataRoomOldFile && !uofTab && !capRelTab && !!projectId'));
   assert.ok(route.includes("slug === DATA_ROOM ? <DataRoomHomeNav search={q} />"));
   const tool = read('frontend/src/pages/raise/dataroom/DataRoomTool.jsx');
   assert.doesNotMatch(tool, /\b(alert|confirm|prompt)\(/);
   assert.doesNotMatch(tool, /dataRoom(Upload|Delete|Grant|Revoke|Update)/, 'the integration writes nothing');
+  // D1109 (#2989): the tool is built, so the canvas graduated from design/incoming/ to integrated/.
   for (const f of ['Raise Data Room Page.dc.html', 'Data Room · Boards.dc.html']) {
-    const src = read(`design/incoming/${f}`);
+    const src = read(`design/canvases/integrated/${f}`);
     assert.ok(src.includes('src="./support.js"'), f); // the runtime is the shared support.js, not inlined
     assert.ok(!src.includes('@font-face') && !src.includes('__claude_design_branding'), f);
   }
-  assert.ok(read('design/incoming/Data Room · Boards.dc.html').includes('dc-import name="Raise Data Room Page"'));
-  assert.ok(read('design/incoming/Data Room · Boards.dc.html').includes('DR24'));
+  assert.ok(read('design/canvases/integrated/Data Room · Boards.dc.html').includes('dc-import name="Raise Data Room Page"'));
+  assert.ok(read('design/canvases/integrated/Data Room · Boards.dc.html').includes('DR24'));
   assert.ok(existsSync('documentation/architecture/decisions/D1101.md'), 'D1101 records the integration');
 });

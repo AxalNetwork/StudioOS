@@ -243,7 +243,8 @@ test('Share: picks a prospect, says what it opens, sends the prospect\'s uid (ne
     await v.click('share-dialog-go');
     const sent = writes(v).filter((q) => q.url.endsWith('/data-room/p3uid/grants')).at(-1);
     assert.deepEqual(sent.body, { prospect: 'rp-1', expires_at: null, folders: null });
-    assert.match(v.textOf('access-said'), /Northwind Angels can open the room now\./);
+    // D1109: the Worker cannot say whether the address has an account, so the line never claims access.
+    assert.match(v.textOf('access-said'), /^If [^ ]+ has a StudioOS account, Northwind Angels can open the room now\. Nobody is invited by email\./);
   } finally { await v.close(); }
 });
 
