@@ -1,39 +1,61 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { bankAccountsApi } from '../../../lib/api/bankAccounts';
 import { adminMercuryApi } from '../../../lib/api/adminMercury';
 import { useAuth } from '../../../hooks/useAuthSync';
 import { isSuperAdminUser } from '../../../lib/shellRole';
 import { AXAL_ENTITIES } from '../../../lib/legalDocFormat';
-import { Lightbox, Pill, Unreadable } from '../../../ui';
+import { Pill, Unreadable } from '../../../ui';
 import { entityRows } from '../fundAdmin/mercuryEntityModel';
 import { agoLabel } from '../../account/connectorsModel';
 import { MercuryEntitySheet } from '../fundAdmin/MercuryEntitySheet';
 import { formatCents } from '../../investor/fundCallsModel.js';
 import { FundStructureDoor } from '../contracts/FundStructureSheet';
-import { ConsoleUnreadable, CONSOLE_LOADING } from './shared';
+import { ConsoleUnreadable } from './shared';
+import {
+  ENTITY_ORDER, NOT_IN_REGISTRY_SUB, PAYMENT_PURPOSE_OPTIONS, RAIL_NOTE, READING, BASE, accountPath, accountUidOf,
+  balanceCell, cardLine, coverageRow, coverageSummary, dayOf, mercuryOnlyBalance, mercuryPill, notInRegistry,
+  purposeLabel, shortName,
+} from './bankAccountsModel';
+import {
+  AddAccountDialog, AddFromMercuryDialog, MERCURY_PRESET, PaymentsDialog, RelabelDialog, RetireDialog, RevealDialog,
+  amber, btnCls, muted, primaryCls,
+} from './BankAccountDialogs';
+import { AccountLightbox, MissingAccount } from './BankAccountLightbox';
+import AdminBoardFrame from '../AdminBoardFrame';
+
+export { MERCURY_PRESET, PAYMENT_PURPOSE_OPTIONS };
 
 /**
  * D708 (#1773) — Bank accounts: each Axal entity's accounts, which payments
  * each takes, and the resolver's answer per payment. D717 (#1782, #1856)
- * restyles it in place to the canvas's board L11: one card per entity with its
- * Mercury connection, the unmatched receipts, what a notice refuses, and the
- * Add account and Reveal dialogs.
+ * restyled it to the canvas's board L11. D1185 (#3114, part 4 of #2389)
+ * draws it as the canvas "Bank Accounts" draws Accounts (BNK1, BNK7):
+ *
+ *   · "Where each payment goes" first: each purpose paid here or refused,
+ *     with the sentence a notice prints, and why a notice refuses;
+ *   · one card per entity, joined to its read-only Mercury (D1184): each
+ *     account's ending, payments, balance and whether Mercury reads it, the
+ *     retired ones folded, and the accounts Mercury reads that the registry
+ *     does not hold ("Add it to the registry");
+ *   · one account's lightbox at `/account/:uid` (BNK2);
+ *   · every change in a dialog that says what it changes (BNK6,
+ *     `BankAccountDialogs.jsx`), where D717 drew inline forms under Manage.
  *
  * Only the Super Admin sees it. Anyone else gets one sentence, no controls,
  * and no read is made. Lists are masked (`••••NNNN`). A reveal asks for a
  * reason, is recorded by the Worker before it decrypts, and the number shows
  * here for 30 seconds, held in component state only, never kept in the browser.
  *
- * Payment instructions never change in place: an account's bank, beneficiary,
- * number and identifiers are fixed once added. Only the label and the purposes
+ * Payment instructions never change in place: only the label and the payments
  * can be edited; to change anything else, retire the account and add another.
  * Writes need a fresh TOTP step-up, which `request()` asks for itself.
  *
- * Reads per open: the registry's `list` and the Mercury `connections()`, then
- * one unmatched-credit read per connected entity. Mercury is only read, through
- * `/api/admin/mercury`; this page holds no token form. The refusal sentences
- * under "What a notice refuses" are the Worker's (`refusals`), never copied.
+ * Reads per open: the registry's `list`, the Mercury `connections()` and
+ * `accounts()`, then one unmatched-credit read per connected entity. Mercury
+ * is only read, through `/api/admin/mercury`; this page holds no token form.
+ * The refusal sentences under "Why a notice refuses" are the Worker's
+ * (`refusals`), never copied.
  */
 
 export const BANK_ACCOUNTS_HOLDER_ONLY = 'Only the Super Admin can see or change payment instructions.';
@@ -41,43 +63,14 @@ export const BANK_ACCOUNTS_HOLDER_ONLY = 'Only the Super Admin can see or change
 /** How long a revealed number stays on screen. */
 export const REVEAL_MS = 30_000;
 
-/** The Worker's `PAYMENT_PURPOSES` (`services/payInstructions.ts`): each purpose and the one entity it pays. */
-export const PAYMENT_PURPOSE_OPTIONS = [
-  { value: 'capital_contribution', label: 'Capital contributions', payee: 'fund' },
-  { value: 'gp_commitment', label: 'GP commitment', payee: 'fund' },
-  { value: 'management_fee', label: 'Management fee', payee: 'gp' },
-  { value: 'platform_licence_fee', label: 'Platform licence fee', payee: 'holdings' },
-  { value: 'territory_licence_fee', label: 'Territory licence fee', payee: 'holdings' },
-];
+// ── BNK1's words ──────────────────────────────────────────────────────────────
 
-const ENTITY_ORDER = ['holdings', 'management', 'gp', 'fund'];
-
-/**
- * Mercury's partner bank and its public identifiers, each still editable. No
- * account number: the owner types that from Mercury's own account page.
- */
-export const MERCURY_PRESET = {
-  label: 'Mercury (Column N.A.)',
-  bank_name: 'Column N.A.',
-  bank_address: '1 Letterman Drive, Building A, Suite A4-700, San Francisco, CA 94129',
-  beneficiary_address: '16192 Coastal Highway, Lewes, DE 19958',
-  routing_number: '121145433',
-  routing_number_alt: '121145307',
-  swift_code: 'CLNOUS66MER',
-  intermediary_swift_code: 'CHASUS33XXX',
-};
-
-// ── L11's words ───────────────────────────────────────────────────────────────
-
-const SUB_LINE = 'Each entity’s accounts. Notices, statements and invoices fill their payment instructions from here.';
-const AUDIT_LINE = 'Opening this page is recorded in the admin audit log: one read of the Mercury connections, and one of each connected entity\'s unmatched receipts.';
+const AUDIT_LINE = 'Opening this page is recorded in the admin audit log: one read of the registry, one of the Mercury connections and accounts, and one of each connected entity\'s unmatched receipts.';
 const FUND_MISSING = 'No account on file. Capital calls can’t issue until the Fund has one.';
 const NO_ACCOUNT = 'No account on file.';
 const RESERVE_WORDS = 'Reserve: never printed on a notice';
 const NO_PURPOSE_WORDS = 'No notice purpose';
 const RECONCILIATION_HREF = '/admin/fund-admin/banking/reconciliation';
-const MERCURY_BANK_OPTION = `Mercury · ${MERCURY_PRESET.bank_name} · ABA ${MERCURY_PRESET.routing_number} · SWIFT ${MERCURY_PRESET.swift_code}`;
-const ADD_NOTE = 'Saved encrypted. The full number is not shown again, except through Reveal.';
 const REVEAL_SHOWN = 'Shown for 30 seconds. It is not kept on this device.';
 
 /** The canvas's four lines, keyed by the resolver's code, in the canvas's order (`NOTICE_REFUSALS`). */
@@ -88,7 +81,6 @@ export const NOTICE_REFUSAL_LINES = Object.freeze({
   fund_account_missing: 'Axal VC Spin-Out Lab Fund I LP has no account.',
 });
 
-const KIND_WORDS = { checking: 'Checking', savings: 'Savings' };
 const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 
 // ── Pure helpers, exported for the test ───────────────────────────────────────
@@ -104,11 +96,11 @@ export function connectionPill(row) {
   return { tone: row.state?.tone || 'neutral', text: row.state?.text || 'Not read' };
 }
 
-/** The Purposes cell: the purpose labels, the reserve's words, or the no-purpose words. */
+/** The Payments cell: the purpose labels, the reserve's words, or the no-purpose words. */
 export function purposesText(account) {
   if (account?.account_kind === 'savings') return RESERVE_WORDS;
-  const list = Array.isArray(account?.purposes) ? account.purposes : [];
-  return list.length ? list.map(purposeLabel).join(' · ') : NO_PURPOSE_WORDS;
+  const ps = Array.isArray(account?.purposes) ? account.purposes : [];
+  return ps.length ? ps.map(purposeLabel).join(' · ') : NO_PURPOSE_WORDS;
 }
 
 /** "<name>: <n> unmatched", "Not connected" or "Not read". An unknown count is never 0. */
@@ -130,21 +122,25 @@ export function receiptDate(isoDay) {
 
 // ── Styles ────────────────────────────────────────────────────────────────────
 
-const inputCls = 'w-full rounded-md border border-[#dcd9e3] bg-white px-2.5 py-1.5 text-[13px] text-gray-900 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-100';
-const btnCls = 'inline-flex items-center gap-1 rounded-md border border-[#dcd9e3] bg-white px-2.5 py-1 text-xs font-semibold text-gray-700 hover:bg-gray-50 disabled:opacity-50 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-200 dark:hover:bg-gray-800';
-const primaryCls = 'inline-flex items-center gap-1 rounded-md bg-axal-violet px-3 py-1.5 text-xs font-bold text-white hover:bg-axal-violet-deep disabled:opacity-50 dark:bg-violet-500 dark:hover:bg-violet-400';
 const cardCls = 'rounded-xl border border-[#dcd9e3] bg-white p-4 dark:border-gray-800 dark:bg-gray-950';
-const fieldCls = 'block text-[11.5px] font-semibold text-axal-muted dark:text-gray-400';
-const muted = 'text-axal-muted dark:text-gray-400';
-const amber = 'text-amber-700 dark:text-amber-300';
 const roseLink = 'font-bold text-rose-600 hover:underline dark:text-rose-300';
-const ACCOUNT_GRID = 'sm:grid-cols-[1fr_0.8fr_0.8fr_1.3fr_1.6fr_0.7fr]';
+const violetLink = 'font-bold text-axal-violet hover:underline dark:text-violet-300';
+const ACCOUNT_GRID = 'sm:grid-cols-[1.2fr_0.8fr_1.55fr_1.1fr_1.15fr_0.75fr_0.5fr]';
 const RECEIPT_GRID = 'sm:grid-cols-[0.7fr_1.2fr_0.7fr_1.6fr_1fr]';
 
-const errText = (e, fallback) => e?.data?.message || e?.message || fallback;
-const purposeLabel = (p) => PAYMENT_PURPOSE_OPTIONS.find((o) => o.value === p)?.label || p;
 const entityName = (key) => AXAL_ENTITIES[key]?.name || key;
 const list = (v) => (Array.isArray(v) ? v : []);
+const hhmm = (d) => `${String(d.getUTCHours()).padStart(2, '0')}:${String(d.getUTCMinutes()).padStart(2, '0')} UTC`;
+
+/**
+ * D1185 — the rail on every Bank accounts tab. The AIRail canvas draws no
+ * board for the page (its key is off the canvas, beside Payments), so
+ * `ConsolePage` draws it alone and this frame docks the rail around it, with
+ * BNK1's sentence: what Eadwyn can and cannot see.
+ */
+export function BankAccountsRail({ children }) {
+  return <AdminBoardFrame workspace="Bank accounts" note={RAIL_NOTE} data-testid="bank-accounts-rail-frame">{children}</AdminBoardFrame>;
+}
 
 export function BankAccountsPanel() {
   const holder = isSuperAdminUser(useAuth().user);
@@ -155,20 +151,21 @@ export function BankAccountsPanel() {
 }
 
 function BankAccountsRegistry() {
+  const { pathname } = useLocation();
+  const navigate = useNavigate();
+  const openUid = accountUidOf(pathname);
   const [data, setData] = useState(null);
   const [failed, setFailed] = useState(false);
   const [notice, setNotice] = useState(null);
-  const [showAdd, setShowAdd] = useState(false);
-  const [busy, setBusy] = useState(false);
-  // { uid, kind: 'relabel' | 'purposes' | 'retire', value }
-  const [action, setAction] = useState(null);
-  // The account whose Reveal dialog is open.
-  const [revealFor, setRevealFor] = useState(null);
-  // { uid, number }: state only, cleared after REVEAL_MS and on unmount.
+  // { kind: 'add' | 'mercury' | 'relabel' | 'payments' | 'retire' | 'reveal', account?, item?, entity? }
+  const [dialog, setDialog] = useState(null);
+  // { uid, number, reason, at }: state only, cleared after REVEAL_MS, on Hide now and on unmount.
   const [revealed, setRevealed] = useState(null);
   const timer = useRef(null);
   // { status: 'loading' | 'ready' | 'unreadable', rows }
   const [mercury, setMercury] = useState({ status: 'loading', rows: null });
+  // { status: 'loading' | 'ready' | 'unreadable', items }: Mercury's stored accounts.
+  const [held, setHeld] = useState({ status: 'loading', items: null });
   // entity key → { status: 'loading' | 'ready' | 'unreadable' | 'unconnected', total, items }
   const [unmatched, setUnmatched] = useState({});
   // The entity whose Connect or Replace opened the Mercury sheet.
@@ -180,6 +177,16 @@ function BankAccountsRegistry() {
       setFailed(false);
     } catch {
       setFailed(true);
+    }
+  }, []);
+
+  const loadHeld = useCallback(async () => {
+    setHeld({ status: 'loading', items: null });
+    try {
+      const r = await adminMercuryApi.accounts();
+      setHeld({ status: 'ready', items: list(r?.items) });
+    } catch {
+      setHeld({ status: 'unreadable', items: null });
     }
   }, []);
 
@@ -207,7 +214,7 @@ function BankAccountsRegistry() {
     }));
   }, []);
 
-  useEffect(() => { load(); loadMercury(); }, [load, loadMercury]);
+  useEffect(() => { load(); loadMercury(); loadHeld(); }, [load, loadMercury, loadHeld]);
   useEffect(() => () => { if (timer.current) clearTimeout(timer.current); }, []);
 
   // Best effort: once the sheet has drawn its rows, bring the chosen entity's group into view.
@@ -229,48 +236,52 @@ function BankAccountsRegistry() {
     return () => { live = false; if (typeof globalThis.cancelAnimationFrame === 'function') globalThis.cancelAnimationFrame(id); };
   }, [sheetFor]);
 
-  const run = async (fn, ok) => {
-    setBusy(true);
-    setNotice(null);
-    try {
-      await fn();
-      setNotice({ kind: 'ok', msg: ok });
-      setAction(null);
-      await load();
-    } catch (e) {
-      setNotice({ kind: 'err', msg: errText(e, 'That did not save. Nothing changed.') });
-    } finally { setBusy(false); }
+  /** A dialog's write went through: close it, say so, read the registry again. */
+  const saved = async (msg) => {
+    setDialog(null);
+    setNotice({ kind: 'ok', msg });
+    await load();
+    if (msg.startsWith('Account added')) loadHeld();
   };
 
   /** Throws the Worker's refusal for the dialog to print. */
   const reveal = async (uid, reason) => {
     const r = await bankAccountsApi.reveal(uid, reason);
     if (timer.current) clearTimeout(timer.current);
-    setRevealed({ uid, number: r?.account?.account_number || '' });
+    setRevealed({ uid, number: r?.account?.account_number || '', reason, at: hhmm(new Date()) });
     timer.current = setTimeout(() => setRevealed(null), REVEAL_MS);
-    setRevealFor(null);
+    setDialog(null);
   };
-
-  const added = async () => {
-    setShowAdd(false);
-    setNotice({ kind: 'ok', msg: 'Account added.' });
-    await load();
-  };
+  const hide = () => { if (timer.current) clearTimeout(timer.current); setRevealed(null); };
 
   const closeSheet = () => { setSheetFor(null); loadMercury(); };
+  const open = (kind, extra = {}) => { setNotice(null); setDialog({ kind, ...extra }); };
 
   if (failed) return <ConsoleUnreadable what="The bank accounts" onRetry={load} />;
-  if (!data) return <div className="p-8 text-center text-sm text-gray-500">{CONSOLE_LOADING}</div>;
+  if (!data) return <div className="p-8 text-center text-sm text-gray-500 dark:text-gray-400" data-testid="bank-accounts-reading">{READING}</div>;
 
   const accounts = list(data.accounts);
   const coverage = list(data.coverage);
   const fundHasAccount = accounts.some((a) => a.entity_key === 'fund' && a.status === 'active');
   const rowFor = (key) => (mercury.status === 'ready' ? mercury.rows.find((r) => r.key === key) || null : null);
+  const extras = held.status === 'ready' ? notInRegistry(accounts, held.items) : [];
+  const lightboxAccount = openUid ? accounts.find((a) => a.uid === openUid) || null : null;
+  const closeLightbox = () => navigate(BASE);
+  const act = {
+    open: (a) => navigate(accountPath(a.uid)),
+    reveal: (a) => open('reveal', { account: a }),
+    relabel: (a) => open('relabel', { account: a }),
+    payments: (a) => open('payments', { account: a }),
+    retire: (a) => open('retire', { account: a }),
+  };
 
   return (
     <div className="mx-auto w-full max-w-[1240px] space-y-4 rounded-xl border border-[#dcd9e3] bg-[#f8f8fa] p-4 text-[#18181b] dark:border-gray-800 dark:bg-[#121018] dark:text-[#f4f3f7] sm:p-[22px]"
       data-testid="bank-accounts-console">
-      <RegistryHeader onAdd={() => { setNotice(null); setShowAdd(true); }} />
+      <div className="flex flex-wrap items-center justify-end gap-2">
+        <FundStructureDoor />
+        <button type="button" className={primaryCls} onClick={() => open('add')} data-testid="bank-accounts-add">Add an account</button>
+      </div>
 
       {notice && (
         <p role={notice.kind === 'err' ? 'alert' : 'status'}
@@ -279,9 +290,16 @@ function BankAccountsRegistry() {
         </p>
       )}
 
+      <Coverage coverage={coverage} accounts={accounts} refusals={data.refusals} onAddFund={() => open('add', { entity: 'fund' })} />
+
       {mercury.status === 'unreadable' && (
         <div data-testid="bank-accounts-mercury-unreadable">
           <Unreadable what="The Mercury connections" claim="This is not a claim that none is connected." onRetry={loadMercury} />
+        </div>
+      )}
+      {held.status === 'unreadable' && (
+        <div data-testid="bank-accounts-held-unreadable">
+          <Unreadable what="Mercury’s accounts" claim="Accounts Mercury reads that the registry does not hold are not listed until this reads." onRetry={loadHeld} />
         </div>
       )}
 
@@ -289,44 +307,98 @@ function BankAccountsRegistry() {
         <EntityCard key={key} entity={key} fundI={data.fund_i} fundHasAccount={fundHasAccount}
           accounts={accounts.filter((a) => a.entity_key === key)}
           coverage={coverage.filter((c) => c.payee === key)}
+          extras={extras.filter((m) => m.entity_key === key)}
           mercury={mercury} row={rowFor(key)} onConnect={() => setSheetFor(key)}
-          busy={busy} action={action} setAction={setAction} revealed={revealed}
-          onReveal={(a) => setRevealFor(a)}
-          onRelabel={(a, label) => run(() => bankAccountsApi.update(a.uid, { label }), 'Label saved.')}
-          onPurposes={(a, purposes) => run(() => bankAccountsApi.update(a.uid, { purposes }), 'Purposes saved.')}
-          onRetire={(a, reason) => run(() => bankAccountsApi.retire(a.uid, reason), 'Account retired.')} />
+          revealed={revealed} act={act}
+          onAdd={() => open('add', { entity: key })} onAddFromMercury={(item) => open('mercury', { item })} />
       ))}
 
       <p className={`text-[11.5px] ${muted}`} data-testid="bank-accounts-audit-line">{AUDIT_LINE}</p>
 
       <UnmatchedReceipts mercury={mercury} unmatched={unmatched} />
-      <NoticeRefusals refusals={data.refusals} coverage={coverage} />
 
-      {showAdd && <AddAccountDialog fundHasAccount={fundHasAccount} onClose={() => setShowAdd(false)} onAdded={added} />}
-      {revealFor && <RevealDialog account={revealFor} onClose={() => setRevealFor(null)} onReveal={(reason) => reveal(revealFor.uid, reason)} />}
+      {openUid && (lightboxAccount
+        ? <AccountLightbox account={lightboxAccount} onClose={closeLightbox}
+          revealed={revealed?.uid === lightboxAccount.uid ? revealed : null} onHide={hide}
+          onReveal={() => act.reveal(lightboxAccount)} onRelabel={() => act.relabel(lightboxAccount)}
+          onPayments={() => act.payments(lightboxAccount)} onRetire={() => act.retire(lightboxAccount)} />
+        : <MissingAccount onClose={closeLightbox} />)}
+
+      {dialog?.kind === 'add' && <AddAccountDialog entity={dialog.entity} fundHasAccount={fundHasAccount} onClose={() => setDialog(null)} onAdded={saved} />}
+      {dialog?.kind === 'mercury' && <AddFromMercuryDialog item={dialog.item} onClose={() => setDialog(null)} onAdded={saved} />}
+      {dialog?.kind === 'relabel' && <RelabelDialog account={dialog.account} onClose={() => setDialog(null)} onSaved={saved} />}
+      {dialog?.kind === 'payments' && <PaymentsDialog account={dialog.account} accounts={accounts} onClose={() => setDialog(null)} onSaved={saved} />}
+      {dialog?.kind === 'retire' && <RetireDialog account={dialog.account} onClose={() => setDialog(null)} onSaved={saved} />}
+      {dialog?.kind === 'reveal' && <RevealDialog account={dialog.account} onClose={() => setDialog(null)} onReveal={(reason) => reveal(dialog.account.uid, reason)} />}
       {sheetFor && <MercuryEntitySheet superAdmin eyebrow="Bank accounts" api={adminMercuryApi} onClose={closeSheet} />}
     </div>
   );
 }
 
-function RegistryHeader({ onAdd }) {
+/** BNK1 — "Where each payment goes": each purpose paid here or refused, and why a notice refuses. */
+function Coverage({ coverage, accounts, refusals, onAddFund }) {
+  const [why, setWhy] = useState(false);
+  const summary = coverageSummary(coverage);
+  const sentences = new Map(list(refusals).map((r) => [r?.code, r?.message]));
+  const ambiguous = coverage.filter((c) => !c.ok && c.code === 'ambiguous_account');
   return (
-    <header className="flex flex-wrap items-start justify-between gap-3">
-      <div className="min-w-0">
-        <h2 className="text-[22px] font-extrabold tracking-[-.02em] text-axal-ink dark:text-gray-100">Bank accounts</h2>
-        <p className={`mt-0.5 text-[13px] ${muted}`}>{SUB_LINE}</p>
+    <section className={cardCls} aria-label="Where each payment goes" data-testid="bank-accounts-coverage-card">
+      <div className="flex flex-wrap items-baseline justify-between gap-2">
+        <h3 className="text-[14px] font-extrabold text-axal-ink dark:text-gray-100">Where each payment goes</h3>
+        <span className={`font-mono text-[12px] ${muted}`} data-testid="bank-accounts-coverage-meta">{summary.meta}</span>
       </div>
-      <div className="flex flex-wrap items-center gap-2">
-        <FundStructureDoor />
-        <button type="button" className={primaryCls} onClick={onAdd} data-testid="bank-accounts-add">Add account</button>
-      </div>
-    </header>
+      {summary.warning && (
+        <div className="mt-3 flex flex-wrap items-center gap-2 rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 dark:border-amber-700 dark:bg-amber-950/40"
+          data-testid="bank-accounts-coverage-warning">
+          <p className="text-[12.5px] font-semibold text-amber-900 dark:text-amber-200">{summary.warning}</p>
+          {summary.fundMissing && <button type="button" className={btnCls} onClick={onAddFund}>Add Fund I’s account</button>}
+        </div>
+      )}
+      <ul className="mt-3 divide-y divide-[#ecebf0] dark:divide-gray-800">
+        {coverage.map((c) => {
+          const r = coverageRow(c, accounts);
+          return (
+            <li key={c.purpose} className="flex flex-wrap items-start justify-between gap-2 py-2" data-testid="bank-accounts-pay-row">
+              <span className="min-w-0">
+                <span className="block text-[13px] font-bold text-axal-ink dark:text-gray-100">{r.label}</span>
+                {r.sub && <span className={`block text-[12px] ${muted}`}>{r.sub}</span>}
+              </span>
+              <span className="flex items-center gap-2">
+                <span className="font-mono text-[12px]">{r.where}</span>
+                <Pill tone={r.pill.tone}>{r.pill.text}</Pill>
+              </span>
+            </li>
+          );
+        })}
+      </ul>
+      <button type="button" className={`mt-2 text-[13px] ${violetLink}`} aria-expanded={why} onClick={() => setWhy((w) => !w)} data-testid="bank-accounts-why">
+        {`${why ? '▾' : '▸'} Why a notice refuses`}
+      </button>
+      {!why && <p className={`text-[12px] ${muted}`}>Four reasons, each with the sentence a notice prints.</p>}
+      {why && (
+        <ul className="mt-2 space-y-2 pl-4" aria-label="What a notice refuses" data-testid="bank-accounts-refusals">
+          {Object.entries(NOTICE_REFUSAL_LINES).map(([code, line]) => (
+            <li key={code} data-testid="bank-accounts-refusal">
+              <p className={`text-[12.5px] font-medium ${amber}`}>{line}</p>
+              {typeof sentences.get(code) === 'string' && sentences.get(code) && (
+                <p className={`text-[12px] ${muted}`}>{`A notice reads: ${sentences.get(code)}`}</p>
+              )}
+            </li>
+          ))}
+          {ambiguous.map((c) => (
+            <li key={c.purpose} data-testid="bank-accounts-refusal">
+              <p className={`text-[12.5px] font-medium ${amber}`}>{c.message}</p>
+            </li>
+          ))}
+        </ul>
+      )}
+    </section>
   );
 }
 
 function ConnectionPill({ mercury, row, onConnect }) {
   const pill = mercury.status === 'ready' ? connectionPill(row) : mercury.status === 'unreadable' ? connectionPill(null) : null;
-  if (!pill) return <span className={`text-[11px] ${muted}`}>{CONSOLE_LOADING}</span>;
+  if (!pill) return <span className={`text-[11px] ${muted}`}>Reading Mercury…</span>;
   return (
     <div className="flex min-w-0 flex-wrap items-center gap-2 sm:justify-end">
       <Pill tone={pill.tone} className="max-w-full max-sm:whitespace-normal" data-testid="bank-accounts-connection">{pill.text}</Pill>
@@ -337,17 +409,27 @@ function ConnectionPill({ mercury, row, onConnect }) {
   );
 }
 
-function EntityCard({ entity, fundI, fundHasAccount, accounts, coverage, mercury, row, onConnect, busy, action, setAction, revealed, onReveal, onRelabel, onPurposes, onRetire }) {
+function EntityCard({ entity, fundI, fundHasAccount, accounts, coverage, extras, mercury, row, onConnect, revealed, act, onAdd, onAddFromMercury }) {
+  const [showRetired, setShowRetired] = useState(false);
   const name = entityName(entity);
   const fund = entity === 'fund';
-  const shown = fund && !fundHasAccount ? accounts.filter((a) => a.status !== 'active') : accounts;
+  const live = accounts.filter((a) => a.status === 'active');
+  const retired = accounts.filter((a) => a.status !== 'active');
+  const shown = showRetired ? [...live, ...retired] : live;
+  const line = mercury.status === 'ready' ? cardLine(row) : null;
   return (
     <section className={cardCls} aria-label={name} data-testid={`bank-accounts-entity-${entity}`}>
       <div className="flex flex-wrap items-center justify-between gap-2">
-        <h3 className="text-[14px] font-extrabold text-axal-ink dark:text-gray-100">{name}</h3>
-        <ConnectionPill mercury={mercury} row={row} onConnect={onConnect} />
+        <div className="flex min-w-0 flex-wrap items-baseline gap-x-2">
+          <h3 className="text-[14px] font-extrabold text-axal-ink dark:text-gray-100">{shortName(entity)}</h3>
+          <span className={`text-[12.5px] ${muted}`}>{name}</span>
+        </div>
+        <div className="flex flex-wrap items-center gap-2">
+          <ConnectionPill mercury={mercury} row={row} onConnect={onConnect} />
+          <button type="button" className={btnCls} onClick={onAdd}>{`Add an account for ${shortName(entity)}`}</button>
+        </div>
       </div>
-      {row?.connected && row.error && <p className={`mt-1 text-[12px] ${muted}`}>{row.error}</p>}
+      {line && <p className={`mt-1 text-[12.5px] ${muted}`} data-testid="bank-accounts-card-line">{line}</p>}
 
       {fund && (
         <p className="mt-2 text-[12.5px] text-gray-700 dark:text-gray-300" data-testid="bank-accounts-fund-i">
@@ -358,25 +440,37 @@ function EntityCard({ entity, fundI, fundHasAccount, accounts, coverage, mercury
       )}
 
       {fund && !fundHasAccount && (
-        <p className="mt-3 rounded-lg border border-dashed border-[#fcd34d] bg-[#fffbeb] px-3 py-2.5 text-[12.5px] font-semibold text-[#92400e] dark:border-amber-700 dark:bg-amber-950/40 dark:text-amber-200"
+        <div className="mt-3 flex flex-wrap items-center gap-2 rounded-lg border border-dashed border-[#fcd34d] bg-[#fffbeb] px-3 py-2.5 dark:border-amber-700 dark:bg-amber-950/40"
           data-testid="bank-accounts-fund-missing">
-          {FUND_MISSING}
-        </p>
-      )}
-
-      {shown.length > 0 && (
-        <div className="mt-3 text-[12.5px]" role="table" aria-label={`${name} accounts`} data-testid="bank-accounts-table">
-          <div role="row" className={`hidden gap-2 border-b border-[#dcd9e3] pb-1.5 text-[11px] font-bold uppercase tracking-[.06em] dark:border-gray-800 sm:grid ${ACCOUNT_GRID} ${muted}`}>
-            {['Label', 'Bank', 'Kind', 'Account', 'Purposes', 'Status'].map((h) => <span key={h} role="columnheader">{h}</span>)}
-          </div>
-          {shown.map((a) => (
-            <AccountRow key={a.uid} account={a} busy={busy} action={action?.uid === a.uid ? action : null}
-              setAction={setAction} revealed={revealed?.uid === a.uid ? revealed.number : null}
-              onReveal={() => onReveal(a)} onRelabel={(v) => onRelabel(a, v)} onPurposes={(v) => onPurposes(a, v)} onRetire={(v) => onRetire(a, v)} />
-          ))}
+          <p className="text-[12.5px] font-semibold text-[#92400e] dark:text-amber-200">{FUND_MISSING}</p>
+          <button type="button" className={btnCls} onClick={onAdd}>Add Fund I’s account</button>
         </div>
       )}
-      {!fund && accounts.length === 0 && <p className={`mt-3 text-[12.5px] ${muted}`}>{NO_ACCOUNT}</p>}
+
+      {(live.length > 0 || retired.length > 0 || extras.length > 0) && (
+        <div className="mt-3 text-[12.5px]" role="table" aria-label={`${name} accounts`} data-testid="bank-accounts-table">
+          <div role="row" className={`hidden gap-2 border-b border-[#dcd9e3] pb-1.5 text-[11px] font-bold uppercase tracking-[.06em] dark:border-gray-800 sm:grid ${ACCOUNT_GRID} ${muted}`}>
+            {['Account', 'Ending', 'Payments', 'Balance', 'Mercury', 'State', ''].map((h, i) => <span key={i} role="columnheader">{h}</span>)}
+          </div>
+          {shown.map((a) => (
+            <AccountRow key={a.uid} account={a} row={row} revealed={revealed?.uid === a.uid ? revealed.number : null} act={act} />
+          ))}
+          {retired.length > 0 && (
+            <div className="border-b border-[#ecebf0] py-2 dark:border-gray-800" data-testid="bank-accounts-retired-toggle">
+              <button type="button" className={`text-[12.5px] ${violetLink}`} aria-expanded={showRetired} onClick={() => setShowRetired((v) => !v)}>
+                {`${showRetired ? 'Hide' : 'Show'} ${retired.length} retired ${retired.length === 1 ? 'account' : 'accounts'} ${showRetired ? '▴' : '▾'}`}
+              </button>
+              {!showRetired && (
+                <p className={`text-[12px] ${muted}`}>
+                  {retired.map((a) => `${a.label} ${a.account_masked} · retired ${dayOf(a.retired_at) || 'on a date not recorded'}${a.retired_reason ? ` · ‘${a.retired_reason}’` : ''}`).join(' · ')}
+                </p>
+              )}
+            </div>
+          )}
+          {extras.map((m) => <MercuryOnlyRow key={m.uid} item={m} onAdd={() => onAddFromMercury(m)} />)}
+        </div>
+      )}
+      {!fund && accounts.length === 0 && extras.length === 0 && <p className={`mt-3 text-[12.5px] ${muted}`}>{NO_ACCOUNT}</p>}
 
       {coverage.length > 0 && (
         <ul className="mt-3 space-y-1 text-[12.5px]" data-testid="bank-accounts-coverage">
@@ -387,92 +481,77 @@ function EntityCard({ entity, fundI, fundHasAccount, accounts, coverage, mercury
           ))}
         </ul>
       )}
+      {coverage.length === 0 && !PAYMENT_PURPOSE_OPTIONS.some((o) => o.payee === entity) && (
+        <p className={`mt-3 text-[12.5px] ${muted}`}>{`${shortName(entity)} takes no payment through the registry.`}</p>
+      )}
     </section>
   );
 }
 
-function PurposePicker({ entity, kind, value, onChange }) {
-  const options = PAYMENT_PURPOSE_OPTIONS.filter((o) => o.payee === entity);
-  if (kind !== 'checking') return <p className={`text-xs ${muted}`}>A savings account takes no payments.</p>;
-  if (!options.length) return <p className={`text-xs ${muted}`}>No payment is made to this entity through the registry.</p>;
+function Cell({ cell, className = '' }) {
   return (
-    <fieldset className="flex flex-wrap gap-3 text-xs text-gray-700 dark:text-gray-300">
-      <legend className={`mb-1 ${fieldCls}`}>Purposes</legend>
-      {options.map((o) => (
-        <label key={o.value} className="inline-flex items-center gap-1">
-          <input type="checkbox" checked={value.includes(o.value)}
-            onChange={(e) => onChange(e.target.checked ? [...value, o.value] : value.filter((p) => p !== o.value))} />
-          {o.label}
-        </label>
-      ))}
-    </fieldset>
+    <span role="cell" className={className} title={cell.tip}>
+      <span className={cell.tone === 'figure' ? 'font-mono font-bold' : muted}>{cell.text}</span>
+      {cell.sub && <span className={`block font-mono text-[11px] ${muted}`}>{cell.sub}</span>}
+      {cell.tip && <span className="sr-only">{`: ${cell.tip}`}</span>}
+    </span>
   );
 }
 
-function AccountRow({ account: a, busy, action, setAction, revealed, onReveal, onRelabel, onPurposes, onRetire }) {
+function AccountRow({ account: a, row, revealed, act }) {
   const active = a.status === 'active';
-  const [managing, setManaging] = useState(false);
-  const open = (kind, value = '') => setAction({ uid: a.uid, kind, value });
-  const set = (value) => setAction({ ...action, value });
-  const submit = (e) => {
-    e.preventDefault();
-    if (!action || busy) return;
-    if (action.kind === 'relabel') onRelabel(action.value);
-    if (action.kind === 'purposes') onPurposes(action.value);
-    if (action.kind === 'retire') onRetire(action.value);
-  };
+  const [menu, setMenu] = useState(false);
+  const pick = (fn) => () => { setMenu(false); fn(a); };
+  const mer = mercuryPill(a, row);
   return (
     <div className="border-b border-[#ecebf0] py-2 last:border-b-0 dark:border-gray-800" data-testid="bank-account-row">
       <div role="row" className={`grid grid-cols-1 gap-1 sm:items-center sm:gap-2 ${ACCOUNT_GRID}`}>
-        <span role="cell" className="font-semibold text-axal-ink dark:text-gray-100">{a.label}</span>
-        <span role="cell">{a.bank_name}</span>
-        <span role="cell">{KIND_WORDS[a.account_kind] || a.account_kind}</span>
-        <span role="cell" className="font-mono">
+        <span role="cell">
+          <Link className="font-bold text-axal-ink hover:underline dark:text-gray-100" to={`/admin/platform/bank-accounts/account/${encodeURIComponent(a.uid)}`} data-testid="bank-account-open">{a.label}</Link>
+          <span className={`block text-[11.5px] ${muted}`}>{a.account_kind === 'savings' ? 'Savings' : 'Checking'}</span>
+        </span>
+        <span role="cell" className="font-mono font-semibold">
           {revealed
             ? <span data-testid="bank-account-revealed">{revealed}</span>
-            : <span aria-label={`ending ${a.account_last4 || String(a.account_masked || '').slice(-4)}`}>{a.account_masked}</span>}
+            : <span aria-label={`ending ${String(a.account_last4 || String(a.account_masked || '').slice(-4)).split('').join(' ')}`}>{a.account_masked}</span>}
         </span>
         <span role="cell" className={a.account_kind === 'savings' || !a.purposes?.length ? muted : ''}>{purposesText(a)}</span>
-        <span role="cell" className="flex flex-wrap items-center gap-1.5">
-          <Pill tone={active ? 'ok' : 'neutral'}>{active ? 'Active' : 'Retired'}</Pill>
-          {active && (
-            <button type="button" className={btnCls} aria-expanded={managing}
-              onClick={() => { setManaging((m) => !m); if (action) setAction(null); }}>Manage</button>
-          )}
+        <Cell cell={balanceCell(a)} />
+        <span role="cell"><Pill tone={mer.tone} data-testid="bank-account-mercury">{mer.text}</Pill></span>
+        <span role="cell"><Pill tone={active ? 'ok' : 'neutral'}>{active ? 'Active' : 'Retired'}</Pill></span>
+        <span role="cell" className="relative flex justify-end">
+          <button type="button" className={btnCls} aria-haspopup="menu" aria-expanded={menu}
+            aria-label={`Manage ${a.label} ${a.account_masked}`} onClick={() => setMenu((m) => !m)} data-testid="bank-account-menu">⋯</button>
         </span>
       </div>
       {!active && a.retired_reason && <p className={`mt-1 text-xs ${muted}`}>Retired: {a.retired_reason}</p>}
       {revealed && <p className={`mt-1 text-xs ${amber}`}>{REVEAL_SHOWN}</p>}
-      {active && managing && !action && (
-        <div className="mt-2 flex flex-wrap gap-2" data-testid="bank-account-manage">
-          <button type="button" className={btnCls} onClick={() => open('relabel', a.label)}>Relabel</button>
-          <button type="button" className={btnCls} onClick={() => open('purposes', a.purposes || [])}>Purposes</button>
-          <button type="button" className={btnCls} onClick={onReveal}>Reveal</button>
-          <button type="button" className={btnCls} onClick={() => open('retire')}>Retire</button>
+      {menu && (
+        <div role="menu" className="mt-2 flex flex-wrap gap-2" data-testid="bank-account-manage">
+          <button type="button" role="menuitem" className={btnCls} onClick={pick(act.open)}>Open</button>
+          {active && <button type="button" role="menuitem" className={btnCls} onClick={pick(act.relabel)}>Relabel</button>}
+          {active && a.account_kind === 'checking' && <button type="button" role="menuitem" className={btnCls} onClick={pick(act.payments)}>Change payments</button>}
+          {active && <button type="button" role="menuitem" className={btnCls} onClick={pick(act.reveal)}>Reveal</button>}
+          {active && <button type="button" role="menuitem" className={btnCls} onClick={pick(act.retire)}>Retire</button>}
         </div>
       )}
-      {action && (
-        <form onSubmit={submit} className="mt-2 space-y-2">
-          {action.kind === 'purposes'
-            ? <PurposePicker entity={a.entity_key} kind={a.account_kind} value={action.value} onChange={set} />
-            : (
-              <label className={fieldCls}>
-                {{ relabel: 'Label', retire: 'Why it is retired' }[action.kind]}
-                <input className={inputCls} value={action.value} maxLength={action.kind === 'relabel' ? 60 : 200}
-                  onChange={(e) => set(e.target.value)} />
-              </label>
-            )}
-          {action.kind === 'retire' && (
-            <p className={`text-xs ${muted}`}>A retired account is kept, never changed, and takes no payments. Add the new one after.</p>
-          )}
-          <div className="flex gap-2">
-            <button type="submit" className={btnCls} disabled={busy}>
-              {{ relabel: 'Save label', purposes: 'Save purposes', retire: 'Retire account' }[action.kind]}
-            </button>
-            <button type="button" className={btnCls} onClick={() => setAction(null)}>Cancel</button>
-          </div>
-        </form>
-      )}
+    </div>
+  );
+}
+
+/** An account Mercury reads that the registry does not hold: no notice prints it. */
+function MercuryOnlyRow({ item, onAdd }) {
+  const bal = mercuryOnlyBalance(item);
+  return (
+    <div className={`grid grid-cols-1 gap-1 border-t border-dashed border-gray-400 py-2 sm:items-center sm:gap-2 ${ACCOUNT_GRID}`} role="row"
+      data-testid="bank-accounts-not-in-registry">
+      <span role="cell" className="sm:col-span-3">
+        <span className={`font-bold ${muted}`}>{`Mercury also reads ••••${item.last_four}${item.nickname ? ` ${item.nickname}` : ''}`}</span>
+        <span className={`block text-[11.5px] ${muted}`}>{NOT_IN_REGISTRY_SUB}</span>
+      </span>
+      <Cell cell={bal} />
+      <span role="cell"><Pill tone="warn">Not in the registry</Pill></span>
+      <span role="cell" className="sm:col-span-2"><button type="button" className={btnCls} onClick={onAdd}>Add it to the registry</button></span>
     </div>
   );
 }
@@ -515,169 +594,6 @@ function UnmatchedReceipts({ mercury, unmatched }) {
       {settled && rows.length === 0 && <p className={`mt-3 text-[12.5px] ${muted}`}>No unmatched receipt.</p>}
       <Link className={`mt-3 inline-block text-[12.5px] ${roseLink}`} to={RECONCILIATION_HREF}>Open the Reconciliation tab</Link>
     </section>
-  );
-}
-
-function NoticeRefusals({ refusals, coverage }) {
-  const sentences = new Map(list(refusals).map((r) => [r?.code, r?.message]));
-  const ambiguous = coverage.filter((c) => !c.ok && c.code === 'ambiguous_account');
-  return (
-    <section className={cardCls} aria-label="What a notice refuses" data-testid="bank-accounts-refusals">
-      <h3 className="text-[14px] font-extrabold text-axal-ink dark:text-gray-100">What a notice refuses</h3>
-      <ul className="mt-3 space-y-2">
-        {Object.entries(NOTICE_REFUSAL_LINES).map(([code, line]) => (
-          <li key={code} data-testid="bank-accounts-refusal">
-            <p className={`text-[12.5px] font-medium ${amber}`}>{line}</p>
-            {typeof sentences.get(code) === 'string' && sentences.get(code) && (
-              <p className={`text-[12px] ${muted}`}>{`A notice reads: ${sentences.get(code)}`}</p>
-            )}
-          </li>
-        ))}
-        {ambiguous.map((c) => (
-          <li key={c.purpose} data-testid="bank-accounts-refusal">
-            <p className={`text-[12.5px] font-medium ${amber}`}>{c.message}</p>
-          </li>
-        ))}
-      </ul>
-    </section>
-  );
-}
-
-const OTHER_BANK_FIELDS = [
-  ['bank_name', 'Bank name'], ['bank_address', 'Bank address'], ['beneficiary_address', 'Beneficiary address'],
-  ['routing_number', 'ABA routing number'], ['routing_number_alt', 'Alternate ABA (optional)'],
-  ['swift_code', 'SWIFT (optional)'], ['intermediary_swift_code', 'Intermediary SWIFT (optional)'],
-];
-
-function AddAccountDialog({ fundHasAccount, onClose, onAdded }) {
-  const [form, setForm] = useState(() => ({
-    entity_key: fundHasAccount ? 'holdings' : 'fund', bank: 'mercury', account_kind: 'checking',
-    account_number: '', account_number_confirm: '', purposes: [],
-    bank_name: '', bank_address: '', beneficiary_address: '', routing_number: '', routing_number_alt: '', swift_code: '', intermediary_swift_code: '',
-  }));
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState(null);
-  const set = (patch) => setForm((f) => ({ ...f, ...patch }));
-  const pickEntity = (entity) => setForm((f) => ({
-    ...f, entity_key: entity,
-    purposes: f.purposes.filter((p) => PAYMENT_PURPOSE_OPTIONS.find((o) => o.value === p)?.payee === entity),
-  }));
-
-  const save = async (e) => {
-    e?.preventDefault?.();
-    if (busy) return;
-    const { label: _presetLabel, ...preset } = MERCURY_PRESET;
-    const bank = form.bank === 'mercury' ? preset : Object.fromEntries(OTHER_BANK_FIELDS.map(([k]) => [k, form[k]]));
-    const body = {
-      entity_key: form.entity_key,
-      label: form.account_kind === 'savings' ? 'Reserve' : 'Operating',
-      beneficiary_name: AXAL_ENTITIES[form.entity_key]?.name || '',
-      account_kind: form.account_kind,
-      account_number: form.account_number,
-      account_number_confirm: form.account_number_confirm,
-      purposes: form.account_kind === 'checking' ? form.purposes : [],
-      ...bank,
-    };
-    setBusy(true);
-    setError(null);
-    try {
-      await bankAccountsApi.add(body);
-      setBusy(false);
-      await onAdded();
-    } catch (err) {
-      setError(errText(err, 'That did not save. Nothing changed.'));
-      setBusy(false);
-    }
-  };
-
-  return (
-    <Lightbox label="Add account" title="Add account" width={560} onClose={onClose} testId="bank-accounts-add-dialog"
-      footer={(
-        <div className="flex justify-end gap-2">
-          <button type="button" className={btnCls} onClick={onClose}>Cancel</button>
-          <button type="button" className={primaryCls} onClick={save} disabled={busy}>Save account</button>
-        </div>
-      )}>
-      <form onSubmit={save} className="space-y-3 px-5 py-4" data-testid="bank-accounts-add-form">
-        <label className={fieldCls}>Beneficiary
-          <select className={inputCls} value={form.entity_key} onChange={(e) => pickEntity(e.target.value)}>
-            {ENTITY_ORDER.map((k) => <option key={k} value={k}>{AXAL_ENTITIES[k].name}</option>)}
-          </select>
-        </label>
-        <label className={fieldCls}>Bank
-          <select className={inputCls} value={form.bank} onChange={(e) => set({ bank: e.target.value })}>
-            <option value="mercury">{MERCURY_BANK_OPTION}</option>
-            <option value="other">Another bank</option>
-          </select>
-        </label>
-        {form.bank === 'other' && (
-          <div className="grid gap-3 sm:grid-cols-2" data-testid="bank-accounts-other-bank">
-            {OTHER_BANK_FIELDS.map(([name, text]) => (
-              <label key={name} className={fieldCls}>{text}
-                <input className={inputCls} value={form[name]} onChange={(e) => set({ [name]: e.target.value })} />
-              </label>
-            ))}
-          </div>
-        )}
-        <label className={fieldCls}>Kind
-          <select className={inputCls} value={form.account_kind}
-            onChange={(e) => setForm((f) => ({ ...f, account_kind: e.target.value, purposes: e.target.value === 'checking' ? f.purposes : [] }))}>
-            <option value="checking">Checking</option>
-            <option value="savings">Savings</option>
-          </select>
-        </label>
-        <label className={fieldCls}>Account number
-          <input className={inputCls} type="password" autoComplete="off" inputMode="numeric" value={form.account_number}
-            onChange={(e) => set({ account_number: e.target.value })} />
-        </label>
-        <label className={fieldCls}>Account number again
-          <input className={inputCls} type="password" autoComplete="off" inputMode="numeric" value={form.account_number_confirm}
-            onChange={(e) => set({ account_number_confirm: e.target.value })} />
-        </label>
-        <PurposePicker entity={form.entity_key} kind={form.account_kind} value={form.purposes} onChange={(purposes) => set({ purposes })} />
-        <p className={`text-[12px] ${muted}`}>{ADD_NOTE}</p>
-        {error && <p role="alert" className="text-[12.5px] text-red-700 dark:text-red-300">{error}</p>}
-      </form>
-    </Lightbox>
-  );
-}
-
-function RevealDialog({ account: a, onClose, onReveal }) {
-  const [reason, setReason] = useState('');
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState(null);
-  const ready = reason.trim().length > 0 && !busy;
-  const go = async (e) => {
-    e?.preventDefault?.();
-    if (!ready) return;
-    setBusy(true);
-    setError(null);
-    try {
-      await onReveal(reason.trim());
-    } catch (err) {
-      setError(errText(err, 'The number could not be shown.'));
-      setBusy(false);
-    }
-  };
-  return (
-    <Lightbox label="Reveal the full number?" title="Reveal the full number?" width={460} onClose={onClose} testId="bank-accounts-reveal-dialog"
-      footer={(
-        <div className="flex justify-end gap-2">
-          <button type="button" className={btnCls} onClick={onClose}>Cancel</button>
-          <button type="button" className={primaryCls} onClick={go} disabled={!ready}>Reveal for 30 seconds</button>
-        </div>
-      )}>
-      <form onSubmit={go} className="space-y-3 px-5 py-4" data-testid="bank-accounts-reveal-form">
-        <p className="text-[12.5px] text-gray-700 dark:text-gray-300" data-testid="bank-accounts-reveal-body">
-          {`${a.entity_name} · ${a.label} ${String(a.account_kind || '').toLowerCase()} ${a.account_masked}. Your reason is written to the audit log.`}
-        </p>
-        <label className={fieldCls}>Reason
-          <input className={inputCls} value={reason} maxLength={200} placeholder="Why you need the full number"
-            onChange={(e) => setReason(e.target.value)} />
-        </label>
-        {error && <p role="alert" className="text-[12.5px] text-red-700 dark:text-red-300">{error}</p>}
-      </form>
-    </Lightbox>
   );
 }
 

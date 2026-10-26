@@ -102,8 +102,8 @@ test('a reveal shows the number for 30 seconds, then only the last four, and sto
   const realSet = globalThis.localStorage.setItem;
   globalThis.localStorage.setItem = (k, val) => { writes.push([k, String(val)]); return realSet(k, val); };
   try {
-    // #1856: the reveal goes through the row's Manage strip and the Reveal dialog.
-    await v.click('Manage');
+    // #1856: the reveal goes through the row's menu and the Reveal dialog (D1185: the menu is the row's ⋯).
+    await v.click('⋯');
     await v.click('Reveal');
     await v.fill('Reason', 'Checking against Mercury');
     mock.timers.enable({ apis: ['setTimeout'] });
