@@ -76,7 +76,8 @@ export function createUseOfFundsEadwyn(runner: typeof runAI = runAI) {
       surface: AI_SURFACE.raiseUseOfFunds, rail: railFor(c, { page: UOF_PAGE, option: UOF_OPTIONS[mode] }) }); }
     catch { return failure(c); }
     // Provider errors and model text never become an error response.
-    const refused = refuseRun(c, { refusal: out.refusal }); if (refused) return refused;
+    const refused = refuseRun(c, { refusal: out.refusal, error: out.refusal === 'guard_unavailable'
+      ? 'The reading could not be checked. A started run may still be charged.' : undefined }); if (refused) return refused;
     if (!out.ok) return failure(c);
     const items = parseReading(out.output, material, mode);
     if (!items) return failure(c, 'uof_reading_ungrounded');

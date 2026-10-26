@@ -24,10 +24,10 @@ function passage(value: any, currency = 'usd', key = ''): string {
 }
 export async function readingMaterial(env: Env, scope: Scope, mode: ReadingMode, okrId?: number): Promise<Material> {
   const sources: ReadingSource[] = [], gaps: Material['gaps'] = [];
-  async function add(ref: string, label: string, source: string, href: string, read: () => Promise<{ value: unknown; at?: string | null }>) {
+  async function add(ref: string, label: string, source: string, href: string, read: () => Promise<{ value: unknown; at?: string | null; reason?: string | null }>) {
     try {
       const r = await read();
-      if (r.value == null) { gaps.push({ label, state: 'not_recorded', reason: `${label} is Not recorded.` }); return; }
+      if (r.value == null) { gaps.push({ label, state: 'not_recorded', reason: r.reason ?? `${label} is Not recorded.` }); return; }
       const text = typeof r.value === 'string' ? r.value : passage(r.value);
       if (!text || text.length > 18000) throw new Error('source_unreadable');
       sources.push({ ref, label, source, text, href, as_of: r.at ?? null });
@@ -53,7 +53,7 @@ export async function readingMaterial(env: Env, scope: Scope, mode: ReadingMode,
     at: base?.updated_at,
   }));
   if (mode === 'runway') {
-    await add('cash-path', 'Plan cash path', 'Modelled', `/raise/use-of-funds/runway${query}`, async () => ({ value: base ? { runway: base.model?.runway.value, cash_path: base.model?.cashPath.value, reason: base.model?.cashPath.reason } : null, at: base?.updated_at }));
+    await add('cash-path', 'Plan cash path', 'Modelled', `/raise/use-of-funds/runway${query}`, async () => ({ value: base?.model?.cashPath.value != null ? { runway: base.model?.runway.value, cash_path: base.model.cashPath.value } : null, at: base?.updated_at, reason: base?.model?.cashPath.reason }));
     await add('today', 'Runway today', plan.runway_today.chosen?.source ?? 'Recorded', `/raise/use-of-funds/runway${query}`, async () => ({ value: plan.runway_today.chosen, at: plan.runway_today.chosen?.as_of }));
     if (plan.runway_today.partial) gaps.push({ label: 'Runway today sources', state: 'unreadable', reason: 'Some measured runway sources are Unreadable. The plan is never runway today.' });
     await add('forecast', 'Financial forecast', 'Modelled', `/raise/use-of-funds/runway${query}`, async () => {
@@ -98,7 +98,7 @@ export function readingPrompt(material: Material, mode: ReadingMode): string {
     'Return JSON only: {"items":[{"text":"plain words", "citations":[{"ref":"source ref", "quote":"exact non-empty passage from that source text"}]}]}. No other keys.',
     mode === 'check' ? 'Every mismatch must cite at least two different sources. If no supported mismatch can be stated, return items: []; that does not certify the plan.'
       : mode === 'runway' ? 'Every item must cite its source. Across the reading cite both plan and cash-path, so inputs and the path are both supported.' : 'Return exactly one item citing the roadmap.',
-    'Use no numbers or number words in your prose: the UI quotes the actual figures verbatim in citations. Give no advice or recommendation. Do not fill or change any financial value.',
+    'Use no numerical quantities in prose: the UI quotes the actual figures verbatim in citations. Neutral references such as "one record" are allowed. Give no advice or recommendation. Do not fill or change any financial value.',
     'Never infer a zero or a fact from a missing/unreadable source. At most six items, each at most two sentences; a milestone name is at most two hundred characters.',
     JSON.stringify(material),
   ].join('\n');
@@ -110,7 +110,9 @@ export function parseReading(raw: unknown, material: Material, mode: ReadingMode
   if (!value || Object.keys(value).join() !== 'items' || !Array.isArray(value.items) || value.items.length > 6 || (mode !== 'check' && !value.items.length) || (mode === 'wording' && value.items.length !== 1)) return null;
   const out: ReadingItem[] = [];
   for (const item of value.items) {
-    if (!item || Object.keys(item).sort().join() !== 'citations,text' || typeof item.text !== 'string' || !clean(item.text) || item.text.length > (mode === 'wording' ? 200 : 650) || unsafeWords.test(item.text) || !Array.isArray(item.citations)) return null;
+    if (!item || Object.keys(item).sort().join() !== 'citations,text' || typeof item.text !== 'string' || !clean(item.text) || item.text.length > (mode === 'wording' ? 200 : 650) || !Array.isArray(item.citations)) return null;
+    // "One record" identifies a cited side, not a new financial quantity.
+    if (unsafeWords.test(item.text.replace(/\bone(?=\s+(?:record|source|side)\b)/gi, 'the'))) return null;
     const citations: ReadingItem['citations'] = [];
     for (const c of item.citations) {
       if (!c || Object.keys(c).sort().join() !== 'quote,ref' || typeof c.quote !== 'string' || !clean(c.quote) || c.quote.length > 1200) return null;

@@ -130,6 +130,7 @@ test('switch, guard, budget and provider failures keep their safe outcomes and n
  const f=fixture();seed(f);
  for(const [why,status]of [['assist_off',403],['guard_blocked_output',422],['guard_unavailable',503],['budget_user_day',402]]){
   refusal=why;const r=await call(f,'POST','',{mode:'check'});assert.equal(r.status,status);assert.doesNotMatch(JSON.stringify(r.body),/private-business-diagnostic/);
+  if(why==='guard_unavailable')assert.doesNotMatch(JSON.stringify(r.body),/Nothing was charged/i);
  }
  refusal=null;crash=true;const r=await call(f,'POST','',{mode:'check'});assert.equal(r.status,503);assert.doesNotMatch(JSON.stringify(r.body),/private-business-diagnostic/);assert.equal(count(f,'research_zone_drafts'),0);
 });
@@ -176,4 +177,15 @@ test('one corrupted kept row does not hide a verified row, and signing-key chang
 test('Keep rejects unknown receipt fields rather than storing unsigned arbitrary content',async()=>{
  const f=fixture();seed(f);const p=await call(f,'POST','',{mode:'check'});
  const r=await call(f,'POST','/keep',{receipt:{...p.body.receipt,extra:'unsigned extra content'}});assert.equal(r.status,400);assert.equal(count(f,'research_zone_drafts'),0);assert.equal(count(f,'activity_logs'),0);
+});
+test('a saved Base without a computable cash path refuses before a paid runway run',async()=>{
+ const f=fixture();seed(f);f.db.exec('UPDATE uof_scenarios SET start_month=NULL WHERE id=101');
+ const r=await call(f,'POST','',{mode:'runway'});assert.equal(r.status,409);assert.equal(runs.length,0);assert.ok(r.body.gaps.some((g:any)=>g.label==='Plan cash path'&&g.state==='not_recorded'));
+});
+test('neutral one-record phrasing is allowed without permitting a numerical quantity',()=>{
+ const material:Material={sources:[{ref:'plan',label:'Plan',source:'Typed',text:'Plan source words',href:'/raise/use-of-funds',as_of:null},{ref:'deck',label:'Deck',source:'Recorded',text:'Deck source words',href:'/raise/pitch',as_of:null}],gaps:[]};
+ const value=(text:string)=>JSON.stringify({items:[{text,citations:material.sources.map(s=>({ref:s.ref,quote:s.text}))}]});
+ assert.ok(parseReading(value('One record differs from the other.'),material,'check'));
+ assert.equal(parseReading(value('The plan costs one dollar.'),material,'check'),null);
+ assert.equal(parseReading(value('One record says twenty months.'),material,'check'),null);
 });
