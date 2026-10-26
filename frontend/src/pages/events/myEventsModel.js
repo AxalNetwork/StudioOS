@@ -137,8 +137,9 @@ export function goingGroups(rest, now = Date.now()) {
 }
 
 /**
- * Needs you (MEV1) from what the reads hold: a hosted event an admin sent back.
- * Pay to confirm, invitations and off-the-waitlist need fields no read sends yet.
+ * Needs you (MEV1) from what the reads hold: a hosted event an admin sent back,
+ * and a place that came off the waitlist (`promoted_at`, D1131 migration 611;
+ * a row from before 611 holds null and makes no row).
  */
 export function needsYou(hosting, attending = [], now = Date.now()) {
   const sent = (hosting || []).filter((e) => e.status === 'rejected').map((e) => ({
