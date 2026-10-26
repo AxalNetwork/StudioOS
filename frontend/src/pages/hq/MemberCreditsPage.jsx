@@ -13,8 +13,8 @@ import {
  * `hq-credits` (design/canvases/integrated/ops-data.js).
  *
  * WHERE IT LIVES. The canvas labels it `/admin/team/[member]/credits`, but in
- * this app `/admin/team` is the public team page editor and HQ's Team row is
- * `/admin/accounts`. So it lives at `/admin/accounts/credits/:userId`, reached
+ * this app `/admin/team` is the public team page editor. It lives at
+ * `/admin/accounts/credits/:userId`, under Team (`/admin/hq-team`, D941), reached
  * from the member's drawer in the Team directory, Super Admin only (D633).
  *
  * WHAT IT DRAWS:
@@ -167,7 +167,7 @@ export default function MemberCreditsPage() {
   return (
     <div className="space-y-4" data-testid="member-credits-page">
       <header>
-        <Link to="/admin/accounts" className="inline-flex items-center gap-1 text-[12px] font-semibold text-axal-muted hover:underline"><ArrowLeft size={12} aria-hidden="true" /> Team</Link>
+        <Link to="/admin/hq-team" className="inline-flex items-center gap-1 text-[12px] font-semibold text-axal-muted hover:underline"><ArrowLeft size={12} aria-hidden="true" /> Team</Link>
         <div className="mt-1 flex flex-wrap items-center justify-between gap-2">
           <h1 className="text-2xl font-extrabold tracking-tight text-axal-ink dark:text-white">{name} · credits</h1>
           {read.status === 'ready' && !adjusting ? <button type="button" className={primary} onClick={() => { setAdjusting(true); setNotice(null); }}>Adjust credits</button> : null}
@@ -175,7 +175,7 @@ export default function MemberCreditsPage() {
         <p className="mt-1 text-[13px] text-axal-muted">1 credit = US$1 of perk value. Every adjustment is kept in the audit log with its reason. What each reward pays is set on <Link to="/admin/credit-rules" className="font-semibold underline">HQ · Credits</Link>.</p>
       </header>
       {read.status === 'not_found' ? (
-        <Card className="p-4" data-testid="member-not-found"><p className="text-[12.5px]"><strong>Unknown member.</strong> No account matches this id. <Link to="/admin/accounts" className="font-semibold underline">Back to Team</Link></p></Card>
+        <Card className="p-4" data-testid="member-not-found"><p className="text-[12.5px]"><strong>Unknown member.</strong> No account matches this id. <Link to="/admin/hq-team" className="font-semibold underline">Back to Team</Link></p></Card>
       ) : (
         <>
           <BalanceCard read={read} />
