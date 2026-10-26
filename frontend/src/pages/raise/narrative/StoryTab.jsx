@@ -251,7 +251,7 @@ export default function StoryTab({ projectId, version, search = '', phone = fals
   const [refusal, setRefusal] = useState(null);
   const words = useRef(null);
   const caret = useRef(null);
-  useRailOption(asking === 'objection' ? OBJECTION_OPTION : asking ? SECTION_OPTION : null, asking === 'objection' ? 'Answer an objection' : 'Draft this section');
+  useRailOption(asking === 'objection' ? 'draft:narrative-objection' : asking ? 'draft:narrative-section' : null, asking === 'objection' ? 'Answer an objection' : 'Draft this section');
 
   useEffect(() => {
     if (!sections) { setDraft(null); return; }
