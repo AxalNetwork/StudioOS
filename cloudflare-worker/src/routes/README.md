@@ -414,7 +414,7 @@ D1123: `admin_lab_operations.ts` adds `/cohorts/:cohort/capacity`, the latest st
 
 D892 §6 (#2673): `admin_billing.ts` mounts `POST /subscriptions/reconcile-incomplete` under `/api/admin/billing`, the owner-run repair of founder and investor rows left at `incomplete`. A dry run unless `dry_run: false`; a dry run needs a Super Admin, a write the write bar and a reason; every run is audited, one that fails part-way included. The owner runs it against production, straight after the deploy.
 
-D1176: `cycle_use_of_funds.ts`, mounted by `cycle_raise.ts` under `/api/cycles/raise/use-of-funds`, serves the plan, scenarios/compare, milestones, hire edits and Base split. Founder/admin and company scoped; support is read only, Mercury stays the founder's own.
+D1176: `cycle_use_of_funds.ts`, mounted by `cycle_raise.ts` under `/api/cycles/raise/use-of-funds`, serves the plan, scenarios/compare, milestones, hire edits and Base split. Founder/admin and company scoped; support is read only, Mercury stays the founder's own. D1177 (#3104) adds `GET /history`: the plan's `raise.use-of-funds` activity, newest first, 20 a page, with who and an admin flag; Mercury rows are the founder's alone.
 
 D1206 (#3172): `calendar.ts` applies Investor Professional only to
 IC creation; calendar reads, including the token subscription, remain available

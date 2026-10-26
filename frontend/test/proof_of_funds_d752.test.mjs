@@ -23,7 +23,9 @@ import {
   statementPreview, todayUtc, viewsWords,
 } from '../src/pages/investor/proofOfFundsModel.js';
 import { ProofDoor, ProofOfFundsSheet, SharedProofOfFunds, useProofTargets } from '../src/pages/investor/ProofOfFunds.jsx';
-import { CommitModal, CommitmentsTab } from '../src/pages/DealRoomPage.jsx';
+import { CommitModal } from '../src/pages/DealRoomPage.jsx';
+// D1155: an investor's own commitment is the Commitment tab's (D1153); the door sits there.
+import { DealCommitment } from '../src/pages/deal/DealWorkTabs.jsx';
 import { MyCommitment } from '../src/pages/SpinoutLabLpCommitment.jsx';
 
 const h = React.createElement;
@@ -292,7 +294,7 @@ test('doors: share, shared with Manage, expired with Share a new one, and each n
   assert.equal(html(null), '');
 });
 
-test('the deal\'s Commitments tab: a door on the investor\'s own row only; no read and no door for anyone else', async () => {
+test('the deal\'s Commitment tab: a door on the investor\'s own commitment only; no read and no door for anyone else', async () => {
   const saved = api.dealCommitments;
   api.dealCommitments = async () => [{ id: 101, investor_user_id: 30, investor_name: 'Investor', amount: 300000, status: 'pending' }, { id: 103, investor_user_id: 31, investor_name: 'Second', amount: 250000, status: 'pending' }];
   const { mercuryAttestationsApi } = await import('../src/lib/api/mercuryAttestations.js');
@@ -302,7 +304,7 @@ test('the deal\'s Commitments tab: a door on the investor\'s own row only; no re
   try {
     let m = await mount();
     try {
-      await m.render(h(CommitmentsTab, { dealId: 1, user: INVESTOR, onShare() {} }));
+      await m.render(h(DealCommitment, { deal: { id: 1, currency: 'USD' }, user: INVESTOR, onShare() {}, onChangeAmount() {} }));
       assert.equal(reads, 1);
       const doors = m.nodes().filter((n) => m.pr(n)['data-testid'] === 'proof-door');
       assert.equal(doors.length, 1, 'one door: the investor\'s own row');
@@ -311,7 +313,7 @@ test('the deal\'s Commitments tab: a door on the investor\'s own row only; no re
       reads = 0;
       m = await mount();
       try {
-        await m.render(h(CommitmentsTab, { dealId: 1, user, onShare() {} }));
+        await m.render(h(DealCommitment, { deal: { id: 1, currency: 'USD' }, user, onShare() {}, onChangeAmount() {} }));
         assert.equal(reads, 0, JSON.stringify(user));
         assert.ok(!m.by('proof-door'));
       } finally { await m.unmount(); }
