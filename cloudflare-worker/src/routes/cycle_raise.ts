@@ -150,7 +150,6 @@ import {
   CapitalAccessError, capitalCanWork, capitalPage, capitalRequestPath, capitalStaff, capitalStaffRequestAllowed, capitalStudioSummary,
   capitalSummary, capitalSupportDetails, capitalSupportHistory, recordCapitalSupport,
 } from '../services/capRelAccess';
-
 import useOfFunds from './cycle_use_of_funds';
 
 const cycleRaise = new Hono<{ Bindings: Env }>();
