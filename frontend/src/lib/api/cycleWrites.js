@@ -57,6 +57,9 @@ export function makeCycleWrites(request) {
       useOfFunds: (projectId, body) => request(`/cycles/raise/use-of-funds?${q(projectId)}`, { method: 'PUT', body: JSON.stringify(body) }),
       prospect: (projectId, body) => request(`/cycles/raise/prospects?${q(projectId)}`, { method: 'POST', body: JSON.stringify(body) }),
       prospectUpdate: (projectId, id, body) => request(`/cycles/raise/prospects/${seg(id)}?${q(projectId)}`, { method: 'PATCH', body: JSON.stringify(body) }),
+      // D1192 (#3126): Import (50 rows a request) and a prospect's next step, through the one writer.
+      prospectsImport: (projectId, rows) => request(`/cycles/raise/prospects/import?${q(projectId)}`, { method: 'POST', body: JSON.stringify({ rows }) }),
+      prospectNextStep: (projectId, id, body) => request(`/cycles/raise/prospects/${seg(id)}/next-step?${q(projectId)}`, { method: 'PUT', body: JSON.stringify(body) }),
       upload: (projectUid, body) => request(`/data-room/${seg(projectUid)}/files`, { method: 'POST', body: JSON.stringify(body) }),
       fileUpdate: (projectUid, uid, body) => request(`/data-room/${seg(projectUid)}/files/${seg(uid)}`, { method: 'PATCH', body: JSON.stringify(body) }),
       // D840 part 2 (#2347): the founder's own Mercury. A sync writes facts and

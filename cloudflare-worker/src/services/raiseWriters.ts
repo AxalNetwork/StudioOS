@@ -603,6 +603,34 @@ export async function addProspect(env: Env, a: { projectId: number; userId: numb
   return { id };
 }
 
+/**
+ * D1192 (#3126, CRL5): Import, parsed client-side, at most 50 rows a request.
+ * Each row goes through `createProspect`, as Add investor does, and each
+ * created row is logged. A row that cannot be added is reported with its
+ * number and why, never dropped silently.
+ */
+export const IMPORT_MAX_ROWS = 50;
+export async function importProspects(env: Env, a: { projectId: number; userId: number; rows: unknown }) {
+  if (!Array.isArray(a.rows) || a.rows.length === 0) throw new WriterError(400, 'rows is required');
+  if (a.rows.length > IMPORT_MAX_ROWS) throw new WriterError(400, `Import at most ${IMPORT_MAX_ROWS} rows a request`);
+  let created = 0;
+  const skipped: { row: number; reason: string }[] = [];
+  for (let i = 0; i < a.rows.length; i++) {
+    const r = a.rows[i] && typeof a.rows[i] === 'object' ? a.rows[i] as Record<string, unknown> : {};
+    const stage = r.stage == null || r.stage === '' ? 'to_contact' : word(r.stage) === 'identified' ? 'to_contact' : word(r.stage);
+    if (!RAISE_STAGES.includes(stage)) { skipped.push({ row: i + 1, reason: 'The stage is not one of the pipeline\u2019s' }); continue; }
+    const out = await createProspect(env, a.projectId, { name: r.name, email: r.email, firm: r.firm, amount: r.amount, stage, notes: r.notes });
+    if (out === 'invalid') { skipped.push({ row: i + 1, reason: 'A name or a valid email is required' }); continue; }
+    if (out === 'duplicate') { skipped.push({ row: i + 1, reason: 'Already in the pipeline' }); continue; }
+    created += 1;
+    await logRaise(env, a.userId, a.projectId, 'capital-relationships', Number(out.prospect.id), 'prospect_created', `Investor imported at ${STAGE_TEXT[stage]}`);
+  }
+  return { created, skipped, total: a.rows.length };
+}
+
+/** The statuses a committed prospect takes (CRL6); `contacts.ts` stores the same three. */
+export const PROSPECT_COMMIT_STATUSES: readonly string[] = ['soft', 'signed', 'wired'];
+
 /** Edit investor: the same fields, each changed only when the body names it. */
 export async function updateProspect(env: Env, a: { projectId: number; userId: number; prospectId: number; body: Record<string, unknown> }) {
   const b = a.body;
@@ -621,7 +649,21 @@ export async function updateProspect(env: Env, a: { projectId: number; userId: n
     if (!name) throw new WriterError(400, 'Name the investor, or pick a fund');
     sets.push('name = ?'); params.push(name); changed.push('name');
   }
-  if (has(b, 'stage')) { sets.push('stage = ?'); params.push(stageIn(b.stage)); changed.push('stage'); }
+  // D1192 (#3126): a committed investor's status (CRL6). It lives only at
+  // Committed: a stage moved away clears it, and a status is refused on any
+  // other stage. No status is "Status not recorded", never counted.
+  const nextStage = has(b, 'stage') ? stageIn(b.stage) : null;
+  if (nextStage) { sets.push('stage = ?'); params.push(nextStage); changed.push('stage'); }
+  if (has(b, 'commit_status')) {
+    const status = b.commit_status == null || b.commit_status === '' ? null : word(b.commit_status);
+    if (status != null && !PROSPECT_COMMIT_STATUSES.includes(status)) throw new WriterError(400, 'status is Soft, Signed or Wired');
+    const stage = nextStage ?? (await env.DB.prepare('SELECT stage FROM raise_prospects WHERE id = ? AND project_id = ?')
+      .bind(id, a.projectId).first<{ stage: string }>())?.stage;
+    if (status != null && stage !== 'committed') throw new WriterError(400, 'Only a committed investor has a status');
+    sets.push('commit_status = ?'); params.push(status); changed.push('status');
+  } else if (nextStage && nextStage !== 'committed') {
+    sets.push('commit_status = ?'); params.push(null);
+  }
   if (has(b, 'notes')) { sets.push('notes = ?'); params.push(b.notes == null || b.notes === '' ? null : String(b.notes).slice(0, 4000)); changed.push('notes'); }
   if (has(b, 'email')) {
     const email = b.email == null || b.email === '' ? null : String(b.email).trim().toLowerCase();

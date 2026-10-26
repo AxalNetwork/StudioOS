@@ -1,5 +1,16 @@
 # Worker route handlers — production source of truth
 
+D1239: `deal_views.ts`, mounted before `deals.ts`, provides Professional investor fit reads and private/accepted-seat firm saved views. Settings confer no deal access; defaults, version checks and identifier-only audit writes are atomic.
+
+
+D1254: scoring and project intake record scores without changing project
+status or stage. Intake creates an applied deal independently of the score.
+The Screening read in `deals.ts` admits investors only to readable deals and
+uses verified, audited snapshots; staff retain their own projections. Venture
+risk's investor read stays scoped to a readable deal, with the portfolio
+matrix and writes reserved to staff. Trust batches preserve Not recorded;
+investor trust reads require a shared deal, rather than an intro alone.
+
 
 D1144: `cycle_raise.ts` returns the stored Product-market fit part, its paged `/pmf/history` read and Re-score’s `pmf: true` flag. The founder/admin project gate is unchanged. `../services/scoring/README.md` names the shared snapshot/checklist/audit transaction.
 
@@ -390,6 +401,8 @@ D1135: `company.ts` adds member self-leave and validates create/rename; `project
 
 D1123: `admin_lab_operations.ts` adds `/cohorts/:cohort/capacity`, the latest stored capacity event for SL6, separately from current Settings. It never returns free-form event details.
 
+D892 §6 (#2673): `admin_billing.ts` mounts `POST /subscriptions/reconcile-incomplete` under `/api/admin/billing`, the owner-run repair of founder and investor rows left at `incomplete`. A dry run unless `dry_run: false`; a dry run needs a Super Admin, a write the write bar and a reason; every run is audited, one that fails part-way included. The owner runs it against production, straight after the deploy.
+
 D1176: `cycle_use_of_funds.ts`, mounted by `cycle_raise.ts` under `/api/cycles/raise/use-of-funds`, serves the plan, scenarios/compare, milestones, hire edits and Base split. Founder/admin and company scoped; support is read only, Mercury stays the founder's own.
 
 D1206 (#3172): `calendar.ts` applies Investor Professional only to
@@ -397,6 +410,12 @@ IC creation; calendar reads, including the token subscription, remain available
 on every plan. Studio/All studios are separate read-only Admin/Super Admin
 scopes with explicit availability; personal ownership and deal-party gates
 still govern every sync, push and export.
+
+D1231: `kyb_admin.ts` mounts at `/api/kyc/businesses` before `kyc.ts`.
+The admin queue and case reads keep sensitive fields masked; each showing and
+R2 document view is audited. Decisions, owner links, import actions and uploads
+require step-up and an unsuspended studio. Licensed studios require Super Admin.
+Migration 616's views discover company, corporate and imported source records.
 Each authorized staff-scope view calls the existing admin audit helper with
 only its scope and normalized date window; no event content is recorded.
 

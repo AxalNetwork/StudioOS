@@ -113,12 +113,17 @@ export function accountFieldsFromStripeSub(obj: Record<string, unknown>): {
  * Upsert the account-plan row from a `customer.subscription.created|updated`
  * webhook. `userId` + `group` come from the subscription metadata we stamp at
  * checkout (`kind='plan'`), so this only ever fires for our own persona subs.
+ *
+ * D892 §6: an event for another subscription than the one the row holds never
+ * replaces a plan the member still holds, unless it is live too and
+ * `takeOver` allows it (a subscription read from the catalog does not).
  */
 export async function upsertAccountPlanFromStripe(
   env: Env,
   obj: Record<string, unknown>,
   group: string | null,
   userId: number,
+  opts: { takeOver?: boolean } = {},
 ): Promise<void> {
   await ensureAccountPlanSchema(env);
   const { status, periodEnd, trialEnd } = accountFieldsFromStripeSub(obj);
@@ -137,8 +142,11 @@ export async function upsertAccountPlanFromStripe(
        period_end        = excluded.period_end,
        trial_end         = excluded.trial_end,
        stripe_customer_id= COALESCE(excluded.stripe_customer_id, account_subscriptions.stripe_customer_id),
-       updated_at        = datetime('now')`,
-  ).bind(userId, group, plan, status, subId, periodEnd, trialEnd, customer).run();
+       updated_at        = datetime('now')
+     WHERE account_subscriptions.subscription_id IS NULL OR account_subscriptions.subscription_id = excluded.subscription_id
+        OR (? = 1 AND excluded.status IN ('active', 'trialing', 'past_due'))
+        OR COALESCE(account_subscriptions.status, '') NOT IN ('active', 'trialing', 'past_due')`,
+  ).bind(userId, group, plan, status, subId, periodEnd, trialEnd, customer, opts.takeOver === false ? 0 : 1).run();
 }
 
 /**

@@ -351,8 +351,7 @@ test('the worker INSERTs, UPDATEs and SELECTs no column that does not exist', ()
   // gate; this keeps the property visible in the test suite too. Covers both
   // INSERT lists, UPDATE SET clauses, single-table SELECT lists, qualified
   // join references and single-table predicates.
-  // ONE reviewed gap remains on record: `corporate_profiles.kyb_status`, where
-  // nothing writes a KYB decision at all, so a column would not help.
+  // D1231 closed KYB with a real case store; the two newsTrust gaps remain.
   //
   // SIX `metrics_snapshots.*` ENTRIES WERE HERE AND ARE GONE, which is what
   // closing a gap looks like in this file. That name covered two different
@@ -402,9 +401,7 @@ test('the worker INSERTs, UPDATEs and SELECTs no column that does not exist', ()
   // keeps its literal harvestable, so its baseline entry stays live, and both
   // check-sqlite-* guards refuse a STALE entry as loudly as a new one.
   //
-  // THE THREE THAT SURVIVE ARE NOT THE CHECKLIST'S.
-  // `corporate_profiles.kyb_status` is the reviewed gap named above — nothing
-  // writes a KYB decision at all, so a column would not help. The other two
+  // The two remaining gaps are not the checklist's. They
   // belong to `services/newsTrust.ts`: `partners.owner_user_id` and
   // `partner_deals.founder_user_id` are trust-score signals that can never
   // fire, 25 of the 35 dead points there. Their repair is its own concern.
@@ -418,7 +415,6 @@ test('the worker INSERTs, UPDATEs and SELECTs no column that does not exist', ()
   // which is what proves each repair landed.
   const unknown = [...unknownColumns().keys()].sort();
   assert.deepEqual(unknown, [
-    'corporate_profiles.kyb_status',
     'partner_deals.founder_user_id',
     'partners.owner_user_id',
   ], `unexpected: ${unknown.join(', ')}`);

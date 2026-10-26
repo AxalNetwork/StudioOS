@@ -290,6 +290,8 @@ test('every gated write sits AFTER its own admin gate, in every file', () => {
     'cloudflare-worker/src/routes/kyc.ts',
     // D960 — granting and ending a mentor's access to a cohort's founders.
     'cloudflare-worker/src/routes/advisors.ts',
+    // D959 — giving, ending and sending the NDA of an investor's cohort access.
+    'cloudflare-worker/src/routes/admin_investor_cohorts.ts',
   ];
   let checked = 0;
   for (const f of FILES) {

@@ -21,13 +21,12 @@
  *      `valid_until` as `expired`. Called from the worker `scheduled()`
  *      handler at 04:35 UTC.
  *
- * KYC/KYB resync is a no-op stub (Persona/Sumsub aren't wired yet — see
- * routes/kyc.ts mock fallback). The function is exported so the cron
- * gate in index.ts can call it; once a real provider lands the body
- * populates `evidence_meta` and flips status -> 'satisfied'.
+ * KYC/KYB reconciliation materialises recorded identity decisions. Providers
+ * remain mocked; D1231's KYB case is the account entity's decision source.
  */
 import type { Env } from '../types';
 import { bindingKey } from '../util/schemaBootstrap';
+import { branchOf } from '../util/branch';
 import { expireKycFromObligations } from './kycCase';
 
 // ---------------------------------------------------------------------------
@@ -471,19 +470,10 @@ export async function expireDueArtifacts(
 }
 
 /**
- * KYC / KYB nightly reconciliation. Persona/Sumsub callbacks update
- * `users.kyc_status` and `corporate_profiles.kyb_status` (when the
- * provider is wired). This cron job materialises those provider
- * verdicts into the canonical `legal_obligations` rows so the Trust
- * Center / mask gate sees them.
- *
- * Algorithm (idempotent, safe to re-run):
- *   1. KYC: any pending/in_review kyc_v1 row whose user.kyc_status
- *      is 'approved' → flip to satisfied + 24mo expiry. If status
- *      is 'rejected' → flip back to pending (re-required).
- *   2. KYB: same flow against corporate_profiles.kyb_status.
- *
- * Returns counts for /api/admin diagnostics.
+ * KYC / KYB nightly reconciliation. KYC uses users.kyc_status; KYB uses
+ * D1231's account entity case (or a linked import when no corporate entity
+ * exists). A company's case never clears its members' account obligations.
+ * KYB expiry is copied from approval, never extended by a nightly resync.
  */
 export async function resyncKycKyb(env: Env): Promise<{ scanned: number; updated: number }> {
   await ensureTrustSchema(env);
@@ -526,61 +516,53 @@ export async function resyncKycKyb(env: Env): Promise<{ scanned: number; updated
     console.error('[trust] resyncKycKyb KYC failed', e);
   }
 
-  // -- KYB reconciliation (entity investors) --------------------------------
-  // THIS BRANCH IS INERT AND NOW SAYS SO. The SELECT joins
-  // `corporate_profiles.kyb_status`, which no table in this schema defines, so D1
-  // rejects it on every run. It used to be swallowed by a bare
-  // `.catch(() => ({ results: [] }))`, which is indistinguishable from "no rows to
-  // reconcile": the nightly cron reported `scanned=0, updated=0` and read as
-  // healthy while `kyb_v1` — which has no other satisfier — stayed pending for
-  // every entity investor and every partner handed one at deal signature.
-  //
-  // The statement is KEPT rather than removed. It is the only record of the
-  // intended flow, and `scripts/check-sqlite-columns.mjs` tracks that phantom
-  // column by name as the standing marker for this gap (asserted in
-  // `test/schema_guards.test.mjs`, and depended on by
-  // `test/obligation_satisfiable.test.ts`). Wiring KYB means giving the decision a
-  // real home — migration 220's `company_kyb_records.status` is the obvious
-  // candidate — and pointing this query at it; it is not a switch to flip.
+  // D1231: the real decision store, scoped to this deployment's studio.
   try {
-    const pendingKyb: any = await env.DB.prepare(
-      `SELECT lo.id AS oblig_id, lo.user_id, cp.kyb_status
-         FROM legal_obligations lo
-         LEFT JOIN corporate_profiles cp ON cp.user_id = lo.user_id
-        WHERE lo.obligation_key = 'kyb_v1'
-          AND lo.status IN ('pending','in_review')`,
-    ).all().catch((e: any) => {
-      console.warn(
-        '[trust] resyncKycKyb KYB inert — no KYB decision can be read: '
-        + 'corporate_profiles.kyb_status does not exist and no provider writes one, '
-        + 'so kyb_v1 cannot be satisfied by this reconciler '
-        + `(${e?.message || e})`,
-      );
-      return { results: [] as any[] };
-    });
-    const rows: any[] = pendingKyb?.results || [];
+    const pendingKyb = await env.DB.prepare(
+      `SELECT lo.id AS oblig_id, lo.user_id, lo.status AS obligation_status, lo.evidence_meta,
+          EXISTS (SELECT 1 FROM corporate_profiles p WHERE p.user_id = lo.user_id AND NULLIF(trim(p.entity_name),'') IS NOT NULL) AS has_account_entity
+       FROM legal_obligations lo WHERE lo.obligation_key = 'kyb_v1'
+         AND lo.status IN ('pending','in_review','expired','satisfied')`,
+    ).all<{ oblig_id: number; user_id: number; obligation_status: string; evidence_meta: string | null; has_account_entity: number }>();
+    // One source pass, not one UNION-view lookup per obligation.
+    const businesses = await env.DB.prepare(
+      `SELECT uid, kind, linked_user_id, status, expires_at FROM kyb_businesses
+       WHERE studio_code = ? AND kind IN ('investing_entity','partner_firm','imported_partner')
+       ORDER BY julianday(reviewed_at) DESC, id DESC`,
+    ).bind(branchOf(env) || 'hq').all<{ uid: string; kind: string; linked_user_id: number | null; status: string; expires_at: string | null }>();
+    const byRef = new Map((businesses.results || []).map(b => [b.uid, b]));
+    const imports = new Map<number, NonNullable<typeof businesses.results>[number]>();
+    for (const b of businesses.results || []) {
+      if (b.kind === 'imported_partner' && b.linked_user_id && b.status !== 'dismissed' && !imports.has(b.linked_user_id)) imports.set(b.linked_user_id, b);
+    }
+    const rows = pendingKyb.results || [];
     scanned += rows.length;
     for (const r of rows) {
-      if (r.kyb_status === 'approved') {
+      let evidence: { source?: string } | null = null;
+      try { evidence = r.evidence_meta ? JSON.parse(r.evidence_meta) : null; } catch { /* preserve other or unreadable evidence */ }
+      if (r.obligation_status === 'satisfied' && evidence?.source !== 'kyb_case') continue;
+      const business = r.has_account_entity ? byRef.get(`account-${r.user_id}`) : imports.get(r.user_id);
+      const kybStatus = business?.status ?? null, caseUid = business?.uid ?? null, expiresAt = business?.expires_at ?? null;
+      if (kybStatus === 'approved' && expiresAt) {
         const upd = await env.DB.prepare(
-          `UPDATE legal_obligations
-              SET status = 'satisfied',
-                  expires_at = ?,
-                  evidence_meta = COALESCE(evidence_meta, json_object('source','kyb_provider','synced_at',?)),
-                  updated_at = CURRENT_TIMESTAMP
-            WHERE id = ?`,
-        ).bind(kycExpiresAt, new Date(now).toISOString(), r.oblig_id).run().catch(() => null);
-        if ((upd?.meta as any)?.changes) updated += 1;
-      } else if (r.kyb_status === 'rejected') {
+          `UPDATE legal_obligations SET status = 'satisfied', expires_at = ?,
+             evidence_meta = json_object('source','kyb_case','case_uid',?), updated_at = CURRENT_TIMESTAMP
+           WHERE id = ? AND (status != 'satisfied' OR expires_at IS NOT ?
+             OR json_extract(evidence_meta,'$.case_uid') IS NOT ?)`,
+        ).bind(expiresAt, caseUid, r.oblig_id, expiresAt, caseUid).run();
+        updated += Number(upd.meta?.changes || 0);
+      } else if (r.obligation_status === 'satisfied' || kybStatus === 'rejected' || kybStatus === 'expired') {
+        const next = kybStatus === 'expired' ? 'expired' : 'pending';
         const upd = await env.DB.prepare(
-          `UPDATE legal_obligations SET status = 'pending', updated_at = CURRENT_TIMESTAMP
-            WHERE id = ? AND status != 'pending'`,
-        ).bind(r.oblig_id).run().catch(() => null);
-        if ((upd?.meta as any)?.changes) updated += 1;
+          `UPDATE legal_obligations SET status = ?, expires_at = NULL, evidence_meta = NULL,
+             updated_at = CURRENT_TIMESTAMP WHERE id = ? AND status != ?`,
+        ).bind(next, r.oblig_id, next).run();
+        updated += Number(upd.meta?.changes || 0);
       }
     }
-  } catch (e) {
-    console.error('[trust] resyncKycKyb KYB failed', e);
+  } catch {
+    console.error('[trust] resyncKycKyb KYB failed');
+    throw new Error('kyb_reconciliation_unreadable');
   }
 
   return { scanned, updated };
@@ -898,6 +880,7 @@ export function obligationSource(row: any): string | null {
   const LABEL: Record<string, string> = {
     kyc_provider: 'Synced from identity verification',
     kyb_provider: 'Synced from entity verification',
+    kyb_case: 'Approved business verification',
     // Written by `recordTermsAcceptance`. Named rather than left to the fallback
     // because "Synced from signup clickwrap" reads like a system import of
     // somebody else's record, and this is the person's own act.

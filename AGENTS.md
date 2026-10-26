@@ -173,6 +173,22 @@ record. Session 1 writes `CHANGELOG.md` from merged PRs, in its own PR
 labelled `changelog`. The `CHANGELOG gate` check (`changelog-gate.yml`) fails
 any other PR that touches the file.
 
+### README.md merges by union
+
+Every folder README is shared by every branch that adds a file to it, so a
+plain merge stopped on each pair of rows appended at the same spot (the owner,
+2026-10-26). `.gitattributes` now merges every `README.md` with git's `union`
+driver, which keeps both sides' lines. That is right for an appended row and
+wrong for a line two branches rewrote: union keeps both versions.
+`scripts/check-folder-docs.mjs` (rule 4) fails a README with a conflict
+marker, two rows for one backticked name in one table, or the same long line
+twice within a few lines (D1279). So:
+
+- Add one row per new file or folder, at the end of its table. Never rewrite
+  another feature's row or paragraph in a task PR.
+- A feature's notes go in its decision file, not in a shared README.
+- If rule 4 fails after a merge, keep the newer version and delete the other.
+
 ### The repository is public
 
 Never put secrets, tokens, personal data or security-sensitive operational

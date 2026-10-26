@@ -266,11 +266,11 @@ test('CSV uses the authenticated client with range and group; Cost retains all d
 
 test('the canonical address and navigation offer Overview, Cost, Limits without losing the legacy anchors', async () => {
   const checkNav = (m) => {
-    assert.deepEqual(m.USAGE_PAGES.map((p) => p.id), ['overview', 'cost', 'limits', 'storage']);
+    assert.deepEqual(m.USAGE_PAGES.map((p) => p.id), ['overview', 'cost', 'ai-tokens', 'limits', 'storage']);
     assert.equal(m.usagePageFor('/account/usage/cost'), 'cost');
   };
   await killed('../src/pages/account/limitsModel.js', "  { id: 'cost', label: 'Cost', path: '/account/usage/cost' },", '', checkNav);
-  assert.deepEqual(USAGE_PAGES.map((p) => p.id), ['overview', 'cost', 'limits', 'storage']);
+  assert.deepEqual(USAGE_PAGES.map((p) => p.id), ['overview', 'cost', 'ai-tokens', 'limits', 'storage']);
   assert.equal(usagePageFor('/account/usage/cost'), 'cost');
   assert.equal(usagePageFor('/settings/usage/cost'), 'cost');
   assert.equal(accountPathFor({ section: 'usage', usagePage: 'cost', phone: true }), '/account/usage/cost');

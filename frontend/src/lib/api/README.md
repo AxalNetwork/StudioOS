@@ -1,5 +1,8 @@
 # frontend/src/lib/api — one file per new API domain
 
+D1239: `dealViews.js` reads personal thesis fit and saves, edits or removes private/firm view settings. The server rechecks deal and accepted-seat access.
+
+
 D1156: `programGrants.js` adds the dated HQ `inUse(uid)` read and the branch
 `sendProgramReport()` action, with no caller-supplied counts.
 
@@ -366,6 +369,12 @@ D1150: `dealContext.js` reads the investor’s `/deals/:id/stage`, `/whats-new`
 and paged `/notes`; add/edit/delete notes use the same Worker scope. Only
 the author edits and deletes, firm colleagues read, and staff have no bypass.
 Reading whats-new advances that user/firm’s visit marker. #3057 consumes it.
+
+D1249 (#3264): `ddDesk.js` is Due Diligence's desk on `/api/dd`: the list
+with its server-side search, filters, sort and pages, the overview's figures,
+My reviews, the subject and people searches (an email for an Admin only), the
+team's observer, conflicts and remove, widen, and HQ's versioned templates. No
+page reads it yet; parts 6–8 (#3265–#3267) draw it.
 
 D1246 (#3261): `ddLifecycle.js` is a Due Diligence case's lifecycle on
 `/api/dd/cases/:uid`: the deal context and archive (`PATCH`), the decision, the
