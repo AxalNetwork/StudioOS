@@ -293,7 +293,7 @@ adminTesting.get('/applications', async (c) => {
     const q = (k: string) => c.req.query(k);
     return c.json(await svc.allApplications(c.env, {
       programme: q('programme'), owner: q('owner'), status: q('status'), role: q('role'), consented: q('consented'),
-      tester: q('tester'), q: q('q'), sort: q('sort'), page: q('page'), page_size: q('page_size'),
+      tester: q('tester'), q: q('q'), sort: q('sort'), page: q('page'), page_size: q('page_size'), scope: q('scope'),
     }));
   } catch (e) { return fail(c, e); }
 });
