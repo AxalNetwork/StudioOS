@@ -17,7 +17,6 @@ function prospectAudit(env: Env, a: { projectId: number; userId: number }, id: n
   return env.DB.prepare("INSERT INTO activity_logs (project_id, user_id, entity_type, entity_id, action, details, actor) VALUES (?, ?, 'raise.capital-relationships', ?, ?, ?, ?)")
     .bind(a.projectId, a.userId, String(id), action, summary, `user:${a.userId}`);
 }
-
 /** D1191: legacy form/import entry, preserving its values with one actor audit. */
 export async function addLegacyProspect(env: Env, a: { projectId: number; userId: number; body: Record<string, unknown> }) {
   return createProspect(env, a.projectId, a.body, a.userId);
@@ -73,4 +72,3 @@ export async function promoteLegacyInvestor(env: Env, a: { projectId: number; us
   return { ...await env.DB.prepare('SELECT * FROM contacts WHERE id = ? AND project_id = ?').bind(row.id, a.projectId).first(),
     record: await env.DB.prepare('SELECT * FROM raise_prospects WHERE id = ? AND project_id = ?').bind(id, a.projectId).first() };
 }
-
