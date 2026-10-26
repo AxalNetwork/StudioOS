@@ -2,7 +2,8 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { Hono } from 'hono';
-import { freshDb, makeD1, token, ADMIN, FOUNDER, PARTNER, addPerk } from './_perks_harness.ts';
+import { freshDb, makeD1, token, ADMIN, FOUNDER, PARTNER, addPerk, MIG } from './_perks_harness.ts';
+import { splitStatements } from './_baseline.mjs';
 import { ensureAdminAuditLogTable } from '../src/routes/admin.ts';
 import refer from '../src/routes/refer_earn.ts';
 import perks from '../src/routes/perks.ts';
@@ -13,6 +14,8 @@ import { perkClaimsCounts } from '../src/services/perkClaims.ts';
 async function harness() {
   const db = freshDb();
   db.exec("ALTER TABLE users ADD COLUMN referral_code TEXT; ALTER TABLE users ADD COLUMN legacy_referral_code TEXT; UPDATE users SET referral_code='ref_' || id");
+  // D965: production's referral reward rules (566), which a paying move grants.
+  for (const stmt of splitStatements(MIG('566_referral_reward_rules.sql'))) if (/^\s*INSERT/i.test(stmt)) db.exec(stmt);
   const hooks = { beforeBatch: null as ((db: any) => void) | null };
   const env: any = { JWT_SECRET: 'unit-test-jwt-secret-0123456789-abcdef', ENVIRONMENT: 'development', DB: makeD1(db, hooks) };
   await ensureReferralSubmissionsSchema(env);

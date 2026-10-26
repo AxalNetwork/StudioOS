@@ -36,7 +36,18 @@ export function drawerOf(pathname) {
 export const tabUnder = (drawer) => (drawer?.kind === 'hosted' ? 'hosting' : 'upcoming');
 
 export const NOT_HOST = 'Only the host and studio admins manage this event.';
-export const HOST_NOT_READ = 'The host’s name is not read here yet.';
+/**
+ * D967 (#3350): the ticket's host line, from the event read's `host_name`
+ * (`GET /api/events/:id`). A null name is "Not recorded" with its reason;
+ * a read that failed says so, never a host.
+ */
+export const HOST_NOT_RECORDED = 'Not recorded: this event has no host on record, or the host’s account was removed.';
+export function hostLine(detail) {
+  if (!detail || detail.status === 'loading') return { state: 'loading', text: 'Reading…' };
+  if (detail.status !== 'ready') return { state: 'unreadable', text: 'The host’s name could not be read.' };
+  const name = typeof detail.data?.host_name === 'string' ? detail.data.host_name.trim() : '';
+  return name ? { state: 'named', text: `Hosted by ${name}` } : { state: 'not_recorded', text: HOST_NOT_RECORDED };
+}
 export const NO_PLACE = 'You hold no place at this event.';
 export const JOIN_FOOT = 'The join link shows only to people holding a seat.';
 export const CODE_LINE = 'Show this at the door. The host scans it to check you in.';

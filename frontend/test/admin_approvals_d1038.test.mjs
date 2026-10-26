@@ -4,6 +4,8 @@
  * lane never 0), the Inbox oldest first, HQ decides for a Super Admin only,
  * and the three lane boards on the reads that exist.
  *
+ * D1047 (#2895), part 9: the phone at 390 (APR15) and dark (APR16), at the end.
+ *
  * D1045 (#2893), part 7: the Inbox on HQ's inbox read (items, tiles, the two
  * charts with their sentences, filters in the address, the ⋯ menu, the bulk
  * bar, the pager), the item at its own address with Assign and History,
@@ -15,6 +17,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
+import { execFileSync } from 'node:child_process';
 import { resolve } from 'node:path';
 import React, { act } from 'react';
 import { createRoot } from 'react-dom/client';
@@ -32,7 +35,7 @@ import { oldestApproved } from '../src/pages/admin/approvals/PitchBoard.jsx';
 import {
   assigneeOf, assignChoices, assignTitle, decidedNotes, decidedPageLine, decidedQueryOf, decidedRows, errorRef, hasNextPage,
   hqBandLine, hqLaneViews, inboxGroupCounts, inboxQueryOf, inboxRows, inboxTiles, itemOfPath, itemPath, itemView, laneAgeChart,
-  notifiesOf, pageLine, refusalToast, waitingOnHq, weekChart, historyLines,
+  notifiesOf, pageLine, refusalToast, waitingOnHq, weekChart, historyLines, cardAge, filterCount, sortLabel,
 } from '../src/pages/admin/approvals/inboxModel.js';
 import { glancesFromStudioGlance } from '../src/pages/admin/adminStudioOverview.js';
 import AdminApprovals, { ApprovalsPage } from '../src/pages/admin/approvals/AdminApprovals.jsx';
@@ -1067,4 +1070,111 @@ test('the routes under one guard, the redirect, the row lit on every sub-path, a
   assert.ok(page.includes('<Link to={`/admin/approvals/items/${r.lane}-${r.id}${loc.search}`}'));
   // APR14b: a non-admin on any /admin path meets RoleGuard's one card (D940), not a page of its own.
   assert.ok(app.includes("return <AdminOnlyNotice home={ROLE_DEFAULT_PATH[effectiveRole] || '/studio'} />;"));
+});
+
+// ------------------------------------------------------------------ D1047 (#2895): the phone (APR15) and dark (APR16)
+
+test('D1047: a phone card\'s age pill and the Filters count, from the rows and the address', () => {
+  const [kyc, dd, jobs] = inboxRows(INBOX);
+  assert.deepEqual(cardAge(kyc), { text: '4 d 7 h · Over 72 hours', tone: 'bad' });
+  assert.deepEqual(cardAge(dd), { text: '1 d 6 h · 24 to 72 hours', tone: 'warn' });
+  assert.deepEqual(cardAge(jobs), { text: 'Age not recorded', tone: null }, 'no band for an age it does not know');
+  assert.deepEqual(cardAge({ age: '3 h', band: { key: 'ok', label: 'Under 24 hours', tone: null } }), { text: '3 h', tone: null }, 'under 24 hours has no band');
+  assert.equal(filterCount(inboxQueryOf('?group=people&age=past&sort=newest&q=ab').filters), 3, 'the order is not a filter');
+  assert.equal(filterCount(inboxQueryOf('?q=a').filters), 0, 'one search character does not filter');
+  assert.equal(filterCount({}), 0);
+  assert.equal(sortLabel(undefined), 'Waiting longest');
+  assert.equal(sortLabel('who'), 'Who');
+});
+
+test('D1047 (APR15a): on a phone the inbox is cards — lane, who, what, the age pill and where it is decided — and the table is above md', async () => {
+  const v = await mount('/admin/approvals', h(AdminApprovals));
+  try {
+    assert.deepEqual(v.ids('approvals-card-').filter((x) => /^approvals-card-[a-z_]+:\d+$/.test(x)), ['approvals-card-kyc:41', 'approvals-card-due_diligence:9', 'approvals-card-jobs:3']);
+    assert.match(v.of('approvals-card-kyc:41'), /KYC\s*Person A\s*Identity check\s*4 d 7 h · Over 72 hours\s*Decided on KYC & KYB ›/);
+    assert.equal(v.of('approvals-card-age-jobs:3'), 'Age not recorded');
+    assert.equal(v.props('approvals-card-open-kyc:41').href, '/admin/approvals/items/kyc-41');
+    assert.match(v.props('approvals-cards').className, /\bmd:hidden\b/);
+    assert.match(v.props('approvals-tiles').className, /\bgrid-cols-2\b/, 'the tiles are two by two');
+    assert.match(v.props('approvals-card-more-kyc:41').className, /\bh-11 w-11\b/, 'the ⋯ is 44 by 44');
+    await v.click('approvals-card-more-kyc:41');
+    assert.ok(v.has('approvals-row-sheet'));
+    assert.equal(v.props('approvals-row-sheet-layer')['data-phone'], 'sheet', '⋯ is a bottom sheet');
+    assert.equal(v.props('approvals-row-sheet-open').href, '/admin/approvals/items/kyc-41');
+    await v.click('approvals-row-sheet-assign');
+    assert.ok(!v.has('approvals-row-sheet'), 'the sheet closes');
+    assert.ok(v.has('approvals-assign'), 'Assign… opens its dialog');
+  } finally { await v.unmount(); }
+});
+
+test('D1047 (APR15b): Filters with its count and Sort open one bottom sheet; each choice lands in the address; Clear empties it', async () => {
+  const v = await mount('/admin/approvals?age=past', h(AdminApprovals));
+  try {
+    assert.match(v.props('approvals-filters').className, /\bhidden\b.*\bsm:flex\b/, 'the desktop filters are not drawn on a phone');
+    assert.match(v.props('approvals-phone-filters').className, /\bsm:hidden\b/);
+    assert.equal(v.of('approvals-filters-count'), '1');
+    assert.equal(v.of('approvals-sort-open'), 'Sort: Waiting longest ▾');
+    await v.click('approvals-filters-open');
+    assert.equal(v.props('approvals-filters-sheet-layer')['data-phone'], 'sheet');
+    assert.match(v.of('approvals-filters-sheet'), /Filters and sort.*Search.*Group.*Lane.*Age.*Assigned.*Sort/s);
+    assert.equal(v.of('approvals-filters-done'), 'Show 123');
+    await v.change('approvals-sheet-lane', 'kyc');
+    assert.match(v.at.path, /lane=kyc/);
+    assert.match(v.at.path, /age=past/);
+    assert.equal(v.of('approvals-filters-count'), '2');
+    assert.ok(v.has('approvals-filters-sheet'), 'the sheet stays open while choosing');
+    await v.change('approvals-sheet-sort', 'who');
+    assert.match(v.at.path, /sort=who/);
+    assert.equal(v.of('approvals-filters-count'), '2', 'the order does not count');
+    await v.click('approvals-filters-clear');
+    assert.equal(v.at.path, '/admin/approvals');
+    await v.click('approvals-filters-done');
+    assert.ok(!v.has('approvals-filters-sheet'));
+  } finally { await v.unmount(); }
+});
+
+test('D1047 (APR15c): a board\'s drawer has "‹ [lane]" back on a phone; dialog and drawer buttons are full width', async () => {
+  const v = await board('/admin/approvals/product-testers/1', testerRoute());
+  try {
+    assert.equal(v.of('tester-drawer-back'), '‹ Product testers');
+    assert.match(v.props('tester-drawer-back').className, /\bmin-h-\[44px\].*\bsm:hidden\b/);
+    await v.click('tester-drawer-back');
+    assert.equal(v.at.path, '/admin/approvals/product-testers', 'back is the board it came from');
+  } finally { await v.unmount(); }
+  const parts = read('frontend/src/pages/admin/approvals/boardParts.jsx');
+  assert.match(parts, /export const FOOT = 'flex justify-end gap-2 max-sm:\*:flex-1';/);
+  assert.match(parts, /<div className=\{FOOT\}>\s*<button type="button" className=\{BTN\} onClick=\{onClose\} data-testid=\{`\$\{testId\}-cancel`\}>/, 'the decision dialog\'s buttons');
+  for (const [f, label] of [['TesterBoard', 'Product testers'], ['PitchBoard', 'Co-marketing'], ['ExpertBoard', 'Wellbeing experts']]) {
+    const src = read(`frontend/src/pages/admin/approvals/${f}.jsx`);
+    assert.ok(src.includes(`<PhoneBack label="${label}" onClose={onClose}`), f);
+    assert.ok(src.includes('<div className={`${FOOT} flex-wrap items-center`}>'), `${f}: the drawer's buttons`);
+  }
+  assert.ok(read('frontend/src/pages/admin/approvals/AdminApprovals.jsx').includes('<PhoneBack label="Approvals" onClose={onClose} testId="approvals-item-back" />'), 'the item drawer too');
+});
+
+test('D1047: every tap target on a phone is at least 44 by 44', () => {
+  const page = read('frontend/src/pages/admin/approvals/AdminApprovals.jsx');
+  const parts = read('frontend/src/pages/admin/approvals/boardParts.jsx');
+  for (const name of ['CHIP', 'BTN', 'BTN_PRIMARY', 'SELECT']) {
+    const m = new RegExp(`const ${name} = '([^']+)'`).exec(page);
+    assert.ok(m && /\bmin-h-\[44px\]/.test(m[1]) && /\bsm:min-h-\[3[46]px\]/.test(m[1]), `AdminApprovals ${name}: ${m?.[1]}`);
+  }
+  for (const name of ['BTN', 'BTN_PRIMARY', 'BTN_DANGER', 'SELECT']) {
+    const m = new RegExp(`export const ${name} = '([^']+)'`).exec(parts);
+    assert.ok(m && /\bmin-h-\[44px\]/.test(m[1]), `boardParts ${name}: ${m?.[1]}`);
+  }
+  assert.match(page, /const SHEET_ITEM = 'flex min-h-\[44px\]/);
+});
+
+test('D1047 (APR16): dark — the guard is green, and every status pill keeps its own dark pair', () => {
+  execFileSync(process.execPath, ['scripts/check-dark-mode.mjs'], { stdio: 'pipe' });
+  const page = read('frontend/src/pages/admin/approvals/AdminApprovals.jsx');
+  const pills = /const PILL = \{([\s\S]*?)\n\};/.exec(page)[1];
+  for (const tone of ['warn', 'bad', 'good', 'plain']) {
+    const line = new RegExp(`${tone}: '([^']+)'`).exec(pills)[1];
+    for (const kind of ['border', 'bg', 'text']) assert.match(line, new RegExp(`\\bdark:${kind}-`), `${tone} has dark:${kind}`);
+  }
+  const parts = read('frontend/src/pages/admin/approvals/boardParts.jsx');
+  const warn = /export const WARN_PILL = '([^']+)'/.exec(parts)[1];
+  for (const kind of ['border', 'bg', 'text']) assert.match(warn, new RegExp(`\\bdark:${kind}-`), `WARN_PILL has dark:${kind}`);
 });

@@ -540,10 +540,21 @@ export async function fulfilOrder(env: Env, orderRef: string): Promise<Order | n
         const { getPromoByCode } = await import('./promos');
         const promo = await getPromoByCode(env, row.promo_code);
         if (promo) {
+          // D1274: a cart names its product and price only when it holds one.
+          const products = new Set(items.map((l) => l.product_id));
+          const prices = new Set(items.map((l) => l.price_id));
           await recordPaidRedemption(env, {
             promoId: promo.id,
             userId: row.user_id,
             paymentIntentId: row.payment_intent_id || `order:${orderRef}`,
+            detail: {
+              source: 'cart',
+              productId: products.size === 1 ? [...products][0] : null,
+              priceId: prices.size === 1 ? [...prices][0] : null,
+              amountBeforeCents: row.subtotal_cents,
+              discountCents: row.discount_cents,
+              currency: row.currency,
+            },
           });
         }
       } catch (e) {

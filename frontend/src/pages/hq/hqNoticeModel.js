@@ -15,6 +15,8 @@ export const HQ_EYEBROW = 'HQ only';
 
 /** Payments and its sub-addresses (D1008, D1012). */
 const PAYMENTS_PATH = /^\/admin\/platform\/payments(\/|$)/;
+/** Product testing and its tabs (D1195, D1204). */
+const TESTING_PATH = /^\/admin\/platform\/product-testing(\/|$)/;
 export const HQ_TITLE = 'This page belongs to the Super Admin';
 export const HQ_REST = 'You are signed in as a studio admin, so this page stays closed rather than opening and refusing each action.';
 
@@ -23,6 +25,8 @@ const SUBJECTS = [
   [/^\/admin\/funds(\/|$)/, 'HQ manages bank accounts.'],
   // D1012 (#2831): PAY11, Payments' closed card.
   [PAYMENTS_PATH, 'HQ sets what members pay.'],
+  // D1204 (#3154): TST15a, Product testing's closed card.
+  [TESTING_PATH, 'HQ runs product testing. You can approve and manage testers on Accounts, and decide tester applications in Approvals.'],
 ];
 
 export function hqLine(pathname = '') {
@@ -41,8 +45,19 @@ export const PAYMENTS_LINKS = [
   { label: 'See the public pricing page', href: '/pricing', primary: false },
 ];
 
-/** The card's links for a path: Payments' own, else Studio and My licence. */
-export const hqLinks = (pathname = '') => (PAYMENTS_PATH.test(String(pathname)) ? PAYMENTS_LINKS : HQ_LINKS);
+/** D1204 (#3154): TST15a sends a studio admin on Product testing to Accounts or Approvals. */
+export const TESTING_LINKS = [
+  { label: 'Go to Accounts', href: '/admin/accounts', primary: false },
+  { label: 'Go to Approvals', href: '/admin/approvals', primary: false },
+];
+
+/** The card's links for a path: Payments' or Product testing's own, else Studio and My licence. */
+export const hqLinks = (pathname = '') => {
+  const p = String(pathname);
+  if (PAYMENTS_PATH.test(p)) return PAYMENTS_LINKS;
+  if (TESTING_PATH.test(p)) return TESTING_LINKS;
+  return HQ_LINKS;
+};
 
 export const ADMIN_TITLE = 'This page is for studio admins';
 export const ADMIN_LINE = 'If you run a studio, ask HQ for admin access.';

@@ -218,7 +218,7 @@ export async function kpiRows(env: Env, projectId: number, now: number): Promise
   ];
 }
 
-export type KpiEntry = { kpi?: unknown; value?: unknown; as_of?: unknown; note?: unknown; label?: unknown; unit?: unknown };
+export type KpiEntry = { kpi?: unknown; value?: unknown; as_of?: unknown; note?: unknown; label?: unknown; unit?: unknown; source?: unknown };
 export type KpiWritten = { id: string; as_of: string; value: number; unit: string; source: 'manual'; created_kpi: boolean };
 
 function number(v: unknown, field = 'value'): number {
@@ -243,6 +243,10 @@ function checkUnit(n: number, unit: 'count' | 'pct' | 'money' | 'usd'): number {
  * missing or unreal date and another venture's custom KPI (404).
  */
 export async function enterKpi(env: Env, projectId: number, userId: number, b: KpiEntry): Promise<KpiWritten> {
+  // D969: a typed figure is a hand entry; a connected source writes its own figures, so it is refused before anything is written.
+  if (b.source != null && b.source !== '' && b.source !== 'manual') {
+    throw new KpiRefused(400, 'A figure typed here is entered by hand. A connected source writes its own figures.', 'source');
+  }
   const asOf = calendarDay(b.as_of);
   if (!asOf) {
     throw new KpiRefused(400, b.as_of == null || b.as_of === '' ? 'Choose the date this figure describes.' : 'as_of must be a real date written YYYY-MM-DD', 'as_of');

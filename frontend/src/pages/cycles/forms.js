@@ -52,10 +52,21 @@ const YES_NO = opts([['yes', 'Yes'], ['no', 'No']]);
 // D695 (#1657, PR 1): Grow's seven canvas forms (CO:324-330) in the canvas's
 // T, CH and CK kinds, each body the one #1697's writer reads (D691.md). The
 // venture goes in the body (`project`). Money is typed in US dollars and sent
-// as whole cents, with its `<store>_currency` only beside an amount. Chip sets
-// read from `form-options` name their key in `optionsFrom`; until #1698's
-// loader fills them, a set with a "None yet" or "Nothing yet" chip offers
-// only that chip (#1656's decision 4).
+// as whole cents, with its `<store>_currency` only beside an amount. A chip
+// set read from `form-options` names its key in `optionsFrom`, and the form's
+// `loadOptions` (D969, #3352) fills it from its module's
+// `GET /api/cycles/grow/modules/<module>/form-options`: the dialog reads "Reading the
+// choices…" until then, and a failed read says so with Try again, never an
+// empty set. With nothing recorded, a set offers its "None yet" or "Nothing
+// yet" chip (#1656's decision 4).
+
+/** D969: a module's form-options, read for a Grow form. */
+const growOptions = (w, projectId, slug) => w.formOptions('grow', projectId, slug);
+/** D969: a form-options list as chips; a disabled choice keeps the Worker's reason as its meta. */
+export function growChips(list) {
+  return (Array.isArray(list) ? list : []).filter((o) => o && o.value != null && o.value !== '')
+    .map((o) => ({ value: String(o.value), label: String(o.label ?? o.value), ...(o.disabled ? { disabled: true } : {}), ...(o.reason ? { meta: String(o.reason) } : {}) }));
+}
 
 /** The value a "None yet" / "Nothing yet" chip sends: nothing. */
 const NONE = '';
@@ -105,6 +116,14 @@ const notifyField = { kind: 'CK', name: 'then', k: 'Then', opts: [{ value: NOTIF
 // Optional, and asked only while they are to be told (D695 decision 7).
 const emailField = { kind: 'T', name: 'from_email', k: 'Their email', input: 'email', max: 200, when: { name: 'then', value: NOTIFY } };
 
+/** D969: Log feedback's chips: the venture's themes, then New theme; None yet, then its roadmap items. */
+export function feedbackOptions(read) {
+  return {
+    theme_choice: { opts: [...growChips(read?.themes), { value: NEW_THEME, label: 'New theme' }] },
+    roadmap_item_ref: { opts: [{ value: NONE, label: 'None yet' }, ...growChips(read?.roadmap_items)] },
+  };
+}
+
 const feedback = {
   key: 'feedback', cta: 'Log feedback', button: 'Log feedback',
   title: 'Log feedback',
@@ -115,7 +134,7 @@ const feedback = {
     { kind: 'T', name: 'body', k: 'Feedback', ph: 'What they said', h: '56px', required: true, max: 4000 },
     { kind: 'CH', name: 'source', k: 'Source', opts: FEEDBACK_SOURCE, def: 0, required: true },
     feedbackFrom,
-    { kind: 'CH', name: 'theme_choice', k: 'Theme', opts: [{ value: NEW_THEME, label: 'New theme' }], def: 0, optionsFrom: 'themes' },
+    { kind: 'CH', name: 'theme_choice', k: 'Theme', opts: [{ value: NEW_THEME, label: 'New theme' }], def: NEW_THEME, optionsFrom: 'themes' },
     { kind: 'T', name: 'theme', k: 'Theme name', max: 80, when: { name: 'theme_choice', value: NEW_THEME } },
     { kind: 'CH', name: 'roadmap_item_ref', k: 'Links to roadmap item', opts: [{ value: NONE, label: 'None yet' }], def: NONE, optionsFrom: 'roadmap_items' },
     notifyField, emailField,
@@ -128,6 +147,8 @@ const feedback = {
       roadmap_item_ref: str(v.roadmap_item_ref), notify_on_ship: notify, from_email: notify ? str(v.from_email) : null,
     };
   },
+  // D969: the venture's themes and roadmap items, from Product improvement's form-options.
+  loadOptions: (w, projectId) => growOptions(w, projectId, 'product-improvement').then(feedbackOptions),
   submit: (w, projectId, v) => w.grow.feedback(projectId, feedback.toBody(v)),
 };
 
@@ -168,23 +189,34 @@ const KPI_UNIT = opts([['count', 'Count'], ['pct', 'Percentage'], ['money', 'Mon
 const kpiValueFields = [
   { kind: 'T', name: 'value', k: 'Value', ph: '$38,400', required: true },
   { kind: 'T', name: 'as_of', k: 'As of', input: 'date', ph: '12 Oct', required: true },
-  // A hand entry is stored as `manual`; a connected Stripe is drawn beside it once #1698's read names it.
-  { kind: 'CH', name: 'source', k: 'Source', opts: [{ value: 'manual', label: 'Entered by hand' }], def: 0, note: 'Stripe shows here once connected.', optionsFrom: 'sources' },
+  // D969: the sources Revenue and traction's form-options names; a connected Stripe is a chip, an unconnected one disabled with why.
+  // A typed figure is a hand entry: choosing a connected source says so and saves nothing (`kpiCheck`).
+  { kind: 'CH', name: 'source', k: 'Source', opts: [{ value: 'manual', label: 'Entered by hand' }], def: 'manual', optionsFrom: 'sources' },
   { kind: 'T', name: 'note', k: 'Note', ph: 'Optional', max: 1000 },
 ];
-const kpiCheck = (v) => (Number.isNaN(toNumber(v.value)) ? { value: 'Type a number.' } : {});
+/** D969: a typed figure is entered by hand; a connected source writes its own figures. */
+export const CONNECTED_SOURCE = 'A connected source writes its own figures. Choose Entered by hand to type one.';
+const kpiCheck = (v) => ({
+  ...(Number.isNaN(toNumber(v.value)) ? { value: 'Type a number.' } : {}),
+  ...(v.source && v.source !== 'manual' ? { source: CONNECTED_SOURCE } : {}),
+});
 // Value is a number in the KPI's own unit: US dollars, not cents, for money (D691.md).
 const kpiBody = (v) => ({
-  kpi: v.kpi || null, value: toNumber(v.value), as_of: str(v.as_of), note: str(v.note),
+  kpi: v.kpi || null, value: toNumber(v.value), as_of: str(v.as_of), note: str(v.note), source: v.source || 'manual',
   ...(v.kpi === CUSTOM ? { label: str(v.label), unit: v.unit || 'count' } : {}),
 });
+/** D969: Enter a KPI's chips from Revenue and traction's form-options. */
+export function kpiOptions(read) {
+  return { kpi: { opts: growChips(read?.kpis) }, source: { opts: growChips(read?.sources) } };
+}
+
 const kpi = {
   key: 'kpi', cta: 'Save KPI', button: 'Enter a KPI',
   title: 'Enter a KPI',
   sub: 'A figure by hand, with its source. Connected sources fill the rest.',
   foot: 'A connected source overrides a hand entry.',
   fields: [
-    { kind: 'CH', name: 'kpi', k: 'KPI', opts: KPI, def: 0, required: true, optionsFrom: 'kpis',
+    { kind: 'CH', name: 'kpi', k: 'KPI', opts: KPI, def: 'mrr', required: true, optionsFrom: 'kpis',
       note: 'Expansion MRR is worked out from the revenue ledger. Runway is worked out from cash and burn.' },
     { kind: 'T', name: 'label', k: 'Name', required: true, max: 80, when: { name: 'kpi', value: CUSTOM } },
     { kind: 'CH', name: 'unit', k: 'Unit', opts: KPI_UNIT, def: 0, when: { name: 'kpi', value: CUSTOM } },
@@ -194,6 +226,8 @@ const kpi = {
   // `/grow/revenue-and-traction/new?kpi=mrr` opens it with that KPI chosen.
   fromQuery: (q) => (ENTERABLE_KPIS.includes(q.get('kpi')) ? { kpi: q.get('kpi') } : {}),
   toBody: kpiBody,
+  // D969: the KPIs (a derived one disabled with why, then the venture's custom ones) and the sources.
+  loadOptions: (w, projectId) => growOptions(w, projectId, 'revenue-and-traction').then(kpiOptions),
   submit: (w, projectId, v) => w.grow.kpi(projectId, kpi.toBody(v)),
 };
 
@@ -239,6 +273,8 @@ const role = {
   fields: [...roleFields, { kind: 'CK', name: 'post_to', k: 'Post to', opts: [{ value: POST_AXAL, label: 'Axal jobs board', checked: true }] }],
   check: roleCheck,
   toBody: (v) => ({ ...roleBody(v), publish: checkedOf(v.post_to, POST_AXAL) }),
+  // D969: the venture's teams, from Team expansion's form-options.
+  loadOptions: (w, projectId) => growOptions(w, projectId, 'team-expansion').then((r) => ({ team: { opts: growChips(r?.teams) } })),
   submit: (w, projectId, v) => w.grow.role(projectId, role.toBody(v)),
 };
 
@@ -313,6 +349,9 @@ const market = {
   ],
   check: marketCheck,
   toBody: (v) => ({ name: str(v.name), state: v.state || null, ...marketPartsBody(v), ...(str(v.geography_ref) ? { geography_ref: str(v.geography_ref) } : {}) }),
+  // D969: Nothing yet, then the geographies Market expansion's form-options names.
+  loadOptions: (w, projectId) => growOptions(w, projectId, 'market-expansion')
+    .then((r) => ({ geography_ref: { opts: [{ value: NONE, label: 'Nothing yet' }, ...growChips(r?.geographies)] } })),
   submit: (w, projectId, v) => w.grow.market(projectId, market.toBody(v)),
 };
 
@@ -857,7 +896,20 @@ const bare = ({ def: _def, required: _required, ...f }) => f;
 // A stored value the Add does not offer is still a choice on Edit.
 const withChips = (f, extra) => ({ ...bare(f), opts: [...f.opts, ...opts(extra)] });
 
-const FEEDBACK_CARRIED = ['status', 'theme', 'roadmap_item_label'];
+const FEEDBACK_CARRIED = ['status', 'theme', 'roadmap_item_ref'];
+/**
+ * D969: a row whose roadmap item was typed before Edit had chips keeps it
+ * until a chip is chosen: its value sends no `roadmap_item_ref`.
+ */
+const KEEP_TYPED_ITEM = '__typed';
+/** D969: Edit feedback's chips: No theme, the themes, New theme; None yet, then the roadmap items. */
+export function editFeedbackOptions(read) {
+  return {
+    theme: { opts: [{ value: NONE, label: 'No theme' }, ...growChips(read?.themes), { value: NEW_THEME, label: 'New theme' }] },
+    roadmap_item_ref: { opts: [{ value: NONE, label: 'None yet' }, ...growChips(read?.roadmap_items)] },
+  };
+}
+
 const editFeedback = {
   ...EDIT,
   key: 'edit-feedback',
@@ -867,21 +919,34 @@ const editFeedback = {
     { ...feedback.fields[0], required: false },
     bare(feedback.fields[1]),
     feedbackFrom,
-    // Free text until #1698's read names the themes and roadmap items as chips.
-    { kind: 'T', name: 'theme', k: 'Theme', max: 80 },
-    { kind: 'T', name: 'roadmap_item_label', k: 'Roadmap item', max: 200 },
+    // D969: chips from Product improvement's form-options, as Log feedback's are. The PATCH takes
+    // `theme` as text and `roadmap_item_ref` as a roadmap item's id, whose label the Worker reads.
+    // `keep` holds the row's own value as a chip when the read does not list it.
+    { kind: 'CH', name: 'theme', k: 'Theme', opts: [{ value: NONE, label: 'No theme' }], optionsFrom: 'themes',
+      keep: (c) => (asText(c.theme) ? { value: c.theme, label: c.theme } : null) },
+    { kind: 'T', name: 'new_theme', k: 'Theme name', max: 80, when: { name: 'theme', value: NEW_THEME } },
+    { kind: 'CH', name: 'roadmap_item_ref', k: 'Roadmap item', opts: [{ value: NONE, label: 'None yet' }], optionsFrom: 'roadmap_items',
+      keep: (c) => (asText(c.roadmap_item_ref) ? { value: c.roadmap_item_ref, label: asText(c.roadmap_item_label) || 'The linked item' } : null) },
     { kind: 'CH', name: 'status', k: 'Status', opts: FEEDBACK_STATUS, required: true },
     { ...notifyField, opts: notifyField.opts.map((o) => ({ ...o, checked: false })) }, emailField,
   ],
   idOf: (row) => growEdit(row)?.uid ?? null,
-  valuesOf: (row) => { const e = growEdit(row) || {}; return { status: asText(e.status), theme: asText(e.theme), roadmap_item_label: asText(e.roadmap_item_label) }; },
+  valuesOf: (row) => {
+    const e = growEdit(row) || {};
+    const item = e.roadmap_item_ref != null && e.roadmap_item_ref !== '' ? asText(e.roadmap_item_ref) : asText(e.roadmap_item_label) ? KEEP_TYPED_ITEM : '';
+    // The label names the kept chip (`keep`); it is not a field, so it is never sent.
+    return { status: asText(e.status), theme: asText(e.theme), roadmap_item_ref: item, roadmap_item_label: asText(e.roadmap_item_label) };
+  },
+  loadOptions: (w, projectId) => growOptions(w, projectId, 'product-improvement').then(editFeedbackOptions),
   toBody: (v) => {
     const notify = checkedOf(v.then, NOTIFY);
-    return sentOnly(v, {
+    const body = sentOnly(v, {
       body: str(v.body), source: v.source || null, from_name: str(v.from_name), from_company: str(v.from_company),
-      theme: str(v.theme), roadmap_item_label: str(v.roadmap_item_label), status: v.status,
+      theme: v.theme === NEW_THEME ? str(v.new_theme) : str(v.theme), roadmap_item_ref: str(v.roadmap_item_ref), status: v.status,
       notify_on_ship: notify, from_email: notify ? str(v.from_email) : null,
     }, FEEDBACK_CARRIED, { notify_on_ship: 'then' });
+    if (v.roadmap_item_ref === KEEP_TYPED_ITEM) delete body.roadmap_item_ref;
+    return body;
   },
   submit: (w, projectId, id, v) => w.grow.feedbackUpdate(projectId, id, editFeedback.toBody(v)),
 };
@@ -2046,7 +2111,9 @@ export function validate(form, values) {
     if (input === 'money' && Number.isNaN(toCents(raw))) errors[f.name] = 'Type an amount in US dollars, 0 or more.';
     if (input === 'score' && Number.isNaN(toScore(raw))) errors[f.name] = 'A score is a whole number from 0 to 10.';
     if (input === 'date' && text && !/^\d{4}-\d{2}-\d{2}$/.test(text)) errors[f.name] = 'Pick a date.';
-    if (kind === 'CH' && text && !choicesOf(f).some((o) => o.value === text)) errors[f.name] = `Pick one of the choices for ${String(label).toLowerCase()}.`;
+    // D969: a field's `keep` chip (the value an Edit opened with) is a choice too.
+    const kept = typeof f.keep === 'function' ? f.keep(values || {}) : null;
+    if (kind === 'CH' && text && !choicesOf(f).some((o) => o.value === text) && String(kept?.value ?? '') !== text) errors[f.name] = `Pick one of the choices for ${String(label).toLowerCase()}.`;
   }
   return { ...errors, ...(typeof form?.check === 'function' ? form.check(values || {}) : {}) };
 }

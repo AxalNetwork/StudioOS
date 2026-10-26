@@ -278,6 +278,7 @@ export function ledgerSource(ref: unknown): string | null {
   if ((m = s.match(/^ticket:(\d+)/))) return `Support ticket #${m[1]}`;
   if ((m = s.match(/^task:(\d+)/))) return `Suggested task #${m[1]}`;
   if ((m = s.match(/^lab:\d+:(.+)$/))) return `Spin-Out Lab: ${m[1].replace(/_/g, ' ')}`;
+  if (s.startsWith('referral:')) return 'Referral reward';
   if ((m = s.match(/^revoke:(\d+)$/))) return `Revokes grant #${m[1]}`;
   if (s.startsWith('admin:')) return 'Granted by an admin';
   return null;

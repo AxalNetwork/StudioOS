@@ -2025,10 +2025,21 @@ async function handleStripeEvent(
       const promoPiId = (obj.id as string | null) ?? null;
       if (promoCodeId && promoUserId && promoPiId) {
         const { recordPaidRedemption } = await import('../services/promos');
+        // D1274: the detail checkout stamped (`promoDetailMeta`). A PI made
+        // before it carries none, and its fields stay NULL.
+        const whole = (v: unknown) => (typeof v === 'string' && /^\d{1,12}$/.test(v) ? Number(v) : null);
         await recordPaidRedemption(env, {
           promoId: promoCodeId,
           userId: promoUserId,
           paymentIntentId: promoPiId,
+          detail: {
+            source: 'payment',
+            productId: meta.product_id ?? null,
+            priceId: meta.price_id ?? null,
+            amountBeforeCents: whole(meta.promo_amount_before),
+            discountCents: whole(meta.promo_discount),
+            currency: typeof obj.currency === 'string' ? obj.currency : null,
+          },
         });
       }
       // Task #8 — universal referral commission. ANY PI stamped at creation
@@ -2166,6 +2177,9 @@ async function handleStripeEvent(
         // live. Never fails the webhook.
         const { repairIncompleteFromStripe } = await import('../services/planSubscription');
         await repairIncompleteFromStripe(env, obj.subscription);
+        // D1274: a subscription's promo redemption, from its first paid invoice.
+        const { recordInvoiceRedemption } = await import('../services/promoUsage');
+        await recordInvoiceRedemption(env, obj);
       }
       const { handleInvoiceEvent } = await import('../services/invoiceEmails');
       await handleInvoiceEvent(env, obj);

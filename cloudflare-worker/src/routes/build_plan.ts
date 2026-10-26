@@ -24,6 +24,10 @@
  *   POST  /links/:uid/accept?project=&scope=   Link
  *   POST  /links/:uid/dismiss?project=&scope=  Not this one: the next sync lands it as its own row
  *   POST  /items/:uid/link                { fed: "issue:owner/repo#n" | "pull:owner/repo#n" } a link by hand
+ *
+ * D968 (#3351): the later stages (`services/buildStates.ts`).
+ *
+ *   GET   /states?project=&scope=&limit=&offset=   each accepted, landed item's Built, Live and Tested, paged
  */
 import { Hono } from 'hono';
 import type { Env, User } from '../types';
@@ -38,6 +42,7 @@ import { AI_SURFACE } from '../services/aiSurfaces';
 import { parseJsonLoose } from '../services/decks/autofill';
 import { railFor, refuseRun } from '../util/railContext';
 import { acceptLink, dismissLink, linkByHand, listHandoffs, listLinks, sendHandoff } from '../services/buildHandoffs';
+import { STATES_PAGE, STATES_PAGE_MAX, listStates } from '../services/buildStates';
 
 const app = new Hono<{ Bindings: Env }>();
 type Project = ProjectRef & { company_id: number | null };
@@ -210,6 +215,15 @@ const linkUid = (c: any) => String(c.req.param('uid') ?? '');
 app.post('/handoffs', scoped(true, async (ctx, c) => sendHandoff(c.env, ctx.user, ctx.projectId, ctx.scope, await bodyOf(c))));
 app.get('/handoffs', scoped(false, async (ctx, c) => ({ handoffs: await listHandoffs(c.env, ctx.projectId, ownsVentureOf(ctx)) })));
 app.get('/links', scoped(false, async (ctx, c) => ({ links: await listLinks(c.env, ctx.projectId, ctx.partner) })));
+// D968 (#3351): each accepted, landed item's Built, Live and Tested, from the row it landed in. Paged.
+app.get('/states', scoped(false, async (ctx, c) => {
+  const limit = c.req.query('limit') === undefined ? STATES_PAGE : Number(c.req.query('limit'));
+  const offset = c.req.query('offset') === undefined ? 0 : Number(c.req.query('offset'));
+  if (!Number.isSafeInteger(limit) || limit < 1 || limit > STATES_PAGE_MAX || !Number.isSafeInteger(offset) || offset < 0) {
+    throw new PlanItemError('invalid_page', 400, `Use a limit from 1 to ${STATES_PAGE_MAX} and a nonnegative offset.`);
+  }
+  return listStates(c.env, ctx.projectId, limit, offset);
+}));
 app.post('/links/:uid/accept', scoped(true, async (ctx, c) => acceptLink(c.env, ctx.user, ctx.projectId, linkUid(c))));
 app.post('/links/:uid/dismiss', scoped(true, async (ctx, c) => dismissLink(c.env, ctx.user, ctx.projectId, linkUid(c))));
 app.post('/items/:uid/link', c => decide(c, async user => linkByHand(c.env, user, itemUid(c), (await bodyOf(c))?.fed)));
