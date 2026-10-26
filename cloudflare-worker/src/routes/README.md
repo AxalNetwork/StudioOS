@@ -433,3 +433,7 @@ firm. The Free quota and join/leave exceptions live in
 `../middleware/requireInvestorTier.ts`; the deal listing stays Professional.
 The INSERT enforces the global allowance atomically. Investor list rows carry
 `can_read` from the existing invited-or-committed reader for safe room links.
+
+| File | Purpose |
+| --- | --- |
+| `deal_insights.ts` | D1151: NDA-gated per-deal Team, Market and Traction reads. |

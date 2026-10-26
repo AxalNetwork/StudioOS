@@ -108,3 +108,7 @@ key unless `RENDER_NOT_YET` lists it. `airail_every_page_d781.test.mjs` holds
 the rules to fixtures.
 
 D1123 extends the Lab desks, overview and operations tests for Formation scope, cohort details, structured admission and grant/refusal states.
+
+| File | Purpose |
+| --- | --- |
+| `deal_insights_client_d1151.test.mjs` | D1151: encoded deal clients preserve response states. |
