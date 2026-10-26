@@ -6,7 +6,7 @@
  * The reads (D1048 §2):
  *   - `GET /api/public/plans-and-packs` — each plan's `product_id`, `prices[]`
  *     (with `price_id`), its `monthly` and `yearly` views and their AI
- *     allowance, and `yearly_saving_percent`. No storage figure yet (#2449).
+ *     allowance, `yearly_saving_percent` and D1167's binary-GB storage figure.
  *   - `POST /api/payments/intent` (through `AxalCheckout`) — the payment,
  *     once the member presses Continue: it stamps the plan on the
  *     subscription and refuses a second one in the same family (D892).
@@ -100,7 +100,7 @@ export function includedLines(plan, spec, interval) {
   const feats = lines.filter((f) => !/of AI tokens a month$/.test(f) && f !== 'AI runs from AI tokens you top up');
   const bytes = Number(cat?.storage?.bytes);
   const storage = Number.isFinite(bytes) && bytes > 0
-    ? { key: 'storage', text: `${(bytes / 1e9).toLocaleString('en-US', { maximumFractionDigits: 1 })} GB of storage`, measured: true }
+    ? { key: 'storage', text: `${(bytes / (1024 ** 3)).toLocaleString('en-US', { maximumFractionDigits: 1 })} GB of storage`, measured: true }
     : { key: 'storage', text: cat?.storage?.reason || STORAGE_WAITS, measured: false };
   return [
     { key: 'ai', text: price?.ai || 'AI runs from AI tokens you top up', measured: !!price?.ai },

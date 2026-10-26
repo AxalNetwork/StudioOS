@@ -4,11 +4,23 @@ Everything a route needs that is not request parsing or response shaping. A file
 here takes `env` and plain values; it does not take a Hono `Context` and does
 not return a `Response`.
 
+`storagePlans.ts` (D1167, #3080) holds the owner's storage allowances and exact
+Best suited for copy. `storagePlanKey` resolves the caller's effective profile,
+persona subscription and LP admission (the shared LP reader and one-time
+account claim) without summing allowances; failed reads
+throw fixed words. `planCatalogue.ts` and the public plans rows project the same
+table. Negotiated and staff values stay null with distinct reasons. Later
+storage readers and guards must consume it rather than copy figures.
+
 `dealAccess.ts` is D1149's shared invited-or-committed investor predicate, used
 by the deal reader and diligence opener. A room request is not a grant.
 
 The split matters because it is what makes the logic testable: the worker suite
 runs these directly against an in-process SQLite, with no request at all.
+
+`useOfFunds/` holds D1175's pure, versioned plan engine and founder-scoped,
+transactional legacy copy/Base writer. See its README for the part-3 contract;
+forecasts stay Modelled and never supply runway today.
 
 `bankAccountHistory.ts` (D1182, #3111) reads the masked reveal ledger and
 bank-account/Mercury audit history. It uses a successful read audit as its route
@@ -18,6 +30,8 @@ Malformed audit details are flagged per row without disabling the history.
 `entityBankAccounts.ts` resolves the recorder's name only for Super Admin
 console responses; a missing name stays null, with no id/email fallback.
 Shared payment-instruction and notice projections omit recorder names.
+D1184 (#3113) validates an optional Mercury source through `mercury/registry.ts`
+before inserting a registry account; its entity, last four and kind must agree.
 
 `captableAccess.ts` consumes verified project permissions from the cap-table
 router (#2436). Investors receive no project-bound cap-table access; accepted
@@ -42,6 +56,12 @@ invalid or ambiguous wall times. Its instant comparison keeps formatting-only
 normalization out of the changed-after-approval flag.
 
 ## The ones worth knowing
+
+`segmentMembership.ts` (D1128, #3008) resolves stored segment identities,
+the active sign-up catalog, an admin-moved member's missing questions, and the
+suppressed per-segment all-question completion count. Questions remain defined
+in code. `segmentProfiles.ts` also creates an authored profile and its first
+history version atomically. Events resolves its audience IDs from this store.
 
 `personaSegments.ts` is D999's segment counts (#2814) behind
 `GET /api/personas/admin/segments`: one grouped pass over every account but
@@ -112,8 +132,10 @@ no new schema, runtime or billing path is introduced.
 | `licenceFeeInvoices.ts` | D802 (#2238), with `statements.ts`'s per-stream draw (`StreamShares`, the `platform_licence_royalties` row): HQ's annual licence-fee invoices to a territory licensee (migration 513). `licenceYear` runs a year from the licence's anniversary (`starts_on`); `issueFeeInvoice` issues one per year at the ledger's `annual_fee_cents`, due after D797's payment terms or 30 days, and refuses a second for the year, a licence with no fee, no start date or a status other than active or suspended, and a missing bank account for `territory_licence_fee`. The printed figures are frozen on the row; `feeInvoicePdf` draws D716's invoice paper from them (`fundNotices.territoryLicenceInvoice`). Payments are HQ-entered running totals, never above the amount; a void needs nothing paid and a reason. |
 | `paymentsCatalog.ts` | D1010 (#2829): what Payments' catalogue read says, from the D1 mirror only. `catalogChecks` (two products making one plan, a plan with no yearly price, a subscription that makes no card, a price charged every N intervals, a non-USD or a weekly plan price, the publishable key's mode against the account's), `showsOn` (where a product reaches members), `priceAllowance` and `annotateCatalog` (each price's AI allowance, each plan's yearly saving), `membersPerPlan` (live members per price and per family and interval, rows with no price counted apart), and `changePrice` (add the new price, archive the old, archive the new again if that fails). Never a key, only modes. |
 | `planAllowance.ts` | D783 (#2124): a plan includes 25% of its price as AI allowance each month. `PLAN_AI_SHARE` is the share; `allowanceFromCharge` turns a charge into whole micro-USD a month, rounded down, a yearly price ÷ 12. `recordSubscriptionAmount` and `markSubscriptionAmountCanceled` keep `member_subscription_amounts` (migration 505) from the subscription webhook, with the price each subscription is charged at since D1010 (migration 572). `planAllowanceFor` sums a member's active member plans (founder, investor, Market Intelligence, advisor and partner; never Registered Agent), falling back to the catalogue's price for a plan with no recorded row. `aiBudget.ts`'s `resolveAiCaps` reads it for every licence but `admin`. |
-| `planCatalogue.ts` | D1050 (#2901): the one plan catalogue, read by every surface that names a plan. `PLAN_CATALOGUE` holds each plan key (`founder:free|growth|studio`, `investor:free|plus|professional|institutional`, `advisor:free|pro`, `partner:free|pro`, `other`, `lp_access`, `admin`) with its family, name, tagline, profile colour, the Stripe metadata `aiCredits.planOf` matches (`licence_key`, `matches`), `sellable` and its reason (Investor Plus is not sold, D786), storage and "Best suited for" (#2449's, null with the reason until decided) and the included lines. **No price is in it**: prices are Stripe's, read from the D1 mirror. `catalogueFields` and `publicCatalogue` are what `GET /api/public/plans-and-packs` sends (the name as `label`: the public read carries no `name` key). `requireTier.ts` and `requireInvestorTier.ts` name a plan from it. |
+| `planCatalogue.ts` | D1050 (#2901): the one plan catalogue, read by every surface that names a plan. `PLAN_CATALOGUE` holds each plan key (`founder:free|growth|studio`, `investor:free|plus|professional|institutional`, `advisor:free|pro`, `partner:free|pro`, `other`, `lp_access`, `admin`) with its family, name, tagline, profile colour, the Stripe metadata `aiCredits.planOf` matches (`licence_key`, `matches`), `sellable` and its reason (Investor Plus is not sold, D786), storage and "Best suited for" (D1167's projection of `storagePlans.ts`) and the included lines. **No price is in it**: prices are Stripe's, read from the D1 mirror. `catalogueFields` and `publicCatalogue` are what `GET /api/public/plans-and-packs` sends (the name as `label`: the public read carries no `name` key). `requireTier.ts` and `requireInvestorTier.ts` name a plan from it. |
 | `aiCreditReversals.ts` | D755 §8: `charge.refunded`, `charge.dispute.created` and `charge.dispute.closed` take a token pack's tokens back, up to the member's balance, recording the rest as `shortfall_microusd`. The share and the balance are read inside the one INSERT that writes the row, so the balance CHECK never fires and racing deliveries take a share once. Acts only on a charge whose PaymentIntent has an `ai_topup_purchases` row; every other charge is untouched. |
+| `hqApprovalSources.ts` | D1041 (#2889): HQ decides — the eight queues only the Super Admin decides (testing programs sent to HQ, learning exercises, features and tasks, payout requests, held AI runs, notice responses, requests from studios, program proposals), each on its own queue's open predicate. Kept apart from `approvalSources.ts`'s `APPROVAL_SOURCES` so a branch's board, backlog total and assignments never read them; `hqLanes` is read only by HQ's glance for a Super Admin. Program-grant requests are `HQ_NOT_COUNTED_YET` until #2774 part 2 stores them. |
+| `approvalDecisions.ts` | D1044 (#2892): the decision log and the weekly arrived-and-decided series. `DECISION_LANES` reads each lane's decided rows from its own store (its decide route's columns, or its own event table where the row keeps no decision time), each one literal SQL with the same columns; a lane that keeps no decision time is `recorded: false` with why, never zero. `decidedLog` merges the lanes newest first, 25 a page; `decidedWeekly` gives eight weeks and the Decided this week tile. HQ's lanes only for a Super Admin (`decisionLanesFor`). |
 | `hqApprovalSources.ts` | D1041 (#2889): HQ decides — the eight queues only the Super Admin decides (testing programs sent to HQ, learning exercises, features and tasks, payout requests, held AI runs, notice responses, requests from studios, program proposals), each on its own queue's open predicate. Kept apart from `approvalSources.ts`'s `APPROVAL_SOURCES` so a branch's board, backlog total and assignments never read them; `hqLanes` is read only by HQ's glance for a Super Admin. D1132 (#3012) adds the ninth, Program-grant requests (`grants`, D983's three program kinds while open), and takes those kinds out of Requests from studios, so each is counted once. |
 | `approvalInbox.ts` | D1132 (#3012): what HQ's inbox read (D1040) lacked for D1038 part 7 — `parseInboxQuery` (search from two characters, lane, group, age band, assigned, sort; a lane the reader cannot see is a bad value), `filterInbox` (on the rows the board read, in memory, so nothing the caller sends reaches SQL), `laneBands` (each lane's split by age band, none for a failed or capped lane) and `LANE_GROUP`, the canvas's groups, held equal to the page model by `approvals_gaps_d1132.test.ts`. |
 | `approvalAssignments.ts` | Who is looking at a board item (D470, migration 341). One current reviewer per lane and item, and an event only when this write changes that person. A missing table stays unreadable — it is not "nobody assigned". A reviewer is an active admin. The write does not change a queue's status and does not open a thread. |
@@ -125,7 +147,7 @@ no new schema, runtime or billing path is introduced.
 | --- | --- |
 | `advisor/` | The advisor state machine and its question banks. |
 | `ai/` | D763: the AI router's pure parts. `guard.ts` holds Llama Guard's slicing, verdicts, category policy and refusal copy. Its README has the rule for adding here. |
-| `calendar/` | Calendar sync (`sync.ts`), cancellation-time removal of tracked copies (`cancelEvents.ts`, D1131), and My events in the calendar (`myEvents.ts`, D1033): tickets and hosted events as calendar kinds, the add-to links, and the copies a sync must remove. D1131 uses `queue.ts`, `queueWorker.ts` and `../models/jobs.ts` for two immediate copies, scan batches of five plus continuation, per-copy cancellation rechecks and independent retry/dead-letter handling. This idempotent job alone may fall back to D1 after an uncertain CF send; exact reads use the mapping primary key, scans use existing source/event indexes. `feedTokens.ts` (D1033, migration 603) is "Subscribe to my events": the per-member token, stored as its SHA-256 only, that lets a calendar client fetch the my-events feed with no session. |
+| `calendar/` | Calendar sync (`sync.ts`), cancellation-time removal of tracked copies (`cancelEvents.ts`, D1131), and My events in the calendar (`myEvents.ts`, D1033): tickets and hosted events as calendar kinds, the add-to links, and the copies a sync must remove. D1131 uses `queue.ts`, `queueWorker.ts` and `../models/jobs.ts` for two immediate copies, scan batches of five plus continuation, per-copy cancellation rechecks and independent retry/dead-letter handling. This idempotent job alone may fall back to D1 after an uncertain CF send; exact reads use the mapping primary key, scans use existing source/event indexes. `feedTokens.ts` (D1033, migration 603) is "Subscribe to my events": the per-member token, stored as its SHA-256 only, that lets a calendar client fetch the my-events feed with no session. `investorMeetings.ts` (D1190) is the `investor_meeting` kind: a founder's meeting or call with an investor, logged with a start in Capital relationships. |
 | `channels/` | D684: business Telegram and WhatsApp conversations, and Zoom and Google Meet calls, reaching Validate › Interviews. The contract, event dedupe, connection tenancy, link codes, outbound tracking and the pending-thread store. Its README has the rules. |
 | `ai/` | D761: the AI router's request and response shapes, per-class timeouts, context-window and paid-only fallbacks, session affinity and the units each attempt used. D760: `catalogue.ts`, every Workers AI model priced in each unit Cloudflare bills, and `pricing.ts`, cost and billed in exact decimals with `AI_MARKUP` written once. Pure; `aiRouter.ts` calls it. |
 | `decks/` | Deck assembly and export. |
@@ -147,6 +169,7 @@ no new schema, runtime or billing path is introduced.
 | `vercel/` | D1096: `api.ts`, the only caller of `api.vercel.com`: a read-only client for the planned reads, uninstall and the OAuth code exchange. Its README has the rules. |
 | `wellbeing/` | Wellbeing check-ins. |
 | `productTesters.ts` | D1042 (#2890): the product tester store (migration 576). `TRANSITIONS` (approve, decline, pause, resume, remove and the status each needs), `messageFor` (what the member is told), `listTesters`, `testerDetail`, `isAdminAccount` (admins cannot test) and `applyTransition` (one conditional UPDATE and one append-only event row in a batch). `reapplyAfter` is the decision day plus 90 days. D1132: a removal ends the member's open program places in the same batch (`withdrawn`, with a `place_ended` row in `testing_events`), never in a closed or rejected programme. `../routes/admin_product_testers.ts` is its only caller. |
+| `testingLogo.ts` | D1199 (#3149): a product-testing programme's logo. `checkLogo` sniffs the bytes (a PNG by its signature and IHDR, an SVG by its first element), caps the size (`LOGO_MAX_BYTES`), requires a square, refuses an SVG with script, a handler, a `javascript:` or external link, `<foreignObject>` or a DOCTYPE, and stores any other SVG as the brand route's `sanitizeSvg` rebuilds it. `putLogo` and `removeLogo` go through `testing.ts`'s `ownProgramme` and only while the programme is editable; the key `testing-logos/<uid>/<uuid>.<ext>` in `FILES` is the Worker's alone. `readLogo` serves only that prefix, to the owner, Super Admin, or any member once the programme is open. `../routes/testing.ts` is its only caller. |
 | `programGrants.ts` | D982 (#2773): program grants. The nine programs and their readiness (held equal to `frontend/src/lib/programGrants.js`), `TERM_FIELDS` (which grant terms apply to which program, and which are defaultable), `validateTerms` (an unknown or inapplicable term is refused; `null` clears), `presentGrant` (the in-force rule and what a grant waits on), `readGrid`, `readDefaults` and `readHistory`. The store is migration 553; `../routes/admin_program_grants.ts` and `licencePrograms.ts` call it. D983 adds the grid's requests tile and series. D956 adds the `draft` state (migration 562), `programNamed` (the nine or a registry key), the terms every program carries for a program D955 added, and `openDraftStatements`. |
 | `programGrantStates.ts` | D956 (#2789): what each viewer reads of a program's grant (`grantViewerOf`, `grantStates`): a Super Admin's count or HQ only, a deployed studio's licence state in the canvas's words (`requested` from both request lanes), the held mode for an admin with no licence or an undeployed studio, and a branch's state from D984's copy; a failed read is unreadable, never a state. Also Offer to studios (`offerToStudios`, `offerRefusal`: D982's switch, on only with a published playbook). Callers: `../routes/admin_programs.ts`, `programCatalogue.ts`, `../routes/admin_program_grants.ts`. |
 | `licencePrograms.ts` | D984 (#2775): the Administrator's programs. `programCopy` (the licence's grant rows and which programs HQ grants, as the licence push carries them to the branch, migration 554), `parseProgramCopy`, `studioPrograms` (the nine programs in the studio's words, in force by `presentGrant` and the day) and `unlinkedPrograms` (HQ runs every program). Callers: `../routes/licence_programs.ts` and `licencePush.ts`. |
@@ -218,6 +241,11 @@ model). Since D691 (#1699) each list carries the canvas's title, columns,
 filters and default sort (the first in `sorts`), and its row ids are addresses
 that never hold a name: an item key, a version, a link, file or prospect id, a
 cap-table `h-<n>`, `e-<n>` or `pool`, and a use-of-funds section key.
+`capRelReads.ts` (D1190, #3124) is Capital relationships' Commitments
+and Match reads: one commitments read across typed prospects, round-call
+answers, deal-room commitments and the founder's Mercury matches, each investor
+counted once by their strongest line; and the fund directory with each fund's
+Fit, the caller's own warm paths and a count of verified investors who fit.
 `raiseWriters.ts` has one writer per migration 442 record and, since D691
 (#1700), one behind each Raise Add and Edit form (migration 463's stores)
 and one per record action: `duplicateNarrativeVersion`, `revokeDeckLink`,
@@ -481,6 +509,8 @@ hourly buckets that are null for an hour the log was silent.
 D1065 (#2935): `buildPlanner.ts` reads accepted Validate labels/counts and applies the ten fixed mapping rules, then batches a plan and source proposals; acceptance stays with D1066. It never runs AI or writes a Build record.
 
 D1066 (#2936): `buildPlanAccept.ts` decides plan items: Accept (with an optional edit) claims the proposal and lands the row through `buildCreates.ts` in one batch with its evidence links, `fill_provenance` rows and activity line, handing the claim back if the batch fails; Dismiss, Accept all in a module (at most 50) and each Build row's evidence trail. `buildCreates.ts` gains the risk, formation-step and prototype-test builders.
+
+D1071 (#2941): `buildPlanWord.ts` is Eadwyn's wording of the plan: the material (pending items' rule titles and evidence labels and counts, never a name, quote or decision), the prompt, the screen (no digit, currency, contact or link leaves) and the wording row (`ai_rail_proposals`, `kind 'draft'`, on `build_plan:<uid>`). Keeping an item's wording goes through `buildPlanAccept.ts`'s `editItem`, and Accept names the run in `fill_provenance`.
 
 D971 completes `programRegistry.ts`'s Lab draft path: its canonical section
 catalogue contains headings only. The existing Super Admin edit route creates a

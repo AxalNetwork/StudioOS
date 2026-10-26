@@ -26,6 +26,7 @@ import { recommendMethod, listOverrides, setOverride, deleteOverride } from '../
 import { getDeckBrand, setStudioWatermark, ensureMethodAllowed, fetchLandingPageForProject, applyBrandKitToSlides } from '../services/decks/branding';
 import { type RenderableDeck } from '../services/decks/render';
 import { renderDeckPPTX, renderDeckPPTXWithImages } from '../services/decks/pptx';
+import { NO_NOTES as NO_SPEAKER_NOTES, NO_SOURCES as NO_SOURCES_RECORDED, aiCards, sourceLines } from '../services/decks/offlineHtml';
 import { stripTrailingSlashes } from '../util/url';
 import { bindingKey } from '../util/schemaBootstrap';
 import { refuse } from '../util/refusal';
@@ -245,14 +246,23 @@ async function deckPrintHmacKey(env: Env): Promise<CryptoKey> {
     { name: 'HMAC', hash: 'SHA-256' }, false, ['sign', 'verify'],
   );
 }
-export async function signDeckPrintToken(env: Env, deckId: number, ttlSec = 180): Promise<string> {
+/**
+ * D1112 (#2992): what an export asked to carry. The options ride inside the
+ * signed payload, so the print page can show the speaker notes only when the
+ * founder's own export asked for them; a token without them carries neither.
+ */
+export type PrintOptions = { notes: boolean; sources: boolean };
+const NO_PRINT_OPTIONS: PrintOptions = { notes: false, sources: false };
+
+export async function signDeckPrintToken(env: Env, deckId: number, ttlSec = 180, opts: PrintOptions = NO_PRINT_OPTIONS): Promise<string> {
   const exp = Math.floor(Date.now() / 1000) + ttlSec;
-  const payload = `deck-print|${deckId}|${exp}`;
+  const flags = `${opts.notes ? 'n' : ''}${opts.sources ? 's' : ''}`;
+  const payload = `deck-print|${deckId}|${exp}${flags ? `|${flags}` : ''}`;
   const key = await deckPrintHmacKey(env);
   const sig = await crypto.subtle.sign('HMAC', key, new TextEncoder().encode(payload));
   return `${b64url(new TextEncoder().encode(payload))}.${b64url(sig)}`;
 }
-export async function verifyDeckPrintToken(env: Env, token: string): Promise<{ deckId: number } | null> {
+export async function verifyDeckPrintToken(env: Env, token: string): Promise<({ deckId: number } & PrintOptions) | null> {
   try {
     const [pB64, sB64] = (token || '').split('.');
     if (!pB64 || !sB64) return null;
@@ -262,12 +272,12 @@ export async function verifyDeckPrintToken(env: Env, token: string): Promise<{ d
     const ok = await crypto.subtle.verify('HMAC', key, sigBytes, payloadBytes);
     if (!ok) return null;
     const payload = new TextDecoder().decode(payloadBytes);
-    const [tag, idStr, expStr] = payload.split('|');
+    const [tag, idStr, expStr, flags = ''] = payload.split('|');
     if (tag !== 'deck-print' || !idStr || !expStr) return null;
     if (Math.floor(Date.now() / 1000) > Number(expStr)) return null;
     const deckId = parseInt(idStr, 10);
     if (!Number.isFinite(deckId) || deckId <= 0) return null;
-    return { deckId };
+    return { deckId, notes: flags.includes('n'), sources: flags.includes('s') };
   } catch { return null; }
 }
 
@@ -603,8 +613,26 @@ decks.get('/by-project/:pid', async (c) => {
   const proposal = await c.env.DB.prepare(
     'SELECT * FROM pitch_deck_proposals WHERE project_id = ? ORDER BY id DESC LIMIT 1',
   ).bind(pid).first<any>();
+  // D1112 (#2992): PD2's Shared links column, each version's links ever made.
+  // A count that could not be read is null, with the read's flag, never 0.
+  let links: Map<number, number> | null = new Map();
+  try {
+    const res = await c.env.DB.prepare(
+      `SELECT t.deck_id, COUNT(*) AS n FROM pitch_deck_share_tokens t
+         JOIN pitch_decks d ON d.id = t.deck_id
+        WHERE d.project_id = ? GROUP BY t.deck_id`,
+    ).bind(pid).all<{ deck_id: number; n: number }>();
+    for (const r of res.results || []) links.set(Number(r.deck_id), Number(r.n));
+  } catch (e) {
+    console.warn('[decks] shared link counts unreadable', (e as Error).message);
+    links = null;
+  }
   return c.json({
-    versions: (await withNames(c.env, (rows.results ?? []) as any[])).map((r) => rowToDeck(r, false)),
+    versions: (await withNames(c.env, (rows.results ?? []) as any[])).map((r) => ({
+      ...rowToDeck(r, false),
+      shared_links: links ? links.get(Number(r.id)) ?? 0 : null,
+    })),
+    shared_links_readable: links !== null,
     proposal: proposal ? rowToProposal(proposal) : null,
   });
 });
@@ -689,13 +717,33 @@ decks.get('/print-export/:token', async (c) => {
     if (pr?.name) projectName = String(pr.name).slice(0, 200);
   } catch {}
   return c.json({
-    ...publicDeckOf(row),
+    ...printDeckOf(row, v),
     method_id: methodId,
     project_id: Number(row.project_id) || null,
     project_name: projectName,
     spinout_fields: await bakeSpinoutFields(c.env, row),
   });
 });
+
+/**
+ * D1112 (#2992) — the version the headless export renders: the public deck,
+ * plus what the export asked to carry. With notes, each card's speaker notes
+ * (null where it has none); with sources, the Sources appendix the HTML file
+ * carries (`sourceLines`, `aiCards`). Without them, neither, as before.
+ */
+export function printDeckOf(row: any, opts: PrintOptions): any {
+  const deck = publicDeckOf(row);
+  const full = rowToDeck(row);
+  if (opts.notes) {
+    deck.slides = deck.slides.map((card: any, i: number) => {
+      const notes = String(full.slides?.[i]?.notes ?? '').trim();
+      return { ...card, notes: notes || null };
+    });
+  }
+  deck.export_options = { notes: opts.notes, sources: opts.sources };
+  if (opts.sources) deck.sources_appendix = { lines: sourceLines(full.slides || []), ai: aiCards(full.slides || []) };
+  return deck;
+}
 
 decks.get('/share/:token', async (c) => {
   const token = c.req.param('token');
@@ -1956,12 +2004,15 @@ decks.post('/:id/export', async (c) => {
   // Re-sanitize persisted slides (defence-in-depth against legacy rows
   // pre-dating sanitizeImageUrl) before they reach Browser Rendering.
   slides = founderPitchSlides(sanitizeSlides(slides));
+  // D1112 (#2992): PD17's two options apply to every format, not only HTML.
+  const opts: PrintOptions = { notes: body?.notes === true, sources: body?.sources === true };
+  const notesOf = (s: any) => (opts.notes ? String(s?.notes ?? '').trim() || NO_SPEAKER_NOTES : undefined);
   const renderable: RenderableDeck = {
     title: row.title || 'Pitch deck',
     project_name: row.title || '',
     slides: slides.map((s: any) => {
       if (Array.isArray(s.fields)) {
-        return { title: s.title, subtitle: s.subtitle, appendix: !!s.appendix, fields: s.fields };
+        return { title: s.title, subtitle: s.subtitle, appendix: !!s.appendix, fields: s.fields, notes: notesOf(s) };
       }
       const fields: any[] = [];
       if (s.title) fields.push({ key: 'title', label: 'Title', kind: 'title', value: s.title });
@@ -1971,9 +2022,18 @@ decks.post('/:id/export', async (c) => {
         fields.push({ key: 'bullets', label: 'Bullets', kind: 'bullets', value: s.bullets });
       }
       if (s.image_url) fields.push({ key: 'img', label: 'Image', kind: 'image', value: s.image_url });
-      return { title: s.title || 'Slide', subtitle: s.subtitle, appendix: false, fields };
+      return { title: s.title || 'Slide', subtitle: s.subtitle, appendix: false, fields, notes: notesOf(s) };
     }),
   };
+  // The Sources appendix is one more page: the print page draws it after the cards.
+  if (opts.sources) {
+    const lines = sourceLines(slides);
+    renderable.slides.push({
+      title: 'Sources', appendix: true,
+      fields: [{ key: 'sources', label: 'Sources', kind: 'bullets', value: lines.length ? lines.map((l) => `Card ${l.card} (${l.title}) · ${l.figure}: ${l.line}`) : [NO_SOURCES_RECORDED] }],
+      notes: opts.notes ? NO_SPEAKER_NOTES : undefined,
+    });
+  }
   const brand = await deckOwnerBrand(c.env, Number(row.project_id));
   const fname = (row.title || 'pitch-deck').replace(/[^A-Za-z0-9_-]+/g, '-').slice(0, 80);
 
@@ -1997,7 +2057,7 @@ decks.post('/:id/export', async (c) => {
         fallback: 'client_render',
       }, 503);
     }
-    const token = await signDeckPrintToken(c.env, id, 180);
+    const token = await signDeckPrintToken(c.env, id, 180, opts);
     const url = `${publicBase}/deck/print-export/${token}?print_mode=pdf`;
     let r: Response;
     try {
@@ -2062,7 +2122,8 @@ decks.post('/:id/export', async (c) => {
   // Browser Rendering available — capture one full-bleed PNG per slide
   // by navigating the SPA print template with slide=N. 5-minute TTL
   // comfortably covers the longest deck (60-slide cap).
-  const token = await signDeckPrintToken(c.env, id, 300);
+  const token = await signDeckPrintToken(c.env, id, 300, opts);
+  // With sources, the last index is the appendix page the print page draws after the cards.
   const slideCount = renderable.slides.length;
   const images: Uint8Array[] = [];
   for (let i = 0; i < slideCount; i++) {

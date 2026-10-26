@@ -552,7 +552,7 @@ test('the wiring: the drawer\'s route, the client in api.js\'s block, dialogs ne
   const app = read('frontend/src/App.jsx');
   assert.match(app, /<Route path="\/raise\/cap-table\/instrument\/:instrument" element=\{guard\(labRoles\(\['admin', 'founder'\]\), <CycleRoute cycle="raise" slug="cap-table" capTableProposal \/>\)\} \/>/);
   const route = read('frontend/src/pages/cycles/CycleRoute.jsx');
-  assert.match(route, /instrument: instrumentId \} = useParams\(\)/);
+  assert.match(route, /instrument: instrumentId(?:, scenario: scenarioId)? \} = useParams\(\)/);
   assert.match(route, /<CapTableTabPage tab=\{capTableTab\} proposal=\{proposalId\} instrument=\{instrumentId\}/);
   assert.match(read('frontend/src/lib/api.js'), /export \* from '\.\/api\/capTableRegister\.js';\nexport \* from '\.\/api\/capTableScenarios\.js';\n/);
   const client = read('frontend/src/lib/api/capTableScenarios.js');
