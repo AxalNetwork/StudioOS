@@ -6,6 +6,8 @@
 // D1067 (#2937): POST /pause, POST /resume, GET /since?project=&scope=.
 // D1071 (#2941): POST|GET /word?project=&scope=, POST /word/:uid/keep|discard, and
 // PATCH /items/:uid { wording } — Keep wording is the item's Save.
+// D1068 (#2938): POST|GET /handoffs?project=&scope= (Send to…, recorded), GET /links,
+// POST /links/:uid/accept|dismiss, and POST /items/:uid/link { fed } (a link by hand).
 import { request } from '../api.js';
 const query = (project, scope) => new URLSearchParams({ project: String(project), scope }).toString();
 export const buildPlanApi = {
@@ -23,5 +25,11 @@ export const buildPlanApi = {
   pause: (project, scope = 'venture') => request(`/cycles/build/plan/pause?${query(project, scope)}`, { method: 'POST', body: '{}' }),
   resume: (project, scope = 'venture') => request(`/cycles/build/plan/resume?${query(project, scope)}`, { method: 'POST', body: '{}' }),
   since: (project, scope = 'venture') => request(`/cycles/build/plan/since?${query(project, scope)}`),
+  send: (project, { provider, items, repository } = {}, scope = 'venture') => request(`/cycles/build/plan/handoffs?${query(project, scope)}`, { method: 'POST', body: JSON.stringify({ provider, items, ...(repository ? { repository } : {}) }) }),
+  handoffs: (project, scope = 'venture') => request(`/cycles/build/plan/handoffs?${query(project, scope)}`),
+  links: (project, scope = 'venture') => request(`/cycles/build/plan/links?${query(project, scope)}`),
+  acceptLink: (project, uid, scope = 'venture') => request(`/cycles/build/plan/links/${encodeURIComponent(uid)}/accept?${query(project, scope)}`, { method: 'POST', body: '{}' }),
+  dismissLink: (project, uid, scope = 'venture') => request(`/cycles/build/plan/links/${encodeURIComponent(uid)}/dismiss?${query(project, scope)}`, { method: 'POST', body: '{}' }),
+  linkByHand: (uid, fed) => request(`/cycles/build/plan/items/${encodeURIComponent(uid)}/link`, { method: 'POST', body: JSON.stringify({ fed }) }),
   evidence: (project, table, id) => request(`/cycles/build/evidence?${new URLSearchParams({ project: String(project), table, id: String(id) })}`),
 };

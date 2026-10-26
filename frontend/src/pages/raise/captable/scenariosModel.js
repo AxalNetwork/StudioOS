@@ -626,6 +626,40 @@ export function exitPanels(cols, exits) {
   }));
 }
 
+/**
+ * D1028 (#2865, CT23c): the compare table on a phone, one scenario per card
+ * to swipe through. A share reads "Today → after" when Today has one; a
+ * figure Today does not have (a price, a post-money, a conversion) reads alone.
+ */
+export function swipeCards(rows, cols) {
+  const n = cols.length;
+  const isPct = (v) => typeof v === 'string' && /%$/.test(v);
+  return cols.map((c, k) => ({
+    name: c.name,
+    status: c.status,
+    meta: `${k + 1} of ${n}${n > 1 ? ' · swipe ›' : ''}`,
+    rows: rows.map((r) => {
+      const today = r.cells[0];
+      const after = r.cells[k + 1];
+      return { label: r.label, bold: !!r.bold, value: isPct(today) && isPct(after) ? `${today} → ${after}` : after };
+    }),
+  }));
+}
+
+/**
+ * D1028 (CT23c): one scenario's exit waterfall as a table on a phone: each
+ * exit, and what founders, investors and employees take. An exit the engine
+ * did not calculate says so in every cell, never $0.
+ */
+export function exitTable(col, exits) {
+  const head = ['Exit', ...GROUPS.slice(0, 3).map((g) => g.label)];
+  const rows = exits.map((exit) => {
+    const by = payoutByGroup(waterfallsOf(col?.result).find((w) => w.exit === exit)?.wf || null);
+    return { exit, cells: [dollars(exit), ...(by ? [by.founders, by.investors, by.people].map(dollars) : [NOT_RECORDED, NOT_RECORDED, NOT_RECORDED])] };
+  });
+  return { head, rows };
+}
+
 /** A short column label for a chart: the name's last words, at most 14 characters. */
 export function shortName(name) {
   const s = String(name || '').trim();

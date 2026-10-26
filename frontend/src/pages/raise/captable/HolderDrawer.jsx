@@ -16,13 +16,13 @@ import { correctable, voidable } from './historyModel';
  * given (the owner) and Correct (CT12c) when `onCorrect` is (an admin).
  */
 
-const INK = 'text-axal-ink dark:text-gray-100';
+const INK = 'text-axal-ink dark:text-gray-200';
 const MUTED = 'text-axal-muted dark:text-gray-400';
 const EYEBROW = 'text-[10.5px] font-extrabold uppercase tracking-[.07em] text-axal-muted dark:text-gray-400';
 const BTN = 'inline-flex min-h-[32px] items-center justify-center rounded-[9px] px-3 text-[12.5px] font-bold';
-const GHOST = `${BTN} border border-axal-hairline bg-white text-axal-ink hover:bg-axal-ground dark:border-gray-700 dark:bg-gray-900 dark:text-gray-100 dark:hover:bg-gray-800`;
-const ROWLINK = 'text-[11.5px] font-semibold text-axal-violet hover:text-axal-violet-deep dark:text-violet-300';
-const AMBER = 'inline-flex w-fit items-center rounded-full border border-amber-200 bg-amber-50 px-2 py-0.5 text-[10.5px] font-bold text-amber-800 dark:border-amber-900 dark:bg-amber-950/30 dark:text-amber-300';
+const GHOST = `${BTN} border border-axal-hairline bg-white text-axal-ink hover:bg-axal-ground dark:border-gray-700 dark:bg-gray-900 dark:text-gray-200 dark:hover:bg-gray-800`;
+const ROWLINK = 'text-[11.5px] font-semibold text-axal-violet hover:text-axal-violet-deep dark:text-violet-400';
+const AMBER = 'inline-flex w-fit items-center rounded-full border border-amber-200 bg-amber-50 px-2 py-0.5 text-[10.5px] font-bold text-amber-800 dark:border-amber-300/55 dark:bg-amber-300/10 dark:text-amber-300';
 
 function useOptional(load, projectId) {
   const [state, setState] = useState({ status: 'loading', data: null });
@@ -39,14 +39,18 @@ function useOptional(load, projectId) {
 
 function Section({ title, children, testId }) {
   return (
-    <section className="flex flex-col gap-1.5 border-t border-axal-hairline pt-3 dark:border-gray-800" data-testid={testId}>
+    <section className="flex flex-col gap-1.5 border-t border-axal-hairline pt-3 dark:border-gray-700" data-testid={testId}>
       <h3 className={`m-0 ${EYEBROW}`}>{title}</h3>
       {children}
     </section>
   );
 }
 
-export default function HolderDrawer({ projectId, holderId, record, grants, onClose, onVoid = null, onCorrect = null }) {
+/**
+ * D1028 (CT23b): `page` draws the drawer as a page of its own below 1024px
+ * (`Lightbox`'s page mode, under the cycle's bar back to the Cap table).
+ */
+export default function HolderDrawer({ projectId, holderId, record, grants, onClose, onVoid = null, onCorrect = null, page = false }) {
   const plan = useOptional(() => capTableHolderApi.equityPlan(projectId), projectId);
   const build = useOptional(() => cyclesApi.module('build', projectId, 'company-creation'), projectId);
   const ready = record.status === 'ready';
@@ -58,7 +62,7 @@ export default function HolderDrawer({ projectId, holderId, record, grants, onCl
   const title = v?.found ? v.name : 'Holder';
   const rawOf = (uid) => (ready ? (record.data?.issuances?.rows || []).find((r) => r.uid === uid) : null) || null;
   return (
-    <Lightbox label={title} eyebrow="Holder" title={title} width={600} onClose={onClose} testId="captable-holder-drawer"
+    <Lightbox label={title} eyebrow="Holder" title={title} width={600} onClose={onClose} testId="captable-holder-drawer" pageBelow={page ? 'lg' : undefined}
       footer={(
         <div className="flex justify-end gap-2">
           <button type="button" className={GHOST} onClick={onClose}>Close</button>
