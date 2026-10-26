@@ -3,6 +3,8 @@ import { api } from '../../../lib/api';
 import { dataRoomApi } from '../../../lib/api/dataRoom';
 import { Lightbox, Unreadable } from '../../../ui';
 import DataRoomDialog from './DataRoomDialog.jsx';
+import { ReportShareRows } from './ReportShares.jsx';
+import AdvisorGrantSection from '../AdvisorGrantSection.jsx';
 import { day } from './dataRoomModel';
 import {
   COFOUNDER_LINE, FILTERS, NDA_LINE, NDA_WORD, REVOKE_LINE, STATE_WORD,
@@ -82,6 +84,13 @@ const startFields = (g = null) => ({
   chosen: g?.folders ? [...g.folders] : [],
 });
 
+/**
+ * D1109 (#2989), carried from the retired files tool: the Worker answers a share
+ * the same whether or not the address has a StudioOS account (so the answer says
+ * nothing about who has one), so the line after Share never claims access it cannot know.
+ */
+export const shareDoneLine = (chosen) => `If ${chosen.email} has a StudioOS account, ${chosen.title} can open the room now. Nobody is invited by email.`;
+
 /** DR7: Share, picking one of this venture's prospects in Capital relationships. `prefill` is a request's investor. */
 export function ShareDialog({ room, projectUid, onClose, onDone, prefill = null }) {
   const [read, setRead] = useState({ status: 'loading', candidates: [] });
@@ -104,7 +113,7 @@ export function ShareDialog({ room, projectUid, onClose, onDone, prefill = null 
   return (
     <DataRoomDialog testId="share-dialog" copy={{ title: 'Share the room', body: `Give one investor access to ${room?.project?.name || 'this venture'}’s room.`, action: 'Share' }}
       disabled={!chosen || Boolean(error)} refusalOf={accessRefusal} onClose={onClose}
-      onConfirm={async () => { await dataRoomApi.share(projectUid, { prospect: chosen.uid, ...grantBody(fields) }); onDone(`${chosen.title} can open the room now.`); }}>
+      onConfirm={async () => { await dataRoomApi.share(projectUid, { prospect: chosen.uid, ...grantBody(fields) }); onDone(shareDoneLine(chosen)); }}>
       <label className="flex flex-col gap-1.5">
         <span className={EYEBROW}>Who</span>
         <input className={FIELD} value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search investors in Capital relationships" data-testid="share-search" />
@@ -267,7 +276,8 @@ export default function DataRoomAccess({ room, projectUid, reload, phone = false
   const grantOf = (uid) => (room?.grants || []).find((g) => g.uid === uid) || null;
   const act = (kind, grant) => { setOpen(null); setDialog({ kind, grant }); };
   const done = (line, link = null) => { setDialog(null); setSaid({ line, link }); reload(); };
-  const shares = Array.isArray(room?.report_shares) ? room.report_shares.filter((s) => s.status === 'active') : null;
+  // D1109: every share with its state (moved from the retired files tool), so a revoked or used-up link is never read as live.
+  const shares = Array.isArray(room?.report_shares) ? room.report_shares : null;
   return (
     <div className="flex min-w-0 flex-col gap-4" data-testid="dataroom-access">
       {!owner ? <p className={NOTE} data-testid="access-cofounder">{COFOUNDER_LINE}</p> : null}
@@ -333,11 +343,14 @@ export default function DataRoomAccess({ room, projectUid, reload, phone = false
       <NdaStrip room={room} owner={owner} onAct={act} />
       <section className={`${CARD} flex flex-col gap-1.5 px-4 py-3`} data-testid="access-report-shares">
         <h3 className={`m-0 text-[14px] font-extrabold ${INK}`}>Scoring report shared with</h3>
-        <p className={`m-0 text-[12px] ${MUTED}`}>Read only. Managed in Fundraising readiness.</p>
+        <p className={`m-0 text-[12px] ${MUTED}`}>Read only. These accounts can open the scoring report, not the files. Each link is made and revoked from the report’s Share button in Fundraising readiness.</p>
         {shares === null ? <Unreadable what="The report shares" claim="This is not a claim that the report is shared with no one." onRetry={reload} />
-          : shares.length ? shares.map((s) => <p key={s.id} className={`m-0 text-[12.5px] font-semibold ${INK}`}>{s.grantee_name || s.grantee_email} <span className={`font-normal ${MUTED}`}>· shared {day(s.created_at)}</span></p>)
+          : shares.length ? <ReportShareRows shares={shares} />
             : <p className={`m-0 text-[12.5px] ${MUTED}`}>Not shared with anyone.</p>}
       </section>
+      {/* D1109 (#2989): the second grant type, moved from the retired files tool. An advisor's
+          brief and document shares are made and revoked here; the advisor sees counts, never the files. */}
+      {owner && projectUid ? <section className={`${CARD} px-4 py-3`} data-testid="access-advisor-grants"><AdvisorGrantSection projectUid={projectUid} /></section> : null}
       {open && grantOf(open) ? <InvestorLightbox room={room} grant={grantOf(open)} owner={owner} onClose={() => setOpen(null)} onAct={act} /> : null}
       {dialog?.kind === 'share' ? <ShareDialog room={room} projectUid={projectUid} onClose={() => setDialog(null)} onDone={done} /> : null}
       {dialog?.kind === 'nda' ? <NdaDialog room={room} projectUid={projectUid} grant={dialog.grant} onClose={() => setDialog(null)} onDone={done} /> : null}

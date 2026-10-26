@@ -57,11 +57,48 @@ export function tabSearch(search = '') {
 
 export const tabHref = (tab, search = '') => `${HOME_PATH}${tab.path}${tabSearch(search)}`;
 
-/** Today's files tool, where uploads, gates, sharing and revoking still happen until part 4. */
-export function workspaceHref(search = '') {
-  const q = tabSearch(search);
-  return `${HOME_PATH}?mode=workspace${q ? `&${q.slice(1)}` : ''}`;
+/**
+ * D1109 (#2989, DR24) — the old addresses that forward into the tool, each
+ * counted (#2319) under its own key and landing on its tab with a moved notice.
+ * `?mode=workspace` was the files tool (`DataRoomPage`), `?mode=access` the
+ * read-only access view (`FounderRaiseDataRoom`), and a file's number its record page.
+ */
+export const MOVED_FROM = Object.freeze({
+  workspace: { key: '/raise/data-room?mode=workspace', to: `${HOME_PATH}/files` },
+  access: { key: '/raise/data-room?mode=access', to: `${HOME_PATH}/access` },
+  file: { key: '/raise/data-room/:id', to: `${HOME_PATH}/file` },
+});
+
+/** The one-line notice each forward lands with (DR24a, DR24b), read from `?moved=`. */
+export const MOVED_NOTICES = Object.freeze({
+  workspace: 'The data room workspace is now Data room › Files.',
+  access: 'The access view is now Data room › Access.',
+  file: 'A file’s page is now its window over Data room › Files.',
+});
+
+/** Which old address, if any, this tool address is: `?mode=` on the bare address. */
+export function movedKind(search = '') {
+  const mode = new URLSearchParams(String(search || '').replace(/^\?/, '')).get('mode');
+  return mode === 'workspace' || mode === 'access' ? mode : null;
 }
+
+/**
+ * Where an old address lands: its tab (or, for a file's number, its window over
+ * Files), with the whole query kept except `mode`, `?moved=` naming the notice,
+ * and the hash kept. `?project_id=` travels as it came.
+ */
+export function movedTarget(kind, search = '', hash = '', id = null) {
+  const from = MOVED_FROM[kind];
+  if (!from) return null;
+  const q = new URLSearchParams(String(search || '').replace(/^\?/, ''));
+  q.delete('mode');
+  q.set('moved', kind);
+  const pathname = kind === 'file' ? `${from.to}/${encodeURIComponent(String(id))}` : from.to;
+  return { pathname, search: `?${q.toString()}`, hash: hash || '' };
+}
+
+/** True for a file record's number under the module: the old record page, never a tab word. */
+export const isOldFileAddress = (slug, id) => slug === SLUG && /^[1-9]\d*$/.test(String(id ?? ''));
 
 /** The venture's uid, which the founder's data-room read is keyed on, from the projects list. */
 export function projectUidOf(projects, projectId) {
@@ -119,5 +156,3 @@ export function grantRows(room, now = Date.now()) {
   }));
 }
 
-// D1106: uploads, gates, folders and removing are this tool's; D1107: sharing, revoking, the NDA and requests are Access's and Requests'.
-export const WORKSPACE_LINE = 'Today’s files tool is still open while the old pages are retired.';

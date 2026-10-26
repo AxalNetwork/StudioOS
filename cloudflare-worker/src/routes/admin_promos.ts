@@ -9,6 +9,7 @@ import {
   normalizeCode,
   readProductIds,
   listPromoPage,
+  rowToView,
   readReason,
   readNameNote,
   markPaused,
@@ -174,6 +175,14 @@ adminPromos.get('/:id/history', async (c) => {
   const promo = await getPromoById(c.env, c.req.param('id'));
   if (!promo) return c.json({ error: 'Promo not found', code: 'not_found' }, 404);
   return c.json({ promo_id: promo.id, history: await codeHistory(c.env, promo.id) });
+});
+
+// D1275: one code, for its drawer at its own address when it is not on the list's page.
+adminPromos.get('/:id', async (c) => {
+  await requireSuperAdmin(c);
+  const promo = await getPromoById(c.env, c.req.param('id'));
+  if (!promo) return c.json({ error: 'Promo not found', code: 'not_found' }, 404);
+  return c.json({ promo: rowToView(promo) });
 });
 
 
