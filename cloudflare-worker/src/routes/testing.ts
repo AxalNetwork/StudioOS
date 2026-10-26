@@ -14,6 +14,7 @@
  *                         with the partner's create, edit and pick.
  *                         D1197: any programme's history and applicants (a
  *                         partner's read only), and every application across programmes.
+ *                         D1196: the overview read (`services/testingOverview.ts`).
  *
  * Lists are `{ items }`; a refusal is `{ error, detail }` with the service's
  * sentence. Another firm's programme or application is 404, as a missing one.
@@ -34,6 +35,7 @@ import { mapError, requirePartnerProfile } from './_t13t14t15_helpers';
 import { requirePartnerRole } from './_partner_workspace_helpers';
 import { refusalBody } from '../util/refusal';
 import * as svc from '../services/testing';
+import { readTestingOverview } from '../services/testingOverview';
 import type { Owner } from '../services/testing';
 import { putLogo, readLogo, removeLogo, uploadedBytes } from '../services/testingLogo';
 
@@ -209,6 +211,15 @@ adminTesting.get('/programmes', async (c) => {
   try {
     await actingHq(c);
     return c.json({ items: await svc.allProgrammes(c.env, c.req.query('status') || null) });
+  } catch (e) { return fail(c, e); }
+});
+
+// D1196 (#3146): Overview's figures no other read carries (TST1 ②, ④, ⑤ and the
+// withdrawn count), each block answering alone, counts only, never an address.
+adminTesting.get('/overview', async (c) => {
+  try {
+    await actingHq(c);
+    return c.json(await readTestingOverview(c.env));
   } catch (e) { return fail(c, e); }
 });
 
