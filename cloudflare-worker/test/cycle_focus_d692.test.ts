@@ -432,7 +432,7 @@ test('8: with the flag on and no open call, the call focus, the meter and the fo
     assert.equal(r.body.focus.then, 'Follow up with the 3 investors due or overdue this week.');
     assert.deepEqual([r.body.meter.label, r.body.meter.count, r.body.meter.target, r.body.meter.display], ['Signed or received', 900000, 1500000, '$900k of $1.5M']);
     assert.equal(r.body.meter.detail,r.body.figures.find((f:any)=>f.key==='committed').reason);
-    assert.match(r.body.meter.detail,/Signed: \$600,000.*Received: \$300,000/);
+    assert.match(r.body.meter.detail,/Received: \$0 \(bank-matched\).*Wired: \$300,000.*Signed: \$600,000/);
     assert.equal(r.body.index[0].key, 'calls');
     assert.equal(row(r.body, 'calls').value, null, 'no call yet: Not recorded');
 
