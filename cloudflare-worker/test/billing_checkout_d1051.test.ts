@@ -31,6 +31,9 @@ const PERIOD_END = 1_900_000_000;
 type Call = { url: string; method: string; body: string; idem: string | null };
 let calls: Call[] = [];
 let heldPrice = { id: 'price_growth_m', unit_amount: 7900 };
+// What Stripe lists per customer that D1 never saw (D892 §6), and a list read that fails.
+let stripeLists: Record<string, unknown[]> = {};
+let listFails = false;
 const realFetch = globalThis.fetch;
 globalThis.fetch = (async (input: any, init: any = {}) => {
   const url = String(typeof input === 'string' ? input : input?.url);
@@ -41,6 +44,10 @@ globalThis.fetch = (async (input: any, init: any = {}) => {
   if (path === '/subscriptions/sub_held' && method === 'GET') {
     return json({ id: 'sub_held', status: 'active', customer: 'cus_founder', current_period_end: PERIOD_END, schedule: null,
       items: { data: [{ id: 'si_1', price: { id: heldPrice.id, unit_amount: heldPrice.unit_amount, currency: 'usd', recurring: { interval: 'month', interval_count: 1 } } }] } });
+  }
+  if (path === '/subscriptions/sub_inv_old' && method === 'GET') {
+    return json({ id: 'sub_inv_old', status: 'active', customer: 'cus_inv_general', current_period_end: PERIOD_END, schedule: null,
+      items: { data: [{ id: 'si_i', price: { id: 'price_pro_m', unit_amount: 14900, currency: 'usd', recurring: { interval: 'month', interval_count: 1 } } }] } });
   }
   if (path === '/subscriptions/sub_partner' && method === 'GET') {
     return json({ id: 'sub_partner', status: 'active', customer: 'cus_partner', current_period_end: PERIOD_END, schedule: null,
@@ -55,6 +62,10 @@ globalThis.fetch = (async (input: any, init: any = {}) => {
   if (path === '/subscriptions' && method === 'POST') {
     return json({ id: 'sub_new1', status: 'incomplete', latest_invoice: { id: 'in_1', payment_intent: { id: 'pi_1', client_secret: 'pi_1' + '_secret_' + 'fixture' } } });
   }
+  if (path === '/subscriptions' && method === 'GET') {
+    if (listFails) return new Response(JSON.stringify({ error: { type: 'api_error', message: 'down' } }), { status: 500 });
+    return json({ data: stripeLists[new URL(url).searchParams.get('customer') || ''] ?? [] });
+  }
   if (path === '/invoices/upcoming') {
     return json({ currency: 'usd', amount_due: 17000, total: 17000, tax: null, lines: { data: [{ amount: -7900, proration: true }, { amount: 24900, proration: true }, { amount: 24900, proration: false }] } });
   }
@@ -66,7 +77,7 @@ globalThis.fetch = (async (input: any, init: any = {}) => {
   return new Response('unexpected call in test: ' + method + ' ' + url, { status: 599 });
 }) as typeof fetch;
 process.on('exit', () => { globalThis.fetch = realFetch; });
-beforeEach(() => { calls = []; heldPrice = { id: 'price_growth_m', unit_amount: 7900 }; });
+beforeEach(() => { calls = []; heldPrice = { id: 'price_growth_m', unit_amount: 7900 }; stripeLists = {}; listFails = false; });
 const posts = () => calls.filter((c) => c.method === 'POST');
 const sent = (c: Call) => new URLSearchParams(c.body);
 
@@ -214,11 +225,43 @@ test('start, a new subscriber with a new card: one incomplete subscription with 
   assert.deepEqual(log.map((l) => [l.action, l.entity_id]), [['checkout_started', 'sub_new1']]);
   assert.ok(!/@|pm_|last4|exp_|brand|fingerprint/.test(log[0].details), 'no email and no card in the log');
   assert.equal(JSON.parse(log[0].details).before_plan_key, 'founder:free', 'what was held before is recorded');
-  // An investor plan lives on the investor customer.
+  // An investor plan lives on the member's own investor customer, made for it, never the general one (D892 §6).
   const inv = await start(db, INVESTOR, { plan_key: 'investor:professional' });
   assert.equal(inv.status, 200, inv.text);
-  assert.equal(sent(posts().filter((c) => c.url.endsWith('/v1/subscriptions')).at(-1)!).get('metadata[kind]'), 'investor');
+  const made = posts().filter((c) => c.url.endsWith('/v1/customers'));
+  assert.equal(made.length, 1);
+  assert.equal(sent(made[0]).get('metadata[scope]'), 'investor');
+  const invSub = sent(posts().filter((c) => c.url.endsWith('/v1/subscriptions')).at(-1)!);
+  assert.deepEqual([invSub.get('metadata[kind]'), invSub.get('customer')], ['investor', 'cus_created']);
+  assert.equal((db.prepare('SELECT investor_stripe_customer_id FROM users WHERE id = ?').get(INVESTOR) as any).investor_stripe_customer_id, 'cus_created');
+});
+
+test('start and quote, a plan Stripe holds that D1 never saw (D892 §6): refused, never a second; a check that fails charges nothing', async () => {
+  const db = database();
+  stripeLists = { cus_founder: [{ id: 'sub_old', status: 'active', metadata: { kind: 'tier', tier: 'growth' } }] };
+  const q = await quote(db, FOUNDER, 'founder:studio');
+  assert.deepEqual([q.status, q.body.error], [409, 'subscription_exists']);
+  const s1 = await start(db, FOUNDER, { plan_key: 'founder:studio' });
+  assert.deepEqual([s1.status, s1.body.error], [409, 'subscription_exists']);
+  // An investor plan made before D892 on the general customer: the member adopts that customer, so its next event grants it.
+  stripeLists = { cus_inv_general: [{ id: 'sub_old_inv', status: 'active', metadata: { kind: 'investor', investor_tier: 'professional' } }] };
+  const s2 = await start(db, INVESTOR, { plan_key: 'investor:professional' });
+  assert.deepEqual([s2.status, s2.body.error], [409, 'subscription_exists']);
   assert.equal((db.prepare('SELECT investor_stripe_customer_id FROM users WHERE id = ?').get(INVESTOR) as any).investor_stripe_customer_id, 'cus_inv_general');
+  // A plan of another family does not count.
+  stripeLists = { cus_founder: [{ id: 'sub_mi', status: 'active', metadata: { kind: 'mi' } }] };
+  assert.equal((await start(db, FOUNDER, { plan_key: 'founder:growth' })).status, 200);
+  // D1 holds an investor plan made before D892 on the general customer, and no investor customer: it is read as held there.
+  stripeLists = {};
+  db.prepare(`UPDATE users SET investor_tier = 'professional', investor_subscription_status = 'active', investor_stripe_subscription_id = 'sub_inv_old', investor_stripe_customer_id = NULL WHERE id = ?`).run(INVESTOR);
+  const held = await quote(db, INVESTOR, 'investor:professional');
+  assert.deepEqual([held.status, held.body.error], [409, 'already_on_plan']);
+  // Stripe cannot say: 503, and nothing made.
+  listFails = true; calls = [];
+  const s3 = await start(db, FOUNDER, { plan_key: 'founder:growth', nonce: 'nonce-press-0002' });
+  assert.deepEqual([s3.status, s3.body.error], [503, 'plan_check_unavailable']);
+  assert.equal((await quote(db, FOUNDER, 'founder:growth')).body.error, 'plan_check_unavailable');
+  assert.equal(posts().length, 0, 'nothing is made when the check fails');
 });
 
 test('start, a saved card: the authenticator code first (owner question 8, C), and only the member\'s own card', async () => {

@@ -44,7 +44,10 @@ import { validatePromoForProduct, computeDiscount, normalizeCode, type PromoRow 
 import { automaticTaxParams, stripeTaxEnabled } from '../util/stripeTax';
 import { refuse } from '../util/refusal';
 import { moneyKindForCatalogPrice } from '../services/moneyRails';
-import { heldPlanSubscription, planMetaFields, planMetaParams, type PlanMeta } from '../services/planSubscription';
+import {
+  adoptInvestorCustomer, ensureInvestorCustomer, heldPlanInStripe, heldPlanSubscription, planMetaFields, planMetaParams,
+  storedInvestorCustomer, type PlanMeta,
+} from '../services/planSubscription';
 import { allowanceFromCharge } from '../services/planAllowance';
 import { planByKey, type CatalogueEntry } from '../services/planCatalogue';
 import {
@@ -92,17 +95,34 @@ async function heldPlanKey(env: Env, userId: number, family: string): Promise<st
   }
 }
 
-/** The Stripe customer a family's subscription lives on: the investor customer for investor plans (as the intent does), the general one otherwise. */
-async function familyCustomer(env: Env, user: CheckoutUser, meta: PlanMeta, create: boolean): Promise<string | null> {
-  const general = create ? await ensurePaymentsCustomer(env, user) : (user.stripe_customer_id ?? null);
-  if (meta.kind !== 'investor') return general;
-  const inv = await env.DB.prepare('SELECT investor_stripe_customer_id FROM users WHERE id = ?').bind(user.id).first<{ investor_stripe_customer_id: string | null }>();
-  if (inv?.investor_stripe_customer_id) return inv.investor_stripe_customer_id;
-  if (create && general) {
-    await env.DB.prepare('UPDATE users SET investor_stripe_customer_id = ? WHERE id = ? AND investor_stripe_customer_id IS NULL').bind(general, user.id).run();
-  }
-  return general;
+/**
+ * The Stripe customer a family's subscription lives on (D892 §6): an investor
+ * plan on the member's own investor customer, never the general one; every
+ * other plan on the general customer. `create` makes the customer when there
+ * is none, and is passed only once nothing is held. `held` also reads the
+ * general customer for an investor member with no investor customer, where an
+ * investor plan made before D892 sits.
+ */
+async function familyCustomer(env: Env, user: CheckoutUser, meta: PlanMeta, mode: 'create' | 'read' | 'held'): Promise<string | null> {
+  if (meta.kind !== 'investor') return mode === 'create' ? await ensurePaymentsCustomer(env, user) : (user.stripe_customer_id ?? null);
+  const inv = await storedInvestorCustomer(env, user.id);
+  if (inv) return inv;
+  if (mode === 'create') return ensureInvestorCustomer(env, user);
+  return mode === 'held' ? (user.stripe_customer_id ?? null) : null;
 }
+
+/**
+ * A plan of this family that Stripe holds and D1 never saw (D892 §6's
+ * `heldPlanInStripe`: a subscription made before D892). Throws when Stripe
+ * cannot say, so nothing is started on a guess.
+ */
+async function heldOnlyInStripe(env: Env, user: CheckoutUser, meta: PlanMeta) {
+  const investor = meta.kind === 'investor' ? await storedInvestorCustomer(env, user.id) : null;
+  const found = await heldPlanInStripe(env, { general: user.stripe_customer_id, investor }, meta);
+  return found ? { ...found, adopt: meta.kind === 'investor' && !investor && found.customer === user.stripe_customer_id } : null;
+}
+const PLAN_CHECK_UNAVAILABLE = { status: 503, code: 'plan_check_unavailable', message: 'Your current plan could not be checked, so nothing was charged. Try again in a moment.' } as CheckoutRefusal;
+const SUBSCRIPTION_EXISTS = { status: 409, code: 'subscription_exists', message: 'You already pay for a plan of this kind. Change it from Billing.' } as CheckoutRefusal;
 
 async function logCheckout(env: Env, userId: number, action: 'checkout_started' | 'plan_changed' | 'promo_applied', ref: string, details: Record<string, unknown>) {
   try {
@@ -135,7 +155,7 @@ async function heldSubscription(env: Env, user: CheckoutUser, meta: PlanMeta): P
   const subId = await heldPlanSubscription(env, user.id, meta);
   if (!subId) return null;
   const sub = await stripeCall<StripeSubLite>(env, `/subscriptions/${subId}`, { 'expand[0]': 'items.data.price' }, { method: 'GET' });
-  const customer = await familyCustomer(env, user, meta, false);
+  const customer = await familyCustomer(env, user, meta, 'held');
   // The D1 mirror named it; Stripe confirms it is this member's before anything reads further.
   if (!sub || !customer || sub.customer !== customer) return null;
   return sub;
@@ -212,7 +232,8 @@ checkout.post('/checkout/quote', async (c) => {
     });
   }
 
-  // A new subscriber.
+  // A new subscriber, unless Stripe holds a plan of this family that D1 never saw.
+  try { if (await heldOnlyInStripe(c.env, user, meta)) return no(c, SUBSCRIPTION_EXISTS); } catch { return no(c, PLAN_CHECK_UNAVAILABLE); }
   const promoCode = typeof body.promo_code === 'string' ? body.promo_code.trim() : '';
   let promo: PromoRow | undefined;
   let discount: { amount: number; code: string } | null = null;
@@ -226,7 +247,7 @@ checkout.post('/checkout/quote', async (c) => {
   let total: number | null = unit - (discount?.amount ?? 0);
   let totalReason: string | null = null;
   if (stripeTaxEnabled(c.env)) {
-    const customer = await familyCustomer(c.env, user, meta, false);
+    const customer = await familyCustomer(c.env, user, meta, 'read');
     if (!customer) {
       vat = { amount: null, reason: 'Tax is worked out from your billing address when you pay.' };
       total = null; totalReason = 'The total, with tax, shows in the payment form.';
@@ -284,15 +305,21 @@ checkout.post('/checkout/start', async (c) => {
     return startChange(c, user, { entry, interval, price, meta, moneyKind, held, nonce, before });
   }
   // Mirror and Stripe disagree: D1 says one is held, Stripe does not confirm it. Never start a second.
-  if (await heldPlanSubscription(c.env, user.id, meta)) {
-    return refuse(c, 409, { code: 'subscription_exists', message: 'You already pay for a plan of this kind. Change it from Billing.', audience: 'member' });
+  if (await heldPlanSubscription(c.env, user.id, meta)) return no(c, SUBSCRIPTION_EXISTS);
+  // Stripe holds one D1 never saw (made before D892). An investor one on the
+  // general customer is adopted, so its next event grants it (D892 §6).
+  let inStripe: Awaited<ReturnType<typeof heldOnlyInStripe>>;
+  try { inStripe = await heldOnlyInStripe(c.env, user, meta); } catch { return no(c, PLAN_CHECK_UNAVAILABLE); }
+  if (inStripe) {
+    if (inStripe.adopt) await adoptInvestorCustomer(c.env, user.id, inStripe.customer);
+    return no(c, SUBSCRIPTION_EXISTS);
   }
 
   // A new subscriber. A saved card is charged with one press, so it asks for the code too (owner question 8, C).
   const pm = typeof body.payment_method === 'string' && body.payment_method ? body.payment_method : null;
   if (pm && !PM_RE.test(pm)) return refuse(c, 400, { code: 'invalid_payment_method', message: 'That card could not be used. Choose another or add a new one.', audience: 'member' });
   if (pm) { await requireFactor(c, 'totp'); await requireStepUp(c); }
-  const customer = (await familyCustomer(c.env, user, meta, true))!;
+  const customer = (await familyCustomer(c.env, user, meta, 'create'))!;
   if (pm) {
     const card = await stripeCall<{ id: string; customer?: string | null }>(c.env, `/payment_methods/${pm}`, {}, { method: 'GET' }).catch(() => null);
     if (!card || card.customer !== customer) return refuse(c, 404, { code: 'payment_method_not_found', message: 'That card could not be used. Choose another or add a new one.', audience: 'member' });
