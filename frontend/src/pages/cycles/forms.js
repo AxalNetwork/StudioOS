@@ -371,9 +371,14 @@ const chipsOf = (list) => (Array.isArray(list) ? list : []).filter((o) => o && o
 const raiseOptions = (w, projectId, slug) => w.formOptions('raise', projectId, slug);
 
 const BY_HAND = 'team';
-/** Re-score's seven rows, labelled as the canvas draws them (CO:317), in its order. */
+/**
+ * Re-score's rows, labelled as the canvas draws them (CO:317), in its order.
+ * D1145 (#3031, RD6): Product-market fit is scored again from Validate with
+ * them; it sends `pmf: true`, which D1144's route requires with the item.
+ */
+const PMF = 'pmf';
 const RESCORE_ITEMS = opts([['narrative', 'Narrative'], ['deck', 'Deck'], ['data_room', 'Data room'], ['cap_table', 'Cap table'],
-  ['use_of_funds', 'Use of funds'], ['traction', 'Traction'], ['team', 'Team']]);
+  ['use_of_funds', 'Use of funds'], ['traction', 'Traction'], [PMF, 'Product-market fit · from Validate'], ['team', 'Team']]);
 /** Each item with when it was last scored; Team is scored by a person on its record, so it is never sent (#1700 refuses it). */
 export function rescoreRows(items) {
   const read = new Map((Array.isArray(items) ? items : []).map((i) => [String(i?.value), i]));
@@ -395,7 +400,10 @@ const rescore = {
     { kind: 'CH', name: 'since', k: 'Evidence read', opts: opts([['all', 'Everything'], ['last', 'Since the last score']]), def: 1 },
   ],
   loadOptions: (w, projectId) => raiseOptions(w, projectId, 'fundraising-readiness').then((r) => ({ items: { opts: rescoreRows(r?.items) } })),
-  toBody: (v) => ({ items: (Array.isArray(v.items) ? v.items : []).filter((k) => k !== BY_HAND), since: v.since === 'all' ? 'all' : 'last' }),
+  toBody: (v) => {
+    const items = (Array.isArray(v.items) ? v.items : []).filter((k) => k !== BY_HAND);
+    return { items, since: v.since === 'all' ? 'all' : 'last', ...(items.includes(PMF) ? { pmf: true } : {}) };
+  },
   submit: (w, projectId, v) => w.raise.rescore(projectId, rescore.toBody(v)),
 };
 

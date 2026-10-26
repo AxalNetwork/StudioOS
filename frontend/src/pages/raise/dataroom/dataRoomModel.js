@@ -139,10 +139,9 @@ export function weekTiles(room) {
 }
 
 export const WAITS = {
-  requests: 'Not read here yet. Access requests from the round call and the deal page are not stored in one queue yet, so none can be shown. This is not a claim that nobody asked.',
   checklist: 'Not read here yet. Which files answer each diligence item, and whether anyone can open them, needs its own read. Coverage by area is on Home.',
   preview: 'Not read here yet. Seeing the room exactly as one investor sees it needs a read that runs the investor’s own filter for that grant.',
 };
 
-// D1106: uploads, gates, folders and removing are this tool's now; sharing and revoking wait for Access (part 6).
-export const WORKSPACE_LINE = 'Sharing and revoking stay in today’s files tool until Access takes them over.';
+// D1106: uploads, gates, folders and removing are this tool's; D1107: sharing, revoking, the NDA and requests are Access's and Requests'.
+export const WORKSPACE_LINE = 'Today’s files tool is still open while the old pages are retired.';

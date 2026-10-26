@@ -18,6 +18,7 @@
 import type { Env } from '../../types';
 import { getSQL } from '../../db';
 import type { CalendarEvent } from '../calendar';
+import { clearSyncError, recordSyncError } from './syncState';
 import {
   loadRefreshTokenExport as loadRefreshToken,
   refreshGoogleAccessToken,
@@ -75,10 +76,14 @@ async function pushOneUserOneProvider(
       ? await refreshGoogleAccessToken(env, tok.raw)
       : await refreshMicrosoftAccessToken(env, tok.raw);
   } catch (e) {
-    console.warn('[calendar/sync] refresh failed', { provider, user: userId }, e);
+    console.warn('[calendar/sync] refresh failed', { provider, user: userId });
+    // D1209: the refusal stays on the status read, so a reload still shows it.
+    await recordSyncError(env, userId, provider, 'connection_refused');
     return;
   }
   if (tok.wasPlaintext) await reencryptRefreshToken(env, tokTable, userId, tok.raw);
+  // A refresh that worked proves the connection, not that every copy was made.
+  await clearSyncError(env, userId, provider, 'connection_refused');
 
   const sql = getSQL(env);
   const existing = (await sql`
@@ -89,7 +94,7 @@ async function pushOneUserOneProvider(
   const externalId = provider === 'google'
     ? await pushEventToGoogle(accessToken, ev, existing?.external_event_id || null)
     : await pushEventToMicrosoft(accessToken, ev, existing?.external_event_id || null);
-  if (!externalId) return;
+  if (!externalId) { await recordSyncError(env, userId, provider, 'copy_refused'); return; }
 
   const nowIso = new Date().toISOString();
   if (existing) {
@@ -166,9 +171,10 @@ export async function onAxalSessionCancelled(
     await Promise.all(rows.map(async (r) => {
       const tokTable = r.provider === 'google' ? 'google_oauth_tokens' : 'microsoft_oauth_tokens';
       const tok = await loadRefreshToken(env, tokTable, r.user_id);
-      // No refresh token = user disconnected; existing disconnect
-      // handlers already cascade DELETE on calendar_sync_records, so
-      // we can safely drop the mapping here too.
+      // No refresh token = user disconnected. D1209: a disconnect now keeps
+      // the mappings, but this copy can no longer be reached to delete it,
+      // and a mapping to a cancelled session would never be used again, so
+      // it is dropped. The copy stays on the external calendar (D1209 §4).
       if (!tok) {
         await sql`
           DELETE FROM calendar_sync_records
@@ -195,6 +201,7 @@ export async function onAxalSessionCancelled(
         // Stamp the row with an error so an admin / future retry job
         // can see it failed; do NOT delete the mapping.
         console.warn('[calendar/sync] cancellation_delete_failed', { provider: r.provider });
+        await recordSyncError(env, r.user_id, r.provider, 'copy_refused');
         try {
           await sql`
             UPDATE calendar_sync_records
@@ -244,4 +251,55 @@ export async function pushOneEventForUser(
     if (r?.last_synced_at && new Date(r.last_synced_at).getTime() >= before) out.microsoft = true;
   }
   return out;
+}
+
+/**
+ * D1209 — "Remove the copies first": delete every copy this member's sessions
+ * have on the provider, before a disconnect. A copy whose delete is confirmed
+ * (or already gone) loses its mapping; a refused one keeps it, with its
+ * error, as a cancellation does. `ok` is true only when none is left, and the
+ * disconnect goes ahead only then.
+ */
+export async function removeProviderCopies(
+  env: Env, userId: number, provider: 'google' | 'microsoft',
+): Promise<{ ok: boolean; removed: number }> {
+  const sql = getSQL(env);
+  const rows = await sql`
+    SELECT source_kind, source_id, external_event_id FROM calendar_sync_records
+    WHERE user_id = ${userId} AND provider = ${provider}
+  ` as Array<{ source_kind: string; source_id: number; external_event_id: string }>;
+  if (!rows.length) return { ok: true, removed: 0 };
+  const tokTable = provider === 'google' ? 'google_oauth_tokens' : 'microsoft_oauth_tokens';
+  const tok = await loadRefreshToken(env, tokTable, userId);
+  if (!tok) return { ok: false, removed: 0 };
+  let accessToken: string;
+  try {
+    accessToken = provider === 'google'
+      ? await refreshGoogleAccessToken(env, tok.raw)
+      : await refreshMicrosoftAccessToken(env, tok.raw);
+  } catch {
+    await recordSyncError(env, userId, provider, 'connection_refused');
+    return { ok: false, removed: 0 };
+  }
+  let removed = 0;
+  for (const r of rows) {
+    const gone = provider === 'google'
+      ? await deleteEventFromGoogle(accessToken, r.external_event_id)
+      : await deleteEventFromMicrosoft(accessToken, r.external_event_id);
+    if (gone) {
+      await sql`
+        DELETE FROM calendar_sync_records
+        WHERE user_id = ${userId} AND provider = ${provider}
+          AND source_kind = ${r.source_kind} AND source_id = ${r.source_id}
+      `;
+      removed++;
+    } else {
+      await sql`
+        UPDATE calendar_sync_records SET last_error = ${'calendar_delete_failed'}
+        WHERE user_id = ${userId} AND provider = ${provider}
+          AND source_kind = ${r.source_kind} AND source_id = ${r.source_id}
+      `;
+    }
+  }
+  return { ok: removed === rows.length, removed };
 }

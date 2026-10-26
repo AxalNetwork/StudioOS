@@ -40,6 +40,7 @@ import type { Context } from 'hono';
 import { oauthCallbackUrl } from '../../util/url';
 import type { Env, User } from '../../types';
 import { projectEnabled } from '../companyScope';
+import { linkProposalStatement, markerLinks, type FedItem, type LinkTarget } from '../../services/buildHandoffs';
 import {
   getDescriptor,
   registerProvider,
@@ -399,10 +400,12 @@ async function ledgerOfPage(env: Env, integrationId: number, externalIds: string
  * An issue's statements. An item the ledger already holds is only updated:
  * a deleted row is never re-created, and its ledger row is unlinked.
  */
-function issueStatements(env: Env, row: IntegrationRow, projectId: number, repo: string, issue: any, ledger: Ledger): { stmts: D1PreparedStatement[]; created: boolean } {
+function issueStatements(env: Env, row: IntegrationRow, projectId: number, repo: string, issue: any, ledger: Ledger, link?: LinkTarget): { stmts: D1PreparedStatement[]; created: boolean } {
   const externalId = `issue:${repo}#${issue.number}`;
   const title = String(issue.title || '').slice(0, 300) || `${repo}#${issue.number}`;
   const touch = env.DB.prepare(LEDGER_TOUCH);
+  // D1068: a new issue naming a plan item's marker is a link proposal, never a second row.
+  if (link && !ledger.has(externalId)) return { stmts: [touch.bind(row.id, projectId, 'product_roadmap', 'issue', externalId, null, null), linkProposalStatement(env, row.user_id, projectId, { externalId, kind: 'issue', title, body: null }, link)], created: false };
   if (ledger.has(externalId)) {
     const localId = ledger.get(externalId);
     if (!localId) return { stmts: [touch.bind(row.id, projectId, 'product_roadmap', 'issue', externalId, null, null)], created: false };
@@ -429,10 +432,12 @@ function issueStatements(env: Env, row: IntegrationRow, projectId: number, repo:
   };
 }
 
-function pullStatements(env: Env, row: IntegrationRow, projectId: number, repo: string, pr: any, ledger: Ledger): { stmts: D1PreparedStatement[]; created: boolean } {
+function pullStatements(env: Env, row: IntegrationRow, projectId: number, repo: string, pr: any, ledger: Ledger, link?: LinkTarget): { stmts: D1PreparedStatement[]; created: boolean } {
   const externalId = `pull:${repo}#${pr.number}`;
   const title = String(pr.title || '').slice(0, 300) || `${repo}#${pr.number}`;
   const touch = env.DB.prepare(LEDGER_TOUCH);
+  // D1068: a new pull request naming a plan item's marker is a link proposal, never a second row.
+  if (link && !ledger.has(externalId)) return { stmts: [touch.bind(row.id, projectId, 'prototype_mvp', 'pull_request', externalId, null, null), linkProposalStatement(env, row.user_id, projectId, { externalId, kind: 'pull_request', title, body: null }, link)], created: false };
   if (ledger.has(externalId)) {
     const localId = ledger.get(externalId);
     if (!localId) return { stmts: [touch.bind(row.id, projectId, 'prototype_mvp', 'pull_request', externalId, null, null)], created: false };
@@ -607,10 +612,17 @@ export async function syncGithub(env: Env, row: IntegrationRow, budget = SYNC_SU
           const ids = landed.map((i) => `${kind === 'issues' ? 'issue' : 'pull'}:${repo}#${i.number}`);
           const ledger = ids.length ? await ledgerOfPage(env, row.id, ids) : new Map();
           if (ids.length) used += 1;
+          // D1068: the new items that name a plan item's marker (a read only when a body names one).
+          const fresh = landed.map((i, n) => ({ externalId: ids[n], kind: (kind === 'issues' ? 'issue' : 'pull_request') as FedItem['kind'], title: '', body: i?.body }))
+            .filter((f) => !ledger.has(f.externalId));
+          const marked = await markerLinks(env, projectId, fresh);
+          used += marked.reads;
           for (const item of landed) {
+            const link = marked.links.get(`${kind === 'issues' ? 'issue' : 'pull'}:${repo}#${item.number}`);
+            if (link) counts.link_proposals = Number(counts.link_proposals || 0) + 1;
             const out = kind === 'issues'
-              ? issueStatements(env, row, projectId, repo, item, ledger)
-              : pullStatements(env, row, projectId, repo, item, ledger);
+              ? issueStatements(env, row, projectId, repo, item, ledger, link)
+              : pullStatements(env, row, projectId, repo, item, ledger, link);
             stmts.push(...out.stmts);
             if (kind === 'issues') {
               counts.issues = Number(counts.issues) + 1;

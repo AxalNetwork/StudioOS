@@ -7,7 +7,8 @@
  *        → { total, page, page_size, rows, why_counts, unreadable }
  *   POST /members/move           { user_ids (1–50), persona_id } → { segment, results, moved }
  *   POST /members/ask-to-finish  { user_ids (1–50) }             → { results, asked, every_days }
- *   GET  /activity?kind=&q=&page= → { total, page, page_size, sources, rows }
+ *   GET  /activity?kind=&segment=&q=&page= → { total, page, page_size, sources, rows }
+ *        (`segment`, D1005: the moves into or out of one segment, its sign-ups and its edits)
  *
  * A store the read needs that cannot be read is 5xx, never an empty list.
  */

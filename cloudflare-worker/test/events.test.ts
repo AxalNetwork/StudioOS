@@ -73,6 +73,8 @@ function freshDb() {
   const db = new DatabaseSync(':memory:', { enableForeignKeyConstraints: false });
   const schema = readFileSync(new URL('../sql/migrations/109_events_core.sql', import.meta.url), 'utf8');
   db.exec(schema);
+  // D1131: comp_source and promoted_at, written with each seat and promotion.
+  db.exec(readFileSync(new URL('../sql/migrations/611_event_registrations_comp_promoted.sql', import.meta.url), 'utf8'));
   return db;
 }
 

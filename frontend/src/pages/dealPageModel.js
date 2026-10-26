@@ -14,8 +14,9 @@
  *
  * WHAT IS READ TODAY. Overview, Documents, Commitment, Activity, Diligence's
  * reference calls, Invitations and Transfers draw today's reads. Scorecard,
- * Evidence, Team, Market, Traction, Terms and Notes have no per-deal read on
+ * Evidence, Team, Market, Traction and Terms have no per-deal read on
  * `main`, so each says "Not read here yet" with its reason (D1148 §3).
+ * Notes reads part 2's store since D1152 (`deal/DealNotes.jsx`).
  */
 
 export const TAB_DEFS = {
@@ -73,6 +74,5 @@ export const WAITS = {
   market: 'No per-deal market read exists yet. TAM, SAM and SOM show here with their sources, once the read lands.',
   traction: 'No per-deal traction read exists yet. Only the figures the founder shares will show here; until then nothing is shown.',
   terms: 'No per-deal terms read exists yet. Proposed terms, the legal paper and the cap table panel (#2432) show here, handing off to the closing room (#2424).',
-  notes: 'Your firm’s notes on this deal are not stored yet. Once they are, only you and your firm will read them.',
   diligence: 'The diligence case for this deal is not read here yet. Your firm’s reference calls are below.',
 };
