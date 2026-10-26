@@ -324,7 +324,7 @@ deals.get('/stage-analytics', async (c) => {
  */
 deals.get('/screening', async (c) => {
   const user = await requireAuth(c);
-  if (user.role !== 'admin' && user.role !== 'partner') return c.json({ detail: 'Forbidden' }, 403);
+  if (user.role !== 'admin' && user.role !== 'partner' && user.role !== 'investor') return c.json({ detail: 'Forbidden' }, 403);
   const sql = getSQL(c.env);
 
   /** The six the scorer writes, in the order it writes them. */
@@ -340,7 +340,7 @@ deals.get('/screening', async (c) => {
   let scored: unknown;
   let flags: unknown;
   try {
-    const rows = user.role === 'admin' ? await sql`
+    let rows = user.role === 'admin' ? await sql`
       SELECT d.id AS deal_id, d.status AS deal_status,
              p.name AS company, p.sector AS sector,
              s.total_score, s.tier, s.created_at AS scored_at,
@@ -360,11 +360,24 @@ deals.get('/screening', async (c) => {
              ) s ON s.project_id = d.project_id
        WHERE (p.id IS NULL OR p.deleted_at IS NULL)
        ORDER BY s.created_at DESC, d.created_at DESC
-       LIMIT 200` : await sql`
+       LIMIT 200` : user.role === 'investor' ? await sql`
+      SELECT d.id AS deal_id, d.status AS deal_status, d.project_id,
+             p.name AS company, p.sector
+        FROM deals d JOIN projects p ON p.id = d.project_id
+       WHERE p.deleted_at IS NULL AND (
+         EXISTS (SELECT 1 FROM deal_invitations i WHERE i.deal_id = d.id AND i.investor_user_id = ${user.id})
+         OR EXISTS (SELECT 1 FROM commitments k WHERE k.deal_id = d.id AND k.investor_user_id = ${user.id})
+       ) ORDER BY d.created_at DESC LIMIT 200` : await sql`
       SELECT d.id AS deal_id, d.status AS deal_status, d.project_id,
              p.name AS company, p.sector
         FROM deals d JOIN projects p ON p.id = d.project_id
        WHERE p.deleted_at IS NULL ORDER BY d.created_at DESC LIMIT 200`;
+    if (user.role === 'investor') {
+      // D1254 preserves the deal reader's invited-or-committed rule, including
+      // historical deals/commitments. The open-deal rule for trust is separate.
+      const allowed = await userReadableDealIds(c.env, user, (rows as any[]).map(row => Number(row.deal_id)));
+      rows = (rows as any[]).filter(row => allowed.has(Number(row.deal_id)));
+    }
     if (user.role !== 'admin') {
       const verified = await getVerifiedLatestSnapshots(c.env, (rows as any[]).map(row => Number(row.project_id)), {
         role: user.role, userId: user.id,

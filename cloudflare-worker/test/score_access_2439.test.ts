@@ -90,7 +90,7 @@ test('risk and screening: flagged/rejected/unsigned/tampered rows supply no comp
       const logs: any[] = f.db.prepare("SELECT * FROM activity_logs WHERE action='score_read'").all();
       if (['approved', 'unsigned', 'tampered'].includes(kind)) assert.equal(logs.length, 3, kind);
       if (kind === 'approved') assert.ok(logs.every(row => JSON.parse(row.details).integrity_valid === true));
-      for (const id of [3, 4, 6, 7]) assert.equal((await request(deals, f.env, id, '/screening')).status, 403);
+      for (const id of [4, 6, 7]) assert.equal((await request(deals, f.env, id, '/screening')).status, 403);
       assert.equal((await request(deals, f.env, 1, '/screening')).status, 200);
     } finally { f.db.close(); }
   }

@@ -1,5 +1,13 @@
 # Worker route handlers — production source of truth
 
+D1254: scoring and project intake record scores without changing project
+status or stage. Intake creates an applied deal independently of the score.
+The Screening read in `deals.ts` admits investors only to readable deals and
+uses verified, audited snapshots; staff retain their own projections. Venture
+risk's investor read stays scoped to a readable deal, with the portfolio
+matrix and writes reserved to staff. Trust batches preserve Not recorded;
+investor trust reads require a shared deal, rather than an intro alone.
+
 
 D1144: `cycle_raise.ts` returns the stored Product-market fit part, its paged `/pmf/history` read and Re-score’s `pmf: true` flag. The founder/admin project gate is unchanged. `../services/scoring/README.md` names the shared snapshot/checklist/audit transaction.
 
