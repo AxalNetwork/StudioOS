@@ -12,9 +12,20 @@ Admin Console's `?tab=personas` forwards here with `?moved=personas`, in
   cards and the needs and offers table, each block answering alone from D999's
   segment counts and D1000's profiles and needs), and Unclassified's list. A
   Super Admin gets the rail on board H22; a plain Admin gets D1004's own key,
-  `Admin · Accounts · Persona segments`. Today's re-tag table
-  (`../consoles/PersonasConsole.jsx`) stays at the foot of Overview until D997
-  part 8 draws the Move dialog.
+  `Admin · Accounts · Persona segments`. Each card's name opens its segment's
+  page. D1005 retired the Admin Console's re-tag table that stood at the foot
+  of Overview.
+- `SegmentPage.jsx` — D1005 (#2820): one segment at
+  `/admin/persona-segments/:key`, its tabs Profile (the address), `/members` and
+  `/activity`, in the same rail frames. Profile is counts only (D999, D1128,
+  D1001's answers and working styles, D1000's needs); Members is D1002's list
+  with its filters, the move bar and each row's ⋯; Activity is D1002's read
+  filtered to the segment.
+- `MoveDialog.jsx` — D1005: SEG4's Move dialog, shared. It says what changes
+  before D1002's move, refuses an admin account for an Admin, and is a bottom
+  sheet on a phone. #2377's account drawer is to open it from "Retag…".
+- `segmentPageModel.js` — pure: the segment page's addresses, counts ("<5" for
+  a suppressed count, "Not recorded" for none), rows and the Move dialog's words.
 - `segModel.js` — pure. The addresses and tabs, the moved notices, Unclassified
   from the persona list and the taxonomy (`../../../lib/personas.js`), and
   Overview's blocks from `personaSegmentsApi` (`../../../lib/api/personaSegments.js`).
@@ -32,6 +43,9 @@ Admin Console's `?tab=personas` forwards here with `?moved=personas`, in
 - What a member answered at sign-up is shown only as counts, never per person
   (parts 4 and 8); counts under 5 are hidden.
 - Each tab is a literal `HeaderTab`, so the reachability walk finds its door.
+  A segment's tabs are `` `/admin/persona-segments/${key}/members` ``, which the
+  walk reads as one parameter followed by `/members` (D1005).
+- A change opens the in-page Move dialog; never `confirm()` or `alert()`.
 
 ## D1128 gaps (#3008)
 

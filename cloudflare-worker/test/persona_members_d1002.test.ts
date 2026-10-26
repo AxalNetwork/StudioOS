@@ -280,3 +280,29 @@ test('7. HTTP: an admin reads; a member and no session are refused; a store the 
   const failed = await call(db, 20, 'GET', '/api/personas/admin/members');
   assert.deepEqual([failed.status, failed.body.code], [503, 'members_unreadable']);
 });
+
+test('8. D1005 (#2820): one segment\'s Activity: the moves into or out of it, its sign-ups and its edits; an ask to finish names no segment', async () => {
+  // Mutations checked: the segment filter ignored → other segments' rows; only seg_to matched → the move out lost;
+  // a malformed key read as no filter → 200.
+  const db = fixture();
+  await call(db, 20, 'POST', '/api/personas/admin/members/move', { user_ids: [2], persona_id: 'lp_institutional' });
+  await askToFinish(env(db), ADMIN, [6], NOW);
+  db.exec(`INSERT INTO segment_profile_history (segment_key, version, action, fields_json, reason, actor_user_id, created_at)
+    VALUES ('founder_new', 2, 'edited', '["who"]', 'Clearer words', 20, '2026-10-23 10:00:00'),
+           ('lp_individual', 2, 'edited', '["who"]', 'Other segment', 20, '2026-10-23 11:00:00')`);
+  const touches = (r: any, key: string) => r.from?.key === key || r.to?.key === key;
+  const own = await readActivity(env(db), { kind: null, segment: 'founder_new', q: '', page: 1 });
+  assert.ok(own.rows.length > 0 && own.rows.every((r: any) => touches(r, 'founder_new')), 'a row from another segment');
+  assert.ok(own.rows.some((r: any) => r.kind === 'move' && r.member.user_id === 2 && r.from?.key === 'founder_new'), 'the move out is missing');
+  assert.ok(own.rows.some((r: any) => r.kind === 'segment_edit' && r.detail.reason === 'Clearer words'));
+  assert.ok(!own.rows.some((r: any) => r.kind === 'ask'), 'an ask names no segment');
+  assert.equal(own.total, own.rows.length);
+  const other = await readActivity(env(db), { kind: null, segment: 'lp_institutional', q: '', page: 1 });
+  assert.deepEqual(other.rows.map((r: any) => [r.kind, r.member?.user_id, r.to?.key]), [['move', 2, 'lp_institutional']]);
+  const all = await readActivity(env(db), { kind: null, q: '', page: 1 });
+  assert.ok(all.rows.some((r: any) => r.kind === 'ask'), 'no segment means every row, as before');
+  const http = await call(db, 20, 'GET', '/api/personas/admin/activity?segment=founder_new&kind=segment_edit');
+  assert.deepEqual([http.status, http.body.rows.map((r: any) => r.detail.reason)], [200, ['Clearer words']]);
+  const bad = await call(db, 20, 'GET', '/api/personas/admin/activity?segment=Bad-Key');
+  assert.deepEqual([bad.status, bad.body.code], [400, 'invalid_segment']);
+});
