@@ -30,3 +30,19 @@ export const closingsApi = {
   /** The admin desk: every open closing with its lines waiting, next actor and owner. */
   desk: () => request('/admin/closings'),
 };
+
+// D1219 (#3216, part 6 of #2424) — D1216's paper signed in order, with Axal's
+// countersign last. Worker: routes/esign.ts, under /api/legal/esign/staged.
+const staged = (path = '') => `/legal/esign/staged${path}`;
+
+export const stagedSigningApi = {
+  /** {document_type, fields?, title?}: the text a stage would sign, and the fields left open. */
+  preview: (body) => post(staged('/preview'), body),
+  /** {deal_id, commitment_id?, document_type, title?, fields, signers: [{role, user_id}], countersign?} */
+  start: (body) => post(staged(), body),
+  /** Every staged envelope on one closing line, by its commitment id. */
+  line: (commitmentId) => request(staged(`/line/${encodeURIComponent(commitmentId)}`)),
+  read: (uid) => request(staged(`/${encodeURIComponent(uid)}`)),
+  /** closing.countersign: a Super Admin, with a fresh step-up (the request helper asks for it). */
+  countersign: (uid) => post(staged(`/${encodeURIComponent(uid)}/countersign`)),
+};
