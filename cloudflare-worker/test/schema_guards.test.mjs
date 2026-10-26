@@ -522,20 +522,20 @@ test('a collision counts only when neither definition can host the other', () =>
   // The exclusion does not blind the gate: a fresh conflicting definition in a
   // real build input still fails it, mutation-checked.
   assert.deepEqual([...all.keys()].sort(), [
-    'capital_calls', 'founder_checkins',
+    'founder_checkins',
     'ic_meetings', 'metrics_snapshots', 'wellbeing_resources',
   ]);
 });
 
 test('the column guard unions competing definitions, which is why it cannot see them', () => {
-  // Not a defect — a stated limitation, pinned so it stays true. capital_calls
-  // has two irreconcilable definitions; knownColumns reports their union, which
+  // Not a defect — a stated limitation, pinned so it stays true. metrics_snapshots
+  // still has irreconcilable definitions; knownColumns reports their union, which
   // is wider than either.
-  const defs = definitions().get('capital_calls');
+  const defs = definitions().get('metrics_snapshots');
   assert.ok(defs.length >= 2);
-  const union = knownColumns().get('capital_calls');
+  const union = knownColumns().get('metrics_snapshots');
   for (const d of defs) assert.ok(union.size > d.cols.size, 'the union exceeds every single definition');
-  assert.ok(union.has('amount') && union.has('amount_cents'), 'both money shapes appear at once');
+  assert.ok(union.has('mrr') && union.has('key_metrics'), 'both snapshot shapes appear at once');
 });
 
 test('a money word is not the same as an amount of money', () => {
@@ -767,4 +767,12 @@ test('json_each and json_tree are SQLite functions, never reported as missing ta
   const found = unknownReferences();
   assert.equal(found.has('json_each'), false);
   assert.equal(found.has('json_tree'), false);
+});
+
+
+test('D1214: the capital-call schema has one definition and no retired syndicate columns', () => {
+  assert.equal(definitions().get('capital_calls').length,1);
+  const columns=knownColumns().get('capital_calls');
+  for(const column of ['deal_id','syndicate_id','lp_responses','idempotency_key','created_by']) assert.equal(columns.has(column),false,column);
+  for(const column of ['limited_partner_id','amount','amount_cents','fund_call_id']) assert.equal(columns.has(column),true,column);
 });

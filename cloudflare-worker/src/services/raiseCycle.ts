@@ -74,7 +74,7 @@ const addHref = (ctx: Ctx, slug: string) => `/raise/${slug}/new?project=${ctx.pr
 export const TOOL_HREF = {
   pitch: '/raise/pitch',
   dataRoom: '/raise/data-room?mode=workspace',
-  capTable: '/raise/capital/cap-table',
+  capTable: '/raise/cap-table',
   pipeline: '/raise/capital/pipeline',
   model: '/raise/capital/model',
   metrics: '/build/kpi',
@@ -1644,10 +1644,13 @@ export async function callsHistory(ctx: Ctx) {
         (SELECT COUNT(*) FROM round_call_recipients r WHERE r.call_id=c.id AND r.commitment_cents IS NOT NULL) AS commitments,
         (SELECT COALESCE(SUM(r.commitment_cents),0) FROM round_call_recipients r WHERE r.call_id=c.id) AS committed_cents,
         (SELECT COUNT(*) FROM round_call_recipients r WHERE r.call_id=c.id AND r.responded_at IS NOT NULL) AS responded,
+        (SELECT COUNT(*) FROM round_call_recipients r WHERE r.call_id=c.id AND r.delivery_state='not_delivered') AS not_delivered,
         (SELECT COUNT(*) FROM round_call_questions q WHERE q.call_id=c.id AND q.answer IS NULL) AS unanswered_questions
        FROM round_calls c WHERE c.project_id=? ORDER BY c.created_at DESC,c.id DESC`,
     ).bind(ctx.projectId).all<{state:string;target_close:string} & Record<string,unknown>>();
     return {enabled:true,items:(rows.results || []).map(row=>({...row,
+      // D1222: a draft has sent no invitation, so how many failed is null, never 0.
+      not_delivered:row.state==='draft'?null:row.not_delivered,
       effective_state:row.state==='sent'?(row.target_close>=ctx.today?'open':'expired'):row.state}))};
   } catch {
     return {state:'unreadable'};

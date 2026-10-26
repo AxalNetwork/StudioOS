@@ -119,16 +119,16 @@ test('reference edits/deletion require author or admin even on a readable deal',
   } finally {db.close();}
 });
 
-test('syndicate roster: creator/member/admin only; emails admin only',async()=>{
+test('syndicate roster: creator/member/admin only; no member emails',async()=>{
   const db=freshDb();
   try {
     db.exec(ddl('syndicates')); db.exec(ddl('syndicate_members'));
     db.exec("INSERT INTO syndicates(id,name,created_by) VALUES(1,'Synthetic',2); INSERT INTO syndicate_members(syndicate_id,user_id,commitment_cents) VALUES(1,3,100)");
     for(const who of [ADMIN,INV_INVITED,INV_COMMITTED,INV_NONE,FOUNDER,PARTNER,7,8]) {
-      const r=await call(db,who,'GET','@/api/networkfx/syndicates/1');assert.equal(r.status,200,r.text);
-      assert.equal(r.body.members.length,[ADMIN,INV_INVITED,INV_COMMITTED].includes(who)?1:0);
-      if(who===ADMIN) assert.ok(r.body.members[0].email);
-      else assert.ok(r.body.members.every(m=>!('email' in m)));
+      const r=await call(db,who,'GET','@/api/networkfx/syndicates/1');
+      const allowed=[ADMIN,INV_INVITED,INV_COMMITTED].includes(who);
+      assert.equal(r.status,allowed?200:403,r.text);
+      if(allowed) {assert.equal(r.body.members.length,1);assert.ok(r.body.members.every(m=>!('email' in m)));}
     }
   } finally {db.close();}
 });

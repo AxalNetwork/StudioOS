@@ -1,6 +1,7 @@
+import { ReadFailure as Unreadable } from './parts';
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
-import { Lightbox, Pill, Unrecorded, Unreadable } from '../../../ui';
+import { Lightbox, Pill, Unrecorded } from '../../../ui';
 import { FundActControl } from '../../../lib/fundActs';
 import { BTN, INPUT, LoadingRows } from '../../account/AccountCenter';
 import { MercuryEntityConnections } from './MercuryEntitySheet';
@@ -31,8 +32,9 @@ function ReadFailed({ read, what, claim }) {
 }
 
 /** The entity accounts with Current and Available; HQ › Platform › Bank accounts › Cash draws it too (D1181). */
-export function Accounts({ apis }) {
-  const read = useRead(() => apis.mercury.accounts(), [apis]);
+export function Accounts({ apis, reading }) {
+  const own = useRead(() => apis.mercury.accounts(), [apis], { enabled: !reading });
+  const read = reading || own;
   const items = read.data?.items || [];
   const cols = [
     { key: 'account', label: 'Account', cell: (a) => `${a.nickname || a.kind} · ${ending(a.last_four)}` },
@@ -52,18 +54,22 @@ export function Accounts({ apis }) {
   );
 }
 
-function Transactions({ apis }) {
+function Transactions({ apis, accounts = [] }) {
   const [page, setPage] = useState(1);
-  const read = useRead(() => apis.mercury.transactions({ page }), [apis, page]);
+  const [filters, setFilters] = useState({});
+  const [query, setQuery] = useState('');
+  const change = (key, value) => { setFilters(f => ({ ...f, [key]: value })); setPage(1); };
+  const read = useRead(() => apis.mercury.transactions({ page, ...filters }), [apis, page, filters]);
   const total = Number(read.data?.total ?? 0);
   const size = Number(read.data?.page_size ?? 50);
   const pages = Math.max(1, Math.ceil(total / size));
-  const items = read.data?.items || [];
+  const items = (read.data?.items || []).filter(t => `${t.counterparty_name || ''} ${t.memo || ''}`.toLowerCase().includes(query.toLowerCase()));
   const cols = [
     { key: 'date', label: 'Posted', mono: true, cell: (t) => t.posted_on || t.created_on },
     { key: 'counterparty', label: 'Counterparty', cell: (t) => t.counterparty_name || 'No counterparty recorded' },
     { key: 'account', label: 'Account', cell: (t) => ending(t.last_four) },
     { key: 'amount', label: 'Amount', align: 'right', mono: true, cell: (t) => money(t.amount_cents) ?? 'Not recorded' },
+    { key: 'memo', label: 'Memo', cell: (t) => t.memo || 'Not recorded: no bank memo.' },
     { key: 'status', label: 'Status', cell: (t) => t.status || 'Not recorded' },
     { key: 'match', label: 'Match', cell: (t) => <Pill tone={t.match ? 'ok' : t.not_ours ? 'warn' : 'neutral'}>{t.match ? t.match.state : t.not_ours ? notOursText(t.not_ours) : 'Unmatched'}</Pill> },
   ];
@@ -75,30 +81,40 @@ function Transactions({ apis }) {
           <button type="button" className={BTN.ghost} disabled={page >= pages} onClick={() => setPage(page + 1)} data-testid="transactions-next">Next</button>
         </span>
       ) : null} testId="banking-transactions">
+      <div className="flex flex-wrap gap-2 p-4">
+        <input className={INPUT} aria-label="Search this transaction page" placeholder="Search counterparty or memo on this page" value={query} onChange={e => setQuery(e.target.value)} />
+        <select className={INPUT} aria-label="Transaction account" value={filters.account || ''} onChange={e => change('account', e.target.value)}><option value="">Every account</option>{accounts.map(a => <option key={a.uid} value={a.uid}>{a.entity_key} · {a.nickname || a.kind} · {ending(a.last_four)}</option>)}</select>
+        <select className={INPUT} aria-label="Transaction direction" value={filters.direction || ''} onChange={e => change('direction', e.target.value)}><option value="">Both directions</option><option value="credit">Credits</option><option value="debit">Debits</option></select>
+        <label className="text-xs text-axal-muted dark:text-gray-400">From<input type="date" className={INPUT} aria-label="Transactions from" value={filters.from || ''} onChange={e => change('from', e.target.value)} /></label>
+        <label className="text-xs text-axal-muted dark:text-gray-400">To<input type="date" className={INPUT} aria-label="Transactions to" value={filters.to || ''} onChange={e => change('to', e.target.value)} /></label>
+      </div>
       {read.status === 'loading' ? <div className="px-4 py-3 sm:px-5"><LoadingRows lines={3} /></div>
         : read.status === 'unreadable' ? <ReadFailed read={read} what="The transactions" claim="This is not a claim that no money moved." />
-          : items.length === 0 ? <Note>No transaction recorded. Lines appear after a sync.</Note>
-            : <Table cols={cols} rows={items} rowKey={(t) => t.uid} template="1fr 1.8fr 1fr 1fr .8fr 1.2fr" rowTestId={(t) => `transaction-${t.uid}`} />}
+          : items.length === 0 ? <Note>{query ? 'No transaction on this page matches the search.' : 'No transaction recorded for these filters. Lines appear after a sync.'}</Note>
+            : <Table cols={cols} rows={items} rowKey={(t) => t.uid} template="1fr 1.4fr .8fr 1fr 1.4fr .8fr 1fr" rowTestId={(t) => `transaction-${t.uid}`} />}
     </Panel>
   );
 }
 
 export function BankingTab({ apis, access }) {
+  const accounts = useRead(() => apis.mercury.accounts(), [apis]);
   const superAdmin = access?.super_admin === true;
   return (
     <Section title="Banking" testId="banking"
       sub="Each Axal entity's Mercury connection, its accounts and their transactions. Every read here is recorded in the admin audit log before it answers.">
+      <div className="grid items-start gap-4 lg:grid-cols-2">
       <Panel label="Entity connections" testId="banking-connections">
         <MercuryEntityConnections superAdmin={superAdmin} api={apis.mercury} />
       </Panel>
-      <Accounts apis={apis} />
-      <Transactions apis={apis} />
       <Panel label="Payment instructions" testId="banking-payment-instructions">
         {actRow(access, 'bank_account.see')?.allowed === true
           ? <Line a="The entities' bank accounts" b="Entered, retired and revealed from the bank accounts console, behind your step-up."
             action={<Link className={BTN.link} to={PAYMENT_INSTRUCTIONS_LINK.href} data-testid="payment-instructions-link">{PAYMENT_INSTRUCTIONS_LINK.text}</Link>} />
           : <Line a="The entities' bank accounts" b={<span data-testid="payment-instructions-admin">{PAYMENT_INSTRUCTIONS_ADMIN}</span>} />}
       </Panel>
+      </div>
+      <Accounts apis={apis} reading={accounts} />
+      <Transactions apis={apis} accounts={accounts.data?.items || []} />
     </Section>
   );
 }
@@ -111,6 +127,7 @@ const LABEL = 'text-[11.5px] font-semibold text-zinc-700 dark:text-gray-200';
 
 function MatchRow({ m, apis, access, onChanged }) {
   const [rejecting, setRejecting] = useState(false);
+  const [confirming, setConfirming] = useState(false);
   const [reason, setReason] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
@@ -123,7 +140,7 @@ function MatchRow({ m, apis, access, onChanged }) {
     <FundActControl access={access} act="mercury.reconcile" testId={`match-refused-${m.uid}`} className="text-[12px] text-axal-muted">
       <span className="flex gap-2">
         {m.state === 'proposed' && <button type="button" className={BTN.primary} disabled={busy} data-testid={`match-confirm-${m.uid}`}
-          onClick={() => run(() => apis.mercury.confirmMatch(m.uid), 'The match could not be confirmed.')}>Confirm</button>}
+          onClick={() => setConfirming(true)}>Confirm</button>}
         <button type="button" className={BTN.ghost} disabled={busy} data-testid={`match-reject-${m.uid}`} onClick={() => setRejecting(true)}>Reject</button>
       </span>
     </FundActControl>
@@ -133,7 +150,13 @@ function MatchRow({ m, apis, access, onChanged }) {
       <Line a={`${money(m.amount_cents) ?? 'Not recorded'} · ${targetName(m)}`}
         b={<span className={NUM}>{`${m.posted_on || 'not posted'} · ${m.counterparty_name || 'No counterparty recorded'} · ${m.entity_key} ${ending(m.last_four)}${m.reason ? ` · ${m.reason}` : ''}`}</span>}
         chip={<Pill tone={m.state === 'needs_review' ? 'warn' : m.state === 'confirmed' ? 'ok' : m.state === 'rejected' ? 'danger' : 'neutral'}>{GROUPS.find(([k]) => k === m.state)?.[1] || m.state}</Pill>} action={actions} />
+      {confirming && <Lightbox phone="sheet" title="Confirm this match?" label="Confirm bank match" testId={`match-dialog-${m.uid}`} onClose={() => { if (!busy) setConfirming(false); }}>
+        <Note>Links this bank transaction to {targetName(m)}. It records a match and moves no money.</Note>
+        <FundActControl access={access} act="mercury.reconcile"><div className="p-4"><button type="button" className={BTN.primary} disabled={busy} data-testid={`match-confirm-submit-${m.uid}`} onClick={() => run(async () => { await apis.mercury.confirmMatch(m.uid); setConfirming(false); }, 'The match could not be confirmed.')}>Confirm match</button></div></FundActControl>
+        {error && <p role="alert" className={ERR}>{error}</p>}
+      </Lightbox>}
       {rejecting && (
+        <Lightbox phone="sheet" title="Reject this match?" label="Reject bank match" onClose={() => { if (!busy) setRejecting(false); }}><Note>Rejects the proposed pair. The transaction stays recorded; a reason is kept.</Note>
         <form className="flex flex-col gap-2 border-b border-axal-hairline bg-[#faf9fc] px-4 py-3 sm:px-5 dark:border-gray-800 dark:bg-gray-950/40" onSubmit={(e) => { e.preventDefault(); run(() => apis.mercury.rejectMatch(m.uid, reason.trim()), 'The match could not be rejected.'); }}>
           <label className={LABEL}>Why is this not the match?
             <input className={`${INPUT} mt-1`} value={reason} onChange={(e) => setReason(e.target.value)} disabled={busy} data-testid={`match-reason-${m.uid}`} />
@@ -143,13 +166,16 @@ function MatchRow({ m, apis, access, onChanged }) {
             <button type="submit" className={BTN.danger} disabled={busy || reason.trim().length < REJECT_REASON_MIN} data-testid={`match-reject-submit-${m.uid}`}>Reject</button>
           </div>
         </form>
+        {error && <p role="alert" className={ERR}>{error}</p>}
+        </Lightbox>
       )}
-      {error && <p role="alert" className={ERR}>{error}</p>}
+      {!rejecting && !confirming && error && <p role="alert" className={ERR}>{error}</p>}
     </div>
   );
 }
 
 function ProposeForm({ apis, access, onChanged }) {
+  const [open, setOpen] = useState(false);
   const [form, setForm] = useState({ transaction_uid: '', target_kind: 'capital_call_line', target_id: '' });
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
@@ -162,12 +188,16 @@ function ProposeForm({ apis, access, onChanged }) {
     try {
       await apis.mercury.proposeMatch({ transaction_uid: form.transaction_uid.trim(), target_kind: form.target_kind, target_id: id });
       setForm({ transaction_uid: '', target_kind: form.target_kind, target_id: '' });
-      onChanged();
+      setOpen(false); onChanged();
     } catch (err) { setError(refusalText(err, 'The pair could not be proposed.')); } finally { setBusy(false); }
   };
   return (
     <Panel label="Propose a match" testId="reconciliation-propose">
       <FundActControl access={access} act="mercury.reconcile" testId="propose-refused" className="block px-4 py-3 text-[12px] text-axal-muted sm:px-5">
+        <div className="p-4"><button type="button" className={BTN.ghost} data-testid="propose-open" onClick={() => setOpen(true)}>Propose a match</button></div>
+      </FundActControl>
+      {open && <Lightbox phone="sheet" title="Propose a match" label="Propose a bank match" onClose={() => { if (!busy) setOpen(false); }}><Note>Proposes a pair for review. It neither confirms the match nor moves money.</Note>
+      <FundActControl access={access} act="mercury.reconcile">
         <form className="grid gap-2 px-4 py-3 sm:grid-cols-[1fr_auto_8rem_auto] sm:px-5" onSubmit={submit} data-testid="propose-form">
           <input className={INPUT} placeholder="Transaction id" value={form.transaction_uid} onChange={(e) => setForm({ ...form, transaction_uid: e.target.value })} disabled={busy} aria-label="Transaction id" />
           <select className={INPUT} value={form.target_kind} onChange={(e) => setForm({ ...form, target_kind: e.target.value })} disabled={busy} aria-label="Target">
@@ -179,6 +209,7 @@ function ProposeForm({ apis, access, onChanged }) {
         </form>
       </FundActControl>
       {error && <p role="alert" className={ERR}>{error}</p>}
+      </Lightbox>}
     </Panel>
   );
 }
@@ -201,7 +232,7 @@ function NotOursDialog({ t, apis, onClose, onChanged }) {
     } catch (err) { setError(refusalText(err, 'The credit could not be marked.')); } finally { setBusy(false); }
   };
   return (
-    <Lightbox label="Mark this credit Not ours" title="Not ours" testId={`not-ours-dialog-${t.uid}`} onClose={onClose} width={480}
+    <Lightbox phone="sheet" label="Mark this credit Not ours" title="Not ours" testId={`not-ours-dialog-${t.uid}`} onClose={onClose} width={480}
       sub={`${money(t.amount_cents) ?? 'Not recorded'} from ${t.counterparty_name || 'no counterparty recorded'} · ${t.entity_key} ${ending(t.last_four)}`}>
       <form className="flex flex-col gap-3 px-5 py-4" onSubmit={submit} data-testid={`not-ours-form-${t.uid}`}>
         <p className="text-[12px] leading-relaxed text-axal-muted dark:text-gray-400">The matcher skips a marked credit, and the monthly summary and the quarterly report leave it out of the unmatched count. Any Admin can withdraw the mark.</p>
@@ -267,6 +298,7 @@ function NotOursRow({ t, apis, access, onChanged }) {
           </FundActControl>
         )} />
       {open && (
+        <Lightbox phone="sheet" title="Withdraw Not ours?" label="Withdraw Not ours" onClose={() => { if (!busy) setOpen(false); }}><Note>Withdraws this mark so the credit can be matched again. Your reason is kept.</Note>
         <form className="flex flex-col gap-2 border-b border-axal-hairline bg-[#faf9fc] px-4 py-3 sm:px-5 dark:border-gray-800 dark:bg-gray-950/40" onSubmit={submit}>
           <label className={LABEL}>Why is it ours after all?
             <input className={`${INPUT} mt-1`} value={reason} onChange={(e) => setReason(e.target.value)} disabled={busy} data-testid={`not-ours-withdraw-reason-${mark.uid}`} />
@@ -276,8 +308,10 @@ function NotOursRow({ t, apis, access, onChanged }) {
             <button type="submit" className={BTN.danger} disabled={busy || reason.trim().length < REJECT_REASON_MIN} data-testid={`not-ours-withdraw-submit-${mark.uid}`}>Withdraw</button>
           </div>
         </form>
+        {error && <p role="alert" className={ERR}>{error}</p>}
+        </Lightbox>
       )}
-      {error && <p role="alert" className={ERR}>{error}</p>}
+      {!open && error && <p role="alert" className={ERR}>{error}</p>}
     </div>
   );
 }
