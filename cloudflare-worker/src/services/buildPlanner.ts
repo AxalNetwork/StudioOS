@@ -3,7 +3,7 @@ import type { Env } from '../types';
 import { loadPainGroupModel } from './painGroups';
 import { themesOf } from './cycleValidate';
 import { evidenceFor } from './validateEvidence';
-import { latestDecision, openCommitments, supportingRefIds } from './verdict';
+import { latestDecision, openCommitments, planVerdict, supportingRefIds } from './verdict';
 
 export const PLAN_MIN_INTERVIEWS = 3;
 export const PLAN_RISK_HIGH_MENTIONS = 3;
@@ -175,17 +175,19 @@ export function planRules(e: PlanEvidence): { items: PlanRuleItem[]; brief: Reco
   return { items, brief };
 }
 
-export type PlanRow = { id: number; uid: string; scope: string; trigger: string; decision_id: number | null; status: string; brief_json: string; evidence_hash: string };
-export const currentPlan = (env: Env, projectId: number, scope: string) => env.DB.prepare(`SELECT id, uid, scope, trigger, decision_id, status, brief_json, evidence_hash
+export type PlanRow = { id: number; uid: string; scope: string; trigger: string; decision_id: number | null; status: string; brief_json: string; evidence_hash: string; created_at?: string; updated_at?: string };
+export const currentPlan = (env: Env, projectId: number, scope: string) => env.DB.prepare(`SELECT id, uid, scope, trigger, decision_id, status, brief_json, evidence_hash, created_at, updated_at
   FROM build_plans WHERE project_id = ? AND scope = ? AND status IN ('draft', 'open', 'paused') ORDER BY id DESC LIMIT 1`).bind(projectId, scope).first<PlanRow>();
 
 /** Partners get landed accepted items only, without the private plan or decision references. */
 export async function readPlan(env: Env, projectId: number, scope = 'venture', partner = false) {
   const plan = await currentPlan(env, projectId, scope);
   const modules = Object.fromEntries([...PLAN_MODULES, 'founding-team'].map(m => [m, [] as any[]]));
-  if (!plan) return { plan: null, modules, brief: null };
+  // D1069: the scope's verdict for VB1's strip and VB14, never a partner's (D693 decision 7).
+  const verdict = partner ? undefined : await planVerdict(env, projectId, scope === 'venture' ? 'venture' : Number(scope.slice(2)));
+  if (!plan) return { plan: null, modules, brief: null, ...(partner ? {} : { verdict }) };
   const rows = (await env.DB.prepare(`SELECT i.uid, i.module, i.kind, i.item_key, i.evidence_json, i.landed_table, i.landed_id, i.marker,
-    q.uid AS proposal_uid, q.status, q.payload_json, q.decided_payload_json, q.source_kind, q.source_ref, q.source_label
+    q.uid AS proposal_uid, q.status, q.payload_json, q.decided_payload_json, q.source_kind, q.source_ref, q.source_label, q.updated_at AS decided_at
     FROM build_plan_items i JOIN ai_rail_proposals q ON q.uid = i.proposal_uid JOIN build_plans p ON p.id = i.plan_id
     WHERE p.scope = ? AND p.project_id = ? AND i.project_id = p.project_id
       AND (i.plan_id = ? OR q.status IN ('accepted', 'edited'))
@@ -197,12 +199,13 @@ export async function readPlan(env: Env, projectId: number, scope = 'venture', p
     if (partner && payload) delete payload.from_commitment;
     modules[r.module].push({ uid: r.uid, kind: r.kind, ...(partner ? {} : { item_key: r.item_key }), proposal_uid: r.proposal_uid, status: r.status,
       payload, evidence, landed_table: r.landed_table, landed_id: r.landed_id, marker: r.marker,
-      ...(partner ? {} : { source_kind: r.source_kind, source_ref: r.source_ref, source_label: r.source_label }) });
+      ...(partner ? {} : { source_kind: r.source_kind, source_ref: r.source_ref, source_label: r.source_label, decided_at: r.status === 'proposed' ? null : r.decided_at ?? null }) });
   }
   const brief = partner ? null : parse(plan.brief_json);
   if (brief && typeof brief === 'object') delete brief[SEEN_KEY];
-  return { plan: partner ? null : { uid: plan.uid, scope: plan.scope, trigger: plan.trigger, decision_id: plan.decision_id, status: plan.status, evidence_hash: plan.evidence_hash },
-    modules, brief };
+  return { plan: partner ? null : { uid: plan.uid, scope: plan.scope, trigger: plan.trigger, decision_id: plan.decision_id, status: plan.status, evidence_hash: plan.evidence_hash,
+    prepared_at: plan.created_at ?? null, updated_at: plan.updated_at ?? null },
+    modules, brief, ...(partner ? {} : { verdict }) };
 }
 
 /** A single D1 batch creates the plan, source proposals and their items, or none. */

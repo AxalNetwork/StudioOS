@@ -32,6 +32,8 @@
 //   `told` is counts only: `owner` is null for HQ's own programme, `mail_reach`
 //   how many Mail's testers:<uid> rule would write to. StudioOS sends no email.
 //   create, edit, pick, decline, uploadLogo, removeLogo: as the partner's, on HQ's own programmes.
+//   overview         GET   /admin/testing/overview → D1196: { weekly, by_profile: { pool, applicants }, withdrawn,
+//                    mail_reach }, each block { available: true, … } or { available: false, reason }; counts only.
 //   applicants       GET   /admin/testing/programmes/:uid/applicants → { programme, items, can_decide }:
 //                         any programme's (D1197); a partner's is read only, `can_decide: false`
 //   events           GET   /admin/testing/programmes/:uid/events?page=&page_size= → { programme, events: { available, page, total, items } }
@@ -107,6 +109,7 @@ export const adminTestingApi = {
   },
   pick: (uid) => request(`/admin/testing/applications/${enc(uid)}/pick`, { method: 'POST' }),
   decline: (uid) => request(`/admin/testing/applications/${enc(uid)}/decline`, { method: 'POST' }),
+  overview: () => request('/admin/testing/overview'),
   uploadLogo: (uid, file) => request(`/admin/testing/programmes/${enc(uid)}/logo`, { method: 'PUT', body: logoForm(file) }),
   removeLogo: (uid) => request(`/admin/testing/programmes/${enc(uid)}/logo`, { method: 'DELETE' }),
 };
