@@ -75,6 +75,8 @@ export async function fixture() {
       config_json TEXT, last_error TEXT, last_error_at TEXT, updated_at TEXT);
     CREATE TABLE integration_logs(id INTEGER PRIMARY KEY, integration_id INTEGER, user_id INTEGER, provider_key TEXT, direction TEXT, event_type TEXT, status TEXT, response_summary TEXT);
     CREATE TABLE user_company_links(user_id INTEGER, company_id INTEGER);
+    -- D1137 (migration 597): resolveActiveCompany reads an archived company as none.
+    CREATE TABLE IF NOT EXISTS company_profiles (id INTEGER PRIMARY KEY, archived_at TEXT);
     CREATE TABLE contacts(id INTEGER PRIMARY KEY);
   `);
   db.exec(mig('311_revenue_entries.sql'));

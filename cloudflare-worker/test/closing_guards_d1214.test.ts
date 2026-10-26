@@ -22,6 +22,7 @@ function fixture() {
     db.exec(tableFromBaseline(baseline, table));
   }
   db.exec(tableFromBaseline(readFileSync(new URL('../sql/migrations/575_cap_table_access.sql',import.meta.url),'utf8'),'cap_table_access_grants'));
+  db.exec('CREATE TABLE IF NOT EXISTS company_profiles (id INTEGER PRIMARY KEY, archived_at TEXT)'); // D1137 (migration 597)
   for (const [id, role] of [[1,'investor'], [2,'investor'], [3,'founder'], [4,'admin'], [5,'partner'], [6,'advisor'], [7,'exploring']]) {
     db.prepare('INSERT INTO users(id,role,email,name,founder_id,is_active,kyc_status) VALUES(?,?,?,?,?,1,?)')
       .run(id,role,`synthetic${id}@example.invalid`,'Synthetic member',id === 3 ? 30 : null,'approved');

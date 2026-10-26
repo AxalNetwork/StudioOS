@@ -80,6 +80,7 @@ const WIDE_ON_PURPOSE = {
   'capital.ts': 'the project read sits inside an admin-only handler',
   'founder_risk.ts': "keys its payload on founder_id — a risk profile belongs to the person, not to one of their companies; the projects join is only a lookup from a deal to its owner",
   'public.ts': 'the unauthenticated public profile facade — there is no active company to scope by, and the profile is the person\'s',
+  'project_lifecycle.ts': 'D1137: a write to ONE named venture, gated to its owner by isProjectManager; `founder_id = ?` only finds the owner\'s account, and a move must reach a company other than the active one',
 };
 
 test('the scope notice stands exactly as long as scoping is incomplete', () => {

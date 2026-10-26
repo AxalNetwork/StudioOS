@@ -14,9 +14,9 @@
  * inherit an unverified id from every caller written before it. Verifying once,
  * here, means that scope can be written without re-auditing its callers.
  *
- * NULL IS THE ANSWER FOR EVERY UNCERTAIN CASE: header absent, unparseable, or
- * naming a company the caller does not belong to. Null means "no company
- * selected", which `companyScope` reads as "every project you own" — correct
+ * NULL IS THE ANSWER FOR EVERY UNCERTAIN CASE: header absent, unparseable,
+ * naming a company the caller does not belong to, or naming an archived one
+ * (D1137). Null means "no company selected", which `companyScope` reads as "every project you own" — correct
  * for the single-company user and for the moment before the switcher is
  * touched. A rejected claim is therefore ignored rather than 403'd: a stale id
  * in a long-open tab is an ordinary event (membership revoked, company
@@ -51,8 +51,14 @@ export async function resolveActiveCompany(
   const claimed = Number(trimmed);
   if (!Number.isSafeInteger(claimed) || claimed <= 0) return null;
 
+  // D1137 (migration 597): an archived company is nobody's active company.
+  // NOT EXISTS rather than a join, so a link reads exactly as before unless
+  // its company is archived.
   const link = await env.DB.prepare(
-    'SELECT 1 AS ok FROM user_company_links WHERE user_id = ? AND company_id = ? LIMIT 1',
+    `SELECT 1 AS ok FROM user_company_links l
+      WHERE l.user_id = ? AND l.company_id = ?
+        AND NOT EXISTS (SELECT 1 FROM company_profiles p WHERE p.id = l.company_id AND p.archived_at IS NOT NULL)
+      LIMIT 1`,
   ).bind(userId, claimed).first<{ ok: number }>();
 
   return link ? claimed : null;
