@@ -18,8 +18,9 @@ import {
   AGE_FILTERS, BAND_PARTS, OUTCOME_FILTERS, SEARCH_MIN, SORTS,
   assignChoices, assignItems, assignTitle, decidedNotes, decidedPageLine, decidedQueryOf, decidedRows, errorRef,
   hasNextPage, hqBandLine, hqLaneViews, inboxGroupCounts, inboxGroups, inboxQueryOf, inboxRows, inboxTiles, itemOfPath,
-  itemView, laneAgeChart, notifiesOf, pageLine, refusalToast, waitingOnHq, weekChart,
+  itemView, laneAgeChart, notifiesOf, pageLine, refusalToast, waitingOnHq, weekChart, cardAge, filterCount, sortLabel,
 } from './inboxModel';
+import { FOOT, PhoneBack } from './boardParts';
 
 /**
  * D1038 (#2390) — Admin › Approvals at /admin/approvals, built to the owner's
@@ -49,12 +50,12 @@ const MONO = 'font-mono tabular-nums';
 const TH = 'px-3 py-2 text-left text-[10.5px] font-bold uppercase tracking-[.07em] text-axal-muted dark:text-gray-400';
 const TD = 'px-3 py-2.5 align-top text-[13px] text-axal-ink dark:text-gray-100';
 const NEW_PILL = 'ml-1.5 rounded-full border border-axal-lavender-edge bg-axal-lavender px-2 py-0.5 text-[10.5px] font-bold text-axal-violet-deep dark:border-violet-800 dark:bg-violet-950/40 dark:text-violet-300';
-const CHIP = 'inline-flex min-h-[36px] items-center gap-1.5 rounded-full border px-3 text-[12.5px] font-bold';
+const CHIP = 'inline-flex min-h-[44px] items-center gap-1.5 sm:min-h-[36px] rounded-full border px-3 text-[12.5px] font-bold';
 const CHIP_ON = 'border-axal-violet bg-axal-lavender text-axal-ink dark:bg-violet-950/40 dark:text-gray-100';
 const CHIP_OFF = 'border-axal-hairline text-axal-muted dark:border-gray-700 dark:text-gray-400';
-const BTN = 'inline-flex min-h-[36px] items-center rounded-[8px] border border-axal-hairline px-3 text-[12.5px] font-bold text-axal-ink hover:bg-gray-50 disabled:opacity-50 dark:border-gray-700 dark:text-gray-100 dark:hover:bg-gray-800';
-const BTN_PRIMARY = 'inline-flex min-h-[36px] items-center rounded-[8px] bg-axal-violet px-3 text-[12.5px] font-bold text-white hover:bg-axal-violet-deep disabled:opacity-50';
-const SELECT = 'min-h-[36px] rounded-[7px] border border-axal-hairline bg-white px-2 text-[12.5px] dark:border-gray-700 dark:bg-gray-900 dark:text-gray-100';
+const BTN = 'inline-flex min-h-[44px] items-center justify-center rounded-[8px] sm:min-h-[36px] border border-axal-hairline px-3 text-[12.5px] font-bold text-axal-ink hover:bg-gray-50 disabled:opacity-50 dark:border-gray-700 dark:text-gray-100 dark:hover:bg-gray-800';
+const BTN_PRIMARY = 'inline-flex min-h-[44px] items-center justify-center rounded-[8px] sm:min-h-[36px] bg-axal-violet px-3 text-[12.5px] font-bold text-white hover:bg-axal-violet-deep disabled:opacity-50';
+const SELECT = 'min-h-[44px] rounded-[7px] sm:min-h-[36px] border border-axal-hairline bg-white px-2 text-[12.5px] dark:border-gray-700 dark:bg-gray-900 dark:text-gray-100';
 
 const PILL = {
   warn: 'border-amber-300 bg-amber-50 text-axal-amber-deep dark:border-amber-800 dark:bg-amber-950/40 dark:text-amber-200',
@@ -176,7 +177,7 @@ function ChartCard({ title, testId, chart, alt, legend, foot, children }) {
       <div className="flex flex-wrap items-center justify-between gap-2">
         <h2 className={H2}>{title}</h2>
         {chart ? (
-          <button type="button" aria-pressed={asTable} onClick={() => setAsTable((t) => !t)} className="text-[12px] font-bold text-axal-violet dark:text-violet-300" data-testid={`${testId}-toggle`}>
+          <button type="button" aria-pressed={asTable} onClick={() => setAsTable((t) => !t)} className="min-h-[44px] text-[12px] font-bold text-axal-violet sm:min-h-0 dark:text-violet-300" data-testid={`${testId}-toggle`}>
             {asTable ? 'View as chart' : 'View as table'}
           </button>
         ) : null}
@@ -244,7 +245,7 @@ function AssignDialog({ items, inbox, callerId, onClose, onDone }) {
   return (
     <Lightbox label={assignTitle(items)} title={assignTitle(items)} sub="They see it under Assigned to me. Assigning decides nothing." onClose={onClose} testId="approvals-assign" width={460}
       footer={(
-        <div className="flex justify-end gap-2">
+        <div className={FOOT}>
           <button type="button" className={BTN} onClick={onClose}>Cancel</button>
           <button type="button" className={BTN_PRIMARY} disabled={!pick || busy} onClick={send} data-testid="approvals-assign-send">{busy ? 'Assigning…' : 'Assign'}</button>
         </div>
@@ -276,7 +277,7 @@ function ItemDrawer({ at, onClose, onAssign }) {
       sub={ready ? 'Esc to close' : null}
       footer={ready ? (
         <div className="flex flex-col gap-2">
-          <div className="flex flex-wrap items-center justify-end gap-3">
+          <div className="flex flex-wrap items-center justify-end gap-3 max-sm:flex-col-reverse max-sm:items-stretch">
             <button type="button" className={BTN} onClick={onClose}>Close</button>
             <span className="text-[12.5px]">Open in <DoorFor lane={v.lane} /></span>
           </div>
@@ -284,6 +285,7 @@ function ItemDrawer({ at, onClose, onAssign }) {
         </div>
       ) : null}>
       <div className="flex flex-col gap-4 px-5 py-4" data-testid="approvals-item-body">
+        <PhoneBack label="Approvals" onClose={onClose} testId="approvals-item-back" />
         {v.state === 'loading' ? <Skeleton.Text lines={4} /> : null}
         {v.state === 'gone' || v.state === 'missing' ? (
           <div className="flex flex-col items-start gap-2" data-testid={`approvals-item-${v.state}`}>
@@ -349,6 +351,104 @@ function WaitingOnHq({ read }) {
   );
 }
 
+/** D1047 (APR15): one item as a phone card — lane, who, what, its age and where it is decided, and ⋯. */
+function RowCard({ row, search, onMore }) {
+  const age = cardAge(row);
+  return (
+    <li className="flex items-start gap-2 border-b border-axal-hairline px-3 py-3 last:border-0 dark:border-gray-700" data-testid={`approvals-card-${row.key}`}>
+      <div className="flex min-w-0 flex-1 flex-col gap-1">
+        <span className={EYE}>{row.laneLabel}</span>
+        <Link to={`/admin/approvals/items/${row.lane}-${row.id}${search}`} className="inline-flex min-h-[28px] items-center text-[13.5px] font-bold text-axal-ink dark:text-gray-100" data-testid={`approvals-card-open-${row.key}`}>{row.who}</Link>
+        <span className="text-[12.5px] text-axal-ink dark:text-gray-100">{row.what}</span>
+        <div className="flex flex-wrap items-center gap-2">
+          <span className={`inline-flex rounded-full border px-2 py-0.5 text-[11px] font-bold ${PILL[age.tone] || PILL.plain}`} data-testid={`approvals-card-age-${row.key}`}>{age.text}</span>
+          <span className="text-[12px] text-axal-ink dark:text-gray-100">Decided on <DoorFor lane={row.lane} /> ›</span>
+        </div>
+      </div>
+      <button type="button" aria-label={`More for ${row.who}`} onClick={() => onMore(row)}
+        className="inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-[8px] border border-axal-hairline text-axal-ink dark:border-gray-700 dark:text-gray-100" data-testid={`approvals-card-more-${row.key}`}>⋯</button>
+    </li>
+  );
+}
+
+const SHEET_ITEM = 'flex min-h-[44px] items-center rounded-[8px] px-3 text-left text-[14px] font-semibold text-axal-ink hover:bg-gray-50 dark:text-gray-100 dark:hover:bg-gray-800';
+
+/** D1047 (APR15): a card's ⋯ as a bottom sheet: Open, Assign…, Copy link. */
+function RowSheet({ row, search, onAssign, onCopy, onClose }) {
+  return (
+    <Lightbox label={`More for ${row.who}`} title={row.who} sub={row.laneLabel} phone="sheet" onClose={onClose} testId="approvals-row-sheet" width={420}>
+      <div className="flex flex-col gap-1 px-3 py-3" role="menu">
+        <Link role="menuitem" to={`/admin/approvals/items/${row.lane}-${row.id}${search}`} className={SHEET_ITEM} onClick={onClose} data-testid="approvals-row-sheet-open">Open</Link>
+        <button role="menuitem" type="button" className={SHEET_ITEM} onClick={() => { onClose(); onAssign([row]); }} data-testid="approvals-row-sheet-assign">Assign…</button>
+        <button role="menuitem" type="button" className={SHEET_ITEM} onClick={() => { onClose(); onCopy(row); }} data-testid="approvals-row-sheet-copy">Copy link</button>
+      </div>
+    </Lightbox>
+  );
+}
+
+/** D1047 (APR15): the phone's filters and order as one bottom sheet, each choice applied as it is made. */
+function FiltersSheet({ q, superAdmin, reviewers, n, typed, onType, setParams, total, onClose, onClear }) {
+  const lanes = superAdmin ? [...LANES, ...HQ_LANES] : LANES;
+  return (
+    <Lightbox label="Filters and sort" title="Filters and sort" phone="sheet" onClose={onClose} testId="approvals-filters-sheet" width={460}
+      footer={(
+        <div className={FOOT}>
+          <button type="button" className={BTN} onClick={onClear} data-testid="approvals-filters-clear">Clear</button>
+          <button type="button" className={`${BTN_PRIMARY} flex-[1.4]`} onClick={onClose} data-testid="approvals-filters-done">{total == null ? 'Done' : `Show ${Number(total).toLocaleString('en-US')}`}</button>
+        </div>
+      )}>
+      <div className="flex flex-col gap-4 px-5 py-4">
+        <label className="flex flex-col gap-1">
+          <span className={EYE}>Search</span>
+          <input type="search" value={typed} placeholder="Search who and what" onChange={(e) => onType(e.target.value)}
+            className="min-h-[44px] rounded-[7px] border border-axal-hairline bg-white px-3 text-[13px] dark:border-gray-700 dark:bg-gray-900 dark:text-gray-100" data-testid="approvals-sheet-search" />
+        </label>
+        <div className="flex flex-col gap-1.5">
+          <span className={EYE}>Group</span>
+          <div className="flex flex-wrap gap-[7px]" role="group" aria-label="Group">
+            <button type="button" aria-pressed={!q.filters.group} className={`${CHIP} ${!q.filters.group ? CHIP_ON : CHIP_OFF}`} onClick={() => setParams({ group: null })}>All <span className={MONO}>{n('all')}</span></button>
+            {inboxGroups(superAdmin).map((g) => (
+              <button key={g.key} type="button" aria-pressed={q.filters.group === g.key} className={`${CHIP} ${q.filters.group === g.key ? CHIP_ON : CHIP_OFF}`}
+                onClick={() => setParams({ group: g.key })} data-testid={`approvals-sheet-group-${g.key}`}>{g.label} <span className={MONO}>{n(g.key)}</span></button>
+            ))}
+          </div>
+        </div>
+        <label className="flex flex-col gap-1">
+          <span className={EYE}>Lane</span>
+          <select className={SELECT} value={q.filters.lane || ''} onChange={(e) => setParams({ lane: e.target.value || null })} data-testid="approvals-sheet-lane">
+            <option value="">{`All ${lanes.length} lanes`}</option>
+            {lanes.map((l) => <option key={l.key} value={l.key}>{l.label}</option>)}
+          </select>
+        </label>
+        <div className="flex flex-col gap-1.5">
+          <span className={EYE}>Age</span>
+          <div className="flex flex-wrap gap-[7px]" role="group" aria-label="Age">
+            {AGE_FILTERS.map((a) => (
+              <button key={a.label} type="button" aria-pressed={(q.filters.age || null) === a.key} className={`${CHIP} ${(q.filters.age || null) === a.key ? CHIP_ON : CHIP_OFF}`}
+                onClick={() => setParams({ age: a.key })} data-testid={`approvals-sheet-age-${a.key || 'any'}`}>{a.label}</button>
+            ))}
+          </div>
+        </div>
+        <label className="flex flex-col gap-1">
+          <span className={EYE}>Assigned</span>
+          <select className={SELECT} value={q.filters.assigned || ''} onChange={(e) => setParams({ assigned: e.target.value || null })} data-testid="approvals-sheet-assigned">
+            <option value="">Anyone</option>
+            <option value="me">Me</option>
+            <option value="none">Unassigned</option>
+            {reviewers.map((r) => <option key={r.id} value={String(r.id)}>{r.name}</option>)}
+          </select>
+        </label>
+        <label className="flex flex-col gap-1">
+          <span className={EYE}>Sort</span>
+          <select className={SELECT} value={q.filters.sort || 'oldest'} onChange={(e) => setParams({ sort: e.target.value === 'oldest' ? null : e.target.value })} data-testid="approvals-sheet-sort">
+            {SORTS.map((x) => <option key={x.key} value={x.key}>{x.label}</option>)}
+          </select>
+        </label>
+      </div>
+    </Lightbox>
+  );
+}
+
 /** The Inbox (APR1, APR11–APR14). */
 function Inbox({ inbox, weekly, requests, views, glance, superAdmin, onAssign, toast }) {
   const loc = useLocation();
@@ -356,6 +456,8 @@ function Inbox({ inbox, weekly, requests, views, glance, superAdmin, onAssign, t
   const q = inboxQueryOf(loc.search, superAdmin);
   const [selected, setSelected] = useState(() => new Set());
   const [typed, setTyped] = useState(q.typed);
+  // D1047 (APR15): the phone's bottom sheets — the filters, or one card's ⋯.
+  const [sheet, setSheet] = useState(null);
   const setParams = (patch) => {
     const p = new URLSearchParams(loc.search);
     for (const [k, v] of Object.entries(patch)) { if (v) p.set(k, v); else p.delete(k); }
@@ -397,7 +499,7 @@ function Inbox({ inbox, weekly, requests, views, glance, superAdmin, onAssign, t
 
   return (
     <div className="flex flex-col gap-5">
-      <div className="grid grid-cols-2 gap-3.5 lg:grid-cols-4" data-testid="approvals-tiles">
+      <div className="grid grid-cols-2 gap-2.5 sm:gap-3.5 lg:grid-cols-4" data-testid="approvals-tiles">
         <Tile label="Waiting" testId="approvals-tile-waiting" t={tiles.waiting} />
         <Tile label="Over 72 hours" testId="approvals-tile-over72" t={tiles.over72} sub={tiles.over72.state === 'ready' ? (oldestLine(views) || tiles.over72.sub) : undefined} />
         <Tile label="Assigned to you" testId="approvals-tile-assigned" t={tiles.mine} />
@@ -438,7 +540,15 @@ function Inbox({ inbox, weekly, requests, views, glance, superAdmin, onAssign, t
             )}
           </div>
 
-          <div className="flex flex-col gap-2.5" data-testid="approvals-filters">
+          {/* D1047 (APR15): on a phone, Filters with its count and Sort open one bottom sheet. */}
+          <div className="flex gap-2 sm:hidden" data-testid="approvals-phone-filters">
+            <button type="button" className={`${BTN} flex-1`} onClick={() => setSheet({ kind: 'filters' })} data-testid="approvals-filters-open">
+              Filters · <span className={`ml-1 ${MONO}`} data-testid="approvals-filters-count">{filterCount(q.filters)}</span>
+            </button>
+            <button type="button" className={`${BTN} flex-[1.2]`} onClick={() => setSheet({ kind: 'filters' })} data-testid="approvals-sort-open">{`Sort: ${sortLabel(q.filters.sort)} ▾`}</button>
+          </div>
+
+          <div className="hidden flex-col gap-2.5 sm:flex" data-testid="approvals-filters">
             <div className="flex flex-wrap gap-[7px]" role="group" aria-label="Group">
               <button type="button" aria-pressed={!q.filters.group} className={`${CHIP} ${!q.filters.group ? CHIP_ON : CHIP_OFF}`} onClick={() => setParams({ group: null })}>All <span className={MONO}>{n('all')}</span></button>
               {inboxGroups(superAdmin).map((g) => (
@@ -497,7 +607,11 @@ function Inbox({ inbox, weekly, requests, views, glance, superAdmin, onAssign, t
               ) : null}
               {inbox.status === 'loading' ? <div className="px-3 py-3" data-testid="approvals-skeleton"><Skeleton.Table rows={6} cols={6} /></div>
                 : rows.length ? (
-                  <table className="w-full min-w-[820px]">
+                  <>
+                  <ul className="m-0 list-none p-0 md:hidden" data-testid="approvals-cards">
+                    {rows.map((r) => <RowCard key={r.key} row={r} search={loc.search} onMore={(row) => setSheet({ kind: 'row', row })} />)}
+                  </ul>
+                  <table className="hidden w-full min-w-[820px] md:table">
                     <thead>
                       <tr className="border-b border-axal-hairline dark:border-gray-700">
                         <th className={TH}><span className="sr-only">Select</span></th>
@@ -520,6 +634,7 @@ function Inbox({ inbox, weekly, requests, views, glance, superAdmin, onAssign, t
                       ))}
                     </tbody>
                   </table>
+                  </>
                 ) : (
                   <div className="flex flex-col items-start gap-1.5 px-4 py-5" data-testid="approvals-empty">
                     {filtered ? (
@@ -541,7 +656,7 @@ function Inbox({ inbox, weekly, requests, views, glance, superAdmin, onAssign, t
               {rows.length ? (
                 <div className="flex flex-wrap items-center justify-between gap-2 border-t border-axal-hairline px-3 py-2 dark:border-gray-700">
                   <span className={`${SUB} ${MONO}`} data-testid="approvals-count">{pageLine(reply)}</span>
-                  <div className="flex gap-2">
+                  <div className="flex gap-2 max-sm:w-full max-sm:*:flex-1">
                     <button type="button" className={BTN} disabled={q.page <= 1} onClick={() => setParams({ page: q.page > 2 ? String(q.page - 1) : null })}>Previous</button>
                     <button type="button" className={BTN} disabled={!hasNextPage(reply)} onClick={() => setParams({ page: String(q.page + 1) })} data-testid="approvals-next">Next</button>
                   </div>
@@ -552,6 +667,13 @@ function Inbox({ inbox, weekly, requests, views, glance, superAdmin, onAssign, t
           </div>
         </>
       )}
+      {sheet?.kind === 'filters' ? (
+        <FiltersSheet q={q} superAdmin={superAdmin} reviewers={reviewers} n={n} typed={typed}
+          onType={(v) => { setTyped(v); const t = v.trim(); if (t.length >= SEARCH_MIN || !t) setParams({ q: t || null }); }}
+          setParams={setParams} total={reply?.total ?? null} onClose={() => setSheet(null)}
+          onClear={() => { setTyped(''); navigate('/admin/approvals', { replace: true }); }} />
+      ) : null}
+      {sheet?.kind === 'row' ? <RowSheet row={sheet.row} search={loc.search} onAssign={onAssign} onCopy={copy} onClose={() => setSheet(null)} /> : null}
     </div>
   );
 }
