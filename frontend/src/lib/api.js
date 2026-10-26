@@ -5702,6 +5702,9 @@ export const articles = {
     request(`/articles/${id}`, { method: 'PUT', body: JSON.stringify(patch) }),
   submit: (id) => request(`/articles/${id}/submit`, { method: 'POST', body: '{}' }),
   retract: (id) => request(`/articles/${id}/retract`, { method: 'POST', body: '{}' }),
+  // D1293 — the author answers an admin's review comment on their own article.
+  replyToComment: (id, cid, body) =>
+    request(`/articles/${id}/comments/${cid}/replies`, { method: 'POST', body: JSON.stringify({ body }) }),
   uploadCover: (id, dataUri) =>
     request(`/articles/${id}/cover`, { method: 'POST', body: JSON.stringify({ data_uri: dataUri }) }),
   uploadImage: (id, dataUri) =>
@@ -5727,9 +5730,16 @@ export const adminArticles = {
   // D484 — set (an ISO UTC string) or clear (null) the time an approved article goes out.
   schedule: (id, publishAt) =>
     request(`/admin/articles/${id}/schedule`, { method: 'POST', body: JSON.stringify({ publish_at: publishAt }) }),
-  unpublish: (id) => request(`/admin/articles/${id}/unpublish`, { method: 'POST', body: '{}' }),
-  addComment: (id, body, anchor) =>
-    request(`/admin/articles/${id}/comments`, { method: 'POST', body: JSON.stringify({ body, anchor }) }),
+  // D1293 — the reason (at least eight characters) is the author's to read.
+  unpublish: (id, reason) =>
+    request(`/admin/articles/${id}/unpublish`, { method: 'POST', body: JSON.stringify({ reason }) }),
+  // D1293 — Super Admin only, at most three at a time.
+  feature: (id, featured) =>
+    request(`/admin/articles/${id}/feature`, { method: 'POST', body: JSON.stringify({ featured }) }),
+  revision: (id, rev) => request(`/admin/articles/${id}/revisions/${rev}`),
+  // D1293 — `parentId` answers a thread instead of starting one.
+  addComment: (id, body, anchor, parentId) =>
+    request(`/admin/articles/${id}/comments`, { method: 'POST', body: JSON.stringify(parentId ? { body, parent_id: parentId } : { body, anchor }) }),
   resolveComment: (cid, resolved) =>
     request(`/admin/articles/comments/${cid}`, { method: 'PUT', body: JSON.stringify({ resolved }) }),
   deleteComment: (cid) => request(`/admin/articles/comments/${cid}`, { method: 'DELETE' }),
