@@ -5,7 +5,8 @@
  * `/api/partners` directory). All endpoints require admin auth.
  *
  * Endpoints:
- *   POST   /invitations            — create + email a partner invitation
+ *   POST   /invitations            — create + email a partner invitation; a Super Admin
+ *                                     may set its terms (`terms`, D1118, migration 634)
  *   GET    /invitations            — list invitations: search, filters, sort, pages, total (D926)
  *   GET    /invitations/lookup     — an open invitation and a member for one address (D926)
  *   (D927: GET /overview, GET /invitations/:id and GET /offers/preview are in
@@ -19,13 +20,14 @@
  */
 import { Hono } from 'hono';
 import type { Env } from '../types';
-import { requireAdmin, requireBranchNotSuspended } from '../auth';
+import { isSuperAdmin, requireAdmin, requireBranchNotSuspended } from '../auth';
 import { logAdminAction } from '../services/adminAudit';
 import { sendPartnerInvitationEmailResult } from '../services/email';
 import { ALL_PARTNER_DEAL_TYPES, activatePartnerDealOnSignature, type PartnerDealType } from '../services/partnerDeals';
 import { ensurePartnerDirectoryColumns } from '../services/partnerDirectorySchema';
 import { notAllowedRefusal, readBranchDealTypes } from '../services/partnerDealTypes';
 import { isLapsed } from '../services/partnerInvitationReads';
+import { parseTermsInput, termsApply, type InvitationTerms } from '../services/partnerInvitationTerms';
 import { branchOf } from '../util/branch';
 // Task #43 — revocation paths must drop investor_dealroom_max to the
 // free-tier cap, not the hardcoded `5` (which is the *professional* cap).
@@ -74,6 +76,23 @@ admin_partners.post('/invitations', async (c) => {
 
   if (allowed.length > 3) return c.json({ error: 'too_many_deal_types' }, 400);
 
+  // D1118 (#2998), the owner's A: only the Super Admin sets an invitation's
+  // own terms, and setting them is the approval. An Admin's invitation goes
+  // with the standard terms. They apply to Deal-sourcing revenue share and
+  // Custom only. Nothing is written before every check passes.
+  let terms: InvitationTerms | null = null;
+  if (body.terms !== undefined && body.terms !== null) {
+    if (!isSuperAdmin(admin as any)) {
+      return c.json({ error: 'super_admin_required', message: 'Only the Super Admin sets an invitation\'s own terms. Send it with the standard terms, or ask the Super Admin.' }, 403);
+    }
+    if (!termsApply(allowed)) {
+      return c.json({ error: 'terms_not_applicable', message: 'Own terms apply only to Deal-sourcing revenue share and Custom. Offer one of them, or send the standard terms.' }, 400);
+    }
+    const parsed = parseTermsInput(body.terms);
+    if (!parsed.ok) return c.json({ error: parsed.error, message: parsed.message }, 400);
+    terms = parsed.terms;
+  }
+
   // D986 — on a branch, only the deal types HQ allows this licence (the copy
   // HQ pushed, migration 555). A licence HQ has not set keeps every type
   // (D986 §3). On HQ itself there is no licence to limit: HQ-held accounts run
@@ -91,17 +110,19 @@ admin_partners.post('/invitations', async (c) => {
   }
 
   const token = genInviteToken();
+  const now = new Date().toISOString();
   const expiresAt = new Date(Date.now() + INVITE_TTL_DAYS * 86400 * 1000).toISOString();
 
   const ins: any = await c.env.DB.prepare(
     `INSERT INTO partner_invitations
        (token, recipient_email, recipient_name, invited_by_user_id, allowed_deal_types,
-        personal_message, expires_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?)
+        personal_message, expires_at, terms_json, terms_set_by, terms_set_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
      RETURNING id`,
   ).bind(
     token, email, name || null, admin.id, JSON.stringify(allowed),
     personalMessage || null, expiresAt,
+    terms ? JSON.stringify(terms) : null, terms ? admin.id : null, terms ? now : null,
   ).first();
 
   const invitationId = Number(ins.id);
@@ -117,12 +138,19 @@ admin_partners.post('/invitations', async (c) => {
 
   await logAdminAction(c.env, admin.id, admin.email, 'partner_invitation_created', {
     invitation_id: invitationId, recipient_email: email, allowed_deal_types: allowed,
-    email_sent: emailSent,
+    email_sent: emailSent, terms: terms ? 'own' : 'standard',
   });
+  // D1118: the approval is its own audit row. Which offers the terms reach,
+  // never the figures or the note.
+  if (terms) {
+    await logAdminAction(c.env, admin.id, admin.email, 'partner_invitation_terms_set', {
+      invitation_id: invitationId, deal_types: allowed.filter((t) => termsApply([t])),
+    });
+  }
 
   return c.json({
     id: invitationId, token, link, expires_at: expiresAt,
-    email_sent: emailSent, allowed_deal_types: allowed,
+    email_sent: emailSent, allowed_deal_types: allowed, terms: terms ? 'own' : 'standard',
   }, 201);
 });
 

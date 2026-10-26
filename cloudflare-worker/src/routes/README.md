@@ -35,6 +35,11 @@ D1150: `deal_context.ts`, mounted before the deal router at `/api/deals`,
 provides investor-owned stage/visit metadata and author/firm-private notes.
 No admin bypass; migration 600; writes and audit rows share a batch.
 
+D1153: `deal_workroom.ts`, mounted before `deals.ts` at `/api/deals`, serves
+the investor's working tabs: the data room's door and a request to the founder,
+the round as a count and a total, and a withdrawal with a required reason kept
+in the same batch as the withdrawal. Investors on the deal only; no migration.
+
 D973 reads live in `admin_network_reads.ts`, mounted before D976’s
 `admin_network.ts` at `/api/admin/network`. Opaque person refs use the
 read-only drawer; numeric account IDs continue to the standing router.
@@ -86,6 +91,8 @@ widened guard on this very sentence, which is the rule working.)
 /api/mail-link     → mail_link.ts (D811: Mail HMAC only, before session middleware; audiences, recipients, feedback and health)
 /api/auth          → auth.ts
 /api/scoring       → scoring.ts
+/api/company/…     → company_lifecycle.ts (D1137: archive, restore and the primary-admin transfer in one batch, primary admin only, each with its membership event; mounted at /api before company.ts)
+/api/projects      → project_lifecycle.ts (D1137: POST /:id/move to a company the owner belongs to, or out of one; POST /:id/transfer the owner seat to a co-founder with a founder account; each with its membership event; mounted before projects.ts)
 /api/projects      → projects.ts
 /api/cycles/build  → cycle_build.ts      (Build overview, six module reads, D662 field writes, and D686 system mappings)
 /api/legal         → legal.ts
@@ -111,7 +118,7 @@ widened guard on this very sentence, which is the rule working.)
 /api/admin         → admin.ts
 /api/private-data  → private-data.ts
 /api/monitoring    → monitoring.ts
-/api/ai-budget     → ai_budget.ts       (member allowance/held reads; Super Admin reviews and plan caps, D640; D755: GET /top-up packs and latest purchase, GET /history, and the Super Admin's /members/:userId, /members/:userId/adjustments and /reconcile; D776: GET /runs, the member's own runs grouped by page, option or record)
+/api/ai-budget     → ai_budget.ts       (member allowance/held reads; D1278: GET /prices from the metering policy and GET /holds, the caller's own holds in progress; Super Admin reviews and plan caps, D640; D755: GET /top-up packs and latest purchase, GET /history, and the Super Admin's /members/:userId, /members/:userId/adjustments and /reconcile; D776: GET /runs, the member's own runs grouped by page, option or record)
 /api/admin/ai-usage → admin_ai_usage.ts (D791: HQ › AI usage; the platform's AI use, the top members and the abuse flags; Pause AI and a member's own monthly cap; the member search by ID or email prefix, and one member's detail. Super Admin with step-up; a member is named by id, name and email on this route only; every write audited with its reason)
 /api/admin/catalog/token-packs → catalog.ts (D755: the Super Admin creates, adopts, changes and archives token packs; the generic catalog writes refuse a pack)
 /api/public/plans-and-packs → public.ts (D755: every plan's price and AI allowance and the packs on sale; D1 only, no session)
@@ -126,6 +133,7 @@ widened guard on this very sentence, which is the rule working.)
 /api/fund-fees     → fund_fees.ts       (D709: the management fee's terms, admissions, net invested capital, offsets, and fee periods the GP previews and issues; moves no money)
 /api/fund-admin    → fund_admin.ts      (D714: GET /access, which fund acts this admin may take, from FUND_ACTS; D1158: GET /lps, the LP roster)
 /api/closings      → closings.ts        (D1215: a closing as a record — open, lines, route, evidence, the cap-table proposal, complete; the admin desk `adminClosings` is mounted at /api/admin/closings)
+/api/reporting     → reporting.ts       (D1058: reporting duties and periods — the founder's desk, the expected date and reminders; the investor's own duties, ask and waive)
 /api/fund-reporting → fund_reporting.ts
 /api/fund-booklets → fund_booklets.ts (D716: the Subscription Booklet, the applicant's ticks, paper and submit, HQ's read, PDF and withdraw; the e-sign send and the GP's acceptance (D759))
 /api/fund-notices  → fund_notices.ts    (D716: an Admin previews, the Super Admin issues, the LP reads their own; kept PDFs through Browser Run)
@@ -425,3 +433,8 @@ firm. The Free quota and join/leave exceptions live in
 `../middleware/requireInvestorTier.ts`; the deal listing stays Professional.
 The INSERT enforces the global allowance atomically. Investor list rows carry
 `can_read` from the existing invited-or-committed reader for safe room links.
+
+D1051 (#2902): `billing_checkout.ts` mounts `/checkout/quote`, `/checkout/start` and `/checkout/status` under `/api/billing`, before `billing.ts`. One checkout for a new plan or a change: an upgrade now and prorated, a downgrade scheduled for the period end, a saved card or a change behind TOTP and step-up. The old hosted checkouts stay until their callers move (#2905).
+| File | Purpose |
+| --- | --- |
+| `deal_insights.ts` | D1151: NDA-gated per-deal Team, Market and Traction reads. |

@@ -45,9 +45,12 @@ test('the route sits in the Raise shell; a founder at /round-calls/:uid is sent 
   const old = readFileSync('frontend/src/pages/founder/RoundCallPage.jsx', 'utf8');
   assert.match(old, /to=\{\(projectId&&call\.state!=='draft'\?'\/raise\/calls\/':'\/round-calls\/'\)\+call\.uid\}/, 'the founder\'s list opens a sent call in the Raise shell, and a draft on its own page, where Continue draft is');
   // D1221 (#2458): a founder's sent call opens at its address under Capital relationships › Calls (CLS8).
-  assert.match(old, /if\(read\.data\?\.viewer==='founder'&&read\.data\.call\.state!=='draft'\)return <Navigate to=\{'\/raise\/capital-relationships\/calls\/'\+encodeURIComponent\(uid\)\} replace\/>;/);
+  // D1224 (#3223): a draft too; the shell's page opens the new-call sheet on it.
+  assert.match(old, /if\(read\.data\?\.viewer==='founder'\)return <Navigate to=\{'\/raise\/capital-relationships\/calls\/'\+encodeURIComponent\(uid\)\} replace\/>;/);
+  assert.match(page, /continueDraft: \(\) => setSheet\(\{ initialCall: read\.data\?\.call \|\| null \}\)/, 'the Draft state\'s Continue draft opens the sheet on the draft');
   const sheet = readFileSync('frontend/src/pages/founder/RoundCallSheet.jsx', 'utf8');
-  assert.equal((sheet.match(/to=\{'\/raise\/calls\/'\+/g) || []).length, 2, 'the open-call notice and the outcome link open the Raise page');
+  assert.match(sheet, /<Link className=\{primary\} to=\{callHref\(call\)\}>Open the call<\/Link>/, 'the open-call notice opens the call under Calls');
+  assert.equal((sheet.match(/to=\{callHref\(\{uid:s\.uid,state:'sent'\}\)\}/g) || []).length, 2, 'the send result\'s See who and Open the call open it under Calls');
   assert.doesNotMatch(sheet, /'\/round-calls\/'\+/);
 });
 
@@ -68,6 +71,7 @@ test('Continue draft reads the call\'s page, so its approval and recorded audien
     step: 1, fields: { name: 'n', amount: '1', instrument: 'safe', terms: 't', minimum: '1', target: '2099-01-01', deck_id: '4', room: false },
     context: { project: { id: 1, name: 'V' }, decks: [deck], chosen: [], data_room: null }, chosen: [], includeMatches: false, matches: null, page: null,
     busy: false, error: '', outcome: null, uid: 'c', editing: null, choosing: false, note: null, projectId: 1 } })));
-  assert.match(html, /v4 · 12 Oct<\/p><\/div><button type="button"[^>]*>Change<\/button>/);
+  // D1224: the canvas's deck card, frozen when sent, with Change version.
+  assert.match(html, /Deck · v4 · frozen when sent<\/p>[\s\S]*<button type="button"[^>]*>Change version<\/button>/);
   assert.doesNotMatch(html, />Edit<\/button>/);
 });

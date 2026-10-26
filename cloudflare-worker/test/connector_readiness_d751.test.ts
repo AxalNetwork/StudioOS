@@ -56,7 +56,7 @@ function fixture(opts: { env?: Record<string, string>; unreadable?: boolean } = 
     CREATE TABLE super_admins(user_id INTEGER PRIMARY KEY);
     CREATE TABLE mi_pro_subscriptions(user_id INTEGER PRIMARY KEY, status TEXT, subscription_id TEXT, plan TEXT, period_end TEXT, stripe_customer_id TEXT);
     CREATE TABLE user_recovery_state(user_id INTEGER PRIMARY KEY, cooling_off_until TEXT, step_up_due_at TEXT);
-    CREATE TABLE company_profiles(id INTEGER PRIMARY KEY);
+    CREATE TABLE company_profiles(id INTEGER PRIMARY KEY, archived_at TEXT);
     CREATE TABLE user_company_links(user_id INTEGER, company_id INTEGER);
     CREATE TABLE projects(id INTEGER PRIMARY KEY, company_id INTEGER, deleted_at TEXT);
     CREATE TABLE activity_logs(id INTEGER PRIMARY KEY, user_id INTEGER, actor TEXT, action TEXT, details TEXT);
@@ -72,7 +72,7 @@ function fixture(opts: { env?: Record<string, string>; unreadable?: boolean } = 
       created_by_user_id INTEGER, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP, updated_by_user_id INTEGER, updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP);
     INSERT INTO users(id, role, name, email, subscription_tier) VALUES (1, 'founder', 'Fay', 'fay@example.test', 'free'),
       (2, 'admin', 'Ada', 'ada@example.test', 'free'), (3, 'founder', 'Sam', 'sam@example.test', 'studio');
-    INSERT INTO company_profiles VALUES (10);
+    INSERT INTO company_profiles (id) VALUES (10);
     INSERT INTO user_company_links VALUES (1, 10), (2, 10), (3, 10);
     INSERT INTO projects VALUES (100, 10, NULL);`);
   db.exec(m435);

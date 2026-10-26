@@ -72,6 +72,8 @@ function freshDb() {
   for (const t of ['users', 'projects', 'partners', 'comarketing_pitches', 'comarketing_attributions', 'user_company_links']) {
     db.exec(stripForeignKeys(tableFromBaseline(BASELINE, t)));
   }
+  // D1137 (migration 597): resolveActiveCompany reads an archived company as none.
+  db.exec('CREATE TABLE IF NOT EXISTS company_profiles (id INTEGER PRIMARY KEY, archived_at TEXT)');
   const u = db.prepare('INSERT INTO users (id, email, role, name, founder_id, partner_id) VALUES (?,?,?,?,?,?)');
   u.run(FAY, 'fay@axal.example', 'founder', 'Fay Founder', 50, null);
   u.run(GUS, 'gus@axal.example', 'founder', 'Gus Founder', 60, null);

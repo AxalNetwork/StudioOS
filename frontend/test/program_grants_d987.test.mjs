@@ -18,7 +18,7 @@ import { installDocument } from './_contracts_dom.mjs';
 import ProgramGrants from '../src/pages/admin/grants/ProgramGrants.jsx';
 import {
   NOT_RECORDED, cellOf, changedKeys, defaultsCards, gridRows, holdingChart, holdingRows, liveSentence, monthsChart,
-  requestRow, studioCsv, studioRows, termInput, termsPayload, tilesOf, viewOf,
+  inUseOf, requestRow, studioCsv, studioRows, termInput, termsPayload, tilesOf, viewOf,
 } from '../src/pages/admin/grants/grantsModel.js';
 import { PROGRAMS } from '../src/lib/programGrants.js';
 import { stripFor, stripItemFor } from '../src/lib/hqStrips.js';
@@ -104,6 +104,13 @@ const STUDIO = {
     { id: 1, action: 'granted', program_key: 'perks', changed: [], reason: 'Year one plan.', actor_user_id: 1, actor_name: 'HQ Admin', at: '2025-02-01 10:00:00' },
   ],
 };
+// D1281: D1156's in-use read for Studio Lisbon: Perks reported, Refer & Earn not yet.
+const USAGE = { licence_uid: 'l1', programs: [
+  { program_key: 'perks', state: 'reported', period: '2026-10', reported_at: '2026-10-25T03:00:00.000Z', age_seconds: 3600, stale: false,
+    counts: { people: { value: 9, state: 'recorded', reason: null }, cohorts: { value: null, state: 'not_recorded', reason: 'x' },
+      referrals: { value: null, state: 'not_recorded', reason: 'x' }, claims: { value: 1204, state: 'recorded', reason: null } } },
+  { program_key: 'refer-and-earn', state: 'not_reported', reason: 'This studio has not reported program figures yet.', period: null, reported_at: null, counts: null },
+] };
 const DEALS = { licence: lic('l1'), catalogue: [{ type: 'referral', label: 'Referral' }, { type: 'revenue_share', label: 'Revenue share' }], recorded: false, types: null, reason: 'HQ has not recorded a list, so every type stays open.', history: [] };
 
 // ---------------------------------------------------------------- the model
@@ -178,12 +185,15 @@ test('terms: typed in units, sent as cents and basis points, only what changed',
   assert.equal(s, 'Studio Lisbon may run Perks from 1 Nov 2026 to the end of its licence, paying HQ €2,000 a year. It starts when the licence is active. It starts when the program schedule is signed.');
 });
 
-test('one studio\'s rows: In use waits on the studios\' figures, a frozen licence disables writes, the CSV is safe', () => {
-  const rows = studioRows(STUDIO, DEFAULTS, REQUESTS.items);
+test('one studio\'s rows: In use from the studio\'s reports (D1281), a frozen licence disables writes, the CSV is safe', () => {
+  // Mutation checked: the unconditional wait restored; a missing report drawn as a zero; the report date dropped.
+  const rows = studioRows(STUDIO, DEFAULTS, REQUESTS.items, { status: 'ready', data: USAGE });
   const r = (k) => rows.find((x) => x.program.key === k);
   assert.equal(rows.length, 9);
-  assert.equal(r('perks').inUse.text, NOT_RECORDED);
-  assert.match(r('perks').inUse.reason, /has not reported program figures yet/);
+  assert.deepEqual([r('perks').inUse.text, r('perks').inUse.reason], ['People 9 · Claims 1,204', 'Reported 25 Oct 2026 for 2026-10.']);
+  assert.deepEqual([r('refer-and-earn').inUse.text, r('refer-and-earn').inUse.reason],
+    [NOT_RECORDED, 'This studio has not reported this program yet. Its last report was on 25 Oct 2026.']);
+  assert.ok(rows.every((x) => !x.inUse || !/program figures yet/.test(x.inUse.reason)), 'D1281: the unconditional wait is gone');
   assert.equal(r('perks').schedule, 'Signed 2 Oct');
   assert.equal(r('spinout-lab').schedule, 'Not sent');
   assert.ok(r('spinout-lab').actions.some((a) => a.key === 'schedule'));
@@ -224,7 +234,7 @@ test('a defaults card: its terms in words, its grant count, a not-ready card loc
 const json = (body, status = 200) => new Response(JSON.stringify(body), { status, headers: { 'Content-Type': 'application/json' } });
 
 /** The Worker, stubbed. `fail` names reads that 503; `writes` answers a write by "METHOD path". */
-function worker({ fail = [], writes = {}, grid = GRID, requests = REQUESTS } = {}) {
+function worker({ fail = [], writes = {}, grid = GRID, requests = REQUESTS, usage = USAGE } = {}) {
   const seen = [];
   globalThis.fetch = async (url, init = {}) => {
     const u = new URL(String(url), 'http://x');
@@ -238,6 +248,7 @@ function worker({ fail = [], writes = {}, grid = GRID, requests = REQUESTS } = {
     if (u.pathname === '/api/admin/program-grants/requests') return json(requests);
     if (u.pathname === '/api/admin/program-grants/defaults') return json({ programs: DEFAULTS });
     if (u.pathname === '/api/admin/program-grants/licences/l1') return json(STUDIO);
+    if (u.pathname === '/api/admin/program-grants/licences/l1/in-use') return json(usage);
     if (u.pathname.startsWith('/api/admin/program-grants/licences/')) return json({ error: 'not_found', message: 'There is no such licence.' }, 404);
     if (u.pathname === '/api/admin/partner-deal-types/licences/l1') return json(DEALS);
     return json({});
@@ -369,7 +380,9 @@ test('mounted one studio (GR3): its tiles, In use waiting, its deal types, histo
     assert.match(m.of('studio-tile-granted'), /3.*of 6 HQ can grant/s);
     assert.match(m.of('studio-tile-own'), /1.*Refer & Earn/s);
     assert.match(m.of('studio-tile-fees'), /€6,000/);
-    assert.match(m.of('studio-inuse-perks'), /Not recorded.*has not reported program figures yet/s);
+    assert.match(m.of('studio-inuse-perks'), /People 9 · Claims 1,204.*Reported 25 Oct 2026 for 2026-10\./s);
+    assert.match(m.of('studio-inuse-refer-and-earn'), /Not recorded.*has not reported this program yet/s);
+    assert.ok(m.reads().includes('GET /api/admin/program-grants/licences/l1/in-use'));
     assert.match(m.of('studio-row-refer-and-earn'), /Granted, own terms.*400 credits a quarter.*Changed/s);
     assert.match(m.of('studio-deal-types'), /every type stays open.*Referral.*Revenue share/s);
     assert.match(m.of('studio-history'), /Refer & Earn: terms changed · Credits a quarter 300 → 400.*Reason: Referral volume doubled/s);
@@ -521,4 +534,34 @@ test('the routes, the guard, the literal tabs, and every write behind a dialog',
       assert.match(src, /run=\{\(reason\) =>/, `${f} writes ${m[1]} outside a reason dialog`);
     }
   }
+});
+
+// ---------------------------------------------------------------- D1281: In use
+
+test('D1281 In use, the model: no report, a stale report, a program with no recorded measure, an unreadable figure, a failed read', () => {
+  // Mutation checked: a stale report not said; an unreadable figure dropped; a failed read drawn as Not recorded; Reading drawn as a figure.
+  const one = (program) => ({ status: 'ready', data: { licence_uid: 'l1', programs: [program] } });
+  assert.deepEqual(inUseOf('perks', one({ program_key: 'perks', state: 'not_reported', reported_at: null })),
+    { text: NOT_RECORDED, reason: 'This studio has not reported this program yet.', state: 'not_reported' }, 'no last report: no date invented');
+  assert.equal(inUseOf('learning', one({ program_key: 'perks', state: 'not_reported' })).text, NOT_RECORDED, 'a program missing from the read is not reported');
+  const stale = inUseOf('perks', one({ ...USAGE.programs[0], stale: true }));
+  assert.equal(stale.reason, 'Reported 25 Oct 2026 for 2026-10 · more than two days old.');
+  const none = inUseOf('perks', one({ ...USAGE.programs[0], counts: { people: { value: null, state: 'not_recorded' } } }));
+  assert.deepEqual([none.text, none.reason], [NOT_RECORDED, 'This studio has no recorded measure for this program. Reported 25 Oct 2026 for 2026-10.']);
+  const bad = inUseOf('perks', one({ ...USAGE.programs[0], counts: { people: { value: 3, state: 'recorded' }, claims: { value: null, state: 'unreadable' } } }));
+  assert.equal(bad.text, 'People 3 · Claims unreadable');
+  assert.deepEqual(inUseOf('perks', { status: 'error' }), { text: 'Unreadable', reason: 'Program figures could not be read.', state: 'unreadable' });
+  assert.equal(inUseOf('perks', { status: 'loading' }).state, 'loading');
+  assert.ok(!/\b0\b/.test(inUseOf('perks', one({ program_key: 'perks', state: 'not_reported' })).text), 'never a zero for a missing report');
+});
+
+test('D1281 In use, mounted: a failed read is Unreadable with Try again and the rest of the studio still draws', async (t) => {
+  pin(t);
+  const m = await mount('/admin/licences/programs/studio/l1', { fail: ['GET /api/admin/program-grants/licences/l1/in-use'] });
+  try {
+    assert.match(m.of('studio-inuse-perks'), /Unreadable.*Program figures could not be read\./s);
+    assert.match(m.of('studio-inuse-unreadable'), /program figures could not be read.*Try again/s);
+    assert.match(m.of('studio-row-refer-and-earn'), /Granted, own terms/, 'the rest of the view still draws');
+    assert.match(m.of('studio-history'), /Refer & Earn: terms changed/);
+  } finally { await m.unmount(); }
 });

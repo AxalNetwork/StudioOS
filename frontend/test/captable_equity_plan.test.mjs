@@ -53,12 +53,14 @@ test('cap-table vesting readers remain scoped to their intended audience', () =>
   // D1262 (#3285) adds project/holder/user-scoped Team counts in Raise.
   // Real SQLite tests in raise_evidence_fixes_d1262 cover its scope and
   // aggregate-only projection; it returns no personal vesting schedule.
+  // D1263 adds the founder-scoped evidence candidate reader. Its route and
+  // cross-project privacy gates are exercised by raise_evidence_d1263.test.ts.
   // D1255 (#3278) added one more on purpose: Governance's founder-vesting input
   // counts the venture's founder holders with a vesting schedule, as two
   // numbers, read only — pinned below.
   assert.deepEqual(
     readers.sort(),
-    ['integrations/providers/carta.ts', 'routes/captable.ts', 'routes/company.ts', 'routes/cycle_build.ts', 'services/capTableRegister.ts', 'services/capTableWrites.ts', 'services/decks/sources.ts', 'services/raiseCycle.ts', 'services/records/build.ts', 'services/ventureScoring/collectors.ts'],
+    ['integrations/providers/carta.ts', 'routes/captable.ts', 'routes/company.ts', 'routes/cycle_build.ts', 'services/capTableRegister.ts', 'services/capTableWrites.ts', 'services/decks/sources.ts', 'services/raiseCycle.ts', 'services/raiseEvidenceSources.ts', 'services/records/build.ts', 'services/ventureScoring/collectors.ts'],
     'only the importer, declared readers and reviewed writer should touch these tables',
   );
   const raise = read('cloudflare-worker/src/services/raiseCycle.ts');
@@ -121,9 +123,9 @@ test('the endpoint is scoped to one venture or to the caller (D1020)', () => {
   // The queries: each table is read by the venture or by the account, never both, never unbound.
   const svc = read('cloudflare-worker/src/services/capTableRegister.ts');
   const plan = svc.slice(svc.indexOf('export async function readEquityPlan('), svc.indexOf('export function equityPlanBody('));
-  assert.equal((plan.match(/WHERE project_id = \?/g) || []).length, 2, 'both venture reads filter on project_id');
+  assert.equal((plan.match(/WHERE project_id = \?/g) || []).length, 3, 'pools, grants and holder filings each filter on project_id');
   assert.equal((plan.match(/WHERE user_id = \?/g) || []).length, 2, 'both account reads filter on user_id');
-  assert.equal((plan.match(/\.bind\(scope\.projectId\)/g) || []).length, 2);
+  assert.equal((plan.match(/\.bind\(scope\.projectId\)/g) || []).length, 3);
   assert.equal((plan.match(/\.bind\(scope\.userId\)/g) || []).length, 2);
 });
 

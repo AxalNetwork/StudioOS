@@ -21,6 +21,7 @@ import { refuse } from '../util/refusal';
 import {
   validatePerson, validateCoverage, validatePlan, personDto,
 } from '../services/companyTeam';
+import { membershipEvent } from '../services/companyMembershipEvents';
 
 const r = new Hono<{ Bindings: Env }>();
 
@@ -32,6 +33,8 @@ type Company = {
   expansion_goals: string | null;
   logo_url: string | null; website: string | null; linkedin_url: string | null;
   description: string | null;
+  /** D1137 (migration 597): set while the company is archived. */
+  archived_at?: string | null;
   created_at: string; updated_at: string;
 };
 type Link = {
@@ -80,6 +83,7 @@ async function detailDto(env: Env, c: Company, viewer: User): Promise<any> {
   for (const f of PRIVATE_FIELDS) out[f] = (c as any)[f];
   out.created_at = c.created_at;
   out.updated_at = c.updated_at;
+  out.archived_at = c.archived_at ?? null;
   const isMember = await viewerIsMember(env, c.id, viewer);
   // D431 — economics are the member's and the editors'. `canEdit` is the rule
   // that already decides who may WRITE carry; the same rule decides who may
@@ -140,9 +144,11 @@ async function canEdit(env: Env, c: Company, user: User): Promise<boolean> {
 r.get('/company/me', async (c) => {
   try {
     const user = await requireAuth(c);
+    // D1137: an archived company is nobody's company until it is restored.
     const link = await c.env.DB.prepare(
-      `SELECT * FROM user_company_links WHERE user_id = ?
-       ORDER BY is_primary_admin DESC, created_at ASC LIMIT 1`
+      `SELECT l.* FROM user_company_links l JOIN company_profiles p ON p.id = l.company_id
+        WHERE l.user_id = ? AND p.archived_at IS NULL
+       ORDER BY l.is_primary_admin DESC, l.created_at ASC LIMIT 1`
     ).bind(user.id).first<Link>();
     if (!link) return c.json(null);
     const company = await c.env.DB.prepare('SELECT * FROM company_profiles WHERE id = ?')
@@ -194,6 +200,9 @@ r.get('/company/memberships', async (c) => {
     // stays because a client rendering duplicates is the visible failure and
     // it should not depend on the index having been applied yet.
     const seen = new Set<number>();
+    // D1137: an archived company leaves the list (and so the switcher). Its
+    // members see it again with `?include=archived`, where they restore it.
+    const withArchived = c.req.query('include') === 'archived';
     for (const link of links.results || []) {
       if (seen.has(link.company_id)) continue;
       seen.add(link.company_id);
@@ -202,6 +211,7 @@ r.get('/company/memberships', async (c) => {
       // A link whose company row is gone is skipped rather than surfaced as a
       // null entry — the switcher renders straight from this array.
       if (!company) continue;
+      if (company.archived_at && !withArchived) continue;
       out.push({
         ...(await detailDto(c.env, company, user)),
         my_role: link.role_in_company,
@@ -290,10 +300,13 @@ r.post('/company/create', async (c) => {
            body.logo_url || null, body.website || null, body.linkedin_url || null,
            body.description || null, nowIso(), nowIso()).run();
     const newId = (ins as any).meta?.last_row_id as number;
-    await c.env.DB.prepare(
-      `INSERT INTO user_company_links (uid, company_id, user_id, role_in_company, is_primary_admin, created_at)
-       VALUES (?, ?, ?, 'Admin', 1, ?)`
-    ).bind(newUid(), newId, user.id, nowIso()).run();
+    await c.env.DB.batch([
+      c.env.DB.prepare(
+        `INSERT INTO user_company_links (uid, company_id, user_id, role_in_company, is_primary_admin, created_at)
+         VALUES (?, ?, ?, 'Admin', 1, ?)`
+      ).bind(newUid(), newId, user.id, nowIso()),
+      membershipEvent(c.env, { kind: 'join', companyId: newId, actorUserId: user.id, targetUserId: user.id, after: { role_in_company: 'Admin', is_primary_admin: true } }),
+    ]);
     const company = await c.env.DB.prepare('SELECT * FROM company_profiles WHERE id = ?').bind(newId).first<Company>();
     return c.json(await detailDto(c.env, company!, user));
   } catch (e) { return mapError(c, e); }
@@ -328,7 +341,12 @@ r.patch('/company/:uid', async (c) => {
     }
     if (sets.length) {
       sets.push('updated_at = ?'); params.push(nowIso()); params.push(company.id);
-      await c.env.DB.prepare(`UPDATE company_profiles SET ${sets.join(', ')} WHERE id = ?`).bind(...params).run();
+      const update = c.env.DB.prepare(`UPDATE company_profiles SET ${sets.join(', ')} WHERE id = ?`).bind(...params);
+      // D1137: a rename is a membership event, recorded with the update.
+      const renamed = body.company_name !== undefined && body.company_name !== company.company_name;
+      await c.env.DB.batch(renamed
+        ? [update, membershipEvent(c.env, { kind: 'rename', companyId: company.id, actorUserId: user.id, before: { company_name: company.company_name }, after: { company_name: body.company_name } })]
+        : [update]);
     }
     const fresh = await c.env.DB.prepare('SELECT * FROM company_profiles WHERE id = ?').bind(company.id).first<Company>();
     return c.json(await detailDto(c.env, fresh!, user));
@@ -486,8 +504,18 @@ r.patch('/company/:uid/members/:userId', async (c) => {
 
     if (!sets.length) return c.json({ detail: 'Nothing to update' }, 400);
     params.push(link.id);
-    await c.env.DB.prepare(`UPDATE user_company_links SET ${sets.join(', ')} WHERE id = ?`)
-      .bind(...params).run();
+    const update = c.env.DB.prepare(`UPDATE user_company_links SET ${sets.join(', ')} WHERE id = ?`).bind(...params);
+    // D1137: a change to the role or to primary admin is a membership event,
+    // recorded with the update. Title, authority and carry are not membership.
+    const before: Record<string, unknown> = {}; const after: Record<string, unknown> = {};
+    const nextRole = body.role_in_company !== undefined ? body.role_in_company.trim().slice(0, 80) : link.role_in_company;
+    if (nextRole !== link.role_in_company) { before.role_in_company = link.role_in_company; after.role_in_company = nextRole; }
+    if (body.is_primary_admin !== undefined && Boolean(body.is_primary_admin) !== Boolean(link.is_primary_admin)) {
+      before.is_primary_admin = Boolean(link.is_primary_admin); after.is_primary_admin = Boolean(body.is_primary_admin);
+    }
+    await c.env.DB.batch(Object.keys(after).length
+      ? [update, membershipEvent(c.env, { kind: 'role_change', companyId: company.id, actorUserId: user.id, targetUserId: userId, before, after })]
+      : [update]);
     return c.json(await detailDto(c.env, company, user));
   } catch (e) { return mapError(c, e); }
 });
@@ -529,7 +557,14 @@ r.delete('/company/:uid/members/:userId', async (c) => {
         return c.json({ detail: 'Cannot remove the only primary admin — assign another first' }, 400);
       }
     }
-    await c.env.DB.prepare('DELETE FROM user_company_links WHERE id = ?').bind(link.id).run();
+    // D1137: a removal, or a leave when the member removes themselves.
+    await c.env.DB.batch([
+      c.env.DB.prepare('DELETE FROM user_company_links WHERE id = ?').bind(link.id),
+      membershipEvent(c.env, {
+        kind: userId === user.id ? 'leave' : 'remove', companyId: company.id, actorUserId: user.id, targetUserId: userId,
+        before: { role_in_company: link.role_in_company, is_primary_admin: Boolean(link.is_primary_admin) },
+      }),
+    ]);
     return c.json({ ok: true });
   } catch (e) { return mapError(c, e); }
 });
@@ -836,15 +871,20 @@ r.post('/company/invitations/accept', async (c) => {
       'SELECT * FROM company_profiles WHERE id = ?',
     ).bind(inv.company_id).first<Company>();
     if (!company) return c.json({ detail: 'That company no longer exists' }, 404);
+    // D1137: an archived company takes no new member until it is restored.
+    if (company.archived_at) return c.json({ detail: 'That company is archived', code: 'archived' }, 410);
 
     const already = await getLink(c.env, company.id, user.id);
     if (!already) {
-      await c.env.DB.prepare(
-        `INSERT INTO user_company_links
-           (uid, company_id, user_id, role_in_company, is_primary_admin, title, authority, created_at)
-         VALUES (?, ?, ?, ?, 0, ?, ?, ?)`,
-      ).bind(newUid(), company.id, user.id, inv.role_in_company,
-             inv.title, inv.authority, nowIso()).run();
+      await c.env.DB.batch([
+        c.env.DB.prepare(
+          `INSERT INTO user_company_links
+             (uid, company_id, user_id, role_in_company, is_primary_admin, title, authority, created_at)
+           VALUES (?, ?, ?, ?, 0, ?, ?, ?)`,
+        ).bind(newUid(), company.id, user.id, inv.role_in_company,
+               inv.title, inv.authority, nowIso()),
+        membershipEvent(c.env, { kind: 'join', companyId: company.id, actorUserId: user.id, targetUserId: user.id, after: { role_in_company: inv.role_in_company, is_primary_admin: false } }),
+      ]);
     }
     // An invitation accepted by someone who was added directly in the meantime
     // is still accepted — the outcome it asked for is the outcome that holds.

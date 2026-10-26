@@ -18,6 +18,7 @@ import { hashEmail } from '../util/hashEmail';
 // also need ensureInvestorPaywallSchema in the same await.
 import { INVESTOR_QUOTAS } from '../middleware/requireInvestorTier';
 import { bindingKey } from '../util/schemaBootstrap';
+import { revsharePct, type InvitationTerms } from './partnerInvitationTerms';
 
 export type PartnerDealType =
   | 'equity_partnership'
@@ -71,10 +72,18 @@ export interface PartnerProfileInput {
  * Build 1-3 default proposals from the admin's allowed-types list and the
  * partner profile signal. Profile fields nudge term length / granted tier
  * but never invent deal types not on the admin's allow-list.
+ *
+ * D1118 (#2998): `terms` are the invitation's own, set by the Super Admin
+ * (migration 634). They replace the standard revenue share, attribution
+ * window and term of Deal-sourcing revenue share and Custom, and the note
+ * goes into both offers. Every other type keeps its standard terms. For
+ * Deal-sourcing, the percentage is the share on founder-sourced deals; the
+ * LP capital line stays standard.
  */
 export function buildProposals(
   allowedTypes: PartnerDealType[],
   profile: PartnerProfileInput,
+  terms: InvitationTerms | null = null,
 ): PartnerProposalDraft[] {
   const valid = allowedTypes.filter(t => ALL_PARTNER_DEAL_TYPES.includes(t));
   if (valid.length === 0) return [];
@@ -115,6 +124,25 @@ export function buildProposals(
         contract_excerpt:
           'SERVICES PARTNERSHIP AGREEMENT — Partner agrees to deliver a minimum of two (2) Statement-of-Work engagements per calendar year for Axal portfolio companies. Compensation per SOW (cash and/or 0.1%–0.5% equity-for-services). Partner is an independent contractor; no employment relationship is created. IP assignment per individual SOW.',
       });
+    } else if (t === 'deal_sourcing_revshare' && terms) {
+      const pct = revsharePct(terms.revshare_bps), days = terms.attribution_window_days;
+      out.push({
+        deal_type: t,
+        label: 'Deal Sourcing Revenue Share',
+        summary: 'Bring qualified founders or LPs to Axal in exchange for a tracked one-time grant + revenue share on closed deals.',
+        terms: {
+          founder_revshare_pct: `${pct}% of Axal fees on deals closed within ${days} days of intro`,
+          lp_revshare_pct: '10% of management fees on capital introduced',
+          attribution_window_days: days,
+          ...(terms.note ? { terms_note: terms.note } : {}),
+        },
+        granted_tier_founder: 'founder_pro',
+        granted_tier_investor: 'professional',
+        term_months: terms.term_months,
+        contract_excerpt:
+          `DEAL SOURCING & REVENUE SHARE AGREEMENT — Partner shall earn ${pct}% of Axal management fees on founder-sourced deals closed within ${days} days of introduction, and 10% of management fees on LP capital introduced. Attribution determined by Partner's unique referral code. Payments quarterly in arrears. Term: ${terms.term_months} months; auto-renews unless cancelled 60 days prior.`
+          + (terms.note ? ` Terms note: ${terms.note}` : ''),
+      });
     } else if (t === 'deal_sourcing_revshare') {
       out.push({
         deal_type: t,
@@ -147,6 +175,24 @@ export function buildProposals(
         term_months: 24,
         contract_excerpt:
           'CAPITAL PARTNERSHIP AGREEMENT — Partner commits ' + (capital ? '$' + capital.toLocaleString() : 'a minimum of $250,000') + ' across Axal-sponsored vehicles over 24 months. Partner receives pro-rata co-invest rights on all SPVs ≥ $500k and a 50% management-fee offset on capital sourced from Partner\'s network. Subject to KYC, accreditation verification, and execution of vehicle-specific subscription docs.',
+      });
+    } else if (terms) {
+      const pct = revsharePct(terms.revshare_bps), days = terms.attribution_window_days;
+      const outline = terms.note || profile.motivation || 'see attached SOW';
+      out.push({
+        deal_type: 'custom',
+        label: 'Custom Deal',
+        summary: 'Bespoke arrangement to be drafted with Axal counsel before signature.',
+        terms: {
+          description: terms.note || profile.motivation || 'See attached SOW',
+          revshare_pct: `${pct}% of Axal fees on deals the partner introduces, closed within ${days} days of introduction`,
+          attribution_window_days: days,
+        },
+        granted_tier_founder: 'founder_pro',
+        granted_tier_investor: null,
+        term_months: terms.term_months,
+        contract_excerpt:
+          `CUSTOM PARTNERSHIP AGREEMENT — Partner shall earn ${pct}% of Axal fees on deals Partner introduces that close within ${days} days of introduction, for a term of ${terms.term_months} months. Outline: ${outline}. Final binding terms will be presented inside the e-sign envelope before signature.`,
       });
     } else {
       out.push({

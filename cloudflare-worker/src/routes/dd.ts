@@ -269,6 +269,22 @@ dd.post('/cases', async (c) => {
         return c.json({ error: 'An invitation or commitment is required to open diligence on this startup.' }, 403);
       }
     }
+    // D1250 (#3265, DDL2): the case may open with its context — round, cheque,
+    // target IC date, lead and linked deal — under PATCH's own checks, all
+    // read before anything is written, so a refused field opens no case.
+    const ctx = await caseContextFrom(c.env, body, {
+      lead_user_id: user.id, target_ic_date: null, round_label: null, cheque_cents: null, cheque_currency: null, deal_id: null,
+    });
+    if ('error' in ctx) return c.json({ error: ctx.error }, ctx.status);
+    if (ctx.next.deal_id != null) {
+      // A linked deal is the startup's own, and an investor's one they are on.
+      const deal = await c.env.DB.prepare(
+        `SELECT d.id FROM deals d WHERE d.id = ? AND ? = 'project' AND d.project_id = ?
+           AND (? = 1 OR EXISTS (SELECT 1 FROM deal_invitations i WHERE i.deal_id = d.id AND i.investor_user_id = ?)
+                OR EXISTS (SELECT 1 FROM commitments k WHERE k.deal_id = d.id AND k.investor_user_id = ?))`,
+      ).bind(ctx.next.deal_id, subjectType, subjectId, isPrivileged ? 1 : 0, user.id, user.id).first();
+      if (!deal) return c.json({ error: 'Link a deal of this startup.' }, 400);
+    }
     const uid = genUid();
     const inserted: any[] = await sql`
       INSERT INTO dd_cases (uid, subject_type, subject_id, subject_label, owner_user_id, template_depth)
@@ -320,7 +336,24 @@ dd.post('/cases', async (c) => {
     }
     // D1246: the opener leads it, and its blocking sections are stamped.
     await stampNewCase(c.env, caseId, { blocking: !template });
-    await audit(c.env, caseId, user, 'case_opened', { type: 'dd_case', id: caseId }, { subject_type: subjectType, subject_id: subjectId, template_depth: templateDepth });
+    if (ctx.changed.length) {
+      const n = ctx.next;
+      await c.env.DB.prepare(
+        'UPDATE dd_cases SET lead_user_id = ?, target_ic_date = ?, round_label = ?, cheque_cents = ?, cheque_currency = ?, deal_id = ? WHERE id = ?',
+      ).bind(n.lead_user_id, n.target_ic_date, n.round_label, n.cheque_cents, n.cheque_currency, n.deal_id, caseId).run();
+    }
+    // The details name which context fields were given, never the figures.
+    await audit(c.env, caseId, user, 'case_opened', { type: 'dd_case', id: caseId }, { subject_type: subjectType, subject_id: subjectId, template_depth: templateDepth, context: ctx.changed });
+    if (ctx.next.lead_user_id !== user.id) {
+      await notify(c.env, {
+        userId: ctx.next.lead_user_id,
+        type: 'dd_case_lead',
+        title: `You lead the due diligence on ${subjectLabel}`,
+        body: 'You can now record the decision and send the case to IC.',
+        link: `/due-diligence/${uid}`,
+        channels: ['in_app'],
+      }).catch(() => null);
+    }
     return c.json({ ...row, template_version: template ? template.version : 0, sections_seeded: sections.length, checklist_seeded: itemsSeeded }, 201);
   } finally { await sql.end(); }
 });
@@ -383,14 +416,26 @@ dd.get('/cases/:uid', async (c) => {
     })));
 
     const decryptedFindings = await Promise.all(findings.map(async f => ({
-      id: f.id, section_id: f.section_id, source_id: f.source_id, source_kind: f.source_kind,
-      severity: f.severity, title: f.title, evidence_url: f.evidence_url,
+      // D1247: id, section, severity, title and the dates, plus who works it,
+      // where it stands, and how it was resolved.
+      ...(await flagView(c.env, f)),
+      source_id: f.source_id, source_kind: f.source_kind, evidence_url: f.evidence_url,
       detail: await decField(c.env, 'dd_findings', 'detail', f.id, f.detail_enc),
       subject_name: await decField(c.env, 'dd_findings', 'subject_name', f.id, f.subject_name_enc),
       evidence_excerpt: await decField(c.env, 'dd_findings', 'evidence_excerpt', f.id, f.evidence_excerpt_enc),
-      resolved_at: f.resolved_at,
-      created_at: f.created_at,
     })));
+    // D1247: one list of flags — findings, and every checklist item marked
+    // flag or fail (source 'checklist'), which the score already counts. An
+    // item with no severity of its own carries the score's default and says so.
+    const flags = [
+      ...decryptedFindings.map((f) => ({ kind: 'finding', ...f })),
+      ...checklist.filter((i) => i.status === 'flag' || i.status === 'fail').map((i) => ({
+        kind: 'checklist', source: 'checklist', id: null, checklist_item_id: i.id, section_id: i.section_id,
+        severity: i.severity || (i.status === 'fail' ? 'medium' : 'low'), severity_recorded: !!i.severity,
+        title: i.title, item_status: i.status, state: 'open', owner_user_id: i.owner_user_id ?? null,
+        created_at: i.created_at, updated_at: i.updated_at ?? null,
+      })),
+    ];
     // D466 — the signer's name travels with the section: the Sign-off column
     // reads it, and a section completed before the column existed renders
     // unrecorded rather than a guessed signer.
@@ -474,6 +519,7 @@ dd.get('/cases/:uid', async (c) => {
       case: caseOut,
       sections: decryptedSections,
       findings: decryptedFindings,
+      flags,
       sources: isScoped ? [] : sources, // scan results are case-wide; hide from scoped reviewers
       attachments,
       reviewers,
@@ -845,6 +891,211 @@ dd.patch('/cases/:uid/items/:itemId', async (c) => {
   } finally { await sql.end(); }
 });
 
+// ---------- flags raised by hand, worked and closed (D1247, #3262) ----------
+//
+// A flag is a `dd_findings` row: a connector's finding, or one a person
+// raised. Each can be given an owner and worked through FLAG_STATES; only
+// 'closed' sets `resolved_at`, so only a closed flag leaves the score (the
+// report keeps it, marked closed). Closing or accepting needs a resolution.
+// Access is the checklist's: admin and the case lead work any section; a
+// section's reviewer works only their own sections; an observer reads only.
+
+const FLAG_STATES = new Set(['open', 'in_progress', 'condition_to_close', 'accepted', 'closed']);
+const FLAG_NEEDS_RESOLUTION = new Set(['accepted', 'closed']);
+const FLAG_TITLE_MAX = 200;
+const FLAG_TEXT_MAX = 4000;
+
+/** Null when `user` may raise or work flags in `sectionId`; else the refusal. */
+async function flagWriteRefusal(env: Env, user: AppUser, cs: Record<string, unknown>, sectionId: number): Promise<{ status: 403; code: string; error: string } | null> {
+  if (user.role === 'admin' || leadsOrOpened(user, cs)) return null;
+  const r = await env.DB.prepare('SELECT role FROM dd_reviewers WHERE case_id = ? AND section_id = ? AND user_id = ? LIMIT 1')
+    .bind(Number(cs.id), sectionId, user.id).first<{ role: string }>();
+  if (!r) return { status: 403, code: 'not_your_section', error: 'You are not assigned to this section.' };
+  if (r.role === 'observer') return { status: 403, code: 'observer_reads_only', error: 'An observer reads this section and does not raise or work its flags.' };
+  return null;
+}
+
+/** A trimmed text of at most `max` characters; '' or null clears it; undefined leaves it. */
+function flagText(raw: unknown, max: number): { ok: true; value: string | null | undefined } | { ok: false } {
+  if (raw === undefined) return { ok: true, value: undefined };
+  if (raw === null) return { ok: true, value: null };
+  if (typeof raw !== 'string') return { ok: false };
+  const t = raw.trim();
+  if (t.length > max) return { ok: false };
+  return { ok: true, value: t || null };
+}
+
+async function userExists(env: Env, id: number): Promise<boolean> {
+  return !!(await env.DB.prepare('SELECT 1 AS one FROM users WHERE id = ? LIMIT 1').bind(id).first());
+}
+
+async function flagView(env: Env, f: any) {
+  return {
+    id: Number(f.id), section_id: f.section_id ?? null, checklist_item_id: f.checklist_item_id ?? null,
+    source: f.raised_by_user_id != null ? 'raised' : 'connector',
+    severity: f.severity, title: f.title, state: f.state,
+    owner_user_id: f.owner_user_id ?? null, raised_by_user_id: f.raised_by_user_id ?? null,
+    resolution: await decField(env, 'dd_findings', 'resolution', Number(f.id), f.resolution_enc ?? null),
+    resolved_at: f.resolved_at ?? null, resolved_by_user_id: f.resolved_by_user_id ?? null,
+    created_at: f.created_at, updated_at: f.updated_at ?? null,
+  };
+}
+
+dd.post('/cases/:uid/findings', async (c) => {
+  const cs = await getCaseByUid(c.env, c.req.param('uid'));
+  if (!cs) return c.json({ error: 'Case not found' }, 404);
+  let user: AppUser;
+  try { user = await requireCaseWriter(c, cs); }
+  catch { return c.json({ error: 'Forbidden: not a case owner or reviewer' }, 403); }
+  const caseId = Number(cs.id);
+  const body = await c.req.json().catch(() => ({})) as Record<string, unknown>;
+
+  const sectionId = Number(body.section_id);
+  if (!Number.isSafeInteger(sectionId)) return c.json({ code: 'section_required', error: 'Name the section the flag belongs to.' }, 400);
+  const section = await c.env.DB.prepare('SELECT id FROM dd_sections WHERE id = ? AND case_id = ?').bind(sectionId, caseId).first();
+  if (!section) return c.json({ code: 'section_not_on_case', error: 'That section is not on this case.' }, 404);
+  const refusal = await flagWriteRefusal(c.env, user, cs, sectionId);
+  if (refusal) return c.json({ code: refusal.code, error: refusal.error }, refusal.status);
+
+  const severity = String(body.severity ?? '');
+  if (!CHECKLIST_SEVERITIES.has(severity)) return c.json({ code: 'invalid_severity', error: 'Severity is one of info, low, medium, high or critical.' }, 400);
+  const title = flagText(body.title, FLAG_TITLE_MAX);
+  if (!title.ok || !title.value) return c.json({ code: 'invalid_title', error: `Give the flag a title of at most ${FLAG_TITLE_MAX} characters.` }, 400);
+  const detail = flagText(body.detail, FLAG_TEXT_MAX);
+  if (!detail.ok) return c.json({ code: 'invalid_detail', error: `The detail is text of at most ${FLAG_TEXT_MAX} characters.` }, 400);
+
+  let owner: number | null = null;
+  if (body.owner_user_id != null) {
+    owner = Number(body.owner_user_id);
+    if (!Number.isSafeInteger(owner)) return c.json({ code: 'invalid_owner', error: 'The owner is a user id.' }, 400);
+    if (!(await userExists(c.env, owner))) return c.json({ code: 'owner_not_found', error: 'That owner was not found.' }, 404);
+  }
+  let itemId: number | null = null;
+  if (body.checklist_item_id != null) {
+    itemId = Number(body.checklist_item_id);
+    const item = Number.isSafeInteger(itemId)
+      ? await c.env.DB.prepare('SELECT section_id FROM dd_checklist_items WHERE id = ? AND case_id = ?').bind(itemId, caseId).first<{ section_id: number }>()
+      : null;
+    if (!item) return c.json({ code: 'item_not_on_case', error: 'That checklist item is not on this case.' }, 404);
+    if (Number(item.section_id) !== sectionId) return c.json({ code: 'item_other_section', error: 'That checklist item is in another section.' }, 400);
+  }
+
+  const ins = await c.env.DB.prepare(
+    `INSERT INTO dd_findings (case_id, section_id, source_kind, severity, title, owner_user_id, raised_by_user_id, checklist_item_id, state, updated_at)
+     VALUES (?, ?, 'manual', ?, ?, ?, ?, ?, 'open', CURRENT_TIMESTAMP) RETURNING id`,
+  ).bind(caseId, sectionId, severity, title.value, owner, user.id, itemId).first<{ id: number }>();
+  const id = Number(ins!.id);
+  if (detail.value) {
+    const enc = await encField(c.env, 'dd_findings', 'detail', id, detail.value);
+    await c.env.DB.prepare('UPDATE dd_findings SET detail_enc = ? WHERE id = ?').bind(enc, id).run();
+  }
+  await audit(c.env, caseId, user, 'finding_raised', { type: 'dd_finding', id },
+    { section_id: sectionId, severity, state: 'open', owner_user_id: owner, checklist_item_id: itemId });
+  const score = await recomputeAndStoreScore(c.env, caseId);
+  const row = await c.env.DB.prepare('SELECT * FROM dd_findings WHERE id = ?').bind(id).first();
+  return c.json({ ok: true, finding: await flagView(c.env, row), ...score }, 201);
+});
+
+dd.patch('/cases/:uid/findings/:id', async (c) => {
+  const cs = await getCaseByUid(c.env, c.req.param('uid'));
+  if (!cs) return c.json({ error: 'Case not found' }, 404);
+  let user: AppUser;
+  try { user = await requireCaseWriter(c, cs); }
+  catch { return c.json({ error: 'Forbidden: not a case owner or reviewer' }, 403); }
+  const caseId = Number(cs.id);
+  const id = Number(c.req.param('id'));
+  const f = Number.isSafeInteger(id)
+    ? await c.env.DB.prepare('SELECT * FROM dd_findings WHERE id = ? AND case_id = ?').bind(id, caseId).first<any>()
+    : null;
+  if (!f) return c.json({ code: 'finding_not_found', error: 'That flag is not on this case.' }, 404);
+  // A flag with no section is case-wide: only admin and the lead work it.
+  const refusal = f.section_id == null
+    ? (user.role === 'admin' || leadsOrOpened(user, cs) ? null : { status: 403 as const, code: 'not_your_section', error: 'Only the case lead works a flag with no section.' })
+    : await flagWriteRefusal(c.env, user, cs, Number(f.section_id));
+  if (refusal) return c.json({ code: refusal.code, error: refusal.error }, refusal.status);
+
+  const body = await c.req.json().catch(() => ({})) as Record<string, unknown>;
+  if (body.state === undefined && body.owner_user_id === undefined && body.resolution === undefined) {
+    return c.json({ code: 'nothing_to_change', error: 'Send an owner, a state or a resolution.' }, 400);
+  }
+  const fromState = String(f.state ?? 'open');
+  const toState = body.state === undefined ? fromState : String(body.state);
+  if (!FLAG_STATES.has(toState)) return c.json({ code: 'invalid_state', error: 'State is one of open, in_progress, condition_to_close, accepted or closed.' }, 400);
+
+  let owner: number | null = f.owner_user_id ?? null;
+  if (body.owner_user_id !== undefined) {
+    owner = body.owner_user_id == null ? null : Number(body.owner_user_id);
+    if (owner != null) {
+      if (!Number.isSafeInteger(owner)) return c.json({ code: 'invalid_owner', error: 'The owner is a user id.' }, 400);
+      if (!(await userExists(c.env, owner))) return c.json({ code: 'owner_not_found', error: 'That owner was not found.' }, 404);
+    }
+  }
+  const resolution = flagText(body.resolution, FLAG_TEXT_MAX);
+  if (!resolution.ok) return c.json({ code: 'invalid_resolution', error: `The resolution is text of at most ${FLAG_TEXT_MAX} characters.` }, 400);
+  let resolutionEnc: string | null = f.resolution_enc ?? null;
+  if (resolution.value !== undefined) {
+    resolutionEnc = resolution.value == null ? null : await encField(c.env, 'dd_findings', 'resolution', id, resolution.value);
+  }
+  if (FLAG_NEEDS_RESOLUTION.has(toState) && !resolutionEnc) {
+    return c.json({ code: 'resolution_required', error: 'Say what resolved it before the flag is accepted or closed.' }, 400);
+  }
+  // Closing stamps who and when; leaving 'closed' reopens the flag into the score.
+  const closing = toState === 'closed' && fromState !== 'closed';
+  const resolvedAt = toState !== 'closed' ? null : (closing ? new Date().toISOString().replace('T', ' ').slice(0, 19) : f.resolved_at);
+  const resolvedBy = toState !== 'closed' ? null : (closing ? user.id : f.resolved_by_user_id);
+
+  // Guarded on the state read above, so two writers never both win.
+  const upd = await c.env.DB.prepare(
+    `UPDATE dd_findings SET state = ?, owner_user_id = ?, resolution_enc = ?, resolved_at = ?, resolved_by_user_id = ?, updated_at = CURRENT_TIMESTAMP
+      WHERE id = ? AND case_id = ? AND state = ?`,
+  ).bind(toState, owner, resolutionEnc, resolvedAt, resolvedBy, id, caseId, fromState).run();
+  if (!upd.meta?.changes) return c.json({ code: 'finding_changed', error: 'Someone changed this flag a moment ago. Read it again and retry.' }, 409);
+
+  const action = closing ? 'finding_closed' : (fromState === 'closed' && toState !== 'closed' ? 'finding_reopened' : 'finding_updated');
+  await audit(c.env, caseId, user, action, { type: 'dd_finding', id }, {
+    from_state: fromState, to_state: toState,
+    owner_from: f.owner_user_id ?? null, owner_to: owner,
+    resolution_changed: resolution.value !== undefined,
+  });
+  const score = await recomputeAndStoreScore(c.env, caseId);
+  const row = await c.env.DB.prepare('SELECT * FROM dd_findings WHERE id = ?').bind(id).first();
+  return c.json({ ok: true, finding: await flagView(c.env, row), ...score });
+});
+
+dd.get('/cases/:uid/findings/:id/history', async (c) => {
+  const user = await requireDdReader(c);
+  const cs = await getCaseByUid(c.env, c.req.param('uid'));
+  if (!cs) return c.json({ error: 'Case not found' }, 404);
+  const caseId = Number(cs.id);
+  const id = Number(c.req.param('id'));
+  const f = Number.isSafeInteger(id)
+    ? await c.env.DB.prepare('SELECT id, section_id FROM dd_findings WHERE id = ? AND case_id = ?').bind(id, caseId).first<{ id: number; section_id: number | null }>()
+    : null;
+  if (!f) return c.json({ code: 'finding_not_found', error: 'That flag is not on this case.' }, 404);
+  // Readers of the flag: admin, the lead, and anyone on its section (an observer included).
+  if (user.role !== 'admin' && !leadsOrOpened(user, cs)) {
+    const r = f.section_id == null ? null : await c.env.DB.prepare('SELECT 1 AS one FROM dd_reviewers WHERE case_id = ? AND section_id = ? AND user_id = ? LIMIT 1')
+      .bind(caseId, f.section_id, user.id).first();
+    if (!r) return c.json({ error: 'Forbidden' }, 403);
+  }
+  const rows = (await c.env.DB.prepare(
+    `SELECT a.id, a.action, a.actor_user_id, a.details_enc, a.created_at, u.name AS actor_name
+       FROM dd_audit_log a LEFT JOIN users u ON u.id = a.actor_user_id
+      WHERE a.case_id = ? AND a.target_type = 'dd_finding' AND a.target_id = ?
+      ORDER BY a.created_at, a.id`,
+  ).bind(caseId, id).all<any>()).results || [];
+  const items = await Promise.all(rows.map(async (r: any) => {
+    let details: unknown = null;
+    if (r.details_enc) {
+      const raw = await decField(c.env, 'dd_audit_log', 'details', r.id, r.details_enc);
+      try { details = raw ? JSON.parse(raw) : null; } catch { details = null; }
+    }
+    // An actor whose account is gone keeps the row; the name reads null.
+    return { id: r.id, action: r.action, at: r.created_at, actor_user_id: r.actor_user_id ?? null, actor_name: r.actor_name ?? null, details };
+  }));
+  return c.json({ items });
+});
+
 // ---------- information requests (build queue #128) ----------
 //
 // INVARIANT: dd_requests rows are founder-visible by design and carry
@@ -1167,6 +1418,9 @@ dd.post('/cases/:uid/report', async (c) => {
         severity: f.severity, title: f.title,
         detail: await decField(c.env, 'dd_findings', 'detail', f.id, f.detail_enc),
         evidence_url: f.evidence_url,
+        // D1247: a closed flag stays in the report, marked closed.
+        state: f.state ?? null,
+        resolution: await decField(c.env, 'dd_findings', 'resolution', f.id, f.resolution_enc ?? null),
       }))),
     })));
     const reportCase: ReportCase = {
@@ -1651,6 +1905,66 @@ async function icRecordFor(env: Env, user: AppUser, caseId: number): Promise<{ u
   try { return await icRecordForCase(env, user as any, caseId); } catch { return null; }
 }
 
+/** A case's deal context (D1246). */
+interface CaseContext {
+  lead_user_id: number; target_ic_date: string | null; round_label: string | null;
+  cheque_cents: number | null; cheque_currency: string | null; deal_id: number | null;
+}
+
+/**
+ * The context fields a body names, each checked; the rest keep `base`'s value.
+ * `PATCH /cases/:uid` and, from D1250, `POST /cases` apply the same checks, so
+ * a case opened with its context is held to what a later change is.
+ */
+async function caseContextFrom(env: Env, body: any, base: CaseContext): Promise<{ next: CaseContext; changed: string[] } | { error: string; status: 400 | 404 }> {
+  const has = (k: string) => Object.prototype.hasOwnProperty.call(body, k);
+  const next = { ...base };
+  const changed: string[] = [];
+  if (has('lead_user_id')) {
+    const id = Number(body.lead_user_id);
+    if (!Number.isInteger(id) || id <= 0) return { error: 'Choose who leads the case.', status: 400 };
+    const u = await env.DB.prepare('SELECT id, role FROM users WHERE id = ? AND COALESCE(is_active, 1) = 1').bind(id).first<{ id: number; role: string }>();
+    if (!u) return { error: 'That person could not be found.', status: 404 };
+    if (!LEAD_ROLES.has(String(u.role))) return { error: 'A case is led by an Admin, a partner or an investor.', status: 400 };
+    next.lead_user_id = id; changed.push('lead');
+  }
+  if (has('target_ic_date')) {
+    const v = body.target_ic_date == null || body.target_ic_date === '' ? null : String(body.target_ic_date);
+    if (v != null && !isDay(v)) return { error: 'The target IC date is a day, YYYY-MM-DD.', status: 400 };
+    next.target_ic_date = v; changed.push('target_ic_date');
+  }
+  if (has('round_label')) {
+    const v = body.round_label == null ? '' : String(body.round_label).trim();
+    if (v.length > 80) return { error: 'The round is at most 80 characters.', status: 400 };
+    next.round_label = v || null; changed.push('round');
+  }
+  if (has('cheque_cents') || has('cheque_currency')) {
+    const cents = has('cheque_cents') ? body.cheque_cents : next.cheque_cents;
+    const cur = has('cheque_currency') ? body.cheque_currency : next.cheque_currency;
+    if (cents == null || cents === '') {
+      next.cheque_cents = null; next.cheque_currency = null;
+    } else {
+      const n = Number(cents);
+      if (!Number.isSafeInteger(n) || n < 0) return { error: 'The cheque is a whole number of cents, zero or more.', status: 400 };
+      const code = String(cur ?? '').trim().toUpperCase();
+      if (!/^[A-Z]{3}$/.test(code)) return { error: 'Give the cheque its currency, a three-letter code such as EUR.', status: 400 };
+      next.cheque_cents = n; next.cheque_currency = code;
+    }
+    changed.push('cheque');
+  }
+  if (has('deal_id')) {
+    if (body.deal_id == null || body.deal_id === '') next.deal_id = null;
+    else {
+      const id = Number(body.deal_id);
+      const deal = Number.isInteger(id) ? await env.DB.prepare('SELECT id FROM deals WHERE id = ?').bind(id).first() : null;
+      if (!deal) return { error: 'That deal could not be found.', status: 404 };
+      next.deal_id = id;
+    }
+    changed.push('deal');
+  }
+  return { next, changed };
+}
+
 dd.patch('/cases/:uid', async (c) => {
   const user = await requireDdReader(c);
   const cs = await getCaseByUid(c.env, c.req.param('uid'));
@@ -1659,7 +1973,6 @@ dd.patch('/cases/:uid', async (c) => {
   if (refusal) return c.json({ error: refusal.error }, refusal.status);
   const caseId = Number(cs.id);
   const body = await c.req.json().catch(() => ({} as any));
-  const has = (k: string) => Object.prototype.hasOwnProperty.call(body, k);
 
   if (body.archive === true) {
     const reason = String(body.archived_reason ?? '').trim();
@@ -1675,57 +1988,16 @@ dd.patch('/cases/:uid', async (c) => {
   }
 
   // The context: each field the body names is checked; the rest keep their value.
-  const next = {
+  const ctx = await caseContextFrom(c.env, body, {
     lead_user_id: leadOf(cs),
     target_ic_date: (cs.target_ic_date ?? null) as string | null,
     round_label: (cs.round_label ?? null) as string | null,
     cheque_cents: cs.cheque_cents == null ? null : Number(cs.cheque_cents),
     cheque_currency: (cs.cheque_currency ?? null) as string | null,
     deal_id: cs.deal_id == null ? null : Number(cs.deal_id),
-  };
-  const changed: string[] = [];
-  if (has('lead_user_id')) {
-    const id = Number(body.lead_user_id);
-    if (!Number.isInteger(id) || id <= 0) return c.json({ error: 'Choose who leads the case.' }, 400);
-    const u = await c.env.DB.prepare('SELECT id, role FROM users WHERE id = ? AND COALESCE(is_active, 1) = 1').bind(id).first<{ id: number; role: string }>();
-    if (!u) return c.json({ error: 'That person could not be found.' }, 404);
-    if (!LEAD_ROLES.has(String(u.role))) return c.json({ error: 'A case is led by an Admin, a partner or an investor.' }, 400);
-    next.lead_user_id = id; changed.push('lead');
-  }
-  if (has('target_ic_date')) {
-    const v = body.target_ic_date == null || body.target_ic_date === '' ? null : String(body.target_ic_date);
-    if (v != null && !isDay(v)) return c.json({ error: 'The target IC date is a day, YYYY-MM-DD.' }, 400);
-    next.target_ic_date = v; changed.push('target_ic_date');
-  }
-  if (has('round_label')) {
-    const v = body.round_label == null ? '' : String(body.round_label).trim();
-    if (v.length > 80) return c.json({ error: 'The round is at most 80 characters.' }, 400);
-    next.round_label = v || null; changed.push('round');
-  }
-  if (has('cheque_cents') || has('cheque_currency')) {
-    const cents = has('cheque_cents') ? body.cheque_cents : next.cheque_cents;
-    const cur = has('cheque_currency') ? body.cheque_currency : next.cheque_currency;
-    if (cents == null || cents === '') {
-      next.cheque_cents = null; next.cheque_currency = null;
-    } else {
-      const n = Number(cents);
-      if (!Number.isSafeInteger(n) || n < 0) return c.json({ error: 'The cheque is a whole number of cents, zero or more.' }, 400);
-      const code = String(cur ?? '').trim().toUpperCase();
-      if (!/^[A-Z]{3}$/.test(code)) return c.json({ error: 'Give the cheque its currency, a three-letter code such as EUR.' }, 400);
-      next.cheque_cents = n; next.cheque_currency = code;
-    }
-    changed.push('cheque');
-  }
-  if (has('deal_id')) {
-    if (body.deal_id == null || body.deal_id === '') next.deal_id = null;
-    else {
-      const id = Number(body.deal_id);
-      const deal = Number.isInteger(id) ? await c.env.DB.prepare('SELECT id FROM deals WHERE id = ?').bind(id).first() : null;
-      if (!deal) return c.json({ error: 'That deal could not be found.' }, 404);
-      next.deal_id = id;
-    }
-    changed.push('deal');
-  }
+  });
+  if ('error' in ctx) return c.json({ error: ctx.error }, ctx.status);
+  const { next, changed } = ctx;
   if (!changed.length) return c.json({ error: 'Nothing to change.' }, 400);
   await c.env.DB.prepare(
     `UPDATE dd_cases SET lead_user_id = ?, target_ic_date = ?, round_label = ?, cheque_cents = ?, cheque_currency = ?, deal_id = ?,
@@ -2043,6 +2315,30 @@ dd.get('/my-reviews', async (c) => {
 const SUBJECT_ROLE: Record<string, string> = { founder: 'founder', advisor: 'advisor', investor: 'investor', partner: 'partner' };
 const likeOf = (q: string) => `%${q.replace(/[\\%_]/g, (m) => `\\${m}`)}%`;
 
+/**
+ * D1250 (#3265, DDL2): each startup the search found, with its stage and the
+ * deals Open a case may link — every deal for an Admin or a partner, an
+ * investor's only those they are invited to or committed on. The ids go in
+ * as one bound JSON array, so the SQL text never changes with the request.
+ */
+async function withDeals(env: Env, user: AppUser, projects: any[]) {
+  const ids = projects.map((p) => Number(p.id));
+  const deals = ids.length
+    ? ((await env.DB.prepare(
+      `SELECT d.id, d.project_id, d.status, d.instrument, d.created_at FROM deals d
+        WHERE d.project_id IN (SELECT value FROM json_each(?))
+          AND (? = 1 OR EXISTS (SELECT 1 FROM deal_invitations i WHERE i.deal_id = d.id AND i.investor_user_id = ?)
+               OR EXISTS (SELECT 1 FROM commitments k WHERE k.deal_id = d.id AND k.investor_user_id = ?))
+        ORDER BY d.created_at DESC, d.id DESC`,
+    ).bind(JSON.stringify(ids), user.role === 'investor' ? 0 : 1, user.id, user.id).all<any>()).results || [])
+    : [];
+  return projects.map((p) => ({
+    id: p.id, name: p.name, type: 'project', stage: p.stage ?? null,
+    deals: deals.filter((d: any) => Number(d.project_id) === Number(p.id))
+      .map((d: any) => ({ id: d.id, status: d.status, instrument: d.instrument ?? null, created_at: d.created_at })),
+  }));
+}
+
 dd.get('/subjects', async (c) => {
   const user = await requireDdReader(c);
   const type = String(c.req.query('type') || '');
@@ -2054,20 +2350,20 @@ dd.get('/subjects', async (c) => {
     // deal with — the same relationship `POST /cases` checks (D1149).
     if (type !== 'project') return c.json({ error: 'You can only open diligence on a startup you are in a deal with.' }, 403);
     const rows = await c.env.DB.prepare(
-      `SELECT p.id, p.name FROM projects p
+      `SELECT p.id, p.name, p.stage FROM projects p
         WHERE p.deleted_at IS NULL AND p.name LIKE ? ESCAPE '\\'
           AND EXISTS (SELECT 1 FROM deals d WHERE d.project_id = p.id AND (
                 EXISTS (SELECT 1 FROM deal_invitations i WHERE i.deal_id = d.id AND i.investor_user_id = ?)
                 OR EXISTS (SELECT 1 FROM commitments k WHERE k.deal_id = d.id AND k.investor_user_id = ?)))
         ORDER BY p.name COLLATE NOCASE LIMIT 20`,
     ).bind(likeOf(q), user.id, user.id).all<any>();
-    return c.json({ items: (rows.results || []).map((r: any) => ({ id: r.id, name: r.name, type })) });
+    return c.json({ items: await withDeals(c.env, user, rows.results || []) });
   }
   if (type === 'project') {
     const rows = await c.env.DB.prepare(
-      `SELECT id, name FROM projects WHERE deleted_at IS NULL AND name LIKE ? ESCAPE '\\' ORDER BY name COLLATE NOCASE LIMIT 20`,
+      `SELECT id, name, stage FROM projects WHERE deleted_at IS NULL AND name LIKE ? ESCAPE '\\' ORDER BY name COLLATE NOCASE LIMIT 20`,
     ).bind(likeOf(q)).all<any>();
-    return c.json({ items: (rows.results || []).map((r: any) => ({ id: r.id, name: r.name, type })) });
+    return c.json({ items: await withDeals(c.env, user, rows.results || []) });
   }
   const rows = await c.env.DB.prepare(
     `SELECT id, name FROM users WHERE role = ? AND COALESCE(is_active, 1) = 1 AND COALESCE(name, '') != '' AND name LIKE ? ESCAPE '\\'

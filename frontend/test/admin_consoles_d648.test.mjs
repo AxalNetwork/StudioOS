@@ -25,7 +25,6 @@ import { MemoryRouter } from 'react-router-dom';
 import { api } from '../src/lib/api.js';
 import * as PAGES from '../src/pages/admin/ConsolePages.jsx';
 import UsersConsole from '../src/pages/admin/consoles/UsersConsole.jsx';
-import KycConsole from '../src/pages/admin/consoles/KycConsole.jsx';
 import DirectoryPanel from '../src/pages/admin/consoles/DirectoryConsole.jsx';
 import IntegrationKeysPanel from '../src/pages/admin/consoles/IntegrationKeysConsole.jsx';
 import GithubSyncPanel from '../src/pages/admin/consoles/GithubSyncConsole.jsx';
@@ -133,8 +132,9 @@ const UNREADABLE = /could not be read\. This is not a sign that there are none\.
 const CONSOLES = [
   { name: 'Users', el: () => React.createElement(UsersConsole), reads: ['adminListUsers'],
     empty: { adminListUsers: async () => ({ results: [], total: 0, by_role: {} }) }, says: /No users found/, loading: /Loading…/ },
-  { name: 'KYC', el: () => React.createElement(KycConsole), reads: ['kycAdminQueue'],
-    empty: { kycAdminQueue: async () => [] }, says: /No one is Waiting\./, loading: /Loading…/ }, // D1228: the canvas's status words
+  // D1233: the KYC console reads `kycPeopleApi` (part 1's queue and figures),
+  // not `api`; its loading, empty and unreadable states, and that it reads
+  // nothing else, are `kyc_people_d1233.test.mjs`'s.
   { name: 'Directory', el: () => React.createElement(DirectoryPanel), reads: ['adminListDirectoryPartners'],
     empty: { adminListDirectoryPartners: async () => ({ partners: [] }) }, says: /No partners found\./, loading: /Loading/ },
   { name: 'Integration keys', el: () => React.createElement(IntegrationKeysPanel), reads: ['adminListIntegrationKeys'],
@@ -195,7 +195,6 @@ test('Billing: a failed disputes read draws Unreadable, never "No disputes loade
 // ── Each page fetches only its own console's data (D938) ────────────────────
 const OWN = [
   ['AllAccountsPage', '/admin/accounts/all', ['adminListUsers', 'trustScoreBatch']],
-  ['KycPage', '/admin/kyc', ['kycAdminQueue']],
   ['DirectoryPage', '/admin/directory', ['adminListDirectoryPartners']],
   // Integration keys and GitHub Sync left the console for HQ's own page
   // (the owner's ruling, 2026-10-20); `integration_keys_hq_only.test.mjs`.
