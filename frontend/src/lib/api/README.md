@@ -434,3 +434,5 @@ D1176: `useOfFunds.js` holds the venture-scoped plan, scenarios/compare, milesto
 | File | Purpose |
 |---|---|
 | `raiseEvidence.js` | D1263: founder evidence reads, refresh and versioned decisions against the mounted Worker routes. |
+| --- | --- |
+| `dealInsights.js` | D1151: per-deal Team, Market and Traction read clients. |

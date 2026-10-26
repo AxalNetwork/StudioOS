@@ -112,3 +112,5 @@ D1123 extends the Lab desks, overview and operations tests for Formation scope, 
 | File | Purpose |
 |---|---|
 | `raise_evidence_client_d1263.test.mjs` | D1263: request methods, project paging, snapshot/version guards and encoded evidence/claim paths. |
+| --- | --- |
+| `deal_insights_client_d1151.test.mjs` | D1151: encoded deal clients preserve response states. |
