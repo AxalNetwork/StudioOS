@@ -1,29 +1,28 @@
-# Personal Calendar helpers
+# Calendar services
 
-These helpers support `../calendar.ts` and `../../routes/calendar.ts`. The
-calendar is personal: a wider studio role does not widen a member's Mine
-feed or its source reads.
+Personal calendar sources and the bookkeeping for external calendar copies.
+The routes gate the member before calling these services. Keep page-only detail
+projection separate from feeds and provider sync, and preserve source ownership
+when adding a kind.
 
-- `items.ts` enriches the page's item drawers with recorded fields, families
-  and action states. It does not add those details to feeds or provider copies.
-- `myEvents.ts` reads the member's event registrations and hosted events,
-  retaining seat/payment states and the standing join-link permission.
-- `investorMeetings.ts` reads the venture founder's recorded prospect meetings
-  with a start time. It invents no time, attendee or invitation.
-- `sourceReaders.ts` reads owner-scoped interview calls, cohort dates,
-  compliance deadlines and deal closing dates. It makes no provider calls.
-- `feedTokens.ts` mints and verifies separate revocable tokens for My events
-  and the whole calendar. Only token hashes are stored; tokens never enter paths.
-- `sync.ts` copies eligible items to the member's connected Google or Outlook
-  calendar, tracks provider mappings and handles updates/cancellations.
-- `syncState.ts` records fixed sync-error codes and timestamps, plus account
-  markers for retained copies across disconnect/reconnect. Provider error text
-  is not stored.
-- `cancelEvents.ts` performs bounded event-copy cleanup and queues durable
-  continuation/retry. It rechecks source state before deleting a provider copy.
+- `myEvents.ts`: the member's event registrations and hosted events as calendar
+  items, plus per-event add-to-calendar links.
+- `feedTokens.ts`: the member's subscription token, returned once; only its hash
+  is stored. Replacing or revoking it invalidates the previous feed address.
+- `investorMeetings.ts`: dated Capital relationships meetings on the venture
+  founder's own calendar, without inviting anyone.
+- `sourceReaders.ts`: personal interview calls, cohort dates, compliance due
+  dates and deal closings as read-only calendar sources; no provider calls.
+- `items.ts`: page-only drawer fields for calendar items. Feed and provider
+  projections keep their separate, smaller event shape.
+- `sync.ts`: create, update and cancellation hooks for copies of Axal-booked
+  sessions on the member's connected Google or Outlook calendar.
+- `cancelEvents.ts`: bounded immediate cleanup and durable continuation for a
+  cancelled registration or event, rechecking source state before deletion.
+- `syncState.ts`: fixed sync-error codes and retained-copy/disconnection state;
+  no provider response text is stored as an error.
 
-When adding a source, preserve its owner and participant gates, stable source
-identity and recorded timing. Missing data stays missing; a failed read is not
-an empty calendar. Keep page-only details out of feeds/provider copies and keep
-calendar-provider credentials, event text and addresses out of logs. Extend
-both the allowed and refused cases in the corresponding calendar tests.
+Add readers beside the source they represent and test member boundaries with
+synthetic data. Tests stub provider calls. Never log feed tokens, provider
+credentials, titles, addresses or response bodies. A missing or failed source
+must remain distinguishable from a known empty calendar.
