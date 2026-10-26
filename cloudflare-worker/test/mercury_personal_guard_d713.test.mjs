@@ -17,7 +17,9 @@ const allowed=new Set(['integrations/providers/mercury.ts','services/mercuryPers
   // D895 (#2674): cached runway only, after owner/company/support checks; no provider or credential read.
   'services/decks/autofill.ts',
   // D891 (#2447): cached venture facts and active connection state; no provider call or credentials.
-  'services/raiseEvidence.ts']);
+  'services/raiseEvidence.ts',
+  // D1176 (#3103): cached facts from the founder caller's own active row, after company/support checks; no provider/credential read.
+  'services/useOfFunds/read.ts']);
 const callers=new Set(['routes/revenue.ts','routes/mercury_personal.ts','routes/needs.ts','routes/network.ts','services/capitalAttestations.ts',
   // D840 part 3: the founder's confirmed raise receipts are financing in their Grow months.
   'services/mercury/growFeeds.ts']);

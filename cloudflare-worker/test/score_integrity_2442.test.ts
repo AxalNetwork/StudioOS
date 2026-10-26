@@ -22,29 +22,7 @@ test('2442: score and intake refuse client adjustments before creating a project
  }
  db.close();
 });
-// Execute the route's status-selection block with a recording SQL boundary.
-// This pins the persisted status decision without mocking scoring mathematics.
-test('2442: official low scores preserve status, high scores keep existing tiers',async()=>{
- const source=read('../src/routes/scoring.ts');
- const block=source.slice(source.indexOf('  let newStatus = project.status;'),source.indexOf('\n  await sql.end();',source.indexOf('  let newStatus = project.status;')));
- for(const score of [0,69.9,70,85]){
-  const writes:any[]=[];
-  const context=vm.createContext({project:{status:'applied'},result:{total_score:score},effectiveSandbox:false,reviewStatus:'auto_approved',projectId:7,sql:async(strings:any,...values:any[])=>writes.push(values)});
-  await vm.runInContext(`(async()=>{${block}; globalThis.status=newStatus;})()`,context);
-  assert.equal(context.status,score>=85?'tier_1':score>=70?'tier_2':'applied');
-  assert.equal(writes.length,score>=70?1:0);
- }
-});
-test('2442: intake low scores preserve project status and create an applied deal',()=>{
- const source=read('../src/routes/projects.ts');
- const start=source.indexOf('  let newStatus =');
- const block=source.slice(start,source.indexOf('\n  await sql`UPDATE projects',start));
- for(const review of ['flagged','auto_approved']){
-  const ctx=vm.createContext({project:{status:'draft',stage:'idea'},result:{total_score:20},intakeReview:review});
-  vm.runInContext(`${block}; globalThis.output=[newStatus,dealStatus,newStage]`,ctx);
-  assert.deepEqual(Array.from(ctx.output),['draft','applied','idea']);
- }
-});
+// D1254's mounted SQLite route regressions now cover status preservation at every score.
 test('2442: both paths flag low scores for a person, preserving sandbox behavior',()=>{
  for(const path of ['../src/routes/scoring.ts','../src/routes/projects.ts']){
   const source=read(path);

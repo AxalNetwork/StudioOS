@@ -107,7 +107,7 @@ test('1. the score: self, this territory\'s admin, and open counterparties; nobo
       [LEAD_PARTNER, FOUNDER_A, 200, 'the deal\'s lead partner'],
       [FOUNDER_A, LEAD_PARTNER, 200, 'the founder reads the lead partner'],
       [MEMBER_A, INVITED, 200, 'a venture member, through the company link'],
-      [INTRO_PENDING, FOUNDER_B, 200, 'an investor in an open intro'],
+      [INTRO_PENDING, FOUNDER_B, 403, 'D1254: an investor needs a shared deal, not just an intro'],
       [FOUNDER_B, INTRO_PENDING, 200, 'the founder in that intro'],
       [STRANGER, FOUNDER_A, 403, 'an investor with no intro or deal'],
       [OTHER_PARTNER, FOUNDER_A, 403, 'a partner not on the deal'],

@@ -3034,6 +3034,26 @@ async function hiddenFounderCounts(env: Env): Promise<{ byRow: Map<number, numbe
   }
 }
 
+/** O-FND A (D960): the Lab's activated applicants, distinct by founder and
+ * cycle. Week records and the user's current Lab flag do not define admission.
+ * One aggregate serves every assignment; unreadable is null, never zero. */
+async function activatedFounderCounts(env: Env): Promise<Map<number, number> | null> {
+  try {
+    const rows = await env.DB.prepare(
+      `SELECT cohort_cycle_id, COUNT(DISTINCT user_id) AS n
+         FROM cohort_applicants WHERE status = ? GROUP BY cohort_cycle_id`
+    ).bind('activated').all<{ cohort_cycle_id: number; n: number }>();
+    if (!rows.success || !Array.isArray(rows.results) || rows.results.some((r) =>
+      !Number.isSafeInteger(r.cohort_cycle_id) || !Number.isSafeInteger(r.n) || r.n < 0)) {
+      throw new Error('cohort_founder_counts_unreadable');
+    }
+    return new Map(rows.results.map((r) => [r.cohort_cycle_id, r.n]));
+  } catch {
+    console.error('[advisors] cohort founder counts unreadable');
+    return null;
+  }
+}
+
 /**
  * Admin: who is assigned to which cohort.
  *
@@ -3069,6 +3089,7 @@ advisors.get('/admin/cohort-assignments', async (c) => {
       advisor_role: string | null; advisor_is_active: number | null;
     }>();
     const hidden = await hiddenFounderCounts(c.env);
+    const founders = await activatedFounderCounts(c.env);
     return c.json({
       items: (rows.results || []).map((r) => ({
         ...r,
@@ -3076,6 +3097,7 @@ advisors.get('/admin/cohort-assignments', async (c) => {
         // A deleted user has no account to be active: null, not false.
         advisor_is_active: r.advisor_is_active == null ? null : Number(r.advisor_is_active) === 1,
         founders_hidden: hidden ? hidden.byRow.get(Number(r.id)) ?? 0 : null,
+        founders_in_cohort: founders ? founders.get(Number(r.cohort_cycle_id)) ?? 0 : null,
       })),
       founders_hidden_total: hidden ? hidden.total : null,
     });

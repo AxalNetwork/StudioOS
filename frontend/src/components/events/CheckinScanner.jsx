@@ -6,11 +6,16 @@
 // manual code-entry fallback for browsers that lack it (or when the camera is
 // denied). The decoded code is handed to onDetect(code); the parent calls
 // `eventsApi.checkin(eventId, code)`.
+//
+// D1037 (#2878, MEV18c): the camera and the code entry are `useScanner` and
+// `ScannerView`, so My events' phone sheet draws them inside a bottom sheet;
+// the default export is the manage page's modal, unchanged.
 import React, { useEffect, useRef, useState, useCallback } from 'react';
 import { X, Camera, Keyboard, AlertTriangle } from 'lucide-react';
 import { useEscapeClose } from '../useEscapeClose';
 
-export default function CheckinScanner({ onDetect, onClose, busy = false }) {
+/** The camera, its decoder and the typed code: `mode` is 'camera' or 'manual'. */
+export function useScanner({ onDetect, busy = false }) {
   const videoRef = useRef(null);
   const streamRef = useRef(null);
   const rafRef = useRef(null);
@@ -25,8 +30,6 @@ export default function CheckinScanner({ onDetect, onClose, busy = false }) {
   );
   const [error, setError] = useState('');
   const [manualCode, setManualCode] = useState('');
-
-  useEscapeClose(onClose);
 
   const stopCamera = useCallback(() => {
     if (rafRef.current) { cancelAnimationFrame(rafRef.current); rafRef.current = null; }
@@ -91,6 +94,80 @@ export default function CheckinScanner({ onDetect, onClose, busy = false }) {
     if (code) { onDetect(code); setManualCode(''); }
   };
 
+  return { videoRef, supported, mode, setMode, error, setError, manualCode, setManualCode, submitManual, busy };
+}
+
+/** The camera with its frame, or the typed code with Check in: what `useScanner` holds. */
+export function ScannerView({ scanner, hint = "Point the camera at an attendee's ticket QR code.", dark = false }) {
+  const { videoRef, supported, mode, setMode, error, setError, manualCode, setManualCode, submitManual, busy } = scanner;
+  return (
+    <div className="space-y-4">
+      {error && (
+        <div className="flex items-start gap-2 rounded-lg bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 px-3 py-2 text-sm text-amber-800 dark:text-amber-200">
+          <AlertTriangle size={16} className="mt-0.5 flex-shrink-0" />
+          <span>{error}</span>
+        </div>
+      )}
+
+      {mode === 'camera' && supported ? (
+        <div className="space-y-3">
+          <div className={`relative w-full overflow-hidden rounded-lg bg-black ${dark ? 'h-[260px] rounded-[14px] bg-[#0b1220]' : 'aspect-square'}`}>
+            <video ref={videoRef} className="h-full w-full object-cover" muted playsInline />
+            <div className="pointer-events-none absolute inset-8 rounded-lg border-2 border-white/70" />
+          </div>
+          <p className="text-center text-sm text-gray-500 dark:text-gray-400">{hint}</p>
+          {dark ? null : (
+            <button
+              onClick={() => setMode('manual')}
+              className="flex w-full items-center justify-center gap-2 rounded-lg border border-gray-300 dark:border-gray-600 px-3 py-2 text-sm font-medium text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-800"
+            >
+              <Keyboard size={16} /> Enter code manually
+            </button>
+          )}
+        </div>
+      ) : (
+        <form onSubmit={submitManual} className="space-y-3" data-testid="checkin-manual">
+          <label className="block text-sm font-medium text-gray-700 dark:text-gray-200">
+            Ticket code
+          </label>
+          <input
+            type="text"
+            value={manualCode}
+            onChange={(e) => setManualCode(e.target.value)}
+            placeholder="Paste or type the code from the ticket"
+            className="w-full rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 px-3 py-2 text-sm text-gray-900 dark:text-gray-100 placeholder-gray-400 dark:placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-violet-500"
+            autoFocus
+            data-testid="checkin-manual-code"
+          />
+          <div className="flex gap-2">
+            <button
+              type="submit"
+              disabled={busy || !manualCode.trim()}
+              className="flex-1 rounded-lg bg-violet-600 px-3 py-2 text-sm font-medium text-white hover:bg-violet-700 disabled:opacity-50"
+              data-testid="checkin-manual-go"
+            >
+              {busy ? 'Checking in…' : 'Check in'}
+            </button>
+            {supported && (
+              <button
+                type="button"
+                onClick={() => { setError(''); setMode('camera'); }}
+                className="flex items-center justify-center gap-2 rounded-lg border border-gray-300 dark:border-gray-600 px-3 py-2 text-sm font-medium text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-800"
+              >
+                <Camera size={16} /> Camera
+              </button>
+            )}
+          </div>
+        </form>
+      )}
+    </div>
+  );
+}
+
+export default function CheckinScanner({ onDetect, onClose, busy = false }) {
+  const scanner = useScanner({ onDetect, busy });
+  useEscapeClose(onClose);
+
   return (
     <div
       className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4"
@@ -111,63 +188,8 @@ export default function CheckinScanner({ onDetect, onClose, busy = false }) {
           </button>
         </div>
 
-        <div className="p-5 space-y-4">
-          {error && (
-            <div className="flex items-start gap-2 rounded-lg bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 px-3 py-2 text-sm text-amber-800 dark:text-amber-200">
-              <AlertTriangle size={16} className="mt-0.5 flex-shrink-0" />
-              <span>{error}</span>
-            </div>
-          )}
-
-          {mode === 'camera' && supported ? (
-            <div className="space-y-3">
-              <div className="relative aspect-square w-full overflow-hidden rounded-lg bg-black">
-                <video ref={videoRef} className="h-full w-full object-cover" muted playsInline />
-                <div className="pointer-events-none absolute inset-8 rounded-lg border-2 border-white/70" />
-              </div>
-              <p className="text-center text-sm text-gray-500 dark:text-gray-400">
-                Point the camera at an attendee's ticket QR code.
-              </p>
-              <button
-                onClick={() => setMode('manual')}
-                className="flex w-full items-center justify-center gap-2 rounded-lg border border-gray-300 dark:border-gray-600 px-3 py-2 text-sm font-medium text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-800"
-              >
-                <Keyboard size={16} /> Enter code manually
-              </button>
-            </div>
-          ) : (
-            <form onSubmit={submitManual} className="space-y-3">
-              <label className="block text-sm font-medium text-gray-700 dark:text-gray-200">
-                Ticket code
-              </label>
-              <input
-                type="text"
-                value={manualCode}
-                onChange={(e) => setManualCode(e.target.value)}
-                placeholder="Paste or type the code from the ticket"
-                className="w-full rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 px-3 py-2 text-sm text-gray-900 dark:text-gray-100 placeholder-gray-400 dark:placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-violet-500"
-                autoFocus
-              />
-              <div className="flex gap-2">
-                <button
-                  type="submit"
-                  disabled={busy || !manualCode.trim()}
-                  className="flex-1 rounded-lg bg-violet-600 px-3 py-2 text-sm font-medium text-white hover:bg-violet-700 disabled:opacity-50"
-                >
-                  {busy ? 'Checking in…' : 'Check in'}
-                </button>
-                {supported && (
-                  <button
-                    type="button"
-                    onClick={() => { setError(''); setMode('camera'); }}
-                    className="flex items-center justify-center gap-2 rounded-lg border border-gray-300 dark:border-gray-600 px-3 py-2 text-sm font-medium text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-800"
-                  >
-                    <Camera size={16} /> Camera
-                  </button>
-                )}
-              </div>
-            </form>
-          )}
+        <div className="p-5">
+          <ScannerView scanner={scanner} />
         </div>
       </div>
     </div>
