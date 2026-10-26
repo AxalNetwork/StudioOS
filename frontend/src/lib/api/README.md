@@ -1,5 +1,8 @@
 # frontend/src/lib/api — one file per new API domain
 
+D1239: `dealViews.js` reads personal thesis fit and saves, edits or removes private/firm view settings. The server rechecks deal and accepted-seat access.
+
+
 D1156: `programGrants.js` adds the dated HQ `inUse(uid)` read and the branch
 `sendProgramReport()` action, with no caller-supplied counts.
 

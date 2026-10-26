@@ -1,5 +1,8 @@
 # Worker route handlers — production source of truth
 
+D1239: `deal_views.ts`, mounted before `deals.ts`, provides Professional investor fit reads and private/accepted-seat firm saved views. Settings confer no deal access; defaults, version checks and identifier-only audit writes are atomic.
+
+
 
 D1144: `cycle_raise.ts` returns the stored Product-market fit part, its paged `/pmf/history` read and Re-score’s `pmf: true` flag. The founder/admin project gate is unchanged. `../services/scoring/README.md` names the shared snapshot/checklist/audit transaction.
 
