@@ -8,10 +8,13 @@
  *                         edit a draft, send to HQ, read applicants, pick and
  *                         decline.
  *   /api/admin/testing    Super Admin: every programme for review, approve or
- *                         send back, open and close, and HQ's own programmes
- *                         with the partner's create, edit and pick. D1197:
- *                         any programme's history and applicants (a partner's
- *                         read only), and every application across programmes.
+ *                         send back, open, move to testing and close (D1198:
+ *                         each answers `told`, counts only), withdraw an
+ *                         application with a reason, and HQ's own programmes
+ *                         with the partner's create, edit and pick.
+ *                         D1197: any programme's history and applicants (a
+ *                         partner's read only), and every application across programmes.
+ *                         D1196: the overview read (`services/testingOverview.ts`).
  *
  * Lists are `{ items }`; a refusal is `{ error, detail }` with the service's
  * sentence. Another firm's programme or application is 404, as a missing one.
@@ -32,6 +35,7 @@ import { mapError, requirePartnerProfile } from './_t13t14t15_helpers';
 import { requirePartnerRole } from './_partner_workspace_helpers';
 import { refusalBody } from '../util/refusal';
 import * as svc from '../services/testing';
+import { readTestingOverview } from '../services/testingOverview';
 import type { Owner } from '../services/testing';
 import { putLogo, readLogo, removeLogo, uploadedBytes } from '../services/testingLogo';
 
@@ -210,6 +214,15 @@ adminTesting.get('/programmes', async (c) => {
   } catch (e) { return fail(c, e); }
 });
 
+// D1196 (#3146): Overview's figures no other read carries (TST1 ②, ④, ⑤ and the
+// withdrawn count), each block answering alone, counts only, never an address.
+adminTesting.get('/overview', async (c) => {
+  try {
+    await actingHq(c);
+    return c.json(await readTestingOverview(c.env));
+  } catch (e) { return fail(c, e); }
+});
+
 adminTesting.post('/programmes/:uid/approve', async (c) => {
   try {
     const { user } = await actingHq(c);
@@ -227,14 +240,30 @@ adminTesting.post('/programmes/:uid/reject', async (c) => {
 adminTesting.post('/programmes/:uid/open', async (c) => {
   try {
     const { user } = await actingHq(c);
-    return c.json({ programme: await svc.openProgramme(c.env, user.id, c.req.param('uid')) });
+    return c.json(await svc.openProgramme(c.env, user.id, c.req.param('uid')));
   } catch (e) { return fail(c, e); }
 });
 
 adminTesting.post('/programmes/:uid/close', async (c) => {
   try {
     const { user } = await actingHq(c);
-    return c.json({ programme: await svc.closeProgramme(c.env, user.id, c.req.param('uid')) });
+    return c.json(await svc.closeProgramme(c.env, user.id, c.req.param('uid')));
+  } catch (e) { return fail(c, e); }
+});
+
+// D1198 (#3148): open or closed → testing; the firm and the picked testers told.
+adminTesting.post('/programmes/:uid/testing', async (c) => {
+  try {
+    const { user } = await actingHq(c);
+    return c.json(await svc.startTesting(c.env, user.id, c.req.param('uid')));
+  } catch (e) { return fail(c, e); }
+});
+
+// D1198: HQ withdraws an application with the reason the member reads.
+adminTesting.post('/applications/:uid/withdraw', async (c) => {
+  try {
+    const { user } = await actingHq(c);
+    return c.json(await svc.withdrawByHq(c.env, user.id, c.req.param('uid'), (await body(c)).reason));
   } catch (e) { return fail(c, e); }
 });
 
