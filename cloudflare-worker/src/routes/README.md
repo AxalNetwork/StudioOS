@@ -163,6 +163,12 @@ and audits `fund.create`. `fund_performance.ts` enforces and audits
 act table; existing institutional GP ownership/tier scope remains. The overview
 also returns an independent per-fund booklet waiting block.
 
+D1174 (#3101): `financials.ts` no longer returns, writes or exports the Capital
+score; its column remains. Export/recompute require a person-saved model.
+`cycle_records.ts` supplies a verified founder/session/company marker before a
+Use of funds section may read private accepted Mercury actuals. Missing and
+unreadable bank data stay distinct, with no provider call.
+
 ### Build operating systems (D686)
 
 `GET /api/cycles/build/systems/choices?project=<id>` returns the caller's own
@@ -390,3 +396,10 @@ scopes with explicit availability; personal ownership and deal-party gates
 still govern every sync, push and export.
 Each authorized staff-scope view calls the existing admin audit helper with
 only its scope and normalized date window; no event content is recorded.
+
+D1237 (#3250): `deals.ts` records the verified firm on a room request; the
+unique investor/deal row cannot be claimed or removed from another selected
+firm. The Free quota and join/leave exceptions live in
+`../middleware/requireInvestorTier.ts`; the deal listing stays Professional.
+The INSERT enforces the global allowance atomically. Investor list rows carry
+`can_read` from the existing invited-or-committed reader for safe room links.
