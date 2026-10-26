@@ -110,7 +110,7 @@ export function JoinLeaveButton({ dealId, member, quotaState, onChanged, compact
         type="button"
         onClick={() => { setRefusal(''); setConfirming(member ? 'leave' : 'join'); }}
         disabled={busy || Boolean(full)}
-        className={member ? BTN.ghost : BTN.primary}
+        className={`${member ? BTN.ghost : BTN.primary} min-h-[44px] justify-center`}
         data-testid={member ? 'dr-leave' : 'dr-join'}
       >
         {busy ? <Loader2 size={14} className="animate-spin" /> : (member ? <LogOut size={14} /> : <LogIn size={14} />)}
@@ -133,14 +133,16 @@ export function JoinLeaveButton({ dealId, member, quotaState, onChanged, compact
           title={confirming === 'leave' ? 'Leave this room?' : 'Request an invitation?'}
           onClose={() => { if (!busy) setConfirming(null); }} testId="dr-request-dialog"
           footer={<div className="flex justify-end gap-2">
-            <button type="button" className={BTN.ghost} disabled={busy} onClick={() => setConfirming(null)} data-testid="dr-request-back">Back</button>
-            <button type="button" className={BTN.primary} disabled={busy || (confirming === 'join' && Boolean(full))}
+            <button type="button" className={`${BTN.ghost} min-h-[44px] justify-center`} disabled={busy} onClick={() => setConfirming(null)} data-testid="dr-request-back">Back</button>
+            <button type="button" className={`${BTN.primary} min-h-[44px] justify-center`} disabled={busy || (confirming === 'join' && Boolean(full))}
               onClick={act} data-testid="dr-request-confirm">{busy ? 'Recording…' : confirming === 'leave' ? 'Leave' : 'Request an invitation'}</button>
           </div>}>
-          <p className="text-sm text-gray-700 dark:text-gray-300">{confirming === 'leave' ? ROOM_LEAVE_CONFIRM : ROOM_REQUEST_CONFIRM}</p>
-          {refusal && <p role="alert" className="mt-3 text-sm text-red-700 dark:text-red-300" data-testid="dr-join-refusal">
-            {refusal === 'quota' ? fullLine || 'Your deal-room quota is full. Leave a room, or change plan.' : refusal}
-          </p>}
+          <div className="px-5 py-4 text-left">
+            <p className="text-sm text-gray-700 dark:text-gray-300">{confirming === 'leave' ? ROOM_LEAVE_CONFIRM : ROOM_REQUEST_CONFIRM}</p>
+            {refusal && <p role="alert" className="mt-3 text-sm text-red-700 dark:text-red-300" data-testid="dr-join-refusal">
+              {refusal === 'quota' ? fullLine || 'Your deal-room quota is full. Leave a room, or change plan.' : refusal}
+            </p>}
+          </div>
         </Lightbox>
       )}
     </div>
