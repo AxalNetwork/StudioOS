@@ -3,6 +3,8 @@ import { Link } from 'react-router-dom';
 import { Card } from '../../ui';
 import HeldZone from './HeldZone';
 import { Figure, useHeldGlance } from './heldFigures';
+import AdminPageHeader, { HeaderTab } from '../../ui/AdminPageHeader';
+import { ACCOUNTS_LINE, ACCOUNTS_TABS, PROFILE_WIDGETS, widgetCount } from './accountsAddress';
 
 /**
  * Admin · Accounts on HQ-held accounts — S20's row (D286).
@@ -26,6 +28,30 @@ const OPEN = 'font-semibold text-axal-ink underline underline-offset-2';
 
 const NOT_ON_GLANCE = 'Retagging is per person, and no count of it is on the Studio glance.';
 
+/** D1299: ACC1's totals row, from the same glance; a figure the glance lacks says so. */
+function AccountsTotals({ glance, acc }) {
+  const ready = acc?.kind === 'ready';
+  const v = (x) => (ready ? x : acc?.kind === 'unreadable' ? null : undefined);
+  const tiles = [
+    ['total', 'Active accounts', v(acc?.total)],
+    ['new7d', 'New in 7 days', v(acc?.new7d)],
+    ['new30d', 'New in 30 days', v(acc?.new30d)],
+    ['deactivated', 'Deactivated', v(acc?.deactivated)],
+  ];
+  return (
+    <ul className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-4" data-testid="accounts-totals">
+      {tiles.map(([k, label, value]) => (
+        <li key={k}>
+          <Card className="h-full p-4" data-testid={`accounts-total-${k}`}>
+            <h3 className="font-mono text-[10.5px] uppercase tracking-[.07em] text-axal-muted">{label}</h3>
+            <Figure state={glance} value={value} reason={acc?.reason} testId={`accounts-total-${k}-count`} />
+          </Card>
+        </li>
+      ))}
+    </ul>
+  );
+}
+
 export default function HeldAccounts() {
   // D555: each card shows its number, from the same glance as the Studio overview.
   const glance = useHeldGlance();
@@ -43,11 +69,29 @@ export default function HeldAccounts() {
         ['The persona taxonomy', 'The taxonomy is HQ’s (Content · Personas); this row retags one person.'],
       ]}
     >
-      <h1 className="text-[18px] font-extrabold tracking-tight text-axal-ink">Accounts</h1>
-      <p className="mt-1 text-[12.5px] text-axal-muted">
-        The accounts HQ holds on axal.vc: the directory, the people still exploring, and one person’s persona.
-      </p>
-      <ul className="mt-3 grid gap-3 sm:grid-cols-2" data-testid="held-accounts-cards">
+      {/* D1299 (#2377): the Accounts canvas's header and tabs (ACC1, ACC2). */}
+      <AdminPageHeader
+        title="Accounts"
+        line={ACCOUNTS_LINE}
+        tabs={ACCOUNTS_TABS.map((t) => (
+          <HeaderTab key={t.key} to={t.to} data-testid={`accounts-tab-${t.key}`}>{t.label}</HeaderTab>
+        ))}
+        data-testid="accounts-header"
+      />
+      <AccountsTotals glance={glance} acc={acc} />
+      <h2 className="mt-5 text-[13px] font-extrabold tracking-tight text-axal-ink">By profile</h2>
+      <ul className="mt-2 grid gap-3 sm:grid-cols-2 lg:grid-cols-4" data-testid="accounts-profile-widgets">
+        {PROFILE_WIDGETS.map((w) => (
+          <li key={w.key}>
+            <Card className="h-full p-4" data-testid={`accounts-widget-${w.key}`}>
+              <h3 className="text-[13px] font-extrabold tracking-tight text-axal-ink">{w.label}</h3>
+              <Figure state={glance} value={w.role ? (ready ? widgetCount(acc.byRole, w.role) : unreadAcc) : undefined} unit="active" reason={w.role ? acc?.reason : w.reason} testId={`accounts-widget-${w.key}-count`} />
+            </Card>
+          </li>
+        ))}
+      </ul>
+      <h2 className="mt-5 text-[13px] font-extrabold tracking-tight text-axal-ink">Also in Accounts</h2>
+      <ul className="mt-2 grid gap-3 sm:grid-cols-2" data-testid="held-accounts-cards">
         <li>
           <Card className="h-full p-4" data-testid="held-accounts-users">
             <h2 className="text-[13px] font-extrabold tracking-tight text-axal-ink">Users table</h2>

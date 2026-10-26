@@ -20,6 +20,11 @@ tiers. Until that glance arrives the first paint says it is reading, and a
 glance that is already in hand is not passed through the legacy props.
 `AdminStudioHome.jsx` does not call that route yet. It is not an `/admin/*` route.
 
+`HeldAccounts.jsx` is Admin › Accounts' Overview at `/admin/accounts`, and
+`ConsolePages.jsx`'s `AllAccountsPage` is All accounts at `/admin/accounts/all`,
+with one account's record at `/admin/accounts/all/:id` (D1299, #2377). The
+addresses and the profile widgets are `accountsAddress.js`'s.
+
 Roughly grouped by what they administer: accounts and roles, the Spin-Out Lab
 cohort (applications, timing, journey preview, and `SpinoutModerationPage.jsx`
 at `/admin/spinout-moderation`, which lists cases awaiting a decision apart
