@@ -100,19 +100,23 @@ const view = (s) => ssr(h(RoundCallSheetView, { state: { ...VIEW, ...s }, on, on
 
 test('The round draws the instrument\'s own term inputs, enabled', () => {
   const html = view({});
-  assert.match(html, /aria-label="Valuation cap · USD"(?![^>]*disabled)[^>]*value="6000000"/);
-  assert.match(html, /aria-label="Discount · %"(?![^>]*disabled)[^>]*value="20"/);
+  // D1224: each term is a labelled field of its own (CLS4).
+  assert.match(html, /<label for="call-cap"[^>]*>Valuation cap · USD<\/label>/);
+  assert.match(html, /id="call-cap"(?![^>]*disabled)[^>]*value="6000000"/);
+  assert.match(html, /id="call-discount"(?![^>]*disabled)[^>]*value="20"/);
   assert.doesNotMatch(html, /Pre-money valuation/);
-  assert.match(html, /aria-label="Other terms"/);
+  assert.match(html, />Terms in plain words<\/label>/);
   assert.doesNotMatch(html, /Cap, discount and pre-money as separate fields/);
 });
 
 test('the audience preview names sector, stage and the cheque range; a reason code is its sentence', () => {
-  assert.equal(matchLine({ sector: 'Fintech', stage: 'Seed', cheque_min_usd: 25000, cheque_max_usd: 250000 }), ' · Thesis fits Fintech, stage Seed, cheque $25k–$250k');
-  assert.equal(matchLine({ sector: 'Fintech', stage: null, cheque_min_usd: null, cheque_max_usd: 250000 }), ' · Thesis fits Fintech');
+  // D1224: the canvas's line (CLS5).
+  assert.equal(matchLine({ sector: 'Fintech', stage: 'Seed', cheque_min_usd: 25000, cheque_max_usd: 250000 }), ' · stage Seed · sector Fintech · cheque range $25k–$250k');
+  assert.equal(matchLine({ sector: 'Fintech', stage: null, cheque_min_usd: null, cheque_max_usd: 250000 }), ' · sector Fintech');
   assert.equal(matchLine({ match_reasons: ['sector'] }), ' · sector');
   const hit = renderedText(view({ step: 2, matches: { data: { matched: 3, sector: 'Fintech', stage: 'Seed', cheque_min_usd: 25000, cheque_max_usd: 250000 } } }));
-  assert.match(hit, /3 verified investors match · Thesis fits Fintech, stage Seed, cheque \$25k–\$250k\. Names appear only once they respond\./);
+  assert.match(hit, /3 matching investors · stage Seed · sector Fintech · cheque range \$25k–\$250k/);
+  assert.match(hit, /Their names stay hidden from you until they respond\./);
   const none = renderedText(view({ step: 2, matches: { data: { matched: 0, reason: 'sector_not_recorded' } } }));
   assert.match(none, /Your venture has no recorded sector, so no match can be made\./);
   assert.equal(AUDIENCE_REASONS.stage_not_recorded, 'Your venture has no recorded stage, so no match can be made.');
@@ -120,15 +124,17 @@ test('the audience preview names sector, stage and the cheque range; a reason co
 });
 
 const PAGE = (call) => ({ call: { ...DRAFT, ...call }, recipients: [{ origin: 'chosen' }], readiness: [{ key: 'round', label: 'Round', ready: true }], counsel_approved: false });
-test('Send: Request counsel review is live; once requested it says when, and Send stays locked', () => {
-  const ask = view({ step: 4, page: PAGE({}) });
+test('Preview: Request counsel review is live; once requested it says when, and Send stays locked', () => {
+  // D1224: counsel review is drawn on the Preview step (CLS6).
+  const ask = view({ step: 3, page: PAGE({}) });
   assert.match(ask, /<button type="button"[^>]*>Request counsel review<\/button>/);
   assert.doesNotMatch(ask, /disabled=""[^>]*>Request counsel review/);
   assert.doesNotMatch(ask, /the Worker has no route for this/);
-  const sent = renderedText(view({ step: 4, page: PAGE({ counsel_requested_at: '2026-10-14 08:00:00', counsel_requested_hash: 'h3' }) }));
-  assert.match(sent, /Sent to Axal HQ for counsel review on 14\/10\/2026/);
+  const requested = PAGE({ counsel_requested_at: '2026-10-14 08:00:00', counsel_requested_hash: 'h3' });
+  const sent = renderedText(view({ step: 3, page: requested }));
+  assert.match(sent, /Requested 14\/10\/2026\. Waiting for counsel\./);
   assert.doesNotMatch(sent, /Request counsel review/);
-  assert.match(sent, /Counsel has not approved the terms yet/);
+  assert.match(renderedText(view({ step: 4, page: requested })), /Counsel has not approved these terms yet/);
   assert.equal(counselRequested({ counsel_requested_at: 'x', counsel_requested_hash: 'old', terms_hash: 'new' }), false, 'changed terms need a new request');
   assert.equal(counselRequested({ counsel_requested_at: 'x', counsel_requested_hash: 'h', terms_hash: 'h' }), true);
   assert.equal(counselRequested({}), false);
@@ -184,7 +190,9 @@ test('Capital relationships: Calls for Capital, on, off, unreadable and empty', 
 
 test('Preview reads the structured terms as an investor sees them, else the free text', () => {
   const structured = renderedText(view({ step: 3, page: PAGE({ instrument: 'convertible_note', valuation_cap_cents: 800000000, discount_bps: 2000, terms: 'MFN' }) }));
-  assert.match(structured, /Convertible note · Cap \$8M · discount 20% · minimum \$25,000/);
+  // D1224: the canvas's "What investors see" card (CLS6), with the plain-words terms under it.
+  for (const part of ['Convertible note', 'Cap $8M · discount 20%', '$25,000', 'MFN']) assert.ok(structured.includes(part), part);
   const free = renderedText(view({ step: 3, page: PAGE({ valuation_cap_cents: null, terms: 'MFN side letter' }) }));
-  assert.match(free, /SAFE · MFN side letter · minimum/);
+  assert.ok(free.includes('SAFE') && free.includes('MFN side letter'), 'the free text');
+  assert.ok(free.includes('Key termsNot recorded'), 'no structured term reads Not recorded, never a zero');
 });

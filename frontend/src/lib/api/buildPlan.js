@@ -8,6 +8,7 @@
 // PATCH /items/:uid { wording } — Keep wording is the item's Save.
 // D1068 (#2938): POST|GET /handoffs?project=&scope= (Send to…, recorded), GET /links,
 // POST /links/:uid/accept|dismiss, and POST /items/:uid/link { fed } (a link by hand).
+// D968 (#3351): GET /states?project=&scope=&limit=&offset= — each accepted, landed item's Built, Live and Tested.
 import { request } from '../api.js';
 const query = (project, scope) => new URLSearchParams({ project: String(project), scope }).toString();
 export const buildPlanApi = {
@@ -30,6 +31,7 @@ export const buildPlanApi = {
   links: (project, scope = 'venture') => request(`/cycles/build/plan/links?${query(project, scope)}`),
   acceptLink: (project, uid, scope = 'venture') => request(`/cycles/build/plan/links/${encodeURIComponent(uid)}/accept?${query(project, scope)}`, { method: 'POST', body: '{}' }),
   dismissLink: (project, uid, scope = 'venture') => request(`/cycles/build/plan/links/${encodeURIComponent(uid)}/dismiss?${query(project, scope)}`, { method: 'POST', body: '{}' }),
+  states: (project, scope = 'venture', { limit = 200, offset = 0 } = {}) => request(`/cycles/build/plan/states?${query(project, scope)}&limit=${Number(limit)}&offset=${Number(offset)}`),
   linkByHand: (uid, fed) => request(`/cycles/build/plan/items/${encodeURIComponent(uid)}/link`, { method: 'POST', body: JSON.stringify({ fed }) }),
   evidence: (project, table, id) => request(`/cycles/build/evidence?${new URLSearchParams({ project: String(project), table, id: String(id) })}`),
 };

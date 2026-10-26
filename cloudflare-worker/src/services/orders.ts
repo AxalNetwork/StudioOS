@@ -243,6 +243,7 @@ export async function resolveCartPromo(
   env: Env,
   code: string,
   cart: PricedCart,
+  userId: number,
 ): Promise<CartPromo | PriceError> {
   // Validate against EVERY distinct product in the cart. A promo restricted to
   // a subset of products must not discount the whole subtotal — otherwise an
@@ -251,7 +252,8 @@ export async function resolveCartPromo(
   const productIds = [...new Set(cart.lines.map((l) => l.product_id))];
   let promoRow: PromoRow | null = null;
   for (const productId of productIds) {
-    const v = await validatePromoForProduct(env, code, productId, cart.subtotal, cart.currency);
+    // D1273: the member, for a code's per-member limits. A cart is one-time, so no interval.
+    const v = await validatePromoForProduct(env, code, productId, cart.subtotal, cart.currency, { userId, interval: null });
     if (!v.ok || !v.promo) return { error: v.reason || 'promo_invalid' };
     promoRow = v.promo;
   }
@@ -538,10 +540,21 @@ export async function fulfilOrder(env: Env, orderRef: string): Promise<Order | n
         const { getPromoByCode } = await import('./promos');
         const promo = await getPromoByCode(env, row.promo_code);
         if (promo) {
+          // D1274: a cart names its product and price only when it holds one.
+          const products = new Set(items.map((l) => l.product_id));
+          const prices = new Set(items.map((l) => l.price_id));
           await recordPaidRedemption(env, {
             promoId: promo.id,
             userId: row.user_id,
             paymentIntentId: row.payment_intent_id || `order:${orderRef}`,
+            detail: {
+              source: 'cart',
+              productId: products.size === 1 ? [...products][0] : null,
+              priceId: prices.size === 1 ? [...prices][0] : null,
+              amountBeforeCents: row.subtotal_cents,
+              discountCents: row.discount_cents,
+              currency: row.currency,
+            },
           });
         }
       } catch (e) {

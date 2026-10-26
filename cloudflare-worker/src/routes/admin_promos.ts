@@ -16,8 +16,16 @@ import {
   markEnded,
   setNameNote,
   PromoInputError,
+  planKeyOf,
+  PROMO_INTERVALS,
+  DEFAULT_PROMO_INTERVALS,
+  type PromoInterval,
 } from '../services/promos';
+import { getCatalog } from '../services/catalog';
+import { isTokenPackProduct } from '../services/aiCredits';
 import { refusalBody } from '../util/refusal';
+import { codeHistory, codeRedemptions, EXPORT_HEADER, exportRows, parseRange, usageRead } from '../services/promoUsage';
+import { csvResponse, stamp, toCsv } from '../services/csv';
 
 // Task #9 — Promo Code admin CRUD. Mounted at `/api/admin/promos` BEFORE the
 // catch-all `/api/admin` in index.ts so the nested routes resolve here (same
@@ -56,6 +64,7 @@ interface StripePromotionCode {
 }
 
 const CODE_RE = /^[A-Z0-9][A-Z0-9_-]{2,63}$/; // 3–64 chars, alphanumeric + _ -
+const PLAN_KEY_RE = /^(tier|investor|plan|mi):[a-z0-9_-]{1,64}$/;
 const PRODUCT_RE = /^prod_[A-Za-z0-9]+$/;
 const CURRENCY_RE = /^[a-z]{3}$/;
 
@@ -125,6 +134,48 @@ adminPromos.get('/', async (c) => {
 });
 
 type Created = { ok: true; promoId: string; code: string; couponId: string } | { ok: false; response: Response };
+// D1274 (#3300): the reads HQ's Usage tab and a code's drawer draw. Super
+// Admin, as the list above; the export is the one read that leaves the
+// console, so it is audited. Registered before `/:id` so `usage` and
+// `export.csv` are never taken for an id.
+const RANGE_REFUSAL = {
+  invalid_range: 'The range must be two dates, YYYY-MM-DD, the first not after the second, at most 366 days apart.',
+  invalid_promo: 'That is not a promo code id.',
+} as const;
+
+adminPromos.get('/usage', async (c) => {
+  await requireSuperAdmin(c);
+  const r = parseRange({ from: c.req.query('from'), to: c.req.query('to'), promo: c.req.query('promo') });
+  if (!r.ok) return c.json({ error: RANGE_REFUSAL[r.code], code: r.code }, 400);
+  return c.json(await usageRead(c.env, r.range));
+});
+
+adminPromos.get('/export.csv', async (c) => {
+  const admin = await requireSuperAdmin(c);
+  const r = parseRange({ from: c.req.query('from'), to: c.req.query('to'), promo: c.req.query('promo') });
+  if (!r.ok) return c.json({ error: RANGE_REFUSAL[r.code], code: r.code }, 400);
+  const { rows, truncated } = await exportRows(c.env, r.range);
+  await audit(c.env, admin.id, 'promo_export', {
+    from: r.range.from, to: r.range.to, promo_id: r.range.promoId, rows: rows.length, truncated,
+  });
+  return csvResponse(toCsv(EXPORT_HEADER, rows), `promo-redemptions-${r.range.from}-${r.range.to}-${stamp()}.csv`,
+    truncated ? { 'X-Export-Truncated': 'true' } : {});
+});
+
+adminPromos.get('/:id/redemptions', async (c) => {
+  await requireSuperAdmin(c);
+  const promo = await getPromoById(c.env, c.req.param('id'));
+  if (!promo) return c.json({ error: 'Promo not found', code: 'not_found' }, 404);
+  return c.json({ promo_id: promo.id, mirror_redeemed: promo.times_redeemed, ...await codeRedemptions(c.env, promo.id) });
+});
+
+adminPromos.get('/:id/history', async (c) => {
+  await requireSuperAdmin(c);
+  const promo = await getPromoById(c.env, c.req.param('id'));
+  if (!promo) return c.json({ error: 'Promo not found', code: 'not_found' }, 404);
+  return c.json({ promo_id: promo.id, history: await codeHistory(c.env, promo.id) });
+});
+
 
 /**
  * One Coupon + one Promotion Code, mirrored and audited (`promo_create`). Shared
@@ -215,6 +266,57 @@ async function createPromo(c: any, admin: { id: number }, body: Record<string, u
       return fail({ error: `invalid product id: ${pid}`, code: 'invalid_product' }, 400);
     }
   }
+
+  // D1273 (#3299): plan and interval scope, and the per-member limits.
+  // A plan is chosen by its key and resolves to the catalog's live products
+  // that sell it; they join the product list, so Stripe's `applies_to` and
+  // checkout's product check enforce the plan.
+  let planKeys: string[] = [];
+  if (body.plan_keys !== undefined) {
+    const parsed = readProductIds(JSON.stringify(body.plan_keys));
+    if (!parsed.ok || parsed.ids.some((k) => !PLAN_KEY_RE.test(k))) {
+      return fail({ error: 'plan_keys must be plan keys such as "tier:growth"', code: 'invalid_plan_keys' }, 400);
+    }
+    planKeys = [...new Set(parsed.ids)];
+  }
+  // #2381 owner question 3: monthly only unless HQ chooses yearly too.
+  let intervals: PromoInterval[] = [...DEFAULT_PROMO_INTERVALS];
+  if (body.intervals !== undefined) {
+    const list = Array.isArray(body.intervals) ? body.intervals : null;
+    if (!list || !list.length || list.some((x) => !(PROMO_INTERVALS as readonly unknown[]).includes(x))) {
+      return fail({ error: 'intervals must list "month", "year" or both', code: 'invalid_intervals' }, 400);
+    }
+    intervals = [...new Set(list as PromoInterval[])];
+  }
+  for (const [field, value] of [['once_per_member', body.once_per_member], ['first_purchase_only', body.first_purchase_only]] as const) {
+    if (value !== undefined && typeof value !== 'boolean') {
+      return fail({ error: `${field} must be true or false`, code: `invalid_${field}` }, 400);
+    }
+  }
+  const oncePerMember = body.once_per_member === true;
+  const firstPurchaseOnly = body.first_purchase_only === true;
+
+  // Every product the code names, chosen or through a plan, must be a live
+  // catalog product, and never a token pack (D755 §5). Refused before Stripe.
+  if (productIds.length || planKeys.length) {
+    const catalog = await getCatalog(c.env);
+    const byId = new Map(catalog.map((p) => [p.id, p]));
+    for (const key of planKeys) {
+      const selling = catalog.filter((p) => p.active && planKeyOf(p) === key).map((p) => p.id);
+      if (!selling.length) {
+        return fail({ error: `No live product sells the plan ${key}.`, code: 'unknown_plan' }, 400);
+      }
+      for (const pid of selling) if (!productIds.includes(pid)) productIds.push(pid);
+    }
+    for (const pid of productIds) {
+      const product = byId.get(pid);
+      if (!product) return fail({ error: `${pid} is not in the catalog. Sync the catalog, then try again.`, code: 'unknown_product' }, 400);
+      if (!product.active) return fail({ error: `${product.name} is archived, so a code cannot apply to it.`, code: 'product_archived' }, 400);
+      if (await isTokenPackProduct(c.env, pid)) {
+        return fail({ error: `${product.name} is a token pack, which is never discounted.`, code: 'token_pack_not_discountable' }, 400);
+      }
+    }
+  }
   productIds.forEach((pid, i) => {
     couponForm[`applies_to[products][${i}]`] = pid;
   });
@@ -256,7 +358,12 @@ async function createPromo(c: any, admin: { id: number }, body: Record<string, u
     coupon: coupon.id,
     code: rawCode,
     'metadata[product_ids]': JSON.stringify(productIds),
+    'metadata[plan_keys]': JSON.stringify(planKeys),
+    'metadata[intervals]': JSON.stringify(intervals),
+    'metadata[once_per_member]': String(oncePerMember),
   };
+  // D1273: Stripe enforces a first purchase itself on a subscription; the Worker checks every path.
+  if (firstPurchaseOnly) promoForm['restrictions[first_time_transaction]'] = 'true';
   if (maxRedemptions != null) promoForm.max_redemptions = String(maxRedemptions);
   if (expiresAtEpoch != null) promoForm.expires_at = String(expiresAtEpoch);
   if (words.name) promoForm['metadata[name]'] = words.name;
@@ -293,6 +400,10 @@ async function createPromo(c: any, admin: { id: number }, body: Record<string, u
     name: words.name ?? null,
     note: words.note ?? null,
     duration_in_months: durationInMonths,
+    plan_keys: planKeys,
+    intervals,
+    once_per_member: oncePerMember,
+    first_purchase_only: firstPurchaseOnly,
   });
 
   await audit(c.env, admin.id, 'promo_create', {
@@ -308,6 +419,10 @@ async function createPromo(c: any, admin: { id: number }, body: Record<string, u
     expires_at: expiresAtIso,
     duration_in_months: durationInMonths,
     ...(replaces ? { replaces } : {}),
+    plan_keys: planKeys,
+    intervals,
+    once_per_member: oncePerMember,
+    first_purchase_only: firstPurchaseOnly,
   });
 
   return { ok: true, promoId: promo.id, code: rawCode, couponId: coupon.id };

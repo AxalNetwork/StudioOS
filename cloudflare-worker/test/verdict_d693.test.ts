@@ -564,6 +564,15 @@ test('10: no file under cloudflare-worker/src but services/verdict.ts names vali
   for (const f of walk(src)) {
     const rel = relative(src, f).split('\\').join('/');
     if (rel === 'services/verdict.ts') continue;
+    // D1263 reads only the venture's current given verdict as an evidence candidate.
+    // Permit its source label and this exact read, never a verdict writer.
+    if (rel === 'services/raiseEvidenceSources.ts') {
+      const source = readFileSync(f, 'utf8');
+      const mentions = source.split('\n').filter(l => l.includes('validation_decision'));
+      if (mentions.length === 2
+        && mentions.some(l => l.includes("source_table:'validation_decisions'"))
+        && mentions.some(l => l.includes("SELECT id,decision,decided_at FROM validation_decisions WHERE project_id=? AND state='given' AND superseded_at IS NULL"))) continue;
+    }
     const lines = readFileSync(f, 'utf8').split('\n').filter((l) => l.includes('validation_decision'));
     if (!lines.length) continue;
     // services/records/owned.ts may name the tables in its two verdict

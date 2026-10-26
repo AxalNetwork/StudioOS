@@ -5,7 +5,7 @@ import { Hono } from 'hono';
 import type { Context } from 'hono';
 import type { ContentfulStatusCode } from 'hono/utils/http-status';
 import type { Env, User } from '../types';
-import { requireAuth, requireAdmin, requireBranchNotSuspended } from '../auth';
+import { requireAuth, requireAdmin, requireBranchNotSuspended, isSuperAdmin } from '../auth';
 import { programRefusal } from '../services/programEnforcement';
 import { generateUniqueShortReferralCode } from '../services/referrals/codes';
 import {
@@ -34,6 +34,10 @@ import {
   avgReviewDaysForReferrer,
   type Category,
   referralFunnel,
+  readReferralRules,
+  rewardLine,
+  categoryRewards,
+  type ReferralRule,
 } from '../services/referralSubmissions';
 
 /**
@@ -48,11 +52,14 @@ import {
  *   POST  /api/refer-earn/strategic-access           → request invite-only access
  *   GET   /api/refer-earn/admin/submissions          → review queue
  *   GET   /api/refer-earn/admin/submissions/funnel   → D1124: stages reached, all time
- *   PATCH /api/refer-earn/admin/submissions/:uid     → move status / annotate
+ *   PATCH /api/refer-earn/admin/submissions/:uid     → move status / annotate, paying its reward
+ *   GET   /api/refer-earn/admin/rewards              → D965: the referral rules, and what they paid
  *
- * Stripe Connect payouts were removed in the referrals redesign: rewards are
- * milestone labels settled off-platform, not transfers. The historical
- * `referral_payouts` table is intentionally left in place (see migration 175).
+ * Stripe Connect payouts were removed in the referrals redesign: no money
+ * moves through this platform. The historical `referral_payouts` table is
+ * intentionally left in place (see migration 175). D965 (#2798) pays the
+ * startup and platform user rewards in perk credits, at the amounts in
+ * `credit_reward_rules`; `reward_label` stays the reviewer's free text.
  */
 
 const refer = new Hono<{ Bindings: Env }>();
@@ -108,6 +115,10 @@ refer.get('/overview', async (c) => {
   const counts = await countsForReferrer(c.env, user.id);
   const strategic = await strategicAccessState(c.env, user.id);
   const avgReviewDays = await avgReviewDaysForReferrer(c.env, user.id);
+  // D965: each category's reward is read from the rules that are on now. A
+  // failed read says so on each line rather than promising a reward.
+  let rules: ReferralRule[] | null = null;
+  try { rules = await readReferralRules(c.env); } catch (e) { console.error('[refer-earn] reward rules unreadable', e); }
 
   return c.json({
     referral_code: code,
@@ -116,6 +127,9 @@ refer.get('/overview', async (c) => {
     categories: CATEGORIES.map((k) => ({
       key: k,
       ...CATEGORY_META[k],
+      reward: rules ? rewardLine(k, rules) : 'The reward could not be read. Reload the page to try again.',
+      // One entry per rule that is on; an empty list when none is; null unread.
+      rewards: rules ? categoryRewards(k, rules) : null,
       // The gate the UI needs in order to decide between "Submit" and
       // "Request access" — computed here so the client never has to infer it.
       locked: k === 'strategic' && strategic !== 'granted',
@@ -391,6 +405,38 @@ refer.get('/admin/submissions/:uid', async (c) => {
     referrer_name: member?.name ?? null, referrer_email: member?.email ?? null, referrer_role: member?.role ?? null });
 });
 
+/**
+ * D965 (#2798): the referral reward rules, and what they have paid. `rules`
+ * is every admin's, since the member page states the same amounts. `paid` is
+ * a cross-member credit figure, so only a Super Admin gets it (D953 §2,
+ * O-MONEY); an Admin gets null. A grant later revoked is not counted, by the
+ * revoke test `CAP_USED_SQL` uses. A D1 failure is a 5xx, never zeros.
+ */
+refer.get('/admin/rewards', async (c) => {
+  const admin = await requireAdmin(c);
+  const rules = await readReferralRules(c.env);
+  let paid: { grants: number; credits: number; by_rule: Record<string, { grants: number; credits: number }> } | null = null;
+  if (isSuperAdmin(admin as never)) {
+    const rows = await c.env.DB.prepare(
+      `SELECT g.rule_key, COUNT(*) AS grants, COALESCE(SUM(g.delta), 0) AS credits FROM perk_credit_ledger g
+        WHERE g.kind = 'grant' AND substr(g.rule_key, 1, 9) = 'referral:'
+          AND NOT EXISTS (SELECT 1 FROM perk_credit_ledger r
+                           WHERE r.user_id = g.user_id AND r.kind = 'admin_adjust'
+                             AND r.source_ref = 'revoke:' || g.id)
+        GROUP BY g.rule_key`,
+    ).all<{ rule_key: string; grants: number; credits: number }>();
+    const byRule: Record<string, { grants: number; credits: number }> = {};
+    for (const r of rules) byRule[r.key] = { grants: 0, credits: 0 };
+    let grants = 0, credits = 0;
+    for (const r of rows.results || []) {
+      byRule[r.rule_key] = { grants: Number(r.grants), credits: Number(r.credits) };
+      grants += Number(r.grants); credits += Number(r.credits);
+    }
+    paid = { grants, credits, by_rule: byRule };
+  }
+  return c.json({ rules, paid });
+});
+
 /** D985 — the submission moves that start something under the grant. */
 export const GRANT_STARTS: ReadonlySet<string> = new Set(['qualified', 'converted', 'reward_eligible']);
 
@@ -414,9 +460,9 @@ refer.patch('/admin/submissions/:uid', async (c) => {
       rewardLabel: body.rewardLabel as string | null | undefined,
       nextStep: body.nextStep as string | null | undefined,
       fitNotes: body.fitNotes as string | null | undefined,
-    });
+    }, admin.email || '');
     const events = await listEvents(c.env, row.id);
-    return c.json(toWire(row, events));
+    return c.json({ ...toWire(row, events), reward: row.reward });
   } catch (e) {
     return errorResponse(c, e);
   }

@@ -11,8 +11,8 @@ import { existsSync, readFileSync } from 'node:fs';
 import React from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { MemoryRouter } from 'react-router-dom';
-import { KycPersonView, KycTabBody } from '../src/pages/admin/kyc/KycTabs.jsx';
-import { BASE, NOT_YET, QUEUE_FILTERS, TABS, WAITS, decidable, personFacts, personHref, statusWord, viewOf } from '../src/pages/admin/kyc/kycModel.js';
+import { KycTabBody } from '../src/pages/admin/kyc/KycTabs.jsx';
+import { BASE, NOT_YET, TABS, WAITS, personHref, statusWord, viewOf } from '../src/pages/admin/kyc/kycModel.js';
 
 const h = React.createElement;
 const read = (p) => readFileSync(p, 'utf8');
@@ -45,28 +45,22 @@ test('an address names its tab and a person’s case; anything else is People', 
 test('the canvas’s status words, with Waiting for pending and nothing unknown read as a status', () => {
   assert.deepEqual(['not_started', 'pending', 'needs_info', 'approved', 'rejected', 'expired', 'odd'].map(statusWord),
     ['Not started', 'Waiting', 'Needs information', 'Approved', 'Rejected', 'Expired', 'Not recorded']);
-  assert.deepEqual(QUEUE_FILTERS, ['pending', 'approved', 'rejected', 'not_started'], 'the four the queue read accepts, Waiting first');
-  assert.deepEqual(['pending', 'rejected', 'approved', 'not_started'].map(decidable), [true, true, false, false], 'as the Worker allows');
+  // D1233: the queue's chips, its filters and what each status allows are `peopleModel`'s (kyc_people_d1233).
 });
 
-test('a fact the record did not return stays null, and no wait says zero or none', () => {
-  const f = Object.fromEntries(personFacts({ email: 'a@example.test', kyc_status: 'pending', kyc_data: { legal_first_name: 'Dev', legal_last_name: 'Testcase' } }));
-  assert.equal(f.Status, 'Waiting');
-  assert.equal(f['Legal name'], 'Dev Testcase');
-  assert.equal(f.Provider, null);
-  assert.equal(f.Nationality, null);
+test('no wait says zero or none', () => {
   for (const [k, w] of Object.entries(WAITS)) assert.ok(!/\b0\b|\bnone\b/i.test(w), k);
+  assert.deepEqual(Object.keys(WAITS), ['businesses', 'renewals', 'audit'], 'D1233 drew People’s and the case’s waits');
 });
 
 /* ------------------------------------------------------------------ *
  * Rendered
  * ------------------------------------------------------------------ */
 
-test('People keeps the queue it is given, between the figures and the queue’s waits', () => {
+test('People draws the queue it is given, and no wait of its own (D1233)', () => {
   const out = html(h(KycTabBody, { view: viewOf('/admin/kyc'), people: h('div', { 'data-testid': 'the-queue' }) }));
-  assert.ok(out.includes('data-testid="the-queue"'), 'D648’s queue, and its Review, stay reachable');
-  for (const id of ['figures', 'queue', 'statuses']) assert.ok(out.includes(`data-testid="kyc-wait-${id}"`), id);
-  assert.ok(out.indexOf('kyc-wait-figures') < out.indexOf('the-queue'));
+  assert.ok(out.includes('data-testid="the-queue"'));
+  assert.ok(!out.includes('kyc-wait-'), 'part 1’s reads fill the figures and the queue');
 });
 
 test('Businesses, Renewals and Audit say what is not read yet, never an empty table', () => {
@@ -78,21 +72,7 @@ test('Businesses, Renewals and Audit say what is not read yet, never an empty ta
   }
 });
 
-test('a person’s case (KYC3): identity, the earlier rejection, each wait, and where to decide', () => {
-  const out = html(h(KycPersonView, { record: {
-    id: 7, name: 'Dev Testcase', email: 'dev@example.test', role: 'investor', kyc_status: 'rejected', rejection_reason: 'The photo was unreadable.',
-    kyc_data: { legal_first_name: 'Dev', legal_last_name: 'Testcase', country: 'IN', id_type: 'passport' },
-  } }));
-  assert.match(out, /Dev Testcase/);
-  assert.match(out, /data-testid="kyc-case-status"[^>]*>Rejected</);
-  assert.match(out, /Earlier rejection: The photo was unreadable\./);
-  assert.match(out, /Not in the record|is not in the record/i, 'a missing fact says so');
-  for (const id of ['documents', 'checks', 'sanctions', 'history', 'assignment', 'decide', 'hq']) assert.ok(out.includes(`data-testid="kyc-wait-${id}"`), id);
-  assert.match(out, /approved or rejected from <a[^>]*href="\/admin\/kyc"/);
-  const done = html(h(KycPersonView, { record: { id: 8, name: 'Ana', kyc_status: 'approved' } }));
-  assert.match(done, /This check is Approved; no decision is open on it\./);
-  assert.ok(!done.includes('kyc-case-rejected'));
-});
+// D1233: one person's case is `KycCase.jsx`'s, tested in kyc_people_d1233.
 
 /* ------------------------------------------------------------------ *
  * Wiring
@@ -108,7 +88,6 @@ test('the wiring: the routes, the header’s tabs, the queue’s door to each ca
   assert.ok(page.includes('<KycTabBody view={kycViewOf(pathname)} people={<KycConsole />} />'));
   const queue = read('frontend/src/pages/admin/consoles/KycConsole.jsx');
   assert.ok(queue.includes('<Link to={`/admin/kyc/people/${k.id}`}'), 'each name opens its case');
-  assert.ok(queue.includes('{statusWord(s)}'), 'the filters say the canvas’s words');
   for (const f of ['KYC KYB Page.dc.html', 'KYC & KYB · Boards.dc.html']) assert.ok(existsSync(`design/incoming/${f}`), f);
   assert.ok(read('design/incoming/KYC & KYB · Boards.dc.html').includes('name="KYC KYB Page"'));
   assert.ok(existsSync('documentation/architecture/decisions/D1228.md'));

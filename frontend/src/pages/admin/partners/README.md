@@ -97,7 +97,10 @@ over its tab, and the dialogs.
 - Nothing D923 §3 lists under "Not drawn now" is drawn, except C1–C4, which
   D929 draws from part 4's overview read, and what D950 draws from parts 3
   and 4: the Email column, the CSV, the offer text, the step dates and the
-  history. Adjust terms waits for O-TERMS.
+  history. Adjust terms is D1118's (#2998): the Super Admin sets an
+  invitation's own terms for Deal-sourcing revenue share and Custom in New
+  invitation, and an Admin sees one sentence saying the standard terms go.
+  The record says which terms the invitation carries.
 - The Invitations tab and one invitation draw the stored stage: since D924 a
   resend keeps it, so Guard I's repair is not applied there (`repair: false`).
   The other tabs keep it until their parts.

@@ -50,8 +50,8 @@ export type ScenarioRow = {
 export const KEYED_LISTS = ['founders', 'safes', 'rounds'] as const;
 /** The highest `e-<n>` this scenario has issued, kept beside the lists. */
 export const ENTRY_KEY_SEQ = 'entry_key_seq';
-/** `e-<n>`, n from 1. Nine digits at most, so the number stays exact. */
-const ENTRY_KEY = /^e-([1-9][0-9]{0,8})$/;
+/** `e-<n>`, n from 1. Nine digits at most, so the number stays exact. D966's repair reads keys with it too. */
+export const ENTRY_KEY = /^e-([1-9][0-9]{0,8})$/;
 
 const keyNumber = (key: unknown): number | null => {
   const m = typeof key === 'string' ? ENTRY_KEY.exec(key) : null;
@@ -398,19 +398,31 @@ async function recompute(env: Env, actor: User, projectId: number, base: Scenari
   return saved.row;
 }
 
-function safeEntry(name: string, a: { instrument: string; basis?: SafeBasis; amount_cents?: number | null; cap_cents?: number | null; discount_pct?: number | null; prospect_id: number | null }) {
+export type SafeTerms = { amount: number; cap?: number; discount?: number };
+
+/**
+ * The terms `safeEntry` stores: dollars from cents, a fraction from a
+ * percentage, and no `cap` or `discount` key when none is given. Throws the
+ * `HolderError` a write answers. D966's repair compares an entry with them.
+ */
+export function safeTerms(a: { amount_cents?: number | null; cap_cents?: number | null; discount_pct?: number | null }): SafeTerms {
   const amount = posInt(a.amount_cents);
   if (amount == null) throw new HolderError(400, 'amount_cents must be a positive whole number of cents');
-  const e: Record<string, unknown> = { name, amount: amount / 100 };
+  const t: SafeTerms = { amount: amount / 100 };
   if (a.cap_cents != null) {
     const cap = posInt(a.cap_cents);
     if (cap == null) throw new HolderError(400, 'cap_cents must be a positive whole number of cents');
-    e.cap = cap / 100;
+    t.cap = cap / 100;
   }
   if (a.discount_pct != null) {
     if (typeof a.discount_pct !== 'number' || !(a.discount_pct >= 0 && a.discount_pct <= 90)) throw new HolderError(400, 'discount_pct must be 0..90');
-    e.discount = a.discount_pct / 100;
+    t.discount = a.discount_pct / 100;
   }
+  return t;
+}
+
+function safeEntry(name: string, a: { instrument: string; basis?: SafeBasis; amount_cents?: number | null; cap_cents?: number | null; discount_pct?: number | null; prospect_id: number | null }) {
+  const e: Record<string, unknown> = { name, ...safeTerms(a) };
   if (a.basis != null) {
     if (a.basis !== 'pre_money' && a.basis !== 'post_money') throw new HolderError(400, 'basis must be pre_money or post_money');
     e.basis = a.basis;

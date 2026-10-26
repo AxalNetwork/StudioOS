@@ -8,7 +8,7 @@ import {
   BOARDS, PITCH_TABS, assetWord, dayText, decisionCopy, doneLine, hoursSince, ageText, pitchRows, publishUrlOk, reasonReady, tabPath,
 } from './approvalsModel';
 import {
-  BTN, BTN_PRIMARY, CARD, DecisionDialog, DialogField, DoneLine, EYE, Fact, Failed, Figure, H2, LINK, MONO, PAGE, PILL, Pager, SUB,
+  BTN, BTN_PRIMARY, CARD, DecisionDialog, FOOT, PhoneBack, DialogField, DoneLine, EYE, Fact, Failed, Figure, H2, LINK, MONO, PAGE, PILL, Pager, SUB,
   TD, TH, Tile, nf, useLoad,
 } from './boardParts';
 
@@ -87,7 +87,7 @@ function PitchDrawer({ uid, onClose, onDecided }) {
       <Lightbox label={ready ? `${p.title}, co-marketing pitch` : 'Co-marketing pitch'} eyebrow={ready ? `Co-marketing pitch · ${STATE_WORD[p.status] || p.status}` : 'Co-marketing pitch'}
         title={ready ? (p.title || 'Untitled pitch') : 'Co-marketing pitch'} sub={ready ? 'Esc to close' : null} onClose={onClose} testId="pitch-drawer" width={600}
         footer={ready && (p.status === 'proposed' || p.status === 'approved') ? (
-          <div className="flex flex-wrap items-center justify-end gap-2">
+          <div className={`${FOOT} flex-wrap items-center`}>
             {p.status === 'proposed' ? (
               <>
                 <button type="button" className={BTN} onClick={() => setDialog('reject')} data-testid="pitch-action-reject">Decline…</button>
@@ -97,6 +97,7 @@ function PitchDrawer({ uid, onClose, onDecided }) {
           </div>
         ) : null}>
         <div className="flex flex-col gap-4 px-5 py-4" data-testid="pitch-drawer-content">
+          <PhoneBack label="Co-marketing" onClose={onClose} testId="pitch-drawer-back" />
           {read.status === 'loading' ? <Skeleton.Text lines={5} /> : null}
           {read.status === 'error' ? (
             read.error?.status === 404

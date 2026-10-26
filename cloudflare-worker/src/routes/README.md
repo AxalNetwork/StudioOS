@@ -118,7 +118,7 @@ widened guard on this very sentence, which is the rule working.)
 /api/admin         → admin.ts
 /api/private-data  → private-data.ts
 /api/monitoring    → monitoring.ts
-/api/ai-budget     → ai_budget.ts       (member allowance/held reads; Super Admin reviews and plan caps, D640; D755: GET /top-up packs and latest purchase, GET /history, and the Super Admin's /members/:userId, /members/:userId/adjustments and /reconcile; D776: GET /runs, the member's own runs grouped by page, option or record)
+/api/ai-budget     → ai_budget.ts       (member allowance/held reads; D1278: GET /prices from the metering policy and GET /holds, the caller's own holds in progress; Super Admin reviews and plan caps, D640; D755: GET /top-up packs and latest purchase, GET /history, and the Super Admin's /members/:userId, /members/:userId/adjustments and /reconcile; D776: GET /runs, the member's own runs grouped by page, option or record)
 /api/admin/ai-usage → admin_ai_usage.ts (D791: HQ › AI usage; the platform's AI use, the top members and the abuse flags; Pause AI and a member's own monthly cap; the member search by ID or email prefix, and one member's detail. Super Admin with step-up; a member is named by id, name and email on this route only; every write audited with its reason)
 /api/admin/catalog/token-packs → catalog.ts (D755: the Super Admin creates, adopts, changes and archives token packs; the generic catalog writes refuse a pack)
 /api/public/plans-and-packs → public.ts (D755: every plan's price and AI allowance and the packs on sale; D1 only, no session)
@@ -168,6 +168,7 @@ widened guard on this very sentence, which is the rule working.)
 /api/admin/bank-accounts → admin_bank_accounts.ts (D1184: audit-first masked Mercury association and resolver notice_preview on the existing list; source-UID check on add, support denied. D1182: audited masked history, stable snapshot pages and recorder names; failed read/audit returns 503. D708: each Axal entity's bank accounts, masked, with add, relabel, purposes, retire and a recorded reveal; Super Admin, HQ only; mounted beside /api/admin/stripe, before the /api/admin catch-all)
 /api/admin/fund-structure → admin_fund_structure.ts (D717: the entity and money map, read-only; masked accounts for the Super Admin, and each entity's active accounts masked (#1855); #1773's sentence for a plain Admin; HQ only; mounted beside /api/admin/bank-accounts, before the /api/admin catch-all)
 /api/admin/mercury    → admin_mercury.ts (D710: each Axal entity's read-only Mercury connection, its accounts, transactions and reconciliation matches, and D749's Not ours marks; D1183 adds audit-first GET /balances and /monthly chart reads. Connect is the Super Admin's behind the write bar, the rest an Admin's on HQ. The only home of Axal VC's own accounts, drawn in HQ › Fund administration › Bank accounts, never on a member connector: D879, D880, D883)
+/api/admin/mercury    → admin_mercury_safe_basis.ts (D966, #2630: POST /safe-basis-repair, the owner's repair of Mercury SAFEs accepted before #2629, whose model entry has no basis. A dry run unless `dry_run: false`, Super Admin; a write takes the write bar and a reason; paused by the recovery cool-off (`COOL_OFF_ROUTES`); paged by proposal id; every run audited, each written entry with its rollback record. Answers ids, keys and outcomes only. Mounted before admin_mercury.ts; reads no entity account)
 /api/eadwyn       → eadwyn.ts          (the Worker AI rail's conversations, their connector switches, and Send/Cancel for a write Eadwyn proposed; D652)
 /api/wellbeing     → wellbeing.ts       (check-ins, the expert directory and bookings; sample experts are seeded outside production only and never shown to members, D643)
 /api               → realtime.ts (WebSocket fan-out, Durable Objects)
@@ -433,3 +434,8 @@ firm. The Free quota and join/leave exceptions live in
 `../middleware/requireInvestorTier.ts`; the deal listing stays Professional.
 The INSERT enforces the global allowance atomically. Investor list rows carry
 `can_read` from the existing invited-or-committed reader for safe room links.
+
+D1051 (#2902): `billing_checkout.ts` mounts `/checkout/quote`, `/checkout/start` and `/checkout/status` under `/api/billing`, before `billing.ts`. One checkout for a new plan or a change: an upgrade now and prorated, a downgrade scheduled for the period end, a saved card or a change behind TOTP and step-up. The old hosted checkouts stay until their callers move (#2905).
+| File | Purpose |
+| --- | --- |
+| `deal_insights.ts` | D1151: NDA-gated per-deal Team, Market and Traction reads. |

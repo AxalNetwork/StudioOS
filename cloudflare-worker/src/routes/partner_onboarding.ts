@@ -20,6 +20,7 @@ import { hashEmail } from '../util/hashEmail';
 import { createAndSendEnvelope, templateBodyRefusal, UnfilledFieldsError } from './esign';
 import { refuse } from '../util/refusal';
 import { recordCapture } from '../services/partnerProfileReview';
+import { readStoredTerms } from '../services/partnerInvitationTerms';
 import {
   buildProposals, ALL_PARTNER_DEAL_TYPES,
   type PartnerDealType, type PartnerProposalDraft,
@@ -41,13 +42,15 @@ interface InvitationRow {
   signed_at: string | null;
   envelope_id: number | null;
   resulting_deal_id: number | null;
+  /** D1118: the Super Admin's own terms (migration 634), or NULL for the standard terms. */
+  terms_json: string | null;
 }
 
 async function loadInvitation(env: Env, token: string): Promise<InvitationRow | null> {
   const row: any = await env.DB.prepare(
     `SELECT id, token, recipient_email, recipient_name, invited_by_user_id,
             allowed_deal_types, personal_message, status, expires_at,
-            viewed_at, signed_at, envelope_id, resulting_deal_id
+            viewed_at, signed_at, envelope_id, resulting_deal_id, terms_json
        FROM partner_invitations WHERE token = ? LIMIT 1`,
   ).bind(token).first();
   return row || null;
@@ -226,7 +229,11 @@ onboard.post('/:token/propose', async (c) => {
   ).bind(gate.inv.id).first();
   if (!profile) return c.json({ error: 'Submit profile first' }, 412);
   const allowed = parseAllowed(gate.inv.allowed_deal_types);
-  const proposals = buildProposals(allowed, profile);
+  // D1118: the invitation's own terms reach its offers. Terms that cannot be
+  // read stop the offers rather than quietly falling back to the standard ones.
+  const stored = readStoredTerms(gate.inv.terms_json);
+  if (stored.state === 'unreadable') return c.json({ error: 'terms_unreadable' }, 503);
+  const proposals = buildProposals(allowed, profile, stored.state === 'set' ? stored.terms : null);
   await c.env.DB.prepare(
     `UPDATE partner_invitations SET status = 'proposed' WHERE id = ? AND status IN ('viewed','profiled')`,
   ).bind(gate.inv.id).run();
@@ -252,7 +259,9 @@ onboard.post('/:token/select', async (c) => {
     `SELECT * FROM partner_profiles WHERE invitation_id = ?`,
   ).bind(gate.inv.id).first();
   if (!profile) return c.json({ error: 'Submit profile first' }, 412);
-  const proposals = buildProposals(allowed, profile);
+  const stored = readStoredTerms(gate.inv.terms_json);
+  if (stored.state === 'unreadable') return c.json({ error: 'terms_unreadable' }, 503);
+  const proposals = buildProposals(allowed, profile, stored.state === 'set' ? stored.terms : null);
 
   let chosen: PartnerProposalDraft | undefined;
   if (body.proposal_id != null) {

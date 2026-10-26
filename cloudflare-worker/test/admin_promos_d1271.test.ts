@@ -136,7 +136,11 @@ test('D1271: a fresh TOTP holder creates, disables and deletes with the existing
     assert.deepEqual(f.snapshot().audit, ['promo_create', 'promo_pause', 'promo_delete'].map(action => [HOLDER, action, 'billing']));
     assert.deepEqual(calls, [
       ['POST', '/v1/coupons', { percent_off: '10', duration: 'once', 'metadata[product_ids]': '[]', 'metadata[created_by]': String(HOLDER), name: 'TEST10' }],
-      ['POST', '/v1/promotion_codes', { coupon: 'coupon_created', code: 'TEST10', 'metadata[product_ids]': '[]' }],
+      // D1273: the scope and limits ride on the promotion code; a code is monthly only by default.
+      ['POST', '/v1/promotion_codes', {
+        coupon: 'coupon_created', code: 'TEST10', 'metadata[product_ids]': '[]',
+        'metadata[plan_keys]': '[]', 'metadata[intervals]': '["month"]', 'metadata[once_per_member]': 'false',
+      }],
       ['POST', '/v1/promotion_codes/promo_seed', { active: 'false' }],
       ['POST', '/v1/promotion_codes/promo_seed', { active: 'false' }],
       ['DELETE', '/v1/coupons/coupon_seed', {}],

@@ -155,6 +155,9 @@ details, repeated views are recorded, and personal/refused/invalid reads create
 no staff-view audit entry.
 Every provider call is stubbed or refused; all rows are synthetic.
 
+| File | Purpose |
+|---|---|
+| `raise_evidence_d1263.test.ts` | D1263: source dates/labels, founder decisions, privacy, refresh and atomic evidence trails over real SQLite. |
 `kyb_d1231.test.ts` drives migration 616 through Hono/auth and real SQLite:
 owner-check explanations, fixed-expiry KYB reconciliation and invalidation,
 studio/role/step-up/freeze refusals, masked/audited showings, private Access-gated
@@ -166,4 +169,7 @@ D1231 follow-up: company member reads reflect expiry and legal edits; company su
 
 D1231 concurrency tests cover displayed If-Match tokens, source edits during a request, staff-created cases without false submitters, dismissed imports and collision-safe migration of legacy reviewer assignments/history.
 
+| File | Purpose |
+| --- | --- |
+| `deal_insights_d1151.test.ts` | Real SQLite tests of D1151 deal access, NDA masks, publication, aggregates and sourced sharing. |
 D1169: `usage_storage_d1169.test.ts` holds the grown storage read: thirteen member stores, company files counted to the company owner, kinds, companies, the ten largest files, the allowance and its state, and that fund, legal, identity, 83(b) and HQ stores are never read. It and `usage_storage_d642.test.ts` run on `_storage_schema.ts`, which replays the baseline and every later migration once into a template database and copies it for each case. Rows are synthetic.

@@ -17,7 +17,7 @@ import { SignJWT } from 'jose';
 
 import captable from '../src/routes/captable.ts';
 import { simulate, validateInputs, type Inputs } from '../src/services/captable.ts';
-import { readCapTable, MODEL_SCENARIO_NAME } from '../src/services/capTableToday.ts';
+import { readCapTable, MODEL_SCENARIO_NAME, NO_PRICE_SENTENCE, priceOnRecord } from '../src/services/capTableToday.ts';
 import { capTableCard, loadCap } from '../src/services/raiseCycle.ts';
 import { unallocated } from '../src/routes/cycle_build.ts';
 import { loadSimSegments } from '../src/services/decks/axalSpinoutDemoDay.ts';
@@ -446,4 +446,40 @@ test('a record that cannot be read is a failure, never a fall back to the model'
   f.env.DB = { ...db, prepare(sql: string) { return db.prepare(sql.includes('FROM cap_table_issuances i') ? 'SELECT * FROM missing_d1018' : sql); } };
   await assert.rejects(readCapTable(f.env, 10), /missing_d1018/);
   assert.equal((await call(f, OWNER, '/scenarios/by-project/10/today')).status, 500);
+});
+
+// ───────────────────────────────────────────────────────────── D1283 (#3341): today's price per share
+
+test('D1283: today carries the record\'s price per share: the last priced issuance, else the latest priced class, else none', async () => {
+  // Mutations checked: the earliest issuance taken; a void issuance counted; the class fallback dropped; a 0 for none.
+  const empty = fresh();
+  const none = await call(empty, OWNER, '/scenarios/by-project/10/today');
+  assert.deepEqual([none.body.today.price, none.body.today.price_sentence], [null, NO_PRICE_SENTENCE]);
+
+  const f = fresh();
+  const { pref } = await worked(f);
+  let r = await call(f, OWNER, '/scenarios/by-project/10/today');
+  assert.deepEqual(r.body.today.price, { micros: 2_500_000, as_of: '2026-04-01', instrument: 'Series A Preferred', source: 'issuance' });
+  assert.equal(r.body.today.price_sentence, null);
+  await record(f, { kind: 'priced', holder_name: 'Fund Two', class_uid: pref.uid, shares: 100, price_per_share_micros: 3_000_000, amount_cents: 30_000, issued_on: '2026-07-01' });
+  r = await call(f, OWNER, '/scenarios/by-project/10/today');
+  assert.deepEqual([r.body.today.price.micros, r.body.today.price.as_of], [3_000_000, '2026-07-01'], 'the last priced issuance');
+
+  // A class with a price and no priced issuance: the class's price, with no date.
+  const g = fresh();
+  const cls = async (body: Record<string, unknown>) => (await call(g, OWNER, '/record/10/classes', 'POST', body)).body.class;
+  const common = await cls({ name: 'Common', kind: 'common' });
+  await cls({ name: 'Seed Preferred', kind: 'preferred', price_per_share_micros: 1_250_000 });
+  await call(g, OWNER, '/record/10/issuances', 'POST', { kind: 'founding', holder_id: 101, class_uid: common.uid, shares: 1000, issued_on: '2026-01-15' });
+  r = await call(g, OWNER, '/scenarios/by-project/10/today');
+  assert.deepEqual(r.body.today.price, { micros: 1_250_000, as_of: null, instrument: 'Seed Preferred', source: 'class' });
+
+  // The pure rule: a void or unpriced issuance is not a price, and a pool's class is not one either.
+  const rec = (issuances: any[], classes: any[] = []) => ({ classes: { rows: classes }, issuances: { rows: issuances } }) as any;
+  const iss = (o: any) => ({ kind: 'priced', status: 'recorded', price_per_share_micros: 1_000_000, issued_on: '2026-01-01', class_uid: 'c1', ...o });
+  assert.equal(priceOnRecord(rec([iss({ status: 'void', price_per_share_micros: 9_000_000, issued_on: '2026-09-01' }), iss({})])).micros, 1_000_000);
+  assert.equal(priceOnRecord(rec([iss({ price_per_share_micros: null })])), null);
+  assert.equal(priceOnRecord(rec([iss({ kind: 'transfer' })])), null, 'a transfer is not a priced round');
+  assert.equal(priceOnRecord(rec([], [{ uid: 'p', name: 'Plan', kind: 'option_pool', price_per_share_micros: 5, created_at: '2026' }])), null);
+  assert.equal(priceOnRecord(rec([iss({ class_uid: 'c1' })], [{ uid: 'c1', name: 'Series A', kind: 'preferred' }])).instrument, 'Series A');
 });

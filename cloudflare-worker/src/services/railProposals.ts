@@ -171,6 +171,9 @@ export async function listRail(env: Env, userId: number, q: { option: string; re
 export async function decideRail(env: Env, userId: number, uid: string, decision: RailDecision, edited?: Record<string, unknown> | null): Promise<RailProposal | null> {
   const status: RailProposalStatus | null = decision === 'accept' ? 'accepted' : decision === 'edit' ? 'edited' : decision === 'discard' ? 'discarded' : null;
   if (!status) return null;
+  // D1263: these decisions must pin/link and audit in their own atomic founder writer.
+  const routed = await getRail(env, userId, uid);
+  if (routed && ['raise:evidence', 'raise:evidence-link'].includes(routed.rail_option)) return null;
   if (status === 'edited' && (!edited || typeof edited !== 'object' || JSON.stringify(edited).length > MAX_PAYLOAD_CHARS)) return null;
   // D777 part 3: keeping a value re-checks the never-fill registry. The stored
   // field may have been listed since it was proposed, and an edit may name one.

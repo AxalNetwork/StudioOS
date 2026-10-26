@@ -341,7 +341,21 @@ export function needsYou(room, now = Date.now()) {
   if (blind.length) rows.push({ key: 'scope', text: `${blind.length} grant${blind.length === 1 ? '’s' : 's’'} folders could not be read`, sub: 'Who they open is not known until it is read again.', to: 'access', bad: true });
   return rows;
 }
-export const REQUESTS_WAIT = 'Access requests are not read here yet: they have no single queue until part 3 (D1104). This is not a claim that nobody asked.';
+/**
+ * D1284 (#3342) — Needs you's access requests, from D1104's queue
+ * (`dataRoomApi.requests`): how many are open, and whether they are the
+ * caller's to answer (`can_answer`, the venture's owner). A reply with no
+ * count is unreadable, never "none".
+ */
+export function requestsNeed(read) {
+  const open = read?.open;
+  if (!Number.isSafeInteger(open) || open < 0) return { state: 'unreadable' };
+  if (open === 0) return { state: 'none', text: 'No access request waits.' };
+  const n = `${open} access request${open === 1 ? '' : 's'}`;
+  return read.can_answer === true
+    ? { state: 'open', text: `${n} wait${open === 1 ? 's' : ''} for your answer`, sub: 'Share the room or decline, on Requests.' }
+    : { state: 'open', text: `${n} open`, sub: 'The venture’s owner answers them. You can read them on Requests.' };
+}
 export const ACTIVITY_WAIT = 'The last ninety days need the activity read (part 4, D1105). The last fifty events and this week’s counts are on Activity.';
 
 /** Who has access: every grant in force, with its end, NDA and folders. */

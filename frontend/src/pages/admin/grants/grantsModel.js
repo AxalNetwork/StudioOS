@@ -12,7 +12,10 @@
  *   - "Requests by month" draws what D983 counts: approved, declined,
  *     withdrawn and still waiting (the store does not split an approval by
  *     its terms);
- *   - "In use" waits on the studios' program figures (#3061).
+ *   - "In use" is each program's latest report from the studio (D1156's
+ *     `GET …/licences/:uid/in-use`, D1281): counts only, with the report's
+ *     date; a program with no report says so, and a failed read is
+ *     Unreadable.
  * A term nobody set reads "Not recorded"; a failed read is Unreadable; neither
  * is ever a zero.
  */
@@ -26,7 +29,9 @@ export const studioPath = (uid) => `${GRANTS_PATH}/studio/${encodeURIComponent(u
 export { NOT_RECORDED };
 export const UNREADABLE = 'Unreadable';
 export const REASON_MIN = 10;
-export const IN_USE_WAIT = 'This studio has not reported program figures yet.';
+export const IN_USE_NONE = 'This studio has not reported this program yet.';
+export const IN_USE_FAILED = 'Program figures could not be read.';
+const METRIC_WORD = { people: 'People', cohorts: 'Cohorts', referrals: 'Referrals', claims: 'Claims' };
 
 /** The page's tabs (GR1). History waits for a read across studios; each studio's history is on its page. */
 export const TABS = [
@@ -299,8 +304,31 @@ export function scheduleWord(grant) {
   return 'Not sent';
 }
 
-/** GR3's rows: the nine programs in catalogue order against this studio's grants and requests. */
-export function studioRows(read, defaultsList, requests) {
+/**
+ * One program's "In use" cell from D1156's read (`{ status, data }`): its
+ * reported counts with the report's date and period, Not recorded when it
+ * has no report (with the studio's last report on any program, if any), or
+ * Unreadable when the read failed. Never a zero for a figure not reported.
+ */
+export function inUseOf(programKey, usage) {
+  if (!usage || usage.status === 'loading') return { text: 'Reading…', reason: null, state: 'loading' };
+  if (usage.status !== 'ready') return { text: UNREADABLE, reason: IN_USE_FAILED, state: 'unreadable' };
+  const programs = Array.isArray(usage.data?.programs) ? usage.data.programs : [];
+  const row = programs.find((x) => x.program_key === programKey);
+  if (!row || row.state !== 'reported') {
+    const last = programs.filter((x) => x.state === 'reported' && x.reported_at).map((x) => String(x.reported_at)).sort().pop();
+    return { text: NOT_RECORDED, reason: `${IN_USE_NONE}${last && dayWord(last) ? ` Its last report was on ${dayWord(last)}.` : ''}`, state: 'not_reported' };
+  }
+  const counts = row.counts || {};
+  const recorded = Object.keys(METRIC_WORD).filter((k) => counts[k]?.state === 'recorded').map((k) => `${METRIC_WORD[k]} ${Number(counts[k].value).toLocaleString('en-GB')}`);
+  const unreadable = Object.keys(METRIC_WORD).filter((k) => counts[k]?.state === 'unreadable').map((k) => `${METRIC_WORD[k]} unreadable`);
+  const when = `Reported ${dayWord(row.reported_at) || 'on a date not recorded'}${row.period ? ` for ${row.period}` : ''}${row.stale ? ' · more than two days old' : ''}`;
+  if (!recorded.length && !unreadable.length) return { text: NOT_RECORDED, reason: `This studio has no recorded measure for this program. ${when}.`, state: 'reported' };
+  return { text: [...recorded, ...unreadable].join(' · '), reason: `${when}.`, state: 'reported' };
+}
+
+/** GR3's rows: the nine programs in catalogue order against this studio's grants and requests, and its In use read. */
+export function studioRows(read, defaultsList, requests, usage) {
   const grants = new Map((read?.grants || []).map((g) => [g.program_key, g]));
   const defaults = new Map((defaultsList || []).map((d) => [d.program_key, d]));
   const open = openRequestsByCell(requests);
@@ -322,7 +350,7 @@ export function studioRows(read, defaultsList, requests) {
       terms: p.grant === 'hq' ? ['Runs in HQ › Platform.'] : p.grant === 'notready' ? [`${p.note || 'Not ready'}.`]
         : cell.kind === 'requested' ? ['Waiting for HQ’s answer.'] : live ? keyTerms(g.terms) : ['Default terms apply if granted.'],
       schedule: p.grant === 'yes' ? scheduleWord(g) : '—',
-      inUse: live && g.state !== 'draft' ? { text: NOT_RECORDED, reason: IN_USE_WAIT } : null,
+      inUse: live && g.state !== 'draft' ? inUseOf(p.key, usage) : null,
       actions: actionsOf(p, g, cell, frozen),
     };
   });
