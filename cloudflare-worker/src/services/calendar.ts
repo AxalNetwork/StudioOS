@@ -1111,15 +1111,16 @@ export async function fetchCalendarScope(
   }
   if (truncated.length) {
     coverage.complete = false; coverage.truncated_kinds = truncated;
-    coverage.reason = 'More items are recorded than this window can show. Narrow the date window to read them.';
+    coverage.reason = [coverage.reason, 'More items are recorded than this window can show. Narrow the date window to read them.'].filter(Boolean).join(' ');
   }
-  const sourceFailure = sources.find(source => !source.ok);
+  const sourceFailure = sources.find(source => source.error === 'unreadable') || sources.find(source => !source.ok);
   const sourceReason = !sourceFailure ? null : sourceFailure.error === 'not_configured'
     ? 'Not read here yet: some calendar sources are not configured.'
     : 'Unreadable: some calendar sources could not be read. Try again.';
   if (sourceFailure) {
-    coverage.complete = false; coverage.error = sourceFailure.error;
-    coverage.reason = sourceReason;
+    coverage.complete = false;
+    if (coverage.error !== 'unreadable') coverage.error = sourceFailure.error;
+    coverage.reason = [coverage.reason, sourceReason].filter(Boolean).join(' ');
   }
   coverage.studios.unshift({ name: scope === 'studio' ? name : 'HQ', code: branch || 'hq',
     ok: !sourceFailure, error: sourceFailure?.error || null,

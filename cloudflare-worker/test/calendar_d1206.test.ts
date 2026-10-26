@@ -256,6 +256,11 @@ test('D1206: Studio requires readable current licence and membership; a failed s
     assert.equal(source.status, 200);
     assert.equal(result.items.length, 2); assert.equal(result.coverage.complete, false);
     assert.equal(result.sources.find((s: any) => s.kind === 'ic_meeting').error, 'unreadable');
+    f.db.exec('DROP TABLE ic_meetings'); f.breakSource('FROM founder_checkins');
+    const mixed=await (await f.request(`/events?${window}&scope=studio&kinds=ic_meeting,founder_checkin`)).json() as any;
+    assert.equal(mixed.sources.find((s: any)=>s.kind==='ic_meeting').error,'not_configured');
+    assert.equal(mixed.sources.find((s: any)=>s.kind==='founder_checkin').error,'unreadable');
+    assert.equal(mixed.coverage.error,'unreadable'); assert.match(mixed.coverage.reason,/Try again/);
     for (const [broken, error] of [['FROM branch_licence','unreadable'],['SELECT id FROM users WHERE is_active','unreadable']] as const) {
       f.breakSource(broken);
       const res = await f.request(`/events?${window}&scope=studio&kinds=founder_checkin`);
@@ -304,6 +309,14 @@ test('D1206: All studios is HQ Super Admin only and reports remote or unreadable
     const unreadable = await (await f.request(`/events?${window}&scope=all&kinds=founder_checkin`)).json() as any;
     assert.equal(unreadable.items.length,3); assert.equal(unreadable.coverage.complete,false);
     assert.equal(unreadable.coverage.error,'unreadable'); assert.match(unreadable.coverage.reason,/Try again/);
+    f.db.exec('DROP TABLE advisor_bookings');
+    for(let n=0;n<1001;n++) f.db.prepare('INSERT INTO founder_checkins (uid,founder_user_id,title,start_at) VALUES (?,?,?,?)').run(`compound-${n}`,2,`Fixture compound ${n}`,START);
+    const compound=await (await f.request(`/events?${window}&scope=all&kinds=founder_checkin,advisor_booking`)).json() as any;
+    assert.equal(compound.items.length,1000); assert.equal(compound.coverage.complete,false);
+    assert.equal(compound.coverage.error,'unreadable','a missing source cannot downgrade the unreadable studio register');
+    assert.deepEqual(compound.coverage.truncated_kinds,['founder_checkin']);
+    for(const reason of [/HQ items only/,/Narrow the date window/,/some calendar sources/]) assert.match(compound.coverage.reason,reason);
+    assert.equal(compound.sources.find((source: any)=>source.kind==='advisor_booking').error,'not_configured');
   } finally { await f.close(); }
 });
 
