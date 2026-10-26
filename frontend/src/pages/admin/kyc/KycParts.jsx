@@ -26,7 +26,7 @@ export function Tile({ t, reading, testId }) {
 }
 
 /** A read that failed: what is missing, never an empty list, and Try again. */
-export function Unreadable({ what, detail, onRetry, testId }) {
+export function ReadFailed({ what, detail, onRetry, testId }) {
   return (
     <div className="flex flex-col gap-1" role="alert" data-testid={testId}>
       <p className="m-0 text-[13px] font-semibold">{what} could not be read. This is not a sign that there are none.</p>

@@ -18,7 +18,7 @@ import {
   PERIOD_CODE, PERIOD_MAX, PERIOD_MIN, PERIOD_NOTE, PERIOD_TOLD, RENEWAL_FILTERS, changeLine, governanceRefusal,
   monthBars, monthLead, periodChanges, periodRow, rangeLine, renewalChipCount, renewalRow, renewalTiles, warnedLine,
 } from './governanceModel';
-import { BTN, CARD, Chip, EYE, FIELD, MUTED, Pager, Tile, TwoColumns, Unreadable } from './KycParts';
+import { BTN, CARD, Chip, EYE, FIELD, MUTED, Pager, Tile, TwoColumns, ReadFailed } from './KycParts';
 import { StatusPill } from '../consoles/KycConsole';
 
 /* ------------------------------------------------------------------ periods */
@@ -80,7 +80,7 @@ export function PeriodsCard() {
     <section className={`${CARD} flex flex-col gap-2 p-4`} data-testid="kyc-periods">
       <h3 className="m-0 text-[14px] font-bold">How long a check lasts</h3>
       {st.kind === 'loading' && <p className={`m-0 text-[13px] ${MUTED}`}>Reading…</p>}
-      {st.kind === 'failed' && <Unreadable what="How long checks last" detail={st.detail} onRetry={load} testId="kyc-periods-failed" />}
+      {st.kind === 'failed' && <ReadFailed what="How long checks last" detail={st.detail} onRetry={load} testId="kyc-periods-failed" />}
       {st.kind === 'ok' && (
         <>
           {periods.map((p) => {
@@ -177,7 +177,7 @@ export default function KycRenewals() {
   return (
     <div className="flex min-w-0 flex-col gap-4" data-testid="kyc-renewals">
       {st.kind === 'failed' ? (
-        <section className={`${CARD} p-4`}><Unreadable what="The renewals" detail={st.detail} onRetry={load} testId="kyc-renewals-failed" /></section>
+        <section className={`${CARD} p-4`}><ReadFailed what="The renewals" detail={st.detail} onRetry={load} testId="kyc-renewals-failed" /></section>
       ) : (
         <div className="grid grid-cols-2 gap-3 lg:grid-cols-4" data-testid="kyc-renewals-tiles">
           {tiles.map((t) => <Tile key={t.key} t={t} reading={reading} testId={`kyc-renewal-tile-${t.key}`} />)}

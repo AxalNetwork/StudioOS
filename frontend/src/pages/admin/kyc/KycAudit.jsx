@@ -19,7 +19,7 @@ import {
   AUDIT_WINDOWS, EXPORT_NOTE, EXPORT_ONLY_HQ, EXPORT_REASON_MAX, EXPORT_SCOPE, actionOptions, auditLead, auditParams,
   auditRow, canExport, dayBars, exportProblem, exportedLine, governanceRefusal, rangeLine, windowDates,
 } from './governanceModel';
-import { BTN, CARD, Chip, EYE, FIELD, MUTED, Pager, TwoColumns, Unreadable } from './KycParts';
+import { BTN, CARD, Chip, EYE, FIELD, MUTED, Pager, TwoColumns, ReadFailed } from './KycParts';
 
 /**
  * Hand the browser the CSV the Worker made. A blob, never a new tab. Returns
@@ -144,7 +144,7 @@ export default function KycAudit({ me: meProp, nowMs: nowProp }) {
         <ExportDoor me={me} window={f.window} nowMs={nowMs} />
       </div>
       {st.kind === 'failed' ? (
-        <section className={`${CARD} p-4`}><Unreadable what="The audit record" detail={st.detail} onRetry={load} testId="kyc-audit-failed" /></section>
+        <section className={`${CARD} p-4`}><ReadFailed what="The audit record" detail={st.detail} onRetry={load} testId="kyc-audit-failed" /></section>
       ) : (
         <>
           <section className={`${CARD} flex min-w-0 flex-col gap-2 p-4`} data-testid="kyc-audit-chart">
