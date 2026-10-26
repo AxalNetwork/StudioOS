@@ -12,9 +12,12 @@
  *   - In progress: an accepted link from `GET /plan/links` (D1068): what came
  *     back from a tool, linked by the founder. A copy to Notion, which
  *     reports nothing back, is "Not recorded".
- *   - Built, Live, Tested: no read carries a landed row's state or the day it
- *     changed, so each is "Not recorded" where it applies. Never "Not yet":
- *     that would claim it is not done.
+ *   - Built, Live, Tested: D968's `GET /plan/states`, from the row each item
+ *     landed in (a must-have's Done with its day, a roadmap item's Done or the
+ *     GitHub release that shipped it, a formation step's done, a test's
+ *     result). Where the row stores no day, the stage is done with "Day not
+ *     recorded". Where no source reports a stage, it is "Not recorded" with the
+ *     read's reason, never "Not yet": that would claim it is not done.
  * A stage that does not apply to a kind (a test is never live) says so.
  */
 import { KIND_WORD, SECTIONS, dayMon, isDecided, moduleName } from './buildPlanModel';
@@ -108,6 +111,9 @@ export const BUCKETS = [
 export const NOT_RECORDED_FOOT = 'Each dot carries its source. Not recorded means no tool reports that stage, never that it is not done.';
 export const CHART_FOOT = 'Not started: accepted for Later on the roadmap. Not recorded: no read here carries that stage yet, or Notion reports nothing back after a copy.';
 export const BUILT_UNREAD = 'Not recorded: no read here carries the day an item was built, so no week is drawn as 0.';
+/** D968: when the states read answers but no item's Built is reported by any source. */
+export const BUILT_UNREPORTED = 'Not recorded: no tool reports an item as built yet, so no week is drawn as 0.';
+export const WEEKS = 12;
 
 /** The stages a kind passes through; the rest "Does not apply". */
 const APPLIES = {
@@ -125,17 +131,40 @@ const FED_WORD = { issue: 'issue', pull_request: 'pull request' };
 const UNREAD_LATER = 'No read here carries this stage yet';
 
 /** One stage of one item: done (with its value and source), not yet, does not apply, or not recorded. */
-const done = (text, source, at) => ({ state: 'done', text, source, at: at || null });
+const done = (text, source, at, note = null) => ({ state: 'done', text, source, at: at || null, ...(note ? { note } : {}) });
 const notYet = { state: 'notyet', text: 'Not yet', source: null };
 const na = { state: 'na', text: 'Does not apply', source: null };
 const unrecorded = (source) => ({ state: 'unrecorded', text: 'Not recorded', source });
 
+export const STATES_UNREAD = 'Built, live and tested could not be read';
+export const DAY_UNREAD = 'Day not recorded';
+
 /**
- * Every accepted item's six stages, from the three reads. `handoffs` and
- * `links` may be null when their read failed: then Sent or In progress is
- * "Not recorded" with that reason, never "Not yet".
+ * One later stage (Built, Live or Tested) from D968's states read. `states` is
+ * undefined when the read was not made, null when it failed, else the rows.
+ * Only a source's own report fills a stage: done (with its day, or "Day not
+ * recorded" and why), not yet, or "Not recorded" with the read's reason.
  */
-export function progressRows(plan, handoffs, links) {
+export function laterStage(kind, key, states, entry) {
+  if (!applies(kind, key)) return na;
+  if (states === undefined) return unrecorded(UNREAD_LATER);
+  if (states === null) return unrecorded(STATES_UNREAD);
+  const st = entry?.[key];
+  if (!st || st.reported !== true) return unrecorded(st?.reason || UNREAD_LATER);
+  if (st.done !== true) return notYet;
+  const when = st.at ? dayMon(st.at) || DAY_UNREAD : DAY_UNREAD;
+  const text = (key === 'tested' || key === 'live') && st.value ? `${st.value} · ${when}` : when;
+  return done(text, st.source || 'Recorded', st.at, st.at ? null : st.at_reason || null);
+}
+
+/**
+ * Every accepted item's six stages, from the four reads. `handoffs` and
+ * `links` may be null when their read failed: then Sent or In progress is
+ * "Not recorded" with that reason, never "Not yet". `states` is D968's:
+ * undefined when not read, null when it failed.
+ */
+export function progressRows(plan, handoffs, links, states) {
+  const stateOf = new Map((Array.isArray(states) ? states : []).map((x) => [x.plan_item_uid, x]));
   const sentBy = new Map();
   for (const h of Array.isArray(handoffs) ? handoffs : []) {
     for (const uid of h.plan_item_uids || []) {
@@ -167,7 +196,7 @@ export function progressRows(plan, handoffs, links) {
       else if (sent?.provider === 'notion') stage.progress = unrecorded('Notion reports nothing back');
       else stage.progress = notYet;
       for (const later of ['built', 'live', 'tested']) {
-        stage[later] = applies(kind, later) ? unrecorded(UNREAD_LATER) : na;
+        stage[later] = laterStage(kind, later, states, stateOf.get(i.uid));
       }
       rows.push({
         uid: i.uid, title: String(i.payload?.title ?? 'Plan item'), kind, kindWord: kindLine(i), module: s.slug, moduleWord: s.name,
@@ -197,6 +226,58 @@ export function lastChange(stage) {
   return STAGES.map((k) => stage[k]?.at).filter(Boolean).sort().pop() || null;
 }
 
+/** The Monday (UTC) on or before a day, as YYYY-MM-DD. */
+export function mondayOf(raw) {
+  const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(String(raw ?? ''));
+  if (!m) return null;
+  const d = new Date(Date.UTC(Number(m[1]), Number(m[2]) - 1, Number(m[3])));
+  if (Number.isNaN(d.getTime())) return null;
+  d.setUTCDate(d.getUTCDate() - ((d.getUTCDay() + 6) % 7));
+  return d.toISOString().slice(0, 10);
+}
+
+/**
+ * "Built per week" (VB10), from each item's Built day. Twelve Monday weeks,
+ * this one to date. A built item whose row stores no day is in no week and is
+ * counted apart (`undated`), as is one built before the twelve weeks
+ * (`earlier`), so each week is what was recorded, never a guess.
+ * `reported` is false when no item's Built is reported by any source: then the
+ * chart stays the dashed not-recorded line.
+ */
+export function builtPerWeek(rows, nowIso, weeks = WEEKS) {
+  const built = (Array.isArray(rows) ? rows : []).map((r) => r.stages?.built).filter(Boolean);
+  const reported = built.some((b) => b.state === 'done' || b.state === 'notyet');
+  const end = mondayOf(nowIso);
+  if (!end) return { reported, weeks: [], undated: 0, earlier: 0, max: 0 };
+  const starts = Array.from({ length: weeks }, (_, k) => {
+    const d = new Date(`${end}T00:00:00Z`);
+    d.setUTCDate(d.getUTCDate() - 7 * (weeks - 1 - k));
+    return d.toISOString().slice(0, 10);
+  });
+  const counts = Object.fromEntries(starts.map((w) => [w, 0]));
+  let undated = 0;
+  let earlier = 0;
+  for (const b of built) {
+    if (b.state !== 'done') continue;
+    const w = mondayOf(b.at);
+    if (!w) undated += 1;
+    else if (w in counts) counts[w] += 1;
+    else if (w < starts[0]) earlier += 1;
+  }
+  const series = starts.map((w, k) => ({ week: w, label: dayMon(w), n: counts[w], current: k === weeks - 1 }));
+  return { reported, weeks: series, undated, earlier, max: Math.max(1, ...series.map((x) => x.n)) };
+}
+
+/** The weekly chart's sentence, for a screen reader and under the bars. */
+export function weekLine(series) {
+  if (!series.reported) return BUILT_UNREPORTED;
+  const total = series.weeks.reduce((t, w) => t + w.n, 0);
+  const parts = [`${total} ${total === 1 ? 'item' : 'items'} built in the last ${series.weeks.length} weeks, by the day each was built.`];
+  if (series.earlier) parts.push(`${series.earlier} built before these weeks.`);
+  if (series.undated) parts.push(`${series.undated} built ${series.undated === 1 ? 'item carries' : 'items carry'} no day, so ${series.undated === 1 ? 'it is' : 'they are'} in no week.`);
+  return parts.join(' ');
+}
+
 /** The chart's rows: per module, how many accepted items sit in each bucket (VB10). */
 export function stageChart(rows) {
   return SECTIONS.map((s) => {
@@ -207,16 +288,17 @@ export function stageChart(rows) {
 }
 
 /**
- * The chart's lead. Built and live are never read here (no read carries a
- * landed row's state), so the lead never says "0 of N are built": it says
- * they are not recorded.
+ * The chart's lead. It says "None is built or live yet" only when a source
+ * reports those stages (D968); when none does, it says they are not recorded,
+ * never "0 of N are built".
  */
 export function stageLead(rows) {
   const built = rows.filter((r) => r.bucket === 'built').length;
   if (!rows.length) return 'No item is accepted yet, so there is nothing to show by stage.';
   if (built) return `${built} of ${rows.length} accepted items are built or live.`;
   const sent = rows.filter((r) => r.stages.sent.state === 'done').length;
-  return `${rows.length} accepted ${rows.length === 1 ? 'item' : 'items'}, ${sent} sent to a tool. Built and live are not recorded here yet.`;
+  const reported = rows.some((r) => ['built', 'live'].some((k) => ['done', 'notyet'].includes(r.stages[k]?.state)));
+  return `${rows.length} accepted ${rows.length === 1 ? 'item' : 'items'}, ${sent} sent to a tool. ${reported ? 'None is built or live yet.' : 'Built and live are not recorded here yet.'}`;
 }
 
 /** The chart's text for a screen reader, naming any module with items not recorded. */

@@ -206,10 +206,11 @@ export const LEGAL_SLOT = {
   title: 'Legal paper',
   line: 'Which templates this deal uses is not read here yet: no read ties a template to a deal. The paper sent to you shows on Documents as it goes out.',
 };
+/** D1027: staff and the founder read the cap table elsewhere; an investor reads the panel (CT15) here. */
 export const CAP_TABLE_SLOT = {
-  eye: 'CT15 · Cap table canvas',
+  eye: 'CT15 · Cap table',
   title: 'Cap table',
-  line: 'The cap table panel is not read here yet. It is CAPTABLE’s panel (#2864), shown at the level the founder shares with you.',
+  line: 'Investors read the cap table here, at the level the founder shares with them. The founder keeps it in Raise › Cap table.',
 };
 export const ROUTES = [
   { key: 'direct', title: 'Direct', line: 'You sign and pay as yourself or your firm.' },
@@ -238,12 +239,14 @@ export function myCommitment(read, currency = 'USD') {
     confirmed: live.status === 'confirmed',
     recorded: `Recorded ${dayOf(live.created_at) || 'on a date not recorded'}`,
     note: live.notes ? String(live.notes) : null,
+    // D1155: the row itself, for D752's proof door on your own commitment.
+    row: live,
     history,
   };
 }
 
-/** Who reads a commitment's note today: the Worker returns it to the deal's founder and the studio too. */
-export const NOTE_READERS = 'You, your firm, the founder and the studio read this note.';
+/** Who reads a commitment's note: since D1155 the Worker returns it to you alone (DL15); the founder and the studio see the amount and status. */
+export const NOTE_READERS = 'Only you read this note. The founder and the studio see your amount and status, never the note.';
 
 /** The round as a count of investors and a total; never a name, never another investor's amount. */
 export function roundLines(read, deal) {

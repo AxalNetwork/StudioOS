@@ -370,6 +370,11 @@ and paged `/notes`; add/edit/delete notes use the same Worker scope. Only
 the author edits and deletes, firm colleagues read, and staff have no bypass.
 Reading whats-new advances that user/firm’s visit marker. #3057 consumes it.
 
+D1242 (#3255): `dealFlow.js` reads Deal flow's Studio lens, `/deals/studio`:
+every round for an admin or an Operating Partner, with its lead, its
+investors (invited, interested, committed), its source, who set a Not raising
+round so, and whether the caller may move it.
+
 D1249 (#3264): `ddDesk.js` is Due Diligence's desk on `/api/dd`: the list
 with its server-side search, filters, sort and pages, the overview's figures,
 My reviews, the subject and people searches (an email for an Admin only), the
@@ -427,10 +432,13 @@ The operator sends a bounded batch size and optional rescan flag; discovery curs
 
 D1199 (#3149): `productTesting.js` adds the programme logo: `partnerTestingApi.uploadLogo(uid, file)` and `.removeLogo(uid)`, the same on `adminTestingApi` for HQ's own programmes, and `productTestingApi.logoSrc(uid)`, the `<img>` path (a 404 there means no logo: draw the initial letter).
 
+D1212 (#3178): `calendarConnections.js` holds the whole-calendar subscription (`GET`, `POST`, `DELETE /calendar/subscription`, D1209) and the disconnect with its choice (`DELETE /calendar/google` and `/calendar/microsoft`, `?remove_copies=1`). The link comes back once, from the POST, and the page never prints it.
+
 D1207 (#3173): `calendarItems.js` holds the Calendar's Reschedule (`PATCH /calendar/ic-meetings/:id` and `/calendar/founder-checkins/:id`) and its pickers (`/calendar/people`, `/calendar/deals`). A person comes back as a uid and a name, never an email or a user number.
 
 D1176: `useOfFunds.js` holds the venture-scoped plan, scenarios/compare, milestones, hires and split calls, plus the retained financial-model read/save. The Worker routes land first; the UI follows in #3104/#3105.
 
+D1051 adds `billingCheckout.js`: `checkoutApi.quote`, `.start(…, nonce)` and `.status(ref)`. Keep one 8–64-character nonce per open sheet and reuse it on retries; the client secret belongs only in the in-page Stripe form.
 | File | Purpose |
 |---|---|
 | `raiseEvidence.js` | D1263: founder evidence reads, refresh and versioned decisions against the mounted Worker routes. |

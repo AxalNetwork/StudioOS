@@ -113,6 +113,8 @@ import adminContractDocRegistry from './routes/admin_contract_doc_registry';
 import adminForms from './routes/admin_forms';
 import adminIntegrationKeys from './routes/admin_integration_keys';
 import adminMercury from './routes/admin_mercury';
+// D966 (#2630): the owner's repair of Mercury SAFEs accepted before #2629.
+import adminMercurySafeBasis from './routes/admin_mercury_safe_basis';
 import adminGithub from './routes/admin_github';
 import githubWebhook from './routes/github';
 // Task #4 (AW) — Admin reader for advisor_turn_audit (L6) + lock/shadow controls (L7).
@@ -131,6 +133,7 @@ import fundFees from './routes/fund_fees';
 import fundAdmin from './routes/fund_admin';
 import closings, { adminClosings } from './routes/closings';
 import reporting from './routes/reporting';
+import reportingReports from './routes/reporting_reports';
 import fundReporting from './routes/fund_reporting';
 import fundBooklets from './routes/fund_booklets';
 import fundNotices from './routes/fund_notices';
@@ -389,6 +392,7 @@ import { processQueueBatch } from './services/queueWorker';
 // import was missed in the first pass and left tier checkout/webhook 404.
 import { requireTier } from './middleware/requireTier';
 import billing from './routes/billing';
+import billingCheckout from './routes/billing_checkout';
 // Task — Stripe-backed product catalog (read + admin sync over the D1 mirror).
 import catalog, { adminCatalog } from './routes/catalog';
 // Task #16 — Admin Stripe management (webhook endpoints + publishable key).
@@ -809,9 +813,15 @@ const COOL_OFF_ROUTES = [
   // added or taken on someone else's behalf. The member-account read beside it
   // stays open.
   '/api/ai-budget/members/:userId/adjustments',
+  // D966 — the SAFE basis repair writes founders' cap tables: the money-adjacent
+  // class D892's reconciliation is paused under (`/api/admin/billing`). The exact
+  // route, so D710's entity reads under `/api/admin/mercury` stay open.
+  '/api/admin/mercury/safe-basis-repair',
 ];
 for (const p of COOL_OFF_ROUTES) app.use(p, recoveryCoolOff);
 // Task #6 — Stripe billing surface (tier checkout/portal/webhook + MI Pro).
+// D1051 (#2902): the checkout quote, start and status. Before `billing` so `/checkout/*` is its.
+app.route('/api/billing', billingCheckout);
 app.route('/api/billing', billing);
 
 // Task — Stripe-backed product catalog read surface. Authenticated read of
@@ -995,6 +1005,8 @@ app.route('/api/admin/closings', adminClosings);
 // Task #9 — IRS-style forms catalog + PDF preview/download (admin-only).
 app.route('/api/admin/forms', adminForms);
 app.route('/api/admin/integration-keys', adminIntegrationKeys);
+// D966 (#2630): POST /safe-basis-repair, founders' Raise SAFEs; it reads no entity account.
+app.route('/api/admin/mercury', adminMercurySafeBasis);
 // D710 (#1775): Mercury, read-only, for fund administration.
 app.route('/api/admin/mercury', adminMercury);
 app.route('/api/admin/github', adminGithub);
@@ -1245,6 +1257,8 @@ app.route('/api/fund-admin', fundAdmin);
 app.route('/api/closings', closings);
 // D1058 (#2928): reporting duties and periods, the founder's desk and the investor's view.
 app.route('/api/reporting', reporting);
+// D1059 (#2929): a report from the Grow modules, sent with frozen figures, corrected as a revision, with its statements.
+app.route('/api/reporting', reportingReports);
 app.route('/api/fund-reporting', fundReporting);
 // D716 — the Subscription Booklet: the applicant's ticks and submit, and HQ's read and withdraw.
 app.route('/api/fund-booklets', fundBooklets);

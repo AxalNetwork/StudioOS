@@ -19,11 +19,13 @@ export const TH = 'px-3 py-2 text-left text-[10.5px] font-bold uppercase trackin
 export const TD = 'px-3 py-2.5 align-top text-[13px] text-axal-ink dark:text-gray-100';
 export const PILL = 'ml-1.5 inline-block rounded-full border border-axal-hairline px-2 py-0.5 text-[10.5px] font-bold text-axal-muted dark:border-gray-700 dark:text-gray-400';
 export const WARN_PILL = 'inline-block rounded-full border border-amber-300 bg-amber-50 px-2 py-0.5 text-[10.5px] font-bold text-amber-800 dark:border-amber-700 dark:bg-amber-950 dark:text-amber-200';
-export const BTN = 'inline-flex min-h-[36px] items-center rounded-[8px] border border-axal-hairline px-3 text-[12.5px] font-bold text-axal-ink hover:bg-gray-50 disabled:opacity-50 dark:border-gray-700 dark:text-gray-100 dark:hover:bg-gray-800';
-export const BTN_PRIMARY = 'inline-flex min-h-[36px] items-center rounded-[8px] bg-axal-violet px-3 text-[12.5px] font-bold text-white hover:bg-axal-violet-deep disabled:opacity-50';
-export const BTN_DANGER = 'inline-flex min-h-[36px] items-center rounded-[8px] bg-axal-destructive px-3 text-[12.5px] font-bold text-white hover:opacity-90 disabled:opacity-50';
+export const BTN = 'inline-flex min-h-[44px] items-center justify-center sm:min-h-[36px] rounded-[8px] border border-axal-hairline px-3 text-[12.5px] font-bold text-axal-ink hover:bg-gray-50 disabled:opacity-50 dark:border-gray-700 dark:text-gray-100 dark:hover:bg-gray-800';
+export const BTN_PRIMARY = 'inline-flex min-h-[44px] items-center justify-center sm:min-h-[36px] rounded-[8px] bg-axal-violet px-3 text-[12.5px] font-bold text-white hover:bg-axal-violet-deep disabled:opacity-50';
+export const BTN_DANGER = 'inline-flex min-h-[44px] items-center justify-center sm:min-h-[36px] rounded-[8px] bg-axal-destructive px-3 text-[12.5px] font-bold text-white hover:opacity-90 disabled:opacity-50';
 export const FIELD = 'w-full rounded-[8px] border border-axal-hairline bg-white px-3 py-2 text-[13px] text-axal-ink dark:border-gray-700 dark:bg-gray-900 dark:text-gray-100';
-export const SELECT = 'min-h-[34px] rounded-[8px] border border-axal-hairline bg-white px-2 text-[12.5px] text-axal-ink dark:border-gray-700 dark:bg-gray-900 dark:text-gray-100';
+export const SELECT = 'min-h-[44px] rounded-[8px] sm:min-h-[34px] border border-axal-hairline bg-white px-2 text-[12.5px] text-axal-ink dark:border-gray-700 dark:bg-gray-900 dark:text-gray-100';
+/** D1047 (APR15): a dialog's or a drawer's buttons, full width on a phone. */
+export const FOOT = 'flex justify-end gap-2 max-sm:*:flex-1';
 export const nf = (n) => Number(n).toLocaleString('en-US');
 export const PAGE = 25;
 
@@ -115,7 +117,7 @@ export function DecisionDialog({ copy, testId, onClose, onSend, ready = true, bl
   return (
     <Lightbox label={copy.title} title={copy.title} sub={copy.changes} onClose={onClose} testId={testId} width={520}
       footer={(
-        <div className="flex justify-end gap-2">
+        <div className={FOOT}>
           <button type="button" className={BTN} onClick={onClose} data-testid={`${testId}-cancel`}>Cancel</button>
           <button type="button" className={danger ? BTN_DANGER : BTN_PRIMARY} disabled={!ready || !!blocked || busy} onClick={send} data-testid={`${testId}-send`}>
             {busy ? 'Saving…' : copy.button}
@@ -130,6 +132,19 @@ export function DecisionDialog({ copy, testId, onClose, onSend, ready = true, bl
         {error ? <p role="alert" className="m-0 text-[13px] font-semibold text-axal-destructive dark:text-red-300" data-testid={`${testId}-refused`}>{error}</p> : null}
       </div>
     </Lightbox>
+  );
+}
+
+/**
+ * D1047 (APR15): on a phone a drawer is a full-screen sheet, and its way back
+ * is "‹ [where it came from]" at the top, 44px tall. Hidden from `sm` up,
+ * where the drawer is a dialog over the page with its own ×.
+ */
+export function PhoneBack({ label, onClose, testId }) {
+  return (
+    <button type="button" onClick={onClose} className="-mt-1 inline-flex min-h-[44px] items-center self-start text-[13px] font-bold text-axal-violet sm:hidden dark:text-violet-300" data-testid={testId}>
+      {`‹ ${label}`}
+    </button>
   );
 }
 

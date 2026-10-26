@@ -2,6 +2,7 @@ import React, { useCallback, useEffect, useState } from 'react';
 import { Link, useLocation, useParams } from 'react-router-dom';
 import { api } from '../../lib/api';
 import { Unreadable } from '../../ui';
+import InvestorCapTablePanel from '../raise/captable/InvestorCapTablePanel';
 import {
   COMPANY_TABS, FIGURES_WAIT, NOT_HELD, NOT_YET, TERMS_WAIT,
   companyHref, companyOf, companyTabOf, holdingLine, reportRows,
@@ -87,7 +88,13 @@ export default function PortfolioCompanyPage() {
   else if (state.status === 'loading') body = <div className="h-3 w-48 animate-pulse rounded bg-axal-ground dark:bg-gray-800" aria-busy="true" data-testid="company-loading" />;
   else if (!position || !companyHref(uid)) body = <section className={CARD} data-testid="company-not-held"><p className={MUTED}>{NOT_HELD}</p><Link to="/portfolio/updates" className={LINK}>Back to Reports</Link></section>;
   else if (tab === 'reports') body = <Reports projectId={position.project_id} />;
-  else if (tab === 'terms') body = <Waiting id="terms" title="Terms" waits={TERMS_WAIT} />;
+  // D1027 (#2864): Terms carries the investor's read-only Cap table panel (CT15) beside the duties' wait.
+  else if (tab === 'terms') body = (
+    <div className="flex flex-col gap-4">
+      <Waiting id="terms" title="Terms" waits={TERMS_WAIT} />
+      <InvestorCapTablePanel projectId={position.project_id} venture={position.project?.name} testId="company-captable" />
+    </div>
+  );
   else body = <Waiting id="figures" title="Figures" waits={FIGURES_WAIT} />;
 
   return (

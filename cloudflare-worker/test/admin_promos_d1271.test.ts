@@ -126,13 +126,14 @@ test('D1271: a fresh TOTP holder creates, disables and deletes with the existing
   try {
     const results = [];
     for (const method of writes) results.push(await f.call(method, HOLDER, 'fresh'));
-    assert.deepEqual(results, [
+    // D1272 adds lifecycle timestamps; this security test keeps the write contract and actor audits.
+    assert.deepEqual(results.map(({status, body}: any) => ({status, body: Object.fromEntries(Object.entries(body).filter(([key]) => !['paused_at', 'ended_at'].includes(key)))})), [
       { status: 200, body: { ok: true, promo_id: 'promo_created', code: 'TEST10' } },
       { status: 200, body: { ok: true, promo_id: 'promo_seed', active: false } },
       { status: 200, body: { ok: true, promo_id: 'promo_seed' } },
     ]);
     assert.deepEqual(f.snapshot().promos, [['promo_created', 1, HOLDER], ['promo_seed', 0, null]]);
-    assert.deepEqual(f.snapshot().audit, ['promo_create', 'promo_update', 'promo_delete'].map(action => [HOLDER, action, 'billing']));
+    assert.deepEqual(f.snapshot().audit, ['promo_create', 'promo_pause', 'promo_delete'].map(action => [HOLDER, action, 'billing']));
     assert.deepEqual(calls, [
       ['POST', '/v1/coupons', { percent_off: '10', duration: 'once', 'metadata[product_ids]': '[]', 'metadata[created_by]': String(HOLDER), name: 'TEST10' }],
       // D1273: the scope and limits ride on the promotion code; a code is monthly only by default.

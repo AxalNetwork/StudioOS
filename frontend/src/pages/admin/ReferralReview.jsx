@@ -28,6 +28,7 @@ import React, { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { Lightbox, PhoneRows, usePhoneWidth } from '../../ui';
 import { api } from '../../lib/api';
+import { rewardSaveLine } from '../../lib/referralRewards';
 import { useAuth } from '../../hooks/useAuthSync';
 import { isSuperAdminUser } from '../../lib/shellRole';
 import AdminBoardFrame from './AdminBoardFrame';
@@ -182,6 +183,7 @@ export function ReferralDialog({ uid, onClose, onSaved }) {
   const [busy, setBusy] = useState(false);
   const [refusal, setRefusal] = useState('');
   const [done, setDone] = useState('');
+  const [paidLine, setPaidLine] = useState(null);
   useEffect(() => {
     let live = true;
     api.adminReferralSubmission(uid).then(
@@ -201,8 +203,11 @@ export function ReferralDialog({ uid, onClose, onSaved }) {
     if (!patch) return;
     setBusy(true);
     setRefusal('');
+    setPaidLine(null);
     try {
       const next = await api.adminReferralReview(uid, patch);
+      // D965: what the move paid the referrer, under its own row.
+      setPaidLine(rewardSaveLine(next?.reward));
       // The timeline is replaced with the history the PATCH returns, and the form starts from the saved row.
       setRead({ status: 'ready', data: { ...row, ...next, history: Array.isArray(next?.history) ? next.history : row.history } });
       setDraft({ status: next?.status || draft.status, nextStep: next?.next_step || '', rewardLabel: next?.reward_label || '', fitNotes: next?.fit_notes || '', note: '' });
@@ -225,6 +230,7 @@ export function ReferralDialog({ uid, onClose, onSaved }) {
         {read.status === 'ready' && draft ? (
           <>
             {done ? <p role="status" className="m-0 rounded-[10px] border border-axal-lavender-edge bg-axal-lavender px-3.5 py-2.5 text-[13px] font-semibold text-axal-ink dark:border-violet-800 dark:bg-violet-950/40 dark:text-gray-100" data-testid="referral-dialog-done">{done}</p> : null}
+            {done && paidLine ? <p role="status" className="m-0 text-[13px] font-semibold text-axal-ink dark:text-gray-100" data-testid="referral-dialog-reward-paid">{paidLine}</p> : null}
             <section className="flex flex-col gap-1.5" data-testid="referral-dialog-timeline">
               <span className={EYE}>Timeline</span>
               {(row.history || []).length ? (

@@ -3,6 +3,7 @@ import type { Context } from 'hono';
 import type { Env, User } from '../types';
 import { schedulePush } from '../integrations/autopush';
 import { getSQL } from '../db';
+import { recordStageEvent } from '../services/dealStageHistory';
 import { requireAuth, requireRole, generateToken } from '../auth';
 import { resolveActiveCompany, ACTIVE_COMPANY_HEADER } from '../middleware/activeCompany';
 import { membershipEvent } from '../services/companyMembershipEvents';
@@ -733,7 +734,16 @@ projects.post('/submit', async (c) => {
   // D1254: intake records an application, never a score-driven promotion or rejection.
   const newStatus = project.status, dealStatus = 'applied', newStage = project.stage;
   try { const { Jobs } = await import('../models/jobs'); await Jobs.enqueue(c.env, 'embed_entity', { type: 'project', id: project.id }); } catch {}
-  await sql`INSERT INTO deals (project_id, status) VALUES (${project.id}, ${dealStatus})`;
+  const [intakeDeal] = await sql`INSERT INTO deals (project_id, status) VALUES (${project.id}, ${dealStatus}) RETURNING id`;
+  // D1242: intake's arrival is a stage event with no person behind it. The
+  // events' CHECK allows `advance`, `pass` and `set`, so intake writes `set`
+  // and its NULL actor is what tells it apart from a person's move.
+  if (intakeDeal?.id != null) {
+    await recordStageEvent(sql, {
+      dealId: Number(intakeDeal.id), fromStage: null, fromStageChangedAt: null,
+      toStage: dealStatus, kind: 'set', actorUserId: null,
+    });
+  }
   await sql`INSERT INTO activity_logs (project_id, action, details, actor) VALUES (${project.id}, 'auto_scored', ${JSON.stringify({ snapshot_id: snapshot.id, outcome: 'recorded', review: intakeReview })}, 'system')`;
   await sql.end();
   return c.json({

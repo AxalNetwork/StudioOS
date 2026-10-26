@@ -98,12 +98,11 @@ test('CalendarPage: a failed provider-status read is never coerced into "not con
 
 test('CalendarPage: the unreadable provider state offers a real retry, not a dead end', () => {
   const src = codeOnly(raw('frontend/src/pages/CalendarPage.jsx'));
-  assert.match(src, /onRetry=\{loadGoogle\}/, 'the Google card is never given a way to retry its own status read');
-  assert.match(src, /onRetry=\{loadMicrosoft\}/, 'the Microsoft card is never given a way to retry its own status read');
-  const specAt = src.indexOf('unreadable: {');
-  assert.ok(specAt > 0, 'the unreadable spec entry is missing');
-  const entry = src.slice(specAt, src.indexOf('},', specAt));
-  assert.match(entry, /actions: \[\['Retry', .*, onRetry\]\]/, 'the unreadable card offers no retry action');
+  // D1212: the cards are /calendar/connected's (CalendarConnected.jsx), given the page's own reloads.
+  assert.match(src, /reloadGoogle=\{loadGoogle\} reloadMicrosoft=\{loadMicrosoft\}/, 'the cards are never given a way to retry their own status reads');
+  const model = codeOnly(raw('frontend/src/pages/calendarConnectedModel.js'));
+  assert.match(model, /case 'unreadable':\s*return \{[\s\S]*?actions: \[\{ key: 'retry', label: 'Try again' \}\] \};/, 'the unreadable card offers no retry action');
+  assert.match(codeOnly(raw('frontend/src/pages/CalendarConnected.jsx')), /if \(a\.key === 'retry'\) return reloadOf\[row\.key\]\?\.\(\);/, 'Try again does not re-read');
 });
 
 // ── WellbeingPage.jsx ─────────────────────────────────────────────────────────

@@ -193,7 +193,8 @@ commit. Titles show the version alone, without dates or descriptions.
 The version counts active months since the start; week/day counters reset
 each month. Active seven-day blocks within the month (1–7, 8–14, etc.)
 produce a zero-based week counter, 0–4. Active days count 1–31. Empty
-blocks/days add nothing. October 23 with activity every day is v8.3.23. Publication dates
+blocks/days add nothing. October 23 with activity every day is v8.3.23-alpha: every tag
+carries the stage, `RELEASE_STAGE` in `frontend/src/lib/release.js`. Publication dates
 are not used to date historical releases.
 
 All release pages are read before writing. A daily marker associates the
@@ -209,6 +210,15 @@ the exact comparison from the previous active day's final commit to this
 one. Publishing still triggers `release-published.yml` for the logo badge.
 `lib/releaseDraft.test.mjs` covers the date counters, historical backfill,
 pagination, fixed published versions and idempotent draft updates.
+
+`release-alpha-rename.mjs` is a one-off. #2655 dropped the stage suffix, so
+v1.0.1 to v8.3.26 were released without `-alpha`. Run by hand through
+`release-alpha-rename.yml`, it gives each published one a suffixed tag on the
+same commit as its old tag and moves the release onto it; drafts only change
+name. It publishes nothing, refuses a suffixed tag that already belongs to
+another release or commit, keeps the old tags unless `--delete-old-tags`, and
+`--dry-run` lists the plan without writes. `lib/releaseAlphaRename.test.mjs`
+covers it.
 
 `dry-run-meeting-bot-deploy.mjs` validates only the separate bot Worker configs
 with an isolated scratch image; Docker is required. It never deploys.

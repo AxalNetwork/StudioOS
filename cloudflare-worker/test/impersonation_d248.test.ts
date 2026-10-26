@@ -356,3 +356,21 @@ test('D248: the cool-off covers the elevation, account and role writes, and leav
     assert.notEqual(r.body?.error, 'recovery_cool_off_active', `${method} ${path} was paused, and must not be`);
   }
 });
+
+// D966 joined COOL_OFF_ROUTES the D248 way: the exact route, decided on its own.
+test('D966: the cool-off pauses the SAFE basis repair, a dry run included, and leaves D710\'s Mercury reads under the same mount open', async () => {
+  const db = freshDb();
+  const env = makeEnv(db);
+  const repairPath = '/api/admin/mercury/safe-basis-repair';
+  // The control: outside the cool-off, the Super Admin's dry run answers.
+  const before = await req(env, HQ, 'POST', repairPath, {});
+  assert.equal(before.status, 200, `the dry run was refused outside the cool-off: ${JSON.stringify(before.body)}`);
+  coolOff(db, HQ);
+  for (const body of [{}, { dry_run: false, reason: 'Mercury SAFEs accepted before #2629 are post-money' }]) {
+    const r = await req(env, HQ, 'POST', repairPath, body);
+    assert.equal(r.status, 423, `the repair was not paused during the cool-off: ${JSON.stringify(r.body)}`);
+    assert.equal(r.body?.error, 'recovery_cool_off_active');
+  }
+  const read = await req(env, HQ, 'GET', '/api/admin/mercury/connections');
+  assert.notEqual(read.body?.error, 'recovery_cool_off_active', 'D710\'s Mercury read was paused, and must not be');
+});

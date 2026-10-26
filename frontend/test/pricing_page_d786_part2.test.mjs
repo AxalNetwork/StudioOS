@@ -173,7 +173,7 @@ test('packs: the read\'s packs and their live offers; none on sale says so', () 
   assert.deepEqual(packCards({ packs: [] }), []);
   const [p] = packCards({ packs: [{ uid: 'k1', unit_amount: 2500, credit_microusd: 25_000_000, bonus_microusd: 5_000_000, offer_ends_at: '2026-11-12T00:00:00Z', first_purchase_only: true }] });
   assert.deepEqual(p, { uid: 'k1', price: '$25', use: '$25 of AI use', offers: ['+20% bonus until 12 Nov', 'First purchase only'] });
-  assert.match(read('frontend/src/pages/PricingPage.jsx'), /No token packs are on sale right now\./);
+  assert.match(read('frontend/src/pages/PricingPage.jsx'), /\{TOPUP_UNAVAILABLE\}/);
 });
 
 // ================================================================ copy

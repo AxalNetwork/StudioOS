@@ -23,14 +23,17 @@ export * from './api/adminNetwork.js';
 export * from './api/adminPartnerFirms.js';
 export * from './api/adminPayments.js';
 export * from './api/adminPrograms.js';
+export * from './api/adminPromos.js';
 export * from './api/adminStorage.js';
 export * from './api/aiBudget.js';
 export * from './api/approvalBoards.js';
 export * from './api/assistants.js';
 export * from './api/bankAccounts.js';
 export * from './api/billingAlerts.js';
+export * from './api/billingCheckout.js';
 export * from './api/billingInvoices.js';
 export * from './api/buildPlan.js';
+export * from './api/calendarConnections.js';
 export * from './api/calendarItems.js';
 export * from './api/capTableAccess.js';
 export * from './api/capTableHolder.js';
@@ -60,6 +63,7 @@ export * from './api/ddLifecycle.js';
 export * from './api/dealContext.js';
 export * from './api/dealFlow.js';
 export * from './api/dealInsights.js';
+export * from './api/dealStaff.js';
 export * from './api/dealViews.js';
 export * from './api/dealWorkroom.js';
 export * from './api/deckAssist.js';
@@ -115,6 +119,7 @@ export * from './api/profile.js';
 export * from './api/programGrants.js';
 export * from './api/programProposals.js';
 export * from './api/programs.js';
+export * from './api/promoUsage.js';
 export * from './api/publicAiModels.js';
 export * from './api/publicPricing.js';
 export * from './api/railPrefs.js';
@@ -2058,11 +2063,22 @@ export const api = {
   // Task #9 — Promo Code admin CRUD. List is a plain admin read; create/toggle/
   // delete are money-adjacent so the server enforces TOTP + step-up (the global
   // `request` helper auto-handles the 403 `step_up_required` challenge).
-  //   adminListPromos()           → { promos: [PromoView] }
+  //   adminListPromos()           → { promos: [PromoView] }: every code. D1272 (#3298) made the read
+  //                                 paged; this walks its pages (100 a page) so today's console and
+  //                                 the product lightbox still see every code. The paged read, the
+  //                                 lifecycle and Replace are `adminPromosApi` (lib/api/adminPromos.js).
   //   adminCreatePromo(body)      → { ok, promo_id, code }
   //   adminSetPromoActive(id, on) → { ok, promo_id, active }
   //   adminDeletePromo(id)        → { ok, promo_id }
-  adminListPromos: () => request('/admin/promos'),
+  adminListPromos: async () => {
+    const promos = [];
+    for (let page = 1; page <= 100; page += 1) {
+      const r = await request(`/admin/promos?page=${page}&page_size=100`);
+      promos.push(...(r?.promos || []));
+      if (promos.length >= Number(r?.total ?? 0) || !(r?.promos || []).length) break;
+    }
+    return { promos };
+  },
   adminCreatePromo: (body) =>
     request('/admin/promos', { method: 'POST', body: JSON.stringify(body || {}) }),
   adminSetPromoActive: (id, active) =>
@@ -2578,6 +2594,8 @@ export const api = {
     return request(`/refer-earn/admin/submissions${qs ? `?${qs}` : ''}`);
   },
   adminReferralSubmission: (uid) => request(`/refer-earn/admin/submissions/${encodeURIComponent(uid)}`),
+  // D965 (#2798): the referral reward rules, and what they paid (a Super Admin's).
+  adminReferralRewards: () => request('/refer-earn/admin/rewards'),
   // D1124 (#3004): the referral funnel, the furthest stage each referral reached.
   adminReferralFunnel: () => request('/refer-earn/admin/submissions/funnel'),
   adminReferralWeekly: (weeks = 12) => request(`/refer-earn/admin/submissions/weekly?${new URLSearchParams({ weeks })}`),
@@ -4111,7 +4129,7 @@ export const api = {
   trustAgreementHistory: (envelope_uuid) =>
     request(`/trust/agreements/${encodeURIComponent(envelope_uuid)}/history`),
   trustScore: (userId) => request(`/trust/score/${encodeURIComponent(userId)}`),
-  // Task #40 — batch the per-row trust-score lookups on AdminPage / DealsPage
+  // Task #40 — batch the per-row trust-score lookups on AdminPage (DealsPage, which also used it, is retired: D1242)
   // into a single request. Returns { scores: [{ user_id, score, missing[],
   // required_total }] } in the same order the ids were sent. D1074: the single
   // read's rule for every id (self, this territory's admin, an open intro or

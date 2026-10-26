@@ -134,6 +134,7 @@ widened guard on this very sentence, which is the rule working.)
 /api/fund-admin    → fund_admin.ts      (D714: GET /access, which fund acts this admin may take, from FUND_ACTS; D1158: GET /lps, the LP roster)
 /api/closings      → closings.ts        (D1215: a closing as a record — open, lines, route, evidence, the cap-table proposal, complete; the admin desk `adminClosings` is mounted at /api/admin/closings)
 /api/reporting     → reporting.ts       (D1058: reporting duties and periods — the founder's desk, the expected date and reminders; the investor's own duties, ask and waive)
+/api/reporting     → reporting_reports.ts (D1059: a report from the Grow modules — draft, choices, preview, send with frozen figures, correct as a revision, the open, and private statements)
 /api/fund-reporting → fund_reporting.ts
 /api/fund-booklets → fund_booklets.ts (D716: the Subscription Booklet, the applicant's ticks, paper and submit, HQ's read, PDF and withdraw; the e-sign send and the GP's acceptance (D759))
 /api/fund-notices  → fund_notices.ts    (D716: an Admin previews, the Super Admin issues, the LP reads their own; kept PDFs through Browser Run)
@@ -168,6 +169,7 @@ widened guard on this very sentence, which is the rule working.)
 /api/admin/bank-accounts → admin_bank_accounts.ts (D1184: audit-first masked Mercury association and resolver notice_preview on the existing list; source-UID check on add, support denied. D1182: audited masked history, stable snapshot pages and recorder names; failed read/audit returns 503. D708: each Axal entity's bank accounts, masked, with add, relabel, purposes, retire and a recorded reveal; Super Admin, HQ only; mounted beside /api/admin/stripe, before the /api/admin catch-all)
 /api/admin/fund-structure → admin_fund_structure.ts (D717: the entity and money map, read-only; masked accounts for the Super Admin, and each entity's active accounts masked (#1855); #1773's sentence for a plain Admin; HQ only; mounted beside /api/admin/bank-accounts, before the /api/admin catch-all)
 /api/admin/mercury    → admin_mercury.ts (D710: each Axal entity's read-only Mercury connection, its accounts, transactions and reconciliation matches, and D749's Not ours marks; D1183 adds audit-first GET /balances and /monthly chart reads. Connect is the Super Admin's behind the write bar, the rest an Admin's on HQ. The only home of Axal VC's own accounts, drawn in HQ › Fund administration › Bank accounts, never on a member connector: D879, D880, D883)
+/api/admin/mercury    → admin_mercury_safe_basis.ts (D966, #2630: POST /safe-basis-repair, the owner's repair of Mercury SAFEs accepted before #2629, whose model entry has no basis. A dry run unless `dry_run: false`, Super Admin; a write takes the write bar and a reason; paused by the recovery cool-off (`COOL_OFF_ROUTES`); paged by proposal id; every run audited, each written entry with its rollback record. Answers ids, keys and outcomes only. Mounted before admin_mercury.ts; reads no entity account)
 /api/eadwyn       → eadwyn.ts          (the Worker AI rail's conversations, their connector switches, and Send/Cancel for a write Eadwyn proposed; D652)
 /api/wellbeing     → wellbeing.ts       (check-ins, the expert directory and bookings; sample experts are seeded outside production only and never shown to members, D643)
 /api               → realtime.ts (WebSocket fan-out, Durable Objects)
@@ -411,7 +413,7 @@ D1123: `admin_lab_operations.ts` adds `/cohorts/:cohort/capacity`, the latest st
 
 D892 §6 (#2673): `admin_billing.ts` mounts `POST /subscriptions/reconcile-incomplete` under `/api/admin/billing`, the owner-run repair of founder and investor rows left at `incomplete`. A dry run unless `dry_run: false`; a dry run needs a Super Admin, a write the write bar and a reason; every run is audited, one that fails part-way included. The owner runs it against production, straight after the deploy.
 
-D1176: `cycle_use_of_funds.ts`, mounted by `cycle_raise.ts` under `/api/cycles/raise/use-of-funds`, serves the plan, scenarios/compare, milestones, hire edits and Base split. Founder/admin and company scoped; support is read only, Mercury stays the founder's own.
+D1176: `cycle_use_of_funds.ts`, mounted by `cycle_raise.ts` under `/api/cycles/raise/use-of-funds`, serves the plan, scenarios/compare, milestones, hire edits and Base split. Founder/admin and company scoped; support is read only, Mercury stays the founder's own. D1177 (#3104) adds `GET /history`: the plan's `raise.use-of-funds` activity, newest first, 20 a page, with who and an admin flag; Mercury rows are the founder's alone.
 
 D1206 (#3172): `calendar.ts` applies Investor Professional only to
 IC creation; calendar reads, including the token subscription, remain available
@@ -434,6 +436,7 @@ firm. The Free quota and join/leave exceptions live in
 The INSERT enforces the global allowance atomically. Investor list rows carry
 `can_read` from the existing invited-or-committed reader for safe room links.
 
+D1051 (#2902): `billing_checkout.ts` mounts `/checkout/quote`, `/checkout/start` and `/checkout/status` under `/api/billing`, before `billing.ts`. One checkout for a new plan or a change: an upgrade now and prorated, a downgrade scheduled for the period end, a saved card or a change behind TOTP and step-up. The old hosted checkouts stay until their callers move (#2905).
 | File | Purpose |
 | --- | --- |
 | `deal_insights.ts` | D1151: NDA-gated per-deal Team, Market and Traction reads. |
