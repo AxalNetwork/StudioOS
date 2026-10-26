@@ -117,7 +117,7 @@ async function market(env: Env, project: any) {
       t.price_position, t.depth_position FROM competitor_tracking t WHERE t.project_id = ? AND t.stopped_at IS NULL ORDER BY t.id`)
       .bind(project.id).all()).results),
     geography: notRecorded('Company markets are recorded; customer geographic distribution and geographic risk are not recorded here'),
-    evidence: notRecorded('Investor evidence items await the PIPE-RAISE read'),
+    evidence: notRecorded('Shared evidence is not available in this view yet'),
   };
 }
 
@@ -146,7 +146,7 @@ async function traction(env: Env, project: any, user: { id: number; role: string
     });
   }), arr: { value: null, ...notRecorded('No founder-shared ARR recorded; MRR is not annualised') },
   nrr: { value: null, ...notRecorded('No founder-shared NRR recorded') },
-  evidence: notRecorded('Investor evidence items await the PIPE-RAISE read') };
+  evidence: notRecorded('Shared evidence is not available in this view yet') };
 }
 
 function handler(section: 'team' | 'market' | 'traction') {
