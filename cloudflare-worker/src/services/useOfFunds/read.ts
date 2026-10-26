@@ -92,7 +92,7 @@ export async function planRead(env:Env,s:Scope,mercuryAllowed:boolean) {
   if (round.disagreements.length) needs_you.push({code:'round_disagreement',reason:'Recorded round sizes differ. Choose the size for this plan.'});
   if (!runway.chosen) needs_you.push({code:'runway_missing',reason:runway.reason!});
   if (deck.value?.state==='out_of_sync') needs_you.push({code:'deck_out_of_sync',reason:'The deck Ask slide has not been marked in sync with this plan.'});
-  const model=projection.value&&'model' in projection.value?projection.value.model:null;
+  const model = (projection.value && ('model' in projection.value)) ? projection.value.model : null;
   if (model?.runway?.value===null) needs_you.push({code:'model_inputs_missing',reason:model.runway.reason});
   if (model?.milestones.value?.some((m:any)=>m.state==='Not costed')) needs_you.push({code:'milestones_not_costed',reason:'Some milestones are Not costed. Their affordability is unknown.'});
   if (model?.milestones.value?.some((m:any)=>m.state==='At risk')) needs_you.push({code:'milestones_at_risk',reason:'Some milestone costs exceed their section allocation.'});
