@@ -15,6 +15,7 @@ import { recordAccessView, recordHolder } from '../services/capTableAccessRecord
  *   GET    /:projectId/links                  owner and co-founders: the venture's share links
  *   POST   /:projectId/links                  owner: { level, label?, expires_in_hours?, view_limit?, holders_agreed? }
  *   DELETE /:projectId/links/:id              owner: revoke
+ *   POST   /:projectId/ask                    an investor related to the venture, not shared with: asks the founder (D1027)
  *
  * `services/captableAccess.ts` says who reads at which level, and
  * `services/captableShare.ts` what each level returns. Every view is built
@@ -38,6 +39,9 @@ import {
   type AccessLevel, type ShareAudience,
 } from '../services/captableShare';
 import { claimShareToken, mintShareToken, sha256Hex, verifyShareToken } from '../services/shareLink';
+import { investorProjectIds } from './_investorProjectScope';
+import { notify } from '../services/notify';
+import { SUPPORT_SESSION_REFUSED_CODE, isSupportSession } from '../services/fundAdminAccess';
 
 const r = new Hono<{ Bindings: Env }>();
 type C = Context<{ Bindings: Env }>;
@@ -203,6 +207,46 @@ r.get('/:projectId', async (c) => {
       ...(a.via === 'studio' ? { support: 'Open for support asks for a reason first. The founder sees it.' } : {}),
       view: await viewAt(c.env, p.id, a.level, a.holder_ref, record),
     });
+  } catch (e) {
+    return answer(c, e);
+  }
+});
+
+/**
+ * D1027 (CT15n): "Ask for access". An investor related to the venture
+ * (`investorProjectIds`) whom the founder has not shared with asks once a day;
+ * the founder is told and answers by granting a level on their Access tab
+ * (D1026). One `captable_access_asked` audit row. Nothing is granted here.
+ */
+export const ASK_SENT = 'Asked. The founder answers on their Access tab.';
+r.post('/:projectId/ask', async (c) => {
+  try {
+    const user = await requireAuth(c);
+    if (String(user.role ?? '').toLowerCase() !== 'investor') throw new Refusal(403, 'investors_only', 'Only an investor asks a founder for their cap table.');
+    if (await isSupportSession(c)) throw new Refusal(403, SUPPORT_SESSION_REFUSED_CODE, 'A support session cannot ask for access.');
+    const p = await projectOr404(c);
+    const related = await investorProjectIds(c.env, user as any, null);
+    if (!related || !related.includes(p.id)) throw new Refusal(404, 'not_a_venture', 'No venture has that id.');
+    const a = await resolveAccess(c.env, user as any, p);
+    if (a.ok) throw new Refusal(409, 'already_shared', 'The founder already shares the cap table with you.');
+    const recent = await c.env.DB.prepare(
+      `SELECT 1 FROM activity_logs WHERE project_id = ? AND user_id = ? AND action = 'captable_access_asked' AND created_at > datetime('now', '-1 day') LIMIT 1`,
+    ).bind(p.id, user.id).first();
+    if (recent) throw new Refusal(409, 'already_asked', 'You asked in the last day. The founder answers on their Access tab.');
+    await audit(c.env, p.id, user.id, 'captable_access_asked', { level_now: 'none' });
+    // The founder is told. Best-effort: the audit row is the record.
+    try {
+      const owners = (await c.env.DB.prepare('SELECT id FROM users WHERE founder_id = ? AND is_active = 1').bind(p.founder_id).all<{ id: number }>()).results || [];
+      for (const o of owners) {
+        await notify(c.env, {
+          userId: Number(o.id), type: 'captable_access_asked',
+          title: `An investor asked to see ${p.name ? `${p.name}’s` : 'your'} cap table`,
+          body: 'Choose a level on your Access tab, or leave it unshared.', link: `/raise/cap-table/access?project_id=${p.id}`,
+          payload: { project_id: p.id }, channels: ['in_app'], category: 'deals',
+        });
+      }
+    } catch { console.warn('[captable-access] ask notify failed'); }
+    return c.json({ ok: true, asked: true, message: ASK_SENT });
   } catch (e) {
     return answer(c, e);
   }

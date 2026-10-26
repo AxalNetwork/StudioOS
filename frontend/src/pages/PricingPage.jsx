@@ -22,14 +22,15 @@ import { usePageMeta } from '../lib/seo';
 import { api } from '../lib/api';
 import { publicPricingApi } from '../lib/api/publicPricing';
 import { useViewMode } from '../contexts/ViewModeContext';
-import { TOKEN_PACKS_PATH } from '../lib/aiTokens';
+import { aiBudgetApi } from '../lib/api/aiBudget';
+import { TOPUP_UNAVAILABLE, usageMoney } from '../lib/aiTokens';
 import CheckoutSheet from '../components/checkout/CheckoutSheet';
 import { planKeyOf } from '../components/checkout/checkoutModel';
 import {
   PRICING_TABS, compareCell, heldCard, initialTab, modelGroups, modelPrices, modelsTab, needsPlanStatus, packCards, planCards,
 } from '../lib/pricingModel';
 import {
-  AI_BAND, CLOSING, COMPARE, FAQ, FAQ_INVESTOR, HERO, LP_ACCESS, MODEL_GROUPS, MODELS_LINE, PACKS, PLAN_CARDS,
+  AI_BAND, CLOSING, COMPARE, FAQ, FAQ_INVESTOR, HERO, LP_ACCESS, MODEL_GROUPS, MODELS_LINE, PACKS, PLAN_CARDS, TOKENS_BAND,
 } from '../lib/sitePricing';
 import './pricing.css';
 
@@ -252,29 +253,83 @@ function Models({ read, onRetry }) {
   });
 }
 
-function Packs({ read }) {
+/**
+ * D1285 (#2452): the "Your AI tokens" band, first on the Models tab for a
+ * signed-in member (the "Add tokens" canvas's CRP1, CRP11 and CRP14). The
+ * balance is `GET /api/ai-budget/me`'s; a failed read says so and never draws
+ * a zero. Add tokens goes to the Token packs below until the checkout sheet's
+ * pack mode opens in place (D1287). The plan's allowance, its storage and the
+ * auto-reload line are D1286's.
+ */
+function TokensBand({ read, onRetry }) {
+  const D = useContext(Face);
+  const me = read.status === 'ready' ? read.body : null;
+  const balance = me && Number.isSafeInteger(me.balance_microusd) ? usageMoney(me.balance_microusd) : null;
+  return (
+    <section className="axp-sec axp-tokband" id="add-tokens" aria-label="Your AI tokens" data-testid="pricing-tokens-band">
+      {me?.ai_paused && <p className="axp-tokband-note" role="status">{TOKENS_BAND.paused}</p>}
+      <div className="axp-tokband-row">
+        <div>
+          <div className="axp-kick">{TOKENS_BAND.kick}</div>
+          {read.status === 'loading' && <div className="axp-muted" aria-busy="true">Reading…</div>}
+          {balance != null && <div className={`axp-tokband-n axp-mono${D}`}>{balance}</div>}
+          {balance != null && <div className="axp-muted">{TOKENS_BAND.never}</div>}
+          {read.status !== 'loading' && balance == null && (
+            <div className="axp-tokband-bad" role="alert">
+              <span>{TOKENS_BAND.unreadable}</span>
+              <button type="button" className="axp-btn axp-btn-err" onClick={onRetry}>Try again</button>
+            </div>
+          )}
+        </div>
+        <a href="#token-packs" className="axp-btn is-primary axp-tokband-add" data-testid="pricing-tokens-add">{TOKENS_BAND.add}</a>
+      </div>
+    </section>
+  );
+}
+
+/**
+ * D1285 (#2452): Token packs, above the model tables (CRP1, CRP6, CRP10–CRP12).
+ * One Buy per pack, straight to the pack's checkout (D755's
+ * `/checkout?token_pack=`), never a second pricing page; a visitor signs in
+ * and comes back here. A failed read says so with Try again, never an empty list.
+ */
+function Packs({ read, onRetry, signedIn }) {
   const D = useContext(Face);
   const packs = read.status === 'ready' ? packCards(read.body) : [];
-  if (read.status !== 'ready') return null;
+  const back = `/login?next=${encodeURIComponent('/pricing?for=models#token-packs')}`;
   return (
-    <section className="axp-sec" aria-labelledby="axp-packs-h">
+    <section className="axp-sec" id="token-packs" aria-labelledby="axp-packs-h" data-testid="pricing-token-packs">
       <div className="axp-kick">{PACKS.kick}</div>
       <h2 id="axp-packs-h" className="axp-h2 axp-h2-s">{PACKS.title}</h2>
       <p className="axp-p">{PACKS.text}</p>
-      {packs.length ? (
+      {read.status === 'loading' && (
+        <div className="axp-packs" aria-busy="true">
+          {[0, 1, 2].map((k) => <div key={k} className="axp-pack axp-skel"><span className="axp-muted">Reading…</span></div>)}
+        </div>
+      )}
+      {read.status === 'unreadable' && (
+        <div className="axp-unavail" role="alert">
+          <div className="axp-unavail-s">{PACKS.unreadable}</div>
+          <button type="button" className="axp-btn axp-btn-err" onClick={onRetry}>Try again</button>
+        </div>
+      )}
+      {read.status === 'ready' && (packs.length ? (
         <div className="axp-packs">
           {packs.map((p) => (
-            <div key={p.uid} className="axp-pack">
-              {p.offers.map((o) => <span key={o} className="axp-pill axp-pill-offer">{o}</span>)}
+            <div key={p.uid} className="axp-pack" data-testid={`pricing-pack-${p.uid}`}>
+              <span className="axp-pack-t">{p.price} of AI tokens</span>
               <span className={`axp-pack-n${D}`}>{p.price}</span>
-              <span className="axp-mono axp-muted">{p.use}</span>
-              <Link to={TOKEN_PACKS_PATH} className="axp-btn">Buy</Link>
+              {p.offers.map((o) => <span key={o} className="axp-pill axp-pill-offer">{o}</span>)}
+              {signedIn
+                ? <Link to={`/checkout?token_pack=${encodeURIComponent(p.uid)}`} className="axp-btn">Buy</Link>
+                : <Link to={back} className="axp-btn">Sign in to buy</Link>}
             </div>
           ))}
         </div>
       ) : (
-        <p className="axp-p axp-muted">No token packs are on sale right now.</p>
-      )}
+        <p className="axp-p axp-muted">{TOPUP_UNAVAILABLE}</p>
+      ))}
+      <p className="axp-small axp-muted">{PACKS.foot}</p>
     </section>
   );
 }
@@ -310,6 +365,10 @@ export function PricingBody({ user = null }) {
   const [checkout, setCheckout] = useState(null);
   const [plans, retryPlans] = useRead(publicPricingApi.plansAndPacks);
   const [models, retryModels] = useRead(publicPricingApi.aiModels);
+  // D1285 (#2452): a member's token balance, read on the Models tab only.
+  const roleTab = tab !== 'models';
+  const meFetch = useCallback(() => (user && !roleTab ? aiBudgetApi.mine() : Promise.resolve(null)), [user, roleTab]);
+  const [me, retryMe] = useRead(meFetch);
   // D1049 (#2900): an Advisor's or Operating Partner's plan is in account_subscriptions,
   // read from their plan status only on their own tab.
   const wantPlan = needsPlanStatus(user, role, tab);
@@ -322,7 +381,6 @@ export function PricingBody({ user = null }) {
     navigate({ pathname: location.pathname, search: `?${q}`, hash: location.hash }, { replace: true });
   };
 
-  const roleTab = tab !== 'models';
   const specs = PLAN_CARDS[tab] || [];
   const built = roleTab && plans.status === 'ready'
     ? planCards(plans.body, specs, { billing, held: heldCard(user, role, tab, planRead), signedIn: !!user })
@@ -407,13 +465,14 @@ export function PricingBody({ user = null }) {
 
       {ready && <Compare key={`compare-${tab}`} tab={tab} cards={built.cards} />}
 
+      {!roleTab && user && <TokensBand read={me} onRetry={retryMe} />}
+      {!roleTab && <Packs read={plans} onRetry={retryPlans} signedIn={!!user} />}
       {!roleTab && (
         <section className="axp-sec axp-models">
           <p className="axp-p">{MODELS_LINE}</p>
           <Models read={models} onRetry={retryModels} />
         </section>
       )}
-      {!roleTab && <Packs read={plans} />}
 
       <Faq key={`faq-${tab}`} tab={tab} />
 

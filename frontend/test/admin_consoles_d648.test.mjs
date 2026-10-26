@@ -28,7 +28,6 @@ import UsersConsole from '../src/pages/admin/consoles/UsersConsole.jsx';
 import DirectoryPanel from '../src/pages/admin/consoles/DirectoryConsole.jsx';
 import IntegrationKeysPanel from '../src/pages/admin/consoles/IntegrationKeysConsole.jsx';
 import GithubSyncPanel from '../src/pages/admin/consoles/GithubSyncConsole.jsx';
-import PromoCodesPanel from '../src/pages/admin/consoles/PromoCodesConsole.jsx';
 import WellbeingExpertsPanel from '../src/pages/admin/consoles/WellbeingConsole.jsx';
 
 // ── A DOM just large enough for React to mount into ─────────────────────────
@@ -141,8 +140,9 @@ const CONSOLES = [
     empty: { adminListIntegrationKeys: async () => ({ providers: [] }) }, says: null, loading: /Loading providers/ },
   { name: 'GitHub Sync', el: () => React.createElement(GithubSyncPanel), reads: ['adminGetGithubConfig'],
     empty: { adminGetGithubConfig: async () => ({}) }, says: /Repository · set at deploy time/, loading: /Loading GitHub settings/ },
-  { name: 'Promo codes', el: () => React.createElement(PromoCodesPanel), reads: ['adminListPromos'],
-    empty: { adminListPromos: async () => ({ promos: [] }), catalogProducts: async () => ({ products: [] }) }, says: /No promo codes yet\./, loading: /Loading/ },
+  // D1275: the Promo codes page reads `adminPromosApi` (the paged list) and
+  // `promoUsageApi`, not `api`; its reading, empty and unreadable states are
+  // `promo_page_d1275.test.mjs`'s.
   { name: 'Wellbeing', el: () => React.createElement(WellbeingExpertsPanel), reads: ['wellbeingExperts'],
     empty: { wellbeingExperts: async () => ({ matches: [] }) }, says: /No experts match the current filter\./, loading: /Loading experts/ },
 ];
@@ -198,7 +198,8 @@ const OWN = [
   ['DirectoryPage', '/admin/directory', ['adminListDirectoryPartners']],
   // Integration keys and GitHub Sync left the console for HQ's own page
   // (the owner's ruling, 2026-10-20); `integration_keys_hq_only.test.mjs`.
-  ['PromoCodesPage', '/admin/platform/promo-codes', ['adminListPromos', 'catalogProducts']],
+  // D1275: of `api`, only the catalogue (for the names and New code's choices).
+  ['PromoCodesPage', '/admin/platform/promo-codes', ['adminCatalogList']],
   ['AdminWellbeingPage', '/admin/wellbeing', ['wellbeingExperts']],
 ];
 /** The reads every tab used to make before it rendered anything. */

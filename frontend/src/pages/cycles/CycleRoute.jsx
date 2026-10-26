@@ -68,7 +68,8 @@ import { CapTableHomeNav, CapTableTabPage } from '../raise/captable/CapTableTool
 import { isCapTableTab, SLUG as CAP_TABLE } from '../raise/captable/capTableModel';
 import { DataRoomHomeNav, DataRoomTabPage } from '../raise/dataroom/DataRoomTool';
 import DataRoomUpload from '../raise/dataroom/DataRoomUpload.jsx';
-import { isDataRoomTab, SLUG as DATA_ROOM } from '../raise/dataroom/dataRoomModel';
+import { isDataRoomTab, isOldFileAddress, SLUG as DATA_ROOM } from '../raise/dataroom/dataRoomModel';
+import { DataRoomMovedRedirect } from '../raise/dataroom/DataRoomMoved';
 import { UseOfFundsHomeNav, UseOfFundsTabPage } from '../raise/useoffunds/UseOfFundsTool';
 import { forecastHref, isUseOfFundsTab, SLUG as USE_OF_FUNDS } from '../raise/useoffunds/useOfFundsModel';
 import { CapRelHomeNav, CapRelTabPage } from '../raise/caprel/CapRelTool';
@@ -164,11 +165,11 @@ const CYCLE_DEFS = {
    * adapter. Its modules are in `modules.js`, held to `services/raiseCycle.ts`'s
    * list by `cycle_adapters_d661.test.ts`.
    *
-   * Data room's module page is `/raise/data-room` with no mode: that static
-   * route draws this page with `slug="data-room"` (D696 decision 12), so all
-   * seven Raise modules have module pages. Its two tools are reached from it:
-   * the read-only access view through the tool link below, and the files tool
-   * through `founderToolNavigation.js`'s door.
+   * Data room's module page is `/raise/data-room`: that static route draws
+   * this page with `slug="data-room"` (D696 decision 12), so all seven Raise
+   * modules have module pages. It is the Data room tool's Home (D1101); the
+   * old files tool and access view are retired and their addresses forward to
+   * the tool's tabs (D1109).
    */
   raise: {
     modules: MODULES.raise,
@@ -213,8 +214,7 @@ const CYCLE_DEFS = {
       // D1173 (#2455): the venture travels with the link (broken item 8).
       'use-of-funds': (q) => ({ label: 'Open the financial model', href: forecastHref(q) }),
       'capital-relationships': () => ({ label: 'Open the investor pipeline', href: '/raise/capital/pipeline' }),
-      // D696 decision 12: the access view manages nothing, so the label says what it shows.
-      'data-room': (q) => ({ label: 'Open the access view: grants, NDA state and recent access', href: `/raise/data-room?mode=access${q ? `&${q.slice(1)}` : ''}` }),
+      // D1109 (#2989): the Data room module page is the tool, so it has no door to the retired access view.
     }),
     add: toFnMap({}),
     fills: {},
@@ -794,11 +794,13 @@ export default function CycleRoute({ cycle, lightbox = false, adding = false, re
   // D1101 (#2456): the Data room tool's tabs are words under its module, never file records.
   // D1106 (#2986): `/raise/data-room/file/<id>` is a file's lightbox over Files.
   const dataRoomTab = record && cycle === 'raise' && (dataRoomFile ? 'files' : isDataRoomTab(slug, recordId) ? recordId : null);
+  // D1109 (#2989): a file's number was its record page; it forwards to its window over Files, counted.
+  const dataRoomOldFile = record && cycle === 'raise' && !dataRoomFile && isOldFileAddress(slug, recordId) ? recordId : null;
   // D1173 (#2455): the Use of funds tool's tabs are words under its module, never section records.
   const uofTab = record && cycle === 'raise' && isUseOfFundsTab(slug, recordId) ? recordId : null;
   // D1188 (#2457): the Capital relationships tool's tabs are words under its module, never investor records.
   const capRelTab = record && cycle === 'raise' && isCapRelTab(slug, recordId) ? recordId : null;
-  const recordState = useCycleRecord({ enabled: record && known && validRecord && !narrativeTab && !capTableTab && !dataRoomTab && !uofTab && !capRelTab && !!projectId && !!def,
+  const recordState = useCycleRecord({ enabled: record && known && validRecord && !narrativeTab && !capTableTab && !dataRoomTab && !dataRoomOldFile && !uofTab && !capRelTab && !!projectId && !!def,
     cycle, projectId, slug, id: recordId, reload, edit, navigate, back: `/${cycle}/${slug}${q}` });
   useScrollToHash(record ? recordState.status !== 'ready' : moduleStatus !== 'ready');
   // The page re-reads once the lightbox is gone, however it went: ×, Escape and
@@ -1007,6 +1009,8 @@ export default function CycleRoute({ cycle, lightbox = false, adding = false, re
       <CapTableTabPage tab={capTableTab} proposal={proposalId} instrument={instrumentId} scenario={scenarioId} projectId={projectId} projectStatus={projectStatus} onRetryProject={() => setProjectsKey((n) => n + 1)}
         search={location.search} cards={tabs} action={action} phone={phone} />
     );
+  } else if (dataRoomOldFile) {
+    body = <DataRoomMovedRedirect kind="file" id={dataRoomOldFile} />;
   } else if (dataRoomTab) {
     body = (
       <DataRoomTabPage tab={dataRoomTab} projectId={projectId} projectStatus={projectStatus} onRetryProject={() => setProjectsKey((n) => n + 1)}
@@ -1105,7 +1109,7 @@ export default function CycleRoute({ cycle, lightbox = false, adding = false, re
         subnav={cycle === 'raise' && slug === NARRATIVE ? <NarrativeTabBar active="home" search={tabSearch(q, searchParams.get('version'))} />
           : cycle === 'raise' && slug === CAP_TABLE ? <CapTableHomeNav search={q} projectId={projectId} />
           : cycle === 'raise' && slug === DATA_ROOM ? <DataRoomHomeNav search={q} />
-          : cycle === 'raise' && slug === USE_OF_FUNDS ? <UseOfFundsHomeNav search={q} />
+          : cycle === 'raise' && slug === USE_OF_FUNDS ? <UseOfFundsHomeNav search={q} projectId={projectId} />
           : cycle === 'raise' && slug === CAP_REL ? <CapRelHomeNav search={q} projectId={projectId} /> : undefined}
       >
         {fillKind && projectId && (

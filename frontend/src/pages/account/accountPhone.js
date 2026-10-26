@@ -16,7 +16,7 @@ import { TIER_PLANS } from '../../components/PaywallModal';
 import { planSummary } from './accountCenterModel';
 import { codeWord } from './connectorsModel.js';
 import { usagePathFor } from './limitsModel.js';
-import { companiesPathFor } from './companies/companiesModel.js';
+import { companiesPathFor, companyPathFor } from './companies/companiesModel.js';
 
 /**
  * Each board's title, sub and section titles, byte for byte from AMP's
@@ -169,11 +169,13 @@ export function connectorKeyFor(pathname = '') {
  * D753 — Connectors with a valid `key` is that connector's page.
  * D807 — Usage with `usagePage` is that Usage page (`/account/usage/limits`).
  * D1138 — Companies and projects with `companiesTab` is that tab (`/account/companies/invitations`).
+ * D1139 — with `companyUid` it is that company's lightbox (`/account/companies/<uid>`).
  */
-export function accountPathFor({ section, phone = false, key = null, usagePage = null, companiesTab = null } = {}) {
+export function accountPathFor({ section, phone = false, key = null, usagePage = null, companiesTab = null, companyUid = null } = {}) {
   if (section === 'connectors' && key && connectorKeyFor(`/account/connectors/${key}`) === key) return `/account/connectors/${key}`;
   if (section === 'usage' && usagePage) return usagePathFor(usagePage);
   // D1138 — Companies and projects with a tab is that tab's own address (`/account/companies/projects`).
+  if (section === 'companies' && companyUid) return companyPathFor(companyUid);
   if (section === 'companies' && companiesTab) return companiesPathFor(companiesTab);
   if (section === 'index') return '/account';
   if (section === 'account' || section === 'profile') return phone ? '/account/profile' : '/account';

@@ -16,7 +16,6 @@ export const FOUNDER_TOOLS = [
   { path: '/raise/pitch', cycle: 'raise', module: 'pitch-deck' },
   { path: '/raise/capital', cycle: 'raise', module: 'use-of-funds' },
   { path: '/raise/capital/pipeline', cycle: 'raise', module: 'capital-relationships' },
-  { path: '/raise/data-room', query: 'mode=workspace', cycle: 'raise', module: 'data-room', label: 'Open the files tool', door: true, roles: ['admin', 'founder'] },
   { path: '/raise/legal-engine', cycle: 'build', module: 'company-creation' },
 ];
 
@@ -29,7 +28,7 @@ export function projectSearch(search = '') {
   return project && /^[1-9]\d*$/.test(project) ? '?project_id=' + project : '';
 }
 
-/** A door's own `query` (D696: the files tool's `mode=workspace`) comes ahead of the venture. */
+/** A door's own `query` comes ahead of the venture. (D696's files-tool door, `mode=workspace`, retired with D1109.) */
 function doorHref(tool, search) {
   const venture = projectSearch(search);
   if (!tool.query) return tool.path + venture;

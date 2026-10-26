@@ -8,6 +8,8 @@
  * Anything else the read carries is drawn as text.
  */
 
+import { LOVABLE_MARK, isLovable } from '../../lib/lovableMark';
+
 const PULL = /^https:\/\/github\.com\/[\w.-]+\/[\w.-]+\/pull\/\d{1,9}$/;
 const RELEASE = /^https:\/\/github\.com\/[\w.-]+\/[\w.-]+\/releases\/[^\s"'<>]+$/;
 
@@ -48,6 +50,8 @@ export function releaseCheckView(release) {
   const notIn = titles(release?.not_in);
   return {
     title: name ? `${tag} · ${name}` : tag,
+    // D1084: the founder's mark on this release's repository, only when set.
+    mark: isLovable(release?.synced_with) && typeof release?.repository === 'string' ? `${release.repository} · ${LOVABLE_MARK}` : null,
     date: day(release?.published_at) ?? 'Not published',
     href: releaseHref(release?.url),
     in: inRelease,

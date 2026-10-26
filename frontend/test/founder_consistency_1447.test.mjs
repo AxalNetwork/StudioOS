@@ -26,7 +26,8 @@ const ZONES = {
   Status: 'FounderRaiseStatus.jsx',
   Capital: 'FounderRaiseCapital.jsx',
   Legal: 'FounderRaiseLegal.jsx',
-  'Data room': 'FounderRaiseDataRoom.jsx',
+  // D1109 (#2989): the Data room zone (`FounderRaiseDataRoom.jsx`, the access view) is retired;
+  // its address forwards to the Data room tool's Access tab, which has no Raise sections row.
 };
 
 test('no Raise zone links Liquidity, and none says it is unavailable', () => {

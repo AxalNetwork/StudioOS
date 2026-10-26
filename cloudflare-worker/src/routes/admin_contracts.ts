@@ -1435,27 +1435,9 @@ adminContracts.get('/:uid', async (c) => {
       const vr = await loadVoidReason(sql, 'envelope_uuid', envRows[0].envelope_uuid || '');
       if (vr) { detail.void_reason = vr.reason; detail.voided_at = vr.voided_at; }
     }
-    // Task #5 (Z) — surface DD linkage so the modal can render an
-    // "Open in DD" button. Best-effort: empty if column not yet
-    // present (migration 026 not applied).
-    try {
-      const f: any[] = await sql`
-        SELECT f.case_id, c.uid AS case_uid, COUNT(*) AS findings_count
-          FROM dd_findings f
-          JOIN dd_cases c ON c.id = f.case_id
-         WHERE f.esign_envelope_uuid = ${envRows[0].envelope_uuid || ''}
-           AND f.resolved_at IS NULL
-         GROUP BY f.case_id, c.uid
-         ORDER BY findings_count DESC LIMIT 1
-      `;
-      if (f[0]) {
-        (detail as any).dd_case_uid = f[0].case_uid;
-        (detail as any).dd_case_id = f[0].case_id;
-        (detail as any).dd_findings_count = Number(f[0].findings_count) || 0;
-      }
-    } catch (e) {
-      console.warn('[admin_contracts] dd link lookup skipped:', (e as Error).message);
-    }
+    // D1245 (#3260): no "Open in DD" link. It read dd_findings.esign_envelope_uuid
+    // (migration 026), but no finding comes from an envelope, so nothing writes
+    // that column and the lookup never matched; no page drew the link either.
     return c.json(detail);
   } finally {
     await sql.end();
@@ -1571,8 +1553,6 @@ adminContracts.post('/:uid/void', async (c) => {
       );
     }
 
-    let envelopeUuid: string | null = null;
-
     if (ref.source === 'documents') {
       const d = ref.row;
       if (String(d.status).toLowerCase() === 'signed') {
@@ -1589,7 +1569,6 @@ adminContracts.post('/:uid/void', async (c) => {
       if (String(env.status).toLowerCase() === 'completed') {
         return c.json({ error: 'Cannot void a signed contract' }, 400);
       }
-      envelopeUuid = env.envelope_uuid;
       await sql`UPDATE esign_envelopes SET status = 'void' WHERE id = ${env.id}`;
       await sql`UPDATE esign_recipients SET status = 'rejected' WHERE envelope_id = ${env.id} AND status = 'pending'`;
       const detail = JSON.stringify({
@@ -1599,37 +1578,8 @@ adminContracts.post('/:uid/void', async (c) => {
       await sql`INSERT INTO activity_logs (action, details, actor, user_id) VALUES ('contract_voided', ${detail}, ${await hashEmail(adminUser.email)}, ${adminUser.id})`;
     }
 
-    // Task #5 (Z) — mirror to dd_audit_log when this envelope is linked
-    // to any due-diligence findings. The link is via the new
-    // dd_findings.esign_envelope_uuid column (migration 026); when no
-    // matching findings exist we silently skip — there's no DD context
-    // to audit against.
-    if (envelopeUuid) {
-      try {
-        // Task #5 (Z) v2 — only mirror to dd_audit_log for OPEN findings
-        // (resolved_at IS NULL). Resolved findings are historical and
-        // shouldn't be re-touched by a contract void event.
-        const findings: any[] = await sql`
-          SELECT DISTINCT case_id FROM dd_findings
-           WHERE esign_envelope_uuid = ${envelopeUuid}
-             AND resolved_at IS NULL
-        `;
-        for (const row of findings) {
-          await c.env.DB.prepare(
-            `INSERT INTO dd_audit_log (case_id, actor_user_id, actor_email_hash, action, target_type, target_id)
-             VALUES (?, ?, ?, ?, ?, ?)`,
-          ).bind(
-            row.case_id, adminUser.id, await hashEmail(adminUser.email),
-            'contract_voided', 'envelope', null,
-          ).run();
-        }
-      } catch (e) {
-        // dd_findings may lack the column on environments where 026
-        // hasn't been applied — log and continue rather than fail the
-        // void.
-        console.warn('[admin_contracts] dd_audit_log mirror skipped:', (e as Error).message);
-      }
-    }
+    // D1245 (#3260): no mirror into dd_audit_log either; it matched findings by
+    // dd_findings.esign_envelope_uuid, which nothing writes (see the detail read).
 
     return c.json({ ok: true, reason });
   } finally {

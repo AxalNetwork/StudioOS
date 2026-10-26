@@ -71,7 +71,7 @@ for (const member of [false, true]) {
       await click('Models');
       assert.equal(nodes().filter(n => cls(n, 'axp-compare') || cls(n, 'axp-card-name')).length, 0, 'Models removes role plans and comparison');
       assert.equal(nodes().filter(n => (props(n)['data-testid'] || '').startsWith('models-compare-')).length, 0, 'Models has no comparison audience picker');
-      assert.ok(text(container).includes('Top up as you go'), 'Models keeps token packs');
+      assert.ok(text(container).includes('Token packs'), 'Models keeps token packs');
       assert.ok(nodes().some(n => cls(n, 'axp-models') && text(n).includes('Synthetic model')), 'Models shows its model table');
       await click('Investor');
       const grid = nodes().find(n => cls(n, 'axp-grid'));

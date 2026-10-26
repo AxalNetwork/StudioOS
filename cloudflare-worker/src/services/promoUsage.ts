@@ -337,7 +337,7 @@ export async function codeRedemptions(env: Env, promoId: string, limit = 100) {
   return { redemptions: list, stripe };
 }
 
-const HISTORY_ACTIONS = ['promo_create', 'promo_update', 'promo_delete'] as const;
+const HISTORY_ACTIONS = ['promo_create', 'promo_update', 'promo_delete', 'promo_pause', 'promo_resume', 'promo_end'] as const;
 /** The audit payload's fields a history row may show: never anything else that was logged. */
 const HISTORY_FIELDS = ['code', 'type', 'percent_off', 'amount_off', 'currency', 'product_ids', 'max_redemptions', 'expires_at', 'active'] as const;
 
@@ -347,7 +347,7 @@ export async function codeHistory(env: Env, promoId: string) {
     const rows = await env.DB.prepare(
       `SELECT a.id, a.action, a.admin_user_id, u.name AS admin_name, a.exported_at AS at, a.filters_json
          FROM admin_audit_log a LEFT JOIN users u ON u.id = a.admin_user_id
-        WHERE a.action IN (?, ?, ?) AND a.report_type = 'billing'
+        WHERE a.action IN (?, ?, ?, ?, ?, ?) AND a.report_type = 'billing'
           AND json_valid(a.filters_json) AND json_extract(a.filters_json, '$.promo_id') = ?
         ORDER BY a.id`,
     ).bind(...HISTORY_ACTIONS, promoId).all<{ id: number; action: string; admin_user_id: number; admin_name: string | null; at: string; filters_json: string }>();

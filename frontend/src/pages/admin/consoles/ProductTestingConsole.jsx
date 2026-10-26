@@ -40,7 +40,13 @@ const selectCls = 'min-h-[32px] rounded-[9px] border border-axal-hairline bg-whi
 const muted = 'text-axal-muted dark:text-gray-400';
 const EYE = 'm-0 font-mono text-[10px] font-bold uppercase tracking-[.07em] text-axal-muted dark:text-gray-400';
 const H2 = 'm-0 text-[16px] font-extrabold tracking-[-.01em] text-axal-ink dark:text-gray-100';
-const FORM_CLASSES = { input: inputCls, button: primaryCls };
+// D1204 (TST16): on a phone the form's bar is pinned to the foot, Cancel first and Save draft the wider.
+const FORM_CLASSES = {
+  input: inputCls, button: primaryCls,
+  bar: 'max-sm:sticky max-sm:bottom-0 max-sm:z-10 max-sm:-mx-4 max-sm:flex-nowrap max-sm:border-t max-sm:border-axal-hairline max-sm:bg-white max-sm:px-4 max-sm:py-3 dark:max-sm:border-gray-800 dark:max-sm:bg-gray-900',
+  save: 'max-sm:order-2 max-sm:flex-[1.4]',
+  cancel: 'max-sm:order-1 max-sm:min-h-[44px] max-sm:flex-1',
+};
 
 export const PRODUCT_TESTING_HOLDER_ONLY = 'Product testing is reviewed by the Super Admin.';
 
@@ -240,8 +246,8 @@ function ReviewCard({ p, items, api, ask }) {
         ))}
       </dl>
       <div className="flex flex-wrap gap-2">
-        <button type="button" className={primaryCls} onClick={() => ask('approve', p)} data-testid={`testing-approve-${p.uid}`}>Approve…</button>
-        <button type="button" className={btnCls} onClick={() => ask('reject', p)} data-testid={`testing-reject-${p.uid}`}>Send back…</button>
+        <button type="button" className={`${primaryCls} max-sm:flex-1`} onClick={() => ask('approve', p)} data-testid={`testing-approve-${p.uid}`}>Approve…</button>
+        <button type="button" className={`${btnCls} max-sm:flex-1`} onClick={() => ask('reject', p)} data-testid={`testing-reject-${p.uid}`}>Send back…</button>
         <RowMenu p={p} ask={ask} testId={`testing-review-menu-${p.uid}`} />
       </div>
     </article>

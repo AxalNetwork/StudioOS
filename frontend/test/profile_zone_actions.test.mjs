@@ -53,8 +53,10 @@ const PROFILES = {
     // 30 → 26 (D704): the four `validate/*` zones are retired and listed in
     // `excluded` below. 30 artboard zones − 4 retired = 26. 26 → 25: the owner
     // removed `raise/liquidity` (2026-10-20), also excluded below. 25 → 24
-    // (D894): `raise/pitch` became the Pitch deck studio, excluded below.
-    zones: 24,
+    // (D894): `raise/pitch` became the Pitch deck studio, excluded below. 24 → 23
+    // (D1109): `raise/data-room`'s access view is retired for the Data room
+    // tool, which draws its own tabs; excluded below.
+    zones: 23,
     // 17 → 22 → 23. Five ops that were `unbuilt` became links because their
     // destination already existed and the reader may open it: `Send to Problem
     // slide` on two zones, `Configure zone`, `Edit templates` and `Send for
@@ -87,13 +89,15 @@ const PROFILES = {
     // `build/kpi`'s `Bulk entry` and `Stripe sync` linked `/build/metrics`'s
     // editor, retired with its hand entry and Stripe import (#2336); both
     // are stated gaps now. `grow/focus`'s `Change metric` links `/build/kpi`.
-    // 18 → 15 (D894): `raise/pitch`'s three links went with that zone.
-    links: 15,
+    // 18 → 15 (D894): `raise/pitch`'s three links went with that zone. 15 → 13
+    // (D1109): `raise/data-room`'s Grant access and Revoke went with its view.
+    links: 13,
     // 20 → 21 with `build/cadence`'s `Export archive`. Migration 250 gave the
     // zone a review archive, so an export over the rows the page is showing is
     // the same `kind: 'export'` every other zone uses. 21 → 20: `raise/liquidity`'s
-    // `Export` went with that zone (owner, 2026-10-20).
-    exports: 20,
+    // `Export` went with that zone (owner, 2026-10-20). 20 → 19 (D1109):
+    // `raise/data-room`'s `Export log`; Activity's Export (CSV) is the tool's.
+    exports: 19,
     // Seven ops the PAGE performs: six of Validate's — three open a dialog the
     // workspace owns and three are server-side CSV downloads with a busy state —
     // plus `research/ask`'s `New brief` and `research/library`'s `Upload` —
@@ -148,7 +152,7 @@ const PROFILES = {
     // D894: `raise/pitch` is the Pitch deck studio, drawn by its own canvas
     // ("Pitch Deck Studio", PD1-PD28) with its own tabs and actions; the zone
     // artboard stays drawn and no table may declare it.
-    excluded: ['validate/hypotheses', 'validate/interviews', 'validate/pain-map', 'validate/verdict', 'raise/liquidity', 'raise/pitch'],
+    excluded: ['validate/hypotheses', 'validate/interviews', 'validate/pain-map', 'validate/verdict', 'raise/liquidity', 'raise/pitch', 'raise/data-room'],
     embeddedGuards: 3,
     // Founder canvas routes are the live routes.
     // #1539 moves FG5's existing body/controls to Raise; its artboard remains the visual source.

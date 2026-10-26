@@ -330,10 +330,15 @@ test('a code’s history: its own audit rows, oldest first, with only the fields
   audit.run(HQ, 'promo_export', 'billing', JSON.stringify({ promo_id: 'promo_launch', rows: 4 }), '2026-10-04 10:00:00');
   audit.run(HQ, 'promo_update', 'other', JSON.stringify({ promo_id: 'promo_launch', active: true }), '2026-10-05 10:00:00');
   audit.run(HQ, 'promo_delete', 'billing', 'not json', '2026-10-06 10:00:00');
+  // D1272 lifecycle actions must stay visible in D1274's history after merging.
+  for (const [i, action] of ['promo_pause', 'promo_resume', 'promo_end'].entries()) {
+    audit.run(HQ, action, 'billing', JSON.stringify({ promo_id: 'promo_launch', reason: 'fixture-only detail' }), `2026-10-0${i + 7} 10:00:00`);
+  }
   const body = await (await f.call('/promo_launch/history')).json() as any;
   assert.deepEqual(body.history, { available: true, reason: null, events: [
     { at: '2026-10-01 10:00:00', action: 'promo_create', by: { id: HQ, name: 'Hana HQ' }, change: { code: 'LAUNCH20', percent_off: 20 } },
     { at: '2026-10-03 10:00:00', action: 'promo_update', by: { id: HQ, name: 'Hana HQ' }, change: { active: false } },
+    ...['promo_pause', 'promo_resume', 'promo_end'].map((action, i) => ({ at: `2026-10-0${i + 7} 10:00:00`, action, by: { id: HQ, name: 'Hana HQ' }, change: {} })),
   ] });
 });
 

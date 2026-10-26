@@ -9,6 +9,7 @@ import { useEscapeClose } from '../components/useEscapeClose';
 import AdminBoardFrame from './admin/AdminBoardFrame';
 import { DdCaseTabBody, DdCaseTabs } from './duediligence/DdTabs';
 import { bandWord, viewOf } from './duediligence/ddModel';
+import DdReviewerPanel from './duediligence/DdReviewer';
 
 const SEV_STYLES = {
   critical: 'bg-red-600 text-white',
@@ -197,6 +198,9 @@ function AdminDueDiligenceCasePageBody() {
           <button onClick={load} className="p-2 text-gray-600 hover:text-violet-600" title="Refresh"><RefreshCw size={16} /></button>
         </div>
       </div>
+
+      {/* D1252 (#3267, DDL12b): a section reviewer's banner and steps; nothing for the deal team. */}
+      <DdReviewerPanel data={data} uid={uid} base={base} onChanged={load} />
 
       <DdCaseTabs uid={uid} active={caseTab} />
 

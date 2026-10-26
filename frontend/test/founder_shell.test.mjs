@@ -296,8 +296,9 @@ test('every founder zone page\'s section row switches lenses on a phone (D575)',
   // twenty-two until the owner removed Raise · Liquidity (2026-10-20);
   // twenty-one until #2343 folded Grow · Brand into the brand builder;
   // twenty until D894 (#2434) replaced Raise · Pitch with the Pitch deck studio,
-  // which draws the canvas's own tabs, not the Raise sections row.
-  assert.ok(rows.length >= 19, `only ${rows.length} founder section rows are lens switchers`);
+  // which draws the canvas's own tabs, not the Raise sections row; nineteen
+  // until D1109 (#2989) retired Raise · Data room's access view for the tool's tabs.
+  assert.ok(rows.length >= 18, `only ${rows.length} founder section rows are lens switchers`);
 });
 
 test('the Worker AI rail is one component, and every founder workspace has it', () => {

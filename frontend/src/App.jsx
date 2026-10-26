@@ -43,7 +43,8 @@ import {
   ChevronDown, Eye, Sparkles,
   Gift, Mail, Globe
 } from 'lucide-react';
-import { SIDEBAR_GROUPS, filterItemsByTier, hasInvestorTier, FOUNDER_FULL_BLEED, INVESTOR_FULL_BLEED, ADVISOR_FULL_BLEED, PARTNER_FULL_BLEED, SHARED_FULL_BLEED, SHARED_FULL_BLEED_PREFIXES, ONBOARDING_CANVAS_PATHS } from './sidebarConfig';
+import { SIDEBAR_GROUPS, filterItemsByTier, hasInvestorTier, withDiligenceRow, FOUNDER_FULL_BLEED, INVESTOR_FULL_BLEED, ADVISOR_FULL_BLEED, PARTNER_FULL_BLEED, SHARED_FULL_BLEED, SHARED_FULL_BLEED_PREFIXES, ONBOARDING_CANVAS_PATHS } from './sidebarConfig';
+import { useDiligenceInvolvement } from './pages/duediligence/useDiligenceInvolvement';
 import { isCyclePath } from './pages/cycles/cyclePaths';
 import { BOUNDARY_ROLES as NARRATIVE_BOUNDARY_ROLES } from './pages/raise/narrative/narrativeModel';
 import { adminRefusal } from './pages/hq/hqNoticeModel';
@@ -126,7 +127,8 @@ const WellbeingResourceLibrary = lazy(() => import('./pages/wellbeing/WellbeingR
 const ExpertProfilePage = lazy(() => import('./pages/ExpertProfilePage'));
 const ExpertEditorPage = lazy(() => import('./pages/ExpertEditorPage'));
 const TicketsPage = lazy(() => import('./pages/TicketsPage'));
-const DealsPage = lazy(() => import('./pages/DealsPage'));
+// D1242 (#3255): Deal flow's Studio lens, for an admin or an Operating Partner; DealsPage is retired.
+const StudioLensRoute = lazy(() => import('./pages/investor/dealflow/StudioLens').then((m) => ({ default: m.StudioLensRoute })));
 const DealRoomPage = lazy(() => import('./pages/DealRoomPage'));
 const PartnerOnboardPage = lazy(() => import('./pages/PartnerOnboardPage'));
 const AdminPartnerInvitations = lazy(() => import('./pages/admin/PartnerInvitations'));
@@ -434,7 +436,6 @@ const OnboardingPartnerPage = lazy(() => import('./pages/OnboardingPartnerPage')
 const OnboardingChatPage = lazy(() => import('./pages/OnboardingChatPage'));
 const BrandBuilderPage = lazy(() => import('./pages/BrandBuilderPage'));
 const CompetitorAnalysisPage = lazy(() => import('./pages/CompetitorAnalysisPage'));
-const DataRoomPage = lazy(() => import('./pages/raise/DataRoomPage'));
 const MessagesPage = lazy(() => import('./pages/MessagesPage'));
 // D702 (#1664) — the founder's profile pages (Studio · Mobile S6m, S7m, S9m, S10m).
 const YouPage = lazy(() => import('./pages/profile/YouPage'));
@@ -469,7 +470,6 @@ const FUND_ADMIN_BOUNDARY_ROLES = new Set(['founder', 'partner', 'investor', 'ad
 const FounderRaiseStatus = lazy(() => import('./pages/founder/FounderRaiseStatus'));
 const FounderRaiseCapital = lazy(() => import('./pages/founder/FounderRaiseCapital'));
 const FounderRaiseLegal = lazy(() => import('./pages/founder/FounderRaiseLegal'));
-const FounderRaiseDataRoom = lazy(() => import('./pages/founder/FounderRaiseDataRoom'));
 const SentUpdatePage = lazy(() => import('./pages/founder/SentUpdatePage'));
 // D668 (#1498): an AI assistant's consent page (D665, D666).
 const ConnectAssistantPage = lazy(() => import('./pages/connect/ConnectAssistantPage'));
@@ -527,6 +527,8 @@ import { signInPath as assistantSignInPath } from './pages/connect/assistantCons
 import { InvestorPricingRedirect, PlansAndPricingRedirect } from './pages/pricingRedirects.jsx';
 // D1029 (#2866): the old Cap table addresses forward into the tool.
 import CapTableMovedRedirect from './pages/raise/captable/CapTableMovedRedirect';
+import { DataRoomMovedRedirect } from './pages/raise/dataroom/DataRoomMoved';
+import { movedKind } from './pages/raise/dataroom/dataRoomModel';
 import {
   PREVIEW_SHELLS, PREVIEW_TRIGGER, PREVIEW_HEADER, PREVIEW_FOOTER,
   previewOptionsFor, selectedPreviewKey, homePreviewKey, previewChip, previewNote,
@@ -1143,7 +1145,9 @@ function ProtectedLayout({ children, user, onLogout, viewMode, onViewModeChange,
   // Padding and the footer are the gaps around it; both have to go, or the
   // landscape stops short of the sidebar and the bottom of the body.
   const onboardingCanvas = ONBOARDING_CANVAS_PATHS.includes(location.pathname);
-  const sidebarGroups = getSidebarGroups(activeRole || 'founder', primaryPersonaId, user, hqView);
+  // D1252 (#3267): "Diligence" for a partner, investor or advisor who leads or reviews a case.
+  const ddInvolved = useDiligenceInvolvement(user, shellRole);
+  const sidebarGroups = withDiligenceRow(getSidebarGroups(activeRole || 'founder', primaryPersonaId, user, hqView), shellRole, ddInvolved);
   // D285 / H36 — which sub-navigation strip this location sits under, in the
   // HQ shell only. The strips are written below as LITERAL links rather than
   // mapped from `HQ_STRIPS`, because the reachability guard reads navigation
@@ -3241,20 +3245,17 @@ function AppInner() {
       <Route path="/raise/capital/cap-table" element={<CapTableMovedRedirect to="/raise/cap-table" moved="cap-table" />} />
       <Route path="/raise/cap-table/variants" element={<CapTableMovedRedirect to="/raise/cap-table/scenarios" moved="variants" />} />
       <Route path="/raise/cap-table/variants/:variant" element={<CapTableMovedRedirect to="/raise/cap-table/scenarios" />} />
-      {/* D696 decision 12: /raise/data-room answers by mode, in this order. An investor's rooms are
-          read by grant under Research · Diligence (D311): the investor branch is a redirect there, so a
-          bookmark still lands, and the guard keeps admitting investor so the redirect can run. A founder's
-          ?mode=workspace is the files tool (uploads, Share and Revoke, the NDA switches, advisor grants);
-          ?mode=access is the read-only access view; the bare address is the Data room module page,
-          whose records open at /raise/data-room/:id. Both tools return to the module page. */}
+      {/* D696 decision 12, D1109 (#2989): /raise/data-room is the Data room tool's Home. An investor's
+          rooms are read by grant under Research · Diligence (D311): the investor branch is a redirect
+          there, so a bookmark still lands, and the guard keeps admitting investor so the redirect can run.
+          The retired files tool (?mode=workspace) and access view (?mode=access) forward to the tool's
+          Files and Access tabs with a moved notice, the query and hash kept, each forward counted (#2319). */}
       <Route path="/raise/data-room" element={guard(['admin', 'founder', 'investor'],
         effectiveRole === 'investor'
           ? <Navigate to="/research/diligence" replace />
-          : new URLSearchParams(location.search).get('mode') === 'workspace'
-            ? founderWorkspace('raise', founderEditor(<DataRoomPage user={user} />))
-            : new URLSearchParams(location.search).get('mode') === 'access'
-              ? founderEditor(<FounderRaiseDataRoom />)
-              : <CycleRoute cycle="raise" slug="data-room" />)} />
+          : movedKind(location.search)
+            ? <DataRoomMovedRedirect kind={movedKind(location.search)} />
+            : <CycleRoute cycle="raise" slug="data-room" />)} />
       {/* Every persona, listed explicitly. `guard([])` would deny everyone —
           RoleGuard tests `allowedRoles.includes(effectiveRole)`, which is
           always false on an empty array, so the route would exist and be
@@ -3394,11 +3395,11 @@ function AppInner() {
           pill row and nothing. `InvestorDealsRoutes` answers the root with the
           bucket board, the same overview every partner and advisor root has.
 
-          The non-investor arm is untouched: `investorWorkspace` returned the
-          bare component for any other effective role, and a partner reading
-          /deals still gets `DealsPage` exactly as before. */}
+          The non-investor arm is Deal flow's Studio lens (D1242, #3255): the
+          same list for an admin or an Operating Partner, on the round's
+          status, which replaced the retired `DealsPage`. */}
       <Route path="/deals" element={guard(['admin', 'partner', 'investor'],
-        effectiveRole === 'investor' ? <InvestorDealsRoutes /> : <DealsPage />)} />
+        effectiveRole === 'investor' ? <InvestorDealsRoutes /> : <StudioLensRoute role={effectiveRole} />)} />
 
       {/* ── Deals · the four stages, as four routes ──────────────────────────
           The zone slugs are InvestorDealsWorkspace's own anchor ids with the
@@ -3499,6 +3500,9 @@ function AppInner() {
       <Route path="/calendar/agenda" element={guard(['admin', 'founder', 'partner', 'investor', 'advisor', 'exploring'], <CalendarPage />)} />
       {/* D1211 (#3177): an item's drawer over the view it was opened from (CAL4, CAL5, CAL18). */}
       <Route path="/calendar/item/:kind/:id" element={guard(['admin', 'founder', 'partner', 'investor', 'advisor', 'exploring'], <CalendarPage />)} />
+      {/* D1212 (#3178): the connected calendars (CAL9) and Google's panel (CAL10), over the calendar. */}
+      <Route path="/calendar/connected" element={guard(['admin', 'founder', 'partner', 'investor', 'advisor', 'exploring'], <CalendarPage />)} />
+      <Route path="/calendar/connected/google" element={guard(['admin', 'founder', 'partner', 'investor', 'advisor', 'exploring'], <CalendarPage />)} />
       {/* Task #40 (E2) — Event host/attendee surface. */}
       {/* D1030 (#2387): each tab its own address; an Explorer reads Upcoming, Discover and Past (MEV2). */}
       <Route path="/my/events" element={guard(['admin', 'founder', 'partner', 'investor', 'advisor', 'exploring'], <MyEventsPage />)} />
@@ -3803,7 +3807,7 @@ function AppInner() {
       {/* D661 (#1474): a founder's /raise is the cycle overview from #1501's
           read, and /raise/<module> its module pages. Every Raise tool route
           above is static and wins; /raise/data-room's own route draws the Data
-          room module page itself when no mode is asked for (D696). */}
+          room tool's Home itself (D696, D1109). */}
       <Route path="/raise" element={founderRaiseLanding
         ? guard(labRoles(['admin', 'founder']), <CycleRoute cycle="raise" />)
         : <Navigate to="/raise/capital/pipeline" replace />} />
