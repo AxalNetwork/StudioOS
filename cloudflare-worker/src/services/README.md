@@ -1,5 +1,9 @@
 # cloudflare-worker/src/services — logic, not HTTP
 
+`programUsage.ts` (D1156) collects month-to-date program counts locally, sends
+only aggregates to HQ, validates authenticated reports and reads dated per-grant
+figures. Missing and unreadable metrics stay distinct from measured zero.
+
 Everything a route needs that is not request parsing or response shaping. A file
 here takes `env` and plain values; it does not take a Hono `Context` and does
 not return a `Response`.
@@ -56,6 +60,12 @@ invalid or ambiguous wall times. Its instant comparison keeps formatting-only
 normalization out of the changed-after-approval flag.
 
 ## The ones worth knowing
+
+`segmentMembership.ts` (D1128, #3008) resolves stored segment identities,
+the active sign-up catalog, an admin-moved member's missing questions, and the
+suppressed per-segment all-question completion count. Questions remain defined
+in code. `segmentProfiles.ts` also creates an authored profile and its first
+history version atomically. Events resolves its audience IDs from this store.
 
 `personaSegments.ts` is D999's segment counts (#2814) behind
 `GET /api/personas/admin/segments`: one grouped pass over every account but

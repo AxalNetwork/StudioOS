@@ -1,8 +1,8 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useLocation, useNavigate } from 'react-router-dom';
 import { Loader2, Sparkles, Check, ArrowRight } from 'lucide-react';
 import { api } from '../lib/api';
-import { PERSONAS } from '../lib/personas';
+import { personaSegmentsApi } from '../lib/api/personaSegments';
 
 // Epic 1 — guided persona onboarding. Three states:
 //   1. INTRO    — collect a free-form first message
@@ -12,9 +12,13 @@ const FOUNDER_IDS = new Set(['founder_new', 'founder_existing']);
 
 export default function OnboardingPersonaPage() {
   const navigate = useNavigate();
-  const [stage, setStage] = useState('intro');
+  const followUp = new URLSearchParams(useLocation().search).get('follow_up') === '1';
+  const [loadTick, setLoadTick] = useState(0);
+  const [catalogReady, setCatalogReady] = useState(false);
+  const [questionReason, setQuestionReason] = useState(null);
+  const [stage, setStage] = useState(followUp ? 'loading' : 'intro');
   const [firstMessage, setFirstMessage] = useState('');
-  const [taxonomy, setTaxonomy] = useState(PERSONAS);
+  const [taxonomy, setTaxonomy] = useState([]);
   const [classifyResult, setClassifyResult] = useState(null);
   const [chosenPersona, setChosenPersona] = useState(null);
   const [secondaryPersona, setSecondaryPersona] = useState(null);
@@ -26,14 +30,28 @@ export default function OnboardingPersonaPage() {
   const [done, setDone] = useState(false);
 
   useEffect(() => {
-    api.getPersonaTaxonomy().then((r) => setTaxonomy(r.personas || PERSONAS)).catch(() => {});
-    api.getMyPersonas().then((r) => {
-      if (r?.personas?.length > 0) {
-        const primary = r.personas.find((p) => p.is_primary) || r.personas[0];
-        setChosenPersona(primary.persona_id);
-      }
-    }).catch(() => {});
-  }, []);
+    let live = true;
+    setError(''); setCatalogReady(false);
+    if (followUp) {
+      setStage('loading');
+      api.getMyPersonas().then(r => {
+        if (!live) return;
+        if (typeof r?.follow_up?.pending !== 'boolean' || !Array.isArray(r.follow_up.questions) || (r.follow_up.pending && !r.follow_up.questions.length)) throw new Error('Your segment questions could not be read. Try again.');
+        const next = r.follow_up;
+        setQuestionReason(next.recorded === false ? `Not recorded. ${next.reason || 'No questions are set for this segment.'}` : null);
+        setTaxonomy(next.persona_id ? [{ id: next.persona_id, label: next.name, follow_up_questions: next.questions }] : []);
+        setChosenPersona(next.persona_id ?? null); setQuestionBank(next.questions); setQuestionIdx(0); setAnswers({});
+        setStage(next.pending && next.questions.length ? 'answers' : 'done'); setDone(!next.pending); setCatalogReady(true);
+      }).catch(() => { if (live) { setError('Your segment questions could not be read. Try again.'); setStage('loading'); } });
+    } else {
+      api.getPersonaTaxonomy().then(r => {
+        if (!live) return;
+        if (!Array.isArray(r?.personas)) throw new Error('Segments could not be read.');
+        setTaxonomy(r.personas); setCatalogReady(true);
+      }).catch(() => { if (live) setError('The segments could not be read. Try again.'); });
+    }
+    return () => { live = false; };
+  }, [followUp, loadTick]);
 
   const personaById = useMemo(() => {
     const map = {};
@@ -88,13 +106,16 @@ export default function OnboardingPersonaPage() {
     }
     setBusy(true); setError('');
     try {
-      await api.answerPersona(chosenPersona, q.key, value);
+      if (followUp) await personaSegmentsApi.answerFollowUp(chosenPersona, q.key, value);
+      else await api.answerPersona(chosenPersona, q.key, value);
       if (questionIdx + 1 < questionBank.length) {
         setQuestionIdx(questionIdx + 1);
       } else {
-        const conf = classifyResult?.persona_id === chosenPersona ? (classifyResult?.confidence || 0.8) : 1.0;
-        const source = classifyResult?.persona_id === chosenPersona ? 'router' : 'self_select';
-        await api.finalizePersona(chosenPersona, conf, source, secondaryPersona);
+        if (!followUp) {
+          const conf = classifyResult?.persona_id === chosenPersona ? (classifyResult?.confidence || 0.8) : 1.0;
+          const source = classifyResult?.persona_id === chosenPersona ? 'router' : 'self_select';
+          await api.finalizePersona(chosenPersona, conf, source, secondaryPersona);
+        }
         setDone(true);
         setStage('done');
       }
@@ -110,7 +131,7 @@ export default function OnboardingPersonaPage() {
         <div className="flex flex-wrap gap-2">
           {q.choices.map((c) => (
             <button key={c} type="button" onClick={() => set(c)}
-              className={`px-3 py-2 rounded-lg text-sm border transition-colors ${val === c ? 'bg-violet-600 border-violet-600 text-white' : 'bg-white border-gray-300 text-gray-700 hover:border-violet-400'}`}>
+              className={`min-h-[44px] px-3 py-2 rounded-lg text-sm border transition-colors ${val === c ? 'bg-violet-600 border-violet-600 text-white' : 'bg-white border-gray-300 text-gray-700 hover:border-violet-400 dark:bg-gray-900 dark:border-gray-700 dark:text-gray-200'}`}>
               {c}
             </button>
           ))}
@@ -119,43 +140,47 @@ export default function OnboardingPersonaPage() {
     }
     if (q.type === 'number') {
       return (
-        <input type="number" value={val} onChange={(e) => set(e.target.value)}
-          className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:border-violet-500 dark:border-gray-700"
+        <input id="persona-question-input" type="number" value={val} onChange={(e) => set(e.target.value)}
+          className="min-h-[44px] w-full bg-white px-3 py-2 border border-gray-300 dark:bg-gray-800 dark:text-gray-100 rounded-lg text-sm focus:outline-none focus:border-violet-500 dark:border-gray-700"
           placeholder="Enter a number" />
       );
     }
     return (
-      <input type="text" value={val} onChange={(e) => set(e.target.value)}
-        className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:border-violet-500 dark:border-gray-700"
+      <input id="persona-question-input" type="text" value={val} onChange={(e) => set(e.target.value)}
+        className="min-h-[44px] w-full bg-white px-3 py-2 border border-gray-300 dark:bg-gray-800 dark:text-gray-100 rounded-lg text-sm focus:outline-none focus:border-violet-500 dark:border-gray-700"
         placeholder="Type your answer" />
     );
   };
 
-  const offerSecondary = chosenPersona && FOUNDER_IDS.has(chosenPersona);
+  const offerSecondary = !followUp && chosenPersona && FOUNDER_IDS.has(chosenPersona);
 
   return (
     <div className="max-w-2xl mx-auto py-8 px-4">
       <div className="flex items-center gap-2 mb-2">
-        <Sparkles size={22} className="text-violet-600" />
-        <h1 className="text-2xl font-bold text-gray-900 dark:text-gray-100">Tell us who you are</h1>
+        <Sparkles size={22} className="text-violet-600 dark:text-violet-300" />
+        <h1 className="text-2xl font-bold text-gray-900 dark:text-gray-100">{followUp ? 'Your segment questions' : 'Tell us who you are'}</h1>
       </div>
-      <p className="text-sm text-gray-600 mb-6">
-        Two minutes. We'll tailor StudioOS to your role and only ask the questions that matter for you.
+      <p className="min-h-[44px] text-sm text-gray-600 dark:text-gray-400 mb-6">
+        {followUp ? 'Your segment was updated. Answer the questions you have not answered for this segment yet.' : "Two minutes. We'll tailor StudioOS to your role and only ask the questions that matter for you."}
       </p>
 
-      {error && <div className="mb-4 text-sm bg-red-50 border border-red-200 text-red-700 rounded-lg px-3 py-2">{error}</div>}
+      {error && <div className="mb-4 text-sm bg-red-50 border border-red-200 text-red-700 dark:bg-red-950/40 dark:border-red-900 dark:text-red-300 rounded-lg px-3 py-2">{error}</div>}
 
-      {stage === 'intro' && (
+      {!catalogReady && !error && <p role="status">Reading segment questions…</p>}
+      {!catalogReady && error && <button type="button" onClick={() => setLoadTick(n => n + 1)} className="min-h-[44px] rounded-lg border px-4 dark:border-gray-700">Try again</button>}
+      {followUp && <button type="button" className="mb-4 min-h-[44px] text-violet-700 dark:text-violet-300" onClick={() => navigate('/account/profile', { state: { skipPersonaFollowUp: true } })}>Not now — return to profile</button>}
+      {!followUp && catalogReady && taxonomy.length === 0 && <p>No active segments are recorded. Try again later.</p>}
+      {stage === 'intro' && catalogReady && taxonomy.length > 0 && (
         <div className="bg-white border border-gray-200 rounded-xl p-5 space-y-4 dark:bg-gray-900 dark:border-gray-800">
           <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">
             In one or two sentences, what brings you to Axal VC?
           </label>
           <textarea value={firstMessage} onChange={(e) => setFirstMessage(e.target.value)} rows={4}
-            className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:border-violet-500 dark:border-gray-700"
+            className="min-h-[44px] w-full bg-white px-3 py-2 border border-gray-300 dark:bg-gray-800 dark:text-gray-100 rounded-lg text-sm focus:outline-none focus:border-violet-500 dark:border-gray-700"
             placeholder="e.g. I run a $50M family office and we're looking to allocate to AI-native venture studios." />
           <div className="flex justify-end">
             <button onClick={classify} disabled={busy || !firstMessage.trim()}
-              className="flex items-center gap-2 bg-violet-600 hover:bg-violet-700 disabled:opacity-50 text-white text-sm px-4 py-2 rounded-lg">
+              className="min-h-[44px] flex items-center gap-2 bg-violet-600 hover:bg-violet-700 disabled:opacity-50 text-white text-sm px-4 py-2 rounded-lg">
               {busy ? <Loader2 className="animate-spin" size={14} /> : <ArrowRight size={14} />}
               Continue
             </button>
@@ -167,17 +192,17 @@ export default function OnboardingPersonaPage() {
         <div className="bg-white border border-gray-200 rounded-xl p-5 space-y-4 dark:bg-gray-900 dark:border-gray-800">
           {classifyResult?.persona_id && !classifyResult?.needs_disambiguation ? (
             <div>
-              <div className="text-xs uppercase tracking-wide text-gray-500 mb-1">Suggested persona</div>
+              <div className="text-xs uppercase tracking-wide text-gray-500 dark:text-gray-400 mb-1">Suggested persona</div>
               <div className="text-lg font-semibold text-gray-900 dark:text-gray-100">{personaById[classifyResult.persona_id]?.label}</div>
-              <p className="text-sm text-gray-600 mt-1">{personaById[classifyResult.persona_id]?.short_description}</p>
-              {classifyResult.rationale && <p className="text-xs text-gray-500 mt-2 italic">{classifyResult.rationale}</p>}
+              <p className="min-h-[44px] text-sm text-gray-600 dark:text-gray-400 mt-1">{personaById[classifyResult.persona_id]?.short_description}</p>
+              {classifyResult.rationale && <p className="text-xs text-gray-500 dark:text-gray-400 mt-2 italic">{classifyResult.rationale}</p>}
               <div className="flex gap-2 mt-4">
                 <button onClick={() => startQuestions(classifyResult.persona_id)}
-                  className="flex items-center gap-2 bg-violet-600 hover:bg-violet-700 text-white text-sm px-4 py-2 rounded-lg">
+                  className="min-h-[44px] flex items-center gap-2 bg-violet-600 hover:bg-violet-700 text-white text-sm px-4 py-2 rounded-lg">
                   <Check size={14} /> Yes, that's me
                 </button>
                 <button onClick={() => { setClassifyResult({ ...classifyResult, needs_disambiguation: true }); }}
-                  className="text-sm text-gray-600 hover:text-gray-900 px-4 py-2">
+                  className="min-h-[44px] text-sm text-gray-600 dark:text-gray-400 hover:text-gray-900 px-4 py-2">
                   Pick a different one
                 </button>
               </div>
@@ -190,7 +215,7 @@ export default function OnboardingPersonaPage() {
                   <button key={p.id} onClick={() => startQuestions(p.id)}
                     className="text-left border border-gray-200 hover:border-violet-400 rounded-lg p-3 transition-colors dark:border-gray-800">
                     <div className="text-sm font-semibold text-gray-900 dark:text-gray-100">{p.label}</div>
-                    <div className="text-xs text-gray-600 mt-0.5 line-clamp-2">{p.short_description}</div>
+                    <div className="text-xs text-gray-600 dark:text-gray-400 mt-0.5 line-clamp-2">{p.short_description}</div>
                   </button>
                 ))}
               </div>
@@ -199,15 +224,22 @@ export default function OnboardingPersonaPage() {
         </div>
       )}
 
+      {stage === 'answers' && questionBank.length === 0 && !followUp && <section className="space-y-4 rounded-xl border border-gray-200 bg-white p-5 dark:border-gray-700 dark:bg-gray-900"><h2 className="font-bold">{personaById[chosenPersona]?.label}</h2><p>Questions: Not recorded. No questions are set for this segment.</p><button type="button" disabled={busy} className="min-h-[44px] rounded-lg bg-violet-600 px-4 text-white" onClick={async () => {
+        setBusy(true); setError('');
+        try { await api.finalizePersona(chosenPersona, 1, 'self_select', null); setDone(true); setStage('done'); }
+        catch (e) { setError(e?.message || 'Your segment could not be saved.'); }
+        finally { setBusy(false); }
+      }}>Use this segment</button></section>}
+
       {stage === 'answers' && questionBank[questionIdx] && (
         <div className="bg-white border border-gray-200 rounded-xl p-5 space-y-4 dark:bg-gray-900 dark:border-gray-800">
           <div className="flex items-center justify-between">
-            <div className="text-xs uppercase tracking-wide text-gray-500">
+            <div className="text-xs uppercase tracking-wide text-gray-500 dark:text-gray-400">
               {personaById[chosenPersona]?.label}
             </div>
-            <div className="text-xs text-gray-500">{questionIdx + 1} / {questionBank.length}</div>
+            <div className="text-xs text-gray-500 dark:text-gray-400">{questionIdx + 1} / {questionBank.length}</div>
           </div>
-          <label className="block text-sm font-medium text-gray-800 dark:text-gray-200">{questionBank[questionIdx].prompt}</label>
+          <label htmlFor="persona-question-input" className="block text-sm font-medium text-gray-800 dark:text-gray-200">{questionBank[questionIdx].prompt}</label>
           {renderQuestionInput(questionBank[questionIdx])}
 
           {questionIdx === questionBank.length - 1 && offerSecondary && (
@@ -222,11 +254,11 @@ export default function OnboardingPersonaPage() {
 
           <div className="flex justify-between">
             <button onClick={() => setQuestionIdx(Math.max(0, questionIdx - 1))} disabled={questionIdx === 0 || busy}
-              className="text-sm text-gray-600 hover:text-gray-900 disabled:opacity-40 px-3 py-2">
+              className="min-h-[44px] text-sm text-gray-600 dark:text-gray-400 hover:text-gray-900 disabled:opacity-40 px-3 py-2">
               Back
             </button>
             <button onClick={submitAnswer} disabled={busy}
-              className="flex items-center gap-2 bg-violet-600 hover:bg-violet-700 disabled:opacity-50 text-white text-sm px-4 py-2 rounded-lg">
+              className="min-h-[44px] flex items-center gap-2 bg-violet-600 hover:bg-violet-700 disabled:opacity-50 text-white text-sm px-4 py-2 rounded-lg">
               {busy ? <Loader2 className="animate-spin" size={14} /> : <ArrowRight size={14} />}
               {questionIdx + 1 === questionBank.length ? 'Finish' : 'Next'}
             </button>
@@ -235,19 +267,15 @@ export default function OnboardingPersonaPage() {
       )}
 
       {stage === 'done' && done && (
-        <div className="bg-emerald-50 border border-emerald-200 rounded-xl p-5">
-          <div className="flex items-center gap-2 text-emerald-700 font-semibold mb-1">
+        <div className="bg-emerald-50 border border-emerald-200 dark:bg-emerald-950/40 dark:border-emerald-900 rounded-xl p-5">
+          <div className="flex items-center gap-2 text-emerald-700 dark:text-emerald-300 font-semibold mb-1">
             <Check size={18} /> All set
           </div>
-          <p className="text-sm text-emerald-800">
-            We've tagged you as <span className="font-medium">{personaById[chosenPersona]?.label}</span>
-            {secondaryPersona && <> and <span className="font-medium">{personaById[secondaryPersona]?.label}</span></>}.
-            Your sidebar and Studio now reflect what's most useful to you.
-          </p>
+          <p className="text-sm text-emerald-800 dark:text-emerald-200">{followUp ? questionReason || 'Your segment questions are up to date. Your segment placement is unchanged.' : <>We've tagged you as <span className="font-medium">{personaById[chosenPersona]?.label}</span>{secondaryPersona && <> and <span className="font-medium">{personaById[secondaryPersona]?.label}</span></>}. Your sidebar and Studio now reflect what's most useful to you.</>}</p>
           <div className="mt-3 flex flex-wrap gap-2">
-            <button onClick={() => navigate('/studio')}
-              className="inline-flex items-center gap-2 bg-violet-600 hover:bg-violet-700 text-white text-sm px-4 py-2 rounded-lg">
-              <ArrowRight size={14} /> Go to Studio
+            <button onClick={() => navigate(followUp ? '/account/profile' : '/studio')}
+              className="min-h-[44px] inline-flex items-center gap-2 bg-violet-600 hover:bg-violet-700 text-white text-sm px-4 py-2 rounded-lg">
+              <ArrowRight size={14} /> {followUp ? 'Return to profile' : 'Go to Studio'}
             </button>
           </div>
         </div>

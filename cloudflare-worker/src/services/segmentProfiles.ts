@@ -275,6 +275,35 @@ export async function checkedChanges(env: Env, current: ReturnType<typeof viewOf
   return next;
 }
 
+/** D1128: create once, using the same bounded profile checks as edits. No
+ * question bank or sidebar link is invented for a stored-only segment. */
+export async function createProfile(env: Env, body: Record<string, unknown>, actor: { id: number }) {
+  const key = typeof body.key === 'string' ? body.key.trim() : '';
+  if (!/^[a-z0-9_]{1,64}$/.test(key) || ['__proto__', 'prototype', 'constructor'].includes(key)) throw new SegmentInputError('invalid_key', 'Use 1 to 64 lower-case letters, numbers or underscores for the segment key.');
+  if (await getProfile(env, key)) throw new SegmentInputError('segment_exists', 'A segment already has that key.', 409);
+  const { key: _key, ...input } = body;
+  const blank = { key, name: '', profile: 'any', status: 'draft', who: null, typical: [], needs: [], offers: { ...emptyOffers(), sidebar_links: [] } };
+  const changes = await checkedChanges(env, blank as any, input);
+  if (!changes.name || !changes.profile || !changes.status) throw new SegmentInputError('required_fields', 'Give the segment a name, profile and status.');
+  const v = { ...blank, ...changes } as any;
+  const after = { name: v.name, profile: v.profile, status: v.status, who: v.who, typical: v.typical, needs: v.needs, offers: v.offers };
+  try {
+    await env.DB.batch([
+      env.DB.prepare(`INSERT INTO segment_profiles (key, name, profile, status, who, typical_json, needs_json, offers_json, version, updated_by) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 1, ?)`)
+        .bind(key, v.name, v.profile, v.status, v.who, JSON.stringify(v.typical), JSON.stringify(v.needs), JSON.stringify(v.offers), actor.id),
+      // Existing migration 559's 'edited' action records the first authored
+      // version too; before=NULL distinguishes creation from a later edit.
+      env.DB.prepare(`INSERT INTO segment_profile_history (segment_key, version, action, fields_json, before_json, after_json, reason, actor_user_id) VALUES (?, 1, 'edited', ?, NULL, ?, ?, ?)`)
+        .bind(key, JSON.stringify(Object.keys(after)), JSON.stringify(after), 'Segment created', actor.id),
+    ]);
+  } catch (error) {
+    // A concurrent create gets the same refusal; no raw D1 message escapes.
+    if (await getProfile(env, key).catch(() => null)) throw new SegmentInputError('segment_exists', 'A segment already has that key.', 409);
+    throw error;
+  }
+  return { ...v, in_code: false, code_profile: null, sign_up_questions: null, version: 1, updated_by: actor.id };
+}
+
 /**
  * One write: the fields that changed, a version more, and one history row,
  * in one batch. The UPDATE names the version the writer read, so a second

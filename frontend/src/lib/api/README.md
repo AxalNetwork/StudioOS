@@ -1,5 +1,8 @@
 # frontend/src/lib/api — one file per new API domain
 
+D1156: `programGrants.js` adds the dated HQ `inUse(uid)` read and the branch
+`sendProgramReport()` action, with no caller-supplied counts.
+
 `../api.js` is the SPA's client for the Worker. It is also the file most likely
 to conflict: on `main` from 2 August to 3 October 2026 it changed in 113 of
 624 commits, because every new client method landed at the bottom of it. From
@@ -368,6 +371,9 @@ D993 (#2804): `partnerProfiles.js` also reads the first-agreement options
 text in the library yet") and sends Unbind (`POST …/:ref/unbind`, Super Admin
 with a recent step-up and a reason). Each list row and profile carries its
 agreement's envelope state on `envelope`.
+
+D1128 extends `personaSegments.js` with mounted Worker paths for creation,
+completion counts, Events segment choices, and expected-primary follow-up answers.
 
 D1000 (#2815): `personaSegments.js` is Persona segments' profile store on
 `/api/personas/segments`: every profile, one with its history, the needs read
