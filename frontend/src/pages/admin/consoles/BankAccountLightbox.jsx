@@ -2,12 +2,12 @@ import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { bankAccountsApi } from '../../../lib/api/bankAccounts';
 import { adminMercuryApi } from '../../../lib/api/adminMercury';
-import { Lightbox, Pill, Unreadable } from '../../../ui';
+import { Lightbox, Pill, Unreadable, usePhoneWidth } from '../../../ui';
 import {
   BASE, accountHistory, balanceCell, instructionFacts, kindWord, lineState, noticePreview,
-  paymentsLine, seriesOf, shortName, signedAmount, sparkPath, dayOf,
+  PHONE_BELOW_SM, paymentsLine, seriesOf, shortName, signedAmount, sparkPath, dayOf,
 } from './bankAccountsModel';
-import { amber, btnCls, muted } from './BankAccountDialogs';
+import { amber, btnCls, muted, primaryCls } from './BankAccountDialogs';
 
 /**
  * D1185 (#3114) — one account, the canvas's board BNK2, as a centred
@@ -71,11 +71,20 @@ export function AccountLightbox({ account: a, onClose, revealed, onReveal, onHid
   const available = balanceCell(a, 'available');
   const preview = noticePreview(a);
   const seriesPoints = seriesOf(series.data, mercuryUid);
+  const phone = usePhoneWidth(PHONE_BELOW_SM);
 
   return (
     <Lightbox label={`Account ${a.label} ${a.account_masked}`} eyebrow={`Account · ${shortName(a.entity_key)}`} title={`${a.label} ${a.account_masked}`}
       width={640} size="tall" onClose={onClose} testId="bank-account-lightbox"
-      footer={<div className="flex justify-end"><button type="button" className={btnCls} onClick={onClose}>Close</button></div>}>
+      footer={phone && active ? (
+        // D1187 (BNK12b, BNK12d): on a phone the account is a full-height sheet whose bar holds Reveal, or Hide now while shown.
+        <div className="flex gap-2" data-testid="bank-account-phone-bar">
+          {revealed
+            ? <button type="button" className={`${btnCls} flex-1`} onClick={onHide} data-testid="bank-account-phone-hide">Hide now</button>
+            : <button type="button" className={`${primaryCls} flex-1`} onClick={onReveal} data-testid="bank-account-phone-reveal">Reveal full number…</button>}
+          <button type="button" className={btnCls} onClick={onClose}>Close</button>
+        </div>
+      ) : <div className="flex justify-end"><button type="button" className={btnCls} onClick={onClose}>Close</button></div>}>
       <div className="flex flex-wrap items-center gap-2 px-5 pb-3" data-testid="bank-account-lightbox-head">
         <Pill tone="neutral">{kindWord(a.account_kind)}</Pill>
         <Pill tone={active ? 'ok' : 'neutral'}>{active ? 'Active' : 'Retired'}</Pill>
