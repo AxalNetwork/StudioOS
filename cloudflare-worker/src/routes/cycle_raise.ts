@@ -106,7 +106,7 @@ import { canWrite, canWritePitchDeck, type ProjectRef } from './_founder_validat
 import { CYCLE, QUESTION, MODULES, CARD_FOR, RECORDS_FOR, INVESTOR_TYPE_LABEL, figures, cards, callsHistory, narrativeHome, recordQuery, type Ctx, type ModuleSlug } from '../services/raiseCycle';
 import {
   WriterError, scoreReadinessItem, rescoreReadiness, saveNarrativeVersion, updateNarrativeVersion, createDeckLink, updateDeckLink,
-  addCapHolder, updateCapHolder, saveUseOfFunds, addProspect, updateProspect, setFileChecklistItem, setProspectNextStep,
+  addCapHolder, updateCapHolder, addProspect, updateProspect, setFileChecklistItem, setProspectNextStep,
 } from '../services/raiseWriters';
 import { hasRecords } from '../services/records';
 import { NARRATIVE_SECTIONS, compareNarrative, readNarrative, readPositioning, readableVersion, saveNarrativeSection, savePositioning } from '../services/narrative/store';
@@ -139,8 +139,10 @@ import { recomputePmf, pmfHistory, pmfModelRead } from '../services/scoring/pmfS
 import { dataRoomOwner, roomSummary } from './data_room';
 import { safeCard, type Card } from '../services/cycleCards';
 import { refuse } from '../util/refusal';
+import useOfFunds from './cycle_use_of_funds';
 
 const cycleRaise = new Hono<{ Bindings: Env }>();
+cycleRaise.route('/use-of-funds', useOfFunds);
 
 const today = () => new Date().toISOString().slice(0, 10);
 
@@ -777,15 +779,6 @@ cycleRaise.patch('/holders/:id', async (c) => {
   if ('group' in b || 'instrument' in b) return c.json({ detail: 'A holder keeps its group and instrument; add a new holder instead' }, 400);
   try {
     return c.json(await updateCapHolder(c.env, { projectId: s.projectId, user: s.user, id, body: b }));
-  } catch (e) { return writeFailed(c, e); }
-});
-
-cycleRaise.put('/use-of-funds', async (c) => {
-  const s = await scope(c);
-  if (s instanceof Response) return s;
-  const b = await body(c);
-  try {
-    return c.json(await saveUseOfFunds(c.env, { projectId: s.projectId, userId: Number(s.user.id), body: b }));
   } catch (e) { return writeFailed(c, e); }
 });
 

@@ -24,10 +24,12 @@ import {
   checklistFor,
   computeScore, worstSeverity,
   encField, decField,
+  DD_DECISIONS, BLOCKING_FLAG_REFUSAL, blockingSectionsWithOpenSevereFlags, stampNewCase,
   renderReportArtifact,
   type DDSubjectType, type ReportCase, type ReportSection, type ChecklistDepth,
 } from '../services/dueDiligence';
 import { encryptBytes, decryptBytes } from '../services/cryptoBox';
+import { createIcRecordForCase, icRecordForCase, caseSentToIc } from './ic';
 
 const dd = new Hono<{ Bindings: Env }>();
 type AppContext = Context<{ Bindings: Env }>;
@@ -49,6 +51,17 @@ async function getCaseByUid(env: Env, uid: string): Promise<Record<string, unkno
 }
 
 interface AppUser { id: number; role: string; email: string; }
+
+/**
+ * D1246 — the case lead (migration 620). A case opened before the column, or
+ * by a path that has not stamped it yet, is led by its opener.
+ */
+function leadOf(cs: Record<string, unknown>): number {
+  return Number(cs.lead_user_id ?? cs.owner_user_id);
+}
+const isLead = (user: AppUser, cs: Record<string, unknown>) => leadOf(cs) === user.id;
+/** The opener keeps the access they had; the lead has the same. */
+const leadsOrOpened = (user: AppUser, cs: Record<string, unknown>) => isLead(user, cs) || Number(cs.owner_user_id) === user.id;
 
 async function requireDdReader(c: AppContext): Promise<AppUser> {
   const user = await requireAuth(c);
@@ -74,7 +87,7 @@ async function requireDdReader(c: AppContext): Promise<AppUser> {
 async function requireCaseWriter(c: AppContext, cs: Record<string, unknown>): Promise<AppUser> {
   const user = await requireDdReader(c);
   if (user.role === 'admin') return user;
-  if (Number(cs.owner_user_id) === user.id) return user;
+  if (leadsOrOpened(user, cs)) return user;
   const sql = getSQL(c.env);
   try {
     const r: any[] = await sql`SELECT 1 FROM dd_reviewers WHERE case_id = ${cs.id} AND user_id = ${user.id} LIMIT 1`;
@@ -137,13 +150,14 @@ dd.get('/cases', async (c) => {
     if (band) { conds.push('risk_band = ?'); params.push(band); }
     if (ownerOnly || user.role !== 'admin') {
       // Partners/investors/advisors only see cases they own OR are a reviewer on.
-      conds.push(`(owner_user_id = ? OR id IN (SELECT case_id FROM dd_reviewers WHERE user_id = ?))`);
-      params.push(user.id, user.id);
+      conds.push(`(owner_user_id = ? OR lead_user_id = ? OR id IN (SELECT case_id FROM dd_reviewers WHERE user_id = ?))`);
+      params.push(user.id, user.id, user.id);
     }
     const where = conds.length ? `WHERE ${conds.join(' AND ')}` : '';
     const rows: any[] = await sql.unsafe(
       `SELECT id, uid, subject_type, subject_id, subject_label, status, risk_score, risk_band,
-              owner_user_id, created_at, updated_at, report_generated_at
+              owner_user_id, lead_user_id, target_ic_date, decision, decided_at, archived_at,
+              created_at, updated_at, report_generated_at
          FROM dd_cases ${where}
          ORDER BY created_at DESC LIMIT 200`,
       params,
@@ -232,6 +246,8 @@ dd.post('/cases', async (c) => {
         VALUES (${caseId}, ${sid}, ${it.key}, ${it.title}, ${it.depth})`;
       itemsSeeded++;
     }
+    // D1246: the opener leads it, and its blocking sections are stamped.
+    await stampNewCase(c.env, caseId);
     await audit(c.env, caseId, user, 'case_opened', { type: 'dd_case', id: caseId }, { subject_type: subjectType, subject_id: subjectId, template_depth: templateDepth });
     return c.json({ ...row, sections_seeded: sections.length, checklist_seeded: itemsSeeded }, 201);
   } finally { await sql.end(); }
@@ -252,7 +268,7 @@ dd.get('/cases/:uid', async (c) => {
   // Anyone else (admin/partner/investor/advisor without an assignment on
   // this case) is rejected with 403.
   let scopedSectionIds: Set<number> | null = null; // null = unrestricted
-  if (user.role !== 'admin' && Number(cs.owner_user_id) !== user.id) {
+  if (user.role !== 'admin' && !leadsOrOpened(user, cs)) {
     const sql = getSQL(c.env);
     try {
       const reviewerRows: any[] = await sql`
@@ -323,6 +339,16 @@ dd.get('/cases/:uid', async (c) => {
       subject_legal_name: isScoped ? null : await decField(c.env, 'dd_cases', 'subject_legal_name', caseId, cs.subject_legal_name_enc as string | null),
       notes: isScoped ? null : await decField(c.env, 'dd_cases', 'notes', caseId, cs.notes_enc as string | null),
       subject_email_enc: undefined, subject_legal_name_enc: undefined, notes_enc: undefined,
+      // D1246: the lead, the decision and the archive. A section reviewer is
+      // told the decision, never its reason, the cheque or the linked deal.
+      lead_user_id: leadOf(cs),
+      decision_reason: isScoped ? null : await decField(c.env, 'dd_cases', 'decision_reason', caseId, cs.decision_reason_enc as string | null),
+      archived_reason: isScoped ? null : await decField(c.env, 'dd_cases', 'archived_reason', caseId, cs.archived_reason_enc as string | null),
+      decision_reason_enc: undefined, archived_reason_enc: undefined,
+      cheque_cents: isScoped ? null : (cs.cheque_cents ?? null),
+      cheque_currency: isScoped ? null : (cs.cheque_currency ?? null),
+      deal_id: isScoped ? null : (cs.deal_id ?? null),
+      ic_record: isScoped ? null : await icRecordFor(c.env, user, caseId),
       scoped: isScoped,
     };
     return c.json({
@@ -419,7 +445,9 @@ dd.post('/cases/:uid/scan', async (c) => {
         RETURNING id`;
       queued.push({ id: Number(inserted[0].id), connector: meta.key });
     }
-    await sql`UPDATE dd_cases SET status = 'in_review', updated_at = CURRENT_TIMESTAMP WHERE id = ${caseId}`;
+    // D1246: a scan moves an open case into review; it never reopens a
+    // decided or archived one (that would put it back on the Approvals lane).
+    await sql`UPDATE dd_cases SET status = 'in_review', updated_at = CURRENT_TIMESTAMP WHERE id = ${caseId} AND status IN ('open', 'in_review')`;
     await audit(c.env, caseId, user, 'external_scan_started', { type: 'dd_case', id: caseId }, { connectors: queued.map(q => q.connector) });
   } finally { await sql.end(); }
 
@@ -517,7 +545,10 @@ dd.post('/cases/:uid/sections/:sectionId/verdict', async (c) => {
     // log of `:uid` with a verdict on a section from a different case.
     const secOwn: any[] = await sql`SELECT 1 FROM dd_sections WHERE id = ${sectionId} AND case_id = ${caseId} LIMIT 1`;
     if (secOwn.length === 0) return c.json({ error: 'Section does not belong to this case' }, 404);
-    if (user.role !== 'admin') {
+    // D1246 (#2385 item 19): the case lead records a verdict on any section,
+    // as an Admin does; they run the case and already read all of it.
+    const lead = isLead(user, cs);
+    if (user.role !== 'admin' && !lead) {
       const r: any[] = await sql`SELECT 1 FROM dd_reviewers WHERE section_id = ${sectionId} AND user_id = ${user.id}`;
       if (r.length === 0) return c.json({ error: 'You are not assigned to this section' }, 403);
     }
@@ -527,7 +558,7 @@ dd.post('/cases/:uid/sections/:sectionId/verdict', async (c) => {
     // directly. The legacy `body.nda_signed` boolean is intentionally
     // ignored: only an actual `dd_attachments` row (uploaded via /nda)
     // OR an admin override counts as evidence.
-    if (verdict !== 'n_a' && user.role !== 'admin') {
+    if (verdict !== 'n_a' && user.role !== 'admin' && !lead) {
       const ndaRows: any[] = await sql`
         SELECT 1 FROM dd_attachments
          WHERE section_id = ${sectionId} AND uploaded_by_user_id = ${user.id}
@@ -634,7 +665,7 @@ dd.patch('/cases/:uid/items/:itemId', async (c) => {
     // Assigned reviewers (writers who are neither admin nor the owner)
     // may only work items on sections they are assigned to — mirrors
     // the verdict scoping rule.
-    if (user.role !== 'admin' && Number(cs.owner_user_id) !== user.id) {
+    if (user.role !== 'admin' && !leadsOrOpened(user, cs)) {
       const r: any[] = await sql`SELECT 1 FROM dd_reviewers WHERE section_id = ${it.section_id} AND user_id = ${user.id} LIMIT 1`;
       if (r.length === 0) return c.json({ error: 'You are not assigned to this section' }, 403);
     }
@@ -719,7 +750,7 @@ dd.post('/cases/:uid/requests', async (c) => {
   catch { return c.json({ error: 'Forbidden: not a case owner or reviewer' }, 403); }
   // Requests go OUT to the subject — only the case owner or an admin may
   // originate them; section reviewers cannot message the subject.
-  if (user.role !== 'admin' && Number(cs.owner_user_id) !== user.id) {
+  if (user.role !== 'admin' && !leadsOrOpened(user, cs)) {
     return c.json({ error: 'Only the case owner or an admin may send requests' }, 403);
   }
   const caseId = Number(cs.id);
@@ -763,7 +794,7 @@ dd.patch('/cases/:uid/requests/:id', async (c) => {
   let user: AppUser;
   try { user = await requireCaseWriter(c, cs); }
   catch { return c.json({ error: 'Forbidden: not a case owner or reviewer' }, 403); }
-  if (user.role !== 'admin' && Number(cs.owner_user_id) !== user.id) {
+  if (user.role !== 'admin' && !leadsOrOpened(user, cs)) {
     return c.json({ error: 'Only the case owner or an admin may update requests' }, 403);
   }
   const caseId = Number(cs.id);
@@ -1025,7 +1056,7 @@ dd.get('/cases/:uid/audit', async (c) => {
   if (!cs) return c.json({ error: 'Case not found' }, 404);
   const sql = getSQL(c.env);
   try {
-    if (user.role !== 'admin' && Number(cs.owner_user_id) !== user.id) {
+    if (user.role !== 'admin' && !leadsOrOpened(user, cs)) {
       // Assigned reviewers may also view the audit trail for cases they
       // are reviewing — they need to see what's been done before/after
       // their verdict. Anyone else is rejected.
@@ -1175,6 +1206,309 @@ dd.post('/cases/:uid/sections/:sectionId/nda', async (c) => {
     await audit(c.env, caseId, user, 'nda_uploaded', { type: 'dd_section', id: sectionId }, { filename, size_bytes: size });
     return c.json({ ok: true, filename, size_bytes: size });
   } finally { await sql.end(); }
+});
+
+// ---------- D1246 (#3261): lifecycle, decision, archive, memo, reports, IC ----------
+//
+// Part 2 of #2385. A case can now be led, given its deal context, decided,
+// archived and handed to IC; the deal team keeps an encrypted memo; every
+// report generated is listed and re-downloads behind a fresh step-up.
+//
+//   PATCH /cases/:uid             lead, target IC date, round, cheque, deal; archive with a reason
+//   POST  /cases/:uid/decision    proceed | proceed_with_conditions | do_not_proceed | withdrawn, reason required
+//   GET   /cases/:uid/memo        the deal team's memo
+//   PUT   /cases/:uid/memo
+//   GET   /cases/:uid/reports     every report generated on the case
+//   POST  /cases/:uid/reports/:reportId/download   a fresh five-minute link, behind step-up
+//   POST  /cases/:uid/ic          "Send to IC": an IC record with this case attached
+//
+// THE GATE for every write here is an Admin or the case lead (#2385). A
+// section reviewer is never one; the opener who handed the lead on is not.
+// An archived case takes no further change. Every write records a
+// `dd_audit_log` row; the figures (cheque, dates) never go into its details,
+// only which fields changed.
+
+const LEAD_ROLES = new Set(['admin', 'partner', 'investor']);
+const MEMO_FIELDS = ['summary', 'verified', 'on_trust', 'conditions'] as const;
+const MEMO_MAX = 8000;
+const REASON_MAX = 2000;
+
+function isDay(v: string): boolean {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(v)) return false;
+  const d = new Date(`${v}T00:00:00Z`);
+  return !Number.isNaN(d.getTime()) && d.toISOString().slice(0, 10) === v;
+}
+
+/** The lead or an Admin, on a case that is not archived; else the refusal to send. */
+function deciderRefusal(user: AppUser, cs: Record<string, unknown>): { status: 403 | 409; error: string } | null {
+  if (user.role !== 'admin' && !isLead(user, cs)) return { status: 403, error: 'Only the case lead or an Admin can change this case.' };
+  if (cs.status === 'archived') return { status: 409, error: 'This case is archived. It takes no further change.' };
+  return null;
+}
+
+/** The IC record this case was sent to, as the caller may see it (`ic.ts` applies IC's scope). */
+async function icRecordFor(env: Env, user: AppUser, caseId: number): Promise<{ uid: string; status: string } | null> {
+  try { return await icRecordForCase(env, user as any, caseId); } catch { return null; }
+}
+
+dd.patch('/cases/:uid', async (c) => {
+  const user = await requireDdReader(c);
+  const cs = await getCaseByUid(c.env, c.req.param('uid'));
+  if (!cs) return c.json({ error: 'Case not found' }, 404);
+  const refusal = deciderRefusal(user, cs);
+  if (refusal) return c.json({ error: refusal.error }, refusal.status);
+  const caseId = Number(cs.id);
+  const body = await c.req.json().catch(() => ({} as any));
+  const has = (k: string) => Object.prototype.hasOwnProperty.call(body, k);
+
+  if (body.archive === true) {
+    const reason = String(body.archived_reason ?? '').trim();
+    if (!reason) return c.json({ error: 'Say why the case is archived.' }, 400);
+    if (reason.length > REASON_MAX) return c.json({ error: `The reason is at most ${REASON_MAX} characters.` }, 400);
+    const enc = await encField(c.env, 'dd_cases', 'archived_reason', caseId, reason);
+    await c.env.DB.prepare(
+      `UPDATE dd_cases SET status = 'archived', archived_reason_enc = ?, archived_by = ?, archived_at = datetime('now'), updated_at = CURRENT_TIMESTAMP
+        WHERE id = ? AND status != 'archived'`,
+    ).bind(enc, user.id, caseId).run();
+    await audit(c.env, caseId, user, 'case_archived', { type: 'dd_case', id: caseId }, { previous_status: cs.status });
+    return c.json({ ok: true, status: 'archived' });
+  }
+
+  // The context: each field the body names is checked; the rest keep their value.
+  const next = {
+    lead_user_id: leadOf(cs),
+    target_ic_date: (cs.target_ic_date ?? null) as string | null,
+    round_label: (cs.round_label ?? null) as string | null,
+    cheque_cents: cs.cheque_cents == null ? null : Number(cs.cheque_cents),
+    cheque_currency: (cs.cheque_currency ?? null) as string | null,
+    deal_id: cs.deal_id == null ? null : Number(cs.deal_id),
+  };
+  const changed: string[] = [];
+  if (has('lead_user_id')) {
+    const id = Number(body.lead_user_id);
+    if (!Number.isInteger(id) || id <= 0) return c.json({ error: 'Choose who leads the case.' }, 400);
+    const u = await c.env.DB.prepare('SELECT id, role FROM users WHERE id = ? AND COALESCE(is_active, 1) = 1').bind(id).first<{ id: number; role: string }>();
+    if (!u) return c.json({ error: 'That person could not be found.' }, 404);
+    if (!LEAD_ROLES.has(String(u.role))) return c.json({ error: 'A case is led by an Admin, a partner or an investor.' }, 400);
+    next.lead_user_id = id; changed.push('lead');
+  }
+  if (has('target_ic_date')) {
+    const v = body.target_ic_date == null || body.target_ic_date === '' ? null : String(body.target_ic_date);
+    if (v != null && !isDay(v)) return c.json({ error: 'The target IC date is a day, YYYY-MM-DD.' }, 400);
+    next.target_ic_date = v; changed.push('target_ic_date');
+  }
+  if (has('round_label')) {
+    const v = body.round_label == null ? '' : String(body.round_label).trim();
+    if (v.length > 80) return c.json({ error: 'The round is at most 80 characters.' }, 400);
+    next.round_label = v || null; changed.push('round');
+  }
+  if (has('cheque_cents') || has('cheque_currency')) {
+    const cents = has('cheque_cents') ? body.cheque_cents : next.cheque_cents;
+    const cur = has('cheque_currency') ? body.cheque_currency : next.cheque_currency;
+    if (cents == null || cents === '') {
+      next.cheque_cents = null; next.cheque_currency = null;
+    } else {
+      const n = Number(cents);
+      if (!Number.isSafeInteger(n) || n < 0) return c.json({ error: 'The cheque is a whole number of cents, zero or more.' }, 400);
+      const code = String(cur ?? '').trim().toUpperCase();
+      if (!/^[A-Z]{3}$/.test(code)) return c.json({ error: 'Give the cheque its currency, a three-letter code such as EUR.' }, 400);
+      next.cheque_cents = n; next.cheque_currency = code;
+    }
+    changed.push('cheque');
+  }
+  if (has('deal_id')) {
+    if (body.deal_id == null || body.deal_id === '') next.deal_id = null;
+    else {
+      const id = Number(body.deal_id);
+      const deal = Number.isInteger(id) ? await c.env.DB.prepare('SELECT id FROM deals WHERE id = ?').bind(id).first() : null;
+      if (!deal) return c.json({ error: 'That deal could not be found.' }, 404);
+      next.deal_id = id;
+    }
+    changed.push('deal');
+  }
+  if (!changed.length) return c.json({ error: 'Nothing to change.' }, 400);
+  await c.env.DB.prepare(
+    `UPDATE dd_cases SET lead_user_id = ?, target_ic_date = ?, round_label = ?, cheque_cents = ?, cheque_currency = ?, deal_id = ?,
+            updated_at = CURRENT_TIMESTAMP WHERE id = ?`,
+  ).bind(next.lead_user_id, next.target_ic_date, next.round_label, next.cheque_cents, next.cheque_currency, next.deal_id, caseId).run();
+  await audit(c.env, caseId, user, 'case_updated', { type: 'dd_case', id: caseId }, { fields: changed });
+  if (changed.includes('lead') && next.lead_user_id !== leadOf(cs) && next.lead_user_id !== user.id) {
+    await notify(c.env, {
+      userId: next.lead_user_id,
+      type: 'dd_case_lead',
+      title: `You lead the due diligence on ${cs.subject_label}`,
+      body: 'You can now record the decision and send the case to IC.',
+      link: `/due-diligence/${cs.uid}`,
+      channels: ['in_app'],
+    }).catch(() => null);
+  }
+  return c.json({ ok: true, case: { uid: cs.uid, ...next } });
+});
+
+dd.post('/cases/:uid/decision', async (c) => {
+  const user = await requireDdReader(c);
+  const cs = await getCaseByUid(c.env, c.req.param('uid'));
+  if (!cs) return c.json({ error: 'Case not found' }, 404);
+  const refusal = deciderRefusal(user, cs);
+  if (refusal) return c.json({ error: refusal.error }, refusal.status);
+  const caseId = Number(cs.id);
+  const body = await c.req.json().catch(() => ({} as any));
+  const decision = String(body.decision || '');
+  if (!(DD_DECISIONS as readonly string[]).includes(decision)) return c.json({ error: 'Choose Proceed, Proceed with conditions, Do not proceed or Withdrawn.' }, 400);
+  const reason = String(body.reason ?? '').trim();
+  if (!reason) return c.json({ error: 'Say why. The reason is recorded with the decision.' }, 400);
+  if (reason.length > REASON_MAX) return c.json({ error: `The reason is at most ${REASON_MAX} characters.` }, 400);
+
+  // #2385 owner question 4: "Proceed" never carries an open High or Critical
+  // flag in a blocking section. "Proceed with conditions" is the way through.
+  if (decision === 'proceed') {
+    const [sections, findings, items] = await Promise.all([
+      c.env.DB.prepare('SELECT id, blocking FROM dd_sections WHERE case_id = ?').bind(caseId).all<any>(),
+      c.env.DB.prepare('SELECT section_id, severity, resolved_at FROM dd_findings WHERE case_id = ?').bind(caseId).all<any>(),
+      c.env.DB.prepare('SELECT section_id, status, severity FROM dd_checklist_items WHERE case_id = ?').bind(caseId).all<any>(),
+    ]);
+    const blocked = blockingSectionsWithOpenSevereFlags(sections.results || [], findings.results || [], items.results || []);
+    if (blocked.length) return c.json({ error: BLOCKING_FLAG_REFUSAL, code: 'blocking_flag_open', section_ids: blocked }, 409);
+  }
+
+  const enc = await encField(c.env, 'dd_cases', 'decision_reason', caseId, reason);
+  await c.env.DB.prepare(
+    `UPDATE dd_cases SET decision = ?, decision_reason_enc = ?, decided_by = ?, decided_at = datetime('now'),
+            status = 'completed', updated_at = CURRENT_TIMESTAMP WHERE id = ? AND status != 'archived'`,
+  ).bind(decision, enc, user.id, caseId).run();
+  await audit(c.env, caseId, user, 'case_decided', { type: 'dd_case', id: caseId }, { decision, previous_decision: cs.decision ?? null });
+
+  // "The case moves to Decided. Reviewers are told." (DDL14 D) — in the bell,
+  // the decision only; its reason stays with the deal team.
+  const reviewers = await c.env.DB.prepare('SELECT DISTINCT user_id FROM dd_reviewers WHERE case_id = ?').bind(caseId).all<{ user_id: number }>();
+  const words: Record<string, string> = { proceed: 'Proceed', proceed_with_conditions: 'Proceed with conditions', do_not_proceed: 'Do not proceed', withdrawn: 'Withdrawn' };
+  let told = 0;
+  for (const r of reviewers.results || []) {
+    if (Number(r.user_id) === user.id) continue;
+    await notify(c.env, {
+      userId: Number(r.user_id),
+      type: 'dd_case_decided',
+      title: `Decision recorded on ${cs.subject_label}: ${words[decision]}`,
+      body: 'The case is decided. Thank you for your review.',
+      link: `/due-diligence/${cs.uid}`,
+      channels: ['in_app'],
+    }).then(() => { told += 1; }).catch(() => null);
+  }
+  return c.json({ ok: true, decision, status: 'completed', reviewers_told: told });
+});
+
+dd.get('/cases/:uid/memo', async (c) => {
+  const user = await requireDdReader(c);
+  const cs = await getCaseByUid(c.env, c.req.param('uid'));
+  if (!cs) return c.json({ error: 'Case not found' }, 404);
+  // The memo is the deal team's: the readers of the whole case, never a
+  // section reviewer.
+  if (user.role !== 'admin' && !leadsOrOpened(user, cs)) return c.json({ error: 'Forbidden' }, 403);
+  const row = await c.env.DB.prepare(
+    `SELECT m.*, u.name AS updated_by_name FROM dd_case_memos m LEFT JOIN users u ON u.id = m.updated_by WHERE m.case_id = ? LIMIT 1`,
+  ).bind(Number(cs.id)).first<any>();
+  if (!row) return c.json({ memo: null });
+  const memo: Record<string, unknown> = { updated_at: row.updated_at, updated_by_name: row.updated_by_name ?? null };
+  for (const f of MEMO_FIELDS) memo[f] = await decField(c.env, 'dd_case_memos', f, Number(row.id), row[`${f}_enc`]);
+  return c.json({ memo });
+});
+
+dd.put('/cases/:uid/memo', async (c) => {
+  const user = await requireDdReader(c);
+  const cs = await getCaseByUid(c.env, c.req.param('uid'));
+  if (!cs) return c.json({ error: 'Case not found' }, 404);
+  const refusal = deciderRefusal(user, cs);
+  if (refusal) return c.json({ error: refusal.error }, refusal.status);
+  const caseId = Number(cs.id);
+  const body = await c.req.json().catch(() => ({} as any));
+  const values: Record<string, string | null> = {};
+  for (const f of MEMO_FIELDS) {
+    const v = body[f] == null ? '' : String(body[f]).trim();
+    if (v.length > MEMO_MAX) return c.json({ error: `Each part of the memo is at most ${MEMO_MAX} characters.` }, 400);
+    values[f] = v || null;
+  }
+  await c.env.DB.prepare(`INSERT OR IGNORE INTO dd_case_memos (uid, case_id) VALUES (?, ?)`).bind(genUid(), caseId).run();
+  const row = await c.env.DB.prepare('SELECT id FROM dd_case_memos WHERE case_id = ?').bind(caseId).first<{ id: number }>();
+  if (!row) return c.json({ error: 'The memo could not be saved. Try again.' }, 503);
+  const memoId = Number(row.id);
+  const enc = {
+    summary: await encField(c.env, 'dd_case_memos', 'summary', memoId, values.summary),
+    verified: await encField(c.env, 'dd_case_memos', 'verified', memoId, values.verified),
+    on_trust: await encField(c.env, 'dd_case_memos', 'on_trust', memoId, values.on_trust),
+    conditions: await encField(c.env, 'dd_case_memos', 'conditions', memoId, values.conditions),
+  };
+  await c.env.DB.prepare(
+    `UPDATE dd_case_memos SET summary_enc = ?, verified_enc = ?, on_trust_enc = ?, conditions_enc = ?, updated_by = ?, updated_at = datetime('now')
+      WHERE id = ?`,
+  ).bind(enc.summary, enc.verified, enc.on_trust, enc.conditions, user.id, memoId).run();
+  await audit(c.env, caseId, user, 'memo_saved', { type: 'dd_case_memo', id: memoId }, { parts: MEMO_FIELDS.filter((f) => values[f] != null) });
+  return c.json({ ok: true, memo: { ...values, updated_by_name: null } });
+});
+
+/** Who may list and re-download reports: who may generate one (`POST /cases/:uid/report`). */
+async function reportReaderRefusal(c: AppContext, cs: Record<string, unknown>): Promise<{ status: 403; error: string } | AppUser> {
+  let user: AppUser;
+  try { user = await requireCaseWriter(c, cs); }
+  catch { return { status: 403, error: 'Forbidden: not a case owner or reviewer' }; }
+  if (user.role !== 'admin' && user.role !== 'partner') return { status: 403, error: 'Forbidden' };
+  return user;
+}
+
+dd.get('/cases/:uid/reports', async (c) => {
+  await requireDdReader(c);
+  const cs = await getCaseByUid(c.env, c.req.param('uid'));
+  if (!cs) return c.json({ error: 'Case not found' }, 404);
+  const who = await reportReaderRefusal(c, cs);
+  if ('error' in who) return c.json({ error: who.error }, who.status);
+  const rows = await c.env.DB.prepare(
+    `SELECT r.id, r.format, r.created_at, r.risk_score_at_generation, r.risk_band_at_generation,
+            r.generated_by_user_id, u.name AS generated_by_name,
+            CASE WHEN r.storage_key IS NULL THEN 0 ELSE 1 END AS stored
+       FROM dd_reports r LEFT JOIN users u ON u.id = r.generated_by_user_id
+      WHERE r.case_id = ? ORDER BY r.created_at DESC, r.id DESC`,
+  ).bind(Number(cs.id)).all<any>();
+  return c.json({ items: (rows.results || []).map((r: any) => ({ ...r, stored: Number(r.stored) === 1 })) });
+});
+
+dd.post('/cases/:uid/reports/:reportId/download', async (c) => {
+  // The same bar as generating one: a TOTP session and a recent step-up.
+  await requireFactor(c, 'totp');
+  await requireStepUp(c);
+  const cs = await getCaseByUid(c.env, c.req.param('uid'));
+  if (!cs) return c.json({ error: 'Case not found' }, 404);
+  const who = await reportReaderRefusal(c, cs);
+  if ('error' in who) return c.json({ error: who.error }, who.status);
+  const reportId = parseInt(c.req.param('reportId'), 10);
+  const r = await c.env.DB.prepare('SELECT id, storage_key, format FROM dd_reports WHERE id = ? AND case_id = ?')
+    .bind(reportId, Number(cs.id)).first<{ id: number; storage_key: string | null; format: string }>();
+  if (!r) return c.json({ error: 'Report not found on this case' }, 404);
+  if (!r.storage_key || !c.env.FILES) return c.json({ error: 'This report was not stored, so it cannot be downloaded again. Generate a new one.' }, 410);
+  const tok = await mintDownloadToken(c.env, { key: r.storage_key, ttlSec: 300, audience: 'dd_report', userId: who.id });
+  await audit(c.env, Number(cs.id), who, 'report_downloaded', { type: 'dd_report', id: Number(r.id) }, { format: r.format });
+  return c.json({ ok: true, download_url: `/api/dd/reports/download/${tok.token}`, expires_in: 300 });
+});
+
+dd.post('/cases/:uid/ic', async (c) => {
+  const user = await requireDdReader(c);
+  const cs = await getCaseByUid(c.env, c.req.param('uid'));
+  if (!cs) return c.json({ error: 'Case not found' }, 404);
+  const refusal = deciderRefusal(user, cs);
+  if (refusal) return c.json({ error: refusal.error }, refusal.status);
+  // #2385 owner question 5: the hand-off follows a decision to go ahead.
+  if (cs.decision !== 'proceed' && cs.decision !== 'proceed_with_conditions') {
+    return c.json({ error: 'Record Proceed or Proceed with conditions before sending the case to IC.' }, 409);
+  }
+  const caseId = Number(cs.id);
+  if (await caseSentToIc(c.env, caseId)) return c.json({ error: 'This case is already with IC.', code: 'already_sent' }, 409);
+  const out = await createIcRecordForCase(c, user as any, {
+    title: `Investment decision: ${String(cs.subject_label)}`,
+    projectId: cs.subject_type === 'project' ? Number(cs.subject_id) : null,
+    dealId: cs.deal_id == null ? null : Number(cs.deal_id),
+    ddCaseId: caseId,
+  });
+  if (!out.ok) return c.json({ error: out.error }, out.status);
+  await audit(c.env, caseId, user, 'sent_to_ic', { type: 'dd_case', id: caseId });
+  return c.json({ ok: true, ic_record: { uid: out.uid, status: out.status } }, 201);
 });
 
 export default dd;
