@@ -316,8 +316,11 @@ test('every gated write sits AFTER its own admin gate, in every file', () => {
       // `requireAdmin`, spinout_moderation's explicit role check, and the
       // community files' `admin(c)` helper which returns a Response. Papering
       // over that difference would weaken the assertion, not simplify it.
+      // D1230: `requireSuperAdmin` (HQ's KYC decide) calls `requireAdmin`
+      // first, so it is the admin gate and more.
       assert.ok(
         handler.includes('await requireAdmin(c)')
+        || handler.includes('await requireSuperAdmin(c)')
         || handler.includes("admin.role !== 'admin'")
         || /const a = await admin\(c\);\s*\n\s*if \(a instanceof Response\) return a;/.test(handler),
         `${f}: the admin gate must run BEFORE the freeze gate in the same handler, `

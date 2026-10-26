@@ -114,11 +114,11 @@ const textOf = (node) => (!node ? '' : node.nodeType === 3 ? node.textContent ||
   : node.childNodes?.length ? node.childNodes.map(textOf).join('') : node.textContent || '');
 const byId = (v, id) => v.nodes().filter((n) => v.props(n)?.['data-testid'] === id);
 const one = (v, id) => byId(v, id)[0];
-/** Opens the Manage strip on the row that prints `acct`'s masked number. */
+/** Opens the row menu (D1185: the row's ⋯) on the row that prints `acct`'s masked number. */
 async function manage(v, acct) {
   const walk = (n) => [n, ...(n.childNodes || []).flatMap(walk)];
   const row = byId(v, 'bank-account-row').find((r) => textOf(r).includes(acct.account_masked));
-  const button = walk(row).find((n) => n.tagName === 'BUTTON' && textOf(n) === 'Manage');
+  const button = walk(row).find((n) => n.tagName === 'BUTTON' && v.props(n)?.['aria-label']?.startsWith('Manage '));
   await act(async () => { v.props(button).onClick(); });
 }
 const cardIds = (v) => v.nodes().map((n) => v.props(n)?.['data-testid']).filter((t) => /^bank-accounts-entity-/.test(t || ''));
@@ -128,7 +128,9 @@ test('the four entity cards are Holdings, Management, GP, Fund I, whatever order
   try {
     assert.deepEqual(cardIds(v), ['holdings', 'management', 'gp', 'fund'].map((k) => `bank-accounts-entity-${k}`));
     const names = ['holdings', 'management', 'gp', 'fund'].map((k) => textOf(one(v, `bank-accounts-entity-${k}`)));
-    names.forEach((t, i) => assert.ok(t.startsWith(AXAL_ENTITIES[['holdings', 'management', 'gp', 'fund'][i]].name), t));
+    // D1185: the canvas's short name, then the legal name beside it.
+    const short = ['Holdings', 'Management', 'GP', 'Fund I'];
+    names.forEach((t, i) => assert.ok(t.startsWith(short[i] + AXAL_ENTITIES[['holdings', 'management', 'gp', 'fund'][i]].name), t));
   } finally { await v.unmount(); restore(); }
 });
 
@@ -155,7 +157,7 @@ test('the Fund I box shows, word for word and with no table, until the Fund has 
   try {
     const fund = one(v, 'bank-accounts-entity-fund');
     assert.ok(textOf(fund).includes(BOX));
-    assert.match(textOf(fund), /^Axal VC Spin-Out Lab Fund I LP.*Fund I is Spin-Out Lab Fund I \(fund #7\)/);
+    assert.match(textOf(fund), /^Fund IAxal VC Spin-Out Lab Fund I LP.*Fund I is Spin-Out Lab Fund I \(fund #7\)/);
     const tables = v.nodes().filter((n) => v.props(n)?.role === 'table' && textOf(fund).includes(textOf(n)) && v.props(n)?.['aria-label']?.startsWith('Axal VC Spin-Out'));
     assert.equal(tables.length, 0, 'the Fund card drew a table with no account');
     assert.match(textOf(fund), /FUND-MISSING-SENTENCE/);
@@ -171,7 +173,7 @@ test('an entity with no account reads "No account on file."', async () => {
   const { v } = await mounted({ bank: { list: async () => ({ ...LIST, accounts: [GP] }) } });
   try {
     assert.match(textOf(one(v, 'bank-accounts-entity-holdings')), /No account on file\.$/);
-    assert.match(textOf(one(v, 'bank-accounts-entity-management')), /No account on file\.$/);
+    assert.match(textOf(one(v, 'bank-accounts-entity-management')), /No account on file\.Management takes no payment through the registry\.$/);
   } finally { await v.unmount(); restore(); }
 });
 
@@ -207,7 +209,7 @@ test('on the page: each card\'s pill, Connect or Replace beside it, and the erro
     assert.equal(buttons.filter((b) => b === 'Replace').length, 2);
     assert.equal(buttons.filter((b) => b === 'Connect').length, 2);
     assert.match(textOf(one(v, 'bank-accounts-entity-gp')), /Mercury refused the token\./);
-    assert.match(v.text(), /Opening this page is recorded in the admin audit log: one read of the Mercury connections, and one of each connected entity's unmatched receipts\./);
+    assert.match(v.text(), /Opening this page is recorded in the admin audit log: one read of the registry, one of the Mercury connections and accounts, and one of each connected entity's unmatched receipts\./);
   } finally { await v.unmount(); restore(); }
 });
 
@@ -218,7 +220,8 @@ test('a failed connections read: four Not read pills, the Unreadable line, no Co
     assert.match(v.text(), /The Mercury connections could not be read\. This is not a claim that none is connected\./);
     const buttons = v.nodes().filter((n) => n.tagName === 'BUTTON').map(textOf);
     assert.ok(!buttons.includes('Connect') && !buttons.includes('Replace'));
-    assert.deepEqual(calls.mercury.map(([k]) => k), ['connections']);
+    // D1185: Mercury's stored accounts are read beside the connections; no transactions are.
+    assert.deepEqual(calls.mercury.map(([k]) => k).sort(), ['accounts', 'connections']);
     assert.match(textOf(one(v, 'bank-accounts-unmatched-lines')), /Axal VC Holdings LLC: Not read/);
     assert.doesNotMatch(textOf(one(v, 'bank-accounts-unmatched')), /\b0 unmatched/);
   } finally { await v.unmount(); restore(); }
@@ -280,6 +283,9 @@ test('what a notice refuses: the four lines in order, each followed by the Worke
   const ambiguous = { purpose: 'platform_licence_fee', label: 'Platform licence fee', payee: 'holdings', ok: false, code: 'ambiguous_account', message: 'SENTINEL-AMBIGUOUS' };
   const { v } = await mounted({ bank: { list: async () => ({ ...LIST, coverage: [...LIST.coverage, ambiguous] }) } });
   try {
+    // D1185: the reasons sit folded under "Why a notice refuses", in Where each payment goes.
+    assert.equal(byId(v, 'bank-accounts-refusal').length, 0);
+    await v.click('▸ Why a notice refuses');
     const items = byId(v, 'bank-accounts-refusal').map(textOf);
     assert.deepEqual(items, [
       'No account for this purpose.A notice reads: SENTINEL-1',
@@ -292,8 +298,9 @@ test('what a notice refuses: the four lines in order, each followed by the Worke
   } finally { await v.unmount(); restore(); }
   const old = await mounted({ bank: { list: async () => ({ ...LIST, refusals: undefined }) } });
   try {
+    await old.v.click('▸ Why a notice refuses');
     assert.deepEqual(byId(old.v, 'bank-accounts-refusal').map(textOf), Object.values(NOTICE_REFUSAL_LINES));
-    assert.doesNotMatch(old.v.text(), /A notice reads:/);
+    assert.doesNotMatch(textOf(one(old.v, 'bank-accounts-refusals')), /A notice reads:/);
   } finally { await old.v.unmount(); restore(); }
 });
 
@@ -311,12 +318,13 @@ test('Reveal: exact title, body and field; disabled while empty; one call; shown
     await manage(v, GP);
     await v.click('Reveal');
     const dialog = one(v, 'bank-accounts-reveal-dialog');
-    assert.equal(v.props(dialog)['aria-label'], 'Reveal the full number?');
-    assert.match(textOf(dialog), /^Reveal the full number\?/);
-    assert.equal(textOf(one(v, 'bank-accounts-reveal-body')), `Axal VC GP LLC · Operating checking ${GP.account_masked}. Your reason is written to the audit log.`);
+    // D1185: BNK6 E's words.
+    assert.equal(v.props(dialog)['aria-label'], 'Reveal the full number');
+    assert.match(textOf(dialog), /^Reveal the full number/);
+    assert.equal(textOf(one(v, 'bank-accounts-reveal-body')), `GP · Operating checking ${GP.account_masked}. Your reason is recorded before the number is shown.`);
     const input = v.nodes().find((n) => n.tagName === 'INPUT' && v.props(n)?.placeholder === 'Why you need the full number');
     assert.equal(v.props(input).maxLength, 200);
-    assert.equal(textOf(input.parentNode).trim(), 'Reason');
+    assert.equal(textOf(input.parentNode).trim(), 'Reason · required · 1 to 200 characters');
     await assert.rejects(v.click('Reveal for 30 seconds'), /Disabled button/);
     await v.fill('Reason', '   ');
     await assert.rejects(v.click('Reveal for 30 seconds'), /Disabled button/);
@@ -361,20 +369,22 @@ const labelTexts = (v, root) => {
     .map((n) => (n.childNodes.find((c) => c.nodeType === 3)?.textContent ?? textOf(n)).trim());
 };
 
-test('Add account: the six fields, the note, Save account; the Mercury option sends the preset with Operating or Reserve', async () => {
+test('Add an account: the seven fields, the note, Save account; the Mercury option sends the preset with Operating or Reserve', async () => {
   const { v, calls } = await mounted({ bank: { list: async () => LIST, add: async () => ({ ok: true }) } });
   try {
-    await v.click('Add account');
+    await v.click('Add an account');
     const dialog = one(v, 'bank-accounts-add-dialog');
-    assert.ok(dialog, 'no Add account dialog');
-    assert.equal(v.props(dialog)['aria-label'], 'Add account');
+    assert.ok(dialog, 'no Add an account dialog');
+    assert.equal(v.props(dialog)['aria-label'], 'Add an account');
+    // D1185: BNK6 A names the entity, shows the beneficiary read only, and adds Label.
     assert.deepEqual(labelTexts(v, dialog).filter((t) => !['Capital contributions', 'GP commitment'].includes(t)),
-      ['Beneficiary', 'Bank', 'Kind', 'Account number', 'Account number again']);
-    assert.ok(v.nodes().some((n) => n.tagName === 'LEGEND' && textOf(n) === 'Purposes'));
+      ['Entity', 'Bank', 'Kind', 'Label', 'Account number', 'Account number again']);
+    assert.match(textOf(one(v, 'bank-accounts-add-beneficiary')), /^Beneficiary, read only: Axal VC Spin-Out Lab Fund I LP$/);
+    assert.ok(v.nodes().some((n) => n.tagName === 'LEGEND' && textOf(n) === 'Payments · this entity’s only'));
     assert.match(textOf(dialog), /Saved encrypted\. The full number is not shown again, except through Reveal\./);
     assert.match(textOf(dialog), /Mercury · Column N\.A\. · ABA 121145433 · SWIFT CLNOUS66MER/);
     // The Fund has no active account, so it is the default beneficiary.
-    const beneficiary = v.nodes().find((n) => n.tagName === 'SELECT' && textOf(n.parentNode).startsWith('Beneficiary'));
+    const beneficiary = v.nodes().find((n) => n.tagName === 'SELECT' && textOf(n.parentNode).startsWith('Entity'));
     assert.equal(v.props(beneficiary).value, 'fund');
     await v.fill('Account number', '7700112233');
     await v.fill('Account number again', '7700112233');
@@ -392,8 +402,8 @@ test('Add account: the six fields, the note, Save account; the Mercury option se
     assert.match(v.text(), /Account added\./);
     assert.equal(calls.bank.filter(([k]) => k === 'list').length, 2, 'success did not reload the registry');
 
-    await v.click('Add account');
-    await v.fill('Beneficiary', 'gp');
+    await v.click('Add an account');
+    await v.fill('Entity', 'gp');
     await v.fill('Kind', 'savings');
     await v.click('Save account');
     await v.flush();
@@ -404,16 +414,16 @@ test('Add account: the six fields, the note, Save account; the Mercury option se
   } finally { await v.unmount(); restore(); }
 });
 
-test('Add account: the default is Holdings once the Fund has an account; Another bank shows the bank fields, no Label or beneficiary name', async () => {
+test('Add an account: the default is Holdings once the Fund has an account; Another bank shows the bank fields, no beneficiary name to type', async () => {
   const { v, calls } = await mounted({ bank: { list: async () => ({ ...LIST, accounts: [...LIST.accounts, FUND] }), add: async () => ({}) } });
   try {
-    await v.click('Add account');
-    const beneficiary = v.nodes().find((n) => n.tagName === 'SELECT' && textOf(n.parentNode).startsWith('Beneficiary'));
+    await v.click('Add an account');
+    const beneficiary = v.nodes().find((n) => n.tagName === 'SELECT' && textOf(n.parentNode).startsWith('Entity'));
     assert.equal(v.props(beneficiary).value, 'holdings');
     await v.fill('Bank', 'other');
     const labels = labelTexts(v, one(v, 'bank-accounts-add-dialog'));
     for (const t of ['Bank name', 'Bank address', 'Beneficiary address', 'ABA routing number']) assert.ok(labels.includes(t), t);
-    assert.ok(!labels.some((t) => t.startsWith('Label') || t.includes('legal name')), labels.join('|'));
+    assert.ok(!labels.some((t) => t.includes('legal name') || t === 'Beneficiary name'), labels.join('|'));
     await v.fill('Bank name', 'Synthetic Bank');
     await v.fill('ABA routing number', '011000015');
     await v.click('Save account');
@@ -428,7 +438,7 @@ test('Add account: the default is Holdings once the Fund has an account; Another
 test('a refused add keeps the dialog open with the Worker\'s sentence', async () => {
   const { v } = await mounted({ bank: { list: async () => LIST, add: async () => { const e = new Error('x'); e.data = { message: 'SENTINEL-ADD-REFUSED' }; throw e; } } });
   try {
-    await v.click('Add account');
+    await v.click('Add an account');
     await v.click('Save account');
     await v.flush();
     const dialog = one(v, 'bank-accounts-add-dialog');

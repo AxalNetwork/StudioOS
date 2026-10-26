@@ -66,6 +66,12 @@ the directory's served funds only.
 `verdict.ts` is Validate's Verdict record (D693, #1703). It is tested through a
 registry of its own and joins `RECORD_SPECS` with Validate's service.
 
+D1174 (#3101): Raise section Actual against plan uses the route's trusted
+`mercuryRead` owner/session/company marker (absent fails closed) and Mercury's
+accepted mapping reader. Connector snapshot sources accompany complete 3/6/12
+month totals; missing figures are Not recorded, failures Unreadable with retry.
+The other record blocks remain available when this read fails.
+
 To register a module, add its `ModuleSpec` under its cycle and slug in
 `index.ts`; add its store to `owned.ts`; set its read and write gates; declare
 each section's own gate; and return only the actions the viewer can use. The

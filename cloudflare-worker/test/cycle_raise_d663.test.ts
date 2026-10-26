@@ -23,7 +23,8 @@ import { SignJWT } from 'jose';
 
 import cycleRaise from '../src/routes/cycle_raise.ts';
 import decks from '../src/routes/decks.ts';
-import { MODULES, parseStatedFigures, consistencyCheck, mismatchSentence, capRows, groupShares, funnelOf } from '../src/services/raiseCycle.ts';
+import { MODULES, parseStatedFigures, consistencyCheck, mismatchSentence, capRows, groupShares, funnelOf, computeReadiness, cashPath, raiseCloseMonth, fundCells, loadFunds } from '../src/services/raiseCycle.ts';
+import { parseUseOfFundsValue } from '../src/util/useOfFunds.ts';
 import { capSlideSeconds, slideTotals } from '../src/services/deckSlideDwell.ts';
 import { CARD_STATES } from '../src/services/cycleCards.ts';
 import { loadSpinoutDeckOverrides, saveSpinoutDeckOverrides } from '../src/services/decks/spinoutDeckOverrides.ts';
@@ -443,7 +444,8 @@ test('use of funds: the split, cash over 18 months, and monthly per category not
   const line = c.series.find((s: any) => s.kind === 'line');
   assert.equal(line.values.length, 19);
   assert.deepEqual([line.values[0], line.values[6], line.values[18]], [300000, 0, 0]);
-  assert.equal(line.plan[0], 1300000);
+  assert.equal(line.plan, undefined, 'a raise with no close date is not injected into month zero');
+  assert.match(JSON.stringify(c), /Not recorded: record an active round close date/);
   assert.equal(fig(o, 'runway_months').value, 6);
   const rec = await moduleRead(db, 'use-of-funds');
   const eng = rec.body.records.rows.find((r: any) => r.cells.category === 'Product & engineering').cells;
@@ -693,4 +695,55 @@ test('#2691: an unstated project figure is never compared, and no comparisons ar
     assert.equal((await checkInputs(env,P,1)).compared,1,'a recorded zero can be compared');
     assert.equal((await computeReadiness(env,P)).find(c=>c.key==='narrative')!.missing,null);
   } finally {db.close();}
+});
+
+
+test('D1174: readiness, card and deck reject the same noncanonical split', async () => {
+  const db = fixture();
+  for (const raw of ['[', '[]', '[{"label":"Unrecognised","pct":100}]', '[{"label":"Product & engineering","pct":30}]']) {
+    db.prepare('UPDATE projects SET use_of_funds = ?, funding_needed = 500000 WHERE id = ?').run(raw, P);
+    const scores = await computeReadiness(env(db), P);
+    const use = scores.find((r: any) => r.key === 'use_of_funds')!;
+    assert.equal(use.reads.find((r: any) => r.a === 'Allocation')?.b, 'Not recorded');
+    assert.equal(card((await overview(db)).body, 'use-of-funds').state, 'empty');
+    assert.deepEqual(parseUseOfFundsValue(raw), []);
+    const cells = fundCells(await loadFunds({ env: env(db), projectId: P } as any), 0);
+    assert.equal(cells.share, null);
+    assert.equal(cells.amount, null);
+  }
+  db.close();
+});
+
+test('D1174: the with-raise cash path enters only at a recorded close month, labelled Modelled', async () => {
+  assert.deepEqual(cashPath(1000, 100, 4, 500, 2), [1000, 900, 1300, 1200, 1100]);
+  assert.equal(cashPath(1000, 100, 4, 500), null);
+  assert.equal(cashPath(1000, 100, 4, 500, 5), null);
+  assert.equal(cashPath(null, 100), null);
+  assert.equal(cashPath(1000, null), null);
+  assert.deepEqual(cashPath(0, 0, 2), [0, 0, 0]);
+  assert.equal(raiseCloseMonth('2026-10-25', '2026-12-01'), 2);
+  assert.equal(raiseCloseMonth('2026-10-25', '2026-10-30'), 0);
+  for (const date of [null, '', '2026-02-30', '2027-02-30', '2026-09-01', 'garbage']) assert.equal(raiseCloseMonth('2026-10-25', date), null);
+  const db = fixture();
+  db.exec(`UPDATE projects SET funding_needed = 1000000, use_of_funds = '[{"key":"product","pct":100}]' WHERE id = ${P};
+    INSERT INTO project_metrics (project_id, snapshot_date, cash_balance, net_burn) VALUES (${P}, '2026-10-01', 300000, 50000);`);
+  const now = new Date();
+  const close = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() + 2, 1)).toISOString().slice(0, 10);
+  db.prepare("INSERT INTO raise_rounds (uid, project_id, status, close_date) VALUES ('d1174', ?, 'active', ?)").run(P, close);
+  const c = card((await overview(db)).body, 'use-of-funds');
+  const line = c.series.find((r: any) => r.kind === 'line');
+  assert.deepEqual([line.plan[0], line.plan[1], line.plan[2]], [300000, 250000, 1200000]);
+  assert.match(JSON.stringify(c), /Modelled.*month 2/);
+  const later = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() + 30, 1)).toISOString().slice(0, 10);
+  db.prepare("UPDATE raise_rounds SET close_date = ? WHERE uid = 'd1174'").run(later);
+  const distant = card((await overview(db)).body, 'use-of-funds');
+  assert.equal(distant.series.find((r: any) => r.kind === 'line').plan, undefined);
+  assert.match(JSON.stringify(distant), /beyond the 18-month horizon/);
+  db.exec('DROP TABLE raise_rounds');
+  const failed = card((await overview(db)).body, 'use-of-funds');
+  assert.equal(failed.state, 'ok');
+  assert.deepEqual(failed.series.find((r: any) => r.kind === 'line').values.slice(0, 3), [300000, 250000, 200000]);
+  assert.equal(failed.series.find((r: any) => r.kind === 'line').plan, undefined);
+  assert.match(JSON.stringify(failed), /Unreadable.*Try again/);
+  db.close();
 });
