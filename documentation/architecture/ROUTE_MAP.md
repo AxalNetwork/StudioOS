@@ -703,6 +703,14 @@ audit are atomic. The history client is `cycleWrites.raise.pmfHistory`. The
 full frontend and Eadwyn explanation remain the later readiness parts. See
 `decisions/D1144.md` for the stored payload and paging contract.
 
+**D1147 (#3033)** adds `raise/pmf-explain`, a separate RD11 Eadwyn band.
+`GET|POST /api/cycles/raise/pmf/explain?project=` reads kept wording or previews
+an explanation/questions from verified input rows. `POST .../keep?project=`
+alone saves a signed reading and actor audit; previews/questions save no
+reading. The founder owns the project, outside support sessions; no admin
+bypass. Neither run nor Keep changes PMF, checklist scores or source records.
+Question controls copy or dismiss. The full PMF card remains #3031's scope.
+
 ### D1113 — legacy Positioning retirement (#2993)
 
 `/raise/pitch/positioning` remains D911's counted forward to
