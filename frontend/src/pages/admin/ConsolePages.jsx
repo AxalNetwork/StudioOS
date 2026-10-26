@@ -16,7 +16,7 @@ import UsersConsole from './consoles/UsersConsole';
 import KycConsole from './consoles/KycConsole';
 import { DirectoryPanel } from './consoles/DirectoryConsole';
 import { WellbeingExpertsPanel } from './consoles/WellbeingConsole';
-import { BankAccountsPanel } from './consoles/BankAccountsConsole';
+import { BankAccountsPanel, BankAccountsRail } from './consoles/BankAccountsConsole';
 import { ProductTestingPanel } from './consoles/ProductTestingConsole';
 import { ProductTestingTabBody, useTestingReads } from './productTesting/ProductTestingTabs';
 import { PAGE_LINE as TESTING_LINE, tabCounts as testingTabCounts, viewOf as testingViewOf } from './productTesting/productTestingModel';
@@ -171,6 +171,8 @@ function BankTabBody({ tab }) {
   return <Wait id="history" title="History" />;
 }
 
+const BANK_LINE = 'The registry of each entity’s bank accounts. Notices and invoices print their payment instructions from here.';
+
 export function BankAccountsPage() {
   const { pathname } = useLocation();
   const tab = tabOf(pathname);
@@ -182,9 +184,11 @@ export function BankAccountsPage() {
     </>
   );
   return (
-    <ConsolePage crumb={{ ...PLATFORM, current: 'Bank accounts' }} title="Bank accounts" line="Each entity's bank accounts, their Mercury state and the receipts not yet matched." tabs={tabs} testId="admin-platform-bank-accounts">
-      <BankTabBody tab={tab} />
-    </ConsolePage>
+    <BankAccountsRail>
+      <ConsolePage crumb={{ ...PLATFORM, current: 'Bank accounts' }} title="Bank accounts" line={BANK_LINE} hqOnly tabs={tabs} testId="admin-platform-bank-accounts">
+        <BankTabBody tab={tab} />
+      </ConsolePage>
+    </BankAccountsRail>
   );
 }
 
