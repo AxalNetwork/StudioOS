@@ -154,6 +154,7 @@ export async function setCompanyAccount(env: Env, userId: number, projectId: num
  * signature, membership or current account cannot produce an unaudited reveal.
  */
 async function recordSignedReveal(env: Env, userId: number, projectId: number, commitmentUid: string, accountUid: string) {
+  const revealUid = crypto.randomUUID();
   let logged: D1Result<{ commitment_id: number }>;
   try {
     logged = await env.DB.prepare(
@@ -168,24 +169,53 @@ async function recordSignedReveal(env: Env, userId: number, projectId: number, c
            WHERE s.project_id = p.id AND s.amount_cents = CAST(ROUND(k.amount * 100) AS INTEGER)
              AND UPPER(s.currency) = d.currency AND e.document_type = 'safe' AND e.deal_id = d.id)
        RETURNING commitment_id`,
-    ).bind(crypto.randomUUID(), accountUid, projectId, commitmentUid, userId).all<{ commitment_id: number }>();
+    ).bind(revealUid, accountUid, projectId, commitmentUid, userId).all<{ commitment_id: number }>();
   } catch { return fail(503, 'company_reveal_unrecorded', 'The reveal could not be recorded, so the instructions are not shown.'); }
   if (!logged.results || logged.results.length !== 1) fail(403, 'signed_line_required', 'A signed investment line is required to reveal these instructions.');
-  return logged.results[0].commitment_id;
+  return { commitmentId: logged.results[0].commitment_id, revealUid };
 }
 
-/** No decrypt occurs before the reveal's durable, number-free audit row. */
+/** A pending row is an attempt, never a claim that the client saw a number. */
+async function finishReveal(env: Env, uid: string, outcome: 'unreadable' | 'currency_mismatch' | 'prepared') {
+  let result: D1Result;
+  try {
+    result = await env.DB.prepare(`UPDATE company_receiving_account_reveals
+      SET outcome = ?, prepared_at = CASE WHEN ? = 'prepared' THEN CURRENT_TIMESTAMP ELSE NULL END
+      WHERE uid = ? AND outcome = 'pending'`).bind(outcome, outcome, uid).run();
+  } catch { return fail(503, 'company_reveal_unrecorded', 'The reveal outcome could not be recorded, so the instructions are not shown.'); }
+  if (Number(result.meta?.changes) !== 1) fail(503, 'company_reveal_unrecorded', 'The reveal outcome could not be recorded, so the instructions are not shown.');
+}
+
+/** Audit before decrypt; record validation outcome before returning any number. */
 export async function revealCompanyAccount(env: Env, userId: number, projectId: number, commitmentUid: unknown) {
   const scope = await scopeFor(env, userId, projectId);
   if (scope.role !== 'investor') fail(403, 'signed_line_required', 'A signed investment line is required to reveal these instructions.');
   if (typeof commitmentUid !== 'string' || !commitmentUid || commitmentUid.length > 100) fail(400, 'commitment_required', 'Choose your signed investment line.');
   const row = await current(env, scope.company_id);
   if (!row) fail(404, 'company_account_not_recorded', 'The company has not recorded a receiving account.');
-  const commitmentId = await recordSignedReveal(env, userId, projectId, commitmentUid, row.uid);
-  const line = await env.DB.prepare('SELECT d.currency FROM commitments k JOIN deals d ON d.id = k.deal_id WHERE k.id = ?')
-    .bind(commitmentId).first<{ currency: string }>();
-  if (!line) fail(503, 'company_account_unreadable', 'These instructions cannot be checked against the investment line.');
-  const details = await plain(env, row);
-  if (details.currency !== line.currency) fail(409, 'company_account_currency_mismatch', 'The recorded account currency differs from this investment line. Confirm the correct instructions with the company.');
+  const { commitmentId, revealUid } = await recordSignedReveal(env, userId, projectId, commitmentUid, row.uid);
+  let line: { currency: string } | null;
+  try {
+    line = await env.DB.prepare('SELECT d.currency FROM commitments k JOIN deals d ON d.id = k.deal_id WHERE k.id = ?')
+      .bind(commitmentId).first<{ currency: string }>();
+  } catch {
+    await finishReveal(env, revealUid, 'unreadable');
+    return fail(503, 'company_account_unreadable', 'These instructions cannot be checked against the investment line.');
+  }
+  if (!line) {
+    await finishReveal(env, revealUid, 'unreadable');
+    fail(503, 'company_account_unreadable', 'These instructions cannot be checked against the investment line.');
+  }
+  let details: Instructions;
+  try { details = await plain(env, row); }
+  catch {
+    await finishReveal(env, revealUid, 'unreadable');
+    return fail(503, 'company_account_unreadable', 'These instructions cannot be read. Ask the company to check its receiving account.');
+  }
+  if (details.currency !== line.currency) {
+    await finishReveal(env, revealUid, 'currency_mismatch');
+    fail(409, 'company_account_currency_mismatch', 'The recorded account currency differs from this investment line. Confirm the correct instructions with the company.');
+  }
+  await finishReveal(env, revealUid, 'prepared');
   return { account: { ...masked(row, details), account_number: details.account_number }, expires_in_seconds: 30 };
 }

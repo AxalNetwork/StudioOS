@@ -55,7 +55,7 @@ function fixture(){
   if(String(url).startsWith('https://gmail.googleapis.com/gmail/')){const body=JSON.parse(init.body);emails.push(Buffer.from(body.raw,'base64url').toString());return new Response(JSON.stringify({id:'fixture-message'}),{headers:{'content-type':'application/json'}});}
   throw new Error('Unexpected external transport');
  };
- const faults:{audit?:boolean;reveal?:boolean;afterSave?:boolean;beforeBatch?:(()=>void);afterBatch?:(()=>void)}={};
+ const faults:{audit?:boolean;reveal?:boolean;revealOutcome?:boolean;revealOutcomeZero?:boolean;afterSave?:boolean;beforeBatch?:(()=>void);afterBatch?:(()=>void)}={};
  const base=d1Over(db);
  const DB:any={...base,prepare(sql:string){
   if(faults.afterSave&&/^SELECT/.test(sql))throw new Error('Synthetic post-save read outage');
@@ -68,6 +68,7 @@ function fixture(){
    if(/^\s*SELECT/.test(sql))return {success:true,results:db.prepare(sql).all(...binds),meta:{changes:0}};
    return run();
   };
+  const execute=statement.run;statement.run=async()=>{if(faults.revealOutcome&&/UPDATE company_receiving_account_reveals/.test(sql))throw new Error('Synthetic outcome audit outage');if(faults.revealOutcomeZero&&/UPDATE company_receiving_account_reveals/.test(sql))return {success:true,meta:{changes:0}};return execute();};
   const all=statement.all;statement.all=async()=>{if(faults.reveal&&/INSERT INTO company_receiving_account_reveals/.test(sql))throw new Error('Synthetic reveal audit outage');return all();};
   return statement;
  },async batch(statements:any[]){faults.beforeBatch?.();const result=await base.batch(statements);faults.afterBatch?.();return result;}};
@@ -113,6 +114,7 @@ test('unsigned, unrelated, withdrawn and incomplete investment paper cannot reve
   f.db.exec("UPDATE safe_issuances SET amount_cents=25000,project_id=10 WHERE uid='safe-one'; UPDATE esign_envelopes SET deal_id=1000 WHERE id=50; UPDATE esign_recipients SET user_id=3 WHERE id=51");
   const r=await f.call(3,'POST','/10/reveal',{commitment_uid:'line-one'});assert.equal(r.status,200,JSON.stringify(r.body));assert.equal(r.body.account.account_number,NUMBER);assert.equal(r.body.expires_in_seconds,30);
   const log=f.rows('SELECT * FROM company_receiving_account_reveals');assert.equal(log.length,1);assert.equal(log[0].actor_user_id,3);assert.equal(log[0].commitment_id,30);assert.ok(!JSON.stringify(log).includes(NUMBER));
+  assert.equal(log[0].outcome,'prepared');assert.ok(log[0].attempted_at);assert.ok(log[0].prepared_at);
   assert.match(r.headers.get('cache-control')||'',/no-store/);
  }finally{f.close();}
 });
@@ -170,6 +172,7 @@ test('cut-and-paste ciphertext and a wrong key never reveal; the owner can repla
  const f=fixture();try{
   await save(f);f.db.exec("UPDATE company_receiving_accounts SET uid='another-row-identity'");
   assert.equal((await f.call(1,'GET')).status,503);const bad=await f.call(3,'POST','/10/reveal',{commitment_uid:'line-one'});assert.equal(bad.status,503);assert.ok(!JSON.stringify(bad.body).includes(NUMBER));
+  const failed=f.one('SELECT * FROM company_receiving_account_reveals ORDER BY id DESC LIMIT 1');assert.equal(failed.outcome,'unreadable');assert.equal(failed.prepared_at,null);
   await save(f,1,OTHER_NUMBER);assert.equal((await f.call(1,'GET')).body.account.account_number,'••••7777');
   f.env.KEK_PII='z'.repeat(48);assert.equal((await f.call(1,'GET')).status,503);await save(f,2,NUMBER);assert.equal((await f.call(3,'POST','/10/reveal',{commitment_uid:'line-one'})).body.account.account_number,NUMBER);
  }finally{f.close();}
@@ -238,6 +241,7 @@ test('an account in another currency cannot be revealed for this line',async()=>
  const f=fixture();try{
   assert.equal((await f.call(1,'PUT','/10',{...input(),currency:'EUR'})).status,200);
   const r=await f.call(3,'POST','/10/reveal',{commitment_uid:'line-one'});assert.equal(r.status,409);assert.ok(!JSON.stringify(r.body).includes(NUMBER));
+  const failed=f.one('SELECT * FROM company_receiving_account_reveals');assert.equal(failed.outcome,'currency_mismatch');assert.equal(failed.prepared_at,null);
  }finally{f.close();}
 });
 
@@ -263,5 +267,20 @@ test('founder-owned instructions stay available during a studio administration s
   assert.equal((await f.call(3,'GET')).body.account.account_number,'••••7777');
   assert.equal((await f.call(3,'POST','/10/reveal',{commitment_uid:'line-one'})).body.account.account_number,OTHER_NUMBER);
   assert.notEqual((await f.call(2,'PUT','/10',input(2))).status,200);
+ }finally{f.close();}
+});
+
+
+test('an outcome audit outage keeps a pending attempt and never returns a full number',async()=>{
+ const f=fixture();try{
+  await save(f);f.faults.revealOutcome=true;
+  const denied=await f.call(3,'POST','/10/reveal',{commitment_uid:'line-one'});
+  assert.equal(denied.status,503);assert.ok(!JSON.stringify(denied.body).includes(NUMBER));
+  const log=f.one('SELECT * FROM company_receiving_account_reveals');assert.equal(log.outcome,'pending');assert.equal(log.prepared_at,null);
+  f.faults.revealOutcome=false;f.faults.revealOutcomeZero=true;
+  const unchanged=await f.call(3,'POST','/10/reveal',{commitment_uid:'line-one'});assert.equal(unchanged.status,503);assert.ok(!JSON.stringify(unchanged.body).includes(NUMBER));
+  f.faults.revealOutcomeZero=false;
+  const accepted=await f.call(3,'POST','/10/reveal',{commitment_uid:'line-one'});assert.equal(accepted.status,200);
+  assert.deepEqual(f.rows('SELECT outcome FROM company_receiving_account_reveals ORDER BY id').map(x=>x.outcome),['pending','pending','prepared']);
  }finally{f.close();}
 });

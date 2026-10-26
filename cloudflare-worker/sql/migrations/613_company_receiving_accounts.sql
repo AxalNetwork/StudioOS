@@ -1,7 +1,8 @@
 -- D1217 (#3214): company-owned receiving instructions and sender-only reports.
 -- Instructions are authenticated ciphertext bound to each immutable version uid.
--- Retained versions let a reveal identify exactly what was shown, without digits
--- in the reveal/audit rows. One active version per company; no payment hold.
+-- Retained versions pin each audited attempt without digits in the ledger.
+-- Outcome distinguishes failed validation from a prepared full-number response;
+-- prepared does not prove client delivery or viewing. No payment hold.
 CREATE TABLE IF NOT EXISTS company_receiving_accounts (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   uid TEXT NOT NULL UNIQUE,
@@ -22,10 +23,13 @@ CREATE TABLE IF NOT EXISTS company_receiving_account_reveals (
   account_id INTEGER NOT NULL REFERENCES company_receiving_accounts(id) ON DELETE CASCADE,
   actor_user_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
   commitment_id INTEGER REFERENCES commitments(id) ON DELETE SET NULL,
-  revealed_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+  outcome TEXT NOT NULL DEFAULT 'pending' CHECK (outcome IN ('pending', 'unreadable', 'currency_mismatch', 'prepared')),
+  attempted_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  prepared_at TEXT,
+  CHECK ((outcome = 'prepared' AND prepared_at IS NOT NULL) OR (outcome <> 'prepared' AND prepared_at IS NULL))
 );
 CREATE INDEX IF NOT EXISTS company_receiving_account_reveals_account
-  ON company_receiving_account_reveals(account_id, revealed_at);
+  ON company_receiving_account_reveals(account_id, attempted_at);
 
 -- #3214 explicitly permits the commitment until D1215's closing line lands.
 -- These report a sender's claim; the existing pending/confirmed/withdrawn status

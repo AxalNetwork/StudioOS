@@ -290,11 +290,21 @@ test('logs: one integration_logs row per read, with the use and counts only', as
   } finally { b.restore(); }
 });
 
-test('only the receipt service and explicit deal pledge/withdrawal routes update commitments', () => {
+test('commitment writers are explicit and investor feeds update only sender metadata', () => {
   const root = 'cloudflare-worker/src';
   const walk = (p: string): string[] => readdirSync(p, { withFileTypes: true }).flatMap((e) => (e.isDirectory() ? walk(join(p, e.name)) : [join(p, e.name)]));
   const writers = walk(root).filter((f) => /\.[cm]?[jt]s$/.test(f) && /UPDATE\s+commitments\b/i.test(readFileSync(f, 'utf8'))).map((f) => relative(root, f));
-  assert.deepEqual(writers, ['routes/deals.ts', 'services/mercuryPersonal.ts']);
+  assert.deepEqual(writers, ['routes/deals.ts', 'services/mercury/investorFeeds.ts', 'services/mercuryPersonal.ts']);
+  // D1217 permits Sent metadata; it cannot edit receiving-side fields.
+  const senderSource = readFileSync(join(root, 'services/mercury/investorFeeds.ts'), 'utf8');
+  const updates = [...senderSource.matchAll(/UPDATE\s+commitments\b/gi)];
+  const clauses = [...senderSource.matchAll(/UPDATE\s+commitments\s+SET\s+([\s\S]*?)\bWHERE\b/gi)];
+  assert.equal(updates.length, 1);
+  assert.equal(clauses.length, updates.length, 'every sender UPDATE must be understood by this guard');
+  for (const clause of clauses) {
+    const columns = [...clause[1].matchAll(/(?:^|,)\s*([a-z_][a-z_0-9]*)\s*=/gi)].map((m) => m[1]).sort();
+    assert.deepEqual(columns, ['sent_amount_cents', 'sent_at', 'sent_by_user_id', 'sent_currency', 'sent_on', 'sent_proposal_uid', 'sent_source_ref']);
+  }
   const dealSource = readFileSync(join(root, 'routes/deals.ts'), 'utf8');
   assert.doesNotMatch(dealSource, /UPDATE\s+commitments\s+SET\s+status\s*=\s*'confirmed'/i, 'deal pledges never confirm a receipt');
 });
