@@ -1553,7 +1553,15 @@ the Raise shell at `/raise/calls/:uid` (`RaiseCallPage`: responses with search,
 filters and paging, the closed and paused banners, Extend the date and Close
 the call); a founder opening `/round-calls/:uid` is sent there, while
 investors and counsel keep `/round-calls/:uid`, and drafts stay on it for
-"Continue draft". D1226 (#3225) redrew the investor's view to CLS13
+"Continue draft". D1225 (#3224) redrew the founder's call to CLS8–CLS11 and
+CLS14: the state chip (Draft, Open, Awaiting counsel, Expired, Closed) and line,
+the strip (Indicated of the target, recipients, opened, data room, questions
+waiting, not told with "See who"), the funnel with its table, the responses
+(investor, furthest response, amount indicated, last activity, on Axal), the
+questions, Extend, Close and Answer each in an in-page dialog, one recipient in a
+drawer with delivery, a co-founder's view from D1222's `can`, and an admin's
+refusal card; amounts read Indicated, and a matching investor stays nameless.
+D1226 (#3225) redrew the investor's view to CLS13
 (`InvestorCallView`), under Deals ("Deals › Round calls › [company]", and the
 investor sidebar's Deals row lights on `/round-calls`): the terms with "In plain
 words", the frozen deck, the data room behind the NDA and the founder's grant,
