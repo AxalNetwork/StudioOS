@@ -29,6 +29,8 @@ import type { Env, User } from '../types';
 import { requireAdmin, requireSuperAdmin, requireSuperAdminWriteBar, isSuperAdmin } from '../auth';
 import { branchOf, HQ_ONLY } from '../util/branch';
 import { logAdminAction } from '../services/adminAudit';
+import { auditRegistryRead, registryMercury, absentMercury } from '../services/mercury/registry';
+import { requireMercuryReader, AUDIT_UNAVAILABLE } from '../services/mercury/access';
 import { Funds } from '../models/funds';
 import { bankAccountHistory, historyFilters, BankHistoryError } from '../services/bankAccountHistory';
 import {
@@ -84,20 +86,43 @@ r.get('/history', async (c) => {
 });
 
 r.get('/', async (c) => {
-  await requireSuperAdmin(c);
+  const actor = await requireSuperAdmin(c);
+  const mercuryReader = await requireMercuryReader(c);
+  if (mercuryReader instanceof Response) return mercuryReader;
+  c.header('Cache-Control', 'no-store');
+  if (!await auditRegistryRead(c.env, Number(actor.id))) return c.json(AUDIT_UNAVAILABLE, 503);
   const [accounts, fundI] = await Promise.all([listAccountsForConsole(c.env), Funds.bySlug(c.env, FUND_I_SLUG)]);
   const coverage = [];
+  const resolved = new Map<PaymentPurpose, Awaited<ReturnType<typeof payInstructionsFor>>>();
   for (const [purpose, def] of Object.entries(PAYMENT_PURPOSES)) {
-    const pay = await payInstructionsFor(c.env, def.payee, purpose as PaymentPurpose);
+    let pay: Awaited<ReturnType<typeof payInstructionsFor>>;
+    try { pay = await payInstructionsFor(c.env, def.payee, purpose as PaymentPurpose); }
+    catch { pay = { ok: false, code: 'account_unreadable', message: 'Payment instructions could not be read. Try again.' }; }
+    resolved.set(purpose as PaymentPurpose, pay);
     coverage.push(pay.ok
       ? { purpose, label: def.label, payee: def.payee, ok: true, account_uid: pay.instructions.uid, account_masked: pay.instructions.account_masked }
       : { purpose, label: def.label, payee: def.payee, ok: false, code: pay.code, message: pay.message });
   }
   const refusals = NOTICE_REFUSALS.map(({ code, payee, purpose }) => ({ code, message: refusalMessage(code, payee, purpose) }));
-  return c.json({ accounts, coverage, fund_i: fundI ? { id: Number(fundI.id), name: fundI.name } : null, refusals });
+  let mercury;
+  try { mercury = await registryMercury(c.env, accounts); }
+  catch { mercury = accounts.map(() => absentMercury('unreadable')); }
+  const enriched = accounts.map((account, i) => ({
+    ...account, mercury: mercury[i],
+    notice_preview: account.status === 'retired' ? [] : account.purposes.map(purpose => {
+      const pay = resolved.get(purpose)!;
+      return pay.ok && pay.instructions.uid !== account.uid
+        ? { ok: false, code: 'account_not_selected', message: 'A notice does not print this account for this purpose.' }
+        : pay;
+    }),
+    notice_preview_reason: account.status === 'retired' ? 'account_retired' : !account.purposes.length ? 'no_notice_purpose' : null,
+  }));
+  return c.json({ accounts: enriched, coverage, fund_i: fundI ? { id: Number(fundI.id), name: fundI.name } : null, refusals });
 });
 
 r.post('/', async (c) => {
+  const mercuryReader = await requireMercuryReader(c);
+  if (mercuryReader instanceof Response) return mercuryReader;
   const actor = await superAdminWriter(c);
   if (actor instanceof Response) return actor;
   try {

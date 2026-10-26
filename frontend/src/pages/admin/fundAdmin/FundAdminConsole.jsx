@@ -1,4 +1,5 @@
 import { Link, Navigate, useLocation, useNavigate, useSearchParams } from 'react-router-dom';
+import { AdminPageHeader, HeaderMenuItem, HeaderTab, actionPrimary, useMovedNotice } from '../../../ui';
 import { useAuth } from '../../../hooks/useAuthSync';
 import { branchOfUser } from '../../../lib/shellRole';
 import { api } from '../../../lib/api';
@@ -10,9 +11,12 @@ import { adminCapitalAttestationsApi } from '../../../lib/api/adminCapitalAttest
 import { fundPerformanceApi } from '../../../lib/api/fundPerformance';
 import { FundPerformanceView } from '../../FundPerformancePage';
 import { Banner } from '../../account/ConnectorSheet';
-import { Landmark, LayoutDashboard, HandCoins, ArrowRightLeft, Percent, FileText, Briefcase, Users, TrendingUp } from 'lucide-react';
-import { BANKING_PARTS, HQ_ONLY, LEGACY_TABS, NOT_YET, TABS, WAITS, administeredFunds, keepFund, legacyHref, pickFund, tabFlags, tabOfView, viewFrom, viewHref } from './fundAdminModel';
+import {
+  BANKING_PARTS, LEGACY_TABS, LINE, MOVED_NOTICES, NOT_YET, TABS, TITLE, WAITS, administeredFunds, fundFilter, fundsCsv,
+  headerPrimary, keepFund, legacyHref, moreItems, pickFund, profilePill, tabCounts, tabOfView, viewFrom, viewHref, withFund,
+} from './fundAdminModel';
 import { useRead } from './useRead';
+import { Refusal } from './Refusal';
 import { OverviewTab } from './OverviewTab';
 import { BankingTab, ReconciliationTab } from './BankingTabs';
 import { CallsTab, DistributionsTab, FeesTab, ReportsTab } from './FundTabs';
@@ -58,17 +62,18 @@ export function FundAdminConsoleView({ user, apis = DEFAULT_APIS }) {
   const forward = legacyHref(location.search);
   const view = viewFrom(location.pathname);
   const tab = tabOfView(view);
+  const moved = useMovedNotice(MOVED_NOTICES);
   const access = useRead(() => apis.fundAdmin.access(), [apis], { enabled: !branch });
   const overview = useRead(() => apis.fundAdmin.overview(), [apis], { enabled: !branch });
   const performance = useRead(() => apis.performance.list(), [apis], { enabled: !branch && !forward && view === 'performance' });
 
   if (forward) return <Navigate to={forward} replace />;
 
+  // FND20a (D1160): a branch admin sees one centred refusal and the console makes no read.
   if (branch) {
     return (
-      <main className="mx-auto max-w-[1440px] pb-16" data-testid="fund-admin-console">
-        <Chrome sub="Axal’s entities and administered funds" />
-        <div className="mx-4 mt-5 sm:mx-6"><Banner tone="neutral" data-testid="fund-admin-branch">{HQ_ONLY}</Banner></div>
+      <main className="mx-auto max-w-[1440px] px-4 pb-16 sm:px-6" data-testid="fund-admin-console">
+        <Refusal kind="branch" testId="fund-admin-branch" />
       </main>
     );
   }
@@ -83,42 +88,35 @@ export function FundAdminConsoleView({ user, apis = DEFAULT_APIS }) {
     else setParams(p, { replace: true });
   };
   const fundProps = { apis, access: acts, funds, fund, overview, onFund: (id) => go({ fund: id }) };
-  const flags = tabFlags(overview.status === 'ready' ? overview.data : null);
+  const counts = tabCounts(overview.status === 'ready' ? overview.data : overview.status === 'unreadable' ? {} : null);
   const keep = keepFund(location.search);
   const asOf = overview.status === 'ready' && overview.data?.as_of ? `As of ${overview.data.as_of}` : null;
-  const role = acts ? (acts.super_admin === true ? 'Super Admin' : 'Admin') : null;
+  const pill = profilePill(acts);
+  const primary = headerPrimary(view, acts, PER_FUND_VIEWS.includes(tab) ? fund : null);
+  const filter = fundFilter(funds, location.search, tab);
+  const exportCsv = () => downloadCsv(fundsCsv(overview.status === 'ready' ? overview.data : null));
 
   return (
     <main className="mx-auto max-w-[1440px] pb-16" data-testid="fund-admin-console">
-      <Chrome sub="Capital calls, distributions, management fees, reconciliation, bank accounts and LP reports for Axal’s entities and administered funds."
-        chips={<>
-          {role && <span className={CHIP} data-testid="fund-admin-role">{role}</span>}
-          {asOf && <span className={CHIP} data-testid="fund-admin-as-of">{asOf}</span>}
-        </>}>
-        <nav className="-mb-px mt-3.5 flex gap-5 overflow-x-auto" aria-label="Fund administration">
-          {TABS.map((t) => {
-            const Icon = ICONS[t.key];
-            const on = t.key === tab;
-            const flag = t.key === 'banking' ? flags.reconciliation : flags[t.key];
-            const props = { 'aria-current': on ? 'page' : undefined, 'data-testid': `fund-admin-tab-${t.key}`,
-              className: `flex shrink-0 items-center gap-[7px] border-b-2 pb-[11px] text-[13px] ${on
-                ? 'border-axal-violet font-bold text-axal-violet-deep dark:text-violet-300'
-                : 'border-transparent font-semibold text-axal-muted hover:text-axal-ink dark:text-gray-400 dark:hover:text-gray-100'}` };
-            const inner = (<>
-              <Icon aria-hidden="true" className="h-3.5 w-3.5" />
-              <span>{t.label}</span>
-              {flag > 0 && (
-                <span data-testid={`fund-admin-flag-${t.key}`} className={`inline-flex h-4 min-w-4 items-center justify-center rounded-axal-pill px-1 text-[9px] font-extrabold ${on
-                  ? 'bg-axal-violet text-white' : 'bg-amber-700/15 text-amber-700 dark:text-amber-300'}`}>{flag}</span>
-              )}
-            </>);
+      <div className="px-4 pt-5 sm:px-6">
+        <AdminPageHeader
+          title={TITLE}
+          pills={pill ? [{ ...pill, testId: 'fund-admin-role' }] : []}
+          line={LINE}
+          actions={primary ? <Link className={actionPrimary} to={primary.to} data-testid="fund-admin-primary">{primary.label}</Link> : null}
+          more={moreItems(acts).map((m) => (m.to
+            ? <HeaderMenuItem key={m.key} to={m.to} data-testid={`fund-admin-more-${m.key}`}>{m.label}</HeaderMenuItem>
+            : <HeaderMenuItem key={m.key} onSelect={exportCsv} data-testid={`fund-admin-more-${m.key}`}>{m.label}</HeaderMenuItem>))}
+          chip={asOf ? <span title="Every figure on this page is as of this date." className="inline-flex rounded-full border border-axal-hairline bg-white px-3 py-1 font-mono text-[11.5px] font-medium text-axal-muted dark:border-gray-700 dark:bg-gray-900 dark:text-gray-400" data-testid="fund-admin-as-of">{asOf}</span> : null}
+          notice={moved}
+          tabs={TABS.map((t) => (t.path
             // Literal heads, so the admin route guard reads each tab's door (D1157).
-            return t.path
-              ? <Link key={t.key} to={`/admin/fund-admin/${t.path}${keep}`} {...props}>{inner}</Link>
-              : <Link key={t.key} to={`/admin/fund-admin${keep}`} {...props}>{inner}</Link>;
-          })}
-        </nav>
-      </Chrome>
+            ? <HeaderTab key={t.key} to={`/admin/fund-admin/${t.path}${keep}`} end={false} count={counts[t.key] || null} data-testid={`fund-admin-tab-${t.key}`}>{t.label}</HeaderTab>
+            : <HeaderTab key={t.key} to={`/admin/fund-admin${keep}`} count={null} data-testid={`fund-admin-tab-${t.key}`}>{t.label}</HeaderTab>))}
+          data-testid="fund-admin-header"
+        />
+        {funds.length > 0 && <FundFilter filter={filter} pathname={location.pathname} search={location.search} />}
+      </div>
       {access.status === 'unreadable' && (
         <div className="mx-4 mt-4 sm:mx-6">
           <Banner tone="warn" data-testid="fund-admin-access-unreadable">
@@ -159,8 +157,6 @@ export function FundAdminConsoleView({ user, apis = DEFAULT_APIS }) {
   );
 }
 
-const ICONS = { overview: LayoutDashboard, funds: Briefcase, lps: Users, calls: HandCoins, distributions: ArrowRightLeft, performance: TrendingUp, fees: Percent, reports: FileText, banking: Landmark };
-
 /** D1157: a tab with no read yet says so where its blocks would be. Never a zero, never "none". */
 function WaitCard({ view }) {
   return (
@@ -170,25 +166,41 @@ function WaitCard({ view }) {
     </section>
   );
 }
-const CHIP = 'inline-flex items-center rounded-axal-sm border border-axal-hairline px-2.5 py-1.5 text-[11.5px] font-semibold text-axal-muted dark:border-gray-700 dark:text-gray-400';
+const PER_FUND_VIEWS = ['calls', 'distributions', 'fees', 'reports'];
 
-/** The canvas's chrome: the violet mark, the title and its sub, the chips, then the tabs. */
-function Chrome({ sub, chips = null, children = null }) {
+/** The fund filter (FND2): pills on a desktop, a select on a phone; kept across tabs as `?fund=`. */
+function FundFilter({ filter, pathname, search }) {
+  const navigate = useNavigate();
   return (
-    <header className="sticky top-0 z-30 border-b border-axal-hairline bg-white px-4 pt-3.5 sm:px-6 dark:border-gray-800 dark:bg-gray-900">
-      <div className="flex flex-wrap items-center justify-between gap-3.5 pb-px">
-        <div className="flex min-w-0 items-center gap-[11px]">
-          <span className="flex h-[29px] w-[29px] flex-none items-center justify-center rounded-axal-sm bg-axal-violet text-white"><Landmark aria-hidden="true" className="h-[15px] w-[15px]" /></span>
-          <div className="min-w-0">
-            <h1 className="text-[15.5px] font-extrabold tracking-[-.015em] text-axal-ink dark:text-gray-100">Fund Administration</h1>
-            <p className="mt-px text-[11.5px] text-axal-muted dark:text-gray-400">{sub}</p>
-          </div>
-        </div>
-        {chips && <div className="flex flex-wrap items-center gap-2">{chips}</div>}
-      </div>
-      {children || <div className="h-3.5" />}
-    </header>
+    <div className="mt-3 flex flex-col gap-1.5" data-testid="fund-admin-filter">
+      <nav aria-label="Fund" className="hidden w-fit flex-wrap gap-0.5 rounded-full border border-axal-hairline bg-[#faf9fc] p-[3px] sm:flex dark:border-gray-700 dark:bg-gray-800">
+        {filter.pills.map((p) => (
+          <Link key={p.key} to={withFund(pathname, search, p.id)} aria-current={p.on ? 'true' : undefined} data-testid={`fund-admin-filter-${p.key}`}
+            className={`inline-flex min-h-[30px] items-center whitespace-nowrap rounded-full px-[13px] text-[12.5px] ${p.on
+              ? 'bg-white font-extrabold text-axal-ink shadow-[0_0_0_1px_theme(colors.axal.hairline)] dark:bg-gray-900 dark:text-gray-100'
+              : 'font-semibold text-axal-muted hover:text-axal-ink dark:text-gray-400 dark:hover:text-gray-100'}`}>{p.label}</Link>
+        ))}
+      </nav>
+      <label className="flex min-h-[44px] items-center gap-2.5 rounded-[9px] border border-axal-hairline bg-white px-3 text-[13px] font-semibold text-axal-ink sm:hidden dark:border-gray-700 dark:bg-gray-900 dark:text-gray-100">
+        <span className="font-mono text-[10px] font-bold uppercase tracking-[.07em] text-axal-muted dark:text-gray-400">Fund</span>
+        <select className="min-w-0 flex-1 bg-transparent" value={filter.pills.find((p) => p.on)?.key || ''} data-testid="fund-admin-filter-select"
+          onChange={(e) => { const p = filter.pills.find((x) => x.key === e.target.value); if (p) navigate(withFund(pathname, search, p.id)); }}>
+          {filter.pills.map((p) => <option key={p.key} value={p.key}>{p.label}</option>)}
+        </select>
+      </label>
+      {filter.note && <p className="m-0 text-[12px] text-axal-muted dark:text-gray-400" data-testid="fund-admin-filter-note">{filter.note}</p>}
+    </div>
   );
+}
+
+/** Export (FND1): a file made in the browser from the read on the page; nothing is sent. */
+function downloadCsv(text) {
+  if (typeof document === 'undefined' || typeof URL?.createObjectURL !== 'function') return;
+  const url = URL.createObjectURL(new Blob([text], { type: 'text/csv' }));
+  const a = document.createElement('a');
+  a.href = url; a.download = 'fund-admin-funds.csv';
+  document.body.appendChild(a); a.click(); a.remove();
+  URL.revokeObjectURL(url);
 }
 
 export default function FundAdminConsole() {

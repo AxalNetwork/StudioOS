@@ -18,6 +18,7 @@
  * themselves: the cap-table writers here log their row.
  */
 import type { Env, User } from '../types';
+import { recomputePmf } from './scoring/pmfStore';
 import { WriterError, isoDateOrNull } from './validateWriters';
 import { ensureSpinoutDeckOverridesSchema } from './decks/spinoutDeckOverrides';
 import { logCycleWrite, type CycleModules } from './cycleActivity';
@@ -49,7 +50,7 @@ async function logRaise(env: Env, userId: number, projectId: number, module: Cyc
   await logCycleWrite(env, { projectId, userId, cycle: 'raise', module, entityId, action, summary });
 }
 
-/** Create the project's seven readiness items if they are missing; returns key → item id. */
+/** Create the project's eight readiness items if they are missing; returns key → item id. */
 export async function ensureReadinessItems(env: Env, projectId: number): Promise<Map<string, number>> {
   for (const [i, item] of READINESS_ITEMS.entries()) {
     await env.DB.prepare(
@@ -92,26 +93,33 @@ async function newestScores(env: Env, projectId: number) {
 }
 
 /** The six items a check scores; `team` is scored by a person. */
-export const COMPUTED_KEYS: readonly string[] = READINESS_KEYS.filter((k) => k !== 'team');
+export const COMPUTED_KEYS: readonly string[] = READINESS_KEYS.filter((k) => k !== 'team' && k !== 'pmf');
 
 /**
  * Run the computed readiness checks and store what each found (decision 8).
  * `items` is a subset of the six computed keys; with none, all six. `since`
  * is `'all'` (the default) or `'last'`, which skips an item whose stores have
- * not changed since its newest score (`changedSinceScored`).
+ * not changed since its newest score (`changedSinceScored`). PMF runs through
+ * its own change-only engine only when `pmf: true` is explicitly requested.
  */
-export async function rescoreReadiness(env: Env, a: { projectId: number; userId: number; items?: unknown; since?: unknown }): Promise<{ scored: number; items: string[] }> {
+export async function rescoreReadiness(env: Env, a: { projectId: number; userId: number; items?: unknown; since?: unknown; pmf?: unknown }): Promise<{ scored: number; items: string[]; pmf?: unknown }> {
+  if (a.pmf !== undefined && typeof a.pmf !== 'boolean') throw new WriterError(400, 'pmf is a boolean');
   let wanted: string[] = [...COMPUTED_KEYS];
   if (a.items !== undefined && a.items !== null) {
     if (!Array.isArray(a.items) || a.items.some((k) => typeof k !== 'string')) throw new WriterError(400, 'items is a list of readiness item keys');
     if (a.items.includes('team')) throw new WriterError(400, 'Team is scored by a person, not by a check');
-    if (a.items.some((k) => !COMPUTED_KEYS.includes(k as string))) throw new WriterError(400, 'Unknown readiness item');
+    if (a.items.some((k) => !COMPUTED_KEYS.includes(k as string) && !(k === 'pmf' && a.pmf === true))) throw new WriterError(400, 'Unknown readiness item');
     if (a.items.length) wanted = COMPUTED_KEYS.filter((k) => (a.items as string[]).includes(k));
   }
   const since = a.since === undefined || a.since === null ? 'all' : a.since;
   if (since !== 'all' && since !== 'last') throw new WriterError(400, "since is 'last' or 'all'");
+  let pmf: Awaited<ReturnType<typeof recomputePmf>> | undefined;
+  if (a.pmf === true) {
+    try { pmf = await recomputePmf(env, a.projectId, a.userId, 'rescore', new Date().toISOString().slice(0,10)); }
+    catch { throw new WriterError(503, 'Product-market fit could not be read'); }
+  }
   const ids = await ensureReadinessItems(env, a.projectId);
-  let computed = (await computeReadiness(env, a.projectId)).filter((c) => wanted.includes(c.key));
+  let computed = wanted.length ? (await computeReadiness(env, a.projectId)).filter((c) => wanted.includes(c.key)) : [];
   if (since === 'last') {
     const newest = await newestScores(env, a.projectId);
     const changed: typeof computed = [];
@@ -124,7 +132,7 @@ export async function rescoreReadiness(env: Env, a: { projectId: number; userId:
     ).bind(ids.get(c.key), a.projectId, c.score, c.evidence, c.missing, a.userId).run();
     await logRaise(env, a.userId, a.projectId, 'fundraising-readiness', c.key, 'readiness_rescored', c.score == null ? `Not scored: ${c.missing}` : `Re-scored by its check: ${c.score}/10`);
   }
-  return { scored: computed.length, items: computed.map((c) => c.key) };
+  return { scored: computed.length + (pmf?.changed ? 1 : 0), items: [...computed.map((c) => c.key), ...(pmf?.changed ? ['pmf'] : [])], ...(pmf ? { pmf } : {}) };
 }
 
 // ---------------------------------------------------------------------------
@@ -749,22 +757,57 @@ export async function addSectionHire(env: Env, a: { projectId: number; userId: n
 
 export const EVENT_KINDS = ['meeting', 'intro', 'email', 'call', 'note'] as const;
 
+/** The two kinds that happen at a time, and so may carry a start (D1190). */
+export const TIMED_EVENT_KINDS = ['meeting', 'call'] as const;
+
 /**
- * Log a step on a prospect's timeline: `{ kind, note, on }`. A date on or
- * before today is when it happened (`done_at`); a later one is when it is
+ * An ISO 8601 instant that names its zone (`Z` or `±hh:mm`), as UTC, or null
+ * when none is given. A time with no zone is refused rather than read as UTC.
+ */
+function startsAtOrNull(v: unknown): string | null {
+  if (v == null || v === '') return null;
+  const s = typeof v === 'string' ? v.trim() : '';
+  if (!/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(:\d{2}(\.\d{1,3})?)?(Z|[+-]\d{2}:\d{2})$/.test(s)) {
+    throw new WriterError(400, 'starts_at is a date and time with its zone, like 2026-11-14T14:00Z');
+  }
+  const ms = Date.parse(s);
+  if (!Number.isFinite(ms)) throw new WriterError(400, 'starts_at is not a real date and time');
+  return new Date(ms).toISOString();
+}
+
+/**
+ * Log a step on a prospect's timeline: `{ kind, note, on, starts_at? }`. A date
+ * on or before today is when it happened (`done_at`); a later one is when it is
  * due (`due_on`), and the timeline reads it as open.
+ *
+ * D1190 (#3124): a meeting or a call may carry `starts_at`, the instant it
+ * starts. Its day is then the step's day (`on`, if given, must be the same UTC
+ * day), and the step gets `calendar_item_uid`, the id its "Investor meeting"
+ * Calendar item keeps (`services/calendar/investorMeetings.ts`). A start on
+ * another kind is refused.
  */
 export async function logProspectEvent(env: Env, a: { projectId: number; userId: number; prospectId: unknown; body: Record<string, unknown> }) {
   const id = await ownProspect(env, a.projectId, a.prospectId);
   const b = a.body;
   const kind = String(b.kind ?? '');
   if (!(EVENT_KINDS as readonly string[]).includes(kind)) throw new WriterError(400, 'kind is meeting, intro, email, call or note');
-  const on = b.on == null || b.on === '' ? new Date().toISOString().slice(0, 10) : isoDateOrNull(b.on);
-  if (on == null) throw new WriterError(400, 'on is YYYY-MM-DD');
+  const startsAt = startsAtOrNull(b.starts_at);
+  if (startsAt != null && !(TIMED_EVENT_KINDS as readonly string[]).includes(kind)) {
+    throw new WriterError(400, 'Only a meeting or a call has a start time');
+  }
+  const given = b.on == null || b.on === '' ? null : isoDateOrNull(b.on);
+  if (b.on != null && b.on !== '' && given == null) throw new WriterError(400, 'on is YYYY-MM-DD');
+  if (startsAt != null && given != null && given !== startsAt.slice(0, 10)) {
+    throw new WriterError(400, 'on and starts_at name different days');
+  }
+  const on = startsAt != null ? startsAt.slice(0, 10) : (given ?? new Date().toISOString().slice(0, 10));
   const today = new Date().toISOString().slice(0, 10);
+  const uid = [...crypto.getRandomValues(new Uint8Array(16))].map((x) => x.toString(16).padStart(2, '0')).join('');
   await env.DB.prepare(
-    `INSERT INTO raise_prospect_events (prospect_id, kind, note, due_on, done_at, created_by) VALUES (?, ?, ?, ?, ?, ?)`,
-  ).bind(id, kind, trimOrNull(b.note, 2000), on > today ? on : null, on > today ? null : on, a.userId).run();
+    `INSERT INTO raise_prospect_events (uid, prospect_id, kind, note, due_on, done_at, starts_at, calendar_item_uid, created_by)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+  ).bind(uid, id, kind, trimOrNull(b.note, 2000), on > today ? on : null, on > today ? null : on,
+    startsAt, startsAt != null ? `investor-meeting-${uid}` : null, a.userId).run();
   await logRaise(env, a.userId, a.projectId, 'capital-relationships', id, 'prospect_event_logged', `${kind[0].toUpperCase()}${kind.slice(1)} logged for ${on}`);
   return { ok: true as const };
 }

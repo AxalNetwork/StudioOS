@@ -13,6 +13,10 @@ ids, company boundaries, unchanged models after refused writes, and owner/admin
 access. It also pins the separate deal-room partner reader and the recompute
 edit gate so future read-only relationships cannot acquire writes accidentally.
 
+`bank_registry_d1184.test.ts` checks the registry’s audited Mercury association,
+masked resolver previews and source add validation over the real migrations,
+with all network access refused.
+
 Tests run **in process against a real SQLite database** (`node:sqlite`) loaded
 from the actual schema or a specific migration file — not against mocks. A
 handler that would fail on D1 because of an unknown column fails here too,
@@ -70,6 +74,11 @@ Every external fetch is forbidden; no Mercury call reaches a provider.
 
 D642: `usage_storage_d642.test.ts` exercises caller-only storage aggregates through JWT/Hono and the canonical SQLite schema (including migration 323), covering company independence, unknown sizes, partial failures, precision and recording attribution.
 
+D1167: `storage_plans_d1167.test.ts` pins the owner's storage table, resolves
+effective plans and recorded persona/LP entitlements against canonical SQLite
+DDL, and holds the anonymous public plans projection and general catalogue to
+the same allowances, with read failures and privacy/read-only counterexamples.
+
 D691: `compliance_events_columns_d691.test.ts` builds the full baseline and every
 post-cutoff migration with foreign keys on. It checks Grow obligation writes,
 API state mappings, seeded compliance events and calendar reads, and bans SQL
@@ -100,6 +109,10 @@ migrated SQLite schema; it also records the shared plan policy's admin exemption
 
 D1091: `google_workspace_connection.test.ts` tests consent, file scope, previews and disconnect using `_google_workspace_fake.mjs`; `fed_ownership.test.ts` holds the shared ledger-owner helper; `google_workspace_feeds.test.ts` pins the empty feed registry, audience and eight read fragments. No real Google host is called.
 
+D1144: `pmf_store_d1144.test.ts` exercises migration 598, signed change-only snapshots, scoped module/history/Re-score, checklist confidence and atomic audit/rollback on SQLite. `pmf_engine.test.ts` keeps the shared pure engine and collector contract.
+
 `deal_context_d1150.test.ts` executes migration 600 and real source tables for
 derived stages, per-user/firm visit markers and private notes, including audit
 rollback, no admin bypass, NDA exclusion and anonymous change metadata.
+
+D1123 extends admin_lab_operations_d971.test.ts with real SQLite capacity-result tests: cohort scoping, last event, absent vs unreadable, and admin-only reads.

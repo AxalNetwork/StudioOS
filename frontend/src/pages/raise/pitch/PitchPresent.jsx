@@ -3,6 +3,7 @@ import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { api } from '../../../lib/api';
 import { reportError } from '../../../lib/log';
 import { usePhoneWidth } from '../../../ui';
+import { BlockGrid } from './BlockGrid';
 import { asList, currentVersion, versionLabel } from './pitchStudioModel';
 import {
   AUDIENCE, EMPTY_CARD, ESC_TO_EXIT, NO_CARDS, NO_VERSION, PRESENTER, READ_FAILED, SHOW_SOURCES, SOURCE_NOT_RECORDED,
@@ -21,7 +22,15 @@ import {
  *
  * Keys: ← → (and Page Up / Page Down, Space, Home, End); Esc leaves for the
  * studio. Present reads; it writes nothing.
+ *
+ * D1112 (#2992): a card the editor laid out on D898's 12 × 6 grid is drawn
+ * from its blocks, each at its range: text, metric tiles with their source
+ * line under "Show sources", charts, images, and video, audio and link blocks
+ * that open in a new tab.
  */
+
+/** Present's card colours: the face is always the light one. */
+const FACE_COLOURS = { bg: '#fbfaf7', ink: '#0f2a3d', accent: '#6d28d9', muted: '#64748b' };
 
 const SHELL = 'fixed inset-0 z-50 flex flex-col overflow-hidden bg-[#0b1220] text-gray-200';
 const BAR = 'flex flex-wrap items-center justify-between gap-2 px-4 py-3 font-mono text-[12px] text-gray-400';
@@ -178,6 +187,13 @@ export default function PitchPresent() {
 function Card({ card, sources, small = false }) {
   const head = small ? 'text-[15px]' : 'text-[clamp(20px,3vw,40px)]';
   const body = small ? 'text-[12px]' : 'text-[clamp(13px,1.4vw,19px)]';
+  if (card.blocks?.length) {
+    return (
+      <div className="relative aspect-video w-full overflow-hidden rounded-[12px] bg-[#fbfaf7] text-[#0f2a3d]" style={{ fontFamily: 'Outfit, sans-serif' }} data-testid="pitch-present-card" data-layout="grid">
+        <BlockGrid blocks={card.blocks} colours={FACE_COLOURS} live sources={sources} testId="pitch-present-blocks" />
+      </div>
+    );
+  }
   return (
     <div className={FACE} style={{ fontFamily: 'Outfit, sans-serif' }} data-testid="pitch-present-card">
       <span className="text-[11px] font-bold uppercase tracking-[.08em] text-axal-violet">{card.n} · {card.title}{card.appendix ? ' · Appendix' : ''}</span>

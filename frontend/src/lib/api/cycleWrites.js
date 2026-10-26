@@ -43,6 +43,7 @@ export function makeCycleWrites(request) {
     // venture goes in the query; the data room's routes take its uid in the
     // path, as `api.dataRoomUploadFile` and `dataRoomUpdateFile` call them.
     raise: {
+      pmfHistory: (projectId, { limit, before } = {}) => request(`/cycles/raise/pmf/history?${new URLSearchParams({ project: String(projectId), ...(limit != null ? { limit: String(limit) } : {}), ...(before != null ? { before: String(before) } : {}) })}`),
       // #1652's caller sends no body, and Re-score sends `{ items, since }`.
       rescore: (projectId, body) => request(`/cycles/raise/readiness/rescore?${q(projectId)}`, { method: 'POST', ...(body ? { body: JSON.stringify(body) } : {}) }),
       narrativeVersion: (projectId, body) => request(`/cycles/raise/narrative-versions?${q(projectId)}`, { method: 'POST', body: JSON.stringify(body) }),

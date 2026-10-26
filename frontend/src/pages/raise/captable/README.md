@@ -25,6 +25,9 @@ owner's "Cap table" canvas: `design/incoming/Raise Cap Table Page.dc.html` and
 | `ProposalDrawer.jsx` | D1025: one proposal at `/raise/cap-table/proposal/<id>` (CT11a–b): a Mercury SAFE request (`mercury-<n>`), a close's investors together, or a person's or an import's proposal. |
 | `IssuanceDialogs.jsx` | D1025: Record an issuance or Propose one (CT12a) at `/new`, Eadwyn's draft from a signed file (CT11c), Void (CT12b) and an admin's correction (CT12c). |
 | `historyModel.js` | D1025, pure: the timeline's and the changes' lines, the toolbar's filters, each dialog's body in the record's units, and each drawer's view. |
+| `ScenariosPages.jsx` | D1024 (#2861): Scenarios (CT6–CT9) — the cards with Compare and New scenario, one scenario at `/raise/cap-table/scenarios/<uid>` (inputs, before and after, the round's events, the exit waterfall and its step chart, the two read-backs) with Duplicate, Rename and Delete in dialogs, and the compare page at `/scenarios/compare?ids=`. |
+| `ScenarioModelEditor.jsx` | D632's variant editor, moved here by D1024: the form for a scenario typed by hand (founders, pool, SAFEs, rounds, an exit), saved in place. The variants page reads it from here until part 14 retires that page. |
+| `scenariosModel.js` | D1024, pure: the addresses, the cards, the dialogs' words, both drafts and their bodies, the results, the waterfall table, the conversion points, the read-backs and the compare rows and charts. |
 | `CapTableTag.jsx` | The On record and Modelled tags. |
 
 ## Where the tool lives
@@ -38,7 +41,9 @@ on the module's record route, `/raise/:slug/:id`, and CycleRoute draws
 address, `h-<n>`, opens the holder drawer over Overview (D1022); `e-<n>` and
 `pool` are still records. `/new` is Record an issuance over Overview (D1025). Two drawers have routes
 of their own: a proposal's, `/raise/cap-table/proposal/<id>` (D1025), and an
-instrument's, `/raise/cap-table/instrument/<uid>`, over Instruments (D1023).
+instrument's, `/raise/cap-table/instrument/<uid>`, over Instruments (D1023); so do a
+scenario and the compare page, `/raise/cap-table/scenarios/<uid>` and
+`/scenarios/compare` (D1024).
 
 ## The rules for adding here
 
@@ -63,7 +68,8 @@ instrument's, `/raise/cap-table/instrument/<uid>`, over Instruments (D1023).
   (a co-founder on Access). Who reads at which level is the Worker's answer
   (`via`, `level`), never a role the page guessed.
 - **Every change opens a dialog that says what it changes and who sees it.**
-  Never `alert` or `confirm`.
+  Never `alert` or `confirm`. A scenario's own Save is the one edit made in place, as the
+  variants page made it (D1024); its Duplicate, Rename, Delete and Attach are dialogs.
 - **Eadwyn never fills an amount, cap, discount, price or share count** (#2431).
 
 D1130 moves venture access/share views and holder choices to recorded issuances.

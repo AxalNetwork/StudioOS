@@ -20,6 +20,8 @@ export type RenderableSlide = {
   subtitle?: string | null;
   appendix?: boolean;
   fields: RenderableField[];
+  /** D1112: the card's speaker notes, set only when the export asked for them. */
+  notes?: string;
 };
 
 export type RenderableDeck = {

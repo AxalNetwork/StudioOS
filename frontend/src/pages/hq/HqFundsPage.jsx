@@ -640,16 +640,17 @@ export default function HqFundsPage() {
         )}
 
         <Card className="p-4">
+          {/* D1160 (#3067, FND16b): HQ's own funds are run in Fund admin, not the retired Fund Ops. */}
+          <h2 className="mb-1 text-[13px] font-bold">HQ&rsquo;s own funds</h2>
           <p className="text-[12.5px] leading-relaxed text-axal-muted">
-            HQ&rsquo;s own fund operations &mdash; capital calls, limited partners and reports &mdash; stay in the
-            shared Funds product.
+            Every deployment&rsquo;s funds are listed above, read only.
           </p>
           <Link
-            to="/funds"
+            to="/admin/fund-admin"
             className="mt-2 inline-flex items-center gap-1 text-[12.5px] font-medium text-violet-700 underline dark:text-violet-300"
             data-testid="hq-funds-link-product"
           >
-            Open HQ&rsquo;s fund operations
+            Manage HQ&rsquo;s funds in Fund admin
           </Link>
         </Card>
       </div>

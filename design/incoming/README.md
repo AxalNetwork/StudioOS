@@ -109,6 +109,45 @@ strength of a live route would empty the queue of the work it exists to track.
    `Trust Center v2.dc.html` to `backlog/` for a day, next to the `NEW` canvases
    that have no route, and away from the v1 of its own page.
 
+## Landed 2026-10-25 — Account menu › Calendar (#2420)
+
+The owner's artifacts `Bj7uoUqbMzkksEDU1XdUYK` (the page) and
+`HQTr1DAQrsQx3Eb6eagVQn` (the board grid) came from S21's prompt on #2420. Each
+was decoded by `scripts/read-canvas.mjs` as is:
+- `Calendar · Boards.dc.html` is the board grid (CAL1 to CAL21); it imports the
+  page by name;
+- `Calendar Page.dc.html` is the page.
+
+No value was edited. They supersede `canvases/integrated/Calendar.dc.html` (C1–C6)
+as the page's target; that file stays where it is until part 5 rebuilds the page.
+
+**Grade: UPGRADE.** S21's integration (D1205) puts Month at `/calendar`, Week at
+`/calendar/week` and Agenda at `/calendar/agenda`, makes the week Monday to Sunday,
+shows a dash instead of 0 for a source that did not answer, and says Not read here
+yet on deadlines, interview calls and a whole-calendar subscription. The grids,
+drawers, dialogs, connected calendars and new kinds wait for D1205's seven parts,
+so this canvas stays in the queue until they land.
+
+## Landed 2026-10-25 — HQ › Platform › Product testing (#2382)
+
+The owner's artifacts `Rdu2ReGAwHnT76E65WdjrB` (the page) and
+`XyuTn3fWnt6fLCmQpYV7yS` (the board grid) came from S21's prompt on #2382. Each
+was decoded by `scripts/read-canvas.mjs` as is:
+- `Product testing · Boards.dc.html` is the board grid (TST1 to TST16); it
+  imports the page by name;
+- `Product Testing Page.dc.html` is the page.
+
+No value was edited.
+
+**Grade: UPGRADE.** The page is `/admin/platform/product-testing`, with each tab
+at its own address. S21's integration (D1195) draws Overview's tiles, places and
+status chips from the programme list and the tester store, keeps D815's console
+as Review and Programs, opens one program at `/programs/:uid`, and draws the
+tester pool without email; the rest says Not read here yet. The reads, the
+writes, the logo and the frontend wait for D1195's nine parts, and member intake
+(TST10) for the owner's answer on #2318, so this canvas stays in the queue until
+they land.
+
 ## Landed 2026-10-25 — Raise · Capital relationships (#2457)
 
 The owner's artifacts `3z5VF6kEsVmbAWPV4UhNiL` (the page) and
@@ -623,6 +662,16 @@ door to today's generator) from the reads that exist. The other boards wait for
 stores the Worker does not have, so this canvas stays in the queue until its
 eight parts land (#2691 to #2698; D906 §6 lists them). The `ROUTE_MAP.md` row
 says what is drawn today.
+
+**Revised 2026-10-25.** The owner sent the same two artifacts again. The board
+grid decodes byte for byte as committed. The page is a layout revision, with no
+board, copy or data change:
+- the Versions and Compare tables use `minmax(0, …)` columns with no minimum
+  width, so they fit without a sideways scroll;
+- NAR3 is 20px taller.
+
+`Investor Narrative Page.dc.html` now holds the revision. The built tool
+(D906–D914) sets no minimum width on either table, so it already matches.
 
 ## Landed 2026-10-24 — Admin · Community · Events (#2368)
 

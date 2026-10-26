@@ -59,9 +59,18 @@ export const FROZEN = [
     //
     // D945 — moving an applicant to another cohort, bulk decisions and admit
     // without an application are admissions too (admin_lab_writes.ts).
+    //
+    // D985 — a second gate stands behind the freeze on the writes that start
+    // something under a program: the branch's licence must hold the program,
+    // not paused, not ended and inside its dates. `grantGatedIn` names the
+    // route files that call `programRefusal`, and
+    // `program_grant_gate_d985.test.mjs` asserts it against the worker the way
+    // `gatedIn` is asserted. Rejections, takedowns and the running cohort's
+    // grace and overrides need no grant.
     row: 'Programs',
-    note: 'Cohort and Spin-Out Lab admissions closed, by the cohort queue and by the older application decide alike, with moves to another cohort, bulk decisions and admitting without an application. Lab grace, overrides, settings, force-proceed and host decisions, including revocation, are frozen. Graduation certificates cannot be issued or revoked. No mentor can be given, or lose, access to a cohort. Perk reviews and feature changes are frozen too; listings and claims remain readable. The running cohort continues to its end date — its week decisions are not frozen, because the founders in it did nothing.',
+    note: 'Cohort and Spin-Out Lab admissions closed, by the cohort queue and by the older application decide alike, with moves to another cohort, bulk decisions and admitting without an application. Lab grace, overrides, settings, force-proceed and host decisions, including revocation, are frozen. Graduation certificates cannot be issued or revoked. No mentor can be given, or lose, access to a cohort. Perk reviews and feature changes are frozen too; listings and claims remain readable. The running cohort continues to its end date — its week decisions are not frozen, because the founders in it did nothing. Outside a suspension, admissions, host approvals, certificate issues, mentor assignments, perk approvals and Refer & Earn acceptances also need the program in this studio’s licence: granted by HQ, not paused, and inside its dates.',
     gatedIn: ['admin_cohort.ts', 'admin_lab_writes.ts', 'admin.ts', 'lab_hosts.ts', 'spinout_certificates.ts', 'advisors.ts', 'perks.ts'],
+    grantGatedIn: ['admin.ts', 'admin_cohort.ts', 'admin_lab_writes.ts', 'advisors.ts', 'lab_hosts.ts', 'perks.ts', 'refer_earn.ts', 'spinout_certificates.ts'],
   },
   {
     // D260 — the admin acts that decide an account's access: both KYC

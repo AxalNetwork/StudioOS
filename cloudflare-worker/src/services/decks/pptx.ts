@@ -449,7 +449,8 @@ export function renderDeckPPTXWithImages(
 
     entries.push({
       name: `ppt/notesSlides/notesSlide${i + 1}.xml`,
-      data: enc.encode(buildNotesSlideXml(i, slideToNotesText(slide))),
+      // D1112: with speaker notes asked for, the card's notes; else its text, as before.
+      data: enc.encode(buildNotesSlideXml(i, slide.notes !== undefined ? slide.notes : slideToNotesText(slide))),
     });
     entries.push({
       name: `ppt/notesSlides/_rels/notesSlide${i + 1}.xml.rels`,

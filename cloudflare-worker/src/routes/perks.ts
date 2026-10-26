@@ -61,6 +61,7 @@ import { Hono } from 'hono';
 import { activeCompanyFor } from '../middleware/activeCompany';
 import type { Env } from '../types';
 import { requireAuth, requireAdmin, requireRole, requireSuperAdmin, requireBranchNotSuspended } from '../auth';
+import { programRefusal } from '../services/programEnforcement';
 import { mapError, newUid, nowIso, todayIso } from './_t13t14t15_helpers';
 import { userMeetsTier, type Tier } from '../middleware/requireTier';
 import { refuse } from '../util/refusal';
@@ -888,6 +889,12 @@ r.post('/admin/:uid/review', async (c) => {
     const notReviewable = (state: string) => refuse(c, 409, { code: 'not_reviewable', message: `This listing is ${state}; ${action} does not apply to that state. Read it again.` });
     if (!moves[action].includes(perk.status)) return notReviewable(perk.status);
     const same = action === 'approve' && perk.status === 'live';
+    // D985 — putting a listing live needs the branch's Perks grant; a reject, a
+    // pause or an edit to a live listing stays open.
+    if (action === 'approve' && !same) {
+      const notGranted = await programRefusal(c.env, 'perks');
+      if (notGranted) return c.json(notGranted.body, notGranted.status);
+    }
     const status = action === 'approve' ? 'live' : action === 'reject' ? 'rejected' : 'paused';
     const featured = b?.featured === undefined ? perk.featured : (b.featured ? 1 : 0);
     const editorial = b?.editorial_note === undefined ? perk.editorial_note : (str(b.editorial_note, 500) || null);

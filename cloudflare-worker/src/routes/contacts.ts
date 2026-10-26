@@ -207,6 +207,7 @@ async function ensureSchema(env: Env): Promise<void> {
        target_date TEXT,
        closed_date TEXT,
        notes TEXT,
+       currency TEXT NOT NULL DEFAULT 'USD',
        created_at TEXT NOT NULL DEFAULT (datetime('now')),
        updated_at TEXT NOT NULL DEFAULT (datetime('now'))
      )`,
@@ -221,6 +222,8 @@ async function ensureSchema(env: Env): Promise<void> {
        holder_email TEXT,
        prior_stake_pct REAL NOT NULL DEFAULT 0,
        taking_amount REAL,
+       taking_cents INTEGER,
+       currency TEXT NOT NULL DEFAULT 'USD',
        state TEXT NOT NULL DEFAULT 'offered',
        offered_at TEXT,
        responded_at TEXT,
@@ -234,11 +237,14 @@ async function ensureSchema(env: Env): Promise<void> {
   for (const s of stmts) await env.DB.prepare(s).run();
   // Round Manager (#129) — self-heal the round/allocation columns on
   // EXISTING tables. Canonical adds are the ALTERs in migration 169;
-  // same PRAGMA-guarded pattern as `amount` below.
+  // same PRAGMA-guarded pattern as `amount` below. D1190 (migration 607): the
+  // target in cents and the round's currency. Migration 607's triggers keep the
+  // cents in step with the dollars; a database healed here has no triggers, and
+  // the commitments read falls back to the dollars when the cents are NULL.
   try {
     const info = await env.DB.prepare(`PRAGMA table_info(raise_rounds)`).all<{ name: string }>();
     const have = new Set((info.results || []).map((x) => x.name));
-    for (const [col, decl] of [['pro_rata_reserved', 'REAL'], ['pre_money', 'REAL']] as const) {
+    for (const [col, decl] of [['pro_rata_reserved', 'REAL'], ['pre_money', 'REAL'], ['target_cents', 'INTEGER'], ['currency', "TEXT NOT NULL DEFAULT 'USD'"]] as const) {
       if (!have.has(col)) {
         try { await env.DB.prepare(`ALTER TABLE raise_rounds ADD COLUMN ${col} ${decl}`).run(); }
         catch (e) { console.warn('[contacts] ALTER raise_rounds column failed (likely already applied)', col, e); }
@@ -250,7 +256,8 @@ async function ensureSchema(env: Env): Promise<void> {
     const have = new Set((info.results || []).map((x) => x.name));
     // D663 (migration 442): the next step, when it is due, and the warm path.
     // D691 (migration 463): the Research directory fund a prospect is.
-    for (const [col, decl] of [['close_id', 'INTEGER'], ['commit_status', 'TEXT'], ['instrument', 'TEXT'], ['next_step', 'TEXT'], ['next_step_due', 'TEXT'], ['warm_path', 'TEXT'], ['research_fund_uid', 'TEXT']] as const) {
+    // D1190 (migration 607): the amount in cents and its currency.
+    for (const [col, decl] of [['close_id', 'INTEGER'], ['commit_status', 'TEXT'], ['instrument', 'TEXT'], ['next_step', 'TEXT'], ['next_step_due', 'TEXT'], ['warm_path', 'TEXT'], ['research_fund_uid', 'TEXT'], ['amount_cents', 'INTEGER'], ['currency', "TEXT NOT NULL DEFAULT 'USD'"]] as const) {
       if (!have.has(col)) {
         try { await env.DB.prepare(`ALTER TABLE raise_prospects ADD COLUMN ${col} ${decl}`).run(); }
         catch (e) { console.warn('[contacts] ALTER raise_prospects column failed (likely already applied)', col, e); }

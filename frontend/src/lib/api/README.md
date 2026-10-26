@@ -103,7 +103,7 @@ the manual writes for migration 440's records. Every call names the project
 with `?project=`.
 
 D661 (#1474): `cycles.js` reads the four cycle pages (`/api/cycles/:cycle/overview`
-and `/modules/:slug`). `cycleWrites.js` is the write table behind their Add and Edit forms,
+and `/modules/:slug`). `cycleWrites.js` also exposes D1144’s venture-scoped `raise.pmfHistory` read and passes the explicit `pmf: true` Re-score flag. It is the write table behind their Add and Edit forms,
 a factory over `request` so the contract test can run it against the real Worker
 routes; `cycles.js` binds it to the app's client as `cyclesWrite`. Its one
 `formOptions(cycle, projectId, slug, query?)` reads a module's form choices from
@@ -176,7 +176,9 @@ the four entity connections (each with its accounts by ending), the Super
 Admin's connect with `confirm_read_only: true` and disconnect with a reason,
 sync now, and the accounts, transactions and matches reads. D749 (#1838) adds
 `markNotOurs` and `withdrawNotOurs`. D717 (#1856): `transactions` takes
-`direction` (`credit` or `debit`). Every read is audited by the Worker;
+`direction` (`credit` or `debit`). D1183 adds `balances({ account, range })`
+(default 90d) and `monthly({ entity })` for the stored cash charts, each a
+mounted GET audited before figures are read. Every read is audited by the Worker;
 nothing here moves money. #1779's console imports it.
 
 D713 (#1778): `mercuryPersonal.js` calls a member's own read-only Mercury:
@@ -215,6 +217,9 @@ Stripe plan invoices in one list, newest first. D789's Usage overview reads the 
 D708 (#1773): `bankAccounts.js` calls `/api/admin/bank-accounts` (the Super
 Admin's list, add, label and purposes, retire, and a recorded reveal of one
 number) and the LP's own `GET /api/funds/:id/capital-calls/lines/:lineId/pay-instructions`.
+D1184 adds per-account `mercury`, `notice_preview` and `notice_preview_reason`
+to the list, and `addFromMercury(uid, body)` on the existing POST, where the
+Worker checks the source entity, ending and kind. No new endpoint.
 A reveal's answer is held in the caller's component state only, never stored.
 D1182 adds `bankAccountsApi.history(filters)` for the audited Super Admin GET
 `/api/admin/bank-accounts/history`: q, kind, entity, actor, range or from/to,
@@ -372,7 +377,7 @@ come back suppressed from 1 to 4.
 
 `googleWorkspace.js` (D1091) calls the mounted Workspace consent, picked files, mapping, Stop using and preview routes. The files screen awaits its canvas.
 
-D1065 (#2935): `buildPlan.js` reads or prepares `/api/cycles/build/plan`, with venture and hypothesis scope. Preparation sends no browser-supplied evidence and accepts nothing into Build.
+D1065 (#2935): `buildPlan.js` reads or prepares `/api/cycles/build/plan`, with venture and hypothesis scope. Preparation sends no browser-supplied evidence and accepts nothing into Build. D1071 (#2941): `word` (one metered run, with the press's rail headers), `wording`, `keepWording` and `discardWording`; `edit(uid, payload, wording)` keeps an item's wording as its Save.
 
 D1075 (#2967): `trustContent.js` is the public trust center's store: `trustPublicApi` (the
 published blocks, the change log, the matrix and the subprocessor subscribe, no session),
@@ -387,3 +392,7 @@ licence's program decisions a page at a time) and downloads the grid's CSV
 D1133 adds `billingAlertsApi.pay(id)` and `.updateCard(id, nonce)` for the mounted failed-renewal preparation routes. Keep one validated 8–64-character nonce per open card form and reuse it on retries. Their client secrets belong only in the in-page Stripe form, never storage or logs.
 
 D1135's `companyActions.js` holds self-service company leave and venture restore.
+
+D1123 adds the cohort capacity read to `labOperations.js`; the mounted Worker route is in admin_lab_operations.ts.
+
+D1199 (#3149): `productTesting.js` adds the programme logo: `partnerTestingApi.uploadLogo(uid, file)` and `.removeLogo(uid)`, the same on `adminTestingApi` for HQ's own programmes, and `productTestingApi.logoSrc(uid)`, the `<img>` path (a 404 there means no logo: draw the initial letter).

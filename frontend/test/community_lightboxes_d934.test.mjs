@@ -275,6 +275,11 @@ test('CM3 Events: the search, each filter and each sort go to the Worker, and ea
     assert.equal(last(), '/api/admin/events?status=published&sort=starts&dir=asc&limit=25&offset=0');
     assert.deepEqual(v.titles('events'), ['Last Week Social', 'Demo Night', 'Open Lab']);
     await v.change('community-box-events-filter-status', '');
+    // D1121: CM3's Type ▾ is a filter the Worker applies, not only a column.
+    await v.change('community-box-events-filter-type', 'workshop');
+    assert.equal(last(), '/api/admin/events?type=workshop&sort=starts&dir=asc&limit=25&offset=0');
+    await v.change('community-box-events-filter-type', '');
+    assert.doesNotMatch(last(), /type=/, 'All types still sends a type');
     await v.change('community-box-events-filter-when', 'ended');
     assert.match(last(), /[?&]when=ended&/);
     assert.deepEqual(v.titles('events'), ['Old Summit', 'Last Week Social']);
@@ -340,8 +345,12 @@ test('CM4 Job postings: every page read, search, each filter and sort, paging, t
     assert.equal(range(v, 'jobs'), '1–25 of 28');
     assert.match(v.rows('jobs')[0], /^Backend Engineer.*Northwind Labs.*Published.*Remote.*Senior.*14/s, 'most applications first');
     assert.match(v.rows('jobs')[1], /^Head of Growth.*On-site.*Lead.*11/s);
-    assert.ok(v.hrefs('community-box-jobs').includes('/admin/jobs'), 'a role opens the job board');
-    assert.match(v.text(), /days open is not shown/, 'the canvas\'s Days open needs a date no read returns');
+    // D1121: a role opens its own posting on the job board, not the board's list.
+    assert.ok(v.hrefs('community-box-jobs').some((h) => /^\/admin\/jobs\?posting=\d+$/.test(h)), 'a role does not open its own posting');
+    assert.ok(!v.hrefs('community-box-jobs').includes('/admin/jobs'), 'a role opens the list, not its posting');
+    // D1121: Posted and Days open are drawn; this fixture's postings were approved before 609, so they read Not recorded.
+    assert.match(v.rows('jobs')[0], /Published.*Senior.*Not recorded.*Not recorded.*14/s, 'Posted and Days open, not recorded before 609');
+    assert.match(v.text(), /only a published posting has days open/);
     await v.click('community-box-jobs-next');
     assert.equal(range(v, 'jobs'), '26–28 of 28');
     await v.change('community-box-jobs-search', 'northwind');
@@ -394,7 +403,9 @@ test('CM5 Circles: As entered on Members and Activity, search, each filter and s
     assert.match(head, /Activity As entered/);
     assert.match(v.textOf('community-box-circles-as-entered'), /typed by an admin/);
     assert.match(v.rows('circles')[0], /^Climate Founders.*Founder.*Public.*Yes.*No.*64.*Active/s, 'by name first');
-    assert.ok(v.hrefs('community-box-circles').includes('/admin/circles'));
+    // D1121: a circle opens its own editor, not the list.
+    assert.ok(v.hrefs('community-box-circles').some((h) => /^\/admin\/circles\?circle=\d+$/.test(h)), 'a circle does not open itself');
+    assert.ok(!v.hrefs('community-box-circles').includes('/admin/circles'), 'a circle opens the list, not itself');
     await v.click('community-box-circles-next');
     assert.equal(range(v, 'circles'), '26–27 of 27');
     await v.change('community-box-circles-search', 'lisbon');
