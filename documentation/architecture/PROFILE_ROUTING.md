@@ -13,8 +13,8 @@ Nothing here is typed by hand, so nothing here can disagree with them.
 each canvas and why. This document answers a different question: *who sees
 it, where in their nav, and how do they get there.*
 
-**Corpus:** 176 canonical canvases at `design/canvases/`, listed
-269 times below — a canvas serving two workspaces appears under both.
+**Corpus:** 177 canonical canvases at `design/canvases/`, listed
+270 times below — a canvas serving two workspaces appears under both.
 
 ## Column meanings
 
@@ -247,7 +247,7 @@ it, where in their nav, and how do they get there.*
 | Validate → Build plan | `/build/plan` · `/build/plan/progress` | — (not routed) | Full page (proposed) | Not reachable yet | NEW | Low |
 | Venture scorecard | `/deals/:id/scorecard` · `/deals?view=table` · `/raise/scorecard` · `/scoring/method` · `/admin/platform/scoring` | — (not routed) | Full page (proposed) | Not reachable yet | NEW | Low |
 
-## Super Admin — 27 canvases
+## Super Admin — 28 canvases
 
 | Canvas | Route | Nav section | Surface | Entry point | Status | Confidence |
 | --- | --- | --- | --- | --- | --- | --- |
@@ -275,6 +275,7 @@ it, where in their nav, and how do they get there.*
 | Persona segments | `/admin/persona-segments/new` · `/api/personas/segments/:key/completion` · `/onboarding/persona?follow_up=1` · `/admin?tab=personas` | HQ | Full page | Sidebar → HQ → Content | UPGRADE | High |
 | Product testing | `/admin/platform/product-testing` · `/review` · `/programs` · `/programs/:uid` · `/applicants` · `/testers` | HQ | Full page (proposed) | Sidebar → HQ → Platform | UPGRADE | Low |
 | Program grants | `/admin/licences/programs` · `/admin/licences/programs/requests` · `/admin/licences/programs/history` · `/admin/licences/programs/defaults` · `/admin/licences/programs/studio/:uid` · `/admin/my-licence/programs` | HQ | Full page (proposed) | Sidebar → HQ → Licences | UPGRADE | Low |
+| Promo codes | `/admin/platform/promo-codes` · `/admin/platform/promo-codes/usage` · `/admin/platform/promo-codes/:id` | HQ | Full page (proposed) | Sidebar → HQ → Platform | UPGRADE | Low |
 | Spin-Out Lab (admin) | `/participants/:uid` · `/applications/:id` · `/admin/spinout-lab` · `/admin/spinout-lab/preview` · `/admin?tab=lab-applications` · `/applications` | — (no nav entry) | Full page | Deep link / in-page action | UPGRADE | Medium |
 | Support Security · Super | `/admin/security` · `/admin/hq-support` · `/help` | HQ | Full page | Sidebar → HQ → Security | UPGRADE | High |
 | Team · Authority | `/admin/team` · `/ic` · `/ic/:uid` | HQ | Full page | Sidebar → HQ → Content | NEW | High |
@@ -352,7 +353,7 @@ it, where in their nav, and how do they get there.*
 | --- | ---: | --- |
 | High | 115 | Live route, reachable from that workspace’s sidebar. |
 | Medium | 76 | Live route, but no sidebar row for that role — reached by deep link or an in-page action. |
-| Low | 78 | Not routed. Proposed route only. |
+| Low | 79 | Not routed. Proposed route only. |
 
 A Medium row is not a defect. Detail pages (`/deals/:id`), print artefacts
 and wizards are reached from the surface above them by design; the brief’s

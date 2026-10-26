@@ -171,6 +171,24 @@ and claim drawers, lights Evidence after Overview in Raise's tab rail, and puts
 the investor's evidence block on the deal page's Evidence tab, every block
 unread until its part lands. The rest is D1262–D1269.
 
+## Landed 2026-10-26 — Platform › Promo codes (#2381)
+
+The owner's artifacts `LNy4HFjYXBxN6GB9fKaEgC` (the page) and
+`SgbteJkN5UB6De4WGNHc5k` (the board grid) came from S21's prompt on #2381.
+Each was decoded by `scripts/read-canvas.mjs`:
+- `Promo codes · Boards.dc.html` is the board grid (PRM1 to PRM13); it imports
+  the page by name;
+- `Promo Codes Page.dc.html` is the page.
+
+**One edit, named.** The reader left two image asset uuids in the page: both are
+the Axal VC mark in the shell's header and sidebar (`alt="Axal VC"`). Both now
+point at `/axal-mark.png`, the mark `frontend/public/` serves. No other value was
+edited.
+
+**Grade: UPGRADE.** S21's integration (D1270) gives the page its Codes and Usage
+tabs and one code's drawer as addresses, under the HQ only pill. The rest is
+D1271–D1276.
+
 ## Landed 2026-10-26 — Approvals › KYC & KYB (#2384)
 
 The owner's artifacts `9U6YH5eduDN6bpd5k4Tucm` (the board grid) and

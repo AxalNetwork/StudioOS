@@ -2818,6 +2818,9 @@ function AppInner() {
       <Route path="/admin/platform/product-testing/:tab" element={guard(['admin'], hqOnly(<ProductTestingHqPage />))} />
       <Route path="/admin/platform/product-testing/programs/:uid" element={guard(['admin'], hqOnly(<ProductTestingHqPage />))} />
       <Route path="/admin/platform/promo-codes" element={guard(['admin'], hqOnly(<PromoCodesPage />))} />
+      {/* D1270 (#2381): Usage and one code's drawer are addresses; the static tab ranks above :id. */}
+      <Route path="/admin/platform/promo-codes/usage" element={guard(['admin'], hqOnly(<PromoCodesPage />))} />
+      <Route path="/admin/platform/promo-codes/:id" element={guard(['admin'], hqOnly(<PromoCodesPage />))} />
       <Route path="/admin/revenue/billing" element={guard(['admin'], hqOnly(<BillingPage />))} />
       <Route path="/admin/trash" element={guard(['admin'], <AdminTrashPage />)} />
       {/* D940 (#2745), SHL7b: an /admin address no route names. An admin reads Not found; a member reads that admin pages are for studio admins (RoleGuard's /admin boundary), not a silent bounce. Ranked below every named /admin route. */}
