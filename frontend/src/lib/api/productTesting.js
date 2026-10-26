@@ -35,6 +35,10 @@
 // D1195's Tester pool tab):
 //   list             GET   /admin/product-testers?status=&page=   → { rows, page, page_size, matching, totals }
 //
+// `adminProductTestersApi`, the tester pool (D1042's store, migration 576; read by
+// D1195's Tester pool tab):
+//   list             GET   /admin/product-testers?status=&page=   → { rows, page, page_size, matching, totals }
+//
 // Every path is written out in full so the drift check (scripts/check-api-drift.mjs)
 // reads each one against the Worker.
 import { request } from '../api.js';
