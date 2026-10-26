@@ -45,7 +45,11 @@ const LOCKED_REASON = 'The founder has not shared this scorecard with investors.
 
 /** A ScoreError is our sentence; anything else is a failed read, never its text. */
 function fail(c: C, e: unknown, what = 'The scorecard') {
-  if (e instanceof ScoreError) return refuse(c, e.status, { code: e.code, message: e.message });
+  if (e instanceof ScoreError) {
+    // ScoreError carries only the service's authored refusal sentences.
+    const { code, message, status } = e;
+    return refuse(c, status, { code, message });
+  }
   return refuse(c, 503, { code: 'scorecard_unreadable', message: `${what} could not be read. That is not the same as none. Try again.`, raw: e });
 }
 
