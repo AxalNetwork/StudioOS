@@ -185,8 +185,10 @@ test('search, the filters and the sort', async () => {
   assert.deepEqual(await ids('status=pending&sort=name&dir=desc'), [13, 12, 11, 10]);
   assert.deepEqual(await ids('status=pending&sort=nonsense&dir=sideways'), [10, 11, 12, 13], 'an unknown sort falls back');
   assert.deepEqual(await ids('status=bogus'), await ids('status=all'), 'an unknown status reads as all');
-  db.prepare('UPDATE users SET kyc_assignee_id = ? WHERE id IN (10, 13)').run(ADMIN);
-  db.prepare('UPDATE users SET kyc_assignee_id = ? WHERE id = 11').run(OTHER_ADMIN);
+  const assign = db.prepare("INSERT INTO kyc_case_assignments (user_id, assignee_id, assigned_at) VALUES (?, ?, datetime('now'))");
+  assign.run(10, ADMIN);
+  assign.run(13, ADMIN);
+  assign.run(11, OTHER_ADMIN);
   assert.deepEqual(await ids('status=pending&assignee=me'), [10, 13]);
   assert.deepEqual(await ids(`status=pending&assignee=${OTHER_ADMIN}`), [11]);
   assert.deepEqual(await ids('status=pending&assignee=none'), [12]);
@@ -396,7 +398,7 @@ test('assignment and notes: only an admin holds a case, and a note never reaches
   assert.deepEqual(c.body.events.map((e: any) => e.kind), ['assigned']);
   const unassign = await call(db, 'PATCH', '/kyc/admin/10/assign', { body: { assignee_id: null } });
   assert.equal(unassign.body.assignee_id, null);
-  assert.equal((db.prepare('SELECT kyc_assigned_at FROM users WHERE id = 10').get() as any).kyc_assigned_at, null);
+  assert.equal((db.prepare('SELECT assigned_at FROM kyc_case_assignments WHERE user_id = 10').get() as any).assigned_at, null);
   const logs = db.prepare('SELECT details FROM activity_logs').all() as any[];
   assert.equal(logs.some((l) => String(l.details).includes('issuing office')), false, 'the note stays out of the log');
   // The history and the notes refuse to be rewritten.

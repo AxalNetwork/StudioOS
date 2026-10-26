@@ -16,8 +16,9 @@
  * NOTHING IDENTIFYING IS LOGGED. A log line names the member by id; notes,
  * reasons and identity values never go to the console.
  *
- * Migration 614 holds the stores: `users.kyc_assignee_id` and
- * `kyc_assigned_at`, `kyc_case_events`, `kyc_notes` and `kyc_documents`.
+ * Migration 614 holds the stores: `kyc_case_assignments` (a side table:
+ * `users` is at D1's 100-column cap), `kyc_case_events`, `kyc_notes` and
+ * `kyc_documents`.
  */
 import type { Env } from '../types';
 import { notify } from './notify';
@@ -131,9 +132,10 @@ const BASE = `
     SELECT u.id, u.name, u.email, u.role,
            COALESCE(u.kyc_status, 'not_started') AS status,
            u.kyc_submitted_at, u.kyc_reviewed_at, u.kyc_reviewed_by,
-           u.kyc_assignee_id, u.kyc_assigned_at,
+           ka.assignee_id AS kyc_assignee_id, ka.assigned_at AS kyc_assigned_at,
            CASE WHEN json_valid(u.kyc_data) THEN u.kyc_data ELSE '{}' END AS j
       FROM users u
+      LEFT JOIN kyc_case_assignments ka ON ka.user_id = u.id
   ),
   f AS (
     SELECT c.*,

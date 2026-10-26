@@ -20,9 +20,6 @@ const KYC_COLUMNS: Array<[string, string]> = [
   ['kyc_reviewed_at', 'TIMESTAMP'],
   ['kyc_reviewed_by', 'INTEGER'],
   ['kyc_rejection_reason', 'TEXT'],
-  // D1229 (migration 614): who on HQ holds the case, and since when.
-  ['kyc_assignee_id', 'INTEGER'],
-  ['kyc_assigned_at', 'TEXT'],
 ];
 
 const MIGRATED = new WeakMap<object, boolean>();
@@ -450,8 +447,11 @@ kyc.get('/admin/:userId/case', async (c) => {
   const userId = caseUserId(c);
   if (!userId) return c.json({ error: 'user_not_found' }, 404);
   const who = await c.env.DB.prepare(
-    `SELECT u.id, u.kyc_status, u.kyc_assignee_id, u.kyc_assigned_at, a.name AS assignee_name
-       FROM users u LEFT JOIN users a ON a.id = u.kyc_assignee_id WHERE u.id = ?`,
+    `SELECT u.id, u.kyc_status, ka.assignee_id AS kyc_assignee_id, ka.assigned_at AS kyc_assigned_at, a.name AS assignee_name
+       FROM users u
+       LEFT JOIN kyc_case_assignments ka ON ka.user_id = u.id
+       LEFT JOIN users a ON a.id = ka.assignee_id
+      WHERE u.id = ?`,
   ).bind(userId).first<any>();
   if (!who) return c.json({ error: 'user_not_found' }, 404);
   const [events, notes, documents] = await Promise.all([
@@ -496,7 +496,9 @@ kyc.patch('/admin/:userId/assign', async (c) => {
   const raw = body?.assignee_id;
   const assigneeId = raw == null ? null : Number(raw);
   if (assigneeId != null && !(Number.isInteger(assigneeId) && assigneeId > 0)) return c.json({ error: 'assignee_id must be an admin\'s id, or null' }, 400);
-  const target = await c.env.DB.prepare('SELECT id, kyc_assignee_id FROM users WHERE id = ?').bind(userId).first<any>();
+  const target = await c.env.DB.prepare(
+    `SELECT u.id, ka.assignee_id AS kyc_assignee_id FROM users u LEFT JOIN kyc_case_assignments ka ON ka.user_id = u.id WHERE u.id = ?`,
+  ).bind(userId).first<any>();
   if (!target) return c.json({ error: 'user_not_found' }, 404);
   if (assigneeId != null) {
     const a = await c.env.DB.prepare("SELECT id FROM users WHERE id = ? AND role = 'admin'").bind(assigneeId).first();
@@ -504,8 +506,10 @@ kyc.patch('/admin/:userId/assign', async (c) => {
   }
   if ((target.kyc_assignee_id ?? null) === assigneeId) return c.json({ user_id: userId, assignee_id: assigneeId, changed: false });
   await c.env.DB.prepare(
-    `UPDATE users SET kyc_assignee_id = ?, kyc_assigned_at = CASE WHEN ? IS NULL THEN NULL ELSE CURRENT_TIMESTAMP END WHERE id = ?`,
-  ).bind(assigneeId, assigneeId, userId).run();
+    `INSERT INTO kyc_case_assignments (user_id, assignee_id, assigned_at, updated_at)
+     VALUES (?, ?, CASE WHEN ? IS NULL THEN NULL ELSE CURRENT_TIMESTAMP END, CURRENT_TIMESTAMP)
+     ON CONFLICT(user_id) DO UPDATE SET assignee_id = excluded.assignee_id, assigned_at = excluded.assigned_at, updated_at = excluded.updated_at`,
+  ).bind(userId, assigneeId, assigneeId).run();
   await recordEvent(c.env, { userId, kind: assigneeId == null ? 'unassigned' : 'assigned', actorId: Number(adminUser.id), note: assigneeId == null ? null : `user_id=${assigneeId}` });
   await logAdmin(c, adminUser, 'kyc_case_assigned', `Admin ${assigneeId == null ? 'unassigned' : `assigned user_id=${assigneeId} to`} the KYC case for user_id=${userId}`);
   return c.json({ user_id: userId, assignee_id: assigneeId, changed: true });

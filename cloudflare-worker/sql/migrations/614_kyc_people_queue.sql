@@ -6,8 +6,11 @@
 -- (Expired), need no column change. The full set the Worker writes is
 -- not_started, pending, needs_info, approved, rejected and expired.
 --
--- users.kyc_assignee_id / kyc_assigned_at — who on HQ holds the case, and
---   since when. NULL is unassigned. Written only by
+-- kyc_case_assignments — who on HQ holds the case, and since when: one row
+--   per person, keyed by user_id. A side table, not columns on `users`: D1
+--   caps a table at 100 columns and `users` is there (GOTCHAS, and
+--   `frontend/test/migration_column_shapes.test.mjs`). No row, or a NULL
+--   assignee, is unassigned. Written only by
 --   `PATCH /api/kyc/admin/:userId/assign`.
 --
 -- kyc_case_events — one row per thing that happened to a case: a submission,
@@ -33,13 +36,18 @@
 -- figures read only what is recorded and say so.
 --
 -- Grep first (D689 D-t): no `kyc_case_events`, `kyc_notes` or
--- `kyc_documents` table and no `kyc_assignee_id` or `kyc_assigned_at` column
--- exists in schema_baseline.sql or an earlier migration.
+-- `kyc_documents` or `kyc_case_assignments` table exists in
+-- schema_baseline.sql or an earlier migration. Nothing is added to `users`.
 --
 -- STANDS ALONE under the runner: no BEGIN/COMMIT outside trigger bodies.
 
-ALTER TABLE users ADD COLUMN kyc_assignee_id INTEGER;
-ALTER TABLE users ADD COLUMN kyc_assigned_at TEXT;
+CREATE TABLE IF NOT EXISTS kyc_case_assignments (
+  user_id      INTEGER PRIMARY KEY,
+  assignee_id  INTEGER,
+  assigned_at  TEXT,
+  updated_at   TEXT NOT NULL DEFAULT (datetime('now'))
+);
+CREATE INDEX IF NOT EXISTS idx_kyc_case_assignments_assignee ON kyc_case_assignments(assignee_id);
 
 CREATE TABLE IF NOT EXISTS kyc_case_events (
   id             INTEGER PRIMARY KEY AUTOINCREMENT,
