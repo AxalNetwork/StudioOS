@@ -87,6 +87,7 @@
  * rather than invented.
  */
 import { useCallback, useEffect, useMemo, useState } from 'react';
+import { Link, useLocation } from 'react-router-dom';
 import { safeReadJSON } from '../lib/storage';
 import { AlertTriangle, Download, Plus, RefreshCw, X } from 'lucide-react';
 import { api } from '../lib/api';
@@ -95,6 +96,7 @@ import BrandIcon from '../ui/BrandIcon.jsx';
 import { usePhoneWidth } from '../ui';
 import { AccountPhonePage, phonePending } from './account/AccountPhonePage';
 import { ACCOUNT_PHONE_PAGES } from './account/accountPhone';
+import { FAMILIES, NOT_YET, VIEWS, WAITS, chipCount, viewOf, windowFor } from './calendarViews';
 import './calendarPage.css';
 
 /**
@@ -126,7 +128,6 @@ const PUSHABLE_KINDS = new Set([
   'event_ticket', 'event_hosted',
 ]);
 
-const RANGES = [['week', 'Week'], ['month', 'Month'], ['agenda', 'Agenda']];
 const PROVIDER_LABEL = { google: 'Google', microsoft: 'Outlook' };
 
 // RSVP values the worker accepts, with the words a person uses for them.
@@ -134,20 +135,6 @@ const RSVP_CHOICES = [['accepted', 'Yes'], ['tentative', 'Maybe'], ['declined', 
 const RSVP_WORD = { accepted: 'yes', declined: 'no', tentative: 'maybe', invited: 'not yet' };
 
 const DAY_MS = 86_400_000;
-
-/** Midnight today, then the window each range mode asks the worker for. */
-function rangeFor(mode) {
-  const start = new Date();
-  start.setHours(0, 0, 0, 0);
-  if (mode === 'week') return { from: start, to: new Date(start.getTime() + 7 * DAY_MS) };
-  if (mode === 'month') {
-    return {
-      from: new Date(start.getFullYear(), start.getMonth(), 1),
-      to: new Date(start.getFullYear(), start.getMonth() + 1, 1),
-    };
-  }
-  return { from: start, to: new Date(start.getTime() + 90 * DAY_MS) };
-}
 
 /** The label beside the segment. `to` is exclusive, so the last day is to-1. */
 function rangeLabel(mode, from, to) {
@@ -361,7 +348,9 @@ export default function CalendarPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [filter, setFilter] = useState(null);       // null = All
-  const [range, setRange] = useState('agenda');
+  // D1205: the view is the address (Month /calendar, /week, /agenda).
+  const { pathname } = useLocation();
+  const range = viewOf(pathname);
   const [google, setGoogle] = useState(null);
   const [microsoft, setMicrosoft] = useState(null);
   const [syncBusy, setSyncBusy] = useState(false);
@@ -379,7 +368,7 @@ export default function CalendarPage() {
   // control the route would refuse is not drawn; the strip states the limit.
   const canIC = role === 'admin' || role === 'investor';
 
-  const window_ = useMemo(() => rangeFor(range), [range]);
+  const window_ = useMemo(() => windowFor(range), [range]);
   const label = rangeLabel(range, window_.from, window_.to);
 
   const load = useCallback(async () => {
@@ -456,11 +445,10 @@ export default function CalendarPage() {
   const failedKinds = useMemo(() => new Set(failedSources.map((s) => s.kind)), [failedSources]);
   const counts = useMemo(() => {
     const out = {};
-    for (const k of KINDS) {
-      out[k.id] = Array.isArray(inRange) ? inRange.filter((e) => e.kind === k.id).length : null;
-    }
+    // D1205: a kind whose source did not answer counts a dash, never 0.
+    for (const k of KINDS) out[k.id] = chipCount(inRange, k.id, failedKinds);
     return out;
-  }, [inRange]);
+  }, [inRange, failedKinds]);
 
   const pool = useMemo(() => {
     if (!Array.isArray(inRange)) return [];
@@ -666,14 +654,14 @@ export default function CalendarPage() {
 
       <div className="cal-controls">
         <div>
-          <div className="cal-seg" role="group" aria-label="Date range">
-            {RANGES.map(([id, text]) => (
-              <button key={id} type="button" className="cal-btn cal-btn-q"
-                      aria-pressed={range === id} onClick={() => setRange(id)}>
-                {text}
-              </button>
+          <nav className="cal-seg" aria-label="Calendar views">
+            {VIEWS.map((v) => (
+              <Link key={v.key} to={v.path} className="cal-btn cal-btn-q"
+                    aria-current={range === v.key ? 'page' : undefined} data-testid={`cal-view-${v.key}`}>
+                {v.label}
+              </Link>
             ))}
-          </div>
+          </nav>
           <span className="cal-range cal-mono">{label}</span>
           <span className="cal-meta">{meta}</span>
         </div>
@@ -689,7 +677,8 @@ export default function CalendarPage() {
                     onClick={() => setFilter(filter === k.id ? null : k.id)}>
               <span className="cal-dot" data-kind={k.id} aria-hidden="true" />
               {k.label}
-              {counts[k.id] === null ? null : <b>{counts[k.id]}</b>}
+              {counts[k.id] === null ? null
+                : <b title={counts[k.id] === '—' ? 'This source did not answer, so its count is not known.' : undefined}>{counts[k.id]}</b>}
             </button>
           ))}
         </div>
@@ -718,8 +707,8 @@ export default function CalendarPage() {
                 </strong>
                 <p>
                   Events from {failedSources.length === 1 ? 'that source are' : 'those sources are'} missing
-                  from this range — the rest of the calendar is complete. Their chip counts read 0 because
-                  nothing came back, not because nothing is scheduled.
+                  from this range — the rest of the calendar is complete. Their chips show a dash, not a
+                  count: nothing came back, which is not the same as nothing scheduled.
                 </p>
               </div>
               <button type="button" className="cal-btn cal-btn-o cal-btn-sm" onClick={load}>Retry this source</button>
@@ -743,9 +732,7 @@ export default function CalendarPage() {
               </p>
               <div>
                 {range !== 'agenda' && (
-                  <button type="button" className="cal-btn cal-btn-o" onClick={() => setRange('agenda')}>
-                    Show next 90 days
-                  </button>
+                  <Link to="/calendar/agenda" className="cal-btn cal-btn-o">Show next 90 days</Link>
                 )}
                 <button type="button" className="cal-btn cal-btn-o" onClick={() => setShowCk(true)}>New check-in</button>
               </div>
@@ -831,9 +818,17 @@ export default function CalendarPage() {
               ))}
             </div>
             <p className="cal-foot">
-              Six sources, six kinds. The filters above are generated from this list, so a kind
-              cannot exist without a way to reach it.
+              {KINDS.length} kinds in {FAMILIES.filter((f) => f.kinds.length).length} families. The filters above are generated
+              from this list, so a kind cannot exist without a way to reach it.
             </p>
+          </div>
+
+          {/* D1205 (#2420): what the canvas draws that no read carries yet. */}
+          <div className="cal-card" style={{ marginTop: 12 }} data-testid="cal-waits">
+            <div className="cal-eb">{NOT_YET}</div>
+            {['deadlines', 'interviews', 'feed'].map((k) => (
+              <p key={k} className="cal-foot" data-testid={`cal-wait-${k}`}>{WAITS[k]}</p>
+            ))}
           </div>
         </aside>
       </div>

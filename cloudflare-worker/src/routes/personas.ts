@@ -24,11 +24,12 @@ import { Hono } from 'hono';
 import type { Env } from '../types';
 import { getSQL } from '../db';
 import { requireAuth, requireAdmin, isSuperAdmin } from '../auth';
-import { PERSONAS, PERSONA_BY_ID, isAllowedPersonaOverlap, type PersonaId } from '../personas';
+import { isAllowedPersonaOverlap, type PersonaId } from '../personas';
 import { classifyPersona } from '../../ai-workers/persona-router';
 import { bindingKey } from '../util/schemaBootstrap';
 import { readPersonaSegments } from '../services/personaSegments';
 import { NOT_OFFERED, statusesOf } from '../services/segmentProfiles';
+import { SEGMENT_KEY, followUpFor, questionsOf, segmentExists, signUpCatalog } from '../services/segmentMembership';
 import { MembersError, movableSegment, moveOne } from '../services/personaMembers';
 
 const personas = new Hono<{ Bindings: Env }>();
@@ -73,8 +74,13 @@ async function ensurePersonaSchema(env: Env): Promise<void> {
   MIGRATED.set(bindingKey(env), true);
 }
 
-function isPersonaId(v: unknown): v is PersonaId {
-  return typeof v === 'string' && v in PERSONA_BY_ID;
+function isPersonaId(v: unknown): v is string {
+  return typeof v === 'string' && SEGMENT_KEY.test(v);
+}
+
+async function checkSegment(c: any, key: string) {
+  try { return await segmentExists(c.env, key) ? null : c.json({ error: 'invalid persona_id' }, 400); }
+  catch { return c.json(STATUSES_UNREADABLE, 503); }
 }
 
 interface UserPersonaRow {
@@ -112,21 +118,18 @@ async function signUpStatuses(c: any) {
 const STATUSES_UNREADABLE = { detail: 'The segments could not be read just now. Try again in a moment.', code: 'segments_unreadable' };
 
 personas.get('/taxonomy', async (c) => {
-  const statuses = await signUpStatuses(c);
-  if (!statuses) return c.json(STATUSES_UNREADABLE, 503);
-  let names = new Map<string, { name: string; who: string | null }>();
+  try { return c.json({ personas: await signUpCatalog(c.env) }); }
+  catch { return c.json(STATUSES_UNREADABLE, 503); }
+});
+
+// Hosts read names/statuses only; the admin segment profile read stays admin-only.
+personas.get('/audience-segments', async (c) => {
+  const user = await requireAuth(c);
   try {
-    const r = await c.env.DB.prepare(`SELECT key, name, who FROM segment_profiles`).all<{ key: string; name: string; who: string | null }>();
-    names = new Map((r.results || []).map((x) => [x.key, { name: x.name, who: x.who }]));
-  } catch (e) {
-    console.error('[personas] segment names unreadable:', (e as Error)?.message);
-    return c.json(STATUSES_UNREADABLE, 503);
-  }
-  const offered = PERSONAS.filter((p) => statuses.get(p.id) === 'active').map((p) => {
-    const stored = names.get(p.id);
-    return stored ? { ...p, label: stored.name, short_description: stored.who || p.short_description } : p;
-  });
-  return c.json({ personas: offered });
+    const result = await c.env.DB.prepare(`SELECT key, name, profile, status FROM segment_profiles WHERE status = 'active' OR ? = 1 ORDER BY name, key`).bind(user.role === 'admin' ? 1 : 0).all();
+    if (!Array.isArray(result?.results)) throw new Error('segment choices unreadable');
+    return c.json({ segments: result.results });
+  } catch { return c.json(STATUSES_UNREADABLE, 503); }
 });
 
 personas.get('/me', async (c) => {
@@ -142,7 +145,8 @@ personas.get('/me', async (c) => {
     SELECT id, user_id, persona_id, key, value, source FROM user_profile_extras WHERE user_id = ${user.id}
   ` as unknown as UserExtraRow[];
   await sql.end();
-  return c.json({ personas: rows, extras });
+  try { return c.json({ personas: rows, extras, follow_up: await followUpFor(c.env, Number(user.id)) }); }
+  catch { return c.json({ code: 'questions_unreadable', detail: 'Your segment questions could not be read. Try again.' }, 503); }
 });
 
 personas.post('/classify', async (c) => {
@@ -166,11 +170,22 @@ personas.post('/classify', async (c) => {
 personas.post('/answer', async (c) => {
   await ensurePersonaSchema(c.env);
   const user = await requireAuth(c);
-  const body = await c.req.json().catch(() => ({} as { persona_id?: unknown; key?: unknown; value?: unknown }));
+  const body = await c.req.json().catch(() => ({} as { persona_id?: unknown; key?: unknown; value?: unknown; expected_primary?: unknown }));
   if (!isPersonaId(body.persona_id)) return c.json({ error: 'invalid persona_id' }, 400);
-  const key = typeof body.key === 'string' ? body.key.slice(0, 80) : '';
-  if (!key) return c.json({ error: 'key required' }, 400);
-  const value = body.value == null ? null : String(body.value).slice(0, 4000);
+  const refused = await checkSegment(c, body.persona_id);
+  if (refused) return refused;
+  if (body.expected_primary === true) {
+    const primary = await c.env.DB.prepare(`SELECT persona_id FROM user_personas WHERE user_id = ? AND is_primary = 1`).bind(user.id).first<{ persona_id: string }>();
+    if (primary?.persona_id !== body.persona_id) return c.json({ code: 'segment_changed', detail: 'Your segment changed. Open your profile again to read its questions.' }, 409);
+  }
+  const key = typeof body.key === 'string' ? body.key : '';
+  const question = questionsOf(body.persona_id).find(q => q.key === key);
+  if (!question) return c.json({ error: 'invalid_question', detail: 'Pick a question set for this segment.' }, 400);
+  const value = typeof body.value === 'string' || typeof body.value === 'number' ? String(body.value).trim() : '';
+  if (!value || value.length > 4000 || (question.type === 'number' && !Number.isFinite(Number(value)))
+      || (question.type === 'choice' && !question.choices?.includes(value))) {
+    return c.json({ error: 'invalid_answer', detail: 'Give a valid answer to this question.' }, 400);
+  }
 
   const sql = getSQL(c.env);
   const existing = await sql`
@@ -196,13 +211,15 @@ personas.post('/finalize', async (c) => {
   const user = await requireAuth(c);
   const body = await c.req.json().catch(() => ({} as { persona_id?: unknown; confidence?: unknown; secondary_persona_id?: unknown; source?: unknown }));
   if (!isPersonaId(body.persona_id)) return c.json({ error: 'invalid persona_id' }, 400);
+  const refused = await checkSegment(c, body.persona_id);
+  if (refused) return refused;
   const confidence = Math.max(0, Math.min(1, Number(body.confidence) || 0));
   const source = body.source === 'self_select' ? 'self_select' : 'router';
 
-  let secondary: PersonaId | null = null;
+  let secondary: string | null = null;
   if (body.secondary_persona_id != null) {
     if (!isPersonaId(body.secondary_persona_id)) return c.json({ error: 'invalid secondary_persona_id' }, 400);
-    if (!isAllowedPersonaOverlap(body.persona_id, body.secondary_persona_id)) {
+    if (!isAllowedPersonaOverlap(body.persona_id as PersonaId, body.secondary_persona_id as PersonaId)) {
       return c.json({ error: 'persona overlap not allowed' }, 400);
     }
     secondary = body.secondary_persona_id;
@@ -272,6 +289,8 @@ personas.post('/admin/:user_id/retag', async (c) => {
   if (!Number.isFinite(userId)) return c.json({ error: 'invalid user_id' }, 400);
   const body = await c.req.json().catch(() => ({} as { persona_id?: unknown }));
   if (!isPersonaId(body.persona_id)) return c.json({ error: 'invalid persona_id' }, 400);
+  const refused = await checkSegment(c, body.persona_id);
+  if (refused) return refused;
 
   // D255, D1000: the single move's rules, shared with the bulk move (D1002, services/personaMembers.ts).
   try {

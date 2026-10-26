@@ -1,6 +1,5 @@
 <!DOCTYPE html>
-<html>
-<head>
+<html><head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <script src="./support.js"></script>
@@ -8,7 +7,7 @@
 <body>
 <x-dc>
 <helmet>
-  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700;800&amp;family=Roboto+Mono:wght@400;500;600;700&amp;display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Roboto+Mono:wght@400;500;600;700&family=Space+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet">
   <style>body{margin:0}a{color:#7c3aed;text-decoration:none}a:hover{color:#6d28d9}button:focus-visible,a:focus-visible,[role=switch]:focus-visible{outline:2px solid #7c3aed;outline-offset:2px}</style>
 </helmet>
 <div style="{{ v.root }}">
@@ -199,7 +198,7 @@
   </sc-if>
 </div>
 </x-dc>
-<script type="text/x-dc" data-dc-script data-props="{&quot;$preview&quot;:{&quot;width&quot;:&quot;1440px&quot;,&quot;height&quot;:&quot;900px&quot;},&quot;board&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;default&quot;:&quot;NAR1&quot;,&quot;options&quot;:[&quot;NAR1&quot;,&quot;NAR2&quot;,&quot;NAR3&quot;,&quot;NAR4&quot;,&quot;NAR5&quot;,&quot;NAR6&quot;,&quot;NAR7&quot;,&quot;NAR7b&quot;,&quot;NAR8&quot;,&quot;NAR9&quot;,&quot;NAR10&quot;,&quot;NAR11&quot;,&quot;NAR12&quot;,&quot;NAR13&quot;,&quot;NAR13hq&quot;,&quot;NAR14a&quot;,&quot;NAR14b&quot;,&quot;NAR15a&quot;,&quot;NAR15b&quot;,&quot;NAR15c&quot;,&quot;NAR16&quot;,&quot;NAR17a&quot;,&quot;NAR17b&quot;,&quot;NAR17c&quot;,&quot;NAR17d&quot;,&quot;NAR18&quot;,&quot;NAR19a&quot;,&quot;NAR19b&quot;,&quot;NAR19c&quot;,&quot;NAR19d&quot;,&quot;NAR20&quot;,&quot;NAR21&quot;,&quot;NAR21d&quot;],&quot;tsType&quot;:&quot;string&quot;}}">
+<script type="text/x-dc" data-dc-script="" data-props="{&quot;$preview&quot;:{&quot;width&quot;:&quot;1440px&quot;,&quot;height&quot;:&quot;900px&quot;},&quot;board&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;default&quot;:&quot;NAR1&quot;,&quot;options&quot;:[&quot;NAR1&quot;,&quot;NAR2&quot;,&quot;NAR3&quot;,&quot;NAR4&quot;,&quot;NAR5&quot;,&quot;NAR6&quot;,&quot;NAR7&quot;,&quot;NAR7b&quot;,&quot;NAR8&quot;,&quot;NAR9&quot;,&quot;NAR10&quot;,&quot;NAR11&quot;,&quot;NAR12&quot;,&quot;NAR13&quot;,&quot;NAR13hq&quot;,&quot;NAR14a&quot;,&quot;NAR14b&quot;,&quot;NAR15a&quot;,&quot;NAR15b&quot;,&quot;NAR15c&quot;,&quot;NAR16&quot;,&quot;NAR17a&quot;,&quot;NAR17b&quot;,&quot;NAR17c&quot;,&quot;NAR17d&quot;,&quot;NAR18&quot;,&quot;NAR19a&quot;,&quot;NAR19b&quot;,&quot;NAR19c&quot;,&quot;NAR19d&quot;,&quot;NAR20&quot;,&quot;NAR21&quot;,&quot;NAR21d&quot;],&quot;tsType&quot;:&quot;string&quot;}}">
 class Component extends DCLogic {
   renderVals() {
     const B = this.props.board || 'NAR1';
@@ -295,7 +294,7 @@ class Component extends DCLogic {
     // Home pieces
     const homeTiles = (n) => TL([['Versions', '[4]', 'Newest v4 · Seed fund'], ['Claims backed', '[9] of [12]', 'In v4'], ['Open mismatches', '[1]', 'MRR, in Traction'], ['Objections answered', '[2] of [3]', 'From Capital relationships']], n);
     const versBars = K({ title: 'All versions', meta: 'Table', ms: 'font-size:12px;font-weight:700;color:' + c.vt, note: 'Two of your four versions are for seed funds.', sum: 'Versions by audience: two for seed funds, one for pre-seed funds, one for angels.', bars: [{ l: 'Seed fund', v: '[2]', fs: FILL('100%') }, { l: 'Pre-seed fund', v: '[1]', fs: FILL('50%') }, { l: 'Angel', v: '[1]', fs: FILL('50%') }], foot: 'Newest: v4 · Seed fund · saved [20 Oct]. No version yet for Series A fund, Strategic, Grant or Other.' });
-    const versT = TB({ title: 'Versions', search: 'Search versions', tools: [tag('Audience: All ▾'), tag('Sort: Newest ▾')], gc: '.6fr 1fr .7fr .95fr .9fr 1.1fr .75fr .7fr', minW: 760, cols: ['Version', 'Audience', 'Based on', 'Claims backed', 'Mismatches', 'Read by deck', 'Saved', 'By'], rows: [
+    const versT = TB({ title: 'Versions', search: 'Search versions', tools: [tag('Audience: All ▾'), tag('Sort: Newest ▾')], gc: 'minmax(0,.55fr) minmax(0,.95fr) minmax(0,.65fr) minmax(0,.95fr) minmax(0,.85fr) minmax(0,1.05fr) minmax(0,.7fr) minmax(0,.7fr)', minW: 0, cols: ['Version', 'Audience', 'Based on', 'Claims backed', 'Mismatches', 'Read by deck', 'Saved', 'By'], rows: [
       [CL('v4', MB), 'Seed fund', 'v1', CL('[9] of [12]', MN), CL('[1]', MN), 'Pitch deck v6', CL('[20 Oct]', MN), '[Name]'],
       [CL('v3', MB), 'Angel', 'v2', CL('[7] of [9]', MN), CL('0', MN), CL('No deck', MU), CL('[6 Oct]', MN), '[Name]'],
       [CL('v2', MB), 'Pre-seed fund', 'v1', CL('[6] of [8]', MN), CL('Not checked', MU), CL('No deck', MU), CL('[22 Sep]', MN), '[Name]'],
@@ -412,7 +411,7 @@ class Component extends DCLogic {
     // Versions and compare
     const verList = K({ title: 'Versions', rows: [['v4 · Seed fund', 'from v1 · saved [20 Oct]', true], ['v3 · Angel', 'from v2 · saved [6 Oct]', true], ['v2 · Pre-seed fund', 'from v1 · saved [22 Sep]', false], ['v1 · Seed fund', 'from Blank · saved [2 Sep]', false]].map(([t, sub, on]) => R(Object.assign(CK(on), { t, sub }))), foot: 'Tick two to compare.' });
     const OUT = 'line-height:1.5;outline:1.5px solid ' + c.out + ';outline-offset:3px;border-radius:4px';
-    const cmpT = TB({ title: 'v3 · Angel and v4 · Seed fund', meta: 'Changed sentences are outlined', bar: false, pager: false, gc: '.7fr 1.6fr 1.6fr', minW: 720, cols: ['Section', 'v3 · Angel', 'v4 · Seed fund'], rows: [
+    const cmpT = TB({ title: 'v3 · Angel and v4 · Seed fund', meta: 'Changed sentences are outlined', bar: false, pager: false, gc: '96px minmax(0,1fr) minmax(0,1fr)', minW: 0, cols: ['Section', 'v3 · Angel', 'v4 · Seed fund'], rows: [
       [CL('Problem', { ts: 'font-weight:700' }), CL('[Finance teams of one to five lose days to manual reconciliation.]', { pill: pill('Backed') }), CL('[Finance teams of one to five lose days to manual reconciliation.]', { pill: pill('Backed') })],
       [CL('Traction', { ts: 'font-weight:700' }), CL('[Early customers close the books faster with us.]', { pill: pill('Not backed') }), CL('[Revenue reached [$16,950] MRR from [42] paying customers.]', { ts: OUT, pill: pill('Backed') })],
       [CL('Market', { ts: 'font-weight:700' }), CL('[Small finance teams in the UK and Europe.]'), CL('[Small finance teams in the UK and Europe.]')],
@@ -501,7 +500,7 @@ class Component extends DCLogic {
     const FONT = 'font-family:' + SG + ';background:' + c.bg + ';color:' + c.ink + ';font-variant-numeric:tabular-nums;-webkit-font-smoothing:antialiased;position:relative;box-sizing:border-box';
     const v = {
       c, eyeS, btnP, btnG, mainS: 'min-width:0;display:flex;flex-direction:column' + (phone ? ';flex:1;min-height:0' : ''),
-      root: isShell ? FONT + ';display:grid;grid-template-columns:196px minmax(0,1fr) 44px;min-height:' + (B === 'NAR3' ? 1000 : 900) + 'px' : phone ? FONT + ';width:390px;height:844px;display:flex;flex-direction:column;overflow:hidden' : sheet ? FONT + ';width:920px;zoom:2;padding:20px' : FONT + ';min-height:100%;padding:24px',
+      root: isShell ? FONT + ';display:grid;grid-template-columns:196px minmax(0,1fr) 44px;min-height:' + (B === 'NAR3' ? 1020 : 900) + 'px' : phone ? FONT + ';width:390px;height:844px;display:flex;flex-direction:column;overflow:hidden' : sheet ? FONT + ';width:920px;zoom:2;padding:20px' : FONT + ';min-height:100%;padding:24px',
       side: isShell, asideS: 'background:' + c.card + ';border-right:1px solid ' + c.hair + ';padding:14px 0;display:flex;flex-direction:column;gap:2px',
       logoS: 'width:20px;height:20px;border-radius:6px;flex:none;background:' + acc,
       scope: shell === 'admin' ? '[Studio Lisbon]' : shell === 'hq' ? 'HQ' : false, scopeS: 'margin:0 12px 10px;padding:5px 8px;border-radius:7px;background:' + acc + ';color:#fff;font:600 10px ' + MO + ';letter-spacing:.04em',
@@ -535,5 +534,4 @@ class Component extends DCLogic {
   }
 }
 </script>
-</body>
-</html>
+</body></html>
