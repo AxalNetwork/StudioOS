@@ -264,7 +264,8 @@ test('mounted PRM1: the tiles, the chips with their counts, the rows, and each r
     assert.equal(r.textOf('promo-chip-paused'), 'Paused3');
     assert.equal(r.count('promo-row'), 5);
     assert.equal(r.textOf('promo-applies-p1'), 'Advisor Pro · monthly');
-    assert.equal(r.textOf('promo-applies-p5'), 'Product list unreadable');
+    // D222: an unreadable product list is PromoProductScope's Unreadable, never "All products".
+    assert.match(r.textOf('promo-applies-p5'), /Product list could not be read\. This is not a claim that the code applies to every product\./);
     assert.equal(r.textOf('promo-redeemed-p5'), '21, no cap');
     await r.click('promo-row-menu-p4');
     assert.equal(r.textOf('promo-row-menu-list-p4'), 'OpenCopy as a new code', 'an ended code offers no resume');

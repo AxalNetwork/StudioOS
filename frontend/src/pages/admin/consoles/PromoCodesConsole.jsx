@@ -22,10 +22,11 @@ import { reportError } from '../../../lib/log';
 import { actionGhost, actionPrimary } from '../../../ui';
 import {
   ACTION_WORD, APPLIES_WORD, BASE, SORTS, STATE_WORD, appliesWord, codeHref, codesHref, dayWord, discountWord,
-  durationWord, endsWord, last30, listQuery, narrowed, redeemedWord, rowActions, tiles, viewOf,
+  durationWord, endsWord, filterSearch, last30, listQuery, narrowed, redeemedWord, rowActions, tiles, viewOf,
 } from '../promos/promoModel';
 import { catalogueChoices, catalogueNames } from '../promos/promoWizard';
 import { PromoDrawer, ReadFailed, StatePill } from '../promos/PromoParts';
+import { PromoProductScope } from '../../PromoProductScope';
 import { CodeWizard, EditDialog, EndDialog, PauseDialog, ResumeDialog } from '../promos/PromoDialogs';
 
 const CARD = 'rounded-xl border border-axal-hairline bg-white dark:border-gray-800 dark:bg-gray-900';
@@ -116,6 +117,7 @@ export function PromoCodesPanel({ view: viewProp, now: nowProp }) {
 
   const go = (patch) => navigate(view.id ? codeHref(view.id, { ...f, ...patch }) : codesHref({ ...f, ...patch }));
   const names = useMemo(() => (cat.kind === 'ok' ? catalogueNames(cat.data?.products) : {}), [cat]);
+  const productName = (id) => names[id] || id;
   const choices = useMemo(() => (cat.kind === 'ok' ? catalogueChoices(cat.data?.products) : null), [cat]);
   const d = list.data;
   const rows = d?.promos || [];
@@ -217,11 +219,14 @@ export function PromoCodesPanel({ view: viewProp, now: nowProp }) {
                     <tr key={p.id} className="border-b border-gray-100 dark:border-gray-800" data-testid="promo-row">
                       {/* D1270 (#2381): a code opens its drawer at its own address (PRM2). */}
                       <td className="py-2 pr-3">
-                        <Link to={codeHref(p.id, f)} className="font-mono font-semibold text-axal-ink underline-offset-2 hover:underline dark:text-gray-100" data-testid={`promo-open-${p.id}`}>{p.code}</Link>
+                        <Link to={`/admin/platform/promo-codes/${encodeURIComponent(p.id)}${filterSearch(f)}`} className="font-mono font-semibold text-axal-ink underline-offset-2 hover:underline dark:text-gray-100" data-testid={`promo-open-${p.id}`}>{p.code}</Link>
                         {p.name && <div className={`text-[12px] ${MUTED}`}>{p.name}</div>}
                       </td>
                       <td className="py-2 pr-3 font-semibold">{discountWord(p)}</td>
-                      <td className={`max-w-[16rem] py-2 pr-3 ${applies.unreadable ? 'text-red-700 dark:text-red-300' : ''}`} data-testid={`promo-applies-${p.id}`}>{applies.text}</td>
+                      {/* D222: a product list is drawn through PromoProductScope (Unreadable, never "All products"); D1275: plans in words. */}
+                      <td className="max-w-[16rem] py-2 pr-3" data-testid={`promo-applies-${p.id}`}>
+                        {(p.plan_keys || []).length && p.product_ids_readable !== false ? applies.text : <PromoProductScope promo={p} productName={productName} />}
+                      </td>
                       <td className="py-2 pr-3">{durationWord(p)}</td>
                       <td className="py-2 pr-3 font-mono" data-testid={`promo-redeemed-${p.id}`}>{redeemedWord(p)}</td>
                       <td className="py-2 pr-3"><div>{ends.day}</div>{ends.soon && <div className={`text-[11.5px] ${MUTED}`}>{ends.soon}</div>}</td>

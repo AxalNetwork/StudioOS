@@ -59,7 +59,7 @@ test('the wiring: the routes, HQ only, the tabs, the row door, the canvas and th
   assert.match(pages, /<ConsolePage hqOnly crumb=\{\{ \.\.\.PLATFORM, current: 'Promo codes' \}\}/);
   assert.ok(pages.includes('<HeaderTab to="/admin/platform/promo-codes/usage" data-testid="promo-tab-usage">Usage</HeaderTab>'));
   assert.ok(pages.includes("{view.tab === 'usage' ? <PromoUsage /> : <PromoCodesPanel view={view} />}"));
-  assert.ok(read('frontend/src/pages/admin/consoles/PromoCodesConsole.jsx').includes('<Link to={codeHref(p.id, f)}'), 'each code opens its drawer at its address');
+  assert.ok(read('frontend/src/pages/admin/consoles/PromoCodesConsole.jsx').includes('<Link to={`/admin/platform/promo-codes/${encodeURIComponent(p.id)}${filterSearch(f)}`}'), 'each code opens its drawer at its address, a literal door the reachability guard reads');
   for (const f of ['Promo Codes Page.dc.html', 'Promo codes · Boards.dc.html']) assert.ok(existsSync(`design/incoming/${f}`), f);
   assert.ok(read('design/incoming/Promo codes · Boards.dc.html').includes('name="Promo Codes Page"'));
   assert.ok(!/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}"/.test(read('design/incoming/Promo Codes Page.dc.html')), 'no asset uuid is left in the page');

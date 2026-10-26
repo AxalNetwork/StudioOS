@@ -16,6 +16,8 @@
  * the page says "Not recorded" with its reason.
  */
 
+import { titleCase } from '../../../lib/absence';
+
 export const BASE = '/admin/platform/promo-codes';
 export const USAGE = `${BASE}/usage`;
 
@@ -179,7 +181,7 @@ export function discountWord(p) {
 export function planKeyWord(key) {
   const [kind, value] = String(key || '').split(':');
   if (kind === 'mi') return 'Market Intelligence Pro';
-  const word = String(value || '').replace(/[_-]+/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase());
+  const word = titleCase(value);
   if (kind === 'investor') return `Investor ${word}`;
   return word || String(key || '');
 }
