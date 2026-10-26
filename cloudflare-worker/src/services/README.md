@@ -291,6 +291,12 @@ and Match reads: one commitments read across typed prospects, round-call
 answers, deal-room commitments and the founder's Mercury matches, each investor
 counted once by their strongest line; and the fund directory with each fund's
 Fit, the caller's own warm paths and a count of verified investors who fit.
+`capRelTabs.ts` (D1193, #3127) is Capital relationships' Outreach, Activity
+and Eadwyn's proposals: every logged change across investors, the materials
+each investor was sent (the data room for its owner alone), and two metered
+runs (next steps and stage moves from a note, each beside its quote; a message
+for the founder to send) kept as `ai_rail_proposals` and accepted through the
+one prospect writer. Eadwyn never writes an amount, a status or a Fit.
 `raiseWriters.ts` has one writer per migration 442 record and, since D691
 (#1700), one behind each Raise Add and Edit form (migration 463's stores)
 and one per record action: `duplicateNarrativeVersion`, `revokeDeckLink`,

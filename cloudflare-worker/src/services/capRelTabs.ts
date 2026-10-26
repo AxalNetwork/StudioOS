@@ -324,12 +324,16 @@ type Rail = { page: string; option?: string | null; record?: string | null };
  */
 export async function proposeFromNote(env: Env, projectId: number, userId: number, body: Record<string, unknown>, rail: Rail) {
   const prospect = await prospectOf(env, projectId, body.prospect_id);
+  // A named step, or else the investor's newest step with a note.
+  const named = body.event_id != null && body.event_id !== '';
   const eventId = Number(body.event_id);
-  if (!Number.isSafeInteger(eventId) || eventId < 1) throw new CapRelTabError(400, 'bad_note', 'Pick a logged meeting or call note.', 'event_id');
-  const ev = await env.DB.prepare(
-    "SELECT id, kind, note, created_at FROM raise_prospect_events WHERE id = ? AND prospect_id = ? AND kind IN ('meeting', 'call', 'note', 'email', 'intro')",
-  ).bind(eventId, prospect.id).first<{ id: number; kind: string; note: string | null; created_at: string }>();
-  if (!ev) throw new CapRelTabError(404, 'unknown_note', 'That note is not on this investor’s timeline.', 'event_id');
+  if (named && (!Number.isSafeInteger(eventId) || eventId < 1)) throw new CapRelTabError(400, 'bad_note', 'Pick a logged meeting or call note.', 'event_id');
+  const ev = named
+    ? await env.DB.prepare('SELECT id, kind, note, created_at FROM raise_prospect_events WHERE id = ? AND prospect_id = ?')
+      .bind(eventId, prospect.id).first<{ id: number; kind: string; note: string | null; created_at: string }>()
+    : await env.DB.prepare("SELECT id, kind, note, created_at FROM raise_prospect_events WHERE prospect_id = ? AND note IS NOT NULL AND trim(note) <> '' ORDER BY created_at DESC, id DESC LIMIT 1")
+      .bind(prospect.id).first<{ id: number; kind: string; note: string | null; created_at: string }>();
+  if (!ev) throw new CapRelTabError(404, 'unknown_note', named ? 'That note is not on this investor’s timeline.' : 'Log a step with a note first. Eadwyn proposes from what you wrote.', 'event_id');
   const note = String(ev.note ?? '').trim();
   if (note.length < 12) throw new CapRelTabError(422, 'note_too_short', 'That note is too short to propose from. Write what was said, then try again.', 'event_id');
 
@@ -345,7 +349,7 @@ export async function proposeFromNote(env: Env, projectId: number, userId: numbe
   for (const p of kept) {
     rows.push(await proposeRail(env, {
       userId, page: PROPOSAL_PAGE, option: NOTE_OPTION, record: prospectRecord(prospect.id), kind: 'proposal',
-      payload: { ...p, prospect_id: prospect.id, event_id: ev.id, note_kind: ev.kind, note_on: ev.created_at.slice(0, 10) },
+      payload: { ...p, prospect_id: prospect.id, event_id: ev.id, note_kind: ev.kind, note_on: ev.created_at.slice(0, 10), note: note.slice(0, 600) },
       model: result.usage?.model ?? null, usageLogId: result.usageLogId ?? null,
     }));
   }

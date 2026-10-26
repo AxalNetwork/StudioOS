@@ -254,6 +254,7 @@ test('proposals from a note: one run, each kept proposal its own row beside its 
   ]);
   assert.equal(all(f, "SELECT task, surface FROM ai_usage_logs WHERE guard_for IS NULL").map((r) => `${r.task}@${r.surface}`).join(), 'rail_write@/raise/capital-relationships');
   assert.ok(f.prompts.some((p) => p.includes('Q3 metrics pack')), 'the note is what is read');
+  assert.equal(run.body.proposals[0].payload.note, NOTE, 'the panel shows the note beside its proposals');
   const open = await call(f, OWNER, cr('proposals'));
   assert.deepEqual(open.body.proposals.map((p: any) => p.investor), ['Bluefern Capital', 'Bluefern Capital']);
   assert.deepEqual((await call(f, OTHER, cr('proposals', 20))).body.proposals, [], 'another member reads none of them');
@@ -290,6 +291,8 @@ test('a note run refuses another investor’s note, another venture’s, a too-s
   assert.equal((await call(f, OWNER, cr('proposals'), 'POST', { prospect_id: 9, event_id: 3 })).status, 404, 'another venture’s investor');
   assert.equal((await call(f, OWNER, cr('proposals'), 'POST', { prospect_id: 2, event_id: 1 })).status, 404, 'a note on another investor');
   assert.equal((await call(f, OWNER, cr('proposals'), 'POST', { prospect_id: 1, event_id: 2 })).status, 422, 'too short to propose from');
+  assert.equal((await call(f, OWNER, cr('proposals'), 'POST', { prospect_id: 1 })).status, 422, 'with no note named, the newest note is read: here the short one');
+  assert.equal((await call(f, OWNER, cr('proposals'), 'POST', { prospect_id: 3 })).status, 404, 'an investor with no note');
   assert.equal((await call(f, OTHER, cr('proposals'), 'POST', { prospect_id: 1, event_id: 1 })).status, 403);
   assert.equal((await call(f, ADMIN, cr('proposals'), 'POST', { prospect_id: 1, event_id: 1 })).status, 403);
   assert.equal(all(f, 'SELECT 1 FROM ai_usage_logs').length, 0, 'no refused press runs the model');

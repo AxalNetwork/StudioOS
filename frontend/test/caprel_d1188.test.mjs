@@ -1,7 +1,8 @@
 // D1188 (#2457) — the Capital relationships tool inside the Raise module page:
 // its tab words (the canvas's seven), Pipeline's investors and Calls' history
-// from the module read, Commitments from today's closes and pro-rata, the three
-// tabs that say what they wait for, and the wiring.
+// from the module read, Commitments from today's closes and pro-rata, and the
+// wiring. D1193 (#3127): Match, Outreach and Activity no longer wait; each
+// draws its own read (`caprel_tabs_d1193.test.mjs` holds their rules).
 //
 // Run with:
 //   node --import ./frontend/test/_deck-loader.mjs --test frontend/test/caprel_d1188.test.mjs
@@ -13,7 +14,7 @@ import { createRoot } from 'react-dom/client';
 import { MemoryRouter, Routes, Route } from 'react-router-dom';
 import { installDocument } from './_contracts_dom.mjs';
 import CycleRoute from '../src/pages/cycles/CycleRoute.jsx';
-import { NOT_YET, TABS, WAITS, isCapRelTab, tabHref, tabSearch } from '../src/pages/raise/caprel/capRelModel.js';
+import { TABS, isCapRelTab, tabHref, tabSearch } from '../src/pages/raise/caprel/capRelModel.js';
 
 const h = React.createElement;
 const read = (path) => readFileSync(path, 'utf8');
@@ -93,11 +94,6 @@ test('the canvas\'s seven tabs, and only their words are tabs; an investor is st
   assert.equal(tabHref(TABS[4], '?project_id=3'), '/raise/capital-relationships/commitments?project_id=3');
 });
 
-test('every waiting tab says why, never zero or none', () => {
-  for (const t of ['match', 'outreach', 'activity']) assert.ok(WAITS[t], t);
-  for (const w of Object.values(WAITS)) assert.ok(!/\b0\b|\$0|\bnone\b/i.test(w), w);
-});
-
 /* ------------------------------------------------------------------ *
  * Mounted
  * ------------------------------------------------------------------ */
@@ -112,24 +108,26 @@ test('Pipeline draws the venture\'s investors on the board (D1192), each opening
   } finally { await v.close(); }
 });
 
-test('Calls draws the module read\'s calls; Commitments reads today\'s closes and pro-rata', async () => {
+test('Calls draws the module read\'s calls; Commitments reads D1190\'s commitments, the closes and pro-rata (D1193)', async () => {
   let v = await mounted('/raise/capital-relationships/calls?project_id=3');
   try { assert.ok(v.testIds().includes('caprel-calls')); } finally { await v.close(); }
   v = await mounted('/raise/capital-relationships/commitments?project_id=3');
   try {
     assert.ok(v.testIds().includes('caprel-commitments'));
+    assert.ok(v.requests.some((u) => /\/capital-relationships\/commitments\?project=3/.test(u)));
     assert.ok(v.requests.some((u) => /\/contacts\/raise-closes/.test(u)));
     assert.ok(v.requests.some((u) => /\/contacts\/raise-pro-rata/.test(u)));
   } finally { await v.close(); }
 });
 
-test('Match, Outreach and Activity say what they wait for, and make no read of their own', async () => {
-  for (const tab of ['match', 'outreach', 'activity']) {
+test('D1193: Match, Outreach and Activity each draw their own read, and no tab waits', async () => {
+  const reads = { match: /\/capital-relationships\/match\?project=3/, outreach: /\/capital-relationships\/materials\?project=3/, activity: /\/capital-relationships\/activity\?project=3/ };
+  for (const [tab, url] of Object.entries(reads)) {
     const v = await mounted(`/raise/capital-relationships/${tab}?project_id=3`);
     try {
-      assert.ok(v.testIds().includes(`caprel-wait-${tab}`), tab);
-      assert.ok(v.text().includes(NOT_YET) && v.text().includes(WAITS[tab].slice(0, 30)), tab);
-      assert.ok(!v.requests.some((u) => /\/records\/|\/contacts\//.test(u)), `${tab} reads nothing it cannot use`);
+      assert.ok(v.testIds().includes(`caprel-${tab}`), tab);
+      assert.ok(!v.testIds().some((id) => id.startsWith('caprel-wait-')), `${tab} does not wait`);
+      assert.ok(v.requests.some((u) => url.test(u)), `${tab} reads its own read`);
     } finally { await v.close(); }
   }
 });
