@@ -1,8 +1,9 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import { LogIn, LogOut, Loader2 } from 'lucide-react';
 import { api } from '../../lib/api';
-import { JOIN_NOTE, STATES, quotaLine, quotaFullLine } from './dealRoomCopy';
+import { JOIN_NOTE, ROOM_REQUEST_CONFIRM, ROOM_LEAVE_CONFIRM, STATES, quotaLine, quotaFullLine } from './dealRoomCopy';
 import { BTN } from './DealRoomKit';
+import { Lightbox } from '../../ui';
 
 /**
  * D630 (#1388) — joining and leaving a deal room, with the quota (canvas
@@ -73,17 +74,21 @@ export function JoinNote() {
  */
 export function JoinLeaveButton({ dealId, member, quotaState, onChanged, compact = false }) {
   const [busy, setBusy] = useState(false);
+  const [confirming, setConfirming] = useState(null);
   const [refusal, setRefusal] = useState('');
   const [notice, setNotice] = useState('');
   const q = quotaState?.quota;
   const full = !member && q && q.full;
 
   const act = async () => {
+    if (!confirming || busy) return;
+    const leaving = confirming === 'leave';
     setBusy(true); setRefusal(''); setNotice('');
     try {
-      if (member) await api.dealroomLeave(dealId);
+      if (leaving) await api.dealroomLeave(dealId);
       else { await api.dealroomJoin(dealId); setNotice('Your invitation request is recorded. Access starts after an invitation or commitment.'); }
       await onChanged?.();
+      setConfirming(null);
     } catch (e) {
       if (e?.code === 'quota_dealrooms_exhausted') {
         // The quota moved under the page (another tab joined). Re-read it so
@@ -91,7 +96,7 @@ export function JoinLeaveButton({ dealId, member, quotaState, onChanged, compact
         await onChanged?.();
         setRefusal('quota');
       } else {
-        setRefusal(e?.message || (member ? 'You could not leave this room. Try again.' : 'You could not join this room. Try again.'));
+        setRefusal(e?.message || (leaving ? 'You could not leave this room. Try again.' : 'You could not join this room. Try again.'));
       }
     } finally {
       setBusy(false);
@@ -103,9 +108,9 @@ export function JoinLeaveButton({ dealId, member, quotaState, onChanged, compact
     <div className={compact ? 'text-right' : ''}>
       <button
         type="button"
-        onClick={act}
+        onClick={() => { setRefusal(''); setConfirming(member ? 'leave' : 'join'); }}
         disabled={busy || Boolean(full)}
-        className={member ? BTN.ghost : BTN.primary}
+        className={`${member ? BTN.ghost : BTN.primary} min-h-[44px] justify-center`}
         data-testid={member ? 'dr-leave' : 'dr-join'}
       >
         {busy ? <Loader2 size={14} className="animate-spin" /> : (member ? <LogOut size={14} /> : <LogIn size={14} />)}
@@ -115,13 +120,30 @@ export function JoinLeaveButton({ dealId, member, quotaState, onChanged, compact
         <p className="mt-1.5 max-w-xs text-xs text-amber-800 dark:text-amber-300" role="status" data-testid="dr-quota-full">{fullLine}</p>
       )}
       {notice && <p role="status" className="mt-1.5 text-xs text-gray-600 dark:text-gray-400">{notice}</p>}
-      {refusal && refusal !== 'quota' && (
+      {!confirming && refusal && refusal !== 'quota' && (
         <p className="mt-1.5 max-w-xs text-xs text-red-700 dark:text-red-300" role="alert" data-testid="dr-join-refusal">{refusal}</p>
       )}
       {refusal === 'quota' && !fullLine && (
         <p className="mt-1.5 max-w-xs text-xs text-amber-800 dark:text-amber-300" role="status" data-testid="dr-quota-full">
           Your deal-room quota is full. Leave a room, or change plan.
         </p>
+      )}
+      {confirming && (
+        <Lightbox label={confirming === 'leave' ? 'Leave this room?' : 'Request an invitation?'}
+          title={confirming === 'leave' ? 'Leave this room?' : 'Request an invitation?'}
+          onClose={() => { if (!busy) setConfirming(null); }} testId="dr-request-dialog"
+          footer={<div className="flex justify-end gap-2">
+            <button type="button" className={`${BTN.ghost} min-h-[44px] justify-center`} disabled={busy} onClick={() => setConfirming(null)} data-testid="dr-request-back">Back</button>
+            <button type="button" className={`${BTN.primary} min-h-[44px] justify-center`} disabled={busy || (confirming === 'join' && Boolean(full))}
+              onClick={act} data-testid="dr-request-confirm">{busy ? 'Recording…' : confirming === 'leave' ? 'Leave' : 'Request an invitation'}</button>
+          </div>}>
+          <div className="px-5 py-4 text-left">
+            <p className="text-sm text-gray-700 dark:text-gray-300">{confirming === 'leave' ? ROOM_LEAVE_CONFIRM : ROOM_REQUEST_CONFIRM}</p>
+            {refusal && <p role="alert" className="mt-3 text-sm text-red-700 dark:text-red-300" data-testid="dr-join-refusal">
+              {refusal === 'quota' ? fullLine || 'Your deal-room quota is full. Leave a room, or change plan.' : refusal}
+            </p>}
+          </div>
+        </Lightbox>
       )}
     </div>
   );
