@@ -15,6 +15,7 @@
  * To change an account, retire it and add the new one.
  */
 import type { Env } from '../types';
+import { checkRegistrySource } from './mercury/registry';
 import { bankHistoryText } from './bankAccountHistory';
 import { encryptColumn, decryptColumn } from './columnCipher';
 import { AXAL_ENTITIES, type AxalEntityKey } from './legalDocFormat';
@@ -114,7 +115,7 @@ export type NewAccountInput = {
   beneficiary_name?: unknown; beneficiary_address?: unknown; account_kind?: unknown;
   account_number?: unknown; account_number_confirm?: unknown;
   routing_number?: unknown; routing_number_alt?: unknown; swift_code?: unknown; intermediary_swift_code?: unknown;
-  purposes?: unknown;
+  purposes?: unknown; mercury_account_uid?: unknown;
 };
 
 function parsePurposes(raw: unknown): PaymentPurpose[] {
@@ -187,6 +188,10 @@ export async function createAccount(env: Env, input: NewAccountInput, actorId: n
   const intermediary = upper(input.intermediary_swift_code) || null;
   if (intermediary && !SWIFT_SHAPE.test(intermediary)) refuse(400, 'intermediary_swift_invalid', "The intermediary bank's SWIFT code is 8 or 11 letters and digits.");
   const purposes = parsePurposes(input.purposes);
+  if (input.mercury_account_uid !== undefined) {
+    const refusal = await checkRegistrySource(env, input.mercury_account_uid, entityKey, number.slice(-4), kind, actorId);
+    if (refusal) return refuse(refusal.status, refusal.code, refusal.sentence);
+  }
   await checkPurposes(env, entityKey, kind, purposes, null);
 
   const uid = crypto.randomUUID();
