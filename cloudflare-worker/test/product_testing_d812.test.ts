@@ -191,7 +191,8 @@ test('a partner\'s programme opens only after HQ approves it; sent back, its nex
   assert.equal((await call(w, HQ, 'POST', `/admin/testing/programmes/${uid}/approve`, {})).body.programme.status, 'approved');
   assert.equal((await call(w, ACME, 'POST', `/admin/testing/programmes/${uid}/open`)).status, 403, 'a partner cannot open it');
   assert.equal((await call(w, HQ, 'POST', `/admin/testing/programmes/${uid}/open`)).body.programme.status, 'open');
-  assert.deepEqual(bell(w, ACME), ['testing_programme_sent_back', 'testing_programme_approved'], 'the partner is told both');
+  // D1198 (#3148): opening tells the firm too.
+  assert.deepEqual(bell(w, ACME), ['testing_programme_sent_back', 'testing_programme_approved', 'testing_programme_opened'], 'the partner is told each step');
   // HQ's own: no review, opens from draft, and is not on a partner's list.
   const hq = (await call(w, HQ, 'POST', '/admin/testing/programmes', PROGRAMME)).body.programme;
   assert.deepEqual([hq.owner_kind, hq.owner_name], ['hq', 'Axal VC']);
@@ -276,13 +277,14 @@ test('every change appends one event and tells the bell', async () => {
   await applyAs(w, FRAN, uid);
   assert.equal(events(w).length, before);
   assert.deepEqual(bell(w, FRAN), ['testing_applied', 'testing_picked', 'testing_not_picked']);
-  assert.deepEqual(bell(w, ACME), ['testing_programme_approved']);
+  // D1198 (#3148): open and close tell the firm.
+  assert.deepEqual(bell(w, ACME), ['testing_programme_approved', 'testing_programme_opened', 'testing_programme_closed']);
   // #2314: new member status notifications open Inbox after the page is retired.
   // Mutation checked: drop `link` from tell's notify → every link is null.
   const links = (user: number) => w.db.prepare('SELECT link FROM notifications_inbox WHERE user_id = ? ORDER BY id').all(user).map((r: any) => r.link);
   assert.deepEqual(links(FRAN), [MY_APPLICATIONS_LINK, MY_APPLICATIONS_LINK, MY_APPLICATIONS_LINK]);
   assert.equal(MY_APPLICATIONS_LINK, '/inbox');
-  assert.deepEqual(links(ACME), [null]);
+  assert.deepEqual(links(ACME), [null, null, null]);
 });
 
 test('the testers audience is the picked applicants who consented; the summary counts what the caller can join', async () => {
