@@ -13,8 +13,8 @@ import { readableRoomFiles, mercuryRunway, mercuryFacts, verifiedMonthlyRevenue,
  *
  * NOTHING HERE IS GUESSED. A value no store holds is `null` ("Not recorded"),
  * never 0. A prospect's last contact is its stored contact's
- * `last_activity_at`; a prospect with no contact has none. A category's
- * monthly spend is not recorded, because no store splits burn by category.
+ * `last_activity_at`; a prospect with no contact has none. Planned monthly
+ * allocation is Modelled; D1174's private record reads accepted Mercury spend.
  *
  * THE SPIN-OUT LAB READS THROUGH THE SAME FUNCTIONS. A Lab venture is an
  * ordinary `projects` row. The computed readiness detectors below are the
@@ -26,6 +26,8 @@ import { readableRoomFiles, mercuryRunway, mercuryFacts, verifiedMonthlyRevenue,
  * Mercury connection, a last four, a counterparty or a bank figure.
  */
 import type { Env } from '../types';
+import { FUND_SECTIONS, parseUseOfFundsValue } from '../util/useOfFunds';
+export { FUND_SECTIONS } from '../util/useOfFunds';
 import { safeCard, safeFigure, countState, PAGE_SIZE, type Card, type Figure } from './cycleCards';
 import { daysBefore, recordQuery, type RecordQuery } from './cycleValidate';
 import { roundCallsEnabled } from './roundCallPolicy';
@@ -72,7 +74,7 @@ const addHref = (ctx: Ctx, slug: string) => `/raise/${slug}/new?project=${ctx.pr
 export const TOOL_HREF = {
   pitch: '/raise/pitch',
   dataRoom: '/raise/data-room?mode=workspace',
-  capTable: '/raise/capital/cap-table',
+  capTable: '/raise/cap-table',
   pipeline: '/raise/capital/pipeline',
   model: '/raise/capital/model',
   metrics: '/build/kpi',
@@ -187,14 +189,14 @@ export async function computeReadiness(env: Env, projectId: number): Promise<Com
     reads: [{ a: 'Pitch decks', b: hasDeck ? plural(deckCount, 'deck saved', 'decks saved') : 'none saved', ...met(hasDeck) }],
   });
 
-  const hasAlloc = String(p?.use_of_funds ?? '').trim().startsWith('[');
+  const hasAlloc = parseUseOfFundsValue(p?.use_of_funds).length > 0;
   const hasTarget = (num(p?.funding_needed) ?? 0) > 0;
   out.push({
     key: 'use_of_funds', score: hasAlloc && hasTarget ? 10 : hasAlloc || hasTarget ? 5 : 0, evidence: 'measured',
     missing: hasAlloc && hasTarget ? null : 'Set a raise target and a 100% allocation.',
     reads: [
       { a: 'Raise target', b: hasTarget ? usd(Number(p!.funding_needed)) : 'not set', ...met(hasTarget) },
-      { a: 'Allocation', b: hasAlloc ? 'split stored' : 'no split stored', ...met(hasAlloc) },
+      { a: 'Allocation', b: hasAlloc ? 'split stored' : 'Not recorded', ...met(hasAlloc) },
     ],
   });
 
@@ -1115,38 +1117,30 @@ async function capRecords(ctx: Ctx, rq: RecordQuery): Promise<Records> {
 // ---------------------------------------------------------------------------
 
 /**
- * The Use of Funds page's five sections, the milestone bucket three of them
- * carry, and each one's key (D691 decision 9), the id every list, record and
- * write names. The deck maps the sections by label, so the labels stay.
+ * D1174 shares the five section keys and split reader with the deck.
+ * These tones preserve the existing section order.
  */
-export const FUND_SECTIONS = [
-  { key: 'product', label: 'Product & engineering', bucket: 'eng' },
-  { key: 'go-to-market', label: 'GTM: sales and marketing', bucket: 'gtm' },
-  { key: 'infrastructure', label: 'Infrastructure & data', bucket: null },
-  { key: 'operations', label: 'Operations, legal & compliance', bucket: 'ops' },
-  { key: 'reserve', label: 'Hiring / runway reserve', bucket: null },
-] as const;
 const FUND_TONES = ['v1', 'v2', 'v3', 'grey', 'muted'];
 
 export function parseAllocation(raw: unknown): number[] | null {
-  const s = String(raw ?? '').trim();
-  if (!s.startsWith('[')) return null;
-  try {
-    const arr = JSON.parse(s);
-    if (!Array.isArray(arr)) return null;
-    const out = FUND_SECTIONS.map(() => 0);
-    for (const x of arr) {
-      const i = FUND_SECTIONS.findIndex((f) => f.label === String(x?.label ?? '').trim());
-      if (i >= 0) out[i] = Math.max(0, Math.min(100, Math.round(Number(x?.pct) || 0)));
-    }
-    return out.some((p) => p > 0) ? out : null;
-  } catch { return null; }
+  const parsed = parseUseOfFundsValue(typeof raw === 'string' ? raw : null);
+  return parsed.length ? FUND_SECTIONS.map((s) => parsed.find((r) => r.label === s.label)?.pct ?? 0) : null;
 }
 
 /** Cash at the end of each of the next `months` months, from cash now and a monthly burn. Null with either missing. */
-export function cashPath(cash: number | null, burn: number | null, months = 18, extra = 0): number[] | null {
-  if (cash == null || burn == null) return null;
-  return Array.from({ length: months + 1 }, (_, m) => Math.max(0, Math.round(cash + extra - burn * m)));
+export function cashPath(cash: number | null, burn: number | null, months = 18, extra = 0, closeMonth: number | null = null): number[] | null {
+  if (cash == null || burn == null || !Number.isFinite(cash) || !Number.isFinite(burn)) return null;
+  if (extra !== 0 && (closeMonth == null || !Number.isInteger(closeMonth) || closeMonth < 0 || closeMonth > months)) return null;
+  return Array.from({ length: months + 1 }, (_, m) => Math.max(0, Math.round(cash + (closeMonth != null && m >= closeMonth ? extra : 0) - burn * m)));
+}
+
+/** A recorded active-round close date, as a UTC month offset; never an assumed month zero. */
+export function raiseCloseMonth(today: string, closeDate: string | null): number | null {
+  if (!closeDate || !/^\d{4}-\d{2}-\d{2}$/.test(closeDate)) return null;
+  const parsed = new Date(`${closeDate}T00:00:00Z`);
+  if (!Number.isFinite(parsed.getTime()) || parsed.toISOString().slice(0, 10) !== closeDate) return null;
+  const offset = (parsed.getUTCFullYear() - Number(today.slice(0, 4))) * 12 + parsed.getUTCMonth() - (Number(today.slice(5, 7)) - 1);
+  return offset < 0 ? null : offset;
 }
 
 export async function loadFunds(ctx: Ctx) {
@@ -1156,6 +1150,13 @@ export async function loadFunds(ctx: Ctx) {
     `SELECT cash_balance, net_burn, snapshot_date FROM project_metrics
       WHERE project_id = ? AND cash_balance IS NOT NULL AND net_burn IS NOT NULL ORDER BY snapshot_date DESC, id DESC LIMIT 1`,
   ).bind(ctx.projectId).first<{ cash_balance: number; net_burn: number; snapshot_date: string }>();
+  let round: { close_date: string | null } | null = null;
+  let closeUnreadable = false;
+  try {
+    round = await ctx.env.DB.prepare(
+      `SELECT close_date FROM raise_rounds WHERE project_id = ? AND status = 'active' ORDER BY id DESC LIMIT 1`,
+    ).bind(ctx.projectId).first<{ close_date: string | null }>();
+  } catch { closeUnreadable = true; }
   let metaObj: any = {};
   try { metaObj = p?.use_of_funds_meta ? JSON.parse(p.use_of_funds_meta) : {}; } catch { metaObj = {}; }
   const costs: Record<string, { bucket?: string; cost?: unknown }> = metaObj && typeof metaObj.milestone_costs === 'object' && metaObj.milestone_costs ? metaObj.milestone_costs : {};
@@ -1164,7 +1165,7 @@ export async function loadFunds(ctx: Ctx) {
   const milestones: Record<string, { label?: unknown; by?: unknown }> = metaObj && typeof metaObj.milestones === 'object' && metaObj.milestones ? metaObj.milestones : {};
   return {
     alloc: parseAllocation(p?.use_of_funds), target: num(p?.funding_needed), costs, metrics: m ?? null,
-    runway: runway != null && runway > 0 ? runway : null, milestones,
+    runway: runway != null && runway > 0 ? runway : null, milestones, closeUnreadable, closeDate: round?.close_date ?? null, closeMonth: raiseCloseMonth(ctx.today, round?.close_date ?? null),
   };
 }
 
@@ -1172,22 +1173,28 @@ export async function useOfFundsCard(ctx: Ctx): Promise<Card> {
   return safeCard(meta('use-of-funds', 'Next 18 months', 'The planned split of the raise, and cash over the next 18 months with and without it.', 'Use of funds'), async (): Promise<CardBody> => {
     const f = await loadFunds(ctx);
     if (!f.alloc) {
-      return { state: 'empty', series: null, next: { text: 'Edit split', href: addHref(ctx, 'use-of-funds') }, reason: 'No split yet. The planned split and runway appear here.' };
+      return { state: 'empty', series: null, next: { text: 'Edit split', href: addHref(ctx, 'use-of-funds') }, reason: 'Not recorded: no valid five-section split. Record a 100% allocation.' };
     }
     const series: unknown[] = [{
-      kind: 'stack', bare: true, rows: [{ label: 'Planned split', parts: f.alloc }], tones: FUND_TONES,
+      kind: 'stack', bare: true, rows: [{ label: 'Planned split · Source: Typed', parts: f.alloc }], tones: FUND_TONES,
       legend: FUND_SECTIONS.map((s, i) => ({ label: s.label, tone: FUND_TONES[i] })),
     }];
     const burn = f.metrics ? Number(f.metrics.net_burn) : null;
-    const path = f.metrics && burn != null && burn > 0 ? cashPath(Number(f.metrics.cash_balance), burn) : null;
+    const path = f.metrics && burn != null && burn >= 0 ? cashPath(Number(f.metrics.cash_balance), burn) : null;
     if (path) {
-      const plan = f.target ? cashPath(Number(f.metrics!.cash_balance), burn, 18, f.target) : null;
+      const plan = f.target ? cashPath(Number(f.metrics!.cash_balance), burn, 18, f.target, f.closeMonth) : null;
       series.push({ kind: 'line', values: path, ...(plan ? { plan } : {}), labels: [{ at: 0, label: 'Now' }, { at: 18, label: '18 mo' }] });
+      series.push({ kind: 'rows', items: [{ label: 'Source', value: plan
+        ? `Modelled · Raise enters in ${f.closeDate?.slice(0, 7)} (month ${f.closeMonth}); cash and burn from the recorded snapshot.`
+        : f.closeUnreadable ? 'Modelled · Without raise only. With raise is Unreadable: the close date could not be read. Try again.'
+          : !f.target ? 'Modelled · Without raise only. With raise is Not recorded: no raise target.'
+          : f.closeMonth != null && f.closeMonth > 18 ? 'Modelled · Without raise only. The recorded close date is beyond the 18-month horizon; no raise enters this chart.'
+          : 'Modelled · Without raise only. With raise is Not recorded: record an active round close date in this or a future month.' }] });
     } else {
       series.push({ kind: 'rows', items: [{ label: 'Cash over 18 months', value: null }] });
     }
     const next = !f.target
-      ? { text: 'Set the raise target', href: TOOL_HREF.model }
+      ? { text: 'Set the raise target', href: `${TOOL_HREF.model}?project_id=${ctx.projectId}` }
       : !path ? { text: 'Record cash and net burn in a metrics snapshot', href: TOOL_HREF.metrics } : null;
     return { state: 'ok', series, next, reason: null };
   });
@@ -1204,12 +1211,12 @@ export function milestoneText(m: { label?: unknown; by?: unknown } | undefined):
 /** One use-of-funds section's cells, read the same way by its list row and its record (decision 9). */
 export function fundCells(f: Awaited<ReturnType<typeof loadFunds>>, i: number) {
   const s = FUND_SECTIONS[i];
-  const pct = f.alloc ? f.alloc[i] : 0;
+  const pct = f.alloc ? f.alloc[i] : null;
   const priced = s.bucket
     ? Object.values(f.costs).filter((c) => c?.bucket === s.bucket && c.cost != null && c.cost !== '' && Number.isFinite(Number(c.cost)))
     : [];
   const cost = priced.reduce((a, c) => a + Number(c.cost), 0);
-  const amount = f.target != null ? Math.round((pct / 100) * f.target) : null;
+  const amount = f.target != null && pct != null ? Math.round((pct / 100) * f.target) : null;
   return {
     category: s.label, share: pct, amount,
     // The amount over the runway it buys; with no runway set, Not recorded.
@@ -1222,10 +1229,10 @@ export function fundCells(f: Awaited<ReturnType<typeof loadFunds>>, i: number) {
 async function fundsRecords(ctx: Ctx, rq: RecordQuery): Promise<Records> {
   const f = await loadFunds(ctx);
   let rows = (f.alloc ?? []).map((_pct, i) => ({ id: FUND_SECTIONS[i].key, cells: fundCells(f, i) }))
-    .filter((r) => r.cells.share > 0 && has(rq.q, r.cells.category));
+    .filter((r) => (r.cells.share ?? 0) > 0 && has(rq.q, r.cells.category));
   if (rq.filter.category) rows = rows.filter((r) => r.id === rq.filter.category);
   // Share, largest first, is the default.
-  if (rq.sort !== 'order') rows.sort((a, b) => b.cells.share - a.cells.share);
+  if (rq.sort !== 'order') rows.sort((a, b) => (b.cells.share ?? 0) - (a.cells.share ?? 0));
   return paged(
     [col('category', 'Category'), col('share', 'Share'), col('amount', 'Amount'), col('monthly', 'Monthly'), col('milestone', 'Milestone')],
     rows, rq.page,

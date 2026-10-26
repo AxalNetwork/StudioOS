@@ -181,6 +181,53 @@ function checkins(f: ReturnType<typeof fixture>) {
   f.db.exec("INSERT INTO users (id,email,name,role) VALUES (6,'other-admin@example.test','Other administrator','admin'); UPDATE users SET is_active=0 WHERE id=5");
 }
 
+test('D1206: staff calendar views record only normalized scope/window metadata in both audit stores before returning', async () => {
+  const f = fixture();
+  try {
+    licensed(f); checkins(f);
+    f.db.exec("UPDATE founder_checkins SET notes='Fixture private notes'; INSERT INTO super_admins (user_id,granted_by_user_id) VALUES (1,1)");
+    const offset = (iso: string) => new Date(Date.parse(iso) + 3 * 3600000).toISOString().replace('Z', '+03:00');
+    const expected: Array<{ scope: string; from: string; to: string }> = [];
+    for (const scope of ['studio', 'studio', 'all']) {
+      if (scope === 'all') { delete f.env.BRANCH_CODE; f.env.APP_URL = 'https://axal.vc'; }
+      const query = new URLSearchParams({ scope, from: offset(FROM), to: offset(TO), kinds: 'founder_checkin', search: 'Fixture private query' });
+      const response = await f.request(`/events?${query}`);
+      assert.equal(response.status, 200);
+      const body = await response.json() as any;
+      assert.ok(body.items.length > 0, 'the audited read still returns visible calendar items');
+      expected.push({ scope, from: FROM, to: TO });
+      const governance = f.db.prepare("SELECT admin_user_id, viewed_user_id, filters_json FROM admin_audit_log WHERE action='calendar_scope_read' ORDER BY id").all() as any[];
+      const activity = f.db.prepare("SELECT user_id, actor, details FROM activity_logs WHERE action='calendar_scope_read' ORDER BY id").all() as any[];
+      assert.deepEqual(governance.map(row => ({ actor: row.admin_user_id, target: row.viewed_user_id, details: JSON.parse(row.filters_json) })),
+        expected.map(details => ({ actor: 1, target: null, details })));
+      assert.deepEqual(activity.map(row => ({ actor: row.user_id, details: JSON.parse(row.details) })),
+        expected.map(details => ({ actor: 1, details })));
+      assert.ok(activity.every(row => /^[a-f0-9]{16}$/.test(row.actor)), 'the existing audit helper hashes the actor email');
+    }
+  } finally { await f.close(); }
+});
+
+test('D1206: personal, refused and invalid calendar reads do not create staff-view audit entries', async () => {
+  const f = fixture();
+  try {
+    licensed(f); checkins(f);
+    const requests: Array<[string, number, number]> = [
+      [`/events?${window}&scope=studio`, 2, 403],
+      [`/events?${window}&scope=all`, 1, 403],
+      [`/events?${window}&scope=unknown`, 1, 400],
+      ['/events?scope=studio&from=invalid', 1, 400],
+      ['/events?scope=studio&from=1970-01-01&to=2100-01-01', 1, 400],
+      [`/events?${window}&scope=mine`, 1, 200],
+      [`/events?${window}`, 2, 200],
+    ];
+    for (const [path, actor, status] of requests) {
+      assert.equal((await f.request(path, actor)).status, status, path);
+      assert.equal(f.db.prepare("SELECT COUNT(*) AS n FROM admin_audit_log WHERE action='calendar_scope_read'").get()?.n, 0, path);
+      assert.equal(f.db.prepare("SELECT COUNT(*) AS n FROM activity_logs WHERE action='calendar_scope_read'").get()?.n, 0, path);
+    }
+  } finally { await f.close(); }
+});
+
 test('D1206: Studio reads only the licensed deployment, deduplicates participants and removes actions/private contact fields', async () => {
   const f = fixture();
   try {
