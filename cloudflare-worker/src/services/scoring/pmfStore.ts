@@ -56,6 +56,18 @@ export async function recomputePmf(env: Env, projectId: number, userId: number, 
     || !['module_read','rescore'].includes(trigger)) throw new Error('invalid_pmf_context');
   const collected = await collectPmfInputs(env, projectId, today);
   const result = scorePmf(collected.inputs, PMF_MODEL_V1, today);
+  // D1145 (#3031, RD16 B): an input that could not be read makes this a partial
+  // score. It is drawn as it is, without that input and at the lower confidence,
+  // but never stored: history, checklist item 8 and the audit keep the last
+  // complete read, and a store that answers again writes the next point.
+  // Below the floor it is not "Not enough recorded" (what is recorded is not
+  // known), so the part is Unreadable, as a failed read always was.
+  if (collected.inputs.some((f) => f.unreadable)) {
+    if (result.state !== 'scored') return { state: 'unreadable' as const, reason: 'Product-market fit could not be read', changed: false };
+    const previous = await latest(env, projectId).catch(() => null);
+    return { ...result, id: previous?.id ?? null, inputs_hash: null, computed_at: new Date().toISOString(),
+      computed_by: userId, trigger, changed: false, partial: true, pivot_at: collected.pivot_at, verdict: collected.verdict };
+  }
   const hash = await pmfInputHash(collected, result);
   const previous = await latest(env, projectId);
   let changed = false;

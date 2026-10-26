@@ -711,6 +711,17 @@ audit are atomic. The history client is `cycleWrites.raise.pmfHistory`. The
 full frontend and Eadwyn explanation remain the later readiness parts. See
 `decisions/D1144.md` for the stored payload and paging contract.
 
+**D1145 (#3031)** replaces D1141's placeholder with the stored score
+(`PmfPart.jsx`, `pmfModel.js`): the Product-market fit and raise kit tiles, the
+ten inputs in four groups with an input lightbox (a bottom sheet on a phone),
+the gaps from both scores, and the history from `pmfHistory` with the pivot
+marked. Below the floor no number shows; a failed or missing read is Unreadable
+with Try again, never "no score". Re-score offers Product-market fit and sends
+`pmf: true`. On the Worker, one Validate store that cannot be read now marks
+only the inputs it feeds as `unreadable`: the score is drawn without them at a
+lower confidence and is not stored. Below the floor such a read is Unreadable.
+See `decisions/D1145.md`.
+
 ### D1113 — legacy Positioning retirement (#2993)
 
 `/raise/pitch/positioning` remains D911's counted forward to
