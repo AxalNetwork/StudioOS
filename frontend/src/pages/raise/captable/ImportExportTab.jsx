@@ -28,18 +28,18 @@ const readLive = (id) => capTableRegisterApi.live(id);
 const readRecord = (id) => capTableRecordApi.read(id);
 const readModule = (id) => cyclesApi.module('raise', id, 'cap-table');
 const TONE_ROW = {
-  red: 'bg-red-50 dark:bg-red-950/30',
-  amber: 'bg-amber-50 dark:bg-amber-950/30',
+  red: 'bg-red-50 dark:bg-red-400/10',
+  amber: 'bg-amber-50 dark:bg-amber-300/10',
   green: '',
   plain: '',
 };
 const TONE_TEXT = {
-  red: 'font-semibold text-red-700 dark:text-red-300',
+  red: 'font-semibold text-red-700 dark:text-red-400',
   amber: 'font-semibold text-amber-800 dark:text-amber-300',
-  green: 'font-semibold text-emerald-700 dark:text-emerald-300',
+  green: 'font-semibold text-emerald-700 dark:text-emerald-400',
   plain: '',
 };
-const SELECT = 'rounded-[8px] border border-axal-hairline bg-white px-2 py-1 text-[12px] text-axal-ink dark:border-gray-700 dark:bg-gray-900 dark:text-gray-100';
+const SELECT = 'rounded-[8px] border border-axal-hairline bg-white px-2 py-1 text-[12px] text-axal-ink dark:border-gray-700 dark:bg-gray-900 dark:text-gray-200';
 
 async function sha256Hex(text) {
   const bytes = new TextEncoder().encode(text);
@@ -127,12 +127,12 @@ function SheetImport({ projectId, reload, retry, onChanged }) {
           <span className={`text-[12.5px] ${INK}`}>Start from the template so the columns match.</span>
           <button type="button" className={actionGhost} onClick={() => downloadText('cap-table-import-template.csv', TEMPLATE_CSV)} data-testid="captable-sheet-template">Download the CSV template</button>
         </div>
-        <label className="flex cursor-pointer flex-col gap-1 rounded-[10px] border-[1.5px] border-dashed border-violet-300 bg-violet-50 px-4 py-4 dark:border-violet-800 dark:bg-violet-950/30">
+        <label className="flex cursor-pointer flex-col gap-1 rounded-[10px] border-[1.5px] border-dashed border-violet-300 bg-violet-50 px-4 py-4 dark:border-[#4c3a8a] dark:bg-[#211f3d]">
           <span className={`text-[13px] font-bold ${INK}`}>Choose a CSV file</span>
           <span className={`text-[12px] ${MUTED}`} data-testid="captable-sheet-file">{file ? `${file.name} · ${file.parsed.rows.length} ${file.parsed.rows.length === 1 ? 'row' : 'rows'} read` : 'Nothing is proposed until you press Propose.'}</span>
           <input type="file" accept=".csv,text/csv" className="sr-only" onChange={choose} data-testid="captable-sheet-input" />
         </label>
-        {readError ? <p role="alert" className="m-0 text-[12px] font-semibold text-red-700 dark:text-red-300" data-testid="captable-sheet-error">{readError}</p> : null}
+        {readError ? <p role="alert" className="m-0 text-[12px] font-semibold text-red-700 dark:text-red-400" data-testid="captable-sheet-error">{readError}</p> : null}
         {file ? (
           <ReadState read={record} what="The record the rows are checked against" claim="Nothing can be checked or proposed until it reads." onRetry={retry} testId="captable-sheet-record">
             <div className="flex flex-col gap-2" data-testid="captable-sheet-map">
@@ -153,13 +153,13 @@ function SheetImport({ projectId, reload, retry, onChanged }) {
             <div className="mt-3 flex flex-wrap gap-2" data-testid="captable-sheet-filters">
               {[['all', `All rows ${n.all}`], ['errors', `Errors ${n.errors}`], ['changes', `Changes ${n.changes}`]].map(([id, label]) => (
                 <button key={id} type="button" aria-pressed={filter === id} onClick={() => setFilter(id)} data-testid={`captable-sheet-filter-${id}`}
-                  className={`rounded-full border px-3 py-1 text-[12px] font-bold ${filter === id ? 'border-axal-violet text-axal-ink dark:border-violet-400 dark:text-gray-100' : 'border-axal-hairline text-axal-muted dark:border-gray-700 dark:text-gray-400'}`}>{label}</button>
+                  className={`rounded-full border px-3 py-1 text-[12px] font-bold ${filter === id ? 'border-axal-violet text-axal-ink dark:border-violet-400 dark:text-gray-200' : 'border-axal-hairline text-axal-muted dark:border-gray-700 dark:text-gray-400'}`}>{label}</button>
               ))}
             </div>
             <Table testId="captable-sheet-preview"
               cols={[{ key: 'r', label: 'Row' }, { key: 'h', label: 'Holder' }, { key: 't', label: 'Type' }, { key: 'c', label: 'Class' }, { key: 's', label: 'Shares' }, { key: 'd', label: 'Date' }, { key: 'k', label: 'Check' }]}
               rows={shown.map((r) => (
-                <tr key={r.row} className={`border-b border-axal-ground last:border-b-0 dark:border-gray-800 ${TONE_ROW[r.tone]}`} data-testid={`captable-sheet-row-${r.tone}`}>
+                <tr key={r.row} className={`border-b border-axal-ground last:border-b-0 dark:border-gray-700 ${TONE_ROW[r.tone]}`} data-testid={`captable-sheet-row-${r.tone}`}>
                   <td className={`${TD} ${MONO}`}>{r.row}</td><td className={TD}>{r.holder || '—'}</td><td className={TD}>{r.type || '—'}</td>
                   <td className={TD}>{r.className || '—'}</td><td className={`${TD} ${MONO}`}>{r.shares != null ? r.shares.toLocaleString('en-US') : '—'}</td>
                   <td className={`${TD} ${MONO}`}>{r.date ? day(r.date) : '—'}</td><td className={`${TD} ${TONE_TEXT[r.tone]}`}>{r.check}</td>
@@ -210,7 +210,7 @@ function ExportBlock({ projectId }) {
     try { await fn(); setSaid((s) => ({ ...s, [key]: 'Downloaded.' })); } catch (e) { setSaid((s) => ({ ...s, [key]: e?.message || 'The export could not be made. Nothing was downloaded.' })); } finally { setBusy(null); }
   };
   const row = (key, title, sub, label, onClick) => (
-    <div className="flex flex-wrap items-center justify-between gap-2 border-b border-axal-ground py-2 last:border-b-0 dark:border-gray-800" data-testid={`captable-export-${key}`}>
+    <div className="flex flex-wrap items-center justify-between gap-2 border-b border-axal-ground py-2 last:border-b-0 dark:border-gray-700" data-testid={`captable-export-${key}`}>
       <span className="flex flex-col"><span className={`text-[13px] font-bold ${INK}`}>{title}</span>{sub ? <span className={`text-[11.5px] ${MUTED}`}>{sub}</span> : null}{said[key] ? <span className={`text-[11.5px] ${INK}`} role="status">{said[key]}</span> : null}</span>
       <button type="button" className={actionGhost} disabled={busy != null} onClick={onClick} data-testid={`captable-export-${key}-go`}>{busy === key ? 'Preparing…' : label}</button>
     </div>

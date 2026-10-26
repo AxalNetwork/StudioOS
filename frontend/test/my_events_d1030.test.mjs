@@ -276,6 +276,8 @@ test('D1131: a durable promotion makes the off-waitlist row; a current status al
   const t={...ATTENDING[0],registration_id:21,promoted_at:'2026-11-09T12:00:00Z'};
   const rows=needsYou([],[t],NOW);assert.equal(rows[0].pill,'Off the waitlist');assert.match(rows[0].text,/A seat opened at Pricing Workshop.*You’re going/);assert.equal(rows[0].action.to,'/events/1');
   assert.equal(needsYou([],[{...t,promoted_at:null}],NOW).length,0);
+  // Migration 611 stamps SQLite text (datetime('now')), read as UTC.
+  assert.equal(needsYou([],[{...t,promoted_at:'2026-11-09 12:00:00'}],NOW)[0].pill,'Off the waitlist');
   assert.equal(needsYou([],[{...t,reg_status:'cancelled'}],NOW).length,0);
   assert.equal(needsYou([],[{...t,status:'cancelled'}],NOW).length,0);
   assert.equal(needsYou([],[{...t,starts_at:'2020-01-01T00:00:00Z'}],NOW).length,0);

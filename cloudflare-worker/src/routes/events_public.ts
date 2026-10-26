@@ -15,7 +15,7 @@ import { Hono } from 'hono';
 import type { Env } from '../types';
 import { verifyTurnstile } from '../services/turnstile';
 import { ensureEventsSchema } from '../services/eventsSchema';
-import { isPrincipalCompEligible, parseAudienceRules } from '../services/eventAudience';
+import { compSourceOf, isPrincipalCompEligible, parseAudienceRules } from '../services/eventAudience';
 import { isCapacityFull, seatsTaken, type EventSeatRow } from '../services/eventCapacity';
 import { buildEventsIcs, isInPersonEvent, shapeAgendaItem, shapeEvent } from '../services/eventsCommon';
 import { registerPrincipal } from './events';
@@ -183,7 +183,7 @@ eventsPublic.post('/events/:slug/register', async (c) => {
   const compRule = await isPrincipalCompEligible(c.env, rules, { email }, event.host_user_id ?? null);
   // A pending comp invitation for this email also grants comp.
   const compInvite: any = await c.env.DB.prepare(
-    `SELECT comp FROM event_invitations WHERE event_id = ? AND lower(invited_email) = lower(?) AND comp = 1 AND status != 'revoked' LIMIT 1`,
+    `SELECT comp, source FROM event_invitations WHERE event_id = ? AND lower(invited_email) = lower(?) AND comp = 1 AND status != 'revoked' LIMIT 1`,
   ).bind(event.id, email).first();
   const comp = compRule.eligible || !!compInvite;
   const paid = Number(event.price_cents || 0) > 0 && !comp;
@@ -196,6 +196,8 @@ eventsPublic.post('/events/:slug/register', async (c) => {
 
   return registerPrincipal(c, event, {
     userId, email, name, comp, paid, source: 'public', invitationId: null, answers: body.answers ?? null,
+    // D1131: the rule that comped the seat, else the comp invitation's source.
+    compSource: compSourceOf(compRule, compInvite),
   });
 });
 
@@ -272,6 +274,8 @@ eventsPublic.post('/invite/:token/respond', async (c) => {
 
   return registerPrincipal(c, event, {
     userId, email, name, comp, paid, source: 'invite', invitationId: Number(inv.id), answers: body.answers ?? null,
+    // D1131: the token route comps by the invitation alone, so its source is the invitation's.
+    compSource: compSourceOf(null, inv),
   });
 });
 

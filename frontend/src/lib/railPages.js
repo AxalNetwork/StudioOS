@@ -480,6 +480,8 @@ export const NO_RAIL_ROUTES = [
   { route: '/attest/partner/:token', roles: [], why: 'A partner’s consent link a guest opens.' },
   { route: '/join/:token', roles: [], why: 'A branch invitation a guest opens.' },
   { route: '/share/captable/venture/:token', roles: [], why: 'A cap table venture link a guest opens, at its level (D1019 §6, D1026).' },
+  { route: '/deals/:dealId', roles: ['advisor'], why: 'D1152 (#3057), DL22c: an Advisor opening a deal reads that deal pages are for investors, with no rail and nothing from the deal.' },
+  { route: '/deals/:dealId/:tab', roles: ['advisor'], why: 'D1152 (#3057), DL22c: an Advisor opening a deal tab reads that deal pages are for investors, with no rail and nothing from the deal.' },
   { route: '/cap-tables/:projectId', roles: ['admin', 'advisor', 'partner'], why: 'D1026 (CT17, CT18): the cap table an Advisor, an Operating Partner or an Admin reads through D1019’s levels has no board on the AI rail canvas; part 14 (#2866) places it under each profile’s own page.' },
   { route: '/admin/due-diligence', roles: ['partner', 'investor', 'advisor'], why: 'Due diligence’s rail is the Admin board’s (D774, AdminBoardFrame); a partner, investor or advisor on it gets the page alone until their profile’s rollout gives them one.' },
   { route: '/admin/due-diligence/:uid', roles: ['partner', 'investor', 'advisor'], why: 'Due diligence’s rail is the Admin board’s (D774, AdminBoardFrame); a partner, investor or advisor on it gets the page alone until their profile’s rollout gives them one.' },
