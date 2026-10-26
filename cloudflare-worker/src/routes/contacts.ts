@@ -430,7 +430,8 @@ async function ownedProjectScope(c: Context<{ Bindings: Env }>, user: User): Pro
         .bind(user.founder_id).all<{ id: number; company_id: number | null }>() : { results: [] };
     const companyId = await activeCompanyFor(c, user);
     const own = (rows.results || []).filter(project => projectInActiveCompany(companyId, project)).map(project => Number(project.id));
-    // Round terms, allocations and sending updates remain the venture owner's.
+    // Owner: round/tranche/pro-rata settings and sending updates. The owner
+    // confirmed co-founders may record each investor's commitment fields.
     const ownerOnly = c.req.method === 'DELETE' || (c.req.method !== 'GET' && /\/raise-(?:round|closes|pro-rata|updates)(?:\/|$)/.test(capitalRequestPath(c.req.path)));
     return ownerOnly ? own : [...new Set([...own, ...await capitalMemberProjectIds(c.env, user)])];
   }

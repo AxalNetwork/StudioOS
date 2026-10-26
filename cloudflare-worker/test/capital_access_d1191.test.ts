@@ -171,6 +171,18 @@ test('D1191: Admin and Super Admin receive local summaries with no investor deta
   }finally{f.close();}
 });
 
+test('D1191 owner decision: co-founders record investor commitments but cannot change round or tranche settings',async()=>{
+  const f=fixture();try {
+    f.db.exec("INSERT INTO raise_closes (id,uid,project_id,round_id,name) VALUES (7,'fixture-close',101,1,'Fixture first close')");
+    const edited=await f.request('/api/contacts/raise-prospects/1',2,'PUT',{stage:'committed',amount:350,commit_status:'signed',instrument:'safe',close_id:7});
+    assert.equal(edited.status,200);assert.equal(edited.data.amount,350);assert.equal(edited.data.commit_status,'signed');assert.equal(edited.data.instrument,'safe');assert.equal(edited.data.close_id,7);
+    assert.equal((await f.request('/api/contacts/raise-round',2,'PUT',{project_id:101,target_amount:1})).status,403);
+    assert.equal((await f.request('/api/contacts/raise-closes/7',2,'PUT',{name:'Forbidden',state:'closed'})).status,403);
+    assert.equal(f.db.prepare('SELECT target_amount FROM raise_rounds WHERE id=1').get()?.target_amount,456789);
+    assert.equal(f.db.prepare('SELECT name FROM raise_closes WHERE id=7').get()?.name,'Fixture first close');
+  }finally{f.close();}
+});
+
 test('D1191: staff cannot bypass investor privacy through Contacts hub reads or mutations',async()=>{
   const f=fixture();try {
     const hub=await f.request('/api/contacts',30);assert.equal(hub.status,200);assert.deepEqual(hub.data.items.map((item:any)=>item.uid),['contact-public']);
