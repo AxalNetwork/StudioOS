@@ -42,7 +42,7 @@ export function sessionsChart(b) {
 }
 const QUEUES = [
   ['unattached_partners', 'Firm', 'Attach to firm', '/admin/advisors-partners/firms'],
-  ['missing_advisor_profiles', 'Profile', 'Open member record', '/admin/accounts'],
+  ['missing_advisor_profiles', 'Profile', 'Open member record', '/admin/accounts/all'],
   ['ending_deals', 'Deal', 'Open deals', '/admin/partner-invitations/deals'],
   ['pending_hosts', 'Lab hosts', 'Review hosts', '/admin/programs/spinout-lab/hosts'],
   ['missing_deck_photos', 'Deck', 'Edit deck roster', '/admin/advisors-partners/deck'],

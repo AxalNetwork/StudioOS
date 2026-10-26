@@ -246,7 +246,7 @@ function dueSettlements(s: Snapshot) {
 /** Overview's Needs-you lists (AP1). Shared with the tab counts, so Overview's count is these items. */
 function needsOf(s: Snapshot, list: Row[], endings: Row[]) {
   return {
-    missing_advisor_profiles: combined([s.accounts, s.advisors], () => rows(s.accounts).filter(u => u.role.toLowerCase() === 'advisor' && !rows(s.advisors).some(a => Number(a.member_id) === Number(u.id))).map(u => ({ ref: `user:${u.id}`, name: u.name, href: '/admin/accounts' }))),
+    missing_advisor_profiles: combined([s.accounts, s.advisors], () => rows(s.accounts).filter(u => u.role.toLowerCase() === 'advisor' && !rows(s.advisors).some(a => Number(a.member_id) === Number(u.id))).map(u => ({ ref: `user:${u.id}`, name: u.name, href: '/admin/accounts/all' }))),
     unattached_partners: combined([s.accounts, s.firms], () => rows(s.accounts).filter(u => u.role.toLowerCase() === 'partner' && !rows(s.firms).some(f => Number(f.id) === Number(u.partner_id))).map(u => ({ ref: `user:${u.id}`, name: u.name, href: '/admin/advisors-partners/firms' }))),
     ending_deals: fromRows(s.deals, () => endings.map(d => ({ id: d.id, type: d.deal_type, ends_at: d.expires_at, href: '/admin/partner-invitations' }))),
     pending_hosts: fromRows(s.hosts, value => value.filter(h => h.status === 'pending').map(h => ({ id: h.id, href: '/admin/programs/spinout-lab/hosts' }))),

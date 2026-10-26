@@ -64,7 +64,7 @@ canvas behind it still shows up here.
 | Group | Label | Route | Canvas behind it |
 | --- | --- | --- | --- |
 | Admin | Studio | `/studio` | — (no canvas; shipped ahead of the design corpus) |
-| Admin | Accounts | `/admin/held/accounts` | — (no canvas; shipped ahead of the design corpus) |
+| Admin | Accounts | `/admin/accounts` | — (no canvas; shipped ahead of the design corpus) |
 | Admin | Approvals | `/admin/approvals` | — (no canvas; shipped ahead of the design corpus) |
 | Admin | Programs | `/admin/programs` | Admin · Programs |
 | Admin | Community | `/admin/community` | — (no canvas; shipped ahead of the design corpus) |
@@ -92,7 +92,7 @@ canvas behind it still shows up here.
 | HQ | Funds oversight | `/admin/funds` | Admin · Super |
 | HQ | Fund admin | `/admin/fund-admin` | — (no canvas; shipped ahead of the design corpus) |
 | HQ | Contracts | `/admin/contracts` | Admin · Super, Contracts · Super, Ops Page · HQ tools (Q1–Q3, D633) |
-| HQ | Team | `/admin/accounts` | Admin · Super |
+| HQ | Team | `/admin/hq-team` | Admin · Super |
 | HQ | Revenue | `/admin/revenue` | — (no canvas; shipped ahead of the design corpus) |
 | HQ | Content | `/admin/content` | — (no canvas; shipped ahead of the design corpus) |
 | HQ | Platform | `/admin/platform` | — (no canvas; shipped ahead of the design corpus) |
@@ -129,7 +129,7 @@ rather than merely absent.
 - partner · Headerless · Delivery (`/delivery`)
 - partner · Headerless · Offers (`/offers`)
 - admin · Admin · Studio (`/studio`)
-- admin · Admin · Accounts (`/admin/held/accounts`)
+- admin · Admin · Accounts (`/admin/accounts`)
 - admin · Admin · Approvals (`/admin/approvals`)
 - admin · Admin · Community (`/admin/community`)
 - admin · Admin · Fund admin (`/admin/fund-admin`)
