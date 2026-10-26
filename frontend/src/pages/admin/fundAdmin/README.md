@@ -38,3 +38,18 @@ an admin's `/funds` and `/funds/performance` forward here.
   dialog is the shared `Lightbox`. The owner's export landed on 2026-10-25
   (`design/incoming/Fund Admin Console Page.dc.html`, D1157): it wins where
   it differs, and no act moves across the table.
+
+## D1165 (#3072): remaining layouts and states
+
+`FeesReportsTabs.jsx` owns Fees and the three Reports subpaths. `FundTabs.jsx`
+keeps its exports compatible; new Fees/Reports layout work belongs in the new
+file. Statements, pack figures and notice figures read on Open. Period editing
+reuses the existing `FundReportPeriodPage` rather than another editor.
+`BooksTab.jsx` mounts the injected ledger API only on Books and reuses
+`FundLedgerView`; individual reconciliation facts never imply agreement with
+Mercury. Keep Mercury stubbed in all tests.
+
+`ReadFailure` supplies Unreadable and Try again per block. `useRead` generations
+exclude stale responses. All nested console Lightboxes inherit the phone sheet
+form; the global step-up opts in separately at the route boundary. See D1165
+for what still needs the owner's live check and other parts' final content.

@@ -129,8 +129,8 @@ test('the tabs are links to their addresses; the open one is current, and Bankin
   } finally { await v.close(); }
 });
 
-test('Funds, LPs and Books draw their wait card and make no read of their own', async () => {
-  for (const [url, view] of [['/admin/fund-admin/funds', 'funds'], ['/admin/fund-admin/lps', 'lps'], ['/admin/fund-admin/banking/books', 'books']]) {
+test('Funds and LPs draw their wait card and make no read of their own', async () => {
+  for (const [url, view] of [['/admin/fund-admin/funds', 'funds'], ['/admin/fund-admin/lps', 'lps']]) {
     const v = await mount(url);
     try {
       assert.ok(v.by(`fund-admin-panel-${view}`), view);

@@ -1,10 +1,13 @@
 import { Link, Navigate, useLocation, useNavigate, useSearchParams } from 'react-router-dom';
-import { AdminPageHeader, HeaderMenuItem, HeaderTab, actionPrimary, useMovedNotice } from '../../../ui';
+import { LightboxPhoneProvider, AdminPageHeader, HeaderMenuItem, HeaderTab, actionPrimary, useMovedNotice } from '../../../ui';
 import { useAuth } from '../../../hooks/useAuthSync';
 import { branchOfUser } from '../../../lib/shellRole';
 import { api } from '../../../lib/api';
 import { fundAdminApi } from '../../../lib/api/fundAdmin';
 import { adminMercuryApi } from '../../../lib/api/adminMercury';
+import { fundLedgerApi } from '../../../lib/api/fundLedger';
+import { fundNoticesApi } from '../../../lib/api/fundNotices';
+import { BooksTab } from './BooksTab';
 import { fundFeesApi } from '../../../lib/api/fundFees';
 import { fundReportingApi } from '../../../lib/api/fundReporting';
 import { adminCapitalAttestationsApi } from '../../../lib/api/adminCapitalAttestations';
@@ -42,6 +45,9 @@ export const DEFAULT_APIS = {
   mercury: adminMercuryApi,
   fees: fundFeesApi,
   reporting: fundReportingApi,
+  ledger: fundLedgerApi,
+  notices: fundNoticesApi,
+  reports: { periods: (id) => api.fundsReportPeriods(id) },
   // D752 (#1890): the Calls tab's proofs of funds, read only on Show.
   capitalAttestations: adminCapitalAttestationsApi,
   // D1157 (#2388): NAV & performance draws today's performance read until FND10 lands.
@@ -97,13 +103,14 @@ export function FundAdminConsoleView({ user, apis = DEFAULT_APIS }) {
   const exportCsv = () => downloadCsv(fundsCsv(overview.status === 'ready' ? overview.data : null));
 
   return (
+    <LightboxPhoneProvider phone="sheet">
     <main className="mx-auto max-w-[1440px] pb-16" data-testid="fund-admin-console">
       <div className="px-4 pt-5 sm:px-6">
         <AdminPageHeader
           title={TITLE}
           pills={pill ? [{ ...pill, testId: 'fund-admin-role' }] : []}
           line={LINE}
-          actions={primary ? <Link className={actionPrimary} to={primary.to} data-testid="fund-admin-primary">{primary.label}</Link> : null}
+          actions={primary ? <Link className={`${actionPrimary} max-sm:w-full max-sm:justify-center`} to={primary.to} data-testid="fund-admin-primary">{primary.label}</Link> : null}
           more={moreItems(acts).map((m) => (m.to
             ? <HeaderMenuItem key={m.key} to={m.to} data-testid={`fund-admin-more-${m.key}`}>{m.label}</HeaderMenuItem>
             : <HeaderMenuItem key={m.key} onSelect={exportCsv} data-testid={`fund-admin-more-${m.key}`}>{m.label}</HeaderMenuItem>))}
@@ -121,6 +128,7 @@ export function FundAdminConsoleView({ user, apis = DEFAULT_APIS }) {
         <div className="mx-4 mt-4 sm:mx-6">
           <Banner tone="warn" data-testid="fund-admin-access-unreadable">
             Which acts you may take could not be read, so every control is shown. The Worker still refuses an act you may not take.
+            <button type="button" className="ml-2 underline" onClick={access.reload} data-testid="fund-admin-access-retry">Try again</button>
           </Banner>
         </div>
       )}
@@ -143,17 +151,19 @@ export function FundAdminConsoleView({ user, apis = DEFAULT_APIS }) {
         {view === 'reconciliation' && <ReconciliationTab apis={apis} access={acts} />}
         {view === 'calls' && <CallsTab {...fundProps} />}
         {view === 'distributions' && <DistributionsTab {...fundProps} />}
-        {view === 'fees' && <FeesTab {...fundProps} />}
-        {view === 'reports' && <ReportsTab {...fundProps} />}
+        {view === 'fees' && <FeesTab key={fund?.id} {...fundProps} />}
+        {view === 'reports' && <ReportsTab key={fund?.id} {...fundProps} />}
         {view === 'performance' && (
           <div className="mx-4 mt-5 sm:mx-6">
             <FundPerformanceView items={performance.data?.items || []} loading={performance.status === 'loading'}
               error={performance.status === 'unreadable' ? (performance.error?.message || 'Fund performance could not be read.') : null} reload={performance.reload} />
           </div>
         )}
-        {(view === 'funds' || view === 'lps' || view === 'books') && <WaitCard view={view} />}
+        {view === 'books' && <BooksTab key={params.get('fund') || 'first'} apis={apis} selectedFund={params.get('fund')} onFund={(id) => go({ fund: id })} />}
+        {(view === 'funds' || view === 'lps') && <WaitCard view={view} />}
       </div>
     </main>
+    </LightboxPhoneProvider>
   );
 }
 

@@ -271,12 +271,15 @@ test('the gated acts call what they name, with the previewed figures', async () 
   await m.unmount();
   const fees = await open(SUPER, 'fees');
   await fees.m.click('fee-issue');
+  await fees.m.click('fee-confirm-submit');
   assert.deepEqual(fees.s.calls.find((c) => c[0] === 'issuePeriod'), ['issuePeriod', 7, '2026Q4', 'd'.repeat(64)]);
   await fees.m.click('fee-terms-confirm-terms-1');
+  await fees.m.click('fee-confirm-submit');
   assert.deepEqual(fees.s.calls.find((c) => c[0] === 'confirmTerms'), ['confirmTerms', 7, 'terms-1']);
   await fees.m.unmount();
   const rec = await open(ADMIN, 'reconciliation');
   await rec.m.click('match-confirm-m-prop');
+  await rec.m.click('match-confirm-submit-m-prop');
   assert.deepEqual(rec.s.calls.find((c) => c[0] === 'confirmMatch'), ['confirmMatch', 'm-prop']);
   await rec.m.click('match-reject-m-rev');
   await rec.m.type('match-reason-m-rev', 'too short');
