@@ -84,7 +84,7 @@ export function useLoad(fn, key, { enabled = true, what = 'approvals:board' } = 
     setState({ status: 'loading', reply: null, error: null });
     Promise.resolve().then(() => call.current()).then(
       (reply) => { if (live) setState({ status: 'ready', reply, error: null }); },
-      (error) => { reportError(what, error); if (live) setState({ status: 'error', reply: null, error }); },
+      (error) => { reportError(`${what}`, error); if (live) setState({ status: 'error', reply: null, error }); },
     );
     return () => { live = false; };
   }, [key, tick, enabled, what]);
