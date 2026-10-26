@@ -171,6 +171,8 @@ const PartnerProfiles = lazy(() => import('./pages/admin/profiles/PartnerProfile
 // D997 (#2378): Persona segments, out of the Admin Console, under Accounts (HQ: Content).
 const PersonaSegments = lazy(() => import('./pages/admin/segments/PersonaSegments'));
 const NewPersonaSegment = lazy(() => import('./pages/admin/segments/NewSegment'));
+// D1005 (#2820): one segment's page, its Profile, Members and Activity tabs.
+const PersonaSegmentPage = lazy(() => import('./pages/admin/segments/SegmentPage'));
 // D1008 (#2386): Payments, out of the Admin Console, under Platform, HQ only.
 const Payments = lazy(() => import('./pages/admin/payments/Payments'));
 const ApRedirect = lazy(() => import('./pages/admin/advisors/ApRedirect'));
@@ -3022,6 +3024,10 @@ function AppInner() {
       <Route path="/admin/persona-segments" element={guard(['admin'], <PersonaSegments />)} />
       <Route path="/admin/persona-segments/new" element={guard(['admin'], <NewPersonaSegment />)} />
       <Route path="/admin/persona-segments/unclassified" element={guard(['admin'], <PersonaSegments />)} />
+      {/* D1005 (#2820): one segment, its three tabs as sub-paths. */}
+      <Route path="/admin/persona-segments/:key" element={guard(['admin'], <PersonaSegmentPage />)} />
+      <Route path="/admin/persona-segments/:key/members" element={guard(['admin'], <PersonaSegmentPage />)} />
+      <Route path="/admin/persona-segments/:key/activity" element={guard(['admin'], <PersonaSegmentPage />)} />
       <Route path="/admin/network-profiles" element={<ApRedirect />} />
       {/* D937 (#2374) — the Spin-Out Lab under Programs, its tabs as sub-paths
           (D936's header). /admin/spinout-lab, its /preview and the Admin
