@@ -181,7 +181,7 @@ test('D1206: Studio reads only the licensed deployment, deduplicates participant
   const f = fixture();
   try {
     licensed(f); checkins(f);
-    f.db.exec("UPDATE founder_checkins SET status='cancelled' WHERE id=22");
+    f.db.exec("UPDATE founder_checkins SET status='cancelled' WHERE id=22; UPDATE founder_checkins SET notes='Fixture private notes'");
     f.db.prepare('INSERT INTO ic_meetings (id,uid,title,start_at,organizer_user_id) VALUES (?,?,?,?,?)').run(1,'shared-ic','Shared meeting',START,1);
     f.db.exec('INSERT INTO ic_meeting_attendees (meeting_id,user_id) VALUES (1,1),(1,2)');
     await assert.rejects(() => service.fetchCalendarScope(f.env,{ id: 2, role: 'founder' } as any,'studio',FROM,TO), { message: 'Forbidden' });
@@ -315,5 +315,27 @@ test('D1206: Studio member reads continue past a complete keyset page without a 
     const body = await (await f.request(`/events?${window}&scope=studio&kinds=founder_checkin`)).json() as any;
     assert.equal(body.coverage.complete,true);
     assert.deepEqual(body.items.map((e: any) => e.title),['Last member check-in']);
+  } finally { await f.close(); }
+});
+
+
+test('D1206: scoped event cards keep the item shape while removing source links, notes and copy actions', async () => {
+  const f = fixture();
+  try {
+    licensed(f);
+    f.db.prepare('INSERT INTO events (id,slug,host_user_id,title,summary,starts_at,ends_at,location_kind,location_url,visibility,status) VALUES (?,?,?,?,?,?,?,?,?,?,?)')
+      .run(77,'fixture-scope-event',2,'Fixture hosted event','Fixture private context',START,END,'virtual','https://meet.example.test/host-room','unlisted','published');
+    const personal = await service.fetchUserEvents(f.env,2,'founder',FROM,TO,['event_hosted']);
+    assert.equal(personal.length,1); assert.ok(personal[0].url); assert.ok(personal[0].notes);
+    const response = await f.request(`/events?${window}&scope=studio&kinds=event_hosted`);
+    const body = await response.json() as any;
+    assert.equal(response.status,200); assert.equal(body.items.length,1);
+    const item = body.items[0];
+    assert.equal(item.family,'events'); assert.equal(item.all_day,false);
+    assert.deepEqual(item.my_role,{ code: 'read_only', words: 'Read only' });
+    assert.equal(item.href,null); assert.equal('url' in item,false); assert.equal(item.notes,null);
+    assert.equal(item.organizer_email,null); assert.equal(item.location_uri,null);
+    assert.ok(item.attendees.every((person: any) => person.email===null));
+    assert.deepEqual(item.can,{ rsvp: false, reschedule: false, cancel: false, copy: false });
   } finally { await f.close(); }
 });
