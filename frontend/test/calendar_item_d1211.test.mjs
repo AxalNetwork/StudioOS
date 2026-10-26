@@ -145,7 +145,7 @@ test('CAL4: the organiser\'s IC meeting — when, where, people, deal, agenda, c
     assert.equal(ui.say(ui.by('cal-item-role')), 'Organiser');
     assert.equal(ui.say(ui.by('cal-item-answer')), 'Going');
     assert.match(ui.say(ui.by('cal-item-when')), /\d+ min/);
-    assert.match(ui.say(ui.by('cal-item-where')), /meet\.google\.com\/abc-defg-hij/);
+    assert.ok(ui.say(ui.by('cal-item-where')).includes('meet.google.com/abc-defg-hij'), 'the link, without its scheme');
     assert.ok(ui.by('cal-item-join-quiet') && !ui.by('cal-item-join'), 'two days out, Join is quiet');
     assert.match(ui.say(ui.by('cal-item-people')), /People 1 of 3 going/);
     assert.equal(ui.count('cal-item-person'), 3);
@@ -337,7 +337,7 @@ test('CAL7: New IC meeting — the deal first, its people by name, Meet when Goo
     assert.match(ui.say(ui.by('cal-ic-people-option')), /Bea · Investor Invited to Acme Robotics/);
     await ui.press(ui.by('cal-ic-people-option'));
     assert.match(ui.say(ui.by('cal-ic-people-chosen')), /Bea/);
-    assert.match(ui.say(ui.by('cal-ic-people')), new RegExp(SAYS.create.replace(/[.]/g, '\\.')));
+    assert.ok(ui.say(ui.by('cal-ic-people')).includes(SAYS.create), 'the People note says what the create does');
     assert.equal(ui.props(ui.by('cal-ic-place-meet')).checked, true, 'Meet is on when Google is connected');
     assert.match(ui.say(ui.by('cal-ic-place')), /Add a Google Meet link The link is made on your Google account/);
     assert.equal(ui.by('cal-ic-place-link'), undefined);
