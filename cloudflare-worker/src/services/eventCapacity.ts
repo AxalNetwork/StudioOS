@@ -145,7 +145,7 @@ export async function promoteWaitlist(env: Env, event: EventSeatRow): Promise<Pr
     const cap = event.capacity != null ? Number(event.capacity) : null;
     const upd: any = await env.DB.prepare(
       `UPDATE event_registrations
-          SET status = ?, waitlist_position = NULL, updated_at = datetime('now')
+          SET status = ?, waitlist_position = NULL, promoted_at = datetime('now'), updated_at = datetime('now')
         WHERE id = ? AND status = 'waitlisted' AND ${SEAT_FREE_PREDICATE}`,
     ).bind(target, next.id, cap, event.id, cap).run();
     if (!upd?.meta?.changes) break; // lost the seat to a concurrent claim/promotion

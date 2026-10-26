@@ -37,9 +37,10 @@ the timed Join control, actual suggestion eligibility and its own retry state,
 event-day Check in on desktop Hosting/Hosting soon, and Events' account-menu
 Current marker. `eventTime.js` shares UTC timestamp parsing and event-zone day
 rules with `hostHeaderModel.js`; `myEventsModel.js` holds the join boundary,
-source words and promotion-row projection. A durable promotion marker and
-rule-derived seat source await a migration number; no historical source or
-promotion is guessed. See `design/EVENT_SYSTEM.md` §10 for the surface's current
+source words and promotion-row projection. Migration 611 stores both facts on
+the registration when they happen (`comp_source`, `promoted_at`); a row from
+before it holds NULL, read as Source not recorded and no off-waitlist row, so
+no historical source or promotion is guessed. See `design/EVENT_SYSTEM.md` §10 for the surface's current
 scope and the parts still pending. Calendar cancellation cleanup is the Worker's
 `cloudflare-worker/src/routes/_eventCalendar.ts` / `cloudflare-worker/src/services/calendar/cancelEvents.ts`, not a client-side provider call.
 

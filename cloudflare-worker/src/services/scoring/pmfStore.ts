@@ -3,7 +3,7 @@ import { signHmac } from '../scoreIntegrity';
 import type { Env } from '../../types';
 import { READINESS_ITEMS, type ComputedScore } from '../raiseCycle';
 import { collectPmfInputs, type PmfCollected } from './pmfCollector';
-import { PMF_MODEL_V1, scorePmf, type PmfResult } from './pmf';
+import { GRADES, PMF_MODEL_V1, scorePmf, type PmfModel, type PmfResult } from './pmf';
 
 export type PmfTrigger = 'module_read' | 'rescore';
 type Stored = { project_id: number; value: number | null; band: string | null; confidence: number; coverage: number; signature: string; id: number; uid: string; inputs_hash: string; inputs_json: string; model_version: string; trigger: PmfTrigger; computed_by: number | null; computed_at: string };
@@ -56,6 +56,18 @@ export async function recomputePmf(env: Env, projectId: number, userId: number, 
     || !['module_read','rescore'].includes(trigger)) throw new Error('invalid_pmf_context');
   const collected = await collectPmfInputs(env, projectId, today);
   const result = scorePmf(collected.inputs, PMF_MODEL_V1, today);
+  // D1145 (#3031, RD16 B): an input that could not be read makes this a partial
+  // score. It is drawn as it is, without that input and at the lower confidence,
+  // but never stored: history, checklist item 8 and the audit keep the last
+  // complete read, and a store that answers again writes the next point.
+  // Below the floor it is not "Not enough recorded" (what is recorded is not
+  // known), so the part is Unreadable, as a failed read always was.
+  if (collected.inputs.some((f) => f.unreadable)) {
+    if (result.state !== 'scored') return { state: 'unreadable' as const, reason: 'Product-market fit could not be read', changed: false };
+    const previous = await latest(env, projectId).catch(() => null);
+    return { ...result, id: previous?.id ?? null, inputs_hash: null, computed_at: new Date().toISOString(),
+      computed_by: userId, trigger, changed: false, partial: true, pivot_at: collected.pivot_at, verdict: collected.verdict };
+  }
   const hash = await pmfInputHash(collected, result);
   const previous = await latest(env, projectId);
   let changed = false;
@@ -104,4 +116,38 @@ export async function pmfHistory(env: Env, projectId: number, limit = 200, befor
   }));
   items.reverse();
   return { items, has_more: (rows.results || []).length > limit, next_cursor: (rows.results || []).length > limit ? page.at(-1)!.id : null };
+}
+
+/** A stored model as RD4 draws it: every field the method dialog names, or the read refuses it. */
+function modelShape(raw: string): PmfModel {
+  const m = JSON.parse(raw);
+  const pairs = (x: unknown) => Array.isArray(x) && x.every((p) => Array.isArray(p) && p.length === 2 && typeof p[0] === 'number' && typeof p[1] === 'string');
+  const ok = m && typeof m.version === 'string' && typeof m.published === 'string' && typeof m.floor === 'number'
+    && pairs(m.confidence) && pairs(m.bands) && m.freshness_days && typeof m.freshness_days.records === 'number' && typeof m.freshness_days.connector === 'number'
+    && Array.isArray(m.inputs) && m.inputs.length > 0 && m.inputs.every((i: any) => i && typeof i.key === 'string' && typeof i.label === 'string'
+      && typeof i.weight === 'number' && typeof i.reads === 'string' && typeof i.module === 'string' && (i.freshness === 'records' || i.freshness === 'connector'));
+  if (!ok) throw new Error('pmf_model_unreadable');
+  return m as PmfModel;
+}
+
+/**
+ * D1146 (#3032): the model RD4 draws, from `scoring_model_versions`. It is the
+ * version this venture's latest stored point was scored with, or, before any
+ * point, the version the code scores with. That version is stored with the
+ * first score (D1144), so before it the read says `stored: false` and answers
+ * the code's own definition, which the first score will publish unchanged. A
+ * point whose model row is missing, or a row RD4 cannot draw, is unreadable,
+ * never the code's copy in its place.
+ */
+export async function pmfModelRead(env: Env, projectId: number) {
+  const last = await env.DB.prepare("SELECT model_version FROM venture_scorecards WHERE project_id = ? AND scope = 'pmf' ORDER BY id DESC LIMIT 1")
+    .bind(projectId).first<{ model_version: string }>();
+  const version = last?.model_version ?? PMF_MODEL_V1.version;
+  const row = await env.DB.prepare("SELECT version, model_json, published_at FROM scoring_model_versions WHERE scope = 'pmf' AND version = ?")
+    .bind(version).first<{ version: string; model_json: string; published_at: string }>();
+  if (!row) {
+    if (last) throw new Error('pmf_model_missing');
+    return { version, stored: false, scored_with: false, published_at: null, model: PMF_MODEL_V1, grades: GRADES };
+  }
+  return { version: row.version, stored: true, scored_with: !!last, published_at: row.published_at, model: modelShape(row.model_json), grades: GRADES };
 }

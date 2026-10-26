@@ -472,6 +472,13 @@ async function roomDetails(env: Env, project: ProjectRow, role: RoomRole | 'supp
                    AND n.status = 'active'
                    AND (n.valid_until IS NULL OR datetime(n.valid_until) > datetime('now'))
               ) AS nda_signed,
+              -- D1107: an NDA out for signature between the pair, so Access says "Waiting for signatures".
+              EXISTS (
+                SELECT 1 FROM pairwise_ndas n
+                 WHERE n.party_a_user_id IN (SELECT owner.id FROM users owner WHERE owner.founder_id = p.founder_id)
+                   AND n.party_b_user_id = g.investor_user_id
+                   AND n.status = 'pending'
+              ) AS nda_pending,
               -- D691 decision 6: the investor is a committed prospect of this
               -- venture, the match a committed-only file is opened by.
               EXISTS (
@@ -518,7 +525,7 @@ async function roomDetails(env: Env, project: ProjectRow, role: RoomRole | 'supp
       folders: folders.results || [],
       files: files.results || [],
       grants: (grants.results || []).map(({ id, folders_scoped, ...g }) => ({
-        ...g, nda_signed: !!g.nda_signed,
+        ...g, nda_signed: !!g.nda_signed, nda_pending: !g.nda_signed && !!g.nda_pending,
         // D1103 — null opens every folder; else the uids it opens. Unreadable
         // is said, never drawn as every folder or none.
         ...(Number(folders_scoped) !== 1 ? { folders: null }
@@ -1359,11 +1366,21 @@ r.post('/:projectUid/grants', async (c) => {
     // D1103 — only the owner shares.
     if (room.role !== 'owner') return c.json(OWNER_ONLY, 403);
     const body = await c.req.json().catch(() => ({} as any));
-    const email = String(body.email || '').trim().toLowerCase();
-    if (!email) return c.json({ detail: 'email is required' }, 400);
     // Checked before the address is looked up, so a refusal says nothing about who has an account.
     const fields = await grantFields(c.env, project.id, body);
     if ('refusal' in fields) return c.json({ detail: fields.refusal }, fields.status);
+    // D1107 (DR7): Share picks one of this venture's own prospects, named by its uid; the
+    // address is read here, never taken from the page. Another venture's prospect is 404.
+    let email = String(body.email || '').trim().toLowerCase();
+    if (body.prospect !== undefined) {
+      const uid = typeof body.prospect === 'string' && body.prospect.length > 0 && body.prospect.length <= 64 ? body.prospect : null;
+      const prospect = uid ? await c.env.DB.prepare('SELECT email FROM raise_prospects WHERE uid = ? AND project_id = ?')
+        .bind(uid, project.id).first<{ email: string | null }>() : null;
+      if (!prospect) return c.json({ detail: 'Investor not found in Capital relationships' }, 404);
+      email = String(prospect.email || '').trim().toLowerCase();
+      if (!email) return c.json({ detail: 'This investor has no email in Capital relationships. Add one there to share the room.', code: 'no_email' }, 400);
+    }
+    if (!email) return c.json({ detail: 'email is required' }, 400);
 
     // Resolves to an EXISTING account. No invitation is sent and no row is
     // written for an unknown address. Both outcomes return the same response.
@@ -1388,6 +1405,31 @@ r.post('/:projectUid/grants', async (c) => {
       ...(fields.values.folders !== undefined ? scopeStatements(c.env, 'investor', [project.id, investor.id], fields.values.folders) : []),
     ]);
     return c.json({ ok: true }, 201);
+  } catch (e) { return mapError(c, e); }
+});
+
+/**
+ * D1107 (DR7) — whom Share offers: this venture's prospects in Capital
+ * relationships (#2457), each with its stage and whether an email is on file.
+ * The owner's only, as sharing is. Whether an address has a StudioOS account
+ * is never said, as `POST /grants` never says it.
+ */
+r.get('/:projectUid/share-candidates', async (c) => {
+  try {
+    const user = await requireAuth(c);
+    const room = await roomProject(c, user, c.req.param('projectUid'));
+    if (!room) return c.json({ detail: 'Project not found' }, 404);
+    if (room.role !== 'owner') return c.json(OWNER_ONLY, 403);
+    const rows = (await c.env.DB.prepare(
+      `SELECT uid, name, firm, stage, email FROM raise_prospects
+        WHERE project_id = ? ORDER BY COALESCE(firm, name, email), id LIMIT 500`,
+    ).bind(room.project.id).all<{ uid: string; name: string | null; firm: string | null; stage: string | null; email: string | null }>()).results || [];
+    return c.json({
+      candidates: rows.map((r) => ({
+        uid: r.uid, name: r.name ?? null, firm: r.firm ?? null, stage: r.stage ?? null,
+        email: r.email ? String(r.email).trim() || null : null,
+      })),
+    });
   } catch (e) { return mapError(c, e); }
 });
 
@@ -1458,9 +1500,38 @@ r.get('/:projectUid/requests', async (c) => {
       console.warn('[data_room] access requests unreadable:', (e as Error)?.message);
       return c.json(REQUESTS_UNREADABLE, 503);
     }
-    return c.json({ requests, open: requests.filter((q) => q.state === 'open').length, can_answer: room.role === 'owner' });
+    // D1107 (DR9): the venture's diligence requests and the files matched to each. Its own block:
+    // a failure here never blanks the access requests.
+    let diligence: unknown[] | null = null;
+    try { diligence = await diligenceOf(c.env, room.project.id); }
+    catch (e) { console.warn('[data_room] diligence requests unreadable:', (e as Error)?.message); }
+    return c.json({ requests, open: requests.filter((q) => q.state === 'open').length, can_answer: room.role === 'owner',
+      diligence, ...(diligence === null ? { diligence_unreadable: true } : {}) });
   } catch (e) { return mapError(c, e); }
 });
+
+/**
+ * D1107 — this venture's diligence requests (`dd_requests` on its project
+ * case), newest first, each with the room's files matched to it. Only the
+ * founder-visible columns: the title, the state and its dates (migration 167's
+ * invariant). No case internals, no reviewer.
+ */
+async function diligenceOf(env: Env, projectId: number) {
+  const reqs = (await env.DB.prepare(
+    `SELECT r.id, r.title, r.state, r.created_at, r.responded_at, r.reviewed_at
+       FROM dd_requests r JOIN dd_cases k ON k.id = r.case_id
+      WHERE k.subject_type = 'project' AND k.subject_id = ?
+      ORDER BY r.created_at DESC, r.id DESC LIMIT 100`,
+  ).bind(projectId).all<{ id: number; title: string; state: string | null; created_at: string; responded_at: string | null; reviewed_at: string | null }>()).results || [];
+  const files = (await env.DB.prepare(
+    'SELECT uid, name, dd_request_id FROM data_room_files WHERE project_id = ? AND dd_request_id IS NOT NULL ORDER BY name',
+  ).bind(projectId).all<{ uid: string; name: string; dd_request_id: number }>()).results || [];
+  return reqs.map((r) => ({
+    id: Number(r.id), title: r.title, state: r.state || 'requested', created_at: r.created_at,
+    responded_at: r.responded_at ?? null, reviewed_at: r.reviewed_at ?? null,
+    files: files.filter((f) => Number(f.dd_request_id) === Number(r.id)).map((f) => ({ uid: f.uid, name: f.name })),
+  }));
+}
 
 /** The request this route names, on this venture; null when there is none. */
 async function requestOf(env: Env, projectId: number, uid: string) {

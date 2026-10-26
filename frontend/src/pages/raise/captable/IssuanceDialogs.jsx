@@ -24,12 +24,12 @@ import { money as moneyOf } from './capTableModel';
  *     the reason the founder will see, recorded as a correction (D1017).
  */
 
-const INPUT = 'w-full rounded-[9px] border border-axal-hairline bg-white px-2.5 py-1.5 text-[13px] text-axal-ink dark:border-gray-700 dark:bg-gray-950 dark:text-gray-100';
+const INPUT = 'w-full rounded-[9px] border border-axal-hairline bg-white px-2.5 py-1.5 text-[13px] text-axal-ink dark:border-gray-700 dark:bg-gray-950 dark:text-gray-200';
 const LABEL = 'flex flex-col gap-1 text-[10.5px] font-extrabold uppercase tracking-[.07em] text-axal-muted dark:text-gray-400';
 const MUTED = 'text-axal-muted dark:text-gray-400';
 const CHIP = 'rounded-full border px-2.5 py-1 text-[12px] font-bold';
 const ON = 'border-axal-violet bg-axal-violet text-white';
-const OFF = 'border-axal-hairline bg-white text-axal-ink hover:bg-axal-ground dark:border-gray-700 dark:bg-gray-900 dark:text-gray-100 dark:hover:bg-gray-800';
+const OFF = 'border-axal-hairline bg-white text-axal-ink hover:bg-axal-ground dark:border-gray-700 dark:bg-gray-900 dark:text-gray-200 dark:hover:bg-gray-800';
 
 function Field({ label, children, sub, testId }) {
   return (
@@ -192,19 +192,19 @@ export function DraftDrawer({ projectId, record, draft, mode = 'record', admin =
     ? `Record ${v.holder}’s ${money ? `${v.kind === 'safe' ? 'SAFE' : 'note'} for ${moneyOf(built.body.amount_cents, code)}` : `${built.body.shares.toLocaleString('en-US')} shares`}? ${CONFIRM_TAIL}`
     : 'Accept opens once you enter the amounts the document holds.';
   return (
-    <Lightbox label="Drafted by Eadwyn" eyebrow="Proposal · drafted by Eadwyn" title={v.title} width={600} onClose={() => !write.busy && onClose()} testId="captable-draft-drawer"
+    <Lightbox label="Drafted by Eadwyn" eyebrow="Proposal · drafted by Eadwyn" title={v.title} width={600} onClose={() => !write.busy && onClose()} testId="captable-draft-drawer" phone="sheet"
       footer={(
         <div className="flex flex-col gap-2">
-          <p className="m-0 text-[12px] font-semibold text-axal-ink dark:text-gray-100" data-testid="captable-draft-confirm">{confirm}</p>
+          <p className="m-0 text-[12px] font-semibold text-axal-ink dark:text-gray-200" data-testid="captable-draft-confirm">{confirm}</p>
           <div className="flex flex-wrap justify-end gap-2">
             <button type="button" className={actionGhost} onClick={discard} disabled={write.busy} data-testid="captable-draft-discard">Discard</button>
             <button type="button" className={actionPrimary} onClick={accept} disabled={write.busy || !built.body} data-testid="captable-draft-accept">{mode === 'propose' ? 'Propose' : 'Accept'}</button>
           </div>
-          {write.refusal ? <p role="alert" className="m-0 text-[12px] font-semibold text-red-700 dark:text-red-300" data-testid="captable-draft-refusal">{write.refusal}</p> : null}
+          {write.refusal ? <p role="alert" className="m-0 text-[12px] font-semibold text-red-700 dark:text-red-400" data-testid="captable-draft-refusal">{write.refusal}</p> : null}
         </div>
       )}>
       <div className="flex flex-col gap-3 text-[13px]">
-        <p className="m-0 rounded-[10px] border border-violet-200 bg-violet-50 px-3 py-2 font-semibold text-violet-900 dark:border-violet-900 dark:bg-violet-950/30 dark:text-violet-200" data-testid="captable-draft-note">
+        <p className="m-0 rounded-[10px] border border-violet-200 bg-violet-50 px-3 py-2 font-semibold text-violet-900 dark:border-[#4c3a8a] dark:bg-[#211f3d] dark:text-violet-400" data-testid="captable-draft-note">
           Eadwyn drafted this from {v.document || 'the document'}. Check it, then accept. It never enters an amount, a cap, a discount, a price or a share count.
         </p>
         <section aria-label="Terms Eadwyn found" data-testid="captable-draft-terms">
@@ -268,7 +268,7 @@ export function CorrectDialog({ projectId, record, row, today = isoDay(), onClos
   };
   return (
     <CapTableDialog title="Correct a record" sub={ADMIN_FOOT} onClose={onClose} action="Save correction" onAction={go} write={write} testId="captable-correct-dialog">
-      <Field label="Record"><span className="text-[13px] font-semibold normal-case tracking-normal text-axal-ink dark:text-gray-100" data-testid="captable-correct-record">{voidLine(row, record).split('. It stays')[0]}</span></Field>
+      <Field label="Record"><span className="text-[13px] font-semibold normal-case tracking-normal text-axal-ink dark:text-gray-200" data-testid="captable-correct-record">{voidLine(row, record).split('. It stays')[0]}</span></Field>
       <Field label="Shares" sub="The share count this record should have. The difference is recorded as a correction."><input className={INPUT} inputMode="numeric" value={next} onChange={(e) => setNext(e.target.value)} aria-label="Shares" data-testid="captable-correct-shares" /></Field>
       <Field label="Reason the founder will see · required">
         <textarea className={`${INPUT} min-h-[52px]`} value={reason} maxLength={2000} onChange={(e) => setReason(e.target.value)} aria-label="Reason the founder will see" data-testid="captable-correct-reason" />
