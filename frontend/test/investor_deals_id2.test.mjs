@@ -234,9 +234,9 @@ test('the zone is mounted once, gated, and registered before the id route', () =
   assert.ok(literal > -1 && byId > -1 && literal < byId,
     '/screening is registered after /:id, so it is swallowed by the id route');
   // Scope this check to the screening handler: a guard on another route
-  // cannot protect this desk. #2439 restricts it to admin/partner; investors
-  // may be privileged elsewhere but cannot read internal screening scores.
+  // cannot protect this desk. D1254 (#3277) admits related investors; mounted
+  // Worker tests prove per-deal gating, verified reads and scoped aggregates.
   const handler = ROUTE.slice(literal, ROUTE.indexOf('\ndeals.', literal + 10));
-  assert.match(handler, /if \(user\.role !== 'admin' && user\.role !== 'partner'\) return c\.json\(\{ detail: 'Forbidden' \}, 403\)/,
-    'the screening desk must permit only admins and partners (#2439)');
+  assert.match(handler, /if \(user\.role !== 'admin' && user\.role !== 'partner' && user\.role !== 'investor'\) return c\.json\(\{ detail: 'Forbidden' \}, 403\)/,
+    'Screening admits only staff or relationship-scoped investors (D1254)');
 });

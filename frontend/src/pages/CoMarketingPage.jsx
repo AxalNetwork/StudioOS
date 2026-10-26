@@ -2,14 +2,14 @@
  *
  * Three views in one page (driven by user role):
  *   - Partner: submit + manage your pitches, see attribution counts.
- *   - Admin: review queue → approve / reject / publish.
+ *   - Admin: reviews pitches on Approvals › Co-marketing pitches (D1046).
  *   - Anyone: published catalog of approved+live campaigns.
  */
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { safeExternalUrl } from '../lib/url';
 import {
-  Megaphone, Send, CheckCircle, XCircle, Loader2, Globe, Copy, Plus, BarChart3,
+  Megaphone, Send, Loader2, Globe, Copy, Plus, BarChart3,
 } from 'lucide-react';
 import { api } from '../lib/api';
 import PageExplainer from '../components/PageExplainer';
@@ -579,132 +579,6 @@ function PartnerView() {
   );
 }
 
-function AdminQueueRow({ pitch, onChange }) {
-  const [busy, setBusy] = useState(false);
-  const [notes, setNotes] = useState('');
-  const [publishUrl, setPublishUrl] = useState('');
-  async function act(kind) {
-    setBusy(true);
-    try {
-      if (kind === 'approve') await api.approveCoMarketingPitch(pitch.uid, notes || null);
-      else if (kind === 'reject') await api.rejectCoMarketingPitch(pitch.uid, notes || null);
-      else if (kind === 'publish') await api.publishCoMarketingPitch(pitch.uid, { published_url: publishUrl || null, notes: notes || null });
-      onChange();
-    } catch (e) { alert(e.message); } finally { setBusy(false); }
-  }
-  return (
-    <div className="bg-white border border-gray-200 rounded p-4 space-y-3 dark:bg-gray-900 dark:border-gray-800">
-      <div className="flex items-center gap-2">
-        <div className="font-semibold text-gray-900 dark:text-gray-100">{pitch.title}</div>
-        <StatusPill status={pitch.status} />
-        <span className="text-[11px] text-gray-500">{pitch.asset_type}</span>
-        <span className="text-[11px] text-gray-500 ml-auto">
-          {pitch.partner_name ? `${pitch.partner_name}${pitch.partner_company ? ` · ${pitch.partner_company}` : ''}` : `partner #${pitch.partner_id}`}
-        </span>
-      </div>
-      {pitch.angle && (
-        <div className="text-sm font-medium text-violet-700 dark:text-violet-300">{pitch.angle}</div>
-      )}
-      <div className="text-sm text-gray-700 whitespace-pre-wrap dark:text-gray-300">{pitch.summary}</div>
-      {pitch.what_you_bring && (
-        <div className="mt-2 text-xs text-gray-600 dark:text-gray-400">
-          <span className="font-medium text-gray-700 dark:text-gray-300">What they bring:</span>{' '}
-          <span className="whitespace-pre-wrap">{pitch.what_you_bring}</span>
-        </div>
-      )}
-      <div className="text-xs text-gray-500 space-x-2">
-        {pitch.proposed_date && <span>Proposed: {new Date(pitch.proposed_date).toLocaleString()}</span>}
-        {pitch.target_audience && <span>· Audience: {pitch.target_audience}</span>}
-        {pitch.distribution_channels && <span>· Channels: {pitch.distribution_channels}</span>}
-      </div>
-      {pitch.asset_url && (
-        <a className="text-xs text-violet-600 hover:underline" href={safeExternalUrl(pitch.asset_url)} target="_blank" rel="noreferrer">View asset</a>
-      )}
-      <textarea rows={2} value={notes}
-        onChange={(e) => setNotes(e.target.value)}
-        placeholder="Reviewer notes, visible to the partner. A decline needs a reason of at least 10 characters."
-        className="w-full px-3 py-2 border border-gray-300 rounded text-sm dark:border-gray-700" />
-      {pitch.status === 'approved' && (
-        <input value={publishUrl}
-          onChange={(e) => setPublishUrl(e.target.value)}
-          placeholder="Published URL (when going live)"
-          className="w-full px-3 py-2 border border-gray-300 rounded text-sm dark:border-gray-700" />
-      )}
-      <div className="flex flex-wrap gap-2">
-        {pitch.status === 'proposed' && (
-          <>
-            <button disabled={busy} onClick={() => act('approve')}
-              className="text-xs bg-emerald-600 hover:bg-emerald-700 disabled:bg-gray-300 text-white px-3 py-1.5 rounded font-medium flex items-center gap-1">
-              <CheckCircle size={12} /> Approve
-            </button>
-            <button disabled={busy} onClick={() => act('reject')}
-              className="text-xs bg-red-600 hover:bg-red-700 disabled:bg-gray-300 text-white px-3 py-1.5 rounded font-medium flex items-center gap-1">
-              <XCircle size={12} /> Reject
-            </button>
-          </>
-        )}
-        {pitch.status === 'approved' && (
-          <button disabled={busy} onClick={() => act('publish')}
-            className="text-xs bg-violet-600 hover:bg-violet-700 disabled:bg-gray-300 text-white px-3 py-1.5 rounded font-medium flex items-center gap-1">
-            <Globe size={12} /> Mark published
-          </button>
-        )}
-      </div>
-      {pitch.attribution_code && (
-        <div className="text-xs text-gray-500 flex items-center gap-2">
-          UTM code: <CopyableCode code={pitch.attribution_code} />
-          <AttributionBadge counts={pitch.attribution} />
-        </div>
-      )}
-    </div>
-  );
-}
-
-function AdminView() {
-  const [filter, setFilter] = useState('proposed');
-  const [items, setItems] = useState([]);
-  const [err, setErr] = useState(null);
-  const [loading, setLoading] = useState(true);
-  async function load() {
-    setErr(null); setLoading(true);
-    try {
-      const d = await api.adminCoMarketingQueue(filter);
-      setItems(d.items || []);
-    } catch (e) {
-      const msg = (e?.message || '').toLowerCase();
-      if (e?.status === 404 || msg === 'not found') setItems([]);
-      else setErr(e.message);
-    } finally { setLoading(false); }
-  }
-  useEffect(() => { load(); }, [filter]);
-
-  return (
-    <div className="space-y-4">
-      <div className="flex items-center gap-2">
-        <span className="text-sm text-gray-700 dark:text-gray-300">Filter:</span>
-        {['proposed', 'approved', 'published', 'rejected', 'withdrawn'].map((s) => (
-          <button key={s} onClick={() => setFilter(s)}
-            className={`text-xs px-3 py-1 rounded-full ${filter === s ? 'bg-violet-600 text-white' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'}`}>
-            {s}
-          </button>
-        ))}
-      </div>
-      {err && (
-        <div className="bg-red-50 border border-red-200 rounded p-3 text-sm text-red-700">{err}</div>
-      )}
-      {loading ? (
-        <div className="text-sm text-gray-500">Loading…</div>
-      ) : items.length === 0 ? (
-        <div className="text-sm text-gray-500">Nothing to show in “{filter}”.</div>
-      ) : (
-        <div className="space-y-3">
-          {items.map((p) => <AdminQueueRow key={p.id} pitch={p} onChange={load} />)}
-        </div>
-      )}
-    </div>
-  );
-}
-
 /**
  * D637 — a click on a published piece's View link records a visit against its
  * pitch (`POST /comarketing/track`). Fire and forget: the link opens either
@@ -761,11 +635,12 @@ export default function CoMarketingPage({ user }) {
   const role = (user?.role || '').toLowerCase();
   const isAdmin = role === 'admin';
   const isPartner = role === 'partner';
-  const [tab, setTab] = useState(isAdmin ? 'admin' : (isPartner ? 'mine' : 'published'));
+  const [tab, setTab] = useState(isPartner || isAdmin ? 'mine' : 'published');
 
+  // D1046 (#2894): the admin Review queue is retired into Approvals ›
+  // Co-marketing pitches, where each decision opens a dialog and tells the partner.
   const tabs = [];
   if (isPartner || isAdmin) tabs.push({ id: 'mine', label: 'My pitches' });
-  if (isAdmin) tabs.push({ id: 'admin', label: 'Review queue' });
   tabs.push({ id: 'published', label: 'Published' });
 
   return (
@@ -790,8 +665,13 @@ export default function CoMarketingPage({ user }) {
         ))}
       </div>
 
+      {isAdmin && (
+        <p className="text-sm text-gray-700 dark:text-gray-300" data-testid="comarketing-review-moved">
+          Pitches are reviewed on{' '}
+          <Link to="/admin/approvals/co-marketing" className="font-semibold text-violet-700 hover:underline dark:text-violet-300">Approvals › Co-marketing pitches</Link>.
+        </p>
+      )}
       {tab === 'mine' && <PartnerView />}
-      {tab === 'admin' && <AdminView />}
       {tab === 'published' && <PublishedFeed />}
     </div>
   );

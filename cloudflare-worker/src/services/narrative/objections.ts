@@ -12,6 +12,14 @@
  * answer written on any of its rows in Capital relationships, else null. It is
  * shown to the founder and admins who already read Capital relationships.
  *
+ * WHICH SECTION ANSWERS IT (the owner's option A, migration 624). Each
+ * objection carries `answered`: the saved version and section whose words
+ * answer it, how that was set (`eadwyn`: an accepted "Answer it" draft, saved;
+ * `picked`: chosen by hand), who set it and when, or null. The answers are read
+ * apart from the feedback: when they cannot be read, `answers` is
+ * 'unreadable' and every `answered` is null, so no objection reads as answered
+ * or unanswered on a failed read; the page says so.
+ *
  * "Answer it" is `objectionDraft.ts`. This file imports nothing of the
  * narrative's store, so the module read (`raiseCycle.ts`) can use it.
  */
@@ -20,6 +28,14 @@ import type { Env } from '../../types';
 /** Rows read at most; past it the read says it is capped rather than undercount in silence. */
 export const FEEDBACK_CAP = 2000;
 
+export type Answered = {
+  version: number;
+  section: string;
+  how: 'eadwyn' | 'picked';
+  by: { id: number; name: string | null } | null;
+  at: string | null;
+};
+
 export type Objection = {
   key: string;
   text: string;
@@ -27,9 +43,10 @@ export type Objection = {
   prospects: number;
   last_heard: string | null;
   answer: string | null;
+  answered?: Answered | null;
 };
 
-export type ObjectionsRead = { state: 'ok'; items: Objection[]; capped: boolean };
+export type ObjectionsRead = { state: 'ok'; items: Objection[]; capped: boolean; answers: 'ok' | 'unreadable' };
 
 const normal = (s: string) => s.replace(/\s+/g, ' ').trim().toLowerCase();
 
@@ -62,6 +79,24 @@ export async function groupObjections(rows: readonly Row[]): Promise<Objection[]
   return out.sort((a, b) => b.count - a.count || a.text.localeCompare(b.text));
 }
 
+type AnswerRow = { objection_key: string; version: number; section_key: string; how: string; answered_by: number | null; name: string | null; answered_at: string | null };
+
+/** The venture's recorded answers by objection key. A failed read throws. */
+export async function readAnswers(env: Env, projectId: number): Promise<Map<string, Answered>> {
+  const res = await env.DB.prepare(
+    `SELECT a.objection_key, a.version, a.section_key, a.how, a.answered_by, u.name, a.answered_at
+       FROM narrative_objection_answers a LEFT JOIN users u ON u.id = a.answered_by
+      WHERE a.project_id = ?`,
+  ).bind(projectId).all<AnswerRow>();
+  return new Map((res.results || []).map((r) => [r.objection_key, {
+    version: Number(r.version),
+    section: r.section_key,
+    how: r.how === 'eadwyn' ? 'eadwyn' : 'picked',
+    by: r.answered_by ? { id: Number(r.answered_by), name: r.name || null } : null,
+    at: r.answered_at ? String(r.answered_at).slice(0, 10) : null,
+  } as Answered]));
+}
+
 /** Every objection the venture's investors raised. A failed read throws; the caller says it could not be read. */
 export async function readObjections(env: Env, projectId: number): Promise<ObjectionsRead> {
   const res = await env.DB.prepare(
@@ -71,5 +106,15 @@ export async function readObjections(env: Env, projectId: number): Promise<Objec
       ORDER BY f.created_at DESC, f.id DESC LIMIT ?`,
   ).bind(projectId, FEEDBACK_CAP + 1).all<Row>();
   const rows = res.results || [];
-  return { state: 'ok', items: await groupObjections(rows.slice(0, FEEDBACK_CAP)), capped: rows.length > FEEDBACK_CAP };
+  const items = await groupObjections(rows.slice(0, FEEDBACK_CAP));
+  let answers: Map<string, Answered> | null = null;
+  try { answers = await readAnswers(env, projectId); } catch (e) {
+    console.warn('[narrative] objection answers unreadable:', (e as Error)?.name);
+  }
+  return {
+    state: 'ok',
+    items: items.map((o) => ({ ...o, answered: answers ? answers.get(o.key) ?? null : null })),
+    capped: rows.length > FEEDBACK_CAP,
+    answers: answers ? 'ok' : 'unreadable',
+  };
 }

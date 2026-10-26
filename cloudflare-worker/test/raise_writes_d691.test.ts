@@ -786,6 +786,7 @@ function cycleFixture() {
   db.exec(sqlOf('442_raise_cycle_stores.sql'));
   db.exec(sqlOf('459_cycle_activity_convention.sql'));
   db.exec(sqlOf('463_raise_record_stores.sql'));
+  db.exec(sqlOf('606_use_of_funds_scenarios.sql'));
   addColumnsFrom(db, sqlOf('607_raise_money_cents.sql'), 'raise_prospect_events'); // D1190: a meeting's start
   db.exec('ALTER TABLE cap_table_vesting ADD COLUMN project_id INTEGER'); // D1020, migration 574
   raiseEvidenceTables(db);
@@ -1100,7 +1101,8 @@ test('10 (route): Add holder and Edit holder go through addHolder() and updateHo
 
 test('11: Edit split round-trips the five sections, the milestones and the runway, keeps milestone_costs, and refuses a split off 100', async () => {
   const db = cycleFixture();
-  db.prepare('UPDATE projects SET use_of_funds_meta = ? WHERE id = ?').run(JSON.stringify({ milestone_costs: { m1: { bucket: 'eng', cost: 5000 } }, deck_synced_at: '2026-10-01T00:00:00Z' }), C_P);
+  db.prepare('UPDATE projects SET use_of_funds_meta = ? WHERE id = ?').run(JSON.stringify({ milestone_costs: { '1': { bucket: 'eng', cost: 5000 } }, deck_synced_at: '2026-10-01T00:00:00Z' }), C_P);
+  db.prepare('INSERT INTO roadmap_okrs(id,project_id,objective) VALUES(1,?,?)').run(C_P,'Product milestone');
   const body = {
     amount_to_raise_cents: 2_000_000_00, runway_months: 20,
     sections: [
@@ -1117,7 +1119,7 @@ test('11: Edit split round-trips the five sections, the milestones and the runwa
   ], 'the stored labels, in the page\'s order');
   assert.equal(p.funding_needed, 2_000_000, 'the column\'s dollars');
   const meta = JSON.parse(p.use_of_funds_meta);
-  assert.deepEqual(meta.milestone_costs, { m1: { bucket: 'eng', cost: 5000 } }, 'other keys are kept');
+  assert.deepEqual(meta.milestone_costs, { '1': { bucket: 'eng', cost: 5000 } }, 'other keys are kept');
   assert.equal(meta.runway_months, 20);
   assert.deepEqual(meta.milestones, { product: { label: 'Ship the pilot', by: '2027-06' } });
   assert.equal(meta.deck_synced_at, null, 'a change marks the deck out of sync');
@@ -1135,7 +1137,7 @@ test('11: Edit split round-trips the five sections, the milestones and the runwa
     { sections: [{ key: 'product', pct: 100, milestone_label: 'x', milestone_by: 'soon' }] },
   ]) assert.equal((await cyc(db, C_FOUNDER, 'PUT', q('/use-of-funds'), b)).status, 400, JSON.stringify(b));
   assert.equal((db.prepare('SELECT use_of_funds_meta FROM projects WHERE id = ?').get(C_P) as any).use_of_funds_meta, p.use_of_funds_meta, 'a refused split writes nothing');
-  assert.deepEqual(logs(db, "entity_type = 'raise.use-of-funds'").map((x) => x.entity_id), ['product', 'go-to-market', 'infrastructure', 'operations', 'reserve']);
+  assert.deepEqual(logs(db, "entity_type = 'raise.use-of-funds' AND action = 'split_saved'").map((x) => x.entity_id), ['product', 'go-to-market', 'infrastructure', 'operations', 'reserve']);
 });
 
 test('12: Add investor stores Identified as to_contact, a fund by its name, answers a duplicate with 409, and never takes a withdrawn fund', async () => {
@@ -1192,7 +1194,8 @@ test('13: every write logs its record\'s row — project, raise.<slug>, the reco
     const before = n(db, 'SELECT COUNT(*) AS n FROM activity_logs');
     const r = await cyc(db, C_FOUNDER, m, q(path), b);
     assert.ok(r.status >= 200 && r.status < 300, `${m} ${path}: ${r.raw}`);
-    assert.equal(n(db, 'SELECT COUNT(*) AS n FROM activity_logs') - before, 1, `${m} ${path} logs one row`);
+    // The first split also initializes Base, with its own atomic creation audit.
+    assert.equal(n(db, 'SELECT COUNT(*) AS n FROM activity_logs') - before, path === '/use-of-funds' ? 2 : 1, `${m} ${path} logs its write and any initialization`);
   }
   const rows = logs(db, 'id > 1');
   for (const r of rows) {
@@ -1206,6 +1209,7 @@ test('13: every write logs its record\'s row — project, raise.<slug>, the reco
     'raise.fundraising-readiness/team', 'raise.fundraising-readiness/deck', 'raise.investor-narrative/1', 'raise.investor-narrative/1',
     `raise.pitch-deck/${(db.prepare('SELECT MAX(id) AS id FROM pitch_deck_share_tokens').get() as any).id}`,
     `raise.cap-table/h-${(db.prepare(`SELECT MAX(id) AS id FROM cap_table_holders`).get() as any).id}`,
+    `raise.use-of-funds/${(db.prepare('SELECT uid FROM uof_scenarios WHERE project_id = ? AND is_base = 1').get(C_P) as any).uid}`,
     'raise.use-of-funds/product', `raise.capital-relationships/${(db.prepare('SELECT MAX(id) AS id FROM raise_prospects').get() as any).id}`,
     'raise.data-room/4',
   ]);
@@ -1292,7 +1296,7 @@ test('11 (add hire): a hire on a section; a bad section, month, amount or curren
   await addSectionHire(env, { projectId: C_P, userId: C_FOUNDER, sectionKey: 'product', body: { role: 'Firmware engineer', start_month: '2027-02', annual_cents: 120_000_00, currency: 'EUR' } });
   assert.deepEqual(rows(db, 'SELECT project_id, category_key, role, start_month, annual_cents, currency, created_by FROM use_of_funds_hires').map((r) => ({ ...r })),
     [{ project_id: C_P, category_key: 'product', role: 'Firmware engineer', start_month: '2027-02', annual_cents: 120_000_00, currency: 'eur', created_by: C_FOUNDER }]);
-  assert.deepEqual(logs(db, "entity_type = 'raise.use-of-funds'").map((r) => [r.entity_id, r.action, r.details]), [['product', 'hire_added', 'Hire added: Firmware engineer from 2027-02']]);
+  assert.deepEqual(logs(db, "entity_type = 'raise.use-of-funds'").map((r) => [r.entity_id, r.action, r.details]), [['product', 'hire_added', 'Hire added.']]);
   for (const [key, body, status] of [
     ['marketing', { role: 'x' }, 404], ['product', { role: '' }, 400], ['product', { role: 'x', start_month: '2027-13' }, 400],
     ['product', { role: 'x', annual_cents: 12.5 }, 400], ['product', { role: 'x', currency: 'euro' }, 400],
@@ -1443,4 +1447,61 @@ test('#2691: copies preserve version metadata, explicit overrides win, and savin
   assert.deepEqual({...db.prepare('SELECT why_now,check_against_json FROM narrative_version_meta WHERE project_id=? AND version=?').get(C_P,override.version)}, {why_now:null,check_against_json:'["deck"]'});
   assert.equal(logs(db,"entity_type='raise.investor-narrative'").length,4,'one cycle write per save/duplicate');
  }finally{db.close();}
+});
+
+// ---------------------------------------------------------------------------
+// D1192 (#3126) — the board's status and Import, through the one writer
+// ---------------------------------------------------------------------------
+
+test('D1192: a committed investor takes Soft, Signed or Wired, none on another stage, and a stage moved away clears it', async () => {
+  // Mutation checked: the stage guard dropped → a status lands on Meeting; the clear on a move away dropped → Wired stays at Passed.
+  const db = cycleFixture();
+  db.exec(`INSERT INTO raise_prospects (id, uid, project_id, name, stage) VALUES (7, 'rp-k', ${C_P}, 'Harbour Angels', 'meeting')`);
+  const st = () => ({ ...(db.prepare('SELECT stage, commit_status FROM raise_prospects WHERE id = 7').get() as any) });
+  assert.equal((await cyc(db, C_FOUNDER, 'PATCH', q('/prospects/7'), { commit_status: 'signed' })).status, 400, 'no status before Committed');
+  const moved = await cyc(db, C_FOUNDER, 'PATCH', q('/prospects/7'), { stage: 'committed', commit_status: 'Signed' });
+  assert.equal(moved.status, 200, moved.raw);
+  assert.deepEqual(st(), { stage: 'committed', commit_status: 'signed' });
+  assert.equal((await cyc(db, C_FOUNDER, 'PATCH', q('/prospects/7'), { commit_status: 'wired' })).status, 200, 'a status alone on a committed card');
+  assert.equal(st().commit_status, 'wired');
+  assert.equal((await cyc(db, C_FOUNDER, 'PATCH', q('/prospects/7'), { commit_status: 'promised' })).status, 400, 'an unknown status');
+  assert.equal((await cyc(db, C_FOUNDER, 'PATCH', q('/prospects/7'), { commit_status: null })).status, 200, 'Status not recorded');
+  assert.deepEqual(st(), { stage: 'committed', commit_status: null });
+  await cyc(db, C_FOUNDER, 'PATCH', q('/prospects/7'), { commit_status: 'soft' });
+  assert.equal((await cyc(db, C_FOUNDER, 'PATCH', q('/prospects/7'), { stage: 'passed' })).status, 200);
+  assert.deepEqual(st(), { stage: 'passed', commit_status: null }, 'a status never outlives Committed');
+  assert.equal((await cyc(db, C_OTHER, 'PATCH', q('/prospects/7'), { stage: 'committed', commit_status: 'wired' })).status, 403);
+  const details = logs(db, "entity_type = 'raise.capital-relationships'").map((x) => x.details);
+  assert.deepEqual(details, ['Investor edited: stage, status', 'Investor edited: status', 'Investor edited: status', 'Investor edited: status', 'Investor edited: stage']);
+});
+
+test('D1192: Import adds at most 50 rows a request through createProspect, logs each, and reports every skipped row with its number', async () => {
+  // Mutation checked: the 50-row cap dropped → 51 rows accepted; a skipped row not reported → `skipped` short; the log per row dropped.
+  const db = cycleFixture();
+  db.exec(`INSERT INTO raise_prospects (uid, project_id, name, email, stage) VALUES ('rp-dup', ${C_P}, 'Harbour Angels', 'deals@harbour.example.test', 'meeting')`);
+  const was = n(db, 'SELECT COUNT(*) AS n FROM raise_prospects');
+  const res = await cyc(db, C_FOUNDER, 'POST', q('/prospects/import'), { rows: [
+    { name: 'Northwind Angels', firm: 'Northwind', stage: 'Identified' },
+    { name: 'Juno Capital', stage: 'hot' },
+    { email: 'not-an-email' },
+    { name: 'Harbour Again', email: 'Deals@Harbour.example.test' },
+    { name: 'Kite Partner Fund', stage: 'meeting', amount: 25000 },
+  ] });
+  assert.equal(res.status, 200, res.raw);
+  assert.deepEqual(res.body, { created: 2, total: 5, skipped: [
+    { row: 2, reason: 'The stage is not one of the pipeline’s' },
+    { row: 3, reason: 'A name or a valid email is required' },
+    { row: 4, reason: 'Already in the pipeline' },
+  ] });
+  assert.equal(n(db, 'SELECT COUNT(*) AS n FROM raise_prospects'), was + 2);
+  assert.deepEqual((db.prepare(`SELECT name, stage FROM raise_prospects WHERE name IN ('Northwind Angels', 'Kite Partner Fund') ORDER BY id`).all() as any[]).map((r) => [r.name, r.stage]),
+    [['Northwind Angels', 'to_contact'], ['Kite Partner Fund', 'meeting']]);
+  assert.deepEqual(logs(db, "entity_type = 'raise.capital-relationships'").map((x) => [x.action, x.details]),
+    [['prospect_created', 'Investor imported at Identified'], ['prospect_created', 'Investor imported at Meeting']]);
+  assert.ok(logs(db).every((x) => !NAMES.test(String(x.details))), 'no investor name in a log');
+  const big = Array.from({ length: 51 }, (_, i) => ({ name: `Fund ${i}` }));
+  assert.equal((await cyc(db, C_FOUNDER, 'POST', q('/prospects/import'), { rows: big })).status, 400, 'at most 50 rows a request');
+  assert.equal((await cyc(db, C_FOUNDER, 'POST', q('/prospects/import'), { rows: [] })).status, 400);
+  assert.equal((await cyc(db, C_OTHER, 'POST', q('/prospects/import'), { rows: [{ name: 'Juno' }] })).status, 403);
+  assert.equal(n(db, 'SELECT COUNT(*) AS n FROM raise_prospects'), was + 2, 'a refused import adds nothing');
 });

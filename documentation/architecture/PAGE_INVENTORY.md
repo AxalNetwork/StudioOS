@@ -39,7 +39,7 @@ canvas behind it still shows up here.
 | --- | --- | --- | --- |
 | Headerless | Studio | `/studio` | Investor LP Canvas |
 | Headerless | Spin-Out Lab | `/spinout-lab` | Explore the Spin-Out Lab, Fund Brief One-Pager |
-| Headerless | Deals | `/deals` | Deal Flow, Investor LP Canvas, Pages · Investor Deals |
+| Headerless | Deals | `/deals` | Deal Flow, Deal flow list, Investor LP Canvas, Pages · Investor Deals |
 | Headerless | Portfolio | `/portfolio` | Investor LP Canvas |
 | Headerless | Axal VC Fund | `/spinout-lab/investor-workspace` | Fund Brief One-Pager, Legal Documents · Templates, LP Investor Workspace, Quarterly Report |
 | Headerless | Fund | `/funds` | Investor LP Canvas, Pages · Funds and fund research, Pages · Investor Fund |
@@ -153,4 +153,4 @@ rather than merely absent.
 - branch_admin · Branch · Insights (`/branch/insights`)
 - branch_admin · Branch · Licences (`/admin/my-licence`)
 
-**Canvas corpus:** 169. **Workspace assignments:** 243.
+**Canvas corpus:** 178. **Workspace assignments:** 274.

@@ -1,0 +1,27 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
+const source=readFileSync(new URL('../src/lib/api/dealViews.js',import.meta.url),'utf8');
+function fixture() {
+ const calls=[];const request=(...args)=>{calls.push(args);return Promise.resolve({ok:true});};
+ const api=new Function('request',`${source.replace(/^import .*;$/m,'').replace('export const dealViewsApi','const dealViewsApi')}\nreturn dealViewsApi;`)(request);
+ return {api,calls};
+}
+test('saved-view client is lazy, encodes paging and IDs, and preserves write bodies and optimistic versions',async()=>{
+ const {api,calls}=fixture();assert.equal(calls.length,0);
+ await api.list({limit:10,offset:20});let u=new URL(calls[0][0],'https://example.invalid');assert.equal(u.pathname,'/deals/views');assert.equal(u.searchParams.get('limit'),'10');assert.equal(u.searchParams.get('offset'),'20');
+ const body={name:'Synthetic',spec:{view:'table'},shared_with_firm:true,is_default:true};await api.create(body);assert.equal(calls[1][0],'/deals/views');assert.equal(calls[1][1].method,'POST');assert.deepEqual(JSON.parse(calls[1][1].body),body);
+ await api.update('a/b?c',2,{name:'Changed'});assert.equal(calls[2][0],'/deals/views/a%2Fb%3Fc');assert.equal(calls[2][1].method,'PATCH');assert.deepEqual(JSON.parse(calls[2][1].body),{name:'Changed',version:2});
+ await api.remove('a/b?c',2);assert.equal(calls[3][0],'/deals/views/a%2Fb%3Fc?version=2');assert.equal(calls[3][1].method,'DELETE');
+ await api.fit([2,1]);u=new URL(calls[4][0],'https://example.invalid');assert.equal(u.pathname,'/deals/fit');assert.equal(u.searchParams.get('ids'),'2,1');
+});
+
+test('the client refuses a missing or invalid rendered version before sending a write',()=>{const {api,calls}=fixture();for(const version of [undefined,null,0,-1,1.5,'2']) {assert.throws(()=>api.update('synthetic',version,{name:'Changed'}));assert.throws(()=>api.remove('synthetic',version));}assert.equal(calls.length,0);});
+
+test('saved-view contexts are explicit on every method and invalid contexts send nothing',async()=>{
+ const {api,calls}=fixture();const context={context:'unbound'};
+ await api.list({...context,limit:10});await api.create({name:'Synthetic'},context);await api.update('id',2,{name:'Changed'},context);await api.remove('id',2,context);
+ for(const [path] of calls) assert.equal(new URL(path,'https://example.invalid').searchParams.get('context'),'unbound');
+ await api.list({context:'archived'});await api.remove('id',2,{context:'archived'});assert.equal(new URL(calls[4][0],'https://example.invalid').searchParams.get('context'),'archived');assert.equal(new URL(calls[5][0],'https://example.invalid').searchParams.get('context'),'archived');
+ for(const run of [()=>api.list({context:'foreign'}),()=>api.create({}, {context:'foreign'}),()=>api.update('id',2,{}, {context:'foreign'}),()=>api.remove('id',2,{context:'foreign'})])assert.throws(run);assert.equal(calls.length,6);
+});
