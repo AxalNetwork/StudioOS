@@ -50,7 +50,7 @@ test('the canvas’s status words, with Waiting for pending and nothing unknown 
 
 test('no wait says zero or none', () => {
   for (const [k, w] of Object.entries(WAITS)) assert.ok(!/\b0\b|\bnone\b/i.test(w), k);
-  assert.deepEqual(Object.keys(WAITS), ['businesses', 'renewals', 'audit'], 'D1233 drew People’s and the case’s waits');
+  assert.deepEqual(Object.keys(WAITS), ['businesses'], 'D1233 drew People’s and the case’s waits; D1235 Renewals’ and Audit’s');
 });
 
 /* ------------------------------------------------------------------ *
@@ -63,8 +63,9 @@ test('People draws the queue it is given, and no wait of its own (D1233)', () =>
   assert.ok(!out.includes('kyc-wait-'), 'part 1’s reads fill the figures and the queue');
 });
 
-test('Businesses, Renewals and Audit say what is not read yet, never an empty table', () => {
-  for (const tab of ['businesses', 'renewals', 'audit']) {
+test('Businesses says what is not read yet, never an empty table', () => {
+  // D1235: Renewals and Audit draw part 4's reads (kyc_governance_d1235).
+  for (const tab of ['businesses']) {
     const out = html(h(KycTabBody, { view: viewOf(`/admin/kyc/${tab}`), people: h('div', { 'data-testid': 'the-queue' }) }));
     assert.ok(out.includes(`data-testid="kyc-wait-${tab}"`) && out.includes(NOT_YET), tab);
     assert.ok(!out.includes('the-queue'), `${tab} does not draw People`);

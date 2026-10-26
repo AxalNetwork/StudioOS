@@ -127,6 +127,26 @@ edited.
 their own addresses and one address per article, under the shared header, and
 the review notices open the article. The boards themselves wait for
 D1291–D1298, so this canvas stays in the queue until they land.
+## Landed 2026-10-26 — Pricing › Models › Add tokens (#2452)
+
+The owner's artifacts `Tq2eoropBxcFAJm2tHMVhH` (the board grid) and
+`X8w6p3Kkb3jTD2goTvFWXj` (the page) came from S21's prompt on #2452. Each was
+decoded by `scripts/read-canvas.mjs`:
+- `Add tokens · Boards.dc.html` is the board grid (CRP1 to CRP18); it imports
+  the page by name;
+- `Add Tokens Page.dc.html` is the page.
+
+**Two edits, named.** The reader left two image asset uuids in the page. The
+Axal VC mark (`alt="Axal VC"`) now points at `/axal-mark.png`, and the Eadwyn
+mark beside CRP9's refused run at `/eadwyn-ai.png`, both served from
+`frontend/public/`. No other value was edited.
+
+**Grade: UPGRADE.** S21's integration (D1285) opens `/pricing`'s Models tab
+with a member's token balance and Token packs above the tables, one Buy per
+pack straight to its checkout, and a failed read that says so. The band's
+allowance and storage, the sheet's pack mode, one Add tokens everywhere and the
+Worker's refusal words wait for D1286–D1289, so this canvas stays in the queue
+until they land.
 
 ## Landed 2026-10-26 — Deals › Deal flow (#2423)
 
@@ -157,6 +177,7 @@ No value was edited.
 **Grade: UPGRADE.** S21's integration (D1244) makes the list's tabs and the
 case's nine tabs addresses under both bases, with Overview as today's case
 page and "Not scored yet" for a case with no band. The rest is D1245–D1252.
+
 
 ## Landed 2026-10-26 — Venture scorecard (#2428)
 

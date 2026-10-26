@@ -269,7 +269,8 @@ test('the deal room keeps Invitations (admin), Transfers (admin, partner) and re
   const page = codeOnly(read('pages/DealRoomPage.jsx'));
   assert.match(page, /\{isInvestor && <DealRoomMembership dealId=\{deal\.id\} \/>\}/, 'the header carries Join and Leave for an investor');
   assert.match(page, /<DealSyndicates projectId=\{deal\.project_id\} user=\{user\} \/>/);
-  assert.match(page, /<DealTransfersTab dealId=\{deal\.id\} currency=\{deal\.currency\} canRecord=\{isAdmin \|\| role === 'partner'\} \/>/);
+  // D1215, D1155: an Admin records transfers; an Operating Partner reads them.
+  assert.match(page, /<DealTransfersTab dealId=\{deal\.id\} currency=\{deal\.currency\} canRecord=\{isAdmin\} \/>/);
   const routes = codeOnly(read('workspaces/investor/InvestorDealsRoutes.jsx'));
   assert.match(routes, /<DealRoomsPanel \/>/, '/deals carries the deal rooms to join');
 });

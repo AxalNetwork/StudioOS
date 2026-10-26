@@ -154,7 +154,8 @@ export const ADMIN_ACTIONS = [
 /** Literal routes, so the reachability walk can read every one. */
 const LINKS = {
   licences: <Link to="/admin/licences" className="font-semibold text-axal-ink underline">Licences &rarr;</Link>,
-  kyc: <Link to="/admin/kyc" className="font-semibold text-axal-ink underline">KYC queue &rarr;</Link>,
+  // D1235: the page is KYC & KYB now (D1228), with People, Businesses, Renewals and Audit.
+  kyc: <Link to="/admin/kyc" className="font-semibold text-axal-ink underline">KYC &amp; KYB &rarr;</Link>,
 };
 
 function ActionRow({ a, tone }) {
