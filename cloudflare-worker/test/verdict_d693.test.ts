@@ -763,7 +763,11 @@ test('13: the record follows CO:368', async () => {
     ['record-new-decision', 'Record a new decision', 'link', 'primary'],
     ['export-memo', 'Export memo', 'write', 'default'],
     ['add-commitment', 'Add a commitment', 'form', 'default'],
-  ], 'commitment-done is declared only while a commitment is open');
+    ['plan-build', 'Plan the build', 'link', 'default'],
+  ], 'commitment-done is declared only while a commitment is open; D1069: a given Proceed plans the build');
+  assert.equal(r.body.actions.find((a: any) => a.key === 'plan-build').href, `/build/plan?project_id=${P}`);
+  const asAdmin = await recordOf(db, ADMIN, d.id);
+  assert.ok(!asAdmin.body.actions.some((a: any) => a.key === 'plan-build'), 'an admin reads; only the venture\'s founders plan (D1065)');
   assert.equal(r.body.actions[0].href, `/validate/verdict/new?project=${P}&for=venture`);
   assert.deepEqual(r.body.next, { text: 'Record a new decision', action: 'record-new-decision' });
 
@@ -771,6 +775,7 @@ test('13: the record follows CO:368', async () => {
   const e = await recordOf(db, FOUNDER, earlier.id);
   assert.deepEqual(e.body.pills[1], { text: 'Superseded', tone: 'grey' });
   assert.deepEqual(e.body.facts[3], { label: 'Supersedes', value: 'Nothing, the first for the venture' });
+  assert.ok(!e.body.actions.some((a: any) => a.key === 'plan-build'), 'a superseded decision plans nothing');
 
   // A hypothesis's decision; a withheld one; one piece of evidence.
   const hd = await given(db, ADMIN, { decision: 'stop', for: h2, evidence: keys(EVIDENCE) });
@@ -784,6 +789,8 @@ test('13: the record follows CO:368', async () => {
   const w = await given(db, FOUNDER, { decision: 'pivot', for: 'venture', evidence: keys(EVIDENCE).slice(0, 1) });
   const wr = await recordOf(db, FOUNDER, w.id);
   assert.deepEqual(wr.body.pills, [{ text: 'Pivot', tone: 'warn' }, { text: 'Withheld', tone: 'grey' }]);
+  assert.ok(!wr.body.actions.some((a: any) => a.key === 'plan-build'), 'a withheld decision offers no plan (VB14 says why on the plan)');
+  assert.ok(!h.body.actions.some((a: any) => a.key === 'plan-build'), 'a Stop plans nothing');
   assert.equal(wr.body.sub.endsWith('rests on 1 piece of evidence'), true, wr.body.sub);
   assert.deepEqual(wr.body.facts.slice(2), [{ label: 'Evidence', value: '1 item' }, { label: 'Supersedes', value: 'Nothing, withheld' }]);
   assert.equal(wr.body.main[0].empty, 'No reasoning recorded.');

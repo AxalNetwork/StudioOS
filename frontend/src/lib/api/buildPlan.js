@@ -3,6 +3,7 @@
 // POST /api/cycles/build/plan?project=&scope=venture|h-N (prepare or update)
 // D1066 (#2936): POST /items/:uid/accept, PATCH /items/:uid, POST /items/:uid/dismiss,
 // POST /modules/:module/accept?project=&scope=, and GET /api/cycles/build/evidence.
+// D1067 (#2937): POST /pause, POST /resume, GET /since?project=&scope=.
 // D1071 (#2941): POST|GET /word?project=&scope=, POST /word/:uid/keep|discard, and
 // PATCH /items/:uid { wording } — Keep wording is the item's Save.
 // D1068 (#2938): POST|GET /handoffs?project=&scope= (Send to…, recorded), GET /links,
@@ -20,6 +21,10 @@ export const buildPlanApi = {
   wording: (project, scope = 'venture') => request(`/cycles/build/plan/word?${query(project, scope)}`),
   keepWording: (project, uid, target, scope = 'venture') => request(`/cycles/build/plan/word/${encodeURIComponent(uid)}/keep?${query(project, scope)}`, { method: 'POST', body: JSON.stringify({ target }) }),
   discardWording: (project, uid, target, scope = 'venture') => request(`/cycles/build/plan/word/${encodeURIComponent(uid)}/discard?${query(project, scope)}`, { method: 'POST', body: JSON.stringify({ target }) }),
+  // D1067 (#2937): pause, resume, and new evidence since the plan (VB13, VB14).
+  pause: (project, scope = 'venture') => request(`/cycles/build/plan/pause?${query(project, scope)}`, { method: 'POST', body: '{}' }),
+  resume: (project, scope = 'venture') => request(`/cycles/build/plan/resume?${query(project, scope)}`, { method: 'POST', body: '{}' }),
+  since: (project, scope = 'venture') => request(`/cycles/build/plan/since?${query(project, scope)}`),
   send: (project, { provider, items, repository } = {}, scope = 'venture') => request(`/cycles/build/plan/handoffs?${query(project, scope)}`, { method: 'POST', body: JSON.stringify({ provider, items, ...(repository ? { repository } : {}) }) }),
   handoffs: (project, scope = 'venture') => request(`/cycles/build/plan/handoffs?${query(project, scope)}`),
   links: (project, scope = 'venture') => request(`/cycles/build/plan/links?${query(project, scope)}`),
