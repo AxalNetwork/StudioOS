@@ -31,11 +31,11 @@ function fixture() {
  INSERT INTO deals(id,uid,project_id,closing_deadline) VALUES(100,'deal-one',10,'2026-11-15'),(200,'deal-two',20,'2026-11-16');
  INSERT INTO investor_dealroom_members(investor_user_id,deal_id) VALUES(4,100),(6,200);
  INSERT INTO cohort_cycles(id,year,month,start_at,end_at,status) VALUES
- (10,2026,11,'2026-11-01T00:00:00Z','2026-11-30T00:00:00Z','active'),
- (20,2026,12,'2026-12-01T00:00:00Z','2026-12-31T00:00:00Z','scheduled');
+ (10,2026,11,'2026-11-01T04:00:00Z','2026-11-30T05:00:00Z','active'),
+ (20,2026,12,'2026-12-01T05:00:00Z','2026-12-31T05:00:00Z','scheduled');
  INSERT INTO week_windows(cohort_cycle_id,week_number,unlock_at,deadline_at) VALUES
- (10,1,'2026-11-01T00:00:00Z','2026-11-07T23:59:00Z'),(10,2,'2026-11-08T00:00:00Z','2026-11-14T23:59:00Z'),
- (20,1,'2026-12-01T00:00:00Z','2026-12-07T23:59:00Z');
+ (10,1,'2026-11-01T04:00:00Z','2026-11-08T04:59:00Z'),(10,2,'2026-11-08T05:00:00Z','2026-11-15T04:59:00Z'),
+ (20,1,'2026-12-01T05:00:00Z','2026-12-08T04:59:00Z');
  INSERT INTO advisor_cohort_assignments(uid,advisor_user_id,cohort_cycle_id,is_active) VALUES('assignment-one',3,10,1),('assignment-two',7,20,1);
  UPDATE users SET spinout_lab_active=1,spinout_lab_started_at='2026-11-02T10:00:00Z' WHERE id IN(1,8);
  INSERT INTO compliance_events(uid,project_id,jurisdiction,event_type,title,due_date) VALUES
@@ -50,10 +50,10 @@ function fixture() {
 }
 const read=(reader:any,env:any,user:number,from=FROM,to=TO)=>reader(env,user,from,to);
 
-test('interview calls belong only to their recorded owner, with source time and names, never another admin calendar',async()=>{
+test('interview calls belong only to their recorded owner, with normalized UTC time and names, never another admin calendar',async()=>{
  const {db,env}=fixture();try{
   const events=await read(interviewCallEvents,env,1);assert.equal(events.length,1);assert.equal(events[0].source_uid,'call-one');
-  assert.equal(events[0].title,'Interview · Fixture person');assert.equal(events[0].start_at,'2026-11-03 12:00:00');assert.equal(events[0].end_at,'2026-11-03 12:30:00');
+  assert.equal(events[0].title,'Interview · Fixture person');assert.equal(events[0].start_at,'2026-11-03T12:00:00.000Z');assert.equal(events[0].end_at,'2026-11-03T12:30:00.000Z');
   assert.equal(events[0].location_uri,'https://example.test/one');assert.equal(events[0].all_day,false);assert.deepEqual(events[0].attendees,[]);
   assert.deepEqual(await read(interviewCallEvents,env,5),[]);assert.equal((await read(interviewCallEvents,env,2))[0].source_uid,'call-two');
   db.exec("UPDATE interview_channel_refs SET status='cancelled' WHERE id=11");assert.deepEqual(await read(interviewCallEvents,env,1),[]);
@@ -124,5 +124,32 @@ test('every source excludes an inactive or deletion-requested member',async()=>{
    db.prepare("UPDATE users SET is_active=1,deletion_requested_at='2026-11-01' WHERE id=?").run(user);assert.deepEqual(await read(reader,env,user),[]);
    db.prepare('UPDATE users SET deletion_requested_at=NULL WHERE id=?').run(user);
   }
+ }finally{db.close();}
+});
+
+
+test('funded and rejected deals have no outstanding closing deadline',async()=>{
+ const {db,env}=fixture();try{
+  for(const status of ['applied','scored','active','funded','rejected']) {
+   db.prepare('UPDATE deals SET status=? WHERE id=100').run(status);
+   assert.equal((await read(dealClosingEvents,env,4)).length,['funded','rejected'].includes(status)?0:1,status);
+  }
+ }finally{db.close();}
+});
+
+test('cohort due days use New York across DST, even when UTC has moved to the next day',async()=>{
+ const {db,env}=fixture();try{
+  const e=await read(cohortDateEvents,env,3,'2026-11-07T00:00:00Z','2026-11-08T00:00:00Z');
+  assert.deepEqual(e.map((x:any)=>[x.start_at,x.end_at]),[['2026-11-07','2026-11-08']]);
+  const end=await read(cohortDateEvents,env,3,'2026-11-29T00:00:00Z','2026-12-01T00:00:00Z');
+  assert.deepEqual(end.map((x:any)=>x.start_at),['2026-11-30']);
+ }finally{db.close();}
+});
+
+test('call offsets normalize to UTC and an absent end adds no invented duration',async()=>{
+ const {db,env}=fixture();try{
+  db.exec("UPDATE interview_channel_refs SET starts_at='2026-11-03T14:00:00+02:00',ends_at=NULL WHERE id=11");
+  const e=await read(interviewCallEvents,env,1);
+  assert.equal(e[0].start_at,'2026-11-03T12:00:00.000Z');assert.equal(e[0].end_at,e[0].start_at);
  }finally{db.close();}
 });

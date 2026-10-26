@@ -1,6 +1,7 @@
 /** D1208 (#3174): four personal, read-only Calendar sources. No provider calls. */
 import type { Env } from '../../types';
 import type { CalendarEvent } from '../calendar';
+import { COHORT_TZ } from '../cohortTiming';
 
 export const READ_ONLY_KINDS: ReadonlySet<string> = new Set(['interview_call', 'cohort_date', 'compliance_due', 'deal_closing']);
 export type SourceKind = 'interview_call' | 'cohort_date' | 'compliance_due' | 'deal_closing';
@@ -31,7 +32,8 @@ function deadline(event: SourceEvent, value: string): SourceEvent {
 /** The call's recorded owner alone; admin access never widens a personal read. */
 export async function interviewCallEvents(env: Env, userId: number, from: string, to: string): Promise<SourceEvent[]> {
   const rows = results(await env.DB.prepare(
-    `SELECT r.id, r.uid, r.provider, r.starts_at, r.ends_at, r.join_url, r.status,
+    `SELECT r.id, r.uid, r.provider, strftime('%Y-%m-%dT%H:%M:%fZ', r.starts_at) AS start_at,
+            strftime('%Y-%m-%dT%H:%M:%fZ', COALESCE(r.ends_at, r.starts_at)) AS end_at, r.join_url, r.status,
             i.interviewee_name, p.id AS project_id
        FROM interview_channel_refs r
        JOIN discovery_interviews i ON i.id = r.interview_id
@@ -41,11 +43,14 @@ export async function interviewCallEvents(env: Env, userId: number, from: string
         AND julianday(r.starts_at) >= julianday(?) AND julianday(r.starts_at) < julianday(?)
       ORDER BY julianday(r.starts_at), r.id`,
   ).bind(userId, from, to).all<Row>());
-  return rows.map((r) => ({
-    ...base('interview_call', Number(r.id), String(r.uid), `Interview · ${r.interviewee_name}`),
-    start_at: String(r.starts_at), end_at: String(r.ends_at || r.starts_at), status: String(r.status),
-    location_kind: 'video', location_uri: r.join_url || null, project_id: Number(r.project_id),
-  }));
+  return rows.map((r) => {
+    if (!r.start_at || !r.end_at) throw new Error('calendar_source_unreadable');
+    return {
+      ...base('interview_call', Number(r.id), String(r.uid), `Interview · ${r.interviewee_name}`),
+      start_at: String(r.start_at), end_at: String(r.end_at), status: String(r.status),
+      location_kind: 'video', location_uri: r.join_url || null, project_id: Number(r.project_id),
+    };
+  });
 }
 
 /** A founder's own ventures only; neither staff privileges nor team grants widen it. */
@@ -70,7 +75,7 @@ export async function dealClosingEvents(env: Env, userId: number, from: string, 
     `SELECT d.id, d.uid, d.closing_deadline, d.project_id, p.name AS project_name
        FROM deals d JOIN projects p ON p.id = d.project_id AND p.deleted_at IS NULL
        JOIN users u ON u.id = ? AND u.role = 'investor' AND u.is_active = 1 AND u.deletion_requested_at IS NULL
-      WHERE d.closing_deadline IS NOT NULL
+      WHERE d.closing_deadline IS NOT NULL AND d.status IN ('applied', 'scored', 'active')
         AND EXISTS (SELECT 1 FROM investor_dealroom_members m WHERE m.deal_id = d.id AND m.investor_user_id = u.id)
         AND julianday(date(d.closing_deadline), '+1 day') > julianday(?)
         AND julianday(date(d.closing_deadline)) < julianday(?)
@@ -78,6 +83,15 @@ export async function dealClosingEvents(env: Env, userId: number, from: string, 
   ).bind(userId, from, to).all<Row>());
   return rows.map((r) => deadline({ ...base('deal_closing', Number(r.id), String(r.uid), `Closing · ${r.project_name}`),
     project_id: Number(r.project_id), deal_id: Number(r.id), url: `/deals/${r.id}` }, String(r.closing_deadline)));
+}
+
+function cohortDay(value: string): string {
+  const normalized = /^\d{4}-\d{2}-\d{2} \d{2}:/.test(value) ? value.replace(' ', 'T') + 'Z' : value;
+  const date = new Date(normalized);
+  if (!Number.isFinite(date.getTime())) throw new Error('calendar_source_unreadable');
+  const parts = new Intl.DateTimeFormat('en-US', { timeZone: COHORT_TZ, year: 'numeric', month: '2-digit', day: '2-digit' }).formatToParts(date);
+  const part = (key: string) => parts.find((p) => p.type === key)?.value;
+  return `${part('year')}-${part('month')}-${part('day')}`;
 }
 
 /** Own Lab cohort (the gate's start-time rule), or a current advisor assignment. */
@@ -91,16 +105,16 @@ export async function cohortDateEvents(env: Env, userId: number, from: string, t
               AND julianday(u.spinout_lab_started_at) < julianday(c.end_at))
           OR (u.role = 'advisor' AND EXISTS (SELECT 1 FROM advisor_cohort_assignments a
                WHERE a.advisor_user_id = u.id AND a.cohort_cycle_id = c.id AND a.is_active = 1)))
-        AND ((julianday(date(c.end_at), '+1 day') > julianday(?) AND julianday(date(c.end_at)) < julianday(?))
-          OR (julianday(date(w.unlock_at), '+1 day') > julianday(?) AND julianday(date(w.unlock_at)) < julianday(?))
-          OR (julianday(date(w.deadline_at), '+1 day') > julianday(?) AND julianday(date(w.deadline_at)) < julianday(?)))
+        AND ((julianday(date(c.end_at), '+1 day') > julianday(?, '-1 day') AND julianday(date(c.end_at)) < julianday(?, '+1 day'))
+          OR (julianday(date(w.unlock_at), '+1 day') > julianday(?, '-1 day') AND julianday(date(w.unlock_at)) < julianday(?, '+1 day'))
+          OR (julianday(date(w.deadline_at), '+1 day') > julianday(?, '-1 day') AND julianday(date(w.deadline_at)) < julianday(?, '+1 day')))
       ORDER BY c.id, w.week_number`,
   ).bind(userId, from, to, from, to, from, to).all<Row>());
   const events = new Map<string, SourceEvent>();
   const add = (r: Row, suffix: string, title: string, value: unknown) => {
     if (!value) return;
     const uid = `cycle-${r.id}-${suffix}`;
-    const event = deadline(base('cohort_date', Number(r.id), uid, title), String(value));
+    const event = deadline(base('cohort_date', Number(r.id), uid, title), cohortDay(String(value)));
     if (Date.parse(`${event.end_at}T00:00:00Z`) > Date.parse(from) && Date.parse(`${event.start_at}T00:00:00Z`) < Date.parse(to)) events.set(uid, event);
   };
   for (const r of rows) {
