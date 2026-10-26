@@ -489,6 +489,9 @@ Event responses use `eventsCommon.ts` to withhold online and hybrid join URLs
 unless a manager or a confirmed seat with settled payment reads them. Public
 calendar exports and invitation attachments use the same public projection.
 
+`calendar/` holds the personal source readers, subscription tokens, page-only
+item details and external-copy lifecycle helpers; see `calendar/README.md`.
+
 #2440: `calendar.ts` reads only events the member owns, organises or attends,
 including for admins. The same boundary feeds the page, calendar downloads,
 Google/Outlook sync and individual pushes; staff-wide typed lists stay separate.
