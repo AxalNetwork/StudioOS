@@ -14,10 +14,11 @@ const READY = new WeakMap<object, boolean>();
 export async function ensureNewsSchema(env: Env): Promise<void> {
   if (READY.get(bindingKey(env))) return;
   try {
-    // `publish_at` and `publish_at_set_by` are migration 346's (D484), named
-    // here so a database this creates matches one the migrations built.
+    // `publish_at` and `publish_at_set_by` are migration 346's (D484), and
+    // `approved_by` migration 635's (D1292), named here so a database this
+    // creates matches one the migrations built.
     await env.DB.exec(
-      "CREATE TABLE IF NOT EXISTS articles (id INTEGER PRIMARY KEY AUTOINCREMENT, slug TEXT NOT NULL UNIQUE, title TEXT NOT NULL, subtitle TEXT, body_markdown TEXT NOT NULL DEFAULT '', body_html TEXT, cover_r2_key TEXT, cover_mime TEXT, tags TEXT, sector TEXT, status TEXT NOT NULL DEFAULT 'draft', author_user_id INTEGER NOT NULL REFERENCES users(id), reviewer_user_id INTEGER REFERENCES users(id), submitted_at TEXT, reviewed_at TEXT, approved_at TEXT, published_at TEXT, rejected_at TEXT, rejection_reason TEXT, word_count INTEGER NOT NULL DEFAULT 0, read_minutes INTEGER NOT NULL DEFAULT 0, excerpt TEXT, seo_title TEXT, canonical_url TEXT, publish_at TEXT, publish_at_set_by INTEGER, created_at TEXT NOT NULL DEFAULT (datetime('now')), updated_at TEXT NOT NULL DEFAULT (datetime('now')))",
+      "CREATE TABLE IF NOT EXISTS articles (id INTEGER PRIMARY KEY AUTOINCREMENT, slug TEXT NOT NULL UNIQUE, title TEXT NOT NULL, subtitle TEXT, body_markdown TEXT NOT NULL DEFAULT '', body_html TEXT, cover_r2_key TEXT, cover_mime TEXT, tags TEXT, sector TEXT, status TEXT NOT NULL DEFAULT 'draft', author_user_id INTEGER NOT NULL REFERENCES users(id), reviewer_user_id INTEGER REFERENCES users(id), submitted_at TEXT, reviewed_at TEXT, approved_at TEXT, approved_by INTEGER REFERENCES users(id), published_at TEXT, rejected_at TEXT, rejection_reason TEXT, word_count INTEGER NOT NULL DEFAULT 0, read_minutes INTEGER NOT NULL DEFAULT 0, excerpt TEXT, seo_title TEXT, canonical_url TEXT, publish_at TEXT, publish_at_set_by INTEGER, created_at TEXT NOT NULL DEFAULT (datetime('now')), updated_at TEXT NOT NULL DEFAULT (datetime('now')))",
     );
     await env.DB.exec(
       'CREATE INDEX IF NOT EXISTS idx_articles_status_pub ON articles(status, published_at DESC)',
@@ -61,6 +62,10 @@ export async function ensureNewsSchema(env: Env): Promise<void> {
     }
     if (!names.has('views')) {
       await env.DB.exec('ALTER TABLE articles ADD COLUMN views INTEGER NOT NULL DEFAULT 0').catch(() => {});
+    }
+    // D1292 — migration 635's approver, for a database the migration has not reached.
+    if (!names.has('approved_by')) {
+      await env.DB.exec('ALTER TABLE articles ADD COLUMN approved_by INTEGER REFERENCES users(id)').catch(() => {});
     }
     READY.set(bindingKey(env), true);
   } catch (e) {

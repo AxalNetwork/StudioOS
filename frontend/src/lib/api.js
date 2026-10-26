@@ -5721,8 +5721,11 @@ export const adminArticles = {
     request(`/admin/articles/${id}/request-changes`, { method: 'POST', body: JSON.stringify({ reason }) }),
   reject: (id, reason) =>
     request(`/admin/articles/${id}/reject`, { method: 'POST', body: JSON.stringify({ reason }) }),
-  approve: (id) => request(`/admin/articles/${id}/approve`, { method: 'POST', body: '{}' }),
-  publish: (id) => request(`/admin/articles/${id}/publish`, { method: 'POST', body: '{}' }),
+  // D1292 — an admin deciding their own article is refused; a Super Admin sends `override_reason`.
+  approve: (id, overrideReason) =>
+    request(`/admin/articles/${id}/approve`, { method: 'POST', body: JSON.stringify(overrideReason ? { override_reason: overrideReason } : {}) }),
+  publish: (id, overrideReason) =>
+    request(`/admin/articles/${id}/publish`, { method: 'POST', body: JSON.stringify(overrideReason ? { override_reason: overrideReason } : {}) }),
   // D484 — set (an ISO UTC string) or clear (null) the time an approved article goes out.
   schedule: (id, publishAt) =>
     request(`/admin/articles/${id}/schedule`, { method: 'POST', body: JSON.stringify({ publish_at: publishAt }) }),

@@ -15,7 +15,8 @@ export type ArticleNotifyKind =
   | 'author_changes_requested'
   | 'author_approved'
   | 'author_published'
-  | 'author_rejected';
+  | 'author_rejected'
+  | 'author_back_to_submitted';
 
 interface Args {
   articleId: number;
@@ -60,6 +61,11 @@ const TITLES: Record<ArticleNotifyKind, (a: Args) => { title: string; body: stri
   author_published: (a) => ({
     title: 'Article published',
     body: `“${a.title}” is now live on /articles/${a.slug}.`,
+  }),
+  // D1292 — an edit to a submitted or approved article sends it back to Submitted.
+  author_back_to_submitted: (a) => ({
+    title: 'Your article is back in the queue',
+    body: `“${a.title}” was edited after it was submitted, so it is waiting for review again. Any publish time was cleared.`,
   }),
   author_rejected: (a) => ({
     title: 'Article rejected',
