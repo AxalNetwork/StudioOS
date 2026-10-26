@@ -32,23 +32,15 @@
  * any column, in any table, whose name contains one of its `columns` tokens as
  * whole words: `consent` matches `marketing_consent` and `consent_given`, never
  * `consentient`. Whole words keep `sin` from refusing `business` and `tin` from
- * refusing `tinted`.
+ * refusing `tinted`. A rule may exclude exact qualified names with `exceptions`.
+ * The money_term exception preserves the existing market-sizing runway input;
+ * it never permits a Use of funds, hire, cash or forecast target.
  *
  * THE RULES ARE DATA, NOT CODE, so the Worker's copy can be compared with this
  * one value for value rather than by reading two functions and hoping.
  */
 
 export const NEVER_FILL_RULES = Object.freeze([
-  {
-    category: 'money_term',
-    label: 'Financial plan inputs',
-    tables: ['financial_models', 'pct'],
-    fields: ['uof_scenarios.amount_to_raise_cents', 'uof_scenarios.target_runway_months', 'uof_scenarios.cash_cents', 'uof_scenarios.start_month', 'uof_scenarios.raise_month', 'uof_scenario_lines.share_pct', 'uof_milestones.cost_cents', 'use_of_funds_hires.annual_cents', 'projects.use_of_funds', 'projects.use_of_funds_meta', 'projects.funding_needed'],
-    columns: ['amount_to_raise', 'amount_to_raise_cents', 'funding_needed', 'share_pct',
-      'target_runway_months', 'runway_months', 'runway', 'cash_cents', 'cash_balance', 'burn',
-      'burn_cents', 'net_burn', 'hire_cost', 'annual_cents', 'annual_cost', 'cost_cents', 'forecast_driver',
-      'use_of_funds', 'use_of_funds_meta', 'milestone_costs'],
-  },
   {
     category: 'score_rating',
     label: 'Scores and ratings',
@@ -123,6 +115,17 @@ export const NEVER_FILL_RULES = Object.freeze([
       'certified', 'certify', 'sworn',
     ],
   },
+  {
+    category: 'money_term',
+    label: 'Financial plan inputs',
+    tables: ['financial_models', 'pct'],
+    exceptions: ['project_market_assumptions.runway'],
+    fields: ['uof_scenarios.amount_to_raise_cents', 'uof_scenarios.target_runway_months', 'uof_scenarios.cash_cents', 'uof_scenarios.start_month', 'uof_scenarios.raise_month', 'uof_scenario_lines.share_pct', 'uof_milestones.cost_cents', 'use_of_funds_hires.annual_cents', 'use_of_funds_hires.start_month', 'projects.use_of_funds', 'projects.use_of_funds_meta', 'projects.funding_needed'],
+    columns: ['cents', 'amount_to_raise', 'amount_to_raise_cents', 'funding_needed', 'share_pct',
+      'target_runway_months', 'runway_months', 'runway', 'cash_cents', 'cash_balance', 'burn',
+      'burn_cents', 'net_burn', 'hire_cost', 'annual_cents', 'annual_cost', 'cost_cents', 'forecast_driver',
+      'use_of_funds', 'use_of_funds_meta', 'milestone_costs'],
+  },
 ]);
 
 /** `signatureName`, `Signature-Name` and `signature_name` all fold to `signature_name`. */
@@ -158,8 +161,9 @@ export function neverFillReason(field) {
   const column = dot >= 0 ? folded.slice(dot + 1) : folded;
   const words = column.split('_').filter(Boolean);
   for (const rule of NEVER_FILL_RULES) {
+    if (rule.exceptions?.includes(folded)) continue;
     if ((table && rule.tables.includes(table)) || rule.fields?.includes(folded)
-      || ((!table || rule.category !== 'money_term') && rule.columns.some((t) => hasWords(words, t)))) {
+      || rule.columns.some((t) => hasWords(words, t))) {
       return { category: rule.category, label: rule.label };
     }
   }

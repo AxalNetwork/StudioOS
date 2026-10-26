@@ -203,3 +203,15 @@ test('numeric milestone names must appear verbatim in the cited roadmap passage'
  assert.equal((await call(f,'POST','',{mode:'wording',okr_id:1})).status,503);
  assert.equal(count(f,'research_zone_drafts'),0);assert.equal(count(f,'activity_logs'),0);
 });
+
+test('qualified financial columns are refused without relying on an explicit field list',()=>{
+ for(const field of ['mercury_raise_facts.burn_cents','use_of_funds_hires.monthly_cents','uof_scenario_lines.amount_cents','future_forecast.forecast_driver','another_plan.runway'])assert.equal(isNeverFill(field),true,field);
+ assert.equal(isNeverFill('project_market_assumptions.runway'),false);
+ assert.equal(isNeverFill('uof_milestones.label'),false);
+ const f=fixture();const tables=f.db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND (name GLOB 'uof_*' OR name='use_of_funds_hires')").all();
+ assert.ok(tables.some((t:any)=>t.name==='uof_scenarios'));
+ for(const table of tables){
+  const columns=f.db.prepare('SELECT name FROM pragma_table_info(?)').all(table.name);
+  for(const column of columns.filter((c:any)=>/cents|pct|runway|burn|cash|amount|driver|^(start_month|raise_month)$/.test(c.name)))assert.equal(isNeverFill(`${table.name}.${column.name}`),true,`${table.name}.${column.name}`);
+ }
+});
