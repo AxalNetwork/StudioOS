@@ -203,6 +203,11 @@ test('D1151: traction requires explicit sharing and a source, preserves zero and
     assert.deepEqual((await read(f,'/100/traction')).body.history.data.flatMap((x:any)=>x.figures),[]);
     f.db.prepare('UPDATE update_recipients SET user_id=3').run();
     assert.deepEqual((await read(f,'/100/traction')).body.history.data.flatMap((x:any)=>x.figures).map((x:any)=>x.value),[0]);
+    f.db.exec("INSERT INTO pairwise_ndas(party_a_user_id,party_b_user_id,status) VALUES(2,5,'active')");
+    f.db.prepare('UPDATE portfolio_updates SET audience_json=? WHERE id=?').run(JSON.stringify({investors:true}),update.id);
+    assert.deepEqual((await read(f,'/100/traction',5)).body.history.data.flatMap((x:any)=>x.figures),[]);
+    f.db.prepare('UPDATE update_recipients SET user_id=5').run();
+    assert.deepEqual((await read(f,'/100/traction',5)).body.history.data.flatMap((x:any)=>x.figures).map((x:any)=>x.value),[0]);
     f.db.exec('DROP TABLE portfolio_updates');
     assert.deepEqual((await read(f,'/100/traction')).body.history,{state:'unreadable',reason:'Unreadable. Try again.'});
   } finally { f.db.close(); }

@@ -121,15 +121,15 @@ async function market(env: Env, project: any) {
   };
 }
 
-async function traction(env: Env, project: any, userId: number) {
+async function traction(env: Env, project: any, user: { id: number; role: string }) {
   return { history: await block(async () => {
     // NDA is necessary, not a sharing grant. Drafts, private snapshots, legacy KPIs
     // and grants to a different investor are deliberately excluded for every role.
     const { results } = await env.DB.prepare(`SELECT id, period, metrics_json FROM portfolio_updates
       WHERE project_id = ? AND status = 'submitted' AND (
         EXISTS (SELECT 1 FROM update_recipients ur WHERE ur.update_id = portfolio_updates.id AND ur.user_id = ? AND ur.audience = 'investor')
-        OR (CASE WHEN json_valid(audience_json) THEN json_type(audience_json, '$.investors') END) = 'true')
-      ORDER BY submitted_at DESC, id DESC`).bind(project.id, userId).all<any>();
+        OR (? = 1 AND (CASE WHEN json_valid(audience_json) THEN json_type(audience_json, '$.investors') END) = 'true'))
+      ORDER BY submitted_at DESC, id DESC`).bind(project.id, user.id, ['investor', 'admin', 'founder'].includes(user.role) ? 1 : 0).all<any>();
     const months = new Map<string, unknown[]>();
     for (const update of results) {
       if (!/^\d{4}-(0[1-9]|1[0-2])$/.test(update.period) || months.has(update.period)) continue;
@@ -177,7 +177,7 @@ function handler(section: 'team' | 'market' | 'traction') {
             project: { name: project.name, sector: project.sector, stage: project.stage, headline: project.headline } });
         }
       }
-      const data = section === 'team' ? await team(c.env, project) : section === 'market' ? await market(c.env, project) : await traction(c.env, project, user.id);
+      const data = section === 'team' ? await team(c.env, project) : section === 'market' ? await market(c.env, project) : await traction(c.env, project, user);
       return c.json({ masked: false, ...data });
     } catch { return c.json({ error: 'unreadable', reason: 'Unreadable. Try again.' }, 503); }
   };
