@@ -61,7 +61,9 @@ for five record stores and profile files with HEAD only, using migration 605's
 durable pointer/discovery cursors and per-row checkpoints. Missing is marked,
 never 0; failures are retryable. Replaced headshots are invalidated with the
 new pointer and remain eligible for reconciliation in later passes. Only the HQ Super Admin maintenance route
-invokes it, with step-up and count-only auditing. No object content or deletion.
+invokes it, with step-up and count-only auditing. An explicit rescan restarts
+completed discovery to recover later retained uploads; an active scan keeps its
+cursor. No object content or deletion.
 
 ## The ones worth knowing
 

@@ -797,11 +797,12 @@ r.post('/storage/backfill-sizes', async (c) => {
   c.header('Cache-Control','private, no-store');
   let body:any;
   try { body=await c.req.json(); } catch { return c.json({code:'backfill_input_invalid',message:'Choose a batch of 1 to 20 files.'},400); }
-  if(!body||typeof body!=='object'||Array.isArray(body)||Object.keys(body).some(k=>k!=='limit'))
+  if(!body||typeof body!=='object'||Array.isArray(body)||Object.keys(body).some(k=>k!=='limit'&&k!=='rescan'))
     return c.json({code:'backfill_input_invalid',message:'Choose a batch of 1 to 20 files.'},400);
+  if(body.rescan!==undefined&&typeof body.rescan!=='boolean') return c.json({code:'backfill_input_invalid',message:'Choose a valid rescan option.'},400);
   const limit=body.limit??10;
   if(!Number.isSafeInteger(limit)||limit<1||limit>20) return c.json({code:'backfill_input_invalid',message:'Choose a batch of 1 to 20 files.'},400);
-  try { return c.json(await backfillMemberFileSizes(c.env,actor.id,limit)); }
+  try { return c.json(await backfillMemberFileSizes(c.env,actor.id,limit,body.rescan===true)); }
   catch { return c.json({code:'storage_backfill_unreadable',message:'The batch could not be read. Try again to resume.'},503); }
 });
 

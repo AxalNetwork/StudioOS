@@ -395,8 +395,8 @@ D1135's `companyActions.js` holds self-service company leave and venture restore
 
 D1123 adds the cohort capacity read to `labOperations.js`; the mounted Worker route is in admin_lab_operations.ts.
 
-D1168 (#3081): `adminStorage.js` exposes `adminStorageApi.backfillSizes(limit)`
+D1168 (#3081): `adminStorage.js` exposes `adminStorageApi.backfillSizes(limit, rescan)`
 to the mounted HQ Super Admin POST `/api/admin/platform/storage/backfill-sizes`.
-The operator sends only a bounded batch size; discovery cursors stay server-side.
+The operator sends a bounded batch size and optional rescan flag; discovery cursors stay server-side. A rescan restarts completed discovery and resumes an active scan.
 
 D1199 (#3149): `productTesting.js` adds the programme logo: `partnerTestingApi.uploadLogo(uid, file)` and `.removeLogo(uid)`, the same on `adminTestingApi` for HQ's own programmes, and `productTestingApi.logoSrc(uid)`, the `<img>` path (a 404 there means no logo: draw the initial letter).

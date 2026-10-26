@@ -109,7 +109,7 @@ function record(env:Env,row:Candidate,size:number|null,missing:string|null,unmea
   default:throw new Error('size_store_unreadable');
  }
 }
-export async function backfillMemberFileSizes(env:Env,actorId:number,limit:number){
+export async function backfillMemberFileSizes(env:Env,actorId:number,limit:number,rescan=false){
  if(!env.FILES)throw new Error('file_storage_unavailable');
  const counts={checked:0,recorded:0,missing:0,failed:0,changed:0,unattributed:0,unmeasurable:0};
  const auditUid=crypto.randomUUID();
@@ -118,6 +118,12 @@ export async function backfillMemberFileSizes(env:Env,actorId:number,limit:numbe
  if(!started.success||started.meta.changes!==1)throw new Error('size_audit_unavailable');
  let outcome='unreadable';let complete=false;
  try{
+  if(rescan){
+   // Restart only a completed discovery. Retrying the request during a scan
+   // must preserve its durable cursor and any concurrent operator's progress.
+   const restarted=await env.DB.prepare(`UPDATE member_file_size_backfill_state SET phase='headshot_rows',r2_cursor=NULL,row_cursor=0,updated_at=datetime('now') WHERE uid=? AND phase='done'`).bind('member-files-v1').run();
+   if(!restarted.success)throw new Error('size_store_unreadable');
+  }
   // Discovery can fail independently: still measure pending, already-known keys.
   try{await discover(env,limit);}catch{counts.failed++;}
   const batch=await measurementBatch(env,limit);
