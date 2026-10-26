@@ -160,7 +160,7 @@ export type ReadRow = { a: string; b: string; c: 'Counted' | 'Partial' | 'Missin
 export type ComputedScore = { compared_count?: number; key: ReadinessKey; score: number | null; evidence: 'measured' | 'stated' | 'pattern' | null; missing: string | null; reads: ReadRow[] };
 const met = (ok: boolean, partial = false): Pick<ReadRow, 'c' | 'tone'> => (ok ? { c: 'Counted', tone: 'ok' } : partial ? { c: 'Partial', tone: 'amb' } : { c: 'Missing', tone: 'bad' });
 
-type MetricProof = { figure: 'mrr' | 'paying_customers'; value: number; source: string; measured: boolean; observed_on: string };
+type MetricProof = { figure: 'mrr' | 'paying_customers'; value: number; source: string; measured: boolean; fresh: boolean; observed_on: string };
 type RevenueProof = { source: string; verification: string; has_document: number; month: string; observed_on: string; cents: number };
 const revenueSource = (r: RevenueProof) => (r.source === 'stripe' && r.verification === 'verified') || (r.source === 'mercury' && ['verified', 'supported'].includes(r.verification))
   ? `Connector · ${r.source === 'stripe' ? 'Stripe' : 'Mercury'}`
@@ -168,6 +168,8 @@ const revenueSource = (r: RevenueProof) => (r.source === 'stripe' && r.verificat
 
 /** Latest recorded value of each kind, separately for every stored source. */
 async function metricProofs(env: Env, projectId: number): Promise<MetricProof[]> {
+  const today = new Date().toISOString().slice(0, 10);
+  const cutoff = daysBefore(today, 90);
   const mrr = await env.DB.prepare(`SELECT mrr, snapshot_date, source FROM (
     SELECT mrr, snapshot_date, source, ROW_NUMBER() OVER (PARTITION BY source ORDER BY snapshot_date DESC, id DESC) AS position
     FROM project_metrics WHERE project_id = ? AND mrr IS NOT NULL
@@ -179,7 +181,7 @@ async function metricProofs(env: Env, projectId: number): Promise<MetricProof[]>
   ) WHERE position = 1 ORDER BY CASE WHEN source = 'stripe' THEN 0 ELSE 1 END, snapshot_date DESC, source`)
     .bind(projectId).all<{ paying_accounts: number; snapshot_date: string; source: string }>();
   const fact = (figure: MetricProof['figure'], value: number, row: { source: string; snapshot_date: string }): MetricProof => ({
-    figure, value: Number(value), measured: row.source === 'stripe', observed_on: row.snapshot_date,
+    figure, value: Number(value), measured: row.source === 'stripe', fresh: row.snapshot_date >= cutoff && row.snapshot_date <= today, observed_on: row.snapshot_date,
     source: `${row.source === 'stripe' ? 'Stripe (measured)' : `Metrics (stated: ${row.source || 'source not recorded'})`} · project_metrics.${figure === 'mrr' ? 'mrr' : 'paying_accounts'} on ${row.snapshot_date}`,
   });
   return [...(mrr.results || []).map(r => fact('mrr', r.mrr, r)), ...(paying.results || []).map(r => fact('paying_customers', r.paying_accounts, r))];
@@ -277,18 +279,18 @@ export async function computeReadiness(env: Env, projectId: number): Promise<Com
   const metricRows = await metricProofs(env, projectId);
   const revenueRows = await revenueProofs(env, projectId);
   const measuredRevenue = revenueRows.some(r => r.cents > 0 && r.verification === 'verified' && revenueSource(r).startsWith('Connector'));
-  const measured = measuredRevenue || metricRows.some(r => r.measured && r.value > 0);
+  const measured = measuredRevenue || metricRows.some(r => r.measured && r.fresh && r.value > 0);
   const documented = revenueRows.some(r => r.cents > 0 && r.verification === 'supported' && (r.has_document || r.source === 'mercury'));
-  const traction = measured || revenueRows.some(r => r.cents > 0) || metricRows.some(r => r.value > 0) || fieldOf(p?.revenue) || fieldOf(p?.mrr) || fieldOf(p?.paying_customers);
+  const traction = measured || revenueRows.some(r => r.cents > 0) || metricRows.some(r => r.fresh && r.value > 0) || fieldOf(p?.revenue) || fieldOf(p?.mrr) || fieldOf(p?.paying_customers);
   out.push({
     key: 'traction', score: traction ? 10 : 0, evidence: measured ? 'measured' : documented ? 'pattern' : 'stated', missing: traction ? null : 'Log revenue or update your proof fields.',
     reads: [
       { a: 'Verified revenue', b: verifiedRevenue ? `${usd(verifiedRevenue.cents / 100)} · ${verifiedRevenue.month} · ${revenueRows.filter(r => r.verification === 'verified').map(revenueSource).join(', ')}` : 'not recorded', ...met(measuredRevenue) },
       ...revenueRows.map(r => ({ a: `Revenue entries · ${revenueSource(r)}`, b: `${usd(r.cents / 100)} · ${r.month} · received_on ${r.observed_on}`, ...met(r.cents > 0) })),
-      ...metricRows.map(r => ({ a: `${r.figure === 'mrr' ? 'MRR' : 'Paying customers'} · ${r.measured ? 'Connector' : 'Typed'}`, b: `${r.figure === 'mrr' ? usd(r.value) : r.value} · ${r.source}`, ...met(true) })),
-      { a: 'Revenue (stated)', b: num(p?.revenue) != null ? `${usd(Number(p!.revenue))} · Typed · Founder's figure` : 'not recorded', ...met(num(p?.revenue) != null) },
-      { a: 'MRR (stated)', b: num(p?.mrr) != null ? `${usd(Number(p!.mrr))} · Typed · Founder's figure` : 'not recorded', ...met(num(p?.mrr) != null) },
-      { a: 'Paying customers (stated)', b: num(p?.paying_customers) != null ? `${Math.round(Number(p!.paying_customers))} · Typed · Founder's figure` : 'not recorded', ...met(num(p?.paying_customers) != null) },
+      ...metricRows.map(r => ({ a: `${r.figure === 'mrr' ? 'MRR' : 'Paying customers'} · ${r.measured ? 'Connector' : 'Typed'}`, b: `${r.figure === 'mrr' ? usd(r.value) : r.value} · ${r.source}${r.fresh ? '' : ' · Outside the current 90-day window'}`, ...met(r.fresh && r.value > 0, true) })),
+      { a: 'Revenue (stated)', b: num(p?.revenue) != null ? `${usd(Number(p!.revenue))} · Typed · Founder's figure` : 'not recorded', ...met(fieldOf(p?.revenue), num(p?.revenue) != null) },
+      { a: 'MRR (stated)', b: num(p?.mrr) != null ? `${usd(Number(p!.mrr))} · Typed · Founder's figure` : 'not recorded', ...met(fieldOf(p?.mrr), num(p?.mrr) != null) },
+      { a: 'Paying customers (stated)', b: num(p?.paying_customers) != null ? `${Math.round(Number(p!.paying_customers))} · Typed · Founder's figure` : 'not recorded', ...met(fieldOf(p?.paying_customers), num(p?.paying_customers) != null) },
     ],
   });
   out.push(await teamReadiness(env, projectId));
@@ -1592,19 +1594,26 @@ async function readinessFigure(ctx: Ctx): Promise<Figure> {
 async function committedFigure(ctx: Ctx): Promise<Figure> {
   return safeFigure({ key: 'committed', label: 'Received, wired and signed against target', unit: 'of', source: 'Confirmed raise receipts · typed raise_prospects · raise_rounds' }, async () => {
     // The confirmed target index permits only one receipt for each prospect.
-    const res = await ctx.env.DB.prepare(`SELECT p.commit_status, p.amount, m.id AS receipt_id, m.amount_cents AS received_cents
+    const res = await ctx.env.DB.prepare(`SELECT p.commit_status, p.amount, m.id AS receipt_id
       FROM raise_prospects p LEFT JOIN mercury_personal_matches m ON m.target_kind = 'raise_prospect' AND m.target_id = p.id AND m.state = 'confirmed'
+        AND p.amount > 0 AND p.amount = ROUND(p.amount, 2) AND m.amount_cents = ROUND(p.amount * 100)
+        AND EXISTS (SELECT 1 FROM users owner JOIN projects own ON own.id = p.project_id
+          WHERE owner.id = m.user_id AND owner.founder_id IS NOT NULL AND owner.founder_id = own.founder_id)
+        AND NOT EXISTS (SELECT 1 FROM integrations i WHERE i.id = m.integration_id
+          AND (i.user_id != m.user_id OR i.provider_key != 'mercury'))
       WHERE p.project_id = ? AND p.stage = 'committed'`).bind(ctx.projectId)
-      .all<{ commit_status: string | null; amount: number | null; receipt_id: number | null; received_cents: number | null }>();
+      .all<{ commit_status: string | null; amount: number | null; receipt_id: number | null }>();
     const commitments = res.results || [];
     const breakdown: Record<'received' | 'wired' | 'signed' | 'soft' | 'unclassified', number | null> = { received: 0, wired: 0, signed: 0, soft: 0, unclassified: 0 };
     let firmRows = 0, firmMissing = 0, incomplete = 0, unclassified = 0;
     for (const c of commitments) {
       // A matched receipt supersedes the typed status. It is counted once,
-      // from its bank-matched amount, never again as wired, signed or soft.
+      // from the matching prospect amount, never again as wired, signed or
+      // soft. The receipt's bank amount is compared in SQL, not projected.
+      // A removed connection does not erase a previously confirmed receipt.
       const category = c.receipt_id != null ? 'received' : c.commit_status === 'wired' ? 'wired'
         : c.commit_status === 'signed' ? 'signed' : c.commit_status === 'soft' ? 'soft' : 'unclassified';
-      const value = category === 'received' ? num(c.received_cents) == null ? null : Number(c.received_cents) / 100 : num(c.amount);
+      const value = num(c.amount);
       const firm = ['received', 'wired', 'signed'].includes(category);
       if (firm) firmRows++;
       if (category === 'unclassified') unclassified++;
@@ -1650,15 +1659,15 @@ export function runwayMonths(cash: number | null, burn: number | null): number |
 async function runwayFigure(ctx: Ctx): Promise<Figure> {
   return safeFigure({ key: 'runway_months', label: 'Months of runway', unit: 'months', source: 'project_metrics · stated' }, async () => {
     const bank = await mercuryRunway(ctx.env, ctx.projectId);
-    if (bank) {
+    if (bank && bank.as_of >= daysBefore(ctx.today, 90) && bank.as_of.slice(0, 10) <= ctx.today) {
       const value = runwayMonths(bank.amount_cents, bank.burn_cents);
       return { value, source: 'Connector · Mercury · measured cash and net burn', delta_30d: null, spark: [], state: value == null ? 'not_recorded' : 'ok', as_of: bank.as_of, reason: value == null ? 'Mercury has no positive recorded net burn' : null };
     }
     const res = await ctx.env.DB.prepare(
       `SELECT cash_balance, net_burn, snapshot_date, source FROM project_metrics
-        WHERE project_id = ? AND cash_balance IS NOT NULL AND net_burn IS NOT NULL
-        ORDER BY CASE WHEN source = 'mercury' THEN 0 ELSE 1 END, snapshot_date DESC, id DESC LIMIT 8`,
-    ).bind(ctx.projectId).all<{ cash_balance: number; net_burn: number; snapshot_date: string; source: string }>();
+        WHERE project_id = ? AND cash_balance IS NOT NULL AND net_burn IS NOT NULL AND snapshot_date <= ?
+        ORDER BY CASE WHEN source = 'mercury' AND snapshot_date >= ? THEN 0 ELSE 1 END, snapshot_date DESC, id DESC LIMIT 8`,
+    ).bind(ctx.projectId, ctx.today, daysBefore(ctx.today, 90)).all<{ cash_balance: number; net_burn: number; snapshot_date: string; source: string }>();
     const rows = res.results || [];
     const snaps = rows.filter(r => r.source === rows[0]?.source);
     if (snaps.length === 0) return { value: null, delta_30d: null, spark: [], state: 'not_recorded', as_of: null, reason: 'No metrics snapshot records cash and net burn' };
@@ -1666,7 +1675,7 @@ async function runwayFigure(ctx: Ctx): Promise<Figure> {
     const now = runwayMonths(Number(snaps[0].cash_balance), Number(snaps[0].net_burn));
     if (now == null) return { value: null, source, delta_30d: null, spark: [], state: 'not_recorded', as_of: snaps[0].snapshot_date, reason: 'Net burn is zero or negative, so burn sets no runway' };
     const spark = snaps.map((s) => runwayMonths(Number(s.cash_balance), Number(s.net_burn))).filter((v): v is number => v != null).reverse();
-    return { value: now, source, delta_30d: null, spark: sparkOrNone(spark), state: 'ok', as_of: snaps[0].snapshot_date, reason: null };
+    return { value: now, source, delta_30d: null, spark: sparkOrNone(spark), state: 'ok', as_of: snaps[0].snapshot_date, reason: snaps[0].snapshot_date < daysBefore(ctx.today, 90) ? 'Stale · the newest runway snapshot is older than 90 days.' : null };
   });
 }
 

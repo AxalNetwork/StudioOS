@@ -25,8 +25,9 @@ function fixture() {
     (3,'founder','Other synthetic founder','other@example.invalid',33,1);
     INSERT INTO projects(id,uid,name,founder_id) VALUES(1,'one','Synthetic venture',11),(2,'two','Other venture',33);`);
   const env: any = { DB: d1Over(db), ENVIRONMENT: 'development' };
-  return { db, env, ctx: { env, projectId: 1, today: '2026-10-26' } };
+  return { db, env, ctx: { env, projectId: 1, today: new Date().toISOString().slice(0,10) } };
 }
+const ago=(days:number)=>{const d=new Date();d.setUTCDate(d.getUTCDate()-days);return d.toISOString().slice(0,10);};
 const proof = async (env: any) => (await computeReadiness(env, 1)).find(x => x.key === 'traction')!;
 const figure = async (ctx: any, key: string): Promise<any> => (await figures(ctx)).find(x => x.key === key)!;
 function narrative(db: DatabaseSync, selected: string | null) {
@@ -55,11 +56,11 @@ test('the stored check selection controls reads and clears old mismatches withou
 
 test('typed MRR stays stated; Stripe and typed snapshots remain separately named, dated and scoped', async () => {
   const f = fixture(); try {
-    f.db.exec("INSERT INTO project_metrics(project_id,snapshot_date,source,mrr) VALUES(1,'2026-10-20','manual',900),(2,'2026-10-25','stripe',999999)");
+    f.db.prepare("INSERT INTO project_metrics(project_id,snapshot_date,source,mrr) VALUES(1,?,'manual',900),(2,?,'stripe',999999)").run(ago(1),ago(0));
     assert.equal((await proof(f.env)).evidence, 'stated');
-    f.db.exec("INSERT INTO project_metrics(project_id,snapshot_date,source,mrr,paying_accounts) VALUES(1,'2026-09-30','stripe',1000,10),(1,'2026-10-01','stripe',1200,NULL)");
+    f.db.prepare("INSERT INTO project_metrics(project_id,snapshot_date,source,mrr,paying_accounts) VALUES(1,?,'stripe',1000,10),(1,?,'stripe',1200,NULL)").run(ago(10),ago(9));
     const p = await proof(f.env); assert.equal(p.evidence, 'measured');
-    const rows = JSON.stringify(p.reads); assert.match(rows, /MRR · Connector.*1,200.*2026-10-01/); assert.match(rows, /MRR · Typed.*900.*manual.*2026-10-20/);
+    const rows = JSON.stringify(p.reads); assert.match(rows, /MRR · Connector.*1,200/); assert.match(rows, /MRR · Typed.*900.*manual/);assert.ok(rows.includes(ago(9)));assert.ok(rows.includes(ago(1)));
     assert.doesNotMatch(rows, /999,999/);
     narrative(f.db, '["metrics"]'); const inputs = await checkInputs(f.env, 1, 1);
     assert.equal(inputs.metrics.mrr!.value, 1200); assert.equal(inputs.metrics.paying_customers!.value, 10);
@@ -68,6 +69,8 @@ test('typed MRR stays stated; Stripe and typed snapshots remain separately named
     const zero = await proof(f.env); assert.equal(zero.score, 0);
     assert.match(zero.reads.find(r => r.a === 'MRR (stated)')!.b, /^\$0 · Typed/);
     assert.match(zero.reads.find(r => r.a === 'MRR · Connector')!.b, /^\$0/);
+    assert.equal(zero.reads.find(r => r.a === 'MRR · Connector')!.c,'Partial');
+    assert.equal(zero.reads.find(r => r.a === 'MRR (stated)')!.c,'Partial');
     f.db.exec('UPDATE project_metrics SET source=NULL WHERE project_id=1');
     assert.match((await checkInputs(f.env,1,1)).metrics.mrr!.source,/source not recorded/);
   } finally { f.db.close(); }
@@ -154,13 +157,14 @@ test('data-room readiness counts downloadable coverage; only open_room and downl
 test('received, wired, signed and soft are disjoint; only actual receipts are received and soft never joins the firm total',async()=>{
   const f=fixture();try {
     f.db.exec("INSERT INTO raise_rounds(uid,project_id,name,status,target_amount) VALUES('round',1,'Seed','active',100000)");
+    f.db.exec("INSERT INTO integrations(id,uid,user_id,provider_key,auth_type,status) VALUES(10,'receipt-bank',1,'mercury','oauth_mcp','active')");
     const p=f.db.prepare("INSERT INTO raise_prospects(id,uid,project_id,name,stage,commit_status,amount) VALUES(?,?,?,'Private investor','committed',?,?)");
-    p.run(1,'wired',1,'wired',1000);p.run(2,'signed',1,'signed',2000);p.run(3,'soft',1,'soft',4000);p.run(4,'received',1,'wired',7000);p.run(5,'foreign',2,'wired',999999);
+    p.run(1,'wired',1,'wired',1000);p.run(2,'signed',1,'signed',2000);p.run(3,'soft',1,'soft',4000);p.run(4,'received',1,'wired',5000);p.run(5,'foreign',2,'wired',999999);
     const receipt=f.db.prepare("INSERT INTO mercury_personal_matches(uid,user_id,integration_id,mercury_transaction_id,account_last_four,amount_cents,posted_on,target_kind,target_id,state) VALUES(?,1,10,?,'1234',?,'2026-10-01',?,?,?)");
-    receipt.run('receipt','bank-one',500000,'raise_prospect',4,'confirmed');receipt.run('withdrawn','bank-two',999999,'raise_prospect',1,'withdrawn');receipt.run('wrong-kind','bank-three',999999,'engagement_invoice',2,'confirmed');
+    receipt.run('receipt','bank-one',500000,'raise_prospect',4,'confirmed');receipt.run('withdrawn','bank-two',100000,'raise_prospect',1,'withdrawn');receipt.run('wrong-kind','bank-three',200000,'engagement_invoice',2,'confirmed');
     let result=await figure(f.ctx,'committed');assert.deepEqual(result.breakdown,{received:5000,wired:1000,signed:2000,soft:4000,unclassified:0});assert.deepEqual(result.value,[8000,100000]);
     assert.doesNotMatch(JSON.stringify(result),/Private investor|1234|bank-one|999999/);
-    f.db.exec("UPDATE mercury_personal_matches SET state='withdrawn' WHERE uid='receipt'");result=await figure(f.ctx,'committed');assert.equal(result.breakdown.received,0);assert.equal(result.breakdown.wired,8000);
+    f.db.exec("UPDATE mercury_personal_matches SET state='withdrawn' WHERE uid='receipt'");result=await figure(f.ctx,'committed');assert.equal(result.breakdown.received,0);assert.equal(result.breakdown.wired,6000);
     f.db.exec('UPDATE raise_prospects SET amount=NULL WHERE id=2');result=await figure(f.ctx,'committed');assert.equal(result.value,null);assert.equal(result.breakdown.signed,null);assert.equal(result.state,'not_recorded');
     f.db.exec('DELETE FROM raise_prospects WHERE id!=3');result=await figure(f.ctx,'committed');assert.deepEqual(result.value,[0,100000]);assert.equal(result.breakdown.soft,4000);
   }finally{f.db.close();}
@@ -168,10 +172,55 @@ test('received, wired, signed and soft are disjoint; only actual receipts are re
 
 test('runway prefers a Connector snapshot, names its date and source, and never mixes typed points into its history',async()=>{
   const f=fixture();try {
-    f.db.exec("INSERT INTO project_metrics(project_id,snapshot_date,source,cash_balance,net_burn) VALUES(1,'2026-08-01','mercury',400,100),(1,'2026-09-01','mercury',500,100),(1,'2026-10-01','mercury',600,100),(1,'2026-10-25','manual',99999,1),(2,'2026-10-26','mercury',99999,1)");
-    let result=await figure(f.ctx,'runway_months');assert.equal(result.value,6);assert.equal(result.as_of,'2026-10-01');assert.match(result.source,/Connector · Mercury/);assert.deepEqual(result.spark,[4,5,6]);
-    f.db.exec("UPDATE project_metrics SET net_burn=0 WHERE project_id=1 AND source='mercury' AND snapshot_date='2026-10-01'");result=await figure(f.ctx,'runway_months');assert.equal(result.value,null);assert.equal(result.state,'not_recorded');
+    f.db.prepare("INSERT INTO project_metrics(project_id,snapshot_date,source,cash_balance,net_burn) VALUES(1,?,'mercury',400,100),(1,?,'mercury',500,100),(1,?,'mercury',600,100),(1,?,'manual',99999,1),(2,?,'mercury',99999,1)").run(ago(30),ago(20),ago(10),ago(1),ago(0));
+    let result=await figure(f.ctx,'runway_months');assert.equal(result.value,6);assert.equal(result.as_of,ago(10));assert.match(result.source,/Connector · Mercury/);assert.deepEqual(result.spark,[4,5,6]);
+    f.db.prepare("UPDATE project_metrics SET net_burn=0 WHERE project_id=1 AND source='mercury' AND snapshot_date=?").run(ago(10));result=await figure(f.ctx,'runway_months');assert.equal(result.value,null);assert.equal(result.state,'not_recorded');
     f.db.exec("DELETE FROM project_metrics WHERE project_id=1 AND source='mercury'");result=await figure(f.ctx,'runway_months');assert.equal(result.value,99999);assert.match(result.source,/stated: manual/);
     f.db.exec('DELETE FROM project_metrics WHERE project_id=1');result=await figure(f.ctx,'runway_months');assert.equal(result.value,null);assert.equal(result.state,'not_recorded');
+  }finally{f.db.close();}
+});
+
+test('only the venture founder’s matching receipt is received; retained proofs survive disconnect',async()=>{
+  const f=fixture();try {
+    f.db.exec(`INSERT INTO raise_rounds(uid,project_id,name,status,target_amount) VALUES('round',1,'Seed','active',10000);
+      INSERT INTO raise_prospects(id,uid,project_id,name,stage,commit_status,amount) VALUES(1,'prospect',1,'Synthetic investor','committed','wired',1000);
+      INSERT INTO integrations(id,uid,user_id,provider_key,auth_type,status) VALUES(10,'owner-bank',1,'mercury','oauth_mcp','active'),(20,'other-bank',3,'mercury','oauth_mcp','active'),(30,'other-provider',1,'github','oauth','active');
+      INSERT INTO mercury_personal_matches(uid,user_id,integration_id,mercury_transaction_id,account_last_four,amount_cents,posted_on,target_kind,target_id,state)
+      VALUES('proof',1,10,'synthetic-credit','1234',100000,'2026-10-01','raise_prospect',1,'confirmed');`);
+    assert.equal((await figure(f.ctx,'committed')).breakdown.received,1000);
+    f.db.exec("UPDATE mercury_personal_matches SET user_id=3,integration_id=20");
+    assert.equal((await figure(f.ctx,'committed')).breakdown.received,0);
+    f.db.exec("INSERT INTO project_members(project_id,user_id,status) VALUES(1,3,'accepted')");
+    assert.equal((await figure(f.ctx,'committed')).breakdown.received,0,'personal receipts require the founder, not merely a project member');
+    f.db.exec('UPDATE mercury_personal_matches SET user_id=1');
+    assert.equal((await figure(f.ctx,'committed')).breakdown.received,0,'another user’s connection is not the founder’s');
+    f.db.exec('UPDATE mercury_personal_matches SET integration_id=30');
+    assert.equal((await figure(f.ctx,'committed')).breakdown.received,0,'the integration must be Mercury');
+    f.db.exec('UPDATE mercury_personal_matches SET integration_id=10,amount_cents=99999');
+    assert.equal((await figure(f.ctx,'committed')).breakdown.received,0,'a receipt must still match the stated amount');
+    f.db.exec('UPDATE mercury_personal_matches SET amount_cents=100000; DELETE FROM integrations WHERE id=10');
+    const retained=await figure(f.ctx,'committed');assert.equal(retained.breakdown.received,1000);assert.equal(retained.breakdown.wired,0);
+    f.db.exec("UPDATE raise_prospects SET amount=1000.005 WHERE id=1; UPDATE mercury_personal_matches SET amount_cents=100001,state='confirmed'");
+    assert.equal((await figure(f.ctx,'committed')).breakdown.received,0,'a fractional-cent amount cannot be a matched receipt');
+  }finally{f.db.close();}
+});
+
+test('stale metrics do not prove current traction or outrank a recent typed runway',async()=>{
+  const f=fixture();try {
+    f.db.exec("INSERT INTO project_metrics(project_id,snapshot_date,source,mrr,cash_balance,net_burn) VALUES(1,'2000-01-01','stripe',1000,NULL,NULL),(1,'2000-01-02','mercury',NULL,99999,1)");
+    let traction=await proof(f.env);assert.equal(traction.score,0);assert.notEqual(traction.evidence,'measured');assert.match(JSON.stringify(traction.reads),/Outside the current 90-day window/);
+    f.db.prepare("INSERT INTO project_metrics(project_id,snapshot_date,source,cash_balance,net_burn) VALUES(1,?,'manual',20,2)").run(ago(1));
+    let runway=await figure(f.ctx,'runway_months');assert.equal(runway.value,10);assert.match(runway.source,/stated: manual/);
+    f.db.exec("INSERT INTO integrations(id,uid,user_id,provider_key,auth_type,status) VALUES(40,'stale-bank',1,'mercury','oauth_mcp','active'); INSERT INTO mercury_raise_facts(integration_id,project_id,kind,fact_key,label,amount_cents,burn_cents,value,as_of) VALUES(40,1,'runway','runway','Runway',999999,100,9999,'2000-01-01')");
+    runway=await figure(f.ctx,'runway_months');assert.equal(runway.value,10,'an old bank fact does not override a recent snapshot');
+    f.db.prepare("INSERT INTO project_metrics(project_id,snapshot_date,source,mrr) VALUES(1,?,'stripe',1000)").run(ago(90));
+    traction=await proof(f.env);assert.equal(traction.evidence,'measured');assert.equal(traction.score,10);
+    f.db.exec("DELETE FROM project_metrics WHERE project_id=1 AND source='stripe'");
+    f.db.prepare("INSERT INTO project_metrics(project_id,snapshot_date,source,mrr) VALUES(1,?,'stripe',1000)").run(ago(-1));
+    assert.equal((await proof(f.env)).score,0,'a future observation cannot prove current traction');
+    f.db.prepare("INSERT INTO project_metrics(project_id,snapshot_date,source,cash_balance,net_burn) VALUES(1,?,'mercury',888,1)").run(ago(-1));
+    assert.equal((await figure(f.ctx,'runway_months')).value,10,'future cash does not replace the recorded current snapshot');
+    f.db.exec('DELETE FROM project_metrics WHERE project_id=1 AND cash_balance=20');
+    runway=await figure(f.ctx,'runway_months');assert.match(runway.reason,/Stale/);assert.equal(runway.as_of,'2000-01-02');
   }finally{f.db.close();}
 });
