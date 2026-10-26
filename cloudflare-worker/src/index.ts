@@ -132,6 +132,7 @@ import email from './routes/email';
 import pipeline from './routes/pipeline';
 import search, { ensureAcademySchema } from './routes/search';
 import kyc from './routes/kyc';
+import kybAdmin from './routes/kyb_admin';
 import esign from './routes/esign';
 import trust from './routes/trust';
 import { expireDueArtifacts as expireTrustArtifacts, resyncKycKyb, renewalSweep } from './services/trust';
@@ -1309,6 +1310,7 @@ app.use('/api/kyc/admin/:userId/document/*', requireCfAccess());
 // endpoint is wired (downstream task), it should also carry the same
 // requireCfAccess() middleware (it's admin-only, so safe to gate).
 
+app.route('/api/kyc/businesses', kybAdmin);
 app.route('/api/kyc', kyc);
 // Task #3 (Y-1) — Trust Center: per-role obligations + 3-way NDA flow.
 app.route('/api/trust', trust);

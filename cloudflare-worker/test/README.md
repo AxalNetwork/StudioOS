@@ -129,3 +129,10 @@ unavailable remote coverage and personal sync/export isolation after a scope
 read. `my_events_feed_d1033.test.ts` also verifies Free and lapsed subscriptions
 with token ownership, revocation and join-link boundaries intact.
 Every provider call is stubbed or refused; all rows are synthetic.
+
+`kyb_d1231.test.ts` drives migration 616 through Hono/auth and real SQLite:
+owner-check explanations, fixed-expiry KYB reconciliation and invalidation,
+studio/role/step-up/freeze refusals, masked/audited showings, private Access-gated
+R2 streams, rejection purge/retry, atomic audit/upload rollback, source discovery,
+imports and licensed studios. Thirteen injected route faults run against the same
+scenarios before and after restoration. All external fetches are refused.

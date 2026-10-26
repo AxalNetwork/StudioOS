@@ -39,6 +39,7 @@
  * these four rather than pretending it is one of them.
  */
 import type { Env } from '../types';
+import { branchOf } from '../util/branch';
 import { SLA_DUE_SOON_HOURS } from './slaWindow';
 import { MODERATION_AWAITING_SQL } from './moderationOpen';
 import { PRE_VERDICT_STATUSES } from './referralSubmissions';
@@ -102,6 +103,8 @@ export type ApprovalSource = {
    * says why.
    */
   decidedOn: string | null;
+  /** Canonical destination when a lane provides its own address. */
+  decisionPath?: string;
   undecidedReason?: string;
   /**
    * D1041 — a second count inside the lane (APR2's line under it), literal like
@@ -348,24 +351,16 @@ export const APPROVAL_SOURCES: readonly ApprovalSource[] = [
   {
     key: 'kyb',
     label: 'KYB',
-    // A BUSINESS, NOT A PERSON (the KYC split). `company_kyb_records`
-    // (migration 220) has no CHECK; its comment gives `users.kyc_status`'s
-    // vocabulary, and the one writer (`POST /api/trust/companies/kyb`) stores
-    // `in_review`. Both of the waiting words are counted, so neither writer's
-    // choice drops a submission off the board.
+    // D1231: all business sources, including newly submitted records discovered by the view.
     countSql:
-      'SELECT COUNT(*) AS n, MIN(datetime(COALESCE(submitted_at, created_at))) AS oldest FROM company_kyb_records '
-      + "WHERE status IN ('pending', 'in_review')",
+      "SELECT COUNT(*) AS n, MIN(datetime(COALESCE(submitted_at, created_at))) AS oldest FROM kyb_businesses WHERE status IN ('in_review') AND kind != 'licensed_studio' AND (studio_code IS NULL OR studio_code = ?)",
     rowsSql:
-      "SELECT k.id AS id, COALESCE(NULLIF(cp.company_name, ''), NULLIF(k.entity_name, ''), 'company ' || k.company_id) AS who, "
-      + "'KYB · ' || COALESCE(NULLIF(k.entity_name, ''), 'entity not named') AS what, "
-      + 'COALESCE(k.submitted_at, k.created_at) AS created_at '
-      + 'FROM company_kyb_records k LEFT JOIN company_profiles cp ON cp.id = k.company_id '
-      + "WHERE k.status IN ('pending', 'in_review') "
-      + 'ORDER BY julianday(COALESCE(k.submitted_at, k.created_at)) ASC LIMIT ?',
+      "SELECT id, display_name AS who, 'KYB · ' || entity_name AS what, COALESCE(submitted_at, created_at) AS created_at "
+      + "FROM kyb_businesses WHERE status IN ('in_review') AND kind != 'licensed_studio' AND (studio_code IS NULL OR studio_code = ?) "
+      + 'ORDER BY julianday(COALESCE(submitted_at, created_at)), id LIMIT ?',
     notifies: 'Nobody yet',
-    decidedOn: null,
-    undecidedReason: 'No admin route decides a business verification yet; the KYB record is written by the company and read by Trust.',
+    decidedOn: 'KYC & KYB › Businesses',
+    decisionPath: '/admin/kyc/businesses',
   },
   {
     key: 'comarketing',
@@ -640,7 +635,7 @@ export async function approvalBoard(
   for (const src of sources) {
     try {
       const rows = await env.DB.prepare(src.rowsSql)
-        .bind(Math.max(1, Math.trunc(Number(limit) || 100)))
+        .bind(...(src.key === 'kyb' ? [branchOf(env) || 'hq'] : []), Math.max(1, Math.trunc(Number(limit) || 100)))
         .all<{ id: number; who: string; what: string; created_at: string }>();
       const got = rows.results || [];
       for (const r of got) {
@@ -713,6 +708,7 @@ export type LaneCount = {
   /** D1041 — who a decision tells, and the page that decides it (null when none does). */
   notifies: string;
   decided_on: string | null;
+  decision_path?: string;
   undecided_reason?: string;
   /** D1041 labelled count or D1039 named figures; null is preserved for a failed named-figure read. */
   sub?: { label: string; count: number | null } | Record<string, number> | null;
@@ -723,6 +719,7 @@ function laneMeta(s: ApprovalSource) {
   return {
     notifies: s.notifies,
     decided_on: s.decidedOn,
+    ...(s.decisionPath ? { decision_path: s.decisionPath } : {}),
     ...(s.undecidedReason ? { undecided_reason: s.undecidedReason } : {}),
   };
 }
@@ -785,7 +782,7 @@ export async function countLanes<K extends string>(
   for (const s of sources) {
     const meta = laneMeta(s as ApprovalSource);
     try {
-      const row = await env.DB.prepare(s.countSql).first<{ n: number; oldest: string | null }>();
+      const row = await env.DB.prepare(s.countSql).bind(...(s.key === 'kyb' ? [branchOf(env) || 'hq'] : [])).first<{ n: number; oldest: string | null }>();
       const sub = s.subSql ? await subCounts(env, s.subSql) : await subCount(env, s as ApprovalSource);
       out.push({
         key: s.key,
