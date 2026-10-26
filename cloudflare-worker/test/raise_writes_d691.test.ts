@@ -786,6 +786,7 @@ function cycleFixture() {
   db.exec(sqlOf('442_raise_cycle_stores.sql'));
   db.exec(sqlOf('459_cycle_activity_convention.sql'));
   db.exec(sqlOf('463_raise_record_stores.sql'));
+  db.exec(sqlOf('606_use_of_funds_scenarios.sql'));
   addColumnsFrom(db, sqlOf('607_raise_money_cents.sql'), 'raise_prospect_events'); // D1190: a meeting's start
   db.exec('ALTER TABLE cap_table_vesting ADD COLUMN project_id INTEGER'); // D1020, migration 574
   raiseEvidenceTables(db);
@@ -1100,7 +1101,8 @@ test('10 (route): Add holder and Edit holder go through addHolder() and updateHo
 
 test('11: Edit split round-trips the five sections, the milestones and the runway, keeps milestone_costs, and refuses a split off 100', async () => {
   const db = cycleFixture();
-  db.prepare('UPDATE projects SET use_of_funds_meta = ? WHERE id = ?').run(JSON.stringify({ milestone_costs: { m1: { bucket: 'eng', cost: 5000 } }, deck_synced_at: '2026-10-01T00:00:00Z' }), C_P);
+  db.prepare('UPDATE projects SET use_of_funds_meta = ? WHERE id = ?').run(JSON.stringify({ milestone_costs: { '1': { bucket: 'eng', cost: 5000 } }, deck_synced_at: '2026-10-01T00:00:00Z' }), C_P);
+  db.prepare('INSERT INTO roadmap_okrs(id,project_id,objective) VALUES(1,?,?)').run(C_P,'Product milestone');
   const body = {
     amount_to_raise_cents: 2_000_000_00, runway_months: 20,
     sections: [
@@ -1117,7 +1119,7 @@ test('11: Edit split round-trips the five sections, the milestones and the runwa
   ], 'the stored labels, in the page\'s order');
   assert.equal(p.funding_needed, 2_000_000, 'the column\'s dollars');
   const meta = JSON.parse(p.use_of_funds_meta);
-  assert.deepEqual(meta.milestone_costs, { m1: { bucket: 'eng', cost: 5000 } }, 'other keys are kept');
+  assert.deepEqual(meta.milestone_costs, { '1': { bucket: 'eng', cost: 5000 } }, 'other keys are kept');
   assert.equal(meta.runway_months, 20);
   assert.deepEqual(meta.milestones, { product: { label: 'Ship the pilot', by: '2027-06' } });
   assert.equal(meta.deck_synced_at, null, 'a change marks the deck out of sync');
@@ -1135,7 +1137,7 @@ test('11: Edit split round-trips the five sections, the milestones and the runwa
     { sections: [{ key: 'product', pct: 100, milestone_label: 'x', milestone_by: 'soon' }] },
   ]) assert.equal((await cyc(db, C_FOUNDER, 'PUT', q('/use-of-funds'), b)).status, 400, JSON.stringify(b));
   assert.equal((db.prepare('SELECT use_of_funds_meta FROM projects WHERE id = ?').get(C_P) as any).use_of_funds_meta, p.use_of_funds_meta, 'a refused split writes nothing');
-  assert.deepEqual(logs(db, "entity_type = 'raise.use-of-funds'").map((x) => x.entity_id), ['product', 'go-to-market', 'infrastructure', 'operations', 'reserve']);
+  assert.deepEqual(logs(db, "entity_type = 'raise.use-of-funds' AND action = 'split_saved'").map((x) => x.entity_id), ['product', 'go-to-market', 'infrastructure', 'operations', 'reserve']);
 });
 
 test('12: Add investor stores Identified as to_contact, a fund by its name, answers a duplicate with 409, and never takes a withdrawn fund', async () => {
@@ -1192,7 +1194,8 @@ test('13: every write logs its record\'s row — project, raise.<slug>, the reco
     const before = n(db, 'SELECT COUNT(*) AS n FROM activity_logs');
     const r = await cyc(db, C_FOUNDER, m, q(path), b);
     assert.ok(r.status >= 200 && r.status < 300, `${m} ${path}: ${r.raw}`);
-    assert.equal(n(db, 'SELECT COUNT(*) AS n FROM activity_logs') - before, 1, `${m} ${path} logs one row`);
+    // The first split also initializes Base, with its own atomic creation audit.
+    assert.equal(n(db, 'SELECT COUNT(*) AS n FROM activity_logs') - before, path === '/use-of-funds' ? 2 : 1, `${m} ${path} logs its write and any initialization`);
   }
   const rows = logs(db, 'id > 1');
   for (const r of rows) {
@@ -1206,6 +1209,7 @@ test('13: every write logs its record\'s row — project, raise.<slug>, the reco
     'raise.fundraising-readiness/team', 'raise.fundraising-readiness/deck', 'raise.investor-narrative/1', 'raise.investor-narrative/1',
     `raise.pitch-deck/${(db.prepare('SELECT MAX(id) AS id FROM pitch_deck_share_tokens').get() as any).id}`,
     `raise.cap-table/h-${(db.prepare(`SELECT MAX(id) AS id FROM cap_table_holders`).get() as any).id}`,
+    `raise.use-of-funds/${(db.prepare('SELECT uid FROM uof_scenarios WHERE project_id = ? AND is_base = 1').get(C_P) as any).uid}`,
     'raise.use-of-funds/product', `raise.capital-relationships/${(db.prepare('SELECT MAX(id) AS id FROM raise_prospects').get() as any).id}`,
     'raise.data-room/4',
   ]);
@@ -1292,7 +1296,7 @@ test('11 (add hire): a hire on a section; a bad section, month, amount or curren
   await addSectionHire(env, { projectId: C_P, userId: C_FOUNDER, sectionKey: 'product', body: { role: 'Firmware engineer', start_month: '2027-02', annual_cents: 120_000_00, currency: 'EUR' } });
   assert.deepEqual(rows(db, 'SELECT project_id, category_key, role, start_month, annual_cents, currency, created_by FROM use_of_funds_hires').map((r) => ({ ...r })),
     [{ project_id: C_P, category_key: 'product', role: 'Firmware engineer', start_month: '2027-02', annual_cents: 120_000_00, currency: 'eur', created_by: C_FOUNDER }]);
-  assert.deepEqual(logs(db, "entity_type = 'raise.use-of-funds'").map((r) => [r.entity_id, r.action, r.details]), [['product', 'hire_added', 'Hire added: Firmware engineer from 2027-02']]);
+  assert.deepEqual(logs(db, "entity_type = 'raise.use-of-funds'").map((r) => [r.entity_id, r.action, r.details]), [['product', 'hire_added', 'Hire added.']]);
   for (const [key, body, status] of [
     ['marketing', { role: 'x' }, 404], ['product', { role: '' }, 400], ['product', { role: 'x', start_month: '2027-13' }, 400],
     ['product', { role: 'x', annual_cents: 12.5 }, 400], ['product', { role: 'x', currency: 'euro' }, 400],

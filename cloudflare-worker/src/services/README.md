@@ -48,11 +48,19 @@ or delete them. They are never silently detached into private scenarios.
 `scoreAccess.ts` scopes #2439 project risk through existing deal permissions,
 and, since D1074 (#2966), trust-score reads to the member, an admin of this
 territory (this deployment's database), and a counterparty in an open intro or
-deal (`mayReadTrustScores`, `counterpartiesOf`). Self/admin trust reads retain
+deal (`mayReadTrustScores`, `counterpartiesOf`). D1254 narrows investors to a
+shared open deal; an intro alone does not grant an investor a trust-score read.
+Self/admin trust reads retain
 obligation details; a counterparty receives only the bare score. Non-admin risk and
 screening snapshots use `scoreIntegrity.ts` verification and read auditing.
 Bulk reads deduplicate projects, select snapshots once, and batch per-score
 audit entries without weakening approval or signature checks.
+
+D1254 makes both engines in `scoring.ts` ignore reserved adjustments, including
+direct service callers. New snapshots retain a zero legacy adjustment field.
+Scoring and intake never promote, reject or advance a venture from a score;
+status changes belong to a person's separate act. Risk coverage excludes
+unscored layers, retaining a recorded numeric zero.
 
 `eventTimes.ts` (D1115, #2995) validates and converts the event writer’s local
 clock inputs in the selected IANA zone, preserving explicit instants and refusing
@@ -178,6 +186,7 @@ no new schema, runtime or billing path is introduced.
 | `narrative/` | D908: the Investor narrative's sections, positioning and bound figures, and the compare of two versions, behind `/api/cycles/raise/narrative/*`. Its README has the rules. |
 | `market_intel/` | Sourcing, extraction and scoring for market intelligence. |
 | `fundAdminAccess.ts` / `fundAdminOverview.ts` | D1159 (#3066): Admin-tier fund creation and valuation acts, with existing institutional GP scope preserved; independent submitted/applicant-signed/not-yet-sent booklet counts per administered fund. Distribution preview LP names come from the shared LP selection in `fundDistributionSplit.ts`, without changing its arithmetic. |
+| `closings.ts` | D1215 (#3212): a closing as a record over migration 612 — `closings`, `closing_lines`, `closing_evidence` and the append-only `closing_events`. An admin or the venture's founder reads every line; anyone else only through a line of their own, and then their own lines and the round's total. A line is `received` only on receiving-side evidence; every write appends one event in its own batch, with no amount, name or account number. |
 | `fundAdminLps.ts` | D1158 (#3065): `GET /api/fund-admin/lps`, every LP of every administered fund in one table. Money from the call ledger (`readFundCalls`), paid distributions, the last D716 notice and the booklet through the LP's application. Writes the fail-closed `fund_lps_read` audit row first. A figure no store holds is null with its reason in the row's `unavailable`; a store that cannot be read makes only its own figures Unreadable. Filters, search, sort, pages and totals run here, after the bound read. |
 | `fundPositionsHistory.ts` | D1158 (#3065): `readFundPositions`, each position with its latest dated mark or `marked: false` and a reason; `readFundHistory`, `readFundPerformance` point in time at each quarter end since the first call. Computed on every read, never stored. |
 | `mercury/` | D710: Mercury for fund administration, read-only. A GET-only client, the boundary parser that drops account numbers, the gates and read audit, the entity connections' store, the hourly sync and the reconciliation matches. Its README has the rules. |
@@ -200,6 +209,7 @@ no new schema, runtime or billing path is introduced.
 | `trustContent.ts` | D1075 (#2967): the public trust center's content store (migration 584): the seven blocks, each line a fact or a gap with its reason (`parseBody`), a certification only with its auditor's report on file, Publish in one batch with one change note (`publish`), the subprocessors (ten days' notice), the change log, and the public matrix from `trust.ts`'s `obligationsForRole` (`publicMatrix`). |
 | `subprocessorNotices.ts` | D1075: the subprocessor notices: double opt-in (an encrypted address, a hashed single-use confirm token), a signed unsubscribe link that works once, and the sweep that emails confirmed subscribers once per new subprocessor before it starts. |
 | `securityReports.ts` | D1075: Help's Security category: a member's report, encrypted, read only by HQ's Super Admins and its sender, never a ticket row (tickets mirror to GitHub and Slack). Five a day; HQ only. |
+| `kycCase.ts` | D1229 (#3237): one person's KYC case beyond its status (migration 614): the people queue (`readQueue`, its filters, sort, paging and counts per status, every statement static), the case's history (`recordEvent`), the member's notices (`noticeMember`), the figures (`readFigures`) and the hand-off from an expired `kyc_v1` (`expireKycFromObligations`, called by `trust.ts`). |
 | `licenceTerms.ts` | D797: a licence's terms schedule, the one list of its 31 fields (`LICENCE_TERM_FIELDS`: key, group, label, type and range) and the canvas's section numbers (`DEFAULT_TERM_SECTIONS`), `validateTermsBody` (an unknown key or a bad value is refused, naming the field; `null` clears), `termsFromRow`, `readLicenceTerms`, `termsDiff` and the `TERMS_REASON` sentences. Migration 512's CHECKs hold the same ranges; HQ's write, `/licence/mine`, the branch copy and D800/D801 import it. |
 | `eadwynTools.ts` | D854: Eadwyn uses the MCP registry's tools inside the member's own access. `eadwynToolInfo` lists them (scope and the page's company; D846's filter replaces `eadwynToolAvailable`), `runEadwynToolCalls` re-checks each call the model proposed, runs a read through `callTool` (metered by D844) and turns a write into an `ai_rail_proposals` row, and `toolResultsForModel` hands results back as escaped data. |
 

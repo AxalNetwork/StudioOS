@@ -18,7 +18,7 @@ const baseline = readFileSync(new URL('../sql/schema_baseline.sql', import.meta.
 const roles = ['admin', 'founder', 'partner', 'investor', 'advisor', 'exploring', 'partner', 'founder'];
 function fixture() {
   const db = new DatabaseSync(':memory:', { enableForeignKeyConstraints: false, enableDoubleQuotedStringLiterals: true });
-  for (const name of ['users', 'projects', 'documents', 'deals', 'deal_invitations', 'commitments']) db.exec(tableFromBaseline(baseline, name));
+  for (const name of ['users', 'projects', 'documents', 'deals', 'deal_invitations', 'commitments', 'activity_logs']) db.exec(tableFromBaseline(baseline, name));
   db.exec('CREATE TABLE user_company_links (id INTEGER PRIMARY KEY, company_id INTEGER, user_id INTEGER)');
   const user = db.prepare('INSERT INTO users (id, role, founder_id, email, name, is_active) VALUES (?, ?, ?, ?, ?, 1)');
   // All external roles carry a residual matching founder_id: role must still gate access.
