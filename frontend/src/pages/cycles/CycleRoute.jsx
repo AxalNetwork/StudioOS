@@ -1105,7 +1105,7 @@ export default function CycleRoute({ cycle, lightbox = false, adding = false, re
         subnav={cycle === 'raise' && slug === NARRATIVE ? <NarrativeTabBar active="home" search={tabSearch(q, searchParams.get('version'))} />
           : cycle === 'raise' && slug === CAP_TABLE ? <CapTableHomeNav search={q} projectId={projectId} />
           : cycle === 'raise' && slug === DATA_ROOM ? <DataRoomHomeNav search={q} />
-          : cycle === 'raise' && slug === USE_OF_FUNDS ? <UseOfFundsHomeNav search={q} />
+          : cycle === 'raise' && slug === USE_OF_FUNDS ? <UseOfFundsHomeNav search={q} projectId={projectId} />
           : cycle === 'raise' && slug === CAP_REL ? <CapRelHomeNav search={q} projectId={projectId} /> : undefined}
       >
         {fillKind && projectId && (
