@@ -89,7 +89,8 @@ test('the address names the tab; a word the role does not draw, or no word, is O
 });
 
 test('every tab with no read says why, and none says zero or none', () => {
-  for (const t of ['scorecard', 'evidence', 'team', 'market', 'traction', 'terms', 'notes', 'diligence']) assert.ok(WAITS[t], t);
+  for (const t of ['scorecard', 'evidence', 'team', 'market', 'traction', 'terms', 'diligence']) assert.ok(WAITS[t], t);
+  assert.equal(WAITS.notes, undefined, 'D1152: Notes reads its store and no longer waits');
   for (const w of Object.values(WAITS)) assert.ok(!/\b0\b|\$0|\bnone\b/i.test(w.replace('not a score of zero', '')), w);
 });
 
@@ -118,10 +119,11 @@ test('a tab with no read draws its wait card and makes no read of its own', asyn
   } finally { await v.close(); }
 });
 
-test('Notes waits for its store and carries the activity under it; Commitment reads the investor\'s own commitments', async () => {
+test('Notes reads your firm\'s notes (D1152) and carries the activity beside them; Commitment reads the investor\'s own commitments', async () => {
   let v = await mounted('/deals/4/notes', INVESTOR);
   try {
-    assert.ok(v.ids().includes('deal-wait-notes'));
+    assert.ok(!v.ids().includes('deal-wait-notes'), 'D1152: part 2\'s store is read, so Notes no longer waits');
+    assert.ok(v.requests.some((u) => /\/api\/deals\/4\/notes/.test(u)));
     assert.ok(v.requests.some((u) => /\/api\/deals\/4\/activity/.test(u)));
   } finally { await v.close(); }
   v = await mounted('/deals/4/commitment', INVESTOR);
@@ -146,8 +148,9 @@ test('a founder at another role\'s tab sees Overview, with their five tabs', asy
 
 test('the wiring: the tab route beside the deal route, tabs as links, and the canvas in incoming', () => {
   const app = read('frontend/src/App.jsx');
-  assert.match(app, /<Route path="\/deals\/:dealId" element=\{guard\(\['admin', 'partner', 'investor', 'founder'\], investorWorkspace\('deals', <DealRoomPage \/>\)\)\} \/>/);
-  assert.match(app, /<Route path="\/deals\/:dealId\/:tab" element=\{guard\(\['admin', 'partner', 'investor', 'founder'\], investorWorkspace\('deals', <DealRoomPage \/>\)\)\} \/>/);
+  // D1152: an Advisor and an Explorer reach the page for DL22's words.
+  assert.match(app, /<Route path="\/deals\/:dealId" element=\{guard\(\['admin', 'partner', 'investor', 'founder', 'advisor', 'exploring'\], investorWorkspace\('deals', <DealRoomPage \/>\)\)\} \/>/);
+  assert.match(app, /<Route path="\/deals\/:dealId\/:tab" element=\{guard\(\['admin', 'partner', 'investor', 'founder', 'advisor', 'exploring'\], investorWorkspace\('deals', <DealRoomPage \/>\)\)\} \/>/);
   const page = read('frontend/src/pages/DealRoomPage.jsx');
   assert.ok(!page.includes('setTab('), 'a tab is an address, never local state');
   assert.ok(page.includes("navigate(tabHref(deal.id, 'commitment'))"), 'a recorded commitment opens Commitment at its address');

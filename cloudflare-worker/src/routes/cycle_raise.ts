@@ -18,6 +18,7 @@
  *   PUT   /readiness/:key            { score, evidence, missing? }
  *   POST  /readiness/rescore         { items?, since?, pmf? }
  *   GET   /pmf/history?project=&limit=&before=  stored Product-market fit points
+ *   D1146 (#3032): GET /pmf/model?project=  → { version, stored, scored_with, published_at, model, grades }, RD4's model
  *   POST  /narrative-versions        { investor_type, start_from?, based_on_version?, one_liner?, why_now?, ask?, check_against? }
  *   PATCH /narrative-versions/:version   the same fields but start_from
  *   D908 (#2692): the narrative's own stores (`services/narrative/store.ts`).
@@ -134,7 +135,7 @@ import { resolveActiveCompany, ACTIVE_COMPANY_HEADER } from '../middleware/activ
 import { projectInActiveCompany } from '../services/tenancyScope';
 import { HolderError } from '../services/capTableWrites';
 import { MatchQueryError, commitmentsRead, matchRead } from '../services/capRelReads';
-import { recomputePmf, pmfHistory } from '../services/scoring/pmfStore';
+import { recomputePmf, pmfHistory, pmfModelRead } from '../services/scoring/pmfStore';
 import { dataRoomOwner, roomSummary } from './data_room';
 import { safeCard, type Card } from '../services/cycleCards';
 import { refuse } from '../util/refusal';
@@ -344,6 +345,13 @@ cycleRaise.get('/pmf/history', async (c) => {
   if (!Number.isInteger(limit) || limit < 1 || limit > 500 || (raw != null && before == null)) return c.json({ detail: 'Invalid history page' }, 400);
   try { return c.json(await pmfHistory(c.env, s.projectId, limit, before)); }
   catch { return c.json({ state: 'unreadable', detail: 'Product-market fit history could not be read', reason: 'Product-market fit history could not be read' }, 503); }
+});
+
+cycleRaise.get('/pmf/model', async (c) => {
+  const s = await scope(c);
+  if (s instanceof Response) return s;
+  try { return c.json(await pmfModelRead(c.env, s.projectId)); }
+  catch { return c.json({ state: 'unreadable', detail: 'How Product-market fit is scored could not be read', reason: 'How Product-market fit is scored could not be read' }, 503); }
 });
 
 // ---------------------------------------------------------------------------

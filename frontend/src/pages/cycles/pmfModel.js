@@ -1,54 +1,102 @@
 /**
- * D1141 (#2433) and D1145 (#3031) — Product-market fit on Fundraising
- * readiness. Pure, so the tests read it without a browser.
- *
- * D1141 put the part on the page before anything computed a score, with
- * model v1 shown (RD4, `INPUTS` below). D1145 draws the score part 3 stores
- * (`parts.pmf` on the module read, D1144) and its history
- * (`GET /api/cycles/raise/pmf/history`):
- *
- *   pmfView      the tile: the number, band, confidence and coverage; "Not
- *                enough recorded" below the floor (no number); Unreadable when
- *                the read failed or never came (never "no score"); and a
- *                partial score when an input could not be read (RD16 B).
- *   inputGroups  the inputs in the canvas's four groups, each row in words.
- *   gapRows      every next step that raises either score, by what it raises.
- *   kitView      the raise kit beside it, from the module's own card.
- *   historyView  the stored points, oldest first, with the pivot marked.
- *
- * NEVER A ZERO FOR A MISSING VALUE: a Not recorded, Not expected yet or
- * unread input draws "—" and says why; only a recorded 0 draws 0.
+ * D1145's stored PMF score, inputs, gaps and history, with D1146's stored-model
+ * method dialog and Validate header chip. No scoring definition is copied here.
+ * Pure view builders keep missing, unreadable and measured zero distinct.
  */
 
 export const TITLE = 'Product-market fit';
-/** D1141's words for a part with nothing computed. D1145 keeps them for the model's legend only. */
 export const NOT_YET = 'Not scored yet. No score is computed from Validate yet, so none is shown. This is not a claim that the venture has no fit.';
 export const READS = 'It will read only what Validate records: interviews, pains, segments, claims, demand, experiments, the Verdict, and product use once a product is live.';
-export const MODEL_VERSION = 'Model v1.0, proposed';
-
-/** The ten inputs of model v1, each with its rule and weight. Weights sum to 100. */
-export const INPUTS = [
-  { key: 'icp_interviews', name: 'ICP interviews held', rule: '5 points each, full at 20', weight: 10, module: 'customer-research' },
-  { key: 'icp_coverage', name: 'ICP coverage', rule: 'share of held interviews with a fit and a segment', weight: 5, module: 'customer-research' },
-  { key: 'pain_frequency', name: 'Pain frequency', rule: 'share of ICP interviews naming the top pain, full at 60%', weight: 10, module: 'problem-discovery' },
-  { key: 'pain_severity', name: 'Pain severity', rule: 'share judged Severe or Real, full at 70%', weight: 10, module: 'problem-discovery' },
-  { key: 'claims_supported', name: 'Claims supported', rule: 'open claims Supported, each by its strongest evidence', weight: 20, module: 'experiments' },
-  { key: 'paying_demand', name: 'Paying demand', rule: 'paid deposits, pilots, pre-sales and letters of intent: 1 → 40, 2–4 → 70, 5+ → 100', weight: 15, module: 'demand-signals' },
-  { key: 'would_pay', name: 'Would pay', rule: 'confirmed would-pay signals ÷ ICP interviews, full at 40%', weight: 10, module: 'demand-signals' },
-  { key: 'waitlist', name: 'Waitlist against the bar', rule: 'sign-ups ÷ the bar you set, capped at 100', weight: 5, module: 'demand-signals' },
-  { key: 'experiments', name: 'Experiment outcomes', rule: 'share of done experiments that support', weight: 5, module: 'experiments' },
-  { key: 'product_pull', name: 'Product pull', rule: 'activation, week-4 retention and the "very disappointed" share, once a product is live', weight: 10, module: null },
+/**
+ * D1146 (#3032) — RD4, "How Product-market fit is scored", is drawn from the
+ * stored model (`GET /api/cycles/raise/pmf/model`), never a copy kept here:
+ * the inputs, their rules and weights, the confidence words and floor, the
+ * bands and the freshness windows are the model's own. Only the grades' words
+ * are the page's; their factors are SCORING's table, sent with the model.
+ */
+export const GRADE_WORDS = [
+  ['measured', 'Measured', 'a recorded session, a connector, the platform\'s waitlist or a verified payment'],
+  ['reviewed', 'Reviewed', 'set by someone other than the founder'],
+  ['sourced', 'Sourced', 'typed with a file, a link, or a dated record'],
+  ['stated', 'Stated', 'typed with no source'],
+  ['not_recorded', 'Not recorded', 'nothing in Validate. It lowers confidence and is never a zero'],
 ];
 
-export const GRADES = [
-  ['Measured', '1.0', 'a recorded session, a connector, the platform\'s waitlist or a verified payment'],
-  ['Reviewed', '0.9', 'set by someone other than the founder'],
-  ['Sourced', '0.7', 'typed with a file, a link, or a dated record'],
-  ['Stated', '0.4', 'typed with no source'],
-  ['Not recorded', '0', 'nothing in Validate'],
-];
+/** The modules a model input may open; anything else is drawn without a link. */
+const VALIDATE_MODULES = new Set(['customer-research', 'record', 'problem-discovery', 'ideal-customer-profile', 'experiments', 'demand-signals', 'verdict']);
 
-export const BANDS = 'Strong 70 or more · Fair 40–69 · Weak under 40. Below 0.25 confidence it shows "Not enough recorded" and no number.';
+const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+/** 'YYYY-MM-DD…' → '25 Oct 2026'. */
+export function dayText(iso) {
+  const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(String(iso || ''));
+  return m ? `${Number(m[3])} ${MONTHS[Number(m[2]) - 1]} ${m[1]}` : '';
+}
+const two = (n) => Number(n).toFixed(2);
+
+/**
+ * The method dialog's content from the model read: `{ state }` while it reads
+ * or when it failed, or every line RD4 draws. A refusal is its own state, so
+ * a venture the caller cannot open is never drawn as a model.
+ */
+export function methodOf(read) {
+  if (!read || read.status === 'loading') return { state: 'loading' };
+  if (read.status === 'refused') return { state: 'refused' };
+  if (read.status !== 'ready' || !read.data?.model) return { state: 'unreadable' };
+  const { model, grades = {}, stored, scored_with: scoredWith, published_at: publishedAt, version } = read.data;
+  const inputs = (model.inputs || []).map((i) => ({
+    key: i.key, name: i.label, reads: i.reads, weight: i.weight,
+    module: VALIDATE_MODULES.has(i.module) ? i.module : null,
+    freshness: i.freshness,
+  }));
+  const conf = [...(model.confidence || [])].sort((x, y) => y[0] - x[0]);
+  const bands = [...(model.bands || [])].sort((x, y) => y[0] - x[0]);
+  const ranges = (rows, fmt, top) => rows.map(([from, word], k) => {
+    if (k === 0) return `${word} ${fmt(from)} or more`;
+    if (k === rows.length - 1 && from === 0) return `${word} under ${fmt(rows[k - 1][0])}`;
+    return `${word} ${fmt(from)}–${top(rows[k - 1][0])}`;
+  });
+  return {
+    state: 'ready',
+    title: `Model v${version || model.version}`,
+    status: stored
+      ? `Published ${dayText(publishedAt || model.published)}${scoredWith ? ' · the model this venture’s latest score used' : ''}`
+      : `Not stored on this database yet. It is stored with the venture’s first score, as written here.`,
+    inputs,
+    total: inputs.reduce((t, i) => t + (Number(i.weight) || 0), 0),
+    grades: GRADE_WORDS.map(([key, label, why]) => ({ key, label, why, factor: Number.isFinite(grades[key]) ? two(grades[key]) : null })),
+    confidence: ranges(conf, two, (x) => two(x - 0.01)).join(' · '),
+    floor: `Below ${two(model.floor)} confidence it shows "Not enough recorded" and no number.`,
+    bands: ranges(bands, String, (x) => String(x - 1)).join(' · '),
+    freshness: `An input older than ${model.freshness_days?.records} days (records) or ${model.freshness_days?.connector} days (a connector figure) is stale, and its grade counts half.`,
+  };
+}
+
+const BAND_GLYPH = { Strong: '●', Fair: '◐', Weak: '○' };
+export const CONF_DOTS = { High: '●●●', Medium: '●●○', Low: '●○○' };
+
+/**
+ * RD12's chip on Validate's overview, from the venture's latest stored point
+ * (`pmfHistory` with `limit: 1`). It reads the store only; the readiness page
+ * is where a score is computed. A refused read names nothing: the chip is the
+ * door alone, never "no score".
+ */
+export function chipOf(read) {
+  if (!read || read.status === 'loading') return { state: 'loading', text: 'Product-market fit · reading…' };
+  if (read.status === 'refused') return { state: 'door', text: 'Product-market fit' };
+  if (read.status !== 'ready') return { state: 'unreadable', text: 'Product-market fit · could not be read' };
+  const p = (read.data?.items || []).at(-1);
+  if (!p) return { state: 'none', text: 'Product-market fit · Not scored yet' };
+  const conf = p.confidence_word ? `${CONF_DOTS[p.confidence_word] || ''} ${p.confidence_word}`.trim() : '';
+  if (p.value === null || p.value === undefined || !p.band) {
+    return { state: 'not_enough', text: 'Product-market fit · Not enough recorded', label: 'Product-market fit: not enough recorded for a score', when: dayText(p.computed_at) };
+  }
+  return {
+    state: 'scored',
+    text: `Product-market fit · ${BAND_GLYPH[p.band] || ''} ${p.band}${conf ? ` · ${conf}` : ''}`.replace(/\s+/g, ' '),
+    label: `Product-market fit: ${p.band}${p.confidence_word ? `, ${p.confidence_word} confidence` : ''}`,
+    when: dayText(p.computed_at),
+  };
+}
 
 /** A Validate module's address, keeping the venture. */
 export function validateHref(module, search = '') {
@@ -62,12 +110,7 @@ export function readinessHref(search = '') {
   return `/raise/fundraising-readiness${m ? `?project_id=${m[1]}` : ''}`;
 }
 
-export const totalWeight = () => INPUTS.reduce((s, i) => s + i.weight, 0);
-
-// ---------------------------------------------------------------------------
-// D1145: the stored score, drawn
-// ---------------------------------------------------------------------------
-
+// D1145: the score, inputs, gaps and history from the module read.
 export const UNREADABLE = 'Product-market fit could not be read. The raise kit below is current.';
 export const NOT_ENOUGH = 'Not enough recorded';
 export const NOT_ENOUGH_NOTE = 'Too little is recorded in Validate for a number, so none shows. Missing data lowers confidence; it is never a zero.';
@@ -85,7 +128,6 @@ export const GROUPS = [
 export const GRADE_WORD = { measured: 'Measured', reviewed: 'Reviewed', sourced: 'Sourced', stated: 'Stated', not_recorded: 'Not recorded' };
 /** A grade's shade on the bars, as the canvas's legend draws it. */
 export const GRADE_SHADE = { measured: 1, reviewed: 0.75, sourced: 0.5, stated: 0.25 };
-export const CONF_DOTS = { High: '●●●', Medium: '●●○', Low: '●○○' };
 
 /** Each Validate (or Build) module an input or step opens, by the Worker's slug. */
 export const MODULE_LABEL = {
@@ -108,13 +150,6 @@ export function moduleHref(module, search = '') {
   return `/validate${module ? `/${module}` : ''}${q}`;
 }
 
-/** D1141's rule words for an input, by the Worker's key (`experiment_outcomes` is D1141's `experiments`). */
-export function ruleOf(key) {
-  const k = key === 'experiment_outcomes' ? 'experiments' : key;
-  return INPUTS.find((i) => i.key === k)?.rule ?? null;
-}
-
-const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 /** "21 Oct 2026", or null for anything that is not a day. */
 export function dayWord(x) {
   const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(String(x ?? ''));
@@ -193,7 +228,6 @@ export function inputRow(i, search = '') {
     beforePivot: Number(i.before_pivot) > 0 ? `${plural(Number(i.before_pivot), 'record', 'records')} before the pivot, not counted` : null,
     href: moduleHref(i.module, search),
     moduleLabel: MODULE_LABEL[i.module] || 'Validate',
-    rule: ruleOf(i.key),
     contribution: recorded && i.contribution != null ? Number(i.contribution).toFixed(1) : null,
     weightNumber: i.weight,
     reason: i.reason || null,
