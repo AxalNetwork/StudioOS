@@ -2426,6 +2426,14 @@ export default {
             else console.warn(`[cron] usage report not sent ${detail}: ${r.reason}`);
           } catch (e) { console.error('[cron] usage report failed', e); }
         }
+        // D1156: each branch reports only program aggregates daily, independent of revenue.
+        if (!hqCadences && now.getUTCHours() === 5 && now.getUTCMinutes() === 15) {
+          try {
+            const { pushProgramUsage } = await import('./services/programUsage');
+            const r = await pushProgramUsage(env, now);
+            console.info(`[cron] program report sent=${r.sent} programs=${r.sent ? r.programs : 0}`);
+          } catch { console.error('[cron] program report failed'); }
+        }
         // D492 / D493 — the nightly consent sweeps at 05:05 UTC, per
         // deployment (both act on this deployment's own rows). Both are
         // idempotent ledgers: a founder is told once per advisor-cohort
