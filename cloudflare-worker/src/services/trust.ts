@@ -482,7 +482,11 @@ export async function expireDueArtifacts(
 export async function resyncKycKyb(env: Env): Promise<{ scanned: number; updated: number }> {
   await ensureTrustSchema(env);
   const now = Date.now();
-  const kycExpiresAt = new Date(now + TTL_24_MO).toISOString();
+  // D1232 (#3240): the period in force NOW, so a new HQ period reaches only the
+  // approvals stamped from here on; a stored `expires_at` is never recomputed.
+  const periods = await renewalPeriods(env);
+  const kycExpiresAt = new Date(now + monthsToMs(periods.kyc_v1.months)).toISOString();
+  const kybExpiresAt = new Date(now + monthsToMs(periods.kyb_v1.months)).toISOString();
   let scanned = 0;
   let updated = 0;
 
@@ -563,7 +567,7 @@ export async function resyncKycKyb(env: Env): Promise<{ scanned: number; updated
                   evidence_meta = COALESCE(evidence_meta, json_object('source','kyb_provider','synced_at',?)),
                   updated_at = CURRENT_TIMESTAMP
             WHERE id = ?`,
-        ).bind(kycExpiresAt, new Date(now).toISOString(), r.oblig_id).run().catch(() => null);
+        ).bind(kybExpiresAt, new Date(now).toISOString(), r.oblig_id).run().catch(() => null);
         if ((upd?.meta as any)?.changes) updated += 1;
       } else if (r.kyb_status === 'rejected') {
         const upd = await env.DB.prepare(
@@ -578,6 +582,52 @@ export async function resyncKycKyb(env: Env): Promise<{ scanned: number; updated
   }
 
   return { scanned, updated };
+}
+
+// ---------------------------------------------------------------------------
+// D1232 (#3240) — how long a check lasts, as HQ's setting (migration 617).
+// ---------------------------------------------------------------------------
+
+/** The checks whose period HQ sets (#2384 owner question 3). */
+export const RENEWAL_PERIOD_KEYS = ['kyc_v1', 'kyb_v1', 'accreditation_v1'] as const;
+export type RenewalPeriodKey = (typeof RENEWAL_PERIOD_KEYS)[number];
+
+/**
+ * The code's periods, in months, used while HQ has set none. They are the
+ * ROLE_MATRIX windows above restated in months (`monthsToMs` turns each back
+ * into exactly that TTL), and a test holds the two together.
+ */
+export const DEFAULT_PERIOD_MONTHS: Readonly<Record<RenewalPeriodKey, number>> = Object.freeze({
+  kyc_v1: 24, kyb_v1: 24, accreditation_v1: 12,
+});
+
+/** A month is 365/12 days, so 12 and 24 months are the 365 and 730 days the constants carry. */
+const MONTH_MS = (365 / 12) * 24 * 60 * 60 * 1000;
+export const monthsToMs = (months: number): number => Math.round(months * MONTH_MS);
+
+export interface RenewalPeriod { months: number; set_by_hq: boolean; updated_at: string | null; updated_by: number | null }
+
+/**
+ * Each check's period now: HQ's row when there is one, else the default.
+ * A deployment that has not applied migration 617 yet reads the defaults
+ * (they are what it used before); any other failure throws, so a caller never
+ * stamps a date with a period it could not read.
+ */
+export async function renewalPeriods(env: Env): Promise<Record<RenewalPeriodKey, RenewalPeriod>> {
+  const out = Object.fromEntries(RENEWAL_PERIOD_KEYS.map((k) => [k, { months: DEFAULT_PERIOD_MONTHS[k], set_by_hq: false, updated_at: null, updated_by: null }])) as Record<RenewalPeriodKey, RenewalPeriod>;
+  let rows: Array<{ obligation_key: string; months: number; updated_at: string | null; updated_by: number | null }> = [];
+  try {
+    rows = ((await env.DB.prepare('SELECT obligation_key, months, updated_at, updated_by FROM kyc_renewal_periods').all<any>()).results || []);
+  } catch (e) {
+    if (/no such table/i.test(String((e as Error)?.message || e))) return out;
+    throw e;
+  }
+  for (const r of rows) {
+    const k = r.obligation_key as RenewalPeriodKey;
+    if (!(RENEWAL_PERIOD_KEYS as readonly string[]).includes(k)) continue;
+    out[k] = { months: Number(r.months), set_by_hq: true, updated_at: r.updated_at ?? null, updated_by: r.updated_by ?? null };
+  }
+  return out;
 }
 
 // ---------------------------------------------------------------------------
