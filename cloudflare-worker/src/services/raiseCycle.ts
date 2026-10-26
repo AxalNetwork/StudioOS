@@ -285,8 +285,8 @@ export async function computeReadiness(env: Env, projectId: number): Promise<Com
   out.push({
     key: 'traction', score: traction ? 10 : 0, evidence: measured ? 'measured' : documented ? 'pattern' : 'stated', missing: traction ? null : 'Log revenue or update your proof fields.',
     reads: [
-      { a: 'Verified revenue', b: verifiedRevenue ? `${usd(verifiedRevenue.cents / 100)} · ${verifiedRevenue.month} · ${revenueRows.filter(r => r.verification === 'verified').map(revenueSource).join(', ')}` : 'not recorded', ...met(measuredRevenue) },
-      ...revenueRows.map(r => ({ a: `Revenue entries · ${revenueSource(r)}`, b: `${usd(r.cents / 100)} · ${r.month} · received_on ${r.observed_on}`, ...met(r.cents > 0) })),
+      { a: 'Verified revenue', b: verifiedRevenue ? `${usd(verifiedRevenue.cents / 100)} · ${verifiedRevenue.month} · ${[...new Set(revenueRows.filter(r => r.verification === 'verified').map(revenueSource))].join(', ')}` : 'not recorded', ...met(measuredRevenue) },
+      ...revenueRows.map(r => ({ a: `Revenue entries · ${revenueSource(r)}`, b: `${usd(r.cents / 100)} · ${r.month} · received_on ${r.observed_on} · ${r.verification} · ${r.has_document ? 'proof document recorded' : 'no proof document recorded'}`, ...met(r.cents > 0) })),
       ...metricRows.map(r => ({ a: `${r.figure === 'mrr' ? 'MRR' : 'Paying customers'} · ${r.measured ? 'Connector' : 'Typed'}`, b: `${r.figure === 'mrr' ? usd(r.value) : r.value} · ${r.source}${r.fresh ? '' : ' · Outside the current 90-day window'}`, ...met(r.fresh && r.value > 0, true) })),
       { a: 'Revenue (stated)', b: num(p?.revenue) != null ? `${usd(Number(p!.revenue))} · Typed · Founder's figure` : 'not recorded', ...met(fieldOf(p?.revenue), num(p?.revenue) != null) },
       { a: 'MRR (stated)', b: num(p?.mrr) != null ? `${usd(Number(p!.mrr))} · Typed · Founder's figure` : 'not recorded', ...met(fieldOf(p?.mrr), num(p?.mrr) != null) },
@@ -1674,7 +1674,7 @@ async function runwayFigure(ctx: Ctx): Promise<Figure> {
     ).bind(ctx.projectId, ctx.today, daysBefore(ctx.today, 90), ctx.projectId, ctx.today).all<{ cash_balance: number; net_burn: number; snapshot_date: string; source: string }>();
     const rows = res.results || [];
     const snaps = rows.filter(r => r.source === rows[0]?.source);
-    if (snaps.length === 0) return { value: null, delta_30d: null, spark: [], state: 'not_recorded', as_of: null, reason: 'No metrics snapshot records cash and net burn' };
+    if (snaps.length === 0) return { value: null, delta_30d: null, spark: [], state: 'not_recorded', as_of: bank?.as_of ?? null, reason: bank ? 'Stored Mercury runway fact is outside the current 90-day window; no eligible metrics snapshot records cash and net burn' : 'No metrics snapshot records cash and net burn' };
     const source = snaps[0].source === 'mercury' ? 'Connector · Mercury · project_metrics (measured cash and net burn)' : `project_metrics · stated: ${snaps[0].source || 'source not recorded'} · Founder's figure`;
     const now = runwayMonths(Number(snaps[0].cash_balance), Number(snaps[0].net_burn));
     if (now == null) return { value: null, source, delta_30d: null, spark: [], state: 'not_recorded', as_of: snaps[0].snapshot_date, reason: 'Net burn is zero or negative, so burn sets no runway' };

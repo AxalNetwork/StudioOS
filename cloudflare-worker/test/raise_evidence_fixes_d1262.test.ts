@@ -86,13 +86,17 @@ test('revenue proof names Connector, Document and Typed records and keeps period
     insert.run('document',1,3000,'usd','-1 month','manual','supported',7);
     insert.run('bank',1,10000,'usd','-1 month','mercury','supported',null);
     for (const [uid, project, currency, month] of [['foreign',2,'usd','-1 month'],['eur',1,'eur','-1 month'],['old',1,'usd','-2 months'],['current',1,'usd','+0 months']] as const) insert.run(uid,project,999999,currency,month,'stripe','verified',null);
+    insert.run('stripe-document',1,10000,'usd','-1 month','stripe','verified',8);
     const p = await proof(f.env); assert.equal(p.evidence, 'measured');
     const rows = JSON.stringify(p.reads); assert.match(rows, /Connector · Stripe/); assert.match(rows, /Connector · Mercury/); assert.match(rows, /Document · revenue proof/); assert.match(rows, /Typed · csv/);
     assert.match(p.reads.find(r=>r.a==='Revenue entries · Connector · Stripe')!.b,/^\$500 ·/);
-    assert.equal(p.reads.filter(r=>r.a.startsWith('Revenue entries ·')).length,4);
+    assert.equal(p.reads.filter(r=>r.a.startsWith('Revenue entries ·')).length,5);
+    assert.equal(p.reads.find(r=>r.a==='Verified revenue')!.b.match(/Connector · Stripe/g)!.length,1);
+    const stripeRows=p.reads.filter(r=>r.a==='Revenue entries · Connector · Stripe');
+    assert.match(stripeRows.find(r=>r.b.startsWith('$100 ·'))!.b,/ · verified · proof document recorded/);assert.match(stripeRows.find(r=>r.b.startsWith('$500 ·'))!.b,/ · verified · no proof document recorded/);
     assert.doesNotMatch(rows, /10,000|Synthetic private customer/);
-    const checked = await checkInputs(f.env,1,1); assert.equal(checked.metrics.revenue!.value,500); assert.match(checked.metrics.revenue!.source,/Verified revenue.*Connector · Stripe/); assert.equal(checked.metrics.mrr,undefined);
-    f.db.exec("DELETE FROM revenue_entries WHERE uid='stripe' OR uid IN ('foreign','eur','old','current')");
+    const checked = await checkInputs(f.env,1,1); assert.equal(checked.metrics.revenue!.value,600); assert.match(checked.metrics.revenue!.source,/Verified revenue.*Connector · Stripe/); assert.equal(checked.metrics.mrr,undefined);
+    f.db.exec("DELETE FROM revenue_entries WHERE uid IN ('stripe','stripe-document') OR uid IN ('foreign','eur','old','current')");
     assert.equal((await proof(f.env)).evidence,'pattern');
     f.db.exec("DELETE FROM revenue_entries WHERE verification='supported'");
     assert.equal((await proof(f.env)).evidence,'stated');
@@ -222,6 +226,10 @@ test('stale metrics do not prove current traction or outrank a recent typed runw
     assert.equal((await figure(f.ctx,'runway_months')).value,10,'future cash does not replace the recorded current snapshot');
     f.db.exec('DELETE FROM project_metrics WHERE project_id=1 AND cash_balance=20');
     runway=await figure(f.ctx,'runway_months');assert.match(runway.reason,/Stale/);assert.equal(runway.as_of,'2000-01-02');
+    f.db.exec('DELETE FROM project_metrics WHERE project_id=1');
+    runway=await figure(f.ctx,'runway_months');assert.equal(runway.value,null);assert.equal(runway.as_of,'2000-01-01');assert.match(runway.reason,/Stored Mercury runway fact is outside the current 90-day window/);
+    f.db.exec('DELETE FROM mercury_raise_facts');
+    runway=await figure(f.ctx,'runway_months');assert.equal(runway.as_of,null);assert.match(runway.reason,/^No metrics snapshot/);
   }finally{f.db.close();}
 });
 
