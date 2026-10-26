@@ -11,9 +11,15 @@
  *     no firm writes NULL.
  *   - A row with no firm (every row before migration 340) reads as "not
  *     recorded" on both reads, never as a firm.
- *   - The wire gate's count goes through `icDecisionScope`: another firm's
- *     open condition still refuses the wire, but the refusal carries no count
- *     and no text of it. A failed gate read refuses (it used to read as 0).
+ *   - The wire gate's count goes through `icDecisionScope`. A failed gate read
+ *     refuses (it used to read as 0).
+ *
+ * D1215 (#3212, #2424 owner question 6): only an Admin records a transfer now,
+ * so the callers here are Admins in firms (the firm is still stamped), and an
+ * Operating Partner is refused before the gate. An Admin is unscoped in
+ * `icDecisionScope`, so every firm's open condition is counted in the refusal;
+ * the gate's "a decision you cannot see" branch no longer has a caller on this
+ * route. The count names no condition's text either way.
  *
  * Run:
  *   node --experimental-strip-types --no-warnings --import ./cloudflare-worker/test/_ts-loader.mjs \
@@ -40,10 +46,11 @@ app.route('/api/deals', deals);
 const JWT_SECRET = 'unit-test-jwt-secret-0123456789-abcdef';
 const MIG = (f: string) => readFileSync(resolve(process.cwd(), 'cloudflare-worker/sql/migrations', f), 'utf8');
 
-const SOLO = 20;      // partner in exactly one firm (FIRM_A)
-const MULTI = 21;     // partner in FIRM_A and FIRM_B
-const LONE = 22;      // partner in no firm
-const RIVAL = 23;     // partner in FIRM_C only
+const SOLO = 20;      // admin in exactly one firm (FIRM_A)
+const MULTI = 21;     // admin in FIRM_A and FIRM_B
+const LONE = 22;      // admin in no firm
+const RIVAL = 23;     // admin in FIRM_C only
+const PARTNER = 24;   // an Operating Partner in FIRM_A
 const FIRM_A = 501, FIRM_B = 502, FIRM_C = 503;
 const DEAL = 71;
 
@@ -106,12 +113,13 @@ function freshDb(withColumn = true) {
   runMigration(db, '335_deal_transfers_and_closing_checklists.sql');
   if (withColumn) runMigration(db, '340_deal_transfer_company.sql');
   const u = db.prepare('INSERT INTO users (id, role, name) VALUES (?, ?, ?)');
-  u.run(SOLO, 'partner', 'Sol Solo'); u.run(MULTI, 'partner', 'Mia Multi');
-  u.run(LONE, 'partner', 'Lou Lone'); u.run(RIVAL, 'partner', 'Rex Rival');
+  u.run(SOLO, 'admin', 'Sol Solo'); u.run(MULTI, 'admin', 'Mia Multi');
+  u.run(LONE, 'admin', 'Lou Lone'); u.run(RIVAL, 'admin', 'Rex Rival');
+  u.run(PARTNER, 'partner', 'Pia Partner');
   const cp = db.prepare('INSERT INTO company_profiles (id, company_name) VALUES (?, ?)');
   cp.run(FIRM_A, 'Alder Ventures'); cp.run(FIRM_B, 'Birch Capital'); cp.run(FIRM_C, 'Cedar Partners');
   const l = db.prepare('INSERT INTO user_company_links (user_id, company_id) VALUES (?, ?)');
-  l.run(SOLO, FIRM_A); l.run(MULTI, FIRM_A); l.run(MULTI, FIRM_B); l.run(RIVAL, FIRM_C);
+  l.run(SOLO, FIRM_A); l.run(MULTI, FIRM_A); l.run(MULTI, FIRM_B); l.run(RIVAL, FIRM_C); l.run(PARTNER, FIRM_A);
   db.prepare('INSERT INTO projects (id, name) VALUES (7, ?)').run('Alpha');
   db.prepare(`INSERT INTO deals (id, uid, project_id, status) VALUES (?, 'd-alpha', 7, 'funded')`).run(DEAL);
   return db;
@@ -119,7 +127,7 @@ function freshDb(withColumn = true) {
 
 async function call(user: number, path: string, db: InstanceType<typeof DatabaseSync>,
   init: { method?: string; body?: any; company?: string } = {}, failOn: string | null = null) {
-  const tok = await new SignJWT({ user_id: user, role: 'partner' })
+  const tok = await new SignJWT({ user_id: user, role: user === PARTNER ? 'partner' : 'admin' })
     .setProtectedHeader({ alg: 'HS256' }).setIssuedAt().setExpirationTime('1h')
     .sign(new TextEncoder().encode(JWT_SECRET));
   const headers: Record<string, string> = { Authorization: `Bearer ${tok}`, 'Content-Type': 'application/json' };
@@ -149,7 +157,7 @@ test('migration 340 adds a nullable company_id to deal_transfers and backfills n
   assert.deepEqual(stored(db), [null], 'an old row is not given a firm');
 });
 
-test('a partner in one firm, with no switcher choice, records the transfer for that firm', async () => {
+test('an admin in one firm, with no switcher choice, records the transfer for that firm', async () => {
   const db = freshDb();
   const r = await record(SOLO, db);
   assert.equal(r.status, 201, JSON.stringify(r.body));
@@ -159,7 +167,7 @@ test('a partner in one firm, with no switcher choice, records the transfer for t
   assert.deepEqual(stored(db), [FIRM_A]);
 });
 
-test('a partner in several firms is never guessed at: no choice is refused and nothing is written', async () => {
+test('an admin in several firms is never guessed at: no choice is refused and nothing is written', async () => {
   const db = freshDb();
   const r = await record(MULTI, db);
   assert.equal(r.status, 400);
@@ -173,7 +181,7 @@ test('a partner in several firms is never guessed at: no choice is refused and n
   assert.deepEqual(stored(db), []);
 });
 
-test('a partner in several firms who chose one in the switcher records it for that firm', async () => {
+test('an admin in several firms who chose one in the switcher records it for that firm', async () => {
   const db = freshDb();
   const r = await record(MULTI, db, String(FIRM_B));
   assert.equal(r.status, 201, JSON.stringify(r.body));
@@ -182,7 +190,7 @@ test('a partner in several firms who chose one in the switcher records it for th
   assert.deepEqual(stored(db), [FIRM_B]);
 });
 
-test('a partner in no firm records no firm, and the row says so', async () => {
+test('an admin in no firm records no firm, and the row says so', async () => {
   const db = freshDb();
   const r = await record(LONE, db);
   assert.equal(r.status, 201, JSON.stringify(r.body));
@@ -232,31 +240,37 @@ test('the caller\'s own firm\'s open condition is counted in the refusal', async
   assert.deepEqual(stored(db), []);
 });
 
-test('another firm\'s open condition still refuses the wire, but its count and text never cross firms', async () => {
+test('D1215: another firm\'s open condition refuses an Admin\'s wire, counted, and its text never crosses', async () => {
   const db = freshDb();
   condition(db, 'dec-c1', RIVAL, FIRM_C, 'Cedar-only: board seat side letter');
   condition(db, 'dec-c2', RIVAL, FIRM_C, 'Cedar-only: key-person clause');
   const r = await record(SOLO, db);
   assert.equal(r.status, 409, 'the gate still holds');
   assert.equal(r.body.error, 'open_conditions_block_transfer');
-  assert.equal('open_conditions' in r.body, false, 'no count from another firm');
-  assert.doesNotMatch(JSON.stringify(r.body), /Cedar|board seat|key-person|\b2\b/);
-  assert.match(r.body.message, /decision you cannot see/);
+  assert.equal(r.body.open_conditions, 2, 'an Admin is unscoped, so every firm\'s condition is counted');
+  assert.doesNotMatch(JSON.stringify(r.body), /Cedar|board seat|key-person/);
   assert.deepEqual(stored(db), []);
-  // The other firm sees its own count.
-  const own = await record(RIVAL, db);
-  assert.equal(own.body.open_conditions, 2);
 });
 
-test('with both, the caller is told only their own count', async () => {
+test('D1215: with both, an Admin is told every open condition', async () => {
   const db = freshDb();
   condition(db, 'dec-a', SOLO, FIRM_A, 'mine');
   condition(db, 'dec-c1', RIVAL, FIRM_C, 'theirs 1');
   condition(db, 'dec-c2', RIVAL, FIRM_C, 'theirs 2');
   const r = await record(SOLO, db);
   assert.equal(r.status, 409);
-  assert.equal(r.body.open_conditions, 1);
-  assert.match(r.body.message, /^1 open IC condition on this deal/);
+  assert.equal(r.body.open_conditions, 3);
+  assert.match(r.body.message, /^3 open IC conditions on this deal/);
+});
+
+test('D1215: an Operating Partner is refused before the gate and the firm, and nothing is written', async () => {
+  const db = freshDb();
+  condition(db, 'dec-c1', RIVAL, FIRM_C, 'Cedar-only: board seat side letter');
+  const r = await record(PARTNER, db);
+  assert.equal(r.status, 403);
+  assert.equal(r.body.error, 'admin_records_transfers');
+  assert.doesNotMatch(JSON.stringify(r.body), /Cedar|board seat|open_conditions/);
+  assert.deepEqual(stored(db), []);
 });
 
 test('a failed gate read refuses the transfer and writes nothing — it used to read as 0', async () => {
