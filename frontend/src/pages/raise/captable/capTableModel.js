@@ -29,6 +29,7 @@
  * D1025's (`historyModel.js`). Access and Import and export are D1026's
  * (`capTableAccess.js`, `capTableImport.js`); the holder and instrument
  * drawers, the dialogs and the proposals wait for their parts (D1015 §6).
+ * D1029 retired the old pages: nothing here links to them any more.
  */
 
 import { NOT_RECORDED } from '../../../lib/absence.js';
@@ -38,9 +39,14 @@ export const HOME_PATH = `/raise/${SLUG}`;
 export const TITLE = 'Cap table';
 /** The canvas's line, with the company left out: the header names the venture. */
 export const LINE = 'Who owns the company, what was issued, and what the next round does to it.';
-/** The old page that still holds the simulator, until the Scenarios part retires it. */
-export const SIMULATOR_PATH = '/raise/capital/cap-table';
-export const VARIANTS_PATH = '/raise/cap-table/variants';
+/**
+ * D1029 (#2866): the old addresses forward here with `?moved=<key>`
+ * (App.jsx `CapTableMovedRedirect`), and the tool says so once (D936).
+ */
+export const MOVED_NOTICES = Object.freeze({
+  'cap-table': 'Cap table has a new address. Update your bookmark.',
+  variants: 'Draft variants is now Scenarios, under Cap table.',
+});
 
 export const MODELLED = 'Modelled';
 export const ON_RECORD = 'On record';
@@ -178,17 +184,6 @@ export function scenarioCards(read) {
   for (const v of Array.isArray(read.variants) ? read.variants : []) out.push(scenarioCard(v));
   return out;
 }
-
-/** The two old pages read the venture as `?project=` (CapTablePage, CapTableVariantsPage). */
-function oldSearch(search = '') {
-  const q = tabSearch(search);
-  return q ? q.replace('project_id=', 'project=') : '';
-}
-
-/** A variant's page; it reads its own venture, so only the variants index needs it. */
-export const variantHref = (uid) => `${VARIANTS_PATH}/${encodeURIComponent(uid)}`;
-export const variantsHref = (search = '') => `${VARIANTS_PATH}${oldSearch(search)}`;
-export const simulatorHref = (search = '') => `${SIMULATOR_PATH}${oldSearch(search)}`;
 
 // ─────────────────────────────────────────────────────────── D1028: the phone and dark
 

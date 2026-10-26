@@ -6,7 +6,7 @@ import { capTableRecordApi } from '../../../lib/api/capTableRecord';
 import { Unreadable, actionGhost } from '../../../ui';
 import CapTableDialog, { useWrite } from './CapTableDialog';
 import { Tag } from './CapTableTag';
-import { harbour, harbourTone, variantsHref } from './capTableModel';
+import { TABS, harbour, harbourTone, tabHref } from './capTableModel';
 import { isoDay } from './historyModel';
 import {
   CARTA_URL, EVENT_KINDS, GRANT_SORTS, METHODS, TOP_UP_LINE,
@@ -315,7 +315,7 @@ export default function OptionPoolTab({ projectId, reload, retry, search = '' })
       <Harbour projectId={projectId} read={valuation} retry={retry} onChanged={retry} />
       <section className={`${CARD} flex flex-wrap items-center gap-3 px-4 py-3`} data-testid="captable-pool-topup">
         <span className="flex flex-1 flex-col"><span className={`text-[13px] font-semibold ${INK}`}>Need more room in the pool?</span><span className={`text-[11.5px] ${MUTED}`}>{TOP_UP_LINE}</span></span>
-        <Link className={actionGhost} to={variantsHref(search)} data-testid="captable-pool-topup-go">Top up the pool</Link>
+        <Link className={actionGhost} to={tabHref(TABS.find((t) => t.id === 'scenarios'), search)} data-testid="captable-pool-topup-go">Top up the pool</Link>
       </section>
       <Grants plan={plan} record={record} retry={retry} />
     </div>

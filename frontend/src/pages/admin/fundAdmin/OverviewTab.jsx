@@ -1,8 +1,9 @@
-import { Pill, Unrecorded, Unreadable } from '../../../ui';
+import { ReadFailure as Unreadable } from './parts';
+import { Pill, Unrecorded } from '../../../ui';
 import { BTN, LoadingRows } from '../../account/AccountCenter';
 import { entityErrorWords, entityState } from './mercuryEntityModel';
 import { ending, money } from './fundAdminModel';
-import { Line, NUM, Note, Panel, Section, TH, Table } from './parts';
+import { Line, NUM, Note, Panel, Section, TH, Table, Tiles } from './parts';
 
 /**
  * Decision 9's overview, laid out to the brief's Overview board: one card per
@@ -56,7 +57,11 @@ function EntityCard({ e }) {
 const blockOk = (b) => b?.state === 'ok' && Array.isArray(b.items);
 
 export function OverviewTab({ overview, onOpen }) {
-  if (overview.status === 'loading' || overview.status === 'idle') return <div className="mx-4 mt-5 sm:mx-6"><LoadingRows lines={5} /></div>;
+  if (overview.status === 'loading' || overview.status === 'idle') return <div className="mx-4 mt-5 flex flex-col gap-4 sm:mx-6" aria-busy="true" data-testid="fund-admin-loading">
+    <Tiles items={['Committed', 'Called', 'Received', 'Outstanding', 'Distributed', 'NAV', 'TVPI', 'Cash across entities'].map(k => ({ k, v: <span className="inline-block h-5 w-24 rounded bg-gray-200 dark:bg-gray-700" />, note: 'Reading…' }))} />
+    <Panel label="Waiting on you"><div className="p-5"><LoadingRows lines={4} /></div></Panel>
+    <div className="grid gap-4 lg:grid-cols-2">{['Capital by fund', 'Call lines by state'].map(label => <Panel key={label} label={label}><div className="p-5"><LoadingRows lines={4} /></div></Panel>)}</div>
+  </div>;
   if (overview.status === 'unreadable') {
     const audit = overview.error?.status === 503;
     return (
@@ -115,7 +120,7 @@ export function OverviewTab({ overview, onOpen }) {
         {!blockOk(o.funds)
           ? <BlockUnreadable testId="overview-funds-unreadable" what="The administered funds" claim="This is not a claim that there is none." onRetry={overview.reload} />
           : o.funds.items.length === 0
-            ? <Note testId="overview-no-fund">No administered fund. A fund whose general partner of record is an outside GP is run from its own fund page.</Note>
+            ? <div className="flex min-h-56 flex-col items-center justify-center gap-2 px-6 py-12 text-center" data-testid="overview-no-fund"><span aria-hidden="true" className="text-3xl text-axal-muted dark:text-gray-400">○</span><h3 className="font-bold text-axal-ink dark:text-gray-100">No Axal VC fund is recorded yet.</h3><p className="max-w-md text-sm text-axal-muted dark:text-gray-400">No administered fund. A fund whose general partner of record is an outside GP is run from its own fund page.</p></div>
             : <Table cols={cols} rows={o.funds.items} rowKey={(f) => f.fund_id} wide
               template="1.5fr 1fr 1fr 1fr 1.2fr .9fr 1.5fr 1.1fr 1.2fr" rowTestId={(f) => `overview-fund-${f.fund_id}`} />}
         {blockOk(o.funds) && !blockOk(o.fees) && <BlockUnreadable testId="overview-fees-unreadable" what="The fee periods" claim="This is not a claim that no fee is due." onRetry={overview.reload} />}

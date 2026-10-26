@@ -470,7 +470,7 @@ test('Option pool draws the tiles, the burn-down with the target, the 409A\'s ch
     assert.match(v.props(v.by('captable-pool-chart'))['aria-label'], /granted rose to 382,000 of 1,500,000 shares/);
     assert.equal(v.count('captable-409a-fired'), 1);
     assert.match(v.text(v.by('captable-409a')), /Safe harbour in force until 2027-03-03\. FMV \$0\.42 per common share/);
-    assert.ok(v.hrefs().includes('/raise/cap-table/variants?project=3'), 'Top up the pool opens a scenario');
+    assert.ok(v.hrefs().includes('/raise/cap-table/scenarios?project_id=3'), 'Top up the pool opens Scenarios (D1029)');
     assert.equal(v.count('captable-grant'), 2);
     assert.match(v.text(v.by('captable-grants-table')), /Jo Rivera Employee 300,000 \$0\.30 2 Feb 2026 48 months · 12-month cliff · from 1 Mar 2025 118,750 Not exercised Data room file/);
     assert.equal(v.text(v.by('captable-grants-foot')), 'Vested 139,250 adds up the 2 rows.');

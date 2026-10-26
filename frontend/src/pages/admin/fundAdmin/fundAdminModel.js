@@ -208,8 +208,8 @@ export function fundFilter(funds, search, view) {
     note: !perFund && chosen && !HONOURS_FILTER.includes(view) ? FILTER_KEPT : null,
   };
 }
-/** D1164: the tabs that offer All funds and also read the chosen fund (NAV & performance's charts and positions). */
-export const HONOURS_FILTER = Object.freeze(['performance']);
+/** D1164/D1165: All-fund views whose chosen fund narrows the read: performance and report packs. */
+export const HONOURS_FILTER = Object.freeze(['performance', 'reportPacks']);
 export const FILTER_KEPT = 'This tab shows every fund. The filter is kept for Capital calls, Distributions, Fees and Reports.';
 
 /** An address under the console with the fund filter set (or cleared, for All funds), keeping the path. */

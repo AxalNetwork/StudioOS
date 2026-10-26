@@ -48,8 +48,8 @@ const QUOTA_UNLIMITED = { used: 12, cap: null, unlimited: true, full: false, tie
 const ok = (quota) => ({ loading: false, error: false, quota });
 
 const DEALS = [
-  { id: 1, project_name: 'Acme', project_sector: 'Logistics', status: 'active', target_raise: 1500000, is_member: 1 },
-  { id: 2, project_name: 'Birch', project_sector: 'Fintech', status: 'scored', target_raise: null, is_member: 0 },
+  { id: 1, project_name: 'Acme', project_sector: 'Logistics', status: 'active', target_raise: 1500000, is_member: 1, can_read: true },
+  { id: 2, project_name: 'Birch', project_sector: 'Fintech', status: 'scored', target_raise: null, is_member: 0, can_read: true },
   { id: 3, project_name: 'Passed Co', status: 'rejected', is_member: 0 },
 ];
 
@@ -93,7 +93,7 @@ test('dr-pipeline: each live deal with Join or Leave, the quota, and what joinin
   assert.ok(t.includes(JOIN_NOTE), 'the join note is drawn');
   assert.match(JOIN_NOTE, /Only an invited or committed investor can read them\./);
   assert.equal((markup.match(/data-testid="dr-pipeline-row"/g) || []).length, 2, 'a passed deal is not offered');
-  assert.match(t, /Acme\s*Diligence\s*Member\s*Logistics\s*·\s*\$1,500,000\s*Leave/);
+  assert.match(t, /Acme\s*Diligence\s*Invitation requested\s*Logistics\s*·\s*\$1,500,000\s*Leave/);
   assert.match(t, /Birch\s*Screening\s*Fintech\s*·\s*Round size: the company has not recorded one\.\s*Request an invitation/);
 
   const full = renderedText(html(h(DealRoomsList, { dealsState: { loading: false, error: false, deals: DEALS }, quotaState: ok(QUOTA_FULL_PRO) })));

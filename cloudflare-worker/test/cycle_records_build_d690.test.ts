@@ -583,7 +583,7 @@ test('test 4: a founder record gates Documents, needs a founder role, and vests 
   assert.deepEqual(section(ana, 'contributions').rows, [{ a: 'Closed the first pilot', b: '9 Oct 2026' }]);
   assert.deepEqual(section(ana, 'cap_table').rows, [{ a: 'Shares', b: '600 shares' }]);
   // #1695 adds the writes after it (Log, Edit); Edit split stays the cap table's link.
-  assert.deepEqual(ana.actions.map((a: any) => [a.key, a.kind, a.href])[0], ['edit-split', 'link', '/raise/capital/cap-table']);
+  assert.deepEqual(ana.actions.map((a: any) => [a.key, a.kind, a.href])[0], ['edit-split', 'link', '/raise/cap-table']);
   assert.equal(factOf((await one(db, 'founding-team', 'h-2')).body, 'Vested today').value, '25%', 'stored vested shares over shares');
   db.close();
 });

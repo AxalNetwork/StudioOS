@@ -60,6 +60,12 @@ import { FOCUSABLE, inertOutside, lockScroll, pushDialog, tabbable, tabTarget, t
 
 const LightboxBar = createContext(null);
 const LightboxPage = createContext(false);
+const LightboxPhone = createContext('full');
+
+/** D1165: a page can give all its nested drawers the same phone sheet form. */
+export function LightboxPhoneProvider({ phone = 'full', children }) {
+  return <LightboxPhone.Provider value={phone}>{children}</LightboxPhone.Provider>;
+}
 
 /** A page-mode bar for every `Lightbox` inside it that is not handed its own: a function of `{ title, sub, onBack }`. */
 export function LightboxBarProvider({ bar, children }) {
@@ -72,7 +78,7 @@ export function useLightboxPage() {
 }
 
 export default function Lightbox({
-  label, onClose, onEscape, children, eyebrow, title, sub, footer, initialFocus, returnFocusTo, width = 560, size = 'fit', testId = 'lightbox', focusKey, pageBelow, bar: barProp, pageClass = '', phone: phoneForm = 'full',
+  label, onClose, onEscape, children, eyebrow, title, sub, footer, initialFocus, returnFocusTo, width = 560, size = 'fit', testId = 'lightbox', focusKey, pageBelow, bar: barProp, pageClass = '', phone: phoneForm,
 }) {
   const id = useId();
   const dialog = useRef(null);
@@ -81,7 +87,8 @@ export default function Lightbox({
   const escape = useRef(onEscape);
   escape.current = onEscape;
   const tall = size === 'tall';
-  const sheet = phoneForm === 'sheet';
+  const inheritedPhone = useContext(LightboxPhone);
+  const sheet = (phoneForm || inheritedPhone) === 'sheet';
   const phone = usePhoneWidth();
   const page = pageBelow === 'lg' && phone;
   const providedBar = useContext(LightboxBar);
