@@ -77,10 +77,16 @@ export const FROZEN = [
     // verdicts, the grant of limited access, and the two Lab admissions.
     // Revoking limited access is a takedown and stays open, as FREEZE_RULE says.
     row: 'Access',
-    // D1230 (#3238): reviewing a sanctions match (trust.ts) and sending a KYC
-    // case to HQ (kyc.ts) freeze with the verdicts they belong to.
-    note: 'No KYC verdict, no review of a sanctions match, no case sent to HQ, no grant of limited access, and no admission to the Spin-Out Lab. Revoking limited access still works.',
-    gatedIn: ['admin.ts', 'kyc.ts', 'trust.ts'],
+    note: 'No KYC verdict, no grant of limited access, and no admission to the Spin-Out Lab. Revoking limited access still works.',
+    gatedIn: ['admin.ts', 'kyc.ts'],
+  },
+  {
+    // D1230 (#3238): recording the review of a sanctions match is a compliance
+    // verdict, so it freezes as KYC's do. Sending a KYC case to HQ is in kyc.ts,
+    // already on the Access row; HQ's own decision is HQ's, not the branch's.
+    row: 'Compliance',
+    note: 'No review of a sanctions match is recorded, and no KYC case is sent to HQ. Screenings already recorded stay readable.',
+    gatedIn: ['trust.ts', 'kyc.ts'],
   },
   {
     // D303 — Wellbeing joined the other three Community consoles behind
