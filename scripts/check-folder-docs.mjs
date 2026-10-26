@@ -108,6 +108,7 @@ const DOCUMENTED = new Map([
   ['frontend/src/pages/admin/programs',       'Admin › Programs (D953): the catalogue, each program page with its tabs, the redirects and the model they read'],
   ['frontend/src/pages/account',              'the Account center\'s sections, one file per canvas section (D568, D642)'],
   ['frontend/src/pages/cycles',               'the four cycle overviews and module pages, from the shared cycle read (D661)'],
+  ['frontend/src/pages/deal',                 'the deal page’s frame, working tabs and the staff views, and who sees what (D1152, D1153, D1155)'],
   ['frontend/src/pages/events',                 'event host tools and public/member detail'],
   ['frontend/src/pages/founder',              'founder workspace landing pages and shared shell'],
   ['frontend/src/pages/site',                 'the public site\'s pages from the owner\'s website canvas (D673–D680), and their stylesheets'],
