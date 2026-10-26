@@ -171,6 +171,7 @@ trust.get('/agreements', async (c) => {
 // GET /score/:userId — Task #4 (Y-2), scoped by D1074 (#2966).
 // Returns {score, missing[]}. Readable by the member, an admin of this
 // territory, and a counterparty in an open intro or deal (`mayReadTrustScores`);
+// D1254 requires a shared open deal for investor callers, not just an intro.
 // anyone else is 403, whatever their role. Only the member and an admin get the
 // missing items. A member with no obligation rows reads `not_recorded`, never 100.
 // ---------------------------------------------------------------------------

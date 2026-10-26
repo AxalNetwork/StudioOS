@@ -27,6 +27,7 @@
 import type { Env } from '../types';
 import { bindingKey } from '../util/schemaBootstrap';
 import { branchOf } from '../util/branch';
+import { expireKycFromObligations } from './kycCase';
 
 // ---------------------------------------------------------------------------
 // Obligation matrix
@@ -437,9 +438,9 @@ export function maskForInvestorRow<T extends Record<string, unknown>>(row: T, fo
  */
 export async function expireDueArtifacts(
   env: Env,
-): Promise<{ obligations_expired: number; ndas_expired: number }> {
+): Promise<{ obligations_expired: number; ndas_expired: number; kyc_expired: number }> {
   await ensureTrustSchema(env);
-  let oblig = 0; let nda = 0;
+  let oblig = 0; let nda = 0; let kyc = 0;
   try {
     const r: any = await env.DB.prepare(
       `UPDATE legal_obligations
@@ -460,7 +461,12 @@ export async function expireDueArtifacts(
     ).run();
     nda = (r?.meta?.changes ?? r?.changes ?? 0) as number;
   } catch (e) { console.error('[trust] expire NDAs failed', e); }
-  return { obligations_expired: oblig, ndas_expired: nda };
+  // D1229 — the hand-off: an expired `kyc_v1` moves its person from approved
+  // to expired (and re-opens the obligation), so `users.kyc_status` no longer
+  // reads approved over a check that has lapsed. Its own failure never stops
+  // the rest of the night's housekeeping.
+  try { kyc = await expireKycFromObligations(env); } catch { console.error('[trust] expire KYC failed'); }
+  return { obligations_expired: oblig, ndas_expired: nda, kyc_expired: kyc };
 }
 
 /**

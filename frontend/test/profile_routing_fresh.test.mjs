@@ -121,8 +121,18 @@ test('ROUTE_MAP still parses to the full canvas corpus', () => {
   // 168 (D1173, #2455): `Use of funds`, /raise/use-of-funds and its tab words.
   // 169 (D1188, #2457): `Capital relationships`, /raise/capital-relationships and its tab words.
   // 170 (D1195, #2382): `Product testing`, /admin/platform/product-testing and its tabs.
+  // 171 (D1213, #2424): `Closing room`, the founder's and the deal's rooms and Contracts › Closings.
+  // 172 (D1221, #2458): `Calls for Capital`, Capital relationships' Calls tab and one call.
+  // 173 (D1228, #2384): `KYC & KYB`, /admin/kyc's four tabs and one person's case.
+  // 174 (D1236, #2423): `Deal flow list`, the Deals root and /deals/compare.
+  // 175 (D1244, #2385): `Due diligence desk`, the list's and the case's tabs.
   // 169 (D1029, #2866): the Cap Table Pro row folds into the Cap table row; its old page is retired.
-  assert.equal(recs.length, 169);
+  // 174 after D1029 (#2866) folded Cap Table Pro into Cap table.
+  // 175 (D1253, #2428): `Venture scorecard`, the panel, the strip and its three pages.
+  // 176 (D1261, #2430): `Raise evidence`, the founder's view, its drawers and the investor block.
+  // 177 (D1270, #2381): `Promo codes`, Codes, Usage and one code's drawer.
+  // 178 (D1277, #2482): `AI tokens`, Usage's third page.
+  assert.equal(recs.length, 178);
 
   for (const r of recs) {
     assert.ok(r.canvas.length > 0, 'every row names a canvas');

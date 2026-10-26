@@ -23,6 +23,7 @@
  *   GET   /admin/queue          everything awaiting review
  *   POST  /admin/:uid/review    approve / reject / pause
  *   POST  /admin/credits        a Super Admin's manual grant or deduction (D608)
+ *   GET   /admin/credits/summary aggregate active non-admin holdings (Super Admin, D957)
  *   GET   /admin/credits/:userId one member's balance and ledger (Super Admin, D633)
  *
  * THE THREE PRICE KINDS, and why the credit one is the only interesting one:
@@ -65,8 +66,10 @@ import { programRefusal } from '../services/programEnforcement';
 import { mapError, newUid, nowIso, todayIso } from './_t13t14t15_helpers';
 import { userMeetsTier, type Tier } from '../middleware/requireTier';
 import { refuse } from '../util/refusal';
+import { AUTH_ERROR_STATUSES } from '../util/authErrors';
 import { logAdminAction } from '../services/adminAudit';
 import { perkClaimsCounts } from '../services/perkClaims';
+import { perkCreditSummary } from '../services/perkCreditSummary';
 import { manualAdjust, ruleReason } from '../services/creditGrants';
 
 const r = new Hono<{ Bindings: Env }>();
@@ -839,6 +842,23 @@ r.post('/admin/credits', async (c) => {
     }
     return c.json({ ok: true, ...out });
   } catch (e) { return mapError(c, e); }
+});
+
+// D957, OD8 A: a successful zero is measured; unreadable is always a refusal.
+// Literal summary must precede the member-id route below.
+r.get('/admin/credits/summary', async (c) => {
+  c.header('Cache-Control', 'private, no-store');
+  try { await requireSuperAdmin(c); }
+  catch (e) {
+    const status = e instanceof Error && Object.hasOwn(AUTH_ERROR_STATUSES, e.message) ? AUTH_ERROR_STATUSES[e.message] : undefined;
+    if (status === 401 || status === 403) return refuse(c, status, { code: status === 401 ? 'unauthorized' : 'forbidden', message: 'Sign in as the HQ Super Admin to read aggregate credit balances.' });
+    return refuse(c, 503, { code: 'credit_summary_unreadable', message: 'Credit balances could not be read. Try again.' });
+  }
+  try { return c.json(await perkCreditSummary(c.env)); }
+  catch {
+    console.error('[perks] credit summary unreadable');
+    return refuse(c, 503, { code: 'credit_summary_unreadable', message: 'Credit balances could not be read. Try again.' });
+  }
 });
 
 // D633 (#1391, Q2): one member's balance and ledger, for the Super Admin's

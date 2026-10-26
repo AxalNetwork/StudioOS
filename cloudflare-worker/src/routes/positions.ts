@@ -12,6 +12,7 @@
 import { Hono } from 'hono';
 import type { Env } from '../types';
 import { requireAuth, requireAdmin, canViewLpData } from '../auth';
+import { assertAdminAct } from '../services/fundAdminAccess';
 import { mapError, nowIso, newUid } from './_t13t14t15_helpers';
 import {
   computeFundMetrics, rollUpPosition, currentPeriod, daysSince, periodCounts,
@@ -492,26 +493,41 @@ r.post('/:projectUid/distributions', async (c) => {
   } catch (e) { return mapError(c, e); }
 });
 
-// POST /api/positions — record a round position (admin only)
+// POST /api/positions — record a round position: an Admin's act, `position.record` (D1215, #3212)
 r.post('/', async (c) => {
   try {
     const user = await requireAdmin(c);
+    await assertAdminAct(c, user, 'position.record');
     const body = await c.req.json().catch(() => ({} as any));
     const projectId = Number(body.project_id);
     const roundName = body.round_name ? String(body.round_name).slice(0, 64) : null;
     if (!Number.isFinite(projectId) || !roundName) return c.json({ detail: 'project_id and round_name required' }, 400);
     const proj = await c.env.DB.prepare('SELECT id FROM projects WHERE id = ? AND deleted_at IS NULL').bind(projectId).first<{ id: number }>();
     if (!proj) return c.json({ detail: 'Project not found' }, 404);
+    // D1215: the closing line this position records, when one is named: a line of a closing on this venture.
+    const lineUid = body.closing_line_uid == null || body.closing_line_uid === '' ? null : String(body.closing_line_uid);
+    if (lineUid !== null) {
+      const line = await c.env.DB.prepare(
+        'SELECT 1 AS yes FROM closing_lines l JOIN closings cl ON cl.id = l.closing_id WHERE l.uid = ? AND cl.project_id = ?'
+      ).bind(lineUid, projectId).first();
+      if (!line) return c.json({ detail: 'No closing line of this venture has that id.', code: 'closing_line_not_found' }, 404);
+    }
     const uid = newUid();
-    const ins = await c.env.DB.prepare(
-      `INSERT INTO portfolio_positions (uid, fund_id, project_id, round_name, invested_amount, shares, price_per_share, ownership_pct, position_date, created_by, created_at, updated_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
-    ).bind(
+    const values = [
       uid, body.fund_id != null ? Number(body.fund_id) : null, projectId, roundName,
       num(body.invested_amount) ?? 0, num(body.shares), num(body.price_per_share), num(body.ownership_pct),
       body.position_date ? String(body.position_date).slice(0, 32) : null,
       user.id, nowIso(), nowIso(),
-    ).run();
+    ];
+    const ins = lineUid === null
+      ? await c.env.DB.prepare(
+        `INSERT INTO portfolio_positions (uid, fund_id, project_id, round_name, invested_amount, shares, price_per_share, ownership_pct, position_date, created_by, created_at, updated_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+      ).bind(...values).run()
+      : await c.env.DB.prepare(
+        `INSERT INTO portfolio_positions (uid, fund_id, project_id, round_name, invested_amount, shares, price_per_share, ownership_pct, position_date, created_by, created_at, updated_at, closing_line_uid)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+      ).bind(...values, lineUid).run();
     const x = await c.env.DB.prepare('SELECT * FROM portfolio_positions WHERE id = ?').bind((ins as any).meta?.last_row_id).first<PositionRow>();
     return c.json(x, 201);
   } catch (e) { return mapError(c, e); }

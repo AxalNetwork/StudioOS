@@ -112,7 +112,8 @@ test('the route sits in the Raise shell; a founder at /round-calls/:uid is sent 
   assert.match(page, /if \(d && d\.viewer !== 'founder'\) return <Navigate to=\{`\/round-calls\/\$\{encodeURIComponent\(uid\)\}`\} replace \/>;/);
   const old = readFileSync('frontend/src/pages/founder/RoundCallPage.jsx', 'utf8');
   assert.match(old, /to=\{\(projectId&&call\.state!=='draft'\?'\/raise\/calls\/':'\/round-calls\/'\)\+call\.uid\}/, 'the founder\'s list opens a sent call in the Raise shell, and a draft on its own page, where Continue draft is');
-  assert.match(old, /if\(read\.data\?\.viewer==='founder'&&read\.data\.call\.state!=='draft'\)return <Navigate to=\{'\/raise\/calls\/'\+encodeURIComponent\(uid\)\} replace\/>;/);
+  // D1221 (#2458): a founder's sent call opens at its address under Capital relationships › Calls (CLS8).
+  assert.match(old, /if\(read\.data\?\.viewer==='founder'&&read\.data\.call\.state!=='draft'\)return <Navigate to=\{'\/raise\/capital-relationships\/calls\/'\+encodeURIComponent\(uid\)\} replace\/>;/);
   const sheet = readFileSync('frontend/src/pages/founder/RoundCallSheet.jsx', 'utf8');
   assert.equal((sheet.match(/to=\{'\/raise\/calls\/'\+/g) || []).length, 2, 'the open-call notice and the outcome link open the Raise page');
   assert.doesNotMatch(sheet, /'\/round-calls\/'\+/);
