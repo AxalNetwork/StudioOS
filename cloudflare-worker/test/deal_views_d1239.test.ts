@@ -295,3 +295,45 @@ test('replacing a default advances its version so a stale form cannot restore or
   assert.equal((await call(w,1)).body.default_uid,a.body.uid);
  }finally{w.db.close();}
 });
+
+test('a shared view stops appearing when its author loses accepted, active firm membership',async()=>{
+ const w=world();try {
+  const made=await create(w,2,{shared_with_firm:true});assert.equal(made.status,201);assert.equal((await call(w,1)).body.items[0].uid,made.body.uid);
+  for(const change of ["UPDATE investor_seats SET revoked_at=CURRENT_TIMESTAMP", "UPDATE investor_seats SET accepted_at=NULL", "UPDATE users SET investor_seat_primary_user_id=NULL WHERE id=2", "UPDATE users SET is_active=0 WHERE id=2"]) {
+    w.db.exec(change);assert.deepEqual((await call(w,1)).body.items,[],change);
+    w.db.exec('UPDATE investor_seats SET revoked_at=NULL,accepted_at=CURRENT_TIMESTAMP; UPDATE users SET investor_seat_primary_user_id=1,is_active=1 WHERE id=2');
+  }
+  assert.equal((await call(w,1)).body.items[0].uid,made.body.uid);
+ }finally{w.db.close();}
+});
+test('unbound views remain explicitly accessible after linking one or multiple companies, without moving firm settings',async()=>{
+ const w=world();try {
+  w.db.exec('DELETE FROM user_company_links WHERE user_id=1');const a=await create(w,1,{is_default:true,shared_with_firm:true});
+  w.db.exec("INSERT INTO user_company_links(uid,user_id,company_id) VALUES('new-company',1,11)");
+  assert.deepEqual((await call(w,1)).body.items,[]);
+  let list=await call(w,1,'GET','/api/deals/views?context=unbound',undefined,{'X-Company-Id':'11'});assert.equal(list.status,200);assert.equal(list.body.default_uid,a.body.uid);assert.equal(list.body.items[0].company_id,null);
+  assert.equal((await call(w,2,'GET','/api/deals/views?context=unbound')).body.items[0].uid,a.body.uid);
+  assert.deepEqual((await call(w,3,'GET','/api/deals/views?context=unbound')).body.items,[]);
+  w.db.exec("INSERT INTO user_company_links(uid,user_id,company_id) VALUES('second-company',1,22)");
+  assert.equal((await call(w,1)).status,409);assert.equal((await call(w,1,'GET','/api/deals/views?context=unbound')).body.items[0].uid,a.body.uid);
+  const changed=await call(w,1,'PATCH',url(a.body.uid)+'?context=unbound',{version:a.body.version,name:'Updated unbound'});assert.equal(changed.status,200);
+  assert.equal((await call(w,1,'DELETE',url(a.body.uid,changed.body.version)+'&context=unbound')).status,200);
+  assert.equal((await call(w,1,'POST','/api/deals/views?context=unbound',{name:'Unbound',spec:{}})).status,201);
+  assert.equal((await call(w,1,'GET','/api/deals/views?context=foreign')).status,400);
+ }finally{w.db.close();}
+});
+test('a removed company link exposes only the author’s archived settings for cleanup, never editing or sharing',async()=>{
+ const w=world();try {
+  const a=await create(w,1,{shared_with_firm:true,is_default:true});const peer=await create(w,2,{shared_with_firm:true});
+  assert.deepEqual((await call(w,1,'GET','/api/deals/views?context=archived')).body.items,[]);
+  w.db.exec('DELETE FROM user_company_links WHERE user_id=1');assert.deepEqual((await call(w,1)).body.items,[]);
+  const list=await call(w,1,'GET','/api/deals/views?context=archived');assert.equal(list.status,200);assert.deepEqual(list.body.items.map((v:any)=>v.uid),[a.body.uid]);assert.equal(list.body.can_share_with_firm,false);assert.equal(list.body.default_uid,null);
+  assert.deepEqual((await call(w,3,'GET','/api/deals/views?context=archived')).body.items,[]);
+  assert.equal((await call(w,1,'POST','/api/deals/views?context=archived',{name:'Refused',spec:{}})).status,400);
+  assert.equal((await call(w,1,'PATCH',url(a.body.uid)+'?context=archived',{version:1,name:'Refused'})).status,400);
+  assert.equal((await call(w,1,'DELETE',url(peer.body.uid,1)+'&context=archived')).status,404);
+  assert.equal((await call(w,1,'DELETE',url(a.body.uid,1)+'&context=archived')).status,200);assert.equal(rows(w).length,1);
+  assert.equal(JSON.parse(audits(w).at(-1)?.details as string).company_id,11);
+  w.db.exec('UPDATE investor_seats SET revoked_at=CURRENT_TIMESTAMP');assert.equal((await call(w,2,'GET','/api/deals/views?context=archived')).status,403);
+ }finally{w.db.close();}
+});

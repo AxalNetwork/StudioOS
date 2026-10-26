@@ -17,3 +17,11 @@ test('saved-view client is lazy, encodes paging and IDs, and preserves write bod
 });
 
 test('the client refuses a missing or invalid rendered version before sending a write',()=>{const {api,calls}=fixture();for(const version of [undefined,null,0,-1,1.5,'2']) {assert.throws(()=>api.update('synthetic',version,{name:'Changed'}));assert.throws(()=>api.remove('synthetic',version));}assert.equal(calls.length,0);});
+
+test('saved-view contexts are explicit on every method and invalid contexts send nothing',async()=>{
+ const {api,calls}=fixture();const context={context:'unbound'};
+ await api.list({...context,limit:10});await api.create({name:'Synthetic'},context);await api.update('id',2,{name:'Changed'},context);await api.remove('id',2,context);
+ for(const [path] of calls) assert.equal(new URL(path,'https://example.invalid').searchParams.get('context'),'unbound');
+ await api.list({context:'archived'});await api.remove('id',2,{context:'archived'});assert.equal(new URL(calls[4][0],'https://example.invalid').searchParams.get('context'),'archived');assert.equal(new URL(calls[5][0],'https://example.invalid').searchParams.get('context'),'archived');
+ for(const run of [()=>api.list({context:'foreign'}),()=>api.create({}, {context:'foreign'}),()=>api.update('id',2,{}, {context:'foreign'}),()=>api.remove('id',2,{context:'foreign'})])assert.throws(run);assert.equal(calls.length,6);
+});

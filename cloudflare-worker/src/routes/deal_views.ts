@@ -31,7 +31,7 @@ r.use('/views', guard);
 r.use('/views/*', guard);
 r.use('/fit', guard);
 
-type Viewer = { user: User; root: number; company: number | null; canShare: boolean };
+type Viewer = { user: User; root: number; company: number | null; canShare: boolean; archived?: boolean };
 async function viewer(c: Ctx): Promise<Viewer> {
   const user = await requireAuth(c);
   const row = await c.env.DB.prepare('SELECT investor_seat_primary_user_id FROM users WHERE id = ?').bind(user.id)
@@ -48,6 +48,11 @@ async function viewer(c: Ctx): Promise<Viewer> {
   if (root !== user.id && !cover.ok) throw new Refused(403, 'This firm seat is no longer available.');
   // A seat represents its primary account's firm, even without a duplicate
   // user_company_links row. A client may select only that account's companies.
+  const context = c.req.query('context');
+  if (context !== undefined && !['unbound', 'archived'].includes(context)) throw new Refused(400, 'The view context is invalid.');
+  if (context === 'unbound' || context === 'archived') {
+    return { user, root, company: null, canShare: context === 'unbound' && cover.ok, archived: context === 'archived' };
+  }
   const raw = c.req.header('X-Company-Id');
   let company = await resolveActiveCompany(c.env, { id: root }, raw);
   if (raw && company == null) throw new Refused(403, 'That firm selection is unavailable.');
@@ -128,6 +133,14 @@ function failure(c: Ctx, error: unknown) {
 async function own(c: Ctx, x: Viewer) {
   const id = c.req.param('uid') ?? '';
   if (!validUid(id)) throw new Refused(404, 'View not found.');
+  if (x.archived) {
+    const row = await c.env.DB.prepare(`SELECT * FROM deal_saved_views v WHERE uid = ? AND owner_user_id = ?
+      AND firm_owner_user_id = ? AND company_id IS NOT NULL AND NOT EXISTS
+      (SELECT 1 FROM user_company_links l WHERE l.user_id = ? AND l.company_id = v.company_id)`)
+      .bind(id, x.user.id, x.root, x.root).first<ViewRow>();
+    if (!row) throw new Refused(404, 'View not found.');
+    return row;
+  }
   const row = await c.env.DB.prepare(`SELECT * FROM deal_saved_views
     WHERE uid = ? AND owner_user_id = ? AND firm_owner_user_id = ? AND company_id IS ?`)
     .bind(id, x.user.id, x.root, x.company).first<ViewRow>();
@@ -142,8 +155,20 @@ r.get('/views', async c => {
     if (!/^\d{1,7}$/.test(rawLimit) || !/^\d{1,7}$/.test(rawOffset)) throw new Refused(400, 'The view page is invalid.');
     const limit = Number(rawLimit), offset = Number(rawOffset);
     if (limit < 1 || limit > 100 || offset > 1000000) throw new Refused(400, 'The view page is invalid.');
+    if (x.archived) {
+      const rows = await c.env.DB.prepare(`SELECT * FROM deal_saved_views v WHERE owner_user_id = ? AND firm_owner_user_id = ?
+        AND company_id IS NOT NULL AND NOT EXISTS
+        (SELECT 1 FROM user_company_links l WHERE l.user_id = ? AND l.company_id = v.company_id)
+        ORDER BY id DESC LIMIT ? OFFSET ?`).bind(x.user.id, x.root, x.root, limit + 1, offset).all<ViewRow>();
+      return c.json({ items: rows.results.slice(0, limit).map(row => shape(row, x.user.id)), has_more: rows.results.length > limit,
+        default_uid: null, company_id: null, can_share_with_firm: false, archived: true });
+    }
     const rows = await c.env.DB.prepare(`SELECT * FROM deal_saved_views WHERE firm_owner_user_id = ? AND company_id IS ?
-      AND (owner_user_id = ? OR (shared_with_firm = 1 AND ? = 1))
+      AND (owner_user_id = ? OR (shared_with_firm = 1 AND ? = 1 AND (owner_user_id = firm_owner_user_id OR EXISTS
+        (SELECT 1 FROM investor_seats author_seat JOIN users author ON author.id = author_seat.seat_user_id
+          WHERE author_seat.primary_user_id = deal_saved_views.firm_owner_user_id AND author_seat.seat_user_id = deal_saved_views.owner_user_id
+          AND author_seat.accepted_at IS NOT NULL AND author_seat.revoked_at IS NULL AND author.is_active = 1
+          AND author.investor_seat_primary_user_id = author_seat.primary_user_id))))
       ORDER BY (owner_user_id = ?) DESC, is_default DESC, id DESC LIMIT ? OFFSET ?`)
       .bind(x.root, x.company, x.user.id, x.canShare ? 1 : 0, x.user.id, limit + 1, offset).all<ViewRow>();
     const current = await c.env.DB.prepare(`SELECT uid FROM deal_saved_views
@@ -173,7 +198,9 @@ function finish(c: Ctx, x: Viewer, id: string, nonce: string, isDefault: number,
 
 r.post('/views', async c => {
   try {
-    const x = await viewer(c), f = fields(await body(c));
+    const x = await viewer(c);
+    if (x.archived) throw new Refused(400, 'Archived views can only be read or removed.');
+    const f = fields(await body(c));
     if (f.shared && !x.canShare) throw new Refused(403, 'Firm views require an active firm seat account.');
     const id = uid(), nonce = uid();
     const result = await c.env.DB.batch([
@@ -194,7 +221,9 @@ r.post('/views', async c => {
 
 r.patch('/views/:uid', async c => {
   try {
-    const x = await viewer(c), old = await own(c, x), f = fields(await body(c), old);
+    const x = await viewer(c);
+    if (x.archived) throw new Refused(400, 'Archived views can only be read or removed.');
+    const old = await own(c, x), f = fields(await body(c), old);
     if (f.shared && !x.canShare) throw new Refused(403, 'Firm views require an active firm seat account.');
     const nonce = uid();
     const result = await c.env.DB.batch([
@@ -227,13 +256,13 @@ r.delete('/views/:uid', async c => {
         AND (? = ? OR EXISTS (SELECT 1 FROM investor_seats s JOIN users u ON u.id = s.seat_user_id
           WHERE s.primary_user_id = ? AND s.seat_user_id = ? AND u.investor_seat_primary_user_id = s.primary_user_id
           AND s.accepted_at IS NOT NULL AND s.revoked_at IS NULL))`)
-        .bind(x.user.id, JSON.stringify({ company_id: x.company }), old.uid, x.user.id, x.root, x.company, old.version,
+        .bind(x.user.id, JSON.stringify({ company_id: old.company_id }), old.uid, x.user.id, x.root, old.company_id, old.version,
           x.user.id, x.root, x.root, x.user.id),
       c.env.DB.prepare(`DELETE FROM deal_saved_views WHERE uid = ? AND owner_user_id = ? AND firm_owner_user_id = ? AND company_id IS ? AND version = ?
         AND (? = ? OR EXISTS (SELECT 1 FROM investor_seats s JOIN users u ON u.id = s.seat_user_id
           WHERE s.primary_user_id = ? AND s.seat_user_id = ? AND u.investor_seat_primary_user_id = s.primary_user_id
           AND s.accepted_at IS NOT NULL AND s.revoked_at IS NULL))`)
-        .bind(old.uid, x.user.id, x.root, x.company, old.version, x.user.id, x.root, x.root, x.user.id),
+        .bind(old.uid, x.user.id, x.root, old.company_id, old.version, x.user.id, x.root, x.root, x.user.id),
     ]);
     if (!result[1].meta.changes) throw new Refused(409, 'The view changed or is unavailable. Refresh and try again.');
     return c.json({ ok: true });
