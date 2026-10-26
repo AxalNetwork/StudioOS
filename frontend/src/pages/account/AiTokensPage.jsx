@@ -48,7 +48,7 @@ function Waiting({ id }) {
   </>;
 }
 
-function Unreadable({ text, onRetry, testId }) {
+function ReadFailed({ text, onRetry, testId }) {
   return <div className="flex flex-col gap-2" data-testid={testId}>
     <p className="m-0 text-[13.5px] text-axal-ink dark:text-gray-100">{text}</p>
     {onRetry && <button type="button" className={`${BTN.ghost} w-fit`} onClick={onRetry} data-testid={`${testId}-retry`}>Try again</button>}
@@ -69,7 +69,7 @@ function Stop({ stop, buy }) {
 function Available({ me, limit, buy, now }) {
   if (me.status === 'loading') return <div data-testid="ai-tokens-available-loading"><p className="m-0 text-[12.5px] text-axal-muted">Reading…</p><LoadingRows lines={3} /></div>;
   const v = me.status === 'ready' ? availableView(me.data, now) : null;
-  if (!v) return <Unreadable text={UNREADABLE_BALANCE} onRetry={me.reload} testId="ai-tokens-available-unreadable" />;
+  if (!v) return <ReadFailed text={UNREADABLE_BALANCE} onRetry={me.reload} testId="ai-tokens-available-unreadable" />;
   const stop = stopState(me.data, limit.status === 'ready' ? limit.data : null, now);
   const total = v.segments.reduce((n, s) => n + s.micro, 0);
   return <div className="flex flex-col gap-3" data-testid="ai-tokens-available-body">
@@ -115,7 +115,7 @@ function Limits({ me, limit }) {
       <span className="text-[13px] font-bold text-axal-ink dark:text-gray-100">Plan allowance</span>
       {r.plan.state === 'ok' && <span className="text-[13px] text-axal-muted dark:text-gray-400"><span className={MONO}>{r.plan.perMonth}</span> a month{r.plan.from ? ` · From your ${r.plan.from} plan` : ''}</span>}
       {r.plan.state === 'none' && <span className="text-[13px] text-axal-muted dark:text-gray-400">{r.plan.text}</span>}
-      {r.plan.state === 'unreadable' && <Unreadable text="Your plan’s allowance could not be read." onRetry={me.reload} testId="ai-tokens-limit-plan-unreadable" />}
+      {r.plan.state === 'unreadable' && <ReadFailed text="Your plan’s allowance could not be read." onRetry={me.reload} testId="ai-tokens-limit-plan-unreadable" />}
     </div>
     <div className="flex flex-col gap-1.5 border-t border-axal-hairline py-3 dark:border-gray-800" data-testid="ai-tokens-limit-own">
       <div className="flex flex-wrap items-center justify-between gap-2">
@@ -124,7 +124,7 @@ function Limits({ me, limit }) {
       </div>
       {r.own.state === 'loading' && <LoadingRows lines={1} />}
       {r.own.state === 'none' && <span className="text-[13px] text-axal-muted dark:text-gray-400">No limit set.</span>}
-      {r.own.state === 'unreadable' && <Unreadable text="Your monthly limit could not be read. That is not the same as no limit." onRetry={limit.reload} testId="ai-tokens-limit-own-unreadable" />}
+      {r.own.state === 'unreadable' && <ReadFailed text="Your monthly limit could not be read. That is not the same as no limit." onRetry={limit.reload} testId="ai-tokens-limit-own-unreadable" />}
       {r.own.state === 'ok' && <>
         <span className="text-[13px] text-axal-muted dark:text-gray-400"><span className={MONO}>{r.own.spent}</span> of <span className={MONO}>{r.own.limit}</span></span>
         <div className="h-1.5 overflow-hidden rounded-full bg-axal-ground dark:bg-gray-800" role="meter" aria-label="Your monthly limit used" aria-valuemin={0} aria-valuemax={100} aria-valuenow={r.own.pct}>
