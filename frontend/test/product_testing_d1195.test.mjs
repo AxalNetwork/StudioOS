@@ -40,7 +40,9 @@ const PROGRAMMES = [
   prog('omega', 'closed', { places: 5, picked_count: 5, applicant_count: 9 }),
 ];
 const TESTERS = {
-  rows: [{ id: 7, status: 'active', member_name: 'Ada Example', member_email: 'ada@example.com', member_role: 'founder', decided_at: '2026-09-02 10:00:00', availability: 'Evenings', consent_email_at: '2026-09-01', consent_version: 'v2' }],
+  // The read's own shape (services/productTesters.ts present()): the member is nested.
+  rows: [{ id: 7, user_id: 70, status: 'active', decided_at: '2026-09-02 10:00:00', decided_by_name: 'Grace Admin', availability: 'Evenings', consent_email_at: '2026-09-01', consent_version: 'v2',
+    member: { id: 70, name: 'Ada Example', email: 'ada@example.com', role: 'founder', email_verified: true }, programmes: { applied: 3, picked: 1 } }],
   page: 1, page_size: 25, matching: 1, totals: { applied: 6, active: 57, paused: 4, declined: 9, removed: 3, total: 79 },
 };
 
@@ -109,7 +111,9 @@ test('the overview figures: open, waiting with its oldest, places on open progra
 });
 
 test('every block with no read says why, and none says zero or none; a tester row never carries the email', () => {
-  for (const k of ['testerPrograms']) assert.ok(WAITS[k], k);
+  for (const k of ['personaSegment']) assert.ok(WAITS[k], k);
+  // D1204 (#3154) filled the pool's Programs column: its wait is retired.
+  assert.equal(WAITS.testerPrograms, undefined);
   // D1203 (#3153) filled one program's applicants and Activity, and the Applicants tab: their waits are retired.
   for (const k of ['applicants', 'activity', 'partnerApplicants']) assert.equal(WAITS[k], undefined, k);
   // D1201 (#3151) filled the Overview's four: their waits are retired, never drawn beside a read.
@@ -206,11 +210,11 @@ test('Applicants reads the applications; the Tester pool draws the store with no
   } finally { await v.close(); }
   v = await mounted('/admin/platform/product-testing/testers');
   try {
-    assert.equal(v.text('tester-chip-active'), 'Active 57');
+    assert.equal(v.text('tester-chip-active'), '✓ Active 57');
     assert.ok(v.text('tester-applications-link').startsWith('6 applications waiting'));
-    assert.ok(v.text('tester-row').startsWith('Ada Example Founder 2 Sep 2026 Evenings v2 Active'));
+    assert.ok(v.text('tester-row').startsWith('Ada Example Founder 2 Sep 2026 Grace Admin Evenings 3 / 1'));
     assert.ok(!/@example\.com/.test(v.text()), 'no email is drawn');
-    assert.ok(v.text('testing-wait-testerPrograms').includes(NOT_YET));
+    assert.equal(v.by('testing-wait-testerPrograms'), undefined);
   } finally { await v.close(); }
 });
 

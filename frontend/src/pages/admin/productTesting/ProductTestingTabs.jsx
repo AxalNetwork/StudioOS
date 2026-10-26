@@ -1,10 +1,13 @@
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { adminProductTestersApi, adminTestingApi } from '../../../lib/api/productTesting';
-import { Pill } from '../../../ui';
+import { Lightbox, Pill } from '../../../ui';
+import { BELOW_MD_QUERY, usePhoneWidth } from '../../../ui/phone/usePhoneWidth';
 import { ConsoleUnreadable, CONSOLE_LOADING } from '../consoles/shared';
 import { ROLE_OPTIONS, statusLabel, statusTone } from '../../testing/programmeModel';
 import TestingDialog from './TestingDialog';
+import ActionMenu from './ActionMenu';
+import { TesterDialog } from '../approvals/TesterBoard';
 import { dialogFor } from './reviewModel';
 import {
   APPLICANT_SORTS, BOTH_LINE, MAIL_LINE, PARTNER_LINE, SCOPES, STATUS_FILTERS, STEPS_PAGE_SIZE, STEPS_PAGES_MAX,
@@ -12,8 +15,9 @@ import {
   stepsFoot, stepsFor, whenLine,
 } from './programModel';
 import {
-  NOT_YET, PROGRAM_SUBS, RAIL, REACH_STEPS, TESTER_CHIPS, WAITS, blockState, dayOf, needsYou, overviewFigures, profileBars, programHref,
-  profileWord, reachRows, testerRow, weeklySeries, weeklySummary,
+  NOT_YET, POOL_FILTERS, POOL_PAGE_SIZES, POOL_SORTS, PROFILE_ORDER, PROGRAM_SUBS, RAIL, REACH_STEPS, TESTER_CHIPS, WAITS, blockState, dayOf,
+  needsYou, overviewFigures, poolEmpty, poolMenu, poolProfileChart, poolView, profileBars, profileWord, programHref, rangeOf, reachRows,
+  weeklySeries, weeklySummary,
 } from './productTestingModel';
 
 /**
@@ -570,6 +574,23 @@ function ApplicantFilters({ f, set, testId }) {
  * with the canvas's line and no button. A row opens its answers. The
  * withdrawn are hidden until asked, from the applications read.
  */
+/** One applicant's answers to the screening questions: under the row on a desktop, full screen on a phone (TST16d). */
+function Answers({ questions, r }) {
+  return (
+    <>
+      <span className={EYEBROW}>Answers to the screening questions</span>
+      {questions.length ? (
+        <dl className="m-0 mt-1.5 flex flex-col gap-2">
+          {answersOf(questions, r.answers).map((x, i) => (
+            <div key={i}><dt className={`${EYEBROW} !text-[10px]`}>Question {i + 1}</dt><dd className="m-0 text-[13px] font-bold">{x.q}</dd><dd className="m-0 text-[13px]">{x.a}</dd></div>
+          ))}
+        </dl>
+      ) : <p className={`m-0 mt-1 text-[12.5px] ${MUTED}`}>This program asks no screening questions.</p>}
+      <p className={`m-0 mt-2 text-[12px] ${MUTED}`}>Availability: {r.availability} · Agreed to email: {r.consented}</p>
+    </>
+  );
+}
+
 function ProgramApplicants({ p, api, read, onChanged }) {
   const [f, setF] = useState({ q: '', status: '', role: '', consented: '', sort: 'newest' });
   const [open, setOpen] = useState(null);
@@ -583,6 +604,15 @@ function ProgramApplicants({ p, api, read, onChanged }) {
   const view = applicantsView(read.data?.items || [], f);
   const wList = withdrawn.data?.applications?.items || [];
   const done = async (text) => { setAsking(null); setNotice(text); await withdrawn.reload(); onChanged?.(); };
+  const phone = usePhoneWidth(BELOW_MD_QUERY);
+  const deciding = ['open', 'testing', 'closed'].includes(programme.status);
+  // D1204 (TST16f): the same three steps the desktop row offers, as the phone sheet's rows.
+  const actionsFor = (r) => [
+    deciding && r.statusKey !== 'picked' ? { key: 'pick', label: 'Pick…' } : null,
+    deciding && r.statusKey === 'applied' ? { key: 'decline', label: 'Decline…' } : null,
+    r.statusKey === 'applied' || r.statusKey === 'picked' ? { key: 'withdraw', label: 'Withdraw for the member…' } : null,
+  ].filter(Boolean);
+  const opened = phone ? view.rows.find((r) => r.uid === open) : null;
 
   if (read.status === 'loading' && !read.data) return <Skeleton id="testing-program-applicants" />;
   if (read.status === 'unreadable') return <BlockUnreadable id="testing-program-applicants" reason="The applicants could not be read. That is not the same as none." onRetry={read.reload} />;
@@ -596,6 +626,28 @@ function ProgramApplicants({ p, api, read, onChanged }) {
       {notice ? <p role="status" className="m-0 text-[12px] font-semibold text-emerald-700 dark:text-emerald-300" data-testid="testing-applicants-notice">{notice}</p> : null}
       {view.rows.length === 0 ? (
         <p className={`m-0 text-[12.5px] ${MUTED}`} data-testid="testing-applicants-none">{(read.data?.items || []).length ? 'No applicant matches these filters.' : 'No one has applied yet.'}</p>
+      ) : phone ? (
+        <ul className="m-0 flex list-none flex-col gap-2 p-0" data-testid="testing-applicant-cards">
+          {view.rows.map((r) => {
+            const items = canDecide ? actionsFor(r) : [];
+            return (
+              <li key={r.uid} className="flex items-start gap-2 rounded-xl border border-axal-hairline px-3 py-2.5 dark:border-gray-800" data-testid="testing-applicant-card">
+                <button type="button" className="flex min-h-[44px] min-w-0 flex-1 flex-col items-start text-left" onClick={() => setOpen(r.uid)} data-testid={`testing-applicant-open-${r.uid}`}>
+                  <span className="text-[14px] font-bold text-axal-ink dark:text-gray-100">{r.name}</span>
+                  <span className={`text-[12px] ${MUTED}`}>{r.profile} · applied {r.applied}</span>
+                  <span className="mt-1 flex flex-wrap gap-1">
+                    <Pill tone={r.statusKey === 'picked' ? 'ok' : 'neutral'}>{r.status}</Pill>
+                    {r.tester === 'yes' ? <span className={TESTER_BADGE} data-testid="testing-tester-badge">Tester</span> : null}
+                  </span>
+                </button>
+                {items.length ? (
+                  <ActionMenu label={`Actions for ${r.name}`} eyebrow={`⋯ · ${r.name} · applied ${r.applied}`} testId={`testing-applicant-menu-${r.uid}`}
+                    items={items} onPick={(kind) => setAsking({ kind, a: r.raw })} />
+                ) : null}
+              </li>
+            );
+          })}
+        </ul>
       ) : (
         <div className="overflow-x-auto">
           <table className={`${TABLE} min-w-[860px]`} data-testid="testing-applicants-table">
@@ -623,15 +675,7 @@ function ProgramApplicants({ p, api, read, onChanged }) {
                   {open === r.uid ? (
                     <tr data-testid={`testing-answers-${r.uid}`}>
                       <td colSpan={canDecide ? 7 : 6} className="border-b border-axal-hairline bg-violet-50 px-3 py-2.5 dark:border-gray-800 dark:bg-violet-950/40">
-                        <span className={EYEBROW}>Answers to the screening questions</span>
-                        {questions.length ? (
-                          <dl className="m-0 mt-1.5 flex flex-col gap-2">
-                            {answersOf(questions, r.answers).map((x, i) => (
-                              <div key={i}><dt className={`${EYEBROW} !text-[10px]`}>Question {i + 1}</dt><dd className="m-0 text-[13px] font-bold">{x.q}</dd><dd className="m-0 text-[13px]">{x.a}</dd></div>
-                            ))}
-                          </dl>
-                        ) : <p className={`m-0 mt-1 text-[12.5px] ${MUTED}`}>This program asks no screening questions.</p>}
-                        <p className={`m-0 mt-2 text-[12px] ${MUTED}`}>Availability: {r.availability} · Agreed to email: {r.consented}</p>
+                        <Answers questions={questions} r={r} />
                       </td>
                     </tr>
                   ) : null}
@@ -655,6 +699,15 @@ function ProgramApplicants({ p, api, read, onChanged }) {
           </ul>
         ) : null}
       </div>
+      {opened ? (
+        <Lightbox label={`${opened.name}'s answers`} eyebrow="Applicants" title={opened.name} onClose={() => setOpen(null)} testId={`testing-answers-${opened.uid}`}>
+          <div className="mb-2 flex flex-wrap gap-1">
+            <Pill tone={opened.statusKey === 'picked' ? 'ok' : 'neutral'}>{opened.status}</Pill>
+            {opened.tester === 'yes' ? <span className={TESTER_BADGE}>Tester</span> : null}
+          </div>
+          <Answers questions={questions} r={opened} />
+        </Lightbox>
+      ) : null}
       {asking ? (
         <TestingDialog key={`${asking.kind}-${asking.a.uid}`} spec={dialogFor(asking.kind, { p: programme, a: asking.a })} api={api}
           ctx={{ p: programme, a: asking.a }} onClose={() => setAsking(null)} onDone={done} />
@@ -894,21 +947,166 @@ export function ApplicantsTab({ api = adminTestingApi }) {
  * Tester pool (TST9)
  * ------------------------------------------------------------------ */
 
-const CHIP = 'inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-[12px] font-semibold';
+const CHIP = 'inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-[12px] font-semibold max-md:min-h-[40px]';
+const POOL_FIELD = 'rounded-lg border border-axal-hairline bg-white px-2.5 py-1.5 text-[12.5px] text-axal-ink max-md:min-h-[44px] dark:border-gray-700 dark:bg-gray-900 dark:text-gray-100';
+const POOL_PAGES = 10;
+const STATUS_TONE = {
+  active: 'border-emerald-200 bg-emerald-50 text-emerald-800 dark:border-emerald-800 dark:bg-emerald-950 dark:text-emerald-200',
+  paused: 'border-amber-200 bg-amber-50 text-amber-900 dark:border-amber-800 dark:bg-amber-950 dark:text-amber-200',
+  declined: 'border-axal-hairline bg-gray-50 text-axal-muted dark:border-gray-700 dark:bg-gray-800 dark:text-gray-300',
+  removed: 'border-axal-hairline bg-gray-50 text-axal-muted dark:border-gray-700 dark:bg-gray-800 dark:text-gray-300',
+};
+const CHIP_MARK = { active: '✓', paused: '‖', declined: '✕', removed: '–' };
 
-export function TestersTab({ testersApi = adminProductTestersApi }) {
+/** The whole pool, a hundred a page, up to a thousand (as Approvals reads it): what the chips, chart and table read. */
+export async function readPool(api = adminProductTestersApi, filters = {}) {
+  let rows = [];
+  let reply = null;
+  for (let page = 1; page <= POOL_PAGES; page += 1) {
+    reply = await api.list('', page, { pageSize: 100, ...filters });
+    rows = rows.concat(Array.isArray(reply?.rows) ? reply.rows : []);
+    if (rows.length >= Number(reply?.matching || 0) || !(reply?.rows || []).length) break;
+  }
+  const matching = Number(reply?.matching || 0);
+  return { rows, totals: reply?.totals || null, matching, complete: rows.length >= matching };
+}
+
+function PoolChart({ chart }) {
+  const [view, setView] = useState('chart');
+  return (
+    <Block id="testers-profile-chart" title="Testers by profile" meta={`Active · ${chart.active}`}
+      toggle={chart.active ? <ChartToggle id="testers-profile" view={view} onChange={setView} /> : null}
+      foot="Paused testers are not counted. Any profile can be a tester.">
+      {chart.active === 0 ? <p className={`m-0 text-[12.5px] ${MUTED}`} data-testid="testers-profile-none">No active testers yet.</p>
+        : view === 'table' ? (
+          <table className={TABLE} data-testid="testers-profile-table">
+            <thead><tr><th className={TH}>Profile</th><th className={TH}>Active testers</th></tr></thead>
+            <tbody>{chart.bars.map((b) => <tr key={b.role}><td className={TD}>{b.label}</td><td className={`${TD} ${MONO}`}>{b.n}</td></tr>)}</tbody>
+          </table>
+        ) : (
+          <div role="img" aria-label={`Active testers by profile: ${chart.sentence}`} className="grid gap-2" data-testid="testers-profile-bars">
+            {chart.bars.map((b) => (
+              <div key={b.role} className="grid grid-cols-[136px_minmax(0,1fr)_36px] items-center gap-2.5 text-[12.5px] max-md:grid-cols-[112px_minmax(0,1fr)_32px]" aria-hidden="true" title={`${b.label} · ${b.n}`}>
+                <span className="text-axal-ink dark:text-gray-100">{b.label}</span>
+                <span className="h-2 rounded-full bg-gray-100 dark:bg-gray-800"><span className="block h-2 rounded-full bg-violet-600 dark:bg-violet-400" style={{ width: `${(b.n / chart.max) * 100}%` }} /></span>
+                <span className={`${MONO} text-right text-axal-ink dark:text-gray-100`}>{b.n}</span>
+              </div>
+            ))}
+          </div>
+        )}
+    </Block>
+  );
+}
+
+function PoolToolbar({ f, set }) {
+  const sel = (k, label, opts) => (
+    <label className="flex flex-col gap-1">
+      <span className="sr-only">{label}</span>
+      <select className={POOL_FIELD} value={f[k]} onChange={(e) => set({ [k]: e.target.value, page: 1 })} aria-label={label} data-testid={`testers-filter-${k}`}>
+        {opts.map(([v, l]) => <option key={v} value={v}>{l}</option>)}
+      </select>
+    </label>
+  );
+  return (
+    <div className="flex flex-wrap items-end gap-2" data-testid="testers-toolbar">
+      <input type="search" className={`${POOL_FIELD} min-w-[200px] max-md:w-full`} placeholder="Search name" aria-label="Search name" value={f.q}
+        onChange={(e) => set({ q: e.target.value, page: 1 })} data-testid="testers-search" />
+      {sel('role', 'Profile', [['', 'Profile: any'], ...PROFILE_ORDER.map((k) => [k, profileWord(k)]), ['none', 'Profile not recorded']])}
+      {sel('availability', 'Availability given', [['', 'Availability given: any'], ['yes', 'Availability given'], ['no', 'Availability not given']])}
+      {sel('inProgramme', 'In a program now', [['', 'In a program now: any'], ['yes', 'In a program now'], ['no', 'Not in a program now']])}
+      <span className={`${CHIP} border-dashed border-gray-300 text-axal-muted dark:border-gray-600 dark:text-gray-400`} title={WAITS.personaSegment} data-testid="testers-filter-persona">Persona segment · {NOT_YET}</span>
+      {sel('sort', 'Sort', POOL_SORTS.map((s) => [s.key, `Sort: ${s.label}`]))}
+    </div>
+  );
+}
+
+function PoolPager({ v, f, set }) {
+  return (
+    <div className="flex flex-wrap items-center justify-between gap-2 text-[12px]" data-testid="testers-pager">
+      <span className={`${MONO} ${MUTED}`} data-testid="testers-range">{rangeOf(v)}</span>
+      <span className="flex items-center gap-2">
+        <label className={`flex items-center gap-1.5 ${MUTED}`}>Rows per page
+          <select className={POOL_FIELD} value={f.pageSize} onChange={(e) => set({ pageSize: Number(e.target.value), page: 1 })} data-testid="testers-page-size">
+            {POOL_PAGE_SIZES.map((n) => <option key={n} value={n}>{n}</option>)}
+          </select>
+        </label>
+        <button type="button" className={`${POOL_FIELD} disabled:opacity-40`} aria-label="Previous page" disabled={v.page <= 1} onClick={() => set({ page: v.page - 1 })} data-testid="testers-prev">‹</button>
+        <span className={MONO} data-testid="testers-page">{v.page} of {v.pages}</span>
+        <button type="button" className={`${POOL_FIELD} disabled:opacity-40`} aria-label="Next page" disabled={v.page >= v.pages} onClick={() => set({ page: v.page + 1 })} data-testid="testers-next">›</button>
+      </span>
+    </div>
+  );
+}
+
+/** The Tester pool (TST9), its empty (TST12b), loading and failed states (TST13, TST14), with D1042's dialogs from the ⋯ menu. */
+export function TestersTab({ testersApi = adminProductTestersApi, Dialog = TesterDialog }) {
   const [status, setStatus] = useState('active');
-  const read = useRead(useCallback(() => testersApi.list(status), [testersApi, status]));
+  const [f, setF] = useState(POOL_FILTERS);
+  const [dialog, setDialog] = useState(null);
+  const [notice, setNotice] = useState(null);
+  const set = (patch) => setF((x) => ({ ...x, ...patch }));
+  const read = useRead(useCallback(() => readPool(testersApi), [testersApi]));
+  const wantIn = Boolean(f.inProgramme);
+  const inRead = useRead(useCallback(() => (wantIn ? readPool(testersApi, { inProgramme: 'yes' }) : Promise.resolve(null)), [testersApi, wantIn]));
+  const inSet = useMemo(() => (inRead.status === 'ready' && inRead.data ? new Set(inRead.data.rows.map((r) => r.id)) : null), [inRead.status, inRead.data]);
+  const rows = read.data?.rows || [];
   const totals = read.data?.totals;
+  const v = useMemo(() => poolView(rows, status, f, inSet), [rows, status, f, inSet]);
+  const chart = useMemo(() => poolProfileChart(rows), [rows]);
+  const byId = useMemo(() => new Map(rows.map((r) => [r.id, r])), [rows]);
+  const done = (line) => { setDialog(null); setNotice(line); read.reload(); if (wantIn) inRead.reload(); };
+  const ask = (t, key) => {
+    if (key === 'pause') setDialog({ kind: 'pause-remove', tester: byId.get(t.id) });
+    else if (key === 'remove') setDialog({ kind: 'remove', tester: byId.get(t.id) });
+    else if (key === 'resume') setDialog({ kind: 'resume', tester: byId.get(t.id) });
+  };
+
+  if (read.status === 'loading' && !read.data) {
+    return (
+      <div className="flex flex-col gap-3" data-testid="testing-testers">
+        <section className={`${CARD} flex flex-col gap-2`} aria-busy="true" data-testid="testers-loading">
+          <h3 className={H3}>Reading…</h3>
+          {[0, 1, 2, 3].map((i) => <span key={i} className="block h-3 animate-pulse rounded bg-gray-100 dark:bg-gray-800" style={{ width: `${90 - i * 12}%` }} aria-hidden="true" />)}
+        </section>
+      </div>
+    );
+  }
+  if (read.status === 'unreadable') {
+    return (
+      <div className="flex flex-col gap-3" data-testid="testing-testers">
+        <section className={`${CARD} flex flex-col items-center gap-2 py-8 text-center`} data-testid="testers-unreadable">
+          <span aria-hidden="true" className="text-[20px] font-extrabold text-red-700 dark:text-red-300">!</span>
+          <h3 className={H3}>We could not load the tester pool.</h3>
+          <p className={`m-0 text-[12.5px] ${MUTED}`}>The rest of Platform still works. This is not a claim that there are none.</p>
+          <button type="button" className={`${BTN} max-md:min-h-[44px]`} onClick={read.reload} data-testid="testers-retry">Try again</button>
+        </section>
+      </div>
+    );
+  }
+  if (poolEmpty(totals)) {
+    return (
+      <div className="flex flex-col gap-3" data-testid="testing-testers">
+        <section className={`${CARD} flex flex-col items-center gap-2 py-8 text-center`} data-testid="testers-empty">
+          <span aria-hidden="true" className={`text-[20px] ${MUTED}`}>○</span>
+          <h3 className={H3}>No testers yet.</h3>
+          <p className={`m-0 text-[12.5px] ${MUTED}`}>Members become testers when an admin approves their application in Approvals.</p>
+          <Link to="/admin/approvals/product-testers" className={`${BTN} no-underline max-md:min-h-[44px]`} data-testid="testers-empty-approvals">Open Approvals</Link>
+        </section>
+      </div>
+    );
+  }
+
+  const label = TESTER_CHIPS.find((c) => c.status === status)?.label || status;
   return (
     <div className="flex flex-col gap-4" data-testid="testing-testers">
       <p className={`m-0 text-[12.5px] ${MUTED}`}>A tester is an account an admin approved to test products. Any profile can apply except Admin. Tester applications are decided in Approvals.</p>
       <div className="flex flex-wrap items-center gap-1.5" role="radiogroup" aria-label="Tester status">
         {TESTER_CHIPS.map((c) => (
-          <button key={c.status} type="button" role="radio" aria-checked={status === c.status} onClick={() => setStatus(c.status)}
+          <button key={c.status} type="button" role="radio" aria-checked={status === c.status} onClick={() => { setStatus(c.status); set({ page: 1 }); }}
             className={`${CHIP} ${status === c.status ? 'border-violet-200 bg-violet-50 text-axal-ink dark:border-violet-700 dark:bg-violet-950 dark:text-gray-100' : 'border-axal-hairline text-axal-ink dark:border-gray-700 dark:text-gray-100'}`}
             data-testid={`tester-chip-${c.status}`}>
-            {c.label} <span className={MONO}>{totals ? totals[c.status] : '—'}</span>
+            <span aria-hidden="true">{CHIP_MARK[c.status]}</span> {c.label} <span className={MONO}>{totals ? totals[c.status] : '—'}</span>
+            {c.status === 'declined' || c.status === 'removed' ? <span className={`font-normal ${MUTED}`}>· not in the pool</span> : null}
           </button>
         ))}
         {totals ? (
@@ -917,35 +1115,52 @@ export function TestersTab({ testersApi = adminProductTestersApi }) {
           </Link>
         ) : null}
       </div>
-      {read.status === 'loading' && <p className={`text-sm ${MUTED}`}>{CONSOLE_LOADING}</p>}
-      {read.status === 'unreadable' && <ConsoleUnreadable what="The tester pool" onRetry={read.reload} />}
-      {read.status === 'ready' && ((read.data?.rows || []).length === 0 ? (
-        <p className={`m-0 text-[12.5px] ${MUTED}`} data-testid="testers-none">No {TESTER_CHIPS.find((c) => c.status === status)?.label.toLowerCase()} testers. Members become testers when an admin approves their application in Approvals.</p>
-      ) : (
-        <div className="overflow-x-auto">
-          <table className="w-full min-w-[640px] border-collapse text-left text-[12.5px]" data-testid="testers-table">
-            <thead>
-              <tr className={EYEBROW}>
-                {['Name', 'Profile', 'Tester since', 'Availability', 'Email consent version', 'Status'].map((h) => <th key={h} className="border-b border-axal-hairline px-2 py-2 dark:border-gray-800">{h}</th>)}
-              </tr>
-            </thead>
-            <tbody>
-              {read.data.rows.map(testerRow).map((t) => (
-                <tr key={t.id} className="border-b border-axal-hairline dark:border-gray-800" data-testid="tester-row">
-                  <td className="px-2 py-2 font-semibold">{t.name}</td>
-                  <td className="px-2 py-2">{profileWord(t.role)}</td>
-                  <td className={`px-2 py-2 ${MONO}`}>{dayOf(t.since) || 'Not recorded'}</td>
-                  <td className="px-2 py-2">{t.availability || 'Not given'}</td>
-                  <td className={`px-2 py-2 ${MONO}`}>{t.consentVersion || 'No consent'}</td>
-                  <td className="px-2 py-2">{TESTER_CHIPS.find((c) => c.status === t.status)?.label || t.status}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-          <p className={`mt-2 text-[12px] ${MUTED}`}>{read.data.matching} {read.data.matching === 1 ? 'tester' : 'testers'} · page {read.data.page}</p>
-        </div>
-      ))}
-      <Wait id="testerPrograms" title="Approved by, and programs" />
+      <div className="grid gap-3.5 lg:grid-cols-2"><PoolChart chart={chart} /></div>
+      <section className={`${CARD} flex flex-col gap-2.5`} data-testid="testers-list">
+        <PoolToolbar f={f} set={set} />
+        {!read.data.complete ? <p className="m-0 text-[12px] text-amber-800 dark:text-amber-300" data-testid="testers-partial">Search, filters and sort cover the first {rows.length} of {read.data.matching} testers.</p> : null}
+        {v.tooShort ? <p className={`m-0 text-[12px] ${MUTED}`}>Search from two characters.</p> : null}
+        {notice ? <p role="status" className="m-0 text-[12px] font-semibold text-emerald-700 dark:text-emerald-300" data-testid="testers-notice">{notice}</p> : null}
+        {wantIn && inRead.status === 'unreadable' ? (
+          <p className={`m-0 text-[12.5px] ${MUTED}`} data-testid="testers-in-programme-unreadable">Who is in a program now could not be read, so this filter shows nobody rather than guess. <button type="button" className={LINK} onClick={inRead.reload}>Try again</button></p>
+        ) : wantIn && inRead.status === 'loading' ? <p className={`m-0 text-[12.5px] ${MUTED}`}>Reading…</p>
+          : v.rows.length === 0 ? (
+            <p className={`m-0 text-[12.5px] ${MUTED}`} data-testid="testers-none">{(totals?.[status] ?? 0) === 0
+              ? `No ${label.toLowerCase()} testers. Members become testers when an admin approves their application in Approvals.`
+              : 'No tester matches these filters.'}</p>
+          ) : (
+            <div className="overflow-x-auto">
+              <table className={`${TABLE} min-w-[960px]`} data-testid="testers-table">
+                <thead><tr>
+                  {['Name', 'Profile', 'Tester since', status === 'active' ? 'Approved by' : 'Decided by', 'Availability', 'Programs', 'Email consent', 'Status', ''].map((h, i) => <th key={i} className={TH}>{h}</th>)}
+                </tr></thead>
+                <tbody>
+                  {v.rows.map((t) => (
+                    <tr key={t.id} data-testid="tester-row">
+                      <td className={`${TD} font-bold`}>{t.name}</td>
+                      <td className={TD}>{profileWord(t.role)}</td>
+                      <td className={`${TD} ${MONO}`}>{dayOf(t.since) || 'Not recorded'}</td>
+                      <td className={TD}>{t.decidedBy || <span className={MUTED}>Not recorded</span>}</td>
+                      <td className={`${TD} ${t.availability ? '' : MUTED}`}>{t.availability || 'Not given'}</td>
+                      <td className={TD}>{t.programmes
+                        ? <><span className={MONO} data-testid="tester-programs">{t.programmes.applied} / {t.programmes.picked}</span><span className={`block text-[11px] ${MUTED}`}>applied / picked</span></>
+                        : <span className={MUTED}>Not recorded</span>}</td>
+                      <td className={`${TD} ${MONO}`}>{t.consentVersion || <span className={MUTED}>No consent</span>}</td>
+                      <td className={TD}><span className={`${CHIP} ${STATUS_TONE[t.status] || ''}`}><span aria-hidden="true">{CHIP_MARK[t.status]}</span> {TESTER_CHIPS.find((c) => c.status === t.status)?.label || t.status}</span></td>
+                      <td className={TD}>
+                        <ActionMenu label={`More actions for ${t.name}`} eyebrow={`⋯ · ${t.name}`} testId={`tester-menu-${t.id}`}
+                          items={poolMenu(t.status).map((it) => (it.key === 'open' ? { ...it, to: `/admin/approvals/product-testers/${encodeURIComponent(t.id)}` } : it))}
+                          onPick={(key) => ask(t, key)} />
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        <PoolPager v={v} f={f} set={set} />
+      </section>
+      {dialog?.tester ? <Dialog kind={dialog.kind} tester={dialog.tester} onClose={() => setDialog(null)} onDone={done} /> : null}
     </div>
   );
 }
