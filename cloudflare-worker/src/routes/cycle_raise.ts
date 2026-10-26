@@ -75,6 +75,15 @@
  *     → the fund directory's answer, each fund with `fit`, `warm_paths`, `in_pipeline`;
  *       `verified_investors: { count }`, never names. `stage` is refused (400), as the directory refuses it.
  *
+ *   D1193 (#3127): Outreach, Activity and Eadwyn's proposals (`services/capRelTabs.ts`).
+ *   GET  /capital-relationships/activity?project=&q=&kind=&investor=&page=   every logged change, 25 a page
+ *   GET  /capital-relationships/materials?project=   per investor: deck link, data room (its owner alone), call
+ *   GET  /capital-relationships/proposals?project=   the caller's open proposals and drafts
+ *   POST /capital-relationships/proposals            { prospect_id, event_id }  one run over a logged note
+ *   POST /capital-relationships/proposals/:uid/accept { edited? }  written through the one prospect writer
+ *   POST /capital-relationships/drafts               { prospect_id, purpose, via? }  one run; the founder sends it
+ *   A draft or proposal is edited or dismissed through `/api/ai/rail/proposals/:uid/decide`.
+ *
  * The reads are `services/raiseCycle.ts`; the writes are
  * `services/raiseWriters.ts` (D691, #1700), each logging one row per record
  * it writes through `logCycleWrite` (decision 12). Every id a route takes,
@@ -142,6 +151,7 @@ import { resolveActiveCompany, ACTIVE_COMPANY_HEADER } from '../middleware/activ
 import { projectInActiveCompany } from '../services/tenancyScope';
 import { HolderError } from '../services/capTableWrites';
 import { MatchQueryError, commitmentsRead, matchRead } from '../services/capRelReads';
+import { CapRelTabError, DRAFT_OPTION, NOTE_OPTION, PROPOSAL_PAGE, acceptProposal, activityRead, draftMessage, materialsRead, proposalsRead, proposeFromNote, prospectRecord } from '../services/capRelTabs';
 import { recomputePmf, pmfHistory, pmfModelRead } from '../services/scoring/pmfStore';
 import { dataRoomOwner, roomSummary } from './data_room';
 import { safeCard, type Card } from '../services/cycleCards';
@@ -431,6 +441,70 @@ cycleRaise.get('/capital-relationships/match', async (c) => {
     console.error('[cycle_raise] match unreadable:', (e as Error)?.name || 'error');
     return c.json({ state: 'unreadable', detail: 'The fund directory could not be read. Try again.' }, 500);
   }
+});
+
+// D1193 (#3127): Outreach, Activity and Eadwyn's proposals. `scope` admits the
+// venture's founder and accepted co-founders, and refuses staff (D1191).
+function capRelTabFailed(c: any, e: unknown, what: string): Response {
+  if (e instanceof CapRelTabError) return c.json({ code: e.code, detail: e.sentence, ...(e.field ? { field: e.field } : {}) }, e.status);
+  if (e instanceof WriterError) return writeFailed(c, e);
+  console.error(`[cycle_raise] ${what} failed:`, (e as Error)?.name || 'error');
+  return c.json({ state: 'unreadable', detail: 'That could not be done just now. Try again.' }, 500);
+}
+
+cycleRaise.get('/capital-relationships/activity', async (c) => {
+  const s = await scope(c);
+  if (s instanceof Response) return s;
+  try { return c.json(await activityRead(c.env, s.projectId, (k) => c.req.query(k))); } catch (e) { return capRelTabFailed(c, e, 'activity'); }
+});
+
+cycleRaise.get('/capital-relationships/materials', async (c) => {
+  const s = await scope(c);
+  if (s instanceof Response) return s;
+  try { return c.json(await materialsRead(c.env, s.projectId, isRoomOwner(s))); } catch (e) { return capRelTabFailed(c, e, 'materials'); }
+});
+
+cycleRaise.get('/capital-relationships/proposals', async (c) => {
+  const s = await scope(c);
+  if (s instanceof Response) return s;
+  try { return c.json(await proposalsRead(c.env, s.projectId, Number(s.user.id))); } catch (e) { return capRelTabFailed(c, e, 'proposals'); }
+});
+
+cycleRaise.post('/capital-relationships/proposals', async (c) => {
+  const s = await scope(c);
+  if (s instanceof Response) return s;
+  const b = await body(c);
+  try {
+    const record = Number.isSafeInteger(Number(b.prospect_id)) && Number(b.prospect_id) > 0 ? prospectRecord(Number(b.prospect_id)) : null;
+    const rail = railFor(c, { page: PROPOSAL_PAGE, option: NOTE_OPTION }, record);
+    const { result, proposals } = await proposeFromNote(c.env, s.projectId, Number(s.user.id), b, rail);
+    if (!proposals) return refuseRun(c, result) || refuse(c, 503, { code: 'ai_unavailable', message: 'Eadwyn could not read that note just now. Try again.' });
+    return c.json({ proposals });
+  } catch (e) { return capRelTabFailed(c, e, 'proposals run'); }
+});
+
+cycleRaise.post('/capital-relationships/proposals/:uid/accept', async (c) => {
+  const s = await scope(c);
+  if (s instanceof Response) return s;
+  const uid = c.req.param('uid');
+  if (!/^[0-9a-f-]{36}$/i.test(uid)) return c.json({ code: 'unknown_proposal', detail: 'That proposal is no longer open.' }, 404);
+  const b = await body(c);
+  const edited = b.edited && typeof b.edited === 'object' && !Array.isArray(b.edited) ? b.edited as Record<string, unknown> : null;
+  try { return c.json(await acceptProposal(c.env, s.projectId, Number(s.user.id), uid, edited)); } catch (e) { return capRelTabFailed(c, e, 'accept'); }
+});
+
+cycleRaise.post('/capital-relationships/drafts', async (c) => {
+  const s = await scope(c);
+  if (s instanceof Response) return s;
+  const b = await body(c);
+  try {
+    const record = Number.isSafeInteger(Number(b.prospect_id)) && Number(b.prospect_id) > 0 ? prospectRecord(Number(b.prospect_id)) : null;
+    const rail = railFor(c, { page: PROPOSAL_PAGE, option: DRAFT_OPTION }, record);
+    const { result, draft, dropped } = await draftMessage(c.env, s.projectId, Number(s.user.id), b, rail);
+    if (dropped) return c.json({ code: 'draft_dropped', detail: 'Eadwyn’s draft named a figure, so it was not kept. Try again, or write it yourself.' }, 422);
+    if (!draft) return refuseRun(c, result) || refuse(c, 503, { code: 'ai_unavailable', message: 'Eadwyn could not draft that just now. Try again.' });
+    return c.json({ draft }, 201);
+  } catch (e) { return capRelTabFailed(c, e, 'draft run'); }
 });
 
 cycleRaise.get('/pmf/history', async (c) => {
