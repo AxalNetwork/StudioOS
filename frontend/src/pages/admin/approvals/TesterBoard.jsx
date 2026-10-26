@@ -169,8 +169,11 @@ function TesterTable({ tab, rows, from }) {
   );
 }
 
-/** Dialogs A, B and C, and Resume. `kind` is approve, decline, pause-remove, remove or resume. */
-function TesterDialog({ kind, tester, onClose, onDone }) {
+/**
+ * Dialogs A, B and C, and Resume. `kind` is approve, decline, pause-remove, remove or resume.
+ * D1204: also the dialogs Product testing's Tester pool opens from its ⋯ menu.
+ */
+export function TesterDialog({ kind, tester, onClose, onDone }) {
   const name = tester.member?.name || 'This member';
   const [note, setNote] = useState('');
   const [reason, setReason] = useState('');

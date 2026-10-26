@@ -18,9 +18,11 @@ import { createRoot } from 'react-dom/client';
 import { MemoryRouter } from 'react-router-dom';
 import { installDocument } from './_contracts_dom.mjs';
 import BuildPlan from '../src/pages/cycles/BuildPlan.jsx';
+import { readAllStates } from '../src/pages/cycles/BuildPlanProgress.jsx';
+import { dayMon } from '../src/pages/cycles/buildPlanModel.js';
 import {
-  bucketOf, chartLabel, counterText, filterRows, githubConnection, pageRows, phoneStatus, pickedRepositories, progressRows, sendRefusal, sendable,
-  stageChart, stageLead, trailNodes, waitingLinks,
+  BUILT_UNREPORTED, STATES_UNREAD, bucketOf, builtPerWeek, chartLabel, counterText, filterRows, githubConnection, pageRows, phoneStatus, pickedRepositories, progressRows, sendRefusal, sendable,
+  laterStage, mondayOf, stageChart, stageLead, trailNodes, waitingLinks, weekLine,
 } from '../src/pages/cycles/buildProgressModel.js';
 
 const h = React.createElement;
@@ -109,6 +111,75 @@ test('the chart: each item in its furthest bucket, the lead never claims 0 built
   assert.doesNotMatch(stageLead(rows), /\b0 of\b/, 'no read carries built, so it is never counted as none');
   assert.match(chartLabel(chart), /In Solution design, 1 is not recorded\./);
   assert.equal(stageLead([]), 'No item is accepted yet, so there is nothing to show by stage.');
+});
+
+// D968: the states read, as the Worker answers it (services/buildStates.ts).
+const NO_DEPLOY = { reported: false, reason: 'No connector reports a deploy here' };
+const NO_TEST = { reported: false, reason: 'No test is linked to this item' };
+const STATES = (mustAt = '2026-10-14 10:00:00', roadAt = '2026-10-20T12:00:00Z') => [
+  { plan_item_uid: MUST, kind: 'must-have', landed_table: 'mvp_features', landed_id: '5', built: { reported: true, done: true, at: mustAt, source: 'Build › MVP scope', value: 'Done' }, live: NO_DEPLOY, tested: NO_TEST },
+  { plan_item_uid: FEAT, kind: 'feature', landed_table: 'mvp_features', landed_id: '6', built: { reported: true, done: false, source: 'Build › MVP scope', value: 'In Progress' }, live: NO_DEPLOY, tested: NO_TEST },
+  { plan_item_uid: ROAD, kind: 'roadmap', landed_table: 'roadmap_okrs', landed_id: '9',
+    built: { reported: true, done: true, at: roadAt, source: 'Connector · GitHub release', value: 'Spring release' },
+    live: { reported: true, done: true, at: roadAt, source: 'Connector · GitHub release', value: 'Spring release' }, tested: NO_TEST },
+  { plan_item_uid: STEP, kind: 'formation-step', landed_table: 'formation_steps', landed_id: '3', built: { reported: true, done: true, at: null, at_reason: 'Formation steps store no day a step was done', source: 'Build › Formation', value: 'Done' } },
+];
+
+test('D968 the later stages: each fills from the states read, an absent stage stays Not recorded with its reason, a failed read says so', () => {
+  const by = Object.fromEntries(progressRows(PLAN(), HANDOFFS, LINKS, STATES()).map((r) => [r.uid, r]));
+  assert.deepEqual(by[MUST].stages.built, { state: 'done', text: '14 Oct', source: 'Build › MVP scope', at: '2026-10-14 10:00:00' });
+  assert.deepEqual(by[MUST].stages.live, { state: 'unrecorded', text: 'Not recorded', source: 'No connector reports a deploy here' });
+  assert.deepEqual(by[MUST].stages.tested, { state: 'unrecorded', text: 'Not recorded', source: 'No test is linked to this item' });
+  assert.deepEqual(by[FEAT].stages.built, { state: 'notyet', text: 'Not yet', source: null }, 'only a source saying it is not done is "Not yet"');
+  assert.deepEqual(by[ROAD].stages.live, { state: 'done', text: 'Spring release · 20 Oct', source: 'Connector · GitHub release', at: '2026-10-20T12:00:00Z' });
+  assert.equal(by[ROAD].stages.built.text, '20 Oct', 'Built carries the day, not the release name');
+  assert.deepEqual(by[STEP].stages.built, { state: 'done', text: 'Day not recorded', source: 'Build › Formation', at: null, note: 'Formation steps store no day a step was done' }, 'done, never a guessed day');
+  assert.deepEqual(['built', 'live', 'tested'].map((k) => by[RISK].stages[k].state), ['na', 'na', 'na']);
+  assert.deepEqual(by[DOOR].stages.live, { state: 'unrecorded', text: 'Not recorded', source: 'No read here carries this stage yet' }, 'an item the read does not name is Not recorded');
+  assert.deepEqual([MUST, ROAD, STEP, FEAT].map((u) => by[u].bucket), ['built', 'built', 'built', 'sent']);
+  assert.equal(stageLead(Object.values(by)), '3 of 6 accepted items are built or live.');
+  // A failed read: every applicable later stage is Not recorded with that reason.
+  const blind = Object.fromEntries(progressRows(PLAN(), HANDOFFS, LINKS, null).map((r) => [r.uid, r]));
+  assert.deepEqual(blind[MUST].stages.built, { state: 'unrecorded', text: 'Not recorded', source: STATES_UNREAD });
+  assert.equal(blind[RISK].stages.built.state, 'na');
+  // Not yet for every reported stage: the lead says none is built, never that it is not recorded.
+  const pending = progressRows(PLAN(), HANDOFFS, LINKS, [STATES()[1]]);
+  assert.equal(stageLead(pending), '6 accepted items, 3 sent to a tool. None is built or live yet.');
+  assert.equal(laterStage('prototype-test', 'tested', [], { tested: { reported: true, done: true, at: null, source: 'Validate › Experiments', value: 'Setup took a day' } }).text, 'Setup took a day · Day not recorded');
+  assert.equal(laterStage('feature', 'built', [], { built: { reported: true, done: true, at: 'garbage', source: 'Build › MVP scope' } }).text, 'Day not recorded', 'an unreadable day is never shown as one');
+});
+
+test('D968 Built per week: twelve Monday weeks from the recorded days; an undated or earlier item is counted apart, never in a week', () => {
+  assert.equal(mondayOf('2026-10-26 09:00:00'), '2026-10-26');
+  assert.equal(mondayOf('2026-10-25'), '2026-10-19', 'a Sunday belongs to the week before');
+  assert.equal(mondayOf(null), null);
+  const rows = progressRows(PLAN(), HANDOFFS, LINKS, STATES());
+  const s = builtPerWeek(rows, '2026-10-26T12:00:00Z');
+  assert.equal(s.reported, true);
+  assert.equal(s.weeks.length, 12);
+  assert.deepEqual(s.weeks[0], { week: '2026-08-10', label: '10 Aug', n: 0, current: false });
+  assert.deepEqual(s.weeks.at(-1), { week: '2026-10-26', label: '26 Oct', n: 0, current: true });
+  assert.deepEqual(s.weeks.filter((w) => w.n).map((w) => [w.week, w.n]), [['2026-10-12', 1], ['2026-10-19', 1]]);
+  assert.equal(s.undated, 1);
+  assert.equal(weekLine(s), '2 items built in the last 12 weeks, by the day each was built. 1 built item carries no day, so it is in no week.');
+  const old = builtPerWeek(progressRows(PLAN(), HANDOFFS, LINKS, STATES('2026-01-05 10:00:00')), '2026-10-26T12:00:00Z');
+  assert.equal(old.earlier, 1);
+  assert.equal(weekLine(old), '1 item built in the last 12 weeks, by the day each was built. 1 built before these weeks. 1 built item carries no day, so it is in no week.');
+  const none = builtPerWeek(progressRows(PLAN(), HANDOFFS, LINKS, []), '2026-10-26T12:00:00Z');
+  assert.equal(none.reported, false, 'no source reports Built, so no week is drawn as 0');
+  assert.equal(weekLine(none), BUILT_UNREPORTED);
+  assert.equal(builtPerWeek(progressRows(PLAN(), HANDOFFS, LINKS, [STATES()[1]]), '2026-10-26T12:00:00Z').reported, true, 'a reported Not yet draws real, empty weeks');
+});
+
+test('D968 readAllStates: every page until the total; a failed page fails the read, never a short list', async () => {
+  const calls = [];
+  const client = { states: async (_p, _s, q) => { calls.push(q); return { states: Array.from({ length: q.offset ? 200 : 500 }, (_, k) => ({ plan_item_uid: `u${q.offset + k}` })), total: 700 }; } };
+  const all = await readAllStates(3, 'venture', client);
+  assert.equal(all.length, 700);
+  assert.deepEqual(calls, [{ limit: 500, offset: 0 }, { limit: 500, offset: 500 }]);
+  let n = 0;
+  const flaky = { states: async () => { n += 1; if (n === 2) throw new Error('503'); return { states: Array.from({ length: 500 }, () => ({})), total: 900 }; } };
+  await assert.rejects(readAllStates(3, 'venture', flaky));
 });
 
 test('the table: search, Module, Stage and Tool, the sort, and pages of 25', () => {
@@ -267,6 +338,37 @@ test('mounted: failed sends and links reads each say so, and their stages read N
     assert.match(r.all(), /What came back from your tools could not be read\./);
     assert.match(r.textOf('plan-progress-table'), /Not recorded.*Sends could not be read/s);
     assert.ok(!r.has('plan-back-in-door'));
+    assert.equal(r.count('plan-progress-row'), 6, 'the plan still draws');
+  } finally { await r.close(); }
+});
+
+test('mounted D968: Built, Live and Tested fill from the states read, with the day not recorded said, and Built per week draws bars', async () => {
+  const ago = (d) => new Date(Date.now() - d * 864e5).toISOString().slice(0, 10);
+  const mustAt = `${ago(1)} 10:00:00`;
+  const r = await mounted({ handle: handler({ '/cycles/build/plan/states?': { answer: () => response({ states: STATES(mustAt, `${ago(8)}T12:00:00Z`), total: 4, limit: 500, offset: 0 }) } }) });
+  try {
+    assert.ok(r.requests.some((q) => /\/cycles\/build\/plan\/states\?project=3&scope=venture&limit=500&offset=0$/.test(q.url)), 'the states read is made, first page');
+    assert.equal(r.textOf('plan-progress-lead'), '3 of 6 accepted items are built or live.');
+    assert.match(r.textOf('plan-progress-table'), new RegExp(`One-day setup wizard.*${dayMon(mustAt)}.*Build › MVP scope.*Not recorded.*No connector reports a deploy here`, 's'));
+    assert.match(r.textOf('plan-progress-table'), /Spring release · \d+ \w{3}.*Connector · GitHub release/s);
+    assert.deepEqual(r.texts('plan-progress-cell-note'), ['Formation steps store no day a step was done']);
+    assert.ok(!r.has('plan-progress-week-unread'), 'reported Built is drawn, not the dashed line');
+    assert.ok(r.has('plan-progress-week-bars'));
+    assert.equal(r.props('plan-progress-week-bars')['aria-label'], '2 items built in the last 12 weeks, by the day each was built. 1 built item carries no day, so it is in no week.');
+    assert.equal(r.props(`plan-progress-week-${mondayOf(mustAt)}`).title.endsWith(': 1'), true);
+    assert.equal(r.count('plan-progress-row'), 6);
+    assert.ok(!/Built, live and tested could not be read/.test(r.all()));
+    assert.deepEqual(writes(r), [], 'reading the states writes nothing');
+  } finally { await r.close(); }
+});
+
+test('mounted D968: a failed states read says so, its stages read Not recorded, and Built per week stays the dashed line', async () => {
+  const r = await mounted({ handle: handler({ '/cycles/build/plan/states?': { answer: () => response({}, 503) } }) });
+  try {
+    assert.match(r.all(), /Built, live and tested could not be read\. This is not a claim that nothing was built\./);
+    assert.match(r.textOf('plan-progress-table'), /Not recorded.*Built, live and tested could not be read/s);
+    assert.ok(r.has('plan-progress-week-unread'));
+    assert.equal(r.textOf('plan-progress-lead'), '6 accepted items, 3 sent to a tool. Built and live are not recorded here yet.');
     assert.equal(r.count('plan-progress-row'), 6, 'the plan still draws');
   } finally { await r.close(); }
 });

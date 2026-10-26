@@ -206,10 +206,11 @@ export const LEGAL_SLOT = {
   title: 'Legal paper',
   line: 'Which templates this deal uses is not read here yet: no read ties a template to a deal. The paper sent to you shows on Documents as it goes out.',
 };
+/** D1027: staff and the founder read the cap table elsewhere; an investor reads the panel (CT15) here. */
 export const CAP_TABLE_SLOT = {
-  eye: 'CT15 · Cap table canvas',
+  eye: 'CT15 · Cap table',
   title: 'Cap table',
-  line: 'The cap table panel is not read here yet. It is CAPTABLE’s panel (#2864), shown at the level the founder shares with you.',
+  line: 'Investors read the cap table here, at the level the founder shares with them. The founder keeps it in Raise › Cap table.',
 };
 export const ROUTES = [
   { key: 'direct', title: 'Direct', line: 'You sign and pay as yourself or your firm.' },

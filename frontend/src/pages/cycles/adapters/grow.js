@@ -340,7 +340,7 @@ export const RECORDS = {
       theme: r.theme ?? null,
       roadmap_item: r.roadmap_item_label ?? null,
       status: pill(FEEDBACK_STATUS, r.status),
-    }, edit: editOf(r.uid == null ? null : { uid: r.uid }, r, ['status', 'theme', 'roadmap_item_label']) }),
+    }, edit: editOf(r.uid == null ? null : { uid: r.uid }, r, ['status', 'theme', 'roadmap_item_ref', 'roadmap_item_label']) }),
     filters: [{ key: 'status', label: 'Status', options: options(FEEDBACK_STATUS) }],
     sorts: [{ key: '-created_at', label: 'Newest' }, { key: 'created_at', label: 'Oldest' }, { key: 'theme', label: 'Theme' }],
   },

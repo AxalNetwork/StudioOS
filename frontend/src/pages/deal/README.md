@@ -4,7 +4,8 @@ D1152 (#3057, part 4 of #2421) and D1153 and D1155 (parts 5 and 7): the deal pag
 "Investor Deal Page" canvas (DL1, DL2, DL14, DL18–DL23, DL24a;
 `design/incoming/Investor Deal Page.dc.html`). The page itself is
 `../DealRoomPage.jsx`, which keeps the shell and the tabs part 6 owns
-(Invitations, Transfers); part 5's working tabs live here since D1153; the tab
+(Invitations, Transfers); part 5's working tabs live here since D1153, and part
+6's reading tabs since D1154; the tab
 addresses are `../dealPageModel.js` (D1148).
 
 - `dealFrameModel.js` — the pure model every file here and the test share:
@@ -43,6 +44,16 @@ addresses are `../dealPageModel.js` (D1148).
   (DL16, Match to my Mercury), an Admin (DL17a, Record a wire behind the IC
   gate, and D752's shared proof of funds on HQ) and an Operating Partner
   (DL17b, read only). Never an investor's note.
+- `dealInsightsModel.js` — D1154's pure model of the reading tabs over
+  D1151's reads: masked before the NDA, unreadable, or open block by block;
+  each person as they published themselves; coverage as a band per axis,
+  never a number; TAM, SAM and SOM with their source or why none; the
+  twelve months of shared figures, where a month not reported is a gap and
+  never 0; and the slots from sibling canvases (DL24).
+- `DealInsightTabs.jsx` — D1154 (#3059, part 6): Team (DL4), Market (DL5)
+  and Traction (DL6), with its charts and their tables, and the scorecard
+  rows and evidence as slots until SCORING (#3280) and PIPE-RAISE (#3291)
+  read them.
 
 The rules for adding here: every figure no read holds is "Not recorded" with
 its reason, a read that failed is "Unreadable" with Try again and leaves the

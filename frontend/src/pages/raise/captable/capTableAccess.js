@@ -163,6 +163,8 @@ const ledgerRow = (h) => ({
   group: GROUP[h?.type] || 'Other',
   shares: shares(typeof h?.shares === 'number' ? h.shares : null),
   pct: pct(typeof h?.pct === 'number' ? h.pct : null),
+  // D1027: the Worker marks the caller's own rows when a grant names their holder.
+  mine: h?.mine === true,
 });
 const GROUP = { founder: 'Founder', preferred: 'Investor', safe: 'Investor', option_pool: 'Option pool', common: 'Common' };
 

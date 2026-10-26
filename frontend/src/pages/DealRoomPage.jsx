@@ -15,7 +15,7 @@ import { useDealroomQuota, QuotaLine, JoinNote, JoinLeaveButton } from '../compo
 import DealInvitationsTab from '../components/deals/DealInvitationsTab';
 import DealTransfersTab from '../components/deals/DealTransfersTab';
 import DealSyndicates from '../components/deals/DealSyndicates';
-import { NOT_YET, TAB_DEFS, WAITS, dealTabsFor, tabHref, tabOf } from './dealPageModel';
+import { TAB_DEFS, dealTabsFor, tabHref, tabOf } from './dealPageModel';
 import ClosingRoom from './closing/ClosingRoom';
 import VentureScorecard from '../components/scoring/scorecard/Scorecard';
 import { EvidenceSummary } from './cycles/evidence/RaiseEvidence';
@@ -27,6 +27,7 @@ import DealNotes, { DealActivity } from './deal/DealNotes';
 import { DealCommitment, DealDiligence, DealDocuments, DealTerms } from './deal/DealWorkTabs';
 import DealCommitmentsStaff from './deal/DealCommitmentsStaff';
 import { READ_ONLY, viewerOf } from './deal/dealAudienceModel';
+import { DealMarket, DealTeam, DealTraction } from './deal/DealInsightTabs';
 import {
   ArrowLeft, FileText, Loader2, X, DollarSign, Send, Check, Users,
 } from 'lucide-react';
@@ -42,19 +43,6 @@ const PILL_N = 'inline-flex items-center rounded-axal-pill border border-axal-ha
 
 function fmtMoney(n, currency = 'USD') {
   return dealMoney(n, currency) ?? 'Not recorded';
-}
-
-/**
- * D1148 (#2421): a tab with no per-deal read yet says so where its blocks
- * would be (`dealPageModel.js` WAITS). Never a zero, never "none".
- */
-function WaitCard({ tab }) {
-  return (
-    <section className="flex flex-col gap-2 rounded-xl border border-gray-200 bg-white p-4 dark:border-gray-800 dark:bg-gray-900" data-testid={`deal-wait-${tab}`}>
-      <span className="w-fit rounded-full border border-dashed border-gray-300 px-2 py-0.5 text-[11px] font-bold text-gray-500 dark:border-gray-600 dark:text-gray-400">{NOT_YET}</span>
-      <p className="m-0 text-sm text-gray-600 dark:text-gray-400">{WAITS[tab]}</p>
-    </section>
-  );
 }
 
 export default function DealRoomPage() {
@@ -191,7 +179,9 @@ export default function DealRoomPage() {
       {tab === 'scorecard' && <VentureScorecard />}
       {/* D1261 (#2430): VR8, VR9's investor block; its read is PIPE-RAISE part 4. */}
       {tab === 'evidence' && <EvidenceSummary />}
-      {['team', 'market', 'traction'].includes(tab) && <WaitCard tab={tab} />}
+      {tab === 'team' && <DealTeam deal={deal} />}
+      {tab === 'market' && <DealMarket deal={deal} />}
+      {tab === 'traction' && <DealTraction deal={deal} />}
       {/* D1153 (#3058): the working tabs, DL7–DL13. An investor's Documents and Commitment are theirs; a founder and staff keep today's. */}
       {tab === 'diligence' && <DealDiligence deal={deal} userId={user?.id} />}
       {tab === 'documents' && (isInvestor ? <DealDocuments deal={deal} /> : <DocumentsTab dealId={deal.id} />)}

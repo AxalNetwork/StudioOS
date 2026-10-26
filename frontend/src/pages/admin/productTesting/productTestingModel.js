@@ -68,7 +68,8 @@ export const NOT_YET = 'Not read here yet';
 /** Why a block draws nothing today. Never a zero, never "none". */
 export const WAITS = Object.freeze({
   // D1203 (#3153) filled one program's applicants and Activity, and the Applicants tab: their waits are retired.
-  testerPrograms: 'Who approved each tester and how many programs they applied to are not read yet.',
+  // D1204 (#3154) filled the Tester pool's Approved by and Programs from D1200's read: `testerPrograms` is retired.
+  personaSegment: 'Persona segments are not read with the tester pool yet, so the pool cannot be filtered by one.',
 });
 
 const num = (v) => (Number.isFinite(Number(v)) ? Number(v) : null);
@@ -121,16 +122,102 @@ export const profileWord = (role) => PROFILE_WORD[role] || 'Profile not recorded
 
 /** A tester row as the page draws it: never the email the read also carries. */
 export function testerRow(r = {}) {
+  const programmes = r.programmes && typeof r.programmes === 'object' ? r.programmes : null;
   return {
     id: r.id,
-    name: r.member_name || 'Name not recorded',
-    role: r.member_role || null,
+    // D1204: the read nests the member (services/productTesters.ts present()); the flat names never came.
+    name: r.member?.name || 'Name not recorded',
+    role: r.member?.role || null,
     since: r.status === 'applied' ? null : (r.decided_at || null),
-    availability: r.availability || null,
+    // D1200: who decided, as a name; the id stays out of what the page draws.
+    decidedBy: r.decided_by_name || null,
+    availability: r.availability && String(r.availability).trim() ? r.availability : null,
+    // D1200: applications not withdrawn, and picks, all time. Null when the read did not carry them.
+    programmes: programmes ? { applied: num(programmes.applied) ?? 0, picked: num(programmes.picked) ?? 0 } : null,
     consentVersion: r.consent_email_at ? (r.consent_version || null) : null,
     status: r.status,
   };
 }
+
+/* ------------------------------------------------------------------ *
+ * D1204 (#3154) — the Tester pool complete (TST9)
+ * ------------------------------------------------------------------ */
+
+/** TST9's sort, default "Tester since, newest". */
+export const POOL_SORTS = Object.freeze([
+  { key: 'since_desc', label: 'Tester since, newest' },
+  { key: 'since_asc', label: 'Tester since, oldest' },
+  { key: 'name', label: 'Name' },
+]);
+export const POOL_PAGE_SIZES = Object.freeze([25, 50, 100]);
+export const POOL_FILTERS = Object.freeze({ q: '', role: '', availability: '', inProgramme: '', sort: 'since_desc', page: 1, pageSize: 25 });
+
+/**
+ * The table's rows for one status chip, over the whole pool read in memory.
+ * Search is by name only, from two characters: the page never holds an email
+ * to search by. `inProgramme` is the set of tester ids D1200's `in_programme=yes`
+ * read returned; with that filter on and no set, the result says it is unread
+ * rather than empty.
+ */
+export function poolView(rows = [], status, f = POOL_FILTERS, inProgramme = null) {
+  const needle = String(f.q || '').trim().toLowerCase();
+  const tooShort = needle.length === 1;
+  if (f.inProgramme && !(inProgramme instanceof Set)) return { rows: [], total: 0, from: 0, to: 0, page: 1, pages: 1, tooShort, unread: 'inProgramme' };
+  let out = (Array.isArray(rows) ? rows : []).map(testerRow).filter((t) => t.status === status);
+  if (needle.length >= 2) out = out.filter((t) => t.name.toLowerCase().includes(needle));
+  if (f.role) out = out.filter((t) => (f.role === 'none' ? !PROFILE_WORD[t.role] : t.role === f.role));
+  if (f.availability === 'yes') out = out.filter((t) => t.availability);
+  if (f.availability === 'no') out = out.filter((t) => !t.availability);
+  if (f.inProgramme === 'yes') out = out.filter((t) => inProgramme.has(t.id));
+  if (f.inProgramme === 'no') out = out.filter((t) => !inProgramme.has(t.id));
+  const since = (t) => (t.since ? String(t.since) : '');
+  if (f.sort === 'name') out.sort((a, b) => a.name.localeCompare(b.name) || a.id - b.id);
+  else if (f.sort === 'since_asc') out.sort((a, b) => (since(a) || '￿').localeCompare(since(b) || '￿') || a.id - b.id);
+  else out.sort((a, b) => since(b).localeCompare(since(a)) || b.id - a.id);
+  const size = POOL_PAGE_SIZES.includes(Number(f.pageSize)) ? Number(f.pageSize) : 25;
+  const pages = Math.max(1, Math.ceil(out.length / size));
+  const page = Math.min(Math.max(1, Math.floor(Number(f.page) || 1)), pages);
+  const start = (page - 1) * size;
+  return {
+    rows: out.slice(start, start + size), total: out.length,
+    from: out.length ? start + 1 : 0, to: Math.min(out.length, start + size), page, pages, tooShort, unread: null,
+  };
+}
+
+/**
+ * TST9's "Testers by profile": active testers by profile, in the canvas's
+ * order. Paused testers are not counted. A profile with no word of its own is
+ * one "Profile not recorded" bar, drawn only when there is one.
+ */
+export function poolProfileChart(rows = []) {
+  const active = (Array.isArray(rows) ? rows : []).filter((r) => r.status === 'active');
+  const by = new Map(PROFILE_ORDER.map((k) => [k, 0]));
+  let other = 0;
+  for (const r of active) {
+    const role = r.member?.role;
+    if (by.has(role)) by.set(role, by.get(role) + 1);
+    else other += 1;
+  }
+  const PLURAL = { founder: 'Founders', investor: 'Investors', advisor: 'Advisors', partner: 'Operating Partners', exploring: 'Explorers' };
+  const bars = PROFILE_ORDER.map((k) => ({ role: k, label: PLURAL[k], n: by.get(k) }));
+  if (other) bars.push({ role: 'none', label: 'Profile not recorded', n: other });
+  const max = Math.max(1, ...bars.map((b) => b.n));
+  return { active: active.length, bars, max, sentence: bars.map((b) => `${b.label} ${b.n}`).join(', ') };
+}
+
+/** TST9's ⋯ on a tester: Open, then what the tester's status allows (D1042's transitions). */
+export function poolMenu(status) {
+  const open = { key: 'open', label: 'Open tester record' };
+  if (status === 'active') return [open, { key: 'pause', label: 'Pause…' }, { key: 'remove', label: 'Remove…' }];
+  if (status === 'paused') return [open, { key: 'resume', label: 'Resume…' }, { key: 'remove', label: 'Remove…' }];
+  return [open];
+}
+
+/** TST12b: the pool holds nobody in any status, so the tab shows its one empty card. */
+export const poolEmpty = (totals) => !!totals && Number(totals.total ?? 0) === 0;
+
+/** "1–25 of 57", or the empty table's line. */
+export const rangeOf = (v) => (v.total ? `${v.from}–${v.to} of ${v.total}` : '0 of 0');
 
 const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 
