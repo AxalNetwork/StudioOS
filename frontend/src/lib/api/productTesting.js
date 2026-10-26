@@ -37,8 +37,9 @@
 //   applicants       GET   /admin/testing/programmes/:uid/applicants → { programme, items, can_decide }:
 //                         any programme's (D1197); a partner's is read only, `can_decide: false`
 //   events           GET   /admin/testing/programmes/:uid/events?page=&page_size= → { programme, events: { available, page, total, items } }
-//   applications     GET   /admin/testing/applications?programme=&owner=&status=&role=&consented=&tester=&q=&sort=&page=&page_size=
-//                         → { applications: { available, page, total, sort, items } }; status none leaves withdrawn out, `all` keeps it
+//   applications     GET   /admin/testing/applications?programme=&owner=&status=&role=&consented=&tester=&q=&sort=&page=&page_size=&scope=
+//                         → { applications: { available, page, total, sort, scope, counts, items } }; status none leaves withdrawn out, `all` keeps it;
+//                         D1203: `scope=open` keeps open and testing programmes; `counts` is one count per status under the other filters
 //
 // `adminProductTestersApi`, the tester pool (D1042's store, migration 576; read by
 // D1195's Tester pool tab):
@@ -101,7 +102,7 @@ export const adminTestingApi = {
   },
   applications: (filters = {}) => {
     const q = new URLSearchParams();
-    for (const k of ['programme', 'owner', 'status', 'role', 'consented', 'tester', 'q', 'sort', 'page', 'page_size']) {
+    for (const k of ['programme', 'owner', 'status', 'role', 'consented', 'tester', 'q', 'sort', 'page', 'page_size', 'scope']) {
       if (filters[k] != null && filters[k] !== '') q.set(k, String(filters[k]));
     }
     const qs = q.toString();

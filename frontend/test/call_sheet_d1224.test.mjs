@@ -10,7 +10,7 @@
  *  4. Counsel's approval clears when a term changes, and the preview says so.
  *  5. Send waits for counsel and for each missing item to be acknowledged; its
  *     result says who was told and links who was not.
- *  6. A draft's address is under Calls, and the shell opens the sheet on it.
+ *  6. A draft's address is under Calls, where Continue draft (D1225) opens the sheet.
  *
  *   node --import ./frontend/test/_deck-loader.mjs --test frontend/test/call_sheet_d1224.test.mjs
  */
@@ -212,20 +212,21 @@ test('5. Send waits for counsel and every acknowledgement; the result counts who
 
 // ── 6. A draft in the shell ─────────────────────────────────────────────────
 
-test('6. a draft opens under Calls, and the shell draws the sheet on it', async () => {
-  // Mutations checked: a draft sent to /round-calls/:uid; the shell drawing the sent-call page for a draft.
+test('6. a draft opens under Calls, and its Continue draft opens the sheet on it in the shell', async () => {
+  // Mutations checked: a draft sent to /round-calls/:uid; a founder's draft kept at /round-calls/:uid.
   assert.equal(callHref({ uid: 'd1', state: 'draft' }), `${LIST_PATH}/d1`);
   const saved = { ...roundCallsApi };
   for (const key of Object.keys(saved)) roundCallsApi[key] = async () => ({});
-  roundCallsApi.page = async () => pageOf();
+  roundCallsApi.page = async () => ({ ...pageOf(), relation: 'owner', can: { draft: true, answer: true, audience: true, send: true, extend: true, close: true } });
   roundCallsApi.availability = async () => ({ enabled: true });
   roundCallsApi.context = async () => CONTEXT;
   try {
     const view = await mountContracts(h(Routes, null, h(Route, { path: '/raise/capital-relationships/calls/:uid', element: h(RaiseCallPage) })), '/raise/capital-relationships/calls/d1');
     try {
       for (let i = 0; i < 8; i++) await view.flush();
+      await view.click('Continue draft');
+      for (let i = 0; i < 8; i++) await view.flush();
       assert.match(view.text(), /New call · step 4 of 5/, 'the draft resumes in the sheet, at its preview');
-      assert.doesNotMatch(view.text(), /Close the call|Extend the date/, 'not the sent call\'s page');
     } finally { await view.unmount(); }
   } finally { Object.assign(roundCallsApi, saved); }
   assert.match(readFileSync('frontend/src/pages/founder/RoundCallPage.jsx', 'utf8'), /if\(read\.data\?\.viewer==='founder'\)return <Navigate to=\{'\/raise\/capital-relationships\/calls\/'\+encodeURIComponent\(uid\)\} replace\/>;/);

@@ -1,174 +1,300 @@
 import React, { useMemo, useState } from 'react';
-import { Link, Navigate, useNavigate, useParams } from 'react-router-dom';
+import { Link, Navigate, useParams } from 'react-router-dom';
+import { Lock } from 'lucide-react';
 import { roundCallsApi } from '../../lib/api/roundCalls';
-import { reportError } from '../../lib/log';
+import { useAuth } from '../../hooks/useAuthSync';
 import { WorkerRail } from '../../ui';
 import RailFrame from '../../ui/RailFrame';
 import { CycleHeader } from '../cycles/CycleOverview';
 import { MODULES } from '../cycles/modules';
-import RoundCallSheet, { CALL_FIELDS, shortDate } from './RoundCallSheet';
-import { useCallRead, CallReadState, callButton, callInput, moneyCents } from './roundCallParts';
-import { LIST_PATH } from '../raise/calls/callsModel';
+import RoundCallSheet from './RoundCallSheet';
+import { useCallRead, CallReadState } from './roundCallParts';
+import { AnswerDialog, CloseDialog, ExtendDialog } from './CallDialogs';
+import CallRecipientDrawer, { toldLine } from './CallRecipientDrawer';
+import {
+  ADMIN_REFUSED, FILTERS, FOOT_LINE, HIDDEN, NOT_RECORDED, OWNER_ONLY, PAGE_SIZE, SORTS, STATE_TONE, callLine,
+  funnelOf, funnelSentence, furthestOf, isNamed, lastActivity, money, notTold, originLine, pageLabel, shortDay, stateNote,
+  stateOf, stripOf, visibleRows,
+} from './raiseCallModel';
 
 /**
- * D686 §5.6 (#1598), §3.1 item 14 — the founder's view of a Call for Capital,
- * inside the Raise shell at `/raise/calls/:uid`: Raise's header and tabs, the
- * rail, and the call's responses with search, filters and paging. An
- * investor or counsel opening this address is sent to `/round-calls/:uid`,
+ * D686 §5.6 (#1598) — the founder's view of a Call for Capital, inside the
+ * Raise shell at `/raise/calls/:uid`: Raise's header and tabs, and the rail.
+ * An investor or counsel opening this address is sent to `/round-calls/:uid`,
  * where their own views are; a founder there is sent here.
  *
- * D1224 (#3223): a DRAFT opens here too, at
- * `/raise/capital-relationships/calls/:uid`: the new-call sheet on that draft,
- * in the Raise shell. Closing it returns to Calls.
+ * D1225 (#3224, Calls part 4) draws it to the owner's canvas:
+ *   · CLS8, an open call: the state chip and line, the strip (Indicated of the
+ *     target, recipients, opened, data room, questions waiting, not told), the
+ *     funnel, the responses table and the questions, and Extend and Close;
+ *   · CLS9, its other states: Draft (Continue draft), Awaiting counsel,
+ *     Expired (Open a new call) and Closed, each read-only;
+ *   · CLS10, the Extend, Close and Answer dialogs, each in the page;
+ *   · CLS11, one recipient in a drawer, with delivery;
+ *   · CLS14, a co-founder's view (draft and answer, D1222's `can`) and an
+ *     admin's refusal.
  *
- * NOTHING IS INVENTED. A matching investor stays nameless until they respond.
- * A commitment's date is drawn only when the Worker stores one (S19-A's
- * `committed_at`); until then the row says what was committed, not when.
+ * AN AMOUNT IS INDICATED, NEVER COMMITTED (D653). A matching investor stays
+ * nameless until they respond. Nothing is invented: what the read lacks is
+ * "Not recorded".
  */
-export const PAGE_SIZE = 25;
-export const FILTERS = [['all', 'All'], ['committed', 'Committed'], ['data_room', 'Data room'], ['opened', 'Opened']];
-const INSTRUMENTS = { safe: 'SAFE', equity: 'Equity', convertible_note: 'Convertible note' };
-const ghost = callButton;
-const danger = 'rounded-lg border border-red-300 px-3 py-2 text-xs font-semibold text-red-700 disabled:opacity-40 dark:border-red-800 dark:text-red-300';
-const pill = 'rounded-full border px-2 py-0.5 text-[11px] font-semibold';
-const PILLS = {
-  committed: `${pill} border-emerald-200 bg-emerald-50 text-emerald-800 dark:border-emerald-900 dark:bg-emerald-950/40 dark:text-emerald-200`,
-  data_room: `${pill} border-violet-200 bg-violet-50 text-violet-800 dark:border-violet-900 dark:bg-violet-950/40 dark:text-violet-200`,
-  opened: `${pill} border-axal-hairline text-axal-muted`,
-  none: `${pill} border-dashed border-gray-300 text-gray-500 dark:border-gray-600 dark:text-gray-400`,
+
+const BTN = 'inline-flex min-h-[36px] items-center rounded-lg border border-axal-hairline bg-white px-3.5 text-sm font-semibold text-axal-ink disabled:opacity-40 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-100';
+const PRIMARY = 'inline-flex min-h-[36px] items-center rounded-lg bg-axal-violet px-3.5 text-sm font-semibold text-white disabled:opacity-40 dark:bg-violet-600';
+const DANGER = 'inline-flex min-h-[36px] items-center rounded-lg border border-red-300 bg-white px-3.5 text-sm font-semibold text-red-700 disabled:opacity-40 dark:border-red-800 dark:bg-gray-900 dark:text-red-300';
+const CARD = 'rounded-xl border border-axal-hairline bg-white p-4 dark:border-gray-800 dark:bg-gray-900';
+const MUTED = 'text-xs text-axal-muted dark:text-gray-400';
+const INPUT = 'rounded-lg border border-axal-hairline bg-white px-3 py-2 text-sm text-axal-ink dark:border-gray-700 dark:bg-gray-900 dark:text-gray-100';
+const TONES = {
+  green: 'border-emerald-200 bg-emerald-50 text-emerald-800 dark:border-emerald-900 dark:bg-emerald-950/40 dark:text-emerald-200',
+  amber: 'border-amber-300 bg-amber-50 text-amber-900 dark:border-amber-800 dark:bg-amber-950/40 dark:text-amber-200',
+  muted: 'border-axal-hairline bg-gray-50 text-axal-muted dark:border-gray-700 dark:bg-gray-800 dark:text-gray-300',
 };
+const pill = (tone) => `inline-flex items-center gap-1 whitespace-nowrap rounded-full border px-2 py-0.5 text-[11px] font-bold ${TONES[tone] || TONES.muted}`;
 
-/** A recipient's furthest response, as its row reads it. */
-export function responseOf(r) {
-  if (r.commitment_cents != null) {
-    const when = CALL_FIELDS.committed_at || r.committed_at ? shortDate(r.committed_at) : null;
-    return { kind: 'committed', text: `Committed ${moneyCents(r.commitment_cents)}${when ? ` · ${when}` : ''}`, pill: 'Committed' };
-  }
-  if (r.data_room_requested_at) return { kind: 'data_room', text: `Asked for the data room · ${shortDate(r.data_room_requested_at) || 'Not recorded'}`, pill: 'Data room' };
-  if (r.opened_at) return { kind: 'opened', text: `Opened · ${shortDate(r.opened_at) || 'Not recorded'}`, pill: 'Opened' };
-  return { kind: 'none', text: 'Not opened yet', pill: 'Not opened' };
+export function StateChip({ state }) {
+  return <span className={pill(STATE_TONE[state])} data-testid="call-state">{state}</span>;
 }
 
-/** Who a recipient is: a matching investor's name is hidden until they respond. */
-export const whoOf = (r) => (r.name ? `${r.name} · ${r.email}` : 'Matching investor · name hidden until they respond');
-
-/** When a recipient last did something: the latest of their recorded times, or null. */
-export function lastActivity(r) {
-  const times = [r.committed_at, r.responded_at, r.data_room_requested_at, r.opened_at].filter(Boolean).map((t) => String(t).replace(' ', 'T'));
-  return times.length ? times.sort().at(-1) : null;
+function Tile({ label, value, sub, testId, children }) {
+  return (
+    <div className={`${CARD} flex min-w-0 flex-col gap-1`} data-testid={testId}>
+      <span className="text-[11px] font-bold uppercase tracking-[.06em] text-axal-muted dark:text-gray-400">{label}</span>
+      <span className="font-mono text-[22px] font-semibold text-axal-ink dark:text-gray-100">{value == null ? NOT_RECORDED : value}</span>
+      {sub ? <span className={MUTED}>{sub}</span> : null}
+      {children}
+    </div>
+  );
 }
 
-export const SORTS = [['latest', 'Latest'], ['furthest', 'Furthest along']];
-
-/** The rows the controls leave: latest activity first (no activity last), or furthest along. */
-export function visibleRows(recipients, { q = '', filter = 'all', sort = 'latest' } = {}) {
-  const needle = q.trim().toLowerCase();
-  const latest = (r) => r.commitment_cents != null ? 3 : r.data_room_requested_at ? 2 : r.opened_at ? 1 : 0;
-  return (recipients || [])
-    .filter((r) => filter === 'all'
-      || (filter === 'committed' && r.commitment_cents != null)
-      || (filter === 'data_room' && !!r.data_room_requested_at)
-      || (filter === 'opened' && !!r.opened_at))
-    .filter((r) => !needle || `${r.name || ''} ${r.email || ''} ${responseOf(r).text}`.toLowerCase().includes(needle))
-    .map((r, i) => ({ r, i }))
-    .sort(sort === 'furthest'
-      ? (a, b) => latest(b.r) - latest(a.r) || a.i - b.i
-      : (a, b) => {
-        const x = lastActivity(a.r); const y = lastActivity(b.r);
-        if (x === y) return a.i - b.i;
-        if (!x) return 1;
-        if (!y) return -1;
-        return x < y ? 1 : -1;
-      })
-    .map(({ r }) => r);
+/** CLS8's strip. A value the read lacks says Not recorded, never 0. */
+function Strip({ d, onSeeNotTold }) {
+  const s = stripOf(d);
+  return (
+    <div className="grid gap-3 sm:grid-cols-3 lg:grid-cols-6" data-testid="call-strip">
+      <Tile label="Indicated" value={s.indicated.value} sub={s.indicated.sub} testId="call-tile-indicated">
+        {s.indicated.pct != null ? <span aria-hidden="true" className="mt-1 block h-1.5 overflow-hidden rounded-full bg-gray-100 dark:bg-gray-800"><span className="block h-full rounded-full bg-axal-violet dark:bg-violet-500" style={{ width: `${s.indicated.pct}%` }} /></span> : null}
+      </Tile>
+      <Tile label="Recipients" value={s.recipients.value} sub={s.recipients.sub} testId="call-tile-recipients" />
+      <Tile label="Opened" value={s.opened.value} testId="call-tile-opened" />
+      <Tile label="Data room" value={s.dataRoom.value} sub={s.dataRoom.sub} testId="call-tile-data-room" />
+      <Tile label="Questions waiting" value={s.waiting.value} testId="call-tile-waiting" />
+      <Tile label="Not told" value={s.notTold.value} sub={s.notTold.value == null ? 'A draft has told no one.' : null} testId="call-tile-not-told">
+        {s.notTold.value > 0 ? <button type="button" className="self-start text-xs font-semibold text-axal-violet underline dark:text-violet-300" onClick={onSeeNotTold} data-testid="call-see-not-told">See who</button> : null}
+      </Tile>
+    </div>
+  );
 }
 
-/** The banner a call that takes no responses shows, or null while it is open. */
-export function callBanner(call, progress, today = new Date().toISOString().slice(0, 10)) {
-  if (call.state === 'closed') return `This call closed on ${shortDate(call.closed_at) || 'Not recorded'} with ${moneyCents(progress.committed_cents)} committed. It is read-only.`;
-  if (call.state === 'sent' && call.target_close < today) return `This call closed on ${shortDate(call.target_close) || 'Not recorded'} with ${moneyCents(progress.committed_cents)} committed. It is read-only.`;
-  if (call.state === 'awaiting_counsel') return 'Responses are paused until counsel approves the extended terms. This call is read-only.';
-  return null;
+/** CLS8's funnel, with its table view. */
+function Funnel({ d }) {
+  const [table, setTable] = useState(false);
+  const rows = funnelOf(d);
+  const max = rows[0][1] || 0;
+  const sentence = funnelSentence(rows);
+  return (
+    <section className={`${CARD} flex flex-col gap-2`} data-testid="call-funnel">
+      <div className="flex items-center gap-3">
+        <h2 className="m-0 text-base font-bold">From recipients to amounts</h2>
+        <span className="flex-1" />
+        <button type="button" className="text-xs font-semibold text-axal-violet underline dark:text-violet-300" onClick={() => setTable(!table)} data-testid="call-funnel-toggle">{table ? 'View as chart' : 'View as table'}</button>
+      </div>
+      {sentence ? <p className={`m-0 ${MUTED}`}>{sentence}</p> : null}
+      {table ? (
+        <table className="w-full text-sm" data-testid="call-funnel-table"><tbody>
+          {rows.map(([label, n]) => <tr key={label} className="border-t border-axal-hairline dark:border-gray-700"><td className="py-1.5">{label}</td><td className="py-1.5 text-right font-mono">{n == null ? NOT_RECORDED : n}</td></tr>)}
+        </tbody></table>
+      ) : (
+        <div role="img" aria-label={rows.map(([l, n]) => `${l} ${n == null ? NOT_RECORDED : n}`).join(', ')} className="flex flex-col gap-2">
+          {rows.map(([label, n], i) => (
+            <div key={label} className="grid grid-cols-[minmax(0,190px)_minmax(0,1fr)_40px] items-center gap-3">
+              <span className="text-xs font-semibold">{i ? `→ ${label}` : label}</span>
+              <span className="block h-[18px] overflow-hidden rounded bg-gray-100 dark:bg-gray-800"><span className="block h-full rounded bg-axal-violet dark:bg-violet-500" style={{ width: `${max && n != null ? (n / max) * 100 : 0}%` }} /></span>
+              <span className="text-right font-mono text-xs font-bold">{n == null ? '—' : n}</span>
+            </div>
+          ))}
+        </div>
+      )}
+    </section>
+  );
+}
+
+/** CLS8's responses table: search, filters, sort and pages; a row opens its recipient. */
+function Responses({ d, s, on }) {
+  const rows = useMemo(() => visibleRows(d.recipients, { q: s.q, filter: s.filter, sort: s.sort }), [d.recipients, s.q, s.filter, s.sort]);
+  const page = rows.slice(s.page * PAGE_SIZE, s.page * PAGE_SIZE + PAGE_SIZE);
+  return (
+    <section className={`${CARD} flex flex-col gap-3`} data-testid="call-responses">
+      <div className="flex flex-wrap items-baseline gap-3">
+        <h2 className="m-0 text-base font-bold">Responses</h2>
+        <span className="font-mono text-xs text-axal-muted dark:text-gray-400">{d.recipients.length}</span>
+        <span className="flex-1" />
+        <select aria-label="Sort responses" className={INPUT} value={s.sort} onChange={(e) => on.sort(e.target.value)} data-testid="call-sort">
+          {SORTS.map(([key, label]) => <option key={key} value={key}>{`Sort: ${label}`}</option>)}
+        </select>
+      </div>
+      <div className="flex flex-wrap items-center gap-2">
+        <input type="search" aria-label="Search investors" placeholder="Search investors" className={`${INPUT} w-48`} value={s.q} onChange={(e) => on.q(e.target.value)} data-testid="call-search" />
+        <div role="group" aria-label="Filter responses" className="flex flex-wrap gap-1">
+          {FILTERS.map(([key, label]) => (
+            <button key={key} type="button" aria-pressed={s.filter === key} onClick={() => on.filter(key)} data-testid={`call-filter-${key}`}
+              className={`rounded-full border px-2.5 py-1 text-xs font-semibold ${s.filter === key ? 'border-violet-700 bg-violet-50 text-violet-800 dark:border-violet-400 dark:bg-violet-950/40 dark:text-violet-200' : 'border-axal-hairline bg-white text-axal-ink dark:border-gray-700 dark:bg-gray-900 dark:text-gray-100'}`}>{label}</button>
+          ))}
+        </div>
+      </div>
+      {!d.recipients.length ? <p className={`m-0 ${MUTED}`} data-testid="call-responses-empty">No recipients are recorded yet.</p>
+        : !rows.length ? <p className={`m-0 ${MUTED}`} data-testid="call-responses-none">No response matches.</p> : (
+          <div className="overflow-x-auto">
+            <table className="w-full min-w-[640px] border-collapse text-sm">
+              <thead><tr className="text-left text-[11px] uppercase tracking-[.06em] text-axal-muted dark:text-gray-400">
+                <th className="py-2 pr-2">Investor</th><th className="py-2 pr-2">Furthest response</th><th className="py-2 pr-2">Amount indicated</th><th className="py-2 pr-2">Last activity</th><th className="py-2">On Axal</th>
+              </tr></thead>
+              <tbody>{page.map((r, i) => {
+                const named = isNamed(r);
+                const key = r.investor_user_id || `match-${s.page}-${i}`;
+                return (
+                  <tr key={key} className="border-t border-axal-hairline align-top dark:border-gray-700" data-testid={`call-row-${named ? r.investor_user_id : `hidden-${i}`}`}>
+                    <td className="py-2 pr-2">
+                      <button type="button" className="text-left" onClick={() => on.open(r)} data-testid={`call-open-${named ? r.investor_user_id : `hidden-${i}`}`}>
+                        <span className="block font-semibold text-axal-ink dark:text-gray-100">{named ? r.name : 'Matching investor'}</span>
+                        <span className={`block ${MUTED}`}>{originLine(r)}</span>
+                      </button>
+                    </td>
+                    <td className="py-2 pr-2">{furthestOf(r).label}</td>
+                    <td className="py-2 pr-2">{named && r.commitment_cents != null
+                      ? <span className="flex flex-col"><span className="font-mono font-semibold">{money(r.commitment_cents)}</span><span className={MUTED}>Recorded</span></span>
+                      : <span className={MUTED}>{named ? '—' : HIDDEN}</span>}</td>
+                    <td className="py-2 pr-2 font-mono text-xs">{named ? (shortDay(lastActivity(r)) || '—') : <span className={MUTED}>Not shown</span>}</td>
+                    <td className="py-2">{notTold(r) ? <span className={pill('amber')}>Not told</span> : <span className={MUTED}>{toldLine(r)}</span>}</td>
+                  </tr>
+                );
+              })}</tbody>
+            </table>
+          </div>
+        )}
+      <div className="flex flex-wrap items-center gap-2">
+        <span className={MUTED}>Every response is also an entry in Capital relationships.</span>
+        <span className="flex-1" />
+        <span className="font-mono text-xs text-axal-muted dark:text-gray-400" data-testid="call-page-label">{pageLabel(s.page, rows.length)}</span>
+        <button type="button" className={BTN} disabled={s.page === 0} onClick={() => on.page(s.page - 1)}>Previous page</button>
+        <button type="button" className={BTN} disabled={(s.page + 1) * PAGE_SIZE >= rows.length} onClick={() => on.page(s.page + 1)}>Next page</button>
+      </div>
+    </section>
+  );
+}
+
+/** CLS8's questions: waiting first in their order; Answer opens CLS10's dialog. */
+function Questions({ d, canAnswer, on }) {
+  const qs = d.questions || [];
+  const waiting = qs.filter((q) => !q.answer && !q.update_uid).length;
+  return (
+    <section className={`${CARD} flex flex-col gap-0`} data-testid="call-questions">
+      <div className="flex items-baseline gap-2 pb-3">
+        <h2 className="m-0 text-base font-bold">Questions</h2>
+        {waiting ? <span className={pill('amber')} data-testid="call-questions-waiting">{`${waiting} waiting`}</span> : null}
+      </div>
+      {qs.length ? qs.map((q) => (
+        <article key={q.uid} className="flex flex-col gap-2 border-t border-axal-hairline py-3 dark:border-gray-700" data-testid={`call-question-${q.uid}`}>
+          <div className="flex items-center gap-2"><span className="flex-1 text-xs font-semibold">{q.name || NOT_RECORDED}</span><span className="font-mono text-xs text-axal-muted dark:text-gray-400">{shortDay(q.asked_at) || NOT_RECORDED}</span></div>
+          <p className="m-0 text-sm font-semibold">“{q.question}”</p>
+          {q.answer ? (
+            <div className="flex flex-col gap-1 rounded-lg bg-gray-50 px-3 py-2 dark:bg-gray-800">
+              <span className={MUTED}>{q.answered_at ? `Answered ${shortDay(q.answered_at)}` : 'Answered'}</span>
+              <span className="text-sm">{q.answer}</span>
+            </div>
+          ) : q.update_uid ? <Link className="text-sm text-axal-violet underline dark:text-violet-300" to={`/updates/${q.update_uid}`}>Reply on the source update</Link>
+            : canAnswer ? <button type="button" className={`${BTN} self-start`} onClick={() => on.answer(q)} data-testid={`call-answer-${q.uid}`}>Answer</button>
+              : <span className={MUTED}>Not answered</span>}
+        </article>
+      )) : <p className={`m-0 border-t border-axal-hairline pt-3 dark:border-gray-700 ${MUTED}`}>No questions yet.</p>}
+    </section>
+  );
 }
 
 export function RaiseCallView({ state: s, on }) {
-  const d = s.data; const c = d.call; const p = d.progress;
-  const rows = useMemo(() => visibleRows(d.recipients, { q: s.q, filter: s.filter, sort: s.sort }), [d.recipients, s.q, s.filter, s.sort]);
-  const page = rows.slice(s.page * PAGE_SIZE, s.page * PAGE_SIZE + PAGE_SIZE);
-  const banner = callBanner(c, p);
-  const open = c.state === 'sent' && !d.read_only;
-  const sub = [c.sent_at ? `Sent ${shortDate(c.sent_at)}` : 'Not sent', `closes ${shortDate(c.target_close) || 'Not recorded'}`, INSTRUMENTS[c.instrument] || c.instrument, c.terms].filter(Boolean).join(' · ');
-  return <div className="space-y-4" data-testid="raise-call-page">
-    <p className="text-sm text-axal-muted">{sub}</p>
-    {banner && <p role="status" className="rounded-lg border border-axal-hairline bg-gray-50 p-3 text-sm dark:border-gray-800 dark:bg-gray-900">{banner}</p>}
-    {banner && c.state !== 'awaiting_counsel' && <button type="button" className={ghost} onClick={on.newCall}>Open a new call</button>}
-    <section className="space-y-3 rounded-xl border border-axal-hairline p-4 dark:border-gray-800">
-      <div className="flex flex-wrap items-center justify-between gap-2">
-        <h2 className="font-semibold">Committed {moneyCents(p.committed_cents)} of {moneyCents(p.target_cents)}</h2>
-        <select aria-label="Sort responses" className={`${callInput} w-auto`} value={s.sort} onChange={(e) => on.sort(e.target.value)}>
-          {SORTS.map(([key, label]) => <option key={key} value={key}>{label}</option>)}</select>
+  const d = s.data; const c = d.call;
+  const can = d.can || {};
+  const state = stateOf(c);
+  const note = stateNote(c, d.progress || {});
+  const writable = state === 'Open' && !d.read_only;
+  const member = d.relation === 'member';
+  const head = (
+    <div className="flex flex-col gap-2" data-testid="call-head">
+      <Link to="/raise/calls" className="text-sm font-semibold text-axal-violet dark:text-violet-300">‹ Calls</Link>
+      <div className="flex flex-wrap items-center gap-2.5">
+        <h1 className="m-0 text-[22px] font-extrabold tracking-[-.02em] text-axal-ink dark:text-gray-100">{c.name}</h1>
+        <StateChip state={state} />
       </div>
-      <div className="flex flex-wrap items-center gap-2">
-        <input type="search" aria-label="Search responses" placeholder="Search responses…" className={`${callInput} max-w-xs`} value={s.q} onChange={(e) => on.q(e.target.value)} />
-        <div role="group" aria-label="Filter responses" className="flex flex-wrap gap-1">{FILTERS.map(([key, label]) => (
-          <button key={key} type="button" aria-pressed={s.filter === key} className={`${ghost} ${s.filter === key ? 'border-violet-700 text-violet-700 dark:border-violet-300 dark:text-violet-300' : ''}`} onClick={() => on.filter(key)}>{label}</button>))}</div>
+      <p className="m-0 text-sm text-axal-muted dark:text-gray-400" data-testid="call-line">{note?.kind === 'awaiting' ? note.line : note?.kind === 'draft' ? note.line : callLine(c)}</p>
+    </div>
+  );
+
+  if (state === 'Draft') {
+    return (
+      <div className="flex flex-col gap-4" data-testid="raise-call-page">
+        {head}
+        {can.draft ? <div className="flex gap-2"><button type="button" className={PRIMARY} onClick={on.continueDraft} data-testid="call-continue-draft">Continue draft</button></div> : null}
+        {member ? <p className={`m-0 ${MUTED}`} data-testid="call-owner-only">{OWNER_ONLY}</p> : null}
       </div>
-      <ul className="divide-y divide-axal-hairline dark:divide-gray-800">{page.map((r, i) => {
-        const res = responseOf(r);
-        return <li key={r.investor_user_id || `match-${s.page}-${i}`} className="flex flex-wrap items-center justify-between gap-2 py-2 text-sm">
-          <div className="min-w-0"><p className="font-semibold">{whoOf(r)}</p><p className="text-axal-muted">{res.text}</p></div>
-          <span className={PILLS[res.kind]}>{res.pill}</span></li>;
-      })}</ul>
-      {!d.recipients.length ? <p>No recipients are recorded yet.</p> : !rows.length && <p>No response matches.</p>}
-      <div className="flex items-center justify-between gap-2 text-xs">
-        <span>{rows.length ? s.page * PAGE_SIZE + 1 : 0}–{Math.min((s.page + 1) * PAGE_SIZE, rows.length)} of {rows.length}</span>
-        <div className="flex gap-2"><button type="button" className={ghost} disabled={s.page === 0} onClick={() => on.page(s.page - 1)}>Previous</button>
-          <button type="button" className={ghost} disabled={(s.page + 1) * PAGE_SIZE >= rows.length} onClick={() => on.page(s.page + 1)}>Next</button></div>
+    );
+  }
+
+  return (
+    <div className="flex flex-col gap-4" data-testid="raise-call-page">
+      {head}
+      {note?.kind === 'awaiting' ? <p role="status" className="m-0 rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-sm text-amber-900 dark:border-amber-800 dark:bg-amber-950/40 dark:text-amber-200" data-testid="call-state-note">{note.note}</p> : null}
+      {note && (note.kind === 'expired' || note.kind === 'closed') ? (
+        <div className="flex flex-col gap-2" data-testid="call-state-note">
+          <p role="status" className="m-0 text-sm">{note.line}</p>
+          {note.kind === 'expired' && can.draft ? <button type="button" className={`${BTN} self-start`} onClick={on.newCall} data-testid="call-new">Open a new call</button> : null}
+        </div>
+      ) : null}
+      <Strip d={d} onSeeNotTold={() => on.filter('not_told')} />
+      <div className="grid items-start gap-4 lg:grid-cols-[minmax(0,1fr)_400px]">
+        <div className="flex min-w-0 flex-col gap-4"><Funnel d={d} /><Responses d={d} s={s} on={on} /></div>
+        <Questions d={d} canAnswer={writable && can.answer} on={on} />
       </div>
-      <p className="text-xs text-axal-muted">Every response is also an entry in Capital relationships.</p>
+      <footer className="flex flex-wrap items-center gap-2.5 border-t border-axal-hairline pt-4 dark:border-gray-800" data-testid="call-foot">
+        {member ? <span className={`mr-auto ${MUTED}`} data-testid="call-owner-only">{OWNER_ONLY}</span> : <span className={`mr-auto ${MUTED}`}>{FOOT_LINE}</span>}
+        {writable && can.extend ? <button type="button" className={BTN} onClick={on.extend} data-testid="call-extend">Extend the date</button> : null}
+        {(writable || state === 'Awaiting counsel') && can.close ? <button type="button" className={DANGER} onClick={on.close} data-testid="call-close">Close the call</button> : null}
+      </footer>
+    </div>
+  );
+}
+
+/** CLS14: an admin refused by the Worker. */
+export function NoPermission({ admin, message }) {
+  return (
+    <section className={`${CARD} mt-6 flex max-w-[420px] flex-col gap-3`} data-testid="call-no-permission">
+      <span aria-hidden="true" className="grid h-[34px] w-[34px] place-items-center rounded-lg bg-gray-100 dark:bg-gray-800"><Lock size={16} /></span>
+      <h2 className="m-0 text-base font-bold">{admin ? ADMIN_REFUSED : 'You cannot open this call.'}</h2>
+      {admin ? <Link to="/admin" className={`${BTN} self-start`}>Go to Studio</Link> : <p className={`m-0 ${MUTED}`}>{message || 'Calls belong to the venture’s founders.'}</p>}
     </section>
-    <section className="space-y-3"><h2 className="font-semibold">Questions</h2>{d.questions.length ? d.questions.map((q) => (
-      <article key={q.uid} className="rounded-xl border border-axal-hairline p-3 dark:border-gray-800"><p>{q.question}</p>{q.name && <p className="text-xs text-axal-muted">{q.name} · {shortDate(q.asked_at) || 'Not recorded'}</p>}
-        {q.answer ? <p><span className={PILLS.opened}>Answered</span> {q.answer}</p> : <p><span className={PILLS.none}>Unanswered</span></p>}
-        {q.update_uid && <Link className="underline" to={`/updates/${q.update_uid}`}>Reply on the source update</Link>}
-        {!q.answer && !d.read_only && !q.update_uid && <><label className="block">Answer<textarea className={callInput} value={s.answers[q.uid] || ''} maxLength={4000} onChange={(e) => on.answerValue(q.uid, e.target.value)} /></label>
-          <button type="button" className={ghost} disabled={s.busy || !s.answers[q.uid]?.trim()} onClick={() => on.answer(q.uid)}>Answer</button></>}
-      </article>)) : <p>No questions are recorded.</p>}</section>
-    {s.error && <p role="alert" className="text-red-700 dark:text-red-300">{s.error}</p>}{s.message && <p role="status">{s.message}</p>}
-    <footer className="flex flex-wrap items-center justify-between gap-2 border-t border-axal-hairline pt-3 dark:border-gray-800">
-      <span className="text-xs text-axal-muted">Received {p.received} · opened {p.opened} · data room {p.data_room_requests} · committed {p.commitments}</span>
-      {open && <div className="flex flex-wrap items-center gap-2">
-        {s.extending && <input type="date" aria-label="New target close" className={callInput} value={s.target} onChange={(e) => on.target(e.target.value)} />}
-        <button type="button" className={ghost} disabled={s.busy || (s.extending && !s.target)} onClick={on.extend}>Extend the date</button>
-        <button type="button" className={danger} disabled={s.busy} onClick={on.close}>Close the call</button></div>}
-    </footer>
-  </div>;
+  );
 }
 
 export default function RaiseCallPage() {
   const { uid } = useParams();
-  const navigate = useNavigate();
+  const user = useAuth()?.user ?? null;
   const read = useCallRead(() => roundCallsApi.page(uid), [uid]);
-  const [q, setQ] = useState(''); const [filter, setFilter] = useState('all'); const [page, setPage] = useState(0); const [sort, setSort] = useState('latest');
-  const [busy, setBusy] = useState(false); const [error, setError] = useState(''); const [message, setMessage] = useState('');
-  const [answers, setAnswers] = useState({}); const [target, setTarget] = useState(''); const [extending, setExtending] = useState(false); const [newCall, setNewCall] = useState(false);
-  async function perform(action, label) {
-    setBusy(true); setError(''); setMessage('');
-    try { await action(); setMessage(label); read.retry(); }
-    catch (e) { reportError('round-calls:manage', e); setError(e.status >= 500 || !e.status ? 'The action could not be confirmed. Check the call before retrying.' : 'This change was refused. Check the call’s current state.'); }
-    finally { setBusy(false); }
-  }
+  const [q, setQ] = useState(''); const [filter, setFilter] = useState('all'); const [page, setPage] = useState(0); const [sort, setSort] = useState('furthest');
+  const [dialog, setDialog] = useState(null);
+  const [sheet, setSheet] = useState(null);
+  const close = () => setDialog(null);
+  const done = () => { setDialog(null); read.retry(); };
+  const reload = () => { setDialog(null); read.retry(); };
   const on = {
-    q: (v) => { setQ(v); setPage(0); }, filter: (v) => { setFilter(v); setPage(0); }, sort: (v) => { setSort(v); setPage(0); }, page: setPage, target: setTarget,
-    answerValue: (key, value) => setAnswers((a) => ({ ...a, [key]: value })),
-    answer: (key) => perform(() => roundCallsApi.answer(uid, key, answers[key]), 'Answer recorded.'),
-    extend: () => (extending ? perform(() => roundCallsApi.manage(uid, { action: 'extend', target_close: target }), 'Target close extended. Responses are paused until counsel approves the extended terms.') : setExtending(true)),
-    close: () => perform(() => roundCallsApi.manage(uid, { action: 'close' }), 'Call closed. It is now read-only.'),
-    newCall: () => setNewCall(true),
+    q: (v) => { setQ(v); setPage(0); }, filter: (v) => { setFilter(v); setPage(0); }, sort: (v) => { setSort(v); setPage(0); }, page: setPage,
+    open: (r) => setDialog({ kind: 'recipient', recipient: r }),
+    answer: (question) => setDialog({ kind: 'answer', question }),
+    extend: () => setDialog({ kind: 'extend' }),
+    close: () => setDialog({ kind: 'close' }),
+    newCall: () => setSheet({ initialCall: null }),
+    continueDraft: () => setSheet({ initialCall: read.data?.call || null }),
   };
   const d = read.data;
   if (d && d.viewer !== 'founder') return <Navigate to={`/round-calls/${encodeURIComponent(uid)}`} replace />;
-  const draft = d?.call?.state === 'draft';
   const cards = MODULES.raise.map((m) => ({ slug: m.slug, name: m.name }));
   const rail = <WorkerRail workspace="Raise" role="founder" stance="Evidence-led view" coverage={[d ? `Venture #${d.call.project_id} selected` : 'No venture selected']} footer="Traceable surface · no unsupported automated actions" />;
   return (
@@ -176,10 +302,16 @@ export default function RaiseCallPage() {
       <main className="space-y-4 p-5 text-axal-ink dark:text-gray-100">
         <CycleHeader cycle="raise" cards={cards} active="capital-relationships" title={d ? `Call for Capital · ${d.call.name}` : 'Call for Capital'}
           search={d ? `?project_id=${d.call.project_id}` : ''} />
-        {read.error?.status === 403 ? <p role="alert">The Worker refused this call: {read.error.message || 'you cannot open it.'}</p>
-          : <CallReadState read={read}>{d && !draft && <RaiseCallView state={{ data: d, q, filter, sort, page, busy, error, message, answers, target, extending }} on={on} />}</CallReadState>}
-        {draft && <RoundCallSheet projectId={d.call.project_id} initialCall={d.call} onClose={() => navigate(LIST_PATH)} />}
-        {newCall && d && <RoundCallSheet projectId={d.call.project_id} onClose={() => { setNewCall(false); read.retry(); }} />}
+        {read.error?.status === 403 ? <NoPermission admin={user?.role === 'admin'} message={read.error.message} />
+          : <CallReadState read={read}>{d && <RaiseCallView state={{ data: d, q, filter, sort, page }} on={on} />}</CallReadState>}
+        {d && dialog?.kind === 'recipient' ? <CallRecipientDrawer recipient={dialog.recipient} questions={d.questions} projectId={d.call.project_id} onClose={close} /> : null}
+        {d && dialog?.kind === 'extend' ? <ExtendDialog call={d.call} onClose={close} onDone={done} onReload={reload}
+          extend={(date) => roundCallsApi.manage(uid, { action: 'extend', target_close: date })} /> : null}
+        {d && dialog?.kind === 'close' ? <CloseDialog call={d.call} onClose={close} onDone={done} onReload={reload}
+          close={() => roundCallsApi.manage(uid, { action: 'close' })} /> : null}
+        {d && dialog?.kind === 'answer' ? <AnswerDialog question={dialog.question} onClose={close} onDone={done} onReload={reload}
+          answer={(text) => roundCallsApi.answer(uid, dialog.question.uid, text)} /> : null}
+        {sheet && d && <RoundCallSheet projectId={d.call.project_id} initialCall={sheet.initialCall} onClose={() => { setSheet(null); read.retry(); }} />}
       </main>
     </RailFrame>
   );

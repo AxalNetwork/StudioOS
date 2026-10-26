@@ -9,7 +9,8 @@ Modelled and follows the URL venture (`project_id` or `project`), including
 Back/Forward, without selecting the first of multiple ventures. Capital's tabs
 carry either alias; D1029 retired the Cap Table tab. Legacy Capital links keep
 the venture through `raise/captable/CapTableMovedRedirect.jsx`, which normalizes
-`project` to `project_id`. An unsaved model
+`project` to `project_id`. The live cap table also reads both aliases through
+`raise/captable/capTableModel.js` (D1029). An unsaved model
 has no sensitivity table; export/recompute require a person-saved model.
 
 ## Finding a page
