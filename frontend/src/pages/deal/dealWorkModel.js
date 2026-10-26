@@ -12,8 +12,9 @@
  * count of investors and a total.
  */
 import { dealMoney } from '../../components/deals/dealMoney';
+import { NOT_RECORDED } from '../../lib/absence';
 
-export const NOT_RECORDED = 'Not recorded';
+export { NOT_RECORDED };
 const DAY = 86400000;
 
 /** A D1 stamp ("2026-10-24 10:00:00", or ISO) as UTC milliseconds, or null. */

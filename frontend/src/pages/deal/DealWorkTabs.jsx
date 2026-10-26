@@ -28,10 +28,10 @@ import {
 
 const FIELD = 'w-full rounded-axal-sm border border-axal-hairline bg-white px-3 py-2 text-[13px] text-axal-ink focus:border-axal-violet focus:outline-none dark:border-gray-700 dark:bg-gray-900 dark:text-gray-100';
 const PILL = {
-  done: 'border-axal-success/40 bg-axal-success-soft text-axal-success dark:border-emerald-700 dark:bg-emerald-950 dark:text-emerald-300',
-  wait: 'border-axal-amber/40 bg-axal-amber-soft text-axal-amber-deep dark:border-amber-700 dark:bg-amber-950 dark:text-amber-300',
+  done: 'border-axal-positive/40 bg-axal-positive/10 text-axal-positive dark:border-emerald-700 dark:bg-emerald-950 dark:text-emerald-300',
+  wait: 'border-axal-amber/40 bg-axal-amber/10 text-axal-amber-deep dark:border-amber-700 dark:bg-amber-950 dark:text-amber-300',
   off: 'border-axal-hairline bg-axal-ground text-axal-muted dark:border-gray-700 dark:bg-gray-800 dark:text-gray-400',
-  now: 'border-axal-violet/40 bg-axal-violet-soft text-axal-violet-deep dark:border-violet-700 dark:bg-violet-950 dark:text-violet-300',
+  now: 'border-axal-lavender-edge bg-axal-lavender text-axal-violet-deep dark:border-violet-700 dark:bg-violet-950 dark:text-violet-300',
 };
 const Pill = ({ tone = 'off', children }) => <span className={`inline-flex items-center rounded-axal-pill border px-2 py-0.5 text-[11.5px] font-bold ${PILL[tone]}`}>{children}</span>;
 const Bar = ({ pct }) => (
@@ -210,11 +210,11 @@ export function DealDocuments({ deal }) {
       {listing && (
         <div className="grid gap-3.5 md:grid-cols-[240px_minmax(0,1fr)]">
           <Card eye="Folders" testId="deal-room-folders">
-            <button type="button" onClick={() => setFolder('')} className={`flex items-center justify-between rounded-axal-sm px-2 py-1.5 text-left text-[13px] ${folder === '' ? 'bg-axal-violet-soft font-extrabold text-axal-violet-deep dark:bg-violet-950 dark:text-violet-300' : 'font-semibold text-axal-ink dark:text-gray-100'}`}>
+            <button type="button" onClick={() => setFolder('')} className={`flex items-center justify-between rounded-axal-sm px-2 py-1.5 text-left text-[13px] ${folder === '' ? 'bg-axal-lavender font-extrabold text-axal-violet-deep dark:bg-violet-950 dark:text-violet-300' : 'font-semibold text-axal-ink dark:text-gray-100'}`}>
               <span>All files</span><span className="font-mono text-[12px]">{listing.files.length}</span>
             </button>
             {listing.folders.map((f) => (
-              <button key={f.uid} type="button" onClick={() => setFolder(f.uid)} className={`flex items-center justify-between rounded-axal-sm px-2 py-1.5 text-left text-[13px] ${folder === f.uid ? 'bg-axal-violet-soft font-extrabold text-axal-violet-deep dark:bg-violet-950 dark:text-violet-300' : 'font-semibold text-axal-ink dark:text-gray-100'}`}>
+              <button key={f.uid} type="button" onClick={() => setFolder(f.uid)} className={`flex items-center justify-between rounded-axal-sm px-2 py-1.5 text-left text-[13px] ${folder === f.uid ? 'bg-axal-lavender font-extrabold text-axal-violet-deep dark:bg-violet-950 dark:text-violet-300' : 'font-semibold text-axal-ink dark:text-gray-100'}`}>
                 <span>{f.name}</span><span className="font-mono text-[12px]">{f.count}</span>
               </button>
             ))}
