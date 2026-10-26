@@ -21,6 +21,13 @@
  *     with each row's outcome, and that includes a run that fails. The audit
  *     insert stays best-effort (D159). Each written row also has its own
  *     rollback record, written with it (`ROW_AUDIT_ACTION`).
+ *   - The recovery cool-off pauses it, dry runs included: the route is on
+ *     `index.ts`'s `COOL_OFF_ROUTES`, as `/api/admin/billing` is on its
+ *     prefixes, because it writes founders' cap tables.
+ *
+ * Only an entry that still carries the exact terms the Accept wrote is
+ * written; one whose terms moved is `entry_changed`, and one whose repaired
+ * inputs fail validation is `inputs_invalid`. Both are left for the owner.
  *
  * The answer and the run's audit hold ids, keys and outcomes: never a name,
  * an email or an amount. The owner runs it against production; no deploy,

@@ -12,8 +12,11 @@
  * `kind = 'safe'`, `status = 'accepted'` and `local_table =
  * 'cap_table_scenarios'` (`CANDIDATES`). That is where the pre-#2629 Accept
  * landed: `local_id` the venture's canonical scenario, `target` the entry
- * key `e-<n>` that `addHolder` returned. Accepts since D1017 land on
- * `cap_table_issuances` and are never candidates.
+ * key `e-<n>` that `addHolder` returned, `payload_json` the terms it was
+ * given. Accepts since D1017 land on `cap_table_issuances` and are never
+ * candidates. A founder who disconnected Mercury lost these rows with the
+ * connection (migration 520, `ON DELETE CASCADE`), so their SAFEs are not
+ * seen here; D966 §6 counts them, read-only.
  *
  * ONE OUTCOME EACH, decided in this order (`settle`):
  *   scenario_missing        `local_id` is null, names no row, or names a row
@@ -28,10 +31,15 @@
  *                           be read
  *   entry_not_safe          the key names a founder, a round or a note
  *   has_basis               the SAFE states a basis; it is kept as it is
+ *   entry_changed           the SAFE's amount, cap or discount is not what the
+ *                           Accept stored from the proposal's payload
+ *                           (`safeTerms`), or the payload cannot be read
  *   record_venture          the venture's cap table is read from the record
  *                           (`readCapTable(...).source === 'record'`, the
  *                           check `acceptSafe` makes before it writes the
  *                           model), so its model is left alone
+ *   inputs_invalid          the repaired inputs fail `validateInputs`, so
+ *                           `simulate` would store errors, not results
  *   would_repair            a dry run's answer for the rest
  *   repaired                written: that one entry gains `basis: 'post_money'`
  *   conflict                the scenario changed after it was read; nothing
@@ -40,7 +48,12 @@
  *                           was written, and the walk went on
  *
  * WHAT IS NEVER DONE. No entry is matched by investor name, only by the key
- * the proposal recorded. No entry but that one is touched: the rest of
+ * the proposal recorded. And the key alone does not prove the entry is the
+ * Accept's: a client that posts no keys sends the same body for "edit the
+ * Mercury row" and "delete it and type a namesake", and `withEntryKeys` gives
+ * the namesake the deleted entry's key. So only an entry that still carries
+ * the exact terms the Accept wrote is written; any other is `entry_changed`,
+ * left for the owner. No entry but that one is touched: the rest of
  * `inputs_json` is written back as it was read. A draft variant is never
  * written, even when it holds an entry under the same key, because a key in a
  * copy proves nothing about where the entry came from (#2630, S1). Such
@@ -53,7 +66,7 @@
  *      holding the operator, the reason and the entry exactly as it was;
  *   2. the scenario: `inputs_json` with the one entry's basis added, and
  *      `result_json` recomputed through `simulate`, the engine every save
- *      runs (`saveScenario`).
+ *      runs (`saveScenario`), on inputs `validateInputs` has passed.
  * Both land or neither does. A guard that no longer holds writes neither, and
  * the row is `conflict`. Then D632's `captable_scenario_updated` activity row
  * names the operator in the venture's own History, by ids only.
@@ -69,8 +82,8 @@
  * The answer holds ids, keys and outcomes only: no name, email or amount.
  */
 import type { Env } from '../../types';
-import { simulate, type Inputs } from '../captable';
-import { ENTRY_KEY, KEYED_LISTS, logScenarioAct } from '../capTableWrites';
+import { simulate, validateInputs, type Inputs } from '../captable';
+import { ENTRY_KEY, HolderError, KEYED_LISTS, logScenarioAct, safeTerms, type SafeTerms } from '../capTableWrites';
 import { ensureCapTableVariantColumn } from '../captableSchema';
 import { readCapTable } from '../capTableToday';
 import { ensureAdminAuditLogTable } from '../../routes/admin';
@@ -85,7 +98,7 @@ export const ROW_AUDIT_ACTION = 'mercury_safe_basis_repaired';
 
 export const REPAIR_OUTCOMES = [
   'repaired', 'would_repair', 'has_basis', 'scenario_missing', 'scenario_other_venture',
-  'entry_missing', 'entry_not_safe', 'record_venture', 'ambiguous', 'conflict', 'failed',
+  'entry_missing', 'entry_not_safe', 'entry_changed', 'record_venture', 'inputs_invalid', 'ambiguous', 'conflict', 'failed',
 ] as const;
 export type RepairOutcome = typeof REPAIR_OUTCOMES[number];
 
@@ -109,7 +122,7 @@ export type RepairResult = {
   next_after: number | null;
 };
 
-const CANDIDATES = `SELECT id, project_id, local_id, target FROM mercury_raise_proposals
+const CANDIDATES = `SELECT id, project_id, local_id, target, payload_json FROM mercury_raise_proposals
   WHERE id > ? AND kind = 'safe' AND status = 'accepted' AND local_table = 'cap_table_scenarios'
   ORDER BY id LIMIT ?`;
 const CLAIMANTS = `SELECT COUNT(*) AS n FROM mercury_raise_proposals
@@ -123,7 +136,7 @@ const ROW_RECORD = `INSERT INTO admin_audit_log (admin_user_id, action, viewed_u
 const WRITE = `UPDATE cap_table_scenarios SET inputs_json = ?, result_json = ?, computed_at = ?, updated_at = ?
   WHERE id = ? AND project_id = ? AND COALESCE(is_variant, 0) = 0 AND inputs_json = ?`;
 
-type Candidate = { id: number; project_id: number; local_id: number | null; target: string | null };
+type Candidate = { id: number; project_id: number; local_id: number | null; target: string | null; payload_json: string | null };
 type ScenarioRead = { id: number; uid: string; project_id: number | null; is_variant: number; inputs_json: string };
 type Entry = Record<string, unknown>;
 type Match = { list: typeof KEYED_LISTS[number]; index: number; entry: Entry };
@@ -139,7 +152,7 @@ export function repairReason(body: unknown): string | null {
 const isEntry = (e: unknown): e is Entry => !!e && typeof e === 'object' && !Array.isArray(e);
 const keyOf = (target: unknown): string | null => (typeof target === 'string' && ENTRY_KEY.test(target) ? target : null);
 
-function parseInputs(json: string | null): Record<string, unknown> | null {
+function parseObject(json: string | null): Record<string, unknown> | null {
   try {
     const v = JSON.parse(String(json ?? ''));
     return isEntry(v) ? v : null;
@@ -162,10 +175,40 @@ const isSafe = (m: Match) => m.list === 'safes' && (m.entry.instrument == null |
 /** No basis, as `safeEntry` and `validateInputs` read one: absent or null. */
 const lacksBasis = (e: Entry) => e.basis == null;
 
+/**
+ * The amount, cap and discount the pre-#2629 Accept stored from this payload:
+ * `acceptRaiseProposal` passed `amount_cents`, `cap_cents ?? null` and
+ * `discount_pct ?? null` to `addHolder`, whose `safeEntry` converts them with
+ * `safeTerms`. Null when the payload cannot be read, or holds terms
+ * `safeEntry` refuses, so no Accept could have stored them.
+ */
+function acceptedTerms(payloadJson: string | null): SafeTerms | null {
+  const payload = parseObject(payloadJson);
+  if (!payload) return null;
+  try {
+    return safeTerms({
+      amount_cents: payload.amount_cents, cap_cents: payload.cap_cents ?? null, discount_pct: payload.discount_pct ?? null,
+    } as Parameters<typeof safeTerms>[0]);
+  } catch (e) {
+    if (e instanceof HolderError) return null;
+    throw e;
+  }
+}
+const TERMS = ['amount', 'cap', 'discount'] as const;
+/** Exactly those terms. Absent and null are one value: `safeEntry` leaves the key out, and a client may post null. */
+const sameTerms = (e: Entry, t: SafeTerms) => TERMS.every((k) => (e[k] ?? null) === (t[k] ?? null));
+
+/** The inputs as read, with that one entry's basis added. */
+function withBasis(inputs: Record<string, unknown>, m: Match): Inputs {
+  const list = [...(inputs[m.list] as unknown[])];
+  list[m.index] = { ...m.entry, basis: REPAIR_BASIS };
+  return { ...inputs, [m.list]: list } as Inputs;
+}
+
 async function untouchedVariants(env: Env, projectId: number, key: string): Promise<number[]> {
   const rows = (await env.DB.prepare(VARIANTS).bind(projectId).all<{ id: number; inputs_json: string }>()).results ?? [];
   return rows.filter((v) => {
-    const inputs = parseInputs(v.inputs_json);
+    const inputs = parseObject(v.inputs_json);
     return !!inputs && entriesUnder(inputs, key).some((m) => isSafe(m) && lacksBasis(m.entry));
   }).map((v) => Number(v.id));
 }
@@ -183,7 +226,7 @@ async function settle(env: Env, p: Candidate, row: RepairRow, opts: RunOpts, sou
   if (!key) return 'entry_missing';
   const claimants = await env.DB.prepare(CLAIMANTS).bind(p.local_id, key).first<{ n: number }>();
   if (Number(claimants?.n ?? 0) > 1) return 'ambiguous';
-  const inputs = parseInputs(s.inputs_json);
+  const inputs = parseObject(s.inputs_json);
   if (!inputs) return 'entry_missing';
   const matches = entriesUnder(inputs, key);
   if (!matches.length) return 'entry_missing';
@@ -191,21 +234,22 @@ async function settle(env: Env, p: Candidate, row: RepairRow, opts: RunOpts, sou
   const [m] = matches;
   if (!isSafe(m)) return 'entry_not_safe';
   if (!lacksBasis(m.entry)) return 'has_basis';
+  const terms = acceptedTerms(p.payload_json);
+  if (!terms || !sameTerms(m.entry, terms)) return 'entry_changed';
   let source = sources.get(p.project_id);
   if (source === undefined) {
     source = (await readCapTable(env, p.project_id)).source;
     sources.set(p.project_id, source);
   }
   if (source === 'record') return 'record_venture';
+  const next = withBasis(inputs, m);
+  if (validateInputs(next).length) return 'inputs_invalid';
   if (!opts.write) return 'would_repair';
-  return (await writeRow(env, p, s, inputs, m, key, opts)) ? 'repaired' : 'conflict';
+  return (await writeRow(env, p, s, next, m, key, opts)) ? 'repaired' : 'conflict';
 }
 
 /** The guarded batch. True when it wrote; false when the scenario changed since it was read. */
-async function writeRow(env: Env, p: Candidate, s: ScenarioRead, inputs: Record<string, unknown>, m: Match, key: string, opts: RunOpts): Promise<boolean> {
-  const list = [...(inputs[m.list] as unknown[])];
-  list[m.index] = { ...m.entry, basis: REPAIR_BASIS };
-  const next = { ...inputs, [m.list]: list } as Inputs;
+async function writeRow(env: Env, p: Candidate, s: ScenarioRead, next: Inputs, m: Match, key: string, opts: RunOpts): Promise<boolean> {
   const nextJson = JSON.stringify(next);
   const result = JSON.stringify(simulate(next));
   const now = new Date().toISOString();

@@ -805,6 +805,10 @@ const COOL_OFF_ROUTES = [
   // added or taken on someone else's behalf. The member-account read beside it
   // stays open.
   '/api/ai-budget/members/:userId/adjustments',
+  // D966 — the SAFE basis repair writes founders' cap tables: the money-adjacent
+  // class D892's reconciliation is paused under (`/api/admin/billing`). The exact
+  // route, so D710's entity reads under `/api/admin/mercury` stay open.
+  '/api/admin/mercury/safe-basis-repair',
 ];
 for (const p of COOL_OFF_ROUTES) app.use(p, recoveryCoolOff);
 // Task #6 — Stripe billing surface (tier checkout/portal/webhook + MI Pro).
