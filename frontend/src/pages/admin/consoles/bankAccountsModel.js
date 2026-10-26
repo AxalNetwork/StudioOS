@@ -355,3 +355,10 @@ export function refusalText(e, fallback = 'That did not save. Nothing changed.')
   if (Number(e?.status) === 403 && code === 'step_up_required') return 'The authenticator code was not entered, so nothing changed.';
   return e?.data?.message || e?.message || fallback;
 }
+
+/**
+ * D1187 (BNK12): the phone the canvas draws at 390 wide, below Tailwind's `sm`
+ * (640px), where the `max-sm:` classes on these pages apply. Not the lens's
+ * 1024px rule: a tablet keeps the table rows.
+ */
+export const PHONE_BELOW_SM = '(max-width: 639px)';

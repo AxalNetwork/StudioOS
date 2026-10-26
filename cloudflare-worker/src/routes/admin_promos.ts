@@ -1,6 +1,6 @@
 import { Hono } from 'hono';
 import type { Env } from '../types';
-import { requireAdmin, requireFactor, requireStepUp } from '../auth';
+import { requireSuperAdmin, requireSuperAdminWriteBar } from '../auth';
 import { stripeCall } from './billing';
 import { ensureAdminAuditLogTable } from './admin';
 import {
@@ -21,8 +21,8 @@ import { refusalBody } from '../util/refusal';
 
 // Task #9 — Promo Code admin CRUD. Mounted at `/api/admin/promos` BEFORE the
 // catch-all `/api/admin` in index.ts so the nested routes resolve here (same
-// mount-precedence trick as `/api/admin/billing`). Each mutation enforces
-// `requireFactor('totp')` + `requireStepUp` + `requireAdmin` — creating a
+// mount-precedence trick as `/api/admin/billing`). D1271: reads require the
+// HQ Super Admin; each mutation takes `requireSuperAdminWriteBar` — creating a
 // 100%-off code is money-adjacent, so it needs a RECENT strong-factor re-auth,
 // not just a long-lived admin JWT. `/api/admin/promos` is also in index.ts's
 // COOL_OFF_PREFIXES so a freshly-recovered admin can't mint promos during
@@ -105,7 +105,7 @@ const refused = (c: any, e: PromoInputError) => c.json(inputRefusal(e), e.status
 
 /**
  * GET /api/admin/promos?q=&state=&applies=&sort=&page=&page_size= — one page
- * of the mirror (admin read; no step-up needed), D1272 (#3298):
+ * of the mirror (Super Admin read; no step-up needed), D1272 (#3298):
  *   q          the code or the name, from two characters
  *   state      active, paused, ended, expired, at_cap or off (`LIST_STATES`)
  *   applies    all (every product) or products (a named list); `plans` waits for part 3
@@ -113,7 +113,7 @@ const refused = (c: any, e: PromoInputError) => c.json(inputRefusal(e), e.status
  * → { promos, total, page, page_size, sort, counts }. A D1 error is a 503, never an empty list.
  */
 adminPromos.get('/', async (c) => {
-  await requireAdmin(c);
+  await requireSuperAdmin(c);
   const q = (k: string) => c.req.query(k);
   try {
     return c.json(await listPromoPage(c.env, { q: q('q'), state: q('state'), applies: q('applies'), sort: q('sort'), page: q('page'), page_size: q('page_size') }));
@@ -315,9 +315,7 @@ async function createPromo(c: any, admin: { id: number }, body: Record<string, u
 
 /** Stripe and the step-up gate, in the order every write checks them. */
 async function writer(c: any) {
-  await requireFactor(c, 'totp');
-  await requireStepUp(c);
-  const admin = await requireAdmin(c);
+  const admin = await requireSuperAdminWriteBar(c);
   if (!c.env.STRIPE_SECRET_KEY) return { admin, stop: c.json({ error: 'Stripe is not configured', code: 'stripe_not_configured' }, 503) };
   return { admin, stop: null as Response | null };
 }

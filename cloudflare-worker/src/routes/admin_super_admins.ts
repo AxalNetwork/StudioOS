@@ -159,7 +159,7 @@ async function tellOfTransfer(
   try {
     const rowId = await notify(env, {
       userId, type: 'super_admin_transfer', title, body,
-      link: '/admin/accounts', payload, channels: ['in_app', 'email'], category: 'security',
+      link: '/admin/hq-team', payload, channels: ['in_app', 'email'], category: 'security',
     });
     return rowId !== null;
   } catch (e) {

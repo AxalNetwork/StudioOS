@@ -109,7 +109,9 @@ test('the overview figures: open, waiting with its oldest, places on open progra
 });
 
 test('every block with no read says why, and none says zero or none; a tester row never carries the email', () => {
-  for (const k of ['applicants', 'activity', 'partnerApplicants', 'testerPrograms']) assert.ok(WAITS[k], k);
+  for (const k of ['testerPrograms']) assert.ok(WAITS[k], k);
+  // D1203 (#3153) filled one program's applicants and Activity, and the Applicants tab: their waits are retired.
+  for (const k of ['applicants', 'activity', 'partnerApplicants']) assert.equal(WAITS[k], undefined, k);
   // D1201 (#3151) filled the Overview's four: their waits are retired, never drawn beside a read.
   for (const k of ['weekly', 'profiles', 'mail', 'needs']) assert.equal(WAITS[k], undefined, k);
   for (const w of Object.values(WAITS)) assert.ok(!/\b0\b|\bnone\b/i.test(w), w);
@@ -175,35 +177,32 @@ test('Programs is D815\'s console as it was', async () => {
   } finally { await v.close(); }
 });
 
-test('one program: details, HQ\'s own applicants, a partner\'s applicants and the history waiting', async () => {
+test('one program: details, HQ\'s own applicants, and the history read', async () => {
   let v = await mounted('/admin/platform/product-testing/programs/alpha');
   try {
     assert.ok(v.current().includes('testing-tab-programs'), 'Programs stays lit under a program');
     assert.equal(v.text('testing-program-name'), 'Product alpha');
-    assert.ok(v.text('testing-program-details').includes('12 of 20 places filled'));
+    // D1203: the places are the first of TST5's four stats; the details card keeps the program's facts.
+    assert.equal(v.text('testing-stat-places-value'), '12 of 20');
+    assert.ok(v.by('testing-program-details'));
   } finally { await v.close(); }
   v = await mounted('/admin/platform/product-testing/programs/alpha?tab=applicants');
   try {
     assert.ok(v.by('testing-program-applicants'));
     assert.ok(v.requests.includes('/admin/testing/programmes/alpha/applicants'));
   } finally { await v.close(); }
-  v = await mounted('/admin/platform/product-testing/programs/beta?tab=applicants');
-  try {
-    assert.ok(v.text('testing-wait-partnerApplicants').includes(NOT_YET));
-    assert.ok(!v.requests.some((u) => u.includes('/beta/applicants')), 'HQ cannot read a partner\'s applicants today');
-  } finally { await v.close(); }
+  // D1203 (#3153): a partner's applicants are read (D1197), and Activity reads the history; tested in product_testing_program_d1203.
   v = await mounted('/admin/platform/product-testing/programs/alpha?tab=activity');
-  try { assert.ok(v.by('testing-wait-activity')); } finally { await v.close(); }
+  try { assert.ok(v.requests.some((u) => u.startsWith('/admin/testing/programmes/alpha/events'))); } finally { await v.close(); }
   v = await mounted('/admin/platform/product-testing/programs/missing');
   try { assert.ok(v.by('testing-program-missing')); } finally { await v.close(); }
 });
 
-test('Applicants waits and makes no read; the Tester pool draws the store with no email, and its status chips page it', async () => {
+test('Applicants reads the applications; the Tester pool draws the store with no email, and its status chips page it', async () => {
   let v = await mounted('/admin/platform/product-testing/applicants');
   try {
-    assert.ok(v.text('testing-wait-applicants').includes(NOT_YET));
-    // Only the header's two tab-count reads (D1201); the tab itself makes none.
-    assert.deepEqual(v.requests.filter((u) => u.startsWith('/admin/')).sort(), ['/admin/product-testers?status=active', '/admin/testing/programmes']);
+    // D1203 (#3153): the tab reads every application, open programs first; tested in product_testing_program_d1203.
+    assert.ok(v.requests.some((u) => u.startsWith('/admin/testing/applications?') && u.includes('scope=open')));
   } finally { await v.close(); }
   v = await mounted('/admin/platform/product-testing/testers');
   try {

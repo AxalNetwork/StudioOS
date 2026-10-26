@@ -5,7 +5,7 @@
  * says "Every figure below was read from this branch alone — none of it is a
  * platform total." It mounts in the shell, so it drew on every HQ page while
  * the scope was set; the scope itself is read by five files. Two narrow: HQ
- * Home swaps in the branch overlay, and Team (`/admin/accounts`) asks the
+ * Home swaps in the branch overlay, and Team (`/admin/hq-team`, D941) asks the
  * server for the branch's administrators. Two decline, in their own words:
  * Analytics and Topology say "Viewing as {branch} does not narrow this page".
  * Every other HQ page — Content, Contracts, Revenue, Funds, Platform, the
@@ -31,7 +31,7 @@ export const UNSCOPED = 'unscoped';
 /** Route → how the page treats the scope, and the file that does it. */
 export const VIEW_AS_SCOPE = {
   '/hq': { scope: NARROWS, page: 'HqHomePage' },
-  '/admin/accounts': { scope: NARROWS, page: 'AccountsPage' },
+  '/admin/hq-team': { scope: NARROWS, page: 'AccountsPage' },
   '/admin/analytics': { scope: DECLINES, page: 'HqAnalyticsPage' },
   '/admin/platform/topology': { scope: DECLINES, page: 'PlatformTopologyPage' },
 };

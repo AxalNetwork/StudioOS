@@ -161,6 +161,21 @@ function perShareMicros(micros, code = 'USD') {
  * CT5's grants, from the venture's equity plan, each named and dated from the
  * record where the record holds the same holder's grant.
  */
+/**
+ * D1130 (#3010): the holder's 83(b), from the plan read's `elections` (one per
+ * holder, not per grant). An unreadable election store says so on its own line
+ * and never blanks the grants. A plan read that carries no `elections` draws no
+ * 83(b) line at all.
+ */
+export function electionWord(elections, holderId) {
+  if (!elections?.available) return 'Unreadable · Try again';
+  const row = (elections.rows || []).find((e) => e.holder_id === holderId);
+  if (!row) return NOT_RECORDED;
+  return row.state === 'done'
+    ? `Filed · ${row.has_document ? 'Proof on file' : 'No document'} · Filing date not recorded`
+    : `Not filed yet${row.due_date ? ` · due ${row.due_date}` : ''}`;
+}
+
 export function grantRows(plan, record) {
   if (!Array.isArray(plan?.grants)) return null;
   const code = record?.currency?.code || 'USD';
@@ -185,6 +200,7 @@ export function grantRows(plan, record) {
       grantOn: rec?.issued_on || '',
       vesting: `${num(g.total_months) == null ? `Term ${NOT_RECORDED.toLowerCase()}` : `${g.total_months} months`} · ${num(g.cliff_months) == null ? `cliff ${NOT_RECORDED.toLowerCase()}` : num(g.cliff_months) === 0 ? 'no cliff' : `${g.cliff_months}-month cliff`} · from ${day(g.start_date)}`,
       vested: shares(g.vested_shares),
+      ...(plan.elections ? { election: electionWord(plan.elections, g.holder_id) } : {}),
       exercise: exercised > 0 ? `Exercised ${shares(exercised)}` : 'Not exercised',
       document: rec?.document_ref ? documentWord(rec) : null,
       carta: g.source === 'connector_carta',

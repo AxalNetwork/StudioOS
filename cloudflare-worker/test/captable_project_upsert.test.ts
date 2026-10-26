@@ -23,7 +23,7 @@ import { SignJWT } from 'jose';
 import captable from '../src/routes/captable.ts';
 
 const JWT_SECRET = 'unit-test-jwt-secret-0123456789-abcdef'; // >= 32 bytes
-const ADMIN_ID = 1;
+const OWNER_ID = 1;
 const PROJECT_ID = 1;
 
 // Two valid, distinct inputs (pass validateInputs): a single founder, then a
@@ -171,9 +171,9 @@ function req(env: any, token: string, path: string, init: RequestInit = {}): Pro
 }
 
 test('Worker: POST upsert keeps exactly one scenario per project across two saves + bootstrap', async () => {
-  const token = await mintToken(ADMIN_ID, 'admin');
+  const token = await mintToken(OWNER_ID, 'founder');
   const { env, rows } = makeEnv(
-    { id: ADMIN_ID, role: 'admin', is_active: 1 },
+    { id: OWNER_ID, role: 'founder', founder_id: 7, subscription_tier: 'studio', is_active: 1 },
     { project: { id: PROJECT_ID, founder_id: 7 } },
   );
 
@@ -221,20 +221,20 @@ test('Worker: POST upsert keeps exactly one scenario per project across two save
 });
 
 test('Worker: PUT refuses to bind a second scenario to a project that already has one (409)', async () => {
-  const token = await mintToken(ADMIN_ID, 'admin');
+  const token = await mintToken(OWNER_ID, 'founder');
   const NOW = '2026-06-28T00:00:00.000Z';
   const { env, rows } = makeEnv(
-    { id: ADMIN_ID, role: 'admin', is_active: 1 },
+    { id: OWNER_ID, role: 'founder', founder_id: 7, subscription_tier: 'studio', is_active: 1 },
     {
       project: { id: PROJECT_ID, founder_id: 7 },
       scenarios: [
         {
-          id: 1, uid: 'uid-bound', owner_user_id: ADMIN_ID, project_id: PROJECT_ID,
+          id: 1, uid: 'uid-bound', owner_user_id: OWNER_ID, project_id: PROJECT_ID,
           name: 'Bound', inputs_json: JSON.stringify(INPUTS_V1), result_json: '{}',
           computed_at: NOW, created_at: NOW, updated_at: NOW,
         },
         {
-          id: 2, uid: 'uid-free', owner_user_id: ADMIN_ID, project_id: null,
+          id: 2, uid: 'uid-free', owner_user_id: OWNER_ID, project_id: null,
           name: 'Free', inputs_json: JSON.stringify(INPUTS_V1), result_json: '{}',
           computed_at: NOW, created_at: NOW, updated_at: NOW,
         },
@@ -261,15 +261,15 @@ test('Worker: a save that loses the INSERT race resolves to the single existing 
   // winner commits the project's canonical row; the loser reads a stale snapshot
   // (no canonical yet), takes the INSERT path, and collides with the partial
   // unique index. The route must recover by editing the winner — 200, one row.
-  const token = await mintToken(ADMIN_ID, 'admin');
+  const token = await mintToken(OWNER_ID, 'founder');
   const NOW = '2026-06-28T00:00:00.000Z';
   const { env, rows } = makeEnv(
-    { id: ADMIN_ID, role: 'admin', is_active: 1 },
+    { id: OWNER_ID, role: 'founder', founder_id: 7, subscription_tier: 'studio', is_active: 1 },
     {
       project: { id: PROJECT_ID, founder_id: 7 },
       scenarios: [
         {
-          id: 1, uid: 'uid-winner', owner_user_id: ADMIN_ID, project_id: PROJECT_ID,
+          id: 1, uid: 'uid-winner', owner_user_id: OWNER_ID, project_id: PROJECT_ID,
           is_variant: 0, name: 'Winner', inputs_json: JSON.stringify(INPUTS_V1),
           result_json: '{}', computed_at: NOW, created_at: NOW, updated_at: NOW,
         },

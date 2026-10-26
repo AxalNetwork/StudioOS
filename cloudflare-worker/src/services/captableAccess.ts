@@ -7,25 +7,32 @@ import { type AccessLevel, levelRank, widerLevel } from './captableShare';
 export type AccessUser = { id: number; role?: string | null; founder_id?: number | null };
 export type AccessProject = { founder_id?: number | null; capRead?: boolean; capWrite?: boolean };
 export type AccessScenario = { owner_user_id: number; project_id?: number | null };
+export const CAPTABLE_SUPPORT_REASON_MIN = 10;
+export const CAPTABLE_SUPPORT_REASON_MAX = 500;
 export function isAdmin(user: AccessUser): boolean { return user.role?.toLowerCase() === 'admin'; }
 function owns(user: AccessUser, project: AccessProject): boolean {
   return user.role?.toLowerCase() === 'founder' && !!user.founder_id && user.founder_id === project.founder_id;
 }
 export function canReadProject(user: AccessUser, project: AccessProject): boolean {
+  // D1130: raw legacy reads never inherit a studio/HQ role. Use resolveAccess.
+  if (isAdmin(user)) return false;
   if (user.role?.toLowerCase() === 'investor') return false;
-  return isAdmin(user) || owns(user, project) || project.capRead === true;
+  return owns(user, project) || project.capRead === true;
 }
 export function canWriteProject(user: AccessUser, project: AccessProject): boolean {
+  if (isAdmin(user)) return false;
   if (user.role?.toLowerCase() === 'investor') return false;
-  return isAdmin(user) || owns(user, project) || project.capWrite === true;
+  return owns(user, project) || project.capWrite === true;
 }
 export function canReadScenario(user: AccessUser, scenario: AccessScenario, project: AccessProject | null): boolean {
-  if (scenario.project_id != null) return isAdmin(user) || (!!project && canReadProject(user, project));
-  return isAdmin(user) || scenario.owner_user_id === user.id;
+  if (isAdmin(user)) return false;
+  if (scenario.project_id != null) return !!project && canReadProject(user, project);
+  return scenario.owner_user_id === user.id;
 }
 export function canWriteScenario(user: AccessUser, scenario: AccessScenario, project: AccessProject | null): boolean {
-  if (scenario.project_id != null) return isAdmin(user) || (!!project && canWriteProject(user, project));
-  return isAdmin(user) || scenario.owner_user_id === user.id;
+  if (isAdmin(user)) return false;
+  if (scenario.project_id != null) return !!project && canWriteProject(user, project);
+  return scenario.owner_user_id === user.id;
 }
 
 // ---------------------------------------------------------------------------

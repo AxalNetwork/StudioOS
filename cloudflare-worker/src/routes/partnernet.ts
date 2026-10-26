@@ -47,6 +47,14 @@ const INTERACTION_COLUMNS = [
   `ALTER TABLE partner_interactions ADD COLUMN outcome TEXT CHECK (outcome IS NULL OR length(outcome) <= 200)`,
 ];
 
+// D958 (migration 563): the columns network.ts's canonical `commissions` adds,
+// so this defensive copy converges with it (check-schema-pair-drift).
+const COMMISSION_COLUMNS = [
+  `ALTER TABLE commissions ADD COLUMN terms_id INTEGER REFERENCES referral_partner_terms(id)`,
+  `ALTER TABLE commissions ADD COLUMN reversed_amount_cents INTEGER NOT NULL DEFAULT 0`,
+  `ALTER TABLE commissions ADD COLUMN reversed_at TIMESTAMP`,
+];
+
 const REL_REQUEST_COLUMNS = [
   `ALTER TABLE partner_relationships ADD COLUMN status TEXT NOT NULL DEFAULT 'accepted'`,
   `ALTER TABLE partner_relationships ADD COLUMN requested_by INTEGER`,
@@ -249,6 +257,7 @@ async function ensureSchema(env: Env) {
   // tables exist and BEFORE the view is (re)created: run the tables, then the
   // columns, then the last two statements (DROP VIEW / CREATE VIEW) again.
   for (const s of stmts) { try { await env.DB.prepare(s).run(); } catch (e: any) { console.error('partnernet schema:', e?.message); } }
+  try { await runSchemaBootstrap(env, COMMISSION_COLUMNS); } catch (e: any) { console.error('partnernet: commission columns unavailable —', e?.message); }
   try { await runSchemaBootstrap(env, REL_REQUEST_COLUMNS); } catch (e: any) { console.error('partnernet: request columns unavailable —', e?.message); }
   try { await runSchemaBootstrap(env, INTERACTION_COLUMNS); } catch (e: any) { console.error('partnernet: interaction columns unavailable —', e?.message); }
   for (const s of stmts.slice(-2)) { try { await env.DB.prepare(s).run(); } catch (e: any) { console.error('partnernet view:', e?.message); } }

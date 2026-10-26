@@ -13,6 +13,7 @@ const inputs={founders:[{name:'Synthetic',shares:100}],option_pool_pct:0};
 function fixture(){
  const db=new DatabaseSync(':memory:',{enableForeignKeyConstraints:false});
  for(const t of ['users','projects','project_members','cap_table_scenarios','cap_table_holders','cap_table_securities','activity_logs','user_company_links']) db.exec(tableFromBaseline(baseline,t));
+ db.exec('CREATE TABLE IF NOT EXISTS company_profiles (id INTEGER PRIMARY KEY, archived_at TEXT)'); // D1137 (migration 597)
  db.exec(tableFromBaseline(readFileSync(new URL('../sql/migrations/575_cap_table_access.sql',import.meta.url),'utf8'),'cap_table_access_grants'));
  const roles=['admin','partner','investor','founder','founder','advisor','partner','exploring','advisor'];
  roles.forEach((role,i)=>db.prepare("INSERT INTO users(id,role,name,email,founder_id,subscription_tier) VALUES(?,?,?,?,?,'studio')").run(i+1,role,'Synthetic',`user${i+1}@example.invalid`,i===3?40:null));
@@ -34,9 +35,9 @@ test('unrelated roles cannot read any cap-table surface or save',async()=>{
   }
  }finally{f.db.close();}
 });
-test('owner, cofounder and admin read; advisors have no holder email or writes',async()=>{
+test('owner and cofounder read; ungranted advisors cannot read the raw register or write',async()=>{
  const f=fixture();try{
-  for(const id of [1,4,5,7]) for(const path of paths) assert.equal((await call(f,id,path)).status,200,`${id} ${path}`);
+  for(const id of [4,5,7]) for(const path of paths) assert.equal((await call(f,id,path)).status,200,`${id} ${path}`);
   const advisor=await call(f,6,'/10');assert.equal(advisor.status,403);
   assert.equal((await call(f,5,'/10')).body.holders[0].email,'holder@example.invalid');
   assert.equal((await call(f,6,'/scenarios','POST',{project_id:10,name:'Synthetic',inputs})).status,403);
@@ -44,11 +45,11 @@ test('owner, cofounder and admin read; advisors have no holder email or writes',
   assert.ok(f.db.prepare("SELECT id FROM activity_logs WHERE user_id=5 AND action='captable_member_write_authorized'").get());
  }finally{f.db.close();}
 });
-test('admin list is own-only; removed members and investor owners cannot bypass through scenarios',async()=>{
+test('admin legacy lists are refused; removed members and investor owners cannot bypass through scenarios',async()=>{
  const f=fixture();try{
-  assert.deepEqual((await call(f,1,'/scenarios')).body.items,[]);
+  assert.equal((await call(f,1,'/scenarios')).status,403);
   f.db.prepare("INSERT INTO cap_table_scenarios(uid,owner_user_id,name,inputs_json) VALUES('admin-own',1,'Synthetic',?)").run(JSON.stringify(inputs));
-  assert.deepEqual((await call(f,1,'/scenarios')).body.items.map((r:any)=>r.uid),['admin-own']);
+  assert.equal((await call(f,1,'/scenarios')).status,403);
   f.db.exec("UPDATE cap_table_scenarios SET owner_user_id=3 WHERE uid='main'");
   assert.deepEqual((await call(f,3,'/scenarios')).body.items,[]);
   assert.equal((await call(f,3,'/scenarios/main')).status,403);
@@ -98,13 +99,34 @@ test('a write that gates the same project twice reuses its membership answer and
  }finally{f.db.close();}
 });
 
-test('orphaned bound scenarios fail closed for owners and remain recoverable by admin',async()=>{
+test('orphaned bound scenarios fail closed for owners and admins',async()=>{
  const f=fixture();try{
   f.db.exec('DELETE FROM projects WHERE id=10');
   assert.deepEqual((await call(f,4,'/scenarios')).body.items,[]);
   assert.equal((await call(f,4,'/scenarios/main')).status,403);
   assert.equal((await call(f,4,'/scenarios/main','DELETE')).status,403);
-  assert.equal((await call(f,1,'/scenarios/main')).status,200);
-  assert.equal((await call(f,1,'/scenarios/main','DELETE')).status,200);
+  assert.equal((await call(f,1,'/scenarios/main')).status,403);
+  assert.equal((await call(f,1,'/scenarios/main','DELETE')).status,403);
+ }finally{f.db.close();}
+});
+
+// D1130: old routes cannot bypass the level/support read, even with an admin token.
+test('admins use the scoped cap-table read and cannot mutate through a legacy route',async()=>{
+ const f=fixture();try{
+  for(const path of paths) assert.equal((await call(f,1,path)).status,403,path);
+  for(const [method,path] of [['POST','/scenarios'],['PUT','/scenarios/main'],['DELETE','/scenarios/main'],['POST','/scenarios/main/share'],['POST','/409a/10'],['POST','/409a/10/events'],['DELETE','/409a/10/events/1'],['PUT','/carta/venture']]){
+   assert.equal((await call(f,1,path,method,{project_id:10,name:'Changed',inputs,reason:'Support investigation'})).status,403,method+' '+path);
+  }
+  assert.equal(f.db.prepare("SELECT name FROM cap_table_scenarios WHERE uid='main'").get()!.name,'Synthetic');
+ }finally{f.db.close();}
+});
+
+test('HQ cannot use record corrections or legacy reads, even with a support reason',async()=>{
+ const f=fixture();try{
+  f.db.exec(tableFromBaseline(baseline,'super_admins'));f.db.exec('INSERT INTO super_admins(user_id) VALUES (1)');
+  assert.equal((await call(f,1,'/record/10/issuances','POST',{kind:'founding',reason:'Synthetic support reason'})).status,403);
+  assert.equal((await call(f,1,'/live?project_id=10')).status,403);
+  assert.equal((await call(f,1,'/equity-plan')).status,403);
+  assert.equal((await call(f,1,'/record/10/document-read','POST',{reason:'Synthetic support reason'})).status,403);
  }finally{f.db.close();}
 });

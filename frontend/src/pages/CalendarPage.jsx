@@ -96,10 +96,14 @@ import BrandIcon from '../ui/BrandIcon.jsx';
 import { usePhoneWidth } from '../ui';
 import { AccountPhonePage, phonePending } from './account/AccountPhonePage';
 import { ACCOUNT_PHONE_PAGES } from './account/accountPhone';
-import { FAMILIES, NOT_YET, VIEWS, WAITS, chipCount, viewOf, windowFor } from './calendarViews';
+import { NOT_YET, VIEWS, WAITS, chipCount, viewOf, windowFor } from './calendarViews';
 import CalendarItemDrawer, { CancelDialog } from './CalendarItemDrawer';
 import { NewCheckinDialog, NewIcDialog, NewMenu } from './CalendarNewDialogs';
 import { itemOf, itemPath } from './calendarItemModel';
+import { DayPopover, KindsPanel, MonthGrid, WeekGrid } from './CalendarGrids';
+import {
+  anchorOf, familiesFor, kindsFrom, kindsOfFamilies, needsFrom, needsMe, shiftAnchor, withDate, withKinds, withNeeds,
+} from './calendarGrid';
 import './calendarPage.css';
 
 /**
@@ -350,7 +354,8 @@ export default function CalendarPage() {
   const [sources, setSources] = useState([]);       // per-source answer, from the worker
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
-  const [filter, setFilter] = useState(null);       // null = All
+  const [kindsOpen, setKindsOpen] = useState(false); // D1210: the Kinds panel (CAL6)
+  const [dayOpen, setDayOpen] = useState(null);      // D1210: the day popover (CAL12)
   // D1205: the view is the address (Month /calendar, /week, /agenda).
   // D1211: /calendar/item/:kind/:id opens the drawer over the view it came
   // from (the link carries it in `state.from`), else over Month.
@@ -360,6 +365,9 @@ export default function CalendarPage() {
   const behind = opened ? (location.state?.from || '/calendar') : location.pathname;
   const pathname = behind;
   const range = viewOf(pathname);
+  // D1210: `?date=` anchors the view (else today); `?kinds=` and `?needs=1` narrow it.
+  const search = opened ? '' : location.search;
+  const anchor = useMemo(() => anchorOf(search), [search]);
   const [google, setGoogle] = useState(null);
   const [microsoft, setMicrosoft] = useState(null);
   const [syncBusy, setSyncBusy] = useState(false);
@@ -376,8 +384,15 @@ export default function CalendarPage() {
   // Mirrors canScheduleIc() in cloudflare-worker/src/routes/calendar.ts. A
   // control the route would refuse is not drawn; the strip states the limit.
   const canIC = role === 'admin' || role === 'investor';
+  // D1210 (CAL14): an Explorer's calendar is Events and From other calendars, and has no New.
+  const explorer = role === 'exploring';
+  const families = familiesFor(role);
+  const allowedKinds = useMemo(() => kindsOfFamilies(families).filter((k) => KINDS.some((x) => x.id === k)), [families]);
+  const shownKinds = useMemo(() => KINDS.filter((k) => allowedKinds.includes(k.id)), [allowedKinds]);
+  const chosen = useMemo(() => kindsFrom(search, allowedKinds), [search, allowedKinds]);
+  const needs = needsFrom(search);
 
-  const window_ = useMemo(() => windowFor(range), [range]);
+  const window_ = useMemo(() => windowFor(range, anchor), [range, anchor]);
   const label = rangeLabel(range, window_.from, window_.to);
 
   const load = useCallback(async () => {
@@ -455,14 +470,18 @@ export default function CalendarPage() {
   const counts = useMemo(() => {
     const out = {};
     // D1205: a kind whose source did not answer counts a dash, never 0.
-    for (const k of KINDS) out[k.id] = chipCount(inRange, k.id, failedKinds);
+    for (const k of shownKinds) out[k.id] = chipCount(inRange, k.id, failedKinds);
     return out;
-  }, [inRange, failedKinds]);
+  }, [inRange, failedKinds, shownKinds]);
 
   const pool = useMemo(() => {
     if (!Array.isArray(inRange)) return [];
-    return filter ? inRange.filter((e) => e.kind === filter) : inRange;
-  }, [inRange, filter]);
+    // D1210: the Kinds filter (`?kinds=`) and "Only what needs me" (`?needs=1`) narrow the one list.
+    return inRange.filter((e) => (!chosen || chosen.has(e.kind)) && (!needs || needsMe(e, myEmail)));
+  }, [inRange, chosen, needs, myEmail]);
+  const narrowed = Boolean(chosen) || needs;
+  const kindsOn = chosen ? chosen.size : allowedKinds.length;
+  const goSearch = (q) => navigate(`${pathname}${q}`);
 
   const days = useMemo(() => {
     const today = new Date(); today.setHours(0, 0, 0, 0);
@@ -625,7 +644,7 @@ export default function CalendarPage() {
         <div className="cal-head-actions">
           {/* D1211 (CAL8 A): one New menu. IC meeting is in it only where
               canScheduleIc allows (`newMenu`), so the gate strip below says why. */}
-          <NewMenu role={role} onPick={(k) => (k === 'ic' && canIC ? setShowIc(true) : setShowCk(true))} />
+          {!explorer && <NewMenu role={role} onPick={(k) => (k === 'ic' && canIC ? setShowIc(true) : setShowCk(true))} />}
           <a className="cal-btn cal-btn-o" href={api.calendarIcsUrl()}
              aria-label="Subscribe to or export this calendar as iCalendar">
             <Download className="w-4 h-4" aria-hidden="true" /> Subscribe · .ics
@@ -646,7 +665,7 @@ export default function CalendarPage() {
           header the canvas draws. */}
       <div className="cal-explainer"><PageExplainer pageKey="calendar" /></div>
 
-      {!canIC && (
+      {!canIC && !explorer && (
         <div className="cal-gate">
           <span className="cal-eb">Not available to you</span>
           <span>
@@ -666,25 +685,28 @@ export default function CalendarPage() {
               </Link>
             ))}
           </nav>
+          <span className="cal-step" role="group" aria-label="Move the calendar">
+            <Link to={`${pathname}${withDate(search, shiftAnchor(range, anchor, -1))}`} className="cal-btn cal-btn-q cal-btn-sm" aria-label="Earlier" data-testid="cal-prev">‹</Link>
+            <Link to={`${pathname}${withDate(search, null)}`} className="cal-btn cal-btn-q cal-btn-sm" data-testid="cal-today">Today</Link>
+            <Link to={`${pathname}${withDate(search, shiftAnchor(range, anchor, 1))}`} className="cal-btn cal-btn-q cal-btn-sm" aria-label="Later" data-testid="cal-next">›</Link>
+          </span>
           <span className="cal-range cal-mono">{label}</span>
           <span className="cal-meta">{meta}</span>
         </div>
-        <div className="cal-chips" role="group" aria-label="Filter by kind">
-          {/* No list, no number. A chip that showed a dash or a zero here would
-              be inventing a count for a request that never answered — the
-              banner above says what happened instead. */}
-          <button type="button" className="cal-chip" aria-pressed={!filter} onClick={() => setFilter(null)}>
-            All{Array.isArray(inRange) ? <b>{inRange.length}</b> : null}
+        <div className="cal-kinds-wrap">
+          {/* D1210 (CAL6): the Kinds filter replaces the chip row. Its counts are
+              still the one list's (`counts`, from inRange), a dash for a source
+              that did not answer, and none at all when the list was not read. */}
+          <button type="button" className="cal-chip" aria-expanded={kindsOpen} aria-pressed={narrowed}
+                  onClick={() => setKindsOpen((x) => !x)} data-testid="cal-kinds">
+            Kinds<b>{needs ? 'needs me' : `${kindsOn} on`}</b>
           </button>
-          {KINDS.map((k) => (
-            <button key={k.id} type="button" className="cal-chip" aria-pressed={filter === k.id}
-                    onClick={() => setFilter(filter === k.id ? null : k.id)}>
-              <span className="cal-dot" data-kind={k.id} aria-hidden="true" />
-              {k.label}
-              {counts[k.id] === null ? null
-                : <b title={counts[k.id] === '—' ? 'This source did not answer, so its count is not known.' : undefined}>{counts[k.id]}</b>}
-            </button>
-          ))}
+          {narrowed ? <Link to={`${pathname}${withNeeds(withKinds(search, null, allowedKinds), false)}`} className="cal-btn cal-btn-q cal-btn-sm" data-testid="cal-kinds-clear">Show everything</Link> : null}
+          {kindsOpen && (
+            <KindsPanel families={families} kindLabel={(k) => KIND_LABEL[k] || k} counts={counts} items={inRange}
+              chosen={chosen} needs={needs} onClose={() => setKindsOpen(false)}
+              onApply={(pick, onlyNeeds) => goSearch(withNeeds(withKinds(search, pick, allowedKinds), onlyNeeds))} />
+          )}
         </div>
       </div>
 
@@ -738,27 +760,34 @@ export default function CalendarPage() {
                 {range !== 'agenda' && (
                   <Link to="/calendar/agenda" className="cal-btn cal-btn-o">Show next 90 days</Link>
                 )}
-                <button type="button" className="cal-btn cal-btn-o" onClick={() => setShowCk(true)}>New check-in</button>
+                {!explorer && <button type="button" className="cal-btn cal-btn-o" onClick={() => setShowCk(true)}>New check-in</button>}
               </div>
             </div>
           )}
 
           {!loading && Array.isArray(inRange) && inRange.length > 0 && pool.length === 0 && (
-            <div className="cal-empty">
-              <div className="cal-eb">Nothing of this kind</div>
-              <h2>No {KIND_LABEL[filter] || filter} events between {label}.</h2>
+            <div className="cal-empty" data-testid="cal-empty-filtered">
+              <div className="cal-eb">Filtered to nothing</div>
+              <h2>{needs ? `Nothing waits on your answer between ${label}.` : `None of the kinds you chose are on between ${label}.`}</h2>
               <p>
-                {failedKinds.has(filter)
-                  ? 'This source did not respond, so the page cannot say whether any are scheduled.'
-                  : `This source answered and returned nothing. ${inRange.length} ${inRange.length === 1 ? 'event' : 'events'} of other kinds ${inRange.length === 1 ? 'is' : 'are'} in this range.`}
+                {chosen && [...chosen].some((k) => failedKinds.has(k))
+                  ? 'A kind you chose did not answer, so the page cannot say whether any are scheduled.'
+                  : `${inRange.length} ${inRange.length === 1 ? 'item' : 'items'} of other kinds ${inRange.length === 1 ? 'is' : 'are'} in this range.`}
               </p>
               <div>
-                <button type="button" className="cal-btn cal-btn-o" onClick={() => setFilter(null)}>Show all kinds</button>
+                <Link to={`${pathname}${withNeeds(withKinds(search, null, allowedKinds), false)}`} className="cal-btn cal-btn-o">Show everything</Link>
               </div>
             </div>
           )}
 
-          {days.map((d) => (
+          {/* D1210: Month and Week are grids (CAL1, CAL2); Agenda is the day list (CAL3). */}
+          {range === 'month' && Array.isArray(inRange) && (
+            <MonthGrid anchor={anchor} items={pool} read={!error} from={pathname} onOpenDay={setDayOpen} />
+          )}
+          {range === 'week' && Array.isArray(inRange) && (
+            <WeekGrid anchor={anchor} items={pool} read={!error} from={pathname} onOpenDay={setDayOpen} />
+          )}
+          {range === 'agenda' && days.map((d) => (
             <div className="cal-day" key={d.key}>
               <div className="cal-day-head">
                 <strong>{d.date}</strong>
@@ -813,7 +842,7 @@ export default function CalendarPage() {
           <div className="cal-card" style={{ marginTop: 12 }}>
             <div className="cal-eb">What is on this calendar</div>
             <div className="cal-sources">
-              {KINDS.map((k) => (
+              {shownKinds.map((k) => (
                 <div key={k.id}>
                   <span className="cal-dot" data-kind={k.id} aria-hidden="true" />
                   <span>{k.label}</span>
@@ -822,7 +851,7 @@ export default function CalendarPage() {
               ))}
             </div>
             <p className="cal-foot">
-              {KINDS.length} kinds in {FAMILIES.filter((f) => f.kinds.length).length} families. The filters above are generated
+              {shownKinds.length} kinds in {families.filter((f) => f.kinds.length).length} families. The Kinds filter above is generated
               from this list, so a kind cannot exist without a way to reach it.
             </p>
           </div>
@@ -837,6 +866,7 @@ export default function CalendarPage() {
         </aside>
       </div>
 
+      {dayOpen && <DayPopover date={dayOpen} items={pool} read={Array.isArray(inRange)} from={pathname} onClose={() => setDayOpen(null)} />}
       {showIc && <NewIcDialog meetAvailable={gState === 'connected'} onClose={() => setShowIc(false)} onSaved={() => { setShowIc(false); load(); }} />}
       {showCk && <NewCheckinDialog role={role} meetAvailable={gState === 'connected'} onClose={() => setShowCk(false)} onSaved={() => { setShowCk(false); load(); }} />}
       {opened && (

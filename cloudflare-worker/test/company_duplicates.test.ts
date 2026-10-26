@@ -124,7 +124,8 @@ function makeEnv(links: Link[], inserts: string[] = []): any {
     DB: {
       prepare: (sql: string) => handle(sql),
       async exec() { return { count: 0, duration: 0 }; },
-      async batch(stmts: any[]) { return (stmts || []).map(() => ({ results: [] })); },
+      // D1137: create writes its link and membership event in one batch, so the stub runs each statement.
+      async batch(stmts: any[]) { const out: any[] = []; for (const st of stmts || []) out.push(await st.run()); return out; },
     },
   };
 }
@@ -195,9 +196,10 @@ test('create: a genuinely new name still works', async () => {
   const inserts: string[] = [];
   const res = await create(makeEnv([link(1, 1, 1)], inserts), token, 'Northwind');
   assert.equal(res.status, 200);
-  assert.equal(inserts.length, 2, 'the company row and its membership link');
+  assert.equal(inserts.length, 3, 'the company row, its membership link and the join event (D1137)');
   assert.ok(inserts.some((q) => q.includes('insert into company_profiles')));
   assert.ok(inserts.some((q) => q.includes('insert into user_company_links')));
+  assert.ok(inserts.some((q) => q.includes('insert into company_membership_events')));
 });
 
 test('create: the name is only taken for the caller, not globally', async () => {
@@ -209,7 +211,7 @@ test('create: the name is only taken for the caller, not globally', async () => 
   // COMPANIES holds "DeFi Scoring" (id 1), but this caller belongs to id 2 only.
   const res = await create(makeEnv([link(1, 2, 1)], inserts), token, 'DeFi Scoring');
   assert.equal(res.status, 200, 'someone else owning the name must not block it');
-  assert.equal(inserts.length, 2);
+  assert.equal(inserts.length, 3);
 });
 
 test('create: an empty or blank name is still rejected before the clash check', async () => {

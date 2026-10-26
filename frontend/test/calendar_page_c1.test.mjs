@@ -215,13 +215,18 @@ test('every count on the page comes from the one fetched list', () => {
   assert.match(page, /const inRange = items;/, 'the single list is gone');
   // D1205: counted by chipCount (calendarViews.js), still over inRange, with a
   // dash for a kind whose source did not answer.
-  assert.match(page, /for \(const k of KINDS\) out\[k\.id\] = chipCount\(inRange, k\.id, failedKinds\);/,
+  // D1210: the viewer's kinds (an Explorer's are fewer), still counted over inRange.
+  assert.match(page, /for \(const k of shownKinds\) out\[k\.id\] = chipCount\(inRange, k\.id, failedKinds\);/,
     'the kind counts no longer come from inRange');
-  assert.match(page, /return filter \? inRange\.filter\(\(e\) => e\.kind === filter\) : inRange;/,
+  // D1210: the Kinds filter and "Only what needs me" narrow inRange itself.
+  assert.match(page, /return inRange\.filter\(\(e\) => \(!chosen \|\| chosen\.has\(e\.kind\)\) && \(!needs \|\| needsMe\(e, myEmail\)\)\);/,
     'the rendered pool no longer comes from inRange');
   assert.match(page, /for \(const e of pool\)/, 'the day groups no longer come from the pool');
-  assert.match(page, /All\{Array\.isArray\(inRange\) \? <b>\{inRange\.length\}<\/b> : null\}/,
-    'the All chip no longer advertises the unfiltered count');
+  // D1210: the grids draw the pool, and the Kinds panel counts the one list (`counts`, `items={inRange}`).
+  assert.match(page, /<MonthGrid anchor=\{anchor\} items=\{pool\}/);
+  assert.match(page, /<WeekGrid anchor=\{anchor\} items=\{pool\}/);
+  assert.match(page, /<KindsPanel families=\{families\} kindLabel=\{\(k\) => KIND_LABEL\[k\] \|\| k\} counts=\{counts\} items=\{inRange\}/,
+    'the Kinds panel no longer counts the one list');
   assert.match(page, /\{d\.events\.length\} \{d\.events\.length === 1 \? 'event' : 'events'\}/,
     'a day group no longer counts its own rendered events');
   // No other array may be counted into a chip or a group.
@@ -309,9 +314,11 @@ test('nothing absent renders as a dash or a plausible zero', () => {
   // identical, and only one of them is a fact about the reader.
   assert.match(TEMPLATE, /Not recorded/);
   assert.doesNotMatch(page, /[>{]\s*[—–-]\s*[<}]/, 'a bare dash is being rendered as a value');
-  // A chip with no readable list carries no number at all rather than a zero.
-  assert.match(page, /\{counts\[k\.id\] === null \? null\s*: <b title=\{counts\[k\.id\] === '—' \? 'This source did not answer, so its count is not known\.' : undefined\}>\{counts\[k\.id\]\}<\/b>\}/,
-    'a chip prints a count when the list could not be read, or a dash with no reason');
+  // D1210: a kind with no readable list carries no number at all rather than a
+  // zero, and a dash only beside its reason (the Kinds panel, CalendarGrids.jsx).
+  const grids = readFileSync('frontend/src/pages/CalendarGrids.jsx', 'utf8');
+  assert.match(grids, /\{counts\?\.\[k\] === '—' \? '— · Could not be read' : counts\?\.\[k\] \?\? ''\}/,
+    'a kind prints a count when the list could not be read, or a dash with no reason');
   // Every "Not recorded" on the rail is followed by the reason it is missing.
   const spec = page.match(/const SPEC = \{([\s\S]*?)\n  \};/)?.[1] || '';
   const states = [...spec.matchAll(/^ {4}(\w+): \{/gm)].map((m) => m[1]);

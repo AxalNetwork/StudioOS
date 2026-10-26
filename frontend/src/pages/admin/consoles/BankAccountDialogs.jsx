@@ -43,8 +43,8 @@ export const ADD_NOTE = 'Saved encrypted. The full number is not shown again, ex
 // ── Styles, shared with the console and the lightbox ─────────────────────────
 
 export const inputCls = 'w-full rounded-md border border-[#dcd9e3] bg-white px-2.5 py-1.5 text-[13px] text-gray-900 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-100';
-export const btnCls = 'inline-flex items-center gap-1 rounded-md border border-[#dcd9e3] bg-white px-2.5 py-1 text-xs font-semibold text-gray-700 hover:bg-gray-50 disabled:opacity-50 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-200 dark:hover:bg-gray-800';
-export const primaryCls = 'inline-flex items-center gap-1 rounded-md bg-axal-violet px-3 py-1.5 text-xs font-bold text-white hover:bg-axal-violet-deep disabled:opacity-50 dark:bg-violet-500 dark:hover:bg-violet-400';
+export const btnCls = 'inline-flex items-center justify-center gap-1 max-sm:min-h-[44px] max-sm:px-3.5 rounded-md border border-[#dcd9e3] bg-white px-2.5 py-1 text-xs font-semibold text-gray-700 hover:bg-gray-50 disabled:opacity-50 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-200 dark:hover:bg-gray-800';
+export const primaryCls = 'inline-flex items-center justify-center gap-1 max-sm:min-h-[44px] max-sm:px-4 rounded-md bg-axal-violet px-3 py-1.5 text-xs font-bold text-white hover:bg-axal-violet-deep disabled:opacity-50 dark:bg-violet-500 dark:hover:bg-violet-400';
 export const dangerCls = 'inline-flex items-center gap-1 rounded-md bg-rose-600 px-3 py-1.5 text-xs font-bold text-white hover:bg-rose-700 disabled:opacity-50 dark:bg-rose-500 dark:hover:bg-rose-400';
 export const fieldCls = 'block text-[11.5px] font-semibold text-axal-muted dark:text-gray-400';
 export const muted = 'text-axal-muted dark:text-gray-400';
@@ -61,15 +61,19 @@ function Refusal({ text }) {
   return text ? <p role="alert" className="text-[12.5px] text-red-700 dark:text-red-300">{text}</p> : null;
 }
 
-/** One dialog: its title says what it changes, its footer is Cancel and the change. */
-function Dialog({ title, sub, testId, onClose, onSubmit, action, actionCls = primaryCls, ready = true, busy, width = 520, children }) {
+/**
+ * One dialog: its title says what it changes, its footer is Cancel and the change.
+ * D1187 (BNK12): on a phone it is a bottom sheet (`phone="sheet"`), except
+ * Reveal, which BNK12d draws as a full-screen sheet.
+ */
+function Dialog({ title, sub, testId, onClose, onSubmit, action, actionCls = primaryCls, ready = true, busy, width = 520, phone = 'sheet', children }) {
   const submit = (e) => { e?.preventDefault?.(); if (ready && !busy) onSubmit(); };
   return (
-    <Lightbox label={title} title={title} sub={sub} width={width} onClose={onClose} testId={testId}
+    <Lightbox label={title} title={title} sub={sub} width={width} onClose={onClose} testId={testId} phone={phone}
       footer={(
-        <div className="flex flex-wrap justify-end gap-2">
-          <button type="button" className={btnCls} onClick={onClose}>Cancel</button>
-          <button type="button" className={actionCls} onClick={submit} disabled={!ready || busy}>{action}</button>
+        <div className="flex flex-wrap justify-end gap-2 max-sm:flex-nowrap">
+          <button type="button" className={`${btnCls} max-sm:flex-1`} onClick={onClose}>Cancel</button>
+          <button type="button" className={`${actionCls} max-sm:flex-1`} onClick={submit} disabled={!ready || busy}>{action}</button>
         </div>
       )}>
       <form onSubmit={submit} className="space-y-3 px-5 py-4" data-testid={`${testId}-form`}>{children}</form>
@@ -320,7 +324,7 @@ export function RevealDialog({ account: a, onClose, onReveal }) {
   const { busy, error, send } = useSend();
   const go = () => send(() => onReveal(reason.trim()), 'The number could not be shown.');
   return (
-    <Dialog title="Reveal the full number" sub={null} testId="bank-accounts-reveal-dialog" width={460}
+    <Dialog title="Reveal the full number" sub={null} testId="bank-accounts-reveal-dialog" width={460} phone="full"
       onClose={onClose} onSubmit={go} action="Reveal for 30 seconds" ready={!reasonError(reason)} busy={busy}>
       <p className="text-[12.5px] text-gray-700 dark:text-gray-300" data-testid="bank-accounts-reveal-body">
         {`${accountName(a)}. Your reason is recorded before the number is shown.`}

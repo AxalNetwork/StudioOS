@@ -105,8 +105,8 @@ export const ADMIN_PLACEMENT = [
 
   // ── The Admin Console's tabs, each a page since D938 (#2743) ───────────
   // `/admin?tab=<value>` forwards to the route (`LegacyContractsRedirect`).
-  // All accounts sits under /admin/accounts until #2375's question 1 is
-  // answered (part 4); Platform and Revenue pages are the Super Admin's.
+  // All accounts is a sub-path of Accounts (/admin/accounts, D941); Platform
+  // and Revenue pages are the Super Admin's.
   tab('users', 'All accounts', '/admin/accounts/all', false, hq('Team', 'embedded'),
     { how: 'Already embedded on HQ · Team; its own page on Admin · Accounts.', also: [admin('Accounts', 'embedded')] }),
   tab('profiles', 'Partner profiles', '/admin/partner-profiles', false, admin('Approvals', 'lane'), { how: 'A lane.' }),
