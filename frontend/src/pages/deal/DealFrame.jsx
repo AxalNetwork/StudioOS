@@ -21,7 +21,7 @@ export const SUB = 'text-[12.5px] leading-[1.5] text-axal-muted dark:text-gray-4
 export const H3 = 'm-0 text-[15px] font-extrabold tracking-axal-heading text-axal-ink dark:text-gray-100';
 const MONO = 'font-mono tabular-nums';
 const BTN = 'inline-flex min-h-[34px] items-center justify-center gap-1.5 rounded-axal-sm px-3.5 text-[13px] font-bold whitespace-nowrap';
-export const BTN_P = `${BTN} border border-axal-violet bg-axal-violet text-white hover:bg-axal-violet-deep dark:border-violet-400 dark:bg-violet-500`;
+export const BTN_P = `${BTN} border border-axal-violet bg-axal-violet text-white hover:bg-axal-violet-deep dark:border-violet-400 dark:bg-violet-500 dark:hover:bg-violet-400`;
 export const BTN_S = `${BTN} border border-axal-hairline bg-white text-axal-ink hover:bg-axal-ground dark:border-gray-700 dark:bg-gray-900 dark:text-gray-100 dark:hover:bg-gray-800`;
 
 /** DL1's key strip: four tiles, a missing figure says so, a bar only when the share is known. */
