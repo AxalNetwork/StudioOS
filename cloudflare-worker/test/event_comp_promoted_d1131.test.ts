@@ -17,7 +17,7 @@ import events from '../src/routes/events.ts';
 import eventsPublic from '../src/routes/events_public.ts';
 import { compSourceOf } from '../src/services/eventAudience.ts';
 
-const SECRET = 'synthetic-comp-promoted-d1131-key-'.repeat(2);
+const SECRET = 'test'.repeat(16);
 const FUTURE = '2099-03-01T10:00:00Z';
 const MIGRATION_611 = readFileSync(new URL('../sql/migrations/611_event_registrations_comp_promoted.sql', import.meta.url), 'utf8');
 
