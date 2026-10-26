@@ -37,6 +37,7 @@ import { fillsForRow, filledColumns } from '../services/fills/provenance';
 import { refuse } from '../util/refusal';
 import { bindingKey } from '../util/schemaBootstrap';
 import { findableBy, keepFindable } from '../services/investorFindable';
+import { ndaChoiceInput } from '../services/dataRoomNda';
 
 const projects = new Hono<{ Bindings: Env }>();
 
@@ -791,8 +792,8 @@ projects.put('/:id', async (c) => {
   }
 
   // Only admin/partner may change status, stage, or playbook week.
-  // Task #2 — data_room_url + data_room_nda_required are owner-editable
-  // (founders manage their own deal-room link). Both are written by the
+  // Task #2 — data_room_url + the NDA choice (D1102: data_room_nda_choice)
+  // are owner-editable (founders manage their own deal-room link). Both are written by the
   // editor on Project detail AND by the Spin-Out deck's "Review the deal"
   // slide save-path so the project stays the single source of truth.
   await ensureProjectDataRoomColumns(c.env);
@@ -901,11 +902,22 @@ projects.put('/:id', async (c) => {
       return c.json({ error: 'invalid_market_sizing', detail: 'SOM cannot exceed SAM' }, 400);
     }
   }
-  const baseFields = ['name', 'description', 'sector', 'problem_statement', 'solution', 'why_now', 'tam', 'sam', 'som', 'users_count', 'revenue', 'growth_signals', 'cost_to_mvp', 'funding_needed', 'use_of_funds', 'use_of_funds_meta', 'incorporation_meta', 'cofounder_decision_meta', 'icp_definition_meta', 'data_room_url', 'data_room_nda_required', 'mrr', 'paying_customers', 'first_payment_date', 'paid_pilot_status', 'product_demo_video_url', 'product_demo_live_url', 'product_demo_caption', 'product_demo_screenshot_url', 'website'];
-  // Normalise: coerce boolean → 0/1 for the NDA flag, trim URL, allow
-  // explicit null to clear either field.
-  if (data.data_room_nda_required !== undefined) {
-    data.data_room_nda_required = data.data_room_nda_required ? 1 : 0;
+  const baseFields = ['name', 'description', 'sector', 'problem_statement', 'solution', 'why_now', 'tam', 'sam', 'som', 'users_count', 'revenue', 'growth_signals', 'cost_to_mvp', 'funding_needed', 'use_of_funds', 'use_of_funds_meta', 'incorporation_meta', 'cofounder_decision_meta', 'icp_definition_meta', 'data_room_url', 'data_room_nda_choice', 'data_room_nda_required', 'mrr', 'paying_customers', 'first_payment_date', 'paid_pilot_status', 'product_demo_video_url', 'product_demo_live_url', 'product_demo_caption', 'product_demo_screenshot_url', 'website'];
+  // D1102 (#2982, migration 608): the NDA choice is `data_room_nda_choice`,
+  // Yes or No and nothing else; it is mirrored into the old column for a
+  // rolled-back Worker. The old key is no longer taken: a page that echoes
+  // it unchanged would store an untouched default as a founder's No. There
+  // is no clear back to unset (the owner's answer names none). Trim URL,
+  // allow explicit null to clear it.
+  delete data.data_room_nda_required;
+  if (data.data_room_nda_choice !== undefined) {
+    const choice = ndaChoiceInput(data.data_room_nda_choice);
+    if (choice === undefined) {
+      await sql.end();
+      return c.json({ error: 'invalid_nda_choice', detail: 'Choose Yes or No for whether the data room needs an NDA.' }, 400);
+    }
+    data.data_room_nda_choice = choice;
+    data.data_room_nda_required = choice;
   }
   // Task #66 — startup website URL: trim, allow null to clear, require
   // an http(s) scheme when present (mirrors the personal-website guard).

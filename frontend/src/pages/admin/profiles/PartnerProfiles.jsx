@@ -3,7 +3,7 @@ import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { RefreshCw } from 'lucide-react';
 import { partnerProfilesApi } from '../../../lib/api/partnerProfiles';
 import { reportError } from '../../../lib/log';
-import { AdminPageHeader, HeaderMenuItem, HeaderTab, useMovedNotice } from '../../../ui';
+import { AdminPageHeader, HeaderMenuItem, HeaderTab, PhoneSheet, useMovedNotice, usePhoneWidth } from '../../../ui';
 import { ChartTable, GroupedColumns, Legend, StackBars } from '../../../ui/Charts';
 import AdminBoardFrame from '../AdminBoardFrame';
 import { useAuth } from '../../../hooks/useAuthSync';
@@ -11,6 +11,7 @@ import { isSuperAdminUser } from '../../../lib/shellRole';
 import ProfileRecord from './ProfileRecord';
 import { ReopenDialog } from './ProfileDialogs';
 import { neighbours, recordPath, refOfPath } from './profileModel';
+import { TAP } from './ppStyles';
 import {
   APPROVALS_PATH, COLUMNS, COUNTS_FAILED, IDENTITY_STATES, LIST_FAILED, LIST_FAILED_SUB, MOVED_NOTICES, NOT_GIVEN, NOT_RECORDED,
   PAGE_LINE, PAGE_SIZE, PAGE_SIZES, PP_TITLE, RAIL_NOTE, REOPEN, REVIEWED_BEFORE, SORTS, SOURCES, STATUS_CHIPS, SUMMARY_CAP,
@@ -44,17 +45,26 @@ import {
  * D995 (#2806): one profile opens as PRF3's lightbox at its own address,
  * `/admin/partner-profiles/<ref>`, over the list it was opened from
  * (`ProfileRecord.jsx`), with Previous and Next through that list.
+ *
+ * D996 (#2807) — ON A PHONE (below 1024px, PRF11a): the queue and every
+ * profile are cards (the age pill, the name and email, the category and the
+ * sources, and a › that opens the profile); Filters and the sort sit in a
+ * bottom sheet, and the button says how many filters are set. A profile is a
+ * full page in the list's place, and the list stays mounted under it,
+ * hidden, so its search, filters and page are there on the way back. Every
+ * tap target is at least 44 by 44 px.
  */
 
-const BTN = 'inline-flex min-h-[36px] items-center justify-center gap-2 whitespace-nowrap rounded-[9px] px-3.5 text-[12.5px] font-bold';
+const BTN = `inline-flex min-h-[36px] items-center justify-center gap-2 whitespace-nowrap rounded-[9px] px-3.5 text-[12.5px] font-bold ${TAP}`;
 const GHOST = `${BTN} border border-axal-hairline bg-white text-axal-ink hover:bg-axal-ground disabled:opacity-50 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-100 dark:hover:bg-gray-800`;
-const PRIMARY = `${BTN} self-start border border-axal-violet bg-axal-violet text-white dark:border-violet-500 dark:bg-violet-600`;
+const FILL = `${BTN} border border-axal-violet bg-axal-violet text-white dark:border-violet-500 dark:bg-violet-600`;
+const PRIMARY = `${FILL} self-start`;
 const CARD = 'rounded-[12px] border border-axal-hairline bg-white dark:border-gray-700 dark:bg-gray-900';
 const EYE = 'text-[10.5px] font-bold uppercase tracking-[.07em] text-axal-muted dark:text-gray-400';
 const SUB = 'text-[12px] leading-[1.45] text-axal-muted dark:text-gray-400';
 const H2 = 'm-0 text-[15px] font-extrabold tracking-[-.02em] text-axal-ink dark:text-gray-100';
 const MONO = 'font-mono tabular-nums';
-const SELECT = 'h-8 rounded-full border border-axal-hairline bg-white px-3 text-[12px] font-semibold text-axal-ink dark:border-gray-700 dark:bg-gray-900 dark:text-gray-100';
+const SELECT = 'h-8 rounded-full border border-axal-hairline bg-white px-3 text-[12px] font-semibold text-axal-ink max-lg:h-11 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-100';
 const PILL = 'inline-flex items-center gap-1 whitespace-nowrap rounded-full border px-2 py-0.5 text-[11px] font-semibold';
 const OUTLINE = `${PILL} border-axal-hairline bg-white text-axal-ink dark:border-gray-700 dark:bg-gray-900 dark:text-gray-100`;
 const TRACK = `${PILL} border-axal-lavender-edge bg-axal-lavender text-axal-violet-deep dark:border-violet-700 dark:bg-violet-900/40 dark:text-violet-200`;
@@ -120,7 +130,7 @@ function Failed({ testId, err, onRetry }) {
       <h2 className={H2}>{LIST_FAILED}</h2>
       <p className={`m-0 ${SUB}`}>{LIST_FAILED_SUB}</p>
       <button type="button" className={PRIMARY} onClick={onRetry}>Try again</button>
-      <button type="button" aria-expanded={open} onClick={() => setOpen((o) => !o)} className="self-start text-[12.5px] font-bold text-axal-violet dark:text-violet-300">Details {open ? '▴' : '▾'}</button>
+      <button type="button" aria-expanded={open} onClick={() => setOpen((o) => !o)} className={`inline-flex items-center self-start text-[12.5px] font-bold text-axal-violet dark:text-violet-300 ${TAP}`}>Details {open ? '▴' : '▾'}</button>
       {open ? <span className={`${MONO} text-[12px] text-axal-muted dark:text-gray-400`} data-testid={`${testId}-ref`}>{failureRef(err)}</span> : null}
     </div>
   );
@@ -223,11 +233,11 @@ function Age({ v }) {
   return <span title={v.age.tip} className={`${PILL} ${MONO} text-[11.5px] font-bold ${v.age.over ? AMBER_FILL : 'border-axal-hairline bg-white text-axal-ink dark:border-gray-700 dark:bg-gray-900 dark:text-gray-100'}`}>{v.age.text}</span>;
 }
 
-function Pick({ label, value, options, onChange, testId, disabled = false, title }) {
+function Pick({ label, value, options, onChange, testId, disabled = false, title, wide = false }) {
   return (
-    <label className="flex">
+    <label className={wide ? 'flex w-full' : 'flex'}>
       <span className="sr-only">{label}</span>
-      <select value={value || ''} onChange={(e) => onChange(e.target.value || null)} className={SELECT} data-testid={testId} disabled={disabled} title={title}>
+      <select value={value || ''} onChange={(e) => onChange(e.target.value || null)} className={wide ? `${SELECT} w-full` : SELECT} data-testid={testId} disabled={disabled} title={title}>
         <option value="">{`${label} ▾`}</option>
         {options.map((o) => <option key={o.key} value={o.key}>{`${label}: ${o.label}`}</option>)}
       </select>
@@ -269,15 +279,78 @@ function Pager({ list, page, pageSize = PAGE_SIZE, setPage, setPageSize, testId 
 
 function Search({ value, onChange }) {
   return (
-    <label className="min-w-[220px] flex-1">
+    <label className="min-w-[220px] flex-1 max-lg:min-w-0 max-lg:basis-full">
       <span className="sr-only">Search name, email or entity</span>
       <input type="search" value={value} onChange={(e) => onChange(e.target.value)} placeholder="Search name, email or entity"
-        className="h-9 w-full max-w-[360px] rounded-[7px] border border-axal-hairline px-3 text-[13px] dark:border-gray-700 dark:bg-gray-900 dark:text-gray-100" data-testid="pp-search" />
+        className="h-9 w-full max-w-[360px] rounded-[7px] border border-axal-hairline px-3 text-[13px] max-lg:h-11 max-lg:max-w-none dark:border-gray-700 dark:bg-gray-900 dark:text-gray-100" data-testid="pp-search" />
     </label>
   );
 }
 
+/**
+ * D996 (PRF11a): one profile as a phone card: the age pill on the queue (or
+ * the status on All profiles), the name and email, the category and the
+ * sources, and a › that opens it.
+ */
+function ProfileCard({ r, onOpen, queue = false, testId }) {
+  const v = rowView(r);
+  return (
+    <li>
+      <button type="button" onClick={onOpen} className={`${CARD} flex min-h-[56px] w-full items-center gap-3 px-3.5 py-3 text-left`} data-testid={testId}>
+        {queue ? <Age v={v} /> : null}
+        <span className="flex min-w-0 flex-1 flex-col gap-1">
+          <span className="text-[13.5px] font-bold leading-snug text-axal-ink dark:text-gray-100">{v.name || v.email}</span>
+          {v.name ? <span className={`[overflow-wrap:anywhere] ${SUB}`}>{v.email}</span> : null}
+          <span className="flex flex-wrap gap-1">
+            {queue ? null : <StatusPill v={v} />}
+            {v.category ? <span className={OUTLINE}>{v.category}</span> : <span className={SUB}>No category captured</span>}
+            {v.track ? <span className={TRACK}>{v.track}</span> : null}
+            {v.sources.map((x) => <span key={x} className={OUTLINE}>{x}</span>)}
+          </span>
+          {!queue && v.changed ? <span className="text-[11px] font-bold text-[#92400e] dark:text-amber-300" title={v.changed.tip}>{v.changed.text}</span> : null}
+        </span>
+        <span aria-hidden="true" className="text-[18px] text-axal-muted dark:text-gray-400">›</span>
+      </button>
+    </li>
+  );
+}
+
+/** "Filters · n" on a phone: it opens the sheet with the filters and the sort. */
+function FiltersButton({ n, onOpen, opener }) {
+  return <button ref={opener} type="button" className={SELECT} onClick={onOpen} data-testid="pp-filters">{`Filters · ${n}`}</button>;
+}
+
+/** PRF11a's bottom sheet: the tab's filters and sort, each applied as it is chosen. */
+function FiltersSheet({ picks, onClear, onClose, opener, cleared }) {
+  return (
+    <PhoneSheet title="Filters and sort" onClose={onClose} opener={opener}>
+      <div className="flex flex-col gap-2.5 pb-1" data-testid="pp-filters-sheet">
+        {picks}
+        <div className="flex gap-2 pt-1">
+          <button type="button" className={`${GHOST} flex-[1]`} onClick={onClear} disabled={cleared} data-testid="pp-filters-clear">Clear filters</button>
+          <button type="button" className={`${FILL} flex-[1.4]`} onClick={onClose} data-testid="pp-filters-done">Done</button>
+        </div>
+      </div>
+    </PhoneSheet>
+  );
+}
+
+const REVIEW_FILTERS = ['source', 'category', 'founder_track'];
+const ALL_FILTERS = ['source', 'category', 'founder_track', 'entity_type', 'agreement', 'has_account', 'identity', 'captured_from', 'captured_to', 'reviewed_by'];
+
+function reviewPicks({ f, set, options, wide = false }) {
+  return [
+    <Pick key="source" wide={wide} label="Source" value={f.source} options={SOURCES} onChange={(source) => set({ source })} testId="pp-filter-source" />,
+    <Pick key="category" wide={wide} label="Onboarding category" value={f.category} options={withNone(options?.category)} onChange={(category) => set({ category })} testId="pp-filter-category" />,
+    <Pick key="track" wide={wide} label="Founder track" value={f.founder_track} options={withNone(options?.founder_track)} onChange={(founder_track) => set({ founder_track })} testId="pp-filter-track" />,
+    <Pick key="sort" wide={wide} label="Sort" value={f.sort === 'waiting' ? '' : f.sort} options={SORTS.review.slice(1)} onChange={(sort) => set({ sort: sort || 'waiting' })} testId="pp-sort" />,
+  ];
+}
+
 function Queue({ list, options, f, set, drafts, onReview, reload }) {
+  const phone = usePhoneWidth();
+  const [sheet, setSheet] = useState(false);
+  const opener = useRef(null);
   const rows = list.data?.rows || [];
   const filtered = filtersSet('review', f) > 0 || String(f.q || '').trim().length >= 2;
   return (
@@ -285,12 +358,22 @@ function Queue({ list, options, f, set, drafts, onReview, reload }) {
       <h2 id="pp-h-queue" className={H2}>Waiting, oldest first</h2>
       <div className="flex flex-wrap items-center gap-2" data-testid="pp-queue-tools">
         <Search value={f.q} onChange={(q) => set({ q })} />
-        <Pick label="Source" value={f.source} options={SOURCES} onChange={(source) => set({ source })} testId="pp-filter-source" />
-        <Pick label="Onboarding category" value={f.category} options={withNone(options?.category)} onChange={(category) => set({ category })} testId="pp-filter-category" />
-        <Pick label="Founder track" value={f.founder_track} options={withNone(options?.founder_track)} onChange={(founder_track) => set({ founder_track })} testId="pp-filter-track" />
-        <Pick label="Sort" value={f.sort === 'waiting' ? '' : f.sort} options={SORTS.review.slice(1)} onChange={(sort) => set({ sort: sort || 'waiting' })} testId="pp-sort" />
-        <Pager list={list} page={f.page} pageSize={f.page_size || PAGE_SIZE} setPage={(page) => set({ page }, true)} setPageSize={(page_size) => set({ page_size })} testId="pp-queue-count" />
+        {phone ? (
+          <>
+            <FiltersButton n={filtersSet('review', f)} onOpen={() => setSheet(true)} opener={opener} />
+            <button type="button" className={SELECT} onClick={() => setSheet(true)} data-testid="pp-sort-open">{`Sort: ${(SORTS.review.find((x) => x.key === (f.sort || 'waiting')) || SORTS.review[0]).label} ▾`}</button>
+          </>
+        ) : (
+          <>
+            {reviewPicks({ f, set, options })}
+            <Pager list={list} page={f.page} pageSize={f.page_size || PAGE_SIZE} setPage={(page) => set({ page }, true)} setPageSize={(page_size) => set({ page_size })} testId="pp-queue-count" />
+          </>
+        )}
       </div>
+      {phone && sheet ? (
+        <FiltersSheet picks={reviewPicks({ f, set, options, wide: true })} opener={opener} onClose={() => setSheet(false)}
+          cleared={filtersSet('review', f) === 0} onClear={() => set(Object.fromEntries(REVIEW_FILTERS.map((k) => [k, null])))} />
+      ) : null}
       {String(f.q || '').trim().length === 1 && <span className={SUB}>Type at least two characters.</span>}
       {list.status === 'loading' && <Skeleton />}
       {list.status === 'error' && <Failed testId="pp-list-failed" err={list.error} onRetry={reload} />}
@@ -304,7 +387,15 @@ function Queue({ list, options, f, set, drafts, onReview, reload }) {
             <Link to="/admin/partner-profiles/all" className={GHOST}>See all profiles</Link>
           </div>
         ))}
-      {list.status === 'ready' && rows.length > 0 && (
+      {list.status === 'ready' && rows.length > 0 && phone && (
+        <>
+          <ul className="m-0 flex list-none flex-col gap-2 p-0" data-testid="pp-queue-cards">
+            {rows.map((r) => <ProfileCard key={r.ref || r.email} r={r} queue onOpen={() => onReview(r)} testId="pp-queue-card" />)}
+          </ul>
+          <Pager list={list} page={f.page} pageSize={f.page_size || PAGE_SIZE} setPage={(page) => set({ page }, true)} testId="pp-queue-count" />
+        </>
+      )}
+      {list.status === 'ready' && rows.length > 0 && !phone && (
         <div className="overflow-x-auto">
           <table className="w-full min-w-[1060px] border-collapse text-left text-[12.5px]">
             <thead>
@@ -337,7 +428,7 @@ function Queue({ list, options, f, set, drafts, onReview, reload }) {
         {drafts == null
           ? 'Drafts are not in the queue: a profile Eadwyn opened with only a name has nothing to review yet.'
           : `Drafts are not in the queue: ${drafts.toLocaleString('en-US')} ${drafts === 1 ? 'profile has' : 'profiles have'} nothing to review yet.`}
-        {' '}<Link to="/admin/partner-profiles/all?status=draft" className="font-bold text-axal-violet dark:text-violet-300">See them in All profiles</Link>. Opening this list is recorded.
+        {' '}<Link to="/admin/partner-profiles/all?status=draft" className="font-bold text-axal-violet max-lg:inline-flex max-lg:min-h-[44px] max-lg:items-center dark:text-violet-300">See them in All profiles</Link>. Opening this list is recorded.
       </span>
     </section>
   );
@@ -350,7 +441,7 @@ function ChartCard({ title, testId, table, alt, legend, note, foot, children, ca
       <div className="flex flex-wrap items-center justify-between gap-2">
         <h2 className={H2}>{title}</h2>
         {table ? (
-          <button type="button" aria-pressed={asTable} onClick={() => setAsTable((t) => !t)} className="text-[12px] font-bold text-axal-violet dark:text-violet-300" data-testid={`${testId}-toggle`}>
+          <button type="button" aria-pressed={asTable} onClick={() => setAsTable((t) => !t)} className={`inline-flex items-center text-[12px] font-bold text-axal-violet dark:text-violet-300 ${TAP}`} data-testid={`${testId}-toggle`}>
             {asTable ? 'View as chart' : 'View as table'}
           </button>
         ) : null}
@@ -501,7 +592,32 @@ function Reviewed({ v }) {
   return <span className={v.reviewed.recorded ? 'font-semibold text-axal-ink dark:text-gray-100' : 'text-axal-muted dark:text-gray-400'} title={v.reviewed.tip} data-testid="pp-reviewed">{v.reviewed.text}</span>;
 }
 
+function allPicks({ f, set, options, wide = false }) {
+  const date = (key, label, testId) => (
+    <label key={key} className={`flex items-center gap-1.5 text-[12px] text-axal-muted dark:text-gray-400 ${wide ? 'w-full justify-between' : ''}`}>
+      {label}
+      <input type="date" value={f[key] || ''} onChange={(e) => set({ [key]: e.target.value || null })} className={SELECT} data-testid={testId} />
+    </label>
+  );
+  return [
+    <Pick key="source" wide={wide} label="Source" value={f.source} options={SOURCES} onChange={(source) => set({ source })} testId="pp-filter-source" />,
+    <Pick key="category" wide={wide} label="Onboarding category" value={f.category} options={withNone(options?.category)} onChange={(category) => set({ category })} testId="pp-filter-category" />,
+    <Pick key="track" wide={wide} label="Founder track" value={f.founder_track} options={withNone(options?.founder_track)} onChange={(founder_track) => set({ founder_track })} testId="pp-filter-track" />,
+    <Pick key="entity" wide={wide} label="Entity type" value={f.entity_type} options={withNone(options?.entity_type)} onChange={(entity_type) => set({ entity_type })} testId="pp-filter-entity" />,
+    <Pick key="agreement" wide={wide} label="Agreement" value={f.agreement} options={withNone(options?.agreement)} onChange={(agreement) => set({ agreement })} testId="pp-filter-agreement" />,
+    <Pick key="account" wide={wide} label="Has an account" value={f.has_account} options={[{ key: 'yes', label: 'Yes' }, { key: 'no', label: 'No' }]} onChange={(has_account) => set({ has_account })} testId="pp-filter-account" />,
+    <Pick key="identity" wide={wide} label="Identity check" value={f.identity} options={IDENTITY_STATES} onChange={(identity) => set({ identity })} testId="pp-filter-identity" />,
+    date('captured_from', 'Captured from', 'pp-filter-from'),
+    date('captured_to', wide ? 'Captured to' : 'to', 'pp-filter-to'),
+    <Pick key="reviewed" wide={wide} label="Reviewed by" value={f.reviewed_by} options={reviewerOptions(options?.reviewed_by)} onChange={(reviewed_by) => set({ reviewed_by })} testId="pp-filter-reviewed" />,
+    <Pick key="sort" wide={wide} label="Sort" value={f.sort === 'newest' ? '' : f.sort} options={SORTS.all.slice(1)} onChange={(sort) => set({ sort: sort || 'newest' })} testId="pp-sort" />,
+  ];
+}
+
 function AllProfiles({ list, summary, counts, f, set, reset, onReview, onReopen, onExport, reload }) {
+  const phone = usePhoneWidth();
+  const [sheet, setSheet] = useState(false);
+  const opener = useRef(null);
   const [hidden, toggleColumn] = useHiddenColumns();
   const shown = shownColumns(hidden);
   // The chosen rows are this page's: a new page, filter or refresh clears them.
@@ -528,13 +644,13 @@ function AllProfiles({ list, summary, counts, f, set, reset, onReview, onReopen,
 
       <section className={`${CARD} flex flex-col gap-3 px-[18px] py-4`} aria-labelledby="pp-h-all" data-testid="pp-all">
         <h2 id="pp-h-all" className={H2}>Every profile</h2>
-        <div className="flex flex-wrap gap-[7px]" role="radiogroup" aria-label="Status" data-testid="pp-status-chips">
+        <div className="flex flex-wrap gap-[7px] max-lg:-mx-[18px] max-lg:flex-nowrap max-lg:overflow-x-auto max-lg:px-[18px]" role="radiogroup" aria-label="Status" data-testid="pp-status-chips">
           {STATUS_CHIPS.map((c) => {
             const on = (f.status || 'all') === c.key;
             const n = totals ? totals[c.total] : null;
             return (
               <button key={c.key} type="button" role="radio" aria-checked={on} onClick={() => set({ status: c.key })}
-                className={`inline-flex min-h-[32px] items-center gap-1.5 rounded-full border px-3 text-[12px] ${on ? 'border-axal-lavender-edge bg-axal-lavender font-bold text-axal-violet-deep dark:border-violet-700 dark:bg-violet-900/40 dark:text-violet-200' : 'border-axal-hairline font-semibold text-axal-ink hover:bg-axal-ground dark:border-gray-700 dark:text-gray-100 dark:hover:bg-gray-800'}`}
+                className={`inline-flex min-h-[32px] shrink-0 items-center gap-1.5 rounded-full border px-3 text-[12px] ${TAP} ${on ? 'border-axal-lavender-edge bg-axal-lavender font-bold text-axal-violet-deep dark:border-violet-700 dark:bg-violet-900/40 dark:text-violet-200' : 'border-axal-hairline font-semibold text-axal-ink hover:bg-axal-ground dark:border-gray-700 dark:text-gray-100 dark:hover:bg-gray-800'}`}
                 data-testid={`pp-chip-${c.key}`}>
                 {c.label} · <span className={MONO}>{n == null ? '—' : n.toLocaleString('en-US')}</span>
               </button>
@@ -545,35 +661,27 @@ function AllProfiles({ list, summary, counts, f, set, reset, onReview, onReopen,
         {f.status === 'draft' && <span className={SUB} data-testid="pp-drafts-chip-note">A Draft has nothing to review yet: Eadwyn opened it with only a name. It is not in the queue.</span>}
         <div className="flex flex-wrap items-center gap-2" data-testid="pp-all-tools">
           <Search value={f.q} onChange={(q) => set({ q })} />
-          <Pick label="Source" value={f.source} options={SOURCES} onChange={(source) => set({ source })} testId="pp-filter-source" />
-          <Pick label="Onboarding category" value={f.category} options={withNone(options?.category)} onChange={(category) => set({ category })} testId="pp-filter-category" />
-          <Pick label="Founder track" value={f.founder_track} options={withNone(options?.founder_track)} onChange={(founder_track) => set({ founder_track })} testId="pp-filter-track" />
-          <Pick label="Entity type" value={f.entity_type} options={withNone(options?.entity_type)} onChange={(entity_type) => set({ entity_type })} testId="pp-filter-entity" />
-          <Pick label="Agreement" value={f.agreement} options={withNone(options?.agreement)} onChange={(agreement) => set({ agreement })} testId="pp-filter-agreement" />
-          <Pick label="Has an account" value={f.has_account} options={[{ key: 'yes', label: 'Yes' }, { key: 'no', label: 'No' }]} onChange={(has_account) => set({ has_account })} testId="pp-filter-account" />
-          <Pick label="Identity check" value={f.identity} options={IDENTITY_STATES} onChange={(identity) => set({ identity })} testId="pp-filter-identity" />
-          <label className="flex items-center gap-1.5 text-[12px] text-axal-muted dark:text-gray-400">
-            Captured from
-            <input type="date" value={f.captured_from || ''} onChange={(e) => set({ captured_from: e.target.value || null })} className={SELECT} data-testid="pp-filter-from" />
-          </label>
-          <label className="flex items-center gap-1.5 text-[12px] text-axal-muted dark:text-gray-400">
-            to
-            <input type="date" value={f.captured_to || ''} onChange={(e) => set({ captured_to: e.target.value || null })} className={SELECT} data-testid="pp-filter-to" />
-          </label>
-          <Pick label="Reviewed by" value={f.reviewed_by} options={reviewerOptions(options?.reviewed_by)} onChange={(reviewed_by) => set({ reviewed_by })} testId="pp-filter-reviewed" />
-          <Pick label="Sort" value={f.sort === 'newest' ? '' : f.sort} options={SORTS.all.slice(1)} onChange={(sort) => set({ sort: sort || 'newest' })} testId="pp-sort" />
-          <ColumnsPicker shown={shown} onChange={toggleColumn} />
+          {phone ? <FiltersButton n={filtersSet('all', f)} onOpen={() => setSheet(true)} opener={opener} /> : (
+            <>
+              {allPicks({ f, set, options })}
+              <ColumnsPicker shown={shown} onChange={toggleColumn} />
+            </>
+          )}
           {filtered ? <button type="button" className={GHOST} onClick={reset} data-testid="pp-clear">Clear filters</button> : null}
         </div>
+        {phone && sheet ? (
+          <FiltersSheet picks={allPicks({ f, set, options, wide: true })} opener={opener} onClose={() => setSheet(false)}
+            cleared={filtersSet('all', f) === 0} onClear={() => set(Object.fromEntries(ALL_FILTERS.map((k) => [k, null])))} />
+        ) : null}
         <div className="flex flex-wrap items-center justify-between gap-2">
-          {chosen.size > 0 ? (
+          {chosen.size > 0 && !phone ? (
             <span className="flex flex-wrap items-center gap-2" data-testid="pp-chosen">
               <span className="text-[12.5px] font-bold text-axal-ink dark:text-gray-100">{chosen.size} selected</span>
               <button type="button" className={GHOST} onClick={() => onExport({ refs: [...chosen] })} data-testid="pp-export-chosen">Export selected</button>
               <button type="button" className={GHOST} onClick={() => setChosen(new Set())}>Clear selection</button>
             </span>
           ) : <span className={SUB}>A verdict given before 24 Oct 2026 has no review date, so its Reviewed says Not recorded.</span>}
-          <Pager list={list} page={f.page} pageSize={f.page_size || PAGE_SIZE} setPage={(page) => set({ page }, true)} setPageSize={(page_size) => set({ page_size })} testId="pp-count" />
+          <Pager list={list} page={f.page} pageSize={f.page_size || PAGE_SIZE} setPage={(page) => set({ page }, true)} setPageSize={phone ? null : (page_size) => set({ page_size })} testId="pp-count" />
         </div>
         {String(f.q || '').trim().length === 1 && <span className={SUB}>Type at least two characters.</span>}
         {list.status === 'loading' && <Skeleton />}
@@ -581,7 +689,12 @@ function AllProfiles({ list, summary, counts, f, set, reset, onReview, onReopen,
         {list.status === 'ready' && rows.length === 0 && (
           <p className="m-0 text-[13px] text-axal-ink dark:text-gray-100" data-testid="pp-no-match">{filtered ? 'No profile matches. Clear the search or the filters.' : 'No partner profiles yet.'}</p>
         )}
-        {list.status === 'ready' && rows.length > 0 && (
+        {list.status === 'ready' && rows.length > 0 && phone && (
+          <ul className="m-0 flex list-none flex-col gap-2 p-0" data-testid="pp-all-cards">
+            {rows.map((r) => <ProfileCard key={r.ref || r.email} r={r} onOpen={() => onReview(r)} testId="pp-all-card" />)}
+          </ul>
+        )}
+        {list.status === 'ready' && rows.length > 0 && !phone && (
           <div className="overflow-x-auto">
             <table className="w-full min-w-[1080px] border-collapse text-left text-[12.5px]">
               <thead>
@@ -642,6 +755,9 @@ function PartnerProfilesPage() {
   const ref = refOfPath(loc.pathname);
   const tab = tabOf(loc.pathname) || (ref && loc.state?.from === 'all' ? 'all' : 'review');
   const notice = useMovedNotice(MOVED_NOTICES);
+  // D996: on a phone a record is a full page in the list's place; the list stays mounted under it, hidden.
+  const phone = usePhoneWidth();
+  const recordPage = Boolean(phone && ref);
   const [tick, setTick] = useState(0);
   const reload = useCallback(() => setTick((t) => t + 1), []);
   // Each tab keeps its own choices; All profiles opens on `?status=` (the queue's Drafts link).
@@ -720,14 +836,15 @@ function PartnerProfilesPage() {
       <span className="font-mono text-[11.5px] text-axal-muted dark:text-gray-400" data-testid="pp-asof">
         {asOf ? `Updated ${new Date(asOf).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit', hourCycle: 'h23' })}` : 'Reading…'}
       </span>
-      <button type="button" aria-label="Refresh" onClick={reload} className="grid h-9 w-9 place-items-center rounded-[9px] border border-axal-hairline text-axal-muted dark:border-gray-700 dark:text-gray-400"><RefreshCw size={16} aria-hidden="true" /></button>
+      <button type="button" aria-label="Refresh" onClick={reload} className="grid h-9 w-9 place-items-center rounded-[9px] border border-axal-hairline text-axal-muted max-lg:h-11 max-lg:w-11 dark:border-gray-700 dark:text-gray-400"><RefreshCw size={16} aria-hidden="true" /></button>
     </>
   );
   // PRF7b: a studio with no partner profile at all says so once, in place of the queue.
   const none = summary.status === 'ready' && (summary.data.totals?.total ?? 0) === 0;
 
   return (
-    <div className="flex flex-col gap-5 pb-24 lg:pb-10" data-testid="partner-profiles">
+    <div className={`flex flex-col gap-5 lg:pb-10 ${recordPage ? '' : 'pb-24'}`} data-testid="partner-profiles">
+      <div hidden={recordPage} className="flex min-w-0 flex-col gap-5" data-testid="pp-list-area">
       <AdminPageHeader
         crumb={{ label: 'Approvals', to: APPROVALS_PATH, current: PP_TITLE }}
         title={PP_TITLE}
@@ -756,9 +873,10 @@ function PartnerProfilesPage() {
       )}
       {tab === 'review' && !none && <Queue list={list} options={summary.data?.options || list.data?.options} f={f} set={set} drafts={tiles?.drafts ?? null} onReview={onReview} reload={reload} />}
       {tab === 'all' && <AllProfiles list={list} summary={summary} counts={counts} f={f} set={set} reset={reset} onReview={onReview} onReopen={onReopen} onExport={onExport} reload={reload} />}
+      </div>
       {reopening && <ReopenDialog row={reopening} onClose={() => setReopening(null)} onDone={() => { setReopening(null); setNote({ tone: 'ok', text: REOPEN.done }); reload(); }} />}
       {ref && (
-        <ProfileRecord refId={ref} rows={rows} viewerSuper={isSuperAdminUser(viewer)}
+        <ProfileRecord refId={ref} rows={rows} viewerSuper={isSuperAdminUser(viewer)} backLabel={tab === 'all' ? 'All profiles' : 'To review'}
           onGo={(to) => navigate(recordPath(to), { state: { from: tab }, replace: true })}
           onClose={() => navigate(listPath)} onChanged={reload} onDecided={onDecided} />
       )}

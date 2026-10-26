@@ -144,8 +144,8 @@ export function requireInvestorTier(required: Exclude<InvestorTier, 'free'>) {
  * D614/D1149 — Free investors may leave a room and read an authorized deal
  * header/key strip. The detail handler returns a restricted projection; all
  * other deal and diligence reads remain Professional.
- * D1033 adds the my-events feed, which has no session for this gate to read and
- * applies the plan rule itself.
+ * D1033 adds the my-events feed, and D1209 the whole-calendar feed: neither has
+ * a session for this gate to read, and each applies the plan rule itself.
  */
 export const INVESTOR_PRO_EXEMPT: ReadonlyArray<{ method: string; path: RegExp }> = [
   // Signed report links validate their own short-lived, single-use token.
@@ -157,6 +157,8 @@ export const INVESTOR_PRO_EXEMPT: ReadonlyArray<{ method: string; path: RegExp }
   // it with no session, so the session gate cannot run; the route applies the
   // same Professional rule to the member its token names.
   { method: 'GET', path: /^\/api\/calendar\/feed\/my-events\.ics$/ },
+  // D1209 (#3175): the whole-calendar feed, under the same rule.
+  { method: 'GET', path: /^\/api\/calendar\/feed\/calendar\.ics$/ },
 ];
 
 /** `requireInvestorTier`, except for the requests `exempt` names. */

@@ -327,6 +327,8 @@ roster. The meetings router accepts `auto_send_bot:false`, otherwise queues B1
 for the consented session at the scheduled start. Bot refusal is separate from
 successful call creation; cancellation stops the bot before the provider call.
 
+D1168 (#3081): `admin_platform.ts` mounts `POST /api/admin/platform/storage/backfill-sizes`, an audited, bounded metadata-only batch for HQ Super Admin with TOTP and recent step-up. Discovery cursors stay in D1; only counts leave the route.
+
 D886 B10 (#2588): `admin_platform.ts` mounts Super Admin-only
 `/meeting-bots` count/charge reads and `/meeting-bots/test` dispatch/timing reads.
 Dispatch requires TOTP plus recent step-up and calls B1's service with the
@@ -345,7 +347,7 @@ webhook's deliveries by hour. D1129 adds bounded `q` search to the log and
 CSV, plus `/change-log/admins` (all admin ids/names, no email). `catalog.ts`
 records a failed sync.
 
-D1065 (#2935): `build_plan.ts` mounts at `/api/cycles/build/plan` before the Build router. GET reads a scoped plan; POST prepares/updates only for the venture’s founder or admitted Lab owner. Admins read; company-linked partners read only landed accepted items without a decision or pending proposal. D1066 (#2936) adds the item decisions (`/items/:uid/accept`, `PATCH /items/:uid`, `/items/:uid/dismiss`, `/modules/:module/accept`), founders only, and exports `buildEvidenceRoutes`, mounted at `/api/cycles/build/evidence` for each Build row's trail. D1071 (#2941) adds Eadwyn's wording: `POST /word` (one metered `draft:build/plan` run, founders only, stored as a wording row on `build_plan:<uid>`), `GET /word`, and `/word/:uid/keep` and `/word/:uid/discard`; an item's wording is kept by `PATCH /items/:uid { wording }`.
+D1065 (#2935): `build_plan.ts` mounts at `/api/cycles/build/plan` before the Build router. GET reads a scoped plan; POST prepares/updates only for the venture’s founder or admitted Lab owner. Admins read; company-linked partners read only landed accepted items without a decision or pending proposal. D1066 (#2936) adds the item decisions (`/items/:uid/accept`, `PATCH /items/:uid`, `/items/:uid/dismiss`, `/modules/:module/accept`), founders only, and exports `buildEvidenceRoutes`, mounted at `/api/cycles/build/evidence` for each Build row's trail. D1071 (#2941) adds Eadwyn's wording: `POST /word` (one metered `draft:build/plan` run, founders only, stored as a wording row on `build_plan:<uid>`), `GET /word`, and `/word/:uid/keep` and `/word/:uid/discard`; an item's wording is kept by `PATCH /items/:uid { wording }`. D1068 (#2938) adds Send to… and Back in: `POST /handoffs` (founders only; the link or the Markdown, recorded), `GET /handoffs` (the text for founders only), `GET /links` (a partner sees links only), `/links/:uid/accept`, `/links/:uid/dismiss`, and `POST /items/:uid/link` (a link by hand).
 
 D971 (#2756): `admin_lab_operations.ts` is mounted by `admin_cohort.ts` under
 `/api/admin/cohort`: read-only `/settings` and `/activity`, both Admin gated.
@@ -364,6 +366,11 @@ calls `logAdminAction`. It grants no subsequent write permission. Admins cannot
 use legacy investor grants through `/shared` instead. The data-room spec in
 `../services/records/raise.ts` uses the same owner-only gate. File uploads default
 to NDA when visibility is omitted; explicit Open remains allowed for the owner.
+D1102 part 2: `cycle_raise.ts`'s data-room paths (the overview's data-room card,
+`GET /modules/data-room`, `PUT /data-room/files/:id/checklist`) take that rule too;
+a non-owner's overview card is `data_room.ts`'s `roomSummary`. `projects.ts`
+(`PUT /:id`, `data_room_nda_choice`) and `decks.ts` (`PUT /:id`, a changed NDA flag
+only) store the founder's NDA choice, migration 608.
 
 D1091 (#2956): `google_workspace.ts` mounts `/api/connectors/google-workspace`: scoped chosen files, draft mapping, Stop using and ephemeral five-row preview. Calendar adds `/google/workspace-files/connect`; Google tokens stay in its one store. Support sessions are refused. See `../services/google/README.md`.
 

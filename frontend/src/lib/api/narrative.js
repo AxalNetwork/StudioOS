@@ -43,6 +43,13 @@ export const narrativeApi = {
   draftSection: (projectId, version, section, body, headers) => request(`/cycles/raise/narrative/${enc(version)}/sections/${enc(section)}/draft?project=${enc(projectId)}`, {
     method: 'POST', body: JSON.stringify(body), headers,
   }),
+  // D913 (#2697, NAR10): the objections investors raised, project-wide, and "Answer it".
+  //   GET  /cycles/raise/narrative/objections → { objections: [{ key, text, count, prospects, last_heard, answer }], capped }
+  //   POST /cycles/raise/narrative/objections/:objection/draft { version, section, words? } → { text, removed }; writes nothing
+  objections: (projectId) => request(`/cycles/raise/narrative/objections?${q(projectId)}`),
+  draftObjection: (projectId, key, body, headers) => request(`/cycles/raise/narrative/objections/${enc(key)}/draft?${q(projectId)}`, {
+    method: 'POST', body: JSON.stringify(body), headers,
+  }),
   narrativeReads: (projectId) => request(`/cycles/raise/narrative/reads?${q(projectId)}`),
   narrativeGiveReason: (projectId, reason) => request(`/cycles/raise/narrative/reads?${q(projectId)}`, { method: 'POST', body: JSON.stringify({ reason }) }),
   narrativeNotes: (projectId) => request(`/cycles/raise/narrative/notes?${q(projectId)}`),

@@ -41,11 +41,13 @@ test.after(() => { globalThis.fetch = nativeFetch; assert.equal(networkCalls, 0,
 function freshDb() {
   const db = new DatabaseSync(':memory:', { enableForeignKeyConstraints: false, enableDoubleQuotedStringLiterals: true });
   databases.push(db);
-  for (const t of ['users', 'super_admins', 'user_sessions', 'activity_logs', 'admin_audit_log', 'vc_funds']) db.exec(tableFromBaseline(BASELINE, t));
+  for (const t of ['users', 'super_admins', 'user_sessions', 'activity_logs', 'admin_audit_log', 'capital_calls', 'limited_partners', 'vc_funds']) db.exec(tableFromBaseline(BASELINE, t));
+  db.exec(read('cloudflare-worker/sql/migrations/312_fund_call_ledger.sql'));
+  db.exec(read('cloudflare-worker/sql/migrations/473_fund_management_fees.sql'));
   db.exec(read('cloudflare-worker/sql/migrations/472_entity_bank_accounts.sql'));
-  for (const s of read('cloudflare-worker/sql/migrations/474_mercury_entity_connections.sql').split(/;\s*\n/)) {
-    if (s.trim() && !/^\s*(--[^\n]*\n\s*)*$/.test(s)) { try { db.exec(s); } catch { /* a table 474 references that this fixture does not need */ } }
-  }
+  // Build the real dependencies, then apply the whole migration strictly.
+  // Any broken table, column or index must fail setup rather than disappear.
+  db.exec(read('cloudflare-worker/sql/migrations/474_mercury_entity_connections.sql'));
   db.prepare('INSERT INTO users (id, role, name, email) VALUES (?, ?, ?, ?)').run(HOLDER, 'admin', 'The Holder', 'holder@example.test');
   db.prepare('INSERT INTO super_admins (user_id) VALUES (?)').run(HOLDER);
   db.prepare("INSERT INTO user_sessions (user_id, jti, factor, created_at) VALUES (?, 'totp-holder', 'totp', datetime('now'))").run(HOLDER);
