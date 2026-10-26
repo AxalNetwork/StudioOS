@@ -270,7 +270,7 @@ function Grants({ plan, record, retry }) {
                           <td className={`${TD} ${MONO}`}>{g.grantDate}</td>
                           <td className={`${TD} text-[11.5px]`}>{g.vesting}</td>
                           <td className={`${TD} ${MONO}`}>{g.vested}</td>
-                          <td className={`${TD} ${MUTED}`}>{g.exercise}</td>
+                          <td className={`${TD} ${MUTED}`}>{g.election ? <span className="block" data-testid="captable-grant-election">{g.election}</span> : null}{g.exercise}</td>
                           <td className={TD}>{g.document ? <span className="text-[11.5px] text-axal-violet dark:text-violet-400">{g.document}</span> : <span className={`${PILL} ${AMBER}`}>! No document</span>}</td>
                         </tr>
                       ))}

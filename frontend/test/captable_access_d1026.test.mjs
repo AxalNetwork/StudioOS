@@ -15,7 +15,7 @@ import { installDocument } from './_contracts_dom.mjs';
 import CycleRoute from '../src/pages/cycles/CycleRoute.jsx';
 import { CapTableReadPage, VentureSharePage } from '../src/pages/raise/captable/SharedCapTable.jsx';
 import {
-  ATTESTED, LEVELS, grantRows, levelRows, linkBody, linkProblems, linkRows, logRows, logWhat, sharedLine, sharedView, supportProblem,
+  ATTESTED, LEVELS, grantRows, recordedHolderChoices, levelRows, linkBody, linkProblems, linkRows, logRows, logWhat, sharedLine, sharedView, supportProblem,
 } from '../src/pages/raise/captable/capTableAccess.js';
 import {
   TEMPLATE_CSV, counts, guessMap, importBody, parseCsv, preview, proposeLabel, readDate, readMoney, readShares,
@@ -365,4 +365,24 @@ test('the wiring: the tabs, the routes, the clients, and the import and export o
   assert.match(worker, /captable\.post\('\/record\/:projectId\/proposals\/import'/);
   assert.match(worker, /captable\.get\('\/record\/:projectId\/export\.csv'/);
   assert.ok(!/alert\(|window\.confirm|confirm\(/.test(read('frontend/src/pages/raise/captable/ImportExportTab.jsx') + read('frontend/src/pages/raise/captable/SharedCapTable.jsx')));
+});
+
+test('D1130: recorded holder choices include SAFE-only identities and exclude proposals; unknown round count stays unknown', () => {
+  assert.deepEqual(recordedHolderChoices({issuances:{rows:[{status:'recorded',holder:{holder_id:8,name:'Synthetic fund'}},{status:'recorded',holder:{holder_id:8,name:'Synthetic fund'}},{status:'proposed',holder:{holder_id:9,name:'Pending'}},{status:'recorded',holder:{holder_id:null,name:'Unbound'}}]}}),[{ref:'holder:8',name:'Synthetic fund'}]);
+  assert.equal(sharedView({view:{audience:'summary',summary:[],rounds_completed:null}}).rounds,null);
+});
+
+test('D1130: the Access dialog grants a recorded identity and never loads scenario holders', async () => {
+  const base=founderHandler();
+  const p=await tool('access',(url,opts) => url.includes('/captable/record/3') ? response({...RECORD,issuances:{rows:[{status:'recorded',holder:{holder_id:101,name:'Recorded holder'}}]}}) : base(url,opts));
+  try {
+    await p.click('captable-grant-new');await p.change('captable-level-holder','holder:101');await p.change('captable-level-own_position',true);await p.click('captable-level-dialog-go');
+    assert.deepEqual(p.requests.find(r=>r.method==='PUT').body,{holder_ref:'holder:101',level:'own_position'});
+    assert.ok(p.requests.some(r=>r.url.includes('/captable/record/3')));assert.ok(!p.requests.some(r=>r.url.includes('/compare')));
+  } finally { await p.close(); }
+});
+
+test('D1130 review: the Investor page draws recorded SAFE-only instruments in their currency', async () => {
+  const p=await readPage(()=>response(VIEW('grant','investor',{audience:'investor',founding:[],rounds:[],instruments:[{holder:'SAFE-only fund',instrument:'safe',amount:123.45,currency:'EUR',basis:null,issue_date:null}]})));
+  try { assert.equal(p.count('captable-read-view-instruments'),1);assert.match(p.text(),/SAFE-only fund · SAFE · EUR 123\.45/); } finally {await p.close();}
 });

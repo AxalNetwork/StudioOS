@@ -48,6 +48,7 @@ const BASELINE = readFileSync(resolve(process.cwd(), 'cloudflare-worker/sql/sche
 const sqlOf = (file: string) => readFileSync(resolve(process.cwd(), `cloudflare-worker/sql/migrations/${file}`), 'utf8');
 
 const ADMIN = 30;
+const CALLER = 31;
 const P = 1;
 
 function fixture() {
@@ -69,13 +70,16 @@ function fixture() {
   db.exec(sqlOf('544_narrative_sections.sql')); // D908: a version based on another copies its narrative stores
   addColumnsFrom(db, sqlOf('441_build_cycle_stores.sql'), 'cap_table_holders');
   db.prepare('INSERT INTO users (id, role, name, email, is_active) VALUES (?, ?, ?, ?, 1)').run(ADMIN, 'admin', 'Ada Admin', 'ada@example.test');
+  // D1130: an admin no longer reaches the legacy cap-table routes, so a
+  // studio-tier account on Kestrel's founder makes the cap-table calls below.
+  db.prepare("INSERT INTO users (id, role, name, email, is_active, founder_id, subscription_tier, subscription_status) VALUES (?, 'founder', 'Cal Caller', 'cal@example.test', 1, 1001, 'studio', 'active')").run(CALLER);
   db.exec(`INSERT INTO projects (id, name, founder_id) VALUES (${P}, 'Kestrel Labs', 1001)`);
   return db;
 }
 
 let wrap: ((db: any) => any) | null = null;
 async function call(db: DatabaseSync, method: string, path: string, body?: unknown) {
-  const tok = await new SignJWT({ user_id: ADMIN, role: 'admin' }).setProtectedHeader({ alg: 'HS256' })
+  const tok = await new SignJWT({ user_id: CALLER, role: 'founder' }).setProtectedHeader({ alg: 'HS256' })
     .setIssuedAt().setExpirationTime('1h').sign(new TextEncoder().encode(JWT_SECRET));
   const DB = wrap ? wrap(d1Over(db)) : d1Over(db);
   const res = await captable.request(path, {

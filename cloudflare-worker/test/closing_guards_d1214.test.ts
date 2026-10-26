@@ -64,7 +64,8 @@ test('D1214: a live person-bound holder grant returns only that holder; recorder
   assert.equal((await call(f,1,'/api/captable/2',undefined,'GET')).status,403);
   f.db.exec("UPDATE cap_table_access_grants SET level='none' WHERE id=1");assert.equal((await call(f,1,'/api/captable/1',undefined,'GET')).status,200);
   f.db.exec("UPDATE cap_table_access_grants SET revoked_at=CURRENT_TIMESTAMP WHERE id=1");assert.equal((await call(f,1,'/api/captable/1',undefined,'GET')).status,403);
-  for(const id of [3,4]) assert.equal((await call(f,id,'/api/captable/1',undefined,'GET')).body.holders.length,2);
+  assert.equal((await call(f,3,'/api/captable/1',undefined,'GET')).body.holders.length,2);
+  assert.equal((await call(f,4,'/api/captable/1',undefined,'GET')).status,403,'D1130: admins use the scoped read, even on the legacy holder route');
  }finally{f.db.close();}
 });
 for(const [method,path] of [['POST','/api/legalcap/capital/call'],['PATCH','/api/legalcap/capital/call/1/send'],['POST','/api/legalcap/capital/call/1/respond'],['GET','/api/legalcap/capital/lp-portal'],['GET','/api/legalcap/capital/calls'],['POST','/api/capital/capitalCall']]) test(`D1214: retired ${method} ${path} cannot read or write money`,async()=>{

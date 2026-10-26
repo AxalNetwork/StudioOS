@@ -420,7 +420,7 @@ test('CAL8 A: the New menu by role, items that leave the page carrying ↗', asy
 test('the page: the drawer route, each row opening its item, no browser pop-up, and the old number fields gone', () => {
   const page = read('frontend/src/pages/CalendarPage.jsx');
   const app = read('frontend/src/App.jsx');
-  assert.match(app, /<Route path="\/calendar\/item\/:kind\/:id" element=\{guard\(\['admin', 'founder', 'partner', 'investor', 'advisor'\], <CalendarPage \/>\)\} \/>/);
+  assert.match(app, /<Route path="\/calendar\/item\/:kind\/:id" element=\{guard\(\['admin', 'founder', 'partner', 'investor', 'advisor', 'exploring'\], <CalendarPage \/>\)\} \/>/);
   assert.match(page, /const opened = itemOf\(location\.pathname\);/);
   assert.match(page, /const behind = opened \? \(location\.state\?\.from \|\| '\/calendar'\) : location\.pathname;/, 'the drawer sits over the view it came from');
   assert.match(page, /<CalendarItemDrawer kind=\{opened\.kind\} id=\{opened\.id\}/);

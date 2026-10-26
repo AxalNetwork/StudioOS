@@ -84,6 +84,7 @@ import tickets from './routes/tickets';
 import deals from './routes/deals';
 import dealFlow from './routes/deal_flow';
 import dealContext from './routes/deal_context';
+import dealWorkroom from './routes/deal_workroom';
 import dealViews from './routes/deal_views';
 import users from './routes/users';
 import marketIntel from './routes/market_intel';
@@ -926,6 +927,8 @@ app.route('/api/tickets', tickets);
 app.route('/api/deals/flow', dealFlow);
 app.route('/api/deals', dealViews);
 app.route('/api/deals', dealContext);
+// D1153 (#3058): the working tabs' room access, round summary and reasoned withdrawal. Before deals.
+app.route('/api/deals', dealWorkroom);
 app.route('/api/deals', deals);
 app.route('/api/users', users);
 app.route('/api/market-intel', marketIntel);

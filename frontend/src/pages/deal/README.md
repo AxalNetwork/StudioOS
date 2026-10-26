@@ -3,8 +3,8 @@
 D1152 (#3057, part 4 of #2421): the deal page's frame, drawn to the owner's
 "Investor Deal Page" canvas (DL1, DL2, DL14, DL18–DL23, DL24a;
 `design/incoming/Investor Deal Page.dc.html`). The page itself is
-`../DealRoomPage.jsx`, which keeps the shell and the tabs parts 5 and 6 own
-(Diligence, Documents, Terms, Commitment, Invitations, Transfers); the tab
+`../DealRoomPage.jsx`, which keeps the shell and the tabs part 6 owns
+(Invitations, Transfers); part 5's working tabs live here since D1153; the tab
 addresses are `../dealPageModel.js` (D1148).
 
 - `dealFrameModel.js` — the pure model every file here and the test share:
@@ -26,6 +26,13 @@ addresses are `../dealPageModel.js` (D1148).
   also the founder's and staff's Activity tab).
 - `dealVisit.js` — reads `whats-new` once per deal per visit, because each
   read advances the reader's "last looked" marker (D1150).
+- `dealWorkModel.js` — D1153's pure model of the working tabs: the case on
+  this company, the room's three access states (withheld files a count,
+  never a name), proposed terms with their source, your commitment, the round
+  as a count and a total, and the withdraw reason's check.
+- `DealWorkTabs.jsx` — D1153 (#3058, part 5): Diligence (DL7), Documents and
+  data room (DL8, DL9), Terms (DL10) and Commitment and closing (DL11–DL13),
+  each change behind an in-page dialog.
 
 The rules for adding here: every figure no read holds is "Not recorded" with
 its reason, a read that failed is "Unreadable" with Try again and leaves the

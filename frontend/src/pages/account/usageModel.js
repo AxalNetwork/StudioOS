@@ -311,6 +311,15 @@ export const STORAGE_AREAS = [
   ['research_library', 'Research library'],
   ['message_attachments', 'Message attachments'],
   ['interview_recordings', 'Interview recordings'],
+  // D1169 (#3082): the read counts every member store. Part 5 draws them by kind.
+  ['data_room_versions', 'Earlier data room versions'],
+  ['session_audio', 'Record a Session audio'],
+  ['deck_reviews', 'Deck reviews'],
+  ['validate_evidence', 'Validate evidence'],
+  ['build_proofs', 'Build proofs'],
+  ['grow_minutes', 'Grow minutes'],
+  ['brand_files', 'Your photo and logos'],
+  ['csv_imports', 'Imports'],
 ];
 
 /**

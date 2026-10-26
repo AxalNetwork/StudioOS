@@ -252,3 +252,14 @@ test('the wiring: no route is added, CycleRoute branches on the tab word, and th
   assert.match(read('design/incoming/Cap Table · Boards.dc.html'), /dc-import name="Raise Cap Table Page"/);
   assert.ok(existsSync('documentation/architecture/decisions/D1015.md'), 'D1015 records the integration');
 });
+
+test('D1130: grants show the holder-linked 83(b) and isolate an unreadable election store', async () => {
+  for (const available of [true,false]) {
+    const v = await mounted('/raise/cap-table/option-pool?project_id=3',{handle:u => u.includes('/equity-plan?project_id=3') ? response({grants:[{id:1,holder_id:8,total_shares:600,vested_shares:0,start_date:null,cliff_months:12,total_months:48}],elections:{available,rows:available?[{holder_id:8,state:'done',has_document:true},{holder_id:9,state:'todo'}]:[]}}) : u.includes('/captable/record/3') ? response({by_holder:{available:true,rows:[{holder_id:8,name:'Synthetic employee'}]}}) : handler(u)});
+    try {
+      assert.equal(v.count('captable-grant'),1);assert.match(v.text(),/Synthetic employee/);
+      assert.match(v.text(),available?/Filed · Proof on file · Filing date not recorded/:/Unreadable · Try again/);
+      assert.match(v.text(),/600/);assert.match(v.text(),/Safe harbour in force/);
+    } finally { await v.close(); }
+  }
+});
