@@ -11,16 +11,32 @@ import { MAX_QUESTIONS, ROLE_OPTIONS, formFrom, formToPayload, refusalText } fro
  * programme; a refusal is shown in the Worker's own words. `classes` carries
  * the caller's accent: amber in the partner workspace, violet on HQ.
  *
- * The logo is not asked for: D812 stores a `logo_key`, and nothing uploads one
- * yet (D815 §3).
+ * D1202 (#3152, TST7): with `logo`, the form also takes a square PNG or SVG
+ * logo, which the caller uploads once the programme is saved (D1199's routes
+ * need its uid): `onSave(payload, { file, remove })`. The type and size are
+ * checked here; that it is square, and safe, the Worker decides and says.
  */
 const baseInput = 'mt-1 w-full rounded-lg border border-axal-hairline bg-white px-2.5 py-1.5 text-[12.5px] dark:border-gray-700 dark:bg-gray-900';
 const baseButton = 'rounded-lg bg-axal-violet px-3 py-1.5 text-[12px] font-semibold text-white disabled:opacity-50';
 const ghost = 'rounded-lg border border-axal-hairline px-3 py-1.5 text-[12px] font-semibold hover:bg-axal-ground dark:border-gray-700 dark:hover:bg-gray-800';
 const label = 'block text-[10px] font-extrabold uppercase tracking-[.09em] text-axal-faint';
 
-export default function ProgrammeForm({ programme = null, onSave, onCancel, saveLabel = 'Save draft', classes = {} }) {
+// The Worker's own limits and sentences (services/testingLogo.ts, D1199).
+export const LOGO_TYPES = ['image/png', 'image/svg+xml'];
+export const LOGO_MAX_BYTES = 256 * 1024;
+/** Why a chosen logo file cannot be sent, or null. */
+export function logoProblem(file) {
+  if (!file) return null;
+  if (!LOGO_TYPES.includes(file.type) && !/\.(png|svg)$/i.test(String(file.name || ''))) return 'A logo is a PNG or an SVG file.';
+  if (Number(file.size) > LOGO_MAX_BYTES) return 'A logo is at most 256 KB.';
+  if (Number(file.size) === 0) return 'That file is empty.';
+  return null;
+}
+
+export default function ProgrammeForm({ programme = null, onSave, onCancel, saveLabel = 'Save draft', classes = {}, logo = false }) {
   const [form, setForm] = useState(() => formFrom(programme));
+  const [logoFile, setLogoFile] = useState(null);
+  const [removeLogo, setRemoveLogo] = useState(false);
   const [error, setError] = useState(null);
   const [busy, setBusy] = useState(false);
   const input = classes.input || baseInput;
@@ -38,10 +54,12 @@ export default function ProgrammeForm({ programme = null, onSave, onCancel, save
     e?.preventDefault?.();
     const out = formToPayload(form);
     if (out.error) { setError(out.error); return; }
+    const bad = logo ? logoProblem(logoFile) : null;
+    if (bad) { setError(bad); return; }
     setBusy(true);
     setError(null);
     try {
-      await onSave(out.payload);
+      await onSave(out.payload, logo ? { file: logoFile, remove: removeLogo && !logoFile } : undefined);
     } catch (err) {
       setError(refusalText(err, 'Axal could not save this programme. Try again.'));
     } finally {
@@ -68,6 +86,20 @@ export default function ProgrammeForm({ programme = null, onSave, onCancel, save
   return (
     <form onSubmit={submit} className="space-y-3" data-testid="programme-form">
       {text('product_name', 'Product')}
+      {logo && (
+        <div className="block" data-testid="programme-logo">
+          <span className={label}>Logo · square, PNG or SVG</span>
+          <input type="file" accept="image/png,image/svg+xml,.png,.svg" className={input}
+            onChange={(e) => { const file = e.target.files?.[0] || null; setLogoFile(file); setRemoveLogo(false); setError(logoProblem(file)); }}
+            data-testid="programme-logo-file" />
+          <span className="mt-1 block text-[11px] text-axal-faint">
+            {logoFile ? `${logoFile.name} is uploaded when you save.` : programme?.logo_key && !removeLogo ? 'This program has a logo. Choose a file to replace it.' : 'At most 256 KB. Without one, the program shows its first letter.'}
+          </span>
+          {programme?.logo_key && !logoFile && !removeLogo
+            ? <button type="button" className={`${ghost} mt-1`} onClick={() => setRemoveLogo(true)} data-testid="programme-logo-remove">Remove the logo</button>
+            : null}
+        </div>
+      )}
       {text('summary', 'Summary', 'One or two sentences members read on the programme card.', 2)}
       {text('tester_tasks', 'What testers do', null, 3)}
       {text('time_needed', 'Time needed', 'For example, 2 hours over 2 weeks.')}

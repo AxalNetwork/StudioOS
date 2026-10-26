@@ -13,8 +13,8 @@ export function BooksTab({ apis, selectedFund, onFund }) {
   const [period, setPeriod] = useState(null);
   const [view, setView] = useState('journal');
   const items = list.data?.items || [];
-  const fundId = selectedFund || items[0]?.id;
-  const fund = items.find(f => String(f.id) === String(fundId));
+  const fund = items.find(f => String(f.id) === String(selectedFund)) || items[0];
+  const fundId = fund?.id;
   const detail = useRead(async () => {
     const item = await apis.ledger.read(fundId, period);
     if (!item || String(item.id) !== String(fundId) || String(item.period?.id) !== String(period)) throw new Error('The selected accounting period could not be read.');
