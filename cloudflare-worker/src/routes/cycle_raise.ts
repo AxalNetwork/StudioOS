@@ -31,7 +31,9 @@
  *   D1114 (#2994): POST /narrative/:version/sections/:section/draft  { mode: draft | shorten | plain, words? }
  *         one metered run under `draft:narrative-section` → { version, section, mode, text, removed }; writes nothing
  *   D913 (#2697): the objections investors raised (`services/narrative/objections.ts`, `objectionDraft.ts`).
- *   GET   /narrative/objections      → { objections: [{ key, text, count, prospects, last_heard, answer }], capped }
+ *   GET   /narrative/objections      → { objections: [{ key, text, count, prospects, last_heard, answer, answered }], capped, answers }
+ *   PUT   /narrative/objections/:objection/answer  { version, section, how: eadwyn | picked } → { objection, answered }
+ *   DELETE /narrative/objections/:objection/answer → { objection, answered: null }   (migration 624)
  *   POST  /narrative/objections/:objection/draft  { version, section, words? }
  *         one metered run under `draft:narrative-objection` → { version, section, objection, text, removed }; writes nothing
  *   D914 (#2698): an admin reads the narrative read only (`services/narrative/adminRead.ts`).
@@ -106,7 +108,7 @@ import { canWrite, canWritePitchDeck, type ProjectRef } from './_founder_validat
 import { CYCLE, QUESTION, MODULES, CARD_FOR, RECORDS_FOR, INVESTOR_TYPE_LABEL, figures, cards, callsHistory, narrativeHome, recordQuery, type Ctx, type ModuleSlug } from '../services/raiseCycle';
 import {
   WriterError, scoreReadinessItem, rescoreReadiness, saveNarrativeVersion, updateNarrativeVersion, createDeckLink, updateDeckLink,
-  addCapHolder, updateCapHolder, saveUseOfFunds, addProspect, updateProspect, setFileChecklistItem, setProspectNextStep,
+  addCapHolder, updateCapHolder, addProspect, updateProspect, setFileChecklistItem, setProspectNextStep,
 } from '../services/raiseWriters';
 import { hasRecords } from '../services/records';
 import { NARRATIVE_SECTIONS, compareNarrative, readNarrative, readPositioning, readableVersion, saveNarrativeSection, savePositioning } from '../services/narrative/store';
@@ -139,8 +141,10 @@ import { recomputePmf, pmfHistory, pmfModelRead } from '../services/scoring/pmfS
 import { dataRoomOwner, roomSummary } from './data_room';
 import { safeCard, type Card } from '../services/cycleCards';
 import { refuse } from '../util/refusal';
+import useOfFunds from './cycle_use_of_funds';
 
 const cycleRaise = new Hono<{ Bindings: Env }>();
+cycleRaise.route('/use-of-funds', useOfFunds);
 
 const today = () => new Date().toISOString().slice(0, 10);
 
@@ -613,8 +617,76 @@ cycleRaise.get('/narrative/objections', async (c) => {
   if (s instanceof Response) return s;
   try {
     const read = await readObjections(c.env, s.projectId);
-    return c.json({ objections: read.items, capped: read.capped });
+    return c.json({ objections: read.items, capped: read.capped, answers: read.answers });
   } catch (e) { return unreadable(c, e); }
+});
+
+// D913 option A (migration 624): which saved version and section answers an
+// objection. `eadwyn` is set by Story's Save after an accepted "Answer it"
+// draft; `picked` by the founder choosing the section by hand. One row per
+// objection: a later answer replaces the earlier one. The log row names the
+// section and version only, never the objection's words or who raised it.
+const HOW_LABEL = { eadwyn: 'Eadwyn’s draft, saved', picked: 'picked by hand' } as const;
+
+async function objectionOf(c: any, projectId: number, key: string): Promise<Objection | Response> {
+  if (!/^[0-9a-f]{16}$/.test(key)) return c.json({ detail: 'Objection not found' }, 404) as Response;
+  let objection: Objection | undefined;
+  try { objection = (await readObjections(c.env, projectId)).items.find((o) => o.key === key); } catch (e) { return unreadable(c, e) as Response; }
+  return objection ?? (c.json({ detail: 'Objection not found' }, 404) as Response);
+}
+
+cycleRaise.put('/narrative/objections/:objection/answer', async (c) => {
+  const s = await narrativeScope(c, 'write');
+  if (s instanceof Response) return s;
+  const key = String(c.req.param('objection') || '');
+  const objection = await objectionOf(c, s.projectId, key);
+  if (objection instanceof Response) return objection;
+  const b = await body(c);
+  const how = b.how === 'eadwyn' || b.how === 'picked' ? b.how : null;
+  if (!how) return c.json({ detail: 'how is eadwyn or picked' }, 400);
+  const section = NARRATIVE_SECTIONS.find((x) => x.key === b.section);
+  if (!section) return c.json({ detail: 'Unknown section', sections: NARRATIVE_SECTIONS.map((x) => x.key) }, 404);
+  let version: number;
+  try { version = await readableVersion(c.env, s.projectId, b.version); } catch (e) { return writeFailed(c, e); }
+  if (version === 0) return c.json({ detail: 'An objection is answered in a saved version. Version 0 is the live deck’s wording.', code: 'invalid_version' }, 409);
+  const userId = Number(s.user.id);
+  try {
+    await c.env.DB.prepare(
+      `INSERT INTO narrative_objection_answers (project_id, objection_key, version, section_key, how, answered_by)
+       VALUES (?, ?, ?, ?, ?, ?)
+       ON CONFLICT (project_id, objection_key) DO UPDATE SET
+         version = excluded.version, section_key = excluded.section_key, how = excluded.how,
+         answered_by = excluded.answered_by, answered_at = datetime('now')`,
+    ).bind(s.projectId, key, version, section.key, how, userId).run();
+    await logCycleWrite(c.env, {
+      projectId: s.projectId, userId, cycle: 'raise', module: 'investor-narrative', entityId: version,
+      action: 'narrative_objection_answered',
+      summary: `An objection marked answered in ${section.label}, version ${version} (${HOW_LABEL[how]})`,
+    });
+    const answered = (await readObjections(c.env, s.projectId)).items.find((o) => o.key === key)?.answered ?? null;
+    return c.json({ objection: key, answered });
+  } catch (e) { return writeFailed(c, e); }
+});
+
+cycleRaise.delete('/narrative/objections/:objection/answer', async (c) => {
+  const s = await narrativeScope(c, 'write');
+  if (s instanceof Response) return s;
+  const key = String(c.req.param('objection') || '');
+  const objection = await objectionOf(c, s.projectId, key);
+  if (objection instanceof Response) return objection;
+  try {
+    const gone: any = await c.env.DB.prepare(
+      'DELETE FROM narrative_objection_answers WHERE project_id = ? AND objection_key = ? RETURNING version, section_key',
+    ).bind(s.projectId, key).first();
+    if (!gone) return c.json({ detail: 'This objection is not marked answered.' }, 404);
+    const label = NARRATIVE_SECTIONS.find((x) => x.key === gone.section_key)?.label ?? 'a section';
+    await logCycleWrite(c.env, {
+      projectId: s.projectId, userId: Number(s.user.id), cycle: 'raise', module: 'investor-narrative', entityId: Number(gone.version),
+      action: 'narrative_objection_unanswered',
+      summary: `An objection no longer marked answered in ${label}, version ${Number(gone.version)}`,
+    });
+    return c.json({ objection: key, answered: null });
+  } catch (e) { return writeFailed(c, e); }
 });
 
 cycleRaise.get('/narrative/:version', async (c) => {
@@ -777,15 +849,6 @@ cycleRaise.patch('/holders/:id', async (c) => {
   if ('group' in b || 'instrument' in b) return c.json({ detail: 'A holder keeps its group and instrument; add a new holder instead' }, 400);
   try {
     return c.json(await updateCapHolder(c.env, { projectId: s.projectId, user: s.user, id, body: b }));
-  } catch (e) { return writeFailed(c, e); }
-});
-
-cycleRaise.put('/use-of-funds', async (c) => {
-  const s = await scope(c);
-  if (s instanceof Response) return s;
-  const b = await body(c);
-  try {
-    return c.json(await saveUseOfFunds(c.env, { projectId: s.projectId, userId: Number(s.user.id), body: b }));
   } catch (e) { return writeFailed(c, e); }
 });
 

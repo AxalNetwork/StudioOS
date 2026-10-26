@@ -421,6 +421,138 @@ export function worstSeverity(sevs: string[]): keyof typeof SEVERITY_FLOOR | nul
   return (out as keyof typeof SEVERITY_FLOOR) || null;
 }
 
+// ---------- Blocking sections and the case decision (D1246, #3261) ----------
+//
+// A blocking section cannot carry an open High or Critical flag into
+// "Proceed" (#2385 owner question 4). Until part 5's template store lets HQ
+// mark them per template version, the rule is the canvas's template board
+// (DDL13): Corporate & Legal, Financial Health and Compliance / AML. A case
+// stamps it on each section at open (`dd_sections.blocking`, migration 620),
+// so a later change to this list never rewrites a case already opened.
+
+export const BLOCKING_SECTION_KEYS: ReadonlySet<string> = new Set(['corporate_legal', 'financial_health', 'compliance_aml']);
+
+export const DD_DECISIONS = ['proceed', 'proceed_with_conditions', 'do_not_proceed', 'withdrawn'] as const;
+export type DDDecision = typeof DD_DECISIONS[number];
+
+/** The canvas's sentence when "Proceed" meets an open High or Critical flag in a blocking section (DDL14 D). */
+export const BLOCKING_FLAG_REFUSAL = 'A blocking section still has an open High flag. Record Proceed with conditions, or close the flag first.';
+
+const OPEN_SEVERE = new Set(['high', 'critical']);
+
+/**
+ * The blocking sections that carry an open High or Critical flag, by section
+ * id. A flag is open when it is a finding with no `resolved_at`, or a
+ * checklist item still flagged or failed; a flag or fail with no severity is
+ * not High (the score reads it as low or medium too).
+ */
+export function blockingSectionsWithOpenSevereFlags(
+  sections: ReadonlyArray<{ id: number; blocking: number | boolean | null }>,
+  findings: ReadonlyArray<{ section_id: number | null; severity: string; resolved_at: string | null }>,
+  items: ReadonlyArray<{ section_id: number | null; status: string; severity: string | null }>,
+): number[] {
+  const blocking = new Set(sections.filter((s) => Number(s.blocking) === 1).map((s) => Number(s.id)));
+  const hit = new Set<number>();
+  for (const f of findings) {
+    if (f.section_id != null && blocking.has(Number(f.section_id)) && !f.resolved_at && OPEN_SEVERE.has(String(f.severity))) hit.add(Number(f.section_id));
+  }
+  for (const it of items) {
+    if (it.section_id != null && blocking.has(Number(it.section_id)) && (it.status === 'flag' || it.status === 'fail') && OPEN_SEVERE.has(String(it.severity))) hit.add(Number(it.section_id));
+  }
+  return [...hit].sort((a, b) => a - b);
+}
+
+/**
+ * What every newly opened case takes at open (migration 620): its lead is its
+ * opener, and its blocking sections are stamped from `BLOCKING_SECTION_KEYS`.
+ * Called by both openers, `POST /api/dd/cases` and the partner-deal seed, so
+ * neither carries its own copy of the rule.
+ */
+export async function stampNewCase(env: Env, caseId: number, opts: { blocking?: boolean } = {}): Promise<void> {
+  await env.DB.prepare('UPDATE dd_cases SET lead_user_id = owner_user_id WHERE id = ? AND lead_user_id IS NULL').bind(caseId).run();
+  // D1249: a case opened from a stored template carries that template's
+  // blocking sections already; only a catalog case takes this list.
+  if (opts.blocking === false) return;
+  for (const key of BLOCKING_SECTION_KEYS) {
+    await env.DB.prepare('UPDATE dd_sections SET blocking = 1 WHERE case_id = ? AND section_key = ?').bind(caseId, key).run();
+  }
+}
+
+// ---------- Versioned templates (D1249, #3264) ----------
+//
+// #2385 owner question 3: HQ owns the templates and a studio picks one. A
+// template is one depth (Lite, Standard, Deep) at one version: for every
+// catalog section, its weight, whether it blocks, and the checklist items it
+// seeds. Version 0 is this file's catalog, and it is what every case opened
+// before migration 623 used. A Super Admin saves a new version and it
+// applies to new cases only; a case keeps the version it was opened with
+// (`dd_cases.template_id`).
+
+export interface TemplateSection { key: string; weight: number; blocking: boolean; items: string[] }
+export interface TemplateBody { sections: TemplateSection[] }
+export const TEMPLATE_DEPTHS: ReadonlyArray<ChecklistDepth> = ['lite', 'standard', 'deep'];
+
+/** The catalog as a template: version 0 of a depth. */
+export function builtInTemplate(depth: ChecklistDepth): TemplateBody {
+  const rank = DEPTH_RANK[depth];
+  return {
+    sections: SECTION_CATALOG.map((s) => ({
+      key: s.key, weight: s.weight, blocking: BLOCKING_SECTION_KEYS.has(s.key),
+      items: CHECKLIST_CATALOG.filter((i) => i.section_key === s.key && DEPTH_RANK[i.depth] <= rank).map((i) => i.key),
+    })),
+  };
+}
+
+/**
+ * A body a Super Admin may save, or why not. Every catalog section appears
+ * once, with a weight above 0 and at most 5; items are catalog items of that
+ * section. A section's title and the items' words stay the catalog's: a
+ * template chooses, it does not rewrite.
+ */
+export function checkTemplateBody(raw: unknown): { ok: true; body: TemplateBody } | { ok: false; error: string } {
+  const sections = Array.isArray((raw as any)?.sections) ? (raw as any).sections : null;
+  if (!sections) return { ok: false, error: 'A template lists its sections.' };
+  const known = new Map(SECTION_CATALOG.map((s) => [s.key, s]));
+  const itemSection = new Map(CHECKLIST_CATALOG.map((i) => [i.key, i.section_key]));
+  const seen = new Set<string>();
+  const out: TemplateSection[] = [];
+  for (const s of sections) {
+    const key = String(s?.key ?? '');
+    if (!known.has(key)) return { ok: false, error: `Unknown section: ${key || 'none'}.` };
+    if (seen.has(key)) return { ok: false, error: `${known.get(key)!.title} is listed twice.` };
+    seen.add(key);
+    const weight = Number(s.weight);
+    if (!Number.isFinite(weight) || weight <= 0 || weight > 5) return { ok: false, error: `${known.get(key)!.title}: a weight is above 0 and at most 5.` };
+    const items = Array.isArray(s.items) ? [...new Set(s.items.map((x: unknown) => String(x)))] as string[] : [];
+    for (const it of items) {
+      if (itemSection.get(it) !== key) return { ok: false, error: `${known.get(key)!.title}: ${it} is not one of its items.` };
+    }
+    out.push({ key, weight: Math.round(weight * 100) / 100, blocking: s.blocking === true, items });
+  }
+  if (seen.size !== known.size) return { ok: false, error: 'A template lists every section, each once.' };
+  return { ok: true, body: { sections: out } };
+}
+
+/** The latest version of a depth, or null when HQ has saved none (the catalog applies). */
+export async function latestTemplate(env: Env, depth: ChecklistDepth): Promise<{ id: number; version: number; body: TemplateBody } | null> {
+  const row = await env.DB.prepare('SELECT id, version, body_json FROM dd_templates WHERE depth = ? ORDER BY version DESC LIMIT 1')
+    .bind(depth).first<{ id: number; version: number; body_json: string }>();
+  if (!row) return null;
+  try { return { id: Number(row.id), version: Number(row.version), body: JSON.parse(row.body_json) }; } catch { return null; }
+}
+
+/** What a case of this subject type seeds from a template: its sections with weight and blocking, and its items. */
+export function seedFromTemplate(subjectType: DDSubjectType, body: TemplateBody) {
+  const bySection = new Map(body.sections.map((s) => [s.key, s]));
+  const items = new Map(CHECKLIST_CATALOG.map((i) => [i.key, i]));
+  const sections = sectionsFor(subjectType).map((s) => {
+    const t = bySection.get(s.key);
+    return { key: s.key, title: s.title, weight: t ? t.weight : s.weight, blocking: t ? t.blocking : BLOCKING_SECTION_KEYS.has(s.key) };
+  });
+  const checklist = sections.flatMap((s) => (bySection.get(s.key)?.items ?? []).map((k) => items.get(k)!).filter(Boolean));
+  return { sections, checklist };
+}
+
 // ---------- PII helpers (column cipher wrappers) ----------
 
 export async function encField(env: Env, table: string, column: string, rowId: number, value: string | null): Promise<string | null> {

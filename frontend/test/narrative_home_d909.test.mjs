@@ -20,7 +20,7 @@ import CycleRoute from '../src/pages/cycles/CycleRoute.jsx';
 import { NarrativeHome } from '../src/pages/raise/narrative/NarrativeTool.jsx';
 import { FORMS, startFromChips } from '../src/pages/cycles/forms.js';
 import {
-  CLAIMS_WAIT, NEEDS_NONE, NOT_RECORDED, OBJECTIONS_WAIT, compareView, deleteLine, duplicateSentence, homeFooter, homePart, homeTiles,
+  ANSWERS_UNREADABLE, CLAIMS_WAIT, NEEDS_NONE, NOT_RECORDED, compareView, deleteLine, duplicateSentence, homeFooter, homePart, homeTiles,
   needsYou, newVersionLine, nextVersion, readByLine, startFromHref, versionSub,
 } from '../src/pages/raise/narrative/narrativeModel.js';
 
@@ -40,17 +40,17 @@ const PART = {
   deck: { version: 6, reads_narrative: true },
   spinout: false,
   // D913 (#2697): the objections investors raised, project-wide.
-  objections: { state: 'ok', items: [{ key: 'a'.repeat(16), text: 'Too small a market', count: 3, prospects: 2, last_heard: '2026-10-09', answer: null }], capped: false },
+  objections: { state: 'ok', items: [{ key: 'a'.repeat(16), text: 'Too small a market', count: 3, prospects: 2, last_heard: '2026-10-09', answer: null, answered: null }], capped: false, answers: 'unreadable' },
 };
 const data = (part) => ({ parts: { narrative: part } });
 
-test('NAR1 tiles: Versions and Open mismatches from the read; Claims backed and Objections answered a dash with the reason, never 0', () => {
+test('NAR1 tiles: Versions and Open mismatches from the read; Claims backed a dash with the reason, and Objections answered a dash when its answers could not be read, never 0', () => {
   const tiles = homeTiles(PART);
   assert.deepEqual(tiles.map((t) => [t.label, t.value, t.sub]), [
     ['Versions', '3', 'Newest v4 · Seed fund'],
     ['Claims backed', '—', CLAIMS_WAIT],
     ['Open mismatches', '1', 'MRR, in v4'],
-    ['Objections answered', '—', `1 heard. ${OBJECTIONS_WAIT}`],
+    ['Objections answered', '—', `1 heard. ${ANSWERS_UNREADABLE}`],
   ]);
   assert.deepEqual(homeTiles({ ...PART, newest: { version: 4, compared: 0, mismatches: [] } }).find((t) => t.key === 'mismatches'),
     { key: 'mismatches', label: 'Open mismatches', value: '—', sub: 'Nothing compared yet in v4', waits: true }, 'nothing compared is not "no mismatch"');
@@ -76,7 +76,7 @@ test('Home renders the tiles, Needs you and the footer from the part, or says th
   for (const id of ['narrative-tile-versions', 'narrative-tile-claims', 'narrative-tile-mismatches', 'narrative-tile-objections', 'narrative-needs-you', 'narrative-needs-row', 'narrative-home-footer']) {
     assert.ok(html.includes(`data-testid="${id}"`), id);
   }
-  assert.ok(html.includes(CLAIMS_WAIT) && html.includes(OBJECTIONS_WAIT));
+  assert.ok(html.includes(CLAIMS_WAIT) && html.includes(ANSWERS_UNREADABLE));
   assert.ok(html.includes('href="/raise/investor-narrative/check?project_id=3&amp;version=4"'));
   for (const sample of ['[Name]', '[$', '[Northwind', '[Studio', '[v4', '[20 Oct]']) assert.ok(!html.includes(sample), `no canvas sample: ${sample}`);
   const none = renderToStaticMarkup(h(MemoryRouter, null, h(NarrativeHome, { data: data({ ...PART, newest: { version: 4, compared: 1, mismatches: [] } }) })));

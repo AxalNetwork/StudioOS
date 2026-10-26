@@ -16,10 +16,13 @@ const SECRET = 'x'.repeat(64);
 const baseline = readFileSync(new URL('../sql/schema_baseline.sql', import.meta.url), 'utf8').replace(/--[^\n]*/g, '');
 function fixture() {
   const { DB, db } = makeD1('');
-  for (const name of ['users', 'founders', 'projects', 'partners', 'deals', 'deal_invitations', 'commitments', 'investor_dealroom_members', 'user_company_links', 'activity_logs', 'deal_stage_events', 'dd_cases', 'dd_sections', 'dd_checklist_items', 'dd_audit_log']) { try { db.exec(stripForeignKeys(tableFromBaseline(baseline, name))); } catch (e) { throw new Error('Fixture table: ' + name, { cause: e }); } }
+  for (const name of ['users', 'founders', 'projects', 'partners', 'deals', 'deal_invitations', 'commitments', 'investor_dealroom_members', 'user_company_links', 'activity_logs', 'deal_stage_events', 'dd_cases', 'dd_sections', 'dd_checklist_items', 'dd_audit_log', 'dd_reviewers']) { try { db.exec(stripForeignKeys(tableFromBaseline(baseline, name))); } catch (e) { throw new Error('Fixture table: ' + name, { cause: e }); } }
   // Read the new column's actual migration, including its backfill default.
   db.exec(readFileSync(new URL('../sql/migrations/599_deal_currency.sql', import.meta.url), 'utf8'));
   db.exec("ALTER TABLE deals ADD COLUMN source TEXT;");
+  // D1246: the DD router reads and writes migration 620's case lifecycle columns.
+  db.exec(readFileSync(new URL('../sql/migrations/620_dd_case_lifecycle.sql', import.meta.url), 'utf8'));
+  db.exec(readFileSync(new URL('../sql/migrations/623_dd_team_templates.sql', import.meta.url), 'utf8'));
   for (const [id, role, tier, fid] of [[1, 'investor', 'professional', null], [2, 'investor', 'professional', null], [3, 'investor', 'professional', null], [4, 'investor', 'free', null], [5, 'founder', null, 50], [6, 'admin', null, null], [7, 'investor', 'free', null]] as const) {
     db.prepare("INSERT INTO users(id,email,name,role,founder_id,investor_tier,investor_subscription_status) VALUES(?,?,?,?,?,?,'active')").run(id, `synthetic${id}@example.test`, `Synthetic ${id}`, role, fid, tier ?? 'free');
   }

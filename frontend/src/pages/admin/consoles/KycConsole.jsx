@@ -1,15 +1,18 @@
 import React, { useEffect, useState } from 'react';
 import { reportError } from '../../../lib/log';
+import { Link } from 'react-router-dom';
 import { api } from '../../../lib/api';
 import { X, ShieldCheck, XCircle, CheckCircle2 } from 'lucide-react';
 import { KycSensitiveFields } from '../../../components/hqReview/SensitiveField';
 import { ROLE_BADGES, KV, CONSOLE_LOADING, ConsoleUnreadable } from './shared';
+import { QUEUE_FILTERS, statusWord } from '../kyc/kycModel';
 
 /**
  * D648 (#1448) — the KYC / AML queue and its review drawer. It reads the queue
  * only when this console is open (the read writes an audit row). A failed read
  * says so; it no longer draws "No submissions". D938: it is the KYC & KYB
- * page's body, at /admin/kyc.
+ * page's body, at /admin/kyc. D1228: People's queue, in the canvas's status
+ * words, each name opening that person's case.
  */
 
 export default function KycConsole() {
@@ -63,10 +66,10 @@ export default function KycConsole() {
             <ShieldCheck size={16} className="text-gray-600" />
             <h3 className="text-sm font-semibold text-gray-900 dark:text-gray-100">KYC / AML Queue</h3>
             <div className="ml-auto flex gap-1">
-              {['pending', 'approved', 'rejected', 'not_started'].map(s => (
+              {QUEUE_FILTERS.map(s => (
                 <button key={s} onClick={() => setKycFilter(s)}
                   className={`text-xs px-2.5 py-1 rounded-md font-medium ${kycFilter === s ? 'bg-violet-600 text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}`}>
-                  {s.replace('_', ' ')}
+                  {statusWord(s)}
                 </button>
               ))}
             </div>
@@ -74,7 +77,7 @@ export default function KycConsole() {
           {failed ? (
             <ConsoleUnreadable what="The KYC queue" onRetry={() => loadKyc(kycFilter)} />
           ) : kycQueue.length === 0 ? (
-            <div className="p-8 text-center text-gray-500 text-sm">No submissions in <strong>{kycFilter.replace('_', ' ')}</strong> status.</div>
+            <div className="p-8 text-center text-gray-500 text-sm">No one is <strong>{statusWord(kycFilter)}</strong>.</div>
           ) : (
             <div className="overflow-x-auto">
               <table className="w-full text-sm">
@@ -91,7 +94,7 @@ export default function KycConsole() {
                   {kycQueue.map(k => (
                     <tr key={k.id} className="border-b border-gray-100 hover:bg-gray-50/50">
                       <td className="px-4 py-3">
-                        <div className="font-medium text-gray-900 dark:text-gray-100">{k.name}</div>
+                        <Link to={`/admin/kyc/people/${k.id}`} className="font-medium text-gray-900 underline dark:text-gray-100" data-testid={`kyc-person-${k.id}`}>{k.name}</Link>
                         <div className="text-xs text-gray-500">{k.email}</div>
                       </td>
                       <td className="px-4 py-3">
@@ -132,7 +135,7 @@ export default function KycConsole() {
               <div className="grid grid-cols-2 gap-3">
                 <KV label="Email" value={kycDetail.email} />
                 <KV label="Role" value={kycDetail.role} />
-                <KV label="Status" value={kycDetail.kyc_status} />
+                <KV label="Status" value={statusWord(kycDetail.kyc_status)} />
                 <KV label="Provider" value={kycDetail.kyc_provider || '—'} />
                 <KV label="Submitted" value={kycDetail.submitted_at ? new Date(kycDetail.submitted_at).toLocaleString() : '—'} />
                 <KV label="Reviewed" value={kycDetail.reviewed_at ? new Date(kycDetail.reviewed_at).toLocaleString() : '—'} />

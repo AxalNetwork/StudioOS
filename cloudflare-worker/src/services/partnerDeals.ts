@@ -423,6 +423,9 @@ async function activateSignedPartnerDeal(
           ).bind(ddCaseId, s.key, s.title, s.weight).run();
         }
       }
+      // D1246: the opener leads it, and its blocking sections are stamped.
+      const { stampNewCase } = await import('./dueDiligence');
+      await stampNewCase(env, ddCaseId);
     }
   } catch (e) { console.warn('[partnerDeals] DD case open failed', (e as Error).message); }
 

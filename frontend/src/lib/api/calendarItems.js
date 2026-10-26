@@ -4,10 +4,14 @@
 // `time_zone` (api.js's `listCalendarEvents`). People come back with a uid
 // and a name, never an email or a user number; the creates take the uids
 // (`attendee_uids`, `founder_uid`, `counterpart_uid`).
+// D1211 (#3177): `item` reads one item for the drawer at
+// /calendar/item/:kind/:id, its people by name, never by email.
 // Worker: routes/calendar.ts.
 import { request } from '../api.js';
 
 export const calendarItemsApi = {
+  /** One item for its reader: 404 `not_party` when they are not part of it (CAL18). */
+  item: (kind, id) => request(`/calendar/item/${encodeURIComponent(kind)}/${encodeURIComponent(id)}`),
   /** Move an IC meeting: the organiser or an admin. Attendees' calendar copies move too. */
   rescheduleIcMeeting: (id, { start_at, duration_min } = {}) => request(`/calendar/ic-meetings/${encodeURIComponent(id)}`, {
     method: 'PATCH', body: JSON.stringify({ start_at, ...(duration_min != null ? { duration_min } : {}) }),
@@ -16,6 +20,8 @@ export const calendarItemsApi = {
   rescheduleCheckin: (id, { start_at, duration_min } = {}) => request(`/calendar/founder-checkins/${encodeURIComponent(id)}`, {
     method: 'PATCH', body: JSON.stringify({ start_at, ...(duration_min != null ? { duration_min } : {}) }),
   }),
+  /** New IC meeting (CAL7). The page draws the plan's refusal itself (CAL18), so no paywall opens over it. */
+  newIcMeeting: (data) => request('/calendar/ic-meetings', { method: 'POST', body: JSON.stringify(data), inlinePaywall: true }),
   /** People you work with, by name. `for` is 'ic' (with the deal) or 'checkin'. */
   people: ({ q = '', for: purpose, deal_id } = {}) => {
     const query = new URLSearchParams({ for: String(purpose || '') });

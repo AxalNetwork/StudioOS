@@ -155,7 +155,9 @@ test('a failed module read says so where the investors would be', async () => {
 test('the wiring: no route is added, CycleRoute branches on the tab word, and the canvas sits in incoming', () => {
   const route = read('frontend/src/pages/cycles/CycleRoute.jsx');
   assert.ok(route.includes('isCapRelTab(slug, recordId)') && route.includes('!capRelTab && !!projectId'));
-  assert.ok(!read('frontend/src/App.jsx').includes('path="/raise/capital-relationships'), 'no route is added');
+  // D1221 (#2458) adds the one route a tab word cannot carry: one call, below the Calls tab.
+  const app = read('frontend/src/App.jsx').replace(`<Route path="/raise/capital-relationships/calls/:uid" element={guard(labRoles(['admin', 'founder']), <RaiseCallPage />)} />`, '');
+  assert.ok(!app.includes('path="/raise/capital-relationships'), 'no other route is added');
   for (const f of ['Capital Relationships Page.dc.html', 'Capital relationships · Boards.dc.html']) assert.ok(existsSync(`design/incoming/${f}`), f);
   assert.ok(read('design/incoming/Capital relationships · Boards.dc.html').includes('Capital Relationships Page'), 'the boards import the page by name');
   assert.ok(existsSync('documentation/architecture/decisions/D1188.md'));
