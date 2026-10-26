@@ -160,3 +160,5 @@ scenarios before and after restoration. All external fetches are refused.
 D1231 follow-up: company member reads reflect expiry and legal edits; company submitter/membership self-review and unsubmitted corporate profiles are covered. Twenty-seven injected faults cover routes, the member status projection and submission-state derivation, each checked before and after restoration.
 
 D1231 concurrency tests cover displayed If-Match tokens, source edits during a request, staff-created cases without false submitters, dismissed imports and collision-safe migration of legacy reviewer assignments/history.
+
+D1169: `usage_storage_d1169.test.ts` holds the grown storage read: thirteen member stores, company files counted to the company owner, kinds, companies, the ten largest files, the allowance and its state, and that fund, legal, identity, 83(b) and HQ stores are never read. It and `usage_storage_d642.test.ts` run on `_storage_schema.ts`, which replays the baseline and every later migration once into a template database and copies it for each case. Rows are synthetic.
