@@ -140,3 +140,7 @@ Staff-view audit tests verify both existing stores contain only scope/window
 details, repeated views are recorded, and personal/refused/invalid reads create
 no staff-view audit entry.
 Every provider call is stubbed or refused; all rows are synthetic.
+
+| File | Purpose |
+|---|---|
+| `raise_evidence_d1263.test.ts` | D1263: source dates/labels, founder decisions, privacy, refresh and atomic evidence trails over real SQLite. |

@@ -142,6 +142,7 @@ import { dataRoomOwner, roomSummary } from './data_room';
 import { safeCard, type Card } from '../services/cycleCards';
 import { refuse } from '../util/refusal';
 import useOfFunds from './cycle_use_of_funds';
+import { RaiseEvidenceError, raiseEvidenceContext, readRaiseEvidence, acceptItem as acceptEvidenceItem, dismissItem as dismissEvidenceItem, setSharing as setEvidenceSharing, linkClaim as linkEvidenceClaim, type RaiseEvidenceContext } from '../services/raiseEvidence';
 
 const cycleRaise = new Hono<{ Bindings: Env }>();
 cycleRaise.route('/use-of-funds', useOfFunds);
@@ -993,6 +994,63 @@ cycleRaise.delete('/mercury/facts/:id', async (c) => {
   if (own instanceof Response) return own;
   if (!(await deleteRaiseFact(c.env, { integrationId: own.integrationId, projectId: s.projectId, id }))) return c.json({ detail: 'Fact not found' }, 404);
   return c.json({ ok: true });
+});
+
+// D1263: the evidence paths use scope(), then active-company and founder-only decision gates.
+async function evidenceScope(c: any, write: boolean): Promise<RaiseEvidenceContext | Response> {
+  c.header('Cache-Control', 'no-store');
+  const s = await scope(c);
+  if (s instanceof Response) return s;
+  if (await isSupportSession(c)) return c.json({ error: 'support_session_refused', message: 'Evidence decisions and source details are unavailable in a support session.' }, 403);
+  const company = await resolveActiveCompany(c.env, s.user, c.req.header(ACTIVE_COMPANY_HEADER));
+  if (c.req.header(ACTIVE_COMPANY_HEADER) && company == null) return c.json({ error: 'company_selection_refused', message: 'Switch to this venture’s company first.' }, 403);
+  const ctx = await raiseEvidenceContext(c.env, s.user, s.projectId, company);
+  if (write && !ctx.founder) throw new RaiseEvidenceError('forbidden', 403);
+  return ctx;
+}
+function evidenceFailure(c: any, error: unknown) {
+  if (error instanceof RaiseEvidenceError) return c.json({ error: error.code, message: error.sentence }, error.status);
+  return c.json({ error: 'evidence_unreadable', message: 'Evidence could not be read or saved. Try again.' }, 503);
+}
+async function evidenceBody(c: any): Promise<Record<string, unknown>> {
+  const body: unknown = await c.req.json().catch(() => null);
+  if (!body || typeof body !== 'object' || Array.isArray(body)) throw new RaiseEvidenceError('invalid', 400);
+  return body as Record<string, unknown>;
+}
+const evidencePage = (c: any) => {
+  const limit = c.req.query('limit') ?? '50', offset = c.req.query('offset') ?? '0';
+  if (!/^[0-9]{1,7}$/.test(limit) || !/^[0-9]{1,7}$/.test(offset)) throw new RaiseEvidenceError('invalid', 400);
+  return { limit: Number(limit), offset: Number(offset) };
+};
+cycleRaise.get('/evidence', async c => {
+  try { const ctx = await evidenceScope(c, false); if (ctx instanceof Response) return ctx; return c.json(await readRaiseEvidence(ctx, evidencePage(c))); }
+  catch (error) { return evidenceFailure(c, error); }
+});
+cycleRaise.post('/evidence/refresh', async c => {
+  try { const ctx = await evidenceScope(c, true); if (ctx instanceof Response) return ctx; return c.json(await readRaiseEvidence(ctx, { ...evidencePage(c), refresh: true })); }
+  catch (error) { return evidenceFailure(c, error); }
+});
+cycleRaise.post('/evidence/items/:id/accept', async c => {
+  try { const ctx = await evidenceScope(c, true); if (ctx instanceof Response) return ctx; const body = await evidenceBody(c);
+    if (Object.keys(body).some(k => k !== 'snapshot_hash')) throw new RaiseEvidenceError('invalid', 400);
+    return c.json(await acceptEvidenceItem(ctx, c.req.param('id'), body.snapshot_hash)); }
+  catch (error) { return evidenceFailure(c, error); }
+});
+cycleRaise.post('/evidence/items/:id/dismiss', async c => {
+  try { const ctx = await evidenceScope(c, true); if (ctx instanceof Response) return ctx; return c.json(await dismissEvidenceItem(ctx, c.req.param('id'))); }
+  catch (error) { return evidenceFailure(c, error); }
+});
+cycleRaise.patch('/evidence/items/:id', async c => {
+  try { const ctx = await evidenceScope(c, true); if (ctx instanceof Response) return ctx; return c.json(await setEvidenceSharing(ctx, c.req.param('id'), await evidenceBody(c))); }
+  catch (error) { return evidenceFailure(c, error); }
+});
+cycleRaise.post('/evidence/claims/:id/link', async c => {
+  try { const ctx = await evidenceScope(c, true); if (ctx instanceof Response) return ctx; return c.json(await linkEvidenceClaim(ctx, c.req.param('id'), await evidenceBody(c))); }
+  catch (error) { return evidenceFailure(c, error); }
+});
+cycleRaise.delete('/evidence/claims/:id/link', async c => {
+  try { const ctx = await evidenceScope(c, true); if (ctx instanceof Response) return ctx; return c.json(await linkEvidenceClaim(ctx, c.req.param('id'), await evidenceBody(c), true)); }
+  catch (error) { return evidenceFailure(c, error); }
 });
 
 export default cycleRaise;
