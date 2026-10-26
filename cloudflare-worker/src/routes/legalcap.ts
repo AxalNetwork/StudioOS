@@ -1,10 +1,7 @@
 import { Hono } from 'hono';
-import { logDealRoomAction } from '../services/dealRoomAudit';
-import { lpMembershipScope, fundGpScope } from '../services/tenancyScope';
-import { claimLpRowsByEmail } from '../services/lpClaim';
 import type { Env } from '../types';
 import { getSQL } from '../db';
-import { requireAuth, requireApprovedKyc } from '../auth';
+import { requireAuth } from '../auth';
 import { logActivity } from './partnernet';
 import { ensureWorkflowSchema } from '../services/workflowSchema';
 import { aiQuotaGate, recordSharedServiceAction } from '../services/aiQuota';
@@ -76,62 +73,6 @@ async function ensureSchema(env: Env) {
     )`,
     `CREATE UNIQUE INDEX IF NOT EXISTS uq_sub_deal ON subsidiaries(deal_id)`,
     `CREATE INDEX IF NOT EXISTS idx_sub_status ON subsidiaries(stripe_atlas_status)`,
-
-    `CREATE TABLE IF NOT EXISTS capital_calls (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      deal_id INTEGER,
-      syndicate_id INTEGER,
-      amount_cents INTEGER NOT NULL,
-      currency TEXT NOT NULL DEFAULT 'USD',
-      due_date TIMESTAMP,
-      status TEXT NOT NULL DEFAULT 'draft',
-      lp_responses TEXT DEFAULT '{}',
-      notes TEXT,
-      idempotency_key TEXT,
-      created_by INTEGER,
-      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-      updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-      CHECK (amount_cents > 0),
-      CHECK (deal_id IS NOT NULL OR syndicate_id IS NOT NULL)
-    )`,
-    `CREATE INDEX IF NOT EXISTS idx_cc_deal ON capital_calls(deal_id)`,
-    `CREATE INDEX IF NOT EXISTS idx_cc_syn ON capital_calls(syndicate_id)`,
-
-    // Syndicates + member roster — referenced by /capital/lp-portal,
-    // /capital/calls/:id/respond, and the auto-call path in /spinout/independent.
-    // SHAPES MUST MATCH CANONICAL DEFINITIONS in networkfx.ts ensureSchema().
-    // CREATE TABLE IF NOT EXISTS is a no-op when the table exists, so a
-    // mismatched shape would silently win the race on a fresh DB and break
-    // networkfx syndicate inserts later.
-    `CREATE TABLE IF NOT EXISTS syndicates (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      name TEXT NOT NULL,
-      description TEXT,
-      created_by INTEGER NOT NULL,
-      deal_id INTEGER,
-      target_cents INTEGER,
-      min_commitment_cents INTEGER NOT NULL DEFAULT 100000,
-      status TEXT DEFAULT 'open',
-      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-      closed_at TIMESTAMP
-    )`,
-    `CREATE INDEX IF NOT EXISTS idx_syn_deal ON syndicates(deal_id, status)`,
-    `CREATE INDEX IF NOT EXISTS idx_syn_status ON syndicates(status)`,
-
-    // syndicate_members canonical shape (also from networkfx.ts).
-    `CREATE TABLE IF NOT EXISTS syndicate_members (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      syndicate_id INTEGER NOT NULL,
-      user_id INTEGER NOT NULL,
-      commitment_cents INTEGER NOT NULL,
-      status TEXT DEFAULT 'pending',
-      joined_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-      FOREIGN KEY (syndicate_id) REFERENCES syndicates(id)
-    )`,
-    `CREATE UNIQUE INDEX IF NOT EXISTS uq_sm_syn_user ON syndicate_members(syndicate_id, user_id)`,
-    `CREATE INDEX IF NOT EXISTS idx_sm_user ON syndicate_members(user_id)`,
-    `CREATE INDEX IF NOT EXISTS idx_cc_status ON capital_calls(status, due_date)`,
-    `CREATE UNIQUE INDEX IF NOT EXISTS uq_cc_idem ON capital_calls(created_by, idempotency_key) WHERE idempotency_key IS NOT NULL`,
 
     `CREATE TABLE IF NOT EXISTS diligence_checklists (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -346,7 +287,11 @@ legalcap.post('/legal/generate', async (c) => {
   const userVars = data?.variables && typeof data.variables === 'object' ? data.variables : {};
   const vars = { ...defaultDocVars(project, user), ...userVars };
   const missing = missingDocFields(TEMPLATES[type], vars);
-  if (missing.length) return c.json({ error: 'Missing document fields', missing_fields: missing }, 400);
+  if (missing.length) return c.json({
+    error: 'Required document terms are Not recorded.', status: 'Not recorded',
+    reason: 'Record the missing terms before generating this document.',
+    missing_fields: missing, terms: Object.fromEntries(missing.map(field => [field, null])),
+  }, 400);
   const gate = await aiQuotaGate(c.env, user.id, { limit: AI_RATE_LIMIT });
   if (!gate.ok) return c.json({ error: gate.error }, gate.status);
   let body = fillTemplate(TEMPLATES[type], vars);
@@ -424,156 +369,18 @@ legalcap.get('/legal/docs/:dealId', async (c) => {
   return c.json(stripped);
 });
 
+// D1214: legal signatures are recorded by the envelope flow only. A legacy
+// click cannot change a document, including one with a completed envelope.
 legalcap.patch('/legal/docs/:id/sign', async (c) => {
-  // Binding signature on a legal doc → enforce KYC. requireApprovedKyc lets
-  // admins through and requires kyc_status==='approved' for everyone else,
-  // which blocks limited-access users until they finish verification.
-  const user = await requireApprovedKyc(c);
-  if (!ADVANCE_ROLES.has(user.role)) return c.json({ error: 'Operators/admins only' }, 403);
-  await ensureSchema(c.env);
-  const id = parseInt(c.req.param('id'));
-  const doc = await c.env.DB.prepare('SELECT * FROM legal_documents WHERE id = ? AND generated_by = ?')
-    .bind(id, user.id).first<any>();
-  if (!doc) return c.json({ error: 'Document not found' }, 404);
-  const body = safeJson<any>(doc.content, {}).body;
-  if (typeof body !== 'string' || !body) return c.json({ error: 'Document body not recorded' }, 409);
-  const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(body));
-  const hash = [...new Uint8Array(digest)].map(b => b.toString(16).padStart(2, '0')).join('');
-  const envelope = await c.env.DB.prepare(`SELECT id FROM esign_envelopes
-    WHERE deal_id = ? AND document_type = ? AND body_sha256 = ? AND created_by = ?
-      AND status = 'completed' AND completed_at IS NOT NULL AND signed_r2_key IS NOT NULL LIMIT 1`)
-    .bind(doc.deal_id, doc.type, hash, user.id).first<{ id: number }>();
-  if (!envelope) return c.json({ error: 'A completed e-sign envelope for this document is required' }, 409);
-  const upd = await c.env.DB.prepare(`UPDATE legal_documents SET status = 'signed', signed_by = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ? AND generated_by = ? AND content = ? AND status IN ('draft', 'generated')
-      AND EXISTS (SELECT 1 FROM esign_envelopes e WHERE e.id = ? AND e.status = 'completed'
-        AND e.completed_at IS NOT NULL AND e.signed_r2_key IS NOT NULL
-        AND e.deal_id = legal_documents.deal_id AND e.document_type = legal_documents.type
-        AND e.body_sha256 = ? AND e.created_by = ?)` )
-    .bind(user.id, id, user.id, doc.content, envelope.id, hash, user.id).run();
-  if (!upd.meta?.changes) return c.json({ error: 'Doc not found or already signed/filed' }, 409);
-  await logDealRoomAction(c.env, user, 'legal_doc_signed', id, {}, 'legal_doc');
-  return c.json({ ok: true });
+  await requireAuth(c);
+  return c.json({ error: 'Sign this document through its signing envelope.' }, 410);
 });
 
-// ============================================================
-// CAPITAL ENGINE
-// ============================================================
-
-legalcap.post('/capital/call', async (c) => {
-  const user = await requireAuth(c);
-  if (!ADVANCE_ROLES.has(user.role)) return c.json({ error: 'Operators/admins only' }, 403);
-  await ensureSchema(c.env);
-  let data: any;
-  try { data = await c.req.json(); } catch { return c.json({ error: 'Invalid JSON' }, 400); }
-  const amountCents = Math.round(Number(data?.amount_cents || (Number(data?.amount) * 100)));
-  if (!Number.isFinite(amountCents) || amountCents <= 0) return c.json({ error: 'amount_cents (or amount in dollars) > 0 required' }, 400);
-  const dealId = data?.deal_id ? parseInt(data.deal_id) : null;
-  const synId = data?.syndicate_id ? parseInt(data.syndicate_id) : null;
-  if (!dealId && !synId) return c.json({ error: 'Provide deal_id or syndicate_id' }, 400);
-
-  const dueDate = data?.due_date ? new Date(data.due_date).toISOString() : new Date(Date.now() + 30 * 86400000).toISOString();
-  const status = data?.send ? 'sent' : 'draft';
-  const idemKey = data?.idempotency_key ? String(data.idempotency_key).slice(0, 100) : null;
-
-  // Idempotency: if same (created_by, idempotency_key) already exists, return it
-  if (idemKey) {
-    const existing: any = await c.env.DB.prepare(`SELECT * FROM capital_calls WHERE created_by = ? AND idempotency_key = ?`).bind(user.id, idemKey).first();
-    if (existing) return c.json({ ...existing, lp_responses: safeJson(existing.lp_responses, {}), idempotent_replay: true });
-  }
-
-  let call: any;
-  try {
-    call = await c.env.DB.prepare(`INSERT INTO capital_calls (deal_id, syndicate_id, amount_cents, currency, due_date, status, notes, idempotency_key, created_by) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING *`)
-      .bind(dealId, synId, amountCents, String(data?.currency || 'USD').slice(0, 3), dueDate, status, data?.notes ? String(data.notes).slice(0, 1000) : null, idemKey, user.id).first();
-  } catch (e: any) {
-    if (/UNIQUE/i.test(e?.message || '')) return c.json({ error: 'Duplicate idempotency_key for this user' }, 409);
-    throw e;
-  }
-
-  await logActivity(c.env, user.id, 'payout_request', { entityType: 'capital_call', entityId: call.id, metadata: { amount_cents: amountCents, deal_id: dealId, syndicate_id: synId } });
-  return c.json({ ...call, lp_responses: safeJson(call.lp_responses, {}) }, 201);
-});
-
-legalcap.patch('/capital/call/:id/send', async (c) => {
-  const user = await requireAuth(c);
-  if (!ADVANCE_ROLES.has(user.role)) return c.json({ error: 'Operators/admins only' }, 403);
-  await ensureSchema(c.env);
-  const id = parseInt(c.req.param('id'));
-  const upd = await c.env.DB.prepare(`UPDATE capital_calls SET status = 'sent', updated_at = CURRENT_TIMESTAMP WHERE id = ? AND status = 'draft'`).bind(id).run();
-  if (!upd.meta?.changes) return c.json({ error: 'Call not found or not in draft' }, 409);
-  return c.json({ ok: true });
-});
-
-legalcap.post('/capital/call/:id/respond', async (c) => {
-  const user = await requireAuth(c);
-  await ensureSchema(c.env);
-  const id = parseInt(c.req.param('id'));
-  let data: any;
-  try { data = await c.req.json(); } catch { return c.json({ error: 'Invalid JSON' }, 400); }
-  const decision = String(data?.decision || '').toLowerCase();
-  if (!['committed', 'declined', 'paid'].includes(decision)) return c.json({ error: 'decision must be committed|declined|paid' }, 400);
-  const amountCents = Math.max(0, Math.round(Number(data?.amount_cents || 0)));
-
-  const call: any = await c.env.DB.prepare(`SELECT * FROM capital_calls WHERE id = ?`).bind(id).first();
-  if (!call) return c.json({ error: 'Capital call not found' }, 404);
-  // Only LPs in the syndicate (or admins) may respond
-  if (user.role !== 'admin' && call.syndicate_id) {
-    const member: any = await c.env.DB.prepare(`SELECT id FROM syndicate_members WHERE syndicate_id = ? AND user_id = ?`).bind(call.syndicate_id, user.id).first();
-    if (!member) return c.json({ error: 'You are not an LP in this syndicate' }, 403);
-  }
-  const responses = safeJson<Record<string, any>>(call.lp_responses, {});
-  responses[String(user.id)] = { decision, amount_cents: amountCents, at: new Date().toISOString() };
-  await c.env.DB.prepare(`UPDATE capital_calls SET lp_responses = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?`).bind(JSON.stringify(responses), id).run();
-  await logActivity(c.env, user.id, 'payout_request', { entityType: 'capital_call_response', entityId: id, metadata: { decision, amount_cents: amountCents } });
-  return c.json({ ok: true, my_response: responses[String(user.id)] });
-});
-
-// LP portal — only show calls relevant to the requesting user (their syndicate memberships)
-legalcap.get('/capital/lp-portal', async (c) => {
-  const user = await requireAuth(c);
-  await ensureSchema(c.env);
-  const sql = getSQL(c.env);
-  const isAdmin = user.role === 'admin';
-  const calls = isAdmin
-    ? await sql`SELECT cc.*, p.name as deal_name, s.name as syndicate_name FROM capital_calls cc LEFT JOIN projects p ON p.id = cc.deal_id LEFT JOIN syndicates s ON s.id = cc.syndicate_id WHERE cc.status IN ('sent', 'paid', 'overdue') ORDER BY cc.due_date`
-    : await sql`SELECT cc.*, p.name as deal_name, s.name as syndicate_name FROM capital_calls cc LEFT JOIN projects p ON p.id = cc.deal_id LEFT JOIN syndicates s ON s.id = cc.syndicate_id WHERE cc.status IN ('sent', 'paid', 'overdue') AND cc.syndicate_id IN (SELECT syndicate_id FROM syndicate_members WHERE user_id = ${user.id}) ORDER BY cc.due_date`;
-  await sql.end();
-  return c.json((calls as any[]).map(c => {
-    const responses = safeJson<Record<string, any>>(c.lp_responses, {});
-    const myResp = responses[String(user.id)] || null;
-    return { ...c, lp_responses: isAdmin ? responses : undefined, my_response: myResp, response_count: Object.keys(responses).length };
-  }));
-});
-
-// Capital calls, as the table actually is (D370).
-//
-// This read named `deal_id`, `syndicate_id` and `lp_responses` — columns the
-// production `capital_calls` does not have (the winning shape is the LP
-// ledger's: `limited_partner_id`, `amount`, `status`, `due_date`,
-// `paid_date`). So it threw on every call, `api.capitalCalls` swallowed the
-// throw into `[]`, and the pages that read it showed "no capital calls" for
-// funds that had them. It now reads the real columns, scoped the way the LP
-// ledger (`capital.ts` GET /calls) scopes them: an admin sees every call;
-// anyone else the calls on their own LP rows and on funds they are general
-// partner of record for. Fixed without that scope it would have handed every
-// investor every LP's calls on the platform.
-legalcap.get('/capital/calls', async (c) => {
-  const user = await requireAuth(c);
-  if (!ADVANCE_ROLES.has(user.role)) return c.json({ error: 'Operators/admins only' }, 403);
-  // Reaching an LP row by email converts it to an account link, as on every
-  // other route that grants by email (lp_membership_consolidated pins it).
-  await claimLpRowsByEmail(c.env, Number(user.id), (user as any).email);
-  const lp = lpMembershipScope(user as any, 'lp');
-  const gp = fundGpScope(user as any, null, 'f');
-  const rows = await c.env.DB.prepare(
-    `SELECT cc.*, lp.fund_id AS fund_id, lp.name AS lp_name, f.name AS fund_name
-       FROM capital_calls cc
-       JOIN limited_partners lp ON lp.id = cc.limited_partner_id
-       LEFT JOIN vc_funds f ON f.id = lp.fund_id
-      WHERE (${lp.sql} OR ${gp.sql})
-      ORDER BY cc.created_at DESC LIMIT 100`,
-  ).bind(...lp.binds, ...gp.binds).all<any>();
-  return c.json(rows.results || []);
+// D1214: the legacy syndicate ledger was incompatible with production's LP
+// ledger. Refuse before schema bootstrap, reads, AI or any money write.
+legalcap.all('/capital/*', async (c) => {
+  await requireAuth(c);
+  return c.json({ error: 'Capital calls are managed in Fund admin.' }, 410);
 });
 
 // ============================================================

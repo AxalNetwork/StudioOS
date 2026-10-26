@@ -33,7 +33,7 @@ import type { Env } from '../types';
 import { requireAuth, isSuperAdmin } from '../auth';
 import { simulate, validateInputs, toCsv, type Inputs, type SimulateResult } from '../services/captable';
 import {
-  canReadProject, canWriteProject, canReadScenario, canWriteScenario,
+  canReadProject, canWriteProject, canReadScenario, canWriteScenario, liveGrantFor,
   CAPTABLE_SUPPORT_REASON_MIN, CAPTABLE_SUPPORT_REASON_MAX,
   type AccessUser, type AccessProject,
 } from '../services/captableAccess';
@@ -1444,15 +1444,33 @@ captable.post('/register/:projectId/snapshot', async (c) => {
 });
 
 // Task #1 (AG) — spec-contract aliases. Read-only project-scoped views over
-// the existing cap_table_holders / cap_table_securities tables. Founders see
-// only their own project; admin/partner/investor see any.
+// the existing cap_table_holders / cap_table_securities tables. Founders and
+// accepted cofounders read their venture. Admins use the scoped read. A recorded
+// person-bound holder grant exposes that holder only, never the full register.
 captable.get('/:projectId', async (c) => {
   const user = await requireAuth(c);
   const projectId = Number(c.req.param('projectId'));
   if (!Number.isFinite(projectId)) return c.json({ detail: 'Invalid project_id' }, 400);
   const proj = await loadProject(c, projectId, user);
-  if (!proj) return c.json({ detail: 'Project not found' }, 404);
-  if (!canReadProject(user, proj)) return c.json({ detail: 'Forbidden' }, 403);
+  if (!proj && !await loadProjectRow(c.env, projectId)) return c.json({ detail: 'Project not found' }, 404);
+  // A read-only project membership is not permission to inspect the raw
+  // register. Holder identity comes from the founder's live grant, never the
+  // connector's recorder user_id or an unverified email match. A holder may
+  // open that position across company selections; this never grants the raw
+  // register or restores an owner's full access in the wrong company.
+  if (!proj || !canWriteProject(user, proj)) {
+    const grant = await liveGrantFor(c.env, projectId, user.id);
+    if (!grant?.holder_ref) return proj
+      ? c.json({ detail: 'Forbidden' }, 403)
+      : c.json({ detail: 'Project not found' }, 404);
+    const own = await c.env.DB.prepare(
+      'SELECT id, project_id, name, security_type, shares, ownership_pct, source, created_at, updated_at FROM cap_table_holders WHERE project_id = ? AND name = ? ORDER BY id ASC',
+    ).bind(projectId, grant.holder_ref).all();
+    // Migration 575 defines holder_ref as a name, not a stable row key.
+    // A duplicated or stale name cannot prove whose position this is.
+    if (own.results?.length !== 1) return c.json({ detail: 'Holder position is not uniquely recorded. Ask the founder to update access.' }, 409);
+    return c.json({ project_id: projectId, holders: own.results, securities: [] });
+  }
   const holders = await c.env.DB.prepare(
     'SELECT * FROM cap_table_holders WHERE project_id = ? ORDER BY id ASC',
   ).bind(projectId).all();

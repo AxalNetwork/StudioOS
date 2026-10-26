@@ -27,7 +27,7 @@ import { SignJWT } from 'jose';
 import captable from '../src/routes/captable.ts';
 
 const JWT_SECRET = 'unit-test-jwt-secret-0123456789-abcdef'; // >= 32 bytes
-const ADMIN_ID = 1;
+const OWNER_ID = 1;
 const INVESTOR_ID = 2;
 const PROJECT_ID = 1;
 
@@ -179,7 +179,7 @@ function req(env: any, token: string, path: string, init: RequestInit = {}): Pro
 function canonRow(overrides: Partial<ScenarioRow> = {}): ScenarioRow {
   const NOW = '2026-06-01T00:00:00.000Z';
   return {
-    id: 1, uid: 'uid-canonical', owner_user_id: ADMIN_ID, project_id: PROJECT_ID,
+    id: 1, uid: 'uid-canonical', owner_user_id: OWNER_ID, project_id: PROJECT_ID,
     name: 'Canonical', inputs_json: JSON.stringify(INPUTS_CANON), result_json: '{}',
     computed_at: NOW, created_at: NOW, updated_at: NOW, is_variant: 0,
     ...overrides,
@@ -187,9 +187,9 @@ function canonRow(overrides: Partial<ScenarioRow> = {}): ScenarioRow {
 }
 
 test('Worker: creating a variant never trips the one-cap-table 409, and stays distinct', async () => {
-  const token = await mintToken(ADMIN_ID, 'admin');
+  const token = await mintToken(OWNER_ID, 'founder');
   const { env, rows } = makeEnv(
-    { id: ADMIN_ID, role: 'admin', is_active: 1 },
+    { id: OWNER_ID, role: 'founder', founder_id: 7, subscription_tier: 'studio', is_active: 1 },
     { project: { id: PROJECT_ID, founder_id: 7 }, scenarios: [canonRow()] },
   );
 
@@ -209,11 +209,11 @@ test('Worker: creating a variant never trips the one-cap-table 409, and stays di
 });
 
 test('Worker: canonical lookups ignore a NEWER variant (deck-safe one-per-project)', async () => {
-  const token = await mintToken(ADMIN_ID, 'admin');
+  const token = await mintToken(OWNER_ID, 'founder');
   // A variant updated AFTER the canonical row — a naive "latest row" lookup
   // would wrongly pick it. The canonical filter must still return the canonical.
   const { env } = makeEnv(
-    { id: ADMIN_ID, role: 'admin', is_active: 1 },
+    { id: OWNER_ID, role: 'founder', founder_id: 7, subscription_tier: 'studio', is_active: 1 },
     {
       project: { id: PROJECT_ID, founder_id: 7 },
       scenarios: [
@@ -246,9 +246,9 @@ test('Worker: canonical lookups ignore a NEWER variant (deck-safe one-per-projec
 });
 
 test('Worker: compare returns the canonical row plus every variant', async () => {
-  const token = await mintToken(ADMIN_ID, 'admin');
+  const token = await mintToken(OWNER_ID, 'founder');
   const { env } = makeEnv(
-    { id: ADMIN_ID, role: 'admin', is_active: 1 },
+    { id: OWNER_ID, role: 'founder', founder_id: 7, subscription_tier: 'studio', is_active: 1 },
     {
       project: { id: PROJECT_ID, founder_id: 7 },
       scenarios: [

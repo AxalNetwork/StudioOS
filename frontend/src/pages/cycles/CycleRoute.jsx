@@ -9,6 +9,7 @@ import { RailCrumbsProvider, useRailOption, useSetRailCrumbs } from '../../ui/ra
 import { ASSIST_SURFACES } from '../../ui/eadwynConfig';
 import FillProposals from '../../workspaces/FillProposals';
 import ZoneDraft from '../../workspaces/ZoneDraft';
+import PmfExplain from '../../workspaces/PmfExplain';
 import AlsoIn from '../../workspaces/AlsoIn';
 import useAssistMode from '../../hooks/useAssistMode';
 import useAiSpend from '../../hooks/useAiSpend';
@@ -1122,6 +1123,7 @@ export default function CycleRoute({ cycle, lightbox = false, adding = false, re
             onAcceptAll={(batches) => acceptSuggestions(batches, interviewSessionsApi).finally(() => setReload((n) => n + 1))} />
         )}
         {moduleStatus === 'ready' && fnOf(def.parts, slug)?.(module, { projectId, reload: () => setReload((n) => n + 1), openAction, query, openDialog, role: user?.role ?? null })}
+        {moduleStatus === 'ready' && cycle === 'raise' && slug === 'fundraising-readiness' && module?.parts?.pmf?.inputs_hash && user?.role === 'founder' && projectId && <PmfExplain key={projectId} projectId={projectId} inputsHash={module.parts.pmf.inputs_hash} ai={ai} />}
       </ModulePage>
     );
   }
