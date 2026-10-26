@@ -363,6 +363,20 @@ test('Change payments and Relabel: each says its effect, sends only what changes
   } finally { await v.unmount(); restore(); }
 });
 
+test('Change payments refuses here a purpose another account of the entity takes, as the Worker would', async () => {
+  const SECOND = { ...OPS, uid: '0000eeee-0000-4000-8000-000000000005', label: 'Second', account_last4: '7777', account_masked: '••••7777', purposes: [], mercury: absent('unmatched') };
+  const { v, calls } = await mounted({ bank: { list: async () => ({ ...LIST, accounts: [...LIST.accounts, SECOND] }), update: async () => ({ account: {} }) } });
+  try {
+    await menu(v, SECOND, 'Change payments');
+    await check(v, one(v, 'bank-accounts-payments-dialog'), 'Platform licence fee', true);
+    assert.equal(textOf(one(v, 'bank-accounts-payments-effect')), 'Adding Platform licence fee: Operating ••••3344 takes it now. Remove it there first.');
+    assert.equal(isDisabled(v, 'Save payments'), true, 'a purpose another account takes could be sent');
+    await check(v, one(v, 'bank-accounts-payments-dialog'), 'Platform licence fee', false);
+    assert.equal(isDisabled(v, 'Save payments'), true);
+    assert.equal(calls.bank.filter(([k]) => k === 'update').length, 0);
+  } finally { await v.unmount(); restore(); }
+});
+
 test('the lightbox at /account/:uid: instructions, payments, the notice preview, Mercury, the latest lines and this account\'s history', async () => {
   const { v, calls } = await mounted({ url: accountPath(OPS.uid) });
   try {
