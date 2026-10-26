@@ -53,11 +53,13 @@ export function defaultNotesTools() {
  * and authorization hosts (the same host for both is allowed), `opts.resource`
  * its server URL, `opts.tools` its `tools/list`, `opts.scope` the scope a grant
  * reports (null: none), and `opts.answer(name, args)` a tool's structured
- * answer. The defaults are the notes provider above, unchanged.
+ * answer. D856: `opts.path` is the server's path when it is not `/mcp`. The
+ * defaults are the notes provider above, unchanged.
  */
 export function notesFake(opts = {}) {
   const H = { mcp: opts.hosts?.mcp ?? 'mcp.notes.example', auth: opts.hosts?.auth ?? 'auth.notes.example' };
   const RESOURCE = opts.resource ?? NOTES_MCP;
+  const PATH = opts.path ?? '/mcp';
   const state = {
     era: opts.era ?? 'modern',
     tools: opts.tools ?? defaultNotesTools(),
@@ -93,7 +95,7 @@ export function notesFake(opts = {}) {
   }
 
   function mcp(init, headers, bearer, call) {
-    if (!state.access.has(bearer)) return json({ error: 'invalid_token' }, 401, { 'WWW-Authenticate': `Bearer resource_metadata="https://${H.mcp}/.well-known/oauth-protected-resource/mcp"` });
+    if (!state.access.has(bearer)) return json({ error: 'invalid_token' }, 401, { 'WWW-Authenticate': `Bearer resource_metadata="https://${H.mcp}/.well-known/oauth-protected-resource${PATH}"` });
     if (state.redirect) return new Response(null, { status: 302, headers: { Location: 'https://elsewhere.example/mcp' } });
     if (state.status) return json({ error: 'stub' }, state.status);
     const msg = JSON.parse(String(init.body || '{}'));
@@ -161,10 +163,10 @@ export function notesFake(opts = {}) {
     const form = () => new URLSearchParams(typeof init.body === 'string' ? init.body : String(init.body ?? ''));
 
     if (u.host === H.mcp) {
-      if (method === 'GET' && u.pathname === '/.well-known/oauth-protected-resource/mcp') {
+      if (method === 'GET' && u.pathname === `/.well-known/oauth-protected-resource${PATH}`) {
         return json({ resource: m.resource, authorization_servers: [m.issuer], ...(state.scope == null ? {} : { scopes_supported: [state.scope] }) });
       }
-      if (method === 'POST' && u.pathname === '/mcp') return mcp(init, headers, bearer, call);
+      if (method === 'POST' && u.pathname === PATH) return mcp(init, headers, bearer, call);
       if (H.mcp !== H.auth) return new Response('not found', { status: 404 });
     }
     if (method === 'GET' && u.pathname === '/.well-known/oauth-authorization-server') {

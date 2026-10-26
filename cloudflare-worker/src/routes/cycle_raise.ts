@@ -109,6 +109,7 @@ import { CYCLE, QUESTION, MODULES, CARD_FOR, RECORDS_FOR, INVESTOR_TYPE_LABEL, f
 import {
   WriterError, scoreReadinessItem, rescoreReadiness, saveNarrativeVersion, updateNarrativeVersion, createDeckLink, updateDeckLink,
   addCapHolder, updateCapHolder, addProspect, updateProspect, setFileChecklistItem, setProspectNextStep,
+  importProspects,
 } from '../services/raiseWriters';
 import { hasRecords } from '../services/records';
 import { NARRATIVE_SECTIONS, compareNarrative, readNarrative, readPositioning, readableVersion, saveNarrativeSection, savePositioning } from '../services/narrative/store';
@@ -859,6 +860,16 @@ cycleRaise.post('/prospects', async (c) => {
   const b = await body(c);
   try {
     return c.json(await addProspect(c.env, { projectId: s.projectId, userId: Number(s.user.id), body: b }), 201);
+  } catch (e) { return writeFailed(c, e); }
+});
+
+// D1192 (#3126, CRL5): Import, at most 50 rows a request, each through the one writer.
+cycleRaise.post('/prospects/import', async (c) => {
+  const s = await scope(c);
+  if (s instanceof Response) return s;
+  const b = await body(c);
+  try {
+    return c.json(await importProspects(c.env, { projectId: s.projectId, userId: Number(s.user.id), rows: b.rows }));
   } catch (e) { return writeFailed(c, e); }
 });
 

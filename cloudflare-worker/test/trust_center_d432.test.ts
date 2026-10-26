@@ -1,3 +1,4 @@
+import { addKybCaseStores } from './_approval_s16_stores.mjs';
 /**
  * D432 — the Trust Center says who the other party is, and says when it
  * could not read.
@@ -129,6 +130,7 @@ function freshDb() {
     );
   `);
   db.exec(readFileSync(resolve(process.cwd(), MIGRATION_220), 'utf8'));
+  addKybCaseStores(db);
 
   const u = db.prepare('INSERT INTO users (id, role, name, email) VALUES (?,?,?,?)');
   u.run(FOUNDER, 'founder', 'Marisol Vega', 'marisol@example.com');
