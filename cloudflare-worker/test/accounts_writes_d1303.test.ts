@@ -61,7 +61,7 @@ const realFetch = globalThis.fetch;
 beforeEach(() => { fetches = 0; globalThis.fetch = (async () => { fetches += 1; throw new Error('no network in D1303'); }) as any; });
 afterEach(() => { globalThis.fetch = realFetch; assert.equal(fetches, 0, 'fetch was called'); });
 
-const SUPER = 1, ADMIN = 2, OTHER_ADMIN = 3, BYPASS = 10, SUBMITTED = 11, UNVERIFIED_A = 12, UNVERIFIED_B = 13, VERIFIED = 14, GONE = 15, FORMULA = 16;
+const SUPER = 1, ADMIN = 2, OTHER_ADMIN = 3, BYPASS = 10, SUBMITTED = 11, UNVERIFIED_A = 12, UNVERIFIED_B = 13, VERIFIED = 14, GONE = 15;
 
 function freshDb() {
   const db = new DatabaseSync(':memory:', { enableForeignKeyConstraints: false, enableDoubleQuotedStringLiterals: true });
