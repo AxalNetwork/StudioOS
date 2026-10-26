@@ -18,6 +18,8 @@ import {
 import { getCatalog } from '../services/catalog';
 import { isTokenPackProduct } from '../services/aiCredits';
 import { refusalBody } from '../util/refusal';
+import { codeHistory, codeRedemptions, EXPORT_HEADER, exportRows, parseRange, usageRead } from '../services/promoUsage';
+import { csvResponse, stamp, toCsv } from '../services/csv';
 
 // Task #9 — Promo Code admin CRUD. Mounted at `/api/admin/promos` BEFORE the
 // catch-all `/api/admin` in index.ts so the nested routes resolve here (same
@@ -105,6 +107,48 @@ adminPromos.get('/', async (c) => {
   await requireSuperAdmin(c);
   const promos = await listPromos(c.env);
   return c.json({ promos });
+});
+
+// D1274 (#3300): the reads HQ's Usage tab and a code's drawer draw. Super
+// Admin, as the list above; the export is the one read that leaves the
+// console, so it is audited. Registered before `/:id` so `usage` and
+// `export.csv` are never taken for an id.
+const RANGE_REFUSAL = {
+  invalid_range: 'The range must be two dates, YYYY-MM-DD, the first not after the second, at most 366 days apart.',
+  invalid_promo: 'That is not a promo code id.',
+} as const;
+
+adminPromos.get('/usage', async (c) => {
+  await requireSuperAdmin(c);
+  const r = parseRange({ from: c.req.query('from'), to: c.req.query('to'), promo: c.req.query('promo') });
+  if (!r.ok) return c.json({ error: RANGE_REFUSAL[r.code], code: r.code }, 400);
+  return c.json(await usageRead(c.env, r.range));
+});
+
+adminPromos.get('/export.csv', async (c) => {
+  const admin = await requireSuperAdmin(c);
+  const r = parseRange({ from: c.req.query('from'), to: c.req.query('to'), promo: c.req.query('promo') });
+  if (!r.ok) return c.json({ error: RANGE_REFUSAL[r.code], code: r.code }, 400);
+  const { rows, truncated } = await exportRows(c.env, r.range);
+  await audit(c.env, admin.id, 'promo_export', {
+    from: r.range.from, to: r.range.to, promo_id: r.range.promoId, rows: rows.length, truncated,
+  });
+  return csvResponse(toCsv(EXPORT_HEADER, rows), `promo-redemptions-${r.range.from}-${r.range.to}-${stamp()}.csv`,
+    truncated ? { 'X-Export-Truncated': 'true' } : {});
+});
+
+adminPromos.get('/:id/redemptions', async (c) => {
+  await requireSuperAdmin(c);
+  const promo = await getPromoById(c.env, c.req.param('id'));
+  if (!promo) return c.json({ error: 'Promo not found', code: 'not_found' }, 404);
+  return c.json({ promo_id: promo.id, mirror_redeemed: promo.times_redeemed, ...await codeRedemptions(c.env, promo.id) });
+});
+
+adminPromos.get('/:id/history', async (c) => {
+  await requireSuperAdmin(c);
+  const promo = await getPromoById(c.env, c.req.param('id'));
+  if (!promo) return c.json({ error: 'Promo not found', code: 'not_found' }, 404);
+  return c.json({ promo_id: promo.id, history: await codeHistory(c.env, promo.id) });
 });
 
 // POST /api/admin/promos — create a Coupon + Promotion Code, mirror to D1.

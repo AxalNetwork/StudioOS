@@ -131,7 +131,10 @@ export async function ensurePromoSchema(env: Env): Promise<void> {
         'promo_id TEXT NOT NULL, ' +
         'user_id INTEGER NOT NULL, ' +
         'payment_intent_id TEXT NOT NULL, ' +
-        "created_at TEXT NOT NULL DEFAULT (datetime('now'))" +
+        "created_at TEXT NOT NULL DEFAULT (datetime('now')), " +
+        // D1274 (migration 631): what the redemption was for.
+        'source TEXT, product_id TEXT, price_id TEXT, billing_interval TEXT, ' +
+        'amount_before_cents INTEGER, discount_cents INTEGER, currency TEXT' +
         ')',
     );
     await env.DB.exec(
@@ -587,6 +590,62 @@ export async function validatePromoForProduct(
   };
 }
 
+/** D1274: how a redemption was paid (migration 631). */
+export type RedemptionSource = 'cart' | 'payment' | 'free_unlock' | 'subscription';
+export const REDEMPTION_SOURCES: readonly RedemptionSource[] = ['cart', 'payment', 'free_unlock', 'subscription'];
+
+/** D1274: what one redemption was for. Every field may be unknown; unknown is stored as NULL, never 0. */
+export interface RedemptionDetail {
+  source: RedemptionSource;
+  productId?: string | null;
+  priceId?: string | null;
+  interval?: string | null;
+  amountBeforeCents?: number | null;
+  discountCents?: number | null;
+  currency?: string | null;
+}
+
+const INTERVALS = new Set(['day', 'week', 'month', 'year']);
+const cents = (n: unknown): number | null => (Number.isSafeInteger(n) && (n as number) >= 0 ? (n as number) : null);
+const text = (v: unknown, re: RegExp): string | null => (typeof v === 'string' && re.test(v) ? v : null);
+
+/** The detail as the columns hold it: anything malformed is NULL. */
+export function detailColumns(d: RedemptionDetail) {
+  return {
+    source: REDEMPTION_SOURCES.includes(d.source) ? d.source : null,
+    product_id: text(d.productId, /^prod_[A-Za-z0-9]{1,64}$/),
+    price_id: text(d.priceId, /^price_[A-Za-z0-9]{1,64}$/),
+    billing_interval: typeof d.interval === 'string' && INTERVALS.has(d.interval) ? d.interval : null,
+    amount_before_cents: cents(d.amountBeforeCents),
+    discount_cents: cents(d.discountCents),
+    currency: typeof d.currency === 'string' && /^[a-z]{3}$/i.test(d.currency) ? d.currency.toLowerCase() : null,
+  };
+}
+
+/**
+ * Stamp a redemption's detail once. Written after the redemption itself and
+ * only where none is stored (`source IS NULL`), so a re-delivered webhook
+ * never rewrites it. Best-effort: the redemption and its count stand even if
+ * this write fails, and the reads then say Not recorded for it.
+ */
+async function recordDetail(env: Env, ref: string, d: RedemptionDetail | undefined): Promise<void> {
+  if (!d) return;
+  const v = detailColumns(d);
+  if (!v.source) return;
+  try {
+    await env.DB.prepare(
+      `UPDATE promo_redemptions
+          SET source = ?, product_id = ?, price_id = ?, billing_interval = ?,
+              amount_before_cents = ?, discount_cents = ?, currency = ?
+        WHERE payment_intent_id = ? AND source IS NULL`,
+    )
+      .bind(v.source, v.product_id, v.price_id, v.billing_interval, v.amount_before_cents, v.discount_cents, v.currency, ref)
+      .run();
+  } catch {
+    console.warn('[promos] redemption detail not recorded');
+  }
+}
+
 /**
  * Free (100%-off / sub-minimum) fulfilment for an à la carte unlock — there's
  * no PaymentIntent to charge, so we grant access directly. Idempotent per user
@@ -600,6 +659,8 @@ export async function fulfilFreeUnlock(
     userId: number;
     featureKey: string;
     unlockDays?: number | null;
+    /** D1274: the product and price; nothing is charged, so the whole price is the discount. */
+    detail?: Omit<RedemptionDetail, 'source'>;
   },
 ): Promise<boolean> {
   await ensurePromoSchema(env);
@@ -637,6 +698,7 @@ export async function fulfilFreeUnlock(
       .bind(args.promo.id)
       .run();
   }
+  await recordDetail(env, syntheticPi, args.detail ? { ...args.detail, source: 'free_unlock' } : undefined);
   await writeFeatureUnlock(env, {
     userId: args.userId,
     featureKey: args.featureKey,
@@ -653,7 +715,7 @@ export async function fulfilFreeUnlock(
  */
 export async function recordPaidRedemption(
   env: Env,
-  args: { promoId: string; userId: number; paymentIntentId: string },
+  args: { promoId: string; userId: number; paymentIntentId: string; detail?: RedemptionDetail },
 ): Promise<void> {
   await ensurePromoSchema(env);
   const ins = await env.DB.prepare(
@@ -669,4 +731,33 @@ export async function recordPaidRedemption(
       .bind(args.promoId)
       .run();
   }
+  await recordDetail(env, args.paymentIntentId, args.detail);
+}
+
+/**
+ * D1274: record a subscription's redemption from its first paid invoice.
+ *
+ * Keyed `sub:<subscription id>`, so a re-delivered invoice, or a second
+ * invoice of the same subscription, records nothing more. It does NOT bump
+ * `promo_codes.times_redeemed`: Stripe counts a subscription redemption
+ * itself, and checkout's cap adds Stripe's counter to the mirror's
+ * (`totalRedeemed`), so a bump here would count it twice. One statement, so a
+ * subscription row never exists without its source.
+ */
+export async function recordSubscriptionRedemption(
+  env: Env,
+  args: { promoId: string; userId: number; subscriptionId: string; detail: Omit<RedemptionDetail, 'source'> },
+): Promise<boolean> {
+  await ensurePromoSchema(env);
+  const v = detailColumns({ ...args.detail, source: 'subscription' });
+  const ins = await env.DB.prepare(
+    `INSERT OR IGNORE INTO promo_redemptions
+       (promo_id, user_id, payment_intent_id, source, product_id, price_id, billing_interval,
+        amount_before_cents, discount_cents, currency)
+     VALUES (?, ?, ?, 'subscription', ?, ?, ?, ?, ?, ?)`,
+  )
+    .bind(args.promoId, args.userId, `sub:${args.subscriptionId}`, v.product_id, v.price_id, v.billing_interval,
+      v.amount_before_cents, v.discount_cents, v.currency)
+    .run();
+  return (ins.meta?.changes ?? 0) === 1;
 }
