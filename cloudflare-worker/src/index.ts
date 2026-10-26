@@ -123,6 +123,7 @@ import funds from './routes/funds';
 import fundLedger from './routes/fund_ledger';
 import fundFees from './routes/fund_fees';
 import fundAdmin from './routes/fund_admin';
+import closings, { adminClosings } from './routes/closings';
 import fundReporting from './routes/fund_reporting';
 import fundBooklets from './routes/fund_booklets';
 import fundNotices from './routes/fund_notices';
@@ -1214,6 +1215,9 @@ app.route('/api/fund-ledger', fundLedger);
 app.route('/api/fund-fees', fundFees); // D709 (#1774): the management fee; records amounts, moves no money
 // D714 — the fund administration console: which fund acts this admin may take.
 app.route('/api/fund-admin', fundAdmin);
+// D1215 (#3212): closings as a record, and the admin desk.
+app.route('/api/closings', closings);
+app.route('/api/admin/closings', adminClosings);
 app.route('/api/fund-reporting', fundReporting);
 // D716 — the Subscription Booklet: the applicant's ticks and submit, and HQ's read and withdraw.
 app.route('/api/fund-booklets', fundBooklets);

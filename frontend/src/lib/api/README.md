@@ -303,6 +303,12 @@ interview channels' Worker secrets from HQ › Integration keys › Channels
 bar). The list comes with `GET /admin/integration-keys`; a value is never read
 back, and a generated one is returned once.
 
+D1215 (#3212): `closings.js` reads and writes closings as a record
+(`/api/closings`, and the admin desk at `/api/admin/closings`): open a closing
+for a deal, its lines and their capital route, the evidence that money moved,
+the founder's cap-table decision and the close. An investor reads their own
+lines and the round's total. Nothing in it moves money.
+
 D845 (#2471): `developerUsage.js` reads the caller's own usage reports over
 `api_usage_events` (D843): `report` (`GET /api/developer/usage`, grouped by day,
 key, provider, connector, tool or model, or by day and a second way) and `events`

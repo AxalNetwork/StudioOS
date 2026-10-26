@@ -93,6 +93,7 @@
     "names.map(() => '?').join(', ') @ services/interviewFindings.ts": 1,
     "OKR_SELECT @ routes/progress.ts": 4,
     "order @ routes/events_public.ts": 1,
+    "owner.sql @ services/closings.ts": 3,
     "OWED_CENTS_SQL @ services/fundCallLedger.ts": 5,
     "OWNER_COLS @ routes/spinout_certificates.ts": 6,
     "P_COLS @ routes/admin_learning_programs.ts": 1,
