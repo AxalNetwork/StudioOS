@@ -772,8 +772,8 @@ export async function markHeld(env: Env, pid: number, user: User, eventId: numbe
   const at = nowIso();
   const occurrence = newUid();
   const statements = [
-    env.DB.prepare('INSERT INTO obligation_occurrences (uid, event_id, held_on, minutes_file_key, notes, created_by) VALUES (?, ?, ?, ?, ?, ?)')
-      .bind(occurrence, e.id, heldOn, key, str(b.notes, 2000), user.id),
+    env.DB.prepare('INSERT INTO obligation_occurrences (uid, event_id, held_on, minutes_file_key, size_bytes, notes, created_by) VALUES (?, ?, ?, ?, ?, ?, ?)')
+      .bind(occurrence, e.id, heldOn, key, key ? file!.size : null, str(b.notes, 2000), user.id),
     months
       ? env.DB.prepare("UPDATE compliance_events SET due_date = ?, reminders_sent_json = '[]', updated_at = ? WHERE id = ?").bind(next, at, e.id)
       : env.DB.prepare("UPDATE compliance_events SET completion_status = 'completed', completed_at = ?, completed_by_user_id = ?, updated_at = ? WHERE id = ?")

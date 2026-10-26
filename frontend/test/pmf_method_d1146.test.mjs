@@ -89,7 +89,12 @@ test('the client reads the model with the venture in the query, and the chip ask
  * Mounted
  * ------------------------------------------------------------------ */
 
-const MODULE = { module: { slug: 'fundraising-readiness', name: 'Fundraising readiness', records_title: 'Readiness items' }, card: { state: 'empty', reason: 'Nothing scored yet.' }, records: { cols: [], rows: [], total: 0, page: 1, page_size: 25 } };
+const MODULE = { module: { slug: 'fundraising-readiness', name: 'Fundraising readiness', records_title: 'Readiness items' }, card: { state: 'empty', reason: 'Nothing scored yet.' }, records: { cols: [], rows: [], total: 0, page: 1, page_size: 25 },
+  parts: { pmf: { ...POINT(), state: 'scored', steps: [],
+    inputs: STORED.model.inputs.map((i) => ({ key: i.key, label: i.label, group: i.group, weight: i.weight,
+      module: i.module, state: 'recorded', value: 52, grade: 'sourced', contribution: 5,
+      words: 'Synthetic recorded input', source: { table: 'synthetic', rows: 1 }, as_of: '2026-10-24' })) } },
+};
 const OVERVIEW = { figures: [], cards: [{ slug: 'customer-research', state: 'empty', reason: 'No interviews yet.' }] };
 
 async function mounted(url, routes = {}) {
@@ -134,6 +139,9 @@ test('RD4 opens from the readiness part, reads the stored model only then, and l
   // Mutation checked: the dialog reading on mount → a model read before the click.
   const v = await mounted('/raise/fundraising-readiness?project_id=3', { '/cycles/raise/pmf/model': () => response(STORED) });
   try {
+    assert.equal(v.of('pmf-value'), '52', 'D1145 score stays visible beside RD4');
+    assert.equal(v.count('pmf-input-row'), 3, 'D1145 uses the module read’s inputs');
+    assert.ok(!v.has('pmf-model'), 'the old copied model fold is gone');
     assert.ok(!v.requests.some((u) => u.includes('/pmf/model')), 'nothing is read until the dialog opens');
     assert.equal(v.prop('pmf-method-open', 'aria-haspopup'), 'dialog');
     await v.click('pmf-method-open');
@@ -145,6 +153,8 @@ test('RD4 opens from the readiness part, reads the stored model only then, and l
     assert.match(v.of('pmf-method-status'), /Published 25 Oct 2026/);
     await v.click('pmf-method-close');
     assert.ok(!v.has('pmf-method'));
+    assert.equal(v.of('pmf-value'), '52', 'closing RD4 retains the score');
+    assert.equal(v.count('pmf-input-row'), 3);
   } finally { await v.close(); }
 });
 

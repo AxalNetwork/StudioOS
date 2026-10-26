@@ -271,3 +271,18 @@ export function refusalOf(err, fallback) {
   const said = String(err?.message || '').trim();
   return said || fallback;
 }
+
+/**
+ * D996 (PRF11b): the "Agreement and notes" row's line on a phone: the first
+ * agreement chosen (or none, or the invitation's), whether it is ready, and
+ * whether a note is written. `groups` is `agreementChoices`' answer, or null
+ * while the agreements are unread.
+ */
+export function agreementRowLine({ agreement, agreementLabel, notes } = {}, groups, { invitation = false } = {}) {
+  const note = String(notes || '').trim() ? '1 note' : 'No note';
+  if (invitation) return `Sent by the invitation · ${note}`;
+  if (!agreement) return `No agreement · ${note}`;
+  const opt = (groups || []).flatMap((g) => g.options).find((o) => o.value === agreement);
+  const ready = groups == null ? null : opt ? opt.note : 'Not in the agreements list';
+  return [agreementLabel || agreement, ready, note].filter(Boolean).join(' · ');
+}

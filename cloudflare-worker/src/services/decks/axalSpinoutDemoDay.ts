@@ -1,4 +1,5 @@
 import { readableRoomFiles } from '../raiseEvidence';
+import { deckNdaRequired } from '../dataRoomNda';
 /**
  * axalSpinoutDemoDay.ts — Task #15
  *
@@ -443,7 +444,9 @@ export type SpinoutDemoDayData = {
     // status so the slide can render a single canonical CTA.
     deal_access: {
       deal_room_url: string;
-      nda_required: boolean;
+      // D1102 (#2982): the founder's choice, else the room's own gates;
+      // null when the room could not be read ("Unreadable", never "Not required").
+      nda_required: boolean | null;
       data_room_ready: boolean | null;
       data_room_reason?: string | null;
       cta_label: string;
@@ -499,7 +502,9 @@ type ProjectRow = {
   // (if the founder edited it inline before this column existed) and
   // then to defaults.
   data_room_url: string | null;
-  data_room_nda_required: number | null;
+  // D1102 (#2982, migration 608): the founder's NDA choice — 1, 0, or NULL
+  // when not chosen. The old `data_room_nda_required` column is not read.
+  data_room_nda_choice: number | null;
   // Task #2 — structured revenue-proof inputs surfaced on the Validation
   // slide's RevenueProofCard. Editable from the project edit modal.
   // `revenue` (legacy total) is the source for `total_revenue`.
@@ -1253,16 +1258,16 @@ export async function fillAxalSpinoutDemoDay(
   }
 
   // ------ Task #14 + Task #2: deal-room access payload --------------
-  // Task #2 — `data_room_url` + `data_room_nda_required` live on the
-  // project as the single source of truth (editable on Project detail
-  // and via the inline editor on the Review-the-deal slide, which
-  // writes back via decks PUT). When the founder hasn't set a URL yet
-  // we still render the CTA in "pending" state so the slide layout
-  // doesn't collapse.
+  // Task #2 — `data_room_url` and the NDA choice live on the project as
+  // the single source of truth (editable on Project detail and via the
+  // inline editor on the Review-the-deal slide, which writes back via
+  // decks PUT). When the founder hasn't set a URL yet we still render the
+  // CTA in "pending" state so the slide layout doesn't collapse.
+  // D1102 (#2982, migration 608): "NDA required" is the founder's choice
+  // when they made one, Yes or No; until then the room's own gates decide
+  // it (`services/dataRoomNda.ts`). The incorporation step no longer does.
   const dataRoomUrl = (p.data_room_url || '').trim();
-  const dataRoomNdaRequired = p.data_room_nda_required != null
-    ? !!p.data_room_nda_required
-    : !doneMap.has('incorporation_completed');
+  const dataRoomNdaRequired = await deckNdaRequired(env, projectId, p.data_room_nda_choice);
   const roomReadiness = await readableRoomFiles(env, projectId)
     .then(files => ({ ready: files.length > 0, reason: null as string | null }))
     .catch(() => ({ ready: null, reason: 'Data room could not be read.' }));

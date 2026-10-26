@@ -182,17 +182,18 @@ const CYCLE_DEFS = {
     // D840 part 2 (#2347): every Raise module's From Mercury, the founder's alone, anchored at #from-mercury.
     parts: toFnMap({
       ...Object.fromEntries(MODULES.raise.map((m) => [m.slug, (data, ctx) => mercuryPart(m.slug, data, ctx)])),
-      // D909 (#2693, NAR1): Home's tiles, Needs you and footer, from the module read's `parts.narrative`.
+      // D909 (#2693, NAR1): Home's tiles, Needs you and footer, from the module read's `parts.narrative`;
+      // D913: its Objections heard, with no Answer it for an admin.
       'investor-narrative': (data, ctx) => (
         <>
-          <NarrativeHome data={data} />
+          <NarrativeHome data={data} admin={isNarrativeAdmin({ role: ctx.role })} />
           {mercuryPart('investor-narrative', data, ctx)}
         </>
       ),
-      // D1141 (#2433): Product-market fit, not scored yet, with model v1; then From Mercury.
+      // D1141 (#2433), D1145 (#3031): Product-market fit from `parts.pmf`, beside the raise kit; then From Mercury.
       'fundraising-readiness': (data, ctx) => (
         <>
-          <PmfPart projectId={ctx.projectId} />
+          <PmfPart part={data?.parts?.pmf} card={data?.card} records={data?.records} projectId={ctx.projectId} reload={ctx.reload} />
           {mercuryPart('fundraising-readiness', data, ctx)}
         </>
       ),
