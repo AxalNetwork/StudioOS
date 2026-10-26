@@ -415,6 +415,20 @@ These are Worker routes in `routes/testing.ts`, backed by `services/testing.ts` 
 
 Mail's testers list is `testers:<uid>` on D811's link, read by `testerRecipients` (`services/mailLinkTesters.ts`): picked testers who consented and have not turned programme emails off, on a programme that has opened, at an address neither suppressed nor unsubscribed. `testersAudience(env, uid)` reads the same rule. Mail's two Product testing reads are under the Mail link contract below (D812 part 2b).
 
+**Referral partners and their custom terms (D958, #2791; migration 563).** Under `/api/admin/referral-partners` (`admin_referral_partners.ts`), every route `requireHqAdmin`. Money (accrued, paid) is the Super Admin's; an Admin's read carries `{ available: false, reason: 'hq_reads' }` in its place.
+
+| Route | Who | What it answers |
+| --- | --- | --- |
+| `GET /api/admin/referral-partners?segment=&terms=&status=&q=&sort=&limit=&offset=` | HQ admin | `items` (name, segment, terms state, code, introductions, converted, money, last activity), `total`, `facts` (Who, Join, Terms). |
+| `POST /api/admin/referral-partners`, `PATCH /api/admin/referral-partners/:userId` | HQ admin | HQ adds a member as a referral partner with a segment (OD3 A), or changes it. 409 `admins_cannot_refer`, `already_referral_partner`. |
+| `GET /api/admin/referral-partners/summary?quarter=`, `GET /api/admin/referral-partners/series` | HQ admin | The quarter's partners, signed and waiting terms, introductions and money by currency; introductions by week, outcome and segment, and money by month. |
+| `GET /api/admin/referral-partners/terms?status=`, `GET /api/admin/referral-partners/:userId/terms` | HQ admin | The terms in one state, oldest first (submitted: the Queue); one partner's terms, newest first. Each row carries its state today (`active` and `expired` read from its dates) and its triggers. |
+| `POST /api/admin/referral-partners/terms`, `PATCH …/terms/:uid`, `POST …/terms/:uid/submit` | HQ admin | A draft, its edits, and draft → submitted. Refusals `trigger_unknown`, `trigger_amount_ambiguous`, `invalid_dates`, `terms_not_draft`, `terms_overlap`. |
+| `POST /api/admin/referral-partners/terms/:uid/approve` | Super Admin, step-up | submitted → approved; a plain Admin gets 403 `super_admin_required` before any code (O-TERMS A). |
+| `POST /api/admin/referral-partners/terms/:uid/preview`, `…/send`, `…/end` | HQ admin | The contract through today's envelope preview and send to the partner on record (approved → sent, `envelope_id` stored); signed or active → ended with a reason. E-sign completion signs the row by its envelope. |
+
+`fireCommissionEvent` pays a referrer's active signed terms before the standard rule, within their caps and with no L2 or L3 bonus, and writes `commissions.terms_id`. `GET /api/network/admin/commission-rules` gains `fires` (only `referral_kyc_approved` today; OD4 open).
+
 ### Legal templates Worker contract (D717, #1782)
 
 Under `/api/admin/contracts` (`admin_contracts.ts`). Each template's kind and Axal party are stored on its row (migration 479), and NULL means "from the slug" (`services/templateFormat.ts`). `GET /templates/store` and `GET /templates/store/:slug` add `doc_kind`, `axal_party`, the effective `kind` and `party`, `format_source` (`row` or `slug`) and `format_fixed`; the single read also adds `format_options` (the storable kinds, the parties, the partyless kinds, the slug's own pair and, since #1852, `entity`: the entity the slug names when the chosen kind takes a party). `POST /templates/store` and `PUT /templates/store/:slug` take `doc_kind` and `axal_party`: an absent key keeps the value, `null` resets it, and a bad pair is 400 `kind_invalid`, `kind_not_drawn`, `party_invalid` or `kind_party_mismatch`. On a #1781 notice or booklet slug, setting either is 409 `format_fixed`.
