@@ -15,6 +15,7 @@ import { ensureDealPassSchema, recordStageEvent, stageRecordingStartedAt } from 
 import { newUid, nowIso } from './_t13t14t15_helpers';
 import { logAdminAction } from '../services/adminAudit';
 import { logDealRoomAction } from '../services/dealRoomAudit';
+import { INTAKE_LINE, LEAD_ADMIN_ONLY, NOT_YOUR_ROUND, canMoveRound, readStudioLens } from '../services/dealStudioLens';
 
 const deals = new Hono<{ Bindings: Env }>();
 
@@ -179,6 +180,16 @@ deals.get('/funnel', async (c) => {
 });
 
 // ---------------------------------------------------------------------------
+// D1242 (#3255) — the Studio lens: every round for an admin or an Operating
+// Partner, with its lead, its investors and who set a Not raising round so.
+// Registered above `/:id`.
+// ---------------------------------------------------------------------------
+deals.get('/studio', async (c) => {
+  const user = await requireRole(c, 'partner');
+  return c.json(await readStudioLens(c.env, user));
+});
+
+// ---------------------------------------------------------------------------
 // Task #127 — pass + stage analytics. Registered above `/:id` so the literal
 // paths are not swallowed by the id route.
 // ---------------------------------------------------------------------------
@@ -194,14 +205,29 @@ deals.get('/pass-analytics', async (c) => {
   await ensureDealPassSchema(c.env);
   const sql = getSQL(c.env);
 
+  // D1242 (#2423 item 6): a round intake scoring set to Not raising is not a
+  // pass, so it is counted apart, never as a pass "before a reason was
+  // required". `services/dealStudioLens.ts` reads the same evidence.
   const counts = await sql`
     SELECT d.pass_reason AS pass_reason, COUNT(*) AS count
       FROM deals d
       LEFT JOIN projects p ON p.id = d.project_id
      WHERE d.status = ${PASSED_STATUS}
        AND (p.id IS NULL OR p.deleted_at IS NULL)
+       AND NOT (d.passed_by_user_id IS NULL
+                AND NOT EXISTS (SELECT 1 FROM deal_stage_events e WHERE e.deal_id = d.id AND e.to_stage = ${PASSED_STATUS} AND e.actor_user_id IS NOT NULL)
+                AND EXISTS (SELECT 1 FROM activity_logs a WHERE a.project_id = d.project_id AND a.action = 'auto_scored' AND a.details LIKE ${INTAKE_LINE}))
      GROUP BY d.pass_reason`;
   const breakdown = buildPassBreakdown(counts as any[]);
+  const [intake] = await sql`
+    SELECT COUNT(*) AS n
+      FROM deals d
+      LEFT JOIN projects p ON p.id = d.project_id
+     WHERE d.status = ${PASSED_STATUS}
+       AND (p.id IS NULL OR p.deleted_at IS NULL)
+       AND d.passed_by_user_id IS NULL
+       AND NOT EXISTS (SELECT 1 FROM deal_stage_events e WHERE e.deal_id = d.id AND e.to_stage = ${PASSED_STATUS} AND e.actor_user_id IS NOT NULL)
+       AND EXISTS (SELECT 1 FROM activity_logs a WHERE a.project_id = d.project_id AND a.action = 'auto_scored' AND a.details LIKE ${INTAKE_LINE})`;
 
   // A reason the caller did not ask about returns no deals rather than all of
   // them — an unfiltered dump of every pass is a different, larger disclosure.
@@ -229,6 +255,9 @@ deals.get('/pass-analytics', async (c) => {
         LEFT JOIN users u ON u.id = d.passed_by_user_id
        WHERE d.status = ${PASSED_STATUS} AND d.pass_reason IS NULL
          AND (p.id IS NULL OR p.deleted_at IS NULL)
+         AND NOT (d.passed_by_user_id IS NULL
+                  AND NOT EXISTS (SELECT 1 FROM deal_stage_events e WHERE e.deal_id = d.id AND e.to_stage = ${PASSED_STATUS} AND e.actor_user_id IS NOT NULL)
+                  AND EXISTS (SELECT 1 FROM activity_logs a WHERE a.project_id = d.project_id AND a.action = 'auto_scored' AND a.details LIKE ${INTAKE_LINE}))
        ORDER BY COALESCE(d.passed_at, d.updated_at) DESC
        LIMIT 100`) as any[];
   }
@@ -243,6 +272,8 @@ deals.get('/pass-analytics', async (c) => {
     unrecorded_note: breakdown.unrecorded > 0
       ? 'These deals were passed before a reason was required. They are not backfilled — a guessed reason would corrupt the record.'
       : null,
+    // D1242: rounds intake scoring set to Not raising, which are not passes.
+    intake_not_raising: Number((intake as any)?.n ?? 0),
     reason: reason || null,
     deals: matches,
   });
@@ -726,6 +757,14 @@ deals.put('/:id', async (c) => {
   const rows = await sql`SELECT id, status, stage_changed_at, amount, lead_partner_id FROM deals WHERE id = ${id}`;
   if (rows.length === 0) { await sql.end(); return c.json({ error: 'Deal not found' }, 404); }
 
+  // D1242: an Operating Partner writes only to a round they lead, and only an
+  // admin changes who leads it; refused before anything is written.
+  if (!canMoveRound(user, (rows[0] as any).lead_partner_id)) { await sql.end(); return c.json(NOT_YOUR_ROUND, 403); }
+  if (data.lead_partner_id !== undefined && String((user as any)?.role) !== 'admin') {
+    await sql.end();
+    return c.json(LEAD_ADMIN_ONLY, 403);
+  }
+
   // A denomination change would relabel historical commitments/transfers.
   if (data.currency !== undefined) {
     await sql.end();
@@ -910,8 +949,10 @@ deals.post('/:id/advance', async (c) => {
   const id = parseInt(c.req.param('id'));
   await ensureDealPassSchema(c.env);
   const sql = getSQL(c.env);
-  const rows = await sql`SELECT status, stage_changed_at FROM deals WHERE id = ${id}`;
+  const rows = await sql`SELECT status, stage_changed_at, lead_partner_id FROM deals WHERE id = ${id}`;
   if (rows.length === 0) { await sql.end(); return c.json({ error: 'Deal not found' }, 404); }
+  // D1242: an Operating Partner moves only the rounds they lead.
+  if (!canMoveRound(user, (rows[0] as any).lead_partner_id)) { await sql.end(); return c.json(NOT_YOUR_ROUND, 403); }
   const cur = String((rows[0] as any).status);
   const idx = PIPELINE.indexOf(cur);
   if (idx < 0 || idx >= PIPELINE.length - 1) {
@@ -977,8 +1018,11 @@ deals.post('/:id/pass', async (c) => {
 
   await ensureDealPassSchema(c.env);
   const sql = getSQL(c.env);
-  const rows = await sql`SELECT status, stage_changed_at FROM deals WHERE id = ${id}`;
+  const rows = await sql`SELECT status, stage_changed_at, lead_partner_id FROM deals WHERE id = ${id}`;
   if (rows.length === 0) { await sql.end(); return c.json({ error: 'Deal not found' }, 404); }
+  // D1242: a studio pass closes the round for every investor, so an Operating
+  // Partner records one only on a round they lead.
+  if (!canMoveRound(user, (rows[0] as any).lead_partner_id)) { await sql.end(); return c.json(NOT_YOUR_ROUND, 403); }
   const cur = String((rows[0] as any).status);
   if (cur === PASSED_STATUS) {
     await sql.end();
@@ -1131,21 +1175,33 @@ deals.get('/:id/data-room', async (c) => {
   return c.json({ detail: 'This export is retired. Use the shared data room with its grants and NDA checks.' }, 410);
 });
 
+// D1155 (#3060, DL15): who reads which commitment, and never another person's note.
+//   - an investor: their own rows, with their own note;
+//   - the deal's founder, an Admin (and a Super Admin, who is an admin) and an
+//     Operating Partner: every row by name, amount and status, never the note.
+//     The Operating Partner keeps the studio-wide read (#2421 owner question 7,
+//     A), without notes; before D1155 they read the confirmed total only, and
+//     the founder and admins read every investor's note;
+//   - any other reader `loadDealForRead` admits: the confirmed total only.
+// `loadDealForRead` already keeps a founder to their own deal.
 deals.get('/:id/commitments', async (c) => {
   const id = parseInt(c.req.param('id'));
   const ctx = await loadDealForRead(c, id);
   if (ctx.error) return ctx.error;
   const { sql, user } = ctx;
-  if (user.role !== 'admin' && user.role !== 'founder' && user.role !== 'investor') {
-    const rows = await sql`SELECT COALESCE(SUM(amount), 0) AS total FROM commitments WHERE deal_id = ${id} AND status = 'confirmed'`;
+  if (user.role === 'investor') {
+    const rows = await sql`SELECT c.id, c.uid, c.deal_id, c.investor_user_id, c.amount, c.status, c.notes, c.created_at, u.name AS investor_name FROM commitments c LEFT JOIN users u ON u.id = c.investor_user_id WHERE c.deal_id = ${id} AND c.investor_user_id = ${user.id} ORDER BY c.created_at DESC`;
     await sql.end();
-    return c.json({ total: Number(rows[0]?.total ?? 0) });
+    return c.json(rows);
   }
-  const rows = user.role === 'investor'
-    ? await sql`SELECT c.id, c.uid, c.deal_id, c.investor_user_id, c.amount, c.status, c.notes, c.created_at, u.name AS investor_name FROM commitments c LEFT JOIN users u ON u.id = c.investor_user_id WHERE c.deal_id = ${id} AND c.investor_user_id = ${user.id} ORDER BY c.created_at DESC`
-    : await sql`SELECT c.id, c.uid, c.deal_id, c.investor_user_id, c.amount, c.status, c.notes, c.created_at, u.name AS investor_name FROM commitments c LEFT JOIN users u ON u.id = c.investor_user_id WHERE c.deal_id = ${id} ORDER BY c.created_at DESC`;
+  if (user.role === 'admin' || user.role === 'founder' || user.role === 'partner') {
+    const rows = await sql`SELECT c.id, c.uid, c.deal_id, c.investor_user_id, c.amount, c.status, c.created_at, u.name AS investor_name FROM commitments c LEFT JOIN users u ON u.id = c.investor_user_id WHERE c.deal_id = ${id} ORDER BY c.created_at DESC`;
+    await sql.end();
+    return c.json(rows);
+  }
+  const rows = await sql`SELECT COALESCE(SUM(amount), 0) AS total FROM commitments WHERE deal_id = ${id} AND status = 'confirmed'`;
   await sql.end();
-  return c.json(rows);
+  return c.json({ total: Number(rows[0]?.total ?? 0) });
 });
 
 deals.post('/:id/commitments', async (c) => {
@@ -1219,7 +1275,8 @@ deals.get('/:id/activity', async (c) => {
   const ctx = await loadDealForRead(c, id);
   if (ctx.error) return ctx.error;
   const { sql, deal, user } = ctx;
-  const named = user.role === 'admin' || user.role === 'founder';
+  // D1155 (DL15): an Operating Partner reads the activity in full, as the commitments read.
+  const named = user.role === 'admin' || user.role === 'founder' || user.role === 'partner';
   const money = (amount: unknown) => (amount == null ? 'Not recorded' : `${Math.round(Number(amount)).toLocaleString()} ${deal.currency ?? 'USD'}`);
   const events: any[] = [];
   events.push({ type: 'created', label: 'Deal created', at: deal.created_at, mine: false });
@@ -1322,6 +1379,26 @@ deals.get('/:id/transfers', async (c) => {
      WHERE t.deal_id = ${id} ORDER BY t.recorded_at DESC`;
   await sql.end();
   return c.json({ items: (rows as any[]).map(withFirm) });
+});
+
+// D1155 (#3060, DL17a): whether an open IC condition holds wires on this
+// deal, read before an Admin opens Record a wire. The same gate the record
+// route enforces (`openConditionsOnDeal`). A condition on a decision the
+// caller cannot see (D467) holds the wire without a count; a failed read is
+// 503, never "nothing holds it".
+deals.get('/:id/transfer-gate', async (c) => {
+  const user = await requireRole(c, 'admin');
+  const id = parseInt(c.req.param('id'));
+  if (!Number.isInteger(id) || id <= 0) return c.json({ error: 'Deal not found' }, 404);
+  const deal = await c.env.DB.prepare('SELECT id FROM deals WHERE id = ?').bind(id).first();
+  if (!deal) return c.json({ error: 'Deal not found' }, 404);
+  try {
+    const gate = await openConditionsOnDeal(c.env, user, id);
+    return c.json({ held: gate.visible > 0 || gate.hidden > 0, open_conditions: gate.visible > 0 ? gate.visible : null });
+  } catch (e) {
+    console.error('[deals] transfer gate read failed:', (e as Error)?.name);
+    return c.json({ error: 'transfer_gate_unreadable', message: 'Whether an IC condition holds wires on this deal could not be read. Try again.' }, 503);
+  }
 });
 
 deals.post('/:id/transfers', async (c) => {

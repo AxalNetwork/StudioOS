@@ -43,6 +43,7 @@ code. Reading an old audit as a to-do list is how work gets redone.
 | `FUND_ADMIN_MAP_2026-10-25.md` | The Fund Administration · Admin canvas (FND1–FND22) read against the code that day: #2388's eleven missing items re-checked, what each tab can read, and what waits (D1157). |
 | `REPORTING_MAP_2026-10-25.md` | The Reporting to investors canvas (RPT1–RPT21) read against the code that day: #2427's eight findings re-checked (three fixed by D889 and `cleanMetrics`), the reads the desk and the company page draw from, what is read nowhere yet, and what each board waits for (D1056). |
 | `ACCOUNTS_MAP_2026-10-26.md` | The Accounts canvas (ACC1–ACC14, #2377) read against the code that day: what each board can read, #2377's fifteen findings re-checked, and which part takes each (D1299). |
+| `ADD_TOKENS_MAP_2026-10-26.md` | The "Add tokens" canvas (CRP1–CRP18, #2452) read against the code that day: the reads each board draws from, #2452's four broken items re-checked, and what waits on which part (D1285). |
 | `CHECKOUT_MAP_2026-10-25.md` | The Checkout canvas (PAYX1–PAYX21) read against the code that day: #2451's nine findings re-checked (two fixed by D892), the reads the sheet draws from, and what each board waits for (D1048). |
 | `ADMIN_PAGE_HEADER_MAP_2026-10-24.md` | The Admin page header canvas (SHL1–SHL9) read against what each board can reuse that day (D936). |
 | `SPINOUT_LAB_ADMIN_MAP_2026-10-24.md` | Every read behind the Spin-Out Lab admin canvas (SL1–SL21), board by board, its defects re-checked at HEAD, and production's calendar that day (D937). |

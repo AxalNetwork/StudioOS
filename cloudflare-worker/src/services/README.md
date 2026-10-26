@@ -136,6 +136,7 @@ no new schema, runtime or billing path is introduced.
 | `stagedSigning.ts` | D1216 (#3213): a closing line's paper signed in order — company, investor, then Axal's countersign — on migration 633's `esign_staged_envelopes` and `esign_staged_signers`. Each stage is a single-recipient envelope sent with `createAndSendEnvelope({ renderedBody })` and checked against the recorded digest; the sign route's completion hook sends the next stage, except Axal's, which a Super Admin releases with step-up. The order is also held by the migration's triggers. A counsel draft previews, never sends. The booklet's `bookletSigning.ts` is unchanged. |
 | `signedDownload.ts` | One-time, short-TTL, HMAC-signed R2 download tokens. Every private file download goes through it. |
 | `dealPassTaxonomy.ts` | The five pass reasons and the stage-event recorder. |
+| `dealStudioLens.ts` | D1242 (#3255): Deal flow's Studio lens read (`GET /api/deals/studio`), who may move a round (an admin any, an Operating Partner only the rounds they lead), and who set a Not raising round so: a person, intake scoring before #2643, or not recorded. |
 | `backup.ts` | The nightly D1 export to R2. |
 | `fundSheets.ts` | Super Admin fund research ↔ Google Sheets. Dedicated OAuth, never calendar tokens. Founders cannot Connect. |
 | `researchFundRead.ts` | The dossier overlap sentence. A missing cheque end stays open; a missing raise is not an overlap of zero. |

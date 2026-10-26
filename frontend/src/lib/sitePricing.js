@@ -156,10 +156,22 @@ export const AI_BAND = Object.freeze({
 
 export const MODELS_LINE = "Prices are Cloudflare's published Workers AI rates plus 25%. Runs are paid from your plan's monthly AI allowance first, then from your AI tokens.";
 
+// D1285 (#2452): the Models tab's Token packs, in the "Add tokens" canvas's words (CRP1, CRP11).
 export const PACKS = Object.freeze({
-  kick: 'AI token packs',
-  title: 'Top up as you go',
-  text: 'Each pack buys its price in AI use at the rates above. Tokens you buy never expire.',
+  kick: 'AI tokens',
+  title: 'Token packs',
+  text: "Buy AI tokens as you need them. Runs use your plan's AI allowance first, then your tokens.",
+  foot: 'Sold by Axal VC Management LLC. Paid securely through Stripe. VAT, where it applies, is added at checkout and is not part of the tokens.',
+  unreadable: "Token packs couldn't be read just now.",
+});
+
+/** D1285 (#2452): the "Your AI tokens" band over the Models tab, for a signed-in member (CRP1, CRP11, CRP14). */
+export const TOKENS_BAND = Object.freeze({
+  kick: 'Token balance',
+  never: 'Tokens never expire.',
+  unreadable: "Your token balance couldn't be read. That's not the same as having none.",
+  paused: 'AI is paused on this account. Contact support. You can still add tokens: runs are paused, not purchases.',
+  add: 'Add tokens',
 });
 
 /** The FAQ. "Can I set a spending limit?" names D788's monthly spend limit (Account › Usage › Limits). */

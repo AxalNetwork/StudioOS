@@ -2,11 +2,13 @@ import React, { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { labOperationsApi } from '../../../lib/api/labOperations';
 import { programGrantsApi } from '../../../lib/api/programGrants';
+import { licenceProgramsApi } from '../../../lib/api/licencePrograms';
+import { periodOf, statusOf, termRows } from '../../../lib/studioPrograms';
 import { actionGhost } from '../../../ui';
 import { CARD, H2, SUB, LINK, INPUT, useRead, Dialog, Field, Select, useWrite } from './labParts';
 import { ReadState } from './labOperationsParts';
 import { refusalText } from './labDesksModel';
-import { CALENDAR, MESSAGES, sizeProblem, requireSettings, requireGrants } from './labOperationsModel';
+import { CALENDAR, MESSAGES, sizeProblem, requireSettings, requireGrants, requirePrograms, labGrantOf } from './labOperationsModel';
 
 function SizeDialog({ field, current, onClose, changed }) {
   const [value, setValue] = useState(String(current));
@@ -24,12 +26,36 @@ function SizeDialog({ field, current, onClose, changed }) {
 }
 
 function GrantTerms({ superAdmin }) {
-  // #2775 owns the branch Admin's grant read; do not send an Admin to HQ's API.
+  // A branch Admin reads its own licence's grant (D984); only a Super Admin reads HQ's grid.
   return <section className={`${CARD} flex flex-col gap-3 p-4`} data-testid="lab-grant-terms">
     <h2 className={H2}>From your studio’s grant</h2>
-    {superAdmin ? <HqGrantTerms /> : <><p className={SUB}>Not read here yet — the Admin grant read is being added in #2775.</p><Link className={LINK} to="/admin/my-licence/programs">Open Licences › Programs</Link></>}
+    {superAdmin ? <HqGrantTerms /> : <StudioGrantTerms />}
     <p className={SUB}>These terms are set by HQ on Program grants, not here.</p>
   </section>;
+}
+// D1280: the period and the Lab's cohort terms, in the Programs tab's words; every other term is on Licences › Programs.
+const LAB_TERMS = ['CAPACITY', 'COHORTS', 'APPROVAL'];
+function StudioGrantTerms() {
+  const [tick, setTick] = useState(0);
+  const read = useRead('lab-studio-grant', tick, () => licenceProgramsApi.mine().then(requirePrograms));
+  const lab = read.data ? labGrantOf(read.data) : null;
+  const status = lab?.kind === 'grant' ? statusOf(lab.program) : null;
+  return <>
+    <ReadState read={read} what="Your studio’s grant" claim="Your studio’s Spin-Out Lab grant could not be read. That is not the same as none." onRetry={() => setTick((t) => t + 1)} testId="lab-studio-grant" />
+    {lab?.kind === 'unlinked' && <p className={SUB} data-testid="lab-studio-grant-unlinked">{lab.line}</p>}
+    {lab?.kind === 'no_copy' && <p className={SUB} data-testid="lab-studio-grant-no-copy">{lab.line}</p>}
+    {lab?.kind === 'none' && <p className={SUB} data-testid="lab-studio-grant-none">Your studio does not hold Spin-Out Lab{lab.program?.word ? ` (${lab.program.word})` : ''}. Ask HQ for it on Licences › Programs.</p>}
+    {status && <div className="flex flex-col gap-2" data-testid="lab-studio-grant">
+      <p className={SUB}>Grant: <strong>{status.word}</strong>{status.line ? ` · ${status.line}` : ''}</p>
+      <dl className="m-0 grid grid-cols-1 gap-2 text-[13px] sm:grid-cols-2">
+        <dt>Period</dt><dd className="m-0">{periodOf(lab.program)}</dd>
+        {termRows(lab.program).filter((r) => LAB_TERMS.includes(r.eye)).map((r) => <React.Fragment key={r.eye}>
+          <dt>{r.eye.charAt(0) + r.eye.slice(1).toLowerCase()}</dt><dd className="m-0">{r.text}{r.sub ? <span className={`block ${SUB}`}>{r.sub}</span> : null}</dd>
+        </React.Fragment>)}
+      </dl>
+    </div>}
+    <Link className={LINK} to="/admin/my-licence/programs">{lab?.kind === 'none' ? 'Request it on Licences › Programs' : 'Open Licences › Programs'}</Link>
+  </>;
 }
 function HqGrantTerms() {
   const [tick, setTick] = useState(0);

@@ -1303,7 +1303,12 @@ dd.get('/requests/mine', async (c) => {
   try {
     const rows: any[] = await sql`
       SELECT r.id, r.title, r.details, r.state, r.due_date, r.responded_at, r.response_note, r.response_url, r.created_at,
-             c.subject_type, c.subject_label
+             c.subject_type, c.subject_label,
+             -- D1252 (DDL15): the subject's own venture, so "Pick a file from your data room" reads that
+             -- room (the data-room routes check ownership again), and the names of the files already
+             -- matched to the request. Never the case's uid, score or sections.
+             CASE WHEN c.subject_type = 'project' THEN (SELECT p.uid FROM projects p WHERE p.id = c.subject_id) END AS project_uid,
+             (SELECT json_group_array(f.name) FROM data_room_files f WHERE f.dd_request_id = r.id) AS file_names
         FROM dd_requests r
         JOIN dd_cases c ON c.id = r.case_id
        WHERE r.withdrawn_at IS NULL AND ((c.subject_type != 'project' AND c.subject_id = ${user.id})
@@ -1313,9 +1318,14 @@ dd.get('/requests/mine', async (c) => {
                 JOIN users u ON LOWER(u.email) = LOWER(f.email)
                WHERE u.id = ${user.id})))
        ORDER BY r.created_at DESC LIMIT 100`;
-    return c.json({ items: rows });
+    return c.json({ items: rows.map((r) => ({ ...r, file_names: parseNames(r.file_names) })) });
   } finally { await sql.end(); }
 });
+
+/** D1252: `json_group_array` answers a JSON string; a bad one is no names, never a throw. */
+function parseNames(raw: unknown): string[] {
+  try { const v = typeof raw === 'string' ? JSON.parse(raw) : raw; return Array.isArray(v) ? v.filter((x) => typeof x === 'string') : []; } catch { return []; }
+}
 
 dd.patch('/requests/:id/respond', async (c) => {
   const user = await requireAuth(c);

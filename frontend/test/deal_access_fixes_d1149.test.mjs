@@ -4,7 +4,9 @@ import React, { act } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { MemoryRouter, Routes, Route } from 'react-router-dom';
 import { mountContracts } from './_contracts_dom.mjs';
-import DealRoomPage, { CommitModal, CommitmentTotal } from '../src/pages/DealRoomPage.jsx';
+import DealRoomPage, { CommitModal } from '../src/pages/DealRoomPage.jsx';
+// D1155: the total moved with the staff commitments table.
+import { CommitmentTotal } from '../src/pages/deal/DealCommitmentsStaff.jsx';
 import DealFreePlan from '../src/components/deals/DealFreePlan.jsx';
 import { dealMoney, dealBackLink } from '../src/components/deals/dealMoney.js';
 import DealSyndicates, { SyndicateDrawer } from '../src/components/deals/DealSyndicates.jsx';
