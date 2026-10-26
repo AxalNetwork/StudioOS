@@ -1947,7 +1947,9 @@ export async function run(env: Env, input: RunOptions): Promise<RunResult> {
   if (opts.userId > 0) {
     try {
       multiplier = await aiBudget.memberChargeMultiplier(env, opts.userId);
-      const held = await aiBudget.reserveAiBudget(env, opts.userId, holdQuoteMicro(opts, route, [primaryModel, ...fallbacks], guardOn, guardInput, multiplier));
+      // D1278: the hold names the run's task, never its prompt.
+      const held = await aiBudget.reserveAiBudget(env, opts.userId, holdQuoteMicro(opts, route, [primaryModel, ...fallbacks], guardOn, guardInput, multiplier),
+        new Date(), { context: { operation: `ai.${opts.task}`, surface: 'ai' } });
       if (!held.ok) {
         const usage:UsageMeta={task:opts.task,model:primaryModel,latency_ms:0,prompt_tokens:0,completion_tokens:0,est_cost_usd:0,fallback_used:false,cached:false,safety_score:null};
         await recordUsage(env, opts, usage, held.refusal);

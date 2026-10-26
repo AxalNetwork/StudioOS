@@ -24,8 +24,8 @@ live here, one file each:
 | `autoReloadModel.js` | D794: the card's words, pure — `stateLine`, `cardText`, `packOptions`, `parseThreshold` (mirrors the Worker's threshold rule), `lastSkipped`, and `OFF_WORDS`, the Worker's sentences for why it turned off |
 | `UsageOverview.jsx` | D789 (#2214): B1 overview, independent spend/balance/limits/chart reads, D806's newest three unified invoices with authenticated PDF downloads and partial-read states, and legacy hash forwarding to Cost. D1166 (#2449): a Storage card (STG17) and `#storage` forwarding to the Storage page |
 | `StoragePage.jsx` | D1166 (#2449): `/account/usage/storage`, Usage's fourth page — D642's storage read by place (`StorageCard`), and Not read here yet on the allowance, kinds, companies and largest files |
-| `AiTokensPage.jsx` | D1277 (#2482): `/account/usage/ai-tokens`, Usage's third page (after Cost) — the canvas's five cards, each Not read here yet until #2482's steps land, and Add tokens to `ADD_TOKENS_PATH` |
-| `aiTokensModel.js` | D1277: the AI tokens page's words, pure — the header, the five cards in order, and each wait's reason |
+| `AiTokensPage.jsx` | D1277 (#2482): `/account/usage/ai-tokens`, Usage's third page (after Cost). Step 1 (#2482) reads `/ai-budget/me` and `/limit`: Available now, Limits that stop spend, When tokens run out, the stop states and Add tokens to `ADD_TOKENS_PATH`, left out in a support session. Held right now, What things cost and the per-key rows wait for step 2 (#3304, D1278) |
+| `aiTokensModel.js` | D1277: the AI tokens page's model, pure — the words, `availableView` (allowance left plus balance, holds apart), `stopState` (the Worker's order and words), `limitRows` and `canBuy` |
 | `storagePageModel.js` | D1166: the Storage page's words, pure — the header, each wait's reason, "Does not count" and Cost's moved line |
 | `CostPage.jsx` | D789: B2 Cost, range/group/model controls, per-kind totals, shared daily chart, responsive table, existing authenticated CSV and preserved detailed usage |
 | `UsageCharts.jsx` | D789: daily stacked model costs with keyboard/tap/hover details and the recorded input/output token lines |

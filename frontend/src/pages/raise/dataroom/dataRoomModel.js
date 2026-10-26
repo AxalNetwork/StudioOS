@@ -13,21 +13,21 @@
  *   - `GET /api/cycles/raise/modules/data-room` → Home (coverage, opens, the
  *     Files records), as CycleRoute draws it today;
  *   - `GET /api/data-room/:projectUid` → Files (the tree, each file's gate and
- *     who can open it now), Access (every grant with its end, NDA, committed
- *     state and who granted it) and Activity (the last fifty events and the
- *     week's counts), through `dataRoomRead.js`'s one access predicate.
+ *     who can open it now) and Access (every grant with its end, NDA, committed
+ *     state and who granted it), through `dataRoomRead.js`'s one access
+ *     predicate; every tab reads it for the venture's uid and the refusal.
+ *   - D1108 (#2988): Activity, Checklist and Preview read D1105's and D1103's
+ *     routes (`activityModel.js`, `checklistModel.js`, `previewModel.js`).
  *
  * A LINK ISSUED IS NOT A READ. The log holds `open_room`, `download` (a link
  * issued) and `blocked` (a refusal). No tab counts a refusal as an open.
  *
- * WHAT IS NOT DRAWN YET, AND WHO DRAWS IT. Requests (no access-request store),
- * the per-item Checklist read and the investor Preview read have no Worker
- * read yet; each tab says so (D1101 §6). Uploads, gates, sharing and revoking
- * stay in today's files tool (`?mode=workspace`) until part 4 replaces it.
+ * WHAT IS NOT DRAWN YET. Eadwyn's proposals (DR14) wait for AUTOFILL's
+ * provenance (#2431); the Checklist tab says so (D1108).
  */
 
 import { NOT_RECORDED } from '../../../lib/absence.js';
-import { accessNow, auditLine, grantAttribution, grantIsActive, noAccessReason, tierOf } from '../dataRoomRead.js';
+import { accessNow, grantAttribution, grantIsActive, noAccessReason, tierOf } from '../dataRoomRead.js';
 
 export const SLUG = 'data-room';
 export const HOME_PATH = `/raise/${SLUG}`;
@@ -118,30 +118,6 @@ export function grantRows(room, now = Date.now()) {
     by: grantAttribution(g),
   }));
 }
-
-/** Activity's log rows. A refusal is a refusal, never an open. */
-export function activityRows(room) {
-  return (room?.recent_access || []).map((a, i) => {
-    const line = auditLine(a);
-    return { key: `${a.created_at || ''}-${i}`, who: a.user_name || a.user_email || NOT_RECORDED, verb: line.verb, what: line.what, tag: line.tag, when: a.created_at || '' };
-  });
-}
-
-/** The week's three counts, each its own figure. Missing is Not recorded, never zero. */
-export function weekTiles(room) {
-  const w = room?.week || null;
-  const n = (k) => (w && Number.isFinite(Number(w[k])) ? String(Number(w[k])) : NOT_RECORDED);
-  return [
-    { k: 'Room opens', v: n('opened') },
-    { k: 'Links issued', v: n('downloaded'), sub: 'A link issued is not a read.' },
-    { k: 'Refused', v: n('blocked'), sub: 'Never counted as an open.' },
-  ];
-}
-
-export const WAITS = {
-  checklist: 'Not read here yet. Which files answer each diligence item, and whether anyone can open them, needs its own read. Coverage by area is on Home.',
-  preview: 'Not read here yet. Seeing the room exactly as one investor sees it needs a read that runs the investor’s own filter for that grant.',
-};
 
 // D1106: uploads, gates, folders and removing are this tool's; D1107: sharing, revoking, the NDA and requests are Access's and Requests'.
 export const WORKSPACE_LINE = 'Today’s files tool is still open while the old pages are retired.';

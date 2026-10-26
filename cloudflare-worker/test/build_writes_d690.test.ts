@@ -958,6 +958,16 @@ test('test 10: a closing write whose log fails is not written, and an upload lea
   }
 });
 
+// D1130: an employee's recorded identity is not a legacy founder row.
+test('83(b) filings accept venture holders without a legacy founder role and reject foreign holders', async () => {
+  const db = seeded();
+  db.exec(`INSERT INTO cap_table_holders(id,user_id,project_id,name,kind) VALUES (88,10,1,'Synthetic employee','employee'),(89,14,2,'Foreign employee','employee')`);
+  const r = await call(db, 'POST', '/formation-steps', {kind:'83b',for_holder_id:'h-88',state:'upcoming'});
+  assert.equal(r.status,201,JSON.stringify(r.body));
+  assert.equal((db.prepare('SELECT for_holder_id FROM formation_steps WHERE id=?').get(r.body.id) as any).for_holder_id,88);
+  assert.equal((await call(db,'POST','/formation-steps',{kind:'83b',for_holder_id:'h-89'})).status,404);
+  db.close();
+});
 
 test('D1168: editing a proof pointer invalidates its old measurement, while other edits preserve it',async()=>{
  const db=seeded();try{

@@ -8,19 +8,20 @@ import { SignJWT } from 'jose';
 import usage from '../src/routes/usage.ts';
 import { readStorageUsage } from '../src/services/storageUsage.ts';
 import { AUTH_ERROR_STATUSES } from '../src/util/authErrors.ts';
-import { tableFromBaseline } from './_baseline.mjs';
+import { migratedDatabase, removeMigratedDatabases } from './_storage_schema.ts';
 import { d1Over } from './_d1_sqlite.mjs';
 
 const SECRET = 'unit-test-secret-d642-012345678901234567';
-const baseline = readFileSync('cloudflare-worker/sql/schema_baseline.sql', 'utf8');
+test.after(() => removeMigratedDatabases());
 const KEYS = ['data_room','diligence_files','research_library','message_attachments','interview_recordings'];
+// D1169 appends eight areas after D642's five and adds a kind and the measured
+// bytes to each. This file keeps D642's five; usage_storage_d1169 holds the rest.
+const D642 = (body: any) => body.areas.filter((a: any) => KEYS.includes(a.key))
+  .map(({ kind: _kind, measured_bytes: _measured, ...a }: any) => a);
 const TABLES = ['data_room_files','dd_attachments','research_documents','message_attachments','discovery_interviews'];
 function fixture() {
-  const db = new DatabaseSync(':memory:', { enableForeignKeyConstraints: false });
-  for (const name of ['users','super_admins','user_sessions','founders','projects','data_room_files','dd_attachments','research_documents','discovery_interviews']) {
-    db.exec(tableFromBaseline(baseline, name));
-  }
-  db.exec(readFileSync('cloudflare-worker/sql/migrations/323_message_attachments.sql', 'utf8'));
+  // D1169: the read now spans thirteen stores, so the fixture is the migrated schema.
+  const db = migratedDatabase();
   db.exec(`INSERT INTO founders(id,name,email) VALUES(101,'One','one@example.test'),(202,'Two','two@example.test');
     INSERT INTO users(id,role,name,email,founder_id,is_active) VALUES
       (11,'investor','One','one@example.test',101,1),(22,'founder','Two','two@example.test',202,1),
@@ -58,17 +59,20 @@ const area = (body: any, key: string) => body.areas.find((row:any)=>row.key===ke
 test('D642: every area counts only the caller, across companies, and recording ownership uses founder profile IDs', async () => {
   const db=fixture(); const {response,body}=await call(db);
   assert.equal(response.status,200); assert.equal(response.headers.get('cache-control'),'private, no-store');
-  assert.deepEqual(body,{total_bytes:450,files:9,unknown_size_files:0,areas:[
-    {key:'data_room',files:2,bytes:30,unknown_size_files:0,recorded:true},
+  // D1169 (owner question 3, A): data room files count to the venture's owner,
+  // not the uploader. room-b (703) moves to member 22; room-other (701) to 11.
+  assert.deepEqual([body.total_bytes,body.files,body.unknown_size_files],[1430,9,0]);
+  assert.deepEqual(D642(body),[
+    {key:'data_room',files:2,bytes:1010,unknown_size_files:0,recorded:true},
     {key:'diligence_files',files:2,bytes:70,unknown_size_files:0,recorded:true},
     {key:'research_library',files:1,bytes:50,unknown_size_files:0,recorded:true},
     {key:'message_attachments',files:2,bytes:130,unknown_size_files:0,recorded:true},
     {key:'interview_recordings',files:2,bytes:170,unknown_size_files:0,recorded:true},
-  ]});
-  const other=await call(db,22); assert.equal(other.body.total_bytes,5000); assert.equal(other.body.files,5);
-  // No names, keys, IDs, contents, or another member's credentials leave this aggregate.
-  assert.deepEqual(Object.keys(body).sort(),['areas','files','total_bytes','unknown_size_files']);
-  for(const row of body.areas) assert.deepEqual(Object.keys(row).sort(),['bytes','files','key','recorded','unknown_size_files']);
+  ]);
+  const other=await call(db,22); assert.equal(other.body.total_bytes,4020); assert.equal(other.body.files,5);
+  // No keys, contents, or another member's files leave the read.
+  assert.ok(!JSON.stringify(body).includes('private'));
+  for(const row of body.areas) assert.deepEqual(Object.keys(row).sort(),['bytes','files','key','kind','measured_bytes','recorded','unknown_size_files']);
 });
 
 test('D642: changing or forging company, project and user selectors never changes the caller-only usage', async()=>{
@@ -96,9 +100,10 @@ test('D642: NULL sizes in every nullable store are unknown, never zero or an exa
 test('D642: a truly empty area is recorded zero, and an HQ admin still sees only their own files',async()=>{
   const db=fixture(); const body=(await call(db,33)).body;
   assert.equal(body.files,0); assert.equal(body.total_bytes,0); assert.equal(body.unknown_size_files,0);
-  assert.deepEqual(body.areas,KEYS.map(key=>({key,files:0,bytes:0,unknown_size_files:0,recorded:true})));
+  assert.deepEqual(D642(body),KEYS.map(key=>({key,files:0,bytes:0,unknown_size_files:0,recorded:true})));
+  assert.ok(body.areas.every((a:any)=>a.files===0&&a.bytes===0&&a.recorded===true));
   db.prepare("UPDATE data_room_files SET size_bytes=0 WHERE uid='room-a'").run();
-  const changed=(await call(db)).body; assert.equal(changed.total_bytes,440); assert.equal(changed.files,9);
+  const changed=(await call(db)).body; assert.equal(changed.total_bytes,1420); assert.equal(changed.files,9);
 });
 
 test('D642: each failed store marks only its area unreadable and leaves all other results intact',async()=>{
@@ -106,23 +111,30 @@ test('D642: each failed store marks only its area unreadable and leaves all othe
     const db=fixture(); const original=(await call(db)).body;
     db.exec(`DROP TABLE ${TABLES[i]}`); const {response,body}=await call(db);
     assert.equal(response.status,200); assert.equal(body.total_bytes,null); assert.equal(body.files,null); assert.equal(body.unknown_size_files,null);
-    assert.deepEqual(area(body,KEYS[i]),{key:KEYS[i],files:null,bytes:null,unknown_size_files:null,recorded:false});
-    assert.deepEqual(body.areas.filter((r:any)=>r.key!==KEYS[i]),original.areas.filter((r:any)=>r.key!==KEYS[i]));
+    const {kind:_kind,...blank}=area(body,KEYS[i]);
+    assert.deepEqual(blank,{key:KEYS[i],files:null,bytes:null,measured_bytes:null,unknown_size_files:null,recorded:false});
+    // D1169: a data room version is read through its file, so it fails with it.
+    const gone=KEYS[i]==='data_room'?['data_room','data_room_versions']:[KEYS[i]];
+    assert.deepEqual(body.areas.filter((r:any)=>!gone.includes(r.key)),original.areas.filter((r:any)=>!gone.includes(r.key)));
   }
+  // D1169: without projects no venture's owner is known, so every company area
+  // is unknown; personal areas still count.
   const db=fixture(); db.exec('DROP TABLE projects'); const body=(await call(db)).body;
-  assert.equal(area(body,'interview_recordings').recorded,false); assert.equal(area(body,'data_room').recorded,true);
+  assert.equal(area(body,'interview_recordings').recorded,false); assert.equal(area(body,'data_room').recorded,false);
+  assert.equal(area(body,'research_library').recorded,true); assert.equal(area(body,'message_attachments').recorded,true);
 });
 
 test('D642: unsafe byte totals are unknown rather than rounded, and SQLite overflow is an unreadable area',async()=>{
   const db=fixture(); db.prepare("UPDATE research_documents SET size_bytes=? WHERE uid='research-a'").run(Number.MAX_SAFE_INTEGER);
-  let body=await readStorageUsage(d1Over(db) as any,11);
+  const read=()=>readStorageUsage({DB:d1Over(db)} as any,{id:11,role:'investor',email:'one@example.test'} as any);
+  let body=await read();
   assert.equal(body.total_bytes,null); assert.equal(body.files,9); assert.equal(body.unknown_size_files,0);
   assert.equal(area(body,'research_library').bytes,Number.MAX_SAFE_INTEGER); assert.equal(area(body,'research_library').recorded,true);
   db.prepare("UPDATE research_documents SET size_bytes=? WHERE uid='research-a'").run(2n**62n);
   db.prepare("INSERT INTO research_documents(uid,owner_user_id,title,r2_key,size_bytes) VALUES('huge',11,'Huge','research/huge',?)").run(2n**62n);
-  body=await readStorageUsage(d1Over(db) as any,11);
+  body=await read();
   assert.equal(area(body,'research_library').recorded,false); assert.equal(body.total_bytes,null);
-  assert.equal(area(body,'data_room').bytes,30);
+  assert.equal(area(body,'data_room').bytes,1010);
 });
 
 test('D642: no session or an inactive account cannot read usage',async()=>{

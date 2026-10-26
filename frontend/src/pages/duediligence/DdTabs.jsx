@@ -34,11 +34,10 @@ export function DdListTabs({ active }) {
   );
 }
 
-/** My reviews (DDL12) and Templates (DDL13): no read carries either yet. */
+/** My reviews (DDL12) waits for part 8 (#3267). D1250 draws Templates (`DdTemplates.jsx`). */
 export function DdListTabBody({ tab }) {
   return (
     <section className={box} data-testid={`dd-list-${tab}`}>
-      {tab === 'templates' && <p className="m-0 text-sm">HQ edits templates. You choose one when you open a case.</p>}
       <DdWait id={tab} />
     </section>
   );

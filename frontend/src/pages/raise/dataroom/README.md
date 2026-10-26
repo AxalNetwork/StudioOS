@@ -6,14 +6,21 @@ owner's "Data room" canvas: `design/incoming/Raise Data Room Page.dc.html` and
 made Files the working tool: Home's blocks, the bulk bar, the file and folder
 lightboxes, Upload and the dialogs. D1107 (#2987, part 6) made Access and
 Requests the working tool: the matrix, Share, one investor, Revoke, Change,
-the NDA, and the access and diligence requests.
+the NDA, and the access and diligence requests. D1108 (#2988, part 7) drew
+Activity, Checklist and Preview from their own reads (D1105, D1103).
 
 | File | What it is |
 |---|---|
-| `DataRoomTool.jsx` | The tool's tab bar (`DataRoomTabBar`), Home's tab bar and blocks (`DataRoomHomeNav`), and its tab pages (`DataRoomTabPage`): Files, Access, Requests and Activity from the founder's room read; Checklist and Preview say what they wait for; DR18's no-permission board on a refusal. A file's lightbox is drawn over Files. |
-| `dataRoomModel.js` | Pure: the addresses, the seven tabs, the words, and every derivation from the room read that Access and Activity draw. |
+| `DataRoomTool.jsx` | The tool's tab bar (`DataRoomTabBar`), Home's tab bar and blocks (`DataRoomHomeNav`), and its tab pages (`DataRoomTabPage`): every tab reads the founder's room for the venture's uid and DR18's no-permission board on a refusal, then draws its own component. A file's lightbox is drawn over Files. |
+| `dataRoomModel.js` | Pure: the addresses, the seven tabs, the words, and the derivations from the room read that Files and Access draw. |
+| `activityModel.js` | Pure (D1108): Activity's period, the chart and its table, the period before, by investor, the log's words (a link issued is never a read, a refusal never an open), its page count and the phone's seven days. |
+| `DataRoomActivity.jsx` | DR10, DR11 and DR22c: Activity from D1105's read, with the period, investor and event filters, the pages, View as table and Export (CSV). |
+| `checklistModel.js` | Pure (D1108): the twelve items in their areas, each state and the Worker's reason in words, file chips, what to do next; the proposals' and readiness figure's waits. |
+| `DataRoomChecklist.jsx` | DR12 and DR14: the checklist from D1105's read, links to Files and Upload, and Eadwyn's proposals as Not read here yet. |
+| `previewModel.js` | Pure (D1108): the grants to view as, and the room as one grant sees it, naming only what the preview read returns and counting the rest. |
+| `DataRoomPreview.jsx` | DR13 and DR13e: Preview from D1103's read, per grant; an ended grant's one sentence. |
 | `filesModel.js` | Pure (D1106): who can open a file (the investor rule, then each grant's folders), the tree and table, every dialog's words with who gains or loses, the upload queue, storage, and Home's blocks. |
-| `DataRoomHome.jsx` | DR1, Home's blocks: the counts, Needs you, who has access, what was added; access requests and the last ninety days say what they wait for. |
+| `DataRoomHome.jsx` | DR1, Home's blocks: the counts, Needs you (with the open access requests from D1104's queue, D1284), who has access, what was added; the last ninety days say what they wait for. |
 | `DataRoomFiles.jsx` | DR2, Files: the folder tree, search, the table and the bulk bar (Move, Set gate, Set end date, Match to checklist, Remove, Clear). |
 | `DataRoomFile.jsx` | DR3 and DR15, one file's lightbox at `/raise/data-room/file/<id>`: who can open it now and why, its gate, what it answers, its versions with Make current, and the links issued and refusals. |
 | `DataRoomFolders.jsx` | DR5: a folder's lightbox (its NDA switch, Rename, Delete folder) and New folder. |

@@ -5,7 +5,7 @@ import { Lightbox, actionDanger, actionGhost } from '../../../ui';
 import useRecordCrumb from '../useRecordCrumb';
 import {
   AGREEMENT_NOT_READY, ANSWERS_LOGGED, LINK_LAPSED, NOT_OFFERED, READING, agreementLine, agreementReady, answersOf, dayOr,
-  dealTypeWord, envelopeHref, findInvitation, invitationRow, isRecordId, linkLine, signingLink, voidReason,
+  dealTypeWord, envelopeHref, findInvitation, invitationRow, isRecordId, linkLine, signingLink, termsApply, termsLine, voidReason,
 } from './partnersDeskModel';
 import {
   NO_MESSAGE, blockOf, chosenDeal, detailReply, detailState, historyLines, messageOf, offersSeen, refusalLines, sendLine, stepRows,
@@ -159,6 +159,17 @@ export default function InvitationRecord({ id, reads, now, onClose, actions }) {
                   {row.offered.others.length ? <span className={`block ${SUB}`}>{`${row.offered.others.map(dealTypeWord).join(', ')}: ${NOT_OFFERED}`}</span> : null}
                 </p>
               )}
+              {/* D1118: the invitation's own terms, set by the Super Admin, or the standard terms. */}
+              {termsApply(inv.allowed_deal_types) || inv.terms?.state === 'own' ? (() => {
+                const t = termsLine(inv.terms);
+                return (
+                  <div className="flex flex-col gap-0.5" data-testid="partners-invitation-terms" data-state={t.state}>
+                    <span className={`text-[12.5px] font-semibold ${t.state === 'unreadable' ? AMBER : 'text-axal-ink dark:text-gray-100'}`}>{t.text}</span>
+                    {t.by ? <span className={SUB}>{t.by}</span> : null}
+                    {t.note ? <span className={SUB}>{`Terms note: ${t.note}`}</span> : null}
+                  </div>
+                );
+              })() : null}
               {seen.state === 'unreadable' ? <BlockFailed reason={seen.reason} what="The offers the invitee saw" testId="partners-invitation-offers-failed" /> : null}
               {seen.state === 'not_shown' ? <p className={`m-0 ${SUB}`} data-testid="partners-invitation-offers-none">{seen.text}</p> : null}
               {seen.state === 'ready' ? (

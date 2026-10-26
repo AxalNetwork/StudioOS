@@ -294,7 +294,8 @@ const area = (key, files, b, unknown = 0) => ({ key, files, bytes: b, unknown_si
 const STORAGE = {
   total_bytes: 1_288_490_189, files: 148, unknown_size_files: 0,
   areas: [area('data_room', 64, 859_832_320), area('diligence_files', 31, 100), area('research_library', 22, 50_331_648),
-    area('message_attachments', 27, 100_663_296), area('interview_recordings', 4, 32_505_856)],
+    area('message_attachments', 27, 100_663_296), area('interview_recordings', 4, 32_505_856),
+    ...['data_room_versions', 'session_audio', 'deck_reviews', 'validate_evidence', 'build_proofs', 'grow_minutes', 'brand_files', 'csv_imports'].map((k) => area(k, 0, 0)),],
 };
 const NOW = new Date(Date.UTC(2026, 9, 8, 18, 48));
 const usageProps = { budget: ready(BUDGET), product: ready(PRODUCT), spend: ready(SPEND), rates: ready(RATES), storage: ready(STORAGE), now: NOW };
@@ -423,8 +424,8 @@ test('7. a storage read with files and no total reads Not recorded with its reas
   assert.match(all, /title="Some files were stored before sizes were recorded\."[^>]*>Not recorded</);
   assert.doesNotMatch(text(all), /\b0\b|0 B/);
   assert.match(text(markup), /Files with no size recorded 3 files/);
-  assert.match(text(markup), /All your files Data room, Diligence files, Research library, Message attachments, Interview recordings/);
-  assert.match(text(markup), /Other files you keep on StudioOS are not counted yet\. No plan sets a storage limit\./);
+  assert.match(text(markup), /All your files Data room, Diligence files, Research library, Message attachments, Interview recordings, Earlier data room versions, Record a Session audio, Deck reviews, Validate evidence, Build proofs, Grow minutes, Your photo and logos, Imports/);
+  assert.match(text(markup), /Identity documents, signed legal copies and fund documents do not count\. No plan sets a storage limit\./);
   // With a total, the value is the total and the file count; with no unsized files there is no such row.
   const whole = text(html(h(PhoneRows, { groups: [storageGroup({ storage: ready(STORAGE) })] })));
   assert.match(whole, /All your files [^›]*1\.2 GB · 148/);

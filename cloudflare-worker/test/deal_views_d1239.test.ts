@@ -22,6 +22,7 @@ function world() {
   for(const sql of splitStatements(read('../sql/migrations/462_grow_record_stores.sql'))) if (/ALTER TABLE markets/i.test(sql)) db.exec(sql);
   db.exec(read('../sql/migrations/376_research_taxonomy.sql'));
   db.exec(migration); db.exec(migration);
+  db.exec(read('../sql/migrations/597_company_archive_and_events.sql')); // D1137: resolveActiveCompany reads archived_at
   for(const [id,role,tier] of [[1,'investor','institutional'],[2,'investor','institutional'],[3,'investor','institutional'],[4,'admin','institutional'],[5,'investor','professional'],[6,'investor','free'],[7,'founder','institutional'],[8,'investor','institutional']]) {
     db.prepare("INSERT INTO users(id,name,email,role,is_active,investor_tier,investor_subscription_status,kyc_status) VALUES(?,?,?,?,1,?,'active','approved')")
       .run(id,`Synthetic ${id}`,`synthetic${id}@example.invalid`,role,tier);

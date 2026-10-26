@@ -136,7 +136,7 @@ orders.post('/intent', async (c) => {
   let discountCents = 0;
   let resolvedPromoCode: string | null = null;
   if (promoCode) {
-    const pr = await resolveCartPromo(c.env, promoCode, cart);
+    const pr = await resolveCartPromo(c.env, promoCode, cart, user.id);
     if ('error' in pr) return c.json({ error: 'promo_invalid', reason: pr.error }, 400);
     discountCents = pr.discountCents;
     resolvedPromoCode = pr.promo.code;

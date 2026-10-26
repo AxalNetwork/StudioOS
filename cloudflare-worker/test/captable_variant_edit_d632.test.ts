@@ -26,7 +26,7 @@ const DRAFT = {
 function freshDb() {
   const db = new DatabaseSync(':memory:');
   db.exec(`
-    CREATE TABLE users (id INTEGER PRIMARY KEY, email TEXT, name TEXT, role TEXT NOT NULL, is_active INTEGER NOT NULL DEFAULT 1);
+    CREATE TABLE users (id INTEGER PRIMARY KEY, email TEXT, name TEXT, role TEXT NOT NULL, founder_id INTEGER, subscription_tier TEXT DEFAULT 'studio', is_active INTEGER NOT NULL DEFAULT 1);
     CREATE TABLE projects (id INTEGER PRIMARY KEY, founder_id INTEGER, company_id INTEGER);
     CREATE TABLE cap_table_scenarios (
       id INTEGER PRIMARY KEY AUTOINCREMENT, uid TEXT NOT NULL UNIQUE, owner_user_id INTEGER NOT NULL,
@@ -37,13 +37,13 @@ function freshDb() {
     CREATE TABLE activity_logs (id INTEGER PRIMARY KEY AUTOINCREMENT, project_id INTEGER, user_id INTEGER,
       action TEXT NOT NULL, details TEXT, actor TEXT);
   `);
-  db.prepare(`INSERT INTO users (id, email, name, role) VALUES (1, 'admin@x.test', 'Admin', 'admin')`).run();
+  db.prepare(`INSERT INTO users (id, email, name, role, founder_id) VALUES (1, 'owner@example.invalid', 'Owner', 'founder', 7)`).run();
   db.prepare(`INSERT INTO projects (id, founder_id) VALUES (1, 7)`).run();
   return db;
 }
 
 async function call(db: DatabaseSync, method: string, path: string, body?: unknown) {
-  const tok = await new SignJWT({ user_id: 1, role: 'admin' }).setProtectedHeader({ alg: 'HS256' })
+  const tok = await new SignJWT({ user_id: 1, role: 'founder' }).setProtectedHeader({ alg: 'HS256' })
     .setIssuedAt().setExpirationTime('1h').sign(new TextEncoder().encode(JWT_SECRET));
   const res = await captable.request(path, {
     method,

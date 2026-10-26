@@ -5,7 +5,7 @@ import { adminMercuryApi } from '../../../lib/api/adminMercury';
 import { useAuth } from '../../../hooks/useAuthSync';
 import { isSuperAdminUser } from '../../../lib/shellRole';
 import { AXAL_ENTITIES } from '../../../lib/legalDocFormat';
-import { Pill, Unreadable } from '../../../ui';
+import { Pill, Unreadable, usePhoneWidth } from '../../../ui';
 import { entityRows } from '../fundAdmin/mercuryEntityModel';
 import { agoLabel } from '../../account/connectorsModel';
 import { MercuryEntitySheet } from '../fundAdmin/MercuryEntitySheet';
@@ -13,7 +13,7 @@ import { formatCents } from '../../investor/fundCallsModel.js';
 import { FundStructureDoor } from '../contracts/FundStructureSheet';
 import { ConsoleUnreadable } from './shared';
 import {
-  ENTITY_ORDER, NOT_IN_REGISTRY_SUB, PAYMENT_PURPOSE_OPTIONS, RAIL_NOTE, READING, BASE, accountPath, accountUidOf,
+  ENTITY_ORDER, NOT_IN_REGISTRY_SUB, PAYMENT_PURPOSE_OPTIONS, PHONE_BELOW_SM, RAIL_NOTE, READING, BASE, accountPath, accountUidOf,
   balanceCell, cardLine, coverageRow, coverageSummary, dayOf, mercuryOnlyBalance, mercuryPill, notInRegistry,
   purposeLabel, shortName,
 } from './bankAccountsModel';
@@ -154,6 +154,8 @@ function BankAccountsRegistry() {
   const { pathname } = useLocation();
   const navigate = useNavigate();
   const openUid = accountUidOf(pathname);
+  // D1187 (BNK12): below 640px each account is a card, not a table row.
+  const phone = usePhoneWidth(PHONE_BELOW_SM);
   const [data, setData] = useState(null);
   const [failed, setFailed] = useState(false);
   const [notice, setNotice] = useState(null);
@@ -278,9 +280,10 @@ function BankAccountsRegistry() {
   return (
     <div className="mx-auto w-full max-w-[1240px] space-y-4 rounded-xl border border-[#dcd9e3] bg-[#f8f8fa] p-4 text-[#18181b] dark:border-gray-800 dark:bg-[#121018] dark:text-[#f4f3f7] sm:p-[22px]"
       data-testid="bank-accounts-console">
-      <div className="flex flex-wrap items-center justify-end gap-2">
+      {/* D1187 (BNK12a): on a phone, Add an account comes first and runs the full width. */}
+      <div className="flex flex-wrap items-center justify-end gap-2 max-sm:flex-col-reverse max-sm:items-stretch" data-testid="bank-accounts-actions">
         <FundStructureDoor />
-        <button type="button" className={primaryCls} onClick={() => open('add')} data-testid="bank-accounts-add">Add an account</button>
+        <button type="button" className={`${primaryCls} max-sm:w-full`} onClick={() => open('add')} data-testid="bank-accounts-add">Add an account</button>
       </div>
 
       {notice && (
@@ -309,7 +312,7 @@ function BankAccountsRegistry() {
           coverage={coverage.filter((c) => c.payee === key)}
           extras={extras.filter((m) => m.entity_key === key)}
           mercury={mercury} row={rowFor(key)} onConnect={() => setSheetFor(key)}
-          revealed={revealed} act={act}
+          revealed={revealed} act={act} phone={phone}
           onAdd={() => open('add', { entity: key })} onAddFromMercury={(item) => open('mercury', { item })} />
       ))}
 
@@ -409,7 +412,7 @@ function ConnectionPill({ mercury, row, onConnect }) {
   );
 }
 
-function EntityCard({ entity, fundI, fundHasAccount, accounts, coverage, extras, mercury, row, onConnect, revealed, act, onAdd, onAddFromMercury }) {
+function EntityCard({ entity, fundI, fundHasAccount, accounts, coverage, extras, mercury, row, onConnect, revealed, act, onAdd, onAddFromMercury, phone }) {
   const [showRetired, setShowRetired] = useState(false);
   const name = entityName(entity);
   const fund = entity === 'fund';
@@ -424,9 +427,9 @@ function EntityCard({ entity, fundI, fundHasAccount, accounts, coverage, extras,
           <h3 className="text-[14px] font-extrabold text-axal-ink dark:text-gray-100">{shortName(entity)}</h3>
           <span className={`text-[12.5px] ${muted}`}>{name}</span>
         </div>
-        <div className="flex flex-wrap items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2 max-sm:w-full">
           <ConnectionPill mercury={mercury} row={row} onConnect={onConnect} />
-          <button type="button" className={btnCls} onClick={onAdd}>{`Add an account for ${shortName(entity)}`}</button>
+          <button type="button" className={`${btnCls} max-sm:w-full`} onClick={onAdd}>{`Add an account for ${shortName(entity)}`}</button>
         </div>
       </div>
       {line && <p className={`mt-1 text-[12.5px] ${muted}`} data-testid="bank-accounts-card-line">{line}</p>}
@@ -453,7 +456,7 @@ function EntityCard({ entity, fundI, fundHasAccount, accounts, coverage, extras,
             {['Account', 'Ending', 'Payments', 'Balance', 'Mercury', 'State', ''].map((h, i) => <span key={i} role="columnheader">{h}</span>)}
           </div>
           {shown.map((a) => (
-            <AccountRow key={a.uid} account={a} row={row} revealed={revealed?.uid === a.uid ? revealed.number : null} act={act} />
+            <AccountRow key={a.uid} account={a} row={row} revealed={revealed?.uid === a.uid ? revealed.number : null} act={act} phone={phone} />
           ))}
           {retired.length > 0 && (
             <div className="border-b border-[#ecebf0] py-2 dark:border-gray-800" data-testid="bank-accounts-retired-toggle">
@@ -498,11 +501,65 @@ function Cell({ cell, className = '' }) {
   );
 }
 
-function AccountRow({ account: a, row, revealed, act }) {
+/** The row's ⋯ menu: every change on an account, as buttons. */
+function AccountMenu({ account: a, act, onPick }) {
+  const active = a.status === 'active';
+  const pick = (fn) => () => { onPick(); fn(a); };
+  return (
+    <div role="menu" className="mt-2 flex flex-wrap gap-2 max-sm:grid max-sm:grid-cols-2" data-testid="bank-account-manage">
+      <button type="button" role="menuitem" className={btnCls} onClick={pick(act.open)}>Open</button>
+      {active && <button type="button" role="menuitem" className={btnCls} onClick={pick(act.relabel)}>Relabel</button>}
+      {active && a.account_kind === 'checking' && <button type="button" role="menuitem" className={btnCls} onClick={pick(act.payments)}>Change payments</button>}
+      {active && <button type="button" role="menuitem" className={btnCls} onClick={pick(act.reveal)}>Reveal</button>}
+      {active && <button type="button" role="menuitem" className={btnCls} onClick={pick(act.retire)}>Retire</button>}
+    </div>
+  );
+}
+
+/**
+ * D1187 (BNK12a): one account as a card on a phone. Its entity, label and
+ * ending, the ⋯ menu, whether Mercury reads it and its state, the payments
+ * and its Current, in the same words as the row.
+ */
+function AccountCard({ account: a, row, revealed, act }) {
   const active = a.status === 'active';
   const [menu, setMenu] = useState(false);
-  const pick = (fn) => () => { setMenu(false); fn(a); };
   const mer = mercuryPill(a, row);
+  const bal = balanceCell(a);
+  return (
+    <article className="mt-2 rounded-lg border border-[#dcd9e3] bg-white p-3 dark:border-gray-700 dark:bg-gray-900" data-testid="bank-account-card">
+      <div className="flex items-start justify-between gap-2">
+        <div className="min-w-0">
+          <div className={`text-[10.5px] font-bold uppercase tracking-[.07em] ${muted}`}>{shortName(a.entity_key)}</div>
+          <Link className="break-words text-[15px] font-extrabold text-axal-ink hover:underline dark:text-gray-100" to={`/admin/platform/bank-accounts/account/${encodeURIComponent(a.uid)}`} data-testid="bank-account-open">
+            {`${a.label} `}
+            {revealed ? <span className="font-mono" data-testid="bank-account-revealed">{revealed}</span> : <span className="font-mono">{a.account_masked}</span>}
+          </Link>
+        </div>
+        <button type="button" className={btnCls} aria-haspopup="menu" aria-expanded={menu}
+          aria-label={`Manage ${a.label} ${a.account_masked}`} onClick={() => setMenu((m) => !m)} data-testid="bank-account-menu">⋯</button>
+      </div>
+      <div className="mt-2 flex flex-wrap gap-1.5">
+        <Pill tone={mer.tone} className="max-w-full whitespace-normal" data-testid="bank-account-mercury">{mer.text}</Pill>
+        <Pill tone={active ? 'ok' : 'neutral'}>{active ? 'Active' : 'Retired'}</Pill>
+      </div>
+      <p className={`mt-2 text-[12.5px] ${a.account_kind === 'savings' || !a.purposes?.length ? muted : ''}`}>{purposesText(a)}</p>
+      <p className="mt-1 flex items-baseline justify-between gap-3 text-[12.5px]" data-testid="bank-account-card-current">
+        <span className={muted}>Current</span>
+        <Cell cell={bal} className="text-right" />
+      </p>
+      {!active && a.retired_reason && <p className={`mt-1 text-xs ${muted}`}>Retired: {a.retired_reason}</p>}
+      {revealed && <p className={`mt-1 text-xs ${amber}`}>{REVEAL_SHOWN}</p>}
+      {menu && <AccountMenu account={a} act={act} onPick={() => setMenu(false)} />}
+    </article>
+  );
+}
+
+function AccountRow({ account: a, row, revealed, act, phone }) {
+  const active = a.status === 'active';
+  const [menu, setMenu] = useState(false);
+  const mer = mercuryPill(a, row);
+  if (phone) return <AccountCard account={a} row={row} revealed={revealed} act={act} />;
   return (
     <div className="border-b border-[#ecebf0] py-2 last:border-b-0 dark:border-gray-800" data-testid="bank-account-row">
       <div role="row" className={`grid grid-cols-1 gap-1 sm:items-center sm:gap-2 ${ACCOUNT_GRID}`}>
@@ -526,15 +583,7 @@ function AccountRow({ account: a, row, revealed, act }) {
       </div>
       {!active && a.retired_reason && <p className={`mt-1 text-xs ${muted}`}>Retired: {a.retired_reason}</p>}
       {revealed && <p className={`mt-1 text-xs ${amber}`}>{REVEAL_SHOWN}</p>}
-      {menu && (
-        <div role="menu" className="mt-2 flex flex-wrap gap-2" data-testid="bank-account-manage">
-          <button type="button" role="menuitem" className={btnCls} onClick={pick(act.open)}>Open</button>
-          {active && <button type="button" role="menuitem" className={btnCls} onClick={pick(act.relabel)}>Relabel</button>}
-          {active && a.account_kind === 'checking' && <button type="button" role="menuitem" className={btnCls} onClick={pick(act.payments)}>Change payments</button>}
-          {active && <button type="button" role="menuitem" className={btnCls} onClick={pick(act.reveal)}>Reveal</button>}
-          {active && <button type="button" role="menuitem" className={btnCls} onClick={pick(act.retire)}>Retire</button>}
-        </div>
-      )}
+      {menu && <AccountMenu account={a} act={act} onPick={() => setMenu(false)} />}
     </div>
   );
 }

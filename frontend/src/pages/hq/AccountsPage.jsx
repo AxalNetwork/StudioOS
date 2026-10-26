@@ -4,7 +4,8 @@ import UsersConsole from '../admin/consoles/UsersConsole';
 import SuperAdminHolders from './SuperAdminHolders';
 import HqTeamTable from './HqTeamTable';
 import HqTeamActions from './HqTeamActions';
-import { Unrecorded, RailFrame, WorkerRail } from '../../ui';
+import { Unrecorded, RailFrame, WorkerRail, useMovedNotice } from '../../ui';
+import { TEAM_MOVED_NOTICES } from '../admin/accountsAddress';
 import { useViewAsBranch } from '../../contexts/ViewAsBranchContext';
 
 /**
@@ -44,6 +45,8 @@ export default function HqAccountsPage({ onImpersonate }) {
   // table's own three states: undefined loading, null unreadable, an object.
   const [team, setTeam] = useState(undefined);
   const { branch: viewAs } = useViewAsBranch();
+  // D941 (#2746): Team moved from /admin/accounts; an old link forwards here with ?moved=team.
+  const moved = useMovedNotice(TEAM_MOVED_NOTICES);
 
   const scope = team && team.scope ? team.scope : null;
   const coverage = [
@@ -95,6 +98,12 @@ export default function HqAccountsPage({ onImpersonate }) {
             Tenant per ordinary account: <Unrecorded /> — an administrator names the licence they
             hold, but no other account does yet, so the directory has no tenant column to read.
           </p>
+          {moved.text ? (
+            <div role="status" aria-live="polite" className="mt-3 flex items-center gap-2.5 rounded-[10px] border border-axal-lavender-edge bg-axal-lavender px-3 py-1.5 text-[13px] text-axal-ink dark:border-violet-800 dark:bg-violet-950/40 dark:text-gray-100" data-testid="hq-team-moved">
+              <span className="min-w-0 flex-1 leading-[1.45]">{moved.text}</span>
+              <button type="button" onClick={moved.dismiss} className="inline-flex min-h-[40px] shrink-0 items-center rounded-[9px] px-2.5 text-[13px] font-bold text-axal-violet-deep dark:text-violet-300">Dismiss</button>
+            </div>
+          ) : null}
         </header>
 
         {viewAs ? (

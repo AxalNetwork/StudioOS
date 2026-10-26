@@ -22,6 +22,7 @@
  */
 import type { Env } from '../types';
 import { ALL_PARTNER_DEAL_TYPES, buildProposals, type PartnerDealType } from './partnerDeals';
+import { readStoredTerms, revsharePct } from './partnerInvitationTerms';
 import { isAutoMergeKey, templateBodyFor } from '../routes/esign';
 import { mergeTokensIn } from './mergeFields';
 
@@ -352,11 +353,20 @@ export async function readInvitation(env: Env, id: number, now = Date.now()) {
     `SELECT pi.id, pi.recipient_email, pi.recipient_name, pi.allowed_deal_types, pi.personal_message, pi.status,
             pi.expires_at, pi.created_at, pi.viewed_at, pi.signed_at, pi.resulting_user_id, pi.resulting_deal_id,
             pi.envelope_id, pi.revoked_at, pi.last_sent_at, pi.send_count, pi.last_send_ok, pi.last_send_reason,
-            u.name AS invited_by_name
+            u.name AS invited_by_name, pi.terms_json, pi.terms_set_at, ts.name AS terms_set_by_name
        FROM partner_invitations pi LEFT JOIN users u ON u.id = pi.invited_by_user_id
+       LEFT JOIN users ts ON ts.id = pi.terms_set_by
       WHERE pi.id = ?`,
   ).bind(id).first();
   if (!inv) return null;
+
+  // D1118 (#2998): the invitation's own terms, set by the Super Admin, or the
+  // standard terms. Unreadable terms are said, and stop the offers below.
+  const stored = readStoredTerms(inv.terms_json);
+  const terms = stored.state === 'set'
+    ? { state: 'own', revshare_pct: revsharePct(stored.terms.revshare_bps), attribution_window_days: stored.terms.attribution_window_days,
+      term_months: stored.terms.term_months, note: stored.terms.note, set_by_name: inv.terms_set_by_name ?? null, set_at: inv.terms_set_at ?? null }
+    : { state: stored.state };
 
   const steps = await block('The step dates', async () => {
     const s = (await readStepRows(env, id)).get(id) ?? {};
@@ -378,7 +388,8 @@ export async function readInvitation(env: Env, id: number, now = Date.now()) {
     const profile: any = await env.DB.prepare(`SELECT * FROM partner_profiles WHERE invitation_id = ?`).bind(id).first();
     // Offers are computed, never stored: shown only once the invitee asked for them.
     if (!shown || !profile) return { shown: false, offers: null };
-    return { shown: true, offers: buildProposals(allowedTypes(inv.allowed_deal_types), profile) };
+    if (stored.state === 'unreadable') throw new Error('Invitation terms unreadable');
+    return { shown: true, offers: buildProposals(allowedTypes(inv.allowed_deal_types), profile, stored.state === 'set' ? stored.terms : null) };
   });
 
   const chosen_deal = await block('The chosen deal', async () => {
@@ -448,12 +459,13 @@ export async function readInvitation(env: Env, id: number, now = Date.now()) {
     return { items, signing_link_renewals: renewals };
   });
 
-  const { allowed_deal_types, ...row } = inv;
+  const { allowed_deal_types, terms_json: _json, terms_set_at: _at, terms_set_by_name: _by, ...row } = inv;
   return {
     invitation: {
       ...row,
       allowed_deal_types: allowedTypes(allowed_deal_types),
       is_lapsed: isLapsed(inv, now),
+      terms,
     },
     steps, offers_seen, chosen_deal, agreement_refusals, history,
   };

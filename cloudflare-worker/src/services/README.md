@@ -133,6 +133,7 @@ no new schema, runtime or billing path is introduced.
 | `interviewSuggestions.ts` | D757 §2.6–§2.7 (#1925): what a Validate module reads from interviews, reads only. `moduleSuggestions` is a module's pending engine suggestions (`parts.suggestions`, writers only), each with its interviewee, session, first transcript segment, speaker and link to the line, the quote withheld without consent; `findingsFor` is the accepted findings the ICP, Market and Demand records list, behind the Quotes rule; `acceptedPerModule` is Customer research's "What it fed". Accept, one at a time or all at once, stays in `../routes/founder_validate_structure.ts`. |
 | `eadwynConnectors.ts` | D652's three rules for connectors in an Eadwyn conversation: the read gate (`readableConnectors`: switched on AND active), the sends a run may only propose (`validateSend`, `SEND_TARGETS`), and the one serialisation and SHA-256 of a payload, so confirm sends what was shown. |
 | `tenancyScope.ts` | **The one place row-level scoping is decided.** Returns composable SQL clauses (`esignEnvelopeScope`, `fundGpScope`, `lpMembershipScope`) and fails closed — an actor it cannot identify gets `NO_ROWS`, not everything. |
+| `stagedSigning.ts` | D1216 (#3213): a closing line's paper signed in order — company, investor, then Axal's countersign — on migration 633's `esign_staged_envelopes` and `esign_staged_signers`. Each stage is a single-recipient envelope sent with `createAndSendEnvelope({ renderedBody })` and checked against the recorded digest; the sign route's completion hook sends the next stage, except Axal's, which a Super Admin releases with step-up. The order is also held by the migration's triggers. A counsel draft previews, never sends. The booklet's `bookletSigning.ts` is unchanged. |
 | `signedDownload.ts` | One-time, short-TTL, HMAC-signed R2 download tokens. Every private file download goes through it. |
 | `dealPassTaxonomy.ts` | The five pass reasons and the stage-event recorder. |
 | `backup.ts` | The nightly D1 export to R2. |
@@ -187,6 +188,7 @@ no new schema, runtime or billing path is introduced.
 | `market_intel/` | Sourcing, extraction and scoring for market intelligence. |
 | `fundAdminAccess.ts` / `fundAdminOverview.ts` | D1159 (#3066): Admin-tier fund creation and valuation acts, with existing institutional GP scope preserved; independent submitted/applicant-signed/not-yet-sent booklet counts per administered fund. Distribution preview LP names come from the shared LP selection in `fundDistributionSplit.ts`, without changing its arithmetic. |
 | `closings.ts` | D1215 (#3212): a closing as a record over migration 612 — `closings`, `closing_lines`, `closing_evidence` and the append-only `closing_events`. An admin or the venture's founder reads every line; anyone else only through a line of their own, and then their own lines and the round's total. A line is `received` only on receiving-side evidence; every write appends one event in its own batch, with no amount, name or account number. |
+| `reportingDuties.ts` | D1058 (#2928): reporting duties over migration 579 — `INFORMATION_RIGHTS` (the templates' information-rights clauses), `createReportingDuties(closingId)` called by `completeClosing`, the period arithmetic, `periodState` (late and missing worked out on read, never stored), reminder settings, and `runReportingDaily` (duties a closing missed, periods as they end, the team's reminders, each claimed once). No event holds a figure. |
 | `fundAdminLps.ts` | D1158 (#3065): `GET /api/fund-admin/lps`, every LP of every administered fund in one table. Money from the call ledger (`readFundCalls`), paid distributions, the last D716 notice and the booklet through the LP's application. Writes the fail-closed `fund_lps_read` audit row first. A figure no store holds is null with its reason in the row's `unavailable`; a store that cannot be read makes only its own figures Unreadable. Filters, search, sort, pages and totals run here, after the bound read. |
 | `fundPositionsHistory.ts` | D1158 (#3065): `readFundPositions`, each position with its latest dated mark or `marked: false` and a reason; `readFundHistory`, `readFundPerformance` point in time at each quarter end since the first call. Computed on every read, never stored. |
 | `mercury/` | D710: Mercury for fund administration, read-only. A GET-only client, the boundary parser that drops account numbers, the gates and read audit, the entity connections' store, the hourly sync and the reconciliation matches. Its README has the rules. |
@@ -195,6 +197,7 @@ no new schema, runtime or billing path is introduced.
 | `records/` | D690's scoped cycle record contract, registry and ownership checks. |
 | `testingOverview.ts` | D1196 (#3146): Product testing's overview read behind `GET /api/admin/testing/overview` (Super Admin): applications and picks per Monday week from `testing_events` (not recorded before the first programme opened), the tester pool and open programmes' applicants by profile, withdrawn counts, and Mail reach per open programme on `testerRecipients`' rule. Each block answers alone; counts only, never an address. |
 | `scoring/` | D1143 (#3029): the Product-market fit score, defined once (#2433). `pmf.ts` is model v1 as data and the pure `scorePmf` (value, band, confidence, coverage and the next steps ranked by gain); `pmfCollector.ts` reads Validate's stores for it with bound SQL, after the latest Pivot, and reads no interviewee name or quote. D1144 adds `pmfStore.ts`: signed, change-only snapshots, history and the atomic PMF checklist/audit update in shared migration 598. See `scoring/README.md`. |
+| `companyMembershipEvents.ts` | D1137 (#3017): the membership audit, `company_membership_events` (migration 597). `membershipEvent` returns the bound INSERT for a join, role change, removal, leave, primary-admin transfer, archive, restore, rename, venture move, owner transfer or seat change, so the route batches it with the change; before and after hold the fields the change touched, never a token or an email. |
 | `signals/` | Signal ingestion and evidence. |
 | `vercel/` | D1096: `api.ts`, the only caller of `api.vercel.com`: a read-only client for the planned reads, uninstall and the OAuth code exchange. Its README has the rules. |
 | `wellbeing/` | Wellbeing check-ins. |
@@ -211,6 +214,9 @@ no new schema, runtime or billing path is introduced.
 | `kycCase.ts` | D1229 (#3237): one person's KYC case beyond its status (migration 614): the people queue (`readQueue`, its filters, sort, paging and counts per status, every statement static), the case's history (`recordEvent`), the member's notices (`noticeMember`), the figures (`readFigures`) and the hand-off from an expired `kyc_v1` (`expireKycFromObligations`, called by `trust.ts`). |
 | `licenceTerms.ts` | D797: a licence's terms schedule, the one list of its 31 fields (`LICENCE_TERM_FIELDS`: key, group, label, type and range) and the canvas's section numbers (`DEFAULT_TERM_SECTIONS`), `validateTermsBody` (an unknown key or a bad value is refused, naming the field; `null` clears), `termsFromRow`, `readLicenceTerms`, `termsDiff` and the `TERMS_REASON` sentences. Migration 512's CHECKs hold the same ranges; HQ's write, `/licence/mine`, the branch copy and D800/D801 import it. |
 | `eadwynTools.ts` | D854: Eadwyn uses the MCP registry's tools inside the member's own access. `eadwynToolInfo` lists them (scope and the page's company; D846's filter replaces `eadwynToolAvailable`), `runEadwynToolCalls` re-checks each call the model proposed, runs a read through `callTool` (metered by D844) and turns a write into an `ai_rail_proposals` row, and `toolResultsForModel` hands results back as escaped data. |
+| `raiseEvidenceSources.ts` | D1263: local Raise evidence source registry, safe projections, source dates and snapshot hashes; founder decisions remain in raiseEvidence.ts. |
+| `capRelAccess.ts` | D1191 (#3125): capital editor access, local staff counts and mandatory founder-visible support audits; contract in the decision file. |
+| `raiseProspectWriters.ts` | D1191: narrow canonical legacy prospect create/edit/promotion writers, re-exported by the Raise writer and safe for Contacts imports. |
 
 ## Rules
 
@@ -272,6 +278,13 @@ model). Since D691 (#1699) each list carries the canvas's title, columns,
 filters and default sort (the first in `sorts`), and its row ids are addresses
 that never hold a name: an item key, a version, a link, file or prospect id, a
 cap-table `h-<n>`, `e-<n>` or `pool`, and a use-of-funds section key.
+D1262 (#3285) names the last complete month's revenue sources and each source's
+metric snapshot; typed traction stays stated. Team backing reads founder/vesting
+and scoped GitHub counts beside the manual assessment. Room opens count only
+open_room/download. Capital exposes separate received/wired/signed/soft totals,
+using confirmed receipts for received; runway prefers a Connector record and
+keeps its source and date. The later Evidence pack and investor projection are
+separate tasks.
 `capRelReads.ts` (D1190, #3124) is Capital relationships' Commitments
 and Match reads: one commitments read across typed prospects, round-call
 answers, deal-room commitments and the founder's Mercury matches, each investor
@@ -553,6 +566,12 @@ catalogue contains headings only. The existing Super Admin edit route creates a
 missing allowed draft section after validation, in the same batch as its edit;
 reads do not seed content. Published versions and audit behavior stay in D954's
 store; no migration or canvas sample text is introduced.
+
+`capTableAccessRecord.ts` (D1130) copy-builds venture level views from the
+issuance record, with stable holder references and fail-closed ambiguous names.
+`capTableRegister.ts` now projects that record for venture exports and `/live`;
+its account view still reads unassigned connector imports. The venture equity
+plan also carries holder-linked filing states without exposing proof keys.
 
 D1129 searches decoded audit detail values, never JSON keys, and includes demoted/deleted payment actors in Who alongside current admins.
 
