@@ -32,7 +32,26 @@ const parseTs = (s: unknown) => Date.parse(String(s || '').replace(' ', 'T') + (
 /** The checks the Renewals tab lists, as the read's IN list names them. Accreditation stays off this page (#2384 owner question 5). */
 const KIND_OF: Record<string, 'person' | 'business'> = { kyc_v1: 'person', kyb_v1: 'business' };
 
-export const RECHECKS_REASON = 'Re-checks are asked from a case once part 1 (D1229) adds them; nothing records one yet.';
+export const RECHECKS_UNREADABLE = 'The re-checks could not be read. This is not a claim that none is waiting.';
+
+/**
+ * Re-checks asked and not yet answered (D1229's `kyc_case_events`): for each
+ * person, the latest `recheck`, open while no submission came after it.
+ * Returns each open ask by person, or null when the events cannot be read.
+ */
+async function openRechecks(env: Env): Promise<Map<number, string> | null> {
+  try {
+    const res = await env.DB.prepare(
+      `SELECT r.user_id, r.asked FROM (
+         SELECT user_id, MAX(datetime(created_at)) AS asked FROM kyc_case_events WHERE kind = 'recheck' GROUP BY user_id
+       ) r
+       WHERE NOT EXISTS (SELECT 1 FROM kyc_case_events s WHERE s.user_id = r.user_id AND s.kind = 'submitted' AND datetime(s.created_at) >= r.asked)`,
+    ).all<{ user_id: number; asked: string }>();
+    return new Map((res.results || []).map((x) => [Number(x.user_id), String(x.asked)]));
+  } catch {
+    return null;
+  }
+}
 export const SCREENING_UNREADABLE = 'The screening record could not be read. This is not a claim that everyone was screened.';
 
 /**
@@ -94,6 +113,7 @@ export async function kycRenewals(env: Env, opts: { filter?: RenewalFilter; q?: 
     for (const n of notices.results || []) warned.set(`${n.subject_id}|${n.expires_at}|${n.threshold_days}`, String(n.notified_at));
   }
 
+  const rechecks = await openRechecks(env);
   const items = rows.map((r) => {
     const t = parseTs(r.expires_at);
     const daysLeft = Number.isFinite(t) ? Math.floor((t - now.getTime()) / DAY_MS) : null;
@@ -111,6 +131,8 @@ export async function kycRenewals(env: Env, opts: { filter?: RenewalFilter; q?: 
       obligation_status: r.status,
       // The person's KYC state, for a KYC row. A KYB row's case state is part 3's.
       kyc_status: r.obligation_key === 'kyc_v1' ? (r.kyc_status ?? null) : null,
+      // A re-check asked of this person and not answered yet; null when none is open or the events are unreadable.
+      recheck_asked_at: r.obligation_key === 'kyc_v1' ? (rechecks?.get(Number(r.user_id)) ?? null) : null,
     };
   });
 
@@ -141,7 +163,9 @@ export async function kycRenewals(env: Env, opts: { filter?: RenewalFilter; q?: 
       expire_30: { count: soon.length, next: soon[0]?.expires_at ?? null },
       expired: expired.length,
       all: items.length,
-      rechecks: { recorded: false, reason: RECHECKS_REASON },
+      rechecks: rechecks === null
+        ? { recorded: false, unreadable: true, reason: RECHECKS_UNREADABLE }
+        : { recorded: true, count: rechecks.size, oldest: [...rechecks.values()].sort()[0] ?? null },
       screened_over_12: await screeningAge(env, now),
     },
     months,
@@ -234,14 +258,17 @@ export async function kycPeriodsWrite(env: Env, adminId: number, actor: string, 
 
 /**
  * The KYC actions the audit lists, each as the canvas words it, and whether it
- * is a look or a decision. ONLY THE ADMIN-SIDE ROWS: `kyc_approved`,
- * `kyc_rejected` and `kyc_submitted` are the member's own rows (their
- * `user_id` is the member), so reading them would name a member as the admin.
- * Parts 1–3 add their actions here as they write them.
+ * is a look, a decision or a change to the case (assignment, a note). ONLY THE
+ * ADMIN-SIDE ROWS: `kyc_approved`, `kyc_rejected` and `kyc_submitted` are the
+ * member's own rows, and `kyc_expired` is the system's with the member in
+ * `user_id`, so reading them would name a member as the admin. Part 3 adds its
+ * actions here as it writes them.
  */
-export const KYC_AUDIT_ACTIONS: Record<string, { word: string; kind: 'look' | 'decision' }> = {
+export const KYC_AUDIT_ACTIONS: Record<string, { word: string; kind: 'look' | 'decision' | 'change' }> = {
   kyc_queue_access: { word: 'Opened the list', kind: 'look' },
   kyc_record_access: { word: 'Opened a case', kind: 'look' },
+  kyc_case_access: { word: 'Opened a case', kind: 'look' },
+  kyc_figures_access: { word: 'Opened the figures', kind: 'look' },
   kyc_field_shown: { word: 'Showed a value', kind: 'look' },
   kyc_document_access: { word: 'Viewed a document', kind: 'look' },
   kyc_renewals_access: { word: 'Opened the renewals', kind: 'look' },
@@ -252,7 +279,22 @@ export const KYC_AUDIT_ACTIONS: Record<string, { word: string; kind: 'look' | 'd
   kyc_periods_changed: { word: 'Changed how long checks last', kind: 'decision' },
   kyc_sent_to_hq: { word: 'Sent to HQ', kind: 'decision' },
   kyc_hq_decided: { word: 'HQ decided', kind: 'decision' },
+  kyc_needs_info_by_admin: { word: 'Asked for information', kind: 'decision' },
+  kyc_recheck_by_admin: { word: 'Asked to verify again', kind: 'decision' },
+  kyc_case_assigned: { word: 'Assigned', kind: 'change' },
+  kyc_note_added: { word: 'Added a note', kind: 'change' },
 };
+
+/**
+ * The case a row is about: the LAST `user_id=<n>` in its sentence, because an
+ * assignment names the assignee first ("assigned user_id=A to the KYC case
+ * for user_id=B").
+ */
+export function caseIdOf(details: unknown): number | null {
+  const all = [...String(details || '').matchAll(/user_id=(\d+)/g)];
+  const n = Number(all.at(-1)?.[1]);
+  return Number.isInteger(n) && n > 0 ? n : null;
+}
 
 const FIELD_LABELS: Record<string, string> = { date_of_birth: 'Date of birth', id_number: 'ID number', address: 'Address', phone: 'Phone' };
 
@@ -275,6 +317,8 @@ export function auditDetail(action: string, details: unknown): string | null {
     }
     case 'kyc_bypass_granted':
       return 'No submission on file';
+    case 'kyc_case_assigned':
+      return /Admin unassigned the/.test(d) ? 'Unassigned' : null;
     case 'kyc_hq_decided': {
       const v = /^HQ (approved|rejected) the/.exec(d)?.[1];
       return v === 'approved' ? 'Approved' : v === 'rejected' ? 'Rejected' : null;
@@ -322,7 +366,9 @@ export async function kycAuditRows(env: Env, win: { from: Date; to: Date }) {
   ).bind(JSON.stringify(Object.keys(KYC_AUDIT_ACTIONS)), sqlTs(win.from), sqlTs(win.to), AUDIT_ROW_CAP + 1).all<any>();
   const raw = res.results || [];
   if (raw.length > AUDIT_ROW_CAP) throw new AuditQueryError(`More than ${AUDIT_ROW_CAP.toLocaleString('en-US')} rows: ask for a shorter window.`);
-  const caseIds = [...new Set(raw.map((r) => Number(/user_id=(\d+)/.exec(String(r.details || ''))?.[1])).filter((n) => Number.isInteger(n) && n > 0))];
+  // The assignee of an assignment is named too ("Assigned to …"), as the first of its two ids.
+  const assigneeOf = (r: any) => (r.action === 'kyc_case_assigned' ? Number(/assigned user_id=(\d+) to/.exec(String(r.details || ''))?.[1]) || null : null);
+  const caseIds = [...new Set(raw.flatMap((r) => [caseIdOf(r.details), assigneeOf(r)]).filter((n): n is number => n != null))];
   const names = new Map<number, string | null>();
   if (caseIds.length) {
     const u = await env.DB.prepare('SELECT id, name FROM users WHERE id IN (SELECT value FROM json_each(?))').bind(JSON.stringify(caseIds)).all<any>();
@@ -330,8 +376,8 @@ export async function kycAuditRows(env: Env, win: { from: Date; to: Date }) {
   }
   return raw.map((r) => {
     const a = KYC_AUDIT_ACTIONS[r.action];
-    const caseId = Number(/user_id=(\d+)/.exec(String(r.details || ''))?.[1]);
-    const hasCase = Number.isInteger(caseId) && caseId > 0;
+    const caseId = caseIdOf(r.details);
+    const assignee = assigneeOf(r);
     return {
       id: Number(r.id),
       at: r.created_at,
@@ -339,8 +385,8 @@ export async function kycAuditRows(env: Env, win: { from: Date; to: Date }) {
       action: r.action,
       word: a.word,
       kind: a.kind,
-      case: hasCase ? { id: caseId, name: names.get(caseId) ?? null } : null,
-      detail: auditDetail(r.action, r.details),
+      case: caseId ? { id: caseId, name: names.get(caseId) ?? null } : null,
+      detail: assignee ? `Assigned to ${names.get(assignee) ?? `account ${assignee}`}` : auditDetail(r.action, r.details),
     };
   });
 }
@@ -357,7 +403,7 @@ export async function kycAudit(env: Env, opts: { from?: string; to?: string; act
   }
   for (const r of all) {
     const d = days.get(String(r.at).slice(0, 10));
-    if (d) { if (r.kind === 'decision') d.decisions += 1; else d.looks += 1; }
+    if (d) { if (r.kind === 'decision') d.decisions += 1; else if (r.kind === 'look') d.looks += 1; }
   }
   const admins = [...new Map(all.filter((r) => r.admin.id != null).map((r) => [r.admin.id, r.admin])).values()];
   const q = String(opts.q || '').trim().toLowerCase();

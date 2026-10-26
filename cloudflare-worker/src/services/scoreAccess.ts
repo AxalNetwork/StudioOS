@@ -27,6 +27,8 @@ export async function mayReadProjectDeal(env: Env, user: User, projectId: number
  *    a commitment that is not withdrawn, or its lead partner. Both directions
  *    count: the founder reads their investor's, and the investor the founder's.
  *
+ * D1254: an investor's counterpart must be on a shared open deal; an intro
+ * alone does not authorize that investor. Self and admin access stay as above.
  * All or nothing: a batch with one id the caller may not read is refused whole.
  */
 export async function mayReadTrustScores(env: Env, user: User, ids: number[]): Promise<boolean> {
@@ -38,12 +40,13 @@ export async function mayReadTrustScores(env: Env, user: User, ids: number[]): P
     ).bind(JSON.stringify(others)).first<{ n: number }>();
     return Number(row?.n ?? 0) === others.length;
   }
-  const allowed = await counterpartiesOf(env, user.id, others);
+  // D1254: investors need a shared open deal; an intro alone grants no score read.
+  const allowed = await counterpartiesOf(env, user.id, others, user.role !== 'investor');
   return others.every(id => allowed.has(id));
 }
 
 /** The ids in `others` that are `userId`'s counterparty in an open intro or an open deal. */
-export async function counterpartiesOf(env: Env, userId: number, others: number[]): Promise<Set<number>> {
+export async function counterpartiesOf(env: Env, userId: number, others: number[], includeIntros = true): Promise<Set<number>> {
   const list = JSON.stringify(others);
   const rows = await env.DB.prepare(`
     WITH want(id) AS (SELECT CAST(value AS INTEGER) FROM json_each(?)),
@@ -71,13 +74,13 @@ export async function counterpartiesOf(env: Env, userId: number, others: number[
         JOIN deal_sides s ON s.deal_id = od.deal_id
       UNION
       SELECT n.party_a_user_id, n.party_b_user_id FROM pairwise_ndas n
-       WHERE n.status IN ('pending','active')
+       WHERE ? = 1 AND n.status IN ('pending','active')
          AND (n.valid_until IS NULL OR julianday(n.valid_until) > julianday('now'))
     )
     SELECT DISTINCT CASE WHEN pairs.a = ? THEN pairs.b ELSE pairs.a END AS id
       FROM pairs
      WHERE (pairs.a = ? AND pairs.b IN (SELECT id FROM want))
         OR (pairs.b = ? AND pairs.a IN (SELECT id FROM want))
-  `).bind(list, userId, userId, userId).all<{ id: number }>();
+  `).bind(list, includeIntros ? 1 : 0, userId, userId, userId).all<{ id: number }>();
   return new Set((rows.results || []).map(row => Number(row.id)));
 }

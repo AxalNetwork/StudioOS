@@ -34,6 +34,7 @@
  */
 
 import { NOT_RECORDED } from '../../../lib/absence.js';
+import { SECTIONS } from './storyModel.js';
 
 export const SLUG = 'investor-narrative';
 export const HOME_PATH = `/raise/${SLUG}`;
@@ -178,16 +179,16 @@ export const homePart = (data) => (data?.parts?.narrative?.state === 'ok' ? data
 export const homeUnreadable = (data) => data?.parts?.narrative?.state === 'unreadable';
 
 export const CLAIMS_WAIT = 'Claims are counted once StudioOS checks each claim against its record.';
-export const OBJECTIONS_WAIT = 'Which section answers each one is not recorded yet.';
+export const ANSWERS_UNREADABLE = 'Which section answers each one could not be read.';
 const DASH = '—';
 
 const versionName = (v) => `v${v.version} · ${v.audience || NOT_RECORDED}`;
 
 /**
  * NAR1's four tiles: Versions and Open mismatches from the part; Claims backed
- * (#2430) a dash with the reason, never 0. Objections answered is a dash too
- * (D913): the part counts the objections heard, and its sub says how many,
- * but which section answers each one is not recorded yet.
+ * (#2430) a dash with the reason, never 0. Objections answered (D913 option
+ * A) is "n of m": how many of the objections heard a saved section answers; a
+ * dash with the reason when either read failed or none was heard.
  */
 export function homeTiles(part) {
   const versions = Array.isArray(part?.versions) ? part.versions : [];
@@ -204,7 +205,7 @@ export function homeTiles(part) {
           : mismatches.length ? `${[...new Set(mismatches.map((m) => m.figure))].join(', ')}, in v${newest.version}` : `None in v${newest.version}`,
       waits: !newest || !newest.compared,
     },
-    { key: 'objections', label: 'Objections answered', value: DASH, sub: objectionsTileSub(objectionsOf(part?.objections)), waits: true },
+    objectionsTile(objectionsOf(part?.objections)),
   ];
 }
 
@@ -530,20 +531,51 @@ export const OBJECTIONS_CAPPED = 'Only the newest feedback is counted here.';
 export const ANSWER_FOOT = 'Answer it opens Ask Eadwyn on this section. Eadwyn writes no numbers.';
 
 /**
- * The objections from either read: `{ status: 'ok', items, capped }`, or
- * `{ status: 'unreadable' }` for a failed or missing read, never an empty list.
+ * The objections from either read: `{ status: 'ok', items, capped, answers }`,
+ * or `{ status: 'unreadable' }` for a failed or missing read, never an empty
+ * list. `answers` is 'ok' only when the Worker read which section answers
+ * each one; otherwise no objection reads as answered or as not answered.
  */
 export function objectionsOf(read) {
   if (!read || read.state === 'unreadable') return { status: 'unreadable' };
   const items = Array.isArray(read.items) ? read.items : Array.isArray(read.objections) ? read.objections : null;
   if (!items) return { status: 'unreadable' };
-  return { status: 'ok', items, capped: Boolean(read.capped) };
+  return { status: 'ok', items, capped: Boolean(read.capped), answers: read.answers === 'ok' ? 'ok' : 'unreadable' };
+}
+
+const SECTION_LABEL = new Map(SECTIONS.map((x) => [x.key, x.label]));
+export const sectionLabel = (key) => SECTION_LABEL.get(key) || String(key ?? '');
+const HOW = { eadwyn: 'Eadwyn’s draft, saved', picked: 'Picked by hand' };
+
+/** Story, opened on a version and a section; the venture is kept. */
+export function sectionHref(version, section, search = '') {
+  const keep = tabSearch(search, version);
+  return `${HOME_PATH}/story${keep ? `${keep}&` : '?'}section=${encodeURIComponent(String(section))}`;
+}
+
+/**
+ * Which saved section answers an objection (option A, migration 624):
+ * `{ label: 'Answered in Market', sub, href }`, or null when none is recorded.
+ */
+export function answeredOf(answered, search = '') {
+  if (!answered || !answered.section || answered.version == null) return null;
+  const by = answered.by?.name ? ` · ${answered.by.name}` : '';
+  return {
+    section: answered.section,
+    version: Number(answered.version),
+    label: `Answered in ${sectionLabel(answered.section)}`,
+    sub: `v${answered.version} · ${HOW[answered.how] || HOW.picked}${by}${answered.at ? ` · ${answered.at}` : ''}`,
+    href: sectionHref(answered.version, answered.section, search),
+  };
 }
 
 const times = (n) => `${n} ${n === 1 ? 'time' : 'times'}`;
 
-/** One objection's row: its words, how often it was raised and by how many investors. */
-export function objectionRow(o) {
+/**
+ * One objection's row: its words, how often it was raised and by how many
+ * investors, and which saved section answers it (`answered`, or null).
+ */
+export function objectionRow(o, search = '') {
   const count = Number(o?.count);
   const prospects = Number(o?.prospects);
   return {
@@ -551,14 +583,51 @@ export function objectionRow(o) {
     text: String(o?.text ?? ''),
     times: Number.isFinite(count) && count > 0 ? times(count) : NOT_RECORDED,
     sub: `Raised ${Number.isFinite(count) && count > 0 ? times(count) : NOT_RECORDED.toLowerCase()}${prospects > 1 ? ` by ${prospects} investors` : ''}`,
+    answered: answeredOf(o?.answered, search),
   };
 }
 
-/** The Objections answered tile's sub: how many were heard, and why the answered count waits. */
-export function objectionsTileSub(view) {
-  if (view.status !== 'ok') return 'The objections could not be read.';
-  if (!view.items.length) return OBJECTIONS_NONE;
-  return `${view.items.length} heard. ${OBJECTIONS_WAIT}`;
+/** The Objections answered tile: "n of m" when both reads came back, else a dash with the reason. */
+export function objectionsTile(view) {
+  const tile = { key: 'objections', label: 'Objections answered' };
+  if (view.status !== 'ok') return { ...tile, value: DASH, sub: 'The objections could not be read.', waits: true };
+  const heard = view.items.length;
+  if (!heard) return { ...tile, value: DASH, sub: OBJECTIONS_NONE, waits: true };
+  if (view.answers !== 'ok') return { ...tile, value: DASH, sub: `${heard} heard. ${ANSWERS_UNREADABLE}`, waits: true };
+  const answered = view.items.filter((o) => answeredOf(o.answered)).length;
+  return { ...tile, value: `${answered} of ${heard}`, sub: answered === heard ? 'Each one is answered in a saved section.' : `${heard - answered} not answered in a saved section yet.`, waits: false };
+}
+
+/** The tile's sub alone. */
+export const objectionsTileSub = (view) => objectionsTile(view).sub;
+
+/** The dialog for marking an objection answered by hand in the open section of a saved version. */
+export function markDialog(row, section, version, unsaved = false) {
+  const label = sectionLabel(section);
+  const lines = [`Records that ${label} in v${version} answers “${row.text}”.`];
+  if (row.answered) lines.push(`It replaces the earlier record: answered in ${sectionLabel(row.answered.section)}, v${row.answered.version}.`);
+  if (unsaved) lines.push(`${label} has changes not saved yet. The record points to v${version} as saved; Save version keeps your changes.`);
+  lines.push('Your words and Capital relationships do not change.');
+  return { title: `Mark answered in ${label}?`, lines, confirm: 'Mark answered' };
+}
+
+/** The dialog for clearing an objection's recorded answer. */
+export function clearDialog(row) {
+  return {
+    title: 'Clear this answer?',
+    lines: [
+      `“${row.text}” will no longer read as ${row.answered ? `answered in ${sectionLabel(row.answered.section)}, v${row.answered.version}` : 'answered'}.`,
+      'The section keeps its words. Capital relationships does not change.',
+    ],
+    confirm: 'Clear answer',
+  };
+}
+
+/** Save version's lines for the objections an accepted "Answer it" draft answers in the sections being saved. */
+export function answerSaveLines(pending, writes) {
+  const written = new Set((writes || []).map((w) => w.section));
+  return Object.entries(pending || {}).filter(([, p]) => written.has(p.section))
+    .map(([, p]) => `Records that ${sectionLabel(p.section)} answers “${p.text}”.`);
 }
 
 /** Home's "Answer it": Story, with the panel on that objection; the venture and the version are kept. */

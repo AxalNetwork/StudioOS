@@ -80,6 +80,7 @@ import partnernet from './routes/partnernet';
 import capital from './routes/capital';
 import tickets from './routes/tickets';
 import deals from './routes/deals';
+import dealFlow from './routes/deal_flow';
 import dealContext from './routes/deal_context';
 import users from './routes/users';
 import marketIntel from './routes/market_intel';
@@ -123,6 +124,7 @@ import funds from './routes/funds';
 import fundLedger from './routes/fund_ledger';
 import fundFees from './routes/fund_fees';
 import fundAdmin from './routes/fund_admin';
+import closings, { adminClosings } from './routes/closings';
 import fundReporting from './routes/fund_reporting';
 import fundBooklets from './routes/fund_booklets';
 import fundNotices from './routes/fund_notices';
@@ -871,8 +873,9 @@ const INVESTOR_PRO_PREFIXES = [
   '/api/deals',
   '/api/ic',
 ];
-// D614/D1149: precise exemptions allow leaving a room and an authorized
-// deal header/key strip. Child deal reads and diligence stay Professional.
+// D614/D1149/D1237: precise exemptions allow Free room quota, join/leave,
+// and an authorized header/key strip. The deal list, child reads and diligence
+// stay Professional; join enforces its one-room allowance in the INSERT.
 const investorPro = requireInvestorTierExcept('professional');
 for (const p of INVESTOR_PRO_PREFIXES) {
   app.use(p, investorPro);
@@ -911,6 +914,8 @@ app.route('/api/advisor', advisorRoutes);
 app.route('/api/partnernet', partnernet);
 app.route('/api/capital', capital);
 app.route('/api/tickets', tickets);
+// D1238 (#3251): an investor firm's own deal flow. Before dealContext and deals, so `flow` is never a deal id.
+app.route('/api/deals/flow', dealFlow);
 app.route('/api/deals', dealContext);
 app.route('/api/deals', deals);
 app.route('/api/users', users);
@@ -966,6 +971,8 @@ app.route('/api/admin/contracts/registry', adminContractDocRegistry);
 // Mount the more-specific /admin/contracts prefix FIRST so it takes
 // precedence over the generic /admin router (which has no contract routes).
 app.route('/api/admin/contracts', adminContracts);
+// D1215 (#3212): the closings desk, before the /api/admin catch-all.
+app.route('/api/admin/closings', adminClosings);
 // Task #9 — IRS-style forms catalog + PDF preview/download (admin-only).
 app.route('/api/admin/forms', adminForms);
 app.route('/api/admin/integration-keys', adminIntegrationKeys);
@@ -1215,6 +1222,8 @@ app.route('/api/fund-ledger', fundLedger);
 app.route('/api/fund-fees', fundFees); // D709 (#1774): the management fee; records amounts, moves no money
 // D714 — the fund administration console: which fund acts this admin may take.
 app.route('/api/fund-admin', fundAdmin);
+// D1215 (#3212): closings as a record; the admin desk is mounted before the /api/admin catch-all.
+app.route('/api/closings', closings);
 app.route('/api/fund-reporting', fundReporting);
 // D716 — the Subscription Booklet: the applicant's ticks and submit, and HQ's read and withdraw.
 app.route('/api/fund-booklets', fundBooklets);

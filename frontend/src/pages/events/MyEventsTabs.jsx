@@ -329,7 +329,7 @@ export function MonthView({ month, setMonth, items, now, zone, api, onSubscribe,
         {CALENDAR_KINDS.map((k) => <span key={k.key} className={`rounded-[5px] border border-l-[3px] px-1.5 py-0.5 text-[11px] font-semibold ${KIND_CHIP[k.key]}`}>{k.label}</span>)}
       </div>
       {day ? (
-        <Lightbox label={`Events on ${day.day} ${monthTitle(month)}`} title={`${day.day} ${monthTitle(month)}`} onClose={() => setDay(null)} width={420} testId="my-events-month-day">
+        <Lightbox label={`Events on ${day.day} ${monthTitle(month)}`} title={`${day.day} ${monthTitle(month)}`} onClose={() => setDay(null)} width={420} phone="sheet" testId="my-events-month-day">
           <div className="flex flex-col gap-1.5 px-5 py-4">
             {dayChips(day, zone).all.map((ch) => (
               <button key={ch.key} type="button" onClick={() => { setDay(null); openChip(ch); }} className={`truncate rounded-[5px] border border-l-[3px] px-2 py-1 text-left text-[12px] font-semibold ${KIND_CHIP[ch.kind]}`} data-testid="my-events-month-day-chip">{ch.text}</button>
@@ -338,7 +338,7 @@ export function MonthView({ month, setMonth, items, now, zone, api, onSubscribe,
         </Lightbox>
       ) : null}
       {adding ? (
-        <Lightbox label={adding.event.title || 'Event'} title={adding.event.title || 'Not recorded'} sub={timeLine(adding.event, viewerZone())} onClose={() => setAdding(null)} width={420} testId="my-events-month-chip-panel">
+        <Lightbox label={adding.event.title || 'Event'} title={adding.event.title || 'Not recorded'} sub={timeLine(adding.event, viewerZone())} onClose={() => setAdding(null)} width={420} phone="sheet" testId="my-events-month-chip-panel">
           <div className="flex flex-col gap-3 px-5 py-4">
             <span className="flex flex-wrap gap-3 text-[12.5px]">
               {adding.kind === 'hosting' ? <Link className={LINK} to={hostedPath(adding.id)}>Open the event</Link>
@@ -387,7 +387,7 @@ export function SubscribeDialog({ read, api, onClose, onChanged }) {
   const make = () => run(async () => { const r = await api.makeFeed(); setMade(r); onChanged(); });
   const remove = () => run(async () => { await api.removeFeed(); setRemoving(false); onChanged(); onClose(); });
   return (
-    <Lightbox label="Subscribe to my events" title="Subscribe to my events" sub={SUBSCRIBE.note} onClose={() => { if (!busy) onClose(); }} width={520} testId="my-events-subscribe-dialog"
+    <Lightbox label="Subscribe to my events" title="Subscribe to my events" sub={SUBSCRIBE.note} onClose={() => { if (!busy) onClose(); }} width={520} phone="sheet" testId="my-events-subscribe-dialog"
       footer={(
         <div className="flex flex-col gap-2">
           {refusal ? <p role="alert" className="m-0 text-[12.5px] text-red-700 dark:text-red-300" data-testid="my-events-subscribe-refusal">{refusal}</p> : null}
@@ -458,8 +458,11 @@ export function HostingFilters({ f, setF }) {
   );
 }
 
-/** One hosted row: the event, its status, visibility and counts, its one action, and the ⋯ menu. */
-export function HostedRow({ event: e, now, onPublish, onCopy, onCancel }) {
+/**
+ * One hosted row: the event, its status, visibility and counts, its one action, and the ⋯ menu.
+ * D1037 (MEV18c): with `onCheckIn` (a phone), the event's-day "Check in" opens the camera sheet in place.
+ */
+export function HostedRow({ event: e, now, onPublish, onCopy, onCancel, onCheckIn = null }) {
   const st = statusOf(e);
   const act = hostAction(e, now);
   return (
@@ -470,6 +473,7 @@ export function HostedRow({ event: e, now, onPublish, onCopy, onCancel }) {
       </EventLine>
       <span className="flex flex-wrap items-center gap-3 text-[12px]">
         {act.dialog ? <button type="button" className={LINK} onClick={() => onPublish(e)} data-testid="my-events-host-action">{act.label}</button>
+          : onCheckIn && act.label === 'Check in' ? <button type="button" className={LINK} onClick={() => onCheckIn(e)} data-testid="my-events-host-checkin">Check in</button>
           : act.label ? <Link className={LINK} to={act.to} data-testid="my-events-host-action">{act.label}</Link> : act.note ? <span className={MUTED}>{act.note}</span> : null}
         <RowMenu label={`Actions for ${e.title || 'this event'}`} items={hostMenu(e, now)} testId="my-events-host-menu"
           onPick={(it) => (it.key === 'copy' ? onCopy(it.copy) : it.key === 'cancel' ? onCancel(e) : null)} />
@@ -478,7 +482,7 @@ export function HostedRow({ event: e, now, onPublish, onCopy, onCancel }) {
   );
 }
 
-export function HostingList({ hosting, now, f, setF, onPublish, onCopy, onCancel }) {
+export function HostingList({ hosting, now, f, setF, onPublish, onCopy, onCancel, onCheckIn = null }) {
   const view = hostingView(hosting, f, now);
   return (
     <>
@@ -488,7 +492,7 @@ export function HostingList({ hosting, now, f, setF, onPublish, onCopy, onCancel
       ) : view.groups.map((g) => (
         <section key={g.key} className={CARD} data-testid={`my-events-group-${g.key}`}>
           <h2 className={`m-0 border-b border-axal-hairline px-4 py-3 text-[14px] font-extrabold dark:border-gray-800 ${INK}`}>{g.label} <span className={`font-mono text-[12px] ${MUTED}`}>{g.rows.length}</span></h2>
-          {g.rows.map((e) => <HostedRow key={e.id} event={e} now={now} onPublish={onPublish} onCopy={onCopy} onCancel={onCancel} />)}
+          {g.rows.map((e) => <HostedRow key={e.id} event={e} now={now} onPublish={onPublish} onCopy={onCopy} onCancel={onCancel} onCheckIn={onCheckIn} />)}
         </section>
       ))}
       <Pager page={view.page} onPage={(p) => setF({ ...f, page: p })} testId="my-events-host-pages" />

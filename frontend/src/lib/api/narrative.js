@@ -44,12 +44,19 @@ export const narrativeApi = {
     method: 'POST', body: JSON.stringify(body), headers,
   }),
   // D913 (#2697, NAR10): the objections investors raised, project-wide, and "Answer it".
-  //   GET  /cycles/raise/narrative/objections → { objections: [{ key, text, count, prospects, last_heard, answer }], capped }
+  //   GET  /cycles/raise/narrative/objections → { objections: [{ key, text, count, prospects, last_heard, answer, answered }], capped, answers }
   //   POST /cycles/raise/narrative/objections/:objection/draft { version, section, words? } → { text, removed }; writes nothing
   objections: (projectId) => request(`/cycles/raise/narrative/objections?${q(projectId)}`),
   draftObjection: (projectId, key, body, headers) => request(`/cycles/raise/narrative/objections/${enc(key)}/draft?${q(projectId)}`, {
     method: 'POST', body: JSON.stringify(body), headers,
   }),
+  // D913 option A (migration 624): which saved version and section answers an objection.
+  //   PUT    /cycles/raise/narrative/objections/:objection/answer { version, section, how: eadwyn | picked } → { objection, answered }
+  //   DELETE /cycles/raise/narrative/objections/:objection/answer → { objection, answered: null }
+  recordAnswer: (projectId, key, body) => request(`/cycles/raise/narrative/objections/${enc(key)}/answer?${q(projectId)}`, {
+    method: 'PUT', body: JSON.stringify(body),
+  }),
+  clearAnswer: (projectId, key) => request(`/cycles/raise/narrative/objections/${enc(key)}/answer?${q(projectId)}`, { method: 'DELETE' }),
   narrativeReads: (projectId) => request(`/cycles/raise/narrative/reads?${q(projectId)}`),
   narrativeGiveReason: (projectId, reason) => request(`/cycles/raise/narrative/reads?${q(projectId)}`, { method: 'POST', body: JSON.stringify({ reason }) }),
   narrativeNotes: (projectId) => request(`/cycles/raise/narrative/notes?${q(projectId)}`),
