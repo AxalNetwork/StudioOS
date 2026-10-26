@@ -89,8 +89,9 @@ test('the address names the tab; a word the role does not draw, or no word, is O
 });
 
 test('every tab with no read says why, and none says zero or none', () => {
-  for (const t of ['scorecard', 'evidence', 'team', 'market', 'traction', 'terms', 'diligence']) assert.ok(WAITS[t], t);
+  for (const t of ['scorecard', 'evidence', 'team', 'market', 'traction']) assert.ok(WAITS[t], t);
   assert.equal(WAITS.notes, undefined, 'D1152: Notes reads its store and no longer waits');
+  for (const t of ['terms', 'diligence']) assert.equal(WAITS[t], undefined, `D1153: ${t} is a working tab and no longer waits`);
   for (const w of Object.values(WAITS)) assert.ok(!/\b0\b|\$0|\bnone\b/i.test(w.replace('not a score of zero', '')), w);
 });
 

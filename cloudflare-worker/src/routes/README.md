@@ -35,6 +35,11 @@ D1150: `deal_context.ts`, mounted before the deal router at `/api/deals`,
 provides investor-owned stage/visit metadata and author/firm-private notes.
 No admin bypass; migration 600; writes and audit rows share a batch.
 
+D1153: `deal_workroom.ts`, mounted before `deals.ts` at `/api/deals`, serves
+the investor's working tabs: the data room's door and a request to the founder,
+the round as a count and a total, and a withdrawal with a required reason kept
+in the same batch as the withdrawal. Investors on the deal only; no migration.
+
 D973 reads live in `admin_network_reads.ts`, mounted before D976’s
 `admin_network.ts` at `/api/admin/network`. Opaque person refs use the
 read-only drawer; numeric account IDs continue to the standing router.
@@ -133,7 +138,7 @@ widened guard on this very sentence, which is the rule working.)
 /api/email         → email.ts
 /api/pipeline      → pipeline.ts
 /api/search        → search.ts
-/api/kyc           → kyc.ts
+/api/kyc           → kyc_governance.ts, kyc.ts  (D1232: renewals, renewal periods, the audit read and its export, mounted first so `/admin/:userId` does not read them as ids)
 /api/legal/esign   → esign.ts            (frontend calls /api/legal/esign/*)
 /api/network       → network.ts
 /api/networkfx     → networkfx.ts

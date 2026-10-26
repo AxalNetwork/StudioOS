@@ -17,7 +17,7 @@ import { DatabaseSync } from 'node:sqlite';
 import { Hono } from 'hono';
 import { SignJWT } from 'jose';
 import raise from '../src/routes/cycle_raise.ts';
-import { dollarsToCents, COUNTED } from '../src/services/capRelReads.ts';
+import { commitmentsRead, dollarsToCents, COUNTED } from '../src/services/capRelReads.ts';
 import { logProspectEvent, WriterError } from '../src/services/raiseWriters.ts';
 import * as calendar from '../src/services/calendar.ts';
 import { tableFromBaseline } from './_baseline.mjs';
@@ -262,16 +262,18 @@ test('commitments: every store read, each investor counted once by their stronge
   assert.equal(b.sources.mercury.state, 'ok');
 });
 
-test('commitments: Mercury is the founder’s alone; an admin reads the same total from the typed Wired line', async () => {
+test('commitments: D1191 refuses unaudited staff detail; the non-founder projection still withholds Mercury', async () => {
   const { db, env } = fixture();
   seedCommitments(db);
   const r = await commitments(env, ADMIN);
-  assert.equal(r.status, 200, r.text);
-  assert.equal(r.body.sources.mercury.state, 'founder_only');
-  const m = byKey(r.body).get('prospect:5');
+  assert.equal(r.status, 403, r.text);
+  assert.equal(r.body.error, 'support_read_required');
+  const projected = await commitmentsRead(env, P, null);
+  assert.equal(projected.sources.mercury.state, 'founder_only');
+  const m = byKey(projected).get('prospect:5');
   assert.deepEqual(m.lines.map((l: any) => l.status), ['wired']);
   assert.ok(!r.text.includes('tx-fixture-1') && !r.text.includes('m-1'), 'no Mercury line reaches an admin');
-  assert.equal(r.body.totals.counted_cents, 65000000, 'the same money, counted once');
+  assert.equal(projected.totals.counted_cents, 65000000, 'the same money, counted once');
 });
 
 test('commitments: who may read it, and a failed block degrades the read instead of blanking it', async () => {

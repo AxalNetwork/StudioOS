@@ -8,6 +8,7 @@ import { resolveReferralCode } from '../services/referrals/resolveCode';
 import { bindingKey } from '../util/schemaBootstrap';
 import { refuse } from '../util/refusal';
 import { logAdminAction } from '../services/adminAudit';
+import { FIRING_RULES, termsPayment } from '../services/referralPartnerTerms';
 
 const network = new Hono<{ Bindings: Env }>();
 
@@ -92,6 +93,12 @@ async function ensureSchema(env: Env) {
     `ALTER TABLE payouts ADD COLUMN failed_at TEXT`,
     `ALTER TABLE commission_rules ADD COLUMN updated_at TEXT`,
     `ALTER TABLE commission_rules ADD COLUMN updated_by INTEGER REFERENCES users(id)`,
+    // D958 (migration 563): which terms paid a commission, and the refund
+    // reversal's columns. Mirrored here so a dev database that has not run 563
+    // still serves the engine.
+    `ALTER TABLE commissions ADD COLUMN terms_id INTEGER REFERENCES referral_partner_terms(id)`,
+    `ALTER TABLE commissions ADD COLUMN reversed_amount_cents INTEGER NOT NULL DEFAULT 0`,
+    `ALTER TABLE commissions ADD COLUMN reversed_at TIMESTAMP`,
   ];
   for (const s of stmts) { try { await db.prepare(s).run(); } catch {} }
 
@@ -160,9 +167,26 @@ export async function fireCommissionEvent(
     if (!refRows.length) return;
     const referral = refRows[0];
 
-    const ruleRows = await sql`SELECT * FROM commission_rules WHERE rule_key = ${ruleKey} AND active = 1`;
+    const ruleRows = await sql`SELECT * FROM commission_rules WHERE rule_key = ${ruleKey}`;
     if (!ruleRows.length) return;
     const rule: any = ruleRows[0];
+
+    // D958 (O-TERMS A): a referral partner's active signed terms pay first,
+    // within their caps, and pay no L2 or L3 bonus. A spent cap pays nothing;
+    // the standard rule does not step in for it. Terms are a signed contract,
+    // so they pay even when HQ has switched the standard rule off.
+    const terms = await termsPayment(env, referral.referrer_id, ruleKey, amountForBps);
+    if (terms) {
+      if (terms.amount_cents <= 0) return;
+      const paid = await env.DB.prepare(
+        `INSERT OR IGNORE INTO commissions (user_id, referral_id, amount_cents, currency, source_type, source_id, status, description, terms_id) VALUES (?, ?, ?, ?, ?, ?, 'accrued', ?, ?)`
+      ).bind(referral.referrer_id, referral.id, terms.amount_cents, terms.currency, rule.source_type, sourceId,
+        `Under signed terms: ${rule.description || ruleKey}${terms.capped === 'none' ? '' : ' (capped)'}`, terms.terms_id).run();
+      if (!paid.meta?.changes) return;
+      await sql`UPDATE referrals SET status = 'converted', converted_at = CURRENT_TIMESTAMP WHERE id = ${referral.id} AND status != 'converted'`;
+      return;
+    }
+    if (Number(rule.active) !== 1) return;
 
     const amountCents = rule.amount_cents
       ? rule.amount_cents
@@ -588,7 +612,8 @@ network.get('/admin/commission-rules', async (c) => {
     FROM commission_rules r LEFT JOIN users u ON u.id = r.updated_by
     ORDER BY r.rule_key`;
   await sql.end();
-  return c.json(rows);
+  // D958: `fires` is true only where an event pays the rule today (OD4 is open).
+  return c.json((rows as any[]).map((r) => ({ ...r, fires: FIRING_RULES.has(r.rule_key) })));
 });
 
 /** The bounds a rule edit is held to. A rule pays a flat amount or a share, never both. */

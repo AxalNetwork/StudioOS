@@ -49,7 +49,7 @@ export const SUPER_ADMIN_BOARDS = [
   { id: 'H7', section: 'Contracts', module: 'Templates', route: '/admin/contracts?tab=templates', files: ['pages/admin/AdminTemplates.jsx', 'pages/admin/contracts/TemplateEditor.jsx', 'pages/admin/contracts/TemplateCatalog.jsx'], rail: 'pages/admin/contracts/ContractsDesk.jsx' },
   { id: 'H8', section: 'Contracts', module: 'Forms', route: '/admin/contracts?tab=forms', files: ['pages/admin/AdminForms.jsx'], rail: 'pages/admin/contracts/ContractsDesk.jsx' },
   { id: 'H9', section: 'Contracts', module: 'Document types', route: '/admin/contracts?tab=document-types', files: ['pages/hq/ContractRegistry.jsx'], rail: 'pages/admin/contracts/ContractsDesk.jsx' },
-  { id: 'H10', section: 'Team', module: null, route: '/admin/accounts', files: ['pages/hq/AccountsPage.jsx'], rail: 'pages/hq/AccountsPage.jsx' },
+  { id: 'H10', section: 'Team', module: null, route: '/admin/hq-team', files: ['pages/hq/AccountsPage.jsx'], rail: 'pages/hq/AccountsPage.jsx' },
   { id: 'H11', section: 'Team', module: 'Users', route: '/admin/accounts/all', files: ['pages/admin/consoles/UsersConsole.jsx'], rail: FRAME, host: CONSOLE_PAGES },
   { id: 'H12', section: 'Revenue', module: null, route: '/admin/revenue', files: ['pages/hq/RevenuePage.jsx'], rail: 'pages/hq/RevenuePage.jsx' },
   { id: 'H13', section: 'Revenue', module: 'Overview', route: '/admin/revenue', files: ['pages/hq/RevenuePage.jsx'], rail: 'pages/hq/RevenuePage.jsx' },

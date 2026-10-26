@@ -95,22 +95,22 @@ test('readiness and coverage require a downloadable file: tier, expiry, active g
  db.exec("UPDATE pairwise_ndas SET valid_until='2000-01-01T12:00:00Z'"); assert.deepEqual((await readableRoomFiles(env,1)).map(f=>f.id),[1,3]);
  db.exec('UPDATE users SET is_active=0 WHERE id=2'); assert.equal((await readableRoomFiles(env,1)).length,0); assert.equal((await dataRoomCard(ctx)).state,'empty');
 });
-test('data-room activity counts downloads only, excluding blocked requests and room opens', async () => {
+test('data-room activity counts downloads and room opens, excluding blocked requests', async () => {
  const {db,ctx}=fixture(); file(db,1); grant(db);
  db.exec("INSERT INTO data_room_access_log(project_id,user_id,file_id,action) VALUES(1,2,1,'blocked'),(1,3,1,'open_room')");
  const before=JSON.stringify((await dataRoomCard(ctx)).series); db.exec("INSERT INTO data_room_access_log(project_id,user_id,file_id,action) VALUES(1,2,1,'download')");
  const after=JSON.stringify((await dataRoomCard(ctx)).series); assert.notEqual(after,before); assert.match(after,/1/);
  db.exec("INSERT INTO data_room_access_log(project_id,user_id,file_id,action) VALUES(1,3,1,'blocked')"); assert.equal(JSON.stringify((await dataRoomCard(ctx)).series),after);
 });
-test('soft, signed and received amounts are disjoint, with unknown amounts kept missing', async () => {
+test('soft, signed and wired amounts are disjoint, with unknown amounts kept missing', async () => {
  const {db,ctx}=fixture(); db.exec("INSERT INTO raise_rounds(uid,project_id,name,status,target_amount) VALUES('synthetic-round',1,'Seed','active',1000000)");
  const insert=db.prepare("INSERT INTO raise_prospects(uid,project_id,name,stage,commit_status,amount) VALUES(?,1,'Investor','committed',?,?)");
  insert.run('soft','soft',100000); insert.run('signed','signed',200000); insert.run('received','wired',300000); insert.run('missing',null,null);
- let f=await figure(ctx,'committed'); assert.deepEqual(f.value,[500000,1000000]); assert.equal(f.label,'Signed or received against target'); assert.match(f.reason!,/Soft: \$100,000.*Signed: \$200,000.*Received: \$300,000.*Incomplete commitments: 1/);
+ let f=await figure(ctx,'committed'); assert.deepEqual(f.value,[500000,1000000]); assert.equal(f.label,'Received, wired and signed against target'); assert.match(f.reason!,/Received: \$0.*Wired: \$300,000.*Signed: \$200,000.*Soft: \$100,000.*Incomplete commitments: 1/);
  db.exec("DELETE FROM raise_prospects WHERE commit_status='signed'"); f=await figure(ctx,'committed'); assert.deepEqual(f.value,[300000,1000000]);
  db.exec("DELETE FROM raise_prospects WHERE commit_status='wired'");
  f=await figure(ctx,'committed'); assert.equal(f.value,null); assert.equal(f.state,'not_recorded');
- insert.run('legacy',null,400000); assert.match((await figure(ctx,'committed')).reason!,/Status not recorded: \$400,000/);
+ insert.run('legacy',null,400000); assert.match((await figure(ctx,'committed')).reason!,/Status not recorded: Not recorded/,'a known amount does not complete a subtotal that also contains a missing amount');
  insert.run('zero','signed',0); assert.deepEqual((await figure(ctx,'committed')).value,[0,1000000]);
  db.exec('DELETE FROM raise_prospects'); assert.deepEqual((await figure(ctx,'committed')).value,[0,1000000],'no commitments is a recorded zero against an existing target');
  insert.run('soft-only','soft',1000); assert.deepEqual((await figure(ctx,'committed')).value,[0,1000000]);

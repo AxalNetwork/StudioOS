@@ -17,8 +17,8 @@ import {
  * Admin · Commissions and payouts — `/admin/commissions` (canvas
  * `pea-commissions`, D569).
  *
- * FOUR READS, EACH WITH ITS OWN STATES, and every one `requireAdmin` but the
- * last:
+ * FOUR READS, EACH WITH ITS OWN STATES, and every one `requireSuperAdmin`
+ * (D958, N15: the comment here once said `requireAdmin`; the route is `hqOnly`):
  *   `GET /network/admin/commission-rules`  the rules, with who last edited each
  *   `GET /network/admin/commissions`       every commission, newest 500
  *   `GET /network/admin/payouts`           the queue, newest 200

@@ -69,6 +69,10 @@ arithmetic changes, both new Admin acts and their audit, frozen/support/member
 refusals, preserved institutional GP scope, and independent booklet queue reads.
 Every external fetch is forbidden; no Mercury call reaches a provider.
 
+| File | Guarantee |
+| --- | --- |
+| `capital_access_d1191.test.ts` | D1191: real-route access, staff summaries, support audit ordering, scoped prospect writes and failure/race outcomes against the canonical schema. |
+
 ## Conventions
 
 - Build the database from the migration the feature actually ships with, so the
@@ -130,6 +134,11 @@ D1144: `pmf_store_d1144.test.ts` exercises migration 598, signed change-only sna
 derived stages, per-user/firm visit markers and private notes, including audit
 rollback, no admin bypass, NDA exclusion and anonymous change metadata.
 
+`deal_workroom_d1153.test.ts` mounts D1153's routes over canonical SQLite DDL and
+migration 595: investor-only access, the room's door and one open request, the
+round as a count and a total with no other investor named, and a withdrawal that
+needs a reason and records it only when it withdrew.
+
 D1123 extends admin_lab_operations_d971.test.ts with real SQLite capacity-result tests: cohort scoping, last event, absent vs unreadable, and admin-only reads.
 
 D1176: `use_of_funds_routes_d1176.test.ts` mounts the real Use of funds and financial routers over canonical SQLite DDL. It covers roles/company scope, read-only support, audited initialization, cross-venture ids, Base projection, partial legacy splits and financial reconciliation, legacy-only metadata and concurrent edit conflicts, stale-copy repair errors, orphan milestone deletion, copies, racing deletion and hire audits, zero/missing values, precedence, bounded runway history, founder-only Mercury, partial reads and audit rollback. Providers are stubbed.
@@ -156,3 +165,5 @@ scenarios before and after restoration. All external fetches are refused.
 D1231 follow-up: company member reads reflect expiry and legal edits; company submitter/membership self-review and unsubmitted corporate profiles are covered. Twenty-seven injected faults cover routes, the member status projection and submission-state derivation, each checked before and after restoration.
 
 D1231 concurrency tests cover displayed If-Match tokens, source edits during a request, staff-created cases without false submitters, dismissed imports and collision-safe migration of legacy reviewer assignments/history.
+
+D1169: `usage_storage_d1169.test.ts` holds the grown storage read: thirteen member stores, company files counted to the company owner, kinds, companies, the ten largest files, the allowance and its state, and that fund, legal, identity, 83(b) and HQ stores are never read. It and `usage_storage_d642.test.ts` run on `_storage_schema.ts`, which replays the baseline and every later migration once into a template database and copies it for each case. Rows are synthetic.

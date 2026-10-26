@@ -82,8 +82,10 @@ test('/admin mounts nothing, and each new address is registered behind its guard
     assert.match(line, /guard\(\['admin'\], /, `${path} is not behind the admin guard`);
     assert.equal(/hqOnly\(/.test(line), HQ_ONLY.includes(tab), `${path}: hqOnly is ${!HQ_ONLY.includes(tab)}`);
   }
-  // /admin/accounts itself stays HQ › Team until #2375's question 1 is answered.
-  assert.match(routeLine('/admin/accounts'), /hqOnly\(<HqAccountsPage/);
+  // D941 (#2746): #2375's question 1 took A — /admin/accounts is Accounts, and
+  // HQ › Team is /admin/hq-team.
+  assert.match(routeLine('/admin/hq-team'), /hqOnly\(<HqAccountsPage/);
+  assert.match(routeLine('/admin/accounts'), /<AccountsAddress superAdmin=\{isSuperAdminUser\(user\)\} \/>/);
 });
 
 test('no page draws the old shell: no Admin Console title, dropdown or ?tab= door', () => {
