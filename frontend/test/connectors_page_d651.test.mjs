@@ -473,7 +473,7 @@ test('the doors: the user menu under Usage, the Account section after Usage, and
 
 test('IntegrationsPage.jsx is retired, and nothing in the app links to the old addresses', () => {
   assert.equal(existsSync(resolve(process.cwd(), 'frontend/src/pages/IntegrationsPage.jsx')), false);
-  for (const f of ['frontend/src/pages/SettingsPage.jsx', 'frontend/src/pages/ProjectDetail.jsx', 'frontend/src/pages/CapTablePage.jsx', 'frontend/src/pages/admin/profiles/ProfileRecord.jsx']) {
+  for (const f of ['frontend/src/pages/SettingsPage.jsx', 'frontend/src/pages/ProjectDetail.jsx', 'frontend/src/pages/raise/captable/ImportExportTab.jsx', 'frontend/src/pages/admin/profiles/ProfileRecord.jsx']) {
     const src = read(f);
     assert.doesNotMatch(src, /(?:href|to)="\/(?:account\/)?integrations"/, `${f} links to the old address`);
     assert.doesNotMatch(src, /import\('\.\/IntegrationsPage'\)/);

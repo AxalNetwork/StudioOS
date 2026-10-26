@@ -115,7 +115,10 @@ export const REDIRECT_ROUTES: readonly RedirectRoute[] = Object.freeze([
   { path: '/build/discovery' }, // #2335: → Validate · Customer research
   { path: '/build/metrics' }, // #2336: → /build/kpi
   { path: '/build/financials' }, // #2339: → /raise/capital/model
-  { path: '/build/captable' }, // #2340: → /raise/capital/cap-table
+  { path: '/build/captable' }, // #2340, D1029: → /raise/cap-table
+  { path: '/raise/capital/cap-table' }, // D1029: → /raise/cap-table?moved=cap-table
+  { path: '/raise/cap-table/variants' }, // D1029: → /raise/cap-table/scenarios?moved=variants
+  { path: '/raise/cap-table/variants/:variant' }, // D1029: → /raise/cap-table/scenarios/:variant
   { path: '/build/command-center' },
   { path: '/mentors' },
   { path: '/office-hours' },

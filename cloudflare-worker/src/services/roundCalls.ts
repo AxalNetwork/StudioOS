@@ -1,5 +1,5 @@
 import type { Env, User } from '../types';
-import { positiveCents, validClose, counselApproved, termsHash, deckContentHash, readiness, matchReasons, founderRecipient, writableCall, roundCallsEnabled, verifiedInvestor } from './roundCallPolicy';
+import { positiveCents, validClose, counselApproved, termsHash, deckContentHash, readiness, ventureReadiness, matchReasons, founderRecipient, writableCall, roundCallsEnabled, verifiedInvestor } from './roundCallPolicy';
 import type { RoundCallTerms, InvestorThesis } from './roundCallPolicy';
 import { notify } from './notify';
 import { hashEmail } from '../util/hashEmail';
@@ -42,12 +42,36 @@ async function verifiedReader(env: Env, actor: User) {
   const current=await env.DB.prepare('SELECT role,is_active,kyc_status FROM users WHERE id=?').bind(actor.id).first<User>();
   if(!current||!verifiedInvestor(current)) throw new RoundCallError('verified_investor_required',403);
 }
-async function founderActor(env: Env, actor: User, projectId: number) {
+/** The venture's owner: a founder (or a Spin-Out Lab explorer) whose founder record owns the project. */
+function ownsProject(current: Pick<User,'role'|'founder_id'|'spinout_lab_active'|'is_active'>, project: { founder_id: number | null }) {
+  return Number(current.is_active)===1 && (current.role==='founder'||(current.role==='exploring'&&Number(current.spinout_lab_active)===1))
+    && current.founder_id!=null && current.founder_id===project.founder_id;
+}
+/**
+ * D1222: an accepted co-founder (or owner-role member) on project_members. An
+ * advisor, an investor or an admin is never a member here. A missing table is
+ * no membership, never an error.
+ */
+export async function ventureMember(env: Env, projectId: number, user: Pick<User,'id'|'role'|'is_active'>): Promise<boolean> {
+  if(Number(user.is_active)!==1||user.role==='investor'||user.role==='admin') return false;
+  try {
+    const row=await env.DB.prepare("SELECT 1 AS ok FROM project_members WHERE project_id=? AND user_id=? AND status='accepted' AND role IN ('owner','cofounder') LIMIT 1").bind(projectId,user.id).first();
+    return !!row;
+  } catch { return false; }
+}
+export type Relation = 'owner' | 'member';
+/**
+ * The live check behind every founder-side write and read. `members` admits a
+ * venture member too (D1222: drafting and answering); the audience, send,
+ * extend and close stay the owner's.
+ */
+async function founderActor(env: Env, actor: User, projectId: number, members = false): Promise<Relation> {
   enabled(env);
   const project=await projectFacts(env,projectId);
-  const current=await env.DB.prepare('SELECT role,founder_id,spinout_lab_active,is_active FROM users WHERE id=?').bind(actor.id).first<User>();
-  if(!current||Number(current.is_active)!==1||(current.role!=='founder'&&!(current.role==='exploring'&&Number(current.spinout_lab_active)===1))
-    ||current.founder_id==null||current.founder_id!==project.founder_id) throw new RoundCallError('project_not_found',404);
+  const current=await env.DB.prepare('SELECT id,role,founder_id,spinout_lab_active,is_active FROM users WHERE id=?').bind(actor.id).first<User>();
+  if(current&&ownsProject(current,project)) return 'owner';
+  if(members&&current&&await ventureMember(env,projectId,current)) return 'member';
+  throw new RoundCallError('project_not_found',404);
 }
 async function counselActor(env: Env, actor: User, projectId: number) {
   enabled(env);
@@ -69,12 +93,16 @@ export async function loadCall(env: Env, uid: string): Promise<CallRow> {
 }
 export async function projectFacts(env: Env, id: number): Promise<ProjectFacts> {
   enabled(env);
+  return projectRecord(env,id);
+}
+/** The project's own facts with no flag: D1222's readiness reads them while calls are off. */
+export async function projectRecord(env: Env, id: number): Promise<ProjectFacts> {
   const row = await env.DB.prepare('SELECT id, uid, name, founder_id, company_id, sector, stage, description, problem_statement, solution, use_of_funds, traction_summary, revenue, mrr, users_count FROM projects WHERE id = ? AND deleted_at IS NULL').bind(id).first<ProjectFacts>();
   if (!row) throw new RoundCallError('project_not_found', 404);
   return row;
 }
 export async function roundContext(env: Env, project: ProjectFacts, ownerId: number) {
-  await founderActor(env,{id:ownerId} as User,project.id);
+  await founderActor(env,{id:ownerId} as User,project.id,true);
   const round = await env.DB.prepare("SELECT id, uid, name, target_amount, close_date, notes, pre_money FROM raise_rounds WHERE project_id = ? AND status = 'active' ORDER BY id DESC LIMIT 1").bind(project.id).first();
   const decks = await env.DB.prepare(`SELECT id, version, title, is_current, created_at,
     CASE WHEN json_valid(slides) AND json_type(slides) = 'array' THEN json_array_length(slides) END AS slide_count FROM pitch_decks WHERE project_id = ? ORDER BY version DESC, id DESC`).bind(project.id).all();
@@ -84,6 +112,21 @@ export async function roundContext(env: Env, project: ProjectFacts, ownerId: num
   const issuance = await env.DB.prepare('SELECT valuation_cap_cents FROM safe_issuances WHERE project_id = ? ORDER BY id DESC LIMIT 1').bind(project.id).first<{ valuation_cap_cents: number }>();
   return { project, round, scenario, term_seeds: keyTermSeeds(round, issuance, scenario), decks: decks.results || [], chosen: chosen.results || [],
     data_room: room && room.count > 0 ? { project_uid: project.uid } : null };
+}
+
+/**
+ * D1222 (#3221, CLS1): each readiness item from the venture's own Raise
+ * records, with no call, no flag and no investor data. The caller has checked
+ * the viewer is the venture's owner or a member.
+ */
+export async function ventureReadinessRead(env: Env, project: ProjectFacts) {
+  const round = await env.DB.prepare("SELECT target_amount, close_date FROM raise_rounds WHERE project_id = ? AND status = 'active' ORDER BY id DESC LIMIT 1").bind(project.id).first<{ target_amount: number | null; close_date: string | null }>();
+  const decks = await env.DB.prepare('SELECT COUNT(*) AS n FROM pitch_decks WHERE project_id = ?').bind(project.id).first<{ n: number }>();
+  const room = await env.DB.prepare('SELECT (SELECT COUNT(*) FROM data_room_files WHERE project_id = ?) + (SELECT COUNT(*) FROM data_room_folders WHERE project_id = ?) AS n').bind(project.id, project.id).first<{ n: number }>();
+  const items = ventureReadiness({ round: round ?? null, decks: Number(decks?.n) || 0, data_room_items: Number(room?.n) || 0,
+    use_of_funds: project.use_of_funds, traction_summary: project.traction_summary, revenue: project.revenue, mrr: project.mrr, users_count: project.users_count }, today());
+  return { project_id: project.id, enabled: roundCallsEnabled(env), items,
+    ready: items.filter(i => i.ready === true).length, counted: items.filter(i => i.ready !== null).length };
 }
 
 /** Recorded dollar values become whole cents; missing/invalid values remain absent. */
@@ -156,7 +199,7 @@ async function audit(env: Env, actor: User, projectId: number, action: string, d
     .bind(action, JSON.stringify(details), await hashEmail(actor.email), actor.id, projectId);
 }
 export async function saveDraft(env: Env, project: ProjectFacts, actor: User, input: Record<string, unknown>, existing?: CallRow) {
-  await founderActor(env,actor,project.id);
+  await founderActor(env,actor,project.id,true);
   if(existing&&existing.project_id!==project.id) throw new RoundCallError('project_not_found',404);
   if (existing && existing.state !== 'draft') throw new RoundCallError('call_read_only', 409);
   const t = await normalizeTerms(env, project, input);
@@ -176,13 +219,16 @@ export async function audience(env: Env, call: CallRow, chosenIds: unknown, incl
   if (!Array.isArray(chosenIds) || chosenIds.length > 100 || chosenIds.some(id => !Number.isSafeInteger(id) || id <= 0)
     || typeof includeMatches !== 'boolean') throw new RoundCallError('invalid_audience');
   const selected = new Set(chosenIds as number[]);
-  const chosen = await env.DB.prepare("SELECT p.id AS prospect_id, u.id AS investor_user_id FROM raise_prospects p JOIN users u ON LOWER(u.email)=LOWER(p.email) WHERE p.project_id=? AND u.role='investor' AND u.is_active=1 AND u.kyc_status='approved'").bind(call.project_id).all<{ prospect_id: number; investor_user_id: number }>();
+  const pipeline = await pipelineInvestors(env,call.project_id);
   const rows = new Map<number, { investor_user_id: number; origin: string; reasons: string[]; ticket_min_usd?: number | null; ticket_max_usd?: number | null }>();
   const found = new Set<number>();
-  for (const row of chosen.results || []) if (selected.has(row.prospect_id)) {
-    found.add(row.prospect_id); rows.set(row.investor_user_id,{investor_user_id:row.investor_user_id,origin:'chosen',reasons:[]});
+  for (const row of pipeline) if (selected.has(row.prospect_id)) {
+    found.add(row.prospect_id);
+    // D1222: a chosen prospect with no verified account is not a recipient; the preview names it instead.
+    if (row.investor_user_id != null) rows.set(row.investor_user_id,{investor_user_id:row.investor_user_id,origin:'chosen',reasons:[]});
   }
-  if (found.size !== selected.size) throw new RoundCallError('chosen_investor_unverified',422);
+  // A prospect id that is not this venture's is still refused.
+  if (found.size !== selected.size) throw new RoundCallError('prospect_not_found',422);
   if (includeMatches) {
     const project = await projectFacts(env,call.project_id);
     const profiles = await env.DB.prepare("SELECT p.user_id, p.sectors_json, p.stages_json, p.thesis_keywords_json, p.ticket_min_usd, p.ticket_max_usd, p.anti_thesis_sectors_json, p.anti_thesis_stages_json FROM investor_profiles p JOIN users u ON u.id=p.user_id WHERE u.role='investor' AND u.is_active=1 AND u.kyc_status='approved'").all<InvestorThesis & { user_id: number }>();
@@ -193,6 +239,24 @@ export async function audience(env: Env, call: CallRow, chosenIds: unknown, incl
   }
   if (rows.size > 500) throw new RoundCallError('audience_too_large',422);
   return [...rows.values()];
+}
+/**
+ * The venture's pipeline prospects, each with its verified investor account
+ * when there is one (an active investor whose KYC is approved), else null.
+ */
+async function pipelineInvestors(env: Env, projectId: number) {
+  const rows = await env.DB.prepare("SELECT p.id AS prospect_id, p.name AS name, (SELECT u.id FROM users u WHERE LOWER(u.email)=LOWER(p.email) AND u.role='investor' AND u.is_active=1 AND u.kyc_status='approved' ORDER BY u.id LIMIT 1) AS investor_user_id FROM raise_prospects p WHERE p.project_id=? ORDER BY p.id").bind(projectId).all<{ prospect_id: number; name: string | null; investor_user_id: number | null }>();
+  return rows.results || [];
+}
+/**
+ * D1222 (#2458 owner question 7): the founder's own prospects with no verified
+ * account on Axal, by name, flagged when chosen. They are not recipients: the
+ * page greys them with "Invite to Axal". No email is returned.
+ */
+export async function notOnAxal(env: Env, call: CallRow, chosenIds: unknown) {
+  const chosen = new Set(Array.isArray(chosenIds) ? chosenIds as number[] : []);
+  return (await pipelineInvestors(env,call.project_id)).filter(r => r.investor_user_id == null)
+    .map(r => ({ prospect_id: r.prospect_id, name: r.name?.trim() || null, chosen: chosen.has(r.prospect_id) }));
 }
 export function audienceSummary(rows: Array<{ origin: string; reasons: string[] }>) {
   return { chosen: rows.filter(r => r.origin === 'chosen').length, matched: rows.filter(r => r.origin === 'match').length,
@@ -211,7 +275,8 @@ export async function saveAudience(env: Env, call: CallRow, actor: User, input: 
   await founderActor(env,actor,call.project_id);
   if (call.state !== 'draft') throw new RoundCallError('call_read_only',409);
   const rows = await audience(env,call,input.chosen_prospect_ids,input.include_matches), at = now();
-  const summary = audienceSummary(rows);
+  // D1222: chosen prospects not on Axal are left out of the recipients and counted, never a failure.
+  const summary = { ...audienceSummary(rows), not_on_axal: (await notOnAxal(env,call,input.chosen_prospect_ids)).filter(r => r.chosen).length };
   const stored = await env.DB.prepare('SELECT investor_user_id, origin FROM round_call_recipients WHERE call_id = ?').bind(call.id).all<{ investor_user_id: number; origin: string }>();
   const key = (r: { investor_user_id: number; origin: string }) => r.investor_user_id + ':' + r.origin;
   const oldSet = new Set((stored.results || []).map(key));
@@ -228,17 +293,24 @@ export async function saveAudience(env: Env, call: CallRow, actor: User, input: 
   return summary;
 }
 export async function founderPage(env: Env, call: CallRow, actor: User) {
-  if(actor.role==='admin') await counselActor(env,actor,call.project_id); else await founderActor(env,actor,call.project_id);
+  let relation: Relation | 'counsel' = 'counsel';
+  if(actor.role==='admin') await counselActor(env,actor,call.project_id); else relation=await founderActor(env,actor,call.project_id,true);
   const rows = await env.DB.prepare('SELECT r.investor_user_id,r.origin,r.match_reasons_json,r.opened_at,r.data_room_requested_at,r.commitment_cents,r.committed_at,r.responded_at,r.last_response_at,r.delivery_state,u.name,u.email FROM round_call_recipients r JOIN users u ON u.id=r.investor_user_id WHERE r.call_id=? ORDER BY r.id').bind(call.id).all<Recipient>();
   const questions = await env.DB.prepare('SELECT q.uid,q.question,q.answer,q.asked_at,q.answered_at,u.name,u.email FROM round_call_questions q JOIN users u ON u.id=q.investor_user_id WHERE q.call_id=? ORDER BY q.asked_at,q.id').bind(call.id).all();
   const external = await env.DB.prepare("SELECT 'update-'||r.uid AS uid,r.message AS question,r.name,r.created_at AS asked_at,u.uid AS update_uid FROM update_ask_replies r JOIN update_asks a ON a.id=r.ask_id JOIN portfolio_updates u ON u.id=a.update_id WHERE a.kind='capital' AND a.link_ref=? AND u.project_id=? AND COALESCE(r.landed_module,'')<>'round_call' ORDER BY r.id").bind(call.uid,call.project_id).all();
   const recipients = (rows.results || []).map(founderRecipient);
-  return { call, viewer: 'founder', read_only: call.state==='closed' || call.state==='awaiting_counsel' || (call.state==='sent' && call.target_close<today()),
+  const owner = relation === 'owner', member = relation === 'member';
+  return { call, viewer: 'founder', relation,
+    // D1222 (CLS14): what this viewer may do. A member drafts and answers; the rest is the owner's.
+    can: { draft: owner || member, answer: owner || member, audience: owner, send: owner, extend: owner, close: owner },
+    read_only: call.state==='closed' || call.state==='awaiting_counsel' || (call.state==='sent' && call.target_close<today()),
     recipients, questions:[...(questions.results || []),...(external.results || [])], counsel_approved:counselApproved(call),
     readiness:readiness(call,await projectFacts(env,call.project_id)),
     progress:{ received:recipients.length,opened:recipients.filter(r=>r.opened_at).length,
       data_room_requests:recipients.filter(r=>r.data_room_requested_at).length,
       commitments:recipients.filter(r=>r.commitment_cents != null).length,
+      // D1222: invitations that could not be delivered at send; a draft has sent none, so it is null, never 0.
+      not_delivered:call.state==='draft'?null:recipients.filter(r=>r.delivery_state==='not_delivered').length,
       committed_cents:recipients.reduce((sum,r)=>sum+(r.commitment_cents||0),0),target_cents:call.amount_cents } };
 }
 export async function sendCall(env: Env, call: CallRow, actor: User, acknowledgeMissing: unknown) {
@@ -427,7 +499,7 @@ export async function manageCall(env:Env,call:CallRow,actor:User,input:Record<st
   return loadCall(env,call.uid);
 }
 export async function answerQuestion(env:Env,call:CallRow,actor:User,questionUid:string,value:unknown) {
-  await founderActor(env,actor,call.project_id);
+  await founderActor(env,actor,call.project_id,true);
   if(!writableCall(call,today())) throw new RoundCallError('call_read_only',409);
   const answer=text(value,4000),at=now();
   const result=await env.DB.batch([
