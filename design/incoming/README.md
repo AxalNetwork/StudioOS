@@ -139,6 +139,22 @@ No value was edited.
 case's nine tabs addresses under both bases, with Overview as today's case
 page and "Not scored yet" for a case with no band. The rest is D1245–D1252.
 
+## Landed 2026-10-26 — Venture scorecard (#2428)
+
+The owner's artifacts `KBDJEscuHJPbjGgfYGBurW` (the page) and
+`HHEn5qeKtrg74ebvLx3vH6` (the board grid) came from S21's prompt on #2428.
+Each was decoded by `scripts/read-canvas.mjs` as is:
+- `Venture scorecard · Boards.dc.html` is the board grid (SC1 to SC22); it
+  imports the page by name;
+- `Venture Scorecard Page.dc.html` is the page.
+
+No value was edited.
+
+**Grade: NEW.** S21's integration (D1253) puts the panel on the deal page's
+Scorecard tab and the scope strip in the Deal flow table, and adds
+`/scoring/method`, `/raise/scorecard` and `/admin/platform/scoring`, every
+scope unread until the Worker's read lands. The rest is D1254–D1260.
+
 ## Landed 2026-10-26 — Approvals › KYC & KYB (#2384)
 
 The owner's artifacts `9U6YH5eduDN6bpd5k4Tucm` (the board grid) and

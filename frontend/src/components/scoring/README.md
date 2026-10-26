@@ -15,6 +15,7 @@ was removed on the owner's instruction (2026-10-20).
 | `ExportReportModal.jsx` | Report export. |
 | `dimIcons.js` | Icon per dimension. |
 | `useCountUp.js` | The number animation. |
+| `scorecard/` | D1253 (#2428): the venture scorecard's scope strip and panel, shared by the deal page, Deal flow and the founder's page. |
 
 Every score comes from the worker. A dimension the venture has not answered for
 is **not scored zero** — it reads as unscored, because a zero is a judgement and

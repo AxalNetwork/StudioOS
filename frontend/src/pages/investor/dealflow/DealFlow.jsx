@@ -10,6 +10,7 @@ import { Link } from 'react-router-dom';
 import { api } from '../../../lib/api';
 import { reportError } from '../../../lib/log';
 import { Unreadable, Unrecorded } from '../../../ui';
+import { ScopeStrip } from '../../../components/scoring/scorecard/Scorecard';
 import {
   MAX_COMPARE, NOT_YET, SCOPES, SCOPE_SWITCH, WAITS,
   compareHref, dealRow, inviteRow, opensDeal, viewHref,
@@ -76,7 +77,7 @@ export function DealsTableView({ rows, scope, picked = [], onPick }) {
                 </td>
                 <td><span className="rounded-full border border-axal-hairline px-2 py-0.5 text-[12px]">{r.round}</span></td>
                 <td>{money(r.ask, r.currency)}</td>
-                <td><span className="text-[12px] text-axal-muted">{NOT_YET}</span></td>
+                <td><ScopeStrip /></td>
                 <td>{r.daysInStage == null ? <Unrecorded reason="The stage's start is not recorded." /> : r.daysInStage}</td>
               </tr>
             ))}
