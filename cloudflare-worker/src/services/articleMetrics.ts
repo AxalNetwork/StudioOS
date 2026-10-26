@@ -62,9 +62,12 @@ export type Viewer = { userId: number | null; role: string | null; impersonated:
  */
 export async function countDailyView(env: Env, slug: string, viewer: Viewer, now: Date = new Date()): Promise<boolean> {
   if (viewer && (viewer.impersonated || String(viewer.role || '').toLowerCase() === 'admin')) return false;
+  // The article is chosen in a subquery so the upsert's conflict columns are
+  // read as the daily table's, and `WHERE true` keeps SQLite's upsert parse
+  // unambiguous after a SELECT.
   const res = await env.DB.prepare(
     `INSERT INTO article_daily_views (article_id, day, views)
-     SELECT id, ?, 1 FROM articles WHERE slug = ? AND status = 'published' AND author_user_id IS NOT ?
+     SELECT p.id, ?, 1 FROM (SELECT id FROM articles WHERE slug = ? AND status = 'published' AND author_user_id IS NOT ?) p WHERE true
      ON CONFLICT(article_id, day) DO UPDATE SET views = views + 1`,
   ).bind(viewDay(now), slug, viewer?.userId ?? null).run();
   return Number(res?.meta?.changes ?? 0) > 0;
