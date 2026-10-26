@@ -116,3 +116,8 @@ behind the owner-set `MEETING_BOT_DEPLOY_ENABLED` Actions variable. It uses
 `MEETING_BOT_CLOUDFLARE_API_TOKEN` and deploys only the preview and production bot hosts, in that order.
 `meeting-bot-image.yml` validates the real image/native load and bot config
 dry runs on PRs. Site deployment never builds or publishes a bot image.
+
+D1165 (#3072, PR #3230): the form/lightbox workflow keeps all focused checks,
+guards, the root build and full drift. Its job has the same 60-minute bound as
+the main CI gate: the prior 30-minute limit cancelled a run during final lint.
+No trigger, permission, secret or check changes.

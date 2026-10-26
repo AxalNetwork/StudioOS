@@ -51,6 +51,33 @@ export function readiness(call: RoundCallTerms, project: { use_of_funds?: string
     { key: 'close', label: 'Target close', ready: validClose(call.target_close) },
   ];
 }
+/**
+ * D1222 (#3221): CLS1's seven items before any call exists, from the venture's
+ * own Raise records only. It reads no investor data and needs no flag. `ready`
+ * is true or false when a record answers it, and null with a reason when only
+ * the call itself can: round terms are written in the call.
+ */
+export type VentureRecords = {
+  round: { target_amount: number | null; close_date: string | null } | null;
+  decks: number; data_room_items: number;
+  use_of_funds?: string | null; traction_summary?: string | null; revenue?: number | null; mrr?: number | null; users_count?: number | null;
+};
+export const NO_ROUND = 'No active round is recorded in Raise.';
+export const TERMS_IN_CALL = 'Round terms are written in the call itself.';
+export function ventureReadiness(v: VentureRecords, today: string) {
+  const round = v.round;
+  const target = round != null && typeof round.target_amount === 'number' && Number.isFinite(round.target_amount) && round.target_amount > 0;
+  const close = round != null && validClose(round.close_date) && String(round.close_date) >= today;
+  return [
+    { key: 'round', label: 'Round target', ready: target, reason: round ? null : NO_ROUND },
+    { key: 'terms', label: 'Round terms', ready: null, reason: TERMS_IN_CALL },
+    { key: 'deck', label: 'Pitch deck version', ready: v.decks > 0, reason: null },
+    { key: 'data_room', label: 'Data room', ready: v.data_room_items > 0, reason: null },
+    { key: 'use_of_funds', label: 'Use of funds', ready: !!v.use_of_funds?.trim(), reason: null },
+    { key: 'traction', label: 'Traction', ready: !!v.traction_summary?.trim() || [v.revenue, v.mrr, v.users_count].some(value => value != null), reason: null },
+    { key: 'close', label: 'Target close', ready: close, reason: round ? null : NO_ROUND },
+  ];
+}
 function list(value: string | null | undefined): string[] {
   try { const parsed = JSON.parse(value || '[]'); return Array.isArray(parsed) ? parsed.filter(item => typeof item === 'string').map(item => item.trim().toLowerCase()) : []; }
   catch { return []; }

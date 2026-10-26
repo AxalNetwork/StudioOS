@@ -209,7 +209,7 @@ const CYCLE_DEFS = {
     tools: toFnMap({
       'investor-narrative': (q) => ({ label: 'Open positioning', href: `/raise/investor-narrative/positioning${q || ''}` }),
       'pitch-deck': () => ({ label: 'Open the pitch deck', href: '/raise/pitch' }),
-      'cap-table': () => ({ label: 'Open the cap table', href: '/raise/capital/cap-table' }),
+      // D1029: the Cap table module page is the tool, so it has no door to itself.
       // D1173 (#2455): the venture travels with the link (broken item 8).
       'use-of-funds': (q) => ({ label: 'Open the financial model', href: forecastHref(q) }),
       'capital-relationships': () => ({ label: 'Open the investor pipeline', href: '/raise/capital/pipeline' }),
@@ -359,7 +359,7 @@ const CYCLE_DEFS = {
     }),
     tools: toFnMap({
       'product-roadmap': (q) => ({ label: 'Open the roadmap: Now, Next and Later', href: `/build/roadmap${q}` }),
-      'founding-team': () => ({ label: 'Open the cap table and vesting', href: '/raise/capital/cap-table' }),
+      'founding-team': (q) => ({ label: 'Open the cap table and vesting', href: `/raise/cap-table${q || ''}` }),
       'operating-systems': (q) => ({ label: 'Open the operating cadence', href: `/build/cadence${q}` }),
     }),
     add: toFnMap({}),

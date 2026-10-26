@@ -33,6 +33,12 @@ fixture is the schema production has rather than a hand-copy that drifts from it
 three tests had each grown their own copy of that reader, and one of the copies
 had already been caught reading a column name production does not use.
 `baseline_reader.test.mjs` holds it to what the regex it replaced returned.
+D1174 regressions live in the use-of-funds, Raise card/record, financial
+integrity and access suites. Synthetic Mercury rows prove accepted mappings,
+private owner/session/company scope, missing versus zero, and local read
+failure; the provider is forbidden. Cash timing and the shared split reader
+are checked against the actual Worker services.
+
 `_engine_schema.mjs` (D757) gives a world whose sessions reach the Validate engine
 what it reads: migrations 453, 465 and 487, `queue_jobs`, and the member and venture
 columns `writableSession` checks.
@@ -130,4 +136,7 @@ It also checks local-licence scopes, HQ elevation, constant-query populated memb
 unavailable remote coverage and personal sync/export isolation after a scope
 read. `my_events_feed_d1033.test.ts` also verifies Free and lapsed subscriptions
 with token ownership, revocation and join-link boundaries intact.
+Staff-view audit tests verify both existing stores contain only scope/window
+details, repeated views are recorded, and personal/refused/invalid reads create
+no staff-view audit entry.
 Every provider call is stubbed or refused; all rows are synthetic.
