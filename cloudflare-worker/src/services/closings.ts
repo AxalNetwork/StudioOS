@@ -5,7 +5,7 @@
  *
  * WHO READS WHAT (#2424 owner question 3):
  *   · an admin reads every closing and every line;
- *   · a founder reads the closings of their own ventures (`projectOwnerScope`),
+ *   · a founder reads the closings of their own ventures (`projectOwnerScope`'s rule),
  *     every line;
  *   · anyone else reads a closing only through a line of their own
  *     (`closing_lines.investor_user_id`), and then reads their own lines and
@@ -30,7 +30,6 @@
  * The platform never moves money: every write here records.
  */
 import type { Env, User } from '../types';
-import { projectOwnerScope } from './tenancyScope';
 
 export class ClosingRefusal extends Error {
   readonly status: number;
@@ -84,6 +83,19 @@ export type Reach = 'all' | 'own';
 
 const isAdmin = (user: User) => String(user?.role ?? '') === 'admin';
 
+/**
+ * The founders row a caller owns ventures through, or -1 (matches none): the
+ * rule of `projectOwnerScope` (tenancyScope.ts), written as a bound value so no
+ * SQL text is spliced. Founder role only, by `founder_id` (a converted
+ * account keeps a residual id, so the role decides), never a deleted venture
+ * (each query keeps `deleted_at IS NULL`).
+ */
+const ownerFounderId = (user: User): number => {
+  const id = (user as any)?.founder_id;
+  return String(user?.role ?? '') === 'founder' && Number.isInteger(id) && id > 0 ? Number(id) : -1;
+};
+const OWNS_PROJECT = 'SELECT 1 AS yes FROM projects p WHERE p.id = ? AND p.founder_id = ? AND p.deleted_at IS NULL';
+
 async function closingByUid(env: Env, closingUid: string): Promise<ClosingRow | null> {
   return env.DB.prepare('SELECT * FROM closings WHERE uid = ?').bind(String(closingUid)).first<ClosingRow>();
 }
@@ -91,9 +103,7 @@ async function closingByUid(env: Env, closingUid: string): Promise<ClosingRow | 
 /** How much of this closing the caller reads: every line, their own lines, or nothing (null). */
 export async function reachOf(env: Env, user: User, closing: ClosingRow): Promise<Reach | null> {
   if (isAdmin(user)) return 'all';
-  const owner = projectOwnerScope(user as any, 'p');
-  const founder = await env.DB.prepare(`SELECT 1 AS yes FROM projects p WHERE p.id = ? AND ${owner.sql}`)
-    .bind(closing.project_id, ...owner.binds).first();
+  const founder = await env.DB.prepare(OWNS_PROJECT).bind(closing.project_id, ownerFounderId(user)).first();
   if (founder) return 'all';
   const own = await env.DB.prepare('SELECT 1 AS yes FROM closing_lines WHERE closing_id = ? AND investor_user_id = ? LIMIT 1')
     .bind(closing.id, Number(user.id)).first();
@@ -146,12 +156,12 @@ export async function listClosings(env: Env, user: User) {
        FROM closings c JOIN projects p ON p.id = c.project_id ORDER BY c.id DESC LIMIT 200`).all<any>();
     return (r.results || []).map((x: any) => ({ ...x, reach: 'all' as Reach }));
   }
-  const owner = projectOwnerScope(user as any, 'p');
   const mine = await env.DB.prepare(
     `SELECT c.uid, c.deal_id, c.project_id, p.name AS project_name, c.round_label, c.instrument, c.currency, c.status,
             c.deadline, c.owner_user_id, c.created_at, c.closed_at
-       FROM closings c JOIN projects p ON p.id = c.project_id WHERE ${owner.sql} ORDER BY c.id DESC LIMIT 200`,
-  ).bind(...owner.binds).all<any>();
+       FROM closings c JOIN projects p ON p.id = c.project_id
+      WHERE p.founder_id = ? AND p.deleted_at IS NULL ORDER BY c.id DESC LIMIT 200`,
+  ).bind(ownerFounderId(user)).all<any>();
   const lined = await env.DB.prepare(
     `SELECT c.uid, c.deal_id, c.project_id, p.name AS project_name, c.round_label, c.instrument, c.currency, c.status,
             c.deadline, c.owner_user_id, c.created_at, c.closed_at
@@ -459,9 +469,7 @@ export async function withdrawEvidence(env: Env, user: User, closingUid: string,
 export async function decideCaptable(env: Env, user: User, closingUid: string, decision: 'accepted' | 'dismissed') {
   const closing = await closingByUid(env, closingUid);
   if (!closing) throw missing();
-  const owner = projectOwnerScope(user as any, 'p');
-  const founder = await env.DB.prepare(`SELECT 1 AS yes FROM projects p WHERE p.id = ? AND ${owner.sql}`)
-    .bind(closing.project_id, ...owner.binds).first();
+  const founder = await env.DB.prepare(OWNS_PROJECT).bind(closing.project_id, ownerFounderId(user)).first();
   if (!founder || isAdmin(user)) {
     if (await reachOf(env, user, closing)) throw new ClosingRefusal(403, 'founder_decides', 'The founder decides the cap-table change.');
     throw missing();

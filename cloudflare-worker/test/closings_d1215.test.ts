@@ -212,6 +212,11 @@ test('a founder reads their own venture\'s closings only, every line and the eve
   assert.equal(other.status, 404);
   assert.deepEqual((await call(db, 'GET', '/api/closings', OTHER_FOUNDER)).body.closings.map((c: any) => c.project_id), [OTHER_PROJECT]);
   assert.equal((await call(db, 'GET', `/api/closings/${uid}`, PARTNER)).status, 404, 'an Operating Partner has no reach');
+  // A converted account keeps a residual founder_id: the role decides, as projectOwnerScope's rule does.
+  db.exec('UPDATE users SET founder_id = 31 WHERE id = 8');
+  assert.equal((await call(db, 'GET', `/api/closings/${uid}`, INV_C)).status, 404, 'an investor with a residual founder_id owns nothing');
+  assert.deepEqual((await call(db, 'GET', '/api/closings', INV_C)).body.closings.map((c: any) => [c.project_id, c.reach]), [[OTHER_PROJECT, 'own']],
+    'only the closing it has a line on, as its own; never venture 31\'s as a founder');
   assert.equal((await call(db, 'GET', '/api/closings', ADMIN)).body.closings.length, 2, 'an Admin reads every closing');
 });
 
