@@ -313,9 +313,39 @@ export interface McpSession {
   readonly offered: readonly string[];
   /** What the server listed that is never called. */
   readonly drift: readonly McpToolDrift[];
+  /** D856: the listed setup tools this server offers, after the record, the pins and the annotations. */
+  readonly setup_offered: readonly string[];
   /** POSTs made so far, the probe and the handshake included. */
   readonly requests: number;
-  callTool(name: string, args?: Record<string, unknown>): Promise<unknown>;
+  /** A setup tool needs its step's ticket (`mintMcpSetupTicket`), and spends that tool's use of it. */
+  callTool(name: string, args?: Record<string, unknown>, ticket?: McpSetupTicket): Promise<unknown>;
+}
+
+/**
+ * D856 (#2501) — a one-time setup ticket: one provider, one step's setup
+ * tools, each callable once. Only this module knows which tickets are live,
+ * so a copied or hand-built object is not one. The setup route mints it after
+ * the member confirms that step (`mcp_client_d847.test.ts` holds the route to
+ * being its only minter).
+ */
+export interface McpSetupTicket { readonly provider: string; readonly tools: readonly string[] }
+const LIVE_TICKETS = new WeakMap<McpSetupTicket, { provider: string; left: Set<string> }>();
+
+/** Mint a ticket for `tools`, every one of them a setup tool on `provider`'s record. */
+export function mintMcpSetupTicket(provider: McpProvider, tools: readonly string[]): McpSetupTicket {
+  const setup = provider.setup_tools ?? [];
+  if (!tools.length || tools.some((t) => !setup.includes(t))) throw new McpClientError('path_not_allowed');
+  const ticket: McpSetupTicket = Object.freeze({ provider: provider.key, tools: Object.freeze([...tools]) });
+  LIVE_TICKETS.set(ticket, { provider: provider.key, left: new Set(tools) });
+  return ticket;
+}
+
+/** Spend `name`'s use of `ticket` for `provider`; false when the ticket is not live for it. */
+function spendTicket(provider: McpProvider, name: string, ticket: McpSetupTicket | undefined): boolean {
+  const live = ticket ? LIVE_TICKETS.get(ticket) : undefined;
+  if (!live || live.provider !== provider.key || !live.left.has(name)) return false;
+  live.left.delete(name);
+  return true;
 }
 
 interface JsonRpcResponse { jsonrpc?: string; id?: unknown; result?: unknown; error?: unknown }
@@ -493,8 +523,9 @@ export async function openMcpSession(provider: McpProvider, opts: McpSessionOpti
   const drift: McpToolDrift[] = [];
   const params = new Map<string, HeaderParam[]>();
   const offered: string[] = [];
+  const setupTools = provider.setup_tools ?? [];
   for (const name of listed.keys()) {
-    if (!provider.read_tools.includes(name) && !provider.write_tools.includes(name)) drift.push({ tool: sanitizedName(name), why: 'unknown' });
+    if (!provider.read_tools.includes(name) && !provider.write_tools.includes(name) && !setupTools.includes(name)) drift.push({ tool: sanitizedName(name), why: 'unknown' });
   }
   for (const name of provider.read_tools) {
     const tool = listed.get(name);
@@ -507,21 +538,38 @@ export async function openMcpSession(provider: McpProvider, opts: McpSessionOpti
     params.set(name, mirrored);
     offered.push(name);
   }
+  // D856: a setup tool changes the member's own account, so it is not
+  // read-only; one the server calls destructive is refused all the same.
+  const setupOffered: string[] = [];
+  for (const name of setupTools) {
+    const tool = listed.get(name);
+    if (!tool || provider.read_tools.includes(name) || provider.write_tools.includes(name)) continue;
+    if (obj(tool.annotations)?.destructiveHint === true) { drift.push({ tool: name, why: 'annotated' }); continue; }
+    const mirrored = headerParams(tool.inputSchema);
+    if (!mirrored) { drift.push({ tool: name, why: 'invalid' }); continue; }
+    if (provider.tool_pins && provider.tool_pins[name] !== await toolFingerprint(tool)) { drift.push({ tool: name, why: 'changed' }); continue; }
+    params.set(name, mirrored);
+    setupOffered.push(name);
+  }
   if (drift.length) {
     const line = JSON.stringify({ event: 'mcp_tool_drift', provider: provider.key, tools: drift.slice(0, 50) });
     (opts.log ?? ((l: string) => console.warn(l)))(line);
   }
   const frozenOffered = Object.freeze(offered);
+  const frozenSetup = Object.freeze(setupOffered);
 
   return {
     get era() { return era; },
     offered: frozenOffered,
+    setup_offered: frozenSetup,
     drift: Object.freeze(drift),
     get requests() { return requests; },
-    async callTool(name: string, args: Record<string, unknown> = {}): Promise<unknown> {
+    async callTool(name: string, args: Record<string, unknown> = {}, ticket?: McpSetupTicket): Promise<unknown> {
       // Refused before any request: a write tool (no ticket exists yet), a name
       // off the record, or one this server does not offer as the record allows.
-      if (provider.write_tools.includes(name) || !provider.read_tools.includes(name) || !frozenOffered.includes(name)) {
+      // D856: a setup tool also needs its step's live ticket, spent here.
+      const setup = setupTools.includes(name) && frozenSetup.includes(name);
+      if (provider.write_tools.includes(name) || (setup ? !spendTicket(provider, name, ticket) : !provider.read_tools.includes(name) || !frozenOffered.includes(name))) {
         throw new McpClientError('path_not_allowed');
       }
       const extra = era === 'modern' ? { 'Mcp-Name': headerValue(name), ...paramHeaders(params.get(name) ?? [], args) } : {};
