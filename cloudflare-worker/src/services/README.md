@@ -197,6 +197,7 @@ no new schema, runtime or billing path is introduced.
 | `records/` | D690's scoped cycle record contract, registry and ownership checks. |
 | `testingOverview.ts` | D1196 (#3146): Product testing's overview read behind `GET /api/admin/testing/overview` (Super Admin): applications and picks per Monday week from `testing_events` (not recorded before the first programme opened), the tester pool and open programmes' applicants by profile, withdrawn counts, and Mail reach per open programme on `testerRecipients`' rule. Each block answers alone; counts only, never an address. |
 | `scoring/` | D1143 (#3029): the Product-market fit score, defined once (#2433). `pmf.ts` is model v1 as data and the pure `scorePmf` (value, band, confidence, coverage and the next steps ranked by gain); `pmfCollector.ts` reads Validate's stores for it with bound SQL, after the latest Pivot, and reads no interviewee name or quote. D1144 adds `pmfStore.ts`: signed, change-only snapshots, history and the atomic PMF checklist/audit update in shared migration 598. See `scoring/README.md`. |
+| `ventureScoring/` | D1255 (#3278): the venture scorecard engine for #2428's other ten scopes. `model.ts` is model v1 as data, `engine.ts` the pure `scoreScope`, `collectors.ts` one bound collector per scope (personal inputs aggregated, never-inputs unread), `store.ts` the recompute on read that keeps a signed row per scope only on change in migration 598's store (`state` from 625). PMF stays `scoring/`'s. See `ventureScoring/README.md`. |
 | `companyMembershipEvents.ts` | D1137 (#3017): the membership audit, `company_membership_events` (migration 597). `membershipEvent` returns the bound INSERT for a join, role change, removal, leave, primary-admin transfer, archive, restore, rename, venture move, owner transfer or seat change, so the route batches it with the change; before and after hold the fields the change touched, never a token or an email. |
 | `signals/` | Signal ingestion and evidence. |
 | `vercel/` | D1096: `api.ts`, the only caller of `api.vercel.com`: a read-only client for the planned reads, uninstall and the OAuth code exchange. Its README has the rules. |
@@ -324,6 +325,8 @@ Unrecorded note or uncapped liquidity terms produce no waterfall plus a warning.
 Scenario inputs do not record individual option grants, which the payout
 assumptions state. Mercury's accepted SAFEs explicitly pass `post_money` through
 `capTableWrites.ts`; manual missing basis retains the legacy pre-money default.
+D966 (#2630): `mercury/safeBasisRepair.ts` adds `post_money` to the SAFEs Mercury's Accept wrote before
+#2629, through the owner's dry-run-first admin route, and leaves every manual SAFE's default as it is.
 The [YC post-money user guide](https://bookface-static.ycombinator.com/assets/ycdc/Website%20User%20Guide%20Feb%202023%20-%20final-28acf9a3b938e643cc270b7da514194d5c271359be25b631b025605673fa9f95.pdf)
 explains exclusion of cash-outs and the unissued pool from liquidity capitalization.
 `dataRoomActivity.ts` (D1105, #2985) is the data room's activity and checklist

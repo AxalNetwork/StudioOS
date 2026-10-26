@@ -580,8 +580,14 @@ events.get('/:id', async (c) => {
     `SELECT * FROM event_agenda_items WHERE event_id = ? ORDER BY display_order ASC, id ASC`,
   ).bind(id).all();
   const registration = await c.env.DB.prepare(`SELECT id, status, payment_status, waitlist_position, decision_reason, decided_at FROM event_registrations WHERE event_id = ? AND user_id = ?`).bind(id, u.id).first();
+  // D967 (#3350): the host's name for the ticket drawer, as /invitations reads it.
+  // The name only, nothing else from the host's account; null with no host.
+  const host = await c.env.DB.prepare(
+    `SELECT host.name AS host_name FROM events e LEFT JOIN users host ON host.id = e.host_user_id WHERE e.id = ?`,
+  ).bind(id).first<{ host_name: string | null }>();
   return c.json({
     registration,
+    host_name: host?.host_name ?? null,
     event: shapeEvent(event, { includePrivate: manage, includeJoinLink: hasConfirmedEventSeat(registration) }),
     agenda: (agenda.results || []).map((row) => shapeAgendaItem(row, { includeJoinLink: manage || isInPersonEvent(event) || hasConfirmedEventSeat(registration) })),
   });

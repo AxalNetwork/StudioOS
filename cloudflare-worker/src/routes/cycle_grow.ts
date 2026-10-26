@@ -162,13 +162,14 @@ async function recordsFor(x: Ctx, slug: GrowSlug, viewer: User, writer: boolean)
   const { env, projectId } = x;
   if (slug === 'product-improvement') {
     const q = await env.DB.prepare(
-      `SELECT uid, body, source, theme, roadmap_item_label, status, from_name, created_at FROM product_feedback
+      `SELECT uid, body, source, theme, roadmap_item_ref, roadmap_item_label, status, from_name, created_at FROM product_feedback
         WHERE project_id = ? ORDER BY created_at DESC, id DESC`,
     ).bind(projectId).all<Row>();
     const rows = (q.results || []).map((f) => {
       const { from_name, ...rest } = f;
       // A customer's name is for the venture's writers; every reader sees the feedback (decision 9).
-      return { id: f.uid, ...rest, ...(writer ? { from_name } : {}), theme: f.theme ?? null, roadmap_item_label: f.roadmap_item_label ?? null };
+      // D969: the linked roadmap item's id, so Edit feedback's chip opens on it.
+      return { id: f.uid, ...rest, ...(writer ? { from_name } : {}), theme: f.theme ?? null, roadmap_item_ref: f.roadmap_item_ref ?? null, roadmap_item_label: f.roadmap_item_label ?? null };
     });
     return { cols: ['Feedback', 'Source', 'Theme', 'Roadmap item', 'Status'], rows,
       filters: [{ key: 'source', label: 'Source', options: fixed(FEEDBACK_SOURCES) }, { key: 'theme', label: 'Theme', options: present(rows, 'theme') },

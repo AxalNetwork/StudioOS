@@ -87,6 +87,15 @@ function promoIdemPart(code?: string): string {
   return normalizeCode(code).replace(/[^A-Z0-9_-]/g, '').slice(0, 64) || 'none';
 }
 
+/**
+ * D1274: what the webhook records with a one-time redemption — the product,
+ * the price before the code and what it took off. Stamped at creation, because
+ * the PaymentIntent's own amount is already the discounted one.
+ */
+function promoDetailMeta(productId: string, amountBefore: number, discount: number): Record<string, string> {
+  return { product_id: productId, promo_amount_before: String(amountBefore), promo_discount: String(discount) };
+}
+
 payments.post('/intent', async (c) => {
   const user = (await requireAuth(c)) as TierUser;
   await ensureTierSchema(c.env);
@@ -264,10 +273,11 @@ payments.post('/intent', async (c) => {
       // from the catalog amount and stamp the promo id so the webhook records
       // the redemption. This generic one-time path has NO fulfilment hook, so a
       // free (sub-minimum) result has nothing to grant → reject explicitly.
-      const { discountedAmount } = computeDiscount(promo, amount);
+      const { discountedAmount, discountCents } = computeDiscount(promo, amount);
       if (discountedAmount < STRIPE_MIN_CHARGE_CENTS) {
         return c.json({ error: 'promo_amount_below_minimum', reason: 'amount_below_minimum' }, 400);
       }
+      Object.assign(metadata, promoDetailMeta(found.product.id, amount, discountCents));
       amount = discountedAmount;
       metadata.promo_code_id = promo.id;
     }
@@ -531,6 +541,13 @@ payments.post('/alacarte/intent', async (c) => {
         userId: user.id,
         featureKey,
         unlockDays: unlockDays === '0' ? null : Number(unlockDays),
+        detail: {
+          productId: found.product.id,
+          priceId: found.price.id,
+          amountBeforeCents: found.price.unit_amount,
+          discountCents: found.price.unit_amount,
+          currency: found.price.currency,
+        },
       });
       if (!granted) return c.json({ error: 'promo_invalid', reason: 'usage_limit_reached' }, 400);
       return c.json({ kind: 'payment', free: true, feature_key: featureKey });
@@ -546,7 +563,10 @@ payments.post('/alacarte/intent', async (c) => {
     unlock_days: unlockDays,
     price_id: found.price.id,
   };
-  if (promo) metadata.promo_code_id = promo.id;
+  if (promo) {
+    metadata.promo_code_id = promo.id;
+    Object.assign(metadata, promoDetailMeta(found.product.id, found.price.unit_amount, found.price.unit_amount - amount));
+  }
   return createPaymentIntent(c, {
     customer,
     amount,
