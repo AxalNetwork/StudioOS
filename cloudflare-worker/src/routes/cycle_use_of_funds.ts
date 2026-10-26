@@ -8,6 +8,7 @@ import { projectInActiveCompany } from '../services/tenancyScope';
 import { isSupportSession } from '../integrations/providers/mercury';
 import { base,fields,hires,idOf,makeBase,milestone,obj,PlanError,saveHire,saveMilestone,saveScenario,saveSplit,scenario,deleteScenario,view,type Scope } from '../services/useOfFunds/store';
 import { planRead,runwayToday } from '../services/useOfFunds/read';
+import useOfFundsEadwyn from './use_of_funds_eadwyn';
 
 const r=new Hono<{Bindings:Env;Variables:{uof:Scope;mercury:boolean}}>();
 r.use('*',async(c,next)=>{
@@ -34,6 +35,7 @@ const body=async(c:any)=>{
   if (!obj(b)) throw new PlanError(400,'invalid_plan','Send a plan object. Nothing was saved.');
   return b;
 };
+r.route('/eadwyn', useOfFundsEadwyn);
 r.get('/plan',async c=>c.json(await planRead(c.env,c.get('uof'),c.get('mercury'))));
 r.get('/scenarios',async c=>{
   const s=c.get('uof'); await base(c.env,s);
