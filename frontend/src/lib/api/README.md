@@ -361,6 +361,11 @@ and paged `/notes`; add/edit/delete notes use the same Worker scope. Only
 the author edits and deletes, firm colleagues read, and staff have no bypass.
 Reading whats-new advances that user/firm’s visit marker. #3057 consumes it.
 
+D1246 (#3261): `ddLifecycle.js` is a Due Diligence case's lifecycle on
+`/api/dd/cases/:uid`: the deal context and archive (`PATCH`), the decision, the
+deal team's memo, the reports list and a report's re-download behind step-up,
+and Send to IC. No page reads it yet; the case tabs are part 7 (#3266).
+
 D971 (#2756): `labOperations.js` reads the Lab's playbook, operative cohort size
 and filtered/paged history, and calls the existing Super Admin draft/publish
 routes and audited size write. Support sessions reuse `adminLab.js`; grant
