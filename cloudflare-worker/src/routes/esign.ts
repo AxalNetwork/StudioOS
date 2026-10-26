@@ -1706,6 +1706,13 @@ esign.post('/sign/:token', async (c) => {
           await recordPartnerActivationFailure(c.env, rec.envelope_id);
         } catch { console.warn('[esign] partner activation failure could not be recorded'); }
       }
+      // D958 — a referral partner's terms: the row that names this envelope
+      // records its signature and reads `signed`, then `active` from its
+      // start date. Its own try, so it never fails the signature.
+      try {
+        const { onReferralTermsEnvelopeCompleted } = await import('../services/referralPartnerTerms');
+        await onReferralTermsEnvelopeCompleted(c.env, rec.envelope_id);
+      } catch { console.warn('[esign] referral_terms_sign_failed'); }
       // Record the signature against the obligation it satisfies — the three
       // NDAs and the advisor disclaimer. Until this hook existed, all four had
       // a signable document, a wired template and a send route, and nothing

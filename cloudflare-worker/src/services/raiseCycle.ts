@@ -1580,6 +1580,11 @@ export async function figures(ctx: Ctx): Promise<Figure[]> {
   return Promise.all([readinessFigure(ctx), committedFigure(ctx), conversationFigure(ctx), runwayFigure(ctx)]);
 }
 
+/** D1191: keep the other tools' figures without reading pipeline amounts. */
+export async function nonCapitalFigures(ctx: Ctx): Promise<Figure[]> {
+  return Promise.all([readinessFigure(ctx), runwayFigure(ctx)]);
+}
+
 // ---------------------------------------------------------------------------
 // Cards and records, by module
 // ---------------------------------------------------------------------------

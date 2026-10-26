@@ -2833,10 +2833,10 @@ function AppInner() {
           Programs. The old address keeps its query and hash and adds
           ?moved=refer-earn; it is counted for #2319. */}
       <Route path="/admin/refer-earn" element={<ReferEarnRedirect />} />
-      {/* D569 — every read on it is `requireAdmin` and answers on either tier,
-          so the guard is `['admin']` and never `hqOnly`. Its one HQ-only
-          zone, the take rate, is `requireSuperAdmin`; the page asks only when
-          `/me` carries the elevation and says so otherwise. */}
+      {/* D569, corrected by D958 (N15) — the route is `hqOnly`, and its
+          commission, rules and payout reads are `requireSuperAdmin`, as is the
+          take rate; the page asks only when `/me` carries the elevation and
+          says so otherwise. */}
       <Route path="/admin/commissions" element={guard(['admin'], hqOnly(<AdminCommissions user={user} />))} />
       {/* D923 (#2370) — Partner invitations moved to its tabs. The old address
           lands on Overview with the moved notice; it is counted for #2319. */}
