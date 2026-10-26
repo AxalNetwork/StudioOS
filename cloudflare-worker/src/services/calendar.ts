@@ -11,8 +11,11 @@
  * They are kept as side-by-side pairs (no shared interface) so each
  * provider's quirks stay legible.
  */
-import type { Env } from '../types';
+import type { Env, User } from '../types';
 import { getSQL } from '../db';
+import { isSuperAdmin } from '../auth';
+import { branchOf } from '../util/branch';
+import { branchBindings } from './branches';
 import { encryptString, decryptString } from './cryptoBox';
 import { hostedEvents, staleMyEventCopies, ticketEvents } from './calendar/myEvents';
 import { investorMeetingEvents } from './calendar/investorMeetings';
@@ -453,6 +456,9 @@ export interface CalendarEvent {
    * the push lookup have no use for it and it costs a query.
    */
   pushed_to?: string[];
+  /** D1206: a scoped projection can never be copied or acted on. */
+  read_only?: true;
+  can?: { edit: false; cancel: false; rsvp: false; push: false };
 }
 
 function addMinutes(iso: string, mins: number): string {
@@ -833,8 +839,9 @@ async function gather(
       events.push(...await READERS[kind](env, userId, fromIso, toIso));
       sources.push({ kind, ok: true, error: null });
     } catch (e) {
-      console.warn('[calendar] source failed', { kind, outcome: 'unreadable' });
-      sources.push({ kind, ok: false, error: isMissingTableError(e) || isMissingColumnError(e) ? 'not_configured' : 'unreadable' });
+      const error = isMissingTableError(e) || isMissingColumnError(e) ? 'not_configured' : 'unreadable';
+      console.warn('[calendar] source failed', { kind, outcome: error });
+      sources.push({ kind, ok: false, error });
     }
   }
   events.sort((a, b) => a.start_at.localeCompare(b.start_at));
@@ -847,6 +854,101 @@ export async function fetchUserEventsWithSources(
   kinds?: string[],
 ): Promise<{ events: CalendarEvent[]; sources: CalendarSourceStatus[] }> {
   return gather(env, userId, role, fromIso, toIso, kinds);
+}
+
+/** D1206: deployment-bound read-only scope. Personal readers stay unchanged. */
+export interface CalendarScopeCoverage {
+  complete: boolean;
+  error: 'unreadable' | 'not_configured' | null;
+  reason: string | null;
+  studios: { name: string | null; code: string | null; ok: boolean; error: 'unreadable' | 'not_configured' | null; reason: string | null }[];
+}
+export async function fetchCalendarScope(
+  env: Env, actor: User, scope: 'studio' | 'all', fromIso: string, toIso: string, kinds?: string[],
+): Promise<{ events: CalendarEvent[]; sources: CalendarSourceStatus[]; coverage: CalendarScopeCoverage }> {
+  const branch = branchOf(env);
+  if (actor.role !== 'admin' || (scope === 'all' && (branch || !isSuperAdmin(actor)))) throw new Error('Forbidden');
+  const wanted = KNOWN_KINDS.filter(kind => !kinds?.length || kinds.includes(kind));
+  const unavailable = (error: 'unreadable' | 'not_configured', reason: string) => ({
+    events: [], sources: wanted.map(kind => ({ kind, ok: false, error })),
+    coverage: { complete: false, error, reason, studios: [] },
+  });
+  if (scope === 'studio' && !branch) {
+    return unavailable('not_configured', 'Not read here yet: HQ has no member-to-licence association. Open the studio deployment.');
+  }
+  let name: string | null = null;
+  if (scope === 'studio') {
+    try {
+      const licence = await env.DB.prepare('SELECT licence_uid, brand_name, status FROM branch_licence WHERE id = ?')
+        .bind(1).first<{ licence_uid: string; brand_name: string | null; status: string }>();
+      if (!licence?.licence_uid || licence.status === 'terminated') return unavailable('not_configured', 'Not read here yet: this deployment has no current studio licence.');
+      name = licence.brand_name || null;
+    } catch {
+      return unavailable('unreadable', 'Unreadable: the studio licence could not be read. Try again.');
+    }
+  }
+  const coverage: CalendarScopeCoverage = { complete: true, error: null, reason: null, studios: [] };
+  if (scope === 'all') {
+    // No calendar RPC exists. The owner chose explicit unavailable remote
+    // coverage, not guessed membership or a call to another studio's database.
+    try {
+      const remote = await env.DB.prepare(`SELECT l.brand_name, d.code FROM territory_licences l
+        LEFT JOIN licence_deployments d ON d.licence_uid = l.uid WHERE l.status <> ? ORDER BY l.id`)
+        .bind('terminated').all<{ brand_name: string | null; code: string | null }>();
+      for (const row of remote.results || []) coverage.studios.push({ name: row.brand_name || null, code: row.code,
+        ok: false, error: 'not_configured', reason: 'Not read here yet: remote studio calendars have no reader.' });
+      for (const binding of branchBindings(env)) {
+        if (!coverage.studios.some(row => row.code === binding.code)) coverage.studios.push({ name: null, code: binding.code,
+          ok: false, error: 'not_configured', reason: 'Not read here yet: remote studio calendars have no reader.' });
+      }
+      if (coverage.studios.length) {
+        coverage.complete = false; coverage.error = 'not_configured';
+        coverage.reason = 'Not read here yet: remote studios are not included. These are HQ items only.';
+      }
+    } catch {
+      coverage.complete = false; coverage.error = 'unreadable';
+      coverage.reason = 'Unreadable: the studio register could not be read. These are HQ items only. Try again.';
+    }
+  }
+  const byId = new Map<string, CalendarEvent>();
+  const statuses = new Map<CalendarEvent['kind'], CalendarSourceStatus>(wanted.map(kind => [kind, { kind, ok: true, error: null }]));
+  let after = 0;
+  try {
+    // Keyset pages avoid D1's row ceilings. There is no silent member cap.
+    while (true) {
+      const rows = await env.DB.prepare("SELECT id, role FROM users WHERE is_active = ? AND id > ? AND (role <> 'admin' OR id = ? OR ? = 1) ORDER BY id LIMIT ?")
+        .bind(1, after, actor.id, scope === 'all' ? 1 : 0, 100).all<{ id: number; role: string }>();
+      const members = rows.results || [];
+      for (const member of members) {
+        const result = await fetchUserEventsWithSources(env, member.id, member.role, fromIso, toIso, kinds);
+        for (const event of result.events) byId.set(event.id, event);
+        for (const status of result.sources) if (!status.ok) {
+          const previous = statuses.get(status.kind);
+          if (previous?.error !== 'unreadable') statuses.set(status.kind, status);
+        }
+      }
+      if (members.length < 100) break;
+      after = members[members.length - 1].id;
+    }
+  } catch {
+    // A failed membership read must not present a shorter list as complete.
+    return unavailable('unreadable', 'Unreadable: studio membership could not be read. Try again.');
+  }
+  const sources = [...statuses.values()];
+  const sourceFailure = sources.find(source => !source.ok);
+  if (sourceFailure) {
+    coverage.complete = false; coverage.error = sourceFailure.error;
+    coverage.reason = 'Unreadable: some calendar sources could not be read. Try again.';
+  }
+  coverage.studios.unshift({ name: scope === 'studio' ? name : 'HQ', code: branch || 'hq',
+    ok: !sourceFailure, error: sourceFailure?.error || null,
+    reason: sourceFailure ? 'Unreadable: some calendar sources could not be read. Try again.' : null });
+  const events = [...byId.values()].sort((a, b) => a.start_at.localeCompare(b.start_at)).map(event => ({
+    ...event, organizer_email: null, attendees: event.attendees.map(attendee => ({ ...attendee, email: null })),
+    location_uri: null, notes: null, url: undefined, pushed_to: [], read_only: true as const,
+    can: { edit: false as const, cancel: false as const, rsvp: false as const, push: false as const },
+  }));
+  return { events, sources, coverage };
 }
 
 /** The strict read: a source that failed is an error, not a shorter list. */
@@ -943,6 +1045,7 @@ export function eventsToIcs(events: CalendarEvent[], calendarName = 'Axal Studio
   ];
   const now = icsDt(new Date().toISOString());
   for (const ev of events) {
+    if (ev.read_only) continue;
     lines.push('BEGIN:VEVENT');
     lines.push(`UID:${ev.kind}-${ev.source_uid}@axal.vc`);
     lines.push(`DTSTAMP:${now}`);
@@ -987,7 +1090,7 @@ function googlePayload(ev: CalendarEvent): any {
 export async function pushEventToGoogle(
   accessToken: string, ev: CalendarEvent, googleEventId: string | null,
 ): Promise<string | null> {
-  if (ev.kind === 'calendly_event') return null;
+  if (ev.read_only || ev.kind === 'calendly_event') return null;
   const headers = { Authorization: `Bearer ${accessToken}`, 'Content-Type': 'application/json' };
   const payload = JSON.stringify(googlePayload(ev));
   try {
@@ -1059,7 +1162,7 @@ function microsoftPayload(ev: CalendarEvent): any {
 export async function pushEventToMicrosoft(
   accessToken: string, ev: CalendarEvent, eventId: string | null,
 ): Promise<string | null> {
-  if (ev.kind === 'calendly_event') return null;
+  if (ev.read_only || ev.kind === 'calendly_event') return null;
   const headers = { Authorization: `Bearer ${accessToken}`, 'Content-Type': 'application/json' };
   const payload = JSON.stringify(microsoftPayload(ev));
   try {

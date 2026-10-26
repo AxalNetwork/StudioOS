@@ -26,14 +26,15 @@ import { addToCalendarLinks, eventVisibleTo, joinLinkAllowed, MY_EVENT_KINDS } f
 import { feedStatus, mintFeedToken, resolveFeedToken, revokeFeedToken } from '../services/calendar/feedTokens';
 import { investorUpsell, userMeetsInvestorTier } from '../middleware/requireInvestorTier';
 import { logAdminAction } from '../services/adminAudit';
-import { requireAuth } from '../auth';
+import { requireAuth, isSuperAdmin } from '../auth';
+import { branchOf } from '../util/branch';
 import {
   googleOAuthAvailable, microsoftOAuthAvailable,
   buildGoogleAuthUrl, buildMicrosoftAuthUrl, GOOGLE_MEET_TRANSCRIPT_SCOPE,
   revokeGoogleOAuthGrant, loadRefreshTokenExport,
   exchangeGoogleCode, exchangeMicrosoftCode,
   fetchGoogleUserinfo, fetchMicrosoftUserinfo,
-  fetchUserEvents, fetchUserEventsWithSources, attachPushRecords, eventsToIcs, KNOWN_KINDS,
+  fetchUserEvents, fetchUserEventsWithSources, fetchCalendarScope, attachPushRecords, eventsToIcs, KNOWN_KINDS,
   syncUserToGoogle, syncUserToMicrosoft,
   preflightOAuthSecrets,
 } from '../services/calendar';
@@ -180,12 +181,21 @@ calendar.get('/events', safe('events', 'Could not list calendar events', async (
   const fromQ = url.searchParams.get('from');
   const toQ = url.searchParams.get('to');
   const kindsQ = url.searchParams.get('kinds');
+  const scope = url.searchParams.get('scope') || 'mine';
+  if (!['mine', 'studio', 'all'].includes(scope)) return c.json({ detail: 'Invalid calendar scope' }, 400);
+  if (scope !== 'mine' && user.role !== 'admin') return c.json({ detail: 'Admin role required' }, 403);
+  if (scope === 'all' && (branchOf(c.env) || !isSuperAdmin(user))) return c.json({ detail: 'Super admin required' }, 403);
   const fromDt = fromQ ? new Date(fromQ) : new Date(Date.now() - 86_400_000);
   const toDt = toQ ? new Date(toQ) : new Date(Date.now() + 90 * 86_400_000);
   if (Number.isNaN(fromDt.getTime()) || Number.isNaN(toDt.getTime())) {
     return c.json({ detail: 'Invalid from/to ISO datetime' }, 400);
   }
   const kinds = kindsQ ? kindsQ.split(',').map(s => s.trim()).filter(Boolean) : undefined;
+  if (scope === 'studio' || scope === 'all') {
+    const result = await fetchCalendarScope(c.env, user, scope, fromDt.toISOString(), toDt.toISOString(), kinds);
+    return c.json({ items: result.events, sources: result.sources, coverage: result.coverage,
+      scope, read_only: true, from: fromDt.toISOString(), to: toDt.toISOString() });
+  }
   // THE DEGRADING READ, deliberately — see `gather` in services/calendar.ts.
   // Until now one unreadable source turned the whole agenda into a 500 and
   // nothing in the response could say which one. `sources` reports every kind
