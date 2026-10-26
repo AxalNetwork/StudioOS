@@ -16,6 +16,9 @@ export const bankAccountsApi = {
     }
     return request(`/admin/bank-accounts/history?${query}`);
   },
+  // list includes per-account mercury facts and the resolver's masked notice_preview.
+  // A source UID is checked by the Worker before an account can be added.
+  addFromMercury: (uid, body) => request('/admin/bank-accounts', { method: 'POST', body: JSON.stringify({ ...body, mercury_account_uid: uid }) }),
   add: (body) => request('/admin/bank-accounts', { method: 'POST', body: JSON.stringify(body) }),
   /** The label and the purposes only; any other field is refused. */
   update: (uid, { label, purposes } = {}) => request(account(uid), {

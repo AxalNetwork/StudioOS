@@ -10,6 +10,7 @@ import { Lightbox, usePhoneWidth } from '../../../ui';
 import { SourcesPanel, useDeckSources } from './SourcesBoards';
 import AddMenu from './AddMenu';
 import CardAssistBar from './CardAssistBar';
+import { BlockGrid } from './BlockGrid';
 import { ChartBlock, ChartLibrary, ChartToolbar } from './ChartTools';
 import { asList, currentVersion, isReadOnly, ventureQuery } from './pitchStudioModel';
 import { cardOf, presentHref } from './presentExportModel';
@@ -17,7 +18,7 @@ import {
   ADDABLE_KINDS, AUDIENCE_LABELS, CALLOUTS, KIND_LABELS, KIT_FAILED, MODEL_FAILED, NOTES_PLACEHOLDER, NO_CARDS, NO_KIT,
   NOT_RECORDED, PHONE_NOTE, READ_FAILED, THEME_LABELS,
   addBlock, applyLayout, applyToAll, blockLabel, cardColours, cardTitle, cardsOf, changesOf, firstFree, firstRunSeen,
-  keyMove, markFirstRunSeen, moveCard, placementProblem, removeBlock, saveState, standardSizes, staleCards, tileValue, updateBlock,
+  keyMove, markFirstRunSeen, moveCard, placementProblem, removeBlock, saveState, standardSizes, staleCards, updateBlock,
 } from './editorModel';
 
 /**
@@ -413,16 +414,8 @@ function CenterCard({ card, index, colours, theme, kit, selBlock, readOnly, char
         style={{ aspectRatio: '16 / 9', background: bg, color: colours.ink, backgroundImage: bgImage ? `url("${bgImage}")` : undefined, backgroundSize: 'cover' }}
         data-testid="pitch-editor-card">
         {blocks && blocks.length ? (
-          <div className="absolute inset-0 grid gap-2 p-[3%]" style={{ gridTemplateColumns: 'repeat(12, minmax(0, 1fr))', gridTemplateRows: 'repeat(6, minmax(0, 1fr))' }}>
-            {blocks.map((b) => (
-              <button type="button" key={b.id}
-                className={`relative min-h-0 min-w-0 overflow-hidden rounded-[8px] p-1.5 text-left ${selBlock === b.id ? 'outline outline-2 outline-violet-500' : 'outline outline-1 outline-dashed outline-black/10'}`}
-                style={{ gridColumn: `${b.grid.c1} / ${b.grid.c2 + 1}`, gridRow: `${b.grid.r1} / ${b.grid.r2 + 1}` }}
-                onClick={() => onSelectBlock(b.id)} aria-label={blockLabel(b)} data-testid={`pitch-editor-block-${b.id}`}>
-                <BlockView block={b} colours={colours} charts={charts} />
-              </button>
-            ))}
-          </div>
+          <BlockGrid blocks={blocks} colours={colours} selected={selBlock} onSelect={onSelectBlock}
+            renderChart={(b) => <ChartBlock block={b} charts={charts} colours={colours} />} testId="pitch-editor-blocks" />
         ) : <FieldedCard card={card} index={index} colours={colours} />}
       </div>
       {!readOnly ? (
@@ -448,46 +441,11 @@ function FieldedCard({ card, index, colours }) {
       {c.bullets.length ? <ul className="m-0 list-disc pl-5 text-[13px]">{c.bullets.map((b, i) => <li key={i}>{b}</li>)}</ul> : null}
       {c.figures.length ? (
         <div className="grid grid-cols-3 gap-2">
-          {c.figures.map((f, i) => <span key={i} className="flex flex-col"><b className="text-[16px]">{f.value}</b><span className="text-[11px]" style={{ color: colours.muted }}>{f.label}</span></span>)}
+          {c.figures.map((f, i) => <span key={i} className="flex flex-col"><b className="text-[16px]">{f.v}</b><span className="text-[11px]" style={{ color: colours.muted }}>{f.k}</span></span>)}
         </div>
       ) : null}
     </div>
   );
-}
-
-function BlockView({ block: b, colours, charts }) {
-  if (b.kind === 'text') {
-    if (!String(b.text || '').trim()) return <span className="text-[11px] italic" style={{ color: colours.muted }}>Text · empty</span>;
-    if (b.style === 'heading') return <span className="text-[20px] font-extrabold leading-tight">{b.text}</span>;
-    if (b.style === 'list') return <ul className="m-0 list-disc pl-4 text-[12px]">{String(b.text).split('\n').filter(Boolean).map((l, i) => <li key={i}>{l}</li>)}</ul>;
-    return <span className="text-[12.5px] leading-snug">{b.text}</span>;
-  }
-  if (b.kind === 'metric') {
-    const v = tileValue(b);
-    return (
-      <span className="flex h-full flex-col justify-center">
-        <span className="text-[10.5px] font-bold uppercase" style={{ color: colours.muted }}>{b.label || 'Metric'}</span>
-        <span className={v === NOT_RECORDED ? 'text-[11.5px] italic' : 'text-[20px] font-extrabold'}>{v}</span>
-        {b.binding ? <span className="text-[10px]" style={{ color: colours.muted }}>{b.binding.source_key} · {b.binding.as_of || 'date not recorded'} · {b.binding.grade || NOT_RECORDED}</span> : null}
-      </span>
-    );
-  }
-  if (b.kind === 'image') return b.image_url ? <img src={b.image_url} alt={b.alt || ''} className="h-full w-full rounded object-cover" /> : <span className="text-[11px] italic">Image · none chosen</span>;
-  if (b.kind === 'video') {
-    return (
-      <span className="relative flex h-full w-full items-center justify-center rounded bg-black/80 text-white">
-        {b.poster_url ? <img src={b.poster_url} alt="" className="absolute inset-0 h-full w-full rounded object-cover opacity-80" /> : null}
-        <span className="relative text-[18px]" aria-hidden="true">▶</span>
-        <span className="absolute bottom-1 left-1 right-1 truncate text-[10px]">{b.title || b.provider}</span>
-      </span>
-    );
-  }
-  if (b.kind === 'audio') return <span className="flex items-center gap-1 text-[11.5px]"><span aria-hidden="true">▶</span>{b.label || 'Audio clip'}</span>;
-  if (b.kind === 'link') return <span className="inline-flex rounded-[8px] px-2 py-1 text-[12px] font-bold text-white" style={{ background: colours.accent }}>{b.label || 'Open'}</span>;
-  if (b.kind === 'graphic') return <span className="text-[11px]" style={{ color: colours.muted }}>Graphic · {b.graphic || 'none chosen'}</span>;
-  // D898 group C: drawn from its bound series, with each series' source chip.
-  if (b.kind === 'chart') return <ChartBlock block={b} charts={charts} colours={colours} />;
-  return null;
 }
 
 // ---------------------------------------------------------------------------

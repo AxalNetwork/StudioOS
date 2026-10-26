@@ -14,7 +14,9 @@
  * asks to carry them, never in a share link. "Show sources" draws each
  * figure's binding (D896's, written on every figure New deck fills, D897):
  * its area, grade and the day it was read (D1111). A figure with no binding,
- * or bound to a slot nothing filled, says its source is not recorded. WHAT IS
+ * or bound to a slot nothing filled, says its source is not recorded. D1112
+ * (#2992): a card laid out on D898's grid is drawn from its blocks, in Present
+ * and in every export, and the two options apply to every format. WHAT IS
  * NOT THERE YET. Google Slides is part 10: its option is drawn, unavailable,
  * with the reason.
  */
@@ -126,11 +128,29 @@ export function cardOf(slide, i) {
     shown.add(key);
     card.figures.push({ k: str(b.label) || 'Figure', v: str(b.value) || NOT_RECORDED, source: sourceOf(b.binding), key });
   }
-  card.empty = !card.sub && !card.lines.length && !card.bullets.length && !card.figures.length && !card.image;
+  card.blocks = gridBlocks(s);
+  card.empty = !card.blocks.length && !card.sub && !card.lines.length && !card.bullets.length && !card.figures.length && !card.image;
   return card;
 }
 
 export const cardsOf = (deck) => (Array.isArray(deck?.slides) ? deck.slides.map(cardOf) : []);
+
+/**
+ * D1112 (#2992): the blocks a card lays out on D898's 12 × 6 grid, those with
+ * a whole range on it. A card with any is drawn from them, as the editor
+ * draws it; a card with none is drawn from its fields.
+ */
+export function gridBlocks(card) {
+  const ok = (n) => Number.isInteger(n);
+  return (Array.isArray(card?.blocks) ? card.blocks : [])
+    .filter((b) => b && b.grid && ok(b.grid.c1) && ok(b.grid.c2) && ok(b.grid.r1) && ok(b.grid.r2));
+}
+
+/** "Ranked bars": a chart type as the editor's library names it. */
+export function chartLabel(t) {
+  const v = str(t).replace(/_/g, ' ');
+  return v ? `${v.charAt(0).toUpperCase()}${v.slice(1)}` : 'Chart';
+}
 
 /** What a key does in present mode: the canvas's arrows and Esc, plus Page keys, Space, Home and End. */
 export function stepFor(key) {
@@ -191,9 +211,18 @@ export const formatLabel = (id) => LABEL[id] || NOT_RECORDED;
 
 export const exportButton = (format) => `Export ${formatLabel(format)}`;
 
-/** The options apply to the HTML file; the PDF and PowerPoint routes carry the cards only, for now. */
-export const optionsApply = (format) => format === 'html';
-export const OPTIONS_HTML_ONLY = 'Speaker notes and the Sources appendix go in the HTML file for now. The PDF and PowerPoint files carry the cards.';
+/**
+ * D1112 (#2992): the two options apply to every format the dialog offers. The
+ * PDF puts the notes on a page after the cards and the Sources appendix last;
+ * PowerPoint puts each card's notes in its speaker notes and the appendix on
+ * a last slide; the HTML file under each card and at the end.
+ */
+export const optionsApply = (format) => FORMATS.some((f) => f.id === format && f.available);
+export const OPTIONS_WHERE = {
+  pdf: 'In the PDF, the notes are a page after the cards, and the Sources appendix is the last page.',
+  pptx: 'In PowerPoint, each card\'s notes are its speaker notes, and the Sources appendix is the last slide.',
+  html: 'In the HTML file, the notes sit under each card, and the Sources appendix is the last card.',
+};
 
 /** What the write changes, said before it happens. */
 export const whatExportDoes = (v) =>

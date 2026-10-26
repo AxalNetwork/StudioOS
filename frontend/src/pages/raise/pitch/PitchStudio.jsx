@@ -14,7 +14,9 @@ import {
   EDIT_PATH, EMPTY_DECK, ENGAGEMENT_VIEW_ROWS, LINE, NOT_RECORDED, NO_VENTURE, NO_VIEWS, READ_ONLY, TABS, TITLE,
   asList, coverOf, currentVersion, dayLabel, isReadOnly, linkPage, linkRows, mmss,
   readerStats, slideSeconds, ventureQuery, versionLabel, versionRows, viewsState, weeklyViews,
+  NEW_DATA_FAILED, NOTHING_BOUND, NOTHING_NEW, REFRESH_THE_DECK, VERSION_SORTS, audienceOptions, newInData,
 } from './pitchStudioModel';
+import { deckSourcesApi } from '../../../lib/api/deckSources';
 import { presentHref } from './presentExportModel';
 import { useRailOption } from '../../../ui/railCrumbs';
 import { newDeckApi } from '../../../lib/api/newDeck';
@@ -255,7 +257,6 @@ export function StudioDecks({ reads, readOnly, q }) {
   const phone = usePhoneWidth();
   const versions = asList(reads.versions.data, 'versions', 'decks');
   const current = currentVersion(versions);
-  const rows = useMemo(() => versionRows(versions), [versions]);
   const busy = reads.projects.status === 'loading' || reads.versions.status === 'loading' || reads.versions.status === 'idle';
 
   let left;
@@ -272,7 +273,7 @@ export function StudioDecks({ reads, readOnly, q }) {
     left = (
       <>
         <CurrentDeck project={reads.project} current={current} versions={versions} deck={reads.deck} q={q} phone={phone} readOnly={readOnly} />
-        <Versions rows={rows} phone={phone} />
+        <Versions versions={versions} phone={phone} />
       </>
     );
   }
@@ -286,6 +287,7 @@ export function StudioDecks({ reads, readOnly, q }) {
         {left}
       </div>
       <aside className="flex flex-col gap-3.5" aria-label="Readers">
+        {current?.id && reads.versions.status === 'ok' ? <NewInData current={current} q={q} /> : null}
         <ReadersAside reads={reads} hasDeck={Boolean(current)} />
       </aside>
     </div>
@@ -389,19 +391,84 @@ function CurrentDeck({ project, current, versions, deck, q, phone, readOnly }) {
   );
 }
 
-function Versions({ rows, phone }) {
+/**
+ * D1112 (#2992), PD2: "New in your data since vN" — the figures this version
+ * holds whose store has moved on, from D896's refresh read (it writes
+ * nothing). "Refresh the deck" opens the editor, which marks those cards.
+ */
+function NewInData({ current, q }) {
+  const [state, setState] = useState({ status: 'loading', data: null });
+  const [tick, setTick] = useState(0);
+  useEffect(() => {
+    let live = true;
+    setState({ status: 'loading', data: null });
+    deckSourcesApi.refresh(current.id).then(
+      (d) => { if (live) setState({ status: 'ok', data: d }); },
+      (e) => { if (live) setState({ status: 'error', data: null }); reportError('pitch-studio:new-in-data', e); },
+    );
+    return () => { live = false; };
+  }, [current.id, tick]);
+  const label = versionLabel(current);
+  const view = state.status === 'ok' ? newInData(state.data) : null;
+  return (
+    <section className={`${CARD} flex flex-col gap-2 p-4`} data-testid="pitch-studio-new-data">
+      <span className={EYE}>New in your data since {label}</span>
+      {state.status === 'loading' ? <Skeleton h="h-14" /> : null}
+      {state.status === 'error' ? (
+        <div role="alert" className="flex flex-col gap-2">
+          <span className={MUTED}>{NEW_DATA_FAILED}</span>
+          <button type="button" className={`${GHOST} self-start`} onClick={() => setTick((t) => t + 1)}><RefreshCw size={14} aria-hidden="true" /> Try again</button>
+        </div>
+      ) : null}
+      {view && !view.checked ? <span className={MUTED} data-testid="pitch-studio-new-data-unbound">{NOTHING_BOUND}</span> : null}
+      {view && view.checked && !view.items.length ? <span className={MUTED} data-testid="pitch-studio-new-data-none">{NOTHING_NEW(label)}</span> : null}
+      {view && view.items.length ? (
+        <ul className="m-0 flex list-none flex-col p-0">
+          {view.items.map((it) => (
+            <li key={it.key} className="flex items-center justify-between gap-3 border-t border-axal-hairline py-1.5 text-[12.5px] first:border-t-0 dark:border-gray-700" data-testid={`pitch-studio-new-data-${it.key}`}>
+              <span className={INK}>{it.t}</span>
+              <span className="font-mono text-[11.5px] text-axal-muted dark:text-gray-400">{it.v}</span>
+            </li>
+          ))}
+        </ul>
+      ) : null}
+      {view && view.unknown ? <span className="text-[11.5px] text-axal-muted dark:text-gray-400">{view.unknown} figure{view.unknown === 1 ? '' : 's'} could not be read for you, so {view.unknown === 1 ? 'it is' : 'they are'} not compared.</span> : null}
+      {view && view.items.length ? <Link to={`${EDIT_PATH}${q}`} className="text-[12.5px] font-bold text-axal-violet hover:underline dark:text-violet-300" data-testid="pitch-studio-refresh-deck">{REFRESH_THE_DECK}</Link> : null}
+    </section>
+  );
+}
+
+const SELECT = 'min-h-[30px] rounded-[8px] border border-axal-hairline bg-white px-2 font-mono text-[11px] text-axal-ink dark:border-gray-700 dark:bg-gray-900 dark:text-gray-100';
+
+function Versions({ versions, phone }) {
+  const [audience, setAudience] = useState('all');
+  const [sort, setSort] = useState('newest');
+  const options = useMemo(() => audienceOptions(versions), [versions]);
+  const rows = useMemo(() => versionRows(versions, { sort, audience }), [versions, sort, audience]);
   return (
     <section className={`${CARD} overflow-hidden`} data-testid="pitch-studio-versions">
-      <div className="flex items-center justify-between gap-2 px-4 py-3">
+      <div className="flex flex-wrap items-center justify-between gap-2 px-4 py-3">
         <span className={`text-[14px] font-extrabold ${INK}`}>Versions</span>
-        <span className="font-mono text-[11px] text-axal-muted dark:text-gray-400">Newest first</span>
+        <span className="flex flex-wrap items-center gap-2">
+          <label className="flex items-center gap-1 font-mono text-[11px] text-axal-muted dark:text-gray-400">Audience
+            <select className={SELECT} value={audience} onChange={(e) => setAudience(e.target.value)} data-testid="pitch-studio-versions-audience">
+              {options.map((o) => <option key={o.id} value={o.id}>{o.t}</option>)}
+            </select>
+          </label>
+          <label className="flex items-center gap-1 font-mono text-[11px] text-axal-muted dark:text-gray-400">Sort
+            <select className={SELECT} value={sort} onChange={(e) => setSort(e.target.value)} data-testid="pitch-studio-versions-sort">
+              {VERSION_SORTS.map((o) => <option key={o.id} value={o.id}>{o.t}</option>)}
+            </select>
+          </label>
+        </span>
       </div>
+      {!rows.length ? <p className={`m-0 border-t border-axal-hairline px-4 py-3 dark:border-gray-700 ${MUTED}`} data-testid="pitch-studio-versions-filtered">No version is written for this audience.</p> : null}
       {phone ? (
         <ul className="m-0 list-none border-t border-axal-hairline p-0 dark:border-gray-700">
           {rows.map((r) => (
             <li key={r.id} className="flex min-h-[44px] items-center justify-between gap-3 border-b border-axal-hairline px-4 text-[12.5px] last:border-b-0 dark:border-gray-700">
               <span className={INK}><b>{r.label}</b> · {r.title} <span className="text-axal-muted dark:text-gray-400">· {r.audience}</span></span>
-              <span className="font-mono text-axal-muted dark:text-gray-400">{r.saved}</span>
+              <span className="font-mono text-axal-muted dark:text-gray-400">{r.saved} · {r.links} link{r.links === '1' ? '' : 's'}</span>
             </li>
           ))}
         </ul>
@@ -415,6 +482,7 @@ function Versions({ rows, phone }) {
               <th className="px-4 py-2 font-semibold">Round</th>
               <th className="px-4 py-2 font-semibold">Saved</th>
               <th className="px-4 py-2 font-semibold">By</th>
+              <th className="px-4 py-2 font-semibold">Shared links</th>
             </tr>
           </thead>
           <tbody>
@@ -426,6 +494,7 @@ function Versions({ rows, phone }) {
                 <td className="px-4 py-2.5 text-axal-muted dark:text-gray-400">{r.round}</td>
                 <td className="px-4 py-2.5 font-mono text-axal-muted dark:text-gray-400">{r.saved}</td>
                 <td className="px-4 py-2.5 text-axal-muted dark:text-gray-400">{r.by}</td>
+                <td className="px-4 py-2.5 font-mono text-axal-muted dark:text-gray-400" data-testid={`pitch-studio-version-links-${r.id}`}>{r.links}</td>
               </tr>
             ))}
           </tbody>
