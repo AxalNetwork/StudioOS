@@ -160,7 +160,7 @@ test('leave: a Free investor can leave a room they joined, and still cannot list
   assert.equal(list.status, 402);
   assert.equal(list.body.required, 'professional');
   const join = await call(app, env, FREE, `/api/deals/${DEAL}/dealroom/join`, { method: 'POST' });
-  assert.equal(join.status, 402, 'joining is not exempt');
+  assert.equal(join.status, 200, 'D1237: Free may request its one room after leaving');
   // The exemption is the DELETE only: another method on the same path is gated.
   const post = await call(app, env, FREE, `/api/deals/${ROOM}/dealroom/leave`, { method: 'POST' });
   assert.equal(post.status, 402);
@@ -172,7 +172,7 @@ test('leave: a Free investor can leave a room they joined, and still cannot list
 // Professional rule to its token's member (my_events_feed_d1033.test.ts).
 test('the exemption list names only precise routes, and index.ts mounts the gate that reads it', () => {
   assert.deepEqual(INVESTOR_PRO_EXEMPT.map((e) => [e.method, e.path.source]),
-    [['GET', '^\\/api\\/dd\\/reports\\/download\\/[A-Za-z0-9_-]+\\.[A-Za-z0-9_-]+\\/?$'], ['GET', '^\\/api\\/deals\\/[1-9][0-9]*\\/?$'], ['DELETE', '^\\/api\\/deals\\/[^/]+\\/dealroom\\/leave\\/?$'],
+    [['GET', '^\\/api\\/dd\\/reports\\/download\\/[A-Za-z0-9_-]+\\.[A-Za-z0-9_-]+\\/?$'], ['GET', '^\\/api\\/deals\\/[1-9][0-9]*\\/?$'], ['GET', '^\\/api\\/deals\\/dealroom\\/quota\\/?$'], ['POST', '^\\/api\\/deals\\/[1-9][0-9]*\\/dealroom\\/join\\/?$'], ['DELETE', '^\\/api\\/deals\\/[^/]+\\/dealroom\\/leave\\/?$'],
       ['GET', '^\\/api\\/calendar\\/feed\\/my-events\\.ics$'],
       // D1209 (#3175): the whole-calendar feed, one precise path, under the same rule as my events.
       ['GET', '^\\/api\\/calendar\\/feed\\/calendar\\.ics$']]);
