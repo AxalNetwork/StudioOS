@@ -23,6 +23,7 @@ export * from './api/adminNetwork.js';
 export * from './api/adminPartnerFirms.js';
 export * from './api/adminPayments.js';
 export * from './api/adminPrograms.js';
+export * from './api/adminPromos.js';
 export * from './api/adminStorage.js';
 export * from './api/aiBudget.js';
 export * from './api/approvalBoards.js';
@@ -32,6 +33,7 @@ export * from './api/billingAlerts.js';
 export * from './api/billingCheckout.js';
 export * from './api/billingInvoices.js';
 export * from './api/buildPlan.js';
+export * from './api/calendarConnections.js';
 export * from './api/calendarItems.js';
 export * from './api/capTableAccess.js';
 export * from './api/capTableHolder.js';
@@ -2060,11 +2062,22 @@ export const api = {
   // Task #9 — Promo Code admin CRUD. List is a plain admin read; create/toggle/
   // delete are money-adjacent so the server enforces TOTP + step-up (the global
   // `request` helper auto-handles the 403 `step_up_required` challenge).
-  //   adminListPromos()           → { promos: [PromoView] }
+  //   adminListPromos()           → { promos: [PromoView] }: every code. D1272 (#3298) made the read
+  //                                 paged; this walks its pages (100 a page) so today's console and
+  //                                 the product lightbox still see every code. The paged read, the
+  //                                 lifecycle and Replace are `adminPromosApi` (lib/api/adminPromos.js).
   //   adminCreatePromo(body)      → { ok, promo_id, code }
   //   adminSetPromoActive(id, on) → { ok, promo_id, active }
   //   adminDeletePromo(id)        → { ok, promo_id }
-  adminListPromos: () => request('/admin/promos'),
+  adminListPromos: async () => {
+    const promos = [];
+    for (let page = 1; page <= 100; page += 1) {
+      const r = await request(`/admin/promos?page=${page}&page_size=100`);
+      promos.push(...(r?.promos || []));
+      if (promos.length >= Number(r?.total ?? 0) || !(r?.promos || []).length) break;
+    }
+    return { promos };
+  },
   adminCreatePromo: (body) =>
     request('/admin/promos', { method: 'POST', body: JSON.stringify(body || {}) }),
   adminSetPromoActive: (id, active) =>

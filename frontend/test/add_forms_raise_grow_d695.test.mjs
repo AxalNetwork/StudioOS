@@ -77,7 +77,7 @@ const COPY = {
     title: 'Enter a KPI', cta: 'Save KPI', sub: 'A figure by hand, with its source. Connected sources fill the rest.', foot: 'A connected source overrides a hand entry.',
     labels: ['KPI', 'Value', 'As of', 'Source', 'Note'],
     chips: { kpi: [['MRR', 'Customers', 'Churn', 'Expansion MRR', 'Burn', 'Runway', 'Custom'], 'mrr'], source: [['Entered by hand'], 'manual'] },
-    notes: ['Stripe shows here once connected.', 'Expansion MRR is worked out from the revenue ledger. Runway is worked out from cash and burn.'],
+    notes: ['Expansion MRR is worked out from the revenue ledger. Runway is worked out from cash and burn.'],
     placeholders: ['$38,400', 'Optional'],
   },
   'team-expansion': {
@@ -154,7 +154,7 @@ async function assertCopy(m) {
 
 test('1: each Grow form draws the canvas copy, with D691.md\'s KPI note and Log feedback\'s foot once its band proposes themes', async () => {
   await mutationCheck(source, path, assertCopy, [
-    ["note: 'Stripe shows here once connected.'", "note: 'Stripe and Accounting show here once connected.'"],
+    ["note: 'Expansion MRR is worked out from the revenue ledger.", "note: 'Expansion MRR is entered from the revenue ledger."],
     ["{ kind: 'CH', name: 'repeats', k: 'Repeats', opts: REPEATS, def: 2 }", "{ kind: 'CH', name: 'repeats', k: 'Repeats', opts: REPEATS, def: 0 }"],
     ["['culture', 'Culture']]);\nconst REPEATS", "]);\nconst REPEATS"],
     ["{ kind: 'CH', name: 'terms_kind', k: 'Terms', opts: TERMS_KIND, def: 3 }", "{ kind: 'CH', name: 'terms_kind', k: 'Terms', opts: TERMS_KIND, def: 0 }"],
@@ -227,19 +227,19 @@ async function assertFields(m) {
   } finally { await mk.unmount(); }
   assert.equal(form(m, 'market-expansion').toBody({ name: 'P', geography_ref: 'PT' }).geography_ref, 'PT');
 
-  // Enter a KPI: Custom reveals a name and a unit; disabled KPIs; no source; ?kpi= fixes it.
+  // Enter a KPI: Custom reveals a name and a unit; disabled KPIs; a hand entry says so (D969); ?kpi= fixes it.
   const kp = await mount(form(m, 'revenue-and-traction'), { slug: 'revenue-and-traction' });
   try {
     for (const k of ['expansion_mrr', 'runway']) assert.equal(propsOf(kp.radios('kpi').find((n) => propsOf(n).value === k)).disabled, true, `${k} is not entered by hand`);
     assert.ok(!kp.by('cycle-form-label'));
     await kp.input('value', '38,400'); await kp.input('as_of', '2026-10-12');
     await kp.submit();
-    assert.deepEqual(kp.calls[0], ['kpi', P, { kpi: 'mrr', value: 38400, as_of: '2026-10-12', note: null }], 'US dollars, not cents, and no source');
+    assert.deepEqual(kp.calls[0], ['kpi', P, { kpi: 'mrr', value: 38400, as_of: '2026-10-12', note: null, source: 'manual' }], 'US dollars, not cents, entered by hand');
     await kp.choose('kpi', 'custom');
     assert.ok(kp.by('cycle-form-label'), 'Custom reveals a name');
     await kp.input('label', 'Pilots'); await kp.choose('unit', 'pct');
     await kp.submit();
-    assert.deepEqual(kp.calls[1][2], { kpi: 'custom', value: 38400, as_of: '2026-10-12', note: null, label: 'Pilots', unit: 'pct' });
+    assert.deepEqual(kp.calls[1][2], { kpi: 'custom', value: 38400, as_of: '2026-10-12', note: null, source: 'manual', label: 'Pilots', unit: 'pct' });
   } finally { await kp.unmount(); }
   const fixed = await mount(form(m, 'revenue-and-traction'), { slug: 'revenue-and-traction', search: '?kpi=net_burn' });
   try { assert.deepEqual(fixed.radios('kpi').filter((n) => propsOf(n).checked).map((n) => propsOf(n).value), ['net_burn']); } finally { await fixed.unmount(); }
@@ -283,7 +283,7 @@ async function assertFields(m) {
 test('7: Grow\'s fields send the bodies #1697\'s writers read', async () => {
   await mutationCheck(source, path, assertFields, [
     ["when: { name: 'then', value: NOTIFY } }", '}'],
-    ["from_email: notify ? str(v.from_email) : null,\n    };\n  },\n  submit: (w, projectId, v) => w.grow.feedback", "from_email: str(v.from_email),\n    };\n  },\n  submit: (w, projectId, v) => w.grow.feedback"],
+    ["notify_on_ship: notify, from_email: notify ? str(v.from_email) : null,\n    };\n  },\n  // D969", "notify_on_ship: notify, from_email: str(v.from_email),\n    };\n  },\n  // D969"],
     ["...(bar == null ? {} : { bar_currency: 'usd' })", "bar_currency: 'usd'"],
     ["if (s.endsWith('%')) return { terms_pct: toNumber(s) };", ''],
     ["when: (v) => Boolean(v.terms_kind) && v.terms_kind !== 'none' }", '}'],
@@ -330,7 +330,7 @@ async function assertEdits(m) {
     assert.ok(fb.text().includes('Edit feedback') && fb.text().includes('Save'));
     await fb.choose('status', 'shipped');
     await fb.submit();
-    assert.deepEqual(fb.calls, [['feedbackUpdate', P, 'u1', { theme: 'Exports', roadmap_item_label: null, status: 'shipped' }]]);
+    assert.deepEqual(fb.calls, [['feedbackUpdate', P, 'u1', { theme: 'Exports', roadmap_item_ref: null, status: 'shipped' }]]);
   } finally { await fb.unmount(); }
   // Edit role: only what was typed; no Post to from a row.
   const roEdit = m.EDITS.grow['team-expansion'];
@@ -353,7 +353,7 @@ async function assertEdits(m) {
     assert.ok(!kp.radios('kpi').length, 'the KPI is fixed');
     await kp.input('value', '40,000'); await kp.input('as_of', '2026-10-13');
     await kp.submit();
-    assert.deepEqual(kp.calls, [['kpi', P, { kpi: 'mrr', value: 40000, as_of: '2026-10-13', note: null }]]);
+    assert.deepEqual(kp.calls, [['kpi', P, { kpi: 'mrr', value: 40000, as_of: '2026-10-13', note: null, source: 'manual' }]]);
   } finally { await kp.unmount(); }
   // Edit feedback, Edit market and Edit obligation keep Status, Decision and State.
   const names = (f) => (f.fields || []).flatMap((x) => (x.parts ? x.parts.map((p) => p.name) : [x.name]));

@@ -60,7 +60,7 @@ test('field adapter preserves legacy rules, defaults, conditional payloads and c
     ["field.type === 'select' ? 'CH'", "field.type === 'select' ? 'T'"],
     ["if (!field.when) return true;", 'if (true) return true;'],
     ["option.checked).map", "false).map"],
-    ["formFields({ fields: field.parts }, loaded)", '[]'],
+    ["formFields({ fields: field.parts }, loaded, current)", '[]'],
     ["return errors;\n}", 'return {};\n}'],
     ["money ? copy.replace(/€/g, '$') : copy", 'copy'],
   ]);
@@ -142,7 +142,7 @@ test('options load before fields, supply defaults/notes, and a refusal prevents 
   await mutationCheck(source, path, assertOptions, [
     ["useState(refused ? null : loadOptions ? undefined : {})", 'useState(refused ? null : {})'],
     ['busy || !loaded || blocked} data-testid="cycle-form-save"', 'busy || blocked} data-testid="cycle-form-save"'],
-    ['setValues(formValues(formFields(base, result), current, queryValues));', ''],
+    ['setValues(formValues(formFields(base, result, current), current, queryValues));', ''],
     ['setRefusal(error?.message ||', "setRefusal('Wrong sentence' ||"],
   ]);
 });

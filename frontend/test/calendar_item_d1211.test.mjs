@@ -422,7 +422,8 @@ test('the page: the drawer route, each row opening its item, no browser pop-up, 
   const app = read('frontend/src/App.jsx');
   assert.match(app, /<Route path="\/calendar\/item\/:kind\/:id" element=\{guard\(\['admin', 'founder', 'partner', 'investor', 'advisor', 'exploring'\], <CalendarPage \/>\)\} \/>/);
   assert.match(page, /const opened = itemOf\(location\.pathname\);/);
-  assert.match(page, /const behind = opened \? \(location\.state\?\.from \|\| '\/calendar'\) : location\.pathname;/, 'the drawer sits over the view it came from');
+  // D1212: the connected calendars sit over the view the same way.
+  assert.match(page, /const behind = opened \|\| connected \? \(location\.state\?\.from \|\| '\/calendar'\) : location\.pathname;/, 'the drawer sits over the view it came from');
   assert.match(page, /<CalendarItemDrawer kind=\{opened\.kind\} id=\{opened\.id\}/);
   assert.match(page, /onClose=\{\(\) => navigate\(behind\)\}/);
   assert.match(page, /<Link to=\{itemPath\(ev\.kind, ev\.source_id\)\} state=\{\{ from \}\}/, 'each row opens its item');
@@ -435,6 +436,9 @@ test('the page: the drawer route, each row opening its item, no browser pop-up, 
     const src = read(`frontend/src/pages/${file}`);
     assert.doesNotMatch(src, /window\.(confirm|alert|prompt)\(/, `${file}: no browser pop-up`);
     const boxes = src.match(/<Lightbox [^\n]+/g) || [];
-    assert.ok(boxes.length >= 2 && boxes.every((b) => b.includes('phone="sheet"')), `${file}: every dialog is a sheet on a phone`);
+    // D1212 (CAL21c): the item itself is a full page on a phone; every dialog over it stays a sheet.
+    const dialogs = boxes.filter((b) => !b.includes('testId="cal-item-drawer"'));
+    assert.ok(dialogs.length >= 2 && dialogs.every((b) => b.includes('phone="sheet"')), `${file}: every dialog is a sheet on a phone`);
+    assert.ok(boxes.filter((b) => b.includes('testId="cal-item-drawer"')).every((b) => !b.includes('phone="sheet"')), `${file}: the item is a full page on a phone`);
   }
 });

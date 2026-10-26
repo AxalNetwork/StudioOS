@@ -23,17 +23,21 @@ const own = (value, key) => value != null && Object.hasOwn(value, key);
 const linkOf = (href) => typeof href === 'string' && !/[\\\u0000-\u001f\u007f]/.test(href) ? safeHref(href) : null;
 
 /** The single boundary for canvas/Worker fields and today's legacy fields. */
-export function formFields(form, loaded = {}) {
+export function formFields(form, loaded = {}, current = null) {
   return (form?.fields ?? []).map((source) => {
     const field = { ...source, ...(loaded?.[source.name] ?? {}) };
     const kind = field.kind || (field.type === 'select' ? 'CH' : 'T');
-    const options = (field.options ?? field.opts ?? []).map((option) => {
+    // D969: `keep(current)` names the chip an Edit opened with, kept when the read does not list it.
+    const kept = typeof field.keep === 'function' && current ? field.keep(current) : null;
+    const listed = field.options ?? field.opts ?? [];
+    const all = kept && !listed.some((option) => String(option?.value ?? option) === String(kept.value)) ? [...listed, kept] : listed;
+    const options = all.map((option) => {
       if (typeof option === 'string') return { value: option, label: cleanFormCopy(option) };
       if (Array.isArray(option)) return { value: String(option[0]), label: cleanFormCopy(option[0]), meta: cleanFormCopy(option[1]), checked: !!option[2] };
       return { ...option, value: String(option.value ?? option.t ?? option.label), label: cleanFormCopy(option.label ?? option.t ?? option.value), meta: cleanFormCopy(option.meta ?? option.m), checked: !!(option.checked ?? option.on) };
     });
     return { ...field, kind, label: cleanFormCopy(field.k ?? field.label), input: field.input ?? field.type ?? 'text', options,
-      parts: field.parts ? formFields({ fields: field.parts }, loaded) : null };
+      parts: field.parts ? formFields({ fields: field.parts }, loaded, current) : null };
   });
 }
 
@@ -147,7 +151,7 @@ function Field({ field, values, errors, setValue, prefix, busy, compact = false,
 
 export default function FormLightbox({ form: base, current = null, cycle, slug, moduleName, onSubmit, onSaved, onClose, loadOptions = null, onSearch = null, searchDelay = 250, search = '', bar, refused = '' }) {
   const id = useId();
-  const initialFields = useMemo(() => formFields(base), [base]);
+  const initialFields = useMemo(() => formFields(base, {}, current), [base, current]);
   const queryValues = useMemo(() => typeof base?.fromQuery === 'function' ? base.fromQuery(new URLSearchParams(search)) : {}, [base, search]);
   const [values, setValues] = useState(() => formValues(initialFields, current, queryValues));
   const [errors, setErrors] = useState({});
@@ -156,9 +160,12 @@ export default function FormLightbox({ form: base, current = null, cycle, slug, 
   const [busy, setBusy] = useState(false);
   const saving = useRef(false);
   const [loaded, setLoaded] = useState(refused ? null : loadOptions ? undefined : {});
+  // D969: a failed read of the choices says so with Try again, and reads them again.
+  const [readFailed, setReadFailed] = useState(false);
+  const [attempt, setAttempt] = useState(0);
   const [done, setDone] = useState(null);
   const [copied, setCopied] = useState(false);
-  const fields = useMemo(() => formFields(base, loaded), [base, loaded]);
+  const fields = useMemo(() => formFields(base, loaded, current), [base, loaded, current]);
   // A T box with `search` offers what `onSearch` finds for its text, each
   // match under its `group`'s label; a pick fills the box and is sent under
   // its own `into` (else `search.into`) while the box still holds it.
@@ -195,13 +202,14 @@ export default function FormLightbox({ form: base, current = null, cycle, slug, 
     Promise.resolve().then(loadOptions).then((read) => {
       if (!live) return;
       const result = read ?? {};
-      setLoaded(result);
-      setValues(formValues(formFields(base, result), current, queryValues));
-    }, (error) => { if (live) { setLoaded(null); setRefusal(error?.message || 'The choices could not be read.'); } });
+      setLoaded(result); setReadFailed(false);
+      setValues(formValues(formFields(base, result, current), current, queryValues));
+    }, (error) => { if (live) { setLoaded(null); setReadFailed(true); setRefusal(error?.message || 'The choices could not be read.'); } });
     return () => { live = false; };
-    // The caller keys a mounted form per row; a new callback does not re-read.
+    // The caller keys a mounted form per row; a new callback does not re-read. Try again does (`attempt`).
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [attempt]);
+  const readAgain = () => { setLoaded(undefined); setReadFailed(false); setRefusal(''); setAttempt((n) => n + 1); };
   if (!base) return null;
   const cycleKey = String(cycle ?? '').toLowerCase();
   const name = moduleName || MODULES[cycleKey]?.find((module) => module.slug === slug)?.name;
@@ -236,6 +244,7 @@ export default function FormLightbox({ form: base, current = null, cycle, slug, 
   return <Lightbox pageBelow="lg" width={560} label={base.title} eyebrow={eyebrow} title={base.title} sub={base.sub ?? base.lead} onClose={onClose} footer={footer} focusKey={done ? 'done' : 'form'} testId="cycle-form" bar={bar}>
     <form id={id} onSubmit={save} noValidate className="flex flex-col gap-3.5 px-5 py-4">
       {refusal && <p role="alert" data-testid="cycle-form-refusal" className="m-0 rounded-lg border border-red-200 bg-red-50 p-3 text-[12.5px] text-red-700 dark:border-red-900 dark:bg-red-950/40 dark:text-red-300">{refusal}</p>}
+      {readFailed && <button type="button" onClick={readAgain} data-testid="cycle-form-read-again" className="self-start rounded-[9px] border border-axal-hairline bg-white px-3.5 py-[9px] text-[12.5px] font-bold text-axal-ink dark:border-gray-700 dark:bg-gray-900 dark:text-gray-100">Try again</button>}
       {done ? <div data-testid="cycle-form-done" className="space-y-3 text-[13px] text-axal-ink dark:text-gray-200">
         <p>{done.text}</p>
         {linkOf(done.href) && <a href={done.href} className="font-bold text-axal-violet underline dark:text-violet-300">Continue</a>}
