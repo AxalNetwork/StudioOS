@@ -33,7 +33,7 @@ test('a different profile or unknown segment adds no persona links, and existing
 test('persona onboarding admits Advisors without widening the other route guards', () => {
   const route = app.split('\n').find(line => line.includes('path="/onboarding/persona"'));
   const roles = [...route.matchAll(/'([a-z]+)'/g)].map(m => m[1]);
-  assert.deepEqual(roles, ['admin', 'founder', 'partner', 'investor', 'advisor']);
+  assert.deepEqual(roles, ['admin', 'founder', 'partner', 'investor', 'advisor', 'exploring']);
   assert.match(route, /<OnboardingPersonaPage \/>/);
 });
 test('the guide names the six Investor segments and the Advisor segment without promising a profile change', () => {
