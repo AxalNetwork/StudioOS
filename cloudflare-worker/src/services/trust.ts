@@ -867,6 +867,7 @@ export function obligationSource(row: any): string | null {
   const LABEL: Record<string, string> = {
     kyc_provider: 'Synced from identity verification',
     kyb_provider: 'Synced from entity verification',
+    kyb_case: 'Approved business verification',
     // Written by `recordTermsAcceptance`. Named rather than left to the fallback
     // because "Synced from signup clickwrap" reads like a system import of
     // somebody else's record, and this is the person's own act.

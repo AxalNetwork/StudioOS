@@ -196,7 +196,8 @@ test('the clear-state claim about automatic refresh is one the worker backs', ()
   assert.match(svc, /export async function resyncKycKyb/,
     'nothing reconciles obligations from account settings any more — the sentence is now false');
   assert.match(svc, /u\.kyc_status/, 'the resync no longer reads the account KYC status');
-  assert.match(svc, /cp\.kyb_status/, 'the resync no longer reads the company KYB status');
+  assert.match(svc, /LEFT JOIN kyb_businesses b/, 'the resync no longer reads recorded business cases');
+  assert.doesNotMatch(svc, /cp\.kyb_status/, 'the retired phantom column must not return');
   assert.match(read('cloudflare-worker/src/index.ts'), /resyncKycKyb\(env\)/,
     'the resync is never invoked, so nothing refreshes automatically');
 });
