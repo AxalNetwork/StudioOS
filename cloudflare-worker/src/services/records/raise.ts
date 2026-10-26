@@ -34,6 +34,7 @@ import {
   loadVersions, prospectFunds, requestTitles, timeOnDeck,
 } from '../raiseCycle';
 import { deckShareMetrics } from '../deckShareUse';
+import { fundSectionActual } from '../mercury/raiseFeeds';
 import {
   CHECK_SOURCES, EVENT_KINDS, LINK_EXPIRY_DAYS, START_FROM, WriterError, addProspectFeedback, addSectionHire, duplicateNarrativeVersion,
   logProspectEvent, markProspectPassed, rescoreReadiness, revokeDeckLink, saveUseOfFunds, scoreReadinessItem, updateCapHolder,
@@ -849,7 +850,22 @@ const funds = spec('use_of_funds', 'use-of-funds', async (rc, id) => {
       action: 'add-hire',
     };
   }),
-  section('actual', 'Actual against plan', async () => ({ rows: [], empty: 'Not recorded: no store splits spend by category.' })),
+  section('actual', 'Actual against plan', async (rc, id, record) => {
+    if (rc.mercuryRead === 'unreadable') return { rows: [], empty: 'Unreadable: the Mercury owner check could not be read. Try again.' };
+    if (rc.mercuryRead !== 'owner') return { rows: [], empty: 'Not recorded here: Mercury spend is private to the founder in their own session and company.' };
+    let actual: Awaited<ReturnType<typeof fundSectionActual>>;
+    try { actual = await fundSectionActual(rc.env, rc.user, rc.projectId, id); }
+    catch { return { rows: [], empty: 'Unreadable: accepted Mercury spend could not be read. Try again.' }; }
+    if (!actual) return { rows: [], empty: 'Not recorded: no accepted Mercury mapping with recorded spend for this section.' };
+    const { f } = loadedOf(record);
+    const plan = fundCells(f, FUND_SECTIONS.findIndex((s) => s.key === id)).amount;
+    return { rows: [
+      { a: 'Planned allocation', b: plan == null ? 'Not recorded' : usd(plan), c: 'Source: Modelled · Typed split and raise target' },
+      ...actual.windows.map((w) => ({ a: `Last ${w.months} complete months`,
+        b: w.cents == null ? 'Not recorded' : new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(w.cents / 100),
+        c: `Source: ${actual.source}` })),
+    ] };
+  }),
   section('feeds', 'Feeds', async (rc, _id, record) => {
     const { f } = loadedOf(record);
     const deck = await rc.env.DB.prepare(

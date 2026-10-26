@@ -9,7 +9,7 @@ import { useEscapeClose } from './useEscapeClose';
 // /auth/step-up, then resolves the original request via the event's done(true)
 // callback so the in-flight call is retried. Escape / cancel calls done(false)
 // which surfaces the original 403 to the caller.
-export default function StepUpModal() {
+export default function StepUpModal({ phoneSheet = false }) {
   const [open, setOpen] = useState(false);
   const [ttl, setTtl] = useState(15);
   const [code, setCode] = useState('');
@@ -76,9 +76,9 @@ export default function StepUpModal() {
   if (!open) return null;
 
   return (
-    <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/50 px-4"
+    <div className={`fixed inset-0 z-[100] flex items-center justify-center bg-black/50 px-4${phoneSheet ? ' max-sm:items-end max-sm:px-0' : ''}`} data-phone={phoneSheet ? 'sheet' : undefined}
       role="dialog" aria-modal="true" aria-label="Confirm it's you">
-      <div className="w-full max-w-sm rounded-2xl bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 shadow-xl p-6">
+      <div className={`w-full max-w-sm rounded-2xl bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 shadow-xl p-6${phoneSheet ? ' max-sm:max-w-none max-sm:rounded-b-none max-sm:max-h-[92dvh] max-sm:overflow-y-auto' : ''}`}>
         <div className="flex items-start justify-between mb-4">
           <div className="flex items-center gap-2">
             <div className="h-9 w-9 rounded-lg bg-violet-100 dark:bg-violet-900/40 flex items-center justify-center">
