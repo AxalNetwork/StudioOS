@@ -29,6 +29,7 @@ import test from 'node:test';
 import { readFileSync } from 'node:fs';
 import assert from 'node:assert/strict';
 import { DatabaseSync } from 'node:sqlite';
+import { tableFromBaseline } from './_baseline.mjs';
 import { SignJWT } from 'jose';
 
 import financials from '../src/routes/financials.ts';
@@ -205,4 +206,38 @@ test('2462: deck autofill excludes models nobody saved', () => {
   assert.ok(db.prepare(query).get(1),path);
   db.close();
  }
+});
+
+
+test('D1174: Capital score is not returned, written or exported; legacy storage stays intact', async () => {
+  const db = freshDb();
+  db.exec(tableFromBaseline(readFileSync(new URL('../sql/schema_baseline.sql', import.meta.url), 'utf8'), 'activity_logs'));
+  const legacy = '{"total":9,"legacy":true}';
+  assert.equal((await save(db, drivers)).status, 200);
+  db.prepare('UPDATE financial_models SET capital_recompute_json = ? WHERE project_id = ?').run(legacy, PROJECT_A);
+  const saved = await save(db, drivers);
+  assert.equal(saved.status, 200);
+  assert.equal(Object.hasOwn(await saved.json(), 'capital_recompute'), false);
+  const getResult = await (await get(financials, `/${PROJECT_A}`, founder, undefined, db)).json();
+  assert.equal(Object.hasOwn(getResult, 'capital_recompute'), false);
+  const recomputed = await financials.request(`/${PROJECT_A}/recompute`, { method: 'POST', headers: { Authorization: `Bearer ${await token(FOUNDER.user, 'founder')}` } }, env(db));
+  assert.equal(recomputed.status, 200);
+  assert.equal(Object.hasOwn(await recomputed.json(), 'capital_recompute'), false);
+  assert.equal(db.prepare('SELECT capital_recompute_json FROM financial_models WHERE project_id = ?').get(PROJECT_A)?.capital_recompute_json, legacy);
+  const exported = await get(financials, `/${PROJECT_A}/export.xlsx`, founder, undefined, db);
+  assert.equal(exported.status, 200);
+  assert.doesNotMatch(await exported.text(), /Capital score|capital_recompute/i);
+  const logs = db.prepare("SELECT details FROM activity_logs WHERE action = 'financial_model_saved'").all() as Array<{ details: string }>;
+  assert.equal(logs.length, 2);
+  for (const log of logs) assert.deepEqual(JSON.parse(log.details), { project_id: PROJECT_A, outcome: 'saved' });
+});
+
+
+test('D1174: recompute and export do not invent a forecast from an unsaved model', async () => {
+ const db = freshDb();
+ db.prepare('INSERT INTO financial_models (project_id, assumptions_json) VALUES (?, ?)').run(PROJECT_A, '{"mrr":123}');
+ const exported = await get(financials, `/${PROJECT_A}/export.xlsx`, founder, undefined, db);
+ assert.equal(exported.status, 404);
+ const recomputed = await financials.request(`/${PROJECT_A}/recompute`, { method: 'POST', headers: { Authorization: `Bearer ${await token(FOUNDER.user, 'founder')}` } }, env(db));
+ assert.equal(recomputed.status, 404);
 });

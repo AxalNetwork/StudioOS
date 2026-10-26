@@ -518,8 +518,9 @@ export const SIDEBAR_GROUPS = {
       // root renders the workspace's overview; the zone row underneath it
       // renders the sections. A row aimed at a zone skips the overview, which
       // is precisely how the founder overviews were lost the first time.
+      // D1226: a round call sent to an investor (/round-calls/:uid) sits under Deals.
       { to: '/deals', icon: Handshake, label: 'Deals',
-        match: ['/deals', '/pipeline', '/raise/data-room'] },
+        match: ['/deals', '/pipeline', '/raise/data-room', '/round-calls'] },
       // Positions is the canvas's word for the holdings view. /portfolio is the
       // overview; /portfolio/positions is the book; /portfolio/health is the
       // legacy alias that still renders the overview, and the generic tab bar

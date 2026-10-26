@@ -20,7 +20,9 @@ jobs:
   contracts:
     name: D695 form and page contracts
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    # The full drift suite now reaches lint near 30 minutes (PR #3230).
+    # Keep the same bounded allowance as ci.yml; every check still runs.
+    timeout-minutes: 60
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v6

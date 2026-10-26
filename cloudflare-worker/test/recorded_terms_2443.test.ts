@@ -109,23 +109,23 @@ test('spin-out refuses missing paper terms before any automatic side effects',as
     for(const table of ['subsidiaries','legal_documents','capital_calls']) assert.equal(f.db.prepare(`SELECT COUNT(*) n FROM ${table}`).get()?.n,0);
   }finally{f.db.close();}
 });
-for(const who of [1,2,3,4,5,6,7]) test(`retired bulk capital call is 404 for caller ${who}`,async()=>{
-  const f=fixture();try {assert.equal((await call(f,who,'/api/capital/capitalCall',{startup_id:1,amount:250000})).status,404);assert.equal(f.db.prepare('SELECT COUNT(*) n FROM capital_calls').get()?.n,0);}finally{f.db.close();}
+for(const who of [1,2,3,4,5,6,7]) test(`retired bulk capital call is 410 for caller ${who}`,async()=>{
+  const f=fixture();try {assert.equal((await call(f,who,'/api/capital/capitalCall',{startup_id:1,amount:250000})).status,410);assert.equal(f.db.prepare('SELECT COUNT(*) n FROM capital_calls').get()?.n,0);}finally{f.db.close();}
 });
-test('legal signing requires the same body, deal, type, originator and completed envelope',async()=>{
+test('retired legal signing refuses even a matching completed envelope',async()=>{
   const f=fixture();try {
     const body='Synthetic agreed terms';const hash=createHash('sha256').update(body).digest('hex');
     f.db.prepare("INSERT INTO legal_documents(id,deal_id,type,status,content,generated_by) VALUES(1,1,'SAFE','generated',?,4)").run(JSON.stringify({body}));
-    assert.equal((await call(f,4,'/api/legalcap/legal/docs/1/sign',{},'PATCH')).status,409);
+    assert.equal((await call(f,4,'/api/legalcap/legal/docs/1/sign',{},'PATCH')).status,410);
     f.db.prepare("INSERT INTO esign_envelopes(id,envelope_uuid,deal_id,document_type,document_title,document_body,body_sha256,status,created_by) VALUES(1,'synthetic',1,'SAFE','Synthetic',?,?,'sent',4)").run(body,hash);
-    assert.equal((await call(f,4,'/api/legalcap/legal/docs/1/sign',{},'PATCH')).status,409);
+    assert.equal((await call(f,4,'/api/legalcap/legal/docs/1/sign',{},'PATCH')).status,410);
     f.db.exec("UPDATE esign_envelopes SET status='completed',completed_at=CURRENT_TIMESTAMP,signed_r2_key='synthetic.pdf'");
     for(const [col,bad,good] of [['body_sha256','wrong',hash],['deal_id',2,1],['document_type','wrong','SAFE'],['created_by',5,4]]) {
-      f.db.prepare(`UPDATE esign_envelopes SET ${col}=?`).run(bad);assert.equal((await call(f,4,'/api/legalcap/legal/docs/1/sign',{},'PATCH')).status,409);f.db.prepare(`UPDATE esign_envelopes SET ${col}=?`).run(good);
+      f.db.prepare(`UPDATE esign_envelopes SET ${col}=?`).run(bad);assert.equal((await call(f,4,'/api/legalcap/legal/docs/1/sign',{},'PATCH')).status,410);f.db.prepare(`UPDATE esign_envelopes SET ${col}=?`).run(good);
     }
-    assert.equal((await call(f,5,'/api/legalcap/legal/docs/1/sign',{},'PATCH')).status,404);
-    assert.equal((await call(f,4,'/api/legalcap/legal/docs/1/sign',{},'PATCH')).status,200);
-    assert.equal(f.db.prepare('SELECT status FROM legal_documents').get()?.status,'signed');
+    assert.equal((await call(f,5,'/api/legalcap/legal/docs/1/sign',{},'PATCH')).status,410);
+    assert.equal((await call(f,4,'/api/legalcap/legal/docs/1/sign',{},'PATCH')).status,410);
+    assert.equal(f.db.prepare('SELECT status FROM legal_documents').get()?.status,'generated');
   }finally{f.db.close();}
 });
 async function share(f:ReturnType<typeof fixture>) {

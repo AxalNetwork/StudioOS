@@ -31,7 +31,8 @@
  * names its module and a code, never an amount, a name or a date.
  */
 import type { Env, User } from '../../types';
-import { FUND_SECTIONS, type ModuleSlug } from '../raiseCycle';
+import type { ModuleSlug } from '../raiseCycle';
+import { FUND_SECTIONS } from '../../util/useOfFunds';
 import { normalizeEntityName, namesAxalEntity } from '../../integrations/providers/mercury';
 import { addHolder } from '../capTableWrites';
 import { readCapTable } from '../capTableToday';
@@ -460,6 +461,35 @@ async function fundsPart(env: Env, i: number, p: number) {
     categories: facts.map((f) => ({ fact_id: f.id, category: f.label, months: f.months, spent_cents: f.amount_cents, section: section.get(String(f.label)) ?? null })),
     sections: accepted.length ? sections : null,
     proposals: pending.map((m) => ({ id: m.id, category: m.source_key, section: m.target, section_label: sectionLabel(m.target) })),
+  };
+}
+
+/** D1174: accepted mappings only, from this founder's own active connection. No provider call. */
+export async function fundSectionActual(env: Env, user: User, projectId: number, key: string) {
+  if (user.role !== 'founder' || !SECTION_KEYS.includes(key)) return null;
+  const connection = await env.DB.prepare(
+    `SELECT i.id FROM integrations i JOIN users u ON u.id = i.user_id AND u.is_active = 1
+       JOIN projects p ON p.founder_id = u.founder_id
+      WHERE i.user_id = ? AND p.id = ? AND i.provider_key = 'mercury' AND i.status = 'active'
+      ORDER BY i.id LIMIT 1`,
+  ).bind(user.id, projectId).first<{ id: number }>();
+  if (!connection) return null;
+  const [facts, accepted] = await Promise.all([
+    factsOf(env, Number(connection.id), projectId, 'spend'),
+    proposalsOf(env, Number(connection.id), projectId, 'fund_mapping', 'accepted'),
+  ]);
+  const categories = new Set(accepted.filter((m) => m.target === key).map((m) => m.source_key));
+  const mapped = facts.filter((f) => categories.has(String(f.label)));
+  if (!mapped.length) return null;
+  return {
+    source: `Connector · Mercury · snapshots ${[...new Set(mapped.map((f) => f.as_of))].sort().join(', ')}`,
+    windows: SPEND_WINDOWS.map((months) => {
+      const recorded = mapped.filter((f) => f.months === months);
+      const complete = new Set(recorded.map((f) => String(f.label))).size === categories.size
+        && recorded.every((f) => f.amount_cents != null && Number.isSafeInteger(f.amount_cents));
+      const total = complete ? recorded.reduce((sum, f) => sum + Number(f.amount_cents), 0) : null;
+      return { months, cents: total != null && Number.isSafeInteger(total) ? total : null };
+    }),
   };
 }
 

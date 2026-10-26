@@ -4,6 +4,12 @@ Every route declared in `App.jsx` resolves to a file here. Most are lazy-loaded,
 so the filename is usually the fastest way from a URL to its code: `/deals` →
 `DealsPage.jsx`.
 
+D1174 (#3101): `FinancialsPage.jsx` has no Capital score. Its forecast is
+Modelled and follows the URL venture (`project_id` or `project`), including
+Back/Forward, without selecting the first of multiple ventures. `CapTablePage.jsx`
+consumes either alias carried by the existing Capital tabs. An unsaved model
+has no sensitivity table; export/recompute require a person-saved model.
+
 ## Finding a page
 
 1. Search `App.jsx` for the URL path — the `element` names the component.
@@ -25,7 +31,6 @@ Naming follows the surface, not the persona: `PortfolioHealthPage`,
 | `deal/` | D1152: the deal page's frame for `DealRoomPage.jsx` — the key strip, the stage track and its one next action, the investor's Overview, Notes and Activity, and the states, with the pure model they share. |
 | `partner/` | Partner-side operations (BD console). |
 | `research/` | Research zone bodies. Library and Ask are on every licence. Funds is the founder shortlist, and `FundDossier.jsx` is one row of it at `/research/funds/:uid`. `CompanyCandidate.jsx` is one competitor at `/research/companies/:analysisId/:candidateId`. |
-| `captable/` | Cap-table panels composed into `CapTablePage.jsx`. |
 | `raise/` | Round-manager panels. |
 | `referrals/` | The Refer & Earn canvas stylesheet for `ReferralsPage.jsx`. |
 | `pipeline/` | Pipeline helpers shared by the pipeline screens. |

@@ -60,7 +60,7 @@ export function Line({ a, b = null, figure = null, chip = null, action = null, t
     <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5 border-b border-axal-hairline px-4 py-3 last:border-b-0 hover:bg-[#faf9fc] sm:px-5 dark:border-gray-800 dark:hover:bg-gray-950/40" data-testid={testId}>
       <div className="min-w-0 flex-1 basis-56">
         <div className={`text-[12px] font-bold ${tone === 'danger' ? 'text-red-700 dark:text-red-300' : 'text-zinc-700 dark:text-gray-200'}`}>{a}</div>
-        {b != null && b !== '' && <div className="mt-0.5 text-[11px] leading-relaxed text-axal-muted dark:text-gray-400">{b}</div>}
+        {b != null && b !== '' && <div className="mt-0.5 break-words [overflow-wrap:anywhere] text-[11px] leading-relaxed text-axal-muted dark:text-gray-400">{b}</div>}
       </div>
       {figure != null && <div className={`text-right text-[12px] font-bold text-axal-ink dark:text-gray-100 ${NUM}`}>{figure}</div>}
       {chip}
@@ -104,7 +104,7 @@ export function Table({ cols, rows, rowKey, template, foot = null, testId, rowTe
           {cols.map((c, i) => (
             <div key={c.key} className={`flex items-baseline justify-between gap-3 px-4 py-1 first:pt-3 last:pb-3 sm:block sm:py-2.5 ${i === 0 ? 'sm:pl-5 sm:pr-2.5' : i === cols.length - 1 ? 'sm:pl-2.5 sm:pr-5' : 'sm:px-2.5'} ${c.align === 'right' ? 'sm:text-right' : ''}`}>
               {i > 0 && <span className={`${TH} sm:hidden`}>{c.label}</span>}
-              <div className={`min-w-0 text-[11.5px] ${c.mono ? `${NUM} font-semibold text-zinc-700 dark:text-gray-200` : 'text-zinc-700 dark:text-gray-200'} ${i === 0 ? 'font-semibold' : ''}`}>{c.cell(r)}</div>
+              <div className={`min-w-0 break-words [overflow-wrap:anywhere] text-[11.5px] ${c.mono ? `${NUM} font-semibold text-zinc-700 dark:text-gray-200` : 'text-zinc-700 dark:text-gray-200'} ${i === 0 ? 'font-semibold' : ''}`}>{c.cell(r)}</div>
             </div>
           ))}
         </div>
@@ -118,4 +118,12 @@ export function Table({ cols, rows, rowKey, template, foot = null, testId, rowTe
 /** An empty or explanatory body line inside a Panel. */
 export function Note({ children, testId }) {
   return <div className="px-4 py-3 text-[12px] leading-relaxed text-axal-muted sm:px-5 dark:text-gray-400" data-testid={testId}>{children}</div>;
+}
+
+/** FND19: each failed block names the state and keeps its own retry. */
+export function ReadFailure({ what, claim, onRetry }) {
+  return <div role="alert" className="flex flex-wrap items-center gap-2 text-[12px] text-red-700 dark:text-red-300">
+    <span>Unreadable: {what} could not be read. {claim}</span>
+    {onRetry && <button type="button" className="min-h-11 underline" onClick={onRetry}>Try again</button>}
+  </div>;
 }

@@ -59,6 +59,11 @@ clock inputs in the selected IANA zone, preserving explicit instants and refusin
 invalid or ambiguous wall times. Its instant comparison keeps formatting-only
 normalization out of the changed-after-approval flag.
 
+D1174 (#3101): `raiseCycle.ts` shares the five-section split reader in
+`../util/useOfFunds.ts` with readiness, records and decks. The Modelled cash
+line injects the raise only at the recorded active-round close month; an
+unreadable close read leaves the baseline available. No date is assumed.
+
 `memberFiles.ts` (D1168, #3081) writes measured headshot/brand-logo metadata
 with its authoritative key. `memberFileSizeBackfill.ts` measures missing sizes
 for five record stores and profile files with HEAD only, using migration 605's
@@ -542,3 +547,11 @@ store; no migration or canvas sample text is introduced.
 D1129 searches decoded audit detail values, never JSON keys, and includes demoted/deleted payment actors in Who alongside current admins.
 
 D1133: `billingRecovery.ts` prepares caller-owned renewal invoice intents or card-only SetupIntents behind Billing’s fresh-TOTP routes, and records only allowlisted payment-refusal families. `billingAlerts.ts` atomically couples renewal history with alert transitions. No card/client secret is stored.
+
+D1206 (#3172): `calendar.ts` retains personal readers, resolves the
+account-owned advisor fallback, reports fixed source error codes without raw
+diagnostics, and excludes Calendly before provider sync reads. Missing schema
+is not an empty source. Studio reads each allowed source once for active members of its licensed
+deployment, excluding private Calendly/wellbeing items, with read-only
+projections; All studios requires HQ Super Admin and explicitly reports unread
+remote coverage. Neither reader is used by sync or exports (D1206).

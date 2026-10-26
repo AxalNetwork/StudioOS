@@ -91,6 +91,7 @@ for (const who of [1, 2]) {
 test('partner has no company exemption; admin keeps its exemption, founder stays in the selected company', async () => {
   const { db, env } = fixture();
   try {
+    await seed(env); // Export requires a person-saved model; this test isolates company access.
     db.exec('INSERT INTO user_company_links (company_id, user_id) VALUES (99, 3), (10, 2), (99, 2), (99, 1)');
     for (const path of ['/financials/1', '/financials/1/export.xlsx', '/revenue/projects/1/entries']) {
       assert.equal((await call(env, 3, 'GET', path, undefined, 99)).status, 404);

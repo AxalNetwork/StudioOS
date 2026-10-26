@@ -15,7 +15,6 @@ export const FOUNDER_TOOLS = [
   { path: '/comarketing', cycle: 'grow', module: 'distribution' },
   { path: '/raise/pitch', cycle: 'raise', module: 'pitch-deck' },
   { path: '/raise/capital', cycle: 'raise', module: 'use-of-funds' },
-  { path: '/raise/capital/cap-table', cycle: 'raise', module: 'cap-table' },
   { path: '/raise/capital/pipeline', cycle: 'raise', module: 'capital-relationships' },
   { path: '/raise/data-room', query: 'mode=workspace', cycle: 'raise', module: 'data-room', label: 'Open the files tool', door: true, roles: ['admin', 'founder'] },
   { path: '/raise/legal-engine', cycle: 'build', module: 'company-creation' },
