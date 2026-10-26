@@ -78,7 +78,7 @@ export const EXISTING_FOUNDER_BANK = [
     type: 'long',
     explainer: 'We’ll mirror this into the cap-table simulator. Refine numbers there.',
     doc_anchor: 'capital/cap-table',
-    page_target: '/raise/capital/cap-table',
+    page_target: '/raise/cap-table',
     validate: all(required, minChars(10)),
   },
 

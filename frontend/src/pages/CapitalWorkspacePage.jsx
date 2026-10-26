@@ -1,26 +1,25 @@
 import React from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
-import { DollarSign, PieChart, TrendingUp } from 'lucide-react';
+import { DollarSign, TrendingUp } from 'lucide-react';
 import FinancialsPage from './FinancialsPage';
-import CapTablePage from './CapTablePage';
 import RaisePipelinePage from './RaisePipelinePage';
 
 // RAISE Workspaces (Task #1) — Capital workspace.
 //
 // Collapses the former standalone founder nav items "Financial Model"
-// (/build/financials), "Cap Table" (/build/captable) and "Raise Pipeline"
-// (/raise) into one workspace with three tabs, reusing each existing page in
+// (/build/financials) and "Raise Pipeline" (/raise) into one workspace with
+// two tabs, reusing each existing page in
 // `embedded` mode so a single workspace title governs. Financial Model is the
 // default tab. Each tab is URL-addressable so it can be deep-linked and the
 // legacy /raise route redirects into the pipeline tab (see App.jsx).
 //
 // Frontend-only — no page logic, data, or API changes. The standalone
-// /build/financials and /build/captable pages are retired (#2339, #2340, the
-// owner's "Remove"): both addresses forward to these tabs.
+// /build/financials page is retired (#2339, the owner's "Remove") and forwards
+// to the model tab. D1029 (#2866): the Cap Table tab is gone; the Cap table
+// tool at /raise/cap-table took it, and /raise/capital/cap-table forwards there.
 
 const TABS = [
   { id: 'model', to: '/raise/capital/model', label: 'Financial Model', icon: DollarSign },
-  { id: 'cap-table', to: '/raise/capital/cap-table', label: 'Cap Table', icon: PieChart },
   { id: 'pipeline', to: '/raise/capital/pipeline', label: 'Raise Pipeline', icon: TrendingUp },
 ];
 
@@ -43,9 +42,7 @@ export default function CapitalWorkspacePage() {
   const location = useLocation();
   const navigate = useNavigate();
 
-  const active = location.pathname.includes('/cap-table')
-    ? 'cap-table'
-    : location.pathname.includes('/pipeline')
+  const active = location.pathname.includes('/pipeline')
     ? 'pipeline'
     : 'model';
 
@@ -56,7 +53,7 @@ export default function CapitalWorkspacePage() {
           <DollarSign className="w-6 h-6 text-violet-600" /> Capital
         </h1>
         <p className="text-sm text-gray-600 dark:text-gray-400 mt-1">
-          Your financial model, cap table, and investor raise pipeline in one place.
+          Your financial model and investor raise pipeline in one place.
         </p>
       </div>
 
@@ -83,7 +80,6 @@ export default function CapitalWorkspacePage() {
       </div>
 
       {active === 'model' && <FinancialsPage embedded />}
-      {active === 'cap-table' && <CapTablePage embedded />}
       {active === 'pipeline' && <RaisePipelinePage embedded />}
     </div>
   );

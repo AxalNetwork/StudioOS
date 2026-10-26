@@ -456,7 +456,7 @@ test('A CYCLE IS MOUNTED ONLY ONCE ITS READ IS WIRED: all four are, each with it
   for (const page of growPages) assert.ok(app.includes(`<Route path="/grow/${page}"`), `/grow/${page} lost its route`);
   for (const m of LIVE_MODULES.grow) assert.ok(!growPages.includes(m.slug), `${m.slug} would be shadowed by a Grow page`);
   // Raise's tools keep their static routes, which win over /raise/:slug.
-  for (const tool of ['/raise/pitch', '/raise/data-room', '/raise/capital/cap-table', '/raise/capital/model', '/raise/capital/pipeline']) {
+  for (const tool of ['/raise/pitch', '/raise/data-room', '/raise/capital/model', '/raise/capital/pipeline']) {
     assert.ok(app.includes(`<Route path="${tool}"`), `${tool} lost its route`);
   }
   // D704 (#1666): the three old zone pages redirect to their modules.

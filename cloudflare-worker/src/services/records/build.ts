@@ -1018,7 +1018,7 @@ const foundingTeam: ModuleSpec = {
     ).bind(ctx.projectId, holderId).first<Any>();
     if (!h) throw new Error('Build founder vanished after its ownership check');
     return [
-      { key: 'edit-split', label: 'Edit split', kind: 'link', href: '/raise/capital/cap-table' },
+      { key: 'edit-split', label: 'Edit split', kind: 'link', href: '/raise/cap-table' },
       { key: 'log-contribution', label: 'Log', kind: 'form',
         form: { title: 'Log a contribution', cta: 'Log', fields: [
           { key: 'text', label: 'Contribution', kind: 'T', required: true },
