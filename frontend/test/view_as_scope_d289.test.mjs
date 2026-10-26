@@ -53,14 +53,14 @@ const READERS = readdirSync(resolve(root, HQ_DIR))
   .filter((f) => f.endsWith('.jsx') && codeOnly(read(`${HQ_DIR}/${f}`)).includes('useViewAsBranch('))
   .map((f) => f.replace('.jsx', ''));
 // A reader mounted by a routed page rather than routed itself.
-const CHILD_READERS = { HqTeamTable: '/admin/accounts' };
+const CHILD_READERS = { HqTeamTable: '/admin/hq-team' };
 
 /* ------------------------------------------------------------------ *
  * The registry and the files
  * ------------------------------------------------------------------ */
 
 test('every registered route is an hqOnly route whose page reads the scope', () => {
-  assert.deepEqual(Object.keys(VIEW_AS_SCOPE), ['/hq', '/admin/accounts', '/admin/analytics', '/admin/platform/topology']);
+  assert.deepEqual(Object.keys(VIEW_AS_SCOPE), ['/hq', '/admin/hq-team', '/admin/analytics', '/admin/platform/topology']);
   for (const [path, entry] of Object.entries(VIEW_AS_SCOPE)) {
     assert.ok([NARROWS, DECLINES].includes(entry.scope), `${path} registers an unknown scope`);
     const comp = componentOf(path);
@@ -106,10 +106,10 @@ test('a route that says it narrows passes the branch into a read or the overlay;
 
 test('the bar draws H12\'s claim only where the registry says narrows, and the out-of-scope sentence everywhere else', () => {
   assert.equal(viewAsScopeFor('/hq'), NARROWS);
-  assert.equal(viewAsScopeFor('/admin/accounts'), NARROWS);
+  assert.equal(viewAsScopeFor('/admin/hq-team'), NARROWS);
   assert.equal(viewAsScopeFor('/admin/analytics'), DECLINES);
   assert.equal(viewAsScopeFor('/admin/platform/topology'), DECLINES);
-  for (const p of ['/admin/content', '/admin/funds', '/admin/contracts', '/admin/revenue', '/admin/platform', '/admin/platform/switches', '/admin/hq-support', '/admin/security', '/admin', '/admin/accounts/x', '', undefined]) {
+  for (const p of ['/admin/content', '/admin/funds', '/admin/contracts', '/admin/revenue', '/admin/platform', '/admin/platform/switches', '/admin/hq-support', '/admin/security', '/admin', '/admin/accounts', '/admin/accounts/x', '/admin/hq-team/x', '', undefined]) {
     assert.equal(viewAsScopeFor(p), UNSCOPED, `${p} is treated as scoped`);
   }
   assert.equal(viewAsSentence('/hq', 'fr'), NARROWED_CLAIM);
