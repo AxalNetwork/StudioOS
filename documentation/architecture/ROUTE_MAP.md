@@ -711,6 +711,15 @@ audit are atomic. The history client is `cycleWrites.raise.pmfHistory`. The
 full frontend and Eadwyn explanation remain the later readiness parts. See
 `decisions/D1144.md` for the stored payload and paging contract.
 
+**D1146 (#3032)** draws RD4, "How Product-market fit is scored", as a dialog
+opened from the readiness part. It reads `GET /api/cycles/raise/pmf/model?project=`,
+which answers the stored `scoring_model_versions` row the venture's latest point
+used (or, before any point, the code's definition marked `stored: false`, which
+the first score publishes). A missing or undrawable row is Unreadable, never
+the code's copy. RD12 is now a chip in Validate's overview header, reading the
+venture's latest stored point (`pmfHistory`, `limit: 1`) as its band and
+confidence; it computes nothing. D1141's line under the overview is gone.
+
 ### D1113 — legacy Positioning retirement (#2993)
 
 `/raise/pitch/positioning` remains D911's counted forward to
