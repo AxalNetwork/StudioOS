@@ -17,6 +17,10 @@ ids, company boundaries, unchanged models after refused writes, and owner/admin
 access. It also pins the separate deal-room partner reader and the recompute
 edit gate so future read-only relationships cannot acquire writes accidentally.
 
+`bank_registry_d1184.test.ts` checks the registry’s audited Mercury association,
+masked resolver previews and source add validation over the real migrations,
+with all network access refused.
+
 Tests run **in process against a real SQLite database** (`node:sqlite`) loaded
 from the actual schema or a specific migration file — not against mocks. A
 handler that would fail on D1 because of an unknown column fails here too,
@@ -73,6 +77,11 @@ Every external fetch is forbidden; no Mercury call reaches a provider.
   the 30s sign-in outage of 2026-09-12 passed every existing test (D74).
 
 D642: `usage_storage_d642.test.ts` exercises caller-only storage aggregates through JWT/Hono and the canonical SQLite schema (including migration 323), covering company independence, unknown sizes, partial failures, precision and recording attribution.
+
+D1167: `storage_plans_d1167.test.ts` pins the owner's storage table, resolves
+effective plans and recorded persona/LP entitlements against canonical SQLite
+DDL, and holds the anonymous public plans projection and general catalogue to
+the same allowances, with read failures and privacy/read-only counterexamples.
 
 D691: `compliance_events_columns_d691.test.ts` builds the full baseline and every
 post-cutoff migration with foreign keys on. It checks Grow obligation writes,

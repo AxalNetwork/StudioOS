@@ -34,6 +34,7 @@ export * from './api/capTableHolder.js';
 export * from './api/capTableRecord.js';
 export * from './api/capTableRegister.js';
 export * from './api/capTableScenarios.js';
+export * from './api/capitalRelationships.js';
 export * from './api/channelKeys.js';
 export * from './api/channels.js';
 export * from './api/community.js';
@@ -2882,7 +2883,8 @@ export const api = {
   // Task #2 — server-side export, format ∈ {pdf, pptx}. PNG cover was
   // removed end-to-end (PDF + PPTX are both driven by Cloudflare Browser
   // Rendering against the live SPA print template).
-  deckExport: (id, format) =>
+  // D1112 (#2992): `{ notes, sources }`, PD17's two options, for PDF and PowerPoint too.
+  deckExport: (id, format, { notes = false, sources = false } = {}) =>
     fetch(`${BASE}/decks/${id}/export`, {
       method: 'POST',
       credentials: 'include',
@@ -2891,7 +2893,7 @@ export const api = {
         ...getAuthHeaders(),
         ...getCsrfHeader('POST'),
       },
-      body: JSON.stringify({ format }),
+      body: JSON.stringify({ format, notes, sources }),
     }),
   // D901 (#2680) — the version as one self-contained HTML file; the Worker
   // records it (`deck_exports` plus an audit row) before answering. Raw

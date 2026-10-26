@@ -122,15 +122,15 @@ test('D245: the last issue reads its period, "None issued", or Unreadable when t
   assert.match(unread, /Last issued: Unreadable /, 'an unread period was drawn as none');
 });
 
-test('D245: the sidebar\'s Funds row opens the registry, and App.jsx registers it for HQ only', () => {
+test('D245: the sidebar\'s Funds oversight row opens the registry, and App.jsx registers it for HQ only', () => {
   const hq = SIDEBAR_GROUPS.super_admin.flatMap((g) => g.items || []);
-  const row = hq.find((r) => r.label === 'Funds');
+  const row = hq.find((r) => r.label === 'Funds oversight');
   assert.ok(row, 'the Funds row is gone from the HQ shell');
   assert.equal(row.to, '/admin/funds');
   assert.match(APP, /<Route path="\/admin\/funds" element=\{guard\(\['admin'\], hqOnly\(<HqFundsPage \/>\)\)\} \/>/,
     'the registry route is not registered, or not HQ-only');
   assert.match(APP, /const HqFundsPage = lazy\(\(\) => import\('\.\/pages\/hq\/HqFundsPage'\)\);/);
-  // Nothing retires: the shared product keeps its route, and the page links it.
+  // D1160 (#3067): the row is Funds oversight (#2388 question 2's default), and HQ's own funds are run in Fund admin.
   assert.match(APP, /<Route path="\/funds" element=/);
-  assert.match(read('frontend/src/pages/hq/HqFundsPage.jsx'), /to="\/funds"/);
+  assert.match(read('frontend/src/pages/hq/HqFundsPage.jsx'), /to="\/admin\/fund-admin"[\s\S]{0,400}Manage HQ&rsquo;s funds in Fund admin/);
 });

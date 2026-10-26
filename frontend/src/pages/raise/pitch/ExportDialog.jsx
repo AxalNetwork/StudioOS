@@ -4,7 +4,7 @@ import { reportError } from '../../../lib/log';
 import { Lightbox } from '../../../ui';
 import { versionRows } from './pitchStudioModel';
 import {
-  EXPORT_TITLE, FORMATS, OPTIONS_HTML_ONLY, exportButton, exportFailure, exportFileName, exportedLine,
+  EXPORT_TITLE, FORMATS, OPTIONS_WHERE, exportButton, exportFailure, exportFileName, exportedLine,
   lastExportLine, optionsApply, whatExportDoes,
 } from './presentExportModel';
 
@@ -12,7 +12,8 @@ import {
  * D901 (#2680) — the export dialog (PD17), opened from the current-deck card.
  *
  * PDF and PowerPoint go through today's `POST /api/decks/:id/export`; HTML
- * through `POST /api/decks/:id/export/html`. The Worker records every export
+ * through `POST /api/decks/:id/export/html`. D1112 (#2992): both carry the
+ * two options, speaker notes and the Sources appendix, for every format. The Worker records every export
  * (`deck_exports`, with the file's fingerprint) before it hands the file over,
  * and the dialog says so before the write. Google Slides is drawn, not
  * offered: it is part 10. A failure reads as PD25 does: what could not be
@@ -62,7 +63,7 @@ export default function ExportDialog({ versions, current, onClose }) {
     try {
       const r = format === 'html'
         ? await api.deckExportHtml(version.id, { notes, sources })
-        : await api.deckExport(version.id, format);
+        : await api.deckExport(version.id, format, { notes, sources });
       if (!r.ok) {
         const body = await r.json().catch(() => null);
         setFailed(exportFailure(format, r.status, body));
@@ -134,7 +135,7 @@ export default function ExportDialog({ versions, current, onClose }) {
           <label className={`flex items-center gap-2 ${apply ? INK : 'text-axal-muted dark:text-gray-500'}`}>
             <input type="checkbox" checked={sources} disabled={!apply} onChange={(e) => setSources(e.target.checked)} data-testid="pitch-export-sources" /> Include a Sources appendix
           </label>
-          {!apply ? <span className={MUTED}>{OPTIONS_HTML_ONLY}</span> : null}
+          {apply && (notes || sources) ? <span className={MUTED} data-testid="pitch-export-where">{OPTIONS_WHERE[format]}</span> : null}
         </div>
         <p className={`m-0 ${MUTED}`} data-testid="pitch-export-what">{whatExportDoes(version)}</p>
         <span className="font-mono text-[11.5px] text-axal-muted dark:text-gray-400" data-testid="pitch-export-last">
