@@ -16,7 +16,7 @@ import { onEventDay } from './hostHeaderModel';
 import { dateBlock, statusOf, visibilityWord } from './myEventsModel';
 import { BRIGHTNESS } from './myEventsPhoneModel';
 import {
-  CODE_LINE, EXPLORER_CLOSED, HOST_NOT_READ, JOIN_FOOT, NOT_HOST, NO_CODE, NO_PLACE,
+  CODE_LINE, EXPLORER_CLOSED, hostLine, JOIN_FOOT, NOT_HOST, NO_CODE, NO_PLACE,
   agendaRows, canCancelEvent, canCancelPlace, cancelEventDialog, cancelPlaceDialog, cancelledLine, gateOf, hostPages,
   hostedTiles, mayManage, nextStep, placeFromDetail, placeIn, publishDialog, seatLine, ticketCard, ticketState, whenWhere,
   whoMayRegister,
@@ -260,7 +260,15 @@ export function TicketDrawer({ id, list, onClose, onDone, page = false, bar = un
                     </div>
                   ))}
             </Section>
-            <Section testId="my-events-ticket-host"><span className={`text-[12.5px] ${MUTED}`}>{HOST_NOT_READ}</span></Section>
+            {(() => {
+              const host = hostLine(detail);
+              return (
+                <Section testId="my-events-ticket-host">
+                  <span className={`text-[12.5px] ${host.state === 'named' ? `font-semibold ${INK}` : MUTED}`} data-state={host.state}>{host.text}</span>
+                  {host.state === 'unreadable' ? <button type="button" className="ml-2 text-[12.5px] font-semibold underline" onClick={retryDetail}>Try again</button> : null}
+                </Section>
+              );
+            })()}
           </div>
         )}
       </Lightbox>
