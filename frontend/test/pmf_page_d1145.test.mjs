@@ -242,6 +242,8 @@ test('5. the page: the tiles, the ten inputs, an input lightbox, the gaps filter
     assert.equal(t.count('pmf-input-lightbox'), 1);
     assert.match(t.textOf('pmf-input-lightbox'), /30 of 100/);
     assert.match(t.textOf('pmf-input-lightbox'), /6\.3 points/);
+    assert.ok(!t.textOf('pmf-input-lightbox').includes('open claims Supported'), 'method rules are read through RD4, not copied from v1');
+    assert.ok(!t.textOf('pmf-input-lightbox').includes('in model v1'), 'the weight comes from the scored point');
     assert.ok(t.hrefs().includes('/validate/experiments?project_id=3'));
   } finally { await t.close(); }
 });

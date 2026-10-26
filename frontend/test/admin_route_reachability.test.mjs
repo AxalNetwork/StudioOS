@@ -165,6 +165,11 @@ function doorsIn(src) {
     /\b(?:navigate|nav)\(\s*`(\/[^`${]*)/g,
   ];
   for (const re of LITERALS) for (const m of withoutNavigate.matchAll(re)) doors.add(m[1]);
+  // D1005 (#2820): a value BETWEEN two literal parts — a segment's tab,
+  // `/admin/persona-segments/${segKey}/members` — is one segment with a path
+  // after it, which the head alone cannot say. It is read as `${}`, which no
+  // literal segment equals, so only a `:param` in that place matches it.
+  for (const m of withoutNavigate.matchAll(/\b(?:to|href)=\{`(\/[^`$]*\/)\$\{[^}`]*\}(\/[^`$?#]+)/g)) doors.add(`${m[1]}\${}${m[2]}`);
 
   // Computed-base links. `AdminDueDiligencePage.jsx:34` builds
   //   const base = pathname.startsWith('/admin') ? '/admin/due-diligence' : '/due-diligence';
@@ -268,12 +273,11 @@ const SECOND_MOUNTS = new Map([
  * alone. Checked against the hosts' own imports below, so it cannot drift.
  */
 const CONSOLE_PAGES = 'frontend/src/pages/admin/ConsolePages.jsx';
-// D995 retired PartnerProfilesConsole: Partner profiles draws its own record.
-const NATIVE_CONSOLES = ['PersonasConsole'].map((n) => `frontend/src/pages/admin/consoles/${n}.jsx`);
+// D995 retired PartnerProfilesConsole: Partner profiles draws its own record,
+// and D1005 retired PersonasConsole: Persona segments draws its own Move dialog.
 const COMPOSED = new Map([
-  ['frontend/src/pages/admin/segments/PersonaSegments.jsx', [NATIVE_CONSOLES[0]]],
   // D1195 (#2382): Product testing's tabs draw the doors to one program (`/programs/:uid`).
-  [CONSOLE_PAGES, [...ADMIN_CONSOLE_FILES.filter((f) => f !== CONSOLE_PAGES && !HQ_KEYS_CONSOLE_FILES.includes(f) && !NATIVE_CONSOLES.includes(f)), 'frontend/src/pages/admin/productTesting/ProductTestingTabs.jsx', 'frontend/src/pages/admin/kyc/KycTabs.jsx']],
+  [CONSOLE_PAGES, [...ADMIN_CONSOLE_FILES.filter((f) => f !== CONSOLE_PAGES && !HQ_KEYS_CONSOLE_FILES.includes(f)), 'frontend/src/pages/admin/productTesting/ProductTestingTabs.jsx', 'frontend/src/pages/admin/kyc/KycTabs.jsx']],
   ['frontend/src/pages/hq/AccountsPage.jsx', ['frontend/src/pages/admin/consoles/UsersConsole.jsx']],
   // D1213 (#2424): Contracts draws its desk from the file beside it, which holds the door to Closings.
   ['frontend/src/pages/hq/ContractsPage.jsx', ['frontend/src/pages/admin/contracts/ContractsDesk.jsx']],

@@ -34,7 +34,7 @@ const ENDED = '2020-01-01T10:00:00Z';
 
 function fixture() {
   const db = new DatabaseSync(':memory:', { enableForeignKeyConstraints: false });
-  for (const name of ['109_events_core.sql', '392_event_organiser.sql', '546_events_review_columns.sql']) {
+  for (const name of ['109_events_core.sql', '392_event_organiser.sql', '546_events_review_columns.sql', '611_event_registrations_comp_promoted.sql']) {
     db.exec(readFileSync(new URL(`../sql/migrations/${name}`, import.meta.url), 'utf8'));
   }
   db.exec(`CREATE TABLE users (id INTEGER PRIMARY KEY, uid TEXT, email TEXT, name TEXT, role TEXT, is_active INTEGER DEFAULT 1,

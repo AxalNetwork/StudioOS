@@ -21,9 +21,13 @@ import DealSyndicates from '../components/deals/DealSyndicates';
 import MercuryMatch from '../components/MercuryMatch';
 import { NOT_YET, TAB_DEFS, WAITS, dealTabsFor, tabHref, tabOf } from './dealPageModel';
 import ClosingRoom from './closing/ClosingRoom';
+import { dealContextApi } from '../lib/api/dealContext';
+import { blockedRole, keyStrip, readFailure, trackOf } from './deal/dealFrameModel';
+import { BTN_P, BTN_S, DealLoading, DealNotFound, DealUnreadable, KeyStrip, NoPermission, RespondDialog, StageTrack } from './deal/DealFrame';
+import DealOverview from './deal/DealOverview';
+import DealNotes, { DealActivity } from './deal/DealNotes';
 import {
-  ArrowLeft, Download, FileText, Loader2, X, DollarSign, Send, Check,
-  Users, Clock, ThumbsUp, ThumbsDown,
+  ArrowLeft, FileText, Loader2, X, DollarSign, Send, Check, Users,
 } from 'lucide-react';
 
 function useCurrentRole() {
@@ -33,13 +37,7 @@ function useCurrentRole() {
   catch { return null; }
 }
 
-const statusColors = {
-  applied: 'bg-blue-100 text-blue-700 border-blue-500/30',
-  scored: 'bg-yellow-100 text-yellow-700 border-yellow-500/30',
-  active: 'bg-green-100 text-green-700 border-green-500/30',
-  funded: 'bg-violet-100 text-violet-700 border-violet-500/30',
-  rejected: 'bg-red-100 text-red-700 border-red-500/30',
-};
+const PILL_N = 'inline-flex items-center rounded-axal-pill border border-axal-hairline bg-axal-ground px-2.5 py-0.5 text-[11px] font-bold text-axal-muted dark:border-gray-700 dark:bg-gray-800 dark:text-gray-300';
 
 function fmtMoney(n, currency = 'USD') {
   return dealMoney(n, currency) ?? 'Not recorded';
@@ -69,113 +67,119 @@ export default function DealRoomPage() {
   const isAdmin = role === 'admin';
   const tabs = dealTabsFor(role);
   const tab = tabOf(tabParam, role);
+  // D1152 (DL22): an Advisor and an Explorer get their words, and nothing is read.
+  const blocked = blockedRole(role);
 
   const [deal, setDeal] = useState(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState('');
+  const [loading, setLoading] = useState(!blocked);
+  const [error, setError] = useState(null);
   const [commitOpen, setCommitOpen] = useState(false);
   // D752 (#1891): the investor's share sheet, opened from their own row or after a commitment.
   const [proofSheet, setProofSheet] = useState(null); // { target, consent, minimumCents }
   const [proofKey, setProofKey] = useState(0);
   const openProof = (target, read) => setProofSheet({ target, consent: read?.consent, minimumCents: read?.minimum_cents });
   const [inviteOpen, setInviteOpen] = useState(false);
-  const [myInvite, setMyInvite] = useState(null);
+  // D1152: part 2's stage (investors only) and the commitments behind the key strip.
+  const [stage, setStage] = useState({ status: 'loading' });
+  const [mine, setMine] = useState({ status: 'loading' });
+  const [respondTo, setRespondTo] = useState(null);
 
   const loadDeal = () => {
+    setLoading(true); setError(null);
     api.getDeal(dealId)
       .then(d => { setDeal(d); document.title = `${d.project_name || 'Deal Room'} — axal`; })
-      .catch(e => { setError(e.message || 'Deal not found'); reportError('DealRoom:getDeal', e); })
+      .catch(e => { setError(e || { status: 0 }); reportError('DealRoom:getDeal', e); })
       .finally(() => setLoading(false));
   };
-
-  useEffect(() => { loadDeal(); /* eslint-disable-next-line */ }, [dealId]);
-
-  useEffect(() => {
-    if (isInvestor && deal && !deal.plan_limited) {
-      api.myDealInvitations()
-        .then(list => setMyInvite((list || []).find(i => Number(i.deal_id) === Number(dealId)) || null))
-        .catch(() => {});
-    }
-  }, [isInvestor, deal?.id, deal?.plan_limited, dealId, commitOpen]);
-
-  const respond = async (response) => {
-    try {
-      await api.respondDealInvitation(dealId, response);
-      setMyInvite(m => (m ? { ...m, status: response } : m));
-    } catch (e) { reportError('DealRoom:respond', e); }
+  const loadStage = () => {
+    setStage({ status: 'loading' });
+    dealContextApi.stage(dealId).then((data) => setStage({ status: 'ready', data }))
+      .catch((e) => { reportError('DealRoom:stage', e); setStage({ status: 'unreadable' }); });
+  };
+  const loadMine = () => {
+    setMine({ status: 'loading' });
+    api.dealCommitments(dealId).then((d) => setMine({ status: 'ready', items: Array.isArray(d) ? d : null }))
+      .catch((e) => { reportError('DealRoom:keyCommitments', e); setMine({ status: 'unreadable' }); });
   };
 
-  if (loading) return <div className="text-center text-gray-500 py-16"><Loader2 className="animate-spin inline mr-2" size={18} /> Loading deal room…</div>;
-  if (error || !deal) return (
-    <div className="text-center py-16">
-      <p className="text-gray-500 mb-4">{error || 'Deal not found'}</p>
-      <button onClick={() => navigate(back.path)} className="text-violet-600 hover:underline">← {back.label}</button>
-    </div>
+  useEffect(() => { if (!blocked) loadDeal(); /* eslint-disable-next-line */ }, [dealId, blocked]);
+  // A Free-plan deal reads nothing more (D1149): its card is drawn from the deal read alone.
+  const full = Boolean(deal && !deal.plan_limited);
+  useEffect(() => {
+    if (!full) return;
+    loadMine();
+    if (isInvestor) loadStage();
+    /* eslint-disable-next-line */
+  }, [full, dealId, isInvestor]);
+
+  const respond = async (response) => {
+    await api.respondDealInvitation(dealId, response);
+    loadStage();
+  };
+
+  const tabRow = (id) => (
+    <nav aria-label="Deal" className="flex gap-1 overflow-x-auto border-b border-axal-hairline dark:border-gray-700" data-testid="deal-tabs">
+      {tabs.map(t => (
+        <Link key={t} to={tabHref(id, t)} aria-current={tab === t ? 'page' : undefined} data-testid={`deal-tab-${t}`}
+          className={`-mb-px whitespace-nowrap border-b-2 px-4 py-2 text-[13px] font-bold ${tab === t ? 'border-axal-violet text-axal-violet-deep dark:border-violet-400 dark:text-violet-300' : 'border-transparent text-axal-muted hover:text-axal-ink dark:text-gray-400 dark:hover:text-gray-200'}`}>
+          {TAB_DEFS[t].label}
+        </Link>
+      ))}
+    </nav>
   );
+
+  if (blocked) return <NoPermission kind={blocked} />;
+  if (loading) return <DealLoading tabs={tabRow(dealId)} />;
+  if (error || !deal) {
+    const kind = readFailure(error);
+    if (kind === 'not_on_deal') return <NoPermission kind="not_on_deal" />;
+    if (kind === 'not_found') return <DealNotFound back={back} />;
+    return <DealUnreadable onRetry={loadDeal} />;
+  }
 
   const canInvite = isAdmin && (deal.status === 'active' || deal.status === 'scored');
   if (deal.plan_limited) return <DealFreePlan deal={deal} onRetry={loadDeal} />;
-  const pct = deal.progress_pct;
+  const track = isInvestor ? trackOf(stage) : null;
 
   return (
-    <div>
-      <button onClick={() => navigate(back.path)} className="text-sm text-gray-500 hover:text-gray-800 flex items-center gap-1 mb-4 dark:text-gray-400">
-        <ArrowLeft size={15} /> {back.label}
-      </button>
-
-      <div className="flex items-start justify-between gap-4 flex-wrap mb-5">
-        <div>
-          <div className="flex items-center gap-2 mb-1">
-            <h1 className="text-2xl font-bold text-gray-900 dark:text-gray-100">{deal.project_name || `Deal #${deal.id}`}</h1>
-            <span className={`px-2 py-0.5 rounded-full text-xs font-medium border capitalize ${statusColors[deal.status]}`}>{deal.status}</span>
+    <div className="flex flex-col gap-4 pb-20 md:pb-0">
+      {/* DL1: the header, one h1. */}
+      <header className="flex flex-col gap-2">
+        <button type="button" onClick={() => navigate(back.path)} className="inline-flex w-fit items-center gap-1 text-[12.5px] font-semibold text-axal-muted hover:text-axal-ink dark:text-gray-400 dark:hover:text-gray-200" data-testid="deal-crumb">
+          <ArrowLeft size={14} /> {back.label}
+        </button>
+        <div className="flex flex-wrap items-start justify-between gap-3.5">
+          <div className="flex min-w-0 flex-col gap-1.5">
+            <h1 className="m-0 text-[24px] font-extrabold tracking-axal-heading text-axal-ink dark:text-gray-100">{deal.project_name || `Deal #${deal.id}`}</h1>
+            <div className="flex flex-wrap items-center gap-1.5">
+              {deal.project_sector && <span className={PILL_N}>{deal.project_sector}</span>}
+              <span className={`${PILL_N} capitalize`} data-testid="deal-status">{deal.status || 'Status not recorded'}</span>
+              {deal.lead_partner_name && <span className="text-[12.5px] font-semibold text-axal-muted dark:text-gray-400">Lead: {deal.lead_partner_name}</span>}
+            </div>
           </div>
-          <p className="text-gray-600 dark:text-gray-400">{deal.project_sector || 'Deal Room'}</p>
+          <div className="flex flex-wrap items-center gap-2">
+            {track?.state === 'ready' && track.stage === 'Invited' && (
+              <button type="button" onClick={() => setRespondTo('passed')} className={BTN_S} data-testid="deal-pass">Pass</button>
+            )}
+            {canInvite && (
+              <button type="button" onClick={() => setInviteOpen(true)} className={BTN_S}><Users size={14} /> Invite Investors</button>
+            )}
+            {isInvestor && (
+              <button type="button" onClick={() => setCommitOpen(true)} className={BTN_P}><DollarSign size={14} /> Commit Capital</button>
+            )}
+          </div>
         </div>
-        <div className="flex flex-wrap items-center gap-2">
-          {isInvestor && myInvite && myInvite.status === 'invited' && (
-            <>
-              <button onClick={() => respond('interested')} className="px-3 py-2 bg-green-600 hover:bg-green-700 text-white rounded-lg text-sm font-medium flex items-center gap-1"><ThumbsUp size={14} /> Interested</button>
-              <button onClick={() => respond('passed')} className="px-3 py-2 border border-gray-300 hover:bg-gray-50 text-gray-600 rounded-lg text-sm font-medium flex items-center gap-1 dark:border-gray-700 dark:text-gray-400"><ThumbsDown size={14} /> Pass</button>
-            </>
-          )}
-          {isInvestor && myInvite && myInvite.status !== 'invited' && (
-            <span className="text-xs text-gray-500 flex items-center gap-1"><Check size={13} /> You responded: {myInvite.status}</span>
-          )}
-          {canInvite && (
-            <button onClick={() => setInviteOpen(true)} className="px-3 py-2 border border-violet-300 text-violet-700 hover:bg-violet-50 rounded-lg text-sm font-medium flex items-center gap-1 dark:border-violet-800 dark:text-violet-300 dark:hover:bg-violet-900/20"><Users size={14} /> Invite Investors</button>
-          )}
-          {isInvestor && (
-            <button onClick={() => setCommitOpen(true)} className="px-3 py-2 bg-violet-600 hover:bg-violet-700 text-white rounded-lg text-sm font-medium flex items-center gap-1"><DollarSign size={14} /> Commit Capital</button>
-          )}
-        </div>
-      </div>
+      </header>
 
+      <KeyStrip tiles={keyStrip(deal, mine, role)} />
+      {track && <StageTrack track={track} onRetry={loadStage} onRespond={setRespondTo} />}
       {isInvestor && <DealRoomMembership dealId={deal.id} />}
 
-      {/* Progress banner */}
-      <div className="bg-white border border-gray-200 rounded-xl p-4 mb-5 dark:bg-gray-900 dark:border-gray-800">
-        <div className="flex justify-between text-sm text-gray-500 mb-1">
-          <span>Capital committed</span>
-          <span>{fmtMoney(deal.capital_committed, deal.currency)} / {fmtMoney(deal.target_raise, deal.currency)} ({pct == null ? 'Not recorded' : `${pct}%`})</span>
-        </div>
-        {pct != null && <div className="w-full h-2.5 bg-gray-100 rounded-full dark:bg-gray-800">
-          <div className="h-2.5 bg-violet-500 rounded-full" style={{ width: `${Math.min(100, pct)}%` }} />
-        </div>}
-      </div>
-
-      {/* Tabs */}
-      <nav aria-label="Deal" className="flex gap-1 overflow-x-auto border-b border-gray-200 dark:border-gray-800 mb-5" data-testid="deal-tabs">
-        {tabs.map(t => (
-          <Link key={t} to={tabHref(deal.id, t)} aria-current={tab === t ? 'page' : undefined} data-testid={`deal-tab-${t}`}
-            className={`whitespace-nowrap px-4 py-2 text-sm font-medium border-b-2 -mb-px ${tab === t ? 'border-violet-600 text-violet-700 dark:text-violet-400' : 'border-transparent text-gray-500 hover:text-gray-800 dark:hover:text-gray-300'}`}>
-            {TAB_DEFS[t].label}
-          </Link>
-        ))}
-      </nav>
+      {tabRow(deal.id)}
 
       {tab === 'overview' && (
         <>
-          <OverviewTab deal={deal} />
+          <DealOverview deal={deal} track={track} investor={isInvestor} />
           <DealSyndicates projectId={deal.project_id} user={user} />
         </>
       )}
@@ -191,19 +195,15 @@ export default function DealRoomPage() {
       {tab === 'commitment' && <p className="m-0 text-sm"><Link to={tabHref(deal.id, 'closing')} className="font-semibold underline" data-testid="deal-closing-door">Open the closing room</Link> for the round's lines, checklist and what is received.</p>}
       {tab === 'commitment' && <CommitmentsTab key={proofKey} dealId={deal.id} currency={deal.currency} proof={isAdmin && !branchOfUser(user)} user={user} onShare={openProof} founderMatch={isDealFounder(role, user, deal)} />}
       {tab === 'closing' && <ClosingRoom dealId={deal.id} role={role} deal={deal} />}
-      {/* DL14: an investor's Notes tab carries the deal's activity under the notes. */}
-      {tab === 'notes' && (
-        <>
-          <WaitCard tab="notes" />
-          <ActivityTab dealId={deal.id} />
-        </>
-      )}
-      {tab === 'activity' && <ActivityTab dealId={deal.id} />}
+      {/* DL14: an investor's Notes tab: their firm's notes, Eadwyn's draft slot and the activity. */}
+      {tab === 'notes' && <DealNotes dealId={deal.id} userId={user?.id} />}
+      {tab === 'activity' && <DealActivity dealId={deal.id} />}
       {tab === 'invitations' && (
         <DealInvitationsTab dealId={deal.id} onInvite={canInvite ? () => setInviteOpen(true) : undefined} />
       )}
       {tab === 'transfers' && <DealTransfersTab dealId={deal.id} currency={deal.currency} canRecord={isAdmin || role === 'partner'} />}
 
+      {respondTo && <RespondDialog answer={respondTo} onConfirm={respond} onClose={() => setRespondTo(null)} />}
       {commitOpen && <CommitModal deal={deal} user={user} onClose={() => setCommitOpen(false)} onDone={async (opts) => {
         setCommitOpen(false); loadDeal(); navigate(tabHref(deal.id, 'commitment'));
         if (!opts?.share || !showsProof(user)) return;
@@ -241,37 +241,6 @@ function DealRoomMembership({ dealId }) {
   );
 }
 
-function Field({ label, value }) {
-  return (
-    <div className="py-2 border-b border-gray-50 dark:border-gray-800/60">
-      <div className="text-xs text-gray-500">{label}</div>
-      <div className="text-sm font-medium text-gray-900 dark:text-gray-100">{value ?? '—'}</div>
-    </div>
-  );
-}
-
-function OverviewTab({ deal }) {
-  return (
-    <div className="grid md:grid-cols-2 gap-x-8 gap-y-1">
-      {deal.description && (
-        <div className="md:col-span-2 mb-2 text-sm text-gray-600 dark:text-gray-400">{deal.description}</div>
-      )}
-      <Field label="Target Raise" value={fmtMoney(deal.target_raise, deal.currency)} />
-      <Field label="Capital Committed" value={fmtMoney(deal.capital_committed, deal.currency)} />
-      <Field label="Minimum Check" value={fmtMoney(deal.minimum_check, deal.currency)} />
-      <Field label="Valuation Cap" value={fmtMoney(deal.valuation_cap, deal.currency)} />
-      <Field label="Instrument" value={deal.instrument} />
-      <Field label="SPV Jurisdiction" value={deal.spv_jurisdiction} />
-      <Field label="Carry" value={deal.carry_pct != null ? `${deal.carry_pct}%` : null} />
-      <Field label="Management Fee" value={deal.management_fee_pct != null ? `${deal.management_fee_pct}%` : null} />
-      <Field label="Closing Deadline" value={deal.closing_deadline} />
-      <Field label="Lead Partner" value={deal.lead_partner_name} />
-      <Field label="Days in Stage" value={deal.days_in_stage == null ? 'Not recorded' : `${deal.days_in_stage} days`} />
-      <Field label="Website" value={deal.website ? <a href={deal.website} target="_blank" rel="noreferrer" className="text-violet-600 hover:underline">{deal.website}</a> : null} />
-    </div>
-  );
-}
-
 function DocumentsTab({ dealId }) {
   const [docs, setDocs] = useState(null);
   const [failed, setFailed] = useState(false);
@@ -285,12 +254,7 @@ function DocumentsTab({ dealId }) {
   if (failed) return <Unreadable what="The documents" claim="That is not a claim that no documents exist." onRetry={load} />;
   return (
     <div>
-      <div className="flex justify-end mb-3">
-        <button type="button" onClick={() => api.downloadDataRoom(dealId).catch(() => alert('Failed to download data room'))}
-          className="px-3 py-2 bg-violet-600 hover:bg-violet-700 text-white rounded-lg text-sm font-medium inline-flex items-center gap-2">
-          <Download size={15} /> Download Data Room
-        </button>
-      </div>
+      {/* D1152: the zip export is retired (410 since #2647), so its button and its browser pop-up are gone. */}
       {docs == null ? (
         <div className="text-center text-gray-500 py-8"><Loader2 className="animate-spin inline" size={16} /></div>
       ) : docs.length === 0 ? (
@@ -392,32 +356,6 @@ export function CommitmentsTab({ dealId, currency = 'USD', proof = false, user =
       ))}
     </div>
     </>
-  );
-}
-
-function ActivityTab({ dealId }) {
-  const [events, setEvents] = useState(null);
-  const [failed, setFailed] = useState(false);
-  const load = () => {
-    setFailed(false);
-    api.dealActivity(dealId).then(setEvents).catch(() => setFailed(true));
-  };
-  useEffect(() => { load(); /* eslint-disable-next-line */ }, [dealId]);
-  if (failed) return <Unreadable what="The activity" claim="That is not a claim that nothing happened." onRetry={load} />;
-  if (events == null) return <div className="text-center text-gray-500 py-8"><Loader2 className="animate-spin inline" size={16} /></div>;
-  if (events.length === 0) return <div className="text-center text-gray-500 py-8">No activity yet</div>;
-  return (
-    <div className="space-y-3">
-      {events.map((e, i) => (
-        <div key={i} className="flex items-start gap-3">
-          <div className="mt-0.5 w-7 h-7 rounded-full bg-gray-100 flex items-center justify-center dark:bg-gray-800"><Clock size={13} className="text-gray-500" /></div>
-          <div>
-            <div className="text-sm text-gray-900 dark:text-gray-100">{e.label}</div>
-            <div className="text-xs text-gray-400">{e.at ? new Date(e.at).toLocaleString() : ''}</div>
-          </div>
-        </div>
-      ))}
-    </div>
   );
 }
 

@@ -4,6 +4,7 @@ import { capTableHolderApi } from '../../../lib/api/capTableHolder';
 import { capTableRecordApi } from '../../../lib/api/capTableRecord';
 import { useAuth } from '../../../hooks/useAuthSync';
 import { Unreadable } from '../../../ui';
+import { usePhoneWidth } from '../../../ui/phone/usePhoneWidth';
 import AccessTab from './AccessTab';
 import ImportExportTab from './ImportExportTab';
 import HistoryTab from './HistoryTab';
@@ -17,9 +18,10 @@ import InstrumentsTab from './InstrumentsTab';
 import OptionPoolTab from './OptionPoolTab';
 import { ScenarioRoute, ScenariosList } from './ScenariosPages';
 import {
-  HOME_NOTE, HOME_PATH, LINE, SLUG, TABS, TITLE,
+  HOME_NOTE, HOME_PATH, LINE, PHONE_ROOT, SLUG, TABS, TITLE,
   tabHref, tabSearch,
 } from './capTableModel';
+import './capTable.css';
 
 /**
  * D1015 (#2432) — the Cap table tool's tab bar and its tab pages. CycleRoute
@@ -28,16 +30,16 @@ import {
  * here comes from a read on `main`; see `capTableModel.js`.
  */
 
-export const CARD = 'rounded-xl border border-axal-hairline bg-white dark:border-gray-800 dark:bg-gray-900';
-export const INK = 'text-axal-ink dark:text-gray-100';
+export const CARD = 'rounded-xl border border-axal-hairline bg-white dark:border-gray-700 dark:bg-gray-900';
+export const INK = 'text-axal-ink dark:text-gray-200';
 export const MUTED = 'text-axal-muted dark:text-gray-400';
 export const EYEBROW = 'text-[10.5px] font-extrabold uppercase tracking-[.07em] text-axal-muted dark:text-gray-400';
 export { Tag };
-export const LINK = 'font-semibold text-axal-violet hover:text-axal-violet-deep dark:text-violet-300 dark:hover:text-violet-200';
+export const LINK = 'font-semibold text-axal-violet hover:text-axal-violet-deep dark:text-violet-400 dark:hover:text-violet-300';
 export const TH = 'px-3 py-2 text-left text-[10.5px] font-extrabold uppercase tracking-[.07em] text-axal-muted dark:text-gray-400';
-export const TD = 'px-3 py-2 align-top text-[12.5px] text-axal-ink dark:text-gray-100';
+export const TD = 'px-3 py-2 align-top text-[12.5px] text-axal-ink dark:text-gray-200';
 export const MONO = 'font-mono tabular-nums';
-export const AMBER = 'rounded-[10px] border border-amber-200 bg-amber-50 px-2.5 py-1.5 text-[11.5px] text-amber-800 dark:border-amber-900 dark:bg-amber-950/30 dark:text-amber-300';
+export const AMBER = 'rounded-[10px] border border-amber-200 bg-amber-50 px-2.5 py-1.5 text-[11.5px] text-amber-800 dark:border-amber-300/55 dark:bg-amber-300/10 dark:text-amber-300';
 
 /** The tool's own tabs, a second level under the Raise modules: text with an underline. */
 export function CapTableTabBar({ active, search = '' }) {
@@ -47,7 +49,7 @@ export function CapTableTabBar({ active, search = '' }) {
         {TABS.map((t) => (
           <Link key={t.id} to={tabHref(t, search)} aria-current={t.id === active ? 'page' : undefined}
             className={`whitespace-nowrap border-b-2 px-3 py-2.5 text-[12.5px] ${t.id === active
-              ? 'border-axal-violet font-extrabold text-axal-ink dark:border-violet-400 dark:text-gray-100'
+              ? 'border-axal-violet font-extrabold text-axal-ink dark:border-violet-400 dark:text-gray-200'
               : 'border-transparent font-semibold text-axal-muted hover:text-axal-ink dark:text-gray-400 dark:hover:text-gray-100'}`}
             data-testid={`captable-tab-${t.id}`}>
             {t.label}
@@ -64,8 +66,10 @@ export function CapTableTabBar({ active, search = '' }) {
  * column. The module page's own Holders list and Planned round card follow, Modelled.
  */
 export function CapTableHomeNav({ search = '', projectId = null }) {
+  // D1028 (CT23a): below 1024px every control here is a 44px target (`capTable.css`).
+  const phone = usePhoneWidth();
   return (
-    <div className="flex flex-col gap-3">
+    <div className={`flex flex-col gap-3${phone ? ` ${PHONE_ROOT}` : ''}`} data-testid="captable-home">
       <CapTableTabBar active="overview" search={search} />
       <p className={`m-0 flex flex-wrap items-center gap-2 text-[12px] ${MUTED}`} data-testid="captable-home-note">
         <Tag kind="record" /> <Tag kind="modelled" /> {HOME_NOTE}
@@ -123,7 +127,7 @@ function HistoryPage({ projectId, reload, retry }) {
 export function Section({ title, tag, children, testId, aside }) {
   return (
     <section className={CARD} data-testid={testId}>
-      <div className="flex flex-wrap items-center justify-between gap-2 border-b border-axal-hairline px-4 py-3 dark:border-gray-800">
+      <div className="flex flex-wrap items-center justify-between gap-2 border-b border-axal-hairline px-4 py-3 dark:border-gray-700">
         <h2 className={`m-0 flex items-center gap-2 text-[15px] font-extrabold tracking-[-.015em] ${INK}`}>{title} {tag}</h2>
         {aside}
       </div>
@@ -144,7 +148,7 @@ export function Table({ cols, rows, testId }) {
   return (
     <div className="overflow-x-auto">
       <table className="w-full border-collapse" data-testid={testId}>
-        <thead><tr className="border-b border-axal-hairline dark:border-gray-800">{cols.map((c) => <th key={c.key} className={TH}>{c.label}</th>)}</tr></thead>
+        <thead><tr className="border-b border-axal-hairline dark:border-gray-700">{cols.map((c) => <th key={c.key} className={TH}>{c.label}</th>)}</tr></thead>
         <tbody>{rows}</tbody>
       </table>
     </div>
@@ -177,8 +181,14 @@ export function CapTableTabPage({ tab, proposal = null, instrument = null, scena
   // D1024: `/scenarios/<uid>` is one scenario and `/scenarios/compare` the compare page, under the Scenarios tab.
   else if (tab === 'scenario') body = <ScenarioRoute id={scenario} projectId={projectId} reload={reload} retry={retry} search={search} />;
   else body = <ScenariosList projectId={projectId} reload={reload} retry={retry} search={search} />;
+  const root = `flex min-w-0 flex-col gap-4${phone ? ` ${PHONE_ROOT}` : ''}`;
+  // D1028 (CT23b): on a phone a holder is a page of its own, under a bar back to
+  // the Cap table, with no tabs and nothing of Overview behind it.
+  if (phone && holder != null && projectId && projectStatus !== 'unreadable') {
+    return <div className={root} data-testid="captable-holder-page"><CapTableOverview projectId={projectId} search={search} holderId={holder} /></div>;
+  }
   return (
-    <div className="flex min-w-0 flex-col gap-4" data-testid={holder != null ? 'captable-holder-page' : overlay ? `captable-${tab}-over-overview` : onInstruments ? 'captable-instrument-over-instruments' : `captable-${tab}-page`}>
+    <div className={root} data-testid={holder != null ? 'captable-holder-page' : overlay ? `captable-${tab}-over-overview` : onInstruments ? 'captable-instrument-over-instruments' : `captable-${tab}-page`}>
       {phone
         ? <CycleBar back={{ label: TITLE, to: `${HOME_PATH}${tabSearch(search)}` }} title={here.label} eadwynLabel={`Raise · ${TITLE}`} />
         : <CycleHeader cycle="raise" cards={cards} active={SLUG} action={action} title={TITLE} sub={LINE} search={tabSearch(search)} />}

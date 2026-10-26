@@ -22,6 +22,7 @@ Naming follows the surface, not the persona: `PortfolioHealthPage`,
 | `advisor/` | The advisor's own practice surfaces. |
 | `founder/` | The founder shell's workspace tab bars. |
 | `investor/` | Investor-only workspace framing and visual-system styles. |
+| `deal/` | D1152: the deal page's frame for `DealRoomPage.jsx` — the key strip, the stage track and its one next action, the investor's Overview, Notes and Activity, and the states, with the pure model they share. |
 | `partner/` | Partner-side operations (BD console). |
 | `research/` | Research zone bodies. Library and Ask are on every licence. Funds is the founder shortlist, and `FundDossier.jsx` is one row of it at `/research/funds/:uid`. `CompanyCandidate.jsx` is one competitor at `/research/companies/:analysisId/:candidateId`. |
 | `captable/` | Cap-table panels composed into `CapTablePage.jsx`. |

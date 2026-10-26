@@ -2,6 +2,8 @@ import React, { useCallback, useEffect, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { capTableAccessApi } from '../../../lib/api/capTableAccess';
 import { Unreadable, actionGhost } from '../../../ui';
+import { usePhoneWidth } from '../../../ui/phone/usePhoneWidth';
+import { PHONE_ROOT } from './capTableModel';
 import { CARD, INK, MONO, MUTED, EYEBROW, Section, Skeleton, TD, Table } from './CapTableTool';
 import CapTableDialog, { useWrite } from './CapTableDialog';
 import { SUPPORT_REASON, logRows, sharedLine, sharedView, supportProblem } from './capTableAccess';
@@ -22,7 +24,7 @@ import { SUPPORT_REASON, logRows, sharedLine, sharedView, supportProblem } from 
  */
 
 const PILL = 'inline-flex w-fit items-center rounded-full border border-axal-hairline px-2 py-0.5 text-[10.5px] font-bold text-axal-muted dark:border-gray-700 dark:text-gray-400';
-const LAVENDER = 'rounded-[10px] border border-violet-200 bg-violet-50 px-3 py-2 text-[12.5px] text-violet-900 dark:border-violet-900 dark:bg-violet-950/30 dark:text-violet-200';
+const LAVENDER = 'rounded-[10px] border border-violet-200 bg-violet-50 px-3 py-2 text-[12.5px] text-violet-900 dark:border-[#4c3a8a] dark:bg-[#211f3d] dark:text-violet-400';
 
 /** One view at its level, from `sharedView`. */
 export function SharedViewBody({ read, testId = 'shared-view' }) {
@@ -39,7 +41,7 @@ export function SharedViewBody({ read, testId = 'shared-view' }) {
   const ledger = (rows) => (
     <Table testId={`${testId}-positions`} cols={[{ key: 'h', label: 'Holder' }, { key: 'g', label: 'Group' }, { key: 's', label: 'Shares' }, { key: 'p', label: '% fully diluted' }]}
       rows={rows.map((r, i) => (
-        <tr key={`${r.holder}-${i}`} className="border-b border-axal-ground last:border-b-0 dark:border-gray-800" data-testid={`${testId}-row`}>
+        <tr key={`${r.holder}-${i}`} className="border-b border-axal-ground last:border-b-0 dark:border-gray-700" data-testid={`${testId}-row`}>
           <td className={`${TD} font-bold`}>{r.holder}</td><td className={TD}>{r.group}</td><td className={`${TD} ${MONO}`}>{r.shares}</td><td className={`${TD} ${MONO}`}>{r.pct}</td>
         </tr>
       ))} />
@@ -89,7 +91,7 @@ function HqLog() {
         : rows.length === 0 ? <p className={`m-0 text-[12.5px] ${MUTED}`}>No cap table has been opened yet.</p> : (
           <Table testId="captable-hq-log-table" cols={[{ key: 'w', label: 'When' }, { key: 'c', label: 'Company' }, { key: 'p', label: 'Who' }, { key: 'x', label: 'What' }]}
             rows={rows.map((r) => (
-              <tr key={r.id} className="border-b border-axal-ground last:border-b-0 dark:border-gray-800" data-testid="captable-hq-log-row">
+              <tr key={r.id} className="border-b border-axal-ground last:border-b-0 dark:border-gray-700" data-testid="captable-hq-log-row">
                 <td className={`${TD} ${MONO}`}>{r.when}</td><td className={TD}>{r.venture}</td><td className={TD}>{r.who}</td><td className={TD}>{r.what}</td>
               </tr>
             ))} />
@@ -118,8 +120,10 @@ function SupportDialog({ projectId, onClose, onOpened }) {
 }
 
 function Frame({ title, line, pills, aside, children, testId }) {
+  // D1028 (CT23): below 1024px every control here is a 44px target (`capTable.css`, imported by the tool).
+  const phone = usePhoneWidth();
   return (
-    <div className="flex min-w-0 flex-col gap-4" data-testid={testId}>
+    <div className={`flex min-w-0 flex-col gap-4${phone ? ` ${PHONE_ROOT}` : ''}`} data-testid={testId}>
       <header className="flex flex-wrap items-start justify-between gap-2">
         <div className="flex flex-col gap-1">
           <h1 className={`m-0 text-[22px] font-extrabold tracking-[-.02em] ${INK}`}>{title}</h1>

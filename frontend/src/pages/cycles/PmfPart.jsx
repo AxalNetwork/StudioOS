@@ -2,14 +2,15 @@ import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { cyclesWrite } from '../../lib/api/cycles';
 import { Lightbox } from '../../ui';
+import { PmfMethodButton } from './PmfMethod';
 import {
-  BANDS, EMPTY_NOTE, GRADES, INPUTS, MISSING_FOOT, MODEL_VERSION, POINTS_FOOT, TITLE,
-  gapRows, historyView, inputGroups, kitView, pmfView, readinessHref, validateHref,
+  EMPTY_NOTE, MISSING_FOOT, POINTS_FOOT, TITLE,
+  gapRows, historyView, inputGroups, kitView, pmfView, validateHref,
 } from './pmfModel';
 
 /**
  * D1141 (#2433) and D1145 (#3031) — Fundraising readiness's Product-market fit
- * part, and the door to it from Validate's overview (RD12).
+ * part. D1146 reads the method from its stored definition and puts RD12 in Validate's header.
  *
  * D1145 draws the score part 3 stores (D1144), from the module read's
  * `parts.pmf`, beside the raise kit the module's own card scores:
@@ -25,7 +26,7 @@ import {
  *
  * Re-score (RD6) is the module's own Re-score, which now offers Product-market
  * fit (`forms.js`); Team is scored on its record (RD7). Every words and number
- * here comes from `pmfModel.js`.
+ * here comes from `pmfModel.js`. RD4 opens the stored-model dialog instead of a copied model fold.
  */
 
 const CARD = 'rounded-xl border border-axal-hairline bg-white dark:border-gray-800 dark:bg-gray-900';
@@ -43,7 +44,6 @@ const BAND_PILL = {
   Weak: `${PILL} border-red-200 bg-red-50 text-red-700 dark:border-red-400/40 dark:bg-red-400/10 dark:text-red-300`,
 };
 const BAND_GLYPH = { Strong: '▲', Fair: '◐', Weak: '▼' };
-const LINK = 'font-semibold text-axal-violet hover:text-axal-violet-deep dark:text-violet-300 dark:hover:text-violet-200';
 const BTN = 'inline-flex min-h-[34px] items-center justify-center gap-1.5 whitespace-nowrap rounded-[9px] px-3 text-[12.5px] font-bold max-sm:min-h-[44px]';
 const GHOST = `${BTN} border border-axal-hairline bg-white text-axal-ink hover:bg-axal-ground dark:border-gray-700 dark:bg-gray-900 dark:text-gray-100 dark:hover:bg-gray-800`;
 const PRIMARY = `${BTN} bg-axal-violet text-white hover:bg-axal-violet-deep`;
@@ -87,7 +87,7 @@ export function PmfPart({ part, card = null, records = null, projectId = null, r
         </>
       )}
       <HistoryCard history={history} pivotAt={part?.pivot_at ?? null} />
-      <ModelFold search={search} />
+      <PmfMethodButton projectId={projectId} search={search} />
       {opened ? <InputLightbox row={opened} onClose={() => setOpen(null)} /> : null}
     </section>
   );
@@ -257,7 +257,7 @@ function InputLightbox({ row, onClose }) {
   const recorded = row.state === 'recorded';
   const facts = [
     ['Value', recorded ? `${row.value} of 100` : row.status],
-    ['Weight', `${row.weightNumber} of 100`, 'in model v1, shared out again over the inputs that apply'],
+    ['Weight', `${row.weightNumber} of 100`, 'from the scored model, shared out again over the inputs that apply'],
     ['Contribution', row.contribution != null ? `${row.contribution} points` : '—', row.contribution != null ? null : 'Out of the value'],
     ['As of', row.asOf || '—'],
   ];
@@ -284,12 +284,6 @@ function InputLightbox({ row, onClose }) {
             </div>
           ))}
         </dl>
-        {row.rule ? (
-          <div className="border-t border-axal-hairline pt-3 dark:border-gray-800">
-            <p className={EYE}>Method</p>
-            <p className={`m-0 mt-1 text-[13px] ${INK}`}>{row.rule}</p>
-          </div>
-        ) : null}
         <div className="border-t border-axal-hairline pt-3 dark:border-gray-800">
           <p className={EYE}>What it read</p>
           <p className={`m-0 mt-1 font-mono text-[12.5px] ${INK}`} data-testid="pmf-lightbox-words">{row.words}</p>
@@ -423,44 +417,5 @@ function HistoryTable({ points }) {
         </tbody>
       </table>
     </div>
-  );
-}
-
-// ---------------------------------------------------------------------------
-// How it is scored (RD4, D1141's fold until part 5 reads the stored model)
-// ---------------------------------------------------------------------------
-
-function ModelFold({ search }) {
-  return (
-    <details className={`${CARD} px-4 py-3`} data-testid="pmf-model">
-      <summary className={`cursor-pointer text-[12.5px] font-bold ${INK}`}>How {TITLE} is scored · {MODEL_VERSION}</summary>
-      <div className="mt-2 overflow-x-auto">
-        <table className="w-full border-collapse">
-          <thead><tr className="border-b border-axal-hairline dark:border-gray-800"><th className={TH}>Input</th><th className={TH}>Rule</th><th className={TH}>Weight</th></tr></thead>
-          <tbody>
-            {INPUTS.map((i) => (
-              <tr key={i.key} className="border-b border-axal-hairline last:border-0 dark:border-gray-800" data-testid="pmf-input">
-                <td className={TD}>{i.module ? <Link className={LINK} to={validateHref(i.module, search)}>{i.name}</Link> : i.name}</td>
-                <td className={TD}>{i.rule}</td>
-                <td className={`${TD} font-mono tabular-nums`}>{i.weight}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
-      <ul className={`m-0 mt-2 flex list-none flex-col gap-0.5 p-0 text-[12px] ${MUTED}`}>
-        {GRADES.map(([g, f, why]) => <li key={g}><span className={`font-bold ${INK}`}>{g} {f}</span> · {why}</li>)}
-      </ul>
-      <p className={`m-0 mt-2 text-[12px] ${MUTED}`}>{BANDS}</p>
-    </details>
-  );
-}
-
-/** RD12: Validate's overview hands off to the readiness page. */
-export function ReadinessDoor({ search = '' }) {
-  return (
-    <p className={`m-0 text-[12.5px] ${MUTED}`} data-testid="pmf-door">
-      What Validate records will feed Product-market fit on Fundraising readiness. <Link className={LINK} to={readinessHref(search)}>Open Fundraising readiness</Link>
-    </p>
   );
 }
