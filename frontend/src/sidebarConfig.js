@@ -101,7 +101,7 @@ export const SIDEBAR_GROUPS = {
   // false claim to leave lying around, and the most misleading to read.
   //
   // Two rows deliberately do not point where their labels first suggest:
-  //   Team  → /admin/accounts, the cross-tenant accounts table with the holder
+  //   Team  → /admin/hq-team (D941), the cross-tenant accounts table with the holder
   //           console above it (canvas H4). /admin/team is the PUBLIC team-page
   //           editor — a different thing wearing the same word.
   //   Home  → /hq, the HQ Home page (canvas H1). The Admin Console is
@@ -128,10 +128,10 @@ export const SIDEBAR_GROUPS = {
       // The master template library. The doc-type REGISTRY the Contracts ·
       // Super canvas draws above it has no store; the page says so.
       { to: '/admin/contracts', icon: FileText, label: 'Contracts' },
-      // D938 (#2743): Team keeps /admin/accounts until #2375's question 1 is
-      // answered, and lights on its subtree: a member's credits, and All
-      // accounts at /admin/accounts/all.
-      { to: '/admin/accounts', icon: Users, label: 'Team', match: ['/admin/accounts'] },
+      // D941 (#2746, #2375 question 1, answer A): Team is /admin/hq-team, and
+      // lights on a member's credits and All accounts, which keep their
+      // addresses under /admin/accounts.
+      { to: '/admin/hq-team', icon: Users, label: 'Team', match: ['/admin/hq-team', '/admin/accounts/credits', '/admin/accounts/all'] },
       // Canvas H5. The artboard's own nav puts Revenue straight after
       // Accounts (= Team), which is where it goes here.
       // D938: Billing left the Admin Console for /admin/revenue/billing.
@@ -230,7 +230,8 @@ export const SIDEBAR_GROUPS = {
   admin: [
     { key: 'admin', label: 'Admin', items: [
       { to: '/studio', icon: LayoutDashboard, label: 'Studio' },
-      { to: '/admin/held/accounts', icon: Users, label: 'Accounts', match: ['/admin/accounts/all', '/admin/persona-segments', '/admin/exploring', '/admin/trash'] },
+      // D941 (#2746): Accounts takes /admin/accounts and lights on its subtree.
+      { to: '/admin/accounts', icon: Users, label: 'Accounts', match: ['/admin/accounts', '/admin/persona-segments', '/admin/exploring', '/admin/trash'] },
       // D506 — the Spin-Out moderation console joined the lanes Approvals
       // leads to (lane 4 links it), so the row stays lit inside it. `match`
       // is the complete statement of what the row owns (SidebarNav), so a

@@ -139,9 +139,10 @@ const AdminTeam = lazy(() => import('./pages/admin/AdminTeam'));
 const ExploringDashboard = lazy(() => import('./pages/ExploringDashboard'));
 const AdminExploring = lazy(() => import('./pages/admin/AdminExploring'));
 // D286 — the five landings of the Admin shell on accounts HQ holds directly
-// (canvas S20). Under /admin/held/ so none can collide with an HQ console:
-// /admin/accounts is HQ's Team, and the HQ consoles are flat /admin/<noun>.
-const HeldAccounts = lazy(() => import('./pages/admin/HeldAccounts'));
+// (canvas S20). D941 (#2746): Accounts takes /admin/accounts, and HQ's Team
+// moved to /admin/hq-team; the other four stay under /admin/held/.
+const AccountsAddress = lazy(() => import('./pages/admin/AccountsAddress'));
+const HeldAccountsRedirect = lazy(() => import('./pages/admin/AccountsAddress').then((m) => ({ default: m.HeldAccountsRedirect })));
 const AdminApprovals = lazy(() => import('./pages/admin/approvals/AdminApprovals'));
 const ApprovalsLaneBoards = lazy(() => import('./pages/admin/approvals/LaneBoards'));
 const HeldApprovalsRedirect = lazy(() => import('./pages/admin/approvals/HeldApprovalsRedirect'));
@@ -2788,8 +2789,7 @@ function AppInner() {
           turned away here as before, not after a forward. */}
       <Route path="/admin" element={guard(['admin'], <LegacyContractsRedirect />)} />
       {/* Each tool at its #2375 address, under AdminPageHeader. All accounts
-          sits under /admin/accounts until #2375's question 1 is answered
-          (part 4, #2746); /admin/accounts itself stays HQ › Team. */}
+          is a sub-path of Accounts (/admin/accounts, D941). */}
       <Route path="/admin/accounts/all" element={guard(['admin'], <AllAccountsPage onImpersonate={handleImpersonate} />)} />
       {/* D1026 (CT17, CT18) — a venture's cap table as an Advisor, an Operating
           Partner, an Admin or the Super Admin reads it. The Worker decides the level. */}
@@ -2862,7 +2862,8 @@ function AppInner() {
       {/* D286 — S20's five landings. `guard(['admin'])` and never `hqOnly`:
           this is the plain admin's own shell. Each carries its consoles as
           literal links, which is how the reachability walk reaches them. */}
-      <Route path="/admin/held/accounts" element={guard(['admin'], <HeldAccounts />)} />
+      {/* D941 (#2746): the Accounts page's old address forwards to its own. */}
+      <Route path="/admin/held/accounts" element={guard(['admin'], <HeldAccountsRedirect />)} />
       {/* D953 (#2371) — Programs left /admin/held/ when it was rebuilt to its
           canvas. The old address keeps its query and hash and adds
           ?moved=held. The catalogue and each program page with its tabs as
@@ -2963,7 +2964,12 @@ function AppInner() {
           Console already has (Legal templates; the Users table) for the
           franchisor, with the holder console above the accounts. */}
       <Route path="/admin/contracts" element={guard(['admin'], <HqContractsPage />)} />
-      <Route path="/admin/accounts" element={guard(['admin'], hqOnly(<HqAccountsPage onImpersonate={handleImpersonate} />))} />
+      {/* D941 (#2746, #2375 question 1, answer A): /admin/accounts is the
+          Admin's Accounts page; HQ › Team is /admin/hq-team, beside
+          /admin/hq-support. A Super Admin's /admin/accounts (old links, the
+          transfer notices already sent) forwards to Team with its notice. */}
+      <Route path="/admin/accounts" element={guard(['admin'], <AccountsAddress superAdmin={isSuperAdminUser(user)} />)} />
+      <Route path="/admin/hq-team" element={guard(['admin'], hqOnly(<HqAccountsPage onImpersonate={handleImpersonate} />))} />
       {/* D633 (#1391, Q2) — one member's credits; the Team directory's drawer is its door. */}
       <Route path="/admin/accounts/credits/:userId" element={guard(['admin'], hqOnly(<MemberCreditsPage />))} />
       {/* HQ · Home (canvas H1). The whole business on one screen; every
