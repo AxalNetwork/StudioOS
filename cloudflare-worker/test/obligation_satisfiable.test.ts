@@ -1,54 +1,5 @@
-/**
- * An obligation seeded `required: 1` must have a code path that can satisfy it.
- *
- * TWO OF THE TEN CANNOT BE, down from eight when this file landed. That number is
- * the measurement, and the point of the file is that it can only fall.
- *
- * WHAT CLOSED, in two steps. The three NDAs and the advisor disclaimer each had a
- * real signable document, a wired template body and a working send route, and
- * nothing wrote the result back — so `satisfyObligationFromEnvelope` now records a
- * completed envelope against them, which is what `evidence_envelope_uuid` was added
- * for in migration 025. Then `tos_v1` and `privacy_v1`, which had no affirmative
- * acceptance anywhere in the product to record: only passive browsewrap text, and
- * on the one screen every signup must pass, not even that. Marking them satisfied
- * would have asserted an act nobody performed, so the fix was a real consent
- * checkbox on the onboarding licence gate plus `recordTermsAcceptance` to make it
- * durable — not a write on its own. Both are proven behaviourally, in
- * `obligation_signature_satisfier.test.ts` and `terms_acceptance.test.ts`.
- *
- * WHAT REMAINS, and why each is a decision rather than a missing write:
- *
- *   `accreditation_v1` — required of every investor, no satisfier. It has a legal
- *   template and an e-sign doc_type, so it looks wired; satisfying or waiving it is
- *   a securities question for counsel, and it is deliberately excluded from
- *   `SATISFIABLE_BY_SIGNATURE` for that reason.
- *
- *   `kyb_v1` — HAS a write site that has never been able to run. That is the
- *   sharper half, because it fails invisibly: `resyncKycKyb`'s KYB branch joins
- *   `corporate_profiles.kyb_status`, a column that exists on no table in this
- *   schema, and the D1 error used to be swallowed by
- *   `.all().catch(() => ({ results: [] }))` — indistinguishable from "no rows to
- *   reconcile", so the nightly cron reported `scanned=0` and read as healthy. Two
- *   places in the repo already knew the column was absent (`schema_guards.test.mjs`,
- *   and a migration comment citing it by name as the example of a value with no
- *   writer); nothing connected that to the obligation depending on it.
- *
- * The second test below is that connection, made behaviourally rather than by
- * reading: the reconciler is RUN, against a database where every external
- * precondition is met, and KYB still does not move — and the branch's own warning
- * is captured, which is what distinguishes "nothing to do tonight" from "this has
- * never worked".
- *
- * WHAT IS STILL DELIBERATELY NOT DONE. No seeding changed, and no obligation is
- * waived. The two remaining keys are each blocked on a decision rather than on
- * code, and the precedent for leaving them alone is `ADVISOR_CHARGING_ENABLED`
- * staying unset until counsel cleared the advisor terms. This file measures;
- * `UNSATISFIABLE_TODAY` is an exact set, so the measurement can only shrink and a
- * regression cannot be quiet.
- *
- * Real SQLite via `_d1_sqlite.mjs`, for the reason that file gives: a text-matching
- * stub cannot tell a correct predicate from an incorrect one, and the whole point
- * here is that one specific predicate cannot run at all.
+/** Required obligations need a working satisfier or an explicitly recorded gap.
+ * D1231 closes KYB through approved account business cases; accreditation remains.
  */
 import test from 'node:test';
 import assert from 'node:assert/strict';
@@ -248,15 +199,7 @@ const UNSATISFIABLE_TODAY: Record<string, Gap> = {
     satisfier: 'none',
     why: 'no write site at all, and required for every investor — needs counsel before any waive',
   },
-  // The one write site that exists and cannot run. Note the shape of the miss: a
-  // real KYB store DOES exist — migration 220's `company_kyb_records`, with a
-  // `status` column — and the reconciler reads a different, absent column on a
-  // different table, so the two have never been connected.
-  kyb_v1: {
-    satisfier: 'inert',
-    blockedBy: 'corporate_profiles.kyb_status',
-    why: 'the UPDATE exists; the SELECT feeding it joins a column no table defines, so it has never run',
-  },
+
 };
 
 /* ------------------------------------------------------------------ *
@@ -277,7 +220,11 @@ function makeEnv() {
   // `users` in the baseline is large and carries FKs; the reconciler reads one
   // column off it, so a minimal stand-in keeps the fixture honest about what is
   // actually consulted.
-  db.exec('CREATE TABLE users (id INTEGER PRIMARY KEY, kyc_status TEXT)');
+  db.exec("CREATE TABLE users (id INTEGER PRIMARY KEY, kyc_status TEXT, role TEXT DEFAULT 'investor')");
+  for (const name of ['company_profiles', 'kyc_partner_imports', 'territory_licences']) db.exec(tableDDL(name));
+  db.exec(read('cloudflare-worker/sql/migrations/220_company_kyb.sql'));
+  db.exec(read('cloudflare-worker/sql/migrations/341_approval_assignments.sql'));
+  db.exec(read('cloudflare-worker/sql/migrations/616_kyb_cases.sql'));
   const coerce = (a: any[]) => a.map((v) => (v === undefined ? null : v === true ? 1 : v === false ? 0 : v));
   const DB = {
     prepare(sql: string) {
@@ -318,57 +265,21 @@ test('the reconciler satisfies KYC when the provider approved it', async () => {
   assert.ok(out.updated >= 1, 'the reconciler reported no update for a row it changed');
 });
 
-test('the reconciler cannot satisfy KYB, and reports success while failing', async () => {
-  // THE FINDING, RUN RATHER THAN READ. Every external precondition a reader would
-  // expect is met: the account has a corporate profile, and the obligation is
-  // pending. The only thing missing is the column the query joins.
+test('the reconciler satisfies KYB only from a recorded approval, and keeps its expiry fixed', async () => {
   const { env, db } = makeEnv();
   db.exec("INSERT INTO users (id, kyc_status) VALUES (8, 'approved')");
   db.exec("INSERT INTO corporate_profiles (user_id, entity_name) VALUES (8, 'Anvil Ltd')");
   db.exec("INSERT INTO legal_obligations (user_id, obligation_key, required, status) VALUES (8, 'kyb_v1', 1, 'pending')");
-
-  const warned: string[] = [];
-  const realWarn = console.warn;
-  console.warn = (...a: unknown[]) => { warned.push(a.map(String).join(' ')); };
-  let out: { scanned: number; updated: number };
-  try {
-    out = await resyncKycKyb(env);
-  } finally {
-    console.warn = realWarn;
-  }
-
-  assert.equal(statusOf(db, 'kyb_v1'), 'pending',
-    'kyb_v1 moved — if a satisfier was built, remove its UNSATISFIABLE_TODAY entry');
-  // The call still resolves and still reports counts — the no-op is unchanged.
-  assert.equal(typeof out!.scanned, 'number', 'resyncKycKyb threw rather than swallowing');
-  assert.equal(out!.updated, 0, 'nothing was updated, which is the honest count of a no-op');
-
-  // AND THE QUERY REALLY DOES FAIL, rather than merely matching no rows — which is
-  // the difference between "no entity investors to reconcile tonight" and "this has
-  // never worked". Proven by the branch's own named warning firing: it is emitted
-  // only from the SELECT's rejection handler. Before this line was added the two
-  // cases were indistinguishable from outside, which is exactly how the gap
-  // survived a nightly cron.
-  const inert = warned.filter((w) => w.includes('KYB inert'));
-  assert.equal(inert.length, 1,
-    'expected exactly one "KYB inert" warning from the failing SELECT, got '
-    + `${inert.length}: ${JSON.stringify(warned)}. If the query no longer rejects, KYB may `
-    + 'now be readable — re-check UNSATISFIABLE_TODAY.kyb_v1.');
-  assert.match(inert[0], /corporate_profiles\.kyb_status/,
-    'the warning does not name the missing column, so a reader of the cron log cannot act on it');
-});
-
-test('corporate_profiles has no kyb_status column, which is why the above cannot work', () => {
-  // The pair. `schema_guards.test.mjs` asserts the absence across every table; this
-  // asserts the LINK — that the satisfier reads precisely the absent column — so
-  // adding the column turns the test above red and demands the entry be removed.
-  const ddl = tableDDL('corporate_profiles');
-  assert.ok(!/\bkyb_status\b/.test(ddl),
-    'corporate_profiles now HAS kyb_status — the KYB reconciler may work; re-check '
-    + 'UNSATISFIABLE_TODAY.kyb_v1 and the behavioural test above');
-  assert.match(TRUST_SVC, /cp\.kyb_status/,
-    'the KYB reconciler no longer reads corporate_profiles.kyb_status; if it was '
-    + 'rewritten, this pairing no longer describes the code');
+  await resyncKycKyb(env);
+  assert.equal(statusOf(db, 'kyb_v1'), 'pending');
+  db.exec("INSERT INTO kyb_cases (uid,studio_code,status,source_revision,expires_at) SELECT 'account-8','hq','approved',source_revision,'2099-01-01' FROM kyb_business_sources WHERE uid='account-8'");
+  const first = await resyncKycKyb(env);
+  assert.equal(statusOf(db, 'kyb_v1'), 'satisfied');
+  assert.equal(first.updated, 1);
+  assert.equal((await resyncKycKyb(env)).updated, 0);
+  db.exec("UPDATE kyb_cases SET status = 'rejected' WHERE uid = 'account-8'");
+  await resyncKycKyb(env);
+  assert.equal(statusOf(db, 'kyb_v1'), 'pending');
 });
 
 test('every obligation a seeder marks required can be satisfied, or is a recorded gap', () => {
@@ -476,7 +387,7 @@ test('the parsers found both sides, so the comparison above is not vacuous', () 
     ...declaredSatisfiableKeys(),
   ].sort();
   assert.deepEqual(working, [
-    'founder_nda_v1', 'investor_nda_v1', 'kyc_v1', 'mentor_disclaimer_v1',
+    'founder_nda_v1', 'investor_nda_v1', 'kyb_v1', 'kyc_v1', 'mentor_disclaimer_v1',
     'mentor_nda_v1', 'partner_msa_v1', 'privacy_v1', 'tos_v1',
   ], 'the set of obligations with a satisfier that can actually run changed');
 });

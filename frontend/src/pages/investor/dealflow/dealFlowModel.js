@@ -13,6 +13,8 @@
  * here yet" with their reason and never draw a zero (D1236 §2).
  */
 
+import { SCOPE_LABELS } from '../../../components/scoring/scorecard/scorecardModel.js';
+
 export const BASE = '/deals';
 export const COMPARE = '/deals/compare';
 
@@ -66,11 +68,8 @@ export function compareHref(ids = []) {
   return clean.length ? `${COMPARE}?ids=${clean.join(',')}` : COMPARE;
 }
 
-/** SCORING's eleven scopes (#2428), in its order. There is no Overall. */
-export const SCOPES = Object.freeze([
-  'Team', 'Market', 'Product-market fit', 'Technical', 'Traction', 'Financial',
-  'Risk', 'Geographic', 'Political and regulatory', 'Governance', 'Legal and IP',
-]);
+/** SCORING's eleven scopes (#2428), in its order, from the scorecard's one list (D1253). There is no Overall. */
+export const SCOPES = SCOPE_LABELS;
 
 /** The investor's own stages (DLS1). Passed sits outside the board, as a filter. */
 export const MY_STAGES = Object.freeze(['Sourced', 'Screening', 'Diligence', 'Commit', 'Closing']);

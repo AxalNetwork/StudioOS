@@ -14,6 +14,7 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { DatabaseSync } from 'node:sqlite';
 import { tableFromBaseline, stripForeignKeys } from './_baseline.mjs';
+import { addKybCaseStores } from './_approval_s16_stores.mjs';
 import { d1Over } from './_d1_sqlite.mjs';
 import {
   APPROVAL_SOURCES,
@@ -51,6 +52,7 @@ function db() {
   d.exec(`CREATE TABLE spinout_moderation_cases (id INTEGER PRIMARY KEY AUTOINCREMENT,
     user_id INTEGER NOT NULL, status TEXT NOT NULL, reason_code TEXT NOT NULL,
     created_at TEXT NOT NULL DEFAULT (datetime('now')), resolved_at TEXT)`);
+  addKybCaseStores(d);
   return d;
 }
 

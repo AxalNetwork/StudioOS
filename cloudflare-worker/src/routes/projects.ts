@@ -730,16 +730,8 @@ projects.post('/submit', async (c) => {
   const intakeHash = await signScore(c.env, project.id, result.total_score, snapshot.created_at, INTEGRITY_VERSION);
   await sql`UPDATE score_snapshots SET integrity_hash = ${intakeHash} WHERE id = ${snapshot.id}`;
 
-  let newStatus = project.status, dealStatus = 'applied', newStage = project.stage;
-  if (intakeReview === 'flagged' && result.total_score >= 70) {
-    // Flagged intake holds the project in review until admin signs off, so
-    // an LP or partner viewing the pipeline never sees an unverified TIER_1.
-    newStatus = 'scoring';
-    dealStatus = 'applied';
-  } else if (result.total_score >= 85) { newStatus = 'tier_1'; newStage = 'build'; dealStatus = 'active'; }
-  else if (result.total_score >= 70) { newStatus = 'tier_2'; dealStatus = 'scored'; }
-
-  await sql`UPDATE projects SET status = ${newStatus}, stage = ${newStage}, updated_at = CURRENT_TIMESTAMP WHERE id = ${project.id}`;
+  // D1254: intake records an application, never a score-driven promotion or rejection.
+  const newStatus = project.status, dealStatus = 'applied', newStage = project.stage;
   try { const { Jobs } = await import('../models/jobs'); await Jobs.enqueue(c.env, 'embed_entity', { type: 'project', id: project.id }); } catch {}
   const [intakeDeal] = await sql`INSERT INTO deals (project_id, status) VALUES (${project.id}, ${dealStatus}) RETURNING id`;
   // D1242: intake's arrival is a stage event with no person behind it. The
@@ -751,7 +743,7 @@ projects.post('/submit', async (c) => {
       toStage: dealStatus, kind: 'set', actorUserId: null,
     });
   }
-  await sql`INSERT INTO activity_logs (project_id, action, details, actor) VALUES (${project.id}, 'auto_scored', ${`Score: ${result.total_score}, Tier: ${result.tier}, Status: ${newStatus}, Review: ${intakeReview}`}, 'system')`;
+  await sql`INSERT INTO activity_logs (project_id, action, details, actor) VALUES (${project.id}, 'auto_scored', ${JSON.stringify({ snapshot_id: snapshot.id, outcome: 'recorded', review: intakeReview })}, 'system')`;
   await sql.end();
   return c.json({
     project: { ...project, status: newStatus, stage: newStage },

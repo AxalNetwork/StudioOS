@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useState } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, Navigate } from 'react-router-dom';
 import { cyclesApi } from '../../lib/api/cycles';
 import { buildPlanApi } from '../../lib/api/buildPlan';
 import { ADD_TOKENS_PATH } from '../../lib/aiTokens';
@@ -12,12 +12,15 @@ import { adaptOverview } from './adapters';
 import { CycleCard, CycleHeader } from './CycleOverview';
 import { CycleBar } from './PhoneModulePage';
 import {
-  DISCARD, DISMISS_BODY, DOOR_LINE, EMPTY_LINE, EMPTY_TITLE, FOUNDING_TEAM_LINE, KEEP, LINE, NOTHING_PENDING, NOT_YET, NOT_YOURS, NOT_YOURS_LINE, NO_PLAN,
-  PAUSED_BY_YOU, PAUSE_BODY, PLAN_TABS, PROGRESS_WAIT, READ_ONLY_LINE, READ_ONLY_NOTE, RESUME_BODY, SECTIONS, SINCE_FOOT, TITLE, UNPREPARED_LINE, UPDATE_BODY,
+  DISCARD, DISMISS_BODY, DOOR_LINE, EMPTY_LINE, EMPTY_TITLE, FOUNDING_TEAM_LINE, KEEP, LINE, NOTHING_PENDING, NOT_YOURS, NOT_YOURS_LINE, NO_PLAN,
+  PAUSED_BY_YOU, PAUSE_BODY, PLAN_TABS, READ_ONLY_LINE, READ_ONLY_NOTE, RESUME_BODY, SECTIONS, SINCE_FOOT, TITLE, UNPREPARED_LINE, UPDATE_BODY,
   WORDING_TAG, WORD_COST, WORD_LABEL, WORD_LINE, WORD_OPTION, WORD_READS, acceptAllLine, countsLine, isDecided, moduleItems, planCounts, planHref, planScope,
   planSearch, preparedLine, provedCards, sinceLine, ventureSearch, verdictState, wordRefusal, wordingRows, writeRefusal,
 } from './buildPlanModel';
 import { BriefCard, DoneRow, EditDialog, PlanConfirm, ProposalCard } from './BuildPlanCards';
+import PlanProgress from './BuildPlanProgress';
+import SendSheet from './BuildPlanSend';
+import { NOT_FOUNDER_LINE, NOT_FOUNDER_ROLES, NOT_FOUNDER_TITLE, OP_LINE, OP_PILL, OP_TITLE, sendable } from './buildProgressModel';
 
 /**
  * D1063 (#2426) — Build's plan at `/build/plan` and its Progress tab at
@@ -29,15 +32,14 @@ import { BriefCard, DoneRow, EditDialog, PlanConfirm, ProposalCard } from './Bui
 const CARD = 'flex min-w-0 flex-col gap-2 rounded-xl border border-axal-hairline bg-white px-[18px] py-4 dark:border-gray-800 dark:bg-gray-900';
 const H2 = 'm-0 text-[15px] font-extrabold tracking-[-.015em] text-axal-ink dark:text-gray-100';
 const MUTED = 'm-0 text-[12.5px] text-axal-muted dark:text-gray-400';
-const PILL = 'w-fit rounded-full border border-dashed border-gray-300 px-2 py-0.5 text-[10.5px] font-bold text-axal-muted dark:border-gray-600 dark:text-gray-400';
 const LINK = 'font-semibold text-axal-violet hover:text-axal-violet-deep dark:text-violet-300 dark:hover:text-violet-200';
 
-/** The plan's own tabs, a second level under Build's: text with an underline, each a literal link. */
-export function PlanTabBar({ active, search = '' }) {
+/** The plan's own tabs, a second level under Build's: text with an underline, each a literal link. An Operating Partner has Progress only (VB15). */
+export function PlanTabBar({ active, search = '', only = null }) {
   return (
     <div className="border-b border-axal-hairline dark:border-gray-700" data-testid="plan-tabs">
       <nav aria-label="Plan" className="-mb-px flex gap-1 overflow-x-auto">
-        {PLAN_TABS.map((t) => (
+        {PLAN_TABS.filter((t) => !only || t.id === only).map((t) => (
           <Link key={t.id} to={planHref(t.id, search)} aria-current={t.id === active ? 'page' : undefined}
             className={`whitespace-nowrap border-b-2 px-3 py-2.5 text-[12.5px] ${t.id === active
               ? 'border-axal-violet font-extrabold text-axal-ink dark:border-violet-400 dark:text-gray-100'
@@ -394,8 +396,10 @@ export function PlanBoard({ projectId, scope = 'venture', search = '', readOnly 
     } else if (b.sinceStatus === 'unreadable' && plan?.plan) {
       notes.push(<Unreadable key="since-down" what="New evidence since the plan" claim="This is not a claim that there is none." onRetry={b.reload} />);
     }
+    const toSend = sendable(plan);
     const tools = !readOnly && plan?.plan && v.kind !== 'stop' ? (
       <span className="flex flex-wrap gap-1.5" data-testid="plan-tools">
+        {!paused ? <button type="button" className={BTN_P} onClick={() => setDialog({ kind: 'send', items: toSend })} data-testid="plan-send-door">Send to…{toSend.length ? ` · ${toSend.length}` : ''}</button> : null}
         {!paused ? <button type="button" className={BTN} onClick={() => setDialog({ kind: 'update' })} data-testid="plan-update">Update the plan</button> : null}
         {!paused ? <button type="button" className={BTN} onClick={() => setDialog({ kind: 'pause' })} data-testid="plan-pause">Pause the plan</button> : null}
       </span>
@@ -450,7 +454,8 @@ export function PlanBoard({ projectId, scope = 'venture', search = '', readOnly 
   }
 
   const dialogs = dialog ? (
-    dialog.kind === 'edit' ? <EditDialog item={dialog.item} module={dialog.slug} accept={(uid, edit) => buildPlanApi.accept(uid, edit || undefined)} onClose={() => setDialog(null)} onDone={done} />
+    dialog.kind === 'send' ? <SendSheet projectId={projectId} scope={scope} items={dialog.items} onClose={() => setDialog(null)} />
+      : dialog.kind === 'edit' ? <EditDialog item={dialog.item} module={dialog.slug} accept={(uid, edit) => buildPlanApi.accept(uid, edit || undefined)} onClose={() => setDialog(null)} onDone={done} />
       : dialog.kind === 'dismiss' ? <PlanConfirm testId="plan-dismiss" title={`Dismiss ${String(dialog.item.payload?.title ?? 'this item')}?`} body={DISMISS_BODY} button="Dismiss" danger slug={dialog.slug}
         run={() => buildPlanApi.dismiss(dialog.item.uid)} onClose={() => setDialog(null)} onDone={done} />
       : dialog.kind === 'all' ? <PlanConfirm testId="plan-accept-all" title={`Accept all in ${dialog.module.name}?`} slug={dialog.module.slug}
@@ -531,30 +536,53 @@ export function VerdictRecordWithPlan({ read, render }) {
   );
 }
 
+/** VB20a: someone who is not a founder of the venture meets this card, never a silent bounce. */
+export function PlanNotFounder() {
+  return (
+    <section className={`${CARD} mx-auto mt-10 w-full max-w-[560px] items-center !py-8 text-center`} data-testid="plan-not-founder">
+      <span aria-hidden="true" className="grid h-10 w-10 place-items-center rounded-full bg-axal-lavender text-[18px] text-axal-violet-deep dark:bg-violet-900/30 dark:text-violet-300">⊘</span>
+      <h2 className={H2}>{NOT_FOUNDER_TITLE}</h2>
+      <p className={MUTED}>{NOT_FOUNDER_LINE}</p>
+      <Link to="/" className={BTN_P}>Go to your home</Link>
+    </section>
+  );
+}
+
 export default function BuildPlan({ tab = 'plan', projectId, projectStatus = 'ready', onRetryProject, search = '', cards, action, phone = false, role = null, lab = false }) {
   const s = planSearch(search);
   const scope = planScope(search);
   const readOnly = role === 'admin';
+  const partner = role === 'partner';
+  // VB20a: a member who is not one of the venture's founders (NOT_FOUNDER_ROLES)
+  // reads nothing here. A Spin-Out Lab member is spared: a Lab founder may hold
+  // one of those roles (D1064).
+  if (NOT_FOUNDER_ROLES.includes(role) && !lab) return <PlanNotFounder />;
+  // VB15: an Operating Partner has Progress only.
+  if (partner && tab !== 'progress') return <Navigate to={`/build/plan/progress${s}`} replace />;
   let body;
   // No venture means no read is made: say the venture list failed, never a skeleton.
   if (projectStatus === 'unreadable') body = <Unreadable what="Your ventures" claim="This is not a claim that you have none." onRetry={onRetryProject} />;
   else if (!projectId) body = <p className={MUTED} aria-busy="true" data-testid="plan-loading">Loading…</p>;
   else if (tab === 'progress') {
-    body = (
-      <section className={CARD} data-testid="plan-progress">
-        <h2 className={H2}>Plan items by stage</h2>
-        <span className={PILL}>{NOT_YET}</span>
-        <p className={MUTED}>{PROGRESS_WAIT}</p>
-      </section>
-    );
+    body = <PlanProgress projectId={projectId} scope={scope} search={s} phone={phone} actions={!readOnly && !partner} />;
   } else body = <PlanBoard projectId={projectId} scope={scope} search={s} readOnly={readOnly} lab={lab} phone={phone} />;
+  const pill = readOnly
+    ? <span className="w-fit rounded-full border border-axal-hairline bg-axal-ground px-2.5 py-px text-[11px] font-bold text-axal-muted dark:border-gray-700 dark:bg-gray-800 dark:text-gray-400" data-testid="plan-read-only-pill">◉ Read only</span>
+    : partner ? <span className="w-fit rounded-full border border-emerald-300 bg-emerald-50 px-2.5 py-px text-[11px] font-bold text-emerald-800 dark:border-emerald-800 dark:bg-emerald-950/30 dark:text-emerald-300" data-testid="plan-op-pill">{OP_PILL}</span> : null;
   return (
     <div className="flex min-w-0 flex-col gap-4" data-testid={`build-plan-${tab}-page`}>
       {phone
-        ? <CycleBar back={{ label: 'Build', to: `/build${ventureSearch(s)}` }} title={TITLE} eadwynLabel={`Build · ${TITLE}`} />
-        : <CycleHeader cycle="build" cards={cards} active="plan" action={action} title={TITLE} sub={readOnly ? READ_ONLY_LINE : LINE} search={ventureSearch(s)} />}
-      {readOnly ? <span className="w-fit rounded-full border border-axal-hairline bg-axal-ground px-2.5 py-px text-[11px] font-bold text-axal-muted dark:border-gray-700 dark:bg-gray-800 dark:text-gray-400" data-testid="plan-read-only-pill">◉ Read only</span> : null}
-      <PlanTabBar active={tab} search={s} />
+        ? <CycleBar back={{ label: 'Build', to: `/build${ventureSearch(s)}` }} title={partner ? OP_TITLE : TITLE} eadwynLabel={`Build · ${partner ? OP_TITLE : TITLE}`} />
+        : partner
+          ? (
+            <header className="flex flex-col gap-1" data-testid="plan-op-header">
+              <h1 className="m-0 text-[22px] font-extrabold tracking-[-.02em] text-axal-ink dark:text-gray-100">{OP_TITLE}</h1>
+              <p className={MUTED}>{OP_LINE}</p>
+            </header>
+          )
+          : <CycleHeader cycle="build" cards={cards} active="plan" action={action} title={TITLE} sub={readOnly ? READ_ONLY_LINE : LINE} search={ventureSearch(s)} />}
+      {pill}
+      <PlanTabBar active={tab} search={s} only={partner ? 'progress' : null} />
       {body}
     </div>
   );

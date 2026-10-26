@@ -21,6 +21,8 @@ import DealSyndicates from '../components/deals/DealSyndicates';
 import MercuryMatch from '../components/MercuryMatch';
 import { NOT_YET, TAB_DEFS, WAITS, dealTabsFor, tabHref, tabOf } from './dealPageModel';
 import ClosingRoom from './closing/ClosingRoom';
+import VentureScorecard from '../components/scoring/scorecard/Scorecard';
+import { EvidenceSummary } from './cycles/evidence/RaiseEvidence';
 import { dealContextApi } from '../lib/api/dealContext';
 import { blockedRole, keyStrip, readFailure, trackOf } from './deal/dealFrameModel';
 import { BTN_P, BTN_S, DealLoading, DealNotFound, DealUnreadable, KeyStrip, NoPermission, RespondDialog, StageTrack } from './deal/DealFrame';
@@ -183,7 +185,11 @@ export default function DealRoomPage() {
           <DealSyndicates projectId={deal.project_id} user={user} />
         </>
       )}
-      {['scorecard', 'evidence', 'team', 'market', 'traction', 'terms'].includes(tab) && <WaitCard tab={tab} />}
+      {/* D1253 (#2428): SC1's panel; each scope waits for the per-deal read. */}
+      {tab === 'scorecard' && <VentureScorecard />}
+      {/* D1261 (#2430): VR8, VR9's investor block; its read is PIPE-RAISE part 4. */}
+      {tab === 'evidence' && <EvidenceSummary />}
+      {['team', 'market', 'traction', 'terms'].includes(tab) && <WaitCard tab={tab} />}
       {tab === 'diligence' && (
         <>
           <WaitCard tab="diligence" />

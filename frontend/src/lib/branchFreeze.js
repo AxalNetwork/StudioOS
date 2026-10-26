@@ -42,8 +42,8 @@ export const FROZEN = [
     // since D215, and four of them have no gate. The row now names both sides.
     // D1041 (#2889) adds eight lanes: four gated, three not, and KYB undecided.
     row: 'Approvals',
-    note: 'LP applications, referrals, strategic referral access, Spin-Out moderation, KYC, perk listings, Spin-Out Lab hosts and wellbeing expert verdicts are frozen, approve and reject alike. Naming a reviewer on the board is frozen too. Items keep their SLA age, so nothing looks fresh when it unfreezes. No admin decides KYB yet. Partner profiles, Exploring, Best-Fit consultations, due diligence, co-marketing pitches, articles and score flags are not frozen.',
-    gatedIn: ['admin_lp_applications.ts', 'refer_earn.ts', 'spinout_moderation.ts', 'kyc.ts', 'perks.ts', 'lab_hosts.ts', 'wellbeing.ts', 'branch_approval_assignments.ts', 'admin_approvals.ts'],
+    note: 'LP applications, referrals, strategic referral access, Spin-Out moderation, KYC, KYB, perk listings, Spin-Out Lab hosts and wellbeing expert verdicts are frozen, approve and reject alike. Naming a reviewer on the board is frozen too. Items keep their SLA age, so nothing looks fresh when it unfreezes. Partner profiles, Exploring, Best-Fit consultations, due diligence, co-marketing pitches, articles and score flags are not frozen.',
+    gatedIn: ['admin_lp_applications.ts', 'refer_earn.ts', 'spinout_moderation.ts', 'kyc.ts', 'kyb_admin.ts', 'perks.ts', 'lab_hosts.ts', 'wellbeing.ts', 'branch_approval_assignments.ts', 'admin_approvals.ts'],
     // D1040: HQ inbox assignments use the same frozen branch write.
   },
   {
@@ -67,9 +67,13 @@ export const FROZEN = [
     // `program_grant_gate_d985.test.mjs` asserts it against the worker the way
     // `gatedIn` is asserted. Rejections, takedowns and the running cohort's
     // grace and overrides need no grant.
+    //
+    // D959 — giving an investor access to a cohort, ending it and sending its
+    // cohort NDA (admin_investor_cohorts.ts). No program grant gates it: no
+    // branch holds Investor cohorts.
     row: 'Programs',
-    note: 'Cohort and Spin-Out Lab admissions closed, by the cohort queue and by the older application decide alike, with moves to another cohort, bulk decisions and admitting without an application. Lab grace, overrides, settings, force-proceed and host decisions, including revocation, are frozen. Graduation certificates cannot be issued or revoked. No mentor can be given, or lose, access to a cohort. Perk reviews and feature changes are frozen too; listings and claims remain readable. The running cohort continues to its end date — its week decisions are not frozen, because the founders in it did nothing. Outside a suspension, admissions, host approvals, certificate issues, mentor assignments, perk approvals and Refer & Earn acceptances also need the program in this studio’s licence: granted by HQ, not paused, and inside its dates.',
-    gatedIn: ['admin_cohort.ts', 'admin_lab_writes.ts', 'admin.ts', 'lab_hosts.ts', 'spinout_certificates.ts', 'advisors.ts', 'perks.ts'],
+    note: 'Cohort and Spin-Out Lab admissions closed, by the cohort queue and by the older application decide alike, with moves to another cohort, bulk decisions and admitting without an application. Lab grace, overrides, settings, force-proceed and host decisions, including revocation, are frozen. Graduation certificates cannot be issued or revoked. No mentor can be given, or lose, access to a cohort, and no investor can be given access to one, lose it or be sent its NDA. Perk reviews and feature changes are frozen too; listings and claims remain readable. The running cohort continues to its end date — its week decisions are not frozen, because the founders in it did nothing. Outside a suspension, admissions, host approvals, certificate issues, mentor assignments, perk approvals and Refer & Earn acceptances also need the program in this studio’s licence: granted by HQ, not paused, and inside its dates.',
+    gatedIn: ['admin_cohort.ts', 'admin_lab_writes.ts', 'admin.ts', 'lab_hosts.ts', 'spinout_certificates.ts', 'advisors.ts', 'perks.ts', 'admin_investor_cohorts.ts'],
     grantGatedIn: ['admin.ts', 'admin_cohort.ts', 'admin_lab_writes.ts', 'advisors.ts', 'lab_hosts.ts', 'perks.ts', 'refer_earn.ts', 'spinout_certificates.ts'],
   },
   {

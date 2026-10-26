@@ -2,6 +2,8 @@
 
 The Deals root at `/deals` for an Investor, and Compare at `/deals/compare`, from the owner's canvas "Deal flow" (DLS1–DLS18). For an admin or an Operating Partner, `/deals` is the Studio lens (D1242, #3255, DLS11–DLS12), which replaced the retired `DealsPage`.
 
+The Deals root at `/deals` for an Investor, and Compare at `/deals/compare`, from the owner's canvas "Deal flow" (DLS1–DLS18).
+
 | File | What it is |
 |---|---|
 | `dealFlowModel.js` | The view and scope switch in the address, compare picks, SCORING's eleven scopes in order, the investor's stages, the round's status words, a row from `GET /api/deals`, and the words of every block no read carries yet |
@@ -13,3 +15,7 @@ The Deals root at `/deals` for an Investor, and Compare at `/deals/compare`, fro
 `../../../workspaces/investor/InvestorDealsRoutes.jsx` mounts it: the root renders `DealFlow` with today's bucket board and deal rooms as its Board view, and `/deals/compare` renders `DealCompare`. The zone pages under `../deals/` are unchanged.
 
 **Adding to it:** a move is offered only where the read's `can_move` says the Worker allows it (an admin any round, an Operating Partner only the rounds they lead). A block with no read says "Not read here yet" with its reason from `WAITS`, never a zero. A row links to `/deals/:id` only where the investor may read it (`opensDeal`).
+
+
+
+**Adding to it:** a block with no read says "Not read here yet" with its reason from `WAITS`, never a zero. A row links to `/deals/:id` only where the investor may read it (`opensDeal`).

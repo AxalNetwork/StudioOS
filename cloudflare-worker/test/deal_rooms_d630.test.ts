@@ -197,14 +197,15 @@ test('D630: join and leave are recorded with their actor; a leave that changed n
 
 test('D630: a recorded transfer and an invitation are recorded with their actor', async () => {
   const db = freshDb();
-  const t = await call(db, PARTNER, '/api/deals/41/transfers', { method: 'POST', body: { amount_cents: 2500000, reference: 'WIRE-1' } });
+  // D1215 (#3212): an Admin records transfers; an Operating Partner no longer does.
+  const t = await call(db, ADMIN, '/api/deals/41/transfers', { method: 'POST', body: { amount_cents: 2500000, reference: 'WIRE-1' } });
   assert.equal(t.status, 201, JSON.stringify(t.body));
   const [tl] = logs(db, 'deal_transfer_recorded');
-  assert.equal(tl.user_id, PARTNER);
+  assert.equal(tl.user_id, ADMIN);
   assert.equal(tl.entity_id, '41');
   assert.equal(JSON.parse(tl.details).amount_cents, 2500000);
 
-  const refused = await call(db, PARTNER, '/api/deals/41/transfers', { method: 'POST', body: { amount_cents: 0 } });
+  const refused = await call(db, ADMIN, '/api/deals/41/transfers', { method: 'POST', body: { amount_cents: 0 } });
   assert.equal(refused.status, 400);
   assert.equal(refused.body.error, 'transfer_amount_invalid');
   assert.equal(logs(db, 'deal_transfer_recorded').length, 1, 'a refused transfer records nothing');

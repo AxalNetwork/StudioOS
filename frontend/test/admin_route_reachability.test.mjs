@@ -317,6 +317,13 @@ const COMPOSED = new Map([
     'frontend/src/pages/admin/partners/PartnersReferrals.jsx',
     'frontend/src/pages/admin/partners/PartnerDialogs.jsx',
   ]],
+  // D1046 (#2894): the Approvals lane boards draw their tabs and the doors to
+  // one item (`/admin/approvals/<board>/:item`) from the files beside them.
+  ['frontend/src/pages/admin/approvals/LaneBoards.jsx', [
+    'frontend/src/pages/admin/approvals/TesterBoard.jsx',
+    'frontend/src/pages/admin/approvals/PitchBoard.jsx',
+    'frontend/src/pages/admin/approvals/ExpertBoard.jsx',
+  ]],
   // D978 (#2764): Advisors & Partners' People tab holds the door to one
   // person (`/admin/advisors-partners/people/:ref`).
   ['frontend/src/pages/admin/advisors/AdvisorsPartners.jsx', [

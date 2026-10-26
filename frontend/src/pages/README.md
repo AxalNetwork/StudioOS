@@ -6,9 +6,11 @@ so the filename is usually the fastest way from a URL to its code: `/pricing` �
 
 D1174 (#3101): `FinancialsPage.jsx` has no Capital score. Its forecast is
 Modelled and follows the URL venture (`project_id` or `project`), including
-Back/Forward, without selecting the first of multiple ventures. Legacy Capital
-links keep the venture through `raise/captable/CapTableMovedRedirect.jsx`, which
-normalizes `project` to `project_id`. An unsaved model
+Back/Forward, without selecting the first of multiple ventures. Capital's tabs
+carry either alias; D1029 retired the Cap Table tab. Legacy Capital links keep
+the venture through `raise/captable/CapTableMovedRedirect.jsx`, which normalizes
+`project` to `project_id`. The live cap table also reads both aliases through
+`raise/captable/capTableModel.js` (D1029). An unsaved model
 has no sensitivity table; export/recompute require a person-saved model.
 
 ## Finding a page
@@ -29,6 +31,8 @@ Naming follows the surface, not the persona: `PortfolioHealthPage`,
 | `advisor/` | The advisor's own practice surfaces. |
 | `founder/` | The founder shell's workspace tab bars. |
 | `investor/` | Investor-only workspace framing and visual-system styles. |
+
+| `scoring/` | D1253 (#2428): the venture scorecard's pages — How scoring works, the founder's Investor scorecard, and HQ › Platform › Scoring. |
 | `duediligence/` | D1244 (#2385): the Due diligence desk's tabs as addresses, the list's and the case's, and the model they share. |
 | `deal/` | D1152: the deal page's frame for `DealRoomPage.jsx` — the key strip, the stage track and its one next action, the investor's Overview, Notes and Activity, and the states, with the pure model they share. |
 | `partner/` | Partner-side operations (BD console). |

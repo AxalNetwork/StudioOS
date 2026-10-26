@@ -15,7 +15,7 @@ import { Hono } from 'hono';
 import type { Context } from 'hono';
 import type { Env } from '../types';
 import { getSQL } from '../db';
-import { requireAuth, requireFactor, requireStepUp } from '../auth';
+import { requireAuth, requireFactor, requireStepUp, requireSuperAdmin, isSuperAdmin } from '../auth';
 import { hashEmail } from '../util/hashEmail';
 import { mintDownloadToken, verifyAndConsumeToken } from '../services/signedDownload';
 import { notify } from '../services/notify';
@@ -24,10 +24,13 @@ import {
   checklistFor,
   computeScore, worstSeverity,
   encField, decField,
+  DD_DECISIONS, BLOCKING_FLAG_REFUSAL, blockingSectionsWithOpenSevereFlags, stampNewCase,
+  TEMPLATE_DEPTHS, DEPTH_RANK, builtInTemplate, checkTemplateBody, latestTemplate, seedFromTemplate, CHECKLIST_CATALOG,
   renderReportArtifact,
-  type DDSubjectType, type ReportCase, type ReportSection, type ChecklistDepth,
+  type DDSubjectType, type ReportCase, type ReportSection, type ChecklistDepth, type TemplateBody,
 } from '../services/dueDiligence';
 import { encryptBytes, decryptBytes } from '../services/cryptoBox';
+import { createIcRecordForCase, icRecordForCase, caseSentToIc } from './ic';
 
 const dd = new Hono<{ Bindings: Env }>();
 type AppContext = Context<{ Bindings: Env }>;
@@ -49,6 +52,17 @@ async function getCaseByUid(env: Env, uid: string): Promise<Record<string, unkno
 }
 
 interface AppUser { id: number; role: string; email: string; }
+
+/**
+ * D1246 — the case lead (migration 620). A case opened before the column, or
+ * by a path that has not stamped it yet, is led by its opener.
+ */
+function leadOf(cs: Record<string, unknown>): number {
+  return Number(cs.lead_user_id ?? cs.owner_user_id);
+}
+const isLead = (user: AppUser, cs: Record<string, unknown>) => leadOf(cs) === user.id;
+/** The opener keeps the access they had; the lead has the same. */
+const leadsOrOpened = (user: AppUser, cs: Record<string, unknown>) => isLead(user, cs) || Number(cs.owner_user_id) === user.id;
 
 async function requireDdReader(c: AppContext): Promise<AppUser> {
   const user = await requireAuth(c);
@@ -74,7 +88,7 @@ async function requireDdReader(c: AppContext): Promise<AppUser> {
 async function requireCaseWriter(c: AppContext, cs: Record<string, unknown>): Promise<AppUser> {
   const user = await requireDdReader(c);
   if (user.role === 'admin') return user;
-  if (Number(cs.owner_user_id) === user.id) return user;
+  if (leadsOrOpened(user, cs)) return user;
   const sql = getSQL(c.env);
   try {
     const r: any[] = await sql`SELECT 1 FROM dd_reviewers WHERE case_id = ${cs.id} AND user_id = ${user.id} LIMIT 1`;
@@ -122,34 +136,100 @@ dd.get('/catalog', async (c) => {
 
 // ---------- list / open / get ----------
 
+// D1249 (#3264, DDL1): the list is the server's, searched, filtered, sorted
+// and paged, with each row's counts. Called with none of the new parameters
+// it answers as before (the newest 200), with `total` beside `items`.
+//
+// ONE FIXED STATEMENT. Every filter is an optional bound value (`? IS NULL OR
+// …`), so the SQL text never changes with the request and nothing is
+// interpolated; the list, its count and the overview read the same predicate.
+const READY_EXPR = "(c.status IN ('open', 'in_review')"
+  + ' AND EXISTS (SELECT 1 FROM dd_sections s WHERE s.case_id = c.id)'
+  + ' AND NOT EXISTS (SELECT 1 FROM dd_sections s WHERE s.case_id = c.id AND s.verdict IS NULL))';
+const CASE_FILTER_SQL = ' WHERE (? IS NULL OR c.subject_type = ?)'
+  + ' AND (? IS NULL OR c.status = ?)'
+  + " AND (? IS NULL OR (? = 'none' AND c.risk_band IS NULL) OR c.risk_band = ?)"
+  + " AND (? IS NULL OR (? = 'ready' AND " + READY_EXPR + ')'
+  + "      OR (? = 'not_started' AND c.status = 'open' AND NOT " + READY_EXPR + ')'
+  + "      OR (? = 'in_review' AND c.status = 'in_review' AND NOT " + READY_EXPR + ')'
+  + "      OR (? = 'decided' AND c.status = 'completed')"
+  + "      OR (? = 'archived' AND c.status = 'archived'))"
+  + ' AND (? IS NULL OR COALESCE(c.lead_user_id, c.owner_user_id) = ?)'
+  + ' AND (? IS NULL OR c.template_depth = ?)'
+  + " AND (? IS NULL OR (? = 'none' AND c.decision IS NULL) OR c.decision = ?)"
+  + " AND (? = 0 OR (c.status IN ('open', 'in_review') AND c.target_ic_date IS NOT NULL AND c.target_ic_date < date('now')))"
+  + " AND (? IS NULL OR c.subject_label LIKE ? ESCAPE '\\' OR c.uid LIKE ? ESCAPE '\\')"
+  + ' AND (? = 1 OR c.owner_user_id = ? OR c.lead_user_id = ? OR c.id IN (SELECT case_id FROM dd_reviewers WHERE user_id = ?))';
+const SEVERITY_RANK_F = "CASE f.severity WHEN 'critical' THEN 5 WHEN 'high' THEN 4 WHEN 'medium' THEN 3 WHEN 'low' THEN 2 ELSE 1 END";
+const SEVERITY_RANK_I = "CASE WHEN i.severity = 'critical' THEN 5 WHEN i.severity = 'high' THEN 4 WHEN i.severity = 'medium' THEN 3"
+  + " WHEN i.severity = 'low' THEN 2 WHEN i.severity IS NOT NULL THEN 1 WHEN i.status = 'fail' THEN 3 ELSE 2 END";
+const LIST_COUNT_SQL = 'SELECT COUNT(*) AS n FROM dd_cases c' + CASE_FILTER_SQL;
+const LIST_ROWS_SQL = 'SELECT c.id, c.uid, c.subject_type, c.subject_id, c.subject_label, c.status, c.risk_score, c.risk_band,'
+  + ' c.owner_user_id, COALESCE(c.lead_user_id, c.owner_user_id) AS lead_user_id, lu.name AS lead_name,'
+  + ' c.template_depth, c.target_ic_date, c.decision, c.decided_at, c.archived_at,'
+  + ' c.created_at, c.updated_at, c.report_generated_at,'
+  + " CASE WHEN c.status = 'completed' THEN 'decided' WHEN c.status = 'archived' THEN 'archived'"
+  + ' WHEN ' + READY_EXPR + " THEN 'ready' WHEN c.status = 'in_review' THEN 'in_review' ELSE 'not_started' END AS stage,"
+  + ' (SELECT COUNT(*) FROM dd_checklist_items i WHERE i.case_id = c.id) AS checklist_total,'
+  + " (SELECT COUNT(*) FROM dd_checklist_items i WHERE i.case_id = c.id AND i.status != 'pending') AS checklist_worked,"
+  + ' ((SELECT COUNT(*) FROM dd_findings f WHERE f.case_id = c.id AND f.resolved_at IS NULL)'
+  + "  + (SELECT COUNT(*) FROM dd_checklist_items i WHERE i.case_id = c.id AND i.status IN ('flag', 'fail'))) AS open_flags,"
+  + ' (SELECT MAX(r) FROM (SELECT ' + SEVERITY_RANK_F + ' AS r FROM dd_findings f WHERE f.case_id = c.id AND f.resolved_at IS NULL'
+  + '   UNION ALL SELECT ' + SEVERITY_RANK_I + " FROM dd_checklist_items i WHERE i.case_id = c.id AND i.status IN ('flag', 'fail'))) AS worst_rank,"
+  + " (SELECT COUNT(*) FROM dd_requests r WHERE r.case_id = c.id AND r.state = 'requested') AS requests_waiting"
+  + ' FROM dd_cases c LEFT JOIN users lu ON lu.id = COALESCE(c.lead_user_id, c.owner_user_id)'
+  + CASE_FILTER_SQL
+  + " ORDER BY CASE WHEN ? = 'name' THEN c.subject_label END COLLATE NOCASE ASC,"
+  + "  CASE WHEN ? = 'target' THEN (c.target_ic_date IS NULL) END ASC,"
+  + "  CASE WHEN ? = 'target' THEN c.target_ic_date END ASC,"
+  + "  CASE WHEN ? = 'activity' THEN c.updated_at END DESC,"
+  + "  CASE WHEN ? = 'flags' THEN open_flags END DESC,"
+  + '  c.created_at DESC, c.id DESC'
+  + ' LIMIT ? OFFSET ?';
+const LIST_SORTS = new Set(['opened', 'target', 'activity', 'flags', 'name']);
+const LIST_STAGES = new Set(['not_started', 'in_review', 'ready', 'decided', 'archived']);
+const SEVERITY_WORD = ['', 'info', 'low', 'medium', 'high', 'critical'];
+
+/** The binds for CASE_FILTER_SQL, in its order: the query's filters, then who may see which cases. */
+function caseFilterBinds(user: AppUser, q: (k: string) => string | undefined): unknown[] {
+  const opt = (v: string | undefined) => (v == null || v === '' ? null : v);
+  const subjectType = opt(q('subject_type'));
+  const status = opt(q('status'));
+  const band = opt(q('risk_band'));
+  const stage = LIST_STAGES.has(String(q('stage'))) ? String(q('stage')) : null;
+  const leadN = Number(q('lead'));
+  const lead = Number.isInteger(leadN) && leadN > 0 ? leadN : null;
+  const template = opt(q('template'));
+  const decision = opt(q('decision'));
+  const search = String(q('q') ?? '').trim().slice(0, 100);
+  const like = search ? search.replace(/[\\%_]/g, (m) => `\\${m}`) : null;
+  const everyone = user.role === 'admin' && q('owner_only') !== '1' ? 1 : 0;
+  return [
+    subjectType, subjectType,
+    status, status,
+    band, band, band,
+    stage, stage, stage, stage, stage, stage,
+    lead, lead,
+    template, template,
+    decision, decision, decision,
+    q('past_target') === '1' ? 1 : 0,
+    like, like == null ? null : `%${like}%`, like == null ? null : `${like}%`,
+    everyone, user.id, user.id, user.id,
+  ];
+}
+
 dd.get('/cases', async (c) => {
   const user = await requireDdReader(c);
-  const sql = getSQL(c.env);
-  const subjectType = c.req.query('subject_type');
-  const status = c.req.query('status');
-  const band = c.req.query('risk_band');
-  const ownerOnly = c.req.query('owner_only') === '1';
-  try {
-    const conds: string[] = [];
-    const params: unknown[] = [];
-    if (subjectType) { conds.push('subject_type = ?'); params.push(subjectType); }
-    if (status) { conds.push('status = ?'); params.push(status); }
-    if (band) { conds.push('risk_band = ?'); params.push(band); }
-    if (ownerOnly || user.role !== 'admin') {
-      // Partners/investors/advisors only see cases they own OR are a reviewer on.
-      conds.push(`(owner_user_id = ? OR id IN (SELECT case_id FROM dd_reviewers WHERE user_id = ?))`);
-      params.push(user.id, user.id);
-    }
-    const where = conds.length ? `WHERE ${conds.join(' AND ')}` : '';
-    const rows: any[] = await sql.unsafe(
-      `SELECT id, uid, subject_type, subject_id, subject_label, status, risk_score, risk_band,
-              owner_user_id, created_at, updated_at, report_generated_at
-         FROM dd_cases ${where}
-         ORDER BY created_at DESC LIMIT 200`,
-      params,
-    );
-    return c.json({ items: rows });
-  } finally { await sql.end(); }
+  const q = (k: string) => c.req.query(k);
+  const sort = LIST_SORTS.has(String(q('sort'))) ? String(q('sort')) : 'opened';
+  const pageSize = Math.min(Math.max(Number.parseInt(String(q('page_size') ?? '200'), 10) || 200, 1), 200);
+  const page = Math.max(Number.parseInt(String(q('page') ?? '1'), 10) || 1, 1);
+  const binds = caseFilterBinds(user, q);
+  const counted = await c.env.DB.prepare(LIST_COUNT_SQL).bind(...binds).first<{ n: number }>();
+  const rows = await c.env.DB.prepare(LIST_ROWS_SQL)
+    .bind(...binds, sort, sort, sort, sort, sort, pageSize, (page - 1) * pageSize).all<any>();
+  const items = (rows.results || []).map(({ worst_rank, ...r }: any) => ({ ...r, worst_severity: worst_rank ? SEVERITY_WORD[Number(worst_rank)] : null }));
+  return c.json({ items, total: Number(counted?.n ?? 0), page, page_size: pageSize, sort });
 });
 
 dd.post('/cases', async (c) => {
@@ -209,20 +289,25 @@ dd.post('/cases', async (c) => {
       await sql`UPDATE dd_cases SET subject_legal_name_enc = ${enc} WHERE id = ${caseId}`;
     }
 
-    const sections = sectionsFor(subjectType);
+    // D1249: the depth's latest template version, or the built-in catalog
+    // (version 0) when HQ has saved none. The case keeps the version.
+    const template = await latestTemplate(c.env, templateDepth);
+    const seed = template ? seedFromTemplate(subjectType, template.body) : null;
+    const sections = seed ? seed.sections : sectionsFor(subjectType).map((s) => ({ ...s, blocking: false }));
     const sectionIdByKey = new Map<string, number>();
     for (const s of sections) {
       const secIns: any[] = await sql`
-        INSERT INTO dd_sections (case_id, section_key, title, weight)
-        VALUES (${caseId}, ${s.key}, ${s.title}, ${s.weight})
+        INSERT INTO dd_sections (case_id, section_key, title, weight, blocking)
+        VALUES (${caseId}, ${s.key}, ${s.title}, ${s.weight}, ${s.blocking ? 1 : 0})
         RETURNING id`;
       sectionIdByKey.set(s.key, Number(secIns[0].id));
     }
+    if (template) await sql`UPDATE dd_cases SET template_id = ${template.id} WHERE id = ${caseId}`;
     // Seed the working checklist at the chosen depth. Items land
     // 'pending'; reviewers work them to pass/flag/fail and the
     // flagged/failed severities feed the composite score alongside
     // connector findings (see recomputeAndStoreScore).
-    const checklist = checklistFor(subjectType, templateDepth);
+    const checklist = seed ? seed.checklist : checklistFor(subjectType, templateDepth);
     let itemsSeeded = 0;
     for (const it of checklist) {
       const sid = sectionIdByKey.get(it.section_key);
@@ -232,8 +317,10 @@ dd.post('/cases', async (c) => {
         VALUES (${caseId}, ${sid}, ${it.key}, ${it.title}, ${it.depth})`;
       itemsSeeded++;
     }
+    // D1246: the opener leads it, and its blocking sections are stamped.
+    await stampNewCase(c.env, caseId, { blocking: !template });
     await audit(c.env, caseId, user, 'case_opened', { type: 'dd_case', id: caseId }, { subject_type: subjectType, subject_id: subjectId, template_depth: templateDepth });
-    return c.json({ ...row, sections_seeded: sections.length, checklist_seeded: itemsSeeded }, 201);
+    return c.json({ ...row, template_version: template ? template.version : 0, sections_seeded: sections.length, checklist_seeded: itemsSeeded }, 201);
   } finally { await sql.end(); }
 });
 
@@ -252,7 +339,7 @@ dd.get('/cases/:uid', async (c) => {
   // Anyone else (admin/partner/investor/advisor without an assignment on
   // this case) is rejected with 403.
   let scopedSectionIds: Set<number> | null = null; // null = unrestricted
-  if (user.role !== 'admin' && Number(cs.owner_user_id) !== user.id) {
+  if (user.role !== 'admin' && !leadsOrOpened(user, cs)) {
     const sql = getSQL(c.env);
     try {
       const reviewerRows: any[] = await sql`
@@ -278,7 +365,14 @@ dd.get('/cases/:uid', async (c) => {
     const sections = sectionsAll.filter(s => allowSection(s.id));
     const findings = findingsAll.filter(f => allowSection(f.section_id));
     const attachments = attachmentsAll.filter(a => allowSection(a.section_id));
-    const reviewers = reviewersAll.filter(r => allowSection(r.section_id));
+    const reviewers = await Promise.all(reviewersAll.filter(r => allowSection(r.section_id)).map(async (r) => ({
+      ...r,
+      // D1249: what a reviewer declared is the deal team's to read, and the reviewer's own.
+      conflicts_note: scopedSectionIds == null || Number(r.user_id) === user.id
+        ? await decField(c.env, 'dd_reviewers', 'conflicts_note', Number(r.id), r.conflicts_note_enc) : null,
+      conflicts_note_enc: undefined,
+      expired: r.expires_at ? Date.parse(String(r.expires_at).replace(' ', 'T') + 'Z') < Date.now() : false,
+    })));
     // Checklist items follow the same section scoping as findings; the
     // encrypted note is decrypted for anyone allowed to see the item.
     const checklist = await Promise.all(checklistAll.filter(i => allowSection(i.section_id)).map(async i => ({
@@ -323,6 +417,17 @@ dd.get('/cases/:uid', async (c) => {
       subject_legal_name: isScoped ? null : await decField(c.env, 'dd_cases', 'subject_legal_name', caseId, cs.subject_legal_name_enc as string | null),
       notes: isScoped ? null : await decField(c.env, 'dd_cases', 'notes', caseId, cs.notes_enc as string | null),
       subject_email_enc: undefined, subject_legal_name_enc: undefined, notes_enc: undefined,
+      // D1246: the lead, the decision and the archive. A section reviewer is
+      // told the decision, never its reason, the cheque or the linked deal.
+      lead_user_id: leadOf(cs),
+      decision_reason: isScoped ? null : await decField(c.env, 'dd_cases', 'decision_reason', caseId, cs.decision_reason_enc as string | null),
+      archived_reason: isScoped ? null : await decField(c.env, 'dd_cases', 'archived_reason', caseId, cs.archived_reason_enc as string | null),
+      decision_reason_enc: undefined, archived_reason_enc: undefined,
+      cheque_cents: isScoped ? null : (cs.cheque_cents ?? null),
+      cheque_currency: isScoped ? null : (cs.cheque_currency ?? null),
+      deal_id: isScoped ? null : (cs.deal_id ?? null),
+      ic_record: isScoped ? null : await icRecordFor(c.env, user, caseId),
+      platform_checks: isScoped ? null : await platformChecks(c.env, user, cs),
       scoped: isScoped,
     };
     return c.json({
@@ -419,7 +524,9 @@ dd.post('/cases/:uid/scan', async (c) => {
         RETURNING id`;
       queued.push({ id: Number(inserted[0].id), connector: meta.key });
     }
-    await sql`UPDATE dd_cases SET status = 'in_review', updated_at = CURRENT_TIMESTAMP WHERE id = ${caseId}`;
+    // D1246: a scan moves an open case into review; it never reopens a
+    // decided or archived one (that would put it back on the Approvals lane).
+    await sql`UPDATE dd_cases SET status = 'in_review', updated_at = CURRENT_TIMESTAMP WHERE id = ${caseId} AND status IN ('open', 'in_review')`;
     await audit(c.env, caseId, user, 'external_scan_started', { type: 'dd_case', id: caseId }, { connectors: queued.map(q => q.connector) });
   } finally { await sql.end(); }
 
@@ -460,6 +567,9 @@ dd.post('/cases/:uid/sections/:sectionId/assign', async (c) => {
   const body = await c.req.json().catch(() => ({}));
   const assigneeId = Number(body.user_id);
   if (!assigneeId) return c.json({ error: 'user_id is required' }, 400);
+  // D1249: a reviewer works the section; an observer reads it and never works it.
+  const reviewerRole = body.role == null || body.role === '' ? 'reviewer' : String(body.role);
+  if (reviewerRole !== 'reviewer' && reviewerRole !== 'observer') return c.json({ error: 'A reviewer or an observer.' }, 400);
 
   const sql = getSQL(c.env);
   try {
@@ -476,12 +586,17 @@ dd.post('/cases/:uid/sections/:sectionId/assign', async (c) => {
       return c.json({ error: 'Assignee role cannot review DD sections (must be admin/partner/investor/advisor)' }, 403);
     }
 
-    await sql`UPDATE dd_sections SET assignee_user_id = ${assigneeId}, status = 'assigned', updated_at = CURRENT_TIMESTAMP WHERE id = ${sectionId}`;
+    // An observer is not the section's assignee: the section waits for a reviewer.
+    if (reviewerRole === 'reviewer') {
+      await sql`UPDATE dd_sections SET assignee_user_id = ${assigneeId}, status = CASE WHEN status = 'completed' THEN status ELSE 'assigned' END, updated_at = CURRENT_TIMESTAMP WHERE id = ${sectionId}`;
+    }
     const jti = genUid();
+    // D1249: the link expires 14 days after it is sent; a resend starts the 14 days again.
     await sql`
-      INSERT INTO dd_reviewers (case_id, section_id, user_id, magic_link_jti)
-      VALUES (${caseId}, ${sectionId}, ${assigneeId}, ${jti})
-      ON CONFLICT(section_id, user_id) DO UPDATE SET invited_at = CURRENT_TIMESTAMP, magic_link_jti = excluded.magic_link_jti`;
+      INSERT INTO dd_reviewers (case_id, section_id, user_id, role, magic_link_jti, expires_at)
+      VALUES (${caseId}, ${sectionId}, ${assigneeId}, ${reviewerRole}, ${jti}, datetime('now', '+14 days'))
+      ON CONFLICT(section_id, user_id) DO UPDATE SET invited_at = CURRENT_TIMESTAMP, magic_link_jti = excluded.magic_link_jti,
+        role = excluded.role, expires_at = excluded.expires_at`;
 
     const baseUrl = c.env.APP_URL || 'https://axal.vc';
     const link = `${baseUrl.replace(/\/+$/, '')}/admin/due-diligence/${cs.uid}?section=${sectionId}&inv=${jti}`;
@@ -493,8 +608,8 @@ dd.post('/cases/:uid/sections/:sectionId/assign', async (c) => {
       link,
       channels: ['in_app', 'email'],
     }).catch(() => null);
-    await audit(c.env, caseId, user, 'section_assigned', { type: 'dd_section', id: sectionId }, { assignee_id: assigneeId });
-    return c.json({ ok: true, magic_link: link });
+    await audit(c.env, caseId, user, 'section_assigned', { type: 'dd_section', id: sectionId }, { assignee_id: assigneeId, role: reviewerRole });
+    return c.json({ ok: true, magic_link: link, role: reviewerRole, expires_in_days: 14 });
   } finally { await sql.end(); }
 });
 
@@ -517,9 +632,13 @@ dd.post('/cases/:uid/sections/:sectionId/verdict', async (c) => {
     // log of `:uid` with a verdict on a section from a different case.
     const secOwn: any[] = await sql`SELECT 1 FROM dd_sections WHERE id = ${sectionId} AND case_id = ${caseId} LIMIT 1`;
     if (secOwn.length === 0) return c.json({ error: 'Section does not belong to this case' }, 404);
-    if (user.role !== 'admin') {
-      const r: any[] = await sql`SELECT 1 FROM dd_reviewers WHERE section_id = ${sectionId} AND user_id = ${user.id}`;
+    // D1246 (#2385 item 19): the case lead records a verdict on any section,
+    // as an Admin does; they run the case and already read all of it.
+    const lead = isLead(user, cs);
+    if (user.role !== 'admin' && !lead) {
+      const r: any[] = await sql`SELECT role FROM dd_reviewers WHERE section_id = ${sectionId} AND user_id = ${user.id}`;
       if (r.length === 0) return c.json({ error: 'You are not assigned to this section' }, 403);
+      if (r[0].role === 'observer') return c.json({ error: 'An observer reads this section and does not record its verdict.' }, 403);
     }
     // Server-side NDA enforcement: any verdict other than 'n_a' requires
     // a real signed-NDA artifact on file. The client-side gate in
@@ -527,7 +646,7 @@ dd.post('/cases/:uid/sections/:sectionId/verdict', async (c) => {
     // directly. The legacy `body.nda_signed` boolean is intentionally
     // ignored: only an actual `dd_attachments` row (uploaded via /nda)
     // OR an admin override counts as evidence.
-    if (verdict !== 'n_a' && user.role !== 'admin') {
+    if (verdict !== 'n_a' && user.role !== 'admin' && !lead) {
       const ndaRows: any[] = await sql`
         SELECT 1 FROM dd_attachments
          WHERE section_id = ${sectionId} AND uploaded_by_user_id = ${user.id}
@@ -634,9 +753,10 @@ dd.patch('/cases/:uid/items/:itemId', async (c) => {
     // Assigned reviewers (writers who are neither admin nor the owner)
     // may only work items on sections they are assigned to — mirrors
     // the verdict scoping rule.
-    if (user.role !== 'admin' && Number(cs.owner_user_id) !== user.id) {
-      const r: any[] = await sql`SELECT 1 FROM dd_reviewers WHERE section_id = ${it.section_id} AND user_id = ${user.id} LIMIT 1`;
+    if (user.role !== 'admin' && !leadsOrOpened(user, cs)) {
+      const r: any[] = await sql`SELECT role FROM dd_reviewers WHERE section_id = ${it.section_id} AND user_id = ${user.id} LIMIT 1`;
       if (r.length === 0) return c.json({ error: 'You are not assigned to this section' }, 403);
+      if (r[0].role === 'observer') return c.json({ error: 'An observer reads this section and does not work its checklist.' }, 403);
     }
 
     const nextStatus = body.status !== undefined ? String(body.status) : String(it.status);
@@ -719,7 +839,7 @@ dd.post('/cases/:uid/requests', async (c) => {
   catch { return c.json({ error: 'Forbidden: not a case owner or reviewer' }, 403); }
   // Requests go OUT to the subject — only the case owner or an admin may
   // originate them; section reviewers cannot message the subject.
-  if (user.role !== 'admin' && Number(cs.owner_user_id) !== user.id) {
+  if (user.role !== 'admin' && !leadsOrOpened(user, cs)) {
     return c.json({ error: 'Only the case owner or an admin may send requests' }, 403);
   }
   const caseId = Number(cs.id);
@@ -763,7 +883,7 @@ dd.patch('/cases/:uid/requests/:id', async (c) => {
   let user: AppUser;
   try { user = await requireCaseWriter(c, cs); }
   catch { return c.json({ error: 'Forbidden: not a case owner or reviewer' }, 403); }
-  if (user.role !== 'admin' && Number(cs.owner_user_id) !== user.id) {
+  if (user.role !== 'admin' && !leadsOrOpened(user, cs)) {
     return c.json({ error: 'Only the case owner or an admin may update requests' }, 403);
   }
   const caseId = Number(cs.id);
@@ -1025,7 +1145,7 @@ dd.get('/cases/:uid/audit', async (c) => {
   if (!cs) return c.json({ error: 'Case not found' }, 404);
   const sql = getSQL(c.env);
   try {
-    if (user.role !== 'admin' && Number(cs.owner_user_id) !== user.id) {
+    if (user.role !== 'admin' && !leadsOrOpened(user, cs)) {
       // Assigned reviewers may also view the audit trail for cases they
       // are reviewing — they need to see what's been done before/after
       // their verdict. Anyone else is rejected.
@@ -1088,7 +1208,10 @@ dd.get('/experts', async (c) => {
       SELECT id, name, email, role FROM users
        WHERE role IN ('admin','partner','advisor','investor')
        ORDER BY name LIMIT 100`;
-    return c.json({ suggestions, eligible });
+    // D1249 (#2385 item 17): an email address is an Admin's to read; the rest
+    // pick by name.
+    const noEmail = (rows: any[]) => user.role === 'admin' ? rows : rows.map(({ email: _e, ...r }) => r);
+    return c.json({ suggestions: noEmail(suggestions), eligible: noEmail(eligible) });
   } finally { await sql.end(); }
 });
 
@@ -1110,9 +1233,13 @@ dd.post('/cases/:uid/reviewer-invite/:jti', async (c) => {
   const sql = getSQL(c.env);
   try {
     const r: any[] = await sql`
-      SELECT id, section_id, user_id FROM dd_reviewers
+      SELECT id, section_id, user_id, expires_at, (expires_at IS NOT NULL AND datetime(expires_at) < datetime('now')) AS expired
+        FROM dd_reviewers
        WHERE case_id = ${cs.id} AND magic_link_jti = ${jti} LIMIT 1`;
     if (r.length === 0) return c.json({ error: 'Invitation invalid or expired' }, 403);
+    // D1249: an invitation link lasts 14 days. Rows invited before migration
+    // 623 carry no expiry and stay as they were sent.
+    if (Number(r[0].expired) === 1) return c.json({ error: 'This invitation has expired. Ask the case lead to send it again.', code: 'invite_expired' }, 410);
     if (Number(r[0].user_id) !== user.id) {
       return c.json({ error: 'This invitation belongs to a different user' }, 403);
     }
@@ -1176,5 +1303,663 @@ dd.post('/cases/:uid/sections/:sectionId/nda', async (c) => {
     return c.json({ ok: true, filename, size_bytes: size });
   } finally { await sql.end(); }
 });
+
+// ---------- D1246 (#3261): lifecycle, decision, archive, memo, reports, IC ----------
+//
+// Part 2 of #2385. A case can now be led, given its deal context, decided,
+// archived and handed to IC; the deal team keeps an encrypted memo; every
+// report generated is listed and re-downloads behind a fresh step-up.
+//
+//   PATCH /cases/:uid             lead, target IC date, round, cheque, deal; archive with a reason
+//   POST  /cases/:uid/decision    proceed | proceed_with_conditions | do_not_proceed | withdrawn, reason required
+//   GET   /cases/:uid/memo        the deal team's memo
+//   PUT   /cases/:uid/memo
+//   GET   /cases/:uid/reports     every report generated on the case
+//   POST  /cases/:uid/reports/:reportId/download   a fresh five-minute link, behind step-up
+//   POST  /cases/:uid/ic          "Send to IC": an IC record with this case attached
+//
+// THE GATE for every write here is an Admin or the case lead (#2385). A
+// section reviewer is never one; the opener who handed the lead on is not.
+// An archived case takes no further change. Every write records a
+// `dd_audit_log` row; the figures (cheque, dates) never go into its details,
+// only which fields changed.
+
+const LEAD_ROLES = new Set(['admin', 'partner', 'investor']);
+const MEMO_FIELDS = ['summary', 'verified', 'on_trust', 'conditions'] as const;
+const MEMO_MAX = 8000;
+const REASON_MAX = 2000;
+
+function isDay(v: string): boolean {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(v)) return false;
+  const d = new Date(`${v}T00:00:00Z`);
+  return !Number.isNaN(d.getTime()) && d.toISOString().slice(0, 10) === v;
+}
+
+/** The lead or an Admin, on a case that is not archived; else the refusal to send. */
+function deciderRefusal(user: AppUser, cs: Record<string, unknown>): { status: 403 | 409; error: string } | null {
+  if (user.role !== 'admin' && !isLead(user, cs)) return { status: 403, error: 'Only the case lead or an Admin can change this case.' };
+  if (cs.status === 'archived') return { status: 409, error: 'This case is archived. It takes no further change.' };
+  return null;
+}
+
+/** The IC record this case was sent to, as the caller may see it (`ic.ts` applies IC's scope). */
+async function icRecordFor(env: Env, user: AppUser, caseId: number): Promise<{ uid: string; status: string } | null> {
+  try { return await icRecordForCase(env, user as any, caseId); } catch { return null; }
+}
+
+dd.patch('/cases/:uid', async (c) => {
+  const user = await requireDdReader(c);
+  const cs = await getCaseByUid(c.env, c.req.param('uid'));
+  if (!cs) return c.json({ error: 'Case not found' }, 404);
+  const refusal = deciderRefusal(user, cs);
+  if (refusal) return c.json({ error: refusal.error }, refusal.status);
+  const caseId = Number(cs.id);
+  const body = await c.req.json().catch(() => ({} as any));
+  const has = (k: string) => Object.prototype.hasOwnProperty.call(body, k);
+
+  if (body.archive === true) {
+    const reason = String(body.archived_reason ?? '').trim();
+    if (!reason) return c.json({ error: 'Say why the case is archived.' }, 400);
+    if (reason.length > REASON_MAX) return c.json({ error: `The reason is at most ${REASON_MAX} characters.` }, 400);
+    const enc = await encField(c.env, 'dd_cases', 'archived_reason', caseId, reason);
+    await c.env.DB.prepare(
+      `UPDATE dd_cases SET status = 'archived', archived_reason_enc = ?, archived_by = ?, archived_at = datetime('now'), updated_at = CURRENT_TIMESTAMP
+        WHERE id = ? AND status != 'archived'`,
+    ).bind(enc, user.id, caseId).run();
+    await audit(c.env, caseId, user, 'case_archived', { type: 'dd_case', id: caseId }, { previous_status: cs.status });
+    return c.json({ ok: true, status: 'archived' });
+  }
+
+  // The context: each field the body names is checked; the rest keep their value.
+  const next = {
+    lead_user_id: leadOf(cs),
+    target_ic_date: (cs.target_ic_date ?? null) as string | null,
+    round_label: (cs.round_label ?? null) as string | null,
+    cheque_cents: cs.cheque_cents == null ? null : Number(cs.cheque_cents),
+    cheque_currency: (cs.cheque_currency ?? null) as string | null,
+    deal_id: cs.deal_id == null ? null : Number(cs.deal_id),
+  };
+  const changed: string[] = [];
+  if (has('lead_user_id')) {
+    const id = Number(body.lead_user_id);
+    if (!Number.isInteger(id) || id <= 0) return c.json({ error: 'Choose who leads the case.' }, 400);
+    const u = await c.env.DB.prepare('SELECT id, role FROM users WHERE id = ? AND COALESCE(is_active, 1) = 1').bind(id).first<{ id: number; role: string }>();
+    if (!u) return c.json({ error: 'That person could not be found.' }, 404);
+    if (!LEAD_ROLES.has(String(u.role))) return c.json({ error: 'A case is led by an Admin, a partner or an investor.' }, 400);
+    next.lead_user_id = id; changed.push('lead');
+  }
+  if (has('target_ic_date')) {
+    const v = body.target_ic_date == null || body.target_ic_date === '' ? null : String(body.target_ic_date);
+    if (v != null && !isDay(v)) return c.json({ error: 'The target IC date is a day, YYYY-MM-DD.' }, 400);
+    next.target_ic_date = v; changed.push('target_ic_date');
+  }
+  if (has('round_label')) {
+    const v = body.round_label == null ? '' : String(body.round_label).trim();
+    if (v.length > 80) return c.json({ error: 'The round is at most 80 characters.' }, 400);
+    next.round_label = v || null; changed.push('round');
+  }
+  if (has('cheque_cents') || has('cheque_currency')) {
+    const cents = has('cheque_cents') ? body.cheque_cents : next.cheque_cents;
+    const cur = has('cheque_currency') ? body.cheque_currency : next.cheque_currency;
+    if (cents == null || cents === '') {
+      next.cheque_cents = null; next.cheque_currency = null;
+    } else {
+      const n = Number(cents);
+      if (!Number.isSafeInteger(n) || n < 0) return c.json({ error: 'The cheque is a whole number of cents, zero or more.' }, 400);
+      const code = String(cur ?? '').trim().toUpperCase();
+      if (!/^[A-Z]{3}$/.test(code)) return c.json({ error: 'Give the cheque its currency, a three-letter code such as EUR.' }, 400);
+      next.cheque_cents = n; next.cheque_currency = code;
+    }
+    changed.push('cheque');
+  }
+  if (has('deal_id')) {
+    if (body.deal_id == null || body.deal_id === '') next.deal_id = null;
+    else {
+      const id = Number(body.deal_id);
+      const deal = Number.isInteger(id) ? await c.env.DB.prepare('SELECT id FROM deals WHERE id = ?').bind(id).first() : null;
+      if (!deal) return c.json({ error: 'That deal could not be found.' }, 404);
+      next.deal_id = id;
+    }
+    changed.push('deal');
+  }
+  if (!changed.length) return c.json({ error: 'Nothing to change.' }, 400);
+  await c.env.DB.prepare(
+    `UPDATE dd_cases SET lead_user_id = ?, target_ic_date = ?, round_label = ?, cheque_cents = ?, cheque_currency = ?, deal_id = ?,
+            updated_at = CURRENT_TIMESTAMP WHERE id = ?`,
+  ).bind(next.lead_user_id, next.target_ic_date, next.round_label, next.cheque_cents, next.cheque_currency, next.deal_id, caseId).run();
+  await audit(c.env, caseId, user, 'case_updated', { type: 'dd_case', id: caseId }, { fields: changed });
+  if (changed.includes('lead') && next.lead_user_id !== leadOf(cs) && next.lead_user_id !== user.id) {
+    await notify(c.env, {
+      userId: next.lead_user_id,
+      type: 'dd_case_lead',
+      title: `You lead the due diligence on ${cs.subject_label}`,
+      body: 'You can now record the decision and send the case to IC.',
+      link: `/due-diligence/${cs.uid}`,
+      channels: ['in_app'],
+    }).catch(() => null);
+  }
+  return c.json({ ok: true, case: { uid: cs.uid, ...next } });
+});
+
+dd.post('/cases/:uid/decision', async (c) => {
+  const user = await requireDdReader(c);
+  const cs = await getCaseByUid(c.env, c.req.param('uid'));
+  if (!cs) return c.json({ error: 'Case not found' }, 404);
+  const refusal = deciderRefusal(user, cs);
+  if (refusal) return c.json({ error: refusal.error }, refusal.status);
+  const caseId = Number(cs.id);
+  const body = await c.req.json().catch(() => ({} as any));
+  const decision = String(body.decision || '');
+  if (!(DD_DECISIONS as readonly string[]).includes(decision)) return c.json({ error: 'Choose Proceed, Proceed with conditions, Do not proceed or Withdrawn.' }, 400);
+  const reason = String(body.reason ?? '').trim();
+  if (!reason) return c.json({ error: 'Say why. The reason is recorded with the decision.' }, 400);
+  if (reason.length > REASON_MAX) return c.json({ error: `The reason is at most ${REASON_MAX} characters.` }, 400);
+
+  // #2385 owner question 4: "Proceed" never carries an open High or Critical
+  // flag in a blocking section. "Proceed with conditions" is the way through.
+  if (decision === 'proceed') {
+    const [sections, findings, items] = await Promise.all([
+      c.env.DB.prepare('SELECT id, blocking FROM dd_sections WHERE case_id = ?').bind(caseId).all<any>(),
+      c.env.DB.prepare('SELECT section_id, severity, resolved_at FROM dd_findings WHERE case_id = ?').bind(caseId).all<any>(),
+      c.env.DB.prepare('SELECT section_id, status, severity FROM dd_checklist_items WHERE case_id = ?').bind(caseId).all<any>(),
+    ]);
+    const blocked = blockingSectionsWithOpenSevereFlags(sections.results || [], findings.results || [], items.results || []);
+    if (blocked.length) return c.json({ error: BLOCKING_FLAG_REFUSAL, code: 'blocking_flag_open', section_ids: blocked }, 409);
+  }
+
+  const enc = await encField(c.env, 'dd_cases', 'decision_reason', caseId, reason);
+  await c.env.DB.prepare(
+    `UPDATE dd_cases SET decision = ?, decision_reason_enc = ?, decided_by = ?, decided_at = datetime('now'),
+            status = 'completed', updated_at = CURRENT_TIMESTAMP WHERE id = ? AND status != 'archived'`,
+  ).bind(decision, enc, user.id, caseId).run();
+  await audit(c.env, caseId, user, 'case_decided', { type: 'dd_case', id: caseId }, { decision, previous_decision: cs.decision ?? null });
+
+  // "The case moves to Decided. Reviewers are told." (DDL14 D) — in the bell,
+  // the decision only; its reason stays with the deal team.
+  const reviewers = await c.env.DB.prepare('SELECT DISTINCT user_id FROM dd_reviewers WHERE case_id = ?').bind(caseId).all<{ user_id: number }>();
+  const words: Record<string, string> = { proceed: 'Proceed', proceed_with_conditions: 'Proceed with conditions', do_not_proceed: 'Do not proceed', withdrawn: 'Withdrawn' };
+  let told = 0;
+  for (const r of reviewers.results || []) {
+    if (Number(r.user_id) === user.id) continue;
+    await notify(c.env, {
+      userId: Number(r.user_id),
+      type: 'dd_case_decided',
+      title: `Decision recorded on ${cs.subject_label}: ${words[decision]}`,
+      body: 'The case is decided. Thank you for your review.',
+      link: `/due-diligence/${cs.uid}`,
+      channels: ['in_app'],
+    }).then(() => { told += 1; }).catch(() => null);
+  }
+  return c.json({ ok: true, decision, status: 'completed', reviewers_told: told });
+});
+
+dd.get('/cases/:uid/memo', async (c) => {
+  const user = await requireDdReader(c);
+  const cs = await getCaseByUid(c.env, c.req.param('uid'));
+  if (!cs) return c.json({ error: 'Case not found' }, 404);
+  // The memo is the deal team's: the readers of the whole case, never a
+  // section reviewer.
+  if (user.role !== 'admin' && !leadsOrOpened(user, cs)) return c.json({ error: 'Forbidden' }, 403);
+  const row = await c.env.DB.prepare(
+    `SELECT m.*, u.name AS updated_by_name FROM dd_case_memos m LEFT JOIN users u ON u.id = m.updated_by WHERE m.case_id = ? LIMIT 1`,
+  ).bind(Number(cs.id)).first<any>();
+  if (!row) return c.json({ memo: null });
+  const memo: Record<string, unknown> = { updated_at: row.updated_at, updated_by_name: row.updated_by_name ?? null };
+  for (const f of MEMO_FIELDS) memo[f] = await decField(c.env, 'dd_case_memos', f, Number(row.id), row[`${f}_enc`]);
+  return c.json({ memo });
+});
+
+dd.put('/cases/:uid/memo', async (c) => {
+  const user = await requireDdReader(c);
+  const cs = await getCaseByUid(c.env, c.req.param('uid'));
+  if (!cs) return c.json({ error: 'Case not found' }, 404);
+  const refusal = deciderRefusal(user, cs);
+  if (refusal) return c.json({ error: refusal.error }, refusal.status);
+  const caseId = Number(cs.id);
+  const body = await c.req.json().catch(() => ({} as any));
+  const values: Record<string, string | null> = {};
+  for (const f of MEMO_FIELDS) {
+    const v = body[f] == null ? '' : String(body[f]).trim();
+    if (v.length > MEMO_MAX) return c.json({ error: `Each part of the memo is at most ${MEMO_MAX} characters.` }, 400);
+    values[f] = v || null;
+  }
+  await c.env.DB.prepare(`INSERT OR IGNORE INTO dd_case_memos (uid, case_id) VALUES (?, ?)`).bind(genUid(), caseId).run();
+  const row = await c.env.DB.prepare('SELECT id FROM dd_case_memos WHERE case_id = ?').bind(caseId).first<{ id: number }>();
+  if (!row) return c.json({ error: 'The memo could not be saved. Try again.' }, 503);
+  const memoId = Number(row.id);
+  const enc = {
+    summary: await encField(c.env, 'dd_case_memos', 'summary', memoId, values.summary),
+    verified: await encField(c.env, 'dd_case_memos', 'verified', memoId, values.verified),
+    on_trust: await encField(c.env, 'dd_case_memos', 'on_trust', memoId, values.on_trust),
+    conditions: await encField(c.env, 'dd_case_memos', 'conditions', memoId, values.conditions),
+  };
+  await c.env.DB.prepare(
+    `UPDATE dd_case_memos SET summary_enc = ?, verified_enc = ?, on_trust_enc = ?, conditions_enc = ?, updated_by = ?, updated_at = datetime('now')
+      WHERE id = ?`,
+  ).bind(enc.summary, enc.verified, enc.on_trust, enc.conditions, user.id, memoId).run();
+  await audit(c.env, caseId, user, 'memo_saved', { type: 'dd_case_memo', id: memoId }, { parts: MEMO_FIELDS.filter((f) => values[f] != null) });
+  return c.json({ ok: true, memo: { ...values, updated_by_name: null } });
+});
+
+/** Who may list and re-download reports: who may generate one (`POST /cases/:uid/report`). */
+async function reportReaderRefusal(c: AppContext, cs: Record<string, unknown>): Promise<{ status: 403; error: string } | AppUser> {
+  let user: AppUser;
+  try { user = await requireCaseWriter(c, cs); }
+  catch { return { status: 403, error: 'Forbidden: not a case owner or reviewer' }; }
+  if (user.role !== 'admin' && user.role !== 'partner') return { status: 403, error: 'Forbidden' };
+  return user;
+}
+
+dd.get('/cases/:uid/reports', async (c) => {
+  await requireDdReader(c);
+  const cs = await getCaseByUid(c.env, c.req.param('uid'));
+  if (!cs) return c.json({ error: 'Case not found' }, 404);
+  const who = await reportReaderRefusal(c, cs);
+  if ('error' in who) return c.json({ error: who.error }, who.status);
+  const rows = await c.env.DB.prepare(
+    `SELECT r.id, r.format, r.created_at, r.risk_score_at_generation, r.risk_band_at_generation,
+            r.generated_by_user_id, u.name AS generated_by_name,
+            CASE WHEN r.storage_key IS NULL THEN 0 ELSE 1 END AS stored
+       FROM dd_reports r LEFT JOIN users u ON u.id = r.generated_by_user_id
+      WHERE r.case_id = ? ORDER BY r.created_at DESC, r.id DESC`,
+  ).bind(Number(cs.id)).all<any>();
+  return c.json({ items: (rows.results || []).map((r: any) => ({ ...r, stored: Number(r.stored) === 1 })) });
+});
+
+dd.post('/cases/:uid/reports/:reportId/download', async (c) => {
+  // The same bar as generating one: a TOTP session and a recent step-up.
+  await requireFactor(c, 'totp');
+  await requireStepUp(c);
+  const cs = await getCaseByUid(c.env, c.req.param('uid'));
+  if (!cs) return c.json({ error: 'Case not found' }, 404);
+  const who = await reportReaderRefusal(c, cs);
+  if ('error' in who) return c.json({ error: who.error }, who.status);
+  const reportId = parseInt(c.req.param('reportId'), 10);
+  const r = await c.env.DB.prepare('SELECT id, storage_key, format FROM dd_reports WHERE id = ? AND case_id = ?')
+    .bind(reportId, Number(cs.id)).first<{ id: number; storage_key: string | null; format: string }>();
+  if (!r) return c.json({ error: 'Report not found on this case' }, 404);
+  if (!r.storage_key || !c.env.FILES) return c.json({ error: 'This report was not stored, so it cannot be downloaded again. Generate a new one.' }, 410);
+  const tok = await mintDownloadToken(c.env, { key: r.storage_key, ttlSec: 300, audience: 'dd_report', userId: who.id });
+  await audit(c.env, Number(cs.id), who, 'report_downloaded', { type: 'dd_report', id: Number(r.id) }, { format: r.format });
+  return c.json({ ok: true, download_url: `/api/dd/reports/download/${tok.token}`, expires_in: 300 });
+});
+
+dd.post('/cases/:uid/ic', async (c) => {
+  const user = await requireDdReader(c);
+  const cs = await getCaseByUid(c.env, c.req.param('uid'));
+  if (!cs) return c.json({ error: 'Case not found' }, 404);
+  const refusal = deciderRefusal(user, cs);
+  if (refusal) return c.json({ error: refusal.error }, refusal.status);
+  // #2385 owner question 5: the hand-off follows a decision to go ahead.
+  if (cs.decision !== 'proceed' && cs.decision !== 'proceed_with_conditions') {
+    return c.json({ error: 'Record Proceed or Proceed with conditions before sending the case to IC.' }, 409);
+  }
+  const caseId = Number(cs.id);
+  if (await caseSentToIc(c.env, caseId)) return c.json({ error: 'This case is already with IC.', code: 'already_sent' }, 409);
+  const out = await createIcRecordForCase(c, user as any, {
+    title: `Investment decision: ${String(cs.subject_label)}`,
+    projectId: cs.subject_type === 'project' ? Number(cs.subject_id) : null,
+    dealId: cs.deal_id == null ? null : Number(cs.deal_id),
+    ddCaseId: caseId,
+  });
+  if (!out.ok) return c.json({ error: out.error }, out.status);
+  await audit(c.env, caseId, user, 'sent_to_ic', { type: 'dd_case', id: caseId });
+  return c.json({ ok: true, ic_record: { uid: out.uid, status: out.status } }, 201);
+});
+
+// ---------- D1249 (#3264): the overview, My reviews, search, the team, templates ----------
+//
+// Part 5 of #2385.
+//
+//   GET    /overview                           DDL1's figures, each block { available, … } or { available: false, reason }
+//   GET    /my-reviews                         DDL12: the sections the caller was invited to
+//   GET    /subjects?type=&q=                  DDL2's picker by name; an investor sees only startups they share a deal with
+//   GET    /people?q=&page=                    DDL9's reviewer search by name; an email for an Admin only
+//   POST   /cases/:uid/sections/:sectionId/conflicts   the reviewer's own declaration
+//   DELETE /cases/:uid/sections/:sectionId/reviewers/:userId   remove someone from a section
+//   POST   /cases/:uid/widen                   Lite → Standard → Deep, never narrower
+//   GET    /templates                          DDL13: each depth's current version and its history
+//   POST   /templates                          a new version; Super Admin only (owner question 3)
+//
+// The overview and My reviews read only what the caller may list (the same
+// fixed predicate as `GET /cases`, CASE_FILTER_SQL). Every case write records a `dd_audit_log` row; a
+// template version is its own record, never overwritten.
+
+const PAST_TARGET_NOTE = 'A case is past its target IC date when that day has gone and it is still open.';
+const AGE_BUCKETS: ReadonlyArray<[string, number, number]> = [['0-7', 0, 7], ['8-14', 8, 14], ['15-30', 15, 30], ['31-60', 31, 60], ['60+', 61, Infinity]];
+const unreadable = (what: string) => ({ available: false as const, reason: `${what} could not be read. Try again in a moment.` });
+
+function daysSince(ts: string, now: number): number | null {
+  const t = Date.parse(String(ts).replace(' ', 'T') + (String(ts).includes('Z') || /[+-]\d\d:?\d\d$/.test(String(ts)) ? '' : 'Z'));
+  return Number.isFinite(t) ? Math.floor((now - t) / 86_400_000) : null;
+}
+
+const OVERVIEW_SQL = 'SELECT c.id, c.status, c.created_at, c.target_ic_date, c.decision, c.decided_at, c.archived_at,'
+  + ' CASE WHEN ' + READY_EXPR + ' THEN 1 ELSE 0 END AS ready,'
+  + " (SELECT COUNT(*) FROM dd_findings f WHERE f.case_id = c.id AND f.resolved_at IS NULL AND f.severity IN ('high', 'critical'))"
+  + "  + (SELECT COUNT(*) FROM dd_checklist_items i WHERE i.case_id = c.id AND i.status IN ('flag', 'fail') AND i.severity IN ('high', 'critical')) AS severe_flags,"
+  + " (SELECT COUNT(*) FROM dd_requests r WHERE r.case_id = c.id AND r.state = 'requested') AS requests_waiting"
+  + ' FROM dd_cases c' + CASE_FILTER_SQL;
+
+dd.get('/overview', async (c) => {
+  const user = await requireDdReader(c);
+  const now = Date.now();
+  const today = new Date(now).toISOString().slice(0, 10);
+  let cases: any[];
+  try {
+    const r = await c.env.DB.prepare(OVERVIEW_SQL).bind(...caseFilterBinds(user, () => undefined)).all<any>();
+    cases = r.results || [];
+  } catch {
+    // A D1 error is the read failing, never an empty desk.
+    return c.json({ error: 'The cases could not be read. Try again in a moment.', code: 'dd_overview_unreadable' }, 503);
+  }
+  const open = cases.filter((x) => x.status === 'open' || x.status === 'in_review');
+  const stages = {
+    available: true,
+    not_started: open.filter((x) => x.status === 'open' && !Number(x.ready)).length,
+    in_review: open.filter((x) => x.status === 'in_review' && !Number(x.ready)).length,
+    ready: open.filter((x) => Number(x.ready)).length,
+    decided_90_days: cases.filter((x) => x.status === 'completed' && x.decided_at && (daysSince(x.decided_at, now) ?? 999) <= 90).length,
+    decided: cases.filter((x) => x.status === 'completed').length,
+    archived: cases.filter((x) => x.status === 'archived').length,
+    open: open.length,
+  };
+  const buckets = AGE_BUCKETS.map(([label]) => ({ label, before_target: 0, past_target: 0, no_target: 0 }));
+  for (const x of open) {
+    const d = daysSince(x.created_at, now);
+    if (d == null) continue;
+    const i = AGE_BUCKETS.findIndex(([, lo, hi]) => d >= lo && d <= hi);
+    if (i < 0) continue;
+    if (!x.target_ic_date) buckets[i].no_target += 1;
+    else if (String(x.target_ic_date) < today) buckets[i].past_target += 1;
+    else buckets[i].before_target += 1;
+  }
+  // Decisions by month, the last 12. Decisions are recorded from migration
+  // 620 on: `recorded_from` is the month of the first one, and a month before
+  // it is "Not recorded", never zero.
+  const months: string[] = [];
+  const d0 = new Date(now);
+  for (let k = 11; k >= 0; k -= 1) months.push(new Date(Date.UTC(d0.getUTCFullYear(), d0.getUTCMonth() - k, 1)).toISOString().slice(0, 7));
+  const blank = () => ({ proceed: 0, proceed_with_conditions: 0, do_not_proceed: 0, withdrawn: 0, archived_without_decision: 0 });
+  const byMonth = new Map(months.map((m) => [m, blank()]));
+  const stamps: string[] = [];
+  for (const x of cases) {
+    if (x.decision && x.decided_at) {
+      stamps.push(String(x.decided_at));
+      const b = byMonth.get(String(x.decided_at).slice(0, 7)); if (b) (b as any)[x.decision] += 1;
+    } else if (x.status === 'archived' && x.archived_at) {
+      stamps.push(String(x.archived_at));
+      const b = byMonth.get(String(x.archived_at).slice(0, 7)); if (b) b.archived_without_decision += 1;
+    }
+  }
+  const recordedFrom = stamps.length ? stamps.sort()[0].slice(0, 7) : null;
+  const withFlags = open.filter((x) => Number(x.severe_flags) > 0);
+  return c.json({
+    stages,
+    severe_flags: { available: true, open: withFlags.reduce((a, x) => a + Number(x.severe_flags), 0), cases: withFlags.length },
+    // Requests carry no due date before part 4 (#3263), so "past due" is not counted here.
+    requests: { available: true, waiting: open.reduce((a, x) => a + Number(x.requests_waiting), 0), past_due: null, past_due_reason: 'Requests have no due date yet.' },
+    ages: { available: true, buckets, note: PAST_TARGET_NOTE },
+    decisions: {
+      available: true,
+      recorded_from: recordedFrom,
+      months: months.map((m) => (recordedFrom != null && m >= recordedFrom ? { month: m, recorded: true, ...byMonth.get(m) } : { month: m, recorded: false })),
+    },
+  });
+});
+
+dd.get('/my-reviews', async (c) => {
+  const user = await requireDdReader(c);
+  const sql = getSQL(c.env);
+  try {
+    const rows: any[] = await sql`
+      SELECT c.uid AS case_uid, c.subject_label, c.subject_type, c.status AS case_status,
+             s.id AS section_id, s.title AS section_title, s.verdict, s.status AS section_status,
+             r.role, r.invited_at, r.responded_at, r.nda_signed_at, r.conflicts, r.expires_at,
+             (r.expires_at IS NOT NULL AND datetime(r.expires_at) < datetime('now') AND r.responded_at IS NULL) AS invite_expired,
+             (SELECT COUNT(*) FROM dd_checklist_items i WHERE i.section_id = s.id AND i.status = 'pending') AS items_pending
+        FROM dd_reviewers r
+        JOIN dd_sections s ON s.id = r.section_id
+        JOIN dd_cases c ON c.id = r.case_id
+       WHERE r.user_id = ${user.id}
+       ORDER BY (c.status IN ('completed', 'archived')) ASC, r.invited_at DESC, r.id DESC
+       LIMIT 200`;
+    return c.json({ items: rows.map((r) => ({ ...r, invite_expired: Number(r.invite_expired) === 1 })) });
+  } finally { await sql.end(); }
+});
+
+const SUBJECT_ROLE: Record<string, string> = { founder: 'founder', advisor: 'advisor', investor: 'investor', partner: 'partner' };
+const likeOf = (q: string) => `%${q.replace(/[\\%_]/g, (m) => `\\${m}`)}%`;
+
+dd.get('/subjects', async (c) => {
+  const user = await requireDdReader(c);
+  const type = String(c.req.query('type') || '');
+  const q = String(c.req.query('q') || '').trim().slice(0, 100);
+  if (user.role === 'advisor') return c.json({ error: 'An advisor reviews cases and does not open them.' }, 403);
+  if (type !== 'project' && !SUBJECT_ROLE[type]) return c.json({ error: 'Choose a startup, founder, advisor, investor or partner.' }, 400);
+  if (user.role === 'investor') {
+    // DDL2's inset: an investor opens diligence only on a startup they share a
+    // deal with — the same relationship `POST /cases` checks (D1149).
+    if (type !== 'project') return c.json({ error: 'You can only open diligence on a startup you are in a deal with.' }, 403);
+    const rows = await c.env.DB.prepare(
+      `SELECT p.id, p.name FROM projects p
+        WHERE p.deleted_at IS NULL AND p.name LIKE ? ESCAPE '\\'
+          AND EXISTS (SELECT 1 FROM deals d WHERE d.project_id = p.id AND (
+                EXISTS (SELECT 1 FROM deal_invitations i WHERE i.deal_id = d.id AND i.investor_user_id = ?)
+                OR EXISTS (SELECT 1 FROM commitments k WHERE k.deal_id = d.id AND k.investor_user_id = ?)))
+        ORDER BY p.name COLLATE NOCASE LIMIT 20`,
+    ).bind(likeOf(q), user.id, user.id).all<any>();
+    return c.json({ items: (rows.results || []).map((r: any) => ({ id: r.id, name: r.name, type })) });
+  }
+  if (type === 'project') {
+    const rows = await c.env.DB.prepare(
+      `SELECT id, name FROM projects WHERE deleted_at IS NULL AND name LIKE ? ESCAPE '\\' ORDER BY name COLLATE NOCASE LIMIT 20`,
+    ).bind(likeOf(q)).all<any>();
+    return c.json({ items: (rows.results || []).map((r: any) => ({ id: r.id, name: r.name, type })) });
+  }
+  const rows = await c.env.DB.prepare(
+    `SELECT id, name FROM users WHERE role = ? AND COALESCE(is_active, 1) = 1 AND COALESCE(name, '') != '' AND name LIKE ? ESCAPE '\\'
+      ORDER BY name COLLATE NOCASE LIMIT 20`,
+  ).bind(SUBJECT_ROLE[type], likeOf(q)).all<any>();
+  return c.json({ items: (rows.results || []).map((r: any) => ({ id: r.id, name: r.name, type })) });
+});
+
+dd.get('/people', async (c) => {
+  const user = await requireDdReader(c);
+  // Who may assign may search (the assign route's own gate).
+  if (user.role !== 'admin' && user.role !== 'partner') return c.json({ error: 'Forbidden' }, 403);
+  const q = String(c.req.query('q') || '').trim().slice(0, 100);
+  const pageSize = 20;
+  const page = Math.max(Number.parseInt(String(c.req.query('page') ?? '1'), 10) || 1, 1);
+  const total = await c.env.DB.prepare(
+    `SELECT COUNT(*) AS n FROM users WHERE role IN ('admin', 'partner', 'investor', 'advisor') AND COALESCE(is_active, 1) = 1
+       AND COALESCE(name, '') != '' AND name LIKE ? ESCAPE '\\'`,
+  ).bind(likeOf(q)).first<{ n: number }>();
+  const rows = await c.env.DB.prepare(
+    `SELECT id, name, role, email FROM users WHERE role IN ('admin', 'partner', 'investor', 'advisor') AND COALESCE(is_active, 1) = 1
+       AND COALESCE(name, '') != '' AND name LIKE ? ESCAPE '\\'
+      ORDER BY name COLLATE NOCASE, id LIMIT ? OFFSET ?`,
+  ).bind(likeOf(q), pageSize, (page - 1) * pageSize).all<any>();
+  const items = (rows.results || []).map((r: any) => (user.role === 'admin' ? r : { id: r.id, name: r.name, role: r.role }));
+  return c.json({ items, total: Number(total?.n ?? 0), page, page_size: pageSize });
+});
+
+dd.post('/cases/:uid/sections/:sectionId/conflicts', async (c) => {
+  const user = await requireDdReader(c);
+  const cs = await getCaseByUid(c.env, c.req.param('uid'));
+  if (!cs) return c.json({ error: 'Case not found' }, 404);
+  const sectionId = parseInt(c.req.param('sectionId'), 10);
+  const row = await c.env.DB.prepare('SELECT id FROM dd_reviewers WHERE case_id = ? AND section_id = ? AND user_id = ?')
+    .bind(Number(cs.id), sectionId, user.id).first<{ id: number }>();
+  // Only the invited person answers for themself.
+  if (!row) return c.json({ error: 'You are not invited to this section.' }, 403);
+  const body = await c.req.json().catch(() => ({} as any));
+  if (typeof body.declared !== 'boolean') return c.json({ error: 'Say whether you have a conflict to declare.' }, 400);
+  const note = String(body.note ?? '').trim();
+  if (body.declared && !note) return c.json({ error: 'Say what the conflict is. The case lead reads it.' }, 400);
+  if (note.length > 2000) return c.json({ error: 'At most 2000 characters.' }, 400);
+  const enc = body.declared ? await encField(c.env, 'dd_reviewers', 'conflicts_note', Number(row.id), note) : null;
+  await c.env.DB.prepare(`UPDATE dd_reviewers SET conflicts = ?, conflicts_note_enc = ?, conflicts_at = datetime('now') WHERE id = ?`)
+    .bind(body.declared ? 'declared' : 'none', enc, Number(row.id)).run();
+  await audit(c.env, Number(cs.id), user, 'conflicts_answered', { type: 'dd_section', id: sectionId }, { declared: body.declared });
+  if (body.declared) {
+    await notify(c.env, {
+      userId: leadOf(cs),
+      type: 'dd_conflict_declared',
+      title: `A reviewer declared a conflict on ${cs.subject_label}`,
+      body: 'Open the case team to read it.',
+      link: `/due-diligence/${cs.uid}/team`,
+      channels: ['in_app'],
+    }).catch(() => null);
+  }
+  return c.json({ ok: true, conflicts: body.declared ? 'declared' : 'none' });
+});
+
+dd.delete('/cases/:uid/sections/:sectionId/reviewers/:userId', async (c) => {
+  const user = await requireDdReader(c);
+  const cs = await getCaseByUid(c.env, c.req.param('uid'));
+  if (!cs) return c.json({ error: 'Case not found' }, 404);
+  if (user.role !== 'admin' && !leadsOrOpened(user, cs)) return c.json({ error: 'Only the case lead or an Admin can change the team.' }, 403);
+  if (cs.status === 'archived') return c.json({ error: 'This case is archived. It takes no further change.' }, 409);
+  const caseId = Number(cs.id);
+  const sectionId = parseInt(c.req.param('sectionId'), 10);
+  const removed = parseInt(c.req.param('userId'), 10);
+  const r = await c.env.DB.prepare('SELECT id, role FROM dd_reviewers WHERE case_id = ? AND section_id = ? AND user_id = ?')
+    .bind(caseId, sectionId, removed).first<{ id: number; role: string }>();
+  if (!r) return c.json({ error: 'That person is not on this section.' }, 404);
+  // Removed from the section: their invitation link stops working with the
+  // row. A verdict they recorded stays signed in their name (D466).
+  await c.env.DB.prepare('DELETE FROM dd_reviewers WHERE id = ?').bind(Number(r.id)).run();
+  await c.env.DB.prepare(
+    `UPDATE dd_sections SET assignee_user_id = NULL, status = CASE WHEN status = 'completed' THEN status ELSE 'pending' END, updated_at = CURRENT_TIMESTAMP
+      WHERE id = ? AND case_id = ? AND assignee_user_id = ?`,
+  ).bind(sectionId, caseId, removed).run();
+  await audit(c.env, caseId, user, 'reviewer_removed', { type: 'dd_section', id: sectionId }, { user_id: removed, role: r.role });
+  return c.json({ ok: true });
+});
+
+dd.post('/cases/:uid/widen', async (c) => {
+  const user = await requireDdReader(c);
+  const cs = await getCaseByUid(c.env, c.req.param('uid'));
+  if (!cs) return c.json({ error: 'Case not found' }, 404);
+  if (user.role !== 'admin' && !isLead(user, cs)) return c.json({ error: 'Only the case lead or an Admin can widen the scope.' }, 403);
+  if (cs.status !== 'open' && cs.status !== 'in_review') return c.json({ error: 'A decided or archived case keeps its scope.' }, 409);
+  const body = await c.req.json().catch(() => ({} as any));
+  const to = String(body.depth || '') as ChecklistDepth;
+  const from = String(cs.template_depth || 'standard') as ChecklistDepth;
+  if (!(TEMPLATE_DEPTHS as readonly string[]).includes(to)) return c.json({ error: 'Choose Standard or Deep.' }, 400);
+  // "You can widen scope later, never narrow it." (DDL2)
+  if (DEPTH_RANK[to] <= DEPTH_RANK[from]) return c.json({ error: 'Scope only widens: choose a deeper template than the case has.' }, 400);
+  const caseId = Number(cs.id);
+  const template = await latestTemplate(c.env, to);
+  const seed = seedFromTemplate(String(cs.subject_type) as DDSubjectType, template ? template.body : builtInTemplate(to));
+  const sections = await c.env.DB.prepare('SELECT id, section_key FROM dd_sections WHERE case_id = ?').bind(caseId).all<{ id: number; section_key: string }>();
+  const sectionId = new Map((sections.results || []).map((s) => [s.section_key, Number(s.id)]));
+  let added = 0;
+  for (const it of seed.checklist) {
+    const sid = sectionId.get(it.section_key);
+    if (!sid) continue;
+    const r = await c.env.DB.prepare(
+      `INSERT OR IGNORE INTO dd_checklist_items (case_id, section_id, item_key, title, depth) VALUES (?, ?, ?, ?, ?)`,
+    ).bind(caseId, sid, it.key, it.title, it.depth).run();
+    added += Number((r as any)?.meta?.changes ?? 0);
+  }
+  await c.env.DB.prepare('UPDATE dd_cases SET template_depth = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?').bind(to, caseId).run();
+  await audit(c.env, caseId, user, 'scope_widened', { type: 'dd_case', id: caseId }, { from, to, items_added: added });
+  return c.json({ ok: true, template_depth: to, items_added: added });
+});
+
+/** A template as DDL13 draws it: each section with its title, weight, blocking and items per depth. */
+function templateView(depth: ChecklistDepth, version: number, body: TemplateBody, meta: { uid?: string; created_at?: string; created_by_name?: string | null } = {}) {
+  const titles = new Map(SECTION_CATALOG.map((s) => [s.key, s.title]));
+  const items = new Map(CHECKLIST_CATALOG.map((i) => [i.key, i]));
+  const sections = body.sections.map((s) => ({
+    key: s.key, title: titles.get(s.key) ?? s.key, weight: s.weight, blocking: s.blocking,
+    items: s.items.length,
+    by_depth: { lite: s.items.filter((k) => items.get(k)?.depth === 'lite').length, standard: s.items.filter((k) => items.get(k)?.depth === 'standard').length, deep: s.items.filter((k) => items.get(k)?.depth === 'deep').length },
+  }));
+  return { depth, version, built_in: version === 0, ...meta, sections, item_count: sections.reduce((a, s) => a + s.items, 0), body };
+}
+
+dd.get('/templates', async (c) => {
+  const user = await requireDdReader(c);
+  const rows = await c.env.DB.prepare(
+    `SELECT t.uid, t.depth, t.version, t.body_json, t.created_at, u.name AS created_by_name
+       FROM dd_templates t LEFT JOIN users u ON u.id = t.created_by ORDER BY t.depth, t.version DESC`,
+  ).all<any>();
+  const all = rows.results || [];
+  const out = TEMPLATE_DEPTHS.map((depth) => {
+    const mine = all.filter((r: any) => r.depth === depth);
+    const latest = mine[0];
+    let current;
+    try { current = latest ? templateView(depth, Number(latest.version), JSON.parse(latest.body_json), { uid: latest.uid, created_at: latest.created_at, created_by_name: latest.created_by_name ?? null }) : null; } catch { current = null; }
+    return {
+      depth,
+      current: current ?? templateView(depth, 0, builtInTemplate(depth)),
+      versions: [...mine.map((r: any) => ({ version: Number(r.version), created_at: r.created_at, created_by_name: r.created_by_name ?? null })), { version: 0, built_in: true }],
+    };
+  });
+  // HQ edits templates; everyone else chooses one when they open a case.
+  return c.json({ templates: out, can_edit: isSuperAdmin(user as any) });
+});
+
+dd.post('/templates', async (c) => {
+  const user = await requireSuperAdmin(c);
+  const body = await c.req.json().catch(() => ({} as any));
+  const depth = String(body.depth || '') as ChecklistDepth;
+  if (!(TEMPLATE_DEPTHS as readonly string[]).includes(depth)) return c.json({ error: 'Choose Lite, Standard or Deep.' }, 400);
+  const checked = checkTemplateBody(body);
+  if (!checked.ok) return c.json({ error: checked.error }, 400);
+  const last = await c.env.DB.prepare('SELECT MAX(version) AS v FROM dd_templates WHERE depth = ?').bind(depth).first<{ v: number | null }>();
+  const version = Number(last?.v ?? 0) + 1;
+  const uid = genUid();
+  try {
+    await c.env.DB.prepare('INSERT INTO dd_templates (uid, depth, version, body_json, created_by) VALUES (?, ?, ?, ?, ?)')
+      .bind(uid, depth, version, JSON.stringify(checked.body), user.id).run();
+  } catch {
+    return c.json({ error: 'Someone saved this template at the same moment. Read it again and save once more.', code: 'version_taken' }, 409);
+  }
+  return c.json({ ok: true, template: templateView(depth, version, checked.body, { uid }) }, 201);
+});
+
+/**
+ * DDL8's platform checks, read only: the subject's identity check
+ * (`users.kyc_status`), the business check for a partner or investor
+ * (`company_kyb_records`, through the account's company) and a partner's
+ * profile (`partner_profiles.admin_status`). Each is decided on its own page;
+ * the case shows its state. A link is drawn for an Admin only, whose pages
+ * they are.
+ */
+async function platformChecks(env: Env, user: AppUser, cs: Record<string, unknown>): Promise<Record<string, unknown>> {
+  const admin = user.role === 'admin';
+  let subjectUserId: number | null = null;
+  try { subjectUserId = await resolveSubjectUserId(env, cs); } catch { subjectUserId = null; }
+  if (!subjectUserId) return { available: false, reason: 'The account this case is about could not be found, so its checks are not shown.' };
+  const out: Record<string, unknown> = { available: true };
+  try {
+    const u = await env.DB.prepare('SELECT kyc_status, kyc_reviewed_at FROM users WHERE id = ?').bind(subjectUserId)
+      .first<{ kyc_status: string | null; kyc_reviewed_at: string | null }>();
+    out.identity = { available: true, status: u?.kyc_status ?? 'not_started', decided_at: u?.kyc_reviewed_at ?? null, link: admin ? '/admin/kyc' : null };
+  } catch { out.identity = unreadable('The identity check'); }
+  if (cs.subject_type === 'partner' || cs.subject_type === 'investor') {
+    try {
+      const k = await env.DB.prepare(
+        `SELECT k.status, k.updated_at FROM user_company_links l JOIN company_kyb_records k ON k.company_id = l.company_id
+          WHERE l.user_id = ? ORDER BY l.is_primary_admin DESC, l.id LIMIT 1`,
+      ).bind(subjectUserId).first<{ status: string; updated_at: string | null }>();
+      out.business = k ? { available: true, status: k.status, updated_at: k.updated_at ?? null, link: admin ? '/admin/kyc' : null }
+        : { available: true, status: null, reason: 'No business check is on record for this account.' };
+    } catch { out.business = unreadable('The business check'); }
+  }
+  if (cs.subject_type === 'partner') {
+    try {
+      const p = await env.DB.prepare('SELECT admin_status, ref, reviewed_at FROM partner_profiles WHERE user_id = ? LIMIT 1').bind(subjectUserId)
+        .first<{ admin_status: string | null; ref: string | null; reviewed_at: string | null }>();
+      out.partner_profile = p ? { available: true, status: p.admin_status ?? 'pending', reviewed_at: p.reviewed_at ?? null, link: admin && p.ref ? `/admin/partner-profiles/${encodeURIComponent(p.ref)}` : null }
+        : { available: true, status: null, reason: 'No partner profile is on record for this account.' };
+    } catch { out.partner_profile = unreadable('The partner profile'); }
+  }
+  return out;
+}
 
 export default dd;

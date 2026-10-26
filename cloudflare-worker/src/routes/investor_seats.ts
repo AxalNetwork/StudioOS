@@ -117,7 +117,9 @@ export async function primaryCover(env: Env, primaryId: number): Promise<{ ok: t
   // D1100: an invitation cannot outlive the primary's bounded retry grace.
   const lapsed = status === 'cancelled' || status === 'canceled' || status === 'unpaid'
     || (status === 'past_due' && !inGrace(status, primary.investor_subscription_renews_at));
-  if (tier !== 'institutional' || lapsed) return { ok: false, error: 'primary_not_institutional' };
+  // D892 §6: a subscription whose first payment never completed covers no seat.
+  const unpaid = status === 'incomplete' || status === 'incomplete_expired';
+  if (tier !== 'institutional' || lapsed || unpaid) return { ok: false, error: 'primary_not_institutional' };
   return { ok: true, tier, status, renewsAt: primary.investor_subscription_renews_at };
 }
 

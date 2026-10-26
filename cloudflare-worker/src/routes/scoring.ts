@@ -318,15 +318,8 @@ scoring.post('/score', async (c) => {
     }
   }
 
-  // Status only flips for auto-approved official runs. Flagged runs hold
-  // the project at its current status until admin signs off (LP guarantee).
-  let newStatus = project.status;
-  if (!effectiveSandbox && reviewStatus === 'auto_approved' && result.total_score >= 70) {
-    newStatus = result.total_score >= 85 ? 'tier_1' : 'tier_2';
-    if (newStatus !== project.status) {
-      await sql`UPDATE projects SET status = ${newStatus}, updated_at = CURRENT_TIMESTAMP WHERE id = ${projectId}`;
-    }
-  }
+  // D1254: a score records evidence; only a person's separate act changes status.
+  const newStatus = project.status;
 
   await sql.end();
 

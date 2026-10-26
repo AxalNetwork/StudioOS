@@ -298,7 +298,9 @@ test('a live history keeps ?project_id= and its hash, and is never current outsi
   CYCLES.raise.history.live = true;
   try {
     const tabs = cycleTabs('raise', cards('raise'), 'capital-relationships', '?project_id=7');
-    assert.deepEqual([tabs[1].name, tabs[1].href, tabs[1].active], ['Calls', '/raise/capital-relationships/calls?project_id=7', false]);
+    // D1261 (#2430): Evidence leads, after Overview; Calls follows it.
+    assert.deepEqual([tabs[1].name, tabs[1].href, tabs[1].active], ['Evidence', '/raise/evidence?project_id=7', false]);
+    assert.deepEqual([tabs[2].name, tabs[2].href, tabs[2].active], ['Calls', '/raise/capital-relationships/calls?project_id=7', false]);
     assert.equal(tabs.find((t) => t.key === 'capital-relationships').active, true, 'the module tab keeps aria-current');
     const out = renderToStaticMarkup(h(MemoryRouter, null, h(CycleHeader, { cycle: 'raise', cards: cards('raise'), active: 'capital-relationships', search: '?project_id=7' })));
     const values = [...out.matchAll(/<option value="([^"]+)"/g)].map((m) => m[1]);
