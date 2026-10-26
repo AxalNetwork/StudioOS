@@ -1556,7 +1556,9 @@ r.post('/:uid/promote', async (c) => {
     // ---- Investor → the canonical prospect writer ----
     if (row.audience === 'investor') {
       const { promoteLegacyInvestor } = await import('../services/raiseProspectWriters');
-      return c.json(await promoteLegacyInvestor(c.env, { projectId: row.project_id, userId: user.id, contactId: row.id }));
+      const promoted = await promoteLegacyInvestor(c.env, { projectId: row.project_id, userId: user.id, contactId: row.id });
+      if (!promoted.already_promoted) await logPromotion(c.env, user, row.project_id, 'promoted an investor to the raise pipeline');
+      return c.json(promoted);
     }
 
     // ---- Advisor → Advisory Suite directory profile ----

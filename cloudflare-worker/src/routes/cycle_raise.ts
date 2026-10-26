@@ -387,6 +387,7 @@ cycleRaise.post('/capital-relationships/support-read', async (c) => {
     const input = await body(c);
     const prospectId = input.prospect_id == null ? null : idParam(String(input.prospect_id));
     if (input.prospect_id != null && prospectId == null) return c.json({ detail: 'Invalid investor' }, 400);
+    if (prospectId != null && !await c.env.DB.prepare('SELECT 1 FROM raise_prospects WHERE id = ? AND project_id = ?').bind(prospectId, s.projectId).first()) return c.json({ detail: 'Investor not found' }, 404);
     const page = capitalPage(input.page);
     const auditId = await recordCapitalSupport(c.env, s.user, s.project, input.reason, { page, prospect_id: prospectId });
     return c.json({ ...(await capitalSupportDetails(c.env, s.projectId, page, prospectId)), audit_id: auditId });

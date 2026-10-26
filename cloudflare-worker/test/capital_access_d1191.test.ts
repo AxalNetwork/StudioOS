@@ -244,7 +244,11 @@ test('D1191: missing summary data is unreadable, summaries and support reads are
     assert.equal(first.data.ventures.length,25);assert.equal(first.data.has_more,true);assert.equal(next.data.ventures.length,8);assert.equal(next.data.has_more,false);
     for(let id=10;id<40;id++)f.db.prepare('INSERT INTO raise_prospects (id,uid,project_id,name) VALUES (?,?,?,?)').run(id,`paged-investor-${id}`,101,'Fixture paged investor');
     const read=await f.request('/api/cycles/raise/capital-relationships/support-read?project=101',30,'POST',{reason:'Fixture paged reason'});assert.equal(read.status,200);assert.equal(read.data.items.length,25);assert.equal(read.data.has_more,true);
-    assert.equal((await f.request('/api/cycles/raise/capital-relationships/support-read?project=101',30,'POST',{reason:'Fixture detail reason',prospect_id:2})).status,404);
+    const beforeInvalid=f.db.prepare('SELECT COUNT(*) AS n FROM activity_logs WHERE action=?').get(CAPITAL_SUPPORT_ACTION)?.n;
+    for(const prospectId of [2,9999]) {
+      f.reset();assert.equal((await f.request('/api/cycles/raise/capital-relationships/support-read?project=101',30,'POST',{reason:'Fixture detail reason',prospect_id:prospectId})).status,404);
+      assert.equal(f.db.prepare('SELECT COUNT(*) AS n FROM activity_logs WHERE action=?').get(CAPITAL_SUPPORT_ACTION)?.n,beforeInvalid);assert.equal(f.privateReads().length,0);
+    }
     const own=await f.request('/api/cycles/raise/capital-relationships/support-read?project=101',30,'POST',{reason:'Fixture detail reason',prospect_id:1,page:2});assert.equal(own.status,200);assert.equal(own.data.items.length,1);assert.equal(own.data.items[0].id,1);
     const detail=f.db.prepare('SELECT details FROM activity_logs WHERE id=?').get(own.data.audit_id) as any;assert.deepEqual(JSON.parse(detail.details),{admin_user_id:30,reason:'Fixture detail reason',read_only:true,page:2,prospect_id:1});
     const history=await f.request('/api/cycles/raise/capital-relationships/support-reads?project=101',1);assert.equal(history.data.reads[0].page,2);assert.equal(history.data.reads[0].prospect_id,1);
@@ -279,6 +283,8 @@ test('D1191: co-founder creates/imports/edits are scoped and actor-audited throu
     f.db.exec("INSERT INTO contacts (id,uid,project_id,name,email,audience,status) VALUES (40,'unpromoted',101,'Fixture Promotion','promotion@example.test','investor','new')");
     const promoted=await f.request('/api/contacts/unpromoted/promote',1,'POST',{});assert.equal(promoted.status,200);assert.ok(promoted.data.record.id);
     const repeated=await f.request('/api/contacts/unpromoted/promote',1,'POST',{});assert.equal(repeated.data.record.id,promoted.data.record.id);assert.equal(repeated.data.already_promoted,true);
+    const promotionHistory=f.db.prepare("SELECT details FROM activity_logs WHERE action='contact_promoted' AND project_id=101 AND user_id=1").all() as any[];
+    assert.equal(promotionHistory.length,1);assert.match(promotionHistory[0].details,/promoted an investor/);assert.doesNotMatch(promotionHistory[0].details,/promotion@example|Fixture Promotion/);
     const last=f.db.prepare("SELECT user_id,action FROM activity_logs WHERE entity_type='raise.capital-relationships' ORDER BY id DESC LIMIT 1").get() as any;assert.equal(last.user_id,1);assert.equal(last.action,'prospect_created');
   }finally{f.close();}
 });
@@ -313,6 +319,7 @@ test('D1191: canonical Contacts promotion preserves the concurrent winner and re
     const result=await f.request('/api/contacts/race-contact/promote',1,'POST',{});assert.equal(result.status,200);assert.equal(result.data.already_promoted,true);assert.equal(result.data.record.id,1001);
     assert.equal(f.db.prepare('SELECT COUNT(*) AS n FROM raise_prospects WHERE contact_id=4').get()?.n,1);
     assert.equal(f.db.prepare('SELECT promoted_ref_id FROM contacts WHERE id=4').get()?.promoted_ref_id,1001);
+    assert.equal(f.db.prepare("SELECT COUNT(*) AS n FROM activity_logs WHERE action='contact_promoted'").get()?.n,0);
   }finally{f.close();}
 });
 
