@@ -12,6 +12,7 @@ import { ReviewDealSlotContext } from '../decks/templates/reviewDealSlot';
 import { ClosedLink, FigureSources, NdaGate } from './raise/pitch/ShareViewerParts';
 import { viewerNote } from './raise/pitch/shareModel';
 import { offersDealPack } from '../lib/shareDeckAudience';
+import { NotesPages, SourcesPage, StudioPrintCard, isStudioSlide } from './raise/pitch/PrintExtras';
 
 // Task #25 — public viewer for an investor share link, plus an authenticated
 // preview at /deck/:id/print. Task #6 expanded the advanced (live React
@@ -683,6 +684,12 @@ export default function PitchDeckPrintPage({ shareMode = false, exportMode = fal
   // just one. We render INSIDE a flexbox track so the template's
   // own [data-slide-frame] markers stay top-to-bottom.
   if (exportMode) {
+    // D1112: a studio deck (New deck's fields, the editor's blocks) is drawn
+    // card by card, as Present draws it; a template deck by its template.
+    const studioDeck = !methodId && (deck.slides || []).some(isStudioSlide);
+    const wantsNotes = deck.export_options?.notes === true;
+    const wantsSources = deck.export_options?.sources === true;
+    const slideTotal = (deck.slides || []).length;
     const fixedStageStyle = {
       width: INNER_W,
       background: '#ffffff',
@@ -708,7 +715,14 @@ export default function PitchDeckPrintPage({ shareMode = false, exportMode = fal
         `}</style>
         <div style={fixedStageStyle} data-export-stage>
           <div style={trackStyle}>
-            {isAdvanced ? (
+            {/* D1112 (#2992): with sources asked for, the index after the last card is the appendix (PowerPoint's last slide). */}
+            {singleSlideIdx != null && wantsSources && singleSlideIdx >= slideTotal ? (
+              <SourcesPage appendix={deck.sources_appendix} />
+            ) : studioDeck ? (
+              (singleSlideIdx != null
+                ? (deck.slides || []).slice(singleSlideIdx, singleSlideIdx + 1).map((s) => <StudioPrintCard key={singleSlideIdx} slide={s} index={singleSlideIdx} />)
+                : (deck.slides || []).map((s, i) => <StudioPrintCard key={i} slide={s} index={i} />))
+            ) : isAdvanced ? (
               singleSlideIdx != null ? (
                 <SingleSlideStage Template={Template} data={templateData} slideIdx={singleSlideIdx} />
               ) : (
@@ -755,6 +769,9 @@ export default function PitchDeckPrintPage({ shareMode = false, exportMode = fal
                 </div>
               ))
             )}
+            {/* The PDF's pages after the cards; PowerPoint carries the notes as speaker notes. */}
+            {singleSlideIdx == null && wantsNotes ? <NotesPages slides={deck.slides || []} /> : null}
+            {singleSlideIdx == null && wantsSources ? <SourcesPage appendix={deck.sources_appendix} /> : null}
           </div>
         </div>
       </div>

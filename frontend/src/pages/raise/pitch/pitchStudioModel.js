@@ -116,9 +116,11 @@ export const AUDIENCE_LABELS = {
  * The versions table, newest first, as the canvas sorts it by default. A
  * version saved before D898 has no audience or round: "Not recorded".
  */
-export function versionRows(versions) {
+export function versionRows(versions, { sort = 'newest', audience = 'all' } = {}) {
+  const dir = sort === 'oldest' ? -1 : 1;
   return [...versions]
-    .sort((a, b) => Number(b.version ?? -1) - Number(a.version ?? -1))
+    .filter((v) => audience === 'all' || (audience === 'none' ? !AUDIENCE_LABELS[v.audience] : v.audience === audience))
+    .sort((a, b) => dir * (Number(b.version ?? -1) - Number(a.version ?? -1)))
     .map((v) => ({
       id: v.id,
       label: versionLabel(v),
@@ -128,8 +130,59 @@ export function versionRows(versions) {
       by: String(v.by?.name || '').trim() || NOT_RECORDED,
       saved: dayLabel(v.created_at),
       current: Boolean(v.is_current || v.current),
+      // D1112: links ever made for this version; null when the count could not be read.
+      links: Number.isInteger(v.shared_links) ? String(v.shared_links) : SHARED_LINKS_UNREAD,
     }));
 }
+
+/** D1112 (#2992): PD2's Sort control, the canvas's default first. */
+export const VERSION_SORTS = [{ id: 'newest', t: 'Newest' }, { id: 'oldest', t: 'Oldest' }];
+export const SHARED_LINKS_UNREAD = 'Not read';
+
+/**
+ * PD2's Audience filter: All, then each audience a version is written for,
+ * in the canvas's order, and "Not recorded" when a version predates D898.
+ */
+export function audienceOptions(versions) {
+  const have = new Set((versions || []).map((v) => (AUDIENCE_LABELS[v?.audience] ? v.audience : 'none')));
+  return [
+    { id: 'all', t: 'All' },
+    ...Object.keys(AUDIENCE_LABELS).filter((k) => have.has(k)).map((k) => ({ id: k, t: AUDIENCE_LABELS[k] })),
+    ...(have.has('none') ? [{ id: 'none', t: NOT_RECORDED }] : []),
+  ];
+}
+
+/**
+ * PD2's "New in your data since vN", from D896's refresh read of that
+ * version: one row per figure whose store has moved past the value the
+ * version holds (stale) or no longer holds one (gone), each once. A figure
+ * that could not be read for this reader is not "new", and is counted apart.
+ */
+export function newInData(refresh) {
+  const rows = Array.isArray(refresh?.rows) ? refresh.rows : [];
+  const seen = new Set();
+  const items = [];
+  let unknown = 0;
+  for (const r of rows) {
+    if (r?.state === 'unknown') { unknown += 1; continue; }
+    if ((r?.state !== 'stale' && r?.state !== 'gone') || seen.has(r.source_key)) continue;
+    seen.add(r.source_key);
+    const label = String(r.current?.label || r.source_key || '').trim() || 'A figure';
+    const module = String(r.current?.module || '').trim();
+    items.push({
+      key: r.source_key,
+      t: r.state === 'gone' ? `${label} is no longer recorded` : `${label} changed${module ? ` · ${module}` : ''}`,
+      v: r.state === 'gone' ? (r.bound?.as_of ? `was ${dayLabel(r.bound.as_of)}` : NOT_RECORDED) : dayLabel(r.current?.as_of),
+      gone: r.state === 'gone',
+    });
+  }
+  return { checked: Number(refresh?.checked) || rows.length, items, unknown };
+}
+
+export const NOTHING_NEW = (label) => `Nothing in your data has changed since ${label}.`;
+export const NOTHING_BOUND = 'This version holds no figure read from your records, so there is nothing to compare.';
+export const NEW_DATA_FAILED = 'What changed in your data could not be read. That is not the same as nothing.';
+export const REFRESH_THE_DECK = 'Refresh the deck ›';
 
 /**
  * The cover of a deck: its first slide's title and subtitle fields (the
