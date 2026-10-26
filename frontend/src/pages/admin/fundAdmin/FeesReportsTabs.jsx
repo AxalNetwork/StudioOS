@@ -31,6 +31,7 @@ export function FeesTab({ apis, access, funds, fund, overview, onFund }) {
   const [quarter, setQuarter] = useState('');
   const [confirmation, setConfirmation] = useState(null);
   const [selected, setSelected] = useState('');
+  const [lpQuery, setLpQuery] = useState('');
   const [preview, setPreview] = useState(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
@@ -39,6 +40,7 @@ export function FeesTab({ apis, access, funds, fund, overview, onFund }) {
     try { await fn(); } catch (e) { setError(refusalText(e, fallback)); } finally { setBusy(false); }
   };
   const s = read.data;
+  const admissions = (s?.lps || []).filter(l => String(l.id).includes(lpQuery.trim()));
   const missing = (s?.lps || []).filter((l) => l.admission_missing).length;
   const termCols = [
     { key: 'rate', label: 'Terms', cell: (t) => `${bpsPercent(t.annual_bps) ?? 'Rate not recorded'} a year from ${t.effective_from}` },
@@ -74,12 +76,13 @@ export function FeesTab({ apis, access, funds, fund, overview, onFund }) {
                   : <Table cols={periodCols} rows={s.periods} rowKey={(p) => p.quarter} template="1.4fr 1.4fr 1fr .8fr .5fr" rowTestId={(p) => `fee-period-${p.quarter}`} />}
               </Panel>
               <Panel label="Admission and net invested" testId="fee-admissions">
+                <div className="p-4"><input className={INPUT} aria-label="Search admission LP ids" placeholder="Search LP ids" value={lpQuery} onChange={e => setLpQuery(e.target.value)} /></div>
                 <Note>Net invested: {amount(s?.net_invested?.[0]?.net_invested_cents)}{s?.net_invested?.[0]?.as_of ? ` · as of ${s.net_invested[0].as_of}` : ' · No dated net invested capital is recorded.'}</Note>
-                {s?.lps?.length ? <Table cols={[
+                {admissions.length ? <Table cols={[
                   { key: 'lp', label: 'LP', cell: l => `LP #${l.id}` },
                   { key: 'admitted', label: 'Admitted', cell: l => l.admitted_on || <Unrecorded>No admission date recorded</Unrecorded> },
                   { key: 'commitment', label: 'Commitment', mono: true, cell: l => l.commitment_amount == null ? 'Not recorded' : amount(Math.round(Number(l.commitment_amount) * 100)) },
-                ]} rows={s.lps} rowKey={l => l.id} template="1fr 1fr 1fr" /> : <Note>No LP admission recorded.</Note>}
+                ]} rows={admissions} rowKey={l => l.id} template="1fr 1fr 1fr" /> : <Note>{lpQuery ? 'No LP id matches this search.' : 'No LP admission recorded.'}</Note>}
                 <Note>Net invested capital is recorded for the fund. The read does not attribute it to individual LPs.</Note>
               </Panel>
               <FeeLines key={selected || s?.periods?.[0]?.quarter || 'empty'} apis={apis} access={access} fund={fund} quarter={selected || s?.periods?.[0]?.quarter} />
@@ -197,30 +200,34 @@ function DraftRow({ d, apis, access, onChanged, compact = false }) {
 export function ReportsTab({ apis, access, funds, fund, overview, onFund }) {
   const location = useLocation();
   const part = location.pathname.endsWith('/periods') ? 'periods' : location.pathname.endsWith('/notices') ? 'notices' : 'packs';
-  const read = useRead(async () => { const data = await apis.reporting.list({ fund_id: fund.id }); if (!Array.isArray(data?.items)) throw new Error('The reporting queue could not be read.'); return data; }, [apis, fund?.id], { enabled: Boolean(fund) && part === 'packs' });
+  const filtered = Boolean(keepFund(location.search));
+  const Frame = part === 'packs' ? Section : FundFrame;
+  const read = useRead(async () => { const data = await apis.reporting.list(filtered ? { fund_id: fund.id } : {}); if (!Array.isArray(data?.items)) throw new Error('The reporting queue could not be read.'); return data; }, [apis, fund?.id], { enabled: part === 'packs' && (!filtered || Boolean(fund)) });
   const [query, setQuery] = useState('');
   const [status, setStatus] = useState('');
-  const items = (read.data?.items || []).filter(d => (!status || d.status === status) && `${d.period_label || ''} ${d.kind || ''} ${d.entity_key || ''}`.toLowerCase().includes(query.toLowerCase()));
+  const [period, setPeriod] = useState('');
+  const items = (read.data?.items || []).filter(d => (!status || d.status === status) && (!period || d.period_label === period) && `${d.period_label || ''} ${d.kind || ''} ${d.entity_key || ''}`.toLowerCase().includes(query.toLowerCase()));
   return (
-    <FundFrame title="Reports" testId="reports-section" funds={funds} fund={fund} overview={overview} onFund={onFund}
+    <Frame title="Reports" testId="reports-section" funds={funds} fund={fund} overview={overview} onFund={onFund}
       sub="The review queue: each draft built from the fund's records. Opening a draft is recorded. Any Admin prepares, returns and exports; a Super Admin who did not prepare it issues.">
       <nav aria-label="Reports" className="flex flex-wrap gap-2" data-testid="fund-admin-reports-parts">
         {[['packs', 'Packs'], ['periods', 'Report periods'], ['notices', 'Notices']].map(([key, label]) => <Link key={key} className={part === key ? BTN.primary : BTN.ghost} aria-current={part === key ? 'page' : undefined} data-testid={`reports-part-${key}`} to={`/admin/fund-admin/reports${key === 'packs' ? '' : `/${key}`}${keepFund(location.search)}`}>{label}</Link>)}
       </nav>
       {fund && part === 'periods' && <ReportPeriods apis={apis} fund={fund} />}
       {fund && part === 'notices' && <Notices apis={apis} fund={fund} />}
-      {fund && part === 'packs' && <div data-testid="reports">
+      {part === 'packs' && <div data-testid="reports">
         <Panel label="Packs · review queue" sub={read.status === 'ready' ? `${items.length} draft${items.length === 1 ? '' : 's'}` : null}>
           <div className="flex flex-wrap gap-2 p-4">
             <input className={INPUT} aria-label="Search packs" placeholder="Search packs" value={query} onChange={e => setQuery(e.target.value)} />
+            <select className={INPUT} aria-label="Pack period" value={period} onChange={e => setPeriod(e.target.value)}><option value="">Every period</option>{[...new Set((read.data?.items || []).map(d => d.period_label).filter(Boolean))].map(v => <option key={v} value={v}>{v}</option>)}</select>
             <select className={INPUT} aria-label="Pack status" value={status} onChange={e => setStatus(e.target.value)}><option value="">Every status</option>{['draft', 'prepared', 'issued', 'superseded'].map(v => <option key={v} value={v}>{v}</option>)}</select>
           </div>
           {read.status === 'loading' ? <Busy />
             : read.status === 'unreadable' ? <Failed read={read} what="The reporting queue" claim="This is not a claim that nothing waits for review." />
-              : items.length === 0 ? <Note>{query || status ? 'No pack matches these filters. Clear the search or status to see the queue.' : 'No draft yet. A draft is built from the fund’s ledger; issued periods stay on the fund’s report pages.'}</Note>
+              : items.length === 0 ? <Note>{query || status || period ? 'No pack matches these filters. Clear the search or status to see the queue.' : 'No draft yet. A draft is built from the fund’s ledger; issued periods stay on the fund’s report pages.'}</Note>
                 : <Table cols={[
                   { key: 'pack', label: 'Pack', cell: d => `${d.period_label || 'Period not recorded'} · ${String(d.kind || '').replaceAll('_', ' ')}` },
-                  { key: 'fund', label: 'Fund or entity', cell: d => d.entity_key || fund.name },
+                  { key: 'fund', label: 'Fund or entity', cell: d => d.entity_key || funds.find(f => Number(f.id) === Number(d.fund_id))?.name || (d.fund_id ? `Fund #${d.fund_id}` : 'Not recorded: no fund or entity.') },
                   { key: 'quarter', label: 'Quarter', mono: true, cell: d => d.period_label || 'Not recorded: no period label.' },
                   { key: 'status', label: 'Status', cell: d => <Pill tone={d.status === 'issued' ? 'ok' : d.status === 'prepared' ? 'warn' : 'neutral'}>{d.status}</Pill> },
                   { key: 'prepared', label: 'Prepared by', cell: d => d.prepared_by == null ? 'Not recorded: no preparer.' : `Admin #${d.prepared_by}` },
@@ -229,18 +236,21 @@ export function ReportsTab({ apis, access, funds, fund, overview, onFund }) {
                 ]} rows={items} rowKey={d => d.uid} rowTestId={d => `draft-${d.uid}`} template="1.6fr 1fr .9fr .8fr 1fr 1.1fr 1.3fr" />}
         </Panel>
       </div>}
-    </FundFrame>
+    </Frame>
   );
 }
 
 function FeeLines({ apis, access, fund, quarter }) {
   const read = useRead(async () => { const data = await apis.fees.period(fund.id, quarter); if (!Array.isArray(data?.lines)) throw new Error('The fee lines could not be read.'); return data; }, [apis, fund.id, quarter], { enabled: Boolean(quarter) });
   const [statement, setStatement] = useState(null);
+  const [lpQuery, setLpQuery] = useState('');
+  const [sort, setSort] = useState('lp');
   const [statementLp, setStatementLp] = useState(null);
   const [linking, setLinking] = useState(false);
   const [callUid, setCallUid] = useState('');
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
+  const lines = (read.data?.lines || []).filter(l => String(l.limited_partner_id).includes(lpQuery.trim())).slice().sort((a, b) => sort === 'fee' ? (b.net_fee_cents ?? -Infinity) - (a.net_fee_cents ?? -Infinity) : a.limited_partner_id - b.limited_partner_id);
   const open = async (lp) => {
     setStatementLp(lp);
     setBusy(true); setError('');
@@ -249,13 +259,16 @@ function FeeLines({ apis, access, fund, quarter }) {
     finally { setBusy(false); }
   };
   return <Panel label={`${quarter || 'Period'} · lines and statements`} testId="fee-lines" aside={quarter ? <FundActControl access={access} act="fee.write"><button type="button" className={BTN.ghost} data-testid="fee-funding-link" onClick={() => setLinking(true)}>Funding call link</button></FundActControl> : null}>
+    <div className="flex flex-wrap gap-2 p-4"><input className={INPUT} aria-label="Search fee-line LP ids" placeholder="Search LP ids" value={lpQuery} onChange={e => setLpQuery(e.target.value)} />
+      <select className={INPUT} aria-label="Sort fee lines" value={sort} onChange={e => setSort(e.target.value)}><option value="lp">LP id</option><option value="fee">Net fee · highest first</option></select></div>
     {!quarter ? <Note>No fee period yet. Preview a quarter to record its draft lines.</Note>
       : read.status === 'loading' ? <Busy /> : read.status === 'unreadable' ? <Failed read={read} what="The fee lines" claim="The terms and periods remain above." />
         : <Table cols={[
           { key: 'lp', label: 'LP', cell: l => `LP #${l.limited_partner_id}` },
           ...[['commitment_cents', 'Commitment'], ['gross_fee_cents', 'Fee'], ['offset_cents', 'Offset'], ['net_fee_cents', 'Net fee']].map(([key, label]) => ({ key, label, mono: true, align: 'right', cell: l => amount(l[key]) })),
           { key: 'statement', label: 'Statement', cell: l => <button type="button" className={BTN.link} disabled={busy} data-testid={`fee-statement-${l.limited_partner_id}`} onClick={() => open(l.limited_partner_id)}>{l.status === 'draft' ? 'Draft · preview' : 'Open statement'}</button> },
-        ]} rows={read.data?.lines || []} rowKey={l => l.limited_partner_id} template="1fr 1fr 1fr 1fr 1fr 1fr" />}
+        ]} rows={lines} rowKey={l => l.limited_partner_id} template="1fr 1fr 1fr 1fr 1fr 1fr" />}
+    {read.status === 'ready' && !lines.length && <Note>{lpQuery ? 'No LP id matches this search.' : 'No fee line recorded for this period.'}</Note>}
     {!linking && <><Alert text={error} />{error && statementLp && <button type="button" className={BTN.link} onClick={() => open(statementLp)}>Try again</button>}</>}
     {linking && <Lightbox phone="sheet" title="Link a funding call" label="Link a funding call" testId="fee-funding-dialog" onClose={() => { if (!busy) setLinking(false); }}>
       <Note>Links this fee period to an already recorded capital call. It records paid lines only where the received call amount covers the fee. It moves no money.</Note>
@@ -301,6 +314,11 @@ function ReportPeriods({ apis, fund }) {
 function Notices({ apis, fund }) {
   const read = useRead(async () => { const data = await apis.notices.list({ fund_id: fund.id }); if (!Array.isArray(data?.notices)) throw new Error('The notices could not be read.'); return data; }, [apis, fund.id]);
   const [opened, setOpened] = useState(null);
+  const [query, setQuery] = useState('');
+  const [type, setType] = useState('');
+  const [lp, setLp] = useState('');
+  const notices = read.data?.notices || [];
+  const visible = notices.filter(n => (!type || n.type === type) && (!lp || String(n.limited_partner_id) === lp) && `${n.title || n.type} ${n.reference || ''}`.toLowerCase().includes(query.toLowerCase()));
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
   const run = async (fn) => { setBusy(true); setError(''); try { await fn(); } catch { setError('Unreadable: the notice could not be read. Try again.'); } finally { setBusy(false); } };
@@ -310,15 +328,20 @@ function Notices({ apis, fund }) {
     const a = document.createElement('a'); a.href = url; a.download = filename; document.body.appendChild(a); a.click(); a.remove(); URL.revokeObjectURL(url);
   });
   return <Panel label="Notices" testId="reports-notices">
+    <div className="flex flex-wrap gap-2 p-4">
+      <input className={INPUT} aria-label="Search notices" placeholder="Search notices" value={query} onChange={e => setQuery(e.target.value)} />
+      <select className={INPUT} aria-label="Notice type" value={type} onChange={e => setType(e.target.value)}><option value="">Every type</option>{[...new Set(notices.map(n => n.type))].map(v => <option key={v} value={v}>{v.replaceAll('_', ' ')}</option>)}</select>
+      <select className={INPUT} aria-label="Notice LP" value={lp} onChange={e => setLp(e.target.value)}><option value="">Every LP</option>{[...new Set(notices.map(n => n.limited_partner_id).filter(v => v != null))].map(v => <option key={v} value={v}>LP #{v}</option>)}</select>
+    </div>
     {read.status === 'loading' ? <Busy /> : read.status === 'unreadable' ? <Failed read={read} what="The notices" claim="Packs and report periods can still be opened." />
-      : !read.data?.notices?.length ? <Note>No notice recorded yet. Issued notices appear here.</Note> : <Table cols={[
+      : !visible.length ? <Note>{notices.length ? 'No notice matches these filters. Clear the filters to see the list.' : 'No notice recorded yet. Issued notices appear here.'}</Note> : <Table cols={[
         { key: 'type', label: 'Type', cell: n => n.title || n.type },
         { key: 'lp', label: 'LP or fund', cell: n => n.limited_partner_id ? `LP #${n.limited_partner_id}` : fund.name },
         { key: 'reference', label: 'Reference', mono: true, cell: n => n.reference || 'Not recorded: no reference was recorded.' },
         { key: 'amount', label: 'Amount', mono: true, cell: n => n.amount_cents == null ? <Unrecorded reason="No amount is recorded for this notice." /> : amount(n.amount_cents) },
         { key: 'date', label: 'Date', mono: true, cell: n => n.notice_date || 'Not recorded: no notice date was recorded.' },
         { key: 'open', label: 'Figures', cell: n => <button type="button" className={BTN.link} disabled={busy} data-testid={`notice-open-${n.uid}`} onClick={() => run(async () => setOpened(await apis.notices.read(n.uid)))}>Open</button> },
-      ]} rows={read.data.notices} rowKey={n => n.uid} template="1.2fr 1fr 1.3fr 1fr 1fr .5fr" />}
+      ]} rows={visible} rowKey={n => n.uid} template="1.2fr 1fr 1.3fr 1fr 1fr .5fr" />}
     {!opened && <Alert text={error} />}
     {opened && <Lightbox phone="sheet" title={opened.title || 'Notice'} label="Notice figures" testId="notice-figures" onClose={() => { if (!busy) setOpened(null); }}>
       <Line a="Amount" figure={amount(opened.figures?.amount_cents)} />

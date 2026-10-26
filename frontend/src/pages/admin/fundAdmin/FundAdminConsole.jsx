@@ -99,7 +99,8 @@ export function FundAdminConsoleView({ user, apis = DEFAULT_APIS }) {
   const asOf = overview.status === 'ready' && overview.data?.as_of ? `As of ${overview.data.as_of}` : null;
   const pill = profilePill(acts);
   const primary = headerPrimary(view, acts, PER_FUND_VIEWS.includes(tab) ? fund : null);
-  const filter = fundFilter(funds, location.search, tab);
+  const filterView = view === 'reports' && !/\/(periods|notices)\/?$/.test(location.pathname) ? 'reportPacks' : tab;
+  const filter = fundFilter(funds, location.search, filterView);
   const exportCsv = () => downloadCsv(fundsCsv(overview.status === 'ready' ? overview.data : null));
 
   return (

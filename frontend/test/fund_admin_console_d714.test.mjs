@@ -316,7 +316,7 @@ test('the empty states render', async () => {
   const rec = await mount(ADMIN, s.apis, '/admin/fund-admin?tab=reconciliation');
   assert.ok(rec.text().includes('No match yet'));
   await rec.unmount();
-  for (const tab of ['calls', 'distributions', 'fees', 'reports']) {
+  for (const tab of ['calls', 'distributions', 'fees']) {
     const m = await mount(ADMIN, s.apis, `/admin/fund-admin?tab=${tab}`);
     assert.ok(m.by('no-administered-fund'), `${tab} with no administered fund`);
     await m.unmount();

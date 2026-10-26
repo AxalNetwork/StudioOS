@@ -205,7 +205,7 @@ export function fundFilter(funds, search, view) {
     perFund,
     pills: [...(perFund ? [] : [{ key: 'all', label: 'All funds', id: null, on: !chosen }]),
       ...(funds || []).map((f) => ({ key: `f-${f.id}`, label: f.name, id: f.id, on: chosen?.id === f.id }))],
-    note: !perFund && chosen ? FILTER_KEPT : null,
+    note: !perFund && view !== 'reportPacks' && chosen ? FILTER_KEPT : null,
   };
 }
 export const FILTER_KEPT = 'This tab shows every fund. The filter is kept for Capital calls, Distributions, Fees and Reports.';

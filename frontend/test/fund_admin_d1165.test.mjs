@@ -170,3 +170,95 @@ test('D1165: summary-only ledger data cannot expose journal facts in the Books s
     assert.match(m.text('books-reconcile'), /summary access only/);
   } finally { await m.close(); }
 });
+
+test('D1165: pack search and period/status filters keep entity packs; the fund filter applies to the read', async () => {
+  const entityUid = 'b'.repeat(32);
+  const m = await mount('/admin/fund-admin/reports', { packs: () => ({ items: [
+    { uid: 'a'.repeat(32), fund_id: 7, period_label: 'Q3 2026', kind: 'lp_quarterly_report', status: 'prepared' },
+    { uid: entityUid, entity_key: 'management', period_label: 'Q2 2026', kind: 'entity_pack', status: 'draft' },
+  ] }) });
+  try {
+    assert.deepEqual(m.calls.find(([n]) => n === 'packs'), ['packs', {}]);
+    assert.match(m.text(), /management/);
+    assert.ok(m.by('fund-admin-filter-all'));
+    assert.ok(!m.by('fund-admin-filter-note'));
+    await m.changeLabel('Pack period', 'Q3 2026');
+    assert.ok(!m.by(`draft-${entityUid}`));
+    await m.changeLabel('Pack period', '');
+    await m.changeLabel('Pack status', 'draft');
+    assert.ok(!m.by(`draft-${m.uid}`));
+    assert.ok(m.by(`draft-${entityUid}`));
+    await m.changeLabel('Search packs', 'no matching pack');
+    assert.match(m.text(), /No pack matches/);
+  } finally { await m.close(); }
+  const n = await mount('/admin/fund-admin/reports?fund=7');
+  try { assert.deepEqual(n.calls.find(([name]) => name === 'packs'), ['packs', { fund_id: 7 }]); } finally { await n.close(); }
+});
+
+test('D1165: notice filters and search distinguish no matches from no recorded notices', async () => {
+  const m = await mount('/admin/fund-admin/reports/notices');
+  try {
+    await m.changeLabel('Search notices', 'no matching reference');
+    assert.match(m.text('reports-notices'), /No notice matches/);
+    await m.changeLabel('Search notices', 'EXAMPLE');
+    assert.ok(m.by(`notice-open-${m.uid}`));
+    await m.changeLabel('Notice type', 'fee_invoice');
+    assert.ok(!m.by(`notice-open-${m.uid}`));
+    await m.changeLabel('Notice type', 'capital_call_notice');
+    assert.ok(m.by(`notice-open-${m.uid}`));
+  } finally { await m.close(); }
+});
+
+test('D1165: transaction filters reset paging and use the existing Worker parameters; text search is page-local', async () => {
+  const account = 'c'.repeat(32);
+  const m = await mount('/admin/fund-admin/banking', { transactions: () => ({ total: 100, page_size: 50, items: [
+    { uid: 'tx-credit', counterparty_name: 'Example sender', memo: 'Recorded wire', last_four: '1234', amount_cents: 12345 },
+  ] }) });
+  try {
+    await m.click('transactions-next');
+    assert.equal(m.calls.filter(([n]) => n === 'transactions').at(-1)[1].page, 2);
+    await m.changeLabel('Transaction direction', 'credit');
+    assert.deepEqual(m.calls.filter(([n]) => n === 'transactions').at(-1)[1], { page: 1, direction: 'credit' });
+    await m.changeLabel('Transaction account', account);
+    await m.changeLabel('Transactions from', '2026-09-01');
+    assert.deepEqual(m.calls.filter(([n]) => n === 'transactions').at(-1)[1], { page: 1, direction: 'credit', account, from: '2026-09-01' });
+    await m.changeLabel('Search this transaction page', 'missing');
+    assert.ok(!m.by('transaction-tx-credit'));
+    await m.changeLabel('Search this transaction page', 'wire');
+    assert.ok(m.by('transaction-tx-credit'));
+    assert.equal(m.calls.filter(([n]) => n === 'accounts').length, 1);
+  } finally { await m.close(); }
+});
+
+test('D1165: journal and fee LP searches filter actual rows and can be cleared', async () => {
+  const m = await mount('/admin/fund-admin/banking/books');
+  try {
+    await m.changeLabel('Search journal entries', 'missing');
+    assert.ok(!m.by('books-journal'));
+    await m.changeLabel('Search journal entries', '');
+    await m.changeLabel('Journal account', 'CAPITAL');
+    assert.match(m.text('books-journal'), /CAPITAL · Capital called/);
+    assert.doesNotMatch(m.text('books-journal'), /CASH · Cash/);
+  } finally { await m.close(); }
+  const n = await mount('/admin/fund-admin/fees');
+  try {
+    await n.changeLabel('Search fee-line LP ids', '999');
+    assert.match(n.text('fee-lines'), /No LP id matches/);
+    await n.changeLabel('Search fee-line LP ids', '4');
+    assert.ok(n.by('fee-statement-4'));
+    await n.changeLabel('Search admission LP ids', '999');
+    assert.match(n.text('fee-admissions'), /No LP id matches/);
+  } finally { await n.close(); }
+});
+
+
+test('D1165: an entity pack is readable even when no administered fund is recorded', async () => {
+  const m = await mount('/admin/fund-admin/reports', {
+    overview: () => ({ funds: { state: 'ok', items: [] } }),
+    packs: () => ({ items: [{ uid: 'b'.repeat(32), entity_key: 'holdings', kind: 'entity_pack', period_label: 'Q3 2026', status: 'draft' }] }),
+  });
+  try {
+    assert.match(m.text('reports'), /holdings/);
+    assert.ok(!m.by('no-administered-fund'));
+  } finally { await m.close(); }
+});

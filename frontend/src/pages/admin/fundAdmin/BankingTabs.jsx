@@ -32,8 +32,9 @@ function ReadFailed({ read, what, claim }) {
 }
 
 /** The entity accounts with Current and Available; HQ › Platform › Bank accounts › Cash draws it too (D1181). */
-export function Accounts({ apis }) {
-  const read = useRead(() => apis.mercury.accounts(), [apis]);
+export function Accounts({ apis, reading }) {
+  const own = useRead(() => apis.mercury.accounts(), [apis], { enabled: !reading });
+  const read = reading || own;
   const items = read.data?.items || [];
   const cols = [
     { key: 'account', label: 'Account', cell: (a) => `${a.nickname || a.kind} · ${ending(a.last_four)}` },
@@ -53,13 +54,16 @@ export function Accounts({ apis }) {
   );
 }
 
-function Transactions({ apis }) {
+function Transactions({ apis, accounts = [] }) {
   const [page, setPage] = useState(1);
-  const read = useRead(() => apis.mercury.transactions({ page }), [apis, page]);
+  const [filters, setFilters] = useState({});
+  const [query, setQuery] = useState('');
+  const change = (key, value) => { setFilters(f => ({ ...f, [key]: value })); setPage(1); };
+  const read = useRead(() => apis.mercury.transactions({ page, ...filters }), [apis, page, filters]);
   const total = Number(read.data?.total ?? 0);
   const size = Number(read.data?.page_size ?? 50);
   const pages = Math.max(1, Math.ceil(total / size));
-  const items = read.data?.items || [];
+  const items = (read.data?.items || []).filter(t => `${t.counterparty_name || ''} ${t.memo || ''}`.toLowerCase().includes(query.toLowerCase()));
   const cols = [
     { key: 'date', label: 'Posted', mono: true, cell: (t) => t.posted_on || t.created_on },
     { key: 'counterparty', label: 'Counterparty', cell: (t) => t.counterparty_name || 'No counterparty recorded' },
@@ -77,15 +81,23 @@ function Transactions({ apis }) {
           <button type="button" className={BTN.ghost} disabled={page >= pages} onClick={() => setPage(page + 1)} data-testid="transactions-next">Next</button>
         </span>
       ) : null} testId="banking-transactions">
+      <div className="flex flex-wrap gap-2 p-4">
+        <input className={INPUT} aria-label="Search this transaction page" placeholder="Search counterparty or memo on this page" value={query} onChange={e => setQuery(e.target.value)} />
+        <select className={INPUT} aria-label="Transaction account" value={filters.account || ''} onChange={e => change('account', e.target.value)}><option value="">Every account</option>{accounts.map(a => <option key={a.uid} value={a.uid}>{a.entity_key} · {a.nickname || a.kind} · {ending(a.last_four)}</option>)}</select>
+        <select className={INPUT} aria-label="Transaction direction" value={filters.direction || ''} onChange={e => change('direction', e.target.value)}><option value="">Both directions</option><option value="credit">Credits</option><option value="debit">Debits</option></select>
+        <label className="text-xs text-axal-muted dark:text-gray-400">From<input type="date" className={INPUT} aria-label="Transactions from" value={filters.from || ''} onChange={e => change('from', e.target.value)} /></label>
+        <label className="text-xs text-axal-muted dark:text-gray-400">To<input type="date" className={INPUT} aria-label="Transactions to" value={filters.to || ''} onChange={e => change('to', e.target.value)} /></label>
+      </div>
       {read.status === 'loading' ? <div className="px-4 py-3 sm:px-5"><LoadingRows lines={3} /></div>
         : read.status === 'unreadable' ? <ReadFailed read={read} what="The transactions" claim="This is not a claim that no money moved." />
-          : items.length === 0 ? <Note>No transaction recorded. Lines appear after a sync.</Note>
+          : items.length === 0 ? <Note>{query ? 'No transaction on this page matches the search.' : 'No transaction recorded for these filters. Lines appear after a sync.'}</Note>
             : <Table cols={cols} rows={items} rowKey={(t) => t.uid} template="1fr 1.4fr .8fr 1fr 1.4fr .8fr 1fr" rowTestId={(t) => `transaction-${t.uid}`} />}
     </Panel>
   );
 }
 
 export function BankingTab({ apis, access }) {
+  const accounts = useRead(() => apis.mercury.accounts(), [apis]);
   const superAdmin = access?.super_admin === true;
   return (
     <Section title="Banking" testId="banking"
@@ -101,8 +113,8 @@ export function BankingTab({ apis, access }) {
           : <Line a="The entities' bank accounts" b={<span data-testid="payment-instructions-admin">{PAYMENT_INSTRUCTIONS_ADMIN}</span>} />}
       </Panel>
       </div>
-      <Accounts apis={apis} />
-      <Transactions apis={apis} />
+      <Accounts apis={apis} reading={accounts} />
+      <Transactions apis={apis} accounts={accounts.data?.items || []} />
     </Section>
   );
 }

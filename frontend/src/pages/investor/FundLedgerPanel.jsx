@@ -72,13 +72,19 @@ export default function FundLedgerPanel() {
 }
 
 function JournalTable({ fund }) {
+  const [query, setQuery] = useState('');
+  const [account, setAccount] = useState('');
   const rows = (fund.journal || []).flatMap((entry, e) => (entry.lines || []).map((line, i) => ({ ...line, entry, key: `${e}-${i}` })));
-  return <Table testId="books-journal" rows={rows} rowKey={r => r.key} template=".9fr 1.8fr 1.3fr 1fr 1fr .8fr" cols={[
+  const visible = rows.filter(r => (!account || r.code === account) && `${r.entry.description || ''} ${r.code} ${r.name}`.toLowerCase().includes(query.toLowerCase()));
+  const input = 'min-h-11 rounded-lg border border-gray-200 bg-white px-3 text-sm text-gray-900 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-100';
+  return <div><div className="mb-3 flex flex-wrap gap-2"><input className={input} aria-label="Search journal entries" placeholder="Search entries" value={query} onChange={e => setQuery(e.target.value)} />
+    <select className={input} aria-label="Journal account" value={account} onChange={e => setAccount(e.target.value)}><option value="">Every account</option>{[...new Map(rows.map(r => [r.code, r.name]))].map(([code, name]) => <option key={code} value={code}>{code} · {name}</option>)}</select></div>
+  {!visible.length ? <EmptyState>No journal line matches these filters.</EmptyState> : <Table testId="books-journal" rows={visible} rowKey={r => r.key} template=".9fr 1.8fr 1.3fr 1fr 1fr .8fr" cols={[
     { key: 'date', label: 'Date', mono: true, cell: r => r.entry.entry_date || 'Not recorded' },
     { key: 'entry', label: 'Entry', cell: r => r.entry.description || 'Not recorded: no entry description.' },
     { key: 'account', label: 'Account', cell: r => `${r.code} · ${r.name}` },
     { key: 'debit', label: 'Debit', mono: true, align: 'right', cell: r => money(r.debit_cents) },
     { key: 'credit', label: 'Credit', mono: true, align: 'right', cell: r => money(r.credit_cents) },
     { key: 'period', label: 'Period', cell: () => fund.period?.label || 'Not recorded: no period recorded.' },
-  ]} foot={<p className="px-4 py-3 text-xs text-gray-500 dark:text-gray-400">Reconciliation is recorded on individual lines. No agreement with the bank is inferred from these totals.</p>} />;
+  ]} foot={<p className="px-4 py-3 text-xs text-gray-500 dark:text-gray-400">Reconciliation is recorded on individual lines. No agreement with the bank is inferred from these totals.</p>} />}</div>;
 }
