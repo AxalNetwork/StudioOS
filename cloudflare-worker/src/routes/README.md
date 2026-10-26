@@ -133,7 +133,7 @@ widened guard on this very sentence, which is the rule working.)
 /api/email         → email.ts
 /api/pipeline      → pipeline.ts
 /api/search        → search.ts
-/api/kyc           → kyc.ts
+/api/kyc           → kyc_governance.ts, kyc.ts  (D1232: renewals, renewal periods, the audit read and its export, mounted first so `/admin/:userId` does not read them as ids)
 /api/legal/esign   → esign.ts            (frontend calls /api/legal/esign/*)
 /api/network       → network.ts
 /api/networkfx     → networkfx.ts
