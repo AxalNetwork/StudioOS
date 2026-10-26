@@ -1,11 +1,5 @@
 # cloudflare-worker/test — what the worker guarantees
 
-`capital_access_d1191.test.ts` exercises the real canonical schema and all
-post-baseline migrations, both route families and record drawers. It checks
-editor memberships, staff summaries, Contacts/impersonation bypasses, owner-only
-round changes, actor-audited legacy writes, and reasoned support reads whose
-founder-visible audit must persist before private SQL. Unknown/unreadable stores
-stay distinct from empty data; summaries and support snapshots are paged.
 `admin_promos_d1271.test.ts` checks all four HQ Super Admin promo gates,
 branch refusal even with an elevation row, stale/non-TOTP sessions, the
 production cool-off prefix, and successful billing-audited writes over
@@ -74,6 +68,10 @@ D1159: `fund_admin_d1159.test.ts` covers named distribution lines without
 arithmetic changes, both new Admin acts and their audit, frozen/support/member
 refusals, preserved institutional GP scope, and independent booklet queue reads.
 Every external fetch is forbidden; no Mercury call reaches a provider.
+
+| File | Guarantee |
+| --- | --- |
+| `capital_access_d1191.test.ts` | D1191: real-route access, staff summaries, support audit ordering, scoped prospect writes and failure/race outcomes against the canonical schema. |
 
 ## Conventions
 

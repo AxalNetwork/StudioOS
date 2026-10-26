@@ -211,6 +211,8 @@ no new schema, runtime or billing path is introduced.
 | `kycCase.ts` | D1229 (#3237): one person's KYC case beyond its status (migration 614): the people queue (`readQueue`, its filters, sort, paging and counts per status, every statement static), the case's history (`recordEvent`), the member's notices (`noticeMember`), the figures (`readFigures`) and the hand-off from an expired `kyc_v1` (`expireKycFromObligations`, called by `trust.ts`). |
 | `licenceTerms.ts` | D797: a licence's terms schedule, the one list of its 31 fields (`LICENCE_TERM_FIELDS`: key, group, label, type and range) and the canvas's section numbers (`DEFAULT_TERM_SECTIONS`), `validateTermsBody` (an unknown key or a bad value is refused, naming the field; `null` clears), `termsFromRow`, `readLicenceTerms`, `termsDiff` and the `TERMS_REASON` sentences. Migration 512's CHECKs hold the same ranges; HQ's write, `/licence/mine`, the branch copy and D800/D801 import it. |
 | `eadwynTools.ts` | D854: Eadwyn uses the MCP registry's tools inside the member's own access. `eadwynToolInfo` lists them (scope and the page's company; D846's filter replaces `eadwynToolAvailable`), `runEadwynToolCalls` re-checks each call the model proposed, runs a read through `callTool` (metered by D844) and turns a write into an `ai_rail_proposals` row, and `toolResultsForModel` hands results back as escaped data. |
+| `capRelAccess.ts` | D1191 (#3125): capital editor access, local staff counts and mandatory founder-visible support audits; contract in the decision file. |
+| `raiseProspectWriters.ts` | D1191: narrow canonical legacy prospect create/edit/promotion writers, re-exported by the Raise writer and safe for Contacts imports. |
 
 ## Rules
 
@@ -277,19 +279,6 @@ and Match reads: one commitments read across typed prospects, round-call
 answers, deal-room commitments and the founder's Mercury matches, each investor
 counted once by their strongest line; and the fund directory with each fund's
 Fit, the caller's own warm paths and a count of verified investors who fit.
-`capRelAccess.ts` (D1191, #3125) keeps capital editors separate from staff:
-accepted co-founders work the pipeline; the local D1 binding is the studio
-boundary. Staff summary SQL reads counts only. A private support response first
-persists the reason on the founder's activity, failing closed, and grants no
-later GET or write access. The same rule gates the capital record sections.
-The wider Raise overview preserves the other tools' cards; `raiseCycle.ts`'s
-`nonCapitalFigures` omits pipeline figures without reading them. Legacy create
-and import batch their prospect insert with the actor audit; an interrupted
-import reports saved and unsaved row counts through its existing response.
-`raiseProspectWriters.ts` is the narrow canonical leaf for legacy prospect
-create/edit/promotion, re-exported by `raiseWriters.ts`. Contacts imports the
-leaf directly so admin/cron consumers of Contacts do not acquire the broader
-Raise dependency graph or any member-bank module. No permission guard is relaxed.
 `raiseWriters.ts` has one writer per migration 442 record and, since D691
 (#1700), one behind each Raise Add and Edit form (migration 463's stores)
 and one per record action: `duplicateNarrativeVersion`, `revokeDeckLink`,
