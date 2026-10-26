@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { Lightbox } from '../../../ui';
+import { Lightbox, usePhoneWidth } from '../../../ui';
 import { api } from '../../../lib/api';
 import { partnerProfilesApi } from '../../../lib/api/partnerProfiles';
 import { reportError } from '../../../lib/log';
@@ -8,11 +8,11 @@ import { useWebSocket } from '../../../hooks/useWebSocket';
 import { SENSITIVE } from '../../../components/hqReview/hqReviewCopy';
 import { reviewedView, statusWord, sourceWords } from './ppModel';
 import {
-  EADWYN_FIELDS, INVITATION_FIELDS, NOT_GIVEN, RECORD_LINE, TAX_SHOWN_SECONDS, TURNS_SHOWN, accountLine, agreementChoices, answers,
+  EADWYN_FIELDS, INVITATION_FIELDS, NOT_GIVEN, RECORD_LINE, TAX_SHOWN_SECONDS, TURNS_SHOWN, accountLine, agreementChoices, agreementRowLine, answers,
   historyLine, neighbours, recordShape, refusalOf, sendResult, summaryOf, taxLine, trackDetails, transcript, turnsLine, whoFacts,
 } from './profileModel';
 import { DecisionDialog, ReopenDialog, UnbindDialog } from './ProfileDialogs';
-import { CARD, DANGER_GHOST, EYE, GHOST, H2, INPUT, MONO, OUTLINE, PRIMARY, SUB, TONE, TONE_GLYPH } from './ppStyles';
+import { CARD, DANGER_GHOST, EYE, GHOST, H2, INPUT, MONO, OUTLINE, PRIMARY, STICKY_BAR, SUB, TAP, TONE, TONE_GLYPH } from './ppStyles';
 
 /**
  * D995 (#2806) — one partner profile as PRF3's lightbox, at its own address
@@ -32,6 +32,13 @@ import { CARD, DANGER_GHOST, EYE, GHOST, H2, INPUT, MONO, OUTLINE, PRIMARY, SUB,
  *
  * Each read answers alone: a block whose read failed says "Could not be read"
  * with Try again, and never blanks the record.
+ *
+ * D996 (#2807) — ON A PHONE (below 1024px, PRF11b and c) the record is a
+ * full-screen page in the list's place: a back link to the list, the same
+ * blocks in one column, the account and identity check, and an "Agreement
+ * and notes" row that opens its own page (Back keeps what was there, Done
+ * keeps the change). Verify… and Reject… (or Reopen…) sit in a bar fixed to
+ * the bottom of the screen. Every tap target is at least 44 by 44 px.
  */
 
 function useRead(fn, deps) {
@@ -208,39 +215,52 @@ function Result({ result }) {
   );
 }
 
-function DecisionCard({ profile, shape, agreements, retryAgreements, docusign, choice, setChoice, viewerSuper, result, onDialog }) {
+function Row({ eye, testId, children }) {
+  return (
+    <div className="flex flex-col gap-1.5 border-t border-axal-hairline py-2.5 first:border-t-0 first:pt-0 dark:border-gray-700" data-testid={testId}>
+      <span className={EYE}>{eye}</span>
+      {children}
+    </div>
+  );
+}
+
+const isDecided = (shape) => shape.status === 'verified' || shape.status === 'rejected';
+
+/** The account and the identity check, read only. */
+function AccountRows({ profile }) {
   const listed = profile.listed || {};
   const acc = accountLine(listed);
   const id = listed.identity_check;
-  const decided = shape.status === 'verified' || shape.status === 'rejected';
-  const verdict = decided ? reviewedView(listed) : null;
-  const groups = agreements.status === 'ready' ? agreementChoices(agreements.data) : [];
-  const row = (eye, body, testId) => (
-    <div className="flex flex-col gap-1.5 border-t border-axal-hairline py-2.5 first:border-t-0 first:pt-0 dark:border-gray-700" data-testid={testId}>
-      <span className={EYE}>{eye}</span>
-      {body}
-    </div>
-  );
   return (
-    <section className={`${CARD} flex flex-col px-[18px] py-4 lg:sticky lg:top-0`} data-testid="pp-decision">
-      <h3 className={`${H2} pb-2.5`}>Decision</h3>
-      {row('Account', (
-        <>
-          {acc.has ? <span className={`${OUTLINE} self-start`}>{acc.text}</span> : <span className={SUB}>{acc.text}</span>}
-          {acc.sub ? <span className={SUB}>{acc.sub}</span> : null}
-          {acc.exploring ? <Link to="/admin/exploring" className={`${GHOST} self-start`} data-testid="pp-decision-exploring">Open the Exploring board</Link> : null}
-        </>
-      ), 'pp-decision-account')}
-      {row('Identity check · read only', id
-        ? <><span className={`${OUTLINE} self-start`}>{id.label}</span><span className={SUB}>KYC &amp; KYB decides it. This page never does.</span></>
-        : <span className={SUB}>No account yet</span>, 'pp-decision-identity')}
-      {shape.invitation ? row('First agreement', (
-        <>
+    <>
+      <Row eye="Account" testId="pp-decision-account">
+        {acc.has ? <span className={`${OUTLINE} self-start`}>{acc.text}</span> : <span className={SUB}>{acc.text}</span>}
+        {acc.sub ? <span className={SUB}>{acc.sub}</span> : null}
+        {acc.exploring ? <Link to="/admin/exploring" className={`${GHOST} self-start`} data-testid="pp-decision-exploring">Open the Exploring board</Link> : null}
+      </Row>
+      <Row eye="Identity check · read only" testId="pp-decision-identity">
+        {id
+          ? <><span className={`${OUTLINE} self-start`}>{id.label}</span><span className={SUB}>KYC &amp; KYB decides it. This page never does.</span></>
+          : <span className={SUB}>No account yet</span>}
+      </Row>
+    </>
+  );
+}
+
+/** The first agreement, how it is sent and the notes: the Decision card's, and PRF11c's page on a phone. */
+function AgreementFields({ shape, agreements, retryAgreements, docusign, choice, setChoice }) {
+  const decided = isDecided(shape);
+  const groups = agreements.status === 'ready' ? agreementChoices(agreements.data) : [];
+  const radio = `flex items-center gap-2 text-[13px] font-semibold ${TAP}`;
+  return (
+    <>
+      {shape.invitation ? (
+        <Row eye="First agreement" testId="pp-decision-agreement">
           <span className="text-[13px] font-medium leading-[1.5] text-axal-ink dark:text-gray-100">The partner agreement is sent by the invitation. See it on Partner invitations.</span>
           <Link to="/admin/partner-invitations" className={`${GHOST} self-start`} data-testid="pp-decision-invitations">Open Partner invitations</Link>
-        </>
-      ), 'pp-decision-agreement') : row('First agreement · optional', (
-        <>
+        </Row>
+      ) : (
+        <Row eye="First agreement · optional" testId="pp-decision-agreement">
           {agreements.status === 'error' ? <Failed what="The agreements could not be read, so none can be picked." onRetry={retryAgreements} testId="pp-agreements-failed" /> : (
             <select value={choice.agreement} disabled={agreements.status !== 'ready' || decided} onChange={(e) => {
               const opt = groups.flatMap((g) => g.options).find((o) => o.value === e.target.value);
@@ -255,51 +275,107 @@ function DecisionCard({ profile, shape, agreements, retryAgreements, docusign, c
             </select>
           )}
           <span className={SUB}>Grouped as in Contracts. A not-ready agreement cannot be picked.</span>
-        </>
-      ), 'pp-decision-agreement')}
-      {!shape.invitation ? row('Send with', (
-        <fieldset className="m-0 flex flex-col gap-1 border-0 p-0" disabled={decided}>
-          <legend className="sr-only">Send with</legend>
-          <label className="flex items-center gap-2 text-[13px] font-semibold text-axal-ink dark:text-gray-100">
-            <input type="radio" name="pp-provider" checked={choice.provider !== 'docusign'} onChange={() => setChoice((c) => ({ ...c, provider: 'native' }))} /> StudioOS signing
-          </label>
-          <label className={`flex items-center gap-2 text-[13px] font-semibold ${docusign ? 'text-axal-ink dark:text-gray-100' : 'text-axal-muted dark:text-gray-500'}`}>
-            <input type="radio" name="pp-provider" disabled={!docusign} checked={choice.provider === 'docusign'} onChange={() => setChoice((c) => ({ ...c, provider: 'docusign' }))} data-testid="pp-provider-docusign" /> DocuSign
-          </label>
-          {!docusign ? (
-            <span className={SUB}>
-              DocuSign is not offered here: it needs a connected DocuSign account on the Raise + Grow plan.{' '}
-              <Link to="/account/connectors/docusign" className="font-bold text-axal-violet dark:text-violet-300">connect DocuSign</Link>
-            </span>
-          ) : null}
-        </fieldset>
-      ), 'pp-decision-send') : null}
-      {row('Notes only admins see', (
-        <>
-          <textarea value={choice.notes} onChange={(e) => setChoice((c) => ({ ...c, notes: e.target.value }))} rows={3} placeholder="Write a note…" className={INPUT} disabled={decided} data-testid="pp-notes" />
-          {choice.notes && !decided ? <button type="button" className={`${GHOST} self-start`} onClick={() => setChoice((c) => ({ ...c, notes: '' }))}>Clear</button> : null}
-        </>
-      ), 'pp-decision-notes')}
+        </Row>
+      )}
+      {!shape.invitation ? (
+        <Row eye="Send with" testId="pp-decision-send">
+          <fieldset className="m-0 flex flex-col gap-1 border-0 p-0" disabled={decided}>
+            <legend className="sr-only">Send with</legend>
+            <label className={`${radio} text-axal-ink dark:text-gray-100`}>
+              <input type="radio" name="pp-provider" checked={choice.provider !== 'docusign'} onChange={() => setChoice((c) => ({ ...c, provider: 'native' }))} /> StudioOS signing
+            </label>
+            <label className={`${radio} ${docusign ? 'text-axal-ink dark:text-gray-100' : 'text-axal-muted dark:text-gray-500'}`}>
+              <input type="radio" name="pp-provider" disabled={!docusign} checked={choice.provider === 'docusign'} onChange={() => setChoice((c) => ({ ...c, provider: 'docusign' }))} data-testid="pp-provider-docusign" /> DocuSign
+            </label>
+            {!docusign ? (
+              <span className={SUB}>
+                DocuSign is not offered here: it needs a connected DocuSign account on the Raise + Grow plan.{' '}
+                <Link to="/account/connectors/docusign" className={`inline-flex items-center font-bold text-axal-violet dark:text-violet-300 ${TAP}`}>connect DocuSign</Link>
+              </span>
+            ) : null}
+          </fieldset>
+        </Row>
+      ) : null}
+      <Row eye="Notes only admins see" testId="pp-decision-notes">
+        <textarea value={choice.notes} onChange={(e) => setChoice((c) => ({ ...c, notes: e.target.value }))} rows={3} placeholder="Write a note…" className={INPUT} disabled={decided} data-testid="pp-notes" />
+        {choice.notes && !decided ? <button type="button" className={`${GHOST} self-start`} onClick={() => setChoice((c) => ({ ...c, notes: '' }))} data-testid="pp-notes-clear">Clear</button> : null}
+      </Row>
+    </>
+  );
+}
+
+/** Verify… and Reject…, or the verdict and Reopen… once decided. `bar` lays them out as PRF11b's sticky bar. */
+function DecisionButtons({ profile, shape, onDialog, bar = false }) {
+  const decided = isDecided(shape);
+  const verdict = decided ? reviewedView(profile.listed || {}) : null;
+  if (decided) {
+    return (
+      <>
+        <span className={`${bar ? 'min-w-0 flex-1 self-center' : 'w-full'} ${SUB}`} data-testid="pp-decision-verdict">{`${statusWord(shape.status)}${verdict?.recorded ? ` ${verdict.text}` : ': its date was not recorded.'}`}</span>
+        <button type="button" className={PRIMARY} onClick={() => onDialog('reopen')} data-testid="pp-decision-reopen">Reopen…</button>
+      </>
+    );
+  }
+  // PRF11b: Reject on the left, Verify wider on the right.
+  return bar ? (
+    <>
+      <button type="button" className={`${DANGER_GHOST} flex-[1]`} onClick={() => onDialog('reject')} data-testid="pp-decision-reject">Reject…</button>
+      <button type="button" className={`${PRIMARY} flex-[1.4]`} onClick={() => onDialog('verify')} data-testid="pp-decision-verify">Verify…</button>
+    </>
+  ) : (
+    <>
+      <button type="button" className={PRIMARY} onClick={() => onDialog('verify')} data-testid="pp-decision-verify">Verify…</button>
+      <button type="button" className={DANGER_GHOST} onClick={() => onDialog('reject')} data-testid="pp-decision-reject">Reject…</button>
+    </>
+  );
+}
+
+function Unbind({ profile, viewerSuper, onDialog }) {
+  if (!profile.unbind?.eligible) return null;
+  return viewerSuper
+    ? <button type="button" className={`${DANGER_GHOST} mt-2 self-start`} onClick={() => onDialog('unbind')} data-testid="pp-decision-unbind">Unbind…</button>
+    : <p className={`m-0 mt-2 ${SUB}`} data-testid="pp-decision-unbind-admin">This profile’s address now belongs to another account. Only a Super Admin can unbind a profile from an account.</p>;
+}
+
+function DecisionCard({ profile, shape, agreements, retryAgreements, docusign, choice, setChoice, viewerSuper, result, onDialog }) {
+  return (
+    <section className={`${CARD} flex flex-col px-[18px] py-4 lg:sticky lg:top-0`} data-testid="pp-decision">
+      <h3 className={`${H2} pb-2.5`}>Decision</h3>
+      <AccountRows profile={profile} />
+      <AgreementFields shape={shape} agreements={agreements} retryAgreements={retryAgreements} docusign={docusign} choice={choice} setChoice={setChoice} />
       <Result result={result} />
       <div className="flex flex-wrap gap-2 pt-3">
-        {decided ? (
-          <>
-            <span className={`w-full ${SUB}`} data-testid="pp-decision-verdict">{`${statusWord(shape.status)}${verdict?.recorded ? ` ${verdict.text}` : ': its date was not recorded.'}`}</span>
-            <button type="button" className={PRIMARY} onClick={() => onDialog('reopen')} data-testid="pp-decision-reopen">Reopen…</button>
-          </>
-        ) : (
-          <>
-            <button type="button" className={PRIMARY} onClick={() => onDialog('verify')} data-testid="pp-decision-verify">Verify…</button>
-            <button type="button" className={DANGER_GHOST} onClick={() => onDialog('reject')} data-testid="pp-decision-reject">Reject…</button>
-          </>
-        )}
+        <DecisionButtons profile={profile} shape={shape} onDialog={onDialog} />
       </div>
-      {profile.unbind?.eligible ? (
-        viewerSuper
-          ? <button type="button" className={`${DANGER_GHOST} mt-2 self-start`} onClick={() => onDialog('unbind')} data-testid="pp-decision-unbind">Unbind…</button>
-          : <p className={`m-0 mt-2 ${SUB}`} data-testid="pp-decision-unbind-admin">This profile’s address now belongs to another account. Only a Super Admin can unbind a profile from an account.</p>
-      ) : null}
+      <Unbind profile={profile} viewerSuper={viewerSuper} onDialog={onDialog} />
     </section>
+  );
+}
+
+/** PRF11b's door to PRF11c: what is chosen, whether it is ready, and whether a note is written. */
+function AgreementRow({ shape, agreements, choice, onOpen }) {
+  const groups = agreements.status === 'ready' ? agreementChoices(agreements.data) : null;
+  return (
+    <section className={CARD} data-testid="pp-phone-agreement-row">
+      <button type="button" onClick={onOpen} className="flex min-h-[56px] w-full items-center gap-3 px-[18px] py-3 text-left" data-testid="pp-phone-agreement-open">
+        <span className="min-w-0 flex-1">
+          <span className="block text-[14px] font-bold text-axal-ink dark:text-gray-100">Agreement and notes</span>
+          <span className={`block ${SUB}`}>{agreements.status === 'error' && !shape.invitation ? 'The agreements could not be read.' : agreementRowLine(choice, groups, { invitation: shape.invitation })}</span>
+        </span>
+        <span aria-hidden="true" className="text-[18px] text-axal-muted dark:text-gray-400">›</span>
+      </button>
+    </section>
+  );
+}
+
+/** D996: a phone page's head: the back link, the title, and what sits under it. */
+function PhoneHead({ back, onBack, title, children, testId }) {
+  return (
+    <div className="flex flex-col gap-1.5 border-b border-axal-hairline px-4 pb-3 pt-1 dark:border-gray-700" data-testid={testId}>
+      <button type="button" onClick={onBack} className={`self-start font-mono text-[11px] font-bold uppercase tracking-[.07em] text-axal-muted dark:text-gray-400 ${TAP} inline-flex items-center`} data-testid={`${testId}-back`}>{`‹ ${back}`}</button>
+      <h1 className="m-0 text-[20px] font-extrabold leading-[1.25] tracking-[-.02em] text-axal-ink dark:text-gray-100">{title}</h1>
+      {children}
+    </div>
   );
 }
 
@@ -307,9 +383,11 @@ function DecisionCard({ profile, shape, agreements, retryAgreements, docusign, c
  * The record. `rows` is the list it was opened from (for Previous, Next and
  * "3 of 7"). `onGo(ref)` opens another record; `onClose()` returns to the
  * list; `onDecided(note, advance)` tells the page what changed, and whether
- * to move on to the next waiting profile.
+ * to move on to the next waiting profile. `backLabel` names that list on a
+ * phone's back link.
  */
-export default function ProfileRecord({ refId, rows, viewerSuper = false, onGo, onClose, onDecided, onChanged }) {
+export default function ProfileRecord({ refId, rows, viewerSuper = false, onGo, onClose, onDecided, onChanged, backLabel = 'To review' }) {
+  const phone = usePhoneWidth();
   const [profile, retryProfile] = useRead(() => partnerProfilesApi.get(refId), [refId]);
   const [history, retryHistory] = useRead(() => partnerProfilesApi.history(refId), [refId]);
   const [agreements, retryAgreements] = useRead(() => partnerProfilesApi.agreements(), []);
@@ -332,7 +410,13 @@ export default function ProfileRecord({ refId, rows, viewerSuper = false, onGo, 
   }, [p]);
   const [dialog, setDialog] = useState(null);
   const [result, setResult] = useState(null);
-  useEffect(() => { setResult(null); setDialog(null); }, [refId]);
+  // D996 (PRF11c): on a phone the agreement and notes are their own page. Its
+  // changes are a draft until Done; Back leaves the record's choice as it was.
+  const [view, setView] = useState('record');
+  const [draft, setDraft] = useState(null);
+  useEffect(() => { setResult(null); setDialog(null); setView('record'); }, [refId]);
+  const openAgreement = () => { setDraft(choice); setView('agreement'); };
+  const keepAgreement = () => { setChoice(draft); setView('record'); };
 
   const place = neighbours(rows, refId);
   const shape = p ? recordShape(p) : null;
@@ -373,6 +457,18 @@ export default function ProfileRecord({ refId, rows, viewerSuper = false, onGo, 
         <span className={SUB}>{RECORD_LINE}</span>
       </div>
     </div>
+  );
+
+  const phoneHead = (
+    <PhoneHead back={backLabel} onBack={onClose} title={label} testId="pp-record-head">
+      {p ? (
+        <span className="flex flex-wrap gap-1.5" data-testid="pp-record-tags">
+          <span className={OUTLINE}>{statusWord(shape.status)}</span>
+          {sourceWords(shape.sources).map((s) => <span key={s} className={OUTLINE}>{s}</span>)}
+        </span>
+      ) : null}
+      <p className={`m-0 [overflow-wrap:anywhere] ${SUB}`}>{p ? `${p.email} · ${p.ref || refId} · ${RECORD_LINE}` : RECORD_LINE}</p>
+    </PhoneHead>
   );
 
   let body;
@@ -418,20 +514,65 @@ export default function ProfileRecord({ refId, rows, viewerSuper = false, onGo, 
               <Facts facts={answers(p, EADWYN_FIELDS)} />
             </Section>
           ) : null}
-          <History read={history} retry={retryHistory} />
+          {phone ? null : <History read={history} retry={retryHistory} />}
+          {phone ? (
+            <>
+              <section className={`${CARD} flex flex-col px-[18px] py-4`} data-testid="pp-phone-account">
+                <AccountRows profile={p} />
+                <Unbind profile={p} viewerSuper={viewerSuper} onDialog={setDialog} />
+              </section>
+              <AgreementRow shape={shape} agreements={agreements} choice={choice} onOpen={openAgreement} />
+              <Result result={result} />
+              <History read={history} retry={retryHistory} />
+            </>
+          ) : null}
         </div>
-        <DecisionCard profile={p} shape={shape} agreements={agreements} retryAgreements={retryAgreements} docusign={docusign}
-          choice={choice} setChoice={setChoice} viewerSuper={viewerSuper} result={result} onDialog={setDialog} />
+        {phone ? null : (
+          <DecisionCard profile={p} shape={shape} agreements={agreements} retryAgreements={retryAgreements} docusign={docusign}
+            choice={choice} setChoice={setChoice} viewerSuper={viewerSuper} result={result} onDialog={setDialog} />
+        )}
       </div>
     );
   }
 
-  return (
-    <Lightbox label={label} onClose={onClose} testId="pp-record" size="tall">
-      <div className="flex min-h-0 flex-1 flex-col overflow-y-auto">
-        {head}
-        {body}
+  // D996 (PRF11c): the agreement and notes on their own phone page, Back and Done in the bar.
+  const agreementPage = phone && view === 'agreement' && p && draft;
+  const pageHead = agreementPage ? (
+    <PhoneHead back={label} onBack={() => setView('record')} title="Agreement and notes" testId="pp-agreement-head">
+      <p className={`m-0 ${SUB}`}>Choose a first agreement if one fits, and leave a note for other admins.</p>
+    </PhoneHead>
+  ) : phoneHead;
+  const phoneBody = agreementPage ? (
+    <>
+      <div className="px-4 py-4" data-testid="pp-agreement-page">
+        <section className={`${CARD} flex flex-col px-[18px] py-4`}>
+          <AgreementFields shape={shape} agreements={agreements} retryAgreements={retryAgreements} docusign={docusign} choice={draft} setChoice={setDraft} />
+        </section>
       </div>
+      <div className={STICKY_BAR} data-testid="pp-agreement-bar">
+        <button type="button" className={`${GHOST} flex-[1]`} onClick={() => setView('record')} data-testid="pp-agreement-back">Back</button>
+        <button type="button" className={`${PRIMARY} flex-[1.4]`} onClick={keepAgreement} data-testid="pp-agreement-done">Done</button>
+      </div>
+    </>
+  ) : (
+    <>
+      {body}
+      {p && !shape.draft ? (
+        <div className={STICKY_BAR} data-testid="pp-record-bar">
+          <DecisionButtons profile={p} shape={shape} onDialog={setDialog} bar />
+        </div>
+      ) : null}
+    </>
+  );
+
+  return (
+    <Lightbox label={label} onClose={onClose} testId="pp-record" size="tall" pageBelow="lg" bar={phone ? () => pageHead : undefined}>
+      {phone ? phoneBody : (
+        <div className="flex min-h-0 flex-1 flex-col overflow-y-auto">
+          {head}
+          {body}
+        </div>
+      )}
       {p && (dialog === 'verify' || dialog === 'reject') ? <DecisionDialog kind={dialog} profile={p} choice={choice} onClose={() => setDialog(null)} onDone={decided} /> : null}
       {p && dialog === 'reopen' ? (
         <ReopenDialog row={{ ...p.listed, ref: p.ref || refId }} onClose={() => setDialog(null)}

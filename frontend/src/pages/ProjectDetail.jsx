@@ -1,5 +1,6 @@
 import React, { useEffect, useState, useCallback, useRef } from 'react';
 import { safeExternalUrl } from '../lib/url';
+import { NDA_CHOICES, NDA_CHOICE_LABEL, NDA_UNSET_LINE, dataRoomSaveBody, ndaChoiceOf } from '../lib/dataRoomNdaChoice';
 import { useParams, Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { ArrowLeft, ChevronRight, FileText, Target, Building, Rocket, Pencil, Trash2, X, Database, Search, ExternalLink, AlertCircle, PieChart, Users, UserPlus, Link2, Copy, Lock, Mail, Check } from 'lucide-react';
 import SectorSelect from '../components/SectorSelect';
@@ -699,15 +700,16 @@ function CrunchbaseLookupSlideOver({ project, onClose, onApplied, onError }) {
 
 function DataRoomSection({ project, onSaved, onError }) {
   const [url, setUrl] = useState(project.data_room_url || '');
-  const [ndaRequired, setNdaRequired] = useState(!!project.data_room_nda_required);
+  // D1102 (#2982): true, false, or null while the founder has not chosen.
+  const [ndaChoice, setNdaChoice] = useState(ndaChoiceOf(project.data_room_nda_choice));
   const [saving, setSaving] = useState(false);
   const [dirty, setDirty] = useState(false);
 
   useEffect(() => {
     setUrl(project.data_room_url || '');
-    setNdaRequired(!!project.data_room_nda_required);
+    setNdaChoice(ndaChoiceOf(project.data_room_nda_choice));
     setDirty(false);
-  }, [project.id, project.data_room_url, project.data_room_nda_required]);
+  }, [project.id, project.data_room_url, project.data_room_nda_choice]);
 
   const valid = (() => {
     const u = url.trim();
@@ -720,11 +722,7 @@ function DataRoomSection({ project, onSaved, onError }) {
     if (!valid || saving) return;
     setSaving(true);
     try {
-      const u = url.trim();
-      const updated = await api.updateProject(project.id, {
-        data_room_url: u || null,
-        data_room_nda_required: ndaRequired,
-      });
+      const updated = await api.updateProject(project.id, dataRoomSaveBody(url, ndaChoice, project.data_room_nda_choice));
       setDirty(false);
       onSaved && onSaved(updated);
     } catch (e) {
@@ -756,15 +754,26 @@ function DataRoomSection({ project, onSaved, onError }) {
       {!valid && (
         <div className="text-xs text-red-600 mt-1">Enter a valid http(s) URL or leave it blank.</div>
       )}
-      <label className="flex items-center gap-2 mt-3 text-sm text-gray-800 dark:text-gray-200 cursor-pointer">
-        <input
-          type="checkbox"
-          checked={ndaRequired}
-          onChange={(e) => { setNdaRequired(e.target.checked); setDirty(true); }}
-          className="rounded border-gray-300 dark:border-gray-700"
-        />
-        NDA required before access
-      </label>
+      <fieldset className="mt-3">
+        <legend className="text-sm text-gray-800 dark:text-gray-200">{NDA_CHOICE_LABEL}</legend>
+        <div className="flex items-center gap-4 mt-1">
+          {NDA_CHOICES.map((option) => (
+            <label key={option.label} className="flex items-center gap-2 text-sm text-gray-800 dark:text-gray-200 cursor-pointer">
+              <input
+                type="radio"
+                name={`data-room-nda-${project.id}`}
+                checked={ndaChoice === option.value}
+                onChange={() => { setNdaChoice(option.value); setDirty(true); }}
+                className="border-gray-300 dark:border-gray-700"
+              />
+              {option.label}
+            </label>
+          ))}
+        </div>
+        {ndaChoice === null && (
+          <p className="text-xs text-gray-600 dark:text-gray-400 mt-1">{NDA_UNSET_LINE}</p>
+        )}
+      </fieldset>
       <div className="flex items-center gap-2 mt-4">
         <button
           type="button"

@@ -22,7 +22,8 @@ Approvals; its tabs are sub-paths: To review and `/all`. The Admin Console's
   Admin's Unbind, each saying what it changes and any refusal in place.
 - `profileModel.js` — pure. The record's blocks and words, the dialogs' and
   the send results' sentences, and Previous and Next.
-- `ppStyles.js` — the class strings the record and its dialogs share.
+- `ppStyles.js` — the class strings the record and its dialogs share, with
+  `TAP` (44 by 44 px below 1024px) and the phone page's sticky bar (D996).
 - `ppModel.js` — pure. The addresses and tabs, the moved sentence, a row's
   words, the age pill, the tiles from the counts read, the weekly and
   categories chart specs, the list read's parameters and the pages.
@@ -40,3 +41,7 @@ Approvals; its tabs are sub-paths: To review and `/all`. The Admin Console's
 - No email goes in an address: one profile's address is its reference
   (`pp_…`, migration 556).
 - Each tab is a literal `HeaderTab`, so the reachability walk finds its door.
+- Below 1024px (D996, PRF11a–c) the page is laid out for a phone with
+  `usePhoneWidth`: cards in place of the tables, filters and sort in a
+  `PhoneSheet`, the record as a `Lightbox` page (`pageBelow="lg"`) with its
+  actions in a sticky bar, and every tap target at least 44 by 44 px.

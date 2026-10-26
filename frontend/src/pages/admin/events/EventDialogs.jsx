@@ -14,6 +14,10 @@ import { EYE, INPUT, Refusal, SUB } from './parts';
  *
  * Each takes `onConfirm(value)`, which resolves when the write answered; a
  * refusal comes back as `refusal`, drawn as one sentence under the buttons.
+ *
+ * D1116 (#2996, EV17f): on a phone each is a bottom sheet (`phone="sheet"`,
+ * D1014's Lightbox form), pinned to the bottom with the page dimmed above it,
+ * as EV9a's capacity dialog is drawn there; wider, it is the centred dialog.
  */
 
 const BODY = 'flex flex-col gap-3.5 px-5 py-4';
@@ -58,7 +62,7 @@ function Buttons({ back = 'Back', onClose, action, onAction, disabled, busy, ton
 export function ApproveDialog({ ev, lines = null, delivery = null, busy, refusal, onClose, onConfirm }) {
   const [feature, setFeature] = useState(false);
   return (
-    <Lightbox label={approveTitle(ev)} title={approveTitle(ev)} onClose={onClose} testId="events-approve-dialog"
+    <Lightbox phone="sheet" label={approveTitle(ev)} title={approveTitle(ev)} onClose={onClose} testId="events-approve-dialog"
       footer={<Buttons onClose={onClose} action="Approve and publish" busy={busy} onAction={() => onConfirm({ feature })} refusal={refusal} testId="events-approve-go" />}>
       <div className={BODY}>
         <ul className={LINES} data-testid="events-approve-lines">{(lines || approveLines(ev)).map((l) => <li key={l}>{l}</li>)}</ul>
@@ -78,7 +82,7 @@ export function SendBackDialog({ ev, busy, refusal, fieldError = null, onClose, 
   const [reason, setReason] = useState('');
   const ready = sendBackReady(reason);
   return (
-    <Lightbox label={sendBackTitle(ev)} title={sendBackTitle(ev)} sub={SEND_BACK_NOTE} onClose={onClose} testId="events-sendback-dialog"
+    <Lightbox phone="sheet" label={sendBackTitle(ev)} title={sendBackTitle(ev)} sub={SEND_BACK_NOTE} onClose={onClose} testId="events-sendback-dialog"
       footer={<Buttons onClose={onClose} action="Send back" busy={busy} disabled={!ready} onAction={() => onConfirm(reason.trim())} refusal={refusal} testId="events-sendback-go" />}>
       <div className={BODY}>
         <div className="flex flex-col gap-1.5">
@@ -114,7 +118,7 @@ export function CapacityDialog({ ev, counts, busy, refusal, onClose, onConfirm }
   const preview = capacityPreview(ev, counts, raw, noCap);
   const title = `Change capacity · ${ev?.title || 'Untitled event'}`;
   return (
-    <Lightbox label={title} title={title} sub={capacityNow(ev, counts)} onClose={onClose} testId="events-capacity-dialog"
+    <Lightbox phone="sheet" label={title} title={title} sub={capacityNow(ev, counts)} onClose={onClose} testId="events-capacity-dialog"
       footer={<Buttons onClose={onClose} action="Save capacity" busy={busy} disabled={Boolean(preview.error)} onAction={() => onConfirm(preview.value)} refusal={refusal} testId="events-capacity-go" />}>
       <div className={BODY}>
         <label className="flex flex-col gap-1.5">
@@ -137,7 +141,7 @@ export function CancelDialog({ ev, payments, busy, refusal, onClose, onConfirm }
   const [understood, setUnderstood] = useState(false);
   const [note, setNote] = useState('');
   return (
-    <Lightbox label={copy.title} title={copy.title} onClose={onClose} testId="events-cancel-dialog"
+    <Lightbox phone="sheet" label={copy.title} title={copy.title} onClose={onClose} testId="events-cancel-dialog"
       footer={<Buttons back="Keep event" onClose={onClose} action="Cancel event" tone="danger" busy={busy} disabled={Boolean(copy.paid) && !understood} onAction={() => onConfirm(note.trim())} refusal={refusal} testId="events-cancel-go" />}>
       <div className={BODY}>
         <span className={EYE}>What happens</span>
@@ -174,7 +178,7 @@ export function UnpublishDialog({ ev, busy, refusal, onClose, onConfirm }) {
   const copy = unpublishCopy(ev);
   const [note, setNote] = useState('');
   return (
-    <Lightbox label={copy.title} title={copy.title} onClose={onClose} testId="events-unpublish-dialog"
+    <Lightbox phone="sheet" label={copy.title} title={copy.title} onClose={onClose} testId="events-unpublish-dialog"
       footer={<Buttons onClose={onClose} action="Unpublish" busy={busy} onAction={() => onConfirm(note.trim())} refusal={refusal} testId="events-unpublish-go" />}>
       <div className={BODY}>
         <p className="m-0 text-[13px] leading-normal text-axal-ink dark:text-gray-100">{copy.body}</p>
@@ -188,7 +192,7 @@ export function UnpublishDialog({ ev, busy, refusal, onClose, onConfirm }) {
 export function FeatureDialog({ ev, busy, refusal, onClose, onConfirm }) {
   const copy = featureCopy(ev);
   return (
-    <Lightbox label={copy.title} title={copy.title} onClose={onClose} testId="events-feature-dialog"
+    <Lightbox phone="sheet" label={copy.title} title={copy.title} onClose={onClose} testId="events-feature-dialog"
       footer={<Buttons onClose={onClose} action={copy.action} busy={busy} onAction={() => onConfirm(copy.next)} refusal={refusal} testId="events-feature-go" />}>
       <div className={BODY}>
         <p className="m-0 text-[13px] leading-normal text-axal-ink dark:text-gray-100">{copy.body}</p>
