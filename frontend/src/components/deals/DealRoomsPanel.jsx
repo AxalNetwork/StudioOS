@@ -2,7 +2,7 @@ import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { api } from '../../lib/api';
 import { DEAL_STAGE_LABEL, dealStage, dealMoneyExact } from '../../lib/dealFlow';
-import { STATES } from './dealRoomCopy';
+import { INVITE_STATUS, ROOM_ACCESS_REQUIRED, ROOM_ACCESS_UNREADABLE, STATES } from './dealRoomCopy';
 import { Loading, Empty, Unreadable, NotRecorded, StatusPill, INPUT } from './DealRoomKit';
 import { useDealroomQuota, QuotaLine, JoinNote, JoinLeaveButton } from './DealRoomJoin';
 
@@ -68,7 +68,7 @@ export function DealRoomsList({ dealsState, quotaState, onRetryDeals, onRetryQuo
         <div>
           <h2 className="text-base font-bold text-gray-900 dark:text-gray-100">Deal rooms</h2>
           <p className="text-sm text-gray-500 dark:text-gray-400">
-            Join a deal room to follow a company in your portfolio and research views, and to open a diligence case on it.
+            {STATES.pipeline.intro}
           </p>
         </div>
         <QuotaLine state={quotaState} onRetry={onRetryQuota} />
@@ -101,12 +101,19 @@ export function DealRoomsList({ dealsState, quotaState, onRetryDeals, onRetryQuo
                 <li key={d.id} className="flex flex-col gap-2 py-3 md:flex-row md:items-center md:justify-between" data-testid="dr-pipeline-row">
                   <div className="min-w-0">
                     <div className="flex flex-wrap items-center gap-2">
-                      <Link to={`/deals/${d.id}`} className="font-semibold text-gray-900 hover:underline dark:text-gray-100">
-                        {d.project_name || `Deal #${d.id}`}
-                      </Link>
+                      {d.can_read === true ? (
+                        <Link to={`/deals/${d.id}`} className="font-semibold text-gray-900 hover:underline dark:text-gray-100">
+                          {d.project_name || `Deal #${d.id}`}
+                        </Link>
+                      ) : (
+                        <span className="font-semibold text-gray-900 dark:text-gray-100">{d.project_name || `Deal #${d.id}`}</span>
+                      )}
                       <StatusPill tone={dealStage(d) === 'diligence' ? 'violet' : 'grey'}>{DEAL_STAGE_LABEL[dealStage(d)]}</StatusPill>
-                      {member && <StatusPill tone="ok" testid="dr-member">Member</StatusPill>}
+                      {member && <StatusPill tone="ok" testid="dr-member">{INVITE_STATUS.requested}</StatusPill>}
                     </div>
+                    {d.can_read !== true && <p className="mt-1 text-xs text-gray-500 dark:text-gray-400" data-testid="dr-access-required">
+                      {d.can_read === false ? ROOM_ACCESS_REQUIRED : ROOM_ACCESS_UNREADABLE}
+                    </p>}
                     <div className="mt-1 flex flex-wrap items-center gap-2 text-xs text-gray-500">
                       <span>{d.project_sector || 'No sector recorded'}</span>
                       <span aria-hidden="true">·</span>

@@ -201,8 +201,9 @@ export function ReportsTab({ apis, access, funds, fund, overview, onFund }) {
   const location = useLocation();
   const part = location.pathname.endsWith('/periods') ? 'periods' : location.pathname.endsWith('/notices') ? 'notices' : 'packs';
   const filtered = Boolean(keepFund(location.search));
+  const fundId = filtered ? fund?.id : null;
   const Frame = part === 'packs' ? Section : FundFrame;
-  const read = useRead(async () => { const data = await apis.reporting.list(filtered ? { fund_id: fund.id } : {}); if (!Array.isArray(data?.items)) throw new Error('The reporting queue could not be read.'); return data; }, [apis, fund?.id], { enabled: part === 'packs' && (!filtered || Boolean(fund)) });
+  const read = useRead(async () => { const data = await apis.reporting.list(filtered ? { fund_id: fundId } : {}); if (!Array.isArray(data?.items)) throw new Error('The reporting queue could not be read.'); return data; }, [apis, fundId], { enabled: part === 'packs' && (!filtered || Boolean(fund)) });
   const [query, setQuery] = useState('');
   const [status, setStatus] = useState('');
   const [period, setPeriod] = useState('');
@@ -222,7 +223,10 @@ export function ReportsTab({ apis, access, funds, fund, overview, onFund }) {
             <select className={INPUT} aria-label="Pack period" value={period} onChange={e => setPeriod(e.target.value)}><option value="">Every period</option>{[...new Set((read.data?.items || []).map(d => d.period_label).filter(Boolean))].map(v => <option key={v} value={v}>{v}</option>)}</select>
             <select className={INPUT} aria-label="Pack status" value={status} onChange={e => setStatus(e.target.value)}><option value="">Every status</option>{['draft', 'prepared', 'issued', 'superseded'].map(v => <option key={v} value={v}>{v}</option>)}</select>
           </div>
-          {read.status === 'loading' ? <Busy />
+          {read.status === 'idle' ? (overview.status === 'loading' || overview.status === 'idle' ? <Busy />
+            : overview.status === 'unreadable' || overview.data?.funds?.state !== 'ok' ? <Failed read={overview} what="The administered funds" claim="The reporting queue has not been read." />
+              : <Note>Choose an administered fund or All funds to read the reporting queue.</Note>)
+            : read.status === 'loading' ? <Busy />
             : read.status === 'unreadable' ? <Failed read={read} what="The reporting queue" claim="This is not a claim that nothing waits for review." />
               : items.length === 0 ? <Note>{query || status || period ? 'No pack matches these filters. Clear the search or status to see the queue.' : 'No draft yet. A draft is built from the fund’s ledger; issued periods stay on the fund’s report pages.'}</Note>
                 : <Table cols={[
@@ -330,12 +334,12 @@ function Notices({ apis, fund }) {
   return <Panel label="Notices" testId="reports-notices">
     <div className="flex flex-wrap gap-2 p-4">
       <input className={INPUT} aria-label="Search notices" placeholder="Search notices" value={query} onChange={e => setQuery(e.target.value)} />
-      <select className={INPUT} aria-label="Notice type" value={type} onChange={e => setType(e.target.value)}><option value="">Every type</option>{[...new Set(notices.map(n => n.type))].map(v => <option key={v} value={v}>{v.replaceAll('_', ' ')}</option>)}</select>
+      <select className={INPUT} aria-label="Notice type" value={type} onChange={e => setType(e.target.value)}><option value="">Every type</option>{[...new Set(notices.map(n => n.type).filter(v => typeof v === 'string' && v.length))].map(v => <option key={v} value={v}>{v.replaceAll('_', ' ')}</option>)}</select>
       <select className={INPUT} aria-label="Notice LP" value={lp} onChange={e => setLp(e.target.value)}><option value="">Every LP</option>{[...new Set(notices.map(n => n.limited_partner_id).filter(v => v != null))].map(v => <option key={v} value={v}>LP #{v}</option>)}</select>
     </div>
     {read.status === 'loading' ? <Busy /> : read.status === 'unreadable' ? <Failed read={read} what="The notices" claim="Packs and report periods can still be opened." />
       : !visible.length ? <Note>{notices.length ? 'No notice matches these filters. Clear the filters to see the list.' : 'No notice recorded yet. Issued notices appear here.'}</Note> : <Table cols={[
-        { key: 'type', label: 'Type', cell: n => n.title || n.type },
+        { key: 'type', label: 'Type', cell: n => n.title || n.type || 'Not recorded: no notice type.' },
         { key: 'lp', label: 'LP or fund', cell: n => n.limited_partner_id ? `LP #${n.limited_partner_id}` : fund.name },
         { key: 'reference', label: 'Reference', mono: true, cell: n => n.reference || 'Not recorded: no reference was recorded.' },
         { key: 'amount', label: 'Amount', mono: true, cell: n => n.amount_cents == null ? <Unrecorded reason="No amount is recorded for this notice." /> : amount(n.amount_cents) },
