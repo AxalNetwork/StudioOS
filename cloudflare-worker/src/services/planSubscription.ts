@@ -19,6 +19,9 @@
  * fix, whose event carries no `kind`.
  */
 import type { Env } from '../types';
+import { stripeCall } from '../routes/billing';
+import { INVESTOR_QUOTAS, type InvestorTier } from '../middleware/requireInvestorTier';
+import { classifyStripeError } from '../util/stripeError';
 import { findCatalogProductByPriceId } from './catalog';
 
 export type PlanMeta =
@@ -65,35 +68,82 @@ export function subscriptionPriceId(obj: Record<string, unknown>): string | null
 }
 
 /**
- * A subscription event's metadata, with the plan filled in from the catalog
- * when the event carries no `kind`. Only `customer.subscription.*` events are
- * read this way. A catalog that cannot be read leaves the metadata as it came:
- * the webhook then does what it did before, and never guesses a plan.
+ * The plan a subscription's own price sells, read from the catalog. Null when
+ * it is none. A catalog that cannot be read is null too, unless `strict`: then
+ * the read's error is thrown, so a caller deciding whether to sell or change a
+ * plan refuses instead of reading "no plan" (D892 §6).
  */
+async function catalogPlanOf(env: Env, obj: Record<string, unknown>, opts: { strict?: boolean } = {}): Promise<PlanMeta | null> {
+  const priceId = subscriptionPriceId(obj);
+  if (!priceId) return null;
+  try {
+    const found = await findCatalogProductByPriceId(env, priceId);
+    return found ? planMetaForProduct(found.product, found.price) : null;
+  } catch (e) {
+    if (opts.strict) throw e;
+    console.warn('[billing] plan metadata not resolved from the catalog:', (e as Error).message);
+    return null;
+  }
+}
+
+/**
+ * A subscription event's metadata, with the plan filled in from the catalog
+ * when the event carries no `kind`, and whether it was (`fromCatalog`). Only
+ * `customer.subscription.*` events are read this way. A catalog that cannot be
+ * read leaves the metadata as it came: the webhook then does what it did
+ * before, and never guesses a plan.
+ */
+export async function subscriptionPlanEvent(
+  env: Env,
+  eventType: string,
+  obj: Record<string, unknown>,
+): Promise<{ meta: Record<string, string>; fromCatalog: boolean }> {
+  const meta = { ...((obj.metadata as Record<string, string> | undefined) ?? {}) };
+  if (meta.kind || !eventType.startsWith('customer.subscription.')) return { meta, fromCatalog: false };
+  const plan = await catalogPlanOf(env, obj);
+  return plan ? { meta: { ...meta, ...planMetaFields(plan) }, fromCatalog: true } : { meta, fromCatalog: false };
+}
+
+/** `subscriptionPlanEvent`'s metadata alone. */
 export async function subscriptionMetadata(
   env: Env,
   eventType: string,
   obj: Record<string, unknown>,
 ): Promise<Record<string, string>> {
-  const meta = { ...((obj.metadata as Record<string, string> | undefined) ?? {}) };
-  if (meta.kind || !eventType.startsWith('customer.subscription.')) return meta;
-  const priceId = subscriptionPriceId(obj);
-  if (!priceId) return meta;
-  try {
-    const found = await findCatalogProductByPriceId(env, priceId);
-    const plan = found ? planMetaForProduct(found.product, found.price) : null;
-    return plan ? { ...meta, ...planMetaFields(plan) } : meta;
-  } catch (e) {
-    console.warn('[billing] plan metadata not resolved from the catalog:', (e as Error).message);
-    return meta;
-  }
+  return (await subscriptionPlanEvent(env, eventType, obj)).meta;
 }
+
+/**
+ * The plan family a Stripe subscription belongs to: its stamped `kind`, else
+ * its price's product. With `strict`, a catalog that cannot be read throws
+ * rather than reading as no family. The intent's duplicate check
+ * (`heldPlanInStripe`) and the swap's scope check read strictly; the webhook
+ * reads leniently and leaves the event as it came.
+ */
+export async function planKindOfSubscription(
+  env: Env,
+  sub: Record<string, unknown>,
+  opts: { strict?: boolean } = {},
+): Promise<PlanMeta['kind'] | null> {
+  const kind = String((sub.metadata as Record<string, string> | undefined)?.kind ?? '');
+  if (kind === 'tier' || kind === 'investor' || kind === 'plan' || kind === 'mi') return kind;
+  if (kind) return null;
+  return (await catalogPlanOf(env, sub, opts))?.kind ?? null;
+}
+
+/**
+ * Statuses of a subscription whose first payment never completed. Stripe makes
+ * the payments intent's subscription `incomplete` and moves it to
+ * `incomplete_expired` when nobody pays. Neither grants a plan (D892 §6).
+ */
+export const UNPAID_STATUSES = ['incomplete', 'incomplete_expired'] as const;
+export const isUnpaidStatus = (s: unknown) => (UNPAID_STATUSES as readonly string[]).includes(String(s || '').toLowerCase());
 
 /**
  * Statuses that mean a subscription still exists for the member: paid, trialing,
  * or a renewal Stripe is retrying. This is about whether a second subscription
- * would be a duplicate, not about access: what `past_due` may use is #2451's
- * owner question 4, and the tier gates are unchanged here.
+ * would be a duplicate, not about access: what `past_due` may use is D1052's
+ * grace, bounded by D1100, in the gates.
  */
 export const HELD_STATUSES = ['active', 'trialing', 'past_due'] as const;
 const held = (s: unknown) => (HELD_STATUSES as readonly string[]).includes(String(s || '').toLowerCase());
@@ -133,10 +183,352 @@ export async function heldPlanSubscription(env: Env, userId: number, meta: PlanM
 }
 
 /**
+ * The same question asked of Stripe, for what D1 cannot see: a subscription
+ * the payments intent made before D892, whose events never reached the plan
+ * columns. The member's live subscriptions on their general customer, then on
+ * their investor customer when they have one, are read; one of the same family
+ * counts as held, and the answer names the customer that holds it.
+ *
+ * Stripe answering `resource_missing` for the general customer means nothing is
+ * held there: the id is unknown under the active key (the test-to-live
+ * mismatch `/billing/overview` heals). Any other failed read throws, so the
+ * intent refuses rather than risk a second charge (D892 §6). That includes the
+ * catalog read that names a subscription's family: one that fails is never
+ * taken for another family.
+ */
+export async function heldPlanInStripe(
+  env: Env,
+  customers: { general: string | null | undefined; investor?: string | null },
+  meta: PlanMeta,
+): Promise<{ subscription: string; customer: string } | null> {
+  const general = customers.general || null;
+  const ids = [general, customers.investor || null].filter((c): c is string => typeof c === 'string' && c.length > 0);
+  for (const customer of [...new Set(ids)]) {
+    let list: { data?: Array<Record<string, unknown>> };
+    try {
+      list = await stripeCall<{ data?: Array<Record<string, unknown>> }>(
+        env, '/subscriptions', { customer, status: 'all', limit: '20' }, { method: 'GET' },
+      );
+    } catch (e) {
+      if (customer === general && classifyStripeError(e) === 'resource_missing') continue;
+      throw e;
+    }
+    for (const sub of list?.data ?? []) {
+      if (!held(sub.status) || typeof sub.id !== 'string') continue;
+      if ((await planKindOfSubscription(env, sub, { strict: true })) === meta.kind) return { subscription: sub.id, customer };
+    }
+  }
+  return null;
+}
+
+/** The member's stored investor customer, read only: nothing is made in Stripe. */
+export async function storedInvestorCustomer(env: Env, userId: number): Promise<string | null> {
+  const row = await env.DB.prepare('SELECT investor_stripe_customer_id FROM users WHERE id = ?')
+    .bind(userId).first<{ investor_stripe_customer_id: string | null }>();
+  return row?.investor_stripe_customer_id || null;
+}
+
+/**
+ * A member with no investor customer, whose investor plan made before D892 sits
+ * on their general customer, takes that customer as their investor customer,
+ * so the plan's next event and the swap route find it. A member who already
+ * has an investor customer keeps it (D892 §6).
+ */
+export async function adoptInvestorCustomer(env: Env, userId: number, customer: string): Promise<boolean> {
+  const r = await env.DB.prepare('UPDATE users SET investor_stripe_customer_id = ? WHERE id = ? AND investor_stripe_customer_id IS NULL')
+    .bind(customer, userId).run();
+  return ((r?.meta?.changes ?? 0) as number) > 0;
+}
+
+/**
+ * The member's investor customer, made when they have none. It is its own
+ * Stripe customer, as the investor checkout makes it, never the general one:
+ * Billing tells the two scopes apart by customer (D892 §6). The intent calls
+ * it only once nothing is held, so a refused intent makes no customer. Two
+ * intents at once can each make one; the first stored wins and the other is
+ * left unused.
+ */
+export async function ensureInvestorCustomer(
+  env: Env,
+  user: { id: number; uid?: string | null; email?: string | null; name?: string | null },
+): Promise<string> {
+  const have = await storedInvestorCustomer(env, user.id);
+  if (have) return have;
+  const made = await stripeCall<{ id: string }>(env, '/customers', {
+    ...(user.email ? { email: user.email } : {}),
+    name: String(user.name || user.email || ''),
+    'metadata[user_id]': String(user.id),
+    'metadata[uid]': String(user.uid ?? ''),
+    'metadata[scope]': 'investor',
+  });
+  await env.DB.prepare('UPDATE users SET investor_stripe_customer_id = ? WHERE id = ? AND investor_stripe_customer_id IS NULL')
+    .bind(made.id, user.id).run();
+  return (await storedInvestorCustomer(env, user.id)) || made.id;
+}
+
+// ── D892 §6: rows left at `incomplete` while Stripe took the payment ────────
+//
+// Before §6 each subscription event wrote its status as it came, so a
+// `customer.subscription.created` (incomplete) delivered after the
+// `updated` (active) could leave a paid founder or investor row at
+// `incomplete`, which every gate now refuses. Two repairs read Stripe for such
+// a row: the webhook's, when an `incomplete` event or `invoice.paid` names the
+// subscription the row holds, which corrects a row Stripe says is live; and
+// the owner's reconciliation (`POST /api/admin/billing/subscriptions/
+// reconcile-incomplete`), which walks every such row and writes what Stripe
+// says, as a dry run unless asked to write.
+
+const SUB_ID = /^sub_[A-Za-z0-9]+$/;
+
+/** A founder or investor row holding a subscription at `incomplete`. */
+export interface IncompleteRow {
+  user_id: number;
+  family: 'tier' | 'investor';
+  subscription_id: string;
+  customer: string | null;
+}
+
+/**
+ * What Stripe said of an incomplete row's subscription, and whether it was
+ * written. `failed` is the reconciliation's own: the row's settling threw (a
+ * D1 error), nothing of it was written, and the walk went on to the next row.
+ */
+export type SettleOutcome = 'granted' | 'ended' | 'unpaid' | 'unchanged' | 'mismatch' | 'missing' | 'unreadable' | 'failed';
+export interface SettleResult {
+  user_id: number;
+  family: 'tier' | 'investor';
+  subscription_id: string;
+  outcome: SettleOutcome;
+  stripe_status: string | null;
+  tier: string | null;
+  written: boolean;
+}
+
+type IncompleteUser = {
+  id: number;
+  stripe_customer_id: string | null; stripe_subscription_id: string | null; subscription_status: string | null;
+  investor_stripe_customer_id: string | null; investor_stripe_subscription_id: string | null; investor_subscription_status: string | null;
+};
+
+function incompleteRowsOf(u: IncompleteUser, only?: string): IncompleteRow[] {
+  const rows: IncompleteRow[] = [];
+  if (u.subscription_status === 'incomplete' && u.stripe_subscription_id && (!only || u.stripe_subscription_id === only)) {
+    rows.push({ user_id: Number(u.id), family: 'tier', subscription_id: u.stripe_subscription_id, customer: u.stripe_customer_id });
+  }
+  if (u.investor_subscription_status === 'incomplete' && u.investor_stripe_subscription_id && (!only || u.investor_stripe_subscription_id === only)) {
+    rows.push({ user_id: Number(u.id), family: 'investor', subscription_id: u.investor_stripe_subscription_id, customer: u.investor_stripe_customer_id });
+  }
+  return rows;
+}
+
+/** The plan tier a subscription sells in `family`: its stamped tier, else its price's product. */
+async function tierOfSubscription(env: Env, sub: Record<string, unknown>, family: 'tier' | 'investor'): Promise<string | null> {
+  const m = (sub.metadata as Record<string, string> | undefined) ?? {};
+  if (family === 'tier' && (m.tier === 'growth' || m.tier === 'studio')) return m.tier;
+  if (family === 'investor' && (m.investor_tier === 'professional' || m.investor_tier === 'institutional')) return m.investor_tier;
+  const plan = await catalogPlanOf(env, sub);
+  if (plan?.kind === 'tier' && family === 'tier') return plan.tier;
+  if (plan?.kind === 'investor' && family === 'investor') return plan.investor_tier;
+  return null;
+}
+
+/**
+ * What Stripe says of `row`'s subscription, written to the row when `write`.
+ * Only the row that still holds that subscription at `incomplete` is touched,
+ * and only when the subscription is on that row's own customer and of its
+ * family. `liveOnly` (the webhook's repair) writes a live subscription only.
+ *
+ *   active, trialing, past_due → the plan, with Stripe's status and period end
+ *   incomplete_expired, canceled → free, and the subscription let go
+ *   unpaid → the status, as its own event would write it
+ *   incomplete, or anything else → unchanged
+ */
+export async function settleIncompleteRow(
+  env: Env,
+  row: IncompleteRow,
+  sub: Record<string, unknown>,
+  opts: { write: boolean; liveOnly?: boolean },
+): Promise<SettleResult> {
+  const status = typeof sub.status === 'string' ? sub.status.toLowerCase() : null;
+  const result = (outcome: SettleOutcome, tier: string | null = null, written = false): SettleResult => ({
+    user_id: row.user_id, family: row.family, subscription_id: row.subscription_id, outcome, stripe_status: status, tier, written,
+  });
+  if (sub.id !== row.subscription_id || !row.customer || sub.customer !== row.customer) return result('mismatch');
+  const kind = await planKindOfSubscription(env, sub);
+  if (kind && kind !== row.family) return result('mismatch');
+
+  // Every write is scoped to the row that still holds this subscription at
+  // `incomplete`, so an event that moved it meanwhile is never overwritten.
+  const inv = row.family === 'investor';
+  let outcome: SettleOutcome;
+  let tier: string | null = null;
+  let write: () => D1PreparedStatement;
+  // What an investor row's accepted seat colleagues take with it; null keeps the row's own value.
+  let follow: { tier: string | null; status: string; renews: string | null };
+  if (held(status)) {
+    outcome = 'granted';
+    tier = await tierOfSubscription(env, sub, row.family);
+    const end = Number(sub.current_period_end);
+    const renews = Number.isFinite(end) && end > 0 ? new Date(end * 1000).toISOString() : null;
+    const dealroom = inv && tier ? INVESTOR_QUOTAS[tier as InvestorTier].dealroom_max : null;
+    follow = { tier, status: status as string, renews };
+    write = () => (inv
+      ? env.DB.prepare(
+        `UPDATE users SET investor_tier = COALESCE(?, investor_tier), investor_subscription_status = ?,
+                          investor_subscription_renews_at = COALESCE(?, investor_subscription_renews_at),
+                          investor_dealroom_max = COALESCE(?, investor_dealroom_max)
+          WHERE id = ? AND investor_stripe_subscription_id = ? AND investor_subscription_status = 'incomplete'`,
+      ).bind(tier, status, renews, dealroom, row.user_id, row.subscription_id)
+      : env.DB.prepare(
+        `UPDATE users SET subscription_tier = COALESCE(?, subscription_tier), subscription_status = ?,
+                          subscription_renews_at = COALESCE(?, subscription_renews_at)
+          WHERE id = ? AND stripe_subscription_id = ? AND subscription_status = 'incomplete'`,
+      ).bind(tier, status, renews, row.user_id, row.subscription_id));
+  } else if (status === 'incomplete_expired' || status === 'canceled') {
+    outcome = 'ended';
+    tier = 'free';
+    // The spelling the deletion writes, so the row reads as any ended plan does.
+    const ended = status === 'canceled' ? 'cancelled' : status;
+    follow = { tier: 'free', status: ended, renews: null };
+    write = () => (inv
+      ? env.DB.prepare(
+        `UPDATE users SET investor_tier = 'free', investor_subscription_status = ?, investor_dealroom_max = ?,
+                          investor_stripe_subscription_id = NULL
+          WHERE id = ? AND investor_stripe_subscription_id = ? AND investor_subscription_status = 'incomplete'`,
+      ).bind(ended, INVESTOR_QUOTAS.free.dealroom_max, row.user_id, row.subscription_id)
+      : env.DB.prepare(
+        `UPDATE users SET subscription_tier = 'free', subscription_status = ?, stripe_subscription_id = NULL
+          WHERE id = ? AND stripe_subscription_id = ? AND subscription_status = 'incomplete'`,
+      ).bind(ended, row.user_id, row.subscription_id));
+  } else if (status === 'unpaid') {
+    outcome = 'unpaid';
+    follow = { tier: null, status: 'unpaid', renews: null };
+    write = () => (inv
+      ? env.DB.prepare(
+        `UPDATE users SET investor_subscription_status = 'unpaid'
+          WHERE id = ? AND investor_stripe_subscription_id = ? AND investor_subscription_status = 'incomplete'`,
+      ).bind(row.user_id, row.subscription_id)
+      : env.DB.prepare(
+        `UPDATE users SET subscription_status = 'unpaid'
+          WHERE id = ? AND stripe_subscription_id = ? AND subscription_status = 'incomplete'`,
+      ).bind(row.user_id, row.subscription_id));
+  } else {
+    return result('unchanged');
+  }
+  if (!opts.write || (opts.liveOnly && outcome !== 'granted')) return result(outcome, tier);
+
+  // An investor row and its accepted seat colleagues are written in one batch,
+  // so they land together or not at all; colleagues carry the row's period end
+  // (D1100). The colleagues' statement runs first, under the row's own guard,
+  // so it matches exactly when the row's write does.
+  const statements = inv
+    ? [env.DB.prepare(
+      `UPDATE users SET investor_tier = COALESCE(?, (SELECT p.investor_tier FROM users p WHERE p.id = ?)),
+                        investor_subscription_status = ?,
+                        investor_subscription_renews_at = COALESCE(?, (SELECT p.investor_subscription_renews_at FROM users p WHERE p.id = ?))
+        WHERE investor_seat_primary_user_id = ? AND id <> ?
+          AND EXISTS (SELECT 1 FROM users p WHERE p.id = ? AND p.investor_stripe_subscription_id = ? AND p.investor_subscription_status = 'incomplete')`,
+    ).bind(follow.tier, row.user_id, follow.status, follow.renews, row.user_id, row.user_id, row.user_id, row.user_id, row.subscription_id), write()]
+    : [write()];
+  const out = await env.DB.batch(statements);
+  const written = ((out[out.length - 1]?.meta?.changes ?? 0) as number) > 0;
+  return result(outcome, tier, written);
+}
+
+/**
+ * The webhook's repair: a row holding `subId` at `incomplete` is corrected
+ * from Stripe when Stripe says the subscription is live. Nothing is read from
+ * Stripe when no row holds it so. It never fails the webhook: a failed read or
+ * write is logged, the row is left whole at `incomplete` (its seat colleagues
+ * with it), and the owner's reconciliation remains for that row.
+ */
+export async function repairIncompleteFromStripe(env: Env, subId: unknown): Promise<number> {
+  if (typeof subId !== 'string' || !SUB_ID.test(subId)) return 0;
+  try {
+    const found = await env.DB.prepare(
+      `SELECT id, stripe_customer_id, stripe_subscription_id, subscription_status,
+              investor_stripe_customer_id, investor_stripe_subscription_id, investor_subscription_status
+         FROM users
+        WHERE (stripe_subscription_id = ? AND subscription_status = 'incomplete')
+           OR (investor_stripe_subscription_id = ? AND investor_subscription_status = 'incomplete')`,
+    ).bind(subId, subId).all<IncompleteUser>();
+    const rows = (found.results ?? []).flatMap((u) => incompleteRowsOf(u, subId));
+    if (!rows.length) return 0;
+    const sub = await stripeCall<Record<string, unknown>>(env, `/subscriptions/${subId}`, {}, { method: 'GET' });
+    let fixed = 0;
+    for (const row of rows) if ((await settleIncompleteRow(env, row, sub, { write: true, liveOnly: true })).written) fixed++;
+    return fixed;
+  } catch (e) {
+    console.warn('[billing] incomplete plan row not repaired:', (e as Error).message);
+    return 0;
+  }
+}
+
+/** The most rows one reconciliation walk reads from Stripe. */
+export const RECONCILE_LIMIT_MAX = 100;
+
+/**
+ * The owner's reconciliation: one page of founder and investor rows at
+ * `incomplete` with a stored subscription, by user id after `after`. Each
+ * row's subscription is read from Stripe, and what it says is reported, and
+ * written only when `write`. A row whose subscription Stripe does not know
+ * (`missing`) or could not read (`unreadable`) is left as it is. A row whose
+ * settling throws is `failed`, written:false, and the walk goes on, so the
+ * answer always says which rows were written. Only the page read itself
+ * throws, before any row is touched. The answer carries `next_after` while
+ * rows remain.
+ */
+export async function reconcileIncompleteRows(
+  env: Env,
+  opts: { write: boolean; after: number; limit: number },
+): Promise<{ checked: number; results: SettleResult[]; counts: Record<SettleOutcome, number>; next_after: number | null }> {
+  const limit = Math.max(1, Math.min(RECONCILE_LIMIT_MAX, Math.floor(opts.limit)));
+  const page = await env.DB.prepare(
+    `SELECT id, stripe_customer_id, stripe_subscription_id, subscription_status,
+            investor_stripe_customer_id, investor_stripe_subscription_id, investor_subscription_status
+       FROM users
+      WHERE id > ?
+        AND ((stripe_subscription_id IS NOT NULL AND subscription_status = 'incomplete')
+          OR (investor_stripe_subscription_id IS NOT NULL AND investor_subscription_status = 'incomplete'))
+      ORDER BY id LIMIT ?`,
+  ).bind(Math.max(0, Math.floor(opts.after)), limit).all<IncompleteUser>();
+  const users = page.results ?? [];
+  const results: SettleResult[] = [];
+  for (const row of users.flatMap((u) => incompleteRowsOf(u))) {
+    const unread = (outcome: SettleOutcome): SettleResult => ({
+      user_id: row.user_id, family: row.family, subscription_id: row.subscription_id, outcome, stripe_status: null, tier: null, written: false,
+    });
+    if (!SUB_ID.test(row.subscription_id)) { results.push(unread('mismatch')); continue; }
+    let sub: Record<string, unknown>;
+    try {
+      sub = await stripeCall<Record<string, unknown>>(env, `/subscriptions/${row.subscription_id}`, {}, { method: 'GET' });
+    } catch (e) {
+      results.push(unread(classifyStripeError(e) === 'resource_missing' ? 'missing' : 'unreadable'));
+      continue;
+    }
+    try {
+      results.push(await settleIncompleteRow(env, row, sub, { write: opts.write }));
+    } catch (e) {
+      // The row's write is one batch, so a throw leaves nothing of it written.
+      console.warn('[billing] incomplete plan row not settled:', row.user_id, row.family, (e as Error).message);
+      results.push({ ...unread('failed'), stripe_status: typeof sub.status === 'string' ? sub.status.toLowerCase() : null });
+    }
+  }
+  const counts = { granted: 0, ended: 0, unpaid: 0, unchanged: 0, mismatch: 0, missing: 0, unreadable: 0, failed: 0 } as Record<SettleOutcome, number>;
+  for (const r of results) counts[r.outcome]++;
+  return {
+    checked: results.length,
+    results,
+    counts,
+    next_after: users.length === limit ? Number(users[users.length - 1].id) : null,
+  };
+}
+
+/**
  * D892 — a renewal whose payment failed. Until now nobody was told. The member
  * is told once per failed attempt, with the next retry when Stripe gives one.
- * What the plan allows meanwhile is #2451's owner question 4; this does not
- * change it. A first payment that fails is not a renewal: the card form shows it.
+ * What the plan allows meanwhile is D1052's grace, bounded by D1100; this does
+ * not change it. A first payment that fails is not a renewal: the card form shows it.
  */
 export async function recordRenewalFailure(env: Env, invoice: Record<string, unknown>): Promise<number | null> {
   if (invoice.billing_reason !== 'subscription_cycle') return null;
@@ -164,9 +556,10 @@ export async function recordRenewalFailure(env: Env, invoice: Record<string, unk
     category: 'billing',
     channels: ['in_app', 'email'],
     title: 'Your plan’s renewal payment failed',
+    // Stripe gives no next attempt on the last one: say so, never promise a retry.
     body: nextDay
-      ? `Stripe will try again on ${nextDay}. Update your card in Billing so the next try goes through.`
-      : 'Stripe will try again. Update your card in Billing so the next try goes through.',
+      ? `Stripe will try again on ${nextDay} (UTC). Update your card in Billing so the next try goes through.`
+      : 'Stripe will not try again. Update your card in Billing and pay the open invoice to keep your plan.',
     link: '/settings?tab=billing',
     payload: { invoice: invoiceId, attempt, subscription: subId, next_payment_attempt: nextDay },
   });

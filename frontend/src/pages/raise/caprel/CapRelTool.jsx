@@ -4,19 +4,21 @@ import { cyclesApi } from '../../../lib/api/cycles';
 import { Unreadable } from '../../../ui';
 import { CycleHeader } from '../../cycles/CycleOverview';
 import { CycleBar } from '../../cycles/PhoneModulePage';
-import { RecordsTable } from '../../cycles/CycleModulePage';
-import { recordHref, recordId, rowLinks } from '../../cycles/recordModel';
 import CallsTab from '../calls/CallsTab';
 import { ProRataPanel, RoundClosesPanel } from '../RoundClosesPanel';
 import { FounderClosing } from '../../closing/ClosingRoom';
 import { CLOSING, HOME_PATH, LINE, NOT_YET, SLUG, TABS, TITLE, WAITS, tabHref, tabSearch } from './capRelModel';
+import CapRelPipeline from './CapRelPipeline';
+import { CapRelOverviewBlocks, MovedNotice } from './CapRelOverview';
 
 /**
  * D1188 (#2457) — the Capital relationships tool's tab bar and tab pages.
  * CycleRoute draws Overview (the module page) with `CapRelHomeNav` under its
  * header, and `CapRelTabPage` for the tab words under the module. Pipeline and
  * Calls draw the module read; Commitments draws today's closes and pro-rata;
- * Match, Outreach and Activity say what they wait for.
+ * Match, Outreach and Activity say what they wait for. D1192 (#3126): Pipeline
+ * is the board and list (`CapRelPipeline.jsx`), and Overview draws its blocks
+ * (`CapRelOverview.jsx`) above the module page's own.
  */
 
 const MUTED = 'text-axal-muted dark:text-gray-400';
@@ -40,9 +42,15 @@ export function CapRelTabBar({ active, search = '' }) {
   );
 }
 
-/** Overview's tab bar. */
-export function CapRelHomeNav({ search = '' }) {
-  return <CapRelTabBar active="overview" search={search} />;
+/** Overview's tab bar, the moved notice, and Overview's blocks (D1192, CRL1) above the module page's own. */
+export function CapRelHomeNav({ search = '', projectId = null }) {
+  return (
+    <div className="flex flex-col gap-4">
+      <MovedNotice />
+      <CapRelTabBar active="overview" search={search} />
+      {projectId ? <CapRelOverviewBlocks projectId={projectId} search={search} /> : null}
+    </div>
+  );
 }
 
 function Wait({ tab }) {
@@ -70,15 +78,6 @@ function useModule(projectId) {
   return { ...read, query, setQuery, retry: () => setReload((n) => n + 1) };
 }
 
-/** Pipeline: the investors, each opening its record. CRL2's board is part 4's. */
-function Pipeline({ projectId, search }) {
-  const read = useModule(projectId);
-  const recs = read.data?.records;
-  return (
-    <RecordsTable title="Investors" records={recs} status={read.status} query={read.query} onQuery={read.setQuery} onRetry={read.retry}
-      rowHref={(row) => (rowLinks(recs, row) ? recordHref('raise', SLUG, recordId(row), tabSearch(search)) : null)} />
-  );
-}
 
 /** Calls: the calls for capital this venture has run, from the module read. */
 function Calls({ projectId }) {
@@ -109,7 +108,7 @@ export function CapRelTabPage({ tab, projectId, projectStatus = 'ready', onRetry
   // No venture means no read is made: say the venture list failed, never a skeleton.
   if (projectStatus === 'unreadable') body = <Unreadable what="Your ventures" claim="This is not a claim that you have none." onRetry={onRetryProject} />;
   else if (!projectId) body = <div className="h-24 animate-pulse rounded-xl bg-axal-ground dark:bg-gray-800" data-testid="caprel-loading" />;
-  else if (tab === 'pipeline') body = <Pipeline projectId={projectId} search={search} />;
+  else if (tab === 'pipeline') body = <CapRelPipeline projectId={projectId} search={search} />;
   else if (tab === 'calls') body = <Calls projectId={projectId} />;
   else if (tab === 'commitments') body = <Commitments projectId={projectId} search={search} />;
   else if (tab === 'closing') body = <FounderClosing projectId={projectId} search={search} />;
@@ -119,6 +118,7 @@ export function CapRelTabPage({ tab, projectId, projectStatus = 'ready', onRetry
       {phone
         ? <CycleBar back={{ label: TITLE, to: `${HOME_PATH}${tabSearch(search)}` }} title={here.label} eadwynLabel={`Raise · ${TITLE}`} />
         : <CycleHeader cycle="raise" cards={cards} active={SLUG} action={action} title={TITLE} sub={LINE} search={tabSearch(search)} />}
+      <MovedNotice />
       <CapRelTabBar active={tab === CLOSING.id ? 'commitments' : tab} search={search} />
       {body}
     </div>

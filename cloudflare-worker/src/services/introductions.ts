@@ -161,7 +161,9 @@ export function monthlyAllowanceFor(user: AllowanceUser): number {
     const status = String(user?.investor_subscription_status || 'free').toLowerCase();
     const lapsed = status === 'unpaid' || status === 'cancelled' || status === 'canceled'
       || (status === 'past_due' && !inGrace(status, user.investor_subscription_renews_at));
-    const tier = lapsed ? 'free' : String(user?.investor_tier || 'free').toLowerCase();
+    // D892 §6: a subscription whose first payment never completed grants nothing.
+    const unpaid = status === 'incomplete' || status === 'incomplete_expired';
+    const tier = lapsed || unpaid ? 'free' : String(user?.investor_tier || 'free').toLowerCase();
     if (tier === 'institutional') return 25;
     if (tier === 'professional') return 10;
     return 3;
@@ -169,7 +171,9 @@ export function monthlyAllowanceFor(user: AllowanceUser): number {
   const status = user.subscription_status ?? 'active';
   const lapsed = status === 'unpaid' || status === 'cancelled' || status === 'canceled'
     || (status === 'past_due' && !inGrace(status, user.subscription_renews_at));
-  const tier = lapsed ? 'free' : String(user?.subscription_tier || 'free').toLowerCase();
+  // D892 §6: the founder allowance follows `userMeetsTier`.
+  const unpaid = status === 'incomplete' || status === 'incomplete_expired';
+  const tier = lapsed || unpaid ? 'free' : String(user?.subscription_tier || 'free').toLowerCase();
   if (tier === 'studio') return 25;
   if (tier === 'growth') return 10;
   return 3;

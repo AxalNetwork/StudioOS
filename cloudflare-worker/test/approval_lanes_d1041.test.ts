@@ -301,7 +301,7 @@ test('every status word a lane reads is its store\'s own, held to the migration\
   // Community tasks, the second store under Features and tasks.
   assert.ok(checkList('383_community_tasks.sql', 'community_tasks', 'status').includes('pending'));
   // Stores with no CHECK keep their writers' words, spelled here so a change shows.
-  assert.deepEqual(wordsIn(src('kyb').countSql, 'status').sort(), ['in_review', 'pending']);
+  assert.deepEqual(wordsIn(src('kyb').countSql, 'status').sort(), ['in_review']);
   assert.deepEqual(wordsIn(src('comarketing').countSql, 'status'), ['proposed']);
   assert.deepEqual(wordsIn(src('articles').countSql, 'status').sort(), ['in_review', 'submitted']);
   assert.deepEqual(wordsIn(src('score_flags').countSql, 'admin_review_status'), ['flagged']);
@@ -326,8 +326,8 @@ test('every lane says who it tells and where it is decided; the gaps are named, 
       product_testers: 'The member', grants: 'The studio',
     },
   );
-  assert.equal(by.kyb.decidedOn, null);
-  assert.match(by.kyb.undecidedReason!, /No admin route decides/);
+  assert.equal(by.kyb.decidedOn, 'KYC & KYB › Businesses');
+  assert.equal(by.kyb.undecidedReason, undefined);
   const keys = new Set([...APPROVAL_SOURCES, ...HQ_APPROVAL_SOURCES].map((s) => s.key));
   for (const n of [...NOT_COUNTED_YET, ...HQ_NOT_COUNTED_YET]) assert.ok(!keys.has(n.key as any), `${n.key} is both laned and not`);
   // D1132: both gaps are laned now.
@@ -348,8 +348,8 @@ test('the glance: HQ decides for a Super Admin only, with notifies and decided_o
   const lane = (k: string) => ap.lanes.find((l: any) => l.key === k);
   assert.deepEqual([lane('articles').notifies, lane('articles').decided_on], ['The author', 'Content queue']);
   assert.deepEqual(lane('comarketing').sub, { label: 'approved, not published yet', count: 1 });
-  assert.equal(lane('kyb').decided_on, null);
-  assert.ok(lane('kyb').undecided_reason);
+  assert.equal(lane('kyb').decided_on, 'KYC & KYB › Businesses');
+  assert.equal(lane('kyb').undecided_reason, undefined);
   assert.deepEqual(ap.not_counted.map((n: any) => n.key), []);
   assert.equal(ap.hq_decides.lanes.length, HQ_APPROVAL_SOURCES.length);
   assert.equal(ap.hq_decides.pending_total, 11, 'D1132: the open program grant is counted once, in its own lane');
