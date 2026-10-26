@@ -87,7 +87,7 @@ export class RaiseEvidenceError extends Error {
   }
 }
 export type RaiseEvidenceContext = {env:Env;user:User;projectId:number;companyId:number|null;founder:boolean};
-/** The route first uses scope(); this repeats project/company and founder identity for direct service callers. */
+/** Repeat venture/company ownership for direct service callers. */
 export async function raiseEvidenceContext(env:Env,user:User,projectId:number,activeCompany:number|null):Promise<RaiseEvidenceContext>{
   const project=await env.DB.prepare('SELECT id,founder_id,company_id FROM projects WHERE id=? AND deleted_at IS NULL').bind(projectId)
     .first<{id:number;founder_id:number|null;company_id:number|null}>();
@@ -117,7 +117,7 @@ function evidenceSummary(ref: Pick<EvidenceCandidate,'kind'|'source_label'>, ver
   const label = ['connector','document','recorded','signed','typed'].includes(ref.source_label) ? ref.source_label : 'recorded';
   return rule ? `Evidence ${rule.kind} (${label}) ${verb}.` : `Evidence ${verb}.`;
 }
-/** The shared store holds safe proposal metadata, not bank values, notes, names or quote text. */
+/** Shared proposal metadata excludes source values and text. */
 function proposalPayload(c:EvidenceCandidate){return JSON.stringify({area:c.area,kind:c.kind,source_table:c.source_table,source_ref:c.source_ref,
   source_label:c.source_label,provider:c.provider,observed_on:c.observed_on,strength:c.strength,summary:c.summary,snapshot_hash:c.snapshot_hash,private_reason:c.private_reason});}
 export type EvidenceProposalRow={id:number;uid:string;source_ref:string;source_kind:string;source_label:string;payload_json:string;status:string;usage_log_id:number|null;model:string|null};
@@ -158,7 +158,7 @@ async function live(ctx:RaiseEvidenceContext,ref:Pick<EvidenceCandidate,'kind'|'
   if(!current)throw new RaiseEvidenceError('changed',409);return current;
 }
 
-/** One refresh lease and a one-hour successful-build clock. Partial sources do not become a fresh empty pack. */
+/** One-hour attempt cooldown; Look again forces refresh. */
 export async function buildCandidates(ctx:RaiseEvidenceContext,opts:{force?:boolean;now?:string;sources?:CollectedEvidence}={}){
   founderOnly(ctx);const now=opts.now??new Date().toISOString(),token=nonce();
   const lease=await ctx.env.DB.prepare(`INSERT INTO raise_evidence_refreshes(project_id,last_attempt_at,lease_uid,lease_until)
@@ -220,7 +220,7 @@ async function decideBatch(ctx:RaiseEvidenceContext,statements:ReturnType<Env['D
   try{await ctx.env.DB.batch(statements);}catch{const conflict=check?await check().catch(()=>false):false;if(conflict instanceof RaiseEvidenceError)throw conflict;if(conflict)throw new RaiseEvidenceError('decided',409);throw new RaiseEvidenceError('unreadable',503);}
 }
 
-/** Accept only the exact source snapshot the founder saw. Values and labels are always rebuilt by code. */
+/** Accept the displayed snapshot with values rebuilt by code. */
 export async function acceptItem(ctx:RaiseEvidenceContext,uid:string,expectedHash:unknown){
   founderOnly(ctx);if(!hashKey(expectedHash))throw new RaiseEvidenceError('invalid',400);
   const q=await proposal(ctx,uid);if(q.status!=='proposed')throw new RaiseEvidenceError('decided',409);
@@ -250,7 +250,7 @@ export async function dismissItem(ctx:RaiseEvidenceContext,uid:string){
   return {uid,status:'discarded'};
 }
 
-/** Sharing/unpinning is a versioned founder decision; confirming a changed source never creates a second candidate. */
+/** Versioned sharing; changed sources require explicit confirmation. */
 export async function setSharing(ctx:RaiseEvidenceContext,uid:string,data:Record<string,unknown>){
   founderOnly(ctx);if(Object.keys(data).some(k=>!['version','visibility','state','confirm_current'].includes(k)))throw new RaiseEvidenceError('invalid',400);
   const old=await item(ctx,uid),expected=version(data.version);if(expected!==old.version)throw new RaiseEvidenceError('changed',409);
@@ -278,7 +278,7 @@ export async function setSharing(ctx:RaiseEvidenceContext,uid:string,data:Record
   return decisionItem(ctx,await item(ctx,uid));
 }
 
-/** Manual links cannot claim to be computed or Eadwyn-written. A supplied Eadwyn proposal must match both records and a real run. */
+/** Links require current evidence and verified provenance. */
 export async function linkClaim(ctx:RaiseEvidenceContext,claimUid:string,data:Record<string,unknown>,remove=false){
   founderOnly(ctx);if(Object.keys(data).some(k=>!['item_id','item_version','proposal_uid'].includes(k))||!evidenceUid(claimUid)||!evidenceUid(data.item_id))throw new RaiseEvidenceError('invalid',400);
   const claim=await ctx.env.DB.prepare('SELECT id,uid FROM raise_claims WHERE uid=? AND project_id=?').bind(claimUid,ctx.projectId).first<{id:number;uid:string}>();
@@ -342,7 +342,7 @@ function parseSourceBlocks(raw:string|undefined){
   }catch{return null;}
 }
 const unreadableBlock={state:'unreadable',rows:null,has_more:null,reason:'This evidence block could not be read. Try again.'} as const;
-/** Each read block fails independently. Admins get metadata, never bank figures, quote bodies or claim text. */
+/** Independent read blocks; admins receive safe metadata. */
 export async function readRaiseEvidence(ctx:RaiseEvidenceContext,query:{limit?:number;offset?:number;refresh?:boolean}={}){
   const limit=query.limit??50,offset=query.offset??0;if(!Number.isSafeInteger(limit)||limit<1||limit>100||!Number.isSafeInteger(offset)||offset<0||offset>1000000)throw new RaiseEvidenceError('invalid',400);
   let sources:CollectedEvidence|null=null,refresh:any={refreshed:false,outcome:'founder_only'};
