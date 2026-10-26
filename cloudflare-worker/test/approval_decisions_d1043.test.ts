@@ -8,6 +8,7 @@ import { join } from 'node:path';
 import { Hono } from 'hono';
 import { SignJWT } from 'jose';
 import comarketing from '../src/routes/comarketing.ts';
+import refer from '../src/routes/refer_earn.ts';
 import wellbeing from '../src/routes/wellbeing.ts';
 import { AUTH_ERROR_STATUSES } from '../src/util/authErrors.ts';
 import { expertDecision } from '../src/services/wellbeing/expertReview.ts';
@@ -63,7 +64,7 @@ function fixture() {
       async get(key: string) { const value = objects.get(key); return value ? { body: new Response(value).body } : null; },
       async delete(key: string) { objects.delete(key); } },
   };
-  const app = new Hono<any>(); app.route('/api/comarketing', comarketing); app.route('/api/wellbeing', wellbeing);
+  const app = new Hono<any>(); app.route('/api/refer-earn', refer); app.route('/api/comarketing', comarketing); app.route('/api/wellbeing', wellbeing);
   app.onError((e, c) => c.json({ detail: e.message }, AUTH_ERROR_STATUSES[e.message] ?? 500));
   return { db, env, app, objects, legacy };
 }
@@ -578,4 +579,140 @@ test('co-marketing response reads cannot report a committed decision as failed',
   const refused = await call(other, 1, 'POST', `${cm}/admin/pitches/pitch-1/approve`, {});
   assert.equal(refused.status, 503); assert.equal(one(other, 'SELECT status FROM comarketing_pitches').status, 'proposed');
   assert.equal(one(other, 'SELECT COUNT(*) AS n FROM notifications_inbox').n, 0); assert.equal(sent.length, 1);
+}));
+
+
+test('strategic access uses the existing decision route, requires a decline reason, and tells each member once', async () => captureMail(async (sent) => {
+  const f = fixture();
+  f.db.exec("INSERT INTO referral_strategic_access(user_id,note,status) VALUES(4,'Synthetic member request','requested'),(3,'Synthetic partner request','requested')");
+  const endpoint = (id: number) => `/api/refer-earn/admin/strategic-access/${id}/decision`;
+  for (const note of [undefined, 'short', {}, ' '.repeat(100), 'x'.repeat(4001)]) {
+    const refused = await call(f, 1, 'POST', endpoint(4), { decision: 'declined', note });
+    assert.equal(refused.status, 400); assert.equal(one(f, 'SELECT status FROM referral_strategic_access WHERE user_id=4').status, 'requested');
+  }
+  assert.equal(sent.length, 0); assert.equal(one(f, 'SELECT COUNT(*) AS n FROM notifications_inbox').n, 0);
+  const reason = 'Synthetic strategic access is not yet appropriate.';
+  const decline = await call(f, 1, 'POST', endpoint(4), { decision: 'declined', note: `  ${reason}  ` });
+  assert.equal(decline.status, 200); assert.equal(decline.body.status, 'declined'); assert.ok(decline.body.decided_at);
+  assert.equal(one(f, 'SELECT note FROM referral_strategic_access WHERE user_id=4').note, 'Synthetic member request');
+  const grant = await call(f, 1, 'POST', endpoint(3), { decision: 'granted' });
+  assert.equal(grant.status, 200); assert.equal(grant.body.status, 'granted');
+  const notices = f.db.prepare('SELECT user_id,type,body,link FROM notifications_inbox ORDER BY id').all() as any[];
+  assert.deepEqual(notices.map((r) => [r.user_id, r.type]), [[4, 'strategic_access_declined'], [3, 'strategic_access_granted']]);
+  assert.ok(notices[0].body.includes(reason)); assert.equal(notices[0].link, '/refer');
+  assert.equal(sent.length, 2);
+  const mailText = sent.map((body) => {
+    const part = body.match(/Content-Type: text\/plain;[^\r\n]*\r?\nContent-Transfer-Encoding: base64\r?\n\r?\n([\s\S]*?)\r?\n--/);
+    assert.ok(part, 'notification mail has its actual plain-text MIME part');
+    return Buffer.from(part[1].replace(/\s/g, ''), 'base64').toString('utf8');
+  });
+  assert.ok(mailText.some((body) => body.includes(reason)));
+  assert.ok(sent.some((body) => /^To: (?:.*<)?other@example\.invalid>?\r?$/m.test(body)));
+  assert.ok(sent.some((body) => /^To: (?:.*<)?expert@example\.invalid>?\r?$/m.test(body)));
+  const audit = one(f, "SELECT admin_user_id,filters_json FROM admin_audit_log WHERE action='referral_strategic_access.declined'");
+  assert.equal(audit.admin_user_id, 1); assert.equal(JSON.parse(audit.filters_json).note, reason);
+  assert.equal((await call(f, 1, 'POST', endpoint(4), { decision: 'declined', note: reason })).status, 409);
+  assert.equal((await call(f, 1, 'POST', endpoint(3), { decision: 'granted' })).status, 409);
+  assert.equal(sent.length, 2); assert.equal(one(f, 'SELECT COUNT(*) AS n FROM notifications_inbox').n, 2);
+  for (const length of [10, 4000]) {
+    const edge = fixture(); edge.db.exec("INSERT INTO referral_strategic_access(user_id,status) VALUES(4,'requested')");
+    const accepted = await call(edge, 1, 'POST', endpoint(4), { decision: 'declined', note: 'x'.repeat(length) });
+    assert.equal(accepted.status, 200); assert.equal(accepted.body.status, 'declined');
+  }
+}));
+
+test('strategic access retains its existing Admin and HQ freeze guards', async () => {
+  const f = fixture(); f.db.exec("INSERT INTO referral_strategic_access(user_id,status) VALUES(3,'requested')");
+  const path = '/api/refer-earn/admin/strategic-access/3/decision';
+  assert.equal((await call(f, null, 'POST', path, { decision: 'granted' })).status, 401);
+  assert.equal((await call(f, 4, 'POST', path, { decision: 'granted' })).status, 403);
+  assert.equal((await call(f, 2, 'POST', path, { decision: 'granted' })).status, 423);
+  assert.equal(one(f, 'SELECT status FROM referral_strategic_access WHERE user_id=3').status, 'requested');
+  assert.equal(one(f, 'SELECT COUNT(*) AS n FROM notifications_inbox').n, 0);
+});
+
+test('strategic decisions notify only the winning conditional write and never depend on a post-commit read', async () => captureMail(async (sent) => {
+  const f = fixture(); f.db.exec("INSERT INTO referral_strategic_access(user_id,status) VALUES(4,'requested')");
+  const prepare = f.env.DB.prepare.bind(f.env.DB); let arrivals = 0; let release!: () => void;
+  const gate = new Promise<void>((resolve) => { release = resolve; });
+  f.env.DB.prepare = (sql: string) => {
+    const statement = prepare(sql);
+    if (sql.includes('UPDATE referral_strategic_access SET status')) {
+      const run = statement.run.bind(statement);
+      statement.run = async (...args: any[]) => { if (++arrivals === 2) release(); await gate; return run(...args); };
+    }
+    return statement;
+  };
+  const path = '/api/refer-earn/admin/strategic-access/4/decision';
+  const raced = await Promise.all([
+    call(f, 1, 'POST', path, { decision: 'granted' }),
+    call(f, 1, 'POST', path, { decision: 'declined', note: 'Synthetic decline reason.' }),
+  ]);
+  assert.deepEqual(raced.map((r) => r.status).sort(), [200, 409]); assert.equal(sent.length, 1);
+  assert.equal(one(f, 'SELECT COUNT(*) AS n FROM notifications_inbox').n, 1);
+  const winner = raced.find((r) => r.status === 200)!;
+  const saved = one(f, 'SELECT status,decided_at FROM referral_strategic_access WHERE user_id=4');
+  assert.equal(winner.body.status, saved.status); assert.equal(winner.body.decided_at, saved.decided_at);
+  assert.match(one(f, 'SELECT type FROM notifications_inbox').type, new RegExp(`${saved.status}$`));
+
+  const other = fixture(); other.db.exec("INSERT INTO referral_strategic_access(user_id,status) VALUES(4,'requested')");
+  const before = other.env.DB.prepare.bind(other.env.DB); let committed = false; let lateReads = 0;
+  other.env.DB.prepare = (sql: string) => {
+    const statement = before(sql);
+    if (sql.includes('UPDATE referral_strategic_access SET status')) {
+      const run = statement.run.bind(statement);
+      statement.run = async (...args: any[]) => { const out = await run(...args); committed = true; return out; };
+    }
+    if (/SELECT[\s\S]*FROM referral_strategic_access/.test(sql)) {
+      const first = statement.first.bind(statement);
+      statement.first = async (...args: any[]) => { if (committed) { lateReads++; throw new Error('Synthetic response-read outage'); } return first(...args); };
+    }
+    return statement;
+  };
+  assert.equal((await call(other, 1, 'POST', path, { decision: 'granted' })).status, 200);
+  assert.equal(lateReads, 0); assert.equal(sent.length, 2);
+
+  const failed = fixture(); failed.db.exec("INSERT INTO referral_strategic_access(user_id,status) VALUES(4,'requested')");
+  const original = failed.env.DB.prepare.bind(failed.env.DB);
+  failed.env.DB.prepare = (sql: string) => {
+    const statement = original(sql);
+    if (/SELECT status[\s\S]*FROM referral_strategic_access/.test(sql)) statement.first = async () => { throw new Error('Synthetic request-read outage'); };
+    return statement;
+  };
+  const refused = await call(failed, 1, 'POST', path, { decision: 'granted' });
+  assert.equal(refused.status, 503); assert.equal(refused.body.error, 'strategic_access_unreadable');
+  assert.equal(one(failed, 'SELECT status FROM referral_strategic_access').status, 'requested');
+  assert.equal(one(failed, 'SELECT COUNT(*) AS n FROM notifications_inbox').n, 0); assert.equal(sent.length, 2);
+}));
+
+test('strategic post-save failures retain the confirmed response and record the actor before a notice attempt', async () => captureMail(async (sent) => {
+  const f = fixture(); f.db.exec("INSERT INTO referral_strategic_access(user_id,status) VALUES(4,'requested')");
+  const prepare = f.env.DB.prepare.bind(f.env.DB); let auditBeforeNotice = false;
+  f.env.DB.prepare = (sql: string) => {
+    const statement = prepare(sql);
+    if (sql.includes('INSERT INTO notifications_inbox')) statement.run = async () => {
+      auditBeforeNotice = one(f, "SELECT COUNT(*) AS n FROM admin_audit_log WHERE action='referral_strategic_access.granted'").n === 1;
+      throw new Error('Synthetic inbox outage');
+    };
+    return statement;
+  };
+  const path = '/api/refer-earn/admin/strategic-access/4/decision';
+  const granted = await call(f, 1, 'POST', path, { decision: 'granted' });
+  assert.equal(granted.status, 200); assert.equal(granted.body.status, 'granted'); assert.equal(auditBeforeNotice, true);
+  assert.equal(one(f, "SELECT admin_user_id FROM admin_audit_log WHERE action='referral_strategic_access.granted'").admin_user_id, 1);
+  assert.equal(one(f, 'SELECT COUNT(*) AS n FROM notifications_inbox').n, 0); assert.equal(sent.length, 0);
+
+  const other = fixture(); other.db.exec("INSERT INTO referral_strategic_access(user_id,status) VALUES(4,'requested')");
+  const original = other.env.DB.prepare.bind(other.env.DB); let auditAttempts = 0;
+  other.env.DB.prepare = (sql: string) => {
+    const statement = original(sql);
+    if (sql.includes('INSERT INTO admin_audit_log')) statement.run = async () => { auditAttempts++; throw new Error('Synthetic audit outage'); };
+    return statement;
+  };
+  const reason = 'Synthetic post-audit decline reason.';
+  const declined = await call(other, 1, 'POST', path, { decision: 'declined', note: reason });
+  assert.equal(declined.status, 200); assert.equal(declined.body.status, 'declined'); assert.equal(auditAttempts, 1);
+  const activity = one(other, "SELECT user_id,details FROM activity_logs WHERE action='referral_strategic_access.declined'");
+  assert.equal(activity.user_id, 1); assert.equal(JSON.parse(activity.details).note, reason);
+  assert.equal(one(other, 'SELECT COUNT(*) AS n FROM notifications_inbox').n, 1); assert.equal(sent.length, 1);
 }));

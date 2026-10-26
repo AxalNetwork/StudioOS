@@ -18,6 +18,7 @@
  *   PUT   /readiness/:key            { score, evidence, missing? }
  *   POST  /readiness/rescore         { items?, since?, pmf? }
  *   GET   /pmf/history?project=&limit=&before=  stored Product-market fit points
+ *   D1146 (#3032): GET /pmf/model?project=  → { version, stored, scored_with, published_at, model, grades }, RD4's model
  *   POST  /narrative-versions        { investor_type, start_from?, based_on_version?, one_liner?, why_now?, ask?, check_against? }
  *   PATCH /narrative-versions/:version   the same fields but start_from
  *   D908 (#2692): the narrative's own stores (`services/narrative/store.ts`).
@@ -29,6 +30,10 @@
  *   PUT   /narrative/:version/sections/:section   { body?, audience_note?, position?, source?, bindings? }
  *   D1114 (#2994): POST /narrative/:version/sections/:section/draft  { mode: draft | shorten | plain, words? }
  *         one metered run under `draft:narrative-section` → { version, section, mode, text, removed }; writes nothing
+ *   D913 (#2697): the objections investors raised (`services/narrative/objections.ts`, `objectionDraft.ts`).
+ *   GET   /narrative/objections      → { objections: [{ key, text, count, prospects, last_heard, answer }], capped }
+ *   POST  /narrative/objections/:objection/draft  { version, section, words? }
+ *         one metered run under `draft:narrative-objection` → { version, section, objection, text, removed }; writes nothing
  *   D914 (#2698): an admin reads the narrative read only (`services/narrative/adminRead.ts`).
  *   GET   /narrative/reads           → { reads: [{ id, reason, by: { name, kind }, created_at, expires_at }], mine, viewer }
  *   POST  /narrative/reads           { reason } an admin's reason for opening it; the founder sees it
@@ -81,6 +86,14 @@
  * table and data-room tools already keep to the venture and admins. An
  * investor or a partner reaches nothing here.
  *
+ * THE DATA ROOM IS ITS OWNER'S (D1102, #2982). Its paths here take D1102's
+ * owner-only rule (`dataRoomOwner`), so an admin is not treated as the owner:
+ * the overview's data-room card is the room's summary for anyone but the owner
+ * (counts and recorded checklist coverage, no file names, investors or access
+ * rows); `GET /modules/data-room` answers an admin 403 `support_read_required`
+ * (the audited `POST /api/data-room/:projectUid/support-read`) and anyone else
+ * 403; `PUT /data-room/files/:id/checklist` answers anyone but the owner 403.
+ *
  * MERCURY IS THE FOUNDER'S ALONE (D840). Its parts and its routes answer only
  * the project's own founder (`founder_id`, not an admin), in their active
  * company, outside a support session, from their own connection. Anyone
@@ -103,6 +116,8 @@ import {
   POSITIONING_OPTION, POSITIONING_PAGE, POSITIONING_SYSTEM, nothingToRead, positioningMaterial, positioningPrompt, readFrom, screenAnswer,
 } from '../services/narrative/positioningDraft';
 import { SECTION_MODES, SECTION_OPTION, SECTION_PAGE, SECTION_SYSTEM, needsWords, screenSection, sectionMaterial, sectionPrompt, type SectionMode } from '../services/narrative/sectionDraft';
+import { readObjections, type Objection } from '../services/narrative/objections';
+import { OBJECTION_OPTION, OBJECTION_SYSTEM, objectionPrompt } from '../services/narrative/objectionDraft';
 import { decideRail, getRail, listRail, proposeRail, withdrawRail, type RailProposal } from '../services/railProposals';
 import { run as aiRouterRun } from '../services/aiRouter';
 import { AI_SURFACE } from '../services/aiSurfaces';
@@ -120,14 +135,17 @@ import { resolveActiveCompany, ACTIVE_COMPANY_HEADER } from '../middleware/activ
 import { projectInActiveCompany } from '../services/tenancyScope';
 import { HolderError } from '../services/capTableWrites';
 import { MatchQueryError, commitmentsRead, matchRead } from '../services/capRelReads';
-import { recomputePmf, pmfHistory } from '../services/scoring/pmfStore';
+import { recomputePmf, pmfHistory, pmfModelRead } from '../services/scoring/pmfStore';
+import { dataRoomOwner, roomSummary } from './data_room';
+import { safeCard, type Card } from '../services/cycleCards';
+import { refuse } from '../util/refusal';
 
 const cycleRaise = new Hono<{ Bindings: Env }>();
 
 const today = () => new Date().toISOString().slice(0, 10);
 
 /** The project in `?project=`, and the caller, or the Response that refuses them. */
-async function scope(c: any): Promise<{ user: User; projectId: number } | Response> {
+async function scope(c: any): Promise<{ user: User; projectId: number; project: ProjectRef } | Response> {
   let user: User;
   try {
     user = (await requireAuth(c)) as User;
@@ -141,11 +159,60 @@ async function scope(c: any): Promise<{ user: User; projectId: number } | Respon
     .bind(projectId).first()) as ProjectRef | null;
   if (!project) return c.json({ detail: 'Project not found' }, 404);
   if (!(/\/deck-links(?:\/|$)/.test(c.req.path) ? canWritePitchDeck(project, user) : canWrite(project, user))) return c.json({ detail: 'Forbidden' }, 403);
-  return { user, projectId };
+  return { user, projectId, project };
+}
+
+// ---------------------------------------------------------------------------
+// D1102 (#2982): the data room's own paths here answer its owner alone
+// ---------------------------------------------------------------------------
+
+/**
+ * `canWrite` admits an admin, so `scope` alone would treat one as the room's
+ * owner. The data-room paths below add D1102's owner-only rule
+ * (`dataRoomOwner`, the helper `routes/data_room.ts` and the shared record
+ * module use): the overview's data-room card, the module read and the
+ * checklist write. Every other path in this file keeps `scope`'s rule.
+ */
+const isRoomOwner = (s: { user: User; project: ProjectRef }) => dataRoomOwner(s.project, s.user as any);
+
+/** The module read's refusal: an admin is pointed at the audited support read, as `/data-room/shared` does. */
+function roomReadRefused(c: any, s: { user: User; project: ProjectRef }): Response | null {
+  if (isRoomOwner(s)) return null;
+  if (isAdmin(s.user)) return refuse(c, 403, { code: 'support_read_required', message: 'Use an audited support read to open this room.' });
+  return c.json({ detail: 'Forbidden' }, 403);
+}
+
+const SUMMARY_ROWS: Array<[string, (s: any) => unknown, 'files' | 'coverage' | 'grants']> = [
+  ['Files', (b) => b.total, 'files'],
+  ['Files gated by NDA', (b) => b.nda, 'files'],
+  ['Checklist items with a tagged file', (b) => `${b.covered_items} of ${b.total_items}`, 'coverage'],
+  ['Active grants', (b) => b.active, 'grants'],
+];
+
+/**
+ * The data-room card for anyone the overview admits who is not the room's
+ * owner: D1102's summary (counts and recorded checklist coverage), never the
+ * owner's card, which names who opened the room. A block that could not be
+ * read says "Unreadable" on its own row; all of them failing is an
+ * unreadable card. It proposes no action: the room's actions are the owner's.
+ */
+function roomSummaryCard(env: Env, projectId: number): Promise<Card> {
+  return safeCard({
+    slug: 'data-room', name: 'Data room', range: 'All files', source: 'The data room summary',
+    caption: 'Counts and checklist tags only. File names, investors and access rows stay with the founder.',
+  }, async () => {
+    const summary: any = await roomSummary(env, { id: projectId, uid: '' });
+    const blocks = [summary.files, summary.coverage, summary.grants];
+    if (!blocks.some((b) => b?.available === true)) throw new Error('Data room summary unavailable');
+    const items = SUMMARY_ROWS.map(([label, value, block]) => ({
+      label, value: summary[block]?.available === true ? value(summary[block]) : 'Unreadable',
+    }));
+    return { state: 'ok', series: [{ kind: 'rows', items }], next: null, reason: null };
+  });
 }
 
 /** D914: `scope`, then the narrative's rule for an admin (read only, and only with a reason). */
-async function narrativeScope(c: any, mode: Mode): Promise<{ user: User; projectId: number } | Response> {
+async function narrativeScope(c: any, mode: Mode): Promise<{ user: User; projectId: number; project: ProjectRef } | Response> {
   const s = await scope(c);
   if (s instanceof Response) return s;
   return (await narrativeAdminGate(c, s.user, s.projectId, mode)) ?? s;
@@ -181,7 +248,11 @@ cycleRaise.get('/overview', async (c) => {
   const s = await scope(c);
   if (s instanceof Response) return s;
   const ctx = ctxOf(c, s.projectId);
-  const [figs, cs] = await Promise.all([figures(ctx), cards(ctx)]);
+  // D1102: the data-room card is the owner's; anyone else reads the room's summary there.
+  // The other six cards are built as `cards()` builds them.
+  const cardsRead = isRoomOwner(s) ? cards(ctx)
+    : Promise.all(MODULES.map((m) => (m.slug === 'data-room' ? roomSummaryCard(c.env, s.projectId) : CARD_FOR[m.slug](ctx))));
+  const [figs, cs] = await Promise.all([figures(ctx), cardsRead]);
   return c.json({ cycle: CYCLE, question: QUESTION, figures: figs, cards: cs, ...(await raisePhone(ctx, figs, cs)) });
 });
 
@@ -191,6 +262,11 @@ cycleRaise.get('/modules/:slug', async (c) => {
   if (!mod) return c.json({ detail: 'No such module', modules: MODULES.map((m) => m.slug) }, 404);
   const s = slug === 'investor-narrative' ? await narrativeScope(c, 'read') : await scope(c);
   if (s instanceof Response) return s;
+  // D1102: the room's files and who opened it are its owner's; refused before anything is read.
+  if (slug === 'data-room') {
+    const refused = roomReadRefused(c, s);
+    if (refused) return refused;
+  }
   const ctx = ctxOf(c, s.projectId);
   const rq = recordQuery({ q: c.req.query('q'), filter: c.req.query('filter'), sort: c.req.query('sort'), page: c.req.query('page') });
   let pmf: unknown;
@@ -269,6 +345,13 @@ cycleRaise.get('/pmf/history', async (c) => {
   if (!Number.isInteger(limit) || limit < 1 || limit > 500 || (raw != null && before == null)) return c.json({ detail: 'Invalid history page' }, 400);
   try { return c.json(await pmfHistory(c.env, s.projectId, limit, before)); }
   catch { return c.json({ state: 'unreadable', detail: 'Product-market fit history could not be read', reason: 'Product-market fit history could not be read' }, 503); }
+});
+
+cycleRaise.get('/pmf/model', async (c) => {
+  const s = await scope(c);
+  if (s instanceof Response) return s;
+  try { return c.json(await pmfModelRead(c.env, s.projectId)); }
+  catch { return c.json({ state: 'unreadable', detail: 'How Product-market fit is scored could not be read', reason: 'How Product-market fit is scored could not be read' }, 503); }
 });
 
 // ---------------------------------------------------------------------------
@@ -523,6 +606,17 @@ cycleRaise.post('/narrative/notes', async (c) => {
   } catch (e) { return inputFailed(c, e, 'note'); }
 });
 
+// D913 (#2697, NAR10): the objections investors raised, project-wide, so Home
+// and Story draw them with no version open (`services/narrative/objections.ts`).
+cycleRaise.get('/narrative/objections', async (c) => {
+  const s = await narrativeScope(c, 'read');
+  if (s instanceof Response) return s;
+  try {
+    const read = await readObjections(c.env, s.projectId);
+    return c.json({ objections: read.items, capped: read.capped });
+  } catch (e) { return unreadable(c, e); }
+});
+
 cycleRaise.get('/narrative/:version', async (c) => {
   const s = await narrativeScope(c, 'read');
   if (s instanceof Response) return s;
@@ -555,6 +649,30 @@ cycleRaise.put('/narrative/:version/sections/:section', async (c) => {
 // writes them with Eadwyn as the source, where the store refuses a digit again.
 const POSITIONING_WORDS: Record<string, string> = { one_liner: 'One-liner', elevator: 'Elevator pitch', category: 'Category', wedge: 'Wedge', line: 'Line' };
 
+/**
+ * What an Eadwyn run reads about one section of one saved version: the
+ * section's words (the page's unsaved `words` when sent, else the stored
+ * ones), the version's audience and its positioning, each figure masked
+ * (`sectionMaterial`). A refusal is the Response to send.
+ */
+async function draftMaterial(c: any, projectId: number, raw: string, sectionKey: string, given: unknown) {
+  if (!/^(0|[1-9][0-9]{0,8})$/.test(raw)) return c.json({ detail: 'Version not found' }, 404) as Response;
+  let read: Awaited<ReturnType<typeof readNarrative>>;
+  try { read = await readNarrative(c.env, projectId, raw); } catch (e) { return writeFailed(c, e) as Response; }
+  if (read.version === 0) return c.json({ detail: 'Version 0 is the live deck’s wording. Change it in the deck, or in a saved version.' }, 409) as Response;
+  if (read.sections.state !== 'ok') return c.json({ code: 'unreadable', detail: 'This version’s sections could not be read, so Eadwyn has nothing to work on. Try again.' }, 503) as Response;
+  const section = (read.sections.items as Array<{ key: string; body: string | null }>).find((x) => x.key === sectionKey);
+  // The words on the page, unsaved, are what the founder asks about; else the stored words.
+  const words = typeof given === 'string' ? given.slice(0, 4000) : section?.body ?? '';
+  const audience = read.meta.state === 'ok' && read.meta.investor_type ? INVESTOR_TYPE_LABEL[read.meta.investor_type] ?? null : null;
+  const positioning = read.positioning.state === 'ok'
+    ? (read.positioning.effective as Array<{ kind: string; text: string }>).filter((p) => POSITIONING_WORDS[p.kind]).map((p) => ({ label: POSITIONING_WORDS[p.kind], text: p.text }))
+    : [];
+  const m = section ? sectionMaterial(sectionKey, words, audience, positioning) : null;
+  if (!m) return c.json({ detail: 'Unknown section', sections: NARRATIVE_SECTIONS.map((x) => x.key) }, 404) as Response;
+  return { version: read.version, m };
+}
+
 cycleRaise.post('/narrative/:version/sections/:section/draft', async (c) => {
   const s = await narrativeScope(c, 'write');
   if (s instanceof Response) return s;
@@ -563,26 +681,16 @@ cycleRaise.post('/narrative/:version/sections/:section/draft', async (c) => {
   const b = await body(c);
   const mode = String(b.mode ?? 'draft') as SectionMode;
   if (!(SECTION_MODES as readonly string[]).includes(mode)) return c.json({ detail: 'mode is draft, shorten or plain' }, 400);
-  let read: Awaited<ReturnType<typeof readNarrative>>;
-  try { read = await readNarrative(c.env, s.projectId, raw); } catch (e) { return writeFailed(c, e); }
-  if (read.version === 0) return c.json({ detail: 'Version 0 is the live deck’s wording. Change it in the deck, or in a saved version.' }, 409);
-  if (read.sections.state !== 'ok') return c.json({ code: 'unreadable', detail: 'This version’s sections could not be read, so Eadwyn has nothing to work on. Try again.' }, 503);
   const sectionKey = String(c.req.param('section') || '');
-  const section = (read.sections.items as Array<{ key: string; body: string | null }>).find((x) => x.key === sectionKey);
-  // The words on the page, unsaved, are what the founder asks about; else the stored words.
-  const words = typeof b.words === 'string' ? b.words.slice(0, 4000) : section?.body ?? '';
-  const audience = read.meta.state === 'ok' && read.meta.investor_type ? INVESTOR_TYPE_LABEL[read.meta.investor_type] ?? null : null;
-  const positioning = read.positioning.state === 'ok'
-    ? (read.positioning.effective as Array<{ kind: string; text: string }>).filter((p) => POSITIONING_WORDS[p.kind]).map((p) => ({ label: POSITIONING_WORDS[p.kind], text: p.text }))
-    : [];
-  const m = section ? sectionMaterial(sectionKey, words, audience, positioning) : null;
-  if (!m) return c.json({ detail: 'Unknown section', sections: NARRATIVE_SECTIONS.map((x) => x.key) }, 404);
+  const got = await draftMaterial(c, s.projectId, raw, sectionKey, b.words);
+  if (got instanceof Response) return got;
+  const { m } = got;
   if (needsWords(mode, m)) return c.json({ code: 'nothing_to_read', detail: `There are no words in ${m.label} to ${mode === 'shorten' ? 'shorten' : 'put in plain words'} yet. Write some, or ask Eadwyn to draft it.` }, 422);
   const result = await aiRouterRun(c.env, {
     task: 'rail_write',
     userId: Number(s.user.id),
     surface: AI_SURFACE.raiseNarrative,
-    rail: railFor(c, { page: SECTION_PAGE, option: SECTION_OPTION }, `narrative:${s.projectId}:${read.version}:${sectionKey}`),
+    rail: railFor(c, { page: SECTION_PAGE, option: SECTION_OPTION }, `narrative:${s.projectId}:${got.version}:${sectionKey}`),
     systemPrompt: SECTION_SYSTEM,
     messages: [{ role: 'user', content: sectionPrompt(mode, m) }],
     temperature: mode === 'draft' ? 0.5 : 0.3,
@@ -593,7 +701,42 @@ cycleRaise.post('/narrative/:version/sections/:section/draft', async (c) => {
   }
   const { text, removed } = screenSection(parseJsonLoose<unknown>(result.output), m.max);
   if (!text) return c.json({ code: 'nothing_kept', detail: 'Eadwyn’s words all held a number, so none was kept. Write this section yourself, and insert figures from your records.', removed }, 422);
-  return c.json({ version: read.version, section: sectionKey, mode, text, removed });
+  return c.json({ version: got.version, section: sectionKey, mode, text, removed });
+});
+
+// D913 (#2697, NAR10): "Answer it". One `rail_write` run under
+// `draft:narrative-objection`: Eadwyn drafts one section's words so they answer
+// one objection. No figure goes in (the section and the objection are masked)
+// and none comes out (a sentence with a digit is dropped); it writes nothing.
+cycleRaise.post('/narrative/objections/:objection/draft', async (c) => {
+  const s = await narrativeScope(c, 'write');
+  if (s instanceof Response) return s;
+  const key = String(c.req.param('objection') || '');
+  if (!/^[0-9a-f]{16}$/.test(key)) return c.json({ detail: 'Objection not found' }, 404);
+  const b = await body(c);
+  const sectionKey = typeof b.section === 'string' ? b.section : '';
+  if (!sectionKey) return c.json({ detail: 'Choose the section that answers it' }, 400);
+  let objection: Objection | undefined;
+  try { objection = (await readObjections(c.env, s.projectId)).items.find((o) => o.key === key); } catch (e) { return unreadable(c, e); }
+  if (!objection) return c.json({ detail: 'Objection not found' }, 404);
+  const got = await draftMaterial(c, s.projectId, String(b.version ?? ''), sectionKey, b.words);
+  if (got instanceof Response) return got;
+  const result = await aiRouterRun(c.env, {
+    task: 'rail_write',
+    userId: Number(s.user.id),
+    surface: AI_SURFACE.raiseNarrative,
+    rail: railFor(c, { page: SECTION_PAGE, option: OBJECTION_OPTION }, `narrative:${s.projectId}:${got.version}:${sectionKey}:objection`),
+    systemPrompt: OBJECTION_SYSTEM,
+    messages: [{ role: 'user', content: objectionPrompt(got.m, objection) }],
+    temperature: 0.5,
+    maxTokens: 900,
+  });
+  if (!result.ok || !result.output) {
+    return refuseRun(c, result) || c.json({ code: 'ai_unavailable', detail: 'Eadwyn could not write this just now. Nothing was charged. Try again.' }, 503);
+  }
+  const { text, removed } = screenSection(parseJsonLoose<unknown>(result.output), got.m.max);
+  if (!text) return c.json({ code: 'nothing_kept', detail: 'Eadwyn’s words all held a number, so none was kept. Answer it yourself, and insert figures from your records.', removed }, 422);
+  return c.json({ version: got.version, section: sectionKey, objection: key, text, removed });
 });
 
 cycleRaise.post('/deck-links', async (c) => {
@@ -669,6 +812,8 @@ cycleRaise.patch('/prospects/:id', async (c) => {
 cycleRaise.put('/data-room/files/:id/checklist', async (c) => {
   const s = await scope(c);
   if (s instanceof Response) return s;
+  // D1102: a room's writes are its owner's. The shared record door refuses the same way.
+  if (!isRoomOwner(s)) return c.json({ detail: 'Forbidden' }, 403);
   const id = idParam(c.req.param('id'));
   if (id == null) return c.json({ detail: 'Invalid file id' }, 400);
   const b = await body(c);

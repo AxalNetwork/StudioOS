@@ -48,10 +48,14 @@ export const BUILD_TABLES = ['mvp_features', 'venture_risks', 'roadmap_okrs', 'f
 export type BuildTable = typeof BUILD_TABLES[number];
 
 export class PlanItemError extends Error {
-  code: 'decided' | 'writer_refused' | 'not_this_project' | 'plan_paused' | 'invalid_edit';
-  status: 400 | 404 | 409 | 502;
-  constructor(code: PlanItemError['code'], status: PlanItemError['status'], message: string) {
-    super(message); this.code = code; this.status = status;
+  // D1068 adds the handoff and link refusals (services/buildHandoffs.ts).
+  code: 'decided' | 'writer_refused' | 'not_this_project' | 'plan_paused' | 'invalid_edit'
+    | 'no_plan' | 'not_accepted' | 'invalid_handoff' | 'repository_not_picked' | 'too_long' | 'pii_found' | 'marker_unknown' | 'already_linked';
+  status: 400 | 403 | 404 | 409 | 422 | 502;
+  /** Fields the refusal carries beside its code and sentence, such as a privacy check's finding kinds. */
+  extra?: Record<string, unknown>;
+  constructor(code: PlanItemError['code'], status: PlanItemError['status'], message: string, extra?: Record<string, unknown>) {
+    super(message); this.code = code; this.status = status; this.extra = extra;
   }
 }
 

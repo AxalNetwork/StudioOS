@@ -10,7 +10,7 @@ import events from '../src/routes/events.ts';
 const SECRET = 'events-2395-synthetic-key-'.repeat(3);
 function fixture(route = events) {
   const db = new DatabaseSync(':memory:', { enableForeignKeyConstraints: false });
-  for (const name of ['109_events_core.sql', '392_event_organiser.sql']) db.exec(readFileSync(new URL(`../sql/migrations/${name}`, import.meta.url), 'utf8'));
+  for (const name of ['109_events_core.sql', '392_event_organiser.sql', '611_event_registrations_comp_promoted.sql']) db.exec(readFileSync(new URL(`../sql/migrations/${name}`, import.meta.url), 'utf8'));
   db.exec(`CREATE TABLE users (id INTEGER PRIMARY KEY, uid TEXT, email TEXT, name TEXT, role TEXT, is_active INTEGER DEFAULT 1);
     INSERT INTO users VALUES (1,'host','host@example.test','Host','founder',1), (2,'a','a@example.test','A','founder',1), (3,'b','b@example.test','B','founder',1);
     INSERT INTO events (id,slug,host_user_id,title,starts_at,status,visibility,admin_published,audience_rules_json)

@@ -18,6 +18,10 @@ import { api, request } from '../api.js';
 //   acceptRequest(p, uid, body)   POST  /data-room/:p/requests/:uid/accept { expires_at?, folders? } → { ok, state }; 409 request_decided
 //   declineRequest(p, uid, reason) POST /data-room/:p/requests/:uid/decline { reason } → { ok, state }; 409 request_decided
 //   sendNda(p, grantUid)          POST  /data-room/:p/grants/:uid/nda → { status: 'envelope_issued', envelope_uuid, signing_url }; 409 nda_active | nda_pending; 404 for an admin (D1102), 403 founder_only
+// D1107 (#2987) — Data room part 6, Access and Share:
+//   shareCandidates(p)            GET   /data-room/:p/share-candidates → { candidates: [{ uid, name, firm, stage, email }] }; 403 owner_only
+//   share(p, body)                POST  /data-room/:p/grants { prospect, expires_at?, folders? } → { ok }; the address is read from this venture's prospect; 400 no_email, 404 another venture's
+//   The requests read also carries `diligence: [{ id, title, state, created_at, responded_at, reviewed_at, files: [{ uid, name }] }]`, or null with `diligence_unreadable`.
 // D1105 (#2985) — Data room part 4, the owner's and a co-founder's reads:
 //   activity(p, q)     GET /data-room/:p/activity?from&to&investor&action&page
 //                      → { period, previous_period, filters, daily: [{ day, opened, downloaded, blocked }],
@@ -43,6 +47,8 @@ export const dataRoomApi = {
   requests: (projectUid) => request(`/data-room/${seg(projectUid)}/requests`),
   acceptRequest: (projectUid, uid, body) => request(`/data-room/${seg(projectUid)}/requests/${seg(uid)}/accept`, { method: 'POST', body: JSON.stringify(body || {}) }),
   declineRequest: (projectUid, uid, reason) => request(`/data-room/${seg(projectUid)}/requests/${seg(uid)}/decline`, { method: 'POST', body: JSON.stringify({ reason }) }),
+  shareCandidates: (projectUid) => request(`/data-room/${seg(projectUid)}/share-candidates`),
+  share: (projectUid, body) => request(`/data-room/${seg(projectUid)}/grants`, { method: 'POST', body: JSON.stringify(body || {}) }),
   sendNda: (projectUid, grantUid) => request(`/data-room/${seg(projectUid)}/grants/${seg(grantUid)}/nda`, { method: 'POST' }),
   activity: (projectUid, q) => request(`/data-room/${seg(projectUid)}/activity${activityQuery(q)}`),
   activityCsv: (projectUid, q) => api._downloadCsv(`/data-room/${seg(projectUid)}/activity.csv${activityQuery(q)}`, 'data-room-activity.csv'),

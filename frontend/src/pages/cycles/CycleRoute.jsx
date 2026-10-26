@@ -44,7 +44,8 @@ import MvpFromGithub from './MvpFromGithub';
 import UpdatesHistory from './UpdatesHistory';
 import ReportingDesk from './ReportingDesk';
 import BuildPlan, { BuildPlanDoor, VerdictRecordWithPlan } from './BuildPlan';
-import { PmfPart, ReadinessDoor } from './PmfPart';
+import { PmfPart } from './PmfPart';
+import { PmfChip } from './PmfMethod';
 import UpdateAskReplies from './UpdateAskReplies';
 import CallsHistory from './CallsHistory';
 import RaiseReceiptMatches from '../../components/RaiseReceiptMatches';
@@ -181,17 +182,18 @@ const CYCLE_DEFS = {
     // D840 part 2 (#2347): every Raise module's From Mercury, the founder's alone, anchored at #from-mercury.
     parts: toFnMap({
       ...Object.fromEntries(MODULES.raise.map((m) => [m.slug, (data, ctx) => mercuryPart(m.slug, data, ctx)])),
-      // D909 (#2693, NAR1): Home's tiles, Needs you and footer, from the module read's `parts.narrative`.
+      // D909 (#2693, NAR1): Home's tiles, Needs you and footer, from the module read's `parts.narrative`;
+      // D913: its Objections heard, with no Answer it for an admin.
       'investor-narrative': (data, ctx) => (
         <>
-          <NarrativeHome data={data} />
+          <NarrativeHome data={data} admin={isNarrativeAdmin({ role: ctx.role })} />
           {mercuryPart('investor-narrative', data, ctx)}
         </>
       ),
-      // D1141 (#2433): Product-market fit, not scored yet, with model v1; then From Mercury.
+      // D1141 (#2433), D1145 (#3031): Product-market fit from `parts.pmf`, beside the raise kit; then From Mercury.
       'fundraising-readiness': (data, ctx) => (
         <>
-          <PmfPart projectId={ctx.projectId} />
+          <PmfPart part={data?.parts?.pmf} card={data?.card} records={data?.records} projectId={ctx.projectId} reload={ctx.reload} />
           {mercuryPart('fundraising-readiness', data, ctx)}
         </>
       ),
@@ -1060,11 +1062,11 @@ export default function CycleRoute({ cycle, lightbox = false, adding = false, re
           onRetryCard={retryCard}
           action={action}
           search={q}
+          // D1146 (#3032, RD12): Validate's header chip, the stored band, opening Fundraising readiness.
+          chip={cycle === 'validate' && projectId ? <PmfChip projectId={projectId} search={q} /> : null}
         />
         {/* D1063 (#2426): the door to the plan, under Build's overview. */}
         {cycle === 'build' && <BuildPlanDoor search={q} />}
-        {/* D1141 (#2433, RD12): Validate's records feed Product-market fit on Fundraising readiness. */}
-        {cycle === 'validate' && <ReadinessDoor search={q} />}
         <AlsoIn role="founder" row={name} />
       </>
     );
