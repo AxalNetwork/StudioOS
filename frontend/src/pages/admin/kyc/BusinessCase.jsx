@@ -13,6 +13,7 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { kybApi } from '../../../lib/api/kyb.js';
+import { businessDocumentBlob } from '../../../lib/api/kycPeople.js';
 import { reportError } from '../../../lib/log';
 import { useAuth } from '../../../hooks/useAuthSync';
 import { Unrecorded } from '../../../ui';
@@ -144,7 +145,7 @@ export function KycBusinessView({ c, onChanged = () => {}, me = null, back = nul
   const entity = c.entity || {};
   const now = nowIso ? Date.parse(nowIso) : Date.now();
   const waiting = ['in_review', 'not_started', 'needs_info'].includes(c.status) ? waitingFor(c.submitted_at, now) : null;
-  const fetchDoc = useMemo(() => (doc ? () => kybApi.documentBlob(c.uid, doc.id) : null), [c.uid, doc]);
+  const fetchDoc = useMemo(() => (doc ? () => businessDocumentBlob(c.uid, doc.id) : null), [c.uid, doc]);
   const shut = { onClose: () => setDialog(null), onDone: done, onStale: stale };
   const requested = Array.isArray(c.requested_documents) ? c.requested_documents : [];
 

@@ -440,7 +440,7 @@ test('the wiring: the tab, the case route, the door, the docs', () => {
   assert.match(read('frontend/src/pages/admin/ConsolePages.jsx'), /people=\{<KycConsole \/>\} businesses=\{<KycBusinesses \/>\} \/>/);
   assert.match(read('frontend/src/App.jsx'), /<Route path="\/admin\/kyc\/businesses\/:id" element=\{guard\(\['admin'\], <KycPage \/>\)\} \/>/);
   assert.match(read('frontend/test/admin_route_reachability.test.mjs'), /kyc\/KycBusinesses\.jsx/);
-  assert.match(read('frontend/src/lib/api/kyb.js'), /documentBlob: \(id, documentId\) => fetchKycDocument\(/);
+  assert.match(read('frontend/src/lib/api/kycPeople.js'), /export const businessDocumentBlob = \(uid, documentId, \{ signal \} = \{\}\) =>\n  fetchKycDocument\(`\/api\/kyc\/businesses\//);
   assert.match(read('documentation/architecture/decisions/D1234.md'), /## D1234/);
   assert.match(read('documentation/architecture/ROUTE_MAP.md'), /D1234/);
   assert.match(read('frontend/src/pages/admin/kyc/README.md'), /BusinessCase\.jsx/);

@@ -1,6 +1,5 @@
 // D1231: business verification. Staff reads; writes retain the shared step-up retry.
 import { request } from '../api.js';
-import { fetchKycDocument } from './kycPeople.js';
 const ref = value => encodeURIComponent(value);
 // The caller supplies the token returned by the case it displayed. Never refresh it silently.
 const write = (path, body, method = 'PATCH') => {
@@ -18,7 +17,5 @@ export const kybApi = {
   linkAccount: (id, userId, reviewToken) => write(`/kyc/businesses/${ref(id)}/link-account`, { user_id: userId, review_token: reviewToken }),
   addStudio: body => write('/kyc/businesses/licensed-studios', body, 'POST'),
   uploadDocument: (id, body) => write(`/kyc/businesses/${ref(id)}/documents`, body, 'POST'),
-  /** D1234: one document's bytes for the viewer inside the page; the Worker logs the view. */
-  documentBlob: (id, documentId) => fetchKycDocument(`/api/kyc/businesses/${ref(id)}/documents/${ref(documentId)}`),
   sensitive: (id, field, index) => request(`/kyc/businesses/${ref(id)}/sensitive/${ref(field)}${index == null ? '' : `?index=${ref(index)}`}`),
 };

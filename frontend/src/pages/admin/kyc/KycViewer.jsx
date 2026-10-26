@@ -52,7 +52,7 @@ export default function KycViewer({ userId, doc, viewer, rejectedOn = null, onCl
     if (doc.removed) return;
     setState({ kind: 'loading' });
     try {
-      // D1234: a business's document passes its own loader (`kybApi.documentBlob`).
+      // D1234: a business's document passes its own loader (`kycPeople.businessDocumentBlob`).
       const { blob, type } = fetchDoc ? await fetchDoc() : await kycPeopleApi.documentBlob(userId, doc.legacy ? null : doc.id);
       if (url.current && typeof URL !== 'undefined' && URL.revokeObjectURL) URL.revokeObjectURL(url.current);
       url.current = typeof URL !== 'undefined' && URL.createObjectURL ? URL.createObjectURL(blob) : null;
