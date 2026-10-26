@@ -231,8 +231,16 @@ test('stale metrics do not prove current traction or outrank a recent typed runw
     assert.equal((await figure(f.ctx,'runway_months')).value,10,'future cash does not replace the recorded current snapshot');
     f.db.exec('DELETE FROM project_metrics WHERE project_id=1 AND cash_balance=20');
     runway=await figure(f.ctx,'runway_months');assert.match(runway.reason,/Stale/);assert.equal(runway.as_of,'2000-01-02');
-    f.db.exec('DELETE FROM project_metrics WHERE project_id=1');
-    runway=await figure(f.ctx,'runway_months');assert.equal(runway.value,null);assert.equal(runway.as_of,'2000-01-01');assert.match(runway.reason,/Stored Mercury runway fact is outside the current 90-day window/);
+    f.db.exec("UPDATE mercury_raise_facts SET as_of='2000-01-03'");
+    runway=await figure(f.ctx,'runway_months');assert.equal(runway.value,10000);assert.equal(runway.as_of,'2000-01-03');assert.match(runway.source,/Connector · Mercury/);assert.match(runway.reason,/Stale/);
+    f.db.exec("UPDATE mercury_raise_facts SET as_of='2000-01-02'");
+    assert.equal((await figure(f.ctx,'runway_months')).value,10000,'Mercury wins a stale-date tie');
+    f.db.exec('UPDATE mercury_raise_facts SET burn_cents=0');
+    runway=await figure(f.ctx,'runway_months');assert.equal(runway.value,null);assert.equal(runway.state,'not_recorded');assert.match(runway.reason,/positive recorded net burn/);
+    f.db.exec('DELETE FROM project_metrics WHERE project_id=1; UPDATE mercury_raise_facts SET burn_cents=100');
+    runway=await figure(f.ctx,'runway_months');assert.equal(runway.value,10000);assert.equal(runway.as_of,'2000-01-02');assert.match(runway.reason,/Stale/);
+    f.db.prepare('UPDATE mercury_raise_facts SET as_of=?').run(ago(-1));
+    runway=await figure(f.ctx,'runway_months');assert.equal(runway.value,null);assert.equal(runway.as_of,ago(-1));assert.match(runway.reason,/Stored Mercury runway fact is outside the current 90-day window/);
     f.db.exec('DELETE FROM mercury_raise_facts');
     runway=await figure(f.ctx,'runway_months');assert.equal(runway.as_of,null);assert.match(runway.reason,/^No metrics snapshot/);
   }finally{f.db.close();}

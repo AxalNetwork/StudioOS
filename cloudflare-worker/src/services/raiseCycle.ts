@@ -1674,6 +1674,10 @@ async function runwayFigure(ctx: Ctx): Promise<Figure> {
     ).bind(ctx.projectId, ctx.today, daysBefore(ctx.today, 90), ctx.projectId, ctx.today).all<{ cash_balance: number; net_burn: number; snapshot_date: string; source: string }>();
     const rows = res.results || [];
     const snaps = rows.filter(r => r.source === rows[0]?.source);
+    if (bank && bank.as_of.slice(0, 10) <= ctx.today && (!snaps.length || bank.as_of.slice(0, 10) >= snaps[0].snapshot_date)) {
+      const value = runwayMonths(bank.amount_cents, bank.burn_cents);
+      return { value, source: 'Connector · Mercury · measured cash and net burn', delta_30d: null, spark: [], state: value == null ? 'not_recorded' : 'ok', as_of: bank.as_of, reason: `Stale · the newest runway observation is older than 90 days.${value == null ? ' Mercury has no positive recorded net burn.' : ''}` };
+    }
     if (snaps.length === 0) return { value: null, delta_30d: null, spark: [], state: 'not_recorded', as_of: bank?.as_of ?? null, reason: bank ? 'Stored Mercury runway fact is outside the current 90-day window; no eligible metrics snapshot records cash and net burn' : 'No metrics snapshot records cash and net burn' };
     const source = snaps[0].source === 'mercury' ? 'Connector · Mercury · project_metrics (measured cash and net burn)' : `project_metrics · stated: ${snaps[0].source || 'source not recorded'} · Founder's figure`;
     const now = runwayMonths(Number(snaps[0].cash_balance), Number(snaps[0].net_burn));
