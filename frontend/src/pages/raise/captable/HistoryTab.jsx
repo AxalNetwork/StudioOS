@@ -18,14 +18,14 @@ import {
  * (CT12c); both are the page's dialogs, given as `onVoid` and `onCorrect`.
  */
 
-const CARD = 'rounded-xl border border-axal-hairline bg-white dark:border-gray-800 dark:bg-gray-900';
-const INK = 'text-axal-ink dark:text-gray-100';
+const CARD = 'rounded-xl border border-axal-hairline bg-white dark:border-gray-700 dark:bg-gray-900';
+const INK = 'text-axal-ink dark:text-gray-200';
 const MUTED = 'text-axal-muted dark:text-gray-400';
-const INPUT = 'rounded-[9px] border border-axal-hairline bg-white px-2.5 py-1.5 text-[12.5px] text-axal-ink dark:border-gray-700 dark:bg-gray-950 dark:text-gray-100';
+const INPUT = 'rounded-[9px] border border-axal-hairline bg-white px-2.5 py-1.5 text-[12.5px] text-axal-ink dark:border-gray-700 dark:bg-gray-950 dark:text-gray-200';
 const PILL = 'inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[11px] font-semibold';
-const DOC = 'border-axal-hairline bg-white text-axal-ink dark:border-gray-700 dark:bg-gray-900 dark:text-gray-100';
-const NODOC = 'border-amber-200 bg-amber-50 text-amber-800 dark:border-amber-900 dark:bg-amber-950/30 dark:text-amber-300';
-const LINK = 'text-[12px] font-semibold text-axal-violet hover:text-axal-violet-deep dark:text-violet-300';
+const DOC = 'border-axal-hairline bg-white text-axal-ink dark:border-gray-700 dark:bg-gray-900 dark:text-gray-200';
+const NODOC = 'border-amber-200 bg-amber-50 text-amber-800 dark:border-amber-300/55 dark:bg-amber-300/10 dark:text-amber-300';
+const LINK = 'text-[12px] font-semibold text-axal-violet hover:text-axal-violet-deep dark:text-violet-400';
 
 function usePaged(load, deps) {
   const [state, setState] = useState({ status: 'loading', data: null });
@@ -44,7 +44,7 @@ function usePaged(load, deps) {
 function Pager({ page, size, total, count, onPage, testId }) {
   const last = Math.max(1, Math.ceil((total || 0) / size));
   return (
-    <div className="flex flex-wrap items-center justify-between gap-2 border-t border-axal-ground px-4 py-2 dark:border-gray-800" data-testid={testId}>
+    <div className="flex flex-wrap items-center justify-between gap-2 border-t border-axal-ground px-4 py-2 dark:border-gray-700" data-testid={testId}>
       <span className={`font-mono text-[11.5px] ${MUTED}`} data-testid={`${testId}-line`}>{pageLine(page, size, total, count)}</span>
       <span className="flex gap-1.5">
         <button type="button" className={actionGhost} disabled={page <= 1} onClick={() => onPage(page - 1)} data-testid={`${testId}-prev`}>Previous</button>
@@ -71,7 +71,7 @@ function Toolbar({ value, onApply }) {
     </select>
   );
   return (
-    <form className="flex flex-wrap items-end gap-2 border-b border-axal-ground px-4 py-3 dark:border-gray-800" role="search" aria-label="Search history"
+    <form className="flex flex-wrap items-end gap-2 border-b border-axal-ground px-4 py-3 dark:border-gray-700" role="search" aria-label="Search history"
       onSubmit={(e) => { e.preventDefault(); apply(draft); }} data-testid="captable-history-toolbar">
       <input className={`${INPUT} min-w-[180px] flex-1`} value={draft.q} onChange={set('q')} placeholder="Search history" aria-label="Search history" maxLength={200} data-testid="captable-history-q" />
       {select('kind', TYPE_OPTIONS, 'Type')}
@@ -82,14 +82,14 @@ function Toolbar({ value, onApply }) {
       <button type="submit" className={actionGhost} data-testid="captable-history-apply">Search</button>
       {JSON.stringify(draft) !== JSON.stringify(EMPTY_FILTERS)
         ? <button type="button" className={actionGhost} onClick={() => { setDraft(EMPTY_FILTERS); apply(EMPTY_FILTERS); }} data-testid="captable-history-clear">Clear</button> : null}
-      {error ? <p role="alert" className="m-0 w-full text-[12px] font-semibold text-red-700 dark:text-red-300" data-testid="captable-history-filter-error">{error}</p> : null}
+      {error ? <p role="alert" className="m-0 w-full text-[12px] font-semibold text-red-700 dark:text-red-400" data-testid="captable-history-filter-error">{error}</p> : null}
     </form>
   );
 }
 
 function TimelineRow({ r, owner, admin, onVoid, onCorrect }) {
   return (
-    <li className="flex gap-3 border-b border-axal-ground px-4 py-3 last:border-b-0 dark:border-gray-800" data-testid="captable-history-row">
+    <li className="flex gap-3 border-b border-axal-ground px-4 py-3 last:border-b-0 dark:border-gray-700" data-testid="captable-history-row">
       <span className="flex w-12 shrink-0 flex-col items-center font-mono leading-tight" aria-label={r.date ? `${r.date.d} ${r.date.m} ${r.date.y}` : 'Date not recorded'}>
         {r.date ? (<><span className={`text-[10.5px] font-bold ${MUTED}`}>{r.date.m}</span><span className={`text-[16px] font-extrabold ${INK}`}>{r.date.d}</span><span className={`text-[10.5px] ${MUTED}`}>{r.date.y}</span></>) : <span className={MUTED}>—</span>}
       </span>
@@ -148,7 +148,7 @@ export default function HistoryTab({ projectId, record, owner = false, admin = f
                     {changes.data.rows.map((e, i) => {
                       const c = changeRow(e);
                       return (
-                        <li key={`${e.at}-${i}`} className="flex justify-between gap-3 border-b border-axal-ground px-4 py-2.5 last:border-b-0 dark:border-gray-800" data-testid="captable-change">
+                        <li key={`${e.at}-${i}`} className="flex justify-between gap-3 border-b border-axal-ground px-4 py-2.5 last:border-b-0 dark:border-gray-700" data-testid="captable-change">
                           <span className={`text-[12.5px] ${INK}`}>{c.text}</span>
                           <span className={`shrink-0 font-mono text-[11.5px] ${MUTED}`}>{c.when}</span>
                         </li>

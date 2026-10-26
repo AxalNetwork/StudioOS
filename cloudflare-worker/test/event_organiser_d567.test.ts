@@ -9,7 +9,7 @@ import { agendaLocation, registrationEligibility, validateRegistrationRules } fr
 const SECRET = 'event-organiser-fixture-key-'.repeat(3);
 function fixture() {
   const db = new DatabaseSync(':memory:', { enableForeignKeyConstraints: false });
-  for (const name of ['109_events_core.sql', '392_event_organiser.sql']) db.exec(readFileSync(new URL(`../sql/migrations/${name}`, import.meta.url), 'utf8'));
+  for (const name of ['109_events_core.sql', '392_event_organiser.sql', '611_event_registrations_comp_promoted.sql']) db.exec(readFileSync(new URL(`../sql/migrations/${name}`, import.meta.url), 'utf8'));
   db.exec(`CREATE TABLE users (id INTEGER PRIMARY KEY, uid TEXT, email TEXT, name TEXT, role TEXT, is_active INTEGER DEFAULT 1);
     CREATE TABLE user_personas (user_id INTEGER, persona_id TEXT, is_primary INTEGER DEFAULT 1);
     CREATE TABLE activity_logs (action TEXT, details TEXT, actor TEXT, user_id INTEGER);
