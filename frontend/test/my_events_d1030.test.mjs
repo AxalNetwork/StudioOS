@@ -109,7 +109,13 @@ function prepare({ user = { id: 2, role: 'founder' }, list, publicList, suggeste
     toast: { toast: null, showToast: () => {} },
     calls: [],
     api: {
-      list: list || (async () => ({ hosting: HOSTING, attending: ATTENDING })),
+      // D1034: Past is its own list in the reply (D1032), with an exact total.
+      list: list || (async () => ({ hosting: HOSTING, attending: ATTENDING, past: { places: [{ ...ATTENDING[3], outcome: 'attended' }], total: 1 } })),
+      // D1034: the tabs' own reads. Each answers empty unless a test says otherwise.
+      invitations: async () => ({ invitations: [] }),
+      feedStatus: async () => ({ subscribed: false, created_at: null, last_used_at: null }),
+      calendarLinks: async () => ({ google: null, outlook: null, ics: null }),
+      eligibility: async () => { throw new Error('not stubbed'); },
       suggested: suggested || (async () => ({ events: [{ id: 30, slug: 'pricing', title: 'Suggested Talk', ...at('2026-12-02T10:00:00Z'), suggestion_reason: 'Matches your track' }] })),
       icsUrl: (id) => `/api/events/${id}/ics`,
     },
@@ -174,7 +180,8 @@ test('Hosting: the groups, each row\'s one action, and the review desk line for 
   const ui = await mount('/my/events/hosting');
   try {
     for (const g of ['needs', 'draft', 'review', 'published', 'cancelled']) assert.ok(ui.ids().includes(`my-events-group-${g}`), g);
-    assert.equal(ui.count('my-events-hosted-row'), 7);
+    // D1034: "When: Upcoming" is the default, so the past published event waits under Past or Any time.
+    assert.equal(ui.count('my-events-hosted-row'), 6);
     assert.ok(ui.hrefs().includes('/events/13/manage') && ui.hrefs().includes('/events/10/edit'));
     assert.ok(!ui.ids().includes('my-events-review-line'));
   } finally { await ui.unmount(); }
@@ -191,8 +198,9 @@ test('Discover reads the public calendar from now, marks what you hold, and answ
   const ui = await mount('/my/events/discover');
   try {
     assert.equal(ui.count('my-events-discover-row'), 2);
-    assert.ok(globalThis[key].calls[0].from, 'only upcoming events');
-    assert.equal(globalThis[key].calls[0].limit, 25);
+    // D1034: the month's list is one read of up to 100; the month chips' counts are reads of one.
+    const month = globalThis[key].calls.find((c) => c.limit === 100);
+    assert.ok(month && month.from, 'only upcoming events, from now');
     assert.match(ui.text(), /Show ticket/, 'D1035: the place you hold opens its ticket');
     assert.match(ui.text(), /\$40/);
     assert.ok(ui.hrefs().includes('/events/demo-day'));
@@ -211,7 +219,7 @@ test('Past: places and hosted events, newest first, with Replay "Not recorded"; 
   try {
     assert.equal(ui.count('my-events-past-row'), 2);
     assert.match(ui.text(), /Checked in/);
-    assert.match(ui.text(), /Replay: Not recorded/);
+    assert.match(ui.text(), /Replay · Not recorded/, 'D1034: the canvas\'s words (MEV9)');
   } finally { await ui.unmount(); }
   prepare({ list: async () => { throw new Error('down'); } });
   const failed = await mount('/my/events/past');
