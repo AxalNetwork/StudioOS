@@ -325,6 +325,8 @@ roster. The meetings router accepts `auto_send_bot:false`, otherwise queues B1
 for the consented session at the scheduled start. Bot refusal is separate from
 successful call creation; cancellation stops the bot before the provider call.
 
+D1168 (#3081): `admin_platform.ts` mounts `POST /api/admin/platform/storage/backfill-sizes`, an audited, bounded metadata-only batch for HQ Super Admin with TOTP and recent step-up. Discovery cursors stay in D1; only counts leave the route.
+
 D886 B10 (#2588): `admin_platform.ts` mounts Super Admin-only
 `/meeting-bots` count/charge reads and `/meeting-bots/test` dispatch/timing reads.
 Dispatch requires TOTP plus recent step-up and calls B1's service with the
