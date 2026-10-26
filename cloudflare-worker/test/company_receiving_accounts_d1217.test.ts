@@ -253,3 +253,15 @@ test('concurrent Accepts have one winner and a stale proposal snapshot cannot wr
   assert.equal(f.one('SELECT sent_at FROM commitments WHERE id=30').sent_at,null);
  }finally{f.close();}
 });
+
+test('founder-owned instructions stay available during a studio administration suspension',async()=>{
+ const f=fixture();try{
+  f.env.BRANCH_CODE='fixture';
+  f.db.exec("INSERT INTO branch_licence(id,licence_uid,status,pushed_at) VALUES(1,'fixture-licence','suspended',CURRENT_TIMESTAMP)");
+  await save(f);
+  await save(f,1,OTHER_NUMBER);
+  assert.equal((await f.call(3,'GET')).body.account.account_number,'••••7777');
+  assert.equal((await f.call(3,'POST','/10/reveal',{commitment_uid:'line-one'})).body.account.account_number,OTHER_NUMBER);
+  assert.notEqual((await f.call(2,'PUT','/10',input(2))).status,200);
+ }finally{f.close();}
+});

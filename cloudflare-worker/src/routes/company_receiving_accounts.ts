@@ -1,7 +1,7 @@
 /** D1217 (#3214): prepared /api/closings/company-receiving-accounts routes. */
 import { Hono } from 'hono';
 import type { Env } from '../types';
-import { requireAuth, requireBranchNotSuspended } from '../auth';
+import { requireAuth } from '../auth';
 import { isSupportSession } from '../integrations/providers/mercury';
 import { refuse } from '../util/refusal';
 import { AUTH_ERROR_STATUSES } from '../util/authErrors';
@@ -31,7 +31,7 @@ accounts.get('/:projectId', async (c) => {
 });
 accounts.put('/:projectId', async (c) => {
   const user = await requireAuth(c);
-  await requireBranchNotSuspended(c);
+  // Private company instructions are not a studio administration decision (D107).
   const input = await c.req.json().catch(() => null);
   if (!input || typeof input !== 'object' || Array.isArray(input)) return refuse(c, 400, { code: 'invalid_body', message: 'Enter the receiving account details.' });
   return c.json(await setCompanyAccount(c.env, user.id, Number(c.req.param('projectId')), input));
