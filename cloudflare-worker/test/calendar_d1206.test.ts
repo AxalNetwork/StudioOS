@@ -5,7 +5,6 @@ import { readFileSync } from 'node:fs';
 import { DatabaseSync } from 'node:sqlite';
 import { SignJWT } from 'jose';
 import calendar from '../src/routes/calendar.ts';
-import worker from '../src/index.ts';
 import * as service from '../src/services/calendar.ts';
 import { mintFeedToken } from '../src/services/calendar/feedTokens.ts';
 import { encryptString } from '../src/services/cryptoBox.ts';
@@ -47,7 +46,7 @@ function fixture() {
   async function request(path: string, id = 1, body?: unknown, mounted = false) {
     const token = await new SignJWT({ user_id: id }).setProtectedHeader({ alg: 'HS256' }).setIssuedAt().setExpirationTime('1h').sign(new TextEncoder().encode(SECRET));
     const init = { method: body === undefined ? 'GET' : 'POST', headers: { Cookie: `${env.BRANCH_CODE ? 'studioos_auth_' + env.BRANCH_CODE : 'studioos_auth'}=${token}; studioos_csrf=fixture-csrf`, 'x-csrf-token': 'fixture-csrf', Origin: 'https://axal.vc', 'content-type': 'application/json' }, ...(body === undefined ? {} : { body: JSON.stringify(body) }) };
-    return mounted ? worker.fetch(new Request('https://axal.vc/api/calendar' + path, init), env, ctx) : calendar.request(path, init, env, ctx);
+    return mounted ? (await import('../src/index.ts')).default.fetch(new Request('https://axal.vc/api/calendar' + path, init), env, ctx) : calendar.request(path, init, env, ctx);
   }
   return { db, env, request, breakSource(s: string) { broken = s; }, async close() { await Promise.allSettled(pending); db.close(); } };
 }
@@ -182,6 +181,7 @@ test('D1206: Studio reads only the licensed deployment, deduplicates participant
   const f = fixture();
   try {
     licensed(f); checkins(f);
+    f.db.exec("UPDATE founder_checkins SET status='cancelled' WHERE id=22");
     f.db.prepare('INSERT INTO ic_meetings (id,uid,title,start_at,organizer_user_id) VALUES (?,?,?,?,?)').run(1,'shared-ic','Shared meeting',START,1);
     f.db.exec('INSERT INTO ic_meeting_attendees (meeting_id,user_id) VALUES (1,1),(1,2)');
     await assert.rejects(() => service.fetchCalendarScope(f.env,{ id: 2, role: 'founder' } as any,'studio',FROM,TO), { message: 'Forbidden' });
@@ -196,7 +196,9 @@ test('D1206: Studio reads only the licensed deployment, deduplicates participant
     assert.deepEqual(body.coverage.studios, [{ name: 'Fixture studio', code: 'fr', ok: true, error: null, reason: null }]);
     for (const event of body.items) {
       assert.equal(event.read_only, true);
-      assert.deepEqual(event.can, { edit: false, cancel: false, rsvp: false, push: false });
+      assert.deepEqual(event.my_role,{ code: 'read_only', words: 'Read only' });
+      assert.equal(event.family, 'meetings'); assert.equal(event.href,null);
+      assert.deepEqual(event.can, { rsvp: false, reschedule: false, cancel: false, copy: false });
       assert.equal(event.organizer_email, null); assert.equal(event.location_uri, null); assert.equal(event.notes, null);
       assert.ok(event.attendees.every((person: any) => person.email === null));
       assert.deepEqual(event.pushed_to, []);
@@ -261,6 +263,10 @@ test('D1206: Studio requires readable current licence and membership; a failed s
       assert.match(body.coverage.reason,/Try again/);
       assert.ok(body.sources.every((s: any) => !s.ok && s.error === error));
     }
+    f.breakSource(''); f.db.exec('DROP TABLE advisor_bookings');
+    const notConfigured = await (await f.request(`/events?${window}&scope=studio&kinds=advisor_booking,founder_checkin`)).json() as any;
+    assert.equal(notConfigured.items.length,2); assert.equal(notConfigured.coverage.error,'not_configured');
+    assert.match(notConfigured.coverage.reason,/Not read here yet/);
     f.breakSource(''); f.db.exec("UPDATE branch_licence SET status='terminated'");
     const terminated = await (await f.request(`/events?${window}&scope=studio`)).json() as any;
     assert.equal(terminated.coverage.error, 'not_configured'); assert.deepEqual(terminated.items, []);
