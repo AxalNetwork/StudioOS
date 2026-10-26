@@ -24,6 +24,14 @@ import { logActivity } from './partnernet';
 
 const capital = new Hono<{ Bindings: Env }>();
 
+// D1214: the retired bulk writer must never bill across funds. Fund admin
+// owns explicit fund calls and their audit/receipt flow.
+capital.post('/capitalCall', async (c) => {
+  await requireAuth(c);
+  return c.json({ error: 'Capital calls are managed in Fund admin.' }, 410);
+});
+
+
 function lpDto(row: any) {
   return {
     id: row.id,

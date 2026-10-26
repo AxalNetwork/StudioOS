@@ -18,8 +18,8 @@ import { DirectoryPanel } from './consoles/DirectoryConsole';
 import { WellbeingExpertsPanel } from './consoles/WellbeingConsole';
 import { BankAccountsPanel } from './consoles/BankAccountsConsole';
 import { ProductTestingPanel } from './consoles/ProductTestingConsole';
-import { ProductTestingTabBody } from './productTesting/ProductTestingTabs';
-import { PAGE_LINE as TESTING_LINE, viewOf as testingViewOf } from './productTesting/productTestingModel';
+import { ProductTestingTabBody, useTestingReads } from './productTesting/ProductTestingTabs';
+import { PAGE_LINE as TESTING_LINE, tabCounts as testingTabCounts, viewOf as testingViewOf } from './productTesting/productTestingModel';
 import { PromoCodesPanel } from './consoles/PromoCodesConsole';
 import { KycTabBody } from './kyc/KycTabs';
 import { PAGE_LINE as KYC_LINE, viewOf as kycViewOf } from './kyc/kycModel';
@@ -208,13 +208,16 @@ export function BankAccountsPage() {
 export function ProductTestingHqPage() {
   const { pathname, search } = useLocation();
   const view = testingViewOf(pathname, search);
+  // D1201: the tab counts and the Overview's tiles draw from the same two reads.
+  const reads = useTestingReads();
+  const counts = testingTabCounts(reads.programmes, reads.testers);
   const tabs = (
     <>
       <HeaderTab to="/admin/platform/product-testing" data-testid="testing-tab-overview">Overview</HeaderTab>
-      <HeaderTab to="/admin/platform/product-testing/review" data-testid="testing-tab-review">Review</HeaderTab>
-      <HeaderTab to="/admin/platform/product-testing/programs" end={false} data-testid="testing-tab-programs">Programs</HeaderTab>
-      <HeaderTab to="/admin/platform/product-testing/applicants" data-testid="testing-tab-applicants">Applicants</HeaderTab>
-      <HeaderTab to="/admin/platform/product-testing/testers" data-testid="testing-tab-testers">Tester pool</HeaderTab>
+      <HeaderTab to="/admin/platform/product-testing/review" count={counts.review} data-testid="testing-tab-review">Review</HeaderTab>
+      <HeaderTab to="/admin/platform/product-testing/programs" end={false} count={counts.programs} data-testid="testing-tab-programs">Programs</HeaderTab>
+      <HeaderTab to="/admin/platform/product-testing/applicants" count={counts.applicants} data-testid="testing-tab-applicants">Applicants</HeaderTab>
+      <HeaderTab to="/admin/platform/product-testing/testers" count={counts.testers} data-testid="testing-tab-testers">Tester pool</HeaderTab>
     </>
   );
   const more = (
@@ -225,7 +228,7 @@ export function ProductTestingHqPage() {
   );
   return (
     <ConsolePage hqOnly crumb={{ ...PLATFORM, current: 'Product testing' }} title="Product testing" line={TESTING_LINE} tabs={tabs} more={more} testId="admin-platform-product-testing">
-      <ProductTestingTabBody view={view} review={<ProductTestingPanel view="review" />} programs={<ProductTestingPanel />} />
+      <ProductTestingTabBody view={view} reads={reads} review={<ProductTestingPanel view="review" />} programs={<ProductTestingPanel />} />
     </ConsolePage>
   );
 }

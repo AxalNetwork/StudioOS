@@ -4,8 +4,8 @@ The Super Admin's Product testing page at `/admin/platform/product-testing` (D11
 
 | File | What it is |
 |---|---|
-| `productTestingModel.js` | Pure: the five tabs and their addresses, `viewOf` (the tab, and on a program its uid and sub-tab), the overview figures from the programme list, the tester row without its email, and each block's wait. |
-| `ProductTestingTabs.jsx` | The new tabs' bodies: Overview (tiles, places bars, status chips), one program (details, HQ's own applicants), Applicants and the Tester pool. `ProductTestingTabBody` picks one from the address. |
+| `productTestingModel.js` | Pure: the five tabs and their addresses, `viewOf` (the tab, and on a program its uid and sub-tab), the overview figures from the programme list, the tester row without its email, and each block's wait. D1201: the weekly series, the profile bars and Mail reach rows from D1196's read, Needs you, the tab counts and the rail's line. |
+| `ProductTestingTabs.jsx` | The new tabs' bodies: Overview (tiles, places bars, status chips; D1201's weekly, by-profile and Mail reach charts with View as table, Needs you and the rail's line), one program (details, HQ's own applicants), Applicants and the Tester pool. `ProductTestingTabBody` picks one from the address. `useTestingReads` is the page's two shared reads: the header's tab counts and the Overview's tiles draw from the same answers. |
 
 ## Where the page lives
 
