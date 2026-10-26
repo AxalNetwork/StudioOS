@@ -511,4 +511,14 @@ export async function completeClosing(env: Env, user: User, closingUid: string) 
     ).bind(Number(user.id), stamp, closing.id, stamp, Number(user.id)),
   ]);
   if (!Number((upd as any)?.meta?.changes ?? 0)) throw new ClosingRefusal(409, 'closing_not_open', 'This closing is closed, so nothing on it changes.');
+  // CP12, D1058: the reporting duties the signed papers name. A failure here
+  // never undoes the close; the daily step creates any duty a closing missed.
+  try {
+    const { createReportingDuties } = await import('./reportingDuties');
+    const r = await createReportingDuties(env, closing.id);
+    return { reporting_duties: r.created, reporting_duties_reason: r.reason };
+  } catch {
+    console.warn('[closings] reporting duties not created; the daily step retries');
+    return { reporting_duties: 0, reporting_duties_reason: 'retried_daily' };
+  }
 }

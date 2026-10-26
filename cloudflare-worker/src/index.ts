@@ -129,6 +129,7 @@ import fundLedger from './routes/fund_ledger';
 import fundFees from './routes/fund_fees';
 import fundAdmin from './routes/fund_admin';
 import closings, { adminClosings } from './routes/closings';
+import reporting from './routes/reporting';
 import fundReporting from './routes/fund_reporting';
 import fundBooklets from './routes/fund_booklets';
 import fundNotices from './routes/fund_notices';
@@ -1240,6 +1241,8 @@ app.route('/api/fund-fees', fundFees); // D709 (#1774): the management fee; reco
 app.route('/api/fund-admin', fundAdmin);
 // D1215 (#3212): closings as a record; the admin desk is mounted before the /api/admin catch-all.
 app.route('/api/closings', closings);
+// D1058 (#2928): reporting duties and periods, the founder's desk and the investor's view.
+app.route('/api/reporting', reporting);
 app.route('/api/fund-reporting', fundReporting);
 // D716 — the Subscription Booklet: the applicant's ticks and submit, and HQ's read and withdraw.
 app.route('/api/fund-booklets', fundBooklets);
@@ -2110,6 +2113,19 @@ export default {
             cronSummary.push(`grow daily reminders=${r.reminders} alerts=${r.alerts}`);
           } catch (e) {
             console.error('[cron] grow daily failed', e instanceof Error ? e.message : 'error');
+          }
+        }
+        // D1058 (#2928) — Reporting's daily step: duties a closing missed, the
+        // periods that have come, and the team's reminders, each claimed
+        // before it is sent so a second run the same day sends nothing.
+        if (now.getUTCHours() === 5 && now.getUTCMinutes() === 40) {
+          try {
+            const { runReportingDaily } = await import('./services/reportingDuties');
+            const r = await runReportingDaily(env, now.getTime());
+            if (r.duties || r.periods || r.reminders) console.info(`[cron] reporting daily duties=${r.duties} periods=${r.periods} reminders=${r.reminders}`);
+            cronSummary.push(`reporting daily duties=${r.duties} periods=${r.periods} reminders=${r.reminders}`);
+          } catch (e) {
+            console.error('[cron] reporting daily failed', e instanceof Error ? e.message : 'error');
           }
         }
         if (now.getUTCHours() === 5 && now.getUTCMinutes() === 25) {
