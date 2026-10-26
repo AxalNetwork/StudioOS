@@ -92,7 +92,7 @@ test('internal deal fields are staff-only and zip is retired', async () => {
   const db=freshDb();
   try { for(const who of [ADMIN,INV_INVITED,INV_COMMITTED,INV_NONE,FOUNDER,PARTNER,7,8]) assert.equal((await call(db,who,'GET','@/api/deals/1/data-room')).status,410); } finally {db.close();}
 });
-test('commitments: investor own rows, founder/admin all, partner total only',async()=>{
+test('commitments: investor own rows; founder, admin and partner all rows, never a note (D1155)',async()=>{
   const db=freshDb();
   try {
     db.exec("INSERT INTO commitments(deal_id,investor_user_id,amount,status) VALUES(1,2,2000,'confirmed')");
@@ -101,8 +101,12 @@ test('commitments: investor own rows, founder/admin all, partner total only',asy
       assert.equal(r.status,200,r.text);assert.equal(r.body.length,1);
       assert.equal(r.body[0].investor_user_id,who);
     }
-    for(const who of [ADMIN,FOUNDER]) assert.equal((await call(db,who,'GET','@/api/deals/1/commitments')).body.length,2);
-    assert.deepEqual((await call(db,PARTNER,'GET','@/api/deals/1/commitments')).body,{total:2000});
+    // D1155 (DL15, #2421 question 7 A): an Operating Partner reads the rows too; nobody but the investor reads a note.
+    for(const who of [ADMIN,FOUNDER,PARTNER]) {
+      const rows=(await call(db,who,'GET','@/api/deals/1/commitments')).body;
+      assert.equal(rows.length,2);
+      for(const row of rows) assert.ok(!('notes' in row),'a note reaches '+who);
+    }
   } finally {db.close();}
 });
 test('reference edits/deletion require author or admin even on a readable deal',async()=>{
