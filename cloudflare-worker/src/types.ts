@@ -54,6 +54,8 @@ export interface Env {
   WHATSAPP_CHANNEL?: string;
   /** D860 (#2505): WhatsApp calls groundwork, on only when exactly "true". */
   WHATSAPP_CALLS?: string;
+  /** D856 (#2501): the guided WhatsApp setup through Meta's MCP, on only when exactly "on". */
+  WHATSAPP_MCP_SETUP?: string;
   TELEGRAM_CHANNEL?: string;
   // D867: private forwarded recordings; absent/unknown is off.
   TELEGRAM_CAPTURE?: string;

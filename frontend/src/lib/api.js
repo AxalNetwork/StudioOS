@@ -5380,6 +5380,22 @@ export const dd = {
     request(`/dd/cases/${uid}/requests`, { method: 'POST', body: JSON.stringify(data) }),
   reviewRequest: (uid, id) =>
     request(`/dd/cases/${uid}/requests/${id}`, { method: 'PATCH', body: JSON.stringify({ state: 'reviewed' }) }),
+  // D1248 (#3263) — due dates, reminders, withdraw, item evidence and document links.
+  setRequestDue: (uid, id, dueDate) =>
+    request(`/dd/cases/${uid}/requests/${id}`, { method: 'PATCH', body: JSON.stringify({ due_date: dueDate || null }) }),
+  remindRequest: (uid, id) => request(`/dd/cases/${uid}/requests/${id}/remind`, { method: 'POST' }),
+  withdrawRequest: (uid, id, reason) =>
+    request(`/dd/cases/${uid}/requests/${id}/withdraw`, { method: 'POST', body: JSON.stringify(reason ? { reason } : {}) }),
+  addEvidenceLink: (uid, itemId, url, label) =>
+    request(`/dd/cases/${uid}/items/${itemId}/evidence`, { method: 'POST', body: JSON.stringify({ url, label }) }),
+  addEvidenceFile: (uid, itemId, file) => {
+    const fd = new FormData();
+    fd.append('file', file);
+    return request(`/dd/cases/${uid}/items/${itemId}/evidence`, { method: 'POST', body: fd });
+  },
+  /** A single-use, two-minute link for the caller alone: `kind` is `attachment` or `request_file`. */
+  documentLink: (uid, kind, id) =>
+    request(`/dd/cases/${uid}/documents/download`, { method: 'POST', body: JSON.stringify({ kind, id }) }),
   // Subject-facing surface: the ONLY dd calls a founder may make. The
   // payload carries no case internals — see routes/dd.ts invariant.
   myRequests: () => request('/dd/requests/mine'),
