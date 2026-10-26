@@ -13,8 +13,8 @@ Nothing here is typed by hand, so nothing here can disagree with them.
 each canvas and why. This document answers a different question: *who sees
 it, where in their nav, and how do they get there.*
 
-**Corpus:** 177 canonical canvases at `design/canvases/`, listed
-270 times below — a canvas serving two workspaces appears under both.
+**Corpus:** 178 canonical canvases at `design/canvases/`, listed
+271 times below — a canvas serving two workspaces appears under both.
 
 ## Column meanings
 
@@ -340,10 +340,11 @@ it, where in their nav, and how do they get there.*
 | Spin-Out Lab-print-1vkgcux | `/spinout-lab` | — (no nav entry) | Full page (Spin-Out Lab — frozen) | Deep link / in-page action | OUT OF SCOPE | High |
 | Trust center (public) | `/trust/me` · `/admin/security/trust-center` | — (no nav entry) | Full page | Deep link / in-page action | NEW | Medium |
 
-## Unassigned — no persona in ROUTE_MAP — 2 canvases
+## Unassigned — no persona in ROUTE_MAP — 3 canvases
 
 | Canvas | Route | Nav section | Surface | Entry point | Status | Confidence |
 | --- | --- | --- | --- | --- | --- | --- |
+| AI tokens | `/account/usage/ai-tokens` | — (not routed) | Full page (proposed) | Not reachable yet | NEW | Low |
 | Brand & Landing Page copy | — | — (not routed) | Full page (Spin-Out Lab — frozen) | Not reachable yet | OUT OF SCOPE | High |
 | My events | `/my/events` · `/my/events/hosting` · `/my/events/discover` · `/my/events/past` · `/my/events/ticket/:eventId` · `/my/events/hosting/:eventId` | — (not routed) | Full page (proposed) | Not reachable yet | UPGRADE | Low |
 
@@ -353,7 +354,7 @@ it, where in their nav, and how do they get there.*
 | --- | ---: | --- |
 | High | 115 | Live route, reachable from that workspace’s sidebar. |
 | Medium | 76 | Live route, but no sidebar row for that role — reached by deep link or an in-page action. |
-| Low | 79 | Not routed. Proposed route only. |
+| Low | 80 | Not routed. Proposed route only. |
 
 A Medium row is not a defect. Detail pages (`/deals/:id`), print artefacts
 and wizards are reached from the surface above them by design; the brief’s

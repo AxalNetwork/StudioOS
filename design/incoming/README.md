@@ -189,6 +189,25 @@ edited.
 tabs and one code's drawer as addresses, under the HQ only pill. The rest is
 D1271–D1276.
 
+## Landed 2026-10-26 — Account › Usage › AI tokens (#2482)
+
+The owner's artifacts `4dVvhKMKyGTBMyNftUp29h` (the page) and
+`Rv7G6qKfmv8k4TzqW5DqeQ` (the board grid) came from S21's prompt on #2482.
+Each was decoded by `scripts/read-canvas.mjs`:
+- `AI tokens · Boards.dc.html` is the board grid (TOKB1 to TOKB13); it imports
+  the page by name;
+- `AI Tokens Page.dc.html` is the page.
+
+**One edit, named.** The reader left two image asset uuids in the page. The
+Axal VC mark (`alt="Axal VC"`) now points at `/axal-mark.png`. The other is a
+32px member avatar with no copy in the repository; it stays as the reader left
+it, so that image does not render. No other value was edited.
+
+**Grade: NEW.** S21's integration (D1277) puts AI tokens third in Usage's
+column at `/account/usage/ai-tokens`, each card waiting, and adds Overview's
+"Holds and prices ›". The build is #2482 itself (S20); the reads it waits on are
+D1278.
+
 ## Landed 2026-10-26 — Approvals › KYC & KYB (#2384)
 
 The owner's artifacts `9U6YH5eduDN6bpd5k4Tucm` (the board grid) and

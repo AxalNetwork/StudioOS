@@ -131,7 +131,8 @@ test('ROUTE_MAP still parses to the full canvas corpus', () => {
   // 175 (D1253, #2428): `Venture scorecard`, the panel, the strip and its three pages.
   // 176 (D1261, #2430): `Raise evidence`, the founder's view, its drawers and the investor block.
   // 177 (D1270, #2381): `Promo codes`, Codes, Usage and one code's drawer.
-  assert.equal(recs.length, 177);
+  // 178 (D1277, #2482): `AI tokens`, Usage's third page.
+  assert.equal(recs.length, 178);
 
   for (const r of recs) {
     assert.ok(r.canvas.length > 0, 'every row names a canvas');

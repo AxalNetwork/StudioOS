@@ -21,6 +21,8 @@ export const OVERVIEW_LINKS = Object.freeze({
   spend: '/account/usage/cost', balance: '/account/billing', daily: '/account/usage/cost',
   tokens: '/account/usage/cost', limits: '/account/usage/limits', invoices: '/account/billing',
   storage: '/account/usage/storage',
+  // D1277 (#2482, owner question 2): the balance keeps Open billing and adds a way to holds and prices.
+  aiTokens: '/account/usage/ai-tokens',
 });
 export function UsageBar({ pct, label }) {
   return <div className="my-2 h-1.5 overflow-hidden rounded-full bg-axal-ground dark:bg-gray-800"
@@ -57,6 +59,7 @@ export function BalanceOverview({ me, overview, autoReload }) {
         : <div className={VALUE}>{balance} <span className="font-sans text-xs font-medium tracking-normal">AI tokens</span></div>}
       <p className="mt-2 text-xs">{allowance?.kind === 'plan' ? `${allowance.left} left of this month's plan allowance`
         : allowance?.kind === 'none' ? allowance.text : 'Not recorded: this month’s plan allowance was not returned.'}</p>
+      <p className="mt-2 text-xs"><Link to={OVERVIEW_LINKS.aiTokens} className={OPEN} data-testid="overview-ai-tokens">Holds and prices ›</Link></p>
     </UsageCardState>
     <div className="mt-2 flex flex-wrap gap-2">
       <UsageCardState read={autoReload} what="Auto-reload">
