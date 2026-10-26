@@ -50,10 +50,13 @@ test('cap-table vesting readers remain scoped to their intended audience', () =>
   // D896 (#2675) added one more on purpose: the pitch deck's sources count
   // the venture's vesting schedules through its own cap-table holders, as a
   // number for a card, read only — pinned below.
+  // D1262 (#3285) adds project/holder/user-scoped Team counts in Raise.
+  // Real SQLite tests in raise_evidence_fixes_d1262 cover its scope and
+  // aggregate-only projection; it returns no personal vesting schedule.
   assert.deepEqual(
     readers.sort(),
-    ['integrations/providers/carta.ts', 'routes/captable.ts', 'routes/company.ts', 'routes/cycle_build.ts', 'services/capTableRegister.ts', 'services/capTableWrites.ts', 'services/decks/sources.ts', 'services/records/build.ts'],
-    'only the Carta importer, the four reviewed readers and the one reviewed writer should touch these tables',
+    ['integrations/providers/carta.ts', 'routes/captable.ts', 'routes/company.ts', 'routes/cycle_build.ts', 'services/capTableRegister.ts', 'services/capTableWrites.ts', 'services/decks/sources.ts', 'services/raiseCycle.ts', 'services/records/build.ts'],
+    'only the importer, declared readers and reviewed writer should touch these tables',
   );
   const deck = read('cloudflare-worker/src/services/decks/sources.ts');
   assert.doesNotMatch(deck, /cap_table_option_pools/, 'the deck counts vesting rows, not pools');

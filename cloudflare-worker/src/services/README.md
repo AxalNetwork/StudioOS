@@ -262,6 +262,13 @@ model). Since D691 (#1699) each list carries the canvas's title, columns,
 filters and default sort (the first in `sorts`), and its row ids are addresses
 that never hold a name: an item key, a version, a link, file or prospect id, a
 cap-table `h-<n>`, `e-<n>` or `pool`, and a use-of-funds section key.
+D1262 (#3285) names the last complete month's revenue sources and each source's
+metric snapshot; typed traction stays stated. Team backing reads founder/vesting
+and scoped GitHub counts beside the manual assessment. Room opens count only
+open_room/download. Capital exposes separate received/wired/signed/soft totals,
+using confirmed receipts for received; runway prefers a Connector record and
+keeps its source and date. The later Evidence pack and investor projection are
+separate tasks.
 `capRelReads.ts` (D1190, #3124) is Capital relationships' Commitments
 and Match reads: one commitments read across typed prospects, round-call
 answers, deal-room commitments and the founder's Mercury matches, each investor
