@@ -93,7 +93,7 @@ async function personal(api = service, route = calendar) {
       f.db.prepare(`INSERT INTO ${provider === 'Google' ? 'google_oauth_tokens' : 'microsoft_oauth_tokens'} (user_id,refresh_token) VALUES (1,?)`).run(encrypted);
       pushed.length = 0;
       const summary = await api[`syncUserTo${provider}`](f.env, 1, 'admin', FROM, TO);
-      assert.deepEqual([summary.total, summary.pushed, summary.failed], [7,6,0]);
+      assert.deepEqual([summary.total, summary.pushed, summary.failed], [6,6,0]);
       assert.deepEqual(new Set(pushed.map(e => e.summary ?? e.subject)), new Set(own.filter(e => e.kind !== 'calendly_event').map(e => e.title)));
     }
   } finally { globalThis.fetch = oldFetch; await f.close(); }
@@ -260,7 +260,7 @@ test('#2440: personal calendar assertions reject widened readers across all sour
     ['if (!(isRequester || isPartnerSide))', 'if (false)'],
     ["source = 'calendly' AND user_id = ?", "source = 'calendly' AND ? IS NOT NULL"],
     ["kind = ? AND user_id = ?", "kind = ? AND ? IS NOT NULL"],
-    ['fetchUserEvents(env, userId, role, fromIso, toIso)', 'fetchUserEvents(env, 2, role, fromIso, toIso)'],
+    ['fetchUserEvents(env, userId, role, fromIso, toIso, copyKinds)', 'fetchUserEvents(env, 2, role, fromIso, toIso, copyKinds)'],
   ]) {
     assert.ok(serviceSource.includes(before), before);
     const mutated = moduleUrl(serviceSource.replace(before, after), serviceUrl);

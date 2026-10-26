@@ -148,7 +148,7 @@ test('D1206: both providers skip Calendly on full sync and direct push; the pers
       f.db.prepare(`INSERT INTO ${table} (user_id,refresh_token) VALUES (1,?)`).run(await encryptString(f.env, 'fixture-refresh'));
       payloads.length = 0;
       const r = await service[`syncUserTo${provider}`](f.env, 1, 'admin', FROM, TO);
-      assert.deepEqual(r, { total: 2, pushed: 1, updated: 0, failed: 0, skipped: 1, removed: 0 });
+      assert.deepEqual(r, { total: 1, pushed: 1, updated: 0, failed: 0, skipped: 0, removed: 0, excluded_kinds: ['calendly_event'] });
       assert.deepEqual(payloads.map(p => p.summary ?? p.subject), ['Fixture 2']);
       assert.equal(await service[`pushEventTo${provider}`]('fixture-access', calendly, null), null);
       assert.equal(await service[`pushEventTo${provider}`]('fixture-access', calendly, 'fixture-existing'), null);
@@ -211,6 +211,7 @@ test('D1206: Studio reads only the licensed deployment, deduplicates participant
     globalThis.fetch = async () => { attemptedCopies++; throw new Error('scoped projection must not reach a provider'); };
     for (const provider of ['Google','Microsoft'] as const) assert.equal(await service[`pushEventTo${provider}`]('fixture-access',body.items[0],null), null);
     assert.equal(attemptedCopies,0);
+    assert.equal((await f.request(`/events?scope=studio&from=1970-01-01&to=2100-01-01`)).status,400);
     const personal = await f.request(`/events?${window}&kinds=founder_checkin,ic_meeting`);
     const mine = await personal.json() as any;
     assert.deepEqual(new Set(mine.items.map((e: any) => e.id)), new Set(['ic_meeting:1','founder_checkin:11']));
@@ -419,5 +420,51 @@ test('D1206: set-based scope preserves every allowed source and filters private 
       for (const item of personal.events) expected.add(item.id);
     }
     assert.deepEqual(new Set(body.events.map(e=>e.id)),expected,'set-based visibility must match the allowed union of unchanged personal readers');
+  } finally { await f.close(); }
+});
+
+
+test('D1206: excluded Calendly read failures do not block eligible copies on either provider', async () => {
+  const f = fixture(); const titles: string[] = [];
+  globalThis.fetch = async (url: any,init: any) => {
+    const u = new URL(String(url));
+    assert.ok(['oauth2.googleapis.com','login.microsoftonline.com','www.googleapis.com','graph.microsoft.com'].includes(u.hostname));
+    if (u.pathname.includes('token')) return Response.json({ access_token:'fixture-access' });
+    const body=JSON.parse(init.body); titles.push(body.summary ?? body.subject); return Response.json({ id:'fixture-copied' });
+  };
+  try {
+    f.db.prepare('INSERT INTO founder_checkins (uid,founder_user_id,title,start_at) VALUES (?,?,?,?)').run('copy-own',1,'Fixture eligible copy',START);
+    f.breakSource("source = 'calendly'");
+    for (const provider of ['Google','Microsoft'] as const) {
+      const table=provider==='Google'?'google_oauth_tokens':'microsoft_oauth_tokens';
+      f.db.prepare(`INSERT INTO ${table} (user_id,refresh_token) VALUES (1,?)`).run(await encryptString(f.env,'fixture-refresh'));
+      const r=await service[`syncUserTo${provider}`](f.env,1,'admin',FROM,TO);
+      assert.deepEqual([r.total,r.pushed,r.failed],[1,1,0]); assert.deepEqual(r.excluded_kinds,['calendly_event']);
+    }
+    assert.deepEqual(titles,['Fixture eligible copy','Fixture eligible copy']);
+    assert.equal(f.statements().some(sql=>sql.includes("source = 'calendly'")),false);
+  } finally { await f.close(); }
+});
+
+test('D1206: staff windows and per-source result caps are explicit; boundary windows remain readable', async () => {
+  const f=fixture();
+  try {
+    licensed(f);
+    const from=new Date('2026-01-01T00:00:00Z').toISOString();
+    const boundary=new Date(Date.parse(from)+180*86400000).toISOString();
+    assert.equal(service.validScopeWindow(from,boundary),true);
+    assert.equal(service.validScopeWindow(from,new Date(Date.parse(boundary)+1).toISOString()),false);
+    assert.equal(service.validScopeWindow(boundary,from),false);
+    assert.equal(service.validScopeWindow('invalid',boundary),false);
+    await assert.rejects(()=>service.fetchCalendarScope(f.env,{ id:1,role:'admin' } as any,'studio',boundary,from),{ message:'Invalid calendar scope window' });
+    assert.equal((await f.request(`/events?scope=studio&from=${from}&to=${boundary}&kinds=founder_checkin`)).status,200);
+    assert.equal((await f.request(`/events?scope=studio&from=${boundary}&to=${from}`)).status,400);
+    for(let id=0;id<1001;id++) f.db.prepare('INSERT INTO founder_checkins (uid,founder_user_id,title,start_at) VALUES (?,?,?,?)').run(`limit-${id}`,2,`Fixture capped ${id}`,new Date(Date.parse(START)+(1001-id)*1000).toISOString());
+    const result=await service.fetchCalendarScope(f.env,{ id:1,role:'admin' } as any,'studio',FROM,TO,['founder_checkin']);
+    assert.equal(result.events.length,1000); assert.equal(result.coverage.complete,false);
+    assert.equal(result.events[0].title,'Fixture capped 1000'); assert.equal(result.events.at(-1)?.title,'Fixture capped 1');
+    assert.equal(result.events.some(item=>item.title==='Fixture capped 0'),false);
+    assert.deepEqual(result.coverage.truncated_kinds,['founder_checkin']); assert.match(result.coverage.reason || '',/Narrow the date window/);
+    assert.deepEqual(result.sources,[{ kind:'founder_checkin',ok:true,error:null }]);
   } finally { await f.close(); }
 });

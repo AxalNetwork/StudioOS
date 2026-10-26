@@ -2,8 +2,8 @@
  * Calendar service — port of backend/app/services/calendar_unified.py.
  *
  * Two responsibilities:
- *   1. Aggregator — fetch the signed-in user's events across IC meetings and
- *      founder check-ins (the only bookable surfaces present in worker D1).
+ *   1. Personal calendar readers and separate read-only staff scopes across
+ *      the Worker D1 calendar stores.
  *   2. OAuth + push-sync — Google Calendar v3 and Microsoft Graph v1.0.
  *
  * Both providers expose the same eight functions (status check, auth-URL,
@@ -909,6 +909,11 @@ export async function fetchUserEventsWithSources(
 
 /** Private external meetings and wellbeing sessions never enter a staff scope. */
 export const SCOPED_EXCLUDED_KINDS = ['calendly_event', 'expert_booking'] as const;
+export const SCOPED_SOURCE_LIMIT = 1000;
+export function validScopeWindow(from: string, to: string): boolean {
+  const start = Date.parse(from), end = Date.parse(to);
+  return Number.isFinite(start) && Number.isFinite(end) && end >= start && end - start <= 180 * 86_400_000;
+}
 
 type ScopedRow = Record<string, any>;
 /**
@@ -916,12 +921,12 @@ type ScopedRow = Record<string, any>;
  * this deployment, without widening any of the personal readers above.
  * Each source deliberately reads no email, note, join link or private address.
  */
-async function scopedRows(env: Env, actor: User, all: boolean, kind: CalendarEvent['kind'], from: string, to: string): Promise<ScopedRow[]> {
+async function scopedRows(env: Env, actor: User, all: boolean, kind: CalendarEvent['kind'], from: string, to: string): Promise<{ rows: ScopedRow[]; truncated: boolean }> {
   let query: string;
   switch (kind) {
     case 'ic_meeting':
       query = `WITH members AS (SELECT id FROM users WHERE is_active = 1 AND (role <> 'admin' OR id = ? OR ? = 1))
-        SELECT m.id, m.uid, m.title, m.start_at, m.duration_min, m.status, m.location_kind, m.deal_id, m.cancel_reason,
+        SELECT m.id AS id, m.uid, m.title, m.start_at AS start_at, m.duration_min, m.status, m.location_kind, m.deal_id, m.cancel_reason,
           (SELECT json_group_array(json_object('name',u.name,'role','attendee','rsvp',a.rsvp))
              FROM ic_meeting_attendees a LEFT JOIN users u ON u.id = a.user_id WHERE a.meeting_id = m.id) AS people_json
         FROM ic_meetings m WHERE m.start_at >= ? AND m.start_at <= ?
@@ -930,7 +935,7 @@ async function scopedRows(env: Env, actor: User, all: boolean, kind: CalendarEve
       break;
     case 'founder_checkin':
       query = `WITH members AS (SELECT id FROM users WHERE is_active = 1 AND (role <> 'admin' OR id = ? OR ? = 1))
-        SELECT c.id,c.uid,c.title,c.start_at,c.duration_min,c.status,c.location_kind,c.project_id,
+        SELECT c.id AS id,c.uid,c.title,c.start_at AS start_at,c.duration_min,c.status,c.location_kind,c.project_id,
                f.name AS founder_name,p.name AS counterpart_name
         FROM founder_checkins c LEFT JOIN users f ON f.id = c.founder_user_id LEFT JOIN users p ON p.id = c.counterpart_user_id
         WHERE c.start_at >= ? AND c.start_at <= ?
@@ -938,7 +943,7 @@ async function scopedRows(env: Env, actor: User, all: boolean, kind: CalendarEve
       break;
     case 'advisor_booking':
       query = `WITH members AS (SELECT id FROM users WHERE is_active = 1 AND (role <> 'admin' OR id = ? OR ? = 1))
-        SELECT b.id,b.uid,b.topic,b.status,b.cancel_reason,s.starts_at AS start_at,s.ends_at AS end_at,
+        SELECT b.id AS id,b.uid,b.topic,b.status,b.cancel_reason,s.starts_at AS start_at,s.ends_at AS end_at,
                a.display_name AS host_name,a.timezone AS time_zone,u.name AS requester_name
         FROM advisor_bookings b JOIN advisor_office_hour_slots s ON s.id = b.slot_id
           LEFT JOIN advisors a ON a.id = b.advisor_id LEFT JOIN users u ON u.id = b.founder_user_id
@@ -948,7 +953,7 @@ async function scopedRows(env: Env, actor: User, all: boolean, kind: CalendarEve
       break;
     case 'partner_office_hour':
       query = `WITH members AS (SELECT id,partner_id FROM users WHERE is_active = 1 AND (role <> 'admin' OR id = ? OR ? = 1))
-        SELECT b.id,b.uid,b.topic,b.status,b.cancel_reason,s.starts_at AS start_at,s.ends_at AS end_at,
+        SELECT b.id AS id,b.uid,b.topic,b.status,b.cancel_reason,s.starts_at AS start_at,s.ends_at AS end_at,
                p.name AS host_name,u.name AS requester_name
         FROM partner_bookings b JOIN partner_office_hour_slots s ON s.id = b.slot_id
           LEFT JOIN partners p ON p.id = b.partner_id LEFT JOIN users u ON u.id = b.founder_user_id
@@ -958,7 +963,7 @@ async function scopedRows(env: Env, actor: User, all: boolean, kind: CalendarEve
       break;
     case 'event_ticket':
       query = `WITH members AS (SELECT id FROM users WHERE is_active = 1 AND (role <> 'admin' OR id = ? OR ? = 1))
-        SELECT r.id, r.status AS reg_status,r.payment_status,r.waitlist_position,e.id AS event_id,e.title,
+        SELECT r.id AS id, r.status AS reg_status,r.payment_status,r.waitlist_position,e.id AS event_id,e.title,
                e.starts_at AS start_at,e.ends_at AS end_at,e.project_id,e.location_kind
         FROM event_registrations r JOIN events e ON e.id = r.event_id
         WHERE e.starts_at >= ? AND e.starts_at <= ? AND r.user_id IN (SELECT id FROM members)
@@ -967,22 +972,23 @@ async function scopedRows(env: Env, actor: User, all: boolean, kind: CalendarEve
       break;
     case 'event_hosted':
       query = `WITH members AS (SELECT id FROM users WHERE is_active = 1 AND (role <> 'admin' OR id = ? OR ? = 1))
-        SELECT e.id,e.title,e.starts_at AS start_at,e.ends_at AS end_at,e.status,e.project_id,e.location_kind
+        SELECT e.id AS id,e.title,e.starts_at AS start_at,e.ends_at AS end_at,e.status,e.project_id,e.location_kind
         FROM events e WHERE e.starts_at >= ? AND e.starts_at <= ?
           AND e.host_user_id IN (SELECT id FROM members) AND e.status <> 'cancelled'`;
       break;
     case 'investor_meeting':
       query = `WITH members AS (SELECT id,founder_id FROM users WHERE is_active = 1 AND (role <> 'admin' OR id = ? OR ? = 1))
-        SELECT ev.id,ev.kind,ev.starts_at AS start_at,ev.calendar_item_uid AS uid,p.name AS prospect_name,p.firm AS prospect_firm,
+        SELECT ev.id AS id,ev.kind,ev.starts_at AS start_at,ev.calendar_item_uid AS uid,p.name AS prospect_name,p.firm AS prospect_firm,
                pr.id AS project_id
         FROM raise_prospect_events ev JOIN raise_prospects p ON p.id = ev.prospect_id JOIN projects pr ON pr.id = p.project_id
         WHERE ev.starts_at >= ? AND ev.starts_at <= ? AND ev.kind IN ('meeting','call') AND ev.calendar_item_uid IS NOT NULL
           AND pr.founder_id IN (SELECT founder_id FROM members WHERE founder_id IS NOT NULL)`;
       break;
-    default: return [];
+    default: return { rows: [], truncated: false };
   }
-  const result = await env.DB.prepare(query).bind(actor.id, all ? 1 : 0, from, to).all<ScopedRow>();
-  return result.results || [];
+  const result = await env.DB.prepare(query + ' ORDER BY start_at, id LIMIT ?').bind(actor.id, all ? 1 : 0, from, to, SCOPED_SOURCE_LIMIT + 1).all<ScopedRow>();
+  const rows = result.results || [];
+  return { rows: rows.slice(0, SCOPED_SOURCE_LIMIT), truncated: rows.length > SCOPED_SOURCE_LIMIT };
 }
 
 /** A staff scope's row, deliberately carrying only the detail that view may show. */
@@ -1027,6 +1033,7 @@ export interface CalendarScopeCoverage {
   complete: boolean;
   error: 'unreadable' | 'not_configured' | null;
   reason: string | null;
+  truncated_kinds?: CalendarEvent['kind'][];
   studios: { name: string | null; code: string | null; ok: boolean; error: 'unreadable' | 'not_configured' | null; reason: string | null }[];
 }
 export interface CalendarScopeItem extends CalendarItem {
@@ -1038,6 +1045,7 @@ export async function fetchCalendarScope(
 ): Promise<{ events: CalendarScopeItem[]; sources: CalendarSourceStatus[]; coverage: CalendarScopeCoverage }> {
   const branch = branchOf(env);
   if (actor.role !== 'admin' || (scope === 'all' && (branch || !isSuperAdmin(actor)))) throw new Error('Forbidden');
+  if (!validScopeWindow(fromIso,toIso)) throw new Error('Invalid calendar scope window');
   const wanted = KNOWN_KINDS.filter(kind => !SCOPED_EXCLUDED_KINDS.some(privateKind => privateKind === kind) && (!kinds?.length || kinds.includes(kind)));
   const unavailable = (error: 'unreadable' | 'not_configured', reason: string) => ({
     events: [], sources: wanted.map(kind => ({ kind, ok: false, error })),
@@ -1087,17 +1095,23 @@ export async function fetchCalendarScope(
     return unavailable('unreadable', 'Unreadable: studio membership could not be read. Try again.');
   }
   const byId = new Map<string, CalendarEvent>();
+  const truncated: CalendarEvent['kind'][] = [];
   const sources: CalendarSourceStatus[] = [];
   for (const kind of wanted) {
     try {
-      const rows = await scopedRows(env, actor, scope === 'all', kind, fromIso, toIso);
-      for (const row of rows) { const event = scopedEvent(kind,row); byId.set(event.id,event); }
+      const result = await scopedRows(env, actor, scope === 'all', kind, fromIso, toIso);
+      if (result.truncated) truncated.push(kind);
+      for (const row of result.rows) { const event = scopedEvent(kind,row); byId.set(event.id,event); }
       sources.push({ kind, ok: true, error: null });
     } catch (e) {
       const error = isMissingTableError(e) || isMissingColumnError(e) ? 'not_configured' : 'unreadable';
       sources.push({ kind, ok: false, error });
       console.warn('[calendar] scoped source failed', { kind, outcome: error });
     }
+  }
+  if (truncated.length) {
+    coverage.complete = false; coverage.truncated_kinds = truncated;
+    coverage.reason = 'More items are recorded than this window can show. Narrow the date window to read them.';
   }
   const sourceFailure = sources.find(source => !source.ok);
   const sourceReason = !sourceFailure ? null : sourceFailure.error === 'not_configured'
@@ -1383,6 +1397,8 @@ export async function deleteEventFromMicrosoft(accessToken: string, eventId: str
 // ===========================================================================
 export interface SyncSummary {
   pushed: number; updated: number; failed: number; skipped: number; total: number;
+  /** These sources are excluded before any read; totals cover copy-eligible items. */
+  excluded_kinds: ['calendly_event'];
   /** D1033 — My events copies taken off the provider because their place or event left. */
   removed: number;
 }
@@ -1412,10 +1428,10 @@ async function syncUserToProvider(
   provider: 'google' | 'microsoft', accessToken: string,
 ): Promise<SyncSummary> {
   const sql = getSQL(env);
-  const events = await fetchUserEvents(env, userId, role, fromIso, toIso);
-  let pushed = 0, updated = 0, failed = 0, skipped = 0;
+  const copyKinds = KNOWN_KINDS.filter(kind => kind !== 'calendly_event');
+  const events = await fetchUserEvents(env, userId, role, fromIso, toIso, copyKinds);
+  let pushed = 0, updated = 0, failed = 0;
   for (const ev of events) {
-    if (ev.kind === 'calendly_event') { skipped++; continue; }
     const rec = (await sql`
       SELECT external_event_id FROM calendar_sync_records
       WHERE user_id = ${userId} AND provider = ${provider}
@@ -1456,7 +1472,7 @@ async function syncUserToProvider(
     `UPDATE ${tokenTable} SET last_synced_at = ? WHERE user_id = ?`,
     [nowIso, userId],
   );
-  return { pushed, updated, failed, skipped, total: events.length, removed };
+  return { pushed, updated, failed, skipped: 0, total: events.length, removed, excluded_kinds: ['calendly_event'] };
 }
 
 /**

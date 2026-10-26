@@ -37,7 +37,7 @@ import {
   revokeGoogleOAuthGrant, loadRefreshTokenExport,
   exchangeGoogleCode, exchangeMicrosoftCode,
   fetchGoogleUserinfo, fetchMicrosoftUserinfo,
-  fetchUserEvents, fetchUserEventsWithSources, fetchCalendarScope, attachPushRecords, eventsToIcs, KNOWN_KINDS, SCOPED_EXCLUDED_KINDS,
+  fetchUserEvents, fetchUserEventsWithSources, fetchCalendarScope, attachPushRecords, eventsToIcs, KNOWN_KINDS, SCOPED_EXCLUDED_KINDS, validScopeWindow,
   syncUserToGoogle, syncUserToMicrosoft,
   preflightOAuthSecrets,
 } from '../services/calendar';
@@ -195,6 +195,7 @@ calendar.get('/events', safe('events', 'Could not list calendar events', async (
   }
   const kinds = kindsQ ? kindsQ.split(',').map(s => s.trim()).filter(Boolean) : undefined;
   if (scope === 'studio' || scope === 'all') {
+    if (!validScopeWindow(fromDt.toISOString(),toDt.toISOString())) return c.json({ detail: 'Staff calendar windows must be ordered and at most 180 days.' }, 400);
     const result = await fetchCalendarScope(c.env, user, scope, fromDt.toISOString(), toDt.toISOString(), kinds);
     return c.json({ items: result.events, sources: result.sources, coverage: result.coverage,
       scope, read_only: true, excluded_kinds: SCOPED_EXCLUDED_KINDS, from: fromDt.toISOString(), to: toDt.toISOString() });
