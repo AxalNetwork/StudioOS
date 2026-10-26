@@ -511,6 +511,8 @@ D1066 (#2936): `buildPlanAccept.ts` decides plan items: Accept (with an optional
 
 D1071 (#2941): `buildPlanWord.ts` is Eadwyn's wording of the plan: the material (pending items' rule titles and evidence labels and counts, never a name, quote or decision), the prompt, the screen (no digit, currency, contact or link leaves) and the wording row (`ai_rail_proposals`, `kind 'draft'`, on `build_plan:<uid>`). Keeping an item's wording goes through `buildPlanAccept.ts`'s `editItem`, and Accept names the run in `fill_provenance`.
 
+D1068 (#2938): `buildHandoffs.ts` is the plan's Send to… and Back in. It builds each tool's text on the server from accepted items (payload, evidence labels without the decision, the brief, a kept Lovable wording), plants each item's marker, runs `lintForSend` as `public` with the markers masked, and records `build_handoffs` (migration 582) with the activity line. It also reads markers for D782's feed (`markerLinks`, `linkProposalStatement`) and decides link proposals (`acceptLink`, `dismissLink`, `linkByHand`); a link re-points the fed item's ledger only to a row of the table the feed writes.
+
 D971 completes `programRegistry.ts`'s Lab draft path: its canonical section
 catalogue contains headings only. The existing Super Admin edit route creates a
 missing allowed draft section after validation, in the same batch as its edit;
