@@ -428,12 +428,18 @@ async function ownedProjectScope(c: Context<{ Bindings: Env }>, user: User): Pro
     const rows = user.founder_id && capitalOwner({ id: 0, founder_id: user.founder_id }, user)
       ? await c.env.DB.prepare('SELECT id, company_id FROM projects WHERE founder_id = ? AND deleted_at IS NULL')
         .bind(user.founder_id).all<{ id: number; company_id: number | null }>() : { results: [] };
+    if ((rows as { success?: boolean }).success === false || !Array.isArray(rows.results)) throw new CapitalAccessError(503, 'capital_access_unreadable', 'Venture access could not be checked. Try again.');
     const companyId = await activeCompanyFor(c, user);
     const own = (rows.results || []).filter(project => projectInActiveCompany(companyId, project)).map(project => Number(project.id));
     // Owner: round/tranche/pro-rata settings and sending updates. The owner
     // confirmed co-founders may record each investor's commitment fields.
     const ownerOnly = c.req.method === 'DELETE' || (c.req.method !== 'GET' && /\/raise-(?:round|closes|pro-rata|updates)(?:\/|$)/.test(capitalRequestPath(c.req.path)));
-    return ownerOnly ? own : [...new Set([...own, ...await capitalMemberProjectIds(c.env, user)])];
+    if (ownerOnly) return own;
+    // Owner-seeded memberships cannot undo that owner's company selection.
+    // Memberships in somebody else's venture still ignore unrelated companies.
+    const ownedIds = new Set(rows.results.map(project => Number(project.id)));
+    const members = (await capitalMemberProjectIds(c.env, user)).filter(id => !ownedIds.has(id));
+    return [...new Set([...own, ...members])];
   }
   if (isAdmin(user)) return 'all';
   if (!user.founder_id) return [];

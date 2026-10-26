@@ -312,8 +312,9 @@ test('D1191: explicit memberships do not inherit company/role/owner privileges a
     assert.deepEqual(await capitalMemberProjectIds(f.env,{id:6,role:'Investor'} as any),[]);
     assert.equal(await capitalCanWork(f.env,{id:101,founder_id:33},{id:3,role:'founder',founder_id:33} as any),false);
     assert.equal(await capitalCanWork(f.env,{id:999,founder_id:11},{id:1,role:'founder',founder_id:11} as any),false);
-    f.db.exec("UPDATE projects SET founder_id=11,company_id=30 WHERE id=303; INSERT INTO raise_prospects (id,uid,project_id,name) VALUES (3,'other-company',303,'Fixture Other Company Investor')");
+    f.db.exec("UPDATE projects SET founder_id=11,company_id=30 WHERE id=303; INSERT INTO raise_prospects (id,uid,project_id,name) VALUES (3,'other-company',303,'Fixture Other Company Investor'); INSERT INTO project_members (project_id,user_id,role,status) VALUES (303,1,'owner','accepted')");
     assert.equal((await f.request('/api/contacts/raise-prospects/3',1,'GET',undefined,undefined,10)).status,403);
+    assert.equal((await f.request('/api/contacts/raise-prospects/3',1)).status,200);
     f.db.exec("UPDATE projects SET deleted_at=datetime('now') WHERE id=101");
     assert.equal((await f.request('/api/cycles/raise/modules/capital-relationships?project=101',2)).status,404);
     assert.equal((await f.request('/api/cycles/raise/modules/capital-relationships?project=101',30)).status,404);
