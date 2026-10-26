@@ -1,3 +1,5 @@
+export const lpRow = { limited_partner_id: 4, fund_id: 7, fund_name: 'Example Fund', name: 'Example LP', email: 'example@example.test', status: 'active', lp_type: 'institution', commitment_cents: 1000000, called_cents: 200000, received_cents: 100000, outstanding_cents: 100000, distributed_cents: 0, overdue_lines: 0, unavailable: {} };
+export const roster = { items: [lpRow], total_rows: 1, page: 1, per_page: 25, pages: 1, totals: { rows: 1, commitment_cents: 1000000 }, tally: { by_type: [] }, funds: [{ id: 7, name: 'Example Fund' }] };
 // Synthetic figures only. Every Mercury entry point is a local stub.
 export const period = { id: 1, label: '2026Q3', start_date: '2026-07-01', end_date: '2026-09-30', closed: false };
 export const ledger = { id: 7, name: 'Example Fund', can_manage: true, periods: [period, { ...period, id: 2, label: '2026Q4' }], period,
@@ -16,6 +18,7 @@ export function fixtures(over = {}) {
     fundAdmin: {
       access: rec('access', () => ({ super_admin: false, acts: ['fee_terms.confirm', 'fee_period.issue', 'fund_report.issue'].map(act => ({ act, allowed: false, sentence: act === 'fee_terms.confirm' ? 'A Super Admin confirms a fund’s fee terms.' : act === 'fee_period.issue' ? 'A Super Admin issues fee periods.' : 'A Super Admin issues fund reports.' })) })),
       overview: rec('overview', () => overview),
+      lps: rec('lps', () => roster),
     },
     fees: {
       state: rec('feeState', () => ({ terms: [{ uid: 'terms1', status: 'draft', annual_bps: 200, effective_from: '2026-01-01' }],
@@ -33,7 +36,7 @@ export function fixtures(over = {}) {
     },
     notices: {
       list: rec('notices', () => ({ notices: [{ uid, type: 'capital_call_notice', title: 'Capital call', fund_id: 7, amount_cents: null, notice_date: '2026-09-30', reference: 'EXAMPLE' }] })),
-      read: rec('noticeRead', () => ({ uid, title: 'Capital call', amount_cents: null, reference: 'EXAMPLE', figures: { amount_cents: null } })),
+      one: rec('noticeRead', () => ({ uid, title: 'Capital call', amount_cents: null, reference: 'EXAMPLE', figures: { amount_cents: null } })),
       pdfBlob: rec('pdf', () => ({ blob: new Blob(['fixture']), filename: 'fixture.pdf' })),
     },
     ledger: { list: rec('ledgerList', () => ({ items: [ledger] })), read: rec('ledgerRead', (id, pid) => ({ ...ledger, period: { ...period, id: Number(pid) } })) },

@@ -6,12 +6,13 @@ import { api } from '../../../lib/api';
 import { fundAdminApi } from '../../../lib/api/fundAdmin';
 import { adminMercuryApi } from '../../../lib/api/adminMercury';
 import { fundLedgerApi } from '../../../lib/api/fundLedger';
-import { fundNoticesApi } from '../../../lib/api/fundNotices';
 import { BooksTab } from './BooksTab';
 import { fundFeesApi } from '../../../lib/api/fundFees';
 import { fundReportingApi } from '../../../lib/api/fundReporting';
 import { adminCapitalAttestationsApi } from '../../../lib/api/adminCapitalAttestations';
 import { fundPerformanceApi } from '../../../lib/api/fundPerformance';
+import { fundNoticesApi } from '../../../lib/api/fundNotices';
+import { fundBookletsApi } from '../../../lib/api/fundBooklets';
 import { FundPerformanceView } from '../../FundPerformancePage';
 import { Banner } from '../../account/ConnectorSheet';
 import {
@@ -23,6 +24,8 @@ import { Refusal } from './Refusal';
 import { OverviewTab } from './OverviewTab';
 import { BankingTab, ReconciliationTab } from './BankingTabs';
 import { CallsTab, DistributionsTab, FeesTab, ReportsTab } from './FundTabs';
+import { LpsTab } from './LpsTab';
+import { withQuery } from './lpsModel';
 
 /**
  * D714 (#1779) PR 4a — the fund administration console at `/admin/fund-admin`,
@@ -46,12 +49,23 @@ export const DEFAULT_APIS = {
   fees: fundFeesApi,
   reporting: fundReportingApi,
   ledger: fundLedgerApi,
-  notices: fundNoticesApi,
   reports: { periods: (id) => api.fundsReportPeriods(id) },
   // D752 (#1890): the Calls tab's proofs of funds, read only on Show.
   capitalAttestations: adminCapitalAttestationsApi,
   // D1157 (#2388): NAV & performance draws today's performance read until FND10 lands.
   performance: fundPerformanceApi,
+  // D1162 (#3069): FND5's roster is `fundAdmin.lps`; FND6's drawer reads and acts per fund.
+  notices: fundNoticesApi,
+  booklets: fundBookletsApi,
+  lps: {
+    add: (fundId, body) => api.fundsAddLpV2(fundId, body),
+    setType: (fundId, lpId, lpType) => api.fundsSetLpType(fundId, lpId, lpType),
+    ledger: (fundId) => api.fundsCallLedger(fundId),
+    receipt: (fundId, lineId, body) => api.fundsRecordReceipt(fundId, lineId, body),
+    distributions: (fundId) => api.fundsDistributions(fundId),
+    contacts: (fundId, lpId) => api.fundsCommsList(fundId, lpId),
+    logContact: (fundId, body) => api.fundsLogComm(fundId, body),
+  },
   funds: {
     distributions: (fundId) => api.fundsDistributions(fundId),
     execute: (body) => api.fundsExecuteDistribution(body),
@@ -99,8 +113,11 @@ export function FundAdminConsoleView({ user, apis = DEFAULT_APIS }) {
   const asOf = overview.status === 'ready' && overview.data?.as_of ? `As of ${overview.data.as_of}` : null;
   const pill = profilePill(acts);
   const primary = headerPrimary(view, acts, PER_FUND_VIEWS.includes(tab) ? fund : null);
+  // D1162: Add LP keeps the roster’s filters.
+  if (primary && view === 'lps') primary.to = `/admin/fund-admin/lps${withQuery(location.search, 'add', true)}`;
   const filterView = view === 'reports' && !/\/(periods|notices)\/?$/.test(location.pathname) ? 'reportPacks' : tab;
   const filter = fundFilter(funds, location.search, filterView);
+
   const exportCsv = () => downloadCsv(fundsCsv(overview.status === 'ready' ? overview.data : null));
 
   return (
@@ -160,8 +177,10 @@ export function FundAdminConsoleView({ user, apis = DEFAULT_APIS }) {
               error={performance.status === 'unreadable' ? (performance.error?.message || 'Fund performance could not be read.') : null} reload={performance.reload} />
           </div>
         )}
+        {view === 'lps' && <LpsTab apis={apis} access={acts} funds={funds} />}
         {view === 'books' && <BooksTab key={params.get('fund') || 'first'} apis={apis} selectedFund={params.get('fund')} onFund={(id) => go({ fund: id })} />}
-        {(view === 'funds' || view === 'lps') && <WaitCard view={view} />}
+        {view === 'funds' && <WaitCard view={view} />}
+
       </div>
     </main>
     </LightboxPhoneProvider>

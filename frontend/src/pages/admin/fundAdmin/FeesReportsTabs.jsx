@@ -312,7 +312,7 @@ function ReportPeriods({ apis, fund }) {
 }
 
 function Notices({ apis, fund }) {
-  const read = useRead(async () => { const data = await apis.notices.list({ fund_id: fund.id }); if (!Array.isArray(data?.notices)) throw new Error('The notices could not be read.'); return data; }, [apis, fund.id]);
+  const read = useRead(async () => { const data = await apis.notices.list({ fundId: fund.id }); if (!Array.isArray(data?.notices)) throw new Error('The notices could not be read.'); return data; }, [apis, fund.id]);
   const [opened, setOpened] = useState(null);
   const [query, setQuery] = useState('');
   const [type, setType] = useState('');
@@ -340,7 +340,7 @@ function Notices({ apis, fund }) {
         { key: 'reference', label: 'Reference', mono: true, cell: n => n.reference || 'Not recorded: no reference was recorded.' },
         { key: 'amount', label: 'Amount', mono: true, cell: n => n.amount_cents == null ? <Unrecorded reason="No amount is recorded for this notice." /> : amount(n.amount_cents) },
         { key: 'date', label: 'Date', mono: true, cell: n => n.notice_date || 'Not recorded: no notice date was recorded.' },
-        { key: 'open', label: 'Figures', cell: n => <button type="button" className={BTN.link} disabled={busy} data-testid={`notice-open-${n.uid}`} onClick={() => run(async () => setOpened(await apis.notices.read(n.uid)))}>Open</button> },
+        { key: 'open', label: 'Figures', cell: n => <button type="button" className={BTN.link} disabled={busy} data-testid={`notice-open-${n.uid}`} onClick={() => run(async () => setOpened(await apis.notices.one(n.uid)))}>Open</button> },
       ]} rows={visible} rowKey={n => n.uid} template="1.2fr 1fr 1.3fr 1fr 1fr .5fr" />}
     {!opened && <Alert text={error} />}
     {opened && <Lightbox phone="sheet" title={opened.title || 'Notice'} label="Notice figures" testId="notice-figures" onClose={() => { if (!busy) setOpened(null); }}>

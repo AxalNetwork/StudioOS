@@ -138,6 +138,12 @@ export interface PmfInputFacts {
   reason: string | null;
   /** Records dated before the latest Pivot, left out (owner question 5 A). */
   before_pivot: number;
+  /**
+   * D1145 (#3031, RD16 B): its store could not be read. It applies, so it is
+   * out of the value and lowers confidence and coverage, as Not recorded does,
+   * but it says "Could not be read" and gets no next step.
+   */
+  unreadable?: boolean;
   meta?: Record<string, unknown>;
 }
 
@@ -177,7 +183,7 @@ export function isStale(model: PmfModel, input: PmfModelInput, asOf: string | nu
   return Number.isFinite(age) && age > model.freshness_days[input.freshness];
 }
 
-export type PmfInputState = 'recorded' | 'not_recorded' | 'not_expected';
+export type PmfInputState = 'recorded' | 'not_recorded' | 'not_expected' | 'unreadable';
 
 export interface PmfInputResult {
   key: PmfInputKey; label: string; group: PmfModelInput['group']; weight: number;
@@ -229,8 +235,9 @@ export function computePmf(inputs: readonly PmfInputFacts[], model: PmfModel = P
   const rows = model.inputs.map((mi): PmfInputResult & { _v: number | null; _g: number; _applies: boolean } => {
     const f = by.get(mi.key);
     const applies = Boolean(f?.applies);
-    const value = f && applies && f.recorded ? normalise(mi.rule, f.raw) : null;
-    const state: PmfInputState = !applies ? 'not_expected' : value == null ? 'not_recorded' : 'recorded';
+    const down = applies && Boolean(f?.unreadable);
+    const value = f && applies && !down && f.recorded ? normalise(mi.rule, f.raw) : null;
+    const state: PmfInputState = !applies ? 'not_expected' : down ? 'unreadable' : value == null ? 'not_recorded' : 'recorded';
     const stale = state === 'recorded' && isStale(model, mi, f!.as_of, today);
     const g = state === 'recorded' ? clamp01(f!.grade) * (stale ? 0.5 : 1) : 0;
     return {
@@ -408,7 +415,7 @@ export function scorePmf(inputs: readonly PmfInputFacts[], model: PmfModel = PMF
   const steps: PmfStep[] = [];
   for (const mi of model.inputs) {
     const f = inputs.find((x) => x.key === mi.key);
-    if (!f || !f.applies) continue;
+    if (!f || !f.applies || f.unreadable) continue;
     for (const p of STEP_RULES[mi.key](f, model)) {
       const g = gainOf(base, computePmf(inputs.map((x) => (x.key === mi.key ? p.after : x)), model, today));
       if (g.value == null && g.confidence_delta <= 0 && !g.coverage) continue;

@@ -8,9 +8,13 @@ import { CycleBar } from '../../cycles/PhoneModulePage';
 import DataRoomFiles from './DataRoomFiles.jsx';
 import DataRoomFile from './DataRoomFile.jsx';
 import DataRoomHome from './DataRoomHome.jsx';
+import DataRoomAccess from './DataRoomAccess.jsx';
+import DataRoomRequests from './DataRoomRequests.jsx';
+import { noPermission } from './accessModel';
+import { useAuth } from '../../../hooks/useAuthSync';
 import {
   HOME_PATH, LINE, TABS, TITLE, WAITS, WORKSPACE_LINE,
-  activityRows, day, grantRows, projectUidOf, tabHref, tabSearch, weekTiles, workspaceHref,
+  activityRows, day, projectUidOf, tabHref, tabSearch, weekTiles, workspaceHref,
 } from './dataRoomModel';
 
 /**
@@ -25,8 +29,6 @@ const INK = 'text-axal-ink dark:text-gray-100';
 const MUTED = 'text-axal-muted dark:text-gray-400';
 const EYEBROW = 'text-[10.5px] font-extrabold uppercase tracking-[.07em] text-axal-muted dark:text-gray-400';
 const LINK = 'font-semibold text-axal-violet hover:text-axal-violet-deep dark:text-violet-300 dark:hover:text-violet-200';
-const TH = 'px-3 py-2 text-left text-[10.5px] font-extrabold uppercase tracking-[.07em] text-axal-muted dark:text-gray-400';
-const TD = 'px-3 py-2 align-top text-[12.5px] text-axal-ink dark:text-gray-100';
 const MONO = 'font-mono tabular-nums';
 
 /** The tool's own tabs, a second level under the Raise modules: text with an underline. */
@@ -82,17 +84,6 @@ function Section({ title, children, testId, aside }) {
   );
 }
 
-function Table({ cols, children, testId }) {
-  return (
-    <div className="overflow-x-auto">
-      <table className="w-full border-collapse" data-testid={testId}>
-        <thead><tr className="border-b border-axal-hairline dark:border-gray-800">{cols.map((c) => <th key={c} className={TH}>{c}</th>)}</tr></thead>
-        <tbody>{children}</tbody>
-      </table>
-    </div>
-  );
-}
-
 /**
  * The founder's room, read once for the tab: the venture's uid from the
  * projects list, then `GET /api/data-room/:projectUid`. Loading, ready,
@@ -119,9 +110,23 @@ function useRoom(projectId, reload) {
   return state;
 }
 
+/** DR18: someone the room is not for, in words for who they are. */
+function NoPermission({ testId }) {
+  const { user } = useAuth() || {};
+  const w = noPermission(user?.role);
+  return (
+    <section className={`${CARD} mx-auto flex w-full max-w-[560px] flex-col items-center gap-2 px-7 py-8 text-center`} data-testid={`${testId}-refused`}>
+      <span aria-hidden="true" className={`text-[22px] ${MUTED}`}>⊘</span>
+      <h2 className={`m-0 text-[16px] font-extrabold ${INK}`}>{w.title}</h2>
+      <p className={`m-0 text-[13px] ${MUTED}`}>{w.line}</p>
+      <Link to={w.to} className="mt-1 inline-flex min-h-[34px] items-center rounded-[9px] bg-axal-violet px-3.5 text-[12.5px] font-bold text-white dark:bg-violet-600">{w.cta}</Link>
+    </section>
+  );
+}
+
 function RoomState({ read, onRetry, testId, children }) {
   if (read.status === 'loading') return <Skeleton testId={`${testId}-loading`} />;
-  if (read.status === 'refused') return <p className={`m-0 text-[13px] ${INK}`} data-testid={`${testId}-refused`}>{read.message || 'You do not have access to this venture’s data room.'}</p>;
+  if (read.status === 'refused') return <NoPermission testId={testId} />;
   if (read.status === 'error') return <div data-testid={`${testId}-unreadable`}><Unreadable what="The data room" claim="This is not a claim that the room is empty." onRetry={onRetry} /></div>;
   return children;
 }
@@ -134,31 +139,19 @@ function FilesTab({ read, retry, search, projectId }) {
   );
 }
 
-function AccessTab({ read, retry, search }) {
-  const rows = read.status === 'ready' ? grantRows(read.room) : [];
+function AccessTab({ read, retry, phone }) {
   return (
-    <Section title="Access by investor" testId="dataroom-access"
-      aside={<Link className={`text-[12px] ${LINK}`} to={workspaceHref(search)}>Share or revoke in the files tool</Link>}>
-      <RoomState read={read} onRetry={retry} testId="dataroom-access">
-        {rows.length === 0
-          ? <p className={`m-0 text-[12.5px] ${MUTED}`} data-testid="dataroom-access-none">The room is not shared with anyone yet.</p>
-          : (
-            <Table cols={['Investor', 'Access', 'Since', 'Until', 'NDA', 'Committed', 'Granted by']} testId="dataroom-access-table">
-              {rows.map((r) => (
-                <tr key={r.uid} className="border-b border-axal-hairline last:border-0 dark:border-gray-800" data-testid="dataroom-grant-row">
-                  <td className={TD}>{r.who}{r.email && r.email !== r.who && <span className={`block text-[11.5px] ${MUTED}`}>{r.email}</span>}</td>
-                  <td className={TD}>{r.state}</td>
-                  <td className={`${TD} ${MONO}`}>{r.since}</td>
-                  <td className={`${TD} ${MONO}`}>{r.until}</td>
-                  <td className={TD}>{r.nda}</td>
-                  <td className={TD}>{r.committed}</td>
-                  <td className={TD}>{r.by}</td>
-                </tr>
-              ))}
-            </Table>
-          )}
-      </RoomState>
-    </Section>
+    <RoomState read={read} onRetry={retry} testId="dataroom-access">
+      <DataRoomAccess room={read.room} projectUid={read.uid} reload={retry} phone={phone} />
+    </RoomState>
+  );
+}
+
+function RequestsTab({ read, retry }) {
+  return (
+    <RoomState read={read} onRetry={retry} testId="dataroom-requests">
+      <DataRoomRequests room={read.room} projectUid={read.uid} reload={retry} />
+    </RoomState>
   );
 }
 
@@ -203,7 +196,7 @@ function ActivityTab({ read, retry }) {
 }
 
 function Waits({ tab }) {
-  const titles = { requests: 'Requests', checklist: 'Checklist', preview: 'Preview as an investor' };
+  const titles = { checklist: 'Checklist', preview: 'Preview as an investor' };
   return (
     <Section title={titles[tab]} testId={`dataroom-${tab}`}>
       <p className={`m-0 text-[12.5px] ${MUTED}`} data-testid={`dataroom-${tab}-wait`}>{WAITS[tab]}</p>
@@ -215,7 +208,7 @@ export function DataRoomTabPage({ tab, projectId, projectStatus = 'ready', onRet
   const navigate = useNavigate();
   const [reload, setReload] = useState(0);
   const retry = useCallback(() => setReload((n) => n + 1), []);
-  const reads = tab === 'files' || tab === 'access' || tab === 'activity';
+  const reads = tab === 'files' || tab === 'access' || tab === 'requests' || tab === 'activity';
   const read = useRoom(reads ? projectId : null, reload);
   const here = TABS.find((t) => t.id === tab) || TABS[0];
   let body;
@@ -224,7 +217,8 @@ export function DataRoomTabPage({ tab, projectId, projectStatus = 'ready', onRet
   else if (!projectId) body = <Skeleton testId="dataroom-loading" />;
   else if (read.status === 'ready' && read.room?.mode === 'summary') body = <AdminRoomSummary room={read.room} reload={retry} />;
   else if (tab === 'files') body = <FilesTab read={read} retry={retry} search={search} projectId={projectId} />;
-  else if (tab === 'access') body = <AccessTab read={read} retry={retry} search={search} />;
+  else if (tab === 'access') body = <AccessTab read={read} retry={retry} phone={phone} />;
+  else if (tab === 'requests') body = <RequestsTab read={read} retry={retry} />;
   else if (tab === 'activity') body = <ActivityTab read={read} retry={retry} />;
   else body = <Waits tab={tab} />;
   return (

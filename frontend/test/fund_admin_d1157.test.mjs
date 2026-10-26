@@ -2,7 +2,7 @@
 // /admin/fund-admin: the canvas's nine tabs, Banking's three parts, D714's
 // `?tab=` links forwarding to the new addresses with the fund filter kept,
 // NAV & performance drawing today's performance read, and "Not read here yet"
-// with its reason on Funds, LPs and Books.
+// with its reason on Funds and Books (D1162 gave LPs its roster).
 //
 // Run with:
 //   node --import ./frontend/test/_deck-loader.mjs --test frontend/test/fund_admin_d1157.test.mjs
@@ -37,7 +37,10 @@ function stubs() {
   return {
     calls,
     apis: {
-      fundAdmin: { access: rec('access', async () => ({ super_admin: false, acts: [] })), overview: rec('overview', async () => OVERVIEW()) },
+      fundAdmin: {
+        access: rec('access', async () => ({ super_admin: false, acts: [] })), overview: rec('overview', async () => OVERVIEW()),
+        lps: rec('lps', async () => ({ funds: [], page: 1, per_page: 25, pages: 1, total_rows: 0, totals: { rows: 0, not_recorded: {} }, tally: { by_type: [] }, items: [] })),
+      },
       performance: { list: rec('performance', async () => ({ items: [] })) },
       mercury: {
         connections: rec('connections', async () => ({ ok: true, entities: [] })),
@@ -110,7 +113,8 @@ test('a D714 ?tab= link forwards to its new address, keeping only a well-formed 
 });
 
 test('every view with no read says why, and none says zero or none', () => {
-  for (const v of ['funds', 'lps', 'books']) assert.ok(WAITS[v], v);
+  for (const v of ['funds', 'books']) assert.ok(WAITS[v], v);
+  assert.equal(WAITS.lps, undefined, 'D1162: LPs reads its roster');
   for (const w of Object.values(WAITS)) assert.ok(!/\b0\b|\$0|\bnone\b/i.test(w), w);
 });
 
@@ -129,8 +133,8 @@ test('the tabs are links to their addresses; the open one is current, and Bankin
   } finally { await v.close(); }
 });
 
-test('Funds and LPs draw their wait card and make no read of their own', async () => {
-  for (const [url, view] of [['/admin/fund-admin/funds', 'funds'], ['/admin/fund-admin/lps', 'lps']]) {
+test('Funds draws its wait card and makes no read of its own', async () => {
+  for (const [url, view] of [['/admin/fund-admin/funds', 'funds']]) {
     const v = await mount(url);
     try {
       assert.ok(v.by(`fund-admin-panel-${view}`), view);

@@ -262,3 +262,12 @@ test('D1165: an entity pack is readable even when no administered fund is record
     assert.ok(!m.by('no-administered-fund'));
   } finally { await m.close(); }
 });
+
+
+test('D1165: the integrated LP drawer inherits the phone sheet inside the console', async () => {
+  const m = await mount('/admin/fund-admin/lps/4');
+  try {
+    assert.equal(m.props(m.by('lp-drawer-layer'))['data-phone'], 'sheet');
+    assert.match(m.text('lp-drawer'), /Example LP/);
+  } finally { await m.close(); }
+});
