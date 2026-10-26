@@ -83,10 +83,8 @@ function Pipeline({ projectId, search }) {
 /** Calls: the calls for capital this venture has run, from the module read. */
 function Calls({ projectId }) {
   const read = useModule(projectId);
-  if (read.status === 'loading') return <div className="h-24 animate-pulse rounded-xl bg-axal-ground dark:bg-gray-800" data-testid="caprel-calls-loading" />;
-  if (read.status === 'unreadable') return <Unreadable what="Your calls for capital" claim="This is not a claim that you have run none." onRetry={read.retry} />;
-  // D1221 (#2458): the Calls for Capital page, off and on (CLS1–CLS3).
-  return <div data-testid="caprel-calls"><CallsTab calls={read.data?.parts?.calls} onRetry={read.retry} /></div>;
+  // D1221 (#2458), D1223 (#3222): the Calls for Capital page, off and on (CLS1–CLS3); it draws its own loading and errors (CLS12).
+  return <div data-testid="caprel-calls"><CallsTab calls={read.data?.parts?.calls} status={read.status} projectId={projectId} onRetry={read.retry} /></div>;
 }
 
 /** Commitments: today's closes and pro-rata, as the old pipeline page draws them. */
