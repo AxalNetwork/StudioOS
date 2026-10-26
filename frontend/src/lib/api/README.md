@@ -217,6 +217,9 @@ Stripe plan invoices in one list, newest first. D789's Usage overview reads the 
 D708 (#1773): `bankAccounts.js` calls `/api/admin/bank-accounts` (the Super
 Admin's list, add, label and purposes, retire, and a recorded reveal of one
 number) and the LP's own `GET /api/funds/:id/capital-calls/lines/:lineId/pay-instructions`.
+D1184 adds per-account `mercury`, `notice_preview` and `notice_preview_reason`
+to the list, and `addFromMercury(uid, body)` on the existing POST, where the
+Worker checks the source entity, ending and kind. No new endpoint.
 A reveal's answer is held in the caller's component state only, never stored.
 D1182 adds `bankAccountsApi.history(filters)` for the audited Super Admin GET
 `/api/admin/bank-accounts/history`: q, kind, entity, actor, range or from/to,
@@ -374,7 +377,7 @@ come back suppressed from 1 to 4.
 
 `googleWorkspace.js` (D1091) calls the mounted Workspace consent, picked files, mapping, Stop using and preview routes. The files screen awaits its canvas.
 
-D1065 (#2935): `buildPlan.js` reads or prepares `/api/cycles/build/plan`, with venture and hypothesis scope. Preparation sends no browser-supplied evidence and accepts nothing into Build.
+D1065 (#2935): `buildPlan.js` reads or prepares `/api/cycles/build/plan`, with venture and hypothesis scope. Preparation sends no browser-supplied evidence and accepts nothing into Build. D1071 (#2941): `word` (one metered run, with the press's rail headers), `wording`, `keepWording` and `discardWording`; `edit(uid, payload, wording)` keeps an item's wording as its Save.
 
 D1075 (#2967): `trustContent.js` is the public trust center's store: `trustPublicApi` (the
 published blocks, the change log, the matrix and the subprocessor subscribe, no session),
@@ -391,3 +394,5 @@ D1133 adds `billingAlertsApi.pay(id)` and `.updateCard(id, nonce)` for the mount
 D1135's `companyActions.js` holds self-service company leave and venture restore.
 
 D1123 adds the cohort capacity read to `labOperations.js`; the mounted Worker route is in admin_lab_operations.ts.
+
+D1199 (#3149): `productTesting.js` adds the programme logo: `partnerTestingApi.uploadLogo(uid, file)` and `.removeLogo(uid)`, the same on `adminTestingApi` for HQ's own programmes, and `productTestingApi.logoSrc(uid)`, the `<img>` path (a 404 there means no logo: draw the initial letter).

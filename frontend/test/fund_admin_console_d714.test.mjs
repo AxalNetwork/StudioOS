@@ -353,7 +353,7 @@ test('the two shell rows lead to the route, which is guard([\'admin\']) and not 
   const admin = SIDEBAR_GROUPS.admin.flatMap((g) => g.items);
   const at = (rows, label) => rows.findIndex((r) => r.label === label);
   assert.equal(hq[at(hq, 'Fund admin')]?.to, '/admin/fund-admin');
-  assert.equal(at(hq, 'Fund admin'), at(hq, 'Funds') + 1, 'after Funds in the HQ shell');
+  assert.equal(at(hq, 'Fund admin'), at(hq, 'Funds oversight') + 1, 'after Funds oversight in the HQ shell (D1160)');
   assert.equal(admin[at(admin, 'Fund admin')]?.to, '/admin/fund-admin');
   assert.equal(at(admin, 'Fund admin'), at(admin, 'Contracts') + 1, 'after Contracts in the Admin shell');
   const line = APP.split('\n').find((l) => l.includes('path="/admin/fund-admin"'));
