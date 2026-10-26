@@ -166,5 +166,8 @@ export function addKybCaseStores(d) {
     }
   }
   canonical.close();
-  d.exec(readFileSync(new URL('../sql/migrations/616_kyb_cases.sql', import.meta.url), 'utf8'));
+  d.exec(readFileSync(new URL('../sql/migrations/341_approval_assignments.sql', import.meta.url), 'utf8'));
+  if (!d.prepare("SELECT 1 FROM sqlite_master WHERE name='kyb_business_sources'").get()) {
+    d.exec(readFileSync(new URL('../sql/migrations/616_kyb_cases.sql', import.meta.url), 'utf8'));
+  }
 }

@@ -40,6 +40,7 @@ kyb.onError((err, c) => {
   if (err.message === STEP_UP_REQUIRED) return c.json(stepUpRefusalBody(err), 403);
   if (err.message === BRANCH_SUSPENDED) return c.json(branchSuspendedBody(err), 423);
   if (err.message === ADMIN_FROZEN) return c.json(adminFrozenBody(err), 423);
+  if (err.message === 'KYB_CHANGED') return conflict(c);
   const status = AUTH_ERROR_STATUSES[err.message];
   if (status) return c.json({ error: 'kyb_access_refused', detail: status === 401 ? 'Sign in to continue.' : 'This action requires authorized studio staff.' }, status);
   return c.json({ error: 'kyb_unreadable', detail: 'Unreadable. Try again.' }, 503);
@@ -72,7 +73,15 @@ async function find(c: Ctx, user: User): Promise<Row | null> {
       .bind(user.id, JSON.stringify(ids)).first<{ id: number }>();
     if (target) await requireSuperAdmin(c);
   }
+  if (row && !['GET', 'HEAD'].includes(c.req.method)) {
+    if (row.status === 'dismissed' || c.req.header('If-Match') !== await reviewToken(c.env, row)) throw new Error('KYB_CHANGED');
+  }
   return row;
+}
+async function reviewToken(env: Env, row: Row): Promise<string> {
+  const key = await crypto.subtle.importKey('raw', new TextEncoder().encode(env.JWT_SECRET), { name: 'HMAC', hash: 'SHA-256' }, false, ['sign']);
+  const bytes = await crypto.subtle.sign('HMAC', key, new TextEncoder().encode(JSON.stringify([row.uid, scope(env), row.source_revision, row.version, row.status])));
+  return Array.from(new Uint8Array(bytes), b => b.toString(16).padStart(2, '0')).join('');
 }
 async function writeUser(c: Ctx): Promise<User> {
   const user = await requireAdmin(c);
@@ -114,17 +123,15 @@ async function commit(c: Ctx, user: User, row: Row, statement: D1PreparedStateme
         AND EXISTS (SELECT 1 FROM kyb_case_events WHERE uid = ?)`)
       .bind(action, row.uid, scope(c.env), action, changeUid),
     // Existing company members still read migration 220. Keep that projection in
-    // the very same transaction, including an admin-started case with no submission.
-    c.env.DB.prepare(`INSERT INTO company_kyb_records
-      (uid, company_id, started_by_user_id, status, entity_name, reviewed_at, reviewed_by, rejection_reason)
-      SELECT ?, s.company_id, ?, k.status, s.entity_name, k.reviewed_at, k.reviewed_by, k.decision_reason
-      FROM kyb_business_sources s JOIN kyb_cases k ON k.uid = s.uid
-      WHERE s.uid = ? AND s.kind = 'founder_company' AND k.studio_code = ?
-        AND EXISTS (SELECT 1 FROM kyb_case_events WHERE uid = ?)
-      ON CONFLICT(company_id) DO UPDATE SET status = excluded.status,
-        reviewed_at = excluded.reviewed_at, reviewed_by = excluded.reviewed_by,
-        rejection_reason = excluded.rejection_reason, updated_at = CURRENT_TIMESTAMP`)
-      .bind(uid(), user.id, row.uid, scope(c.env), changeUid),
+    // the very same transaction. Staff cases never invent a member submission.
+    c.env.DB.prepare(`UPDATE company_kyb_records SET
+      status = (SELECT status FROM kyb_cases WHERE uid = ?),
+      reviewed_at = (SELECT reviewed_at FROM kyb_cases WHERE uid = ?),
+      reviewed_by = (SELECT reviewed_by FROM kyb_cases WHERE uid = ?),
+      rejection_reason = (SELECT decision_reason FROM kyb_cases WHERE uid = ?), updated_at = CURRENT_TIMESTAMP
+      WHERE company_id = ? AND ? = 'founder_company'
+        AND EXISTS (SELECT 1 FROM kyb_case_events WHERE uid = ?)`)
+      .bind(row.uid, row.uid, row.uid, row.uid, row.company_id, row.kind, changeUid),
     c.env.DB.prepare(`UPDATE kyb_cases SET source_revision =
       (SELECT source_revision FROM kyb_business_sources WHERE uid = ?)
       WHERE uid = ? AND studio_code = ?
@@ -244,7 +251,7 @@ kyb.get('/:id', async c => {
     return cases.results?.length ? ok(cases.results.map(item => ({ ...item, read_only: true }))) : missing('No due-diligence case is recorded for this account entity.');
   });
   await audit(c.env, user, await hashEmail(user.email), 'kyb_record_access', row.uid).run();
-  return c.json({ ...summary(row, user), entity: {
+  return c.json({ ...summary(row, user), review_token: await reviewToken(c.env, row), entity: {
     registered_address: maskFor('address', row.registered_address), tax_id: row.tax_id_last4 ? `••••${row.tax_id_last4}` : null,
     signing_authority_name: row.signing_authority_name, signing_authority_title: row.signing_authority_title,
   }, owners: ownerBlock, directors: parse(row.case_directors_json ?? row.directors_json)?.map(p => ({ name: p.name ?? null, title: p.title ?? null })) ?? missing('Directors have not been recorded.'),
@@ -295,9 +302,9 @@ kyb.put('/:id/owners', async c => {
       status = 'in_review',
       registry_matches = NULL, good_standing = NULL, expires_at = NULL,
       version = version + 1, updated_at = CURRENT_TIMESTAMP
-     WHERE uid = ? AND studio_code = ? AND version = ?`,
+     WHERE uid = ? AND studio_code = ? AND version = ? AND EXISTS (SELECT 1 FROM kyb_business_sources WHERE source_id = ? AND uid = ? AND source_revision = ?)`,
   ).bind(JSON.stringify(people.map(p => ({ name: p.name.trim(), ownership_pct: p.ownership_pct, user_id: p.user_id ?? null, dob: p.dob ?? null, nationality: p.nationality ?? null }))),
-    JSON.stringify(directors.map(p => ({ name: p.name.trim(), title: p.title ?? null }))), b.disclosed ? 1 : 0, row.source_revision, row.uid, scope(c.env), row.version), 'kyb_owners_updated');
+    JSON.stringify(directors.map(p => ({ name: p.name.trim(), title: p.title ?? null }))), b.disclosed ? 1 : 0, row.source_revision, row.uid, scope(c.env), row.version, row.source_id, row.uid, row.source_revision), 'kyb_owners_updated');
   return changed ? c.json({ ok: true }) : conflict(c);
 });
 
@@ -325,14 +332,13 @@ kyb.patch('/:id/approve', async c => {
     `UPDATE kyb_cases SET status = 'approved', registry_matches = 1, good_standing = ?, unchecked_owner_reason = ?,
       decision_reason = ?, source_revision = ?, reviewed_by = ?, reviewed_at = CURRENT_TIMESTAMP, expires_at = ?,
       version = version + 1, updated_at = CURRENT_TIMESTAMP
-     WHERE uid = ? AND studio_code = ? AND version = ?
-       AND EXISTS (SELECT 1 FROM kyb_business_sources s WHERE s.uid = kyb_cases.uid AND s.source_revision = ?)
+     WHERE uid = ? AND studio_code = ? AND version = ? AND EXISTS (SELECT 1 FROM kyb_business_sources WHERE source_id = ? AND uid = ? AND source_revision = ?)
        AND (? IS NOT NULL OR NOT EXISTS (
          SELECT 1 FROM json_each(?) o LEFT JOIN users u ON u.id = json_extract(o.value,'$.user_id')
          WHERE (json_extract(o.value,'$.ownership_pct') IS NULL OR json_extract(o.value,'$.ownership_pct') >= 25)
            AND COALESCE(u.kyc_status,'not_started') != 'approved'))`,
   ).bind(typeof b.good_standing === 'boolean' ? Number(b.good_standing) : null, reason, text(b.note, 2000), row.source_revision, user.id, expires,
-    row.uid, scope(c.env), row.version, row.source_revision, reason, JSON.stringify(relevant)), 'kyb_approved');
+    row.uid, scope(c.env), row.version, row.source_id, row.uid, row.source_revision, reason, JSON.stringify(relevant)), 'kyb_approved');
   return changed ? c.json({ uid: row.uid, status: 'approved', expires_at: expires }) : conflict(c);
 });
 
@@ -345,8 +351,8 @@ kyb.patch('/:id/reject', async c => {
   const docs = await c.env.DB.prepare('SELECT file_key FROM kyb_documents WHERE case_uid = ?').bind(row.uid).all<Row>();
   const changed = await commit(c, user, row, c.env.DB.prepare(
     `UPDATE kyb_cases SET status = 'rejected', decision_reason = ?, source_revision = ?, reviewed_by = ?, reviewed_at = CURRENT_TIMESTAMP,
-      expires_at = NULL, version = version + 1, updated_at = CURRENT_TIMESTAMP WHERE uid = ? AND studio_code = ? AND version = ?`,
-  ).bind(reason, row.source_revision, user.id, row.uid, scope(c.env), row.version), 'kyb_rejected', [
+      expires_at = NULL, version = version + 1, updated_at = CURRENT_TIMESTAMP WHERE uid = ? AND studio_code = ? AND version = ? AND EXISTS (SELECT 1 FROM kyb_business_sources WHERE source_id = ? AND uid = ? AND source_revision = ?)`,
+  ).bind(reason, row.source_revision, user.id, row.uid, scope(c.env), row.version, row.source_id, row.uid, row.source_revision), 'kyb_rejected', [
     c.env.DB.prepare('UPDATE kyb_documents SET deleted_at = CURRENT_TIMESTAMP, updated_at = CURRENT_TIMESTAMP WHERE case_uid = ? AND changes() = 1').bind(row.uid),
   ]);
   if (!changed) return conflict(c);
@@ -365,8 +371,8 @@ kyb.patch('/:id/request-documents', async c => {
   await materialize(c, row);
   const changed = await commit(c, user, row, c.env.DB.prepare(
     `UPDATE kyb_cases SET status = 'needs_info', requested_documents_json = ?, decision_reason = ?, source_revision = ?,
-      expires_at = NULL, version = version + 1, updated_at = CURRENT_TIMESTAMP WHERE uid = ? AND studio_code = ? AND version = ?`,
-  ).bind(JSON.stringify([...new Set(b.kinds)].map(kind => ({ kind }))), text(b.message, 2000), row.source_revision, row.uid, scope(c.env), row.version), 'kyb_documents_requested');
+      expires_at = NULL, version = version + 1, updated_at = CURRENT_TIMESTAMP WHERE uid = ? AND studio_code = ? AND version = ? AND EXISTS (SELECT 1 FROM kyb_business_sources WHERE source_id = ? AND uid = ? AND source_revision = ?)`,
+  ).bind(JSON.stringify([...new Set(b.kinds)].map(kind => ({ kind }))), text(b.message, 2000), row.source_revision, row.uid, scope(c.env), row.version, row.source_id, row.uid, row.source_revision), 'kyb_documents_requested');
   return changed ? c.json({ uid: row.uid, status: 'needs_info' }) : conflict(c);
 });
 
@@ -380,8 +386,8 @@ kyb.patch('/:id/dismiss', async c => {
   const changed = await commit(c, user, row, c.env.DB.prepare(
     `UPDATE kyb_cases SET status = 'dismissed', decision_reason = ?, source_revision = ?, expires_at = NULL,
       reviewed_by = ?, reviewed_at = CURRENT_TIMESTAMP, version = version + 1, updated_at = CURRENT_TIMESTAMP
-     WHERE uid = ? AND studio_code = ? AND version = ? AND linked_user_id IS NULL`,
-  ).bind(reason, row.source_revision, user.id, row.uid, scope(c.env), row.version), 'kyb_import_dismissed');
+     WHERE uid = ? AND studio_code = ? AND version = ? AND EXISTS (SELECT 1 FROM kyb_business_sources WHERE source_id = ? AND uid = ? AND source_revision = ?) AND linked_user_id IS NULL`,
+  ).bind(reason, row.source_revision, user.id, row.uid, scope(c.env), row.version, row.source_id, row.uid, row.source_revision), 'kyb_import_dismissed');
   return changed ? c.json({ uid: row.uid, status: 'dismissed' }) : conflict(c);
 });
 
@@ -398,8 +404,8 @@ kyb.patch('/:id/link-account', async c => {
   const changed = await commit(c, user, row, c.env.DB.prepare(
     `UPDATE kyb_cases SET linked_user_id = ?, status = 'in_review', source_revision = ?, expires_at = NULL,
       reviewed_at = NULL, reviewed_by = NULL, version = version + 1, updated_at = CURRENT_TIMESTAMP
-     WHERE uid = ? AND studio_code = ? AND version = ? AND linked_user_id IS NULL`,
-  ).bind(account.id, row.source_revision, row.uid, scope(c.env), row.version), 'kyb_import_linked');
+     WHERE uid = ? AND studio_code = ? AND version = ? AND EXISTS (SELECT 1 FROM kyb_business_sources WHERE source_id = ? AND uid = ? AND source_revision = ?) AND linked_user_id IS NULL`,
+  ).bind(account.id, row.source_revision, row.uid, scope(c.env), row.version, row.source_id, row.uid, row.source_revision), 'kyb_import_linked');
   return changed ? c.json({ uid: row.uid, linked_user_id: account.id, status: 'in_review' }) : conflict(c);
 });
 
@@ -421,8 +427,8 @@ kyb.post('/:id/documents', async c => {
   try {
     const changed = await commit(c, user, row, c.env.DB.prepare(
       `UPDATE kyb_cases SET status = 'in_review', source_revision = ?, expires_at = NULL,
-        version = version + 1, updated_at = CURRENT_TIMESTAMP WHERE uid = ? AND studio_code = ? AND version = ?`,
-    ).bind(row.source_revision, row.uid, scope(c.env), row.version), 'kyb_document_uploaded', [
+        version = version + 1, updated_at = CURRENT_TIMESTAMP WHERE uid = ? AND studio_code = ? AND version = ? AND EXISTS (SELECT 1 FROM kyb_business_sources WHERE source_id = ? AND uid = ? AND source_revision = ?)`,
+    ).bind(row.source_revision, row.uid, scope(c.env), row.version, row.source_id, row.uid, row.source_revision), 'kyb_document_uploaded', [
       c.env.DB.prepare(`INSERT INTO kyb_documents (uid, case_uid, kind, file_key, content_type, size_bytes, uploaded_by)
         SELECT ?, ?, ?, ?, ?, ?, ? WHERE changes() = 1`)
         .bind(documentUid, row.uid, b.kind, key, match[1], bytes.length, user.id),

@@ -125,3 +125,13 @@ SELECT s.*,
   CASE WHEN c.source_revision = s.source_revision THEN c.directors_json END AS case_directors_json,
   CASE WHEN c.source_revision = s.source_revision AND c.owners_json IS NOT NULL THEN c.owners_disclosed END AS case_owners_disclosed
 FROM kyb_business_sources s LEFT JOIN kyb_cases c ON c.uid = s.uid;
+
+-- Preserve D470's assignments/history across the KYB lane's new source ids.
+-- Negative staging avoids unique-key collisions (e.g. old ids 1 and 4).
+-- Orphaned history retains a negative archival key rather than naming a new business.
+UPDATE approval_assignments SET item_id = -item_id WHERE lane = 'kyb' AND item_id > 0;
+UPDATE approval_events SET item_id = -item_id WHERE lane = 'kyb' AND item_id > 0;
+UPDATE approval_assignments SET item_id = (SELECT company_id * 4 FROM company_kyb_records WHERE id = -approval_assignments.item_id)
+ WHERE lane = 'kyb' AND item_id < 0 AND EXISTS (SELECT 1 FROM company_kyb_records WHERE id = -approval_assignments.item_id);
+UPDATE approval_events SET item_id = (SELECT company_id * 4 FROM company_kyb_records WHERE id = -approval_events.item_id)
+ WHERE lane = 'kyb' AND item_id < 0 AND EXISTS (SELECT 1 FROM company_kyb_records WHERE id = -approval_events.item_id);

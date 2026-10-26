@@ -146,4 +146,6 @@ R2 streams, rejection purge/retry, atomic audit/upload rollback, source discover
 imports and licensed studios. Twenty injected route faults run against the same
 scenarios before and after restoration. All external fetches are refused.
 
-D1231 follow-up: company member reads reflect expiry and legal edits; company submitter/membership self-review and unsubmitted corporate profiles are covered. Twenty-three injected faults cover routes, the member status projection and submission-state derivation, each checked before and after restoration.
+D1231 follow-up: company member reads reflect expiry and legal edits; company submitter/membership self-review and unsubmitted corporate profiles are covered. Twenty-six injected faults cover routes, the member status projection and submission-state derivation, each checked before and after restoration.
+
+D1231 concurrency tests cover displayed If-Match tokens, source edits during a request, staff-created cases without false submitters, dismissed imports and collision-safe migration of legacy reviewer assignments/history.

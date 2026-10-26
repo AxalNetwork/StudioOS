@@ -933,7 +933,8 @@ trust.get('/companies/kyb', async (c) => {
     rows = await c.env.DB.prepare(
       `SELECT cp.id AS company_id, cp.uid AS company_uid, cp.company_name,
               ucl.role_in_company, ucl.is_primary_admin,
-              k.uid AS kyb_uid, reviewed.status, k.entity_name, k.entity_type,
+              COALESCE(k.uid, CASE WHEN reviewed.version > 0 THEN reviewed.uid END) AS kyb_uid, reviewed.status,
+              COALESCE(k.entity_name, reviewed.entity_name) AS entity_name, k.entity_type,
               k.jurisdiction, k.registration_number, k.submitted_at, reviewed.reviewed_at
          FROM user_company_links ucl
          JOIN company_profiles cp ON cp.id = ucl.company_id

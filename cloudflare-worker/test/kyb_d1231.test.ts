@@ -50,10 +50,10 @@ function fixture(router = kyb, memberRouter = trust) {
     INSERT INTO legal_obligations (user_id,obligation_key,required,status) VALUES (3,'kyb_v1',1,'pending'),(4,'kyb_v1',1,'pending'),(5,'kyb_v1',1,'pending');`);
   db.exec("INSERT INTO kyb_cases (uid,studio_code,status,source_revision,owners_json,owners_disclosed) SELECT 'account-3','hq','in_review',source_revision,owners_json,owners_disclosed FROM kyb_business_sources WHERE uid='account-3'");
   const objects = new Map<string, { bytes: Uint8Array; contentType: string }>();
-  let failure = '', deletesFail = false;
+  let failure = '', deletesFail = false, beforeBatch: (() => void) | null = null;
   const base = d1Over(db);
   const env: any = { JWT_SECRET, ENVIRONMENT: 'development', DB: {
-    ...base, prepare(sql: string) {
+    ...base, async batch(statements: any[]) { beforeBatch?.(); beforeBatch = null; return base.batch(statements); }, prepare(sql: string) {
       if (failure && sql.includes(failure)) throw new Error('secret-database-error');
       return base.prepare(sql);
     },
@@ -69,12 +69,20 @@ function fixture(router = kyb, memberRouter = trust) {
   const call = async (path: string, method = 'GET', body?: unknown, as = 2, jti = `fresh-${as}`, headers: Record<string, string> = {}) => {
     const token = as ? await new SignJWT({ user_id: as, role: as < 3 ? 'admin' : 'investor', jti })
       .setProtectedHeader({ alg: 'HS256' }).setIssuedAt().setExpirationTime('1h').sign(new TextEncoder().encode(JWT_SECRET)) : null;
+    if (!['GET','HEAD'].includes(method) && !Object.hasOwn(headers,'If-Match') && /^\/(company|account|import|studio)-[1-9][0-9]*\//.test(path)) {
+      const row = db.prepare('SELECT * FROM kyb_businesses WHERE uid=?').get(path.split('/')[1]) as any;
+      if (row) {
+        const key = await crypto.subtle.importKey('raw',new TextEncoder().encode(JWT_SECRET),{name:'HMAC',hash:'SHA-256'},false,['sign']);
+        const sig = await crypto.subtle.sign('HMAC',key,new TextEncoder().encode(JSON.stringify([row.uid,env.BRANCH_CODE || 'hq',row.source_revision,row.version,row.status])));
+        headers = {...headers,'If-Match':Array.from(new Uint8Array(sig),b=>b.toString(16).padStart(2,'0')).join('')};
+      }
+    }
     const res = await app.request(`/businesses${path === '/' ? '' : path.startsWith('/?') ? path.slice(1) : path}`, { method, headers: { ...(token ? { Authorization: `Bearer ${token}` } : {}), 'Content-Type': 'application/json', ...headers },
       ...(body === undefined ? {} : { body: JSON.stringify(body) }) }, env);
     const text = await res.text(); let data: any; try { data = JSON.parse(text); } catch { data = text; }
     return { status: res.status, body: data, text, headers: res.headers };
   };
-  return { db, env, objects, call, breakRead: (s: string) => { failure = s; }, failDeletes: (v: boolean) => { deletesFail = v; } };
+  return { db, env, objects, call, breakRead: (s: string) => { failure = s; }, failDeletes: (v: boolean) => { deletesFail = v; }, beforeBatch: (fn: () => void) => { beforeBatch = fn; } };
 }
 const checks = { registry_matches: true, owners_identified: true, owners_checked_or_explained: true };
 const approve = (f: ReturnType<typeof fixture>, id = 'account-3', body = checks) => f.call(`/${id}/approve`, 'PATCH', body);
@@ -239,7 +247,7 @@ test('owner links, document requests and imports use one local case and never in
     assert.equal((await f.call('/company-1')).body.status, 'needs_info');
     assert.equal(f.db.prepare('SELECT status FROM company_kyb_records WHERE company_id=1').get()?.status, 'needs_info');
     assert.equal((await f.call('/import-1/dismiss','PATCH',{ reason: 'Imported in error.' })).status, 200);
-    assert.equal((await f.call('/import-1/link-account','PATCH',{ user_id: 4 })).status, 400);
+    assert.equal((await f.call('/import-1/link-account','PATCH',{ user_id: 4 })).status, 409);
     f.db.exec("INSERT INTO kyc_partner_imports (id,user_id,legal_name) VALUES (2,2,'Another Import')");
     assert.equal((await f.call('/import-2/link-account','PATCH',{ user_id: 999 })).status, 404);
     assert.equal((await f.call('/import-2/link-account','PATCH',{ user_id: 4 })).status, 200);
@@ -437,6 +445,79 @@ test('corporate creation does not invent a review submission; an explicit reques
   await submissionScenario();
 });
 
+async function staleReviewScenario(router = kyb) {
+  const f = fixture(router);
+  try {
+    const shown = await f.call('/account-3');
+    assert.match(shown.body.review_token,/^[a-f0-9]{64}$/);
+    assert.equal((await f.call('/account-3/reject','PATCH',{reason:'Registry needs another review.'},2,'fresh-2',{'If-Match':''})).status,409);
+    f.db.exec("UPDATE corporate_profiles SET registration_number='updated after opening' WHERE user_id=3");
+    const stale = {'If-Match':shown.body.review_token};
+    for (const [suffix,method,body] of [
+      ['approve','PATCH',{...checks,unchecked_owner_reason:'Identity pending.'}],
+      ['reject','PATCH',{reason:'Registry needs another review.'}],
+      ['owners','PUT',{owners:preparedOwners,disclosed:true}],
+      ['request-documents','PATCH',{kinds:['incorporation'],message:'Please send the certificate.'}],
+      ['documents','POST',{kind:'other',data_uri:'data:application/pdf;base64,JVBERg=='}],
+    ] as const) assert.equal((await f.call(`/account-3/${suffix}`,method,body,2,'fresh-2',stale)).status,409,suffix);
+    assert.equal(f.db.prepare('SELECT COUNT(*) n FROM kyb_case_events').get()?.n,0);
+    const fresh = await f.call('/account-3');
+    assert.notEqual(fresh.body.review_token,shown.body.review_token);
+    assert.equal((await f.call('/account-3/request-documents','PATCH',{kinds:['incorporation'],message:'Please send the certificate.'},2,'fresh-2',{'If-Match':fresh.body.review_token})).status,200);
+    assert.equal((await f.call('/account-3/reject','PATCH',{reason:'Registry needs another review.'},2,'fresh-2',{'If-Match':fresh.body.review_token})).status,409,'staff changes also invalidate the displayed token');
+    f.beforeBatch(() => f.db.exec("UPDATE corporate_profiles SET entity_name='Changed during request' WHERE user_id=3"));
+    assert.equal((await f.call('/account-3/reject','PATCH',{reason:'Registry needs another review.'})).status,409,'the final SQL also checks the source revision');
+  } finally { f.db.close(); }
+}
+test('writes require the displayed review token and refuse source or case changes', () => staleReviewScenario());
+
+async function staffCreatedScenario(router = kyb) {
+  const f = fixture(router);
+  try {
+    assert.equal((await f.call('/company-2/owners','PUT',{owners:[{name:'Founder',ownership_pct:100,user_id:5}],disclosed:true})).status,200);
+    assert.equal(f.db.prepare('SELECT 1 FROM company_kyb_records WHERE company_id=2').get(),undefined,'staff must not invent a member submission');
+    assert.equal((await approve(f,'company-2')).status,200,'the independent reviewer can finish this staff case');
+    f.db.exec("INSERT INTO user_company_links (uid,company_id,user_id) VALUES ('company2-member',2,5)");
+    const member = await f.call('/member/trust/companies/kyb','GET',undefined,5);
+    assert.equal(member.body.items[0].kyb.status,'approved');
+  } finally { f.db.close(); }
+}
+test('staff can prepare and approve an unsubmitted company without becoming its submitter', () => staffCreatedScenario());
+
+async function dismissedScenario(router = kyb) {
+  const f = fixture(router);
+  try {
+    assert.equal((await f.call('/import-1/dismiss','PATCH',{reason:'Duplicate import from the same registry.'})).status,200);
+    for (const [suffix,method,body] of [['owners','PUT',{owners:[],disclosed:true}],
+      ['documents','POST',{kind:'other',data_uri:'data:application/pdf;base64,JVBERg=='}],
+      ['request-documents','PATCH',{kinds:['incorporation'],message:'Please provide the certificate.'}]] as const) {
+      assert.equal((await f.call(`/import-1/${suffix}`,method,body)).status,409,suffix);
+    }
+    assert.equal((await f.call('/import-1')).body.status,'dismissed');
+  } finally { f.db.close(); }
+}
+test('non-decision edits cannot reopen a dismissed import', () => dismissedScenario());
+
+function legacyAssignmentsScenario(fault = false) {
+  const db = new DatabaseSync(':memory:', {enableForeignKeyConstraints:false});
+  try {
+    db.exec("CREATE TABLE company_kyb_records (id INTEGER PRIMARY KEY, company_id INTEGER); INSERT INTO company_kyb_records VALUES (1,10),(4,20)");
+    db.exec(read('cloudflare-worker/sql/migrations/341_approval_assignments.sql'));
+    db.exec("INSERT INTO approval_assignments (lane,item_id,assignee_user_id,assigned_by_user_id) VALUES ('kyb',1,2,1),('kyb',4,3,1),('kyb',99,4,1),('kyc',1,5,1); INSERT INTO approval_events (lane,item_id,kind,actor_user_id,assignee_user_id) VALUES ('kyb',1,'assigned',1,2),('kyb',4,'assigned',1,3)");
+    let sql = read('cloudflare-worker/sql/migrations/616_kyb_cases.sql');
+    if (fault) sql = sql.replaceAll('SELECT company_id * 4 FROM company_kyb_records','SELECT company_id * 8 FROM company_kyb_records');
+    db.exec(sql);
+    assert.deepEqual(db.prepare("SELECT item_id,assignee_user_id FROM approval_assignments WHERE lane='kyb' ORDER BY assignee_user_id").all().map(r=>[r.item_id,r.assignee_user_id]),[[40,2],[80,3],[-99,4]]);
+    assert.deepEqual(db.prepare("SELECT item_id FROM approval_events ORDER BY id").all().map(r=>r.item_id),[40,80]);
+    assert.equal(db.prepare("SELECT item_id FROM approval_assignments WHERE lane='kyc'").get()?.item_id,1);
+  } finally { db.close(); }
+}
+test('migration preserves legacy KYB assignments and history without id collisions', () => {
+  legacyAssignmentsScenario();
+  assert.throws(() => legacyAssignmentsScenario(true), {code:'ERR_ASSERTION'});
+  legacyAssignmentsScenario();
+});
+
 // Exercise the same behavioural assertions with faults injected, then restored.
 // Data-URL modules keep mutations out of the working tree and concurrent tests.
 async function mutated(from: string, to: string, route = 'kyb_admin') {
@@ -469,6 +550,8 @@ test('D1231 mutation checks: the guards, audit, redaction and decision paths fai
     ['if (target) await requireSuperAdmin(c);', 'if (false) await requireSuperAdmin(c);', staffBoundaryScenario],
     ['u.id = b.linked_user_id OR u.id IN', 'u.id = b.linked_user_id AND u.id IN', staffBoundaryScenario],
   ];
+  mutations.push(["c.req.header('If-Match') !== await reviewToken(c.env, row)", 'false', staleReviewScenario]);
+  mutations.push(["row.status === 'dismissed' ||", 'false ||', dismissedScenario]);
   mutations.push(['companySelfReview(row, user) ||', 'false ||', companySelfScenario]);
   for (const [from,to,scenario] of mutations) {
     await scenario();
