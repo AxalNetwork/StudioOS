@@ -325,6 +325,8 @@ Unrecorded note or uncapped liquidity terms produce no waterfall plus a warning.
 Scenario inputs do not record individual option grants, which the payout
 assumptions state. Mercury's accepted SAFEs explicitly pass `post_money` through
 `capTableWrites.ts`; manual missing basis retains the legacy pre-money default.
+D966 (#2630): `mercury/safeBasisRepair.ts` adds `post_money` to the SAFEs Mercury's Accept wrote before
+#2629, through the owner's dry-run-first admin route, and leaves every manual SAFE's default as it is.
 The [YC post-money user guide](https://bookface-static.ycombinator.com/assets/ycdc/Website%20User%20Guide%20Feb%202023%20-%20final-28acf9a3b938e643cc270b7da514194d5c271359be25b631b025605673fa9f95.pdf)
 explains exclusion of cash-outs and the unissued pool from liquidity capitalization.
 `dataRoomActivity.ts` (D1105, #2985) is the data room's activity and checklist
