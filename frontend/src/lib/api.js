@@ -33,6 +33,7 @@ export * from './api/billingAlerts.js';
 export * from './api/billingCheckout.js';
 export * from './api/billingInvoices.js';
 export * from './api/buildPlan.js';
+export * from './api/calendarConnections.js';
 export * from './api/calendarItems.js';
 export * from './api/capTableAccess.js';
 export * from './api/capTableHolder.js';
