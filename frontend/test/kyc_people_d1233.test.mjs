@@ -188,6 +188,7 @@ test('the case: the seven checks, the documents, the history, and the member’s
     assert.ok(worker.includes(`body: \`${template}\``), `${kind}: ${template}`);
   }
   assert.equal(refusalWord({ status: 423, code: 'branch_suspended' }), 'A paused studio cannot decide checks. Nothing was changed.');
+  assert.equal(refusalWord({ status: 423 }), 'A paused studio cannot decide checks. Nothing was changed.', 'a 423 with no code is the paused studio too');
   assert.equal(refusalWord({ code: 'step_up_required', status: 403 }), 'Your authenticator code was not confirmed, so nothing was decided.');
   assert.equal(viewerRefusal({ code: 'access_required' }).title, 'Your HQ staff sign-in is needed');
   assert.equal(viewerRefusal({ status: 404 }, { rejectedOn: '2 Oct 2026' }).line, 'This document was deleted when the check was rejected on 2 Oct 2026. The decision stays on record.');
@@ -322,6 +323,7 @@ test('mounted bulk bar: two picked people are assigned in the page, one write ea
   const r = await mounted(h(KycConsole, { me: ME, nowIso: NOW }));
   try {
     await r.change('kyc-pick-7', true);
+    assert.match(r.textOf('kyc-bulk'), /^1 selected/, 'one picked row is enough for the bar');
     await r.change('kyc-pick-8', true);
     assert.match(r.textOf('kyc-bulk'), /^2 selectedAssign to…Clear.*no bulk approve/);
     await r.click('kyc-bulk-assign');
