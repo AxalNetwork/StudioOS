@@ -16,7 +16,7 @@ import { hostAction, tabOf } from '../src/pages/events/myEventsModel.js';
 import {
   EXPLORER_CLOSED, MY_EVENTS_OPEN_TO_EXPLORERS, NOT_HOST, NO_PLACE, agendaRows, cancelEventDialog, cancelPlaceDialog, cancelledLine,
   drawerOf, gateOf, hostedPath, hostedTiles, joinLinkOf, mapsUrl, nextStep, placeFromDetail, placeIn, publishDialog, seatLine,
-  tabUnder, ticketCard, ticketPath, ticketState, whoMayRegister,
+  tabUnder, ticketCard, ticketPath, ticketState, whoMayRegister, HOST_NOT_RECORDED, hostLine,
 } from '../src/pages/events/eventDrawersModel.js';
 
 const read = (p) => readFileSync(new URL('../../' + p, import.meta.url), 'utf8');
@@ -220,7 +220,7 @@ function prepare(o = {}) {
       list: o.list || (async () => { calls.push(['list']); return LIST(); }),
       suggested: async () => ({ events: [] }),
       icsUrl: (id) => `/api/events/${id}/ics`,
-      get: o.get || (async (id) => { calls.push(['get', id]); return { event: { id, title: 'Pricing Workshop' }, registration: null, agenda: [{ id: 1, title: 'Welcome', starts_at: ahead(5), speaker_name: 'Ana' }] }; }),
+      get: o.get || (async (id) => { calls.push(['get', id]); return { event: { id, title: 'Pricing Workshop' }, registration: null, host_name: 'Rhea Host', agenda: [{ id: 1, title: 'Welcome', starts_at: ahead(5), speaker_name: 'Ana' }] }; }),
       calendarLinks: o.links || (async (id) => ({ event_id: id, google: 'https://calendar.google.test/x', outlook: 'https://outlook.test/x', ics: `/api/events/${id}/ics` })),
       cancelPlace: async (id) => { calls.push(['cancelPlace', id]); return { ok: true }; },
       submitReview: async (id) => { calls.push(['submitReview', id]); return { event: { id } }; },
@@ -278,7 +278,8 @@ test('the ticket at /my/events/ticket/1: the code, when and where, Add to calend
     assert.ok(ui.hrefs().includes('/api/events/1/ics'));
     assert.equal(ui.textIn('my-events-ticket-seat'), 'Your seatPaid ticket · $40Paid.');
     assert.equal(ui.textIn('my-events-ticket-agenda-row').replace(/\d\d:\d\d/, 'HH:MM'), 'HH:MMWelcomeAna');
-    assert.match(ui.textIn('my-events-ticket-host'), /not read here yet/);
+    // D967: the host's name from the event read.
+    assert.equal(ui.textIn('my-events-ticket-host'), 'Hosted by Rhea Host');
     assert.ok(ui.hrefs().includes('/events/pricing'), 'Open event page');
   } finally { await ui.unmount(); }
 });
@@ -324,8 +325,24 @@ test('a ticket the list does not hold: from the event read, else "You hold no pl
     assert.ok(ui.has('my-events-ticket-calendar-unread'));
     assert.ok(ui.hrefs().includes('/api/events/1/ics'), 'the .ics stands');
     assert.ok(ui.has('my-events-ticket-agenda-unread'));
+    // D967: a failed event read names no host, and says so.
+    assert.equal(ui.textIn('my-events-ticket-host'), 'The host’s name could not be read.Try again');
     assert.equal(ui.textIn('my-events-ticket-code-text'), 'K7Q2-9X4M', 'the rest of the ticket stands');
   } finally { await ui.unmount(); }
+});
+
+test('D967: a ticket with no host on record says Not recorded with its reason, never a name', async () => {
+  for (const host_name of [null, undefined, '   ']) {
+    prepare({ get: async (id) => ({ event: { id, title: 'Pricing Workshop' }, registration: null, host_name, agenda: [] }) });
+    const ui = await mount('/my/events/ticket/1');
+    try {
+      assert.equal(ui.textIn('my-events-ticket-host'), HOST_NOT_RECORDED, String(host_name));
+      assert.doesNotMatch(ui.textIn('my-events-ticket-host'), /Hosted by|not read here yet/);
+    } finally { await ui.unmount(); }
+  }
+  assert.deepEqual(hostLine({ status: 'loading' }), { state: 'loading', text: 'Reading…' });
+  assert.equal(hostLine({ status: 'ready', data: { host_name: ' Ana Example ' } }).text, 'Hosted by Ana Example');
+  assert.equal(hostLine({ status: 'error' }).state, 'unreadable');
 });
 
 test('Cancel my place opens MEV7a; confirming cancels through DELETE, re-reads the list and goes back to Upcoming', async () => {
