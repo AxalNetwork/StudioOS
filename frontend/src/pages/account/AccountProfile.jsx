@@ -1,3 +1,4 @@
+import PersonaFollowUpCheck from './PersonaFollowUpCheck';
 import { useEffect, useState } from 'react';
 import { normalizePhoneInput, phonePlaceholder, PHONE_ERROR } from '../../lib/phoneNumber';
 import { Link } from 'react-router-dom';
@@ -550,6 +551,7 @@ export default function ProfileIdentityCanvas({ data, onAccountChange, onSaved }
 
   return (
     <div className="@container space-y-3" data-testid="account-profile-canvas">
+      <PersonaFollowUpCheck />
       <div className="grid items-start gap-3 @2xl:grid-cols-2">
         <PersonalDetailsCard account={data} identity={identity} details={details} onSave={savePersonal} />
         <div className="space-y-3">

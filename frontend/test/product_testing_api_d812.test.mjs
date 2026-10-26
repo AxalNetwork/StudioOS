@@ -78,6 +78,17 @@ test('a partner and HQ reach their own routes', async () => {
   assert.throws(() => adminTestingApi.programmes('nope'), /Unknown programme status/);
 });
 
+test('D1198 (#3148): HQ moves a programme to testing and withdraws an application with a reason', async () => {
+  const calls = await seen(async () => {
+    await adminTestingApi.startTesting('p 1');
+    await adminTestingApi.withdraw('a 1', 'The dates no longer fit.');
+  });
+  assert.deepEqual(calls, [
+    ['POST', '/admin/testing/programmes/p%201/testing', null],
+    ['POST', '/admin/testing/applications/a%201/withdraw', { reason: 'The dates no longer fit.' }],
+  ]);
+});
+
 test('api.js re-exports the module (D527)', () => {
   assert.equal(api.productTestingApi, productTestingApi);
   assert.equal(api.partnerTestingApi, partnerTestingApi);
