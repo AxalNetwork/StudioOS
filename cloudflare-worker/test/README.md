@@ -125,6 +125,11 @@ D1144: `pmf_store_d1144.test.ts` exercises migration 598, signed change-only sna
 derived stages, per-user/firm visit markers and private notes, including audit
 rollback, no admin bypass, NDA exclusion and anonymous change metadata.
 
+`deal_workroom_d1153.test.ts` mounts D1153's routes over canonical SQLite DDL and
+migration 595: investor-only access, the room's door and one open request, the
+round as a count and a total with no other investor named, and a withdrawal that
+needs a reason and records it only when it withdrew.
+
 D1123 extends admin_lab_operations_d971.test.ts with real SQLite capacity-result tests: cohort scoping, last event, absent vs unreadable, and admin-only reads.
 
 D1176: `use_of_funds_routes_d1176.test.ts` mounts the real Use of funds and financial routers over canonical SQLite DDL. It covers roles/company scope, read-only support, audited initialization, cross-venture ids, Base projection, partial legacy splits and financial reconciliation, legacy-only metadata and concurrent edit conflicts, stale-copy repair errors, orphan milestone deletion, copies, racing deletion and hire audits, zero/missing values, precedence, bounded runway history, founder-only Mercury, partial reads and audit rollback. Providers are stubbed.
