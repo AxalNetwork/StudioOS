@@ -11,9 +11,35 @@ import { computeThesisFit, readFitGeographies, readThesis, type FitGeography } f
 
 const r = new Hono<{ Bindings: Env }>();
 type Ctx = Context<{ Bindings: Env }>;
+const refusalSentences = [
+  'Archived views can only be read or removed.',
+  'Choose the firm this view belongs to.',
+  'Firm views require an active firm seat account.',
+  'Give the view a name.',
+  'Refresh this view before deleting it.',
+  'Refresh this view before editing it.',
+  'That firm selection is unavailable.',
+  'The investor account is unavailable.',
+  'The view changed or is unavailable. Refresh and try again.',
+  'The view changed. Refresh before deleting it.',
+  'The view context is invalid.',
+  'The view could not be saved. Refresh and try again.',
+  'The view options are invalid.',
+  'The view page is invalid.',
+  'The view request is invalid.',
+  'The view specification is invalid.',
+  'The view specification is too large.',
+  'The view version is invalid.',
+  'This firm seat is no longer available.',
+  'View not found.',
+] as const;
+type RefusalSentence = typeof refusalSentences[number];
 class Refused extends Error {
   readonly status: 400 | 403 | 404 | 409;
-  constructor(status: 400 | 403 | 404 | 409, message: string) { super(message); this.status = status; }
+  readonly response: { error: RefusalSentence };
+  constructor(status: 400 | 403 | 404 | 409, sentence: RefusalSentence) {
+    super('deal_view_refused'); this.status = status; this.response = { error: sentence };
+  }
 }
 const uid = () => crypto.randomUUID().replaceAll('-', '');
 const validUid = (value: string) => /^[a-f0-9]{32}$/.test(value);
@@ -127,7 +153,7 @@ function fields(data: Record<string, unknown>, old?: ViewRow) {
     version: data.version === undefined ? old?.version ?? 1 : Number(data.version) };
 }
 function failure(c: Ctx, error: unknown) {
-  if (error instanceof Refused) return c.json({ error: error.message }, error.status);
+  if (error instanceof Refused) return c.json(error.response, error.status);
   return c.json({ error: 'Deal-flow settings are unreadable. Try again.' }, 503);
 }
 async function own(c: Ctx, x: Viewer) {
@@ -224,7 +250,7 @@ r.patch('/views/:uid', async c => {
     const x = await viewer(c);
     if (x.archived) throw new Refused(400, 'Archived views can only be read or removed.');
     const old = await own(c, x), f = fields(await body(c), old);
-    if (f.shared && !x.canShare) throw new Refused(403, 'Firm views require an active firm seat account.');
+    if (f.shared && !old.shared_with_firm && !x.canShare) throw new Refused(403, 'Firm views require an active firm seat account.');
     const nonce = uid();
     const result = await c.env.DB.batch([
       c.env.DB.prepare(`UPDATE deal_saved_views SET name = ?, spec_json = ?, shared_with_firm = ?, is_default = 0,

@@ -340,3 +340,23 @@ test('a removed company link exposes only the author’s archived settings for c
   w.db.exec('UPDATE investor_seats SET revoked_at=CURRENT_TIMESTAMP');assert.equal((await call(w,2,'GET','/api/deals/views?context=archived')).status,403);
  }finally{w.db.close();}
 });
+
+test('a settings database failure returns a fixed unreadable sentence without query text',async()=>{
+ const w=world();try {
+  const prepare=w.env.DB.prepare.bind(w.env.DB);w.env.DB.prepare=(sql:string)=>{if(sql.includes('FROM deal_saved_views'))throw new Error('PRIVATE QUERY 1234567');return prepare(sql);};
+  const result=await call(w,1);assert.equal(result.status,503);assert.match(result.body.error,/unreadable/i);assert.doesNotMatch(JSON.stringify(result.body),/PRIVATE|QUERY|1234567/);
+ }finally{w.db.close();}
+});
+
+test('a primary who loses firm coverage can maintain or unshare an existing view but cannot grant a new share',async()=>{
+ const w=world();try {
+  const shared=await create(w,1,{shared_with_firm:true});const privateView=await create(w);
+  w.db.exec("UPDATE users SET investor_tier='professional' WHERE id=1");
+  assert.equal((await call(w,2)).status,403);
+  const changed=await call(w,1,'PATCH',url(shared.body.uid),{version:1,name:'Still mine',is_default:true});assert.equal(changed.status,200);assert.equal(changed.body.shared_with_firm,true);
+  assert.equal((await create(w,1,{shared_with_firm:true})).status,403);
+  assert.equal((await call(w,1,'PATCH',url(privateView.body.uid),{version:1,shared_with_firm:true})).status,403);
+  const unshared=await call(w,1,'PATCH',url(shared.body.uid),{version:changed.body.version,shared_with_firm:false});assert.equal(unshared.status,200);assert.equal(unshared.body.shared_with_firm,false);
+  assert.equal((await call(w,1,'PATCH',url(shared.body.uid),{version:unshared.body.version,shared_with_firm:true})).status,403);
+ }finally{w.db.close();}
+});
