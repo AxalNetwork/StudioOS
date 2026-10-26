@@ -55,6 +55,7 @@ export * from './api/cycleWrites.js';
 export * from './api/cycles.js';
 export * from './api/dataRoom.js';
 export * from './api/ddDesk.js';
+export * from './api/ddFlags.js';
 export * from './api/ddLifecycle.js';
 export * from './api/dealContext.js';
 export * from './api/dealFlow.js';
