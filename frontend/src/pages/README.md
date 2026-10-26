@@ -6,8 +6,8 @@ so the filename is usually the fastest way from a URL to its code: `/deals` →
 
 D1174 (#3101): `FinancialsPage.jsx` has no Capital score. Its forecast is
 Modelled and follows the URL venture (`project_id` or `project`), including
-Back/Forward, without selecting the first of multiple ventures. `CapTablePage.jsx`
-consumes either alias carried by the existing Capital tabs. An unsaved model
+Back/Forward, without selecting the first of multiple ventures. The Cap table
+tool (D1029, which retired the old cap-table page) reads either alias. An unsaved model
 has no sensitivity table; export/recompute require a person-saved model.
 
 ## Finding a page
