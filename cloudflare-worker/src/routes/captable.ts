@@ -33,7 +33,7 @@ import type { Env } from '../types';
 import { requireAuth } from '../auth';
 import { simulate, validateInputs, toCsv, type Inputs, type SimulateResult } from '../services/captable';
 import {
-  canReadProject, canWriteProject, canReadScenario, canWriteScenario,
+  canReadProject, canWriteProject, canReadScenario, canWriteScenario, liveGrantFor,
   type AccessUser, type AccessProject,
 } from '../services/captableAccess';
 import { ensureCapTableVariantColumn } from '../services/captableSchema';
@@ -1419,14 +1419,25 @@ captable.post('/register/:projectId/snapshot', async (c) => {
 
 // Task #1 (AG) — spec-contract aliases. Read-only project-scoped views over
 // the existing cap_table_holders / cap_table_securities tables. Founders see
-// only their own project; admin/partner/investor see any.
+// only their venture; admins and accepted cofounders read it too. A recorded
+// person-bound holder grant exposes that holder only, never the full register.
 captable.get('/:projectId', async (c) => {
   const user = await requireAuth(c);
   const projectId = Number(c.req.param('projectId'));
   if (!Number.isFinite(projectId)) return c.json({ detail: 'Invalid project_id' }, 400);
   const proj = await loadProject(c, projectId, user);
   if (!proj) return c.json({ detail: 'Project not found' }, 404);
-  if (!canReadProject(user, proj)) return c.json({ detail: 'Forbidden' }, 403);
+  // A read-only project membership is not permission to inspect the raw
+  // register. Holder identity comes from the founder's live grant, never the
+  // connector's recorder user_id or an unverified email match.
+  if (!canWriteProject(user, proj)) {
+    const grant = await liveGrantFor(c.env, projectId, user.id);
+    if (!grant?.holder_ref) return c.json({ detail: 'Forbidden' }, 403);
+    const own = await c.env.DB.prepare(
+      'SELECT id, project_id, name, security_type, shares, ownership_pct, source, created_at, updated_at FROM cap_table_holders WHERE project_id = ? AND name = ? ORDER BY id ASC',
+    ).bind(projectId, grant.holder_ref).all();
+    return c.json({ project_id: projectId, holders: own.results || [], securities: [] });
+  }
   const holders = await c.env.DB.prepare(
     'SELECT * FROM cap_table_holders WHERE project_id = ? ORDER BY id ASC',
   ).bind(projectId).all();

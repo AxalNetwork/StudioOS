@@ -247,12 +247,12 @@ async function seedSyndicates(db: InstanceType<typeof DatabaseSync>) {
 test('D630: ?project_id= lists one company’s syndicates, and refuses a malformed id', async () => {
   const db = freshDb();
   await seedSyndicates(db);
-  const r = await call(db, PRO, `/api/networkfx/syndicates?project_id=${PROJECT}`);
+  const r = await call(db, ADMIN, `/api/networkfx/syndicates?project_id=${PROJECT}`);
   assert.equal(r.status, 200);
   assert.deepEqual(r.body.map((s: any) => s.id).sort(), [1, 2, 4]);
-  const all = await call(db, PRO, '/api/networkfx/syndicates');
+  const all = await call(db, ADMIN, '/api/networkfx/syndicates');
   assert.equal(all.body.length, 4, 'without the filter the list is unchanged');
-  const bad = await call(db, PRO, '/api/networkfx/syndicates?project_id=abc');
+  const bad = await call(db, ADMIN, '/api/networkfx/syndicates?project_id=abc');
   assert.equal(bad.status, 400);
   assert.equal(bad.body.error, 'bad_project_id');
 });

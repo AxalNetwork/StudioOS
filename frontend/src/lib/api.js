@@ -3004,7 +3004,7 @@ export const api = {
   voteLeaderboard: (limit = 10) => request(`/pipeline/votes/leaderboard?limit=${limit}`),
   // D370: no `.catch(() => [])`. That turned a failed read into "no capital
   // calls", which is a claim; a caller that wants a fallback writes its own.
-  capitalCalls: () => request('/legalcap/capital/calls'),
+  capitalCalls: () => request('/capital/calls'),
   complianceFor: (dealId) => request(`/legalcap/compliance/${dealId}`),
 
   spinoutExecute: (data) => request('/legalcap/spinout/execute', { method: 'POST', body: JSON.stringify(data) }),
