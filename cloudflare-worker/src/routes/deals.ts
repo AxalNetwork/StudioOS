@@ -1188,25 +1188,39 @@ deals.post('/:id/commitments/:uid/withdraw', async (c) => {
   return c.json({ ok: true });
 });
 
+/**
+ * D1152 (#3057, DL14) — WHO IS NAMED IN THE ACTIVITY follows the commitments
+ * read above: an admin and the deal's own founder read every investor by
+ * name and amount. Anyone else reads their own rows as "You …", another
+ * investor's commitment as "An investor committed" with no name and no
+ * amount, and never another investor's invitation. `mine` marks the
+ * caller's own rows, for the page's Mine filter.
+ */
 deals.get('/:id/activity', async (c) => {
   const id = parseInt(c.req.param('id'));
   const ctx = await loadDealForRead(c, id);
   if (ctx.error) return ctx.error;
-  const { sql, deal } = ctx;
+  const { sql, deal, user } = ctx;
+  const named = user.role === 'admin' || user.role === 'founder';
+  const money = (amount: unknown) => (amount == null ? 'Not recorded' : `${Math.round(Number(amount)).toLocaleString()} ${deal.currency ?? 'USD'}`);
   const events: any[] = [];
-  events.push({ type: 'created', label: 'Deal created', at: deal.created_at });
-  if (deal.stage_changed_at) events.push({ type: 'stage', label: `Moved to ${deal.status}`, at: deal.stage_changed_at });
-  const commits = await sql`SELECT c.amount, c.created_at, u.name AS investor_name FROM commitments c LEFT JOIN users u ON u.id = c.investor_user_id WHERE c.deal_id = ${id} ORDER BY c.created_at DESC`;
+  events.push({ type: 'created', label: 'Deal created', at: deal.created_at, mine: false });
+  if (deal.stage_changed_at) events.push({ type: 'stage', label: `Moved to ${deal.status}`, at: deal.stage_changed_at, mine: false });
+  const commits = await sql`SELECT c.amount, c.created_at, c.investor_user_id, u.name AS investor_name FROM commitments c LEFT JOIN users u ON u.id = c.investor_user_id WHERE c.deal_id = ${id} ORDER BY c.created_at DESC`;
   for (const r of commits as any[]) {
-    events.push({ type: 'commitment', label: `${r.investor_name || 'An investor'} committed ${r.amount == null ? 'Not recorded' : `${Math.round(r.amount).toLocaleString()} ${deal.currency ?? 'USD'}`}`, at: r.created_at });
+    const mine = Number(r.investor_user_id) === Number(user.id);
+    const label = named ? `${r.investor_name || 'An investor'} committed ${money(r.amount)}`
+      : mine ? `You committed ${money(r.amount)}` : 'An investor committed';
+    events.push({ type: 'commitment', label, at: r.created_at, mine });
   }
-  const invites = await sql`SELECT di.status, di.created_at, di.responded_at, u.name AS investor_name FROM deal_invitations di LEFT JOIN users u ON u.id = di.investor_user_id WHERE di.deal_id = ${id} ORDER BY di.created_at DESC`;
+  const invites = await sql`SELECT di.status, di.created_at, di.responded_at, di.investor_user_id, u.name AS investor_name FROM deal_invitations di LEFT JOIN users u ON u.id = di.investor_user_id WHERE di.deal_id = ${id} ORDER BY di.created_at DESC`;
   for (const r of invites as any[]) {
-    events.push({
-      type: 'invitation',
-      label: `${r.investor_name || 'An investor'} invited${r.status !== 'invited' ? ` — ${r.status}` : ''}`,
-      at: r.responded_at || r.created_at,
-    });
+    const mine = Number(r.investor_user_id) === Number(user.id);
+    if (!named && !mine) continue;
+    const label = named
+      ? `${r.investor_name || 'An investor'} invited${r.status !== 'invited' ? ` — ${r.status}` : ''}`
+      : r.status === 'interested' ? 'You said you’re interested' : r.status === 'passed' ? 'You passed' : 'You were invited';
+    events.push({ type: 'invitation', label, at: r.responded_at || r.created_at, mine });
   }
   await sql.end();
   events.sort((a, b) => (normTs(b.at) || 0) - (normTs(a.at) || 0));

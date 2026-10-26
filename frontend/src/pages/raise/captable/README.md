@@ -29,6 +29,7 @@ owner's "Cap table" canvas: `design/incoming/Raise Cap Table Page.dc.html` and
 | `ScenarioModelEditor.jsx` | D632's variant editor, moved here by D1024: the form for a scenario typed by hand (founders, pool, SAFEs, rounds, an exit), saved in place. The variants page reads it from here until part 14 retires that page. |
 | `scenariosModel.js` | D1024, pure: the addresses, the cards, the dialogs' words, both drafts and their bodies, the results, the waterfall table, the conversion points, the read-backs and the compare rows and charts. |
 | `CapTableTag.jsx` | The On record and Modelled tags. |
+| `capTable.css` | D1028 (#2865, CT23): on a phone (below 1024px) every control under the tool's root class `captable-phone` is a 44 × 44px target. Imported by `CapTableTool.jsx`. |
 
 ## Where the tool lives
 
@@ -71,3 +72,6 @@ scenario and the compare page, `/raise/cap-table/scenarios/<uid>` and
   Never `alert` or `confirm`. A scenario's own Save is the one edit made in place, as the
   variants page made it (D1024); its Duplicate, Rename, Delete and Attach are dialogs.
 - **Eadwyn never fills an amount, cap, discount, price or share count** (#2431).
+- **Every board works on a phone and in dark** (D1028).
+  - **On a phone:** a page's root carries `PHONE_ROOT` below 1024px. A dialog or drawer is a bottom sheet (`Lightbox`'s `phone="sheet"`), except the holder, which is a page. A wide table either has a phone form (cards, the compare swipe) or scrolls sideways.
+  - **In dark:** use CT8's pairs in `DARK` (`capTableModel.js`). `captable_phone_dark_d1028.test.mjs` fails on any other dark violet, status, hairline or ink class.

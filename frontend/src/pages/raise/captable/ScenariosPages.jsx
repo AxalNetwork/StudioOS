@@ -1,10 +1,11 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { capTableHolderApi } from '../../../lib/api/capTableHolder';
 import { capTableScenariosApi } from '../../../lib/api/capTableScenarios';
 import { useAuth } from '../../../hooks/useAuthSync';
 import { hasTier } from '../../../sidebarConfig';
 import { Unreadable } from '../../../ui';
+import { usePhoneWidth } from '../../../ui/phone/usePhoneWidth';
 import { ChartTable, Columns, ExitSteps, Legend, WeekLines } from '../../../ui/Charts';
 import CapTableDialog, { useWrite } from './CapTableDialog';
 import { Tag } from './CapTableTag';
@@ -13,10 +14,10 @@ import { PLAN_LINE } from './overviewModel';
 import { dollars, simulatorHref, tabSearch } from './capTableModel';
 import {
   ASSUMPTIONS_FALLBACK, COMPARE, READ_SOURCE, GROUPS, MAX_COMPARE, MAX_EXITS, MODEL_LOCKED, READ_ONLY, SAVED, SCENARIOS_PATH,
-  attachRead, attachedRead, beforeAfter, compareExits, compareHref, compareIds, compareRows, dialogCopy,
+  attachRead, attachedRead, beforeAfter, compareExits, compareHref, compareIds, compareRows, dialogCopy, exitTable,
   draftFromScenario, engineNotes, exitPanels, founderPanels, fromToday, inputsFromDraft, nameError,
   newScenarioInputs, nextName, notModelled, paymentReadBack, roundEvents, roundReadBack, runRequest,
-  sameInputs, scenarioCards, scenarioHref, scenariosHead, shareSteps, short, shortName, todayBody, todayDraft,
+  sameInputs, scenarioCards, scenarioHref, scenariosHead, shareSteps, short, shortName, swipeCards, todayBody, todayDraft,
   toggleCompare, variantSaveErrors, waterfallTable, waterfallsOf, withNotes,
 } from './scenariosModel';
 
@@ -27,21 +28,25 @@ import {
  * reads), and `/scenarios/compare?ids=` (CT7, CT8 in dark). Every rule and
  * line is in `scenariosModel.js`; every write opens a dialog except the
  * editor's own Save, which edits in place as the variants page did.
+ *
+ * D1028 (#2865, CT23c): on a phone the compare page is one scenario per card,
+ * swiped or stepped with ‹ and ›, and the exit waterfall of the card in view
+ * as a table.
  */
 
-const CARD = 'rounded-xl border border-axal-hairline bg-white dark:border-gray-800 dark:bg-gray-900';
-const INK = 'text-axal-ink dark:text-gray-100';
+const CARD = 'rounded-xl border border-axal-hairline bg-white dark:border-gray-700 dark:bg-gray-900';
+const INK = 'text-axal-ink dark:text-gray-200';
 const MUTED = 'text-axal-muted dark:text-gray-400';
 const EYEBROW = 'text-[10.5px] font-extrabold uppercase tracking-[.07em] text-axal-muted dark:text-gray-400';
-const LINK = 'font-semibold text-axal-violet hover:text-axal-violet-deep dark:text-violet-300 dark:hover:text-violet-200';
+const LINK = 'font-semibold text-axal-violet hover:text-axal-violet-deep dark:text-violet-400 dark:hover:text-violet-300';
 const TH = 'px-3 py-2 text-left text-[10.5px] font-extrabold uppercase tracking-[.07em] text-axal-muted dark:text-gray-400';
-const TD = 'px-3 py-2 align-top text-[12.5px] text-axal-ink dark:text-gray-100';
+const TD = 'px-3 py-2 align-top text-[12.5px] text-axal-ink dark:text-gray-200';
 const MONO = 'font-mono tabular-nums';
-const AMBER = 'rounded-[10px] border border-amber-200 bg-amber-50 px-2.5 py-1.5 text-[11.5px] text-amber-800 dark:border-amber-900 dark:bg-amber-950/30 dark:text-amber-300';
-const BTN = 'inline-flex min-h-[34px] items-center justify-center rounded-[9px] border border-axal-hairline bg-white px-3.5 text-[13px] font-bold text-axal-ink hover:border-axal-violet disabled:opacity-50 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-100';
+const AMBER = 'rounded-[10px] border border-amber-200 bg-amber-50 px-2.5 py-1.5 text-[11.5px] text-amber-800 dark:border-amber-300/55 dark:bg-amber-300/10 dark:text-amber-300';
+const BTN = 'inline-flex min-h-[34px] items-center justify-center rounded-[9px] border border-axal-hairline bg-white px-3.5 text-[13px] font-bold text-axal-ink hover:border-axal-violet disabled:opacity-50 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-200';
 const PRIMARY = 'inline-flex min-h-[34px] items-center justify-center rounded-[9px] border border-axal-violet bg-axal-violet px-3.5 text-[13px] font-bold text-white hover:bg-axal-violet-deep disabled:opacity-50';
-const INPUT = 'w-full min-w-0 rounded-md border border-axal-hairline bg-white px-2 py-1.5 text-[13px] text-axal-ink dark:border-gray-700 dark:bg-gray-900 dark:text-gray-100';
-const LAV = 'rounded-xl border border-axal-lavender-edge bg-axal-lavender dark:border-violet-800 dark:bg-violet-950/30';
+const INPUT = 'w-full min-w-0 rounded-md border border-axal-hairline bg-white px-2 py-1.5 text-[13px] text-axal-ink dark:border-gray-700 dark:bg-gray-900 dark:text-gray-200';
+const LAV = 'rounded-xl border border-axal-lavender-edge bg-axal-lavender dark:border-[#4c3a8a] dark:bg-[#211f3d]';
 
 // ─────────────────────────────────────────────────────────── shared parts
 
@@ -77,7 +82,7 @@ function useWrites(projectId) {
 function Block({ title, tags, aside, testId, children, foot }) {
   return (
     <section className={CARD} data-testid={testId}>
-      <div className="flex flex-wrap items-center justify-between gap-2 border-b border-axal-hairline px-4 py-3 dark:border-gray-800">
+      <div className="flex flex-wrap items-center justify-between gap-2 border-b border-axal-hairline px-4 py-3 dark:border-gray-700">
         <h2 className={`m-0 flex flex-wrap items-center gap-2 text-[15px] font-extrabold tracking-[-.015em] ${INK}`}>{title} {tags}</h2>
         {aside}
       </div>
@@ -103,7 +108,7 @@ function ReadState({ read, what, claim, onRetry, testId, children }) {
 /** A chart with its Table toggle (D893's "View as table"), the alt sentence on the drawing. */
 function ChartBlock({ title, testId, alt, legend, table, foot, children }) {
   const [asTable, setAsTable] = useState(false);
-  const seg = (on) => `min-h-[28px] rounded-[7px] px-2.5 text-[12px] font-bold ${on ? 'bg-white text-axal-ink shadow-sm dark:bg-gray-700 dark:text-gray-100' : MUTED}`;
+  const seg = (on) => `min-h-[28px] rounded-[7px] px-2.5 text-[12px] font-bold ${on ? 'bg-white text-axal-ink shadow-sm dark:bg-gray-700 dark:text-gray-200' : MUTED}`;
   return (
     <Block title={title} tags={<Tag kind="modelled" />} testId={testId} foot={foot}
       aside={(
@@ -142,13 +147,13 @@ function EadwynBand({ read, attached, canAttach, onAttach, testId }) {
   }
   return (
     <section className={`${LAV} flex flex-col gap-2 px-4 py-3`} data-testid={testId}>
-      <span className="text-[10.5px] font-extrabold uppercase tracking-[.07em] text-axal-violet dark:text-violet-300">Proposal · plain-language read</span>
+      <span className="text-[10.5px] font-extrabold uppercase tracking-[.07em] text-axal-violet dark:text-violet-400">Proposal · plain-language read</span>
       <h2 className={`m-0 flex items-center gap-2 text-[15px] font-extrabold ${INK}`}>{read.title} <Tag kind="modelled" /></h2>
-      <p className="m-0 text-[12.5px] font-semibold text-axal-violet dark:text-violet-300" data-testid={`${testId}-source`}>{READ_SOURCE}</p>
+      <p className="m-0 text-[12.5px] font-semibold text-axal-violet dark:text-violet-400" data-testid={`${testId}-source`}>{READ_SOURCE}</p>
       <ol className="m-0 flex list-none flex-col p-0">
         {read.steps.map((t, i) => (
-          <li key={i} className="flex gap-2.5 border-t border-axal-lavender-edge py-1.5 text-[13px] leading-[1.55] dark:border-violet-800" data-testid={`${testId}-step`}>
-            <span className={`w-3.5 flex-none font-mono text-[12px] font-bold text-axal-violet dark:text-violet-300`}>{i + 1}</span>
+          <li key={i} className="flex gap-2.5 border-t border-axal-lavender-edge py-1.5 text-[13px] leading-[1.55] dark:border-[#4c3a8a]" data-testid={`${testId}-step`}>
+            <span className={`w-3.5 flex-none font-mono text-[12px] font-bold text-axal-violet dark:text-violet-400`}>{i + 1}</span>
             <span className={INK}>{t}</span>
           </li>
         ))}
@@ -213,7 +218,7 @@ export function ScenariosList({ projectId, reload, retry, search }) {
     <div className="flex flex-col gap-3.5" data-testid="captable-scenarios">
       <div className="flex flex-wrap items-center gap-2.5" data-testid="captable-scenarios-head">
         {!plan
-          ? <span className="inline-flex min-h-[30px] items-center rounded-full border border-axal-lavender-edge bg-axal-lavender px-3 text-[12.5px] font-bold text-axal-violet dark:border-violet-800 dark:bg-violet-950/40 dark:text-violet-300" data-testid="captable-scenarios-plan">{PLAN_LINE} Everything here still reads.</span>
+          ? <span className="inline-flex min-h-[30px] items-center rounded-full border border-axal-lavender-edge bg-axal-lavender px-3 text-[12.5px] font-bold text-axal-violet dark:border-[#4c3a8a] dark:bg-[#211f3d] dark:text-violet-400" data-testid="captable-scenarios-plan">{PLAN_LINE} Everything here still reads.</span>
           : <span className={`text-[13px] font-semibold ${INK}`}>{read.status === 'ready' ? scenariosHead(read.data, today.status === 'ready' ? today.data : null) : 'Scenarios'}</span>}
         {writes && start ? <button type="button" className={BTN} onClick={() => setCreating(true)} data-testid="captable-scenario-new">New scenario</button> : null}
         {picked.length
@@ -233,9 +238,9 @@ export function ScenariosList({ projectId, reload, retry, search }) {
               {cards.map((s) => (
                 <div key={s.uid || s.name} className={`${CARD} flex flex-col gap-1.5 px-3.5 py-3`} data-testid="captable-scenario-card">
                   <span className={EYEBROW}>{s.model ? 'Main cap table' : 'Scenario'}</span>
-                  <Link to={scenarioHref(s.uid, search)} className={`text-[14px] font-extrabold ${INK} hover:text-axal-violet`} data-testid="captable-scenario-open">{s.name}</Link>
+                  <Link to={scenarioHref(s.uid, search)} className={`text-[14px] font-extrabold ${INK} hover:text-axal-violet dark:hover:text-violet-400`} data-testid="captable-scenario-open">{s.name}</Link>
                   <span className={`flex flex-wrap items-center gap-2 text-[12px] ${MUTED}`}>{s.start} <Tag kind="modelled" /></span>
-                  <span className={`border-t border-axal-hairline pt-2 font-mono text-[12px] leading-[1.5] ${INK} dark:border-gray-800`}>{s.round}</span>
+                  <span className={`border-t border-axal-hairline pt-2 font-mono text-[12px] leading-[1.5] ${INK} dark:border-gray-700`}>{s.round}</span>
                   <span className={`text-[12px] ${MUTED}`}>Founders after <span className={MONO}>{s.founders}</span> · changed {s.changed}{s.computed ? '' : ' · not computed'}</span>
                   {s.uid ? (
                     <label className={`flex items-center gap-2 text-[12.5px] font-semibold ${INK}`}>
@@ -284,7 +289,7 @@ function TodayEditor({ draft, setDraft, instruments }) {
   return (
     <div className="flex flex-col gap-3" data-testid="captable-scenario-inputs">
       {draft.rounds.map((r, k) => (
-        <fieldset key={k} className="m-0 flex flex-col gap-2 border-0 border-t border-axal-hairline p-0 pt-2 dark:border-gray-800" data-testid="captable-scenario-round">
+        <fieldset key={k} className="m-0 flex flex-col gap-2 border-0 border-t border-axal-hairline p-0 pt-2 dark:border-gray-700" data-testid="captable-scenario-round">
           <div className="flex items-center justify-between">
             <legend className={EYEBROW}>Round {k + 1}</legend>
             <button type="button" className={`${LINK} text-[12px]`} onClick={() => setDraft((d) => ({ ...d, rounds: d.rounds.filter((_, j) => j !== k) }))} aria-label={`Remove round ${k + 1}`}>Remove</button>
@@ -300,7 +305,7 @@ function TodayEditor({ draft, setDraft, instruments }) {
             <span className="flex flex-wrap gap-1.5">
               {[['pre_money', 'Pre-money (founders)'], ['post_money', 'Post-money (everyone)']].map(([v, label]) => (
                 <button key={v} type="button" role="radio" aria-checked={r.payer === v} onClick={() => setDraft((d) => ({ ...d, rounds: d.rounds.map((x, j) => (j === k ? { ...x, payer: v } : x)) }))}
-                  className={`min-h-[30px] rounded-full border px-3 text-[12px] font-bold ${r.payer === v ? 'border-axal-violet bg-axal-lavender text-axal-violet dark:bg-violet-950/40 dark:text-violet-300' : `border-axal-hairline ${MUTED} dark:border-gray-700`}`}
+                  className={`min-h-[30px] rounded-full border px-3 text-[12px] font-bold ${r.payer === v ? 'border-axal-violet bg-axal-lavender text-axal-violet dark:border-[#4c3a8a] dark:bg-[#211f3d] dark:text-violet-400' : `border-axal-hairline ${MUTED} dark:border-gray-700`}`}
                   data-testid={`captable-scenario-payer-${v}`}>{label}</button>
               ))}
             </span>
@@ -308,7 +313,7 @@ function TodayEditor({ draft, setDraft, instruments }) {
         </fieldset>
       ))}
       <button type="button" className={`${LINK} self-start text-[12.5px]`} onClick={() => setDraft((d) => ({ ...d, rounds: [...d.rounds, { name: '', pre_money: '', investment: '', pool: '', payer: 'pre_money' }] }))} data-testid="captable-scenario-add-round">Add a round</button>
-      <div className="flex flex-col gap-1.5 border-t border-axal-hairline pt-2 dark:border-gray-800">
+      <div className="flex flex-col gap-1.5 border-t border-axal-hairline pt-2 dark:border-gray-700">
         <span className={EYEBROW}>Instruments that convert</span>
         {instruments.length === 0
           ? <span className={`text-[12px] ${MUTED}`}>The record holds no SAFE or note that has not converted.</span>
@@ -320,11 +325,11 @@ function TodayEditor({ draft, setDraft, instruments }) {
             </label>
           ))}
       </div>
-      <div className="flex flex-col gap-1.5 border-t border-axal-hairline pt-2 dark:border-gray-800">
+      <div className="flex flex-col gap-1.5 border-t border-axal-hairline pt-2 dark:border-gray-700">
         <span className={EYEBROW}>New investors</span>
         <span className={`text-[12px] ${MUTED}`}>Each round’s new money is one line, “{draft.rounds[0]?.name || 'Round'} Investors”: the engine does not split it by investor, so who invests is not modelled here.</span>
       </div>
-      <div className="flex flex-col gap-1.5 border-t border-axal-hairline pt-2 dark:border-gray-800">
+      <div className="flex flex-col gap-1.5 border-t border-axal-hairline pt-2 dark:border-gray-700">
         <span className={EYEBROW}>Exit values (up to {MAX_EXITS})</span>
         {draft.exits.map((v, k) => (
           <span key={k} className="flex items-center gap-2">
@@ -346,14 +351,14 @@ function ResultsBlocks({ run, onRecord }) {
   if (run.status === 'idle') return null;
   if (run.status === 'invalid' || run.status === 'refused') {
     return (
-      <ul className="m-0 flex flex-col gap-1 rounded-lg border border-red-200 bg-red-50 p-3 text-[12.5px] text-red-800 dark:border-red-900 dark:bg-red-950/30 dark:text-red-200" data-testid="captable-scenario-run-errors">
+      <ul className="m-0 flex flex-col gap-1 rounded-lg border border-red-200 bg-red-50 p-3 text-[12.5px] text-red-800 dark:border-red-400/50 dark:bg-red-400/10 dark:text-red-400" data-testid="captable-scenario-run-errors">
         {(run.errors || []).map((m) => <li key={m} className="ml-4">{m}</li>)}
       </ul>
     );
   }
   if (!run.data) return <Skeleton testId="captable-scenario-run-loading" />;
   const result = run.data.result || {};
-  if (result.errors) return <ul className="m-0 text-[12.5px] text-red-700 dark:text-red-300" data-testid="captable-scenario-run-errors">{result.errors.map((m) => <li key={m}>{m}</li>)}</ul>;
+  if (result.errors) return <ul className="m-0 text-[12.5px] text-red-700 dark:text-red-400" data-testid="captable-scenario-run-errors">{result.errors.map((m) => <li key={m}>{m}</li>)}</ul>;
   const rows = beforeAfter(result);
   const events = roundEvents(result);
   const notes = [...engineNotes(result), ...notModelled(run.data)];
@@ -363,12 +368,12 @@ function ResultsBlocks({ run, onRecord }) {
         foot={onRecord ? 'Today is on record. Everything after the round is Modelled.' : 'The start is your typed model, not the record. Everything here is Modelled.'}>
         <div className="overflow-x-auto">
           <table className="w-full border-collapse" data-testid="captable-scenario-results-table">
-            <thead><tr className="border-b border-axal-hairline dark:border-gray-800">
+            <thead><tr className="border-b border-axal-hairline dark:border-gray-700">
               {['Holder or group', onRecord ? 'Today' : 'Start', `After ${result.rounds?.length ? result.rounds[result.rounds.length - 1].name : 'the rounds'}`, 'Change'].map((c) => <th key={c} className={TH}>{c}</th>)}
             </tr></thead>
             <tbody>
               {rows.map((r) => (
-                <tr key={r.key} className="border-b border-axal-ground last:border-b-0 dark:border-gray-800" data-testid="captable-scenario-result-row">
+                <tr key={r.key} className="border-b border-axal-ground last:border-b-0 dark:border-gray-700" data-testid="captable-scenario-result-row">
                   <td className={`${TD} ${r.group ? 'font-bold' : 'pl-6'}`}>{r.label}</td>
                   <td className={`${TD} ${MONO} ${MUTED}`}>{r.before}</td>
                   <td className={`${TD} ${MONO} font-bold`}>{r.after}</td>
@@ -385,7 +390,7 @@ function ResultsBlocks({ run, onRecord }) {
           : events.map((e) => (
             <div key={e.round} className="flex flex-col gap-1">
               <span className={EYEBROW}>{e.round}</span>
-              {e.lines.map((l) => <span key={l} className={`flex gap-2 text-[12.5px] ${INK}`} data-testid="captable-scenario-event"><span aria-hidden="true" className="text-axal-violet">→</span>{l}</span>)}
+              {e.lines.map((l) => <span key={l} className={`flex gap-2 text-[12.5px] ${INK}`} data-testid="captable-scenario-event"><span aria-hidden="true" className="text-axal-violet dark:text-violet-400">→</span>{l}</span>)}
             </div>
           ))}
         {notes.length ? <ul className={`m-0 flex list-none flex-col gap-1 p-0`} data-testid="captable-scenario-notes">{notes.map((n) => <li key={n} className={AMBER}>{n}</li>)}</ul> : null}
@@ -422,10 +427,10 @@ function WaterfallBlocks({ result, assumptions, attached, canAttach, onAttach })
           : (
             <div className="overflow-x-auto">
               <table className="w-full border-collapse" data-testid="captable-waterfall-table">
-                <thead><tr className="border-b border-axal-hairline dark:border-gray-800">{['Holder', 'Group', 'Preference', 'Takes the preference or converts', 'Payout'].map((c) => <th key={c} className={TH}>{c}</th>)}</tr></thead>
+                <thead><tr className="border-b border-axal-hairline dark:border-gray-700">{['Holder', 'Group', 'Preference', 'Takes the preference or converts', 'Payout'].map((c) => <th key={c} className={TH}>{c}</th>)}</tr></thead>
                 <tbody>
                   {table.rows.map((r) => (
-                    <tr key={r.holder} className="border-b border-axal-ground last:border-b-0 dark:border-gray-800" data-testid="captable-waterfall-row">
+                    <tr key={r.holder} className="border-b border-axal-ground last:border-b-0 dark:border-gray-700" data-testid="captable-waterfall-row">
                       <td className={`${TD} font-bold`}>{r.holder}</td>
                       <td className={TD}>{r.group}</td>
                       <td className={`${TD} ${MONO}`}>{r.preference}</td>
@@ -538,11 +543,11 @@ export function ScenarioPage({ projectId, uid, search, reload, retry }) {
                         : <ReadState read={today} what="Today, from the record" claim="This scenario’s inputs are kept." onRetry={retry} testId="captable-scenario-today">{null}</ReadState>)
                       : <VariantEditor draft={draft} setDraft={edit} onSave={save} saving={saving} errors={saveErrors} saved={saved} naming={false} />}
                 {today_ && writes && draft ? (
-                  <div className="flex flex-col gap-2 border-t border-axal-hairline pt-2 dark:border-gray-800">
-                    {saveErrors.length ? <ul className="m-0 text-[12.5px] text-red-700 dark:text-red-300" data-testid="captable-scenario-save-errors">{saveErrors.map((m) => <li key={m}>{m}</li>)}</ul> : null}
+                  <div className="flex flex-col gap-2 border-t border-axal-hairline pt-2 dark:border-gray-700">
+                    {saveErrors.length ? <ul className="m-0 text-[12.5px] text-red-700 dark:text-red-400" data-testid="captable-scenario-save-errors">{saveErrors.map((m) => <li key={m}>{m}</li>)}</ul> : null}
                     <span className="flex flex-wrap items-center gap-3">
                       <button type="button" className={PRIMARY} onClick={save} disabled={saving} data-testid="captable-scenario-save">{saving ? 'Saving…' : 'Save scenario'}</button>
-                      {saved ? <span className="text-[12px] text-emerald-700 dark:text-emerald-300" data-testid="captable-scenario-saved">{SAVED}</span> : null}
+                      {saved ? <span className="text-[12px] text-emerald-700 dark:text-emerald-400" data-testid="captable-scenario-saved">{SAVED}</span> : null}
                     </span>
                   </div>
                 ) : null}
@@ -602,9 +607,80 @@ function useCompareRuns(projectId, scenarios) {
   return { runs, exits };
 }
 
+/** CT23c: the compare table one scenario per card, and that scenario's exit waterfall as a table. */
+function PhoneCompare({ rows, cols, exits, todayError, assumptions }) {
+  const cards = swipeCards(rows, cols);
+  const [at, setAt] = useState(0);
+  const track = useRef(null);
+  const here = Math.min(at, Math.max(0, cards.length - 1));
+  const go = (k) => {
+    const n = Math.max(0, Math.min(cards.length - 1, k));
+    setAt(n);
+    const el = track.current;
+    if (el && typeof el.scrollTo === 'function' && el.clientWidth) el.scrollTo({ left: n * el.clientWidth, behavior: 'smooth' });
+  };
+  const onScroll = (e) => {
+    const el = e.currentTarget;
+    if (el?.clientWidth) setAt(Math.round(el.scrollLeft / el.clientWidth));
+  };
+  const table = exitTable(cols[here], exits);
+  const pager = cards.length > 1 ? (
+    <span className="flex items-center gap-1">
+      <button type="button" className={BTN} onClick={() => go(here - 1)} disabled={here === 0} aria-label="Previous scenario" data-testid="captable-compare-prev">‹</button>
+      <button type="button" className={BTN} onClick={() => go(here + 1)} disabled={here === cards.length - 1} aria-label="Next scenario" data-testid="captable-compare-next">›</button>
+    </span>
+  ) : null;
+  return (
+    <>
+      <Block title="Scenarios compared" tags={<><Tag kind="record" /><Tag kind="modelled" /></>} testId="captable-compare-swipe-block" aside={pager}
+        foot="A share reads Today, from the record, then after the scenario's last round, Modelled.">
+        {todayError ? <Unreadable what="Today, from the record" claim="The scenarios still draw." /> : null}
+        <div ref={track} onScroll={onScroll} className="-mx-4 flex snap-x snap-mandatory overflow-x-auto" aria-roledescription="carousel" aria-label="Scenarios compared" data-testid="captable-compare-swipe">
+          {cards.map((c, k) => (
+            <section key={`${c.name}-${k}`} className="w-full shrink-0 snap-start px-4" aria-roledescription="slide" aria-label={`${c.name}, ${k + 1} of ${cards.length}`} aria-current={k === here ? 'true' : undefined} data-testid="captable-compare-card">
+              <div className="mb-1 flex items-baseline justify-between gap-2">
+                <h3 className={`m-0 text-[14px] font-extrabold ${INK}`}>{c.name}</h3>
+                <span className={`${MONO} text-[11.5px] ${MUTED}`} data-testid="captable-compare-card-meta">{c.meta}</span>
+              </div>
+              <ul className="m-0 flex list-none flex-col p-0">
+                {c.rows.map((r) => (
+                  <li key={r.label} className="flex items-baseline justify-between gap-3 border-t border-axal-hairline py-2 dark:border-gray-700" data-testid="captable-compare-card-row">
+                    <span className={`text-[12.5px] ${r.bold ? `font-bold ${INK}` : `pl-3 ${MUTED}`}`}>{r.label}</span>
+                    <span className={`${MONO} text-[12.5px] font-bold ${INK}`}>{r.value}</span>
+                  </li>
+                ))}
+              </ul>
+            </section>
+          ))}
+        </div>
+      </Block>
+      <Block title={`Exit waterfall · ${cols[here]?.name || 'Scenario'}`} tags={<Tag kind="modelled" />} testId="captable-compare-exit-table-block"
+        foot={`Assumptions: ${assumptions.join(' ')}`}>
+        {exits.length === 0
+          ? <p className={`m-0 text-[12.5px] ${MUTED}`} data-testid="captable-compare-no-exits">None of these scenarios sets an exit value, so no waterfall is drawn.</p>
+          : (
+            <div className="overflow-x-auto">
+              <table className="w-full border-collapse" data-testid="captable-compare-exit-table">
+                <thead><tr className="border-b border-axal-hairline dark:border-gray-700">{table.head.map((c) => <th key={c} className={TH}>{c}</th>)}</tr></thead>
+                <tbody>
+                  {table.rows.map((r) => (
+                    <tr key={r.exit} className="border-b border-axal-ground last:border-b-0 dark:border-gray-700" data-testid="captable-compare-exit-row">
+                      {r.cells.map((v, i) => <td key={i} className={`${TD} ${MONO} ${i === 0 ? 'font-bold' : ''}`}>{v}</td>)}
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+      </Block>
+    </>
+  );
+}
+
 function CompareBody({ projectId, scenarios, today, search, writes, onAttached }) {
   const { runs, exits } = useCompareRuns(projectId, scenarios);
   const [attaching, setAttaching] = useState(null);
+  const phone = usePhoneWidth();
   const todayResult = today.status === 'ready' && today.data?.today?.available ? today.data.today.result : null;
   const cols = scenarios.map((s, k) => ({ name: s.is_variant ? s.name : 'Cap table · model', short: shortName(s.is_variant ? s.name : 'Model'), fromToday: fromToday(s), result: runs[k]?.result || null, status: runs[k]?.status || 'loading' }));
   const rows = compareRows(todayResult, cols);
@@ -614,6 +690,26 @@ function CompareBody({ projectId, scenarios, today, search, writes, onAttached }
   const first = scenarios[0];
   const firstRead = runs[0]?.status === 'ready' ? roundReadBack(runs[0].result) : null;
   const head = ['', todayResult ? '┊ Today · on record' : '┊ Today · nothing recorded', ...cols.map((c) => c.name)];
+  const readBack = (
+    <>
+      {first && firstRead ? (
+        <EadwynBand read={{ ...firstRead, title: `Read the round back · ${cols[0].name}` }} attached={!!attachedRead(first.inputs, 'round')}
+          canAttach={writes && !!first.is_variant} onAttach={() => setAttaching(firstRead)} testId="captable-ead-compare" />
+      ) : null}
+      {attaching ? (
+        <ConfirmDialog copy={dialogCopy('attach', first)} testId="captable-compare-attach-dialog" onClose={() => setAttaching(null)}
+          onGo={async () => { const out = await capTableScenariosApi.update(first.uid, { name: first.name, inputs: attachRead(first.inputs, attaching) }); setAttaching(null); onAttached(); return out; }} />
+      ) : null}
+    </>
+  );
+  if (phone) {
+    return (
+      <>
+        <PhoneCompare rows={rows} cols={cols} exits={exits} todayError={today.status === 'error'} assumptions={assumptions} />
+        {readBack}
+      </>
+    );
+  }
   return (
     <>
       <Block title="Scenarios compared" tags={<><Tag kind="record" /><Tag kind="modelled" /></>} testId="captable-compare-table-block"
@@ -622,10 +718,10 @@ function CompareBody({ projectId, scenarios, today, search, writes, onAttached }
         {today.status === 'error' ? <Unreadable what="Today, from the record" claim="The scenarios still draw." /> : null}
         <div className="overflow-x-auto">
           <table className="w-full border-collapse" data-testid="captable-compare-table">
-            <thead><tr className="border-b border-axal-hairline dark:border-gray-800">{head.map((c, i) => <th key={`${c}-${i}`} className={`${TH} ${i === 1 ? 'border-l border-dotted border-axal-muted' : ''}`}>{c}</th>)}</tr></thead>
+            <thead><tr className="border-b border-axal-hairline dark:border-gray-700">{head.map((c, i) => <th key={`${c}-${i}`} className={`${TH} ${i === 1 ? 'border-l border-dotted border-axal-muted' : ''}`}>{c}</th>)}</tr></thead>
             <tbody>
               {rows.map((r) => (
-                <tr key={r.label} className="border-b border-axal-ground last:border-b-0 dark:border-gray-800" data-testid="captable-compare-row">
+                <tr key={r.label} className="border-b border-axal-ground last:border-b-0 dark:border-gray-700" data-testid="captable-compare-row">
                   <td className={`${TD} ${r.bold ? 'font-bold' : 'pl-6'}`}>{r.label}</td>
                   {r.cells.map((v, i) => <td key={i} className={`${TD} ${MONO} ${i === 0 ? `border-l border-dotted border-axal-muted ${MUTED}` : ''}`}>{v}</td>)}
                 </tr>
@@ -669,14 +765,7 @@ function CompareBody({ projectId, scenarios, today, search, writes, onAttached }
             </div>
           )}
       </ChartBlock>
-      {first && firstRead ? (
-        <EadwynBand read={{ ...firstRead, title: `Read the round back · ${cols[0].name}` }} attached={!!attachedRead(first.inputs, 'round')}
-          canAttach={writes && !!first.is_variant} onAttach={() => setAttaching(firstRead)} testId="captable-ead-compare" />
-      ) : null}
-      {attaching ? (
-        <ConfirmDialog copy={dialogCopy('attach', first)} testId="captable-compare-attach-dialog" onClose={() => setAttaching(null)}
-          onGo={async () => { const out = await capTableScenariosApi.update(first.uid, { name: first.name, inputs: attachRead(first.inputs, attaching) }); setAttaching(null); onAttached(); return out; }} />
-      ) : null}
+      {readBack}
     </>
   );
 }

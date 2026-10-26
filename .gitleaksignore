@@ -147,3 +147,10 @@ d3e56a7ede0ae62ca9a133216acccd33d4506841:cloudflare-worker/test/segment_suggesti
 # credential. The next commit writes it as 'a'.repeat(16), so no later commit
 # carries the literal. Scoped to the one finding, as D482's entry is.
 703c1b81192f64c2472bc39101c6106e766a0d9a:frontend/test/narrative_home_d909.test.mjs:generic-api-key:43
+
+# D1131 (#3011): the synthetic JWT signing string in the comp-source and
+# promotion test's first commit. It signs test tokens for an in-memory database
+# only, and was never a credential. The next commit uses the shared unit-test
+# literal instead, so no later commit carries this one. Scoped to the one
+# finding, as D1190's entry is.
+42af98cec222959cd510469e93884223e346d267:cloudflare-worker/test/event_comp_promoted_d1131.test.ts:generic-api-key:20
