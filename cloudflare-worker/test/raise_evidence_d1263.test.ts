@@ -258,6 +258,8 @@ test('confirming a newly bank-derived source starts it Private, and an explicit 
  w.db.exec("UPDATE project_metrics SET source='mercury'");seed(w,'connector_fed_items',{integration_id:1,project_id:1,module:'grow',kind:'metric_month',external_id:'changed-metric',local_table:'project_metrics',local_id:1});
  const bank=await setSharing(w.ctx,i.uid,{version:2,confirm_current:true});assert.equal(bank.private_reason,'bank');assert.equal(bank.visibility,'private');
  const shared=await setSharing(w.ctx,i.uid,{version:3,visibility:'summary'});assert.equal(shared.visibility,'summary');assert.equal(shared.private_reason,'bank');
+ w.db.exec("UPDATE project_metrics SET source='manual'");await setSharing(w.ctx,i.uid,{version:4,confirm_current:true,visibility:'summary'});
+ w.db.exec("UPDATE project_metrics SET source='mercury'");const explicit=await setSharing(w.ctx,i.uid,{version:5,confirm_current:true,visibility:'summary'});assert.equal(explicit.visibility,'summary');assert.equal(explicit.private_reason,'bank');
  }finally{w.db.close();}
 });
 
