@@ -31,7 +31,7 @@ function world() {
     INSERT INTO investor_seats(primary_user_id,seat_email,seat_user_id,accepted_at) VALUES(1,'synthetic2@example.invalid',2,CURRENT_TIMESTAMP);
     UPDATE users SET investor_seat_primary_user_id=1 WHERE id=2;
     INSERT INTO projects(id,name,sector,stage,hq) VALUES(10,'Synthetic venture','Climate','Seed','Europe'),(20,'Other venture','Consumer','Growth','Europe');
-    INSERT INTO deals(id,project_id,status,target_raise,currency) VALUES(1,10,'active',20000,'USD'),(2,20,'active',20000,'USD');
+    INSERT INTO deals(id,project_id,status,target_raise,minimum_check,currency) VALUES(1,10,'active',2000000,20000,'USD'),(2,20,'active',2000000,20000,'USD');
     INSERT INTO deal_invitations(deal_id,investor_user_id) VALUES(1,1),(1,2),(2,3);
     INSERT INTO investor_profiles(user_id,sectors_json,stages_json,geos_json,ticket_min_usd,ticket_max_usd)
       VALUES(1,'["Climate"]','["Seed"]','["Europe"]',10000,50000);
@@ -191,17 +191,17 @@ test('free-text HQ never supplies geography; missing or unreadable inputs do not
 
 test('fit rules preserve measured zero, exclusions, partial confidence and missing-versus-unset distinctions',()=>{
  const thesis:Thesis={sectors:['Climate'],stages:['Pre-seed'],regions:['Europe'],ticketMin:10000,ticketMax:50000,excludedSectors:[],excludedStages:[]};
- const missing={sector:null,stage:null,regions:null,ask:null,currency:null};
+ const missing={sector:null,stage:null,regions:null,minimumCheck:null,currency:null};
  const empty=computeThesisFit(null,missing);assert.equal(empty.state,'not_set');assert.equal(empty.score,null);assert.equal(empty.confidence,0);
  const none=computeThesisFit(thesis,missing);assert.equal(none.state,'not_enough_recorded');assert.equal(none.score,null);assert.equal(none.confidence,0);
- const zero=computeThesisFit(thesis,{sector:'Consumer',stage:'Growth',regions:['APAC'],ask:1000,currency:'USD'});assert.equal(zero.score,0);assert.equal(zero.confidence,1);assert.equal(zero.state,'recorded');
+ const zero=computeThesisFit(thesis,{sector:'Consumer',stage:'Growth',regions:['APAC'],minimumCheck:60000,currency:'USD'});assert.equal(zero.score,0);assert.equal(zero.confidence,1);assert.equal(zero.state,'recorded');
  const partial=computeThesisFit(thesis,{...missing,stage:'pre_seed'});assert.equal(partial.score,100);assert.equal(partial.confidence,0.25);assert.equal(partial.confidence_label,'Low');
  const medium=computeThesisFit(thesis,{...missing,stage:'pre_seed',sector:'Climate'});assert.equal(medium.confidence,0.5);assert.equal(medium.confidence_label,'Medium');
- const measuredZero=computeThesisFit({...thesis,ticketMin:0,ticketMax:0},{...missing,ask:0,currency:'USD'});assert.equal(measuredZero.score,100);
+ const measuredZero=computeThesisFit({...thesis,ticketMin:0,ticketMax:0},{...missing,minimumCheck:0,currency:'USD'});assert.equal(measuredZero.score,100);
  const excluded=computeThesisFit({...thesis,excludedSectors:['Climate']},{...missing,sector:'Climate'});assert.equal(excluded.score,0);
  const unknownRegion=computeThesisFit(thesis,{...missing,regions:['APAC'],geographyIncomplete:true});assert.equal(unknownRegion.criteria[2].state,'not_recorded');
- const boundaries=computeThesisFit(thesis,{...missing,ask:10000,currency:'USD'});assert.equal(boundaries.score,100);assert.equal(computeThesisFit(thesis,{...missing,ask:50000,currency:'USD'}).score,100);
- for(const ask of [NaN,Infinity,-1])assert.equal(computeThesisFit(thesis,{...missing,ask,currency:'USD'}).score,null);
+ const boundaries=computeThesisFit(thesis,{...missing,minimumCheck:50000,currency:'USD'});assert.equal(boundaries.score,100);assert.equal(computeThesisFit(thesis,{...missing,minimumCheck:50000,currency:'USD'}).score,100);
+ for(const minimumCheck of [NaN,Infinity,-1])assert.equal(computeThesisFit(thesis,{...missing,minimumCheck,currency:'USD'}).score,null);
  assert.equal(thesisRegion('Asia'),'APAC');assert.equal(thesisRegion('Oceania'),'APAC');assert.equal(thesisRegion('Latin America'),'LATAM');assert.equal(thesisRegion('Middle East'),'MENA');assert.equal(thesisRegion('unknown'),null);
 });
 test('geographic source uses only this venture’s served/planned markets and reports unmapped references',async()=>{
@@ -240,11 +240,14 @@ test('fit no longer becomes available through a saved view, a room or a primary 
  }finally{w.db.close();}
 });
 
-test('fit ask uses the recorded target first, falls back to amount, and never supplies an absent amount',async()=>{
+test('ticket fit uses the minimum cheque floor, never the round target or an invented allocation',async()=>{
  const w=world();try {
-  w.db.exec('UPDATE deals SET amount=9999999 WHERE id=1');assert.equal((await call(w,1,'GET','/api/deals/fit?ids=1')).body.items[0].score,100);
-  w.db.exec('UPDATE deals SET target_raise=NULL,amount=20000 WHERE id=1');assert.equal((await call(w,1,'GET','/api/deals/fit?ids=1')).body.items[0].score,100);
-  w.db.exec('UPDATE deals SET amount=NULL WHERE id=1');assert.equal((await call(w,1,'GET','/api/deals/fit?ids=1')).body.items[0].criteria[3].state,'not_recorded');
+  w.db.exec('UPDATE deals SET target_raise=2000000,amount=9999999,minimum_check=20000 WHERE id=1');
+  let fit=(await call(w,1,'GET','/api/deals/fit?ids=1')).body.items[0];assert.equal(fit.score,100);assert.equal(fit.criteria[3].source,'deals.minimum_check + deals.currency');
+  w.db.exec('UPDATE deals SET minimum_check=1000 WHERE id=1');assert.equal((await call(w,1,'GET','/api/deals/fit?ids=1')).body.items[0].score,100);
+  w.db.exec('UPDATE deals SET minimum_check=60000 WHERE id=1');assert.equal((await call(w,1,'GET','/api/deals/fit?ids=1')).body.items[0].criteria[3].state,'outside');
+  w.db.exec('UPDATE deals SET minimum_check=NULL,target_raise=20000,amount=20000 WHERE id=1');fit=(await call(w,1,'GET','/api/deals/fit?ids=1')).body.items[0];assert.equal(fit.criteria[3].state,'not_recorded');assert.equal(fit.confidence,0.75);
+  w.db.exec('UPDATE deals SET minimum_check=20000 WHERE id=1; UPDATE investor_profiles SET ticket_max_usd=NULL WHERE user_id=1');assert.equal((await call(w,1,'GET','/api/deals/fit?ids=1')).body.items[0].criteria[3].state,'not_recorded');
  }finally{w.db.close();}
 });
 

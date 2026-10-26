@@ -9,7 +9,7 @@ export type Thesis = {
 export type FitFacts = {
   sector: string | null; stage: string | null;
   regions: string[] | null; geographyIncomplete?: boolean;
-  ask: number | null; currency: string | null;
+  minimumCheck: number | null; currency: string | null;
 };
 type CriterionState = 'match' | 'outside' | 'not_set' | 'not_recorded';
 type Criterion = { key: 'sector' | 'stage' | 'region' | 'ticket'; state: CriterionState; source: string; reason: string };
@@ -101,13 +101,16 @@ export function computeThesisFit(thesis: Thesis | null, facts: FitFacts) {
     reason: !t.regions.length ? 'No thesis region is recorded.' : regionMatch ? 'A recorded market region matches your thesis.'
       : !facts.regions?.length || facts.geographyIncomplete ? 'Market geography is not fully recorded.' : 'The recorded market regions are outside your thesis.' });
   const ticketSet = t.ticketMin != null || t.ticketMax != null;
-  const ask = finite(facts.ask);
-  const comparable = ask != null && facts.currency === 'USD';
-  const ticketMatch = comparable && (t.ticketMin == null || ask >= t.ticketMin) && (t.ticketMax == null || ask <= t.ticketMax);
-  criteria.push({ key: 'ticket', source: 'deals.target_raise / deals.amount + deals.currency',
+  const minimumCheck = finite(facts.minimumCheck);
+  // A minimum cheque is a floor, not the investor's allocation or the whole round.
+  // Only a thesis maximum can constrain that floor; a thesis minimum alone cannot.
+  const comparable = minimumCheck != null && facts.currency === 'USD' && t.ticketMax != null;
+  const ticketMatch = comparable && minimumCheck <= t.ticketMax!;
+  criteria.push({ key: 'ticket', source: 'deals.minimum_check + deals.currency',
     state: !ticketSet ? 'not_set' : !comparable ? 'not_recorded' : ticketMatch ? 'match' : 'outside',
-    reason: !ticketSet ? 'No thesis ticket range is recorded.' : !comparable ? 'A comparable USD ask is not recorded; no exchange rate is assumed.'
-      : ticketMatch ? 'The recorded ask is within your ticket range.' : 'The recorded ask is outside your ticket range.' });
+    reason: !ticketSet ? 'No thesis ticket range is recorded.' : !comparable ? 'A comparable USD minimum check and thesis maximum ticket are not recorded.'
+      : ticketMatch ? 'The recorded minimum check does not exceed your maximum ticket; no allocation is assumed.'
+        : 'The recorded minimum check exceeds your maximum ticket.' });
   const known = criteria.filter(c => c.state === 'match' || c.state === 'outside');
   const confidence = known.length / 4;
   return { state: !set ? 'not_set' : !known.length ? 'not_enough_recorded' : 'recorded',

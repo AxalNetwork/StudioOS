@@ -281,10 +281,10 @@ r.get('/fit', async c => {
     const unavailable = (id: number) => ({ deal_id: id, state: 'unavailable', label: 'Deal unavailable', score: null, confidence: null });
     if (!readable.size) return c.json({ items: wanted.map(unavailable) });
     const thesis = await readThesis(c.env, user.id);
-    const rows = await c.env.DB.prepare(`SELECT d.id, d.project_id, d.target_raise, d.amount, d.currency, p.sector, p.stage
+    const rows = await c.env.DB.prepare(`SELECT d.id, d.project_id, d.minimum_check, d.currency, p.sector, p.stage
       FROM deals d JOIN projects p ON p.id = d.project_id
       WHERE d.id IN (SELECT CAST(value AS INTEGER) FROM json_each(?)) AND p.deleted_at IS NULL`)
-      .bind(JSON.stringify([...readable])).all<{ id: number; project_id: number; target_raise: number | null; amount: number | null;
+      .bind(JSON.stringify([...readable])).all<{ id: number; project_id: number; minimum_check: number | null;
         currency: string | null; sector: string | null; stage: string | null }>();
     let geography: Map<number, FitGeography> | null = null;
     let geographyFailed = false;
@@ -297,7 +297,7 @@ r.get('/fit', async c => {
         const recorded = geography?.get(row.project_id);
         if (geographyFailed || recorded?.unreadable) throw new Error('geography_unreadable');
         return { deal_id: row.id, ...computeThesisFit(thesis, { sector: row.sector, stage: row.stage,
-          ask: row.target_raise ?? row.amount, currency: row.currency, regions: recorded?.regions ?? null,
+          minimumCheck: row.minimum_check, currency: row.currency, regions: recorded?.regions ?? null,
           geographyIncomplete: recorded?.geographyIncomplete ?? false }) };
       } catch { return { deal_id: row.id, state: 'unreadable', score: null, confidence: null,
         label: 'Unreadable', reason: 'The fit inputs could not be read. Try again.' }; }
