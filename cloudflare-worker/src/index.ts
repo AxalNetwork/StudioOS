@@ -84,6 +84,7 @@ import tickets from './routes/tickets';
 import deals from './routes/deals';
 import dealFlow from './routes/deal_flow';
 import dealContext from './routes/deal_context';
+import dealViews from './routes/deal_views';
 import users from './routes/users';
 import marketIntel from './routes/market_intel';
 import marketIntelPublic from './routes/market_intel_public';
@@ -920,6 +921,7 @@ app.route('/api/capital', capital);
 app.route('/api/tickets', tickets);
 // D1238 (#3251): an investor firm's own deal flow. Before dealContext and deals, so `flow` is never a deal id.
 app.route('/api/deals/flow', dealFlow);
+app.route('/api/deals', dealViews);
 app.route('/api/deals', dealContext);
 app.route('/api/deals', deals);
 app.route('/api/users', users);

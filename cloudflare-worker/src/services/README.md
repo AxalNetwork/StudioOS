@@ -1,5 +1,8 @@
 # cloudflare-worker/src/services — logic, not HTTP
 
+`thesisFit.ts` (D1239) computes personal fit from structured thesis preferences and recorded sector, stage, market-country regions and USD minimum cheque. Missing criteria lower coverage; no fit is stored or used as a venture scope.
+
+
 `programUsage.ts` (D1156) collects month-to-date program counts locally, sends
 only aggregates to HQ, validates authenticated reports and reads dated per-grant
 figures. Missing and unreadable metrics stay distinct from measured zero.
