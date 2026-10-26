@@ -133,6 +133,21 @@ async function item(ctx:RaiseEvidenceContext,id:string){
   const row=await ctx.env.DB.prepare('SELECT * FROM raise_evidence_items WHERE uid=? AND project_id=?').bind(id,ctx.projectId).first<RaiseEvidenceItem>();
   if(!row)throw new RaiseEvidenceError('not_found',404);return row;
 }
+function itemMetadata(row:RaiseEvidenceItem){
+  return {uid:row.uid,area:row.area,kind:row.kind,source_label:row.source_label,provider:row.provider,strength:row.strength,observed_on:row.observed_on,summary:row.summary,
+    state:row.state,visibility:row.visibility,version:row.version};
+}
+function founderItem(row:RaiseEvidenceItem,found:EvidenceCandidate|undefined,failed=false){
+  const changed=found?found.snapshot_hash!==row.snapshot_hash:null,bankUnavailable=row.private_reason==='bank'&&(!found||failed);
+  return {...itemMetadata(row),id:row.id,private_reason:row.private_reason,source_table:row.source_table,source_ref:row.source_ref,snapshot_hash:row.snapshot_hash,
+    value_num:bankUnavailable?null:row.value_num,value_unit:bankUnavailable?null:row.value_unit,currency:bankUnavailable?null:row.currency,
+    source_state:failed?'unreadable':!found?'not_recorded':changed?'changed':'recorded',source_changed:changed,
+    stale:found?.stale??null,date_reason:found?.date_reason??'The source observation date is not recorded.'};
+}
+async function decisionItem(ctx:RaiseEvidenceContext,row:RaiseEvidenceItem){
+  try{return founderItem(row,await live(ctx,row));}
+  catch(error){return founderItem(row,undefined,error instanceof RaiseEvidenceError&&error.code==='unreadable');}
+}
 async function live(ctx:RaiseEvidenceContext,ref:Pick<EvidenceCandidate,'kind'|'area'|'source_table'|'source_ref'>,collected?:CollectedEvidence){
   const sources=collected??await collectEvidenceSources(ctx.env,ctx.projectId,ctx.user.id,new Date().toISOString(),[ref.kind],[ref]);
   const rule=EVIDENCE_RULES.find(r=>r.kind===ref.kind);
@@ -221,7 +236,7 @@ export async function acceptItem(ctx:RaiseEvidenceContext,uid:string,expectedHas
     SELECT ?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,? WHERE EXISTS(SELECT 1 FROM ai_rail_proposals WHERE uid=? AND record_ref=? AND json_extract(decided_payload_json,'$.decision_uid')=?)`)
     .bind(id,ctx.projectId,current.area,current.kind,current.source_table,current.source_ref,current.provider,current.source_label,current.strength,current.observed_on,current.summary,current.value_num,current.value_unit,current.currency,current.snapshot_hash,q.uid,current.private_reason?'private':'after_nda',current.private_reason,token,ctx.user.id,ctx.user.id,q.uid,recordRef(ctx.projectId),token);
   await decideBatch(ctx,[claim,pin,itemProvenance(ctx,id,token,'snapshot_hash',null,current.snapshot_hash,current,q.id),activity(ctx,current.area,id,'evidence_accepted',evidenceSummary(current,'accepted'))],async()=> (await proposal(ctx,uid)).status!=='proposed');
-  return item(ctx,id);
+  return decisionItem(ctx,await item(ctx,id));
 }
 export async function dismissItem(ctx:RaiseEvidenceContext,uid:string){
   founderOnly(ctx);const q=await proposal(ctx,uid);if(q.status!=='proposed')throw new RaiseEvidenceError('decided',409);
@@ -259,7 +274,7 @@ export async function setSharing(ctx:RaiseEvidenceContext,uid:string,data:Record
       (SELECT l.claim_id FROM raise_claim_evidence l JOIN raise_evidence_items i ON i.id=l.item_id AND i.project_id=l.project_id WHERE i.uid=? AND i.project_id=? AND i.mutation_uid=?)`).bind(ctx.projectId,uid,ctx.projectId,token),
     activity(ctx,old.area,uid,'evidence_changed',evidenceSummary(old,'sharing or pin state changed')),
   ],async()=> (await item(ctx,uid)).version!==expected ? new RaiseEvidenceError('changed',409) : null);
-  return item(ctx,uid);
+  return decisionItem(ctx,await item(ctx,uid));
 }
 
 /** Manual links cannot claim to be computed or Eadwyn-written. A supplied Eadwyn proposal must match both records and a real run. */
@@ -351,15 +366,7 @@ export async function readRaiseEvidence(ctx:RaiseEvidenceContext,query:{limit?:n
     return {state:'recorded',rows:rows.results.slice(0,limit).map(row=>{
       const found=current.get(candidateKey(row));const rule=EVIDENCE_RULES.find(r=>r.kind===row.kind);
       const failed=rule&&sources?.blocks.some(b=>b.dataset===rule.dataset&&b.state==='unreadable');
-      const changed=ctx.founder?found?found.snapshot_hash!==row.snapshot_hash:null:null;
-      const common={uid:row.uid,area:row.area,kind:row.kind,source_label:row.source_label,provider:row.provider,strength:row.strength,observed_on:row.observed_on,summary:row.summary,
-        state:row.state,visibility:row.visibility,version:row.version};
-      if(!ctx.founder)return common;
-      const bankUnavailable=row.private_reason==='bank'&&(!found||failed);
-      return {...common,source_table:row.source_table,source_ref:row.source_ref,snapshot_hash:row.snapshot_hash,
-        value_num:bankUnavailable?null:row.value_num,value_unit:bankUnavailable?null:row.value_unit,currency:bankUnavailable?null:row.currency,
-        source_state:failed?'unreadable':!found?'not_recorded':changed?'changed':'recorded',source_changed:changed,
-        stale:found?.stale??null,date_reason:found?.date_reason??'The source observation date is not recorded.'};
+      return ctx.founder?founderItem(row,found,!!failed):itemMetadata(row);
     }),has_more:rows.results.length>limit};
   }catch{return unreadableBlock;}})();
   const proposals=await(async()=>{try{

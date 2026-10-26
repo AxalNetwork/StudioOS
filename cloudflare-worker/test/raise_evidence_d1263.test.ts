@@ -242,3 +242,12 @@ test('an unreadable interview dependency cannot become an empty theme; missing-s
  w.db.exec('DELETE FROM project_metrics');const missing=proposal(w);const after=await readRaiseEvidence(w.ctx,{refresh:true});const held=after.proposals.rows?.find(p=>p.uid===missing.uid);assert.equal(held?.source_state,'not_recorded');assert.equal(held?.can_accept,false);assert.equal(auditCount(w),0);
  }finally{w.db.close();}
 });
+
+
+test('mutation replies redact bank values for another Lab founder just like reads and omit internal write fields',async()=>{
+ const w=world();try{sources(w);const i=await pin(w,'bank-runway');assert.equal(i.value_num,8);assert.equal('mutation_uid' in i,false);assert.equal('accepted_by' in i,false);
+ const other=await raiseEvidenceContext(w.env,w.db.prepare('SELECT * FROM users WHERE id=6').get() as any,1,10);const page=await readRaiseEvidence(other);assert.equal(page.items.rows?.find(r=>r.uid===i.uid)?.value_num,null);
+ const hidden=await setSharing(other,i.uid,{version:1,visibility:'private',state:'unpinned'});assert.equal(hidden.state,'unpinned');assert.equal(hidden.value_num,null);assert.equal(hidden.value_unit,null);assert.equal(hidden.currency,null);assert.equal('mutation_uid' in hidden,false);assert.equal('accepted_by' in hidden,false);
+ const owned=await setSharing(w.ctx,i.uid,{version:2,visibility:'private',state:'pinned'});assert.equal(owned.value_num,8);assert.equal(owned.version,3);
+ }finally{w.db.close();}
+});
