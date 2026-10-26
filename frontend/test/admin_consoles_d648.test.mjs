@@ -26,7 +26,6 @@ import { api } from '../src/lib/api.js';
 import * as PAGES from '../src/pages/admin/ConsolePages.jsx';
 import UsersConsole from '../src/pages/admin/consoles/UsersConsole.jsx';
 import KycConsole from '../src/pages/admin/consoles/KycConsole.jsx';
-import PersonasPanel from '../src/pages/admin/consoles/PersonasConsole.jsx';
 import DirectoryPanel from '../src/pages/admin/consoles/DirectoryConsole.jsx';
 import IntegrationKeysPanel from '../src/pages/admin/consoles/IntegrationKeysConsole.jsx';
 import GithubSyncPanel from '../src/pages/admin/consoles/GithubSyncConsole.jsx';
@@ -136,8 +135,6 @@ const CONSOLES = [
     empty: { adminListUsers: async () => ({ results: [], total: 0, by_role: {} }) }, says: /No users found/, loading: /Loading…/ },
   { name: 'KYC', el: () => React.createElement(KycConsole), reads: ['kycAdminQueue'],
     empty: { kycAdminQueue: async () => [] }, says: /No submissions in pending status/, loading: /Loading…/ },
-  { name: 'Personas', el: () => React.createElement(PersonasPanel), reads: ['listPersonasAdmin'],
-    empty: { listPersonasAdmin: async () => ({ users: [] }) }, says: /No users\./, loading: /Loading/ },
   { name: 'Directory', el: () => React.createElement(DirectoryPanel), reads: ['adminListDirectoryPartners'],
     empty: { adminListDirectoryPartners: async () => ({ partners: [] }) }, says: /No partners found\./, loading: /Loading/ },
   { name: 'Integration keys', el: () => React.createElement(IntegrationKeysPanel), reads: ['adminListIntegrationKeys'],
