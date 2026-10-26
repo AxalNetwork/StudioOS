@@ -11,8 +11,8 @@ The Ops canvas's deal-room screens (`design/canvases/integrated/ops-data.js`:
 | `DealFreePlan.jsx` | D1149: DL22b header/key strip and plan card, with no private reads. |
 | `dealMoney.js` | Currency-aware amount formatting and the role-specific back destination. |
 | `DealRoomKit.jsx` | The four states (loading, empty, Not recorded, Unreadable with "Try again"), status pills and refusals. |
-| `DealRoomJoin.jsx` | The quota read (`GET /deals/dealroom/quota`), the quota line, the join note, and Join / Leave. |
-| `DealRoomsPanel.jsx` | `/deals`: every live deal with Join or Leave. |
+| `DealRoomJoin.jsx` | The quota read (`GET /deals/dealroom/quota`), the quota line and note, and confirmed request/leave through the shared Lightbox (D1237). A refusal stays in the dialog. |
+| `DealRoomsPanel.jsx` | `/deals`: live deals and invitation requests (D1237). A name links only when the Worker explicitly returns `can_read: true`; requesting a room alone grants no access. |
 | `DealInvitationsTab.jsx` | The Invitations tab (admin). |
 | `DealTransfersTab.jsx` | The Transfers tab and "Record a transfer" (admin, partner). |
 | `DealReferencesTab.jsx` | The References tab (admin, investor). |
