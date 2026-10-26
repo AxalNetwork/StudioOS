@@ -25,9 +25,8 @@ import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import React, { act } from 'react';
 import { mountContracts } from './_contracts_dom.mjs';
-import { AuthProvider } from '../src/hooks/useAuthSync.jsx';
 import { dd, ddDeskApi, ddLifecycleApi } from '../src/lib/api.js';
-import AdminDueDiligencePage, { DdListPage } from '../src/pages/AdminDueDiligencePage.jsx';
+import { DdListPage } from '../src/pages/AdminDueDiligencePage.jsx';
 import {
   PAUSED, TEMPLATES_NOTE, ageChart, canChangeCase, canOpenCase, chequeCents, decisionsChart, filterChips, listQuery,
   noMatchText, openCaseLine, openCasePayload, overviewTiles, rangeText, refusalText, rowCells, stageStrip, targetCell,
@@ -426,27 +425,18 @@ test('Templates: a Super Admin saves the next version through a dialog; an Admin
   } finally { await bad.v.unmount(); restore(); }
 });
 
-test('a founder on /due-diligence is sent to their requests, never shown the desk', async () => {
-  const calls = stub();
-  const v = await mountContracts(React.createElement(AuthProvider, null, React.createElement(AdminDueDiligencePage)), '/due-diligence', { id: 8, role: 'founder', name: 'Fay' });
-  try {
-    await v.flush();
-    // Mutation checked: drop the redirect → the desk reads the cases.
-    assert.ok(!v.text().includes('Due diligence'), v.text());
-    assert.equal(calls.filter(([k]) => k === 'cases' || k === 'overview').length, 0);
-  } finally { await v.unmount(); restore(); }
-});
-
 /* ------------------------------------------------------------------ *
  * The wiring
  * ------------------------------------------------------------------ */
 
 test('the wiring: the route lets a founder reach the redirect, the Worker takes the context, the docs', () => {
   const app = read('frontend/src/App.jsx');
-  assert.ok(app.includes(`<Route path="/due-diligence" element={guard(['admin', 'partner', 'investor', 'advisor', 'founder'], <AdminDueDiligencePage />)} />`));
+  // DDL17: a founder on the member base's list addresses is sent to their requests, before any guard or read.
+  // Mutation checked: drop the redirect on /due-diligence → the founder meets RoleGuard instead.
+  const sent = (p) => `<Route path="${p}" element={user?.role === 'founder' ? <Navigate to="/due-diligence/requests" replace /> : guard(['admin', 'partner', 'investor', 'advisor'], <AdminDueDiligencePage />)} />`;
+  for (const p of ['/due-diligence', '/due-diligence/my-reviews', '/due-diligence/templates']) assert.ok(app.includes(sent(p)), p);
   assert.ok(app.includes(`<Route path="/admin/due-diligence" element={guard(['admin', 'partner', 'investor', 'advisor'], <AdminDueDiligencePage />)} />`), 'the admin base takes no founder');
   const page = read('frontend/src/pages/AdminDueDiligencePage.jsx');
-  assert.ok(page.includes(`if (me?.role === 'founder') return <Navigate to="/due-diligence/requests" replace />;`));
   assert.ok(!page.includes('Subject ID'), 'no typed subject id');
   const worker = read('cloudflare-worker/src/routes/dd.ts');
   assert.ok(worker.includes('const ctx = await caseContextFrom(c.env, body, {\n      lead_user_id: user.id,'), 'POST /cases checks its context before writing');

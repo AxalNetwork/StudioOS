@@ -11,7 +11,7 @@
  * case." No disabled control stands in for the editor.
  */
 import React, { useCallback, useEffect, useState } from 'react';
-import { ddDeskApi } from '../../lib/api';
+import { ddDeskApi } from '../../lib/api/ddDesk.js';
 import { reportError } from '../../lib/log';
 import { TEMPLATES_NOTE, depthWord, templateBody, templateCard, templateDraftState, weightShares } from './ddListModel.js';
 import { Dialog, Note, Refusal, btnCls, cardCls, eyebrowCls, inputCls, muted, primaryCls, useSend } from './DdUi.jsx';

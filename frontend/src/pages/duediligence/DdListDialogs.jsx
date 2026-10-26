@@ -7,7 +7,9 @@
  * before it is sent; a refusal stays in its dialog in the Worker's words.
  */
 import React, { useEffect, useRef, useState } from 'react';
-import { dd, ddDeskApi, ddLifecycleApi } from '../../lib/api';
+import { dd } from '../../lib/api';
+import { ddDeskApi } from '../../lib/api/ddDesk.js';
+import { ddLifecycleApi } from '../../lib/api/ddLifecycle.js';
 import {
   CURRENCIES, SUBJECT_TYPES, dealLabel, openCaseLine, openCasePayload, subjectTypeWord, templateCard,
 } from './ddListModel.js';

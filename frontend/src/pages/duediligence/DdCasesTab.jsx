@@ -14,9 +14,9 @@
  * that match nobody say what they asked for, with Clear filters.
  */
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { MoreHorizontal, Plus, RefreshCw, Search, SlidersHorizontal, X } from 'lucide-react';
-import { ddDeskApi } from '../../lib/api';
+import { ddDeskApi } from '../../lib/api/ddDesk.js';
 import { reportError } from '../../lib/log';
 import { useToast } from '../../components/useToast';
 import ToastMessage from '../../components/ToastMessage';
@@ -167,8 +167,11 @@ function Empty({ title, sub, children, testId }) {
 
 const clock = (d) => `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
 
-export default function DdCasesTab({ me, base, now = Date.now() }) {
+export default function DdCasesTab({ me, now = Date.now() }) {
   const navigate = useNavigate();
+  // A case link stays on the caller's base, so a member never reaches an /admin/ address.
+  const { pathname } = useLocation();
+  const base = pathname.startsWith('/admin') ? '/admin/due-diligence' : '/due-diligence';
   const [ov, setOv] = useState(null);
   const [list, setList] = useState(null);
   const [listState, setListState] = useState('loading');

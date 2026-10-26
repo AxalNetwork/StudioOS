@@ -1,5 +1,5 @@
 import React from 'react';
-import { Navigate, useLocation } from 'react-router-dom';
+import { useLocation } from 'react-router-dom';
 import { useAuth } from '../hooks/useAuthSync';
 import AdminBoardFrame from './admin/AdminBoardFrame';
 import { DdListTabBody, DdListTabs } from './duediligence/DdTabs';
@@ -21,28 +21,27 @@ function DdListHeader() {
 // D1244 (#2385): Cases, My reviews and Templates are their own addresses.
 // D1250 (#3265): Cases is DDL1 (`DdCasesTab`) and Templates DDL13
 // (`DdTemplates`); My reviews stays D1244's wait until part 8 (#3267).
-export function DdListPage({ me }) {
-  const { listTab, base } = viewOf(useLocation().pathname);
+export function DdListPage({ me: given }) {
+  const signedIn = useAuth()?.user ?? null;
+  const me = given ?? signedIn;
+  const { listTab } = viewOf(useLocation().pathname);
   const tab = listTab || 'cases';
   return (
     <div>
       <DdListHeader />
       <DdListTabs active={tab} />
-      {tab === 'cases' ? <DdCasesTab me={me} base={base} /> : null}
+      {tab === 'cases' ? <DdCasesTab me={me} /> : null}
       {tab === 'templates' ? <DdTemplates /> : null}
       {tab === 'my-reviews' ? <DdListTabBody tab="my-reviews" /> : null}
     </div>
   );
 }
 
+// DDL17: a founder never reaches this page; App.jsx sends them to their requests.
 export default function AdminDueDiligencePage() {
-  const me = useAuth()?.user ?? null;
-  // DDL17: diligence is run by the investment team. A founder who reaches the
-  // desk is sent to the requests addressed to them, never to a case.
-  if (me?.role === 'founder') return <Navigate to="/due-diligence/requests" replace />;
   return (
     <AdminBoardFrame workspace="Due diligence" note="Eadwyn reads the cases listed here. A verdict is recorded only when you record it." data-testid="admin-board-due-diligence">
-      <DdListPage me={me} />
+      <DdListPage />
     </AdminBoardFrame>
   );
 }
