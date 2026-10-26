@@ -394,3 +394,5 @@ D1133 adds `billingAlertsApi.pay(id)` and `.updateCard(id, nonce)` for the mount
 D1135's `companyActions.js` holds self-service company leave and venture restore.
 
 D1123 adds the cohort capacity read to `labOperations.js`; the mounted Worker route is in admin_lab_operations.ts.
+
+D1199 (#3149): `productTesting.js` adds the programme logo: `partnerTestingApi.uploadLogo(uid, file)` and `.removeLogo(uid)`, the same on `adminTestingApi` for HQ's own programmes, and `productTestingApi.logoSrc(uid)`, the `<img>` path (a 404 there means no logo: draw the initial letter).
