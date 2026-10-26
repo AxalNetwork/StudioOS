@@ -49,9 +49,20 @@ export function dealTabsFor(role) {
   return ['overview'];
 }
 
+/**
+ * D1213 (#2424): pages under a deal that are not tabs. The closing room is the
+ * canvas's "Deals › [company] › Closing" (CP2, CP14, CP19): its own address,
+ * opened from the Commitment tab, with no place in the tab bar.
+ */
+export const SUB_PAGES = {
+  closing: { label: 'Closing', path: 'closing', roles: ['investor', 'founder', 'admin', 'partner'] },
+};
+
 /** The tab an address names for this role: a word the role does not draw is Overview. */
 export function tabOf(param, role) {
   const word = String(param ?? '');
+  const sub = Object.keys(SUB_PAGES).find((k) => SUB_PAGES[k].path === word);
+  if (sub) return SUB_PAGES[sub].roles.includes(role) ? sub : 'overview';
   const id = Object.keys(TAB_DEFS).find((k) => TAB_DEFS[k].path === word);
   return id && dealTabsFor(role).includes(id) ? id : 'overview';
 }
@@ -59,7 +70,7 @@ export function tabOf(param, role) {
 /** A tab's address; the deal id is digits only. */
 export function tabHref(dealId, tab) {
   const id = /^[1-9]\d*$/.test(String(dealId)) ? String(dealId) : '';
-  const path = TAB_DEFS[tab]?.path || '';
+  const path = (TAB_DEFS[tab] || SUB_PAGES[tab])?.path || '';
   return `/deals/${id}${path ? `/${path}` : ''}`;
 }
 

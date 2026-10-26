@@ -288,6 +288,9 @@ const SuperAdminOnlyNotice = lazy(() => import('./pages/hq/SuperAdminOnlyNotice'
 const LabOnlyNotice = lazy(() => import('./pages/admin/lab/LabOnlyNotice'));
 const AdminOnlyNotice = lazy(() => import('./pages/hq/AdminOnlyNotice'));
 const HqContractsPage = lazy(() => import('./pages/hq/ContractsPage'));
+// D1213 (#2424) — Contracts › Closings and one closing.
+const ClosingsDeskPage = lazy(() => import('./pages/closing/ClosingsPages').then((m) => ({ default: m.ClosingsDeskPage })));
+const AdminClosingPage = lazy(() => import('./pages/closing/ClosingsPages').then((m) => ({ default: m.AdminClosingPage })));
 const HqAccountsPage = lazy(() => import('./pages/hq/AccountsPage'));
 const HqHomePage = lazy(() => import('./pages/hq/HqHomePage'));
 const HqRevenuePage = lazy(() => import('./pages/hq/RevenuePage'));
@@ -2959,6 +2962,9 @@ function AppInner() {
           Console already has (Legal templates; the Users table) for the
           franchisor, with the holder console above the accounts. */}
       <Route path="/admin/contracts" element={guard(['admin'], <HqContractsPage />)} />
+      {/* D1213 (#2424) — the Closings desk (CP13) and one closing (CP14); Contracts links here. */}
+      <Route path="/admin/contracts/closings" element={guard(['admin'], <ClosingsDeskPage />)} />
+      <Route path="/admin/contracts/closings/:dealId" element={guard(['admin'], <AdminClosingPage />)} />
       <Route path="/admin/accounts" element={guard(['admin'], hqOnly(<HqAccountsPage onImpersonate={handleImpersonate} />))} />
       {/* D633 (#1391, Q2) — one member's credits; the Team directory's drawer is its door. */}
       <Route path="/admin/accounts/credits/:userId" element={guard(['admin'], hqOnly(<MemberCreditsPage />))} />

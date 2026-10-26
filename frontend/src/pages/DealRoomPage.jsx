@@ -20,6 +20,7 @@ import DealReferencesTab from '../components/deals/DealReferencesTab';
 import DealSyndicates from '../components/deals/DealSyndicates';
 import MercuryMatch from '../components/MercuryMatch';
 import { NOT_YET, TAB_DEFS, WAITS, dealTabsFor, tabHref, tabOf } from './dealPageModel';
+import ClosingRoom from './closing/ClosingRoom';
 import {
   ArrowLeft, Download, FileText, Loader2, X, DollarSign, Send, Check,
   Users, Clock, ThumbsUp, ThumbsDown,
@@ -186,7 +187,10 @@ export default function DealRoomPage() {
         </>
       )}
       {tab === 'documents' && <DocumentsTab dealId={deal.id} />}
+      {/* D1213 (#2424): the round's closing room, its own address under the deal. */}
+      {tab === 'commitment' && <p className="m-0 text-sm"><Link to={tabHref(deal.id, 'closing')} className="font-semibold underline" data-testid="deal-closing-door">Open the closing room</Link> for the round's lines, checklist and what is received.</p>}
       {tab === 'commitment' && <CommitmentsTab key={proofKey} dealId={deal.id} currency={deal.currency} proof={isAdmin && !branchOfUser(user)} user={user} onShare={openProof} founderMatch={isDealFounder(role, user, deal)} />}
+      {tab === 'closing' && <ClosingRoom dealId={deal.id} role={role} deal={deal} />}
       {/* DL14: an investor's Notes tab carries the deal's activity under the notes. */}
       {tab === 'notes' && (
         <>

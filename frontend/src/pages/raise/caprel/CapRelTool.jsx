@@ -8,7 +8,8 @@ import { RecordsTable } from '../../cycles/CycleModulePage';
 import { recordHref, recordId, rowLinks } from '../../cycles/recordModel';
 import CallsHistory from '../../cycles/CallsHistory';
 import { ProRataPanel, RoundClosesPanel } from '../RoundClosesPanel';
-import { HOME_PATH, LINE, NOT_YET, SLUG, TABS, TITLE, WAITS, tabHref, tabSearch } from './capRelModel';
+import { FounderClosing } from '../../closing/ClosingRoom';
+import { CLOSING, HOME_PATH, LINE, NOT_YET, SLUG, TABS, TITLE, WAITS, tabHref, tabSearch } from './capRelModel';
 
 /**
  * D1188 (#2457) — the Capital relationships tool's tab bar and tab pages.
@@ -88,11 +89,13 @@ function Calls({ projectId }) {
 }
 
 /** Commitments: today's closes and pro-rata, as the old pipeline page draws them. */
-function Commitments({ projectId }) {
+function Commitments({ projectId, search = '' }) {
   const [err, setErr] = useState('');
   return (
     <div className="flex flex-col gap-4" data-testid="caprel-commitments">
       {err && <p role="alert" className="m-0 text-[12.5px] text-red-700 dark:text-red-300" data-testid="caprel-commitments-error">{err}</p>}
+      {/* D1213 (#2424): the round's closing room (CP1). */}
+      <p className="m-0 text-[13px]"><Link to={tabHref(CLOSING, search)} className="font-semibold underline" data-testid="caprel-closing-door">Open the closing room</Link> for the paper, the lines and what is received.</p>
       <RoundClosesPanel projectId={projectId} onError={setErr} />
       <ProRataPanel projectId={projectId} onError={setErr} />
     </div>
@@ -100,21 +103,22 @@ function Commitments({ projectId }) {
 }
 
 export function CapRelTabPage({ tab, projectId, projectStatus = 'ready', onRetryProject, search = '', cards, action, phone = false }) {
-  const here = TABS.find((t) => t.id === tab) || TABS[0];
+  const here = TABS.find((t) => t.id === tab) || (tab === CLOSING.id ? CLOSING : TABS[0]);
   let body;
   // No venture means no read is made: say the venture list failed, never a skeleton.
   if (projectStatus === 'unreadable') body = <Unreadable what="Your ventures" claim="This is not a claim that you have none." onRetry={onRetryProject} />;
   else if (!projectId) body = <div className="h-24 animate-pulse rounded-xl bg-axal-ground dark:bg-gray-800" data-testid="caprel-loading" />;
   else if (tab === 'pipeline') body = <Pipeline projectId={projectId} search={search} />;
   else if (tab === 'calls') body = <Calls projectId={projectId} />;
-  else if (tab === 'commitments') body = <Commitments projectId={projectId} />;
+  else if (tab === 'commitments') body = <Commitments projectId={projectId} search={search} />;
+  else if (tab === 'closing') body = <FounderClosing projectId={projectId} search={search} />;
   else body = <Wait tab={tab} />;
   return (
     <div className="flex min-w-0 flex-col gap-4" data-testid={`caprel-${tab}-page`}>
       {phone
         ? <CycleBar back={{ label: TITLE, to: `${HOME_PATH}${tabSearch(search)}` }} title={here.label} eadwynLabel={`Raise · ${TITLE}`} />
         : <CycleHeader cycle="raise" cards={cards} active={SLUG} action={action} title={TITLE} sub={LINE} search={tabSearch(search)} />}
-      <CapRelTabBar active={tab} search={search} />
+      <CapRelTabBar active={tab === CLOSING.id ? 'commitments' : tab} search={search} />
       {body}
     </div>
   );

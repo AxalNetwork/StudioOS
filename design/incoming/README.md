@@ -109,6 +109,23 @@ strength of a live route would empty the queue of the work it exists to track.
    `Trust Center v2.dc.html` to `backlog/` for a day, next to the `NEW` canvases
    that have no route, and away from the v1 of its own page.
 
+## Landed 2026-10-26 — The closing room (#2424)
+
+The owner's artifacts `N3XUV6g4U2NAnLovRYYy96` (the page) and
+`X79ZB6qGrE6DsL29pAhzyC` (the board grid) came from S21's prompt on #2424. Each
+was decoded by `scripts/read-canvas.mjs` as is:
+- `Closing room · Boards.dc.html` is the board grid (CP1 to CP21); it imports the
+  page by name;
+- `Closing Room Page.dc.html` is the page.
+
+No value was edited.
+
+**Grade: NEW.** S21's integration (D1213) puts the founder's room at
+`/raise/capital-relationships/closing`, the room under a deal at
+`/deals/:dealId/closing`, and Contracts › Closings at `/admin/contracts/closings`
+with one closing at `/admin/contracts/closings/:dealId`, drawn from today's
+reads. The rest is D1214–D1220.
+
 ## Landed 2026-10-25 — Account menu › Calendar (#2420)
 
 The owner's artifacts `Bj7uoUqbMzkksEDU1XdUYK` (the page) and
