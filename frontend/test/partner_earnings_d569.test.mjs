@@ -608,8 +608,11 @@ test('a rule is edited through the route\'s own checks, and confirmed from what 
   assert.match(ruleEditInput({ kind: 'percentage', value: '100.01' }).error, /100%/);
   assert.match(ruleEditInput({ kind: 'percentage', value: 'two' }).error, /such as 2 or 2\.5/);
   assert.match(ruleEditInput({ kind: 'fixed', value: '1', description: 'x'.repeat(301) }).error, /at most 300 characters/);
-  // A rule switched off accrues nothing, because the writer reads active rules only.
-  assert.match(NETWORK, /SELECT \* FROM commission_rules WHERE rule_key = \$\{ruleKey\} AND active = 1/);
+  // A rule switched off accrues nothing: the writer stops before paying a rule
+  // that is not active. D958: a referral partner's signed terms pay first, so
+  // that check now sits after them (terms are a contract the switch does not end).
+  assert.match(NETWORK, /SELECT \* FROM commission_rules WHERE rule_key = \$\{ruleKey\}`/);
+  assert.ok(NETWORK.indexOf('if (Number(rule.active) !== 1) return;') > NETWORK.indexOf('const terms = await termsPayment('), 'the standard rule pays only when active, after the terms');
 
   // Opened: the editor under the table, and no other Edit while it is open.
   const editing = { key: 'referral_kyc_approved', stage: 'edit', draft: ruleDraftOf(RULES[1]) };

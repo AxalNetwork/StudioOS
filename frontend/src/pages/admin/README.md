@@ -48,10 +48,11 @@ panel and links Exploring, Personas and Trash. Approvals (now
 `insights/AdminInsights.jsx`, D893) left `/admin/held/` when each was rebuilt
 to its canvas. Since D555 the landing and Approvals read HQ's own figures from
 the Studio glance through `heldFigures.jsx` (`useHeldGlance`, `Figure`,
-`laneOf`): lane counts on Approvals and counts on the cards. Mounted at
-`/admin/held/*` —
-a prefix of their own so none can collide with an HQ console such as
-`/admin/accounts`. Every console link on them is literal, because
+`laneOf`): lane counts on Approvals and counts on the cards. Since D941
+(#2746) the Accounts landing is at `/admin/accounts` (`AccountsAddress.jsx`
+mounts it, and forwards a Super Admin to HQ › Team at `/admin/hq-team`;
+`accountsAddress.js` holds the addresses and Team's moved notice), and
+`/admin/held/accounts` forwards there (`HeldAccountsRedirect.jsx`). Every console link on them is literal, because
 `frontend/test/admin_route_reachability.test.mjs` reads navigation syntax,
 and `HeldZone` carries the always-visible scope sentence and the shell's one
 Worker AI rail mount.

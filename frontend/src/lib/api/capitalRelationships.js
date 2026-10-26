@@ -2,7 +2,8 @@ import { request } from '../api.js';
 
 // D1190 (#3124) — Capital relationships part 2: the tool's Commitments and
 // Match reads, on routes/cycle_raise.ts at /api/cycles/raise. The module's own
-// gate applies (the venture's founder or an admin).
+// D1191: owners/accepted co-founders work the pipeline; staff use a summary
+// or a reasoned, read-only support response, never a persistent read grant.
 //   commitments(p)   GET /cycles/raise/capital-relationships/commitments?project=
 //                    → { currency, round, totals: { counted_cents, not_counted_cents, by_status, percent_of_target, … },
 //                        investors: [{ key, prospect_id, name, chosen, lines: [{ source, status, counted, cents, currency, on, via }] }],
@@ -21,6 +22,11 @@ const matchQuery = (q = {}) => {
   return s ? `&${s}` : '';
 };
 export const capitalRelationshipsApi = {
+  summary: (projectId, page = 1) => request(`/cycles/raise/capital-relationships/summary?${projectId == null ? '' : project(projectId)}&page=${encodeURIComponent(String(page))}`),
+  supportRead: (projectId, reason, { page = 1, prospectId } = {}) => request(`/cycles/raise/capital-relationships/support-read?${project(projectId)}`, {
+    method: 'POST', body: JSON.stringify({ reason, page, ...(prospectId == null ? {} : { prospect_id: prospectId }) }),
+  }),
+  supportReads: (projectId, page = 1) => request(`/cycles/raise/capital-relationships/support-reads?${project(projectId)}&page=${encodeURIComponent(String(page))}`),
   commitments: (projectId) => request(`/cycles/raise/capital-relationships/commitments?${project(projectId)}`),
   match: (projectId, q) => request(`/cycles/raise/capital-relationships/match?${project(projectId)}${matchQuery(q)}`),
 };

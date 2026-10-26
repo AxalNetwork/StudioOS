@@ -41,7 +41,7 @@ const CONTRACTS = 'pages/admin/contracts/ContractsDesk.jsx';
 const CONSOLE_PAGES = 'pages/admin/ConsolePages.jsx';
 
 export const ADMIN_BOARDS = [
-  { id: 'S1', section: 'Accounts', module: null, route: '/admin/held/accounts', files: ['pages/admin/HeldAccounts.jsx'], rail: HELD },
+  { id: 'S1', section: 'Accounts', module: null, route: '/admin/accounts', files: ['pages/admin/HeldAccounts.jsx'], rail: HELD },
   { id: 'S2', section: 'Accounts', module: 'Users', route: '/admin/accounts/all', files: ['pages/admin/consoles/UsersConsole.jsx'], rail: FRAME, host: CONSOLE_PAGES },
   { id: 'S3', section: 'Accounts', module: 'Exploring members', route: '/admin/exploring', files: ['pages/admin/AdminExploring.jsx'], rail: FRAME },
   { id: 'S4', section: 'Accounts', module: 'Trash', route: '/admin/trash', files: ['pages/AdminTrashPage.jsx'], rail: FRAME },
