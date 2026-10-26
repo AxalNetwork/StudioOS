@@ -52,7 +52,7 @@ function stub(source) {
 }
 async function mount(source, path, route = '/events/:id/edit', url = '/events/42/edit') {
   const Page = (await sourceModule(stub(source), path)).default;
-  return mountForm(h(Routes, { location: url }, h(Route, { path: route, element: h(Page) })));
+  return mountForm(h(Routes, { location: url }, h(Route, { path: route, element: h(Page) })), { phone: fixture.phone });
 }
 async function editorScenario(source = editor) {
   prepare();
@@ -95,15 +95,31 @@ async function ticketScenario(source = tickets) {
     try {
       await ui.flush();
       // D1030 (#2387): on a desktop the tickets are Upcoming's, the next event with its code and the rest in Going.
+      // D1037 (#2878, MEV18a): on a phone Upcoming draws the next event and Going as cards; the code is on the ticket.
       const text = ui.text();
       assert.match(text, /Going/);
       assert.match(text, /Waitlist/);
       assert.doesNotMatch(text, /published/);
       assert.match(text, /Free seat/);
-      assert.equal(ui.nodes().filter(n => ui.props(n)['data-ticket-code'] === 'own-code').length, 1);
+      assert.equal(ui.nodes().filter(n => ui.props(n)['data-ticket-code'] === 'own-code').length, phone ? 0 : 1);
       assert.equal((text.match(/Free seat/g) || []).length, 1);
     } finally { await ui.unmount(); }
   }
+  // D1037 (MEV18b): on a phone the ticket is a page of its own, with the member's own code and seat.
+  prepare({ phone: true });
+  const ui = await mount(source, ticketsPath, '/my/events/*', '/my/events/ticket/42');
+  try {
+    await ui.flush();
+    assert.ok(ui.nodes().some(n => ui.props(n)['data-testid'] === 'my-events-ticket-drawer-page'), 'the ticket is a page, not a dialog');
+    // The drawer draws the real QR (MyEventsDrawers.jsx); its code is printed under it in mono.
+    const code = ui.nodes().find(n => ui.props(n)['data-testid'] === 'my-events-ticket-code-text');
+    assert.ok(code, 'the code is drawn');
+    assert.equal(textOf(code).trim(), 'own-code');
+    const text = ui.text();
+    assert.match(text, /Going/);
+    assert.match(text, /Free seat/);
+    assert.match(text, /Turn your screen brightness up at the door\./);
+  } finally { await ui.unmount(); }
 }
 // Use the actual client URL functions, rather than duplicating them in mocks.
 async function clients() {
@@ -146,7 +162,7 @@ test('#2395: behavioral checks reject editor, ticket and calendar regressions th
     ]],
     [editor, failureScenario, [['if (loadError)', 'if (false)']]],
     [tickets, ticketScenario, [
-      ['ticketPill(t.reg_status, ahead)', 'ticketPill(t.status, ahead)'],
+      ["if (drawer?.kind === 'ticket') {", 'if (false) {'],
       ['const place = placeOf(t);', 'const place = placeOf({ ...t, reg_status: t.status });'],
       ['const code = ticket.checkin_code || null;', 'const code = null;'],
       ['{seat ? <Pill', '{false ? <Pill'],

@@ -1,5 +1,16 @@
 # Worker route handlers — production source of truth
 
+D1239: `deal_views.ts`, mounted before `deals.ts`, provides Professional investor fit reads and private/accepted-seat firm saved views. Settings confer no deal access; defaults, version checks and identifier-only audit writes are atomic.
+
+
+D1254: scoring and project intake record scores without changing project
+status or stage. Intake creates an applied deal independently of the score.
+The Screening read in `deals.ts` admits investors only to readable deals and
+uses verified, audited snapshots; staff retain their own projections. Venture
+risk's investor read stays scoped to a readable deal, with the portfolio
+matrix and writes reserved to staff. Trust batches preserve Not recorded;
+investor trust reads require a shared deal, rather than an intro alone.
+
 
 D1144: `cycle_raise.ts` returns the stored Product-market fit part, its paged `/pmf/history` read and Re-score’s `pmf: true` flag. The founder/admin project gate is unchanged. `../services/scoring/README.md` names the shared snapshot/checklist/audit transaction.
 
@@ -114,6 +125,7 @@ widened guard on this very sentence, which is the rule working.)
 /api/funds         → funds.ts
 /api/fund-fees     → fund_fees.ts       (D709: the management fee's terms, admissions, net invested capital, offsets, and fee periods the GP previews and issues; moves no money)
 /api/fund-admin    → fund_admin.ts      (D714: GET /access, which fund acts this admin may take, from FUND_ACTS; D1158: GET /lps, the LP roster)
+/api/closings      → closings.ts        (D1215: a closing as a record — open, lines, route, evidence, the cap-table proposal, complete; the admin desk `adminClosings` is mounted at /api/admin/closings)
 /api/fund-reporting → fund_reporting.ts
 /api/fund-booklets → fund_booklets.ts (D716: the Subscription Booklet, the applicant's ticks, paper and submit, HQ's read, PDF and withdraw; the e-sign send and the GP's acceptance (D759))
 /api/fund-notices  → fund_notices.ts    (D716: an Admin previews, the Super Admin issues, the LP reads their own; kept PDFs through Browser Run)
@@ -388,6 +400,8 @@ D1133: `billing.ts` mounts `/alerts/:id/pay` and `/alerts/:id/update-card` under
 D1135: `company.ts` adds member self-leave and validates create/rename; `projects.ts` counts live ventures, adds owner restore within 30 days and sends email-mode team invitations.
 
 D1123: `admin_lab_operations.ts` adds `/cohorts/:cohort/capacity`, the latest stored capacity event for SL6, separately from current Settings. It never returns free-form event details.
+
+D1176: `cycle_use_of_funds.ts`, mounted by `cycle_raise.ts` under `/api/cycles/raise/use-of-funds`, serves the plan, scenarios/compare, milestones, hire edits and Base split. Founder/admin and company scoped; support is read only, Mercury stays the founder's own.
 
 D1206 (#3172): `calendar.ts` applies Investor Professional only to
 IC creation; calendar reads, including the token subscription, remain available

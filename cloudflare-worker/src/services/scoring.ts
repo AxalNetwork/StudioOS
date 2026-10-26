@@ -93,7 +93,8 @@ export function runFullScore(data: Record<string, number>) {
   const distribution = scoreDistribution(Number(data.distribution_channels), Number(data.distribution_virality));
 
   let total = market.total + team.total + product.total + capital.total + fit.total + distribution.total;
-  const aiAdj = Number(data.ai_adjustment ?? 0);
+  // D1254: adjustments are reserved; even internal callers cannot inject one.
+  const aiAdj = 0;
   total = Math.min(Math.max(total + aiAdj, 0), 100);
   const tier = classifyTier(total);
 
@@ -112,7 +113,7 @@ function r(n: number) { return Math.round(n * 10) / 10; }
 // ──────────────────────────────────────────────────────────────────────────
 // v2 — "The Brain" 100-point scoring (Diligence & Scoring Engine redesign)
 // Categories: A Market 25 / B Team 20 / C Product 20 / D Traction 15 /
-//             E Capital 10 / F Fit&Moat 10  +  AI Bonus -10..+10
+//             E Capital 10 / F Fit&Moat 10
 // All sub-factor inputs are bounded; the engine never trusts client values.
 // ──────────────────────────────────────────────────────────────────────────
 
@@ -139,8 +140,6 @@ export type ScoreV2Input = {
   // F. Fit & Moat (10)
   strategic_alignment?: number; // 0..5
   moat_strength?: number;       // 0..5
-  // AI Bonus
-  ai_adjustment?: number;       // -10..+10
 };
 
 const clamp = (n: number, lo: number, hi: number) =>
@@ -224,7 +223,7 @@ export function runScoreV2(data: ScoreV2Input): ScoreV2Result {
   const fit = scoreFitV2(data.strategic_alignment ?? 0, data.moat_strength ?? 0);
 
   const before = market.total + team.total + product.total + traction.total + capital.total + fit.total;
-  const adj = clamp(data.ai_adjustment ?? 0, -10, 10);
+  const adj = 0;
   const total = clamp(before + adj, 0, 100);
 
   const rec = total >= 80 ? 'Strong'

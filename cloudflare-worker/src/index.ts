@@ -52,6 +52,8 @@ import adminPublications from './routes/admin_publications';
 import adminTeam from './routes/admin_team';
 import adminNetworkProfiles from './routes/admin_network_profiles';
 import adminNetwork from './routes/admin_network';
+import adminInvestorCohorts from './routes/admin_investor_cohorts';
+import investorCohorts from './routes/investor_cohorts';
 import profileHistoryRoutes from './routes/profile_history';
 import founderProfileRoutes from './routes/founder_profile';
 import adminProfilingRoutes from './routes/admin_profiling';
@@ -80,7 +82,9 @@ import partnernet from './routes/partnernet';
 import capital from './routes/capital';
 import tickets from './routes/tickets';
 import deals from './routes/deals';
+import dealFlow from './routes/deal_flow';
 import dealContext from './routes/deal_context';
+import dealViews from './routes/deal_views';
 import users from './routes/users';
 import marketIntel from './routes/market_intel';
 import marketIntelPublic from './routes/market_intel_public';
@@ -123,6 +127,7 @@ import funds from './routes/funds';
 import fundLedger from './routes/fund_ledger';
 import fundFees from './routes/fund_fees';
 import fundAdmin from './routes/fund_admin';
+import closings, { adminClosings } from './routes/closings';
 import fundReporting from './routes/fund_reporting';
 import fundBooklets from './routes/fund_booklets';
 import fundNotices from './routes/fund_notices';
@@ -903,6 +908,9 @@ app.route('/api/admin/partners', adminPartners);
 // D976 (#2762) — the advisor and partner network's pause, directory switch and standing read.
 app.route('/api/admin/network', adminNetworkReads);
 app.route('/api/admin/network', adminNetwork);
+// D959 (#2792) — Investor cohort access: the admin's grants, and the investor's and founder's routes.
+app.route('/api/admin/investor-cohorts', adminInvestorCohorts);
+app.route('/api/investor-cohorts', investorCohorts);
 app.route('/api/admin/publications', adminPublications);
 app.route('/api/partner-onboard', partnerOnboarding);
 app.route('/api/partner-portal', partnerPortal);
@@ -911,6 +919,9 @@ app.route('/api/advisor', advisorRoutes);
 app.route('/api/partnernet', partnernet);
 app.route('/api/capital', capital);
 app.route('/api/tickets', tickets);
+// D1238 (#3251): an investor firm's own deal flow. Before dealContext and deals, so `flow` is never a deal id.
+app.route('/api/deals/flow', dealFlow);
+app.route('/api/deals', dealViews);
 app.route('/api/deals', dealContext);
 app.route('/api/deals', deals);
 app.route('/api/users', users);
@@ -966,6 +977,8 @@ app.route('/api/admin/contracts/registry', adminContractDocRegistry);
 // Mount the more-specific /admin/contracts prefix FIRST so it takes
 // precedence over the generic /admin router (which has no contract routes).
 app.route('/api/admin/contracts', adminContracts);
+// D1215 (#3212): the closings desk, before the /api/admin catch-all.
+app.route('/api/admin/closings', adminClosings);
 // Task #9 — IRS-style forms catalog + PDF preview/download (admin-only).
 app.route('/api/admin/forms', adminForms);
 app.route('/api/admin/integration-keys', adminIntegrationKeys);
@@ -1215,6 +1228,8 @@ app.route('/api/fund-ledger', fundLedger);
 app.route('/api/fund-fees', fundFees); // D709 (#1774): the management fee; records amounts, moves no money
 // D714 — the fund administration console: which fund acts this admin may take.
 app.route('/api/fund-admin', fundAdmin);
+// D1215 (#3212): closings as a record; the admin desk is mounted before the /api/admin catch-all.
+app.route('/api/closings', closings);
 app.route('/api/fund-reporting', fundReporting);
 // D716 — the Subscription Booklet: the applicant's ticks and submit, and HQ's read and withdraw.
 app.route('/api/fund-booklets', fundBooklets);
@@ -2452,6 +2467,12 @@ export default {
             const r = await syncCohortAdvisorNotices(env, { limit: 2000 });
             if (r.started || r.ended) console.info(`[cron] cohort advisor notices started=${r.started} ended=${r.ended}`);
           } catch (e) { console.error('[cron] cohort advisor notices failed', e); }
+          // D959 — investor cohort access: closes grants past their last day, then tells founders.
+          try {
+            const { syncInvestorCohortNotices } = await import('./services/investorCohortAccess');
+            const r = await syncInvestorCohortNotices(env, { limit: 2000 });
+            if (r.started || r.ended || r.expired) console.info(`[cron] investor cohort notices started=${r.started} ended=${r.ended} expired=${r.expired}`);
+          } catch (e) { console.error('[cron] investor cohort notices failed', e); }
           try {
             const { noticeLegacyRelationships } = await import('./routes/partnernet');
             const r = await noticeLegacyRelationships(env, 500);

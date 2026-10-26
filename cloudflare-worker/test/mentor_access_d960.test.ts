@@ -73,7 +73,7 @@ function makeD1(db: InstanceType<typeof DatabaseSync>, failing: RegExp[] = []) {
       const api: any = {
         bind: (...x: any[]) => { b = coerce(x); return api; },
         async first() { check(sql); const q = sqliteCall(sql, b); return db.prepare(q.sql).get(...q.values) ?? null; },
-        async all() { check(sql); const q = sqliteCall(sql, b); return { results: db.prepare(q.sql).all(...q.values) }; },
+        async all() { check(sql); const q = sqliteCall(sql, b); return { success: true, results: db.prepare(q.sql).all(...q.values) }; },
         async run() {
           check(sql);
           const q = sqliteCall(sql, b);
@@ -91,7 +91,7 @@ function makeD1(db: InstanceType<typeof DatabaseSync>, failing: RegExp[] = []) {
 function freshDb() {
   const db = new DatabaseSync(':memory:', { enableForeignKeyConstraints: false, enableDoubleQuotedStringLiterals: true });
   for (const t of ['users', 'cohort_cycles', 'company_week_status', 'advisor_cohort_assignments', 'notifications_inbox',
-    'user_settings', 'week_windows', 'activity_logs']) {
+    'user_settings', 'week_windows', 'activity_logs', 'cohort_applicants']) {
     db.exec(stripForeignKeys(tableFromBaseline(BASELINE, t)));
   }
   db.exec(noComments(M367));
@@ -375,6 +375,111 @@ test('hidden counts that cannot be read are null, not 0, and the list still answ
   assert.equal(r.body.items.length, 1);
   assert.equal(r.body.items[0].founders_hidden, null);
   assert.equal(r.body.founders_hidden_total, null);
+});
+
+// O-FND A: a founder belongs to the cycle the Lab activated them for.
+function applicant(db: DatabaseSync, application: number, founder: number, cycle: number, status: string) {
+  db.prepare('INSERT INTO cohort_applicants (application_id, user_id, cohort_cycle_id, status) VALUES (?, ?, ?, ?)')
+    .run(application, founder, cycle, status);
+}
+
+test('O-FND A counts distinct activated founders per cycle from Week 1, on every assignment row', async () => {
+  const db = freshDb();
+  const env = envOf(db);
+  const first = await assign(env, ADMIN, AVA, CYCLE);
+  await assign(env, ADMIN, ALF, CYCLE);
+  await assign(env, ADMIN, AVA, OTHER);
+  await end(env, ADMIN, first.body.id);
+  db.prepare('UPDATE users SET is_active = 0 WHERE id = ?').run(ALF);
+  applicant(db, 1, FAY, CYCLE, 'activated');
+  applicant(db, 2, FAY, CYCLE, 'activated'); // two applications, one founder
+  applicant(db, 3, FOUNDER_USER, CYCLE, 'activated'); // no weekly record: Week 1 still counts
+  applicant(db, 4, FLO, OTHER, 'activated');
+  for (const [i, status] of ['pending', 'approved', 'waitlisted', 'rejected', 'withdrawn', 'rolled_forward'].entries()) {
+    applicant(db, 10 + i, FIN, CYCLE, status); // even approved + weekly membership is not activation
+  }
+  db.prepare('UPDATE users SET spinout_lab_active = 1, spinout_lab_started_at = ? WHERE id = ?')
+    .run('2026-09-01', FIN); // the timeline's current flag is not the cycle's admission record
+  const changes = () => db.prepare('SELECT total_changes() AS n').get()!.n;
+  const before = changes();
+  const r = await call(env, ADMIN, A);
+  assert.equal(r.status, 200);
+  assert.equal(r.body.items.length, 3);
+  assert.deepEqual(Object.keys(r.body.items[0]).sort(), [
+    'advisor_email', 'advisor_is_active', 'advisor_name', 'advisor_role', 'advisor_user_id',
+    'assigned_at', 'cohort_cycle_id', 'founders_hidden', 'founders_in_cohort', 'id', 'is_active',
+    'note', 'uid', 'unassigned_at',
+  ]);
+  assert.deepEqual(r.body.items.map((row: any) => [row.cohort_cycle_id, row.founders_in_cohort]).sort(), [[CYCLE, 2], [CYCLE, 2], [OTHER, 1]]);
+  assert.doesNotMatch(JSON.stringify(r.body), /Fay|Fin Founder|Flo|Nia|fay@|fin@|flo@|nia@|founder_user_id/);
+  assert.equal(changes(), before, 'the count read changes no record');
+});
+
+test('O-FND A reports measured zero and does not cap the number of activated founders', async () => {
+  const db = freshDb();
+  const env = envOf(db);
+  await assign(env, ADMIN, AVA, CYCLE);
+  await assign(env, ADMIN, AVA, OTHER);
+  const empty = await call(env, ADMIN, A);
+  assert.ok(empty.body.items.every((row: any) => row.founders_in_cohort === 0));
+  const user = db.prepare("INSERT INTO users (id, email, name, role) VALUES (?, ?, 'Synthetic activated founder', 'founder')");
+  for (let n = 0; n < 601; n++) {
+    user.run(1000 + n, `activated-${n}@example.test`);
+    applicant(db, 1000 + n, 1000 + n, CYCLE, 'activated');
+  }
+  const r = await call(env, ADMIN, A);
+  assert.deepEqual(r.body.items.map((row: any) => [row.cohort_cycle_id, row.founders_in_cohort]).sort(), [[CYCLE, 601], [OTHER, 0]]);
+});
+
+test('O-FND A unreadable activation records give null counts while the assignment list still answers', async (t) => {
+  const db = freshDb();
+  await assign(envOf(db), ADMIN, AVA, CYCLE);
+  applicant(db, 1, FAY, CYCLE, 'activated');
+  const env = envOf(db);
+  const log = t.mock.method(console, 'error', () => {});
+  const failed = { ...env, DB: { ...env.DB, prepare(sql: string) {
+    if (/FROM cohort_applicants/.test(sql)) throw new Error('D1_ERROR: private-founder-diagnostic');
+    return env.DB.prepare(sql);
+  } } };
+  const r = await call(failed, ADMIN, A);
+  assert.equal(r.status, 200);
+  assert.equal(r.body.items.length, 1);
+  assert.equal(r.body.items[0].founders_in_cohort, null);
+  assert.equal(r.body.items[0].advisor_user_id, AVA);
+  assert.doesNotMatch(JSON.stringify([r.body, log.mock.calls.map((x) => x.arguments)]), /private-founder-diagnostic/);
+});
+
+test('O-FND A failed or malformed D1 results are unreadable, never zero', async () => {
+  const db = freshDb();
+  const env = envOf(db);
+  await assign(env, ADMIN, AVA, CYCLE);
+  for (const value of [{ success: false, results: [] }, { success: true }, { success: true, results: [{ cohort_cycle_id: CYCLE, n: -1 }] }]) {
+    const bad = { ...env, DB: { ...env.DB, prepare(sql: string) {
+      if (/FROM cohort_applicants/.test(sql)) return { bind() { return this; }, async all() { return value; } };
+      return env.DB.prepare(sql);
+    } } };
+    const r = await call(bad, ADMIN, A);
+    assert.equal(r.status, 200);
+    assert.equal(r.body.items[0].founders_in_cohort, null);
+  }
+});
+
+test('O-FND A keeps the count behind the admin gate and available to a frozen admin', async () => {
+  const db = freshDb();
+  const env = envOf(db);
+  await assign(env, ADMIN, AVA, CYCLE);
+  applicant(db, 1, FAY, CYCLE, 'activated');
+  let reads = 0;
+  const measured = { ...env, DB: { ...env.DB, prepare(sql: string) {
+    if (/FROM cohort_applicants/.test(sql)) reads++;
+    return env.DB.prepare(sql);
+  } } };
+  for (const id of [FOUNDER_USER, AVA]) assert.equal((await call(measured, id, A)).status, 403);
+  assert.equal(reads, 0);
+  const r = await call(measured, FROZEN, A);
+  assert.equal(r.status, 200);
+  assert.equal(r.body.items[0].founders_in_cohort, 1);
+  assert.equal(reads, 1, 'all assignment rows share one aggregate read');
 });
 
 // ---------------------------------------------------------------------------
