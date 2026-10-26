@@ -1664,10 +1664,14 @@ async function runwayFigure(ctx: Ctx): Promise<Figure> {
       return { value, source: 'Connector · Mercury · measured cash and net burn', delta_30d: null, spark: [], state: value == null ? 'not_recorded' : 'ok', as_of: bank.as_of, reason: value == null ? 'Mercury has no positive recorded net burn' : null };
     }
     const res = await ctx.env.DB.prepare(
-      `SELECT cash_balance, net_burn, snapshot_date, source FROM project_metrics
+      `WITH chosen AS (SELECT source FROM project_metrics
         WHERE project_id = ? AND cash_balance IS NOT NULL AND net_burn IS NOT NULL AND snapshot_date <= ?
-        ORDER BY CASE WHEN source = 'mercury' AND snapshot_date >= ? THEN 0 ELSE 1 END, snapshot_date DESC, id DESC LIMIT 8`,
-    ).bind(ctx.projectId, ctx.today, daysBefore(ctx.today, 90)).all<{ cash_balance: number; net_burn: number; snapshot_date: string; source: string }>();
+        ORDER BY CASE WHEN source = 'mercury' AND snapshot_date >= ? THEN 0 ELSE 1 END, snapshot_date DESC, id DESC LIMIT 1)
+        SELECT cash_balance, net_burn, snapshot_date, source FROM project_metrics
+        WHERE project_id = ? AND source IS (SELECT source FROM chosen)
+          AND cash_balance IS NOT NULL AND net_burn IS NOT NULL AND snapshot_date <= ?
+        ORDER BY snapshot_date DESC, id DESC LIMIT 8`,
+    ).bind(ctx.projectId, ctx.today, daysBefore(ctx.today, 90), ctx.projectId, ctx.today).all<{ cash_balance: number; net_burn: number; snapshot_date: string; source: string }>();
     const rows = res.results || [];
     const snaps = rows.filter(r => r.source === rows[0]?.source);
     if (snaps.length === 0) return { value: null, delta_30d: null, spark: [], state: 'not_recorded', as_of: null, reason: 'No metrics snapshot records cash and net burn' };

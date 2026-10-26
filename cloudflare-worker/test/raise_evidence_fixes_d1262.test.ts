@@ -224,3 +224,20 @@ test('stale metrics do not prove current traction or outrank a recent typed runw
     runway=await figure(f.ctx,'runway_months');assert.match(runway.reason,/Stale/);assert.equal(runway.as_of,'2000-01-02');
   }finally{f.db.close();}
 });
+
+
+test('runway keeps eight same-source history points even when other sources interleave, including unknown provenance',async()=>{
+  const f=fixture();try {
+    const insert=f.db.prepare("INSERT INTO project_metrics(project_id,snapshot_date,source,cash_balance,net_burn) VALUES(1,?,?,?,1)");
+    for(let n=0;n<10;n++){
+      insert.run(ago(n*4), 'manual', 10+n);
+      insert.run(ago(n*4+1), 'csv', 999);
+      insert.run(ago(n*4+2), 'import', 888);
+    }
+    let runway=await figure(f.ctx,'runway_months');assert.equal(runway.value,10);assert.equal(runway.as_of,ago(0));assert.deepEqual(runway.spark,[17,16,15,14,13,12,11,10]);
+    f.db.exec("UPDATE project_metrics SET source=NULL WHERE source='manual'");
+    runway=await figure(f.ctx,'runway_months');assert.equal(runway.value,10);assert.match(runway.source,/source not recorded/);assert.deepEqual(runway.spark,[17,16,15,14,13,12,11,10]);
+    f.db.prepare("INSERT INTO project_metrics(project_id,snapshot_date,source,cash_balance,net_burn) VALUES(2,?,NULL,777,1)").run(ago(0));
+    assert.deepEqual((await figure(f.ctx,'runway_months')).spark,[17,16,15,14,13,12,11,10]);
+  }finally{f.db.close();}
+});
