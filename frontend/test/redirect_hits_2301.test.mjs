@@ -11,7 +11,7 @@ import { readFileSync, readdirSync } from 'node:fs';
 import React, { act } from 'react';
 import { createRoot } from 'react-dom/client';
 import { installDocument } from './_contracts_dom.mjs';
-import { ADMIN_TAB_REDIRECTS, REDIRECT_ROUTES, ROLE_REDIRECTS, isRedirectKey } from '../../cloudflare-worker/src/services/redirectRoutes.ts';
+import { ADMIN_TAB_REDIRECTS, FORWARD_REDIRECTS, REDIRECT_ROUTES, ROLE_REDIRECTS, isRedirectKey } from '../../cloudflare-worker/src/services/redirectRoutes.ts';
 import { redirectPatternFor, useRedirectBeacon } from '../src/lib/redirectBeacon.js';
 
 const h = React.createElement;
@@ -39,7 +39,8 @@ test('the list is App.jsx\'s redirect-only routes, no more and no fewer', () => 
   const files = [new URL('../src/App.jsx', import.meta.url),
     ...readdirSync(new URL('../src/routes/', import.meta.url)).filter((f) => f.endsWith('.jsx')).map((f) => new URL(`../src/routes/${f}`, import.meta.url))];
   const routes = files.flatMap((f) => redirectOnlyRoutes(readFileSync(f, 'utf8')));
-  assert.deepEqual([...new Set(routes)].sort(), REDIRECT_ROUTES.filter((r) => !r.path.includes('?') && !r.role).map((r) => r.path).sort(),
+  // D1160 and D1109: a role's forward and a self-counting forward are not address-bar routes.
+  assert.deepEqual([...new Set(routes)].sort(), REDIRECT_ROUTES.filter((r) => !r.path.includes('?') && !r.role && !r.forward).map((r) => r.path).sort(),
     'a redirect route added, removed or turned into a page: update cloudflare-worker/src/services/redirectRoutes.ts');
   // A route that redirects for some roles only is a page, and is not listed.
   for (const page of ['/raise/data-room', '/build', '/raise', '/profile']) assert.equal(routes.includes(page), false, page);
@@ -154,4 +155,31 @@ test('D1160: a role\'s forward is counted by the forward itself, never by the ad
       h(Route, { path: '*', element: null })))); });
     assert.deepEqual(sent, ['redirect:/funds/performance']);
   } finally { await act(async () => root.unmount()); restore(); }
+});
+
+test('D1109: the Data room\'s old addresses are counted by their forward, never by the address bar, and land on the tool', async () => {
+  assert.deepEqual(FORWARD_REDIRECTS.map((r) => r.path), ['/raise/data-room?mode=workspace', '/raise/data-room?mode=access', '/raise/data-room/:id']);
+  for (const { path } of FORWARD_REDIRECTS) assert.ok(isRedirectKey(`redirect:${path}`), `${path} is countable`);
+  // The tool's own pages share these shapes, so the address bar counts none of them.
+  for (const page of ['/raise/data-room', '/raise/data-room/files', '/raise/data-room/12']) assert.equal(redirectPatternFor(page, '?mode=workspace'), null, page);
+  const { DataRoomMovedRedirect } = await import('../src/pages/raise/dataroom/DataRoomMoved.jsx');
+  const { MemoryRouter, Routes, Route, useLocation } = await import('react-router-dom');
+  for (const [from, element, key, landed] of [
+    ['/raise/data-room?mode=workspace&project_id=12#up', (send) => h(DataRoomMovedRedirect, { kind: 'workspace', send }), 'redirect:/raise/data-room?mode=workspace', '/raise/data-room/files?project_id=12&moved=workspace#up'],
+    ['/raise/data-room?mode=access&project_id=12', (send) => h(DataRoomMovedRedirect, { kind: 'access', send }), 'redirect:/raise/data-room?mode=access', '/raise/data-room/access?project_id=12&moved=access'],
+    ['/raise/data-room/7?project_id=12', (send) => h(DataRoomMovedRedirect, { kind: 'file', id: '7', send }), 'redirect:/raise/data-room/:id', '/raise/data-room/file/7?project_id=12&moved=file'],
+  ]) {
+    const restore = installDocument();
+    const sent = []; let at = null;
+    function Where() { const l = useLocation(); at = `${l.pathname}${l.search}${l.hash}`; return null; }
+    const root = createRoot(document.createElement('div'));
+    try {
+      await act(async () => { root.render(h(MemoryRouter, { initialEntries: [from] }, h(Routes, null,
+        h(Route, { path: '/raise/data-room', element: element((k) => sent.push(k)) }),
+        h(Route, { path: '/raise/data-room/7', element: element((k) => sent.push(k)) }),
+        h(Route, { path: '*', element: h(Where) })))); });
+      assert.deepEqual(sent, [key], from);
+      assert.equal(at, landed, from);
+    } finally { await act(async () => root.unmount()); restore(); }
+  }
 });

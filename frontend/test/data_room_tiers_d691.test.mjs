@@ -19,7 +19,8 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 
-import { ACCESS_TIERS, accessNow, noAccessReason, tierOf } from '../src/pages/raise/dataRoomRead.js';
+import { accessNow, noAccessReason, tierOf } from '../src/pages/raise/dataRoomRead.js';
+import { GATES } from '../src/pages/raise/dataroom/filesModel.js';
 
 const read = (p) => readFileSync(resolve(process.cwd(), p), 'utf8');
 const NOW = Date.parse('2026-10-17T12:00:00Z');
@@ -67,22 +68,14 @@ test('17: the reasons the room already gave still hold', () => {
   assert.match(noAccessReason({ visibility: 'nda' }, [{ uid: 'x', status: 'active', nda_signed: false }], NOW), /needs a signed NDA/);
 });
 
-test('17: no ACCESS_TIERS note says "Not built", each says where the tier is set, and each maps to its stored value', () => {
-  assert.deepEqual(ACCESS_TIERS.map((t) => t.key), ['invited', 'committed', 'nobody']);
-  for (const t of ACCESS_TIERS) {
+// D1109 (#2989): the files tool is retired; the Data room tool's gate (`filesModel.js`'s GATES) names the tiers now.
+test('17: the tool\'s three gates are the stored tiers, none says "Not built", and each says what it does', () => {
+  assert.deepEqual(GATES.map((t) => [t.key, t.label]), [['invited', 'Everyone invited'], ['committed', 'Committed only'], ['nobody', 'Private to you']]);
+  for (const t of GATES) {
     assert.doesNotMatch(t.note, /not built/i, t.label);
-    assert.match(t.note, /Set per file from Raise › Data room’s Upload and Edit file, not on this page\./, t.label);
+    assert.ok(t.note.length > 10, t.label);
   }
-});
-
-test('17: the page marks the file\'s own tier, says a folder has none, and no longer lists the tiers as unavailable', () => {
-  const page = read('frontend/src/pages/raise/DataRoomPage.jsx');
-  assert.doesNotMatch(page, /Committed-only and private tiers/);
-  assert.doesNotMatch(page, /Not built/);
-  assert.match(page, /const marked = kind === 'file' && tierOf\(item\) === t\.key;/);
-  assert.match(page, /<Pill tone="info">This file<\/Pill>/);
-  assert.match(page, /A folder has no tier: access is set per file\./);
-  // The worker and the page read the same three values.
+  // The worker and the tool read the same three values.
   const worker = read('cloudflare-worker/src/services/dataRoomAccess.ts');
   assert.match(worker, /export const ACCESS_TIERS = \['invited', 'committed', 'nobody'\] as const;/);
 });

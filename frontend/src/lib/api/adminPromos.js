@@ -10,6 +10,10 @@
 //   replace(id, body)   POST  /admin/promos/:id/replace { …the new code, as create takes it, reason }
 //                       → { ok, promo_id, code, old_ended, old_promo_id }; 502 with old_ended false
 //                         when the new code was made and the old one could not be ended
+//   one(id)             GET   /admin/promos/:id → { promo } (D1275: the drawer at its address, when
+//                       the code is not on the list's page); 404 not_found
+//   end(id, reason)     DELETE /admin/promos/:id { reason } (D1275: End now — Stripe deletes the coupon,
+//                       so an ended code never resumes) → { ok, promo_id }
 // Every write needs TOTP and a recent step-up; `request` handles the challenge.
 import { request } from '../api.js';
 
@@ -25,4 +29,6 @@ export const adminPromosApi = {
   },
   change: (id, body) => request(`/admin/promos/${enc(id)}`, { method: 'PATCH', body: JSON.stringify(body || {}) }),
   replace: (id, body) => request(`/admin/promos/${enc(id)}/replace`, { method: 'POST', body: JSON.stringify(body || {}) }),
+  one: (id) => request(`/admin/promos/${enc(id)}`),
+  end: (id, reason) => request(`/admin/promos/${enc(id)}`, { method: 'DELETE', body: JSON.stringify({ reason }) }),
 };

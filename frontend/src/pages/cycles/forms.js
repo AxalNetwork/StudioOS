@@ -555,7 +555,7 @@ const deckLink = {
   },
 };
 
-/** The size the file tool's queue refuses before sending (`DataRoomPage.jsx`). */
+/** The size Upload's queue refuses before sending (`raise/dataroom/DataRoomUpload.jsx`), the Worker's own cap. */
 export const MAX_UPLOAD_MB = 20;
 const PROJECT_UID = /^[A-Za-z0-9_-]{1,80}$/;
 const NEW_FOLDER = 'name:';

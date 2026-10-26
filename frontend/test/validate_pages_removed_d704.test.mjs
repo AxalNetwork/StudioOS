@@ -256,7 +256,8 @@ test('D704 test 7 (deleted and kept): the old workspace and its pieces are gone;
   const record = read('frontend/src/pages/founder/InterviewReviewPage.jsx');
   for (const used of ['InterviewRecording', 'InterviewEvidenceFields', 'PainSeverity']) assert.ok(record.includes(used), `${used} keeps its importer`);
   assert.ok(existsSync('frontend/src/workspaces/founder/InterviewRecording.jsx') && existsSync('frontend/src/workspaces/founder/ValidateDialogs.jsx'));
-  assert.ok(existsSync('frontend/src/pages/founder/FounderRaiseDataRoom.jsx'), 'FounderRaiseDataRoom stays');
+  // D1109 (#2989): the Data room access view is retired with part 8 of #2456; its address forwards to Access.
+  assert.ok(!existsSync('frontend/src/pages/founder/FounderRaiseDataRoom.jsx'), 'FounderRaiseDataRoom is retired');
 });
 
 test('D704 test 8 (census): each verdict-zone feature is drawn at its home', () => {
