@@ -28,6 +28,7 @@ import {
 import AdminLab from '../src/pages/admin/lab/AdminLab.jsx';
 import LabRedirect from '../src/pages/admin/lab/LabRedirect.jsx';
 import LabPreviewRedirect from '../src/pages/admin/lab/LabPreviewRedirect.jsx';
+import LabSettings from '../src/pages/admin/lab/LabSettings.jsx';
 import AdminPageHeader, { HeaderTab } from '../src/ui/AdminPageHeader.jsx';
 import { NO_RAIL_ROUTES } from '../src/lib/railPages.js';
 import { SIDEBAR_GROUPS } from '../src/sidebarConfig.js';
@@ -333,6 +334,94 @@ test('both old addresses keep their query and hash and add the moved key', async
     await act(async () => root.unmount());
     restore();
     assert.equal(landed, `${to}?x=1&moved=spinout-lab#top`);
+  }
+});
+
+// ---------------------------------------------------------------- Settings: the branch Admin's grant (D1280)
+//
+// The block reads D984's `GET /api/licence/mine/programs` for the caller's own
+// licence. The rows are what `studioPrograms` answers on production's shape.
+
+const LAB_ROW = (standing, grant) => ({ program_key: 'spinout-lab', name: 'Spin-Out Lab', group: 'Founders', standing,
+  word: { in_force: 'In force', paused: 'Paused', not_recorded: 'Not recorded', switched_off: 'Not offered' }[standing],
+  line: { in_force: 'Your studio runs this program on the terms below.', paused: 'HQ paused this program. Nothing new starts until HQ resumes it.', not_recorded: 'HQ has not recorded a grant for this program yet.', switched_off: 'HQ does not grant this program at the moment.' }[standing],
+  grant });
+const GRANT = { uid: 'g1', program_key: 'spinout-lab', state: 'granted', in_force: true, waiting_on: [], effective_end: '2027-10-31',
+  terms: { starts_on: '2026-11-01', ends_with_licence: 1, capacity_cap: 30, capacity_uncapped: 0, cohorts_per_year: 6, hq_approves_each_cohort: null },
+  schedule: { status: 'signed', contract_uid: 'c1', signed_at: '2026-10-02T10:00:00Z' }, note: null, paused_at: null, ended_at: null, set_at: '2026-10-01T09:00:00Z' };
+const PROGRAMS = (rows) => ({ linked: true, source: 'hq', as_of: null, age_seconds: null, licence: { uid: 'lic-1', brand_name: 'Synthetic studio' }, programs: rows, reason: null });
+
+async function settings(answer) {
+  const original = globalThis.fetch;
+  const seen = [];
+  const json = (body, status = 200) => new Response(JSON.stringify(body), { status, headers: { 'Content-Type': 'application/json' } });
+  let calls = 0;
+  globalThis.fetch = async (url) => {
+    const p = new URL(String(url), 'http://x').pathname;
+    seen.push(p);
+    if (p === '/api/admin/cohort/settings') return json({ settings: { min: 1, max: 25 } });
+    if (p === '/api/licence/mine/programs') { calls += 1; const a = typeof answer === 'function' ? answer(calls) : answer; return a instanceof Response ? a : json(a); }
+    return json({});
+  };
+  const v = await render(h(LabSettings));
+  const flush = async () => { for (let i = 0; i < 6; i += 1) await act(async () => { await new Promise((r) => setTimeout(r, 0)); }); };
+  await flush();
+  return {
+    ...v, seen, flush,
+    of: (id) => { const n = v.byTestId(id); assert.ok(n, `no ${id}`); return v.textOf(n); },
+    has: (id) => Boolean(v.byTestId(id)),
+    links: () => v.nodes().filter((n) => n.tagName === 'A').map((n) => [v.textOf(n), v.props(n)?.href ?? v.props(n)?.to]),
+    async unmount() { await v.unmount(); globalThis.fetch = original; },
+  };
+}
+
+test('Settings, D1280: an Admin with a grant reads its state, period and cohort terms in the Programs tab\'s words', async () => {
+  const m = await settings(PROGRAMS([LAB_ROW('in_force', GRANT), LAB_ROW('not_recorded', null)].map((r, i) => (i ? { ...r, program_key: 'learning' } : r))));
+  try {
+    const block = m.of('lab-studio-grant');
+    assert.match(block, /Grant: In force · Your studio runs this program on the terms below\./);
+    assert.match(block, /Period1 Nov 2026 → 31 Oct 2027/);
+    assert.match(block, /CapacityUp to 30/);
+    assert.match(block, /Cohorts6 cohorts a year/);
+    assert.match(block, /ApprovalNot recorded.*HQ has not entered this term\./s, 'a term nobody set is Not recorded, never Off');
+    assert.doesNotMatch(m.of('lab-grant-terms'), /#2775|Not read here yet/, 'the wait text that named the gap is gone');
+    assert.ok(m.seen.includes('/api/licence/mine/programs'));
+    assert.ok(!m.seen.some((p) => p.startsWith('/api/admin/program-grants')), 'an Admin never reads HQ\'s grid');
+    assert.ok(m.links().some(([t, to]) => t === 'Open Licences › Programs' && to === '/admin/my-licence/programs'));
+  } finally { await m.unmount(); }
+});
+
+test('Settings, D1280: with no grant the Admin is told so and sent to request it; HQ-held and no-copy say why', async () => {
+  for (const row of [LAB_ROW('not_recorded', null), LAB_ROW('switched_off', null)]) {
+    const m = await settings(PROGRAMS([row]));
+    try {
+      assert.match(m.of('lab-studio-grant-none'), /Your studio does not hold Spin-Out Lab/);
+      assert.ok(!m.has('lab-studio-grant'), 'no terms are drawn for a grant that does not exist');
+      assert.ok(m.links().some(([t, to]) => t === 'Request it on Licences › Programs' && to === '/admin/my-licence/programs'), row.standing);
+    } finally { await m.unmount(); }
+  }
+  const missing = await settings(PROGRAMS([]));
+  try { assert.match(missing.of('lab-studio-grant-none'), /does not hold Spin-Out Lab/); } finally { await missing.unmount(); }
+  const hq = await settings({ linked: false, source: 'hq', as_of: null, age_seconds: null, licence: null, programs: [LAB_ROW('not_recorded', null)], reason: 'Your account is not linked to a licence. On HQ-held accounts, HQ runs every program.' });
+  try { assert.match(hq.of('lab-studio-grant-unlinked'), /HQ runs every program/); assert.ok(!hq.has('lab-studio-grant-none')); } finally { await hq.unmount(); }
+  const copy = await settings({ linked: true, source: 'copy', as_of: null, age_seconds: null, licence: null, programs: null, reason: 'HQ has not sent this branch its programs yet.' });
+  try { assert.match(copy.of('lab-studio-grant-no-copy'), /HQ has not sent this branch its programs yet/); assert.ok(!copy.has('lab-studio-grant-none'), 'no copy is not the same as no grant'); } finally { await copy.unmount(); }
+});
+
+test('Settings, D1280: a failed or incomplete read is Unreadable with Try again, never "no grant", and Try again reads again', async () => {
+  const down = new Response(JSON.stringify({ error: 'licence_programs_unreadable' }), { status: 503, headers: { 'Content-Type': 'application/json' } });
+  const m = await settings((n) => (n === 1 ? down : PROGRAMS([LAB_ROW('in_force', GRANT)])));
+  try {
+    assert.match(m.of('lab-studio-grant-unreadable'), /Unreadable.*not the same as none.*Try again/s);
+    assert.ok(!m.has('lab-studio-grant-none') && !m.has('lab-studio-grant'));
+    const retry = m.nodes().find((n) => n.tagName === 'BUTTON' && m.textOf(n) === 'Try again');
+    await act(async () => m.props(retry).onClick());
+    await m.flush();
+    assert.match(m.of('lab-studio-grant'), /In force/);
+  } finally { await m.unmount(); }
+  for (const body of [{ linked: true, programs: 'nine' }, { programs: [] }, { linked: true, programs: null }]) {
+    const odd = await settings(body);
+    try { assert.ok(odd.has('lab-studio-grant-unreadable'), `${JSON.stringify(body)} is not drawn as none`); } finally { await odd.unmount(); }
   }
 });
 
