@@ -1,8 +1,10 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import { Pill } from '../../ui';
 import {
-  APPLICATION_LABEL, MAIL_NOTE, canDecline, canPick, isPickable, placesLine, refusalText, statusLabel, statusTone,
+  APPLICATION_LABEL, MAIL_NOTE, canDecline, canPick, isPickable, placesLine, statusLabel, statusTone,
 } from './programmeModel';
+import TestingDialog from '../admin/productTesting/TestingDialog';
+import { dialogFor } from '../admin/productTesting/reviewModel';
 
 /**
  * D815 (#2261) — one programme's applicants, for its owner: a partner (D4) or
@@ -16,16 +18,21 @@ import {
  * NO EMAIL ADDRESS. The Worker sends none to an owner; testers are written to
  * from Axal VC Mail, which this page says (MAIL_NOTE).
  *
- * `api` is `{ applicants(uid), pick(appUid), decline(appUid) }`: the partner's
- * or HQ's methods from `lib/api/productTesting.js`.
+ * `api` is `{ applicants(uid), pick(appUid), decline(appUid), withdraw? }`:
+ * the partner's or HQ's methods from `lib/api/productTesting.js`.
+ *
+ * D1202 (#3152, TST3 F–H): Pick, Decline and, with HQ's `withdraw`, Withdraw
+ * for the member each open a dialog that says what it changes, who is told and
+ * what is recorded; a refusal (I) is drawn inside it in the Worker's words.
  */
 const ghost = 'rounded-lg border border-axal-hairline px-2.5 py-1 text-[12px] font-semibold hover:bg-axal-ground disabled:opacity-50 dark:border-gray-700 dark:hover:bg-gray-800';
 const baseButton = 'rounded-lg bg-axal-violet px-2.5 py-1 text-[12px] font-semibold text-white disabled:opacity-50';
 
 export default function ProgrammeApplicants({ uid, api, classes = {}, onChanged }) {
   const [state, setState] = useState({ status: 'loading', data: null });
-  const [busy, setBusy] = useState(null);
-  const [refusal, setRefusal] = useState(null);
+  // { kind: 'pick' | 'decline' | 'withdraw', application }
+  const [asking, setAsking] = useState(null);
+  const [notice, setNotice] = useState(null);
   const button = classes.button || baseButton;
 
   const load = useCallback(() => {
@@ -37,20 +44,12 @@ export default function ProgrammeApplicants({ uid, api, classes = {}, onChanged 
   }, [api, uid]);
   useEffect(() => { load(); }, [load]);
 
-  async function decide(appUid, decision) {
-    setBusy(appUid);
-    setRefusal(null);
-    try {
-      await api[decision](appUid);
-      await load();
-      onChanged?.();
-    } catch (err) {
-      setRefusal(refusalText(err, decision === 'pick'
-        ? 'Axal could not pick this tester. Try again.'
-        : 'Axal could not decline this application. Try again.'));
-    } finally {
-      setBusy(null);
-    }
+  const ask = (kind, application) => { setNotice(null); setAsking({ kind, application }); };
+  async function done(text) {
+    setAsking(null);
+    setNotice(text);
+    await load();
+    onChanged?.();
   }
 
   if (state.status === 'loading' && !state.data) {
@@ -78,7 +77,7 @@ export default function ProgrammeApplicants({ uid, api, classes = {}, onChanged 
       {!pickable && programme && (
         <p className="text-[12px] text-axal-muted" data-testid="applicants-not-open">Testers are picked once the programme has opened.</p>
       )}
-      {refusal && <p role="alert" className="text-[12px] font-semibold text-red-700 dark:text-red-300" data-testid="applicants-refusal">{refusal}</p>}
+      {notice && <p role="status" className="text-[12px] font-semibold text-emerald-700 dark:text-emerald-300" data-testid="applicants-notice">{notice}</p>}
       {items.length === 0 ? (
         <p className="text-[12.5px] text-axal-muted" data-testid="applicants-empty">No one has applied yet.</p>
       ) : (
@@ -94,12 +93,16 @@ export default function ProgrammeApplicants({ uid, api, classes = {}, onChanged 
                 <div className="flex items-center gap-2">
                   <Pill tone={a.status === 'picked' ? 'ok' : a.status === 'declined' ? 'neutral' : 'info'}>{APPLICATION_LABEL[a.status] || a.status}</Pill>
                   {pickable && canPick(a) && (
-                    <button type="button" disabled={busy === a.uid} onClick={() => decide(a.uid, 'pick')} className={button}
-                      data-testid={`applicant-pick-${a.uid}`}>Pick</button>
+                    <button type="button" onClick={() => ask('pick', a)} className={button}
+                      data-testid={`applicant-pick-${a.uid}`}>Pick…</button>
                   )}
                   {pickable && canDecline(a) && (
-                    <button type="button" disabled={busy === a.uid} onClick={() => decide(a.uid, 'decline')} className={ghost}
-                      data-testid={`applicant-decline-${a.uid}`}>Decline</button>
+                    <button type="button" onClick={() => ask('decline', a)} className={ghost}
+                      data-testid={`applicant-decline-${a.uid}`}>Decline…</button>
+                  )}
+                  {typeof api.withdraw === 'function' && (a.status === 'applied' || a.status === 'picked') && (
+                    <button type="button" onClick={() => ask('withdraw', a)} className={ghost}
+                      data-testid={`applicant-withdraw-${a.uid}`}>Withdraw…</button>
                   )}
                 </div>
               </div>
@@ -117,6 +120,10 @@ export default function ProgrammeApplicants({ uid, api, classes = {}, onChanged 
             </li>
           ))}
         </ul>
+      )}
+      {asking && (
+        <TestingDialog spec={dialogFor(asking.kind, { p: programme, a: asking.application })} api={api}
+          ctx={{ p: programme, a: asking.application }} onClose={() => setAsking(null)} onDone={done} />
       )}
     </div>
   );

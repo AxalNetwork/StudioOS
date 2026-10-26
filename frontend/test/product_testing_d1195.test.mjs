@@ -160,7 +160,9 @@ test('Review: what waits on HQ, what is approved and not open, and what was sent
     assert.ok(v.text('testing-waiting').includes('Product delta') && v.text('testing-waiting').includes('Product epsilon'));
     assert.ok(v.text('testing-approved').includes('Product eta'));
     assert.ok(v.text('testing-sent-back').includes('Say what testers will be asked to install.'));
-    assert.ok(!v.by('testing-all') && !v.by('testing-new-programme'));
+    assert.ok(!v.by('testing-all'));
+    // D1202: New program is the page header's, on every tab; it opens over Programs.
+    assert.ok(v.by('testing-new-programme'));
   } finally { await v.close(); }
 });
 
