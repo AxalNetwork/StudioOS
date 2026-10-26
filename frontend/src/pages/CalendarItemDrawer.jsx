@@ -234,7 +234,7 @@ export default function CalendarItemDrawer({ kind, id, onClose, onChanged, canCo
   }
   if (!item) {
     return (
-      <Lightbox label="Calendar item" title="Calendar item" onClose={onClose} width={640} phone="sheet" testId="cal-item-drawer">
+      <Lightbox label="Calendar item" title="Calendar item" onClose={onClose} width={640} testId="cal-item-drawer">
         <div className="px-5 py-6" data-testid="cal-item-state">
           {read.status === 'error'
             ? <Unreadable what="This item" claim="That is not the same as it not existing." onRetry={load} />
@@ -280,7 +280,7 @@ export default function CalendarItemDrawer({ kind, id, onClose, onChanged, canCo
 
   return (
     <>
-      <Lightbox label={item.title || kindWord} eyebrow={null} title={item.title || 'Not recorded'} sub={head} onClose={onClose} width={640} phone="sheet" footer={footer} testId="cal-item-drawer">
+      <Lightbox label={item.title || kindWord} eyebrow={null} title={item.title || 'Not recorded'} sub={head} onClose={onClose} width={640} footer={footer} testId="cal-item-drawer">
         <div className={`flex flex-col ${cancelled ? 'opacity-90' : ''}`} data-testid={`cal-item-${item.kind}`}>
           {cancelled ? (
             <Section testId="cal-item-cancel-reason">
