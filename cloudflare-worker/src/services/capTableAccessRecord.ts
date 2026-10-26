@@ -32,8 +32,10 @@ export function recordAccessView(record: RecordRead, level: Exclude<AccessLevel,
   if (fd.available && fd.unallocated_pool != null) groups.set('Option pool', (groups.get('Option pool') ?? 0) + fd.unallocated_pool);
   const summary = fd.available ? [...groups].map(([group, shares]) => ({ group, pct: pct(shares) })) : [];
   const splitReason = fd.available ? null : fd.sentence || 'Fully diluted ownership is not recorded.';
-  const copyPosition = (h: typeof positions[number]) => ({ holder: h.holder, type: h.type, shares: h.shares, pct: h.pct });
   const selected = recordHolder(record, holderRef);
+  // D1027: a grant that names the caller's holder marks the caller's own rows, and only theirs (CT15's "Your position").
+  const copyPosition = (h: typeof positions[number]) => ({ holder: h.holder, type: h.type, shares: h.shares, pct: h.pct,
+    ...(selected && h.identity === key(selected) ? { mine: true } : {}) });
   const mine = (h: Holder | null | undefined) => h != null && selected != null && key(h) === key(selected);
   const instrument = (i: RecordRead['instruments']['rows'][number]) => ({
     instrument: i.kind, amount: i.amount_cents == null ? null : i.amount_cents / 100,
