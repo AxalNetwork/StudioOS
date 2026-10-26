@@ -137,5 +137,5 @@ Every provider call is stubbed or refused; all rows are synthetic.
 owner-check explanations, fixed-expiry KYB reconciliation and invalidation,
 studio/role/step-up/freeze refusals, masked/audited showings, private Access-gated
 R2 streams, rejection purge/retry, atomic audit/upload rollback, source discovery,
-imports and licensed studios. Eighteen injected route faults run against the same
+imports and licensed studios. Twenty injected route faults run against the same
 scenarios before and after restoration. All external fetches are refused.

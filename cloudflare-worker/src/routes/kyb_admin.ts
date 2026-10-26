@@ -61,10 +61,12 @@ async function find(c: Ctx, user: User): Promise<Row | null> {
     && (row.linked_user_id === user.id || declaredOwners(row)?.some(p => p.user_id === user.id))) {
     throw new Error('Forbidden');
   }
-  // Another administrator's legal entity is Super Admin data.
-  if (row?.linked_user_id && row.linked_user_id !== user.id && !isSuperAdmin(user)) {
-    const target = await c.env.DB.prepare('SELECT role FROM users WHERE id = ?').bind(row.linked_user_id).first<{ role: string }>();
-    if (target?.role === 'admin') await requireSuperAdmin(c);
+  // Another administrator's entity or verified owner link is Super Admin data.
+  if (row && !isSuperAdmin(user)) {
+    const ids = [row.linked_user_id, ...(declaredOwners(row) || []).map(p => p.user_id)].filter(positive);
+    const target = await c.env.DB.prepare("SELECT id FROM users WHERE role = 'admin' AND id != ? AND id IN (SELECT value FROM json_each(?)) LIMIT 1")
+      .bind(user.id, JSON.stringify(ids)).first<{ id: number }>();
+    if (target) await requireSuperAdmin(c);
   }
   return row;
 }
@@ -172,7 +174,9 @@ kyb.get('/', async c => {
   const result = await c.env.DB.prepare(
     `SELECT b.* FROM kyb_businesses b
      WHERE (b.studio_code IS NULL OR b.studio_code = ?) AND (b.kind != 'licensed_studio' OR ? = 1)
-       AND (? = 1 OR NOT EXISTS (SELECT 1 FROM users u WHERE u.id = b.linked_user_id AND u.role = 'admin' AND u.id != ?))
+       AND (? = 1 OR NOT EXISTS (SELECT 1 FROM users u WHERE (u.id = b.linked_user_id OR u.id IN
+         (SELECT json_extract(o.value,'$.user_id') FROM json_each(CASE WHEN json_valid(b.case_owners_json) THEN b.case_owners_json ELSE '[]' END) o))
+         AND u.role = 'admin' AND u.id != ?))
        AND (? = '' OR b.status = ?) AND (? = '' OR b.kind = ?) AND (? = '' OR b.jurisdiction = ?)
        AND (? = '' OR instr(lower(b.entity_name), lower(?)) > 0 OR lower(COALESCE(b.registration_number,'')) = lower(?))
      ORDER BY julianday(COALESCE(b.submitted_at,b.created_at)), b.id LIMIT ? OFFSET ?`,
@@ -180,7 +184,9 @@ kyb.get('/', async c => {
   const counts = await c.env.DB.prepare(
     `SELECT b.status, COUNT(*) AS n, MIN(COALESCE(b.submitted_at,b.created_at)) AS oldest_at FROM kyb_businesses b
      WHERE (b.studio_code IS NULL OR b.studio_code = ?) AND (b.kind != 'licensed_studio' OR ? = 1)
-       AND (? = 1 OR NOT EXISTS (SELECT 1 FROM users u WHERE u.id = b.linked_user_id AND u.role = 'admin' AND u.id != ?))
+       AND (? = 1 OR NOT EXISTS (SELECT 1 FROM users u WHERE (u.id = b.linked_user_id OR u.id IN
+         (SELECT json_extract(o.value,'$.user_id') FROM json_each(CASE WHEN json_valid(b.case_owners_json) THEN b.case_owners_json ELSE '[]' END) o))
+         AND u.role = 'admin' AND u.id != ?))
        AND (? = '' OR b.status = ?) AND (? = '' OR b.kind = ?) AND (? = '' OR b.jurisdiction = ?)
        AND (? = '' OR instr(lower(b.entity_name), lower(?)) > 0 OR lower(COALESCE(b.registration_number,'')) = lower(?))
      GROUP BY b.status`,

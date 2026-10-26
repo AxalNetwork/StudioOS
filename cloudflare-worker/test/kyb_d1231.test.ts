@@ -365,6 +365,19 @@ async function resubmissionScenario(router = kyb) {
 }
 test('non-decision edits cannot revive a prior rejection, review metadata or stale owner links', () => resubmissionScenario());
 
+async function staffBoundaryScenario(router = kyb) {
+  const f = fixture(router);
+  try {
+    f.db.exec(`UPDATE kyb_cases SET owners_json='[{"name":"Super owner","ownership_pct":100,"user_id":1}]' WHERE uid='account-3'`);
+    assert.equal((await f.call('/account-3')).status,403);
+    assert.equal((await f.call('/account-3/sensitive/address')).status,403);
+    const queue = await f.call('/?q=Investor');
+    assert.equal(queue.body.total,0); assert.equal(queue.body.items.length,0);
+    assert.equal((await f.call('/account-3','GET',undefined,1)).status,200);
+  } finally { f.db.close(); }
+}
+test('another administrator in the verified owner links remains Super Admin data', () => staffBoundaryScenario());
+
 // Exercise the same behavioural assertions with faults injected, then restored.
 // Data-URL modules keep mutations out of the working tree and concurrent tests.
 async function mutated(from: string, to: string) {
@@ -394,6 +407,8 @@ test('D1231 mutation checks: the guards, audit, redaction and decision paths fai
     ['if (account.id === user.id)', 'if (false)', selfReviewScenario],
     ["status = 'in_review',\n      registry_matches", "status = status,\n      registry_matches", resubmissionScenario],
     ['row.case_owners_json ?? null', 'row.owners_json ?? null', resubmissionScenario],
+    ['if (target) await requireSuperAdmin(c);', 'if (false) await requireSuperAdmin(c);', staffBoundaryScenario],
+    ['u.id = b.linked_user_id OR u.id IN', 'u.id = b.linked_user_id AND u.id IN', staffBoundaryScenario],
   ];
   for (const [from,to,scenario] of mutations) {
     await scenario();
