@@ -600,6 +600,7 @@ function roomFixture() {
   addColumnsFrom(db, stripForeignKeys(sqlOf('596_data_room_file_source.sql')), 'data_room_files');
   addColumnsFrom(db, stripForeignKeys(sqlOf('442_raise_cycle_stores.sql')), 'data_room_files');
   withGrantFolders(db); // D1103: migration 594
+  addColumnsFrom(db, stripForeignKeys(sqlOf('622_dd_documents_due_reminders.sql')), 'dd_requests'); // D1248: withdrawn requests take no file
   const u = db.prepare('INSERT INTO users (id, role, founder_id, name, email) VALUES (?,?,?,?,?)');
   u.run(R_FOUNDER, 'founder', 300, 'Fen Founder', 'fen@example.test');
   u.run(COMMITTED, 'investor', null, 'Cal Committed', 'Cal@Example.test');
