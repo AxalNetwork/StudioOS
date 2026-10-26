@@ -81,6 +81,24 @@ export function requireGrants(data) {
   if (!Array.isArray(data?.licences)) throw new Error('The program grants read was incomplete.');
   return data;
 }
+/** D984's `GET /api/licence/mine/programs`: a list, or null with the reason no copy is held. */
+export function requirePrograms(data) {
+  const listed = Array.isArray(data?.programs) || (data?.programs === null && typeof data?.reason === 'string');
+  if (typeof data?.linked !== 'boolean' || !listed) throw new Error('The programs read was incomplete.');
+  return data;
+}
+/**
+ * D1280: the Spin-Out Lab's row in the studio's own programs read, as Settings
+ * draws it for a branch Admin. `unlinked`: no licence binds the account, so HQ
+ * runs the Lab; `no_copy`: a branch HQ has not sent its programs yet; `none`:
+ * the studio holds no grant; `grant`: the row, with its grant.
+ */
+export function labGrantOf(data) {
+  if (data.linked === false) return { kind: 'unlinked', line: data.reason || 'Your account is not linked to a licence. On HQ-held accounts, HQ runs every program.' };
+  if (!Array.isArray(data.programs)) return { kind: 'no_copy', line: data.reason };
+  const program = data.programs.find((p) => p?.program_key === 'spinout-lab') || null;
+  return program?.grant ? { kind: 'grant', program } : { kind: 'none', program };
+}
 export function requireSupport(data) {
   if (!Array.isArray(data?.sessions)) throw new Error('The support sessions read was incomplete.');
   return data;
