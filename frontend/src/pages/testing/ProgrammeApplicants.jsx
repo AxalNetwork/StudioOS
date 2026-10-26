@@ -122,7 +122,7 @@ export default function ProgrammeApplicants({ uid, api, classes = {}, onChanged 
         </ul>
       )}
       {asking && (
-        <TestingDialog spec={dialogFor(asking.kind, { p: programme, a: asking.application })} api={api}
+        <TestingDialog key={`${asking.kind}-${asking.application?.uid}`} spec={dialogFor(asking.kind, { p: programme, a: asking.application })} api={api}
           ctx={{ p: programme, a: asking.application }} onClose={() => setAsking(null)} onDone={done} />
       )}
     </div>

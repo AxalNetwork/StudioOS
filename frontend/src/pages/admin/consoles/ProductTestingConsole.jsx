@@ -54,6 +54,7 @@ export function ProductTestingPanel({ api = adminTestingApi, view = 'programs' }
 /** The programme's square: its logo (D1199), else its letter when there is none or it does not load. */
 export function Logo({ p, size = 28 }) {
   const [failed, setFailed] = useState(!p?.logo_key);
+  useEffect(() => { setFailed(!p?.logo_key); }, [p?.logo_key]);
   const box = { width: size, height: size };
   if (failed) {
     return (
@@ -128,7 +129,7 @@ export function ProductTestingConsole({ api = adminTestingApi, view = 'programs'
           <ProgrammeForm programme={dialog.programme} onSave={save} onCancel={close} classes={FORM_CLASSES} logo />
         </Lightbox>
       )}
-      {spec && <TestingDialog spec={spec} api={api} ctx={{ p: dialog.programme }} onClose={() => setDialog(null)} onDone={done} />}
+      {spec && <TestingDialog key={`${spec.key}-${dialog.programme?.uid}`} spec={spec} api={api} ctx={{ p: dialog.programme }} onClose={() => setDialog(null)} onDone={done} />}
     </div>
   );
 }
