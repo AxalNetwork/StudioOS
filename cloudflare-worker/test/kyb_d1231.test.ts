@@ -587,3 +587,40 @@ test('the member status assertion catches legacy status projection', async () =>
   await assert.rejects(() => mutated('reviewed.status, k.entity_name','k.status, k.entity_name','trust').then(memberStatusScenario), {code:'ERR_ASSERTION'});
   await memberStatusScenario();
 });
+
+// D1232 (#3240): a KYB approval takes HQ's KYB period, and the KYB case's rows read in the KYC audit by business.
+test('D1232: a KYB approval stamps the KYB period in force; its rows read in the audit by business, never by value', async () => {
+  const { kycAudit, auditCsv, kycAuditRows, auditWindow } = await import('../src/services/kycGovernance.ts');
+  const { monthsToMs } = await import('../src/services/trust.ts');
+  const f = fixture();
+  try {
+    f.db.exec("UPDATE users SET kyc_status='approved' WHERE id=6");
+    f.db.exec("INSERT INTO kyc_renewal_periods (obligation_key, months, updated_by) VALUES ('kyb_v1', 18, 1)");
+    const before = Date.now();
+    const ok = await approve(f);
+    assert.equal(ok.status, 200, ok.text);
+    const at = Date.parse(ok.body.expires_at);
+    assert.ok(at >= before + monthsToMs(18) && at <= Date.now() + monthsToMs(18), 'HQ\'s 18 months, not a fixed 2 years');
+    await resyncKycKyb(f.env);
+    assert.equal(statusOf(f).expires_at, ok.body.expires_at);
+    f.db.exec("UPDATE kyc_renewal_periods SET months = 6 WHERE obligation_key = 'kyb_v1'");
+    await resyncKycKyb(f.env);
+    assert.equal(statusOf(f).expires_at, ok.body.expires_at, 'a later period never moves a stamped date');
+
+    assert.equal((await f.call('/account-3/sensitive/address')).status, 200);
+    const audit = await kycAudit(f.env, {});
+    const kyb = audit.items.filter((r: any) => r.action.startsWith('kyb_') || r.business);
+    const approved = kyb.find((r: any) => r.action === 'kyb_approved');
+    assert.equal(approved?.word, 'Approved');
+    assert.equal(approved?.kind, 'decision');
+    assert.deepEqual(approved?.business, { uid: 'account-3', name: 'Investor Ltd' });
+    assert.equal(approved?.case, null, 'a business uid is never read as an account id');
+    const shown = kyb.find((r: any) => r.action === 'kyc_field_shown');
+    assert.equal(shown?.detail, 'Registered address');
+    assert.deepEqual(shown?.business, { uid: 'account-3', name: 'Investor Ltd' });
+    assert.equal((await kycAudit(f.env, { q: 'investor ltd' })).total, kyb.length);
+    const csv = auditCsv(await kycAuditRows(f.env, auditWindow()));
+    assert.match(csv, /,Approved,Investor Ltd,/);
+    for (const secret of ['secret-street', 'secret-number-9988', 'Owner B is']) assert.equal(JSON.stringify(audit).includes(secret) || csv.includes(secret), false, secret);
+  } finally { f.db.close(); }
+});

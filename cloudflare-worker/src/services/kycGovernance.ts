@@ -261,8 +261,9 @@ export async function kycPeriodsWrite(env: Env, adminId: number, actor: string, 
  * is a look, a decision or a change to the case (assignment, a note). ONLY THE
  * ADMIN-SIDE ROWS: `kyc_approved`, `kyc_rejected` and `kyc_submitted` are the
  * member's own rows, and `kyc_expired` is the system's with the member in
- * `user_id`, so reading them would name a member as the admin. Part 3 adds its
- * actions here as it writes them.
+ * `user_id`, so reading them would name a member as the admin. D1231's KYB
+ * cases (`kyb_admin.ts`) write admin-side rows only, each naming its business
+ * by uid in JSON details, so all of them are listed.
  */
 export const KYC_AUDIT_ACTIONS: Record<string, { word: string; kind: 'look' | 'decision' | 'change' }> = {
   kyc_queue_access: { word: 'Opened the list', kind: 'look' },
@@ -283,7 +284,31 @@ export const KYC_AUDIT_ACTIONS: Record<string, { word: string; kind: 'look' | 'd
   kyc_recheck_by_admin: { word: 'Asked to verify again', kind: 'decision' },
   kyc_case_assigned: { word: 'Assigned', kind: 'change' },
   kyc_note_added: { word: 'Added a note', kind: 'change' },
+  kyb_queue_access: { word: 'Opened the business list', kind: 'look' },
+  kyb_record_access: { word: 'Opened a business case', kind: 'look' },
+  kyb_document_access: { word: 'Viewed a document', kind: 'look' },
+  kyb_approved: { word: 'Approved', kind: 'decision' },
+  kyb_rejected: { word: 'Rejected', kind: 'decision' },
+  kyb_documents_requested: { word: 'Asked for documents', kind: 'decision' },
+  kyb_import_dismissed: { word: 'Dismissed an import', kind: 'decision' },
+  kyb_import_linked: { word: 'Linked an import', kind: 'change' },
+  kyb_owners_updated: { word: 'Updated the owners', kind: 'change' },
+  kyb_document_uploaded: { word: 'Added a document', kind: 'change' },
+  kyb_studio_recorded: { word: 'Recorded a studio', kind: 'change' },
 };
+
+/** A KYB row's JSON details (`kyb_admin.ts`'s `{ case, outcome, field? }`), or null for a KYC sentence. */
+function kybDetails(details: unknown): { case?: unknown; field?: unknown } | null {
+  const d = String(details || '');
+  if (!d.startsWith('{')) return null;
+  try { const v = JSON.parse(d); return v && typeof v === 'object' ? v : null; } catch { return null; }
+}
+
+/** The business a KYB row is about: its case uid, as `kyb_admin.ts` writes it. */
+export function businessUidOf(details: unknown): string | null {
+  const c = kybDetails(details)?.case;
+  return typeof c === 'string' && /^[a-z_]+-\d+$/.test(c) ? c : null;
+}
 
 /**
  * The case a row is about: the LAST `user_id=<n>` in its sentence, because an
@@ -297,6 +322,7 @@ export function caseIdOf(details: unknown): number | null {
 }
 
 const FIELD_LABELS: Record<string, string> = { date_of_birth: 'Date of birth', id_number: 'ID number', address: 'Address', phone: 'Phone' };
+const KYB_FIELD_LABELS: Record<string, string> = { address: 'Registered address', registration_number: 'Registration number', owner_dob: "An owner's date of birth" };
 
 /** What a row may say beyond its action, rebuilt from parts this code wrote. Never the sentence itself. */
 export function auditDetail(action: string, details: unknown): string | null {
@@ -306,6 +332,8 @@ export function auditDetail(action: string, details: unknown): string | null {
     case 'kyc_queue_access': case 'kyc_renewals_access': case 'kyc_audit_access':
       return count ? `${count} ${count === '1' ? 'row' : 'rows'}` : null;
     case 'kyc_field_shown': {
+      const kyb = kybDetails(details);
+      if (kyb) return typeof kyb.field === 'string' && KYB_FIELD_LABELS[kyb.field] ? KYB_FIELD_LABELS[kyb.field] : null;
       const f = /showed (\w+) on/.exec(d)?.[1];
       return f && FIELD_LABELS[f] ? FIELD_LABELS[f] : null;
     }
@@ -342,7 +370,8 @@ export class AuditQueryError extends Error {
 /** The window asked for: ISO dates, `to` exclusive of the day after, at most 366 days; default the last 30. */
 export function auditWindow(fromRaw?: string, toRaw?: string, now = Date.now()) {
   const day = (s?: string) => (s && /^\d{4}-\d{2}-\d{2}$/.test(s) ? Date.parse(`${s}T00:00:00Z`) : NaN);
-  const to = toRaw ? day(toRaw) + DAY_MS : now;
+  // The default ends with the current second: stored times are whole seconds, so a row written this second is in it.
+  const to = toRaw ? day(toRaw) + DAY_MS : Math.floor(now / 1000) * 1000 + 1000;
   const from = fromRaw ? day(fromRaw) : to - 30 * DAY_MS;
   if ((fromRaw && !Number.isFinite(from)) || (toRaw && !Number.isFinite(to))) throw new AuditQueryError('Dates are YYYY-MM-DD.');
   if (from >= to) throw new AuditQueryError('The start comes before the end.');
@@ -374,9 +403,16 @@ export async function kycAuditRows(env: Env, win: { from: Date; to: Date }) {
     const u = await env.DB.prepare('SELECT id, name FROM users WHERE id IN (SELECT value FROM json_each(?))').bind(JSON.stringify(caseIds)).all<any>();
     for (const x of u.results || []) names.set(Number(x.id), x.name ?? null);
   }
+  const uids = [...new Set(raw.map((r) => businessUidOf(r.details)).filter((u): u is string => u != null))];
+  const businesses = new Map<string, string | null>();
+  if (uids.length) {
+    const b = await env.DB.prepare('SELECT uid, entity_name FROM kyb_businesses WHERE uid IN (SELECT value FROM json_each(?))').bind(JSON.stringify(uids)).all<any>();
+    for (const x of b.results || []) businesses.set(String(x.uid), x.entity_name ?? null);
+  }
   return raw.map((r) => {
     const a = KYC_AUDIT_ACTIONS[r.action];
     const caseId = caseIdOf(r.details);
+    const uid = businessUidOf(r.details);
     const assignee = assigneeOf(r);
     return {
       id: Number(r.id),
@@ -386,6 +422,7 @@ export async function kycAuditRows(env: Env, win: { from: Date; to: Date }) {
       word: a.word,
       kind: a.kind,
       case: caseId ? { id: caseId, name: names.get(caseId) ?? null } : null,
+      business: uid ? { uid, name: businesses.get(uid) ?? null } : null,
       detail: assignee ? `Assigned to ${names.get(assignee) ?? `account ${assignee}`}` : auditDetail(r.action, r.details),
     };
   });
@@ -410,7 +447,7 @@ export async function kycAudit(env: Env, opts: { from?: string; to?: string; act
   const listed = all.filter((r) => (!opts.action || r.action === opts.action)
     && (opts.admin == null || r.admin.id === opts.admin)
     && (opts.caseId == null || r.case?.id === opts.caseId)
-    && (!q || [r.admin.name, r.case?.name, r.word, r.detail].some((x) => String(x || '').toLowerCase().includes(q))));
+    && (!q || [r.admin.name, r.case?.name, r.business?.name, r.word, r.detail].some((x) => String(x || '').toLowerCase().includes(q))));
   const pageSize = Math.min(100, Math.max(1, opts.pageSize ?? 25));
   const page = Math.max(1, opts.page ?? 1);
   return {
@@ -435,7 +472,7 @@ const csvCell = (v: unknown) => {
 /** The export's CSV: when, admin, action, case and detail. Names and actions only. */
 export function auditCsv(rows: Awaited<ReturnType<typeof kycAuditRows>>): string {
   const head = ['When (UTC)', 'Admin', 'Action', 'Case', 'Detail'];
-  const body = rows.map((r) => [r.at, r.admin.name ?? (r.admin.id == null ? '' : `Account ${r.admin.id}`), r.word, r.case ? (r.case.name ?? `Account ${r.case.id}`) : '', r.detail ?? '']);
+  const body = rows.map((r) => [r.at, r.admin.name ?? (r.admin.id == null ? '' : `Account ${r.admin.id}`), r.word, r.case ? (r.case.name ?? `Account ${r.case.id}`) : r.business ? (r.business.name ?? r.business.uid) : '', r.detail ?? '']);
   return [head, ...body].map((line) => line.map(csvCell).join(',')).join('\r\n') + '\r\n';
 }
 

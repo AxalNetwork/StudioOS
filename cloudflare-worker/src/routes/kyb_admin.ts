@@ -6,6 +6,7 @@ import { branchOf, BRANCH_SUSPENDED } from '../util/branch';
 import { hashEmail } from '../util/hashEmail';
 import { AUTH_ERROR_STATUSES, STEP_UP_REQUIRED, ADMIN_FROZEN, stepUpRefusalBody, branchSuspendedBody, adminFrozenBody } from '../util/authErrors';
 import { maskFor } from '../services/sensitiveFields';
+import { monthsToMs, renewalPeriods } from '../services/trust';
 import { requireCfAccess } from '../middleware/cfAccess';
 
 type Ctx = Context<{ Bindings: Env }>;
@@ -327,7 +328,8 @@ kyb.patch('/:id/approve', async c => {
     return c.json({ error: 'unchecked_owner_reason_required', detail: 'Explain each owner whose identity check is not approved.' }, 400);
   }
   await materialize(c, row);
-  const expires = new Date(Date.now() + 2 * 365 * 86400000).toISOString();
+  // D1232: the KYB period in force at approval (HQ's setting, else 24 months); a later change never moves this date.
+  const expires = new Date(Date.now() + monthsToMs((await renewalPeriods(c.env)).kyb_v1.months)).toISOString();
   const changed = await commit(c, user, row, c.env.DB.prepare(
     `UPDATE kyb_cases SET status = 'approved', registry_matches = 1, good_standing = ?, unchecked_owner_reason = ?,
       decision_reason = ?, source_revision = ?, reviewed_by = ?, reviewed_at = CURRENT_TIMESTAMP, expires_at = ?,

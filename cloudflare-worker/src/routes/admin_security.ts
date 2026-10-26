@@ -451,6 +451,8 @@ const ACTOR_SIDE_ACTIONS = [
   'kyc_record_access', 'kyc_queue_access', 'partner_profile_access',
   'kyc_field_shown', 'kyc_renewals_access', 'kyc_audit_access', 'kyc_periods_changed', 'kyc_sent_to_hq', 'kyc_hq_decided',
   'kyc_case_access', 'kyc_figures_access', 'kyc_case_assigned', 'kyc_note_added', 'kyc_needs_info_by_admin', 'kyc_recheck_by_admin',
+  'kyb_queue_access', 'kyb_record_access', 'kyb_document_access', 'kyb_approved', 'kyb_rejected', 'kyb_documents_requested',
+  'kyb_import_dismissed', 'kyb_import_linked', 'kyb_owners_updated', 'kyb_document_uploaded', 'kyb_studio_recorded',
   'contract_resent', 'contract_voided',
   'hq_branch_support_session',
   'spinout_moderation',
@@ -564,12 +566,12 @@ const FEED_AUDIT_EXPORTS_SQL = `SELECT a.id, a.action, a.report_type, a.format, 
     WHERE a.action LIKE '%export%'
     ORDER BY a.exported_at DESC, a.id DESC LIMIT ?`;
 
-/** Twenty-five placeholders, one per entry in ACTOR_SIDE_ACTIONS (D625 added the three identity reads; D1232 the KYC value shown, renewals, audit, periods, D1230's Send to HQ and its decision, and D1229's case, figures, assignment, note, ask for information and re-check). */
+/** Thirty-six placeholders, one per entry in ACTOR_SIDE_ACTIONS (D625 added the three identity reads; D1232 the KYC value shown, renewals, audit, periods, D1230's Send to HQ and its decision, D1229's case, figures, assignment, note, ask for information and re-check, and D1231's eleven KYB case actions). */
 const FEED_ACTIVITY_ACTOR_SIDE_SQL = `SELECT l.id, l.action, l.details, l.created_at, l.user_id,
           u.name AS actor_name, u.email AS actor_email
      FROM activity_logs l
      LEFT JOIN users u ON u.id = l.user_id
-    WHERE l.action IN (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    WHERE l.action IN (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     ORDER BY l.created_at DESC, l.id DESC LIMIT ?`;
 
 /** One placeholder, one per entry in SUSPENSION_ACTIVITY_ACTIONS. */
