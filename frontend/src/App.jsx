@@ -2674,6 +2674,9 @@ function AppInner() {
       {/* D1309 (#2507, #2515, #2525): Record a session's channels, each at its own address (recordChannels.js).
           Static, so /validate/:slug/:id never reads them as a record. */}
       <Route path="/validate/record/whatsapp" element={guard(labRoles(['admin', 'founder']), <RecordChannelPage />)} />
+      {/* D862 (#2507): WhatsApp's tabs are paths under its address. */}
+      <Route path="/validate/record/whatsapp/:tab" element={guard(labRoles(['admin', 'founder']), <RecordChannelPage />)} />
+      <Route path="/validate/record/whatsapp/:tab/:id" element={guard(labRoles(['admin', 'founder']), <RecordChannelPage />)} />
       <Route path="/validate/record/telegram" element={guard(labRoles(['admin', 'founder']), <RecordChannelPage />)} />
       <Route path="/validate/record/calls" element={guard(labRoles(['admin', 'founder']), <RecordChannelPage />)} />
       <Route path="/validate/:slug" element={guard(labRoles(['admin', 'founder']), <CycleRoute cycle="validate" />)} />
