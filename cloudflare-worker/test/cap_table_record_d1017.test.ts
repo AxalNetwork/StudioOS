@@ -356,6 +356,7 @@ test('an admin writes only with a reason, which the founder reads in the history
     const bare = await call(f, ADMIN, '/record/10/issuances', 'POST', body);
     assert.equal(bare.status, 400);
     assert.deepEqual(bare.body.missing, ['reason']);
+    assert.equal((await call(f, ADMIN, '/record/10/issuances', 'POST', {...body,reason:'check'})).status,400,'a correction needs the full support reason');
     assert.equal((await call(f, ADMIN, '/record/10/classes', 'POST', { name: 'B', kind: 'common' })).body.error, 'reason_required');
     assert.equal((await call(f, ADMIN, '/record/10/currency', 'PUT', { currency: 'EUR' })).body.error, 'reason_required');
     const fixed = await call(f, ADMIN, '/record/10/issuances', 'POST', { ...body, reason: 'Support ticket 12: the founder’s certificate was missed' });

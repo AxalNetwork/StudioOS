@@ -2,7 +2,7 @@ import React, { useEffect, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { roundCallsApi } from '../../lib/api/roundCalls';
 import { reportError } from '../../lib/log';
-import { NOT_STORED } from './recordSetup';
+import { callHref } from '../raise/calls/callsModel';
 import Lightbox from '../../ui/Lightbox';
 import ActionSheet, { primary, ghost } from '../../ui/ActionSheet';
 import { useCallRead, CallReadState, callButton, callInput, moneyCents, dollarsToCents, callDate } from './roundCallParts';
@@ -17,6 +17,12 @@ import { useCallRead, CallReadState, callButton, callInput, moneyCents, dollarsT
  * AVAILABILITY FIRST: the sheet reads `/round-calls/availability` before
  * anything else. While round calls are not enabled it says so and makes no
  * other call.
+ *
+ * D1224 (#3223) — the canvas's new-call sheet (CLS4–CLS7): the round with
+ * each seeded field's source, materials, the pipeline with investors not on
+ * Axal greyed, the preview with counsel's four states, and Send with what is
+ * missing acknowledged one by one, then its result. A saved draft's address is
+ * `callHref`'s, under Calls in the Raise shell. A refusal keeps every entry.
  */
 export const ROUND_CALL_STEPS=['The round','Materials','Audience','Preview','Send'];
 
@@ -25,7 +31,6 @@ export const CALL_FIELDS=Object.freeze({key_terms:true,counsel_request:true,coun
 
 const INSTRUMENTS={safe:'SAFE',equity:'Equity',convertible_note:'Convertible note'};
 const TERM_LABELS={cap:'Valuation cap · USD',discount:'Discount · %',pre_money:'Pre-money valuation · USD'};
-const pill='rounded-full border border-axal-hairline px-2 py-0.5 text-[11px] text-axal-muted';
 
 /** "$8M", "$250k", "$900": the way counsel reads a term. */
 export function shortUsd(value) {
@@ -175,6 +180,7 @@ function RoundCallFlow({projectId,onClose,initialCall}) {
   const [step,setStep]=useState(0),[chosen,setChosen]=useState([]),[includeMatches,setIncludeMatches]=useState(false);
   const [matches,setMatches]=useState(null),[page,setPage]=useState(null),[editing,setEditing]=useState(null),[choosing,setChoosing]=useState(false);
   const [busy,setBusy]=useState(false),[error,setError]=useState(''),[outcome,setOutcome]=useState(null),[note,setNote]=useState(null);
+  const [dismissed,setDismissed]=useState(false),[acks,setAcks]=useState([]),[cleared,setCleared]=useState(false),[savedDraft,setSavedDraft]=useState(false);
   const saved=useRef(null),touched=useRef(false),[matchRun,setMatchRun]=useState(0);
   useEffect(()=>{
     if(!context.data||!resume.data)return;
@@ -215,6 +221,8 @@ function RoundCallFlow({projectId,onClose,initialCall}) {
       minimum_cheque_cents:minimum,target_close:fields.target,deck_id:deck?.id??null,deck_version:deck?.version??null,
       data_room_project_uid:fields.room?context.data.data_room?.project_uid??null:null};
     const result=uid?await roundCallsApi.save(uid,body):await roundCallsApi.create(body);
+    // D1224: saving changed terms clears counsel's approval on the Worker; say so in the preview.
+    if(page?.counsel_approved&&saved.current&&!same(fields,saved.current,ROUND_KEYS))setCleared(true);
     setUid(result.uid);saved.current=fields;return result.uid;
   }
   async function next(){
@@ -228,43 +236,102 @@ function RoundCallFlow({projectId,onClose,initialCall}) {
   }
   const missing=page?.readiness?.filter(item=>!item.ready)||[];
   async function send(){await run(async()=>{setOutcome(await roundCallsApi.send(uid,{acknowledge_missing:missing.length>0}));});}
-  const on={change,next,send,back:()=>setStep(n=>Math.max(0,n-1)),goto:n=>setStep(n),edit:setEditing,choosing:()=>setChoosing(v=>!v),
+  async function saveDraft(){
+    const gap=firstMissingRow(fields);if(gap){setError('Complete the round name, amounts, instrument, terms and target close to save a draft.');return;}
+    await run(async()=>{await persist(ROUND_KEYS);setSavedDraft(true);});
+  }
+  const on={change,next,send,saveDraft,
+    acceptTerms:text=>{setFields(f=>acceptPlainTerms(f,text));},dismissTerms:()=>setDismissed(true),
+    ack:key=>setAcks(list=>list.includes(key)?list.filter(k=>k!==key):[...list,key]),back:()=>setStep(n=>Math.max(0,n-1)),goto:n=>setStep(n),edit:setEditing,choosing:()=>setChoosing(v=>!v),
     recheck:()=>run(async()=>setPage(await roundCallsApi.page(uid))),
-    requestCounsel:()=>run(async()=>{await roundCallsApi.requestCounsel(uid,page.call.revision);setPage(await roundCallsApi.page(uid));}),retryMatches:()=>setMatchRun(n=>n+1),
+    requestCounsel:()=>run(async()=>{await roundCallsApi.requestCounsel(uid,page.call.revision);setCleared(false);setPage(await roundCallsApi.page(uid));}),retryMatches:()=>setMatchRun(n=>n+1),
     includeMatches:value=>{touched.current=true;setIncludeMatches(value);},
     choose:id=>{touched.current=true;setChosen(values=>values.includes(id)?values.filter(value=>value!==id):[...values,id]);}};
   const ready=context.data&&resume.data;
-  if(ready&&!resume.data.open)return <RoundCallSheetView state={{step,fields,context:context.data,chosen,includeMatches,matches,page,busy,error,outcome,uid,editing,choosing,note,projectId}} on={on} onClose={onClose}/>;
+  if(ready&&!resume.data.open)return <RoundCallSheetView state={{step,fields,context:context.data,chosen,includeMatches,matches,page,busy,error,outcome,uid,editing,choosing,note,projectId,dismissed,acks,cleared,saved:savedDraft}} on={on} onClose={onClose}/>;
   return <ActionSheet {...CALL_SHEET} onClose={onClose}><CallReadState read={context}><CallReadState read={resume}>{ready&&<OpenCallNotice call={resume.data.open}/>}</CallReadState></CallReadState></ActionSheet>;
 }
 
 export function OpenCallNotice({call}) {
   return <div role="status" className="space-y-3"><p className="font-semibold">This venture has an open call · {call.name} · closes {callDate(call.target_close)}</p>
-    <Link className={primary} to={'/raise/calls/'+encodeURIComponent(call.uid)}>Open the call</Link></div>;
+    <Link className={primary} to={callHref(call)}>Open the call</Link></div>;
 }
 
-function Row({label,value,editing,onEdit,children,action='Edit'}) {
-  return <div className="flex items-start justify-between gap-3 border-b border-axal-hairline py-2">
-    <div className="min-w-0 flex-1"><p className="text-xs text-axal-muted">{label}</p>{editing?children:<p className="break-words">{value??'Not recorded'}</p>}</div>
-    <button type="button" className={callButton} onClick={onEdit}>{editing?'Done':action}</button></div>;
+/**
+ * D1224 (#3223) — the plain-words terms, written only from the fields the
+ * founder typed or a record filled: the amount, the instrument and its key
+ * terms, the minimum cheque and the close. It adds no figure of its own, so a
+ * money term is never proposed (#2431 `money_term`); null until every one of
+ * those fields is set. Eadwyn's own wording waits for a Worker route (D1224 §3).
+ */
+export function plainTerms(f) {
+  const amount=wholeDollars(f.amount),minimum=wholeDollars(f.minimum),close=longDate(f.target),kind=INSTRUMENT_PHRASE[f.instrument];
+  if(!amount||!minimum||!close||!kind)return null;
+  const keys=TERM_KEYS[f.instrument]||[];
+  const terms=[keys.includes('cap')&&wholeDollars(f.cap)&&'a valuation cap of '+wholeDollars(f.cap),
+    keys.includes('discount')&&percent(f.discount==null||f.discount===''?null:Number(f.discount)/100)&&'a discount of '+percent(Number(f.discount)/100),
+    keys.includes('pre_money')&&wholeDollars(f.pre_money)&&'a pre-money valuation of '+wholeDollars(f.pre_money)].filter(Boolean);
+  return `${kind} for up to ${amount}${terms.length?' with '+terms.join(' and '):''}. The smallest cheque is ${minimum}, and the call closes on ${close}.`;
+}
+const INSTRUMENT_PHRASE={safe:'A SAFE',convertible_note:'A convertible note',equity:'An equity round'};
+/** Accepting the drafted words changes the plain-words terms and nothing else. */
+export function acceptPlainTerms(fields,text) { return {...fields,terms:String(text||'')}; }
+/** "15 Nov 2026", or null. */
+export function longDate(value) {
+  if(!value)return null;
+  const d=new Date(String(value).length===10?value+'T12:00:00Z':value);
+  return Number.isNaN(d.valueOf())?null:d.toLocaleDateString('en-GB',{day:'numeric',month:'short',year:'numeric',timeZone:'UTC'});
+}
+
+/** Where each seeded field came from, for its chip; a field the founder changed loses it. */
+export function seedChips(context,fields) {
+  if(!context)return {};
+  const seed={...recordedRoundFields(context),...termSeed(context,fields.instrument)};
+  const planner=!context.round;
+  const from={amount:context.round?.target_amount!=null?'From your round settings':planner&&seed.amount?'From your round planner':null,
+    target:context.round?.close_date?'From your round settings':null,
+    cap:seed.cap?'From your recorded terms':null,discount:seed.discount?'From your recorded terms':null,pre_money:seed.pre_money?'From your recorded terms':null};
+  return Object.fromEntries(Object.entries(from).filter(([k,v])=>v&&fields[k]!==''&&fields[k]===seed[k]));
+}
+
+export const TERM_HELP='The key term of a SAFE. A convertible note asks for a cap and a discount; equity asks for the pre-money valuation.';
+export const MINIMUM_HELP='Typed by you. Eadwyn never fills an amount, a term, a cap, a discount or a minimum cheque.';
+
+const chip='rounded-full border border-axal-hairline bg-gray-50 px-2 py-0.5 text-[11px] text-axal-muted dark:bg-gray-800';
+const card='space-y-2 rounded-xl border border-axal-hairline p-3';
+const eyebrowCls='text-[11px] font-semibold uppercase tracking-wide text-axal-muted';
+
+function Field({label,id,chipText,help,children}) {
+  return <div className="space-y-1"><label htmlFor={id} className="block text-xs font-semibold">{label}</label>
+    <div className="flex min-w-0 items-center gap-2"><div className="min-w-0 flex-1">{children}</div>{chipText&&<span className={chip} data-testid={'call-chip-'+id}>{chipText}</span>}</div>
+    {help&&<p className="text-xs text-axal-muted">{help}</p>}</div>;
 }
 
 function RoundStep({s,on}) {
-  const f=s.fields,toggle=key=>()=>on.edit(s.editing===key?null:key);
-  const input={amount:<input className={callInput} inputMode="decimal" aria-label="Target amount · USD" value={f.amount} onChange={e=>on.change('amount',e.target.value)}/>,
-    instrument:<select className={callInput} aria-label="Instrument" value={f.instrument} onChange={e=>on.change('instrument',e.target.value)}><option value="">Choose an instrument</option><option value="safe">SAFE</option><option value="equity">Equity</option><option value="convertible_note">Convertible note</option></select>,
-    terms:<>{(TERM_KEYS[f.instrument]||[]).map(k=><input key={k} className={callInput} inputMode="decimal" aria-label={TERM_LABELS[k]} placeholder={TERM_LABELS[k]}
-        disabled={!CALL_FIELDS.key_terms} value={f[k]||''} onChange={e=>on.change(k,e.target.value)}/>)}
-      {!f.instrument&&<p className="text-xs text-axal-muted">Choose an instrument for its cap, discount or pre-money.</p>}
-      {!CALL_FIELDS.key_terms&&<p className="text-xs text-axal-muted">Cap, discount and pre-money as separate fields: {NOT_STORED}</p>}
-      <textarea className={callInput} aria-label="Other terms" placeholder="Other terms" maxLength={20000} value={f.terms} onChange={e=>on.change('terms',e.target.value)}/></>,
-    minimum:<input className={callInput} inputMode="decimal" aria-label="Minimum cheque · USD" value={f.minimum} onChange={e=>on.change('minimum',e.target.value)}/>,
-    target:<input type="date" className={callInput} aria-label="Target close" value={f.target} onChange={e=>on.change('target',e.target.value)}/>};
+  const f=s.fields,chips=seedChips(s.context,f),drafted=plainTerms(f);
   return <>
-    <p className="text-xs text-axal-muted">Filled from your round planner</p>
     {s.note&&<p role="alert">{s.note}</p>}
-    <label className="block">Round name<input className={callInput} value={f.name} maxLength={200} onChange={e=>on.change('name',e.target.value)}/></label>
-    {ROUND_ROWS.map(row=><Row key={row.key} label={row.label} value={row.show(f)} editing={s.editing===row.key} onEdit={toggle(row.key)}>{input[row.key]}</Row>)}
+    <Field label="Name" id="call-name"><input id="call-name" className={callInput} value={f.name} maxLength={200} onChange={e=>on.change('name',e.target.value)}/></Field>
+    <div className="grid grid-cols-[minmax(0,1fr)_110px] gap-3">
+      <Field label="Target amount" id="call-amount" chipText={chips.amount}><input id="call-amount" className={callInput} inputMode="decimal" value={f.amount} onChange={e=>on.change('amount',e.target.value)}/></Field>
+      <Field label="Currency" id="call-currency"><input id="call-currency" className={callInput} value="USD" readOnly/></Field>
+    </div>
+    <div className="space-y-1"><p className="text-xs font-semibold" id="call-instrument">Instrument</p>
+      <div role="group" aria-labelledby="call-instrument" className="flex flex-wrap gap-2">{[['safe','SAFE'],['convertible_note','Convertible note'],['equity','Equity']].map(([k,label])=>
+        <button key={k} type="button" className={f.instrument===k?primary:ghost} aria-pressed={f.instrument===k} onClick={()=>on.change('instrument',k)}>{label}</button>)}</div></div>
+    {(TERM_KEYS[f.instrument]||[]).map((k,i)=><Field key={k} label={TERM_LABELS[k]} id={'call-'+k} chipText={chips[k]} help={i===0?TERM_HELP:null}>
+      <input id={'call-'+k} className={callInput} inputMode="decimal" value={f[k]||''} onChange={e=>on.change(k,e.target.value)}/></Field>)}
+    {!f.instrument&&<p className="text-xs text-axal-muted">Choose an instrument for its cap, discount or pre-money.</p>}
+    <Field label="Minimum cheque" id="call-minimum" help={MINIMUM_HELP}><input id="call-minimum" className={callInput} inputMode="decimal" value={f.minimum} onChange={e=>on.change('minimum',e.target.value)}/></Field>
+    <Field label="Target close" id="call-target" chipText={chips.target}><input id="call-target" type="date" className={callInput} value={f.target} onChange={e=>on.change('target',e.target.value)}/></Field>
+    <Field label="Terms in plain words" id="call-terms"><textarea id="call-terms" className={callInput} maxLength={20000} placeholder="Empty" value={f.terms} onChange={e=>on.change('terms',e.target.value)}/></Field>
+    {!f.terms.trim()&&drafted&&!s.dismissed&&<div className="space-y-2 rounded-xl border border-violet-200 bg-violet-50 p-3 dark:border-violet-900 dark:bg-violet-950/30" data-testid="call-drafted-terms">
+      <p className="text-xs font-bold text-violet-700 dark:text-violet-300">Drafted from the fields above</p>
+      <p className="text-sm">{drafted}</p>
+      <div className="flex flex-wrap gap-2"><button type="button" className={callButton} onClick={()=>on.acceptTerms(drafted)}>Accept</button>
+        <button type="button" className={callButton} onClick={()=>on.acceptTerms(drafted,true)}>Edit</button>
+        <button type="button" className={callButton} onClick={on.dismissTerms}>Dismiss</button></div></div>}
+    {s.saved&&<p role="status">Draft saved. <Link className="underline" to={callHref({uid:s.uid,state:'draft'})}>Its address</Link> opens it again.</p>}
   </>;
 }
 
@@ -272,55 +339,91 @@ function MaterialsStep({s,on}) {
   const deck=s.context.decks.find(d=>String(d.id)===s.fields.deck_id);
   const room=s.context.data_room;
   return <>
-    <Row label="Pitch deck" value={deck?['v'+deck.version,shortDate(deck.created_at),deck.slide_count!=null&&deck.slide_count+' slides'].filter(Boolean).join(' · '):s.context.decks.length?'No deck linked':'Not recorded · no pitch deck version exists for this venture.'}
-      editing={s.editing==='deck'} action="Change" onEdit={()=>on.edit(s.editing==='deck'?null:'deck')}>
-      <select className={callInput} aria-label="Pitch deck version" value={s.fields.deck_id} onChange={e=>on.change('deck_id',e.target.value)}><option value="">No deck linked</option>{s.context.decks.map(d=><option key={d.id} value={d.id}>{d.title||'Pitch deck'} · v{d.version}</option>)}</select>
-    </Row>
-    {room?<div className="flex items-start justify-between gap-3 border-b border-axal-hairline py-2"><div><p className="text-xs text-axal-muted">Data room</p>
-        <p>{s.fields.room?'Linked behind its NDA gate. Files are never copied into the call.':'Not linked'}</p>{s.fields.room&&<span className={pill}>NDA gate on</span>}</div>
-        <button type="button" className={callButton} onClick={()=>on.change('room',!s.fields.room)}>Change</button></div>
-      :<div className="space-y-2 py-2"><p className="text-xs text-axal-muted">Data room</p><p>No data room yet. Investors will see the deck only.</p><span className={pill}>Not recorded</span>
-        <div><Link className={primary} to={'/raise/data-room?project_id='+s.context.project.id}>Create a data room</Link></div></div>}
+    <section className={card} aria-label="Pitch deck"><p className={eyebrowCls}>Pitch deck</p>
+      {deck?<><p className="font-semibold">{deck.title||s.context.project.name} · v{deck.version} · frozen when sent</p>
+          <p className="text-xs text-axal-muted">Investors read this version. Changes you make to the deck later do not reach them.</p></>
+        :<p>{s.context.decks.length?'No deck linked':'Not recorded · no pitch deck version exists for this venture.'}</p>}
+      {s.context.decks.length>0&&(s.editing==='deck'
+        ?<select className={callInput} aria-label="Pitch deck version" value={s.fields.deck_id} onChange={e=>on.change('deck_id',e.target.value)}><option value="">No deck linked</option>{s.context.decks.map(d=><option key={d.id} value={d.id}>{d.title||'Pitch deck'} · v{d.version}</option>)}</select>
+        :<button type="button" className={callButton} onClick={()=>on.edit('deck')}>Change version</button>)}
+    </section>
+    <section className={card} aria-label="Data room"><p className={eyebrowCls}>Data room</p>
+      {room?<><p className="font-semibold">{s.fields.room?'Linked behind its NDA gate':'Not linked'}</p>
+          <p className="text-xs text-axal-muted">Investors see it only after an NDA and your grant. Files are never copied into the call.</p>
+          <div className="flex flex-wrap items-center gap-3"><button type="button" role="switch" aria-checked={!!s.fields.room} className={callButton} onClick={()=>on.change('room',!s.fields.room)}>{s.fields.room?'Unlink':'Link the data room'}</button>
+            <Link className="text-xs font-semibold underline" to={'/raise/data-room?project_id='+s.context.project.id}>Open Data room ›</Link></div></>
+        :<><p>No data room yet. Investors will see the deck only.</p><Link className={primary} to={'/raise/data-room?project_id='+s.context.project.id}>Create a data room</Link></>}
+    </section>
   </>;
 }
 
 /** Why no match can be made, by the preview's reason code. */
 export const AUDIENCE_REASONS={sector_not_recorded:'Your venture has no recorded sector, so no match can be made.',stage_not_recorded:'Your venture has no recorded stage, so no match can be made.'};
-/** " · Thesis fits Fintech, stage Seed, cheque $25k–$250k", from what the preview returns. */
+/** " · stage Seed · sector Fintech · cheque range $25k–$250k", from what the preview returns. */
 export function matchLine(d) {
-  const parts=[d.sector&&'Thesis fits '+d.sector,d.stage&&'stage '+d.stage,
-    d.cheque_min_usd!=null&&d.cheque_max_usd!=null&&'cheque '+shortUsd(d.cheque_min_usd)+'–'+shortUsd(d.cheque_max_usd)].filter(Boolean);
-  if(parts.length)return ' · '+parts.join(', ');
-  return d.match_reasons?.length?' · '+d.match_reasons.join(', '):'';
+  const parts=[d.stage&&'stage '+d.stage,d.sector&&'sector '+d.sector,
+    d.cheque_min_usd!=null&&d.cheque_max_usd!=null&&'cheque range '+shortUsd(d.cheque_min_usd)+'–'+shortUsd(d.cheque_max_usd)].filter(Boolean);
+  if(parts.length)return ' · '+parts.join(' · ');
+  return d.match_reasons?.length?' · '+d.match_reasons.join(' · '):'';
 }
 
 function AudienceStep({s,on}) {
-  const m=s.matches,data=m?.data;
+  const m=s.matches,data=m?.data,others=data?.not_on_axal||[];
   return <>
-    <div className="flex items-start justify-between gap-3 border-b border-axal-hairline py-2"><div><p>{s.chosen.length} investors from Capital relationships</p><p className="text-xs text-axal-muted">Selected by hand</p></div>
-      <button type="button" className={callButton} onClick={on.choosing}>Choose</button></div>
-    {s.choosing&&(s.context.chosen.length?s.context.chosen.map(p=><label key={p.prospect_id} className="block"><input type="checkbox" checked={s.chosen.includes(p.prospect_id)} onChange={()=>on.choose(p.prospect_id)}/> {p.name} · {p.email}</label>):<p>No verified investor from this venture’s pipeline is available.</p>)}
-    <div className="space-y-2 py-2" aria-live="polite">
+    <div><h3 className="font-semibold">From your pipeline</h3><p className="text-xs text-axal-muted">Investors with a verified Axal account can be chosen.</p></div>
+    <ul className="divide-y divide-axal-hairline border-y border-axal-hairline" aria-label="Your pipeline">
+      {s.context.chosen.map(p=><li key={p.prospect_id} className="flex items-center gap-3 py-2"><input type="checkbox" aria-label={'Choose '+(p.name||'this investor')} checked={s.chosen.includes(p.prospect_id)} onChange={()=>on.choose(p.prospect_id)}/>
+        <span className="min-w-0 flex-1 font-semibold">{p.name||'Name not recorded'}</span><span className={chip}>Verified on Axal</span></li>)}
+      {others.map(p=><li key={'n'+p.prospect_id} className="flex items-center gap-3 py-2 text-axal-muted" data-testid="call-not-on-axal"><input type="checkbox" disabled aria-label={(p.name||'This investor')+' is not on Axal'} checked={false} readOnly/>
+        <span className="min-w-0 flex-1">{p.name||'Name not recorded'}</span><span className={chip}>Not on Axal</span>
+        <button type="button" className={callButton} disabled title={INVITE_WAIT}>Invite to Axal</button></li>)}
+      {!s.context.chosen.length&&!others.length&&<li className="py-2">No investor from this venture’s pipeline is available.</li>}
+    </ul>
+    {others.length>0&&<p className="text-xs text-axal-muted">Invite to Axal: {INVITE_WAIT}</p>}
+    <div className={card} aria-live="polite">
       {!m||m.loading?<p role="status">Checking matches…</p>
         :m.error?<p role="alert">Matches are unreadable · <button type="button" className={callButton} onClick={on.retryMatches}>Try again</button></p>
-        :data.matched>0?<><p>{data.matched} verified investors match{matchLine(data)}. Names appear only once they respond.</p>
-          <span className={pill}>Verified only</span>
-          <div><button type="button" className={primary} aria-pressed={s.includeMatches} onClick={()=>on.includeMatches(!s.includeMatches)}>{s.includeMatches?'Included':'Include'}</button></div></>
-        :<><p>No matching investors yet · {AUDIENCE_REASONS[data.reason]||'No verified investor fits your stage, sector and cheque size. Widen the minimum cheque, or send to the investors you choose.'}</p><span className={pill}>None</span></>}
+        :data.matched>0?<><div className="flex items-center gap-3"><button type="button" role="switch" aria-checked={!!s.includeMatches} aria-label="Also invite investors whose published focus fits" className={callButton} onClick={()=>on.includeMatches(!s.includeMatches)}>{s.includeMatches?'On':'Off'}</button>
+            <span className="font-semibold">Also invite investors whose published focus fits</span></div>
+          <p className="text-sm">{data.matched} matching investors{matchLine(data)}</p>
+          <p className="text-xs text-axal-muted">Their names stay hidden from you until they respond.</p></>
+        :<p>No matching investors yet · {AUDIENCE_REASONS[data.reason]||'No verified investor fits your stage, sector and cheque size. Widen the minimum cheque, or send to the investors you choose.'}</p>}
     </div>
-    <p className="text-xs text-axal-muted">Only investors verified on the platform can see the call.</p>
   </>;
 }
+export const INVITE_WAIT='not offered here yet. Axal has no route that invites a pipeline investor; they can sign up and verify, then be chosen.';
 
-function PreviewStep({s}) {
-  const c=s.page.call;
+/** The four counsel states the preview draws, and the button each shows. */
+export function counselState(page,cleared=false) {
+  const c=page?.call||{};
+  if(page?.counsel_approved)return {key:'approved',line:`Approved for these terms on ${callDate(c.counsel_approved_at)}.`,action:null};
+  if(counselRequested(c))return {key:'requested',line:`Requested ${callDate(c.counsel_requested_at)}. Waiting for counsel.`,action:null};
+  if(cleared||c.counsel_requested_at)return {key:'cleared',line:'Your changes cleared the approval.',action:'Request again'};
+  return {key:'not_requested',line:'Not requested.',action:'Request counsel review'};
+}
+const COUNSEL_PILL={approved:'Approved',requested:'Requested',cleared:'Needs a new review',not_requested:'Not requested'};
+
+function PreviewStep({s,on}) {
+  const c=s.page.call,items=s.page.readiness||[],missing=items.filter(i=>!i.ready),counsel=counselState(s.page,s.cleared);
   return <>
-    <p className="text-xs text-axal-muted">As an investor sees it</p>
-    <p className="font-semibold">{s.context.project.name} · raising {moneyCents(c.amount_cents)}</p>
-    <p>{[INSTRUMENTS[c.instrument]||c.instrument,callTermsText(c)||c.terms,'minimum '+moneyCents(c.minimum_cheque_cents),'closes '+(shortDate(c.target_close)||'Not recorded')].join(' · ')}</p>
-    <p>{c.deck_version==null?'Pitch deck — Not recorded · no version linked':<>Pitch deck v{c.deck_version} — <Link className="underline" to="/raise/pitch">View</Link></>}</p>
-    <p>{c.data_room_project_uid?'Data room — Request access · NDA first':'Data room — Not recorded · no room linked'}</p>
-    <p>Ask a question — Answered by the founder in place</p>
+    <section className={card} aria-label="What investors see"><p className={eyebrowCls}>What investors see</p>
+      <p className="font-bold">{`A private round call from ${s.context.project.name}`}</p>
+      <dl className="grid grid-cols-2 gap-2 sm:grid-cols-5">{[['Instrument',INSTRUMENTS[c.instrument]||'Not recorded'],['Target',moneyCents(c.amount_cents)],['Key terms',callTermsText(c)||'Not recorded'],['Minimum',moneyCents(c.minimum_cheque_cents)],['Closes',longDate(c.target_close)||'Not recorded']].map(([k,v])=>
+        <div key={k} className="min-w-0"><dt className={eyebrowCls}>{k}</dt><dd className="font-mono text-xs font-semibold">{v}</dd></div>)}</dl>
+      {c.terms?.trim()&&<p className="text-sm" data-testid="call-preview-terms">{c.terms}</p>}
+      <p className="text-xs text-axal-muted">{[c.deck_version==null?'No deck linked':'Deck v'+c.deck_version,c.data_room_project_uid?'data room after an NDA':'no data room linked','indicate an amount','ask a question'].join(' · ')}</p>
+    </section>
+    <section className={card} aria-label="Readiness"><div className="flex items-baseline gap-2"><h3 className="font-semibold">Readiness</h3><span className="font-mono text-xs text-axal-muted">{items.length-missing.length} of {items.length} ready</span></div>
+      {missing.length>0&&<ul>{missing.map(item=>{const t=readinessTarget(item.key,s.projectId);return <li key={item.key} className="flex items-center justify-between gap-2 py-1"><span>{item.label} · Not yet</span>
+        {t?.href?<Link className={callButton} to={t.href}>Open</Link>:t?<button type="button" className={callButton} onClick={()=>on.goto(t.step)}>Open</button>:null}</li>;})}</ul>}
+      <p className="text-xs text-axal-muted">You can send with items missing. Investors see what is there.</p>
+    </section>
+    <section className={card} aria-label="Counsel review" data-testid="call-counsel"><div className="flex items-center gap-2"><h3 className="font-semibold">Counsel review</h3><span className={chip}>{COUNSEL_PILL[counsel.key]}</span></div>
+      <p>{counsel.line}</p>
+      {counsel.key==='approved'&&<p className="text-xs text-axal-muted">Any change to the terms or the audience needs a new review.</p>}
+      <div className="flex flex-wrap gap-2">{counsel.action&&<button type="button" className={callButton} disabled={s.busy||!CALL_FIELDS.counsel_request} onClick={on.requestCounsel}>{counsel.action}</button>}
+        {counsel.key!=='approved'&&<button type="button" className={callButton} onClick={on.recheck}>Check again</button>}</div>
+    </section>
   </>;
 }
 
@@ -329,40 +432,63 @@ export function counselRequested(c) {
   return !!c?.counsel_requested_at&&(c.counsel_requested_hash==null||c.counsel_requested_hash===c.terms_hash);
 }
 
-function SendStep({s,on,missing,approved}) {
-  const r=s.page.recipients||[],total=s.page.readiness.length;
+/** Who the call goes to, from the recorded audience. */
+export function audienceCounts(page) {
+  const r=page?.recipients||[];
+  const chosen=r.filter(x=>x.origin==='chosen').length,matched=r.filter(x=>x.origin==='match').length;
+  return {chosen,matched,total:chosen+matched};
+}
+/** Send is offered once counsel approved these terms and every missing item is acknowledged. */
+export function canSend(page,acks) {
+  const missing=(page?.readiness||[]).filter(i=>!i.ready);
+  return !!page?.counsel_approved&&missing.every(i=>acks.includes(i.key));
+}
+
+function SendStep({s,on}) {
+  const missing=(s.page.readiness||[]).filter(item=>!item.ready),n=audienceCounts(s.page),approved=!!s.page.counsel_approved;
   return <>
-    <h3 className="font-semibold">Ready to send</h3>
-    <p>To {r.filter(x=>x.origin==='chosen').length} chosen investors and {r.filter(x=>x.origin==='match').length} matching investors</p>
-    {approved?<p>Terms — Approved by counsel · {callDate(s.page.call.counsel_approved_at)}</p>:<>
-      <p role="alert">Counsel has not approved the terms yet. Send unlocks once they do.</p>
-      <div className="flex flex-wrap items-center gap-2"><span>Terms</span><span className={pill}>Awaiting counsel</span>
-        {counselRequested(s.page.call)?<span>Sent to Axal HQ for counsel review on {callDate(s.page.call.counsel_requested_at)}</span>
-          :<button type="button" className={callButton} disabled={s.busy||!CALL_FIELDS.counsel_request} onClick={on.requestCounsel}>Request counsel review</button>}
-        <button type="button" className={callButton} onClick={on.recheck}>Check again</button></div></>}
-    <p>Readiness — {total-missing.length} of {total} items in place{!missing.length&&<> <span className={pill}>Ready</span></>}</p>
-    {missing.length>0&&<section aria-label="Call readiness" className="space-y-2"><h4 className="font-semibold">Call readiness</h4>
-      <p>{missing.length} of {total} call readiness items are missing. Send anyway, or finish them first.</p>
-      <ul>{missing.map(item=>{const t=readinessTarget(item.key,s.projectId);return <li key={item.key} className="flex items-center justify-between gap-2 py-1"><span>{item.label} · Not yet</span>
-        {t?.href?<Link className={callButton} to={t.href}>Open</Link>:t?<button type="button" className={callButton} onClick={()=>on.goto(t.step)}>Open</button>:null}</li>;})}</ul>
-      <p className="text-xs text-axal-muted">This is the call’s own list. <Link className="underline" to={'/raise/fundraising-readiness?project_id='+s.projectId}>Fundraising readiness</Link> scores the venture and its items differ.</p></section>}
+    <h3 className="text-lg font-extrabold">Send {s.page.call.name} to {n.total} investors?</h3>
+    <p className="text-sm text-axal-muted">{n.chosen} chosen from your pipeline and {n.matched} matching investors.</p>
+    {missing.length>0&&<section aria-label="Missing from this call"><p className={eyebrowCls}>Missing from this call</p>
+      <ul>{missing.map(item=><li key={item.key} className="flex items-center gap-3 border-t border-axal-hairline py-2"><span className="flex-1 font-semibold">{item.label}</span>
+        <label className="inline-flex items-center gap-2 text-sm"><input type="checkbox" aria-label={'Send anyway without '+item.label} checked={(s.acks||[]).includes(item.key)} onChange={()=>on.ack(item.key)}/>Send anyway without it</label></li>)}</ul></section>}
+    <section className={card} aria-label="What happens"><p className={eyebrowCls}>What happens</p>
+      <ul className="list-disc space-y-1 pl-5 text-sm"><li>Each chosen investor is told on Axal.</li><li>Matching investors see the call. You see their names only when they respond.</li>
+        <li>{approved?`Counsel approved these terms on ${callDate(s.page.call.counsel_approved_at)}.`:'Counsel has not approved these terms yet, so the call cannot be sent.'}</li></ul></section>
   </>;
 }
 
+/** The send's result, in the canvas's words. */
+export function sendResult(o) {
+  const told=Number(o?.notified),missed=Number(o?.not_delivered);
+  if(!Number.isFinite(told))return 'Sent. Axal could not read how many investors were told.';
+  return `Sent. ${told} investor${told===1?' was':'s were'} told on Axal.${missed>0?` ${missed} could not be told.`:''}`;
+}
+
+function SendResult({s}) {
+  const missed=Number(s.outcome.not_delivered)>0;
+  return <div role="status" className="space-y-2" data-testid="call-send-result">
+    <p className="font-semibold">{sendResult(s.outcome)} {missed&&<Link className="underline" to={callHref({uid:s.uid,state:'sent'})}>See who</Link>}</p>
+    <p className="text-xs text-axal-muted">Investors are told inside Axal. No email is sent.</p>
+    {!missed&&<Link className="underline" to={callHref({uid:s.uid,state:'sent'})}>Open the call</Link>}
+  </div>;
+}
+
 export function RoundCallSheetView({state:s,on,onClose}) {
-  const missing=s.page?.readiness?.filter(item=>!item.ready)||[];
-  const approved=!!s.page?.counsel_approved;
-  const footer=s.outcome?null:<>{s.step>0&&<button type="button" className={ghost} disabled={s.busy} onClick={on.back}>{s.step===4&&missing.length?'Finish them first':'Back'}</button>}
-    {s.step<4?<button type="button" className={primary} disabled={s.busy} onClick={on.next}>Next</button>:<button type="button" className={primary} disabled={s.busy||!approved} onClick={on.send}>{missing.length?'Send anyway':'Send the call'}</button>}</>;
-  return <ActionSheet {...CALL_SHEET} onClose={onClose} steps={ROUND_CALL_STEPS} step={s.step}
-    banner={s.error?{tone:'error',text:s.error}:null} footNote={s.outcome?null:`Step ${s.step+1} of 5`} footer={footer}>
-    <fieldset disabled={s.busy||!!s.outcome} className="space-y-3">
+  const sendable=s.page?canSend(s.page,s.acks||[]):false;
+  const footer=s.outcome?null:<>
+    {s.step===0?<button type="button" className={ghost} disabled={s.busy} onClick={on.saveDraft}>Save draft</button>
+      :<button type="button" className={ghost} disabled={s.busy} onClick={on.back}>Back</button>}
+    {s.step<4?<button type="button" className={primary} disabled={s.busy} onClick={on.next}>Next</button>
+      :<button type="button" className={primary} disabled={s.busy||!sendable} onClick={on.send}>Send the call</button>}</>;
+  return <ActionSheet eyebrow={`New call · step ${s.step+1} of 5`} title={ROUND_CALL_STEPS[s.step]} titleId={CALL_SHEET.titleId} sub={CALL_SHEET.sub} testId={CALL_SHEET.testId}
+    onClose={onClose} steps={ROUND_CALL_STEPS} step={s.step} banner={s.error?{tone:'error',text:s.error}:null} footer={footer}>
+    {s.outcome?<SendResult s={s}/>:<fieldset disabled={s.busy} className="space-y-3">
       {s.step===0&&<RoundStep s={s} on={on}/>}
       {s.step===1&&<MaterialsStep s={s} on={on}/>}
       {s.step===2&&<AudienceStep s={s} on={on}/>}
-      {s.step===3&&s.page&&<PreviewStep s={s}/>}
-      {s.step===4&&s.page&&<SendStep s={s} on={on} missing={missing} approved={approved}/>}
-    </fieldset>
-    {s.outcome&&<p role="status" className="mt-4">The call is available to {s.outcome.recipients} verified recipients; {s.outcome.notified} notified, {s.outcome.not_delivered} not delivered. <Link className="underline" to={'/raise/calls/'+s.uid}>Open the call</Link></p>}
+      {s.step===3&&s.page&&<PreviewStep s={s} on={on}/>}
+      {s.step===4&&s.page&&<SendStep s={s} on={on}/>}
+    </fieldset>}
   </ActionSheet>;
 }

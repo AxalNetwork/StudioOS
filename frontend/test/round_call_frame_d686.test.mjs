@@ -85,7 +85,8 @@ test('the flow draws ActionSheet steps, a round × and the footer', () => {
   assert.match(html, /aria-current="step"[^>]*>2 · Materials</);
   assert.match(html, /aria-label="Close" data-testid="round-call-sheet-close"/);
   assert.match(html, /role="alert" data-tone="error"[^>]*>Refused\.</);
-  assert.match(html, /Step 2 of 5/);
+  // D1224: the step is the sheet's eyebrow (CLS4–CLS7).
+  assert.match(html, /New call · step 2 of 5/);
   assert.match(html, />Back<\/button>/);
 });
 

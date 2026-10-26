@@ -80,15 +80,17 @@ test('an admin overview carries the room summary as its data-room card, with no 
   } finally { f.db.close(); }
 });
 
-test("the admin's other six cards are the owner's, unchanged", async () => {
+test("D1191: the admin overview restricts capital while preserving other tools' existing cards", async () => {
   const f = fixture(); try {
     const owner = (await f.call(OWNER, 'GET', '/overview?project=1')).body;
     const admin = (await f.call(ADMIN, 'GET', '/overview?project=1')).body;
-    const others = (b: any) => b.cards.filter((c: any) => c.slug !== 'data-room');
-    assert.equal(others(admin).length, 6);
-    assert.deepEqual(others(admin), others(owner));
-    assert.deepEqual(admin.cards.map((c: any) => c.slug), owner.cards.map((c: any) => c.slug), 'same seven, same order');
-    assert.deepEqual(admin.figures, owner.figures);
+    assert.equal(admin.mode, 'summary');
+    assert.equal(admin.cards.length, 7);
+    for (const card of admin.cards.filter((c:any)=>!['capital-relationships','data-room'].includes(c.slug))) assert.deepEqual(card,cardOf(owner,card.slug));
+    assert.deepEqual(admin.figures.map((f:any)=>f.key), ['readiness_score','runway_months']);
+    assert.equal(owner.cards.length, 7);
+    assert.equal(owner.figures.length, 4);
+    assert.ok(!JSON.stringify(admin).includes('Synthetic investor'));
   } finally { f.db.close(); }
 });
 

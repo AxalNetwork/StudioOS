@@ -36,7 +36,7 @@ async function fixture() {
     CREATE TABLE super_admins(user_id INTEGER PRIMARY KEY);
     CREATE TABLE mi_pro_subscriptions(user_id INTEGER PRIMARY KEY, status TEXT, subscription_id TEXT, plan TEXT, period_end TEXT, stripe_customer_id TEXT);
     CREATE TABLE user_recovery_state(user_id INTEGER PRIMARY KEY, cooling_off_until TEXT, step_up_due_at TEXT);
-    CREATE TABLE company_profiles(id INTEGER PRIMARY KEY);
+    CREATE TABLE company_profiles(id INTEGER PRIMARY KEY, archived_at TEXT);
     CREATE TABLE user_company_links(user_id INTEGER, company_id INTEGER);
     CREATE TABLE projects(id INTEGER PRIMARY KEY, company_id INTEGER, deleted_at TEXT);
     CREATE TABLE activity_logs(id INTEGER PRIMARY KEY, user_id INTEGER, actor TEXT, action TEXT, details TEXT);
@@ -49,7 +49,7 @@ async function fixture() {
       payload_json TEXT, created_at TEXT DEFAULT CURRENT_TIMESTAMP);
     CREATE TABLE integration_waitlist(id INTEGER PRIMARY KEY, user_id INTEGER, provider_key TEXT, notes TEXT, notified_at TEXT, created_at TEXT DEFAULT CURRENT_TIMESTAMP, UNIQUE(user_id, provider_key));
     INSERT INTO users(id, role, name, email) VALUES (1, 'founder', 'First', 'first@example.test'), (2, 'founder', 'Second', 'second@example.test');
-    INSERT INTO company_profiles VALUES (10), (20);
+    INSERT INTO company_profiles (id) VALUES (10), (20);
     INSERT INTO user_company_links VALUES (1, 10), (1, 20), (2, 10);
     INSERT INTO projects VALUES (100, 10, NULL), (200, 20, NULL);`);
   db.exec(m435); db.exec(m445); db.exec(m001); db.exec(m153); db.exec(m499); addMvpStores(db);

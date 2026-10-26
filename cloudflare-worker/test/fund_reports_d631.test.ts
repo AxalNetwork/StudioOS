@@ -8,7 +8,7 @@ import funds from '../src/routes/funds.ts';
 import {FundReportRefusal,reportId} from '../src/services/fundReports.ts';
 const baseline=readFileSync(new URL('../sql/schema_baseline.sql',import.meta.url),'utf8');
 const tables=['users','vc_funds','limited_partners','portfolio_positions','legal_documents','fund_report_periods','activity_logs','user_company_links'];
-const schema=tables.map(t=>stripForeignKeys(tableFromBaseline(baseline,t))).join('\n')+`CREATE UNIQUE INDEX periods_unique ON fund_report_periods(fund_id,period);`;
+const schema=tables.map(t=>stripForeignKeys(tableFromBaseline(baseline,t))).join('\n')+`CREATE UNIQUE INDEX periods_unique ON fund_report_periods(fund_id,period);CREATE TABLE IF NOT EXISTS company_profiles (id INTEGER PRIMARY KEY, archived_at TEXT);`; // D1137: migration 597's archive flag
 const secret='d631-local-fixture-signing-secret';
 async function fixture(){
  const {DB,db}=makeD1(schema);

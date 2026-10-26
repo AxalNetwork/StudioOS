@@ -70,10 +70,10 @@ type Evt = {
 
 /**
  * Stateful stub. PROJECT carries founder_id 100 so FOUNDER owns it and
- * OUTSIDER (999) does not; OTHER_PROJECT belongs to a third founder, so
- * neither of them owns it.
+ * OUTSIDER (999) does not. OTHER_PROJECT defaults to a third founder; the
+ * cross-project delete case assigns both ventures to FOUNDER.
  */
-function makeEnv() {
+function makeEnv(otherFounderId = 200) {
   const valuations: Val[] = [];
   const events: Evt[] = [];
   let nextVal = 1, nextEvt = 1;
@@ -107,9 +107,9 @@ function makeEnv() {
       },
       async first() {
         if (s.includes('from projects where id')) {
-          // Both projects exist; only PROJECT is owned by FOUNDER.
+          // Both projects exist; the cross-project delete case gives this owner both.
           if (bound[0] === PROJECT) return { id: PROJECT, founder_id: 100 };
-          if (bound[0] === OTHER_PROJECT) return { id: OTHER_PROJECT, founder_id: 200 };
+          if (bound[0] === OTHER_PROJECT) return { id: OTHER_PROJECT, founder_id: otherFounderId };
           return null;
         }
         if (s.startsWith('insert into valuations_409a')) {
@@ -331,13 +331,13 @@ test('a founder cannot record a valuation against another company', async () => 
   assert.equal(valuations.length, 0);
 });
 
-test('an admin can read and record', async () => {
+test('an admin must use the scoped read and cannot record a legacy valuation', async () => {
   const { env } = makeEnv();
   const token = await mintToken(ADMIN, 'admin');
-  assert.equal((await getStatus(env, token)).status, 200);
+  assert.equal((await getStatus(env, token)).status, 403);
   assert.equal((await postValuation(env, token, {
     valuation_date: RECENT, fmv_per_share: 0.15,
-  })).status, 201);
+  })).status, 403);
 });
 
 // ---------- deletes ----------
@@ -359,13 +359,13 @@ test('a delete cannot reach an event belonging to another project', async () => 
   // The handler scopes the DELETE by project_id as well as event id;
   // without that, write access to any one project would be write access
   // to every project's event log.
-  const { env, events } = makeEnv();
+  const { env, events } = makeEnv(100);
   const token = await mintToken(FOUNDER, 'founder');
   const created = await (await postEvent(env, token, {
     kind: 'priced_round', occurred_on: RECENT,
   })).json() as any;
 
-  const res = await req(env, await mintToken(ADMIN, 'admin'),
+  const res = await req(env, token,
     `/409a/${OTHER_PROJECT}/events/${created.id}`, { method: 'DELETE' });
   assert.equal(res.status, 404, 'the id exists, but not under that project');
   assert.equal(events.length, 1, 'and it survives');

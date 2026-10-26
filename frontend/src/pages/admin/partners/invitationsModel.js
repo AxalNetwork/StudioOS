@@ -280,6 +280,9 @@ export function offerCard(p) {
 const TERM_WORDS = {
   equity_pct: 'Equity', time_commitment: 'Time', board_observer: 'Board observer', rate: 'Rate',
   equity_for_services_band: 'Equity for services', minimum_engagements_per_year: 'Engagements a year',
+  // D1118: the revenue-share offers' terms, standard or the Super Admin's own.
+  founder_revshare_pct: 'Founder deals', lp_revshare_pct: 'LP capital', attribution_window_days: 'Attribution window (days)',
+  revshare_pct: 'Revenue share', terms_note: 'Terms note', description: 'Description',
 };
 const termLabel = (k) => TERM_WORDS[k] || String(k).replace(/_/g, ' ').replace(/^./, (c) => c.toUpperCase());
 

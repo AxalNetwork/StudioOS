@@ -10,6 +10,8 @@
  * reviewers, checklist, requests). There is no decision, no memo, no flag
  * state, no my-reviews read and no template store, so those blocks say "Not
  * read here yet" with their reason and never draw a zero (D1244 §2).
+ * D1250 (#3265) draws the list tabs from D1249's reads (`ddListModel.js`);
+ * Templates no longer waits.
  */
 
 export const ADMIN_BASE = '/admin/due-diligence';
@@ -101,7 +103,6 @@ export const NOT_YET = 'Not read here yet';
 /** What the canvas draws that no read carries yet. Never a zero, never "none". */
 export const WAITS = Object.freeze({
   'my-reviews': 'The sections you are invited to review, across cases, are not read here yet (part 5).',
-  templates: 'Versioned templates with weights and blocking sections are not stored yet; Lite, Standard and Deep are fixed in the Worker today (part 5).',
   decision: 'The case decision, its reason and who recorded it are not stored yet (part 2).',
   flags: 'Flags raised by hand, with an owner, a state and a resolution, are not stored yet (part 3).',
   documents: 'Files the subject filed against a request, evidence on checklist items and NDA downloads are not read here yet (part 4).',

@@ -14,6 +14,7 @@ const baseline = readFileSync(new URL('../sql/schema_baseline.sql', import.meta.
 function fixture() {
   const db = new DatabaseSync(':memory:', { enableForeignKeyConstraints: false });
   for (const t of ['users','projects','partners','deals','deal_invitations','commitments','investor_dealroom_members','user_company_links','company_profiles','activity_logs','mi_pro_subscriptions','super_admins']) db.exec(tableFromBaseline(baseline,t));
+  db.exec(readFileSync('cloudflare-worker/sql/migrations/597_company_archive_and_events.sql','utf8')); // D1137: resolveActiveCompany reads archived_at
   for (const [id,tier] of [[1,'free'],[2,'professional']] as const) {
     db.prepare("INSERT INTO users(id,role,email,name,investor_tier,investor_subscription_status,investor_dealroom_max) VALUES(?,'investor',?,'Synthetic',?,'active',5)").run(id,`synthetic${id}@example.invalid`,tier);
     db.prepare("INSERT INTO user_company_links(uid,user_id,company_id) VALUES(?,?,10),(?,?,20)").run(`a${id}`,id,`b${id}`,id);

@@ -788,7 +788,10 @@ function getSidebarGroups(role, primaryPersonaId, user, hqView = true) {
 
 // Carta-style user dropdown — top-right of the global header.
 function UserDropdown({ user, onLogout }) {
-  const eventsCurrent = isMyEventsPath(useLocation().pathname);
+  const accountPath = useLocation().pathname;
+  const eventsCurrent = isMyEventsPath(accountPath);
+  // D1210 (CAL1): Calendar is Current on every calendar address.
+  const calendarCurrent = /^\/calendar(\/|$)/.test(accountPath);
   const [open, setOpen] = useState(false);
   const ref = useRef(null);
   useEffect(() => {
@@ -865,9 +868,9 @@ function UserDropdown({ user, onLogout }) {
               Perks
             </Link>
           )}
-          <Link to="/calendar" onClick={() => setOpen(false)}
-            className="flex items-center px-4 py-2 text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors" role="menuitem">
-            Calendar
+          <Link to="/calendar" onClick={() => setOpen(false)} aria-current={calendarCurrent ? 'page' : undefined}
+            className="flex items-center justify-between px-4 py-2 text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors" role="menuitem">
+            Calendar {calendarCurrent ? <span className="text-[11px] font-bold text-axal-violet" data-testid="account-calendar-current">Current</span> : null}
           </Link>
           <Link to="/my/events" onClick={() => setOpen(false)} aria-current={eventsCurrent ? 'page' : undefined}
             className="flex items-center justify-between px-4 py-2 text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors" role="menuitem">
@@ -2833,10 +2836,10 @@ function AppInner() {
           Programs. The old address keeps its query and hash and adds
           ?moved=refer-earn; it is counted for #2319. */}
       <Route path="/admin/refer-earn" element={<ReferEarnRedirect />} />
-      {/* D569 — every read on it is `requireAdmin` and answers on either tier,
-          so the guard is `['admin']` and never `hqOnly`. Its one HQ-only
-          zone, the take rate, is `requireSuperAdmin`; the page asks only when
-          `/me` carries the elevation and says so otherwise. */}
+      {/* D569, corrected by D958 (N15) — the route is `hqOnly`, and its
+          commission, rules and payout reads are `requireSuperAdmin`, as is the
+          take rate; the page asks only when `/me` carries the elevation and
+          says so otherwise. */}
       <Route path="/admin/commissions" element={guard(['admin'], hqOnly(<AdminCommissions user={user} />))} />
       {/* D923 (#2370) — Partner invitations moved to its tabs. The old address
           lands on Overview with the moved notice; it is counted for #2319. */}
@@ -3132,9 +3135,9 @@ function AppInner() {
       <Route path="/admin/due-diligence/:uid" element={guard(['admin', 'partner', 'investor', 'advisor'], <AdminDueDiligenceCasePage />)} />
       <Route path="/admin/due-diligence/:uid/:tab" element={guard(['admin', 'partner', 'investor', 'advisor'], <AdminDueDiligenceCasePage />)} />
       {/* Task #83 — de-admin Due Diligence: investor/advisor-facing alias of the same pages (no /admin framing). */}
-      <Route path="/due-diligence" element={guard(['admin', 'partner', 'investor', 'advisor'], <AdminDueDiligencePage />)} />
-      <Route path="/due-diligence/my-reviews" element={guard(['admin', 'partner', 'investor', 'advisor'], <AdminDueDiligencePage />)} />
-      <Route path="/due-diligence/templates" element={guard(['admin', 'partner', 'investor', 'advisor'], <AdminDueDiligencePage />)} />
+      <Route path="/due-diligence" element={user?.role === 'founder' ? <Navigate to="/due-diligence/requests" replace /> : guard(['admin', 'partner', 'investor', 'advisor'], <AdminDueDiligencePage />)} />
+      <Route path="/due-diligence/my-reviews" element={user?.role === 'founder' ? <Navigate to="/due-diligence/requests" replace /> : guard(['admin', 'partner', 'investor', 'advisor'], <AdminDueDiligencePage />)} />
+      <Route path="/due-diligence/templates" element={user?.role === 'founder' ? <Navigate to="/due-diligence/requests" replace /> : guard(['admin', 'partner', 'investor', 'advisor'], <AdminDueDiligencePage />)} />
       {/* Build queue #128 — subject-facing request inbox. Founders included by design:
           this surface exposes only the requests addressed to them, never case data
           (the "founders NEVER read DD" invariant lives in the worker). React Router
@@ -3490,11 +3493,12 @@ function AppInner() {
       <Route path="/comarketing" element={guard(['admin', 'partner', 'founder', 'investor'], partnerPrivateWorkspace(effectiveRole === 'founder' ? founderWorkspace('grow', founderEditor(<CoMarketingPage user={user} />)) : <PartnerWorkspaceTabs set="offers" user={user}><CoMarketingPage user={user} /></PartnerWorkspaceTabs>))} />
       {/* D637 — one pitch, edited while Proposed. Only a partner owns pitches (or an admin reads one). */}
       <Route path="/comarketing/:pitch" element={guard(['admin', 'partner'], partnerPrivateWorkspace(<PartnerWorkspaceTabs set="offers" user={user}><CoMarketingPitchPage /></PartnerWorkspaceTabs>))} />
-      <Route path="/calendar" element={guard(['admin', 'founder', 'partner', 'investor', 'advisor'], <CalendarPage />)} />
-      <Route path="/calendar/week" element={guard(['admin', 'founder', 'partner', 'investor', 'advisor'], <CalendarPage />)} />
-      <Route path="/calendar/agenda" element={guard(['admin', 'founder', 'partner', 'investor', 'advisor'], <CalendarPage />)} />
+      {/* D1210 (#3176, CAL14): an Explorer reaches the calendar: Events and From other calendars, and no New. */}
+      <Route path="/calendar" element={guard(['admin', 'founder', 'partner', 'investor', 'advisor', 'exploring'], <CalendarPage />)} />
+      <Route path="/calendar/week" element={guard(['admin', 'founder', 'partner', 'investor', 'advisor', 'exploring'], <CalendarPage />)} />
+      <Route path="/calendar/agenda" element={guard(['admin', 'founder', 'partner', 'investor', 'advisor', 'exploring'], <CalendarPage />)} />
       {/* D1211 (#3177): an item's drawer over the view it was opened from (CAL4, CAL5, CAL18). */}
-      <Route path="/calendar/item/:kind/:id" element={guard(['admin', 'founder', 'partner', 'investor', 'advisor'], <CalendarPage />)} />
+      <Route path="/calendar/item/:kind/:id" element={guard(['admin', 'founder', 'partner', 'investor', 'advisor', 'exploring'], <CalendarPage />)} />
       {/* Task #40 (E2) — Event host/attendee surface. */}
       {/* D1030 (#2387): each tab its own address; an Explorer reads Upcoming, Discover and Past (MEV2). */}
       <Route path="/my/events" element={guard(['admin', 'founder', 'partner', 'investor', 'advisor', 'exploring'], <MyEventsPage />)} />

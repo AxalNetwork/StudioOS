@@ -29,6 +29,7 @@ async function fixture(state='sent',migration=readFileSync('cloudflare-worker/sq
     'mi_pro_subscriptions','portfolio_updates','job_postings']) {
     db.exec(tableFromBaseline(baseline,table));
   }
+  db.exec('CREATE TABLE IF NOT EXISTS company_profiles (id INTEGER PRIMARY KEY, archived_at TEXT)'); // D1137 (migration 597)
   // Not in the baseline: these two come from their own migrations (302, 277).
   db.exec(readFileSync('cloudflare-worker/sql/migrations/302_push_subscriptions.sql','utf8'));
   db.exec(readFileSync('cloudflare-worker/sql/migrations/277_user_recovery_state.sql','utf8'));

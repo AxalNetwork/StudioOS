@@ -19,6 +19,7 @@
  */
 import { PDFDocument, StandardFonts, rgb, type PDFFont, type PDFPage } from 'pdf-lib';
 import type { Env } from '../types';
+import { readRecord, RecordError } from './capTableRecord';
 import { winAnsiSafe } from './legalDocFormat';
 import { hashEmail } from '../util/hashEmail';
 
@@ -26,11 +27,11 @@ import { hashEmail } from '../util/hashEmail';
 export const CARTA_SOURCE = 'connector_carta';
 
 export type HolderRow = {
-  id: number; name: string; email: string | null; security_type: string | null;
-  shares: number | null; ownership_pct: number | null; source: string; updated_at: string | null;
+  id: number | null; name: string; email: string | null; security_type: string | null;
+  shares: number | null; options?: number | null; ownership_pct: number | null; source: string; updated_at: string | null;
 };
 export type SecurityRow = {
-  id: number; name: string; share_class: string | null;
+  id: number | string; name: string; share_class: string | null;
   shares_authorized: number | null; shares_issued: number | null; source: string; updated_at: string | null;
 };
 export type PoolRow = {
@@ -62,44 +63,53 @@ export function knownSum<T>(rows: T[], key: keyof T): number | null {
 }
 
 /** Each holder's share of the recorded total, or null when the total is not known. */
-export function withOwnership<T extends { shares: number | null }>(holders: T[]): { total_shares: number | null; holders: Array<T & { ownership_pct: number | null }> } {
+export function withOwnership<T extends { shares: number | null; options?: number | null }>(holders: T[], fullyDiluted?: number | null): { total_shares: number | null; holders: Array<T & { ownership_pct: number | null }> } {
   const total = knownSum(holders, 'shares');
+  const denominator = fullyDiluted === undefined ? total : fullyDiluted;
   return {
     total_shares: total,
     holders: holders.map((h) => {
       const shares = num(h.shares);
-      return { ...h, shares, ownership_pct: total != null && total > 0 && shares != null ? (shares / total) * 100 : null };
+      const options = num(h.options);
+      const held = fullyDiluted === undefined ? shares : shares != null && options != null ? shares + options : null;
+      return { ...h, shares, ownership_pct: denominator != null && denominator > 0 && held != null ? (held / denominator) * 100 : null };
     }),
   };
 }
 
+export type RegisterRead = { holders: HolderRow[]; securities: SecurityRow[]; fully_diluted?: number | null; fully_diluted_reason?: string | null };
+
 export type RegisterScope = { kind: 'venture'; projectId: number } | { kind: 'account'; userId: number };
 
 /** The holders and securities of one venture, or of one account. */
-export async function readRegister(env: Env, scope: RegisterScope): Promise<{ holders: HolderRow[]; securities: SecurityRow[] }> {
-  const holders = scope.kind === 'venture'
-    ? await env.DB.prepare(
-      `SELECT id, name, email, security_type, shares, ownership_pct, source, updated_at
-         FROM cap_table_holders WHERE project_id = ? ORDER BY shares DESC, name ASC LIMIT 500`,
-    ).bind(scope.projectId).all<HolderRow>()
-    : await env.DB.prepare(
-      `SELECT id, name, email, security_type, shares, ownership_pct, source, updated_at
-         FROM cap_table_holders WHERE user_id = ? ORDER BY shares DESC, name ASC LIMIT 500`,
-    ).bind(scope.userId).all<HolderRow>();
-  const securities = scope.kind === 'venture'
-    ? await env.DB.prepare(
-      `SELECT id, name, share_class, shares_authorized, shares_issued, source, updated_at
-         FROM cap_table_securities WHERE project_id = ? ORDER BY name ASC LIMIT 200`,
-    ).bind(scope.projectId).all<SecurityRow>()
-    : await env.DB.prepare(
-      `SELECT id, name, share_class, shares_authorized, shares_issued, source, updated_at
-         FROM cap_table_securities WHERE user_id = ? ORDER BY name ASC LIMIT 200`,
-    ).bind(scope.userId).all<SecurityRow>();
+export async function readRegister(env: Env, scope: RegisterScope): Promise<RegisterRead> {
+  // D1130: venture exports and Carta's record read the same issuance ledger as Overview.
+  // Account-level connector imports remain a separate, explicitly unassigned register.
+  if (scope.kind === 'venture') {
+    const record = await readRecord(env, scope.projectId);
+    const h = record.by_holder as { available: boolean; reason: string | null; rows?: Array<{ holder_id: number | null; name: string; shares: number; options: number }> };
+    const cls = record.by_class as { available: boolean; reason: string | null; rows?: Array<{ uid: string; name: string; kind: string; authorized_shares: number | null; issued: number | null }> };
+    if ((!h.available && h.reason !== 'nothing_recorded') || (!cls.available && cls.reason !== 'nothing_recorded')) throw new RecordError(409, 'record_unavailable', 'The recorded balances cannot be calculated. Resolve the record before exporting.');
+    return {
+      holders: (h.rows || []).map(row => ({ id: row.holder_id, name: row.name, email: null, security_type: null, shares: row.shares, options: row.options, ownership_pct: null, source: 'record', updated_at: null })),
+      fully_diluted: record.fully_diluted.available ? num(record.fully_diluted.shares) : null,
+      fully_diluted_reason: typeof record.fully_diluted.sentence === 'string' ? record.fully_diluted.sentence : null,
+      securities: (cls.rows || []).map(row => ({ id: row.uid, name: row.name, share_class: row.kind, shares_authorized: row.authorized_shares, shares_issued: row.issued, source: 'record', updated_at: null })),
+    };
+  }
+  const holders = await env.DB.prepare(
+    `SELECT id, name, email, security_type, shares, ownership_pct, source, updated_at
+       FROM cap_table_holders WHERE user_id = ? ORDER BY shares DESC, name ASC LIMIT 500`,
+  ).bind(scope.userId).all<HolderRow>();
+  const securities = await env.DB.prepare(
+    `SELECT id, name, share_class, shares_authorized, shares_issued, source, updated_at
+       FROM cap_table_securities WHERE user_id = ? ORDER BY name ASC LIMIT 200`,
+  ).bind(scope.userId).all<SecurityRow>();
   return { holders: holders.results || [], securities: securities.results || [] };
 }
 
 /** The option pools and vesting grants of one venture, or of one account. */
-export async function readEquityPlan(env: Env, scope: RegisterScope): Promise<{ pools: PoolRow[]; vesting: VestingRow[] }> {
+export async function readEquityPlan(env: Env, scope: RegisterScope): Promise<{ pools: PoolRow[]; vesting: VestingRow[]; elections: { available: boolean; rows: Array<{ holder_id: number; state: string; due_date: string | null; has_document: boolean }> } }> {
   const pools = scope.kind === 'venture'
     ? await env.DB.prepare(
       `SELECT id, name, shares_authorized, shares_issued, shares_available, source, updated_at
@@ -120,7 +130,14 @@ export async function readEquityPlan(env: Env, scope: RegisterScope): Promise<{ 
               total_shares, vested_shares, source, updated_at
          FROM cap_table_vesting WHERE user_id = ? ORDER BY start_date DESC`,
     ).bind(scope.userId).all<VestingRow>();
-  return { pools: pools.results || [], vesting: vesting.results || [] };
+  let elections: { available: boolean; rows: Array<{ holder_id: number; state: string; due_date: string | null; has_document: boolean }> } = { available: true, rows: [] };
+  if (scope.kind === 'venture') {
+    try {
+      const read = await env.DB.prepare("SELECT for_holder_id AS holder_id, state, due_date, (length(trim(COALESCE(proof_file_key, ''))) > 0) AS has_document FROM formation_steps WHERE project_id = ? AND kind = '83b' AND for_holder_id IS NOT NULL ORDER BY updated_at DESC, id DESC").bind(scope.projectId).all<{ holder_id: number; state: string; due_date: string | null; has_document: number }>();
+      elections.rows = (read.results || []).map(r => ({ holder_id: r.holder_id, state: r.state, due_date: r.due_date, has_document: r.has_document === 1 }));
+    } catch { elections = { available: false, rows: [] }; }
+  }
+  return { pools: pools.results || [], vesting: vesting.results || [], elections };
 }
 
 /** The equity plan's answer: the rows as recorded, and totals only where every row records the figure. */
@@ -155,6 +172,7 @@ export function equityPlanBody(pools: PoolRow[], vesting: VestingRow[]) {
 /** Where a row came from, in words. */
 export function sourceWord(source: string | null | undefined): string {
   if (source === CARTA_SOURCE) return 'Carta';
+  if (source === 'record') return 'Issuance record';
   if (source === 'import') return 'Import';
   return 'Entered on StudioOS';
 }
@@ -177,19 +195,21 @@ const pctText = (p: number | null) => (p == null ? null : p.toFixed(4));
  * The recorded register as CSV. A missing figure is an empty cell, never 0.
  * `withEmail` is false for a reader who may not see holders' addresses.
  */
-export function registerCsv(register: { holders: HolderRow[]; securities: SecurityRow[] }, asOf: string, withEmail: boolean): string {
+export function registerCsv(register: RegisterRead, asOf: string, withEmail: boolean): string {
   const out: string[] = [];
   const w = (...cells: unknown[]) => out.push(cells.map(csvCell).join(','));
-  const owned = withOwnership(register.holders);
+  const owned = withOwnership(register.holders, register.fully_diluted);
   w('Cap table, as recorded', `As of ${asOf}`);
   w('');
   w('Holders');
-  w('Holder', ...(withEmail ? ['Email'] : []), 'Security type', 'Shares', 'Ownership %', 'Source');
+  const recorded = 'fully_diluted' in register;
+  w('Holder', ...(withEmail ? ['Email'] : []), 'Security type', 'Shares', ...(recorded ? ['Options', 'Ownership % (fully diluted)'] : ['Ownership %']), 'Source');
   for (const h of owned.holders) {
-    w(h.name, ...(withEmail ? [h.email] : []), h.security_type, h.shares, pctText(h.ownership_pct), sourceWord(h.source));
+    w(h.name, ...(withEmail ? [h.email] : []), h.security_type, h.shares, ...(recorded ? [h.options] : []), pctText(h.ownership_pct), sourceWord(h.source));
   }
   w('Total shares', ...(withEmail ? [''] : []), '', owned.total_shares);
   w('');
+  if (recorded) w('Fully diluted shares', register.fully_diluted, register.fully_diluted_reason);
   w('Securities');
   w('Security', 'Class', 'Authorized', 'Issued', 'Source');
   for (const s of register.securities) w(s.name, s.share_class, num(s.shares_authorized), num(s.shares_issued), sourceWord(s.source));
@@ -205,7 +225,7 @@ const fmtPct = (v: number | null) => (v == null ? NOT_RECORDED : `${v.toFixed(2)
  * share of the recorded total, and the securities. Letter size, Helvetica, the
  * text made WinAnsi-safe. No email reaches the paper.
  */
-export async function snapshotPdf(ventureName: string, asOf: string, register: { holders: HolderRow[]; securities: SecurityRow[] }): Promise<Uint8Array> {
+export async function snapshotPdf(ventureName: string, asOf: string, register: RegisterRead): Promise<Uint8Array> {
   const doc = await PDFDocument.create();
   const font = await doc.embedFont(StandardFonts.Helvetica);
   const bold = await doc.embedFont(StandardFonts.HelveticaBold);
@@ -218,17 +238,21 @@ export async function snapshotPdf(ventureName: string, asOf: string, register: {
     for (const [text, x] of cells) page.drawText(winAnsiSafe(text).slice(0, 60), { x, y, size, font: f, color });
     y -= size + 6;
   };
-  const owned = withOwnership(register.holders);
+  const owned = withOwnership(register.holders, register.fully_diluted);
   line([[`Cap table, as recorded: ${ventureName}`, M]], bold, 16);
   line([[`As of ${asOf}`, M]], font, 11, muted);
   y -= 8;
   line([['Holders', M]], bold, 12);
-  line([['Holder', M], ['Security type', 260], ['Shares', 380], ['Ownership', 470]], bold, 9, muted);
+  const recorded = 'fully_diluted' in register;
+  if (recorded) line([['Shares and options; ownership uses fully diluted shares.', M]], font, 9, muted);
+  line(recorded ? [['Holder', M], ['Shares', 300], ['Options', 380], ['Ownership FD', 470]] : [['Holder', M], ['Security type', 260], ['Shares', 380], ['Ownership', 470]], bold, 9, muted);
   if (!owned.holders.length) line([['No holder is recorded.', M]], font, 10, muted);
   for (const h of owned.holders) {
-    line([[h.name, M], [h.security_type || NOT_RECORDED, 260], [fmtShares(h.shares), 380], [fmtPct(h.ownership_pct), 470]], font, 10);
+    line(recorded ? [[h.name, M], [fmtShares(h.shares), 300], [fmtShares(num(h.options)), 380], [fmtPct(h.ownership_pct), 470]] : [[h.name, M], [h.security_type || NOT_RECORDED, 260], [fmtShares(h.shares), 380], [fmtPct(h.ownership_pct), 470]], font, 10);
   }
   line([['Total shares', M], [fmtShares(owned.total_shares), 380]], bold, 10);
+  if (recorded) line([['Fully diluted shares', M], [fmtShares(register.fully_diluted ?? null), 380]], bold, 10);
+  if (register.fully_diluted_reason) line([[register.fully_diluted_reason, M]], font, 9, muted);
   y -= 8;
   line([['Securities', M]], bold, 12);
   line([['Security', M], ['Class', 260], ['Authorized', 380], ['Issued', 470]], bold, 9, muted);

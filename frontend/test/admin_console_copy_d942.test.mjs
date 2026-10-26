@@ -120,7 +120,7 @@ test('error reports name the console file, not the retired AdminPage', () => {
   const consoles = 'pages/admin/consoles';
   for (const [name, tags] of Object.entries({
     GithubSyncConsole: ['githubConfigLoad'],
-    KycConsole: ['loadKycQueue', 'kycRecord'],
+    KycConsole: ['loadKycQueue', 'kycFigures'],
     UsersConsole: ['loadUsers', 'trustScoreBatch', 'loadAdminData'],
   })) {
     const src = fs.readFileSync(`${ROOT}/${consoles}/${name}.jsx`, 'utf8');

@@ -49,7 +49,12 @@ function makeD1(db: InstanceType<typeof DatabaseSync>) {
       return api;
     },
     async exec(sql: string) { db.exec(sql); return { count: 0, duration: 0 }; },
-    async batch(x: any[]) { return x; },
+    // D1137: the membership writes are batches now, so the stub runs them, all or none, as D1 does.
+    async batch(x: any[]) {
+      db.exec('BEGIN');
+      try { const out: any[] = []; for (const st of x) out.push(await st.run()); db.exec('COMMIT'); return out; }
+      catch (e) { db.exec('ROLLBACK'); throw e; }
+    },
   };
 }
 
@@ -76,12 +81,16 @@ function freshDb() {
       stage TEXT, revenue_range TEXT, employee_count INTEGER, current_products TEXT,
       international_presence TEXT, expansion_goals TEXT, logo_url TEXT, website TEXT,
       linkedin_url TEXT, description TEXT,
-      created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP, updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP);
+      created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP, updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP, archived_at TEXT);
     CREATE TABLE user_company_links (
       id INTEGER PRIMARY KEY AUTOINCREMENT, uid TEXT NOT NULL UNIQUE, company_id INTEGER NOT NULL,
       user_id INTEGER NOT NULL, role_in_company TEXT NOT NULL DEFAULT 'Member',
       is_primary_admin INTEGER NOT NULL DEFAULT 0, title TEXT, authority TEXT, carry_bps INTEGER,
       created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP, UNIQUE (company_id, user_id));
+      -- D1137 (migration 597): each membership change writes its event in the same batch.
+      CREATE TABLE company_membership_events (id INTEGER PRIMARY KEY AUTOINCREMENT, company_id INTEGER, project_id INTEGER,
+        actor_user_id INTEGER, target_user_id INTEGER, kind TEXT NOT NULL, before_json TEXT, after_json TEXT,
+        created_at TEXT NOT NULL DEFAULT (datetime('now')));
   `);
   db.exec(migration236());
   const u = db.prepare('INSERT INTO users (id, role, name, email) VALUES (?, ?, ?, ?)');
