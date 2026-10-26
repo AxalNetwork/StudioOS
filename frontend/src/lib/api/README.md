@@ -394,3 +394,5 @@ D1133 adds `billingAlertsApi.pay(id)` and `.updateCard(id, nonce)` for the mount
 D1135's `companyActions.js` holds self-service company leave and venture restore.
 
 D1123 adds the cohort capacity read to `labOperations.js`; the mounted Worker route is in admin_lab_operations.ts.
+
+D1207 (#3173): `calendarItems.js` holds the Calendar's Reschedule (`PATCH /calendar/ic-meetings/:id` and `/calendar/founder-checkins/:id`) and its pickers (`/calendar/people`, `/calendar/deals`). A person comes back as a uid and a name, never an email or a user number.

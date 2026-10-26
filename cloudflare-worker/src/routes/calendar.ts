@@ -1,11 +1,12 @@
 /**
  * Calendar routes — port of backend/app/api/routes/calendar.py.
  *
- * Mounted at /api/calendar. Nineteen endpoints across:
+ * Mounted at /api/calendar. Twenty-three endpoints across:
  *   - unified events feed + ICS export
  *   - "Subscribe to my events": its token (make, read, remove) and the feed (D1033)
- *   - IC meetings CRUD + RSVP
- *   - founder check-ins CRUD
+ *   - IC meetings CRUD + RSVP + Reschedule (D1207)
+ *   - founder check-ins CRUD + Reschedule (D1207)
+ *   - the people and deal pickers for New IC meeting and New check-in (D1207)
  *   - Google Calendar OAuth + sync (status, connect, callback, sync, disconnect)
  *   - Microsoft 365 / Outlook OAuth + sync (same five)
  *
@@ -19,11 +20,13 @@ import { Hono } from 'hono';
 import { prepareWorkspaceConnect } from './google_workspace';
 import { DRIVE_FILE_SCOPE, WorkspaceError, clearWorkspaceConnection, ensureWorkspaceIntegration } from '../services/google/workspace';
 import type { Env, User } from '../types';
+import type { CalendarEvent } from '../services/calendar';
 import { getSQL } from '../db';
 import { canAccessProject, getProjectMembershipRole } from '../services/projectAccess';
 import { userMayReadDeal } from './deals';
 import { addToCalendarLinks, eventVisibleTo, joinLinkAllowed, MY_EVENT_KINDS } from '../services/calendar/myEvents';
 import { feedStatus, mintFeedToken, resolveFeedToken, revokeFeedToken } from '../services/calendar/feedTokens';
+import { COPYABLE_KINDS, describeItems } from '../services/calendar/items';
 import { investorUpsell, userMeetsInvestorTier } from '../middleware/requireInvestorTier';
 import { logAdminAction } from '../services/adminAudit';
 import { requireAuth } from '../auth';
@@ -191,10 +194,14 @@ calendar.get('/events', safe('events', 'Could not list calendar events', async (
   // nothing in the response could say which one. `sources` reports every kind
   // that was asked for and whether it answered, so the page can render the four
   // that loaded and name the fifth instead of blanking.
+  //
+  // D1207: this read alone asks for cancelled rows, so the page can strike
+  // them through with their reason; and each item carries what the drawer
+  // draws (`describeItems`). The feed, the sync and the push never see either.
   const { events, sources } = await fetchUserEventsWithSources(
-    c.env, user.id, lc(user.role), fromDt.toISOString(), toDt.toISOString(), kinds,
+    c.env, user.id, lc(user.role), fromDt.toISOString(), toDt.toISOString(), kinds, { withCancelled: true },
   );
-  const items = await attachPushRecords(c.env, user.id, events);
+  const items = await describeItems(c.env, user, await attachPushRecords(c.env, user.id, events));
   await ensureCalendarOAuthSchema(c.env);
   const sql = getSQL(c.env);
   const tok = (await sql`SELECT 1 FROM google_oauth_tokens WHERE user_id = ${user.id}` as any[])[0];
@@ -366,6 +373,56 @@ async function isDealParty(env: Env, user: User, dealId: number): Promise<boolea
   return isProjectParty(env, user, deal, false);
 }
 
+/** A person's id from the uid the people picker gave, or null. */
+async function userIdByUid(env: Env, ref: unknown): Promise<number | null> {
+  if (typeof ref !== 'string') return null;
+  const row = await env.DB.prepare('SELECT id FROM users WHERE uid = ? AND is_active = 1').bind(ref).first<{ id: number }>();
+  return row ? Number(row.id) : null;
+}
+
+/**
+ * The copy each attendee's Google or Outlook calendar holds of an IC meeting:
+ * the organiser first, then everyone else invited. Create and Reschedule send
+ * the same event, so a reschedule PATCHes the copies the create made.
+ */
+async function icSyncEvent(env: Env, meetingId: number): Promise<CalendarEvent | null> {
+  const sql = getSQL(env);
+  const m = (await sql`SELECT * FROM ic_meetings WHERE id = ${meetingId}` as any[])[0];
+  if (!m) return null;
+  const att = await sql`
+    SELECT u.email, u.name FROM ic_meeting_attendees a
+    LEFT JOIN users u ON u.id = a.user_id WHERE a.meeting_id = ${meetingId}
+  ` as any[];
+  const me = (await sql`SELECT email, name FROM users WHERE id = ${m.organizer_user_id}` as any[])[0];
+  return {
+    id: `ic_meeting:${meetingId}`, kind: 'ic_meeting', source_id: meetingId,
+    source_uid: m.uid, title: m.title, start_at: m.start_at,
+    end_at: new Date(new Date(m.start_at).getTime() + Number(m.duration_min) * 60_000).toISOString(),
+    status: 'confirmed', location_kind: m.location_kind, location_uri: m.location_uri,
+    organizer_email: me?.email || null, notes: m.agenda || null,
+    attendees: [
+      { email: me?.email || null, name: me?.name || null, role: 'organizer' },
+      ...att.filter((a: any) => a.email && a.email !== me?.email)
+            .map((a: any) => ({ email: a.email, name: a.name, role: 'invitee' })),
+    ],
+  };
+}
+
+/**
+ * D1207 — a Reschedule's new start and length (CAL19). The start must be
+ * ahead, as at create; a length outside the kind's range is held to it, as
+ * create holds it; no length keeps the current one.
+ */
+function rescheduleOf(body: any, current: number, min: number, max: number):
+  { ok: true; start: string; duration: number } | { ok: false; detail: string } {
+  if (!body?.start_at) return { ok: false, detail: 'start_at required' };
+  const start = new Date(body.start_at);
+  if (Number.isNaN(start.getTime()) || start.getTime() <= Date.now()) return { ok: false, detail: 'start_at must be in the future' };
+  const asked = body.duration_min == null ? current : parseInt(body.duration_min, 10);
+  const duration = Math.min(max, Math.max(min, Number.isFinite(asked) ? asked : current));
+  return { ok: true, start: start.toISOString(), duration };
+}
+
 calendar.post('/ic-meetings', safe('ic_create', 'Could not create IC meeting', async (c) => {
   const user = await requireAuth(c);
   if (!canScheduleIc(lc(user.role))) return c.json({ detail: 'Investor or admin role required' }, 403);
@@ -384,7 +441,14 @@ calendar.post('/ic-meetings', safe('ic_create', 'Could not create IC meeting', a
   if (!(await userMayReadDeal(c.env, user, dealId))) return c.json({ detail: 'Not allowed to schedule for this deal' }, 403);
   if (user.role === 'investor' && !(await isDealParty(c.env, user, dealId))) return c.json({ detail: 'Current deal relationship required' }, 403);
   if (body.attendee_user_ids != null && !Array.isArray(body.attendee_user_ids)) return c.json({ detail: 'Invalid attendees' }, 400);
+  if (body.attendee_uids != null && !Array.isArray(body.attendee_uids)) return c.json({ detail: 'Invalid attendees' }, 400);
   const attendeeIds = new Set<number>((body.attendee_user_ids || []).map(Number));
+  // D1207: the people picker gives each person's uid, so the page never asks for a number.
+  for (const ref of body.attendee_uids || []) {
+    const id = await userIdByUid(c.env, ref);
+    if (id === null) return c.json({ detail: 'Invalid attendee' }, 400);
+    attendeeIds.add(id);
+  }
   for (const attendeeId of attendeeIds) {
     if (!Number.isSafeInteger(attendeeId) || attendeeId <= 0) return c.json({ detail: 'Invalid attendee' }, 400);
     if (attendeeId === user.id) continue;
@@ -420,32 +484,11 @@ calendar.post('/ic-meetings', safe('ic_create', 'Could not create IC meeting', a
   // (attendee lookup + event assembly + dynamic import) happens inside
   // the waitUntil closure so the IC-create response returns immediately.
   const meetingId = meeting.id;
-  const meetingStart = meeting.start_at;
-  const meetingTitle = meeting.title;
-  const meetingLocKind = meeting.location_kind;
-  const meetingLocUri = meeting.location_uri;
-  const meetingAgenda = meeting.agenda;
-  const endIso = new Date(startAt.getTime() + duration * 60_000).toISOString();
   const icSyncP = (async () => {
     try {
       const { onAxalSessionCreated } = await import('../services/calendar/sync');
-      const att = await sql`
-        SELECT u.email, u.name FROM ic_meeting_attendees a
-        LEFT JOIN users u ON u.id = a.user_id WHERE a.meeting_id = ${meetingId}
-      ` as any[];
-      const me = (await sql`SELECT email, name FROM users WHERE id = ${user.id}` as any[])[0];
-      const ev = {
-        id: `ic_meeting:${meetingId}`, kind: 'ic_meeting' as const, source_id: meetingId,
-        source_uid: uid, title: meetingTitle, start_at: meetingStart, end_at: endIso,
-        status: 'confirmed', location_kind: meetingLocKind, location_uri: meetingLocUri,
-        organizer_email: me?.email || null, notes: meetingAgenda || null,
-        attendees: [
-          { email: me?.email || null, name: me?.name || null, role: 'organizer' as const },
-          ...att.filter((a: any) => a.email && a.email !== me?.email)
-                .map((a: any) => ({ email: a.email, name: a.name, role: 'invitee' as const })),
-        ],
-      };
-      await onAxalSessionCreated(c.env, ev);
+      const ev = await icSyncEvent(c.env, meetingId);
+      if (ev) await onAxalSessionCreated(c.env, ev);
     } catch (e) { console.warn('[calendar] IC sync hook failed', e); }
   })();
   if (c.executionCtx?.waitUntil) c.executionCtx.waitUntil(icSyncP);
@@ -512,6 +555,40 @@ calendar.delete('/ic-meetings/:id', safe('ic_cancel', 'Could not cancel IC meeti
   return c.json({ ok: true });
 }));
 
+// D1207 — Reschedule (CAL19): "Everyone invited is told, and their calendar
+// copies move." The organiser's or an admin's, as Cancel is.
+calendar.patch('/ic-meetings/:id', safe('ic_reschedule', 'Could not reschedule IC meeting', async (c) => {
+  const user = await requireAuth(c);
+  const id = parseInt(c.req.param('id'), 10);
+  const body = await c.req.json().catch(() => ({}));
+  const sql = getSQL(c.env);
+  const m = (await sql`SELECT id, organizer_user_id, status, duration_min FROM ic_meetings WHERE id = ${id}` as any[])[0];
+  if (!m) return c.json({ detail: 'IC meeting not found' }, 404);
+  if (!(isAdmin(lc(user.role)) || m.organizer_user_id === user.id)) {
+    return c.json({ detail: 'Only the organiser or an admin can reschedule' }, 403);
+  }
+  if (m.status === 'cancelled') return c.json({ error: 'cancelled', detail: 'A cancelled meeting cannot be moved.' }, 409);
+  const next = rescheduleOf(body, Number(m.duration_min), 10, 600);
+  if (!next.ok) return c.json({ detail: next.detail }, 400);
+  const nowIso = new Date().toISOString();
+  await sql`
+    UPDATE ic_meetings SET start_at = ${next.start}, duration_min = ${next.duration}, updated_at = ${nowIso}
+     WHERE id = ${id} AND status != 'cancelled'
+  `;
+  await logAdminAction(c.env, user.id, user.email, 'calendar_ic_rescheduled', { meeting_id: id, duration_min: next.duration });
+  // Moves each attendee's Google or Outlook copy (deferred, best-effort).
+  const icMoveP = (async () => {
+    try {
+      const { onAxalSessionUpdated } = await import('../services/calendar/sync');
+      const ev = await icSyncEvent(c.env, id);
+      if (ev) await onAxalSessionUpdated(c.env, ev);
+    } catch (e) { console.warn('[calendar] IC reschedule sync hook failed', e); }
+  })();
+  if (c.executionCtx?.waitUntil) c.executionCtx.waitUntil(icMoveP);
+  const row = (await sql`SELECT * FROM ic_meetings WHERE id = ${id}` as any[])[0];
+  return c.json(await serializeIc(c.env, row));
+}));
+
 // ===========================================================================
 // Founder check-ins
 // ===========================================================================
@@ -532,6 +609,26 @@ async function serializeCheckin(env: Env, c: any): Promise<any> {
   };
 }
 
+/** A check-in's calendar copy: the founder and the counterpart. Create and Reschedule send the same. */
+async function checkinSyncEvent(env: Env, checkinId: number): Promise<CalendarEvent | null> {
+  const sql = getSQL(env);
+  const ck = (await sql`SELECT * FROM founder_checkins WHERE id = ${checkinId}` as any[])[0];
+  if (!ck) return null;
+  const f = (await sql`SELECT email, name FROM users WHERE id = ${ck.founder_user_id}` as any[])[0];
+  const co = ck.counterpart_user_id ? (await sql`SELECT email, name FROM users WHERE id = ${ck.counterpart_user_id}` as any[])[0] : null;
+  return {
+    id: `founder_checkin:${checkinId}`, kind: 'founder_checkin', source_id: checkinId,
+    source_uid: ck.uid, title: ck.title, start_at: ck.start_at,
+    end_at: new Date(new Date(ck.start_at).getTime() + Number(ck.duration_min) * 60_000).toISOString(),
+    status: 'confirmed', location_kind: ck.location_kind, location_uri: ck.location_uri,
+    organizer_email: co?.email || f?.email || null, notes: ck.notes || null,
+    attendees: [
+      { email: f?.email || null, name: f?.name || null, role: 'founder' },
+      ...(co ? [{ email: co.email, name: co.name, role: 'counterpart' }] : []),
+    ],
+  };
+}
+
 calendar.post('/founder-checkins', safe('ck_create', 'Could not create check-in', async (c) => {
   const user = await requireAuth(c);
   const body = await c.req.json().catch(() => ({}));
@@ -539,6 +636,17 @@ calendar.post('/founder-checkins', safe('ck_create', 'Could not create check-in'
   const startAt = new Date(body.start_at);
   if (Number.isNaN(startAt.getTime()) || startAt.getTime() <= Date.now()) {
     return c.json({ detail: 'start_at must be in the future' }, 400);
+  }
+  // D1207: the people picker gives a uid; a number is still taken as before.
+  if (body.founder_uid != null) {
+    const id = await userIdByUid(c.env, body.founder_uid);
+    if (id === null) return c.json({ detail: 'founder user not found' }, 404);
+    body.founder_user_id = id;
+  }
+  if (body.counterpart_uid != null) {
+    const id = await userIdByUid(c.env, body.counterpart_uid);
+    if (id === null) return c.json({ detail: 'Invalid counterpart' }, 400);
+    body.counterpart_user_id = id;
   }
   const founderId = parseInt(body.founder_user_id, 10);
   if (!Number.isFinite(founderId)) return c.json({ detail: 'founder_user_id required' }, 400);
@@ -587,27 +695,11 @@ calendar.post('/founder-checkins', safe('ck_create', 'Could not create check-in'
   // Task #52 — push founder check-in to attendees' external calendars
   // (deferred via waitUntil so the response returns immediately).
   const ckId = checkin.id;
-  const ckStart = checkin.start_at;
-  const ckLocKind = checkin.location_kind;
-  const ckLocUri = checkin.location_uri;
-  const ckNotes = body.notes || null;
-  const ckEndIso = new Date(startAt.getTime() + duration * 60_000).toISOString();
   const ckSyncP = (async () => {
     try {
-      const f = (await sql`SELECT email, name FROM users WHERE id = ${founderId}` as any[])[0];
-      const co = counterId ? (await sql`SELECT email, name FROM users WHERE id = ${counterId}` as any[])[0] : null;
-      const ev = {
-        id: `founder_checkin:${ckId}`, kind: 'founder_checkin' as const, source_id: ckId,
-        source_uid: uid, title, start_at: ckStart, end_at: ckEndIso,
-        status: 'confirmed', location_kind: ckLocKind, location_uri: ckLocUri,
-        organizer_email: co?.email || f?.email || null, notes: ckNotes,
-        attendees: [
-          { email: f?.email || null, name: f?.name || null, role: 'founder' as const },
-          ...(co ? [{ email: co.email, name: co.name, role: 'counterpart' as const }] : []),
-        ],
-      };
+      const ev = await checkinSyncEvent(c.env, ckId);
       const { onAxalSessionCreated } = await import('../services/calendar/sync');
-      await onAxalSessionCreated(c.env, ev);
+      if (ev) await onAxalSessionCreated(c.env, ev);
     } catch (e) { console.warn('[calendar] checkin sync hook failed', e); }
   })();
   if (c.executionCtx?.waitUntil) c.executionCtx.waitUntil(ckSyncP);
@@ -656,15 +748,198 @@ calendar.delete('/founder-checkins/:id', safe('ck_cancel', 'Could not cancel che
   return c.json({ ok: true });
 }));
 
+// D1207 — Reschedule a check-in. A check-in stores no booker, so either of
+// its two people may move it, or an admin: its Cancel's rule.
+calendar.patch('/founder-checkins/:id', safe('ck_reschedule', 'Could not reschedule check-in', async (c) => {
+  const user = await requireAuth(c);
+  const id = parseInt(c.req.param('id'), 10);
+  const body = await c.req.json().catch(() => ({}));
+  const sql = getSQL(c.env);
+  const row = (await sql`
+    SELECT founder_user_id, counterpart_user_id, status, duration_min FROM founder_checkins WHERE id = ${id}
+  ` as any[])[0];
+  if (!row) return c.json({ detail: 'Check-in not found' }, 404);
+  if (!(isAdmin(lc(user.role)) || row.founder_user_id === user.id || row.counterpart_user_id === user.id)) {
+    return c.json({ detail: 'Only attendees or admin can reschedule' }, 403);
+  }
+  if (row.status === 'cancelled') return c.json({ error: 'cancelled', detail: 'A cancelled check-in cannot be moved.' }, 409);
+  const next = rescheduleOf(body, Number(row.duration_min), 10, 240);
+  if (!next.ok) return c.json({ detail: next.detail }, 400);
+  const nowIso = new Date().toISOString();
+  await sql`
+    UPDATE founder_checkins SET start_at = ${next.start}, duration_min = ${next.duration}, updated_at = ${nowIso}
+     WHERE id = ${id} AND status != 'cancelled'
+  `;
+  await logAdminAction(c.env, user.id, user.email, 'calendar_checkin_rescheduled', { checkin_id: id, duration_min: next.duration });
+  const ckMoveP = (async () => {
+    try {
+      const { onAxalSessionUpdated } = await import('../services/calendar/sync');
+      const ev = await checkinSyncEvent(c.env, id);
+      if (ev) await onAxalSessionUpdated(c.env, ev);
+    } catch (e) { console.warn('[calendar] checkin reschedule sync hook failed', e); }
+  })();
+  if (c.executionCtx?.waitUntil) c.executionCtx.waitUntil(ckMoveP);
+  const ck = (await sql`SELECT * FROM founder_checkins WHERE id = ${id}` as any[])[0];
+  return c.json(await serializeCheckin(c.env, ck));
+}));
+
+// ===========================================================================
+// D1207 — the people and deal pickers (CAL7, CAL8). New IC meeting and New
+// check-in search by name, so nobody types a user number or an email.
+//
+// ONLY PEOPLE YOU WORK WITH. A person is offered only when they share the
+// deal (IC) or a venture (check-in) with the caller, by the same rule the
+// create applies (`isDealParty`, `isProjectParty`). So the picker never offers
+// someone a create would refuse, and never another studio's people. Each
+// person carries their uid (the create takes it), their name, their profile
+// and how the caller knows them; never an email and never a user number.
+// ===========================================================================
+const PROFILE_WORDS: Readonly<Record<string, string>> = {
+  admin: 'Admin', founder: 'Founder', partner: 'Operating Partner',
+  investor: 'Investor', advisor: 'Advisor', exploring: 'Member',
+};
+const PICK_MAX = 20;
+
+type Venture = { id: number; name: string; founder_id: number | null };
+type Picked = { how: string[]; ventures: Map<number, string> };
+
+function note(into: Map<number, Picked>, userId: unknown, how: string, venture: Venture) {
+  const id = Number(userId);
+  if (!Number.isSafeInteger(id) || id <= 0) return;
+  const p: Picked = into.get(id) || { how: [], ventures: new Map() };
+  if (!p.how.includes(how)) p.how.push(how);
+  p.ventures.set(venture.id, venture.name);
+  into.set(id, p);
+}
+
+/** Everyone on one venture, each with how they are on it. */
+async function ventureCandidates(env: Env, v: Venture, into: Map<number, Picked>, withDealId?: number) {
+  const sql = getSQL(env);
+  const deals = withDealId
+    ? await sql`SELECT id, lead_partner_id FROM deals WHERE id = ${withDealId}` as any[]
+    : await sql`SELECT id, lead_partner_id FROM deals WHERE project_id = ${v.id}` as any[];
+  for (const d of deals) {
+    note(into, d.lead_partner_id, `Lead partner on ${v.name}`, v);
+    for (const r of await sql`SELECT investor_user_id AS id FROM deal_invitations WHERE deal_id = ${d.id} AND status IN ('invited','interested')` as any[]) note(into, r.id, `Invited to ${v.name}`, v);
+    for (const r of await sql`SELECT investor_user_id AS id FROM commitments WHERE deal_id = ${d.id} AND status IN ('pending','confirmed')` as any[]) note(into, r.id, `Committed to ${v.name}`, v);
+  }
+  if (v.founder_id) {
+    for (const r of await sql`SELECT id FROM users WHERE founder_id = ${v.founder_id} AND role = 'founder'` as any[]) note(into, r.id, `Founder of ${v.name}`, v);
+  }
+  // A removed or pending member is dropped by the create's rule in `presentPicked`.
+  for (const r of await sql`SELECT user_id AS id FROM project_members WHERE project_id = ${v.id}` as any[]) note(into, r.id, `On the ${v.name} team`, v);
+  for (const r of await sql`SELECT advisor_user_id AS id FROM advisor_client_grants
+      WHERE project_id = ${v.id} AND status = 'active' AND scope_sessions = 1
+        AND (expires_at IS NULL OR datetime(expires_at) > datetime('now'))` as any[]) note(into, r.id, `Advisor to ${v.name}`, v);
+}
+
+/** The ventures a person is on, by any of the ties `isProjectParty` reads. */
+async function venturesOf(env: Env, user: User): Promise<Venture[]> {
+  const r = await env.DB.prepare(
+    `SELECT DISTINCT p.id, p.name, p.founder_id FROM projects p
+      WHERE p.deleted_at IS NULL AND (
+        (? IS NOT NULL AND p.founder_id = ?)
+        OR p.id IN (SELECT project_id FROM project_members WHERE user_id = ? AND status = 'accepted' AND removed_at IS NULL)
+        OR p.id IN (SELECT project_id FROM advisor_client_grants WHERE advisor_user_id = ? AND status = 'active')
+        OR p.id IN (SELECT project_id FROM deals WHERE lead_partner_id = ?)
+        OR p.id IN (SELECT d.project_id FROM deal_invitations i JOIN deals d ON d.id = i.deal_id WHERE i.investor_user_id = ?)
+        OR p.id IN (SELECT d.project_id FROM commitments k JOIN deals d ON d.id = k.deal_id WHERE k.investor_user_id = ?)
+      ) ORDER BY p.name, p.id`,
+  ).bind(user.founder_id ?? null, user.founder_id ?? null, user.id, user.id, user.id, user.id, user.id).all<Venture>();
+  const out: Venture[] = [];
+  for (const v of r.results || []) if (await isProjectParty(env, user, v)) out.push(v);
+  return out;
+}
+
+async function presentPicked(env: Env, picked: Map<number, Picked>, keep: (u: User) => Promise<boolean>, q: string) {
+  const items: any[] = [];
+  for (const [id, p] of picked) {
+    const u = await env.DB.prepare('SELECT * FROM users WHERE id = ? AND is_active = 1').bind(id).first<User & { uid: string; display_name?: string | null; headline?: string | null }>();
+    if (!u || !(await keep(u))) continue;
+    const name = String(u.display_name || u.name || '').trim();
+    if (!name || (q && !name.toLowerCase().includes(q))) continue;
+    items.push({
+      uid: u.uid, name, profile: PROFILE_WORDS[String(u.role)] || 'Member', headline: u.headline || null,
+      how: p.how, ventures: [...p.ventures].map(([vid, vname]) => ({ id: vid, name: vname })),
+    });
+  }
+  items.sort((a, b) => a.name.localeCompare(b.name));
+  return items.slice(0, PICK_MAX);
+}
+
+calendar.get('/people', safe('people_pick', 'Could not search people', async (c) => {
+  const user = await requireAuth(c);
+  const url = new URL(c.req.url);
+  const purpose = url.searchParams.get('for') || '';
+  const q = (url.searchParams.get('q') || '').trim().slice(0, 80).toLowerCase();
+  const sql = getSQL(c.env);
+  const picked = new Map<number, Picked>();
+  if (purpose === 'ic') {
+    if (!canScheduleIc(lc(user.role))) return c.json({ detail: 'Investor or admin role required' }, 403);
+    const dealId = Number(url.searchParams.get('deal_id'));
+    if (!Number.isSafeInteger(dealId) || dealId <= 0) {
+      return c.json({ error: 'deal_required', detail: 'Choose the deal first: the people come from it.' }, 400);
+    }
+    if (!(await userMayReadDeal(c.env, user, dealId))) return c.json({ detail: 'Not allowed to schedule for this deal' }, 403);
+    if (user.role === 'investor' && !(await isDealParty(c.env, user, dealId))) return c.json({ detail: 'Current deal relationship required' }, 403);
+    const v = (await sql`SELECT p.id, p.name, p.founder_id FROM deals d JOIN projects p ON p.id = d.project_id
+      WHERE d.id = ${dealId} AND p.deleted_at IS NULL` as Venture[])[0];
+    if (v) await ventureCandidates(c.env, v, picked, dealId);
+    picked.delete(user.id);
+    // The create's own rule for each attendee.
+    return c.json({ for: 'ic', items: await presentPicked(c.env, picked, (u) => isDealParty(c.env, u, dealId), q) });
+  }
+  if (purpose === 'checkin') {
+    const ventures = await venturesOf(c.env, user);
+    const mine = ventures.filter((v) => user.role === 'founder' && user.founder_id && v.founder_id === user.founder_id);
+    if (mine.length) {
+      // A founder books with anyone on their ventures, as the counterpart.
+      for (const v of mine) await ventureCandidates(c.env, v, picked);
+      picked.delete(user.id);
+      return c.json({ for: 'checkin', items: await presentPicked(c.env, picked, async (u) => {
+        for (const v of mine) if (await isProjectParty(c.env, u, v)) return true;
+        return false;
+      }, q) });
+    }
+    // Anyone else books with the founders of the ventures they are on.
+    for (const v of ventures) {
+      if (!v.founder_id) continue;
+      for (const r of await sql`SELECT id FROM users WHERE founder_id = ${v.founder_id}` as any[]) note(picked, r.id, `Founder of ${v.name}`, v);
+    }
+    picked.delete(user.id);
+    // The create books only a founder (`Target must be a founder`).
+    return c.json({ for: 'checkin', items: await presentPicked(c.env, picked, async (u) => u.role === 'founder', q) });
+  }
+  return c.json({ error: 'for_required', detail: "Say who the search is for: 'ic' or 'checkin'." }, 400);
+}));
+
+/** D1207 — the deals the caller can open, by venture name, for New IC meeting's Deal field. */
+calendar.get('/deals', safe('deal_pick', 'Could not search deals', async (c) => {
+  const user = await requireAuth(c);
+  const q = (new URL(c.req.url).searchParams.get('q') || '').trim().slice(0, 80).toLowerCase();
+  const rows = await c.env.DB.prepare(
+    `SELECT d.id, d.status, p.name FROM deals d JOIN projects p ON p.id = d.project_id
+      WHERE p.deleted_at IS NULL AND (? = '' OR instr(lower(p.name), ?) > 0)
+      ORDER BY p.name, d.id LIMIT 200`,
+  ).bind(q, q).all() as { results?: { id: number; status: string; name: string }[] };
+  const items: any[] = [];
+  for (const d of rows.results || []) {
+    if (items.length >= PICK_MAX) break;
+    if (!(await userMayReadDeal(c.env, user, d.id))) continue;
+    // An investor schedules only on a deal they are still on (the create's rule).
+    if (user.role === 'investor' && !(await isDealParty(c.env, user, d.id))) continue;
+    items.push({ id: d.id, name: d.name, status: d.status });
+  }
+  return c.json({ items });
+}));
+
 // ===========================================================================
 // Task #52 — "Add to my external calendar" for events that pre-date the
 // user's OAuth connection. POST /api/calendar/push/:kind/:source_id pushes
 // one specific Axal session to whichever providers the caller has connected.
 // ===========================================================================
-const PUSHABLE_KINDS = new Set([
-  'advisor_booking', 'ic_meeting', 'founder_checkin', 'partner_office_hour',
-  'event_ticket', 'event_hosted',
-]);
+// The same list an item's `can.copy` reads (D1207, services/calendar/items.ts).
+const PUSHABLE_KINDS = new Set<string>(COPYABLE_KINDS);
 calendar.post('/push/:kind/:source_id', safe('push_one', 'Could not push event', async (c) => {
   const user = await requireAuth(c);
   const kind = String(c.req.param('kind') || '');
