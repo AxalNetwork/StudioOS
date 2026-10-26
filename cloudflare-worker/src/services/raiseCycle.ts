@@ -172,16 +172,16 @@ async function metricProofs(env: Env, projectId: number): Promise<MetricProof[]>
   const cutoff = daysBefore(today, 90);
   const mrr = await env.DB.prepare(`SELECT mrr, snapshot_date, source FROM (
     SELECT mrr, snapshot_date, source, ROW_NUMBER() OVER (PARTITION BY source ORDER BY snapshot_date DESC, id DESC) AS position
-    FROM project_metrics WHERE project_id = ? AND mrr IS NOT NULL
+    FROM project_metrics WHERE project_id = ? AND mrr IS NOT NULL AND snapshot_date <= ?
   ) WHERE position = 1 ORDER BY CASE WHEN source = 'stripe' THEN 0 ELSE 1 END, snapshot_date DESC, source`)
-    .bind(projectId).all<{ mrr: number; snapshot_date: string; source: string }>();
+    .bind(projectId, today).all<{ mrr: number; snapshot_date: string; source: string }>();
   const paying = await env.DB.prepare(`SELECT paying_accounts, snapshot_date, source FROM (
     SELECT paying_accounts, snapshot_date, source, ROW_NUMBER() OVER (PARTITION BY source ORDER BY snapshot_date DESC, id DESC) AS position
-    FROM project_metrics WHERE project_id = ? AND paying_accounts IS NOT NULL
+    FROM project_metrics WHERE project_id = ? AND paying_accounts IS NOT NULL AND snapshot_date <= ?
   ) WHERE position = 1 ORDER BY CASE WHEN source = 'stripe' THEN 0 ELSE 1 END, snapshot_date DESC, source`)
-    .bind(projectId).all<{ paying_accounts: number; snapshot_date: string; source: string }>();
+    .bind(projectId, today).all<{ paying_accounts: number; snapshot_date: string; source: string }>();
   const fact = (figure: MetricProof['figure'], value: number, row: { source: string; snapshot_date: string }): MetricProof => ({
-    figure, value: Number(value), measured: row.source === 'stripe', fresh: row.snapshot_date >= cutoff && row.snapshot_date <= today, observed_on: row.snapshot_date,
+    figure, value: Number(value), measured: row.source === 'stripe', fresh: row.snapshot_date >= cutoff, observed_on: row.snapshot_date,
     source: `${row.source === 'stripe' ? 'Stripe (measured)' : `Metrics (stated: ${row.source || 'source not recorded'})`} · project_metrics.${figure === 'mrr' ? 'mrr' : 'paying_accounts'} on ${row.snapshot_date}`,
   });
   return [...(mrr.results || []).map(r => fact('mrr', r.mrr, r)), ...(paying.results || []).map(r => fact('paying_customers', r.paying_accounts, r))];

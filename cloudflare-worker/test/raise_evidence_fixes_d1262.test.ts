@@ -220,8 +220,13 @@ test('stale metrics do not prove current traction or outrank a recent typed runw
     f.db.prepare("INSERT INTO project_metrics(project_id,snapshot_date,source,mrr) VALUES(1,?,'stripe',1000)").run(ago(90));
     traction=await proof(f.env);assert.equal(traction.evidence,'measured');assert.equal(traction.score,10);
     f.db.exec("DELETE FROM project_metrics WHERE project_id=1 AND source='stripe'");
-    f.db.prepare("INSERT INTO project_metrics(project_id,snapshot_date,source,mrr) VALUES(1,?,'stripe',1000)").run(ago(-1));
+    narrative(f.db, '["metrics"]');
+    f.db.prepare("INSERT INTO project_metrics(project_id,snapshot_date,source,mrr,paying_accounts) VALUES(1,?,'stripe',1200,12),(1,?,'stripe',9999,99)").run(ago(1),ago(-1));
+    traction=await proof(f.env);assert.equal(traction.score,10);assert.equal(traction.evidence,'measured');assert.doesNotMatch(JSON.stringify(traction.reads),/9,999|99 · Stripe/);
+    let compared=await checkInputs(f.env,1,1);assert.equal(compared.metrics.mrr!.value,1200);assert.equal(compared.metrics.paying_customers!.value,12);
+    f.db.prepare("DELETE FROM project_metrics WHERE source='stripe' AND snapshot_date=?").run(ago(1));
     assert.equal((await proof(f.env)).score,0,'a future observation cannot prove current traction');
+    compared=await checkInputs(f.env,1,1);assert.equal(compared.metrics.mrr,undefined);assert.equal(compared.metrics.paying_customers,undefined);
     f.db.prepare("INSERT INTO project_metrics(project_id,snapshot_date,source,cash_balance,net_burn) VALUES(1,?,'mercury',888,1)").run(ago(-1));
     assert.equal((await figure(f.ctx,'runway_months')).value,10,'future cash does not replace the recorded current snapshot');
     f.db.exec('DELETE FROM project_metrics WHERE project_id=1 AND cash_balance=20');
