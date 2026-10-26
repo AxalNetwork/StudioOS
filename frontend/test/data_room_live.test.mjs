@@ -25,7 +25,9 @@ import { routeBlock } from './_routes.mjs';
 
 const root = resolve(process.cwd());
 const read = (p) => readFileSync(resolve(root, p), 'utf8');
-const PAGE = 'frontend/src/pages/raise/DataRoomPage.jsx';
+// D1109 (#2989): the founder's room is the Data room tool (`raise/dataroom/`); the old page is retired.
+const TOOL_DIR = 'frontend/src/pages/raise/dataroom';
+const TOOL = () => readdirSync(resolve(root, TOOL_DIR)).filter((f) => f.endsWith('.jsx')).map((f) => read(`${TOOL_DIR}/${f}`)).join('\n');
 const ROUTE = 'cloudflare-worker/src/routes/data_room.ts';
 
 test('the NDA gate reads pairwise_ndas, not a second NDA notion', () => {
@@ -122,8 +124,10 @@ test('the UI does not claim a watermark', () => {
 });
 
 test('sharing does not promise an invitation', () => {
-  const s = read(PAGE);
-  assert.match(s, /does not send an invitation/i);
+  const s = read(`${TOOL_DIR}/DataRoomAccess.jsx`);
+  assert.match(s, /Nobody is invited by email\./);
+  // D1109: and the line after Share does not claim access the Worker's answer cannot confirm.
+  assert.ok(s.includes('If ${chosen.email} has a StudioOS account'));
   const w = read(ROUTE);
   // #2461: an unknown address gets the same answer as a known one, so the
   // form cannot be used to learn who has an account. No row, no invitation.
@@ -147,23 +151,24 @@ test('the page is routed, role-branched, and never a second root', () => {
   const route = routeBlock(app, '/raise/data-room');
   assert.ok(route, 'no /raise/data-room route');
   assert.match(route, /guard\(\['admin', 'founder', 'investor'\],/);
-  assert.match(route, /<DataRoomPage/);
+  // D1109: the founder's arm is the tool's Home; the retired modes forward to its tabs.
+  assert.match(route, /<CycleRoute cycle="raise" slug="data-room" \/>/);
+  assert.match(route, /<DataRoomMovedRedirect kind=\{movedKind\(location\.search\)\} \/>/);
+  assert.doesNotMatch(route, /DataRoomPage|FounderRaiseDataRoom/);
   // The persona is a branch inside one route, not a /founder or /investor root.
   assert.ok(!/path="\/investor\/data-room"|path="\/founder\/data-room"/.test(app));
-  const s = read(PAGE);
-  assert.match(s, /const isFounder = role === 'founder' \|\| role === 'admin'/);
 });
 
-test('every api.* the page calls exists on both sides', () => {
+test('every api.* the tool calls exists on both sides', () => {
   // apiMethodNames parses api.js ONCE and exactly (a top-level property at two
   // spaces of indent). The previous form built a regex per method name, which
   // Semgrep flagged as non-literal-regexp; see _apiMethods.mjs for why that
   // finding was not reachable and why the loop was still the weaker design.
-  const called = apiCallsIn(read(PAGE));
+  const called = apiCallsIn(TOOL());
   const defined = apiMethodNames(read('frontend/src/lib/api.js'));
   const missing = [...called].filter((m) => !defined.has(m));
   assert.deepEqual(missing, [], `api.js does not define: ${missing.join(', ')}`);
-  assert.ok(called.size >= 8, 'the page should exercise most of the route');
+  assert.ok(called.size >= 8, 'the tool should exercise most of the route');
 });
 
 test('the four tables exist and nothing else creates them', () => {

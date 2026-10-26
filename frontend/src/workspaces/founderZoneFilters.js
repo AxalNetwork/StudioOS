@@ -268,14 +268,6 @@ export const FOUNDER_ZONE_FILTERS = {
     { canvas: 'Compliance', key: 'compliance' },
     { canvas: 'Signatures', key: 'signatures' },
   ],
-  // Grants, files and access events are all project-scoped records, so the
-  // matrix, both of its axes and the gap read are each a view over them.
-  'raise/data-room': [
-    { canvas: 'Matrix', key: 'matrix' },
-    { canvas: 'By artifact', key: 'artifacts' },
-    { canvas: 'By investor', key: 'investors' },
-    { canvas: 'Gaps', key: 'gaps' },
-  ],
 
   // ── Grow ─────────────────────────────────────────────────────────────────
   // Metric snapshots are dated, so the two period views run. `Targets` runs now
