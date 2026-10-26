@@ -6,8 +6,9 @@ import { capTableRecordApi } from '../../../lib/api/capTableRecord';
 import { useAuth } from '../../../hooks/useAuthSync';
 import { hasTier } from '../../../sidebarConfig';
 import { Lightbox, Unreadable } from '../../../ui';
+import { usePhoneWidth } from '../../../ui/phone/usePhoneWidth';
 import { Tag } from './CapTableTag';
-import { HOME_PATH, harbour, tabSearch } from './capTableModel';
+import { HOME_PATH, PHONE_HOLDERS, harbour, tabSearch } from './capTableModel';
 import HolderDrawer from './HolderDrawer';
 import ProposalDrawer from './ProposalDrawer';
 import { CorrectDialog, RecordDialog, VoidDialog } from './IssuanceDialogs';
@@ -15,7 +16,7 @@ import { proposalHref } from './historyModel';
 import {
   AS_OF_NONE, COFOUNDER_LINE, EMPTY_LINE, EMPTY_TITLE, EXPLORER_LINE, EXPLORER_TITLE, FD_LEGEND, MODEL_LINE, MODEL_TITLE,
   OTHER_LINE, OTHER_TITLE, PLANS_PATH, PLAN_LINE, SAVE_BLOCKED, UNREADABLE_LINE,
-  asOf, bars, byClass, cartaChip, harbourChip, instruments, needsYou, proposalsFromModel, tiles, whoOwns,
+  asOf, bars, byClass, cartaChip, harbourChip, holderCards, instruments, needsYou, proposalsFromModel, tiles, whoOwns,
 } from './overviewModel';
 
 /**
@@ -31,23 +32,29 @@ import {
  * (CT11); the holder drawer's rows offer Void (CT12b) to the owner and
  * Correct (CT12c) to an admin. `open` says which of the first two the address
  * asks for.
+ *
+ * D1028 (#2865, CT23a–b): below 1024px Overview is a column. The tool bar's
+ * one action fills its row; then Needs you, the Outstanding / Fully diluted
+ * switch, the group bar, Who owns as cards and the rest of the side column.
+ * A holder is a page of its own (`HolderDrawer` with `page`), and every
+ * dialog and drawer is a bottom sheet.
  */
 
-const CARD = 'rounded-xl border border-axal-hairline bg-white dark:border-gray-800 dark:bg-gray-900';
-const INK = 'text-axal-ink dark:text-gray-100';
+const CARD = 'rounded-xl border border-axal-hairline bg-white dark:border-gray-700 dark:bg-gray-900';
+const INK = 'text-axal-ink dark:text-gray-200';
 const MUTED = 'text-axal-muted dark:text-gray-400';
 const EYEBROW = 'text-[10.5px] font-extrabold uppercase tracking-[.07em] text-axal-muted dark:text-gray-400';
-const LINK = 'font-semibold text-axal-violet hover:text-axal-violet-deep dark:text-violet-300 dark:hover:text-violet-200';
+const LINK = 'font-semibold text-axal-violet hover:text-axal-violet-deep dark:text-violet-400 dark:hover:text-violet-300';
 const TH = 'px-3 py-2 text-left text-[10.5px] font-extrabold uppercase tracking-[.07em] text-axal-muted dark:text-gray-400';
-const TD = 'px-3 py-2 align-top text-[12.5px] text-axal-ink dark:text-gray-100';
+const TD = 'px-3 py-2 align-top text-[12.5px] text-axal-ink dark:text-gray-200';
 const MONO = 'font-mono tabular-nums';
 const BTN = 'inline-flex min-h-[32px] items-center justify-center rounded-[9px] px-3 text-[12.5px] font-bold disabled:opacity-50';
 const PRIMARY = `${BTN} bg-axal-violet text-white hover:bg-axal-violet-deep`;
-const GHOST = `${BTN} border border-axal-hairline bg-white text-axal-ink hover:bg-axal-ground dark:border-gray-700 dark:bg-gray-900 dark:text-gray-100 dark:hover:bg-gray-800`;
+const GHOST = `${BTN} border border-axal-hairline bg-white text-axal-ink hover:bg-axal-ground dark:border-gray-700 dark:bg-gray-900 dark:text-gray-200 dark:hover:bg-gray-800`;
 const CHIP = {
-  good: 'border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-900 dark:bg-emerald-950/30 dark:text-emerald-300',
-  warn: 'border-amber-200 bg-amber-50 text-amber-800 dark:border-amber-900 dark:bg-amber-950/30 dark:text-amber-300',
-  bad: 'border-red-200 bg-red-50 text-red-700 dark:border-red-900 dark:bg-red-950/30 dark:text-red-300',
+  good: 'border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-400/45 dark:bg-emerald-400/10 dark:text-emerald-400',
+  warn: 'border-amber-200 bg-amber-50 text-amber-800 dark:border-amber-300/55 dark:bg-amber-300/10 dark:text-amber-300',
+  bad: 'border-red-200 bg-red-50 text-red-700 dark:border-red-400/50 dark:bg-red-400/10 dark:text-red-400',
   muted: 'border-axal-hairline bg-axal-ground text-axal-muted dark:border-gray-700 dark:bg-gray-800 dark:text-gray-400',
 };
 const BAR_FILL = {
@@ -87,7 +94,7 @@ function Block({ title, tag, aside, children, testId }) {
   return (
     <section className={CARD} data-testid={testId}>
       {title ? (
-        <div className="flex flex-wrap items-center justify-between gap-2 border-b border-axal-hairline px-4 py-3 dark:border-gray-800">
+        <div className="flex flex-wrap items-center justify-between gap-2 border-b border-axal-hairline px-4 py-3 dark:border-gray-700">
           <h2 className={`m-0 flex items-center gap-2 text-[15px] font-extrabold tracking-[-.015em] ${INK}`}>{title} {tag}</h2>
           {aside}
         </div>
@@ -122,7 +129,7 @@ function Seg({ options, value, onChange, label, testId }) {
 
 // ─────────────────────────────────────────────────────────── the tool bar
 
-function ToolBar({ record, harbourRead, cartaRead, need, role, plan, onRecord }) {
+function ToolBar({ record, harbourRead, cartaRead, need, role, plan, onRecord, phone = false }) {
   const failed = record.status === 'error';
   const loading = record.status === 'loading';
   const chips = loading
@@ -140,18 +147,18 @@ function ToolBar({ record, harbourRead, cartaRead, need, role, plan, onRecord })
   else if (!plan && role !== 'reader') {
     actions = (
       <>
-        <span className="inline-flex min-h-[30px] items-center rounded-full border border-axal-lavender-edge bg-axal-lavender px-3 text-[12.5px] font-bold text-axal-violet dark:border-violet-800 dark:bg-violet-950/40 dark:text-violet-300" data-testid="captable-plan-gate">{PLAN_LINE}</span>
+        <span className="inline-flex min-h-[30px] items-center rounded-full border border-axal-lavender-edge bg-axal-lavender px-3 text-[12.5px] font-bold text-axal-violet dark:border-[#4c3a8a] dark:bg-[#211f3d] dark:text-violet-400" data-testid="captable-plan-gate">{PLAN_LINE}</span>
         <Link className={GHOST} to={PLANS_PATH}>See plans</Link>
       </>
     );
-  } else if (onRecord && role === 'owner') actions = <button type="button" className={PRIMARY} onClick={() => onRecord('record')} data-testid="captable-record">Record an issuance</button>;
-  else if (onRecord && role === 'cofounder') actions = <button type="button" className={PRIMARY} onClick={() => onRecord('propose')} data-testid="captable-propose">Propose an issuance</button>;
+  } else if (onRecord && role === 'owner') actions = <button type="button" className={`${PRIMARY}${phone ? ' flex-1' : ''}`} onClick={() => onRecord('record')} data-testid="captable-record">Record an issuance</button>;
+  else if (onRecord && role === 'cofounder') actions = <button type="button" className={`${PRIMARY}${phone ? ' flex-1' : ''}`} onClick={() => onRecord('propose')} data-testid="captable-propose">Propose an issuance</button>;
   return (
     <div className="flex flex-wrap items-center justify-between gap-2" data-testid="captable-toolbar">
       <div className="flex flex-wrap items-center gap-1.5">
         {chips.map((c, i) => <Chip key={i} chip={c} testId={`captable-chip-${i}`} />)}
       </div>
-      {actions ? <div className="flex flex-wrap items-center gap-2">{actions}</div> : null}
+      {actions ? <div className={`flex flex-wrap items-center gap-2${phone ? ' w-full' : ''}`} data-testid="captable-toolbar-actions">{actions}</div> : null}
     </div>
   );
 }
@@ -164,7 +171,7 @@ function NeedsYou({ need, role, onReview }) {
     <Block title="Needs you" aside={<span className="font-mono text-[11.5px] font-bold text-amber-700 dark:text-amber-300" data-testid="captable-needs-meta">{need.meta}</span>} testId="captable-needs">
       <ul className="m-0 flex list-none flex-col gap-2 p-0">
         {need.rows.map((r) => (
-          <li key={r.uid} className="flex flex-wrap items-center gap-2 border-b border-axal-ground pb-2 last:border-b-0 last:pb-0 dark:border-gray-800" data-testid="captable-need">
+          <li key={r.uid} className="flex flex-wrap items-center gap-2 border-b border-axal-ground pb-2 last:border-b-0 last:pb-0 dark:border-gray-700" data-testid="captable-need">
             <span className={`rounded-full border px-2 py-0.5 text-[10.5px] font-bold ${CHIP.muted}`}>{r.pill}</span>
             <span className={`min-w-0 flex-1 text-[12.5px] ${INK}`}>{r.lead} {r.text}</span>
             <button type="button" className={GHOST} onClick={() => onReview(r)} data-testid="captable-need-review">{role === 'owner' ? 'Review' : 'Open'}</button>
@@ -193,10 +200,10 @@ function WhoOwns({ record, search, view, setView, basis, setBasis }) {
         {!classes.available ? <p className={`m-0 text-[12.5px] ${MUTED}`} data-testid="captable-by-class-unavailable">{classes.sentence || 'The classes cannot be counted.'}</p> : (
           <div className="overflow-x-auto">
             <table className="w-full border-collapse">
-              <thead><tr className="border-b border-axal-hairline dark:border-gray-800">{['Class', 'Authorized', 'Issued', 'Outstanding', 'Price per share', 'Liquidation preference', 'Conversion ratio', 'Holders'].map((c) => <th key={c} className={TH}>{c}</th>)}</tr></thead>
+              <thead><tr className="border-b border-axal-hairline dark:border-gray-700">{['Class', 'Authorized', 'Issued', 'Outstanding', 'Price per share', 'Liquidation preference', 'Conversion ratio', 'Holders'].map((c) => <th key={c} className={TH}>{c}</th>)}</tr></thead>
               <tbody>
                 {classes.rows.map((c) => (
-                  <tr key={c.uid} className="border-b border-axal-ground last:border-b-0 dark:border-gray-800" data-testid="captable-class-row">
+                  <tr key={c.uid} className="border-b border-axal-ground last:border-b-0 dark:border-gray-700" data-testid="captable-class-row">
                     <td className={`${TD} font-bold`}>{c.name}</td>
                     <td className={`${TD} ${MONO}`}>{c.authorized}</td>
                     <td className={`${TD} ${MONO}`}>{c.issued}</td>
@@ -220,12 +227,12 @@ function WhoOwns({ record, search, view, setView, basis, setBasis }) {
       {!owns.available ? <p className={`m-0 text-[12.5px] ${MUTED}`} data-testid="captable-who-owns-unavailable">{owns.sentence || 'Who owns cannot be counted from the record.'}</p> : (
         <div className="overflow-x-auto">
           <table className="w-full border-collapse">
-            <thead><tr className="border-b border-axal-hairline dark:border-gray-800">{['Holder', 'Class', basis === 'out' ? 'Shares' : 'Shares and options', '% fully diluted', '% outstanding', 'Source', 'Last change'].map((c) => <th key={c} className={TH}>{c}</th>)}</tr></thead>
+            <thead><tr className="border-b border-axal-hairline dark:border-gray-700">{['Holder', 'Class', basis === 'out' ? 'Shares' : 'Shares and options', '% fully diluted', '% outstanding', 'Source', 'Last change'].map((c) => <th key={c} className={TH}>{c}</th>)}</tr></thead>
             <tbody>
               {owns.groups.map((g) => (
                 <React.Fragment key={g.id}>
                   <tr className="bg-axal-ground dark:bg-gray-800/60" data-testid="captable-group">
-                    <td className={`${TD} ${EYEBROW} !text-axal-ink dark:!text-gray-100`}>{g.label}</td>
+                    <td className={`${TD} ${EYEBROW} !text-axal-ink dark:!text-gray-200`}>{g.label}</td>
                     <td className={TD} />
                     <td className={`${TD} ${MONO} font-extrabold`}>{g.shares.toLocaleString('en-US')}</td>
                     <td className={`${TD} ${MONO} font-extrabold`}>{g.pctFd}</td>
@@ -233,7 +240,7 @@ function WhoOwns({ record, search, view, setView, basis, setBasis }) {
                     <td className={TD} /><td className={TD} />
                   </tr>
                   {g.rows.map((r) => (
-                    <tr key={r.key} className="border-b border-axal-ground last:border-b-0 dark:border-gray-800" data-testid="captable-holder-row">
+                    <tr key={r.key} className="border-b border-axal-ground last:border-b-0 dark:border-gray-700" data-testid="captable-holder-row">
                       <td className={`${TD} font-bold`}>{r.href ? <Link className={LINK} to={r.href}>{r.name}</Link> : r.name}</td>
                       <td className={TD}>{r.classes}</td>
                       <td className={`${TD} ${MONO}`}>{r.shares.toLocaleString('en-US')}</td>
@@ -285,7 +292,7 @@ function Bars({ list }) {
   );
 }
 
-function Side({ record, compare, harbourRead, search, retry }) {
+function Side({ record, compare, harbourRead, search, retry, withBars = true }) {
   const t = tiles(record.data);
   const list = bars(record.data, compare.status === 'ready' ? compare.data : null);
   const inst = instruments(record.data);
@@ -303,7 +310,7 @@ function Side({ record, compare, harbourRead, search, retry }) {
         ))}
       </div>
       {compare.status === 'error' ? <div data-testid="captable-after-unreadable"><Unreadable what="Your model" claim="The bars from the record still draw." onRetry={retry} /></div> : null}
-      <Bars list={list} />
+      {withBars ? <Bars list={list} /> : null}
       <Block title="Outstanding instruments" aside={<span className={`font-mono text-[11.5px] ${MUTED}`}>{inst.length}</span>} testId="captable-instruments">
         {inst.length === 0 ? <p className={`m-0 text-[12.5px] ${MUTED}`}>No SAFE or note is on record.</p> : (
           <ul className="m-0 flex list-none flex-col gap-1.5 p-0">
@@ -327,6 +334,68 @@ function Side({ record, compare, harbourRead, search, retry }) {
               </div>
             )}
       </Block>
+    </div>
+  );
+}
+
+// ─────────────────────────────────────────────────────────── the phone (D1028, CT23a)
+
+/** Who owns as cards: one holder a card, its share by the switch, six before "Show more". */
+function HolderCards({ record, basis, search }) {
+  const [all, setAll] = useState(false);
+  const v = holderCards(whoOwns(record, basis, search), basis, all ? Infinity : PHONE_HOLDERS);
+  return (
+    <Block title="Who owns the company" tag={<Tag kind="record" />} testId="captable-holder-cards">
+      {!v.available ? <p className={`m-0 text-[12.5px] ${MUTED}`} data-testid="captable-who-owns-unavailable">{v.sentence || 'Who owns cannot be counted from the record.'}</p> : (
+        <>
+          <ul className="m-0 flex list-none flex-col p-0">
+            {v.cards.map((c) => {
+              const body = (
+                <>
+                  <span className="flex min-w-0 flex-col gap-0.5">
+                    <span className={`w-fit rounded-full border px-2 py-0.5 text-[10.5px] font-bold ${CHIP.muted}`}>{c.pill}</span>
+                    <span className={`text-[13px] font-bold ${INK}`}>{c.name}</span>
+                    <span className={`text-[12px] ${MUTED}`}>{c.line}</span>
+                  </span>
+                  <span className={`${MONO} shrink-0 text-[13px] font-bold ${INK}`} title={v.label}>{c.value}</span>
+                </>
+              );
+              const row = 'flex items-start justify-between gap-3 py-2.5';
+              return (
+                <li key={c.key} className="border-t border-axal-hairline first:border-t-0 dark:border-gray-700" data-testid="captable-holder-card">
+                  {c.href ? <Link className={`${row} no-underline`} to={c.href} data-testid="captable-holder-card-link">{body}</Link> : <div className={row}>{body}</div>}
+                </li>
+              );
+            })}
+          </ul>
+          {v.foot ? (
+            <p className={`m-0 mt-1 flex flex-wrap items-center gap-2 text-[11.5px] ${MUTED}`} data-testid="captable-holder-cards-foot">
+              {v.foot}
+              {v.more ? <button type="button" className={GHOST} onClick={() => setAll(true)} data-testid="captable-holder-cards-more">Show more</button> : null}
+            </p>
+          ) : null}
+        </>
+      )}
+    </Block>
+  );
+}
+
+/** CT23a below the tool bar: the switch, the group bar, the cards (or By class), then the side column without its bars. */
+function PhoneOverview({ record, compare, harbourRead, search, retry, view, setView, basis, setBasis }) {
+  return (
+    <div className="flex min-w-0 flex-col gap-3" data-testid="captable-phone-overview">
+      <div className="flex flex-col gap-2" data-testid="captable-show">
+        <span className={EYEBROW}>Show</span>
+        <span className="flex flex-wrap gap-2">
+          {view === 'holder' ? <Seg label="Count" options={[['out', 'Outstanding'], ['fd', 'Fully diluted']]} value={basis} onChange={setBasis} testId="captable-basis" /> : null}
+          <Seg label="Group by" options={[['holder', 'By holder'], ['class', 'By class']]} value={view} onChange={setView} testId="captable-view" />
+        </span>
+      </div>
+      <Bars list={bars(record.data, compare.status === 'ready' ? compare.data : null)} />
+      {view === 'class'
+        ? <WhoOwns record={record.data} search={tabSearch(search)} view={view} setView={setView} basis={basis} setBasis={setBasis} />
+        : <HolderCards record={record.data} basis={basis} search={tabSearch(search)} />}
+      <Side record={record} compare={compare} harbourRead={harbourRead} search={search} retry={retry} withBars={false} />
     </div>
   );
 }
@@ -364,7 +433,7 @@ function FromModel({ projectId, scenario, onClose, onDone }) {
   };
   const founders = list.filter((b) => b.kind === 'founding').length;
   return (
-    <Lightbox label="Record them from the model" title="Record them from the model?" width={540} onClose={() => !busy && onClose()} testId="captable-from-model"
+    <Lightbox label="Record them from the model" title="Record them from the model?" width={540} onClose={() => !busy && onClose()} testId="captable-from-model" phone="sheet"
       footer={(
         <div className="flex justify-end gap-2">
           <button type="button" className={GHOST} onClick={onClose} disabled={busy}>Cancel</button>
@@ -378,7 +447,7 @@ function FromModel({ projectId, scenario, onClose, onDone }) {
             : 'Your saved model holds no founder or SAFE to propose.'}
         </p>
         <p className={`m-0 ${MUTED}`}>Nothing counts until you record each one in Needs you, where you add its class, date and document. You and your co-founders see the proposals; nobody else does.</p>
-        {error ? <p role="alert" className="m-0 font-semibold text-red-700 dark:text-red-300" data-testid="captable-from-model-error">{error}</p> : null}
+        {error ? <p role="alert" className="m-0 font-semibold text-red-700 dark:text-red-400" data-testid="captable-from-model-error">{error}</p> : null}
       </div>
     </Lightbox>
   );
@@ -387,6 +456,7 @@ function FromModel({ projectId, scenario, onClose, onDone }) {
 export function CapTableOverview({ projectId, search = '', holderId = null, open = null }) {
   const { user } = useAuth() || {};
   const navigate = useNavigate();
+  const phone = usePhoneWidth();
   const [reload, setReload] = useState(0);
   const retry = useCallback(() => setReload((n) => n + 1), []);
   const explorer = String(user?.role || '').toLowerCase() === 'exploring';
@@ -424,6 +494,19 @@ export function CapTableOverview({ projectId, search = '', holderId = null, open
   const done = () => { setVoiding(null); setCorrecting(null); retry(); };
   const leave = () => { closeDrawer(); retry(); };
 
+  const holderDrawer = holderId != null ? (
+    <HolderDrawer projectId={projectId} holderId={holderId} record={record} grants={grants} role={role} onClose={closeDrawer} page={phone}
+      onVoid={role === 'owner' || admin ? setVoiding : null} onCorrect={admin ? setCorrecting : null} />
+  ) : null;
+  const rowDialogs = (
+    <>
+      {voiding ? <VoidDialog projectId={projectId} record={record.data} row={voiding} admin={admin && role !== 'owner'} onClose={() => setVoiding(null)} onDone={done} /> : null}
+      {correcting ? <CorrectDialog projectId={projectId} record={record.data} row={correcting} onClose={() => setCorrecting(null)} onDone={done} /> : null}
+    </>
+  );
+  // D1028 (CT23b): on a phone the holder is the page; nothing of Overview is drawn behind it.
+  if (phone && holderDrawer) return <div className="flex min-w-0 flex-col" data-testid="captable-holder-full">{holderDrawer}{rowDialogs}</div>;
+
   let body;
   if (record.status === 'loading') body = <Reading />;
   else if (record.status === 'refused') {
@@ -435,7 +518,7 @@ export function CapTableOverview({ projectId, search = '', holderId = null, open
   } else if (record.status === 'error') {
     body = (
       <div className={`${CARD} flex flex-wrap items-center justify-between gap-3 px-4 py-3`} role="alert" data-testid="captable-record-unreadable">
-        <span className="text-[13px] font-semibold text-red-700 dark:text-red-300">{UNREADABLE_LINE}</span>
+        <span className="text-[13px] font-semibold text-red-700 dark:text-red-400">{UNREADABLE_LINE}</span>
         <button type="button" className={GHOST} onClick={retry}>Try again</button>
       </div>
     );
@@ -458,10 +541,12 @@ export function CapTableOverview({ projectId, search = '', holderId = null, open
             </Center>
           )
         ) : (
-          <div className="grid gap-3.5 lg:grid-cols-[minmax(0,2fr)_minmax(0,1fr)]">
-            <WhoOwns record={record.data} search={tabSearch(search)} view={view} setView={setView} basis={basis} setBasis={setBasis} />
-            <Side record={record} compare={compare} harbourRead={harbourRead} search={search} retry={retry} />
-          </div>
+          phone ? <PhoneOverview record={record} compare={compare} harbourRead={harbourRead} search={search} retry={retry} view={view} setView={setView} basis={basis} setBasis={setBasis} /> : (
+            <div className="grid gap-3.5 lg:grid-cols-[minmax(0,2fr)_minmax(0,1fr)]">
+              <WhoOwns record={record.data} search={tabSearch(search)} view={view} setView={setView} basis={basis} setBasis={setBasis} />
+              <Side record={record} compare={compare} harbourRead={harbourRead} search={search} retry={retry} />
+            </div>
+          )
         )}
       </div>
     );
@@ -469,26 +554,22 @@ export function CapTableOverview({ projectId, search = '', holderId = null, open
 
   return (
     <div className="flex min-w-0 flex-col gap-3.5" data-testid="captable-overview">
-      <ToolBar record={record} harbourRead={harbourRead} cartaRead={cartaRead} need={need} role={role} plan={plan} onRecord={writes ? onRecord : null} />
+      <ToolBar record={record} harbourRead={harbourRead} cartaRead={cartaRead} need={need} role={role} plan={plan} onRecord={writes ? onRecord : null} phone={phone} />
       {body}
       {open?.kind === 'record' && record.status === 'ready' && (writes || admin) ? (
         <RecordDialog projectId={projectId} record={record.data} mode={recordMode} admin={admin && role !== 'owner'} onClose={closeDrawer} onDone={leave} />
       ) : null}
       {open?.kind === 'record' && record.status === 'ready' && !(writes || admin) ? (
-        <Lightbox label="Record an issuance" title="Record an issuance" onClose={closeDrawer} testId="captable-record-closed">
+        <Lightbox label="Record an issuance" title="Record an issuance" onClose={closeDrawer} testId="captable-record-closed" phone="sheet">
           <p className={`m-0 text-[13px] ${INK}`}>{plan ? 'Only the owner records, and a co-founder proposes. You can read this cap table.' : PLAN_LINE}</p>
         </Lightbox>
       ) : null}
       {open?.kind === 'proposal' ? (
         <ProposalDrawer projectId={projectId} id={open.id} role={role} record={{ ...record, retry }} onClose={closeDrawer} onDone={leave} />
       ) : null}
-      {voiding ? <VoidDialog projectId={projectId} record={record.data} row={voiding} admin={admin && role !== 'owner'} onClose={() => setVoiding(null)} onDone={done} /> : null}
-      {correcting ? <CorrectDialog projectId={projectId} record={record.data} row={correcting} onClose={() => setCorrecting(null)} onDone={done} /> : null}
+      {rowDialogs}
       {fromModel ? <FromModel projectId={projectId} scenario={compare.data?.canonical} onClose={() => setFromModel(false)} onDone={() => { setFromModel(false); retry(); }} /> : null}
-      {holderId != null ? (
-        <HolderDrawer projectId={projectId} holderId={holderId} record={record} grants={grants} role={role} onClose={closeDrawer}
-          onVoid={role === 'owner' || admin ? setVoiding : null} onCorrect={admin ? setCorrecting : null} />
-      ) : null}
+      {holderDrawer}
     </div>
   );
 }

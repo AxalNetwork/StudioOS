@@ -122,3 +122,12 @@ rollback, no admin bypass, NDA exclusion and anonymous change metadata.
 D1123 extends admin_lab_operations_d971.test.ts with real SQLite capacity-result tests: cohort scoping, last event, absent vs unreadable, and admin-only reads.
 
 D1176: `use_of_funds_routes_d1176.test.ts` mounts the real Use of funds and financial routers over canonical SQLite DDL. It covers roles/company scope, cross-venture ids, Base projection, copies, racing deletion, zero/missing values, precedence, founder-only Mercury, partial reads and audit rollback. Providers are stubbed.
+
+`calendar_d1206.test.ts` checks mounted Free-investor reads and subscriptions,
+Professional-only IC creation, advisor fallback ownership, partial-source error
+codes and safe diagnostics, and Calendly exclusion from both provider copies.
+It also checks local-licence scopes, HQ elevation, constant-query populated memberships, private-kind exclusions,
+unavailable remote coverage and personal sync/export isolation after a scope
+read. `my_events_feed_d1033.test.ts` also verifies Free and lapsed subscriptions
+with token ownership, revocation and join-link boundaries intact.
+Every provider call is stubbed or refused; all rows are synthetic.

@@ -161,7 +161,7 @@ no new schema, runtime or billing path is introduced.
 | --- | --- |
 | `advisor/` | The advisor state machine and its question banks. |
 | `ai/` | D763: the AI router's pure parts. `guard.ts` holds Llama Guard's slicing, verdicts, category policy and refusal copy. Its README has the rule for adding here. |
-| `calendar/` | Calendar sync (`sync.ts`), cancellation-time removal of tracked copies (`cancelEvents.ts`, D1131), and My events in the calendar (`myEvents.ts`, D1033): tickets and hosted events as calendar kinds, the add-to links, and the copies a sync must remove. D1131 uses `queue.ts`, `queueWorker.ts` and `../models/jobs.ts` for two immediate copies, scan batches of five plus continuation, per-copy cancellation rechecks and independent retry/dead-letter handling. This idempotent job alone may fall back to D1 after an uncertain CF send; exact reads use the mapping primary key, scans use existing source/event indexes. `feedTokens.ts` (D1033, migration 603) is "Subscribe to my events": the per-member token, stored as its SHA-256 only, that lets a calendar client fetch the my-events feed with no session. `investorMeetings.ts` (D1190) is the `investor_meeting` kind: a founder's meeting or call with an investor, logged with a start in Capital relationships. |
+| `calendar/` | Calendar sync (`sync.ts`), cancellation-time removal of tracked copies (`cancelEvents.ts`, D1131), and My events in the calendar (`myEvents.ts`, D1033): tickets and hosted events as calendar kinds, the add-to links, and the copies a sync must remove. D1131 uses `queue.ts`, `queueWorker.ts` and `../models/jobs.ts` for two immediate copies, scan batches of five plus continuation, per-copy cancellation rechecks and independent retry/dead-letter handling. This idempotent job alone may fall back to D1 after an uncertain CF send; exact reads use the mapping primary key, scans use existing source/event indexes. `feedTokens.ts` (D1033, migration 603) is "Subscribe to my events": the per-member token, stored as its SHA-256 only, that lets a calendar client fetch the my-events feed with no session; D1209 (migration 610) adds the whole-calendar scope. `syncState.ts` (D1209) is what a Google or Outlook sync leaves behind: the error code on the token row that the status reads return, and the marker of whose copies a disconnect kept (`calendar_sync_retained`). `sync.ts`'s `removeProviderCopies` is the disconnect's "Remove the copies first". `investorMeetings.ts` (D1190) is the `investor_meeting` kind: a founder's meeting or call with an investor, logged with a start in Capital relationships. |
 | `channels/` | D684: business Telegram and WhatsApp conversations, and Zoom and Google Meet calls, reaching Validate › Interviews. The contract, event dedupe, connection tenancy, link codes, outbound tracking and the pending-thread store. Its README has the rules. |
 | `ai/` | D761: the AI router's request and response shapes, per-class timeouts, context-window and paid-only fallbacks, session affinity and the units each attempt used. D760: `catalogue.ts`, every Workers AI model priced in each unit Cloudflare bills, and `pricing.ts`, cost and billed in exact decimals with `AI_MARKUP` written once. Pure; `aiRouter.ts` calls it. |
 | `decks/` | Deck assembly and export. |
@@ -489,6 +489,9 @@ Event responses use `eventsCommon.ts` to withhold online and hybrid join URLs
 unless a manager or a confirmed seat with settled payment reads them. Public
 calendar exports and invitation attachments use the same public projection.
 
+`calendar/` holds the personal source readers, subscription tokens, page-only
+item details and external-copy lifecycle helpers; see `calendar/README.md`.
+
 #2440: `calendar.ts` reads only events the member owns, organises or attends,
 including for admins. The same boundary feeds the page, calendar downloads,
 Google/Outlook sync and individual pushes; staff-wide typed lists stay separate.
@@ -528,6 +531,8 @@ D1066 (#2936): `buildPlanAccept.ts` decides plan items: Accept (with an optional
 
 D1071 (#2941): `buildPlanWord.ts` is Eadwyn's wording of the plan: the material (pending items' rule titles and evidence labels and counts, never a name, quote or decision), the prompt, the screen (no digit, currency, contact or link leaves) and the wording row (`ai_rail_proposals`, `kind 'draft'`, on `build_plan:<uid>`). Keeping an item's wording goes through `buildPlanAccept.ts`'s `editItem`, and Accept names the run in `fill_provenance`.
 
+D1068 (#2938): `buildHandoffs.ts` is the plan's Send to… and Back in. It builds each tool's text on the server from accepted items (payload, evidence labels without the decision, the brief, a kept Lovable wording), plants each item's marker, runs `lintForSend` as `public` with the markers masked, and records `build_handoffs` (migration 582) with the activity line. It also reads markers for D782's feed (`markerLinks`, `linkProposalStatement`) and decides link proposals (`acceptLink`, `dismissLink`, `linkByHand`); a link re-points the fed item's ledger only to a row of the table the feed writes.
+
 D971 completes `programRegistry.ts`'s Lab draft path: its canonical section
 catalogue contains headings only. The existing Super Admin edit route creates a
 missing allowed draft section after validation, in the same batch as its edit;
@@ -537,3 +542,11 @@ store; no migration or canvas sample text is introduced.
 D1129 searches decoded audit detail values, never JSON keys, and includes demoted/deleted payment actors in Who alongside current admins.
 
 D1133: `billingRecovery.ts` prepares caller-owned renewal invoice intents or card-only SetupIntents behind Billing’s fresh-TOTP routes, and records only allowlisted payment-refusal families. `billingAlerts.ts` atomically couples renewal history with alert transitions. No card/client secret is stored.
+
+D1206 (#3172): `calendar.ts` retains personal readers, resolves the
+account-owned advisor fallback, reports fixed source error codes without raw
+diagnostics, and excludes Calendly before provider sync reads. Missing schema
+is not an empty source. Studio reads each allowed source once for active members of its licensed
+deployment, excluding private Calendly/wellbeing items, with read-only
+projections; All studios requires HQ Super Admin and explicitly reports unread
+remote coverage. Neither reader is used by sync or exports (D1206).

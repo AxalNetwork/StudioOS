@@ -9,6 +9,7 @@ import { RailCrumbsProvider, useRailOption, useSetRailCrumbs } from '../../ui/ra
 import { ASSIST_SURFACES } from '../../ui/eadwynConfig';
 import FillProposals from '../../workspaces/FillProposals';
 import ZoneDraft from '../../workspaces/ZoneDraft';
+import PmfExplain from '../../workspaces/PmfExplain';
 import AlsoIn from '../../workspaces/AlsoIn';
 import useAssistMode from '../../hooks/useAssistMode';
 import useAiSpend from '../../hooks/useAiSpend';
@@ -44,7 +45,8 @@ import MvpFromGithub from './MvpFromGithub';
 import UpdatesHistory from './UpdatesHistory';
 import ReportingDesk from './ReportingDesk';
 import BuildPlan, { BuildPlanDoor, VerdictRecordWithPlan } from './BuildPlan';
-import { PmfPart, ReadinessDoor } from './PmfPart';
+import { PmfPart } from './PmfPart';
+import { PmfChip } from './PmfMethod';
 import UpdateAskReplies from './UpdateAskReplies';
 import CallsHistory from './CallsHistory';
 import RaiseReceiptMatches from '../../components/RaiseReceiptMatches';
@@ -189,10 +191,10 @@ const CYCLE_DEFS = {
           {mercuryPart('investor-narrative', data, ctx)}
         </>
       ),
-      // D1141 (#2433): Product-market fit, not scored yet, with model v1; then From Mercury.
+      // D1141 (#2433), D1145 (#3031): Product-market fit from `parts.pmf`, beside the raise kit; then From Mercury.
       'fundraising-readiness': (data, ctx) => (
         <>
-          <PmfPart projectId={ctx.projectId} />
+          <PmfPart part={data?.parts?.pmf} card={data?.card} records={data?.records} projectId={ctx.projectId} reload={ctx.reload} />
           {mercuryPart('fundraising-readiness', data, ctx)}
         </>
       ),
@@ -1061,11 +1063,11 @@ export default function CycleRoute({ cycle, lightbox = false, adding = false, re
           onRetryCard={retryCard}
           action={action}
           search={q}
+          // D1146 (#3032, RD12): Validate's header chip, the stored band, opening Fundraising readiness.
+          chip={cycle === 'validate' && projectId ? <PmfChip projectId={projectId} search={q} /> : null}
         />
         {/* D1063 (#2426): the door to the plan, under Build's overview. */}
         {cycle === 'build' && <BuildPlanDoor search={q} />}
-        {/* D1141 (#2433, RD12): Validate's records feed Product-market fit on Fundraising readiness. */}
-        {cycle === 'validate' && <ReadinessDoor search={q} />}
         <AlsoIn role="founder" row={name} />
       </>
     );
@@ -1121,6 +1123,7 @@ export default function CycleRoute({ cycle, lightbox = false, adding = false, re
             onAcceptAll={(batches) => acceptSuggestions(batches, interviewSessionsApi).finally(() => setReload((n) => n + 1))} />
         )}
         {moduleStatus === 'ready' && fnOf(def.parts, slug)?.(module, { projectId, reload: () => setReload((n) => n + 1), openAction, query, openDialog, role: user?.role ?? null })}
+        {moduleStatus === 'ready' && cycle === 'raise' && slug === 'fundraising-readiness' && module?.parts?.pmf?.inputs_hash && user?.role === 'founder' && projectId && <PmfExplain key={projectId} projectId={projectId} inputsHash={module.parts.pmf.inputs_hash} ai={ai} />}
       </ModulePage>
     );
   }

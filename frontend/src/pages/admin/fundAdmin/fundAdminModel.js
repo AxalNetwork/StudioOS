@@ -79,7 +79,6 @@ export const NOT_YET = 'Not read here yet';
 /** Why a tab draws no blocks today. Never a zero, never "none". */
 export const WAITS = Object.freeze({
   funds: 'Each administered fund with its facts, its economics and New fund are not drawn here yet. The administered funds are listed on Overview, from the overview read.',
-  lps: 'No read lists the LPs across funds yet. Each fund\u2019s LPs are read per fund; one view of every LP\u2019s commitment, calls, LPA, identity check and booklet waits for its read.',
   books: 'The books of each administered fund are not drawn here yet. The fund ledger read exists; this part draws it.',
 });
 
@@ -205,9 +204,12 @@ export function fundFilter(funds, search, view) {
     perFund,
     pills: [...(perFund ? [] : [{ key: 'all', label: 'All funds', id: null, on: !chosen }]),
       ...(funds || []).map((f) => ({ key: `f-${f.id}`, label: f.name, id: f.id, on: chosen?.id === f.id }))],
-    note: !perFund && chosen ? FILTER_KEPT : null,
+    // D1164: NAV & performance reads one fund when one is chosen, so the filter is not just kept there.
+    note: !perFund && chosen && !HONOURS_FILTER.includes(view) ? FILTER_KEPT : null,
   };
 }
+/** D1164: the tabs that offer All funds and also read the chosen fund (NAV & performance's charts and positions). */
+export const HONOURS_FILTER = Object.freeze(['performance']);
 export const FILTER_KEPT = 'This tab shows every fund. The filter is kept for Capital calls, Distributions, Fees and Reports.';
 
 /** An address under the console with the fund filter set (or cleared, for All funds), keeping the path. */
@@ -229,7 +231,7 @@ export function tabCounts(overview) {
   const flag = (n, key) => (n > 0 ? { kind: 'flag', value: n, testId: `fund-admin-flag-${key}` } : null);
   return {
     funds: ok ? { kind: 'num', value: overview.funds.items.length } : overview ? { kind: 'dash', tip: 'The administered funds could not be read.' } : { kind: 'load' },
-    lps: { kind: 'dash', tip: 'Not read here yet: no read lists the LPs across funds.' },
+    lps: { kind: 'dash', tip: 'Not counted here: the LPs tab reads its own roster (D1162).' },
     calls: flag(flags.calls, 'calls'),
     reports: flag(flags.reports, 'reports'),
     // D1157: Reconciliation is a part of Banking, so its matches flag the Banking tab.
@@ -251,6 +253,8 @@ export function headerPrimary(view, access, fund) {
     return { label: may('capital_call.issue') ? 'New capital call' : 'Preview a capital call', to: fund ? `/funds/calls?fund=${fund.id}` : `${BASE}/calls` };
   }
   if (tab === 'distributions') return { label: may('distribution.execute') ? 'New distribution' : 'Preview a distribution', to: `${BASE}/distributions${fund ? `?fund=${fund.id}` : ''}#distribution-form` };
+  // D1162: Add LP opens on the LPs tab; adding is an Admin's act (`fund.write`).
+  if (tab === 'lps') return { label: 'Add LP', to: `${BASE}/lps?add=1${fund ? `&fund=${fund.id}` : ''}` };
   if (tab === 'fees') return { label: 'Preview period', to: `${BASE}/fees${fund ? `?fund=${fund.id}` : ''}#fee-prepare` };
   return null;
 }

@@ -31,6 +31,7 @@ import {
   type EventSeatRow,
 } from '../services/eventCapacity';
 import {
+  compSourceOf,
   isPrincipalCompEligible,
   mintCompInvitations,
   parseAudienceRules,
@@ -185,9 +186,10 @@ events.use('*', async (c, next) => {
   await next();
 });
 
-// D1032 (#2873): where a free seat came from. Only an invitation records it
-// (`event_invitations.source`); a seat an audience rule made free at
-// registration does not store which rule, so its source is null, not a guess.
+// D1032 (#2873): where a free seat came from. D1131 (migration 611): the seat
+// records it (`event_registrations.comp_source`, written with the seat) in the
+// invitation sources' words; a seat written before 611 falls back to its comp
+// invitation's source, and with neither its source is null, not a guess.
 const COMP_SOURCE_OF_INVITATION: Record<string, string> = {
   manual: 'invitation',
   auto_partner: 'official_partner',
@@ -200,7 +202,8 @@ const COMP_SOURCE_OF_INVITATION: Record<string, string> = {
 // The registration fields My events reads (D1032), shared by Upcoming and Past.
 // Every field is the row's own; nothing missing is drawn as 0.
 function placeFields(r: any) {
-  const fromInvitation = r.comp === 1 && r.inv_comp === 1 ? COMP_SOURCE_OF_INVITATION[String(r.inv_source)] ?? null : null;
+  const fromSeat = r.comp === 1 && r.reg_comp_source ? COMP_SOURCE_OF_INVITATION[String(r.reg_comp_source)] ?? null : null;
+  const fromInvitation = fromSeat ?? (r.comp === 1 && r.inv_comp === 1 ? COMP_SOURCE_OF_INVITATION[String(r.inv_source)] ?? null : null);
   return {
     registration_id: Number(r.reg_id),
     reg_status: r.reg_status,
@@ -210,6 +213,8 @@ function placeFields(r: any) {
     comp_source: fromInvitation,
     comp_source_recorded: r.comp === 1 ? fromInvitation !== null : null,
     checked_in_at: r.checked_in_at ?? null,
+    // D1131: when this place came off the waitlist; null before migration 611, or never promoted.
+    promoted_at: r.reg_promoted_at ?? null,
     decision_reason: r.decision_reason ?? null,
     is_speaker: Number(r.is_speaker) === 1,
   };
@@ -250,6 +255,7 @@ events.get('/', async (c) => {
   const attending = await c.env.DB.prepare(
     `SELECT e.*, r.id AS reg_id, r.status AS reg_status, r.payment_status AS reg_payment_status,
             r.amount_cents AS reg_amount_cents, r.waitlist_position AS reg_waitlist_position, r.comp,
+            r.comp_source AS reg_comp_source, r.promoted_at AS reg_promoted_at,
             r.decision_reason, inv.source AS inv_source, inv.comp AS inv_comp, cx.checked_in_at,
             EXISTS (SELECT 1 FROM event_agenda_items a WHERE a.event_id = e.id AND a.speaker_user_id = r.user_id) AS is_speaker, ch.code AS checkin_code
        FROM events e
@@ -264,6 +270,7 @@ events.get('/', async (c) => {
   const past = await c.env.DB.prepare(
     `SELECT e.*, r.id AS reg_id, r.status AS reg_status, r.payment_status AS reg_payment_status,
             r.amount_cents AS reg_amount_cents, r.waitlist_position AS reg_waitlist_position, r.comp,
+            r.comp_source AS reg_comp_source, r.promoted_at AS reg_promoted_at,
             r.decision_reason, inv.source AS inv_source, inv.comp AS inv_comp, cx.checked_in_at,
             EXISTS (SELECT 1 FROM event_agenda_items a WHERE a.event_id = e.id AND a.speaker_user_id = r.user_id) AS is_speaker
        FROM events e
@@ -795,6 +802,7 @@ events.post('/:id/invitation', async (c) => {
     comp, paid, source: 'invite', invitationId: Number(inv.id), answers: body.answers ?? null,
     // The caller is the signed-in invitee, so a paid ticket may mint its PaymentIntent.
     selfPay: true,
+    compSource: compSourceOf(compRule, inv),
   });
   if (res.status < 400) {
     await c.env.DB.prepare(
@@ -958,7 +966,7 @@ events.post('/:id/registrations/:rid/approve', async (c) => {
     // Promoting a waitlisted row adds a seat → capacity-guard it atomically.
     const cap = event.capacity != null ? Number(event.capacity) : null;
     const upd: any = await c.env.DB.prepare(
-      `UPDATE event_registrations SET status = 'confirmed', waitlist_position = NULL, decision_reason = NULL, decided_by_user_id = ?, decided_at = datetime('now'), updated_at = datetime('now')
+      `UPDATE event_registrations SET status = 'confirmed', waitlist_position = NULL, promoted_at = datetime('now'), decision_reason = NULL, decided_by_user_id = ?, decided_at = datetime('now'), updated_at = datetime('now')
          WHERE id = ? AND status = 'waitlisted' AND ${SEAT_FREE_PREDICATE}`,
     ).bind(u.id, rid, cap, id, cap).run();
     if (!upd?.meta?.changes) return c.json({ error: 'full' }, 409);
@@ -1040,7 +1048,7 @@ events.post('/:id/registrations/:rid/promote', async (c) => {
   // Capacity-guarded compare-and-set: 0 changes means the seat is gone (filled
   // concurrently) or the row was already promoted — either way, refuse.
   const upd: any = await c.env.DB.prepare(
-    `UPDATE event_registrations SET status = ?, waitlist_position = NULL, decision_reason = NULL, decided_by_user_id = ?, decided_at = datetime('now'), updated_at = datetime('now')
+    `UPDATE event_registrations SET status = ?, waitlist_position = NULL, promoted_at = datetime('now'), decision_reason = NULL, decided_by_user_id = ?, decided_at = datetime('now'), updated_at = datetime('now')
        WHERE id = ? AND status = 'waitlisted' AND ${SEAT_FREE_PREDICATE}`,
   ).bind(target, u.id, rid, cap, id, cap).run();
   if (!upd?.meta?.changes) return c.json({ error: 'full' }, 409);
@@ -1122,6 +1130,7 @@ events.post('/:id/register', async (c) => {
     userId: u.id, email: u.email, name: u.name,
     comp, paid, source: 'self', invitationId: invitation?.id ?? null,
     answers: body.answers ?? null,
+    compSource: compSourceOf(compRule, invitation),
   });
 });
 
@@ -1375,6 +1384,11 @@ export async function registerPrincipal(
     answers: unknown;
     /** D1032: `userId` is the signed-in caller, so a paid seat may mint its PaymentIntent (as `source: 'self'` may). */
     selfPay?: boolean;
+    /**
+     * D1131 (migration 611): where the free seat came from (`compSourceOf`), written with the seat.
+     * Ignored when the seat is not free.
+     */
+    compSource?: string | null;
   },
 ): Promise<Response> {
   const env: Env = c.env;
@@ -1430,6 +1444,9 @@ export async function registerPrincipal(
   const amountCents = p.paid ? Number(event.price_cents || 0) : 0;
   const answersJson = p.answers ? JSON.stringify(p.answers) : '{}';
   const cap = event.capacity != null ? Number(event.capacity) : null;
+  // D1131: the comp's source is recorded with the seat, and a reused row starts
+  // a new lifecycle, so an earlier promotion never reads as this one's.
+  const compSource = p.comp ? (p.compSource ?? null) : null;
 
   // classifyNewSeat read the seat count a moment ago; the actual seat claim is
   // capacity-guarded in the SAME statement (SEAT_FREE_PREDICATE) so two
@@ -1443,19 +1460,19 @@ export async function registerPrincipal(
     if (existing) {
       const upd: any = await env.DB.prepare(
         `UPDATE event_registrations
-            SET status = ?, comp = ?, source = ?, invitation_id = ?, waitlist_position = NULL,
+            SET status = ?, comp = ?, comp_source = ?, promoted_at = NULL, source = ?, invitation_id = ?, waitlist_position = NULL,
                 payment_status = ?, amount_cents = ?, answers_json = ?, updated_at = datetime('now')
           WHERE id = ? AND ${SEAT_FREE_PREDICATE}`,
-      ).bind(landed, p.comp ? 1 : 0, p.source, p.invitationId, paymentStatus, amountCents, answersJson, existing.id, cap, eventId, cap).run();
+      ).bind(landed, p.comp ? 1 : 0, compSource, p.source, p.invitationId, paymentStatus, amountCents, answersJson, existing.id, cap, eventId, cap).run();
       if (!upd?.meta?.changes) { landed = 'waitlisted'; waitlistPosition = await nextWaitlistPosition(env, eventId); }
     } else {
       const ins: any = await env.DB.prepare(
         `INSERT INTO event_registrations
-           (event_id, user_id, email, name, status, source, comp, invitation_id, waitlist_position,
+           (event_id, user_id, email, name, status, source, comp, comp_source, invitation_id, waitlist_position,
             payment_status, amount_cents, answers_json)
-         SELECT ?, ?, ?, ?, ?, ?, ?, ?, NULL, ?, ?, ?
+         SELECT ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, ?, ?, ?
           WHERE ${SEAT_FREE_PREDICATE}`,
-      ).bind(eventId, p.userId, p.email, p.name, landed, p.source, p.comp ? 1 : 0, p.invitationId, paymentStatus, amountCents, answersJson, cap, eventId, cap).run();
+      ).bind(eventId, p.userId, p.email, p.name, landed, p.source, p.comp ? 1 : 0, compSource, p.invitationId, paymentStatus, amountCents, answersJson, cap, eventId, cap).run();
       if (ins?.meta?.changes) regId = Number(ins?.meta?.last_row_id);
       else { landed = 'waitlisted'; waitlistPosition = await nextWaitlistPosition(env, eventId); }
     }
@@ -1467,17 +1484,17 @@ export async function registerPrincipal(
     if (existing) {
       await env.DB.prepare(
         `UPDATE event_registrations
-            SET status = 'waitlisted', comp = ?, source = ?, invitation_id = ?, waitlist_position = ?,
+            SET status = 'waitlisted', comp = ?, comp_source = ?, promoted_at = NULL, source = ?, invitation_id = ?, waitlist_position = ?,
                 payment_status = ?, amount_cents = ?, answers_json = ?, updated_at = datetime('now')
           WHERE id = ?`,
-      ).bind(p.comp ? 1 : 0, p.source, p.invitationId, waitlistPosition, paymentStatus, amountCents, answersJson, existing.id).run();
+      ).bind(p.comp ? 1 : 0, compSource, p.source, p.invitationId, waitlistPosition, paymentStatus, amountCents, answersJson, existing.id).run();
     } else {
       const ins: any = await env.DB.prepare(
         `INSERT INTO event_registrations
-           (event_id, user_id, email, name, status, source, comp, invitation_id, waitlist_position,
+           (event_id, user_id, email, name, status, source, comp, comp_source, invitation_id, waitlist_position,
             payment_status, amount_cents, answers_json)
-         VALUES (?, ?, ?, ?, 'waitlisted', ?, ?, ?, ?, ?, ?, ?)`,
-      ).bind(eventId, p.userId, p.email, p.name, p.source, p.comp ? 1 : 0, p.invitationId, waitlistPosition, paymentStatus, amountCents, answersJson).run();
+         VALUES (?, ?, ?, ?, 'waitlisted', ?, ?, ?, ?, ?, ?, ?, ?)`,
+      ).bind(eventId, p.userId, p.email, p.name, p.source, p.comp ? 1 : 0, compSource, p.invitationId, waitlistPosition, paymentStatus, amountCents, answersJson).run();
       regId = Number(ins?.meta?.last_row_id);
     }
   }

@@ -3,6 +3,11 @@
 
 D1144: `cycle_raise.ts` returns the stored Product-market fit part, its paged `/pmf/history` read and Re-score’s `pmf: true` flag. The founder/admin project gate is unchanged. `../services/scoring/README.md` names the shared snapshot/checklist/audit transaction.
 
+D1147: `pmf_explain.ts` mounts at `/api/cycles/raise/pmf/explain` before Raise.
+It previews input-only explanations/questions without saving a reading; only
+the founder's verified Keep writes accepted wording and its audit. It never
+writes a score or recomputes PMF.
+
 These files are the production API behind `https://axal.vc/api/*`. They are
 mounted by `cloudflare-worker/src/index.ts` and run on Cloudflare Workers
 against D1 (`env.DB`), KV, R2, Vectorize, AI, Queues and Durable Objects.
@@ -345,7 +350,7 @@ webhook's deliveries by hour. D1129 adds bounded `q` search to the log and
 CSV, plus `/change-log/admins` (all admin ids/names, no email). `catalog.ts`
 records a failed sync.
 
-D1065 (#2935): `build_plan.ts` mounts at `/api/cycles/build/plan` before the Build router. GET reads a scoped plan; POST prepares/updates only for the venture’s founder or admitted Lab owner. Admins read; company-linked partners read only landed accepted items without a decision or pending proposal. D1066 (#2936) adds the item decisions (`/items/:uid/accept`, `PATCH /items/:uid`, `/items/:uid/dismiss`, `/modules/:module/accept`), founders only, and exports `buildEvidenceRoutes`, mounted at `/api/cycles/build/evidence` for each Build row's trail. D1071 (#2941) adds Eadwyn's wording: `POST /word` (one metered `draft:build/plan` run, founders only, stored as a wording row on `build_plan:<uid>`), `GET /word`, and `/word/:uid/keep` and `/word/:uid/discard`; an item's wording is kept by `PATCH /items/:uid { wording }`.
+D1065 (#2935): `build_plan.ts` mounts at `/api/cycles/build/plan` before the Build router. GET reads a scoped plan; POST prepares/updates only for the venture’s founder or admitted Lab owner. Admins read; company-linked partners read only landed accepted items without a decision or pending proposal. D1066 (#2936) adds the item decisions (`/items/:uid/accept`, `PATCH /items/:uid`, `/items/:uid/dismiss`, `/modules/:module/accept`), founders only, and exports `buildEvidenceRoutes`, mounted at `/api/cycles/build/evidence` for each Build row's trail. D1071 (#2941) adds Eadwyn's wording: `POST /word` (one metered `draft:build/plan` run, founders only, stored as a wording row on `build_plan:<uid>`), `GET /word`, and `/word/:uid/keep` and `/word/:uid/discard`; an item's wording is kept by `PATCH /items/:uid { wording }`. D1068 (#2938) adds Send to… and Back in: `POST /handoffs` (founders only; the link or the Markdown, recorded), `GET /handoffs` (the text for founders only), `GET /links` (a partner sees links only), `/links/:uid/accept`, `/links/:uid/dismiss`, and `POST /items/:uid/link` (a link by hand).
 
 D971 (#2756): `admin_lab_operations.ts` is mounted by `admin_cohort.ts` under
 `/api/admin/cohort`: read-only `/settings` and `/activity`, both Admin gated.
@@ -379,3 +384,9 @@ D1135: `company.ts` adds member self-leave and validates create/rename; `project
 D1123: `admin_lab_operations.ts` adds `/cohorts/:cohort/capacity`, the latest stored capacity event for SL6, separately from current Settings. It never returns free-form event details.
 
 D1176: `cycle_use_of_funds.ts`, mounted by `cycle_raise.ts` under `/api/cycles/raise/use-of-funds`, serves the plan, scenarios/compare, milestones, hire edits and Base split. Founder/admin and company scoped; support is read only, Mercury stays the founder's own.
+
+D1206 (#3172): `calendar.ts` applies Investor Professional only to
+IC creation; calendar reads, including the token subscription, remain available
+on every plan. Studio/All studios are separate read-only Admin/Super Admin
+scopes with explicit availability; personal ownership and deal-party gates
+still govern every sync, push and export.

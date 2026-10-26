@@ -177,6 +177,7 @@ import matches from './routes/matches';
 import settings from './routes/settings';
 import personas from './routes/personas';
 import personaSegments from './routes/persona_segments';
+import segmentAggregates from './routes/persona_segment_aggregates';
 import personaMembers from './routes/persona_members';
 import onboarding from './routes/onboarding';
 // Task #6 (IF) — per-role onboarding checklist + product-tour tracking.
@@ -321,6 +322,7 @@ import cycleValidate from './routes/cycle_validate';
 import cycleRecords from './routes/cycle_records';
 import cycleVerdict from './routes/cycle_verdict';
 import cycleRaise from './routes/cycle_raise';
+import pmfExplain from './routes/pmf_explain';
 import founderValidateStructure from './routes/founder_validate_structure';
 import founderValidateSessions from './routes/founder_validate_sessions';
 import meetingBotCallbacks from './routes/meeting_bot_callbacks';
@@ -866,7 +868,6 @@ const INVESTOR_PRO_PREFIXES = [
   '/api/dd',
   '/api/pipeline',
   '/api/deals',
-  '/api/calendar',
   '/api/ic',
 ];
 // D614/D1149: precise exemptions allow leaving a room and an authorized
@@ -1367,6 +1368,9 @@ app.route('/api/integrations', integrations);
 // D652 — the Worker AI rail's conversations and their connectors (#1464).
 app.route('/api/eadwyn', eadwynRoutes);
 app.route('/api/crunchbase', crunchbaseRoutes);
+// D1001 (#2816): a segment's answers and working styles as suppressed counts,
+// mounted by D1005 (#2820), before the profile router as D1001 asks.
+app.route('/api/personas/segments', segmentAggregates);
 // D1000 (#2815): the segment profiles, before the personas routes.
 app.route('/api/personas/segments', personaSegments);
 // D1002 (#2817): members, bulk move, ask to finish and activity, before the personas routes.
@@ -1551,6 +1555,7 @@ app.route('/api/channels', channels);
 app.route('/api/cycles/validate/decisions', cycleVerdict);
 app.route('/api/cycles/validate', cycleValidate);
 app.route('/api/cycles', cycleRecords);
+app.route('/api/cycles/raise/pmf/explain', pmfExplain);
 app.route('/api/cycles/raise', cycleRaise);
 // D658 (#1471) — a structured interview's placements, decided one at a time.
 app.route('/api/founder/validate', founderValidateStructure);

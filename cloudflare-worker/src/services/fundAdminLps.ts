@@ -44,9 +44,13 @@ const NO_APPLICATION = 'No LP application links this LP to the fund.';
 export const SORTS = ['name', 'fund', 'commitment', 'called', 'received', 'outstanding', 'distributed', 'last_notice'] as const;
 export const BOOKLET_STATES = ['not_started', 'open', 'submitted', 'withdrawn', 'not_recorded'] as const;
 export const PER_PAGE_MAX = 200;
+/** An identity check that is no longer waiting on anyone; any other recorded state is pending. */
+const IDENTITY_SETTLED = ['approved', 'rejected'];
 
 export type LpQuery = {
   fund_id: number | null;
+  /** D1162: one LP's row, for FND6's drawer at `/admin/fund-admin/lps/:id`. */
+  lp_id: number | null;
   lpa: 'signed' | 'unsigned' | null;
   identity: string | null;
   booklet: typeof BOOKLET_STATES[number] | null;
@@ -71,6 +75,9 @@ export function parseLpQuery(get: (k: string) => string | undefined): LpQuery | 
   const fund = get('fund');
   const fundId = fund === undefined || fund === '' ? null : /^\d{1,9}$/.test(fund) && Number(fund) > 0 ? Number(fund) : NaN;
   if (Number.isNaN(fundId)) return 'fund';
+  const lp = get('lp');
+  const lpId = lp === undefined || lp === '' ? null : /^\d{1,9}$/.test(lp) && Number(lp) > 0 ? Number(lp) : NaN;
+  if (Number.isNaN(lpId)) return 'lp';
   const lpa = get('lpa') || null;
   if (lpa !== null && lpa !== 'signed' && lpa !== 'unsigned') return 'lpa';
   const identity = get('identity') || null;
@@ -89,7 +96,7 @@ export function parseLpQuery(get: (k: string) => string | undefined): LpQuery | 
   const page = int('page', 1, 1, 100000), perPage = int('per_page', 50, 1, PER_PAGE_MAX);
   if (page === null) return 'page';
   if (perPage === null) return 'per_page';
-  return { fund_id: fundId, lpa, identity, booklet, outstanding, overdue, q, sort, dir, page, per_page: perPage };
+  return { fund_id: fundId, lp_id: lpId, lpa, identity, booklet, outstanding, overdue, q, sort, dir, page, per_page: perPage };
 }
 
 const rows = async <T>(env: Env, sql: string, ...binds: unknown[]): Promise<T[]> => {
@@ -138,7 +145,7 @@ const MONEY = ['commitment_cents', 'called_cents', 'received_cents', 'outstandin
  * administer. The caller has passed `requireFundAdminReader`.
  */
 export async function fundAdminLps(env: Env, user: User, query: LpQuery, today: string) {
-  if (!await auditRead(env, user, 'fund_lps_read', { surface: 'fund_admin.lps', fund_id: query.fund_id })) return null;
+  if (!await auditRead(env, user, 'fund_lps_read', { surface: 'fund_admin.lps', fund_id: query.fund_id, lp_id: query.lp_id })) return null;
   const administered = await administeredFunds(env);
   const funds = query.fund_id === null ? administered : administered.filter((f) => f.id === query.fund_id);
   if (query.fund_id !== null && !funds.length) return 'fund_not_administered' as const;
@@ -170,7 +177,9 @@ export async function fundAdminLps(env: Env, user: User, query: LpQuery, today: 
             (SELECT b.status FROM fund_subscription_booklets b WHERE b.application_id = a.id
               ORDER BY b.status = 'withdrawn', b.id DESC LIMIT 1) AS booklet_status,
             (SELECT b.submitted_at FROM fund_subscription_booklets b WHERE b.application_id = a.id
-              ORDER BY b.status = 'withdrawn', b.id DESC LIMIT 1) AS submitted_at
+              ORDER BY b.status = 'withdrawn', b.id DESC LIMIT 1) AS submitted_at,
+            (SELECT b.uid FROM fund_subscription_booklets b WHERE b.application_id = a.id
+              ORDER BY b.status = 'withdrawn', b.id DESC LIMIT 1) AS booklet_uid
        FROM limited_partners lp
        JOIN vc_funds f ON f.id = lp.fund_id
        JOIN lp_applications a ON a.user_id = lp.user_id AND a.fund_slug = f.slug
@@ -205,8 +214,9 @@ export async function fundAdminLps(env: Env, user: User, query: LpQuery, today: 
     if (!lastNotice) unavailable.last_notice = notices ? NO_NOTICE : UNREADABLE;
 
     const b = booklets?.get(Number(lp.id));
+    // D1162: the booklet's uid, so FND6's Booklet tab opens that one (null before one is opened).
     const booklet = b ? { state: (b.booklet_status ?? 'not_started') as string, application_status: b.application_status ?? null,
-      submitted_at: b.submitted_at ?? null } : null;
+      submitted_at: b.submitted_at ?? null, uid: b.booklet_uid ?? null } : null;
     if (!booklet) unavailable.booklet = !booklets ? UNREADABLE : !hasAccount ? NO_ACCOUNT_BOOKLET : !lp.fund_slug ? NO_FUND_SLUG : NO_APPLICATION;
 
     return {
@@ -235,7 +245,8 @@ export async function fundAdminLps(env: Env, user: User, query: LpQuery, today: 
 
   type Row = typeof all[number];
   const keep = (r: Row) =>
-    (query.lpa === null || r.lpa_signed === (query.lpa === 'signed'))
+    (query.lp_id === null || r.limited_partner_id === query.lp_id)
+    && (query.lpa === null || r.lpa_signed === (query.lpa === 'signed'))
     && (query.identity === null || (query.identity === 'not_recorded' ? r.kyc_status === null : r.kyc_status === query.identity))
     && (query.booklet === null || (query.booklet === 'not_recorded' ? r.booklet === null : r.booklet?.state === query.booklet))
     && (!query.outstanding || (r.outstanding_cents ?? 0) > 0)
@@ -270,6 +281,28 @@ export async function fundAdminLps(env: Env, user: User, query: LpQuery, today: 
     if (filtered.length - held.length) totals.not_recorded[k] = filtered.length - held.length;
   }
 
+  // D1162: what FND5's tiles and its chart by LP type count, over every row
+  // the filters keep (all pages). A type no row records is `lp_type: null`,
+  // drawn as "Not recorded"; a type whose rows hold no commitment is null.
+  const types = new Map<string | null, { lps: number; held: number; cents: number }>();
+  for (const r of filtered) {
+    const t = types.get(r.lp_type) || { lps: 0, held: 0, cents: 0 };
+    t.lps += 1;
+    if (r.commitment_cents !== null) { t.held += 1; t.cents += r.commitment_cents; }
+    types.set(r.lp_type, t);
+  }
+  const overdueHeld = filtered.filter((r) => r.overdue_lines !== null);
+  const tally = {
+    lpa_pending: filtered.filter((r) => !r.lpa_signed).length,
+    identity_pending: filtered.filter((r) => r.kyc_status !== null && !IDENTITY_SETTLED.includes(r.kyc_status)).length,
+    identity_not_recorded: filtered.filter((r) => r.kyc_status === null).length,
+    overdue_lines: overdueHeld.length ? overdueHeld.reduce((s, r) => s + (r.overdue_lines as number), 0) : null,
+    by_type: [...types.entries()]
+      .map(([lpType, t]) => ({ lp_type: lpType, lps: t.lps, commitment_cents: t.held ? t.cents : null }))
+      .sort((x, y) => (x.lp_type === null ? 1 : 0) - (y.lp_type === null ? 1 : 0)
+        || (y.commitment_cents ?? -1) - (x.commitment_cents ?? -1) || String(x.lp_type).localeCompare(String(y.lp_type))),
+  };
+
   const start = (query.page - 1) * query.per_page;
   return {
     as_of: today,
@@ -280,6 +313,7 @@ export async function fundAdminLps(env: Env, user: User, query: LpQuery, today: 
     pages: Math.max(1, Math.ceil(filtered.length / query.per_page)),
     total_rows: filtered.length,
     totals,
+    tally,
     items: filtered.slice(start, start + query.per_page),
   };
 }

@@ -456,6 +456,8 @@ export function hqApprovalsView(approvals) {
     sla: worst?.sla || null,
     noQueue: (approvals.no_queue || []).map((n) => ({ ...n, to: NO_QUEUE_CONSOLES[n.label] || null })),
     notApplicable: approvals.not_applicable || [],
+    // D1045: the Super Admin's HQ-decides lanes, for Approvals' Lanes tab.
+    hqDecides: approvals.hq_decides ?? null,
     text: worst ? `${head} · worst: ${worst.label}, oldest ${worst.age || 'undated'}` : head,
   };
 }
