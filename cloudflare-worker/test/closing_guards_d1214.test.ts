@@ -37,9 +37,9 @@ function fixture() {
   app.onError((err,c) => c.json({error:err.message},AUTH_ERROR_STATUSES[err.message] || 500));
   return { db, env, app };
 }
-async function call(f: ReturnType<typeof fixture>, uid: number, path: string, body?: any, method='POST') {
+async function call(f: ReturnType<typeof fixture>, uid: number, path: string, body?: any, method='POST', headers: Record<string,string>={}) {
   const jwt = await new SignJWT({user_id:uid}).setProtectedHeader({alg:'HS256'}).setIssuedAt().setExpirationTime('1h').sign(new TextEncoder().encode(secret));
-  const res = await f.app.request(path,{method,headers:{Authorization:`Bearer ${jwt}`,'Content-Type':'application/json'},body:body === undefined ? undefined : JSON.stringify(body)},f.env);
+  const res = await f.app.request(path,{method,headers:{Authorization:`Bearer ${jwt}`,'Content-Type':'application/json',...headers},body:body === undefined ? undefined : JSON.stringify(body)},f.env);
   return {status:res.status,body:await res.json().catch(()=>null)};
 }
 
@@ -121,5 +121,15 @@ test('D1214: a non-member may join with supplied terms; private syndicate reads 
   assert.equal((await call(f,1,'/api/networkfx/syndicates/1/join',{commitment_cents:100})).status,200);
   assert.equal((await call(f,1,'/api/networkfx/syndicates/1',undefined,'GET')).status,200);
   assert.equal((await call(f,1,'/api/networkfx/syndicates',undefined,'GET')).body.length,1);
+ }finally{f.db.close();}
+});
+
+
+test('D1214: a holder grant crosses the holder’s company selection without opening the venture register',async()=>{
+ const f=fixture();try {
+  f.db.exec("UPDATE users SET role='founder',founder_id=70 WHERE id=7; UPDATE projects SET company_id=100 WHERE id=1; INSERT INTO user_company_links(uid,user_id,company_id) VALUES('holder-company',7,200); INSERT INTO cap_table_holders(user_id,project_id,name,shares) VALUES(3,1,'Synthetic holder',100),(3,1,'Other holder',900); INSERT INTO cap_table_access_grants(project_id,user_id,holder_ref,level,granted_by) VALUES(1,1,'Synthetic holder','own_position',3)");
+  assert.equal((await call(f,7,'/api/captable/1',undefined,'GET',{'X-Company-Id':'200'})).status,404);
+  f.db.exec("UPDATE cap_table_access_grants SET user_id=7");
+  const own=await call(f,7,'/api/captable/1',undefined,'GET',{'X-Company-Id':'200'});assert.equal(own.status,200);assert.deepEqual(own.body.holders.map((r:any)=>r.name),['Synthetic holder']);assert.deepEqual(own.body.securities,[]);
  }finally{f.db.close();}
 });

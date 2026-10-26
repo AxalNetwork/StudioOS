@@ -1426,13 +1426,17 @@ captable.get('/:projectId', async (c) => {
   const projectId = Number(c.req.param('projectId'));
   if (!Number.isFinite(projectId)) return c.json({ detail: 'Invalid project_id' }, 400);
   const proj = await loadProject(c, projectId, user);
-  if (!proj) return c.json({ detail: 'Project not found' }, 404);
+  if (!proj && !await loadProjectRow(c.env, projectId)) return c.json({ detail: 'Project not found' }, 404);
   // A read-only project membership is not permission to inspect the raw
   // register. Holder identity comes from the founder's live grant, never the
-  // connector's recorder user_id or an unverified email match.
-  if (!canWriteProject(user, proj)) {
+  // connector's recorder user_id or an unverified email match. A holder may
+  // open that position across company selections; this never grants the raw
+  // register or restores an owner's full access in the wrong company.
+  if (!proj || !canWriteProject(user, proj)) {
     const grant = await liveGrantFor(c.env, projectId, user.id);
-    if (!grant?.holder_ref) return c.json({ detail: 'Forbidden' }, 403);
+    if (!grant?.holder_ref) return proj
+      ? c.json({ detail: 'Forbidden' }, 403)
+      : c.json({ detail: 'Project not found' }, 404);
     const own = await c.env.DB.prepare(
       'SELECT id, project_id, name, security_type, shares, ownership_pct, source, created_at, updated_at FROM cap_table_holders WHERE project_id = ? AND name = ? ORDER BY id ASC',
     ).bind(projectId, grant.holder_ref).all();
