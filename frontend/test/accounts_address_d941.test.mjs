@@ -16,7 +16,8 @@ import { createRoot } from 'react-dom/client';
 import { MemoryRouter, Routes, Route, useLocation } from 'react-router-dom';
 import { installDocument } from './_contracts_dom.mjs';
 import { ACCOUNTS_PATH, TEAM_MOVED_NOTICES, TEAM_PATH, heldAccountsForward, teamForward } from '../src/pages/admin/accountsAddress.js';
-import AccountsAddress, { HeldAccountsRedirect } from '../src/pages/admin/AccountsAddress.jsx';
+import AccountsAddress from '../src/pages/admin/AccountsAddress.jsx';
+import HeldAccountsRedirect from '../src/pages/admin/HeldAccountsRedirect.jsx';
 import HqAccountsPage from '../src/pages/hq/AccountsPage.jsx';
 import { SIDEBAR_GROUPS } from '../src/sidebarConfig.js';
 

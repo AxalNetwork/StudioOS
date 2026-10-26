@@ -52,7 +52,7 @@ the Studio glance through `heldFigures.jsx` (`useHeldGlance`, `Figure`,
 (#2746) the Accounts landing is at `/admin/accounts` (`AccountsAddress.jsx`
 mounts it, and forwards a Super Admin to HQ › Team at `/admin/hq-team`;
 `accountsAddress.js` holds the addresses and Team's moved notice), and
-`/admin/held/accounts` forwards there. Every console link on them is literal, because
+`/admin/held/accounts` forwards there (`HeldAccountsRedirect.jsx`). Every console link on them is literal, because
 `frontend/test/admin_route_reachability.test.mjs` reads navigation syntax,
 and `HeldZone` carries the always-visible scope sentence and the shell's one
 Worker AI rail mount.

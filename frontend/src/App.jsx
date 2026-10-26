@@ -142,7 +142,7 @@ const AdminExploring = lazy(() => import('./pages/admin/AdminExploring'));
 // (canvas S20). D941 (#2746): Accounts takes /admin/accounts, and HQ's Team
 // moved to /admin/hq-team; the other four stay under /admin/held/.
 const AccountsAddress = lazy(() => import('./pages/admin/AccountsAddress'));
-const HeldAccountsRedirect = lazy(() => import('./pages/admin/AccountsAddress').then((m) => ({ default: m.HeldAccountsRedirect })));
+const HeldAccountsRedirect = lazy(() => import('./pages/admin/HeldAccountsRedirect'));
 const AdminApprovals = lazy(() => import('./pages/admin/approvals/AdminApprovals'));
 const ApprovalsLaneBoards = lazy(() => import('./pages/admin/approvals/LaneBoards'));
 const HeldApprovalsRedirect = lazy(() => import('./pages/admin/approvals/HeldApprovalsRedirect'));
