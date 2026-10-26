@@ -1,0 +1,290 @@
+/** D1263: real SQLite, production schema + migrations; all people/figures are synthetic. */
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import { DatabaseSync } from 'node:sqlite';
+import { readFileSync, readdirSync } from 'node:fs';
+import { Hono } from 'hono';
+import { SignJWT } from 'jose';
+import { BASELINE_CUTOFF, migrationNumber, compareMigrations } from '../../scripts/lib/migrationPlan.mjs';
+import { d1Over } from './_d1_sqlite.mjs';
+import router from '../src/routes/cycle_raise.ts';
+import { collectEvidenceSources, evidenceDate, evidenceStale, EVIDENCE_RULES, candidateKey } from '../src/services/raiseEvidenceSources.ts';
+import { raiseEvidenceContext, buildCandidates, acceptItem, dismissItem, setSharing, linkClaim, readRaiseEvidence } from '../src/services/raiseEvidence.ts';
+import { decideRail } from '../src/services/railProposals.ts';
+const read=(p:string)=>readFileSync(new URL(p,import.meta.url),'utf8');
+const DDL=(()=>{const db=new DatabaseSync(':memory:',{enableDoubleQuotedStringLiterals:true});db.exec(read('../sql/schema_baseline.sql'));
+ for(const f of readdirSync(new URL('../sql/migrations/',import.meta.url)).filter(f=>/^\d+_.*\.sql$/.test(f)&&migrationNumber(f)>BASELINE_CUTOFF).sort(compareMigrations))db.exec(read('../sql/migrations/'+f));
+ const ddl=db.prepare("SELECT sql FROM sqlite_master WHERE sql IS NOT NULL AND name NOT LIKE 'sqlite_%' ORDER BY CASE type WHEN 'table' THEN 0 WHEN 'index' THEN 1 ELSE 2 END").all().map((r:any)=>r.sql);db.close();return ddl;})();
+const secret='t'.repeat(64); // in-memory test signing seed only
+function world(){
+ const db=new DatabaseSync(':memory:',{enableForeignKeyConstraints:false,enableDoubleQuotedStringLiterals:true});for(const sql of DDL)db.exec(sql);
+ db.exec(`INSERT INTO users(id,name,email,role,founder_id,is_active,spinout_lab_active) VALUES
+ (1,'Synthetic Founder','one@example.invalid','founder',100,1,0),(2,'Other Founder','two@example.invalid','founder',200,1,0),
+ (3,'Synthetic Admin','three@example.invalid','admin',NULL,1,0),(4,'Synthetic Partner','four@example.invalid','partner',NULL,1,0),
+ (5,'Synthetic Investor','five@example.invalid','investor',NULL,1,0),(6,'Lab Founder','six@example.invalid','exploring',100,1,1);
+ INSERT INTO projects(id,name,founder_id,company_id) VALUES(1,'Synthetic Venture',100,10),(2,'Other Venture',200,20);
+ INSERT INTO company_profiles(id,uid,company_name) VALUES(10,'company-one','Synthetic One'),(20,'company-two','Synthetic Two');
+ INSERT INTO user_company_links(uid,user_id,company_id) VALUES('one',1,10),('two',2,20),('three',3,10),('six',6,10);`);
+ const env:any={DB:d1Over(db),JWT_SECRET:secret,ENVIRONMENT:'development'};
+ const ctx:any={env,user:db.prepare('SELECT * FROM users WHERE id=1').get(),projectId:1,companyId:10,founder:true};
+ const app=new Hono<any>();app.route('/api/cycles/raise',router);
+ return {db,env,ctx,app};
+}
+type World=ReturnType<typeof world>;
+/** Only fills required fixture columns; the source under test and dates are always explicit below. */
+function seed(w:World,table:string,values:Record<string,unknown>){
+ if(!/^[a-z_0-9]+$/.test(table))throw new Error('bad fixture table');
+ const row={...values};for(const c of w.db.prepare('PRAGMA table_info('+table+')').all() as any[])if(c.notnull&&!c.pk&&c.dflt_value==null&&!(c.name in row))row[c.name]=/INT|REAL|NUM/.test(c.type)?1:c.name==='uid'?table+'-'+String(values.id??values.external_id??values.user_id??'one'):'synthetic';
+ const keys=Object.keys(row);for(const k of keys)if(!/^[a-z_0-9]+$/.test(k))throw new Error('bad fixture column');
+ w.db.prepare('INSERT INTO '+table+'('+keys.join(',')+') VALUES('+keys.map(()=>'?').join(',')+')').run(...keys.map(k=>row[k] as any));
+}
+function sources(w:World){
+ seed(w,'integrations',{id:1,user_id:1,provider_key:'mercury',status:'active'});seed(w,'integrations',{id:2,user_id:1,provider_key:'github',status:'active'});
+ seed(w,'data_room_files',{id:1,uid:'file-one',project_id:1,name:'PRIVATE NAME',r2_key:'PRIVATE KEY'});
+ seed(w,'revenue_entries',{id:1,uid:'revenue-one',project_id:1,customer:'PRIVATE CUSTOMER',revenue_type:'recurring',amount_cents:100,currency:'usd',received_on:'2026-09-01',source:'mercury',verification:'supported',proof_document_id:1});
+ for(const [id,kind,key,value,months] of [[1,'runway','runway',8,3],[2,'revenue','revenue:2026-09',null,3],[3,'spend','spend:product',null,6]])seed(w,'mercury_raise_facts',{id,integration_id:1,project_id:1,kind,fact_key:key,value,months,amount_cents:123400,label:'product',as_of:'2026-09-02'});
+ seed(w,'mercury_raise_proposals',{id:1,integration_id:1,project_id:1,kind:'fund_mapping',source_key:'product',status:'accepted',target:'product'});
+ seed(w,'mercury_raise_proposals',{id:2,integration_id:1,project_id:1,kind:'statement',source_key:'statement-one',status:'accepted',local_table:'data_room_files',local_id:1,payload_json:JSON.stringify({month:'2026-09',account_id:'PRIVATE ACCOUNT',last_four:'9876'})});
+ seed(w,'mercury_raise_proposals',{id:3,integration_id:1,project_id:1,kind:'safe',source_key:'safe-one',status:'accepted',local_table:'cap_table_holders',local_id:1,payload_json:JSON.stringify({date:'2026-09-03',amount_cents:200000,investor_name:'PRIVATE INVESTOR'})});
+ seed(w,'connector_fed_items',{integration_id:1,project_id:1,module:'grow',kind:'revenue_entry',external_id:'revenue-entry-one',local_table:'revenue_entries',local_id:1});
+ seed(w,'cap_table_holders',{id:1,user_id:1,project_id:1,kind:'founder',source:'manual',founder_role:'ceo',ownership_pct:50,created_at:'2026-09-04'});
+ seed(w,'cap_table_vesting',{id:1,user_id:1,holder_id:1,project_id:1,source:'manual',total_shares:100,start_date:'2026-09-05'});
+ seed(w,'github_login_map',{project_id:1,login:'PRIVATE LOGIN',holder_id:1,mapped_by:1});
+ seed(w,'github_contributors',{id:1,integration_id:2,project_id:1,repository:'PRIVATE REPO',login:'PRIVATE LOGIN',commits_90d:0,updated_at:'2026-10-26'});
+ seed(w,'skill_evidence',{user_id:1,axis:'engineering',source:'action',count_window:3,count_lifetime:3,last_at:'2026-09-06'});
+ seed(w,'pain_groups',{id:1,project_id:1,title:'Slow setup'});seed(w,'pain_group_aliases',{project_id:1,group_id:1,phrase_norm:'slow setup',display_phrase:'Slow setup'});
+ seed(w,'discovery_interviews',{id:1,project_id:1,interviewee_name:'PRIVATE INTERVIEWEE',interview_date:'2026-09-07',pains_json:'["Slow setup"]',quote_consent:1,notes:'PRIVATE QUOTE',icp_fit:'strong'});
+ seed(w,'demand_signals',{id:1,project_id:1,kind:'loi',status:'confirmed',signal_date:'2026-09-08',source_kind:'interview',interview_id:1,evidence_file_key:'PRIVATE FILE',amount_cents:100,currency:'usd'});
+ seed(w,'hypothesis_experiments',{id:1,uid:'experiment-one',project_id:1,result:'PRIVATE RESULT',status:'done',updated_at:'2026-10-26'});
+ seed(w,'validation_decisions',{id:1,project_id:1,decision:'proceed',state:'given',decided_at:'2026-09-09'});
+ seed(w,'project_metrics',{id:1,project_id:1,snapshot_date:'2026-09-10',source:'manual',mrr:0,cash_balance:987654321});
+ seed(w,'roadmap_releases',{id:1,project_id:1,repository:'PRIVATE REPO',tag:'v1',published_at:'2026-09-11',prerelease:0});
+ seed(w,'mvp_features',{id:1,project_id:1,title:'Synthetic feature',is_must_have:1,delivery_status:'done',done_at:'2026-09-12'});
+ seed(w,'use_of_funds_hires',{id:1,uid:'hire-one',project_id:1,category_key:'product',role:'PRIVATE ROLE',annual_cents:100000,currency:'usd',created_at:'2026-09-13'});
+ seed(w,'roadmap_okrs',{id:1,project_id:1,objective:'Synthetic',target_date:'2027-01-01',created_at:'2026-09-14'});
+ seed(w,'formation_steps',{id:1,project_id:1,title:'Synthetic formation',kind:'formation',state:'done',proof_file_key:'PRIVATE PROOF',updated_at:'2026-10-26'});
+ seed(w,'entity_obligations',{id:1,uid:'obligation-one',entity_id:1,kind:'annual_report',cadence:'annual',status:'filed',resolved_on:'2026-09-15'});w.db.exec('UPDATE projects SET entity_id=1 WHERE id=1');
+ seed(w,'documents',{id:1,uid:'document-one',project_id:1,title:'Synthetic document',doc_type:'cofounder',status:'signed',signed_at:'2026-09-16',content:'PRIVATE DOCUMENT'});
+ seed(w,'section_83b_trackers',{id:1,uid:'83b-one',project_id:1,user_id:1,status:'filed',mailed_at:'2026-09-17'});
+ seed(w,'raise_prospects',{id:1,uid:'prospect-one',project_id:1,name:'PRIVATE INVESTOR',email:'private@example.invalid',stage:'committed',commit_status:'soft',amount_cents:50000,currency:'USD',updated_at:'2026-10-26'});
+ seed(w,'mercury_personal_matches',{id:1,uid:'match-one',user_id:1,integration_id:1,account_last_four:'1234',target_kind:'raise_prospect',target_id:1,state:'confirmed',amount_cents:50000,posted_on:'2026-09-18'});
+ seed(w,'round_calls',{id:1,uid:'call-one',project_id:1,company_id:10,state:'sent',instrument:'safe'});seed(w,'round_call_recipients',{id:1,origin:'chosen',call_id:1,investor_user_id:5,commitment_cents:50000,responded_at:'2026-09-19'});
+ seed(w,'financial_models',{id:1,project_id:1,assumptions_json:'{"monthly_growth_pct":0,"monthly_churn_pct":2,"cac":10,"gross_margin_pct":80}',updated_by:1,updated_at:'2026-09-20'});
+ for(const [id,table,kind] of [[1,'roadmap_releases','release'],[2,'formation_steps','ip_step']])seed(w,'connector_fed_items',{integration_id:2,project_id:1,module:'build',kind,external_id:'external-'+id,local_table:table,local_id:1});
+}
+async function call(w:World,who:number|null,method='GET',tail='/evidence?project=1',body?:unknown,claims:Record<string,unknown>={},headers:Record<string,string>={}){
+ const auth=who==null?{}:{Authorization:'Bearer '+await new SignJWT({user_id:who,...claims}).setProtectedHeader({alg:'HS256'}).setIssuedAt().setExpirationTime('1h').sign(new TextEncoder().encode(secret))};
+ const r=await w.app.request('/api/cycles/raise'+tail,{method,headers:{'Content-Type':'application/json','X-Company-Id':'10',...auth,...headers},...(body===undefined?{}:{body:JSON.stringify(body)})},w.env);
+ return {status:r.status,cache:r.headers.get('Cache-Control'),body:await r.json() as any};
+}
+const proposal=(w:World,kind='kpi-snapshot')=>w.db.prepare("SELECT uid,payload_json FROM ai_rail_proposals WHERE status='proposed' AND json_extract(payload_json,'$.kind')=? LIMIT 1").get(kind) as any;
+const auditCount=(w:World)=>Number(w.db.prepare("SELECT COUNT(*) n FROM activity_logs WHERE action<>'evidence_refreshed'").get()?.n);
+async function pin(w:World,kind='kpi-snapshot'){await buildCandidates(w.ctx);const q=proposal(w,kind);return acceptItem(w.ctx,q.uid,JSON.parse(q.payload_json).snapshot_hash);}
+
+test('each pack kind has its source label and actual source date; missing dates and measured zero survive',async()=>{
+ const w=world();try{sources(w);const got=await collectEvidenceSources(w.env,1,1,'2026-10-26');assert.deepEqual(got.blocks.filter(b=>b.state==='unreadable'),[]);
+ const expected:Record<string,[string,string|null]>={
+ 'revenue-receipt':['connector','2026-09-01'],'bank-runway':['connector','2026-09-02'],'founder-holding':['typed','2026-09-04'],'vesting-schedule':['typed','2026-09-05'],'founder-commits':['connector',null],'skill-actions':['recorded','2026-09-06'],'pain-theme':['recorded','2026-09-07'],'consented-quote':['recorded','2026-09-07'],'icp-fit':['recorded','2026-09-07'],'demand-signal':['document','2026-09-08'],'experiment-result':['typed',null],'validation-verdict':['typed','2026-09-09'],'kpi-snapshot':['typed','2026-09-10'],'bank-revenue':['connector','2026-09-02'],'roadmap-release':['connector','2026-09-11'],'must-have-done':['typed','2026-09-12'],'mapped-bank-spend':['connector','2026-09-02'],'hiring-plan':['typed','2026-09-13'],'roadmap-milestone':['typed','2026-09-14'],'formation-proof':['document',null],'filed-obligation':['signed','2026-09-15'],'signed-document':['signed','2026-09-16'],'github-ip-step':['connector',null],'bank-statement':['connector','2026-09'],'loi-file':['document','2026-09-08'],'revenue-proof':['document','2026-09-01'],'accepted-safe':['connector','2026-09-03'],'filed-83b':['signed','2026-09-17'],'signed-founder-equity':['signed','2026-09-16'],'confirmed-receipt':['connector','2026-09-18'],'round-call-response':['recorded','2026-09-19'],'typed-commitment':['typed',null],'model-assumption':['typed','2026-09-20']};
+ assert.deepEqual(Object.keys(expected).sort(),EVIDENCE_RULES.map(r=>r.kind).sort());
+ for(const [kind,[label,date]] of Object.entries(expected)){const rows=got.candidates.filter(c=>c.kind===kind);assert.ok(rows.length>0,kind);for(const c of rows){assert.equal(c.source_label,label,kind);assert.equal(c.observed_on,date,kind);if(c.source_label==='typed')assert.equal(c.strength,'anecdote');}}
+ assert.equal(new Set(got.candidates.map(candidateKey)).size,got.candidates.length);
+ assert.equal(got.candidates.find(c=>c.kind==='kpi-snapshot')?.value_num,0);assert.equal(got.candidates.find(c=>c.kind==='founder-commits')?.value_num,0);
+ assert.doesNotMatch(JSON.stringify(got.candidates),/PRIVATE|987654321|private@example/);
+ assert.equal(evidenceDate('2026-02-30'),null);assert.equal(evidenceDate('2026-09'), '2026-09');assert.equal(evidenceStale(null,90,'2026-10-26'),null);assert.equal(evidenceStale('2025-01-01',365,'2026-10-26'),true);assert.equal(evidenceStale('2026-10-01',90,'2026-10-26'),false);
+ }finally{w.db.close();}
+});
+test('connector proof, mapping, quote consent and saved assumptions are required; no defaults are invented',async()=>{
+ const w=world();try{sources(w);w.db.exec("UPDATE integrations SET status='revoked'; UPDATE discovery_interviews SET quote_consent=0; DELETE FROM github_login_map; UPDATE financial_models SET updated_by=NULL; UPDATE mercury_raise_proposals SET status='dismissed'");
+ const got=await collectEvidenceSources(w.env,1,1);for(const kind of ['bank-runway','founder-commits','consented-quote','bank-revenue','roadmap-release','mapped-bank-spend','github-ip-step','bank-statement','accepted-safe','confirmed-receipt','model-assumption'])assert.equal(got.candidates.some(c=>c.kind===kind),false,kind);
+ assert.ok(got.candidates.some(c=>c.kind==='kpi-snapshot'));assert.equal(got.candidates.find(c=>c.kind==='typed-commitment')?.source_label,'typed');
+ }finally{w.db.close();}
+});
+test('freshness is one hour, force refresh works, safe proposal payloads carry no figures, and dismiss is permanent',async()=>{
+ const w=world();try{sources(w);const first=await buildCandidates(w.ctx,{now:'2026-10-26T12:00:00Z'});assert.equal(first.outcome,'recorded');assert.ok(first.changed>0);
+ assert.equal((await buildCandidates(w.ctx,{now:'2026-10-26T12:30:00Z'})).refreshed,false);assert.equal((await buildCandidates(w.ctx,{force:true,now:'2026-10-26T12:30:00Z'})).refreshed,true);
+ const q=proposal(w);await dismissItem(w.ctx,q.uid);w.db.exec('UPDATE project_metrics SET mrr=25');await buildCandidates(w.ctx,{force:true,now:'2026-10-26T13:31:00Z'});
+ assert.equal(w.db.prepare('SELECT status FROM ai_rail_proposals WHERE uid=?').get(q.uid)?.status,'discarded');assert.equal(w.db.prepare("SELECT COUNT(*) n FROM ai_rail_proposals WHERE json_extract(payload_json,'$.kind')='kpi-snapshot' AND json_extract(payload_json,'$.area')='Investor narrative and Pitch deck'").get()?.n,1);
+ assert.doesNotMatch(JSON.stringify(w.db.prepare('SELECT payload_json FROM ai_rail_proposals').all()),/PRIVATE|123400|987654321|value_num/);
+ assert.equal(auditCount(w),1);assert.equal(w.db.prepare("SELECT written_value FROM fill_provenance WHERE target_table='ai_rail_proposals'").get()?.written_value,'discarded');
+ }finally{w.db.close();}
+});
+test('accept rebuilds values, defaults privacy, refuses changed snapshots and accepts once with provenance and audit',async()=>{
+ const w=world();try{sources(w);await buildCandidates(w.ctx);const q=proposal(w);const hash=JSON.parse(q.payload_json).snapshot_hash;
+ w.db.exec('UPDATE project_metrics SET mrr=25');await assert.rejects(()=>acceptItem(w.ctx,q.uid,hash),{code:'changed'});assert.equal(auditCount(w),0);
+ w.db.exec('UPDATE project_metrics SET mrr=0');const item=await acceptItem(w.ctx,q.uid,hash);assert.equal(item.value_num,0);assert.equal(item.source_label,'typed');assert.equal(item.visibility,'after_nda');
+ await assert.rejects(()=>acceptItem(w.ctx,q.uid,hash),{code:'decided'});assert.equal(auditCount(w),1);
+ for(const kind of ['bank-runway','consented-quote']){const r=proposal(w,kind);const i=await acceptItem(w.ctx,r.uid,JSON.parse(r.payload_json).snapshot_hash);assert.equal(i.visibility,'private');}
+ const provenance=w.db.prepare("SELECT * FROM fill_provenance WHERE target_table='raise_evidence_items'").all() as any[];assert.equal(provenance.length,3);assert.equal(JSON.parse(provenance[0].citation_json).source_label,'typed');assert.equal(provenance[0].ai_usage_log_id,null);
+ assert.match(String(w.db.prepare("SELECT details FROM activity_logs WHERE action='evidence_accepted' ORDER BY id LIMIT 1").get()?.details),/kpi-snapshot \(typed\)/);
+ }finally{w.db.close();}
+});
+test('sharing and links are versioned, never claim Backed, invalidate cached checks, and unpin works after source deletion',async()=>{
+ const w=world();try{sources(w);const i=await pin(w);seed(w,'raise_claims',{uid:'claim-one',project_id:1,surface:'deck',surface_version:'v1',field_key:'mrr',claim_kind:'mrr',state:'backed'});
+ await assert.rejects(()=>linkClaim(w.ctx,'claim-one',{item_id:i.uid,item_version:1,how:'computed'}),{code:'invalid'});
+ assert.equal((await linkClaim(w.ctx,'claim-one',{item_id:i.uid,item_version:1})).how,'founder');assert.equal(w.db.prepare('SELECT state FROM raise_claims').get()?.state,'not_backed');
+ w.db.exec("UPDATE raise_claims SET state='backed'; UPDATE project_metrics SET mrr=50");
+ await assert.rejects(()=>setSharing(w.ctx,i.uid,{version:1,visibility:'summary'}),{code:'changed'});
+ const changed=await setSharing(w.ctx,i.uid,{version:1,visibility:'summary',confirm_current:true});assert.equal(changed.version,2);assert.equal(changed.value_num,50);assert.equal(w.db.prepare('SELECT state FROM raise_claims').get()?.state,'not_backed');
+ await assert.rejects(()=>setSharing(w.ctx,i.uid,{version:1,visibility:'private'}),{code:'changed'});
+ await linkClaim(w.ctx,'claim-one',{item_id:i.uid},true);assert.equal(w.db.prepare('SELECT COUNT(*) n FROM raise_claim_evidence').get()?.n,0);
+ w.db.exec('DELETE FROM project_metrics');const unpinned=await setSharing(w.ctx,i.uid,{version:2,state:'unpinned',visibility:'private'});assert.equal(unpinned.state,'unpinned');
+ await assert.rejects(()=>setSharing(w.ctx,i.uid,{version:3,state:'pinned'}),{code:'changed'});assert.equal(auditCount(w),5);
+ }finally{w.db.close();}
+});
+test('audit/provenance failure and a stale founder permission roll every decision back',async()=>{
+ for(const fail of ['audit','provenance','permission']){const w=world();try{sources(w);await buildCandidates(w.ctx);const q=proposal(w);const base=w.env.DB;
+ if(fail==='permission')w.db.exec('UPDATE users SET is_active=0 WHERE id=1');else w.env.DB={...base,batch:(stmts:any[])=>base.batch([...stmts,base.prepare(fail==='audit'?"INSERT INTO activity_logs(id) VALUES(NULL)":"INSERT INTO fill_provenance(target_table) VALUES('synthetic')")])};
+ await assert.rejects(()=>acceptItem(w.ctx,q.uid,JSON.parse(q.payload_json).snapshot_hash));assert.equal(w.db.prepare('SELECT status FROM ai_rail_proposals WHERE uid=?').get(q.uid)?.status,'proposed');assert.equal(w.db.prepare('SELECT COUNT(*) n FROM raise_evidence_items').get()?.n,0);assert.equal(auditCount(w),0);assert.equal(w.db.prepare('SELECT COUNT(*) n FROM fill_provenance').get()?.n,0);
+ }finally{w.db.close();}}
+});
+test('generic decisions cannot bypass evidence writers; ordinary proposals keep working',async()=>{
+ const w=world();try{sources(w);await buildCandidates(w.ctx);const q=proposal(w);assert.equal(await decideRail(w.env,1,q.uid,'accept'),null);assert.equal(await decideRail(w.env,1,q.uid,'discard'),null);
+ seed(w,'ai_rail_proposals',{uid:'normal-one',user_id:1,rail_page:'/raise/evidence',rail_option:'ordinary:option',kind:'proposal',payload_json:'{}'});assert.equal((await decideRail(w.env,1,'normal-one','accept'))?.status,'accepted');assert.equal(w.db.prepare('SELECT status FROM ai_rail_proposals WHERE uid=?').get(q.uid)?.status,'proposed');
+ }finally{w.db.close();}
+});
+test('source failures stay unreadable without blanking other sources; invalid paging is refused',async()=>{
+ const w=world();try{sources(w);w.db.exec('DROP TABLE project_metrics');const got=await readRaiseEvidence(w.ctx);assert.equal(got.refresh.outcome,'partial');assert.equal(got.sources?.find(b=>b.dataset==='metrics')?.count,null);assert.equal(got.sources?.find(b=>b.dataset==='metrics')?.state,'unreadable');assert.ok((got.proposals.rows?.length??0)>0);
+ await assert.rejects(()=>readRaiseEvidence(w.ctx,{limit:0}),{code:'invalid'});assert.equal(evidenceStale('2026-07',90,'2026-10-26'),null);
+ }finally{w.db.close();}
+});
+test('routes enforce founder ownership, active company and support refusal; admins read safe metadata only',async()=>{
+ const w=world();try{sources(w);const i=await pin(w,'bank-runway');
+ const own=await call(w,1);assert.equal(own.status,200);assert.equal(own.cache,'no-store');assert.equal(own.body.permissions.can_decide,true);
+ for(const who of [2,4,5])assert.equal((await call(w,who)).status,403);assert.equal((await call(w,null)).status,401);
+ assert.equal((await call(w,1,'GET','/evidence?project=1',undefined,{}, {'X-Company-Id':'20'})).status,403);
+ const admin=await call(w,3);assert.equal(admin.status,200);assert.equal(admin.body.permissions.can_decide,false);assert.equal(admin.body.items.rows.some((r:any)=>r.uid===i.uid),false);assert.doesNotMatch(JSON.stringify(admin.body),/PRIVATE|123400|value_num|stated_value/);
+ assert.equal((await call(w,3,'PATCH',`/evidence/items/${i.uid}?project=1`,{version:1,visibility:'summary'})).status,403);
+ assert.equal((await call(w,6)).status,200);assert.equal((await call(w,1,'GET','/evidence?project=1',undefined,{impersonated_by:3})).status,403);
+ assert.equal((await call(w,1,'GET','/evidence?project=1&limit=banana')).status,400);
+ const q=proposal(w);assert.equal((await call(w,1,'POST',`/evidence/items/${q.uid}/accept?project=1`,{snapshot_hash:JSON.parse(q.payload_json).snapshot_hash,source_label:'connector'})).status,400);
+ assert.equal((await call(w,1,'POST','/evidence/refresh?project=1')).status,200);
+ await assert.rejects(()=>raiseEvidenceContext(w.env,w.ctx.user,2,20),{code:'forbidden'});
+ }finally{w.db.close();}
+});
+
+test('Eadwyn links require the exact proposal and a matching real run; project-composite foreign keys reject cross-venture links',async()=>{
+ const w=world();try{sources(w);const i=await pin(w);seed(w,'raise_claims',{id:1,uid:'claim-one',project_id:1,surface:'deck',surface_version:'v1',field_key:'mrr',claim_kind:'mrr'});
+ seed(w,'ai_usage_logs',{id:1,user_id:1,task:'evidence-link',model:'synthetic-model',rail_option:'raise:evidence-link',record_ref:'project:1'});
+ seed(w,'ai_rail_proposals',{uid:'link-one',user_id:1,rail_page:'/raise/evidence',rail_option:'raise:evidence-link',record_ref:'project:1',kind:'proposal',model:'synthetic-model',usage_log_id:1,payload_json:JSON.stringify({claim_id:'claim-one',item_id:i.uid,snapshot_hash:i.snapshot_hash})});
+ assert.equal(await decideRail(w.env,1,'link-one','accept'),null);
+ w.db.exec("UPDATE ai_usage_logs SET model='other-model'");await assert.rejects(()=>linkClaim(w.ctx,'claim-one',{item_id:i.uid,item_version:1,proposal_uid:'link-one'}),{code:'forbidden'});assert.equal(w.db.prepare('SELECT COUNT(*) n FROM raise_claim_evidence').get()?.n,0);
+ w.db.exec("UPDATE ai_usage_logs SET model='synthetic-model'");const linked=await linkClaim(w.ctx,'claim-one',{item_id:i.uid,item_version:1,proposal_uid:'link-one'});assert.equal(linked.how,'eadwyn_accepted');
+ const p=w.db.prepare("SELECT ai_usage_log_id,model FROM fill_provenance WHERE target_table='raise_claim_evidence'").get();assert.equal(p?.ai_usage_log_id,1);assert.equal(p?.model,'synthetic-model');
+ seed(w,'raise_claims',{id:2,uid:'other-claim',project_id:2,surface:'deck',surface_version:'v1',field_key:'mrr',claim_kind:'mrr'});w.db.exec('PRAGMA foreign_keys=ON');
+ assert.throws(()=>w.db.prepare("INSERT INTO raise_claim_evidence(project_id,claim_id,item_id,how,mutation_uid) VALUES(1,2,?,'founder','cross')").run(i.id),/FOREIGN KEY/);
+ await assert.rejects(()=>linkClaim(w.ctx,'other-claim',{item_id:i.uid,item_version:1}),{code:'not_found'});
+ }finally{w.db.close();}
+});
+test('bounded refresh progresses across a large pack; source identity and pagination remain stable',async()=>{
+ const w=world();try{sources(w);const base=(await collectEvidenceSources(w.env,1,1)).candidates.find(c=>c.kind==='kpi-snapshot')!;
+ const candidates=Array.from({length:501},(_,n)=>({...base,source_ref:String(n)+':mrr'}));const input={candidates,blocks:[{dataset:'metrics',state:'recorded',count:501}]} as any;
+ const first=await buildCandidates(w.ctx,{sources:input,now:'2026-10-26T12:00:00Z'});assert.equal(first.changed,500);assert.equal(first.remaining,1);assert.equal(first.outcome,'partial');
+ const second=await buildCandidates(w.ctx,{sources:input,force:true,now:'2026-10-26T12:01:00Z'});assert.equal(second.changed,1);assert.equal(second.outcome,'recorded');assert.equal(w.db.prepare('SELECT COUNT(*) n FROM ai_rail_proposals').get()?.n,501);
+ const page=await readRaiseEvidence(w.ctx,{limit:10,offset:20});assert.equal(page.proposals.rows?.length,10);assert.equal(page.proposals.has_more,true);
+ }finally{w.db.close();}
+});
+
+
+test('counted demand is eligible, unconfirmed demand is held back, and a connector milestone needs active ledger proof',async()=>{
+ const w=world();try{sources(w);w.db.exec("UPDATE demand_signals SET status='counted'");let got=await collectEvidenceSources(w.env,1,1);assert.ok(got.candidates.some(c=>c.kind==='demand-signal'));assert.ok(got.candidates.some(c=>c.kind==='loi-file'));
+ w.db.exec("UPDATE demand_signals SET status='to_confirm'");got=await collectEvidenceSources(w.env,1,1);assert.equal(got.candidates.some(c=>c.kind==='demand-signal'),false);
+ seed(w,'connector_fed_items',{integration_id:2,project_id:1,module:'build',kind:'milestone',external_id:'external-milestone',local_table:'roadmap_okrs',local_id:1});got=await collectEvidenceSources(w.env,1,1);const milestone=got.candidates.find(c=>c.kind==='roadmap-milestone');assert.equal(milestone?.source_label,'connector');assert.equal(milestone?.observed_on,null);
+ w.db.exec("UPDATE integrations SET status='revoked' WHERE id=2");got=await collectEvidenceSources(w.env,1,1);assert.equal(got.candidates.find(c=>c.kind==='roadmap-milestone')?.source_label,'typed');
+ }finally{w.db.close();}
+});
+
+test('partial attempts cool down for one hour; Look again retries; a decision can read just its source dataset',async()=>{
+ const w=world();try{sources(w);w.db.exec('DROP TABLE project_metrics');const first=await buildCandidates(w.ctx,{now:'2026-10-26T12:00:00Z'});assert.equal(first.outcome,'partial');
+ assert.equal((await buildCandidates(w.ctx,{now:'2026-10-26T12:05:00Z'})).refreshed,false);assert.equal(w.db.prepare("SELECT COUNT(*) n FROM activity_logs WHERE action='evidence_refreshed'").get()?.n,1);
+ assert.equal((await buildCandidates(w.ctx,{now:'2026-10-26T12:05:00Z',force:true})).refreshed,true);
+ assert.equal((await buildCandidates(w.ctx,{now:'2026-10-26T13:06:00Z'})).refreshed,true);
+ const single=await collectEvidenceSources(w.env,1,1,'2026-10-26',['bank-runway']);assert.deepEqual(single.blocks.map(b=>b.dataset),['bank']);assert.ok(single.candidates.length>0);assert.ok(single.candidates.every(c=>c.kind==='bank-runway'));
+ }finally{w.db.close();}
+});
+test('duplicate and missing links report conflicts, and an in-flight version race asks for a fresh decision',async()=>{
+ const w=world();try{sources(w);const i=await pin(w);seed(w,'raise_claims',{uid:'claim-one',project_id:1,surface:'deck',surface_version:'v1',field_key:'mrr',claim_kind:'mrr'});
+ await assert.rejects(()=>linkClaim(w.ctx,'claim-one',{item_id:i.uid},true),{code:'not_found',status:404});await linkClaim(w.ctx,'claim-one',{item_id:i.uid,item_version:1});
+ await assert.rejects(()=>linkClaim(w.ctx,'claim-one',{item_id:i.uid,item_version:1}),{code:'decided',status:409});const count=auditCount(w),base=w.env.DB;
+ w.env.DB={...base,batch:(stmts:any[])=>{w.db.prepare('UPDATE raise_evidence_items SET version=version+1 WHERE uid=?').run(i.uid);return base.batch(stmts);}};
+ await assert.rejects(()=>setSharing(w.ctx,i.uid,{version:1,visibility:'private'}),{code:'changed',status:409});assert.equal(auditCount(w),count);assert.equal(w.db.prepare('SELECT visibility FROM raise_evidence_items WHERE uid=?').get(i.uid)?.visibility,'after_nda');
+ }finally{w.db.close();}
+});
+
+test('all founder routes execute a complete accept/share/link/unlink/dismiss lifecycle; other roles cannot accept',async()=>{
+ const w=world();try{sources(w);w.db.exec(read('../sql/migrations/628_raise_evidence.sql'));const opened=await call(w,1);assert.equal(opened.status,200);const q=proposal(w);
+ for(const who of [2,3,4,5])assert.equal((await call(w,who,'POST',`/evidence/items/${q.uid}/accept?project=1`,{snapshot_hash:JSON.parse(q.payload_json).snapshot_hash})).status,403);
+ const accepted=await call(w,1,'POST',`/evidence/items/${q.uid}/accept?project=1`,{snapshot_hash:JSON.parse(q.payload_json).snapshot_hash});assert.equal(accepted.status,200);assert.equal(accepted.body.state,'pinned');
+ const shared=await call(w,1,'PATCH',`/evidence/items/${accepted.body.uid}?project=1`,{version:1,visibility:'summary'});assert.equal(shared.status,200);assert.equal(shared.body.version,2);
+ seed(w,'raise_claims',{uid:'claim-one',project_id:1,surface:'deck',surface_version:'v1',field_key:'mrr',claim_kind:'mrr'});
+ const path='/evidence/claims/claim-one/link?project=1';assert.equal((await call(w,1,'POST',path,{item_id:accepted.body.uid,item_version:2})).status,200);assert.equal((await call(w,1,'DELETE',path,{item_id:accepted.body.uid})).status,200);
+ const remaining=proposal(w);assert.equal((await call(w,1,'POST',`/evidence/items/${remaining.uid}/dismiss?project=1`)).body.status,'discarded');assert.equal((await call(w,1,'PATCH',`/evidence/items/${accepted.body.uid}?project=1`,[])).status,400);
+ }finally{w.db.close();}
+});
+
+test('a cached page reads only its source IDs; bank privacy follows normalized provider labels',async()=>{
+ const w=world();try{
+ seed(w,'integrations',{id:1,user_id:1,provider_key:'mercury',status:'active'});
+ for(let id=1;id<=120;id++)seed(w,'project_metrics',{id,project_id:1,snapshot_date:new Date(Date.UTC(2026,0,id)).toISOString().slice(0,10),source:'connector:Mercury',mrr:id});
+ const forged=await collectEvidenceSources(w.env,1,1);assert.ok(forged.candidates.every(c=>c.source_label==='typed'));
+ for(let id=1;id<=120;id++)seed(w,'connector_fed_items',{integration_id:1,project_id:1,module:'grow',kind:'metric_month',external_id:'metric-'+id,local_table:'project_metrics',local_id:id});
+ await buildCandidates(w.ctx);const page=await readRaiseEvidence(w.ctx,{limit:1});assert.equal(page.refresh.refreshed,false);assert.equal(page.proposals.rows?.length,1);assert.equal(page.proposals.rows?.[0].can_accept,true);
+ assert.deepEqual(page.live_sources?.map(b=>[b.dataset,b.count]),[['metrics',1]]);assert.equal(page.sources?.find(b=>b.dataset==='metrics')?.count,120);
+ const q=proposal(w);const i=await acceptItem(w.ctx,q.uid,JSON.parse(q.payload_json).snapshot_hash);assert.equal(i.source_label,'connector');assert.equal(i.private_reason,'bank');assert.equal(i.visibility,'private');
+ const admin={...w.ctx,founder:false,user:w.db.prepare('SELECT * FROM users WHERE id=3').get()};const metadata=await readRaiseEvidence(admin);assert.equal(metadata.items.rows?.length,0);assert.equal(metadata.proposals.rows?.length,0);
+ }finally{w.db.close();}
+});
+
+
+test('an unreadable interview dependency cannot become an empty theme; missing-source candidates wait safely for the founder',async()=>{
+ const w=world();try{sources(w);await buildCandidates(w.ctx);const q=proposal(w,'pain-theme'),hash=JSON.parse(q.payload_json).snapshot_hash;w.db.exec('DROP TABLE discovery_interviews');
+ const pack=await collectEvidenceSources(w.env,1,1);assert.equal(pack.blocks.find(b=>b.dataset==='themes')?.state,'unreadable');assert.equal(pack.blocks.find(b=>b.dataset==='themes')?.count,null);
+ await assert.rejects(()=>acceptItem(w.ctx,q.uid,hash),{code:'unreadable',status:503});const page=await readRaiseEvidence(w.ctx);assert.equal(page.proposals.rows?.find(p=>p.uid===q.uid)?.source_state,'unreadable');
+ w.db.exec('DELETE FROM project_metrics');const missing=proposal(w);const after=await readRaiseEvidence(w.ctx,{refresh:true});const held=after.proposals.rows?.find(p=>p.uid===missing.uid);assert.equal(held?.source_state,'not_recorded');assert.equal(held?.can_accept,false);assert.equal(auditCount(w),0);
+ }finally{w.db.close();}
+});
+
+
+test('mutation replies redact bank values for another Lab founder just like reads and omit internal write fields',async()=>{
+ const w=world();try{sources(w);const i=await pin(w,'bank-runway');assert.equal(i.value_num,8);assert.match(i.snapshot_hash??'',/^[a-f0-9]{64}$/);assert.equal('mutation_uid' in i,false);assert.equal('accepted_by' in i,false);
+ const other=await raiseEvidenceContext(w.env,w.db.prepare('SELECT * FROM users WHERE id=6').get() as any,1,10);const page=await readRaiseEvidence(other);assert.equal(page.items.rows?.find(r=>r.uid===i.uid)?.value_num,null);assert.equal(page.items.rows?.find(r=>r.uid===i.uid)?.snapshot_hash,null);assert.equal(page.proposals.rows?.find(r=>r.kind==='bank-revenue')?.snapshot_hash,null);
+ const hidden=await setSharing(other,i.uid,{version:1,visibility:'private',state:'unpinned'});assert.equal(hidden.state,'unpinned');assert.equal(hidden.value_num,null);assert.equal(hidden.value_unit,null);assert.equal(hidden.currency,null);assert.equal(hidden.snapshot_hash,null);assert.equal('mutation_uid' in hidden,false);assert.equal('accepted_by' in hidden,false);
+ const owned=await setSharing(w.ctx,i.uid,{version:2,visibility:'private',state:'pinned'});assert.equal(owned.value_num,8);assert.equal(owned.snapshot_hash,i.snapshot_hash);assert.equal(owned.version,3);
+ }finally{w.db.close();}
+});
+
+
+test('confirming a newly bank-derived source starts it Private, and an explicit sharing choice is honored',async()=>{
+ const w=world();try{sources(w);const i=await pin(w);await setSharing(w.ctx,i.uid,{version:1,visibility:'summary'});
+ w.db.exec("UPDATE project_metrics SET source='mercury'");seed(w,'connector_fed_items',{integration_id:1,project_id:1,module:'grow',kind:'metric_month',external_id:'changed-metric',local_table:'project_metrics',local_id:1});
+ const bank=await setSharing(w.ctx,i.uid,{version:2,confirm_current:true});assert.equal(bank.private_reason,'bank');assert.equal(bank.visibility,'private');
+ const shared=await setSharing(w.ctx,i.uid,{version:3,visibility:'summary'});assert.equal(shared.visibility,'summary');assert.equal(shared.private_reason,'bank');
+ w.db.exec("UPDATE project_metrics SET source='manual'");await setSharing(w.ctx,i.uid,{version:4,confirm_current:true,visibility:'summary'});
+ w.db.exec("UPDATE project_metrics SET source='mercury'");const explicit=await setSharing(w.ctx,i.uid,{version:5,confirm_current:true,visibility:'summary'});assert.equal(explicit.visibility,'summary');assert.equal(explicit.private_reason,'bank');
+ }finally{w.db.close();}
+});
+
+
+test('snapshot fingerprints depend on the private server key, remain deterministic, and never fall back to public hashes',async()=>{
+ const w=world();try{sources(w);const first=await collectEvidenceSources(w.env,1,1),again=await collectEvidenceSources(w.env,1,1);assert.deepEqual(first.candidates.map(c=>c.snapshot_hash),again.candidates.map(c=>c.snapshot_hash));
+ const rotated=await collectEvidenceSources({...w.env,JWT_SECRET:'u'.repeat(64)},1,1);assert.equal(first.candidates.length,rotated.candidates.length);assert.ok(first.candidates.every((c,i)=>c.snapshot_hash!==rotated.candidates[i].snapshot_hash));
+ const missing=await collectEvidenceSources({...w.env,JWT_SECRET:''},1,1);assert.equal(missing.candidates.length,0);assert.ok(missing.blocks.some(b=>b.state==='unreadable'));
+ }finally{w.db.close();}
+});
+
+
+test('holder and vesting connector labels require an active ledger, never a typed provider hint or sync date',async()=>{
+ const w=world();try{sources(w);
+ for(const source of ['carta','connector:carta','stripe','mercury']){w.db.prepare('UPDATE cap_table_holders SET source=?').run(source);w.db.prepare('UPDATE cap_table_vesting SET source=?').run(source);const got=await collectEvidenceSources(w.env,1,1);for(const kind of ['founder-holding','vesting-schedule'])assert.equal(got.candidates.find(c=>c.kind===kind)?.source_label,'typed');assert.equal(got.candidates.find(c=>c.kind==='founder-holding')?.observed_on,null);}
+ w.db.exec("UPDATE cap_table_holders SET source='connector:carta'; UPDATE cap_table_vesting SET source='carta'");seed(w,'integrations',{id:3,user_id:1,provider_key:'carta',status:'active'});
+ for(const table of ['cap_table_holders','cap_table_vesting'])seed(w,'connector_fed_items',{integration_id:3,project_id:1,module:'raise',kind:'cap_table',external_id:table,local_table:table,local_id:1});
+ const backed=await collectEvidenceSources(w.env,1,1);for(const kind of ['founder-holding','vesting-schedule']){const row=backed.candidates.find(c=>c.kind===kind);assert.equal(row?.source_label,'connector');assert.equal(row?.provider,'carta');}assert.equal(backed.candidates.find(c=>c.kind==='founder-commits')?.provider,'github');
+ w.db.exec("UPDATE integrations SET status='revoked' WHERE id=3");const revoked=await collectEvidenceSources(w.env,1,1);for(const kind of ['founder-holding','vesting-schedule'])assert.equal(revoked.candidates.find(c=>c.kind===kind)?.source_label,'typed');
+ }finally{w.db.close();}
+});
+
+
+test('fingerprints bind privacy policy as well as source figures',async()=>{
+ const w=world();const rule=EVIDENCE_RULES.find(r=>r.kind==='kpi-snapshot') as any;const previous=rule.private_reason;
+ try{sources(w);const first=(await collectEvidenceSources(w.env,1,1)).candidates.find(c=>c.kind==='kpi-snapshot')!;rule.private_reason='bank';const changed=(await collectEvidenceSources(w.env,1,1)).candidates.find(c=>c.kind==='kpi-snapshot')!;assert.notEqual(changed.snapshot_hash,first.snapshot_hash);assert.equal(changed.private_reason,'bank');}
+ finally{rule.private_reason=previous;w.db.close();}
+});

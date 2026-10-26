@@ -63,11 +63,13 @@ function stripeCalls(): Call[] {
 const CALLS = stripeCalls();
 const isCreate = (c: Call) => c.method === 'POST' && c.path !== null && (STRIPE_CREATE_PATHS as readonly string[]).includes(stripePathOf(c.path));
 
-test('every stripeCall that POSTs to a create path names its money kind, and there are exactly the fourteen', () => {
+test('every stripeCall that POSTs to a create path names its money kind, and there are exactly the sixteen', () => {
   const creates = CALLS.filter(isCreate);
   assert.deepEqual(creates.map((c) => `${c.file} ${stripePathOf(c.path!)}`).sort(), [
     'routes/billing.ts /checkout/sessions', 'routes/billing.ts /checkout/sessions', 'routes/billing.ts /checkout/sessions',
     'routes/billing.ts /subscriptions',
+    // D1051 (#2902): checkout's new subscription, and the schedule a downgrade waits on.
+    'routes/billing_checkout.ts /subscription_schedules', 'routes/billing_checkout.ts /subscriptions',
     'routes/legal.ts /checkout/sessions', 'routes/legal.ts /invoiceitems', 'routes/legal.ts /invoices',
     'routes/orders.ts /payment_intents',
     'routes/payments.ts /payment_intents', 'routes/payments.ts /subscriptions',

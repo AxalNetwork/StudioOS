@@ -53,9 +53,11 @@ test('cap-table vesting readers remain scoped to their intended audience', () =>
   // D1262 (#3285) adds project/holder/user-scoped Team counts in Raise.
   // Real SQLite tests in raise_evidence_fixes_d1262 cover its scope and
   // aggregate-only projection; it returns no personal vesting schedule.
+  // D1263 adds the founder-scoped evidence candidate reader. Its route and
+  // cross-project privacy gates are exercised by raise_evidence_d1263.test.ts.
   assert.deepEqual(
     readers.sort(),
-    ['integrations/providers/carta.ts', 'routes/captable.ts', 'routes/company.ts', 'routes/cycle_build.ts', 'services/capTableRegister.ts', 'services/capTableWrites.ts', 'services/decks/sources.ts', 'services/raiseCycle.ts', 'services/records/build.ts'],
+    ['integrations/providers/carta.ts', 'routes/captable.ts', 'routes/company.ts', 'routes/cycle_build.ts', 'services/capTableRegister.ts', 'services/capTableWrites.ts', 'services/decks/sources.ts', 'services/raiseCycle.ts', 'services/raiseEvidenceSources.ts', 'services/records/build.ts'],
     'only the importer, declared readers and reviewed writer should touch these tables',
   );
   const raise = read('cloudflare-worker/src/services/raiseCycle.ts');

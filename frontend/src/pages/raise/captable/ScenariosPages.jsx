@@ -14,7 +14,7 @@ import { PLAN_LINE } from './overviewModel';
 import { dollars, tabSearch } from './capTableModel';
 import {
   ASSUMPTIONS_FALLBACK, COMPARE, READ_SOURCE, GROUPS, MAX_COMPARE, MAX_EXITS, MODEL_LOCKED, READ_ONLY, SAVED, SCENARIOS_PATH,
-  attachRead, attachedRead, beforeAfter, compareExits, compareHref, compareIds, compareRows, dialogCopy, exitTable,
+  attachRead, attachedRead, beforeAfter, todayPrice, compareExits, compareHref, compareIds, compareRows, dialogCopy, exitTable,
   draftFromScenario, engineNotes, exitPanels, founderPanels, fromToday, inputsFromDraft, nameError,
   newScenarioInputs, nextName, notModelled, paymentReadBack, roundEvents, roundReadBack, runRequest,
   sameInputs, scenarioCards, scenarioHref, scenariosHead, shareSteps, short, shortName, swipeCards, todayBody, todayDraft,
@@ -346,7 +346,7 @@ function TodayEditor({ draft, setDraft, instruments }) {
   );
 }
 
-function ResultsBlocks({ run, onRecord }) {
+function ResultsBlocks({ run, onRecord, today }) {
   if (run.status === 'idle') return null;
   if (run.status === 'invalid' || run.status === 'refused') {
     return (
@@ -358,7 +358,7 @@ function ResultsBlocks({ run, onRecord }) {
   if (!run.data) return <Skeleton testId="captable-scenario-run-loading" />;
   const result = run.data.result || {};
   if (result.errors) return <ul className="m-0 text-[12.5px] text-red-700 dark:text-red-400" data-testid="captable-scenario-run-errors">{result.errors.map((m) => <li key={m}>{m}</li>)}</ul>;
-  const rows = beforeAfter(result);
+  const rows = beforeAfter(result, todayPrice(today, onRecord));
   const events = roundEvents(result);
   const notes = [...engineNotes(result), ...notModelled(run.data)];
   return (
@@ -374,7 +374,7 @@ function ResultsBlocks({ run, onRecord }) {
               {rows.map((r) => (
                 <tr key={r.key} className="border-b border-axal-ground last:border-b-0 dark:border-gray-700" data-testid="captable-scenario-result-row">
                   <td className={`${TD} ${r.group ? 'font-bold' : 'pl-6'}`}>{r.label}</td>
-                  <td className={`${TD} ${MONO} ${MUTED}`}>{r.before}</td>
+                  <td className={`${TD} ${MONO} ${MUTED}`}>{r.before}{r.note ? <span className="block font-sans text-[11px]" data-testid="captable-scenario-before-note">{r.note}</span> : null}</td>
                   <td className={`${TD} ${MONO} font-bold`}>{r.after}</td>
                   <td className={`${TD} ${MONO}`}>{r.change}</td>
                 </tr>
@@ -552,7 +552,7 @@ export function ScenarioPage({ projectId, uid, search, reload, retry }) {
                 ) : null}
               </Block>
               <div className="flex min-w-0 flex-col gap-3.5">
-                <ResultsBlocks run={run} onRecord={today_} />
+                <ResultsBlocks run={run} onRecord={today_} today={today} />
                 {run.status === 'ready' && run.data?.result && !run.data.result.errors ? (
                   <>
                     <EadwynBand read={roundReadBack(run.data.result)} attached={!!attachedRead(scenario.inputs, 'round')} canAttach={writes && !model} onAttach={() => attach(roundReadBack(run.data.result))} testId="captable-ead-round" />
@@ -682,7 +682,7 @@ function CompareBody({ projectId, scenarios, today, search, writes, onAttached }
   const phone = usePhoneWidth();
   const todayResult = today.status === 'ready' && today.data?.today?.available ? today.data.today.result : null;
   const cols = scenarios.map((s, k) => ({ name: s.is_variant ? s.name : 'Cap table · model', short: shortName(s.is_variant ? s.name : 'Model'), fromToday: fromToday(s), result: runs[k]?.result || null, status: runs[k]?.status || 'loading' }));
-  const rows = compareRows(todayResult, cols);
+  const rows = compareRows(todayResult, cols, todayPrice(today, true));
   const panels = founderPanels(cols);
   const exitsDrawn = exitPanels(cols, exits);
   const assumptions = today.status === 'ready' && Array.isArray(today.data?.assumptions) ? today.data.assumptions : ASSUMPTIONS_FALLBACK;

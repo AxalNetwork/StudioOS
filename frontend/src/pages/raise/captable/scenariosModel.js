@@ -28,7 +28,6 @@ export const MAX_COMPARE = 3;
 export const MAX_EXITS = 4;
 export const MODEL_NAME = 'Cap table · model';
 export const SAVED = 'Saved. The main cap table did not change.';
-export const NOT_READ = 'Not read here yet';
 export const NOT_CONVERTED = 'Not converted';
 export const NOT_IN = 'Not in this scenario';
 export const MODEL_LOCKED = 'This is your saved model. A scenario never writes it: duplicate it to change its inputs.';
@@ -327,12 +326,38 @@ const change = (a, b) => {
   return `${d > 0 ? '+' : '−'}${Math.abs(d).toFixed(2)}`;
 };
 
+/** D1283 (#3341): why today has no price per share when nothing on record is priced. */
+export const NO_PRICE = 'No priced round is on record.';
+const dayLabel = (v) => {
+  const d = v ? new Date(String(v).length === 10 ? `${v}T12:00:00Z` : v) : null;
+  return d && !Number.isNaN(d.valueOf()) ? d.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric', timeZone: 'UTC' }) : null;
+};
+
+/**
+ * D1283 (#3341): today's price per share for Before and the compare table,
+ * from the today read's `price` (the record's last priced issuance, else its
+ * latest priced class). A scenario that starts from the typed model reads Not
+ * recorded, its foot saying why; nothing priced on record reads Not recorded
+ * with that reason. Never 0, and never a wait: the figure is read.
+ */
+export function todayPrice(read, onRecord = true) {
+  if (!onRecord) return { text: NOT_RECORDED, note: null };
+  if (!read || read.status === 'loading') return { text: 'Reading…', note: null };
+  if (read.status !== 'ready') return { text: 'Could not be read', note: null };
+  const t = read.data?.today;
+  const p = t?.price;
+  if (p && Number.isSafeInteger(p.micros) && p.micros > 0) {
+    return { text: `$${(p.micros / 1e6).toFixed(4)}`, note: ['On record', p.instrument, dayLabel(p.as_of)].filter(Boolean).join(' · ') };
+  }
+  return { text: NOT_RECORDED, note: t?.price_sentence || NO_PRICE };
+}
+
 /**
  * Before and after by holder and group (CT6). Before is the scenario's start:
  * the record for a scenario from Today, its own typed founders otherwise.
  * A group with no holder on either side is left out, never drawn as 0%.
  */
-export function beforeAfter(result) {
+export function beforeAfter(result, price = null) {
   const before = result?.founding;
   const after = lastLedger(result);
   const rows = [];
@@ -352,7 +377,7 @@ export function beforeAfter(result) {
   }
   const rounds = Array.isArray(result?.rounds) ? result.rounds : [];
   const last = rounds[rounds.length - 1];
-  rows.push({ key: 'price', label: 'Price per share', group: false, before: NOT_READ, after: last ? `$${last.price_per_share.toFixed(4)}` : 'No round modelled', change: '—' });
+  rows.push({ key: 'price', label: 'Price per share', group: false, before: price?.text ?? NOT_RECORDED, note: price?.note ?? null, after: last ? `$${last.price_per_share.toFixed(4)}` : 'No round modelled', change: '—' });
   rows.push({ key: 'post', label: 'Post-money', group: false, before: 'No round modelled', after: last ? dollars(last.post_money) : 'No round modelled', change: '—' });
   return rows;
 }
@@ -550,7 +575,7 @@ export function compareExits(scenarios) {
  * `cols` are `{ name, result | null, status }`; a column whose run failed
  * says so in every row rather than drawing a figure.
  */
-export function compareRows(today, cols) {
+export function compareRows(today, cols, price = null) {
   const series = [{ result: today, today: true }, ...cols.map((c) => ({ result: c.result, status: c.status }))];
   const cell = (s, fn) => (s.status && s.status !== 'ready' ? (s.status === 'loading' ? 'Reading…' : 'Could not be read') : s.result ? fn(s.result, s.today) : NOT_RECORDED);
   const groupPct = (types) => (r, isToday) => {
@@ -570,7 +595,7 @@ export function compareRows(today, cols) {
   }
   for (const g of GROUPS.slice(1)) rows.push({ label: g.label, bold: true, cells: series.map((s) => cell(s, groupPct(g.types))) });
   const lastRound = (r) => (r.rounds || [])[(r.rounds || []).length - 1];
-  rows.push({ label: 'Price per share', cells: series.map((s) => cell(s, (r, isToday) => (isToday ? NOT_READ : lastRound(r) ? `$${lastRound(r).price_per_share.toFixed(4)}` : 'No round modelled'))) });
+  rows.push({ label: 'Price per share', cells: series.map((s) => cell(s, (r, isToday) => (isToday ? price?.text ?? NOT_RECORDED : lastRound(r) ? `$${lastRound(r).price_per_share.toFixed(4)}` : 'No round modelled'))) });
   rows.push({ label: 'Post-money', cells: series.map((s) => cell(s, (r, isToday) => (isToday || !lastRound(r) ? 'No round modelled' : dollars(lastRound(r).post_money)))) });
   for (const n of instruments) {
     rows.push({ label: `${n} · shares`, cells: series.map((s) => cell(s, (r, isToday) => {
