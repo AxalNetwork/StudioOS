@@ -17,6 +17,8 @@ import { reportError } from '../../lib/log';
 import DealReferencesTab from '../../components/deals/DealReferencesTab';
 import DealSyndicates from '../../components/deals/DealSyndicates';
 import FromMercury from '../investor/FromMercury';
+import { ProofDoor, useProofTargets } from '../investor/ProofOfFunds';
+import { ownDealTarget, showsProof } from '../investor/proofOfFundsModel';
 import { tabHref } from '../dealPageModel';
 import { CARD, EYE, SUB, H3, BTN_S, BTN_P } from './DealFrame';
 import { Slot } from './DealOverview';
@@ -330,8 +332,10 @@ export function DealTerms({ deal, investor }) {
 
 // ---------------------------------------------------------------- DL11–DL13 Commitment and closing
 
-export function DealCommitment({ deal, user, onChangeAmount }) {
+export function DealCommitment({ deal, user, onChangeAmount, onShare }) {
   const currency = deal.currency || 'USD';
+  // D752 (#1891): an investor on HQ shares a proof of funds from their own commitment.
+  const own = useProofTargets({ enabled: showsProof(user) });
   const [mine, setMine] = useState({ status: 'loading' });
   const loadMine = () => {
     setMine({ status: 'loading' });
@@ -372,6 +376,7 @@ export function DealCommitment({ deal, user, onChangeAmount }) {
               <button type="button" className={`${BTN_S} text-axal-destructive dark:text-red-300`} onClick={() => setWithdrawing(true)} data-testid="deal-withdraw">Withdraw</button>
             </div>
             {c.confirmed && <p className={`m-0 ${SUB}`}>A confirmed commitment changes only by withdrawing it and committing again.</p>}
+            {own.status === 'ready' && <ProofDoor target={ownDealTarget(own.read, c.row, user)} onShare={(t) => onShare?.(t, own.read)} />}
           </>
         )}
         {c.history?.length > 0 && (

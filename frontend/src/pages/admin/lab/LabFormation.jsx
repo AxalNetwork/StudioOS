@@ -14,9 +14,9 @@ import {
 /**
  * D970 (#2755) — Formation (SL10; SL10d's dialogs): the 83(b) operator review
  * and the formation orders, two desks that also serve startups outside the
- * Lab. The "Lab ventures · All startups" switch waits for part 4 (#2751), so
- * both list every startup, as their reads do, and nothing filters by venture
- * in the browser meanwhile.
+ * Lab. The "Lab ventures · All startups" switch (#2751) sends its scope to
+ * both reads, and the Worker filters; nothing filters by venture in the
+ * browser.
  *
  * Every write opens a dialog with nothing preselected: assign the operator,
  * record a review (no outcome chosen, no date), mark the packet ready (no

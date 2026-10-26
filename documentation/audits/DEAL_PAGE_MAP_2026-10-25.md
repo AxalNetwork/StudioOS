@@ -57,3 +57,20 @@ The owner's Investor Deal Page canvas (#2421, boards DL1–DL24), read against t
 - **Stage, what's new and notes** (part 2, #3055, migration 600).
 - **Team, Market, Traction reads** (part 3, #3056) wait on PIPE-RAISE and SCORING.
 - **The frontend** (parts 4–7, #3057–#3060) follows.
+
+## 5. Status (added by D1155, 2026-10-26)
+
+This map has been acted on in full. The snapshot above is unchanged; this note says where each part landed.
+
+| Part | Decision | State |
+|---|---|---|
+| 1 Fixes | D1149 | Merged |
+| 2 Worker: stage, what's new, notes | D1150 | Merged |
+| 3 Worker: Team, Market, Traction | D1151 | Merged |
+| 4 Frontend: frame, header, Overview, Notes, states | D1152 | Merged |
+| 5 Frontend: Diligence, Documents, Terms, Commitment | D1153 | Merged |
+| 6 Frontend: Scorecard, Evidence, Team, Market, Traction, slots | D1154 | Merged |
+| 7 The founder's, admin's and Operating Partner's views; who sees what | D1155 | This part |
+
+**§2 item 12** ("Investors are refused Transfers") is decided by DL15 and D1213: an investor never reads the recorded transfers, which stay with an Admin and an Operating Partner. The refusal stands.
+

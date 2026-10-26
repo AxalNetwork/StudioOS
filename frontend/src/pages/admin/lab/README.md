@@ -85,7 +85,9 @@ D971 (#2756), SL12–SL14 and SL21:
   than copying a sample chart into the playbook.
 - `LabSettings.jsx` reads operative cohort size, edits Minimum or Places in a
   dialog, reads a selected licensed studio's grant for a Super Admin, and draws
-  the fixed rules. An Admin's grant terms wait explicitly for #2775.
+  the fixed rules. A branch Admin reads its own licence's Spin-Out Lab grant
+  from `GET /api/licence/mine/programs` (D984): its state, period and cohort
+  terms in the Programs tab's words, or why there is none (D1280).
 - `LabActivity.jsx` reads the Worker's filtered and paged history. Super Admin
   support sessions read separately and search/page over the newest 100 records;
   an Admin makes no support-session request.

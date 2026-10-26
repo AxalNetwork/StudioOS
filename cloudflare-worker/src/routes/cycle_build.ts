@@ -7,6 +7,7 @@ import { CONNECTOR_METADATA, getDescriptor } from '../integrations/registry';
 import { MODULE_LABELS, fedCounts } from '../integrations/fed';
 import { syncArrivals, syncArrivalsText, syncErrorWords } from '../integrations/githubFeeds';
 import { acceptDesignProposal, dismissDesignProposal, solutionDesignFromCode } from '../integrations/providers/github/solutionDesign';
+import { lovableRepositories } from '../integrations/providers/github/lovableMark';
 import { foundingTeamFromCode, mapLogin, unmapLogin } from '../integrations/providers/github/team';
 import { acceptCompanyProposal, companyFromCode, dismissCompanyProposal } from '../integrations/providers/github/company';
 import { validateConnectorSettings } from '../integrations/connectorRules';
@@ -304,7 +305,9 @@ async function prototypeGithub(env: Env, p: Project) {
       }
       byRelease.get(c.release_id)[number(c.in_release) === 1 ? 'in' : 'not_in'].push({ id: c.feature_id, title: c.title });
     }
-    const releases = [...byRelease.values()];
+    // D1084: a release's repository the founder marked "Synced with Lovable".
+    const lovable = await lovableRepositories(env, p.id);
+    const releases = [...byRelease.values()].map((r) => (lovable.has(r.repository) ? { ...r, synced_with: 'lovable' } : r));
     const empty = !fed.length && !releases.length;
     return {
       state: empty ? 'empty' : 'ok',

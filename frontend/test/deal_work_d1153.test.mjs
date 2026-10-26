@@ -89,7 +89,8 @@ test('Commitment: yours with its note and who reads it; the round is a count and
   assert.deepEqual([c.state, c.uid, c.amount, c.status, c.recorded, c.note], ['ready', 'c1', '$50,000', 'Pending', 'Recorded 4 Nov 2026', 'Follow on at the A.']);
   assert.deepEqual(c.history.map((x) => x.line), ['$10,000 · Withdrawn · recorded 1 Sep 2026']);
   assert.equal(myCommitment({ status: 'ready', items: [{ uid: 'o', amount: 1, status: 'withdrawn' }] }).state, 'none');
-  assert.equal(NOTE_READERS, 'You, your firm, the founder and the studio read this note.');
+  // D1155 (DL15): the Worker returns a note to its investor alone.
+  assert.equal(NOTE_READERS, 'Only you read this note. The founder and the studio see your amount and status, never the note.');
   const r = roundLines(ready({ investors: 3, confirmed_total: 250000, pending_total: 50000, currency: 'USD' }), DEAL);
   assert.deepEqual([r.investors, r.confirmed, r.pending, r.pct], ['3 investors have a live commitment', '$250,000 confirmed of $1,000,000', '$50,000 more is pending', 25]);
   assert.match(r.privacy, /counted, never named/);
@@ -184,7 +185,7 @@ test('Commitment: Withdraw needs a reason before anything is sent, then withdraw
   // Mutation checked: the withdraw posted without a reason; the reason not sent.
   const v = await mounted('/deals/4/commitment', INVESTOR, handlerWith({ 'deals/4/commitments': (u, m) => (m === 'GET' ? response([{ id: 1, uid: 'c1', amount: 50000, status: 'pending', notes: 'Follow on.', created_at: '2026-11-04 10:00:00', investor_user_id: 21 }]) : null) }));
   try {
-    assert.match(v.textOf('deal-my-commitment'), /\$50,000[\s\S]*Pending[\s\S]*Recorded 4 Nov 2026[\s\S]*Follow on\.[\s\S]*the founder and the studio read this note/);
+    assert.match(v.textOf('deal-my-commitment'), /\$50,000[\s\S]*Pending[\s\S]*Recorded 4 Nov 2026[\s\S]*Follow on\.[\s\S]*Only you read this note\./);
     assert.match(v.textOf('deal-round'), /\$250,000 confirmed of \$1,000,000[\s\S]*2 investors have a live commitment[\s\S]*counted, never named/);
     await v.click('deal-withdraw');
     assert.ok(v.has('deal-withdraw-dialog'));

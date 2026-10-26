@@ -8,14 +8,16 @@
  * follows the release with no code change. `scripts/release-draft.mjs` keeps
  * daily drafts from main commit history, named by `nextReleaseTag`.
  *
- * New tags count active release periods without a stage suffix. RELEASE_STAGE
- * remains the fallback badge for builds with no published release; legacy
- * alpha, beta and rc tags continue to parse.
+ * Every tag carries the stage, `-alpha` while RELEASE_STAGE says so: the
+ * owner's rule, as the first releases were tagged. #2655 dropped the suffix
+ * for a while (v1.0.1 to v8.3.26); `scripts/release-alpha-rename.mjs` renames
+ * those releases. RELEASE_STAGE is also the badge for a build with no
+ * published release. Beta and rc tags, and the unsuffixed ones, still parse.
  */
 export const RELEASE_STAGE = 'alpha';
 
 /** The first release counts one active month and day, in week zero. */
-export const FIRST_RELEASE = 'v1.0.1';
+export const FIRST_RELEASE = 'v1.0.1-alpha';
 
 const TAG = /^v(\d+)\.(\d+)\.(\d+)(?:-(alpha|beta|rc)(?:\.(\d+))?)?$/;
 
@@ -35,8 +37,9 @@ export function parseRelease(tag) {
 /** Active months accumulate; active week/day counters belong to the latest month.
  * Month weeks are seven-day blocks (1–7, 8–14, ...), numbered from zero.
  * Only blocks/days with main commits count: weeks 0–4, days 1–31.
+ * The stage follows as a suffix (`v8.3.26-alpha`); a stable stage has none.
  */
-export function nextReleaseTag(commitDays) {
+export function nextReleaseTag(commitDays, stage = RELEASE_STAGE) {
   const days = [...new Set(commitDays)].sort();
   if (!days.length) throw new Error('No active commit days.');
   const months = new Set();
@@ -49,7 +52,7 @@ export function nextReleaseTag(commitDays) {
   const month = days.at(-1).slice(0, 7);
   const activeDays = days.filter((day) => day.slice(0, 7) === month);
   const activeWeeks = new Set(activeDays.map((day) => Math.floor((Number(day.slice(8)) - 1) / 7)));
-  return `v${months.size}.${activeWeeks.size - 1}.${activeDays.length}`;
+  return `v${months.size}.${activeWeeks.size - 1}.${activeDays.length}${stage === 'stable' ? '' : `-${stage}`}`;
 }
 
 /**

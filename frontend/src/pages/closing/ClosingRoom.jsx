@@ -61,8 +61,11 @@ function Lines({ dealId, role, currency }) {
   const read = useRead(() => api.dealCommitments(dealId), [dealId]);
   if (read.status === 'loading') return <div className="h-24 animate-pulse rounded-xl bg-gray-100 dark:bg-gray-800" data-testid="closing-lines-loading" />;
   if (read.status === 'error') return <section className={box} data-testid="closing-lines"><Unreadable what="The lines" claim="This is not a claim that the round has none." onRetry={read.retry} /></section>;
-  // An Operating Partner's read is the confirmed total only, never the lines.
-  if (!Array.isArray(read.data)) return null;
+  // An Operating Partner sees the total, never the lines, in the closing room
+  // (#2424 owner question 3). The commitments read gives them the rows for the
+  // deal page's Commitment tab since D1155 (#2421 question 7), so the room
+  // keeps its own rule here.
+  if (role === 'partner' || !Array.isArray(read.data)) return null;
   const { rows, committed, received, unrecordedAmounts } = lineRows(read.data);
   return (
     <section className={box} data-testid="closing-lines">
