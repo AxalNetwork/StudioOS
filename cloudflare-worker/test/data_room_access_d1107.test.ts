@@ -48,6 +48,8 @@ function fixture() {
     addColumnsFrom(db, MIG(f), 'data_room_files');
     addColumnsFrom(db, MIG(f), 'raise_prospects');
   }
+  // D1248: migration 622's request columns (due date, withdrawn), which the diligence read selects.
+  addColumnsFrom(db, MIG('622_dd_documents_due_reminders.sql'), 'dd_requests');
   db.exec(MIG('436_round_calls.sql'));
   db.exec(MIG('595_data_room_access_requests.sql').split('INSERT OR IGNORE')[0]);
   const u = db.prepare('INSERT INTO users (id, role, founder_id, name, email) VALUES (?,?,?,?,?)');

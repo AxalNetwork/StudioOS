@@ -1,12 +1,18 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { adminProductTestersApi, adminTestingApi } from '../../../lib/api/productTesting';
 import { Pill } from '../../../ui';
 import { ConsoleUnreadable, CONSOLE_LOADING } from '../consoles/shared';
-import ProgrammeApplicants from '../../testing/ProgrammeApplicants';
-import { MAIL_NOTE, ROLE_OPTIONS, datesLine, placesLine, statusLabel, statusTone } from '../../testing/programmeModel';
+import { ROLE_OPTIONS, statusLabel, statusTone } from '../../testing/programmeModel';
+import TestingDialog from './TestingDialog';
+import { dialogFor } from './reviewModel';
 import {
-  NOT_YET, PROGRAM_SUBS, RAIL, REACH_STEPS, TESTER_CHIPS, WAITS, blockState, dayOf, needsYou, overviewFigures, profileBars,
+  APPLICANT_SORTS, BOTH_LINE, MAIL_LINE, PARTNER_LINE, SCOPES, STATUS_FILTERS, STEPS_PAGE_SIZE, STEPS_PAGES_MAX,
+  answersOf, applicantsView, applicationRow, eventLine, miniStats, programmeFacts, rangeLine, reviewLines, statusChips,
+  stepsFoot, stepsFor, whenLine,
+} from './programModel';
+import {
+  NOT_YET, PROGRAM_SUBS, RAIL, REACH_STEPS, TESTER_CHIPS, WAITS, blockState, dayOf, needsYou, overviewFigures, profileBars, programHref,
   profileWord, reachRows, testerRow, weeklySeries, weeklySummary,
 } from './productTestingModel';
 
@@ -453,15 +459,254 @@ const NO_READS = Object.freeze({ programmes: () => new Promise(() => {}) });
 const NO_TESTERS = Object.freeze({ list: () => new Promise(() => {}) });
 
 /* ------------------------------------------------------------------ *
- * One program (TST5, TST6)
+ * One program (TST5, TST6) — D1203
  * ------------------------------------------------------------------ */
 
-const roleNames = (roles) => (Array.isArray(roles) ? roles : [])
-  .map((r) => ROLE_OPTIONS.find(([k]) => k === r)?.[1] || r).join(', ') || 'No role chosen';
+/**
+ * The program's history, read whole for the stepper and Activity: pages of
+ * STEPS_PAGE_SIZE, newest first, at most STEPS_PAGES_MAX of them. `capped`
+ * says when there was more than that.
+ */
+function useHistory(api, uid) {
+  const fn = useCallback(async () => {
+    const items = [];
+    let total = 0;
+    for (let page = 1; page <= STEPS_PAGES_MAX; page += 1) {
+      const r = await api.events(uid, { page, pageSize: STEPS_PAGE_SIZE });
+      const block = r?.events;
+      if (!block || block.available === false) throw new Error(block?.reason || 'unreadable');
+      total = Number(block.total) || 0;
+      items.push(...(block.items || []));
+      if (items.length >= total || !(block.items || []).length) break;
+    }
+    return { items, total, capped: items.length < total };
+  }, [api, uid]);
+  return useRead(fn);
+}
+
+const STEP_DOT = {
+  done: 'border-violet-600 bg-violet-600 dark:border-violet-400 dark:bg-violet-400',
+  now: 'border-violet-600 bg-white ring-4 ring-violet-100 dark:border-violet-400 dark:bg-gray-900 dark:ring-violet-950',
+  next: 'border-gray-300 bg-white dark:border-gray-600 dark:bg-gray-900',
+};
+
+function Stepper({ p, history }) {
+  const steps = stepsFor(p, history.status === 'ready' ? history.data.items : []);
+  const foot = stepsFoot(p);
+  return (
+    <Block id="testing-program-steps" title="Where it stands" meta="From the program’s history"
+      foot={foot}>
+      {history.status === 'unreadable' ? <BlockUnreadable id="testing-program-steps" reason="The program’s history could not be read, so the dates of its steps are not shown." onRetry={history.reload} /> : null}
+      <ol className="m-0 grid list-none gap-2 p-0" style={{ gridTemplateColumns: `repeat(${steps.length}, minmax(0, 1fr))` }}>
+        {steps.map((st) => (
+          <li key={st.key} className="flex min-w-0 flex-col gap-1" data-testid={`testing-step-${st.key}`} data-state={st.state}>
+            <span className="flex items-center gap-1.5">
+              <span className={`inline-block h-3 w-3 shrink-0 rounded-full border-2 ${STEP_DOT[st.state]}`} aria-hidden="true" />
+              <span className={`text-[12.5px] ${st.state === 'next' ? MUTED : 'font-bold text-axal-ink dark:text-gray-100'}`}>{st.label}{st.state === 'now' ? ' · now' : ''}</span>
+            </span>
+            <span className={`text-[11.5px] ${MUTED}`}>{history.status === 'loading' && st.state !== 'next' ? 'Reading…' : (st.note || '')}</span>
+          </li>
+        ))}
+      </ol>
+    </Block>
+  );
+}
+
+function MiniStats({ stats }) {
+  return (
+    <div className="grid grid-cols-2 gap-2.5 md:grid-cols-4" data-testid="testing-program-stats">
+      {stats.map((x) => <Tile key={x.key} label={x.label} value={x.value} sub={x.sub} testId={`testing-stat-${x.key}`} />)}
+    </div>
+  );
+}
+
+function Details({ p }) {
+  return (
+    <section className={`${CARD} flex flex-col gap-2`} data-testid="testing-program-details">
+      <h3 className={H3}>Details</h3>
+      <dl className="m-0 grid gap-x-4 gap-y-1.5 text-[12.5px] sm:grid-cols-[180px_minmax(0,1fr)]">
+        {programmeFacts(p).map((f) => (
+          <React.Fragment key={f.k}>
+            <dt className={`font-semibold ${MUTED}`}>{f.k}</dt>
+            <dd className="m-0 text-axal-ink dark:text-gray-100">{f.v}</dd>
+          </React.Fragment>
+        ))}
+      </dl>
+      {p.status === 'rejected' && p.review_note ? <p className="m-0 text-[12.5px] text-red-700 dark:text-red-300">Sent back: {p.review_note}</p> : null}
+    </section>
+  );
+}
+
+const FIELD = 'rounded-lg border border-axal-hairline bg-white px-2 py-1 text-[12.5px] dark:border-gray-700 dark:bg-gray-950 dark:text-gray-100';
+const TESTER_BADGE = 'ml-1.5 inline-flex items-center rounded-full border border-gray-400 px-1.5 py-px text-[10.5px] font-bold text-axal-ink dark:border-gray-500 dark:text-gray-100';
+const BTN_GHOST = 'rounded-lg border border-axal-hairline px-2.5 py-1 text-[12px] font-semibold hover:bg-axal-ground disabled:opacity-50 dark:border-gray-700 dark:hover:bg-gray-800';
+const BTN = 'rounded-lg bg-axal-violet px-2.5 py-1 text-[12px] font-semibold text-white disabled:opacity-50';
+
+/** The table's filters, search and sort (TST5a, TST6); one program's list is read whole and narrowed here. */
+function ApplicantFilters({ f, set, testId }) {
+  return (
+    <div className="flex flex-wrap items-center gap-2" data-testid={testId}>
+      <input className={`${FIELD} w-[180px]`} placeholder="Search name" value={f.q} onChange={(e) => set({ q: e.target.value })} aria-label="Search name" data-testid={`${testId}-q`} />
+      <select className={FIELD} value={f.status} onChange={(e) => set({ status: e.target.value })} aria-label="Status" data-testid={`${testId}-status`}>
+        {STATUS_FILTERS.map(([k, l]) => <option key={k} value={k}>{l}</option>)}
+      </select>
+      <select className={FIELD} value={f.role} onChange={(e) => set({ role: e.target.value })} aria-label="Profile" data-testid={`${testId}-role`}>
+        <option value="">Every profile</option>
+        {ROLE_OPTIONS.map(([k]) => <option key={k} value={k}>{profileWord(k)}</option>)}
+      </select>
+      <select className={FIELD} value={f.consented} onChange={(e) => set({ consented: e.target.value })} aria-label="Agreed to email" data-testid={`${testId}-consented`}>
+        <option value="">Agreed to email: any</option><option value="yes">Agreed to email</option><option value="no">Not agreed</option>
+      </select>
+      <select className={FIELD} value={f.sort} onChange={(e) => set({ sort: e.target.value })} aria-label="Sort" data-testid={`${testId}-sort`}>
+        {APPLICANT_SORTS.map(([k, l]) => <option key={k} value={k}>Sort: {l}</option>)}
+      </select>
+    </div>
+  );
+}
+
+/**
+ * One program's applicants (TST5a, TST6). HQ's own: Pick…, Decline… and
+ * Withdraw for the member… through D1202's dialogs. A partner's: read only,
+ * with the canvas's line and no button. A row opens its answers. The
+ * withdrawn are hidden until asked, from the applications read.
+ */
+function ProgramApplicants({ p, api, read, onChanged }) {
+  const [f, setF] = useState({ q: '', status: '', role: '', consented: '', sort: 'newest' });
+  const [open, setOpen] = useState(null);
+  const [showWithdrawn, setShowWithdrawn] = useState(false);
+  const withdrawn = useRead(useCallback(() => api.applications({ programme: p.uid, status: 'withdrawn', page_size: 100 }), [api, p.uid]));
+  const [asking, setAsking] = useState(null);
+  const [notice, setNotice] = useState(null);
+  const set = (patch) => setF((x) => ({ ...x, ...patch }));
+  const canDecide = read.data?.can_decide === true;
+  const programme = read.data?.programme || p;
+  const view = applicantsView(read.data?.items || [], f);
+  const wList = withdrawn.data?.applications?.items || [];
+  const done = async (text) => { setAsking(null); setNotice(text); await withdrawn.reload(); onChanged?.(); };
+
+  if (read.status === 'loading' && !read.data) return <Skeleton id="testing-program-applicants" />;
+  if (read.status === 'unreadable') return <BlockUnreadable id="testing-program-applicants" reason="The applicants could not be read. That is not the same as none." onRetry={read.reload} />;
+  const questions = programme.questions || [];
+  return (
+    <section className={`${CARD} flex flex-col gap-2.5`} data-testid="testing-program-applicants">
+      <p className={`m-0 text-[12.5px] ${MUTED}`} data-testid="testing-applicants-line">{canDecide ? MAIL_LINE : `${PARTNER_LINE(p.owner_name)} ${MAIL_LINE.split('. ')[1]}`}</p>
+      {read.data?.tester_pool_readable === false ? <p className="m-0 text-[12px] text-amber-800 dark:text-amber-300" data-testid="testing-pool-unread">The tester pool could not be read, so no row says whether its member is a tester.</p> : null}
+      <ApplicantFilters f={f} set={set} testId="testing-applicant-filters" />
+      {view.tooShort ? <p className={`m-0 text-[12px] ${MUTED}`}>Search from two characters.</p> : null}
+      {notice ? <p role="status" className="m-0 text-[12px] font-semibold text-emerald-700 dark:text-emerald-300" data-testid="testing-applicants-notice">{notice}</p> : null}
+      {view.rows.length === 0 ? (
+        <p className={`m-0 text-[12.5px] ${MUTED}`} data-testid="testing-applicants-none">{(read.data?.items || []).length ? 'No applicant matches these filters.' : 'No one has applied yet.'}</p>
+      ) : (
+        <div className="overflow-x-auto">
+          <table className={`${TABLE} min-w-[860px]`} data-testid="testing-applicants-table">
+            <thead><tr>{['Name', 'Profile', 'Applied', 'Status', 'Agreed to email', 'Availability', canDecide ? '' : null].filter((h) => h !== null).map((h, i) => <th key={i} className={TH}>{h}</th>)}</tr></thead>
+            <tbody>
+              {view.rows.map((r) => (
+                <React.Fragment key={r.uid}>
+                  <tr data-testid="testing-applicant-row">
+                    <td className={`${TD} font-bold`}>
+                      <button type="button" className="text-left font-bold" aria-expanded={open === r.uid} onClick={() => setOpen(open === r.uid ? null : r.uid)} data-testid={`testing-applicant-open-${r.uid}`}>{r.name} {open === r.uid ? '▴' : '▾'}</button>
+                    </td>
+                    <td className={TD}>{r.profile}{r.tester === 'yes' ? <span className={TESTER_BADGE} data-testid="testing-tester-badge">Tester</span> : null}</td>
+                    <td className={`${TD} ${MONO}`}>{r.applied}</td>
+                    <td className={TD}>{r.status}</td>
+                    <td className={TD}>{r.consented}</td>
+                    <td className={`${TD} ${r.availability === 'Not given' ? MUTED : ''}`}>{r.availability}</td>
+                    {canDecide ? (
+                      <td className={`${TD} whitespace-nowrap`}>
+                        {['open', 'testing', 'closed'].includes(programme.status) && r.statusKey !== 'picked' ? <button type="button" className={BTN} onClick={() => setAsking({ kind: 'pick', a: r.raw })} data-testid={`testing-pick-${r.uid}`}>Pick…</button> : null}{' '}
+                        {['open', 'testing', 'closed'].includes(programme.status) && r.statusKey === 'applied' ? <button type="button" className={BTN_GHOST} onClick={() => setAsking({ kind: 'decline', a: r.raw })} data-testid={`testing-decline-${r.uid}`}>Decline…</button> : null}{' '}
+                        {r.statusKey === 'applied' || r.statusKey === 'picked' ? <button type="button" className={BTN_GHOST} onClick={() => setAsking({ kind: 'withdraw', a: r.raw })} data-testid={`testing-withdraw-${r.uid}`}>Withdraw for the member…</button> : null}
+                      </td>
+                    ) : null}
+                  </tr>
+                  {open === r.uid ? (
+                    <tr data-testid={`testing-answers-${r.uid}`}>
+                      <td colSpan={canDecide ? 7 : 6} className="border-b border-axal-hairline bg-violet-50 px-3 py-2.5 dark:border-gray-800 dark:bg-violet-950/40">
+                        <span className={EYEBROW}>Answers to the screening questions</span>
+                        {questions.length ? (
+                          <dl className="m-0 mt-1.5 flex flex-col gap-2">
+                            {answersOf(questions, r.answers).map((x, i) => (
+                              <div key={i}><dt className={`${EYEBROW} !text-[10px]`}>Question {i + 1}</dt><dd className="m-0 text-[13px] font-bold">{x.q}</dd><dd className="m-0 text-[13px]">{x.a}</dd></div>
+                            ))}
+                          </dl>
+                        ) : <p className={`m-0 mt-1 text-[12.5px] ${MUTED}`}>This program asks no screening questions.</p>}
+                        <p className={`m-0 mt-2 text-[12px] ${MUTED}`}>Availability: {r.availability} · Agreed to email: {r.consented}</p>
+                      </td>
+                    </tr>
+                  ) : null}
+                </React.Fragment>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+      <div className="flex flex-col gap-1.5" data-testid="testing-withdrawn">
+        {withdrawn.status === 'unreadable' ? <span className={`text-[12px] ${MUTED}`}>Who withdrew could not be read. <button type="button" className={LINK} onClick={withdrawn.reload}>Try again</button></span>
+          : withdrawn.status === 'ready' ? (
+            <span className={`text-[12px] ${MUTED}`}>
+              Withdrawn: <span className={MONO} data-testid="testing-withdrawn-count">{withdrawn.data?.applications?.total ?? 0}</span>
+              {(withdrawn.data?.applications?.total ?? 0) > 0 ? <> · <button type="button" className={LINK} onClick={() => setShowWithdrawn((x) => !x)} data-testid="testing-withdrawn-toggle">{showWithdrawn ? 'Hide' : 'Show'}</button></> : null}
+            </span>
+          ) : null}
+        {showWithdrawn && wList.length ? (
+          <ul className="m-0 flex list-none flex-col gap-1 p-0" data-testid="testing-withdrawn-list">
+            {wList.map((a) => <li key={a.uid} className="text-[12.5px]" data-testid="testing-withdrawn-row"><span className="font-semibold">{a.name || 'Name not recorded'}</span> <span className={MUTED}>· {profileWord(a.role)} · applied {dayOf(a.applied_at) || 'Not recorded'}</span></li>)}
+          </ul>
+        ) : null}
+      </div>
+      {asking ? (
+        <TestingDialog key={`${asking.kind}-${asking.a.uid}`} spec={dialogFor(asking.kind, { p: programme, a: asking.a })} api={api}
+          ctx={{ p: programme, a: asking.a }} onClose={() => setAsking(null)} onDone={done} />
+      ) : null}
+    </section>
+  );
+}
+
+/** Activity (TST5c): the program's history, newest first, 25 to a page, in words. Never an email address. */
+function Activity({ history }) {
+  const [page, setPage] = useState(1);
+  if (history.status === 'loading' && !history.data) return <Skeleton id="testing-activity" />;
+  if (history.status === 'unreadable') return <BlockUnreadable id="testing-activity" reason="This program’s history could not be read. That is not the same as no history." onRetry={history.reload} />;
+  const items = history.data.items;
+  const size = 25;
+  const last = Math.max(1, Math.ceil(items.length / size));
+  const rows = items.slice((page - 1) * size, page * size);
+  return (
+    <section className={`${CARD} flex flex-col gap-2`} data-testid="testing-activity">
+      {items.length === 0 ? <p className={`m-0 text-[12.5px] ${MUTED}`} data-testid="testing-activity-none">Nothing is recorded in this program’s history yet.</p> : (
+        <table className={TABLE} data-testid="testing-activity-table">
+          <thead><tr><th className={`${TH} w-[200px]`}>When</th><th className={TH}>What</th></tr></thead>
+          <tbody>
+            {rows.map((e) => (
+              <tr key={e.id} data-testid="testing-activity-row">
+                <td className={`${TD} ${MONO}`}>{whenLine(e.at)}</td>
+                <td className={`${TD} font-semibold`}>{eventLine(e)}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      )}
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <span className={`text-[12px] ${MUTED}`} data-testid="testing-activity-range">{rangeLine(page, size, items.length, rows.length)}{history.data.capped ? ` · the newest ${items.length} of ${history.data.total} changes are read` : ''}</span>
+        {last > 1 ? (
+          <span className="flex gap-2">
+            <button type="button" className={BTN_GHOST} disabled={page <= 1} onClick={() => setPage(page - 1)}>Newer</button>
+            <button type="button" className={BTN_GHOST} disabled={page >= last} onClick={() => setPage(page + 1)} data-testid="testing-activity-older">Older</button>
+          </span>
+        ) : null}
+      </div>
+      <p className={`m-0 text-[11.5px] ${MUTED}`}>From the program’s history. Never an email address.</p>
+    </section>
+  );
+}
 
 export function ProgramTab({ uid, sub = 'overview', api = adminTestingApi }) {
   const programmes = useRead(useCallback(() => api.programmes(), [api]));
-  const applicantsApi = useMemo(() => ({ applicants: api.applicants, pick: api.pick, decline: api.decline, withdraw: api.withdraw }), [api]);
+  const history = useHistory(api, uid);
+  const applicants = useRead(useCallback(() => api.applicants(uid), [api, uid]));
+  const withdrawn = useRead(useCallback(() => api.applications({ programme: uid, status: 'withdrawn', page_size: 1 }), [api, uid]));
+  const overview = useRead(useCallback(() => api.overview(), [api]));
   if (programmes.status === 'loading' && !programmes.data) return <p className={`p-6 text-sm ${MUTED}`}>{CONSOLE_LOADING}</p>;
   if (programmes.status === 'unreadable') return <ConsoleUnreadable what="This testing program" onRetry={programmes.reload} />;
   const p = (programmes.data?.items || []).find((x) => x.uid === uid);
@@ -474,6 +719,15 @@ export function ProgramTab({ uid, sub = 'overview', api = adminTestingApi }) {
     );
   }
   const hq = p.owner_kind === 'hq';
+  const reach = overview.status === 'ready' ? (overview.data?.mail_reach?.available === false ? null : overview.data?.mail_reach ?? null) : null;
+  const stats = miniStats(p, {
+    applicants: applicants.status === 'ready' ? applicants.data : null,
+    withdrawn: withdrawn.status === 'ready' ? Number(withdrawn.data?.applications?.total ?? 0) : null,
+    reach,
+  });
+  if (!hq && stats[1].value !== 'Unreadable') stats[1] = { ...stats[1], sub: `${stats[1].sub} · read only for HQ` };
+  const count = applicants.status === 'ready' ? (applicants.data?.items || []).length : null;
+  const reload = () => { programmes.reload(); applicants.reload(); withdrawn.reload(); history.reload(); };
   return (
     <div className="flex flex-col gap-4" data-testid="testing-program">
       <div className="flex flex-wrap items-center gap-2">
@@ -485,41 +739,153 @@ export function ProgramTab({ uid, sub = 'overview', api = adminTestingApi }) {
         {PROGRAM_SUBS.map((s) => (
           <Link key={s.key} to={`/admin/platform/product-testing/programs/${encodeURIComponent(p.uid)}${s.query}`} aria-current={s.key === sub ? 'page' : undefined}
             className={`-mb-px border-b-2 px-0.5 pb-2 text-[13px] font-semibold no-underline ${s.key === sub ? 'border-axal-violet text-axal-ink dark:border-violet-400 dark:text-gray-100' : `border-transparent ${MUTED}`}`}
-            data-testid={`testing-program-sub-${s.key}`}>{s.label}</Link>
+            data-testid={`testing-program-sub-${s.key}`}>{s.label}{s.key === 'applicants' && count != null ? ` ${count}` : ''}</Link>
         ))}
       </nav>
       {sub === 'overview' && (
-        <section className={`${CARD} flex flex-col gap-1.5 text-[12.5px]`} data-testid="testing-program-details">
-          <p className="m-0"><span className="font-semibold">Places:</span> {placesLine(p)} · {p.applicant_count} {p.applicant_count === 1 ? 'applicant' : 'applicants'}</p>
-          <p className="m-0"><span className="font-semibold">Dates:</span> {datesLine(p)}</p>
-          {p.summary && <p className="m-0">{p.summary}</p>}
-          {p.tester_tasks && <p className="m-0"><span className="font-semibold">What testers do:</span> {p.tester_tasks}</p>}
-          {p.time_needed && <p className="m-0"><span className="font-semibold">Time needed:</span> {p.time_needed}</p>}
-          <p className="m-0"><span className="font-semibold">Who can apply:</span> {roleNames(p.eligible_roles)}</p>
-          {(p.questions || []).length > 0 && <ol className="m-0 ml-4 list-decimal">{p.questions.map((q, i) => <li key={i}>{q}</li>)}</ol>}
-          {p.status === 'rejected' && p.review_note && <p className="m-0 text-red-700 dark:text-red-300">Sent back: {p.review_note}</p>}
-        </section>
+        <>
+          <Stepper p={p} history={history} />
+          <MiniStats stats={stats} />
+          <div className={`grid gap-3 ${hq ? '' : 'lg:grid-cols-[minmax(0,1fr)_minmax(0,2fr)]'}`}>
+            {!hq ? (
+              <section className={`${CARD} flex flex-col gap-1.5`} data-testid="testing-program-review">
+                <h3 className={H3}>Review</h3>
+                {history.status === 'unreadable' ? <p className={`m-0 text-[12.5px] ${MUTED}`}>The program’s history could not be read.</p>
+                  : reviewLines(p, history.data?.items).map((t, i) => <p key={i} className="m-0 text-[12.5px]">{t}</p>)}
+              </section>
+            ) : null}
+            <Details p={p} />
+          </div>
+          {history.status === 'ready' && history.data.items.length ? (
+            <section className={`${CARD} flex flex-col gap-1.5`} data-testid="testing-program-recent">
+              <h3 className={H3}>Recent activity</h3>
+              {history.data.items.slice(0, 5).map((e) => (
+                <p key={e.id} className="m-0 flex flex-col"><span className="text-[12.5px] font-semibold">{eventLine(e)}</span><span className={`${MONO} text-[11.5px] ${MUTED}`}>{whenLine(e.at)}</span></p>
+              ))}
+              <Link className={`${LINK} text-[12px]`} to={programHref(p.uid, 'activity')}>See all in Activity ›</Link>
+            </section>
+          ) : null}
+        </>
       )}
-      {sub === 'applicants' && (hq ? (
-        <section className={`${CARD} flex flex-col gap-2`} data-testid="testing-program-applicants">
-          <p className={`m-0 text-[12.5px] ${MUTED}`}>{MAIL_NOTE} No email address is shown here.</p>
-          <ProgrammeApplicants uid={p.uid} api={applicantsApi} onChanged={programmes.reload} />
-        </section>
-      ) : <Wait id="partnerApplicants" title="Applicants" />)}
-      {sub === 'activity' && <Wait id="activity" title="Activity" />}
+      {sub === 'applicants' && <ProgramApplicants p={p} api={api} read={applicants} onChanged={reload} />}
+      {sub === 'activity' && <Activity history={history} />}
     </div>
   );
 }
 
 /* ------------------------------------------------------------------ *
- * Applicants (TST8)
+ * Applicants (TST8) — D1203
  * ------------------------------------------------------------------ */
 
-export function ApplicantsTab() {
+export function ApplicantsTab({ api = adminTestingApi }) {
+  const [scope, setScope] = useState('open');
+  const [f, setF] = useState({ status: '', programme: '', owner: '', role: '', consented: '', tester: '', q: '', sort: 'applied', page: 1 });
+  const set = (patch) => setF((x) => ({ ...x, page: 1, ...patch }));
+  const needle = f.q.trim().length >= 2 ? f.q.trim() : '';
+  const programmes = useRead(useCallback(() => api.programmes(), [api]));
+  const read = useRead(useCallback(() => api.applications({
+    scope, status: f.status, programme: f.programme, owner: f.owner, role: f.role, consented: f.consented, tester: f.tester,
+    q: needle, sort: f.sort, page: f.page, page_size: 25,
+  }), [api, scope, f.status, f.programme, f.owner, f.role, f.consented, f.tester, needle, f.sort, f.page]));
+  const [asking, setAsking] = useState(null);
+  const [notice, setNotice] = useState(null);
+  const block = read.data?.applications;
+  const rows = (block?.items || []).map(applicationRow);
+  const chips = statusChips(block?.counts);
+  const progs = programmes.data?.items || [];
+  const progOf = (uid) => progs.find((x) => x.uid === uid) || null;
+  const done = async (text) => { setAsking(null); setNotice(text); await read.reload(); };
+  const last = block ? Math.max(1, Math.ceil((block.total || 0) / (block.page_size || 25))) : 1;
   return (
     <div className="flex flex-col gap-3" data-testid="testing-applicants-tab">
-      <p className={`m-0 text-[12.5px] ${MUTED}`}>An applicant applied to one program. A tester is in the pool. Someone can be both.</p>
-      <Wait id="applicants" title="Every applicant" />
+      <div className="flex flex-wrap items-center gap-2.5">
+        <span className={EYEBROW}>Show</span>
+        <div className={SEG} role="radiogroup" aria-label="Show" data-testid="testing-scope">
+          {SCOPES.map(([k, l]) => <button key={k} type="button" role="radio" aria-checked={scope === k} onClick={() => { setScope(k); set({}); }} className={scope === k ? SEG_ON : SEG_OFF} data-testid={`testing-scope-${k}`}>{l}</button>)}
+        </div>
+      </div>
+      <div className="flex flex-wrap items-center gap-1.5" role="radiogroup" aria-label="Status" data-testid="testing-status-chips">
+        {chips.map((c) => (
+          <button key={c.key || 'all'} type="button" role="radio" aria-checked={f.status === c.key} onClick={() => set({ status: c.key })}
+            className={`${CHIP} ${f.status === c.key ? 'border-violet-200 bg-violet-50 text-axal-ink dark:border-violet-700 dark:bg-violet-950 dark:text-gray-100' : 'border-axal-hairline text-axal-ink dark:border-gray-700 dark:text-gray-100'}`}
+            data-testid={`testing-status-chip-${c.key || 'all'}`}>
+            {c.label} <span className={MONO}>{c.count == null ? '—' : c.count}</span>
+          </button>
+        ))}
+      </div>
+      <p className={`m-0 text-[12.5px] ${MUTED}`}>{BOTH_LINE}</p>
+      <div className="flex flex-wrap items-center gap-2" data-testid="testing-applications-filters">
+        <input className={`${FIELD} w-[180px]`} placeholder="Search name" value={f.q} onChange={(e) => set({ q: e.target.value })} aria-label="Search name" data-testid="testing-applications-q" />
+        <select className={FIELD} value={f.programme} onChange={(e) => set({ programme: e.target.value })} aria-label="Program" data-testid="testing-applications-programme">
+          <option value="">Every program</option>
+          {progs.map((x) => <option key={x.uid} value={x.uid}>{x.product_name}</option>)}
+        </select>
+        <select className={FIELD} value={f.owner} onChange={(e) => set({ owner: e.target.value })} aria-label="Owner" data-testid="testing-applications-owner">
+          <option value="">Every owner</option><option value="hq">Axal VC</option><option value="partner">Partner firms</option>
+        </select>
+        <select className={FIELD} value={f.role} onChange={(e) => set({ role: e.target.value })} aria-label="Profile" data-testid="testing-applications-role">
+          <option value="">Every profile</option>
+          {ROLE_OPTIONS.map(([k]) => <option key={k} value={k}>{profileWord(k)}</option>)}
+        </select>
+        <select className={FIELD} value={f.consented} onChange={(e) => set({ consented: e.target.value })} aria-label="Agreed to email" data-testid="testing-applications-consented">
+          <option value="">Agreed to email: any</option><option value="yes">Agreed to email</option><option value="no">Not agreed</option>
+        </select>
+        <select className={FIELD} value={f.tester} onChange={(e) => set({ tester: e.target.value })} aria-label="Tester in the pool" data-testid="testing-applications-tester">
+          <option value="">Tester in the pool: any</option><option value="yes">A tester in the pool</option><option value="no">Not in the pool</option>
+        </select>
+        <select className={FIELD} value={f.sort} onChange={(e) => set({ sort: e.target.value })} aria-label="Sort" data-testid="testing-applications-sort">
+          <option value="applied">Sort: Applied, newest first</option><option value="name">Sort: Name</option>
+        </select>
+      </div>
+      {f.q.trim().length === 1 ? <p className={`m-0 text-[12px] ${MUTED}`}>Search from two characters.</p> : null}
+      {notice ? <p role="status" className="m-0 text-[12px] font-semibold text-emerald-700 dark:text-emerald-300">{notice}</p> : null}
+      {read.status === 'loading' && !read.data ? <Skeleton id="testing-applications" /> : null}
+      {read.status === 'unreadable' ? <BlockUnreadable id="testing-applications" reason="The applications could not be read. That is not the same as none." onRetry={read.reload} /> : null}
+      {read.status !== 'unreadable' && block ? (rows.length === 0 ? (
+        <p className={`m-0 text-[12.5px] ${MUTED}`} data-testid="testing-applications-none">No application matches. {scope === 'open' ? 'Show All programs to include closed ones.' : ''}</p>
+      ) : (
+        <div className="overflow-x-auto">
+          <table className={`${TABLE} min-w-[1000px]`} data-testid="testing-applications-table">
+            <thead><tr>{['Name', 'Profile', 'Program', 'Owner', 'Applied', 'Status', 'Agreed to email', ''].map((h, i) => <th key={i} className={TH}>{h}</th>)}</tr></thead>
+            <tbody>
+              {rows.map((r) => {
+                const prog = progOf(r.programmeUid);
+                const open = prog && ['open', 'testing', 'closed'].includes(prog.status);
+                return (
+                  <tr key={r.uid} data-testid="testing-application-row">
+                    <td className={`${TD} font-bold`}>{r.name}</td>
+                    <td className={TD}>{r.profile}{r.tester ? <span className={TESTER_BADGE} data-testid="testing-tester-badge">Tester</span> : null}</td>
+                    <td className={TD}>{r.programmeUid ? <Link className={LINK} to={programHref(r.programmeUid, 'applicants')}>{r.programme}</Link> : r.programme}</td>
+                    <td className={`${TD} ${r.hq ? 'font-bold text-axal-violet dark:text-violet-300' : ''}`}>{r.owner}</td>
+                    <td className={`${TD} ${MONO}`}>{r.applied}</td>
+                    <td className={TD}>{r.status}</td>
+                    <td className={TD}>{r.consented}</td>
+                    <td className={`${TD} whitespace-nowrap`}>
+                      {r.hq && prog && open && r.statusKey !== 'picked' && r.statusKey !== 'withdrawn' ? <button type="button" className={BTN} onClick={() => setAsking({ kind: 'pick', a: r.raw, p: prog })} data-testid={`testing-app-pick-${r.uid}`}>Pick…</button> : null}{' '}
+                      {r.hq && prog && open && r.statusKey === 'applied' ? <button type="button" className={BTN_GHOST} onClick={() => setAsking({ kind: 'decline', a: r.raw, p: prog })} data-testid={`testing-app-decline-${r.uid}`}>Decline…</button> : null}{' '}
+                      {prog && (r.statusKey === 'applied' || r.statusKey === 'picked') ? <button type="button" className={BTN_GHOST} onClick={() => setAsking({ kind: 'withdraw', a: r.raw, p: prog })} data-testid={`testing-app-withdraw-${r.uid}`}>Withdraw for the member…</button> : null}
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+          <div className="mt-2 flex flex-wrap items-center justify-between gap-2">
+            <span className={`text-[12px] ${MUTED}`} data-testid="testing-applications-range">{rangeLine(block.page, block.page_size, block.total, rows.length)} · one row per application</span>
+            {last > 1 ? (
+              <span className="flex gap-2">
+                <button type="button" className={BTN_GHOST} disabled={f.page <= 1} onClick={() => setF((x) => ({ ...x, page: x.page - 1 }))}>Previous</button>
+                <button type="button" className={BTN_GHOST} disabled={f.page >= last} onClick={() => setF((x) => ({ ...x, page: x.page + 1 }))} data-testid="testing-applications-next">Next</button>
+              </span>
+            ) : null}
+          </div>
+          <p className={`m-0 mt-1 text-[11.5px] ${MUTED}`}>Pick… and Decline… appear only on Axal VC’s own programs. Never an email address.</p>
+        </div>
+      )) : null}
+      {asking ? (
+        <TestingDialog key={`${asking.kind}-${asking.a.uid}`} spec={dialogFor(asking.kind, { p: asking.p, a: asking.a })} api={api}
+          ctx={{ p: asking.p, a: asking.a }} onClose={() => setAsking(null)} onDone={done} />
+      ) : null}
     </div>
   );
 }
