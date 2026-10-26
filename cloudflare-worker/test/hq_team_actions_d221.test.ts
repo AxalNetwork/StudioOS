@@ -480,7 +480,8 @@ test('D241: a transfer that lands tells the successor and the former holder, as 
     // `security` is a CRITICAL category: quiet hours and the digest cannot hold it.
     assert.equal(n.category, 'security');
     assert.equal(n.severity, 'critical');
-    assert.equal(n.link, '/admin/accounts', 'the notice does not lead to the holder console');
+    // D941 (#2746): Team, which holds the holder console, is /admin/hq-team; old notices forward there.
+    assert.equal(n.link, '/admin/hq-team', 'the notice does not lead to the holder console');
     assert.ok(n.body.includes(HANDOVER), 'the notice does not carry the reason the holder typed');
     assert.doesNotMatch(`${n.title} ${n.body}`, /advis|advice|recommend|fiduciar/i);
   }

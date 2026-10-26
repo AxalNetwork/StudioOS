@@ -694,7 +694,7 @@ export function filterCountries(rows, q) {
 export function buildGroup(key, groupRead) {
   if (!key) return null;
   const label = Object.values(PROFILE_OF).find((p) => p.key === key)?.label || profileOf(key).label;
-  const base = { key, label, accountsHref: `/admin/held/accounts?profile=${encodeURIComponent(key)}` };
+  const base = { key, label, accountsHref: `/admin/accounts?profile=${encodeURIComponent(key)}` };
   const g = data(groupRead).group;
   const s = blockState(groupRead, g);
   if (s) return { ...base, ...s, count: null, tiles: [], countries: [] };

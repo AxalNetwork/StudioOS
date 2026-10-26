@@ -16,6 +16,7 @@ import { aiBudgetFixture } from './_ai_budget_fixture.mjs';
 import { withGuard } from './_guard_stub.mjs';
 import { AUTH_ERROR_STATUSES } from '../src/util/authErrors.ts';
 import route from '../src/routes/admin_ai_usage.ts';
+import aiBudgetRoute from '../src/routes/ai_budget.ts';
 import { AI_USAGE_FLAGS, SEARCH_MAX, aiUsageFlags, emailPrefixPattern, platformAiUsage, rangeBounds } from '../src/services/aiUsageAdmin.ts';
 import { AI_PAUSED_MESSAGE, reserveAiBudget, resolveAiCaps } from '../src/services/aiBudget.ts';
 import { run, __resetForTest, budgetRefusalMessage } from '../src/services/aiRouter.ts';
@@ -68,6 +69,7 @@ function app() {
     return status ? c.json({ detail: e.message }, status) : c.json({ detail: 'Internal server error' }, 500);
   });
   a.route('/api/admin/ai-usage', route);
+  a.route('/api/ai-budget', aiBudgetRoute);
   return a;
 }
 async function call(w: any, user: number | null, path: string, init: { method?: string; body?: unknown } = {}) {
@@ -237,6 +239,11 @@ test('Pause AI: the hold refuses ai_paused (403) and charges nothing; the member
     assert.equal(notes[0].body, AI_PAUSED_MESSAGE);
     assert.equal(AI_PAUSED_MESSAGE, 'AI is paused on this account. Contact support.');
 
+    // D1277 (#2482): the member's own budget read names the pause, so Usage › AI tokens can say so.
+    const me = await call(w, MEMBER, '/api/ai-budget/me');
+    assert.equal(me.status, 200);
+    assert.equal(me.body.ai_paused, true);
+    assert.equal((await call(w, ADMIN, '/api/ai-budget/me')).body.ai_paused, false, 'only the paused member reads it');
     // The hold: refused, nothing held, nothing taken from the balance.
     assert.deepEqual(await reserveAiBudget(env, MEMBER, 1000), { ok: false, refusal: 'ai_paused' });
     assert.equal(w.f.db.prepare('SELECT COUNT(*) AS n FROM ai_budget_reservations').get().n, 0);
@@ -268,6 +275,7 @@ test('Pause AI: the hold refuses ai_paused (403) and charges nothing; the member
     assert.deepEqual(rest, { member_id: MEMBER, actor_id: SUPER, reason: 'Spoke to the member; usage explained.', paused_reason: REASON, paused_by: SUPER });
     assert.match(paused_at, /^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}$/);
     assert.equal(w.f.db.prepare('SELECT COUNT(*) AS n FROM member_ai_pauses').get().n, 0);
+    assert.equal((await call(w, MEMBER, '/api/ai-budget/me')).body.ai_paused, false, 'unpausing clears the read');
     const back = await run(env, { task: 'advisor_turn', userId: MEMBER, text: 'hello' });
     assert.equal(back.ok, true, 'unpausing did not restore runs');
     const twice = await call(w, SUPER, `/api/admin/ai-usage/members/${MEMBER}/pause`, { method: 'DELETE', body: { reason: 'Spoke to the member; usage explained.' } });

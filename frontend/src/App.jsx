@@ -139,9 +139,10 @@ const AdminTeam = lazy(() => import('./pages/admin/AdminTeam'));
 const ExploringDashboard = lazy(() => import('./pages/ExploringDashboard'));
 const AdminExploring = lazy(() => import('./pages/admin/AdminExploring'));
 // D286 — the five landings of the Admin shell on accounts HQ holds directly
-// (canvas S20). Under /admin/held/ so none can collide with an HQ console:
-// /admin/accounts is HQ's Team, and the HQ consoles are flat /admin/<noun>.
-const HeldAccounts = lazy(() => import('./pages/admin/HeldAccounts'));
+// (canvas S20). D941 (#2746): Accounts takes /admin/accounts, and HQ's Team
+// moved to /admin/hq-team; the other four stay under /admin/held/.
+const AccountsAddress = lazy(() => import('./pages/admin/AccountsAddress'));
+const HeldAccountsRedirect = lazy(() => import('./pages/admin/HeldAccountsRedirect'));
 const AdminApprovals = lazy(() => import('./pages/admin/approvals/AdminApprovals'));
 const ApprovalsLaneBoards = lazy(() => import('./pages/admin/approvals/LaneBoards'));
 const HeldApprovalsRedirect = lazy(() => import('./pages/admin/approvals/HeldApprovalsRedirect'));
@@ -287,6 +288,7 @@ const BranchAnalytics = lazy(() => import('./pages/branch/BranchAnalytics'));
 // The Super Admin's HQ-only surfaces (migrations 199/207). `hqOnly` below
 // renders the notice for an admin without the elevation.
 const SuperAdminOnlyNotice = lazy(() => import('./pages/hq/SuperAdminOnlyNotice'));
+const PlanNotFounder = lazy(() => import('./pages/cycles/BuildPlan').then((m) => ({ default: m.PlanNotFounder })));
 const LabOnlyNotice = lazy(() => import('./pages/admin/lab/LabOnlyNotice'));
 const AdminOnlyNotice = lazy(() => import('./pages/hq/AdminOnlyNotice'));
 const HqContractsPage = lazy(() => import('./pages/hq/ContractsPage'));
@@ -2329,6 +2331,8 @@ function AppInner() {
   // Admin users browsing via the "View as" switcher (not impersonation) have
   // effectiveRole = viewMode, not 'admin'. We add viewMode to the list so
   // RoleGuard doesn't redirect them while they're previewing another role.
+  // D1070: who meets VB20a's card on the plan's two addresses.
+  const planNotFounder = ['investor', 'advisor', 'exploring'].includes(user?.role) && user?.spinout_lab_active !== 1;
   const labRoles = (roles) => {
     const result = [...roles];
     if (user && user.spinout_lab_active === 1 && !result.includes(user.role)) {
@@ -2801,8 +2805,7 @@ function AppInner() {
           turned away here as before, not after a forward. */}
       <Route path="/admin" element={guard(['admin'], <LegacyContractsRedirect />)} />
       {/* Each tool at its #2375 address, under AdminPageHeader. All accounts
-          sits under /admin/accounts until #2375's question 1 is answered
-          (part 4, #2746); /admin/accounts itself stays HQ › Team. */}
+          is a sub-path of Accounts (/admin/accounts, D941). */}
       <Route path="/admin/accounts/all" element={guard(['admin'], <AllAccountsPage onImpersonate={handleImpersonate} />)} />
       {/* D1026 (CT17, CT18) — a venture's cap table as an Advisor, an Operating
           Partner, an Admin or the Super Admin reads it. The Worker decides the level. */}
@@ -2881,7 +2884,8 @@ function AppInner() {
       {/* D286 — S20's five landings. `guard(['admin'])` and never `hqOnly`:
           this is the plain admin's own shell. Each carries its consoles as
           literal links, which is how the reachability walk reaches them. */}
-      <Route path="/admin/held/accounts" element={guard(['admin'], <HeldAccounts />)} />
+      {/* D941 (#2746): the Accounts page's old address forwards to its own. */}
+      <Route path="/admin/held/accounts" element={guard(['admin'], <HeldAccountsRedirect />)} />
       {/* D953 (#2371) — Programs left /admin/held/ when it was rebuilt to its
           canvas. The old address keeps its query and hash and adds
           ?moved=held. The catalogue and each program page with its tabs as
@@ -2990,10 +2994,15 @@ function AppInner() {
           Console already has (Legal templates; the Users table) for the
           franchisor, with the holder console above the accounts. */}
       <Route path="/admin/contracts" element={guard(['admin'], <HqContractsPage />)} />
+      {/* D941 (#2746, #2375 question 1, answer A): /admin/accounts is the
+          Admin's Accounts page; HQ › Team is /admin/hq-team, beside
+          /admin/hq-support. A Super Admin's /admin/accounts (old links, the
+          transfer notices already sent) forwards to Team with its notice. */}
+      <Route path="/admin/accounts" element={guard(['admin'], <AccountsAddress superAdmin={isSuperAdminUser(user)} />)} />
+      <Route path="/admin/hq-team" element={guard(['admin'], hqOnly(<HqAccountsPage onImpersonate={handleImpersonate} />))} />
       {/* D1213 (#2424) — the Closings desk (CP13) and one closing (CP14); Contracts links here. */}
       <Route path="/admin/contracts/closings" element={guard(['admin'], <ClosingsDeskPage />)} />
       <Route path="/admin/contracts/closings/:dealId" element={guard(['admin'], <AdminClosingPage />)} />
-      <Route path="/admin/accounts" element={guard(['admin'], hqOnly(<HqAccountsPage onImpersonate={handleImpersonate} />))} />
       {/* D633 (#1391, Q2) — one member's credits; the Team directory's drawer is its door. */}
       <Route path="/admin/accounts/credits/:userId" element={guard(['admin'], hqOnly(<MemberCreditsPage />))} />
       {/* HQ · Home (canvas H1). The whole business on one screen; every
@@ -3176,8 +3185,10 @@ function AppInner() {
       <Route path="/build/connect" element={guard(labRoles(['admin', 'founder']), <CycleRoute cycle="build" lightbox />)} />
       <Route path="/build/tools" element={guard(['admin', 'founder'], <HistoryRedirect to="/build/operating-systems" hash="#tools" />)} />
       {/* D1063 (#2426): Validate → Build's plan and its progress, ahead of /build/:slug. */}
-      <Route path="/build/plan" element={guard(labRoles(['admin', 'founder']), <CycleRoute cycle="build" buildPlan="plan" />)} />
-      <Route path="/build/plan/progress" element={guard(labRoles(['admin', 'founder']), <CycleRoute cycle="build" buildPlan="progress" />)} />
+      {/* D1070 (#2940): an Operating Partner opens Progress (VB15); an investor, advisor or explorer
+          meets "This plan belongs to the venture's founders" (VB20a), never a silent bounce. A Lab member is spared it. */}
+      <Route path="/build/plan" element={guard(labRoles(['admin', 'founder', 'partner', 'investor', 'advisor', 'exploring']), planNotFounder ? <PlanNotFounder /> : <CycleRoute cycle="build" buildPlan="plan" />)} />
+      <Route path="/build/plan/progress" element={guard(labRoles(['admin', 'founder', 'partner', 'investor', 'advisor', 'exploring']), planNotFounder ? <PlanNotFounder /> : <CycleRoute cycle="build" buildPlan="progress" />)} />
       <Route path="/build/:slug" element={guard(labRoles(['admin', 'founder']), <CycleRoute cycle="build" />)} />
       <Route path="/build/:slug/:id" element={guard(labRoles(['admin', 'founder']), <CycleRoute cycle="build" record />)} />
       <Route path="/build/:slug/new" element={guard(labRoles(['admin', 'founder']), <CycleRoute cycle="build" adding />)} />

@@ -12,6 +12,11 @@
  *   POST   /telegram/link           a one-time code and its t.me link (rollout gated)
  *   GET    /telegram/setup          D863: the six setup steps, each done, todo or blocked, from stored rows (rollout gated)
  *   POST   /whatsapp/connect        finish Embedded Signup: { code, waba_id, phone_number_id }
+ *   GET    /whatsapp/setup          D856: the guided setup's six steps, from stored rows (never calls Meta)
+ *   POST   /whatsapp/setup/:step    D856: run one step through Meta's MCP; a step that changes an account
+ *                                   needs { confirm: true }, after which its one-time setup ticket is minted.
+ *                                   Both 404 unless WHATSAPP_MCP_SETUP is "on"; for a Founder on a paid
+ *                                   plan, under the channel's rollout
  *   POST   /whatsapp/link           D754 way B (#1937): a one-time code, and the wa.me link that
  *                                   sends `LINK <code>` to Axal's own number
  *   GET    /whatsapp/link           the newest claim ('•••• 1234') and the current link, with Axal's
@@ -109,7 +114,10 @@
  */
 import { Hono, type Context } from 'hono';
 import type { Env, User } from '../types';
-import { requireAuth, requireSuperAdmin, isSuperAdmin } from '../auth';
+import { requireAuth, requireSuperAdmin, isSuperAdmin, selectJwt } from '../auth';
+import { userMeetsTier, tierUpsell } from '../middleware/requireTier';
+import { mintMcpSetupTicket } from '../integrations/mcpClient';
+import { MCP_PROVIDERS } from '../integrations/mcpProviders';
 import { canHoldValidateSource } from './_founder_validate_helpers';
 import { refuse } from '../util/refusal';
 import { IntakeError, activeMember } from '../services/interviewIntake';
@@ -149,6 +157,10 @@ import {
 import * as telegram from '../services/channels/telegram';
 import { telegramSetup } from '../services/channels/telegramSetup';
 import * as whatsapp from '../services/channels/whatsapp';
+import {
+  readWhatsAppSetup, runWhatsAppSetupStep, waSetupSentence, whatsappMcpSetupOn, WaSetupError, WA_SETUP_CONFIRM, WA_SETUP_PROVIDER, WA_SETUP_STEPS,
+  WA_SETUP_TICKET_TOOLS, type WaSetupStep,
+} from '../services/channels/whatsappSetup';
 import * as waLink from '../services/channels/whatsappLink';
 import * as capture from '../services/channels/whatsappCapture';
 import * as telegramCapture from '../services/channels/telegramCapture';
@@ -470,6 +482,54 @@ channels.post('/whatsapp/connect', venture(async (c, user) => {
   const out = await whatsapp.completeEmbeddedSignup(c.env, user.id, { code, wabaId, phoneNumberId });
   if (!out.ok) return no(c, out.status, out.code);
   return c.json({ ok: true, connection: { status: 'active', external_account_name: out.name, can_reply: true } });
+}));
+
+/**
+ * D856 (#2501): the guided setup through Meta's MCP. Off (the default) both
+ * routes answer 404 before anything is read, and Embedded Signup above is
+ * untouched either way. A Founder on a paid plan (owner question 2, A), under
+ * the channel's rollout; never a support session, which cannot change a
+ * member's account at Meta.
+ */
+function waSetup(handler: (c: C, user: User) => Promise<Response>) {
+  return async (c: C): Promise<Response> => {
+    if (!whatsappMcpSetupOn(c.env)) return c.json({ error: 'not_found' }, 404);
+    return venture(async (c2, user) => {
+      if (!providerAvailable(c2.env, 'whatsapp') || !channelOpenTo(c2.env, 'whatsapp', user)) return no(c2, 503, 'not_available');
+      if (!userMeetsTier(user, 'growth')) return c2.json(tierUpsell('growth'), 402);
+      await activeMember(c2.env, user.id);
+      return handler(c2, user);
+    })(c);
+  };
+}
+
+const waSetupRefusal = (c: C, err: WaSetupError) => refuse(c, err.status, { code: err.code, message: waSetupSentence(err.code), extra: { code: err.code, ...err.extra } });
+
+channels.get('/whatsapp/setup', waSetup(async (c, user) => c.json(await readWhatsAppSetup(c.env, user.id))));
+
+channels.post('/whatsapp/setup/:step', waSetup(async (c, user) => {
+  const step = c.req.param('step') ?? '';
+  if (!(WA_SETUP_STEPS as readonly string[]).includes(step)) return c.json({ error: 'not_found' }, 404);
+  const key = step as WaSetupStep;
+  if ((await selectJwt(c))?.payload.impersonated_by) {
+    return refuse(c, 403, { code: 'support_session_refused', message: 'A support session cannot set up a member’s WhatsApp.', extra: { code: 'support_session_refused' } });
+  }
+  const body = await c.req.json<Record<string, unknown>>().catch(() => ({} as Record<string, unknown>));
+  const confirm = WA_SETUP_CONFIRM[key];
+  // A step that changes an account runs only on the founder's confirm, and
+  // only then is its ticket minted: this step's tools, this provider, once.
+  if (confirm && body.confirm !== true) {
+    return refuse(c, 400, { code: 'confirm_required', message: 'Confirm this step first; nothing was changed.', extra: { code: 'confirm_required', confirm } });
+  }
+  const tools = WA_SETUP_TICKET_TOOLS[key];
+  const ticket = tools ? mintMcpSetupTicket(MCP_PROVIDERS[WA_SETUP_PROVIDER], tools) : undefined;
+  const phone = body.phone_number_id == null ? null : String(body.phone_number_id).trim();
+  try {
+    return c.json({ ok: true, ...(await runWhatsAppSetupStep(c.env, user.id, key, { phone_number_id: phone, ticket })) });
+  } catch (err) {
+    if (err instanceof WaSetupError) return waSetupRefusal(c, err);
+    throw err;
+  }
 }));
 
 channels.delete('/:provider', member(async (c, user) => {

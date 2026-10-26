@@ -52,13 +52,12 @@ test('the envelope wins over evidence_meta when a row carries both', () => {
   );
 });
 
-test('the two known sync sources read as sentences, not as column values', () => {
+test('the known sync sources read as sentences, not as column values', () => {
   assert.equal(obligationSource({ evidence_meta: '{"source":"kyc_provider"}' }),
     'Synced from identity verification');
   assert.equal(obligationSource({ evidence_meta: '{"source":"kyb_provider"}' }),
     'Synced from entity verification');
-  // The writers those two labels describe, still in place.
-  // (`resyncKycKyb` is what stamps them — see its COALESCE json_object calls.)
+  assert.equal(obligationSource({ evidence_meta: '{"source":"kyb_case"}' }), 'Approved business verification');
 });
 
 test('meta already parsed by a caller works the same as the raw string', () => {
