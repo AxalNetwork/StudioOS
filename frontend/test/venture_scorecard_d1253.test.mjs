@@ -109,6 +109,7 @@ test('the wiring: the three routes, the deal tab, the deal flow column, HQ’s s
   assert.ok(!deal.includes("['scorecard', 'evidence'"), 'the scorecard tab is no longer a wait card');
   assert.ok(read('frontend/src/pages/investor/dealflow/DealFlow.jsx').includes('<td><ScopeStrip /></td>'));
   assert.ok(read('frontend/src/lib/hqStrips.js').includes("['Scoring', '/admin/platform/scoring']"));
+  assert.ok(app.includes('<StripLink to="/admin/platform/scoring">Scoring</StripLink>'), 'HQ’s Platform strip in the shell holds the door');
   for (const f of ['Venture Scorecard Page.dc.html', 'Venture scorecard · Boards.dc.html']) assert.ok(existsSync(`design/incoming/${f}`), f);
   assert.ok(read('design/incoming/Venture scorecard · Boards.dc.html').includes('name="Venture Scorecard Page"'));
   assert.ok(existsSync('documentation/architecture/decisions/D1253.md'));
