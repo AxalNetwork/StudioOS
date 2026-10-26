@@ -14,6 +14,7 @@ import { resolve } from 'node:path';
 import {
   studioGlance, HQ_SCOPE_LABEL, HQ_BENCHMARK_REASON, CONTENT_TO_HQ_REASON,
 } from '../src/services/studioGlance.ts';
+import { addKybCaseStores } from './_approval_s16_stores.mjs';
 import { NOT_LANED } from '../src/services/approvalSources.ts';
 import { ACTIVE_ACCOUNT_BASIS } from '../src/services/activeAccounts.ts';
 
@@ -134,6 +135,7 @@ test('HQ approvals: when every lane answers, the total is their sum', async () =
   for (const m of ['220_company_kyb.sql', '313_lab_host_applications.sql', '576_product_testers.sql']) {
     db.exec(readFileSync(new URL(`../sql/migrations/${m}`, import.meta.url), 'utf8'));
   }
+  addKybCaseStores(db);
   const g: any = await studioGlance({ DB: makeD1(db) } as any, NOW);
   assert.deepEqual(g.approvals.unreadable, []);
   assert.equal(g.approvals.pending_total, 4, 'KYC, partner profile, exploring, one moderation case under review');

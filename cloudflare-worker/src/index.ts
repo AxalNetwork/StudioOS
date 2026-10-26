@@ -137,6 +137,8 @@ import email from './routes/email';
 import pipeline from './routes/pipeline';
 import search, { ensureAcademySchema } from './routes/search';
 import kyc from './routes/kyc';
+import kybAdmin from './routes/kyb_admin';
+import kycGovernance from './routes/kyc_governance';
 import esign from './routes/esign';
 import trust from './routes/trust';
 import { expireDueArtifacts as expireTrustArtifacts, resyncKycKyb, renewalSweep } from './services/trust';
@@ -500,7 +502,7 @@ app.use(
     // alongside the `studioos_csrf` cookie on cookie-authenticated mutating
     // requests. Without it in the allowlist, the browser preflight blocks
     // every POST/PUT/PATCH/DELETE from the SPA in production.
-    allowHeaders: ['Content-Type', 'Authorization', 'X-CSRF-Token', 'X-Rail-Page', 'X-Rail-Option', 'X-Rail-Record'],
+    allowHeaders: ['Content-Type', 'Authorization', 'If-Match', 'X-CSRF-Token', 'X-Rail-Page', 'X-Rail-Option', 'X-Rail-Record'],
   }),
 );
 
@@ -1328,6 +1330,9 @@ app.use('/api/kyc/admin/:userId/document/*', requireCfAccess());
 // endpoint is wired (downstream task), it should also carry the same
 // requireCfAccess() middleware (it's admin-only, so safe to gate).
 
+app.route('/api/kyc/businesses', kybAdmin);
+// D1232 (#3240): renewals, periods and the audit, ahead of kyc.ts's `/admin/:userId`.
+app.route('/api/kyc', kycGovernance);
 app.route('/api/kyc', kyc);
 // Task #3 (Y-1) — Trust Center: per-role obligations + 3-way NDA flow.
 app.route('/api/trust', trust);

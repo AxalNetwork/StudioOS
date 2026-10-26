@@ -89,15 +89,14 @@ function ConsolePage({ crumb, hqCrumb = crumb, title, line, hqOnly = false, more
   );
 }
 
-const ACCOUNTS = { label: 'Accounts', to: '/admin/held/accounts' };
+const ACCOUNTS = { label: 'Accounts', to: '/admin/accounts' };
 const APPROVALS = { label: 'Approvals', to: '/admin/approvals' };
 const COMMUNITY = { label: 'Community', to: '/admin/community' };
 const PLATFORM = { label: 'Platform', to: '/admin/platform' };
 
 /**
- * All accounts, at `/admin/accounts/all`. #2375's question 1 (does Accounts
- * take `/admin/accounts`, or `/admin/members`?) is the owner's, so the list
- * sits here until part 4 (#2746); `/admin/accounts` itself stays HQ › Team.
+ * All accounts, at `/admin/accounts/all`, a sub-path of Accounts
+ * (`/admin/accounts`, D941). On HQ it sits under Team (`/admin/hq-team`).
  * The More menu carries the Trash door the console's header held.
  */
 export function AllAccountsPage({ onImpersonate }) {
@@ -105,7 +104,7 @@ export function AllAccountsPage({ onImpersonate }) {
   return (
     <ConsolePage
       crumb={{ ...ACCOUNTS, current: 'All accounts' }}
-      hqCrumb={{ label: 'Team', to: '/admin/accounts', current: 'All accounts' }}
+      hqCrumb={{ label: 'Team', to: '/admin/hq-team', current: 'All accounts' }}
       title="All accounts"
       line="Every account HQ holds: find one, change its role, open its record."
       more={(
@@ -224,7 +223,7 @@ export function ProductTestingHqPage() {
   const more = (
     <>
       <HeaderMenuItem to="/admin/approvals/product-testers" data-testid="testing-more-approvals">Tester applications in Approvals</HeaderMenuItem>
-      <HeaderMenuItem to="/admin/held/accounts" data-testid="testing-more-accounts">Testers in Accounts</HeaderMenuItem>
+      <HeaderMenuItem to="/admin/accounts" data-testid="testing-more-accounts">Testers in Accounts</HeaderMenuItem>
     </>
   );
   // D1202 (TST7): New program is the header's, a lightbox over Programs.

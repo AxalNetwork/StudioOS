@@ -133,7 +133,7 @@ widened guard on this very sentence, which is the rule working.)
 /api/email         → email.ts
 /api/pipeline      → pipeline.ts
 /api/search        → search.ts
-/api/kyc           → kyc.ts
+/api/kyc           → kyc_governance.ts, kyc.ts  (D1232: renewals, renewal periods, the audit read and its export, mounted first so `/admin/:userId` does not read them as ids)
 /api/legal/esign   → esign.ts            (frontend calls /api/legal/esign/*)
 /api/network       → network.ts
 /api/networkfx     → networkfx.ts
@@ -410,6 +410,12 @@ IC creation; calendar reads, including the token subscription, remain available
 on every plan. Studio/All studios are separate read-only Admin/Super Admin
 scopes with explicit availability; personal ownership and deal-party gates
 still govern every sync, push and export.
+
+D1231: `kyb_admin.ts` mounts at `/api/kyc/businesses` before `kyc.ts`.
+The admin queue and case reads keep sensitive fields masked; each showing and
+R2 document view is audited. Decisions, owner links, import actions and uploads
+require step-up and an unsuspended studio. Licensed studios require Super Admin.
+Migration 616's views discover company, corporate and imported source records.
 Each authorized staff-scope view calls the existing admin audit helper with
 only its scope and normalized date window; no event content is recorded.
 

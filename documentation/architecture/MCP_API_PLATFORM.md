@@ -406,6 +406,12 @@ only when that base does.
 | #2477 Eadwyn uses registry tools | D854 | #2486 | `main` (`d0a59a69`) |
 | #2478 connector roadmap check | D855 | #2488 | `main` (`7bb619de`) |
 
+The UI task for AI tokens, added 2026-10-26 (S26):
+
+| Task | Decision | PR | Where it is |
+|---|---|---|---|
+| #2482 Usage › AI tokens (TOKB), step 1 | D1277 | the step-1 PR | in review; step 2 waits for #3304 (D1278) |
+
 ## 8. Progress log
 
 - **2026-10-21 (S21).**

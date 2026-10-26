@@ -1,6 +1,7 @@
 // D1101 (#2456) — the Data room tool inside the Raise module page: its tab
-// words, the three tabs the founder's room read carries (Files, Access,
-// Activity), the three that say what they wait for, and the wiring.
+// words, the tabs the founder's room read carries, and the wiring. D1108
+// (#2988) draws Activity, Checklist and Preview from their own reads; their
+// tests are `data_room_d1108.test.mjs`.
 //
 // Run with:
 //   node --import ./frontend/test/_deck-loader.mjs --test frontend/test/data_room_tool_d1101.test.mjs
@@ -13,7 +14,7 @@ import { MemoryRouter, Routes, Route } from 'react-router-dom';
 import { installDocument } from './_contracts_dom.mjs';
 import CycleRoute from '../src/pages/cycles/CycleRoute.jsx';
 import {
-  TABS, WAITS, activityRows, fileRows, grantRows, isDataRoomTab, projectUidOf, tabHref, tabSearch, weekTiles, workspaceHref,
+  TABS, fileRows, grantRows, isDataRoomTab, projectUidOf, tabHref, tabSearch, workspaceHref,
 } from '../src/pages/raise/dataroom/dataRoomModel.js';
 
 const h = React.createElement;
@@ -122,15 +123,6 @@ test('grants: in force, ended or revoked; NDA, committed and who granted; a miss
   assert.equal(grantRows({ grants: [{ uid: 'r', status: 'revoked', created_at: null }] }, NOW)[0].state, 'Revoked');
 });
 
-test('activity: a refusal is never an open, a link issued is not a read, and a missing week is Not recorded', () => {
-  const rows = activityRows(ROOM);
-  assert.deepEqual(rows.map((r) => r.tag), ['Blocked', 'Download', 'View']);
-  const tiles = weekTiles(ROOM);
-  assert.deepEqual(tiles.map((t) => [t.k, t.v]), [['Room opens', '3'], ['Links issued', '2'], ['Refused', '1']]);
-  assert.match(tiles[1].sub, /not a read/);
-  assert.deepEqual(weekTiles({}).map((t) => t.v), ['Not recorded', 'Not recorded', 'Not recorded']);
-});
-
 /* ------------------------------------------------------------------ *
  * Mounted
  * ------------------------------------------------------------------ */
@@ -148,21 +140,20 @@ test('Files, Access and Activity read the founder\'s room by the venture\'s uid,
   const a = await mounted('/raise/data-room/access?project_id=3');
   // D1107 (DR6): Access opens on the grants in force, as the canvas's Grant: Active; g2 has ended.
   try { assert.equal(a.count('dataroom-grant-row'), 1); assert.match(a.text(), /Bluefern Capital/); } finally { await a.close(); }
+  // D1108 (#2988): Activity reads D1105's route for the venture's uid.
   const l = await mounted('/raise/data-room/activity?project_id=3');
   try {
-    assert.equal(l.count('dataroom-week-tile'), 3);
-    assert.match(l.text(), /was blocked from/);
-    assert.match(l.text(), /A link issued is not a read\./);
+    assert.ok(l.requests.some((u) => /\/data-room\/p3uid\/activity\?/.test(u)));
+    assert.ok(!l.requests.some((u) => /\/records\/activity/.test(u)), 'a tab word is not a record');
   } finally { await l.close(); }
 });
 
-test('Checklist and Preview say what they wait for, and make no room read (Requests is D1107\'s)', async () => {
-  for (const tab of ['checklist', 'preview']) {
+test('D1108: Checklist and Preview read their own routes for the venture\'s uid, never a record', async () => {
+  for (const [tab, route] of [['checklist', /\/data-room\/p3uid\/checklist$/], ['preview', /\/data-room\/p3uid\/preview\?grant=g1$/]]) {
     const v = await mounted(`/raise/data-room/${tab}?project_id=3`);
     try {
-      assert.ok(v.testIds().includes(`dataroom-${tab}-wait`), tab);
-      assert.ok(v.text().includes(WAITS[tab].slice(0, 30)), tab);
-      assert.ok(!v.requests.some((u) => /\/data-room\/p3uid/.test(u)), `${tab} reads nothing it cannot use`);
+      assert.ok(v.requests.some((u) => route.test(u)), tab);
+      assert.ok(!v.requests.some((u) => new RegExp(`/records/${tab}`).test(u)), `${tab} is not a record`);
     } finally { await v.close(); }
   }
 });
