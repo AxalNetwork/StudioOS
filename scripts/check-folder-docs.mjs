@@ -81,6 +81,7 @@ const DOCUMENTED = new Map([
   ['frontend/src/components/products',        'the Plans & Pricing storefront pieces (D755)'],
   ['frontend/src/decks/templates',            'the pitch-deck slide templates'],
   ['frontend/src/pages/admin',                'the admin console'],
+  ['frontend/src/pages/admin/approvals',      'Admin › Approvals (D1038): the Inbox, Lanes, Decided and the three lane boards that decide (D1046)'],
   ['frontend/src/pages/admin/advisors',       'Advisors & Partners under Community (D972)'],
   ['frontend/src/pages/admin/community',      'the Community overview (D930)'],
   ['frontend/src/pages/admin/consoles',       'one file per Admin Console tool (D648)'],
