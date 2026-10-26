@@ -178,14 +178,16 @@ export const homePart = (data) => (data?.parts?.narrative?.state === 'ok' ? data
 export const homeUnreadable = (data) => data?.parts?.narrative?.state === 'unreadable';
 
 export const CLAIMS_WAIT = 'Claims are counted once StudioOS checks each claim against its record.';
-export const OBJECTIONS_WAIT = 'Answers to objections are not recorded yet.';
+export const OBJECTIONS_WAIT = 'Which section answers each one is not recorded yet.';
 const DASH = '—';
 
 const versionName = (v) => `v${v.version} · ${v.audience || NOT_RECORDED}`;
 
 /**
  * NAR1's four tiles: Versions and Open mismatches from the part; Claims backed
- * (#2430) and Objections answered (#2457) a dash with the reason, never 0.
+ * (#2430) a dash with the reason, never 0. Objections answered is a dash too
+ * (D913): the part counts the objections heard, and its sub says how many,
+ * but which section answers each one is not recorded yet.
  */
 export function homeTiles(part) {
   const versions = Array.isArray(part?.versions) ? part.versions : [];
@@ -202,7 +204,7 @@ export function homeTiles(part) {
           : mismatches.length ? `${[...new Set(mismatches.map((m) => m.figure))].join(', ')}, in v${newest.version}` : `None in v${newest.version}`,
       waits: !newest || !newest.compared,
     },
-    { key: 'objections', label: 'Objections answered', value: DASH, sub: OBJECTIONS_WAIT, waits: true },
+    { key: 'objections', label: 'Objections answered', value: DASH, sub: objectionsTileSub(objectionsOf(part?.objections)), waits: true },
   ];
 }
 
@@ -512,4 +514,55 @@ export function insertInStoryHref(figureKey, search = '') {
   if (!key) return null;
   const keep = tabSearch(search);
   return `${HOME_PATH}/story${keep ? `${keep}&` : '?'}insert=${encodeURIComponent(key)}`;
+}
+
+// ---------------------------------------------------------------------------
+// D913 (#2697): the objections investors raised (NAR10's panel on Story and
+// NAR1's "Objections heard" card), from `GET /narrative/objections` and the
+// module read's `parts.narrative.objections`, which hold the same items.
+// ---------------------------------------------------------------------------
+
+export const OBJECTION_OPTION = 'draft:narrative-objection';
+export const OBJECTIONS_FROM = 'From Capital relationships';
+export const OBJECTIONS_NONE = 'No objection is recorded in Capital relationships yet.';
+export const OBJECTIONS_UNREADABLE = 'The objections investors raised could not be read. This is not a claim that there are none.';
+export const OBJECTIONS_CAPPED = 'Only the newest feedback is counted here.';
+export const ANSWER_FOOT = 'Answer it opens Ask Eadwyn on this section. Eadwyn writes no numbers.';
+
+/**
+ * The objections from either read: `{ status: 'ok', items, capped }`, or
+ * `{ status: 'unreadable' }` for a failed or missing read, never an empty list.
+ */
+export function objectionsOf(read) {
+  if (!read || read.state === 'unreadable') return { status: 'unreadable' };
+  const items = Array.isArray(read.items) ? read.items : Array.isArray(read.objections) ? read.objections : null;
+  if (!items) return { status: 'unreadable' };
+  return { status: 'ok', items, capped: Boolean(read.capped) };
+}
+
+const times = (n) => `${n} ${n === 1 ? 'time' : 'times'}`;
+
+/** One objection's row: its words, how often it was raised and by how many investors. */
+export function objectionRow(o) {
+  const count = Number(o?.count);
+  const prospects = Number(o?.prospects);
+  return {
+    key: String(o?.key ?? ''),
+    text: String(o?.text ?? ''),
+    times: Number.isFinite(count) && count > 0 ? times(count) : NOT_RECORDED,
+    sub: `Raised ${Number.isFinite(count) && count > 0 ? times(count) : NOT_RECORDED.toLowerCase()}${prospects > 1 ? ` by ${prospects} investors` : ''}`,
+  };
+}
+
+/** The Objections answered tile's sub: how many were heard, and why the answered count waits. */
+export function objectionsTileSub(view) {
+  if (view.status !== 'ok') return 'The objections could not be read.';
+  if (!view.items.length) return OBJECTIONS_NONE;
+  return `${view.items.length} heard. ${OBJECTIONS_WAIT}`;
+}
+
+/** Home's "Answer it": Story, with the panel on that objection; the venture and the version are kept. */
+export function answerItHref(key, search = '', version = null) {
+  const keep = tabSearch(search, version);
+  return `${HOME_PATH}/story${keep ? `${keep}&` : '?'}objection=${encodeURIComponent(String(key))}`;
 }

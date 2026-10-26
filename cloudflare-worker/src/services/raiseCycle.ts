@@ -35,6 +35,7 @@ import { peerBenchmark, type PeerBenchmark } from './peerBenchmark';
 import { SERVED_FUNDS } from './researchFundDirectory';
 import { focusTokens, mapCompanySector, mapFundFocus, normalizeLabel } from './researchTaxonomy';
 import { deckReaders, readBySentence } from './narrative/readers';
+import { readObjections } from './narrative/objections';
 import { inputsFrom, readCapTable } from './capTableToday';
 import { simulate } from './captable';
 import { deckShareMetrics } from './deckShareUse';
@@ -609,12 +610,19 @@ export async function narrativeCard(ctx: Ctx): Promise<Card> {
  *   - `newest`: the newest version's check, as the card states it: how many
  *     figures were compared and each mismatch, figure by figure;
  *   - `deck`: the current deck, and whether any of its cards reads a version;
- *   - `spinout`: whether New version offers the Spin-Out deck wording.
- * Claims backed (#2430) and Objections answered (#2457) have no store, so the
- * part carries neither; the page says why.
+ *   - `spinout`: whether New version offers the Spin-Out deck wording;
+ *   - `objections` (D913): the objections investors raised, project-wide,
+ *     `{ state: 'unreadable' }` on its own when the feedback cannot be read.
+ * Claims backed (#2430) has no store, so the part carries none; the page says why.
  */
 export async function narrativeHome(ctx: Ctx) {
-  const [versions, readers] = await Promise.all([loadVersions(ctx), deckReaders(ctx.env, ctx.projectId)]);
+  const [versions, readers, objections] = await Promise.all([
+    loadVersions(ctx), deckReaders(ctx.env, ctx.projectId),
+    readObjections(ctx.env, ctx.projectId).catch((e) => {
+      console.warn('[raiseCycle] objections unreadable:', (e as Error)?.message);
+      return { state: 'unreadable' as const };
+    }),
+  ]);
   const newest = versions[0] ?? null;
   const inputs = newest ? await checkInputs(ctx.env, ctx.projectId, newest.version) : null;
   const found = inputs ? consistencyCheck(inputs.stated, inputs.metrics) : [];
@@ -634,6 +642,7 @@ export async function narrativeHome(ctx: Ctx) {
     },
     deck: readers.deck && { version: readers.deck.version, reads_narrative: readers.byVersion.size > 0 },
     spinout: readers.spinout,
+    objections,
   };
 }
 
