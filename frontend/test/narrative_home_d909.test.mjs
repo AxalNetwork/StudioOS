@@ -39,6 +39,8 @@ const PART = {
   newest: { version: 4, compared: 2, mismatches: [{ figure: 'MRR', sentence: 'MRR: $18,400 in Narrative · traction.takeaway, $16,950 in Metrics · project_metrics.mrr on 2026-09-30' }] },
   deck: { version: 6, reads_narrative: true },
   spinout: false,
+  // D913 (#2697): the objections investors raised, project-wide.
+  objections: { state: 'ok', items: [{ key: 'a'.repeat(16), text: 'Too small a market', count: 3, prospects: 2, last_heard: '2026-10-09', answer: null }], capped: false },
 };
 const data = (part) => ({ parts: { narrative: part } });
 
@@ -48,7 +50,7 @@ test('NAR1 tiles: Versions and Open mismatches from the read; Claims backed and 
     ['Versions', '3', 'Newest v4 · Seed fund'],
     ['Claims backed', '—', CLAIMS_WAIT],
     ['Open mismatches', '1', 'MRR, in v4'],
-    ['Objections answered', '—', OBJECTIONS_WAIT],
+    ['Objections answered', '—', `1 heard. ${OBJECTIONS_WAIT}`],
   ]);
   assert.deepEqual(homeTiles({ ...PART, newest: { version: 4, compared: 0, mismatches: [] } }).find((t) => t.key === 'mismatches'),
     { key: 'mismatches', label: 'Open mismatches', value: '—', sub: 'Nothing compared yet in v4', waits: true }, 'nothing compared is not "no mismatch"');
@@ -199,7 +201,7 @@ test('Versions: a failed compare says so, never "the same"', async () => {
 
 test('the wiring: Home is the module part, never a fork; /new is today\'s address; the client calls D908\'s compare', () => {
   const route = read('frontend/src/pages/cycles/CycleRoute.jsx');
-  assert.match(route, /'investor-narrative': \(data, ctx\) => \(\s*<>\s*<NarrativeHome data=\{data\} \/>\s*\{mercuryPart\('investor-narrative', data, ctx\)\}/);
+  assert.match(route, /'investor-narrative': \(data, ctx\) => \(\s*<>\s*<NarrativeHome data=\{data\} admin=\{isNarrativeAdmin\(\{ role: ctx\.role \}\)\} \/>\s*\{mercuryPart\('investor-narrative', data, ctx\)\}/);
   assert.equal((route.match(/<CycleModulePage|<ModulePage/g) || []).length >= 1, true);
   const api = read('frontend/src/lib/api/cycles.js');
   assert.ok(api.includes('narrativeCompare: (projectId, a, b) => request(`/cycles/raise/narrative/compare?project=${encodeURIComponent(projectId)}&a=${encodeURIComponent(a)}&b=${encodeURIComponent(b)}`)'));

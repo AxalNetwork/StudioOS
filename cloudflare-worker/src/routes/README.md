@@ -325,6 +325,8 @@ roster. The meetings router accepts `auto_send_bot:false`, otherwise queues B1
 for the consented session at the scheduled start. Bot refusal is separate from
 successful call creation; cancellation stops the bot before the provider call.
 
+D1168 (#3081): `admin_platform.ts` mounts `POST /api/admin/platform/storage/backfill-sizes`, an audited, bounded metadata-only batch for HQ Super Admin with TOTP and recent step-up. Discovery cursors stay in D1; only counts leave the route.
+
 D886 B10 (#2588): `admin_platform.ts` mounts Super Admin-only
 `/meeting-bots` count/charge reads and `/meeting-bots/test` dispatch/timing reads.
 Dispatch requires TOTP plus recent step-up and calls B1's service with the
@@ -362,6 +364,11 @@ calls `logAdminAction`. It grants no subsequent write permission. Admins cannot
 use legacy investor grants through `/shared` instead. The data-room spec in
 `../services/records/raise.ts` uses the same owner-only gate. File uploads default
 to NDA when visibility is omitted; explicit Open remains allowed for the owner.
+D1102 part 2: `cycle_raise.ts`'s data-room paths (the overview's data-room card,
+`GET /modules/data-room`, `PUT /data-room/files/:id/checklist`) take that rule too;
+a non-owner's overview card is `data_room.ts`'s `roomSummary`. `projects.ts`
+(`PUT /:id`, `data_room_nda_choice`) and `decks.ts` (`PUT /:id`, a changed NDA flag
+only) store the founder's NDA choice, migration 608.
 
 D1091 (#2956): `google_workspace.ts` mounts `/api/connectors/google-workspace`: scoped chosen files, draft mapping, Stop using and ephemeral five-row preview. Calendar adds `/google/workspace-files/connect`; Google tokens stay in its one store. Support sessions are refused. See `../services/google/README.md`.
 

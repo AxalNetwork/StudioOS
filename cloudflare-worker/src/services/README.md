@@ -59,6 +59,16 @@ clock inputs in the selected IANA zone, preserving explicit instants and refusin
 invalid or ambiguous wall times. Its instant comparison keeps formatting-only
 normalization out of the changed-after-approval flag.
 
+`memberFiles.ts` (D1168, #3081) writes measured headshot/brand-logo metadata
+with its authoritative key. `memberFileSizeBackfill.ts` measures missing sizes
+for five record stores and profile files with HEAD only, using migration 605's
+durable pointer/discovery cursors and per-row checkpoints. Missing is marked,
+never 0; failures are retryable. Replaced headshots are invalidated with the
+new pointer and remain eligible for reconciliation in later passes. Only the HQ Super Admin maintenance route
+invokes it, with step-up and count-only auditing. An explicit rescan restarts
+completed discovery to recover later retained uploads; an active scan keeps its
+cursor. No object content or deletion.
+
 ## The ones worth knowing
 
 `segmentMembership.ts` (D1128, #3008) resolves stored segment identities,
@@ -502,6 +512,7 @@ Perk listings without exposing member ids or review notes.
 `perkClaims.ts` (D957) gives the admin Perks page and program catalogue one
 UTC Monday window for claim totals, listing ranks and weekly price-kind counts.
 `raiseEvidence.ts` reads active Mercury runway facts and the files current data-room grants can download, for Raise and deck readiness.
+`dataRoomNda.ts` (D1102, migration 608) is the demo-day deck's "NDA required": the founder's `projects.data_room_nda_choice` when set (Yes or No), else true when any file an investor can be admitted to (`tierAdmits()`) is gated `nda`, else null when the room cannot be read. It also says what a write may store as a choice.
 
 `paymentsChangeLog.ts` (D1011) names the fifteen catalogue and Stripe audit
 actions and reads them back as the Payments change log (D1129: bound literal

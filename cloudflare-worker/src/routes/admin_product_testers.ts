@@ -5,7 +5,11 @@
  *   GET /               the testers, one status or all, oldest application
  *                       first, 25 a page (100 at most), with the member's name,
  *                       email, role, `email_verified` and `kyc_status`, and the
- *                       count of every status.
+ *                       count of every status. D1200 (#3150): each row also
+ *                       carries `decided_by_name` and `programmes: { applied,
+ *                       picked }`, and the list filters by `role`,
+ *                       `availability_given` (yes|no) and `in_programme`
+ *                       (yes|no); `matching` counts what the filters keep.
  *   GET /:id            one tester, the testing programs they applied to, and
  *                       their history.
  *   POST /:id/approve   applied → active. `{ note? }`
@@ -31,7 +35,7 @@ import { requireAdmin } from '../auth';
 import { refuse } from '../util/refusal';
 import { notify } from '../services/notify';
 import {
-  DECLINE_REASON_MIN, NOTE_MAX, REASON_MAX, TESTER_STATUSES, TRANSITIONS, applyTransition, isAdminAccount, isTesterStatus, listTesters,
+  DECLINE_REASON_MIN, NOTE_MAX, REASON_MAX, TESTER_STATUSES, TRANSITIONS, applyTransition, isAdminAccount, isRoleWord, isTesterStatus, isYesNo, listTesters,
   messageFor, readTester, reapplyAfter, testerDetail, type TesterAction,
 } from '../services/productTesters';
 
@@ -49,8 +53,17 @@ r.get('/', async (c) => {
   if (status && !isTesterStatus(status)) {
     return refuse(c, 400, { code: 'unknown_status', message: `Status is one of ${TESTER_STATUSES.join(', ')}.` });
   }
+  const role = c.req.query('role');
+  if (role && !isRoleWord(role)) return refuse(c, 400, { code: 'unknown_role', message: 'Role is a role name, such as founder or investor.' });
+  const availability = c.req.query('availability_given');
+  const inProgramme = c.req.query('in_programme');
+  for (const [name, v] of [['availability_given', availability], ['in_programme', inProgramme]] as const) {
+    if (v && !isYesNo(v)) return refuse(c, 400, { code: 'bad_filter', message: `${name} is yes or no.` });
+  }
   try {
-    return c.json(await listTesters(c.env, { status, page: c.req.query('page'), page_size: c.req.query('page_size') }));
+    return c.json(await listTesters(c.env, {
+      status, role, availability_given: availability, in_programme: inProgramme, page: c.req.query('page'), page_size: c.req.query('page_size'),
+    }));
   } catch (e) {
     return refuse(c, 503, { code: 'product_testers_unreadable', message: 'The product testers could not be read. Try again in a moment.', raw: e });
   }
