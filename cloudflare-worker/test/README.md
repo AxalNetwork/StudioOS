@@ -155,6 +155,9 @@ details, repeated views are recorded, and personal/refused/invalid reads create
 no staff-view audit entry.
 Every provider call is stubbed or refused; all rows are synthetic.
 
+| File | Purpose |
+|---|---|
+| `raise_evidence_d1263.test.ts` | D1263: source dates/labels, founder decisions, privacy, refresh and atomic evidence trails over real SQLite. |
 `kyb_d1231.test.ts` drives migration 616 through Hono/auth and real SQLite:
 owner-check explanations, fixed-expiry KYB reconciliation and invalidation,
 studio/role/step-up/freeze refusals, masked/audited showings, private Access-gated
