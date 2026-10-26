@@ -3352,9 +3352,10 @@ function AppInner() {
       <Route path="/deals/screening" element={guard(['admin', 'investor'], <InvestorDealsRoutes />)} />
       <Route path="/deals/commit" element={guard(['admin', 'investor'], <InvestorDealsRoutes />)} />
       <Route path="/deals/closing" element={guard(['admin', 'investor'], <InvestorDealsRoutes />)} />
-      <Route path="/deals/:dealId" element={guard(['admin', 'partner', 'investor', 'founder'], investorWorkspace('deals', <DealRoomPage />))} />
-      {/* D1148 (#2421): each deal tab at its own address; a word the role does not draw opens Overview. */}
-      <Route path="/deals/:dealId/:tab" element={guard(['admin', 'partner', 'investor', 'founder'], investorWorkspace('deals', <DealRoomPage />))} />
+      <Route path="/deals/:dealId" element={guard(['admin', 'partner', 'investor', 'founder', 'advisor', 'exploring'], investorWorkspace('deals', <DealRoomPage />))} />
+      {/* D1148 (#2421): each deal tab at its own address; a word the role does not draw opens Overview.
+          D1152 (#3057): an Advisor and an Explorer reach the page to read DL22's words; it reads nothing for them. */}
+      <Route path="/deals/:dealId/:tab" element={guard(['admin', 'partner', 'investor', 'founder', 'advisor', 'exploring'], investorWorkspace('deals', <DealRoomPage />))} />
       {/* D670 — the Market intelligence page is retired, with its sector
           digest email. Research reads the same market data, so an old link
           (and a link in a digest already sent) lands there. */}

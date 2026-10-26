@@ -195,7 +195,8 @@ test('investor Deals implements the I3 hierarchy with live sources', () => {
   // that owns it. So the zone links to the deal room instead, and this asks
   // for exactly that: the figure has a home, and the zone reaches it rather
   // than reprinting it.
-  const DEAL_ROOM = read('frontend/src/pages/DealRoomPage.jsx');
+  // D1152: the committed figure is the key strip's, drawn from `deal/dealFrameModel.js`.
+  const DEAL_ROOM = read('frontend/src/pages/DealRoomPage.jsx') + read('frontend/src/pages/deal/dealFrameModel.js');
   assert.match(DEAL_ROOM, /capital_committed/,
     'the deal room stopped showing committed capital, so nothing shows it');
   const COMMIT_ZONE = read('frontend/src/pages/investor/deals/CommitZone.jsx');
