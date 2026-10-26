@@ -15,7 +15,9 @@ import { money } from './fundAdminModel';
 export { LP_TYPE_LABELS, LP_TYPES };
 
 export const BASE = '/admin/fund-admin/lps';
-export const NOT_RECORDED = 'Not recorded';
+import { NOT_RECORDED } from '../../../lib/absence';
+
+export { NOT_RECORDED };
 
 /** The type a row records, or "Not recorded" (the chart's dashed bar). */
 export const lpTypeText = (t) => (t && LP_TYPE_LABELS[t]) || NOT_RECORDED;
