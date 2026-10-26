@@ -8,6 +8,7 @@ import { investorActiveCompany } from './_investorProjectScope';
 import { openConditionsOnDeal } from './ic';
 import { activeCompanyFor } from '../middleware/activeCompany';
 import { requireAuth, requireRole, requireApprovedKyc, requireAdmin, canAccessFounderResource } from '../auth';
+import { assertAdminAct } from '../services/fundAdminAccess';
 import { isPassReason, passReasonLabel, PASS_REASON_KEYS, PASS_REASON_UNRECORDED } from '../services/dealPassTaxonomy';
 import { buildPassBreakdown, buildStageFunnel, DEAL_METRIC_UNAVAILABLE } from '../services/dealAnalytics';
 import { ensureDealPassSchema, recordStageEvent, stageRecordingStartedAt } from '../services/dealStageHistory';
@@ -1311,9 +1312,18 @@ deals.get('/:id/transfers', async (c) => {
 });
 
 deals.post('/:id/transfers', async (c) => {
-  // Recording a transfer is an operator's act (partner/admin), like every
-  // other deal mutation; the deal's investors read it.
+  // D1215 (#3212, #2424 owner question 6): recording a transfer is money
+  // evidence, an Admin's act (`closing.evidence`). An Operating Partner keeps
+  // the closing checklist's ticks and no longer records money; the deal's
+  // investors read it.
   const user = await requireRole(c, 'partner');
+  if (user.role !== 'admin') {
+    return c.json({
+      error: 'admin_records_transfers',
+      message: 'An Admin records transfers. An Operating Partner ticks the closing checklist. Nothing was recorded.',
+    }, 403);
+  }
+  await assertAdminAct(c, user, 'closing.evidence');
   const id = parseInt(c.req.param('id'));
   const data = await c.req.json().catch(() => ({} as any));
   const sql = getSQL(c.env);
@@ -1369,11 +1379,29 @@ deals.post('/:id/transfers', async (c) => {
   const phoneVerified = data?.phone_verified === true ? 1 : 0;
   const firm = await transferFirm(c, user);
   if ('refuse' in firm) { await sql.end(); return firm.refuse; }
+  // D1215: the closing line this transfer serves, when one is named: a line
+  // of an open closing on this deal, or nothing is recorded.
+  const lineUid = data?.closing_line_uid == null || data.closing_line_uid === '' ? null : String(data.closing_line_uid);
+  if (lineUid !== null) {
+    const line = await c.env.DB.prepare(
+      `SELECT 1 AS yes FROM closing_lines l JOIN closings cl ON cl.id = l.closing_id
+        WHERE l.uid = ? AND cl.deal_id = ? AND cl.status = 'open'`
+    ).bind(lineUid, id).first();
+    if (!line) {
+      await sql.end();
+      return c.json({ error: 'closing_line_not_found', message: 'No line of an open closing on this deal has that id. Nothing was recorded.' }, 404);
+    }
+  }
   const uid = newUid();
-  const ins = await c.env.DB.prepare(
-    `INSERT INTO deal_transfers (uid, deal_id, amount_cents, reference, phone_verified, note, recorded_by, recorded_at, company_id)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`
-  ).bind(uid, id, amountCents, reference, phoneVerified, note, user.id, nowIso(), firm.companyId).run();
+  const ins = lineUid === null
+    ? await c.env.DB.prepare(
+      `INSERT INTO deal_transfers (uid, deal_id, amount_cents, reference, phone_verified, note, recorded_by, recorded_at, company_id)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`
+    ).bind(uid, id, amountCents, reference, phoneVerified, note, user.id, nowIso(), firm.companyId).run()
+    : await c.env.DB.prepare(
+      `INSERT INTO deal_transfers (uid, deal_id, amount_cents, reference, phone_verified, note, recorded_by, recorded_at, company_id, closing_line_uid)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+    ).bind(uid, id, amountCents, reference, phoneVerified, note, user.id, nowIso(), firm.companyId, lineUid).run();
   await sql.end();
   await logDealRoomAction(c.env, user, 'deal_transfer_recorded', id, { transfer_uid: uid, amount_cents: amountCents, company_id: firm.companyId });
   const row = await c.env.DB.prepare(

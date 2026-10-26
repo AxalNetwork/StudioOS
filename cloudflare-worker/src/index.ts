@@ -123,6 +123,7 @@ import funds from './routes/funds';
 import fundLedger from './routes/fund_ledger';
 import fundFees from './routes/fund_fees';
 import fundAdmin from './routes/fund_admin';
+import closings, { adminClosings } from './routes/closings';
 import fundReporting from './routes/fund_reporting';
 import fundBooklets from './routes/fund_booklets';
 import fundNotices from './routes/fund_notices';
@@ -966,6 +967,8 @@ app.route('/api/admin/contracts/registry', adminContractDocRegistry);
 // Mount the more-specific /admin/contracts prefix FIRST so it takes
 // precedence over the generic /admin router (which has no contract routes).
 app.route('/api/admin/contracts', adminContracts);
+// D1215 (#3212): the closings desk, before the /api/admin catch-all.
+app.route('/api/admin/closings', adminClosings);
 // Task #9 — IRS-style forms catalog + PDF preview/download (admin-only).
 app.route('/api/admin/forms', adminForms);
 app.route('/api/admin/integration-keys', adminIntegrationKeys);
@@ -1215,6 +1218,8 @@ app.route('/api/fund-ledger', fundLedger);
 app.route('/api/fund-fees', fundFees); // D709 (#1774): the management fee; records amounts, moves no money
 // D714 — the fund administration console: which fund acts this admin may take.
 app.route('/api/fund-admin', fundAdmin);
+// D1215 (#3212): closings as a record; the admin desk is mounted before the /api/admin catch-all.
+app.route('/api/closings', closings);
 app.route('/api/fund-reporting', fundReporting);
 // D716 — the Subscription Booklet: the applicant's ticks and submit, and HQ's read and withdraw.
 app.route('/api/fund-booklets', fundBooklets);
