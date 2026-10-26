@@ -575,7 +575,7 @@ test('D686 #1594: Calls history is scoped, newest first, with independent recipi
       ['expired','sent','2000-01-01','2020-01-04'],['closed','closed','2000-01-01','2020-01-05'],
     ])ins.run(uid,uid,close,state,FOUNDER,at);
     db.exec("INSERT INTO round_call_questions(uid,call_id,investor_user_id,question,answer) VALUES('q1',1,71,'One?',NULL),('q2',1,71,'Two?','Answered'),('q3',1,72,'Three?',NULL)");
-    const res=await moduleRead(db,'capital-relationships','',ADMIN);
+    const res=await moduleRead(db,'capital-relationships','',FOUNDER);
     const calls=res.body.parts.calls;
     assert.deepEqual([res.status,calls.enabled,calls.items.map((i:any)=>[i.uid,i.effective_state])],
       [200,true,[['closed','closed'],['expired','expired'],['paused','awaiting_counsel'],['draft','draft'],['call-1','open']]]);
@@ -584,6 +584,7 @@ test('D686 #1594: Calls history is scoped, newest first, with independent recipi
       [3,1,1,2,9000000,2,2]);
     assert.deepEqual([calls.items[0].recipients,calls.items[0].committed_cents,calls.items[0].unanswered_questions],[0,0,0]);
     assert.equal(JSON.stringify(calls).includes('rhea@example.test')||JSON.stringify(calls).includes('Quinn Quiet'),false);
+    assert.equal((await moduleRead(db,'capital-relationships','',ADMIN)).body.parts?.calls,undefined,'D1191: staff summaries do not expose Calls history');
     assert.equal((await moduleRead(db,'capital-relationships','',OTHER)).status,403);
     assert.equal((await moduleRead(db,'use-of-funds')).body.parts?.calls,undefined,'only Capital relationships gains Calls');
   } finally {FLAGS={};}

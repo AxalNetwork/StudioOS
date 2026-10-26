@@ -69,6 +69,10 @@ arithmetic changes, both new Admin acts and their audit, frozen/support/member
 refusals, preserved institutional GP scope, and independent booklet queue reads.
 Every external fetch is forbidden; no Mercury call reaches a provider.
 
+| File | Guarantee |
+| --- | --- |
+| `capital_access_d1191.test.ts` | D1191: real-route access, staff summaries, support audit ordering, scoped prospect writes and failure/race outcomes against the canonical schema. |
+
 ## Conventions
 
 - Build the database from the migration the feature actually ships with, so the
