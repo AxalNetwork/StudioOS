@@ -66,6 +66,8 @@ function present(row: any) {
     applied_at: row.applied_at,
     decided_at: row.decided_at ?? null,
     decided_by: row.decided_by == null ? null : Number(row.decided_by),
+    // D1200 (#3150): who decided, as a name, for the Product testing page, which never draws an email.
+    decided_by_name: row.decided_by == null ? null : (row.decided_by_name ?? null),
     note: row.note ?? null,
     reason: row.reason ?? null,
     reapply_after: row.status === 'declined' && row.decided_at ? reapplyAfter(row.decided_at) : null,
@@ -97,29 +99,80 @@ export function isTesterStatus(s: string): s is TesterStatus {
   return (TESTER_STATUSES as readonly string[]).includes(s);
 }
 
-export type ListQuery = { status?: string | undefined; page?: string | undefined; page_size?: string | undefined };
+export type ListQuery = {
+  status?: string | undefined; page?: string | undefined; page_size?: string | undefined;
+  /** D1200: the member's role, as `users.role` stores it. */
+  role?: string | undefined;
+  /** D1200: `yes` for testers who gave their availability, `no` for those who did not. */
+  availability_given?: string | undefined;
+  /** D1200: `yes` for testers holding a picked place in a programme that has not closed, `no` for the rest. */
+  in_programme?: string | undefined;
+};
+
+/** A role as `users.role` stores one: lower case, letters and underscores. */
+export const isRoleWord = (s: string) => /^[a-z_]{1,30}$/.test(s);
+export const YES_NO = ['yes', 'no'] as const;
+export const isYesNo = (s: string) => (YES_NO as readonly string[]).includes(s);
+
+/**
+ * D1200 (#3150): the filters, as one fixed WHERE in which each is off when its
+ * value is ''. A place is "in a programme" while the application is `picked`
+ * in a programme that has not closed or been rejected (D1132's open place,
+ * picked only). The WHERE is written out in both queries below, word for
+ * word: no SQL text is assembled.
+ */
+
 
 export async function listTesters(env: Env, q: ListQuery) {
   const status = q.status && isTesterStatus(q.status) ? q.status : '';
+  const role = q.role && isRoleWord(q.role) ? q.role : '';
+  const availability = q.availability_given && isYesNo(q.availability_given) ? q.availability_given : '';
+  const inProgramme = q.in_programme && isYesNo(q.in_programme) ? q.in_programme : '';
+  const filters = [status, status, role, role, availability, availability, inProgramme, inProgramme];
   const page = Math.max(1, Math.floor(Number(q.page) || 1));
   const pageSize = Math.min(PAGE_SIZE_MAX, Math.max(1, Math.floor(Number(q.page_size) || PAGE_SIZE)));
   const rows = await env.DB.prepare(
     `SELECT t.id, t.user_id, t.status, t.applied_at, t.decided_at, t.decided_by, t.note, t.reason,
             t.answers, t.availability, t.consent_email_at, t.consent_version, t.updated_at,
             u.name AS member_name, u.email AS member_email, u.role AS member_role,
-            u.email_verified AS member_email_verified, u.kyc_status AS member_kyc_status
+            u.email_verified AS member_email_verified, u.kyc_status AS member_kyc_status,
+            d.name AS decided_by_name,
+            (SELECT COUNT(*) FROM testing_applications pa WHERE pa.user_id = t.user_id AND pa.status <> 'withdrawn') AS programmes_applied,
+            (SELECT COUNT(*) FROM testing_applications pa WHERE pa.user_id = t.user_id AND pa.status = 'picked') AS programmes_picked
        FROM product_testers t JOIN users u ON u.id = t.user_id
+       LEFT JOIN users d ON d.id = t.decided_by
       WHERE (? = '' OR t.status = ?)
+        AND (? = '' OR u.role = ?)
+        AND (? = '' OR (? = 'yes') = (t.availability IS NOT NULL AND trim(t.availability) <> ''))
+        AND (? = '' OR (? = 'yes') = EXISTS (
+              SELECT 1 FROM testing_applications ia JOIN testing_programmes ip ON ip.id = ia.programme_id
+               WHERE ia.user_id = t.user_id AND ia.status = 'picked' AND ip.status NOT IN ('closed', 'rejected')))
       ORDER BY t.applied_at ASC, t.id ASC LIMIT ? OFFSET ?`,
-  ).bind(status, status, pageSize, (page - 1) * pageSize).all<any>();
+  ).bind(...filters, pageSize, (page - 1) * pageSize).all<any>();
   const counted = await env.DB.prepare('SELECT status, COUNT(*) AS n FROM product_testers GROUP BY status').all<any>();
   const totals: Record<TesterStatus | 'total', number> = { applied: 0, active: 0, paused: 0, declined: 0, removed: 0, total: 0 };
   for (const r of counted.results || []) {
     if (isTesterStatus(r.status)) totals[r.status as TesterStatus] = Number(r.n);
     totals.total += Number(r.n);
   }
-  const matching = status ? totals[status] : totals.total;
-  return { rows: (rows.results || []).map(present), page, page_size: pageSize, matching, totals };
+  const filtered = role || availability || inProgramme;
+  const matching = !filtered ? (status ? totals[status] : totals.total) : Number((await env.DB.prepare(
+    `SELECT COUNT(*) AS n FROM product_testers t JOIN users u ON u.id = t.user_id
+      WHERE (? = '' OR t.status = ?)
+        AND (? = '' OR u.role = ?)
+        AND (? = '' OR (? = 'yes') = (t.availability IS NOT NULL AND trim(t.availability) <> ''))
+        AND (? = '' OR (? = 'yes') = EXISTS (
+              SELECT 1 FROM testing_applications ia JOIN testing_programmes ip ON ip.id = ia.programme_id
+               WHERE ia.user_id = t.user_id AND ia.status = 'picked' AND ip.status NOT IN ('closed', 'rejected')))`,
+  ).bind(...filters).first<any>())?.n ?? 0);
+  return {
+    rows: (rows.results || []).map((r: any) => ({
+      ...present(r),
+      // D1200: the programmes this member applied to (any not withdrawn) and was picked for, all time.
+      programmes: { applied: Number(r.programmes_applied ?? 0), picked: Number(r.programmes_picked ?? 0) },
+    })),
+    page, page_size: pageSize, matching, totals,
+  };
 }
 
 export async function readTester(env: Env, id: number): Promise<Tester | null> {
@@ -127,8 +180,9 @@ export async function readTester(env: Env, id: number): Promise<Tester | null> {
     `SELECT t.id, t.user_id, t.status, t.applied_at, t.decided_at, t.decided_by, t.note, t.reason,
             t.answers, t.availability, t.consent_email_at, t.consent_version, t.updated_at,
             u.name AS member_name, u.email AS member_email, u.role AS member_role,
-            u.email_verified AS member_email_verified, u.kyc_status AS member_kyc_status
+            u.email_verified AS member_email_verified, u.kyc_status AS member_kyc_status, d.name AS decided_by_name
        FROM product_testers t JOIN users u ON u.id = t.user_id
+       LEFT JOIN users d ON d.id = t.decided_by
       WHERE t.id = ?`,
   ).bind(id).first<any>();
   return row ? present(row) : null;
