@@ -21,11 +21,13 @@ function text(value: unknown): string | null {
 }
 function priorRoles(raw: string | null) {
   if (!raw) return [];
-  const parsed = JSON.parse(raw);
-  if (!Array.isArray(parsed)) return [];
-  return parsed.slice(0, 30).filter(x => x && typeof x === 'object').map(x => ({
-    title: text(x.title), company: text(x.company ?? x.org), start: text(x.start), end: text(x.end),
-  }));
+  try {
+    const parsed = JSON.parse(raw);
+    if (!Array.isArray(parsed)) return null;
+    return parsed.slice(0, 30).filter(x => x && typeof x === 'object').map(x => ({
+      title: text(x.title), company: text(x.company ?? x.org), start: text(x.start), end: text(x.end),
+    }));
+  } catch { return null; }
 }
 
 async function team(env: Env, project: any) {
@@ -50,8 +52,9 @@ async function team(env: Env, project: any) {
       const flags = effectiveFlags(p.privacy_prefs, p.role);
       if (!flags.name) return [];
       const archetype = Object.values(ARCHETYPES).flat().find(a => a.slug === p.archetype_slug);
-      return [{ user_id: p.id, uid: p.uid, name: p.name, role: p.team_role,
-        prior_roles: flags.background ? priorRoles(p.experience) : [],
+      const roles = flags.background ? priorRoles(p.experience) : [];
+      return [{ user_id: p.id, coverage_shared: !!flags.background, uid: p.uid, name: p.name, role: p.team_role,
+        prior_roles: roles, ...(roles == null ? { prior_roles_state: 'unreadable', prior_roles_reason: 'Unreadable. Try again.' } : {}),
         archetype: archetype ? { slug: archetype.slug, label: archetype.label } : null,
         full_time_since: null, full_time_reason: 'Not recorded',
         founder_market_fit: null, founder_market_fit_reason: 'No published evidence recorded' }];
@@ -59,9 +62,10 @@ async function team(env: Env, project: any) {
   });
   const rows = people.state === 'recorded' ? people.data as any[] : null;
   const coverage = rows == null ? { state: 'unreadable', reason: 'Team publication is unreadable. Try again.' } : await block(async () => {
-    // Read-only equivalent of the radar's blended coverage. Only team aggregates leave SQL;
-    // two contributors per axis prevent a one-person team exposing an individual's score.
-    const ids = JSON.stringify(rows.map(p => p.user_id));
+    // Blend as the radar does, but disclose only coarse bands of the TEAM MEAN.
+    // An exact maximum is an individual's score even with multiple contributors.
+    // A public name alone is insufficient: honor background publication as well.
+    const ids = JSON.stringify(rows.filter(p => p.coverage_shared).map(p => p.user_id));
     const { results } = await env.DB.prepare(`WITH self AS (
       SELECT user_id, skill_id, self_level FROM user_skills WHERE user_id IN (SELECT value FROM json_each(?))
     ), peers AS (
@@ -75,17 +79,17 @@ async function team(env: Env, project: any) {
       LEFT JOIN self ON self.user_id = p.user_id AND self.skill_id = p.skill_id
       LEFT JOIN peers ON peers.user_id = p.user_id AND peers.skill_id = p.skill_id
       GROUP BY p.user_id, s.category_slug
-    ) SELECT category_slug, COUNT(*) AS contributors, MAX(score) AS coverage FROM member_axes GROUP BY category_slug`)
+    ) SELECT category_slug, COUNT(*) AS contributors, AVG(score) AS coverage FROM member_axes GROUP BY category_slug`)
       .bind(ids, ids).all<any>();
     return RADAR_AXES.map(axis => {
       const row = results.find(x => x.category_slug === axis.slug && x.contributors >= 2);
       return { slug: axis.slug, label: axis.label,
-        coverage: row ? Math.max(0, Math.min(100, Math.round(row.coverage * 20))) : null,
+        coverage_band: row ? (row.coverage >= 3 ? 'covered' : row.coverage >= 1.5 ? 'partial' : 'gap') : null,
         reason: row ? null : 'Not recorded for at least two published team members' };
     });
   });
   // Internal IDs are used only for aggregate scoping, never in a person's public projection.
-  const published = rows?.map(({ user_id: _id, ...person }) => person);
+  const published = rows?.map(({ user_id: _id, coverage_shared: _shared, ...person }) => person);
   return { people: published ? { state: 'recorded', data: published } : people, coverage,
     values_band: { value: null, ...notRecorded('No recorded consent to share a team values band') } };
 }
@@ -155,6 +159,8 @@ function handler(section: 'team' | 'market' | 'traction') {
       const project = await c.env.DB.prepare(`SELECT p.id, p.founder_id, p.name, p.sector, p.stage, p.tagline AS headline
         FROM deals d JOIN projects p ON p.id = d.project_id WHERE d.id = ? AND p.deleted_at IS NULL`).bind(id).first<any>();
       if (!project) return c.json({ error: 'deal_not_found' }, 404);
+      // D1149 deliberately retains partners' separate deal policy pending #2450;
+      // trust.ts masks investors. Do not silently redefine that shared role rule.
       if (user.role === 'investor') {
         const founder = await c.env.DB.prepare(`SELECT id FROM users WHERE founder_id = ? AND COALESCE(is_active, 1) = 1 ORDER BY id LIMIT 1`)
           .bind(project.founder_id).first<any>();

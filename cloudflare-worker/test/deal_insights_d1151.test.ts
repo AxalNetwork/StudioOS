@@ -109,7 +109,7 @@ test('D1151: published team projection omits private/inactive/invited people and
       {uid:f.db.prepare('SELECT uid FROM users WHERE id=2').get()!.uid,name:'Founder',role:'founder',prior_roles:[{title:'Builder',company:'Prior Co',start:'2020',end:null}],archetype:null,full_time_since:null,full_time_reason:'Not recorded',founder_market_fit:null,founder_market_fit_reason:'No published evidence recorded'},
       {uid:f.db.prepare('SELECT uid FROM users WHERE id=7').get()!.uid,name:'Published hire',role:'engineer',prior_roles:[],archetype:null,full_time_since:null,full_time_reason:'Not recorded',founder_market_fit:null,founder_market_fit_reason:'No published evidence recorded'},
     ]);
-    assert.deepEqual(result.body.coverage.data.map((x:any)=>x.coverage),Array(8).fill(null));
+    assert.deepEqual(result.body.coverage.data.map((x:any)=>x.coverage_band),Array(8).fill(null));
     assert.deepEqual(result.body.values_band,{ value:null,state:'not_recorded',reason:'No recorded consent to share a team values band' });
     f.db.exec('UPDATE profile_archetype_publish SET published=1 WHERE user_id=2');
     assert.deepEqual((await read(f,'/100/team')).body.people.data[0].archetype,{slug:archetype.slug,label:archetype.label});
@@ -127,9 +127,26 @@ test('D1151: eight-axis coverage is a team aggregate and never fills a missing a
     const skill=f.db.prepare("SELECT id FROM skills WHERE category_slug='engineering' AND is_active=1 LIMIT 1").get()!;
     f.db.prepare('INSERT INTO user_skills(user_id,skill_id,self_level) VALUES(2,?,3),(7,?,4),(8,?,5)').run(skill.id,skill.id,skill.id);
     const axes=(await read(f,'/100/team')).body.coverage.data;
-    assert.deepEqual(axes.filter((x:any)=>x.coverage!=null).map((x:any)=>[x.slug,x.coverage,x.reason]),[['engineering',80,null]]);
+    assert.deepEqual(axes.filter((x:any)=>x.coverage_band!=null).map((x:any)=>[x.slug,x.coverage_band,x.reason]),[['engineering','covered',null]]);
+    f.db.exec('UPDATE user_skills SET self_level=0 WHERE user_id=2; UPDATE user_skills SET self_level=5 WHERE user_id=7');
+    assert.equal((await read(f,'/100/team')).body.coverage.data.find((x:any)=>x.slug==='engineering').coverage_band,'partial');
+    f.db.exec('UPDATE user_skills SET self_level=0 WHERE user_id=7');
+    assert.equal((await read(f,'/100/team')).body.coverage.data.find((x:any)=>x.slug==='engineering').coverage_band,'gap');
+    f.db.prepare(`UPDATE users SET privacy_prefs='{"public_profile":{"background":false}}' WHERE id=7`).run();
+    assert.deepEqual((await read(f,'/100/team')).body.coverage.data.map((x:any)=>x.coverage_band),Array(8).fill(null));
+    f.db.prepare('UPDATE users SET privacy_prefs=NULL WHERE id=7').run();
     f.db.prepare('DELETE FROM user_skills WHERE user_id=7').run();
-    assert.deepEqual((await read(f,'/100/team')).body.coverage.data.map((x:any)=>x.coverage),Array(8).fill(null));
+    assert.deepEqual((await read(f,'/100/team')).body.coverage.data.map((x:any)=>x.coverage_band),Array(8).fill(null));
+  } finally { f.db.close(); }
+});
+
+test('D1151: corrupt career history affects only that field, never other people or coverage', async () => {
+  const f=fixture();
+  try {
+    nda(f);
+    f.db.prepare("UPDATE user_profile_ext SET experience='not-json' WHERE user_id=2").run();
+    const result=(await read(f,'/100/team')).body;
+    assert.deepEqual([result.people.state,result.people.data.length,result.people.data[0].prior_roles,result.people.data[0].prior_roles_state,result.people.data[1].name,result.coverage.state],['recorded',2,null,'unreadable','Published hire','recorded']);
   } finally { f.db.close(); }
 });
 
