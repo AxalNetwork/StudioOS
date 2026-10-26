@@ -1,12 +1,12 @@
 // Task #40 (E2) — MyEventsPage. D1030 (#2387): on a desktop, the owner's "My
 // events" canvas — Upcoming, Hosting, Discover and Past, each at its own
 // address under /my/events, drawn from the reads that exist (myEventsModel.js).
-// The phone keeps D700's A7m sections until D1030's phone part.
+// D1037 (#2878): on a phone, MEV18 (MyEventsPhone.jsx) in place of D700's A7m.
 // D1035 (#2876): the ticket and hosted-event drawers open over their tab at
 // /my/events/ticket/[id] and /my/events/hosting/[id] (MyEventsDrawers.jsx).
 import React, { useCallback, useEffect, useState } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
-import { Plus, Calendar, MapPin, Ticket } from 'lucide-react';
+import { Plus } from 'lucide-react';
 import { eventsApi } from '../../lib/eventsApi';
 import { eventsPublic } from '../../lib/api';
 import { adminEvents } from '../../lib/api';
@@ -16,10 +16,11 @@ import { useAuth } from '../../hooks/useAuthSync';
 import { useToast } from '../../components/useToast';
 import PageExplainer from '../../components/PageExplainer';
 import EventQRCode from '../../components/events/EventQRCode';
-import { Unreadable } from '../../ui';
-import { Lightbox } from '../../ui';
+import { CheckInSheet, PhoneUpcoming } from './MyEventsPhone';
+import { PHONE_ROOT } from './myEventsPhoneModel';
+import { Lightbox, PhoneBar, Unreadable, actionPrimary } from '../../ui';
 import { usePhoneWidth } from '../../ui/phone/usePhoneWidth';
-import { AccountPhonePage, phonePending } from '../account/AccountPhonePage';
+import { PHONE_PAGE } from '../account/AccountPhonePage';
 import { ACCOUNT_PHONE_PAGES } from '../account/accountPhone';
 import {
   EXPLORER_LINE, LINE, TITLE,
@@ -34,123 +35,14 @@ import {
   PastTabFull, Pill, RowMenu, Segmented, Skeleton, SubscribeCard, SubscribeDialog, placeMenu,
 } from './MyEventsTabs';
 
-const STATUS_STYLES = {
-  draft: 'bg-gray-100 text-gray-700 dark:bg-gray-800 dark:text-gray-300',
-  pending_review: 'bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-300',
-  published: 'bg-emerald-100 text-emerald-800 dark:bg-emerald-900/30 dark:text-emerald-300',
-  cancelled: 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-300',
-};
-
-const REG_STATUS_STYLES = {
-  registered: 'bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-300',
-  confirmed: 'bg-emerald-100 text-emerald-800 dark:bg-emerald-900/30 dark:text-emerald-300',
-  waitlisted: 'bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-300',
-  attended: 'bg-violet-100 text-violet-800 dark:bg-violet-900/30 dark:text-violet-300',
-  cancelled: 'bg-gray-100 text-gray-600 dark:bg-gray-800 dark:text-gray-400',
-  declined: 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-300',
-};
-
-function fmtDate(value, tz) {
-  if (!value) return 'Date TBD';
-  const d = new Date(value);
-  if (Number.isNaN(d.getTime())) return value;
-  try {
-    return d.toLocaleString(undefined, {
-      weekday: 'short', month: 'short', day: 'numeric',
-      hour: 'numeric', minute: '2-digit',
-      ...(tz ? { timeZone: tz } : {}),
-    });
-  } catch { return d.toLocaleString(); }
-}
-
-function StatusBadge({ status, map = STATUS_STYLES }) {
-  const cls = map[status] || 'bg-gray-100 text-gray-700 dark:bg-gray-800 dark:text-gray-300';
-  return (
-    <span className={`inline-block rounded-full px-2 py-0.5 text-xs font-medium capitalize ${cls}`}>
-      {String(status || '').replace(/_/g, ' ') || 'draft'}
-    </span>
-  );
-}
-
 // ---------------------------------------------------------------------------
-// D700 (#1662) — A7m, the page on a phone.
+// D1037 (#2878) — MEV18, the page on a phone, in place of D700's A7m. Its bar
+// is the shared PhoneBar from the account pages (ACCOUNT_PHONE_PAGES.events),
+// which names itself to Eadwyn by its title and draws no button of its own;
+// then the tabs, scrolling sideways, and the tab. A ticket is a page of its
+// own under "‹ Events" (MEV18b); Hosting's event-day Check in is the camera
+// sheet (MEV18c). Every dialog is a bottom sheet, every control 44 × 44px.
 // ---------------------------------------------------------------------------
-
-const GOING = new Set(['registered', 'confirmed']);
-const shortDay = (value) => {
-  const d = new Date(value);
-  return value && !Number.isNaN(d.getTime()) ? d.toLocaleDateString(undefined, { day: 'numeric', month: 'short' }) : 'Date TBD';
-};
-const whereOf = (e) => e.location_text || e.location_kind || '';
-
-/** A ticket's pill: Going, Waitlist, Attended, or its own status word. */
-function ticketPill(status, upcoming) {
-  if (upcoming && GOING.has(status)) return { label: 'Going', tone: 'ok' };
-  if (status === 'waitlisted') return { label: 'Waitlist', tone: 'warn' };
-  if (status === 'attended') return { label: 'Attended', tone: 'ok' };
-  return { label: String(status || '').replace(/_/g, ' ') || 'registered', tone: 'neutral' };
-}
-
-/**
- * A7m's sections from `eventsApi.list` (`events`: { status, hosting,
- * attending, reload }) and `eventsApi.suggested` (`suggested`: the events, or
- * null while it is out or after it failed — best-effort, as on the desktop).
- * Past has no Replay pill, and Hosting is a third section (decision 10).
- */
-export function eventsPhoneGroups({ events, suggested, now = new Date() }) {
-  const [upTitle, pastTitle] = ACCOUNT_PHONE_PAGES.events.sections;
-  const upcoming = { label: upTitle, rows: [], testid: 'events-phone-upcoming' };
-  const past = { label: pastTitle, rows: [], testid: 'events-phone-past' };
-  const hosting = { label: 'Hosting', rows: [], testid: 'events-phone-hosting', cta: { label: 'New event', to: '/events/new', testid: 'events-phone-new' } };
-  if (events.status !== 'ready') {
-    const note = phonePending(events.status, 'Your events', 'This is not a claim that you have none.', events.reload);
-    return [{ ...upcoming, note }, { ...past, note }, { ...hosting, note }];
-  }
-  const at = (e) => new Date(e.starts_at).getTime();
-  const tickets = [...events.attending].sort((a, b) => (at(a) || 0) - (at(b) || 0));
-  for (const t of tickets) {
-    const ahead = !(at(t) < now.getTime());
-    (ahead ? upcoming : past).rows.push({
-      key: t.id || t.registration_id,
-      title: `${shortDay(t.starts_at)} · ${t.title || t.event_title}`,
-      description: [fmtDate(t.starts_at, t.timezone), whereOf(t)].filter(Boolean).join(' · '),
-      pill: ticketPill(t.reg_status, ahead),
-      testid: 'events-phone-ticket',
-    });
-  }
-  for (const ev of suggested || []) {
-    upcoming.rows.push({
-      key: `suggested-${ev.id}`,
-      title: `${shortDay(ev.starts_at)} · ${ev.title}`,
-      description: ev.suggestion_reason || whereOf(ev) || fmtDate(ev.starts_at, ev.timezone),
-      pill: { label: 'RSVP', tone: 'info' },
-      to: `/events/${ev.slug || ev.id}`,
-      testid: 'events-phone-suggested',
-    });
-  }
-  past.rows.reverse();
-  if (!upcoming.rows.length) upcoming.note = 'No upcoming events.';
-  if (!past.rows.length) past.note = 'No past events.';
-  hosting.rows = events.hosting.map((ev) => ({
-    key: ev.id,
-    title: `${shortDay(ev.starts_at)} · ${ev.title}`,
-    description: [String(ev.status || 'draft').replace(/_/g, ' '), ev.visibility].filter(Boolean).join(' · '),
-    value: 'Manage',
-    to: `/events/${ev.id}/manage`,
-    testid: 'events-phone-hosted',
-  }));
-  if (!hosting.rows.length) hosting.note = "You're not hosting any events yet.";
-  return [upcoming, past, hosting];
-}
-
-/** A7m — the bar and the sections, then `children`: the explainer and the tickets' check-in codes. */
-export function EventsPhoneView({ events, suggested, now, children = null }) {
-  return (
-    <AccountPhonePage pageKey="events" testid="events-phone" groups={eventsPhoneGroups({ events, suggested, now })}>
-      {children}
-    </AccountPhonePage>
-  );
-}
 
 /** D1131: suggestions fail as their own block and can be retried. */
 function useSuggestedEvents() {
@@ -215,6 +107,8 @@ export default function MyEventsPage() {
   const [answer, setAnswer] = useState(null);
   const [subscribing, setSubscribing] = useState(false);
   const [older, setOlder] = useState(null);
+  // D1037 (MEV18c): the hosted event whose camera sheet is open on a phone.
+  const [checking, setChecking] = useState(null);
   const api = {
     publicList: (p) => eventsPublic.list(p),
     eligibility: (id) => eventsApi.eligibility(id),
@@ -257,24 +151,6 @@ export default function MyEventsPage() {
     </div>
   );
 
-  if (phone) {
-    const events = { status: loading ? 'loading' : loadError ? 'unreadable' : 'ready', hosting, attending, reload: load };
-    const coded = attending.filter((t) => t.checkin_code || t.code || t.qr_code);
-    return (
-      <EventsPhoneView events={events} suggested={Array.isArray(suggested.data?.events) ? suggested.data.events : null}>
-        <PageExplainer pageKey="my_events" />
-        {drawerEl}
-        {events.status === 'ready' && coded.length > 0 && (
-          <div>
-            <h2 className="text-[11px] font-bold uppercase tracking-wide text-gray-700 dark:text-gray-300">Check-in codes</h2>
-            <AttendingList tickets={coded} />
-          </div>
-        )}
-        {toastEl}
-      </EventsPhoneView>
-    );
-  }
-
   const explorer = isExplorer(user);
   // MEV17b: only if the owner closes My events to Explorers (D1030 opened it to them).
   if (explorer && !MY_EVENTS_OPEN_TO_EXPLORERS) return <ExplorerClosedCard />;
@@ -284,6 +160,86 @@ export default function MyEventsPage() {
   const tips = Array.isArray(suggested.data?.events) ? suggested.data.events : [];
   const invites = invitations.status === 'ready' && Array.isArray(invitations.data?.invitations) ? invitations.data.invitations : [];
 
+  const nav = (
+    <nav aria-label="Events" className={`${phone ? '' : 'mt-4 '}flex gap-1 overflow-x-auto border-b border-axal-hairline dark:border-gray-700`} data-testid="my-events-tabs">
+      {tabsFor(user).map((t) => {
+        const c = counts[t.key];
+        return (
+          <Link key={t.key} to={tabHref(t)} aria-current={t.key === tab ? 'page' : undefined}
+            className={`-mb-px whitespace-nowrap border-b-2 px-3 py-2.5 text-[12.5px] ${t.key === tab
+              ? 'border-axal-violet font-extrabold text-axal-ink dark:border-violet-400 dark:text-gray-100'
+              : 'border-transparent font-semibold text-axal-muted hover:text-axal-ink dark:text-gray-400 dark:hover:text-gray-100'}`}
+            data-testid={`my-events-tab-${t.key}`}>
+            {t.label}{t.key === 'discover' || !c ? '' : (
+              <span className="ml-1.5 font-mono text-[11px]" title={c.why || undefined} data-testid={`my-events-count-${t.key}`}>
+                {c.value == null ? '—' : c.value}{c.why && c.value == null ? <span className="sr-only"> ({c.why})</span> : null}
+              </span>
+            )}
+          </Link>
+        );
+      })}
+    </nav>
+  );
+  const body = tab === 'discover' ? (
+      <DiscoverTabFull api={api} held={held} invitations={invites} suggested={tips} suggestionsRead={suggested} now={now}
+        onRegistered={changed} onAccept={(inv) => setAnswer({ invitation: inv, action: 'accept' })} />
+    ) : loading ? (
+      <Reading />
+    ) : loadError ? (
+      <div className={`${CARD} p-5`} data-testid="my-events-unreadable">
+        <Unreadable what="Your events" claim="That is not the same as having none." onRetry={load} />
+      </div>
+    ) : tab === 'hosting' && !explorer ? (
+      <HostingTab hosting={hosting} now={now} admin={String(user?.role || '').toLowerCase() === 'admin'} onDone={(line) => { load(); showToast({ kind: 'ok', msg: line }); }}
+        onCopy={(path) => copyLink(path, showToast)} onCancel={(e) => navigate(hostedPath(e.id))} onCheckIn={phone ? setChecking : null} />
+    ) : tab === 'past' ? (
+      <PastTabFull past={past} hosting={explorer ? [] : hosting} now={now} onOlder={readOlder} older={older} onRetry={load} />
+    ) : phone ? (
+      <PhoneUpcoming attending={attending} hosting={explorer ? [] : hosting} invitations={invites} explorer={explorer} now={now} api={api}
+        onAnswer={(inv, action) => setAnswer({ invitation: inv, action })}
+        onPick={(t, it) => (it.key === 'ticket' || it.key === 'cancel' ? navigate(ticketPath(t.id)) : null)} />
+    ) : (
+      <UpcomingTab attending={attending} hosting={explorer ? [] : hosting} invitations={invites} invitationsRead={invitations} feed={feed}
+        suggested={tips} suggestionsRead={suggested} explorer={explorer} now={now} api={api}
+        onAnswer={(inv, action) => setAnswer({ invitation: inv, action })} onSubscribe={() => setSubscribing(true)}
+        onPick={(t, it) => (it.key === 'ticket' || it.key === 'cancel' ? navigate(ticketPath(t.id)) : null)} />
+  );
+
+  if (phone) {
+    const page = ACCOUNT_PHONE_PAGES.events;
+    const root = `${PHONE_PAGE} ${PHONE_ROOT}`;
+    // MEV18b: a ticket is a page of its own, under "‹ Events", with nothing of the tab behind it.
+    if (drawer?.kind === 'ticket') {
+      return (
+        <div className={root} data-testid="my-events-phone-ticket" data-phone="true">
+          <TicketDrawer key={`t-${drawer.id}`} id={drawer.id} list={list} onClose={closeDrawer} onDone={doneDrawer} page
+            bar={({ title, onBack }) => <PhoneBar back={{ label: 'Events', onClick: onBack }} title={title} eadwynLabel={page.title} />} />
+          {toastEl}
+        </div>
+      );
+    }
+    return (
+      <div className={root} data-testid="my-events-phone" data-phone="true">
+        <PhoneBar back={{ label: 'Back' }} title={page.title} sub={page.sub} eadwynLabel={page.title} />
+        <div className="flex flex-col gap-3 px-[22px] pb-[18px] pt-3.5">
+          <PageExplainer pageKey="my_events" />
+          {explorer ? (
+            <p className="m-0 rounded-[10px] border border-violet-200 bg-violet-50 px-3 py-2 text-[12.5px] text-axal-ink dark:border-[#4c3a8a] dark:bg-[#211f3d] dark:text-gray-200" data-testid="my-events-explorer-line">
+              {EXPLORER_LINE} <Link className={LINK} to="/exploring">Set up your profile</Link>
+            </p>
+          ) : null}
+          {nav}
+          {tab === 'hosting' && !explorer ? <Link to="/events/new" className={`${actionPrimary} w-full justify-center`} data-testid="my-events-new"><Plus size={15} /> New event</Link> : null}
+          {body}
+        </div>
+        {answer ? <InvitationDialog answer={answer} api={api} onClose={() => setAnswer(null)} onDone={(line) => { setAnswer(null); changed(line); }} /> : null}
+        {subscribing ? <SubscribeDialog read={feed} api={api} onClose={() => setSubscribing(false)} onChanged={feed.reload} /> : null}
+        {checking ? <CheckInSheet event={checking} onClose={(added) => { setChecking(null); if (added) load(); }} /> : null}
+        {drawerEl}
+        {toastEl}
+      </div>
+    );
+  }
   return (
     <div className="mx-auto max-w-6xl px-4 py-6" data-testid="my-events">
       <div className="flex flex-wrap items-start justify-between gap-3">
@@ -310,47 +266,9 @@ export default function MyEventsPage() {
         </p>
       ) : null}
 
-      <nav aria-label="Events" className="mt-4 flex gap-1 overflow-x-auto border-b border-axal-hairline dark:border-gray-700" data-testid="my-events-tabs">
-        {tabsFor(user).map((t) => {
-          const c = counts[t.key];
-          return (
-            <Link key={t.key} to={tabHref(t)} aria-current={t.key === tab ? 'page' : undefined}
-              className={`-mb-px whitespace-nowrap border-b-2 px-3 py-2.5 text-[12.5px] ${t.key === tab
-                ? 'border-axal-violet font-extrabold text-axal-ink dark:border-violet-400 dark:text-gray-100'
-                : 'border-transparent font-semibold text-axal-muted hover:text-axal-ink dark:text-gray-400 dark:hover:text-gray-100'}`}
-              data-testid={`my-events-tab-${t.key}`}>
-              {t.label}{t.key === 'discover' || !c ? '' : (
-                <span className="ml-1.5 font-mono text-[11px]" title={c.why || undefined} data-testid={`my-events-count-${t.key}`}>
-                  {c.value == null ? '—' : c.value}{c.why && c.value == null ? <span className="sr-only"> ({c.why})</span> : null}
-                </span>
-              )}
-            </Link>
-          );
-        })}
-      </nav>
+      {nav}
 
-      <div className="mt-4">
-        {tab === 'discover' ? (
-          <DiscoverTabFull api={api} held={held} invitations={invites} suggested={tips} suggestionsRead={suggested} now={now}
-            onRegistered={changed} onAccept={(inv) => setAnswer({ invitation: inv, action: 'accept' })} />
-        ) : loading ? (
-          <Reading />
-        ) : loadError ? (
-          <div className={`${CARD} p-5`} data-testid="my-events-unreadable">
-            <Unreadable what="Your events" claim="That is not the same as having none." onRetry={load} />
-          </div>
-        ) : tab === 'hosting' && !explorer ? (
-          <HostingTab hosting={hosting} now={now} admin={String(user?.role || '').toLowerCase() === 'admin'} onDone={(line) => { load(); showToast({ kind: 'ok', msg: line }); }}
-            onCopy={(path) => copyLink(path, showToast)} onCancel={(e) => navigate(hostedPath(e.id))} />
-        ) : tab === 'past' ? (
-          <PastTabFull past={past} hosting={explorer ? [] : hosting} now={now} onOlder={readOlder} older={older} onRetry={load} />
-        ) : (
-          <UpcomingTab attending={attending} hosting={explorer ? [] : hosting} invitations={invites} invitationsRead={invitations} feed={feed}
-            suggested={tips} suggestionsRead={suggested} explorer={explorer} now={now} api={api}
-            onAnswer={(inv, action) => setAnswer({ invitation: inv, action })} onSubscribe={() => setSubscribing(true)}
-            onPick={(t, it) => (it.key === 'ticket' || it.key === 'cancel' ? navigate(ticketPath(t.id)) : null)} />
-        )}
-      </div>
+      <div className="mt-4">{body}</div>
 
       {answer ? <InvitationDialog answer={answer} api={api} onClose={() => setAnswer(null)} onDone={(line) => { setAnswer(null); changed(line); }} /> : null}
       {subscribing ? <SubscribeDialog read={feed} api={api} onClose={() => setSubscribing(false)} onChanged={feed.reload} /> : null}
@@ -496,7 +414,7 @@ function UpcomingTab({ attending, hosting, invitations, invitationsRead, feed, s
         </div>
       </div>
       {adding ? (
-        <Lightbox label={`Add ${adding.title || 'this event'} to your calendar`} title={adding.title || 'Not recorded'} sub={timeLine(adding, zone)} onClose={() => setAdding(null)} width={420} testId="my-events-add-calendar-dialog">
+        <Lightbox label={`Add ${adding.title || 'this event'} to your calendar`} title={adding.title || 'Not recorded'} sub={timeLine(adding, zone)} onClose={() => setAdding(null)} width={420} phone="sheet" testId="my-events-add-calendar-dialog">
           <div className="px-5 py-4"><AddToCalendar id={adding.id} api={api} onSubscribe={() => { setAdding(null); onSubscribe(); }} /></div>
         </Lightbox>
       ) : null}
@@ -558,7 +476,7 @@ function SuggestedCard({ events, read, explorer = false }) {
   );
 }
 
-function HostingTab({ hosting, admin, now, onDone, onCopy, onCancel }) {
+function HostingTab({ hosting, admin, now, onDone, onCopy, onCancel, onCheckIn = null }) {
   const [f, setF] = useState(HOST_DEFAULTS);
   // D1035: a draft's Send for review or Publish opens MEV6's dialog here, without the drawer.
   const [publishing, setPublishing] = useState(null);
@@ -584,57 +502,8 @@ function HostingTab({ hosting, admin, now, onDone, onCopy, onCancel }) {
       ) : null}
       {hosting.length === 0
         ? <EmptyCard copy={EMPTY.hosting} to="/events/new" glyph="+" testId="my-events-hosting-none" />
-        : <HostingList hosting={hosting} now={now} f={f} setF={setF} onPublish={setPublishing} onCopy={onCopy} onCancel={onCancel} />}
+        : <HostingList hosting={hosting} now={now} f={f} setF={setF} onPublish={setPublishing} onCopy={onCopy} onCancel={onCancel} onCheckIn={onCheckIn} />}
       {publishing ? <PublishDialog event={publishing} counts={publishing.counts} onClose={() => setPublishing(null)} onDone={(line) => { setPublishing(null); onDone(line); }} /> : null}
     </div>
-  );
-}
-
-function AttendingList({ tickets }) {
-  if (!tickets.length) {
-    return (
-      <div className="py-12 text-center">
-        <Ticket size={32} className="mx-auto text-gray-300 dark:text-gray-600" />
-        <p className="mt-3 text-gray-500 dark:text-gray-400">You don't have any tickets yet.</p>
-      </div>
-    );
-  }
-  return (
-    <ul className="mt-4 grid gap-3 sm:grid-cols-2">
-      {tickets.map((t) => {
-        const code = t.checkin_code || t.code || t.qr_code;
-        return (
-          <li key={t.id || t.registration_id} className="flex gap-4 rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 p-4">
-            <div className="min-w-0 flex-1">
-              <h3 className="truncate text-base font-semibold text-gray-900 dark:text-gray-100">{t.title || t.event_title}</h3>
-              <div className="mt-1 space-y-1 text-sm text-gray-500 dark:text-gray-400">
-                <div className="inline-flex items-center gap-1"><Calendar size={14} /> {fmtDate(t.starts_at, t.timezone)}</div>
-                {(t.location_text || t.location_kind) && (
-                  <div className="inline-flex items-center gap-1"><MapPin size={14} /> {t.location_text || t.location_kind}</div>
-                )}
-              </div>
-              <div className="mt-2 flex items-center gap-2">
-                <StatusBadge status={t.reg_status} map={REG_STATUS_STYLES} />
-                {t.comp ? (
-                  <span className="rounded-full bg-emerald-100 px-2 py-0.5 text-xs font-medium text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-300">
-                    Free seat
-                  </span>
-                ) : null}
-              </div>
-            </div>
-            {code ? (
-              <div className="flex flex-col items-center">
-                <EventQRCode value={code} size={120} />
-                <span className="mt-1 text-[11px] text-gray-400 dark:text-gray-500">Show at check-in</span>
-              </div>
-            ) : (
-              <div className="flex w-[120px] items-center justify-center text-center text-[11px] text-gray-400 dark:text-gray-500">
-                QR available once confirmed
-              </div>
-            )}
-          </li>
-        );
-      })}
-    </ul>
   );
 }
