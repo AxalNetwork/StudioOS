@@ -369,6 +369,9 @@ text in the library yet") and sends Unbind (`POST …/:ref/unbind`, Super Admin
 with a recent step-up and a reason). Each list row and profile carries its
 agreement's envelope state on `envelope`.
 
+D1128 extends `personaSegments.js` with mounted Worker paths for creation,
+completion counts, Events segment choices, and expected-primary follow-up answers.
+
 D1000 (#2815): `personaSegments.js` is Persona segments' profile store on
 `/api/personas/segments`: every profile, one with its history, the needs read
 (members, needs met and gaps, offers by kind, links' reach), and the Super

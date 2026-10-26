@@ -57,6 +57,12 @@ normalization out of the changed-after-approval flag.
 
 ## The ones worth knowing
 
+`segmentMembership.ts` (D1128, #3008) resolves stored segment identities,
+the active sign-up catalog, an admin-moved member's missing questions, and the
+suppressed per-segment all-question completion count. Questions remain defined
+in code. `segmentProfiles.ts` also creates an authored profile and its first
+history version atomically. Events resolves its audience IDs from this store.
+
 `personaSegments.ts` is D999's segment counts (#2814) behind
 `GET /api/personas/admin/segments`: one grouped pass over every account but
 admins (deactivated ones counted apart), folded into blocks that each carry
