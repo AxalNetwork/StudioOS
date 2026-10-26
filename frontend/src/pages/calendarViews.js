@@ -4,9 +4,9 @@
  * canvas "Calendar" (CAL1–CAL21). Pure, so
  * `frontend/test/calendar_views_d1205.test.mjs` holds each rule.
  *
- * The page (`CalendarPage.jsx`) still draws one list grouped by day in every
- * view; the month and week grids, the drawer, the connected-calendars panel and
- * the new kinds are D1205's parts.
+ * D1210: Month and Week are grids (`CalendarGrids.jsx`, rules in
+ * `calendarGrid.js`) and Agenda the list grouped by day; `windowFor` takes the
+ * `?date=` anchor as its `now`.
  */
 
 /** The canvas's three views, in its order: Month is the default. */

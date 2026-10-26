@@ -728,6 +728,19 @@ export async function completeEmbeddedSignup(env: Env, userId: number, input: Si
   const subscribed = await graph('subscribe', `${GRAPH_BASE}/${encodeURIComponent(input.wabaId)}/subscribed_apps`, { method: 'POST', token });
   if (!subscribed.ok || subscribed.data?.success === false) return { ok: false, status: 502, code: 'subscribe_failed' };
 
+  return storeWhatsAppConnection(env, userId, { wabaId: input.wabaId, phoneNumberId: input.phoneNumberId, number, token });
+}
+
+/**
+ * The D684 connection row, as Embedded Signup writes it: one `integrations`
+ * row per member, its token encrypted against its uid, the number masked.
+ * D856's guided setup (`whatsappSetup.ts`) writes the same row through here.
+ */
+export async function storeWhatsAppConnection(
+  env: Env, userId: number,
+  input: { wabaId: string; phoneNumberId: string; number: Record<string, unknown>; token: string },
+): Promise<ConnectOutcome> {
+  const { number, token } = input;
   const masked = maskNumber(number.display_phone_number);
   const verified = typeof number.verified_name === 'string' && number.verified_name.trim()
     ? number.verified_name.trim().slice(0, CHANNEL_LIMITS.maxNameChars) : null;

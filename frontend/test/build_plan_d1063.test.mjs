@@ -78,7 +78,8 @@ test('mounted plan: What Validate proved from the Validate overview, each module
     assert.equal(t.props(t.byId('plan-tab-progress')).href, '/build/plan/progress?project_id=7');
     assert.equal(t.props(t.byId('plan-tab-plan'))['aria-current'], 'page');
     await at('progress', h(BuildPlan, { tab: 'progress', projectId: 7, search: '?project_id=7', cards: [] }));
-    assert.match(t.text(t.byId('plan-progress')), /Plan items by stage.*Not read here yet.*nothing here reads as not done/s);
+    // D1070 (#2940): Progress draws its stages from the plan, sends and links reads; never "not done".
+    assert.match(t.text(t.byId('plan-progress')), /Plan items by stage.*Not recorded means no tool reports that stage, never that it is not done\./s);
     assert.equal(calls.length, 1, 'Progress makes no Validate read');
     cyclesApi.overview = async () => { throw new Error('down'); };
     await at('down', h(BuildPlan, { tab: 'plan', projectId: 8, search: '', cards: [] }));

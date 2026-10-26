@@ -311,7 +311,7 @@ test('INS3: ?group= opens a profile, filled from the read with group=<role>, wit
   assert.deepEqual(g.tiles.map(([t, v]) => [t, v.text]), [['New in 30 days', '7'], ['Active last week', '40'], ['Activated', '33%'], ['Dormant', '12']]);
   assert.equal(g.signups.rows[7].text, '7 to date');
   assert.equal(g.active.values[0], null);
-  assert.equal(g.accountsHref, '/admin/held/accounts?profile=advisor');
+  assert.equal(g.accountsHref, '/admin/accounts?profile=advisor');
   assert.deepEqual(filterCountries(g.countries, 'can').map((r) => r.country), ['Canada']);
   assert.deepEqual(filterCountries(g.countries, 'not st').map((r) => r.country), [null], 'the blank country is searchable as Not stated');
   assert.equal(filterCountries(g.countries, '').length, 2);

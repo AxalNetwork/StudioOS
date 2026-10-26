@@ -47,7 +47,12 @@ export const PROGRAM_ACTIVITY_ACTIONS: Record<ProgramKey, readonly string[]> = {
   'ai-native-venture': [],
   'mentor-cohorts': MENTOR_ACCESS_ACTIONS,
   'investor-cohorts': INVESTOR_ACCESS_ACTIONS,
-  'referral-partners': [],
+  // D958: the referral partners and their terms (routes/admin_referral_partners.ts).
+  'referral-partners': [
+    'referral_partner.added', 'referral_partner.updated',
+    'referral_terms.created', 'referral_terms.updated', 'referral_terms.submitted', 'referral_terms.approved',
+    'referral_terms.sent', 'referral_terms.ended',
+  ],
   'refer-and-earn': ['referral_strategic_access.granted', 'referral_strategic_access.declined'],
   perks: ['perk.approved', 'perk.rejected', 'perk.paused', 'perk.feature_updated'],
   learning: LEARNING_PROGRAM_ACTIONS,
@@ -211,6 +216,11 @@ export async function programActivity(
         concerns = { perk: d.uid };
       } else if (r.kind.startsWith('learning.') && typeof d.uid === 'string') {
         concerns = { learning_program: { uid: d.uid, name: names.get(d.uid) ?? null } };
+      } else if (r.kind.startsWith('referral_terms.') && typeof d.uid === 'string') {
+        // D958: terms are named by their reference, never the partner.
+        concerns = { terms: d.uid };
+      } else if (r.kind.startsWith('referral_partner.') && typeof d.segment === 'string') {
+        concerns = { segment: d.segment };
       } else if (typeof d.cohort_cycle_id === 'number') {
         // D960's and D959's rows name the cohort; the mentor or investor in `target_user_id` is a person, so is never named.
         concerns = { cohort_cycle_id: d.cohort_cycle_id };

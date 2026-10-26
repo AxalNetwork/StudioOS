@@ -81,6 +81,8 @@ export function userMeetsTier(user: User | null | undefined, required: Tier): bo
   // Cancel-at-period-end remains active at Stripe until the subscription ends.
   if (status === 'unpaid' || status === 'cancelled' || status === 'canceled'
     || (status === 'past_due' && !inGrace(status, (user as TierUser).subscription_renews_at))) return false;
+  // D892 §6: a subscription whose first payment never completed grants nothing.
+  if (status === 'incomplete' || status === 'incomplete_expired') return false;
   // X-1: partner-granted/referred tiers are time-bounded. The cron sweep
   // resets tier→'free' at expiry, but enforce on read too so a stale
   // session can't bypass an expired grant before the cron runs.

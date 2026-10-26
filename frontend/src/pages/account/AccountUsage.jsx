@@ -459,7 +459,7 @@ export function StorageCard({ storage, role, title = 'Storage' }) {
       aside={v && !v.empty ? (v.total != null
         ? <span className={`${MONO} text-base text-axal-ink dark:text-gray-100`} data-testid="usage-storage-total">{v.total} <span className="font-sans text-[13px] text-axal-muted dark:text-gray-400">in {v.files} {v.files === 1 ? 'file' : 'files'}</span></span>
         : <span data-testid="usage-storage-total"><Unrecorded reason={v.anyUnreadable ? 'A place below could not be read.' : 'Some files were stored before sizes were recorded.'}>Total not recorded</Unrecorded></span>) : null}
-      footer={v && !v.empty ? 'Other files you keep on StudioOS are not counted yet. No plan sets a storage limit.' : null}
+      footer={v && !v.empty ? 'Identity documents, signed legal copies and fund documents do not count. No plan sets a storage limit.' : null}
     >
       <div id="storage" className="scroll-mt-24" />
       {storage.status === 'loading' ? <LoadingRows lines={5} />
@@ -619,7 +619,7 @@ export function storageGroup({ storage }) {
   if (v.noSize > 0) {
     group.rows.push({ title: ACCOUNT_PHONE_COPY.noSizeFiles, value: `${v.noSize} ${v.noSize === 1 ? 'file' : 'files'}`, testid: 'usage-phone-nosize' });
   }
-  group.note = 'Other files you keep on StudioOS are not counted yet. No plan sets a storage limit.';
+  group.note = 'Identity documents, signed legal copies and fund documents do not count. No plan sets a storage limit.';
   return group;
 }
 

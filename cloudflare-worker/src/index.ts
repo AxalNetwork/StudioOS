@@ -84,6 +84,7 @@ import tickets from './routes/tickets';
 import deals from './routes/deals';
 import dealFlow from './routes/deal_flow';
 import dealContext from './routes/deal_context';
+import dealWorkroom from './routes/deal_workroom';
 import dealViews from './routes/deal_views';
 import users from './routes/users';
 import marketIntel from './routes/market_intel';
@@ -137,6 +138,8 @@ import email from './routes/email';
 import pipeline from './routes/pipeline';
 import search, { ensureAcademySchema } from './routes/search';
 import kyc from './routes/kyc';
+import kybAdmin from './routes/kyb_admin';
+import kycGovernance from './routes/kyc_governance';
 import esign from './routes/esign';
 import trust from './routes/trust';
 import { expireDueArtifacts as expireTrustArtifacts, resyncKycKyb, renewalSweep } from './services/trust';
@@ -321,6 +324,7 @@ import partnerPipeline from './routes/partner_pipeline';
 import partnerOffers from './routes/partner_offers';
 import { testing, partnerTesting, adminTesting } from './routes/testing';
 import adminProductTesters from './routes/admin_product_testers';
+import adminReferralPartners from './routes/admin_referral_partners';
 import partnerDelivery from './routes/partner_delivery';
 import founderValidate from './routes/founder_validate';
 import cycleValidate from './routes/cycle_validate';
@@ -499,7 +503,7 @@ app.use(
     // alongside the `studioos_csrf` cookie on cookie-authenticated mutating
     // requests. Without it in the allowlist, the browser preflight blocks
     // every POST/PUT/PATCH/DELETE from the SPA in production.
-    allowHeaders: ['Content-Type', 'Authorization', 'X-CSRF-Token', 'X-Rail-Page', 'X-Rail-Option', 'X-Rail-Record'],
+    allowHeaders: ['Content-Type', 'Authorization', 'If-Match', 'X-CSRF-Token', 'X-Rail-Page', 'X-Rail-Option', 'X-Rail-Record'],
   }),
 );
 
@@ -923,6 +927,8 @@ app.route('/api/tickets', tickets);
 app.route('/api/deals/flow', dealFlow);
 app.route('/api/deals', dealViews);
 app.route('/api/deals', dealContext);
+// D1153 (#3058): the working tabs' room access, round summary and reasoned withdrawal. Before deals.
+app.route('/api/deals', dealWorkroom);
 app.route('/api/deals', deals);
 app.route('/api/users', users);
 app.route('/api/market-intel', marketIntel);
@@ -1325,6 +1331,9 @@ app.use('/api/kyc/admin/:userId/document/*', requireCfAccess());
 // endpoint is wired (downstream task), it should also carry the same
 // requireCfAccess() middleware (it's admin-only, so safe to gate).
 
+app.route('/api/kyc/businesses', kybAdmin);
+// D1232 (#3240): renewals, periods and the audit, ahead of kyc.ts's `/admin/:userId`.
+app.route('/api/kyc', kycGovernance);
 app.route('/api/kyc', kyc);
 // Task #3 (Y-1) — Trust Center: per-role obligations + 3-way NDA flow.
 app.route('/api/trust', trust);
@@ -1545,6 +1554,8 @@ app.route('/api/partner/testing', partnerTesting);
 app.route('/api/admin/testing', adminTesting);
 // D1042 (#2890): the product tester pool — HQ approves, declines, pauses, resumes and removes.
 app.route('/api/admin/product-testers', adminProductTesters);
+// D958 (#2791): referral partners and their custom terms, HQ only.
+app.route('/api/admin/referral-partners', adminReferralPartners);
 // #45 — what the firm records about work in flight: milestones, blockers,
 // what was shipped, who holds a seat inside a client's systems, and the
 // recurring update. Health is derived over five of those tables at read time

@@ -2,7 +2,7 @@ import { Hono } from 'hono';
 import type { Env } from '../types';
 import { requireAuth, requireFactor, requireHqAdmin, requireStepUp, requireSuperAdmin } from '../auth';
 import { AI_LICENCE_KEYS, AiBudgetReviewConflict, AiBudgetReviewNotFound, listAiBudgetReviews,
-  listAiLicenceCaps, loadAiBudget, memberHolds, planView, resolveAiCaps, settleAiBudgetReview, TYPED_CAP_LICENCES, usdToMicro } from '../services/aiBudget';
+  aiPaused, listAiLicenceCaps, loadAiBudget, memberHolds, planView, resolveAiCaps, settleAiBudgetReview, TYPED_CAP_LICENCES, usdToMicro } from '../services/aiBudget';
 import { parseSpendLimit, readSpendLimit, writeSpendLimit } from '../services/aiSpendLimit';
 import { PLAN_AI_SHARE } from '../services/planAllowance';
 import { aiTopupStatus, memberTopupReading, readAiTopupProduct } from '../services/aiTopups';
@@ -25,7 +25,8 @@ r.onError((error,c)=>{
 });
 r.get('/me',async c=>{
   const user=await requireAuth(c);
-  try { return c.json(await loadAiBudget(c.env,user.id)); }
+  // D1277 (#2482 step 1): `ai_paused` names D791's pause, so Usage › AI tokens says so rather than offering tokens that would not help.
+  try { return c.json({ ...await loadAiBudget(c.env,user.id), ai_paused: await aiPaused(c.env,user.id) }); }
   catch(error) { return refuse(c,503,{code:'ai_budget_unreadable',message:'Unreadable: your AI allowance and top-up balance could not be read.',raw:error,audience:'member'}); }
 });
 /**

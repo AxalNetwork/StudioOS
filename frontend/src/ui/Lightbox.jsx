@@ -159,7 +159,9 @@ export default function Lightbox({
   }
 
   return (
-    <div className={`fixed inset-0 z-[80] flex items-center justify-center p-5 max-sm:p-0${sheet ? ' max-sm:items-end' : ''}`} data-testid={`${testId}-layer`} data-size={tall ? 'tall' : 'fit'} data-phone={sheet ? 'sheet' : undefined}>
+    // D1187: the space before the interpolation matters. With none, Tailwind's
+    // scanner never saw `max-sm:p-0`, so no phone sheet ever lost its 20px margin.
+    <div className={`fixed inset-0 z-[80] flex items-center justify-center p-5 max-sm:p-0 ${sheet ? 'max-sm:items-end' : ''}`} data-testid={`${testId}-layer`} data-size={tall ? 'tall' : 'fit'} data-phone={sheet ? 'sheet' : undefined}>
       <div
         aria-hidden="true"
         data-testid={`${testId}-backdrop`}

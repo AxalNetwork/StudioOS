@@ -27,6 +27,8 @@ import { MANAGED_PROVIDERS } from '../src/services/providerOauthKeys.ts';
 const TYPED_READS: Record<string, string> = {
   mercury: 'cloudflare-worker/src/services/mercury/reads.ts',
   notion: 'cloudflare-worker/src/services/notion/reads.ts',
+  // D856: the guided setup's reads.
+  whatsapp_business: 'cloudflare-worker/src/services/channels/whatsappSetup.ts',
 };
 
 const records = Object.entries(MCP_PROVIDERS) as Array<[string, McpProvider]>;
