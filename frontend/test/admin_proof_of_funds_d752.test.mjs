@@ -114,11 +114,12 @@ test('the LP application: the row is keyed by the selection and sits after Accre
 });
 
 test('the deal: the proof read is an admin on HQ\'s only, and the commitments read is unchanged', () => {
-  const page = codeOnly(read('pages/DealRoomPage.jsx'));
-  assert.match(page, /<CommitmentsTab [^>]*\bproof=\{isAdmin && !branchOfUser\(user\)\}/);
+  // D1155: the staff commitments table carries the proof read now.
+  assert.match(codeOnly(read('pages/DealRoomPage.jsx')), /<DealCommitmentsStaff [^>]*\bproof=\{isAdmin && !branchOfUser\(user\)\}/);
+  const page = codeOnly(read('pages/deal/DealCommitmentsStaff.jsx'));
   assert.match(page, /if \(!proof \|\| !loaded\) return undefined;[\s\S]{0,80}adminCapitalAttestationsApi\.forDeal\(dealId\)/);
   assert.equal(page.split('adminCapitalAttestationsApi.forDeal(').length - 1, 1);
-  assert.match(page, /api\.dealCommitments\(dealId\)\.then\(setItems\)/);
+  assert.match(page, /api\.dealCommitments\(dealId\)/);
 });
 
 const walk = (p) => readdirSync(p, { withFileTypes: true }).flatMap((e) => (e.isDirectory() ? walk(join(p, e.name)) : [join(p, e.name)]));
@@ -126,7 +127,7 @@ const walk = (p) => readdirSync(p, { withFileTypes: true }).flatMap((e) => (e.is
 test('who can reach it: four files name the admin read, api.js names only its module, and the shared LP page names no proof', () => {
   const root = resolve('frontend/src');
   const naming = walk(root).filter((f) => /\.(jsx?|mjs)$/.test(f) && readFileSync(f, 'utf8').includes('adminCapitalAttestationsApi')).map((f) => f.slice(root.length + 1)).sort();
-  assert.deepEqual(naming, ['lib/api/adminCapitalAttestations.js', 'pages/DealRoomPage.jsx', 'pages/admin/AdminLpApplications.jsx', 'pages/admin/fundAdmin/FundAdminConsole.jsx']);
+  assert.deepEqual(naming, ['lib/api/adminCapitalAttestations.js', 'pages/admin/AdminLpApplications.jsx', 'pages/admin/fundAdmin/FundAdminConsole.jsx', 'pages/deal/DealCommitmentsStaff.jsx']);
   assert.match(read('lib/api.js'), /export \* from '\.\/api\/adminCapitalAttestations\.js';/);
   const lps = read('pages/investor/InvestorFundLPs.jsx');
   assert.doesNotMatch(lps, /ProofOfFunds|proof_of_funds/);

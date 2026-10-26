@@ -15,8 +15,8 @@
  *               that read failed) and `eligible_total`.
  *
  * Both Formation desks serve every startup, not only the Lab's. The "Lab
- * ventures · All startups" switch waits for part 4 (#2751); nothing here
- * filters by venture in the browser meanwhile.
+ * ventures · All startups" switch (#2751) sends its scope to the Worker, which
+ * filters; nothing here filters by venture in the browser.
  *
  * A failed read says so with Try again and never draws a zero or "none yet";
  * a figure no store holds says "Not recorded" with its reason. Every write

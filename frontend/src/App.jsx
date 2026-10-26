@@ -43,7 +43,8 @@ import {
   ChevronDown, Eye, Sparkles,
   Gift, Mail, Globe
 } from 'lucide-react';
-import { SIDEBAR_GROUPS, filterItemsByTier, hasInvestorTier, FOUNDER_FULL_BLEED, INVESTOR_FULL_BLEED, ADVISOR_FULL_BLEED, PARTNER_FULL_BLEED, SHARED_FULL_BLEED, SHARED_FULL_BLEED_PREFIXES, ONBOARDING_CANVAS_PATHS } from './sidebarConfig';
+import { SIDEBAR_GROUPS, filterItemsByTier, hasInvestorTier, withDiligenceRow, FOUNDER_FULL_BLEED, INVESTOR_FULL_BLEED, ADVISOR_FULL_BLEED, PARTNER_FULL_BLEED, SHARED_FULL_BLEED, SHARED_FULL_BLEED_PREFIXES, ONBOARDING_CANVAS_PATHS } from './sidebarConfig';
+import { useDiligenceInvolvement } from './pages/duediligence/useDiligenceInvolvement';
 import { isCyclePath } from './pages/cycles/cyclePaths';
 import { BOUNDARY_ROLES as NARRATIVE_BOUNDARY_ROLES } from './pages/raise/narrative/narrativeModel';
 import { adminRefusal } from './pages/hq/hqNoticeModel';
@@ -126,7 +127,8 @@ const WellbeingResourceLibrary = lazy(() => import('./pages/wellbeing/WellbeingR
 const ExpertProfilePage = lazy(() => import('./pages/ExpertProfilePage'));
 const ExpertEditorPage = lazy(() => import('./pages/ExpertEditorPage'));
 const TicketsPage = lazy(() => import('./pages/TicketsPage'));
-const DealsPage = lazy(() => import('./pages/DealsPage'));
+// D1242 (#3255): Deal flow's Studio lens, for an admin or an Operating Partner; DealsPage is retired.
+const StudioLensRoute = lazy(() => import('./pages/investor/dealflow/StudioLens').then((m) => ({ default: m.StudioLensRoute })));
 const DealRoomPage = lazy(() => import('./pages/DealRoomPage'));
 const PartnerOnboardPage = lazy(() => import('./pages/PartnerOnboardPage'));
 const AdminPartnerInvitations = lazy(() => import('./pages/admin/PartnerInvitations'));
@@ -1143,7 +1145,9 @@ function ProtectedLayout({ children, user, onLogout, viewMode, onViewModeChange,
   // Padding and the footer are the gaps around it; both have to go, or the
   // landscape stops short of the sidebar and the bottom of the body.
   const onboardingCanvas = ONBOARDING_CANVAS_PATHS.includes(location.pathname);
-  const sidebarGroups = getSidebarGroups(activeRole || 'founder', primaryPersonaId, user, hqView);
+  // D1252 (#3267): "Diligence" for a partner, investor or advisor who leads or reviews a case.
+  const ddInvolved = useDiligenceInvolvement(user, shellRole);
+  const sidebarGroups = withDiligenceRow(getSidebarGroups(activeRole || 'founder', primaryPersonaId, user, hqView), shellRole, ddInvolved);
   // D285 / H36 — which sub-navigation strip this location sits under, in the
   // HQ shell only. The strips are written below as LITERAL links rather than
   // mapped from `HQ_STRIPS`, because the reachability guard reads navigation
@@ -3394,11 +3398,11 @@ function AppInner() {
           pill row and nothing. `InvestorDealsRoutes` answers the root with the
           bucket board, the same overview every partner and advisor root has.
 
-          The non-investor arm is untouched: `investorWorkspace` returned the
-          bare component for any other effective role, and a partner reading
-          /deals still gets `DealsPage` exactly as before. */}
+          The non-investor arm is Deal flow's Studio lens (D1242, #3255): the
+          same list for an admin or an Operating Partner, on the round's
+          status, which replaced the retired `DealsPage`. */}
       <Route path="/deals" element={guard(['admin', 'partner', 'investor'],
-        effectiveRole === 'investor' ? <InvestorDealsRoutes /> : <DealsPage />)} />
+        effectiveRole === 'investor' ? <InvestorDealsRoutes /> : <StudioLensRoute role={effectiveRole} />)} />
 
       {/* ── Deals · the four stages, as four routes ──────────────────────────
           The zone slugs are InvestorDealsWorkspace's own anchor ids with the

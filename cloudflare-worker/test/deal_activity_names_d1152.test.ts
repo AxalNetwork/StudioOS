@@ -82,18 +82,14 @@ test('an investor reads their own rows as "You", another investor\'s commitment 
   } finally { db.close(); }
 });
 
-test('an admin and the deal\'s founder read every investor by name and amount; a partner reads none', async () => {
+test('an admin, the deal\'s founder and an Operating Partner read every investor by name and amount (D1155, DL15)', async () => {
   const db = freshDb();
   try {
-    for (const who of [ADMIN, FOUNDER]) {
+    for (const who of [ADMIN, FOUNDER, PARTNER]) {
       const labels = (await activity(db, who)).body.map((e: any) => e.label);
       assert.ok(labels.includes('Ben Backer committed 75,000 USD'), `${ROLE[who]}: ${labels}`);
       assert.ok(labels.includes('Ada Angel committed 50,000 USD'));
       assert.ok(labels.includes('Ada Angel invited — interested'));
     }
-    const p = await activity(db, PARTNER);
-    assert.equal(p.status, 200, p.text);
-    assert.deepEqual(p.body.map((e: any) => e.label), ['An investor committed', 'An investor committed', 'Deal created']);
-    for (const name of ['Ada Angel', 'Ben Backer', '50,000', '75,000']) assert.ok(!p.text.includes(name), name);
   } finally { db.close(); }
 });

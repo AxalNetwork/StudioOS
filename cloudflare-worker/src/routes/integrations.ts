@@ -68,6 +68,7 @@ import { extraScopes, hasScopeOverreach, validateConnectorSettings } from '../in
 import { stripTrailingSlashes } from '../util/url';
 import { fedCounts } from '../integrations/fed';
 import { accessToken, accessibleRepositories, checkChoice, grantedPermissions, githubInstallUrl, readProgress } from '../integrations/providers/github';
+import { syncedWithOf } from '../integrations/providers/github/lovableMark';
 
 const integrations = new Hono<{ Bindings: Env }>();
 
@@ -927,6 +928,8 @@ integrations.get('/:uid/repositories', async (c) => {
       install_url: githubInstallUrl(c.env),
       selected: Array.isArray(cfg.repositories) ? cfg.repositories : [],
       project_id: cfg.project_id ?? null,
+      // D1084: the founder's "Synced with Lovable" marks, on picked repositories only; absent when there are none.
+      ...(Object.keys(syncedWithOf(cfg)).length ? { synced_with: syncedWithOf(cfg) } : {}),
     });
   } catch (e) {
     return refuse(c, 502, { code: 'repositories_unreadable', message: 'GitHub did not list the repositories. Check the connection and try again.', raw: e, audience: 'owner' });

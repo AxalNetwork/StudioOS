@@ -9,25 +9,28 @@ const commits = [commit('2026-03-25T12:00:00Z'), commit('2026-03-25T13:00:00Z', 
 const marker = (day) => `<!-- studioos-daily-release:${day} -->`;
 
 test('versions count commit months cumulatively, with zero-based active weeks and days reset monthly', () => {
-  assert.equal(nextReleaseTag(['2026-03-25']), 'v1.0.1');
-  assert.equal(nextReleaseTag(['2026-03-25', '2026-03-25', '2026-04-02']), 'v2.0.1');
-  assert.equal(nextReleaseTag(['2026-12-31', '2027-01-01']), 'v2.0.1');
-  assert.equal(nextReleaseTag(['2025-10-23', '2026-10-23']), 'v2.0.1');
-  assert.equal(nextReleaseTag(['2026-10-18', '2026-10-19']), 'v1.0.2');
-  assert.equal(nextReleaseTag(['2026-10-07', '2026-10-08']), 'v1.1.2');
+  assert.equal(nextReleaseTag(['2026-03-25']), 'v1.0.1-alpha');
+  assert.equal(nextReleaseTag(['2026-03-25', '2026-03-25', '2026-04-02']), 'v2.0.1-alpha');
+  assert.equal(nextReleaseTag(['2026-12-31', '2027-01-01']), 'v2.0.1-alpha');
+  assert.equal(nextReleaseTag(['2025-10-23', '2026-10-23']), 'v2.0.1-alpha');
+  assert.equal(nextReleaseTag(['2026-10-18', '2026-10-19']), 'v1.0.2-alpha');
+  assert.equal(nextReleaseTag(['2026-10-07', '2026-10-08']), 'v1.1.2-alpha');
   const october = Array.from({ length: 23 }, (_, i) => `2026-10-${String(i + 1).padStart(2, '0')}`);
   const earlierMonths = [3, 4, 5, 6, 7, 8, 9].map((m) => `2026-${String(m).padStart(2, '0')}-25`);
-  assert.equal(nextReleaseTag([...earlierMonths, ...october]), 'v8.3.23');
-  assert.equal(nextReleaseTag(october.filter((d) => !d.endsWith('-02'))), 'v1.3.22');
-  assert.equal(nextReleaseTag(['2026-10-01', '2026-10-08', '2026-10-22']), 'v1.2.3');
-  assert.equal(nextReleaseTag(Array.from({ length: 31 }, (_, i) => `2026-10-${String(i + 1).padStart(2, '0')}`)), 'v1.4.31');
+  assert.equal(nextReleaseTag([...earlierMonths, ...october]), 'v8.3.23-alpha');
+  assert.equal(nextReleaseTag(october.filter((d) => !d.endsWith('-02'))), 'v1.3.22-alpha');
+  assert.equal(nextReleaseTag(['2026-10-01', '2026-10-08', '2026-10-22']), 'v1.2.3-alpha');
+  assert.equal(nextReleaseTag(Array.from({ length: 31 }, (_, i) => `2026-10-${String(i + 1).padStart(2, '0')}`)), 'v1.4.31-alpha');
   for (const days of [[], ['bad'], ['2026-02-30']]) assert.throws(() => nextReleaseTag(days));
+  // Mutation checked: drop the suffix → every tag above reads without -alpha.
+  assert.equal(nextReleaseTag(['2026-03-25'], 'beta'), 'v1.0.1-beta');
+  assert.equal(nextReleaseTag(['2026-03-25'], 'stable'), 'v1.0.1');
 });
 
 test('one plan per UTC main commit day, exact final commit and comparison boundary', () => {
   assert.deepEqual(dailyReleasePlan(commits), [
-    { date: '2026-03-25', target: sha(2), count: 2, tag: 'v1.0.1', previous: null },
-    { date: '2026-04-02', target: sha(3), count: 1, tag: 'v2.0.1', previous: sha(2) },
+    { date: '2026-03-25', target: sha(2), count: 2, tag: 'v1.0.1-alpha', previous: null },
+    { date: '2026-04-02', target: sha(3), count: 1, tag: 'v2.0.1-alpha', previous: sha(2) },
   ]);
   assert.equal(dailyReleasePlan([commit('2026-03-25T23:30:00-02:00')])[0].date, '2026-03-26');
   assert.deepEqual(dailyReleasePlan([]), []);
@@ -37,9 +40,9 @@ test('one plan per UTC main commit day, exact final commit and comparison bounda
 
 test('draft names, dates, counts and comparison links describe that day, not publication day', () => {
   const [first, last] = dailyReleasePlan(commits).map((row) => draftPayload(row, 'test/repo'));
-  assert.equal(first.tag_name, 'v1.0.1');
+  assert.equal(first.tag_name, 'v1.0.1-alpha');
   assert.equal(last.target_commitish, sha(3));
-  assert.equal(last.name, 'v2.0.1');
+  assert.equal(last.name, 'v2.0.1-alpha');
   assert.equal(last.draft, true);
   assert.equal(last.prerelease, false);
   assert.match(first.body, /2 commits on main/);
@@ -67,9 +70,9 @@ function fake(releases) {
 
 test('backfill creates every missing day despite legacy releases being published today', async () => {
   const f = fake([{ id: 10, tag_name: 'v0.28.0-alpha', draft: false, published_at: '2026-10-23T17:00:00Z' }]);
-  assert.deepEqual(await updateDraft({ ...f, repo: 'test/repo', commits }), { days: 2, written: 2, frozen: 0, latest: 'v2.0.1' });
+  assert.deepEqual(await updateDraft({ ...f, repo: 'test/repo', commits }), { days: 2, written: 2, frozen: 0, latest: 'v2.0.1-alpha' });
   assert.deepEqual(f.writes.map((w) => [w.path, w.method, w.body.tag_name, w.body.target_commitish]), [
-    ['/repos/test/repo/releases', 'POST', 'v1.0.1', sha(2)], ['/repos/test/repo/releases', 'POST', 'v2.0.1', sha(3)],
+    ['/repos/test/repo/releases', 'POST', 'v1.0.1-alpha', sha(2)], ['/repos/test/repo/releases', 'POST', 'v2.0.1-alpha', sha(3)],
   ]);
   assert.deepEqual(f.pauses, [1100, 1100]);
 });
@@ -77,11 +80,11 @@ test('backfill creates every missing day despite legacy releases being published
 test('only matching drafts refresh; published daily versions and legacy releases are fixed', async () => {
   const f = fake([
     { id: 10, tag_name: 'v0.28.0-alpha', draft: false },
-    { id: 11, tag_name: 'v1.0.1', draft: false, target_commitish: sha(1), body: marker('2026-03-25') },
-    { id: 12, tag_name: 'v2.0.1', draft: true, body: marker('2026-04-02') },
-    { id: 13, tag_name: 'v90.1.1', draft: true, body: marker('2026-05-01') },
+    { id: 11, tag_name: 'v1.0.1-alpha', draft: false, target_commitish: sha(1), body: marker('2026-03-25') },
+    { id: 12, tag_name: 'v2.0.1-alpha', draft: true, body: marker('2026-04-02') },
+    { id: 13, tag_name: 'v90.1.1-alpha', draft: true, body: marker('2026-05-01') },
   ]);
-  assert.deepEqual(await updateDraft({ ...f, repo: 'test/repo', commits }), { days: 2, written: 1, frozen: 1, latest: 'v2.0.1' });
+  assert.deepEqual(await updateDraft({ ...f, repo: 'test/repo', commits }), { days: 2, written: 1, frozen: 1, latest: 'v2.0.1-alpha' });
   assert.equal(f.writes.length, 1);
   assert.equal(f.writes[0].path, '/repos/test/repo/releases/12');
   assert.equal(f.writes[0].method, 'PATCH');
@@ -101,7 +104,7 @@ test('unchanged drafts are idempotent and dry-run makes no release writes or wai
 });
 
 test('an unrelated release with the same tag fails before writing', async () => {
-  const f = fake([{ id: 30, tag_name: 'v1.0.1', draft: false, body: 'unrelated' }]);
+  const f = fake([{ id: 30, tag_name: 'v1.0.1-alpha', draft: false, body: 'unrelated' }]);
   await assert.rejects(updateDraft({ ...f, repo: 'test/repo', commits }), /another release/);
   assert.deepEqual(f.writes, []);
 });
@@ -109,6 +112,8 @@ test('an unrelated release with the same tag fails before writing', async () => 
 test('workflow fetches complete main history and versions still parse in the badge', () => {
   assert.match(readFileSync('.github/workflows/release-draft.yml', 'utf8'), /fetch-depth: 0/);
   assert.equal(parseRelease('v0.28.0-alpha').stage, 'alpha');
+  assert.deepEqual(releaseBadge('v8.3.23-alpha'), { label: 'v8.3.23-alpha', stage: 'alpha' });
+  // #2655's unsuffixed tags (v1.0.1 to v8.3.26) still parse until they are renamed.
   assert.deepEqual(releaseBadge('v8.3.23'), { label: 'v8.3.23', stage: 'stable' });
   assert.equal(parseRelease('bad'), null);
   assert.deepEqual(releaseBadge(''), { label: 'alpha', stage: 'alpha' });
@@ -127,19 +132,19 @@ test('long notes remain bounded', () => {
 });
 
 test('a published daily release with an unpinned target fails without writing', async () => {
-  const f = fake([{ id: 11, tag_name: 'v1.0.1', draft: false, target_commitish: 'main', body: marker('2026-03-25') }]);
+  const f = fake([{ id: 11, tag_name: 'v1.0.1-alpha', draft: false, target_commitish: 'main', body: marker('2026-03-25') }]);
   await assert.rejects(updateDraft({ ...f, repo: 'test/repo', commits }), /pin its commit/);
   assert.deepEqual(f.writes, []);
 });
 
 test('renaming a draft frees its old tag before a later day reuses that version', async () => {
   const f = fake([
-    { id: 1, tag_name: 'v1.1.2', draft: true, body: marker('2026-03-01') },
-    { id: 2, tag_name: 'v2.2.2', draft: true, body: marker('2026-03-08') },
+    { id: 1, tag_name: 'v1.1.2-alpha', draft: true, body: marker('2026-03-01') },
+    { id: 2, tag_name: 'v2.2.2-alpha', draft: true, body: marker('2026-03-08') },
   ]);
   const result = await updateDraft({ ...f, repo: 'test/repo', commits: [commit('2026-03-01T12:00:00Z'), commit('2026-03-08T12:00:00Z', 2)] });
   assert.equal(result.written, 2);
-  assert.deepEqual(f.writes.map((w) => [w.path, w.body.tag_name]), [['/repos/test/repo/releases/1', 'v1.0.1'], ['/repos/test/repo/releases/2', 'v1.1.2']]);
+  assert.deepEqual(f.writes.map((w) => [w.path, w.body.tag_name]), [['/repos/test/repo/releases/1', 'v1.0.1-alpha'], ['/repos/test/repo/releases/2', 'v1.1.2-alpha']]);
   f.writes.length = 0;
   assert.equal((await updateDraft({ ...f, repo: 'test/repo', commits: [commit('2026-03-01T12:00:00Z'), commit('2026-03-08T12:00:00Z', 2)], dryRun: true })).written, 2);
   assert.deepEqual(f.writes, []);

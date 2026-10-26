@@ -29,6 +29,7 @@
  * Dismiss below without registering the provider.
  */
 import type { Env } from '../../../types';
+import { syncedWithOf } from './lovableMark';
 
 export const DESIGN_DIRS = ['docs', 'doc', 'adr', 'docs/adr'] as const;
 const ADR_DIRS = new Set<string>(['adr', 'docs/adr']);
@@ -293,7 +294,7 @@ export async function syncSolutionDesign(
 /** What Solution design shows from code: Built with, the pending proposals, the accepted notes. */
 export async function solutionDesignFromCode(env: Env, projectId: number) {
   const stacks = (await env.DB.prepare(
-    `SELECT s.repository, s.languages_json, s.topics_json, s.updated_at
+    `SELECT s.repository, s.languages_json, s.topics_json, s.updated_at, i.config_json
        FROM solution_design_stack s
        JOIN connector_fed_items l ON l.local_table = 'solution_design_stack' AND l.local_id = s.id AND l.kind = 'stack'
        JOIN integrations i ON i.id = s.integration_id
@@ -317,11 +318,20 @@ export async function solutionDesignFromCode(env: Env, projectId: number) {
         topics: stackTopics(parse(s.topics_json, [])),
         updated_at: s.updated_at,
         source_label: 'From GitHub',
+        // D1084: the founder's mark on the connection that feeds this repository, only when set; never guessed.
+        ...markOf(s.config_json, s.repository),
       };
     }),
     proposals: proposals.map((p) => ({ id: p.id, repository: p.repository, path: p.path, title: p.title, extract: p.extract ?? null, url: safeGithubUrl(p.url) })),
     notes: notes.map((n) => ({ id: n.id, title: n.title, body: n.body ?? null, source_url: safeGithubUrl(n.source_url), source_path: n.source_path ?? null, created_at: n.created_at })),
   };
+}
+
+/** D1084: `{ synced_with }` when the connection's owner marked this repository, else nothing. */
+function markOf(configJson: string | null, repository: string): { synced_with?: 'lovable' } {
+  let cfg: Record<string, unknown> = {};
+  try { cfg = JSON.parse(configJson || '{}'); } catch { return {}; }
+  return syncedWithOf(cfg)[repository] === 'lovable' ? { synced_with: 'lovable' } : {};
 }
 
 /** A link is drawn only when it is GitHub's own https page. */

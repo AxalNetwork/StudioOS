@@ -1,7 +1,7 @@
 import React, { useRef, useState } from 'react';
 import { Lightbox, actionDanger, actionGhost, actionPrimary } from '../../../ui';
 import { reportError } from '../../../lib/log';
-import { refusalWords } from './companiesModel';
+import { nameClash, refusalWords } from './companiesModel';
 
 /**
  * D1138 (#3018) — the section's two in-page dialogs: answering an invitation
@@ -46,14 +46,19 @@ export function ConfirmDialog({ title, body, button, danger = false, run, onClos
 
 export const NAME_MAX = 200;
 
-/** New company: you become its primary admin, and it becomes active on this device. */
-export function NewCompanyDialog({ create, onClose, onDone }) {
+/**
+ * New company: you become its primary admin, and it becomes active on this
+ * device. D1139 (CMP6): a name one of your companies already has is said
+ * under the field before anything is sent; the Worker refuses it either way.
+ */
+export function NewCompanyDialog({ create, companies = [], onClose, onDone }) {
   const [name, setName] = useState('');
   const [busy, setBusy] = useState(false);
   const [refusal, setRefusal] = useState('');
   const lock = useRef(false);
   const trimmed = name.trim();
-  const ready = trimmed.length > 0 && trimmed.length <= NAME_MAX;
+  const clash = nameClash(trimmed, companies);
+  const ready = trimmed.length > 0 && trimmed.length <= NAME_MAX && !clash;
   const close = () => { if (!lock.current) onClose(); };
   const go = async () => {
     if (lock.current || !ready) return;
@@ -77,6 +82,7 @@ export function NewCompanyDialog({ create, onClose, onDone }) {
           <span className="text-[10.5px] font-bold uppercase tracking-[.07em] text-axal-muted dark:text-gray-400">Name</span>
           <input value={name} onChange={(e) => setName(e.target.value)} maxLength={NAME_MAX} className={FIELD} data-testid="new-company-name" />
           <span className={SUB}>{trimmed.length} / {NAME_MAX} characters</span>
+          {clash ? <span role="alert" className={ERR} data-testid="new-company-clash">You already have a company called {clash}.</span> : null}
         </label>
         {refusal ? <p role="alert" className={ERR} data-testid="new-company-refusal">{refusal}</p> : null}
       </div>

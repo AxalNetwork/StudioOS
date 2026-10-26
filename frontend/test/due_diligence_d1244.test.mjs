@@ -14,7 +14,7 @@ import { renderToStaticMarkup } from 'react-dom/server';
 import { MemoryRouter } from 'react-router-dom';
 import { DdCaseTabBody, DdCaseTabs, DdListTabBody, DdListTabs } from '../src/pages/duediligence/DdTabs.jsx';
 import {
-  ADMIN_BASE, CASE_TABS, LIST_TABS, MEMBER_BASE, NOT_YET, ON_OVERVIEW, PAGE_LINE, TITLE, WAITS,
+  ADMIN_BASE, CASE_TABS, LIST_TABS, MEMBER_BASE, ON_OVERVIEW, PAGE_LINE, TITLE, WAITS,
   bandWord, baseOf, caseHref, decisionWord, listHref, viewOf,
 } from '../src/pages/duediligence/ddModel.js';
 
@@ -71,9 +71,10 @@ test('the list tabs are links on the caller’s base, the open one marked', () =
   assert.ok(member.includes('href="/due-diligence/my-reviews"') && !member.includes('/admin/'), 'a member never gets an /admin link');
 });
 
-test('My reviews waits, with its reason; Templates is drawn (D1250)', () => {
+test('My reviews is drawn (D1252) and Templates is drawn (D1250); neither waits', () => {
   const mine = html('/due-diligence/my-reviews', h(DdListTabBody, { tab: 'my-reviews' }));
-  assert.ok(mine.includes('data-testid="dd-wait-my-reviews"') && mine.includes(NOT_YET));
+  assert.ok(mine.includes('data-testid="dd-list-my-reviews"') && !mine.includes('data-testid="dd-wait-my-reviews"'));
+  assert.equal(WAITS['my-reviews'], undefined, 'D1252 reads the caller\'s reviews');
   assert.equal(WAITS.templates, undefined, 'D1250 reads the template store');
 });
 

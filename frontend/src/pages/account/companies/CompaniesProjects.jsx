@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { Link, useLocation } from 'react-router-dom';
+import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { api, getActiveCompanyId } from '../../../lib/api';
 import { accountCompaniesApi } from '../../../lib/api/accountCompanies.js';
 import { isSuperAdminUser } from '../../../lib/shellRole';
@@ -8,9 +8,11 @@ import { useActiveCompany } from '../../../contexts/ActiveCompanyContext';
 import { useCompanySwitch } from '../../../ui/CompanySwitcher';
 import { HeaderTab, Unreadable, actionPrimary, usePhoneWidth } from '../../../ui';
 import { ConfirmDialog, NewCompanyDialog } from './CompaniesDialogs';
+import CompanyLightbox from './CompanyLightbox';
+import VentureLightbox from './VentureLightbox';
 import {
   ACTIVE_HERE, ACTIVE_LINE, ADMIN_LINE, ADVISOR_LINE, EXPLORER_LINE, LINE, SHARED_LINE, TAB_LABELS, TITLE,
-  answerCopy, canCreate, companiesTabFor, companyCards, engagementRows, filterCards, filterVentures, fundGroups,
+  answerCopy, canCreate, companiesTabFor, companyCards, companyPathFor, companyUidFor, engagementRows, filterCards, filterVentures, fundGroups,
   invitationRows, profileOf, projectGroups, tabCount, tabsFor,
 } from './companiesModel';
 
@@ -24,6 +26,10 @@ import {
  * Unreadable with Try again and never blanks another. The writes here are
  * New company and answering an invitation addressed to you, each in an
  * in-page dialog that says what it changes.
+ *
+ * D1139 (#3019): `/account/companies/<uid>` opens that company's lightbox
+ * (CMP2) over the Companies tab, and a venture's Open its lightbox (CMP4);
+ * the lifecycle dialogs (CMP6–CMP8) open from them.
  */
 
 const CARD = 'rounded-xl border border-axal-hairline bg-white dark:border-gray-800 dark:bg-gray-900';
@@ -101,7 +107,10 @@ function CompanyCard({ c, profile, funds, phone }) {
           {pills}
           <span className={`text-[12px] ${MUTED}`}>{[c.stage, c.title].filter(Boolean).join(' · ') || 'Stage not recorded'}</span>
         </div>
-        {c.active && !phone ? <Link className={LINK} to="/company-settings">Company Settings</Link> : null}
+        <span className="flex items-center gap-3">
+          {c.active && !phone ? <Link className={LINK} to="/company-settings">Company Settings</Link> : null}
+          <Link className={BTN} to={companyPathFor(c.uid)} data-testid={`company-open-${c.uid}`}>Open</Link>
+        </span>
       </div>
       <dl className="m-0 grid gap-2 sm:grid-cols-[110px_minmax(0,1fr)]">
         <dt className={EYE}>Members</dt>
@@ -185,7 +194,7 @@ function CompaniesTab({ read, retry, profile, cards, funds, phone, onNew }) {
 
 // ---------------------------------------------------------------- Projects (CMP3)
 
-function ProjectsTab({ read, retry, summary, profile }) {
+function ProjectsTab({ read, retry, summary, profile, onOpen }) {
   const [q, setQ] = useState('');
   const [company, setCompany] = useState('');
   if (read.status === 'loading' && !read.data) return <Skeleton testId="projects-loading" />;
@@ -213,10 +222,13 @@ function ProjectsTab({ read, retry, summary, profile }) {
           <h3 className={`m-0 flex items-baseline justify-between text-[13.5px] font-extrabold ${INK}`}>{g.title}<span className={`font-mono text-[11.5px] ${MUTED}`}>{g.rows.length}</span></h3>
           <ul className="m-0 flex list-none flex-col gap-2 p-0">
             {g.rows.map((r) => (
-              <li key={r.id} className="flex flex-col gap-0.5 border-t border-axal-hairline pt-2 first:border-0 first:pt-0 dark:border-gray-800" data-testid="project-row">
-                <span className={`text-[14px] font-bold ${INK}`}>{r.name}</span>
-                <span className={`text-[12px] ${MUTED}`}>{r.stage}{r.week ? ` · ${r.week}` : ''} · {r.members} · your seat: {r.seat}</span>
-                <span className={`text-[12px] ${MUTED}`}>{r.cycles}</span>
+              <li key={r.id} className="flex flex-wrap items-center justify-between gap-2 border-t border-axal-hairline pt-2 first:border-0 first:pt-0 dark:border-gray-800" data-testid="project-row">
+                <span className="flex min-w-0 flex-col gap-0.5">
+                  <span className={`text-[14px] font-bold ${INK}`}>{r.name}</span>
+                  <span className={`text-[12px] ${MUTED}`}>{r.stage}{r.week ? ` · ${r.week}` : ''} · {r.members} · your seat: {r.seat}</span>
+                  <span className={`text-[12px] ${MUTED}`}>{r.cycles}</span>
+                </span>
+                <button type="button" className={BTN} onClick={() => onOpen(r)} data-testid={`project-open-${r.id}`}>Open</button>
               </li>
             ))}
           </ul>
@@ -327,16 +339,21 @@ export default function CompaniesProjects({ role }) {
   const phone = usePhoneWidth();
   const auth = useAuth();
   const { company: active, setCompanies, companies: known } = useActiveCompany();
-  const { create } = useCompanySwitch();
+  const { create, switchTo, leave } = useCompanySwitch();
+  const navigate = useNavigate();
+  const meId = auth?.user?.id ?? null;
+  // D1139 — a company uid in the address opens its lightbox over Companies.
+  const openUid = companyUidFor(loc.pathname);
   const profile = profileOf(role, isSuperAdminUser(auth?.user));
   const visible = tabsFor(profile);
   const asked = companiesTabFor(loc.pathname);
   const tab = visible.includes(asked) ? asked : 'companies';
+  const [venture, setVenture] = useState(null);
 
   const [tick, setTick] = useState(0);
   const retry = useCallback(() => setTick((n) => n + 1), []);
   const companies = useRead(readCompanies, true, tick);
-  const projects = useRead(readProjects, visible.includes('projects'), tick);
+  const projects = useRead(readProjects, visible.includes('projects') || !!openUid, tick);
   const invitations = useRead(readInvitations, true, tick);
   const funds = useRead(readFunds, visible.includes('funds'), tick);
   const engagements = useRead(readEngagements, visible.includes('engagements'), tick);
@@ -359,6 +376,7 @@ export default function CompaniesProjects({ role }) {
   };
 
   const refreshSwitcher = () => api.listMyCompanies().then((rows) => { if (Array.isArray(rows)) setCompanies(rows); }).catch(() => {});
+  const changed = (msg, { switcher = false } = {}) => { setDone(msg); if (switcher) refreshSwitcher(); retry(); };
   const answer = (row, kind) => {
     if (kind === 'decline') return accountCompaniesApi.declineProjectInvitation(row.id);
     return row.kind === 'company' ? accountCompaniesApi.acceptCompanyInvitation(row.id) : accountCompaniesApi.acceptProjectInvitation(row.id);
@@ -397,7 +415,7 @@ export default function CompaniesProjects({ role }) {
           {cards.length ? <p className={`m-0 text-[12.5px] ${MUTED}`} data-testid="companies-shared">{SHARED_LINE}</p> : null}
         </>
       )}
-      {tab === 'projects' && <ProjectsTab read={projects} retry={retry} summary={companies.status === 'ready' ? companies.data : null} profile={profile} />}
+      {tab === 'projects' && <ProjectsTab read={projects} retry={retry} summary={companies.status === 'ready' ? companies.data : null} profile={profile} onOpen={setVenture} />}
       {tab === 'funds' && <FundsTab read={funds} retry={retry} groups={fundsByFirm} />}
       {tab === 'engagements' && <EngagementsTab read={engagements} retry={retry} />}
       {tab === 'invitations' && (
@@ -417,8 +435,19 @@ export default function CompaniesProjects({ role }) {
             }} />
         );
       })() : null}
+      {openUid && !venture ? (
+        <CompanyLightbox uid={openUid} card={cards.find((c) => c.uid === openUid) || null}
+          projects={projects.status === 'ready' ? projects.data : null} meId={meId}
+          active={activeUid === openUid} row={(known || []).find((c) => c.uid === openUid) || null}
+          switchTo={switchTo} leave={leave} onChanged={changed} onOpenVenture={setVenture}
+          onClose={() => navigate('/account/companies')} />
+      ) : null}
+      {venture ? (
+        <VentureLightbox venture={venture} companies={cards} meId={meId}
+          onClose={() => setVenture(null)} onChanged={changed} />
+      ) : null}
       {adding ? (
-        <NewCompanyDialog create={create} onClose={() => setAdding(false)}
+        <NewCompanyDialog create={create} companies={companies.status === 'ready' ? companies.data?.companies : known} onClose={() => setAdding(false)}
           onDone={(c) => { setDone(`${c?.company_name || 'The company'} is created and active on this device.`); setAdding(false); retry(); }} />
       ) : null}
     </div>

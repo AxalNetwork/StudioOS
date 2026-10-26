@@ -600,6 +600,35 @@ export const SIDEBAR_GROUPS = {
   ],
 };
 
+/**
+ * D1252 (#3267, #2385 owner question 1) — "Diligence" for a partner, investor
+ * or advisor who leads or reviews a case. They reached Due diligence only by
+ * a link; the partner nav dropped the row on purpose because most never run
+ * one (see the removals above). So the row is added to the one flat group
+ * only when `involved` is true: the caller's own `GET /api/dd/cases` holds a
+ * case they opened, lead or review (`useDiligenceInvolvement`). Admins reach
+ * it through Approvals; a founder (the subject) never sees the case, only
+ * their requests. Placed after Research, never twice.
+ */
+export const DILIGENCE_ROLES = Object.freeze(['partner', 'investor', 'advisor']);
+// `label` first: `scripts/build-profile-routing.mjs` reads `{ to: '…'` lines as each role's static rows, and this
+// row is added only for the people above, so it is not one of them.
+export const DILIGENCE_ROW = Object.freeze({ label: 'Diligence', to: '/due-diligence', icon: Shield, match: ['/due-diligence'] });
+
+export function withDiligenceRow(groups, role, involved) {
+  if (involved !== true || !DILIGENCE_ROLES.includes(role) || !Array.isArray(groups) || !groups.length) return groups;
+  if (groups.some((g) => (g.items || []).some((it) => it.to === DILIGENCE_ROW.to))) return groups;
+  const at = groups.findIndex((g) => (g.items || []).some((it) => it.label === 'Research'));
+  const gi = at >= 0 ? at : 0;
+  return groups.map((g, i) => {
+    if (i !== gi) return g;
+    const items = [...(g.items || [])];
+    const r = items.findIndex((it) => it.label === 'Research');
+    items.splice(r >= 0 ? r + 1 : items.length, 0, DILIGENCE_ROW);
+    return { ...g, items };
+  });
+}
+
 // Decide which group keys should start expanded on a fresh visit:
 // Home + the first non-Home group with items. Returns a Set<string>.
 export function defaultOpenGroups(role) {

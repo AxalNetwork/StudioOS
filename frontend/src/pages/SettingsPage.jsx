@@ -32,7 +32,7 @@ import { BuyTokensCard, PaymentDetailsCard, PlanAllowanceCard, TokenBalanceCard,
 import FollowingSection from './account/AccountFollowing';
 import UsageSection from './account/UsageOverview';
 import CompaniesProjects from './account/companies/CompaniesProjects';
-import { companiesTabFor } from './account/companies/companiesModel';
+import { companiesTabFor, companyUidFor } from './account/companies/companiesModel';
 import CostPage from './account/CostPage';
 // D807 (#2246) — `/account/usage/limits`, Usage's Limits page.
 import LimitsPage from './account/LimitsPage';
@@ -277,6 +277,8 @@ export default function SettingsPage() {
   const usagePage = active === 'usage' ? usagePageFor(location.pathname) : null;
   // D1138 — Companies and projects' tabs are addresses of their own; the canonicalising effect keeps them.
   const companiesTab = active === 'companies' ? companiesTabFor(location.pathname) : null;
+  // D1139 — `/account/companies/<uid>` is that company's lightbox, kept by the same effect.
+  const companyUid = active === 'companies' ? companyUidFor(location.pathname) : null;
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -306,7 +308,7 @@ export default function SettingsPage() {
   // account recovery. A canonicalising hop must not eat the part of the link
   // that said why it was sent.
   useEffect(() => {
-    const want = accountPathFor({ section: active, phone, key: connectorKey, usagePage, companiesTab });
+    const want = accountPathFor({ section: active, phone, key: connectorKey, usagePage, companiesTab, companyUid });
     if (location.pathname !== want && /^\/(?:account|settings)\b/.test(location.pathname)) {
       navigate({ pathname: want, search: location.search, hash: location.hash }, { replace: true, state: location.state });
     }
