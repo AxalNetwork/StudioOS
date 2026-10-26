@@ -20,8 +20,9 @@
  * mark is a dashed "No mark" bar, never its cost.
  */
 import { formatCents } from '../../investor/fundCallsModel.js';
+import { NOT_RECORDED } from '../../../lib/absence.js';
 
-export const NOT_RECORDED = 'Not recorded';
+export { NOT_RECORDED };
 export const NAV_LINE = 'NAV is investments only: the latest dated mark of each position. Cash, liabilities, fees and carry are not included. Paid-in means capital called.';
 export const MARK_INFO = 'Marks are dated and kept. A new mark does not change an old one. LPs see NAV in issued reports only.';
 export const MOVE_INFO = 'Changes which fund’s NAV this position counts in.';
