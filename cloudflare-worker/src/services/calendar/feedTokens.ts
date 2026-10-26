@@ -23,6 +23,13 @@
 import type { Env, User } from '../../types';
 
 export const FEED_SCOPE = 'my_events';
+/**
+ * D1209 (#3175, migration 610): the whole calendar, every kind the member's
+ * own calendar reads ("Mine"), has a token of its own, so either address can
+ * be handed out, replaced or removed without the other.
+ */
+export const CALENDAR_FEED_SCOPE = 'calendar';
+export type FeedScope = typeof FEED_SCOPE | typeof CALENDAR_FEED_SCOPE;
 
 /** 32 random bytes in base64url: 43 characters, no padding. */
 const TOKEN_RE = /^[A-Za-z0-9_-]{43}$/;
@@ -45,33 +52,33 @@ const sqlMs = (s: string | null) => (s ? Date.parse(`${s.replace(' ', 'T')}${/[z
 
 export type FeedStatus = { subscribed: boolean; created_at: string | null; last_used_at: string | null };
 
-export async function feedStatus(env: Env, userId: number): Promise<FeedStatus> {
+export async function feedStatus(env: Env, userId: number, scope: FeedScope = FEED_SCOPE): Promise<FeedStatus> {
   const row = await env.DB.prepare(
     'SELECT created_at, last_used_at FROM calendar_feed_tokens WHERE user_id = ? AND scope = ?',
-  ).bind(userId, FEED_SCOPE).first<{ created_at: string; last_used_at: string | null }>();
+  ).bind(userId, scope).first<{ created_at: string; last_used_at: string | null }>();
   return { subscribed: !!row, created_at: row?.created_at ?? null, last_used_at: row?.last_used_at ?? null };
 }
 
 /** Make the member's token, replacing any older one. The token is returned once. */
-export async function mintFeedToken(env: Env, userId: number, now = new Date()):
+export async function mintFeedToken(env: Env, userId: number, now = new Date(), scope: FeedScope = FEED_SCOPE):
   Promise<{ token: string; created_at: string; replaced: boolean }> {
   const token = base64url(crypto.getRandomValues(new Uint8Array(32)));
   const at = sqlNow(now);
   const before = await env.DB.prepare('SELECT 1 AS x FROM calendar_feed_tokens WHERE user_id = ? AND scope = ?')
-    .bind(userId, FEED_SCOPE).first();
+    .bind(userId, scope).first();
   await env.DB.prepare(
     `INSERT INTO calendar_feed_tokens (user_id, scope, token_sha256, created_at, last_used_at)
      VALUES (?, ?, ?, ?, NULL)
      ON CONFLICT (user_id, scope) DO UPDATE
        SET token_sha256 = excluded.token_sha256, created_at = excluded.created_at, last_used_at = NULL`,
-  ).bind(userId, FEED_SCOPE, await sha256Hex(token), at).run();
+  ).bind(userId, scope, await sha256Hex(token), at).run();
   return { token, created_at: at, replaced: !!before };
 }
 
 /** Remove the member's token. True when there was one. */
-export async function revokeFeedToken(env: Env, userId: number): Promise<boolean> {
+export async function revokeFeedToken(env: Env, userId: number, scope: FeedScope = FEED_SCOPE): Promise<boolean> {
   const r = await env.DB.prepare('DELETE FROM calendar_feed_tokens WHERE user_id = ? AND scope = ?')
-    .bind(userId, FEED_SCOPE).run();
+    .bind(userId, scope).run();
   return Number(r?.meta?.changes || 0) > 0;
 }
 
@@ -79,12 +86,13 @@ export async function revokeFeedToken(env: Env, userId: number): Promise<boolean
  * The member a presented token names, or null. A malformed token, an unknown
  * one, and one refused by the account's state all answer null.
  */
-export async function resolveFeedToken(env: Env, presented: string | null | undefined, now = new Date()):
+export async function resolveFeedToken(env: Env, presented: string | null | undefined, now = new Date(),
+  scope: FeedScope = FEED_SCOPE):
   Promise<User | null> {
   if (!presented || !TOKEN_RE.test(presented)) return null;
   const row = await env.DB.prepare(
     'SELECT id, user_id, created_at FROM calendar_feed_tokens WHERE token_sha256 = ? AND scope = ?',
-  ).bind(await sha256Hex(presented), FEED_SCOPE).first<{ id: number; user_id: number; created_at: string }>();
+  ).bind(await sha256Hex(presented), scope).first<{ id: number; user_id: number; created_at: string }>();
   if (!row) return null;
   // SELECT * as `getCurrentUser` reads it, so the investor plan columns the
   // paywall rule reads are there whichever bootstrap added them.
