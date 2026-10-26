@@ -114,7 +114,7 @@ test('Needs you: each queue that holds something, with the page that decides it;
   const n = buildNeeds(ALL, NOW);
   assert.deepEqual(n.rows.map((r) => [r.key, r.to]), [
     ['unattached', AP_FIRMS_PATH],
-    ['no-profile', '/admin/held/accounts'],
+    ['no-profile', '/admin/accounts'],
     ['ending', '/admin/partner-invitations/deals'],
     ['hosts', '/admin/programs/spinout-lab/hosts'],
     ['no-photo', AP_DECK_PATH],

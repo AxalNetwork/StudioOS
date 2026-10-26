@@ -76,7 +76,7 @@ test('all fourteen rows are present: the canvas\'s eleven in canvas order, with 
   assert.equal(rows.find((r) => r.label === 'Platform')?.to, '/admin/platform');
   const licences = rows.find((r) => r.to === '/admin/licences');
   assert.ok(licences, 'the franchise console must be reachable from the HQ shell');
-  assert.equal(rows.find((r) => r.label === 'Team')?.to, '/admin/accounts',
+  assert.equal(rows.find((r) => r.label === 'Team')?.to, '/admin/hq-team',
     'Team is the cross-tenant accounts table, not the public team-page editor');
   assert.equal(rows.find((r) => r.label === 'Support')?.to, '/admin/hq-support',
     'Support is the three-queue HQ page, not the shared Help Center');
@@ -134,7 +134,7 @@ test("'super_admin' names a shell, never a permission", () => {
 });
 
 test('the HQ-only routes render the notice for an admin without the elevation', () => {
-  for (const path of ['/admin/licences', '/admin/accounts', '/hq', '/admin/security', '/admin/hq-support']) {
+  for (const path of ['/admin/licences', '/admin/hq-team', '/hq', '/admin/security', '/admin/hq-support']) {
     const line = APP.split('\n').find((l) => l.includes(`path="${path}"`));
     assert.ok(line, `${path} must be registered`);
     assert.match(line, /hqOnly\(/, `${path} must be wrapped in hqOnly — the server 403s a plain admin on every call there`);

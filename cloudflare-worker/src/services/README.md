@@ -133,6 +133,7 @@ no new schema, runtime or billing path is introduced.
 | `interviewSuggestions.ts` | D757 §2.6–§2.7 (#1925): what a Validate module reads from interviews, reads only. `moduleSuggestions` is a module's pending engine suggestions (`parts.suggestions`, writers only), each with its interviewee, session, first transcript segment, speaker and link to the line, the quote withheld without consent; `findingsFor` is the accepted findings the ICP, Market and Demand records list, behind the Quotes rule; `acceptedPerModule` is Customer research's "What it fed". Accept, one at a time or all at once, stays in `../routes/founder_validate_structure.ts`. |
 | `eadwynConnectors.ts` | D652's three rules for connectors in an Eadwyn conversation: the read gate (`readableConnectors`: switched on AND active), the sends a run may only propose (`validateSend`, `SEND_TARGETS`), and the one serialisation and SHA-256 of a payload, so confirm sends what was shown. |
 | `tenancyScope.ts` | **The one place row-level scoping is decided.** Returns composable SQL clauses (`esignEnvelopeScope`, `fundGpScope`, `lpMembershipScope`) and fails closed — an actor it cannot identify gets `NO_ROWS`, not everything. |
+| `stagedSigning.ts` | D1216 (#3213): a closing line's paper signed in order — company, investor, then Axal's countersign — on migration 633's `esign_staged_envelopes` and `esign_staged_signers`. Each stage is a single-recipient envelope sent with `createAndSendEnvelope({ renderedBody })` and checked against the recorded digest; the sign route's completion hook sends the next stage, except Axal's, which a Super Admin releases with step-up. The order is also held by the migration's triggers. A counsel draft previews, never sends. The booklet's `bookletSigning.ts` is unchanged. |
 | `signedDownload.ts` | One-time, short-TTL, HMAC-signed R2 download tokens. Every private file download goes through it. |
 | `dealPassTaxonomy.ts` | The five pass reasons and the stage-event recorder. |
 | `backup.ts` | The nightly D1 export to R2. |
@@ -212,6 +213,8 @@ no new schema, runtime or billing path is introduced.
 | `kycCase.ts` | D1229 (#3237): one person's KYC case beyond its status (migration 614): the people queue (`readQueue`, its filters, sort, paging and counts per status, every statement static), the case's history (`recordEvent`), the member's notices (`noticeMember`), the figures (`readFigures`) and the hand-off from an expired `kyc_v1` (`expireKycFromObligations`, called by `trust.ts`). |
 | `licenceTerms.ts` | D797: a licence's terms schedule, the one list of its 31 fields (`LICENCE_TERM_FIELDS`: key, group, label, type and range) and the canvas's section numbers (`DEFAULT_TERM_SECTIONS`), `validateTermsBody` (an unknown key or a bad value is refused, naming the field; `null` clears), `termsFromRow`, `readLicenceTerms`, `termsDiff` and the `TERMS_REASON` sentences. Migration 512's CHECKs hold the same ranges; HQ's write, `/licence/mine`, the branch copy and D800/D801 import it. |
 | `eadwynTools.ts` | D854: Eadwyn uses the MCP registry's tools inside the member's own access. `eadwynToolInfo` lists them (scope and the page's company; D846's filter replaces `eadwynToolAvailable`), `runEadwynToolCalls` re-checks each call the model proposed, runs a read through `callTool` (metered by D844) and turns a write into an `ai_rail_proposals` row, and `toolResultsForModel` hands results back as escaped data. |
+| `capRelAccess.ts` | D1191 (#3125): capital editor access, local staff counts and mandatory founder-visible support audits; contract in the decision file. |
+| `raiseProspectWriters.ts` | D1191: narrow canonical legacy prospect create/edit/promotion writers, re-exported by the Raise writer and safe for Contacts imports. |
 
 ## Rules
 
@@ -273,6 +276,13 @@ model). Since D691 (#1699) each list carries the canvas's title, columns,
 filters and default sort (the first in `sorts`), and its row ids are addresses
 that never hold a name: an item key, a version, a link, file or prospect id, a
 cap-table `h-<n>`, `e-<n>` or `pool`, and a use-of-funds section key.
+D1262 (#3285) names the last complete month's revenue sources and each source's
+metric snapshot; typed traction stays stated. Team backing reads founder/vesting
+and scoped GitHub counts beside the manual assessment. Room opens count only
+open_room/download. Capital exposes separate received/wired/signed/soft totals,
+using confirmed receipts for received; runway prefers a Connector record and
+keeps its source and date. The later Evidence pack and investor projection are
+separate tasks.
 `capRelReads.ts` (D1190, #3124) is Capital relationships' Commitments
 and Match reads: one commitments read across typed prospects, round-call
 answers, deal-room commitments and the founder's Mercury matches, each investor

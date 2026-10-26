@@ -80,6 +80,7 @@ export * from './api/helpCenter.js';
 export * from './api/insights.js';
 export * from './api/interviewSessions.js';
 export * from './api/kyb.js';
+export * from './api/kycGovernance.js';
 export * from './api/kycHq.js';
 export * from './api/kycPeople.js';
 export * from './api/labOperations.js';

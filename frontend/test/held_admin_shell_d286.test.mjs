@@ -80,7 +80,7 @@ test('the nine rows are S20\'s eight, in S20\'s order, with D714\'s Fund admin a
     ['Studio', 'Accounts', 'Approvals', 'Programs', 'Community', 'Contracts', 'Fund admin', 'Insights', 'Licences']);
   assert.deepEqual(rows.map((r) => r.to), [
     '/studio',
-    '/admin/held/accounts',
+    '/admin/accounts',
     '/admin/approvals',
     '/admin/programs',
     '/admin/community',
@@ -101,7 +101,7 @@ test('the nine rows are S20\'s eight, in S20\'s order, with D714\'s Fund admin a
   assert.match(SIDEBAR_SRC, /^\s*\/\/ \{ to: '\/admin\/x', icon: Megaphone, label: 'X \(Twitter\)' \},$/m);
 });
 
-test('the two held landings, Programs, Community and Insights are guard([\'admin\']) without hqOnly, the held two under a prefix no HQ console can collide with', () => {
+test('Accounts, Approvals, Programs, Community and Insights are guard([\'admin\']) without hqOnly, each old held address forwarding', () => {
   for (const [path, page, old, redirect] of [
     ['/admin/insights', 'AdminInsights', '/admin/held/insights', 'HeldInsightsRedirect'],
     ['/admin/community', 'AdminCommunity', '/admin/held/community', 'HeldCommunityRedirect'],
@@ -114,20 +114,22 @@ test('the two held landings, Programs, Community and Insights are guard([\'admin
     assert.doesNotMatch(line, /hqOnly\(/, `${path} is wrapped in hqOnly — this is the plain admin's own shell`);
     assert.match(routeLine(old), new RegExp(`<${redirect} \\/>`), `the old address ${old} no longer redirects`);
   }
+  // D941 (#2746, #2375 question 1, answer A): Accounts took /admin/accounts;
+  // its old held address forwards, and HQ's Team moved to /admin/hq-team.
   for (const [label, file] of Object.entries(LANDINGS)) {
     const row = rows.find((r) => r.label === label);
     assert.ok(row, `${label} has no row`);
-    assert.ok(row.to.startsWith('/admin/held/'), `${label}'s landing is not under /admin/held/`);
+    assert.equal(row.to, '/admin/accounts', `${label}'s landing is not at /admin/accounts`);
     const line = routeLine(row.to);
     assert.ok(line, `${row.to} is not registered`);
-    assert.match(line, /guard\(\['admin'\]/, `${row.to} is not guard(['admin'])`);
+    assert.match(line, /guard\(\['admin'\], <AccountsAddress superAdmin=\{isSuperAdminUser\(user\)\} \/>\)/, `${row.to} is not guard(['admin']) on AccountsAddress`);
     assert.doesNotMatch(line, /hqOnly\(/, `${row.to} is wrapped in hqOnly — this is the plain admin's own shell`);
-    assert.match(APP, new RegExp(`lazy\\(\\(\\) => import\\('\\./pages/admin/${file.split('/').pop().replace('.jsx', '')}'\\)\\)`),
-      `${file} is not lazy-imported by App.jsx`);
+    assert.match(APP, /lazy\(\(\) => import\('\.\/pages\/admin\/AccountsAddress'\)\)/, 'AccountsAddress is not lazy-imported by App.jsx');
+    assert.match(read('frontend/src/pages/admin/AccountsAddress.jsx'), new RegExp(`import HeldAccounts from '\\./${file.split('/').pop().replace('.jsx', '')}'`), `${file} is not what /admin/accounts draws`);
     assert.match(SRC[file], /<HeldZone\b/, `${file} does not render inside HeldZone`);
   }
-  // The collision the prefix avoids: HQ's Team is /admin/accounts and hqOnly.
-  assert.match(routeLine('/admin/accounts'), /hqOnly\(/);
+  assert.match(routeLine('/admin/held/accounts'), /<HeldAccountsRedirect \/>/, 'the old address /admin/held/accounts no longer redirects');
+  assert.match(routeLine('/admin/hq-team'), /hqOnly\(<HqAccountsPage/, 'HQ › Team is not at /admin/hq-team, HQ only');
   // The four landings with consoles keep their row lit inside them.
   for (const label of ['Accounts', 'Approvals', 'Programs', 'Community']) {
     assert.ok(Array.isArray(rows.find((r) => r.label === label).match), `${label} has no match list`);
@@ -341,7 +343,8 @@ test('the Admin rows light by path and `match` alone: no admin page lives on a q
   const row = (label) => rows.find((r) => r.label === label);
   for (const [label, path] of [['Accounts', '/admin/accounts/all'], ['Accounts', '/admin/persona-segments'], ['Approvals', '/admin/kyc'],
     ['Approvals', '/admin/partner-profiles'], ['Community', '/admin/directory'], ['Community', '/admin/wellbeing']]) {
-    assert.ok(row(label).match.includes(path), `${label} does not light on ${path}`);
+    // `match` holds path prefixes (SidebarNav); D941's Accounts owns /admin/accounts and its subtree.
+    assert.ok(row(label).match.some((p) => path === p || path.startsWith(`${p}/`)), `${label} does not light on ${path}`);
   }
 });
 

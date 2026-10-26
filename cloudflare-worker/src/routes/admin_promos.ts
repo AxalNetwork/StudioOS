@@ -1,6 +1,6 @@
 import { Hono } from 'hono';
 import type { Env } from '../types';
-import { requireAdmin, requireFactor, requireStepUp } from '../auth';
+import { requireSuperAdmin, requireSuperAdminWriteBar } from '../auth';
 import { stripeCall } from './billing';
 import { ensureAdminAuditLogTable } from './admin';
 import {
@@ -15,8 +15,8 @@ import { refusalBody } from '../util/refusal';
 
 // Task #9 — Promo Code admin CRUD. Mounted at `/api/admin/promos` BEFORE the
 // catch-all `/api/admin` in index.ts so the nested routes resolve here (same
-// mount-precedence trick as `/api/admin/billing`). Each mutation enforces
-// `requireFactor('totp')` + `requireStepUp` + `requireAdmin` — creating a
+// mount-precedence trick as `/api/admin/billing`). D1271: reads require the
+// HQ Super Admin; each mutation takes `requireSuperAdminWriteBar` — creating a
 // 100%-off code is money-adjacent, so it needs a RECENT strong-factor re-auth,
 // not just a long-lived admin JWT. `/api/admin/promos` is also in index.ts's
 // COOL_OFF_PREFIXES so a freshly-recovered admin can't mint promos during
@@ -93,18 +93,16 @@ async function audit(
   }
 }
 
-// GET /api/admin/promos — list the mirror (admin read; no step-up needed).
+// GET /api/admin/promos — HQ Super Admin mirror read; no step-up needed.
 adminPromos.get('/', async (c) => {
-  await requireAdmin(c);
+  await requireSuperAdmin(c);
   const promos = await listPromos(c.env);
   return c.json({ promos });
 });
 
 // POST /api/admin/promos — create a Coupon + Promotion Code, mirror to D1.
 adminPromos.post('/', async (c) => {
-  await requireFactor(c, 'totp');
-  await requireStepUp(c);
-  const admin = await requireAdmin(c);
+  const admin = await requireSuperAdminWriteBar(c);
   if (!c.env.STRIPE_SECRET_KEY) {
     return c.json({ error: 'Stripe is not configured', code: 'stripe_not_configured' }, 503);
   }
@@ -278,9 +276,7 @@ adminPromos.post('/', async (c) => {
 
 // PATCH /api/admin/promos/:id — toggle active (enable/disable redemption).
 adminPromos.patch('/:id', async (c) => {
-  await requireFactor(c, 'totp');
-  await requireStepUp(c);
-  const admin = await requireAdmin(c);
+  const admin = await requireSuperAdminWriteBar(c);
   if (!c.env.STRIPE_SECRET_KEY) {
     return c.json({ error: 'Stripe is not configured', code: 'stripe_not_configured' }, 503);
   }
@@ -307,9 +303,7 @@ adminPromos.patch('/:id', async (c) => {
 // "delete" = deactivate the promotion code AND delete the backing coupon
 // (best-effort) so it can never be redeemed again.
 adminPromos.delete('/:id', async (c) => {
-  await requireFactor(c, 'totp');
-  await requireStepUp(c);
-  const admin = await requireAdmin(c);
+  const admin = await requireSuperAdminWriteBar(c);
   if (!c.env.STRIPE_SECRET_KEY) {
     return c.json({ error: 'Stripe is not configured', code: 'stripe_not_configured' }, 503);
   }

@@ -147,7 +147,7 @@ test('the newest version\'s mismatches name the figure and both sources; no vers
   assert.equal(n.compared, 1);
   assert.equal(n.mismatches.length, 1);
   assert.equal(n.mismatches[0].figure, 'MRR');
-  assert.match(n.mismatches[0].sentence, /\$18,400 in Narrative · traction\.takeaway, \$16,950 in Metrics \(stated: manual\) · project_metrics\.mrr on 2026-09-30/);
+  assert.match(n.mismatches[0].sentence, /\$18,400 in Narrative · traction\.takeaway, \$16,950 in Metrics \(stated: source not recorded\) · project_metrics\.mrr on 2026-09-30/);
 });
 
 test('the versions table: Audience, Based on, Read by deck and By; a version saved before 463 reads Not recorded (null)', async () => {

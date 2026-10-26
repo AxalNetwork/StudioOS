@@ -17,14 +17,5 @@
       "reason": "The atomic rebuild of users under its own name, in one batch: copy to a temporary table, DROP users, re-create users from a DDL string built at runtime, copy back, drop the temporary table. The temporary name exists only inside the batch and users exists before and after it, so the rebuild changes a column constraint, never the set of object names step 9 compares."
     }
   },
-  "columns": {
-    "commissions.reversed_amount_cents": {
-      "type": "INTEGER",
-      "reason": "services/referralCommissions.ts:43 adds it in dev and preview only (ensureClawbackColumns returns early when ENVIRONMENT is production, and its comment says production owns the column via migration). No migration declares it, so a fresh build and, read as the code stands, production lack a column the clawback UPDATE writes. Declaring it needs a migration number from the issue; found by D359's column comparison on 2026-10-04."
-    },
-    "commissions.reversed_at": {
-      "type": "TIMESTAMP",
-      "reason": "services/referralCommissions.ts:44 adds it in dev and preview only (ensureClawbackColumns returns early when ENVIRONMENT is production, and its comment says production owns the column via migration). No migration declares it, so a fresh build and, read as the code stands, production lack a column the clawback UPDATE writes. Declaring it needs a migration number from the issue; found by D359's column comparison on 2026-10-04."
-    }
-  }
+  "columns": {}
 }
