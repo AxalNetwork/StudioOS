@@ -4,7 +4,9 @@
  *
  * Each writer validates its values against a fixed list and binds every one
  * of them. None decides who may write: `routes/cycle_raise.ts` and the
- * record route check `canWrite` on the project first. Every id a write takes,
+ * record route check their project gate first (`canWrite`, or D1191's capital
+ * editor gate). Legacy prospect create/import/edit/promotion enter here too.
+ * Every id a write takes,
  * in its path or its body, is checked here with `ownedRow` (D690), the same
  * check the record route makes, and answers 404 when it is not this venture's.
  *
@@ -602,6 +604,9 @@ export async function addProspect(env: Env, a: { projectId: number; userId: numb
   await logRaise(env, a.userId, a.projectId, 'capital-relationships', id, 'prospect_created', `Investor added at ${STAGE_TEXT[stage]}`);
   return { id };
 }
+
+// Contacts uses the narrow leaf; all Raise writers share its implementation.
+export { addLegacyProspect, updateLegacyProspect, promoteLegacyInvestor } from './raiseProspectWriters';
 
 /**
  * D1192 (#3126, CRL5): Import, parsed client-side, at most 50 rows a request.
