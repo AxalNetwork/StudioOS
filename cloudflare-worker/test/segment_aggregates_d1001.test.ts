@@ -285,3 +285,13 @@ for (const suffix of ['answers', 'archetypes']) {
     assert.equal((await read(db, suffix)).status, 503);
   });
 }
+
+test('D1005 (#2820): the production app mounts these reads, before the segment profiles, so /:key/answers is never read as a profile', () => {
+  // Mutations checked: the mount removed; mounted after the profile router.
+  const index = readFileSync('cloudflare-worker/src/index.ts', 'utf8');
+  assert.match(index, /^import segmentAggregates from '\.\/routes\/persona_segment_aggregates';$/m);
+  const mine = index.indexOf("app.route('/api/personas/segments', segmentAggregates);");
+  const profiles = index.indexOf("app.route('/api/personas/segments', personaSegments);");
+  assert.ok(mine > 0, 'D1001\'s reads are not mounted');
+  assert.ok(mine < profiles, 'mounted after the profile router');
+});

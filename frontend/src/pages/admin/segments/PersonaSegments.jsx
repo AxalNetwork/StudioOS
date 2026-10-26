@@ -9,7 +9,6 @@ import { isSuperAdminUser } from '../../../lib/shellRole';
 import { AdminPageHeader, HeaderTab, useMovedNotice } from '../../../ui';
 import { Chart, ChartTable } from '../../../ui/Charts';
 import AdminBoardFrame from '../AdminBoardFrame';
-import { PersonasPanel } from '../consoles/PersonasConsole';
 import {
   ACCOUNTS_PATH, ADMIN_RAIL_NOTE, ALL_FAILED, ALL_FAILED_LINE, BLOCK_FAILED, CONTENT_PATH, LIST_FAILED, NOT_PER_PROFILE, NOT_YET, OFFER_KINDS,
   PAGE_LINE, PROFILE_FILTERS, RAIL_NOTE, SCOPE_LINE, SEG_TITLE, STATUS_WORD,
@@ -27,10 +26,10 @@ import {
  * segment counts over every account but admins (no Guard L), D1000's segment
  * profiles and its needs read. Each block answers alone: one that could not
  * be read says so with its own Try again, never as zeros. Unclassified still
- * reads the persona list under Guard L until part 9. Answers, archetypes, a
- * segment's own page, the Move dialog, Activity and Suggestions wait for
- * D997's parts; until the Move dialog lands, today's re-tag table stays at
- * the foot of Overview.
+ * reads the persona list under Guard L until part 9. Each card's name opens
+ * that segment's own page (D1005, `SegmentPage.jsx`), where its members move
+ * by SEG4's Move dialog; D1005 retired the re-tag table that stood at the
+ * foot of Overview. Suggestions wait for D997's parts.
  */
 
 const BTN = 'inline-flex min-h-[36px] items-center justify-center gap-2 whitespace-nowrap rounded-[9px] px-3.5 text-[12.5px] font-bold';
@@ -239,7 +238,7 @@ function SegmentCard({ c, lpOn }) {
   const n = c.needs;
   return (
     <div className="flex flex-col gap-1.5 rounded-[10px] border border-axal-hairline bg-white px-3.5 py-3 dark:border-gray-700 dark:bg-gray-900" data-testid={`seg-card-${c.key}`}>
-      <span className="text-[13.5px] font-extrabold text-axal-ink dark:text-gray-100">{c.name}</span>
+      <Link to={`/admin/persona-segments/${c.key}`} className="text-[13.5px] font-extrabold text-axal-ink underline-offset-2 hover:underline dark:text-gray-100" data-testid={`seg-card-open-${c.key}`}>{c.name}</Link>
       {c.who ? <span className={SUB}>{c.who}</span> : null}
       <div className="flex items-baseline gap-2 border-t border-axal-hairline pt-2 dark:border-gray-700">
         {c.members === null
@@ -461,11 +460,6 @@ function Overview({ superAdmin, tick }) {
 
       <section className={`${CARD} flex flex-col gap-2 border-dashed p-4`} data-testid="seg-advisor-create"><h2 className={H2}>Advisor segments</h2><p className={SUB}>HQ defines the segments Advisors can join.</p>{superAdmin ? <Link to="/admin/persona-segments/new?profile=advisor" className={`${GHOST} min-h-[44px] self-start`}>New segment</Link> : <p className={SUB}>HQ writes the segment profiles.</p>}</section>
 
-      <section className="flex flex-col gap-2" aria-labelledby="seg-h-move" data-testid="seg-move-table">
-        <h2 id="seg-h-move" className={H2}>Move a member</h2>
-        <span className={SUB}>Today&apos;s re-tag table, until D997 part 8 draws each segment&apos;s Members tab and the Move dialog.</span>
-        <PersonasPanel />
-      </section>
     </>
   );
 }

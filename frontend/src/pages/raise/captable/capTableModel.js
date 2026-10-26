@@ -189,3 +189,33 @@ function oldSearch(search = '') {
 export const variantHref = (uid) => `${VARIANTS_PATH}/${encodeURIComponent(uid)}`;
 export const variantsHref = (search = '') => `${VARIANTS_PATH}${oldSearch(search)}`;
 export const simulatorHref = (search = '') => `${SIMULATOR_PATH}${oldSearch(search)}`;
+
+// ─────────────────────────────────────────────────────────── D1028: the phone and dark
+
+/**
+ * D1028 (#2865, CT23): below 1024px the tool's root carries this class, and
+ * `capTable.css` makes every control in it a 44 × 44px target.
+ */
+export const PHONE_ROOT = 'captable-phone';
+/** CT23a: the holder cards Overview shows on a phone before "Show more". */
+export const PHONE_HOLDERS = 6;
+
+/**
+ * D1028 (CT8): the dark pairs every board uses. Violet text is #a78bfa, and
+ * each status colour keeps its own pair: positive #34d399, negative #f87171,
+ * amber #fcd34d. The hairline is #374151 and the ink #e5e7eb.
+ * `captable_phone_dark_d1028.test.mjs` holds every file here to them.
+ */
+export const DARK = {
+  violet: 'dark:text-violet-400',
+  positive: 'dark:text-emerald-400',
+  negative: 'dark:text-red-400',
+  amber: 'dark:text-amber-300',
+  hairline: 'dark:border-gray-700',
+  ink: 'dark:text-gray-200',
+  muted: 'dark:text-gray-400',
+  card: 'dark:bg-gray-900',
+  raised: 'dark:bg-gray-800',
+  lavender: 'dark:bg-[#211f3d]',
+  lavenderEdge: 'dark:border-[#4c3a8a]',
+};

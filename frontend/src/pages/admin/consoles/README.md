@@ -11,7 +11,6 @@ its own routed desk and tests.
 | --- | --- | --- |
 | `UsersConsole.jsx` | Users: the account directory, role picker, support sessions, the account drawer | the users list, trust scores |
 | `KycConsole.jsx` | KYC / AML queue and its review drawer | the queue, one record on Review |
-| `PersonasConsole.jsx` | Personas. Since D997 the tab forwards to `/admin/persona-segments` (`../segments/`), whose Overview embeds `PersonasPanel` until its part 8 | the persona list |
 | `DirectoryConsole.jsx` | Directory | the directory partners |
 | `IntegrationKeysConsole.jsx` | Integration keys | the provider keys, each one's callback URL and setup guide, and the OAuth clients set only at deploy |
 | `GithubSyncConsole.jsx` | GitHub Sync | the sync settings |
