@@ -54,6 +54,8 @@ export type RecordField = {
 };
 
 export type RecordContext = {
+  /** Verified request context for founder-only bank reads; absent fails closed. */
+  mercuryRead?: 'owner' | 'refused' | 'unreadable';
   env: Env;
   projectId: number;
   project: ProjectRef;

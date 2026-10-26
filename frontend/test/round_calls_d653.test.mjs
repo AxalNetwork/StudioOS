@@ -81,12 +81,12 @@ const checks={
   recipients(m){const recipients=[{origin:'match',opened_at:'2098-01-01',commitment_cents:null},{origin:'match',name:'Real responder',email:'real@example.test',commitment_cents:0}];
     const text=renderedText(pageHtml(m,{...founder,recipients}));
     assert.deepEqual([text.includes('identity private until a response'),text.includes('Real responder · real@example.test'),text.includes('No commitment recorded'),text.includes('No recipients are recorded yet')],[true,true,true,false]);},
-  closed(m){const text=renderedText(pageHtml(m,{...investor,call:{...call,state:'closed'},read_only:true}));
+  closed(m){const html=pageHtml(m,{...investor,call:{...call,state:'closed'},read_only:true}),text=renderedText(html);
     const owner=renderedText(pageHtml(m,{...founder,call:{...call,state:'closed'},read_only:true,questions:[{uid:'q',question:'A question'}]}));
-    assert.deepEqual([text.includes('read-only'),text.includes('Commit with an amount'),text.includes('Ask a question'),owner.includes('Extend the date'),owner.includes('Close the call'),owner.includes('Answer in place')],[true,false,false,false,false,false]);},
+    assert.deepEqual([text.includes('This call is closed.'),button(html,'Indicate an amount'),button(html,'Ask a question'),owner.includes('Extend the date'),owner.includes('Close the call'),owner.includes('Answer in place')],[true,'MISSING','MISSING',false,false,false]);},
   waiting(m){const c={...call,state:'awaiting_counsel'},readonly={...investor,call:c,read_only:true};
-    const text=renderedText(pageHtml(m,readonly)),hq=renderedText(pageHtml(m,{...founder,call:c,viewer:'counsel',read_only:true,counsel_approved:false},{reference:'Counsel renewed approval'}));
-    assert.deepEqual([text.includes('paused until counsel'),text.includes('Commit with an amount'),hq.includes('Record approved terms')],[true,false,true]);},
+    const html=pageHtml(m,readonly),text=renderedText(html),hq=renderedText(pageHtml(m,{...founder,call:c,viewer:'counsel',read_only:true,counsel_approved:false},{reference:'Counsel renewed approval'}));
+    assert.deepEqual([text.includes('paused until counsel'),button(html,'Indicate an amount'),hq.includes('Record approved terms')],[true,'MISSING',true]);},
   changedDeck(m){const text=renderedText(render(m.page.RecordedCallDeck,{deck:{unreadable:true}}));assert.deepEqual([text.includes('deck changed after approval'),text.includes('restore the approved deck')],[true,true]);},
   nda(m){const invalid=pageHtml(m,{...investor,data_room:{recorded:true,nda_signed:false,has_grant:true,path:'/research/diligence/private'}});
     const valid=pageHtml(m,{...investor,data_room:{recorded:true,nda_signed:true,has_grant:true,path:'/research/diligence/private'}});
@@ -143,9 +143,9 @@ const probes=[
   ['money','parts',"if(value==null)return 'Not recorded';","if(value==null)return '$0';"],
   ['money','parts',"cents>0","cents>=0"],
   ['recipients','page',"identity private until a response","identity shared"],
-  ['closed','page',"!d.read_only&&<section className=\"space-y-3\"","true&&<section className=\"space-y-3\""],
+  ['closed','page',"{!d.read_only&&<button type=\"button\" data-testid=\"indicate\"","{true&&<button type=\"button\" data-testid=\"indicate\""],
   ['closed','page',"['sent','awaiting_counsel'].includes(c.state)","true"],
-  ['nda','page',"d.data_room.path&&d.data_room.nda_signed&&d.data_room.has_grant","d.data_room.path"],
+  ['nda','page',"room.path&&room.nda_signed&&room.has_grant","room.path"],
   ['deck','page',"no linked deck version could be read","deck available"],
   ['deck','page',"Unreadable · the recorded deck could not be decoded.","Deck ready."],
   ['update','SentUpdateView',"{a.kind==='capital'&&(a.link_ref?","{false&&(a.link_ref?"],
