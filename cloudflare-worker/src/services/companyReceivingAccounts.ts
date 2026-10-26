@@ -76,8 +76,9 @@ async function plain(env: Env, row: AccountRow): Promise<Instructions> {
   } catch { return fail(503, 'company_account_unreadable', 'These instructions cannot be read. Ask the company to check its receiving account.'); }
 }
 function masked(row: Pick<AccountRow, 'uid' | 'revision' | 'created_at' | 'account_last4'>, details: Instructions) {
+  const visible = details.account_number.length <= 6 ? details.account_number.slice(-2) : row.account_last4;
   return { uid: row.uid, revision: row.revision, created_at: row.created_at,
-    ...details, account_number: `••••${row.account_last4}`, warning: COMPANY_PAY_WARNING };
+    ...details, account_number: `••••${visible}`, warning: COMPANY_PAY_WARNING };
 }
 
 export async function readCompanyAccount(env: Env, userId: number, projectId: number) {
@@ -158,8 +159,9 @@ async function recordSignedReveal(env: Env, userId: number, projectId: number, c
   let logged: D1Result<{ commitment_id: number }>;
   try {
     logged = await env.DB.prepare(
-      `INSERT INTO company_receiving_account_reveals(uid, account_id, actor_user_id, commitment_id)
-       SELECT ?, a.id, u.id, k.id FROM company_receiving_accounts a
+      `INSERT INTO company_receiving_account_reveals(uid, account_id, account_uid, company_uid, actor_user_id, commitment_id)
+       SELECT ?, a.id, a.uid, cp.uid, u.id, k.id FROM company_receiving_accounts a
+       JOIN company_profiles cp ON cp.id = a.company_id
        JOIN projects p ON p.company_id = a.company_id AND p.deleted_at IS NULL
        JOIN deals d ON d.project_id = p.id JOIN commitments k ON k.deal_id = d.id
        JOIN users u ON u.id = k.investor_user_id AND u.role = 'investor' AND u.is_active = 1 AND u.deletion_requested_at IS NULL

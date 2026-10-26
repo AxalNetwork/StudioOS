@@ -114,6 +114,7 @@ test('unsigned, unrelated, withdrawn and incomplete investment paper cannot reve
   f.db.exec("UPDATE safe_issuances SET amount_cents=25000,project_id=10 WHERE uid='safe-one'; UPDATE esign_envelopes SET deal_id=1000 WHERE id=50; UPDATE esign_recipients SET user_id=3 WHERE id=51");
   const r=await f.call(3,'POST','/10/reveal',{commitment_uid:'line-one'});assert.equal(r.status,200,JSON.stringify(r.body));assert.equal(r.body.account.account_number,NUMBER);assert.equal(r.body.expires_in_seconds,30);
   const log=f.rows('SELECT * FROM company_receiving_account_reveals');assert.equal(log.length,1);assert.equal(log[0].actor_user_id,3);assert.equal(log[0].commitment_id,30);assert.ok(!JSON.stringify(log).includes(NUMBER));
+  assert.equal(log[0].account_uid,r.body.account.uid);assert.equal(log[0].company_uid,'company-one');
   assert.equal(log[0].outcome,'prepared');assert.ok(log[0].attempted_at);assert.ok(log[0].prepared_at);
   assert.match(r.headers.get('cache-control')||'',/no-store/);
  }finally{f.close();}
@@ -283,4 +284,35 @@ test('an outcome audit outage keeps a pending attempt and never returns a full n
   const accepted=await f.call(3,'POST','/10/reveal',{commitment_uid:'line-one'});assert.equal(accepted.status,200);
   assert.deepEqual(f.rows('SELECT outcome FROM company_receiving_account_reveals ORDER BY id').map(x=>x.outcome),['pending','pending','prepared']);
  }finally{f.close();}
+});
+
+test('short account numbers remain partially hidden until a signed, audited reveal',async()=>{
+ const f=fixture();try{
+  const cases=[['1234','••••34'],['12345','••••45'],['123456','••••56'],['1234567','••••4567']];
+  for(const [i,[number,expected]] of cases.entries()){
+   const saved=await save(f,i,number);assert.equal(saved.body.account.account_number,expected);
+   assert.equal((await f.call(3,'GET')).body.account.account_number,expected);
+   const full=await f.call(3,'POST','/10/reveal',{commitment_uid:'line-one'});assert.equal(full.status,200);assert.equal(full.body.account.account_number,number);
+  }
+ }finally{f.close();}
+});
+
+test('audit identities and outcomes survive account-version or company deletion without retaining bank data',()=>{
+ for(const source of ['account','company']){
+  // Isolate this migration's FKs; route fixtures above exercise the full chain.
+  const db=new DatabaseSync(':memory:');
+  try{
+   db.exec('CREATE TABLE users(id INTEGER PRIMARY KEY); CREATE TABLE company_profiles(id INTEGER PRIMARY KEY,uid TEXT UNIQUE); CREATE TABLE commitments(id INTEGER PRIMARY KEY)');
+   db.exec(readFileSync('cloudflare-worker/sql/migrations/613_company_receiving_accounts.sql','utf8'));
+   db.exec(`INSERT INTO users VALUES(1); INSERT INTO company_profiles VALUES(100,'company-one'); INSERT INTO commitments(id) VALUES(30);
+    INSERT INTO company_receiving_accounts(id,uid,company_id,revision,instructions_enc,account_last4,created_by_user_id) VALUES(1,'account-version-one',100,1,'v1.synthetic','4821',1);
+    INSERT INTO company_receiving_account_reveals(uid,account_id,account_uid,company_uid,actor_user_id,commitment_id,outcome,prepared_at)
+      VALUES('reveal-one',1,'account-version-one','company-one',1,30,'prepared',CURRENT_TIMESTAMP)`);
+   assert.doesNotThrow(()=>db.exec(source==='account'?'DELETE FROM company_receiving_accounts WHERE id=1':'DELETE FROM company_profiles WHERE id=100'));
+   const log=db.prepare('SELECT * FROM company_receiving_account_reveals').all() as any[];
+   assert.equal(log.length,1);assert.equal(log[0].account_id,null);assert.equal(log[0].account_uid,'account-version-one');assert.equal(log[0].company_uid,'company-one');assert.equal(log[0].outcome,'prepared');assert.equal(log[0].actor_user_id,1);assert.ok(log[0].prepared_at);
+   assert.ok(!JSON.stringify(log).includes('4821'));assert.ok(!JSON.stringify(log).includes('v1.synthetic'));
+   assert.equal((db.prepare('SELECT COUNT(*) AS n FROM company_receiving_accounts').get() as any).n,0);
+  }finally{db.close();}
+ }
 });

@@ -2,7 +2,8 @@
 -- Instructions are authenticated ciphertext bound to each immutable version uid.
 -- Retained versions pin each audited attempt without digits in the ledger.
 -- Outcome distinguishes failed validation from a prepared full-number response;
--- prepared does not prove client delivery or viewing. No payment hold.
+-- prepared does not prove client delivery or viewing. Immutable source UIDs
+-- survive source deletion without retaining bank data. No payment hold.
 CREATE TABLE IF NOT EXISTS company_receiving_accounts (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   uid TEXT NOT NULL UNIQUE,
@@ -20,7 +21,9 @@ CREATE UNIQUE INDEX IF NOT EXISTS company_receiving_accounts_active
 CREATE TABLE IF NOT EXISTS company_receiving_account_reveals (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   uid TEXT NOT NULL UNIQUE,
-  account_id INTEGER NOT NULL REFERENCES company_receiving_accounts(id) ON DELETE CASCADE,
+  account_id INTEGER REFERENCES company_receiving_accounts(id) ON DELETE SET NULL,
+  account_uid TEXT NOT NULL,
+  company_uid TEXT NOT NULL,
   actor_user_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
   commitment_id INTEGER REFERENCES commitments(id) ON DELETE SET NULL,
   outcome TEXT NOT NULL DEFAULT 'pending' CHECK (outcome IN ('pending', 'unreadable', 'currency_mismatch', 'prepared')),
