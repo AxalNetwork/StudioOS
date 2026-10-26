@@ -269,6 +269,22 @@ dd.post('/cases', async (c) => {
         return c.json({ error: 'An invitation or commitment is required to open diligence on this startup.' }, 403);
       }
     }
+    // D1250 (#3265, DDL2): the case may open with its context — round, cheque,
+    // target IC date, lead and linked deal — under PATCH's own checks, all
+    // read before anything is written, so a refused field opens no case.
+    const ctx = await caseContextFrom(c.env, body, {
+      lead_user_id: user.id, target_ic_date: null, round_label: null, cheque_cents: null, cheque_currency: null, deal_id: null,
+    });
+    if ('error' in ctx) return c.json({ error: ctx.error }, ctx.status);
+    if (ctx.next.deal_id != null) {
+      // A linked deal is the startup's own, and an investor's one they are on.
+      const deal = await c.env.DB.prepare(
+        `SELECT d.id FROM deals d WHERE d.id = ? AND ? = 'project' AND d.project_id = ?
+           AND (? = 1 OR EXISTS (SELECT 1 FROM deal_invitations i WHERE i.deal_id = d.id AND i.investor_user_id = ?)
+                OR EXISTS (SELECT 1 FROM commitments k WHERE k.deal_id = d.id AND k.investor_user_id = ?))`,
+      ).bind(ctx.next.deal_id, subjectType, subjectId, isPrivileged ? 1 : 0, user.id, user.id).first();
+      if (!deal) return c.json({ error: 'Link a deal of this startup.' }, 400);
+    }
     const uid = genUid();
     const inserted: any[] = await sql`
       INSERT INTO dd_cases (uid, subject_type, subject_id, subject_label, owner_user_id, template_depth)
@@ -320,7 +336,24 @@ dd.post('/cases', async (c) => {
     }
     // D1246: the opener leads it, and its blocking sections are stamped.
     await stampNewCase(c.env, caseId, { blocking: !template });
-    await audit(c.env, caseId, user, 'case_opened', { type: 'dd_case', id: caseId }, { subject_type: subjectType, subject_id: subjectId, template_depth: templateDepth });
+    if (ctx.changed.length) {
+      const n = ctx.next;
+      await c.env.DB.prepare(
+        'UPDATE dd_cases SET lead_user_id = ?, target_ic_date = ?, round_label = ?, cheque_cents = ?, cheque_currency = ?, deal_id = ? WHERE id = ?',
+      ).bind(n.lead_user_id, n.target_ic_date, n.round_label, n.cheque_cents, n.cheque_currency, n.deal_id, caseId).run();
+    }
+    // The details name which context fields were given, never the figures.
+    await audit(c.env, caseId, user, 'case_opened', { type: 'dd_case', id: caseId }, { subject_type: subjectType, subject_id: subjectId, template_depth: templateDepth, context: ctx.changed });
+    if (ctx.next.lead_user_id !== user.id) {
+      await notify(c.env, {
+        userId: ctx.next.lead_user_id,
+        type: 'dd_case_lead',
+        title: `You lead the due diligence on ${subjectLabel}`,
+        body: 'You can now record the decision and send the case to IC.',
+        link: `/due-diligence/${uid}`,
+        channels: ['in_app'],
+      }).catch(() => null);
+    }
     return c.json({ ...row, template_version: template ? template.version : 0, sections_seeded: sections.length, checklist_seeded: itemsSeeded }, 201);
   } finally { await sql.end(); }
 });
@@ -1651,6 +1684,66 @@ async function icRecordFor(env: Env, user: AppUser, caseId: number): Promise<{ u
   try { return await icRecordForCase(env, user as any, caseId); } catch { return null; }
 }
 
+/** A case's deal context (D1246). */
+interface CaseContext {
+  lead_user_id: number; target_ic_date: string | null; round_label: string | null;
+  cheque_cents: number | null; cheque_currency: string | null; deal_id: number | null;
+}
+
+/**
+ * The context fields a body names, each checked; the rest keep `base`'s value.
+ * `PATCH /cases/:uid` and, from D1250, `POST /cases` apply the same checks, so
+ * a case opened with its context is held to what a later change is.
+ */
+async function caseContextFrom(env: Env, body: any, base: CaseContext): Promise<{ next: CaseContext; changed: string[] } | { error: string; status: 400 | 404 }> {
+  const has = (k: string) => Object.prototype.hasOwnProperty.call(body, k);
+  const next = { ...base };
+  const changed: string[] = [];
+  if (has('lead_user_id')) {
+    const id = Number(body.lead_user_id);
+    if (!Number.isInteger(id) || id <= 0) return { error: 'Choose who leads the case.', status: 400 };
+    const u = await env.DB.prepare('SELECT id, role FROM users WHERE id = ? AND COALESCE(is_active, 1) = 1').bind(id).first<{ id: number; role: string }>();
+    if (!u) return { error: 'That person could not be found.', status: 404 };
+    if (!LEAD_ROLES.has(String(u.role))) return { error: 'A case is led by an Admin, a partner or an investor.', status: 400 };
+    next.lead_user_id = id; changed.push('lead');
+  }
+  if (has('target_ic_date')) {
+    const v = body.target_ic_date == null || body.target_ic_date === '' ? null : String(body.target_ic_date);
+    if (v != null && !isDay(v)) return { error: 'The target IC date is a day, YYYY-MM-DD.', status: 400 };
+    next.target_ic_date = v; changed.push('target_ic_date');
+  }
+  if (has('round_label')) {
+    const v = body.round_label == null ? '' : String(body.round_label).trim();
+    if (v.length > 80) return { error: 'The round is at most 80 characters.', status: 400 };
+    next.round_label = v || null; changed.push('round');
+  }
+  if (has('cheque_cents') || has('cheque_currency')) {
+    const cents = has('cheque_cents') ? body.cheque_cents : next.cheque_cents;
+    const cur = has('cheque_currency') ? body.cheque_currency : next.cheque_currency;
+    if (cents == null || cents === '') {
+      next.cheque_cents = null; next.cheque_currency = null;
+    } else {
+      const n = Number(cents);
+      if (!Number.isSafeInteger(n) || n < 0) return { error: 'The cheque is a whole number of cents, zero or more.', status: 400 };
+      const code = String(cur ?? '').trim().toUpperCase();
+      if (!/^[A-Z]{3}$/.test(code)) return { error: 'Give the cheque its currency, a three-letter code such as EUR.', status: 400 };
+      next.cheque_cents = n; next.cheque_currency = code;
+    }
+    changed.push('cheque');
+  }
+  if (has('deal_id')) {
+    if (body.deal_id == null || body.deal_id === '') next.deal_id = null;
+    else {
+      const id = Number(body.deal_id);
+      const deal = Number.isInteger(id) ? await env.DB.prepare('SELECT id FROM deals WHERE id = ?').bind(id).first() : null;
+      if (!deal) return { error: 'That deal could not be found.', status: 404 };
+      next.deal_id = id;
+    }
+    changed.push('deal');
+  }
+  return { next, changed };
+}
+
 dd.patch('/cases/:uid', async (c) => {
   const user = await requireDdReader(c);
   const cs = await getCaseByUid(c.env, c.req.param('uid'));
@@ -1659,7 +1752,6 @@ dd.patch('/cases/:uid', async (c) => {
   if (refusal) return c.json({ error: refusal.error }, refusal.status);
   const caseId = Number(cs.id);
   const body = await c.req.json().catch(() => ({} as any));
-  const has = (k: string) => Object.prototype.hasOwnProperty.call(body, k);
 
   if (body.archive === true) {
     const reason = String(body.archived_reason ?? '').trim();
@@ -1675,57 +1767,16 @@ dd.patch('/cases/:uid', async (c) => {
   }
 
   // The context: each field the body names is checked; the rest keep their value.
-  const next = {
+  const ctx = await caseContextFrom(c.env, body, {
     lead_user_id: leadOf(cs),
     target_ic_date: (cs.target_ic_date ?? null) as string | null,
     round_label: (cs.round_label ?? null) as string | null,
     cheque_cents: cs.cheque_cents == null ? null : Number(cs.cheque_cents),
     cheque_currency: (cs.cheque_currency ?? null) as string | null,
     deal_id: cs.deal_id == null ? null : Number(cs.deal_id),
-  };
-  const changed: string[] = [];
-  if (has('lead_user_id')) {
-    const id = Number(body.lead_user_id);
-    if (!Number.isInteger(id) || id <= 0) return c.json({ error: 'Choose who leads the case.' }, 400);
-    const u = await c.env.DB.prepare('SELECT id, role FROM users WHERE id = ? AND COALESCE(is_active, 1) = 1').bind(id).first<{ id: number; role: string }>();
-    if (!u) return c.json({ error: 'That person could not be found.' }, 404);
-    if (!LEAD_ROLES.has(String(u.role))) return c.json({ error: 'A case is led by an Admin, a partner or an investor.' }, 400);
-    next.lead_user_id = id; changed.push('lead');
-  }
-  if (has('target_ic_date')) {
-    const v = body.target_ic_date == null || body.target_ic_date === '' ? null : String(body.target_ic_date);
-    if (v != null && !isDay(v)) return c.json({ error: 'The target IC date is a day, YYYY-MM-DD.' }, 400);
-    next.target_ic_date = v; changed.push('target_ic_date');
-  }
-  if (has('round_label')) {
-    const v = body.round_label == null ? '' : String(body.round_label).trim();
-    if (v.length > 80) return c.json({ error: 'The round is at most 80 characters.' }, 400);
-    next.round_label = v || null; changed.push('round');
-  }
-  if (has('cheque_cents') || has('cheque_currency')) {
-    const cents = has('cheque_cents') ? body.cheque_cents : next.cheque_cents;
-    const cur = has('cheque_currency') ? body.cheque_currency : next.cheque_currency;
-    if (cents == null || cents === '') {
-      next.cheque_cents = null; next.cheque_currency = null;
-    } else {
-      const n = Number(cents);
-      if (!Number.isSafeInteger(n) || n < 0) return c.json({ error: 'The cheque is a whole number of cents, zero or more.' }, 400);
-      const code = String(cur ?? '').trim().toUpperCase();
-      if (!/^[A-Z]{3}$/.test(code)) return c.json({ error: 'Give the cheque its currency, a three-letter code such as EUR.' }, 400);
-      next.cheque_cents = n; next.cheque_currency = code;
-    }
-    changed.push('cheque');
-  }
-  if (has('deal_id')) {
-    if (body.deal_id == null || body.deal_id === '') next.deal_id = null;
-    else {
-      const id = Number(body.deal_id);
-      const deal = Number.isInteger(id) ? await c.env.DB.prepare('SELECT id FROM deals WHERE id = ?').bind(id).first() : null;
-      if (!deal) return c.json({ error: 'That deal could not be found.' }, 404);
-      next.deal_id = id;
-    }
-    changed.push('deal');
-  }
+  });
+  if ('error' in ctx) return c.json({ error: ctx.error }, ctx.status);
+  const { next, changed } = ctx;
   if (!changed.length) return c.json({ error: 'Nothing to change.' }, 400);
   await c.env.DB.prepare(
     `UPDATE dd_cases SET lead_user_id = ?, target_ic_date = ?, round_label = ?, cheque_cents = ?, cheque_currency = ?, deal_id = ?,
@@ -2043,6 +2094,30 @@ dd.get('/my-reviews', async (c) => {
 const SUBJECT_ROLE: Record<string, string> = { founder: 'founder', advisor: 'advisor', investor: 'investor', partner: 'partner' };
 const likeOf = (q: string) => `%${q.replace(/[\\%_]/g, (m) => `\\${m}`)}%`;
 
+/**
+ * D1250 (#3265, DDL2): each startup the search found, with its stage and the
+ * deals Open a case may link — every deal for an Admin or a partner, an
+ * investor's only those they are invited to or committed on. The ids go in
+ * as one bound JSON array, so the SQL text never changes with the request.
+ */
+async function withDeals(env: Env, user: AppUser, projects: any[]) {
+  const ids = projects.map((p) => Number(p.id));
+  const deals = ids.length
+    ? ((await env.DB.prepare(
+      `SELECT d.id, d.project_id, d.status, d.instrument, d.created_at FROM deals d
+        WHERE d.project_id IN (SELECT value FROM json_each(?))
+          AND (? = 1 OR EXISTS (SELECT 1 FROM deal_invitations i WHERE i.deal_id = d.id AND i.investor_user_id = ?)
+               OR EXISTS (SELECT 1 FROM commitments k WHERE k.deal_id = d.id AND k.investor_user_id = ?))
+        ORDER BY d.created_at DESC, d.id DESC`,
+    ).bind(JSON.stringify(ids), user.role === 'investor' ? 0 : 1, user.id, user.id).all<any>()).results || [])
+    : [];
+  return projects.map((p) => ({
+    id: p.id, name: p.name, type: 'project', stage: p.stage ?? null,
+    deals: deals.filter((d: any) => Number(d.project_id) === Number(p.id))
+      .map((d: any) => ({ id: d.id, status: d.status, instrument: d.instrument ?? null, created_at: d.created_at })),
+  }));
+}
+
 dd.get('/subjects', async (c) => {
   const user = await requireDdReader(c);
   const type = String(c.req.query('type') || '');
@@ -2054,20 +2129,20 @@ dd.get('/subjects', async (c) => {
     // deal with — the same relationship `POST /cases` checks (D1149).
     if (type !== 'project') return c.json({ error: 'You can only open diligence on a startup you are in a deal with.' }, 403);
     const rows = await c.env.DB.prepare(
-      `SELECT p.id, p.name FROM projects p
+      `SELECT p.id, p.name, p.stage FROM projects p
         WHERE p.deleted_at IS NULL AND p.name LIKE ? ESCAPE '\\'
           AND EXISTS (SELECT 1 FROM deals d WHERE d.project_id = p.id AND (
                 EXISTS (SELECT 1 FROM deal_invitations i WHERE i.deal_id = d.id AND i.investor_user_id = ?)
                 OR EXISTS (SELECT 1 FROM commitments k WHERE k.deal_id = d.id AND k.investor_user_id = ?)))
         ORDER BY p.name COLLATE NOCASE LIMIT 20`,
     ).bind(likeOf(q), user.id, user.id).all<any>();
-    return c.json({ items: (rows.results || []).map((r: any) => ({ id: r.id, name: r.name, type })) });
+    return c.json({ items: await withDeals(c.env, user, rows.results || []) });
   }
   if (type === 'project') {
     const rows = await c.env.DB.prepare(
-      `SELECT id, name FROM projects WHERE deleted_at IS NULL AND name LIKE ? ESCAPE '\\' ORDER BY name COLLATE NOCASE LIMIT 20`,
+      `SELECT id, name, stage FROM projects WHERE deleted_at IS NULL AND name LIKE ? ESCAPE '\\' ORDER BY name COLLATE NOCASE LIMIT 20`,
     ).bind(likeOf(q)).all<any>();
-    return c.json({ items: (rows.results || []).map((r: any) => ({ id: r.id, name: r.name, type })) });
+    return c.json({ items: await withDeals(c.env, user, rows.results || []) });
   }
   const rows = await c.env.DB.prepare(
     `SELECT id, name FROM users WHERE role = ? AND COALESCE(is_active, 1) = 1 AND COALESCE(name, '') != '' AND name LIKE ? ESCAPE '\\'

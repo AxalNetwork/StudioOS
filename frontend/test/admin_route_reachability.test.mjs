@@ -171,7 +171,7 @@ function doorsIn(src) {
   // literal segment equals, so only a `:param` in that place matches it.
   for (const m of withoutNavigate.matchAll(/\b(?:to|href)=\{`(\/[^`$]*\/)\$\{[^}`]*\}(\/[^`$?#]+)/g)) doors.add(`${m[1]}\${}${m[2]}`);
 
-  // Computed-base links. `AdminDueDiligencePage.jsx:34` builds
+  // Computed-base links. `duediligence/DdCasesTab.jsx` (D1250; before it, `AdminDueDiligencePage.jsx`) builds
   //   const base = pathname.startsWith('/admin') ? '/admin/due-diligence' : '/due-diligence';
   // and links `${base}/${c.uid}`, so the literal never appears anywhere. Resolve
   // by substitution rather than by pattern: plain indexOf and slicing, no regex
@@ -727,7 +727,8 @@ test('the computed-base resolver still sees the due-diligence case links', () =>
   // If this regresses, /admin/due-diligence/:uid stops looking reachable from that
   // page — it stays reachable via AdminPage's raw anchor, so only this test would
   // notice, which is the point of pinning the mechanism separately.
-  const dd = doorsIn(read('frontend/src/pages/AdminDueDiligencePage.jsx')).doors;
+  // D1250 (#3265): the case links moved with the Cases tab into DdCasesTab.jsx.
+  const dd = doorsIn(read('frontend/src/pages/duediligence/DdCasesTab.jsx')).doors;
   assert.ok(dd.includes('/admin/due-diligence/'),
     'the computed base no longer resolves; template links through a const are unread');
   // D1244 (#2385): the case tabs, `${base}/${uid}/${t.key}`, reach only `:uid/:tab`.
