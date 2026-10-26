@@ -13,7 +13,7 @@
  * the next stage is sent (`onStagedEnvelopeCompleted`, called by the sign
  * route), except Axal's: it waits for a Super Admin to release it under
  * `closing.countersign` with a fresh step-up (`releaseCountersign`), and is
- * sent to that Super Admin. Migration 624's triggers refuse a stage sent while
+ * sent to that Super Admin. Migration 633's triggers refuse a stage sent while
  * one ahead of it is unsigned, so the order holds even if a route forgot it.
  *
  * COUNSEL'S TEXT. A document whose type has no text on file (a SAFE, until
@@ -214,7 +214,7 @@ async function signersOf(env: Env, stagedId: number): Promise<SignerRow[]> {
 }
 
 /**
- * Sends one stage. The order is checked here and again by migration 624's
+ * Sends one stage. The order is checked here and again by migration 633's
  * trigger. The envelope must carry the staged digest, or it is voided.
  */
 async function sendStage(

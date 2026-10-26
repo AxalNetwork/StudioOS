@@ -8,7 +8,7 @@
  * untouched and runs in the same suite); a countersign without step-up is
  * refused; an out-of-order signature is refused.
  *
- * The fixture is the baseline's tables plus migrations 434, 475, 479 and 624,
+ * The fixture is the baseline's tables plus migrations 434, 475, 479 and 633,
  * the e-sign routes on one app, an in-memory R2, and no Browser Run binding,
  * so each signed copy is drawn by pdf-lib. `globalThis.fetch` throws, and the
  * file ends by asserting it was never called.
@@ -36,7 +36,7 @@ const SCHEMA = TABLES.map((t) => stripForeignKeys(tableFromBaseline(baseline, t)
   + '\n' + migration('434_contract_template_publications.sql')
   + '\n' + migration('475_legal_document_files.sql')
   + '\n' + migration('479_template_kind_party.sql')
-  + '\n' + migration('624_staged_signing.sql');
+  + '\n' + migration('633_staged_signing.sql');
 const SECRET = ['d1216', 'staged', 'esign', 'fixture', 'secret'].join('-');
 
 const ADMIN = 1, FOUNDER = 2, INVESTOR = 3, STRANGER = 4, SUPER = 6, OTHER_INVESTOR = 7;

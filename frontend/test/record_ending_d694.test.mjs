@@ -43,9 +43,11 @@ test('Validate has only module tabs and its six phone index rows', () => {
   const six = ['problem-discovery', 'customer-research', 'ideal-customer-profile', 'market-intelligence', 'demand-signals', 'experiments'];
   assert.deepEqual(phoneIndex({ index: six.map((key) => ({ key, title: key, detail: '', value: null, href: `/validate/${key}` })), cards: [] }).map((row) => row.key), six);
   assert.deepEqual(phoneIndex({ figures: [], cards: [] }), []);
-  for (const [cycle, title] of [['build', 'Tools'], ['raise', 'Calls'], ['grow', 'Reporting']]) {
-    assert.equal(cycleTabs(cycle, cards)[1].name, title);
+  // D1261 (#2430): Raise's own Evidence tab leads; its history follows.
+  for (const [cycle, title, at] of [['build', 'Tools', 1], ['raise', 'Calls', 2], ['grow', 'Reporting', 1]]) {
+    assert.equal(cycleTabs(cycle, cards)[at].name, title);
   }
+  assert.equal(cycleTabs('raise', cards)[1].name, 'Evidence');
 });
 
 test('the three breadcrumbs and review delete return to Customer research', () => {

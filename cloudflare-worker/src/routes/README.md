@@ -1,5 +1,8 @@
 # Worker route handlers — production source of truth
 
+D1239: `deal_views.ts`, mounted before `deals.ts`, provides Professional investor fit reads and private/accepted-seat firm saved views. Settings confer no deal access; defaults, version checks and identifier-only audit writes are atomic.
+
+
 D1254: scoring and project intake record scores without changing project
 status or stage. Intake creates an applied deal independently of the score.
 The Screening read in `deals.ts` admits investors only to readable deals and

@@ -7,6 +7,8 @@ import { useToast } from '../components/useToast';
 import ToastMessage from '../components/ToastMessage';
 import { useEscapeClose } from '../components/useEscapeClose';
 import AdminBoardFrame from './admin/AdminBoardFrame';
+import { DdListTabBody, DdListTabs } from './duediligence/DdTabs';
+import { PAGE_LINE, TITLE, viewOf } from './duediligence/ddModel';
 
 const BAND_STYLES = {
   green: 'bg-emerald-100 text-emerald-700 border-emerald-200',
@@ -71,11 +73,8 @@ function AdminDueDiligencePageBody() {
 
   return (
     <div>
-      <div className="flex items-center gap-3 mb-1">
-        <ShieldAlert size={24} className="text-violet-600" />
-        <h1 className="text-2xl font-bold text-gray-900 dark:text-gray-100">Due Diligence</h1>
-      </div>
-      <p className="text-gray-600 dark:text-gray-400 mb-6">Open and track DD cases on startups, founders, advisors, investors, and partners.</p>
+      <DdListHeader />
+      <DdListTabs active="cases" />
 
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-6">
         {[
@@ -300,11 +299,31 @@ function NewCaseModal({ onClose, onCreated }) {
   );
 }
 
+// D1244 (#2385): the title and line are the canvas's (DDL1); no shield icon.
+function DdListHeader() {
+  return (
+    <>
+      <h1 className="text-2xl font-extrabold tracking-tight text-gray-900 dark:text-gray-100 mb-1">{TITLE}</h1>
+      <p className="text-gray-600 dark:text-gray-400 mb-4">{PAGE_LINE}</p>
+    </>
+  );
+}
+
 // D774 (#2100): S11 drew no rail. The board's page, in the Admin boards' frame.
+// D1244 (#2385): My reviews and Templates are their own addresses. Neither has
+// a read yet, so they draw the header, the tabs and what waits — and do not
+// load the case list they do not show.
+function DdListPage() {
+  const { listTab } = viewOf(useLocation().pathname);
+  return listTab && listTab !== 'cases'
+    ? <div><DdListHeader /><DdListTabs active={listTab} /><DdListTabBody tab={listTab} /></div>
+    : <AdminDueDiligencePageBody />;
+}
+
 export default function AdminDueDiligencePage() {
   return (
     <AdminBoardFrame workspace="Due diligence" note="Eadwyn reads the cases listed here. A verdict is recorded only when you record it." data-testid="admin-board-due-diligence">
-      <AdminDueDiligencePageBody />
+      <DdListPage />
     </AdminBoardFrame>
   );
 }
