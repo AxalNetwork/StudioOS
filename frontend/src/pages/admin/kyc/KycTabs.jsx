@@ -1,15 +1,20 @@
 /**
  * D1228 (#2384) — KYC & KYB's tab bodies (KYC1, KYC6, KYC9, KYC10) and one
  * person's case (KYC3), under the page header `ConsolePages.KycPage` draws.
- * Businesses, Renewals and Audit say "Not read here yet" with their reason
- * (`kycModel.WAITS`) until parts 6 and 7 draw them.
+ * Businesses says "Not read here yet" with its reason (`kycModel.WAITS`)
+ * until part 6 draws it.
  *
  * D1233 (#3241): People is the queue alone (`consoles/KycConsole.jsx`, with
  * its figures), and the case is `KycCase.jsx`, where every decision is.
+ *
+ * D1235 (#3243): Renewals (`KycRenewals.jsx`, with how long a check lasts)
+ * and Audit (`KycAudit.jsx`, with HQ's export) draw part 4's reads (D1232).
  */
 import React from 'react';
 import { NOT_YET, WAITS } from './kycModel';
 import { KycPersonCase, KycPersonView } from './KycCase';
+import KycRenewals from './KycRenewals';
+import KycAudit from './KycAudit';
 
 export { KycPersonCase, KycPersonView };
 
@@ -37,7 +42,7 @@ function Section({ title, testId, children }) {
 export function KycTabBody({ view, people }) {
   if (view.person) return <KycPersonCase id={view.person} />;
   if (view.tab === 'businesses') return <Section title="Businesses" testId="kyc-businesses"><KycWait id="businesses" /></Section>;
-  if (view.tab === 'renewals') return <Section title="Renewals" testId="kyc-renewals"><KycWait id="renewals" /></Section>;
-  if (view.tab === 'audit') return <Section title="Audit" testId="kyc-audit"><KycWait id="audit" /></Section>;
+  if (view.tab === 'renewals') return <KycRenewals />;
+  if (view.tab === 'audit') return <KycAudit />;
   return <div className="flex min-w-0 flex-col gap-4" data-testid="kyc-people">{people}</div>;
 }

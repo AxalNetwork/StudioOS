@@ -129,7 +129,7 @@ export function resumeStep(page,on=today()) {
 export function readinessTarget(key,projectId) {
   if(key==='round'||key==='terms'||key==='close')return {step:0};
   if(key==='deck')return {step:1};
-  if(key==='data_room')return {href:'/raise/data-room?project_id='+projectId};
+  if(key==='data_room')return {href:'/raise/data-room/requests?project_id='+projectId};
   if(key==='use_of_funds')return {href:'/raise/use-of-funds?project_id='+projectId};
   if(key==='traction')return {href:'/grow/revenue-and-traction?project_id='+projectId};
   return null;

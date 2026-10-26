@@ -7,9 +7,8 @@ import { MemoryRouter } from 'react-router-dom';
 import { FigureTile } from '../src/pages/cycles/CycleOverview.jsx';
 import PhoneCycleRoot from '../src/pages/cycles/PhoneCycleRoot.jsx';
 import { FilledMark } from '../src/pages/SpinoutLabMarketPage.jsx';
-import FounderRaiseDataRoom from '../src/pages/founder/FounderRaiseDataRoom.jsx';
-import { accessNow, noAccessReason, roomStats } from '../src/pages/raise/dataRoomRead.js';
-import { api } from '../src/lib/api.js';
+import { accessNow, noAccessReason } from '../src/pages/raise/dataRoomRead.js';
+import { grantOn } from '../src/pages/raise/dataroom/filesModel.js';
 import { mountContracts } from './_contracts_dom.mjs';
 const now=Date.parse('2026-10-24T12:00:00Z');
 test('a fill keeps citations and cost but never displays its model, even in its tooltip',async()=>{
@@ -26,37 +25,22 @@ test('access requires an unexpired readable grant as well as file tier, expiry a
  assert.equal(accessNow(f,[{...g,expires_at:'2026-10-25'}],now).length,1);
  for(const hidden of [{access_tier:'nobody'},{access_expires_at:'2000-01-01'}]) assert.deepEqual(accessNow({...f,...hidden},[g],now),[]);
  assert.deepEqual(accessNow(f,[{...g,committed:false}],now),[]);assert.deepEqual(accessNow(f,[{...g,nda_signed:false}],now),[]);
- assert.equal(roomStats({grants:[{...g,expires_at:'2000-01-01'}]})[2].v,'0');
 });
-test('the founder matrix refuses hidden files and file activity excludes blocked and room-open events',async()=>{
- const prior={listProjects:api.listProjects,dataRoom:api.dataRoom};
- const g={uid:'g',status:'active',investor_name:'Synthetic investor',nda_signed:false,committed:false};
- api.listProjects=async()=>[{id:1,uid:'synthetic-venture',name:'Synthetic venture'}];
- api.dataRoom=async()=>({files:[
-  {uid:'private',name:'Private file',visibility:'open',access_tier:'nobody'},
-  {uid:'expired',name:'Expired file',visibility:'open',access_expires_at:'2000-01-01'},
-  {uid:'committed',name:'Committed file',visibility:'open',access_tier:'committed'},
-  {uid:'public',name:'Downloadable file',visibility:'open',access_tier:'invited'},
-  {uid:'private-nda',name:'Private NDA file',visibility:'nda',access_tier:'nobody'},
-  {uid:'expired-nda',name:'Expired NDA file',visibility:'nda',access_expires_at:'2000-01-01'},
-  {uid:'committed-nda',name:'Committed NDA file',visibility:'nda',access_tier:'committed'},
-  {uid:'only-nda',name:'NDA only file',visibility:'nda',access_tier:'invited'},
- ],grants:[g,{...g,uid:'expired-grant',expires_at:'2000-01-01'}],folders:[],recent_access:[
-  {action:'blocked',file_name:'Private file'},{action:'blocked',file_name:'Private file'},
-  {action:'open_room',file_name:'Private file'},{action:'download',file_name:'Downloadable file'},
- ]});
- const m=await mountContracts(React.createElement(FounderRaiseDataRoom),'/raise/data-room?project_id=1');
- try {await m.flush();const nodeText=n=>n.nodeType===3?n.textContent:n.childNodes?.map(nodeText).join('')||n.textContent||'';
-  const row=id=>m.nodes().find(n=>m.props(n)?.['data-testid']===`row-data-room-file-${id}`);
-  for(const id of ['private','expired','committed','private-nda','expired-nda','committed-nda']){assert.match(nodeText(row(id)),/None/);assert.doesNotMatch(nodeText(row(id)),/Granted/);}
-  assert.match(nodeText(row('public')),/Granted/);
-  assert.match(nodeText(row('only-nda')),/NDA gated/);assert.doesNotMatch(nodeText(row('only-nda')),/Granted/);
-  const stat=m.nodes().find(n=>n.tagName==='DIV' && n.className==='fr-capital-stat-strip');
-  // The label and count travel together in the same mounted tile.
-  const tiles=m.nodes().filter(n=>m.props(n)?.className?.includes('fr-capital-stat'));
-  const activity=tiles.find(n=>/^Items viewed/.test(nodeText(n)));assert.ok(activity);assert.match(nodeText(activity),/^Items viewed1/);
-  const most=tiles.find(n=>/^Most viewed/.test(nodeText(n)));assert.ok(most);assert.match(nodeText(most),/Downloadable file/);assert.doesNotMatch(nodeText(most),/Private file/);
- }finally {await m.unmount();Object.assign(api,prior);}
+// D1109 (#2989): the access view (FounderRaiseDataRoom) is retired; its matrix is the tool's Access,
+// where every cell is `grantOn`. A file no investor may open is never "Can open", and an ended grant opens nothing.
+// (Activity's words, where a refusal is never an open, are held by data_room_d1108.)
+test('the founder matrix refuses hidden files and an ended grant',()=>{
+ const g={uid:'g',status:'active',investor_name:'Synthetic investor',nda_signed:false,committed:false,folders:null};
+ const room={files:[],folders:[],grants:[g]};
+ const files=[
+  {uid:'private',visibility:'open',access_tier:'nobody'},{uid:'expired',visibility:'open',access_expires_at:'2000-01-01'},
+  {uid:'committed',visibility:'open',access_tier:'committed'},{uid:'private-nda',visibility:'nda',access_tier:'nobody'},
+  {uid:'expired-nda',visibility:'nda',access_expires_at:'2000-01-01'},{uid:'committed-nda',visibility:'nda',access_tier:'committed'},
+ ];
+ for(const f of files) assert.equal(grantOn(room,f,g,now).open,false,f.uid);
+ assert.equal(grantOn(room,{uid:'public',visibility:'open',access_tier:'invited'},g,now).open,true);
+ assert.equal(grantOn(room,{uid:'only-nda',visibility:'nda',access_tier:'invited'},g,now).open,false);
+ assert.equal(grantOn(room,{uid:'public',visibility:'open',access_tier:'invited'},{...g,expires_at:'2000-01-01'},now).open,false);
 });
 
 

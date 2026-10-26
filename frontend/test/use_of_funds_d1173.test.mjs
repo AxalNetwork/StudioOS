@@ -87,7 +87,8 @@ test('the canvas\'s seven tabs, and only their words are tabs; a section is stil
 });
 
 test('every waiting tab says why, never zero or none', () => {
-  for (const t of ['milestones', 'runway', 'scenarios', 'actuals', 'history']) assert.ok(WAITS[t], t);
+  // D1177 (#3104) drew Milestones and hires, Runway, Plan vs actual and History; only Scenarios waits (part 5).
+  assert.deepEqual(Object.keys(WAITS), ['scenarios']);
   for (const w of Object.values(WAITS)) assert.ok(!/\b0\b|\$0|\bnone\b/i.test(w), w);
 });
 
@@ -106,8 +107,8 @@ test('Allocation draws the module read\'s sections, each opening its record, nev
   } finally { await v.close(); }
 });
 
-test('Milestones, Runway, Scenarios, Plan vs actual and History say what they wait for, and make no read of their own', async () => {
-  for (const tab of ['milestones', 'runway', 'scenarios', 'actuals', 'history']) {
+test('Scenarios says what it waits for, and makes no read of its own; Runway keeps the forecast link', async () => {
+  for (const tab of ['scenarios']) {
     const v = await mounted(`/raise/use-of-funds/${tab}?project_id=3`);
     try {
       assert.ok(v.testIds().includes(`uof-wait-${tab}`), tab);
@@ -134,10 +135,10 @@ test('Home is the module page with the tabs; a section is still its record page;
   try { assert.ok(!other.testIds().includes('uof-tabs')); } finally { await other.close(); }
 });
 
-test('a failed module read says so where the sections would be', async () => {
-  const fail = await mounted('/raise/use-of-funds/allocation?project_id=3', { handle: (u) => (u.includes('/cycles/raise/modules/') ? response({ detail: 'boom' }, 500) : handler(u)) });
+test('a failed plan read says so where the sections would be (D1177: Allocation reads the plan)', async () => {
+  const fail = await mounted('/raise/use-of-funds/allocation?project_id=3', { handle: (u) => (u.includes('/use-of-funds/plan') ? response({ detail: 'boom' }, 500) : handler(u)) });
   try {
-    assert.match(fail.text(), /This is not a claim that there are none\./);
+    assert.match(fail.text(), /Use of funds could not be read\. Nothing here is a zero\./);
     assert.doesNotMatch(fail.text(), /Product & engineering/);
   } finally { await fail.close(); }
 });

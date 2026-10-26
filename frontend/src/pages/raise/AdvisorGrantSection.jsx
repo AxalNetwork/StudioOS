@@ -193,15 +193,11 @@ function DocumentShares({ projectUid, grants, busyOuter }) {
  * moved every time it was viewed would be a last-read time pretending to be a
  * first-read one.
  *
- * WHERE A FOUNDER ACTUALLY FINDS IT, said plainly because it took a browser run
- * to establish: this whole section renders inside `DataRoomPage`, which
- * `/raise/data-room` mounts only under `?mode=workspace` — the canvas zone
- * `FounderRaiseDataRoom` is the default body, and its "Open workspace" link is
- * the way through. So the receipt is two clicks from the Raise bucket, exactly as
- * `DocumentShares` above it has always been. That is the right home for the
- * mirror of a control, and it is not the most discoverable place in the product;
- * if the advisor's tiles turn out to sit unopened, surfacing this list on the
- * canvas zone as well is the fix, not moving it.
+ * WHERE A FOUNDER ACTUALLY FINDS IT: this whole section renders on the Data
+ * room tool's Access tab (`raise/dataroom/DataRoomAccess.jsx`, D1109), below
+ * the scoring report's shares, for the room's owner. It moved there when the
+ * old files tool (`DataRoomPage`, `?mode=workspace`) was retired; before that it
+ * was two clicks from the Raise bucket, exactly as `DocumentShares` above it.
  *
  * IT IS NOT GRANT-GATED, unlike everything above it, and that difference is
  * stated on the card. The grants are project-scoped; this list is keyed on the

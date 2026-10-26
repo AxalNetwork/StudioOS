@@ -266,8 +266,9 @@ test('7. Connectors, Build\'s rows, channel cards, setup cards, provider tags an
 
 test('7b. the surfaces this test cannot mount pass the key to BrandIcon at the agreed size', () => {
   const has = (file, re, why) => assert.match(read(file), re, `${file}: ${why}`);
-  has('frontend/src/pages/CalendarPage.jsx', /<BrandIcon provider=\{provider\} name=\{name\} size=\{24\} \/><strong>\{name\}<\/strong>/, 'the provider card\'s 24px tile');
-  has('frontend/src/pages/CalendarPage.jsx', /provider="google_calendar" name="Google Calendar"[\s\S]*provider="microsoft_365" name="Microsoft Outlook"/, 'both providers, by key');
+  // D1212 (CAL9): the provider tiles are /calendar/connected's rows.
+  has('frontend/src/pages/CalendarConnected.jsx', /<BrandIcon provider=\{BRAND\[row\.key\]\} name=\{row\.name\} size=\{24\} \/>/, 'the provider row\'s 24px tile');
+  has('frontend/src/pages/CalendarConnected.jsx', /google: 'google_calendar', microsoft: 'microsoft_365', calendly: 'calendly', zoom: 'zoom'/, 'the four providers, by key');
   has('frontend/src/pages/admin/consoles/IntegrationKeysConsole.jsx', /<BrandIcon provider=\{row\.provider_key\} name=\{label\} size=\{24\} \/>/, 'a 24px tile by each label');
   has('frontend/src/pages/hq/PlatformPage.jsx', /<BrandIcon provider=\{k\.provider_key\} name=\{PROVIDER_LABEL\[k\.provider_key\] \|\| k\.provider_key\} size=\{24\} \/>/, 'a 24px tile by each label');
   has('frontend/src/pages/admin/consoles/GithubSyncConsole.jsx', /<BrandIcon provider="github" name="GitHub" size=\{18\} variant="bare" tone="current" className="text-gray-800 dark:text-gray-100" \/>/, 'the GitHub mark in GitHub\'s documented monochrome, as the console drew it, not lucide\'s GitBranch');

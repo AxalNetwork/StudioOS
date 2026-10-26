@@ -12,7 +12,7 @@ const STATIC = '<script src="./support.js"></script>';
 const LOADER = "document.write('<script src=\"./support.js'";
 
 const CANVASES = [
-  'design/canvases/backlog/Data Room.dc.html',
+  'design/canvases/scraps/Data Room.dc.html',
   'design/canvases/backlog/Perks & Products.dc.html',
   'design/canvases/integrated/Advisory Practice.dc.html',
   'design/canvases/integrated/BD Console.dc.html',

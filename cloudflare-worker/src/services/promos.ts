@@ -23,6 +23,7 @@ import type { Env } from '../types';
 import { stripeCall } from '../routes/billing';
 import { writeFeatureUnlock } from './featureUnlocks';
 import { bindingKey } from '../util/schemaBootstrap';
+import { likeNeedle } from '../util/likeSearch';
 
 // Stripe rejects PaymentIntents below the per-currency minimum (~50 cents for
 // USD). A discount that drops a one-time charge below this is treated as "free"
@@ -46,6 +47,16 @@ export interface PromoRow {
   created_by: number | null;
   created_at: string;
   synced_at: string;
+  // D1272 (#3298), migration 629. Absent on a row read before 629 reached the database.
+  paused_at?: string | null;
+  paused_by?: number | null;
+  ended_at?: string | null;
+  ended_by?: number | null;
+  reason?: string | null;
+  name?: string | null;
+  note?: string | null;
+  duration_in_months?: number | null;
+  replaced_by?: string | null;
   /** D1273 (migration 630). Absent on a store built before it: read as no scope and no limits. */
   plan_keys_json?: string | null;
   intervals_json?: string | null;
@@ -70,6 +81,18 @@ export interface PromoView {
   expires_at: string | null;
   created_by: number | null;
   created_at: string;
+  /** D1272: the page's state, in `promoState`'s order with paused and ended first (`LIST_STATES`). */
+  state: ListState;
+  paused_at: string | null;
+  paused_by: number | null;
+  ended_at: string | null;
+  ended_by: number | null;
+  reason: string | null;
+  name: string | null;
+  note: string | null;
+  /** The months a `repeating` coupon runs; null for once or forever, and for codes made before migration 629. */
+  duration_in_months: number | null;
+  replaced_by: string | null;
   /** D1273: the plans HQ chose ([] for none); they resolved to products at create. */
   plan_keys: string[];
   /** D1273: the intervals a subscription may use it on; null for a code made before 630 (every interval). */
@@ -121,6 +144,14 @@ export async function ensurePromoSchema(env: Env): Promise<void> {
         "synced_at TEXT NOT NULL DEFAULT (datetime('now'))" +
         ')',
     );
+    // D1272 (#3298) — migration 629's columns. On a database that has 629 these
+    // fail as duplicates, and each failure is left alone.
+    for (const col of [
+      'paused_at TEXT', 'paused_by INTEGER', 'ended_at TEXT', 'ended_by INTEGER', 'reason TEXT',
+      'name TEXT', 'note TEXT', 'duration_in_months INTEGER', 'replaced_by TEXT',
+    ]) {
+      try { await env.DB.exec(`ALTER TABLE promo_codes ADD COLUMN ${col}`); } catch { /* already there */ }
+    }
     await env.DB.exec(
       'CREATE UNIQUE INDEX IF NOT EXISTS idx_promo_codes_normalized ON promo_codes(code_normalized)',
     );
@@ -208,7 +239,7 @@ export function planKeyOf(product: { metadata?: Record<string, string> | null } 
   return null;
 }
 
-export function rowToView(row: PromoRow): PromoView {
+export function rowToView(row: PromoRow, nowMs: number = Date.now()): PromoView {
   const products = readProductIds(row.product_ids_json);
   const plans = readProductIds(row.plan_keys_json ?? '[]');
   const intervals = readIntervals(row.intervals_json);
@@ -228,6 +259,16 @@ export function rowToView(row: PromoRow): PromoView {
     expires_at: row.expires_at,
     created_by: row.created_by,
     created_at: row.created_at,
+    state: listState(row, nowMs),
+    paused_at: row.paused_at ?? null,
+    paused_by: row.paused_by ?? null,
+    ended_at: row.ended_at ?? null,
+    ended_by: row.ended_by ?? null,
+    reason: row.reason ?? null,
+    name: row.name ?? null,
+    note: row.note ?? null,
+    duration_in_months: row.duration_in_months ?? null,
+    replaced_by: row.replaced_by ?? null,
     plan_keys: plans.ok ? plans.ids : [],
     // An interval list that cannot be read is shown as no interval, as checkout refuses it.
     intervals: intervals.ok ? intervals.intervals : [],
@@ -253,6 +294,10 @@ export async function mirrorPromo(
     active: boolean;
     expires_at: string | null;
     created_by: number | null;
+    /** D1272: stored on create; Stripe keeps them on the promotion code's metadata too. */
+    name?: string | null;
+    note?: string | null;
+    duration_in_months?: number | null;
     /** D1273. A code's terms are fixed once made, so these are written at create. */
     plan_keys?: string[];
     intervals?: PromoInterval[] | null;
@@ -265,9 +310,9 @@ export async function mirrorPromo(
     `INSERT INTO promo_codes
        (id, code, code_normalized, coupon_id, percent_off, amount_off, currency,
         duration, product_ids_json, max_redemptions, times_redeemed, active,
-        expires_at, created_by, plan_keys_json, intervals_json, once_per_member,
-        first_purchase_only, synced_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))
+        expires_at, created_by, name, note, duration_in_months,
+        plan_keys_json, intervals_json, once_per_member, first_purchase_only, synced_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))
      ON CONFLICT(id) DO UPDATE SET
        code = excluded.code,
        code_normalized = excluded.code_normalized,
@@ -280,6 +325,9 @@ export async function mirrorPromo(
        max_redemptions = excluded.max_redemptions,
        active = excluded.active,
        expires_at = excluded.expires_at,
+       name = excluded.name,
+       note = excluded.note,
+       duration_in_months = excluded.duration_in_months,
        plan_keys_json = excluded.plan_keys_json,
        intervals_json = excluded.intervals_json,
        once_per_member = excluded.once_per_member,
@@ -301,6 +349,9 @@ export async function mirrorPromo(
       p.active ? 1 : 0,
       p.expires_at,
       p.created_by,
+      p.name ?? null,
+      p.note ?? null,
+      p.duration_in_months ?? null,
       JSON.stringify(p.plan_keys ?? []),
       p.intervals == null ? null : JSON.stringify(p.intervals),
       p.once_per_member ? 1 : 0,
@@ -314,7 +365,7 @@ export async function listPromos(env: Env): Promise<PromoView[]> {
   const res = await env.DB.prepare(
     'SELECT * FROM promo_codes ORDER BY created_at DESC',
   ).all<PromoRow>();
-  return (res.results ?? []).map(rowToView);
+  return (res.results ?? []).map((r) => rowToView(r));
 }
 
 export async function getPromoById(env: Env, id: string): Promise<PromoRow | null> {
@@ -371,6 +422,178 @@ export function promoState(
   if (promoExpired(row.expires_at, nowMs)) return 'expired';
   if (row.max_redemptions != null && redeemed >= row.max_redemptions) return 'exhausted';
   return 'active';
+}
+
+// ───────────────────────────────────────────────────────────────────────────
+// D1272 (#3298) — the list read, and paused, resumed and ended recorded
+// ───────────────────────────────────────────────────────────────────────────
+
+/**
+ * The page's states (D1270's `promoModel.js` `STATE_WORD`): ended and paused
+ * are recorded facts and come first; then `promoState`'s order with its words
+ * as the page says them: switched off (`inactive`), expired, at its cap
+ * (`exhausted`), active. A code switched off before migration 629, with
+ * neither fact recorded, is `off`.
+ */
+export const LIST_STATES = ['active', 'paused', 'ended', 'expired', 'at_cap', 'off'] as const;
+export type ListState = (typeof LIST_STATES)[number];
+const STATE_OF: Record<PromoState, ListState> = { inactive: 'off', expired: 'expired', exhausted: 'at_cap', active: 'active' };
+
+/** One row's state, as `LIST_SQL` computes it; the mirror's count is the lower bound HQ reads (see `promoState`). */
+export function listState(row: Pick<PromoRow, 'active' | 'expires_at' | 'max_redemptions' | 'times_redeemed' | 'paused_at' | 'ended_at'>, nowMs: number): ListState {
+  if (row.ended_at) return 'ended';
+  if (row.paused_at) return 'paused';
+  return STATE_OF[promoState(row, Number(row.times_redeemed) || 0, nowMs)];
+}
+
+export const LIST_SORTS = ['newest', 'oldest', 'code', 'redeemed'] as const;
+export const LIST_APPLIES = ['all', 'products', 'plans'] as const;
+export const LIST_PAGE_SIZE = 25;
+export const LIST_PAGE_MAX = 100;
+export const NAME_MAX = 80;
+export const NOTE_MAX = 500;
+export const REASON_MAX = 280;
+
+/** A refusal of a list query or a write: a code, a sentence and a status. */
+export class PromoInputError extends Error {
+  readonly code: string;
+  readonly status: 400 | 404 | 409;
+  constructor(code: string, sentence: string, status: 400 | 404 | 409 = 400) {
+    super(sentence);
+    this.code = code; this.status = status;
+  }
+}
+
+/**
+ * The state in SQL, the same order as `listState`. Expiry compares as a time
+ * (`julianday`), so an ISO stamp and a SQL stamp read alike; one that does not
+ * parse is not expired, as `promoExpired` says.
+ */
+const STATE_SQL = `CASE
+    WHEN ended_at IS NOT NULL THEN 'ended'
+    WHEN paused_at IS NOT NULL THEN 'paused'
+    WHEN active <> 1 THEN 'off'
+    WHEN expires_at IS NOT NULL AND julianday(expires_at) <= julianday(?) THEN 'expired'
+    WHEN max_redemptions IS NOT NULL AND times_redeemed >= max_redemptions THEN 'at_cap'
+    ELSE 'active' END`;
+const LIST_FROM = `FROM (SELECT p.*, ${STATE_SQL} AS list_state FROM promo_codes p) x
+  WHERE (? IS NULL OR x.code_normalized LIKE ? ESCAPE '\\' OR x.name LIKE ? ESCAPE '\\')
+    AND (? IS NULL
+      OR (? = 'all' AND x.product_ids_json = '[]' AND COALESCE(x.plan_keys_json, '[]') = '[]')
+      OR (? = 'products' AND x.product_ids_json <> '[]' AND COALESCE(x.plan_keys_json, '[]') = '[]')
+      OR (? = 'plans' AND COALESCE(x.plan_keys_json, '[]') <> '[]'))`;
+const LIST_WHERE_STATE = `AND (? IS NULL OR x.list_state = ?)`;
+// Every order ends on the id, so a page never shifts between two reads of the same rows.
+const LIST_ORDER: Record<(typeof LIST_SORTS)[number], string> = {
+  newest: 'ORDER BY x.created_at DESC, x.id DESC',
+  oldest: 'ORDER BY x.created_at ASC, x.id ASC',
+  code: 'ORDER BY x.code_normalized ASC, x.id ASC',
+  redeemed: 'ORDER BY x.times_redeemed DESC, x.id ASC',
+};
+
+export type ListQuery = { q?: unknown; state?: unknown; applies?: unknown; sort?: unknown; page?: unknown; page_size?: unknown };
+
+/**
+ * `GET /api/admin/promos`: one page of codes, filtered and sorted, with the
+ * total the filters keep and a count per state under the other filters (so
+ * the page's chips add up). Every value is bound; the statement text changes
+ * only with the sort, picked from `LIST_ORDER`.
+ */
+export async function listPromoPage(env: Env, query: ListQuery = {}, nowMs: number = Date.now()) {
+  const str = (v: unknown) => (v == null ? '' : String(v).trim());
+  const page = str(query.page) ? Number(query.page) : 1;
+  const size = str(query.page_size) ? Number(query.page_size) : LIST_PAGE_SIZE;
+  if (!Number.isSafeInteger(page) || page < 1) throw new PromoInputError('invalid_page', 'page is a whole number from 1.');
+  if (!Number.isSafeInteger(size) || size < 1 || size > LIST_PAGE_MAX) throw new PromoInputError('invalid_page_size', `page_size is a whole number from 1 to ${LIST_PAGE_MAX}.`);
+  const state = str(query.state) || null;
+  if (state && !(LIST_STATES as readonly string[]).includes(state)) throw new PromoInputError('invalid_state', `state is one of: ${LIST_STATES.join(', ')}.`);
+  const applies = str(query.applies) || null;
+  if (applies && !(LIST_APPLIES as readonly string[]).includes(applies)) throw new PromoInputError('invalid_applies', `applies is one of: ${LIST_APPLIES.join(', ')}.`);
+  // Plan and interval scope is part 3's (migration 630): nothing records it yet, so no list can be filtered by it.
+  // D1275: plan scope is recorded since part 3 (migration 630). `plans` keeps a code HQ chose plans
+  // for; `products` keeps one that names products and no plan; `all` keeps one that names neither.
+  const sort = (str(query.sort) || 'newest') as (typeof LIST_SORTS)[number];
+  if (!(LIST_SORTS as readonly string[]).includes(sort)) throw new PromoInputError('invalid_sort', `sort is one of: ${LIST_SORTS.join(', ')}.`);
+  const rawQ = str(query.q);
+  const needle = rawQ ? likeNeedle(rawQ.toUpperCase()) : null;
+  if (rawQ && !needle) throw new PromoInputError('invalid_q', 'Search with at least two characters.');
+  const nameNeedle = rawQ ? likeNeedle(rawQ) : null;
+
+  await ensurePromoSchema(env);
+  const now = new Date(nowMs).toISOString();
+  const base = [now, needle, needle, nameNeedle, applies, applies, applies, applies];
+  const total = await env.DB.prepare(`SELECT COUNT(*) AS n ${LIST_FROM} ${LIST_WHERE_STATE}`)
+    .bind(...base, state, state).first<{ n: number }>();
+  const rows = await env.DB.prepare(`SELECT x.* ${LIST_FROM} ${LIST_WHERE_STATE} ${LIST_ORDER[sort]} LIMIT ? OFFSET ?`)
+    .bind(...base, state, state, size, (page - 1) * size).all<PromoRow>();
+  const byState = await env.DB.prepare(`SELECT x.list_state AS state, COUNT(*) AS n ${LIST_FROM} GROUP BY x.list_state`)
+    .bind(...base).all<{ state: string; n: number }>();
+  const counts = Object.fromEntries(LIST_STATES.map((st) => [st, Number((byState.results ?? []).find((r) => r.state === st)?.n ?? 0)]));
+  return {
+    promos: (rows.results ?? []).map((r) => rowToView(r, nowMs)),
+    total: Number(total?.n ?? 0), page, page_size: size, sort, counts,
+  };
+}
+
+/** A reason as stored: one line, bounded; required where `need` says so. */
+export function readReason(raw: unknown, need: boolean): string | null {
+  const v = typeof raw === 'string' ? raw.replace(/\s+/g, ' ').trim() : '';
+  if (!v) {
+    if (need) throw new PromoInputError('reason_required', 'Give the reason. It is recorded with the change.');
+    return null;
+  }
+  if (v.length > REASON_MAX) throw new PromoInputError('invalid_reason', `The reason is at most ${REASON_MAX} characters.`);
+  return v;
+}
+
+/** Name and note as stored: trimmed, bounded, an empty string clears. `undefined` is "not sent". */
+export function readNameNote(body: Record<string, unknown>): { name?: string | null; note?: string | null } {
+  const out: { name?: string | null; note?: string | null } = {};
+  for (const [k, max] of [['name', NAME_MAX], ['note', NOTE_MAX]] as const) {
+    if (!(k in body)) continue;
+    const raw = body[k];
+    if (raw !== null && typeof raw !== 'string') throw new PromoInputError(`invalid_${k}`, `${k} is text, or null to clear it.`);
+    const v = typeof raw === 'string' ? (k === 'name' ? raw.replace(/\s+/g, ' ') : raw).trim() : '';
+    if (v.length > max) throw new PromoInputError(`invalid_${k}`, `The ${k} is at most ${max} characters.`);
+    out[k] = v || null;
+  }
+  return out;
+}
+
+/** Pause: switched off in Stripe and here, with who, when and why. Guarded on not ended and not already paused. */
+export async function markPaused(env: Env, id: string, by: number, reason: string | null): Promise<boolean> {
+  const r = await env.DB.prepare(
+    `UPDATE promo_codes SET active = 0, paused_at = datetime('now'), paused_by = ?, reason = ?, synced_at = datetime('now')
+      WHERE id = ? AND ended_at IS NULL AND paused_at IS NULL`,
+  ).bind(by, reason, id).run();
+  return Number(r.meta?.changes ?? 0) === 1;
+}
+
+/** Resume: the pause cleared and the code on again. An ended code is never resumed (the WHERE). */
+export async function markResumed(env: Env, id: string, reason: string | null): Promise<boolean> {
+  const r = await env.DB.prepare(
+    `UPDATE promo_codes SET active = 1, paused_at = NULL, paused_by = NULL, reason = ?, synced_at = datetime('now')
+      WHERE id = ? AND ended_at IS NULL`,
+  ).bind(reason, id).run();
+  return Number(r.meta?.changes ?? 0) === 1;
+}
+
+/** End: off for good, with who, when and why, and what replaced it. Guarded on not already ended. */
+export async function markEnded(env: Env, id: string, by: number, reason: string | null, replacedBy: string | null = null): Promise<boolean> {
+  const r = await env.DB.prepare(
+    `UPDATE promo_codes SET active = 0, ended_at = datetime('now'), ended_by = ?, reason = ?, replaced_by = ?, synced_at = datetime('now')
+      WHERE id = ? AND ended_at IS NULL`,
+  ).bind(by, reason, replacedBy, id).run();
+  return Number(r.meta?.changes ?? 0) === 1;
+}
+
+/** Name and note on the mirror; only the fields sent change. */
+export async function setNameNote(env: Env, id: string, fields: { name?: string | null; note?: string | null }): Promise<void> {
+  const has = (k: 'name' | 'note') => (k in fields ? 1 : 0);
+  await env.DB.prepare(
+    `UPDATE promo_codes SET name = CASE WHEN ? THEN ? ELSE name END, note = CASE WHEN ? THEN ? ELSE note END, synced_at = datetime('now')
+      WHERE id = ?`,
+  ).bind(has('name'), fields.name ?? null, has('note'), fields.note ?? null, id).run();
 }
 
 /** Reflect an active toggle into the mirror. */

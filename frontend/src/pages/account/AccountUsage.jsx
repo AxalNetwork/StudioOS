@@ -466,7 +466,7 @@ export function StorageCard({ storage, role, title = 'Storage' }) {
         : !v ? <Unreadable what="Storage" claim="This is not a claim that you stored nothing." onRetry={storage.reload} />
           : v.empty ? (
             <EmptyState size="sm" data-testid="usage-storage-empty" title="No files uploaded yet."
-              cta={role === 'founder' ? { label: 'Open the data room', to: '/raise/data-room' } : undefined} />
+              cta={role === 'founder' ? { label: 'Open the data room’s files', to: '/raise/data-room/files' } : undefined} />
           ) : v.places.map((p) => (
             <div key={p.key} className="grid grid-cols-[minmax(0,1.4fr)_80px_100px_minmax(0,1.4fr)] items-center gap-3 border-b border-axal-ground py-2.5 text-[13px] last:border-0 dark:border-gray-800" data-testid={`usage-storage-${p.key}`}>
               <span className="font-semibold">{p.label}</span>

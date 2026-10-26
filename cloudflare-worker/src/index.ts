@@ -133,6 +133,7 @@ import fundFees from './routes/fund_fees';
 import fundAdmin from './routes/fund_admin';
 import closings, { adminClosings } from './routes/closings';
 import reporting from './routes/reporting';
+import reportingReports from './routes/reporting_reports';
 import fundReporting from './routes/fund_reporting';
 import fundBooklets from './routes/fund_booklets';
 import fundNotices from './routes/fund_notices';
@@ -1257,6 +1258,8 @@ app.route('/api/fund-admin', fundAdmin);
 app.route('/api/closings', closings);
 // D1058 (#2928): reporting duties and periods, the founder's desk and the investor's view.
 app.route('/api/reporting', reporting);
+// D1059 (#2929): a report from the Grow modules, sent with frozen figures, corrected as a revision, with its statements.
+app.route('/api/reporting', reportingReports);
 app.route('/api/fund-reporting', fundReporting);
 // D716 — the Subscription Booklet: the applicant's ticks and submit, and HQ's read and withdraw.
 app.route('/api/fund-booklets', fundBooklets);

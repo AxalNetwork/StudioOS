@@ -15,6 +15,7 @@ owner's "Cap table" canvas: `design/incoming/Raise Cap Table Page.dc.html` and
 | `AccessTab.jsx` | Access (CT13, D1026): who sees what, the levels, the share links and the access log; the owner changes, a co-founder reads. |
 | `ImportExportTab.jsx` | Import and export (CT14, D1026): Carta's binding, a spreadsheet to proposals, Mercury's SAFE requests, the three exports. |
 | `SharedCapTable.jsx` | The read for an Advisor, an Operating Partner, an Admin and the Super Admin (CT17, CT18) at `/cap-tables/:projectId`, and the venture link's page. |
+| `InvestorCapTablePanel.jsx`, `investorPanelModel.js` | D1027 (#2864): the investor's read-only panel (CT15, CT15o, CT15n), mounted on the deal page's Terms tab and the company page's Terms. It draws only what the investor's level returns: the group bar, the positions with "Your position" in lavender, rounds or why they are not recorded, and why the payout at exit values is not shown; not shared, "Ask for access" in a dialog. |
 | `CapTableDialog.jsx` | The in-page dialog every change opens, with the Worker's refusal under its buttons. |
 | `capTableAccess.js` | Pure: the levels, the grants, links and log rows, New link's and the support reason's checks, and each level's view. |
 | `capTableImport.js` | Pure: the template, the CSV parse, the column map and the preview's checks against the record. |

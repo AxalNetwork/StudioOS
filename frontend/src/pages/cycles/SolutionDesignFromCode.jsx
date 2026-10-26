@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { LOVABLE_MARK, isLovable } from '../../lib/lovableMark';
 import { cyclesWrite } from '../../lib/api/cycles';
 import { fromCodeView, githubHref, languagesText } from './designFromCode';
 
@@ -61,7 +62,7 @@ function BuiltWith({ stacks }) {
       <ul className="m-0 flex list-none flex-col gap-1.5 p-0">
         {stacks.map((s) => (
           <li key={s.repository} className="flex flex-col" data-testid={`built-with-${s.repository}`}>
-            <span className={FAINT}>{s.repository} · {s.source_label || 'From GitHub'}</span>
+            <span className={FAINT}>{s.repository} · {s.source_label || 'From GitHub'}{isLovable(s.synced_with) ? ` · ${LOVABLE_MARK}` : ''}</span>
             <span className={LINE}>{languagesText(s)}</span>
             {Array.isArray(s.topics) && s.topics.length > 0 && (
               <span className="mt-0.5 flex flex-wrap gap-1">
