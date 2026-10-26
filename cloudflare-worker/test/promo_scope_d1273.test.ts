@@ -60,6 +60,8 @@ globalThis.fetch = (async (input: any, init: any = {}) => {
     const customer = new URL(url).searchParams.get('customer') || '';
     return json({ data: paidIntents[customer] ?? [], has_more: !!morePages[customer] });
   }
+  // The plans a member already holds (D892 §6 reads them before a subscription starts): none.
+  if (path.startsWith('/subscriptions') && method === 'GET') return json({ data: [], has_more: false });
   if (path.startsWith('/subscriptions')) {
     if (refuseSubscription) return json({ error: { message: 'card declined' } }, 402);
     return json({ id: 'sub_1', status: 'incomplete', latest_invoice: { id: 'in_1', payment_intent: { id: 'pi_1', client_secret: 'pi_1_secret_fixture' } } });
