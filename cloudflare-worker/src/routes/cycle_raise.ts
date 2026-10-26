@@ -156,7 +156,7 @@ const cycleRaise = new Hono<{ Bindings: Env }>();
 cycleRaise.route('/use-of-funds', useOfFunds);
 
 const today = () => new Date().toISOString().slice(0, 10);
-const capitalPath = (path: string) => /\/(?:capital-relationships|prospects)(?:\/|$)/.test(capitalRequestPath(path));
+const capitalPath = (path: string) => /\/(?:capital-relationships|prospects)(?:\/|$)/.test(path);
 
 function capitalFailure(c: any, error: unknown): Response {
   if (error instanceof Error && error.message === 'Unauthorized') return c.json({ detail: 'Unauthorized' }, 401);
@@ -175,14 +175,16 @@ async function scope(c: any): Promise<{ user: User; projectId: number; project: 
   const raw = String(c.req.query('project') ?? '');
   if (!/^[1-9][0-9]{0,9}$/.test(raw)) return c.json({ detail: 'project is required' }, 400);
   const projectId = Number(raw);
-  const project = (await c.env.DB.prepare(capitalPath(c.req.path) || capitalRequestPath(c.req.path).endsWith('/overview')
+  let path: string;
+  try { path = capitalRequestPath(c.req.path); } catch (error) { return capitalFailure(c, error); }
+  const project = (await c.env.DB.prepare(capitalPath(path) || path.endsWith('/overview')
     ? 'SELECT id, founder_id FROM projects WHERE id = ? AND deleted_at IS NULL' : 'SELECT id, founder_id FROM projects WHERE id = ?')
     .bind(projectId).first()) as ProjectRef | null;
   if (!project) return c.json({ detail: 'Project not found' }, 404);
-  if ((capitalPath(c.req.path) || capitalRequestPath(c.req.path).endsWith('/overview')) && await isSupportSession(c)) {
+  if ((capitalPath(path) || path.endsWith('/overview')) && await isSupportSession(c)) {
     return refuse(c, 403, { code: 'support_session_refused', message: 'Use your own staff account and give a reason for a support read.' });
   }
-  if (capitalPath(c.req.path)) {
+  if (capitalPath(path)) {
     if (capitalStaff(user)) {
       if (!capitalStaffRequestAllowed(c.req.method, c.req.path)) return refuse(c, 403, c.req.method === 'GET'
         ? { code: 'support_read_required', message: 'Give a reason for a read-only support view.' }

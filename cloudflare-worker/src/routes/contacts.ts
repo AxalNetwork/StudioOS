@@ -47,8 +47,8 @@ async function capitalRestricted(c: Context<{ Bindings: Env }>, user: User) {
 
 // Legacy pipeline URLs inherit D1191 too; a reason never unlocks ordinary GETs.
 r.use('*', async (c, next) => {
-  if (!/\/raise-(?:prospects|round|closes|pro-rata|updates)(?:\/|$)/.test(capitalRequestPath(c.req.path))) return next();
   try {
+    if (!/\/raise-(?:prospects|round|closes|pro-rata|updates)(?:\/|$)/.test(capitalRequestPath(c.req.path))) return next();
     const user = await requireAuth(c);
     if ((await selectJwt(c))?.payload.impersonated_by) return c.json({ detail: 'Use your own staff account and a reasoned support read.', code: 'support_session_refused' }, 403);
     if (capitalStaff(user)) {

@@ -9,7 +9,8 @@ export const capitalInvestor = (user: Pick<User, 'role'>) => role(user) === 'inv
 export const capitalOwner = (project: ProjectRef, user: User) => !capitalStaff(user) && !capitalInvestor(user) && ownsVenture(project, user);
 export const CAPITAL_SUPPORT_ACTION = 'capital_relationships_support_read';
 export function capitalRequestPath(path: string): string {
-  try { return decodeURIComponent(path); } catch { return ''; }
+  try { return decodeURIComponent(path); }
+  catch { throw new CapitalAccessError(400, 'invalid_capital_path', 'Invalid request path.'); }
 }
 /** Every other capital request is refused, including future private GETs. */
 export function capitalStaffRequestAllowed(method: string, rawPath: string): boolean {

@@ -67,11 +67,11 @@ function fixture() {
         async run() {
           before(sql,args);
           if (legacyAuditFailure > 0 && sql.includes("'prospect_created'") && sql.includes('INSERT INTO activity_logs') && --legacyAuditFailure === 0) throw new Error('Synthetic private legacy audit error');
-          if (losePromotion && sql.includes("UPDATE contacts SET promoted_to='raise'") && args[3]===4) {
+          if (losePromotion && sql.includes("UPDATE contacts SET promoted_to='raise'") && args[4]===4) {
             losePromotion=false;
             db.prepare("INSERT INTO raise_prospects (id,uid,project_id,contact_id,name,stage) VALUES (1001,'fixture-winner',101,4,'Fixture winner','to_contact')").run();
             db.prepare("UPDATE contacts SET promoted_to='raise',promoted_ref_id=1001 WHERE id=4").run();
-            return { success:true,meta:{changes:0,last_row_id:0} };
+            // Run the actual CAS below against the concurrent winner.
           }
           if (auditFailure && sql.includes('INSERT INTO activity_logs') && args.includes(CAPITAL_SUPPORT_ACTION)) {
             if (auditFailure === 'throw') throw new Error('Synthetic private audit error');
@@ -320,6 +320,7 @@ test('D1191: canonical Contacts promotion preserves the concurrent winner and re
     assert.equal(f.db.prepare('SELECT COUNT(*) AS n FROM raise_prospects WHERE contact_id=4').get()?.n,1);
     assert.equal(f.db.prepare('SELECT promoted_ref_id FROM contacts WHERE id=4').get()?.promoted_ref_id,1001);
     assert.equal(f.db.prepare("SELECT COUNT(*) AS n FROM activity_logs WHERE action='contact_promoted'").get()?.n,0);
+    assert.equal(f.db.prepare("SELECT COUNT(*) AS n FROM activity_logs WHERE action='prospect_created'").get()?.n,0);
   }finally{f.close();}
 });
 
@@ -335,13 +336,40 @@ test('D1191: unreadable membership and support history fail closed with fixed wo
 test('D1191: encoded access paths and page bounds are normalized before classification',()=>{
   assert.equal(capitalRequestPath('/api/contacts/%72aise-prospects'),'/api/contacts/raise-prospects');
   assert.equal(capitalRequestPath('/api/cycles/raise/modules/%63apital-relationships'),'/api/cycles/raise/modules/capital-relationships');
-  assert.equal(capitalRequestPath('/api/contacts/%broken'),'');
+  assert.throws(()=>capitalRequestPath('/api/contacts/%broken'),/Invalid request path/);
   for(const raw of [null,undefined,'',0,-1,1.2,100001,'invalid'])assert.equal(capitalPage(raw),1);
   for(const raw of [2,'3',100000])assert.equal(capitalPage(raw),Number(raw));
   const base='/api/cycles/raise';
   assert.equal(capitalStaffRequestAllowed('GET',base+'/modules/capital-relationships'),true);
   assert.equal(capitalStaffRequestAllowed('POST',base+'/capital-relationships/support-read'),true);
   for(const [method,path] of [['GET','/capital-relationships/commitments'],['GET','/capital-relationships/match'],['GET','/capital-relationships/future-private-read'],['GET','/prospects/future-private-read'],['POST','/prospects/other/support-read'],['PUT','/modules/capital-relationships'],['GET','/capital-relationships/support-read']])assert.equal(capitalStaffRequestAllowed(method,base+path),false);
+});
+
+test('D1191: malformed paths fail closed before private queries for members, staff and impersonation',async()=>{
+  const f=fixture();try {
+    for(const [actor,impersonator] of [[1,undefined],[30,undefined],[1,30]]) {
+      for(const [path,method] of [['/api/contacts/raise-prospects/%broken','GET'],['/api/cycles/raise/prospects/%broken?project=101','PATCH']]) {
+        f.reset();const response=await f.request(path,actor,method,method==='GET'?undefined:{notes:'Forbidden'},impersonator);
+        assert.equal(response.status,400);assert.equal(f.privateReads().length,0);assert.doesNotMatch(JSON.stringify(response.data),/%broken|Forbidden/);
+      }
+    }
+  }finally{f.close();}
+});
+
+test('D1191: promotion and its actor audit roll back together, and a retry records both histories once',async()=>{
+  const f=fixture();try {
+    f.db.exec("INSERT INTO contacts (id,uid,project_id,name,email,audience,status) VALUES (40,'audit-promotion',101,'Fixture promotion','audit-promotion@example.test','investor','new')");
+    f.failLegacyAuditAt(1);
+    const failed=await f.request('/api/contacts/audit-promotion/promote',1,'POST',{});assert.equal(failed.status,503);assert.doesNotMatch(JSON.stringify(failed.data),/Synthetic private/);
+    assert.equal(f.db.prepare('SELECT COUNT(*) AS n FROM raise_prospects').get()?.n,2);
+    assert.equal(f.db.prepare('SELECT promoted_ref_id FROM contacts WHERE id=40').get()?.promoted_ref_id,null);
+    assert.equal(f.db.prepare("SELECT COUNT(*) AS n FROM activity_logs WHERE action IN ('prospect_created','contact_promoted')").get()?.n,0);
+    const retried=await f.request('/api/contacts/audit-promotion/promote',1,'POST',{});assert.equal(retried.status,200);
+    const again=await f.request('/api/contacts/audit-promotion/promote',1,'POST',{});assert.equal(again.data.already_promoted,true);
+    assert.equal(f.db.prepare('SELECT COUNT(*) AS n FROM raise_prospects').get()?.n,3);
+    assert.equal(f.db.prepare("SELECT COUNT(*) AS n FROM activity_logs WHERE action='prospect_created'").get()?.n,1);
+    assert.equal(f.db.prepare("SELECT COUNT(*) AS n FROM activity_logs WHERE action='contact_promoted'").get()?.n,1);
+  }finally{f.close();}
 });
 
 test('D1191: a failed secondary staff audit preserves the mandatory founder audit without logging private errors',async()=>{

@@ -55,20 +55,27 @@ export async function promoteLegacyInvestor(env: Env, a: { projectId: number; us
     if (existing) return { ...row, record: existing, already_promoted: true };
   }
   const now = new Date().toISOString();
-  const inserted = await env.DB.prepare(
+  const uid = crypto.randomUUID();
+  const insert = env.DB.prepare(
     'INSERT INTO raise_prospects (uid, project_id, contact_id, name, email, firm, stage, notes, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
-  ).bind(crypto.randomUUID(), a.projectId, row.id, row.name || null, row.email, null, 'to_contact', row.message ? String(row.message).slice(0, 4000) : null, now, now).run();
+  ).bind(uid, a.projectId, row.id, row.name || null, row.email, null, 'to_contact', row.message ? String(row.message).slice(0, 4000) : null, now, now);
+  let inserted; let changed;
+  try {
+    [inserted, changed] = await env.DB.batch([
+      insert,
+      env.DB.prepare("UPDATE contacts SET promoted_to='raise', promoted_ref_id=(SELECT id FROM raise_prospects WHERE uid=? AND project_id=?), status='qualified', last_activity_at=?, updated_at=? WHERE id=? AND project_id=? AND (promoted_ref_id IS NULL OR promoted_ref_id = ?)")
+        .bind(uid, a.projectId, now, now, row.id, a.projectId, row.promoted_ref_id),
+      env.DB.prepare("INSERT INTO activity_logs (project_id, user_id, entity_type, entity_id, action, details, actor) SELECT ?, ?, 'raise.capital-relationships', CAST(p.id AS TEXT), 'prospect_created', 'Investor promoted from Contacts', ? FROM raise_prospects p WHERE p.uid=? AND p.project_id=? AND EXISTS (SELECT 1 FROM contacts c WHERE c.id=? AND c.project_id=? AND c.promoted_ref_id=p.id)")
+        .bind(a.projectId, a.userId, `user:${a.userId}`, uid, a.projectId, row.id, a.projectId),
+    ]);
+  } catch { throw new LegacyWriterError(503, 'The investor promotion could not be saved. Try again.'); }
   const id = Number(inserted.meta.last_row_id);
-  const changed = await env.DB.prepare(
-    "UPDATE contacts SET promoted_to='raise', promoted_ref_id=?, status='qualified', last_activity_at=?, updated_at=? WHERE id=? AND project_id=? AND (promoted_ref_id IS NULL OR promoted_ref_id = ?)",
-  ).bind(id, now, now, row.id, a.projectId, row.promoted_ref_id).run();
   if (changed.meta.changes === 0) {
     await env.DB.prepare('DELETE FROM raise_prospects WHERE id = ? AND project_id = ?').bind(id, a.projectId).run();
     const winner = await env.DB.prepare('SELECT * FROM contacts WHERE id = ? AND project_id = ?').bind(row.id, a.projectId).first<any>();
     const record = winner?.promoted_ref_id ? await env.DB.prepare('SELECT * FROM raise_prospects WHERE id = ? AND project_id = ?').bind(winner.promoted_ref_id, a.projectId).first() : null;
     return { ...winner, record, already_promoted: true };
   }
-  await prospectAudit(env, a, id, 'prospect_created', 'Investor promoted from Contacts').run();
   return { ...await env.DB.prepare('SELECT * FROM contacts WHERE id = ? AND project_id = ?').bind(row.id, a.projectId).first(),
     record: await env.DB.prepare('SELECT * FROM raise_prospects WHERE id = ? AND project_id = ?').bind(id, a.projectId).first() };
 }
