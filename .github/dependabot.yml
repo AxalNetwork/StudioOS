@@ -6,6 +6,7 @@ version: 2
 #  - npm (cloudflare-worker) — Hono + Workers types (PRODUCTION dep tree)
 #  - npm (cloudflare-worker-tail) — wrangler tail consumer (dev/deploy tooling)
 #  - npm (scripts/claude-review) — the Anthropic SDK the advisory PR review pins
+#  - bun (brandtemplates/*) — the Lovable templates, security updates only
 #  - pip (root) — FastAPI dev backend
 #  - github-actions — keep CI actions current
 #
@@ -107,6 +108,22 @@ updates:
       tail-worker:
         patterns: ['*']
     labels: ['deps', 'worker']
+
+  # The Lovable brand templates are Bun projects (bun.lock, no npm lockfile).
+  # Under `npm` Dependabot refused them ("cannot update bun.lock"), so their
+  # security alerts (zod GHSA-mrhx-c7xc-m3w5) had no fix path. Security
+  # updates only: a limit of 0 opens no version-update PRs across sixteen
+  # templates, while security PRs still come. The cooldown matches each
+  # template's bunfig.toml (`minimumReleaseAge`, 7 days).
+  - package-ecosystem: bun
+    directories: ['/brandtemplates/*']
+    schedule:
+      interval: weekly
+      day: monday
+    cooldown:
+      default-days: 7
+    open-pull-requests-limit: 0
+    labels: ['deps']
 
   - package-ecosystem: pip
     directory: /

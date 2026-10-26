@@ -609,7 +609,8 @@ export function intervalPrices(priced: Array<{ unit_amount: number; currency: st
  */
 export async function plansAndPacks(env: Env) {
   const { PLAN_AI_SHARE, allowanceFromCharge } = await import('./planAllowance');
-  const { catalogueFields, planByLicenceKey, publicCatalogue } = await import('./planCatalogue');
+  const { catalogueFields, planByKey, planByLicenceKey, publicCatalogue } = await import('./planCatalogue');
+  const { storageFields } = await import('./storagePlans');
   // D783: no plan, no allowance. A paid plan includes 25% of its price each month: each price says what it gives,
   // and the plan's figure is its headline price's (monthly first, else yearly), as the card shows the price.
   const none = { share: PLAN_AI_SHARE, monthly_microusd: 0, source: 'none' };
@@ -624,9 +625,14 @@ export async function plansAndPacks(env: Env) {
     if (!/no such table: stripe_products\b/.test(String((e as Error)?.message ?? e))) throw e;
   }
   const plans: Record<string, unknown>[] = [];
-  for (const [family, key] of [['founder', 'founder:free'], ['investor', 'investor:free'], ['other', 'other']] as const)
+  for (const [family, key] of [['founder', 'founder:free'], ['investor', 'investor:free'], ['advisor', 'advisor:free'],
+    ['partner', 'partner:free'], ['other', 'other'], ['lp', 'lp_access']] as const)
     plans.push({ family, licence_key: key, product_id: null, plan_name: null, free: true, prices: [], allowance: none,
-      monthly: null, yearly: null, yearly_saving_percent: null, catalogue: catalogueFields(planByLicenceKey(key)) });
+      monthly: null, yearly: null, yearly_saving_percent: null, ...storageFields(key), catalogue: catalogueFields(planByKey(key)) });
+  // Storage is known; Checkout does not sell Investor Plus yet (D786/#2451).
+  plans.push({ family: 'investor', licence_key: 'investor:plus', product_id: null, plan_name: null, free: false,
+    prices: [], allowance: null, monthly: null, yearly: null, yearly_saving_percent: null,
+    ...storageFields('investor:plus'), catalogue: catalogueFields(planByKey('investor:plus')) });
   for (const row of rows) {
     let metadata: Record<string, string>, prices: any[];
     try { metadata = JSON.parse(row.metadata_json); prices = JSON.parse(row.prices_json); } catch { continue; }
@@ -640,7 +646,7 @@ export async function plansAndPacks(env: Env) {
       prices: priced, allowance: top ? { share: PLAN_AI_SHARE, monthly_microusd: top.allowance_microusd, source: 'plan' } : null,
       // D816 (#2262): the two prices /pricing's interval switch shows, and the saving computed from them.
       ...intervalPrices(priced),
-      catalogue: catalogueFields(planByLicenceKey(plan.licence_key)) });
+      ...storageFields(planByLicenceKey(plan.licence_key)?.key), catalogue: catalogueFields(planByLicenceKey(plan.licence_key)) });
   }
   return { plans, packs: (await packsOnSale(env)).packs, covers: PLAN_COVERS, resets: PLAN_RESETS, catalogue: publicCatalogue() };
 }
