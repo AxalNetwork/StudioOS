@@ -57,7 +57,7 @@ const parse = <T>(s: unknown, def: T): T => {
 // ---------------------------------------------------------------------------
 
 const TEXT_FIELDS: Record<string, number> = {
-  product_name: 200, logo_key: 500, summary: 4000, tester_tasks: 4000, time_needed: 200,
+  product_name: 200, summary: 4000, tester_tasks: 4000, time_needed: 200,
 };
 const DATE_FIELDS = ['opens_at', 'closes_at', 'testing_starts', 'testing_ends'] as const;
 
@@ -68,6 +68,8 @@ const DATE_FIELDS = ['opens_at', 'closes_at', 'testing_starts', 'testing_ends'] 
 export function programmeInput(body: any, partial: boolean): Record<string, unknown> {
   const b = body && typeof body === 'object' ? body : {};
   const out: Record<string, unknown> = {};
+  // D1199: the Worker sets `logo_key` when a logo is uploaded (services/testingLogo.ts); a body never does.
+  if ('logo_key' in b) throw refuse(400, 'invalid_request', 'Upload the logo instead; logo_key is set by the upload.');
   for (const [k, max] of Object.entries(TEXT_FIELDS)) {
     if (!(k in b)) continue;
     const v = b[k] == null ? '' : String(b[k]).trim();
