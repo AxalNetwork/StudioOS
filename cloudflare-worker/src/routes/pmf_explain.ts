@@ -45,11 +45,12 @@ async function read(c: Context<{ Bindings: Env }>) {
 async function preview(c: Context<{ Bindings: Env }>, runner: typeof runAI) {
     const s = await scope(c); if (s instanceof Response) return s;
     const b = await jsonBody(c);
-    if (!b || Object.keys(b).join() !== 'mode' || !['explain', 'questions'].includes(b.mode)) return c.json({ detail: 'Choose Explain or interview questions.' }, 400);
+    if (!b || Object.keys(b).sort().join() !== 'inputs_hash,mode' || !['explain', 'questions'].includes(b.mode) || typeof b.inputs_hash !== 'string' || !/^[a-f0-9]{64}$/.test(b.inputs_hash)) return c.json({ detail: 'Choose Explain or interview questions from the current readiness inputs.' }, 400);
     const mode = b.mode as ExplainMode;
     try {
       const snapshot = await storedPmfInputs(c.env, s.projectId);
       if (!snapshot) return c.json({ detail: 'Not recorded: open the readiness inputs first.' }, 409);
+      if (snapshot.hash !== b.inputs_hash) return c.json({ code: 'pmf_inputs_changed', detail: 'The displayed inputs changed. Refresh readiness before asking Eadwyn.' }, 409);
       const inputs = explanationInputs(snapshot.inputs, mode);
       if (!inputs.length) return c.json({ detail: 'Not recorded: there are no applicable inputs to read.' }, 409);
       const out = await runner(c.env, { task: 'workspace_explain', userId: s.user.id, text: explanationPrompt(inputs, mode), maxTokens: 2000,

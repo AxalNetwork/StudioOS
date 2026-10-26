@@ -146,7 +146,8 @@ test('Files, Access and Activity read the founder\'s room by the venture\'s uid,
     assert.ok(v.hrefs().includes('/raise/data-room/new?project_id=3'), 'Upload opens the tool\'s sheet');
   } finally { await v.close(); }
   const a = await mounted('/raise/data-room/access?project_id=3');
-  try { assert.equal(a.count('dataroom-grant-row'), 2); assert.match(a.text(), /Bluefern Capital/); } finally { await a.close(); }
+  // D1107 (DR6): Access opens on the grants in force, as the canvas's Grant: Active; g2 has ended.
+  try { assert.equal(a.count('dataroom-grant-row'), 1); assert.match(a.text(), /Bluefern Capital/); } finally { await a.close(); }
   const l = await mounted('/raise/data-room/activity?project_id=3');
   try {
     assert.equal(l.count('dataroom-week-tile'), 3);
@@ -155,8 +156,8 @@ test('Files, Access and Activity read the founder\'s room by the venture\'s uid,
   } finally { await l.close(); }
 });
 
-test('Requests, Checklist and Preview say what they wait for, and make no room read', async () => {
-  for (const tab of ['requests', 'checklist', 'preview']) {
+test('Checklist and Preview say what they wait for, and make no room read (Requests is D1107\'s)', async () => {
+  for (const tab of ['checklist', 'preview']) {
     const v = await mounted(`/raise/data-room/${tab}?project_id=3`);
     try {
       assert.ok(v.testIds().includes(`dataroom-${tab}-wait`), tab);

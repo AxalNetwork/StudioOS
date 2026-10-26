@@ -16,11 +16,11 @@ async function mounted(overrides = {}) {
   document.createElement = tag => { const n = create(tag); n.querySelector = () => null; n.querySelectorAll = () => []; n.focus = () => {}; n.children = []; return n; };
   document.body.style = { overflow: 'auto', paddingRight: '' };
   pmfExplainApi.read = async p => { calls.push(['read', p]); return overrides.read ? overrides.read(p) : { reading: null }; };
-  pmfExplainApi.preview = async (p, mode, headers) => { calls.push(['preview', p, mode, headers]); return overrides.preview ? overrides.preview(p, mode) : mode === 'questions' ? { items: [item] } : proposal; };
+  pmfExplainApi.preview = async (p, mode, headers, inputsHash) => { calls.push(['preview', p, mode, headers, inputsHash]); return overrides.preview ? overrides.preview(p, mode) : mode === 'questions' ? { items: [item] } : proposal; };
   pmfExplainApi.keep = async (p, receipt) => { calls.push(['keep', p, receipt]); return overrides.keep ? overrides.keep(p, receipt) : { reading: { items: [item] } }; };
   const container = document.createElement('div'); document.body.appendChild(container); const root = createRoot(container);
   const flush = async () => { await act(async () => { for (let i = 0; i < 5; i++) await new Promise(resolve => setTimeout(resolve, 0)); }); };
-  const render = async projectId => { await act(async () => root.render(React.createElement(PmfExplain, { projectId }))); await flush(); };
+  const render = async (projectId, inputsHash = 'a'.repeat(64)) => { await act(async () => root.render(React.createElement(PmfExplain, { projectId, inputsHash }))); await flush(); };
   await render(7);
   const walk = n => [n, ...(n.childNodes || []).flatMap(walk)];
   const text = n => n?.nodeType === 3 ? n.textContent : n?.childNodes?.length ? n.childNodes.map(text).join('') : n?.textContent || '';
@@ -38,6 +38,7 @@ test('mount reads only kept text; Explain is a cited proposal and Dismiss never 
     await ui.click('Explain this score');
     assert.match(ui.text(), /Proposal · plain-language reading/); assert.match(ui.text(), /Cites · Waitlist/); assert.match(ui.text(), /0 signups/);
     assert.equal(ui.calls[1][2], 'explain'); assert.equal(decodeURIComponent(ui.calls[1][3]['X-Rail-Option']), 'draft:raise/pmf-explain');
+    assert.equal(ui.calls[1][4], 'a'.repeat(64));
     await ui.click('Dismiss'); assert.equal(ui.calls.filter(c => c[0] === 'keep').length, 0); assert.doesNotMatch(ui.text(), /The recorded evidence is limited/);
   } finally { await ui.close(); }
 });
@@ -81,5 +82,14 @@ test('a late preview from a previous venture cannot replace the current venture 
     await act(async () => { resolve.get(8)({ ...proposal, items: [{ ...item, text: 'Current venture wording.' }] }); await current.pending; });
     assert.match(ui.text(), /Current venture wording/);
     assert.equal(ui.calls.filter(c => c[0] === 'keep').length, 0);
+  } finally { await ui.close(); }
+});
+test('a refreshed input payload clears the old proposal and uses its new hash', async () => {
+  const ui = await mounted();
+  try {
+    await ui.click('Explain this score'); await ui.render(7, 'b'.repeat(64));
+    assert.doesNotMatch(ui.text(), /Proposal · plain-language reading/);
+    await ui.click('Questions for the next interviews');
+    assert.equal(ui.calls.filter(c => c[0] === 'preview').at(-1)[4], 'b'.repeat(64));
   } finally { await ui.close(); }
 });

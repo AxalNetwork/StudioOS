@@ -15,7 +15,7 @@ function Citations({ items }) {
   </div>)}</div>;
 }
 /** RD11. Opening and running a preview never saves a reading or changes a score. */
-export default function PmfExplain({ projectId, ai }) {
+export default function PmfExplain({ projectId, inputsHash, ai }) {
   const [mode, setMode] = useState(null);
   const [proposal, setProposal] = useState(null);
   const [kept, setKept] = useState(null);
@@ -33,15 +33,15 @@ export default function PmfExplain({ projectId, ai }) {
     try { const result = await pmfExplainApi.read(projectId); if (current === generation.current && serial === readSerial.current) setKept(result.reading); }
     catch { if (current === generation.current && serial === readSerial.current) setReadError(true); }
   }
-  useEffect(() => { generation.current++; setMode(null); setProposal(null); setError(''); setBusy(false); load(); return () => { generation.current++; }; }, [projectId]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => { generation.current++; setMode(null); setProposal(null); setError(''); setBusy(false); load(); return () => { generation.current++; }; }, [projectId, inputsHash]); // eslint-disable-line react-hooks/exhaustive-deps
   async function run(nextMode) {
     const current = generation.current;
     setMode(nextMode); setProposal(null); setError(''); setCopied(false); setBusy(true);
     try {
-      const result = await pmfExplainApi.preview(projectId, nextMode, railPressHeaders(OPTIONS[nextMode]));
+      const result = await pmfExplainApi.preview(projectId, nextMode, railPressHeaders(OPTIONS[nextMode]), inputsHash);
       if (current === generation.current) setProposal(result);
     } catch (e) {
-      if (current === generation.current) setError(e?.code === 'assist_off' ? 'Eadwyn is off for this page. Switch to AI to run a reading.' : e?.status === 402 ? 'Your AI allowance cannot cover this run. Add AI tokens to continue.' : e?.status === 409 ? 'Not recorded: open the current readiness inputs before asking Eadwyn.' : 'The reading is Unreadable. Try again.');
+      if (current === generation.current) setError(e?.code === 'assist_off' ? 'Eadwyn is off for this page. Switch to AI to run a reading.' : e?.code === 'pmf_inputs_changed' ? 'The displayed inputs changed. Refresh readiness before asking Eadwyn.' : e?.status === 402 ? 'Your AI allowance cannot cover this run. Add AI tokens to continue.' : e?.status === 409 ? 'Not recorded: add evidence in Validate, then refresh readiness.' : 'The reading is Unreadable. Try again.');
     } finally { if (current === generation.current) setBusy(false); }
   }
   async function keep() {

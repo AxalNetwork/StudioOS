@@ -35,6 +35,7 @@ async function fixture() {
     INSERT INTO waitlist_signups(project_id,email,audience,created_at) VALUES(1,'hidden@example.test','customer','2026-10-01');`);
   const env: any = { DB: d1Over(db), JWT_SECRET: crypto.randomUUID() + crypto.randomUUID(), ENVIRONMENT: 'development' };
   await recomputePmf(env, 1, 1, 'module_read', '2026-10-25');
+  const displayedHash = (await storedPmfInputs(env, 1))!.hash;
   let model: any = null;
   let output: string | null = null;
   let refusal: string | null = null;
@@ -46,6 +47,7 @@ async function fixture() {
     return { ok: true, output: output ?? JSON.stringify({ items: rows.map((r: any) => ({ input: r.key, text: 'Explore the experience behind this evidence.' })) }), usage: { model: 'synthetic-model', est_cost_usd: 0.001 } };
   }) as any));
   async function call(user: number | null, method = 'POST', body: any = { mode: 'explain' }, path = '?project=1', operator?: number) {
+    if (body?.mode && !Object.prototype.hasOwnProperty.call(body, 'inputs_hash')) body = { ...body, inputs_hash: displayedHash };
     const headers: any = { 'Content-Type': 'application/json' };
     if (user !== null) headers.Authorization = 'Bearer ' + await new SignJWT({ user_id: user, ...(operator ? { impersonated_by: operator } : {}) }).setProtectedHeader({ alg: 'HS256' }).setIssuedAt().setExpirationTime('1h').sign(new TextEncoder().encode(env.JWT_SECRET));
     const res = await app.request('/api/cycles/raise/pmf/explain' + path, { method, headers, ...(method === 'GET' ? {} : { body: JSON.stringify(body) }) }, env);
@@ -139,6 +141,15 @@ test('manual mode and ungrounded model output are refused before a reading or sc
   assert.equal((await f.call(1)).status, 403); assert.equal(f.state(), before);
   const g = await fixture(); g.output('{"items":[{"input":"invented","text":"Invented reading"}]}');
   const unchanged = g.state(); assert.equal((await g.call(1)).status, 503); assert.equal(g.state(), unchanged);
+});
+test('a displayed input hash must match the current signed snapshot before either model run', async () => {
+  const f = await fixture(); const before = f.state();
+  for (const mode of ['explain', 'questions']) {
+    const stale = await f.call(1, 'POST', { mode, inputs_hash: 'a'.repeat(64) });
+    assert.equal(stale.status, 409); assert.equal(stale.body.code, 'pmf_inputs_changed');
+  }
+  assert.equal((await f.call(1, 'POST', { mode: 'explain', inputs_hash: 'invalid' })).status, 400);
+  assert.equal(f.model(), null); assert.equal(f.state(), before);
 });
 test('the parser refuses absent, duplicated and numeric claims; zero evidence remains a recorded citation', () => {
   const rows = [{ key: 'waitlist', label: 'Waitlist', state: 'recorded', grade_factor: 0.7, words: '0 signups', grade: 'sourced', stale: true, module: 'demand-signals' }] as PmfInputResult[];

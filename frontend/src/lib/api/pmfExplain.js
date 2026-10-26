@@ -3,6 +3,6 @@ import { request } from '../api.js';
 const query = project => new URLSearchParams({ project: String(project) });
 export const pmfExplainApi = {
   read: project => request(`/cycles/raise/pmf/explain?${query(project)}`),
-  preview: (project, mode, headers) => request(`/cycles/raise/pmf/explain?${query(project)}`, { method: 'POST', headers, body: JSON.stringify({ mode }) }),
+  preview: (project, mode, headers, inputsHash) => request(`/cycles/raise/pmf/explain?${query(project)}`, { method: 'POST', headers, body: JSON.stringify({ mode, inputs_hash: inputsHash }) }),
   keep: (project, receipt) => request(`/cycles/raise/pmf/explain/keep?${query(project)}`, { method: 'POST', body: JSON.stringify({ receipt }) }),
 };
