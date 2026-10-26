@@ -50,14 +50,20 @@ test('cap-table vesting readers remain scoped to their intended audience', () =>
   // D896 (#2675) added one more on purpose: the pitch deck's sources count
   // the venture's vesting schedules through its own cap-table holders, as a
   // number for a card, read only — pinned below.
+  // D1255 (#3278) added one more on purpose: Governance's founder-vesting input
+  // counts the venture's founder holders with a vesting schedule, as two
+  // numbers, read only — pinned below.
   assert.deepEqual(
     readers.sort(),
-    ['integrations/providers/carta.ts', 'routes/captable.ts', 'routes/company.ts', 'routes/cycle_build.ts', 'services/capTableRegister.ts', 'services/capTableWrites.ts', 'services/decks/sources.ts', 'services/records/build.ts'],
+    ['integrations/providers/carta.ts', 'routes/captable.ts', 'routes/company.ts', 'routes/cycle_build.ts', 'services/capTableRegister.ts', 'services/capTableWrites.ts', 'services/decks/sources.ts', 'services/records/build.ts', 'services/ventureScoring/collectors.ts'],
     'only the Carta importer, the four reviewed readers and the one reviewed writer should touch these tables',
   );
   const deck = read('cloudflare-worker/src/services/decks/sources.ts');
   assert.doesNotMatch(deck, /cap_table_option_pools/, 'the deck counts vesting rows, not pools');
   assert.doesNotMatch(deck, /(INSERT INTO|UPDATE|DELETE FROM)\s+cap_table_/, 'a read, never a write');
+  const scorecard = read('cloudflare-worker/src/services/ventureScoring/collectors.ts');
+  assert.doesNotMatch(scorecard, /cap_table_option_pools/, 'the scorecard counts vesting rows, not pools');
+  assert.doesNotMatch(scorecard, /(INSERT INTO|UPDATE|DELETE FROM)\s+cap_table_/, 'the scorecard reads, never writes');
   assert.match(deck, /FROM cap_table_vesting v\s*WHERE v\.holder_id IN \(SELECT h\.id FROM cap_table_holders h WHERE h\.project_id = \?/,
     'vesting is reached only through this venture\u2019s holders');
   const company = read('cloudflare-worker/src/routes/company.ts');

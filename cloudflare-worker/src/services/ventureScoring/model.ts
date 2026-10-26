@@ -216,7 +216,7 @@ export const VENTURE_MODEL_V1: VentureModel = Object.freeze<VentureModel>({
         { key: 'cap_table', label: 'Cap table recorded', weight: 20, rule: { kind: 'direct' }, freshness: 'records',
           reads: 'Holders recorded on the cap table; from Carta it is Measured.', source: 'cap_table_holders' },
         { key: 'founder_vesting', label: 'Founder vesting', weight: 20, rule: { kind: 'share', full: 1 }, freshness: 'records', personal: true,
-          reads: 'Founder holders with a vesting schedule.', source: 'cap_table_holders, cap_table_vesting' },
+          reads: 'Founder holders with a vesting schedule.', source: 'cap_table_holders and their vesting schedules' },
         { key: 'filings', label: 'Filings on time', weight: 20, rule: { kind: 'share', full: 1 }, freshness: 'records',
           reads: 'Obligations already due that were filed by their date or waived.', source: 'entity_obligations' },
         { key: 'formation', label: 'Formation done with proof', weight: 15, rule: { kind: 'share', full: 1 }, freshness: 'records',

@@ -122,7 +122,7 @@ export const STATEMENTS = Object.freeze({
     vesting: `SELECT COUNT(*) AS founders,
         SUM(CASE WHEN EXISTS (SELECT 1 FROM cap_table_vesting v WHERE v.holder_id = h.id) THEN 1 ELSE 0 END) AS vesting,
         SUM(CASE WHEN EXISTS (SELECT 1 FROM cap_table_vesting v WHERE v.holder_id = h.id AND v.carta_vesting_id IS NOT NULL) THEN 1 ELSE 0 END) AS carta,
-        (SELECT MAX(v.updated_at) FROM cap_table_vesting v WHERE v.project_id = ?) AS at
+        (SELECT MAX(v.updated_at) FROM cap_table_vesting v WHERE v.holder_id IN (SELECT h2.id FROM cap_table_holders h2 WHERE h2.project_id = ?)) AS at
       FROM cap_table_holders h WHERE h.project_id = ? AND h.kind = 'founder'`,
     filings: `SELECT COUNT(*) AS due,
         SUM(CASE WHEN o.status = 'waived' OR (o.status = 'filed' AND (o.resolved_on IS NULL OR o.resolved_on <= o.due_date)) THEN 1 ELSE 0 END) AS on_time,
