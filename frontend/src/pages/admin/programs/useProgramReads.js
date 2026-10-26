@@ -4,6 +4,8 @@ import { adminProgramsApi } from '../../../lib/api/adminPrograms';
 import { insightsApi } from '../../../lib/api/insights';
 import { learningApi } from '../../../lib/api/learning';
 import { programsApi } from '../../../lib/api/programs';
+import { investorCohortsApi } from '../../../lib/api/investorCohorts';
+import { referralPartnersApi } from '../../../lib/api/referralPartners';
 import { reportError } from '../../../lib/log';
 import { OPEN_STATUSES } from './programsModel';
 
@@ -114,11 +116,15 @@ export function useCatalogueReads(superAdmin, { weeks, scopeOf = () => ({ code: 
   const catalogue = useRead('catalogue', `catalogue:${weeks}:${scope || ''}`, tick, canRead,
     () => adminProgramsApi.catalogue({ weeks, scope: scope || undefined }).then(catalogueReply));
   const labApps = useRead('lab-applications', 'lab-applications', tick, canRead && !scope, readLabApplications);
+  // D963 (#2796): the Referral partners and Investor cohort access cards' figures, from parts 5 and 6's
+  // summaries. Neither has a per-studio form, so neither is read under a studio's name.
+  const partners = useRead('partners:summary', 'partners-summary', tick, canRead && !scope, () => referralPartnersApi.summary());
+  const investors = useRead('investors:summary', 'investors-summary', tick, canRead && !scope, () => investorCohortsApi.summary());
   const last = useRef({ scope: null, read: null });
   if (catalogue.status === 'ready') last.current = { scope: scope || '', read: catalogue };
   const cards = catalogue.status === 'ready' || last.current.scope !== (scope || '') || !last.current.read ? catalogue : last.current.read;
   const drawn = [catalogue, ...(scope || !canRead ? [] : [labApps])];
-  return { catalogue, cards, labApps, scopes, studio, drawn, reload };
+  return { catalogue, cards, labApps, partners, investors, scopes, studio, drawn, reload };
 }
 
 /**
