@@ -39,6 +39,7 @@ app.route('/api/deals', deals);
 const JWT_SECRET = 'unit-test-jwt-secret-0123456789-abcdef';
 
 const PARTNER = 20;
+const ADMIN = 19;
 const INVESTOR = 42;
 const OTHER_INVESTOR = 43;
 const PROJ = 7;
@@ -160,6 +161,7 @@ function freshDb() {
   `);
   const u = db.prepare('INSERT INTO users (id, role, name) VALUES (?, ?, ?)');
   u.run(PARTNER, 'partner', 'Pat Partner');
+  u.run(ADMIN, 'admin', 'Ada Admin');
   u.run(INVESTOR, 'investor', 'Ingrid Investor');
   u.run(OTHER_INVESTOR, 'investor', 'Otto Outsider');
   db.prepare('INSERT INTO projects (id, name) VALUES (?, ?)').run(PROJ, 'Alpha');
@@ -179,6 +181,8 @@ const env = (db: any): any => ({ JWT_SECRET, ENVIRONMENT: 'development', DB: mak
 
 type Who = { user: number; role: string };
 const partner = { user: PARTNER, role: 'partner' };
+// D1215 (#3212, #2424 owner question 6): an Admin records transfers; an Operating Partner no longer does.
+const admin = { user: ADMIN, role: 'admin' };
 const investor = { user: INVESTOR, role: 'investor' };
 const outsider = { user: OTHER_INVESTOR, role: 'investor' };
 
@@ -212,14 +216,14 @@ function addCondition(db: InstanceType<typeof DatabaseSync>, dealId: number, sta
 // ── Transfers ──────────────────────────────────────────────────────────────
 
 test('a transfer is recorded in integer cents with who and when', async () => {
-  const r = await call(partner, `/${DEAL}/transfers`, {
+  const r = await call(admin, `/${DEAL}/transfers`, {
     method: 'POST',
     body: { amount_cents: 25000000, reference: 'WT-8831', phone_verified: true, note: 'first tranche' },
   });
   assert.equal(r.status, 201);
   assert.equal(r.body.item.amount_cents, 25000000, 'money is integer cents, never a float');
   assert.equal(r.body.item.phone_verified, 1);
-  assert.equal(r.body.item.recorded_by_name, 'Pat Partner');
+  assert.equal(r.body.item.recorded_by_name, 'Ada Admin');
 
   const list = await call(partner, `/${DEAL}/transfers`, {}, r.db);
   assert.equal(list.body.items.length, 1);
@@ -227,7 +231,7 @@ test('a transfer is recorded in integer cents with who and when', async () => {
 
 test('a float or a zero is refused — money is integer cents', async () => {
   for (const bad of [250.5, 0, -100, '25000']) {
-    const r = await call(partner, `/${DEAL}/transfers`, { method: 'POST', body: { amount_cents: bad } });
+    const r = await call(admin, `/${DEAL}/transfers`, { method: 'POST', body: { amount_cents: bad } });
     assert.equal(r.status, 400, `amount_cents=${bad}`);
     assert.equal(r.body?.error, 'transfer_amount_invalid');
   }
@@ -236,7 +240,7 @@ test('a float or a zero is refused — money is integer cents', async () => {
 test('an open IC condition refuses the transfer; resolving it lets the wire through', async () => {
   const db = freshDb();
   addCondition(db, DEAL);
-  const refused = await call(partner, `/${DEAL}/transfers`, {
+  const refused = await call(admin, `/${DEAL}/transfers`, {
     method: 'POST', body: { amount_cents: 100000 },
   }, db);
   assert.equal(refused.status, 409);
@@ -248,7 +252,7 @@ test('an open IC condition refuses the transfer; resolving it lets the wire thro
 
   // Resolve the condition — the commit room's act — and the write lands.
   db.prepare(`UPDATE ic_conditions SET status = 'met'`).run();
-  const allowed = await call(partner, `/${DEAL}/transfers`, {
+  const allowed = await call(admin, `/${DEAL}/transfers`, {
     method: 'POST', body: { amount_cents: 100000 },
   }, db);
   assert.equal(allowed.status, 201);
@@ -256,8 +260,8 @@ test('an open IC condition refuses the transfer; resolving it lets the wire thro
 
 test('an investor reads transfers on their deals only; a partner reads the record', async () => {
   const db = freshDb();
-  await call(partner, `/${DEAL}/transfers`, { method: 'POST', body: { amount_cents: 100000 } }, db);
-  await call(partner, `/${DEAL_B}/transfers`, { method: 'POST', body: { amount_cents: 200000 } }, db);
+  await call(admin, `/${DEAL}/transfers`, { method: 'POST', body: { amount_cents: 100000 } }, db);
+  await call(admin, `/${DEAL_B}/transfers`, { method: 'POST', body: { amount_cents: 200000 } }, db);
 
   const mine = await call(investor, '/transfers', {}, db);
   assert.equal(mine.status, 200);
@@ -274,6 +278,14 @@ test('an investor reads transfers on their deals only; a partner reads the recor
 test('an investor may not record a transfer', async () => {
   const r = await call(investor, `/${DEAL}/transfers`, { method: 'POST', body: { amount_cents: 100000 } });
   assert.equal(r.status, 403);
+});
+
+test('D1215: an Operating Partner no longer records a transfer, and nothing is written', async () => {
+  const db = freshDb();
+  const r = await call(partner, `/${DEAL}/transfers`, { method: 'POST', body: { amount_cents: 100000 } }, db);
+  assert.equal(r.status, 403);
+  assert.equal(r.body?.error, 'admin_records_transfers');
+  assert.equal((db.prepare('SELECT COUNT(*) AS n FROM deal_transfers').get() as any).n, 0);
 });
 
 // ── The closing checklist ──────────────────────────────────────────────────

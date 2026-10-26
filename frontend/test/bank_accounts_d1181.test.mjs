@@ -1,7 +1,7 @@
 // D1181 (#2389) — HQ › Platform › Bank accounts' three tabs from the canvas
 // (BNK1, BNK3, BNK5): Accounts is today's registry, Cash draws the entity
-// accounts' balances from Mercury's read and says what waits, History waits
-// for its read; Cash and History are the Super Admin's.
+// accounts' balances from Mercury's read, History reads the ledger (D1186
+// replaced the waits); Cash and History are the Super Admin's.
 //
 // Run with:
 //   node --import ./frontend/test/_deck-loader.mjs --test frontend/test/bank_accounts_d1181.test.mjs
@@ -14,7 +14,7 @@ import { MemoryRouter } from 'react-router-dom';
 import { installDocument } from './_contracts_dom.mjs';
 import { AuthProvider } from '../src/hooks/useAuthSync.jsx';
 import { BankAccountsPage } from '../src/pages/admin/ConsolePages.jsx';
-import { NOT_YET, TABS, WAITS, tabOf } from '../src/pages/admin/consoles/bankAccountsTabs.js';
+import { TABS, tabOf } from '../src/pages/admin/consoles/bankAccountsTabs.js';
 
 const h = React.createElement;
 const read = (p) => readFileSync(p, 'utf8');
@@ -51,10 +51,9 @@ test('three tabs at their own addresses; anything else under the page is Account
   assert.equal(tabOf('/admin/platform/bank-accounts/history/'), 'history');
   assert.equal(tabOf('/admin/platform/bank-accounts'), 'accounts');
   assert.equal(tabOf('/admin/platform/bank-accounts/nope'), 'accounts');
-  for (const w of Object.values(WAITS)) assert.ok(!/\b0\b|\$0|\bnone\b/i.test(w), w);
 });
 
-test('Cash, for the Super Admin: the entity accounts\' balances from Mercury\'s read, and the series and monthly blocks waiting', async () => {
+test('Cash, for the Super Admin: the entity accounts\' balances from Mercury\'s read; D1186 replaced the series and monthly waits', async () => {
   const v = await mounted('/admin/platform/bank-accounts/cash', SUPER);
   try {
     assert.deepEqual(v.current(), ['bank-tab-cash']);
@@ -62,17 +61,16 @@ test('Cash, for the Super Admin: the entity accounts\' balances from Mercury\'s 
     assert.ok(!v.requests.some((u) => u.startsWith('/admin/bank-accounts')), 'Cash makes no registry read');
     assert.match(v.text(), /\$12,345\.67/);
     assert.match(v.text(), /Unreadable/);
-    for (const id of ['series', 'monthly']) assert.ok(v.ids().includes(`bank-wait-${id}`), id);
-    assert.ok(v.text().includes(NOT_YET));
+    for (const id of ['series', 'monthly']) assert.ok(v.ids().includes(`bank-cash-${id}`) && !v.ids().includes(`bank-wait-${id}`), id);
   } finally { await v.close(); }
 });
 
-test('History waits for its read and makes none', async () => {
+test('History reads part 1\'s history (D1186) and nothing else', async () => {
   const v = await mounted('/admin/platform/bank-accounts/history', SUPER);
   try {
     assert.deepEqual(v.current(), ['bank-tab-history']);
-    assert.ok(v.ids().includes('bank-wait-history'));
-    assert.deepEqual(v.requests.filter((u) => u.startsWith('/admin/')), []);
+    assert.ok(!v.ids().includes('bank-wait-history'));
+    assert.deepEqual(v.requests.filter((u) => u.startsWith('/admin/')), ['/admin/bank-accounts/history?page=1&per=25']);
   } finally { await v.close(); }
 });
 
@@ -81,7 +79,7 @@ test('an Admin on Cash or History is sent to Fund admin › Banking and reads no
     const v = await mounted(`/admin/platform/bank-accounts/${tab}`, ADMIN);
     try {
       assert.ok(v.ids().includes('bank-admin-line'), tab);
-      assert.ok(!v.ids().includes('banking-accounts') && !v.ids().includes('bank-wait-history'), tab);
+      assert.ok(!v.ids().includes('banking-accounts') && !v.ids().includes('bank-history'), tab);
       assert.deepEqual(v.requests.filter((u) => u.startsWith('/admin/')), [], tab);
     } finally { await v.close(); }
   }

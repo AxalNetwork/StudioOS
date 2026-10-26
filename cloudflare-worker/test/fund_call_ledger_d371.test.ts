@@ -514,6 +514,8 @@ test('the call ledger: each call with its lines, states, KYC and the named resid
   assert.equal(r.status, 200, JSON.stringify(r.body));
   const [c1] = r.body.calls;
   assert.equal(c1.call_number, 1);
+  // D1163: the call's own uid, which its notices are previewed and issued by.
+  assert.equal(c1.uid, one(env, 'SELECT uid FROM fund_capital_calls WHERE call_number = 1').uid);
   assert.equal(c1.residual_lp_name, 'U10');
   assert.equal(c1.received_cents, 1_000);
   assert.equal(c1.outstanding_cents, 99_000);

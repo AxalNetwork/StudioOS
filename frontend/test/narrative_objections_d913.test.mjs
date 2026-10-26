@@ -1,7 +1,10 @@
 /**
  * D913 (#2697) — the objections investors raised: NAR10, the Objections panel
  * beside Story's writing surface, with "Answer it"; and NAR1's "Objections
- * heard" card and Objections answered tile on Home.
+ * heard" card and Objections answered tile on Home. Option A (migration
+ * 624): "Answered in [Section] ›", the n-of-m tile, an accepted draft recorded
+ * as the answer on Save version, and Mark answered / Clear answer behind their
+ * dialogs.
  *
  * The model is pure; Story is mounted under CycleRoute, as the tool runs,
  * against the Worker's shapes (D908's read, `GET /narrative/objections`,
@@ -22,7 +25,8 @@ import { ObjectionsCard } from '../src/pages/raise/narrative/ObjectionsPanel.jsx
 import { __resetAssistModeForTest } from '../src/hooks/useAssistMode.js';
 import { SECTIONS } from '../src/pages/raise/narrative/storyModel.js';
 import {
-  ANSWER_FOOT, OBJECTIONS_NONE, OBJECTIONS_UNREADABLE, OBJECTIONS_WAIT, answerItHref, homeTiles, objectionRow, objectionsOf, objectionsTileSub,
+  ANSWER_FOOT, ANSWERS_UNREADABLE, OBJECTIONS_NONE, OBJECTIONS_UNREADABLE, answerItHref, answerSaveLines, answeredOf, clearDialog, homeTiles, markDialog,
+  objectionRow, objectionsOf, objectionsTile, objectionsTileSub, sectionHref,
 } from '../src/pages/raise/narrative/narrativeModel.js';
 
 const h = React.createElement;
@@ -35,6 +39,8 @@ const OBJECTIONS = [
   { key: K_MARKET, text: 'Too small a market', count: 4, prospects: 3, last_heard: '2026-10-09', answer: 'The wedge opens the mid-market.' },
   { key: K_NOW, text: 'Why now?', count: 1, prospects: 1, last_heard: '2026-10-03', answer: null },
 ];
+const ANSWERED = { version: 7, section: 'competition', how: 'picked', by: { id: 1, name: 'Fay Founder' }, at: '2026-10-20' };
+const ANSWERED_ITEMS = () => [{ ...OBJECTIONS[0], answered: ANSWERED }, { ...OBJECTIONS[1], answered: null }];
 const keys = SECTIONS.map((s) => s.key);
 const WORDS = { market: 'Finance teams in mid-sized companies.' };
 const items = () => keys.map((key, i) => ({ key, label: SECTIONS[i].label, store: SECTIONS[i].store, deck_key: null, position: i, audience_note: null, source: null, updated_at: null, body: WORDS[key] ?? null }));
@@ -49,8 +55,9 @@ const OPTIONS = { versions: [{ value: '2', label: 'v2 · seed fund' }] };
 const MODULE = { module: { slug: 'investor-narrative', name: 'Investor narrative', records_title: 'Versions' }, card: { state: 'empty', reason: 'No narrative saved yet.' }, records: { cols: [], rows: [], total: 0, page: 1, page_size: 25 } };
 const ANSWER = { version: 2, section: 'market', objection: K_MARKET, text: 'Mid-market finance teams are the first of many we serve.', removed: 0 };
 
-function handler({ objections = () => response({ objections: OBJECTIONS, capped: false }), draft = () => response(ANSWER) } = {}) {
+function handler({ objections = () => response({ objections: OBJECTIONS, capped: false, answers: 'ok' }), draft = () => response(ANSWER), answerWrite = () => response({ answered: null }) } = {}) {
   return (url, options = {}) => {
+    if (url.includes('/answer?')) return answerWrite(url, options);
     if (options.method === 'PUT') return response({ ok: true });
     if (options.method === 'POST' && url.includes('/narrative/objections/')) return draft(url, options);
     if (url.includes('/cycles/raise/narrative/objections')) return objections(url, options);
@@ -93,6 +100,8 @@ async function mounted(url, { handle = handler(), aiOff = false } = {}) {
     has: (id) => Boolean(byId(id)),
     textOf: (id) => text(byId(id)),
     click: (id) => fire(id, 'onClick', { preventDefault() {} }),
+    change: (id, value) => fire(id, 'onChange', { target: { value, selectionStart: value.length } }),
+    follow: (id) => fire(id, 'onClick', { button: 0, defaultPrevented: false, preventDefault() {}, target: byId(id), currentTarget: byId(id) }),
     async close() { await act(async () => root.unmount()); Object.assign(globalThis, previous); restore(); },
   };
 }
@@ -104,18 +113,50 @@ const header = (r, name) => r.headers?.[name] ?? r.headers?.get?.(name) ?? null;
  * ------------------------------------------------------------------ */
 
 test('the objections from either read, each row\'s words and count, the tile\'s sub, and Home\'s Answer it address', () => {
-  assert.deepEqual(objectionsOf({ objections: OBJECTIONS, capped: true }), { status: 'ok', items: OBJECTIONS, capped: true }, 'the route\'s shape');
-  assert.deepEqual(objectionsOf({ state: 'ok', items: [], capped: false }), { status: 'ok', items: [], capped: false }, 'the part\'s shape; none is a real empty list');
+  assert.deepEqual(objectionsOf({ objections: OBJECTIONS, capped: true, answers: 'ok' }), { status: 'ok', items: OBJECTIONS, capped: true, answers: 'ok' }, 'the route\'s shape');
+  assert.deepEqual(objectionsOf({ state: 'ok', items: [], capped: false, answers: 'ok' }), { status: 'ok', items: [], capped: false, answers: 'ok' }, 'the part\'s shape; none is a real empty list');
+  assert.equal(objectionsOf({ objections: OBJECTIONS }).answers, 'unreadable', 'answers not read are never "none answered"');
   for (const bad of [null, undefined, { state: 'unreadable' }, {}]) assert.deepEqual(objectionsOf(bad), { status: 'unreadable' }, 'a failed or missing read is never an empty list');
-  assert.deepEqual(objectionRow(OBJECTIONS[0]), { key: K_MARKET, text: 'Too small a market', times: '4 times', sub: 'Raised 4 times by 3 investors' });
+  assert.deepEqual(objectionRow(OBJECTIONS[0]), { key: K_MARKET, text: 'Too small a market', times: '4 times', sub: 'Raised 4 times by 3 investors', answered: null });
   assert.equal(objectionRow(OBJECTIONS[1]).sub, 'Raised 1 time', 'one investor is not named as a count');
   assert.equal(objectionRow({ key: 'x', text: 'y' }).sub, 'Raised not recorded', 'a missing count is never 0');
-  assert.equal(objectionsTileSub(objectionsOf({ objections: OBJECTIONS })), `2 heard. ${OBJECTIONS_WAIT}`);
-  assert.equal(objectionsTileSub(objectionsOf({ objections: [] })), OBJECTIONS_NONE);
+  assert.equal(objectionsTileSub(objectionsOf({ objections: OBJECTIONS })), `2 heard. ${ANSWERS_UNREADABLE}`);
+  assert.equal(objectionsTileSub(objectionsOf({ objections: [], answers: 'ok' })), OBJECTIONS_NONE);
   assert.equal(objectionsTileSub(objectionsOf(null)), 'The objections could not be read.');
-  const tile = homeTiles({ state: 'ok', versions: [], newest: null, objections: { state: 'ok', items: OBJECTIONS } }).find((t) => t.key === 'objections');
-  assert.deepEqual([tile.value, tile.waits], ['—', true], 'answered waits: a dash, never 0');
+  const tile = (objections) => homeTiles({ state: 'ok', versions: [], newest: null, objections }).find((t) => t.key === 'objections');
+  assert.deepEqual([tile({ state: 'ok', items: OBJECTIONS }).value, tile({ state: 'ok', items: OBJECTIONS }).waits], ['—', true], 'answers not read: a dash, never 0');
+  assert.deepEqual([tile({ state: 'unreadable' }).value, tile({ state: 'ok', items: [], answers: 'ok' }).value], ['—', '—'], 'nothing read, nothing heard: a dash');
+  assert.deepEqual(objectionsTile(objectionsOf({ objections: ANSWERED_ITEMS(), answers: 'ok' })),
+    { key: 'objections', label: 'Objections answered', value: '1 of 2', sub: '1 not answered in a saved section yet.', waits: false }, 'n of m, a real zero allowed');
+  assert.equal(tile({ state: 'ok', items: OBJECTIONS, answers: 'ok' }).value, '0 of 2', 'none answered, once read, is a real zero');
+  assert.equal(tile({ state: 'ok', items: [ANSWERED_ITEMS()[0]], answers: 'ok' }).sub, 'Each one is answered in a saved section.');
   assert.equal(answerItHref(K_MARKET, '?project_id=3&tab=x', 4), `/raise/investor-narrative/story?project_id=3&version=4&objection=${K_MARKET}`);
+});
+
+test('Answered in [Section] ›: its words, version, how and address; the dialogs and Save version\'s lines say what they change', () => {
+  assert.deepEqual(answeredOf(ANSWERED, '?project_id=3&version=2'), {
+    section: 'competition', version: 7, label: 'Answered in Competition', sub: 'v7 · Picked by hand · Fay Founder · 2026-10-20',
+    href: '/raise/investor-narrative/story?project_id=3&version=7&section=competition',
+  }, 'it opens the version that answers it, not the one open');
+  assert.equal(answeredOf({ ...ANSWERED, how: 'eadwyn', by: null, at: null }).sub, 'v7 · Eadwyn’s draft, saved');
+  assert.equal(answeredOf(null), null);
+  assert.equal(sectionHref(2, 'why_now', '?project=3'), '/raise/investor-narrative/story?project_id=3&version=2&section=why_now');
+  const row = objectionRow(ANSWERED_ITEMS()[0]);
+  assert.deepEqual(markDialog(objectionRow(OBJECTIONS[0]), 'market', 2), {
+    title: 'Mark answered in Market?',
+    lines: ['Records that Market in v2 answers “Too small a market”.', 'Your words and Capital relationships do not change.'],
+    confirm: 'Mark answered',
+  });
+  assert.deepEqual(markDialog(row, 'market', 2, true).lines, [
+    'Records that Market in v2 answers “Too small a market”.',
+    'It replaces the earlier record: answered in Competition, v7.',
+    'Market has changes not saved yet. The record points to v2 as saved; Save version keeps your changes.',
+    'Your words and Capital relationships do not change.',
+  ]);
+  assert.deepEqual(clearDialog(row), { title: 'Clear this answer?', lines: ['“Too small a market” will no longer read as answered in Competition, v7.', 'The section keeps its words. Capital relationships does not change.'], confirm: 'Clear answer' });
+  const pending = { [K_MARKET]: { section: 'market', text: 'Too small a market' }, [K_NOW]: { section: 'why_now', text: 'Why now?' } };
+  assert.deepEqual(answerSaveLines(pending, [{ section: 'market' }]), ['Records that Market answers “Too small a market”.'], 'only a section this save writes');
+  for (const d of [markDialog(row, 'market', 2), clearDialog(row)]) for (const l of d.lines) assert.doesNotMatch(l, /North|South|investor/i, 'no investor named');
 });
 
 test('Home\'s Objections heard: each objection with its count and Answer it on the newest version; none for an admin or with no version; a failed read says so', () => {
@@ -132,6 +173,12 @@ test('Home\'s Objections heard: each objection with its count and Answer it on t
   assert.ok(failed.includes(OBJECTIONS_UNREADABLE) && failed.includes('role="alert"'));
   const none = renderToStaticMarkup(h(MemoryRouter, null, h(ObjectionsCard, { part: { ...part, objections: { state: 'ok', items: [] } } })));
   assert.ok(none.includes(OBJECTIONS_NONE));
+  const answered = renderToStaticMarkup(h(MemoryRouter, null, h(ObjectionsCard, { part: { ...part, objections: { state: 'ok', items: ANSWERED_ITEMS(), answers: 'ok' } }, search: '?project_id=3' })));
+  assert.ok(answered.includes('✓ Answered in Competition ›') && answered.includes('v7 · Picked by hand'));
+  assert.ok(answered.includes('href="/raise/investor-narrative/story?project_id=3&amp;version=7&amp;section=competition"'));
+  assert.equal(answered.split('Answer it ›').length - 1, 1, 'Answer it only on the objection not answered');
+  assert.ok(html.includes(ANSWERS_UNREADABLE), 'answers not read: the card says so');
+  assert.ok(!answered.includes(ANSWERS_UNREADABLE));
   for (const sample of ['[Too small', '[Market]', '[Why now', '[2] of [3]']) assert.ok(!html.includes(sample), `no canvas sample: ${sample}`);
 });
 
@@ -204,6 +251,118 @@ test('mounted NAR10: a failed read says so with Try again, which reads again; no
     assert.equal(empty.textOf('objections-none'), OBJECTIONS_NONE);
     assert.ok(!empty.has('story-objections-foot'));
   } finally { await empty.close(); }
+});
+
+test('mounted option A: an accepted Answer it draft is recorded when Save version writes its section, and the dialog says so', async () => {
+  const m = await mounted(STORY);
+  try {
+    await m.click('story-rail-market');
+    await m.click(`story-objection-answer-${K_MARKET}`);
+    await m.click('story-proposal-accept');
+    assert.equal(m.requests.filter((r) => r.url.includes('/answer?')).length, 0, 'accepting records nothing');
+    await m.click('story-save-open');
+    assert.match(m.textOf('story-save'), /Records that Market answers “Too small a market”\./);
+    const reads = m.requests.filter((r) => r.method === 'GET' && r.url.includes('/narrative/objections')).length;
+    await m.click('story-save-confirm');
+    const section = m.requests.findIndex((r) => r.method === 'PUT' && r.url.includes('/sections/market'));
+    const answer = m.requests.findIndex((r) => r.url.includes(`/narrative/objections/${K_MARKET}/answer?`));
+    assert.ok(section >= 0 && answer > section, 'the answer is recorded after its section is saved');
+    assert.deepEqual([m.requests[answer].method, m.requests[answer].body], ['PUT', { version: '2', section: 'market', how: 'eadwyn' }]);
+    assert.ok(m.requests.filter((r) => r.method === 'GET' && r.url.includes('/narrative/objections')).length > reads, 'the panel reads again');
+    assert.ok(!m.has('story-answer-not-recorded'));
+  } finally { await m.close(); }
+});
+
+test('mounted option A: a section saved but its answer refused says so; a draft not accepted records nothing', async () => {
+  let m = await mounted(STORY, { handle: handler({ answerWrite: () => response({ detail: 'Version not found' }, 404) }) });
+  try {
+    await m.click('story-rail-market');
+    await m.click(`story-objection-answer-${K_MARKET}`);
+    await m.click('story-proposal-accept');
+    await m.click('story-save-open');
+    await m.click('story-save-confirm');
+    assert.match(m.textOf('story-answer-not-recorded'), /^Saved, but which section answers “Too small a market” \(Version not found\) was not recorded\. Mark it answered from Objections heard\.$/);
+  } finally { await m.close(); }
+  m = await mounted(STORY);
+  try {
+    await m.click('story-rail-market');
+    await m.click(`story-objection-answer-${K_MARKET}`);
+    await m.click('story-proposal-discard');
+    assert.equal(m.has('story-save-open') && m.props('story-save-open').disabled, true, 'nothing to save');
+    assert.equal(m.requests.filter((r) => r.url.includes('/answer?')).length, 0);
+  } finally { await m.close(); }
+  // Accepted, then put back as saved: that section is not written, so its answer is not recorded.
+  m = await mounted(STORY);
+  try {
+    await m.click('story-rail-market');
+    await m.click(`story-objection-answer-${K_MARKET}`);
+    await m.click('story-proposal-accept');
+    await m.change('story-words', WORDS.market);
+    await m.click('story-rail-solution');
+    await m.change('story-words', 'Close the books in a day.');
+    await m.click('story-save-open');
+    assert.doesNotMatch(m.textOf('story-save'), /Records that/);
+    await m.click('story-save-confirm');
+    assert.ok(m.requests.some((r) => r.method === 'PUT' && r.url.includes('/sections/solution')));
+    assert.equal(m.requests.filter((r) => r.url.includes('/answer?')).length, 0, 'Market was not saved, so nothing is recorded');
+  } finally { await m.close(); }
+});
+
+test('mounted option A: Answered in [Section] › on the panel, and ?section= opens that section', async () => {
+  const m = await mounted(`${STORY}&section=competition`, { handle: handler({ objections: () => response({ objections: ANSWERED_ITEMS(), answers: 'ok' }) }) });
+  try {
+    assert.equal(m.props('story-rail-competition')['aria-current'], 'true', 'the section in the address is open');
+    assert.equal(m.textOf(`story-objection-answered-${K_MARKET}`), '✓ Answered in Competition ›');
+    assert.equal(m.props(`story-objection-answered-${K_MARKET}`).href, '/raise/investor-narrative/story?project_id=3&version=7&section=competition');
+    assert.ok(!m.has(`story-objection-answered-${K_NOW}`));
+  } finally { await m.close(); }
+  // Followed from Story itself, with another section open: Story moves to it.
+  const here = await mounted(STORY, { handle: handler({ objections: () => response({ objections: ANSWERED_ITEMS(), answers: 'ok' }) }) });
+  try {
+    await here.click('story-rail-team');
+    await here.follow(`story-objection-answered-${K_MARKET}`);
+    assert.equal(here.props('story-rail-competition')['aria-current'], 'true');
+  } finally { await here.close(); }
+});
+
+test('mounted option A: Mark answered and Clear answer each open a dialog first, then write; a refused write keeps the dialog', async () => {
+  const m = await mounted(STORY, { handle: handler({ objections: () => response({ objections: ANSWERED_ITEMS(), answers: 'ok' }) }) });
+  try {
+    await m.click('story-rail-market');
+    await m.click(`story-objection-mark-${K_NOW}`);
+    assert.equal(m.requests.filter((r) => r.url.includes('/answer?')).length, 0, 'the dialog first');
+    assert.match(m.textOf('story-objection-mark-dialog'), /Mark answered in Market\?.*Records that Market in v2 answers “Why now\?”\./s);
+    await m.click('story-objection-mark-dialog-confirm');
+    const put = m.requests.find((r) => r.url.includes(`/narrative/objections/${K_NOW}/answer?`));
+    assert.deepEqual([put.method, put.body], ['PUT', { version: '2', section: 'market', how: 'picked' }]);
+    assert.ok(!m.has('story-objection-mark-dialog'), 'closed once written');
+    await m.click(`story-objection-clear-${K_MARKET}`);
+    assert.match(m.textOf('story-objection-clear-dialog'), /no longer read as answered in Competition, v7/);
+    await m.click('story-objection-clear-dialog-confirm');
+    const del = m.requests.find((r) => r.method === 'DELETE');
+    assert.ok(del.url.includes(`/narrative/objections/${K_MARKET}/answer?`));
+    assert.ok(!m.has(`story-objection-clear-${K_NOW}`), 'nothing to clear on an objection not answered');
+  } finally { await m.close(); }
+  const refused = await mounted(STORY, { handle: handler({ answerWrite: () => response({ detail: 'Version not found' }, 404) }) });
+  try {
+    await refused.click(`story-objection-mark-${K_MARKET}`);
+    await refused.click('story-objection-mark-dialog-confirm');
+    assert.equal(refused.textOf('story-objection-mark-dialog-failed'), 'Nothing was changed: Version not found.');
+  } finally { await refused.close(); }
+});
+
+test('mounted option A: answers not read say so, with no Mark or Clear; the live deck offers neither', async () => {
+  let m = await mounted(STORY, { handle: handler({ objections: () => response({ objections: OBJECTIONS, answers: 'unreadable' }) }) });
+  try {
+    assert.equal(m.textOf('objections-answers-unreadable'), ANSWERS_UNREADABLE);
+    assert.ok(m.has(`story-objection-${K_MARKET}`), 'the objections still show');
+    assert.ok(!m.has(`story-objection-mark-${K_MARKET}`) && !m.has(`story-objection-clear-${K_MARKET}`));
+  } finally { await m.close(); }
+  const live = (url, options) => (/\/cycles\/raise\/narrative\/\d+\?/.test(url) ? response({ ...NARRATIVE(), version: 0, meta: { ...NARRATIVE().meta, live: true } }) : handler()(url, options));
+  m = await mounted(STORY, { handle: live });
+  try {
+    assert.ok(!m.has(`story-objection-mark-${K_MARKET}`), 'version 0 is not a saved version');
+  } finally { await m.close(); }
 });
 
 test('the sources: Answer it goes through the narrative API under its own rail option, and the panel reads no canvas sample', () => {
