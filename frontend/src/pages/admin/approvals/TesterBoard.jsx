@@ -8,7 +8,7 @@ import {
   answerPairs, dayText, decisionCopy, doneLine, profileChart, profileWord, reasonReady, tabPath, testerActions, testerHistory, testerRows,
 } from './approvalsModel';
 import {
-  BTN, BTN_PRIMARY, CARD, DecisionDialog, DialogField, DoneLine, EYE, Fact, Failed, Figure, H2, LINK, MONO, PAGE, PILL, Pager, SELECT, SUB,
+  BTN, BTN_PRIMARY, CARD, DecisionDialog, FOOT, PhoneBack, DialogField, DoneLine, EYE, Fact, Failed, Figure, H2, LINK, MONO, PAGE, PILL, Pager, SELECT, SUB,
   TD, TH, Tile, WARN_PILL, nf, useLoad,
 } from './boardParts';
 
@@ -222,7 +222,7 @@ function TesterDrawer({ id, onClose, onDecided }) {
       <Lightbox label={ready ? `${t.member?.name || 'Member'}, product tester` : 'Product tester'} eyebrow={ready ? EYEBROW[t.status] : 'Product tester'}
         title={ready ? (t.member?.name || 'Name not recorded') : 'Product tester'} sub={ready ? 'Esc to close' : null} onClose={onClose} testId="tester-drawer" width={600}
         footer={ready ? (
-          <div className="flex flex-wrap items-center justify-end gap-2">
+          <div className={`${FOOT} flex-wrap items-center`}>
             {t.status === 'applied' ? <Link className={BTN} to={`/admin/approvals/items/product_testers-${t.id}`} data-testid="tester-assign">Assign…</Link> : null}
             {testerActions(t.status).map((a) => (
               <button key={a} type="button" className={a === 'approve' || a === 'resume' ? BTN_PRIMARY : BTN} onClick={() => setDialog(a)} data-testid={`tester-action-${a}`}>{ACTION_LABEL[a]}</button>
@@ -230,6 +230,7 @@ function TesterDrawer({ id, onClose, onDecided }) {
           </div>
         ) : null}>
         <div className="flex flex-col gap-4 px-5 py-4" data-testid="tester-drawer-content">
+          <PhoneBack label="Product testers" onClose={onClose} testId="tester-drawer-back" />
           {read.status === 'loading' ? <Skeleton.Text lines={5} /> : null}
           {read.status === 'error' ? (
             read.error?.status === 404

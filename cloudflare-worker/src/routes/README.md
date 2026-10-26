@@ -434,6 +434,7 @@ firm. The Free quota and join/leave exceptions live in
 The INSERT enforces the global allowance atomically. Investor list rows carry
 `can_read` from the existing invited-or-committed reader for safe room links.
 
+D1051 (#2902): `billing_checkout.ts` mounts `/checkout/quote`, `/checkout/start` and `/checkout/status` under `/api/billing`, before `billing.ts`. One checkout for a new plan or a change: an upgrade now and prorated, a downgrade scheduled for the period end, a saved card or a change behind TOTP and step-up. The old hosted checkouts stay until their callers move (#2905).
 | File | Purpose |
 | --- | --- |
 | `deal_insights.ts` | D1151: NDA-gated per-deal Team, Market and Traction reads. |

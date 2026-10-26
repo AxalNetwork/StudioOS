@@ -7,7 +7,7 @@ import { AdminPageHeader, HeaderTab, Lightbox, Skeleton } from '../../../ui';
 import { BandPill } from './AdminApprovals';
 import { BOARDS, EXPERT_TABS, dayText, decisionCopy, doneLine, expertBoard, expertState, reasonReady, tabPath } from './approvalsModel';
 import {
-  BTN, BTN_PRIMARY, CARD, DecisionDialog, DialogField, DoneLine, EYE, Fact, Failed, Figure, H2, LINK, MONO, PAGE, PILL, Pager, SUB,
+  BTN, BTN_PRIMARY, CARD, DecisionDialog, FOOT, PhoneBack, DialogField, DoneLine, EYE, Fact, Failed, Figure, H2, LINK, MONO, PAGE, PILL, Pager, SUB,
   TD, TH, Tile, WARN_PILL, nf, useLoad,
 } from './boardParts';
 
@@ -100,13 +100,14 @@ function ExpertDrawer({ uid, onClose, onDecided }) {
       <Lightbox label={ready ? `${e.name}, wellbeing expert` : 'Wellbeing expert'} eyebrow={ready ? `Wellbeing expert · ${STATE_EYEBROW[state] || 'Expert'}` : 'Wellbeing expert'}
         title={ready ? (e.name || 'Name not recorded') : 'Wellbeing expert'} sub={ready ? (e.headline || 'Esc to close') : null} onClose={onClose} testId="expert-drawer" width={600}
         footer={ready && ACTIONS[state] ? (
-          <div className="flex flex-wrap items-center justify-end gap-2">
+          <div className={`${FOOT} flex-wrap items-center`}>
             {ACTIONS[state].map((a) => (
               <button key={a} type="button" className={a === 'verify' || a === 'restore' ? BTN_PRIMARY : BTN} onClick={() => setDialog(a)} data-testid={`expert-action-${a}`}>{ACTION_LABEL[a]}</button>
             ))}
           </div>
         ) : null}>
         <div className="flex flex-col gap-4 px-5 py-4" data-testid="expert-drawer-content">
+          <PhoneBack label="Wellbeing experts" onClose={onClose} testId="expert-drawer-back" />
           {read.status === 'loading' ? <Skeleton.Text lines={5} /> : null}
           {read.status === 'error' ? (
             read.error?.status === 404
