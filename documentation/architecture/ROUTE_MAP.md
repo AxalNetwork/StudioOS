@@ -1552,6 +1552,11 @@ remain references. Share an update’s capital asks link to the latest open call
 network recipients see the ask text only. Eligible replies appear as native call
 questions and atomic Raise pipeline entries; other update replies remain on the
 source ask and appear in the founder’s question list with that source link.
+D1222 (#3221, Calls for Capital part 1):
+- `GET /round-calls/readiness?project_id` answers while the flag is off. It returns CLS1's seven items from the venture's own Raise records (round, deck, data room, use of funds, traction, close; terms are `null`, written in the call) and no investor data.
+- The audience preview adds `not_on_axal`: the venture's prospects with no verified account, by name, flagged when chosen, with no email. A chosen prospect not on Axal is left out of the save and counted, never a failure; another venture's prospect is still refused (422 `prospect_not_found`).
+- `not_delivered` is on each `parts.calls` item and in the call's `progress` (null for a draft).
+- An accepted co-founder (`project_members`) may read the context, the list and a call, and may draft and answer questions; the call carries `relation` and `can`. The audience, counsel request, send, extend and close stay the owner's, checked again in each service.
 
 ### Axal VC Mail link (D811, #2257)
 
