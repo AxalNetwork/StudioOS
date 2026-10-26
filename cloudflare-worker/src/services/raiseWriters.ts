@@ -21,11 +21,10 @@ import type { Env, User } from '../types';
 import { recomputePmf } from './scoring/pmfStore';
 import { WriterError, isoDateOrNull } from './validateWriters';
 import { ensureSpinoutDeckOverridesSchema } from './decks/spinoutDeckOverrides';
-import { logCycleWrite, type CycleModules } from './cycleActivity';
+import { logCycleWrite, logCycleWriteStatement, type CycleModules } from './cycleActivity';
 import { ownedRow } from './records/owned';
 import { addHolder, updateHolder, HolderError, type AddHolderArgs } from './capTableWrites';
 import { SERVED_FUNDS } from './researchFundDirectory';
-import { normalizeUseOfFunds } from '../util/useOfFunds';
 import { ensureTier } from '../middleware/requireTier';
 import { createShareLink, revokeShareLink, SHARE_NEVER_EXPIRES } from '../routes/decks';
 import { shareIncludeFromBody } from './decks/shareInclude';
@@ -522,8 +521,6 @@ export async function updateCapHolder(env: Env, a: { projectId: number; user: Us
 // Use of funds (decision 9)
 // ---------------------------------------------------------------------------
 
-const MILESTONE_BY = /^\d{4}-(0[1-9]|1[0-2])(-\d{2})?$/;
-
 /**
  * Edit split: the five stored sections in `projects.use_of_funds` (through
  * `normalizeUseOfFunds`, so they total 100), the raise in `funding_needed`
@@ -533,65 +530,13 @@ const MILESTONE_BY = /^\d{4}-(0[1-9]|1[0-2])(-\d{2})?$/;
  * split, and nothing is written to a deck.
  */
 export async function saveUseOfFunds(env: Env, a: { projectId: number; userId: number; body: Record<string, unknown> }) {
-  const b = a.body;
-  if (!Array.isArray(b.sections) || !b.sections.length) throw new WriterError(400, 'sections is a list of { key, pct }');
-  const seen = new Set<string>();
-  const sections = b.sections.map((x: any) => {
-    const s = FUND_SECTIONS.find((f) => f.key === x?.key);
-    if (!s) throw new WriterError(400, 'Unknown use-of-funds section');
-    if (seen.has(s.key)) throw new WriterError(400, 'Each section appears once');
-    seen.add(s.key);
-    const pct = x?.pct;
-    if (typeof pct !== 'number' || !Number.isInteger(pct) || pct < 0 || pct > 100) throw new WriterError(400, 'Each share is a whole number from 0 to 100');
-    const label = x && has(x, 'milestone_label') ? trimOrNull(x.milestone_label, 200) : undefined;
-    const by = x && has(x, 'milestone_by') && x.milestone_by != null && x.milestone_by !== '' ? String(x.milestone_by).trim() : null;
-    if (by != null && !MILESTONE_BY.test(by)) throw new WriterError(400, 'milestone_by is YYYY-MM or YYYY-MM-DD');
-    return { key: s.key, label: s.label, pct, milestone: label === undefined ? undefined : label == null ? null : { label, by } };
-  });
-  const uof = normalizeUseOfFunds(JSON.stringify(FUND_SECTIONS
-    .map((f) => sections.find((s) => s.key === f.key))
-    .filter((s): s is NonNullable<typeof s> => !!s)
-    .map((s) => ({ label: s.label, pct: s.pct }))));
-  if (uof.error) throw new WriterError(400, uof.error);
-  if (uof.value == null) throw new WriterError(400, 'Use of Funds must total exactly 100%.');
-
-  let amount: number | null | undefined;
-  if (has(b, 'amount_to_raise_cents')) {
-    amount = b.amount_to_raise_cents === null ? null : posInt(b.amount_to_raise_cents);
-    if (b.amount_to_raise_cents !== null && amount == null) throw new WriterError(400, 'amount_to_raise_cents is a positive whole number of cents');
-  }
-  let runway: number | null | undefined;
-  if (has(b, 'runway_months')) {
-    runway = b.runway_months === null ? null : posInt(b.runway_months);
-    if (b.runway_months !== null && (runway == null || runway > 120)) throw new WriterError(400, 'runway_months is a whole number from 1 to 120');
-  }
-
-  const { normalizeUofMeta, ensureProjectUofMetaColumn } = await import('../routes/projects');
-  await ensureProjectUofMetaColumn(env);
-  const p = await env.DB.prepare('SELECT use_of_funds_meta FROM projects WHERE id = ?').bind(a.projectId).first<{ use_of_funds_meta: string | null }>();
-  let meta: Record<string, any> = {};
-  if (p?.use_of_funds_meta) {
-    try { meta = JSON.parse(p.use_of_funds_meta); } catch { meta = null as any; }
-    if (!meta || typeof meta !== 'object' || Array.isArray(meta)) throw new WriterError(409, 'The stored use-of-funds plan could not be read, so it was not overwritten');
-  }
-  if (runway !== undefined) { if (runway == null) delete meta.runway_months; else meta.runway_months = runway; }
-  const milestones: Record<string, unknown> = meta.milestones && typeof meta.milestones === 'object' && !Array.isArray(meta.milestones) ? { ...meta.milestones } : {};
-  for (const s of sections) {
-    if (s.milestone === undefined) continue;
-    if (s.milestone == null) delete milestones[s.key]; else milestones[s.key] = s.milestone;
-  }
-  meta.milestones = milestones;
-  meta.deck_synced_at = null;
-  const norm = normalizeUofMeta(meta);
-  if (norm.error) throw new WriterError(400, norm.error);
-
-  const sets = ['use_of_funds = ?', 'use_of_funds_meta = ?']; const params: unknown[] = [uof.value, norm.value ?? null];
-  if (amount !== undefined) { sets.push('funding_needed = ?'); params.push(amount == null ? null : amount / 100); }
-  await env.DB.prepare(`UPDATE projects SET ${sets.join(', ')} WHERE id = ?`).bind(...params, a.projectId).run();
-  for (const s of sections) {
-    await logRaise(env, a.userId, a.projectId, 'use-of-funds', s.key, 'split_saved', `Split saved: ${s.pct}% of the raise`);
-  }
-  return { ok: true as const, use_of_funds: JSON.parse(uof.value), runway_months: meta.runway_months ?? null };
+  // D1176: record-drawer edits and the module PUT share the same dual writer.
+  const { saveSplit, PlanError } = await import('./useOfFunds/store');
+  const user = await env.DB.prepare('SELECT * FROM users WHERE id = ? AND is_active = 1').bind(a.userId).first<User>();
+  const owner = await env.DB.prepare("SELECT u.id FROM projects p JOIN users u ON u.founder_id=p.founder_id AND u.role='founder' AND u.is_active=1 WHERE p.id=? AND p.deleted_at IS NULL ORDER BY u.id LIMIT 1").bind(a.projectId).first<{id:number}>();
+  if (!user || !owner) throw new WriterError(404, 'The founder plan is unavailable.');
+  try { return await saveSplit(env, {projectId:a.projectId,user,founderUserId:owner.id}, a.body); }
+  catch (e) { if (e instanceof PlanError) throw new WriterError(e.status, e.sentence); throw e; }
 }
 
 // ---------------------------------------------------------------------------
@@ -748,11 +693,14 @@ export async function addSectionHire(env: Env, a: { projectId: number; userId: n
   if (b.annual_cents != null && annual == null) throw new WriterError(400, 'annual_cents is a positive whole number of cents');
   const currency = b.currency == null || b.currency === '' ? 'usd' : String(b.currency).trim().toLowerCase();
   if (!/^[a-z]{3}$/.test(currency)) throw new WriterError(400, 'currency is a three-letter code');
-  const ins = await env.DB.prepare(
-    `INSERT INTO use_of_funds_hires (project_id, category_key, role, start_month, annual_cents, currency, created_by) VALUES (?, ?, ?, ?, ?, ?, ?)`,
-  ).bind(a.projectId, section.key, role, month, annual, currency, a.userId).run();
-  await logRaise(env, a.userId, a.projectId, 'use-of-funds', section.key, 'hire_added', `Hire added: ${role}${month ? ` from ${month}` : ''}`);
-  return { ok: true as const, id: Number(ins?.meta?.last_row_id) || null };
+  const actor = await env.DB.prepare('SELECT role FROM users WHERE id=?').bind(a.userId).first<{role:string}>();
+  const written = await env.DB.batch([
+    env.DB.prepare(`INSERT INTO use_of_funds_hires (project_id, category_key, role, start_month, annual_cents, currency, created_by) VALUES (?, ?, ?, ?, ?, ?, ?)`)
+      .bind(a.projectId, section.key, role, month, annual, currency, a.userId),
+    logCycleWriteStatement(env, { projectId:a.projectId,userId:a.userId,cycle:'raise',module:'use-of-funds',entityId:section.key,
+      action:'hire_added',summary:actor?.role==='admin'?'Studio admin: Hire added.':'Hire added.' }),
+  ]);
+  return { ok: true as const, id: Number(written[0]?.meta?.last_row_id) || null };
 }
 
 export const EVENT_KINDS = ['meeting', 'intro', 'email', 'call', 'note'] as const;

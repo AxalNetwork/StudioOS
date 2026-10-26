@@ -271,3 +271,88 @@ test('D1165: the integrated LP drawer inherits the phone sheet inside the consol
     assert.match(m.text('lp-drawer'), /Example LP/);
   } finally { await m.close(); }
 });
+
+test('D1165 review: Packs rereads when All funds and the first fund are toggled', async () => {
+  const m = await mount('/admin/fund-admin/reports');
+  try {
+    await m.click('fund-admin-filter-f-7');
+    await m.click('fund-admin-filter-all');
+    assert.deepEqual(m.calls.filter(([name]) => name === 'packs'), [['packs', {}], ['packs', { fund_id: 7 }], ['packs', {}]]);
+  } finally { await m.close(); }
+});
+
+test('D1165 review: delayed overview neither duplicates an unfiltered pack read nor claims an unread queue is empty', async () => {
+  let release;
+  let m = await mount('/admin/fund-admin/reports', { overview: () => new Promise(r => { release = r; }) });
+  try {
+    assert.equal(m.calls.filter(([name]) => name === 'packs').length, 1);
+    await m.flush(() => release(m.overview));
+    assert.equal(m.calls.filter(([name]) => name === 'packs').length, 1);
+    assert.ok(m.by(`draft-${m.uid}`));
+  } finally { await m.close(); }
+  m = await mount('/admin/fund-admin/reports?fund=7', { overview: () => new Promise(r => { release = r; }) });
+  try {
+    assert.doesNotMatch(m.text('reports'), /No draft yet/);
+    assert.equal(m.calls.filter(([name]) => name === 'packs').length, 0);
+    await m.flush(() => release({ funds: { state: 'ok', items: [] } }));
+    assert.match(m.text('reports'), /Choose an administered fund or All funds/);
+    assert.doesNotMatch(m.text('reports'), /No draft yet/);
+  } finally { await m.close(); }
+  m = await mount('/admin/fund-admin/reports?fund=7', { overview: () => { throw new Error('fixture'); } });
+  try {
+    assert.match(m.text('reports'), /Unreadable.*Try again/);
+    assert.doesNotMatch(m.text('reports'), /No draft yet/);
+    assert.equal(m.calls.filter(([name]) => name === 'packs').length, 0);
+  } finally { await m.close(); }
+});
+
+test('D1165 review: Books falls back only to an entitled ledger when the carried fund is absent', async () => {
+  const m = await mount('/admin/fund-admin/banking/books?fund=999');
+  try {
+    assert.ok(m.by('books-journal'));
+    assert.doesNotMatch(m.text('banking-books'), /no accessible fund ledger/);
+    await m.click('books-period-2');
+    assert.deepEqual(m.calls.find(([name]) => name === 'ledgerRead'), ['ledgerRead', 7, 2]);
+  } finally { await m.close(); }
+});
+
+test('D1165 review: a notice with no type stays readable and does not break the type filter', async () => {
+  const m = await mount('/admin/fund-admin/reports/notices', { notices: () => ({ notices: [
+    { uid: 'missing', type: null, amount_cents: null },
+    { uid: 'recorded', type: 'capital_call_notice', title: 'Recorded call', amount_cents: 100 },
+  ] }) });
+  try {
+    assert.match(m.text('reports-notices'), /Not recorded: no notice type/);
+    assert.ok(m.by('notice-open-missing'));
+    await m.changeLabel('Notice type', 'capital_call_notice');
+    assert.ok(!m.by('notice-open-missing'));
+    assert.ok(m.by('notice-open-recorded'));
+  } finally { await m.close(); }
+});
+
+test('D1165 review: reload keeps recorded data, a changed identity clears it, and stale refreshes cannot cross identities', async () => {
+  const { useRead } = await import('../src/pages/admin/fundAdmin/useRead.js');
+  const restore = installDocument();
+  const el = document.createElement('div'); document.body.appendChild(el); const root = createRoot(el);
+  const pending = []; let reading;
+  function Probe({ id, enabled = true }) { reading = useRead(() => new Promise(resolve => pending.push({ id, resolve })), [id], { enabled }); return null; }
+  try {
+    await act(async () => root.render(h(Probe, { id: 7 })));
+    await act(async () => { pending[0].resolve({ value: 'recorded' }); await pause(); });
+    let refreshing;
+    await act(async () => { refreshing = reading.reload(); });
+    assert.equal(reading.status, 'ready');
+    assert.equal(reading.data.value, 'recorded');
+    await act(async () => root.render(h(Probe, { id: 8 })));
+    assert.equal(reading.status, 'loading');
+    assert.equal(reading.data, null);
+    await act(async () => { pending[1].resolve({ value: 'stale' }); await refreshing; });
+    assert.equal(reading.data, null);
+    await act(async () => { pending[2].resolve({ value: 'current' }); await pause(); });
+    assert.equal(reading.data.value, 'current');
+    await act(async () => root.render(h(Probe, { id: 8, enabled: false })));
+    assert.equal(reading.status, 'idle');
+    assert.equal(reading.data, null);
+    assert.equal(pending.length, 3);
+  } finally { await act(async () => root.unmount()); restore(); }
+});

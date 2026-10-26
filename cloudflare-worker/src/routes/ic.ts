@@ -321,6 +321,63 @@ r.post('/', async (c) => {
   } catch (e) { return mapError(c, e); }
 });
 
+/**
+ * D1246 (#3261) — "Send to IC" from a decided Due Diligence case (#2385 owner
+ * question 5): a draft decision with the case attached, written here so the
+ * insert, its company scope and its project check stay in the one file that
+ * owns `ic_decisions`. `POST /api/dd/cases/:uid/ic` calls it after its own
+ * gates (Admin or the case lead, a decided case, none sent yet); this adds
+ * the Commit stage's own: `canUseIc`, and that an investor may point a
+ * decision only at a venture they can find (D702).
+ */
+export async function createIcRecordForCase(
+  c: any,
+  user: User,
+  args: { title: string; projectId: number | null; dealId: number | null; ddCaseId: number },
+): Promise<{ ok: true; uid: string; status: string } | { ok: false; status: 403 | 404; error: string }> {
+  if (!canUseIc(user)) return { ok: false, status: 403, error: 'Only an Admin, a partner or an investor can open an IC record.' };
+  const projectId = args.projectId != null && Number.isFinite(args.projectId) ? args.projectId : null;
+  if (projectId != null) {
+    const proj = await c.env.DB.prepare('SELECT id FROM projects WHERE id = ? AND deleted_at IS NULL').bind(projectId).first();
+    if (!proj || !(await findableBy(c.env, user, projectId))) return { ok: false, status: 404, error: 'The startup this case is about could not be found.' };
+  }
+  let dealId = args.dealId != null && Number.isFinite(args.dealId) ? args.dealId : null;
+  if (dealId != null) {
+    const deal = await c.env.DB.prepare('SELECT id FROM deals WHERE id = ?').bind(dealId).first();
+    if (!deal) dealId = null;
+  }
+  const companyId = await activeCompanyFor(c, user);
+  const uid = newUid();
+  await c.env.DB.prepare(
+    `INSERT INTO ic_decisions (uid, project_id, deal_id, dd_case_id, title, memo, terms_json, status, created_by, company_id, created_at, updated_at)
+     VALUES (?, ?, ?, ?, ?, NULL, NULL, 'draft', ?, ?, ?, ?)`
+  ).bind(uid, projectId, dealId, args.ddCaseId, args.title.slice(0, 300), user.id, companyId, nowIso(), nowIso()).run();
+  return { ok: true, uid, status: 'draft' };
+}
+
+/**
+ * D1246 — the IC record a Due Diligence case was sent to, through IC's own
+ * scope: a case lead who cannot open the record in IC does not learn its uid
+ * from the case either.
+ */
+export async function icRecordForCase(env: Env, user: User, caseId: number): Promise<{ uid: string; status: string } | null> {
+  const scope = icDecisionScope(user);
+  const row = await env.DB.prepare(
+    `SELECT d.uid, d.status FROM ic_decisions d WHERE d.dd_case_id = ? AND ${scope.sql} ORDER BY d.id DESC LIMIT 1`
+  ).bind(caseId, ...scope.binds).first<{ uid: string; status: string }>();
+  return row ? { uid: String(row.uid), status: String(row.status) } : null;
+}
+
+/**
+ * D1246 — whether a case has gone to IC at all, whoever's firm holds the
+ * record. A case goes once; this answers yes or no and returns nothing of
+ * the record, so it needs no scope.
+ */
+export async function caseSentToIc(env: Env, caseId: number): Promise<boolean> {
+  const row = await env.DB.prepare('SELECT 1 AS x FROM ic_decisions WHERE dd_case_id = ? LIMIT 1').bind(caseId).first();
+  return !!row;
+}
+
 // ---------------------------------------------------------------------------
 // GET /api/ic/commit-room — canvas ID3, the desk behind `/deals/commit`.
 //

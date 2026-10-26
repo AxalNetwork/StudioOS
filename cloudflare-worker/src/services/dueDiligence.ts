@@ -421,6 +421,60 @@ export function worstSeverity(sevs: string[]): keyof typeof SEVERITY_FLOOR | nul
   return (out as keyof typeof SEVERITY_FLOOR) || null;
 }
 
+// ---------- Blocking sections and the case decision (D1246, #3261) ----------
+//
+// A blocking section cannot carry an open High or Critical flag into
+// "Proceed" (#2385 owner question 4). Until part 5's template store lets HQ
+// mark them per template version, the rule is the canvas's template board
+// (DDL13): Corporate & Legal, Financial Health and Compliance / AML. A case
+// stamps it on each section at open (`dd_sections.blocking`, migration 620),
+// so a later change to this list never rewrites a case already opened.
+
+export const BLOCKING_SECTION_KEYS: ReadonlySet<string> = new Set(['corporate_legal', 'financial_health', 'compliance_aml']);
+
+export const DD_DECISIONS = ['proceed', 'proceed_with_conditions', 'do_not_proceed', 'withdrawn'] as const;
+export type DDDecision = typeof DD_DECISIONS[number];
+
+/** The canvas's sentence when "Proceed" meets an open High or Critical flag in a blocking section (DDL14 D). */
+export const BLOCKING_FLAG_REFUSAL = 'A blocking section still has an open High flag. Record Proceed with conditions, or close the flag first.';
+
+const OPEN_SEVERE = new Set(['high', 'critical']);
+
+/**
+ * The blocking sections that carry an open High or Critical flag, by section
+ * id. A flag is open when it is a finding with no `resolved_at`, or a
+ * checklist item still flagged or failed; a flag or fail with no severity is
+ * not High (the score reads it as low or medium too).
+ */
+export function blockingSectionsWithOpenSevereFlags(
+  sections: ReadonlyArray<{ id: number; blocking: number | boolean | null }>,
+  findings: ReadonlyArray<{ section_id: number | null; severity: string; resolved_at: string | null }>,
+  items: ReadonlyArray<{ section_id: number | null; status: string; severity: string | null }>,
+): number[] {
+  const blocking = new Set(sections.filter((s) => Number(s.blocking) === 1).map((s) => Number(s.id)));
+  const hit = new Set<number>();
+  for (const f of findings) {
+    if (f.section_id != null && blocking.has(Number(f.section_id)) && !f.resolved_at && OPEN_SEVERE.has(String(f.severity))) hit.add(Number(f.section_id));
+  }
+  for (const it of items) {
+    if (it.section_id != null && blocking.has(Number(it.section_id)) && (it.status === 'flag' || it.status === 'fail') && OPEN_SEVERE.has(String(it.severity))) hit.add(Number(it.section_id));
+  }
+  return [...hit].sort((a, b) => a - b);
+}
+
+/**
+ * What every newly opened case takes at open (migration 620): its lead is its
+ * opener, and its blocking sections are stamped from `BLOCKING_SECTION_KEYS`.
+ * Called by both openers, `POST /api/dd/cases` and the partner-deal seed, so
+ * neither carries its own copy of the rule.
+ */
+export async function stampNewCase(env: Env, caseId: number): Promise<void> {
+  await env.DB.prepare('UPDATE dd_cases SET lead_user_id = owner_user_id WHERE id = ? AND lead_user_id IS NULL').bind(caseId).run();
+  for (const key of BLOCKING_SECTION_KEYS) {
+    await env.DB.prepare('UPDATE dd_sections SET blocking = 1 WHERE case_id = ? AND section_key = ?').bind(caseId, key).run();
+  }
+}
+
 // ---------- PII helpers (column cipher wrappers) ----------
 
 export async function encField(env: Env, table: string, column: string, rowId: number, value: string | null): Promise<string | null> {
