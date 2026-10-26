@@ -71,7 +71,8 @@ export type FundActKey =
   | 'fund_ledger.administrator' | 'fund_ledger.write'
   | 'bank_account.see' | 'bank_account.change' | 'bank_account.reveal'
   | 'fee_terms.confirm' | 'fee_period.issue' | 'fee.write'
-  | 'mercury.connection' | 'mercury.sync' | 'mercury.reconcile';
+  | 'mercury.connection' | 'mercury.sync' | 'mercury.reconcile'
+  | 'closing.countersign' | 'closing.evidence' | 'position.record' | 'fund_investment.commit' | 'fund_investment.release';
 
 export type FundAct = Readonly<{
   act: FundActKey;
@@ -181,6 +182,22 @@ export const FUND_ACTS: readonly FundAct[] = Object.freeze([
   act({ act: 'mercury.reconcile', label: 'Propose, confirm or reject a bank match, or mark a credit Not ours', tier: 'admin', owner: '#1775', sentence: null,
     routes: ['POST /api/admin/mercury/matches', 'POST /api/admin/mercury/matches/:uid/confirm', 'POST /api/admin/mercury/matches/:uid/reject',
       'POST /api/admin/mercury/transactions/:uid/not-ours', 'POST /api/admin/mercury/not-ours/:uid/withdraw'] }),
+  // D1215 (#3212, #2424 owner question 5): the closing acts. Recording evidence
+  // and positions are an Admin's; countersigning for an Axal entity, committing
+  // fund money and recording its release are the Super Admin's, with a step-up.
+  // The three Super Admin acts have no route yet: later parts of #2424 add
+  // them, and the console reads their sentences now. Nothing here moves money.
+  act({ act: 'closing.evidence', label: 'Record or withdraw evidence that money moved for a closing line', tier: 'admin', owner: '#3212', sentence: null,
+    routes: ['POST /api/closings/:uid/lines/:lineUid/evidence', 'POST /api/closings/:uid/evidence/:evidenceUid/withdraw',
+      'POST /api/deals/:id/transfers'] }),
+  act({ act: 'position.record', label: 'Record a portfolio position', tier: 'admin', owner: '#3212', sentence: null,
+    routes: ['POST /api/positions'] }),
+  act({ act: 'closing.countersign', label: 'Countersign a closing for an Axal entity', tier: 'super_admin', owner: '#3212',
+    sentence: 'A Super Admin countersigns a closing for an Axal entity.', routes: [] }),
+  act({ act: 'fund_investment.commit', label: "Commit a fund's money to a company", tier: 'super_admin', owner: '#3212',
+    sentence: "A Super Admin commits a fund's money to a company.", routes: [] }),
+  act({ act: 'fund_investment.release', label: "Record that a fund's investment was released", tier: 'super_admin', owner: '#3212',
+    sentence: "A Super Admin records that a fund's investment was released.", routes: [] }),
 ]);
 
 /**

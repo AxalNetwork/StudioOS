@@ -13,6 +13,9 @@ import { sectionsFor, checklistFor, encField, decField } from '../src/services/d
 const BASELINE=readFileSync(new URL('../sql/schema_baseline.sql',import.meta.url),'utf8');
 // S1 assigned migration 535 and decision D888 on #2392.
 const REBUILD=readFileSync(new URL('../sql/migrations/535_dd_advisor_subject.sql',import.meta.url),'utf8');
+// D1246 (#3261): the router now reads and writes migration 620's columns, so a
+// database the router is mounted on carries it, as production does.
+const LIFECYCLE=readFileSync(new URL('../sql/migrations/620_dd_case_lifecycle.sql',import.meta.url),'utf8');
 const OLD_CASE=tableFromBaseline(readFileSync(new URL('../sql/migrations/008_due_diligence.sql',import.meta.url),'utf8'),'dd_cases');
 const OLD_SCHEMA=BASELINE.replace(tableFromBaseline(BASELINE,'dd_cases'),OLD_CASE+"\nALTER TABLE dd_cases ADD COLUMN template_depth TEXT NOT NULL DEFAULT 'standard';");
 const SUBJECTS=['project','founder','advisor','investor','partner'] as const;
@@ -80,6 +83,7 @@ async function creation(sql=REBUILD,router=dd,fresh=false) {
   const w=world(fresh);
   try {
     if(!fresh) apply(w,sql);
+    apply(w,LIFECYCLE);
     for(const type of SUBJECTS) {
       const r=await request(w,'POST','/cases',{subject_type:type,subject_id:1,subject_label:'Synthetic',template_depth:'deep',notes:'Synthetic new notes'},router);
       assert.equal(r.status,201,type);
@@ -137,6 +141,7 @@ async function preservation(sql=REBUILD) {
     const legacy:any=await read.json();assert.equal(legacy.case.subject_type,'mentor');assert.equal(legacy.case.notes,'Synthetic notes');
     // Replay is lossless too, including a deleted-highest-id database.
     apply(w,sql);assert.deepEqual(snapshot(w),before);assert.deepEqual(sequences(w),seq);
+    apply(w,LIFECYCLE);
     const r=await request(w,'POST','/cases',{subject_type:'advisor',subject_id:1,subject_label:'Synthetic'});
     assert.equal(r.status,201);assert.ok((await r.json() as any).id>900);
   }finally{w.db.close();}
@@ -154,6 +159,7 @@ async function emptyHistory(sql=REBUILD) {
     w.db.prepare("INSERT INTO dd_cases(id,uid,subject_type,subject_id,subject_label,owner_user_id) VALUES(900,'deleted-synthetic','mentor',1,'Synthetic',1)").run();
     w.db.prepare('DELETE FROM dd_cases').run();
     apply(w,sql);assert.equal(w.db.prepare('SELECT COUNT(*) n FROM dd_cases').get()!.n,0);
+    apply(w,LIFECYCLE);
     const response=await request(w,'POST','/cases',{subject_type:'advisor',subject_id:1,subject_label:'Synthetic'});
     assert.equal(response.status,201);assert.ok((await response.json() as any).id>900);
   }finally{w.db.close();}
