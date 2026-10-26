@@ -2,6 +2,8 @@ import { request } from '../api.js';
 const params = input => new URLSearchParams(Object.entries(input || {}).filter(([,value]) => value != null && value !== '')).toString();
 export const roundCallsApi = {
   availability: () => request('/round-calls/availability'),
+  // D1222: CLS1's readiness from the venture's own Raise records, read whether calls are on or off.
+  readiness: projectId => request('/round-calls/readiness?' + params({project_id:projectId})),
   context: projectId => request('/round-calls/context?' + params({project_id:projectId})),
   list: projectId => request('/round-calls?' + params({project_id:projectId})),
   page: uid => request(`/round-calls/${encodeURIComponent(uid)}`),
