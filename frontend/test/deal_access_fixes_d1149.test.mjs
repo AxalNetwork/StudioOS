@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import React from 'react';
+import React, { act } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { MemoryRouter, Routes, Route } from 'react-router-dom';
 import { mountContracts } from './_contracts_dom.mjs';
@@ -55,7 +55,7 @@ test('the commitment dialog, totals and transfer amounts use the deal currency; 
 test('joining records a request and explains that it grants no access', async () => {
   const original = api.dealroomJoin; const calls = []; api.dealroomJoin = async (id) => { calls.push(id); return { requested: true }; };
   const view = await mountContracts(h(JoinLeaveButton, { dealId: 100, member: false, quotaState: { quota: { full: false } } }));
-  try { await view.click('Request an invitation'); await view.flush(); assert.deepEqual(calls, [100]); assert.match(view.text(), /invitation request is recorded/); assert.match(view.text(), /Access starts after an invitation or commitment/); }
+  try { await view.click('Request an invitation'); await view.flush(); const confirm=view.nodes().find(n=>view.props(n)?.['data-testid']==='dr-request-confirm'); await act(async()=>{await view.props(confirm).onClick();}); await view.flush(); assert.deepEqual(calls, [100]); assert.match(view.text(), /invitation request is recorded/); assert.match(view.text(), /Access starts after an invitation or commitment/); }
   finally { await view.unmount(); api.dealroomJoin = original; }
 });
 
