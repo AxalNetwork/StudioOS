@@ -121,7 +121,7 @@ rollback, no admin bypass, NDA exclusion and anonymous change metadata.
 
 D1123 extends admin_lab_operations_d971.test.ts with real SQLite capacity-result tests: cohort scoping, last event, absent vs unreadable, and admin-only reads.
 
-D1176: `use_of_funds_routes_d1176.test.ts` mounts the real Use of funds and financial routers over canonical SQLite DDL. It covers roles/company scope, read-only support, audited initialization, cross-venture ids, Base projection, legacy-only metadata and concurrent edit conflicts, stale-copy repair errors, orphan milestone deletion, copies, racing deletion and hire audits, zero/missing values, precedence, bounded runway history, founder-only Mercury, partial reads and audit rollback. Providers are stubbed.
+D1176: `use_of_funds_routes_d1176.test.ts` mounts the real Use of funds and financial routers over canonical SQLite DDL. It covers roles/company scope, read-only support, audited initialization, cross-venture ids, Base projection, partial legacy splits and financial reconciliation, legacy-only metadata and concurrent edit conflicts, stale-copy repair errors, orphan milestone deletion, copies, racing deletion and hire audits, zero/missing values, precedence, bounded runway history, founder-only Mercury, partial reads and audit rollback. Providers are stubbed.
 
 `calendar_d1206.test.ts` checks mounted Free-investor reads and subscriptions,
 Professional-only IC creation, advisor fallback ownership, partial-source error

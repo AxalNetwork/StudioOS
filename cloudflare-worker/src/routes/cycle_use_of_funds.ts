@@ -27,7 +27,7 @@ r.use('*',async(c,next)=>{
   c.set('mercury',user.role==='founder'&&Number(user.founder_id)===Number(project.founder_id)&&!support);
   await next();
 });
-r.onError((e,c)=> e instanceof PlanError ? c.json({code:e.code,detail:e.sentence},e.status as any)
+r.onError((e,c)=> e instanceof PlanError ? c.json({code:e.code,detail:e.sentence,...(e.recovery?{recovery:e.recovery}:{})},e.status as any)
   : c.json({code:'unreadable',detail:'Use of funds is Unreadable. Read the plan before retrying this change.'},503));
 const body=async(c:any)=>{
   const b=await c.req.json().catch(()=>null);

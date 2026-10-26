@@ -215,7 +215,7 @@ test('D1176 stale legacy costs give a correction route and keep data until an ex
   const f=fixture();const legacy={milestone_costs:{m1:{bucket:'eng',cost:400}},keep:'Recorded outside this tool'};
   f.db.prepare('UPDATE projects SET use_of_funds_meta=? WHERE id=1').run(JSON.stringify(legacy));
   const r=await call(f,'PUT','',{sections:[{key:'product',pct:100}]});
-  assert.equal(r.status,409);assert.equal(r.body.code,'legacy_plan_repair_required');assert.match(r.body.detail,/PUT \/api\/projects\/:id/);
+  assert.equal(r.status,409);assert.equal(r.body.code,'legacy_plan_repair_required');assert.deepEqual(r.body.recovery,{method:'PUT',route:'/api/projects/:id'});
   assert.deepEqual(JSON.parse(rows(f,'SELECT use_of_funds_meta FROM projects WHERE id=1')[0].use_of_funds_meta),legacy);
   assert.equal(rows(f,'SELECT id FROM uof_scenarios').length,0);assert.equal(rows(f,'SELECT id FROM activity_logs').length,0);
   // The existing authenticated projects PUT accepts this explicit metadata correction.
@@ -234,7 +234,7 @@ test('D1176 projection keeps later legacy-only entries and extra fields while re
   assert.equal((await call(f,'PUT','',{sections:[{key:'product',pct:100}]})).status,200);
   let meta=JSON.parse(rows(f,'SELECT use_of_funds_meta FROM projects WHERE id=1')[0].use_of_funds_meta);
   assert.deepEqual(meta.milestones.operations,external.milestones.operations);assert.deepEqual(meta.milestone_costs.m1,external.milestone_costs.m1);assert.equal(meta.milestone_costs['1'].note,'Keep extra');
-  const other=await created(f,{name:'No copied milestones'});
+  const other=await created(f,{name:'No copied milestones',lines});
   assert.equal((await call(f,'POST',`/scenarios/${other.id}/make-base`,{})).status,200);
   meta=JSON.parse(rows(f,'SELECT use_of_funds_meta FROM projects WHERE id=1')[0].use_of_funds_meta);
   assert.deepEqual(meta.milestones,{operations:external.milestones.operations});assert.deepEqual(meta.milestone_costs,{m1:external.milestone_costs.m1});assert.equal(meta.keep,'Unrelated');
@@ -294,19 +294,21 @@ test('D1176 hire uid is schema-backed and a concurrent removal produces no false
   }
 });
 test('D1176 a legacy write between preflight and batch rolls back every Base mutation and audit',async()=>{
-  for(const mode of ['split','scenario','milestone','promotion']) {
+  for(const mode of ['split','scenario','milestone','promotion']) for(const field of ['metadata','split','amount']) {
     const f=fixture();const alternative=await created(f);const base=rows(f,'SELECT id FROM uof_scenarios WHERE is_base=1')[0].id;
     const milestone=await call(f,'POST','/milestones',{scenario_id:base,label:'Keep',okr_id:1,cost_cents:100});assert.equal(milestone.status,201);
     const snapshot=()=>['uof_scenarios','uof_scenario_lines','uof_milestones','activity_logs'].map(t=>rows(f,`SELECT * FROM ${t}`));
     const before=snapshot();const original=f.env.DB.batch;let external:any;
     f.env.DB.batch=async(stmts:any[])=>{
-      const current=JSON.parse(rows(f,'SELECT use_of_funds_meta FROM projects WHERE id=1')[0].use_of_funds_meta);external={...current,keep:'Concurrent project writer'};
-      f.db.prepare('UPDATE projects SET use_of_funds_meta=? WHERE id=1').run(JSON.stringify(external));return original(stmts);
+      external=rows(f,'SELECT use_of_funds_meta,use_of_funds,funding_needed FROM projects WHERE id=1')[0];
+      if(field==='metadata')external.use_of_funds_meta=JSON.stringify({...JSON.parse(external.use_of_funds_meta),keep:'Concurrent project writer'});
+      if(field==='split')external.use_of_funds=JSON.stringify([{label:'Product & engineering',pct:100}]);
+      if(field==='amount')external.funding_needed=77;
+      f.db.prepare('UPDATE projects SET use_of_funds_meta=?,use_of_funds=?,funding_needed=? WHERE id=1').run(external.use_of_funds_meta,external.use_of_funds,external.funding_needed);return original(stmts);
     };
     const r=mode==='split'?await call(f,'PUT','',{sections:[{key:'reserve',pct:100}]}):mode==='scenario'?await call(f,'PATCH',`/scenarios/${base}`,{name:'Must roll back'}):mode==='milestone'?await call(f,'PATCH',`/milestones/${milestone.body.id}`,{cost_cents:999}):await call(f,'POST',`/scenarios/${alternative.id}/make-base`,{});
     assert.equal(r.status,409,mode);assert.equal(r.body.code,'legacy_plan_changed',mode);assert.deepEqual(snapshot(),before,mode);
-    assert.deepEqual(JSON.parse(rows(f,'SELECT use_of_funds_meta FROM projects WHERE id=1')[0].use_of_funds_meta),external,mode);
-    assert.equal(rows(f,'SELECT funding_needed FROM projects WHERE id=1')[0].funding_needed,null);
+    assert.deepEqual(rows(f,'SELECT use_of_funds_meta,use_of_funds,funding_needed FROM projects WHERE id=1')[0],external,`${mode}/${field}`);
   }
 });
 test('D1176 founder and admin initialization is audited once in the copy transaction and failed audit leaves no Base',async()=>{
@@ -319,6 +321,43 @@ test('D1176 founder and admin initialization is audited once in the copy transac
   const f=fixture();f.db.exec('DROP TABLE activity_logs');
   const r=await call(f,'GET','/plan');assert.equal(r.status,200);assert.equal(r.body.base.state,'unreadable');
   assert.equal(rows(f,'SELECT id FROM uof_scenarios').length,0);assert.equal(rows(f,'SELECT id FROM uof_scenario_lines').length,0);
+});
+test('D1176 metadata-only Base edits preserve a copied three-section legacy split',async()=>{
+  const f=fixture();const split=JSON.stringify([{label:'Product & engineering',pct:40},{label:'GTM: sales and marketing',pct:40},{label:'Hiring / runway reserve',pct:20}]);
+  f.db.prepare('UPDATE projects SET use_of_funds=?,funding_needed=? WHERE id=1').run(split,'');
+  const base=(await call(f,'GET','/scenarios')).body.items[0];
+  assert.equal(base.lines.filter((l:any)=>l.share_pct===null).length,2);
+  assert.equal((await call(f,'PATCH',`/scenarios/${base.id}`,{name:'Renamed',target_runway_months:18})).status,200);
+  assert.equal(rows(f,'SELECT use_of_funds FROM projects WHERE id=1')[0].use_of_funds,split);
+  const m=await call(f,'POST','/milestones',{scenario_id:base.id,label:'Launch',category_key:'product'});assert.equal(m.status,201);
+  assert.equal((await call(f,'PATCH',`/milestones/${m.body.id}`,{label:'New launch'})).status,200);
+  assert.equal((await call(f,'DELETE',`/milestones/${m.body.id}`)).status,200);
+  assert.equal(rows(f,'SELECT use_of_funds FROM projects WHERE id=1')[0].use_of_funds,split);
+  const before=rows(f,'SELECT * FROM activity_logs');
+  assert.equal((await call(f,'PATCH',`/scenarios/${base.id}`,{lines:lines.map(l=>({...l,share_pct:null}))})).status,409);
+  assert.deepEqual(rows(f,'SELECT * FROM activity_logs'),before);
+  assert.equal(rows(f,'SELECT use_of_funds FROM projects WHERE id=1')[0].use_of_funds,split);
+});
+test('D1176 an unknown split cannot be promoted over the current Base or legacy deck inputs',async()=>{
+  const f=fixture();const current=await created(f);await call(f,'POST',`/scenarios/${current.id}/make-base`,{});
+  const blank=await created(f,{name:'Split not recorded'});
+  const snapshot=()=>['uof_scenarios','projects','activity_logs'].map(t=>rows(f,`SELECT * FROM ${t}`));const before=snapshot();
+  const refused=await call(f,'POST',`/scenarios/${blank.id}/make-base`,{});
+  assert.equal(refused.status,409);assert.equal(refused.body.code,'base_split_required');assert.deepEqual(snapshot(),before);
+});
+test('D1176 later legacy financial edits require explicit reconciliation rather than an unrelated Base rename',async()=>{
+  for(const field of ['split','amount','target']) {
+    const f=fixture();const base=await created(f);await call(f,'POST',`/scenarios/${base.id}/make-base`,{});
+    const meta=JSON.parse(rows(f,'SELECT use_of_funds_meta FROM projects WHERE id=1')[0].use_of_funds_meta);
+    if(field==='split')f.db.prepare('UPDATE projects SET use_of_funds=? WHERE id=1').run(JSON.stringify([{label:'Product & engineering',pct:90},{label:'Hiring / runway reserve',pct:10}]));
+    if(field==='amount')f.db.exec('UPDATE projects SET funding_needed=777 WHERE id=1');
+    if(field==='target'){meta.runway_months=33;f.db.prepare('UPDATE projects SET use_of_funds_meta=? WHERE id=1').run(JSON.stringify(meta));}
+    const snapshot=()=>['projects','uof_scenarios','activity_logs'].map(t=>rows(f,`SELECT * FROM ${t}`));const before=snapshot();
+    const r=await call(f,'PATCH',`/scenarios/${base.id}`,{name:'Unrelated rename'});
+    assert.equal(r.status,409,field);assert.equal(r.body.code,'legacy_plan_changed',field);assert.deepEqual(snapshot(),before,field);
+    const reconcile=field==='amount'?{amount_to_raise_cents:77700}:field==='target'?{target_runway_months:33}:{lines:lines.map(l=>({...l,share_pct:l.key==='product'?90:l.key==='reserve'?10:0}))};
+    assert.equal((await call(f,'PATCH',`/scenarios/${base.id}`,reconcile)).status,200,field);
+  }
 });
 test('D1176 invalid financial and AI provenance payloads refuse without writes; explicit zero cash/raise survives',async()=>{
   const f=fixture();const a=await created(f);

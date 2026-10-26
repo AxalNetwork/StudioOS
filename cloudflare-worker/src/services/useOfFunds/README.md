@@ -31,6 +31,9 @@ entries and refusing conflicting edits of the same key. A failed legacy copy
 names the existing projects PUT correction route; it never drops stale costs.
 Deleting a milestone does not require its old OKR still to exist. No read
 reaches a provider or another user's Mercury records.
+An unrelated Base edit retains a historical split with omitted sections;
+promotion/replacement requires a complete split. Later legacy financial edits
+must be explicitly reconciled rather than overwritten by a rename.
 
 Migration 606 creates the three new stores. Hires remain in
 `use_of_funds_hires` (migration 463); part 3 scopes and supplies that list.

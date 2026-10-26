@@ -6,6 +6,7 @@ import { plan, SECTION_KEYS, type PlanInputs, type SectionKey, type Source } fro
 export type Scope = { projectId: number; user: User; founderUserId: number; readOnly?: boolean };
 export class PlanError extends Error {
   status:number; code:string; sentence:string;
+  recovery?: {method:'PUT';route:string};
   constructor(status: number, code: string, sentence: string) { super(sentence); this.status=status;this.code=code;this.sentence=sentence; }
 }
 export const obj = (v: unknown): v is Record<string, any> => !!v && typeof v === 'object' && !Array.isArray(v);
@@ -74,8 +75,10 @@ export async function base(env: Env, s: Scope) {
   }
 }
 function legacyRepair(conflict=false) {
-  return new PlanError(409, conflict ? 'legacy_plan_changed' : 'legacy_plan_repair_required',
-    'Review and correct the legacy Use of funds fields with PUT /api/projects/:id before retrying. Existing data was kept.');
+  const error=new PlanError(409, conflict ? 'legacy_plan_changed' : 'legacy_plan_repair_required',
+    "Review and correct this venture's saved plan fields before retrying. Existing data was kept.");
+  error.recovery={method:'PUT',route:'/api/projects/:id'};
+  return error;
 }
 async function planBatch(env:Env,statements:D1PreparedStatement[]) {
   try { return await env.DB.batch(statements); }
@@ -120,6 +123,14 @@ export async function view(env: Env, s: Scope, r: any) {
 }
 
 const legacyBucket = { product: 'eng', 'go-to-market': 'gtm', infrastructure: 'infra', operations: 'ops', reserve: 'hiring' };
+const hasCompleteSplit=(lines:any[])=>lines.length===5&&SECTION_KEYS.every(k=>lines.some(l=>l.category_key===k&&Number.isSafeInteger(l.share_pct)&&l.share_pct>=0&&l.share_pct<=100))&&lines.reduce((sum,l)=>sum+l.share_pct,0)===100;
+const incompleteBase=()=>new PlanError(409,'base_split_required','Record a complete split totalling 100% before making this scenario the Base or replacing its split.');
+function recordedSplit(raw:string|null) {
+  let rows:any;try { rows=json(raw); } catch { throw legacyRepair(); }
+  if(rows===null) return null;
+  if(!Array.isArray(rows)||rows.some(l=>!SECTION_KEYS.some(k=>l?.key===k||l?.label===SECTION_LABELS[k]))) throw legacyRepair();
+  return JSON.stringify(SECTION_KEYS.map(k=>rows.find(l=>l?.key===k||l?.label===SECTION_LABELS[k])?.pct??0));
+}
 function milestoneProjection(milestones:any[]) {
   const projected:Record<string,Record<string,any>>={milestones:{},milestone_costs:{}};
   for (const m of milestones) {
@@ -137,16 +148,30 @@ function sameMilestoneEntry(a:any,b:any,cost:boolean) {
 }
 /** Replace only the old Base's projection; other legacy writers' entries survive. */
 async function legacyStatements(env: Env, s: Scope, r: any, lines: any[], milestones: any[]) {
-  const project = await env.DB.prepare('SELECT use_of_funds_meta FROM projects WHERE id = ?').bind(s.projectId).first<any>();
+  const project = await env.DB.prepare('SELECT use_of_funds_meta,use_of_funds,funding_needed FROM projects WHERE id = ?').bind(s.projectId).first<any>();
   let meta:any;
   try { meta=json(project?.use_of_funds_meta,{}); } catch { throw legacyRepair(); }
   if (!obj(meta)) throw legacyRepair();
-  const complete = lines.length === 5 && lines.every(l => l.share_pct !== null) && lines.reduce((sum, l) => sum + l.share_pct, 0) === 100;
+  const complete = hasCompleteSplit(lines);
   const split = complete ? SECTION_KEYS.map(k => ({ label: SECTION_LABELS[k], pct: lines.find(l => l.category_key === k).share_pct })) : null;
+  const recordedTarget=meta.runway_months??null;
   meta.deck_synced_at = null;
   if (r.target_runway_months === null) delete meta.runway_months; else meta.runway_months = r.target_runway_months;
-  const previous=await env.DB.prepare('SELECT id FROM uof_scenarios WHERE project_id=? AND is_base=1').bind(s.projectId).first<{id:number}>();
-  const before=milestoneProjection(previous?(await scenarioParts(env,previous.id)).milestones:[]);
+  const previous=await env.DB.prepare('SELECT * FROM uof_scenarios WHERE project_id=? AND is_base=1').bind(s.projectId).first<any>();
+  const previousParts=previous?await scenarioParts(env,previous.id):{lines:[],milestones:[]};
+  if(previous) {
+    const storedAmount=project.funding_needed;
+    const recordedAmount=storedAmount==null||(typeof storedAmount==='string'&&!storedAmount.trim())?null:Math.round(Number(storedAmount)*100);
+    if(recordedAmount!==previous.amount_to_raise_cents&&recordedAmount!==r.amount_to_raise_cents) throw legacyRepair(true);
+    if(recordedTarget!==previous.target_runway_months&&recordedTarget!==r.target_runway_months) throw legacyRepair(true);
+    if(complete&&hasCompleteSplit(previousParts.lines)) {
+      const current=recordedSplit(project.use_of_funds);
+      const prior=JSON.stringify(SECTION_KEYS.map(k=>previousParts.lines.find(l=>l.category_key===k).share_pct));
+      const next=JSON.stringify(SECTION_KEYS.map(k=>lines.find(l=>l.category_key===k).share_pct));
+      if(current!==prior&&current!==next) throw legacyRepair(true);
+    }
+  }
+  const before=milestoneProjection(previousParts.milestones);
   const after=milestoneProjection(milestones);
   for (const field of ['milestones','milestone_costs']) {
     const current=meta[field]??{};
@@ -163,11 +188,11 @@ async function legacyStatements(env: Env, s: Scope, r: any, lines: any[], milest
     // CASE is lazy in SQLite. A changed snapshot evaluates fixed invalid JSON,
     // aborting and rolling back the WHOLE D1 batch, including earlier statements.
     // No project content is parsed or placed in the database error.
-    env.DB.prepare("SELECT json(CASE WHEN EXISTS(SELECT 1 FROM projects WHERE id=? AND deleted_at IS NULL AND use_of_funds_meta IS ?) THEN 'true' ELSE '' END)")
-      .bind(s.projectId,project?.use_of_funds_meta??null),
-    env.DB.prepare(`UPDATE projects SET use_of_funds = ?, funding_needed = ?, use_of_funds_meta = ?, updated_at = datetime('now') WHERE id = ?
+    env.DB.prepare("SELECT json(CASE WHEN EXISTS(SELECT 1 FROM projects WHERE id=? AND deleted_at IS NULL AND use_of_funds_meta IS ? AND use_of_funds IS ? AND funding_needed IS ?) THEN 'true' ELSE '' END)")
+      .bind(s.projectId,project?.use_of_funds_meta??null,project?.use_of_funds??null,project?.funding_needed??null),
+    env.DB.prepare(`UPDATE projects SET use_of_funds = CASE WHEN ?=1 THEN ? ELSE use_of_funds END, funding_needed = ?, use_of_funds_meta = ?, updated_at = datetime('now') WHERE id = ?
     AND EXISTS(SELECT 1 FROM uof_scenarios WHERE id=? AND project_id=? AND is_base=1)`)
-    .bind(split === null ? null : JSON.stringify(split), r.amount_to_raise_cents === null ? null : r.amount_to_raise_cents / 100, JSON.stringify(meta), s.projectId,r.id,s.projectId)];
+    .bind(complete?1:0,split === null ? null : JSON.stringify(split), r.amount_to_raise_cents === null ? null : r.amount_to_raise_cents / 100, JSON.stringify(meta), s.projectId,r.id,s.projectId)];
 }
 function readLines(b: unknown) {
   if (!Array.isArray(b) || b.length !== 5) throw bad();
@@ -207,6 +232,7 @@ export async function saveScenario(env: Env, s: Scope, id: number | null, b: Rec
   const r = mergeScenario(old, input); if (!r.name) throw bad();
   const parts = id !== null || from ? await scenarioParts(env, id ?? from.id) : { lines: SECTION_KEYS.map(category_key => ({ category_key, share_pct: null, sublabel: null, source_label: null })), milestones: [] };
   const lines = has(input, 'lines') ? readLines(input.lines) : parts.lines;
+  if(r.is_base&&has(input,'lines')&&!hasCompleteSplit(lines)) throw incompleteBase();
   const uid = r.uid;
   const stmts = id === null
     ? [env.DB.prepare(`INSERT INTO uof_scenarios(uid,project_id,name,is_base,currency,amount_to_raise_cents,target_runway_months,start_month,raise_month,cash_cents,legacy_copied_at,created_by,updated_by)
@@ -231,6 +257,7 @@ export async function saveScenario(env: Env, s: Scope, id: number | null, b: Rec
 }
 export async function makeBase(env: Env, s: Scope, id: number) {
   const r = await scenario(env, s, id); const parts = await scenarioParts(env, id);
+  if(!hasCompleteSplit(parts.lines)) throw incompleteBase();
   if (r.currency !== 'usd') throw new PlanError(409, 'base_currency', 'The Base uses USD because its legacy readers record dollars.');
   // Clearing and assigning the unique Base happen in the same transaction.
   const written=await planBatch(env,[
