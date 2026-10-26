@@ -50,10 +50,10 @@ function medium(db:DatabaseSync) {
 }
 const count=(db:DatabaseSync,table:string)=>Number((db.prepare('SELECT COUNT(*) n FROM '+table).get() as any).n);
 const app=new Hono<any>();app.route('/api/cycles/raise',cycleRaise);
-async function call(env:any,id:number|null,path:string,method='GET',data?:unknown,operator?:number) {
- const headers:any={'Content-Type':'application/json'};
- if(id!==null)headers.Authorization='Bearer '+await new SignJWT({user_id:id,...(operator?{impersonated_by:operator}:{})}).setProtectedHeader({alg:'HS256'}).setIssuedAt().setExpirationTime('1h').sign(new TextEncoder().encode(SECRET));
- const res=await app.request('/api/cycles/raise'+path,{method,headers,...(data===undefined?{}:{body:JSON.stringify(data)})},env);
+/** A GET as the venture's founder (user 1), the only caller these tests need. */
+async function call(env:any,path:string) {
+ const token=await new SignJWT({user_id:1}).setProtectedHeader({alg:'HS256'}).setIssuedAt().setExpirationTime('1h').sign(new TextEncoder().encode(SECRET));
+ const res=await app.request('/api/cycles/raise'+path,{headers:{Authorization:'Bearer '+token}},env);
  return {status:res.status,body:await res.json() as any};
 }
 const quiet = async <T>(f: () => Promise<T>) => { const w = console.warn; console.warn = () => {}; try { return await f(); } finally { console.warn = w; } };
@@ -91,7 +91,7 @@ test('2. one store down: the module draws the partial score, says which input co
     assert.equal(first.state, 'scored');
     const rows = [count(db, 'venture_scorecards'), count(db, 'readiness_scores'), count(db, 'activity_logs')];
     db.exec('DROP TABLE waitlist_signups');
-    const r = await quiet(() => call(env, 1, '/modules/fundraising-readiness?project=1'));
+    const r = await quiet(() => call(env, '/modules/fundraising-readiness?project=1'));
     assert.equal(r.status, 200);
     const pmf = r.body.parts.pmf;
     assert.equal(pmf.state, 'scored');
