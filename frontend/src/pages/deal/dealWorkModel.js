@@ -79,13 +79,16 @@ export function caseCard(row, detail, userId) {
   };
 }
 
-/** Requests to the founder, from the case read, each with how long it has waited. */
+/** Requests to the founder, from the case read, each with how long it has waited and its due date (D1248). */
 export function requestRows(detail, nowMs = Date.now()) {
   return (detail?.requests || []).map((r) => {
+    // D1248: a withdrawn request keeps its state but takes no answer, so it never waits.
+    if (r.withdrawn_at) return { id: r.id, title: r.title, tone: 'off', state: `Withdrawn${dayOf(r.withdrawn_at) ? ` ${dayOf(r.withdrawn_at)}` : ''}` };
     if (r.state === 'requested') {
       const at = stampMs(r.created_at);
       const days = at == null ? null : Math.max(0, Math.floor((nowMs - at) / DAY));
-      return { id: r.id, title: r.title, tone: 'wait', state: days == null ? 'Waiting · asked on a date not recorded' : `Waiting ${days} day${days === 1 ? '' : 's'}` };
+      const due = dayOf(r.due_date) ? ` · due ${dayOf(r.due_date)}` : '';
+      return { id: r.id, title: r.title, tone: 'wait', state: `${days == null ? 'Waiting · asked on a date not recorded' : `Waiting ${days} day${days === 1 ? '' : 's'}`}${due}` };
     }
     const answered = dayOf(r.responded_at);
     return { id: r.id, title: r.title, tone: 'done', state: r.state === 'reviewed' ? `Reviewed${answered ? ` · answered ${answered}` : ''}` : `Answered${answered ? ` ${answered}` : ''}` };

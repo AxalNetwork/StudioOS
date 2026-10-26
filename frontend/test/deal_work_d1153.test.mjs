@@ -54,7 +54,7 @@ test('the room\'s three access states; behind an NDA the withheld files are a co
 });
 
 test('Diligence: your case on this company only, its card and requests; a list cut short is not "no case"', () => {
-  // Mutation checked: another company's case taken; an archived case taken; the cap ignored; waiting days miscounted.
+  // Mutation checked: another company's case taken; an archived case taken; the cap ignored; waiting days miscounted; a withdrawn request waiting.
   const read = ready({ items: [{ uid: 'x', subject_type: 'project', subject_id: 8, status: 'open' }, { uid: 'old', subject_type: 'project', subject_id: 7, status: 'archived' }, { uid: 'dd1', subject_type: 'project', subject_id: 7, status: 'in_review', stage: 'in_review', subject_label: 'Harbor Ledger', checklist_total: 52, checklist_worked: 38, open_flags: 3, risk_band: 'moderate', created_at: '2026-10-01 08:00:00', lead_name: 'Ada', owner_user_id: 21 }], total: 3 });
   const found = caseForDeal(read, 7);
   assert.equal(found.row.uid, 'dd1');
@@ -65,7 +65,11 @@ test('Diligence: your case on this company only, its card and requests; a list c
   assert.deepEqual(card.yours, [{ title: 'Financial health', status: 'Open' }]);
   assert.equal(caseCard({ ...found.row, checklist_total: 0, risk_band: null, open_flags: 0 }, null, 21).items.line, 'No checklist items are recorded on this case.');
   const now = Date.parse('2026-10-25T12:00:00Z');
-  assert.deepEqual(requestRows({ requests: [{ id: 1, title: 'Burn plan', state: 'requested', created_at: '2026-10-21 08:00:00' }, { id: 2, title: 'Customers', state: 'received', responded_at: '2026-10-19' }] }, now).map((r) => r.state), ['Waiting 4 days', 'Answered 19 Oct 2026']);
+  assert.deepEqual(requestRows({ requests: [
+    { id: 1, title: 'Burn plan', state: 'requested', created_at: '2026-10-21 08:00:00', due_date: '2026-10-30' },
+    { id: 2, title: 'Customers', state: 'received', responded_at: '2026-10-19' },
+    { id: 3, title: 'Patent receipt', state: 'requested', created_at: '2026-10-20', withdrawn_at: '2026-10-22 09:00:00' },
+  ] }, now).map((r) => [r.state, r.tone]), [['Waiting 4 days · due 30 Oct 2026', 'wait'], ['Answered 19 Oct 2026', 'done'], ['Withdrawn 22 Oct 2026', 'off']], 'D1248: a withdrawn request never waits');
 });
 
 test('Terms: each from the deal, and a term no field holds is Not recorded with its reason, never 0', () => {
