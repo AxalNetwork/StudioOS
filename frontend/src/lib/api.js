@@ -55,6 +55,7 @@ export * from './api/cycles.js';
 export * from './api/dataRoom.js';
 export * from './api/ddLifecycle.js';
 export * from './api/dealContext.js';
+export * from './api/dealFlow.js';
 export * from './api/deckAssist.js';
 export * from './api/deckEditor.js';
 export * from './api/deckSources.js';
