@@ -511,6 +511,7 @@ const AdvisorAdvisoryWorkspace = lazy(() => import('./pages/advisor/advisory/Adv
 // wrapped in its own <Suspense fallback> so fetching a chunk can't blank the app.
 const InactivityWarningModal = lazy(() => import('./components/InactivityWarningModal'));
 const RecordLivePage = lazy(() => import('./pages/founder/RecordLivePage'));
+const RecordChannelPage = lazy(() => import('./pages/founder/RecordChannelPage'));
 const NotificationBell = lazy(() => import('./components/NotificationBell'));
 const FounderWellbeingMenu = lazy(() => import('./components/FounderWellbeingMenu'));
 const CommandPalette = lazy(() => import('./components/CommandPalette'));
@@ -2670,6 +2671,11 @@ function AppInner() {
       <Route path="/validate/record" element={guard(labRoles(['admin', 'founder']), <CycleRoute cycle="validate" lightbox />)} />
       {/* D685 §5.6.2 (#1588): the Recording View full screen, bound to the app's one recording. */}
       <Route path="/validate/record/live" element={guard(labRoles(['admin', 'founder']), <RecordLivePage />)} />
+      {/* D1309 (#2507, #2515, #2525): Record a session's channels, each at its own address (recordChannels.js).
+          Static, so /validate/:slug/:id never reads them as a record. */}
+      <Route path="/validate/record/whatsapp" element={guard(labRoles(['admin', 'founder']), <RecordChannelPage />)} />
+      <Route path="/validate/record/telegram" element={guard(labRoles(['admin', 'founder']), <RecordChannelPage />)} />
+      <Route path="/validate/record/calls" element={guard(labRoles(['admin', 'founder']), <RecordChannelPage />)} />
       <Route path="/validate/:slug" element={guard(labRoles(['admin', 'founder']), <CycleRoute cycle="validate" />)} />
       <Route path="/validate/:slug/:id" element={guard(labRoles(['admin', 'founder']), <CycleRoute cycle="validate" record />)} />
       {/* D695: every Add has an address. Customer research's Add stays Record a session, the query kept. */}

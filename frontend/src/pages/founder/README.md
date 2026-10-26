@@ -71,3 +71,7 @@ roster, display names and offsets without platform IDs. Missing is Not recorded;
 failed reads are Unreadable. B6 still owns final speaker mapping/transcription;
 B7 reads the stored speaker labels as they arrive. Runtime wiring and rollout
 remain B8/B9's gates. S1 authorized the existing screen look without a new canvas.
+
+`RecordChannelPage.jsx` is Record a session › WhatsApp, Telegram and Calls at
+`/validate/record/<channel>` (D1309); the channels and addresses are
+`recordChannels.js`'s.
