@@ -732,6 +732,16 @@ the code's copy. RD12 is now a chip in Validate's overview header, reading the
 venture's latest stored point (`pmfHistory`, `limit: 1`) as its band and
 confidence; it computes nothing. D1141's line under the overview is gone.
 
+**D1147 (#3033)** adds `raise/pmf-explain`, a separate RD11 Eadwyn band.
+`GET|POST /api/cycles/raise/pmf/explain?project=` reads kept wording or previews
+an explanation/questions from verified input rows matching the displayed
+snapshot hash. D1145 partial reads without a persisted hash do not mount the
+band or use an older stored snapshot. `POST .../keep?project=`
+alone saves a signed reading and actor audit; previews/questions save no
+reading. The founder owns the project, outside support sessions; no admin
+bypass. Neither run nor Keep changes PMF, checklist scores or source records.
+Question controls copy or dismiss. The full PMF card remains #3031's scope.
+
 ### D1113 — legacy Positioning retirement (#2993)
 
 `/raise/pitch/positioning` remains D911's counted forward to

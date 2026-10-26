@@ -41,6 +41,7 @@ export const FOUNDER_KINDS = [
 export const FOUNDER_HANDLERS = ['form', 'upload', 'draft', 'transcribe', 'none'];
 
 const CYCLE = 'frontend/src/pages/cycles/CycleRoute.jsx';
+const PMF = 'frontend/src/workspaces/PmfExplain.jsx';
 const ADVISOR = 'frontend/src/components/advisor/PersonalAdvisor.jsx';
 const SESSION = 'frontend/src/pages/founder/InterviewSessionPage.jsx';
 const DECK = 'frontend/src/pages/PitchDeckPage.jsx';
@@ -141,6 +142,14 @@ export const FOUNDER_OPTIONS = [
   },
 
   // ── Raise.
+  {
+    page: 'Founder · Raise · Fundraising readiness', key: 'draft:raise/pmf-explain', route: '/raise/fundraising-readiness', label: 'Explain this score', kind: 'reason', handler: 'draft',
+    at: [[PMF, "explain: 'draft:raise/pmf-explain'"]],
+  },
+  {
+    page: 'Founder · Raise · Fundraising readiness', key: 'draft:raise/pmf-questions', route: '/raise/fundraising-readiness', label: 'Questions for the next interviews', kind: 'write', handler: 'draft',
+    at: [[PMF, "questions: 'draft:raise/pmf-questions'"]],
+  },
   {
     page: 'Founder · Raise · Fundraising readiness', key: 'draft:raise/data-room', route: '/raise/fundraising-readiness', label: 'Read the room', kind: 'reason', handler: 'draft',
     at: [[CYCLE, "surface: 'raise/data-room'"]],
