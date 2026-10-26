@@ -167,11 +167,13 @@ export async function saveScenario(env: Env, s: Scope, id: number | null, b: Rec
         SELECT ?,?,?,0,?,?,?,?,?,?,?,?,? WHERE ? IS NULL OR EXISTS(SELECT 1 FROM uof_scenarios WHERE id=? AND project_id=?)`).bind(uid, s.projectId, r.name, r.currency, r.amount_to_raise_cents, r.target_runway_months, r.start_month, r.raise_month, r.cash_cents, r.legacy_copied_at, s.user.id, s.user.id,from?.id??null,from?.id??null,s.projectId)]
     : [env.DB.prepare(`UPDATE uof_scenarios SET name=?,currency=?,amount_to_raise_cents=?,target_runway_months=?,start_month=?,raise_month=?,cash_cents=?,legacy_copied_at=?,updated_by=?,updated_at=datetime('now') WHERE id=? AND project_id=? AND is_base=?`)
       .bind(r.name, r.currency, r.amount_to_raise_cents, r.target_runway_months, r.start_month, r.raise_month, r.cash_cents, r.legacy_copied_at, s.user.id, id, s.projectId,r.is_base)];
-  if (id===null||has(input,'lines')) for (const l of lines) stmts.push(env.DB.prepare(`INSERT INTO uof_scenario_lines(scenario_id,category_key,share_pct,sublabel,source_label,source_kind,source_ref,updated_by)
-    SELECT id,?,?,?,?,?,?,? FROM uof_scenarios WHERE uid=? AND project_id=? AND is_base=?
-    ON CONFLICT(scenario_id,category_key) DO UPDATE SET prior_value=CAST(share_pct AS TEXT),share_pct=excluded.share_pct,sublabel=excluded.sublabel,
-      source_kind=NULL,source_ref=NULL,source_label=excluded.source_label,updated_by=excluded.updated_by,updated_at=datetime('now')`)
-    .bind(l.category_key, l.share_pct, l.sublabel, l.source_label, l.source_kind??null,l.source_ref??null, s.user.id, uid, s.projectId,r.is_base));
+  if (id===null) for (const l of lines) stmts.push(env.DB.prepare(`INSERT INTO uof_scenario_lines(scenario_id,category_key,share_pct,sublabel,source_label,source_kind,source_ref,updated_by)
+    SELECT id,?,?,?,?,?,?,? FROM uof_scenarios WHERE uid=? AND project_id=? AND is_base=0`)
+    .bind(l.category_key,l.share_pct,l.sublabel,l.source_label,l.source_kind??null,l.source_ref??null,s.user.id,uid,s.projectId));
+  else if (has(input,'lines')) for (const l of lines) stmts.push(env.DB.prepare(`UPDATE uof_scenario_lines SET prior_value=CAST(share_pct AS TEXT),share_pct=?,sublabel=?,
+    source_kind=NULL,source_ref=NULL,source_label='typed',updated_by=?,updated_at=datetime('now')
+    WHERE scenario_id=? AND category_key=? AND EXISTS(SELECT 1 FROM uof_scenarios WHERE id=? AND project_id=? AND is_base=?)`)
+    .bind(l.share_pct,l.sublabel,s.user.id,id,l.category_key,id,s.projectId,r.is_base));
   if (id === null) for (const m of parts.milestones) stmts.push(env.DB.prepare(`INSERT INTO uof_milestones(scenario_id,category_key,label,due_on,cost_cents,okr_id,source_label,source_kind,source_ref,updated_by)
     SELECT id,?,?,?,?,?,?,?,?,? FROM uof_scenarios WHERE uid=? AND project_id=?`).bind(m.category_key,m.label,m.due_on,m.cost_cents,m.okr_id,m.source_label,m.source_kind,m.source_ref,s.user.id,uid,s.projectId));
   if (r.is_base) stmts.push(...await legacyStatements(env, s, r, lines, parts.milestones));
