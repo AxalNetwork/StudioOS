@@ -1,6 +1,7 @@
 // D1019/D1026 — who sees a venture's cap table: the caller's view at their
 // level, an admin's support read, the grants, the access log, the share links
-// by level, the public venture link, and HQ's log across companies.
+// by level, the public venture link, HQ's log across companies, and (D1027) an
+// investor's ask for access.
 // Worker: routes/captable_access.ts (mounted at /api/captable/access).
 import { request } from '../api.js';
 
@@ -11,6 +12,8 @@ const pageQuery = (before) => (before ? `?before=${encodeURIComponent(before)}` 
 export const capTableAccessApi = {
   view: (projectId) => request(base(projectId)),
   support: (projectId, reason) => request(`${base(projectId)}/support`, json('POST', { reason })),
+  /** D1027 (CT15n): an investor not shared with asks the founder, once a day. */
+  ask: (projectId) => request(`${base(projectId)}/ask`, json('POST')),
   grants: (projectId) => request(`${base(projectId)}/grants`),
   grant: (projectId, body) => request(`${base(projectId)}/grants`, json('PUT', body)),
   revokeGrant: (projectId, id) => request(`${base(projectId)}/grants/${encodeURIComponent(id)}`, { method: 'DELETE' }),

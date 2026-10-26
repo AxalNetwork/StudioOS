@@ -141,9 +141,10 @@ export default function ProgrammeForm({ programme = null, onSave, onCancel, save
         </div>
       </fieldset>
       {error && <p role="alert" className="text-[12px] font-semibold text-red-700 dark:text-red-300" data-testid="programme-form-error">{error}</p>}
-      <div className="flex flex-wrap gap-2 pt-1">
-        <button type="submit" disabled={busy} className={button} data-testid="programme-save">{busy ? 'Saving…' : saveLabel}</button>
-        {onCancel && <button type="button" onClick={onCancel} className={ghost}>Cancel</button>}
+      {/* D1204 (TST16): a page may pin this bar and size its buttons on a phone (`classes.bar`, `.save`, `.cancel`). */}
+      <div className={`flex flex-wrap gap-2 pt-1 ${classes.bar || ''}`} data-testid="programme-form-bar">
+        <button type="submit" disabled={busy} className={`${button} ${classes.save || ''}`} data-testid="programme-save">{busy ? 'Saving…' : saveLabel}</button>
+        {onCancel && <button type="button" onClick={onCancel} className={`${ghost} ${classes.cancel || ''}`} data-testid="programme-cancel">Cancel</button>}
       </div>
     </form>
   );

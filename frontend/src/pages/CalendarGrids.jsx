@@ -48,7 +48,7 @@ function useRoving(len, start) {
 }
 
 /** The month (CAL1): six Monday-first weeks; today ringed; three items a day, then "+N more", which opens the day. */
-export function MonthGrid({ anchor, items, read, today = new Date(), from, onOpenDay }) {
+export function MonthGrid({ anchor, items, read, today = new Date(), from, onOpenDay, dots = false }) {
   const cells = useMemo(() => monthCells(anchor, today), [anchor, today]);
   const { days } = useMemo(() => byDay(items), [items]);
   // The one tab stop starts on today, or the 1st when today is not in this month.
@@ -74,10 +74,17 @@ export function MonthGrid({ anchor, items, read, today = new Date(), from, onOpe
                   aria-current={c.isToday ? 'date' : undefined} data-testid={`cal-mday-${c.key}`}>
                   {c.date.getDate()}
                 </button>
-                <div className="cal-mitems">
-                  {shown.map((ev) => <Chip key={ev.id} ev={ev} from={from} compact />)}
-                  {more ? <button type="button" className="cal-more" onClick={() => onOpenDay(c.date)} data-testid={`cal-more-${c.key}`}>+{more} more</button> : null}
-                </div>
+                {/* D1212 (CAL21b): on a phone a day shows dots only; its day opens the popover with the items. */}
+                {dots ? (
+                  <div className="cal-mdots" aria-hidden="true" data-testid={`cal-mdots-${c.key}`}>
+                    {list.slice(0, 4).map((ev) => <span key={ev.id} className="cal-dot" data-kind={ev.kind} />)}
+                  </div>
+                ) : (
+                  <div className="cal-mitems">
+                    {shown.map((ev) => <Chip key={ev.id} ev={ev} from={from} compact />)}
+                    {more ? <button type="button" className="cal-more" onClick={() => onOpenDay(c.date)} data-testid={`cal-more-${c.key}`}>+{more} more</button> : null}
+                  </div>
+                )}
               </div>
             );
           })}
