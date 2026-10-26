@@ -13,7 +13,7 @@ import { formatCents } from '../../investor/fundCallsModel.js';
 import { FundStructureDoor } from '../contracts/FundStructureSheet';
 import { ConsoleUnreadable } from './shared';
 import {
-  ENTITY_ORDER, NOT_IN_REGISTRY_SUB, PAYMENT_PURPOSE_OPTIONS, READING, BASE, accountPath, accountUidOf,
+  ENTITY_ORDER, NOT_IN_REGISTRY_SUB, PAYMENT_PURPOSE_OPTIONS, RAIL_NOTE, READING, BASE, accountPath, accountUidOf,
   balanceCell, cardLine, coverageRow, coverageSummary, dayOf, mercuryOnlyBalance, mercuryPill, notInRegistry,
   purposeLabel, shortName,
 } from './bankAccountsModel';
@@ -22,6 +22,7 @@ import {
   amber, btnCls, muted, primaryCls,
 } from './BankAccountDialogs';
 import { AccountLightbox, MissingAccount } from './BankAccountLightbox';
+import AdminBoardFrame from '../AdminBoardFrame';
 
 export { MERCURY_PRESET, PAYMENT_PURPOSE_OPTIONS };
 
@@ -130,6 +131,16 @@ const RECEIPT_GRID = 'sm:grid-cols-[0.7fr_1.2fr_0.7fr_1.6fr_1fr]';
 const entityName = (key) => AXAL_ENTITIES[key]?.name || key;
 const list = (v) => (Array.isArray(v) ? v : []);
 const hhmm = (d) => `${String(d.getUTCHours()).padStart(2, '0')}:${String(d.getUTCMinutes()).padStart(2, '0')} UTC`;
+
+/**
+ * D1185 — the rail on every Bank accounts tab. The AIRail canvas draws no
+ * board for the page (its key is off the canvas, beside Payments), so
+ * `ConsolePage` draws it alone and this frame docks the rail around it, with
+ * BNK1's sentence: what Eadwyn can and cannot see.
+ */
+export function BankAccountsRail({ children }) {
+  return <AdminBoardFrame workspace="Bank accounts" note={RAIL_NOTE} data-testid="bank-accounts-rail-frame">{children}</AdminBoardFrame>;
+}
 
 export function BankAccountsPanel() {
   const holder = isSuperAdminUser(useAuth().user);

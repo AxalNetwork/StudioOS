@@ -478,7 +478,8 @@ test('the wiring: the lightbox route behind hqOnly, the rail beside Payments, th
   }
   assert.equal(consoleBoard('/admin/platform/bank-accounts', 'super_admin'), null, 'an off-canvas key took a canvas board');
   const pages = read('frontend/src/pages/admin/ConsolePages.jsx');
-  assert.match(pages, /rail=\{\{ workspace: 'Bank accounts', note: BANK_RAIL_NOTE \}\}/);
+  assert.match(pages, /<BankAccountsRail>\s*<ConsolePage crumb=\{\{ \.\.\.PLATFORM, current: 'Bank accounts' \}\}/, 'the rail does not frame the whole page');
+  assert.match(read('frontend/src/pages/admin/consoles/BankAccountsConsole.jsx'), /<AdminBoardFrame workspace="Bank accounts" note=\{RAIL_NOTE\}/);
   assert.match(RAIL_NOTE, /never sees an account number, a balance or a transaction\.$/);
   const consoleSrc = read('frontend/src/pages/admin/consoles/BankAccountsConsole.jsx');
   assert.doesNotMatch(consoleSrc, /<form\b|Loading admin console|CONSOLE_LOADING/);
