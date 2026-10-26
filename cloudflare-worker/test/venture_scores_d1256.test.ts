@@ -117,7 +117,7 @@ const quiet = async <T>(fn: () => Promise<T>) => {
 };
 /** Scores the venture once, as its founder would on a read. */
 const scored = async (f: ReturnType<typeof fixture>) => { await quiet(() => scoreVenture(f.env, 10, { actorId: 1, trigger: 'read', today: TODAY })); };
-const NDA = (db: DatabaseSync) => db.exec(`INSERT INTO pairwise_ndas(party_a_user_id,party_b_user_id,status,valid_until) VALUES (1,4,'active',NULL)`);
+const NDA = (db: DatabaseSync) => db.exec(`INSERT OR REPLACE INTO pairwise_ndas(party_a_user_id,party_b_user_id,status,valid_until) VALUES (1,4,'active',NULL)`);
 const PRIVATE = ['Private Person', 'private@example.test', 'Private Employer Inc', 'Private University', 'private-login', 'Privatelandia'];
 
 test('an investor off the deal reads nothing; on it, bands and confidence only before the NDA; every read is logged', async () => {
@@ -127,6 +127,10 @@ test('an investor off the deal reads nothing; on it, bands and confidence only b
   assert.equal(off.status, 403);
   assert.equal(off.body.error, 'not_on_deal');
   assert.equal(off.body.scopes, undefined);
+  // A pending NDA, or an active one past its date, is not an NDA.
+  f.db.exec(`INSERT INTO pairwise_ndas(party_a_user_id,party_b_user_id,status,valid_until) VALUES (1,4,'pending',NULL)`);
+  assert.equal((await f.call(4, 'GET', '/deal/100')).body.nda, false, 'pending');
+  f.db.exec(`UPDATE pairwise_ndas SET status = 'active', valid_until = '2000-01-01 00:00:00' WHERE party_a_user_id = 1 AND party_b_user_id = 4`);
   const masked = await f.call(4, 'GET', '/deal/100');
   assert.equal(masked.status, 200, JSON.stringify(masked.body));
   assert.equal(masked.body.nda, false);
@@ -137,8 +141,8 @@ test('an investor off the deal reads nothing; on it, bands and confidence only b
   }
   assert.ok(masked.body.scopes.some((s: any) => s.band), 'a scored scope shows its band');
   const log = f.logs().filter((l) => l.user_id === 4);
-  assert.equal(log.length, 1);
-  assert.deepEqual(log[0].details, { viewer: 'investor', scopes: 11, deal_id: 100, masked: true });
+  assert.equal(log.length, 2);
+  assert.deepEqual(log[1].details, { viewer: 'investor', scopes: 11, deal_id: 100, masked: true });
   assert.doesNotMatch(JSON.stringify(f.logs()), /"value"|"band"|Strong|Fair|Weak/, 'a read log carries no score');
   // An investor reads through a deal, never by venture id.
   assert.equal((await f.call(4, 'GET', '/10')).body.error, 'read_through_deal');
@@ -168,6 +172,10 @@ test('after an NDA an investor sees values and inputs, a personal input as a ban
 test("the founder's switch: on once listed, off locks investors out, and the strip with it", async () => {
   const f = fixture();
   await scored(f);
+  // Unlisted: no deal and no row, the switch is off; listed, it is on.
+  f.db.exec('DELETE FROM deals WHERE id = 100');
+  assert.deepEqual((await f.call(1, 'GET', '/10/sharing')).body.investors.on, false);
+  f.db.exec("INSERT INTO deals(id,project_id,status) VALUES (100,10,'active')");
   const sharing = await f.call(1, 'GET', '/10/sharing');
   assert.deepEqual(sharing.body.investors, { on: true, set: false, default_rule: 'On once the venture is listed, until you turn it off.' });
   const off = await f.call(1, 'PUT', '/10/sharing', { investors: false });
@@ -180,9 +188,6 @@ test("the founder's switch: on once listed, off locks investors out, and the str
   // Staff are not held by the switch.
   assert.equal((await f.call(6, 'POST', '/batch', { deal_ids: [100] })).body.items[0].locked, false);
   assert.equal(f.count('activity_logs', "action = 'venture_score_sharing_changed'"), 1);
-  // Unlisted: no deal, no row, the switch is off.
-  f.db.exec('DELETE FROM deals');
-  assert.equal((await f.call(1, 'GET', '/10/sharing')).body.investors.on, false);
 });
 
 test('who reads by venture id: founder and co-founder in full and unlogged, staff logged, an advisor only when shared, an Explorer never', async () => {
