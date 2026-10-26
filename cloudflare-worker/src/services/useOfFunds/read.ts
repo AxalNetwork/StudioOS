@@ -6,7 +6,7 @@ import { base, json, obj, scenario, view, PlanError, type Scope } from './store'
 export async function block<T>(read: () => Promise<T>) {
   try { return { state: 'ok' as const, value: await read(), reason: null }; }
   catch(e) {
-    if(e instanceof PlanError&&e.code==='plan_not_initialized') return {state:'not_initialized' as const,value:null,reason:e.sentence};
+    if (e instanceof PlanError && e.code === 'plan_not_initialized') return {state:'not_initialized' as const,value:null,reason:e.sentence};
     return { state: 'unreadable' as const, value: null, reason: 'This block is Unreadable. Try again.' };
   }
 }
