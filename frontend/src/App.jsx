@@ -3126,9 +3126,9 @@ function AppInner() {
       <Route path="/admin/due-diligence/:uid" element={guard(['admin', 'partner', 'investor', 'advisor'], <AdminDueDiligenceCasePage />)} />
       <Route path="/admin/due-diligence/:uid/:tab" element={guard(['admin', 'partner', 'investor', 'advisor'], <AdminDueDiligenceCasePage />)} />
       {/* Task #83 — de-admin Due Diligence: investor/advisor-facing alias of the same pages (no /admin framing). */}
-      <Route path="/due-diligence" element={guard(['admin', 'partner', 'investor', 'advisor'], <AdminDueDiligencePage />)} />
-      <Route path="/due-diligence/my-reviews" element={guard(['admin', 'partner', 'investor', 'advisor'], <AdminDueDiligencePage />)} />
-      <Route path="/due-diligence/templates" element={guard(['admin', 'partner', 'investor', 'advisor'], <AdminDueDiligencePage />)} />
+      <Route path="/due-diligence" element={guard(['admin', 'partner', 'investor', 'advisor', 'founder'], <AdminDueDiligencePage />)} />
+      <Route path="/due-diligence/my-reviews" element={guard(['admin', 'partner', 'investor', 'advisor', 'founder'], <AdminDueDiligencePage />)} />
+      <Route path="/due-diligence/templates" element={guard(['admin', 'partner', 'investor', 'advisor', 'founder'], <AdminDueDiligencePage />)} />
       {/* Build queue #128 — subject-facing request inbox. Founders included by design:
           this surface exposes only the requests addressed to them, never case data
           (the "founders NEVER read DD" invariant lives in the worker). React Router
