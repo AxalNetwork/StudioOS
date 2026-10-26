@@ -99,6 +99,8 @@ test('a stale or invalid milestone field cannot start a paid run',async()=>{
 });
 
 test('verification failure explains possible billing without displaying private provider text',async()=>{
- const ui=await mounted({preview:async()=>{throw Object.assign(new Error('private-provider-output'),{status:503,code:'uof_reading_ungrounded'});}});
+ for(const code of ['uof_reading_ungrounded','uof_reading_cost_unreadable']) {
+ const ui=await mounted({preview:async()=>{throw Object.assign(new Error('private-provider-output'),{status:503,code});}});
  try{await ui.click('Check this plan');assert.match(ui.text(),/could not be verified/);assert.match(ui.text(),/may still be charged/);assert.doesNotMatch(ui.text(),/private-provider-output/);}finally{await ui.close();}
+ }
 });

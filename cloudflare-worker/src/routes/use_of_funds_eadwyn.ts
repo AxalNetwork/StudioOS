@@ -14,7 +14,7 @@ import { railFor, refuseRun } from '../util/railContext';
 import { refuse } from '../util/refusal';
 
 type Bindings = { Bindings: Env; Variables: { readingScope: Scope } };
-const failure = (c: any, code = 'uof_reading_unreadable', status = 503) => refuse(c, status, { code, message: code === 'uof_reading_ungrounded' ? 'This reading could not be verified. The run may still be charged.' : 'This reading is Unreadable. Try again.' });
+const failure = (c: any, code = 'uof_reading_unreadable', status = 503) => refuse(c, status, { code, message: ['uof_reading_ungrounded','uof_reading_cost_unreadable'].includes(code) ? 'This reading could not be verified. The run may still be charged.' : 'This reading is Unreadable. Try again.' });
 const validId = (n: unknown) => /^[1-9][0-9]{0,9}$/.test(String(n ?? ''));
 const sign = (env: Env, payload: string) => signHmac(env, 'uof-reading:v1:' + payload);
 const same = (a: unknown, b: string) => {
@@ -83,7 +83,7 @@ export function createUseOfFundsEadwyn(runner: typeof runAI = runAI) {
     if (!items) return failure(c, 'uof_reading_ungrounded');
     const cost = out.usage?.est_cost_usd;
     const costMicro = typeof cost === 'number' && cost >= 0 ? Math.round(cost * 1e6) : null;
-    if (costMicro === null || !Number.isSafeInteger(costMicro)) return failure(c);
+    if (costMicro === null || !Number.isSafeInteger(costMicro)) return failure(c, 'uof_reading_cost_unreadable');
     const source_refs = material.sources.map(({ ref, label, source, href, as_of }) => ({ ref, label, source, href, as_of }));
     const reading = { mode, items, source_refs, gaps: material.gaps, captured_at: new Date().toISOString(), cost_micro_usd: costMicro };
     if (mode === 'wording') return c.json({ reading }); // Accept places the name in the unsaved form only.

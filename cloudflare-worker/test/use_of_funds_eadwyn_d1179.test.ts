@@ -156,7 +156,7 @@ test('parser requires both runway inputs and path, rejects duplicate references 
 test('another founder in the same company still cannot run a reading; a missing run cost is unreadable',async()=>{
  const f=fixture();seed(f);f.db.exec("INSERT INTO projects(id,name,founder_id,company_id) VALUES(4,'Foreign founder same company',22,10)");
  assert.equal((await call(f,'POST','/api/cycles/raise/use-of-funds/eadwyn?project=4',{mode:'check'})).status,404);assert.equal(runs.length,0);
- missingCost=true;assert.equal((await call(f,'POST','',{mode:'check'})).status,503);assert.equal(count(f,'research_zone_drafts'),0);
+ missingCost=true;const r=await call(f,'POST','',{mode:'check'});assert.equal(r.status,503);assert.match(r.body.message,/may still be charged/);assert.equal(count(f,'research_zone_drafts'),0);
 });
 test('a check requires the plan even when deck and narrative exist; absence never initializes a scenario',async()=>{
  const f=fixture();seed(f);f.db.exec('DELETE FROM uof_scenario_lines; DELETE FROM uof_scenarios');
