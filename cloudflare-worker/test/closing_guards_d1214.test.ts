@@ -103,3 +103,22 @@ test('D1214: names and pledged figures stay out of syndicate and commitment audi
   assert.equal(audit.length,3);const text=JSON.stringify(audit);assert.doesNotMatch(text,/Private synthetic syndicate|54321|12345|@/);
  }finally{f.db.close();}
 });
+
+
+test('D1214: duplicate or missing holder names refuse instead of disclosing an ambiguous position',async()=>{
+ const f=fixture();try {
+  f.db.exec("INSERT INTO cap_table_holders(user_id,project_id,name,shares) VALUES(3,1,'Same name',100),(3,1,'Same name',999); INSERT INTO cap_table_access_grants(project_id,user_id,holder_ref,level,granted_by) VALUES(1,1,'Same name','none',3)");
+  const ambiguous=await call(f,1,'/api/captable/1',undefined,'GET');assert.equal(ambiguous.status,409);assert.equal('holders' in ambiguous.body,false);assert.doesNotMatch(JSON.stringify(ambiguous.body),/Same name|999|100/);
+  f.db.exec("UPDATE cap_table_access_grants SET holder_ref='Missing holder'");assert.equal((await call(f,1,'/api/captable/1',undefined,'GET')).status,409);
+ }finally{f.db.close();}
+});
+test('D1214: a non-member may join with supplied terms; private syndicate reads open only after membership',async()=>{
+ const f=fixture();try {
+  f.db.exec("INSERT INTO syndicates(id,name,min_commitment_cents,created_by) VALUES(1,'Synthetic',100,2)");
+  assert.deepEqual((await call(f,1,'/api/networkfx/syndicates',undefined,'GET')).body,[]);
+  assert.equal((await call(f,1,'/api/networkfx/syndicates/1',undefined,'GET')).status,403);
+  assert.equal((await call(f,1,'/api/networkfx/syndicates/1/join',{commitment_cents:100})).status,200);
+  assert.equal((await call(f,1,'/api/networkfx/syndicates/1',undefined,'GET')).status,200);
+  assert.equal((await call(f,1,'/api/networkfx/syndicates',undefined,'GET')).body.length,1);
+ }finally{f.db.close();}
+});

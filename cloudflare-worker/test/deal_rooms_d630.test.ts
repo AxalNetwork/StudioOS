@@ -252,6 +252,7 @@ test('D630: ?project_id= lists one company’s syndicates, and refuses a malform
   assert.deepEqual(r.body.map((s: any) => s.id).sort(), [1, 2, 4]);
   const all = await call(db, ADMIN, '/api/networkfx/syndicates');
   assert.equal(all.body.length, 4, 'without the filter the list is unchanged');
+  assert.deepEqual((await call(db, PRO, `/api/networkfx/syndicates?project_id=${PROJECT}`)).body, [], 'D1214: a project link alone discloses no syndicate names or amounts');
   const bad = await call(db, ADMIN, '/api/networkfx/syndicates?project_id=abc');
   assert.equal(bad.status, 400);
   assert.equal(bad.body.error, 'bad_project_id');

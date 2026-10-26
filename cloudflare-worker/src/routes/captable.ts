@@ -1436,7 +1436,10 @@ captable.get('/:projectId', async (c) => {
     const own = await c.env.DB.prepare(
       'SELECT id, project_id, name, security_type, shares, ownership_pct, source, created_at, updated_at FROM cap_table_holders WHERE project_id = ? AND name = ? ORDER BY id ASC',
     ).bind(projectId, grant.holder_ref).all();
-    return c.json({ project_id: projectId, holders: own.results || [], securities: [] });
+    // Migration 575 defines holder_ref as a name, not a stable row key.
+    // A duplicated or stale name cannot prove whose position this is.
+    if (own.results?.length !== 1) return c.json({ detail: 'Holder position is not uniquely recorded. Ask the founder to update access.' }, 409);
+    return c.json({ project_id: projectId, holders: own.results, securities: [] });
   }
   const holders = await c.env.DB.prepare(
     'SELECT * FROM cap_table_holders WHERE project_id = ? ORDER BY id ASC',
