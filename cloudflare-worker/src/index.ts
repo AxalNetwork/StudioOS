@@ -105,6 +105,7 @@ import { runDailyKvSnapshot, writeBackupHeartbeat } from './services/backup';
 import advisory from './routes/advisory';
 import activity from './routes/activity';
 import admin from './routes/admin';
+import adminAccounts from './routes/admin_accounts';
 import adminBilling from './routes/admin_billing';
 import adminPromos from './routes/admin_promos';
 import adminContracts from './routes/admin_contracts';
@@ -1221,6 +1222,8 @@ app.route('/api/licence', licenceRequests);
 app.route('/api/licence', licencePrograms);
 app.route('/api/licence', licence);
 app.route('/api/best-fit', bestFitSelf);
+// D1303 (#3400): All accounts' bulk resend, saved views and export.
+app.route('/api/admin/accounts', adminAccounts);
 app.route('/api/admin', admin);
 app.route('/api/private-data', privateData);
 app.route('/api/monitoring', monitoring);

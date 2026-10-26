@@ -530,15 +530,16 @@ export default function UsersConsole({ onImpersonate }) {
     }
     try { await api.adminToggleActive(user.id, reason); loadAll(); } catch (e) { alert(e.message); }
   };
+  // D1303: the Worker now requires a reason for full access without an identity
+  // check. Until D1306's dialog (ACC7 D) replaces this, the prompt asks for it.
   const handleGrantFullAccess = async (user) => {
-    const ok = window.confirm(
-      `Grant ${user.name || user.email} full access without requiring KYC?\n\n` +
-      `This marks their KYC status as approved, lets them out of the verification gate, ` +
-      `and is logged in their activity history. Use this only when you've verified their ` +
-      `identity through another channel.`
+    const reason = window.prompt(
+      `Grant ${user.name || user.email} full access without an identity check?\n\n` +
+      `This marks their identity check approved and is recorded with the reason you give. ` +
+      `Use it only when you have checked their identity another way.\n\nReason (10 to 500 characters):`
     );
-    if (!ok) return;
-    try { await api.kycAdminApprove(user.id); loadAll(); }
+    if (reason == null) return;
+    try { await api.kycAdminApprove(user.id, { reason: reason.trim(), note: reason.trim() }); loadAll(); }
     catch (e) { alert(e.message || 'Failed to grant access'); }
   };
   const handleGrantLimitedAccess = async (user) => {

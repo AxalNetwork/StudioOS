@@ -11,6 +11,7 @@ import { railBody } from './railPages.js';
 // block does not name exactly the files in lib/api/.
 // api-modules:begin
 export * from './api/accountCompanies.js';
+export * from './api/adminAccountWrites.js';
 export * from './api/adminAiUsage.js';
 export * from './api/adminApprovals.js';
 export * from './api/adminCapitalAttestations.js';
@@ -2501,7 +2502,8 @@ export const api = {
   kycAdminGet: (userId) => request(`/kyc/admin/${userId}`),
   // D634 — one masked KYC field in clear; the Worker logs the showing first.
   kycAdminShowField: (userId, field) => request(`/kyc/admin/${userId}/sensitive/${encodeURIComponent(field)}`),
-  kycAdminApprove: (userId) => request(`/kyc/admin/${userId}/approve`, { method: 'PATCH' }),
+  // D1303: full access without an identity check needs {reason} (10 to 500 characters); a reviewed submission takes an optional {note}.
+  kycAdminApprove: (userId, body) => request(`/kyc/admin/${userId}/approve`, { method: 'PATCH', ...(body ? { body: JSON.stringify(body) } : {}) }),
   kycAdminReject: (userId, reason) => request(`/kyc/admin/${userId}/reject`, { method: 'PATCH', body: JSON.stringify({ reason }) }),
   adminGetProfile: (email) => request(`/profiling/admin/${encodeURIComponent(email)}`),
   // D634 — a partner profile's masked tax ID in clear; the showing is logged.
