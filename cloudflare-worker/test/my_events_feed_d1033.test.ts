@@ -3,8 +3,8 @@
  * per-member token URL a calendar client fetches with no session (migration
  * 603).
  *
- * The router is mounted as `index.ts` mounts it: the investor Professional gate
- * on `/api/calendar`, then the calendar routes. The fixture is the production
+ * The router is mounted as `index.ts` mounts it: calendar reads and subscriptions
+ * have no prefix plan gate (D1206). The fixture is the production
  * baseline plus the real migrations. Every row is synthetic: `example.test`
  * addresses, `Fixture` names, made-up titles and join links.
  */
@@ -15,7 +15,6 @@ import { DatabaseSync } from 'node:sqlite';
 import { Hono } from 'hono';
 import { SignJWT } from 'jose';
 import calendar from '../src/routes/calendar.ts';
-import { requireInvestorTierExcept } from '../src/middleware/requireInvestorTier.ts';
 import { sha256Hex } from '../src/services/calendar/feedTokens.ts';
 
 const SECRET = 'synthetic-calendar-feed-d1033-'.repeat(3);
@@ -48,11 +47,8 @@ function fixture() {
   }; return statement; }, async exec(sql: string) { db.exec(sql); } };
   const env: any = { DB, ENVIRONMENT: 'production', JWT_SECRET: SECRET, APP_URL: 'https://app.example.test' };
 
-  // As index.ts mounts it: the Professional gate on the prefix, then the router.
+  // D1206: only IC creation is Professional; feeds remain personal on every plan.
   const app = new Hono<any>();
-  const gate = requireInvestorTierExcept('professional');
-  app.use('/api/calendar', gate);
-  app.use('/api/calendar/*', gate);
   app.route('/api/calendar', calendar);
   app.onError((e, c) => (e.message === 'Unauthorized' ? c.json({ detail: 'Not authenticated' }, 401) : c.json({ error: e.message }, 500)));
 
@@ -263,29 +259,32 @@ test('every refusal reads the same: no token, a malformed one, an unknown one, a
   assert.ok(token);
 });
 
-test('the paywall: the feed passes the session gate and applies its rule to the token\'s member', async () => {
+test('D1206: Free and lapsed members keep their personal feed without widening token access', async () => {
   const f = fixture();
   seed(f.db);
-  // A Free investor cannot make one: the gate answers the signed-in route.
+  // A Free investor can subscribe, but sees none of another member's events.
   const free = await f.signedIn('/api/calendar/my-events/feed', 4, 'POST');
-  assert.equal(free.status, 402);
-  assert.equal(free.body.error, 'investor_tier_required');
+  assert.equal(free.status, 201);
+  const freeFeed = await f.fetchFeed(free.body.url);
+  assert.equal(freeFeed.status, 200);
+  assert.equal(vevents(freeFeed.text).length, 0);
 
-  // A Professional investor who made one and then dropped to Free gets the same 402.
+  // Losing Professional does not revoke a personal calendar subscription.
   const made = await f.signedIn('/api/calendar/my-events/feed', 3, 'POST');
   assert.equal((await f.fetchFeed(made.body.url)).status, 200);
   f.db.prepare("UPDATE users SET investor_subscription_status = 'cancelled' WHERE id = 3").run();
   const lapsed = await f.fetchFeed(made.body.url);
-  assert.equal(lapsed.status, 402);
-  assert.equal(JSON.parse(lapsed.text).required, 'professional');
-  assert.ok(!lapsed.text.includes(ROOM));
+  assert.equal(lapsed.status, 200);
+  assert.equal(vevents(lapsed.text).length, 3);
+  assert.ok(withTitle(lapsed.text, 'Fixture event 1')!.includes(ROOM));
+  assert.ok(!lapsed.text.includes('Fixture event 5'), 'a lapsed member still cannot read another member\'s ticket');
 
-  // Every role the gate passes reads its feed: an admin and a founder host.
+  // An admin and a founder host also keep personal feeds.
   for (const id of [1, 2]) {
     const own = await f.signedIn('/api/calendar/my-events/feed', id, 'POST');
     assert.equal(own.status, 201, `user ${id} makes one`);
     assert.equal((await f.fetchFeed(own.body.url)).status, 200, `user ${id} reads it`);
   }
-  // The exemption is that one GET path: the old signed-in file is still gated without a session.
+  // The ordinary download still needs a session; only a valid feed token replaces it.
   assert.equal((await f.signedIn('/api/calendar/events.ics', null)).status, 401);
 });

@@ -126,4 +126,6 @@ Professional-only IC creation, advisor fallback ownership, partial-source error
 codes and safe diagnostics, and Calendly exclusion from both provider copies.
 It also checks local-licence scopes, HQ elevation, constant-query populated memberships, private-kind exclusions,
 unavailable remote coverage and personal sync/export isolation after a scope
-read. Every provider call is stubbed or refused; all rows are synthetic.
+read. `my_events_feed_d1033.test.ts` also verifies Free and lapsed subscriptions
+with token ownership, revocation and join-link boundaries intact.
+Every provider call is stubbed or refused; all rows are synthetic.
