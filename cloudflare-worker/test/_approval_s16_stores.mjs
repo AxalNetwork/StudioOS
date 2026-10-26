@@ -13,6 +13,8 @@
  * `created_at`, and only the missing ones are added.
  */
 import { readFileSync } from 'node:fs';
+import { DatabaseSync } from 'node:sqlite';
+import { tableFromBaseline } from './_baseline.mjs';
 
 export const S16_STORES_SQL = `
   CREATE TABLE partner_profiles (
@@ -134,6 +136,7 @@ export function addS16Stores(d) {
   for (const [name, type] of USER_COLUMNS) {
     if (!have.has(name)) d.exec(`ALTER TABLE users ADD COLUMN ${name} ${type}`);
   }
+  addKybCaseStores(d);
 }
 
 /** D1043's declined predicate reads the real migration, not a copied column. */
@@ -141,4 +144,27 @@ export function addExpertReviewStore(d) {
   if (!d.prepare('PRAGMA table_info(experts)').all().some((c) => c.name === 'decision_state')) {
     d.exec(readFileSync(new URL('../sql/migrations/577_expert_review_records.sql', import.meta.url), 'utf8'));
   }
+}
+
+/** D1231: the KYB lane reads the real case view and all its source shapes. */
+export function addKybCaseStores(d) {
+  const baseline = readFileSync(new URL('../sql/schema_baseline.sql', import.meta.url), 'utf8');
+  const canonical = new DatabaseSync(':memory:', { enableForeignKeyConstraints: false });
+  const sources = ['company_profiles', 'corporate_profiles', 'kyc_partner_imports', 'territory_licences'];
+  for (const table of sources) canonical.exec(tableFromBaseline(baseline, table));
+  canonical.exec(readFileSync(new URL('../sql/migrations/220_company_kyb.sql', import.meta.url), 'utf8'));
+  for (const table of [...sources, 'company_kyb_records']) {
+    const ddl = canonical.prepare('SELECT sql FROM sqlite_master WHERE name = ?').get(table).sql;
+    if (!d.prepare('SELECT 1 FROM sqlite_master WHERE name = ?').get(table)) d.exec(ddl);
+    else {
+      // Older fixtures intentionally trim unrelated columns. Supply the columns
+      // the new view reads from canonical DDL rather than inventing another shape.
+      const have = new Set(d.prepare(`PRAGMA table_info(${table})`).all().map(c => c.name));
+      for (const column of canonical.prepare(`PRAGMA table_info(${table})`).all()) {
+        if (!have.has(column.name)) d.exec(`ALTER TABLE ${table} ADD COLUMN ${column.name} ${column.type}${column.dflt_value == null ? '' : ' DEFAULT ' + column.dflt_value}`);
+      }
+    }
+  }
+  canonical.close();
+  d.exec(readFileSync(new URL('../sql/migrations/616_kyb_cases.sql', import.meta.url), 'utf8'));
 }

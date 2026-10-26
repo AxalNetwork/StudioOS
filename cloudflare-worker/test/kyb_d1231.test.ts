@@ -14,7 +14,7 @@ import { AUTH_ERROR_STATUSES } from '../src/util/authErrors.ts';
 import { d1Over } from './_d1_sqlite.mjs';
 import { BASELINE_CUTOFF, compareMigrations, migrationNumber } from '../../scripts/lib/migrationPlan.mjs';
 
-const ROOT = process.cwd(), JWT_SECRET = 'd1231-synthetic-jwt-secret-at-least-32-bytes';
+const ROOT = process.cwd(), JWT_SECRET = 'test-'.repeat(12);
 const read = (p: string) => readFileSync(resolve(ROOT, p), 'utf8');
 const migrations = readdirSync(resolve(ROOT, 'cloudflare-worker/sql/migrations')).filter(f => /^\d+_.*\.sql$/.test(f)).sort(compareMigrations);
 const schema = [read('cloudflare-worker/sql/schema_baseline.sql'), ...migrations.filter(f => migrationNumber(f) > BASELINE_CUTOFF).map(f => read(`cloudflare-worker/sql/migrations/${f}`))];
