@@ -16,10 +16,10 @@ import UsersConsole from './consoles/UsersConsole';
 import KycConsole from './consoles/KycConsole';
 import { DirectoryPanel } from './consoles/DirectoryConsole';
 import { WellbeingExpertsPanel } from './consoles/WellbeingConsole';
-import { BankAccountsPanel } from './consoles/BankAccountsConsole';
+import { BankAccountsPanel, BankAccountsRail } from './consoles/BankAccountsConsole';
 import { ProductTestingPanel } from './consoles/ProductTestingConsole';
-import { ProductTestingTabBody } from './productTesting/ProductTestingTabs';
-import { PAGE_LINE as TESTING_LINE, viewOf as testingViewOf } from './productTesting/productTestingModel';
+import { ProductTestingTabBody, useTestingReads } from './productTesting/ProductTestingTabs';
+import { PAGE_LINE as TESTING_LINE, tabCounts as testingTabCounts, viewOf as testingViewOf } from './productTesting/productTestingModel';
 import { PromoCodesPanel } from './consoles/PromoCodesConsole';
 import { BillingPanel } from './consoles/BillingConsole';
 
@@ -52,7 +52,7 @@ export function consoleBoard(pathname, role) {
   return profile === PROFILE_OF_ROLE[role] ? module : null;
 }
 
-function ConsolePage({ crumb, hqCrumb = crumb, title, line, hqOnly = false, more = null, tabs = null, testId, children }) {
+function ConsolePage({ crumb, hqCrumb = crumb, title, line, hqOnly = false, more = null, tabs = null, actions = null, testId, children }) {
   const user = useAuth()?.user ?? null;
   const { pathname } = useLocation();
   const hq = isSuperAdminUser(user);
@@ -67,6 +67,7 @@ function ConsolePage({ crumb, hqCrumb = crumb, title, line, hqOnly = false, more
         line={line}
         scope={!hq}
         more={more}
+        actions={actions}
         tabs={tabs}
         notice={{ text: notice.text, onDismiss: notice.dismiss }}
       />
@@ -171,6 +172,8 @@ function BankTabBody({ tab }) {
   return <Wait id="history" title="History" />;
 }
 
+const BANK_LINE = 'The registry of each entity’s bank accounts. Notices and invoices print their payment instructions from here.';
+
 export function BankAccountsPage() {
   const { pathname } = useLocation();
   const tab = tabOf(pathname);
@@ -182,9 +185,11 @@ export function BankAccountsPage() {
     </>
   );
   return (
-    <ConsolePage crumb={{ ...PLATFORM, current: 'Bank accounts' }} title="Bank accounts" line="Each entity's bank accounts, their Mercury state and the receipts not yet matched." tabs={tabs} testId="admin-platform-bank-accounts">
-      <BankTabBody tab={tab} />
-    </ConsolePage>
+    <BankAccountsRail>
+      <ConsolePage crumb={{ ...PLATFORM, current: 'Bank accounts' }} title="Bank accounts" line={BANK_LINE} hqOnly tabs={tabs} testId="admin-platform-bank-accounts">
+        <BankTabBody tab={tab} />
+      </ConsolePage>
+    </BankAccountsRail>
   );
 }
 
@@ -196,13 +201,16 @@ export function BankAccountsPage() {
 export function ProductTestingHqPage() {
   const { pathname, search } = useLocation();
   const view = testingViewOf(pathname, search);
+  // D1201: the tab counts and the Overview's tiles draw from the same two reads.
+  const reads = useTestingReads();
+  const counts = testingTabCounts(reads.programmes, reads.testers);
   const tabs = (
     <>
       <HeaderTab to="/admin/platform/product-testing" data-testid="testing-tab-overview">Overview</HeaderTab>
-      <HeaderTab to="/admin/platform/product-testing/review" data-testid="testing-tab-review">Review</HeaderTab>
-      <HeaderTab to="/admin/platform/product-testing/programs" end={false} data-testid="testing-tab-programs">Programs</HeaderTab>
-      <HeaderTab to="/admin/platform/product-testing/applicants" data-testid="testing-tab-applicants">Applicants</HeaderTab>
-      <HeaderTab to="/admin/platform/product-testing/testers" data-testid="testing-tab-testers">Tester pool</HeaderTab>
+      <HeaderTab to="/admin/platform/product-testing/review" count={counts.review} data-testid="testing-tab-review">Review</HeaderTab>
+      <HeaderTab to="/admin/platform/product-testing/programs" end={false} count={counts.programs} data-testid="testing-tab-programs">Programs</HeaderTab>
+      <HeaderTab to="/admin/platform/product-testing/applicants" count={counts.applicants} data-testid="testing-tab-applicants">Applicants</HeaderTab>
+      <HeaderTab to="/admin/platform/product-testing/testers" count={counts.testers} data-testid="testing-tab-testers">Tester pool</HeaderTab>
     </>
   );
   const more = (
@@ -211,9 +219,15 @@ export function ProductTestingHqPage() {
       <HeaderMenuItem to="/admin/held/accounts" data-testid="testing-more-accounts">Testers in Accounts</HeaderMenuItem>
     </>
   );
+  // D1202 (TST7): New program is the header's, a lightbox over Programs.
+  const actions = (
+    <Link to="/admin/platform/product-testing/programs?new=1"
+      className="inline-flex min-h-[34px] items-center justify-center rounded-[9px] bg-axal-violet px-3.5 text-[13px] font-bold text-white no-underline hover:bg-axal-violet-deep max-sm:min-h-[44px] dark:bg-violet-500 dark:hover:bg-violet-400"
+      data-testid="testing-new-programme">New program</Link>
+  );
   return (
-    <ConsolePage hqOnly crumb={{ ...PLATFORM, current: 'Product testing' }} title="Product testing" line={TESTING_LINE} tabs={tabs} more={more} testId="admin-platform-product-testing">
-      <ProductTestingTabBody view={view} review={<ProductTestingPanel view="review" />} programs={<ProductTestingPanel />} />
+    <ConsolePage hqOnly crumb={{ ...PLATFORM, current: 'Product testing' }} title="Product testing" line={TESTING_LINE} tabs={tabs} more={more} actions={actions} testId="admin-platform-product-testing">
+      <ProductTestingTabBody view={view} reads={reads} review={<ProductTestingPanel view="review" />} programs={<ProductTestingPanel />} />
     </ConsolePage>
   );
 }

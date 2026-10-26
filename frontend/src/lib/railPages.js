@@ -376,6 +376,9 @@ const SUPER = [
   own('/admin/integration-keys', key(SA, 'Platform', 'Integration keys')),
   own('/admin/integration-keys#github', key(SA, 'Platform', 'GitHub sync')),
   own('/admin/platform/payments', key(SA, 'Platform', 'Payments catalogue')),
+  // D1185 (#3114): Bank accounts docks the rail beside Payments. The AIRail canvas draws no board for it,
+  // so its key is off the canvas; its own canvas (BNK1) gives the rail's sentence.
+  off('/admin/platform/bank-accounts', key(SA, 'Platform', 'Bank accounts')),
   own('/admin/platform/promo-codes', key(SA, 'Platform', 'Promo codes')),
   own('/admin/credit-rules', key(SA, 'Platform', 'Credit rules')),
   own('/admin/platform/allowances', key(SA, 'Platform', 'AI allowances')),

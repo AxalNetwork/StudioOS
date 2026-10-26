@@ -26,9 +26,10 @@ owner's "Cap table" canvas: `design/incoming/Raise Cap Table Page.dc.html` and
 | `IssuanceDialogs.jsx` | D1025: Record an issuance or Propose one (CT12a) at `/new`, Eadwyn's draft from a signed file (CT11c), Void (CT12b) and an admin's correction (CT12c). |
 | `historyModel.js` | D1025, pure: the timeline's and the changes' lines, the toolbar's filters, each dialog's body in the record's units, and each drawer's view. |
 | `ScenariosPages.jsx` | D1024 (#2861): Scenarios (CT6–CT9) — the cards with Compare and New scenario, one scenario at `/raise/cap-table/scenarios/<uid>` (inputs, before and after, the round's events, the exit waterfall and its step chart, the two read-backs) with Duplicate, Rename and Delete in dialogs, and the compare page at `/scenarios/compare?ids=`. |
-| `ScenarioModelEditor.jsx` | D632's variant editor, moved here by D1024: the form for a scenario typed by hand (founders, pool, SAFEs, rounds, an exit), saved in place. The variants page reads it from here until part 14 retires that page. |
+| `ScenarioModelEditor.jsx` | D632's variant editor, moved here by D1024: the form for a scenario typed by hand (founders, pool, SAFEs, rounds, an exit), saved in place. D1029 retired the variants page, so Scenarios is its only reader. |
 | `scenariosModel.js` | D1024, pure: the addresses, the cards, the dialogs' words, both drafts and their bodies, the results, the waterfall table, the conversion points, the read-backs and the compare rows and charts. |
 | `CapTableTag.jsx` | The On record and Modelled tags. |
+| `CapTableMovedRedirect.jsx` | D1029 (#2866): the old addresses (`/raise/capital/cap-table`, `/build/captable`, `/raise/cap-table/variants` and a variant) forward here, the query and hash kept and `?project=` read as `?project_id=`; the tool's moved notice reads `?moved=`. |
 | `capTable.css` | D1028 (#2865, CT23): on a phone (below 1024px) every control under the tool's root class `captable-phone` is a 44 × 44px target. Imported by `CapTableTool.jsx`. |
 
 ## Where the tool lives

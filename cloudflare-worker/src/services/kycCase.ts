@@ -51,6 +51,15 @@ export async function recordEvent(
   ).bind(e.userId, e.kind, e.actorId, e.note ? String(e.note).slice(0, NOTE_MAX) : null, e.submittedAt ?? null).run();
 }
 
+/**
+ * The history row for a change already saved. It never fails the change: the
+ * status is written by then, and a 500 would tell HQ a decision did not happen
+ * when it did. A miss logs the kind, never the note.
+ */
+export async function recordEventAfter(env: Env, e: Parameters<typeof recordEvent>[1]): Promise<void> {
+  try { await recordEvent(env, e); } catch { console.warn(`[kycCase] history row not written: ${e.kind}`); }
+}
+
 // ---------------------------------------------------------------------------
 // The member's notices
 // ---------------------------------------------------------------------------

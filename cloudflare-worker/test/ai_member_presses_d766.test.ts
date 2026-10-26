@@ -189,3 +189,26 @@ test('no member route calls env.AI.run directly any more; the wizard\'s AI press
   assert.doesNotMatch(askAI, /reload\(\)/, 'reloading would draw the saved split over the proposal');
   assert.match(wizard, /api\.spinoutEquity\(\{ deal_id: deal\.id, allocation, proposed: aiRecommended \}\)/);
 });
+
+
+// D1214: execute the recommendation read with the model stubbed. Candidate
+// responses may name the member but never expose an address, even to the lead.
+for (const linked of [false, true]) test(`D1214: syndicate candidates omit emails (linked=${linked})`, async () => {
+  const ai = makeAI(() => reply('Synthetic rationale'));
+  const w = world(ai);
+  try {
+    w.f.db.exec("ALTER TABLE users ADD COLUMN kyc_status TEXT");
+    // Bootstrap through a read, then record a lead and a candidate.
+    await call(w, 'GET', '/api/networkfx/syndicates');
+    w.f.db.exec("INSERT INTO users(id,email,name,role,kyc_status,is_active) VALUES(90000,'candidate@example.invalid','Synthetic candidate','investor','approved',1)");
+    w.f.db.prepare("INSERT INTO syndicates(id,name,created_by,deal_id) VALUES(1,'Synthetic',?,?)").run(MEMBER,linked?7:null);
+    if(linked) {
+      w.f.db.exec("CREATE TABLE match_scores(user_id INTEGER,deal_id INTEGER,score_type TEXT,score REAL,explanation TEXT); INSERT INTO match_scores VALUES(90000,7,'deal_flow',75,'Synthetic fit')");
+    }
+    const r=await call(w,'POST','/api/networkfx/syndicates/1/recommendations',{});
+    assert.equal(r.status,200,JSON.stringify(r.body));
+    assert.equal(r.body.candidates[0].name,'Synthetic candidate');
+    assert.equal('email' in r.body.candidates[0],false);
+    assert.equal(JSON.stringify(r.body).includes('candidate@example.invalid'),false);
+  } finally { w.f.db.close(); }
+});

@@ -109,7 +109,9 @@ test('the overview figures: open, waiting with its oldest, places on open progra
 });
 
 test('every block with no read says why, and none says zero or none; a tester row never carries the email', () => {
-  for (const k of ['weekly', 'profiles', 'mail', 'needs', 'applicants', 'activity', 'partnerApplicants', 'testerPrograms']) assert.ok(WAITS[k], k);
+  for (const k of ['applicants', 'activity', 'partnerApplicants', 'testerPrograms']) assert.ok(WAITS[k], k);
+  // D1201 (#3151) filled the Overview's four: their waits are retired, never drawn beside a read.
+  for (const k of ['weekly', 'profiles', 'mail', 'needs']) assert.equal(WAITS[k], undefined, k);
   for (const w of Object.values(WAITS)) assert.ok(!/\b0\b|\bnone\b/i.test(w), w);
   const row = testerRow(TESTERS.rows[0]);
   assert.ok(!JSON.stringify(row).includes('@'), 'no email in what the page draws');
@@ -125,7 +127,7 @@ test('the tester client refuses an unknown status and pages by query', async () 
  * Mounted
  * ------------------------------------------------------------------ */
 
-test('Overview: the HQ-only header and tabs, four tiles from the two reads, places bars, status chips, and the waits', async () => {
+test('Overview: the HQ-only header and tabs, four tiles from the two reads, places bars and status chips (D1201 draws the rest)', async () => {
   const v = await mounted('/admin/platform/product-testing');
   try {
     assert.deepEqual(v.current().filter((id) => id.startsWith('testing-tab-')), ['testing-tab-overview']);
@@ -138,7 +140,7 @@ test('Overview: the HQ-only header and tabs, four tiles from the two reads, plac
     assert.ok(v.text('testing-tile-pool').includes('4 paused · 6 applications waiting in Approvals'));
     assert.ok(v.by('testing-bar-alpha') && v.by('testing-bar-beta') && !v.by('testing-bar-omega'));
     assert.equal(v.text('testing-chip-submitted'), 'Waiting for HQ 2');
-    for (const id of ['weekly', 'profiles', 'mail', 'needs']) assert.ok(v.text(`testing-wait-${id}`).includes(NOT_YET), id);
+    for (const id of ['weekly', 'profiles', 'mail', 'needs']) assert.equal(v.by(`testing-wait-${id}`), undefined, id);
     assert.ok(v.requests.includes('/admin/product-testers?status=active'));
     assert.ok(!/@example\.com/.test(v.text()), 'no email is drawn');
   } finally { await v.close(); }
@@ -160,7 +162,9 @@ test('Review: what waits on HQ, what is approved and not open, and what was sent
     assert.ok(v.text('testing-waiting').includes('Product delta') && v.text('testing-waiting').includes('Product epsilon'));
     assert.ok(v.text('testing-approved').includes('Product eta'));
     assert.ok(v.text('testing-sent-back').includes('Say what testers will be asked to install.'));
-    assert.ok(!v.by('testing-all') && !v.by('testing-new-programme'));
+    assert.ok(!v.by('testing-all'));
+    // D1202: New program is the page header's, on every tab; it opens over Programs.
+    assert.ok(v.by('testing-new-programme'));
   } finally { await v.close(); }
 });
 
@@ -198,7 +202,8 @@ test('Applicants waits and makes no read; the Tester pool draws the store with n
   let v = await mounted('/admin/platform/product-testing/applicants');
   try {
     assert.ok(v.text('testing-wait-applicants').includes(NOT_YET));
-    assert.deepEqual(v.requests.filter((u) => u.startsWith('/admin/')), []);
+    // Only the header's two tab-count reads (D1201); the tab itself makes none.
+    assert.deepEqual(v.requests.filter((u) => u.startsWith('/admin/')).sort(), ['/admin/product-testers?status=active', '/admin/testing/programmes']);
   } finally { await v.close(); }
   v = await mounted('/admin/platform/product-testing/testers');
   try {

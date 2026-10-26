@@ -1,13 +1,15 @@
 import { Hono } from 'hono';
 import type { Env } from '../types';
 import { getSQL } from '../db';
-import { requireAuth, requireAdmin, requireStepUp, requireBranchNotSuspended } from '../auth';
+import { requireAuth, requireAdmin, requireStepUp, requireBranchNotSuspended, requireSuperAdmin } from '../auth';
 import { putKycDocumentFromDataUri, getKycDocument, deleteKycDocument } from '../services/r2';
 import { hashEmail } from '../util/hashEmail';
 import { bindingKey } from '../util/schemaBootstrap';
 import { KYC_SENSITIVE, type KycSensitive, kycFieldValue, maskKycData } from '../services/sensitiveFields';
+import { caseReferrals, caseScreening, closeReferrals, noteOf, raiseReferral, referralsFor, screenOnSubmission, NOTE_MAX, NOTE_MIN } from '../services/kycHq';
+import { refuse } from '../util/refusal';
 import {
-  DOCUMENT_KINDS, MAX_DOCUMENTS, NOTE_MAX, SUBMITTABLE, noticeMember, parseQueueQuery, readFigures, readQueue, recordEvent,
+  DOCUMENT_KINDS, MAX_DOCUMENTS, NOTE_MAX as CASE_NOTE_MAX, SUBMITTABLE, noticeMember, parseQueueQuery, readFigures, readQueue, recordEventAfter,
 } from '../services/kycCase';
 
 const kyc = new Hono<{ Bindings: Env }>();
@@ -247,10 +249,6 @@ kyc.post('/submit', async (c) => {
       await c.env.DB.prepare('INSERT INTO kyc_documents (user_id, kind, file_key, content_type, size_bytes) VALUES (?, ?, ?, ?, ?)')
         .bind(user.id, d.kind, d.meta.file_key, d.meta.content_type, d.meta.size).run();
     }
-    const at = await c.env.DB.prepare('SELECT kyc_submitted_at FROM users WHERE id = ?').bind(user.id).first<{ kyc_submitted_at: string | null }>();
-    await recordEvent(c.env, { userId: Number(user.id), kind: 'submitted', actorId: Number(user.id), submittedAt: at?.kyc_submitted_at ?? null });
-    // An automated fail is a decision the member is told about on the page; it is recorded beside the submission.
-    if (newStatus === 'rejected') await recordEvent(c.env, { userId: Number(user.id), kind: 'rejected', actorId: null, note: rejectionReason, submittedAt: at?.kyc_submitted_at ?? null });
   } catch (e) {
     // Compensating delete: roll back the R2 upload if DB write failed,
     // otherwise we'd orphan PII.
@@ -260,6 +258,23 @@ kyc.post('/submit', async (c) => {
     throw e;
   }
   await sql.end();
+
+  // D1229 — the case's history: the submission, and an automated fail beside it (the member reads that one on the page).
+  const at = await c.env.DB.prepare('SELECT kyc_submitted_at FROM users WHERE id = ?').bind(user.id).first<{ kyc_submitted_at: string | null }>().catch(() => null);
+  await recordEventAfter(c.env, { userId: Number(user.id), kind: 'submitted', actorId: Number(user.id), submittedAt: at?.kyc_submitted_at ?? null });
+  if (newStatus === 'rejected') await recordEventAfter(c.env, { userId: Number(user.id), kind: 'rejected', actorId: null, note: rejectionReason, submittedAt: at?.kyc_submitted_at ?? null });
+
+  // D1230 (#3238): screen on submission, and send the case to HQ on its own
+  // for a self-disclosed PEP or a match. Neither can fail the submission: a
+  // screening that could not run is recorded as unreadable, never as clear.
+  // The member is not told the outcome.
+  if (newStatus === 'pending') {
+    await screenOnSubmission(c.env, user.id, kycPayload);
+    if (kycPayload.pep_self_disclosed) {
+      await raiseReferral(c.env, { userId: user.id, reason: 'pep', note: 'The member disclosed that they are a politically exposed person.' })
+        .catch((e) => console.error('[kyc-hq] pep referral not raised', (e as Error)?.name));
+    }
+  }
 
   // Resubmission cleanup: delete the previously-stored document, if any.
   // Done after the UPDATE so a failure here doesn't leave the user without
@@ -344,6 +359,10 @@ kyc.get('/admin/:userId', async (c) => {
     // D634 — sensitive values leave masked. Each one is shown, and logged,
     // through `GET /admin/:userId/sensitive/:field` below.
     kyc_data: maskKycData(publicKycData(r.kyc_data)),
+    // D1230: the screening (an unreadable one is never clear) and whether
+    // the case is with HQ (a failed read is never "not with HQ").
+    screening: await caseScreening(c.env, r.id),
+    hq: await caseReferrals(c.env, r.id),
     _admin: adminUser.email,
   });
 });
@@ -427,7 +446,6 @@ kyc.get('/admin/:userId/document', async (c) => {
   });
 });
 
-
 // ---------- D1229 · ONE CASE: assignment, notes, history, documents ----------
 
 const caseUserId = (c: any) => {
@@ -510,7 +528,7 @@ kyc.patch('/admin/:userId/assign', async (c) => {
      VALUES (?, ?, CASE WHEN ? IS NULL THEN NULL ELSE CURRENT_TIMESTAMP END, CURRENT_TIMESTAMP)
      ON CONFLICT(user_id) DO UPDATE SET assignee_id = excluded.assignee_id, assigned_at = excluded.assigned_at, updated_at = excluded.updated_at`,
   ).bind(userId, assigneeId, assigneeId).run();
-  await recordEvent(c.env, { userId, kind: assigneeId == null ? 'unassigned' : 'assigned', actorId: Number(adminUser.id), note: assigneeId == null ? null : `user_id=${assigneeId}` });
+  await recordEventAfter(c.env, { userId, kind: assigneeId == null ? 'unassigned' : 'assigned', actorId: Number(adminUser.id), note: assigneeId == null ? null : `user_id=${assigneeId}` });
   await logAdmin(c, adminUser, 'kyc_case_assigned', `Admin ${assigneeId == null ? 'unassigned' : `assigned user_id=${assigneeId} to`} the KYC case for user_id=${userId}`);
   return c.json({ user_id: userId, assignee_id: assigneeId, changed: true });
 });
@@ -524,7 +542,7 @@ kyc.post('/admin/:userId/notes', async (c) => {
   const body = await c.req.json().catch(() => ({}));
   const text = String(body?.body ?? '').trim();
   if (!text) return c.json({ error: 'note_empty', detail: 'Write the note first.' }, 400);
-  if (text.length > NOTE_MAX) return c.json({ error: 'note_too_long', detail: `A note is at most ${NOTE_MAX} characters.` }, 400);
+  if (text.length > CASE_NOTE_MAX) return c.json({ error: 'note_too_long', detail: `A note is at most ${CASE_NOTE_MAX} characters.` }, 400);
   const target = await c.env.DB.prepare('SELECT id FROM users WHERE id = ?').bind(userId).first();
   if (!target) return c.json({ error: 'user_not_found' }, 404);
   const res = await c.env.DB.prepare('INSERT INTO kyc_notes (user_id, author_user_id, body) VALUES (?, ?, ?)').bind(userId, adminUser.id, text).run();
@@ -554,10 +572,10 @@ kyc.get('/admin/:userId/documents/:docId', async (c) => {
 const submittedAtOf = async (env: Env, userId: number) =>
   (await env.DB.prepare('SELECT kyc_submitted_at FROM users WHERE id = ?').bind(userId).first<{ kyc_submitted_at: string | null }>())?.kyc_submitted_at ?? null;
 
-/** A message the member reads: at least five characters, at most NOTE_MAX. */
+/** A message the member reads: at least five characters, at most CASE_NOTE_MAX. */
 const memberMessage = (v: unknown): string | null => {
   const s = String(v ?? '').trim();
-  return s.length >= 5 && s.length <= NOTE_MAX ? s : null;
+  return s.length >= 5 && s.length <= CASE_NOTE_MAX ? s : null;
 };
 
 // Needs information: a waiting case goes back to the member with a question.
@@ -571,7 +589,10 @@ kyc.patch('/admin/:userId/needs-info', async (c) => {
   if (!userId) return c.json({ error: 'User not found' }, 404);
   const body = await c.req.json().catch(() => ({}));
   const message = memberMessage(body?.message);
-  if (!message) return c.json({ error: `Say what the member should send (5 to ${NOTE_MAX} characters)` }, 400);
+  if (!message) return c.json({ error: `Say what the member should send (5 to ${CASE_NOTE_MAX} characters)` }, 400);
+  // D1230: a case with HQ is decided by HQ alone.
+  const withHq = await refuseIfWithHq(c, userId);
+  if (withHq) return withHq;
   const res = await c.env.DB.prepare(
     `UPDATE users SET kyc_status = 'needs_info', kyc_reviewed_at = CURRENT_TIMESTAMP, kyc_reviewed_by = ? WHERE id = ? AND kyc_status = 'pending'`,
   ).bind(adminUser.id, userId).run();
@@ -580,7 +601,7 @@ kyc.patch('/admin/:userId/needs-info', async (c) => {
     if (!t) return c.json({ error: 'User not found' }, 404);
     return c.json({ error: 'not_waiting', detail: 'Only a waiting case can be sent back for information.', kyc_status: t.kyc_status || 'not_started' }, 409);
   }
-  await recordEvent(c.env, { userId, kind: 'needs_info', actorId: Number(adminUser.id), note: message, submittedAt: await submittedAtOf(c.env, userId) });
+  await recordEventAfter(c.env, { userId, kind: 'needs_info', actorId: Number(adminUser.id), note: message, submittedAt: await submittedAtOf(c.env, userId) });
   await logAdmin(c, adminUser, 'kyc_needs_info_by_admin', `Admin asked for information on the KYC case for user_id=${userId}`);
   await noticeMember(c.env, userId, 'needs_info', message);
   return c.json({ kyc_status: 'needs_info', user_id: userId });
@@ -597,7 +618,10 @@ kyc.patch('/admin/:userId/recheck', async (c) => {
   if (!userId) return c.json({ error: 'User not found' }, 404);
   const body = await c.req.json().catch(() => ({}));
   const message = memberMessage(body?.message);
-  if (!message) return c.json({ error: `Say why the member should verify again (5 to ${NOTE_MAX} characters)` }, 400);
+  if (!message) return c.json({ error: `Say why the member should verify again (5 to ${CASE_NOTE_MAX} characters)` }, 400);
+  // D1230: a case with HQ is decided by HQ alone.
+  const withHq = await refuseIfWithHq(c, userId);
+  if (withHq) return withHq;
   const res = await c.env.DB.prepare(
     `UPDATE users SET kyc_status = 'needs_info', kyc_reviewed_at = CURRENT_TIMESTAMP, kyc_reviewed_by = ? WHERE id = ? AND kyc_status IN ('approved', 'expired')`,
   ).bind(adminUser.id, userId).run();
@@ -606,25 +630,16 @@ kyc.patch('/admin/:userId/recheck', async (c) => {
     if (!t) return c.json({ error: 'User not found' }, 404);
     return c.json({ error: 'not_checked', detail: 'Only an approved or expired check can be re-checked.', kyc_status: t.kyc_status || 'not_started' }, 409);
   }
-  await recordEvent(c.env, { userId, kind: 'recheck', actorId: Number(adminUser.id), note: message, submittedAt: await submittedAtOf(c.env, userId) });
+  await recordEventAfter(c.env, { userId, kind: 'recheck', actorId: Number(adminUser.id), note: message, submittedAt: await submittedAtOf(c.env, userId) });
   await logAdmin(c, adminUser, 'kyc_recheck_by_admin', `Admin asked user_id=${userId} to verify again`);
   await noticeMember(c.env, userId, 'recheck', message);
   return c.json({ kyc_status: 'needs_info', user_id: userId });
 });
 
-kyc.patch('/admin/:userId/approve', async (c) => {
-  const adminUser = await requireAdmin(c);
-  // D260 — a suspended branch clears no one for full access: 423, after the
-  // admin gate (an anonymous caller still gets 401) and before step-up (a
-  // frozen branch is not asked for a code it could not use).
-  await requireBranchNotSuspended(c);
-  await requireStepUp(c); // BLOCK-AUTH-03 — KYC verdicts require a RECENT TOTP step-up
-  await ensureColumns(c.env);
-  const userId = parseInt(c.req.param('userId'));
-  // D1229 — an optional approval note, kept on the case's history (HQ's words, never the member's).
-  const approveBody = await c.req.json().catch(() => ({}));
-  const approvalNote = approveBody?.note == null ? null : String(approveBody.note).trim();
-  if (approvalNote && approvalNote.length > NOTE_MAX) return c.json({ error: `An approval note is at most ${NOTE_MAX} characters` }, 400);
+
+// The two verdicts, shared by the studio's routes and HQ's (D1230). Each
+// answers the response the route sends; the gates stay on the routes.
+async function approveCase(c: any, adminUser: any, userId: number, note: string | null = null): Promise<Response> {
   const sql = getSQL(c.env);
   // Pull kyc_submitted_at too so we can distinguish a normal queue review
   // (user submitted KYC, admin reviewed it) from an admin bypass
@@ -644,7 +659,8 @@ kyc.patch('/admin/:userId/approve', async (c) => {
   await sql`INSERT INTO activity_logs (action, details, actor, user_id) VALUES (${adminAction}, ${adminDetails}, ${await hashEmail(adminUser.email)}, ${adminUser.id})`;
   await sql`INSERT INTO activity_logs (action, details, actor, user_id) VALUES ('kyc_approved', ${`Your KYC verification was approved by Axal compliance.`}, ${await hashEmail(target.email)}, ${target.id})`;
   await sql.end();
-  await recordEvent(c.env, { userId, kind: 'approved', actorId: Number(adminUser.id), note: approvalNote || null, submittedAt: target.kyc_submitted_at ?? null });
+  // D1229 — the history row (with HQ's optional note, never sent to the member) and the member's notice.
+  await recordEventAfter(c.env, { userId, kind: 'approved', actorId: Number(adminUser.id), note, submittedAt: target.kyc_submitted_at ?? null });
   await noticeMember(c.env, userId, 'approved');
 
   // Fire commission event for the referrer (if any)
@@ -654,19 +670,9 @@ kyc.patch('/admin/:userId/approve', async (c) => {
   } catch (e) { console.error('fireCommissionEvent failed:', e); }
 
   return c.json({ kyc_status: 'approved', user_id: userId });
-});
+}
 
-kyc.patch('/admin/:userId/reject', async (c) => {
-  const adminUser = await requireAdmin(c);
-  // D260 — the verdict is frozen both ways, as every D107 queue is: a reject
-  // purges the stored document and writes a verdict, and neither is a takedown.
-  await requireBranchNotSuspended(c);
-  await requireStepUp(c); // BLOCK-AUTH-03 — KYC verdicts require a RECENT TOTP step-up
-  await ensureColumns(c.env);
-  const userId = parseInt(c.req.param('userId'));
-  const { reason } = await c.req.json().catch(() => ({}));
-  if (!reason || String(reason).trim().length < 5) return c.json({ error: 'Rejection reason required (min 5 chars)' }, 400);
-
+async function rejectCase(c: any, adminUser: any, userId: number, reason: string): Promise<Response> {
   const sql = getSQL(c.env);
   const rows = await sql`SELECT id, email, name, kyc_status, kyc_data, kyc_submitted_at FROM users WHERE id = ${userId}`;
   if (!rows.length) { await sql.end(); return c.json({ error: 'User not found' }, 404); }
@@ -685,14 +691,132 @@ kyc.patch('/admin/:userId/reject', async (c) => {
   await sql`INSERT INTO activity_logs (action, details, actor, user_id) VALUES ('kyc_rejected', ${`Your KYC submission was rejected by Axal compliance. Reason: ${reason}. You may resubmit.`}, ${await hashEmail(target.email)}, ${target.id})`;
   await sql.end();
   // D1229 — the case's other documents go too: the bytes from R2, the row keeps when.
-  const listed = await c.env.DB.prepare('SELECT id, file_key FROM kyc_documents WHERE user_id = ? AND removed_at IS NULL').bind(userId).all<{ id: number; file_key: string }>();
+  const listed: { results?: Array<{ id: number; file_key: string }> } = await c.env.DB.prepare('SELECT id, file_key FROM kyc_documents WHERE user_id = ? AND removed_at IS NULL').bind(userId).all()
+    .catch(() => { console.error('R2 cleanup on reject failed: the document list could not be read'); return { results: [] }; });
   for (const d of listed.results || []) {
     await deleteKycDocument(c.env, d.file_key).catch(() => console.error('R2 cleanup on reject failed: a listed document'));
     await c.env.DB.prepare('UPDATE kyc_documents SET removed_at = CURRENT_TIMESTAMP WHERE id = ? AND removed_at IS NULL').bind(d.id).run();
   }
-  await recordEvent(c.env, { userId, kind: 'rejected', actorId: Number(adminUser.id), note: String(reason), submittedAt: target.kyc_submitted_at ?? null });
+  await recordEventAfter(c.env, { userId, kind: 'rejected', actorId: Number(adminUser.id), note: String(reason), submittedAt: target.kyc_submitted_at ?? null });
   await noticeMember(c.env, userId, 'rejected', String(reason));
   return c.json({ kyc_status: 'rejected', user_id: userId, reason });
+}
+
+/**
+ * D1230 — a case with HQ is decided by HQ alone, on `/hq/decide`. The
+ * studio's routes refuse it, and refuse when the referrals cannot be read:
+ * a case that might be with HQ is not decided here.
+ */
+async function refuseIfWithHq(c: any, userId: number): Promise<Response | null> {
+  let open: Awaited<ReturnType<typeof referralsFor>>['open'];
+  try {
+    ({ open } = await referralsFor(c.env, userId));
+  } catch (e) {
+    console.error('[kyc-hq] referral read failed before a verdict', (e as Error)?.name);
+    return refuse(c, 503, { code: 'hq_unreadable', message: 'Whether this case is with HQ could not be read, so it was not decided. Try again.', audience: 'admin' });
+  }
+  if (!open.length) return null;
+  return refuse(c, 409, {
+    code: 'sent_to_hq',
+    message: 'This case is with HQ. A Super Admin decides it.',
+    audience: 'admin',
+    extra: { reasons: open.map((r) => r.reason) },
+  });
+}
+
+kyc.patch('/admin/:userId/approve', async (c) => {
+  const adminUser = await requireAdmin(c);
+  // D260 — a suspended branch clears no one for full access: 423, after the
+  // admin gate (an anonymous caller still gets 401) and before step-up (a
+  // frozen branch is not asked for a code it could not use).
+  await requireBranchNotSuspended(c);
+  await requireStepUp(c); // BLOCK-AUTH-03 — KYC verdicts require a RECENT TOTP step-up
+  await ensureColumns(c.env);
+  const userId = parseInt(c.req.param('userId'));
+  // D1229 — an optional approval note, kept on the case's history (HQ's words, never the member's).
+  const approveBody = await c.req.json().catch(() => ({}));
+  const approvalNote = approveBody?.note == null ? null : String(approveBody.note).trim();
+  if (approvalNote && approvalNote.length > CASE_NOTE_MAX) return c.json({ error: `An approval note is at most ${CASE_NOTE_MAX} characters` }, 400);
+  const withHq = await refuseIfWithHq(c, userId);
+  if (withHq) return withHq;
+  return approveCase(c, adminUser, userId, approvalNote || null);
+});
+
+kyc.patch('/admin/:userId/reject', async (c) => {
+  const adminUser = await requireAdmin(c);
+  // D260 — the verdict is frozen both ways, as every D107 queue is: a reject
+  // purges the stored document and writes a verdict, and neither is a takedown.
+  await requireBranchNotSuspended(c);
+  await requireStepUp(c); // BLOCK-AUTH-03 — KYC verdicts require a RECENT TOTP step-up
+  await ensureColumns(c.env);
+  const userId = parseInt(c.req.param('userId'));
+  const { reason } = await c.req.json().catch(() => ({}));
+  if (!reason || String(reason).trim().length < 5) return c.json({ error: 'Rejection reason required (min 5 chars)' }, 400);
+  const withHq = await refuseIfWithHq(c, userId);
+  if (withHq) return withHq;
+  return rejectCase(c, adminUser, userId, reason);
+});
+
+// D1230 (#3238) — Send to HQ, by an admin, with a note. The Worker raises
+// `pep` and `sanctions_match` on its own at submission; this is the third
+// reason. It decides nothing, so it asks for no step-up; a suspended branch
+// still sends nothing.
+kyc.post('/admin/:userId/hq', async (c) => {
+  const adminUser = await requireAdmin(c);
+  await requireBranchNotSuspended(c);
+  await ensureColumns(c.env);
+  const userId = parseInt(c.req.param('userId'));
+  const body = await c.req.json().catch(() => ({} as any));
+  const note = noteOf(body?.note);
+  if (!note) {
+    return refuse(c, 400, { code: 'note_required', message: `Say why this goes to HQ, in ${NOTE_MIN} to ${NOTE_MAX} characters.`, audience: 'admin' });
+  }
+  const target = await c.env.DB.prepare('SELECT id FROM users WHERE id = ?').bind(userId).first<any>();
+  if (!target) return refuse(c, 404, { code: 'user_not_found', message: 'This member does not exist. Nothing was sent.', audience: 'admin' });
+  const r = await raiseReferral(c.env, { userId, reason: 'admin', note, raisedBy: adminUser.id });
+  if (r.already) {
+    return refuse(c, 409, { code: 'already_sent_to_hq', message: 'An admin already sent this case to HQ, and HQ has not decided it yet.', audience: 'admin' });
+  }
+  await c.env.DB.prepare('INSERT INTO activity_logs (action, details, actor, user_id) VALUES (?, ?, ?, ?)')
+    .bind('kyc_sent_to_hq', `Admin sent the KYC case for user_id=${userId} to HQ (referral #${r.id})`, await hashEmail(adminUser.email), adminUser.id).run();
+  return c.json({ id: r.id, user_id: userId, reason: 'admin', raised_by: { id: adminUser.id, name: adminUser.name || null } }, 201);
+});
+
+// D1230 (#3238) — HQ decides a case it holds. A Super Admin only (owner
+// question 4 on #2384), with the verdicts' own gates: branch not suspended
+// and a recent TOTP step-up. The verdict is the studio's, through the same
+// helper; every open referral then closes with it.
+kyc.post('/admin/:userId/hq/decide', async (c) => {
+  const superAdmin = await requireSuperAdmin(c);
+  await requireBranchNotSuspended(c);
+  await requireStepUp(c);
+  await ensureColumns(c.env);
+  const userId = parseInt(c.req.param('userId'));
+  const body = await c.req.json().catch(() => ({} as any));
+  const verdict = body?.verdict;
+  if (verdict !== 'approved' && verdict !== 'rejected') {
+    return refuse(c, 400, { code: 'bad_verdict', message: 'The verdict is approved or rejected.', audience: 'admin' });
+  }
+  const note = noteOf(body?.note);
+  if (verdict === 'rejected' && !note) {
+    return refuse(c, 400, { code: 'note_required', message: `Say why it is rejected, in ${NOTE_MIN} to ${NOTE_MAX} characters. The member reads it.`, audience: 'admin' });
+  }
+  let open: Awaited<ReturnType<typeof referralsFor>>['open'];
+  try {
+    ({ open } = await referralsFor(c.env, userId));
+  } catch (e) {
+    console.error('[kyc-hq] referral read failed before HQ decided', (e as Error)?.name);
+    return refuse(c, 503, { code: 'hq_unreadable', message: 'The case could not be read, so it was not decided. Try again.', audience: 'admin' });
+  }
+  if (!open.length) {
+    return refuse(c, 409, { code: 'not_sent_to_hq', message: 'This case is not with HQ. The studio decides it.', audience: 'admin' });
+  }
+  const res = verdict === 'approved' ? await approveCase(c, superAdmin, userId) : await rejectCase(c, superAdmin, userId, note as string);
+  if (res.status !== 200) return res;
+  await closeReferrals(c.env, userId, superAdmin.id, verdict, note);
+  await c.env.DB.prepare('INSERT INTO activity_logs (action, details, actor, user_id) VALUES (?, ?, ?, ?)')
+    .bind('kyc_hq_decided', `HQ ${verdict} the KYC case for user_id=${userId} (${open.length} referral${open.length === 1 ? '' : 's'} closed)`, await hashEmail(superAdmin.email), superAdmin.id).run();
+  return c.json({ kyc_status: verdict, user_id: userId, closed: open.map((r) => r.id) });
 });
 
 export default kyc;

@@ -47,5 +47,5 @@ test('each call goes to the route the Worker mounts', async () => {
 
 test('api.js re-exports the module in its alphabetical block (D527)', () => {
   const api = readFileSync(new URL('../src/lib/api.js', import.meta.url), 'utf8');
-  assert.match(api, /export \* from '\.\/api\/interviewSessions\.js';\nexport \* from '\.\/api\/kycPeople\.js';\nexport \* from '\.\/api\/labOperations\.js';/);
+  assert.match(api, /export \* from '\.\/api\/kycHq\.js';\nexport \* from '\.\/api\/kycPeople\.js';\nexport \* from '\.\/api\/labOperations\.js';/);
 });
