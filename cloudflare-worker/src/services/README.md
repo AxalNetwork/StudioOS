@@ -48,11 +48,19 @@ or delete them. They are never silently detached into private scenarios.
 `scoreAccess.ts` scopes #2439 project risk through existing deal permissions,
 and, since D1074 (#2966), trust-score reads to the member, an admin of this
 territory (this deployment's database), and a counterparty in an open intro or
-deal (`mayReadTrustScores`, `counterpartiesOf`). Self/admin trust reads retain
+deal (`mayReadTrustScores`, `counterpartiesOf`). D1254 narrows investors to a
+shared open deal; an intro alone does not grant an investor a trust-score read.
+Self/admin trust reads retain
 obligation details; a counterparty receives only the bare score. Non-admin risk and
 screening snapshots use `scoreIntegrity.ts` verification and read auditing.
 Bulk reads deduplicate projects, select snapshots once, and batch per-score
 audit entries without weakening approval or signature checks.
+
+D1254 makes both engines in `scoring.ts` ignore reserved adjustments, including
+direct service callers. New snapshots retain a zero legacy adjustment field.
+Scoring and intake never promote, reject or advance a venture from a score;
+status changes belong to a person's separate act. Risk coverage excludes
+unscored layers, retaining a recorded numeric zero.
 
 `eventTimes.ts` (D1115, #2995) validates and converts the event writer’s local
 clock inputs in the selected IANA zone, preserving explicit instants and refusing
