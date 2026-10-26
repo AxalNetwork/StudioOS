@@ -66,6 +66,7 @@ widened guard on this very sentence, which is the rule working.)
 /api/mercury/investor → mercury_investor.ts (an investor's own Mercury feeding Deals · Pipeline, Commit and Closing and Fund · Calls, Accounting and Reporting: facts written, proposals accepted, Pipeline shown only; read-only, on HQ or in a branch (D884), the caller's own data only, D840 part 4)
 /api/admin/capital-attestations → admin_capital_attestations.ts (HQ admins read an investor's shared proof of funds; audited before it answers; reads capital_attestations only, never a connection; D752)
 /api/testing/mail  → testing_mail.ts (D811: programme-signed preferences and one-click unsubscribe; no newsletter opt-in required)
+/api/testing/programmes/:uid/logo, /api/partner/testing/programmes/:uid/logo, /api/admin/testing/programmes/:uid/logo → testing.ts (D1199: the programme logo, PUT and DELETE by its owner, GET for its readers; the testingLogo service)
 /api/mail-link     → mail_link.ts (D811: Mail HMAC only, before session middleware; audiences, recipients, feedback and health)
 /api/auth          → auth.ts
 /api/scoring       → scoring.ts
