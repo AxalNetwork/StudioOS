@@ -2901,15 +2901,23 @@ function AppInner() {
       <Route path="/admin/approvals/decided" element={guard(['admin'], <AdminApprovals />)} />
       <Route path="/admin/approvals/items/:ref" element={guard(['admin'], <AdminApprovals />)} />
       <Route path="/admin/approvals/product-testers" element={guard(['admin'], <ApprovalsLaneBoards />)} />
+      <Route path="/admin/approvals/product-testers/active" element={guard(['admin'], <ApprovalsLaneBoards />)} />
+      <Route path="/admin/approvals/product-testers/paused" element={guard(['admin'], <ApprovalsLaneBoards />)} />
+      <Route path="/admin/approvals/product-testers/declined" element={guard(['admin'], <ApprovalsLaneBoards />)} />
+      <Route path="/admin/approvals/product-testers/removed" element={guard(['admin'], <ApprovalsLaneBoards />)} />
+      <Route path="/admin/approvals/product-testers/:item" element={guard(['admin'], <ApprovalsLaneBoards />)} />
       <Route path="/admin/approvals/co-marketing" element={guard(['admin'], <ApprovalsLaneBoards />)} />
       <Route path="/admin/approvals/co-marketing/approved" element={guard(['admin'], <ApprovalsLaneBoards />)} />
       <Route path="/admin/approvals/co-marketing/published" element={guard(['admin'], <ApprovalsLaneBoards />)} />
       <Route path="/admin/approvals/co-marketing/declined" element={guard(['admin'], <ApprovalsLaneBoards />)} />
       <Route path="/admin/approvals/co-marketing/withdrawn" element={guard(['admin'], <ApprovalsLaneBoards />)} />
+      <Route path="/admin/approvals/co-marketing/:item" element={guard(['admin'], <ApprovalsLaneBoards />)} />
       <Route path="/admin/approvals/wellbeing-experts" element={guard(['admin'], <ApprovalsLaneBoards />)} />
       <Route path="/admin/approvals/wellbeing-experts/incomplete" element={guard(['admin'], <ApprovalsLaneBoards />)} />
       <Route path="/admin/approvals/wellbeing-experts/verified" element={guard(['admin'], <ApprovalsLaneBoards />)} />
+      <Route path="/admin/approvals/wellbeing-experts/declined" element={guard(['admin'], <ApprovalsLaneBoards />)} />
       <Route path="/admin/approvals/wellbeing-experts/hidden" element={guard(['admin'], <ApprovalsLaneBoards />)} />
+      <Route path="/admin/approvals/wellbeing-experts/:item" element={guard(['admin'], <ApprovalsLaneBoards />)} />
       <Route path="/admin/held/approvals" element={<HeldApprovalsRedirect />} />
       {/* D930 (#2367) — Community left /admin/held/ when it was rebuilt to its
           canvas, as Insights did. The old address keeps its query and hash
