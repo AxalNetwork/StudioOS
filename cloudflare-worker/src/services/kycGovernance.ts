@@ -33,7 +33,30 @@ const parseTs = (s: unknown) => Date.parse(String(s || '').replace(' ', 'T') + (
 const KIND_OF: Record<string, 'person' | 'business'> = { kyc_v1: 'person', kyb_v1: 'business' };
 
 export const RECHECKS_REASON = 'Re-checks are asked from a case once part 1 (D1229) adds them; nothing records one yet.';
-export const SCREENING_REASON = 'Screening dates arrive with part 2 (D1230); nothing records one yet.';
+export const SCREENING_UNREADABLE = 'The screening record could not be read. This is not a claim that everyone was screened.';
+
+/**
+ * Approved people whose latest sanctions screening is over 12 months old, and
+ * those never screened. Every screening run writes a `sanctions_screenings`
+ * row (`services/sanctions.ts`); a run that failed writes none, which is why
+ * "never screened" is its own count and never folded into "screened".
+ */
+async function screeningAge(env: Env, now: Date) {
+  const year = new Date(now.getTime());
+  year.setUTCFullYear(year.getUTCFullYear() - 1);
+  try {
+    const row = await env.DB.prepare(
+      `SELECT SUM(CASE WHEN s.last_run IS NOT NULL AND s.last_run < datetime(?) THEN 1 ELSE 0 END) AS stale,
+              SUM(CASE WHEN s.last_run IS NULL THEN 1 ELSE 0 END) AS never
+         FROM users u
+         LEFT JOIN (SELECT user_id, MAX(datetime(run_at)) AS last_run FROM sanctions_screenings GROUP BY user_id) s ON s.user_id = u.id
+        WHERE u.kyc_status = 'approved'`,
+    ).bind(sqlTs(year)).first<{ stale: number | null; never: number | null }>();
+    return { recorded: true, count: Number(row?.stale ?? 0), never_screened: Number(row?.never ?? 0) };
+  } catch {
+    return { recorded: false, unreadable: true, reason: SCREENING_UNREADABLE };
+  }
+}
 
 export type RenewalFilter = 'all' | 'soon' | 'expired';
 
@@ -119,7 +142,7 @@ export async function kycRenewals(env: Env, opts: { filter?: RenewalFilter; q?: 
       expired: expired.length,
       all: items.length,
       rechecks: { recorded: false, reason: RECHECKS_REASON },
-      screened_over_12: { recorded: false, reason: SCREENING_REASON },
+      screened_over_12: await screeningAge(env, now),
     },
     months,
     filter,
@@ -227,6 +250,8 @@ export const KYC_AUDIT_ACTIONS: Record<string, { word: string; kind: 'look' | 'd
   kyc_bypass_granted: { word: 'Granted without a check', kind: 'decision' },
   kyc_rejected_by_admin: { word: 'Rejected', kind: 'decision' },
   kyc_periods_changed: { word: 'Changed how long checks last', kind: 'decision' },
+  kyc_sent_to_hq: { word: 'Sent to HQ', kind: 'decision' },
+  kyc_hq_decided: { word: 'HQ decided', kind: 'decision' },
 };
 
 const FIELD_LABELS: Record<string, string> = { date_of_birth: 'Date of birth', id_number: 'ID number', address: 'Address', phone: 'Phone' };
@@ -250,6 +275,10 @@ export function auditDetail(action: string, details: unknown): string | null {
     }
     case 'kyc_bypass_granted':
       return 'No submission on file';
+    case 'kyc_hq_decided': {
+      const v = /^HQ (approved|rejected) the/.exec(d)?.[1];
+      return v === 'approved' ? 'Approved' : v === 'rejected' ? 'Rejected' : null;
+    }
     case 'kyc_periods_changed': {
       const parts = [...d.matchAll(/(kyc_v1|kyb_v1|accreditation_v1) (\d+)->(\d+) months/g)]
         .map(([, k, a, b]) => `${PERIOD_LABELS[k as RenewalPeriodKey]}: ${a} → ${b} months`);

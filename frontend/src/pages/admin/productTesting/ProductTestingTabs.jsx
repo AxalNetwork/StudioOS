@@ -461,7 +461,7 @@ const roleNames = (roles) => (Array.isArray(roles) ? roles : [])
 
 export function ProgramTab({ uid, sub = 'overview', api = adminTestingApi }) {
   const programmes = useRead(useCallback(() => api.programmes(), [api]));
-  const applicantsApi = useMemo(() => ({ applicants: api.applicants, pick: api.pick, decline: api.decline }), [api]);
+  const applicantsApi = useMemo(() => ({ applicants: api.applicants, pick: api.pick, decline: api.decline, withdraw: api.withdraw }), [api]);
   if (programmes.status === 'loading' && !programmes.data) return <p className={`p-6 text-sm ${MUTED}`}>{CONSOLE_LOADING}</p>;
   if (programmes.status === 'unreadable') return <ConsoleUnreadable what="This testing program" onRetry={programmes.reload} />;
   const p = (programmes.data?.items || []).find((x) => x.uid === uid);

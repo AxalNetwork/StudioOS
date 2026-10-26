@@ -156,6 +156,7 @@ test('renewals: expired first, then the soonest, over 12 months, with the warnin
     assert.equal(r.body.counts.expire_30.count, 2);
     assert.equal(r.body.counts.expired, 1);
     assert.equal(r.body.counts.rechecks.recorded, false, 'nothing records a re-check yet: not 0');
+    assert.equal(r.body.counts.screened_over_12.recorded, false, 'no screening table: unreadable, never 0');
     assert.equal(r.body.months.length, 12);
     assert.equal(r.body.months.reduce((t: number, m: any) => t + m.people + m.businesses, 0), 3, 'the chart counts what is still to expire');
     assert.deepEqual((await call(env, ADMIN, '/admin/renewals?filter=expired')).body.items.map((i: any) => i.who.name), ['Bea Lapsed']);
@@ -217,6 +218,25 @@ test('auditDetail rebuilds only what this code wrote', () => {
   assert.equal(auditDetail('kyc_field_shown', 'Admin showed password on'), null, 'an unknown field names nothing');
   assert.equal(auditDetail('kyc_document_access', 'Admin viewed KYC document for user_id=3 (legacy D1 storage)'), 'Document (older storage)');
   assert.equal(auditDetail('kyc_rejected_by_admin', 'reason: anything'), null);
+  assert.equal(auditDetail('kyc_hq_decided', 'HQ rejected the KYC case for user_id=3 (1 referral closed)'), 'Rejected');
+  assert.equal(auditDetail('kyc_sent_to_hq', 'Admin sent the KYC case for user_id=3 to HQ (referral #4)'), null, 'the note an admin typed is never in it');
+});
+
+test('screened over 12 months: approved people whose latest screening is older than a year, and never-screened apart', async () => {
+  // Mutation checked: the oldest screening in place of the latest → Ada's recent run is ignored and she counts as stale.
+  const { db, env } = await fixture();
+  try {
+    db.exec(`CREATE TABLE sanctions_screenings (id INTEGER PRIMARY KEY AUTOINCREMENT, user_id INTEGER NOT NULL, provider TEXT NOT NULL,
+      run_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP, hit INTEGER NOT NULL DEFAULT 0, severity TEXT NOT NULL DEFAULT 'none',
+      match_count INTEGER NOT NULL DEFAULT 0, payload_json TEXT, reviewed_by INTEGER, reviewed_at TIMESTAMP, review_notes TEXT)`);
+    const u = db.prepare("INSERT INTO users (id, email, name, role, kyc_status) VALUES (?, ?, ?, 'investor', ?)");
+    u.run(30, 'old@x.test', 'Old Screen', 'approved'); u.run(31, 'mix@x.test', 'Rescreened', 'approved'); u.run(32, 'none@x.test', 'Never', 'approved'); u.run(33, 'p@x.test', 'Pending Old', 'pending');
+    const s = db.prepare("INSERT INTO sanctions_screenings (user_id, provider, run_at) VALUES (?, 'mock', ?)");
+    s.run(30, '2024-01-01 09:00:00'); s.run(31, '2024-01-01 09:00:00'); s.run(31, iso(Date.now() - 10 * DAY)); s.run(33, '2024-01-01 09:00:00');
+    const r = await call(env, ADMIN, '/admin/renewals');
+    // MEMBER (3) is approved and never screened too.
+    assert.deepEqual(r.body.counts.screened_over_12, { recorded: true, count: 1, never_screened: 2 });
+  } finally { db.close(); }
 });
 
 test('the export: a Super Admin at HQ with a reason, recorded first; the file holds names and actions only', async () => {

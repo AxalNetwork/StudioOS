@@ -12,6 +12,7 @@ import { mayReadTrustScores } from '../services/scoreAccess';
  *   POST   /api/trust/obligation/:key/start
  *                                      — retired: authenticated 410; no write
  *   GET    /api/trust/sanctions        — admin-only (stub for X-1)
+ *   POST   /api/trust/sanctions/:id/review — admin, step-up: who reviewed a match, when, and their notes (D1230)
  *
  * The 3-way NDA flow lives in `services/trust.ts` + reuses the existing
  * `esign` envelope/recipients tables (one envelope, three recipient rows).
@@ -19,7 +20,8 @@ import { mayReadTrustScores } from '../services/scoreAccess';
 import { Hono } from 'hono';
 import { stripTrailingSlashes } from '../util/url';
 import type { Env } from '../types';
-import { requireAuth, requireAdmin } from '../auth';
+import { requireAuth, requireAdmin, requireBranchNotSuspended, requireStepUp } from '../auth';
+import { hashEmail } from '../util/hashEmail';
 import {
   ensureTrustSchema,
   seedObligations,
@@ -610,6 +612,49 @@ trust.post('/sanctions/screen/:user_id', async (c) => {
     }
     throw e;
   }
+});
+
+// ---------------------------------------------------------------------------
+// POST /sanctions/:id/review — D1230 (#3238). An admin records that they
+// reviewed a possible match: who, when, and their notes (5 to 2000
+// characters). Only a match is reviewed, and only once; the write is a
+// compliance verdict, so it keeps the KYC verdicts' gates (branch not
+// suspended, recent TOTP step-up). The log names the screening, never the
+// notes or the match.
+// ---------------------------------------------------------------------------
+const REVIEW_NOTES_MIN = 5;
+const REVIEW_NOTES_MAX = 2000;
+trust.post('/sanctions/:id/review', async (c) => {
+  const admin = await requireAdmin(c);
+  await requireBranchNotSuspended(c);
+  await requireStepUp(c);
+  const id = Number(c.req.param('id'));
+  if (!Number.isInteger(id) || id <= 0) return refuse(c, 400, { code: 'invalid_screening', message: 'That is not a screening.', audience: 'admin' });
+  const body = await c.req.json().catch(() => ({} as any));
+  const notes = typeof body?.notes === 'string' ? body.notes.trim() : '';
+  if (notes.length < REVIEW_NOTES_MIN || notes.length > REVIEW_NOTES_MAX) {
+    return refuse(c, 400, { code: 'notes_required', message: `Say what you checked, in ${REVIEW_NOTES_MIN} to ${REVIEW_NOTES_MAX} characters.`, audience: 'admin' });
+  }
+  const row: any = await c.env.DB.prepare(
+    `SELECT s.id, s.user_id, s.hit, s.reviewed_at, s.reviewed_by, u.name AS reviewer_name
+       FROM sanctions_screenings s LEFT JOIN users u ON u.id = s.reviewed_by WHERE s.id = ?`,
+  ).bind(id).first();
+  if (!row) return refuse(c, 404, { code: 'screening_not_found', message: 'This screening does not exist. Nothing was recorded.', audience: 'admin' });
+  if (Number(row.hit) !== 1) return refuse(c, 409, { code: 'not_a_match', message: 'This screening found no match, so there is nothing to review.', audience: 'admin' });
+  const already = () => refuse(c, 409, {
+    code: 'already_reviewed',
+    message: 'This match was already reviewed.',
+    audience: 'admin',
+    extra: { reviewed_at: row.reviewed_at, reviewed_by: row.reviewed_by ? { id: Number(row.reviewed_by), name: row.reviewer_name || null } : null },
+  });
+  const upd: any = await c.env.DB.prepare(
+    `UPDATE sanctions_screenings SET reviewed_by = ?, reviewed_at = CURRENT_TIMESTAMP, review_notes = ?
+      WHERE id = ? AND reviewed_at IS NULL RETURNING reviewed_at`,
+  ).bind(admin.id, notes, id).first();
+  if (!upd) return already();
+  await c.env.DB.prepare('INSERT INTO activity_logs (action, details, actor, user_id) VALUES (?, ?, ?, ?)')
+    .bind('sanctions_match_reviewed', `Admin reviewed sanctions screening #${id} for user_id=${row.user_id}`, await hashEmail(admin.email), admin.id).run();
+  return c.json({ id, user_id: Number(row.user_id), reviewed_by: { id: admin.id, name: admin.name || null }, reviewed_at: upd.reviewed_at, notes });
 });
 
 // ---------------------------------------------------------------------------

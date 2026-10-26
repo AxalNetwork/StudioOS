@@ -9,6 +9,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
+  FUND_SECTIONS,
   parseUseOfFundsValue,
   normalizeUseOfFunds,
   formatUseOfFundsText,
@@ -32,16 +33,31 @@ test('parseUseOfFundsValue: JSON-first with colon labels and drop-zero', () => {
   ]);
 });
 
-test('parseUseOfFundsValue: caps at 5 sections', () => {
+test('D1174: unknown sections are not a recorded split', () => {
   const six = Array.from({ length: 6 }, (_, i) => ({ label: `S${i}`, pct: 10 }));
-  assert.equal(parseUseOfFundsValue(JSON.stringify(six)).length, 5);
+  assert.deepEqual(parseUseOfFundsValue(JSON.stringify(six)), []);
 });
 
-test('parseUseOfFundsValue: legacy free-text fallback', () => {
-  assert.deepEqual(parseUseOfFundsValue('Eng 55%, GTM 30%, Ops 15%'), [
-    { label: 'Eng', pct: 55 },
-    { label: 'GTM', pct: 30 },
-    { label: 'Ops', pct: 15 },
+test('D1174: legacy text needs canonical labels; unknown labels stay unrecorded', () => {
+  const five = FUND_SECTIONS.map((s) => ({ label: s.label, pct: 20 }));
+  for (const separator of [', ', '; ', '\n']) assert.deepEqual(parseUseOfFundsValue(five.map((s) => `${s.label} ${s.pct}%`).join(separator)), five);
+  assert.deepEqual(parseUseOfFundsValue('Eng 55%, GTM 30%, Ops 15%'), []);
+  for (const text of ['Product & engineering 150%', 'Product & engineering 100%; unreadable row']) assert.deepEqual(parseUseOfFundsValue(text), []);
+  assert.deepEqual(parseUseOfFundsValue('Product & engineering 60%; GTM: sales and marketing 40%'), [
+    { label: 'Product & engineering', pct: 60 }, { label: 'GTM: sales and marketing', pct: 40 },
+  ]);
+});
+
+ test('D1174: one canonical key reader rejects malformed, duplicate, unknown and incomplete splits', () => {
+  for (const value of ['[', '[]', '[null]', '[{"label":"Other","pct":100}]',
+    '[{"key":"other","label":"Product & engineering","pct":100}]',
+    '[{"key":"product","pct":50}]', '[{"key":"product","pct":50},{"key":"product","pct":50}]',
+    '[{"key":"product","pct":0},{"key":"product","pct":100}]',
+    '[{"key":"product","pct":[100]}]', '[{"key":"product","pct":null}]', '[{"key":"product","pct":true}]', '[{"key":"product","pct":""}]']) {
+    assert.deepEqual(parseUseOfFundsValue(value), [], value);
+  }
+  assert.deepEqual(parseUseOfFundsValue('[{"key":"reserve","pct":30},{"key":"product","pct":70}]'), [
+    { label: 'Product & engineering', pct: 70 }, { label: 'Hiring / runway reserve', pct: 30 },
   ]);
 });
 
@@ -92,12 +108,12 @@ test('normalizeUseOfFunds: legacy free-text passes through unchanged', () => {
   });
 });
 
-test('formatUseOfFundsText: JSON → readable, free-text passthrough, empty → ""', () => {
+test('formatUseOfFundsText: canonical JSON → readable; unknown text and empty → ""', () => {
   assert.equal(
     formatUseOfFundsText(CANON),
     'Product & engineering 45%; GTM: sales and marketing 30%; Infrastructure & data 25%',
   );
-  assert.equal(formatUseOfFundsText('Eng 60%, GTM 40%'), 'Eng 60%, GTM 40%');
+  assert.equal(formatUseOfFundsText('Eng 60%, GTM 40%'), '');
   assert.equal(formatUseOfFundsText(''), '');
   assert.equal(formatUseOfFundsText(null), '');
 });

@@ -571,12 +571,12 @@ test('each IN-list has exactly as many placeholders as the array that fills it',
   };
   assert.equal(marks('FEED_ACTIVITY_ACTOR_SIDE_SQL'), arrayLen('ACTOR_SIDE_ACTIONS'));
   // D625 — the three identity reads join the actor-side feed, and the length is pinned.
-  // D1232 (#3240) — and the KYC value shown, renewals, audit and period changes.
-  assert.equal(arrayLen('ACTOR_SIDE_ACTIONS'), 17);
+  // D1232 (#3240) — and the KYC value shown, renewals, audit, period changes, and D1230's Send to HQ and decision.
+  assert.equal(arrayLen('ACTOR_SIDE_ACTIONS'), 19);
   const actionsAt = src.indexOf('const ACTOR_SIDE_ACTIONS = [');
   const actionsEnd = src.indexOf('];', actionsAt);
   const actions = src.slice(actionsAt, actionsEnd);
-  for (const name of ['kyc_record_access', 'kyc_queue_access', 'partner_profile_access', 'kyc_field_shown', 'kyc_renewals_access', 'kyc_audit_access', 'kyc_periods_changed']) {
+  for (const name of ['kyc_record_access', 'kyc_queue_access', 'partner_profile_access', 'kyc_field_shown', 'kyc_renewals_access', 'kyc_audit_access', 'kyc_periods_changed', 'kyc_sent_to_hq', 'kyc_hq_decided']) {
     assert.equal(actions.includes(`'${name}'`), true, name);
   }
   assert.equal(marks('FEED_ACTIVITY_SUSPENSIONS_SQL'), arrayLen('SUSPENSION_ACTIVITY_ACTIONS'));
