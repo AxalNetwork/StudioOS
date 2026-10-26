@@ -1688,9 +1688,11 @@ deals.post('/:id/dealroom/join', async (c) => {
   }
   const dealId = Number(c.req.param('id'));
   if (!Number.isFinite(dealId)) return c.json({ error: 'bad_id' }, 400);
-  // D614: a room belongs to a deal. Joining one that does not exist wrote a
-  // membership row, which then counted against the investor's room quota.
-  const deal = await c.env.DB.prepare(`SELECT id FROM deals WHERE id = ?`).bind(dealId).first<{ id: number }>();
+  // D1237 review: request only a live room, matching the panel and the list's
+  // project-deletion filter. Unavailable and unknown deals share a refusal.
+  const deal = await c.env.DB.prepare(`SELECT d.id FROM deals d LEFT JOIN projects p ON p.id = d.project_id
+    WHERE d.id = ? AND d.status IN ('applied', 'scored', 'active', 'funded')
+      AND (p.id IS NULL OR p.deleted_at IS NULL)`).bind(dealId).first<{ id: number }>();
   if (!deal) return c.json({ error: 'deal_not_found' }, 404);
 
   const companyId = await investorActiveCompany(c, user);

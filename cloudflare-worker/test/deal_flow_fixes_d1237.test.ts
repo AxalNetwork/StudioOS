@@ -86,6 +86,29 @@ test('the INSERT protects the last Free slot even when the earlier count is stal
   }finally{f.db.close();}
 });
 
+test('requests accept the panel’s live stages and refuse rejected, deleted and unknown deals without a write',async()=>{
+  for(const who of [1,2]) {
+    const f=fixture();try {
+      for(const status of ['applied','scored','active','funded']) {
+        f.db.prepare('UPDATE deals SET status=? WHERE id=101').run(status);
+        assert.equal((await call(f,who,'POST','/101/dealroom/join',10)).status,200,status);
+        await call(f,who,'DELETE','/101/dealroom/leave',10);
+      }
+      f.db.exec('DELETE FROM activity_logs');
+      f.db.exec("UPDATE deals SET status='rejected' WHERE id=101");
+      const rejected=await call(f,who,'POST','/101/dealroom/join',10);
+      f.db.exec("UPDATE deals SET status='active' WHERE id=101; UPDATE projects SET deleted_at=datetime('now') WHERE id=10");
+      const deleted=await call(f,who,'POST','/101/dealroom/join',10);
+      const unknown=await call(f,who,'POST','/999/dealroom/join',10);
+      for(const result of [rejected,deleted,unknown]) {
+        assert.equal(result.status,404);assert.deepEqual(result.body,{error:'deal_not_found'});
+      }
+      assert.deepEqual(rows(f,who),[]);
+      assert.equal(f.db.prepare('SELECT COUNT(*) n FROM activity_logs').get()!.n,0);
+    }finally{f.db.close();}
+  }
+});
+
 test('a UNIQUE race rechecks the stored firm instead of claiming another firm’s request',async()=>{
   const f=fixture();try {
     const prepare=f.env.DB.prepare.bind(f.env.DB);let raced=false;
