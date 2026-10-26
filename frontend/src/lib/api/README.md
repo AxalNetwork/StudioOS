@@ -286,6 +286,10 @@ D780 (#2105): `railProposals.js` lists the caller's own drafts, proposals and
 notes from a rail option's run (`ai_rail_proposals`, migration 506) and decides
 one: accept, edit or discard. Deciding writes no record; the page's own Save does.
 
+D1301 (#3397): `adminAccounts.js` reads Admin › Accounts' overview
+(`GET /admin/accounts/overview`), counted as Insights counts through the
+Worker's shared `cloudflare-worker/src/services/accountCounts.ts`.
+
 D893 (#2660): `insights.js` reads Admin › Insights' one read,
 `insightsApi.adminInsights(params)` (`GET /api/admin/insights`, any admin): every
 block of the canvas as counts, filtered by range, profile and country, with the
