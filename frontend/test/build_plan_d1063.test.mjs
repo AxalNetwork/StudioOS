@@ -16,17 +16,20 @@ import React, { act } from 'react';
 import { createRoot } from 'react-dom/client';
 import { MemoryRouter } from 'react-router-dom';
 import { installDocument } from './_contracts_dom.mjs';
-import { NOT_YET, PLAN_TABS, PROVED, SECTIONS, planHref, planSearch, provedCards } from '../src/pages/cycles/buildPlanModel.js';
+import { PLAN_TABS, PROVED, SECTIONS, planHref, planSearch, provedCards } from '../src/pages/cycles/buildPlanModel.js';
 import BuildPlan, { BuildPlanDoor } from '../src/pages/cycles/BuildPlan.jsx';
 import { cyclesApi } from '../src/lib/api/cycles.js';
+import { buildPlanApi } from '../src/lib/api/buildPlan.js';
 
 const read = (p) => readFileSync(resolve(process.cwd(), p), 'utf8');
 const h = React.createElement;
 
-test('the plan\'s addresses keep only the venture; the four Validate cards in order; every Build module but Founding team takes proposals', () => {
+test('the plan\'s addresses keep only the venture and its scope; the four Validate cards in order; every Build module but Founding team takes proposals', () => {
   assert.deepEqual(PLAN_TABS.map((t) => t.path), ['/build/plan', '/build/plan/progress']);
   assert.equal(planSearch('?project_id=7&x=1'), '?project_id=7');
   assert.equal(planSearch('?project_id=abc'), '');
+  assert.equal(planSearch('?project_id=7&scope=h-3&x=1'), '?project_id=7&scope=h-3', 'D1069: a one-claim plan keeps its scope');
+  assert.equal(planSearch('?project_id=7&scope=h-x'), '?project_id=7');
   assert.equal(planHref('progress', '?project_id=7'), '/build/plan/progress?project_id=7');
   const overview = { cards: [{ slug: 'demand-signals' }, { slug: 'verdict' }, { slug: 'problem-discovery' }, { slug: 'customer-research' }, { slug: 'experiments' }] };
   assert.deepEqual(provedCards(overview).map((c) => c.slug), ['problem-discovery', 'experiments', 'demand-signals'], 'in order; a card not sent is left out; no other module');
@@ -50,6 +53,11 @@ function harness() {
 test('mounted plan: What Validate proved from the Validate overview, each module waiting, Progress waiting, a failed read said', async () => {
   const t = harness();
   const was = cyclesApi.overview;
+  const plans = { ...buildPlanApi };
+  // D1069: the plan's own read answers no plan yet; part 6 draws what it holds (build_plan_d1069.test.mjs).
+  buildPlanApi.read = async () => ({ plan: null, modules: {}, brief: null, verdict: null });
+  buildPlanApi.wording = async () => ({ wording: null });
+  buildPlanApi.since = async () => ({ plan: null, status: null, changed: null, new: null, contradicting: null });
   const calls = [];
   cyclesApi.overview = async (...a) => {
     calls.push(a);
@@ -66,9 +74,7 @@ test('mounted plan: What Validate proved from the Validate overview, each module
     const proved = t.text(t.byId('plan-proved'));
     assert.match(proved, /What Validate proved.*Problem discovery.*No pain theme accepted yet.*Demand and urgency signals/s);
     assert.doesNotMatch(proved, /Customer research/, 'only the four modules the plan rests on');
-    for (const s of SECTIONS) assert.ok(t.text(t.byId(`plan-section-${s.slug}`)).startsWith(`${s.name}${NOT_YET}`), s.slug);
-    assert.match(t.text(t.byId('plan-wait')), /not a claim that there is nothing to build/);
-    assert.match(t.text(t.byId('plan-founding-team')), /Founding team takes no proposals/);
+    assert.match(t.text(t.byId('plan-unprepared')), /No plan is prepared yet.*Prepare the plan/s, 'D1069: no plan is said, never a module of zeros');
     assert.equal(t.props(t.byId('plan-tab-progress')).href, '/build/plan/progress?project_id=7');
     assert.equal(t.props(t.byId('plan-tab-plan'))['aria-current'], 'page');
     await at('progress', h(BuildPlan, { tab: 'progress', projectId: 7, search: '?project_id=7', cards: [] }));
@@ -77,10 +83,10 @@ test('mounted plan: What Validate proved from the Validate overview, each module
     cyclesApi.overview = async () => { throw new Error('down'); };
     await at('down', h(BuildPlan, { tab: 'plan', projectId: 8, search: '', cards: [] }));
     assert.match(t.text(t.byId('plan-proved')), /not a claim that nothing was proved/);
-    assert.ok(t.byId('plan-section-prototype-mvp'), 'one failed read never blanks the page');
+    assert.ok(t.byId('plan-unprepared'), 'one failed read never blanks the page');
     await at('door', h(BuildPlanDoor, { search: '?project_id=7&tab=x' }));
     assert.equal(t.props(t.walk(t.byId('build-plan-door')).find((n) => n.tagName === 'A')).href, '/build/plan?project_id=7');
-  } finally { cyclesApi.overview = was; await t.close(); }
+  } finally { cyclesApi.overview = was; Object.assign(buildPlanApi, plans); await t.close(); }
 });
 
 test('wiring: the routes sit ahead of /build/:slug, CycleRoute draws the plan with no Build overview read, the overview opens the plan, and the canvas is in', () => {
@@ -94,7 +100,7 @@ test('wiring: the routes sit ahead of /build/:slug, CycleRoute draws the plan wi
   assert.match(route, /\} else if \(buildPlan && cycle === 'build'\) \{/);
   assert.match(route, /if \(record \|\| slug \|\| reporting \|\| buildPlan \|\| !projectId \|\| !def\) return undefined;/);
   assert.match(route, /\{cycle === 'build' && <BuildPlanDoor search=\{q\} \/>\}/);
-  for (const f of ['frontend/src/pages/cycles/BuildPlan.jsx', 'frontend/src/pages/cycles/buildPlanModel.js']) {
+  for (const f of ['frontend/src/pages/cycles/BuildPlan.jsx', 'frontend/src/pages/cycles/BuildPlanCards.jsx', 'frontend/src/pages/cycles/buildPlanModel.js']) {
     assert.doesNotMatch(read(f), /window\.(alert|confirm)|\balert\(|\bconfirm\(/, f);
   }
   assert.ok(read('design/incoming/Validate → Build · Boards.dc.html').includes('VB22'));

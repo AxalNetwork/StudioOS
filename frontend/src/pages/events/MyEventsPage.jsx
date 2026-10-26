@@ -17,16 +17,22 @@ import { useToast } from '../../components/useToast';
 import PageExplainer from '../../components/PageExplainer';
 import EventQRCode from '../../components/events/EventQRCode';
 import { Unreadable } from '../../ui';
+import { Lightbox } from '../../ui';
 import { usePhoneWidth } from '../../ui/phone/usePhoneWidth';
 import { AccountPhonePage, phonePending } from '../account/AccountPhonePage';
 import { ACCOUNT_PHONE_PAGES } from '../account/accountPhone';
 import {
-  EXPLORER_LINE, LINE, NOT_READ, REPLAY_LINE, TITLE,
-  JOIN_LEAD_MS, joinState, seatSourceLabel, dateBlock, discoverAction, goingGroups, hostAction, hostingGroups, hostingSoon, isExplorer, needsYou, nextEvent,
-  pastRows, placeOf, priceOf, splitTickets, statusOf, tabCounts, tabHref, tabOf, tabsFor, timeLine, visibilityWord, whereOf as eventWhere,
+  EXPLORER_LINE, LINE, TITLE,
+  JOIN_LEAD_MS, joinState, seatSourceLabel, goingGroups, hostAction, hostingSoon, isExplorer, nextEvent,
+  placeOf, splitTickets, statusOf, tabHref, tabOf, tabsFor, timeLine,
 } from './myEventsModel';
 import { MY_EVENTS_OPEN_TO_EXPLORERS, drawerOf, hostedPath, tabUnder, ticketPath } from './eventDrawersModel';
 import { ExplorerClosedCard, HostedDrawer, PublishDialog, TicketDrawer } from './MyEventsDrawers';
+import { EMPTY, HOST_DEFAULTS, calendarItems, monthOf, needsYouRows, onDay, tabCountsFull } from './myEventsTabsModel';
+import {
+  AddToCalendar, CARD, DiscoverTabFull, EmptyCard, EventLine, HostCountsLine, HostingList, InvitationDialog, MiniCalendar, MonthView, NeedsYouCard,
+  PastTabFull, Pill, RowMenu, Segmented, Skeleton, SubscribeCard, SubscribeDialog, placeMenu,
+} from './MyEventsTabs';
 
 const STATUS_STYLES = {
   draft: 'bg-gray-100 text-gray-700 dark:bg-gray-800 dark:text-gray-300',
@@ -185,7 +191,8 @@ export default function MyEventsPage() {
     setLoading(true);
     setLoadError('');
     try {
-      const res = await eventsApi.list();
+      // D1034: Past reads 100 places at a time (D1032's ceiling), so its chart and years count what is there.
+      const res = await eventsApi.list({ pastLimit: PAST_READ });
       setHosting(Array.isArray(res?.hosting) ? res.hosting : (Array.isArray(res) ? res : []));
       setAttending(Array.isArray(res?.attending) ? res.attending : []);
       setPast(res?.past && Array.isArray(res.past.places) ? res.past : null);
@@ -200,8 +207,34 @@ export default function MyEventsPage() {
 
   useEffect(() => { load(); }, [load]);
   const suggested = useSuggestedEvents();
+  // D1034: my pending invitations (D1032) and whether Subscribe is set up (D1033), each its own read.
+  const invitations = useOwnRead(() => eventsApi.invitations());
+  const feed = useOwnRead(() => eventsApi.feedStatus());
   const phone = usePhoneWidth();
   const navigate = useNavigate();
+  const [answer, setAnswer] = useState(null);
+  const [subscribing, setSubscribing] = useState(false);
+  const [older, setOlder] = useState(null);
+  const api = {
+    publicList: (p) => eventsPublic.list(p),
+    eligibility: (id) => eventsApi.eligibility(id),
+    register: (id) => eventsApi.register(id),
+    answerInvitation: (id, action) => eventsApi.answerInvitation(id, action),
+    calendarLinks: (id) => eventsApi.calendarLinks(id),
+    makeFeed: () => eventsApi.makeFeed(),
+    removeFeed: () => eventsApi.removeFeed(),
+  };
+  const changed = (line) => { load(); invitations.reload(); showToast({ kind: 'ok', msg: line }); };
+  const readOlder = async () => {
+    if (!past) { load(); return; }
+    setOlder('loading');
+    try {
+      const res = await eventsApi.list({ pastLimit: PAST_READ, pastOffset: past.places.length });
+      const more = Array.isArray(res?.past?.places) ? res.past.places : [];
+      setPast({ ...past, places: [...past.places, ...more], total: res?.past?.total ?? past.total });
+      setOlder(null);
+    } catch { setOlder('error'); }
+  };
 
   // D1035: the drawer the address names, over the tab it opens from. Closing
   // goes back to that tab; a change made inside closes it, re-reads the list
@@ -246,9 +279,10 @@ export default function MyEventsPage() {
   // MEV17b: only if the owner closes My events to Explorers (D1030 opened it to them).
   if (explorer && !MY_EVENTS_OPEN_TO_EXPLORERS) return <ExplorerClosedCard />;
   const tab = tabOf(location.pathname);
-  const counts = tabCounts({ attending, hosting, ok: !loading && !loadError });
+  const counts = tabCountsFull({ attending, hosting: explorer ? [] : hosting, past, ok: !loadError, loading });
   const held = new Set(attending.map((t) => t.id));
   const tips = Array.isArray(suggested.data?.events) ? suggested.data.events : [];
+  const invites = invitations.status === 'ready' && Array.isArray(invitations.data?.invitations) ? invitations.data.invitations : [];
 
   return (
     <div className="mx-auto max-w-6xl px-4 py-6" data-testid="my-events">
@@ -278,14 +312,18 @@ export default function MyEventsPage() {
 
       <nav aria-label="Events" className="mt-4 flex gap-1 overflow-x-auto border-b border-axal-hairline dark:border-gray-700" data-testid="my-events-tabs">
         {tabsFor(user).map((t) => {
-          const n = counts[t.key];
+          const c = counts[t.key];
           return (
             <Link key={t.key} to={tabHref(t)} aria-current={t.key === tab ? 'page' : undefined}
               className={`-mb-px whitespace-nowrap border-b-2 px-3 py-2.5 text-[12.5px] ${t.key === tab
                 ? 'border-axal-violet font-extrabold text-axal-ink dark:border-violet-400 dark:text-gray-100'
                 : 'border-transparent font-semibold text-axal-muted hover:text-axal-ink dark:text-gray-400 dark:hover:text-gray-100'}`}
               data-testid={`my-events-tab-${t.key}`}>
-              {t.label}{t.key === 'discover' ? '' : <span className="ml-1.5 font-mono text-[11px]">{n == null ? '—' : n}</span>}
+              {t.label}{t.key === 'discover' || !c ? '' : (
+                <span className="ml-1.5 font-mono text-[11px]" title={c.why || undefined} data-testid={`my-events-count-${t.key}`}>
+                  {c.value == null ? '—' : c.value}{c.why && c.value == null ? <span className="sr-only"> ({c.why})</span> : null}
+                </span>
+              )}
             </Link>
           );
         })}
@@ -293,7 +331,8 @@ export default function MyEventsPage() {
 
       <div className="mt-4">
         {tab === 'discover' ? (
-          <DiscoverTab held={held} suggested={tips} suggestionsRead={suggested} />
+          <DiscoverTabFull api={api} held={held} invitations={invites} suggested={tips} suggestionsRead={suggested} now={now}
+            onRegistered={changed} onAccept={(inv) => setAnswer({ invitation: inv, action: 'accept' })} />
         ) : loading ? (
           <Reading />
         ) : loadError ? (
@@ -301,139 +340,166 @@ export default function MyEventsPage() {
             <Unreadable what="Your events" claim="That is not the same as having none." onRetry={load} />
           </div>
         ) : tab === 'hosting' && !explorer ? (
-          <HostingTab hosting={hosting} now={now} admin={String(user?.role || '').toLowerCase() === 'admin'} onDone={(line) => { load(); showToast({ kind: 'ok', msg: line }); }} />
+          <HostingTab hosting={hosting} now={now} admin={String(user?.role || '').toLowerCase() === 'admin'} onDone={(line) => { load(); showToast({ kind: 'ok', msg: line }); }}
+            onCopy={(path) => copyLink(path, showToast)} onCancel={(e) => navigate(hostedPath(e.id))} />
         ) : tab === 'past' ? (
-          <PastTab attending={attending} hosting={explorer ? [] : hosting} />
+          <PastTabFull past={past} hosting={explorer ? [] : hosting} now={now} onOlder={readOlder} older={older} onRetry={load} />
         ) : (
-          <UpcomingTab attending={attending} hosting={explorer ? [] : hosting} suggested={tips} suggestionsRead={suggested} explorer={explorer} now={now} />
+          <UpcomingTab attending={attending} hosting={explorer ? [] : hosting} invitations={invites} invitationsRead={invitations} feed={feed}
+            suggested={tips} suggestionsRead={suggested} explorer={explorer} now={now} api={api}
+            onAnswer={(inv, action) => setAnswer({ invitation: inv, action })} onSubscribe={() => setSubscribing(true)}
+            onPick={(t, it) => (it.key === 'ticket' || it.key === 'cancel' ? navigate(ticketPath(t.id)) : null)} />
         )}
       </div>
 
+      {answer ? <InvitationDialog answer={answer} api={api} onClose={() => setAnswer(null)} onDone={(line) => { setAnswer(null); changed(line); }} /> : null}
+      {subscribing ? <SubscribeDialog read={feed} api={api} onClose={() => setSubscribing(false)} onChanged={feed.reload} /> : null}
       {drawerEl}
       {toastEl}
     </div>
   );
 }
 
-const CARD = 'rounded-xl border border-axal-hairline bg-white dark:border-gray-800 dark:bg-gray-900';
-const INK = 'text-axal-ink dark:text-gray-100';
+/** D1034: Past reads this many places at a time, D1032's ceiling. */
+const PAST_READ = 100;
+
+/** A read of its own, with a retry: a failed one never blanks the page. */
+function useOwnRead(fn) {
+  const [state, setState] = useState({ status: 'loading', data: null });
+  const [revision, setRevision] = useState(0);
+  useEffect(() => {
+    let alive = true;
+    setState({ status: 'loading', data: null });
+    Promise.resolve().then(fn)
+      .then(data => { if (alive) setState({ status: 'ready', data }); })
+      .catch(() => { if (alive) setState({ status: 'error', data: null }); });
+    return () => { alive = false; };
+  }, [revision]);
+  return { ...state, reload: () => setRevision(n => n + 1) };
+}
+
+/** Copy link: the event's public address, through the clipboard; a refused copy says so. */
+function copyLink(path, showToast) {
+  const url = `${typeof window !== 'undefined' && window.location ? window.location.origin : ''}${path}`;
+  Promise.resolve().then(() => navigator.clipboard.writeText(url))
+    .then(() => showToast({ kind: 'ok', msg: 'The event’s link is copied.' }))
+    .catch(() => showToast({ kind: 'error', msg: `The link could not be copied. It is ${url}` }));
+}
+
 const MUTED = 'text-axal-muted dark:text-gray-400';
 const EYEBROW = 'text-[10.5px] font-extrabold uppercase tracking-[.07em] text-axal-muted dark:text-gray-400';
 const LINK = 'font-semibold text-axal-violet hover:text-axal-violet-deep dark:text-violet-300 dark:hover:text-violet-200';
-const TONES = {
-  good: 'border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-900 dark:bg-emerald-950/30 dark:text-emerald-300',
-  warn: 'border-amber-200 bg-amber-50 text-amber-800 dark:border-amber-900 dark:bg-amber-950/30 dark:text-amber-300',
-  bad: 'border-red-200 bg-red-50 text-red-700 dark:border-red-900 dark:bg-red-950/30 dark:text-red-300',
-  muted: 'border-axal-hairline bg-axal-ground text-axal-muted dark:border-gray-700 dark:bg-gray-800 dark:text-gray-400',
-};
-
-function Pill({ tone = 'muted', children, testId }) {
-  return <span className={`inline-flex w-fit items-center rounded-full border px-2 py-0.5 text-[11px] font-bold ${TONES[tone] || TONES.muted}`} data-testid={testId}>{children}</span>;
-}
-
-function Reading() {
-  return <div className="h-28 w-full animate-pulse rounded-xl bg-axal-ground dark:bg-gray-800" aria-label="Reading…" data-testid="my-events-loading" />;
-}
-
-/** The 58px date tile: "NOV" over "14" over "THU". */
-function DateTile({ event }) {
-  const d = dateBlock(event);
-  return (
-    <div className="flex w-[58px] shrink-0 flex-col items-center rounded-[10px] border border-axal-hairline py-1.5 font-mono dark:border-gray-700">
-      {d ? (<>
-        <span className={`text-[10px] font-bold ${MUTED}`}>{d.month}</span>
-        <span className={`text-[20px] font-extrabold leading-none ${INK}`}>{d.day}</span>
-        <span className={`text-[10px] ${MUTED}`}>{d.weekday}</span>
-      </>) : <span className={`px-1 text-center text-[10px] ${MUTED}`}>No date</span>}
-    </div>
-  );
-}
-
+const INK = 'text-axal-ink dark:text-gray-100';
 const viewerZone = () => { try { return Intl.DateTimeFormat().resolvedOptions().timeZone; } catch { return null; } };
 
-function EventLine({ event, to, children }) {
+/** MEV15: the tab while its read is out, as the canvas's grey bars. */
+function Reading() {
   return (
-    <div className="flex min-w-0 items-start gap-3">
-      <DateTile event={event} />
-      <div className="flex min-w-0 flex-col gap-0.5">
-        {to
-          ? <Link to={to} className={`truncate text-[14px] font-extrabold hover:text-axal-violet ${INK}`} data-testid="my-events-open-drawer">{event.title || 'Not recorded'}</Link>
-          : <span className={`truncate text-[14px] font-extrabold ${INK}`}>{event.title || 'Not recorded'}</span>}
-        <span className={`text-[12px] ${MUTED}`}>{timeLine(event, viewerZone())}</span>
-        <span className={`inline-flex items-center gap-1 text-[12px] ${MUTED}`}><MapPin size={12} /> {eventWhere(event)}</span>
-        {children}
-      </div>
+    <div className="grid gap-4 lg:grid-cols-3" aria-label="Reading…" data-testid="my-events-loading">
+      <div className="flex flex-col gap-3.5 lg:col-span-2"><Skeleton lines={3} /><Skeleton lines={5} /></div>
+      <div className="flex flex-col gap-3.5"><Skeleton lines={5} /><Skeleton lines={3} /></div>
     </div>
   );
 }
 
-function UpcomingTab({ attending, hosting, suggested, suggestionsRead, explorer, now }) {
+function UpcomingTab({ attending, hosting, invitations, invitationsRead, feed, suggested, suggestionsRead, explorer, now, api, onAnswer, onSubscribe, onPick }) {
+  const zone = viewerZone();
   const { upcoming } = splitTickets(attending, now);
   const next = nextEvent(upcoming);
-  const rest = upcoming.filter((t) => t !== next);
-  const needs = needsYou(hosting, attending, now);
+  const [chosen, setChosen] = useState(null);
+  const [monthPick, setMonthPick] = useState(null);
+  const [view, setView] = useState('List');
+  const [adding, setAdding] = useState(null);
+  const month = monthPick || monthOf(now, zone);
+  const rest = onDay(upcoming.filter((t) => t !== next), chosen, zone);
+  const needs = needsYouRows({ hosting, attending, invitations, now });
   const soon = hostingSoon(hosting, now);
-  return (
-    <div className="grid gap-4 lg:grid-cols-3">
-      <div className="flex flex-col gap-3.5 lg:col-span-2">
-        {needs.length ? (
-          <section className={CARD} data-testid="my-events-needs">
-            <h2 className={`m-0 border-b border-axal-hairline px-4 py-3 text-[15px] font-extrabold dark:border-gray-800 ${INK}`}>Needs you</h2>
-            {needs.slice(0, 4).map((n) => (
-              <div key={n.key} className="flex flex-wrap items-center justify-between gap-2 border-b border-axal-ground px-4 py-2.5 last:border-b-0 dark:border-gray-800" data-testid="my-events-needs-row">
-                <span className="flex items-center gap-2 text-[12.5px]"><Pill tone={n.tone || 'bad'}>{n.pill}</Pill> <span className={INK}>{n.text}</span></span>
-                <Link className={`${LINK} text-[12.5px]`} to={n.action.to}>{n.action.label}</Link>
-              </div>
-            ))}
-          </section>
-        ) : null}
-        <section className={`${CARD} p-4`} data-testid="my-events-next">
-          <h2 className={`m-0 mb-3 ${EYEBROW}`}>Your next event</h2>
-          {next ? <NextEvent ticket={next} now={now} /> : (
-            <p className={`m-0 text-[13px] ${MUTED}`} data-testid="my-events-nothing">Nothing coming up. <Link className={LINK} to={tabHref({ path: '/discover' })}>Find an event in Discover.</Link></p>
-          )}
-        </section>
-        {rest.length ? (
-          <section className={`${CARD} p-4`} data-testid="my-events-going">
-            <h2 className={`m-0 mb-2 text-[15px] font-extrabold ${INK}`}>Going</h2>
-            {goingGroups(rest, now).map((g) => (
-              <div key={g.key} className="mt-2 flex flex-col gap-2">
-                <span className={EYEBROW}>{g.label}</span>
-                {g.rows.map((t) => {
-                  const place = placeOf(t);
-                  return (
-                    <div key={t.id} className="flex flex-wrap items-center justify-between gap-2" data-testid="my-events-going-row">
-                      <EventLine event={t}><Pill tone={place.tone}>{place.label}</Pill></EventLine>
-                      <Link className={`${LINK} text-[12px]`} to={ticketPath(t.id)} data-testid="my-events-show-ticket">Show ticket</Link>
-                    </div>
-                  );
-                })}
-              </div>
-            ))}
-          </section>
-        ) : null}
-        {!explorer && soon.length ? (
-          <section className={`${CARD} p-4`} data-testid="my-events-hosting-soon">
-            <h2 className={`m-0 mb-2 text-[15px] font-extrabold ${INK}`}>Hosting soon</h2>
-            {soon.map((e) => {
-              const st = statusOf(e);
-              const act = hostAction(e, now);
-              return (
-                <div key={e.id} className="mt-2 flex flex-wrap items-center justify-between gap-2" data-testid="my-events-hosting-soon-row">
-                  <EventLine event={e} to={hostedPath(e.id)}><Pill tone={st.tone}>{st.label}</Pill></EventLine>
-                  {act.to ? <Link className={`${LINK} text-[12px]`} to={act.to}>{act.label}</Link>
-                    : act.dialog ? <Link className={`${LINK} text-[12px]`} to={hostedPath(e.id)}>{act.label}</Link>
-                      : <span className={`text-[12px] ${MUTED}`}>{act.note}</span>}
-                </div>
-              );
-            })}
-            <p className={`m-0 mt-2 text-[11.5px] ${MUTED}`}>Seats, waitlist and approvals per event: {NOT_READ}.</p>
-          </section>
-        ) : null}
-      </div>
+  const items = calendarItems({ upcoming, hosting, invitations, now });
+  const toggle = <Segmented options={['List', 'Month']} value={view} onChange={setView} label="Show as" testId="my-events-going-view" />;
+  const pick = (t, it) => (it.key === 'calendar' ? setAdding(t) : onPick(t, it));
+  if (view === 'Month') {
+    return (
       <div className="flex flex-col gap-3.5">
-        <SuggestedCard events={suggested.slice(0, 3)} read={suggestionsRead} explorer={explorer} />
+        <NeedsYouCard needs={needs} onAnswer={onAnswer} />
+        <MonthView month={month} setMonth={setMonthPick} items={explorer ? items.filter((x) => x.kind !== 'hosting') : items} now={now} zone={zone} api={api} onSubscribe={onSubscribe} toggle={toggle} />
       </div>
+    );
+  }
+  const nothing = !upcoming.length && !soon.length && !needs.rows.length;
+  return (
+    <div className="flex flex-col gap-3.5">
+      <NeedsYouCard needs={needs} onAnswer={onAnswer} />
+      {invitationsRead.status === 'error' ? (
+        <div className={`${CARD} p-3`} data-testid="my-events-invitations-unreadable"><Unreadable what="Your invitations" claim="This is not a claim that you have none." onRetry={invitationsRead.reload} /></div>
+      ) : null}
+      <div className="grid gap-4 lg:grid-cols-3">
+        <div className="flex flex-col gap-3.5 lg:col-span-2">
+          {nothing ? <EmptyCard copy={EMPTY.upcoming} to={tabHref({ path: '/discover' })} testId="my-events-nothing" /> : (
+            <section className={`${CARD} p-4`} data-testid="my-events-next">
+              <h2 className={`m-0 mb-3 ${EYEBROW}`}>Your next event</h2>
+              {next ? <NextEvent ticket={next} now={now} /> : (
+                <p className={`m-0 text-[13px] ${MUTED}`}>Nothing coming up. <Link className={LINK} to={tabHref({ path: '/discover' })}>Find an event in Discover.</Link></p>
+              )}
+            </section>
+          )}
+          {upcoming.length > (next ? 1 : 0) ? (
+            <section className={`${CARD} p-4`} data-testid="my-events-going">
+              <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
+                <h2 className={`m-0 text-[15px] font-extrabold ${INK}`}>Going</h2>
+                {toggle}
+              </div>
+              {rest.length === 0 ? <p className={`m-0 text-[12.5px] ${MUTED}`} data-testid="my-events-going-day-none">Nothing else on that day.</p> : goingGroups(rest, now).map((g) => (
+                <div key={g.key} className="mt-2 flex flex-col gap-2">
+                  <span className={EYEBROW}>{g.label}</span>
+                  {g.rows.map((t) => {
+                    const place = placeOf(t);
+                    return (
+                      <div key={t.id} className="flex flex-wrap items-center justify-between gap-2" data-testid="my-events-going-row">
+                        <EventLine event={t}><Pill tone={place.tone}>{place.label}</Pill></EventLine>
+                        <span className="flex items-center gap-2">
+                          <Link className={`${LINK} text-[12px]`} to={ticketPath(t.id)} data-testid="my-events-show-ticket">Show ticket</Link>
+                          <RowMenu label={`Actions for ${t.title || 'this event'}`} items={placeMenu(t)} onPick={(it) => pick(t, it)} testId="my-events-place-menu" />
+                        </span>
+                      </div>
+                    );
+                  })}
+                </div>
+              ))}
+            </section>
+          ) : null}
+          {!explorer && soon.length ? (
+            <section className={`${CARD} p-4`} data-testid="my-events-hosting-soon">
+              <h2 className={`m-0 mb-2 flex items-center justify-between text-[15px] font-extrabold ${INK}`}>Hosting soon <span className={`font-mono text-[11.5px] font-bold ${MUTED}`}>{soon.length} of {hosting.length}</span></h2>
+              {soon.map((e) => {
+                const st = statusOf(e);
+                const act = hostAction(e, now);
+                return (
+                  <div key={e.id} className="mt-2 flex flex-wrap items-center justify-between gap-2" data-testid="my-events-hosting-soon-row">
+                    <EventLine event={e} to={hostedPath(e.id)}>
+                      <Pill tone={st.tone}>{st.label}</Pill>
+                      {e.status === 'published' || e.status === 'pending_review' ? <HostCountsLine event={e} /> : null}
+                    </EventLine>
+                    {act.to ? <Link className={`${LINK} text-[12px]`} to={act.to}>{act.label}</Link>
+                      : act.dialog ? <Link className={`${LINK} text-[12px]`} to={hostedPath(e.id)}>{act.label}</Link>
+                        : <span className={`text-[12px] ${MUTED}`}>{act.note}</span>}
+                  </div>
+                );
+              })}
+              <Link className={`${LINK} mt-2 inline-block text-[12px]`} to={tabHref({ path: '/hosting' })} data-testid="my-events-open-hosting">Open Hosting</Link>
+            </section>
+          ) : null}
+        </div>
+        <div className="flex flex-col gap-3.5">
+          <MiniCalendar month={month} setMonth={setMonthPick} items={items} chosen={chosen} onChoose={setChosen} explorer={explorer} now={now} zone={zone} />
+          <SubscribeCard read={feed} onOpen={onSubscribe} />
+          <SuggestedCard events={suggested.slice(0, 3)} read={suggestionsRead} explorer={explorer} />
+        </div>
+      </div>
+      {adding ? (
+        <Lightbox label={`Add ${adding.title || 'this event'} to your calendar`} title={adding.title || 'Not recorded'} sub={timeLine(adding, zone)} onClose={() => setAdding(null)} width={420} testId="my-events-add-calendar-dialog">
+          <div className="px-5 py-4"><AddToCalendar id={adding.id} api={api} onSubscribe={() => { setAdding(null); onSubscribe(); }} /></div>
+        </Lightbox>
+      ) : null}
     </div>
   );
 }
@@ -477,7 +543,7 @@ function SuggestedCard({ events, read, explorer = false }) {
   return (
     <section className={`${CARD} p-4`} data-testid="my-events-suggested">
       <h2 className={`m-0 mb-2 text-[15px] font-extrabold ${INK}`}>Suggested for you</h2>
-      {read?.status === 'loading' ? <Reading /> : read?.status === 'error' ? <Unreadable what="Suggested events" claim="This is not a claim that none are available." onRetry={read.reload} /> : events.length === 0 ? <p className={`m-0 text-[12.5px] ${MUTED}`}>Nothing to suggest right now.</p> : events.map(ev => {
+      {read?.status === 'loading' ? <Skeleton lines={3} testId="my-events-suggested-loading" /> : read?.status === 'error' ? <Unreadable what="Suggested events" claim="This is not a claim that none are available." onRetry={read.reload} /> : events.length === 0 ? <p className={`m-0 text-[12.5px] ${MUTED}`}>Nothing to suggest right now.</p> : events.map(ev => {
         const closed = ev.registration_eligible === false;
         const unknown = typeof ev.registration_eligible !== 'boolean';
         return <div key={ev.id} className="mt-2 flex flex-col gap-0.5 rounded-[10px] border border-axal-hairline p-2.5 dark:border-gray-700" data-testid="my-events-suggested-row">
@@ -492,11 +558,10 @@ function SuggestedCard({ events, read, explorer = false }) {
   );
 }
 
-function HostingTab({ hosting, admin, now, onDone }) {
-  const [q, setQ] = useState('');
+function HostingTab({ hosting, admin, now, onDone, onCopy, onCancel }) {
+  const [f, setF] = useState(HOST_DEFAULTS);
   // D1035: a draft's Send for review or Publish opens MEV6's dialog here, without the drawer.
   const [publishing, setPublishing] = useState(null);
-  const groups = hostingGroups(hosting, now, q);
   // D1036 (MEV13): the review desk's waiting count, its own read; a failed read is said, never a 0.
   const [waiting, setWaiting] = useState(admin ? { state: 'loading' } : null);
   useEffect(() => {
@@ -517,113 +582,10 @@ function HostingTab({ hosting, admin, now, onDone }) {
           <Link className={LINK} to="/admin/events/review">Open the review desk</Link>
         </p>
       ) : null}
-      <input type="search" value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search your events" aria-label="Search your events"
-        className="w-full max-w-sm rounded-[7px] border border-axal-hairline bg-white px-3 py-1.5 text-[12.5px] dark:border-gray-700 dark:bg-gray-900 dark:text-gray-100" />
-      {hosting.length === 0 ? (
-        <div className={`${CARD} flex flex-col items-start gap-2 p-5`} data-testid="my-events-hosting-none">
-          <span className={`text-[13.5px] ${INK}`}>You’re not hosting anything yet. Host a workshop, office hours or a demo day for the people you work with.</span>
-          <Link className={LINK} to="/events/new">New event</Link>
-        </div>
-      ) : groups.length === 0 ? (
-        <p className={`m-0 text-[12.5px] ${MUTED}`}>No hosted event matches “{q}”.</p>
-      ) : groups.map((g) => (
-        <section key={g.key} className={CARD} data-testid={`my-events-group-${g.key}`}>
-          <h2 className={`m-0 border-b border-axal-hairline px-4 py-3 text-[14px] font-extrabold dark:border-gray-800 ${INK}`}>{g.label} <span className={`font-mono text-[12px] ${MUTED}`}>{g.rows.length}</span></h2>
-          {g.rows.map((e) => {
-            const st = statusOf(e);
-            const act = hostAction(e, now);
-            return (
-              <div key={e.id} className="flex flex-wrap items-center justify-between gap-2 border-b border-axal-ground px-4 py-3 last:border-b-0 dark:border-gray-800" data-testid="my-events-hosted-row">
-                <EventLine event={e} to={hostedPath(e.id)}>
-                  <span className="mt-1 flex flex-wrap items-center gap-2 text-[12px]"><Pill tone={st.tone}>{st.label}</Pill><span className={MUTED}>{visibilityWord(e.visibility)}</span></span>
-                </EventLine>
-                <span className="flex flex-wrap items-center gap-3 text-[12px]">
-                  {act.dialog ? <button type="button" className={LINK} onClick={() => setPublishing(e)} data-testid="my-events-host-action">{act.label}</button>
-                    : act.label ? <Link className={LINK} to={act.to} data-testid="my-events-host-action">{act.label}</Link> : act.note ? <span className={MUTED}>{act.note}</span> : null}
-                  {e.status !== 'draft' && e.status !== 'rejected' ? <Link className={LINK} to={`/events/${e.id}/edit`}>Edit details</Link> : null}
-                </span>
-              </div>
-            );
-          })}
-        </section>
-      ))}
-      {hosting.length ? <p className={`m-0 text-[11.5px] ${MUTED}`}>Seats, waitlist, approvals and open invitations per event: {NOT_READ}.</p> : null}
+      {hosting.length === 0
+        ? <EmptyCard copy={EMPTY.hosting} to="/events/new" glyph="+" testId="my-events-hosting-none" />
+        : <HostingList hosting={hosting} now={now} f={f} setF={setF} onPublish={setPublishing} onCopy={onCopy} onCancel={onCancel} />}
       {publishing ? <PublishDialog event={publishing} counts={publishing.counts} onClose={() => setPublishing(null)} onDone={(line) => { setPublishing(null); onDone(line); }} /> : null}
-    </div>
-  );
-}
-
-const PAGE = 25;
-
-function DiscoverTab({ held, suggested, suggestionsRead }) {
-  const [q, setQ] = useState('');
-  const [offset, setOffset] = useState(0);
-  const [read, setRead] = useState({ status: 'loading', events: [] });
-  const [reload, setReload] = useState(0);
-  const term = q.trim().length >= 2 ? q.trim() : '';
-  useEffect(() => {
-    let alive = true;
-    setRead({ status: 'loading', events: [] });
-    eventsPublic.list({ limit: PAGE, offset, q: term || undefined, from: new Date().toISOString() })
-      .then((res) => { if (alive) setRead({ status: 'ready', events: Array.isArray(res?.events) ? res.events : [] }); })
-      .catch(() => { if (alive) setRead({ status: 'error', events: [] }); });
-    return () => { alive = false; };
-  }, [term, offset, reload]);
-  return (
-    <div className="flex flex-col gap-3.5" data-testid="my-events-discover">
-      {suggestionsRead?.status === 'error' ? <Unreadable what="Suggested events" claim="This is not a claim that none are available." onRetry={suggestionsRead.reload} /> : null}
-      {suggested.length ? (
-        <section className="grid gap-2.5 md:grid-cols-2 lg:grid-cols-4">
-          {suggested.slice(0, 4).map((ev) => (
-            <Link key={ev.id} to={`/events/${ev.slug || ev.id}`} className={`${CARD} flex flex-col gap-1 p-3 hover:border-axal-violet`} data-testid="my-events-discover-suggested">
-              <span className={`text-[13px] font-bold ${INK}`}>{ev.title}</span>
-              <span className={`text-[11.5px] ${MUTED}`}>{timeLine(ev, viewerZone())}</span>
-              {ev.suggestion_reason ? <Pill tone="muted">{ev.suggestion_reason}</Pill> : null}
-            </Link>
-          ))}
-        </section>
-      ) : null}
-      <input type="search" value={q} onChange={(e) => { setQ(e.target.value); setOffset(0); }} placeholder="Search events" aria-label="Search events"
-        className="w-full max-w-sm rounded-[7px] border border-axal-hairline bg-white px-3 py-1.5 text-[12.5px] dark:border-gray-700 dark:bg-gray-900 dark:text-gray-100" />
-      <section className={CARD}>
-        {read.status === 'loading' ? <div className="p-4"><Reading /></div>
-          : read.status === 'error' ? <div className="p-4" data-testid="my-events-discover-unreadable"><Unreadable what="The public calendar" claim="This is not a claim that nothing is on." onRetry={() => setReload((n) => n + 1)} /></div>
-          : read.events.length === 0 ? <p className={`m-0 p-4 text-[12.5px] ${MUTED}`} data-testid="my-events-discover-none">{term ? `No upcoming event matches “${term}”.` : 'No upcoming events on the public calendar.'}</p>
-          : read.events.map((ev) => {
-            const act = discoverAction(ev, held);
-            return (
-              <div key={ev.id} className="flex flex-wrap items-center justify-between gap-2 border-b border-axal-ground px-4 py-3 last:border-b-0 dark:border-gray-800" data-testid="my-events-discover-row">
-                <EventLine event={ev}><span className={`text-[12px] ${MUTED}`}>{priceOf(ev)}</span></EventLine>
-                <Link className={`${LINK} text-[12px]`} to={act.to}>{act.label}</Link>
-              </div>
-            );
-          })}
-      </section>
-      {read.status === 'ready' && (offset > 0 || read.events.length === PAGE) ? (
-        <div className="flex items-center gap-3 text-[12px]" data-testid="my-events-discover-pages">
-          <span className={`font-mono ${MUTED}`}>{offset + 1}–{offset + read.events.length}</span>
-          {offset > 0 ? <button type="button" className={LINK} onClick={() => setOffset(Math.max(0, offset - PAGE))}>Previous</button> : null}
-          {read.events.length === PAGE ? <button type="button" className={LINK} onClick={() => setOffset(offset + PAGE)}>Next</button> : null}
-        </div>
-      ) : null}
-    </div>
-  );
-}
-
-function PastTab({ attending, hosting }) {
-  const { past } = splitTickets(attending);
-  const rows = pastRows(past, hosting);
-  return (
-    <div className="flex flex-col gap-3.5">
-      <section className={CARD} data-testid="my-events-past">
-        {rows.length === 0 ? <p className={`m-0 p-4 text-[12.5px] ${MUTED}`} data-testid="my-events-past-none">No past events yet.</p> : rows.map((r) => (
-          <div key={r.key} className="flex flex-wrap items-center justify-between gap-2 border-b border-axal-ground px-4 py-3 last:border-b-0 dark:border-gray-800" data-testid="my-events-past-row">
-            <EventLine event={r.event}><Pill tone="muted">{r.result}</Pill></EventLine>
-            <span className={`text-[11.5px] ${MUTED}`} title={REPLAY_LINE}>Replay: Not recorded</span>
-          </div>
-        ))}
-      </section>
-      <p className={`m-0 text-[11.5px] ${MUTED}`}>{REPLAY_LINE} Places you cancelled or the host declined: {NOT_READ}.</p>
     </div>
   );
 }

@@ -229,7 +229,7 @@ test('Updates history is newest first with grouped counts, author links, legacy 
     (103,'investor',2,'notification','2026-10-01'),(103,'investor',NULL,NULL,NULL),
     (103,'team',1,'notification',NULL),(103,'network',3,'notification','2026-10-02');
     INSERT INTO update_asks (id,uid,update_id,kind,text,asked_again_at) VALUES
-    (201,'ask1',103,'customer','Intro',NULL),(202,'ask2',103,'partner','Partner','2026-10-12'),
+    (201,'ask1',103,'customer','Intro',NULL),(202,'ask2',103,'partner','Partner','${new Date(Date.now() - 86_400_000).toISOString()}'),
     (203,'ask3',103,'hire','Role',NULL);
     INSERT INTO update_ask_replies (uid,ask_id,name,message) VALUES ('reply1',203,'Alex','I know someone');`);
   const before = (f.db.prepare('SELECT COUNT(*) AS n FROM portfolio_updates').get() as any).n;
