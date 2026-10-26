@@ -10,8 +10,7 @@ D1221 (#2458), built to the owner's canvas: `design/incoming/Calls for Capital P
 ## Where it lives
 
 - `/raise/capital-relationships/calls`: this page, Capital relationships' Calls tab.
-- `/raise/capital-relationships/calls/:uid`: one sent call (`../../founder/RaiseCallPage.jsx`), the one route `App.jsx` adds.
-- A draft is still edited at `/round-calls/:uid` until the sheet moves (D1221 part 3).
+- `/raise/capital-relationships/calls/:uid`: one call (`../../founder/RaiseCallPage.jsx`), the one route `App.jsx` adds. A sent call draws its page; a draft opens the new-call sheet on it (D1224, #3223), and `callHref` sends both here.
 
 ## The rules for adding here
 

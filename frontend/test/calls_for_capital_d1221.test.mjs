@@ -23,9 +23,10 @@ const html = (calls) => renderToStaticMarkup(h(MemoryRouter, null, h(CallsTab, {
  * The model
  * ------------------------------------------------------------------ */
 
-test('a sent call opens under Calls, a draft where drafts are edited, a bad uid nowhere', () => {
+test('a sent call and a draft both open under Calls (D1224), a bad uid nowhere', () => {
   assert.equal(callHref({ uid: 'c_1', state: 'sent' }), '/raise/capital-relationships/calls/c_1');
-  assert.equal(callHref({ uid: 'c_1', state: 'draft' }), '/round-calls/c_1');
+  // D1224 (#3223): a draft opens in the Raise shell too, on the new-call sheet.
+  assert.equal(callHref({ uid: 'c_1', state: 'draft' }), '/raise/capital-relationships/calls/c_1');
   assert.equal(callHref({ uid: '../x', state: 'sent' }), LIST_PATH);
   assert.deepEqual(['draft', 'awaiting_counsel', 'open', 'expired', 'closed', 'odd'].map(stateWord), ['Draft', 'Awaiting counsel', 'Open', 'Expired', 'Closed', 'Not recorded']);
 });
@@ -68,7 +69,7 @@ test('the list (CLS2): every count the read carries, Indicated never Committed, 
     { uid: 'd1', name: 'Draft call', state: 'draft', amount_cents: 50000000, committed_cents: 0 },
   ] });
   assert.ok(out.includes('href="/raise/capital-relationships/calls/c1"'));
-  assert.ok(out.includes('href="/round-calls/d1"'));
+  assert.ok(out.includes('href="/raise/capital-relationships/calls/d1"'));
   assert.match(out, /Indicated of target/);
   assert.ok(!/committed/i.test(out.replace(/not payments or commitments/, '')), 'no amount is called committed');
   assert.match(out, /12 · 9 · 4 · 3/);

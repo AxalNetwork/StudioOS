@@ -1,5 +1,5 @@
 import React, { useMemo, useState } from 'react';
-import { Link, Navigate, useParams } from 'react-router-dom';
+import { Link, Navigate, useNavigate, useParams } from 'react-router-dom';
 import { roundCallsApi } from '../../lib/api/roundCalls';
 import { reportError } from '../../lib/log';
 import { WorkerRail } from '../../ui';
@@ -8,6 +8,7 @@ import { CycleHeader } from '../cycles/CycleOverview';
 import { MODULES } from '../cycles/modules';
 import RoundCallSheet, { CALL_FIELDS, shortDate } from './RoundCallSheet';
 import { useCallRead, CallReadState, callButton, callInput, moneyCents } from './roundCallParts';
+import { LIST_PATH } from '../raise/calls/callsModel';
 
 /**
  * D686 §5.6 (#1598), §3.1 item 14 — the founder's view of a Call for Capital,
@@ -15,6 +16,10 @@ import { useCallRead, CallReadState, callButton, callInput, moneyCents } from '.
  * rail, and the call's responses with search, filters and paging. An
  * investor or counsel opening this address is sent to `/round-calls/:uid`,
  * where their own views are; a founder there is sent here.
+ *
+ * D1224 (#3223): a DRAFT opens here too, at
+ * `/raise/capital-relationships/calls/:uid`: the new-call sheet on that draft,
+ * in the Raise shell. Closing it returns to Calls.
  *
  * NOTHING IS INVENTED. A matching investor stays nameless until they respond.
  * A commitment's date is drawn only when the Worker stores one (S19-A's
@@ -142,6 +147,7 @@ export function RaiseCallView({ state: s, on }) {
 
 export default function RaiseCallPage() {
   const { uid } = useParams();
+  const navigate = useNavigate();
   const read = useCallRead(() => roundCallsApi.page(uid), [uid]);
   const [q, setQ] = useState(''); const [filter, setFilter] = useState('all'); const [page, setPage] = useState(0); const [sort, setSort] = useState('latest');
   const [busy, setBusy] = useState(false); const [error, setError] = useState(''); const [message, setMessage] = useState('');
@@ -162,6 +168,7 @@ export default function RaiseCallPage() {
   };
   const d = read.data;
   if (d && d.viewer !== 'founder') return <Navigate to={`/round-calls/${encodeURIComponent(uid)}`} replace />;
+  const draft = d?.call?.state === 'draft';
   const cards = MODULES.raise.map((m) => ({ slug: m.slug, name: m.name }));
   const rail = <WorkerRail workspace="Raise" role="founder" stance="Evidence-led view" coverage={[d ? `Venture #${d.call.project_id} selected` : 'No venture selected']} footer="Traceable surface · no unsupported automated actions" />;
   return (
@@ -170,7 +177,8 @@ export default function RaiseCallPage() {
         <CycleHeader cycle="raise" cards={cards} active="capital-relationships" title={d ? `Call for Capital · ${d.call.name}` : 'Call for Capital'}
           search={d ? `?project_id=${d.call.project_id}` : ''} />
         {read.error?.status === 403 ? <p role="alert">The Worker refused this call: {read.error.message || 'you cannot open it.'}</p>
-          : <CallReadState read={read}>{d && <RaiseCallView state={{ data: d, q, filter, sort, page, busy, error, message, answers, target, extending }} on={on} />}</CallReadState>}
+          : <CallReadState read={read}>{d && !draft && <RaiseCallView state={{ data: d, q, filter, sort, page, busy, error, message, answers, target, extending }} on={on} />}</CallReadState>}
+        {draft && <RoundCallSheet projectId={d.call.project_id} initialCall={d.call} onClose={() => navigate(LIST_PATH)} />}
         {newCall && d && <RoundCallSheet projectId={d.call.project_id} onClose={() => { setNewCall(false); read.retry(); }} />}
       </main>
     </RailFrame>
