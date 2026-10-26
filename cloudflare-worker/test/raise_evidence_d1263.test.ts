@@ -178,7 +178,44 @@ test('bounded refresh progresses across a large pack; source identity and pagina
  const w=world();try{sources(w);const base=(await collectEvidenceSources(w.env,1,1)).candidates.find(c=>c.kind==='kpi-snapshot')!;
  const candidates=Array.from({length:501},(_,n)=>({...base,source_ref:String(n)+':mrr'}));const input={candidates,blocks:[{dataset:'metrics',state:'recorded',count:501}]} as any;
  const first=await buildCandidates(w.ctx,{sources:input,now:'2026-10-26T12:00:00Z'});assert.equal(first.changed,500);assert.equal(first.remaining,1);assert.equal(first.outcome,'partial');
- const second=await buildCandidates(w.ctx,{sources:input,now:'2026-10-26T12:01:00Z'});assert.equal(second.changed,1);assert.equal(second.outcome,'recorded');assert.equal(w.db.prepare('SELECT COUNT(*) n FROM ai_rail_proposals').get()?.n,501);
+ const second=await buildCandidates(w.ctx,{sources:input,force:true,now:'2026-10-26T12:01:00Z'});assert.equal(second.changed,1);assert.equal(second.outcome,'recorded');assert.equal(w.db.prepare('SELECT COUNT(*) n FROM ai_rail_proposals').get()?.n,501);
  const page=await readRaiseEvidence(w.ctx,{limit:10,offset:20});assert.equal(page.proposals.rows?.length,10);assert.equal(page.proposals.has_more,true);
+ }finally{w.db.close();}
+});
+
+
+test('counted demand is eligible, unconfirmed demand is held back, and a connector milestone needs active ledger proof',async()=>{
+ const w=world();try{sources(w);w.db.exec("UPDATE demand_signals SET status='counted'");let got=await collectEvidenceSources(w.env,1,1);assert.ok(got.candidates.some(c=>c.kind==='demand-signal'));assert.ok(got.candidates.some(c=>c.kind==='loi-file'));
+ w.db.exec("UPDATE demand_signals SET status='to_confirm'");got=await collectEvidenceSources(w.env,1,1);assert.equal(got.candidates.some(c=>c.kind==='demand-signal'),false);
+ seed(w,'connector_fed_items',{integration_id:2,project_id:1,module:'build',kind:'milestone',external_id:'external-milestone',local_table:'roadmap_okrs',local_id:1});got=await collectEvidenceSources(w.env,1,1);const milestone=got.candidates.find(c=>c.kind==='roadmap-milestone');assert.equal(milestone?.source_label,'connector');assert.equal(milestone?.observed_on,null);
+ w.db.exec("UPDATE integrations SET status='revoked' WHERE id=2");got=await collectEvidenceSources(w.env,1,1);assert.equal(got.candidates.find(c=>c.kind==='roadmap-milestone')?.source_label,'typed');
+ }finally{w.db.close();}
+});
+
+test('partial attempts cool down for one hour; Look again retries; a decision can read just its source dataset',async()=>{
+ const w=world();try{sources(w);w.db.exec('DROP TABLE project_metrics');const first=await buildCandidates(w.ctx,{now:'2026-10-26T12:00:00Z'});assert.equal(first.outcome,'partial');
+ assert.equal((await buildCandidates(w.ctx,{now:'2026-10-26T12:05:00Z'})).refreshed,false);assert.equal(w.db.prepare("SELECT COUNT(*) n FROM activity_logs WHERE action='evidence_refreshed'").get()?.n,1);
+ assert.equal((await buildCandidates(w.ctx,{now:'2026-10-26T12:05:00Z',force:true})).refreshed,true);
+ assert.equal((await buildCandidates(w.ctx,{now:'2026-10-26T13:06:00Z'})).refreshed,true);
+ const single=await collectEvidenceSources(w.env,1,1,'2026-10-26',['bank-runway']);assert.deepEqual(single.blocks.map(b=>b.dataset),['bank']);assert.ok(single.candidates.length>0);assert.ok(single.candidates.every(c=>c.kind==='bank-runway'));
+ }finally{w.db.close();}
+});
+test('duplicate and missing links report conflicts, and an in-flight version race asks for a fresh decision',async()=>{
+ const w=world();try{sources(w);const i=await pin(w);seed(w,'raise_claims',{uid:'claim-one',project_id:1,surface:'deck',surface_version:'v1',field_key:'mrr',claim_kind:'mrr'});
+ await assert.rejects(()=>linkClaim(w.ctx,'claim-one',{item_id:i.uid},true),{code:'not_found',status:404});await linkClaim(w.ctx,'claim-one',{item_id:i.uid,item_version:1});
+ await assert.rejects(()=>linkClaim(w.ctx,'claim-one',{item_id:i.uid,item_version:1}),{code:'decided',status:409});const count=auditCount(w),base=w.env.DB;
+ w.env.DB={...base,batch:(stmts:any[])=>{w.db.prepare('UPDATE raise_evidence_items SET version=version+1 WHERE uid=?').run(i.uid);return base.batch(stmts);}};
+ await assert.rejects(()=>setSharing(w.ctx,i.uid,{version:1,visibility:'private'}),{code:'changed',status:409});assert.equal(auditCount(w),count);assert.equal(w.db.prepare('SELECT visibility FROM raise_evidence_items WHERE uid=?').get(i.uid)?.visibility,'after_nda');
+ }finally{w.db.close();}
+});
+
+test('all founder routes execute a complete accept/share/link/unlink/dismiss lifecycle; other roles cannot accept',async()=>{
+ const w=world();try{sources(w);w.db.exec(read('../sql/migrations/628_raise_evidence.sql'));const opened=await call(w,1);assert.equal(opened.status,200);const q=proposal(w);
+ for(const who of [2,3,4,5])assert.equal((await call(w,who,'POST',`/evidence/items/${q.uid}/accept?project=1`,{snapshot_hash:JSON.parse(q.payload_json).snapshot_hash})).status,403);
+ const accepted=await call(w,1,'POST',`/evidence/items/${q.uid}/accept?project=1`,{snapshot_hash:JSON.parse(q.payload_json).snapshot_hash});assert.equal(accepted.status,200);assert.equal(accepted.body.state,'pinned');
+ const shared=await call(w,1,'PATCH',`/evidence/items/${accepted.body.uid}?project=1`,{version:1,visibility:'summary'});assert.equal(shared.status,200);assert.equal(shared.body.version,2);
+ seed(w,'raise_claims',{uid:'claim-one',project_id:1,surface:'deck',surface_version:'v1',field_key:'mrr',claim_kind:'mrr'});
+ const path='/evidence/claims/claim-one/link?project=1';assert.equal((await call(w,1,'POST',path,{item_id:accepted.body.uid,item_version:2})).status,200);assert.equal((await call(w,1,'DELETE',path,{item_id:accepted.body.uid})).status,200);
+ const remaining=proposal(w);assert.equal((await call(w,1,'POST',`/evidence/items/${remaining.uid}/dismiss?project=1`)).body.status,'discarded');assert.equal((await call(w,1,'PATCH',`/evidence/items/${accepted.body.uid}?project=1`,[])).status,400);
  }finally{w.db.close();}
 });

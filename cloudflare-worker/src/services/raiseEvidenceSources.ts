@@ -73,7 +73,7 @@ const QUERIES = {
     (SELECT 1 FROM project_members m WHERE m.project_id=p.id AND m.user_id=u.id AND m.status='accepted' AND m.role IN ('owner','cofounder')) GROUP BY s.axis,s.source`,
   themes: `SELECT id,title,updated_at FROM pain_groups WHERE project_id=?`,
   interviews: `SELECT id,interview_date,icp_fit,quote_consent,pains_json,notes,updated_at FROM discovery_interviews WHERE project_id=?`,
-  signals: `SELECT id,kind,status,signal_date,source_kind,interview_id,session_id,evidence_file_key,amount_cents,currency,updated_at FROM demand_signals WHERE project_id=? AND status='confirmed'`,
+  signals: `SELECT id,kind,status,signal_date,source_kind,interview_id,session_id,evidence_file_key,amount_cents,currency,updated_at FROM demand_signals WHERE project_id=? AND status IN ('confirmed','counted')`,
   experiments: `SELECT id,status,result,updated_at FROM hypothesis_experiments WHERE project_id=? AND result IS NOT NULL AND trim(result)<>''`,
   verdicts: `SELECT id,decision,decided_at FROM validation_decisions WHERE project_id=? AND state='given' AND superseded_at IS NULL`,
   metrics: `SELECT id,snapshot_date,source,mrr,arr,cac,ltv,monthly_churn_pct,active_users,new_users,net_burn,headcount,nrr_pct,paying_accounts FROM project_metrics WHERE project_id=?`,
@@ -200,12 +200,21 @@ function materials(rule: EvidenceRule, rows: DataRow[]): Material[] {
 }
 
 /** bankUserId is an authenticated founder's own connection owner, never an investor ID supplied in a request. */
-export async function collectEvidenceSources(env:Env, projectId:number, bankUserId:number, now=new Date().toISOString()):Promise<CollectedEvidence>{
+export async function collectEvidenceSources(env:Env, projectId:number, bankUserId:number, now=new Date().toISOString(),onlyKinds?:readonly string[]):Promise<CollectedEvidence>{
   const data=new Map<Dataset,DataRow[]>(); const blocks:SourceBlock[]=[];
-  for(const [name,sql] of Object.entries(QUERIES) as [Dataset,string][]){
-    try {const statement=env.DB.prepare(sql);const result=await (BANK_DATASETS.has(name)?statement.bind(projectId,bankUserId):statement.bind(projectId)).all<DataRow>();
-      if(!Array.isArray(result.results))throw new Error('source_unreadable'); data.set(name,result.results);blocks.push({dataset:name,state:'recorded',count:result.results.length});
-    }catch{blocks.push({dataset:name,state:'unreadable',count:null,reason:'This source could not be read. Try again.'});}
+  const requested = onlyKinds ? new Set(EVIDENCE_RULES.filter(r=>onlyKinds.includes(r.kind)).map(r=>r.dataset)) : null;
+  if(requested?.has('themes')) requested.add('interviews');
+  const queries=(Object.entries(QUERIES) as [Dataset,string][]).filter(([name])=>!requested||requested.has(name));
+  const reads=await Promise.allSettled(queries.map(async ([name,sql])=>{
+    const statement=env.DB.prepare(sql);
+    const result=await (BANK_DATASETS.has(name)?statement.bind(projectId,bankUserId):statement.bind(projectId)).all<DataRow>();
+    if(!Array.isArray(result.results))throw new Error('source_unreadable');
+    return result.results;
+  }));
+  for(let i=0;i<queries.length;i++){
+    const name=queries[i][0],result=reads[i];
+    if(result.status==='fulfilled'){data.set(name,result.value);blocks.push({dataset:name,state:'recorded',count:result.value.length});}
+    else blocks.push({dataset:name,state:'unreadable',count:null,reason:'This source could not be read. Try again.'});
   }
   if(data.has('themes')&&data.has('interviews')){
     try{const model=await loadPainGroupModel(env,projectId);const mentions=new Map<number,string[]>();
@@ -215,7 +224,7 @@ export async function collectEvidenceSources(env:Env, projectId:number, bankUser
     }catch{data.delete('themes');const b=blocks.find(b=>b.dataset==='themes')!;b.state='unreadable';b.count=null;b.reason='This source could not be read. Try again.';}
   }
   const candidates:EvidenceCandidate[]=[];
-  for(const rule of EVIDENCE_RULES){const rows=data.get(rule.dataset);if(!rows)continue;
+  for(const rule of EVIDENCE_RULES){if(onlyKinds&&!onlyKinds.includes(rule.kind))continue;const rows=data.get(rule.dataset);if(!rows)continue;
     try{for(const m of materials(rule,rows)){
       if(!/^[A-Za-z0-9_:./-]{1,200}$/.test(m.ref))throw new Error('source_unreadable');
       const origin=provenance(m.row), label=m.source??(rule.source==='record'?origin.label:rule.source);

@@ -134,7 +134,7 @@ async function item(ctx:RaiseEvidenceContext,id:string){
   if(!row)throw new RaiseEvidenceError('not_found',404);return row;
 }
 async function live(ctx:RaiseEvidenceContext,ref:Pick<EvidenceCandidate,'kind'|'area'|'source_table'|'source_ref'>,collected?:CollectedEvidence){
-  const sources=collected??await collectEvidenceSources(ctx.env,ctx.projectId,ctx.user.id);
+  const sources=collected??await collectEvidenceSources(ctx.env,ctx.projectId,ctx.user.id,new Date().toISOString(),[ref.kind]);
   const rule=EVIDENCE_RULES.find(r=>r.kind===ref.kind);
   if(!rule)throw new RaiseEvidenceError('changed',409);
   const block=sources.blocks.find(b=>b.dataset===rule.dataset);
@@ -151,7 +151,7 @@ export async function buildCandidates(ctx:RaiseEvidenceContext,opts:{force?:bool
     WHERE p.id=? AND p.deleted_at IS NULL AND p.company_id IS ? AND p.founder_id=u.founder_id AND u.role<>'admin' AND (u.role='founder' OR u.spinout_lab_active=1)
     ON CONFLICT(project_id) DO UPDATE SET last_attempt_at=excluded.last_attempt_at,lease_uid=excluded.lease_uid,lease_until=excluded.lease_until
     WHERE (raise_evidence_refreshes.lease_until IS NULL OR datetime(raise_evidence_refreshes.lease_until)<=datetime(?))
-      AND (?=1 OR raise_evidence_refreshes.last_built_at IS NULL OR datetime(raise_evidence_refreshes.last_built_at)<datetime(?,'-1 hour'))`)
+      AND (?=1 OR raise_evidence_refreshes.last_attempt_at IS NULL OR datetime(raise_evidence_refreshes.last_attempt_at)<datetime(?,'-1 hour'))`)
     .bind(now,token,now,ctx.user.id,ctx.projectId,ctx.companyId,now,opts.force?1:0,now).run();
   if(!lease.meta.changes){const cached=await ctx.env.DB.prepare('SELECT last_built_at,lease_until,outcome FROM raise_evidence_refreshes WHERE project_id=?').bind(ctx.projectId).first<{last_built_at:string|null;lease_until:string|null;outcome:string}>();
     return {refreshed:false,busy:cached?.lease_until!=null&&Date.parse(cached.lease_until.replace(' ','T')+'Z')>Date.parse(now),outcome:cached?.outcome??'not_recorded',changed:null,remaining:null};}
@@ -201,8 +201,8 @@ function proposalProvenance(ctx:RaiseEvidenceContext,q:EvidenceProposalRow,token
     VALUES('ai_rail_proposals',(SELECT id FROM ai_rail_proposals WHERE uid=? AND record_ref=? AND json_extract(decided_payload_json,'$.decision_uid')=?),'status',NULL,'restatement',?,?,0,?,NULL,'raise:evidence',?,?,NULL,?)`)
     .bind(q.uid,recordRef(ctx.projectId),token,written,written,JSON.stringify({source_kind:q.source_kind,source_ref:q.source_ref,source_label:q.source_label,prior_value:'proposed'}),ctx.user.id,q.uid,q.id);
 }
-async function decideBatch(ctx:RaiseEvidenceContext,statements:ReturnType<Env['DB']['prepare']>[],check?:()=>Promise<boolean>){
-  try{await ctx.env.DB.batch(statements);}catch{if(check&&await check().catch(()=>false))throw new RaiseEvidenceError('decided',409);throw new RaiseEvidenceError('unreadable',503);}
+async function decideBatch(ctx:RaiseEvidenceContext,statements:ReturnType<Env['DB']['prepare']>[],check?:()=>Promise<boolean|RaiseEvidenceError|null>){
+  try{await ctx.env.DB.batch(statements);}catch{const conflict=check?await check().catch(()=>false):false;if(conflict instanceof RaiseEvidenceError)throw conflict;if(conflict)throw new RaiseEvidenceError('decided',409);throw new RaiseEvidenceError('unreadable',503);}
 }
 
 /** Accept only the exact source snapshot the founder saw. Values and labels are always rebuilt by code. */
@@ -258,7 +258,7 @@ export async function setSharing(ctx:RaiseEvidenceContext,uid:string,data:Record
     ctx.env.DB.prepare(`UPDATE raise_claims SET state='not_backed',checked_at=NULL WHERE project_id=? AND id IN
       (SELECT l.claim_id FROM raise_claim_evidence l JOIN raise_evidence_items i ON i.id=l.item_id AND i.project_id=l.project_id WHERE i.uid=? AND i.project_id=? AND i.mutation_uid=?)`).bind(ctx.projectId,uid,ctx.projectId,token),
     activity(ctx,old.area,uid,'evidence_changed',evidenceSummary(old,'sharing or pin state changed')),
-  ]);
+  ],async()=> (await item(ctx,uid)).version!==expected ? new RaiseEvidenceError('changed',409) : null);
   return item(ctx,uid);
 }
 
@@ -268,6 +268,10 @@ export async function linkClaim(ctx:RaiseEvidenceContext,claimUid:string,data:Re
   const claim=await ctx.env.DB.prepare('SELECT id,uid FROM raise_claims WHERE uid=? AND project_id=?').bind(claimUid,ctx.projectId).first<{id:number;uid:string}>();
   if(!claim)throw new RaiseEvidenceError('not_found',404);
   const selected=await item(ctx,data.item_id),token=nonce();
+  const readLink=()=>ctx.env.DB.prepare('SELECT id FROM raise_claim_evidence WHERE project_id=? AND claim_id=? AND item_id=?').bind(ctx.projectId,claim.id,selected.id).first();
+  const existing=await readLink();
+  if(remove&&!existing)throw new RaiseEvidenceError('not_found',404);
+  if(!remove&&existing)throw new RaiseEvidenceError('decided',409);
   if(!remove){
     const expected=version(data.item_version);if(expected!==selected.version||selected.state!=='pinned')throw new RaiseEvidenceError('changed',409);
     const current=await live(ctx,selected);if(current.snapshot_hash!==selected.snapshot_hash)throw new RaiseEvidenceError('changed',409);
@@ -306,7 +310,12 @@ export async function linkClaim(ctx:RaiseEvidenceContext,claimUid:string,data:Re
         prior_value:remove?'linked':null,claim_uid:claimUid,item_uid:selected.uid}),q?.model??null,q?EVIDENCE_LINK_OPTION:EVIDENCE_OPTION,ctx.user.id,claimUid,q?.usage_log_id??null,q?.id??null));
   if(remove)statements.push(ctx.env.DB.prepare('DELETE FROM raise_claim_evidence WHERE project_id=? AND claim_id=? AND item_id=? AND mutation_uid=?').bind(ctx.projectId,claim.id,selected.id,token));
   statements.push(ctx.env.DB.prepare("UPDATE raise_claims SET state='not_backed',checked_at=NULL WHERE id=? AND project_id=?").bind(claim.id,ctx.projectId),activity(ctx,selected.area,claimUid,remove?'evidence_unlinked':'evidence_linked',evidenceSummary(selected,remove?'unlinked from a claim':'linked to a claim; its state needs checking')));
-  await decideBatch(ctx,statements);
+  await decideBatch(ctx,statements,async()=>{
+    if(q&&(await proposal(ctx,q.uid,EVIDENCE_LINK_OPTION)).status!=='proposed')return new RaiseEvidenceError('decided',409);
+    if((await item(ctx,selected.uid)).version!==selected.version)return new RaiseEvidenceError('changed',409);
+    const linked=await readLink();
+    return remove&&!linked?new RaiseEvidenceError('not_found',404):!remove&&linked?new RaiseEvidenceError('decided',409):null;
+  });
   return {claim_id:claimUid,item_id:selected.uid,linked:!remove,how:remove?null:q?'eadwyn_accepted':'founder'};
 }
 
