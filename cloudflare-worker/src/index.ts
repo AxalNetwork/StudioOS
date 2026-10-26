@@ -870,8 +870,9 @@ const INVESTOR_PRO_PREFIXES = [
   '/api/deals',
   '/api/ic',
 ];
-// D614/D1149: precise exemptions allow leaving a room and an authorized
-// deal header/key strip. Child deal reads and diligence stay Professional.
+// D614/D1149/D1237: precise exemptions allow Free room quota, join/leave,
+// and an authorized header/key strip. The deal list, child reads and diligence
+// stay Professional; join enforces its one-room allowance in the INSERT.
 const investorPro = requireInvestorTierExcept('professional');
 for (const p of INVESTOR_PRO_PREFIXES) {
   app.use(p, investorPro);
