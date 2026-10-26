@@ -1131,21 +1131,33 @@ deals.get('/:id/data-room', async (c) => {
   return c.json({ detail: 'This export is retired. Use the shared data room with its grants and NDA checks.' }, 410);
 });
 
+// D1155 (#3060, DL15): who reads which commitment, and never another person's note.
+//   - an investor: their own rows, with their own note;
+//   - the deal's founder, an Admin (and a Super Admin, who is an admin) and an
+//     Operating Partner: every row by name, amount and status, never the note.
+//     The Operating Partner keeps the studio-wide read (#2421 owner question 7,
+//     A), without notes; before D1155 they read the confirmed total only, and
+//     the founder and admins read every investor's note;
+//   - any other reader `loadDealForRead` admits: the confirmed total only.
+// `loadDealForRead` already keeps a founder to their own deal.
 deals.get('/:id/commitments', async (c) => {
   const id = parseInt(c.req.param('id'));
   const ctx = await loadDealForRead(c, id);
   if (ctx.error) return ctx.error;
   const { sql, user } = ctx;
-  if (user.role !== 'admin' && user.role !== 'founder' && user.role !== 'investor') {
-    const rows = await sql`SELECT COALESCE(SUM(amount), 0) AS total FROM commitments WHERE deal_id = ${id} AND status = 'confirmed'`;
+  if (user.role === 'investor') {
+    const rows = await sql`SELECT c.id, c.uid, c.deal_id, c.investor_user_id, c.amount, c.status, c.notes, c.created_at, u.name AS investor_name FROM commitments c LEFT JOIN users u ON u.id = c.investor_user_id WHERE c.deal_id = ${id} AND c.investor_user_id = ${user.id} ORDER BY c.created_at DESC`;
     await sql.end();
-    return c.json({ total: Number(rows[0]?.total ?? 0) });
+    return c.json(rows);
   }
-  const rows = user.role === 'investor'
-    ? await sql`SELECT c.id, c.uid, c.deal_id, c.investor_user_id, c.amount, c.status, c.notes, c.created_at, u.name AS investor_name FROM commitments c LEFT JOIN users u ON u.id = c.investor_user_id WHERE c.deal_id = ${id} AND c.investor_user_id = ${user.id} ORDER BY c.created_at DESC`
-    : await sql`SELECT c.id, c.uid, c.deal_id, c.investor_user_id, c.amount, c.status, c.notes, c.created_at, u.name AS investor_name FROM commitments c LEFT JOIN users u ON u.id = c.investor_user_id WHERE c.deal_id = ${id} ORDER BY c.created_at DESC`;
+  if (user.role === 'admin' || user.role === 'founder' || user.role === 'partner') {
+    const rows = await sql`SELECT c.id, c.uid, c.deal_id, c.investor_user_id, c.amount, c.status, c.created_at, u.name AS investor_name FROM commitments c LEFT JOIN users u ON u.id = c.investor_user_id WHERE c.deal_id = ${id} ORDER BY c.created_at DESC`;
+    await sql.end();
+    return c.json(rows);
+  }
+  const rows = await sql`SELECT COALESCE(SUM(amount), 0) AS total FROM commitments WHERE deal_id = ${id} AND status = 'confirmed'`;
   await sql.end();
-  return c.json(rows);
+  return c.json({ total: Number(rows[0]?.total ?? 0) });
 });
 
 deals.post('/:id/commitments', async (c) => {
@@ -1219,7 +1231,8 @@ deals.get('/:id/activity', async (c) => {
   const ctx = await loadDealForRead(c, id);
   if (ctx.error) return ctx.error;
   const { sql, deal, user } = ctx;
-  const named = user.role === 'admin' || user.role === 'founder';
+  // D1155 (DL15): an Operating Partner reads the activity in full, as the commitments read.
+  const named = user.role === 'admin' || user.role === 'founder' || user.role === 'partner';
   const money = (amount: unknown) => (amount == null ? 'Not recorded' : `${Math.round(Number(amount)).toLocaleString()} ${deal.currency ?? 'USD'}`);
   const events: any[] = [];
   events.push({ type: 'created', label: 'Deal created', at: deal.created_at, mine: false });
@@ -1322,6 +1335,26 @@ deals.get('/:id/transfers', async (c) => {
      WHERE t.deal_id = ${id} ORDER BY t.recorded_at DESC`;
   await sql.end();
   return c.json({ items: (rows as any[]).map(withFirm) });
+});
+
+// D1155 (#3060, DL17a): whether an open IC condition holds wires on this
+// deal, read before an Admin opens Record a wire. The same gate the record
+// route enforces (`openConditionsOnDeal`). A condition on a decision the
+// caller cannot see (D467) holds the wire without a count; a failed read is
+// 503, never "nothing holds it".
+deals.get('/:id/transfer-gate', async (c) => {
+  const user = await requireRole(c, 'admin');
+  const id = parseInt(c.req.param('id'));
+  if (!Number.isInteger(id) || id <= 0) return c.json({ error: 'Deal not found' }, 404);
+  const deal = await c.env.DB.prepare('SELECT id FROM deals WHERE id = ?').bind(id).first();
+  if (!deal) return c.json({ error: 'Deal not found' }, 404);
+  try {
+    const gate = await openConditionsOnDeal(c.env, user, id);
+    return c.json({ held: gate.visible > 0 || gate.hidden > 0, open_conditions: gate.visible > 0 ? gate.visible : null });
+  } catch (e) {
+    console.error('[deals] transfer gate read failed:', (e as Error)?.name);
+    return c.json({ error: 'transfer_gate_unreadable', message: 'Whether an IC condition holds wires on this deal could not be read. Try again.' }, 503);
+  }
 });
 
 deals.post('/:id/transfers', async (c) => {
