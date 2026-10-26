@@ -1790,6 +1790,8 @@ D1091 (#2956, partial foundation): `/api/connectors/google-workspace` mounts `ro
 
 D1133 (#3013): Pricing’s in-place checkout sheet uses D1049’s held-plan read and retries it independently. Worker `/api/billing/alerts/:id/pay` and `/update-card` prepare only the caller’s failed renewal, behind a fresh TOTP. D1054 owns the still-unbuilt app-wide banner; D1051’s #2902 contract now includes recorded post-payment changes.
 
+D1051 (#2902): `/api/billing/checkout/quote`, `/checkout/start` and `GET /checkout/status?ref=` mount `routes/billing_checkout.ts` ahead of `billing.ts`. Quote is read only; start makes one incomplete subscription for a new subscriber, or changes a held plan behind TOTP and step-up (an upgrade now and prorated, a downgrade by schedule at the period end); status answers only the caller's own ref. No screen calls them yet (#2905).
+
 D1135 (#3015): Company Settings' existing Leave company confirmation now posts
 `/api/company/:uid/leave` through the switcher's shared action. It removes the
 membership and clears a departed active selection. Explorers have no Add a new

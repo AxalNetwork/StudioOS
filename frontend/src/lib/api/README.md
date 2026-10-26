@@ -430,3 +430,5 @@ D1199 (#3149): `productTesting.js` adds the programme logo: `partnerTestingApi.u
 D1207 (#3173): `calendarItems.js` holds the Calendar's Reschedule (`PATCH /calendar/ic-meetings/:id` and `/calendar/founder-checkins/:id`) and its pickers (`/calendar/people`, `/calendar/deals`). A person comes back as a uid and a name, never an email or a user number.
 
 D1176: `useOfFunds.js` holds the venture-scoped plan, scenarios/compare, milestones, hires and split calls, plus the retained financial-model read/save. The Worker routes land first; the UI follows in #3104/#3105.
+
+D1051 adds `billingCheckout.js`: `checkoutApi.quote`, `.start(…, nonce)` and `.status(ref)`. Keep one 8–64-character nonce per open sheet and reuse it on retries; the client secret belongs only in the in-page Stripe form.

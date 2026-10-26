@@ -381,6 +381,7 @@ import { processQueueBatch } from './services/queueWorker';
 // import was missed in the first pass and left tier checkout/webhook 404.
 import { requireTier } from './middleware/requireTier';
 import billing from './routes/billing';
+import billingCheckout from './routes/billing_checkout';
 // Task — Stripe-backed product catalog (read + admin sync over the D1 mirror).
 import catalog, { adminCatalog } from './routes/catalog';
 // Task #16 — Admin Stripe management (webhook endpoints + publishable key).
@@ -804,6 +805,8 @@ const COOL_OFF_ROUTES = [
 ];
 for (const p of COOL_OFF_ROUTES) app.use(p, recoveryCoolOff);
 // Task #6 — Stripe billing surface (tier checkout/portal/webhook + MI Pro).
+// D1051 (#2902): the checkout quote, start and status. Before `billing` so `/checkout/*` is its.
+app.route('/api/billing', billingCheckout);
 app.route('/api/billing', billing);
 
 // Task — Stripe-backed product catalog read surface. Authenticated read of
