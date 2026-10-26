@@ -478,7 +478,10 @@ const STATE_SQL = `CASE
     ELSE 'active' END`;
 const LIST_FROM = `FROM (SELECT p.*, ${STATE_SQL} AS list_state FROM promo_codes p) x
   WHERE (? IS NULL OR x.code_normalized LIKE ? ESCAPE '\\' OR x.name LIKE ? ESCAPE '\\')
-    AND (? IS NULL OR (? = 'all' AND x.product_ids_json = '[]') OR (? = 'products' AND x.product_ids_json <> '[]'))`;
+    AND (? IS NULL
+      OR (? = 'all' AND x.product_ids_json = '[]' AND COALESCE(x.plan_keys_json, '[]') = '[]')
+      OR (? = 'products' AND x.product_ids_json <> '[]' AND COALESCE(x.plan_keys_json, '[]') = '[]')
+      OR (? = 'plans' AND COALESCE(x.plan_keys_json, '[]') <> '[]'))`;
 const LIST_WHERE_STATE = `AND (? IS NULL OR x.list_state = ?)`;
 // Every order ends on the id, so a page never shifts between two reads of the same rows.
 const LIST_ORDER: Record<(typeof LIST_SORTS)[number], string> = {
@@ -507,7 +510,8 @@ export async function listPromoPage(env: Env, query: ListQuery = {}, nowMs: numb
   const applies = str(query.applies) || null;
   if (applies && !(LIST_APPLIES as readonly string[]).includes(applies)) throw new PromoInputError('invalid_applies', `applies is one of: ${LIST_APPLIES.join(', ')}.`);
   // Plan and interval scope is part 3's (migration 630): nothing records it yet, so no list can be filtered by it.
-  if (applies === 'plans') throw new PromoInputError('applies_not_recorded', 'Plan scope is not recorded yet, so codes cannot be filtered by it. That is not a claim that none applies to plans.');
+  // D1275: plan scope is recorded since part 3 (migration 630). `plans` keeps a code HQ chose plans
+  // for; `products` keeps one that names products and no plan; `all` keeps one that names neither.
   const sort = (str(query.sort) || 'newest') as (typeof LIST_SORTS)[number];
   if (!(LIST_SORTS as readonly string[]).includes(sort)) throw new PromoInputError('invalid_sort', `sort is one of: ${LIST_SORTS.join(', ')}.`);
   const rawQ = str(query.q);
@@ -517,7 +521,7 @@ export async function listPromoPage(env: Env, query: ListQuery = {}, nowMs: numb
 
   await ensurePromoSchema(env);
   const now = new Date(nowMs).toISOString();
-  const base = [now, needle, needle, nameNeedle, applies, applies, applies];
+  const base = [now, needle, needle, nameNeedle, applies, applies, applies, applies];
   const total = await env.DB.prepare(`SELECT COUNT(*) AS n ${LIST_FROM} ${LIST_WHERE_STATE}`)
     .bind(...base, state, state).first<{ n: number }>();
   const rows = await env.DB.prepare(`SELECT x.* ${LIST_FROM} ${LIST_WHERE_STATE} ${LIST_ORDER[sort]} LIMIT ? OFFSET ?`)
