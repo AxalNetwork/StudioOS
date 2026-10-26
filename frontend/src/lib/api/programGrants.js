@@ -45,6 +45,9 @@ export const programGrantsApi = {
   grid: () => request('/admin/program-grants'),
   defaults: () => request('/admin/program-grants/defaults'),
   saveDefaults: (program, body) => request(`/admin/program-grants/defaults/${enc(program)}`, { method: 'PUT', body: JSON.stringify(body || {}) }),
+  // D1156: dated count-only reports; missing reports are explicit.
+  inUse: (uid) => request(`/admin/program-grants/licences/${enc(uid)}/in-use`),
+  sendProgramReport: () => request('/licence/mine/programs/report', { method: 'POST' }),
   licence: (uid) => request(`/admin/program-grants/licences/${enc(uid)}`),
   history: (uid, program) => request(`/admin/program-grants/licences/${enc(uid)}/history${program ? `?program=${enc(program)}` : ''}`),
   grant: (uid, program, body) => request(at(uid, program), { method: 'POST', body: JSON.stringify(body || {}) }),

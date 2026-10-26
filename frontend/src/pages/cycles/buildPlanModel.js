@@ -22,10 +22,25 @@ export const PLAN_TABS = [
   { id: 'progress', label: 'Progress', path: '/build/plan/progress' },
 ];
 
-/** Only `?project_id=` rides on a plan tab, so the chosen venture is kept and nothing else. */
+/**
+ * Only `?project_id=` and the plan's `scope` ride on a plan tab, so the chosen
+ * venture (and a one-claim plan, D1067 §1) is kept and nothing else.
+ */
 export function planSearch(search = '') {
-  const id = new URLSearchParams(String(search || '').replace(/^\?/, '')).get('project_id');
-  return id && /^\d+$/.test(id) ? `?project_id=${id}` : '';
+  const q = new URLSearchParams(String(search || '').replace(/^\?/, ''));
+  const id = q.get('project_id');
+  if (!id || !/^\d+$/.test(id)) return '';
+  const scope = planScope(search);
+  return `?project_id=${id}${scope === 'venture' ? '' : `&scope=${scope}`}`;
+}
+
+/** The venture alone, for a link that leaves the plan (a module, Validate, Build's overview). */
+export const ventureSearch = (search = '') => planSearch(search).replace(/&scope=[^&]*/, '');
+
+/** The plan's scope from the address: the venture, or one claim `h-<id>` (D1065). */
+export function planScope(search = '') {
+  const s = new URLSearchParams(String(search || '').replace(/^\?/, '')).get('scope');
+  return s && /^h-[1-9][0-9]{0,9}$/.test(s) ? s : 'venture';
 }
 
 export const planHref = (tab, search = '') => `${(PLAN_TABS.find((t) => t.id === tab) || PLAN_TABS[0]).path}${planSearch(search)}`;
@@ -52,7 +67,6 @@ export const SECTIONS = [
   { slug: 'operating-systems', name: 'Operating systems', kinds: 'doors to connect GitHub, Vercel and PostHog' },
 ];
 
-export const PLAN_WAIT = 'Proposals are prepared by the planner’s rules from what you accepted in Validate (part 1). Until then none is shown, which is not a claim that there is nothing to build.';
 export const PROGRESS_WAIT = 'Each accepted item’s stages (Accepted, Sent, In progress, Built, Live, Tested) are read from the plan and your tools’ feeds (parts 1 and 4). Until then no stage is drawn, so nothing here reads as not done.';
 
 /**
@@ -99,3 +113,241 @@ export function wordRefusal(e) {
   if (code === 'assist_off') return { kind: 'off', text: AI_OFF_LINE, sub: AI_OFF_SUB };
   return { kind: 'other', text: sentence || 'Eadwyn could not word the plan just now. Nothing was charged. Try again.', sub: null };
 }
+
+// ─────────────────────────────────────────── D1069 (#2939): the plan complete
+
+/** A proposal's kind, as its card's pill says it (VB1). */
+export const KIND_WORD = {
+  feature: 'Feature', 'must-have': 'Must-have', 'prototype-test': 'Prototype test', risk: 'Risk',
+  roadmap: 'Roadmap item', 'formation-step': 'Formation step', 'connect-door': 'Connect',
+};
+
+/** Where an accepted item lands, as D1066 §1 writes it. A door lands nothing. */
+export function landsIn(item) {
+  const p = item?.payload || {};
+  switch (item?.kind) {
+    case 'feature': return 'Solution design › Features';
+    case 'risk': return 'Solution design › Risks';
+    case 'must-have': return 'Prototype / MVP › Must-haves';
+    case 'prototype-test': return 'Prototype / MVP › Tests';
+    // A commitment carries no lane; D1066 lands it in Next.
+    case 'roadmap': return `Product roadmap › ${['Now', 'Next', 'Later'].includes(p.lane) ? p.lane : 'Next'}`;
+    case 'formation-step': return 'Company creation › Formation';
+    default: return null;
+  }
+}
+
+const EVIDENCE_KIND = {
+  pain_group: 'Problem discovery', hypothesis: 'Hypothesis', experiment: 'Experiment', signal: 'Demand',
+  finding: 'Customer research', feature: 'Feature', commitment: 'Your commitment', decision: 'Verdict',
+};
+const SIGNAL_WORD = { loi: 'LOI', would_pay: 'Would pay', pre_sale: 'Pre-sale' };
+
+/** One "Because" chip: the source word, the module it came from, and its label (VB1). */
+export function evidenceChip(e) {
+  const source = ['Recorded', 'Typed', 'Document'].includes(e?.source_label) ? e.source_label : 'Typed';
+  const label = e?.kind === 'signal' ? SIGNAL_WORD[e.label] || String(e?.label ?? '') : String(e?.label ?? '');
+  return { source, text: [EVIDENCE_KIND[e?.kind] || 'Evidence', label].filter(Boolean).join(' · ') };
+}
+
+/** The "Because" chips of an item, signals counted into one chip so a test does not list ten LOIs. */
+export function becauseChips(item) {
+  const ev = Array.isArray(item?.evidence) ? item.evidence : [];
+  const signals = ev.filter((e) => e?.kind === 'signal');
+  const chips = ev.filter((e) => e?.kind !== 'signal').map(evidenceChip);
+  if (signals.length) chips.push({ source: signals.every((s) => s.source_label === 'Document') ? 'Document' : 'Recorded', text: `Demand · ${signals.length} confirmed ${signals.length === 1 ? 'signal' : 'signals'}` });
+  return chips;
+}
+
+/** The item's status pill (VB3). Discarded reads Dismissed, the word the button used. */
+export const STATUS_WORD = {
+  proposed: '○ Proposed', accepted: '✓ Accepted', edited: '✎ Edited and accepted', withdrawn: '↺ Withdrawn', discarded: '– Dismissed',
+};
+export const isDecided = (i) => i?.status === 'accepted' || i?.status === 'edited';
+
+const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+/** "12 Oct" from a SQLite or ISO stamp, in UTC; null when there is none to read. */
+export function dayMon(raw) {
+  const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(String(raw ?? ''));
+  return m && MONTHS[Number(m[2]) - 1] ? `${Number(m[3])} ${MONTHS[Number(m[2]) - 1]}` : null;
+}
+/** "12 Oct, 14:05" in UTC; null when there is no stamp. */
+export function dayTime(raw) {
+  const d = dayMon(raw);
+  const t = /[ T](\d{2}):(\d{2})/.exec(String(raw ?? ''));
+  return d ? (t ? `${d}, ${t[1]}:${t[2]} UTC` : d) : null;
+}
+
+/** An accepted (or dismissed) item's one line: when, and where it landed (VB1, VB3). */
+export function decidedLine(item) {
+  const when = dayMon(item?.decided_at);
+  if (item?.status === 'discarded') return `Dismissed${when ? ` ${when}` : ''} · it will not be proposed again`;
+  const where = item?.kind === 'connect-door' ? 'Operating systems' : landsIn(item);
+  return [when ? `Accepted ${when}` : 'Accepted', where].filter(Boolean).join(' · ');
+}
+
+/** Every item of the plan, in module order. */
+const allItems = (plan) => SECTIONS.flatMap((s) => (plan?.modules?.[s.slug] || []));
+
+/** VB1's counts: real numbers from the read, never guessed. */
+export function planCounts(plan) {
+  const items = allItems(plan);
+  return {
+    proposed: items.filter((i) => i?.status === 'proposed').length,
+    accepted: items.filter(isDecided).length,
+    dismissed: items.filter((i) => i?.status === 'discarded').length,
+  };
+}
+export const countsLine = (c) => `${c.proposed} proposed · ${c.accepted} accepted · ${c.dismissed} dismissed`;
+
+/** A module's items, ordered as the canvas draws them: proposals, then decided, then dismissed and withdrawn. */
+export function moduleItems(plan, slug) {
+  const rank = { proposed: 0, accepted: 1, edited: 1, discarded: 2, withdrawn: 3 };
+  return (plan?.modules?.[slug] || []).map((i, n) => [i, n])
+    .sort(([a, x], [b, y]) => (rank[a?.status] ?? 4) - (rank[b?.status] ?? 4) || x - y).map(([i]) => i);
+}
+
+const DECISION = { proceed: 'Proceed', pivot: 'Pivot', stop: 'Stop' };
+
+/**
+ * What the scope's verdict means for the plan (VB1, VB14). `verdict` is the
+ * plan read's: the newest unsuperseded decision, or null when none.
+ *   · given Proceed or Pivot: the strip's "From your Verdict" (founders only);
+ *   · given Stop: the plan is paused, and resumes on a new decision;
+ *   · withheld: "Plan anyway", and Raise shows the plan as resting on withheld evidence.
+ */
+export function verdictState(verdict) {
+  if (!verdict || !DECISION[verdict.decision]) return { kind: 'none' };
+  const n = Number(verdict.evidence_count) || 0;
+  const pieces = `${n} ${n === 1 ? 'piece' : 'pieces'} of evidence`;
+  if (verdict.state === 'withheld') {
+    return { kind: 'withheld', line: `Your verdict is withheld: ${n} of ${Number(verdict.bar) || 5} pieces of evidence. You can still plan, but Raise will show the plan as resting on withheld evidence.` };
+  }
+  if (verdict.decision === 'stop') return { kind: 'stop', line: 'Your verdict is Stop. The plan is paused. Accepted items stay.', sub: 'Record a new decision to resume.' };
+  const when = dayMon(verdict.decided_at);
+  return { kind: 'given', strip: `From your Verdict: ${[DECISION[verdict.decision], when, pieces].filter(Boolean).join(' · ')}` };
+}
+
+/** "Prepared 12 Oct, 14:05 UTC · rules only, no AI cost" (VB1); the trigger is never an AI run (D1065). */
+export function preparedLine(plan) {
+  const at = dayTime(plan?.prepared_at);
+  return `${at ? `Prepared ${at}` : 'Prepared'} · rules only, no AI cost`;
+}
+
+/**
+ * VB13: what D1067's `/since` says. `new` is null for a plan prepared before
+ * D1067 kept its list: then only "changed" is known, and no count is guessed.
+ */
+export function sinceLine(since) {
+  if (!since || !since.plan) return null;
+  const n = since.new, c = since.contradicting;
+  if (Number.isInteger(n) && n > 0) {
+    return `${n} new ${n === 1 ? 'piece' : 'pieces'} of evidence since this plan${Number.isInteger(c) && c > 0 ? `, ${c} contradicting` : ''}.`;
+  }
+  if (since.changed) return n === null ? 'Your evidence changed since this plan. How many pieces are new was not recorded for this plan.' : 'Your evidence changed since this plan.';
+  return null;
+}
+export const SINCE_FOOT = 'No accepted item is changed by itself. Open it to decide.';
+
+/**
+ * VB4: each kind's own fields, D1066 §2's list and values. Impact is
+ * `added_value`, the column a feature's Impact is stored in.
+ */
+export const EDIT_FIELDS = {
+  feature: [
+    { key: 'title', label: 'Title', kind: 'text', max: 200 },
+    { key: 'description', label: 'Description', kind: 'area', max: 2000 },
+    { key: 'added_value', label: 'Impact', kind: 'choice', options: ['Low', 'Medium', 'High'] },
+    { key: 'effort', label: 'Effort', kind: 'choice', options: ['S', 'M', 'L', 'XL'] },
+  ],
+  'must-have': [{ key: 'title', label: 'Title', kind: 'text', max: 200 }],
+  'prototype-test': [
+    { key: 'title', label: 'Title', kind: 'text', max: 200 },
+    { key: 'method', label: 'Method', kind: 'text', max: 500 },
+    { key: 'target', label: 'Target', kind: 'text', max: 500 },
+  ],
+  risk: [
+    { key: 'title', label: 'Title', kind: 'text', max: 200 },
+    { key: 'severity', label: 'Severity', kind: 'choice', options: ['low', 'medium', 'high'], words: { low: 'Low', medium: 'Medium', high: 'High' } },
+    { key: 'mitigation', label: 'Mitigation', kind: 'area', max: 2000 },
+  ],
+  roadmap: [
+    { key: 'title', label: 'Title', kind: 'text', max: 200 },
+    { key: 'lane', label: 'Lane', kind: 'choice', options: ['Now', 'Next', 'Later'] },
+  ],
+  'formation-step': [{ key: 'title', label: 'Title', kind: 'text', max: 200 }],
+};
+export const canEdit = (item) => Boolean(EDIT_FIELDS[item?.kind]);
+
+/** The form's starting values: the proposal as it stands (or the founder's saved edit). */
+export function editStart(item) {
+  const p = item?.payload || {};
+  return Object.fromEntries((EDIT_FIELDS[item?.kind] || []).map((f) => [f.key, p[f.key] == null ? '' : String(p[f.key])]));
+}
+
+/**
+ * The edit Accept sends: only the fields the founder changed, so an untouched
+ * item reads `accepted`, not `edited` (D1066 §2). A blank title is refused here
+ * before the Worker refuses it; a blank optional field is left as proposed.
+ */
+export function editPayload(item, form) {
+  const start = editStart(item);
+  const out = {};
+  for (const f of EDIT_FIELDS[item?.kind] || []) {
+    const v = String(form?.[f.key] ?? '').trim();
+    if (f.key === 'title' && !v) return { error: 'A title is required.' };
+    if (v === String(start[f.key] ?? '').trim()) continue;
+    if (!v) continue;
+    if (f.kind === 'choice' && !f.options.includes(v)) return { error: `${f.label} is not a value this item takes.` };
+    out[f.key] = v.slice(0, f.max || v.length);
+  }
+  return { edit: Object.keys(out).length ? out : null };
+}
+
+/** The module an item's write belongs to, by name. */
+export const moduleName = (slug) => SECTIONS.find((s) => s.slug === slug)?.name || 'Build';
+
+/**
+ * A refused write, in words (VB3's "could not save"). The Worker's own sentence
+ * is used when it sent one (D1066 §5); a store failure says nothing was saved.
+ */
+export function writeRefusal(e, slug) {
+  const code = e?.data?.code || e?.data?.error || e?.code || null;
+  const said = String(e?.data?.message || e?.data?.detail || '').trim();
+  const sentence = said && !/^[a-z_]+$/.test(said) ? said : '';
+  if (code === 'writer_refused') return `${moduleName(slug)} could not save this: ${sentence || 'Build refused the write.'}`;
+  if (code === 'decided') return sentence || 'This item is already decided.';
+  if (code === 'plan_paused' || code === 'plan_stopped') return sentence || 'The plan is paused. Record a new decision to resume.';
+  if (code === 'invalid_edit') return sentence || 'That edit is not one this item takes.';
+  if (code === 'not_this_project') return sentence || 'This plan belongs to the venture’s founders.';
+  return sentence || 'This could not be saved. Nothing was saved; try again.';
+}
+
+/** Accept all's answer (D1066 §3) in words: how many landed, what was refused, and whether more wait. */
+export function acceptAllLine(out) {
+  const results = Array.isArray(out?.results) ? out.results : [];
+  const ok = Number.isInteger(out?.accepted) ? out.accepted : results.filter((r) => r?.ok).length;
+  const refused = results.filter((r) => r && !r.ok);
+  const parts = [`${ok} accepted.`];
+  if (refused.length) parts.push(`${refused.length} could not be: ${String(refused[0].message || 'refused').replace(/\.$/, '')}.`);
+  if (out?.more) parts.push('More are waiting. Press Accept all again.');
+  return parts.join(' ');
+}
+
+/** VB17: nothing accepted in Validate yet (D1065 `no_evidence`). */
+export const EMPTY_TITLE = 'Nothing to plan from yet.';
+export const EMPTY_LINE = 'The plan reads only what you accepted in Validate. Accept findings from your interviews first.';
+/** No plan yet, but there may be evidence: the founder prepares it by rule. */
+export const UNPREPARED_LINE = 'No plan is prepared yet. The planner’s rules prepare it from what you accepted in Validate, at no AI cost.';
+/** VB16: an admin reads the plan. */
+export const READ_ONLY_LINE = 'Founders accept their plan. You can read it.';
+export const READ_ONLY_NOTE = 'If the owner allows admins to accept, Accept appears here.';
+/** VB20a: a caller the plan is not for. */
+export const NOT_YOURS = 'This plan belongs to the venture’s founders.';
+export const NOT_YOURS_LINE = 'Investors, advisors and explorers see a venture’s evidence only when its founders share it in Raise.';
+/** Pause and resume (D1067 §3), each said before it is done. */
+export const PAUSED_BY_YOU = 'You paused the plan. Accepted items stay. Nothing is prepared or accepted while it is paused.';
+export const PAUSE_BODY = 'Nothing is prepared or accepted while the plan is paused. Accepted items stay as they are. You can resume it.';
+export const RESUME_BODY = 'The plan opens again, so you can accept its proposals.';
+export const UPDATE_BODY = 'The rules read your accepted evidence again. New proposals are added and unsupported ones withdrawn. No accepted item is changed.';
+export const DISMISS_BODY = 'It will not be proposed again. Nothing is written to Build.';

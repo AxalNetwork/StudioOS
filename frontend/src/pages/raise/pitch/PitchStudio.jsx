@@ -9,6 +9,8 @@ import { Lightbox, RailFrame, WorkerRail, usePhoneWidth } from '../../../ui';
 import ExportDialog from './ExportDialog';
 import PitchNotes from './PitchNotes';
 import PitchReview from './PitchReview';
+import VersionCompare from './VersionCompare';
+import { comparePair } from './compareModel';
 import { CoverageMeter, useDeckSources } from './SourcesBoards';
 import {
   EDIT_PATH, EMPTY_DECK, ENGAGEMENT_VIEW_ROWS, LINE, NOT_RECORDED, NO_VENTURE, NO_VIEWS, READ_ONLY, TABS, TITLE,
@@ -258,6 +260,9 @@ export function StudioDecks({ reads, readOnly, q }) {
   const versions = asList(reads.versions.data, 'versions', 'decks');
   const current = currentVersion(versions);
   const busy = reads.projects.status === 'loading' || reads.versions.status === 'loading' || reads.versions.status === 'idle';
+  // D898 group D (PD15): the version chosen to compare with the current one.
+  const [compare, setCompare] = useState(null);
+  const pair = compare ? comparePair(versions, compare) : null;
 
   let left;
   if (busy) left = <><Skeleton h="h-44" testId="pitch-studio-loading" /><Skeleton h="h-40" /></>;
@@ -273,7 +278,11 @@ export function StudioDecks({ reads, readOnly, q }) {
     left = (
       <>
         <CurrentDeck project={reads.project} current={current} versions={versions} deck={reads.deck} q={q} phone={phone} readOnly={readOnly} />
-        <Versions versions={versions} phone={phone} />
+        <Versions versions={versions} phone={phone} onCompare={setCompare} />
+        {pair && !phone ? (
+          <VersionCompare key={`${pair.older.id}-${pair.newer.id}`} older={pair.older} newer={pair.newer} versions={versions} readOnly={readOnly}
+            onClose={() => setCompare(null)} onRestored={() => { setCompare(null); reads.reload(); }} />
+        ) : null}
       </>
     );
   }
@@ -440,7 +449,7 @@ function NewInData({ current, q }) {
 
 const SELECT = 'min-h-[30px] rounded-[8px] border border-axal-hairline bg-white px-2 font-mono text-[11px] text-axal-ink dark:border-gray-700 dark:bg-gray-900 dark:text-gray-100';
 
-function Versions({ versions, phone }) {
+function Versions({ versions, phone, onCompare }) {
   const [audience, setAudience] = useState('all');
   const [sort, setSort] = useState('newest');
   const options = useMemo(() => audienceOptions(versions), [versions]);
@@ -483,6 +492,7 @@ function Versions({ versions, phone }) {
               <th className="px-4 py-2 font-semibold">Saved</th>
               <th className="px-4 py-2 font-semibold">By</th>
               <th className="px-4 py-2 font-semibold">Shared links</th>
+              <th className="px-4 py-2 font-semibold"><span className="sr-only">Compare</span></th>
             </tr>
           </thead>
           <tbody>
@@ -495,6 +505,11 @@ function Versions({ versions, phone }) {
                 <td className="px-4 py-2.5 font-mono text-axal-muted dark:text-gray-400">{r.saved}</td>
                 <td className="px-4 py-2.5 text-axal-muted dark:text-gray-400">{r.by}</td>
                 <td className="px-4 py-2.5 font-mono text-axal-muted dark:text-gray-400" data-testid={`pitch-studio-version-links-${r.id}`}>{r.links}</td>
+                <td className="px-4 py-2.5 text-right">
+                  {!r.current && onCompare ? (
+                    <button type="button" className="text-[12px] font-bold text-axal-violet hover:underline dark:text-violet-300" onClick={() => onCompare(r.id)} data-testid={`pitch-studio-compare-${r.id}`}>Compare</button>
+                  ) : null}
+                </td>
               </tr>
             ))}
           </tbody>
