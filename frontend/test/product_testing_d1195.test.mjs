@@ -18,7 +18,7 @@ import { AuthProvider } from '../src/hooks/useAuthSync.jsx';
 import { ProductTestingHqPage } from '../src/pages/admin/ConsolePages.jsx';
 import { adminProductTestersApi } from '../src/lib/api/productTesting.js';
 import {
-  NOT_YET, TABS, WAITS, overviewFigures, programHref, testerRow, viewOf,
+  TABS, WAITS, overviewFigures, programHref, testerRow, viewOf,
 } from '../src/pages/admin/productTesting/productTestingModel.js';
 
 const h = React.createElement;

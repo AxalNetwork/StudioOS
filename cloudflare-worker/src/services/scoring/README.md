@@ -23,3 +23,7 @@ model's interpretation. Never accept browser-supplied scores or raw inputs.
 explanation or lowest-confidence interview-question prompt, then validates the
 citations and words. `../../routes/pmf_explain.ts` mounts previews and the explicit Keep;
 `storedPmfInputs` reads without recomputing or writing a score.
+
+D1255 (#3278): `../ventureScoring/` scores the other ten scopes into the same
+store. Its `scoreVenture` asks `recomputePmf` for this scope rather than
+writing PMF rows itself, so `pmfStore.ts` stays PMF's one writer.

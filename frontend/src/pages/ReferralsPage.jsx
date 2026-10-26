@@ -6,7 +6,9 @@
  * `/api/email/*`; no canvas `.side` nav.
  *
  * The old page was organised around a Stripe Connect balance; that model is
- * gone — rewards are milestone labels settled off-platform.
+ * gone. D965 (#2798): startup and platform user referrals pay perk credits at
+ * the amounts HQ sets, read from the overview's rules; other rewards are
+ * labels settled off-platform.
  */
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import QRCode from 'qrcode';
@@ -22,6 +24,7 @@ import { Unreadable } from '../ui';
 import BrandIcon from '../ui/BrandIcon.jsx';
 import './referrals/referrals.css';
 import { appOrigin } from '../lib/branchHost';
+import { memberRewardMatrix } from '../lib/referralRewards';
 
 const STATUS_TONE = {
   draft: 'grey',
@@ -86,15 +89,12 @@ const PRIORITY_CHIP = {
   Selective: CHIP.amber,
 };
 
-const REWARD_MATRIX = [
-  { cat: 'Startup / founder', model: 'Milestone-based', modelTone: 'green', note: 'Paid on cohort acceptance and completed formation.' },
-  { cat: 'Platform user', model: 'Platform credit', modelTone: 'grey', note: 'Issued once matched and onboarded with a founder.' },
-  { cat: 'Strategic & capital', model: 'Invite-only / custom', modelTone: 'amber', note: 'Terms negotiated directly, not published — case by case.' },
-];
+// D965 (#2798): the reward matrix is drawn from the overview's rules
+// (`memberRewardMatrix`), so it never promises credits while a rule is off.
 
 const FAQS = [
   { q: 'Who is eligible to submit a referral?', a: 'Anyone already connected to Axal VC — founders in a cohort or graduated, advisors, investors, operators, and service partners.' },
-  { q: 'When are rewards actually paid?', a: 'Only after a qualifying outcome — acceptance and formation for startup referrals, onboarding for advisors and partners, a paying customer for platform users. Never on submission alone.' },
+  { q: 'When are rewards actually paid?', a: 'Only after a qualifying outcome — acceptance and formation for a startup referral, onboarding for a platform user. What each pays now is on its category above. Strategic introductions are agreed case by case. Partner accounts are not paid perk credits. Never on submission alone.' },
   { q: 'Can I refer myself or my own company?', a: 'No. Self-referrals aren’t eligible under this program — apply directly instead.' },
   { q: 'Is every referral accepted?', a: 'No — most are not, and that’s intentional. Review is against a real quality bar, not a quota.' },
   { q: 'Is this program open to everyone, or invite-only?', a: 'Startup, advisor, platform user, and service partner referrals are open. Strategic and capital introductions run on invite-only terms.' },
@@ -1037,7 +1037,7 @@ export default function ReferralsPage({ embedded = false }) {
                 Rewards vary by category and are never issued on submission alone — a qualified outcome (acceptance, close, or onboarding) is required. Some categories run on invite-only terms set case by case.
               </p>
               <div className="mt-4">
-                {REWARD_MATRIX.map((rw) => (
+                {memberRewardMatrix(overview?.categories).map((rw) => (
                   <div key={rw.cat} className="flex flex-wrap items-center gap-3 border-t border-[#f4f3f7] py-3 first:border-t-0">
                     <div className="min-w-[180px] flex-none text-[12.5px] font-bold">{rw.cat}</div>
                     <span className={CHIP[rw.modelTone]}>{rw.model}</span>

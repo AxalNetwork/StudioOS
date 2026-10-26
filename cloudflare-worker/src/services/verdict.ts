@@ -375,6 +375,22 @@ export async function latestVenturePivotDay(env: Env, projectId: number): Promis
 }
 
 /**
+ * D1255 (#3278) — the day of the latest Pivot or Stop given, on the venture
+ * or on any claim, or null. A superseded one still counts: it happened. A
+ * withheld decision does not. The venture scorecard's Risk scope reads it to
+ * tell whether an invalidated claim has been answered; it reads no reasoning
+ * and no name.
+ */
+export async function latestPivotOrStopDay(env: Env, projectId: number): Promise<string | null> {
+  const row = await env.DB.prepare(
+    `SELECT MAX(decided_at) AS at FROM validation_decisions
+      WHERE project_id = ? AND decision IN ('pivot', 'stop') AND state = 'given'`,
+  ).bind(projectId).first<{ at: string | null }>();
+  const d = String(row?.at ?? '').slice(0, 10);
+  return /^\d{4}-\d{2}-\d{2}$/.test(d) ? d : null;
+}
+
+/**
  * D1143 — the venture's Verdict as Product-market fit shows it (never scores
  * it): the current given decision, as `currentDecision` reads it, else the
  * latest withheld one ("Withheld (below 5 pieces)"). No reasoning, no name.

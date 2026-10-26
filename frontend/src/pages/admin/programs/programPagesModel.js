@@ -97,6 +97,8 @@ export const REFUSALS = Object.freeze({
   // D957, Refer & Earn.
   bad_transition: 'This referral changed while you were reading it. Nothing was saved; open it again.',
   already_decided: 'This request was decided while you were reading it. Nothing changed.',
+  // D965: a paying move whose reward could not be paid does not move.
+  reward_not_paid: 'The referrer’s reward could not be paid, so the referral did not move. Nothing was saved.',
   // D957, Perks.
   not_reviewable: 'This listing changed while you were reading it, so that does not apply now. Nothing changed.',
   note_required: 'Write the reason. The partner sees it on their listing.',
