@@ -124,6 +124,6 @@ D1123 extends admin_lab_operations_d971.test.ts with real SQLite capacity-result
 `calendar_d1206.test.ts` checks mounted Free-investor reads and subscriptions,
 Professional-only IC creation, advisor fallback ownership, partial-source error
 codes and safe diagnostics, and Calendly exclusion from both provider copies.
-It also checks local-licence scopes, HQ elevation, complete member pagination,
+It also checks local-licence scopes, HQ elevation, constant-query populated memberships, private-kind exclusions,
 unavailable remote coverage and personal sync/export isolation after a scope
 read. Every provider call is stubbed or refused; all rows are synthetic.

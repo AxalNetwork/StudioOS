@@ -17,7 +17,7 @@ import { isSuperAdmin } from '../auth';
 import { branchOf } from '../util/branch';
 import { branchBindings } from './branches';
 import { encryptString, decryptString } from './cryptoBox';
-import { hostedEvents, staleMyEventCopies, ticketEvents } from './calendar/myEvents';
+import { hostedEvents, staleMyEventCopies, ticketEvents, placeOf } from './calendar/myEvents';
 import { investorMeetingEvents } from './calendar/investorMeetings';
 import { describeItems, type CalendarItem } from './calendar/items';
 
@@ -907,6 +907,121 @@ export async function fetchUserEventsWithSources(
   return gather(env, userId, role, fromIso, toIso, kinds, opts);
 }
 
+/** Private external meetings and wellbeing sessions never enter a staff scope. */
+export const SCOPED_EXCLUDED_KINDS = ['calendly_event', 'expert_booking'] as const;
+
+type ScopedRow = Record<string, any>;
+/**
+ * One set-based statement per source. Membership is decided in SQL, against
+ * this deployment, without widening any of the personal readers above.
+ * Each source deliberately reads no email, note, join link or private address.
+ */
+async function scopedRows(env: Env, actor: User, all: boolean, kind: CalendarEvent['kind'], from: string, to: string): Promise<ScopedRow[]> {
+  let query: string;
+  switch (kind) {
+    case 'ic_meeting':
+      query = `WITH members AS (SELECT id FROM users WHERE is_active = 1 AND (role <> 'admin' OR id = ? OR ? = 1))
+        SELECT m.id, m.uid, m.title, m.start_at, m.duration_min, m.status, m.location_kind, m.deal_id, m.cancel_reason,
+          (SELECT json_group_array(json_object('name',u.name,'role','attendee','rsvp',a.rsvp))
+             FROM ic_meeting_attendees a LEFT JOIN users u ON u.id = a.user_id WHERE a.meeting_id = m.id) AS people_json
+        FROM ic_meetings m WHERE m.start_at >= ? AND m.start_at <= ?
+          AND (m.organizer_user_id IN (SELECT id FROM members)
+            OR EXISTS (SELECT 1 FROM ic_meeting_attendees a WHERE a.meeting_id = m.id AND a.user_id IN (SELECT id FROM members)))`;
+      break;
+    case 'founder_checkin':
+      query = `WITH members AS (SELECT id FROM users WHERE is_active = 1 AND (role <> 'admin' OR id = ? OR ? = 1))
+        SELECT c.id,c.uid,c.title,c.start_at,c.duration_min,c.status,c.location_kind,c.project_id,
+               f.name AS founder_name,p.name AS counterpart_name
+        FROM founder_checkins c LEFT JOIN users f ON f.id = c.founder_user_id LEFT JOIN users p ON p.id = c.counterpart_user_id
+        WHERE c.start_at >= ? AND c.start_at <= ?
+          AND (c.founder_user_id IN (SELECT id FROM members) OR c.counterpart_user_id IN (SELECT id FROM members))`;
+      break;
+    case 'advisor_booking':
+      query = `WITH members AS (SELECT id FROM users WHERE is_active = 1 AND (role <> 'admin' OR id = ? OR ? = 1))
+        SELECT b.id,b.uid,b.topic,b.status,b.cancel_reason,s.starts_at AS start_at,s.ends_at AS end_at,
+               a.display_name AS host_name,a.timezone AS time_zone,u.name AS requester_name
+        FROM advisor_bookings b JOIN advisor_office_hour_slots s ON s.id = b.slot_id
+          LEFT JOIN advisors a ON a.id = b.advisor_id LEFT JOIN users u ON u.id = b.founder_user_id
+        WHERE s.starts_at >= ? AND s.starts_at <= ?
+          AND b.status IN ('pending','confirmed','completed','cancelled')
+          AND (b.founder_user_id IN (SELECT id FROM members) OR a.user_id IN (SELECT id FROM members))`;
+      break;
+    case 'partner_office_hour':
+      query = `WITH members AS (SELECT id,partner_id FROM users WHERE is_active = 1 AND (role <> 'admin' OR id = ? OR ? = 1))
+        SELECT b.id,b.uid,b.topic,b.status,b.cancel_reason,s.starts_at AS start_at,s.ends_at AS end_at,
+               p.name AS host_name,u.name AS requester_name
+        FROM partner_bookings b JOIN partner_office_hour_slots s ON s.id = b.slot_id
+          LEFT JOIN partners p ON p.id = b.partner_id LEFT JOIN users u ON u.id = b.founder_user_id
+        WHERE s.starts_at >= ? AND s.starts_at <= ?
+          AND b.status IN ('pending','confirmed','completed','cancelled')
+          AND (b.founder_user_id IN (SELECT id FROM members) OR b.partner_id IN (SELECT partner_id FROM members WHERE partner_id IS NOT NULL))`;
+      break;
+    case 'event_ticket':
+      query = `WITH members AS (SELECT id FROM users WHERE is_active = 1 AND (role <> 'admin' OR id = ? OR ? = 1))
+        SELECT r.id, r.status AS reg_status,r.payment_status,r.waitlist_position,e.id AS event_id,e.title,
+               e.starts_at AS start_at,e.ends_at AS end_at,e.project_id,e.location_kind
+        FROM event_registrations r JOIN events e ON e.id = r.event_id
+        WHERE e.starts_at >= ? AND e.starts_at <= ? AND r.user_id IN (SELECT id FROM members)
+          AND r.status IN ('registered','confirmed','attended','waitlisted') AND e.status <> 'cancelled'
+          AND COALESCE(e.host_user_id,0) <> r.user_id`;
+      break;
+    case 'event_hosted':
+      query = `WITH members AS (SELECT id FROM users WHERE is_active = 1 AND (role <> 'admin' OR id = ? OR ? = 1))
+        SELECT e.id,e.title,e.starts_at AS start_at,e.ends_at AS end_at,e.status,e.project_id,e.location_kind
+        FROM events e WHERE e.starts_at >= ? AND e.starts_at <= ?
+          AND e.host_user_id IN (SELECT id FROM members) AND e.status <> 'cancelled'`;
+      break;
+    case 'investor_meeting':
+      query = `WITH members AS (SELECT id,founder_id FROM users WHERE is_active = 1 AND (role <> 'admin' OR id = ? OR ? = 1))
+        SELECT ev.id,ev.kind,ev.starts_at AS start_at,ev.calendar_item_uid AS uid,p.name AS prospect_name,p.firm AS prospect_firm,
+               pr.id AS project_id
+        FROM raise_prospect_events ev JOIN raise_prospects p ON p.id = ev.prospect_id JOIN projects pr ON pr.id = p.project_id
+        WHERE ev.starts_at >= ? AND ev.starts_at <= ? AND ev.kind IN ('meeting','call') AND ev.calendar_item_uid IS NOT NULL
+          AND pr.founder_id IN (SELECT founder_id FROM members WHERE founder_id IS NOT NULL)`;
+      break;
+    default: return [];
+  }
+  const result = await env.DB.prepare(query).bind(actor.id, all ? 1 : 0, from, to).all<ScopedRow>();
+  return result.results || [];
+}
+
+/** A staff scope's row, deliberately carrying only the detail that view may show. */
+function scopedEvent(kind: CalendarEvent['kind'], row: ScopedRow): CalendarEvent {
+  const people: CalendarEvent['attendees'] = [];
+  const person = (name: unknown, role: string, rsvp?: string) => {
+    if (typeof name === 'string' && name.trim()) people.push({ name, email: null, role, ...(rsvp ? { rsvp } : {}) });
+  };
+  if (row.people_json) for (const p of JSON.parse(row.people_json)) person(p.name,p.role,p.rsvp);
+  person(row.founder_name,'founder'); person(row.counterpart_name,'counterpart');
+  person(row.host_name,kind === 'advisor_booking' ? 'advisor' : 'partner'); person(row.requester_name,'requester');
+  let title = row.title;
+  let status = row.status;
+  let uid = row.uid;
+  if (kind === 'advisor_booking') title = `Advisor session — ${row.topic || ''}`.trim();
+  if (kind === 'partner_office_hour') title = `Partner office hours — ${row.topic || ''}`.trim();
+  if (kind === 'event_ticket') {
+    const place = placeOf({ status: row.reg_status, payment_status: row.payment_status, waitlist_position: row.waitlist_position });
+    status = place?.code; title = place?.mark ? `${place.mark}: ${row.title}` : row.title; uid = `reg-${row.id}`;
+  }
+  if (kind === 'event_hosted') uid = `event-${row.id}`;
+  if (kind === 'investor_meeting') {
+    const who = String(row.prospect_firm || row.prospect_name || '').trim() || 'an investor';
+    title = `Investor ${row.kind === 'call' ? 'call' : 'meeting'} · ${who}`; status = 'scheduled';
+  }
+  return {
+    id: `${kind}:${row.id}`, kind, source_id: Number(row.id), source_uid: String(uid),
+    title: title || 'Not recorded: this item has no title.', start_at: row.start_at,
+    end_at: row.end_at || (row.duration_min != null ? addMinutes(row.start_at,row.duration_min) : row.start_at),
+    status, location_kind: row.location_kind || null, location_uri: null, organizer_email: null, attendees: people,
+    notes: null, deal_id: row.deal_id ?? null, project_id: row.project_id ?? null,
+    ...(kind === 'event_ticket' || kind === 'event_hosted' ? { event_id: Number(row.event_id || row.id) } : {}),
+    cancel_reason: row.status === 'cancelled'
+      ? (kind === 'advisor_booking' || kind === 'partner_office_hour' ? bookingCancelReason(row.cancel_reason) : row.cancel_reason ?? null)
+      : null,
+    time_zone: row.time_zone || null,
+  };
+}
+
 /** D1206: deployment-bound read-only scope. Personal readers stay unchanged. */
 export interface CalendarScopeCoverage {
   complete: boolean;
@@ -923,7 +1038,7 @@ export async function fetchCalendarScope(
 ): Promise<{ events: CalendarScopeItem[]; sources: CalendarSourceStatus[]; coverage: CalendarScopeCoverage }> {
   const branch = branchOf(env);
   if (actor.role !== 'admin' || (scope === 'all' && (branch || !isSuperAdmin(actor)))) throw new Error('Forbidden');
-  const wanted = KNOWN_KINDS.filter(kind => !kinds?.length || kinds.includes(kind));
+  const wanted = KNOWN_KINDS.filter(kind => !SCOPED_EXCLUDED_KINDS.some(privateKind => privateKind === kind) && (!kinds?.length || kinds.includes(kind)));
   const unavailable = (error: 'unreadable' | 'not_configured', reason: string) => ({
     events: [], sources: wanted.map(kind => ({ kind, ok: false, error })),
     coverage: { complete: false, error, reason, studios: [] },
@@ -965,31 +1080,25 @@ export async function fetchCalendarScope(
       coverage.reason = 'Unreadable: the studio register could not be read. These are HQ items only. Try again.';
     }
   }
-  const byId = new Map<string, CalendarEvent>();
-  const statuses = new Map<CalendarEvent['kind'], CalendarSourceStatus>(wanted.map(kind => [kind, { kind, ok: true, error: null }]));
-  let after = 0;
+  // Verify the membership store can be read before returning any scoped data.
   try {
-    // Keyset pages avoid D1's row ceilings. There is no silent member cap.
-    while (true) {
-      const rows = await env.DB.prepare("SELECT id, role FROM users WHERE is_active = ? AND id > ? AND (role <> 'admin' OR id = ? OR ? = 1) ORDER BY id LIMIT ?")
-        .bind(1, after, actor.id, scope === 'all' ? 1 : 0, 100).all<{ id: number; role: string }>();
-      const members = rows.results || [];
-      for (const member of members) {
-        const result = await fetchUserEventsWithSources(env, member.id, member.role, fromIso, toIso, kinds, { withCancelled: true });
-        for (const event of result.events) byId.set(event.id, event);
-        for (const status of result.sources) if (!status.ok) {
-          const previous = statuses.get(status.kind);
-          if (previous?.error !== 'unreadable') statuses.set(status.kind, status);
-        }
-      }
-      if (members.length < 100) break;
-      after = members[members.length - 1].id;
-    }
+    await env.DB.prepare('SELECT id FROM users WHERE is_active = ? LIMIT ?').bind(1,1).all();
   } catch {
-    // A failed membership read must not present a shorter list as complete.
     return unavailable('unreadable', 'Unreadable: studio membership could not be read. Try again.');
   }
-  const sources = [...statuses.values()];
+  const byId = new Map<string, CalendarEvent>();
+  const sources: CalendarSourceStatus[] = [];
+  for (const kind of wanted) {
+    try {
+      const rows = await scopedRows(env, actor, scope === 'all', kind, fromIso, toIso);
+      for (const row of rows) { const event = scopedEvent(kind,row); byId.set(event.id,event); }
+      sources.push({ kind, ok: true, error: null });
+    } catch (e) {
+      const error = isMissingTableError(e) || isMissingColumnError(e) ? 'not_configured' : 'unreadable';
+      sources.push({ kind, ok: false, error });
+      console.warn('[calendar] scoped source failed', { kind, outcome: error });
+    }
+  }
   const sourceFailure = sources.find(source => !source.ok);
   const sourceReason = !sourceFailure ? null : sourceFailure.error === 'not_configured'
     ? 'Not read here yet: some calendar sources are not configured.'

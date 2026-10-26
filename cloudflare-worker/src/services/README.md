@@ -530,6 +530,7 @@ D1133: `billingRecovery.ts` prepares caller-owned renewal invoice intents or car
 D1206 (#3172): `calendar.ts` retains personal readers, resolves the
 account-owned advisor fallback, reports fixed source error codes without raw
 diagnostics, and skips Calendly when copying to Google/Outlook. Missing schema
-is not an empty source. Studio reads active members of its licensed deployment with read-only
+is not an empty source. Studio reads each allowed source once for active members of its licensed
+deployment, excluding private Calendly/wellbeing items, with read-only
 projections; All studios requires HQ Super Admin and explicitly reports unread
 remote coverage. Neither reader is used by sync or exports (D1206).

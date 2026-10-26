@@ -18,7 +18,7 @@ const window = `from=${FROM}&to=${TO}`;
 function fixture() {
   const db = new DatabaseSync(':memory:', { enableForeignKeyConstraints: false });
   db.exec(readFileSync(new URL('../sql/schema_baseline.sql', import.meta.url), 'utf8'));
-  for (const name of ['235_calendar_events_kind.sql', '277_user_recovery_state.sql', '603_calendar_feed_tokens.sql', '256_branch_local_copies.sql', '258_licence_deployments.sql']) {
+  for (const name of ['235_calendar_events_kind.sql', '277_user_recovery_state.sql', '603_calendar_feed_tokens.sql', '256_branch_local_copies.sql', '258_licence_deployments.sql', '463_raise_record_stores.sql', '607_raise_money_cents.sql']) {
     db.exec(readFileSync(new URL(`../sql/migrations/${name}`, import.meta.url), 'utf8'));
   }
   for (const [id, role] of [[1,'admin'],[2,'founder'],[3,'advisor'],[4,'investor'],[5,'investor']] as const) {
@@ -28,8 +28,9 @@ function fixture() {
     INSERT INTO projects (id,name,founder_id) VALUES (20,'Fixture venture',102);
     INSERT INTO deals (id,project_id) VALUES (200,20);
     INSERT INTO deal_invitations (deal_id,investor_user_id) VALUES (200,4),(200,5);`);
-  let broken = '';
+  let broken = ''; let reads = 0; const statements: string[] = [];
   const DB = { prepare(sql: string) {
+    reads++; statements.push(sql);
     if (broken && sql.includes(broken)) throw new Error('synthetic private row and token must not escape');
     let args: any[] = []; const stmt: any = {
       bind(...values: any[]) { args = values.map(v => v ?? null); return stmt; },
@@ -48,7 +49,7 @@ function fixture() {
     const init = { method: body === undefined ? 'GET' : 'POST', headers: { Cookie: `${env.BRANCH_CODE ? 'studioos_auth_' + env.BRANCH_CODE : 'studioos_auth'}=${token}; studioos_csrf=fixture-csrf`, 'x-csrf-token': 'fixture-csrf', Origin: 'https://axal.vc', 'content-type': 'application/json' }, ...(body === undefined ? {} : { body: JSON.stringify(body) }) };
     return mounted ? (await import('../src/index.ts')).default.fetch(new Request('https://axal.vc/api/calendar' + path, init), env, ctx) : calendar.request(path, init, env, ctx);
   }
-  return { db, env, request, breakSource(s: string) { broken = s; }, async close() { await Promise.allSettled(pending); db.close(); } };
+  return { db, env, request, readCount() { return reads; }, statements() { return statements; }, breakSource(s: string) { broken = s; }, async close() { await Promise.allSettled(pending); db.close(); } };
 }
 
 // Nothing in this suite may contact a real provider, even on a refusal path.
@@ -254,7 +255,7 @@ test('D1206: Studio requires readable current licence and membership; a failed s
     assert.equal(source.status, 200);
     assert.equal(result.items.length, 2); assert.equal(result.coverage.complete, false);
     assert.equal(result.sources.find((s: any) => s.kind === 'ic_meeting').error, 'unreadable');
-    for (const [broken, error] of [['FROM branch_licence','unreadable'],['SELECT id, role FROM users','unreadable']] as const) {
+    for (const [broken, error] of [['FROM branch_licence','unreadable'],['SELECT id FROM users WHERE is_active','unreadable']] as const) {
       f.breakSource(broken);
       const res = await f.request(`/events?${window}&scope=studio&kinds=founder_checkin`);
       const body = await res.json() as any;
@@ -306,15 +307,19 @@ test('D1206: All studios is HQ Super Admin only and reports remote or unreadable
 });
 
 
-test('D1206: Studio member reads continue past a complete keyset page without a silent member cap', async () => {
+test('D1206: Studio includes large memberships with a fixed query count', async () => {
   const f = fixture();
   try {
     licensed(f);
     for (let id=10; id<=114; id++) f.db.prepare('INSERT INTO users (id,email,name,role) VALUES (?,?,?,?)').run(id, `fixture-page-${id}@example.test`, `Fixture page ${id}`, 'founder');
     f.db.prepare('INSERT INTO founder_checkins (uid,founder_user_id,title,start_at) VALUES (?,?,?,?)').run('last-member',114,'Last member check-in',START);
-    const body = await (await f.request(`/events?${window}&scope=studio&kinds=founder_checkin`)).json() as any;
+    for (let i=0;i<500;i++) f.db.prepare('INSERT INTO founder_checkins (uid,founder_user_id,title,start_at) VALUES (?,?,?,?)').run(`bulk-${i}`,10+i%105,`Bulk check-in ${i}`,START);
+    const before = f.readCount();
+    const body = await service.fetchCalendarScope(f.env,{ id: 1,role: 'admin' } as any,'studio',FROM,TO);
     assert.equal(body.coverage.complete,true);
-    assert.deepEqual(body.items.map((e: any) => e.title),['Last member check-in']);
+    assert.equal(body.events.length,501);
+    assert.ok(body.events.some((e: any) => e.title==='Last member check-in'));
+    assert.ok(f.readCount()-before <= 12, 'queries must not multiply with members');
   } finally { await f.close(); }
 });
 
@@ -337,5 +342,82 @@ test('D1206: scoped event cards keep the item shape while removing source links,
     assert.equal(item.organizer_email,null); assert.equal(item.location_uri,null);
     assert.ok(item.attendees.every((person: any) => person.email===null));
     assert.deepEqual(item.can,{ rsvp: false, reschedule: false, cancel: false, copy: false });
+  } finally { await f.close(); }
+});
+
+
+test('D1206: private Calendly and wellbeing items stay personal and are never queried by either staff scope', async () => {
+  const f = fixture();
+  try {
+    licensed(f);
+    for (const source of ['calendly','axal']) f.db.prepare('INSERT INTO calendar_events (uid,user_id,source,kind,external_uri,title,start_at,end_at) VALUES (?,?,?,?,?,?,?,?)')
+      .run(`private-${source}`,2,source,'expert_booking',`fixture-${source}`,`Private ${source}`,START,END);
+    const own = await service.fetchUserEvents(f.env,2,'founder',FROM,TO,['calendly_event','expert_booking']);
+    assert.equal(own.length,2);
+    for (const scope of ['studio','all']) {
+      if (scope==='all') { delete f.env.BRANCH_CODE; f.env.APP_URL='https://axal.vc'; f.db.exec('INSERT INTO super_admins (user_id,granted_by_user_id) VALUES (1,1)'); }
+      const before = f.statements().length;
+      const response = await f.request(`/events?${window}&scope=${scope}`);
+      const body = await response.json() as any;
+      assert.equal(response.status,200); assert.deepEqual(body.items,[]);
+      assert.deepEqual(body.excluded_kinds,['calendly_event','expert_booking']);
+      assert.ok(body.sources.every((s: any) => !['calendly_event','expert_booking'].includes(s.kind)));
+      assert.equal(f.statements().slice(before).some(sql => sql.includes('FROM calendar_events')),false);
+    }
+  } finally { await f.close(); }
+});
+
+test('D1206: set-based scope preserves every allowed source and filters private admin, inactive and revoked rows', async () => {
+  const f = fixture();
+  try {
+    licensed(f); checkins(f);
+    f.db.exec("UPDATE users SET founder_id=106 WHERE id=6; INSERT INTO projects (id,name,founder_id) VALUES (66,'Foreign venture',106); INSERT INTO advisors (id,uid,user_id,display_name) VALUES (30,'a30',3,'Fixture advisor'),(60,'a60',6,'Foreign advisor'); INSERT INTO partners (id,uid,name,email) VALUES (30,'p30','Fixture partner','partner@example.test'),(60,'p60','Foreign partner','foreign@example.test'); UPDATE users SET partner_id=30 WHERE id=4; UPDATE users SET partner_id=60 WHERE id=6;");
+    for (const [id,owner] of [[30,2],[60,6]]) {
+      f.db.prepare('INSERT INTO advisor_office_hour_slots (id,uid,advisor_id,starts_at,ends_at) VALUES (?,?,?,?,?)').run(id,`as-${id}`,id,START,END);
+      f.db.prepare('INSERT INTO advisor_bookings (id,uid,slot_id,advisor_id,founder_user_id,topic) VALUES (?,?,?,?,?,?)').run(id,`ab-${id}`,id,id,owner,`${id===30?'Fixture':'Foreign'} topic`);
+      f.db.prepare('INSERT INTO partner_office_hour_slots (id,uid,partner_id,starts_at,ends_at) VALUES (?,?,?,?,?)').run(id,`ps-${id}`,id,START,END);
+      f.db.prepare('INSERT INTO partner_bookings (id,uid,slot_id,partner_id,founder_user_id,topic) VALUES (?,?,?,?,?,?)').run(id,`pb-${id}`,id,id,owner,`${id===30?'Fixture':'Foreign'} topic`);
+    }
+    f.db.exec("INSERT INTO advisor_bookings (id,uid,slot_id,advisor_id,founder_user_id,topic) VALUES (31,'ab-host-side',30,30,5,'Fixture host session'); INSERT INTO partner_bookings (id,uid,slot_id,partner_id,founder_user_id,topic) VALUES (31,'pb-host-side',30,30,5,'Fixture host office hours');");
+    for (const [id,attendee] of [[70,2],[71,6],[72,2]]) {
+      f.db.prepare('INSERT INTO ic_meetings (id,uid,title,start_at,organizer_user_id) VALUES (?,?,?,?,?)').run(id,`ic-${id}`,id===71?'Foreign IC':'Fixture shared IC',START,6);
+      f.db.prepare('INSERT INTO ic_meeting_attendees (meeting_id,user_id) VALUES (?,?)').run(id,attendee);
+    }
+    f.db.exec("UPDATE ic_meetings SET status='cancelled',cancel_reason='capacity_race' WHERE id=72");
+    for (const [id,owner,status] of [[30,2,'published'],[31,6,'published'],[32,6,'published'],[33,2,'cancelled'],[34,2,'draft']] as const) f.db.prepare('INSERT INTO events (id,slug,host_user_id,title,starts_at,ends_at,status,visibility) VALUES (?,?,?,?,?,?,?,?)').run(id,`event-${id}`,owner,id===31?'Foreign event':`Fixture event ${id}`,START,END,status,'unlisted');
+    for (const [id,user,status] of [[40,2,'confirmed'],[41,5,'confirmed'],[42,3,'cancelled']] as const) f.db.prepare('INSERT INTO event_registrations (id,event_id,user_id,email,status) VALUES (?,?,?,?,?)').run(id,32,user,`fixture-${user}@example.test`,status);
+    f.db.exec("INSERT INTO event_registrations (id,event_id,user_id,email,status) VALUES (43,30,2,'fixture-host@example.test','confirmed'),(44,32,4,'fixture-wait@example.test','waitlisted'); UPDATE event_registrations SET waitlist_position=7 WHERE id=44;");
+    for (const [id,project] of [[30,20],[60,66]]) {
+      f.db.prepare('INSERT INTO raise_prospects (id,uid,project_id,name,firm,stage) VALUES (?,?,?,?,?,?)').run(id,`prospect-${id}`,project,'Fixture prospect',id===30?'Fixture firm':'Foreign firm','meeting');
+      f.db.prepare('INSERT INTO raise_prospect_events (id,prospect_id,kind,starts_at,calendar_item_uid,note) VALUES (?,?,?,?,?,?)').run(id,id,'meeting',START,`meeting-${id}`,'Private note must not be selected');
+    }
+    const before = f.readCount();
+    const body = await service.fetchCalendarScope(f.env,{ id: 1,role: 'admin' } as any,'studio',FROM,TO);
+    assert.equal(body.coverage.complete,true,JSON.stringify(body.sources));
+    assert.deepEqual(new Set(body.events.map(e=>e.id)),new Set(['ic_meeting:70','ic_meeting:72','founder_checkin:11','founder_checkin:22','advisor_booking:30','advisor_booking:31','partner_office_hour:30','partner_office_hour:31','event_hosted:30','event_hosted:34','event_ticket:40','event_ticket:44','investor_meeting:30']));
+    assert.ok(f.readCount()-before <= 12);
+    assert.equal(JSON.stringify(body.events).includes('Foreign IC'),false);
+    assert.equal(JSON.stringify(body.events).includes('Foreign topic'),false);
+    assert.equal(JSON.stringify(body.events).includes('Foreign firm'),false);
+    for (const event of body.events) {
+      assert.equal(event.organizer_email,null); assert.equal(event.notes,null); assert.equal(event.location_uri,null);
+      assert.ok(event.attendees.every(p=>p.email===null)); assert.equal(event.href,null);
+      assert.deepEqual(event.can,{ rsvp:false,reschedule:false,cancel:false,copy:false });
+    }
+    assert.equal(body.events.find(e=>e.id==='ic_meeting:72')?.cancel_reason,'capacity_race','an IC free-text reason is not a booking code');
+    const waitlisted = body.events.find(e=>e.id==='event_ticket:44')!;
+    assert.equal(waitlisted.title,'Waitlist · #7: Fixture event 32'); assert.equal(waitlisted.status,'waitlisted');
+    const investor = body.events.find(e=>e.id==='investor_meeting:30')!;
+    assert.equal(investor.start_at,START); assert.equal(investor.end_at,START); assert.equal(investor.source_uid,'meeting-30');
+    const queries = f.statements().slice(before);
+    assert.equal(queries.some(sql => /\b(?:m\.agenda|c\.notes|ev\.note|u\.email|location_uri|location_url)\b/.test(sql)),false,'scoped reads must not fetch private content only to strip it');
+    const expected = new Set<string>();
+    const allowed = service.KNOWN_KINDS.filter(kind => !['calendly_event','expert_booking'].includes(kind));
+    for (const member of f.db.prepare("SELECT id,role FROM users WHERE is_active=1 AND (role<>'admin' OR id=1)").all() as any[]) {
+      const personal = await service.fetchUserEventsWithSources(f.env,member.id,member.role,FROM,TO,allowed,{ withCancelled:true });
+      assert.ok(personal.sources.every(source=>source.ok));
+      for (const item of personal.events) expected.add(item.id);
+    }
+    assert.deepEqual(new Set(body.events.map(e=>e.id)),expected,'set-based visibility must match the allowed union of unchanged personal readers');
   } finally { await f.close(); }
 });

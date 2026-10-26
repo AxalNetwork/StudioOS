@@ -37,7 +37,7 @@ import {
   revokeGoogleOAuthGrant, loadRefreshTokenExport,
   exchangeGoogleCode, exchangeMicrosoftCode,
   fetchGoogleUserinfo, fetchMicrosoftUserinfo,
-  fetchUserEvents, fetchUserEventsWithSources, fetchCalendarScope, attachPushRecords, eventsToIcs, KNOWN_KINDS,
+  fetchUserEvents, fetchUserEventsWithSources, fetchCalendarScope, attachPushRecords, eventsToIcs, KNOWN_KINDS, SCOPED_EXCLUDED_KINDS,
   syncUserToGoogle, syncUserToMicrosoft,
   preflightOAuthSecrets,
 } from '../services/calendar';
@@ -197,7 +197,7 @@ calendar.get('/events', safe('events', 'Could not list calendar events', async (
   if (scope === 'studio' || scope === 'all') {
     const result = await fetchCalendarScope(c.env, user, scope, fromDt.toISOString(), toDt.toISOString(), kinds);
     return c.json({ items: result.events, sources: result.sources, coverage: result.coverage,
-      scope, read_only: true, from: fromDt.toISOString(), to: toDt.toISOString() });
+      scope, read_only: true, excluded_kinds: SCOPED_EXCLUDED_KINDS, from: fromDt.toISOString(), to: toDt.toISOString() });
   }
   // THE DEGRADING READ, deliberately — see `gather` in services/calendar.ts.
   // Until now one unreadable source turned the whole agenda into a 500 and
