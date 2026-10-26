@@ -1,5 +1,10 @@
 # cloudflare-worker/test — what the worker guarantees
 
+`admin_promos_d1271.test.ts` checks all four HQ Super Admin promo gates,
+branch refusal even with an elevation row, stale/non-TOTP sessions, the
+production cool-off prefix, and successful billing-audited writes over
+canonical SQLite tables with Stripe stubbed.
+
 `program_usage_d1156.test.ts` exercises migration 601, count-only branch reports,
 newest-wins HQ storage, monthly source counts, partial failures, roles,
 throttling and the dated in-use read with synthetic SQLite records.
@@ -63,6 +68,10 @@ D1159: `fund_admin_d1159.test.ts` covers named distribution lines without
 arithmetic changes, both new Admin acts and their audit, frozen/support/member
 refusals, preserved institutional GP scope, and independent booklet queue reads.
 Every external fetch is forbidden; no Mercury call reaches a provider.
+
+| File | Guarantee |
+| --- | --- |
+| `capital_access_d1191.test.ts` | D1191: real-route access, staff summaries, support audit ordering, scoped prospect writes and failure/race outcomes against the canonical schema. |
 
 ## Conventions
 
@@ -155,3 +164,4 @@ D1231 concurrency tests cover displayed If-Match tokens, source edits during a r
 | File | Purpose |
 | --- | --- |
 | `deal_insights_d1151.test.ts` | Real SQLite tests of D1151 deal access, NDA masks, publication, aggregates and sourced sharing. |
+D1169: `usage_storage_d1169.test.ts` holds the grown storage read: thirteen member stores, company files counted to the company owner, kinds, companies, the ten largest files, the allowance and its state, and that fund, legal, identity, 83(b) and HQ stores are never read. It and `usage_storage_d642.test.ts` run on `_storage_schema.ts`, which replays the baseline and every later migration once into a template database and copies it for each case. Rows are synthetic.

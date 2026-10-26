@@ -19,7 +19,7 @@ import { PERSONAS } from '../../../lib/personas.js';
 
 export const SEG_PATH = '/admin/persona-segments';
 export const SEG_UNCLASSIFIED_PATH = '/admin/persona-segments/unclassified';
-export const ACCOUNTS_PATH = '/admin/held/accounts';
+export const ACCOUNTS_PATH = '/admin/accounts';
 export const CONTENT_PATH = '/admin/content';
 export const SEG_TITLE = 'Persona segments';
 export const PAGE_LINE = 'Who your members are within each profile, what each segment needs, and what you offer it.';

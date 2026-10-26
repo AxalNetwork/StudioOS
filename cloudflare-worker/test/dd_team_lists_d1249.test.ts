@@ -31,7 +31,7 @@ const TABLES = ['users', 'super_admins', 'projects', 'founders', 'deals', 'deal_
 function world() {
   const { DB, db } = makeD1('');
   for (const t of TABLES) db.exec(stripForeignKeys(tableFromBaseline(baseline, t)));
-  for (const m of ['339_dd_section_signoff', '620_dd_case_lifecycle', '623_dd_team_templates', '302_push_subscriptions']) db.exec(read(`../sql/migrations/${m}.sql`));
+  for (const m of ['339_dd_section_signoff', '620_dd_case_lifecycle', '622_dd_documents_due_reminders', '623_dd_team_templates', '302_push_subscriptions']) db.exec(read(`../sql/migrations/${m}.sql`));
   db.exec(`ALTER TABLE partner_profiles ADD COLUMN ref TEXT; ALTER TABLE partner_profiles ADD COLUMN reviewed_at TEXT;
            CREATE TABLE company_kyb_records (id INTEGER PRIMARY KEY, uid TEXT, company_id INTEGER, started_by_user_id INTEGER, status TEXT, updated_at TEXT);`);
   const u = db.prepare('INSERT INTO users (id, email, name, role, is_active, kyc_status, kyc_reviewed_at) VALUES (?, ?, ?, ?, 1, ?, ?)');
@@ -97,6 +97,10 @@ test('the list: server-side search, filters, sort and pages, with stable totals 
   // Mutation checked: count pending items as worked → checklist_worked 2.
   assert.deepEqual([alpha.stage, alpha.checklist_total, alpha.checklist_worked, alpha.open_flags, alpha.worst_severity, alpha.requests_waiting, alpha.lead_name],
     ['in_review', 2, 1, 1, 'high', 1, 'Lee Lead']);
+  // D1248 (#3263): a withdrawn request no longer waits.
+  w.db.prepare("UPDATE dd_requests SET withdrawn_at = '2026-10-26T00:00:00.000Z' WHERE state = 'requested'").run();
+  assert.equal((await call(w, ADMIN, 'GET', '/cases')).body.items[0].requests_waiting, 0, 'a withdrawn request still waited on the list');
+  w.db.prepare("UPDATE dd_requests SET withdrawn_at = NULL WHERE state = 'requested'").run();
   // Mutation checked: page the count with the rows → total 1 on page 2.
   const p1 = await call(w, ADMIN, 'GET', '/cases?page_size=2&page=1');
   const p2 = await call(w, ADMIN, 'GET', '/cases?page_size=2&page=2');
@@ -129,6 +133,17 @@ test('the overview: stages, open High flags, requests waiting, ages by target da
   assert.equal(r.body.requests.waiting, 1);
   // Mutation checked: count past-due as zero → past_due 0 on a store with no due dates.
   assert.equal(r.body.requests.past_due, null, 'no due date is stored, so none is past due');
+  // D1248 (#3263): once a waiting request carries a due date, past due is counted; a withdrawn one never waits.
+  w.db.prepare("UPDATE dd_requests SET due_date = '2020-01-01' WHERE state = 'requested'").run();
+  // A second waiting request on the same case, with no due date: never past due.
+  w.db.prepare("INSERT INTO dd_requests (case_id, title, state) SELECT case_id, 'Undated', 'requested' FROM dd_requests WHERE state = 'requested' LIMIT 1").run();
+  const dated = (await call(w, ADMIN, 'GET', '/overview')).body.requests;
+  assert.deepEqual([dated.waiting, dated.past_due, dated.past_due_reason], [2, 1, null], 'an undated request counted as past due');
+  w.db.prepare("UPDATE dd_requests SET withdrawn_at = '2026-10-26T00:00:00.000Z' WHERE state = 'requested'").run();
+  const gone = (await call(w, ADMIN, 'GET', '/overview')).body.requests;
+  assert.deepEqual([gone.waiting, gone.past_due], [0, null], 'a withdrawn request still waited');
+  w.db.prepare("DELETE FROM dd_requests WHERE title = 'Undated'").run();
+  w.db.prepare("UPDATE dd_requests SET withdrawn_at = NULL, due_date = NULL WHERE state = 'requested'").run();
   const ages = r.body.ages.buckets;
   assert.equal(ages.reduce((a: number, b: any) => a + b.before_target + b.past_target + b.no_target, 0), 2);
   assert.ok(ages.some((b: any) => b.past_target === 1), 'Beta is past its target');

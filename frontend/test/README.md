@@ -26,6 +26,10 @@ effects: both venture aliases, invalid/missing selection, Back and score
 removal. Only chart drawing is stubbed for the minimal DOM. The cap-table suite
 also exercises a `project_id` deep link.
 
+| File | Guarantee |
+| --- | --- |
+| `capital_access_client_d1191.test.mjs` | D1191: capital summary/support transport preserves project, page, reason, investor target and POST verb. |
+
 ## Conventions
 
 - One file per surface or per rule; the header comment says what went wrong and

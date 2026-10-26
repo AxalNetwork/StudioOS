@@ -177,14 +177,16 @@ test('the rows #2375 names light on the pages that left the console (D938)', () 
     const item = SIDEBAR_GROUPS[group].flatMap((g) => g.items).find((i) => i.to === to);
     return path === item.to || (item.match || []).some((p) => path === p || path.startsWith(`${p}/`));
   };
-  assert.ok(lit('super_admin', '/admin/accounts', '/admin/accounts/all'), 'Team');
-  assert.ok(lit('super_admin', '/admin/accounts', '/admin/accounts/credits/7'), 'Team keeps a member\'s credits');
+  // D941 (#2746): Team is /admin/hq-team; All accounts and a member's credits keep their addresses and light it.
+  assert.ok(lit('super_admin', '/admin/hq-team', '/admin/accounts/all'), 'Team');
+  assert.ok(lit('super_admin', '/admin/hq-team', '/admin/accounts/credits/7'), 'Team keeps a member\'s credits');
+  assert.ok(!lit('super_admin', '/admin/hq-team', '/admin/accounts'), 'Team lights on the Admin\'s Accounts page');
   assert.ok(lit('super_admin', '/admin/revenue', '/admin/revenue/billing'), 'Revenue');
   for (const p of ['/admin/articles/calendar', '/admin/persona-segments', '/admin/advisors-partners/deck', '/admin/team']) {
     assert.ok(lit('super_admin', '/admin/content', p), `Content on ${p}`);
   }
-  assert.ok(lit('admin', '/admin/held/accounts', '/admin/accounts/all'), 'Accounts');
-  assert.ok(lit('admin', '/admin/held/accounts', '/admin/persona-segments'), 'Accounts on Persona segments');
+  assert.ok(lit('admin', '/admin/accounts', '/admin/accounts/all'), 'Accounts');
+  assert.ok(lit('admin', '/admin/accounts', '/admin/persona-segments'), 'Accounts on Persona segments');
   // D1038 (#2390): Approvals moved to /admin/approvals; its lane boards light it too.
   for (const p of ['/admin/kyc', '/admin/partner-profiles', '/admin/approvals/co-marketing']) assert.ok(lit('admin', '/admin/approvals', p), `Approvals on ${p}`);
   for (const p of ['/admin/directory', '/admin/wellbeing', '/admin/wellbeing/resources']) assert.ok(lit('admin', '/admin/community', p), `Community on ${p}`);
