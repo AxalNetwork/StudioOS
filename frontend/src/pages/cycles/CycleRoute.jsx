@@ -43,7 +43,7 @@ import RoadmapFromGithub from './RoadmapFromGithub';
 import MvpFromGithub from './MvpFromGithub';
 import UpdatesHistory from './UpdatesHistory';
 import ReportingDesk from './ReportingDesk';
-import BuildPlan, { BuildPlanDoor } from './BuildPlan';
+import BuildPlan, { BuildPlanDoor, VerdictRecordWithPlan } from './BuildPlan';
 import { PmfPart } from './PmfPart';
 import { PmfChip } from './PmfMethod';
 import UpdateAskReplies from './UpdateAskReplies';
@@ -150,6 +150,11 @@ const CYCLE_DEFS = {
     // what the read sends, with the session's working parts inside it.
     recordPage: toFnMap({
       'customer-research': (read, ctx) => <InterviewRecord read={read} {...ctx} />,
+      // D1069 (#2939, VB2a): after a given Proceed or Pivot, "Plan the build" above the record.
+      verdict: (read, ctx) => <VerdictRecordWithPlan read={read} render={(record) => (
+        <RecordView record={record} activity={ctx.activity} cycleName={ctx.cycleName} moduleName={ctx.moduleName} onLink={ctx.onLink}
+          onForm={ctx.onForm} onWrite={ctx.onWrite} onClient={ctx.onClient} onShowAll={ctx.onShowAll} />
+      )} />,
     }),
   },
   /**
@@ -993,7 +998,7 @@ export default function CycleRoute({ cycle, lightbox = false, adding = false, re
     // D1063 (#2426): Validate → Build's plan, under Build's header and tab row.
     body = (
       <BuildPlan tab={buildPlan} projectId={projectId} projectStatus={projectStatus} onRetryProject={() => setProjectsKey((n) => n + 1)}
-        search={location.search} cards={tabs} action={action} phone={phone} />
+        search={location.search} cards={tabs} action={action} phone={phone} role={user?.role ?? null} lab={user?.spinout_lab_active === 1 && user?.role !== 'admin'} />
     );
   } else if (capTableTab) {
     body = (
