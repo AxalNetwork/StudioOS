@@ -72,6 +72,7 @@ import { mvpRun } from './github/mvp';
 import { syncSolutionDesign } from './github/solutionDesign';
 import { deleteContributorsOf, syncTeam } from './github/team';
 import { deleteFactsOf, syncCompany } from './github/company';
+import { checkSyncedWith } from './github/lovableMark';
 
 const PROVIDER_KEY = 'github';
 const API = 'https://api.github.com';
@@ -686,8 +687,14 @@ registerProvider({
   sync: (c, _user, row) => syncGithub(c.env, row),
   // The repository choice has its own route (`PUT /:uid/repositories`), which
   // re-reads the grant; a config patch may not set it around that check.
-  validateConfig(patch) {
+  // D1084: `synced_with` marks a picked repository "Synced with Lovable".
+  validateConfig(patch, existing) {
     if ('repositories' in patch || 'installations' in patch) return { ok: false, error: 'use_repositories_route' };
+    if ('synced_with' in patch) {
+      const v = checkSyncedWith(patch.synced_with, existing);
+      if (!v.ok) return { ok: false, error: v.error };
+      return { ok: true, patch: { ...patch, synced_with: v.synced_with } };
+    }
     return { ok: true, patch };
   },
 });
