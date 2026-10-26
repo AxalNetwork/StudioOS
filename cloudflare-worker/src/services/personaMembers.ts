@@ -255,12 +255,14 @@ export function idsOf(v: unknown): number[] {
   return ids;
 }
 
-/** The segment a move may use: one code knows, never a Retired one. */
+/** The segment a move may use: one code knows or HQ created (D1128), never a Retired one. */
 export async function movableSegment(env: Env, personaId: unknown): Promise<string> {
-  if (typeof personaId !== 'string' || !(personaId in PERSONA_BY_ID)) throw new MembersError(400, 'invalid_persona_id', 'Choose a segment.');
+  if (typeof personaId !== 'string') throw new MembersError(400, 'invalid_persona_id', 'Choose a segment.');
   const { statuses, names } = await segmentTable(env).catch(() => { throw new MembersError(503, 'segments_unreadable', 'The segments could not be read just now. Try again in a moment.'); });
+  // D1128: a segment HQ created is stored in segment_profiles only.
+  if (!(personaId in PERSONA_BY_ID) && !names.has(personaId)) throw new MembersError(400, 'invalid_persona_id', 'Choose a segment.');
   if (statuses.get(personaId) === 'retired') {
-    throw new MembersError(409, 'segment_retired', retiredSentence(names.get(personaId) || PERSONA_BY_ID[personaId as PersonaId].label));
+    throw new MembersError(409, 'segment_retired', retiredSentence(names.get(personaId) || PERSONA_BY_ID[personaId as PersonaId]?.label || 'This segment'));
   }
   return personaId;
 }

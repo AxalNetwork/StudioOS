@@ -66,6 +66,7 @@ widened guard on this very sentence, which is the rule working.)
 /api/mercury/investor → mercury_investor.ts (an investor's own Mercury feeding Deals · Pipeline, Commit and Closing and Fund · Calls, Accounting and Reporting: facts written, proposals accepted, Pipeline shown only; read-only, on HQ or in a branch (D884), the caller's own data only, D840 part 4)
 /api/admin/capital-attestations → admin_capital_attestations.ts (HQ admins read an investor's shared proof of funds; audited before it answers; reads capital_attestations only, never a connection; D752)
 /api/testing/mail  → testing_mail.ts (D811: programme-signed preferences and one-click unsubscribe; no newsletter opt-in required)
+/api/testing/programmes/:uid/logo, /api/partner/testing/programmes/:uid/logo, /api/admin/testing/programmes/:uid/logo → testing.ts (D1199: the programme logo, PUT and DELETE by its owner, GET for its readers; the testingLogo service)
 /api/mail-link     → mail_link.ts (D811: Mail HMAC only, before session middleware; audiences, recipients, feedback and health)
 /api/auth          → auth.ts
 /api/scoring       → scoring.ts
@@ -324,6 +325,12 @@ D886 B10 (#2588): `admin_platform.ts` mounts Super Admin-only
 `/meeting-bots` count/charge reads and `/meeting-bots/test` dispatch/timing reads.
 Dispatch requires TOTP plus recent step-up and calls B1's service with the
 operator's own consented session; status events supply content-free timings.
+
+D1128 (#3008): `persona_segments.ts` adds HQ-only `POST /` creation and the
+admin `GET /:key/completion` count. `personas.ts` exposes authenticated
+`GET /audience-segments` (names/statuses only); `/me` includes the member’s
+missing segment questions. Its existing answer route accepts an expected-primary
+check for follow-up; custom stored segment IDs work in sign-up and retag.
 
 D1011 (#2830): `admin_payments.ts` is the Payments page's Super Admin reads,
 mounted at `/api/admin/payments`: the change log over the catalogue's and

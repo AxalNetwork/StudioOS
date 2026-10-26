@@ -459,6 +459,8 @@ function Overview({ superAdmin, tick }) {
       <CardsBlock seg={seg} profiles={profiles} coverage={coverage} profile={profile} lpOn={lpOn} superAdmin={superAdmin} onRetry={() => retry('profiles')} />
       <NeedsBlock coverage={coverage} profile={profile} onRetry={() => retry('coverage')} />
 
+      <section className={`${CARD} flex flex-col gap-2 border-dashed p-4`} data-testid="seg-advisor-create"><h2 className={H2}>Advisor segments</h2><p className={SUB}>HQ defines the segments Advisors can join.</p>{superAdmin ? <Link to="/admin/persona-segments/new?profile=advisor" className={`${GHOST} min-h-[44px] self-start`}>New segment</Link> : <p className={SUB}>HQ writes the segment profiles.</p>}</section>
+
       <section className="flex flex-col gap-2" aria-labelledby="seg-h-move" data-testid="seg-move-table">
         <h2 id="seg-h-move" className={H2}>Move a member</h2>
         <span className={SUB}>Today&apos;s re-tag table, until D997 part 8 draws each segment&apos;s Members tab and the Move dialog.</span>
@@ -568,6 +570,7 @@ export function PersonaSegmentsPage({ superAdmin }) {
   );
   const actions = (
     <>
+      {superAdmin && <Link to="/admin/persona-segments/new" className={`${BTN} min-h-[44px] bg-axal-violet text-white`}>New segment</Link>}
       <span className="font-mono text-[11.5px] text-axal-muted dark:text-gray-400" data-testid="seg-asof">
         {asOf ? `Updated ${new Date(asOf).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit', hourCycle: 'h23' })}` : 'Reading…'}
       </span>
