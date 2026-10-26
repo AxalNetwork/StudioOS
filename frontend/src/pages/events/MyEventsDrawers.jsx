@@ -14,6 +14,7 @@ import { Lightbox, Unreadable, actionDanger, actionGhost, actionPrimary } from '
 import EventQRCode from '../../components/events/EventQRCode';
 import { onEventDay } from './hostHeaderModel';
 import { dateBlock, statusOf, visibilityWord } from './myEventsModel';
+import { BRIGHTNESS } from './myEventsPhoneModel';
 import {
   CODE_LINE, EXPLORER_CLOSED, HOST_NOT_READ, JOIN_FOOT, NOT_HOST, NO_CODE, NO_PLACE,
   agendaRows, canCancelEvent, canCancelPlace, cancelEventDialog, cancelPlaceDialog, cancelledLine, gateOf, hostPages,
@@ -113,7 +114,7 @@ export function ChangeDialog({ copy, onClose, onConfirm, danger = false, note = 
   };
   const close = () => { if (!busy) onClose(); };
   return (
-    <Lightbox label={copy.title} title={copy.title} sub={copy.sub || undefined} onClose={close} width={480} testId={testId}
+    <Lightbox label={copy.title} title={copy.title} sub={copy.sub || undefined} onClose={close} width={480} phone="sheet" testId={testId}
       footer={(
         <div className="flex flex-col gap-2">
           {refusal ? <p role="alert" className="m-0 text-[12.5px] text-red-700 dark:text-red-300" data-testid={`${testId}-refusal`}>{refusal}</p> : null}
@@ -154,7 +155,12 @@ export function PublishDialog({ event, counts, onClose, onDone }) {
  * The ticket (MEV3)
  * ------------------------------------------------------------------ */
 
-export function TicketDrawer({ id, list, onClose, onDone }) {
+/**
+ * D1037 (MEV18b): with `page`, the ticket is a page of its own below 1024px
+ * (`Lightbox`'s page mode under `bar`, the phone's "‹ Events"): the code
+ * larger, the brightness line under it, and Close left to the bar.
+ */
+export function TicketDrawer({ id, list, onClose, onDone, page = false, bar = undefined }) {
   const [detail, retryDetail] = useRead(() => eventsApi.get(id), id);
   const [links, retryLinks] = useRead(() => eventsApi.calendarLinks(id), id);
   const [asking, setAsking] = useState(false);
@@ -172,12 +178,12 @@ export function TicketDrawer({ id, list, onClose, onDone }) {
       {place && canCancelPlace(place) ? (
         <button type="button" className={actionDanger} onClick={() => setAsking(true)} data-testid="my-events-ticket-cancel">{state === 'waitlist' ? 'Leave the waitlist' : 'Cancel my place'}</button>
       ) : <span />}
-      <button type="button" className={actionGhost} onClick={onClose} data-testid="my-events-ticket-close">Close</button>
+      {page ? null : <button type="button" className={actionGhost} onClick={onClose} data-testid="my-events-ticket-close">Close</button>}
     </div>
   );
   return (
     <>
-      <Lightbox label={title} onClose={onClose} width={600} testId="my-events-ticket-drawer" footer={footer}>
+      <Lightbox label={title} onClose={onClose} width={600} testId="my-events-ticket-drawer" footer={footer} pageBelow={page ? 'lg' : undefined} bar={page ? bar : undefined}>
         {waiting ? <Reading testId="my-events-ticket-reading" /> : unread ? (
           <div className="px-5 py-5"><Unreadable what="Your ticket" claim="That is not the same as having none." onRetry={() => { list.reload?.(); retryDetail(); }} /></div>
         ) : !place ? (
@@ -200,9 +206,9 @@ export function TicketDrawer({ id, list, onClose, onDone }) {
               <Section testId="my-events-ticket-code">
                 {place.checkin_code ? (
                   <div className="flex flex-col items-center gap-1.5">
-                    <EventQRCode value={place.checkin_code} size={210} />
+                    <EventQRCode value={place.checkin_code} size={page ? 240 : 210} />
                     <span className={`font-mono text-[13px] ${INK}`} data-testid="my-events-ticket-code-text">{place.checkin_code}</span>
-                    <span className={`text-center text-[12.5px] ${MUTED}`}>{CODE_LINE}</span>
+                    <span className={`text-center text-[12.5px] ${MUTED}`} data-testid="my-events-ticket-code-line">{page ? `${CODE_LINE} ${BRIGHTNESS}` : CODE_LINE}</span>
                   </div>
                 ) : <p className={`m-0 text-[12.5px] ${MUTED}`} data-testid="my-events-ticket-no-code">{NO_CODE}</p>}
               </Section>
@@ -323,7 +329,7 @@ export function HostedDrawer({ id, list, user, onClose, onDone }) {
   ) : null;
   return (
     <>
-      <Lightbox label={label} onClose={onClose} width={600} testId="my-events-hosted-drawer" footer={footer}>
+      <Lightbox label={label} onClose={onClose} width={600} phone="sheet" testId="my-events-hosted-drawer" footer={footer}>
         {waiting ? <Reading testId="my-events-hosted-reading" /> : missing ? (
           [403, 404].includes(Number(detail.error?.status))
             ? <NotHostCard event={null} onClose={onClose} />
