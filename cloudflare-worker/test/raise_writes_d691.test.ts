@@ -1194,7 +1194,8 @@ test('13: every write logs its record\'s row — project, raise.<slug>, the reco
     const before = n(db, 'SELECT COUNT(*) AS n FROM activity_logs');
     const r = await cyc(db, C_FOUNDER, m, q(path), b);
     assert.ok(r.status >= 200 && r.status < 300, `${m} ${path}: ${r.raw}`);
-    assert.equal(n(db, 'SELECT COUNT(*) AS n FROM activity_logs') - before, 1, `${m} ${path} logs one row`);
+    // The first split also initializes Base, with its own atomic creation audit.
+    assert.equal(n(db, 'SELECT COUNT(*) AS n FROM activity_logs') - before, path === '/use-of-funds' ? 2 : 1, `${m} ${path} logs its write and any initialization`);
   }
   const rows = logs(db, 'id > 1');
   for (const r of rows) {
@@ -1208,6 +1209,7 @@ test('13: every write logs its record\'s row — project, raise.<slug>, the reco
     'raise.fundraising-readiness/team', 'raise.fundraising-readiness/deck', 'raise.investor-narrative/1', 'raise.investor-narrative/1',
     `raise.pitch-deck/${(db.prepare('SELECT MAX(id) AS id FROM pitch_deck_share_tokens').get() as any).id}`,
     `raise.cap-table/h-${(db.prepare(`SELECT MAX(id) AS id FROM cap_table_holders`).get() as any).id}`,
+    `raise.use-of-funds/${(db.prepare('SELECT uid FROM uof_scenarios WHERE project_id = ? AND is_base = 1').get(C_P) as any).uid}`,
     'raise.use-of-funds/product', `raise.capital-relationships/${(db.prepare('SELECT MAX(id) AS id FROM raise_prospects').get() as any).id}`,
     'raise.data-room/4',
   ]);
