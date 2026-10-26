@@ -37,6 +37,8 @@ export const HQ_STRIPS = {
     ['Payments', '/admin/platform/payments'],
     ['Bank accounts', '/admin/platform/bank-accounts'],
     ['Product testing', '/admin/platform/product-testing'],
+    // D1253 (#2428): the venture scorecard's model, indices and fairness check.
+    ['Scoring', '/admin/platform/scoring'],
     ['Promo codes', '/admin/platform/promo-codes'],
     ['Monitoring', '/monitoring'],
     ['Telegram', '/admin/telegram'],

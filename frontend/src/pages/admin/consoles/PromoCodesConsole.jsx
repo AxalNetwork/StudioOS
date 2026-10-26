@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useState } from 'react';
+import { Link } from 'react-router-dom';
 import { api } from '../../../lib/api';
 import { X, RefreshCw, Loader2, Trash2, Ticket, Plus } from 'lucide-react';
 import { useToast } from '../../../components/useToast';
@@ -258,7 +259,8 @@ export function PromoCodesPanel() {
                 const limit = p.max_redemptions != null ? `/${p.max_redemptions}` : '';
                 return (
                   <tr key={p.id} className="border-b border-gray-100 hover:bg-gray-50/50 dark:border-gray-800 dark:hover:bg-gray-800/30">
-                    <td className="px-4 py-3 font-mono font-medium text-gray-900 dark:text-gray-100">{p.code}</td>
+                    {/* D1270 (#2381): a code opens its drawer at its own address (PRM2). */}
+                    <td className="px-4 py-3 font-mono font-medium text-gray-900 dark:text-gray-100"><Link to={`/admin/platform/promo-codes/${p.id}`} className="underline">{p.code}</Link></td>
                     <td className="px-4 py-3 text-gray-700 dark:text-gray-300">{discountLabel(p)}</td>
                     <td className="px-4 py-3 text-xs text-gray-600 dark:text-gray-400 max-w-[18rem]">
                       <PromoProductScope promo={p} productName={productName} />

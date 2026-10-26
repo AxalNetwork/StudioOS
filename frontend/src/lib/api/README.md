@@ -1,5 +1,8 @@
 # frontend/src/lib/api — one file per new API domain
 
+D1239: `dealViews.js` reads personal thesis fit and saves, edits or removes private/firm view settings. The server rechecks deal and accepted-seat access.
+
+
 D1156: `programGrants.js` adds the dated HQ `inUse(uid)` read and the branch
 `sendProgramReport()` action, with no caller-supplied counts.
 
@@ -303,6 +306,12 @@ interview channels' Worker secrets from HQ › Integration keys › Channels
 bar). The list comes with `GET /admin/integration-keys`; a value is never read
 back, and a generated one is returned once.
 
+D1215 (#3212): `closings.js` reads and writes closings as a record
+(`/api/closings`, and the admin desk at `/api/admin/closings`): open a closing
+for a deal, its lines and their capital route, the evidence that money moved,
+the founder's cap-table decision and the close. An investor reads their own
+lines and the round's total. Nothing in it moves money.
+
 D845 (#2471): `developerUsage.js` reads the caller's own usage reports over
 `api_usage_events` (D843): `report` (`GET /api/developer/usage`, grouped by day,
 key, provider, connector, tool or model, or by day and a second way) and `events`
@@ -361,6 +370,17 @@ and paged `/notes`; add/edit/delete notes use the same Worker scope. Only
 the author edits and deletes, firm colleagues read, and staff have no bypass.
 Reading whats-new advances that user/firm’s visit marker. #3057 consumes it.
 
+D1249 (#3264): `ddDesk.js` is Due Diligence's desk on `/api/dd`: the list
+with its server-side search, filters, sort and pages, the overview's figures,
+My reviews, the subject and people searches (an email for an Admin only), the
+team's observer, conflicts and remove, widen, and HQ's versioned templates. No
+page reads it yet; parts 6–8 (#3265–#3267) draw it.
+
+D1246 (#3261): `ddLifecycle.js` is a Due Diligence case's lifecycle on
+`/api/dd/cases/:uid`: the deal context and archive (`PATCH`), the decision, the
+deal team's memo, the reports list and a report's re-download behind step-up,
+and Send to IC. No page reads it yet; the case tabs are part 7 (#3266).
+
 D971 (#2756): `labOperations.js` reads the Lab's playbook, operative cohort size
 and filtered/paged history, and calls the existing Super Admin draft/publish
 routes and audited size write. Support sessions reuse `adminLab.js`; grant
@@ -408,3 +428,5 @@ The operator sends a bounded batch size and optional rescan flag; discovery curs
 D1199 (#3149): `productTesting.js` adds the programme logo: `partnerTestingApi.uploadLogo(uid, file)` and `.removeLogo(uid)`, the same on `adminTestingApi` for HQ's own programmes, and `productTestingApi.logoSrc(uid)`, the `<img>` path (a 404 there means no logo: draw the initial letter).
 
 D1207 (#3173): `calendarItems.js` holds the Calendar's Reschedule (`PATCH /calendar/ic-meetings/:id` and `/calendar/founder-checkins/:id`) and its pickers (`/calendar/people`, `/calendar/deals`). A person comes back as a uid and a name, never an email or a user number.
+
+D1176: `useOfFunds.js` holds the venture-scoped plan, scenarios/compare, milestones, hires and split calls, plus the retained financial-model read/save. The Worker routes land first; the UI follows in #3104/#3105.

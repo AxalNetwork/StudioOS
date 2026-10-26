@@ -181,7 +181,8 @@ test('the zone is mounted on its own route and the workspace no longer draws it'
   // all — it renders the bucket board — so the shape is a root branch and then
   // the registry. The invariant is unchanged and is the one the message names:
   // `ZONES` must be consulted, or four artboards sit in a map nothing reads.
-  assert.match(ROUTES, /\{isRoot\s*\n?\s*\? <DealsRoot /, 'the root no longer renders its own overview');
+  // D1236 (#2423): Compare comes first, then the root, then the registry.
+  assert.match(ROUTES, /: isRoot\s*\n?\s*\? <DealsRoot /, 'the root no longer renders its own overview');
   assert.match(ROUTES, /\(Zone \? <Zone \/>/, 'the registry is declared and never consulted');
   // Two files mounting one zone row is two chip rows and two export buttons
   // for one route — the defect `profile_zone_actions` caught when this landed.

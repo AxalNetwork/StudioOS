@@ -109,7 +109,6 @@ export const NOT_A_QUEUE = [
   { key: 'formation', label: '83(b) follow-ups and formation packets', reason: 'Tasks on the Spin-Out Lab’s Formation tab, not decisions.' },
 ];
 
-const nf = (n) => Number(n).toLocaleString('en-US');
 
 /** "6 d 2 h", "9 h", "40 min"; null when the age was not read. */
 export function ageText(hours) {
@@ -179,23 +178,56 @@ export const PITCH_TABS = [
   { key: 'withdrawn', label: 'Withdrawn', path: '/withdrawn' },
 ];
 
-/** Wellbeing's tabs. There is no declined state yet (part 5), so no Declined tab. */
+/** Wellbeing's tabs. D1046: part 5's declined state is its own tab. */
 export const EXPERT_TABS = [
   { key: 'verify', label: 'To verify', path: '' },
   { key: 'incomplete', label: 'Profile incomplete', path: '/incomplete' },
   { key: 'verified', label: 'Verified', path: '/verified' },
+  { key: 'declined', label: 'Declined', path: '/declined' },
   { key: 'hidden', label: 'Hidden', path: '/hidden' },
 ];
 
-/** What a lane-board path opens: the board and its tab, or null. */
+/** D1046: Product testers' tabs, one per stored status (D1042), `applied` drawn as Waiting. */
+export const TESTER_TABS = [
+  { key: 'waiting', status: 'applied', label: 'Waiting', path: '' },
+  { key: 'active', status: 'active', label: 'Active', path: '/active' },
+  { key: 'paused', status: 'paused', label: 'Paused', path: '/paused' },
+  { key: 'declined', status: 'declined', label: 'Declined', path: '/declined' },
+  { key: 'removed', status: 'removed', label: 'Removed', path: '/removed' },
+];
+
+const BOARD_TABS = [['co-marketing', PITCH_TABS], ['wellbeing-experts', EXPERT_TABS], ['product-testers', TESTER_TABS]];
+
+/**
+ * What a lane-board path opens: the board and its tab, or null. D1046: one
+ * segment past a board that is not a tab is one item's address
+ * (`/admin/approvals/co-marketing/<uid>`): the board on its first tab, with
+ * that item's drawer open. Tab paths win, so no id can shadow a tab.
+ */
 export function boardOf(pathname) {
   const p = String(pathname || '').replace(/\/+$/, '');
-  for (const [slug, tabs] of [['co-marketing', PITCH_TABS], ['wellbeing-experts', EXPERT_TABS], ['product-testers', [{ key: 'waiting', path: '' }]]]) {
+  for (const [slug, tabs] of BOARD_TABS) {
     const t = tabs.find((x) => `${PATH}/${slug}${x.path}` === p);
     if (t) return { board: slug, tab: t.key };
   }
+  for (const [slug, tabs] of BOARD_TABS) {
+    const head = `${PATH}/${slug}/`;
+    if (!p.startsWith(head)) continue;
+    const rest = p.slice(head.length);
+    if (rest && !rest.includes('/')) {
+      let item;
+      try { item = decodeURIComponent(rest); } catch { return null; }
+      return { board: slug, tab: tabs[0].key, item };
+    }
+  }
   return null;
 }
+
+/** The path of a board's tab. */
+export const tabPath = (board, key) => {
+  const tabs = BOARD_TABS.find(([slug]) => slug === board)?.[1] || [];
+  return `${PATH}/${board}${tabs.find((t) => t.key === key)?.path || ''}`;
+};
 
 const ASSET = { webinar: 'Webinar', blog: 'Blog', podcast: 'Podcast', event: 'Event', newsletter: 'Newsletter' };
 export const assetWord = (t) => ASSET[String(t || '').toLowerCase()] || 'Other';
@@ -235,33 +267,274 @@ export function attributionTotals(items) {
 }
 
 /**
- * An expert's state on the board. "To verify" is the directory's own bar
- * (active, unverified, not hidden, at least 70% complete, not a sample);
- * below 70% is Profile incomplete. A sample from the seed is never a lane item.
+ * An expert's state on the board, on part 5's review read (D1043). Hidden wins;
+ * then a decline; then verified. A pending expert is "To verify" at the
+ * directory's own bar (at least 70% complete) and "Profile incomplete" below
+ * it. A sample from the seed is never a lane item (the Worker leaves samples
+ * out; this holds if one arrives).
  */
 export function expertState(e) {
   if (e?.hidden) return 'hidden';
-  if (e?.verified) return 'verified';
+  if (e?.decision_state === 'declined') return 'declined';
+  if (e?.verified || e?.decision_state === 'verified') return 'verified';
   if (e?.is_sample) return null;
   return Number(e?.profile_completion_pct || 0) >= 70 ? 'verify' : 'incomplete';
 }
 
+/** "Licence and 2 files", "1 file", or null when nothing is given. */
+export function credentialsText(c) {
+  const files = Array.isArray(c?.files) ? c.files.length : 0;
+  const parts = [c?.licence_number ? 'Licence' : null, files ? `${files} ${files === 1 ? 'file' : 'files'}` : null].filter(Boolean);
+  return parts.length ? parts.join(' and ') : null;
+}
+
 /**
- * The experts read, as tab counts and rows. The read stops at 50 ranked
- * experts; when it holds fewer than `total_active` the counts are floors and
- * say so (`partial`).
+ * The experts, as tab counts and rows, oldest first. `reply` is every page the
+ * board read: `{ items, total }`. When it holds fewer than `total` the counts
+ * are not drawn (`partial`), never drawn short.
  */
-export function expertBoard(reply, tab) {
-  const list = Array.isArray(reply?.matches) ? reply.matches : [];
-  const total = Number.isFinite(Number(reply?.total_active)) ? Number(reply.total_active) : null;
+export function expertBoard(reply, tab, now = Date.now()) {
+  const list = Array.isArray(reply?.items) ? reply.items : [];
+  const total = Number.isFinite(Number(reply?.total)) ? Number(reply.total) : null;
   const partial = total === null || list.length < total;
   const counts = {};
   for (const t of EXPERT_TABS) counts[t.key] = list.filter((e) => expertState(e) === t.key).length;
-  const rows = list.filter((e) => expertState(e) === tab).map((e) => ({
-    key: e.uid, name: e.name || 'Not recorded', headline: e.headline || null,
-    categories: Array.isArray(e.categories) ? e.categories : [],
-    pricing: e.first_session_free ? 'Free first session' : Number(e.hourly_rate_usd) > 0 ? `$${nf(Number(e.hourly_rate_usd))} an hour` : 'Not recorded',
-    pct: Math.round(Number(e.profile_completion_pct || 0)),
+  const rows = list.filter((e) => expertState(e) === tab).map((e) => {
+    const hrs = hoursSince(e.created_at, now);
+    return {
+      key: e.uid, name: e.name || 'Not recorded', headline: e.headline || null,
+      pct: e.profile_completion_pct == null ? null : Math.round(Number(e.profile_completion_pct)),
+      ageHours: hrs, age: ageText(hrs), band: bandOf(hrs),
+      credentials: credentialsText(e.credentials), decidedOn: dayText(e.decided_at),
+    };
+  }).sort((a, b) => (b.ageHours ?? -1) - (a.ageHours ?? -1));
+  const waiting = rows.length && tab === 'verify' ? rows[0] : null;
+  return { counts, rows, partial, total, read: list.length, oldest: waiting?.age || null };
+}
+
+/* ------------------------------------------------------------------ *
+ * D1046 (#2894): Product testers (APR4, APR5)
+ * ------------------------------------------------------------------ */
+
+/** The five profiles that can apply, in the canvas's words. Admins cannot apply. */
+export const PROFILES = [
+  { role: 'founder', label: 'Founders', one: 'Founder' },
+  { role: 'investor', label: 'Investors', one: 'Investor' },
+  { role: 'advisor', label: 'Advisors', one: 'Advisor' },
+  { role: 'partner', label: 'Operating Partners', one: 'Operating Partner' },
+  { role: 'exploring', label: 'Explorers', one: 'Explorer' },
+];
+export const profileWord = (role) => PROFILES.find((x) => x.role === role)?.one || 'Other';
+
+/**
+ * Member intake (#2318). No route lets a member apply yet (D1042 §4), so
+ * intake is paused in fact: #2318's answer A. When a member apply route lands
+ * this becomes a read, not a constant.
+ */
+export const INTAKE_PAUSED = true;
+export const INTAKE_PAUSED_LINE = 'Member intake is paused. Nobody can apply now. Applications already stored still wait here.';
+
+const KYC_WORD = { approved: 'Approved', pending: 'Pending', submitted: 'Pending', rejected: 'Rejected', review: 'In review' };
+export const identityWord = (k) => KYC_WORD[String(k || '').toLowerCase()] || 'Not started';
+
+/** The table's rows for one tab, in the order the Worker gives (oldest application first). */
+export function testerRows(rows, now = Date.now()) {
+  return (Array.isArray(rows) ? rows : []).map((t) => {
+    const hrs = hoursSince(t.applied_at, now);
+    return {
+      key: t.id, id: t.id, status: t.status,
+      name: t.member?.name || 'Name not recorded', email: t.member?.email || null,
+      profile: profileWord(t.member?.role), emailVerified: !!t.member?.email_verified,
+      identity: identityWord(t.member?.kyc_status),
+      applied: dayText(t.applied_at) || 'Not recorded', ageHours: hrs, age: ageText(hrs), band: bandOf(hrs),
+      availability: t.availability && String(t.availability).trim() ? String(t.availability) : null,
+      consent: t.consent_email_at ? `Given · ${t.consent_version || 'version not recorded'}` : null,
+      decidedBy: t.decided_by_name || null, decidedOn: dayText(t.decided_at),
+      reason: t.reason || null,
+      programmes: t.programmes || null,
+    };
+  });
+}
+
+/**
+ * The chart by profile (APR4): applications in the last 12 weeks, from every
+ * tester the board read. A read that stopped short draws no bars (`partial`).
+ */
+export function profileChart(rows, { complete = true, now = Date.now() } = {}) {
+  if (!complete) return { partial: true, bars: [], total: null, sentence: 'Not every tester could be read, so the chart is not drawn.' };
+  const since = now - 84 * 24 * 3_600_000;
+  const recent = (Array.isArray(rows) ? rows : []).filter((t) => { const h = hoursSince(t.applied_at, now); return h !== null && now - h * 3_600_000 >= since; });
+  const bars = PROFILES.map((p) => ({ role: p.role, label: p.label, n: recent.filter((t) => t.member?.role === p.role).length }));
+  const other = recent.length - bars.reduce((a, b) => a + b.n, 0);
+  if (other) bars.push({ role: 'other', label: 'Other', n: other });
+  const total = recent.length;
+  const sentence = total
+    ? `Applications to test products in the last 12 weeks: ${bars.map((b) => `${b.label.toLowerCase()} ${b.n}`).join(', ')}.`
+    : 'No application to test products in the last 12 weeks.';
+  return { partial: false, bars, total, sentence, max: Math.max(1, ...bars.map((b) => b.n)) };
+}
+
+/** The member's answers as question and answer pairs, whatever shape they were stored in. */
+export function answerPairs(answers) {
+  if (Array.isArray(answers)) {
+    return answers.map((a, i) => {
+      if (a && typeof a === 'object') return { q: String(a.question || a.q || a.label || `Answer ${i + 1}`), a: String(a.answer ?? a.a ?? a.value ?? '') };
+      return { q: `Answer ${i + 1}`, a: String(a ?? '') };
+    }).filter((x) => x.a.trim());
+  }
+  if (answers && typeof answers === 'object') return Object.entries(answers).map(([q, a]) => ({ q, a: String(a ?? '') })).filter((x) => x.a.trim());
+  return [];
+}
+
+const TESTER_EVENT = { approve: 'Approved', decline: 'Declined', pause: 'Paused', resume: 'Resumed', remove: 'Removed', apply: 'Applied' };
+/** A tester's history, oldest first: "Approved by Admin A · 21 Oct 2026". */
+export function testerHistory(events) {
+  return (Array.isArray(events) ? events : []).map((e) => ({
+    key: e.id,
+    line: `${TESTER_EVENT[e.action] || 'Changed'}${e.actor_name ? ` by ${e.actor_name}` : ''}`,
+    on: dayText(e.created_at) || 'Date not recorded',
+    reason: e.reason || null,
   }));
-  return { counts, rows, partial, total, read: list.length };
+}
+
+/** What a tester's drawer offers, by status. Declined and removed are the record. */
+export function testerActions(status) {
+  if (status === 'applied') return ['decline', 'approve'];
+  if (status === 'active') return ['pause-remove'];
+  if (status === 'paused') return ['remove', 'resume'];
+  return [];
+}
+
+/* ------------------------------------------------------------------ *
+ * The decisions (APR5, APR7, APR8): what each dialog says changes, who
+ * is told, and what is recorded. A refusal needs a reason the other person
+ * sees; the minimums are the Worker's.
+ * ------------------------------------------------------------------ */
+
+export const REASON_MIN = { tester_decline: 10, tester_pause: 1, tester_remove: 1, pitch_reject: 10, expert_decline: 10 };
+export const reasonReady = (kind, text) => String(text || '').trim().length >= (REASON_MIN[kind] || 0);
+
+/** A published link the Worker takes: a complete https address, no credentials, at most 500 characters. */
+export function publishUrlOk(raw) {
+  const v = String(raw || '').trim();
+  if (!v || v.length > 500) return false;
+  try {
+    const u = new URL(v);
+    return u.protocol === 'https:' && !!u.hostname && !u.username && !u.password;
+  } catch { return false; }
+}
+
+/** The dialog's words for one decision. `who` is the person's name; `profile` a tester's. */
+export function decisionCopy(kind, { who = 'They', profile, partner, version } = {}) {
+  const name = who || 'They';
+  switch (kind) {
+    case 'tester_approve': return {
+      title: `Approve ${name} as a product tester?`, button: 'Approve',
+      changes: `They join the tester pool, and testing programs can pick them. They keep their ${profile || 'current'} profile.`,
+      told: 'They are told by email and in their inbox.',
+      recorded: 'Recorded in their history: who approved them and when. Your note is kept for admins.',
+    };
+    case 'tester_decline': return {
+      title: `Decline ${name}’s application?`, button: 'Decline',
+      changes: 'They can apply again after 90 days.',
+      told: 'They are told by email and in their inbox, with your reason.',
+      recorded: 'Recorded in their history: who declined them, when and why.',
+    };
+    case 'tester_pause': return {
+      title: `Pause or remove ${name}?`, button: 'Pause',
+      changes: 'Pause: no new programs; current ones carry on.',
+      told: 'They are told by email and in their inbox, with your reason.',
+      recorded: 'Recorded in their history: who paused them, when and why.',
+    };
+    case 'tester_remove': return {
+      title: `Remove ${name}?`, button: 'Remove',
+      changes: 'Remove: they leave the pool; their open program places end.',
+      told: 'They are told by email and in their inbox, with your reason.',
+      recorded: 'Recorded in their history: who removed them, when and why, and each program place that ended.',
+    };
+    case 'tester_resume': return {
+      title: `Resume ${name}?`, button: 'Resume',
+      changes: 'They are back in the tester pool, and testing programs can pick them again.',
+      told: 'They are told by email and in their inbox.',
+      recorded: 'Recorded in their history: who resumed them and when.',
+    };
+    case 'pitch_approve': return {
+      title: `Approve ${partner || 'the partner'}’s pitch?`, button: 'Approve',
+      changes: 'An attribution code is issued, and they can start preparing it. Nothing is published yet.',
+      told: `${partner || 'The partner'} is told by email and in their inbox.`,
+      recorded: 'Recorded on the pitch: who approved it and when.',
+    };
+    case 'pitch_reject': return {
+      title: `Decline ${partner || 'the partner'}’s pitch?`, button: 'Decline',
+      changes: 'A declined pitch is closed; they can send a new one.',
+      told: `${partner || 'The partner'} is told by email and in their inbox, with your reason.`,
+      recorded: 'Recorded on the pitch: who declined it, when and why.',
+    };
+    case 'pitch_publish': return {
+      title: 'Mark it published?', button: 'Publish',
+      changes: 'It appears on the published list for members, with its attribution code.',
+      told: `${partner || 'The partner'} is told by email and in their inbox, with the link.`,
+      recorded: 'Recorded on the pitch: who published it, when, and the link.',
+    };
+    case 'expert_verify': return {
+      title: `Verify ${name}?`, button: 'Verify',
+      changes: 'They appear in the wellbeing directory for members.',
+      told: 'They are told by email and in their inbox.',
+      recorded: `Recorded: who verified them, when, and that you checked their credentials${version != null ? ` (review version ${version})` : ''}.`,
+    };
+    case 'expert_decline': return {
+      title: `Decline ${name}?`, button: 'Decline',
+      changes: 'They can update their profile and ask again.',
+      told: 'They are told by email and in their inbox, with your reason.',
+      recorded: 'Recorded: who declined them, when and why.',
+    };
+    case 'expert_hide': return {
+      title: `Hide ${name} from the directory?`, button: 'Hide',
+      changes: 'Members can no longer find or book them. Their record stays.',
+      told: 'They are told by email and in their inbox.',
+      recorded: 'Recorded in their decision history: who hid them and when.',
+    };
+    case 'expert_restore': return {
+      title: `Restore ${name} to the directory?`, button: 'Restore',
+      changes: 'Members can find them again if they are verified.',
+      told: 'They are told by email and in their inbox.',
+      recorded: 'Recorded in their decision history: who restored them and when.',
+    };
+    case 'expert_unverify': return {
+      title: `Remove ${name}’s verification?`, button: 'Remove verification',
+      changes: 'They leave the directory until they are verified again.',
+      told: 'They are told by email and in their inbox.',
+      recorded: 'Recorded in their decision history: who removed it and when.',
+    };
+    default: return null;
+  }
+}
+
+/** The line a board shows after a decision lands. */
+export function doneLine(kind, who, extra = {}) {
+  const name = who || 'They';
+  const ended = Number(extra.places_ended) || 0;
+  return {
+    tester_approve: `${name} is a product tester now. They are told.`,
+    tester_decline: `${name}’s application is declined. They are told, with your reason.`,
+    tester_pause: `${name} is paused. They are told, with your reason.`,
+    tester_remove: `${name} is removed from the pool${ended ? `, and ${ended} open program ${ended === 1 ? 'place' : 'places'} ended` : ''}. They are told, with your reason.`,
+    tester_resume: `${name} is back in the pool. They are told.`,
+    pitch_approve: `${name} is approved, with an attribution code. The partner is told.`,
+    pitch_reject: `${name} is declined. The partner is told, with your reason.`,
+    pitch_publish: `${name} is published. The partner is told.`,
+    expert_verify: `${name} is verified and listed. They are told.`,
+    expert_decline: `${name} is declined. They are told, with your reason.`,
+    expert_hide: `${name} is hidden from the directory. They are told.`,
+    expert_restore: `${name} is back in the directory. They are told.`,
+    expert_unverify: `${name}’s verification is removed. They are told.`,
+  }[kind] || 'Saved.';
+}
+
+/** A refusal in the Worker's own sentence (the client's `e.message`), or one that says nothing changed. */
+export function refusalLine(e) {
+  const said = typeof e?.message === 'string' && e.message.includes(' ') && e.message !== 'Request failed' ? e.message : null;
+  if (said && e?.status && e.status < 500) return said;
+  if (e?.status >= 500 || !e?.status) return 'This could not be saved. Nothing changed. Read the item again before retrying.';
+  return 'This was refused. Nothing changed. Read the item again before retrying.';
 }
