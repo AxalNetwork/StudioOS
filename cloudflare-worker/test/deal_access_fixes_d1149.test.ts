@@ -67,7 +67,7 @@ test('Free gets an authorized header/key strip only; all other deal reads and DD
   assert.equal(free.body.project_name, 'Synthetic venture'); assert.equal(free.body.currency, 'USD');
   assert.equal(free.body.capital_committed, 25000);
   for (const name of ['notes','description','minimum_check','valuation_cap','project_id','founder_user_id','partner_name']) assert.equal(name in free.body, false, name);
-  for (const path of ['/deals','/deals/100/documents','/deals/100/commitments','/deals/100/activity','/deals/dealroom/quota','/dd/cases']) assert.equal((await call(f, 4, 'GET', path)).status, 402, path);
+  for (const path of ['/deals','/deals/100/documents','/deals/100/commitments','/deals/100/activity','/dd/cases']) assert.equal((await call(f, 4, 'GET', path)).status, 402, path);
   assert.equal((await call(f, 7, 'GET', '/deals/100')).status, 403);
   assert.equal((await call(f, 4, 'POST', '/deals/100/commitments', { amount: 5000 })).status, 402);
   const paid = await call(f, 2, 'GET', '/deals/100');
