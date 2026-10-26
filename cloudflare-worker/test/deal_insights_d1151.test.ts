@@ -68,8 +68,10 @@ test('D1151: authentication and canonical deal ownership precede every section',
       for (const [path,who,status] of [[`/100/${section}`,4,404],[`/100/${section}`,6,404],[`/200/${section}`,3,404],[`/999/${section}`,1,404],[`/0/${section}`,3,400],[`/1e2/${section}`,3,400]] as const) {
         assert.equal((await read(f,path,who)).status,status);
       }
-      assert.equal((await read(f,`/100/${section}`,2)).status,200);
-      assert.equal((await read(f,`/100/${section}`,5)).status,200);
+      for (const who of [1,2,5]) {
+        const result=await read(f,`/100/${section}`,who);
+        assert.deepEqual([result.status,result.body.masked],[200,false]);
+      }
     }
     f.db.prepare('DELETE FROM deal_invitations').run();
     f.db.prepare("INSERT INTO commitments(deal_id,investor_user_id,amount,status) VALUES(100,3,100,'withdrawn')").run();
@@ -147,6 +149,9 @@ test('D1151: corrupt career history affects only that field, never other people 
     f.db.prepare("UPDATE user_profile_ext SET experience='not-json' WHERE user_id=2").run();
     const result=(await read(f,'/100/team')).body;
     assert.deepEqual([result.people.state,result.people.data.length,result.people.data[0].prior_roles,result.people.data[0].prior_roles_state,result.people.data[1].name,result.coverage.state],['recorded',2,null,'unreadable','Published hire','recorded']);
+    f.db.prepare("UPDATE users SET privacy_prefs='not-json' WHERE id=2").run();
+    const corrupt=(await read(f,'/100/team')).body;
+    assert.deepEqual([corrupt.people.state,corrupt.people.publication_state,corrupt.people.data.map((x:any)=>x.name),corrupt.coverage.state],['recorded','unreadable',['Published hire'],'recorded']);
   } finally { f.db.close(); }
 });
 

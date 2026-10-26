@@ -31,6 +31,7 @@ function priorRoles(raw: string | null) {
 }
 
 async function team(env: Env, project: any) {
+  let unreadableProfiles = false;
   const people = await block(async () => {
     const { results } = await env.DB.prepare(`SELECT u.id, u.uid, u.name, u.role, u.privacy_prefs,
       s.visibility, s.visibility_chosen_at, e.experience,
@@ -47,8 +48,9 @@ async function team(env: Env, project: any) {
     if (results.length > 200) throw new Error('Team limit');
     return results.flatMap(p => {
       if (effectiveVisibility(p.visibility, p.visibility_chosen_at) === 'private') return [];
-      // Invalid publication preferences fail this block closed, rather than defaulting public.
-      if (p.privacy_prefs) JSON.parse(p.privacy_prefs);
+      // Corrupt preferences withhold only this person, never default them public.
+      try { if (p.privacy_prefs) JSON.parse(p.privacy_prefs); }
+      catch { unreadableProfiles = true; return []; }
       const flags = effectiveFlags(p.privacy_prefs, p.role);
       if (!flags.name) return [];
       const archetype = Object.values(ARCHETYPES).flat().find(a => a.slug === p.archetype_slug);
@@ -90,7 +92,8 @@ async function team(env: Env, project: any) {
   });
   // Internal IDs are used only for aggregate scoping, never in a person's public projection.
   const published = rows?.map(({ user_id: _id, coverage_shared: _shared, ...person }) => person);
-  return { people: published ? { state: 'recorded', data: published } : people, coverage,
+  return { people: published ? { state: 'recorded', data: published,
+      ...(unreadableProfiles ? { publication_state: 'unreadable', publication_reason: 'Some profile publication preferences are unreadable. Try again.' } : {}) } : people, coverage,
     values_band: { value: null, ...notRecorded('No recorded consent to share a team values band') } };
 }
 
@@ -161,7 +164,9 @@ function handler(section: 'team' | 'market' | 'traction') {
       if (!project) return c.json({ error: 'deal_not_found' }, 404);
       // D1149 deliberately retains partners' separate deal policy pending #2450;
       // trust.ts masks investors. Do not silently redefine that shared role rule.
-      if (user.role === 'investor') {
+      const ndaExempt = ['admin', 'partner', 'founder'].includes(user.role);
+      // Founders reach here only for their own venture, through userMayReadDeal.
+      if (!ndaExempt) {
         const founder = await c.env.DB.prepare(`SELECT id FROM users WHERE founder_id = ? AND COALESCE(is_active, 1) = 1 ORDER BY id LIMIT 1`)
           .bind(project.founder_id).first<any>();
         // Same directional pair as trust.ts, without a read-side schema bootstrap.
