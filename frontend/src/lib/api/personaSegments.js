@@ -27,7 +27,10 @@ import { request } from '../api.js';
 //                            → { total, page, page_size, rows, why_counts, unreadable }
 //   moveMembers(ids, key)    POST /personas/admin/members/move { user_ids, persona_id } → { segment, results, moved }
 //   askToFinish(ids)         POST /personas/admin/members/ask-to-finish { user_ids } → { results, asked, every_days }
-//   activity(params)         GET  /personas/admin/activity?kind=&q=&page= → { total, page, page_size, sources, rows }
+//   activity(params)         GET  /personas/admin/activity?kind=&segment=&q=&page= → { total, page, page_size, sources, rows }
+// D1001 (#2816), mounted by D1005 (#2820), on routes/persona_segment_aggregates.ts: counts only, 1–4 suppressed.
+//   answers(key)             GET  /personas/segments/:key/answers    → { segment, small_cell_min, themes_enabled, questions }
+//   archetypes(key)          GET  /personas/segments/:key/archetypes → { segment, small_cell_min, profiled, not_recorded, archetypes }
 const qs = (params = {}) => {
   const s = new URLSearchParams(Object.entries(params).filter(([, v]) => v !== undefined && v !== null && v !== '').map(([k, v]) => [k, String(v)])).toString();
   return s ? `?${s}` : '';
@@ -50,4 +53,6 @@ export const personaSegmentsApi = {
   moveMembers: (userIds, personaId) => request('/personas/admin/members/move', { method: 'POST', body: JSON.stringify({ user_ids: userIds, persona_id: personaId }) }),
   askToFinish: (userIds) => request('/personas/admin/members/ask-to-finish', { method: 'POST', body: JSON.stringify({ user_ids: userIds }) }),
   activity: (params = {}) => request(`/personas/admin/activity${qs(params)}`),
+  answers: (key) => request(`/personas/segments/${encodeURIComponent(key)}/answers`),
+  archetypes: (key) => request(`/personas/segments/${encodeURIComponent(key)}/archetypes`),
 };

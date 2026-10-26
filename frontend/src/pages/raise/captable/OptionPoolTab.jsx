@@ -24,23 +24,23 @@ import {
  * Each read answers alone: the record, the plan, the 409A and the model.
  */
 
-const CARD = 'rounded-xl border border-axal-hairline bg-white dark:border-gray-800 dark:bg-gray-900';
-const INK = 'text-axal-ink dark:text-gray-100';
+const CARD = 'rounded-xl border border-axal-hairline bg-white dark:border-gray-700 dark:bg-gray-900';
+const INK = 'text-axal-ink dark:text-gray-200';
 const MUTED = 'text-axal-muted dark:text-gray-400';
 const EYEBROW = 'text-[10.5px] font-extrabold uppercase tracking-[.07em] text-axal-muted dark:text-gray-400';
 const TH = 'px-3 py-2 text-left text-[10.5px] font-extrabold uppercase tracking-[.07em] text-axal-muted dark:text-gray-400';
-const TD = 'px-3 py-2 align-top text-[12.5px] text-axal-ink dark:text-gray-100';
+const TD = 'px-3 py-2 align-top text-[12.5px] text-axal-ink dark:text-gray-200';
 const MONO = 'font-mono tabular-nums';
-const INPUT = 'rounded-[9px] border border-axal-hairline bg-white px-2.5 py-1.5 text-[12.5px] text-axal-ink dark:border-gray-700 dark:bg-gray-950 dark:text-gray-100';
+const INPUT = 'rounded-[9px] border border-axal-hairline bg-white px-2.5 py-1.5 text-[12.5px] text-axal-ink dark:border-gray-700 dark:bg-gray-950 dark:text-gray-200';
 const FIELD = `w-full ${INPUT}`;
 const PILL = 'inline-flex w-fit items-center gap-1 rounded-full border px-2 py-0.5 text-[11px] font-semibold';
-const NEUTRAL = 'border-axal-hairline bg-white text-axal-ink dark:border-gray-700 dark:bg-gray-900 dark:text-gray-100';
-const AMBER = 'border-amber-200 bg-amber-50 text-amber-800 dark:border-amber-900 dark:bg-amber-950/30 dark:text-amber-300';
-const LINK = 'font-semibold text-axal-violet hover:text-axal-violet-deep dark:text-violet-300 dark:hover:text-violet-200';
+const NEUTRAL = 'border-axal-hairline bg-white text-axal-ink dark:border-gray-700 dark:bg-gray-900 dark:text-gray-200';
+const AMBER = 'border-amber-200 bg-amber-50 text-amber-800 dark:border-amber-300/55 dark:bg-amber-300/10 dark:text-amber-300';
+const LINK = 'font-semibold text-axal-violet hover:text-axal-violet-deep dark:text-violet-400 dark:hover:text-violet-300';
 const TONE = {
-  good: 'border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-900 dark:bg-emerald-950/30 dark:text-emerald-300',
+  good: 'border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-400/45 dark:bg-emerald-400/10 dark:text-emerald-400',
   warn: AMBER,
-  bad: 'border-red-200 bg-red-50 text-red-700 dark:border-red-900 dark:bg-red-950/30 dark:text-red-300',
+  bad: 'border-red-200 bg-red-50 text-red-700 dark:border-red-400/50 dark:bg-red-400/10 dark:text-red-400',
   muted: 'border-axal-hairline bg-axal-ground text-axal-muted dark:border-gray-700 dark:bg-gray-800 dark:text-gray-400',
 };
 
@@ -66,7 +66,7 @@ const readCompare = (id) => api.getCapTableCompare(id);
 function Block({ title, tag, aside, testId, children }) {
   return (
     <section className={CARD} data-testid={testId}>
-      <div className="flex flex-wrap items-center justify-between gap-2 border-b border-axal-hairline px-4 py-3 dark:border-gray-800">
+      <div className="flex flex-wrap items-center justify-between gap-2 border-b border-axal-hairline px-4 py-3 dark:border-gray-700">
         <h2 className={`m-0 flex items-center gap-2 text-[15px] font-extrabold tracking-[-.015em] ${INK}`}>{title} {tag}</h2>
         {aside}
       </div>
@@ -87,7 +87,7 @@ function Tiles({ view }) {
     <div className="flex flex-col gap-2" data-testid="captable-pool-tiles">
       <div className="grid grid-cols-2 gap-2.5 sm:grid-cols-5">
         {view.tiles.map((t) => (
-          <div key={t.label} className={`flex flex-col gap-0.5 rounded-xl px-3.5 py-3 ${t.missing ? 'border border-dashed border-axal-muted dark:border-gray-600' : 'border border-axal-hairline dark:border-gray-800'} bg-white dark:bg-gray-900`} data-testid={t.missing ? 'captable-pool-tile-missing' : 'captable-pool-tile'}>
+          <div key={t.label} className={`flex flex-col gap-0.5 rounded-xl px-3.5 py-3 ${t.missing ? 'border border-dashed border-axal-muted dark:border-gray-600' : 'border border-axal-hairline dark:border-gray-700'} bg-white dark:bg-gray-900`} data-testid={t.missing ? 'captable-pool-tile-missing' : 'captable-pool-tile'}>
             <span className={EYEBROW}>{t.label}</span>
             <span className={`text-[18px] font-extrabold ${t.missing ? MUTED : `${MONO} ${INK}`}`}>{t.value}</span>
             {t.sub ? <span className={`text-[11px] ${MUTED}`}>{t.sub}</span> : null}
@@ -229,7 +229,7 @@ function Grants({ plan, record, retry }) {
       <Block title="Grants · with Carta connected" tag={<span className={`${PILL} ${NEUTRAL}`}>Carta · read only</span>} testId="captable-grants-carta">
         <ul className="m-0 flex list-none flex-col gap-2 p-0">
           {all.map((g) => (
-            <li key={g.key} className="flex flex-wrap items-center justify-between gap-2 border-b border-axal-ground pb-2 last:border-b-0 dark:border-gray-800" data-testid="captable-grant-carta">
+            <li key={g.key} className="flex flex-wrap items-center justify-between gap-2 border-b border-axal-ground pb-2 last:border-b-0 dark:border-gray-700" data-testid="captable-grant-carta">
               <span className="flex flex-col"><span className={`text-[13px] font-semibold ${INK}`}>{g.holder} · {g.shares} options · strike {g.strike}</span><span className={`text-[11.5px] ${MUTED}`}>From Carta · read only</span></span>
               <a className={`${LINK} text-[12px]`} href={CARTA_URL} target="_blank" rel="noopener noreferrer">Edit in Carta</a>
             </li>
@@ -246,7 +246,7 @@ function Grants({ plan, record, retry }) {
   );
   return (
     <section className={CARD} data-testid="captable-grants">
-      <div className="flex flex-wrap items-center gap-2 border-b border-axal-hairline px-4 py-3 dark:border-gray-800">
+      <div className="flex flex-wrap items-center gap-2 border-b border-axal-hairline px-4 py-3 dark:border-gray-700">
         <h2 className={`m-0 mr-auto text-[15px] font-extrabold tracking-[-.015em] ${INK}`}>Grants</h2>
         <input className={`${INPUT} min-w-[150px]`} value={f.q} onChange={(e) => setF((d) => ({ ...d, q: e.target.value }))} placeholder="Search grants" aria-label="Search grants" data-testid="captable-grants-q" />
         {select('role', [{ value: '', label: 'Any role' }, { value: 'employee', label: 'Employee' }, { value: 'advisor', label: 'Advisor' }, { value: 'founder', label: 'Founder' }], 'Role')}
@@ -259,10 +259,10 @@ function Grants({ plan, record, retry }) {
               : (
                 <div className="overflow-x-auto">
                   <table className="w-full border-collapse" data-testid="captable-grants-table">
-                    <thead><tr className="border-b border-axal-hairline dark:border-gray-800">{['Holder', 'Role', 'Shares', 'Strike', 'Grant date', 'Vesting', 'Vested', '83(b) or exercise', 'Document'].map((c) => <th key={c} className={TH}>{c}</th>)}</tr></thead>
+                    <thead><tr className="border-b border-axal-hairline dark:border-gray-700">{['Holder', 'Role', 'Shares', 'Strike', 'Grant date', 'Vesting', 'Vested', '83(b) or exercise', 'Document'].map((c) => <th key={c} className={TH}>{c}</th>)}</tr></thead>
                     <tbody>
                       {rows.map((g) => (
-                        <tr key={g.key} className="border-b border-axal-ground last:border-b-0 dark:border-gray-800" data-testid="captable-grant">
+                        <tr key={g.key} className="border-b border-axal-ground last:border-b-0 dark:border-gray-700" data-testid="captable-grant">
                           <td className={`${TD} font-bold`}>{g.holder}</td>
                           <td className={TD}>{g.role}</td>
                           <td className={`${TD} ${MONO}`}>{g.shares}</td>
@@ -271,7 +271,7 @@ function Grants({ plan, record, retry }) {
                           <td className={`${TD} text-[11.5px]`}>{g.vesting}</td>
                           <td className={`${TD} ${MONO}`}>{g.vested}</td>
                           <td className={`${TD} ${MUTED}`}>{g.exercise}</td>
-                          <td className={TD}>{g.document ? <span className="text-[11.5px] text-axal-violet dark:text-violet-300">{g.document}</span> : <span className={`${PILL} ${AMBER}`}>! No document</span>}</td>
+                          <td className={TD}>{g.document ? <span className="text-[11.5px] text-axal-violet dark:text-violet-400">{g.document}</span> : <span className={`${PILL} ${AMBER}`}>! No document</span>}</td>
                         </tr>
                       ))}
                     </tbody>

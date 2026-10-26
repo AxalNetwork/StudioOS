@@ -85,6 +85,7 @@ const STATEMENTS: string[] = [
      status            TEXT NOT NULL DEFAULT 'registered',
      source            TEXT NOT NULL DEFAULT 'self',
      comp              INTEGER NOT NULL DEFAULT 0,
+     comp_source       TEXT, -- D1131, migration 611: where a free seat came from
      invitation_id     INTEGER REFERENCES event_invitations(id),
      waitlist_position INTEGER,
      payment_status    TEXT NOT NULL DEFAULT 'none',
@@ -94,6 +95,7 @@ const STATEMENTS: string[] = [
      decision_reason   TEXT,
      decided_by_user_id INTEGER REFERENCES users(id),
      decided_at        TEXT,
+     promoted_at       TEXT,
      registered_at     TEXT NOT NULL DEFAULT (datetime('now')),
      updated_at        TEXT NOT NULL DEFAULT (datetime('now')),
      UNIQUE (event_id, user_id),

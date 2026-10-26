@@ -159,8 +159,12 @@ test('11: Re-score sends the ticked items and `since`, and only those items get 
   const { w } = writesAs(db);
   const form = formFor('raise', 'fundraising-readiness');
   const { values, fields } = await opened(form, w);
-  assert.deepEqual(choices(fields, 'items'), ['narrative', 'deck', 'data_room', 'cap_table', 'use_of_funds', 'traction', 'team']);
-  const v = { ...values, items: values.items.filter((k: string) => k !== 'deck') };
+  // D1145 (#3031, RD6): Product-market fit is offered too. It is unticked here: this test holds the
+  // computed checks, and D1144's store test holds PMF's own Re-score with its `pmf: true`.
+  assert.deepEqual(choices(fields, 'items'), ['narrative', 'deck', 'data_room', 'cap_table', 'use_of_funds', 'traction', 'pmf', 'team']);
+  assert.ok(values.items.includes('pmf'), 'Product-market fit is ticked by default');
+  assert.equal(form.toBody(values).pmf, true, 'and sends its flag');
+  const v = { ...values, items: values.items.filter((k: string) => k !== 'deck' && k !== 'pmf') };
   assert.deepEqual(validate(form, v), {});
   const out = await form.submit(w, P, v);
   assert.deepEqual(out.items.sort(), ['cap_table', 'data_room', 'narrative', 'traction', 'use_of_funds']);
