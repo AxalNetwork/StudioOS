@@ -1510,7 +1510,7 @@ function ProtectedLayout({ children, user, onLogout, viewMode, onViewModeChange,
         <CommandPalette />
         <KeyboardShortcutsOverlay />
         <InstallPrompt />
-        <StepUpModal />
+        <StepUpModal phoneSheet={location.pathname.startsWith('/admin/fund-admin')} />
       </Suspense>
     </ViewAsBranchContext.Provider>
     </ViewModeContext.Provider>
