@@ -24,7 +24,8 @@ import {
 } from './bankCashModel';
 
 const RECONCILIATION = '/admin/fund-admin/banking/reconciliation';
-const CHIP = 'inline-flex min-h-[28px] items-center rounded-full border px-2.5 text-[12px] font-semibold';
+// D1187 (BNK12c): 40px chips on a phone, as the canvas's.
+const CHIP = 'inline-flex min-h-[28px] max-sm:min-h-[40px] items-center rounded-full border px-2.5 max-sm:px-3 text-[12px] font-semibold';
 const CHIP_ON = `${CHIP} border-axal-violet bg-axal-lavender text-axal-violet-deep dark:border-violet-400 dark:bg-violet-950/40 dark:text-violet-200`;
 const CHIP_OFF = `${CHIP} border-axal-hairline bg-white text-axal-ink hover:bg-axal-ground dark:border-gray-700 dark:bg-gray-900 dark:text-gray-100 dark:hover:bg-gray-800`;
 const MUTED = 'text-axal-muted dark:text-gray-400';
@@ -225,6 +226,7 @@ function MonthlyChart({ m }) {
 
 function MonthlyTable({ m }) {
   return (
+    <div className="overflow-x-auto" data-testid="bank-cash-monthly-table-wrap">
     <table className="w-full border-collapse text-[12px]" data-testid="bank-cash-monthly-table">
       <thead><tr className={`text-left ${MUTED}`}><th className="px-4 py-2 font-bold">Month</th><th className="px-3 py-2 text-right font-bold">In</th><th className="px-3 py-2 text-right font-bold">Out</th><th className="px-4 py-2 font-bold">Note</th></tr></thead>
       <tbody>
@@ -238,6 +240,7 @@ function MonthlyTable({ m }) {
         ))}
       </tbody>
     </table>
+    </div>
   );
 }
 
