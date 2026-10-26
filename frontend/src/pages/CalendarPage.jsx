@@ -92,7 +92,6 @@ import { safeReadJSON } from '../lib/storage';
 import { AlertTriangle, Download, RefreshCw } from 'lucide-react';
 import { api } from '../lib/api';
 import PageExplainer from '../components/PageExplainer';
-import BrandIcon from '../ui/BrandIcon.jsx';
 import { usePhoneWidth } from '../ui';
 import { AccountPhonePage, phonePending } from './account/AccountPhonePage';
 import { ACCOUNT_PHONE_PAGES } from './account/accountPhone';
@@ -101,6 +100,8 @@ import CalendarItemDrawer, { CancelDialog } from './CalendarItemDrawer';
 import { NewCheckinDialog, NewIcDialog, NewMenu } from './CalendarNewDialogs';
 import { itemOf, itemPath } from './calendarItemModel';
 import { DayPopover, KindsPanel, MonthGrid, WeekGrid } from './CalendarGrids';
+import { ConnectedPanel, ConnectedSummary, GooglePanel, SubscribeDialog } from './CalendarConnected';
+import { CONNECTED_PATH, connectedOf, stripLabel, weekStrip } from './calendarConnectedModel';
 import {
   anchorOf, familiesFor, kindsFrom, kindsOfFamilies, needsFrom, needsMe, shiftAnchor, withDate, withKinds, withNeeds,
 } from './calendarGrid';
@@ -282,7 +283,7 @@ function humanizeOAuthReason(reason) {
 // D700 (#1662) — A6m, the page on a phone.
 // ---------------------------------------------------------------------------
 
-/** The pill each provider state reads, shared with `ProviderCard`. */
+/** The pill each provider state reads on the phone's sources (D700). */
 const PROVIDER_PILL = {
   reading: 'Checking', unreadable: 'Unreadable', unconfigured: 'Not configured',
   off: 'Not connected', connected: 'Connected', failed: 'Sync failed',
@@ -362,17 +363,20 @@ export default function CalendarPage() {
   const location = useLocation();
   const navigate = useNavigate();
   const opened = itemOf(location.pathname);
-  const behind = opened ? (location.state?.from || '/calendar') : location.pathname;
+  // D1212: /calendar/connected (and /google) opens its panel over the view it came from, else over Month.
+  const connected = connectedOf(location.pathname);
+  const behind = opened || connected ? (location.state?.from || '/calendar') : location.pathname;
   const pathname = behind;
-  const range = viewOf(pathname);
+  const phone = usePhoneWidth();
   // D1210: `?date=` anchors the view (else today); `?kinds=` and `?needs=1` narrow it.
-  const search = opened ? '' : location.search;
+  const search = opened || connected ? '' : location.search;
+  // D1212 (CAL21a): on a phone Agenda is the default; Month is `/calendar?view=month`.
+  const phoneAgenda = phone && viewOf(pathname) === 'month' && !/(^|[?&])view=month(&|$)/.test(search.replace(/^\?/, ''));
+  const range = phoneAgenda ? 'agenda' : viewOf(pathname);
   const anchor = useMemo(() => anchorOf(search), [search]);
   const [google, setGoogle] = useState(null);
   const [microsoft, setMicrosoft] = useState(null);
-  const [syncBusy, setSyncBusy] = useState(false);
-  const [gmailRemovalBusy, setGmailRemovalBusy] = useState(false);
-  const [msSyncBusy, setMsSyncBusy] = useState(false);
+  const [subscribing, setSubscribing] = useState(false); // D1212: Subscribe (CAL11)
   const [googleResult, setGoogleResult] = useState(null);
   const [microsoftResult, setMicrosoftResult] = useState(null);
   const [showIc, setShowIc] = useState(false);
@@ -531,102 +535,6 @@ export default function CalendarPage() {
           ? 'source coverage not reported'
           : `${sources.length} sources · all answered${Array.isArray(inRange) && inRange.length === 0 ? ' · 0 events' : ''}`;
 
-  const phone = usePhoneWidth();
-
-  async function connectGoogle() {
-    try {
-      const r = await api.googleCalConnect();
-      window.location.assign(r.redirect_url || r.auth_url);
-    } catch (e) {
-      // Task #35 — typed 'oauth_config_missing' surfaces with a `missing`
-      // list so an admin can fix the config without reading worker logs.
-      const data = e?.data;
-      if (data?.code === 'oauth_config_missing') {
-        const miss = Array.isArray(data.missing) && data.missing.length ? ` (missing: ${data.missing.join(', ')})` : '';
-        setGoogleResult({ kind: 'error', text: `Google Calendar isn't configured yet — contact an admin${miss}.` });
-      } else {
-        setGoogleResult({ kind: 'error', text: e.message });
-      }
-    }
-  }
-  async function disconnectGoogle() {
-    if (!window.confirm('Disconnect Google Calendar? Already-pushed events stay on Google.')) return;
-    try {
-      await api.googleCalDisconnect();
-      await loadGoogle();
-      setGoogleResult({ kind: 'success', text: 'Google disconnected.' });
-    } catch (e) {
-      const revocationFailed = e?.code === 'google_revocation_failed';
-      setGoogleResult({
-        kind: 'error',
-        text: revocationFailed
-          ? `${e.message || 'Google could not confirm revocation.'} Your connection is still saved.`
-          : `Google could not be disconnected: ${e.message || 'please try again.'}`,
-        forceDisconnectAvailable: revocationFailed,
-      });
-    }
-  }
-  async function forceDisconnectGoogle() {
-    if (!window.confirm('Disconnect from Axal VC even though Google did not confirm revocation? Calendar credentials will be removed here. If Axal VC still appears in your Google Account, remove its access there too.')) return;
-    try {
-      const r = await api.googleCalForceDisconnect();
-      await loadGoogle();
-      setGoogleResult({ kind: 'success', text: r.warning || 'Disconnected from Axal VC. Check your Google Account access settings.' });
-    } catch (e) {
-      setGoogleResult({ kind: 'error', text: e.message || 'Google could not be disconnected locally.' });
-    }
-  }
-  async function removeGmailAccess() {
-    if (!window.confirm('Remove Gmail access? Google will revoke this app’s current grant, briefly disconnect Calendar, then ask you to reconnect without Gmail access.')) return;
-    setGmailRemovalBusy(true);
-    setGoogleResult(null);
-    try {
-      const r = await api.googleCalRemoveGmailAccess();
-      window.location.assign(r.redirect_url || r.auth_url);
-    } catch (e) {
-      setGoogleResult({ kind: 'error', text: e.message || 'Gmail access could not be removed.' });
-      setGmailRemovalBusy(false);
-    }
-  }
-  async function runSync() {
-    setSyncBusy(true); setGoogleResult(null);
-    try {
-      const r = await api.googleCalSync();
-      setGoogleResult({ kind: 'success', text: `Pushed ${r.pushed} new, updated ${r.updated}, ${r.failed} failed (of ${r.total}).` });
-      await loadGoogle();
-    } catch (e) { setGoogleResult({ kind: 'error', text: e.message }); }
-    setSyncBusy(false);
-  }
-  async function connectMicrosoft() {
-    try {
-      const r = await api.microsoftCalConnect();
-      window.location.assign(r.redirect_url || r.auth_url);
-    } catch (e) {
-      const data = e?.data;
-      if (data?.code === 'oauth_config_missing') {
-        const miss = Array.isArray(data.missing) && data.missing.length ? ` (missing: ${data.missing.join(', ')})` : '';
-        setMicrosoftResult({ kind: 'error', text: `Outlook isn't configured yet — contact an admin${miss}.` });
-      } else {
-        setMicrosoftResult({ kind: 'error', text: e.message });
-      }
-    }
-  }
-  async function disconnectMicrosoft() {
-    if (!window.confirm('Disconnect Outlook? Already-pushed events stay on Outlook.')) return;
-    await api.microsoftCalDisconnect();
-    await loadMicrosoft();
-    setMicrosoftResult({ kind: 'success', text: 'Outlook disconnected.' });
-  }
-  async function runMsSync() {
-    setMsSyncBusy(true); setMicrosoftResult(null);
-    try {
-      const r = await api.microsoftCalSync();
-      setMicrosoftResult({ kind: 'success', text: `Pushed ${r.pushed} new, updated ${r.updated}, ${r.failed} failed (of ${r.total}).` });
-      await loadMicrosoft();
-    } catch (e) { setMicrosoftResult({ kind: 'error', text: e.message }); }
-    setMsSyncBusy(false);
-  }
-
   const page = (
     <div className="cal" data-testid="calendar-page">
       <header className="cal-head">
@@ -645,10 +553,10 @@ export default function CalendarPage() {
           {/* D1211 (CAL8 A): one New menu. IC meeting is in it only where
               canScheduleIc allows (`newMenu`), so the gate strip below says why. */}
           {!explorer && <NewMenu role={role} onPick={(k) => (k === 'ic' && canIC ? setShowIc(true) : setShowCk(true))} />}
-          <a className="cal-btn cal-btn-o" href={api.calendarIcsUrl()}
-             aria-label="Subscribe to or export this calendar as iCalendar">
-            <Download className="w-4 h-4" aria-hidden="true" /> Subscribe · .ics
-          </a>
+          {/* D1212 (CAL11): Subscribe opens its dialog: the private whole-calendar link, and the one-off .ics. */}
+          <button type="button" className="cal-btn cal-btn-o" onClick={() => setSubscribing(true)} data-testid="cal-subscribe-open">
+            <Download className="w-4 h-4" aria-hidden="true" /> Subscribe
+          </button>
           {/* Not on the canvas. Kept from the page this replaces because it
               works and nothing else re-reads the feed without changing the
               range — the quiet style keeps it out of the way of the three
@@ -679,7 +587,7 @@ export default function CalendarPage() {
         <div>
           <nav className="cal-seg" aria-label="Calendar views">
             {VIEWS.map((v) => (
-              <Link key={v.key} to={v.path} className="cal-btn cal-btn-q"
+              <Link key={v.key} to={phone && v.key === 'month' ? '/calendar?view=month' : v.path} className="cal-btn cal-btn-q"
                     aria-current={range === v.key ? 'page' : undefined} data-testid={`cal-view-${v.key}`}>
                 {v.label}
               </Link>
@@ -782,10 +690,13 @@ export default function CalendarPage() {
 
           {/* D1210: Month and Week are grids (CAL1, CAL2); Agenda is the day list (CAL3). */}
           {range === 'month' && Array.isArray(inRange) && (
-            <MonthGrid anchor={anchor} items={pool} read={!error} from={pathname} onOpenDay={setDayOpen} />
+            <MonthGrid anchor={anchor} items={pool} read={!error} from={pathname} onOpenDay={setDayOpen} dots={phone} />
           )}
           {range === 'week' && Array.isArray(inRange) && (
             <WeekGrid anchor={anchor} items={pool} read={!error} from={pathname} onOpenDay={setDayOpen} />
+          )}
+          {phone && range === 'agenda' && Array.isArray(inRange) && (
+            <WeekStrip anchor={anchor} items={pool} pathname={pathname} search={search} />
           )}
           {range === 'agenda' && days.map((d) => (
             <div className="cal-day" key={d.key}>
@@ -805,21 +716,11 @@ export default function CalendarPage() {
         </section>
 
         <aside className="cal-rail">
-          <div className="cal-eb">Connected calendars</div>
-          <div className="cal-providers">
-            <ProviderCard
-              provider="google_calendar" name="Google Calendar" state={gState} status={google} result={googleResult}
-              busy={syncBusy || gmailRemovalBusy} gmailRemovalBusy={gmailRemovalBusy}
-              envVars="GOOGLE_CLIENT_ID / GOOGLE_CLIENT_SECRET"
-              onConnect={connectGoogle} onSync={runSync} onDisconnect={disconnectGoogle}
-              onRemoveGmail={removeGmailAccess} onForceDisconnect={forceDisconnectGoogle} onRetry={loadGoogle}
-            />
-            <ProviderCard
-              provider="microsoft_365" name="Microsoft Outlook" state={mState} status={microsoft} result={microsoftResult}
-              busy={msSyncBusy} envVars="MICROSOFT_CLIENT_ID / MICROSOFT_CLIENT_SECRET"
-              onConnect={connectMicrosoft} onSync={runMsSync} onDisconnect={disconnectMicrosoft} onRetry={loadMicrosoft}
-            />
-          </div>
+          {/* D1212 (CAL1's rail): one line per calendar, and Manage opens /calendar/connected (CAL9). */}
+          <ConnectedSummary gState={gState} mState={mState} google={google} microsoft={microsoft} />
+          {[googleResult, microsoftResult].filter(Boolean).map((r) => (
+            <p key={r.text} role="status" className="cal-prov-said" data-testid="cal-oauth-result">{r.text}</p>
+          ))}
 
           <div className="cal-card" style={{ marginTop: 14 }}>
             <div className="cal-eb">Three different promises</div>
@@ -859,7 +760,7 @@ export default function CalendarPage() {
           {/* D1205 (#2420): what the canvas draws that no read carries yet. */}
           <div className="cal-card" style={{ marginTop: 12 }} data-testid="cal-waits">
             <div className="cal-eb">{NOT_YET}</div>
-            {['deadlines', 'interviews', 'feed'].map((k) => (
+            {['deadlines', 'interviews'].map((k) => (
               <p key={k} className="cal-foot" data-testid={`cal-wait-${k}`}>{WAITS[k]}</p>
             ))}
           </div>
@@ -869,6 +770,14 @@ export default function CalendarPage() {
       {dayOpen && <DayPopover date={dayOpen} items={pool} read={Array.isArray(inRange)} from={pathname} onClose={() => setDayOpen(null)} />}
       {showIc && <NewIcDialog meetAvailable={gState === 'connected'} onClose={() => setShowIc(false)} onSaved={() => { setShowIc(false); load(); }} />}
       {showCk && <NewCheckinDialog role={role} meetAvailable={gState === 'connected'} onClose={() => setShowCk(false)} onSaved={() => { setShowCk(false); load(); }} />}
+      {connected === 'list' && (
+        <ConnectedPanel google={google} microsoft={microsoft} gState={gState} mState={mState}
+                        reloadGoogle={loadGoogle} reloadMicrosoft={loadMicrosoft} onClose={() => navigate(behind)} />
+      )}
+      {connected === 'google' && (
+        <GooglePanel google={google} gState={gState} reloadGoogle={loadGoogle} onClose={() => navigate(CONNECTED_PATH)} />
+      )}
+      {subscribing && <SubscribeDialog onClose={() => setSubscribing(false)} />}
       {opened && (
         <CalendarItemDrawer kind={opened.kind} id={opened.id} canCopy={anyConnected} onChanged={load}
                             onClose={() => navigate(behind)} />
@@ -877,15 +786,31 @@ export default function CalendarPage() {
   );
 
   if (!phone) return page;
-  const events = { status: Array.isArray(inRange) ? 'ready' : loading ? 'loading' : 'unreadable', items: inRange || [], reload: load };
-  const providers = [
-    { name: 'Google Calendar', state: gState, status: google },
-    { name: 'Microsoft 365', state: mState, status: microsoft },
-  ];
+  // D1212 (CAL21): on a phone the bar is A6m's (D700), and the page under it is
+  // the canvas's: the week strip over the agenda, Month as dots, an item and
+  // the connected calendars as full pages. A6m's Today and This week sections
+  // are the agenda now, so they are not drawn twice.
   return (
-    <CalendarPhoneView events={events} providers={providers}>
+    <AccountPhonePage pageKey="calendar" testid="calendar-phone" groups={[]}>
       <div className="-mx-[22px]">{page}</div>
-    </CalendarPhoneView>
+    </AccountPhonePage>
+  );
+}
+
+/** CAL21a: Monday to Sunday of the anchor's week; a day opens the agenda from that day. */
+function WeekStrip({ anchor, items, pathname, search }) {
+  const strip = weekStrip(anchor, items);
+  return (
+    <div className="cal-strip" role="tablist" aria-label={stripLabel(strip)} data-testid="cal-strip">
+      {strip.map((d) => (
+        <Link key={d.key} role="tab" aria-selected={d.selected} aria-label={d.label} to={`${pathname}${withDate(search, d.date)}`}
+              className={`cal-strip-day${d.selected ? ' is-on' : ''}${d.isToday ? ' is-today' : ''}`} data-testid={`cal-strip-${d.key}`}>
+          <span className="cal-eb">{d.letter}</span>
+          <b className="cal-mono">{d.day}</b>
+          <span className="cal-strip-kinds" aria-hidden="true">{d.kinds.map((k, i) => <span key={i} className="cal-dot" data-kind={k} />)}</span>
+        </Link>
+      ))}
+    </div>
   );
 }
 
@@ -1036,12 +961,10 @@ function EventRow({ ev, myEmail, role, from, canPush, pushRemedy, onChanged }) {
 }
 
 /**
- * Which of the five states a provider is in.
+ * Which of CAL9's six states a provider is in (`calendarConnectedModel.js` STATES).
  *
- * Four are read from the server. `failed` is the exception and is deliberately
- * narrow: nothing persists a provider-level sync failure, so it is only ever
- * reached from a sync or connect THIS reader just ran. A cold load after an
- * overnight failure still reads "Connected" — see the file docblock.
+ * All are read from the server. `failed` is D1209's persisted `sync_error`, or
+ * a connect THIS reader just ran that came back refused.
  */
 function providerState(status, result) {
   if (!status) return 'reading';
@@ -1052,90 +975,7 @@ function providerState(status, result) {
   if (status.unreadable) return 'unreadable';
   if (status.available === false || status.configured === false) return 'unconfigured';
   if (!status.connected) return 'off';
-  if (result?.kind === 'error') return 'failed';
+  // D1212: D1209 persists the last sync's failure, so a cold load reads it too.
+  if (status.sync_error || result?.kind === 'error') return 'failed';
   return 'connected';
-}
-
-function ProviderCard({ provider, name, state, status, result, busy, gmailRemovalBusy, envVars, onConnect, onSync, onDisconnect, onRemoveGmail, onForceDisconnect, onRetry }) {
-  const last = status?.last_synced_at ? new Date(status.last_synced_at) : null;
-  const lastText = last && !Number.isNaN(last.getTime()) ? last.toLocaleString() : null;
-  const account = status?.google_email || status?.microsoft_email || null;
-
-  // Every state names its own reason for the missing last-sync time — never a
-  // dash, and never a plausible "never" that could be read as a failure.
-  const SPEC = {
-    reading: {
-      pill: PROVIDER_PILL.reading, tone: '',
-      whyNoSync: 'The connection has not been read back yet.',
-      why: 'This card fills in as soon as the server answers.',
-      actions: [],
-    },
-    unreadable: {
-      pill: PROVIDER_PILL.unreadable, tone: 'cal-nr-warn',
-      whyNoSync: 'The connection status could not be read, so there is no last-sync time to show.',
-      why: `${name}'s connection status could not be read. This says nothing about whether it is configured — try again.`,
-      actions: [['Retry', 'cal-btn-o', onRetry]],
-    },
-    unconfigured: {
-      pill: PROVIDER_PILL.unconfigured, tone: '',
-      whyNoSync: 'Nothing can have synced, because the connection cannot be offered.',
-      why: `This server has no ${name} OAuth credentials, so the connection is not available to anyone. An admin sets ${envVars}.`,
-      actions: [],
-    },
-    off: {
-      pill: PROVIDER_PILL.off, tone: '',
-      whyNoSync: 'Nothing has synced, so there is no last-sync time to show.',
-      why: 'Connect to push events automatically. Nothing is written to this calendar until you do.',
-      actions: [['Connect', 'cal-btn-o', onConnect]],
-    },
-    connected: {
-      pill: PROVIDER_PILL.connected, tone: 'cal-nr-ok',
-      whyNoSync: 'Connected, but no sync has run yet — the first one writes this time.',
-      why: `Every StudioOS event appears in this calendar and stays up to date${account ? `, as ${account}` : ''}.`,
-      actions: [['Sync now', 'cal-btn-o', onSync], ['Disconnect', 'cal-btn-q', onDisconnect]],
-    },
-    failed: {
-      pill: PROVIDER_PILL.failed, tone: 'cal-nr-warn',
-      whyNoSync: 'No sync has completed, so there is no time to show.',
-      why: 'The last attempt was refused. Events already pushed remain on this calendar; nothing new has been written since.',
-      actions: [['Reconnect', 'cal-btn-p', onConnect], ['Disconnect', 'cal-btn-q', onDisconnect]],
-    },
-  };
-  const s = SPEC[state] || SPEC.reading;
-  const gmailStillGranted = provider === 'google_calendar' && status?.connected === true
-    && String(status?.scope || '').split(/[\s,]+/).includes('https://www.googleapis.com/auth/gmail.readonly');
-
-  return (
-    <div className="cal-card" data-testid={`calendar-provider-${state}`}>
-      <div className="cal-prov-top">
-        <span className="flex items-center gap-2"><BrandIcon provider={provider} name={name} size={24} /><strong>{name}</strong></span>
-        <span className={`cal-nr ${s.tone}`}>{s.pill}</span>
-      </div>
-      <div className="cal-prov-sync">
-        <span>Last sync</span>
-        {lastText ? <span className="cal-mono">{lastText}</span> : <span className="cal-nr">Not recorded</span>}
-      </div>
-      {!lastText && <p className="cal-prov-why">{s.whyNoSync}</p>}
-      <p className="cal-prov-why">{s.why}</p>
-      {(s.actions.length > 0 || gmailStillGranted || result?.forceDisconnectAvailable) && (
-        <div className="cal-prov-actions">
-          {s.actions.map(([text, cls, fn]) => (
-            <button key={text} type="button" className={`cal-btn ${cls} cal-btn-sm`}
-                    onClick={fn} disabled={busy}>
-              {busy && !gmailRemovalBusy && text === 'Sync now' ? 'Syncing…' : text}
-            </button>
-          ))}
-          {gmailStillGranted && <button type="button" className="cal-btn cal-btn-o cal-btn-sm"
-            onClick={onRemoveGmail} disabled={busy} data-testid="calendar-remove-gmail-access">
-            {gmailRemovalBusy ? 'Removing Gmail access…' : 'Remove Gmail access'}
-          </button>}
-          {result?.forceDisconnectAvailable && <button type="button" className="cal-btn cal-btn-q cal-btn-sm"
-            onClick={onForceDisconnect} disabled={busy} data-testid="calendar-force-disconnect">
-            Disconnect locally
-          </button>}
-        </div>
-      )}
-      {result && <p className="cal-prov-said">{result.text}</p>}
-    </div>
-  );
 }

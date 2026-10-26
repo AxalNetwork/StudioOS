@@ -71,6 +71,7 @@ export default function MvpFromGithub({ github }) {
                               : <span className="text-[12.5px] font-semibold text-axal-ink dark:text-gray-100">{v.title}</span>}
                             <span className="text-[11px] text-axal-muted dark:text-gray-400">{v.date}</span>
                           </div>
+                          {v.mark && <span className="text-[11px] font-semibold text-axal-violet-deep dark:text-violet-300" data-testid={`github-release-lovable-${i}`}>{v.mark}</span>}
                           <p className={LINE} data-testid={`github-release-in-${i}`}><span className="font-semibold">In:</span> {v.inText}</p>
                           <p className={LINE} data-testid={`github-release-not-in-${i}`}><span className="font-semibold">Not in:</span> {v.notInText}</p>
                         </li>

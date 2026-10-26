@@ -2992,7 +2992,7 @@ function buildLifecycleChecklist(
       return [
         { key: 'investors_10', label: 'Add 10 investors to your pipeline', done: s.active_prospects >= 10, href: '/raise/capital', manual: false },
         { key: 'pitch_ready', label: 'Prepare your pitch deck', done: m('pitch_ready'), href: '/raise/pitch', manual: true },
-        { key: 'data_room', label: 'Assemble your data room', done: m('data_room'), href: '/raise/capital', manual: true },
+        { key: 'data_room', label: 'Assemble your data room', done: m('data_room'), href: '/raise/data-room', manual: true },
       ];
     default:
       return [];

@@ -225,11 +225,6 @@ export const FOUNDER_ZONE_ACTIONS = {
     { label: 'Add document', to: '/legal' },
     { label: 'Calendar', to: '/raise/legal-engine/compliance' },
   ],
-  'raise/data-room': [
-    { label: 'Grant access', to: '/raise/data-room?mode=workspace' },
-    { label: 'Revoke', to: '/raise/data-room?mode=workspace' },
-    { label: 'Export log', kind: 'export' },
-  ],
 
   // ── Research ─────────────────────────────────────────────────────────────
   // `New brief` STARTS A THREAD, and the label is the artboard's own. A brief

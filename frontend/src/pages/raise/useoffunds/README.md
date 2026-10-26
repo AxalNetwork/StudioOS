@@ -4,8 +4,9 @@ The founder's Use of funds tool at `/raise/use-of-funds` (D1173, #2455). It is b
 
 | File | What it is |
 |---|---|
-| `UseOfFundsTool.jsx` | The tool's tab bar (`UseOfFundsTabBar`), Home's tab bar (`UseOfFundsHomeNav`), and its tab pages (`UseOfFundsTabPage`). Allocation draws the module read's sections. Milestones and hires, Runway, Scenarios, Plan vs actual and History say what they wait for. |
-| `useOfFundsModel.js` | Pure: the addresses, the canvas's seven tabs, `isUseOfFundsTab`, the venture-only query, today's financial model link with the venture kept, and each tab's wait. |
+| `UseOfFundsTool.jsx` | The tool's tab bar (`UseOfFundsTabBar`), Home's tab bar and blocks (`UseOfFundsHomeNav`, `UseOfFundsHome`), and its tab pages (`UseOfFundsTabPage`). D1177: Home, Allocation, Milestones and hires, Runway, Plan vs actual and History draw D1176's reads; Scenarios says what it waits for (part 5). |
+| `UseOfFundsParts.jsx` | D1177: the plan read (`usePlan`), the cards, tiles and source pills, the admin's banner, three small charts each with a table view, and the dialogs: Edit split, Add milestone, Where this plan is used and Choose the round size. |
+| `useOfFundsModel.js` | Pure: the addresses, the canvas's seven tabs, `isUseOfFundsTab`, the venture-only query, today's financial model link with the venture kept, Scenarios' wait, and D1177's derivations: tiles, section rows, the split check, runway today against its candidates and the forecast, the ties, Needs you, plan vs actual and History. |
 
 ## Where the tool lives
 

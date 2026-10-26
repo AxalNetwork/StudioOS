@@ -298,9 +298,9 @@ test('the wiring: no route is added, CycleRoute branches on the tab word, and th
   const route = read('frontend/src/pages/cycles/CycleRoute.jsx');
   assert.match(route, /const narrativeTab = record && cycle === 'raise' && isNarrativeTab\(slug, recordId\) \? recordId : null;/);
   // D1015 (#2432) adds the Cap table tool's tab words beside the narrative's; D1101 (#2456) the Data room's.
-  assert.match(route, /enabled: record && known && validRecord && !narrativeTab && !capTableTab && !dataRoomTab && !uofTab && !capRelTab && !!projectId && !!def/);
+  assert.match(route, /enabled: record && known && validRecord && !narrativeTab && !capTableTab && !dataRoomTab && !dataRoomOldFile && !uofTab && !capRelTab && !!projectId && !!def/);
   // 2026-10-24 (D906 review): Home's tabs keep the address's version, as every other tab page does.
-  assert.match(route, /subnav=\{cycle === 'raise' && slug === NARRATIVE \? <NarrativeTabBar active="home" search=\{tabSearch\(q, searchParams\.get\('version'\)\)\} \/>\s+: cycle === 'raise' && slug === CAP_TABLE \? <CapTableHomeNav search=\{q\} projectId=\{projectId\} \/>\s+: cycle === 'raise' && slug === DATA_ROOM \? <DataRoomHomeNav search=\{q\} \/>\s+: cycle === 'raise' && slug === USE_OF_FUNDS \? <UseOfFundsHomeNav search=\{q\} \/>\s+: cycle === 'raise' && slug === CAP_REL \? <CapRelHomeNav search=\{q\} projectId=\{projectId\} \/> : undefined\}/);
+  assert.match(route, /subnav=\{cycle === 'raise' && slug === NARRATIVE \? <NarrativeTabBar active="home" search=\{tabSearch\(q, searchParams\.get\('version'\)\)\} \/>\s+: cycle === 'raise' && slug === CAP_TABLE \? <CapTableHomeNav search=\{q\} projectId=\{projectId\} \/>\s+: cycle === 'raise' && slug === DATA_ROOM \? <DataRoomHomeNav search=\{q\} \/>\s+: cycle === 'raise' && slug === USE_OF_FUNDS \? <UseOfFundsHomeNav search=\{q\} projectId=\{projectId\} \/>\s+: cycle === 'raise' && slug === CAP_REL \? <CapRelHomeNav search=\{q\} projectId=\{projectId\} \/> : undefined\}/);
   for (const f of ['Investor Narrative Page.dc.html', 'Investor Narrative · Boards.dc.html']) {
     const src = read(`design/incoming/${f}`);
     assert.match(src, /<script src="\.\/support\.js"><\/script>/, f);

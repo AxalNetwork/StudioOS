@@ -1,0 +1,50 @@
+name: Release alpha rename
+
+# One-off, run by hand (Actions → Release alpha rename → Run workflow).
+# #2655 dropped the stage suffix from the daily tags, so v1.0.1 to v8.3.26
+# were released without "-alpha". This gives each of those releases its
+# suffixed tag on the same commit and moves the release onto it; drafts only
+# change name. Nothing is published, so release-published.yml does not run.
+# Leave dry_run on first and read the plan in the log.
+on:
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: 'Plan only: list what would change, write nothing'
+        type: boolean
+        default: true
+      delete_old_tags:
+        description: 'Also delete each old unsuffixed tag once its release has moved'
+        type: boolean
+        default: false
+
+# The draft updater writes the same releases; one writer at a time.
+concurrency:
+  group: release-draft
+  cancel-in-progress: false
+
+permissions:
+  contents: write
+
+jobs:
+  rename:
+    name: add the stage suffix to unsuffixed releases
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v6
+        with:
+          node-version: '22'
+      - name: Test the rename rules
+        run: node --test scripts/lib/releaseAlphaRename.test.mjs scripts/lib/releaseDraft.test.mjs
+      - name: Rename
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          DRY_RUN: ${{ inputs.dry_run }}
+          DELETE_OLD_TAGS: ${{ inputs.delete_old_tags }}
+        run: |
+          args=()
+          if [ "$DRY_RUN" = "true" ]; then args+=(--dry-run); fi
+          if [ "$DELETE_OLD_TAGS" = "true" ]; then args+=(--delete-old-tags); fi
+          node scripts/release-alpha-rename.mjs "${args[@]}"

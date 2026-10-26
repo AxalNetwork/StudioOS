@@ -32,7 +32,8 @@ const SHARE = codeOnly(read('frontend/src/pages/founder/ShareUpdateSheet.jsx'));
 const UPDATES = codeOnly(read('frontend/src/pages/PortfolioUpdatesPage.jsx'));
 const WORKSPACE = read('frontend/src/pages/PortfolioWorkspace.jsx');
 const APP = read('frontend/src/App.jsx');
-const DEALS = codeOnly(read('frontend/src/pages/DealsPage.jsx'));
+// D1242 (#3255): the Studio lens replaced DealsPage; its panels and dialogs live beside it.
+const DEALS = codeOnly(read('frontend/src/pages/investor/dealflow/StudioLens.jsx') + '\n' + read('frontend/src/pages/investor/dealflow/StudioParts.jsx'));
 const PIPELINE = codeOnly(read('frontend/src/pages/investor/deals/PipelineZone.jsx'));
 
 test('the Metrics page and its Investor update card are retired (#2336)', () => {

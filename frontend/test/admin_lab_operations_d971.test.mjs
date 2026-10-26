@@ -42,6 +42,7 @@ async function mount(Component, o = {}, props = {}) {
     if (u.pathname === '/api/admin/cohort/activity') return json({ items: [], total: 0, coverage: 'History never names an admin.' });
     if (u.pathname === '/api/admin/cohort/impersonation-audit') return json({ sessions: [] });
     if (u.pathname === '/api/admin/program-grants') return json({ licences: [] });
+    if (u.pathname === '/api/licence/mine/programs') return json({ linked: false, source: 'hq', programs: [], reason: 'Your account is not linked to a licence. On HQ-held accounts, HQ runs every program.' });
     return json({});
   };
   const container = document.createElement('div'); document.body.appendChild(container);
@@ -113,7 +114,8 @@ test('failed playbook retries without hiding the monthly checklist or granting w
 test('Settings confirms only the edited size, blank is disabled, zero survives, refusal stays in dialog; Admin never reads HQ grants', async () => {
   const m = await mount(LabSettings, { 'POST /api/admin/cohort/applications/settings': json({ message: 'The change was refused.' }, 403) });
   try {
-    assert.match(m.text(), /Not read here yet.*#2775/);
+    // D1280: an Admin reads its own licence's grant (admin_lab_d937 draws it), never HQ's grid.
+    assert.equal(m.calls.some((c) => c.path === '/api/licence/mine/programs'), true);
     assert.equal(m.calls.some((c) => c.path.startsWith('/api/admin/program-grants')), false);
     await m.click('lab-size-edit-min'); assert.match(m.of('lab-size-dialog'), /next capacity check/);
     await m.type('lab-size-value', ''); assert.equal(m.props('lab-size-dialog-go').disabled, true);
