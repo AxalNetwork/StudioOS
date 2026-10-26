@@ -5,7 +5,7 @@ import React, { useCallback, useEffect, useState } from 'react';
 import { useLocation, useParams } from 'react-router-dom';
 import { events } from '../../lib/api';
 import { eventsApi } from '../../lib/eventsApi';
-import { PERSONAS } from '../../lib/personas';
+import { personaSegmentsApi } from '../../lib/api/personaSegments';
 import InvitePeopleModal from '../../components/events/InvitePeopleModal';
 import CheckinScanner from '../../components/events/CheckinScanner';
 import { REGISTRATION_TABS, pageRows, recorded, registrationTab } from './eventOrganiserModel';
@@ -34,6 +34,17 @@ export default function EventManagePage() {
   const [error, setError] = useState('');
   const [actionError, setActionError] = useState('');
   const [busy, setBusy] = useState(false);
+  const [segments, setSegments] = useState({ status: 'loading', rows: [] });
+  const [segmentTick, setSegmentTick] = useState(0);
+  useEffect(() => {
+    if (screen !== 'eligibility') return undefined;
+    let live = true; setSegments({ status: 'loading', rows: [] });
+    personaSegmentsApi.audienceSegments().then(r => {
+      if (!live) return;
+      setSegments(Array.isArray(r?.segments) ? { status: 'ready', rows: r.segments } : { status: 'unreadable', rows: [] });
+    }, () => { if (live) setSegments({ status: 'unreadable', rows: [] }); });
+    return () => { live = false; };
+  }, [screen, segmentTick]);
   const [rules, setRules] = useState({ mode: 'everyone', roles: [], personas: [] });
   const [approval, setApproval] = useState(false);
   const [preview, setPreview] = useState(null);
@@ -100,7 +111,7 @@ export default function EventManagePage() {
         {screen === 'eligibility' && <div className="evo-grid"><form className="evo-card" onSubmit={e => { e.preventDefault(); act(() => events.update(id, { audience_rules_json: JSON.stringify(rules), approval_required: approval })); }}>
           <h2>Who may register</h2>
           {[['everyone', 'Everyone'], ['selected', 'Chosen roles or personas'], ['invite_only', 'Invite only']].map(([value, label]) => <label key={value}><input type="radio" name="audience" checked={rules.mode === value} onChange={() => setRules(r => ({ ...r, mode: value }))} /> {label}</label>)}
-          {rules.mode === 'selected' && <><fieldset><legend>Roles</legend>{roles.map(role => <label key={role}><input type="checkbox" checked={rules.roles.includes(role)} onChange={() => toggle('roles', role)} /> {role}</label>)}</fieldset><fieldset><legend>Personas</legend>{PERSONAS.map(p => <label key={p.id}><input type="checkbox" checked={rules.personas.includes(p.id)} onChange={() => toggle('personas', p.id)} /> {p.label}</label>)}</fieldset></>}
+          {rules.mode === 'selected' && <><fieldset><legend>Roles</legend>{roles.map(role => <label key={role}><input type="checkbox" checked={rules.roles.includes(role)} onChange={() => toggle('roles', role)} /> {role}</label>)}</fieldset><fieldset><legend>Persona segments</legend>{segments.status === 'loading' ? <p>Reading segment choices…</p> : segments.status === 'unreadable' ? <p>Segment choices are unreadable. <button type="button" onClick={() => setSegmentTick(n => n + 1)}>Try again</button></p> : segments.rows.length === 0 ? <p>No segments recorded.</p> : segments.rows.map(p => <label key={p.key}><input type="checkbox" checked={rules.personas.includes(p.key)} onChange={() => toggle('personas', p.key)} /> {p.name}{p.status !== 'active' ? ` (${p.status})` : ''}</label>)}{segments.status === 'ready' && rules.personas.filter(key => !segments.rows.some(p => p.key === key)).map(key => <label key={key}><input type="checkbox" checked onChange={() => toggle('personas', key)} /> Selected segment (not offered now)</label>)}</fieldset></>}
           <label><input type="checkbox" checked={approval} onChange={e => setApproval(e.target.checked)} /> Approval required</label><p>Registrations wait in Pending until you approve them.</p><button className="evo-primary" disabled={busy}>Save rule</button>
         </form><section className="evo-card"><h2>As a member sees it</h2><p>Preview of the saved rule for your signed-in account.</p>{preview ? <><strong>{preview.eligible ? 'Eligible' : 'Not eligible'}: {preview.reason}</strong><p>{preview.requires_approval ? 'Approval is required.' : 'Approval is not required.'}</p><p>{preview.is_full ? preview.waitlist_enabled ? 'The event is full; new registrations join the waitlist.' : 'The event is full.' : 'Registration has available capacity.'}</p></> : <p>Unreadable — eligibility could not be read.</p>}</section></div>}
         {screen === 'registrations' && <section className="evo-card"><h2>Capacity</h2>{counts ? <p>{counts.seats_taken} / {counts.capacity === null ? 'No limit recorded' : counts.capacity} seats · {counts.waitlisted} waitlisted</p> : <p>Unreadable — capacity was not returned.</p>}
