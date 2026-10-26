@@ -29,8 +29,6 @@ const INK = 'text-axal-ink dark:text-gray-100';
 const MUTED = 'text-axal-muted dark:text-gray-400';
 const EYEBROW = 'text-[10.5px] font-extrabold uppercase tracking-[.07em] text-axal-muted dark:text-gray-400';
 const LINK = 'font-semibold text-axal-violet hover:text-axal-violet-deep dark:text-violet-300 dark:hover:text-violet-200';
-const TH = 'px-3 py-2 text-left text-[10.5px] font-extrabold uppercase tracking-[.07em] text-axal-muted dark:text-gray-400';
-const TD = 'px-3 py-2 align-top text-[12.5px] text-axal-ink dark:text-gray-100';
 const MONO = 'font-mono tabular-nums';
 
 /** The tool's own tabs, a second level under the Raise modules: text with an underline. */
@@ -83,17 +81,6 @@ function Section({ title, children, testId, aside }) {
       </div>
       <div className="px-4 py-3">{children}</div>
     </section>
-  );
-}
-
-function Table({ cols, children, testId }) {
-  return (
-    <div className="overflow-x-auto">
-      <table className="w-full border-collapse" data-testid={testId}>
-        <thead><tr className="border-b border-axal-hairline dark:border-gray-800">{cols.map((c) => <th key={c} className={TH}>{c}</th>)}</tr></thead>
-        <tbody>{children}</tbody>
-      </table>
-    </div>
   );
 }
 
