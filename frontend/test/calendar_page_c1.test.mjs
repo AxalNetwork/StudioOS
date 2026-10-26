@@ -36,6 +36,7 @@
  * someone re-exports the canvas with six kinds, the note stops being true and
  * a maintainer is told.
  */
+import { STATES as CONNECTED_STATES, connectionRow } from '../src/pages/calendarConnectedModel.js';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
@@ -273,7 +274,8 @@ test('the header carries New and Subscribe, and the IC gate matches canScheduleI
 // with three views at their own addresses, Month first; calendar_views_d1205
 // holds the model.
 test('the views are links to their addresses, Month first, and the open one is announced', () => {
-  assert.match(page, /const range = viewOf\(pathname\);/, 'the view no longer comes from the address');
+  // D1212 (CAL21a): on a phone bare /calendar is Agenda; Month is ?view=month.
+  assert.match(page, /const range = phoneAgenda \? 'agenda' : viewOf\(pathname\);/, 'the view no longer comes from the address');
   assert.match(page, /<nav className="cal-seg" aria-label="Calendar views">/, 'the views are not a labelled nav');
   assert.match(page, /aria-current=\{range === v\.key \? 'page' : undefined\}/, 'the open view is not announced');
   assert.doesNotMatch(page, /useState\('agenda'\)/, 'the view is component state again, not the address');
@@ -319,18 +321,17 @@ test('nothing absent renders as a dash or a plausible zero', () => {
   const grids = readFileSync('frontend/src/pages/CalendarGrids.jsx', 'utf8');
   assert.match(grids, /\{counts\?\.\[k\] === '—' \? '— · Could not be read' : counts\?\.\[k\] \?\? ''\}/,
     'a kind prints a count when the list could not be read, or a dash with no reason');
-  // Every "Not recorded" on the rail is followed by the reason it is missing.
-  const spec = page.match(/const SPEC = \{([\s\S]*?)\n  \};/)?.[1] || '';
-  const states = [...spec.matchAll(/^ {4}(\w+): \{/gm)].map((m) => m[1]);
-  // D332 — 'unreadable' joined the set: a failed STATUS READ (the request
-  // itself never came back) is a different claim from 'unconfigured' (the
-  // server answered that this deployment has no OAuth credentials at all).
-  assert.deepEqual(states, ['reading', 'unreadable', 'unconfigured', 'off', 'connected', 'failed'],
+  // D1212 (CAL9): the rail's cards moved to /calendar/connected. Each of the
+  // six states draws its own sentence there, and its pill says the state.
+  // D332 — 'unreadable' (the status read never came back) stays apart from
+  // 'unconfigured' (the server answered that it has no sign-in for it).
+  assert.deepEqual(CONNECTED_STATES.map((x) => x.key), ['reading', 'unconfigured', 'off', 'connected', 'failed', 'unreadable'],
     'the provider states changed without this guard');
-  assert.equal([...spec.matchAll(/whyNoSync: /g)].length, states.length,
-    'a provider state can show "Not recorded" with no reason beside it');
-  assert.equal([...spec.matchAll(/\n {6}why: /g)].length, states.length,
-    'a provider state has no why-line');
+  for (const x of CONNECTED_STATES) {
+    const row = connectionRow('google', x.key, {});
+    assert.ok(row.sub && row.sub.length > 8, `${x.key} has no sentence`);
+    assert.ok(row.pill.includes(x.label), `${x.key}'s pill does not say its state`);
+  }
 });
 
 test('with no provider connected the push control is withheld and the note names the right remedy', () => {
@@ -472,22 +473,24 @@ test('the page prints none of the canvas fixture', () => {
   assert.doesNotMatch(pageRaw, /Halyard Security|Meridian Robotics|Priya Nair|Perkins Coie|Thornbury Capital|Kelp Bio|LoopSense|Ashurst|Marcus Chen|Verity Health|7 – 13 Sep 2026|2 min ago|4 hrs ago/);
 });
 
+// D1212 (CAL10): the Google panel at /calendar/connected/google carries the old grant's removal.
+const connectedRaw = raw('frontend/src/pages/CalendarConnected.jsx');
+const connectedModelRaw = raw('frontend/src/pages/calendarConnectedModel.js');
 test('members with a legacy Gmail grant can remove it and reconnect Google without Gmail', () => {
-  assert.match(pageRaw, /provider === 'google_calendar'[\s\S]*?gmail\.readonly/,
+  assert.match(connectedModelRaw, /gmailStillGranted = \(status\) => status\?\.connected === true && has\(status\?\.scope, GMAIL_SCOPE\)/,
     'the removal action must be limited to a Google connection that still has the Gmail scope');
-  assert.match(pageRaw, /data-testid="calendar-remove-gmail-access"[\s\S]*?>\s*\{gmailRemovalBusy \? 'Removing Gmail access…' : 'Remove Gmail access'\}/,
-    'the quiet removal action is missing from the Google Calendar card');
-  assert.match(pageRaw, /api\.googleCalRemoveGmailAccess\(\)[\s\S]*?window\.location\.assign\(r\.redirect_url \|\| r\.auth_url\)/,
+  assert.match(connectedModelRaw, /GMAIL_SCOPE = 'https:\/\/www\.googleapis\.com\/auth\/gmail\.readonly'/);
+  assert.match(connectedRaw, /data-testid="calendar-remove-gmail-access">Remove Gmail access</,
+    'the removal action is missing from the Google panel');
+  assert.match(connectedRaw, /api\.googleCalRemoveGmailAccess\(\)[\s\S]*?window\.location\.assign\(r\.redirect_url \|\| r\.auth_url\)/,
     "removing Gmail access must continue into Google's fresh consent");
 });
 
 test('Google offers an explicit local-only disconnect after revocation fails', () => {
-  assert.match(pageRaw, /e\?\.code === 'google_revocation_failed'[\s\S]*?forceDisconnectAvailable: revocationFailed/,
+  assert.match(connectedModelRaw, /code === 'google_revocation_failed'\) return \{ text: [^}]*local: true \}/,
     'only a confirmed Google revocation failure must leave a local disconnect option');
-  assert.match(pageRaw, /data-testid="calendar-force-disconnect"[\s\S]*?Disconnect locally/,
+  assert.match(connectedRaw, /\{refusal\?\.local \? <button [^>]*data-testid="calendar-force-disconnect">Disconnect locally<\/button>/,
     'the fallback action must be labeled so it does not imply Google revocation');
-  assert.match(pageRaw, /googleCalForceDisconnect\(\)[\s\S]*?Google Account/,
+  assert.match(connectedRaw, /googleCalForceDisconnect\(\)[\s\S]*?Google Account/,
     'the fallback must warn the member about any remaining Google grant');
-  assert.match(pageRaw, /busy && !gmailRemovalBusy && text === 'Sync now' \? 'Syncing…'/,
-    'removing Gmail must not label the calendar as syncing');
 });

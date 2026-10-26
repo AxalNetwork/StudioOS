@@ -73,5 +73,4 @@ export const NOT_YET = 'Not read here yet';
 export const WAITS = Object.freeze({
   deadlines: 'Deadlines are not read yet: cohort week dates, filings and board meetings, and deal closing dates each need a reader on the calendar.',
   interviews: 'Interview calls are not on the calendar yet. They stay on Validate › Customer research until the calendar reads them.',
-  feed: 'A private subscription for your whole calendar is not offered yet. Subscribe to my events covers tickets and hosted events only; the download is a one-off file.',
 });
