@@ -308,6 +308,8 @@ const HqAiUsagePage = lazy(() => import('./pages/hq/AiUsagePage'));
 const ScoringMethodPage = lazy(() => import('./pages/scoring/ScoringMethodPage'));
 const FounderScorecardPage = lazy(() => import('./pages/scoring/FounderScorecardPage'));
 const HqScoringPage = lazy(() => import('./pages/scoring/HqScoringPage'));
+// D1261 (#2430): the founder's Evidence view and its drawers.
+const RaiseEvidence = lazy(() => import('./pages/cycles/evidence/RaiseEvidence'));
 const HqPlatformTopologyPage = lazy(() => import('./pages/hq/PlatformTopologyPage'));
 // The owner's ruling (2026-10-20): the providers' keys and GitHub Sync, one
 // Super Admin page and its own HQ row, no longer Admin Console tabs.
@@ -3791,6 +3793,10 @@ function AppInner() {
       <Route path="/raise/cap-table/scenarios/:scenario" element={guard(labRoles(['admin', 'founder']), <CycleRoute cycle="raise" slug="cap-table" capTableScenario />)} />
       {/* D1253 (#2428): the founder's own scorecard (SC8); a static path ranks above /raise/:slug. */}
       <Route path="/raise/scorecard" element={guard(labRoles(['admin', 'founder']), <FounderScorecardPage />)} />
+      {/* D1261 (#2430): Evidence (VR1) and its item and claim drawers (VR2, VR3) as addresses, before /raise/:slug. */}
+      <Route path="/raise/evidence" element={guard(labRoles(['admin', 'founder']), <RaiseEvidence />)} />
+      <Route path="/raise/evidence/item/:id" element={guard(labRoles(['admin', 'founder']), <RaiseEvidence />)} />
+      <Route path="/raise/evidence/claim/:id" element={guard(labRoles(['admin', 'founder']), <RaiseEvidence />)} />
       <Route path="/raise/:slug" element={guard(labRoles(['admin', 'founder']), <CycleRoute cycle="raise" />)} />
       {/* D1106 (#2986): a data-room file's lightbox over Files. */}
       <Route path="/raise/data-room/file/:id" element={guard(labRoles(['admin', 'founder']), <CycleRoute cycle="raise" slug="data-room" record dataRoomFile />)} />
