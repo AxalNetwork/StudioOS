@@ -323,7 +323,7 @@ export async function ownCommitments(env: Env, user: User): Promise<OwnCommitmen
   const r = await env.DB.prepare(
     `SELECT c.id, c.amount, c.created_at, p.name AS project_name
        FROM commitments c JOIN deals d ON d.id = c.deal_id LEFT JOIN projects p ON p.id = d.project_id
-      WHERE c.investor_user_id = ? AND c.status <> 'withdrawn' ORDER BY c.id`,
+      WHERE c.investor_user_id = ? AND c.status = 'pending' AND c.sent_at IS NULL AND d.currency = 'USD' AND p.deleted_at IS NULL ORDER BY c.id`,
   ).bind(user.id).all<{ id: number; amount: number | null; created_at: string | null; project_name: string | null }>();
   return (r.results || []).flatMap((c) => {
     const cents = c.amount == null ? NaN : Math.round(Number(c.amount) * 100);
@@ -512,9 +512,9 @@ export async function readStatements(reader: InvestorReader, window: { from: str
 
 export type AcceptOutcome =
   | { ok: true; result_ref: string | null }
-  | { ok: false; status: 400 | 404 | 409; code: string; message: string };
+  | { ok: false; status: 400 | 404 | 409 | 503; code: string; message: string };
 
-const no = (status: 400 | 404 | 409, code: string, message: string): AcceptOutcome => ({ ok: false, status, code, message });
+const no = (status: 400 | 404 | 409 | 503, code: string, message: string): AcceptOutcome => ({ ok: false, status, code, message });
 
 /**
  * Accept one proposal: the only place a proposal writes. Each kind re-checks
@@ -524,11 +524,55 @@ export async function acceptProposal(env: Env, user: User, p: ProposalRow, body:
   extras: { statementPdf?: StatementPdf | null } = {}): Promise<AcceptOutcome> {
   if (p.state !== 'proposed') return no(409, 'already_decided', 'This proposal was already accepted or dismissed.');
   if (p.kind === 'closing') {
-    const own = await env.DB.prepare("SELECT 1 AS x FROM commitments WHERE id = ? AND investor_user_id = ? AND status <> 'withdrawn'")
-      .bind(p.target_id, user.id).first();
+    // A sender's own bank match never establishes receipt by the company.
+    const own = await env.DB.prepare(
+      `SELECT k.status, k.amount, d.currency FROM commitments k
+       JOIN deals d ON d.id = k.deal_id JOIN projects pr ON pr.id = d.project_id AND pr.deleted_at IS NULL
+       JOIN users u ON u.id = k.investor_user_id AND u.role = 'investor' AND u.is_active = 1 AND u.deletion_requested_at IS NULL
+       WHERE k.id = ? AND k.investor_user_id = ? AND k.status <> 'withdrawn'`,
+    ).bind(p.target_id, user.id).first<{ status: string; amount: number; currency: string }>();
     if (!own) return no(404, 'target_not_found', 'That is not one of your open commitments.');
-    // The accepted proposal is the funded record, citing the transaction.
-    return await markAccepted(env, user, p, `mercury:${p.mercury_id}`) ? { ok: true, result_ref: `mercury:${p.mercury_id}` } : no(409, 'already_decided', 'This proposal was already accepted or dismissed.');
+    if (own.status === 'confirmed') return no(409, 'already_received', 'This line is already confirmed by the receiving side.');
+    const cents = Math.round(Number(own.amount) * 100);
+    if (p.target_kind !== 'deal_commitment' || own.currency !== 'USD' || !Number.isSafeInteger(cents) || cents <= 0
+        || !Number.isSafeInteger(p.amount_cents) || p.amount_cents !== cents
+        || typeof p.posted_on !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(p.posted_on)
+        || typeof p.mercury_id !== 'string' || !p.mercury_id || p.mercury_id.length > 255) {
+      return no(409, 'closing_proposal_stale', 'This proposal no longer matches the open line. Read it again before accepting.');
+    }
+    const ref = `mercury:${p.mercury_id}`;
+    let writes: D1Result[];
+    try {
+      writes = await env.DB.batch([
+        env.DB.prepare(`UPDATE mercury_investor_proposals
+          SET state = 'accepted', result_ref = ?, decided_at = CURRENT_TIMESTAMP, updated_at = CURRENT_TIMESTAMP
+          WHERE id = ? AND user_id = ? AND state = 'proposed' AND kind = 'closing' AND target_kind = 'deal_commitment'
+            AND target_id = ? AND amount_cents = ? AND posted_on = ? AND mercury_id = ?
+            AND EXISTS (SELECT 1 FROM commitments k JOIN deals d ON d.id = k.deal_id
+              JOIN projects pr ON pr.id = d.project_id AND pr.deleted_at IS NULL
+              JOIN users u ON u.id = k.investor_user_id AND u.role = 'investor' AND u.is_active = 1 AND u.deletion_requested_at IS NULL
+              WHERE k.id = ? AND k.investor_user_id = ? AND k.status = 'pending' AND k.sent_at IS NULL
+                AND CAST(ROUND(k.amount * 100) AS INTEGER) = ? AND d.currency = 'USD')`)
+          .bind(ref, p.id, user.id, p.target_id, p.amount_cents, p.posted_on, p.mercury_id, p.target_id, user.id, p.amount_cents),
+        env.DB.prepare(`UPDATE commitments SET sent_at = CURRENT_TIMESTAMP, sent_on = ?, sent_by_user_id = ?,
+          sent_source_ref = ?, sent_proposal_uid = ?, sent_amount_cents = ?, sent_currency = 'USD'
+          WHERE id = ? AND investor_user_id = ? AND status = 'pending' AND sent_at IS NULL AND changes() = 1
+            AND EXISTS (SELECT 1 FROM mercury_investor_proposals p
+              WHERE p.id = ? AND p.user_id = ? AND p.state = 'accepted' AND p.result_ref = ?)`)
+          .bind(p.posted_on, user.id, `proposal:${p.uid}`, p.uid, p.amount_cents, p.target_id, user.id, p.id, user.id, ref),
+        env.DB.prepare(`INSERT INTO activity_logs(uid, user_id, action, details)
+          SELECT ?, ?, 'closing_sender_reported', '{"state":"sent"}'
+          WHERE changes() = 1 AND EXISTS (SELECT 1 FROM commitments WHERE id = ? AND investor_user_id = ? AND sent_proposal_uid = ?)
+          ON CONFLICT(uid) DO NOTHING`)
+          .bind(`closing-sent:${p.uid}`, user.id, p.target_id, user.id, p.uid),
+      ]);
+    } catch {
+      return no(503, 'sender_report_unavailable', 'Sent could not be recorded. No receipt was confirmed. Try again.');
+    }
+    if (Number(writes[0]?.meta?.changes) !== 1 || Number(writes[1]?.meta?.changes) !== 1) {
+      return no(409, 'already_decided', 'This proposal or line changed before Sent could be recorded.');
+    }
+    return { ok: true, result_ref: ref };
   }
   if (p.kind === 'call') {
     if (!p.fund_id || !(await gpFunds(env, user, p.fund_id)).length) return no(404, 'target_not_found', 'That is not a fund you are GP of.');
