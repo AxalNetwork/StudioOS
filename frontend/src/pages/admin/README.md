@@ -107,6 +107,10 @@ HQ only, under the shared admin page header: five tabs at their own addresses,
 with Review and Programs drawn by D815's console in `consoles/` — see its own
 README.
 
+`kyc/` is D1228's KYC & KYB at `/admin/kyc`, under Approvals: four tabs at their
+own addresses and one person's case at `/admin/kyc/people/:id`, with People
+drawn by D648's queue in `consoles/` — see its own README.
+
 `payments/` is D1008's Payments at `/admin/platform/payments`, HQ only, under
 Platform, built to its canvas under the shared admin page header (D936).
 `/admin?tab=payments` redirects to it; today's editor opens on request at the

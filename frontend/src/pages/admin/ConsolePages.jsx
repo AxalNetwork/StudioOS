@@ -21,6 +21,8 @@ import { ProductTestingPanel } from './consoles/ProductTestingConsole';
 import { ProductTestingTabBody } from './productTesting/ProductTestingTabs';
 import { PAGE_LINE as TESTING_LINE, viewOf as testingViewOf } from './productTesting/productTestingModel';
 import { PromoCodesPanel } from './consoles/PromoCodesConsole';
+import { KycTabBody } from './kyc/KycTabs';
+import { PAGE_LINE as KYC_LINE, viewOf as kycViewOf } from './kyc/kycModel';
 import { BillingPanel } from './consoles/BillingConsole';
 
 /**
@@ -113,10 +115,20 @@ export function AllAccountsPage({ onImpersonate }) {
   );
 }
 
+/** D1228 (#2384) — KYC & KYB's four tabs (KYC1, KYC6, KYC9, KYC10) and a person's case (KYC3). */
 export function KycPage() {
+  const { pathname } = useLocation();
+  const tabs = (
+    <>
+      <HeaderTab to="/admin/kyc" data-testid="kyc-tab-people">People</HeaderTab>
+      <HeaderTab to="/admin/kyc/businesses" data-testid="kyc-tab-businesses">Businesses</HeaderTab>
+      <HeaderTab to="/admin/kyc/renewals" data-testid="kyc-tab-renewals">Renewals</HeaderTab>
+      <HeaderTab to="/admin/kyc/audit" data-testid="kyc-tab-audit">Audit</HeaderTab>
+    </>
+  );
   return (
-    <ConsolePage crumb={{ ...APPROVALS, current: 'KYC & KYB' }} title="KYC & KYB" line="Identity checks waiting for review, and each one's record." testId="admin-kyc">
-      <KycConsole />
+    <ConsolePage crumb={{ ...APPROVALS, current: 'KYC & KYB' }} title="KYC & KYB" line={KYC_LINE} tabs={tabs} testId="admin-kyc">
+      <KycTabBody view={kycViewOf(pathname)} people={<KycConsole />} />
     </ConsolePage>
   );
 }

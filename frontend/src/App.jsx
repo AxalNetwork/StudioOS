@@ -2796,6 +2796,9 @@ function AppInner() {
           Partner, an Admin or the Super Admin reads it. The Worker decides the level. */}
       <Route path="/cap-tables/:projectId" element={guard(['admin', 'advisor', 'partner'], <CapTableReadPage />)} />
       <Route path="/admin/kyc" element={guard(['admin'], <KycPage />)} />
+      {/* D1228 (#2384) — KYC & KYB's other tabs and one person's case. */}
+      <Route path="/admin/kyc/:tab" element={guard(['admin'], <KycPage />)} />
+      <Route path="/admin/kyc/people/:id" element={guard(['admin'], <KycPage />)} />
       <Route path="/admin/directory" element={guard(['admin'], <DirectoryPage />)} />
       <Route path="/admin/wellbeing" element={guard(['admin'], <AdminWellbeingPage />)} />
       {/* Platform and Revenue pages are the Super Admin's, like every other (#2375). */}

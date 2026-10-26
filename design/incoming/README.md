@@ -109,6 +109,21 @@ strength of a live route would empty the queue of the work it exists to track.
    `Trust Center v2.dc.html` to `backlog/` for a day, next to the `NEW` canvases
    that have no route, and away from the v1 of its own page.
 
+## Landed 2026-10-26 — Approvals › KYC & KYB (#2384)
+
+The owner's artifacts `9U6YH5eduDN6bpd5k4Tucm` (the board grid) and
+`1GB2y5PhbYoTM3vaQ7iePE` (the page) came from S21's prompt on #2384. Each was
+decoded by `scripts/read-canvas.mjs` as is:
+- `KYC & KYB · Boards.dc.html` is the board grid (KYC1 to KYC17); it imports
+  the page by name;
+- `KYC KYB Page.dc.html` is the page.
+
+No value was edited.
+
+**Grade: UPGRADE.** S21's integration (D1228) gives `/admin/kyc` the canvas's
+four tabs, People, Businesses, Renewals and Audit, each at its own address,
+and one person's case at `/admin/kyc/people/:id`. The rest is D1229–D1235.
+
 ## Landed 2026-10-26 — Raise › Calls for Capital (#2458)
 
 The owner's artifacts `J62CXhkW7Q3roPvNQKN9YD` (the page) and

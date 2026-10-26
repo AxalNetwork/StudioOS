@@ -135,7 +135,7 @@ const CONSOLES = [
   { name: 'Users', el: () => React.createElement(UsersConsole), reads: ['adminListUsers'],
     empty: { adminListUsers: async () => ({ results: [], total: 0, by_role: {} }) }, says: /No users found/, loading: /Loading…/ },
   { name: 'KYC', el: () => React.createElement(KycConsole), reads: ['kycAdminQueue'],
-    empty: { kycAdminQueue: async () => [] }, says: /No submissions in pending status/, loading: /Loading…/ },
+    empty: { kycAdminQueue: async () => [] }, says: /No one is Waiting\./, loading: /Loading…/ }, // D1228: the canvas's status words
   { name: 'Personas', el: () => React.createElement(PersonasPanel), reads: ['listPersonasAdmin'],
     empty: { listPersonasAdmin: async () => ({ users: [] }) }, says: /No users\./, loading: /Loading/ },
   { name: 'Directory', el: () => React.createElement(DirectoryPanel), reads: ['adminListDirectoryPartners'],
@@ -247,6 +247,9 @@ test('HQ · Accounts mounts the Users console alone, not the whole Admin Console
 
 test('D647: Contracts imports its own desk without the Admin Console module', () => {
   const page = readFileSync(resolve(process.cwd(), 'frontend/src/pages/hq/ContractsPage.jsx'), 'utf8');
-  assert.match(page, /export \{ default \} from '\.\.\/admin\/contracts\/ContractsDesk\.jsx'/);
+  // D1213: an import rather than a re-export, so the route-reachability guard
+  // reads the desk's Closings door as composed into this host.
+  assert.match(page, /import ContractsDesk from '\.\.\/admin\/contracts\/ContractsDesk'/);
+  assert.match(page, /export default ContractsDesk;/);
   assert.doesNotMatch(page, /from '\.\.\/AdminPage'/);
 });

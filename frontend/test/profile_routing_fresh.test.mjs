@@ -123,7 +123,8 @@ test('ROUTE_MAP still parses to the full canvas corpus', () => {
   // 170 (D1195, #2382): `Product testing`, /admin/platform/product-testing and its tabs.
   // 171 (D1213, #2424): `Closing room`, the founder's and the deal's rooms and Contracts › Closings.
   // 172 (D1221, #2458): `Calls for Capital`, Capital relationships' Calls tab and one call.
-  assert.equal(recs.length, 172);
+  // 173 (D1228, #2384): `KYC & KYB`, /admin/kyc's four tabs and one person's case.
+  assert.equal(recs.length, 173);
 
   for (const r of recs) {
     assert.ok(r.canvas.length > 0, 'every row names a canvas');
