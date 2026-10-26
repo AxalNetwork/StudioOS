@@ -149,30 +149,6 @@ export function laneView(lane, glance) {
 
 export const laneViews = (glance) => LANES.map((l) => laneView(l, glance));
 
-/**
- * The Waiting tile (APR1, APR13): the sum over the lanes that answered, with
- * "+" when one failed, and how many of the twenty are counted at all.
- */
-export function waitingTile(views) {
-  if (views.some((v) => v.state === 'loading')) return { state: 'loading' };
-  const counted = views.filter((v) => v.glance);
-  const ready = counted.filter((v) => v.state === 'ready');
-  const failed = counted.filter((v) => v.state === 'unreadable');
-  if (!ready.length) return { state: 'unreadable', reason: GLANCE_FAILED };
-  const total = ready.reduce((t, v) => t + v.count, 0);
-  const uncounted = views.length - counted.length;
-  return {
-    state: 'ready',
-    value: failed.length ? `${nf(total)} +` : nf(total),
-    sub: failed.length
-      ? `${failed.map((v) => v.label).join(', ')} could not be read`
-      // D1132: every lane is counted now, so "0 are not counted yet" is not said.
-      : uncounted
-        ? `across ${nf(ready.length)} of ${nf(views.length)} lanes; ${nf(uncounted)} ${uncounted === 1 ? 'is' : 'are'} not counted yet`
-        : `across ${nf(ready.length)} of ${nf(views.length)} lanes`,
-  };
-}
-
 /** The oldest wait across the lanes, said as a line under "Over 72 hours"; null when none waits. */
 export function oldestLine(views) {
   const waiting = views.filter((v) => v.state === 'ready' && v.count > 0 && v.ageHours !== null);
@@ -181,46 +157,8 @@ export function oldestLine(views) {
   return `oldest ${top.age}, ${top.label}`;
 }
 
-/**
- * The lanes with items, longest wait first (APR1's order); a lane whose age
- * was not read sorts last, never first.
- */
-export function waitingLanes(views, { group = null, q = '' } = {}) {
-  const s = String(q || '').trim().toLowerCase();
-  return views
-    .filter((v) => v.state === 'ready' && v.count > 0)
-    .filter((v) => !group || v.group === group)
-    .filter((v) => s.length < 2 || v.label.toLowerCase().includes(s))
-    .sort((a, b) => (b.ageHours ?? -1) - (a.ageHours ?? -1));
-}
-
-/** The group chips' counts: a number when every counted lane in it answered, else null. */
-export function groupCounts(views) {
-  const out = {};
-  for (const g of GROUPS) {
-    const counted = views.filter((v) => v.group === g.key && v.glance);
-    out[g.key] = counted.some((v) => v.state !== 'ready') ? null : counted.reduce((t, v) => t + v.count, 0);
-  }
-  const all = Object.values(out);
-  out.all = all.some((n) => n === null) ? null : all.reduce((t, n) => t + n, 0);
-  return out;
-}
-
-/** "Waiting by lane" (APR1), one bar per waiting lane, its tone the oldest item's band. */
-export function laneBars(views) {
-  const tone = { past: 'violet', due: 'amber', ok: 'sky' };
-  return waitingLanes(views).map((v) => ({
-    key: v.key, label: v.label, value: v.count, text: `${nf(v.count)} waiting`, tone: tone[v.band?.key] || 'muted',
-  }));
-}
-
-/** A filter from the address (`?group=`, `?lane=`), so other pages can link to one. */
-export function filtersOf(search) {
-  const p = new URLSearchParams(search || '');
-  const group = GROUPS.some((g) => g.key === p.get('group')) ? p.get('group') : null;
-  const lane = p.get('lane') || null;
-  return { group, lane, q: p.get('q') || '' };
-}
+// D1045 (#2893): the glance-built Inbox (its Waiting tile, lane rows, group
+// counts, bars and filters) gave way to the inbox read; see inboxModel.js.
 
 /* ------------------------------------------------------------------ *
  * The lane boards (APR4, APR6, APR8)
