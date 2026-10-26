@@ -1,5 +1,9 @@
 # cloudflare-worker/src/services — logic, not HTTP
 
+`programUsage.ts` (D1156) collects month-to-date program counts locally, sends
+only aggregates to HQ, validates authenticated reports and reads dated per-grant
+figures. Missing and unreadable metrics stay distinct from measured zero.
+
 Everything a route needs that is not request parsing or response shaping. A file
 here takes `env` and plain values; it does not take a Hono `Context` and does
 not return a `Response`.
@@ -17,6 +21,10 @@ by the deal reader and diligence opener. A room request is not a grant.
 
 The split matters because it is what makes the logic testable: the worker suite
 runs these directly against an in-process SQLite, with no request at all.
+
+`useOfFunds/` holds D1175's pure, versioned plan engine and founder-scoped,
+transactional legacy copy/Base writer. See its README for the part-3 contract;
+forecasts stay Modelled and never supply runway today.
 
 `bankAccountHistory.ts` (D1182, #3111) reads the masked reveal ledger and
 bank-account/Mercury audit history. It uses a successful read audit as its route
@@ -52,6 +60,12 @@ invalid or ambiguous wall times. Its instant comparison keeps formatting-only
 normalization out of the changed-after-approval flag.
 
 ## The ones worth knowing
+
+`segmentMembership.ts` (D1128, #3008) resolves stored segment identities,
+the active sign-up catalog, an admin-moved member's missing questions, and the
+suppressed per-segment all-question completion count. Questions remain defined
+in code. `segmentProfiles.ts` also creates an authored profile and its first
+history version atomically. Events resolves its audience IDs from this store.
 
 `personaSegments.ts` is D999's segment counts (#2814) behind
 `GET /api/personas/admin/segments`: one grouped pass over every account but
@@ -159,6 +173,7 @@ no new schema, runtime or billing path is introduced.
 | `vercel/` | D1096: `api.ts`, the only caller of `api.vercel.com`: a read-only client for the planned reads, uninstall and the OAuth code exchange. Its README has the rules. |
 | `wellbeing/` | Wellbeing check-ins. |
 | `productTesters.ts` | D1042 (#2890): the product tester store (migration 576). `TRANSITIONS` (approve, decline, pause, resume, remove and the status each needs), `messageFor` (what the member is told), `listTesters`, `testerDetail`, `isAdminAccount` (admins cannot test) and `applyTransition` (one conditional UPDATE and one append-only event row in a batch). `reapplyAfter` is the decision day plus 90 days. D1132: a removal ends the member's open program places in the same batch (`withdrawn`, with a `place_ended` row in `testing_events`), never in a closed or rejected programme. `../routes/admin_product_testers.ts` is its only caller. |
+| `testingLogo.ts` | D1199 (#3149): a product-testing programme's logo. `checkLogo` sniffs the bytes (a PNG by its signature and IHDR, an SVG by its first element), caps the size (`LOGO_MAX_BYTES`), requires a square, refuses an SVG with script, a handler, a `javascript:` or external link, `<foreignObject>` or a DOCTYPE, and stores any other SVG as the brand route's `sanitizeSvg` rebuilds it. `putLogo` and `removeLogo` go through `testing.ts`'s `ownProgramme` and only while the programme is editable; the key `testing-logos/<uid>/<uuid>.<ext>` in `FILES` is the Worker's alone. `readLogo` serves only that prefix, to the owner, Super Admin, or any member once the programme is open. `../routes/testing.ts` is its only caller. |
 | `programGrants.ts` | D982 (#2773): program grants. The nine programs and their readiness (held equal to `frontend/src/lib/programGrants.js`), `TERM_FIELDS` (which grant terms apply to which program, and which are defaultable), `validateTerms` (an unknown or inapplicable term is refused; `null` clears), `presentGrant` (the in-force rule and what a grant waits on), `readGrid`, `readDefaults` and `readHistory`. The store is migration 553; `../routes/admin_program_grants.ts` and `licencePrograms.ts` call it. D983 adds the grid's requests tile and series. D956 adds the `draft` state (migration 562), `programNamed` (the nine or a registry key), the terms every program carries for a program D955 added, and `openDraftStatements`. |
 | `programGrantStates.ts` | D956 (#2789): what each viewer reads of a program's grant (`grantViewerOf`, `grantStates`): a Super Admin's count or HQ only, a deployed studio's licence state in the canvas's words (`requested` from both request lanes), the held mode for an admin with no licence or an undeployed studio, and a branch's state from D984's copy; a failed read is unreadable, never a state. Also Offer to studios (`offerToStudios`, `offerRefusal`: D982's switch, on only with a published playbook). Callers: `../routes/admin_programs.ts`, `programCatalogue.ts`, `../routes/admin_program_grants.ts`. |
 | `licencePrograms.ts` | D984 (#2775): the Administrator's programs. `programCopy` (the licence's grant rows and which programs HQ grants, as the licence push carries them to the branch, migration 554), `parseProgramCopy`, `studioPrograms` (the nine programs in the studio's words, in force by `presentGrant` and the day) and `unlinkedPrograms` (HQ runs every program). Callers: `../routes/licence_programs.ts` and `licencePush.ts`. |

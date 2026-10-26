@@ -1,0 +1,71 @@
+<!DOCTYPE html>
+<html><head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <meta name="design_doc_mode" content="canvas">
+  <link href="https://fonts.googleapis.com/css2?family=Roboto+Mono:wght@400;500;600;700&family=Space+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <style>body{margin:0;background:#eeedf2}a{color:#7c3aed;text-decoration:none}a:hover{color:#6d28d9}</style>
+</helmet>
+<div style="display:flex;flex-direction:column;font-family:'Space Grotesk',system-ui,sans-serif;color:#18181b">
+  <header style="padding:40px 44px 8px;display:flex;flex-direction:column;gap:6px">
+    <span style="font:700 11px 'Roboto Mono',monospace;letter-spacing:.07em;text-transform:uppercase;color:#6b6577">Members · Calendar</span>
+    <h1 style="margin:0;font-size:28px;font-weight:800;letter-spacing:-.02em">Calendar</h1>
+    <p style="margin:0;font-size:14px;color:#6b6577;max-width:840px;line-height:1.55">Every member’s one view of what is booked on StudioOS: month, week and agenda, kinds to filter, one item per booking, New, and the connected calendars. Calendar sits in the account menu, so no sidebar row is lit. Sample now is Tue 10 Nov 2026, 10:50, Lisbon time. Weekdays follow the real November 2026, so the IC meeting is Thu 12 Nov and the week is 9–15 Nov. Drawers and panels are drawn as centred lightboxes.</p>
+  </header>
+  <sc-for list="{{ boards }}" as="b" hint-placeholder-count="21">
+    <section id="{{ b.id }}" style="padding:36px 44px;border-bottom:1px solid rgba(0,0,0,.08);display:flex;flex-direction:column;gap:12px;scroll-margin-top:16px">
+      <div style="display:flex;align-items:baseline;gap:10px;flex-wrap:wrap">
+        <a href="#{{ b.id }}" style="font:700 11px 'Roboto Mono',monospace;padding:3px 8px;background:#18181b;color:#fff;border-radius:5px">{{ b.id }}</a>
+        <h2 style="margin:0;font-size:16px;font-weight:800;letter-spacing:-.01em">{{ b.t }}</h2>
+      </div>
+      <p style="margin:0;font-size:13px;line-height:1.55;color:#4a4553;max-width:920px">{{ b.cap }}</p>
+      <div style="display:flex;gap:28px;flex-wrap:wrap;align-items:flex-start">
+        <sc-for list="{{ b.frames }}" as="f" hint-placeholder-count="1">
+          <div style="display:flex;flex-direction:column;gap:8px;flex:none">
+            <sc-if value="{{ f.lab }}" hint-placeholder-val="{{ false }}"><span style="font:600 11px 'Roboto Mono',monospace;color:#6b6577">{{ f.lab }}</span></sc-if>
+            <div style="{{ f.box }}"><dc-import name="Calendar Page" board="{{ f.b }}" hint-size="{{ f.hint }}"></dc-import></div>
+          </div>
+        </sc-for>
+      </div>
+    </section>
+  </sc-for>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script="">
+class Component extends DCLogic {
+  renderVals() {
+    const D = (b, lab, w, h, r) => ({ b, lab: lab || false, hint: '100%,' + (h || 900) + 'px', box: 'width:' + (w || 1440) + 'px;' + (h ? 'height:' + h + 'px;' : '') + 'overflow:hidden;border-radius:' + (r || 12) + 'px;border:1px solid rgba(24,24,27,.12);background:#f4f3f7;box-shadow:0 1px 3px rgba(0,0,0,.06)' });
+    const P = (b, lab) => D(b, lab, 390, 844, 28);
+    const boards = [
+      ['CAL1', 'Month · Founder · desktop 1440 · light', 'November 2026 for a founder in [Cohort 6], with the account menu open on Calendar. Deadline flags come first in a day, then up to three chips and “+2 more”. Today is ringed in violet.', [D('CAL1', false, 1440, 1600)]],
+      ['CAL2', 'Week · Investor', '9–15 Nov from 07:00 to 21:00, with the now line, an all-day row, two overlapping bookings side by side, one waiting for confirmation and one cancelled. New is open, and a drag on Saturday shows the slot it would book.', [D('CAL2', false, 1440, 1500)]],
+      ['CAL3', 'Agenda · Advisor', 'From today, grouped by day, filtered to three of five families.', [D('CAL3', false, 1440, 1040)]],
+      ['CAL4', 'Item · IC meeting · lightbox', 'The item opens as a centred lightbox over the week.', [D('CAL4', false, 1440, 1700)]],
+      ['CAL5', 'Item · the other kinds', 'Eight kinds and a cancelled meeting, each as its lightbox opens.', [D('CAL5', false, 1440)]],
+      ['CAL6', 'Kinds filter', 'Five families with their kinds and counts for November, three quick sets, and Show [28] items.', [D('CAL6', false, 1200)]],
+      ['CAL7', 'New IC meeting', 'The dialog, with the inline error for a start in the past.', [D('CAL7', false, 720)]],
+      ['CAL8', 'New menu and New check-in', 'A · the Founder’s New menu. B · the check-in dialog.', [D('CAL8', false, 1200)]],
+      ['CAL9', 'Connected calendars · lightbox', 'Google, Outlook, Calendly and Zoom, the states a calendar can be in, and what each option does.', [D('CAL9', false, 1440, 1600)]],
+      ['CAL10', 'Google connection', 'What Axal VC can do with Google, the old Gmail grant, and the disconnect dialog.', [D('CAL10', 'Lightbox', 1440, 1600), D('CAL10d', 'Disconnect', 720)]],
+      ['CAL11', 'Subscribe', 'A private, read-only feed link.', [D('CAL11', false, 720)]],
+      ['CAL12', 'Day popover and quick look', '“+2 more” open on Thu 12, and a hover card on Mon 23.', [D('CAL12', false, 1200)]],
+      ['CAL13', 'Month · Admin · Studio scope', 'The scope switch on Studio: the studio’s meetings, read only.', [D('CAL13', false, 1440, 1190)]],
+      ['CAL14', 'Agenda · Explorer', 'Events and Calendly only, and no New.', [D('CAL14', false, 1440, 760)]],
+      ['CAL15', 'Empty', 'A · nothing booked. B · filtered to nothing. C · first visit, no calendar connected.', [D('CAL15', false, 1200)]],
+      ['CAL16', 'Loading', 'Header, toolbar and grid at once; chips and rail cards still reading.', [D('CAL16', false, 1440, 1000)]],
+      ['CAL17', 'Error and partial', 'A · one source failed: its kind reads a dash, never 0. B · nothing answered.', [D('CAL17', false, 1200)]],
+      ['CAL18', 'No permission', 'A meeting you are not part of, and the Free-plan gate on IC meetings if the owner keeps it.', [D('CAL18', false, 1200)]],
+      ['CAL19', 'Reschedule and cancel', 'Both dialogs say who is told and what happens to calendar copies.', [D('CAL19', false, 1200)]],
+      ['CAL20', 'Week · dark', 'CAL2 in the dark colours; violet becomes #a78bfa.', [D('CAL20', false, 1440, 1280)]],
+      ['CAL21', 'Phone · 390 wide', 'Agenda is the phone default, with a one-week strip. Month shows dots only. An item and Connected calendars open as full pages; dialogs become bottom sheets.', [P('CAL21a', 'Agenda'), P('CAL21b', 'Month'), P('CAL21c', 'Item'), P('CAL21d', 'Connected calendars')]]
+    ].map(([id, t, cap, frames]) => ({ id, t, cap, frames }));
+    return { boards };
+  }
+}
+</script>
+</body></html>
