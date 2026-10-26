@@ -6,6 +6,7 @@ The Super Admin's Product testing page at `/admin/platform/product-testing` (D11
 |---|---|
 | `productTestingModel.js` | Pure: the five tabs and their addresses, `viewOf` (the tab, and on a program its uid and sub-tab), the overview figures from the programme list, the tester row without its email, and each block's wait. |
 | `reviewModel.js` | Pure (D1202, #3152): the ⋯ menu per owner and status (`menuFor`), the dialogs A–H (`dialogFor`), who was told in counts (`toldLine`), Programs' search, filters, sort and pager (`programsView`), and Review's earlier-programmes and sent-back lines. |
+| `ProgrammeLogo.jsx` | A programme's square on Review and Programs: its logo from D1199's `GET /api/testing/programmes/:uid/logo`, else its first letter when there is none or it does not load. |
 | `TestingDialog.jsx` | One dialog, A–H, from `dialogFor`: what the step changes, who is told and what is recorded, its field and its one request; a refusal (I) is drawn inside it in the Worker's words. Never a browser pop-up. |
 | `ProductTestingTabs.jsx` | The new tabs' bodies: Overview (tiles, places bars, status chips), one program (details, HQ's own applicants), Applicants and the Tester pool. `ProductTestingTabBody` picks one from the address. |
 

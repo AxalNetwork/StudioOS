@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
-import { adminTestingApi, productTestingApi } from '../../../lib/api/productTesting';
+import { adminTestingApi } from '../../../lib/api/productTesting';
 import { useAuth } from '../../../hooks/useAuthSync';
 import { isSuperAdminUser } from '../../../lib/shellRole';
 import { Lightbox, Pill } from '../../../ui';
@@ -8,8 +8,9 @@ import { ConsoleUnreadable, CONSOLE_LOADING } from './shared';
 import ProgrammeForm from '../../testing/ProgrammeForm';
 import { ROLE_OPTIONS, refusalText, statusLabel, statusTone } from '../../testing/programmeModel';
 import TestingDialog from '../productTesting/TestingDialog';
+import ProgrammeLogo from '../productTesting/ProgrammeLogo';
 import {
-  CLOSES_FILTERS, OWNER_FILTERS, PLACES_FILTERS, SORTS, dayWord, dialogFor, earlierLine, firmsOf, logoInitial, menuFor,
+  CLOSES_FILTERS, OWNER_FILTERS, PLACES_FILTERS, SORTS, dayWord, dialogFor, earlierLine, firmsOf, menuFor,
   ownerName, programHref, programsView, rowFigures, sentBackLine, spanWords, statusChips, whoWords,
 } from '../productTesting/reviewModel';
 
@@ -49,21 +50,6 @@ export function ProductTestingPanel({ api = adminTestingApi, view = 'programs' }
     return <p className="p-6 text-sm text-gray-700 dark:text-gray-300" data-testid="product-testing-holder-only">{PRODUCT_TESTING_HOLDER_ONLY}</p>;
   }
   return <ProductTestingConsole api={api} view={view} />;
-}
-
-/** The programme's square: its logo (D1199), else its letter when there is none or it does not load. */
-export function Logo({ p, size = 28 }) {
-  const [failed, setFailed] = useState(!p?.logo_key);
-  useEffect(() => { setFailed(!p?.logo_key); }, [p?.logo_key]);
-  const box = { width: size, height: size };
-  if (failed) {
-    return (
-      <span style={box} aria-hidden="true" className="grid flex-none place-items-center rounded-[7px] border border-violet-200 bg-violet-50 text-[12px] font-extrabold text-axal-violet-deep dark:border-violet-500/40 dark:bg-violet-500/10 dark:text-violet-300">
-        {logoInitial(p?.product_name)}
-      </span>
-    );
-  }
-  return <img src={productTestingApi.logoSrc(p.uid)} alt="" style={box} className="flex-none rounded-[7px] border border-axal-hairline object-contain dark:border-gray-700" onError={() => setFailed(true)} />;
 }
 
 export function ProductTestingConsole({ api = adminTestingApi, view = 'programs' }) {
@@ -236,7 +222,7 @@ function ReviewCard({ p, items, api, ask }) {
         <span className={`text-[12px] ${muted}`}>{ownerName(p)}</span>
       </div>
       <div className="flex items-start gap-3">
-        <Logo p={p} size={44} />
+        <ProgrammeLogo p={p} size={44} />
         <div className="flex min-w-0 flex-col gap-1">
           <p className="m-0 text-[12.5px] font-semibold text-axal-ink dark:text-gray-100">Sent{dayWord(p.updated_at) ? ` ${dayWord(p.updated_at)}` : ''} by {ownerName(p)}</p>
           <p className={`m-0 text-[12px] ${muted}`} data-testid={`testing-earlier-${p.uid}`}>{side || 'Reading its history…'}</p>
@@ -329,7 +315,7 @@ function Programs({ items, ask }) {
                   const r = rowFigures(p);
                   return (
                     <tr key={p.uid} className="border-b border-axal-hairline align-middle last:border-0 dark:border-gray-800" data-testid={`testing-programme-${p.uid}`}>
-                      <td className="px-2 py-2"><Logo p={p} /></td>
+                      <td className="px-2 py-2"><ProgrammeLogo p={p} /></td>
                       <td className="px-2 py-2">
                         <Link to={programHref(p.uid)} className="text-[13px] font-bold text-axal-ink no-underline hover:underline dark:text-gray-100">{p.product_name}</Link>
                         <span className={`block text-[11.5px] ${muted}`}>{ownerName(p)}</span>
