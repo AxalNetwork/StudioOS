@@ -185,7 +185,7 @@ export const VENTURE_MODEL_V1: VentureModel = Object.freeze<VentureModel>({
         { key: 'analyst_layers', label: 'Analyst layer reviews', weight: 25, rule: { kind: 'direct' }, freshness: 'records',
           reads: 'The mean analyst score across the venture-risk layers an analyst scored.', source: 'venture_risk_overrides' },
         { key: 'invalidated_claims', label: 'Invalidated claims answered', weight: 20, rule: { kind: 'share', full: 1 }, freshness: 'records',
-          reads: 'Claims whose last verdict is invalidated, answered by a pivot or stop given since.', source: 'hypothesis_verdict_history, validation_decisions' },
+          reads: 'Claims whose last verdict is invalidated, answered by a pivot or stop given since.', source: 'hypothesis_verdict_history and Verdict’s decisions' },
       ],
     },
     geographic: {

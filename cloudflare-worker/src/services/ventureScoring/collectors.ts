@@ -19,6 +19,7 @@ import type { Env } from '../../types';
 import { isIpAssignmentStep } from '../../integrations/providers/github/company';
 import { DILIGENCE_CHECKLIST } from '../raiseCycle';
 import { mercuryRunway } from '../raiseEvidence';
+import { latestPivotOrStopDay } from '../verdict';
 import { parseUseOfFundsValue } from '../../util/useOfFunds';
 import { GRADES, type GradeLabel, type ScopeKey } from './model';
 import { unsourced, type InputFacts } from './engine';
@@ -105,8 +106,6 @@ export const STATEMENTS = Object.freeze({
       WHERE project_id = ? AND analyst_score IS NOT NULL`,
     verdicts: `SELECT h.hypothesis_id, h.verdict, h.observed_at FROM hypothesis_verdict_history h
       WHERE h.project_id = ? AND h.id = (SELECT MAX(x.id) FROM hypothesis_verdict_history x WHERE x.project_id = h.project_id AND x.hypothesis_id = h.hypothesis_id)`,
-    decision: `SELECT decided_at FROM validation_decisions WHERE project_id = ? AND superseded_at IS NULL AND state = 'given'
-      AND decision IN ('pivot', 'stop') ORDER BY decided_at DESC, id DESC LIMIT 1`,
   },
   markets: `SELECT demand_score, demand_source, partners_score, partners_source, cost_score, cost_source,
       regulation_score, regulation_source, updated_at FROM markets WHERE project_id = ? AND state IN ('served', 'entering', 'considering')`,
@@ -428,7 +427,8 @@ async function risk(env: Env, projectId: number): Promise<InputFacts[]> {
     first<{ risk_band: string; at: string | null }>(env, STATEMENTS.risk.dd, projectId),
     first<{ rows: number; n: number | null; at: string | null }>(env, STATEMENTS.risk.layers, projectId),
     all<{ hypothesis_id: number; verdict: string | null; observed_at: string | null }>(env, STATEMENTS.risk.verdicts, projectId),
-    first<{ decided_at: string | null }>(env, STATEMENTS.risk.decision, projectId),
+    // Decisions are verdict.ts's to read (D693): it answers with a day only.
+    latestPivotOrStopDay(env, projectId),
   ]);
   const out: InputFacts[] = [];
   const total = num(reg?.total), high = num(reg?.high);
@@ -444,10 +444,10 @@ async function risk(env: Env, projectId: number): Promise<InputFacts[]> {
     ? recorded('analyst_layers', num(layers.n), null, GRADES.reviewed, day(layers.at), 'venture_risk_overrides', num(layers.rows), plural(num(layers.rows), 'layer reviewed', 'layers reviewed'))
     : missing('analyst_layers', 'venture_risk_overrides', 'No analyst has scored a risk layer'));
   const invalid = verdicts.filter((v) => v.verdict === 'invalidated');
-  const decidedAt = day(decision?.decided_at);
+  const decidedAt = decision;
   const answered = invalid.filter((v) => decidedAt && day(v.observed_at) && day(v.observed_at)! <= decidedAt).length;
   out.push(verdicts.length > 0
-    ? recorded('invalidated_claims', invalid.length ? answered : 1, invalid.length || 1, GRADES.sourced, newest(...verdicts.map((v) => v.observed_at), decision?.decided_at), 'hypothesis_verdict_history', verdicts.length,
+    ? recorded('invalidated_claims', invalid.length ? answered : 1, invalid.length || 1, GRADES.sourced, newest(...verdicts.map((v) => v.observed_at), decision), 'hypothesis_verdict_history', verdicts.length,
       invalid.length ? `${answered} of ${plural(invalid.length, 'invalidated claim', 'invalidated claims')} answered by a pivot or stop` : 'No claim is invalidated')
     : missing('invalidated_claims', 'hypothesis_verdict_history', 'No claim verdict is recorded'));
   return out;

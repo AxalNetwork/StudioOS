@@ -196,7 +196,11 @@ function seed(db: DatabaseSync) {
       VALUES ('m1',10,'Synthetic market','entering',7,'Synthetic study',6,'Synthetic counsel');
     INSERT INTO cap_table_holders(user_id,project_id,name,kind,source) VALUES (1,10,'Private Person','founder','manual');
     INSERT INTO formation_steps(project_id,title,state,kind,created_by) VALUES (10,'Incorporate','done','formation',1),(10,'Assign IP to the company','done','other',1);
-    INSERT INTO ritual_runs(project_id,ritual_id,run_date,state) VALUES (10,1,'2026-10-20','done'),(10,1,'2026-10-13','missed');`);
+    INSERT INTO ritual_runs(project_id,ritual_id,run_date,state) VALUES (10,1,'2026-10-20','done'),(10,1,'2026-10-13','missed');
+    INSERT INTO hypothesis_verdict_history(project_id,hypothesis_id,verdict,lane,observed_at) VALUES
+      (10,1,'testing','claims','2026-09-01'),(10,1,'invalidated','claims','2026-09-20'),(10,2,'invalidated','claims','2026-10-10'),(10,3,'validated','claims','2026-10-01'),(10,4,'invalidated','claims','2026-09-25');
+    INSERT INTO validation_decisions(project_id,decision,reasoning,decided_at,decided_by,state) VALUES
+      (10,'pivot','Synthetic reasoning','2026-10-01',1,'given'),(10,'stop','Synthetic reasoning','2026-10-20',1,'withheld');`);
 }
 const count = (db: DatabaseSync, table: string, where = '1=1') => Number((db.prepare(`SELECT COUNT(*) AS n FROM ${table} WHERE ${where}`).get() as any).n);
 
@@ -215,6 +219,8 @@ test('collectors: every scope reads its stores, and Traction and Financial wait 
   assert.equal(by.traction.state, 'scored');
   assert.equal(by.traction.inputs.find((i: any) => i.key === 'growth').value, 100, 'MRR doubled over three months');
   assert.equal(by.legal_ip.inputs.find((i: any) => i.key === 'spinout_ip').state, 'recorded');
+  assert.equal(by.risk.inputs.find((i: any) => i.key === 'invalidated_claims').words, '2 of 3 invalidated claims answered by a pivot or stop',
+    'a pivot given after a claim is invalidated answers it; a withheld stop answers none');
   assert.equal(by.geographic.inputs.find((i: any) => i.key === 'country_environment').reason, 'Facts only: no country index is chosen (owner question 4)');
 
   const early = fixture('validate');
