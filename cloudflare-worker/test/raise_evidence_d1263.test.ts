@@ -270,3 +270,21 @@ test('snapshot fingerprints depend on the private server key, remain determinist
  const missing=await collectEvidenceSources({...w.env,JWT_SECRET:''},1,1);assert.equal(missing.candidates.length,0);assert.ok(missing.blocks.some(b=>b.state==='unreadable'));
  }finally{w.db.close();}
 });
+
+
+test('holder and vesting connector labels require an active ledger, never a typed provider hint or sync date',async()=>{
+ const w=world();try{sources(w);
+ for(const source of ['carta','connector:carta','stripe','mercury']){w.db.prepare('UPDATE cap_table_holders SET source=?').run(source);w.db.prepare('UPDATE cap_table_vesting SET source=?').run(source);const got=await collectEvidenceSources(w.env,1,1);for(const kind of ['founder-holding','vesting-schedule'])assert.equal(got.candidates.find(c=>c.kind===kind)?.source_label,'typed');assert.equal(got.candidates.find(c=>c.kind==='founder-holding')?.observed_on,null);}
+ w.db.exec("UPDATE cap_table_holders SET source='connector:carta'; UPDATE cap_table_vesting SET source='carta'");seed(w,'integrations',{id:3,user_id:1,provider_key:'carta',status:'active'});
+ for(const table of ['cap_table_holders','cap_table_vesting'])seed(w,'connector_fed_items',{integration_id:3,project_id:1,module:'raise',kind:'cap_table',external_id:table,local_table:table,local_id:1});
+ const backed=await collectEvidenceSources(w.env,1,1);for(const kind of ['founder-holding','vesting-schedule']){const row=backed.candidates.find(c=>c.kind===kind);assert.equal(row?.source_label,'connector');assert.equal(row?.provider,'carta');}assert.equal(backed.candidates.find(c=>c.kind==='founder-commits')?.provider,'github');
+ w.db.exec("UPDATE integrations SET status='revoked' WHERE id=3");const revoked=await collectEvidenceSources(w.env,1,1);for(const kind of ['founder-holding','vesting-schedule'])assert.equal(revoked.candidates.find(c=>c.kind===kind)?.source_label,'typed');
+ }finally{w.db.close();}
+});
+
+
+test('fingerprints bind privacy policy as well as source figures',async()=>{
+ const w=world();const rule=EVIDENCE_RULES.find(r=>r.kind==='kpi-snapshot') as any;const previous=rule.private_reason;
+ try{sources(w);const first=(await collectEvidenceSources(w.env,1,1)).candidates.find(c=>c.kind==='kpi-snapshot')!;rule.private_reason='bank';const changed=(await collectEvidenceSources(w.env,1,1)).candidates.find(c=>c.kind==='kpi-snapshot')!;assert.notEqual(changed.snapshot_hash,first.snapshot_hash);assert.equal(changed.private_reason,'bank');}
+ finally{rule.private_reason=previous;w.db.close();}
+});
