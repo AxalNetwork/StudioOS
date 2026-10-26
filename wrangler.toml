@@ -246,6 +246,8 @@ MCP_SERVER_ENABLED = "true"
 API_KEYS_ENABLED = "false"
 # D860 (#2505): WhatsApp calls groundwork; off until the owner answers #2505 and a live build ships.
 WHATSAPP_CALLS = "false"
+# D856 (#2501): the guided WhatsApp setup through Meta's MCP; "on" only, else its routes 404. Off until Meta's facts are verified live.
+WHATSAPP_MCP_SETUP = "off"
 # Feature flag for the Queues migration. While "true" the worker enqueues
 # new jobs onto the native CF Queue (`JOB_QUEUE`); the legacy D1
 # `queue_jobs` cron drain stays alive in parallel so any in-flight legacy
@@ -606,6 +608,8 @@ MCP_SERVER_ENABLED = "true"
 API_KEYS_ENABLED = "false"
 # D860 (#2505): WhatsApp calls groundwork; off until the owner answers #2505 and a live build ships.
 WHATSAPP_CALLS = "false"
+# D856 (#2501): the guided WhatsApp setup through Meta's MCP; "on" only, else its routes 404. Off until Meta's facts are verified live.
+WHATSAPP_MCP_SETUP = "off"
 USE_CF_QUEUE      = "true"
 # Set at deploy time by cloudflare-worker-deploy.yml (--var WORKER_DEPLOY_VERSION).
 # branchOps health returns it so HQ can persist licence_deployments.last_version.
@@ -788,6 +792,8 @@ MCP_SERVER_ENABLED = "false"
 API_KEYS_ENABLED = "false"
 # D860 (#2505): WhatsApp calls groundwork; off until the owner answers #2505 and a live build ships.
 WHATSAPP_CALLS = "false"
+# D856 (#2501): the guided WhatsApp setup through Meta's MCP; "on" only, else its routes 404. Off until Meta's facts are verified live.
+WHATSAPP_MCP_SETUP = "off"
 USE_CF_QUEUE      = "true"
 # Task #4 (CG) — preview env can use a separate gateway slug (e.g.
 # `advisor-ongoing-preview`) created in the dashboard. Defaults to the

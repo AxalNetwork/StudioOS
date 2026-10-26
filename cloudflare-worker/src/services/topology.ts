@@ -273,13 +273,13 @@ export const SECRET_WRITERS = [
 ] as const;
 
 /**
- * THE CANVAS SAID ACCESS GUARDS /hq AND /admin/*. It guards these two routes
- * and nothing else; `index.ts` records why it was taken off /api/admin/*. The
+ * THE CANVAS SAID ACCESS GUARDS /hq AND /admin/*. It guards identity and business documents; `index.ts` records why it was taken off /api/admin/*. The
  * test holds this list to every `requireCfAccess()` mount.
  */
 export const CF_ACCESS_PATHS = [
   '/api/kyc/admin/:userId/document',
   '/api/kyc/admin/:userId/document/*',
+  '/api/kyc/businesses/:id/documents/:documentId',
 ] as const;
 
 // ── the payload ─────────────────────────────────────────────────────────────
