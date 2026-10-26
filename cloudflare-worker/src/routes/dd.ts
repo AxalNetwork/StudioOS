@@ -1233,7 +1233,7 @@ dd.post('/cases/:uid/reviewer-invite/:jti', async (c) => {
   const sql = getSQL(c.env);
   try {
     const r: any[] = await sql`
-      SELECT id, section_id, user_id, expires_at, (expires_at IS NOT NULL AND expires_at < datetime('now')) AS expired
+      SELECT id, section_id, user_id, expires_at, (expires_at IS NOT NULL AND datetime(expires_at) < datetime('now')) AS expired
         FROM dd_reviewers
        WHERE case_id = ${cs.id} AND magic_link_jti = ${jti} LIMIT 1`;
     if (r.length === 0) return c.json({ error: 'Invitation invalid or expired' }, 403);
@@ -1716,7 +1716,7 @@ dd.get('/my-reviews', async (c) => {
       SELECT c.uid AS case_uid, c.subject_label, c.subject_type, c.status AS case_status,
              s.id AS section_id, s.title AS section_title, s.verdict, s.status AS section_status,
              r.role, r.invited_at, r.responded_at, r.nda_signed_at, r.conflicts, r.expires_at,
-             (r.expires_at IS NOT NULL AND r.expires_at < datetime('now') AND r.responded_at IS NULL) AS invite_expired,
+             (r.expires_at IS NOT NULL AND datetime(r.expires_at) < datetime('now') AND r.responded_at IS NULL) AS invite_expired,
              (SELECT COUNT(*) FROM dd_checklist_items i WHERE i.section_id = s.id AND i.status = 'pending') AS items_pending
         FROM dd_reviewers r
         JOIN dd_sections s ON s.id = r.section_id
