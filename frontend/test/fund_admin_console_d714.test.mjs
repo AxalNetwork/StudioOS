@@ -75,6 +75,24 @@ const FEES = () => ({
   periods: [{ quarter: '2026Q3', window_start: '2026-07-01', window_end: '2026-09-30', status: 'issued', net_cents: 250000, remittance_reference: 'FEE-2026Q3' }],
 });
 const DRAFTS = () => ({ items: [{ uid: 'a'.repeat(32), kind: 'lp_quarterly_report', period_label: 'Q3 2026', status: 'prepared', revision: 1, fund_id: 7, report_period_id: 3, prepared_at: '2026-10-10' }] });
+// D1163 (#3070): the fund's call ledger, as `GET /api/funds/7/capital-calls` returns it.
+const LINE = (id, callId, lp, name, owed, received, state, extra = {}) => ({
+  id, fund_call_id: callId, limited_partner_id: lp, lp_name: name, lp_email: `${name.toLowerCase().replace(/\s+/g, '')}@example.test`, has_account: true, kyc_status: 'approved',
+  commitment_cents: owed * 5, owed_cents: owed, received_cents: received, outstanding_cents: owed - received, receipt_count: received ? 1 : 0,
+  due_date: '2026-10-01', paid_date: null, created_at: '2026-09-15', state, days_overdue: state === 'overdue' ? 17 : null, receipt_recorded: null, ...extra,
+});
+const LEDGER = () => ({
+  ok: true,
+  summary: { committed_cents: 50000000, committed_lps: 2, called_cents: 10000000, received_cents: 7500000, paid_before_receipts_cents: 0, outstanding_cents: 2500000, calls_count: 2 },
+  calls: [
+    { id: 22, uid: 'c'.repeat(32), call_number: 2, amount_cents: 5000000, purpose: 'Follow-on in Venture A', due_date: '2026-10-01', created_at: '2026-09-15', issued_by_name: 'Ada Admin', residual_cents: 0, residual_lp_id: null, residual_lp_name: null, line_count: 2, received_cents: 2500000, outstanding_cents: 2500000,
+      lines: [LINE(11, 22, 1, 'LP One', 3000000, 1000000, 'overdue'), LINE(12, 22, 2, 'LP Two', 2000000, 1500000, 'overdue')] },
+    { id: 21, uid: 'b'.repeat(32), call_number: 1, amount_cents: 5000000, purpose: 'First close', due_date: '2026-06-01', created_at: '2026-05-15', issued_by_name: 'Ada Admin', residual_cents: 0, residual_lp_id: null, residual_lp_name: null, line_count: 2, received_cents: 5000000, outstanding_cents: 0,
+      lines: [LINE(9, 21, 1, 'LP One', 3000000, 3000000, 'paid'), LINE(10, 21, 2, 'LP Two', 2000000, 2000000, 'paid')] },
+  ],
+  unnumbered: [],
+  truncated: false,
+});
 
 function stubs(over = {}) {
   const calls = [];
@@ -88,7 +106,7 @@ function stubs(over = {}) {
         distributionPreview: rec('distributionPreview', async (fundId, cents) => ({
           ok: true, fund_id: fundId, proceeds_cents: cents, distributable: true, basis_returned_cents: cents / 2, profit_cents: cents / 2,
           carry_rate: 0.2, carry_rate_defaulted: true, carry_withheld_cents: cents / 10, distributable_cents: cents - cents / 10,
-          distribution_type: 'exit_proceeds', lines: [{ lp_id: 1, amount_cents: cents - cents / 10 - 1 }], dropped_lp_ids: [2], unallocated_cents: 1,
+          distribution_type: 'exit_proceeds', lines: [{ lp_id: 1, lp_name: 'LP One', amount_cents: cents - cents / 10 - 1 }], dropped_lp_ids: [2], unallocated_cents: 1,
         })),
       },
       mercury: {
@@ -129,6 +147,18 @@ function stubs(over = {}) {
           { uid: 'pf-2', purpose: 'lp_application', target_id: 202, deal_id: null, fund_id: 7, investor_user_id: 31, investor_name: 'LP Two', target_label: 'Fund I application',
             state: 'revoked', label: 'Revoked', revoked_on: '2026-10-12', statement: 'Revoked by the investor on 2026-10-12.' },
         ] })),
+      },
+      calls: {
+        ledger: rec('ledger', async () => LEDGER()),
+        preview: rec('callPreview', async () => ({ ok: true, next_call_number: 3, residual_cents: 0, excluded: [], lines: [] })),
+        issue: rec('callIssue', async () => ({ ok: true })),
+        receipt: rec('receipt', async () => ({ ok: true })),
+      },
+      notices: {
+        preview: rec('noticePreview', async () => ({ html: '<p>Notice</p>', figures: {}, figures_sha256: 'e'.repeat(64), refusal: null })),
+        issue: rec('noticeIssue', async () => ({ ok: true })),
+        callPreview: rec('callNoticePreview', async () => ({ call: {}, lines: [], digest: 'd'.repeat(64) })),
+        callIssue: rec('callNoticeIssue', async () => ({ already_issued: false, notices: [] })),
       },
       funds: {
         distributions: rec('distributions', async () => ({ ok: true, items: [{ id: 91, lp_id: 1, lp_name: 'LP One', amount_cents: 450000, status: 'pending', distribution_type: 'exit_proceeds', created_at: '2026-10-01' }] })),
@@ -196,7 +226,7 @@ test('each tab renders its fixture', async () => {
     overview: ['Axal Holdings', 'Checking · ending 9001 · Operating', '$12,345.67', 'Example Fund I', '2 overdue', '2026Q3 · issued', '1 draft · 2 prepared', '3 proposed · 1 need review'],
     banking: ['Holdings Org', 'ending 9001', 'Current $12,345.67', 'Available Unreadable', 'Page 1 of 2', 'LP One'],
     reconciliation: ['$1,000.00 · Capital-call line #11', 'Fee period #41', 'Needs review'],
-    calls: ['Example Fund I · capital calls', '$100,000.00 of $500,000.00 committed', 'Open the call ledger', 'Open the books', 'Proof of funds shared by LPs', 'Show proofs of funds'],
+    calls: ['Capital calls', '$500,000.00', '$100,000.00', '$75,000.00', '$25,000.00', 'Outstanding by age', 'Call 2 · $50,000.00 · due 2026-10-01', 'LP One', 'Record receipt', 'Open LP', 'Earlier calls', 'Proof of funds shared by LPs', 'Show proofs of funds'],
     distributions: ['Carry withheld', 'the job’s 20% default', '1 LP share rounded to zero', 'LP One', '$4,500.00'],
     fees: ['2% a year from 2026-01-01', '1 LP has no admission date recorded', '2026Q3 · net $2,500.00', '2026Q4 · net $2,500.00'],
     reports: ['Q3 2026 · lp quarterly report', 'prepared', 'Opened, and recorded in the audit log'],
@@ -267,6 +297,8 @@ test('the gated acts call what they name, with the previewed figures', async () 
   await m.click('distribution-execute');
   assert.deepEqual(s.calls.find((c) => c[0] === 'execute'), ['execute', { fund_id: 7, proceeds_cents: 100000 }]);
   await m.click('distribution-mark-paid-91');
+  assert.ok(!s.calls.some((c) => c[0] === 'markPaid'), 'Mark paid opens its dialog first');
+  await m.click('distribution-mark-confirm');
   assert.deepEqual(s.calls.find((c) => c[0] === 'markPaid'), ['markPaid', 91]);
   await m.unmount();
   const fees = await open(SUPER, 'fees');
@@ -582,9 +614,12 @@ test('canvas Not ours: the action opens a dialog, and the dialog is the shared L
 test('canvas Distributions: the proceeds card holds Execute, and the per-LP total is the sum of the lines', async () => {
   const { m } = await open(SUPER, 'distributions');
   const preview = m.text(m.by('distribution-preview'));
-  for (const w of ['Where every cent goes', 'Proceeds', 'Basis returned', 'Profit', 'Carry withheld', 'To the LPs', 'No line received', 'Per-LP distribution preview']) {
-    assert.ok(preview.includes(w), `missing "${w}"`);
+  // D1163: "Where every cent goes" is its own panel beside the per-LP preview.
+  const where = m.text(m.by('distribution-where'));
+  for (const w of ['Where every cent goes', 'Proceeds', 'Basis returned', 'Profit', 'Carry withheld', 'To the LPs', 'Cents no line received']) {
+    assert.ok(where.includes(w), `missing "${w}"`);
   }
+  assert.ok(preview.includes('Per-LP preview') && preview.includes('LP One'), 'the per-LP preview names each LP');
   // 1000.00 proceeds: carry $100.00, one line of $899.99, one cent unallocated.
   assert.ok(m.text(m.by('distribution-line-1')).includes('$899.99'));
   assert.match(preview, /Total \$899\.99/);
@@ -593,7 +628,7 @@ test('canvas Distributions: the proceeds card holds Execute, and the per-LP tota
   // A preview without its rate says so; it never prints NaN.
   const r = stubs({ distributionPreview: async (fundId, cents) => ({ ok: true, fund_id: fundId, proceeds_cents: cents, distributable: false, lines: [], unallocated_cents: 0 }) });
   const { m: n } = await open(SUPER, 'distributions', r);
-  assert.ok(n.text(n.by('distribution-preview')).includes('The rate is not recorded in this preview.'));
+  assert.ok(n.text(n.by('distribution-where')).includes('The rate is not recorded in this preview.'));
   assert.doesNotMatch(n.text(), /NaN/);
   await n.unmount();
 });

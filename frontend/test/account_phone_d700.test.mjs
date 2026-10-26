@@ -44,7 +44,7 @@ import { __resetEadwynPanelForTest, useEadwynPanel, useEadwynRailServes } from '
 import TrustCenterPage, { TrustPhoneView } from '../src/pages/TrustCenterPage.jsx';
 import PerksPage, { PerksPhoneView } from '../src/pages/PerksPage.jsx';
 import CalendarPage, { CalendarPhoneView, NO_END_REASON } from '../src/pages/CalendarPage.jsx';
-import MyEventsPage, { EventsPhoneView } from '../src/pages/events/MyEventsPage.jsx';
+import MyEventsPage from '../src/pages/events/MyEventsPage.jsx';
 import LearningHome, { LearningPhoneView } from '../src/pages/learning/LearningHome.jsx';
 import { COMING_SOON_LINE } from '../src/pages/learning/learningAccess.js';
 import { TAB_NOT_LIVE } from '../src/pages/learning/learningModel.js';
@@ -519,14 +519,6 @@ const PROVIDERS = [
   { name: 'Google Calendar', state: 'connected', status: { connected: true, last_synced_at: '2026-10-17T08:57:00Z' } },
   { name: 'Microsoft 365', state: 'failed', status: { connected: true } },
 ];
-const EV_NOW = new Date(Date.UTC(2026, 9, 17, 12));
-const TICKETS = [
-  { id: 't1', title: 'Pricing pressure-test workshop', starts_at: '2026-10-24T15:00:00Z', status: 'published', reg_status: 'confirmed', location_kind: 'Online' },
-  { id: 't2', title: 'Demo Day', starts_at: '2026-11-18T15:00:00Z', status: 'published', reg_status: 'waitlisted' },
-  { id: 't3', title: 'Fundraising basics', starts_at: '2026-10-03T15:00:00Z', status: 'published', reg_status: 'attended' },
-];
-const HOSTING = [{ id: 41, title: 'Founder dinner', starts_at: '2026-11-02T18:00:00Z', status: 'published', visibility: 'members' }];
-const SUGGESTED = [{ id: 51, slug: 'office-hours-block', title: 'Office hours block', starts_at: '2026-12-02T15:00:00Z' }];
 const LEARN = {
   me: { status: 'ready', in_progress: [{ subject_kind: 'course', subject_uid: 'c1', title: 'Customer discovery', percent: 68, href: '/learning/courses/discovery' }] },
   programs: { enrolled: { status: 'ready', rows: [] }, open: { status: 'ready', programs: [] } },
@@ -539,14 +531,12 @@ const PHONE_VIEWS = {
   trust: () => h(TrustPhoneView, { status: 'ready', obligations: OBLIGATIONS }),
   perks: () => h(PerksPhoneView, { catalog: ready(CATALOG), mine: ready(MINE) }),
   calendar: () => h(CalendarPhoneView, { events: { status: 'ready', items: CAL_EVENTS }, providers: PROVIDERS, now: CAL_NOW }),
-  events: () => h(EventsPhoneView, { events: { status: 'ready', hosting: HOSTING, attending: TICKETS }, suggested: SUGGESTED, now: EV_NOW }),
   learning: () => h(LearningPhoneView, { gated: false, ...LEARN, now: Date.parse('2026-10-17T12:00:00Z') }),
   help: () => h(HelpPhoneView, { popular: POPULAR, areas: HELP_AREAS }),
   pricing: () => h(PricingPhoneView, { pricing: ready(PLANS), budget: ready(BUDGET), product: ready(PRODUCT) }),
 };
 // Decision 10's departures in a section list, named rather than matched loosely.
 const DEPARTED_SECTIONS = {
-  events: (c) => [...c, 'Hosting'],
   help: (c) => ['Popular this week', ...c.slice(1)],
 };
 
@@ -627,12 +617,6 @@ test('5. A4m–A10m: each section reads its values from the page\'s sources', ()
   assert.doesNotMatch(cal, /Next month/, 'This week is the next seven days only');
   assert.match(cal, /Google Calendar Synced [^·]+ Connected Microsoft 365 Last sync not recorded Sync failed/, 'providerState\'s own words');
 
-  const events = text(html(PHONE_VIEWS.events()));
-  // Dates are the runtime's locale (en-US under node).
-  assert.match(events, /Upcoming Oct 24 · Pricing pressure-test workshop [^›]*Going Nov 18 · Demo Day [^›]*Waitlist Dec 2 · Office hours block [^›]*RSVP/);
-  assert.match(events, /Past Oct 3 · Fundraising basics [^›]*Attended/);
-  assert.match(html(PHONE_VIEWS.events()), /href="\/events\/office-hours-block"/);
-
   const learning = text(html(PHONE_VIEWS.learning()));
   assert.match(learning, /Continue learning Customer discovery Course 68%/);
   assert.match(learning, /Upcoming webinars Pricing teardown [^›]*Register/);
@@ -666,7 +650,9 @@ test('6. the member routes mount the pages that draw A7m and A10m; the public pa
   // D755 §13, D786: the catalogue (/pricing/products) opens to visitors; a product's page still needs sign-in.
   assert.match(app, /<Route path="\/pricing\/products" element=\{user \? guard\(\[[^\]]+\], <ProductsPage \/>\) : <ProductsPage \/>\} \/>/);
   assert.match(app, /<Route path="\/pricing\/products\/:productId" element=\{guard\(\[[^\]]+\], <ProductsPage \/>\)\} \/>/);
-  assert.match(read('frontend/src/pages/events/MyEventsPage.jsx'), /<EventsPhoneView /);
+  // D1037 (#2878): Events retired A7m for MEV18, and kept the account bar.
+  assert.match(read('frontend/src/pages/events/MyEventsPage.jsx'), /<PhoneBar back=\{\{ label: 'Back' \}\} title=\{page\.title\} sub=\{page\.sub\} eadwynLabel=\{page\.title\} \/>/);
+  assert.match(read('frontend/src/pages/events/MyEventsPage.jsx'), /const page = ACCOUNT_PHONE_PAGES\.events;/);
   assert.match(read('frontend/src/pages/account/PricingPhone.jsx'), /<AccountPhonePage pageKey="pricing"/);
   for (const f of ['frontend/src/pages/events/PublicEventsPage.jsx', 'frontend/src/pages/PricingPage.jsx']) {
     const src = read(f);
@@ -753,19 +739,32 @@ test('8. a gated Learning draws the coming-soon line and Browse, Articles open, 
   assert.match(home, /\{!gated && <OpenPrograms \{\.\.\.programs\} \/>\}/);
 });
 
-test('8. Events: no Replay, and Hosting when the caller hosts an event', () => {
-  const t = text(html(PHONE_VIEWS.events()));
-  assert.doesNotMatch(t, /Replay/);
-  assert.match(t, /Hosting Nov 2 · Founder dinner published · members Manage › New event/);
-  assert.match(html(PHONE_VIEWS.events()), /href="\/events\/41\/manage"/);
-  assert.ok(CANVAS_PAGES.events.chunk.includes("'Replay'"), 'the canvas draws the pill this departs from');
+/** The page itself below 1024px: `usePhoneWidth` reads `window.matchMedia` on its first render. */
+function atPhoneWidth(render) {
+  const had = Object.prototype.hasOwnProperty.call(globalThis, 'window');
+  const previous = globalThis.window;
+  globalThis.window = { matchMedia: () => ({ matches: true, addEventListener() {}, removeEventListener() {} }) };
+  try { return render(); } finally { if (had) globalThis.window = previous; else delete globalThis.window; }
+}
+
+test('8. Events (D1037, #2878): MEV18 in place of A7m, under the same account bar, then the four tabs', () => {
+  const c = CANVAS_PAGES.events;
+  const markup = atPhoneWidth(() => html(h(MyEventsPage), '/my/events'));
+  assert.equal(barOf(markup).trim().startsWith(`‹ Back ${c.title} ${c.sub}`), true, barOf(markup));
+  assert.match(markup, /class="-m-4 md:-m-6 lg:m-0 [^"]*my-events-phone"/, 'the phone gutter and the 44px root');
+  assert.match(markup, /data-testid="my-events-phone" data-phone="true"/);
+  assert.doesNotMatch(markup, /data-testid="events-phone/, 'A7m is retired on this page');
+  const tabs = [...markup.matchAll(/data-testid="my-events-tab-(\w+)"/g)].map((m) => m[1]);
+  assert.deepEqual(tabs, ['upcoming', 'hosting', 'discover', 'past']);
+  for (const href of ['/my/events', '/my/events/hosting', '/my/events/discover', '/my/events/past']) assert.match(markup, new RegExp(`href="${href}"`));
+  assert.doesNotMatch(text(markup), /Replay/);
 });
 
 // --- 10. The Eadwyn button ---------------------------------------------------------
 
 const PR2_FILES = [
   'frontend/src/pages/account/AccountPhonePage.jsx', 'frontend/src/pages/TrustCenterPage.jsx', 'frontend/src/pages/PerksPage.jsx',
-  'frontend/src/pages/CalendarPage.jsx', 'frontend/src/pages/events/MyEventsPage.jsx', 'frontend/src/pages/learning/LearningHome.jsx',
+  'frontend/src/pages/CalendarPage.jsx', 'frontend/src/pages/events/MyEventsPage.jsx', 'frontend/src/pages/events/MyEventsPhone.jsx', 'frontend/src/pages/learning/LearningHome.jsx',
   'frontend/src/pages/docs/DocsLayout.jsx', 'frontend/src/pages/account/PricingPhone.jsx', 'frontend/src/pages/ProductsPage.jsx',
 ];
 
@@ -837,7 +836,9 @@ test('11. the A4m–A10m phone views pass no company or venture to a read', () =
     block('frontend/src/pages/TrustCenterPage.jsx', 'export function trustPhoneGroups(', 'export default function TrustCenterPage('),
     block('frontend/src/pages/PerksPage.jsx', ' * D700 (#1662) — A5m', ' * The standalone `/perks` page'),
     block('frontend/src/pages/CalendarPage.jsx', '// D700 (#1662) — A6m', 'export default function CalendarPage('),
-    block('frontend/src/pages/events/MyEventsPage.jsx', '// D700 (#1662) — A7m', 'export default function MyEventsPage('),
+    block('frontend/src/pages/events/MyEventsPage.jsx', '// D1037 (#2878) — MEV18', '/** D1131: suggestions'),
+    read('frontend/src/pages/events/MyEventsPhone.jsx'),
+    read('frontend/src/pages/events/myEventsPhoneModel.js'),
     block('frontend/src/pages/learning/LearningHome.jsx', '// D700 (#1662) — A8m', '/** What the rail says'),
     block('frontend/src/pages/docs/DocsLayout.jsx', '// D700 (#1662) — A9m', 'export default function DocsLayout('),
     read('frontend/src/pages/account/PricingPhone.jsx'),

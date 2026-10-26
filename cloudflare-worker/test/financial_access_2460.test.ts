@@ -18,7 +18,7 @@ const baseline = readFileSync(new URL('../sql/schema_baseline.sql', import.meta.
 const roles = ['admin', 'founder', 'partner', 'investor', 'advisor', 'exploring', 'partner', 'founder'];
 function fixture() {
   const db = new DatabaseSync(':memory:', { enableForeignKeyConstraints: false, enableDoubleQuotedStringLiterals: true });
-  for (const name of ['users', 'projects', 'documents', 'deals', 'deal_invitations', 'commitments']) db.exec(tableFromBaseline(baseline, name));
+  for (const name of ['users', 'projects', 'documents', 'deals', 'deal_invitations', 'commitments', 'activity_logs']) db.exec(tableFromBaseline(baseline, name));
   db.exec('CREATE TABLE user_company_links (id INTEGER PRIMARY KEY, company_id INTEGER, user_id INTEGER)');
   // D1137 (migration 597): resolveActiveCompany reads an archived company as none.
   db.exec('CREATE TABLE IF NOT EXISTS company_profiles (id INTEGER PRIMARY KEY, archived_at TEXT)');

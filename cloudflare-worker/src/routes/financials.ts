@@ -23,6 +23,7 @@ import { resolveActiveCompany, ACTIVE_COMPANY_HEADER } from '../middleware/activ
 import type { Env } from '../types';
 import { requireAuth, canAccessFounderResource } from '../auth';
 import { bindingKey } from '../util/schemaBootstrap';
+import { logCycleWriteStatement } from '../services/cycleActivity';
 
 const financials = new Hono<{ Bindings: Env }>();
 
@@ -500,7 +501,7 @@ financials.put('/:projectId', async (c) => {
   if (legacy.has('inputs_json')) { cols.push('inputs_json'); vals.push(JSON.stringify(a)); }
   const placeholders = cols.map(() => '?').join(', ');
   try {
-    await c.env.DB.prepare(
+    await c.env.DB.batch([c.env.DB.prepare(
       `INSERT INTO financial_models (${cols.join(', ')})
        VALUES (${placeholders})
        ON CONFLICT(project_id) DO UPDATE SET
@@ -509,30 +510,18 @@ financials.put('/:projectId', async (c) => {
          sensitivity_json       = excluded.sensitivity_json,
          updated_by             = excluded.updated_by,
          updated_at             = excluded.updated_at`,
-    ).bind(...vals).run();
+    ).bind(...vals), logCycleWriteStatement(c.env, { projectId, userId: Number(user.id), cycle: 'raise', module: 'use-of-funds', entityId: null, action: 'forecast_saved', summary: user.role === 'admin' ? 'Studio admin: forecast saved.' : 'Forecast saved.' }),
+    // Retain D1174's compatibility event in the same transaction; scope/outcome only.
+    c.env.DB.prepare(`INSERT INTO activity_logs (action,details,actor,user_id,created_at) VALUES (?,?,?,?,datetime('now'))`)
+      .bind('financial_model_saved',JSON.stringify({project_id:projectId,outcome:'saved'}),String(user.id),user.id)]);
   } catch (e) {
     const msg = (e as Error).message || '';
-    console.error('[financials] PUT upsert:', msg);
+    console.error('[financials] PUT upsert failed');
     const drift = /no such (table|column)|constraint|unique/i.test(msg);
     return c.json(
       { detail: drift ? 'Financial model store not ready, please retry.' : 'Failed to save financial model', code: drift ? 'schema_drift' : 'write_failed' },
       drift ? 503 : 500,
     );
-  }
-
-  // Outcome and scope only: no venture name or financial figures in logs.
-  try {
-    await c.env.DB.prepare(
-      `INSERT INTO activity_logs (action, details, actor, user_id, created_at)
-         VALUES (?, ?, ?, ?, datetime('now'))`,
-    ).bind(
-      'financial_model_saved',
-      JSON.stringify({ project_id: projectId, outcome: 'saved' }),
-      String(user.id),
-      user.id,
-    ).run();
-  } catch {
-    // activity_logs schema drift — never fail the save on a log write.
   }
 
   return c.json({

@@ -22,7 +22,9 @@ import { useRead } from './useRead';
 import { Refusal } from './Refusal';
 import { OverviewTab } from './OverviewTab';
 import { BankingTab, ReconciliationTab } from './BankingTabs';
-import { CallsTab, DistributionsTab, FeesTab, ReportsTab } from './FundTabs';
+import { FeesTab, ReportsTab } from './FundTabs';
+import { CallsTab } from './CallsTab';
+import { DistributionsTab } from './DistributionsTab';
 import { PerformanceTab } from './PerformanceTab';
 import { LpsTab } from './LpsTab';
 import { withQuery } from './lpsModel';
@@ -65,6 +67,13 @@ export const DEFAULT_APIS = {
     distributions: (fundId) => api.fundsDistributions(fundId),
     contacts: (fundId, lpId) => api.fundsCommsList(fundId, lpId),
     logContact: (fundId, body) => api.fundsLogComm(fundId, body),
+  },
+  // D1163 (#3070): the Calls tab's ledger, the new call's preview and issue, and Record receipt.
+  calls: {
+    ledger: (fundId) => api.fundsCallLedger(fundId),
+    preview: (fundId, cents) => api.fundsCallPreview(fundId, cents),
+    issue: (fundId, cents, purpose, due) => api.fundsCapitalCallV2(fundId, cents, purpose, due),
+    receipt: (fundId, lineId, body) => api.fundsRecordReceipt(fundId, lineId, body),
   },
   funds: {
     distributions: (fundId) => api.fundsDistributions(fundId),

@@ -21,11 +21,14 @@ export const LIMITS_PAGE = Object.freeze({ title: 'Limits', sub: 'What stops spe
 /**
  * Usage's pages under the account navigation, in the canvas's order. The
  * canvas draws three children — Overview, Cost and Limits (D789, D807) — and
- * the Storage canvas adds the fourth (D1166, #2449).
+ * the Storage canvas adds the fourth (D1166, #2449), and AI tokens sits after
+ * Cost (D1277, #2482).
  */
 export const USAGE_PAGES = Object.freeze([
   { id: 'overview', label: 'Overview', path: '/account/usage' },
   { id: 'cost', label: 'Cost', path: '/account/usage/cost' },
+  // D1277 (#2482): AI tokens, after Cost — the account's one ledger, not the API's.
+  { id: 'ai-tokens', label: 'AI tokens', path: '/account/usage/ai-tokens' },
   { id: 'limits', label: 'Limits', path: '/account/usage/limits' },
   { id: 'storage', label: 'Storage', path: '/account/usage/storage' },
 ]);
