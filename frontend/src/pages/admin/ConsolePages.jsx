@@ -8,6 +8,7 @@ import AdminPageHeader, { HeaderMenuItem, HeaderTab, useMovedNotice } from '../.
 import { adminMercuryApi } from '../../lib/api/adminMercury';
 import { Accounts as EntityAccounts } from './fundAdmin/BankingTabs';
 import { ADMIN_CASH_LINE, NOT_YET, WAITS, tabOf } from './consoles/bankAccountsTabs';
+import { RAIL_NOTE as BANK_RAIL_NOTE } from './consoles/bankAccountsModel';
 import AdminBoardFrame from './AdminBoardFrame';
 import { movedNoticesFor } from './LegacyContractsRedirect';
 // D648 (#1448) — one component per console, each in its own file under
@@ -52,7 +53,7 @@ export function consoleBoard(pathname, role) {
   return profile === PROFILE_OF_ROLE[role] ? module : null;
 }
 
-function ConsolePage({ crumb, hqCrumb = crumb, title, line, hqOnly = false, more = null, tabs = null, testId, children }) {
+function ConsolePage({ crumb, hqCrumb = crumb, title, line, hqOnly = false, more = null, tabs = null, rail = null, testId, children }) {
   const user = useAuth()?.user ?? null;
   const { pathname } = useLocation();
   const hq = isSuperAdminUser(user);
@@ -73,6 +74,10 @@ function ConsolePage({ crumb, hqCrumb = crumb, title, line, hqOnly = false, more
       <div className="min-w-0">{children}</div>
     </div>
   );
+  // D1185: a page the AIRail canvas draws no board for may dock the rail with its own canvas's sentence.
+  if (!board && rail) {
+    return <AdminBoardFrame workspace={rail.workspace} note={rail.note} data-testid="admin-console-frame">{page}</AdminBoardFrame>;
+  }
   if (!board) return page;
   return (
     <AdminBoardFrame workspace={board} note={`Eadwyn reads the ${board} panel on this page. Nothing here changes until you act on it.`} data-testid="admin-console-frame">
@@ -171,6 +176,8 @@ function BankTabBody({ tab }) {
   return <Wait id="history" title="History" />;
 }
 
+const BANK_LINE = 'The registry of each entity’s bank accounts. Notices and invoices print their payment instructions from here.';
+
 export function BankAccountsPage() {
   const { pathname } = useLocation();
   const tab = tabOf(pathname);
@@ -182,7 +189,8 @@ export function BankAccountsPage() {
     </>
   );
   return (
-    <ConsolePage crumb={{ ...PLATFORM, current: 'Bank accounts' }} title="Bank accounts" line="Each entity's bank accounts, their Mercury state and the receipts not yet matched." tabs={tabs} testId="admin-platform-bank-accounts">
+    <ConsolePage crumb={{ ...PLATFORM, current: 'Bank accounts' }} title="Bank accounts" line={BANK_LINE} hqOnly tabs={tabs}
+      rail={{ workspace: 'Bank accounts', note: BANK_RAIL_NOTE }} testId="admin-platform-bank-accounts">
       <BankTabBody tab={tab} />
     </ConsolePage>
   );
