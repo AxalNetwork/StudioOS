@@ -5,9 +5,9 @@
  * each rule.
  *
  * WHAT IS READ TODAY. People and the case read part 1's and part 2's routes
- * (D1233, `peopleModel.js`). No admin route reads a business, a renewal or
- * the audit trail yet, so those tabs say "Not read here yet" with their
- * reason and never draw a zero (D1228 §2).
+ * (D1233, `peopleModel.js`); Renewals and Audit read part 4's (D1235,
+ * `governanceModel.js`). No admin route reads a business yet, so that tab
+ * says "Not read here yet" with its reason and never draws a zero (D1228 §2).
  */
 
 export const BASE = '/admin/kyc';
@@ -59,6 +59,4 @@ export const NOT_YET = 'Not read here yet';
 /** What the canvas draws that no read carries yet. Never a zero, never "none". */
 export const WAITS = Object.freeze({
   businesses: 'No admin read returns a business yet: company records, account entities and imports sit in three stores with no reviewer.',
-  renewals: 'What is about to lapse is not read here yet: no admin read returns the checks’ expiry dates or the warnings sent.',
-  audit: 'The record of every look and decision is not read here yet on this page: no studio admin read returns the KYC actions.',
 });

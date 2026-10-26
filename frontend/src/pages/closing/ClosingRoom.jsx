@@ -1,8 +1,14 @@
 /**
- * D1213 (#2424) — one deal's closing room (CP1, CP2, CP14, CP19), drawn from
- * today's reads only. The founder sees it under Raise › Capital relationships ›
- * Closing, an investor and the staff on the deal page's Closing tab, an Admin at
- * Contracts › Closings › one closing. Each read fails on its own block.
+ * D1213 (#2424) — one deal's closing room (CP1, CP2, CP14, CP19). The founder
+ * sees it under Raise › Capital relationships › Closing, an investor and the
+ * staff on the deal page's Closing tab, an Admin at Contracts › Closings › one
+ * closing. Each read fails on its own block.
+ *
+ * D1218 (#3215): when the deal has a closing in the store (D1215), the
+ * founder, an investor and an Admin read the room from it (`RecordRoom.jsx`).
+ * Until the studio team opens one, and for an Operating Partner (who reads no
+ * closing record), the room is the deal's, as D1213 drew it. Anyone else meets
+ * the no-permission card, and no read is made (CP19).
  *
  * Who sees what (#2424 owner question 3, its recommended answer):
  * - founder and admin: every line;
@@ -12,9 +18,14 @@
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { api } from '../../lib/api';
+import { closingsApi } from '../../lib/api/closings';
 import { Unreadable, Unrecorded } from '../../ui';
 import { dealMoney } from '../../components/deals/dealMoney';
+import { BTN } from '../account/AccountCenter';
 import { NOT_YET, STEPS, WAITS, lineRows } from './closingModel';
+import { closingForDeal } from './deskModel';
+import RecordRoom, { NoAccess } from './RecordRoom';
+import { NO_ACCESS, canEnter } from './roomModel';
 
 const box = 'flex flex-col gap-2 rounded-xl border border-gray-200 bg-white p-4 dark:border-gray-800 dark:bg-gray-900';
 
@@ -50,8 +61,11 @@ function Lines({ dealId, role, currency }) {
   const read = useRead(() => api.dealCommitments(dealId), [dealId]);
   if (read.status === 'loading') return <div className="h-24 animate-pulse rounded-xl bg-gray-100 dark:bg-gray-800" data-testid="closing-lines-loading" />;
   if (read.status === 'error') return <section className={box} data-testid="closing-lines"><Unreadable what="The lines" claim="This is not a claim that the round has none." onRetry={read.retry} /></section>;
-  // An Operating Partner's read is the confirmed total only, never the lines.
-  if (!Array.isArray(read.data)) return null;
+  // An Operating Partner sees the total, never the lines, in the closing room
+  // (#2424 owner question 3). The commitments read gives them the rows for the
+  // deal page's Commitment tab since D1155 (#2421 question 7), so the room
+  // keeps its own rule here.
+  if (role === 'partner' || !Array.isArray(read.data)) return null;
   const { rows, committed, received, unrecordedAmounts } = lineRows(read.data);
   return (
     <section className={box} data-testid="closing-lines">
@@ -124,8 +138,8 @@ function Transfers({ dealId, currency }) {
   );
 }
 
-/** The room. `deal` is the deal read the host already made, or null to read it here. */
-export default function ClosingRoom({ dealId, role, deal: given = null }) {
+/** The deal's room, as D1213 drew it from today's reads. */
+function DealRoom({ dealId, role, deal: given = null }) {
   const read = useRead(() => (given ? Promise.resolve(given) : api.getDeal(dealId)), [dealId, given]);
   if (read.status === 'loading') return <div className="h-32 animate-pulse rounded-xl bg-gray-100 dark:bg-gray-800" data-testid="closing-loading" />;
   if (read.status === 'error') return <section className={box} data-testid="closing-room"><Unreadable what="This deal" claim="Its closing could not be drawn." onRetry={read.retry} /></section>;
@@ -153,6 +167,37 @@ export default function ClosingRoom({ dealId, role, deal: given = null }) {
         {['paper', 'route', 'instructions', 'evidence', 'captable', 'reporting'].map((id) => <Wait key={id} id={id} />)}
         {staff && <Wait id="activity" />}
       </div>
+    </div>
+  );
+}
+
+/**
+ * The room. `deal` is the deal read the host already made, or null to read it
+ * here. The deal's closing in the store decides which room is drawn; a failed
+ * list read costs only that note, never the room (CP18).
+ */
+export default function ClosingRoom({ dealId, role, deal = null }) {
+  const allowed = canEnter(role);
+  const record = role !== 'partner' && allowed;
+  const list = useRead(() => (record ? closingsApi.list() : Promise.resolve(null)), [dealId, record]);
+  if (!allowed) return <NoAccess text={NO_ACCESS.role} back={<Link className={`${BTN.primary} w-fit`} to="/">Go to your home</Link>} />;
+  if (role === 'partner') {
+    return (
+      <div className="flex min-w-0 flex-col gap-3">
+        <p className="m-0 w-fit rounded-full border border-gray-300 px-2 py-0.5 text-[11px] font-bold text-gray-600 dark:border-gray-600 dark:text-gray-400" data-testid="closing-partner-note">Read only · {NO_ACCESS.partner}</p>
+        <DealRoom dealId={dealId} role={role} deal={deal} />
+      </div>
+    );
+  }
+  if (list.status === 'loading') return <div className="h-32 animate-pulse rounded-xl bg-gray-100 dark:bg-gray-800" data-testid="closing-loading" />;
+  const entry = list.status === 'ok' ? closingForDeal(list.data?.closings, dealId) : null;
+  if (entry) return <RecordRoom entry={entry} viewer={role} deal={deal} />;
+  return (
+    <div className="flex min-w-0 flex-col gap-3">
+      {list.status === 'error'
+        ? <section className={box} data-testid="closing-record-unread"><Unreadable what="This deal’s closing record" claim="The room below is read from the deal until it can be read." onRetry={list.retry} /></section>
+        : <p className="m-0 text-[12.5px] text-gray-600 dark:text-gray-400" data-testid="closing-record-none">The studio team has not opened this deal’s closing yet, so the room is read from the deal.</p>}
+      <DealRoom dealId={dealId} role={role} deal={deal} />
     </div>
   );
 }

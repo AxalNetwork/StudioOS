@@ -62,6 +62,7 @@ type UpdateRow = {
   period: string | null; title: string; body: string | null; kpis_json: string | null;
   status: string; submitted_at: string | null; created_at: string; updated_at: string;
   metrics_json?: string | null;
+  kind?: string;
 };
 
 function isInvestorSide(user: User): boolean {
@@ -107,6 +108,9 @@ async function canShareUpdate(env: Env, user: User, projectId: number, founderId
 }
 
 const shareDenied = { detail: 'You can read this venture but not share its updates.', code: 'share_not_allowed' };
+
+// D1059 (#2929): a report is edited, sent and corrected from Reporting only, where its figures are re-read and frozen.
+const REPORT_ROW = { detail: 'This is a report. Change and send it from Reporting, where its figures are checked and frozen.', code: 'report_row' };
 
 /**
  * D1057 (#2927, #2427 finding 4): the figures an update carries, each with its
@@ -266,6 +270,7 @@ r.put('/:uid', async (c) => {
     const user = await requireAuth(c);
     const u = await c.env.DB.prepare('SELECT * FROM portfolio_updates WHERE uid = ?').bind(c.req.param('uid')).first<UpdateRow>();
     if (!u) return c.json({ detail: 'Not found' }, 404);
+    if (u.kind === 'report') return c.json(REPORT_ROW, 409);
     if (u.author_user_id !== user.id && !isAdmin(user)) return c.json({ detail: 'Forbidden' }, 403);
     const body = await c.req.json().catch(() => ({} as any));
     await c.env.DB.prepare(
@@ -288,6 +293,7 @@ r.post('/:uid/submit', async (c) => {
     const user = await requireAuth(c);
     const u = await c.env.DB.prepare('SELECT * FROM portfolio_updates WHERE uid = ?').bind(c.req.param('uid')).first<UpdateRow>();
     if (!u) return c.json({ detail: 'Not found' }, 404);
+    if (u.kind === 'report') return c.json(REPORT_ROW, 409);
     if (u.author_user_id !== user.id && !isAdmin(user)) return c.json({ detail: 'Forbidden' }, 403);
     const wasSubmitted = u.status === 'submitted';
     await c.env.DB.prepare("UPDATE portfolio_updates SET status='submitted', submitted_at=?, updated_at=? WHERE id=?")
@@ -495,6 +501,7 @@ r.put('/:uid/share', async (c) => {
     const user = await requireAuth(c);
     const u = await c.env.DB.prepare('SELECT * FROM portfolio_updates WHERE uid = ?').bind(c.req.param('uid')).first<ShareRow>();
     if (!u) return c.json({ detail: 'Not found' }, 404);
+    if (u.kind === 'report') return c.json(REPORT_ROW, 409);
     if (u.author_user_id !== user.id && !isAdmin(user)) return c.json({ detail: 'Forbidden' }, 403);
     if (u.sent_at) return c.json({ detail: 'This update was sent and is read-only' }, 409);
     const body = await c.req.json().catch(() => ({} as any));
@@ -559,6 +566,7 @@ r.post('/:uid/send', async (c) => {
     const user = await requireAuth(c);
     const u = await c.env.DB.prepare('SELECT * FROM portfolio_updates WHERE uid = ?').bind(c.req.param('uid')).first<ShareRow>();
     if (!u) return c.json({ detail: 'Not found' }, 404);
+    if (u.kind === 'report') return c.json(REPORT_ROW, 409);
     if (u.author_user_id !== user.id && !isAdmin(user)) return c.json({ detail: 'Forbidden' }, 403);
     if (u.sent_at) return c.json({ detail: 'This update was already sent' }, 409);
     const choice = cleanAudience(jload(u.audience_json, {}));

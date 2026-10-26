@@ -47,7 +47,8 @@
 //
 // `adminProductTestersApi`, the tester pool (D1042's store, migration 576; read by
 // D1195's Tester pool tab):
-//   list             GET   /admin/product-testers?status=&page=   → { rows, page, page_size, matching, totals }
+//   list             GET   /admin/product-testers?status=&page=&page_size=&role=&availability_given=&in_programme=
+//                         → { rows, page, page_size, matching, totals } (D1200's filters; D1204 reads the pool whole)
 //
 // Every path is written out in full so the drift check (scripts/check-api-drift.mjs)
 // reads each one against the Worker.
@@ -118,11 +119,15 @@ export const adminTestingApi = {
 export const TESTER_STATUSES = ['applied', 'active', 'paused', 'declined', 'removed'];
 
 export const adminProductTestersApi = {
-  list: (status, page = 1) => {
+  list: (status, page = 1, { pageSize, role, availabilityGiven, inProgramme } = {}) => {
     if (status != null && status !== '' && !TESTER_STATUSES.includes(status)) throw new Error(`Unknown tester status: ${status}`);
     const q = new URLSearchParams();
     if (status) q.set('status', status);
     if (page > 1) q.set('page', String(page));
+    if (pageSize) q.set('page_size', String(pageSize));
+    if (role) q.set('role', role);
+    if (availabilityGiven) q.set('availability_given', availabilityGiven);
+    if (inProgramme) q.set('in_programme', inProgramme);
     const qs = q.toString();
     return request(`/admin/product-testers${qs ? `?${qs}` : ''}`);
   },
