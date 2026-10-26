@@ -89,8 +89,9 @@ admin.get('/users', async (c) => {
 
   // BACK-COMPAT. With no `envelope`, the answer is the page as a flat array,
   // as it always was: pickers across the SPA read it that way.
+  const rows = page.results;
   const envelope = c.req.query('envelope') === '1' || c.req.query('envelope') === 'true';
-  if (!envelope) return c.json(page.results);
+  if (!envelope) return c.json(rows);
 
   // THE ENVELOPE (D128). `total` and `by_role` are counts over the whole
   // table, never over `results`: the console's tiles read them. D1300 adds
