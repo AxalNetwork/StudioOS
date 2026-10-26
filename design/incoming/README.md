@@ -124,6 +124,21 @@ No value was edited.
 for an Investor, with Board and Table, Mine, All deals and New for you in the
 address, and Compare at `/deals/compare`. The rest is D1237–D1243.
 
+## Landed 2026-10-26 — Approvals › Due diligence (#2385)
+
+The owner's artifacts `PCAvq4xfUyaregxd9yeQzX` (the page) and
+`5gehsd8xEv18KLhYwqx4tz` (the board grid) came from S21's prompt on #2385.
+Each was decoded by `scripts/read-canvas.mjs` as is:
+- `Due diligence · Boards.dc.html` is the board grid (DDL1 to DDL19); it
+  imports the page by name;
+- `Due Diligence Desk Page.dc.html` is the page.
+
+No value was edited.
+
+**Grade: UPGRADE.** S21's integration (D1244) makes the list's tabs and the
+case's nine tabs addresses under both bases, with Overview as today's case
+page and "Not scored yet" for a case with no band. The rest is D1245–D1252.
+
 ## Landed 2026-10-26 — Approvals › KYC & KYB (#2384)
 
 The owner's artifacts `9U6YH5eduDN6bpd5k4Tucm` (the board grid) and

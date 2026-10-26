@@ -187,6 +187,10 @@ function doorsIn(src) {
       // as a link nobody wrote. A literal before the `?` is a test, not a value.
       const value = bind[2].includes('?') ? bind[2].slice(bind[2].indexOf('?')) : bind[2];
       for (const lit of value.matchAll(/'(\/[^']*)'/g)) doors.add(`${lit[1]}${tail}`);
+      // D1244 (#2385): a case's tab is `${base}/${uid}/${t.key}`: two whole
+      // segments after the base, each a value. Read as `/…/${}/${}`, which only
+      // a `:uid/:tab` route matches — the head alone (`/…/`) reaches `:uid`.
+      if (/^(?:\/\$\{[^}`]*\}){2}$/.test(rest)) for (const lit of value.matchAll(/'(\/[^']*)'/g)) doors.add(`${lit[1]}/\${}/\${}`);
     }
   }
   return { doors: [...doors], redirects };
@@ -368,6 +372,9 @@ const COMPOSED = new Map([
   ['frontend/src/pages/admin/programs/ProposalsPage.jsx', [
     'frontend/src/pages/admin/programs/ProposalTables.jsx',
   ]],
+  // D1244 (#2385): Due diligence's list tabs and case tabs are drawn by DdTabs.
+  ['frontend/src/pages/AdminDueDiligencePage.jsx', ['frontend/src/pages/duediligence/DdTabs.jsx']],
+  ['frontend/src/pages/AdminDueDiligenceCasePage.jsx', ['frontend/src/pages/duediligence/DdTabs.jsx']],
 ]);
 
 /** path → the files whose doors that path can reach. */
@@ -714,6 +721,12 @@ test('the computed-base resolver still sees the due-diligence case links', () =>
   const dd = doorsIn(read('frontend/src/pages/AdminDueDiligencePage.jsx')).doors;
   assert.ok(dd.includes('/admin/due-diligence/'),
     'the computed base no longer resolves; template links through a const are unread');
+  // D1244 (#2385): the case tabs, `${base}/${uid}/${t.key}`, reach only `:uid/:tab`.
+  const tabs = doorsIn(read('frontend/src/pages/duediligence/DdTabs.jsx')).doors;
+  for (const d of ['/admin/due-diligence/${}/${}', '/due-diligence/${}/${}', '/admin/due-diligence/my-reviews', '/admin/due-diligence/templates']) {
+    assert.ok(tabs.includes(d), `DdTabs no longer yields the door ${d}`);
+  }
+  assert.equal(toRoute('/admin/due-diligence/${}/${}'), '/admin/due-diligence/:uid/:tab');
 });
 
 test('a component mounted at a second path is declared once', () => {
