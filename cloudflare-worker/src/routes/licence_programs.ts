@@ -20,6 +20,8 @@
  * A D1 error, or a copy that cannot be read, is a 503, never an empty list.
  * Nothing here writes: asking HQ for a program is a request (part 2, #2774).
  */
+import { sendProgramUsageNow } from '../services/programUsage';
+import { logAdminAction } from '../services/adminAudit';
 import { Hono } from 'hono';
 import type { Env } from '../types';
 import { requireAuth } from '../auth';
@@ -96,6 +98,15 @@ r.get('/mine/programs', async (c) => {
   } catch (e) {
     return refuse(c, 503, { ...UNREADABLE, raw: e });
   }
+});
+
+r.post('/mine/programs/report', async (c) => {
+  const user = await requireAuth(c);
+  if (user.role !== 'admin') throw new Error('Admin required');
+  if (!branchOf(c.env)) return c.json({ error: 'branch_only', message: 'Only a studio deployment reports program figures.' }, 403);
+  const { status, ...result } = await sendProgramUsageNow(c.env);
+  if (result.sent) await logAdminAction(c.env, user.id, user.email, 'program_usage.sent', { programs: result.programs });
+  return c.json(result, status);
 });
 
 export default r;

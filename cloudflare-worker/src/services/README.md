@@ -1,5 +1,9 @@
 # cloudflare-worker/src/services — logic, not HTTP
 
+`programUsage.ts` (D1156) collects month-to-date program counts locally, sends
+only aggregates to HQ, validates authenticated reports and reads dated per-grant
+figures. Missing and unreadable metrics stay distinct from measured zero.
+
 Everything a route needs that is not request parsing or response shaping. A file
 here takes `env` and plain values; it does not take a Hono `Context` and does
 not return a `Response`.
@@ -54,6 +58,16 @@ audit entries without weakening approval or signature checks.
 clock inputs in the selected IANA zone, preserving explicit instants and refusing
 invalid or ambiguous wall times. Its instant comparison keeps formatting-only
 normalization out of the changed-after-approval flag.
+
+`memberFiles.ts` (D1168, #3081) writes measured headshot/brand-logo metadata
+with its authoritative key. `memberFileSizeBackfill.ts` measures missing sizes
+for five record stores and profile files with HEAD only, using migration 605's
+durable pointer/discovery cursors and per-row checkpoints. Missing is marked,
+never 0; failures are retryable. Replaced headshots are invalidated with the
+new pointer and remain eligible for reconciliation in later passes. Only the HQ Super Admin maintenance route
+invokes it, with step-up and count-only auditing. An explicit rescan restarts
+completed discovery to recover later retained uploads; an active scan keeps its
+cursor. No object content or deletion.
 
 ## The ones worth knowing
 
@@ -164,6 +178,8 @@ no new schema, runtime or billing path is introduced.
 | `notion/` | D1085: a founder's own Notion, read-only, through Notion's MCP server. `reads.ts` is the only file that opens a Notion session: search, a page with its fingerprint, children, a data source's schema and its rows, each id checked before it is sent, never SQL. Its README has the rules. |
 | `referrals/` | Referral submissions. |
 | `records/` | D690's scoped cycle record contract, registry and ownership checks. |
+| `scoring/` | D1143 (#3029): the Product-market fit score, defined once (#2433). `pmf.ts` is model v1 as data and the pure `scorePmf` (value, band, confidence, coverage and the next steps ranked by gain); `pmfCollector.ts` reads Validate's stores for it with bound SQL, after the latest Pivot, and reads no interviewee name or quote. |
+| `testingOverview.ts` | D1196 (#3146): Product testing's overview read behind `GET /api/admin/testing/overview` (Super Admin): applications and picks per Monday week from `testing_events` (not recorded before the first programme opened), the tester pool and open programmes' applicants by profile, withdrawn counts, and Mail reach per open programme on `testerRecipients`' rule. Each block answers alone; counts only, never an address. |
 | `scoring/` | D1143 (#3029): the Product-market fit score, defined once (#2433). `pmf.ts` is model v1 as data and the pure `scorePmf` (value, band, confidence, coverage and the next steps ranked by gain); `pmfCollector.ts` reads Validate's stores for it with bound SQL, after the latest Pivot, and reads no interviewee name or quote. D1144 adds `pmfStore.ts`: signed, change-only snapshots, history and the atomic PMF checklist/audit update in shared migration 598. See `scoring/README.md`. |
 | `signals/` | Signal ingestion and evidence. |
 | `vercel/` | D1096: `api.ts`, the only caller of `api.vercel.com`: a read-only client for the planned reads, uninstall and the OAuth code exchange. Its README has the rules. |
@@ -496,6 +512,7 @@ Perk listings without exposing member ids or review notes.
 `perkClaims.ts` (D957) gives the admin Perks page and program catalogue one
 UTC Monday window for claim totals, listing ranks and weekly price-kind counts.
 `raiseEvidence.ts` reads active Mercury runway facts and the files current data-room grants can download, for Raise and deck readiness.
+`dataRoomNda.ts` (D1102, migration 608) is the demo-day deck's "NDA required": the founder's `projects.data_room_nda_choice` when set (Yes or No), else true when any file an investor can be admitted to (`tierAdmits()`) is gated `nda`, else null when the room cannot be read. It also says what a write may store as a choice.
 
 `paymentsChangeLog.ts` (D1011) names the fifteen catalogue and Stripe audit
 actions and reads them back as the Payments change log (D1129: bound literal

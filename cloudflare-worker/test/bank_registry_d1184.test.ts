@@ -57,7 +57,7 @@ test('D1184: exact entity/ending join and resolver-owned masked preview, no cred
     const account = await f.add(); await f.add({ entity_key: 'holdings', beneficiary_name: AXAL_ENTITIES.holdings.name, purposes: [] }); f.mercury(); f.mercury(OTHER, 'holdings', '8897', 99999); f.mercury('c'.repeat(32), 'gp', '7733', 88888);
     const r = await f.call(); assert.equal(r.status, 200); assert.equal(r.headers.get('cache-control'), 'no-store');
     const a = r.body.accounts[0]; assert.equal(a.uid, account.uid);
-    assert.deepEqual(a.mercury, { account_uid: UID, current: { cents: 12345, reason: null }, available: { cents: 12000, reason: null }, read_at: READ_AT, reason: null });
+    assert.deepEqual(a.mercury, { account_uid: UID, kind: 'checking', connected: true, current: { cents: 12345, reason: null }, available: { cents: 12000, reason: null }, read_at: READ_AT, reason: null });
     assert.deepEqual(a.notice_preview, [await payInstructionsFor(f.env, 'gp', 'management_fee')]);
     assert.equal(a.notice_preview[0].instructions.account_masked, '••••8897'); assert.equal(a.notice_preview[0].warning, PAY_WARNING); assert.equal(a.notice_preview_reason, null);
     for (const secret of ['account_number_enc','account_number"','synthetic-private-token','provider-', 'synthetic-private-provider-text']) assert.ok(!JSON.stringify(r.body).includes(secret));
@@ -69,7 +69,7 @@ test('D1184: exact entity/ending join and resolver-owned masked preview, no cred
 test('D1184: unmatched and ambiguous facts are null with reasons, never zero or another entity’s balance', async () => {
   const f = fixture(); try {
     await f.add(); f.mercury(OTHER, 'holdings');
-    const expected = (reason: string) => ({ account_uid: null, current: { cents: null, reason }, available: { cents: null, reason }, read_at: null, reason });
+    const expected = (reason: string) => ({ account_uid: null, kind: null, connected: null, current: { cents: null, reason }, available: { cents: null, reason }, read_at: null, reason });
     let a = (await f.call()).body.accounts[0]; assert.deepEqual(a.mercury, expected('unmatched')); assert.equal(a.notice_preview[0].ok, true);
     f.mercury(); f.mercury('c'.repeat(32)); a = (await f.call()).body.accounts[0]; assert.deepEqual(a.mercury, expected('ambiguous'));
   } finally { f.db.close(); }

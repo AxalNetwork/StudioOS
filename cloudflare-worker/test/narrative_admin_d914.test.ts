@@ -156,7 +156,8 @@ test('2. an admin reads nothing of the narrative until they give a reason; the r
     assert.equal(r.body.code, 'read_reason_required');
     assert.equal(r.body.detail, REASON_REQUIRED);
   }
-  assert.equal((await call(db, ADMIN, 'GET', '/modules/data-room')).status, 200, 'another Raise module reads as before');
+  // D1102 (#2982): the data room's module read is its owner's, so another module stands in.
+  assert.equal((await call(db, ADMIN, 'GET', '/modules/cap-table')).status, 200, 'another Raise module reads as before');
   assert.equal((await call(db, FOUNDER, 'GET', '/modules/investor-narrative')).status, 200, 'the founder needs no reason');
 });
 

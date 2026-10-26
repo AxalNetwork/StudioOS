@@ -264,6 +264,10 @@ heartbeat also takes `slides`, the viewer's seconds per slide, stored through
 
 D982 (#2773): `admin_program_grants.ts` mounts `/api/admin/program-grants`: HQ's program grants per licence (the grid, one licence, its history, the default terms) under `requireSuperAdmin`, and grant, change terms, pause, resume, end and the defaults under `requireSuperAdminWriteBar` with a reason of at least 10 characters. Each grant write appends one `licence_events` `program_changed` row; the store is migration 553 and `../services/programGrants.ts`. See `documentation/architecture/decisions/D982.md`.
 
+D1156 adds `GET /api/admin/program-grants/licences/:uid/in-use` (HQ Super
+Admin) and `POST /api/licence/mine/programs/report` (local branch Admin).
+Both delegate to `../services/programUsage.ts`; neither accepts member data.
+
 D983 (#2774): `admin_program_requests.ts` mounts `/api/admin/program-grants/requests`, ahead of part 1's routes: the studios' program requests (a grant, a terms change, an end) from HQ's lane and every branch's, under `requireSuperAdmin`, and HQ's approve and decline under `requireSuperAdminWriteBar` with a reason of at least 10 characters. An approval records a draft as a `program_changed` event (`request_approved`); Grant stays `admin_program_grants.ts`'s write. The generic `PATCH /api/admin/escalations/:uid` refuses these kinds. The checks are `../services/programRequests.ts`. See `documentation/architecture/decisions/D983.md`.
 
 D956 (#2789): `admin_programs.ts` adds `PUT /:key/grantable`, Offer to studios, under `requireSuperAdminWriteBar` with a reason: D982's "can be granted" switch, switched on only with a published playbook, as `admin_program_grants.ts`'s defaults write now also requires. The catalogue and `/:key` carry each program's `grant` for the viewer (`../services/programGrantStates.ts`). An approval for one studio (`admin_program_proposals.ts`) opens a `draft` grant (migration 562), which `admin_program_grants.ts`'s grant write takes to `granted`; every other move from a draft is refused. See `documentation/architecture/decisions/D956.md`.
@@ -321,6 +325,8 @@ roster. The meetings router accepts `auto_send_bot:false`, otherwise queues B1
 for the consented session at the scheduled start. Bot refusal is separate from
 successful call creation; cancellation stops the bot before the provider call.
 
+D1168 (#3081): `admin_platform.ts` mounts `POST /api/admin/platform/storage/backfill-sizes`, an audited, bounded metadata-only batch for HQ Super Admin with TOTP and recent step-up. Discovery cursors stay in D1; only counts leave the route.
+
 D886 B10 (#2588): `admin_platform.ts` mounts Super Admin-only
 `/meeting-bots` count/charge reads and `/meeting-bots/test` dispatch/timing reads.
 Dispatch requires TOTP plus recent step-up and calls B1's service with the
@@ -358,6 +364,11 @@ calls `logAdminAction`. It grants no subsequent write permission. Admins cannot
 use legacy investor grants through `/shared` instead. The data-room spec in
 `../services/records/raise.ts` uses the same owner-only gate. File uploads default
 to NDA when visibility is omitted; explicit Open remains allowed for the owner.
+D1102 part 2: `cycle_raise.ts`'s data-room paths (the overview's data-room card,
+`GET /modules/data-room`, `PUT /data-room/files/:id/checklist`) take that rule too;
+a non-owner's overview card is `data_room.ts`'s `roomSummary`. `projects.ts`
+(`PUT /:id`, `data_room_nda_choice`) and `decks.ts` (`PUT /:id`, a changed NDA flag
+only) store the founder's NDA choice, migration 608.
 
 D1091 (#2956): `google_workspace.ts` mounts `/api/connectors/google-workspace`: scoped chosen files, draft mapping, Stop using and ephemeral five-row preview. Calendar adds `/google/workspace-files/connect`; Google tokens stay in its one store. Support sessions are refused. See `../services/google/README.md`.
 

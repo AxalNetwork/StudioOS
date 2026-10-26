@@ -721,3 +721,85 @@ test('the canvas is committed in the intake queue, the rail canvas carries the d
   assert.match(decision, new RegExp(`The canvas draws ${count} boards`));
   assert.match(read('design/incoming/README.md'), new RegExp(`lettered boards: ${count} in all`));
 });
+
+/* ------------------------------------------------------------------ *
+ * D898 group D (#2676): PD15, versions and compare
+ * ------------------------------------------------------------------ */
+
+const V3 = { id: 39, version: 3, title: 'Seed', is_current: 0, created_at: '2026-10-12 10:00:00' };
+const V4 = { id: 40, version: 4, title: 'Seed', is_current: 1, created_at: '2026-10-20 10:00:00' };
+const DECK3 = { id: 39, version: 3, slides: [{ title: 'Problem', notes: 'a' }, { title: 'Traction', blocks: [] }, { title: 'Team' }] };
+const DECK4 = { id: 40, version: 4, slides: [{ title: 'Problem', notes: 'a' }, { title: 'Traction', blocks: [{ id: 'b1', kind: 'text' }] }, { title: 'Team' }, { title: 'Ask' }] };
+
+test('PD15 model: cards changed by position, a card only one version has is changed, and Restore says what it saves and what stays', async () => {
+  const { compareCards, restoreDialog, comparePair, changedPill } = await import('../src/pages/raise/pitch/compareModel.js');
+  const c = compareCards(DECK3, DECK4);
+  assert.deepEqual(c.left.map((x) => [x.n, x.title, x.changed]), [['01', 'Problem', false], ['02', 'Traction', true], ['03', 'Team', false]]);
+  assert.deepEqual(c.right.map((x) => x.changed), [false, true, false, true], 'the added Ask card is changed');
+  assert.equal(c.changed, 2);
+  assert.equal(changedPill(0), 'No card changed');
+  const d = restoreDialog(V3, V4, [V3, V4]);
+  assert.equal(d.title, 'Restore v3?');
+  assert.deepEqual(d.lines, [
+    "v5 is saved with v3's cards, notes, theme, audience and round, and becomes the working deck.",
+    'v4 stays in Versions. Its shared links keep showing v4, as it was when they were made.',
+    'Nothing is deleted.',
+  ]);
+  assert.deepEqual([comparePair([V3, V4], 39).older.id, comparePair([V3, V4], 39).newer.id], [39, 40]);
+  assert.deepEqual(comparePair([V3, V4], 40).older.id, 39, 'the current one compares with the one before');
+  assert.equal(comparePair([V4], 40), null, 'one version: nothing to compare');
+});
+
+test('PD15 mounted: Compare draws both versions with the changed cards outlined; Restore opens a dialog first, then restores and re-reads', async () => {
+  let restored = null;
+  let listed = 0;
+  const m = await mount(h(PitchStudio, { tab: 'decks' }), '/raise/pitch?project_id=7', {
+    listProjects: async () => [{ id: 7, name: 'Acme' }],
+    deckListVersions: async () => { listed += 1; return { versions: [V4, V3] }; },
+    deckGet: async (id) => (Number(id) === 39 ? DECK3 : DECK4),
+    deckEngagement: async () => engagement,
+    'cycles.module': async () => ({ card: cardOk, records }),
+    deckRestore: async (id) => { restored = id; return { id: 41, version: 5 }; },
+  }, { id: 2, role: 'founder', founder_id: 20 });
+  try {
+    assert.ok(!m.by('pitch-studio-compare-40'), 'the current version has no Compare');
+    await m.press(m.by('pitch-studio-compare-39'));
+    assert.ok(m.by('pitch-compare'));
+    assert.equal(m.text().match(/(\d) changed/)?.[1], '2');
+    assert.equal(m.pr(m.by('pitch-compare-left-card-02'))['data-changed'], 'yes');
+    assert.equal(m.pr(m.by('pitch-compare-left-card-01'))['data-changed'], 'no');
+    assert.equal(m.pr(m.by('pitch-compare-right-card-04'))['data-changed'], 'yes');
+    await m.press(m.by('pitch-compare-restore'));
+    assert.match(m.text(), /v5 is saved with v3's cards.*v4 stays in Versions/);
+    assert.equal(restored, null, 'opening the dialog restores nothing');
+    const before = listed;
+    await m.press(m.by('pitch-compare-restore-run'));
+    assert.equal(restored, 39);
+    assert.ok(listed > before, 'the versions are read again');
+    assert.ok(!m.by('pitch-compare'), 'the compare closes on the new working deck');
+  } finally { await m.unmount(); }
+});
+
+test('PD15: an admin compares but has no Restore; a refused restore says so in the dialog and changes nothing', async () => {
+  const admin = await mount(h(PitchStudio, { tab: 'decks' }), '/raise/pitch?project_id=7', {
+    listProjects: async () => [{ id: 7, name: 'Acme' }], deckListVersions: async () => ({ versions: [V4, V3] }),
+    deckGet: async (id) => (Number(id) === 39 ? DECK3 : DECK4), deckEngagement: async () => engagement, 'cycles.module': async () => ({ card: cardOk, records }),
+  }, { id: 9, role: 'admin' });
+  try {
+    await admin.press(admin.by('pitch-studio-compare-39'));
+    assert.ok(admin.by('pitch-compare'));
+    assert.ok(!admin.by('pitch-compare-restore'), 'an admin reads');
+  } finally { await admin.unmount(); }
+  const m = await mount(h(PitchStudio, { tab: 'decks' }), '/raise/pitch?project_id=7', {
+    listProjects: async () => [{ id: 7, name: 'Acme' }], deckListVersions: async () => ({ versions: [V4, V3] }),
+    deckGet: async (id) => (Number(id) === 39 ? DECK3 : DECK4), deckEngagement: async () => engagement, 'cycles.module': async () => ({ card: cardOk, records }),
+    deckRestore: async () => { const e = new Error('forbidden'); e.status = 403; throw e; },
+  }, { id: 2, role: 'founder', founder_id: 20 });
+  try {
+    await m.press(m.by('pitch-studio-compare-39'));
+    await m.press(m.by('pitch-compare-restore'));
+    await m.press(m.by('pitch-compare-restore-run'));
+    assert.equal(m.text().includes('forbidden'), true);
+    assert.ok(m.by('pitch-compare-restore-dialog'), 'the dialog stays open with the refusal');
+  } finally { await m.unmount(); }
+});
