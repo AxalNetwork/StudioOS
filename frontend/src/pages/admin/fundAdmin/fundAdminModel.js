@@ -204,9 +204,12 @@ export function fundFilter(funds, search, view) {
     perFund,
     pills: [...(perFund ? [] : [{ key: 'all', label: 'All funds', id: null, on: !chosen }]),
       ...(funds || []).map((f) => ({ key: `f-${f.id}`, label: f.name, id: f.id, on: chosen?.id === f.id }))],
-    note: !perFund && chosen ? FILTER_KEPT : null,
+    // D1164: NAV & performance reads one fund when one is chosen, so the filter is not just kept there.
+    note: !perFund && chosen && !HONOURS_FILTER.includes(view) ? FILTER_KEPT : null,
   };
 }
+/** D1164: the tabs that offer All funds and also read the chosen fund (NAV & performance's charts and positions). */
+export const HONOURS_FILTER = Object.freeze(['performance']);
 export const FILTER_KEPT = 'This tab shows every fund. The filter is kept for Capital calls, Distributions, Fees and Reports.';
 
 /** An address under the console with the fund filter set (or cleared, for All funds), keeping the path. */

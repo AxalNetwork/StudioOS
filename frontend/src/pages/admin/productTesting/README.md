@@ -4,11 +4,11 @@ The Super Admin's Product testing page at `/admin/platform/product-testing` (D11
 
 | File | What it is |
 |---|---|
-| `productTestingModel.js` | Pure: the five tabs and their addresses, `viewOf` (the tab, and on a program its uid and sub-tab), the overview figures from the programme list, the tester row without its email, and each block's wait. |
+| `productTestingModel.js` | Pure: the five tabs and their addresses, `viewOf` (the tab, and on a program its uid and sub-tab), the overview figures from the programme list, the tester row without its email, and each block's wait. D1201: the weekly series, the profile bars and Mail reach rows from D1196's read, Needs you, the tab counts and the rail's line. |
+| `ProductTestingTabs.jsx` | The new tabs' bodies: Overview (tiles, places bars, status chips; D1201's weekly, by-profile and Mail reach charts with View as table, Needs you and the rail's line), one program (details, HQ's own applicants), Applicants and the Tester pool. `ProductTestingTabBody` picks one from the address. `useTestingReads` is the page's two shared reads: the header's tab counts and the Overview's tiles draw from the same answers. |
 | `reviewModel.js` | Pure (D1202, #3152): the ⋯ menu per owner and status (`menuFor`), the dialogs A–H (`dialogFor`), who was told in counts (`toldLine`), Programs' search, filters, sort and pager (`programsView`), and Review's earlier-programmes and sent-back lines. |
 | `ProgrammeLogo.jsx` | A programme's square on Review and Programs: its logo from D1199's `GET /api/testing/programmes/:uid/logo`, else its first letter when there is none or it does not load. |
 | `TestingDialog.jsx` | One dialog, A–H, from `dialogFor`: what the step changes, who is told and what is recorded, its field and its one request; a refusal (I) is drawn inside it in the Worker's words. Never a browser pop-up. |
-| `ProductTestingTabs.jsx` | The new tabs' bodies: Overview (tiles, places bars, status chips), one program (details, HQ's own applicants), Applicants and the Tester pool. `ProductTestingTabBody` picks one from the address. |
 
 ## Where the page lives
 

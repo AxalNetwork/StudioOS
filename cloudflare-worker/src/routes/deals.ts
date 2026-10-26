@@ -7,7 +7,7 @@ import { getSQL } from '../db';
 import { investorActiveCompany } from './_investorProjectScope';
 import { openConditionsOnDeal } from './ic';
 import { activeCompanyFor } from '../middleware/activeCompany';
-import { requireAuth, requireRole, requireAdmin, canAccessFounderResource } from '../auth';
+import { requireAuth, requireRole, requireApprovedKyc, requireAdmin, canAccessFounderResource } from '../auth';
 import { isPassReason, passReasonLabel, PASS_REASON_KEYS, PASS_REASON_UNRECORDED } from '../services/dealPassTaxonomy';
 import { buildPassBreakdown, buildStageFunnel, DEAL_METRIC_UNAVAILABLE } from '../services/dealAnalytics';
 import { ensureDealPassSchema, recordStageEvent, stageRecordingStartedAt } from '../services/dealStageHistory';
@@ -1133,6 +1133,7 @@ deals.get('/:id/commitments', async (c) => {
 
 deals.post('/:id/commitments', async (c) => {
   const user = await requireRole(c, 'investor');
+  await requireApprovedKyc(c);
   const id = Number(c.req.param('id'));
   const data = await c.req.json();
   const amount = Number(data.amount);
@@ -1167,8 +1168,8 @@ deals.post('/:id/commitments', async (c) => {
     db.prepare(`UPDATE deals SET capital_committed = (SELECT COALESCE(SUM(amount), 0) FROM commitments WHERE deal_id = ? AND status = 'confirmed') WHERE id = ?`).bind(id, id),
   ]);
   if (!results[0].meta?.changes && !results[1].meta?.changes) return c.json({ detail: 'Deal or commitment changed; refresh before retrying' }, 409);
-  await logDealRoomAction(c.env, user, 'deal_commitment_pending', id, { company_id: companyId, amount });
   const saved = await db.prepare(`SELECT uid FROM commitments WHERE deal_id = ? AND investor_user_id = ? AND company_id IS ? AND status = 'pending' ORDER BY id LIMIT 1`).bind(id, user.id, companyId).first<any>();
+  await logDealRoomAction(c.env, user, 'deal_commitment_pending', id, { company_id: companyId, commitment_uid: saved?.uid ?? null });
   const total = await db.prepare(`SELECT COALESCE(SUM(amount), 0) AS total FROM commitments WHERE deal_id = ? AND status = 'confirmed'`).bind(id).first<any>();
   return c.json({ ok: true, uid: saved?.uid, capital_committed: total?.total ?? 0 });
 });

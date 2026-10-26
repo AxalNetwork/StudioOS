@@ -18,3 +18,8 @@ before calling the collector, recompute or history functions.
 Future scoring scopes reuse migration 598's store and distinguish their model
 versions by `(scope, version)`. Never replace a historical result with a new
 model's interpretation. Never accept browser-supplied scores or raw inputs.
+
+`pmfExplain.ts` (D1147) projects only signed PMF input rows into Eadwyn's
+explanation or lowest-confidence interview-question prompt, then validates the
+citations and words. `../../routes/pmf_explain.ts` mounts previews and the explicit Keep;
+`storedPmfInputs` reads without recomputing or writing a score.

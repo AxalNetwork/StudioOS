@@ -138,6 +138,8 @@ test('every band on the founder\'s boards is listed, under the Worker\'s own nam
   const surfaces = new Set([...RESEARCH.matchAll(/^ {2}'([a-z-]+\/[a-z/-]+)': \{$/gm)].map((m) => m[1]));
   // D1071: the build plan's wording is its own route's option, not a research ZoneDraft surface.
   surfaces.add(read('cloudflare-worker/src/services/buildPlanWord.ts').match(/^export const WORD_OPTION = 'draft:([a-z-]+\/[a-z/-]+)';$/m)?.[1]);
+  // D1147: transient input-only previews have a dedicated mounted route; Keep alone persists.
+  for (const match of read('cloudflare-worker/src/services/scoring/pmfExplain.ts').matchAll(/'draft:(raise\/pmf-[a-z]+)'/g)) surfaces.add(match[1]);
   const kinds = new Set([...FILLS.matchAll(/^ {2}kind: '([a-z_]+)',$/gm)].map((m) => m[1]));
   for (const o of FOUNDER_OPTIONS) {
     const [verb, object] = o.key.split(':');

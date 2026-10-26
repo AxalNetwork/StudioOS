@@ -1,7 +1,7 @@
 /**
  * The fields Eadwyn never fills (D777, from D720 §9: "Eadwyn drafts; you send").
  *
- * FOUR KINDS OF FIELD, and a fill that names one is refused — in this file for
+ * FIVE KINDS OF FIELD, and a fill that names one is refused — in this file for
  * the SPA, and in `cloudflare-worker/src/services/fills/neverFill.ts` for the
  * Worker, which carries the same rules. `cloudflare-worker/test/never_fill.test.ts`
  * fails when the two disagree, so a field added here and not there (or the other
@@ -18,6 +18,8 @@
  *   legal_attestation  A statement made under the law's weight — accreditation,
  *                      certification, a sworn or affirmed fact. Only the person
  *                      making it can make it.
+ *   score_rating       Scores and ratings come from their model or human rater,
+ *                      never from an Eadwyn fill (D1147).
  *
  * HOW A FIELD IS NAMED. Either `table.column` — what a fill kind's `target()`
  * and `fill_provenance` record — or a bare form-field name, for a form that
@@ -35,6 +37,12 @@
  */
 
 export const NEVER_FILL_RULES = Object.freeze([
+  {
+    category: 'score_rating',
+    label: 'Scores and ratings',
+    tables: ['readiness_scores', 'venture_scorecards'],
+    columns: ['score', 'scores', 'rating', 'ratings'],
+  },
   {
     category: 'signature_consent',
     label: 'Signatures and consents',

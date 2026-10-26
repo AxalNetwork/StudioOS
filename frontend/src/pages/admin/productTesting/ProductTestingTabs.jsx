@@ -6,7 +6,8 @@ import { ConsoleUnreadable, CONSOLE_LOADING } from '../consoles/shared';
 import ProgrammeApplicants from '../../testing/ProgrammeApplicants';
 import { MAIL_NOTE, ROLE_OPTIONS, datesLine, placesLine, statusLabel, statusTone } from '../../testing/programmeModel';
 import {
-  NOT_YET, PROGRAM_SUBS, TESTER_CHIPS, WAITS, dayOf, overviewFigures, profileWord, testerRow,
+  NOT_YET, PROGRAM_SUBS, RAIL, REACH_STEPS, TESTER_CHIPS, WAITS, blockState, dayOf, needsYou, overviewFigures, profileBars,
+  profileWord, reachRows, testerRow, weeklySeries, weeklySummary,
 } from './productTestingModel';
 
 /**
@@ -63,10 +64,316 @@ function Tile({ label, value, sub, testId, children }) {
  * Overview (TST1)
  * ------------------------------------------------------------------ */
 
-export function OverviewTab({ api = adminTestingApi, testersApi = adminProductTestersApi }) {
+/** The page's two shared reads: the Overview's tiles and the header's tab counts draw from the same answers (D1201). */
+export function useTestingReads({ api = adminTestingApi, testersApi = adminProductTestersApi } = {}) {
   const programmes = useRead(useCallback(() => api.programmes(), [api]));
   const testers = useRead(useCallback(() => testersApi.list('active'), [testersApi]));
-  if (programmes.status === 'loading') return <p className={`p-6 text-sm ${MUTED}`}>{CONSOLE_LOADING}</p>;
+  return { programmes, testers };
+}
+
+const SEG = 'inline-flex rounded-lg border border-axal-hairline p-0.5 text-[11.5px] font-semibold dark:border-gray-700';
+const SEG_ON = 'rounded-md bg-violet-50 px-2 py-0.5 text-axal-ink dark:bg-violet-950 dark:text-gray-100';
+const SEG_OFF = `rounded-md px-2 py-0.5 ${MUTED}`;
+
+/** Chart or Table (the canvas's toggle): the table is the chart's "View as table", the same figures. */
+function ChartToggle({ id, view, onChange }) {
+  return (
+    <div className={SEG} role="radiogroup" aria-label="Show as" data-testid={`${id}-toggle`}>
+      {['chart', 'table'].map((k) => (
+        <button key={k} type="button" role="radio" aria-checked={view === k} onClick={() => onChange(k)}
+          className={view === k ? SEG_ON : SEG_OFF} data-testid={`${id}-toggle-${k}`}>{k === 'chart' ? 'Chart' : 'View as table'}</button>
+      ))}
+    </div>
+  );
+}
+
+/** One overview block's frame: its title, the toggle when it has figures, and its four states. */
+function Block({ id, title, meta, toggle, children, foot }) {
+  return (
+    <section className={`${CARD} flex min-w-0 flex-col gap-2.5`} data-testid={id}>
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <h3 className={H3}>{title}{meta ? <span className={`ml-2 font-normal ${MUTED}`}>{meta}</span> : null}</h3>
+        {toggle}
+      </div>
+      {children}
+      {foot ? <p className={`m-0 text-[12px] ${MUTED}`}>{foot}</p> : null}
+    </section>
+  );
+}
+
+function BlockUnreadable({ id, reason, onRetry }) {
+  return (
+    <div className="flex flex-col gap-1.5" data-testid={`${id}-unreadable`}>
+      <span className="text-[12.5px] font-semibold text-red-700 dark:text-red-300">Unreadable</span>
+      <p className={`m-0 text-[12.5px] ${MUTED}`}>{reason}</p>
+      <button type="button" className={`${LINK} w-fit text-[12px]`} onClick={onRetry} data-testid={`${id}-retry`}>Try again</button>
+    </div>
+  );
+}
+
+const Skeleton = ({ id }) => <div aria-label="Reading" className="h-24 animate-pulse rounded-lg bg-gray-100 dark:bg-gray-800" data-testid={`${id}-loading`} />;
+
+const NotRecordedLine = ({ id, children }) => (
+  <p className={`m-0 border-t-[1.5px] border-dashed border-gray-400 pt-3 text-[13px] font-semibold dark:border-gray-500 ${MUTED}`} data-testid={`${id}-not-recorded`}>{children}</p>
+);
+
+const APPS = 'stroke-violet-600 dark:stroke-violet-400';
+const PICKS = 'stroke-sky-500 dark:stroke-sky-400';
+const APPS_FILL = 'fill-violet-600 dark:fill-violet-400';
+const PICKS_FILL = 'fill-sky-500 dark:fill-sky-400';
+const SVG_TEXT = 'fill-axal-muted dark:fill-gray-400';
+const SVG_INK = 'fill-axal-ink dark:fill-gray-100';
+const SVG_HAIR = 'stroke-gray-200 dark:stroke-gray-700';
+
+/** Applications and picks per week (TST1): two lines; unrecorded weeks a dashed hairline; the current week hollow, "to date". */
+function WeeklyChart({ s }) {
+  const W = 660, H = 250, L = 36, Rt = 116, T = 16, Bm = 30, iw = W - L - Rt, ih = H - T - Bm, n = s.rows.length;
+  const ym = Math.max(5, Math.ceil((s.max || 0) / 5) * 5);
+  const X = (i) => +(L + (n > 1 ? (i * iw) / (n - 1) : iw / 2)).toFixed(1);
+  const Y = (v) => +(T + ih - (v / ym) * ih).toFixed(1);
+  const ticks = []; for (let v = 0; v <= ym; v += ym / 4) ticks.push(v);
+  const firstRec = s.rows.findIndex((r) => r.recorded);
+  const lastUnrec = firstRec === -1 ? n - 1 : firstRec;
+  const series = [['Applications', 'applications', APPS, APPS_FILL], ['Picks', 'picks', PICKS, PICKS_FILL]];
+  return (
+    <svg viewBox={`0 0 ${W} ${H}`} role="img" aria-label={weeklySummary(s)} className="h-auto w-full" data-testid="testing-weekly-chart">
+      {ticks.map((v) => (
+        <g key={v}>
+          <line x1={L} x2={L + iw} y1={Y(v)} y2={Y(v)} className={SVG_HAIR} />
+          <text x={L - 7} y={Y(v) + 4} textAnchor="end" fontSize="11" className={SVG_TEXT}>{v}</text>
+        </g>
+      ))}
+      {s.rows.map((r, i) => (i % 2 === 0 || i === n - 1) ? <text key={r.week} x={X(i)} y={H - 8} textAnchor="middle" fontSize="10.5" className={SVG_TEXT}>{r.label}</text> : null)}
+      {s.unrecorded > 0 ? (
+        <g data-testid="testing-weekly-unrecorded">
+          <line x1={X(0)} x2={X(Math.min(lastUnrec, n - 1))} y1={Y(0)} y2={Y(0)} strokeWidth="1.5" strokeDasharray="4 4" className="stroke-gray-500 dark:stroke-gray-400" />
+          <text x={X(0) + 2} y={T + 14} fontSize="10.5" className={SVG_TEXT}>Not recorded:</text>
+          <text x={X(0) + 2} y={T + 28} fontSize="10.5" className={SVG_TEXT}>no program was open</text>
+        </g>
+      ) : null}
+      {series.map(([name, k, stroke, fill]) => {
+        const pts = s.rows.map((r, i) => (r[k] == null ? null : [X(i), Y(r[k]), r, i])).filter(Boolean);
+        if (!pts.length) return null;
+        const last = pts[pts.length - 1];
+        return (
+          <g key={k} data-testid={`testing-weekly-${k}`}>
+            <path d={pts.map((pt, i) => `${i ? 'L' : 'M'}${pt[0]} ${pt[1]}`).join(' ')} fill="none" strokeWidth="2.2" className={stroke} />
+            {pts.map(([x, y, r]) => (
+              <circle key={r.week} cx={x} cy={y} r={r.toDate ? 4.5 : 3} strokeWidth={r.toDate ? 2 : 0}
+                className={r.toDate ? `${stroke} fill-white dark:fill-gray-900` : fill} tabIndex={0} data-testid={r.toDate ? `testing-weekly-${k}-to-date` : undefined}>
+                <title>{`${r.label} · ${name} ${r[k]}${r.toDate ? ' so far' : ''}`}</title>
+              </circle>
+            ))}
+            <text x={last[0] + 10} y={last[1] + 4} fontSize="11.5" fontWeight="700" className={SVG_INK}>{`${name} ${last[2][k]}`}</text>
+          </g>
+        );
+      })}
+      {n && s.rows[n - 1].toDate ? <text x={X(n - 1)} y={T + 6} textAnchor="middle" fontSize="10" className={SVG_TEXT}>to date</text> : null}
+    </svg>
+  );
+}
+
+const TABLE = 'w-full border-collapse text-left text-[12.5px]';
+const TH = `border-b border-axal-hairline px-2 py-1.5 dark:border-gray-800 ${EYEBROW}`;
+const TD = 'border-b border-axal-hairline px-2 py-1.5 dark:border-gray-800';
+
+function WeeklyBlock({ read }) {
+  const [view, setView] = useState('chart');
+  const id = 'testing-weekly';
+  const st = read.status === 'ready' ? blockState(read.data?.weekly) : null;
+  const s = st?.state === 'ready' ? weeklySeries(read.data.weekly) : null;
+  const legend = (
+    <div className={`flex flex-wrap gap-3 text-[11.5px] ${MUTED}`}>
+      <span className="inline-flex items-center gap-1.5"><span className="h-2.5 w-2.5 rounded-full bg-violet-600 dark:bg-violet-400" />Applications</span>
+      <span className="inline-flex items-center gap-1.5"><span className="h-2.5 w-2.5 rounded-full bg-sky-500 dark:bg-sky-400" />Picks</span>
+      <span className="inline-flex items-center gap-1.5"><span className="w-3.5 border-t-[1.5px] border-dashed border-gray-500 dark:border-gray-400" />Not recorded</span>
+    </div>
+  );
+  return (
+    <Block id={id} title="Applications and picks per week" meta={s ? `Last ${s.rows.length} weeks` : null}
+      toggle={s?.anyRecorded ? <ChartToggle id={id} view={view} onChange={setView} /> : null}
+      foot={s?.anyRecorded ? 'Weeks start on Monday. The current week is a hollow point, to date.' : null}>
+      {read.status === 'loading' ? <Skeleton id={id} /> : null}
+      {read.status === 'unreadable' ? <BlockUnreadable id={id} reason="The overview did not answer. This is not a claim that there are none." onRetry={read.reload} /> : null}
+      {st?.state === 'unreadable' ? <BlockUnreadable id={id} reason={st.reason} onRetry={read.reload} /> : null}
+      {s && !s.anyRecorded ? <NotRecordedLine id={id}>Not recorded: no program has opened yet, so no week has applications or picks to count.</NotRecordedLine> : null}
+      {s?.anyRecorded && view === 'chart' ? <>{legend}<WeeklyChart s={s} /></> : null}
+      {s?.anyRecorded && view === 'table' ? (
+        <div className="overflow-x-auto">
+          <table className={TABLE} data-testid={`${id}-table`}>
+            <thead><tr><th className={TH}>Week of</th><th className={TH}>Applications</th><th className={TH}>Picks</th></tr></thead>
+            <tbody>
+              {s.rows.map((r) => (
+                <tr key={r.week}>
+                  <td className={TD}>{r.label}{r.toDate ? <span className={MUTED}> · to date</span> : null}</td>
+                  <td className={`${TD} ${MONO}`}>{r.recorded ? r.applications : 'Not recorded'}</td>
+                  <td className={`${TD} ${MONO}`}>{r.recorded ? r.picks : 'Not recorded'}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      ) : null}
+    </Block>
+  );
+}
+
+/** Who applies, by profile (TST1, TST14a): the pool and the applicants side by side, each answering alone. */
+function ProfilesBlock({ read }) {
+  const [view, setView] = useState('chart');
+  const id = 'testing-profiles';
+  const b = read.status === 'ready' ? profileBars(read.data?.by_profile) : null;
+  const both = b && b.pool.state === 'ready' && b.applicants.state === 'ready';
+  const any = b && (b.pool.state === 'ready' || b.applicants.state === 'ready');
+  const empty = any && b.max === 0;
+  const W = 560, L = 132, Rr = 34, rh = both ? 38 : 24, iw = W - L - Rr, mx = Math.max(1, b?.max || 0);
+  const bars = (r) => [
+    b.pool.state === 'ready' ? ['pool', r.pool, APPS_FILL, 'Testers in the pool'] : null,
+    b.applicants.state === 'ready' ? ['applicants', r.applicants, PICKS_FILL, 'Applicants on open programs'] : null,
+  ].filter(Boolean);
+  return (
+    <Block id={id} title="Who applies, by profile" toggle={any && !empty ? <ChartToggle id={id} view={view} onChange={setView} /> : null}
+      foot={any ? (b.pool.state === 'ready' ? 'Any profile can be a tester. Admins cannot apply.' : 'The tester pool could not be read, so its bars are left out. Any profile can be a tester. Admins cannot apply.') : null}>
+      {read.status === 'loading' ? <Skeleton id={id} /> : null}
+      {read.status === 'unreadable' ? <BlockUnreadable id={id} reason="The overview did not answer. This is not a claim that there are none." onRetry={read.reload} /> : null}
+      {b && !any ? <BlockUnreadable id={id} reason={b.pool.reason} onRetry={read.reload} /> : null}
+      {b && any && b.pool.state !== 'ready' ? <p className="m-0 text-[12px] font-semibold text-red-700 dark:text-red-300" data-testid={`${id}-pool-unreadable`}>The tester pool could not be read. <button type="button" className={`${LINK} text-[12px]`} onClick={read.reload}>Try again</button></p> : null}
+      {b && any && b.applicants.state !== 'ready' ? <p className="m-0 text-[12px] font-semibold text-red-700 dark:text-red-300" data-testid={`${id}-applicants-unreadable`}>The applicants on open programs could not be read. <button type="button" className={`${LINK} text-[12px]`} onClick={read.reload}>Try again</button></p> : null}
+      {empty ? <p className={`m-0 text-[12.5px] ${MUTED}`} data-testid={`${id}-empty`}>No testers in the pool and no applicants on open programs yet.</p> : null}
+      {any && !empty && view === 'chart' ? (
+        <>
+          <div className={`flex flex-wrap gap-3 text-[11.5px] ${MUTED}`}>
+            {b.pool.state === 'ready' ? <span className="inline-flex items-center gap-1.5"><span className="h-2.5 w-2.5 rounded-sm bg-violet-600 dark:bg-violet-400" />Testers in the pool</span> : null}
+            {b.applicants.state === 'ready' ? <span className="inline-flex items-center gap-1.5"><span className="h-2.5 w-2.5 rounded-sm bg-sky-500 dark:bg-sky-400" />Applicants on open programs</span> : null}
+          </div>
+          <svg viewBox={`0 0 ${W} ${b.rows.length * rh + 4}`} role="img" className="h-auto w-full" data-testid={`${id}-chart`}
+            aria-label={`By profile: ${b.rows.map((r) => `${r.label} ${bars(r).map((x) => x[1]).join(' and ')}`).join(', ')}.`}>
+            {b.rows.map((r, i) => {
+              const y = i * rh + 4;
+              return (
+                <g key={r.key}>
+                  <text x="0" y={y + 14} fontSize="12" className={SVG_INK}>{r.label}</text>
+                  {bars(r).map(([k, v, fill, name], j) => {
+                    const by = y + 2 + j * 14, bw = Math.max(2, (v / mx) * iw);
+                    return (
+                      <g key={k}>
+                        <rect x={L} y={by} width={bw.toFixed(1)} height="11" rx="2" className={fill} tabIndex={0} data-testid={`${id}-${k}-${r.key}`}><title>{`${r.label} · ${name} ${v}`}</title></rect>
+                        <text x={(L + bw + 6).toFixed(1)} y={by + 10} fontSize="11" className={`${SVG_INK} font-mono`}>{v}</text>
+                      </g>
+                    );
+                  })}
+                </g>
+              );
+            })}
+          </svg>
+        </>
+      ) : null}
+      {any && !empty && view === 'table' ? (
+        <div className="overflow-x-auto">
+          <table className={TABLE} data-testid={`${id}-table`}>
+            <thead><tr><th className={TH}>Profile</th>{b.pool.state === 'ready' ? <th className={TH}>Testers in the pool</th> : null}{b.applicants.state === 'ready' ? <th className={TH}>Applicants on open programs</th> : null}</tr></thead>
+            <tbody>
+              {b.rows.map((r) => (
+                <tr key={r.key}>
+                  <td className={TD}>{r.label}</td>
+                  {b.pool.state === 'ready' ? <td className={`${TD} ${MONO}`}>{r.pool}</td> : null}
+                  {b.applicants.state === 'ready' ? <td className={`${TD} ${MONO}`}>{r.applicants}</td> : null}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      ) : null}
+    </Block>
+  );
+}
+
+/** Can Mail reach them? (TST1): per open program, the four steps; counts only, never an address. */
+function ReachBlock({ read }) {
+  const [view, setView] = useState('chart');
+  const id = 'testing-reach';
+  const st = read.status === 'ready' ? blockState(read.data?.mail_reach) : null;
+  const rows = st?.state === 'ready' ? reachRows(read.data.mail_reach) : null;
+  const W = 560, L = 118, cw = (W - L) / 4, rh = 40, T = 22;
+  return (
+    <Block id={id} title="Can Mail reach them?" toggle={rows?.length ? <ChartToggle id={id} view={view} onChange={setView} /> : null}
+      foot="Mail writes only to picked testers who agreed, kept emails on, and whose address is not suppressed. Delivery figures are in Axal VC Mail.">
+      {read.status === 'loading' ? <Skeleton id={id} /> : null}
+      {read.status === 'unreadable' ? <BlockUnreadable id={id} reason="The overview did not answer. This is not a claim that there are none." onRetry={read.reload} /> : null}
+      {st?.state === 'unreadable' ? <BlockUnreadable id={id} reason={st.reason} onRetry={read.reload} /> : null}
+      {rows && rows.length === 0 ? <p className={`m-0 text-[12.5px] ${MUTED}`} data-testid={`${id}-empty`}>No program is open or testing, so nobody is picked yet.</p> : null}
+      {rows?.length && view === 'chart' ? (
+        <svg viewBox={`0 0 ${W} ${T + rows.length * rh}`} role="img" className="h-auto w-full" data-testid={`${id}-chart`}
+          aria-label={`Of the testers picked on each open program, how many Mail can reach: ${rows.map((r) => `${r.name} ${r.steps[3].n} of ${r.steps[0].n}`).join(', ')}.`}>
+          {REACH_STEPS.map((s, j) => <text key={s.key} x={L + j * cw} y="12" fontSize="9" letterSpacing=".3" className={`${SVG_TEXT} font-mono`}>{s.label.toUpperCase()}</text>)}
+          {rows.map((r, i) => {
+            const y = T + i * rh, top = r.steps[0].n;
+            return (
+              <g key={r.uid}>
+                <text x="0" y={y + 17} fontSize="12" fontWeight="700" className={SVG_INK}>{r.name.length > 16 ? `${r.name.slice(0, 15)}…` : r.name}<title>{r.name}</title></text>
+                {r.steps.map((s, j) => {
+                  const x = L + j * cw, tw = cw - 36, bw = top > 0 ? Math.max(2, (s.n / top) * tw) : 0;
+                  return (
+                    <g key={s.key}>
+                      <rect x={x} y={y + 8} width={tw.toFixed(1)} height="12" rx="3" className="fill-gray-50 stroke-gray-200 dark:fill-gray-800 dark:stroke-gray-700" />
+                      {bw ? <rect x={x} y={y + 8} width={bw.toFixed(1)} height="12" rx="3" className={APPS_FILL} tabIndex={0}><title>{`${r.name} · ${s.label} ${s.n}`}</title></rect> : null}
+                      <text x={(x + tw + 6).toFixed(1)} y={y + 18} fontSize="11" className={`${SVG_INK} font-mono`} data-testid={`${id}-${r.uid}-${s.key}`}>{s.n}</text>
+                    </g>
+                  );
+                })}
+              </g>
+            );
+          })}
+        </svg>
+      ) : null}
+      {rows?.length && view === 'table' ? (
+        <div className="overflow-x-auto">
+          <table className={TABLE} data-testid={`${id}-table`}>
+            <thead><tr><th className={TH}>Program</th>{REACH_STEPS.map((s) => <th key={s.key} className={TH}>{s.label}</th>)}</tr></thead>
+            <tbody>{rows.map((r) => <tr key={r.uid}><td className={TD}>{r.name}</td>{r.steps.map((s) => <td key={s.key} className={`${TD} ${MONO}`}>{s.n}</td>)}</tr>)}</tbody>
+          </table>
+        </div>
+      ) : null}
+    </Block>
+  );
+}
+
+/** Needs you (TST1), from the programme list: what waits on HQ, each with where it is acted on. */
+function NeedsBlock({ items, now }) {
+  const rows = needsYou(items, now);
+  return (
+    <Block id="testing-needs" title="Needs you" meta={String(rows.length)}
+      foot="Withdrawal requests reach HQ through Support; they are not read here yet.">
+      {rows.length === 0 ? <p className={`m-0 text-[12.5px] ${MUTED}`} data-testid="testing-needs-none">Nothing waits on you: no program waits for review, is approved and not open, has dates that passed its status, or has applicants with nobody picked.</p> : (
+        <ul className="m-0 flex list-none flex-col p-0">
+          {rows.map((r) => (
+            <li key={r.key} className="flex flex-wrap items-center justify-between gap-2 border-t border-axal-hairline py-2 first:border-t-0 dark:border-gray-800" data-testid={`testing-need-${r.key}`}>
+              <span className="text-[13px] font-semibold leading-snug text-axal-ink dark:text-gray-100">{r.text}</span>
+              <Link className={`${LINK} text-[12.5px]`} to={r.action.to}>{r.action.label}</Link>
+            </li>
+          ))}
+        </ul>
+      )}
+    </Block>
+  );
+}
+
+/** The rail's line (TST1): what Eadwyn reads here and never does. */
+function RailNote() {
+  return (
+    <aside className="flex flex-col gap-2 rounded-xl border border-axal-lavender-edge bg-axal-lavender px-4 py-3 dark:border-violet-800 dark:bg-violet-950/40" data-testid="testing-rail-line">
+      <p className="m-0 text-[13px] leading-relaxed text-axal-ink dark:text-gray-100">{RAIL.line}</p>
+      <p className="m-0 text-[12px] text-axal-ink dark:text-gray-200"><span className={EYEBROW}>Reads</span> {RAIL.reads}</p>
+      <p className="m-0 text-[12px] text-axal-ink dark:text-gray-200"><span className={EYEBROW}>Never</span> {RAIL.never}</p>
+    </aside>
+  );
+}
+
+export function OverviewTab({ api = adminTestingApi, testersApi = adminProductTestersApi, reads = null, now = Date.now() }) {
+  const own = useTestingReads({ api: reads ? NO_READS : api, testersApi: reads ? NO_TESTERS : testersApi });
+  const { programmes, testers } = reads || own;
+  const overview = useRead(useCallback(() => api.overview(), [api]));
+  if (programmes.status === 'loading' && !programmes.data) return <p className={`p-6 text-sm ${MUTED}`}>{CONSOLE_LOADING}</p>;
   if (programmes.status === 'unreadable') return <ConsoleUnreadable what="Testing programmes" onRetry={programmes.reload} />;
   const f = overviewFigures(programmes.data?.items);
   const totals = testers.data?.totals;
@@ -98,7 +405,7 @@ export function OverviewTab({ api = adminTestingApi, testersApi = adminProductTe
       </div>
 
       <div className="grid gap-3.5 lg:grid-cols-3">
-        <div className="lg:col-span-2"><Wait id="weekly" title="Applications and picks per week" /></div>
+        <div className="min-w-0 lg:col-span-2"><WeeklyBlock read={overview} /></div>
         <section className={`${CARD} flex flex-col gap-2`} data-testid="testing-places-bars">
           <h3 className={H3}>Places filled, by open program</h3>
           {f.bars.length === 0 ? <p className={`m-0 text-[12.5px] ${MUTED}`}>No program is open or testing.</p> : f.bars.map((b) => (
@@ -114,15 +421,16 @@ export function OverviewTab({ api = adminTestingApi, testersApi = adminProductTe
               ) : <span className="h-0 w-full border-t border-dashed border-gray-300 dark:border-gray-600" />}
             </Link>
           ))}
+          <p className={`m-0 text-[12px] ${MUTED}`}>The track is the places; the fill is the testers picked. A bar opens its program.</p>
         </section>
       </div>
 
-      <div className="grid gap-3.5 lg:grid-cols-2">
-        <Wait id="profiles" title="Who applies, by profile" />
-        <Wait id="mail" title="Can Mail reach them?" />
+      <div className="hidden gap-3.5 sm:grid lg:grid-cols-2">
+        <ProfilesBlock read={overview} />
+        <ReachBlock read={overview} />
       </div>
 
-      <section className={`${CARD} flex flex-col gap-2`} data-testid="testing-status-chips">
+      <section className={`${CARD} hidden flex-col gap-2 sm:flex`} data-testid="testing-status-chips">
         <h3 className={H3}>Programs by status</h3>
         <div className="flex flex-wrap gap-1.5">
           {f.chips.map((c) => (
@@ -134,10 +442,15 @@ export function OverviewTab({ api = adminTestingApi, testersApi = adminProductTe
         <p className={`m-0 text-[12px] ${MUTED}`}>Axal VC {f.owners.hq} · Partner firms {f.owners.partner}</p>
       </section>
 
-      <Wait id="needs" title="Needs you" />
+      <NeedsBlock items={programmes.data?.items} now={now} />
+      <RailNote />
     </div>
   );
 }
+
+// When the page passes its own reads, the Overview makes none of its own.
+const NO_READS = Object.freeze({ programmes: () => new Promise(() => {}) });
+const NO_TESTERS = Object.freeze({ list: () => new Promise(() => {}) });
 
 /* ------------------------------------------------------------------ *
  * One program (TST5, TST6)
@@ -272,11 +585,11 @@ export function TestersTab({ testersApi = adminProductTestersApi }) {
 }
 
 /** The tab an address names, drawn; Review and Programs are passed in (D815's console). */
-export function ProductTestingTabBody({ view, review, programs }) {
+export function ProductTestingTabBody({ view, review, programs, reads = null }) {
   if (view.tab === 'programs' && view.uid) return <ProgramTab uid={view.uid} sub={view.sub} />;
   if (view.tab === 'review') return review;
   if (view.tab === 'programs') return programs;
   if (view.tab === 'applicants') return <ApplicantsTab />;
   if (view.tab === 'testers') return <TestersTab />;
-  return <OverviewTab />;
+  return <OverviewTab reads={reads} />;
 }

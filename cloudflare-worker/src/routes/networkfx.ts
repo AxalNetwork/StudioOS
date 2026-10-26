@@ -182,7 +182,7 @@ networkfx.get('/referrals/compounding', async (c) => {
 // ============================================================
 
 networkfx.get('/syndicates', async (c) => {
-  await requireAuth(c);
+  const user = await requireAuth(c);
   await ensureSchema(c.env);
   const status = c.req.query('status');
   // D630 (#1388) — the syndicates linked to one company, for the deal room's
@@ -195,13 +195,14 @@ networkfx.get('/syndicates', async (c) => {
     return c.json({ error: 'bad_project_id', detail: 'project_id must be a positive whole number.' }, 400);
   }
   const sql = getSQL(c.env);
-  const rows = projectId != null
-    ? (status
-      ? await sql`SELECT s.*, u.name as creator_name FROM syndicates s LEFT JOIN users u ON u.id = s.created_by WHERE s.deal_id = ${projectId} AND s.status = ${status} ORDER BY s.created_at DESC LIMIT 100`
-      : await sql`SELECT s.*, u.name as creator_name FROM syndicates s LEFT JOIN users u ON u.id = s.created_by WHERE s.deal_id = ${projectId} ORDER BY s.created_at DESC LIMIT 100`)
-    : status
-      ? await sql`SELECT s.*, u.name as creator_name FROM syndicates s LEFT JOIN users u ON u.id = s.created_by WHERE s.status = ${status} ORDER BY s.created_at DESC LIMIT 100`
-      : await sql`SELECT s.*, u.name as creator_name FROM syndicates s LEFT JOIN users u ON u.id = s.created_by ORDER BY s.created_at DESC LIMIT 100`;
+  const rows = await sql`
+    SELECT s.*, u.name AS creator_name FROM syndicates s LEFT JOIN users u ON u.id = s.created_by
+    WHERE (${projectId} IS NULL OR s.deal_id = ${projectId})
+      AND (${status || null} IS NULL OR s.status = ${status || null})
+      AND (${user.role} = 'admin' OR s.created_by = ${user.id} OR EXISTS (
+        SELECT 1 FROM syndicate_members mine WHERE mine.syndicate_id = s.id AND mine.user_id = ${user.id}
+      ))
+    ORDER BY s.created_at DESC LIMIT 100`;
   const ids = (rows as any[]).map(r => r.id);
   let memberMap: Record<number, any> = {};
   if (ids.length) {
@@ -223,14 +224,11 @@ networkfx.get('/syndicates/:id', async (c) => {
   const sql = getSQL(c.env);
   const rows = await sql`SELECT s.*, u.name as creator_name FROM syndicates s LEFT JOIN users u ON u.id = s.created_by WHERE s.id = ${id}`;
   if (!rows.length) { await sql.end(); return c.json({ error: 'Not found' }, 404); }
-  const memberRows = await sql`SELECT m.*, u.name, u.email FROM syndicate_members m JOIN users u ON u.id = m.user_id WHERE syndicate_id = ${id} ORDER BY joined_at`;
+  const memberRows = await sql`SELECT m.*, u.name FROM syndicate_members m JOIN users u ON u.id = m.user_id WHERE syndicate_id = ${id} ORDER BY joined_at`;
   const mayReadMembers = user.role === 'admin' || Number(rows[0].created_by) === user.id
     || memberRows.some(member => Number(member.user_id) === user.id);
-  const members = mayReadMembers ? memberRows.map(member => {
-    const projected = { ...member };
-    if (user.role !== 'admin') delete projected.email;
-    return projected;
-  }) : [];
+  if (!mayReadMembers) { await sql.end(); return c.json({ error: 'Only the lead, members and admins can read this syndicate.' }, 403); }
+  const members = memberRows;
   let project = null;
   if ((rows[0] as any).deal_id) {
     const p = await sql`SELECT id, name, sector, stage, status FROM projects WHERE id = ${(rows[0] as any).deal_id}`;
@@ -253,7 +251,7 @@ networkfx.post('/syndicates', async (c) => {
   const sql = getSQL(c.env);
   const [s] = await sql`INSERT INTO syndicates (name, description, created_by, deal_id, target_cents, min_commitment_cents, status) VALUES (${data.name}, ${data.description || null}, ${user.id}, ${dealId}, ${targetCents}, ${minCents}, 'open') RETURNING *`;
   await sql.end();
-  await logAction(c.env, 'syndicate_created', user.id, { syndicate_id: s.id, name: s.name });
+  await logAction(c.env, 'syndicate_created', user.id, { syndicate_id: s.id });
   return c.json(s, 201);
 });
 
@@ -269,7 +267,7 @@ networkfx.post('/syndicates/:id/join', async (c) => {
   const sRow: any = await c.env.DB.prepare(`SELECT * FROM syndicates WHERE id = ?`).bind(id).first();
   if (!sRow) return c.json({ error: 'Syndicate not found' }, 404);
   if (sRow.status !== 'open') return c.json({ error: 'Syndicate is not open' }, 400);
-  if (commitmentCents < sRow.min_commitment_cents) return c.json({ error: `Minimum commitment is $${(sRow.min_commitment_cents / 100).toFixed(2)}` }, 400);
+  if (commitmentCents < sRow.min_commitment_cents) return c.json({ error: 'Commitment is below the syndicate minimum.' }, 400);
   if (sRow.created_by === user.id) return c.json({ error: 'Cannot join your own syndicate' }, 400);
 
   // Atomic insert via UNIQUE index — duplicate join returns 409
@@ -279,7 +277,7 @@ networkfx.post('/syndicates/:id/join', async (c) => {
     if (String(e?.message || '').toLowerCase().includes('unique')) return c.json({ error: 'Already joined this syndicate' }, 409);
     throw e;
   }
-  await logAction(c.env, 'syndicate_joined', user.id, { syndicate_id: id, commitment_cents: commitmentCents });
+  await logAction(c.env, 'syndicate_joined', user.id, { syndicate_id: id });
 
   // Pledges are not receipts. Reaching the target does not fund a syndicate.
   return c.json({ ok: true });

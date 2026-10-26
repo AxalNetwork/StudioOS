@@ -72,7 +72,7 @@ test('the SPA and the Worker carry the same rules', () => {
   );
   assert.deepEqual(
     worker.NEVER_FILL_RULES.map((r) => r.category).sort(),
-    ['identity_number', 'legal_attestation', 'payment_amount', 'signature_consent'],
+    ['identity_number', 'legal_attestation', 'payment_amount', 'score_rating', 'signature_consent'],
   );
 });
 
