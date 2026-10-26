@@ -7,7 +7,7 @@ import { requireInvestorTier } from '../middleware/requireInvestorTier';
 import { resolveActiveCompany } from '../middleware/activeCompany';
 import { primaryCover } from './investor_seats';
 import { userReadableDealIds } from './deals';
-import { computeThesisFit, readFitGeography, readThesis } from '../services/thesisFit';
+import { computeThesisFit, readFitGeographies, readThesis, type FitGeography } from '../services/thesisFit';
 
 const r = new Hono<{ Bindings: Env }>();
 type Ctx = Context<{ Bindings: Env }>;
@@ -114,6 +114,7 @@ function fields(data: Record<string, unknown>, old?: ViewRow) {
   for (const key of ['shared_with_firm', 'is_default']) {
     if (data[key] !== undefined && typeof data[key] !== 'boolean') throw new Refused(400, 'The view options are invalid.');
   }
+  if (old && data.version === undefined) throw new Refused(400, 'Refresh this view before editing it.');
   if (data.version !== undefined && (!Number.isSafeInteger(data.version) || Number(data.version) < 1)) throw new Refused(400, 'The view version is invalid.');
   return { name, spec: data.spec === undefined && old ? old.spec_json : viewSpec(data.spec),
     shared: data.shared_with_firm === undefined ? old?.shared_with_firm ?? 0 : data.shared_with_firm ? 1 : 0,
@@ -215,6 +216,9 @@ r.patch('/views/:uid', async c => {
 r.delete('/views/:uid', async c => {
   try {
     const x = await viewer(c), old = await own(c, x);
+    const expected = c.req.query('version') ?? '';
+    if (!/^[1-9][0-9]{0,14}$/.test(expected)) throw new Refused(400, 'Refresh this view before deleting it.');
+    if (Number(expected) !== old.version) throw new Refused(409, 'The view changed. Refresh before deleting it.');
     const result = await c.env.DB.batch([
       c.env.DB.prepare(`INSERT INTO activity_logs(user_id,action,entity_type,entity_id,details)
         SELECT ?,'deal_view_deleted','deal_view',uid,? FROM deal_saved_views
@@ -252,14 +256,22 @@ r.get('/fit', async c => {
       WHERE d.id IN (SELECT CAST(value AS INTEGER) FROM json_each(?)) AND p.deleted_at IS NULL`)
       .bind(JSON.stringify([...readable])).all<{ id: number; project_id: number; target_raise: number | null; amount: number | null;
         currency: string | null; sector: string | null; stage: string | null }>();
-    const items = await Promise.all(rows.results.map(async row => {
+    let geography: Map<number, FitGeography> | null = null;
+    let geographyFailed = false;
+    if (thesis?.regions.length) {
+      try { geography = await readFitGeographies(c.env, rows.results.map(row => row.project_id)); }
+      catch { geographyFailed = true; }
+    }
+    const items = rows.results.map(row => {
       try {
-        const geography = thesis?.regions.length ? await readFitGeography(c.env, row.project_id) : { regions: null };
+        const recorded = geography?.get(row.project_id);
+        if (geographyFailed || recorded?.unreadable) throw new Error('geography_unreadable');
         return { deal_id: row.id, ...computeThesisFit(thesis, { sector: row.sector, stage: row.stage,
-          ask: row.target_raise ?? row.amount, currency: row.currency, ...geography }) };
+          ask: row.target_raise ?? row.amount, currency: row.currency, regions: recorded?.regions ?? null,
+          geographyIncomplete: recorded?.geographyIncomplete ?? false }) };
       } catch { return { deal_id: row.id, state: 'unreadable', score: null, confidence: null,
         label: 'Unreadable', reason: 'The fit inputs could not be read. Try again.' }; }
-    }));
+    });
     const byId = new Map(items.map(item => [item.deal_id, item]));
     return c.json({ items: wanted.map(id => byId.get(id) ?? unavailable(id)) });
   } catch { return c.json({ error: 'Thesis fit is unreadable. Try again.' }, 503); }

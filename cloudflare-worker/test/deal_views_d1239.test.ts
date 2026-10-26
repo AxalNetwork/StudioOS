@@ -48,7 +48,7 @@ async function call(w:World,who:number|null,method='GET',path='/api/deals/views'
   return {status:response.status,cache:response.headers.get('Cache-Control'),body:await response.json().catch(()=>null)};
 }
 const create=(w:World,who=1,extra:Record<string,unknown>={})=>call(w,who,'POST','/api/deals/views',{name:'Synthetic view',spec:{version:1,scope:'mine',view:'table',filters:{sectors:['Climate']},columns:['team','fit'],weights:{team:20}},...extra});
-const url=(uid:string)=>`/api/deals/views/${uid}`;
+const url=(uid:string,version?:number)=>`/api/deals/views/${uid}${version===undefined?'':`?version=${version}`}`;
 const rows=(w:World)=>w.db.prepare('SELECT * FROM deal_saved_views ORDER BY id').all();
 const audits=(w:World)=>w.db.prepare("SELECT * FROM activity_logs WHERE action LIKE 'deal_view_%' ORDER BY id").all();
 
@@ -79,10 +79,10 @@ test('private is author-only; shared is read by an accepted firm seat and never 
 test('author can edit, unshare and delete; audit holds references and never the view name, filter text or weighting figures',async()=>{
  const w=world();try {
   const made=await create(w,1,{name:'PRIVATE VIEW',shared_with_firm:true,spec:{filters:{search:'PRIVATE FILTER',minimum:1234567}}});assert.equal(made.status,201);
-  const changed=await call(w,1,'PATCH',url(made.body.uid),{name:'PRIVATE RENAMED',shared_with_firm:false,spec:{scope:'all',view:'board'}});
+  const changed=await call(w,1,'PATCH',url(made.body.uid),{version:made.body.version,name:'PRIVATE RENAMED',shared_with_firm:false,spec:{scope:'all',view:'board'}});
   assert.equal(changed.status,200);assert.equal(changed.body.version,2);assert.equal(changed.body.name,'PRIVATE RENAMED');assert.deepEqual(changed.body.spec,{scope:'all',view:'board'});
   assert.deepEqual((await call(w,2)).body.items,[]);
-  const removed=await call(w,1,'DELETE',url(made.body.uid));assert.equal(removed.status,200);assert.equal(rows(w).length,0);
+  const removed=await call(w,1,'DELETE',url(made.body.uid,changed.body.version));assert.equal(removed.status,200);assert.equal(rows(w).length,0);
   assert.deepEqual(audits(w).map((a:any)=>[a.action,a.user_id,a.entity_id]),[['deal_view_created',1,made.body.uid],['deal_view_updated',1,made.body.uid],['deal_view_deleted',1,made.body.uid]]);
   assert.doesNotMatch(JSON.stringify(audits(w)),/PRIVATE|1234567|example\.invalid/);
  }finally{w.db.close();}
@@ -98,7 +98,7 @@ test('defaults stay personal and atomic, and stale edits cannot clear another de
   const colleague=await create(w,2,{is_default:true});assert.equal(colleague.status,201);
   list=await call(w,1);assert.equal(list.body.default_uid,b.body.uid);
   assert.equal((await call(w,2)).body.default_uid,colleague.body.uid);
-  await Promise.all([call(w,1,'PATCH',url(a.body.uid),{is_default:true}),call(w,1,'PATCH',url(b.body.uid),{is_default:true})]);
+  await Promise.all([call(w,1,'PATCH',url(a.body.uid),{is_default:true,version:2}),call(w,1,'PATCH',url(b.body.uid),{is_default:true,version:b.body.version})]);
   assert.equal((await call(w,1)).body.items.filter((v:any)=>v.is_default).length,1);
  }finally{w.db.close();}
 });
@@ -107,8 +107,8 @@ test('an audit failure rolls back create, edit, default changes and deletion',as
   const a=await create(w,1,{is_default:true});const b=await create(w);const before=JSON.stringify(rows(w));
   w.db.exec('DROP TABLE activity_logs');
   assert.equal((await create(w,1,{is_default:true})).status,503);assert.equal(JSON.stringify(rows(w)),before);
-  assert.equal((await call(w,1,'PATCH',url(b.body.uid),{is_default:true})).status,503);assert.equal(JSON.stringify(rows(w)),before);
-  assert.equal((await call(w,1,'DELETE',url(a.body.uid))).status,503);assert.equal(JSON.stringify(rows(w)),before);
+  assert.equal((await call(w,1,'PATCH',url(b.body.uid),{is_default:true,version:b.body.version})).status,503);assert.equal(JSON.stringify(rows(w)),before);
+  assert.equal((await call(w,1,'DELETE',url(a.body.uid,a.body.version))).status,503);assert.equal(JSON.stringify(rows(w)),before);
  }finally{w.db.close();}
 });
 test('revoked, unaccepted, mismatched or lapsed seats cannot retain firm views; a company link alone grants none',async()=>{
@@ -181,8 +181,9 @@ test('free-text HQ never supplies geography; missing or unreadable inputs do not
   w.db.exec("UPDATE markets SET geography_ref=NULL WHERE project_id=10");
   let fit=(await call(w,1,'GET','/api/deals/fit?ids=1')).body.items[0];assert.equal(fit.criteria[2].state,'not_recorded');assert.equal(fit.confidence,0.75);
   w.db.exec("INSERT INTO deal_invitations(deal_id,investor_user_id) VALUES(2,1)");
-  const prepare=w.env.DB.prepare.bind(w.env.DB);w.env.DB.prepare=(sql:string)=>{const stmt=prepare(sql);const bind=stmt.bind;stmt.bind=(...values:any[])=>{const bound=bind(...values);if(sql.includes('FROM markets m') && values[0]===10)bound.all=async()=>{throw new Error('PRIVATE provider details 1234567');};return bound;};return stmt;};
-  let r=await call(w,1,'GET','/api/deals/fit?ids=1,2');assert.equal(r.status,200);assert.equal(r.body.items.find((i:any)=>i.deal_id===1).state,'unreadable');assert.equal(r.body.items.find((i:any)=>i.deal_id===1).score,null);assert.equal(r.body.items.find((i:any)=>i.deal_id===2).state,'recorded');assert.doesNotMatch(JSON.stringify(r.body),/PRIVATE|1234567/);
+  w.db.exec("INSERT INTO markets(uid,project_id,name,state,geography_ref) VALUES('other',20,'Other market','served','US')");
+  let reads=0;const prepare=w.env.DB.prepare.bind(w.env.DB);w.env.DB.prepare=(sql:string)=>{const stmt=prepare(sql);const bind=stmt.bind;stmt.bind=(...values:any[])=>{const bound=bind(...values);if(sql.includes('FROM markets m')) {const all=bound.all;bound.all=async()=>{reads++;const result=await all();return {...result,results:result.results.map((row:any)=>row.project_id===10?{...row,region:{invalid:'PRIVATE provider details 1234567'}}:row)};};}return bound;};return stmt;};
+  let r=await call(w,1,'GET','/api/deals/fit?ids=1,2');assert.equal(r.status,200);assert.equal(reads,1);assert.equal(r.body.items.find((i:any)=>i.deal_id===1).state,'unreadable');assert.equal(r.body.items.find((i:any)=>i.deal_id===1).score,null);assert.equal(r.body.items.find((i:any)=>i.deal_id===2).state,'recorded');assert.equal(r.body.items.find((i:any)=>i.deal_id===2).criteria[2].state,'outside');assert.doesNotMatch(JSON.stringify(r.body),/PRIVATE|1234567/);
   w.env.DB.prepare=prepare;
   w.db.exec("UPDATE investor_profiles SET sectors_json='PRIVATE INVALID' WHERE user_id=1");r=await call(w,1,'GET','/api/deals/fit?ids=1');assert.equal(r.status,503);assert.doesNotMatch(JSON.stringify(r.body),/PRIVATE/);
  }finally{w.db.close();}
@@ -225,9 +226,9 @@ test('a seat revoked after context resolution cannot write, clear a default or c
   const a=await create(w,2,{is_default:true});const b=await create(w,2);const before=JSON.stringify(rows(w)),count=audits(w).length;
   const batch=w.env.DB.batch.bind(w.env.DB);
   w.env.DB.batch=async(statements:any[])=>{w.db.exec('UPDATE investor_seats SET revoked_at=CURRENT_TIMESTAMP');return batch(statements);};
-  assert.equal((await call(w,2,'PATCH',url(b.body.uid),{is_default:true})).status,409);assert.equal(JSON.stringify(rows(w)),before);assert.equal(audits(w).length,count);
+  assert.equal((await call(w,2,'PATCH',url(b.body.uid),{is_default:true,version:b.body.version})).status,409);assert.equal(JSON.stringify(rows(w)),before);assert.equal(audits(w).length,count);
   w.db.exec('UPDATE investor_seats SET revoked_at=NULL');assert.equal((await create(w,2,{is_default:true})).status,409);assert.equal(JSON.stringify(rows(w)),before);assert.equal(audits(w).length,count);
-  w.db.exec('UPDATE investor_seats SET revoked_at=NULL');assert.equal((await call(w,2,'DELETE',url(a.body.uid))).status,409);assert.equal(JSON.stringify(rows(w)),before);assert.equal(audits(w).length,count);
+  w.db.exec('UPDATE investor_seats SET revoked_at=NULL');assert.equal((await call(w,2,'DELETE',url(a.body.uid,a.body.version))).status,409);assert.equal(JSON.stringify(rows(w)),before);assert.equal(audits(w).length,count);
  }finally{w.db.close();}
 });
 test('fit no longer becomes available through a saved view, a room or a primary account’s invitation',async()=>{
@@ -244,5 +245,38 @@ test('fit ask uses the recorded target first, falls back to amount, and never su
   w.db.exec('UPDATE deals SET amount=9999999 WHERE id=1');assert.equal((await call(w,1,'GET','/api/deals/fit?ids=1')).body.items[0].score,100);
   w.db.exec('UPDATE deals SET target_raise=NULL,amount=20000 WHERE id=1');assert.equal((await call(w,1,'GET','/api/deals/fit?ids=1')).body.items[0].score,100);
   w.db.exec('UPDATE deals SET amount=NULL WHERE id=1');assert.equal((await call(w,1,'GET','/api/deals/fit?ids=1')).body.items[0].criteria[3].state,'not_recorded');
+ }finally{w.db.close();}
+});
+
+test('edits and deletes require the rendered version; a stale or missing version changes nothing',async()=>{
+ const w=world();try {
+  const a=await create(w,1,{is_default:true});
+  assert.equal((await call(w,1,'PATCH',url(a.body.uid),{name:'Changed'})).status,400);
+  assert.equal((await call(w,1,'DELETE',url(a.body.uid))).status,400);
+  const changed=await call(w,1,'PATCH',url(a.body.uid),{name:'Changed',version:1});assert.equal(changed.status,200);
+  const before=JSON.stringify(rows(w)),count=audits(w).length;
+  assert.equal((await call(w,1,'DELETE',url(a.body.uid,1))).status,409);assert.equal(JSON.stringify(rows(w)),before);assert.equal(audits(w).length,count);
+  assert.equal((await call(w,1,'DELETE',url(a.body.uid,changed.body.version))).status,200);
+ }finally{w.db.close();}
+});
+test('migration default uniqueness covers company and unbound contexts directly',()=>{
+ const w=world();try {
+  const add=w.db.prepare("INSERT INTO deal_saved_views(uid,owner_user_id,firm_owner_user_id,company_id,name,is_default,spec_json,mutation_uid) VALUES(?,1,1,?,'Synthetic',1,'{}',?)");
+  add.run('company-one',11,'one');assert.throws(()=>add.run('company-two',11,'two'),/UNIQUE/);
+  add.run('unbound-one',null,'three');assert.throws(()=>add.run('unbound-two',null,'four'),/UNIQUE/);
+ }finally{w.db.close();}
+});
+test('a failed bulk geographic read is unreadable without echoing the database error',async()=>{
+ const w=world();try {
+  const prepare=w.env.DB.prepare.bind(w.env.DB);w.env.DB.prepare=(sql:string)=>{const stmt=prepare(sql);const bind=stmt.bind;stmt.bind=(...values:any[])=>{const bound=bind(...values);if(sql.includes('FROM markets m'))bound.all=async()=>{throw new Error('PRIVATE database failure 1234567');};return bound;};return stmt;};
+  const result=await call(w,1,'GET','/api/deals/fit?ids=1');assert.equal(result.status,200);assert.equal(result.body.items[0].state,'unreadable');assert.equal(result.body.items[0].score,null);assert.doesNotMatch(JSON.stringify(result.body),/PRIVATE|1234567/);
+ }finally{w.db.close();}
+});
+
+test('a malformed venture input is unreadable without blanking another authorized fit row',async()=>{
+ const w=world();try {
+  w.db.exec('INSERT INTO deal_invitations(deal_id,investor_user_id) VALUES(2,1)');
+  const prepare=w.env.DB.prepare.bind(w.env.DB);w.env.DB.prepare=(sql:string)=>{const stmt=prepare(sql);const bind=stmt.bind;stmt.bind=(...values:any[])=>{const bound=bind(...values);if(sql.includes('JOIN projects p')) {const all=bound.all;bound.all=async()=>{const result=await all();return {...result,results:result.results.map((row:any)=>row.id===1?{...row,sector:{invalid:'PRIVATE input 1234567'}}:row)};};}return bound;};return stmt;};
+  const result=await call(w,1,'GET','/api/deals/fit?ids=1,2');assert.equal(result.status,200);assert.equal(result.body.items[0].state,'unreadable');assert.equal(result.body.items[0].score,null);assert.equal(result.body.items[1].state,'recorded');assert.doesNotMatch(JSON.stringify(result.body),/PRIVATE|1234567/);
  }finally{w.db.close();}
 });

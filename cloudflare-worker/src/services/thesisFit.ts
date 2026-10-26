@@ -48,17 +48,35 @@ export function thesisRegion(region: string): string | null {
   return regions[region] ?? null;
 }
 
-/** SCORING's Geographic facts cite Grow's recorded markets; never parse projects.hq. */
-export async function readFitGeography(env: Env, projectId: number) {
-  const rows = await env.DB.prepare(`SELECT m.geography_ref, c.region FROM markets m
+export type FitGeography = { regions: string[] | null; geographyIncomplete: boolean; unreadable?: boolean };
+/** SCORING's Geographic facts cite Grow's recorded markets; never parse projects.hq.
+ * One bound query serves the batch. A malformed source row stays local to its project.
+ */
+export async function readFitGeographies(env: Env, projectIds: number[]): Promise<Map<number, FitGeography>> {
+  const grouped = new Map(projectIds.map(id => [id, { regions: [] as string[], geographyIncomplete: false, unreadable: false }]));
+  if (!grouped.size) return new Map();
+  const rows = await env.DB.prepare(`SELECT m.project_id, m.geography_ref, c.region FROM markets m
     LEFT JOIN research_countries c ON c.code = m.geography_ref
-    WHERE m.project_id = ? AND m.state IN ('considering','entering','served')`).bind(projectId)
-    .all<{ geography_ref: string | null; region: string | null }>();
-  const records = rows.results;
-  if (!Array.isArray(records)) throw new Error('geography_unreadable');
-  const mapped = records.map(row => row.region ? thesisRegion(row.region) : null);
-  return { regions: mapped.some(Boolean) ? [...new Set(mapped.filter((v): v is string => v != null))] : null,
-    geographyIncomplete: mapped.some(v => v == null) };
+    WHERE m.project_id IN (SELECT CAST(value AS INTEGER) FROM json_each(?))
+    AND m.state IN ('considering','entering','served')`).bind(JSON.stringify([...grouped.keys()]))
+    .all<{ project_id: number; geography_ref: string | null; region: string | null }>();
+  if (!Array.isArray(rows.results)) throw new Error('geography_unreadable');
+  for (const row of rows.results) {
+    const entry = grouped.get(row.project_id);
+    if (!entry) continue;
+    if ((row.region != null && typeof row.region !== 'string') || (row.geography_ref != null && typeof row.geography_ref !== 'string')) {
+      entry.unreadable = true; continue;
+    }
+    const region = row.region ? thesisRegion(row.region) : null;
+    if (region) entry.regions.push(region); else entry.geographyIncomplete = true;
+  }
+  return new Map([...grouped].map(([id, value]) => [id, { ...value, regions: value.regions.length ? [...new Set(value.regions)] : null }]));
+}
+
+export async function readFitGeography(env: Env, projectId: number): Promise<FitGeography> {
+  const result = (await readFitGeographies(env, [projectId])).get(projectId)!;
+  if (result.unreadable) throw new Error('geography_unreadable');
+  return result;
 }
 
 export function computeThesisFit(thesis: Thesis | null, facts: FitFacts) {
