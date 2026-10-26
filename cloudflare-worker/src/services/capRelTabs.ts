@@ -127,6 +127,19 @@ export function activitySource(action: string, details: string | null): Activity
   return 'typed';
 }
 
+const ACTIVITY_FROM = `FROM activity_logs a
+      LEFT JOIN users u ON u.id = a.user_id
+      LEFT JOIN raise_prospects p ON p.project_id = a.project_id AND a.entity_id GLOB '[1-9]*' AND p.id = CAST(a.entity_id AS INTEGER)
+     WHERE a.project_id = ? AND a.entity_type = ?
+       AND (? IS NULL OR a.action IN (SELECT value FROM json_each(?)))
+       AND (? IS NULL OR a.entity_id = ?)
+       AND (? IS NULL OR a.details LIKE ? ESCAPE '\\' OR p.name LIKE ? ESCAPE '\\' OR p.firm LIKE ? ESCAPE '\\' OR u.name LIKE ? ESCAPE '\\')`;
+const ACTIVITY_COUNT = `SELECT COUNT(*) AS n ${ACTIVITY_FROM}`;
+const ACTIVITY_ROWS = `SELECT a.id, a.action, a.details, a.created_at, a.user_id, u.name AS who, u.founder_id AS who_founder,
+       p.id AS prospect_id, p.name AS prospect_name, p.firm AS prospect_firm
+  ${ACTIVITY_FROM}
+ ORDER BY a.created_at DESC, a.id DESC LIMIT ? OFFSET ?`;
+
 /** CRL12: every logged change to the venture's pipeline, round and closes, newest first. */
 export async function activityRead(env: Env, projectId: number, get: (k: string) => string | undefined) {
   const page = Math.max(1, Math.min(10_000, Number.parseInt(get('page') ?? '1', 10) || 1));
@@ -137,26 +150,12 @@ export async function activityRead(env: Env, projectId: number, get: (k: string)
   if (investorRaw && !(Number.isSafeInteger(investor) && (investor as number) > 0)) throw new CapRelTabError(400, 'bad_investor', 'Pick an investor in your pipeline.', 'investor');
   const q = (get('q') ?? '').trim().slice(0, 100);
 
-  const where = ['a.project_id = ?', 'a.entity_type = ?'];
-  const args: unknown[] = [projectId, MODULE_TYPE];
-  if (kind) { where.push('a.action IN (SELECT value FROM json_each(?))'); args.push(JSON.stringify(ACTIVITY_KINDS[kind])); }
-  if (investor != null) { where.push('a.entity_id = ?'); args.push(String(investor)); }
-  if (q) {
-    where.push(`(a.details LIKE ? ESCAPE '\\' OR p.name LIKE ? ESCAPE '\\' OR p.firm LIKE ? ESCAPE '\\' OR u.name LIKE ? ESCAPE '\\')`);
-    const like = `%${q.replace(/[\\%_]/g, (m) => `\\${m}`)}%`;
-    args.push(like, like, like, like);
-  }
-  const from = `FROM activity_logs a
-      LEFT JOIN users u ON u.id = a.user_id
-      LEFT JOIN raise_prospects p ON p.project_id = a.project_id AND a.entity_id GLOB '[1-9]*' AND p.id = CAST(a.entity_id AS INTEGER)
-     WHERE ${where.join(' AND ')}`;
-  const total = Number((await env.DB.prepare(`SELECT COUNT(*) AS n ${from}`).bind(...args).first<{ n: number }>())?.n ?? 0);
-  const rows = (await env.DB.prepare(
-    `SELECT a.id, a.action, a.details, a.created_at, a.user_id, u.name AS who, u.founder_id AS who_founder,
-            p.id AS prospect_id, p.name AS prospect_name, p.firm AS prospect_firm
-       ${from}
-      ORDER BY a.created_at DESC, a.id DESC LIMIT ? OFFSET ?`,
-  ).bind(...args, PAGE_SIZE, (page - 1) * PAGE_SIZE).all<{
+  // Each filter is bound; an unset one is NULL and matches every row.
+  const like = q ? `%${q.replace(/[\\%_]/g, (m) => `\\${m}`)}%` : null;
+  const args = [projectId, MODULE_TYPE, kind ? JSON.stringify(ACTIVITY_KINDS[kind]) : null, kind ? JSON.stringify(ACTIVITY_KINDS[kind]) : null,
+    investor != null ? String(investor) : null, investor != null ? String(investor) : null, like, like, like, like, like];
+  const total = Number((await env.DB.prepare(ACTIVITY_COUNT).bind(...args).first<{ n: number }>())?.n ?? 0);
+  const rows = (await env.DB.prepare(ACTIVITY_ROWS).bind(...args, PAGE_SIZE, (page - 1) * PAGE_SIZE).all<{
     id: number; action: string; details: string | null; created_at: string; user_id: number | null; who: string | null; who_founder: number | null;
     prospect_id: number | null; prospect_name: string | null; prospect_firm: string | null;
   }>()).results ?? [];
