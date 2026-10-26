@@ -89,6 +89,7 @@
  *     appear as a locked row to an investor without an NDA — a filename is
  *     itself information ("Series B term sheet — Acme.pdf").
  */
+import { markRequestAnsweredByFile } from '../services/ddRequests';
 import { Hono } from 'hono';
 import type { Env } from '../types';
 import { requireAuth, requireAdmin } from '../auth';
@@ -263,7 +264,7 @@ async function accessFields(env: Env, projectId: number, body: any): Promise<{ v
       const id = Number(body.dd_request_id);
       const row = Number.isInteger(id) && id > 0 ? await env.DB.prepare(
         `SELECT r.id FROM dd_requests r JOIN dd_cases k ON k.id = r.case_id
-          WHERE r.id = ? AND k.subject_type = 'project' AND k.subject_id = ?`,
+          WHERE r.id = ? AND k.subject_type = 'project' AND k.subject_id = ? AND r.withdrawn_at IS NULL`,
       ).bind(id, projectId).first<{ id: number }>() : null;
       if (!row) return { refusal: 'Request not found', status: 404 };
       values.dd_request_id = Number(row.id);
@@ -858,6 +859,8 @@ r.post('/:projectUid/files', async (c) => {
       await logCycleWrite(c.env, { projectId: project.id, userId: Number(user.id), cycle: 'raise', module: 'data-room',
         entityId: fileId, action: 'file_uploaded', summary: `File uploaded; access ${access.values.access_tier ?? 'invited'}` });
     }
+    // D1248 — a file uploaded as a request's answer answers it.
+    if (access.values.dd_request_id != null) await markRequestAnsweredByFile(c.env, Number(access.values.dd_request_id), Number(user.id));
     return c.json({ uid, size_bytes: bytes.byteLength }, 201);
   } catch (e) { return mapError(c, e); }
 });
@@ -944,6 +947,8 @@ r.patch('/:projectUid/files/:uid', async (c) => {
       `UPDATE data_room_files SET ${sets.join(', ')} WHERE uid = ? AND project_id = ? RETURNING id`,
     ).bind(...params, c.req.param('uid'), project.id).first<{ id: number }>();
     if (!res) return c.json({ detail: 'File not found' }, 404);
+    // D1248 — a file matched to a request answers it.
+    if (access.values.dd_request_id != null) await markRequestAnsweredByFile(c.env, Number(access.values.dd_request_id), Number(user.id));
     // D691 decision 12 — one row on the file's record, naming the fields changed.
     const fields = sets.slice(0, -1).map((x) => x.split(' ')[0].replace(/_id$/, '').replace(/_/g, ' '));
     await logCycleWrite(c.env, { projectId: project.id, userId: Number(user.id), cycle: 'raise', module: 'data-room',
@@ -1518,16 +1523,16 @@ r.get('/:projectUid/requests', async (c) => {
  */
 async function diligenceOf(env: Env, projectId: number) {
   const reqs = (await env.DB.prepare(
-    `SELECT r.id, r.title, r.state, r.created_at, r.responded_at, r.reviewed_at
+    `SELECT r.id, r.title, r.state, r.due_date, r.created_at, r.responded_at, r.reviewed_at
        FROM dd_requests r JOIN dd_cases k ON k.id = r.case_id
-      WHERE k.subject_type = 'project' AND k.subject_id = ?
+      WHERE k.subject_type = 'project' AND k.subject_id = ? AND r.withdrawn_at IS NULL
       ORDER BY r.created_at DESC, r.id DESC LIMIT 100`,
-  ).bind(projectId).all<{ id: number; title: string; state: string | null; created_at: string; responded_at: string | null; reviewed_at: string | null }>()).results || [];
+  ).bind(projectId).all<{ id: number; title: string; state: string | null; due_date: string | null; created_at: string; responded_at: string | null; reviewed_at: string | null }>()).results || [];
   const files = (await env.DB.prepare(
     'SELECT uid, name, dd_request_id FROM data_room_files WHERE project_id = ? AND dd_request_id IS NOT NULL ORDER BY name',
   ).bind(projectId).all<{ uid: string; name: string; dd_request_id: number }>()).results || [];
   return reqs.map((r) => ({
-    id: Number(r.id), title: r.title, state: r.state || 'requested', created_at: r.created_at,
+    id: Number(r.id), title: r.title, state: r.state || 'requested', due_date: r.due_date ?? null, created_at: r.created_at,
     responded_at: r.responded_at ?? null, reviewed_at: r.reviewed_at ?? null,
     files: files.filter((f) => Number(f.dd_request_id) === Number(r.id)).map((f) => ({ uid: f.uid, name: f.name })),
   }));

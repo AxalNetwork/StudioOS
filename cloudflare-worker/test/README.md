@@ -6,6 +6,10 @@ editor memberships, staff summaries, Contacts/impersonation bypasses, owner-only
 round changes, actor-audited legacy writes, and reasoned support reads whose
 founder-visible audit must persist before private SQL. Unknown/unreadable stores
 stay distinct from empty data; summaries and support snapshots are paged.
+`admin_promos_d1271.test.ts` checks all four HQ Super Admin promo gates,
+branch refusal even with an elevation row, stale/non-TOTP sessions, the
+production cool-off prefix, and successful billing-audited writes over
+canonical SQLite tables with Stripe stubbed.
 
 `program_usage_d1156.test.ts` exercises migration 601, count-only branch reports,
 newest-wins HQ storage, monthly source counts, partial failures, roles,
