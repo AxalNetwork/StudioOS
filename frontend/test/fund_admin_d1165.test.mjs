@@ -5,7 +5,7 @@ import { createRoot } from 'react-dom/client';
 import { MemoryRouter } from 'react-router-dom';
 import { installDocument } from './_contracts_dom.mjs';
 import { FundAdminConsoleView } from '../src/pages/admin/fundAdmin/FundAdminConsole.jsx';
-import { fixtures } from './fund_admin_d1165_fixtures.mjs';
+import { fixtures, ledger } from './fund_admin_d1165_fixtures.mjs';
 
 const h = React.createElement;
 const pause = () => new Promise(r => setTimeout(r, 0));
@@ -160,4 +160,13 @@ test('D1165: nested fund drawers inherit the phone sheet, and an explicit full-s
   assert.match(render(undefined), /data-phone="sheet"/);
   assert.doesNotMatch(render('full'), /data-phone="sheet"/);
   assert.match(render(undefined), /dark:bg-gray-950/);
+});
+
+
+test('D1165: summary-only ledger data cannot expose journal facts in the Books side card', async () => {
+  const m = await mount('/admin/fund-admin/banking/books', { ledgerList: () => ({ items: [{ ...ledger, can_manage: false }] }) });
+  try {
+    assert.doesNotMatch(m.text('banking-books'), /Recorded receipt|CASH|CAPITAL/);
+    assert.match(m.text('books-reconcile'), /summary access only/);
+  } finally { await m.close(); }
 });
