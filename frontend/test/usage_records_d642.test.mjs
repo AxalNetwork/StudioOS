@@ -16,8 +16,8 @@ const routesReadme = read('cloudflare-worker/src/routes/README.md');
 const routeMap = read('documentation/architecture/ROUTE_MAP.md');
 const service = read('cloudflare-worker/src/services/storageUsage.ts');
 
-// The five area keys, as the service types them.
-const AREA_KEYS = (service.match(/export type StorageAreaKey = ([^;]+);/)?.[1] || '')
+// The area keys, as the service types them: D642's five, then D1169's eight.
+const AREA_KEYS = (service.match(/export type StorageAreaKey =\s*([^;]+);/)?.[1] || '')
   .split('|').map((k) => k.trim().replace(/'/g, '')).filter(Boolean);
 
 const HEADING = '### Usage page and HQ allowances (D642, #1435)';
@@ -29,8 +29,9 @@ function d642Section() {
   return next < 0 ? routeMap.slice(at) : routeMap.slice(at, at + HEADING.length + next);
 }
 
-test('the service still names five storage areas', () => {
-  assert.deepEqual(AREA_KEYS, ['data_room', 'diligence_files', 'research_library', 'message_attachments', 'interview_recordings']);
+test('the service names D642’s five storage areas first, then D1169’s eight', () => {
+  assert.deepEqual(AREA_KEYS, ['data_room', 'diligence_files', 'research_library', 'message_attachments', 'interview_recordings',
+    'data_room_versions', 'session_audio', 'deck_reviews', 'validate_evidence', 'build_proofs', 'grow_minutes', 'brand_files', 'csv_imports']);
 });
 
 test('/api/usage is mounted, and the routes README lists the mount', () => {
