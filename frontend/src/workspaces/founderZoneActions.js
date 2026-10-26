@@ -212,8 +212,8 @@ export const FOUNDER_ZONE_ACTIONS = {
   ],
   'raise/capital': [
     { label: 'Model a round', to: '/raise/capital/model' },
-    { label: 'Export to Carta', to: '/raise/capital/cap-table', linkNote: 'the cap table exports CSV; there is no Carta connection' },
-    { label: 'Add instrument', to: '/raise/capital/cap-table' },
+    { label: 'Export to Carta', to: '/raise/cap-table/import-export', linkNote: 'the cap table exports CSV; there is no Carta connection' },
+    { label: 'Add instrument', to: '/raise/cap-table/instruments' },
   ],
   'raise/legal': [
     // THE REASON WAS STALE, NOT WRONG WHEN WRITTEN. "No e-signature provider

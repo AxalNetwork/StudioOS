@@ -10,7 +10,7 @@ import CapTableDialog, { useWrite } from './CapTableDialog';
 import { Tag } from './CapTableTag';
 import { VariantEditor } from './ScenarioModelEditor';
 import { PLAN_LINE } from './overviewModel';
-import { dollars, simulatorHref, tabSearch } from './capTableModel';
+import { dollars, tabSearch } from './capTableModel';
 import {
   ASSUMPTIONS_FALLBACK, COMPARE, READ_SOURCE, GROUPS, MAX_COMPARE, MAX_EXITS, MODEL_LOCKED, READ_ONLY, SAVED, SCENARIOS_PATH,
   attachRead, attachedRead, beforeAfter, compareExits, compareHref, compareIds, compareRows, dialogCopy,
@@ -219,7 +219,6 @@ export function ScenariosList({ projectId, reload, retry, search }) {
         {picked.length
           ? <Link className={BTN} to={compareHref(picked, search)} data-testid="captable-scenario-compare">Compare selected ({picked.length})</Link>
           : <span className={`text-[12px] ${MUTED}`}>Tick up to {MAX_COMPARE} to compare them with Today.</span>}
-        <Link className={`${LINK} text-[12px]`} to={simulatorHref(search)}>Open the simulator</Link>
       </div>
       {today.status === 'ready' && !today.data?.today?.available
         ? <p className={`m-0 text-[12px] ${MUTED}`} data-testid="captable-scenarios-no-today">{today.data?.today?.sentence || 'Nothing is recorded yet.'} A new scenario starts from your saved model until the record holds shares.</p>
@@ -227,7 +226,7 @@ export function ScenariosList({ projectId, reload, retry, search }) {
       {today.status === 'error' ? <div data-testid="captable-scenarios-today-unreadable"><Unreadable what="Today, from the record" claim="Your scenarios still draw." onRetry={retry} /></div> : null}
       <ReadState read={read} what="Your scenarios" claim="This is not a claim that none are saved." onRetry={retry} testId="captable-scenarios">
         {cards.length === 0
-          ? <p className={`m-0 text-[12.5px] ${MUTED}`} data-testid="captable-scenarios-none">No scenarios yet, and no saved model. Record what was issued on Overview, or save a model in the simulator.</p>
+          ? <p className={`m-0 text-[12.5px] ${MUTED}`} data-testid="captable-scenarios-none">No scenarios yet, and no saved model. Record what was issued on Overview, then start a scenario from it.</p>
           : (
             <div className="grid gap-2.5 md:grid-cols-2 xl:grid-cols-3">
               {cards.map((s) => (
@@ -522,13 +521,13 @@ export function ScenarioPage({ projectId, uid, search, reload, retry }) {
                 </span>
               ) : null}
             </div>
-            {model ? <p className={`m-0 text-[12.5px] ${MUTED}`} data-testid="captable-scenario-model-locked">{MODEL_LOCKED} <Link className={LINK} to={simulatorHref(search)}>Open the simulator</Link></p> : null}
+            {model ? <p className={`m-0 text-[12.5px] ${MUTED}`} data-testid="captable-scenario-model-locked">{MODEL_LOCKED}</p> : null}
             {!plan ? <p className={`m-0 text-[12.5px] ${MUTED}`} data-testid="captable-scenario-plan">{PLAN_LINE} Everything here still reads.</p>
               : !writes && !model ? <p className={`m-0 text-[12.5px] ${MUTED}`} data-testid="captable-scenario-read-only">{READ_ONLY}</p> : null}
             <div className="grid items-start gap-3.5 lg:grid-cols-[minmax(0,1fr)_minmax(0,2fr)]">
               <Block title="Inputs" testId="captable-scenario-inputs-block">
                 {model
-                  ? <p className={`m-0 text-[12.5px] ${MUTED}`}>The model’s inputs are edited in the simulator.</p>
+                  ? <p className={`m-0 text-[12.5px] ${MUTED}`}>Duplicate the model to change its inputs.</p>
                   : !draft ? <Skeleton testId="captable-scenario-draft-loading" />
                     : today_
                       ? (today.status === 'ready'

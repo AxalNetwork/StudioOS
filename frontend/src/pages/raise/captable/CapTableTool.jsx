@@ -1,9 +1,10 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
+import { Info } from 'lucide-react';
 import { capTableHolderApi } from '../../../lib/api/capTableHolder';
 import { capTableRecordApi } from '../../../lib/api/capTableRecord';
 import { useAuth } from '../../../hooks/useAuthSync';
-import { Unreadable } from '../../../ui';
+import { Unreadable, useMovedNotice } from '../../../ui';
 import AccessTab from './AccessTab';
 import ImportExportTab from './ImportExportTab';
 import HistoryTab from './HistoryTab';
@@ -17,7 +18,7 @@ import InstrumentsTab from './InstrumentsTab';
 import OptionPoolTab from './OptionPoolTab';
 import { ScenarioRoute, ScenariosList } from './ScenariosPages';
 import {
-  HOME_NOTE, HOME_PATH, LINE, SLUG, TABS, TITLE,
+  HOME_NOTE, HOME_PATH, LINE, MOVED_NOTICES, SLUG, TABS, TITLE,
   tabHref, tabSearch,
 } from './capTableModel';
 
@@ -59,6 +60,22 @@ export function CapTableTabBar({ active, search = '' }) {
 }
 
 /**
+ * D1029 (#2866): the moved notice, after an old address forwarded here with
+ * `?moved=<key>`. Dismiss drops `moved` and keeps the rest of the address.
+ */
+export function CapTableMovedNotice() {
+  const notice = useMovedNotice(MOVED_NOTICES);
+  if (!notice.text) return null;
+  return (
+    <div role="status" aria-live="polite" className="flex items-center gap-2.5 rounded-[10px] border border-axal-lavender-edge bg-axal-lavender px-3 py-1.5 text-[13px] text-axal-ink dark:border-violet-800 dark:bg-violet-950/40 dark:text-gray-100" data-testid="captable-moved">
+      <Info size={15} aria-hidden="true" className="shrink-0 text-axal-violet-deep dark:text-violet-300" />
+      <span className="min-w-0 flex-1 leading-[1.45]">{notice.text}</span>
+      <button type="button" onClick={notice.dismiss} className="inline-flex min-h-[44px] shrink-0 items-center rounded-[9px] px-2.5 text-[13px] font-bold text-axal-violet-deep sm:min-h-[40px] dark:text-violet-300">Dismiss</button>
+    </div>
+  );
+}
+
+/**
  * Overview's tab bar, the line that says which figures are the record's, and
  * (D1022) the record's blocks: the tool bar, Needs you, Who owns and the side
  * column. The module page's own Holders list and Planned round card follow, Modelled.
@@ -66,6 +83,7 @@ export function CapTableTabBar({ active, search = '' }) {
 export function CapTableHomeNav({ search = '', projectId = null }) {
   return (
     <div className="flex flex-col gap-3">
+      <CapTableMovedNotice />
       <CapTableTabBar active="overview" search={search} />
       <p className={`m-0 flex flex-wrap items-center gap-2 text-[12px] ${MUTED}`} data-testid="captable-home-note">
         <Tag kind="record" /> <Tag kind="modelled" /> {HOME_NOTE}
@@ -182,6 +200,7 @@ export function CapTableTabPage({ tab, proposal = null, instrument = null, scena
       {phone
         ? <CycleBar back={{ label: TITLE, to: `${HOME_PATH}${tabSearch(search)}` }} title={here.label} eadwynLabel={`Raise · ${TITLE}`} />
         : <CycleHeader cycle="raise" cards={cards} active={SLUG} action={action} title={TITLE} sub={LINE} search={tabSearch(search)} />}
+      <CapTableMovedNotice />
       <CapTableTabBar active={holder != null || overlay ? 'overview' : onInstruments ? 'instruments' : tab === 'scenario' ? 'scenarios' : tab} search={search} />
       {body}
     </div>

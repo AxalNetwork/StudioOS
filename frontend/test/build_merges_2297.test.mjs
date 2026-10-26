@@ -16,7 +16,8 @@ const MERGES = [
   ['/build/discovery', '/validate/customer-research', '/validate/:slug', 'DiscoveryPage'],
   ['/build/metrics', '/build/kpi', '/build/kpi', 'MetricsPage'],
   ['/build/financials', '/raise/capital/model', '/raise/capital/model', null],
-  ['/build/captable', '/raise/capital/cap-table', '/raise/capital/cap-table', null],
+  // D1029 (#2866): straight to the Cap table tool, whose redirect is its own component.
+  ['/build/captable', '/raise/cap-table', null, 'CapTablePage'],
   ['/grow/brand', '/build/brand', '/build/brand', 'founder/FounderGrowBrand'],
 ];
 
@@ -24,6 +25,10 @@ const routeLine = (path) => APP.split('\n').find((l) => l.includes(`<Route path=
 
 test('each retired address forwards to its survivor, query and hash kept', () => {
   for (const [from, to, survivorRoute] of MERGES) {
+    if (from === '/build/captable') {
+      assert.equal(routeLine(from).trim(), '<Route path="/build/captable" element={<CapTableMovedRedirect to="/raise/cap-table" />} />');
+      continue;
+    }
     assert.equal(routeLine(from).trim(),
       `<Route path="${from}" element={<Navigate replace to={{ pathname: '${to}', search: location.search, hash: location.hash }} />} />`,
       `${from} no longer forwards to ${to} with its query and hash`);

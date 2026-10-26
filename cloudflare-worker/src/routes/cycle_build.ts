@@ -464,7 +464,7 @@ async function founding(env: Env, p: Project, viewer: Viewer): Promise<ModuleRea
   }, { role: h.founder_role ?? null, equity: h.ownership_pct == null ? null : number(h.ownership_pct) },
   { role: h.founder_role ?? null, ownership_pct: h.ownership_pct ?? null }));
   const state = !founderRows.length ? 'empty' : !equityKnown ? 'not_recorded' : equityTotal > 0 || withVesting.length ? 'ok' : 'too_little';
-  return { card: card('founding-team', state, series, 'Today', state === 'not_recorded' ? 'One or more founder ownership percentages are not recorded.' : state === 'empty' ? 'No founders yet. The equity split and vesting appear here.' : state === 'too_little' ? 'Ownership percentages sum to zero; no split can be drawn.' : null, state === 'empty' ? { text: 'Add founder', href: '/raise/capital/cap-table' } : next(p, 'founding-team', founderRows.find(h => !h.start_date) ? 'Record founder vesting' : null)),
+  return { card: card('founding-team', state, series, 'Today', state === 'not_recorded' ? 'One or more founder ownership percentages are not recorded.' : state === 'empty' ? 'No founders yet. The equity split and vesting appear here.' : state === 'too_little' ? 'Ownership percentages sum to zero; no split can be drawn.' : null, state === 'empty' ? { text: 'Add founder', href: '/raise/cap-table' } : next(p, 'founding-team', founderRows.find(h => !h.start_date) ? 'Record founder vesting' : null)),
     cols: [['founder', 'Founder'], ['role', 'Role'], ['equity', 'Equity'], ['vesting', 'Vesting'], ['agreement', 'Agreement']].map(([key, label]) => ({ key, label })),
     rows: holderRows,
     list: { filters: [{ key: 'role', label: 'Role', options: optionsOf(holderRows, 'role') }], sort: { key: '-equity', label: 'Equity' } },

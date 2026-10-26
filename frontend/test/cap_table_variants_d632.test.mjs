@@ -1,19 +1,16 @@
 /**
  * D632 (#1390) — the cap table's draft variants, edited in place (Ops canvas
- * `ct-variants`), rendered from the real components in each state.
+ * `ct-variants`), rendered from the real components in each state. D1029
+ * (#2866) deleted the variants page: its address opens Scenarios, and the
+ * editor and the form pinned here are the tool's (D1024).
  */
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { readFileSync } from 'node:fs';
 import { createElement as h } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { MemoryRouter } from 'react-router-dom';
-import {
-  CapTableVariantsView, VariantEditor, draftFromScenario, inputsFromDraft, variantSaveErrors, variantHref,
-} from '../src/pages/CapTableVariantsPage.jsx';
-import * as scenarios from '../src/pages/raise/captable/scenariosModel.js';
-import * as editor from '../src/pages/raise/captable/ScenarioModelEditor.jsx';
-import { ScenarioComparePanel } from '../src/pages/CapTablePage.jsx';
+import { draftFromScenario, inputsFromDraft, variantSaveErrors } from '../src/pages/raise/captable/scenariosModel.js';
+import { VariantEditor } from '../src/pages/raise/captable/ScenarioModelEditor.jsx';
 
 const html = (el) => renderToStaticMarkup(h(MemoryRouter, null, el));
 const words = (markup) => {
@@ -36,7 +33,6 @@ const VARIANT = {
     exit_value: null,
   },
 };
-const READY = { kind: 'ready', projectId: 4, canonical: { uid: 'main', name: 'Main' }, variants: [VARIANT, { uid: 'v-2', name: 'Bridge first' }] };
 
 test('the editor draws each group, with Not recorded where a variant stores nothing', () => {
   const draft = draftFromScenario(VARIANT);
@@ -89,60 +85,7 @@ test('a refused save reads as the route\'s sentences', () => {
   assert.match(saved, /Saved\. The main cap table did not change\./);
 });
 
-test('the page: tabs, the main table as a link only, and the editor for the chosen variant', () => {
-  const editor = h(VariantEditor, { draft: draftFromScenario(VARIANT), setDraft: () => {} });
-  const markup = html(h(CapTableVariantsView, { read: READY, selectedUid: 'v-1', editor }));
-  const text = words(markup);
-  assert.match(text, /Cap table Draft variants Model alternatives without touching the main cap table\. The main table stays one per company\. New variant/);
-  assert.match(text, /Bigger seed Bridge first Main cap table/);
-  assert.match(markup, /aria-current="page"[^>]*href="\/raise\/cap-table\/variants\/v-1"/);
-  assert.match(markup, /href="\/raise\/cap-table\/variants\/v-2"/);
-  assert.match(markup, /href="\/raise\/capital\/cap-table"[^>]*>Main cap table</);
-  assert.match(markup, /data-testid="variant-editor"/);
-  assert.doesNotMatch(markup, /variants\/main/, 'the main table is never opened as a variant');
-});
-
-test('the page: loading, empty, missing and unreadable', () => {
-  const loading = html(h(CapTableVariantsView, { read: { kind: 'loading' } }));
-  assert.match(words(loading), /Loading variants…/);
-  assert.doesNotMatch(loading, /variant-new|variants-empty/);
-
-  const empty = words(html(h(CapTableVariantsView, { read: { ...READY, variants: [] } })));
-  assert.match(empty, /No draft variants yet\. The main cap table is the only table\./);
-  assert.match(empty, /New variant/);
-
-  const unread = html(h(CapTableVariantsView, { read: { kind: 'unreadable', message: 'Network down.' } }));
-  assert.match(words(unread), /Variants could not be read just now\. Network down\. Try again/);
-  assert.doesNotMatch(unread, /No draft variants yet|variant-new/);
-
-  const main = words(html(h(CapTableVariantsView, { read: { kind: 'missing', message: 'This is the main cap table, not a draft variant. Edit it on the cap table page.' } })));
-  assert.match(main, /This is the main cap table, not a draft variant\./);
-});
-
-test('the compare panel links each draft variant to its editor, and not the main table', () => {
-  const markup = html(h(ScenarioComparePanel, {
-    data: { canonical: { uid: 'main', name: 'Main', result: null }, variants: [{ uid: 'v-1', name: 'Bigger seed', result: null }] },
-    loading: false, error: null, onClose: () => {}, onRefresh: () => {},
-  }));
-  assert.match(markup, /data-testid="variant-edit-v-1"/);
-  assert.match(markup, /href="\/raise\/cap-table\/variants\/v-1"/);
-  assert.doesNotMatch(markup, /variant-edit-main/);
-  assert.equal(variantHref('a b'), '/raise/cap-table/variants/a%20b');
-});
-
-test('the page saves through the in-place edit, never the main-table upsert', () => {
-  const src = readFileSync(new URL('../src/pages/CapTableVariantsPage.jsx', import.meta.url), 'utf8');
-  assert.match(src, /client\.updateCapTableScenario\(variant, \{ name, inputs \}\)/);
-  assert.doesNotMatch(src, /createCapTableScenario|project_id: /, 'no write that could replace the main cap table');
-  const app = readFileSync(new URL('../src/App.jsx', import.meta.url), 'utf8');
-  assert.match(app, /path="\/raise\/cap-table\/variants\/:variant" element=\{guard\(\['admin', 'founder'\]/);
-});
-
-test('D1024: the form and the editor live in the Cap table tool now; this page reads them from there until part 14', () => {
-  assert.equal(draftFromScenario, scenarios.draftFromScenario);
-  assert.equal(inputsFromDraft, scenarios.inputsFromDraft);
-  assert.equal(variantSaveErrors, scenarios.variantSaveErrors);
-  assert.equal(VariantEditor, editor.VariantEditor);
+test('D1024: the editor is the Cap table tool\'s, named by Scenarios\' rename dialog', () => {
   const named = words(html(h(VariantEditor, { draft: draftFromScenario(VARIANT), setDraft: () => {}, naming: false })));
   assert.doesNotMatch(named, /Variant name/, 'Scenarios renames in a dialog');
   assert.match(named, /Save scenario/);

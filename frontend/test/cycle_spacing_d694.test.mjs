@@ -26,7 +26,8 @@ test('cycle roots, every declared module, action, new page and record have the c
   }
   assert.equal(isCyclePath('/validate/record/live'), true);
   assert.deepEqual(ACTION_PATHS, { validate: 'record', build: 'connect', raise: 'call', grow: 'update' });
-  assert.deepEqual(STATIC_CHILDREN, ['/raise/cap-table/variants']);
+  // D1029: the variants page was the last static child; its addresses redirect into Scenarios now.
+  assert.deepEqual(STATIC_CHILDREN, []);
   assert.equal(RECORD_ID.test('data_room'), true);
   const defs = read('frontend/src/pages/cycles/CycleRoute.jsx');
   for (const [cycle, action] of Object.entries(ACTION_PATHS)) {
@@ -36,7 +37,6 @@ test('cycle roots, every declared module, action, new page and record have the c
 
 test('legacy, static, unknown and malformed child routes keep their own shell', () => {
   for (const path of [
-    '/raise/cap-table/variants', '/raise/cap-table/variants/a',
     '/validate/interviews', '/validate/interviews/5', '/validate/session/9', '/validate/inbox',
     '/raise/calls/abc', '/build/roadmap', '/raise/pitch', '/grow/focus', '/studio',
     '/validate/customer-research/Ab12', '/validate/customer-research/12/edit', '/validatex',
@@ -50,7 +50,7 @@ test('literal cycle routes mount a cycle page or a redirect', () => {
   for (const [index, route] of routes.entries()) {
     if (!isCyclePath(route[1]) || exceptions.has(route[1])) continue;
     const section = app.slice(route.index, routes[index + 1]?.index ?? app.length);
-    assert.match(section, /<CycleRoute\b|<Navigate\b|<HistoryRedirect\b/, route[1]);
+    assert.match(section, /<CycleRoute\b|<Navigate\b|<HistoryRedirect\b|<CapTableMovedRedirect\b/, route[1]);
   }
 });
 

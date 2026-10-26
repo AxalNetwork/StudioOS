@@ -29,7 +29,10 @@ test('every guide has exactly one placement and every ordered area has guides', 
 test('surface paths and guards match the mounted routes, including dynamic Account paths', () => {
   const guards = new Map([...routes.matchAll(/<Route\s+path="([^"]+)"\s+element=\{guard\((labRoles\()?\[([^\]]+)\]/g)].map((m) => [m[1], { roles: [...m[3].matchAll(/'([^']+)'/g)].map((x) => x[1]), lab: Boolean(m[2]) }]));
   for (const [path, surface] of Object.entries(HELP_SURFACES)) {
-    const guard = guards.get(path) || (path.startsWith('/account/') ? guards.get('/account/:section') : null);
+    // D1029: a cycle module (`/raise/cap-table`) is mounted by its cycle's `/<cycle>/:slug` route.
+    const cycleSlug = /^\/(validate|build|raise|grow)\/[a-z0-9-]+$/.exec(path)?.[1];
+    const guard = guards.get(path) || (path.startsWith('/account/') ? guards.get('/account/:section') : null)
+      || (cycleSlug ? guards.get(`/${cycleSlug}/:slug`) : null);
     if (guard) assert.deepEqual({ roles: surface.roles, lab: surface.lab }, guard, path);
     else {
       const route = [...routes.matchAll(/<Route\s+path="([^"]+)"\s+element=\{([^\n]+)/g)].find((m) => m[1] === path);

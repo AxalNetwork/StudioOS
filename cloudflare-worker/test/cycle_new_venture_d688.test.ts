@@ -76,7 +76,7 @@ const emptyBuild = [
   ['solution-design', 'No features yet. Linked and unlinked features appear here.', 'Add feature', '/build/solution-design?project=101&add=1'],
   ['prototype-mvp', 'No must-haves yet. The burn-up toward the ship date appears here.', 'Add must-have', '/build/prototype-mvp?project=101&add=1'],
   ['product-roadmap', 'No roadmap items yet. Now, Next and Later appear here.', 'Add item', '/build/roadmap?project_id=101'],
-  ['founding-team', 'No founders yet. The equity split and vesting appear here.', 'Add founder', '/raise/capital/cap-table'],
+  ['founding-team', 'No founders yet. The equity split and vesting appear here.', 'Add founder', '/raise/cap-table'],
   ['company-creation', 'No filings yet. Formation steps and their dates appear here.', 'Add filing', '/build/company-creation?project=101&add=1'],
   ['operating-systems', 'No systems connected yet. Each system and its state appear here.', 'Connect a system', '/build/connect?project_id=101'],
 ] as const;
