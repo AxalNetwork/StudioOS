@@ -26,7 +26,7 @@ import { resolve } from 'node:path';
 import { SignJWT } from 'jose';
 import funds from '../src/routes/funds.ts';
 import fundSim from '../src/routes/fund_simulator.ts';
-import legalcap from '../src/routes/legalcap.ts';
+import capital from '../src/routes/capital.ts';
 import { handleJob } from '../src/services/queueWorker.ts';
 import { makeD1 } from './_d1_sqlite.mjs';
 
@@ -343,24 +343,24 @@ test('fund-sim: only the GP of record (or an admin) saves a scenario under a fun
   assert.equal(count(env), 1);
 });
 
-// ── /legalcap/capital/calls: the dead read, swapped ─────────────────────
+// ── /capital/calls: the dead read, swapped ─────────────────────
 
-test('legacy calls read: returns the real rows instead of throwing', async () => {
+test('canonical calls read: returns the real rows instead of throwing', async () => {
   // It named deal_id / syndicate_id / lp_responses, which capital_calls does
   // not have, so every call threw and the pages showed "no capital calls".
   const env = makeEnv();
-  const r = await call(legalcap, env, ADMIN_ID, '/capital/calls');
+  const r = await call(capital, env, ADMIN_ID, '/calls');
   assert.equal(r.status, 200);
   assert.deepEqual(r.body.map((x: any) => x.id).sort(), [1, 2]);
   assert.ok(r.body.every((x: any) => typeof x.fund_id === 'number'), 'each call names its fund');
 });
 
-test('legacy calls read: fixed WITH a scope — an investor never sees another LP\'s call', async () => {
+test('canonical calls read: fixed WITH a scope — an investor never sees another LP\'s call', async () => {
   const env = makeEnv();
-  assert.deepEqual((await call(legalcap, env, LP_ID, '/capital/calls')).body.map((x: any) => x.id), [1]);
-  assert.deepEqual((await call(legalcap, env, GP_ID, '/capital/calls')).body.map((x: any) => x.id), [1]);
-  assert.deepEqual((await call(legalcap, env, OTHER_GP_ID, '/capital/calls')).body.map((x: any) => x.id), [2]);
-  assert.equal((await call(legalcap, env, FOUNDER_ID, '/capital/calls')).status, 403);
+  assert.deepEqual((await call(capital, env, LP_ID, '/calls')).body.map((x: any) => x.id), [1]);
+  assert.deepEqual((await call(capital, env, GP_ID, '/calls')).body.map((x: any) => x.id), [1]);
+  assert.deepEqual((await call(capital, env, OTHER_GP_ID, '/calls')).body.map((x: any) => x.id), [2]);
+  assert.equal((await call(capital, env, FOUNDER_ID, '/calls')).status, 403);
 });
 
 // ── The frontend reads the live ledger ──────────────────────────────────
@@ -368,7 +368,7 @@ test('legacy calls read: fixed WITH a scope — an investor never sees another L
 test('the fund pages read the live calls ledger, and the legacy method no longer swallows failure', () => {
   const read = (p: string) => readFileSync(resolve(process.cwd(), p), 'utf8');
   const api = read('frontend/src/lib/api.js');
-  const m = /capitalCalls: \(\) => request\('\/legalcap\/capital\/calls'\)([^,\n]*)/.exec(api);
+  const m = /capitalCalls: \(\) => request\('\/capital\/calls'\)([^,\n]*)/.exec(api);
   assert.ok(m, 'api.capitalCalls was not found');
   assert.doesNotMatch(m[1], /\.catch/, 'a failed read is again reported as "no calls"');
   // Re-aimed by D371: the other page D370 swapped, FundOpsWorkspace's Capital

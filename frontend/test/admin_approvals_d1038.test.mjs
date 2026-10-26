@@ -4,6 +4,11 @@
  * lane never 0), the Inbox oldest first, HQ decides for a Super Admin only,
  * and the three lane boards on the reads that exist.
  *
+ * D1045 (#2893), part 7: the Inbox on HQ's inbox read (items, tiles, the two
+ * charts with their sentences, filters in the address, the ⋯ menu, the bulk
+ * bar, the pager), the item at its own address with Assign and History,
+ * Notifies and HQ's counts on Lanes, the Decided log, and the states.
+ *
  * Run with:
  *   node --import ./frontend/test/_deck-loader.mjs --test frontend/test/admin_approvals_d1038.test.mjs
  */
@@ -13,13 +18,18 @@ import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import React, { act } from 'react';
 import { createRoot } from 'react-dom/client';
-import { MemoryRouter, Routes, Route } from 'react-router-dom';
+import { MemoryRouter, Routes, Route, useLocation } from 'react-router-dom';
 import { installDocument } from './_contracts_dom.mjs';
 import { SIDEBAR_GROUPS } from '../src/sidebarConfig.js';
 import {
-  HQ_LANES, LANES, MOVED_KEY, ageText, bandOf, boardOf, expertBoard, expertState, filtersOf, groupCounts, laneBars, laneViews,
-  oldestLine, pitchRows, tabOf, waitingLanes, waitingTile, attributionTotals,
+  HQ_LANES, LANES, MOVED_KEY, ageText, bandOf, boardOf, expertBoard, expertState, laneViews,
+  oldestLine, pitchRows, tabOf, attributionTotals,
 } from '../src/pages/admin/approvals/approvalsModel.js';
+import {
+  assigneeOf, assignChoices, assignTitle, decidedNotes, decidedPageLine, decidedQueryOf, decidedRows, errorRef, hasNextPage,
+  hqBandLine, hqLaneViews, inboxGroupCounts, inboxQueryOf, inboxRows, inboxTiles, itemOfPath, itemPath, itemView, laneAgeChart,
+  notifiesOf, pageLine, refusalToast, waitingOnHq, weekChart, historyLines,
+} from '../src/pages/admin/approvals/inboxModel.js';
 import { glancesFromStudioGlance } from '../src/pages/admin/adminStudioOverview.js';
 import AdminApprovals, { ApprovalsPage } from '../src/pages/admin/approvals/AdminApprovals.jsx';
 import LaneBoards from '../src/pages/admin/approvals/LaneBoards.jsx';
@@ -55,6 +65,62 @@ const GLANCE = {
 const ALL_READ = { ...GLANCE, approvals: { ...GLANCE.approvals, lanes: GLANCE.approvals.lanes.map((l) => (l.key === 'lp' ? { ...l, count: 3, oldest_age_hours: 12 } : l)) } };
 const ready = (payload) => ({ status: 'ready', hq: glancesFromStudioGlance(payload, null).hq });
 
+// D1045: HQ's inbox read (D1040, D1132) as the Worker answers it: three items,
+// one assigned, one nobody's, one whose assignment was not read; LP failed.
+const INBOX = {
+  items: [
+    { lane: 'kyc', lane_label: 'KYC', id: 41, who: 'Person A', what: 'Identity check', created_at: '2026-10-20 08:00:00', age_hours: 103, sla: 'past', assignee: { user_id: 7, name: 'Admin A' } },
+    { lane: 'due_diligence', lane_label: 'Due diligence', id: 9, who: 'Company B', what: 'Seed round', created_at: '2026-10-24 12:00:00', age_hours: 30, sla: 'due_soon', assignee: null },
+    { lane: 'jobs', lane_label: 'Jobs', id: 3, who: 'Company C', what: 'Engineer', created_at: null, age_hours: null, sla: 'unknown' },
+  ],
+  total: 123,
+  unfiltered_total: 123,
+  page: 1,
+  page_size: 25,
+  lanes: [
+    { key: 'kyc', label: 'KYC', group: 'people', count: 10, bands: { ok: 2, due_soon: 3, past: 5, unknown: 0 } },
+    { key: 'due_diligence', label: 'Due diligence', group: 'deals', count: 6, bands: { ok: 0, due_soon: 6, past: 0, unknown: 0 } },
+    { key: 'jobs', label: 'Jobs', group: 'community', count: 3, bands: { ok: 0, due_soon: 0, past: 0, unknown: 3 } },
+    { key: 'exploring', label: 'Exploring', group: 'programs', count: 104, bands: { ok: 100, due_soon: 4, past: 0, unknown: 0 } },
+    { key: 'lp', label: 'LP applications', group: 'deals', count: null, bands: null, bands_reason: 'LP applications could not be read.' },
+  ],
+  unreadable: ['LP applications'],
+  reason: 'LP applications could not be read.',
+  capped: false,
+  tiles: { over_72h: 5, assigned_to_me: 2, per_admin: [{ id: 7, name: 'Admin A', count: 14 }, { id: 8, name: 'Admin B', count: 3 }] },
+  reviewers: [{ id: 7, name: 'Admin A' }, { id: 8, name: 'Admin B' }],
+  decides: false,
+};
+const WEEKS = ['2026-08-31', '2026-09-07', '2026-09-14', '2026-09-21', '2026-09-28', '2026-10-05', '2026-10-12', '2026-10-19'];
+const WEEKLY = {
+  weeks: WEEKS.map((w) => ({ week_start: w })),
+  totals: { arrived: [10, 12, 9, 14, 11, 13, 15, 6], decided: [8, 11, 10, 12, 9, 14, 12, 4], arrived_leaves_out: [], decided_leaves_out: ['Wellbeing experts', 'Exploring'] },
+  tile: { decided_this_week: 12, median_wait_hours: 33 },
+  unreadable: [],
+};
+const REQUESTS = { items: [
+  { uid: 'r1', kind: 'renewal', subject: 'Renewal', status: 'open', sla: 'ok', created_at: '2026-10-20 10:00:00' },
+  { uid: 'r2', kind: 'seat_increase', subject: 'Seats', status: 'answered', created_at: '2026-10-01 10:00:00' },
+] };
+const ITEM = {
+  item: INBOX.items[0],
+  lane: { key: 'kyc', label: 'KYC', group: 'people', notifies: 'The member, by email', decided_on: '/admin/kyc', hq: false },
+  history: { available: true, items: [{ kind: 'assigned', created_at: '2026-10-21 09:00:00', actor_user_id: 8, actor_name: 'Admin B', assignee_user_id: 7, assignee_name: 'Admin A' }] },
+  decides: false,
+};
+const DECIDED = {
+  items: [{ lane: 'kyc', lane_label: 'KYC', item_id: 40, who: 'Person D', outcome: 'approved', outcome_word: 'Approved', decided_at: '2026-10-25 14:00:00', decided_by: { id: 7, name: 'Admin A' }, wait_hours: 33, note: 'Welcome aboard', note_shown: true }],
+  total: 357,
+  page: 1,
+  page_size: 25,
+  lanes: [
+    { key: 'kyc', label: 'KYC', recorded: true, since: null, count: 300 },
+    { key: 'wellbeing_experts', label: 'Wellbeing experts', recorded: true, since: '2026-10-21', count: 2 },
+    { key: 'exploring', label: 'Exploring', recorded: false, reason: 'Explorers do not record who decided.' },
+  ],
+  unreadable: [],
+};
+
 // ---------------------------------------------------------------- the model
 
 test('the addresses, the tabs, the boards, and the redirect\'s key', () => {
@@ -66,8 +132,12 @@ test('the addresses, the tabs, the boards, and the redirect\'s key', () => {
   assert.deepEqual(boardOf('/admin/approvals/product-testers'), { board: 'product-testers', tab: 'waiting' });
   assert.equal(boardOf('/admin/approvals/lanes'), null);
   assert.equal(MOVED_KEY, 'held-approvals');
-  assert.deepEqual(filtersOf('?group=deals&lane=kyc&q=ky'), { group: 'deals', lane: 'kyc', q: 'ky' });
-  assert.equal(filtersOf('?group=nope').group, null, 'an unknown group is no filter');
+  assert.equal(tabOf('/admin/approvals/items/kyc-41'), 'inbox', 'an item opens over the Inbox');
+  assert.equal(itemPath('kyc', 41), '/admin/approvals/items/kyc-41');
+  assert.deepEqual(itemOfPath('/admin/approvals/items/partner_profiles-7'), { lane: 'partner_profiles', id: 7 });
+  for (const bad of ['/admin/approvals/items/kyc-0', '/admin/approvals/items/kyc', '/admin/approvals/items/kyc-4x', '/admin/approvals/lanes']) {
+    assert.equal(itemOfPath(bad), null, bad);
+  }
 });
 
 test('the twenty lanes in four groups; nine new; all twenty the glance counts (D1041, D1132); HQ\'s nine', () => {
@@ -108,27 +178,117 @@ test('a lane is a number, unreadable (never 0), not counted yet (never 0), or lo
   assert.equal(laneViews({ status: 'unreadable', hq: null }).find((x) => x.key === 'kyc').state, 'unreadable');
 });
 
-test('the Waiting tile: "92 +" when a lane failed and which; the full sum and the uncounted lanes when all answered', () => {
-  const partial = waitingTile(laneViews(ready(GLANCE)));
-  assert.deepEqual([partial.value, partial.sub], ['92 +', 'LP applications could not be read']);
-  const whole = waitingTile(laneViews(ready(ALL_READ)));
-  assert.deepEqual([whole.value, whole.sub], ['95', 'across 20 of 20 lanes'], 'D1132: nothing is uncounted, so no "0 are not counted yet"');
-  assert.equal(waitingTile(laneViews({ status: 'unreadable', hq: null })).state, 'unreadable');
+test('the Over 72 hours tile\'s line names the oldest lane from the glance', () => {
   assert.equal(oldestLine(laneViews(ready(GLANCE))), 'oldest 6 d 2 h, Due diligence');
 });
 
-test('the Inbox lists waiting lanes oldest first, an unknown age last, by group and by search from two characters', () => {
-  const views = laneViews(ready(GLANCE));
-  assert.deepEqual(waitingLanes(views).map((x) => x.key), ['due_diligence', 'kyc', 'cohort', 'partner_profiles', 'best_fit', 'moderation', 'exploring', 'jobs']);
-  assert.deepEqual(waitingLanes(views, { group: 'deals' }).map((x) => x.key), ['due_diligence']);
-  assert.deepEqual(waitingLanes(views, { q: 'k' }).length, 8, 'one character does not filter');
-  assert.deepEqual(waitingLanes(views, { q: 'ky' }).map((x) => x.key), ['kyc']);
-  const counts = groupCounts(views);
-  assert.equal(counts.people, null, 'a failed lane leaves its group with no total');
-  assert.equal(counts.deals, 6);
-  assert.equal(counts.all, null);
-  assert.equal(groupCounts(laneViews(ready(ALL_READ))).all, 95);
-  assert.deepEqual(laneBars(views).slice(0, 3).map((b) => [b.label, b.tone]), [['Due diligence', 'violet'], ['KYC', 'violet'], ['Spin-Out Lab applications', 'amber']]);
+// ---------------------------------------------------------------- part 7's model (D1045)
+
+test('the inbox query from the address: search from two characters, a bad value dropped, oldest the default', () => {
+  assert.deepEqual(inboxQueryOf('?q=k&group=people&age=past&assigned=me&sort=newest&page=2'), { page: 2, filters: { group: 'people', age: 'past', assigned: 'me', sort: 'newest' }, typed: 'k' });
+  assert.deepEqual(inboxQueryOf('?q=ky').filters, { q: 'ky' });
+  assert.deepEqual(inboxQueryOf('?group=hq&age=old&assigned=-1&sort=random&page=0'), { page: 1, filters: {}, typed: '' }, 'HQ is no group for an Admin');
+  assert.deepEqual(inboxQueryOf('?group=hq&assigned=8', true).filters, { group: 'hq', assigned: '8' });
+});
+
+test('rows: the band pill, the group, and who holds it — "Not read" is never "Unassigned"', () => {
+  const rows = inboxRows(INBOX);
+  assert.deepEqual(rows.map((r) => [r.key, r.age, r.band.label, r.group, r.assignee.text]), [
+    ['kyc:41', '4 d 7 h', 'Over 72 hours', 'People and accounts', 'Admin A'],
+    ['due_diligence:9', '1 d 6 h', '24 to 72 hours', 'Deals and portfolio', 'Unassigned'],
+    ['jobs:3', 'Age not recorded', 'Age not recorded', 'Community and content', 'Not read'],
+  ]);
+  assert.equal(rows[0].href, '/admin/approvals/items/kyc-41');
+  assert.deepEqual(assigneeOf({}), { kind: 'unread', text: 'Not read' });
+  assert.equal(pageLine(INBOX), '1–3 of 123 +', 'a failed lane leaves the total short, and says so');
+  assert.equal(pageLine({ ...INBOX, unreadable: [] }), '1–3 of 123');
+  assert.equal(pageLine({ ...INBOX, total: null }), '1–3 of —');
+  assert.equal(hasNextPage({ ...INBOX, total: 123 }), true);
+  assert.equal(hasNextPage({ ...INBOX, page: 5 }), false);
+});
+
+test('the four tiles: numbers from the reads, "Could not be read" with why, never a 0 for a gap', () => {
+  const t = inboxTiles({ status: 'ready', reply: INBOX }, { status: 'ready', reply: WEEKLY });
+  assert.deepEqual([t.waiting.value, t.waiting.sub], ['123 +', 'LP applications could not be read']);
+  assert.deepEqual([t.over72.value, t.mine.value, t.decided.value, t.decided.sub], ['5', '2', '12', 'median wait 1 d 9 h']);
+  const whole = inboxTiles({ status: 'ready', reply: { ...INBOX, unreadable: [] } }, null);
+  assert.equal(whole.waiting.sub, 'across 5 lanes');
+  assert.equal(whole.decided.state, 'loading');
+  const withheld = inboxTiles({ status: 'ready', reply: { ...INBOX, tiles: { over_72h: null, assigned_to_me: null, reason: 'Assignments could not be read.' } } }, { status: 'error' });
+  assert.deepEqual([withheld.over72.state, withheld.mine.reason, withheld.decided.state], ['unreadable', 'Assignments could not be read.', 'unreadable']);
+  assert.equal(inboxTiles({ status: 'error' }, null).waiting.state, 'unreadable');
+  const counts = inboxGroupCounts(INBOX, false);
+  assert.deepEqual([counts.people, counts.deals, counts.all], [10, null, null], 'a failed lane leaves its group with no total');
+});
+
+test('Waiting by lane: split by band, worst first, a failed lane a row that says so; the sentence names the most and the oldest', () => {
+  const c = laneAgeChart(INBOX);
+  assert.equal(c.type, 'stackbars');
+  assert.deepEqual(c.rows.map((r) => [r.key, r.total]), [['kyc', '10 waiting'], ['due_diligence', '6 waiting'], ['exploring', '104 waiting'], ['jobs', '3 waiting'], ['lp', 'Could not be read']]);
+  assert.deepEqual(c.rows[0].parts.map((p) => p.value), [2, 3, 5, 0]);
+  assert.equal(c.sum, 'Items waiting by lane in age bands. Explorers ready for a profile holds the most, 104; KYC has 5 over 72 hours. LP applications is not split: it could not be read in full.');
+});
+
+test('the weekly chart: two lines, this week to date, its sentence, and the lanes Decided leaves out', () => {
+  const w = weekChart(WEEKLY);
+  assert.equal(w.drawable, true);
+  assert.deepEqual([w.chart.type, w.chart.labels[0], w.chart.currentIndex, w.chart.series.map((x) => x.label)], ['lines', '31 Aug', 7, ['Arrived', 'Decided']]);
+  assert.match(w.sum, /^Items that arrived and were decided each week for eight weeks\. Arrivals went from 10 to 6 a week\. Decisions went from 8 to 4\. This week is not finished\.$/);
+  assert.equal(w.foot, 'Wellbeing experts, Exploring do not record when they were decided, so they are not in Decided.');
+  assert.equal(weekChart({ weeks: [], totals: {}, unreadable: ['KYC'] }).reason, 'KYC could not be read.');
+});
+
+test('the item: its facts and history, or why not (gone, missing, unread with a reference)', () => {
+  const v = itemView({ status: 'ready', reply: ITEM });
+  assert.deepEqual([v.who, v.laneLabel, v.submitted, v.age, v.assignee.text, v.group], ['Person A', 'KYC', '20 Oct 2026, 08:00', '4 d 7 h', 'Admin A', 'People and accounts']);
+  assert.deepEqual(v.history.lines, [{ text: 'Assigned to Admin A by Admin B', day: '21 Oct 2026' }]);
+  assert.equal(historyLines({ available: true, items: [{ actor_user_id: 7, assignee_user_id: 7, assignee_name: 'Admin A', created_at: null }] }).lines[0].text, 'Admin A took it');
+  assert.equal(historyLines(null).state, 'unread');
+  const err = (status, code, message) => ({ status: 'error', error: Object.assign(new Error(message || 'x'), { status, code }) });
+  assert.equal(itemView(err(404, 'item_not_waiting', 'This item is not waiting any more.')).state, 'gone');
+  assert.equal(itemView(err(404, 'item_not_found')).state, 'missing');
+  const unread = itemView(err(503, 'lane_unreadable', 'KYC could not be read.'));
+  assert.deepEqual([unread.state, unread.ref], ['unread', 'HTTP 503 · lane_unreadable']);
+  assert.equal(errorRef({}), null);
+});
+
+test('Assign: each admin with what they hold now, the caller marked; the title; a refusal said with the list re-read', () => {
+  assert.deepEqual(assignChoices(INBOX, 7).choices.map((c) => c.label), ['Admin A · you · 14 now', 'Admin B · 3 now']);
+  assert.equal(assignChoices({ reviewers: null, reviewers_reason: 'Admins could not be read.' }, 7).text, 'Admins could not be read.');
+  assert.equal(assignTitle([{ who: 'Person A', laneLabel: 'KYC' }]), 'Assign Person A’s identity check');
+  assert.equal(assignTitle([{}, {}, {}]), 'Assign 3 items');
+  assert.equal(refusalToast(Object.assign(new Error('Admin B is not a reviewer'), { code: 'not_a_reviewer' })), 'Admin B is not a reviewer. The list is up to date now.');
+  assert.equal(refusalToast(new Error('Request failed')), 'That could not be done. The list is up to date now.');
+});
+
+test('Lanes: Notifies with "Nobody yet" a warning; HQ\'s counts from the glance, never 0 for a gap', () => {
+  assert.deepEqual(notifiesOf({ notifies: 'Nobody yet' }), { state: 'ready', text: 'Nobody yet', warn: true });
+  assert.equal(notifiesOf({}).text, 'Not read here yet');
+  const hq = hqLaneViews({ lanes: [{ key: 'payouts', count: 4, oldest_age_hours: 80 }, { key: 'tickets', count: null }], pending_total: null, unreadable: ['Tickets'] });
+  const by = (k) => hq.find((l) => l.key === k);
+  assert.deepEqual([by('payouts').state, by('payouts').count, by('payouts').age], ['ready', 4, '3 d 8 h']);
+  assert.deepEqual([by('tickets').state, by('tickets').count], ['unreadable', null]);
+  assert.equal(by('grants').state, 'unrecorded');
+  assert.ok(hqLaneViews(null).every((l) => l.state === 'unrecorded'));
+  assert.equal(hqBandLine({ pending_total: 22 }), 'HQ decides · 22 waiting · only Super Admins see this group');
+  assert.match(hqBandLine({ pending_total: null, unreadable: ['Tickets'] }), /Tickets could not be read, so no total/);
+});
+
+test('Decided: rows in the store\'s words, the "not recorded before" line, the query, the page line', () => {
+  const r = decidedRows(DECIDED)[0];
+  assert.deepEqual([r.when, r.lane, r.outcome.word, r.outcome.tone, r.by, r.wait, r.shown], ['25 Oct 2026, 14:00', 'KYC', 'Approved', 'good', 'Admin A', '1 d 9 h', true]);
+  const n = decidedNotes(DECIDED);
+  assert.deepEqual(n.since, ['Wellbeing experts: decisions were not recorded before 21 Oct 2026.']);
+  assert.deepEqual(n.notRecorded, [{ label: 'Explorers ready for a profile', reason: 'Explorers do not record who decided.' }]);
+  assert.equal(decidedPageLine(DECIDED), '1–1 of 357');
+  assert.deepEqual(decidedQueryOf('?lane=kyc&outcome=approved&decided_by=7&from=2026-10-01&to=bad&page=41'), { page: 1, lane: 'kyc', outcome: 'approved', decided_by: '7', from: '2026-10-01' });
+});
+
+test('Waiting on HQ: the open requests; an account with no licence asks HQ nothing, never "0"', () => {
+  const v = waitingOnHq({ status: 'ready', reply: REQUESTS }, Date.parse('2026-10-26T10:00:00Z'));
+  assert.deepEqual(v.rows.map((r) => [r.text, r.sub]), [['Renewal', 'sent 20 Oct 2026 · 6 d 0 h']]);
+  assert.equal(waitingOnHq({ status: 'error', error: { status: 404, code: 'no_licence' } }).state, 'none');
+  assert.equal(waitingOnHq({ status: 'error', error: { status: 503 } }).state, 'unread');
 });
 
 test('pitches oldest first in the canvas\'s words; attribution summed over the published', () => {
@@ -202,45 +362,256 @@ function stub({ glance = () => json(GLANCE), queue = (s) => json({ items: [] }),
 }
 const reads = (s) => [...new Set(s.seen.filter((p) => !p.startsWith('/api/ai') && !p.startsWith('/api/rail')).map((p) => p.split('?')[0]))].sort();
 
-test('mounted, Inbox: one h1, the moved notice, "92 +" with the failed lane named, lanes oldest first with their doors, and only the glance read', async () => {
-  const s = stub();
-  const v = await render('/admin/approvals?moved=held-approvals', h(AdminApprovals));
+// D1045: the page with every read it makes, focus kept (so focus return reads), POSTs recorded.
+const PART7 = {
+  inbox: () => json(INBOX), weekly: () => json(WEEKLY), requests: () => json(REQUESTS), item: () => json(ITEM),
+  decided: () => json(DECIDED), assign: () => json({ ok: true, assigned: 1 }),
+};
+async function mount(url, el, over = {}) {
+  const restore = installDocument('', { focus: true });
+  const original = { fetch: globalThis.fetch, navigator: Object.getOwnPropertyDescriptor(globalThis, 'navigator') };
+  const on = { glance: () => json(GLANCE), ...PART7, ...over };
+  const seen = [];
+  const posts = [];
+  const copied = [];
+  Object.defineProperty(globalThis, 'navigator', { configurable: true, value: { clipboard: { writeText: async (t) => { copied.push(t); } } } });
+  globalThis.fetch = async (u, opts = {}) => {
+    const x = new URL(String(u), 'http://x');
+    seen.push(`${x.pathname}${x.search}`);
+    if (String(opts.method || 'GET') === 'POST') posts.push({ path: x.pathname, body: JSON.parse(opts.body || '{}') });
+    if (x.pathname === '/api/admin/studio/glance') return on.glance();
+    if (x.pathname === '/api/admin/approvals') return on.inbox(x.searchParams);
+    if (x.pathname === '/api/admin/approvals/decided/weekly') return on.weekly();
+    if (x.pathname === '/api/admin/approvals/decided') return on.decided(x.searchParams);
+    if (x.pathname === '/api/admin/approvals/assignments') return on.assign();
+    if (x.pathname.startsWith('/api/admin/approvals/items/')) return on.item(x.pathname);
+    if (x.pathname === '/api/licence/mine/requests') return on.requests();
+    return json({});
+  };
+  document.body.style = { overflow: 'auto', paddingRight: '' };
+  const container = document.createElement('div');
+  document.body.appendChild(container);
+  const root = createRoot(container);
+  const at = { path: url };
+  function Probe() { const l = useLocation(); at.path = `${l.pathname}${l.search}`; return null; }
+  await act(async () => { root.render(h(MemoryRouter, { initialEntries: [url] }, h(Routes, null, h(Route, { path: '*', element: el })), h(Probe))); });
+  const flush = () => act(async () => { for (let i = 0; i < 12; i += 1) await new Promise((r) => setTimeout(r, 0)); });
+  await flush();
+  const walk = (n) => [n, ...(n.childNodes || []).flatMap(walk)];
+  const textOf = (n) => (n?.nodeType === 3 ? n.textContent || '' : n?.childNodes?.length ? n.childNodes.map(textOf).join('') : n?.textContent || '');
+  const props = (n) => Object.entries(n).find(([k]) => k.startsWith('__reactProps$'))?.[1] || {};
+  const byId = (id) => walk(container).find((n) => props(n)['data-testid'] === id);
+  const event = { button: 0, preventDefault() {}, stopPropagation() {}, defaultPrevented: false };
+  return {
+    seen, posts, copied, at, flush,
+    of: (id) => { const n = byId(id); assert.ok(n, `no ${id}`); return textOf(n); },
+    has: (id) => Boolean(byId(id)),
+    props: (id) => props(byId(id)),
+    ids: (prefix) => walk(container).map((n) => props(n)['data-testid']).filter((t) => typeof t === 'string' && t.startsWith(prefix)),
+    hrefs: () => walk(container).filter((n) => n.tagName === 'A').map((n) => props(n).href),
+    h1s: () => walk(container).filter((n) => n.tagName === 'H1').length,
+    focus(id) { const n = byId(id); assert.ok(n, `no ${id} to focus`); n.focus(); },
+    focused: () => (document.activeElement && document.activeElement !== document.body ? props(document.activeElement)['data-testid'] || 'other' : 'body'),
+    async click(id) { const p = props(byId(id)); assert.ok(p.onClick, `no ${id} to click`); assert.ok(!p.disabled, `${id} is disabled`); await act(async () => { await p.onClick(event); }); await flush(); },
+    async change(id, value) { const p = props(byId(id)); assert.ok(p.onChange, `no ${id} to change`); await act(async () => { p.onChange({ target: { value, checked: true } }); }); await flush(); },
+    async unmount() {
+      await act(async () => root.unmount());
+      globalThis.fetch = original.fetch;
+      if (original.navigator) Object.defineProperty(globalThis, 'navigator', original.navigator); else delete globalThis.navigator;
+      restore();
+    },
+  };
+}
+const api = (v) => [...new Set(v.seen.filter((p) => p.startsWith('/api/admin/approvals') || p.startsWith('/api/licence') || p.startsWith('/api/admin/studio')).map((p) => p.split('?')[0]))].sort();
+
+test('mounted, Inbox (APR1): the tiles, the two charts with their sentences, the items with their doors, the partial note and Waiting on HQ', async () => {
+  const v = await mount('/admin/approvals?moved=held-approvals', h(AdminApprovals));
   try {
     assert.equal(v.h1s(), 1);
     assert.match(v.of('approvals-header'), /Approvals has a new address\. Update your bookmark\./);
-    assert.match(v.of('approvals-tab-inbox'), /Inbox\s*—/, 'no total while a lane failed');
-    assert.match(v.of('approvals-tile-waiting'), /Waiting\s*92 \+\s*LP applications could not be read/);
-    assert.match(v.of('approvals-tile-over72'), /Not read here yet\s*oldest 6 d 2 h, Due diligence/);
-    assert.match(v.of('approvals-tile-assigned'), /Not read here yet/);
-    assert.match(v.of('approvals-partial'), /LP applications could not be read/);
-    assert.deepEqual(v.ids('approvals-row-'), ['approvals-row-due_diligence', 'approvals-row-kyc', 'approvals-row-cohort', 'approvals-row-partner_profiles', 'approvals-row-best_fit', 'approvals-row-moderation', 'approvals-row-exploring', 'approvals-row-jobs']);
-    assert.match(v.of('approvals-row-jobs'), /Age not recorded/, 'an unknown age sorts last and says so');
-    assert.match(v.of('approvals-row-kyc'), /4 d 7 h\s*Over 72 hours/);
-    assert.ok(v.hrefs().includes('/admin/due-diligence'));
-    assert.deepEqual(reads(s), ['/api/admin/studio/glance']);
-  } finally { await v.unmount(); s.restore(); }
+    assert.match(v.of('approvals-tab-inbox'), /Inbox\s*123 \+/);
+    assert.match(v.of('approvals-tile-waiting'), /Waiting\s*123 \+\s*LP applications could not be read/);
+    assert.match(v.of('approvals-tile-over72'), /Over 72 hours\s*5\s*oldest 6 d 2 h, Due diligence/);
+    assert.match(v.of('approvals-tile-assigned'), /Assigned to you\s*2/);
+    assert.match(v.of('approvals-tile-decided'), /Decided this week\s*12\s*median wait 1 d 9 h/);
+    assert.equal(v.props('approvals-chart-lanes-img')['aria-label'], laneAgeChart(INBOX).sum, 'the chart\'s one sentence');
+    assert.equal(v.props('approvals-chart-weeks-img').role, 'img');
+    assert.match(v.of('approvals-chart-weeks'), /Wellbeing experts, Exploring do not record when they were decided/);
+    await v.click('approvals-chart-lanes-toggle');
+    assert.match(v.of('approvals-chart-lanes'), /View as chart.*KYC\s*2\s*3\s*5\s*0\s*10 waiting/s, 'View as table: the same rows');
+    assert.deepEqual(v.ids('approvals-row-'), ['approvals-row-kyc:41', 'approvals-row-due_diligence:9', 'approvals-row-jobs:3']);
+    assert.match(v.of('approvals-row-kyc:41'), /4 d 7 h\s*Over 72 hours\s*KYC\s*People and accounts\s*Person A\s*Identity check\s*Admin A\s*KYC & KYB/);
+    assert.match(v.of('approvals-row-due_diligence:9'), /Unassigned\s*Due diligence/);
+    assert.match(v.of('approvals-row-jobs:3'), /Age not recorded.*Not read\s*Jobs/s, 'an unread assignment is never "Unassigned"');
+    assert.equal(v.props('approvals-open-kyc:41').href, '/admin/approvals/items/kyc-41?moved=held-approvals');
+    assert.match(v.of('approvals-partial'), /LP applications could not be read, so its items are missing below\. The other 4 lanes are complete\. Try again/);
+    assert.equal(v.of('approvals-count'), '1–3 of 123 +');
+    assert.match(v.of('approvals-waiting-on-hq'), /What this studio asked HQ\.\s*Renewal\s*sent 20 Oct 2026/);
+    assert.doesNotMatch(v.of('approvals-waiting-on-hq'), /Seat increase/, 'an answered request is not waiting');
+    assert.match(v.of('approvals-group-people'), /People and accounts\s*10/);
+    assert.match(v.of('approvals-group-deals'), /Deals and portfolio\s*—/, 'a failed lane is a dash, never 0');
+    assert.ok(!v.has('approvals-group-hq'), 'an Admin has no HQ group');
+    assert.deepEqual(api(v), ['/api/admin/approvals', '/api/admin/approvals/decided/weekly', '/api/admin/studio/glance', '/api/licence/mine/requests']);
+    assert.ok(!v.seen.some((p) => /decide|approve|reject/.test(p.split('?')[0].replace('/decided', ''))), 'nothing decides here');
+  } finally { await v.unmount(); }
 });
 
-test('mounted, Inbox: an Admin on an HQ lane link sees the Super Admin card, never the rows; a failed glance is never an empty inbox', async () => {
-  let s = stub();
-  let v = await render('/admin/approvals?lane=payouts', h(ApprovalsPage, { viewer: { role: 'admin', is_super_admin: 0 } }));
+test('mounted, Inbox: filters live in the address and reach the Worker; one search character does not filter; the pager', async () => {
+  const v = await mount('/admin/approvals?group=people&age=past&assigned=me&sort=lane&q=k', h(AdminApprovals));
   try {
-    assert.match(v.of('approvals-hq-only'), /This lane belongs to the Super Admin\./);
-    assert.ok(!v.has('approvals-inbox'));
-  } finally { await v.unmount(); s.restore(); }
-  s = stub({ glance: () => json({ detail: 'down' }, 503) });
-  v = await render('/admin/approvals', h(AdminApprovals));
+    const sent = v.seen.find((p) => p.startsWith('/api/admin/approvals?'));
+    assert.equal(sent, '/api/admin/approvals?page=1&group=people&age=past&assigned=me&sort=lane');
+    assert.equal(v.props('approvals-assigned').value, 'me');
+    await v.click('approvals-next');
+    assert.equal(v.at.path, '/admin/approvals?group=people&age=past&assigned=me&sort=lane&q=k&page=2');
+    assert.ok(v.seen.includes('/api/admin/approvals?page=2&group=people&age=past&assigned=me&sort=lane'));
+    await v.change('approvals-search', 'ky');
+    assert.ok(!v.at.path.includes('page='), 'a new search starts at page 1');
+    assert.ok(v.seen.includes('/api/admin/approvals?page=1&q=ky&group=people&age=past&assigned=me&sort=lane'));
+  } finally { await v.unmount(); }
+});
+
+test('mounted, Inbox: the ⋯ menu copies the item\'s link; the bulk bar assigns the picked items and a refusal is a toast, the list re-read', async () => {
+  let refuse = false;
+  const v = await mount('/admin/approvals', h(ApprovalsPage, { viewer: { id: 7, role: 'admin', is_super_admin: 0 } }), {
+    assign: () => (refuse ? json({ code: 'item_not_waiting', message: 'This item is not waiting any more: it was decided, withdrawn or moved.' }, 404) : json({ ok: true, assigned: 2 })),
+  });
   try {
-    assert.match(v.of('approvals-failed'), /We could not load Approvals\./);
+    await v.click('approvals-menu-kyc:41');
+    await v.click('approvals-menu-kyc:41-copy');
+    assert.deepEqual(v.copied.map((u) => u.replace(/^[a-z]+:\/\/[^/]*/, '')), ['/admin/approvals/items/kyc-41']);
+    assert.match(v.of('approvals-toast'), /Link copied\./);
+    await v.change('approvals-pick-kyc:41');
+    await v.change('approvals-pick-jobs:3');
+    assert.match(v.of('approvals-bulk'), /2 selected\s*Assign…\s*Clear/);
+    await v.click('approvals-bulk-assign');
+    assert.match(v.of('approvals-assign'), /Assign 2 items\s*They see it under Assigned to me\. Assigning decides nothing\./);
+    assert.match(v.of('approvals-assign-7'), /Admin A · you · 14 now/);
+    assert.equal(v.props('approvals-assign-send').disabled, true, 'nobody chosen, nothing sent');
+    await v.change('approvals-assign-pick-8');
+    const before = v.seen.filter((p) => p.startsWith('/api/admin/approvals?')).length;
+    await v.click('approvals-assign-send');
+    assert.deepEqual(v.posts, [{ path: '/api/admin/approvals/assignments', body: { assignee_user_id: 8, items: [{ lane: 'kyc', item_id: 41 }, { lane: 'jobs', item_id: 3 }] } }]);
+    assert.match(v.of('approvals-toast'), /Assigned to Admin B\./);
+    assert.ok(!v.has('approvals-assign'));
+    assert.ok(v.seen.filter((p) => p.startsWith('/api/admin/approvals?')).length > before, 'the list is read again');
+    refuse = true;
+    await v.click('approvals-menu-due_diligence:9');
+    await v.click('approvals-menu-due_diligence:9-assign');
+    assert.match(v.of('approvals-assign'), /Assign Company B’s item/);
+    await v.change('approvals-assign-pick-7');
+    await v.click('approvals-assign-send');
+    assert.equal(v.of('approvals-toast').replace('×', ''), 'This item is not waiting any more: it was decided, withdrawn or moved. The list is up to date now.');
+  } finally { await v.unmount(); }
+});
+
+test('mounted, the item (APR3): its own address over the Inbox, the facts, Assigned, History, the deciding page; closing gives focus back to the row', async () => {
+  const v = await mount('/admin/approvals', h(ApprovalsPage, { viewer: { id: 7, role: 'admin', is_super_admin: 0 } }));
+  try {
+    v.focus('approvals-open-kyc:41');
+    await v.click('approvals-open-kyc:41');
+    assert.equal(v.at.path, '/admin/approvals/items/kyc-41');
+    assert.ok(v.has('approvals-inbox'), 'the Inbox stays underneath');
+    assert.ok(v.seen.includes('/api/admin/approvals/items/kyc/41'));
+    assert.match(v.of('approvals-item'), /Item\s*Person A\s*Esc to close/);
+    assert.match(v.of('approvals-item-facts'), /Submitted\s*20 Oct 2026, 08:00\s*Profile\s*Identity check\s*Item ID\s*41\s*Lane\s*KYC · People and accounts/);
+    assert.match(v.of('approvals-item-assigned'), /Assigned\s*Admin A\s*Assign…/);
+    assert.match(v.of('approvals-item-history'), /Assigned to Admin A by Admin B · 21 Oct 2026/);
+    assert.match(v.of('approvals-item'), /Open in KYC & KYB\s*This lane is decided on its own page, where its rules and messages live\./);
+    await v.click('approvals-item-close');
+    assert.equal(v.at.path, '/admin/approvals');
+    assert.ok(!v.has('approvals-item'));
+    assert.equal(v.focused(), 'approvals-open-kyc:41', 'Esc and Close give focus back to the row');
+  } finally { await v.unmount(); }
+  const gone = await mount('/admin/approvals/items/kyc-41', h(AdminApprovals), { item: () => json({ code: 'item_not_waiting', message: 'This item is not waiting any more: it was decided, withdrawn or moved.' }, 404) });
+  try {
+    assert.match(gone.of('approvals-item-gone'), /This item is not waiting any more.*Back to the inbox/);
+  } finally { await gone.unmount(); }
+  const down = await mount('/admin/approvals/items/kyc-41', h(AdminApprovals), { item: () => json({ code: 'lane_unreadable', message: 'KYC could not be read.' }, 503) });
+  try {
+    assert.match(down.of('approvals-item-failed'), /This item could not be read\.\s*KYC could not be read\.\s*Try again/);
+    assert.match(down.of('approvals-item-failed-details'), /Details\s*HTTP 503 · lane_unreadable/);
+  } finally { await down.unmount(); }
+});
+
+test('mounted, states: skeletons while reading (APR12); nothing waiting (APR11a); a failed inbox with Details, never empty (APR13b); the HQ-lane card (APR14a)', async () => {
+  let v = await mount('/admin/approvals', h(AdminApprovals), { inbox: () => new Promise(() => {}) });
+  try {
+    assert.ok(v.has('approvals-skeleton'));
+    assert.ok(!v.has('approvals-empty'));
+  } finally { await v.unmount(); }
+  v = await mount('/admin/approvals', h(AdminApprovals), { inbox: () => json({ ...INBOX, items: [], total: 0, unfiltered_total: 0, unreadable: [] }) });
+  try {
+    assert.match(v.of('approvals-empty'), /Nothing is waiting on you\..*See what was decided/s);
+    assert.ok(v.hrefs().includes('/admin/approvals/decided'));
+  } finally { await v.unmount(); }
+  v = await mount('/admin/approvals?age=past', h(AdminApprovals), { inbox: () => json({ ...INBOX, items: [], total: 0, unreadable: [] }) });
+  try {
+    assert.match(v.of('approvals-empty'), /Nothing matches these filters\.\s*Clear filters/);
+  } finally { await v.unmount(); }
+  v = await mount('/admin/approvals', h(AdminApprovals), { inbox: () => json({ code: 'assigned_unreadable', message: 'Assignments could not be read.' }, 503) });
+  try {
+    assert.match(v.of('approvals-failed'), /We could not load Approvals\.\s*The rest of the admin still works/);
+    assert.match(v.of('approvals-failed-details'), /HTTP 503 · assigned_unreadable/);
     assert.ok(!v.has('approvals-empty'), 'a failed read is not "nothing waiting"');
-  } finally { await v.unmount(); s.restore(); }
+    assert.match(v.of('approvals-tile-waiting'), /Could not be read/);
+  } finally { await v.unmount(); }
+  v = await mount('/admin/approvals?lane=payouts', h(ApprovalsPage, { viewer: { role: 'admin', is_super_admin: 0 } }));
+  try {
+    assert.match(v.of('approvals-hq-only'), /This lane belongs to the Super Admin\..*Show my inbox/s);
+    assert.ok(!v.has('approvals-inbox'));
+  } finally { await v.unmount(); }
+});
+
+test('mounted, Super Admin: the HQ decides band and the HQ group chip', async () => {
+  const glance = { ...GLANCE, approvals: { ...GLANCE.approvals, hq_decides: { lanes: [{ key: 'payouts', count: 22, oldest_age_hours: 30 }], pending_total: 22, unreadable: [] } } };
+  const v = await mount('/admin/approvals', h(ApprovalsPage, { viewer: { role: 'admin', is_super_admin: 1 } }), { glance: () => json(glance) });
+  try {
+    assert.equal(v.of('approvals-hq-band'), 'HQ decides · 22 waiting · only Super Admins see this group');
+    assert.ok(v.has('approvals-group-hq'));
+  } finally { await v.unmount(); }
+  const admin = await mount('/admin/approvals', h(ApprovalsPage, { viewer: { role: 'admin', is_super_admin: 0 } }), { glance: () => json(glance) });
+  try {
+    assert.ok(!admin.has('approvals-hq-band'), 'an Admin never sees the HQ band, whatever the glance carries');
+  } finally { await admin.unmount(); }
+});
+
+test('mounted, Decided (APR10): the log in the store\'s words, "not recorded before", the filters in the address, the count', async () => {
+  const v = await mount('/admin/approvals/decided?outcome=approved', h(AdminApprovals));
+  try {
+    assert.ok(v.seen.includes('/api/admin/approvals/decided?page=1&outcome=approved'));
+    assert.match(v.of('approvals-tab-decided'), /Decided\s*357/);
+    assert.match(v.of('approvals-decided-notes'), /Wellbeing experts: decisions were not recorded before 21 Oct 2026\.\s*Explorers ready for a profile: Explorers do not record who decided\./);
+    assert.match(v.of('approvals-decided-kyc:40:2026-10-25 14:00:00'), /25 Oct 2026, 14:00\s*KYC\s*Person D\s*Approved\s*Admin A\s*1 d 9 h\s*Welcome aboard\s*◉ They see this/);
+    assert.equal(v.of('approvals-decided-count'), '1–1 of 357');
+    assert.ok(!v.seen.some((p) => p.startsWith('/api/admin/approvals?')), 'Decided reads no inbox');
+  } finally { await v.unmount(); }
+  const down = await mount('/admin/approvals/decided', h(AdminApprovals), { decided: () => json({ code: 'bad_page', message: 'x' }, 503) });
+  try {
+    assert.match(down.of('approvals-decided-failed'), /We could not load what was decided\./);
+    assert.match(down.of('approvals-tab-decided'), /Decided\s*—/, 'no count, never 0');
+  } finally { await down.unmount(); }
 });
 
 test('mounted, Lanes: each group\'s lanes with New pills, Could not be read with Try again, Not read here yet, and HQ decides only for a Super Admin', async () => {
-  const s = stub();
+  // D1045: each lane's Notifies (D1041) and HQ's counts ride on the glance.
+  const told = { kyc: 'The member, by email', comarketing: 'Nobody yet' };
+  const lanesGlance = {
+    ...GLANCE,
+    approvals: {
+      ...GLANCE.approvals,
+      lanes: GLANCE.approvals.lanes.map((l) => (told[l.key] ? { ...l, notifies: told[l.key] } : l)),
+      hq_decides: { lanes: [{ key: 'payouts', count: 4, oldest_age_hours: 80 }, { key: 'tickets', count: null }], pending_total: null, unreadable: ['Tickets'] },
+    },
+  };
+  const s = stub({ glance: () => json(lanesGlance) });
   let v = await render('/admin/approvals/lanes', h(ApprovalsPage, { viewer: { role: 'admin', is_super_admin: 0 } }));
   try {
     assert.match(v.of('approvals-lane-lp'), /LP applications\s*Could not be read Try again/);
+    assert.equal(v.of('approvals-notifies-kyc'), 'The member, by email');
+    assert.equal(v.of('approvals-notifies-comarketing'), 'Nobody yet');
+    assert.equal(v.of('approvals-notifies-events'), 'Not read here yet', 'a glance without it is not read here, never "Nobody"');
+    assert.match(v.of('approvals-tab-lanes'), /Lanes\s*20/);
     // D1041: KYB is counted now (the stub's glance answers 0); D1132: so is Product testers.
     assert.match(v.of('approvals-lane-kyb'), /KYB\s*New\s*0/);
     assert.match(v.of('approvals-lane-product_testers'), /Product testers\s*New\s*0\s*—\s*Here/);
@@ -250,7 +621,11 @@ test('mounted, Lanes: each group\'s lanes with New pills, Could not be read with
   } finally { await v.unmount(); }
   v = await render('/admin/approvals/lanes', h(ApprovalsPage, { viewer: { role: 'admin', is_super_admin: 1 } }));
   try {
-    assert.match(v.of('approvals-hq-lanes'), /HQ decides/);
+    assert.match(v.of('approvals-hq-lanes'), /HQ decides · Tickets could not be read, so no total/);
+    assert.match(v.of('approvals-hq-payouts'), /Payout requests\s*4\s*3 d 8 h\s*Commissions/);
+    assert.equal(v.of('approvals-hq-count-tickets'), 'Could not be read');
+    assert.equal(v.of('approvals-hq-count-grants'), 'Not read here yet', 'a lane off the glance is never 0');
+    assert.match(v.of('approvals-tab-lanes'), /Lanes\s*29/);
     assert.match(v.of('approvals-hq-proposals'), /not built yet/);
     // D1132: Program-grant requests opens HQ's Requests page (D987), not "not built yet".
     assert.match(v.of('approvals-hq-grants'), /Licences › Program grants › Requests/);
@@ -291,7 +666,7 @@ test('mounted, boards: co-marketing reads its five states alone and decides nowh
 
 test('the routes under one guard, the redirect, the row lit on every sub-path, and the canvas in design/incoming', () => {
   const app = read('frontend/src/App.jsx');
-  for (const p of ['/admin/approvals', '/admin/approvals/lanes', '/admin/approvals/decided']) {
+  for (const p of ['/admin/approvals', '/admin/approvals/lanes', '/admin/approvals/decided', '/admin/approvals/items/:ref']) {
     assert.ok(app.includes(`<Route path="${p}" element={guard(['admin'], <AdminApprovals />)} />`), p);
   }
   for (const p of ['/admin/approvals/product-testers', '/admin/approvals/co-marketing', '/admin/approvals/co-marketing/declined', '/admin/approvals/wellbeing-experts/hidden']) {
@@ -303,5 +678,12 @@ test('the routes under one guard, the redirect, the row lit on every sub-path, a
   assert.ok(row.match.includes('/admin/approvals'), 'the lane boards light the row');
   assert.ok(read('design/incoming/Approvals · Boards.dc.html').includes('APR16'));
   assert.ok(read('design/incoming/Approvals Page.dc.html').length > 1000);
-  assert.doesNotMatch(read('frontend/src/pages/admin/approvals/LaneBoards.jsx'), /window\.(alert|confirm)|\balert\(|\bconfirm\(/);
+  for (const f of ['LaneBoards.jsx', 'AdminApprovals.jsx']) {
+    assert.doesNotMatch(read(`frontend/src/pages/admin/approvals/${f}`), /window\.(alert|confirm)|\balert\(|\bconfirm\(/, f);
+  }
+  // D1045: the item link is a literal template the reachability walk resolves to the one-segment route.
+  const page = read('frontend/src/pages/admin/approvals/AdminApprovals.jsx');
+  assert.ok(page.includes('<Link to={`/admin/approvals/items/${r.lane}-${r.id}${loc.search}`}'));
+  // APR14b: a non-admin on any /admin path meets RoleGuard's one card (D940), not a page of its own.
+  assert.ok(app.includes("return <AdminOnlyNotice home={ROLE_DEFAULT_PATH[effectiveRole] || '/studio'} />;"));
 });
