@@ -1686,6 +1686,55 @@ export const notGranted = (word) => `HQ has not granted ${word} to this studio.`
 export const DEAL_TYPES_UNREADABLE = 'Which deal types this studio may offer could not be read. Sending still checks them.';
 export const MESSAGE_HINT = 'Shown in the email and at the start of the onboarding chat.';
 export const LINK_FOOT = 'The link is valid for 14 days. Resending gives a new 14 days.';
+
+/**
+ * D1118 (#2998) — PI4's "Adjust terms", the owner's A: only the Super Admin
+ * sets an invitation's own terms, and setting them is the approval. They
+ * apply to Deal-sourcing revenue share and Custom only. An Admin's invitation
+ * goes with the standard terms, and the dialog says so in one sentence. The
+ * bounds are the Worker's (`partnerInvitationTerms.ts`); it checks them again.
+ */
+export const TERMS_TYPES = ['deal_sourcing_revshare', 'custom'];
+export const TERMS_TITLE = 'Adjust terms';
+export const TERMS_NOTE = 'For Deal-sourcing revenue share and Custom only. Setting them here is your approval: the invitee’s offer and the agreement they sign carry them. Left closed, the invitation goes with the standard terms.';
+export const TERMS_ADMIN = 'This invitation goes with the standard terms. Only the Super Admin sets an invitation’s own terms.';
+export const TERMS_NOTE_MAX = 500;
+export const termsApply = (types) => Array.isArray(types) && types.some((t) => TERMS_TYPES.includes(t));
+
+const whole = (v) => (/^\d+$/.test(String(v ?? '').trim()) ? Number(String(v).trim()) : null);
+
+/**
+ * The Adjust terms fields as the Worker's `terms`. Closed, or with no type
+ * they apply to, it is the standard terms and nothing is sent. Open, every
+ * figure is required: a blank is never read as 0.
+ */
+export function termsInput({ open, pct, days, months, note } = {}, types = []) {
+  if (!open || !termsApply(types)) return { state: 'standard' };
+  const p = String(pct ?? '').trim();
+  const percent = /^\d{1,2}(\.\d{1,2})?$/.test(p) ? Number(p) : null;
+  if (percent === null || percent <= 0 || percent > 50) return { state: 'invalid', field: 'pct', text: 'Enter a revenue share from 0.01% to 50%, with at most two decimals.' };
+  const d = whole(days);
+  if (d === null || d < 30 || d > 1095) return { state: 'invalid', field: 'days', text: 'Enter an attribution window of 30 to 1,095 days.' };
+  const m = whole(months);
+  if (m === null || m < 1 || m > 60) return { state: 'invalid', field: 'months', text: 'Enter a term of 1 to 60 months.' };
+  const n = String(note ?? '').trim();
+  if (n.length > TERMS_NOTE_MAX) return { state: 'invalid', field: 'note', text: 'Keep the terms note to 500 characters.' };
+  return { state: 'own', terms: { revshare_pct: percent, attribution_window_days: d, term_months: m, note: n || null } };
+}
+
+/** The record's terms line, from the invitation read's `terms` (D1118). */
+export function termsLine(terms) {
+  if (!terms || terms.state === 'standard') return { state: 'standard', text: 'Standard terms.' };
+  if (terms.state !== 'own') return { state: 'unreadable', text: 'This invitation’s own terms could not be read, so no offer is made until they can be.' };
+  const who = terms.set_by_name ? `Set by ${terms.set_by_name}` : 'Set by the Super Admin';
+  const when = day(terms.set_at);
+  return {
+    state: 'own',
+    text: `Own terms: ${terms.revshare_pct}% revenue share · ${nf(terms.attribution_window_days)}-day attribution window · ${nf(terms.term_months)} months`,
+    by: when ? `${who} on ${when}` : who,
+    note: terms.note || null,
+  };
+}
 export const counter = (n, max) => `${nf(n)} / ${nf(max)}`;
 
 export function toggleType(picked, key) {
@@ -1746,6 +1795,10 @@ export function refusalText(err, kind = 'invitation') {
   const code = err?.code || err?.data?.code || null;
   if (code === 'admin_frozen' || (status === 423 && code !== 'branch_suspended')) return FROZEN;
   if (code === 'branch_suspended') return 'This studio’s licence is suspended, so changes are paused until HQ lifts it.';
+  // D1118: a terms refusal, or an Admin sending own terms. The Worker's sentence says which field and why.
+  if (code === 'super_admin_required' || /^terms_/.test(String(code || ''))) {
+    return String(err?.message || '').trim() || 'The terms could not be saved. Check each field.';
+  }
   // PI10b (D1117): a type the licence does not allow. The Worker's sentence names it.
   if (code === 'deal_type_not_allowed' || err?.data?.error === 'deal_type_not_allowed') {
     return String(err?.message || '').trim() || 'This studio’s licence does not allow one of these deal types. HQ sets which partner deal types a studio may offer.';

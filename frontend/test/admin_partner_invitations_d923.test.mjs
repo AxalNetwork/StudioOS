@@ -673,8 +673,9 @@ test('the desk reads only D923 §2\'s reads through existing clients, and draws 
   assert.deepEqual(timerClosers('const timer = setTimeout(() => setCheckFor(typed), CHECK_DELAY_MS);'), [], 'the email check\'s debounce is not a closer');
   assert.match(src, /setTimeout\(\(\) => setCheckFor\(typed\), CHECK_DELAY_MS\)/, 'and that debounce is still the desk\'s one timer');
   assert.doesNotMatch(src, /'—'|"—"|\?\? 0\b/, 'no dash or zero standing in for a value');
-  // D950 draws Export CSV and the agreement's "Could not be sent" lines; Adjust terms waits for O-TERMS.
-  assert.doesNotMatch(src, /<svg|recharts|Adjust terms|Founder Pro|\bDelivered\b|Agreement blocked/);
+  // D950 draws Export CSV and the agreement's "Could not be sent" lines. O-TERMS is answered (A), so
+  // D1118 (#2998) draws Adjust terms, for the Super Admin only (admin_partner_invitations_d1118).
+  assert.doesNotMatch(src, /<svg|recharts|Founder Pro|\bDelivered\b|Agreement blocked/);
   for (const sample of ['Lio Testwell', 'Mara Example', 'Teo Sample', 'Ada Placeholder', '[12 Oct]', '[42]', 'partner/invite/']) assert.ok(!src.includes(sample), `a canvas sample reached the desk: ${sample}`);
   // The dates go through ui/parseStamp.js, the one rule both desks read.
   assert.match(read('frontend/src/pages/admin/partners/partnersDeskModel.js'), /import \{ parseStamp \} from '\.\.\/\.\.\/\.\.\/ui\/parseStamp\.js';/);
