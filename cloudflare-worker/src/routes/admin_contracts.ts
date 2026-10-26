@@ -157,11 +157,17 @@ function bytesToB64(bytes: Uint8Array): string {
 
 // Preview and send derive their body from the same recorded snapshot. Neither
 // accepts a caller-supplied document body or a caller-supplied signer identity.
-function envelopeHandler(operation: 'preview' | 'send') {
+// D958: a route that builds the input itself (a referral partner's terms, whose
+// signer is the partner on record) passes it as `given`; the preview hash, the
+// published template and the audit row are checked exactly as for a direct send.
+export function envelopeHandler(operation: 'preview' | 'send', given?: Record<string, unknown>) {
   return async (c: AppContext, admin: Awaited<ReturnType<typeof requireAdmin>>) => {
     let input: Record<string, unknown>;
-    try { input = await c.req.json(); }
-    catch { return c.json({ error: 'invalid_request' }, 400); }
+    if (given) input = given;
+    else {
+      try { input = await c.req.json(); }
+      catch { return c.json({ error: 'invalid_request' }, 400); }
+    }
     if (!input || typeof input !== 'object' || Array.isArray(input)) return c.json({ error: 'invalid_request' }, 400);
     let prepared;
     try { prepared = await preparePublishedContract(c.env, input, admin.id, isSuperAdmin(admin)); }

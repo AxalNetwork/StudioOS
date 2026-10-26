@@ -33,8 +33,8 @@ export interface ClawbackResult {
 const READY = new WeakMap<object, boolean>();
 
 /**
- * Dev/preview only — production owns this column via migration. Mirrors the
- * production-no-DDL rule established for the apex cutover.
+ * Dev/preview only — production owns these columns via migration 563 (D958).
+ * Mirrors the production-no-DDL rule established for the apex cutover.
  */
 async function ensureClawbackColumns(env: Env): Promise<void> {
   if (READY.get(bindingKey(env))) return;
