@@ -372,6 +372,8 @@ deals.get('/screening', async (c) => {
         FROM deals d JOIN projects p ON p.id = d.project_id
        WHERE p.deleted_at IS NULL ORDER BY d.created_at DESC LIMIT 200`;
     if (user.role === 'investor') {
+      // D1254 preserves the deal reader's invited-or-committed rule, including
+      // historical deals/commitments. The open-deal rule for trust is separate.
       const allowed = await userReadableDealIds(c.env, user, (rows as any[]).map(row => Number(row.deal_id)));
       rows = (rows as any[]).filter(row => allowed.has(Number(row.deal_id)));
     }
