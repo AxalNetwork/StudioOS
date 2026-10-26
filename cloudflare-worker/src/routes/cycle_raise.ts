@@ -448,7 +448,7 @@ cycleRaise.get('/capital-relationships/match', async (c) => {
 function capRelTabFailed(c: any, e: unknown, what: string): Response {
   if (e instanceof CapRelTabError) return c.json({ code: e.code, detail: e.sentence, ...(e.field ? { field: e.field } : {}) }, e.status);
   if (e instanceof WriterError) return writeFailed(c, e);
-  console.error(`[cycle_raise] ${what} failed:`, (e as Error)?.name || 'error');
+  console.error('[cycle_raise] capital-relationships failed:', what, (e as Error)?.name || 'error');
   return c.json({ state: 'unreadable', detail: 'That could not be done just now. Try again.' }, 500);
 }
 
