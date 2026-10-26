@@ -12,6 +12,11 @@ import { dealMoney } from './dealMoney';
  */
 
 /** What joining does, and what it does not. Both the list and the header say it. */
+export const ROOM_ACCESS_REQUIRED = 'An invitation or commitment is needed to open this deal.';
+export const ROOM_ACCESS_UNREADABLE = 'Deal access could not be confirmed.';
+export const ROOM_REQUEST_CONFIRM = 'This records your invitation request for the selected firm. Nobody is notified automatically. It does not grant access to the deal or diligence.';
+export const ROOM_LEAVE_CONFIRM = 'This removes your room request. It does not withdraw a commitment or change anyone else’s access. Nobody is notified.';
+
 export const JOIN_NOTE = 'Requesting an invitation records your interest. It does not grant access to the deal or diligence. Only an invited or committed investor can read them.';
 
 const PLAN_LABEL = { free: 'Free', professional: 'Professional', institutional: 'Institutional' };
@@ -45,6 +50,7 @@ export function quotaFullLine(q) {
 /** The empty, "Not recorded" and "Unreadable" lines each screen draws. */
 export const STATES = {
   pipeline: {
+    intro: 'Live deals, your invitation requests and the room allowance on your plan.',
     empty: 'No deal is open to join yet.',
     unread: 'The pipeline could not be read just now.',
     nrRound: 'Round size: the company has not recorded one.',

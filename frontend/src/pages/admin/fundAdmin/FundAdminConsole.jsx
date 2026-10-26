@@ -169,7 +169,7 @@ export function FundAdminConsoleView({ user, apis = DEFAULT_APIS }) {
         {view === 'calls' && <CallsTab {...fundProps} />}
         {view === 'distributions' && <DistributionsTab {...fundProps} />}
         {view === 'fees' && <FeesTab key={fund?.id} {...fundProps} />}
-        {view === 'reports' && <ReportsTab key={fund?.id} {...fundProps} />}
+        {view === 'reports' && <ReportsTab key={params.get('fund') || 'all'} {...fundProps} />}
         {view === 'performance' && (
           <PerformanceTab apis={apis} access={acts} funds={funds} fundId={filter.pills.find((p) => p.on && p.id != null)?.id ?? null} onChanged={overview.reload} />
         )}
