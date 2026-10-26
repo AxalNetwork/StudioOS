@@ -135,8 +135,8 @@ r.post('/:uid/captable/dismiss', async (c) => {
 
 r.post('/:uid/complete', async (c) => {
   const user = await admin(c);
-  await completeClosing(c.env, user, c.req.param('uid'));
-  return c.json({ ok: true, status: 'closed' });
+  const duties = await completeClosing(c.env, user, c.req.param('uid'));
+  return c.json({ ok: true, status: 'closed', ...duties });
 });
 
 /** The admin desk at `/api/admin/closings`. */
