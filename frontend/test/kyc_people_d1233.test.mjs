@@ -249,7 +249,8 @@ test('mounted KYC1: the queue from part 1’s read, oldest first, with its figur
     const q = r.requests.find((x) => x.url.includes('/kyc/admin/people'));
     assert.equal(q.url, '/api/kyc/admin/people?status=pending&sort=submitted&dir=asc&page=1&page_size=25');
     assert.ok(r.requests.some((x) => x.url === '/api/kyc/admin/figures'));
-    assert.ok(!r.requests.some((x) => /\/kyc\/admin\/queue|\/kyc\/admin\/\d+$/.test(x.url)), 'no older queue read, and no record opened from the list');
+    assert.ok(!r.requests.some((x) => x.url.includes('/kyc/admin/queue')), 'no older queue read');
+    assert.ok(!r.requests.some((x) => /^\/api\/kyc\/admin\/\d+$/.test(x.url)), 'no record opened from the list');
     assert.equal(r.textOf('kyc-chip-pending'), 'Waiting14');
     assert.equal(r.textOf('kyc-chip-all'), 'All439');
     assert.match(r.textOf('kyc-tile-median'), /1\.8 days.*Last 90 days/);
