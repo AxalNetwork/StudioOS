@@ -121,7 +121,10 @@ test('a source that did not answer: its chip says a dash with why, never 0; the 
     assert.ok(v.text('cal-fam-other').includes('and 1 unread'), 'its family says one is unread');
     assert.ok(!/read 0/.test(v.text()), 'the banner no longer says the chip reads 0');
     assert.equal(v.text('cal-waits').startsWith(NOT_YET), true);
-    for (const k of ['deadlines', 'interviews', 'feed']) assert.ok(v.text(`cal-wait-${k}`).includes(WAITS[k].slice(0, 30)), k);
+    // D1212 (#3178) filled the whole-calendar subscription (Subscribe, CAL11): its wait is retired.
+    assert.equal(WAITS.feed, undefined);
+    assert.equal(v.by('cal-wait-feed'), undefined);
+    for (const k of ['deadlines', 'interviews']) assert.ok(v.text(`cal-wait-${k}`).includes(WAITS[k].slice(0, 30)), k);
   } finally { await v.close(); }
 });
 

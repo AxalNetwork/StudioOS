@@ -20,6 +20,7 @@ import FromMercury from '../investor/FromMercury';
 import { tabHref } from '../dealPageModel';
 import { CARD, EYE, SUB, H3, BTN_S, BTN_P } from './DealFrame';
 import { Slot } from './DealOverview';
+import InvestorCapTablePanel from '../raise/captable/InvestorCapTablePanel';
 import { DECK_SLOT } from './dealFrameModel';
 import {
   ASK_MAX, CAP_TABLE_SLOT, LEGAL_SLOT, NOTE_READERS, QUESTIONS_SLOT, ROUTES, ROUTE_NOTE, SYNDICATES_LINE, WITHDRAW_MAX,
@@ -301,7 +302,10 @@ export function DealTerms({ deal, investor }) {
       <div className="flex flex-col gap-3.5">
         <Slot slot={LEGAL_SLOT} testId="deal-terms-legal" />
         <p className={`m-0 ${SUB}`}>Your line and review-and-sign are in the closing room. <Link to={tabHref(deal.id, 'closing')} className="font-bold text-axal-violet-deep underline dark:text-violet-300">Open the closing room</Link></p>
-        <Slot slot={CAP_TABLE_SLOT} testId="deal-terms-captable" />
+        {/* D1027 (#2864): the investor's read-only Cap table panel (CT15), at the level the founder shares. */}
+        {investor
+          ? <InvestorCapTablePanel projectId={deal.project_id} venture={deal.project_name} testId="deal-terms-captable" />
+          : <Slot slot={CAP_TABLE_SLOT} testId="deal-terms-captable" />}
       </div>
       {investor && (
         <section className="flex flex-col gap-2.5 md:col-span-2" data-testid="deal-terms-routes">
