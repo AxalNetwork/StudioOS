@@ -64,8 +64,14 @@ const QUERIES = {
     JOIN integrations i ON i.id=f.integration_id AND i.provider_key='mercury' AND i.status='active'
     JOIN users u ON u.id=i.user_id AND u.is_active=1 JOIN projects p ON p.id=f.project_id AND p.founder_id=u.founder_id
     WHERE f.project_id=? AND i.user_id=? AND f.kind IN ('runway','revenue')`,
-  holders: `SELECT h.id,h.source,h.ownership_pct,h.shares,h.created_at,h.updated_at FROM cap_table_holders h WHERE h.project_id=? AND (h.kind='founder' OR h.founder_role IS NOT NULL)`,
-  vesting: `SELECT v.id,v.source,v.start_date,v.total_shares,v.vested_shares,v.updated_at FROM cap_table_vesting v JOIN cap_table_holders h ON h.id=v.holder_id
+  holders: `SELECT h.id,h.source,h.ownership_pct,h.shares,h.created_at,h.updated_at,EXISTS
+    (SELECT 1 FROM connector_fed_items l JOIN integrations i ON i.id=l.integration_id AND i.status='active'
+      WHERE l.project_id=h.project_id AND l.local_table='cap_table_holders' AND l.local_id=h.id
+        AND i.provider_key=replace(replace(replace(lower(h.source),'connector_',''),'connector:',''),'connector-','')) AS connector_proof FROM cap_table_holders h WHERE h.project_id=? AND (h.kind='founder' OR h.founder_role IS NOT NULL)`,
+  vesting: `SELECT v.id,v.source,v.start_date,v.total_shares,v.vested_shares,v.updated_at,EXISTS
+    (SELECT 1 FROM connector_fed_items l JOIN integrations i ON i.id=l.integration_id AND i.status='active'
+      WHERE l.project_id=h.project_id AND l.local_table='cap_table_vesting' AND l.local_id=v.id
+        AND i.provider_key=replace(replace(replace(lower(v.source),'connector_',''),'connector:',''),'connector-','')) AS connector_proof FROM cap_table_vesting v JOIN cap_table_holders h ON h.id=v.holder_id
     WHERE h.project_id=? AND (v.project_id IS NULL OR v.project_id=h.project_id)`,
   contributors: `SELECT g.id,g.commits_90d,g.repository FROM github_contributors g JOIN integrations i ON i.id=g.integration_id
     JOIN github_login_map m ON m.project_id=g.project_id AND m.login=g.login JOIN cap_table_holders h ON h.id=m.holder_id AND h.project_id=g.project_id AND h.founder_role IS NOT NULL
@@ -171,7 +177,8 @@ const sourceProvider=(row:DataRow)=>string(row.source)?.toLowerCase().replace(/^
 function provenance(row: DataRow): {label:EvidenceSourceLabel;provider:string|null} {
   const provider=sourceProvider(row);
   if(provider&&['mercury','stripe','carta'].includes(provider)) {
-    if((row.connector_proof!==undefined&&row.connector_proof!==1&&!(provider==='stripe'&&row.verification==='verified'))
+    const proven=row.connector_proof===1||(provider==='stripe'&&row.verification==='verified');
+    if(!proven
       ||(row.verification!==undefined&&row.verification!=='verified'&&!(provider==='mercury'&&row.verification==='supported'&&row.connector_proof===1)))return {label:row.proof_id!=null?'document':'typed',provider:null};
     return {label:'connector',provider};
   }
@@ -192,9 +199,9 @@ function materials(rule: EvidenceRule, rows: DataRow[]): Material[] {
     switch(rule.kind){
       case 'revenue-receipt': add(row.received_on,row.amount_cents,'cents',id,{privateReason:sourceProvider(row)==='mercury'?'bank':undefined});break;
       case 'bank-runway': if(row.kind==='runway'&&row.fact_key==='runway'&&num(row.value)!=null)add(row.as_of,row.value,'months');break;
-      case 'founder-holding': add(provenance(row).label==='typed'?row.created_at:null,row.ownership_pct??row.shares,row.ownership_pct!=null?'percent':'shares');break;
+      case 'founder-holding': add(['manual','typed'].includes(String(row.source).toLowerCase())?row.created_at:null,row.ownership_pct??row.shares,row.ownership_pct!=null?'percent':'shares');break;
       case 'vesting-schedule': add(row.start_date,row.total_shares,'shares');break;
-      case 'founder-commits': add(null,row.commits_90d,'commits');break;
+      case 'founder-commits': add(null,row.commits_90d,'commits',id,{provider:'github'});break;
       case 'skill-actions': add(row.last_at,row.count_window,'actions',String(row.axis)+':'+String(row.source));break;
       case 'pain-theme': if(num(row.mentions)!=null&&Number(row.mentions)>0)add(row.observed_on,row.mentions,'interviews',id,{strength:Number(row.mentions)>=2?'pattern':'anecdote'});break;
       case 'consented-quote': if(row.quote_consent===1&&string(row.notes))add(row.interview_date,null,undefined,id+':quote');break;
@@ -270,9 +277,10 @@ export async function collectEvidenceSources(env:Env, projectId:number, bankUser
       const origin=provenance(m.row), label=m.source??(rule.source==='record'?origin.label:rule.source);
       const provider=m.provider??(label==='connector'?(origin.provider??(rule.private_reason==='bank'?'mercury':null)):null);
       const observed=evidenceDate(m.date), strength=m.strength??(label==='typed'?'anecdote':num(m.value)!=null||label==='signed'?'measured':label==='document'?'pattern':'anecdote');
-      for(const area of rule.areas){const snapshot_hash=await evidenceHash({project_id:projectId,kind:rule.kind,area,source_table:rule.source_table,source_ref:m.ref,source_label:label,provider,observed_on:observed,material:m.row},key);
+      const privateReason=m.privateReason??rule.private_reason??(sourceProvider(m.row)==='mercury'?'bank':null);
+      for(const area of rule.areas){const snapshot_hash=await evidenceHash({project_id:projectId,kind:rule.kind,area,source_table:rule.source_table,source_ref:m.ref,source_label:label,provider,observed_on:observed,strength,private_reason:privateReason,summary:rule.summary,value_num:num(m.value),value_unit:m.unit??null,currency:string(m.row.currency),material:m.row},key);
         candidates.push({kind:rule.kind,area,source_table:rule.source_table,source_ref:m.ref,provider,source_label:label,strength,observed_on:observed,summary:rule.summary,
-          value_num:num(m.value),value_unit:m.unit??null,currency:string(m.row.currency),snapshot_hash,private_reason:m.privateReason??rule.private_reason??null,backs:rule.backs,
+          value_num:num(m.value),value_unit:m.unit??null,currency:string(m.row.currency),snapshot_hash,private_reason:privateReason,backs:rule.backs,
           stale:evidenceStale(observed,rule.days,now),date_reason:observed?null:'The source has no recorded observation date; a sync timestamp is not used.'});}
     }}catch{const b=blocks.find(b=>b.dataset===rule.dataset)!;b.state='unreadable';b.count=null;b.reason='This source could not be read. Try again.';}
   }
