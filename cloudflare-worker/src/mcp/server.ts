@@ -315,7 +315,7 @@ export async function callTool(env: Env, props: GrantProps, grantId: string | nu
       };
       return quote > 0
         ? (await meteredCall(env, { userId: runUser.id, executionId, operation, quoteMicrousd: quote,
-          pricingVersion: policy.version, apiKeyUid, signal }, runTool)).value
+          pricingVersion: policy.version, apiKeyUid, signal, surface: 'mcp' }, runTool)).value
         : await runTool();
     });
     if (grantId && env.OAUTH_KV) {
