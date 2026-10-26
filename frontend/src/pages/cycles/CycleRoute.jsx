@@ -45,7 +45,8 @@ import MvpFromGithub from './MvpFromGithub';
 import UpdatesHistory from './UpdatesHistory';
 import ReportingDesk from './ReportingDesk';
 import BuildPlan, { BuildPlanDoor, VerdictRecordWithPlan } from './BuildPlan';
-import { PmfPart, ReadinessDoor } from './PmfPart';
+import { PmfPart } from './PmfPart';
+import { PmfChip } from './PmfMethod';
 import UpdateAskReplies from './UpdateAskReplies';
 import CallsHistory from './CallsHistory';
 import RaiseReceiptMatches from '../../components/RaiseReceiptMatches';
@@ -1062,11 +1063,11 @@ export default function CycleRoute({ cycle, lightbox = false, adding = false, re
           onRetryCard={retryCard}
           action={action}
           search={q}
+          // D1146 (#3032, RD12): Validate's header chip, the stored band, opening Fundraising readiness.
+          chip={cycle === 'validate' && projectId ? <PmfChip projectId={projectId} search={q} /> : null}
         />
         {/* D1063 (#2426): the door to the plan, under Build's overview. */}
         {cycle === 'build' && <BuildPlanDoor search={q} />}
-        {/* D1141 (#2433, RD12): Validate's records feed Product-market fit on Fundraising readiness. */}
-        {cycle === 'validate' && <ReadinessDoor search={q} />}
         <AlsoIn role="founder" row={name} />
       </>
     );

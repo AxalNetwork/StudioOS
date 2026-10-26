@@ -177,6 +177,7 @@ import matches from './routes/matches';
 import settings from './routes/settings';
 import personas from './routes/personas';
 import personaSegments from './routes/persona_segments';
+import segmentAggregates from './routes/persona_segment_aggregates';
 import personaMembers from './routes/persona_members';
 import onboarding from './routes/onboarding';
 // Task #6 (IF) — per-role onboarding checklist + product-tour tracking.
@@ -1368,6 +1369,9 @@ app.route('/api/integrations', integrations);
 // D652 — the Worker AI rail's conversations and their connectors (#1464).
 app.route('/api/eadwyn', eadwynRoutes);
 app.route('/api/crunchbase', crunchbaseRoutes);
+// D1001 (#2816): a segment's answers and working styles as suppressed counts,
+// mounted by D1005 (#2820), before the profile router as D1001 asks.
+app.route('/api/personas/segments', segmentAggregates);
 // D1000 (#2815): the segment profiles, before the personas routes.
 app.route('/api/personas/segments', personaSegments);
 // D1002 (#2817): members, bulk move, ask to finish and activity, before the personas routes.

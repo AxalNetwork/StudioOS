@@ -112,17 +112,17 @@ function stub(list) {
   return { seen, restore() { globalThis.fetch = original; } };
 }
 
-test('mounted Overview, as an Admin: one h1, the Accounts crumb and notice, and today\'s re-tag table (D1004 draws the counts)', async () => {
+test('mounted Overview, as an Admin: one h1, the Accounts crumb and notice, and no re-tag table (D1004 draws the counts)', async () => {
   // D1004 (#2819): Overview's tiles, charts and cards read D999's segment counts and D1000's
-  // profiles, tested in persona_segments_overview_d1004; the persona list feeds only the
-  // re-tag table and Unclassified now.
+  // profiles, tested in persona_segments_overview_d1004. D1005 (#2820) retired the re-tag
+  // table: a member moves from their segment's Members tab, by the Move dialog.
   const s = stub(() => json({ users: USERS }));
   const v = await render('/admin/persona-segments?moved=personas');
   try {
     assert.equal(v.h1s(), 1);
     assert.match(v.of('seg-header'), /Accounts.*Persona segments/s);
     assert.match(v.of('seg-header'), /Personas is now Persona segments, under Accounts\./);
-    assert.match(v.of('seg-move-table'), /User Personas/, 'the re-tag table is unreachable');
+    assert.ok(!v.has('seg-move-table'), 'the retired re-tag table is still on Overview');
     assert.equal(v.count('seg-scope-capped'), 0, 'Overview is not under Guard L');
     assert.ok(!v.has('hq-board-persona-segments'), 'a plain admin got the HQ rail');
     assert.ok(s.seen.includes('/api/personas/admin/segments'), 'Overview reads the segment counts');
