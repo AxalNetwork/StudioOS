@@ -39,7 +39,7 @@ cryptography==50.0.2
     #   http-ece
     #   py-vapid
     #   pywebpush
-fastapi==0.143.0
+fastapi==0.146.0
     # via repl-nix-workspace
 frozenlist==1.8.0
     # via
@@ -49,7 +49,7 @@ google-api-core==2.42.0
     # via google-api-python-client
 google-api-python-client==2.201.0
     # via repl-nix-workspace
-google-auth==2.61.0
+google-auth==2.62.0
     # via
     #   google-api-core
     #   google-api-python-client
@@ -110,7 +110,7 @@ protobuf==7.36.2
     #   repl-nix-workspace
 psycopg2-binary==2.9.13
     # via repl-nix-workspace
-py-vapid==1.9.4
+py-vapid==1.9.6
     # via pywebpush
 pyasn1==0.6.4
     # via pyasn1-modules
@@ -146,13 +146,13 @@ requests==2.34.2
     #   requests-oauthlib
 requests-oauthlib==2.0.0
     # via google-auth-oauthlib
-sqlalchemy==2.1.4
+sqlalchemy==2.1.5
     # via
     #   alembic
     #   sqlmodel
 sqlmodel==0.0.48
     # via repl-nix-workspace
-starlette==1.7.0
+starlette==1.9.0
     # via fastapi
 typing-extensions==4.16.0
     # via

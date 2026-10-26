@@ -379,7 +379,9 @@ export function WeekLine({ values, labels, previous = null, height = 220 }) {
  * current week (`toDate`) is hatched in each series' own colour, so the
  * hatch never takes a series' colour away. A `null` value is not recorded:
  * it is a short dashed mark on the baseline, never a zero-height bar
- * (D994, Partner profiles' weekly decisions before part 2).
+ * (D994, Partner profiles' weekly decisions before part 2). D1034 (#2875):
+ * a row with `blank` is a period still to come, drawn as nothing at all but
+ * its label (My events' Past: "December has not come yet").
  */
 export function GroupedColumns({ rows, series, height = 220 }) {
   const [ref, W] = useBoxWidth();
@@ -418,7 +420,7 @@ export function GroupedColumns({ rows, series, height = 220 }) {
           const x0 = Lx + gw * i + (gw - bw * k) / 2;
           return (
             <g key={`${r.label}-${i}`}>
-              {series.map((s, j) => {
+              {r.blank ? null : series.map((s, j) => {
                 const x = x0 + bw * j;
                 if (r.values[j] == null) {
                   return <line key={s.label} x1={x} x2={x + bw} y1={top + ch - 1} y2={top + ch - 1} strokeWidth="1.5" strokeDasharray="2 2" className="stroke-axal-muted" />;
