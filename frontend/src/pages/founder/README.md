@@ -88,3 +88,8 @@ Telegram's boards (TG1–TG7, D869, #2515) are built on the same tool.
 (`CHAT_TOOLS` in `channelSessionModel.js`); `RecordWhatsAppTool.jsx` re-exports
 WhatsApp's, and `RecordTelegramTool.jsx` adds Telegram's own tabs (Send to
 Axal, Connection, MCP access) under `/validate/record/telegram`.
+
+Calls' boards (MC1–MC7, D878, #2525) are `RecordCallsTool.jsx`, with its
+rules in `callsModel.js` (pure): Upcoming, Calls, Upload, Proposals,
+Connection and Retention, as paths under `/validate/record/calls`. It reuses
+the shared parts and `RecordChatTool.jsx`'s tab bar (`SubTabs`).
