@@ -72,6 +72,7 @@ import { DataRoomMovedRedirect } from '../raise/dataroom/DataRoomMoved';
 import { UseOfFundsHomeNav, UseOfFundsTabPage } from '../raise/useoffunds/UseOfFundsTool';
 import { forecastHref, isUseOfFundsTab, SLUG as USE_OF_FUNDS } from '../raise/useoffunds/useOfFundsModel';
 import { CapRelHomeNav, CapRelTabPage } from '../raise/caprel/CapRelTool';
+import EvidencePart from './evidence/EvidencePart';
 import { isCapRelTab, SLUG as CAP_REL } from '../raise/caprel/capRelModel';
 
 
@@ -203,14 +204,21 @@ const CYCLE_DEFS = {
     // D686 §5.6: Capital relationships' Calls history, anchored at #calls.
     // D752 (#1989): then the founder's "Match to my Mercury" for committed prospects.
     // D840 part 2 (#2347): every Raise module's From Mercury, the founder's alone, anchored at #from-mercury.
+    // D1267 (#3290, VR6): then each module's Evidence part, opening the Evidence view's drawers.
     parts: toFnMap({
-      ...Object.fromEntries(MODULES.raise.map((m) => [m.slug, (data, ctx) => mercuryPart(m.slug, data, ctx)])),
+      ...Object.fromEntries(MODULES.raise.map((m) => [m.slug, (data, ctx) => (
+        <>
+          {mercuryPart(m.slug, data, ctx)}
+          <EvidencePart slug={m.slug} projectId={ctx.projectId} />
+        </>
+      )])),
       // D909 (#2693, NAR1): Home's tiles, Needs you and footer, from the module read's `parts.narrative`;
       // D913: its Objections heard, with no Answer it for an admin.
       'investor-narrative': (data, ctx) => (
         <>
           <NarrativeHome data={data} admin={isNarrativeAdmin({ role: ctx.role })} />
           {mercuryPart('investor-narrative', data, ctx)}
+          <EvidencePart slug="investor-narrative" projectId={ctx.projectId} />
         </>
       ),
       // D1141 (#2433), D1145 (#3031): Product-market fit from `parts.pmf`, beside the raise kit; then From Mercury.
@@ -218,6 +226,7 @@ const CYCLE_DEFS = {
         <>
           <PmfPart part={data?.parts?.pmf} card={data?.card} records={data?.records} projectId={ctx.projectId} reload={ctx.reload} />
           {mercuryPart('fundraising-readiness', data, ctx)}
+          <EvidencePart slug="fundraising-readiness" projectId={ctx.projectId} />
         </>
       ),
       // D1227 (#3226): the Calls history left Overview; Calls for Capital is the Calls tab (D1221).
@@ -225,6 +234,7 @@ const CYCLE_DEFS = {
         <>
           <RaiseReceiptMatches role={ctx.role} onChanged={ctx.reload} />
           {mercuryPart('capital-relationships', data, ctx)}
+          <EvidencePart slug="capital-relationships" projectId={ctx.projectId} />
         </>
       ),
     }),
