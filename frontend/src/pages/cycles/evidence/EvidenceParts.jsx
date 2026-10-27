@@ -4,9 +4,10 @@
  * (VR1–VR5), the drawer an address opens (VR2, VR3), and the in-page dialog
  * every change opens before it is made. No browser pop-up anywhere.
  */
-import React, { useEffect, useState } from 'react';
+import React, { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { Lightbox } from '../../../ui';
+import Sheet from '../../../ui/Sheet.jsx';
 import { CLAIM_STATE } from './evidenceModel';
 import { day, providerWord, sharingWord, sourceWord } from './evidenceView';
 
@@ -110,30 +111,22 @@ export function ChangeDialog({ title, says, confirm = 'Confirm', danger = false,
 }
 
 /**
- * VR2, VR3: a drawer named by the address, 480 wide beside the page and full
- * screen on a phone. Closing goes back to the view, keeping the query; Escape
- * closes it too.
+ * VR2, VR3: a drawer named by the address, drawn as the shared Sheet at the
+ * canvas's 480 (D1317). Closing goes back to the view, keeping the query.
+ * The link keeps that address in the markup; the sheet's own close does too.
  */
 export function Drawer({ label, eyebrow, title, closeTo, children, footer = null, testId }) {
   const navigate = useNavigate();
-  useEffect(() => {
-    const onKey = (e) => { if (e.key === 'Escape' && !e.defaultPrevented) navigate(closeTo); };
-    if (typeof window !== 'undefined') window.addEventListener('keydown', onKey);
-    return () => { if (typeof window !== 'undefined') window.removeEventListener('keydown', onKey); };
-  }, [navigate, closeTo]);
   return (
-    <aside role="dialog" aria-modal="false" aria-label={label} data-testid={testId}
-      className="fixed inset-0 z-[70] flex flex-col overflow-y-auto bg-white shadow-xl lg:inset-y-0 lg:left-auto lg:right-0 lg:w-[480px] lg:border-l lg:border-axal-hairline dark:bg-gray-950 dark:lg:border-gray-800">
-      <header className="sticky top-0 flex items-start justify-between gap-3 border-b border-axal-hairline bg-white px-5 py-4 dark:border-gray-800 dark:bg-gray-950">
-        <div className="flex min-w-0 flex-col gap-1">
-          {eyebrow ? <span className="text-[11px] font-bold uppercase tracking-[.08em] text-axal-muted dark:text-gray-400">{eyebrow}</span> : null}
-          <h2 className="m-0 text-[17px] font-bold text-axal-ink dark:text-gray-100">{title}</h2>
-        </div>
-        <Link to={closeTo} className={LINK} data-testid={`${testId}-close`}>Close</Link>
-      </header>
+    <Sheet label={label} eyebrow={eyebrow} title={title} width={480} onClose={() => navigate(closeTo)} testId={testId}
+      footer={(
+        <>
+          {footer}
+          <Link to={closeTo} className={LINK}>Back to evidence</Link>
+        </>
+      )}>
       <div className="flex flex-col divide-y divide-axal-hairline px-5 dark:divide-gray-800">{children}</div>
-      {footer ? <footer className="sticky bottom-0 mt-auto flex flex-wrap gap-2 border-t border-axal-hairline bg-white px-5 py-3 dark:border-gray-800 dark:bg-gray-950">{footer}</footer> : null}
-    </aside>
+    </Sheet>
   );
 }
 export function Section({ title, children, testId }) {
