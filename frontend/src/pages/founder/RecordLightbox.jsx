@@ -20,7 +20,7 @@ import { chatConsentBlock, chatConsentOf, consentChoices, consentLine, noticeBlo
 import {
   CONSENTS, DURATIONS, HOW_OPTIONS, NOT_STORED, PROVIDERS, SETUP_FIELDS, STAGE_WORD, assignTarget, callChannel, callLabel, chipStatus, consentNote, howOf,
   attachesCall, attachOutcome, defaultProvider, estimate, hasMeetingLink, languageOptions, meetingLinkProblem, modeOf, newStartKey, pipelineRows, sessionBody, setupBody,
-  startRefusal, startState, talkingPoints, threadsFor, modeNote,
+  startRefusal, startState, talkingPoints, threadsFor, modeNote, createMeetingOffer, createdLink, botState, botTranscriptLine,
 } from './recordSetup.js';
 
 /**
@@ -169,6 +169,8 @@ export default function RecordLightbox({
   recorder = null,
   // D703 (#1665): the cycle route's page mode below 1024px ({ pageBelow, bar, pageClass }), spread on the Lightbox.
   asPage,
+  // D1346 (#3554): `GET /founder/validate/meetings/bot`, when the caller has read it already.
+  initialBot,
 }) {
   // The chips' statuses (#1586): `GET /api/channels` once, unless the caller
   // passed the read. A failed read is null, and the chips then say "Not
@@ -182,6 +184,19 @@ export default function RecordLightbox({
       .catch(() => { if (alive) setChannels(null); });
     return () => { alive = false; };
   }, [channelsSource, initialChannels, fields.channels]);
+  // D1346 (#3554): whether Eadwyn AI can join, read on open so Send is disabled up front, not refused
+  // after the press. undefined is still reading; null is unreadable (Try again reads it once more).
+  const [botRead, setBotRead] = useState(initialBot);
+  const [botTick, setBotTick] = useState(0);
+  useEffect(() => {
+    if (initialBot !== undefined && botTick === 0) return undefined;
+    if (typeof channelsSource?.botAvailability !== 'function') { setBotRead(null); return undefined; }
+    let alive = true;
+    setBotRead(undefined);
+    channelsSource.botAvailability().then((r) => { if (alive) setBotRead(r ?? null); }).catch(() => { if (alive) setBotRead(null); });
+    return () => { alive = false; };
+  }, [channelsSource, initialBot, botTick]);
+  const [creating, setCreating] = useState({ busy: false, error: '' });
   const nameRef = useRef(null);
   const sending = useRef(false); // a second press in the same render must not send again
   const startKey = useRef(null);
@@ -262,8 +277,25 @@ export default function RecordLightbox({
   const blockedReason = importing && !thread && state.ok ? 'Choose a chat to import.' : state.ok ? chatBlock : null;
   const linkProblem = hasMeetingLink(mode, provider) ? meetingLinkProblem(provider, link) : null;
   const ready = state.ok && !blockedReason && !linkProblem && !busy;
-  const botReady = mode === 'video' && !!botPlatform(link);
+  const meeting = hasMeetingLink(mode, provider);
+  const bot = botState(botRead, botPlatform(link) || (meeting ? provider : null));
+  const botReady = mode === 'video' && !!botPlatform(link) && bot.canSend;
   const label = botReady ? 'Send Eadwyn AI' : m.start;
+  const offer = createMeetingOffer(mode, provider, channels);
+  const openable = meeting && !!link.trim() && !linkProblem;
+  useEffect(() => { setCreating({ busy: false, error: '' }); }, [provider]);
+  /** D1346: "Create the meeting for me" — a meeting starting now on the member's own account; its link fills the field. */
+  const createMeeting = async () => {
+    if (creating.busy || offer?.kind !== 'create' || typeof channelsSource?.instantMeeting !== 'function') return;
+    setCreating({ busy: true, error: '' });
+    try {
+      const url = createdLink(provider, await channelsSource.instantMeeting(provider, minutes));
+      if (!url) throw new Error('');
+      setLink(url); setRefusal(null); setCreating({ busy: false, error: '' });
+    } catch (e) {
+      setCreating({ busy: false, error: (typeof e?.message === 'string' && e.message.trim()) || `The meeting could not be created. Create it in ${chosen?.label || 'the app'} and paste its link.` });
+    }
+  };
   const languages = languageOptions(models, live);
 
   // The chats waiting for this app, read when its chip is chosen.
@@ -432,6 +464,7 @@ export default function RecordLightbox({
           <div className="flex items-center gap-2">
             <button type="button" onClick={onClose} className="rounded-[9px] px-3 py-2 text-[12.5px] font-bold text-axal-muted hover:bg-gray-100 dark:text-gray-300 dark:hover:bg-gray-800" data-testid="record-cancel">Cancel</button>
             {botReady && <button type="button" onClick={() => submit('device')} disabled={!ready} className="rounded-[9px] border border-gray-300 px-3 py-2 text-[12.5px] font-bold text-gray-700 disabled:opacity-50 dark:border-gray-700 dark:text-gray-200" data-testid="record-device">Record this device</button>}
+            {meeting && !bot.canSend && <button type="button" disabled aria-describedby="record-bot-state" className="cursor-not-allowed rounded-[9px] border border-gray-300 px-3 py-2 text-[12.5px] font-bold text-gray-400 dark:border-gray-700 dark:text-gray-500" data-testid="record-bot-send-off">Send Eadwyn AI</button>}
             <button type="button" onClick={() => submit()} aria-disabled={!ready || undefined} aria-describedby={ready ? undefined : (m.audio && !CONSENTS.some(([k]) => k === consent) ? consentNoteId : 'record-start-reason')}
               disabled={busy} data-testid="record-start" className={ready ? 'rounded-[9px] bg-axal-violet px-3.5 py-2 text-[13px] font-bold text-white hover:bg-axal-violet-deep' : 'cursor-not-allowed rounded-[9px] bg-violet-300 px-3.5 py-2 text-[13px] font-bold text-white dark:bg-violet-900/60 dark:text-violet-300'}>{busy ? 'Starting…' : label}</button>
           </div>
@@ -504,6 +537,26 @@ export default function RecordLightbox({
                 : linkProblem ? <span role="alert" className="font-normal text-red-700 dark:text-red-400">{linkProblem}</span> : null}
             </label>
           )}
+          {meeting && (offer || openable) && (
+            <div className="flex flex-wrap items-center gap-x-3 gap-y-1" data-testid="record-create-meeting">
+              {offer?.kind === 'create' && (
+                <button type="button" onClick={createMeeting} disabled={creating.busy || offer.connected === false || !fields.meeting_url}
+                  className="rounded-[9px] border border-axal-hairline px-3 py-1.5 text-[12px] font-semibold text-axal-ink hover:bg-axal-ground disabled:cursor-not-allowed disabled:opacity-50 dark:border-gray-700 dark:text-gray-100 dark:hover:bg-gray-800" data-testid="record-create-meeting-button">
+                  {creating.busy ? 'Creating the meeting…' : 'Create the meeting for me'}
+                </button>
+              )}
+              {offer?.kind === 'create' && offer.connectHref && <Link to={offer.connectHref} className="text-[12px] font-semibold text-axal-violet underline dark:text-violet-300" data-testid="record-create-connect">{offer.connectLabel}</Link>}
+              {openable && <a href={link.trim()} target="_blank" rel="noopener noreferrer" className="text-[12px] font-semibold text-axal-violet underline dark:text-violet-300" data-testid="record-open-meeting">Open the meeting</a>}
+              {offer && offer.kind !== 'create' && <p className="m-0 w-full text-[11.5px] text-axal-faint" data-testid="record-create-note">{offer.sentence}</p>}
+              {creating.error && <p role="alert" className="m-0 w-full text-[11.5px] font-semibold text-red-700 dark:text-red-400" data-testid="record-create-error">{creating.error}</p>}
+            </div>
+          )}
+          {meeting && !bot.canSend && (
+            <p id="record-bot-state" className="m-0 text-[12px] text-axal-muted dark:text-gray-400" data-testid="record-bot-state" data-state={bot.state}>
+              {bot.sentence}
+              {bot.state === 'unreadable' && <button type="button" onClick={() => setBotTick((n) => n + 1)} className="ml-1.5 font-semibold text-axal-violet underline dark:text-violet-300" data-testid="record-bot-retry">Try again</button>}
+            </p>
+          )}
           {botReady && <><MeetingBotConsentNotice /><p className="m-0 text-[12px] text-axal-faint" data-testid="bot-billing-note">Eadwyn AI uses your AI tokens for bot time and transcription. Your balance is checked before sending. The call limit is 30 minutes on a free plan and two hours on a paid plan.</p></>}
           {mode === 'text' && provider === 'paste' && (
             <label className="flex flex-col gap-1 text-[11.5px] font-semibold text-axal-muted dark:text-gray-400">The conversation
@@ -563,8 +616,15 @@ export default function RecordLightbox({
           <p className="m-0 text-[11.5px] text-axal-faint" data-testid="record-points-note">{fields.points ? 'The hypotheses you pick appear in the Talking points drawer while you record.' : NOT_STORED}</p>
         </Section>
 
-        {m.audio && (
-          <Section title={botReady ? "Device recording options" : "Transcript"} testId="record-transcript">
+        {m.audio && botReady && (
+          <Section title="Transcript" testId="record-transcript">
+            <p className="m-0 text-[12.5px] text-axal-ink dark:text-gray-100" data-testid="record-bot-transcript">{botTranscriptLine(botRead).transcript}</p>
+            <p className="m-0 rounded-[9px] bg-axal-lavender px-3 py-2 text-[12.5px] text-axal-violet-deep dark:bg-violet-900/30 dark:text-violet-200" data-testid="record-bot-price">{botTranscriptLine(botRead).price}</p>
+            <p className="m-0 text-[11.5px] text-axal-faint">Live captions and the final-transcript choice are for recording this device.</p>
+          </Section>
+        )}
+        {m.audio && !botReady && (
+          <Section title="Transcript" testId="record-transcript">
             {models === undefined ? <p className="m-0 text-[12px] text-axal-faint">Reading models…</p>
               : models === null ? <p className="m-0 text-[12px] text-axal-faint" data-testid="record-models-unreadable">Unreadable: the model list could not be read.</p>
                 : (
@@ -584,7 +644,7 @@ export default function RecordLightbox({
                     </div>
                     {!fields.language && <p className="m-0 text-[11.5px] text-axal-faint" data-testid="record-language-note">{NOT_STORED}</p>}
                     <div className="flex items-center justify-between gap-2 rounded-[9px] bg-axal-lavender px-3 py-2 text-[12.5px] text-axal-violet-deep dark:bg-violet-900/30 dark:text-violet-200" data-testid="record-estimate">
-                      <span>{botReady ? `Record this device · ${eta.text}` : eta.text}</span>
+                      <span>{eta.text}</span>
                       <label className="flex items-center gap-1.5 text-[11.5px]"><span className="sr-only">Estimated length</span>
                         <select value={minutes} onChange={(e) => setMinutes(Number(e.target.value))} className="rounded-md border border-axal-lavender-edge bg-white px-1.5 py-0.5 text-[11.5px] dark:border-violet-800 dark:bg-gray-900" data-testid="record-minutes">
                           {DURATIONS.map((d) => <option key={d} value={d}>{d} min</option>)}

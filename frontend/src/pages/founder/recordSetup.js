@@ -155,6 +155,9 @@ export function chipStatus(mode, chip, channels) {
   if (chip.ready) return { word: 'Ready', disabled: false };
   const known = availableOf(channels, chip.link);
   const conn = connectionOf(channels, chip.link);
+  // D1346 (#3554): Eadwyn AI joins a Meet call as a guest, so the chip never asks for a
+  // connection. Connecting Google is offered only beside "Create the meeting for me".
+  if (mode === 'video' && chip.value === 'google_meet') return { word: isConnected(conn, chip.link) ? 'Connected' : 'Ready', disabled: false };
   if (!channels || known === null) return { word: 'Not available yet', disabled: mode === 'text' };
   if (known === false) return { word: 'Not available yet', disabled: mode === 'text' };
   if (isConnected(conn, chip.link)) return { word: 'Connected', disabled: false };
@@ -216,6 +219,54 @@ export function attachOutcome(result, error) {
 
 /** The link field is drawn for video, on a provider that has links. */
 export const hasMeetingLink = (mode, provider) => mode === 'video' && ['zoom', 'google_meet', 'teams'].includes(provider);
+
+/**
+ * D1346 (#3554): "Create the meeting for me", beside Meeting link. Zoom and
+ * Google Meet make a meeting starting now on the member's own account
+ * (`POST /founder/validate/meetings/instant`); Teams is paste only. `connected`
+ * is null when the connections could not be read: the Worker then decides, and
+ * says "Connect … first" in its own words.
+ */
+export const TEAMS_PASTE = 'Create the meeting in Microsoft Teams and paste its link here. Axal cannot create a Teams meeting yet.';
+export const CREATE_CONNECT = Object.freeze({ zoom: 'Connect Zoom to create the meeting here', google_meet: 'Connect Google to create the meeting here' });
+export function createMeetingOffer(mode, provider, channels) {
+  if (mode !== 'video') return null;
+  if (provider === 'teams') return { kind: 'paste', sentence: TEAMS_PASTE };
+  if (provider !== 'zoom' && provider !== 'google_meet') return null;
+  const label = provider === 'zoom' ? 'Zoom' : 'Google Meet';
+  if (availableOf(channels, provider) === false) return { kind: 'unavailable', sentence: `${label} meetings cannot be created on Axal yet. Create it in ${label} and paste the link.` };
+  const connected = channels ? isConnected(connectionOf(channels, provider), provider) : null;
+  return { kind: 'create', connected, connectHref: connected === false ? '/account/connectors' : null, connectLabel: CREATE_CONNECT[provider] };
+}
+/** The link the Worker made, or null: a reply that is not a link on the provider's own host fills nothing. */
+export function createdLink(provider, reply) {
+  const url = typeof reply?.join_url === 'string' ? reply.join_url.trim() : '';
+  return url && !meetingLinkProblem(provider, url) ? url : null;
+}
+
+/**
+ * D1346 (#3554): whether Eadwyn AI can join, from `GET
+ * /founder/validate/meetings/bot`, read when the dialog opens. `undefined` is
+ * still reading and `null` unreadable; neither is "available".
+ */
+export const BOT_UNAVAILABLE = 'Eadwyn AI can’t join calls yet on Axal. Record this device instead, or paste the link to keep it for later.';
+export const BOT_UNREADABLE = 'Unreadable: Axal could not read whether Eadwyn AI can join. This is not a claim that it cannot.';
+export function botState(read, platform) {
+  if (read === undefined) return { state: 'loading', canSend: false, sentence: 'Checking whether Eadwyn AI can join…' };
+  if (read === null || typeof read !== 'object' || typeof read.platforms !== 'object' || read.platforms === null) return { state: 'unreadable', canSend: false, sentence: BOT_UNREADABLE };
+  if (platform && read.platforms[platform] === true) return { state: 'available', canSend: true, sentence: null };
+  return { state: 'unavailable', canSend: false, sentence: BOT_UNAVAILABLE };
+}
+const perMinute = (micro) => (Number.isSafeInteger(micro) && micro > 0 ? `$${(micro / 1e6).toFixed(4)} a minute` : 'not priced yet');
+/** The bot's own transcript line and price (D886 §5), in place of the device's options. */
+export function botTranscriptLine(read) {
+  const p = read?.price || {};
+  const limit = Number.isSafeInteger(read?.limit_minutes) && read.limit_minutes > 0 ? `${read.limit_minutes} minutes` : null;
+  return {
+    transcript: 'Eadwyn AI records the call’s audio, and its transcript names each speaker where the platform gives their names.',
+    price: `Eadwyn AI’s time: ${perMinute(p.bot_microusd_per_minute)}. Its transcript: ${perMinute(p.transcription_microusd_per_minute)}.${limit ? ` A call stops at ${limit} on your plan.` : ''}`,
+  };
+}
 
 /** Flux, the live model the Worker transcribes in English only (D685 §5.1.3). */
 export const FLUX = '@cf/deepgram/flux';
