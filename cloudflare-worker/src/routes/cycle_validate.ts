@@ -210,9 +210,10 @@ function googleWrite(handler: (c: any, g: { user: User; projectId: number; integ
       const { project, integration } = await workspaceContext(c, user, c.req.query('project'));
       return await handler(c, { user, projectId: Number(project.id), integrationId: Number(integration.id) });
     } catch (e) {
-      if (e instanceof Error && ['Unauthorized', 'Forbidden'].includes(e.message)) return c.json({ detail: e.message }, e.message === 'Unauthorized' ? 401 : 403);
+      if (e instanceof Error && e.message === 'Unauthorized') return c.json({ detail: 'Unauthorized' }, 401);
+      if (e instanceof Error && e.message === 'Forbidden') return c.json({ detail: 'Forbidden' }, 403);
       if (e instanceof WorkspaceError) return c.json({ error: e.code }, e.status);
-      if (e instanceof IntakeError) return c.json({ error: e.code, detail: e.message }, e.status);
+      if (e instanceof IntakeError) return c.json({ error: e.code }, e.status);
       return writeFailed(c, e);
     }
   };
