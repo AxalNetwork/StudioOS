@@ -1,4 +1,5 @@
 import React, { useEffect, useRef, useState, useSyncExternalStore } from 'react';
+import { Link } from 'react-router-dom';
 import { ChevronDown, Plus } from 'lucide-react';
 import { useActiveCompany as _useActiveCompany } from '../contexts/ActiveCompanyContext';
 import { api, setActiveCompanyId, initActiveCompanyId } from '../lib/api';
@@ -79,6 +80,8 @@ import { companyActionsApi } from '../lib/api/companyActions';
  * is actually scoped — the rows a person owns — and the shared half is named
  * beside it, so neither sentence can be read as the other's bug.
  */
+/** D1140 (#3020): the switcher's way to every company (CMP19a). */
+export const MANAGE_LABEL = 'Manage companies and projects';
 export const SHARED_NOTICE = 'Projects, deals, funds and quotes belong to the company selected here. Marketplaces and your account settings are shared across your companies.';
 const ADVISOR_NOTICE = 'Practice and Expertise are not yet separated by company.';
 
@@ -326,6 +329,15 @@ function CompanySwitcher({ collapsed, role }) {
           </form>
         )}
       </div>
+      {/* D1140 (#3020, CMP19a): every company and its ventures, in one place under Account. */}
+      <Link
+        to="/account/companies"
+        onClick={() => setOpen(false)}
+        className="flex items-center px-3 py-2.5 text-xs font-semibold text-violet-700 dark:text-violet-300 hover:bg-gray-50 dark:hover:bg-gray-800"
+        data-testid="switcher-manage"
+      >
+        {MANAGE_LABEL} ›
+      </Link>
       <div className="border-t border-gray-100 dark:border-gray-800 px-3 py-2 text-[11px] leading-snug text-gray-500 dark:text-gray-400">
         {SHARED_NOTICE}
         {role === 'advisor' ? <> {ADVISOR_NOTICE}</> : null}

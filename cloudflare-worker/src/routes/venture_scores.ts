@@ -13,6 +13,7 @@
  *   POST /api/venture-scores/:projectId/corrections      → the founder's "Ask to correct"
  *   GET  /api/venture-scores/:projectId/sharing          → the founder's switch and advisors
  *   PUT  /api/venture-scores/:projectId/sharing          → change them
+ *   GET  /api/venture-scores/:projectId/trajectory       → D1258: each scope's stored rows by model version (founder, Operating Partner, Admin)
  *
  * The rule of who reads what is `services/ventureScoring/access.ts`; the
  * scores are `services/ventureScoring/store.ts`'s (D1255). No route accepts a
@@ -32,7 +33,7 @@ import { scoreVenture, storedScorecard, type StoredScope } from '../services/ven
 import { latestFairness } from '../services/ventureScoring/jobs';
 import {
   BATCH_MAX, ScoreError, askCorrection, dealProject, hasNda, investorOnDeal, investorView, investorsMaySee, isFounderOf, isScope,
-  isStaff, latestReviews, listCorrections, logScorecard, parseReview, parseWeights, readSharing, readWeights, saveReview, stripView,
+  isStaff, latestReviews, listCorrections, logScorecard, parseReview, parseWeights, readSharing, readTrajectory, readWeights, saveReview, stripView,
   ventureRow, viewerOf, writeSharing, writeWeights, type Viewer,
 } from '../services/ventureScoring/access';
 
@@ -264,6 +265,23 @@ r.post('/:projectId/corrections', async (c) => {
     if (!(await isFounderOf(c.env, user, project))) return refuse(c, 403, { code: 'no_access', message: 'Only the venture’s founders can ask to correct an input.' });
     return c.json(await askCorrection(c.env, user, project.id, body), 201);
   } catch (e) { return fail(c, e); }
+});
+
+// D1258 (SC12): the trajectory across model versions. The founder's own read is not logged; staff's is.
+r.get('/:projectId/trajectory', async (c) => {
+  const user = await requireAuth(c);
+  try {
+    const project = await venture(c);
+    if (!project) return refuse(c, 404, { code: 'not_found', message: 'No such venture.' });
+    const founder = await isFounderOf(c.env, user, project);
+    if (!founder && !isStaff(user)) return refuse(c, 403, { code: 'no_access', message: 'The trajectory is for the venture’s founders and studio staff.' });
+    const out = await readTrajectory(c.env, project.id);
+    if (!founder) {
+      await logScorecard(c.env, { projectId: project.id, userId: user.id, action: 'venture_score_read',
+        details: { viewer: 'staff', scopes: out.scopes.length, deal_id: null, masked: false, trajectory: true }, role: roleOf(user) });
+    }
+    return c.json({ project_id: project.id, ...out });
+  } catch (e) { return fail(c, e, 'The trajectory'); }
 });
 
 r.get('/:projectId/sharing', async (c) => {

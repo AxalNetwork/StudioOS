@@ -111,6 +111,44 @@ strength of a live route would empty the queue of the work it exists to track.
    `Trust Center v2.dc.html` to `backlog/` for a day, next to the `NEW` canvases
    that have no route, and away from the v1 of its own page.
 
+## Landed 2026-10-27 — Google Workspace and Notion in the four cycles (#2402, #2405)
+
+The owner's four artifacts came from the prompts on #2402 and #2405. Each was
+decoded by `scripts/read-canvas.mjs`:
+- `Google Workspace Page.dc.html` (`P8PKaJFr8nh7bCc9uHtj7E`) and
+  `Google Workspace · Boards.dc.html` (`HrTskQMmPN7mKgiKnXzWoh`), GW1 to GW8;
+- `Notion Page.dc.html` (`CrMqvY6NSNKNei6BAs1aZM`) and `Notion · Boards.dc.html`
+  (`GsbtRkWwA8ScSE8ayxGsj2`), NT1 to NT8.
+Each grid imports its page by name.
+
+**One edit, named.** In both pages the Axal VC mark points at `/axal-mark.png`.
+No other value was edited. NT6's proposal keeps Google's "Version 7 stays as it
+is." line; it is recorded in D1314, not edited.
+
+**Grade: UPGRADE.** S21's integration (D1314) adds their lines to Build's
+connector parts; the build tasks are #2951–#2960.
+## Landed 2026-10-27 — Lovable and Vercel in Validate and Build (#2398, #2408)
+
+The owner's artifacts came from the prompts on #2398 and #2408. Each was
+decoded by `scripts/read-canvas.mjs`:
+- `Lovable Page.dc.html` (`VzvyBQScibFwCmPhwzqHvd`) is Lovable's page, LV1 to
+  LV8, as variants of one page; the owner re-exported it the same day with the
+  Build in Lovable dialog drawn (the first export left its body as
+  `%%DLGBODY%%`);
+- `Lovable · Boards.dc.html` (`C1Mmza6h8wpj3mukzvfUKx`) is its board grid; it
+  imports the page by name;
+- `From Vercel Page.dc.html` (`QyfJJphpixYJXkkGEsDLVL`) is Vercel's page;
+- `From Vercel · Boards.dc.html` (`LwXtNrAiHcBPt1zsH86xuK`) is the board grid,
+  VC1 to VC7; it imports the page by name.
+
+**Two edits, named.** In both pages, the Axal VC mark points at
+`/axal-mark.png` and the Eadwyn mark at `/eadwyn-ai.png`. No other value was
+edited.
+
+**Grade: UPGRADE.** The parts go on module pages that are live. S21's
+integration (D1311) gives Build's modules one line per connector part, in the
+canvases' order; the parts are #2947, #2948 (Lovable) and #2962, #2963,
+#2964 (Vercel).
 ## Landed 2026-10-26 — Validate › Record a session › WhatsApp, Telegram, Calls (#2507, #2515, #2525)
 
 The owner's four artifacts came from the prompts on #2507, #2515 and #2525.

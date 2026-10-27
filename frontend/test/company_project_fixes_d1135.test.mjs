@@ -2,6 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import React, { act, useState } from 'react';
 import { createRoot } from 'react-dom/client';
+import { MemoryRouter } from 'react-router-dom';
 import { installDocument } from './_contracts_dom.mjs';
 import CompanySwitcher, { useCompanySwitch } from '../src/ui/CompanySwitcher.jsx';
 import { ActiveCompanyContext } from '../src/contexts/ActiveCompanyContext.js';
@@ -34,7 +35,8 @@ let controls;
 function Probe() { controls = useCompanySwitch(); return h('span', { 'data-testid': 'state' }, JSON.stringify({ company: controls.company, companies: controls.companies })); }
 function Harness({ role = 'founder' }) {
   const [company, setCompany] = useState(one); const [companies, setCompanies] = useState([one, two]);
-  return h(ActiveCompanyContext.Provider, { value: { company, setCompany, companies, setCompanies } }, h(Probe), h(CompanySwitcher, { role }));
+  // D1140: the switcher's Manage link needs a router.
+  return h(MemoryRouter, null, h(ActiveCompanyContext.Provider, { value: { company, setCompany, companies, setCompanies } }, h(Probe), h(CompanySwitcher, { role })));
 }
 test('successful leave removes the membership and clears persisted active selection; failure keeps both', async () => {
   const original = companyActionsApi.leave; const originalList = api.listMyCompanies; const calls = []; let fail = true;
