@@ -164,8 +164,22 @@ b86a6d6d4eac96a90f29bc3f4714d364d2f6b4a0:cloudflare-worker/test/kyb_d1231.test.t
 # a deployed credential. Current fixture builds a low-entropy runtime seed.
 # Pin only the already-published finding; retain every other check.
 12459279aa7c16030a24ba971ed05bbe2d1f3e76:cloudflare-worker/test/raise_evidence_d1263.test.ts:generic-api-key:18
+# D1320 (#2481): synthetic API key ids (`key_id`, the public half shown as
+# `axk_<id>_••••`, never a secret) in the API usage test's fixtures. The next
+# commit uses low-entropy ids instead. Pin only the two published findings.
+54ddf32c30d05b661dfc959575975fa1869fdc14:frontend/test/api_usage_d1320.test.mjs:generic-api-key:30
+54ddf32c30d05b661dfc959575975fa1869fdc14:frontend/test/api_usage_d1320.test.mjs:generic-api-key:31
+
 # D1094 (#2959): the synthetic JWT signing string in google_workspace_gw5's
 # first commit. It signs nothing outside an in-memory test database and was
 # never a credential. The next commit (0652605bb4) builds the value at run
 # time, so no later commit carries a literal. Scoped to the one finding.
 214ec54f83bafee02779afe679acfd8ee7496de6:cloudflare-worker/test/google_workspace_gw5.test.ts:generic-api-key:75
+
+
+# D1319 (#3480): a synthetic signing seed and a JWT-shaped sample in the
+# publish lint test, never deployed credentials. The fixture now builds a
+# low-entropy runtime seed and assembles the sample from its parts.
+# Pin only the two already-published findings; retain every other check.
+5e8d812707ccd72f3b83c00586252df8d43edc4c:cloudflare-worker/test/publish_core_d1319.test.ts:generic-api-key:38
+5e8d812707ccd72f3b83c00586252df8d43edc4c:cloudflare-worker/test/publish_core_d1319.test.ts:jwt:293

@@ -82,6 +82,7 @@ const DOCUMENTED = new Map([
   ['documentation/operations',        'runbooks — the steps to ship, check and recover production'],
   // Nested folders heavy enough to be opaque from their parent alone.
   ['frontend/src/components/brand/templates', 'the landing-page template previews'],
+  ['frontend/src/components/checkout',        'the checkout sheet, its entry and the renewal banner (D1048, D1054)'],
   ['frontend/src/components/cofounder',       'the co-founder agreement builder'],
   ['frontend/src/components/hqReview',        'the HQ review pieces (D634)'],
   ['frontend/src/components/products',        'the Plans and pricing storefront and its Token packs (D755)'],
@@ -115,6 +116,7 @@ const DOCUMENTED = new Map([
   ['frontend/src/pages/account',              'the Account center\'s sections, one file per canvas section (D568, D642)'],
   ['frontend/src/pages/account/companies',    'Companies and projects: the pane, its lightboxes and dialogs, and the moved settings (D1134, D1140)'],
   ['frontend/src/pages/cycles',               'the four cycle overviews and module pages, from the shared cycle read (D661)'],
+  ['frontend/src/pages/cycles/evidence',      'Raise evidence (D1261, D1266, D1267): the founder\'s view, its drawers, the module parts and the deck chips'],
   ['frontend/src/pages/closing',              'the closing room and the admin Closings desk, one closing, its paper, routes and activity (D1213, D1219)'],
   ['frontend/src/pages/events',                 'event host tools and public/member detail'],
   ['frontend/src/pages/founder',              'founder workspace landing pages and shared shell'],

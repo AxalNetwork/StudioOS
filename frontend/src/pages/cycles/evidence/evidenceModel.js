@@ -6,9 +6,10 @@
  * the Raise areas the pack covers, and the words of every block no read carries
  * yet. Pure, so `frontend/test/raise_evidence_d1261.test.mjs` holds each rule.
  *
- * NOTHING IS READ HERE YET. `raise_evidence_items`, `raise_claims` and the
- * candidate builder are part 2; the claim check part 3; the investor read part
- * 4. Each label's default grade is SCORING's one mapping
+ * D1266 (#3289): the founder's view reads `GET /api/cycles/raise/evidence`
+ * (parts 2 and 3) through `evidenceView.js`. D1268 (#3291): the investor's
+ * block draws only what that read returned. Each label's default grade is
+ * SCORING's one mapping
  * (`components/scoring/scorecard/scorecardModel.js` SOURCE_GRADE); this file
  * adds no grade of its own.
  */
@@ -56,27 +57,28 @@ export const AREAS = Object.freeze([
 
 const ID = /^[A-Za-z0-9_-]{1,64}$/;
 
-/** What the address names: the page, or one item's or one claim's drawer over it. */
+/**
+ * What the address names: the view, the review queue (VR4, `/review`), the
+ * investor preview (VR11, `/preview`), or one item's or one claim's drawer
+ * over the view (D1266).
+ */
 export function viewOf(pathname = '') {
   const rest = String(pathname).startsWith(BASE) ? String(pathname).slice(BASE.length) : '';
+  if (/^\/review\/?$/.test(rest)) return { page: 'review', drawer: null, id: null };
+  if (/^\/preview\/?$/.test(rest)) return { page: 'preview', drawer: null, id: null };
   const m = /^\/(item|claim)\/([^/]+)\/?$/.exec(rest);
-  if (m && ID.test(m[2])) return { drawer: m[1], id: m[2] };
-  return { drawer: null, id: null };
+  if (m && ID.test(m[2])) return { page: 'view', drawer: m[1], id: m[2] };
+  return { page: 'view', drawer: null, id: null };
 }
 export const itemHref = (id, search = '') => (ID.test(String(id ?? '')) ? `${BASE}/item/${id}${search}` : `${BASE}${search}`);
 export const claimHref = (id, search = '') => (ID.test(String(id ?? '')) ? `${BASE}/claim/${id}${search}` : `${BASE}${search}`);
+export const reviewHref = (search = '') => `${BASE}/review${search}`;
+export const previewHref = (search = '') => `${BASE}/preview${search}`;
 
 export const NOT_YET = 'Not read here yet';
 
-/** What the canvas draws that no read carries yet. Never a zero, never "none". */
-export const WAITS = Object.freeze({
-  claims: 'Each claim’s state, the evidence behind it and its source are not read here yet: the stores and candidate builder are part 2, the claim check part 3.',
-  proposals: 'Evidence waiting for your review (the candidates built from Validate, Build and connectors) is not read here yet (part 2).',
-  coverage: 'Coverage by area and by source is not read here yet (part 2).',
-  opens: 'Which investors opened what is not recorded yet (part 4).',
-  item: 'This item, its record, its date and its sharing are not read here yet (part 2).',
-  claim: 'This claim, its state and the evidence linked to it are not read here yet (part 3).',
-});
+/** What the canvas draws that no read carries yet. Never a zero, never "none". The founder's view is live (D1266) and the investor's block is live (D1268). */
+export const WAITS = Object.freeze({});
 
 // ---------------------------------------------------------------------------
 // D1268 (#3291) — the investor's read (D1265 `investorEvidence`): VR8 before the

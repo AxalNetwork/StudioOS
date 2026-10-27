@@ -4,6 +4,7 @@ import { api } from '../../lib/api';
 import { EmptyState, Pill, Unrecorded, Unreadable } from '../../ui';
 import { BTN, Chips, INPUT, LoadingRows, Outcome, PanelCard, useAccountRead } from './AccountCenter';
 import { billingSourceFor, dayLabel, filterOrders, orderRow, planSummary, refusalText, ORDER_STATUS } from './accountCenterModel';
+import { changePlanKey, heldOfStatus, openCheckout } from '../../components/checkout/checkoutEntry';
 
 /**
  * D568 — Billing and orders: the plan line with "Manage billing", and the
@@ -28,8 +29,10 @@ export function useBillingStatus(role) {
   return useAccountRead(() => api[source.status]());
 }
 
-const STATUS_TONE = { active: 'ok', trialing: 'info', past_due: 'warn', unpaid: 'danger', canceled: 'neutral', incomplete: 'warn' };
-const STATUS_WORD = { active: 'Active', trialing: 'Trial', past_due: 'Past due', unpaid: 'Unpaid', canceled: 'Cancelled', incomplete: 'Incomplete' };
+// D1054 (PAYX10c): a renewal Stripe is still retrying reads "Payment failed";
+// one it stopped retrying (unpaid) has switched the plan off, so it reads "Ended".
+const STATUS_TONE = { active: 'ok', trialing: 'info', past_due: 'danger', unpaid: 'neutral', canceled: 'neutral', incomplete: 'warn' };
+const STATUS_WORD = { active: 'Active', trialing: 'Trial', past_due: 'Payment failed', unpaid: 'Ended', canceled: 'Cancelled', incomplete: 'Incomplete' };
 
 function goTo(url) { window.location.assign(url); }
 
@@ -39,6 +42,10 @@ export function PlanHeader({ role, billing, openPortal, navigate = goTo }) {
   const source = billingSourceFor(role);
   const s = billing.status === 'ready' ? planSummary(role, billing.data) : null;
   const portal = openPortal || (() => api[source.portal]());
+  // D1054 (PAYX11): Change plan opens the checkout sheet here, so Billing and
+  // Pricing no longer send the member back and forth. With nothing to change
+  // to here, Compare plans is Pricing.
+  const changeKey = billing.status === 'ready' ? changePlanKey(role, heldOfStatus(role, billing.data)) : null;
 
   const manage = async () => {
     setBusy(true);
@@ -90,7 +97,12 @@ export function PlanHeader({ role, billing, openPortal, navigate = goTo }) {
               )}
             </div>
             <div className="flex flex-wrap gap-2">
-              <Link to={source.pricing} className={BTN.ghost} data-testid="link-plans-pricing">Plans &amp; Pricing</Link>
+              {changeKey ? (
+                <button type="button" className={BTN.ghost} data-testid="button-change-plan"
+                  onClick={() => openCheckout({ plan_key: changeKey, from: { label: 'Billing', href: '/account/billing' } })}>Change plan</button>
+              ) : (
+                <Link to={source.pricing} className={BTN.ghost} data-testid="link-plans-pricing">Compare plans</Link>
+              )}
               <button
                 type="button"
                 className={BTN.primary}

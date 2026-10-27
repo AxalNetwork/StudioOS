@@ -1,6 +1,10 @@
 import { useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
+import { api as appApi } from '../../lib/api';
 import { aiBudgetApi } from '../../lib/api/aiBudget';
+import { useAuth } from '../../hooks/useAuthSync';
+import { useViewMode } from '../../contexts/ViewModeContext';
+import { heldOfStatus, nextPlanKey, openCheckout } from '../../components/checkout/checkoutEntry';
 import { PhoneBar, Pill, Unrecorded, Unreadable, usePhoneWidth } from '../../ui';
 import { BTN, INPUT, LoadingRows, Outcome, PanelCard, Switch, useAccountRead } from './AccountCenter';
 import { refusalText } from './accountCenterModel';
@@ -118,6 +122,37 @@ export function SpendLimitCard({ read, api = aiBudgetApi }) {
   return <PanelCard title="Monthly spend limit" data-testid="card-spend-limit">{body}</PanelCard>;
 }
 
+/**
+ * D1054 (#2905, PAYX12): what the plan includes, with Compare plans and
+ * Upgrade. Upgrade opens the checkout sheet over this page on the next plan
+ * up, naming what it unlocks; with no plan above it, only Compare plans.
+ */
+export const FREE_INCLUDED = 'Free plan: no AI allowance. AI runs from AI tokens you top up.';
+const PRICING_OF = { investor: '/pricing?for=investor', advisor: '/pricing?for=advisor', partner: '/pricing?for=operating-partner' };
+export function IncludedCard({ budget, role, held }) {
+  const v = budget.status === 'ready' ? allowanceCard(budget.data) : null;
+  const next = nextPlanKey(role, held);
+  let line;
+  if (budget.status === 'loading') line = <Loading testid="included-loading" />;
+  else if (!v) line = <Unreadable what="What your plan includes" onRetry={budget.reload} />;
+  else line = <p className="m-0 text-[13px] text-axal-ink dark:text-gray-200" data-testid="included-line">{v.none ? FREE_INCLUDED : <>Your plan includes <span className={MONO}>{v.perMonth}</span> of AI a month.</>}</p>;
+  return (
+    <PanelCard title="Included with your plan" data-testid="card-included">
+      <div className="flex flex-col gap-3">
+        <span className={LABEL}>Account › Usage › Limits</span>
+        {line}
+        <div className="flex flex-wrap gap-2">
+          <Link to={PRICING_OF[role] || '/pricing'} className={BTN.ghost} data-testid="included-compare">Compare plans</Link>
+          {next && (
+            <button type="button" className={BTN.primary} data-testid="included-upgrade"
+              onClick={() => openCheckout({ plan_key: next, from: { label: 'Usage', href: '/account/usage/limits' }, unlocks: 'a monthly AI allowance' })}>Upgrade</button>
+          )}
+        </div>
+      </div>
+    </PanelCard>
+  );
+}
+
 /** The plan allowance, read-only. */
 export function PlanAllowanceCard({ budget }) {
   const v = budget.status === 'ready' ? allowanceCard(budget.data) : null;
@@ -183,7 +218,7 @@ function Small({ title, aside = null, testid, children }) {
 }
 
 /** The page given its four reads: the header (a phone draws its bar), the limit, then the three read-only cards. */
-export function LimitsView({ limit, budget, autoReload, topUp, api = aiBudgetApi, phone = false }) {
+export function LimitsView({ limit, budget, autoReload, topUp, api = aiBudgetApi, phone = false, role = null, held = null }) {
   return (
     <div className="flex flex-col gap-3" data-testid="limits-page" data-phone={phone ? 'true' : undefined}>
       {phone ? (
@@ -196,6 +231,7 @@ export function LimitsView({ limit, budget, autoReload, topUp, api = aiBudgetApi
           <p className="text-[13px] text-axal-muted dark:text-gray-400">{LIMITS_PAGE.sub}</p>
         </div>
       )}
+      {role && <IncludedCard budget={budget} role={role} held={held} />}
       <SpendLimitCard key={limit.status} read={limit} api={api} />
       <div className={`grid items-start gap-3 ${phone ? 'grid-cols-1' : 'lg:grid-cols-3'}`} data-testid="limits-cards">
         <PlanAllowanceCard budget={budget} />
@@ -213,5 +249,14 @@ export default function LimitsPage() {
   const autoReload = useAccountRead(() => aiBudgetApi.autoReload());
   const topUp = useAccountRead(() => aiBudgetApi.topUp());
   const phone = usePhoneWidth();
-  return <LimitsView limit={limit} budget={budget} autoReload={autoReload} topUp={topUp} phone={phone} />;
+  // D1054: the plan held, for Upgrade: the session's own tier, or an Advisor's or Partner's plan status.
+  const { user } = useAuth() || {};
+  const role = String(useViewMode()?.shellRole || user?.role || '').toLowerCase();
+  const sellsPlan = ['founder', 'investor', 'advisor', 'partner'].includes(role);
+  const group = role === 'advisor' || role === 'partner';
+  const plan = useAccountRead(() => (group ? appApi.planStatus() : Promise.resolve(null)));
+  const held = role === 'founder' ? String(user?.subscription_tier || 'free').toLowerCase()
+    : role === 'investor' ? String(user?.investor_tier || 'free').toLowerCase()
+      : group && plan.status === 'ready' ? heldOfStatus(role, plan.data) : null;
+  return <LimitsView limit={limit} budget={budget} autoReload={autoReload} topUp={topUp} phone={phone} role={sellsPlan ? role : null} held={held} />;
 }

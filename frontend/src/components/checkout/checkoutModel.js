@@ -69,6 +69,8 @@ export function intervalsOf(plan) {
  *   - `staff`     an admin account holds no plan (PAYX16);
  *   - `explorer`  no profile yet: choose one first (PAYX15);
  *   - `other`     a plan for another profile (PAYX19);
+ *   - `notsold`   the catalogue does not sell this plan: Investor Plus is not
+ *                 offered yet, Institutional is priced by sales (D1054, PAYX13);
  *   - `unsellable` no monthly or yearly price is on sale (PAYX18);
  *   - `change`    the member already pays for a plan in this family: since
  *                 D1053 the change is quoted and made here, through D1051's
@@ -80,9 +82,11 @@ export function sheetMode({ user, role, plan, held }) {
   // D1053 (PAYX19a): a visitor signs in first, and lands back on the plan they chose.
   if (!user && !role) return 'signin';
   const r = String(role || user?.role || '').toLowerCase();
-  if (r === 'admin' || r === 'super_admin') return 'staff';
+  // D1054 (PAYX16): a licence administrator holds no plan either.
+  if (r === 'admin' || r === 'super_admin' || r === 'branch_admin') return 'staff';
   if (r === 'exploring') return 'explorer';
   if (ROLE_FAMILY[r] && plan?.family && ROLE_FAMILY[r] !== plan.family) return 'other';
+  if (plan?.catalogue?.sellable === false) return 'notsold';
   const { monthly, yearly } = intervalsOf(plan);
   if (!monthly && !yearly) return 'unsellable';
   if (held && held !== 'free') return 'change';
@@ -306,6 +310,18 @@ export function whatYouGet(result) {
 /** "Pay with": a saved card's words. The investor plan is paid on its own customer (D892 §6), so it takes none. */
 export const cardWords = (m) => `${m?.brand ? m.brand.charAt(0).toUpperCase() + m.brand.slice(1) : 'Card'} ending ${m?.last4 || '••••'}${m?.exp_month && m?.exp_year ? ` · expires ${String(m.exp_month).padStart(2, '0')}/${String(m.exp_year).slice(-2)}` : ''}`;
 export const savedCardsApply = (plan) => plan?.family !== 'investor';
+
+/**
+ * D1054 (PAYX13): a plan the catalogue does not sell, in the canvas's words,
+ * with the catalogue's own reason. A plan priced by sales offers Contact sales.
+ */
+export function notSoldView(plan) {
+  const key = planKeyOf(plan);
+  const reason = typeof plan?.catalogue?.sellable_reason === 'string' ? plan.catalogue.sellable_reason : null;
+  if (key === 'investor:plus') return { title: 'Not offered yet', line: reason || 'This plan is not sold yet.', contact: false };
+  if (reason && /sales team/i.test(reason)) return { title: 'Contact sales', line: 'This plan is priced by our sales team for each firm. Nothing is bought here.', contact: true };
+  return { title: 'Not sold here', line: reason || 'This plan is not sold here.', contact: false };
+}
 
 /** PAYX19a: the sign-in address that brings the member back to this plan. */
 export function signinHref(plan, interval) {
