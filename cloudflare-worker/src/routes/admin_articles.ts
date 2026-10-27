@@ -31,6 +31,7 @@ import { notifyArticle } from '../services/articleNotify';
 import { notify } from '../services/notify';
 import { ensureFollowsSchema } from './follows';
 import { logAdminAction } from '../services/adminAudit';
+import { parseQueueQuery, publicationChips, queueRows, stageCounts } from '../services/articleQueue';
 
 const adminArticles = new Hono<{ Bindings: Env }>();
 
@@ -78,34 +79,35 @@ async function loadArticle(env: Env, id: number) {
   ).bind(id).first<any>();
 }
 
+// D1291 (#3387): the queue read the Pipeline board, list and Calendar draw
+// (services/articleQueue.ts). `status` keeps its old meaning, one raw status,
+// so today's page reads what it always did; `stage` adds ready and scheduled.
 adminArticles.get('/queue', async (c) => {
   await requireAdmin(c);
   await ensureNewsSchema(c.env);
   const url = new URL(c.req.url);
-  const status = url.searchParams.get('status');
   const limit = clampLimit(url.searchParams.get('limit'), 50, 100);
   const offset = parseOffset(url.searchParams.get('offset'));
-  const where: string[] = [];
-  const bind: any[] = [];
-  if (status) {
-    where.push('a.status = ?');
-    bind.push(status);
-  } else {
-    where.push("a.status IN ('submitted','in_review','changes_requested','approved')");
+  const parsed = parseQueueQuery(url.searchParams, limit, offset);
+  if (!parsed.ok) return c.json({ error: parsed.error, code: parsed.code }, 400);
+  const q = parsed.query;
+  let rows;
+  try {
+    rows = await queueRows(c.env, q);
+  } catch {
+    console.warn('[admin_articles] queue read failed');
+    return c.json({ error: 'The queue could not be read. Try again.', code: 'queue_unreadable' }, 503);
   }
-  const sql = `SELECT a.id, a.slug, a.title, a.status, a.author_user_id, a.submitted_at,
-                      a.reviewed_at, a.approved_at, a.updated_at, a.word_count,
-                      u.name AS author_name, u.email AS author_email,
-                      r.name AS reviewer_name
-                 FROM articles a
-                 LEFT JOIN users u ON u.id = a.author_user_id
-                 LEFT JOIN users r ON r.id = a.reviewer_user_id
-                WHERE ${where.join(' AND ')}
-             ORDER BY COALESCE(a.submitted_at, a.updated_at) ASC
-                LIMIT ? OFFSET ?`;
-  bind.push(limit, offset);
-  const res = await c.env.DB.prepare(sql).bind(...bind).all<any>();
-  return c.json({ items: res.results || [], limit, offset });
+  // Each block reads alone: one that fails says so and leaves the rows standing.
+  const counts = await stageCounts(c.env).catch(() => ({ available: false as const, reason: 'unreadable' as const }));
+  const publications = q.from && q.to
+    ? await publicationChips(c.env, q.from, q.to).catch(() => ({ available: false as const, reason: 'unreadable' as const }))
+    : undefined;
+  return c.json({
+    items: rows.items, total: rows.total, limit, offset, counts,
+    ...(publications ? { publications } : {}),
+    query: { stage: q.stage, sort: q.sort, from: q.from, to: q.to },
+  });
 });
 
 adminArticles.get('/:id', async (c) => {

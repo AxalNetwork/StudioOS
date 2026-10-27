@@ -5709,9 +5709,19 @@ export const articles = {
 };
 
 export const adminArticles = {
-  queue: ({ status, limit = 50, offset = 0 } = {}) => {
+  // D1291: `status` is one raw status, as before; `stage` adds ready and
+  // scheduled (and `open`, `calendar`, `all`). Search `q`, filters `author`,
+  // `profile`, `sector`, `reviewer`, `submitted_from`, `submitted_to`,
+  // `open_comments` (1 or 0), `sort` (waiting, newest, goes_out, rounds,
+  // title) and the calendar's `from`/`to`. Empty values are left out.
+  // → { items, total, limit, offset, counts, publications? }
+  queue: ({ status, limit = 50, offset = 0, ...filters } = {}) => {
     const qs = new URLSearchParams();
     if (status) qs.set('status', status);
+    for (const k of ['stage', 'q', 'author', 'profile', 'sector', 'reviewer', 'submitted_from', 'submitted_to', 'open_comments', 'sort', 'from', 'to']) {
+      const v = filters[k];
+      if (v !== undefined && v !== null && v !== '') qs.set(k, String(v));
+    }
     qs.set('limit', String(limit));
     qs.set('offset', String(offset));
     return request(`/admin/articles/queue?${qs.toString()}`);
