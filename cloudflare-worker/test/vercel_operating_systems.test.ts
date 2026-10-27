@@ -94,8 +94,10 @@ function vercel(db: any) {
   db.exec(`INSERT INTO integrations(id, uid, user_id, provider_key, display_name, status, last_synced_at) VALUES (50, 'vc-1', 1, 'vercel', 'Vercel', 'active', '2026-10-23 09:12:00');
            INSERT INTO integration_companies(integration_id, company_id, enabled) VALUES (50, 10, 1);`);
 }
-const NOW = new Date('2026-10-27T12:00:00Z');
 const DAY = 86_400_000;
+// Today at noon UTC: the Hosting read's 30-day window counts back from the real clock, so the fixtures do too.
+const NOW = new Date(Math.floor(Date.now() / DAY) * DAY + 12 * 3_600_000);
+const iso = (ms: number) => new Date(ms).toISOString();
 const dep = (uid: string, readyState: string, createdAt: number) => ({ uid, readyState, target: 'production', createdAt });
 /** Evidence where every kind is wrong at once. */
 const BAD = {
@@ -130,6 +132,9 @@ test('each health kind opens on its evidence; a source not read checks nothing',
   assert.deepEqual(healthFindings({ production: BAD.production } as any, NOW).checked, ['production_failed'], 'without the project, a rollback cannot be judged');
   assert.deepEqual(healthFindings({ accountDomains: BAD.accountDomains } as any, NOW).checked, [], 'without the project’s domains, an expiry is no venture’s');
   assert.deepEqual(healthFindings({}, NOW), { checked: [], open: [] });
+  // Production on a deployment newer than the newest ready one in the list is no rollback.
+  const promoted = { project: { targets: { production: dep('dpl_promoted', 'READY', 9000) } }, production: [dep('dpl_ready', 'READY', 2000)] };
+  assert.deepEqual(healthFindings(promoted as any, NOW).open, []);
 });
 
 test('a Vercel-registered domain’s expiry window: 30 days, or 14 with auto-renew off; an external domain has no expiry', () => {
@@ -191,6 +196,7 @@ test('Dismiss: the founder dismisses an open event; it stays dismissed while its
   await applyHealth(env, CTX, healthFindings(BAD as any, NOW), NOW);
   const id = rowsOf(db, "SELECT id FROM vercel_health_events WHERE kind = 'domain_unverified'")[0].id;
   assert.equal((await call(env, `/api/cycles/build/vercel/health-events/${id}?project=101`, 2, 'DELETE')).status, 403, 'only who may write the venture');
+  assert.equal((await call(env, `/api/cycles/build/vercel/health-events/${id}?project=101`, 4, 'DELETE')).status, 403, 'a partner reads the board and never writes it');
   assert.equal((await call(env, `/api/cycles/build/vercel/health-events/${id}?project=102`, 1, 'DELETE')).status, 404, 'another venture’s event');
   const ok = await call(env, `/api/cycles/build/vercel/health-events/${id}?project=101`, 1, 'DELETE');
   assert.deepEqual([ok.status, ok.body], [200, { ok: true }]);
@@ -206,7 +212,8 @@ test('Dismiss: the founder dismisses an open event; it stays dismissed while its
   const fixed = new Date(NOW.getTime() + 2 * DAY);
   await applyHealth(env, CTX, healthFindings(GOOD as any, fixed), fixed);
   const other = rowsOf(db, "SELECT id FROM vercel_health_events WHERE kind = 'rollback'")[0].id;
-  assert.equal((await call(env, `/api/cycles/build/vercel/health-events/${other}?project=101`, 1, 'DELETE')).status, 409);
+  const closedOne = await call(env, `/api/cycles/build/vercel/health-events/${other}?project=101`, 1, 'DELETE');
+  assert.deepEqual([closedOne.status, closedOne.body.detail], [409, 'That health event has closed, so there is nothing to dismiss.']);
   assert.equal((await call(env, '/api/cycles/build/vercel/health-events/abc?project=101', 1, 'DELETE')).status, 404);
 });
 
@@ -230,6 +237,16 @@ test('the Hosting read: empty with no Vercel connection, the events with Open an
   assert.deepEqual([sys.facts, sys.facts_reason], [null, PART1_WAIT], 'the project’s facts wait for part 1, never empty or zero');
   assert.deepEqual([h.syncs.state, h.syncs.reason], ['not_recorded', SYNC_WAIT]);
   assert.match(sys.action.href, /vercel/);
+  // An event closed more than 30 days ago is not drawn; an open one is drawn first even when older than a closed one.
+  const put = db.prepare('INSERT INTO vercel_health_events (integration_id, project_id, kind, subject, opened_at, closed_at, source) VALUES (50, 101, ?, ?, ?, ?, ?)');
+  put.run('rollback', 'dpl_ancient', iso(NOW.getTime() - 60 * DAY), iso(NOW.getTime() - 59 * DAY), 'sync');
+  put.run('domain_unverified', 'old.acme.example', iso(NOW.getTime() - 20 * DAY), null, 'webhook');
+  put.run('production_failed', 'dpl_recent_closed', iso(NOW.getTime() + 3 * DAY), iso(NOW.getTime() + 3 * DAY + 3_600_000), 'sync');
+  const h2 = (await tools(env)).hosting.systems[0].health;
+  assert.ok(!h2.items.some((e: any) => e.subject === 'dpl_ancient'), 'closed 30 days ago or more: not drawn');
+  const firstClosed = h2.items.findIndex((e: any) => e.state === 'closed');
+  assert.ok(h2.items.slice(0, firstClosed).every((e: any) => e.state === 'open') && h2.items.slice(firstClosed).every((e: any) => e.state === 'closed'), 'every open event before any closed one');
+  assert.ok(h2.items.findIndex((e: any) => e.subject === 'old.acme.example') < h2.items.findIndex((e: any) => e.subject === 'dpl_recent_closed'));
 });
 
 test('the Tools rule: a non-member reads the counts, never a domain; a venture with no company reads not recorded', async () => {
