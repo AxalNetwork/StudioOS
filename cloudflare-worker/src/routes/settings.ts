@@ -433,6 +433,8 @@ settings.post('/headshot', async (c) => {
   try {
     meta = await putHeadshotFromDataUri(c.env, user.id, dataUri);
   } catch (e: any) {
+    // D1170 — the storage refusal is the answer, with its own shape.
+    if (e instanceof Response) return e;
     return refuse(c, 400, { code: 'upload_failed', message: 'The photo could not be uploaded. Use a JPEG, PNG or WebP image of 3 MB or less.', raw: e });
   }
 
