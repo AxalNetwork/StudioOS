@@ -22,6 +22,7 @@ import FoundingTeamFromCode from './FoundingTeamFromCode';
 import CompanyFromCode from './CompanyFromCode';
 import RoadmapFromGithub from './RoadmapFromGithub';
 import MvpFromGithub from './MvpFromGithub';
+import FromLovable from './FromLovable';
 
 export const BUILD_PARTS = Object.freeze({
   'solution-design': [
@@ -39,8 +40,8 @@ export const BUILD_PARTS = Object.freeze({
     ['github', (data) => <MvpFromGithub github={data?.parts?.github} />],
     // VC2: the Live strip and each must-have's preview: #2963 (D1098), MvpFromVercel, #from-vercel.
     ['vercel', null],
-    // LV7: From Lovable under From GitHub: #2948 (D1083), FromLovable, #from-lovable.
-    ['lovable', null],
+    // LV7: From Lovable under From GitHub (D1083, #2948), anchored at #from-lovable: the project's one app link.
+    ['lovable', (data, ctx) => <FromLovable part={data?.parts?.lovable} cycle="build" projectId={ctx.projectId} onRetry={ctx.reload} />],
     // NT3: a must-have database as facts: #2953 (D1088), FromNotion, #from-notion.
     ['notion', null],
   ],

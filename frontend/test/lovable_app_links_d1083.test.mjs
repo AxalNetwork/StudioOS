@@ -156,6 +156,9 @@ test('remove asks first and says nothing changes in Lovable; the experiment reco
     assert.deepEqual(f.calls, [['unlink', 'validate', 7, 5]]);
     assert.ok(m.by('lovable-5-empty'));
   } finally { await m.unmount(); }
+  const parts = readFileSync(new URL('../src/pages/cycles/buildParts.jsx', import.meta.url), 'utf8');
+  assert.match(parts, /\['lovable', \(data, ctx\) => <FromLovable part=\{data\?\.parts\?\.lovable\} cycle="build" projectId=\{ctx\.projectId\} onRetry=\{ctx\.reload\} \/>\]/,
+    'Prototype / MVP draws From Lovable from its read, as Build');
   const route = readFileSync(new URL('../src/pages/cycles/CycleRoute.jsx', import.meta.url), 'utf8');
   assert.match(route, /experiments: \(read, ctx\) => <div className="space-y-3">[\s\S]*?<FromLovable part=\{read\.parts\.lovable\} cycle="validate" projectId=\{ctx\.projectId\} onRetry=\{ctx\.reload\} \/>/);
 });

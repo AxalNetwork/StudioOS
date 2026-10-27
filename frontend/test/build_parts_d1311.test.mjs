@@ -36,14 +36,15 @@ test('a part not built yet is a null on its own line, named with the task that b
   for (const [issue, decision, component] of [
     ['#2962', 'D1097', 'RunsOnFromVercel'], ['#2962', 'D1097', 'HostingFromVercel'],
     ['#2963', 'D1098', 'MvpFromVercel'], ['#2963', 'D1098', 'RoadmapFromVercel'],
-    ['#2964', 'D1099', 'CompanyFromVercel'], ['#2948', 'D1083', 'FromLovable'],
+    ['#2964', 'D1099', 'CompanyFromVercel'],
     ['#2958', 'D1093', 'FromGoogle'], ['#2953', 'D1088', 'FromNotion'],
   ]) {
     assert.ok(src.includes(`${issue} (${decision}), ${component}`), `${component} names ${issue}`);
   }
   // The unbuilt ones are left out of what draws; GitHub's stay.
   assert.deepEqual(builtParts('product-roadmap').map(([k]) => k), ['github']);
-  assert.deepEqual(builtParts('prototype-mvp').map(([k]) => k), ['github']);
+  // D1083 (#2948) filled Lovable's line: From Lovable draws under From GitHub.
+  assert.deepEqual(builtParts('prototype-mvp').map(([k]) => k), ['github', 'lovable']);
   // CycleRoute takes Build's parts from here, and from nowhere else.
   assert.match(read('frontend/src/pages/cycles/CycleRoute.jsx'), /parts: toFnMap\(buildPartsMap\(\)\),/);
 });
