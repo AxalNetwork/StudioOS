@@ -117,6 +117,7 @@ import adminMercury from './routes/admin_mercury';
 import adminMercurySafeBasis from './routes/admin_mercury_safe_basis';
 import adminGithub from './routes/admin_github';
 import githubWebhook from './routes/github';
+import vercelWebhook from './routes/vercel_webhook';
 // Task #4 (AW) — Admin reader for advisor_turn_audit (L6) + lock/shadow controls (L7).
 import adminAdvisorAudit from './routes/admin_advisor_audit';
 import adminCohort from './routes/admin_cohort';
@@ -176,6 +177,8 @@ void _registerCrunchbase;
 import './integrations/providers/stripe';
 // D655 (#1467) — GitHub: read-only issues, pull requests and releases from chosen repositories.
 import './integrations/providers/github';
+// D1096: the read-only Vercel Integration.
+import './integrations/providers/vercel';
 // D713 (#1778) — a founder's or partner's own Mercury, read-only: `connect` only.
 import './integrations/providers/mercury';
 // D1085 (#2950) — a founder's own Notion, read-only, through Notion's MCP server: sign-in only.
@@ -1418,6 +1421,8 @@ app.route('/api/developer/limits', developerLimits);
 app.route('/api/integrations/mercury/oauth', mercuryOauthRoutes);
 // D1080 (#2945): Sign in with <Provider> for every other MCP record, and its client ID metadata documents.
 app.route('/api/integrations/mcp', connectorMcpOauthRoutes);
+// D1096 (#2961): Vercel signs every installation's events to one URL; ahead of the per-connection receiver.
+app.route('/api/connectors/webhook/vercel', vercelWebhook);
 app.route('/api/connectors', integrations);
 app.route('/api/integrations', integrations);
 // D652 — the Worker AI rail's conversations and their connectors (#1464).
