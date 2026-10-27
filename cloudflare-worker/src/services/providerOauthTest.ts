@@ -262,6 +262,24 @@ async function testGithub(id: string, secret: string): Promise<ProviderTestResul
     detail: ok ? 'GitHub accepted the client credentials.' : `GitHub rejected credentials (${err || res.status}).` };
 }
 
+/**
+ * D1096: a single-use code that cannot exist, against Vercel's token endpoint.
+ * UNVERIFIED until the owner's first live check: that Vercel names a rejected
+ * client (`invalid_client`) apart from a rejected code once the pair is accepted.
+ */
+async function testVercel(id: string, secret: string): Promise<ProviderTestResult> {
+  const body = new URLSearchParams({ client_id: id, client_secret: secret, code: 'axal-probe-invalid-code' });
+  const res = await safeFetch('https://api.vercel.com/v2/oauth/access_token', {
+    method: 'POST', headers: { 'content-type': 'application/x-www-form-urlencoded', accept: 'application/json' }, body,
+  });
+  if (!res) return { ok: false, reachable: false, detail: 'Network/timeout reaching api.vercel.com' };
+  const j = await parseJsonSafe(res);
+  const err = String(j?.error?.code || j?.error || '').toLowerCase().slice(0, 80);
+  const ok = res.status >= 400 && res.status < 500 && res.status !== 401 && !/client/.test(err);
+  return { ok, reachable: true, http_status: res.status, provider_error: err || null,
+    detail: ok ? 'Vercel answered the probe without rejecting the client.' : `Vercel rejected the client credentials (${err || res.status}).` };
+}
+
 // ─── New providers (API key) ────────────────────────────────────────────────
 
 async function testCrunchbase(_id: string, secret: string): Promise<ProviderTestResult> {
@@ -364,6 +382,7 @@ export async function testOauthCreds(
     case 'stripe':     return testStripe(cred.id, cred.secret);
     case 'carta':      return testCarta(cred.id, cred.secret);
     case 'github':     return testGithub(cred.id, cred.secret);
+    case 'vercel':     return testVercel(cred.id, cred.secret);
     case 'crunchbase': return testCrunchbase(cred.id, cred.secret);
     case 'affinity':   return testAffinity(cred.id, cred.secret);
     case 'telegram':   return testTelegram(cred.id, cred.secret);

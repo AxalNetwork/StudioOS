@@ -96,6 +96,8 @@ export function keyPath(p) {
  */
 export function pageAction(p, { view = 'idle' } = {}) {
   if (!p || p.auth_type === 'none') return { kind: 'none' };
+  // D1091: Google Workspace's section owns its action (Allow Google files, Choose files).
+  if (p.key === 'google_workspace') return { kind: 'none' };
   const name = p.display_name || 'this connector';
   if (p.connection) {
     const pill = connectionStatus(p.connection, p);

@@ -77,6 +77,28 @@ workspace.get('/picker-config', safe(async (c, user) => {
   const apiKey = c.env.GOOGLE_PICKER_API_KEY, appId = c.env.GOOGLE_PICKER_APP_ID, clientId = googleCalClientId(c.env);
   return c.json({ state, configured: !!(apiKey && appId && clientId), api_key: apiKey || null, app_id: appId || null, client_id: clientId || null, scope: DRIVE_FILE_SCOPE });
 }));
+/**
+ * D1091 (GW1, GW2): the member's own chosen files across every venture, for
+ * the connector page, with the connection state and the Google account the
+ * files are read with. No project is asked: the page lists what this member
+ * chose. Each file names its venture by name; nothing is read from Google.
+ */
+workspace.get('/mine', safe(async (c, user) => {
+  const state = await workspaceConnection(c.env, user.id);
+  const account = await c.env.DB.prepare('SELECT google_email FROM google_oauth_tokens WHERE user_id = ?').bind(user.id).first();
+  const row = await c.env.DB.prepare("SELECT id FROM integrations WHERE user_id = ? AND provider_key = 'google_workspace'").bind(user.id).first().catch(() => null);
+  const rows = row ? await c.env.DB.prepare(
+    `SELECT f.*, p.name AS venture_name FROM google_workspace_files f LEFT JOIN projects p ON p.id = f.project_id
+      WHERE f.integration_id = ? AND f.user_id = ? AND f.status <> 'stopped' ORDER BY f.project_id, f.id`,
+  ).bind(row.id, user.id).all() : { results: [] };
+  const items = (rows.results || []).map((r: any) => ({ ...fileView(r), venture_name: r.venture_name ?? null }));
+  return c.json({
+    state,
+    account_email: state === 'google_not_connected' ? null : (account?.google_email ?? null),
+    items,
+    ventures: new Set(items.map((i: any) => i.project_id)).size,
+  });
+}));
 workspace.get('/files', safe(async (c, user) => {
   const { project, integration } = await context(c, user, c.req.query('project'));
   const rows = await c.env.DB.prepare("SELECT * FROM google_workspace_files WHERE integration_id = ? AND user_id = ? AND project_id = ? AND status <> 'stopped' ORDER BY id").bind(integration.id, user.id, project.id).all();
