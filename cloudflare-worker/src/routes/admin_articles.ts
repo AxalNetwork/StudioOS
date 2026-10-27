@@ -117,24 +117,54 @@ adminArticles.get('/:id', async (c) => {
   if (!Number.isInteger(id) || id <= 0) return c.json({ error: 'invalid' }, 400);
   const row = await loadArticle(c.env, id);
   if (!row) return c.json({ error: 'not_found' }, 404);
+  // D1293 — each revision names who saved it; `saved_by_name` is null when
+  // that account is gone, and the drawer says so rather than guessing.
   const revs = await c.env.DB.prepare(
-    `SELECT id, rev, title, status_at_save, saved_by, reason, created_at
-       FROM article_revisions WHERE article_id = ? ORDER BY rev DESC`,
+    `SELECT r.id, r.rev, r.title, r.status_at_save, r.saved_by, r.reason, r.created_at,
+            s.name AS saved_by_name
+       FROM article_revisions r
+       LEFT JOIN users s ON s.id = r.saved_by
+      WHERE r.article_id = ? ORDER BY r.rev DESC`,
   ).bind(id).all<any>();
   const cmts = await c.env.DB.prepare(
     `SELECT c.id, c.author_id, c.body, c.anchor, c.resolved_at, c.created_at,
-            u.name AS author_name, u.role AS author_role
+            c.parent_id, c.resolved_by, c.edited_at,
+            u.name AS author_name, u.role AS author_role,
+            rb.name AS resolved_by_name
        FROM article_review_comments c
        LEFT JOIN users u ON u.id = c.author_id
-      WHERE c.article_id = ? ORDER BY c.created_at`,
+       LEFT JOIN users rb ON rb.id = c.resolved_by
+      WHERE c.article_id = ? ORDER BY c.created_at, c.id`,
   ).bind(id).all<any>();
   let tags: string[] = [];
   try { tags = row.tags ? JSON.parse(row.tags) : []; } catch { tags = []; }
   return c.json({
-    article: { ...row, tags },
+    // D1293 — `rendered_html` is the body as readers would see it now, from
+    // the current markdown. `body_html` stays what was rendered at publish.
+    article: { ...row, tags, rendered_html: renderMarkdown(row.body_markdown || '') },
     revisions: revs.results || [],
     comments: cmts.results || [],
   });
+});
+
+// GET /api/admin/articles/:id/revisions/:rev — D1293: one revision's stored
+// text, for the drawer's compare. Admins only; an author reads their own
+// article through /api/articles/draft/:id, never another revision.
+adminArticles.get('/:id/revisions/:rev', async (c) => {
+  await requireAdmin(c);
+  await ensureNewsSchema(c.env);
+  const id = Number(c.req.param('id'));
+  const rev = Number(c.req.param('rev'));
+  if (!Number.isInteger(id) || id <= 0 || !Number.isInteger(rev) || rev <= 0) return c.json({ error: 'invalid' }, 400);
+  const row = await c.env.DB.prepare(
+    `SELECT r.rev, r.title, r.subtitle, r.body_markdown, r.status_at_save, r.saved_by, r.reason, r.created_at,
+            s.name AS saved_by_name
+       FROM article_revisions r
+       LEFT JOIN users s ON s.id = r.saved_by
+      WHERE r.article_id = ? AND r.rev = ? LIMIT 1`,
+  ).bind(id, rev).first<any>();
+  if (!row) return c.json({ error: 'revision_not_found', detail: 'That revision is not stored for this article.' }, 404);
+  return c.json({ revision: row });
 });
 
 async function transition(
@@ -359,16 +389,32 @@ export async function publishDueArticles(env: Env, now: Date = new Date()): Prom
   return { readable: true, due: due.length, published };
 }
 
+// POST /api/admin/articles/:id/unpublish  { reason }
+//
+// D1293 — the author is told why, in their own notice ("Your article was
+// unpublished"), not as "Changes requested". A reason under eight characters
+// is refused, as request-changes and reject refuse one. Unpublishing also
+// takes the article off the featured strip.
 adminArticles.post('/:id/unpublish', async (c) => {
   const id = Number(c.req.param('id'));
   const admin = await requireAdmin(c);
   await ensureNewsSchema(c.env);
+  const body: any = await c.req.json().catch(() => ({}));
+  const reason = String(body?.reason || '').slice(0, 2000).trim();
+  if (reason.length < 8) {
+    return c.json({ error: 'reason_too_short', detail: 'Say why, in at least eight characters. The author reads it. Nothing was unpublished.' }, 400);
+  }
   const row = await loadArticle(c.env, id);
   if (!row) return c.json({ error: 'not_found' }, 404);
   if (row.status !== 'published') return c.json({ error: 'invalid_status', status: row.status }, 409);
-  await c.env.DB.prepare(
-    `UPDATE articles SET status='approved', updated_at = ? WHERE id = ?`,
+  const res = await c.env.DB.prepare(
+    `UPDATE articles SET status='approved', featured_at = NULL, featured_by = NULL, updated_at = ?
+      WHERE id = ? AND status = 'published'`,
   ).bind(new Date().toISOString(), id).run();
+  if (!res?.meta?.changes) {
+    const now = await loadArticle(c.env, id);
+    return c.json({ error: 'invalid_status', status: now?.status ?? null }, 409);
+  }
   // D484 — back to approved, so a publish time that already passed must go,
   // or the next cron tick would publish it again. Its own statement: a
   // database without migration 346 still unpublishes.
@@ -377,14 +423,70 @@ adminArticles.post('/:id/unpublish', async (c) => {
   ).bind(id).run().catch(() => {});
   await snapshotRevision(c.env, id, admin.id, 'manual');
   await bustArticleEdgeCache(c.env, row.slug, id, row.author_user_id);
-  await notifyArticle(c.env, 'author_changes_requested', {
+  await notifyArticle(c.env, 'author_unpublished', {
     articleId: id,
     slug: row.slug,
     title: row.title,
     authorUserId: row.author_user_id,
-    reason: 'Article was unpublished by an admin and returned to approved status.',
+    reason,
+  });
+  // The reason is the author's to read; the audit row holds the fact only.
+  await logAdminAction(c.env, admin.id, admin.email || '', 'article.unpublish', {
+    article_id: id, was_featured: !!row.featured_at,
   });
   return c.json({ ok: true });
+});
+
+/** The most articles featured on Articles at once (D1290 §4, question 4). */
+export const FEATURED_MAX = 3;
+
+// POST /api/admin/articles/:id/feature  { featured: true | false }
+//
+// D1293 — a Super Admin features a published article on Articles, or takes
+// it off. At most FEATURED_MAX at a time: the count is part of the UPDATE's
+// own WHERE, so two Super Admins racing for the last place feature one
+// article, not two. Featuring an article already featured, or unfeaturing
+// one that is not, changes nothing and says so.
+adminArticles.post('/:id/feature', async (c) => {
+  const admin = await requireAdmin(c);
+  if (!isSuperAdmin(admin)) {
+    return c.json({ error: 'super_admin_only', detail: 'Only a Super Admin features an article. Nothing was changed.' }, 403);
+  }
+  await ensureNewsSchema(c.env);
+  const id = Number(c.req.param('id'));
+  if (!Number.isInteger(id) || id <= 0) return c.json({ error: 'invalid' }, 400);
+  const body: any = await c.req.json().catch(() => null);
+  if (!body || typeof body.featured !== 'boolean') {
+    return c.json({ error: 'featured_required', detail: 'Send featured: true or false.' }, 400);
+  }
+  const row = await loadArticle(c.env, id);
+  if (!row) return c.json({ error: 'not_found' }, 404);
+  const now = new Date().toISOString();
+  if (body.featured) {
+    const res = await c.env.DB.prepare(
+      `UPDATE articles SET featured_at = ?, featured_by = ?
+        WHERE id = ? AND status = 'published' AND featured_at IS NULL
+          AND (SELECT COUNT(*) FROM articles WHERE featured_at IS NOT NULL) < ?`,
+    ).bind(now, admin.id, id, FEATURED_MAX).run();
+    if (!res?.meta?.changes) {
+      const again = await loadArticle(c.env, id);
+      if (again?.featured_at) return c.json({ article: again, changed: false });
+      if (again?.status !== 'published') {
+        return c.json({ error: 'invalid_status', status: again?.status ?? null, expected: 'published', detail: 'Only a published article can be featured. Nothing was changed.' }, 409);
+      }
+      return c.json({ error: 'featured_full', max: FEATURED_MAX, detail: `${FEATURED_MAX} articles are featured already. Unfeature one first. Nothing was changed.` }, 409);
+    }
+  } else {
+    if (!row.featured_at) return c.json({ article: row, changed: false });
+    await c.env.DB.prepare(
+      'UPDATE articles SET featured_at = NULL, featured_by = NULL WHERE id = ?',
+    ).bind(id).run();
+  }
+  await logAdminAction(c.env, admin.id, admin.email || '', body.featured ? 'article.feature' : 'article.unfeature', {
+    article_id: id,
+  });
+  await bustArticleEdgeCache(c.env, row.slug, id, row.author_user_id);
+  return c.json({ article: await loadArticle(c.env, id), changed: true });
 });
 
 adminArticles.post('/:id/comments', async (c) => {
@@ -395,10 +497,22 @@ adminArticles.post('/:id/comments', async (c) => {
   const text = String(body.body || '').slice(0, 5000).trim();
   if (!text) return c.json({ error: 'empty' }, 400);
   const anchor = body.anchor ? String(body.anchor).slice(0, 120) : null;
+  // D1293 — `parent_id` answers a thread: it must be a first comment on this
+  // same article. A reply takes no anchor of its own; the thread has one.
+  let parentId: number | null = null;
+  if (body.parent_id !== undefined && body.parent_id !== null) {
+    parentId = Number(body.parent_id);
+    const parent = Number.isInteger(parentId) && parentId > 0
+      ? await c.env.DB.prepare(
+        'SELECT id FROM article_review_comments WHERE id = ? AND article_id = ? AND parent_id IS NULL',
+      ).bind(parentId, id).first<{ id: number }>()
+      : null;
+    if (!parent) return c.json({ error: 'comment_not_found', detail: 'That thread is not on this article. Nothing was posted.' }, 404);
+  }
   const ins: any = await c.env.DB.prepare(
-    `INSERT INTO article_review_comments (article_id, author_id, body, anchor)
-     VALUES (?, ?, ?, ?)`,
-  ).bind(id, admin.id, text, anchor).run();
+    `INSERT INTO article_review_comments (article_id, author_id, body, anchor, parent_id)
+     VALUES (?, ?, ?, ?, ?)`,
+  ).bind(id, admin.id, text, parentId ? null : anchor, parentId).run();
   return c.json({ id: Number(ins?.meta?.last_row_id), ok: true }, 201);
 });
 
@@ -409,9 +523,13 @@ adminArticles.put('/comments/:cid', async (c) => {
   if (!Number.isFinite(cid) || cid <= 0) return c.json({ error: 'comment_not_found' }, 404);
   const body: any = await c.req.json().catch(() => ({}));
   const comment = await c.env.DB.prepare(
-    'SELECT id, article_id, author_id, body, resolved_at FROM article_review_comments WHERE id = ?',
-  ).bind(cid).first<{ id: number; article_id: number; author_id: number; body: string; resolved_at: string | null }>();
+    'SELECT id, article_id, author_id, body, resolved_at, parent_id FROM article_review_comments WHERE id = ?',
+  ).bind(cid).first<{ id: number; article_id: number; author_id: number; body: string; resolved_at: string | null; parent_id: number | null }>();
   if (!comment) return c.json({ error: 'comment_not_found' }, 404);
+  // D1293 — a thread is resolved at its first comment; a reply is not.
+  if (typeof body.resolved === 'boolean' && comment.parent_id) {
+    return c.json({ error: 'reply_not_resolvable', detail: 'Resolve the thread, not a reply. Nothing was changed.' }, 400);
+  }
 
   // Column names are literals. A request field never becomes SQL.
   let nextBody: string | undefined;
@@ -430,18 +548,22 @@ adminArticles.put('/comments/:cid', async (c) => {
   if (body.resolved === false) nextResolved = null;
   if (nextBody === undefined && nextResolved === undefined) return c.json({ error: 'no_changes' }, 400);
 
+  // D1293 — a text change stamps `edited_at`; resolving records who
+  // (`resolved_by`), and reopening clears it with the time.
+  const now = new Date().toISOString();
+  const resolvedBy = nextResolved ? admin.id : null;
   if (nextBody !== undefined && nextResolved !== undefined) {
     await c.env.DB.prepare(
-      'UPDATE article_review_comments SET body = ?, resolved_at = ? WHERE id = ?',
-    ).bind(nextBody, nextResolved, cid).run();
+      'UPDATE article_review_comments SET body = ?, edited_at = ?, resolved_at = ?, resolved_by = ? WHERE id = ?',
+    ).bind(nextBody, now, nextResolved, resolvedBy, cid).run();
   } else if (nextBody !== undefined) {
     await c.env.DB.prepare(
-      'UPDATE article_review_comments SET body = ? WHERE id = ?',
-    ).bind(nextBody, cid).run();
+      'UPDATE article_review_comments SET body = ?, edited_at = ? WHERE id = ?',
+    ).bind(nextBody, now, cid).run();
   } else {
     await c.env.DB.prepare(
-      'UPDATE article_review_comments SET resolved_at = ? WHERE id = ?',
-    ).bind(nextResolved, cid).run();
+      'UPDATE article_review_comments SET resolved_at = ?, resolved_by = ? WHERE id = ?',
+    ).bind(nextResolved, resolvedBy, cid).run();
   }
 
   // Only a Super Admin rewriting someone else's text is an audit event.
@@ -469,7 +591,9 @@ adminArticles.delete('/comments/:cid', async (c) => {
   if (Number(comment.author_id) !== Number(admin.id) && !isSuperAdmin(admin)) {
     return c.json({ error: 'not_your_comment', detail: 'Only the comment’s author or a Super Admin can delete it. Nothing was deleted.' }, 403);
   }
-  await c.env.DB.prepare('DELETE FROM article_review_comments WHERE id = ?').bind(cid).run();
+  // D1293 — a thread's replies go with it. Said here as well as by the
+  // foreign key, so a database without enforced keys keeps no orphan.
+  await c.env.DB.prepare('DELETE FROM article_review_comments WHERE id = ? OR parent_id = ?').bind(cid, cid).run();
   await logAdminAction(c.env, admin.id, admin.email || '', 'article_comment_deleted', {
     article_id: comment.article_id,
     comment_id: comment.id,
