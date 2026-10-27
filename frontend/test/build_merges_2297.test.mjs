@@ -15,7 +15,8 @@ const APP = readFileSync(resolve(root, 'frontend/src/App.jsx'), 'utf8');
 const MERGES = [
   ['/build/discovery', '/validate/customer-research', '/validate/:slug', 'DiscoveryPage'],
   ['/build/metrics', '/build/kpi', '/build/kpi', 'MetricsPage'],
-  ['/build/financials', '/raise/capital/model', '/raise/capital/model', null],
+  // D1178 (#3105): to Use of funds › Runway › Forecast, through its own redirect.
+  ['/build/financials', '/raise/use-of-funds/runway/forecast', null, null],
   // D1029 (#2866): straight to the Cap table tool, whose redirect is its own component.
   ['/build/captable', '/raise/cap-table', null, 'CapTablePage'],
   ['/grow/brand', '/build/brand', '/build/brand', 'founder/FounderGrowBrand'],
@@ -27,6 +28,12 @@ test('each retired address forwards to its survivor, query and hash kept', () =>
   for (const [from, to, survivorRoute] of MERGES) {
     if (from === '/build/captable') {
       assert.equal(routeLine(from).trim(), '<Route path="/build/captable" element={<CapTableMovedRedirect to="/raise/cap-table" />} />');
+      continue;
+    }
+    if (from === '/build/financials') {
+      // Its query and hash are kept by the component; use_of_funds_d1178 lands each one.
+      assert.equal(routeLine(from).trim(), '<Route path="/build/financials" element={<UseOfFundsMovedRedirect />} />');
+      assert.match(routeLine(to), /element=\{guard\(/, `${to}'s route is gone`);
       continue;
     }
     assert.equal(routeLine(from).trim(),

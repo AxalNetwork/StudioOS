@@ -1,7 +1,12 @@
 /**
  * D1270 (#2381) — the parts of HQ › Platform › Promo codes that are not the
- * list itself: the Usage tab's wait (PRM7, part 6) and one code's drawer at
- * its address (PRM2), over the list (`../consoles/PromoCodesConsole.jsx`).
+ * list itself: the Usage tab (PRM7) and one code's drawer at its address
+ * (PRM2), over the list (`../consoles/PromoCodesConsole.jsx`).
+ *
+ * D1276 (#3302): Usage reads `GET /api/admin/promos/usage` for the range in
+ * the address. Its five blocks arrive apart (`{ available, reason }`): each is
+ * drawn, said empty in the canvas's words, or failed with Try again on its
+ * own, so one failed block never blanks the tab. Each chart has View as table.
  *
  * D1275 (#3301): the drawer is complete — a lightbox with Overview,
  * Redemptions and History, read from `GET /api/admin/promos/:id`, `/:id/
@@ -12,10 +17,12 @@ import React, { useCallback, useEffect, useState } from 'react';
 import { adminPromosApi } from '../../../lib/api/adminPromos.js';
 import { promoUsageApi } from '../../../lib/api/promoUsage.js';
 import { reportError } from '../../../lib/log';
-import { Lightbox, actionGhost, actionPrimary } from '../../../ui';
+import { Link, useLocation, useNavigate } from 'react-router-dom';
+import { Chart, ChartTable, Legend, Lightbox, actionGhost, actionPrimary } from '../../../ui';
 import {
-  ACTION_WORD, NOT_YET, STATE_WORD, WAITS, appliesWord, dayWord, discountWord, durationWord, historyRow, limitWord,
-  minuteWord, redeemedLines, redemptionRow, rowActions,
+  ACTION_WORD, NOT_YET, RANGES, SOURCES, STATE_WORD, WAITS, appliesWord, blockState, codeHref, currencyRows, dayWord, discountWord,
+  durationWord, historyRow, limitWord, minuteWord, nearEndRows, nearEndSentence, periodWord, productsChart, rangeProblem,
+  redeemedLines, redemptionRow, rowActions, topCodesChart, usageHref, usageRangeOf, usageTiles, weekChart,
 } from './promoModel';
 import { memberPays, draftFrom } from './promoWizard';
 
@@ -31,8 +38,181 @@ export function PromoWait({ id }) {
   );
 }
 
-export function PromoUsage() {
-  return <section className={box} data-testid="promo-usage"><h2 className="m-0 text-[15px] font-bold">Usage</h2><PromoWait id="usage" /></section>;
+const CHIP = 'rounded-full border px-3 py-1 text-[12.5px] font-semibold';
+const CHIP_ON = 'border-violet-600 bg-violet-50 text-violet-800 dark:border-[#a78bfa] dark:bg-violet-950 dark:text-violet-100';
+const CHIP_OFF = 'border-axal-hairline bg-white text-axal-ink dark:border-gray-700 dark:bg-gray-900 dark:text-gray-200';
+const DATE = 'rounded-lg border border-axal-hairline bg-white px-2 py-1 text-[12.5px] dark:border-gray-700 dark:bg-gray-900 dark:text-gray-100';
+
+/** The range chips; Custom opens two days and Apply. The range lives in the address. */
+function RangeBar({ range, onRange }) {
+  const [custom, setCustom] = useState(range.key === 'custom');
+  const [from, setFrom] = useState(range.from);
+  const [to, setTo] = useState(range.to);
+  const [problem, setProblem] = useState(null);
+  const apply = () => {
+    const p = rangeProblem(from, to);
+    setProblem(p);
+    if (!p) onRange({ key: 'custom', from, to });
+  };
+  return (
+    <div className="flex flex-col gap-2">
+      <div className="flex flex-wrap items-center gap-1.5" role="group" aria-label="Range">
+        {RANGES.map((r) => {
+          const on = custom ? r.key === 'custom' : range.key === r.key;
+          return (
+            <button key={r.key} type="button" aria-pressed={on} className={`${CHIP} ${on ? CHIP_ON : CHIP_OFF}`} data-testid={`promo-usage-range-${r.key}`}
+              onClick={() => { if (r.key === 'custom') setCustom(true); else { setCustom(false); setProblem(null); onRange({ key: r.key }); } }}>{r.label}</button>
+          );
+        })}
+      </div>
+      {custom && (
+        <div className="flex flex-wrap items-end gap-2 text-[12.5px]" data-testid="promo-usage-custom">
+          <label className="flex flex-col gap-0.5 font-semibold">First day<input type="date" className={DATE} value={from} onChange={(e) => setFrom(e.target.value)} data-testid="promo-usage-from" /></label>
+          <label className="flex flex-col gap-0.5 font-semibold">Last day<input type="date" className={DATE} value={to} onChange={(e) => setTo(e.target.value)} data-testid="promo-usage-to" /></label>
+          <button type="button" className={actionGhost} onClick={apply} data-testid="promo-usage-apply">Apply</button>
+          {problem && <span role="alert" className="text-red-700 dark:text-red-300" data-testid="promo-usage-range-problem">{problem}</span>}
+        </div>
+      )}
+      <span className={`text-[11.5px] ${MUTED}`}>Whole days in UTC, both included. Weeks start on Monday.</span>
+    </div>
+  );
+}
+
+/** A block's frame: its title, its sentence, and View as table when it draws a chart. */
+function Block({ id, title, chart, state, onRetry, children, wide = false }) {
+  const [table, setTable] = useState(false);
+  return (
+    <section className={`${box} min-w-0 ${wide ? 'lg:col-span-2' : ''}`} aria-labelledby={`promo-usage-h-${id}`} data-testid={`promo-usage-${id}`}>
+      <div className="flex items-start justify-between gap-2">
+        <h3 id={`promo-usage-h-${id}`} className="m-0 text-[14px] font-bold">{title}</h3>
+        {chart && state.kind === 'ok' && (
+          <button type="button" className="text-[12px] font-semibold text-axal-violet underline dark:text-[#a78bfa]" onClick={() => setTable(!table)} data-testid={`promo-usage-${id}-toggle`}>
+            {table ? 'View as chart' : 'View as table'}
+          </button>
+        )}
+      </div>
+      {state.kind === 'loading' && <div className="h-24 animate-pulse rounded-lg bg-gray-100 dark:bg-gray-800" />}
+      {state.kind === 'unreadable' && <ReadFailed what={title} onRetry={onRetry} testId={`promo-usage-${id}-failed`} />}
+      {state.kind === 'empty' && <p className={`m-0 text-[12.5px] ${MUTED}`} data-testid={`promo-usage-${id}-empty`}>{state.text}</p>}
+      {state.kind === 'ok' && (
+        <>
+          {chart?.summary && <p className="m-0 text-[12.5px]" data-testid={`promo-usage-${id}-summary`}>{chart.summary}</p>}
+          {chart && (table
+            ? <div className="overflow-x-auto" data-testid={`promo-usage-${id}-table`}><ChartTable chart={chart} caption={title} /></div>
+            : <div role="img" aria-label={chart.alt} data-testid={`promo-usage-${id}-chart`}><Chart chart={chart} /></div>)}
+          {children}
+        </>
+      )}
+    </section>
+  );
+}
+
+function UsageTile({ t, reading }) {
+  return (
+    <div className="flex min-w-0 flex-col gap-1 rounded-xl border border-axal-hairline bg-white p-3 dark:border-gray-800 dark:bg-gray-900" data-testid={`promo-usage-tile-${t.key}`}>
+      <span className={`text-[11px] font-bold uppercase tracking-[.06em] ${MUTED}`}>{t.label}</span>
+      <span className="text-[19px] font-bold tabular-nums">{reading ? '…' : (t.value ?? 'Not recorded')}</span>
+      <span className={`text-[11.5px] ${MUTED}`}>{reading ? 'Reading…' : t.sub}</span>
+    </div>
+  );
+}
+
+/**
+ * PRM7, PRM8 (dark) and PRM13 (the phone: one block per screen width). `now`
+ * is for tests; the range comes from the address.
+ */
+export function PromoUsage({ now }) {
+  const location = useLocation();
+  const navigate = useNavigate();
+  const at = now ?? Date.now();
+  const range = usageRangeOf(location.search, at);
+  const [st, reload] = useRead(() => promoUsageApi.usage({ from: range.from, to: range.to }), [range.from, range.to], 'PromoUsage');
+  const [exporting, setExporting] = useState({ busy: false, error: null });
+  const u = st.kind === 'ok' ? st.data : null;
+  const failed = st.kind !== 'ok' && st.kind !== 'loading';
+  const of = (name) => {
+    if (st.kind === 'loading') return { kind: 'loading', text: null };
+    if (st.kind !== 'ok') return { kind: 'unreadable', text: null };
+    return blockState(name, u?.[name]);
+  };
+  const week = u ? weekChart(u.redemptions, at) : null;
+  const top = u ? topCodesChart(u.top_codes) : null;
+  const products = u ? productsChart(u.products) : null;
+  const currencies = u ? currencyRows(u.discount) : [];
+  const near = u ? nearEndRows(u.near_end) : null;
+  const exportCsv = async () => {
+    setExporting({ busy: true, error: null });
+    try { await promoUsageApi.exportCsv({ from: range.from, to: range.to }); setExporting({ busy: false, error: null }); } catch (e) {
+      reportError('PromoUsage:export', e);
+      setExporting({ busy: false, error: e?.message || 'The export could not be made. Try again.' });
+    }
+  };
+  return (
+    <section className="flex flex-col gap-3" data-testid="promo-usage">
+      <div className="flex flex-wrap items-start justify-between gap-2">
+        <div className="flex flex-col gap-1">
+          <h2 className="m-0 text-[15px] font-bold">Usage</h2>
+          <span className={`text-[12.5px] ${MUTED}`} data-testid="promo-usage-period">{dayWord(range.from)} to {dayWord(range.to)} · every code</span>
+        </div>
+        <div className="flex flex-col items-end gap-1">
+          <button type="button" className={actionGhost} disabled={exporting.busy} onClick={exportCsv} data-testid="promo-usage-export">{exporting.busy ? 'Exporting…' : 'Export CSV'}</button>
+          {exporting.error && <span role="alert" className="text-[12px] text-red-700 dark:text-red-300" data-testid="promo-usage-export-error">{exporting.error}</span>}
+        </div>
+      </div>
+      <RangeBar key={`${range.key}-${range.from}-${range.to}`} range={range} onRange={(r) => navigate(usageHref(r))} />
+      {failed && <ReadFailed what="Usage for this period" onRetry={reload} testId="promo-usage-failed" />}
+      {!failed && (
+        <>
+          <div className="grid grid-cols-2 gap-2 lg:grid-cols-4" data-testid="promo-usage-tiles">
+            {usageTiles(u, range).map((t) => <UsageTile key={t.key} t={t} reading={st.kind === 'loading'} />)}
+          </div>
+          <div className="grid grid-cols-1 gap-3 lg:grid-cols-2">
+            <Block id="weeks" title="Redemptions per week" chart={week} state={of('redemptions')} onRetry={reload} wide>
+              <Legend items={SOURCES.map((s) => ({ label: s.label, tone: s.tone }))} />
+              <span className={`text-[11.5px] ${MUTED}`} data-testid="promo-usage-weeks-recorded">{week?.recorded}</span>
+            </Block>
+            <Block id="discount" title="Discount given, per currency" state={of('discount')} onRetry={reload}>
+              <p className={`m-0 text-[12.5px] ${MUTED}`}>Each currency is shown on its own and never added together.</p>
+              <ul className="m-0 flex list-none flex-col gap-1.5 p-0" data-testid="promo-usage-currencies">
+                {currencies.map((c) => (
+                  <li key={c.currency} className="flex flex-wrap items-baseline justify-between gap-2 border-t border-gray-100 pt-1.5 text-[12.5px] dark:border-gray-800" data-testid="promo-usage-currency">
+                    <span className="font-semibold">{c.currency}</span>
+                    <span className="font-mono tabular-nums">{c.total} · {c.redemptions} redemptions · {c.average} on average</span>
+                  </li>
+                ))}
+              </ul>
+              {u?.discount?.not_recorded > 0 && <span className={`text-[11.5px] ${MUTED}`} data-testid="promo-usage-discount-unrecorded">{u.discount.not_recorded.toLocaleString('en-US')} {u.discount.not_recorded === 1 ? 'redemption carries' : 'redemptions carry'} no amount and {u.discount.not_recorded === 1 ? 'is' : 'are'} not in these figures.</span>}
+              <PromoWait id="discountWeeks" />
+            </Block>
+            <Block id="top" title="Top codes" chart={top} state={of('top_codes')} onRetry={reload}>
+              <span className={`text-[11.5px] ${MUTED}`}>Counted from StudioOS’s records for {periodWord(range)}. A code’s drawer gives Stripe’s own count.</span>
+            </Block>
+            <Block id="products" title="By plan and product" chart={products} state={of('products')} onRetry={reload}>
+              {products?.unrecorded && <span className={`text-[11.5px] ${MUTED}`} data-testid="promo-usage-products-unrecorded">{products.unrecorded}</span>}
+            </Block>
+            <Block id="near" title="Codes near their end" state={of('near_end')} onRetry={reload} wide>
+              <p className="m-0 text-[12.5px]" data-testid="promo-usage-near-summary">{nearEndSentence(u?.near_end)}</p>
+              {near?.length > 0 && (
+                <ul className="m-0 flex list-none flex-col p-0" data-testid="promo-usage-near-list">
+                  {near.map((r) => (
+                    <li key={r.id} className="flex flex-wrap items-center justify-between gap-2 border-t border-gray-100 py-1.5 text-[12.5px] dark:border-gray-800" data-testid="promo-usage-near-row">
+                      <span className="font-mono font-semibold">{r.code}</span>
+                      <span className="flex items-center gap-3">
+                        <span className="tabular-nums">{r.used}</span>
+                        <span className={r.atCap ? 'font-semibold text-sky-800 dark:text-sky-200' : 'text-amber-800 dark:text-amber-200'}>{r.why}</span>
+                        <Link to={codeHref(r.id)} className="font-semibold text-axal-violet underline dark:text-[#a78bfa]" data-testid={`promo-usage-near-open-${r.id}`}>Open</Link>
+                      </span>
+                    </li>
+                  ))}
+                </ul>
+              )}
+              <span className={`text-[11.5px] ${MUTED}`}>Every active code, whatever the range. Paused codes are left out.</span>
+            </Block>
+          </div>
+        </>
+      )}
+    </section>
+  );
 }
 
 const PILL = {
@@ -57,12 +237,12 @@ export function ReadFailed({ what, onRetry, testId }) {
   );
 }
 
-function useRead(load, deps) {
+function useRead(load, deps, who = 'PromoDrawer') {
   const [st, setSt] = useState({ kind: 'loading', data: null });
   const run = useCallback(async () => {
     setSt((s) => ({ kind: s.data ? 'ok' : 'loading', data: s.data }));
     try { setSt({ kind: 'ok', data: await load() }); } catch (e) {
-      reportError('PromoDrawer:read', e);
+      reportError(`${who}:read`, e);
       setSt({ kind: e?.status === 404 ? 'missing' : 'failed', data: null });
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
