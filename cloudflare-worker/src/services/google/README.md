@@ -9,6 +9,12 @@ Every new read must have a fixed origin/path in the allowlist, a timeout,
 a response limit and a fake. Never add a provider write here. Five-row previews
 are ephemeral. No module importer is built in part 2.
 
+`driveCreate.ts` (D904, #2683) is the one exception the owner allowed
+(2026-10-27): creating the new presentation a founder exports from the Pitch
+deck studio, by one frozen POST to Drive's upload endpoint, with no file id,
+no parents and no sharing. Nothing else may write with this grant; D904's test
+scans the Worker for any other Drive upload.
+
 `growFeeds.ts` (D1095, #2960) is Grow's From Google. It lands a mapped metrics
 Sheet in `project_metrics` with `source = 'google_sheets'`, only in the columns
 no Stripe or Mercury writer owns. It turns `#board` and `#filing` events from

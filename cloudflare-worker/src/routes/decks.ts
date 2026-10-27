@@ -1973,39 +1973,17 @@ decks.post('/:id/autofill', async (c) => {
 });
 
 /**
- * POST /api/decks/:id/export — { format: 'pdf' | 'pptx' } → file bytes.
- *
- * Task #2 rewrite:
- *  - PDF: Browser Rendering navigates to the live React SPA print
- *    template at /deck/print-export/:hmacToken with print_mode=pdf so
- *    every slide renders at native 1920×1080. Matches the in-app
- *    preview investors see.
- *  - PPTX: For each slide, screenshot the same SPA URL with slide=N
- *    (single-slide mode), then embed each PNG full-bleed in the .pptx
- *    via renderDeckPPTXWithImages(). Falls back to the text-only
- *    renderer when BROWSER is unavailable so dev still gets a download.
- *  - PNG cover removed end-to-end (UI + handler + validator).
+ * The deck's slides, re-sanitized, and the same deck in the text writer's
+ * shape: one per slide, plus the Sources appendix as a last page when asked
+ * for. The PDF/PowerPoint export and D904's Google Slides export share it.
  */
-decks.post('/:id/export', async (c) => {
-  const user = await requireAuth(c);
-  const id = parseInt(c.req.param('id'));
-  await ensureSchema(c.env);
-  let row: any;
-  try { row = await getDeckRow(c.env, id); } catch { return c.json({ error: 'not found' }, 404); }
-  try { await projectOwned(c, user, Number(row.project_id), { write: true }); }
-  catch { return c.json({ error: 'forbidden' }, 403); }
-  const body = await c.req.json().catch(() => ({} as any));
-  const format = String(body?.format || 'pdf').toLowerCase();
-  if (!['pdf', 'pptx'].includes(format)) {
-    return c.json({ error: 'format must be pdf | pptx' }, 400);
-  }
+export function exportDeckOf(row: any, opts: PrintOptions): { slides: any[]; renderable: RenderableDeck } {
   let slides: any[] = [];
   try { slides = JSON.parse(row.slides || '[]'); } catch { slides = []; }
+  if (!Array.isArray(slides)) slides = [];
   // Re-sanitize persisted slides (defence-in-depth against legacy rows
   // pre-dating sanitizeImageUrl) before they reach Browser Rendering.
   slides = founderPitchSlides(sanitizeSlides(slides));
-  // D1112 (#2992): PD17's two options apply to every format, not only HTML.
-  const opts: PrintOptions = { notes: body?.notes === true, sources: body?.sources === true };
   const notesOf = (s: any) => (opts.notes ? String(s?.notes ?? '').trim() || NO_SPEAKER_NOTES : undefined);
   const renderable: RenderableDeck = {
     title: row.title || 'Pitch deck',
@@ -2034,6 +2012,39 @@ decks.post('/:id/export', async (c) => {
       notes: opts.notes ? NO_SPEAKER_NOTES : undefined,
     });
   }
+  return { slides, renderable };
+}
+
+/**
+ * POST /api/decks/:id/export — { format: 'pdf' | 'pptx' } → file bytes.
+ *
+ * Task #2 rewrite:
+ *  - PDF: Browser Rendering navigates to the live React SPA print
+ *    template at /deck/print-export/:hmacToken with print_mode=pdf so
+ *    every slide renders at native 1920×1080. Matches the in-app
+ *    preview investors see.
+ *  - PPTX: For each slide, screenshot the same SPA URL with slide=N
+ *    (single-slide mode), then embed each PNG full-bleed in the .pptx
+ *    via renderDeckPPTXWithImages(). Falls back to the text-only
+ *    renderer when BROWSER is unavailable so dev still gets a download.
+ *  - PNG cover removed end-to-end (UI + handler + validator).
+ */
+decks.post('/:id/export', async (c) => {
+  const user = await requireAuth(c);
+  const id = parseInt(c.req.param('id'));
+  await ensureSchema(c.env);
+  let row: any;
+  try { row = await getDeckRow(c.env, id); } catch { return c.json({ error: 'not found' }, 404); }
+  try { await projectOwned(c, user, Number(row.project_id), { write: true }); }
+  catch { return c.json({ error: 'forbidden' }, 403); }
+  const body = await c.req.json().catch(() => ({} as any));
+  const format = String(body?.format || 'pdf').toLowerCase();
+  if (!['pdf', 'pptx'].includes(format)) {
+    return c.json({ error: 'format must be pdf | pptx' }, 400);
+  }
+  // D1112 (#2992): PD17's two options apply to every format, not only HTML.
+  const opts: PrintOptions = { notes: body?.notes === true, sources: body?.sources === true };
+  const { renderable } = exportDeckOf(row, opts);
   const brand = await deckOwnerBrand(c.env, Number(row.project_id));
   const fname = (row.title || 'pitch-deck').replace(/[^A-Za-z0-9_-]+/g, '-').slice(0, 80);
 
