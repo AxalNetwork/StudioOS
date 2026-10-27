@@ -59,7 +59,7 @@ test('the three redirects land on /pricing, /pricing/products/:id and ?for=inves
 
 test('App mounts the catalogue at /pricing/products and the old addresses as redirects', () => {
   const app = read('frontend/src/App.jsx');
-  assert.match(app, /<Route path="\/pricing\/products" element=\{user \? guard\(\[[^\]]+\], <ProductsPage \/>\) : <ProductsPage \/>\} \/>/);
+  assert.match(app, /* D1288: wrapped in the old token addresses' redirect. */ /<Route path="\/pricing\/products" element=\{<TokensRedirect>\{user \? guard\(\[[^\]]+\], <ProductsPage \/>\) : <ProductsPage \/>\}<\/TokensRedirect>\} \/>/);
   assert.match(app, /<Route path="\/pricing\/products\/:productId" element=\{guard\(\[[^\]]+\], <ProductsPage \/>\)\} \/>/);
   assert.match(app, /<Route path="\/plans-and-pricing" element=\{<PlansAndPricingRedirect \/>\} \/>/);
   assert.match(app, /<Route path="\/plans-and-pricing\/:productId" element=\{<ParamRedirect to="\/pricing\/products\/:productId" \/>\} \/>/);

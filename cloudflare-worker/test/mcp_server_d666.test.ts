@@ -271,7 +271,9 @@ test('activity_logs: one row per call with tool, company, client and outcome, an
   await callTool(env, token, 'get_interview_guide', { company: P, hypothesis: 'SECRET-ARG-TEXT reconciliation' });
   const rows = db.prepare(`SELECT user_id, project_id, details FROM activity_logs WHERE action = 'mcp_tool_call'`).all() as any[];
   assert.equal(rows.length, 1);
-  assert.deepEqual(JSON.parse(rows[0].details), { tool: 'get_interview_guide', company_id: P, client: 'Claude', outcome: 'ok' });
+  // D1316 (#3474): the line also names the connection's grant id (never a token).
+  const grantId = (await asUser(env, FOUNDER, 'GET', '/api/connectors/assistants')).body.grants[0].id;
+  assert.deepEqual(JSON.parse(rows[0].details), { tool: 'get_interview_guide', company_id: P, client: 'Claude', outcome: 'ok', grant: grantId });
   assert.deepEqual([rows[0].user_id, rows[0].project_id], [FOUNDER, P]);
   assert.ok(!JSON.stringify(db.prepare('SELECT * FROM activity_logs').all()).includes('SECRET-ARG-TEXT'));
 });

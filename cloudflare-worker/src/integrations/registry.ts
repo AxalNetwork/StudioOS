@@ -24,6 +24,7 @@ import { NOTION_FEEDS } from './notionFeeds';
 import { vercelPulls, vercelFedModules } from './vercelFeeds';
 import { VERCEL_READ_SCOPES } from '../services/vercel/api';
 import { GOOGLE_WORKSPACE_FEEDS } from './googleWorkspaceFeeds';
+import { PUBLISH_TARGETS } from './publishTargets';
 import { bindingKey } from '../util/schemaBootstrap';
 
 export type ProviderStatus = 'live' | 'beta' | 'coming_soon';
@@ -42,6 +43,12 @@ export interface ConnectorMetadata {
   used_by?: Array<{ label: string; href: string }>;
   /** D757 §2.12: the Validate modules its transcripts suggest into (`moduleLabels.ts` keys). */
   suggests?: string[];
+  /**
+   * D1319 (#2400): what the founder may publish through it, and where. No
+   * `default_mode`: a publish is never automatic and never a `sends` row, so
+   * `send_modes` and `autopush` cannot reach it. Held to `PUBLISH_TARGETS`.
+   */
+  publishes?: Array<{ what: string; target: string }>;
 }
 
 export interface ProviderDescriptor {
@@ -183,6 +190,63 @@ export interface PushPreview {
   fields: { name: string; value: string | number | null }[];
 }
 
+/** D1319 (#2400): one account or audience an adapter can publish to. */
+export interface PublishDestinationInfo {
+  external_account_id: string;
+  display_name: string;
+  audience_label: string | null;
+}
+
+/** D1319: what a destination's preview and send are built from: the draft's final text for it, and its media. */
+export interface PublishInput {
+  text: string;
+  media_r2_keys: string[];
+  alt_texts: string[];
+  destination: PublishDestinationInfo;
+}
+
+/**
+ * D1319: one destination's preview, built by the same function `publish`
+ * sends with (D652's rule). `problems` non-empty means Send is off: over a
+ * limit, a media rule broken. Nothing is cut silently.
+ */
+export interface PublishPreview {
+  target: string;
+  audience: string | null;
+  fields: { name: string; value: string | number | null }[];
+  counts: { name: string; used: number; limit: number | null }[];
+  media: { count: number; limit: number | null; types: string[] } | null;
+  problems: string[];
+}
+
+/** D1319: what the provider gave back for an accepted post. */
+export interface PublishResult {
+  external_post_id: string;
+  external_url: string | null;
+}
+
+/**
+ * D1319: how `publish` says it did not end in a recorded post. `not_created`
+ * is a provider 4xx meaning no post exists (validation, auth, a 429 with
+ * `retryAfter`); `unknown` is anything after the request left (a timeout, a
+ * reset, a 5xx, a throw after the provider said yes). Any other throw from
+ * `publish` is read as `unknown`: an outcome that is not known is never re-sent.
+ */
+export class PublishError extends Error {
+  readonly kind: 'not_created' | 'unknown';
+  readonly code: string;
+  readonly retryAfter: string | null;
+  readonly httpStatus: number | null;
+  constructor(kind: 'not_created' | 'unknown', code: string, opts: { retryAfter?: string | null; httpStatus?: number | null } = {}) {
+    super(code);
+    this.name = 'PublishError';
+    this.kind = kind;
+    this.code = code;
+    this.retryAfter = opts.retryAfter ?? null;
+    this.httpStatus = opts.httpStatus ?? null;
+  }
+}
+
 export interface ProviderImpl {
   key: string;
   connect(c: Context<{ Bindings: Env }>, user: User, input: ConnectInput): Promise<ConnectResult>;
@@ -240,7 +304,29 @@ export interface ProviderImpl {
   postConnect?(c: Context<{ Bindings: Env }>, user: User, row: IntegrationRow): Promise<void>;
   /** D751 — whether Axal holds this provider's OAuth client. Never a value or a name. */
   ready?(env: Env): Promise<boolean | null>;
+  /**
+   * D1319 (#2400) — PUBLISHING, a capability of its own, never `push`: so
+   * `autopush.ts` and Eadwyn's send targets cannot reach it. Every call comes
+   * from `routes/publish.ts` after the founder pressed Send in the confirm
+   * dialog. `listDestinations` lists the accounts the publish scope reaches
+   * (empty without it); `publishPreview` builds what `publish` sends;
+   * `publish` sends it once; `retract` deletes it where the provider can;
+   * `findPublished` looks for a post whose outcome was not known.
+   */
+  listDestinations?(env: Env, row: IntegrationRow): Promise<PublishDestinationInfo[]>;
+  publishPreview?(env: Env, row: IntegrationRow, input: PublishInput): Promise<PublishPreview>;
+  publish?(env: Env, row: IntegrationRow, envelope: { input: PublishInput; preview: PublishPreview }, opts: { idempotencyKey: string }): Promise<PublishResult>;
+  retract?(env: Env, row: IntegrationRow, externalPostId: string): Promise<void>;
+  findPublished?(env: Env, row: IntegrationRow, envelope: { input: PublishInput; preview: PublishPreview }): Promise<PublishResult | null>;
 }
+
+/**
+ * D1319 (#2400): connectors that can publish for a founder, from
+ * `PUBLISH_TARGETS`, beside `MONEY_MOVERS` on the page: their trust notice
+ * says a post goes out only when the founder presses Send. None yet: each
+ * provider issue adds its row.
+ */
+export const PUBLISHERS: ReadonlySet<string> = new Set<string>(PUBLISH_TARGETS.map((t) => t.key));
 
 const PROVIDER_IMPLS: Map<string, ProviderImpl> = new Map();
 

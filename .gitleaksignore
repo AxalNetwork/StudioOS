@@ -175,3 +175,11 @@ b86a6d6d4eac96a90f29bc3f4714d364d2f6b4a0:cloudflare-worker/test/kyb_d1231.test.t
 # never a credential. The next commit (0652605bb4) builds the value at run
 # time, so no later commit carries a literal. Scoped to the one finding.
 214ec54f83bafee02779afe679acfd8ee7496de6:cloudflare-worker/test/google_workspace_gw5.test.ts:generic-api-key:75
+
+
+# D1319 (#3480): a synthetic signing seed and a JWT-shaped sample in the
+# publish lint test, never deployed credentials. The fixture now builds a
+# low-entropy runtime seed and assembles the sample from its parts.
+# Pin only the two already-published findings; retain every other check.
+5e8d812707ccd72f3b83c00586252df8d43edc4c:cloudflare-worker/test/publish_core_d1319.test.ts:generic-api-key:38
+5e8d812707ccd72f3b83c00586252df8d43edc4c:cloudflare-worker/test/publish_core_d1319.test.ts:jwt:293
