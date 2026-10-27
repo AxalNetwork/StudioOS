@@ -9,8 +9,9 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { kycPeopleApi } from '../../../lib/api/kycPeople.js';
 import { reportError } from '../../../lib/log';
-import { Lightbox, actionGhost } from '../../../ui';
+import { actionGhost } from '../../../ui';
 import { timeLabel } from './peopleModel';
+import Sheet from '../../../ui/Sheet.jsx';
 
 const FOOT = 'This view is recorded. Download is not offered.';
 
@@ -75,7 +76,7 @@ export default function KycViewer({ userId, doc, viewer, rejectedOn = null, onCl
     </div>
   );
   return (
-    <Lightbox label={`${doc.title}`} title={doc.title} onClose={onClose} width={960} testId="kyc-viewer"
+    <Sheet label={`${doc.title}`} title={doc.title} onClose={onClose} width={960} testId="kyc-viewer"
       footer={(
         <div className="flex flex-wrap items-center justify-between gap-2">
           <span className="text-[12px] text-axal-muted dark:text-gray-400" data-testid="kyc-viewer-foot">{FOOT}</span>
@@ -98,6 +99,6 @@ export default function KycViewer({ userId, doc, viewer, rejectedOn = null, onCl
           <Watermark text={mark} />
         </div>
       )}
-    </Lightbox>
+    </Sheet>
   );
 }

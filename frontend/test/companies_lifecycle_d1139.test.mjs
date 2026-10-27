@@ -186,6 +186,10 @@ test('mounted CMP2: a card opens /account/companies/<uid>; the lightbox reads th
   try {
     assert.equal(v.prop('company-open-c8', 'href'), '/account/companies/c8');
     assert.ok(v.has('company-lightbox'));
+    assert.equal(v.prop('company-lightbox', 'role'), 'dialog', 'D1317: the company is the shared Sheet over its list');
+    assert.ok(v.prop('company-lightbox', 'aria-labelledby'));
+    assert.equal(v.prop('company-lightbox', 'data-width'), 720);
+    assert.ok(v.has('company-lightbox-scrim'));
     assert.match(v.of('company-facts'), /Seed.*harbor\.example.*12 Jan 2026.*3 Oct 2026.*Validate/s);
     assert.match(v.of('company-ventures-block'), /Ledger app.*MVP · Lab week 2 of 4 · your seat: Owner/s);
     assert.match(v.of('company-loose'), /Not in a company: 1 venture shows under every company until you move it/);
@@ -194,6 +198,10 @@ test('mounted CMP2: a card opens /account/companies/<uid>; the lightbox reads th
     assert.match(v.of('company-invitation'), /kim@example\.test.*email not sent/);
     for (const id of ['company-rename', 'company-invite', 'company-transfer', 'company-archive', 'company-leave', 'company-open-studio']) assert.ok(v.has(id), id);
     assert.ok(!v.has('company-make-active'), 'it is already active');
+    await v.click('company-lightbox-close');
+    assert.equal(v.path(), '/account/companies', 'D1317: closing the sheet returns to the list’s address');
+    assert.ok(!v.has('company-lightbox'));
+    assert.ok(v.has('company-open-c8'), 'the list was under it all along');
   } finally { await v.close(); }
 });
 
@@ -319,6 +327,9 @@ test('mounted CMP4 as owner: a Lab-locked venture shows the Worker\'s reason in 
   try {
     await v.click('project-open-1');
     assert.ok(v.has('venture-lightbox'));
+    assert.equal(v.prop('venture-lightbox', 'role'), 'dialog', 'D1317: the venture is the shared Sheet');
+    assert.ok(v.prop('venture-lightbox', 'aria-labelledby'));
+    assert.equal(v.prop('venture-lightbox', 'data-width'), 720);
     assert.match(v.of('venture-facts'), /MVP.*Lab week 2 of 4.*Validate/s);
     assert.match(v.of('venture-lab-lock'), /Co-founder and advisor invites unlock in Week 4 of the Spin-Out Lab\. Keep going — you're in Week 2\./);
     assert.ok(!v.has('venture-invitation') && !v.has('venture-invite'), 'no invitations while locked');

@@ -31,6 +31,9 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { codeOnly } from './_codeOnly.mjs';
+import React from 'react';
+import { renderToStaticMarkup } from 'react-dom/server';
+import { DependenciesDialog, ScenarioDialog } from '../src/pages/founder/RoadmapDialogs.jsx';
 
 const read = (p) => readFileSync(resolve(process.cwd(), p), 'utf8');
 const PAGE = codeOnly(read('frontend/src/pages/founder/FounderBuildRoadmap.jsx'));
@@ -112,4 +115,14 @@ test('the page states what risk cannot be, rather than showing a number for it',
   assert.ok(!/label="At risk"/.test(PAGE),
     'an `At risk` stat is back on the roadmap page — it would have to be invented');
   assert.match(PAGE, /label="Blocked"/, 'the honest version of that number is gone too');
+});
+
+test('D1317: the scenario editor is the shared Sheet at 720px, its save row in the fixed footer; the dependency editor stays centred', () => {
+  const h = React.createElement;
+  const out = renderToStaticMarkup(h(ScenarioDialog, { items: [{ id: 1, objective: 'Ship v1', quarter: 'Q1' }], scenario: { id: 3, name: 'raise slips' }, onClose() {}, onSave() {}, onDelete() {} }));
+  assert.match(out, /role="dialog" aria-modal="true" aria-labelledby="[^"]+"[^>]*data-testid="dialog-scenario"[^>]*data-width="720"/);
+  const foot = out.slice(out.indexOf('data-testid="dialog-scenario-footer"'));
+  assert.ok(out.includes('data-testid="dialog-scenario-footer"'));
+  for (const id of ['button-scenario-delete', 'button-scenario-save']) assert.ok(foot.includes(`data-testid="${id}"`), `${id} sits in the footer`);
+  assert.match(renderToStaticMarkup(h(DependenciesDialog, { items: [], dependencies: [], onClose() {} })), /class="fb-roadmap-modal"/);
 });

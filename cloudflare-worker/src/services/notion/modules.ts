@@ -22,7 +22,8 @@
 
 export type Section = 'validate' | 'build' | 'raise' | 'grow';
 export type SourceKind = 'page' | 'page_tree' | 'database';
-export type ProposalKind = 'interview' | 'design_note' | 'prospect' | 'prospect_link' | 'data_room_snapshot';
+/** `fact_link` (D1088, migration 644): a fact module's look-alike, "Link to [existing]?", never imported twice. */
+export type ProposalKind = 'interview' | 'design_note' | 'prospect' | 'prospect_link' | 'data_room_snapshot' | 'fact_link';
 
 export interface FieldDef {
   label: string;

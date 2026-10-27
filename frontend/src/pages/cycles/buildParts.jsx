@@ -22,6 +22,7 @@ import FoundingTeamFromCode from './FoundingTeamFromCode';
 import CompanyFromCode from './CompanyFromCode';
 import RoadmapFromGithub from './RoadmapFromGithub';
 import MvpFromGithub from './MvpFromGithub';
+import FromNotion from './FromNotion';
 import HostingFromVercel from './HostingFromVercel';
 import RunsOnFromVercel from './RunsOnFromVercel';
 
@@ -33,8 +34,8 @@ export const BUILD_PARTS = Object.freeze({
     ['vercel', (data, ctx) => <RunsOnFromVercel part={data?.parts?.vercel_runtime} reload={ctx.reload} />],
     // GW3/GW6: spec Docs as proposals: #2958 (D1093), FromGoogle, #from-google.
     ['google', null],
-    // NT3/NT6: spec pages as proposals: #2953 (D1088), FromNotion, #from-notion.
-    ['notion', null],
+    // NT3/NT6: spec pages as proposals (D1088, #2953), anchored at #from-notion.
+    ['notion', (_data, ctx) => <FromNotion section="build" module="solution_design" projectId={ctx.projectId} />],
   ],
   'prototype-mvp': [
     // D782 (#2112): pull request states and release checks, anchored at #from-github.
@@ -43,8 +44,8 @@ export const BUILD_PARTS = Object.freeze({
     ['vercel', null],
     // LV7: From Lovable under From GitHub: #2948 (D1083), FromLovable, #from-lovable.
     ['lovable', null],
-    // NT3: a must-have database as facts: #2953 (D1088), FromNotion, #from-notion.
-    ['notion', null],
+    // NT3: a must-have database as facts (D1088, #2953), anchored at #from-notion.
+    ['notion', (_data, ctx) => <FromNotion section="build" module="prototype_mvp" projectId={ctx.projectId} />],
   ],
   'product-roadmap': [
     // VC3: the Deploys strip sits ABOVE GitHub's Releases strip: #2963 (D1098), RoadmapFromVercel, #from-vercel.
@@ -53,8 +54,8 @@ export const BUILD_PARTS = Object.freeze({
     ['github', (data) => <RoadmapFromGithub github={data?.parts?.github} />],
     // GW3: a mapped roadmap Sheet's rows: #2958 (D1093), FromGoogle, #from-google.
     ['google', null],
-    // NT3: a roadmap database's rows: #2953 (D1088), FromNotion, #from-notion.
-    ['notion', null],
+    // NT3: a roadmap database's rows (D1088, #2953), anchored at #from-notion.
+    ['notion', (_data, ctx) => <FromNotion section="build" module="product_roadmap" projectId={ctx.projectId} />],
   ],
   'operating-systems': [
     // D686 §5.4: Tools history, with GitHub's Code system, anchored at #tools.

@@ -13,10 +13,10 @@
  */
 import { useState } from 'react';
 import { stagedSigningApi } from '../../lib/api/closings';
-import { Lightbox } from '../../ui';
 import { BTN, INPUT } from '../account/AccountCenter';
 import { Err, NotYet } from './ClosingDialogs';
 import { DESK_WAITS, PAPERS, moneyCents, paperFields, signersFor } from './deskModel';
+import Sheet from '../../ui/Sheet.jsx';
 
 const refusal = (e, fallback) => (typeof e?.message === 'string' && e.message.trim() ? e.message.trim() : fallback);
 const EYEBROW = 'text-[10px] font-extrabold uppercase tracking-[.09em] text-gray-500 dark:text-gray-400';
@@ -62,7 +62,7 @@ export default function PaperDrawer({ closing, company, line, founderUserId, onC
   const sendable = !!preview?.sendable && open.length === 0 && signers.length === 2;
 
   return (
-    <Lightbox label="Prepare the paper" eyebrow="Step 1 · Paper" title="Prepare the paper" sub={`${line.investor_name || 'This line'} · ${amount || 'Amount not recorded'}`}
+    <Sheet label="Prepare the paper" eyebrow="Step 1 · Paper" title="Prepare the paper" sub={`${line.investor_name || 'This line'} · ${amount || 'Amount not recorded'}`}
       testId="closing-paper-drawer" onClose={onClose} width={620}>
       <div className="flex flex-col gap-4 px-5 py-4 text-[12.5px]">
         <section className="flex flex-col gap-1.5" aria-label="Template">
@@ -125,6 +125,6 @@ export default function PaperDrawer({ closing, company, line, founderUserId, onC
           ? <button type="button" className={BTN.primary} disabled={busy || !sendable} onClick={() => setConfirm(true)} data-testid="closing-paper-send">Send for signature</button>
           : <button type="button" className={BTN.primary} disabled={busy} onClick={send} data-testid="closing-paper-send-confirm">Send it</button>}
       </div>
-    </Lightbox>
+    </Sheet>
   );
 }

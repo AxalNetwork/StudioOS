@@ -9,7 +9,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { api } from '../lib/api';
 import { calendarItemsApi } from '../lib/api/calendarItems';
-import { Lightbox, Unreadable, actionDanger, actionGhost, actionPrimary } from '../ui';
+import { Lightbox, Sheet, Unreadable, actionDanger, actionGhost, actionPrimary } from '../ui';
 import {
   ANSWERS, ANSWER_WORD, KIND_WORDS, LENGTHS, NOT_PARTY, NOT_PARTY_SUB, SAYS,
   copyLines, goingLine, joinOpen, minutesOf, noChangeLine, refusalOf, startError, startOf, whenLine, whenShort, zoneLabel,
@@ -222,25 +222,25 @@ export default function CalendarItemDrawer({ kind, id, onClose, onChanged, canCo
 
   if (read.status === 'not_party') {
     return (
-      <Lightbox label="Calendar item" title="Calendar item" onClose={onClose} width={480} phone="sheet" testId="cal-item-refused">
+      <Sheet label="Calendar item" title="Calendar item" onClose={onClose} width={480} phone="sheet" testId="cal-item-refused">
         <div className="flex flex-col items-center gap-2 px-6 py-8 text-center">
           <span aria-hidden="true" className={`text-[22px] ${MUTED}`}>⊘</span>
           <p className={`m-0 text-[14px] font-bold ${INK}`} data-testid="cal-item-not-party">{NOT_PARTY}</p>
           <p className={`m-0 text-[12.5px] ${MUTED}`}>{NOT_PARTY_SUB}</p>
           <button type="button" className={actionGhost} onClick={onClose}>Back to Calendar</button>
         </div>
-      </Lightbox>
+      </Sheet>
     );
   }
   if (!item) {
     return (
-      <Lightbox label="Calendar item" title="Calendar item" onClose={onClose} width={640} testId="cal-item-drawer">
+      <Sheet label="Calendar item" title="Calendar item" onClose={onClose} width={640} testId="cal-item-drawer">
         <div className="px-5 py-6" data-testid="cal-item-state">
           {read.status === 'error'
             ? <Unreadable what="This item" claim="That is not the same as it not existing." onRetry={load} />
             : <p className={`m-0 text-[13px] ${MUTED}`}>Reading…</p>}
         </div>
-      </Lightbox>
+      </Sheet>
     );
   }
 
@@ -280,7 +280,7 @@ export default function CalendarItemDrawer({ kind, id, onClose, onChanged, canCo
 
   return (
     <>
-      <Lightbox label={item.title || kindWord} eyebrow={null} title={item.title || 'Not recorded'} sub={head} onClose={onClose} width={640} footer={footer} testId="cal-item-drawer">
+      <Sheet label={item.title || kindWord} eyebrow={null} title={item.title || 'Not recorded'} sub={head} onClose={onClose} width={640} footer={footer} testId="cal-item-drawer">
         <div className={`flex flex-col ${cancelled ? 'opacity-90' : ''}`} data-testid={`cal-item-${item.kind}`}>
           {cancelled ? (
             <Section testId="cal-item-cancel-reason">
@@ -347,7 +347,7 @@ export default function CalendarItemDrawer({ kind, id, onClose, onChanged, canCo
           ) : null}
           {said ? <p role="status" className={`m-0 px-5 pb-3 text-[12.5px] font-semibold ${INK}`} data-testid="cal-item-said">{said}</p> : null}
         </div>
-      </Lightbox>
+      </Sheet>
       {dialog === 'reschedule' ? <RescheduleDialog item={item} onClose={() => setDialog(null)} onDone={done} /> : null}
       {dialog === 'cancel' ? <CancelDialog item={item} onClose={() => setDialog(null)} onDone={done} /> : null}
     </>
