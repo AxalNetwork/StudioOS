@@ -88,7 +88,7 @@ test('an article address opens that article\'s review', async () => {
   } finally { await w.done(); }
 });
 
-for (const tab of ['calendar', 'authors', 'performance']) {
+for (const tab of ['calendar']) {
   test(`${tab}: says what it waits on, and draws no queue`, async () => {
     const w = await mount(`/admin/articles/${tab}`);
     try {
@@ -101,6 +101,6 @@ for (const tab of ['calendar', 'authors', 'performance']) {
   });
 }
 
-test('Performance never draws a zero for views it does not record', () => {
-  assert.match(WAITS.performance.lines[0], /^Views per week: Not recorded\./);
+test('D1297 drew Authors and Performance: neither waits any more', () => {
+  assert.deepEqual(Object.keys(WAITS), ['calendar']);
 });
