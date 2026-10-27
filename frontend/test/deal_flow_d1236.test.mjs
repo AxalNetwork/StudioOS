@@ -12,7 +12,7 @@ import { existsSync, readFileSync } from 'node:fs';
 import React from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { MemoryRouter } from 'react-router-dom';
-import { CompareView, DealFlowToolbar, DealsTableView, InvitesView } from '../src/pages/investor/dealflow/DealFlow.jsx';
+import { CompareView, DealFlowToolbar, InvitesView } from '../src/pages/investor/dealflow/DealFlow.jsx';
 import {
   BASE, NOT_YET, SCOPES, WAITS, compareHref, compareIds, dealRow, inviteRow, opensDeal, roundWord, viewHref, viewOf,
 } from '../src/pages/investor/dealflow/dealFlowModel.js';
@@ -71,22 +71,8 @@ test('the toolbar: the scope switch and the view switch are addresses; New for y
   assert.ok(!nw.includes('dealflow-view-table'));
 });
 
-test('the table (DLS2): every row, the round’s word, Not recorded for a missing ask, scores waiting, and doors only under Mine', () => {
-  const rows = [dealRow({ id: 4, project_name: 'Acme', project_sector: 'Robotics', status: 'scored', amount: 1500000, currency: 'USD', days_in_stage: 6 }), dealRow({ id: 5, project_name: 'Bluefern', status: 'active' })];
-  const mine = html(h(DealsTableView, { rows, scope: 'mine' }));
-  assert.ok(mine.includes('href="/deals/4"'));
-  assert.match(mine, /Screened/);
-  assert.match(mine, /\$1\.5M/);
-  assert.ok(mine.includes('data-testid="dealflow-wait-scores"'));
-  assert.ok(!/>0</.test(mine.replace(/<td>6<\/td>/, '')), 'no missing value drawn as 0');
-  const all = html(h(DealsTableView, { rows, scope: 'all' }));
-  assert.ok(!all.includes('href="/deals/4"'), 'All deals is not a door the investor may walk through');
-  const two = html(h(DealsTableView, { rows, scope: 'mine', picked: ['4', '5'] }));
-  assert.ok(two.includes('href="/deals/compare?ids=4,5"'));
-  const one = html(h(DealsTableView, { rows, scope: 'mine', picked: ['4'] }));
-  assert.ok(!one.includes('/deals/compare') && /Pick at least two to compare\./.test(one), 'one pick is no comparison');
-  assert.match(html(h(DealsTableView, { rows: [], scope: 'mine' })), /Nothing in your deal flow yet/);
-});
+// D1240 (#3253) replaced D1236's table with the firm's own flow, its scores and its
+// settings: `deal_flow_board_d1240.test.mjs` holds the table, the board and their states.
 
 test('New for you (DLS6): the studio’s invitations, and the other ways in waiting', () => {
   const out = html(h(InvitesView, { rows: [inviteRow({ deal_id: 9, project_name: 'Harbor AI', message: 'Fits your thesis.' })] }));
