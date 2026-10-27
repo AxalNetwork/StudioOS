@@ -3895,6 +3895,8 @@ function AppInner() {
       <Route path="/raise/scorecard/trajectory" element={guard(labRoles(['admin', 'founder']), <FounderScorecardPage tab="trajectory" />)} />
       {/* D1261 (#2430): Evidence (VR1) and its item and claim drawers (VR2, VR3) as addresses, before /raise/:slug. */}
       <Route path="/raise/evidence" element={guard(labRoles(['admin', 'founder']), <RaiseEvidence />)} />
+      <Route path="/raise/evidence/review" element={guard(labRoles(['admin', 'founder']), <RaiseEvidence />)} />
+      <Route path="/raise/evidence/preview" element={guard(labRoles(['admin', 'founder']), <RaiseEvidence />)} />
       <Route path="/raise/evidence/item/:id" element={guard(labRoles(['admin', 'founder']), <RaiseEvidence />)} />
       <Route path="/raise/evidence/claim/:id" element={guard(labRoles(['admin', 'founder']), <RaiseEvidence />)} />
       <Route path="/raise/use-of-funds/runway/forecast" element={guard(labRoles(['admin', 'founder']), <CycleRoute cycle="raise" slug="use-of-funds" uofSub="forecast" />)} />
