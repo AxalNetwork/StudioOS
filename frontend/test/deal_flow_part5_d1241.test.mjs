@@ -69,10 +69,6 @@ const FIT = () => ({ items: [
   { deal_id: 3, state: 'recorded', score: 0, confidence_label: 'Medium' },
   { deal_id: 9, state: 'unavailable', score: null },
 ] });
-const VIEWS = () => ({ items: [
-  { uid: 'v1', name: 'Strong team', mine: true, is_default: false, shared_with_firm: false, version: 3, spec: { version: 1, view: 'table', scope: 'mine', filters: { min: { team: 'strong' } }, sort: { by: 'market', dir: 'desc' } } },
-  { uid: 'v2', name: 'Monday IC list', mine: false, is_default: false, shared_with_firm: true, version: 1, spec: { version: 1, view: 'board', scope: 'mine' } },
-], default_uid: null, can_share_with_firm: false });
 
 const INBOX = () => ({
   items: [
