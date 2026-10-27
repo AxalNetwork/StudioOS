@@ -13,7 +13,6 @@ import { createRoot } from 'react-dom/client';
 import { MemoryRouter, Route, Routes, useLocation } from 'react-router-dom';
 import { installDocument } from './_contracts_dom.mjs';
 import UseOfFundsMovedRedirect from '../src/pages/raise/useoffunds/UseOfFundsMovedRedirect.jsx';
-import { tabHref } from '../src/pages/CapitalWorkspacePage.jsx';
 import { FORWARD_REDIRECTS, REDIRECT_ROUTES } from '../../cloudflare-worker/src/services/redirectRoutes.ts';
 import { redirectPatternFor } from '../src/lib/redirectBeacon.js';
 import { FOUNDER_TOOLS } from '../src/pages/cycles/founderToolNavigation.js';
@@ -29,15 +28,14 @@ test('FinancialsPage.jsx is gone, and nothing in the app imports it', () => {
   }
 });
 
-test('the Capital workspace keeps only Raise Pipeline, still keeping the venture across its tab', () => {
-  const ws = read('frontend/src/pages/CapitalWorkspacePage.jsx');
-  assert.doesNotMatch(ws, /id: 'model'|Financial Model'|<FinancialsPage/);
-  assert.match(ws, /\{ id: 'pipeline', to: '\/raise\/capital\/pipeline', label: 'Raise Pipeline'/);
-  assert.match(ws, /<RaisePipelinePage embedded \/>/);
-  assert.equal(tabHref('/raise/capital/pipeline', '?project=4&mode=x'), '/raise/capital/pipeline?project=4');
+test('the Capital workspace is gone: #3128 already forwarded Raise Pipeline, so the file had no tab left', () => {
+  assert.equal(existsSync('frontend/src/pages/CapitalWorkspacePage.jsx'), false);
   const app = read('frontend/src/App.jsx');
-  assert.match(app, /path="\/raise\/capital\/pipeline" element=\{guard\(\['admin', 'founder'\], founderWorkspace\('raise', founderEditor\(<CapitalWorkspacePage \/>\)\)\)\}/);
-  assert.equal(app.match(/<CapitalWorkspacePage \/>/g).length, 1, 'the workspace is mounted somewhere other than its Pipeline address');
+  assert.doesNotMatch(app, /CapitalWorkspacePage/);
+  assert.equal(
+    app.split('\n').find((l) => l.includes('<Route path="/raise/capital/pipeline" element='))?.trim(),
+    '<Route path="/raise/capital/pipeline" element={<CapRelMovedRedirect tab="pipeline" moved="pipeline" />} />',
+  );
 });
 
 test('?mode=workspace and the model\'s old addresses land on Forecast with the venture; the workspace mode counts itself', async () => {
@@ -77,7 +75,7 @@ test('the doors that opened the model point where it lives now', () => {
   assert.doesNotMatch(bank, /page_target: '\/raise\/capital\/model'/);
   assert.equal(bank.match(/page_target: '\/raise\/use-of-funds\/runway\/forecast'/g)?.length, 3);
   assert.ok(!FOUNDER_TOOLS.some((t) => t.path === '/raise/capital'), 'the retired model editor still has a module return');
-  assert.ok(FOUNDER_TOOLS.some((t) => t.path === '/raise/capital/pipeline'));
+  assert.ok(!FOUNDER_TOOLS.some((t) => t.path === '/raise/capital/pipeline'), 'the pipeline only forwards (D1194)');
   assert.doesNotMatch(read('frontend/src/lib/explainers.js'), /^\s+financials: \{/m);
 });
 

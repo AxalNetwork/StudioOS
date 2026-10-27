@@ -11,6 +11,7 @@
  *    integrity and detect tampering.
  */
 import type { Env } from '../types';
+import { assertStorageRoom, noteStorageLanded } from './storageRoom';
 
 const EXT_BY_MIME: Record<string, string> = {
   'image/jpeg': 'jpg',
@@ -125,10 +126,14 @@ export async function putHeadshotFromDataUri(
   if (bytes.byteLength > 3 * 1024 * 1024) throw new Error('Image exceeds 3MB limit');
   const uuid = crypto.randomUUID();
   const fileKey = `headshots/${userId}/${uuid}.${ext}`;
+  // D1170 — a profile photo counts to its member (D1169 §1). The refusal is
+  // thrown as the 413 Response; callers pass a thrown Response through.
+  const storage = await assertStorageRoom(env, { userId }, bytes.byteLength, { id: userId });
   await env.FILES.put(fileKey, bytes, {
     httpMetadata: { contentType },
     customMetadata: { user_id: String(userId) },
   });
+  await noteStorageLanded(env, storage);
   return {
     file_key: fileKey,
     content_type: contentType,

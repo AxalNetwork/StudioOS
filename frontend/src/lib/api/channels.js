@@ -15,6 +15,8 @@
 //   whatsappCaptures GET    /channels/whatsapp/captures    D754 way B (#1938): → { items }: what the member forwarded to Axal
 //   agreeCapture     POST   /channels/whatsapp/captures/:uid/consent  "Agreed beforehand" for a capture still waiting (#1939)
 //   connectWhatsApp  POST   /channels/whatsapp/connect     { code, waba_id, phone_number_id } from Embedded Signup
+//   whatsappSetup    GET    /channels/whatsapp/setup       D856 (#2501): → { signed_in, number_masked, steps }; 404 while the guided setup is off
+//   whatsappSetupStep POST  /channels/whatsapp/setup/:step { confirm, phone_number_id? } one step, on the founder's confirm (D862)
 //   disconnect       DELETE /channels/:provider
 //   test             POST   /channels/:provider/test
 //   threads          GET    /channels/threads?status=      → { items: ThreadView[] }
@@ -47,6 +49,8 @@ const enc = encodeURIComponent;
 const PROVIDERS = new Set(['telegram', 'whatsapp', 'zoom', 'google_meet']);
 const THREAD_STATUSES = new Set(['pending', 'assigned', 'ignored']);
 const MEETING_PROVIDERS = new Set(['zoom', 'google_meet']);
+/** D856: the guided setup's six steps, in order. */
+const WA_SETUP_STEPS = new Set(['prerequisites', 'number', 'register', 'webhook', 'template', 'connect']);
 /** D754: how a member says the interviewee agreed — the recorder's methods without `in_app`. */
 export const MEMBER_CONSENT_METHODS = ['verbal', 'written', 'pre_agreed'];
 
@@ -123,6 +127,13 @@ export const channelsApi = {
   connectWhatsApp: ({ code, waba_id, phone_number_id }) => request('/channels/whatsapp/connect', {
     method: 'POST', body: JSON.stringify({ code, waba_id, phone_number_id: phone_number_id ?? null }),
   }),
+  whatsappSetup: () => request('/channels/whatsapp/setup'),
+  whatsappSetupStep: (step, { phone_number_id } = {}) => {
+    if (!WA_SETUP_STEPS.has(step)) throw new Error(`Unknown setup step: ${step}`);
+    return request(`/channels/whatsapp/setup/${enc(step)}`, {
+      method: 'POST', body: JSON.stringify({ confirm: true, ...(phone_number_id ? { phone_number_id: String(phone_number_id) } : {}) }),
+    });
+  },
   disconnect: (p) => request(`/channels/${enc(provider(p))}`, { method: 'DELETE' }),
   test: (p) => request(`/channels/${enc(provider(p))}/test`, { method: 'POST', body: JSON.stringify({}) }),
   threads: (status) => request(`/channels/threads${threadsQuery(status)}`),

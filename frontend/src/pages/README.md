@@ -6,8 +6,8 @@ so the filename is usually the fastest way from a URL to its code: `/pricing` �
 
 D1180 (#3107): the old FinancialsPage is retired; the financial model is Use of
 funds › Runway › Forecast (`raise/useoffunds/`), on the same `/api/financials`
-store. `CapitalWorkspacePage.jsx` keeps one tab, Raise Pipeline, until #3128
-forwards it; its tab keeps either venture alias. D1029 retired the Cap Table tab. Legacy Capital links keep
+store. #3128 (D1194) had already forwarded Raise Pipeline, so the Capital workspace
+page is deleted: both old tabs only forward. D1029 retired the Cap Table tab. Legacy Capital links keep
 the venture through `raise/captable/CapTableMovedRedirect.jsx`, which normalizes
 `project` to `project_id`. The live cap table also reads both aliases through
 `raise/captable/capTableModel.js` (D1029).

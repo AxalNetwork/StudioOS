@@ -83,7 +83,9 @@ export async function connectionForWhatsApp(env: Env, phoneNumberId: string): Pr
   };
 }
 
-const REQUIRED_SECRETS: Record<ChannelProvider, string[]> = {
+/** D1092: a chosen Google Doc is read through the Workspace grant, not a channel connection, so it is not offered here. */
+type ConnectedProvider = Exclude<ChannelProvider, 'google_docs'>;
+const REQUIRED_SECRETS: Record<ConnectedProvider, string[]> = {
   telegram: ['TELEGRAM_CHANNEL_BOT_TOKEN', 'TELEGRAM_CHANNEL_BOT_USERNAME', 'TELEGRAM_CHANNEL_WEBHOOK_SECRET'],
   whatsapp: ['WHATSAPP_APP_ID', 'WHATSAPP_APP_SECRET', 'WHATSAPP_VERIFY_TOKEN', 'WHATSAPP_EMBEDDED_SIGNUP_CONFIG_ID'],
   zoom: ['ZOOM_CLIENT_ID', 'ZOOM_CLIENT_SECRET', 'ZOOM_WEBHOOK_SECRET_TOKEN'],
@@ -95,7 +97,7 @@ const REQUIRED_SECRETS: Record<ChannelProvider, string[]> = {
 /** Whether each provider's platform secrets are set here. Names of the missing ones only. */
 export function availability(env: Env): ProviderAvailability[] {
   const vars = env as unknown as Record<string, unknown>;
-  return (Object.keys(REQUIRED_SECRETS) as ChannelProvider[]).map((provider) => {
+  return (Object.keys(REQUIRED_SECRETS) as ConnectedProvider[]).map((provider) => {
     if (provider === 'google_meet') {
       const available = googleOAuthAvailable(env);
       return { provider, available, missing: available ? [] : ['GOOGLE_CAL_CLIENT_ID or GOOGLE_CLIENT_ID', 'GOOGLE_CAL_CLIENT_SECRET or GOOGLE_CLIENT_SECRET'] };

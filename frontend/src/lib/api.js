@@ -86,6 +86,7 @@ export * from './api/fundReports.js';
 export * from './api/fundStructure.js';
 export * from './api/googleSignIn.js';
 export * from './api/googleWorkspace.js';
+export * from './api/googleWorkspaceBuild.js';
 export * from './api/helpCenter.js';
 export * from './api/insights.js';
 export * from './api/interviewSessions.js';
@@ -102,6 +103,7 @@ export * from './api/licenceFeeInvoices.js';
 export * from './api/licencePrograms.js';
 export * from './api/licenceRequests.js';
 export * from './api/licenceTerms.js';
+export * from './api/lovableAppLinks.js';
 export * from './api/mcpOauth.js';
 export * from './api/memberCredits.js';
 export * from './api/mercuryAttestations.js';
@@ -111,6 +113,7 @@ export * from './api/narrative.js';
 export * from './api/network.js';
 export * from './api/newDeck.js';
 export * from './api/newsletter.js';
+export * from './api/notion.js';
 export * from './api/partnerDealReads.js';
 export * from './api/partnerDealTypes.js';
 export * from './api/partnerProfiles.js';
@@ -217,6 +220,8 @@ function getCsrfHeader(method) {
 // done(true) so the original request is retried once. Concurrent 403s share one
 // in-flight prompt. If no modal is mounted (e.g. nothing listening), we fail
 // fast via the synchronous `ack` flag so the request never hangs.
+// D1287: `request(path, { noStepUp: true })` skips the prompt and throws the 403,
+// for a read that is only shown (the checkout sheet's auto-reload line).
 let _stepUpInFlight = null;
 function requestStepUp(ttlMinutes) {
   if (_stepUpInFlight) return _stepUpInFlight;
@@ -834,6 +839,7 @@ export async function request(path, options = {}) {
         res.status === 403 &&
         err && err.code === 'step_up_required' &&
         !options.__steppedUp &&
+        !options.noStepUp &&
         !path.startsWith('/auth/step-up')
       ) {
         try {
@@ -2523,7 +2529,8 @@ export const api = {
   kycAdminGet: (userId) => request(`/kyc/admin/${userId}`),
   // D634 — one masked KYC field in clear; the Worker logs the showing first.
   kycAdminShowField: (userId, field) => request(`/kyc/admin/${userId}/sensitive/${encodeURIComponent(field)}`),
-  // D1303: full access without an identity check needs {reason} (10 to 500 characters); a reviewed submission takes an optional {note}.
+  // D1303 (#3400): full access without an identity check needs {reason} (10 to 500 characters); a reviewed submission takes an optional {note}.
+  // D1306 (#3403): the drawer's full-access dialog sends both, from the one reason it asks for.
   kycAdminApprove: (userId, body) => request(`/kyc/admin/${userId}/approve`, { method: 'PATCH', ...(body ? { body: JSON.stringify(body) } : {}) }),
   kycAdminReject: (userId, reason) => request(`/kyc/admin/${userId}/reject`, { method: 'PATCH', body: JSON.stringify({ reason }) }),
   adminGetProfile: (email) => request(`/profiling/admin/${encodeURIComponent(email)}`),
@@ -2762,6 +2769,8 @@ export const api = {
   // D383 — the partner interview on an applicant (schedule replaces the live one).
   adminCohortScheduleInterview: (applicantId, payload) => request(`/admin/cohort/applications/${applicantId}/interview`, { method: 'POST', body: JSON.stringify(payload) }),
   adminCohortCancelInterview: (applicantId) => request(`/admin/cohort/applications/${applicantId}/interview/cancel`, { method: 'POST' }),
+  // D1123: held or missed, once the interview's time has passed.
+  adminCohortInterviewOutcome: (applicantId, outcome) => request(`/admin/cohort/applications/${applicantId}/interview/outcome`, { method: 'POST', body: JSON.stringify({ outcome }) }),
   adminCohortForceProceed: (cycleId, payload) => request(`/admin/cohort/applications/cycles/${cycleId}/force-proceed`, { method: 'POST', body: JSON.stringify(payload) }),
   adminCohortAppNotifications: (cycleId) => request(`/admin/cohort/applications/notifications${cycleId ? `?cycle_id=${cycleId}` : ''}`),
   adminCohortAppEvents: (cycleId) => request(`/admin/cohort/applications/events${cycleId ? `?cycle_id=${cycleId}` : ''}`),
@@ -3666,6 +3675,9 @@ export const api = {
   // D209 — H14, the topology stated once. Super admin; a branch reads its own
   // half through branchDeployment() below.
   hqPlatformTopology: () => request('/admin/platform/topology'),
+  // D1170 — HQ › Platform › Storage: every member's stored bytes as totals by
+  // kind, plan and state; no name, email, id or file name. Super admin.
+  hqPlatformStorage: () => request('/admin/platform/storage'),
   hqSetPlatformSwitch: (key, action, reason) =>
     request(`/admin/platform/switches/${encodeURIComponent(key)}`, {
       method: 'POST',

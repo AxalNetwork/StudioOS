@@ -16,7 +16,7 @@ export const paths = {
   back: 'frontend/src/pages/founder/FounderModuleBackLink.jsx',
   app: 'frontend/src/App.jsx',
   shell: 'frontend/src/workspaces/shellConfig.js',
-  match: 'frontend/src/pages/founder/FounderGrowCapitalMatch.jsx',
+  moved: 'frontend/src/pages/raise/caprel/CapRelMovedRedirect.jsx',
   route: 'frontend/src/pages/cycles/CycleRoute.jsx',
 };
 export const actual = { navigation, CycleModulePage, FounderModuleBackLink, SHELLS,
@@ -44,16 +44,13 @@ export const RETURNS = [
   ['/raise/pitch/review','/raise/pitch-deck','← Raise › Pitch deck'],
   ['/raise/pitch/edit','/raise/pitch-deck','← Raise › Pitch deck'],
   ['/raise/pitch/analytics','/raise/pitch-deck','← Raise › Pitch deck'],
-  // D1180 (#3107): /raise/capital's editor (the Capital workspace's model tab) is retired, and
-  // /raise/capital/model only forwards to Forecast (D1178), so neither has a module return.
-  ['/raise/capital/pipeline','/raise/capital-relationships','← Raise › Capital relationships'],
+  // D1180 (#3107) and D1194 (#3128): /raise/capital, /raise/capital/model and
+  // /raise/capital/pipeline only forward, so none has a module return.
   ['/raise/legal-engine','/build/company-creation','← Build › Company creation'],
   ['/raise/legal-engine/incorporation','/build/company-creation','← Build › Company creation'],
   ['/raise/legal-engine/founders','/build/company-creation','← Build › Company creation'],
   ['/raise/legal-engine/compliance','/build/company-creation','← Build › Company creation'],
   ['/raise/legal-engine/equity','/build/company-creation','← Build › Company creation'],
-  ['/raise/capital-match','/raise/capital-relationships','← Raise › Capital relationships'],
-  ['/grow/capital-match','/raise/capital-relationships','← Raise › Capital relationships'],
   ['/build/brand','/grow/distribution','← Grow › Distribution'],
   ['/grow/launch','/grow/distribution','← Grow › Distribution'],
   ['/legal','/build/company-creation','← Build › Company creation'],
@@ -71,7 +68,8 @@ export const checks = {
       // Cap table's one door, Open liquidity, left with Liquidity & Exits (owner, 2026-10-20).
       [],
       [{href:'/legal?project_id=41',label:'Open legal documents',quiet:true},{href:'/legal/send?project_id=41',label:'Open e-signature',quiet:true}],
-      [{href:'/raise/capital-match?project_id=41',label:'Open investor match',quiet:true}],
+      // D1194: Investor match is Capital relationships › Match.
+      [{href:'/raise/capital-relationships/match?project_id=41',label:'Open investor match',quiet:true}],
       // D1109: the files tool's door (D696) left with the tool; the module page is the Data room tool.
       [],
     ]);
@@ -82,11 +80,11 @@ export const checks = {
     const groups=[['grow','distribution'],['raise','cap-table'],['build','company-creation'],['raise','capital-relationships']];
     assert.deepEqual(users.map(user=>groups.flatMap(([c,s])=>m.navigation.moduleToolLinks(c,s,user)).map(l=>l.href)),
       [
-        ['/build/brand','/grow/launch','/legal','/legal/send','/raise/capital-match'],
-        ['/build/brand','/grow/launch','/legal','/legal/send','/raise/capital-match'],
-        ['/build/brand','/grow/launch','/legal','/legal/send','/raise/capital-match'],
-        ['/build/brand','/grow/launch','/legal','/legal/send','/raise/capital-match'],
-        ['/build/brand','/grow/launch','/legal','/legal/send','/raise/capital-match'],[],[],[],
+        ['/build/brand','/grow/launch','/legal','/legal/send','/raise/capital-relationships/match'],
+        ['/build/brand','/grow/launch','/legal','/legal/send','/raise/capital-relationships/match'],
+        ['/build/brand','/grow/launch','/legal','/legal/send','/raise/capital-relationships/match'],
+        ['/build/brand','/grow/launch','/legal','/legal/send','/raise/capital-relationships/match'],
+        ['/build/brand','/grow/launch','/legal','/legal/send','/raise/capital-relationships/match'],[],[],[],
       ]);
   },
   returns(m=actual) {
@@ -108,22 +106,24 @@ export const checks = {
   bindings(m=actual) {
     const app=codeOnly(m.sources.app);
     // D1178: /raise/capital/model is a redirect to Use of funds › Forecast now, so no editor mounts there.
+    // D1194: the capital-match addresses forward to the tool, so they mount no editor either.
     const routes=RETURNS.map(r=>r[0]).filter(p=>!['/raise/capital-match','/grow/capital-match','/build/brand','/grow/launch','/legal','/legal/send','/raise/capital/model'].includes(p));
     assert.deepEqual([routes.map(p=>[p,routeBlock(app,p)?.includes('founderEditor(')??false]),
       /const founderEditor = \(component\) => <><FounderModuleBackLink user=\{user\} \/>\{component\}<\/>/.test(app),
       /tools=\{moduleToolLinks\(cycle, slug, user, q\)\}/.test(m.sources.route)],
       [routes.map(p=>[p,true]),true,true]);
   },
+  // D1194 (#3128): the three old addresses forward to the Capital relationships
+  // tool's tab with the moved notice; the forward keeps the venture and the hash.
   redirect(m=actual) {
-    const block=routeBlock(codeOnly(m.sources.app),'/grow/capital-match');
-    const target=routeBlock(codeOnly(m.sources.app),'/raise/capital-match');
-    assert.deepEqual([block?.includes("pathname: '/raise/capital-match'"),block?.includes('search: location.search'),
-      block?.includes('hash: location.hash'),target?.includes('<FounderGrowCapitalMatch user={user} />')],[true,true,true,true]);
-  },
-  match(m=actual) {
-    const src=codeOnly(m.sources.match);
-    assert.deepEqual([src.includes('<FounderModuleBackLink user={user} />'),src.includes('workspace="Raise"'),
-      src.includes('Grow sections'),src.includes("founderZoneFilters('raise/capital-match'")],[true,true,false,true]);
+    const app=codeOnly(m.sources.app);
+    const moved=codeOnly(m.sources.moved);
+    assert.deepEqual([
+      ['/raise/capital/pipeline','pipeline'],['/raise/capital-match','match'],['/grow/capital-match','match'],
+    ].map(([p,tab])=>[p,routeBlock(app,p)?.includes(`<CapRelMovedRedirect tab="${tab}" moved="${tab}" />`)??false]),
+    [['/raise/capital/pipeline',true],['/raise/capital-match',true],['/grow/capital-match',true]]);
+    assert.deepEqual([moved.includes('capRelMovedTo(tab, loc.search, moved)'),moved.includes('hash: loc.hash'),
+      moved.includes('<Navigate replace')],[true,true,true]);
   },
   shell(m=actual) {
     const rows=m.SHELLS.founder.rows;
@@ -131,10 +131,13 @@ export const checks = {
   },
   guards(m=actual) {
     const app=codeOnly(m.sources.app);
+    // A module tab (D1194's /raise/capital-relationships/match) has no route of
+    // its own: /<cycle>/:slug/:id answers it, so its guard is that route's.
+    const route=(path)=>routeBlock(app,path)||(path.split('/').length===4?routeBlock(app,'/'+path.split('/')[1]+'/:slug/:id'):null);
     assert.deepEqual(m.navigation.FOUNDER_TOOLS.filter(t=>t.door).map(t=>{
-      const block=routeBlock(app,t.path)||'';
+      const block=route(t.path)||'';
       const roles=block.match(/guard\((?:labRoles\()?\[([^\]]*)\]/)?.[1]||'';
       return [t.path,t.roles.every(r=>roles.includes("'"+r+"'"))];
-    }),[['/build/brand',true],['/grow/launch',true],['/legal',true],['/legal/send',true],['/raise/capital-match',true]]);
+    }),[['/build/brand',true],['/grow/launch',true],['/legal',true],['/legal/send',true],['/raise/capital-relationships/match',true]]);
   },
 };

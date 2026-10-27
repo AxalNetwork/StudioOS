@@ -129,7 +129,7 @@ test('readiness: each item ready, missing or set in the call, opening its tool f
   assert.equal(v.items.find((i) => i.key === 'traction').tool, 'Fundraising readiness');
   assert.equal(v.items.find((i) => i.key === 'terms').reason, 'Round terms are written in the call itself.');
   for (const k of ['round', 'terms', 'deck', 'data_room', 'use_of_funds', 'traction', 'close']) assert.ok(READINESS_TOOL[k], k);
-  assert.equal(readinessView({ status: 'ready', data: READY() }, 'x').items[0].href, '/raise/capital/pipeline', 'a bad venture id is not carried');
+  assert.equal(readinessView({ status: 'ready', data: READY() }, 'x').items[0].href, '/raise/capital-relationships/commitments', 'a bad venture id is not carried');
   assert.equal(readinessView({ status: 'ready', data: { ...READY(), counted: undefined } }).summary, null, 'no count the Worker did not send');
   assert.equal(readinessView({ status: 'ready', data: {} }).status, 'unreadable');
   assert.equal(readinessView({ status: 'unreadable' }).status, 'unreadable');

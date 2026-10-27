@@ -74,6 +74,7 @@ import { setSecret, deleteSecret, type CfSecretResult } from '../services/cloudf
 import { refusalBody } from '../util/refusal';
 import { getDescriptor } from '../integrations/registry';
 import { redirectUri as githubCallback } from '../integrations/providers/github';
+import { redirectUri as vercelCallback } from '../integrations/providers/vercel';
 import { redirectUri as slackCallback } from '../integrations/providers/slack';
 import { redirectUri as hubspotCallback } from '../integrations/providers/hubspot';
 import { redirectUri as calendlyCallback } from '../integrations/providers/calendly';
@@ -139,6 +140,7 @@ const CALLBACK_URL: Record<ManagedProviderKey, ((env: Env) => string) | null> = 
   stripe: stripeCallback,
   carta: cartaCallback,
   github: githubCallback,
+  vercel: vercelCallback,
   crunchbase: null,
   affinity: null,
   telegram: null,

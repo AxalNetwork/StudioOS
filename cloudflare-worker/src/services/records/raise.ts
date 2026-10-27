@@ -583,7 +583,7 @@ const dataRoom: ModuleSpec = { ...spec('data_room_files', 'data-room', async (rc
       const blob = file as File;
       return { ok: true, record: await replaceDataRoomFile(c.env, {
         project: await projectUid(c), userId: userId(c), fileId: Number(fileId),
-        bytes: new Uint8Array(await blob.arrayBuffer()), contentType: blob.type || null,
+        bytes: new Uint8Array(await blob.arrayBuffer()), contentType: blob.type || null, caller: c.user as any,
       }) };
     }),
   },

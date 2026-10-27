@@ -11,6 +11,8 @@
  *   POST /switches/:key  throw or release one, with a reason, audited (D203)
  *   GET  /topology       what this Worker binds, exports and calls, and what
  *                        the shared services do and do not carry (D209, H14)
+ *   GET  /storage        every member's stored bytes as totals by kind, plan
+ *                        and state; no name or file name (D1170)
  *
  * EVERY BLOCK CARRIES ITS OWN STATE. One store failing to answer makes that
  * block unreadable, with the reason, and leaves the others standing: an
@@ -108,6 +110,7 @@ import {
   getPublishableKey, maskPublishableKey, publishableKeyMode, readCatalogMirrorSummary,
 } from '../services/catalog';
 import { promoState, readProductIds } from '../services/promos';
+import { readPlatformStorage } from '../services/storageHq';
 
 const r = new Hono<{ Bindings: Env }>();
 
@@ -804,6 +807,17 @@ r.post('/storage/backfill-sizes', async (c) => {
   if(!Number.isSafeInteger(limit)||limit<1||limit>20) return c.json({code:'backfill_input_invalid',message:'Choose a batch of 1 to 20 files.'},400);
   try { return c.json(await backfillMemberFileSizes(c.env,actor.id,limit,body.rescan===true)); }
   catch { return c.json({code:'storage_backfill_unreadable',message:'The batch could not be read. Try again to resume.'},503); }
+});
+
+/**
+ * D1170 (#3083) — HQ › Platform › Storage (STG20's read): every member's
+ * stored bytes as totals by kind, by plan and by state. No name, email, id or
+ * file name leaves it (`services/storageHq.ts`).
+ */
+r.get('/storage', async (c) => {
+  await requireSuperAdmin(c);
+  c.header('Cache-Control', 'private, no-store');
+  return c.json(await readPlatformStorage(c.env));
 });
 
 export default r;

@@ -3,11 +3,12 @@
  * Cases · My reviews · Templates, and the case's nine tabs. Mounted by
  * `AdminDueDiligencePage.jsx` and `AdminDueDiligenceCasePage.jsx` under both
  * `/admin/due-diligence` and `/due-diligence`. A tab no read carries yet says
- * "Not read here yet" with its reason (`ddModel.WAITS`), never a zero.
+ * "Not read here yet" with its reason (`ddModel.WAITS`), never a zero. The
+ * case tabs' bodies are D1251's (`DdCaseWork.jsx`, `DdCaseDeal.jsx`).
  */
 import React from 'react';
 import { Link, useLocation } from 'react-router-dom';
-import { CASE_TABS, NOT_YET, ON_OVERVIEW, WAITS } from './ddModel';
+import { CASE_TABS, NOT_YET, WAITS } from './ddModel';
 import DdMyReviews from './DdMyReviews';
 
 const tabCls = (on) => `whitespace-nowrap border-b-2 px-1 pb-2 text-[13.5px] font-semibold ${on ? 'border-violet-600 text-gray-900 dark:border-violet-400 dark:text-gray-100' : 'border-transparent text-axal-muted hover:text-gray-900 dark:text-gray-400 dark:hover:text-gray-100'}`;
@@ -45,13 +46,13 @@ export function DdListTabBody({ tab }) {
   );
 }
 
-/** DDL3's tabs, each its own address. The bare case address, which emails and notices carry, opens Overview too. */
-export function DdCaseTabs({ uid, active }) {
+/** DDL3's tabs, each its own address. The bare case address, which emails and notices carry, opens Overview too. A reviewer's read passes RT's four (`ddCaseModel.tabsFor`). */
+export function DdCaseTabs({ uid, active, tabs = CASE_TABS }) {
   const { pathname } = useLocation();
   const base = pathname.startsWith('/admin') ? '/admin/due-diligence' : '/due-diligence';
   return (
     <nav aria-label="Case" className="mb-5 flex gap-5 overflow-x-auto border-b border-axal-hairline dark:border-gray-800" data-testid="dd-case-tabs">
-      {CASE_TABS.map((t) => (
+      {tabs.map((t) => (
         <Link
           key={t.key}
           to={`${base}/${uid}/${t.key}`}
@@ -63,21 +64,5 @@ export function DdCaseTabs({ uid, active }) {
         </Link>
       ))}
     </nav>
-  );
-}
-
-/** A case tab other than Overview: where today's blocks are drawn, then what waits. */
-export function DdCaseTabBody({ uid, tab }) {
-  const { pathname } = useLocation();
-  const base = pathname.startsWith('/admin') ? '/admin/due-diligence' : '/due-diligence';
-  return (
-    <section className={box} data-testid={`dd-case-${tab}`}>
-      <p className="m-0 text-sm">
-        {ON_OVERVIEW[tab]}{' '}
-        <Link to={`${base}/${uid}`} className="font-semibold text-violet-700 underline dark:text-violet-300">Open Overview</Link>
-      </p>
-      {WAITS[tab] && <DdWait id={tab} />}
-      {tab === 'sign-off' && <DdWait id="decision" />}
-    </section>
   );
 }

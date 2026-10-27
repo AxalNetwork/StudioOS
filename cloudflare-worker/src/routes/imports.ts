@@ -28,6 +28,7 @@ import type { Env, User } from '../types';
 import { requireAuth } from '../auth';
 import { activeCompanyFor } from '../middleware/activeCompany';
 import { refuse, rowFailureSentence } from '../util/refusal';
+import { assertStorageRoom, noteStorageLanded } from '../services/storageRoom';
 
 const imports = new Hono<{ Bindings: Env }>();
 
@@ -240,13 +241,19 @@ function autoMap(headers: string[], target: string): Record<string, string> {
 
 // ─────────────────────────────────────────────────────────────── R2 helpers
 
-async function maybeStoreRaw(env: Env, userId: number, csv: string, prefix: string): Promise<{key:string;size:number} | null> {
+async function maybeStoreRaw(env: Env, user: { id: number; role: string }, csv: string, prefix: string): Promise<{key:string;size:number} | null> {
   if (!env.FILES) return null;
+  const userId = user.id;
   const key = `imports/${userId}/${prefix}-${Date.now()}-${Math.random().toString(36).slice(2, 10)}.csv`;
+  const size = new TextEncoder().encode(csv).byteLength;
+  // D1170 — the kept CSV counts to the member importing it (D1169 §1). A
+  // refusal is the import's answer: nothing is imported or stored.
+  const storage = await assertStorageRoom(env, { userId }, size, user);
   try {
     await env.FILES.put(key, csv, { httpMetadata: { contentType: 'text/csv' } });
-    return {key,size:new TextEncoder().encode(csv).byteLength};
   } catch { return null; }
+  await noteStorageLanded(env, storage);
+  return {key,size};
 }
 
 // ─────────────────────────────────────────────────────────────── import row helpers
@@ -368,7 +375,7 @@ imports.post('/universal/commit', async (c) => {
   const { headers, rows } = parseCsv(csv);
   if (rows.length > 5000) return c.json({ error: 'too_many_rows', max: 5000 }, 413);
 
-  const rawKey = await maybeStoreRaw(c.env, user.id, csv, `universal-${target}`);
+  const rawKey = await maybeStoreRaw(c.env, user, csv, `universal-${target}`);
   const importId = await startImport(c.env, user.id, 'spreadsheet', target, rawKey);
 
   const errors: Array<{ row: number; error: string }> = [];
@@ -526,7 +533,7 @@ imports.post('/angellist/commit', async (c) => {
   const hidx: Record<string, number> = {};
   for (const h of ANGELLIST_HEADERS) hidx[h] = normHeaders.indexOf(h);
 
-  const rawKey = await maybeStoreRaw(c.env, user.id, csv, 'angellist');
+  const rawKey = await maybeStoreRaw(c.env, user, csv, 'angellist');
   const importId = await startImport(c.env, user.id, 'angellist_csv', 'projects+captable+rounds', rawKey);
 
   const errors: Array<{ row: number; error: string }> = [];
@@ -643,7 +650,7 @@ imports.post('/portfolio/commit', async (c) => {
   const idx: Record<string, number> = {};
   for (const h of PORTFOLIO_HEADERS) idx[h] = norm.indexOf(h);
 
-  const rawKey = await maybeStoreRaw(c.env, user.id, csv, 'portfolio');
+  const rawKey = await maybeStoreRaw(c.env, user, csv, 'portfolio');
   const importId = await startImport(c.env, user.id, 'portfolio_csv', 'investor_portfolio_holdings', rawKey);
 
   const errors: Array<{ row: number; error: string }> = [];

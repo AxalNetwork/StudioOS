@@ -5,23 +5,15 @@
 // (`cloudflare-worker/test/cycle_records_raise_d691.test.ts`).
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { existsSync, readFileSync } from 'node:fs';
-import { tabHref } from '../src/pages/CapitalWorkspacePage.jsx';
-import { codeOnly } from './_codeOnly.mjs';
+import { existsSync } from 'node:fs';
 
-const read = (path) => readFileSync(new URL(path, import.meta.url), 'utf8');
-
-test('the Capital tabs keep the venture and nothing else', () => {
-  assert.equal(tabHref('/raise/capital/model', '?project=7'), '/raise/capital/model?project=7');
-  assert.equal(tabHref('/raise/capital/pipeline', '?project_id=7&tab=x#y'), '/raise/capital/pipeline?project_id=7');
-  assert.equal(tabHref('/raise/capital/pipeline', '?project=7&project_id=7'), '/raise/capital/pipeline?project=7&project_id=7');
-  assert.equal(tabHref('/raise/capital/model', ''), '/raise/capital/model');
-  assert.equal(tabHref('/raise/capital/model', '?other=1'), '/raise/capital/model');
-  assert.match(read('../src/pages/CapitalWorkspacePage.jsx'), /navigate\(tabHref\(t\.to, location\.search\)\)/);
+test('the Capital workspace is gone, so its tab query lives on the moved redirects', () => {
+  // D1180 deleted the page after D1194 forwarded Pipeline. Venture keeping is
+  // pinned on CapTableMovedRedirect, UseOfFundsMovedRedirect and capRelMovedTo.
+  assert.equal(existsSync(new URL('../src/pages/CapitalWorkspacePage.jsx', import.meta.url)), false);
 });
 
 test('D1029: the old simulator is gone, and Capital has no Cap Table tab', () => {
   assert.equal(existsSync(new URL('../src/pages/CapTablePage.jsx', import.meta.url)), false);
-  const ws = read('../src/pages/CapitalWorkspacePage.jsx');
-  assert.doesNotMatch(codeOnly(ws), /CapTablePage|'cap-table'|\/raise\/capital\/cap-table/);
+  assert.equal(existsSync(new URL('../src/pages/CapitalWorkspacePage.jsx', import.meta.url)), false);
 });

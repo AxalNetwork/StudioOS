@@ -42,7 +42,18 @@ export type StorageArea = {
 export const STORAGE_KINDS: ReadonlyArray<StorageKindKey> = ['data_room', 'documents', 'recordings', 'decks_exports', 'brand', 'other'];
 
 type Scope = 'company' | 'personal' | 'deck';
-type Def = { key: StorageAreaKey; kind: StorageKindKey; scope: Scope; groups: string; largest: string };
+type Def = { key: StorageAreaKey; kind: StorageKindKey; scope: Scope; groups: string; largest: string; owners: string };
+
+/**
+ * D1170 — every venture and the one member its files count to, by the rule
+ * `OWNED` applies to one member: the company's first primary admin, else the
+ * venture's founder. HQ's storage read (`owners` below) groups by it.
+ */
+const VENTURE_OWNERS = `(SELECT p.id AS project_id, COALESCE(
+    (SELECT l2.user_id FROM user_company_links l2 WHERE l2.company_id = p.company_id AND l2.is_primary_admin = 1
+      ORDER BY l2.created_at, l2.id LIMIT 1),
+    (SELECT MIN(u.id) FROM users u WHERE u.founder_id = p.founder_id)) AS user_id
+  FROM projects p) vo`;
 
 // Every statement is static and bound. A company area binds the caller's own
 // ventures as one JSON array (`json_each(?)`); a personal area binds their id.
@@ -55,25 +66,38 @@ const AREAS: ReadonlyArray<Def> = [
       WHERE f.source_kind <> 'signed' GROUP BY f.project_id`,
     largest: `SELECT f.name AS name, NULL AS version, f.size_bytes AS bytes, f.created_at AS added_at, f.project_id AS project_id, f.uid AS ref
       FROM json_each(?) own JOIN data_room_files f ON f.project_id = own.value
-      WHERE f.source_kind <> 'signed' AND f.size_bytes IS NOT NULL ORDER BY f.size_bytes DESC, f.id DESC LIMIT 10` },
+      WHERE f.source_kind <> 'signed' AND f.size_bytes IS NOT NULL ORDER BY f.size_bytes DESC, f.id DESC LIMIT 10`,
+    owners: `SELECT vo.user_id AS user_id, COUNT(*) AS files, SUM(f.size_bytes) AS bytes,
+      SUM(CASE WHEN f.size_bytes IS NULL THEN 1 ELSE 0 END) AS unknown_size_files
+      FROM ` + VENTURE_OWNERS + ` JOIN data_room_files f ON f.project_id = vo.project_id
+      WHERE f.source_kind <> 'signed' AND vo.user_id IS NOT NULL GROUP BY vo.user_id` },
   { key: 'diligence_files', kind: 'documents', scope: 'personal',
     groups: `SELECT NULL AS project_id, COUNT(*) AS files, SUM(size_bytes) AS bytes,
       SUM(CASE WHEN size_bytes IS NULL THEN 1 ELSE 0 END) AS unknown_size_files
       FROM dd_attachments WHERE uploaded_by_user_id = ?`,
     largest: `SELECT filename AS name, NULL AS version, size_bytes AS bytes, created_at AS added_at, NULL AS project_id, NULL AS ref
-      FROM dd_attachments WHERE uploaded_by_user_id = ? AND size_bytes IS NOT NULL ORDER BY size_bytes DESC, id DESC LIMIT 10` },
+      FROM dd_attachments WHERE uploaded_by_user_id = ? AND size_bytes IS NOT NULL ORDER BY size_bytes DESC, id DESC LIMIT 10`,
+    owners: `SELECT uploaded_by_user_id AS user_id, COUNT(*) AS files, SUM(size_bytes) AS bytes,
+      SUM(CASE WHEN size_bytes IS NULL THEN 1 ELSE 0 END) AS unknown_size_files
+      FROM dd_attachments WHERE uploaded_by_user_id IS NOT NULL GROUP BY uploaded_by_user_id` },
   { key: 'research_library', kind: 'documents', scope: 'personal',
     groups: `SELECT NULL AS project_id, COUNT(*) AS files, SUM(size_bytes) AS bytes,
       SUM(CASE WHEN size_bytes IS NULL THEN 1 ELSE 0 END) AS unknown_size_files
       FROM research_documents WHERE owner_user_id = ?`,
     largest: `SELECT title AS name, NULL AS version, size_bytes AS bytes, created_at AS added_at, NULL AS project_id, uid AS ref
-      FROM research_documents WHERE owner_user_id = ? AND size_bytes IS NOT NULL ORDER BY size_bytes DESC, id DESC LIMIT 10` },
+      FROM research_documents WHERE owner_user_id = ? AND size_bytes IS NOT NULL ORDER BY size_bytes DESC, id DESC LIMIT 10`,
+    owners: `SELECT owner_user_id AS user_id, COUNT(*) AS files, SUM(size_bytes) AS bytes,
+      SUM(CASE WHEN size_bytes IS NULL THEN 1 ELSE 0 END) AS unknown_size_files
+      FROM research_documents WHERE owner_user_id IS NOT NULL GROUP BY owner_user_id` },
   { key: 'message_attachments', kind: 'other', scope: 'personal',
     groups: `SELECT NULL AS project_id, COUNT(*) AS files, SUM(size_bytes) AS bytes,
       SUM(CASE WHEN size_bytes IS NULL THEN 1 ELSE 0 END) AS unknown_size_files
       FROM message_attachments WHERE uploader_user_id = ?`,
     largest: `SELECT filename AS name, NULL AS version, size_bytes AS bytes, created_at AS added_at, NULL AS project_id, uid AS ref
-      FROM message_attachments WHERE uploader_user_id = ? AND size_bytes IS NOT NULL ORDER BY size_bytes DESC, id DESC LIMIT 10` },
+      FROM message_attachments WHERE uploader_user_id = ? AND size_bytes IS NOT NULL ORDER BY size_bytes DESC, id DESC LIMIT 10`,
+    owners: `SELECT uploader_user_id AS user_id, COUNT(*) AS files, SUM(size_bytes) AS bytes,
+      SUM(CASE WHEN size_bytes IS NULL THEN 1 ELSE 0 END) AS unknown_size_files
+      FROM message_attachments WHERE uploader_user_id IS NOT NULL GROUP BY uploader_user_id` },
   { key: 'interview_recordings', kind: 'recordings', scope: 'company',
     groups: `SELECT i.project_id AS project_id, COUNT(*) AS files, SUM(i.recording_size_bytes) AS bytes,
       SUM(CASE WHEN i.recording_size_bytes IS NULL THEN 1 ELSE 0 END) AS unknown_size_files
@@ -83,7 +107,11 @@ const AREAS: ReadonlyArray<Def> = [
       COALESCE(i.recording_uploaded_at, i.created_at) AS added_at, i.project_id AS project_id, CAST(i.id AS TEXT) AS ref
       FROM json_each(?) own JOIN discovery_interviews i ON i.project_id = own.value
       WHERE i.recording_r2_key IS NOT NULL AND TRIM(i.recording_r2_key) <> '' AND i.recording_size_bytes IS NOT NULL
-      ORDER BY i.recording_size_bytes DESC, i.id DESC LIMIT 10` },
+      ORDER BY i.recording_size_bytes DESC, i.id DESC LIMIT 10`,
+    owners: `SELECT vo.user_id AS user_id, COUNT(*) AS files, SUM(i.recording_size_bytes) AS bytes,
+      SUM(CASE WHEN i.recording_size_bytes IS NULL THEN 1 ELSE 0 END) AS unknown_size_files
+      FROM ` + VENTURE_OWNERS + ` JOIN discovery_interviews i ON i.project_id = vo.project_id
+      WHERE i.recording_r2_key IS NOT NULL AND TRIM(i.recording_r2_key) <> '' AND vo.user_id IS NOT NULL GROUP BY vo.user_id` },
   // An earlier version is the object Replace kept (data_room.ts); the current
   // one is the file's own row, so nothing is counted twice.
   { key: 'data_room_versions', kind: 'data_room', scope: 'company',
@@ -93,7 +121,11 @@ const AREAS: ReadonlyArray<Def> = [
       WHERE f.source_kind <> 'signed' GROUP BY f.project_id`,
     largest: `SELECT f.name AS name, v.version AS version, v.size_bytes AS bytes, v.created_at AS added_at, f.project_id AS project_id, f.uid AS ref
       FROM json_each(?) own JOIN data_room_files f ON f.project_id = own.value JOIN data_room_file_versions v ON v.file_id = f.id
-      WHERE f.source_kind <> 'signed' AND v.size_bytes IS NOT NULL ORDER BY v.size_bytes DESC, v.id DESC LIMIT 10` },
+      WHERE f.source_kind <> 'signed' AND v.size_bytes IS NOT NULL ORDER BY v.size_bytes DESC, v.id DESC LIMIT 10`,
+    owners: `SELECT vo.user_id AS user_id, COUNT(*) AS files, SUM(v.size_bytes) AS bytes,
+      SUM(CASE WHEN v.size_bytes IS NULL THEN 1 ELSE 0 END) AS unknown_size_files
+      FROM ` + VENTURE_OWNERS + ` JOIN data_room_files f ON f.project_id = vo.project_id JOIN data_room_file_versions v ON v.file_id = f.id
+      WHERE f.source_kind <> 'signed' AND vo.user_id IS NOT NULL GROUP BY vo.user_id` },
   // One Record a Session recording is one file: the sum of its stored chunks.
   { key: 'session_audio', kind: 'recordings', scope: 'company',
     groups: `SELECT s.project_id AS project_id, COUNT(DISTINCT s.id) AS files, SUM(c.size_bytes) AS bytes,
@@ -104,7 +136,11 @@ const AREAS: ReadonlyArray<Def> = [
       s.project_id AS project_id, s.uid AS ref
       FROM json_each(?) own JOIN interview_sessions s ON s.project_id = own.value
       JOIN interview_session_chunks c ON c.session_id = s.id LEFT JOIN discovery_interviews i ON i.id = s.interview_id
-      GROUP BY s.id HAVING COUNT(c.size_bytes) = COUNT(*) ORDER BY bytes DESC, s.id DESC LIMIT 10` },
+      GROUP BY s.id HAVING COUNT(c.size_bytes) = COUNT(*) ORDER BY bytes DESC, s.id DESC LIMIT 10`,
+    owners: `SELECT vo.user_id AS user_id, COUNT(DISTINCT s.id) AS files, SUM(c.size_bytes) AS bytes,
+      COUNT(DISTINCT CASE WHEN c.size_bytes IS NULL THEN s.id END) AS unknown_size_files
+      FROM ` + VENTURE_OWNERS + ` JOIN interview_sessions s ON s.project_id = vo.project_id
+      JOIN interview_session_chunks c ON c.session_id = s.id WHERE vo.user_id IS NOT NULL GROUP BY vo.user_id` },
   // A deck review counts while its upload is kept (`raw_retained`). Its
   // `project_id` comes from the uploader's form, unchecked, so it never moves
   // the file to another member's plan: it only names the caller's own venture.
@@ -116,7 +152,10 @@ const AREAS: ReadonlyArray<Def> = [
     largest: `SELECT COALESCE(d.filename, d.title) AS name, NULL AS version, d.size AS bytes, d.created_at AS added_at,
       CASE WHEN d.project_id IN (SELECT value FROM json_each(?)) THEN d.project_id END AS project_id, d.id AS ref
       FROM deck_reviews d WHERE d.user_id = ? AND d.raw_retained = 1 AND d.r2_key IS NOT NULL AND TRIM(d.r2_key) <> ''
-      AND d.size IS NOT NULL ORDER BY d.size DESC, d.created_at DESC LIMIT 10` },
+      AND d.size IS NOT NULL ORDER BY d.size DESC, d.created_at DESC LIMIT 10`,
+    owners: `SELECT d.user_id AS user_id, COUNT(*) AS files, SUM(d.size) AS bytes, SUM(CASE WHEN d.size IS NULL THEN 1 ELSE 0 END) AS unknown_size_files
+      FROM deck_reviews d WHERE d.user_id IS NOT NULL AND d.raw_retained = 1 AND d.r2_key IS NOT NULL AND TRIM(d.r2_key) <> ''
+      GROUP BY d.user_id` },
   // D1168's stores: a row marked missing holds no object and is not a file.
   { key: 'validate_evidence', kind: 'documents', scope: 'company',
     groups: `SELECT d.project_id AS project_id, COUNT(*) AS files, SUM(d.size_bytes) AS bytes,
@@ -128,7 +167,12 @@ const AREAS: ReadonlyArray<Def> = [
       d.project_id AS project_id, CAST(d.id AS TEXT) AS ref
       FROM json_each(?) own JOIN demand_signals d ON d.project_id = own.value
       WHERE d.evidence_file_key IS NOT NULL AND TRIM(d.evidence_file_key) <> '' AND d.size_missing_at IS NULL
-      AND d.size_bytes IS NOT NULL ORDER BY d.size_bytes DESC, d.id DESC LIMIT 10` },
+      AND d.size_bytes IS NOT NULL ORDER BY d.size_bytes DESC, d.id DESC LIMIT 10`,
+    owners: `SELECT vo.user_id AS user_id, COUNT(*) AS files, SUM(d.size_bytes) AS bytes,
+      SUM(CASE WHEN d.size_bytes IS NULL THEN 1 ELSE 0 END) AS unknown_size_files
+      FROM ` + VENTURE_OWNERS + ` JOIN demand_signals d ON d.project_id = vo.project_id
+      WHERE d.evidence_file_key IS NOT NULL AND TRIM(d.evidence_file_key) <> '' AND d.size_missing_at IS NULL AND vo.user_id IS NOT NULL
+      GROUP BY vo.user_id` },
   // A formation step names its venture; an entity's proof names it in its key,
   // checked against that entity's venture as D1168's backfill checks it.
   { key: 'build_proofs', kind: 'documents', scope: 'company',
@@ -150,7 +194,15 @@ const AREAS: ReadonlyArray<Def> = [
         SELECT o.title AS name, o.size_bytes AS bytes, o.created_at AS added_at, p.id AS project_id, o.uid AS ref
           FROM json_each(?) own JOIN projects p ON p.id = own.value JOIN entity_obligations o ON o.entity_id = p.entity_id
          WHERE o.proof_file_key GLOB ('build-proof/' || p.id || '/*') AND o.size_missing_at IS NULL AND o.size_bytes IS NOT NULL)
-      ORDER BY bytes DESC, added_at DESC LIMIT 10` },
+      ORDER BY bytes DESC, added_at DESC LIMIT 10`,
+    owners: `SELECT vo.user_id AS user_id, COUNT(*) AS files, SUM(x.size_bytes) AS bytes,
+      SUM(CASE WHEN x.size_bytes IS NULL THEN 1 ELSE 0 END) AS unknown_size_files FROM (
+        SELECT s.project_id AS project_id, s.size_bytes AS size_bytes FROM formation_steps s
+         WHERE s.proof_file_key IS NOT NULL AND TRIM(s.proof_file_key) <> '' AND s.size_missing_at IS NULL
+        UNION ALL
+        SELECT p.id AS project_id, o.size_bytes AS size_bytes FROM projects p JOIN entity_obligations o ON o.entity_id = p.entity_id
+         WHERE o.proof_file_key GLOB ('build-proof/' || p.id || '/*') AND o.size_missing_at IS NULL) x
+      JOIN ` + VENTURE_OWNERS + ` ON vo.project_id = x.project_id WHERE vo.user_id IS NOT NULL GROUP BY vo.user_id` },
   { key: 'grow_minutes', kind: 'documents', scope: 'company',
     groups: `SELECT e.project_id AS project_id, COUNT(*) AS files, SUM(o.size_bytes) AS bytes,
       SUM(CASE WHEN o.size_bytes IS NULL THEN 1 ELSE 0 END) AS unknown_size_files
@@ -160,7 +212,12 @@ const AREAS: ReadonlyArray<Def> = [
     largest: `SELECT e.title AS name, NULL AS version, o.size_bytes AS bytes, o.created_at AS added_at, e.project_id AS project_id, o.uid AS ref
       FROM json_each(?) own JOIN compliance_events e ON e.project_id = own.value JOIN obligation_occurrences o ON o.event_id = e.id
       WHERE o.minutes_file_key IS NOT NULL AND TRIM(o.minutes_file_key) <> '' AND o.size_missing_at IS NULL
-      AND o.size_bytes IS NOT NULL ORDER BY o.size_bytes DESC, o.id DESC LIMIT 10` },
+      AND o.size_bytes IS NOT NULL ORDER BY o.size_bytes DESC, o.id DESC LIMIT 10`,
+    owners: `SELECT vo.user_id AS user_id, COUNT(*) AS files, SUM(o.size_bytes) AS bytes,
+      SUM(CASE WHEN o.size_bytes IS NULL THEN 1 ELSE 0 END) AS unknown_size_files
+      FROM ` + VENTURE_OWNERS + ` JOIN compliance_events e ON e.project_id = vo.project_id JOIN obligation_occurrences o ON o.event_id = e.id
+      WHERE o.minutes_file_key IS NOT NULL AND TRIM(o.minutes_file_key) <> '' AND o.size_missing_at IS NULL AND vo.user_id IS NOT NULL
+      GROUP BY vo.user_id` },
   // Superseded photos and logos D1168 keeps are still stored, so they count.
   { key: 'brand_files', kind: 'brand', scope: 'personal',
     groups: `SELECT NULL AS project_id, COUNT(*) AS files, SUM(size_bytes) AS bytes,
@@ -168,14 +225,21 @@ const AREAS: ReadonlyArray<Def> = [
       FROM member_files WHERE owner_user_id = ? AND size_missing_at IS NULL`,
     largest: `SELECT kind AS name, NULL AS version, size_bytes AS bytes, created_at AS added_at, NULL AS project_id, uid AS ref
       FROM member_files WHERE owner_user_id = ? AND size_missing_at IS NULL AND size_bytes IS NOT NULL
-      ORDER BY size_bytes DESC, id DESC LIMIT 10` },
+      ORDER BY size_bytes DESC, id DESC LIMIT 10`,
+    owners: `SELECT owner_user_id AS user_id, COUNT(*) AS files, SUM(size_bytes) AS bytes,
+      SUM(CASE WHEN size_bytes IS NULL THEN 1 ELSE 0 END) AS unknown_size_files
+      FROM member_files WHERE owner_user_id IS NOT NULL AND size_missing_at IS NULL GROUP BY owner_user_id` },
   { key: 'csv_imports', kind: 'other', scope: 'personal',
     groups: `SELECT NULL AS project_id, COUNT(*) AS files, SUM(size_bytes) AS bytes,
       SUM(CASE WHEN size_bytes IS NULL THEN 1 ELSE 0 END) AS unknown_size_files
       FROM data_imports WHERE user_id = ? AND raw_file_r2_key IS NOT NULL AND TRIM(raw_file_r2_key) <> '' AND size_missing_at IS NULL`,
     largest: `SELECT source AS name, NULL AS version, size_bytes AS bytes, started_at AS added_at, NULL AS project_id, CAST(id AS TEXT) AS ref
       FROM data_imports WHERE user_id = ? AND raw_file_r2_key IS NOT NULL AND TRIM(raw_file_r2_key) <> '' AND size_missing_at IS NULL
-      AND size_bytes IS NOT NULL ORDER BY size_bytes DESC, id DESC LIMIT 10` },
+      AND size_bytes IS NOT NULL ORDER BY size_bytes DESC, id DESC LIMIT 10`,
+    owners: `SELECT user_id AS user_id, COUNT(*) AS files, SUM(size_bytes) AS bytes,
+      SUM(CASE WHEN size_bytes IS NULL THEN 1 ELSE 0 END) AS unknown_size_files
+      FROM data_imports WHERE user_id IS NOT NULL AND raw_file_r2_key IS NOT NULL AND TRIM(raw_file_r2_key) <> '' AND size_missing_at IS NULL
+      GROUP BY user_id` },
 ];
 
 /**
@@ -230,7 +294,7 @@ function binds(def: Def, userId: number, owned: string): unknown[] {
   return def.key === 'build_proofs' ? [owned, owned] : [owned];
 }
 
-async function readArea(db: D1Database, def: Def, userId: number, ventures: Venture[] | null): Promise<AreaRead> {
+async function readArea(db: D1Database, def: Def, userId: number, ventures: Venture[] | null, withLargest = true): Promise<AreaRead> {
   const blank: StorageArea = { key: def.key, kind: def.kind, files: null, bytes: null, measured_bytes: null, unknown_size_files: null, recorded: false };
   // A company area cannot be read without knowing whose ventures they are.
   if (ventures === null && def.scope === 'company') return { area: blank, groups: [], largest: null };
@@ -248,6 +312,7 @@ async function readArea(db: D1Database, def: Def, userId: number, ventures: Vent
     const area: StorageArea = { key: def.key, kind: def.kind, files, bytes: unknown > 0 ? null : measured,
       measured_bytes: measured, unknown_size_files: unknown, recorded: true };
     let largest: Largest[] | null = null;
+    if (!withLargest) return { area, groups, largest };
     try {
       const top = await db.prepare(def.largest).bind(...binds(def, userId, list)).all();
       if (top.success !== true || !Array.isArray(top.results)) throw new Error(UNREADABLE);
@@ -387,4 +452,59 @@ export async function readStorageUsage(env: Env, user: User) {
     largest,
     largest_complete: reads.every((r) => r.area.recorded && r.largest !== null),
   };
+}
+
+
+/**
+ * D1170 — the bytes one member's plan holds, for the upload guard: the same
+ * thirteen areas and the same attribution as `readStorageUsage`, without the
+ * largest files. `null` when any area or the ventures cannot be read, so the
+ * guard never weighs an upload against a partial sum.
+ */
+export async function storageUsedBytes(env: Env, userId: number): Promise<{ measured_bytes: number; unknown_size_files: number } | null> {
+  const ventures = await readVentures(env.DB, userId);
+  if (ventures === null) return null;
+  const reads = await Promise.all(AREAS.map((def) => readArea(env.DB, def, userId, ventures, false)));
+  const total = sum(reads.map((r) => r.area));
+  if (total.measured_bytes === null || total.unknown_size_files === null) return null;
+  return { measured_bytes: total.measured_bytes, unknown_size_files: total.unknown_size_files };
+}
+
+export type OwnerTotals = { files: number; measured_bytes: number; unknown_size_files: number; kinds: Record<StorageKindKey, number> };
+
+/**
+ * D1170 — every member's stored bytes at once, for HQ's totals: one grouped
+ * statement per area (`owners`), attributed by the rule each area's own query
+ * applies. An area that cannot be read is named in `unreadable` and adds
+ * nothing; no member's total is then complete, which the caller says.
+ */
+export async function readStorageByOwner(env: Env): Promise<{ owners: Map<number, OwnerTotals>; unreadable: StorageAreaKey[] }> {
+  const owners = new Map<number, OwnerTotals>();
+  const unreadable: StorageAreaKey[] = [];
+  const blank = (): OwnerTotals => ({ files: 0, measured_bytes: 0, unknown_size_files: 0,
+    kinds: Object.fromEntries(STORAGE_KINDS.map((k) => [k, 0])) as Record<StorageKindKey, number> });
+  const reads = await Promise.all(AREAS.map(async (def) => {
+    try {
+      const rows = await env.DB.prepare(def.owners).all<any>();
+      if (rows.success !== true || !Array.isArray(rows.results)) throw new Error(UNREADABLE);
+      for (const r of rows.results) {
+        if (!id(r?.user_id) || !count(r.files) || (r.bytes !== null && !count(r.bytes)) || !count(r.unknown_size_files ?? 0)) throw new Error(UNREADABLE);
+      }
+      return { def, rows: rows.results as Array<{ user_id: number; files: number; bytes: number | null; unknown_size_files: number | null }> };
+    } catch {
+      return { def, rows: null };
+    }
+  }));
+  for (const { def, rows } of reads) {
+    if (rows === null) { unreadable.push(def.key); continue; }
+    for (const r of rows) {
+      const t = owners.get(r.user_id) ?? blank();
+      t.files += r.files;
+      t.measured_bytes += r.bytes ?? 0;
+      t.unknown_size_files += r.unknown_size_files ?? 0;
+      t.kinds[def.kind] += r.bytes ?? 0;
+      owners.set(r.user_id, t);
+    }
+  }
+  return { owners, unreadable };
 }

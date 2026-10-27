@@ -207,8 +207,10 @@ export function buildByCohort(read, appsRead, now) {
 /**
  * A row per cohort that has started (and the next one), a cell per week:
  * Not started; Now, with its deadline; or the outcomes recorded for it.
- * "Of those who reached it" is not recorded (D944: nothing stores a
- * reached-week ledger), so a cell says how many passed, never a share.
+ * D1123 (migration 602): a week whose deadline was processed with the
+ * reached-week ledger says "[passed] of [reached]", the founders who passed
+ * of those who reached it. A week decided before it says how many passed,
+ * never a share (D944).
  */
 export function buildHeat(read, now) {
   const b = blockOf(read, 'cohorts');
@@ -227,17 +229,30 @@ export function buildHeat(read, now) {
       const to = parseStamp(w.deadline_at);
       if (from == null || from > now) return { n, kind: 'not_started', text: 'Not started' };
       if (to != null && now <= to) return { n, kind: 'now', text: `Now · ${dayET(to)}`, deadline: stampET(to) };
-      return {
+      const counts = {
         n, kind: 'counts', passed: Number(w.passed || 0), failed: Number(w.failed || 0),
         grace: Number(w.in_grace || 0), pending: Number(w.pending || 0),
-        text: `${nf(w.passed || 0)} passed`,
       };
+      const reached = metricOf(w.reached);
+      if (reached.kind === 'value' && reached.value > 0) {
+        const of = Number(w.reached.passed || 0);
+        const share = of / reached.value;
+        return { ...counts, reached: reached.value, passedOfReached: of, share, pct: Math.round(share * 100), text: `${nf(of)} of ${nf(reached.value)}` };
+      }
+      // Nobody reached it is a real answer, but a share of nobody is not one.
+      return { ...counts, reached: reached.kind === 'value' ? 0 : null, reachedReason: reached.kind === 'value' ? null : reached.reason, text: `${nf(w.passed || 0)} passed` };
     });
     return { key: keyOf(c), label: cohortLabel(c), cells };
   });
+  const decided = rows.flatMap((r) => r.cells).filter((c) => c.kind === 'counts');
+  const shared = decided.filter((c) => c.share != null);
   return {
     state: 'ready', rows,
-    note: 'Each cell is the founders who passed that week. How many reached a week is not recorded, so no cell is a share.',
+    note: !decided.length || shared.length === decided.length
+      ? 'Each cell is founders who passed that week, of those who reached it.'
+      : shared.length
+        ? 'Each cell is founders who passed that week, of those who reached it. A week decided before reached weeks were recorded says how many passed, never a share.'
+        : 'Each cell is the founders who passed that week. Who reached these weeks was not recorded, so no cell is a share.',
   };
 }
 
@@ -294,14 +309,19 @@ export function buildFunnel(read, chosen) {
     return { key: s.key, label: s.label, ...m, pct, share: m.kind === 'value' && applied ? m.value / applied : null };
   });
   const iv = metricOf(steps.interviewed);
+  // D1123: interviewed is the interviews an admin recorded as held, beside the steps.
+  const ivPct = iv.kind === 'value' && applied ? Math.round((iv.value / applied) * 100) : null;
+  const awaiting = iv.kind === 'value' ? Number(steps.interviewed?.awaiting || 0) : 0;
   return {
     state: 'ready', cohort: key, label: cohortLabel(cohort),
     options: all.filter((c) => (parseStamp(c.applications_open_at) ?? Infinity) <= asOf)
       .map((c) => ({ key: keyOf(c), label: cohortLabel(c) })),
     rows,
-    interviewed: iv,
+    interviewed: { ...iv, pct: ivPct, awaiting },
     alt: `${cohortLabel(cohort)}: ${rows.map((r) => `${r.label.toLowerCase()} ${r.text}`).join(', ')}.`,
-    foot: `Interviewed: ${iv.text}${iv.reason ? ` (${iv.reason})` : ''}. Interviews are optional, so they sit beside the steps, not in them.`,
+    foot: iv.kind === 'value'
+      ? `Interviewed ${iv.text}${ivPct != null ? ` · ${ivPct}% of applied` : ''}.${awaiting ? ` ${nf(awaiting)} past interview${awaiting === 1 ? ' has' : 's have'} no outcome recorded yet.` : ''} Interviews are optional, so they sit beside the steps, not in them.`
+      : `Interviewed: ${iv.text}${iv.reason ? ` (${iv.reason})` : ''}. Interviews are optional, so they sit beside the steps, not in them.`,
   };
 }
 
