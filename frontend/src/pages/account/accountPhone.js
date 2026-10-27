@@ -85,6 +85,9 @@ export const ACCOUNT_PHONE_COPY = {
   modelsNote: 'Estimated from the run log. Runs still in progress are not in these yet.',
   allFiles: 'All your files',
   noSizeFiles: 'Files with no size recorded',
+  // D1171 (STG15): A2m's Storage opens Usage › Storage, which draws the figures.
+  storageMoved: 'Open Storage',
+  storageMovedSub: 'Your plan, your files by kind and company, and the largest. It has its own page now.',
   browseConnectors: 'Browse connectors',
 };
 

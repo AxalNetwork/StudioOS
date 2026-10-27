@@ -1,4 +1,6 @@
 // D1166 (#2449) — Account › Usage › Storage, Usage's fourth page: its address
+// (D1171, #3084, draws the page complete; its blocks are pinned in
+// storage_page_d1171.test.mjs, and the "Not read here yet" pins left here)
 // and navigation, today's one read (D642's /usage/storage) drawn by place,
 // "Not read here yet" with its reason where no read exists (the allowance, by
 // kind, by company, largest files), never a figure from the owner's table;
@@ -18,7 +20,7 @@ import { installDocument } from './_contracts_dom.mjs';
 import StoragePage from '../src/pages/account/StoragePage.jsx';
 import UsageOverview, { StorageOverview } from '../src/pages/account/UsageOverview.jsx';
 import { USAGE_PAGES, usagePageFor } from '../src/pages/account/limitsModel.js';
-import { DOES_NOT_COUNT, NOT_YET, STORAGE_PAGE, WAITS } from '../src/pages/account/storagePageModel.js';
+import { DOES_NOT_COUNT, STORAGE_PAGE } from '../src/pages/account/storagePageModel.js';
 
 const h = React.createElement;
 const read = (p) => readFileSync(p, 'utf8');
@@ -66,12 +68,9 @@ test('Storage is Usage\'s fourth page, at /account/usage/storage', () => {
   assert.equal(usagePageFor('/account/usage/storage/x'), 'overview');
 });
 
-test('every block with no read says why, and none says zero, none, or a figure from the owner\'s table', () => {
-  for (const k of ['allowance', 'kinds', 'companies', 'largest', 'counts']) assert.ok(WAITS[k], k);
-  for (const w of Object.values(WAITS)) {
-    assert.ok(!/\b0\b|\bnone\b/i.test(w), w);
-    assert.ok(!/\b\d+ ?GB\b/.test(w), `no allowance figure is claimed: ${w}`);
-  }
+// D1171 (#3084): the blocks D1166 drew as "Not read here yet" now draw D1169's
+// read (`storage_page_d1171`). What stays D1166's: What counts, byte for byte.
+test('What counts is the canvas\'s, byte for byte', () => {
   assert.deepEqual([...DOES_NOT_COUNT], ['Identity documents', 'Signed legal copies', 'Fund documents', 'Anything Axal VC publishes']);
 });
 
@@ -79,31 +78,22 @@ test('every block with no read says why, and none says zero, none, or a figure f
  * Mounted
  * ------------------------------------------------------------------ */
 
-test('the page: the header, today\'s read by place, and Not read here yet on the allowance, kinds, companies and largest files', async () => {
+test('the page: the header and one storage read, beside the public plans read (D1171)', async () => {
   const v = await mounted('/account/usage/storage', h(StoragePage, { role: 'founder' }), '/account/usage/storage');
   try {
     assert.ok(v.by('usage-storage-page'));
     assert.ok(v.text().includes(STORAGE_PAGE.sub));
-    assert.equal(v.text('usage-storage-total'), '3 GB in 42 files');
-    assert.ok(v.by('usage-storage-data_room'));
-    for (const k of ['allowance', 'kinds', 'companies', 'largest']) {
-      assert.ok(v.text(`storage-card-${k}`).includes(NOT_YET), k);
-      assert.ok(v.text(`storage-card-${k}`).includes(WAITS[k].slice(0, 40)), k);
-    }
-    assert.ok(v.text('storage-wait-counts').includes(NOT_YET));
-    assert.equal(v.text('storage-does-not-count'), DOES_NOT_COUNT.join(' '));
-    assert.ok(!/of \d+ ?GB|\d+%/.test(v.text()), 'no allowance and no share of one is drawn');
-    assert.deepEqual(v.requests, ['/usage/storage'], 'one read, D642\'s');
+    assert.equal(v.text('storage-does-not-count'), DOES_NOT_COUNT.map((r) => `• ${r}`).join(' '));
+    assert.deepEqual(v.requests.filter((r) => r === '/usage/storage'), ['/usage/storage'], 'one storage read, D642\'s as D1169 grew it');
   } finally { await v.close(); }
 });
 
-test('Overview: a Storage card with today\'s total, the allowance not read here yet, and a door to the page', () => {
+// D1171: the Overview card draws X of Y from the plan; storage_page_d1171 pins it.
+test('Overview: a Storage card with a door to the page, and a missing total never drawn as a size', () => {
   const ready = { status: 'ready', data: STORAGE, reload() {} };
   const out = renderToStaticMarkup(h(MemoryRouter, null, h(StorageOverview, { storage: ready })));
-  assert.match(out, /data-testid="overview-storage-total"[^>]*>3 GB</);
-  assert.match(out, new RegExp(`data-testid="overview-storage-allowance"[^>]*>Your plan(&#x27;|')s allowance: ${NOT_YET}\\.`));
   assert.match(out, /href="\/account\/usage\/storage"/);
-  const partial = renderToStaticMarkup(h(MemoryRouter, null, h(StorageOverview, { storage: { ...ready, data: { ...STORAGE, total_bytes: null } } })));
+  const partial = renderToStaticMarkup(h(MemoryRouter, null, h(StorageOverview, { storage: { ...ready, data: { ...STORAGE, total_bytes: null, measured_bytes: null } } })));
   assert.match(partial, /Not recorded/);
   assert.doesNotMatch(partial, /0 B|overview-storage-total/, 'a missing total is never drawn as a size');
 });
