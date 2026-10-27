@@ -28,7 +28,7 @@ import { getProviderImpl, PublishError, type IntegrationRow, type PublishInput, 
 import { publishTarget, PUBLISH_DAILY_CAP } from '../integrations/publishTargets';
 import { projectEnabled } from '../integrations/companyScope';
 import { publishLint, type PublishLintResult } from './publishLint';
-import { isVentureFounder } from './mercury/growFeeds';
+import { isVentureFounder } from './ventureFounder';
 
 export const STRANDED_MINUTES = 10;
 
